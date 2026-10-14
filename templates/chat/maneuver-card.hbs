@@ -1,0 +1,72 @@
+{{!-- Maneuver card (D-626). Accent: horde red, as an attack's. --}}
+<div class="azeroth azeroth-card azeroth-card-attack azeroth-card-maneuver" data-message-kind="maneuver">
+  {{> systems/azeroth-rpg/templates/chat/partials/card-header.hbs title=title subtitle=subtitle}}
+
+  <div class="azeroth-card-body">
+    <p class="azeroth-card-text">{{text}}</p>
+
+    {{#if isPress}}
+    <div class="azeroth-card-actions">
+      {{#each targets}}
+      <button type="button" data-action="applyDamage" data-target-index="{{this.index}}" data-damage="1">
+        {{localize "AZEROTH.Card.ApplyTo" name=this.name}} <strong>1</strong>
+      </button>
+      {{else}}
+      <button type="button" data-action="applyDamage" data-damage="1">{{localize "AZEROTH.Card.ApplyDamage"}}</button>
+      {{/each}}
+    </div>
+    {{/if}}
+
+    {{#if isSunder}}
+    <div class="azeroth-card-actions">
+      {{#each targets}}
+      <button type="button" data-action="applySundered" data-target-index="{{this.index}}">{{localize "AZEROTH.Card.ApplySundered" name=this.name}}</button>
+      {{else}}
+      <button type="button" data-action="applySundered">{{localize "AZEROTH.Card.ApplySunderedControlled"}}</button>
+      {{/each}}
+    </div>
+    {{/if}}
+
+    {{#if isOverbear}}
+    {{#each targets}}
+      {{#if this.size.immovable}}<p class="azeroth-note">{{localize "AZEROTH.Card.CannotBeMoved" name=this.name}}</p>
+      {{else}}
+        {{#if this.size.boons}}<p class="azeroth-note">{{localize "AZEROTH.Card.SizeLarger" name=this.name}}</p>{{/if}}
+        {{#if this.size.banes}}<p class="azeroth-note">{{localize "AZEROTH.Card.SizeSmaller" name=this.name}}</p>{{/if}}
+      {{/if}}
+    {{/each}}
+    <div class="azeroth-card-actions">
+      <button type="button" data-action="resistTest" data-resilience="body" data-dc="{{dc}}">
+        {{localize "AZEROTH.Card.ResistTest" resilience=resistLabel dc=dc}}
+      </button>
+    </div>
+    <div class="azeroth-card-actions">
+      {{#each targets}}
+      {{#unless this.size.immovable}}
+      <button type="button" data-action="applyCondition" data-condition="prone" data-target-index="{{this.index}}">{{localize "AZEROTH.Card.ApplyProne" name=this.name}}</button>
+      {{/unless}}
+      {{else}}
+      <button type="button" data-action="applyCondition" data-condition="prone">{{localize "AZEROTH.Card.ApplyProneControlled"}}</button>
+      {{/each}}
+    </div>
+    {{/if}}
+
+    {{#if isDisarm}}
+    <div class="azeroth-card-actions">
+      <button type="button" data-action="attackFromCard" data-dc="{{opposedDC}}" data-no-damage="1">{{localize "AZEROTH.Card.OpposedAttack" dc=opposedDC}}</button>
+    </div>
+    <p class="azeroth-note">{{localize "AZEROTH.Maneuver.DisarmNote"}}</p>
+    {{/if}}
+
+    {{#if isRiposte}}
+    <div class="azeroth-card-actions">
+      {{!-- 06 SS7's Riposte is the blow after a Parry held, and 04's
+            Counterstrike adds to its damage per rank (D-711 phase 2): the
+            button says which blow this is so the dialog can offer the line. --}}
+      <button type="button" data-action="attackFromCard" data-budget="reaction" data-riposte>{{localize "AZEROTH.Sheet.Attack"}}</button>
+    </div>
+    <p class="azeroth-note">{{localize "AZEROTH.Maneuver.RiposteNote"}}</p>
+    {{/if}}
+
+  </div>
+</div>

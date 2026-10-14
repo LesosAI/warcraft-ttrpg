@@ -1,0 +1,54 @@
+{{!--
+  Conditions and effects (D11 SS1: `core` holds conditions). Rendered by both
+  actor sheets, so both register its actions (actions.mjs#effectActions).
+
+  * The fifteen conditions as toggles reading `actor.statuses`, with a value
+    stepper on the three that carry one (A1 SS1: Bleeding X, Poisoned X,
+    Scorched X).
+  * Every other Active Effect the actor holds: toggle, edit, delete.
+  * The corruption thresholds crossed, DERIVED and read-only - never a
+    document, never a custom change type (D-596): the number is the effect.
+--}}
+<div class="azeroth-effects">
+  <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Effects.Conditions"}}</h3>
+  <ul class="azeroth-conditions">
+    {{#each effects.conditions as |c|}}
+    {{!-- The bubble is the <li>: border, ground and the active fill live here,
+          so a valued condition's stepper sits INSIDE it (2026-09-02). --}}
+    <li class="azeroth-condition{{#if c.active}} is-active{{/if}}{{#if c.valued}} is-valued{{/if}}" data-condition="{{c.id}}">
+      <button type="button" class="azeroth-condition-toggle" data-action="toggleCondition" data-condition="{{c.id}}"
+              aria-pressed="{{c.active}}">
+        <img src="{{c.img}}" alt="">
+        <span>{{localize c.label}}</span>
+      </button>
+      {{#if c.valued}}
+      <span class="azeroth-condition-value">
+        <button type="button" data-action="stepCondition" data-condition="{{c.id}}" data-delta="-1"
+                aria-label="{{localize "AZEROTH.Effects.StepDown" name=(localize c.label)}}"{{#unless c.active}} disabled{{/unless}}>&minus;</button>
+        <strong>{{#if c.active}}{{c.value}}{{else}}&mdash;{{/if}}</strong>
+        <button type="button" data-action="stepCondition" data-condition="{{c.id}}" data-delta="1"
+                aria-label="{{localize "AZEROTH.Effects.StepUp" name=(localize c.label)}}">+</button>
+      </span>
+      {{/if}}
+    </li>
+    {{/each}}
+  </ul>
+
+  {{!-- The effect rows, unless the caller draws them elsewhere (Core, D-665). --}}
+  {{#unless noList}}
+  {{> systems/azeroth-rpg/templates/actor/partials/effect-list.hbs effects=effects}}
+  {{/unless}}
+
+  {{#if effects.thresholds.length}}
+  <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Effects.Thresholds"}}</h3>
+  <ol class="azeroth-threshold-list">
+    {{#each effects.thresholds as |t|}}
+    <li class="azeroth-threshold-row is-{{t.track}}">
+      <span class="azeroth-threshold-track">{{localize t.label}}</span>
+      <strong>{{t.threshold}}</strong>
+      <span class="azeroth-note">{{#if t.name}}{{t.name}}{{else}}{{localize "AZEROTH.Effects.ThresholdNote"}}{{/if}}</span>
+    </li>
+    {{/each}}
+  </ol>
+  {{/if}}
+</div>

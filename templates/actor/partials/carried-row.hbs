@@ -1,0 +1,48 @@
+{{!--
+  One carried thing, wherever it is listed: loose under its kind, or inside
+  the container that holds it (08 SS11, D-671).
+
+  **Where it is kept costs the row nothing** (the lead, 2026-09-07). A select
+  on every row was a line of furniture on a tab that is already dense, so the
+  choice moved off the row entirely: drag the thing onto a container, or take
+  *Put in* off its right click. `draggable` is core's own drag selector, and
+  the row already carries the item id core's `_onDragStart` reads.
+--}}
+<li class="azeroth-carried-item draggable" data-item-id="{{row.id}}">
+  {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=row.img rarityClass=row.rarityClass}}
+  <span class="azeroth-carried-name{{#if row.rarityClass}} {{row.rarityClass}}{{/if}}" data-action="expandItem" role="button" tabindex="0" aria-expanded="false">{{row.name}}</span>
+  {{!-- Which of 08 SS11's slots it is worn in (D-686). A word, not a colour:
+        the tab lists a ring and a signet ring side by side and nothing else
+        on the row says the two are worn in different places. --}}
+  {{#if row.slot}}<span class="azeroth-carried-slot">{{row.slot}}</span>{{/if}}
+  {{> systems/azeroth-rpg/templates/actor/partials/star.hbs favorite=row.favorite}}
+  <button type="button" class="azeroth-open" data-action="openItem" data-tooltip="{{localize "AZEROTH.Sheet.Open"}}" aria-label="{{localize "AZEROTH.Sheet.Open"}}"><i class="fa-solid fa-pen-to-square"></i></button>
+  {{!-- The unit is on the row (D-675): every thing carries a weight now, and
+        a bare number beside a name reads as a quantity. --}}
+  <span class="azeroth-carried-weight">{{#if row.weight}}{{localize "AZEROTH.Sheet.Pounds" n=row.weight}}{{else}}{{azerothDash row.weight}}{{/if}}</span>
+  {{#if row.usable}}
+  <button type="button" class="azeroth-use" data-action="useGear">{{localize "AZEROTH.Feature.Use"}}{{#if row.quantity}} <span class="azeroth-carried-count">{{row.quantity}}</span>{{/if}}</button>
+  {{/if}}
+  {{#if row.charges}}
+  {{!-- A waterskin holds a day, and is filled again (08 SS11, 09 SS5). --}}
+  <span class="azeroth-carried-charges">{{localize "AZEROTH.Container.Charges" value=row.charges.value max=row.charges.max unit=row.charges.unit}}</span>
+  <button type="button" class="azeroth-use" data-action="spendCharge"{{#unless row.charges.value}} disabled{{/unless}}>{{localize "AZEROTH.Container.Spend"}}</button>
+  <button type="button" class="azeroth-forge-quiet" data-action="fillCharges">{{localize "AZEROTH.Container.Fill"}}</button>
+  {{/if}}
+  {{#if row.equippable}}
+  {{!-- Equip and Equipped, whatever the thing is (the lead, 2026-09-07): an
+        Augment is held in the off hand and 07 SS3 is what says so, but the
+        row is a row and a second word for the same button read as a second
+        kind of button. The tooltip carries what an Augment is worth. --}}
+  <button type="button" class="azeroth-equip{{#if row.equipped}} is-equipped{{/if}}" data-action="toggleEquipped"
+          data-tooltip="{{#if row.augment}}{{localize "AZEROTH.Augment.Tooltip" className=row.augment.className bonus=row.augment.bonus}}{{else}}{{localize "AZEROTH.Sheet.Equip"}}{{/if}}" aria-pressed="{{row.equipped}}">
+    {{#if row.equipped}}{{localize "AZEROTH.Sheet.Equipped"}}{{else}}{{localize "AZEROTH.Sheet.Equip"}}{{/if}}
+  </button>
+  {{else}}<span></span>{{/if}}
+  <button type="button" class="azeroth-delete" data-action="deleteItem" data-tooltip="{{localize "AZEROTH.Sheet.Delete"}}" aria-label="{{localize "AZEROTH.Sheet.Delete"}}">&times;</button>
+  {{#if row.coating}}
+  <span class="azeroth-carried-coating">{{localize "AZEROTH.Use.CoatedWith" name=row.coating}}
+    <button type="button" class="azeroth-chip-x" data-action="clearCoating" data-tooltip="{{localize "AZEROTH.Use.Wipe"}}" aria-label="{{localize "AZEROTH.Use.Wipe"}}">&times;</button></span>
+  {{/if}}
+  {{> systems/azeroth-rpg/templates/actor/partials/item-detail.hbs id=row.id detail=row.detail description=row.description}}
+</li>

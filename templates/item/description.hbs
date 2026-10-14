@@ -1,0 +1,132 @@
+{{!--
+  ProseMirror only: TinyMCE was removed entirely in V14. `<prose-mirror>` is
+  core's own custom element (client/applications/elements/prosemirror-editor.mjs),
+  so there is no editor helper to call and nothing to fall back to.
+
+  ONE ROOT: a template part must render a single element, so the description
+  and a named item's Signature (08 SS20, D-633) share this wrapper.
+
+  THE ENRICHED HTML IS THE ELEMENT'S CHILD, NEVER AN `enriched` ATTRIBUTE.
+  Core reads it as a CONSTRUCTOR ARGUMENT or off `this.innerHTML` and never
+  looks at the attribute (`client/applications/elements/prosemirror-editor.mjs`,
+  14.367: `this.#enriched = enriched || this.innerHTML`), and its own
+  `toFormGroup` sets `editor.innerHTML = config.enriched` for exactly this
+  reason. With the attribute, `#enriched` is the empty string, `_refresh`
+  writes it into the content div, and **every editable item printed a blank
+  description** while the compendium copy - not editable, so the plain
+  branch below - printed it fine (the lead, 2026-09-06).
+--}}
+<div class="azeroth-item__text">
+  <section class="azeroth-item__description">
+    <h2 class="azeroth-item__section-title" data-action="toggleDescription">
+      {{localize "AZEROTH.Item.Description"}}
+    </h2>
+    <div class="azeroth-item__prose">
+      {{#if editable}}
+        {{!-- `enriched` is what the toggled (read-only) view shows; without it the
+              editor printed the raw @UUID source until a click (2026-09-02). --}}
+        <prose-mirror name="system.description" value="{{item.system.description}}"
+                      toggled="" document-uuid="{{item.uuid}}">{{{descriptionHTML}}}</prose-mirror>
+      {{else}}
+        {{{descriptionHTML}}}
+      {{/if}}
+    </div>
+  </section>
+  {{#if effectShown}}
+  {{!-- The mechanics (07 §9's effect, 04's talent text), editable like the lore (2026-09-06). --}}
+  <section class="azeroth-item__description azeroth-item__effect">
+    <h2 class="azeroth-item__section-title">{{localize "AZEROTH.Item.Effect"}}</h2>
+    <div class="azeroth-item__prose">
+      {{#if editable}}
+        <prose-mirror name="system.effect" value="{{item.system.effect}}"
+                      toggled="" document-uuid="{{item.uuid}}">{{{effectHTML}}}</prose-mirror>
+      {{else}}
+        {{{effectHTML}}}
+      {{/if}}
+    </div>
+  </section>
+  {{/if}}
+  {{#if grants.length}}
+  {{!-- What the affixes grant (08 §6), read off the flags the Forge wrote. --}}
+  <section class="azeroth-item__description azeroth-item__grants">
+    <h2 class="azeroth-item__section-title">{{localize "AZEROTH.Item.Grants"}}</h2>
+    <ul class="azeroth-item__grant-list">{{#each grants}}<li>{{this}}</li>{{/each}}</ul>
+  </section>
+  {{/if}}
+  {{#if signatureShown}}
+  <section class="azeroth-item__description azeroth-item__signature">
+    <h2 class="azeroth-item__section-title">{{localize "AZEROTH.Item.Signature"}}</h2>
+    <div class="azeroth-item__prose">
+      {{#if editable}}
+        <prose-mirror name="system.signature" value="{{item.system.signature}}"
+                      toggled="" document-uuid="{{item.uuid}}">{{{signatureHTML}}}</prose-mirror>
+      {{else}}
+        {{{signatureHTML}}}
+      {{/if}}
+    </div>
+    {{!-- WHAT IT DOES, beside the sentence (08 SS20, D-692). The kind, the gate
+          and whether it holds for whoever is wearing it, the limit, and a Use
+          control ONLY where there is one to press: a standing Signature draws
+          as text with no button anywhere, because a control that does nothing
+          is worse than none (D-681). A refusal says why IN WORDS - a greyed
+          button with no cause is the state a player asks the GM about. --}}
+    <div class="azeroth-item__signature-state">
+      {{#if signature.kindChip}}
+      {{!-- The LABEL, not the sentence: the sentence is 190px of chip. --}}
+      <span class="azeroth-feature-chip" data-tooltip="{{localize signature.kindLabel}}">{{localize signature.kindChip}}</span>
+      {{/if}}
+      {{#if signature.actionLabel}}
+      <span class="azeroth-feature-chip">{{localize signature.actionLabel}}</span>
+      {{/if}}
+      {{#if signature.cost}}
+      <span class="azeroth-feature-chip">{{signature.cost.amount}} {{localize signature.cost.label}}</span>
+      {{/if}}
+      {{#if signature.uses}}
+      {{!-- The counter, NOT the stepper: this sheet has no `stepUses` handler
+            and a Signature's uses live at a path no other pass walks. --}}
+      <span class="azeroth-feature-chip azeroth-feature-uses">{{signature.uses.value}}/{{signature.uses.max}} {{localize signature.uses.per}}</span>
+      {{/if}}
+      {{#if signature.pressable}}
+      <button type="button" class="azeroth-use" data-action="useSignature"{{#if signature.refusal}} disabled{{/if}}>{{localize "AZEROTH.Feature.Use"}}</button>
+      {{/if}}
+    </div>
+    {{#each signature.gates as |g|}}
+    <p class="azeroth-item__signature-note">{{#if g.value}}{{localize "AZEROTH.Signature.GateValue" kind=(localize g.label) value=g.value}}{{else}}{{localize g.label}}{{/if}}</p>
+    {{/each}}
+    {{#if signature.gateHolds}}<p class="azeroth-item__signature-note">{{localize "AZEROTH.Signature.GateHolds"}}</p>{{/if}}
+    {{#if signature.gateFails}}<p class="azeroth-item__signature-note">{{localize "AZEROTH.Signature.GateFails"}}</p>{{/if}}
+    {{!-- A GATE COVERS ONLY ITS OWN SENTENCE (D-722). One line per gated
+          sentence, with its own verdict, so a Rogue reads *this part does not
+          apply to you* under the Damage Rating and nothing under the
+          retaliation that IS working for them. The gate is printed whether it
+          holds or not (D-692) and the verdict is words, never a grey (D5). --}}
+    {{!-- The clauses read *Only for one class: Paladin* already, so the marker
+          is a lead-in and the clauses follow it plainly: a wrapper round each
+          one printed *This part only: Only for one class: …* (the first
+          screenshot, D-611). One paragraph a branch, its verdict at the end. --}}
+    {{#each signature.gatedParts as |part|}}
+    <p class="azeroth-item__signature-note">
+      {{localize "AZEROTH.Signature.PartOnly"}}
+      {{#each part.gates as |g|}}{{#unless @first}} · {{/unless}}{{#if g.value}}{{localize "AZEROTH.Signature.GateValue" kind=(localize g.label) value=g.value}}{{else}}{{localize g.label}}{{/if}}{{/each}}
+      {{#if part.holds}}{{localize "AZEROTH.Signature.PartHolds"}}{{/if}}
+      {{#if part.fails}}{{localize "AZEROTH.Signature.PartFails"}}{{/if}}
+    </p>
+    {{/each}}
+    {{!-- AND THE BUTTON'S OWN GATE, beside the button (D-722): a press that
+          refuses has to say who it is for, and the sentence that presses is
+          not always the sentence the trunk is gated on. --}}
+    {{#if signature.pressGates.length}}
+    <p class="azeroth-item__signature-note">
+      {{localize "AZEROTH.Signature.PressOnly"}}
+      {{#each signature.pressGates as |g|}}{{#unless @first}} · {{/unless}}{{#if g.value}}{{localize "AZEROTH.Signature.GateValue" kind=(localize g.label) value=g.value}}{{else}}{{localize g.label}}{{/if}}{{/each}}
+    </p>
+    {{/if}}
+    {{#if signature.refusalLabel}}
+    <p class="azeroth-item__signature-note">{{localize signature.refusalLabel}}</p>
+    {{/if}}
+    {{#if signature.reason}}
+    <p class="azeroth-item__signature-note">{{localize signature.reason}}</p>
+    {{/if}}
+  </section>
+  {{/if}}
+</div>

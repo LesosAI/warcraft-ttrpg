@@ -1,0 +1,18 @@
+{{!-- Behavior closes the block and is always present (D-515). --}}
+<section class="tab azeroth-panel {{tab.cssClass}}" data-tab="notes" data-group="primary">
+  {{#if notes.lore}}
+  {{!-- The paragraph after the block (D4 §10.2), which the tab never printed (2026-09-06). --}}
+  <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Sheet.Lore"}}</h3>
+  <div class="azeroth-lore">{{{notes.lore}}}</div>
+  {{/if}}
+  <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Sheet.Behavior"}}</h3>
+  <div class="azeroth-behavior">{{{notes.behavior}}}</div>
+  {{#if notes.tactics}}
+  <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Sheet.Tactics"}}</h3>
+  <div>{{{notes.tactics}}}</div>
+  {{/if}}
+  {{#if notes.ecology}}
+  <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Sheet.Ecology"}}</h3>
+  <div>{{{notes.ecology}}}</div>
+  {{/if}}
+</section>

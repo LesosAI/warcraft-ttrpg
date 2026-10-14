@@ -1,0 +1,53 @@
+{{!-- What Use does for one ability or Boss Action (D-647). The row passes `prefix`, `index`, `list` and `auto`. --}}
+<div class="azeroth-generator-automation">
+  <label class="azeroth-generator-auto-kind">{{localize "AZEROTH.Generator.Automation.Kind"}}
+    <select name="{{prefix}}-auto-kind-{{index}}" data-generator="automation">{{#each auto.kinds}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}</select>
+  </label>
+  <button type="button" class="azeroth-forge-quiet" data-action="generatorSeedAbility" data-list="{{list}}" data-index="{{index}}">{{localize "AZEROTH.Generator.Automation.Seed"}}</button>
+  {{#if auto.on}}
+  <div class="azeroth-generator-auto-fields">
+    {{#if auto.isSpell}}
+    <label>{{localize "AZEROTH.Generator.Automation.Spell"}} <input type="text" name="{{prefix}}-auto-spell-{{index}}" value="{{auto.spell}}" data-generator="automation" placeholder="{{localize "AZEROTH.Generator.Automation.SpellName"}}"></label>
+    {{else}}
+    <label>{{localize "AZEROTH.Card.Action"}}
+      <select name="{{prefix}}-auto-action-{{index}}" data-generator="automation">{{#each auto.actions}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}</select>
+    </label>
+    <label>{{localize "AZEROTH.Generator.Cost"}}
+      <select name="{{prefix}}-auto-pool-{{index}}" data-generator="automation">{{#each auto.pools}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}</select>
+      <input type="number" name="{{prefix}}-auto-amount-{{index}}" value="{{auto.cost.amount}}" min="0" data-generator="automation" aria-label="{{localize "AZEROTH.Generator.Automation.Amount"}}">
+    </label>
+    <label>{{localize "AZEROTH.Card.Uses"}}
+      <input type="number" name="{{prefix}}-auto-uses-{{index}}" value="{{auto.uses.max}}" min="0" data-generator="automation" aria-label="{{localize "AZEROTH.Card.Uses"}}">
+      <select name="{{prefix}}-auto-per-{{index}}" data-generator="automation">{{#each auto.pers}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}</select>
+    </label>
+    <label><span class="azeroth-forge-check"><input type="checkbox" name="{{prefix}}-auto-casting-{{index}}" data-generator="automation" {{#if auto.casting}}checked{{/if}}> {{localize "AZEROTH.Generator.Automation.Casting"}}</span></label>
+    {{#if auto.isTest}}
+    <label>{{localize "AZEROTH.Roll.DC"}} <input type="number" name="{{prefix}}-auto-dc-{{index}}" value="{{auto.dc}}" min="0" data-generator="automation" placeholder="{{localize "AZEROTH.Generator.Automation.DCDefault"}}"></label>
+    <label>{{localize "AZEROTH.Generator.Automation.Resist"}}
+      <select name="{{prefix}}-auto-resist-{{index}}" data-generator="automation">{{#each auto.resists}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}</select>
+    </label>
+    {{/if}}
+    {{#if auto.isHeal}}
+    <label>{{localize "AZEROTH.Generator.Automation.Heal"}} <input type="number" name="{{prefix}}-auto-heal-{{index}}" value="{{auto.heal}}" min="0" data-generator="automation"></label>
+    {{/if}}
+    {{#if auto.isAttack}}
+    <label>{{localize "AZEROTH.Sheet.AttackBonus"}} <input type="number" name="{{prefix}}-auto-bonus-{{index}}" value="{{auto.attack.bonus}}" data-generator="automation"></label>
+    <label>{{localize "AZEROTH.Item.Damage"}} <input type="number" name="{{prefix}}-auto-rating-{{index}}" value="{{auto.attack.damage}}" min="0" data-generator="automation"></label>
+    <label>{{localize "AZEROTH.Item.Traits"}} <input type="text" name="{{prefix}}-auto-traits-{{index}}" value="{{auto.traits}}" data-generator="automation"></label>
+    {{else}}
+    <label>{{localize "AZEROTH.Card.Damage"}}
+      <input type="number" name="{{prefix}}-auto-damage-{{index}}" value="{{auto.damage.amount}}" min="0" data-generator="automation" aria-label="{{localize "AZEROTH.Card.Damage"}}">
+      <select name="{{prefix}}-auto-type-{{index}}" data-generator="automation">{{#each auto.types}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}</select>
+    </label>
+    {{/if}}
+    <label>{{localize "AZEROTH.Generator.Automation.Area"}} <input type="text" name="{{prefix}}-auto-area-{{index}}" value="{{auto.area}}" data-generator="automation" placeholder="{{localize "AZEROTH.Generator.Automation.AreaHint"}}"></label>
+    <label>{{localize "AZEROTH.Sheet.Inflicts"}}
+      <select name="{{prefix}}-auto-condition-{{index}}" data-generator="automation">{{#each auto.conditions}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}</select>
+      <input type="number" name="{{prefix}}-auto-value-{{index}}" value="{{auto.inflicts.value}}" min="1" data-generator="automation" aria-label="{{localize "AZEROTH.Generator.Automation.Value"}}">
+      <select name="{{prefix}}-auto-until-{{index}}" data-generator="automation" aria-label="{{localize "AZEROTH.Generator.Automation.Until"}}">{{#each auto.untils}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}</select>
+    </label>
+    <label class="azeroth-generator-auto-note">{{localize "AZEROTH.Generator.Automation.Note"}} <input type="text" name="{{prefix}}-auto-note-{{index}}" value="{{auto.note}}" data-generator="automation"></label>
+    {{/if}}
+  </div>
+  {{/if}}
+</div>

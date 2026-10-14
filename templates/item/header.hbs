@@ -1,0 +1,30 @@
+{{!-- Item header: portrait, name, subtype, and where in the book it came from. --}}
+<header class="azeroth-item__header">
+  <img class="azeroth-item__portrait{{#if rarityClass}} {{rarityClass}}{{/if}}" src="{{item.img}}" alt="{{item.name}}"
+       data-edit="img" {{#unless editable}}data-tooltip="{{item.name}}"{{/unless}}>
+
+  <div class="azeroth-item__identity">
+    {{#if editable}}
+      <input class="azeroth-item__name{{#if rarityClass}} {{rarityClass}}{{/if}}" type="text" name="name" value="{{item.name}}">
+    {{else}}
+      <h1 class="azeroth-item__name{{#if rarityClass}} {{rarityClass}}{{/if}}">{{item.name}}</h1>
+    {{/if}}
+    <p class="azeroth-item__type">{{localize (concat "TYPES.Item." item.type)}}</p>
+    {{#if provenance}}
+      {{!-- Never a page number: pagination shifts on every compile (D3 §5). --}}
+      <p class="azeroth-item__source">{{provenance}}</p>
+    {{/if}}
+  </div>
+  {{#if castable}}
+  <div class="azeroth-item__actions">
+    <button type="button" data-action="castSpell">
+      {{localize "AZEROTH.Sheet.Cast"}}
+    </button>
+  </div>
+  {{/if}}
+  {{#if forgeable}}
+  <div class="azeroth-item__actions">
+    <button type="button" data-action="forge">{{localize "AZEROTH.Sheet.Forge"}}</button>
+  </div>
+  {{/if}}
+</header>

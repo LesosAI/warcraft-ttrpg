@@ -1,0 +1,14 @@
+{{!-- Step 7 (01 §5, 02 §4): your own tongue and the side's; a people of neither side says which raised them. --}}
+{{#if pane.asks}}
+<div class="azeroth-creator-methods" role="radiogroup" aria-label="{{localize "AZEROTH.Creator.RaisedBy"}}">
+  <span class="azeroth-forge-name">{{localize "AZEROTH.Creator.RaisedBy"}}</span>
+  {{#each pane.sides as |sd|}}
+  <label class="azeroth-forge-check"><input type="radio" name="side" value="{{sd.key}}" data-creator="side" {{#if sd.selected}}checked{{/if}}> {{sd.label}} ({{sd.tongue}})</label>
+  {{/each}}
+</div>
+{{else}}{{#if pane.raised}}
+<p class="azeroth-dialog-note">{{localize "AZEROTH.Creator.RaisedByIs" side=pane.raised}}</p>
+{{/if}}{{/if}}
+<ul class="azeroth-creator-chips" aria-label="{{localize "AZEROTH.Item.Languages"}}">
+  {{#each pane.languages}}<li class="azeroth-state-chip">{{this}}</li>{{else}}<li class="azeroth-forge-none">{{localize "AZEROTH.Creator.NoRace"}}</li>{{/each}}
+</ul>

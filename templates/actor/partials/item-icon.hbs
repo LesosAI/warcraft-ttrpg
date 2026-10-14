@@ -1,0 +1,21 @@
+{{!--
+  One item icon, ringed in its rarity's colour (D-676).
+
+  **A ring is a SECOND carrier, not the only one** - the name beside it
+  already takes the rarity's colour on every surface that uses this partial
+  (D-634), and the item sheet says the rarity in words. That is what makes a
+  colour-only ring legitimate here (D5, CLAUDE.md SS22).
+
+  The ring is an OUTLINE rather than a border: the row icons are `flex: none`
+  at exactly 20px with no space budgeted for a frame, and the spell row's grid
+  track is a hard 20px, so a border would shrink the art or reflow the row.
+  Common takes no rarity class and falls back to a neutral iron ring, so every
+  icon is framed the same way and only the colour changes.
+--}}
+{{#if img}}
+<span class="azeroth-icon {{#if rarityClass}}{{rarityClass}}{{else}}azeroth-rarity-common{{/if}}">
+  <img src="{{img}}" alt="">
+</span>
+{{else}}
+<span class="azeroth-icon azeroth-icon--empty"></span>
+{{/if}}

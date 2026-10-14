@@ -1,0 +1,58 @@
+{{!--
+  The chooser for a feature that is a menu (D-618, D-619): one select over
+  the options the class's level has reached, each option's effect listed
+  under it so the choice is made with the rule in view. An option's tag is a
+  totem's level, a creature's tier and weight class, or "known" on a form
+  already learned; the note, where there is one, is the Forms count.
+  DialogV2 wraps this in its own <form>; the field name `choice` is the
+  contract with workflows.mjs.
+
+  WHERE THE USE TAKES MORE THAN ONE (02 SS7's Totem Mastery, D-710) the select
+  becomes a checkbox on every row - the same list, the same greying - and the
+  prompt says how many. It is the ONE chooser either way (D-673). A row may
+  arrive `checked`, and `selectAll` puts a row above the list that ticks every
+  one that is still open (D-721).
+
+  `multi` and `max` are spread onto every option as well as the root: a bare
+  name inside `#each` resolves against the row, not the root (D-609).
+--}}
+<div class="azeroth-dialog azeroth-choose">
+  <div class="azeroth-dialog-row">
+    {{#if multi}}
+    <span class="azeroth-choose-prompt">{{prompt}}</span>
+    {{else}}
+    <label for="azeroth-choose-select">{{prompt}}</label>
+    <select id="azeroth-choose-select" name="choice" autofocus>
+      {{#each options as |o|}}
+      <option value="{{o.index}}"{{#if o.disabled}} disabled{{/if}}{{#if o.selected}} selected{{/if}}>{{o.name}}{{#if o.tag}} ({{o.tag}}){{/if}}</option>
+      {{/each}}
+    </select>
+    {{/if}}
+  </div>
+  {{#if note}}<p class="azeroth-dialog-note azeroth-choose-note">{{note}}</p>{{/if}}
+  {{!-- Every row at once (D-721). A checklist's row only, above the list, and
+        carrying NO data-action: DialogV2 has no actions map, and a checkbox
+        emits change rather than click either way. --}}
+  {{#if selectAll}}
+  <label class="azeroth-choose-tick azeroth-choose-all">
+    <input type="checkbox" name="all">
+    <span>{{localize "AZEROTH.Feature.SelectAll"}}</span>
+  </label>
+  {{/if}}
+  <dl class="azeroth-choose-list">
+    {{#each options as |o|}}
+    <div class="azeroth-choose-option{{#if o.disabled}} is-unavailable{{/if}}" data-index="{{o.index}}">
+      <dt>
+        {{#if o.multi}}
+        <label class="azeroth-choose-tick">
+          <input type="checkbox" name="choice" value="{{o.index}}"{{#if o.disabled}} disabled{{/if}}{{#if o.checked}} checked{{/if}}{{#if o.selected}} autofocus{{/if}}>
+          <span>{{o.name}}</span>
+        </label>
+        {{else}}{{o.name}}{{/if}}
+        {{#if o.tag}} <span class="azeroth-choose-level">{{o.tag}}</span>{{/if}}
+      </dt>
+      <dd>{{{o.html}}}</dd>
+    </div>
+    {{/each}}
+  </dl>
+</div>

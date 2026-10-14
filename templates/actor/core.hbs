@@ -1,0 +1,78 @@
+{{!-- Pools, rest, conditions and career (D11 SS1). --}}
+<section class="tab azeroth-panel {{tab.cssClass}}" data-tab="core" data-group="primary">
+  {{!-- The identity lines (D-636): the tongues spoken, and 01 SS8's one sentence. --}}
+  <dl class="azeroth-core-identity">
+    <dt>{{localize "AZEROTH.Sheet.Languages"}}</dt>
+    <dd>{{#each languages}}<span class="azeroth-state-chip">{{this}}</span>{{else}}{{azerothDash null}}{{/each}}</dd>
+    <dt>{{localize "AZEROTH.Sheet.Motive"}}</dt>
+    <dd>{{#if editable}}<input type="text" name="system.motive" value="{{system.motive}}" aria-label="{{localize "AZEROTH.Sheet.Motive"}}">{{else}}{{system.motive}}{{/if}}</dd>
+  </dl>
+
+  {{!-- One partial for every pool, shared with the Spells header (D-614). --}}
+  {{#each pools}}
+  {{> systems/azeroth-rpg/templates/actor/partials/pool.hbs this}}
+  {{/each}}
+
+  <div class="azeroth-rest">
+    <button type="button" data-action="shortRest">{{localize "AZEROTH.Sheet.ShortRest"}}</button>
+    <button type="button" data-action="longRest">{{localize "AZEROTH.Sheet.LongRest"}}</button>
+  </div>
+
+  {{!-- 05 SS14, 06 SS9: one Tether, stand at 1 Health, no Test. Never restored by a rest. --}}
+  <div class="azeroth-tether">
+    <span>{{localize "AZEROTH.SpiritTether.Label"}} {{system.spiritTether.value}} / {{system.spiritTether.max}}</span>
+    <button type="button" data-action="burnTether">{{localize "AZEROTH.Sheet.BurnTether"}}</button>
+  </div>
+
+  {{#if sustaining.length}}
+  {{!-- D-355: each costs 1 Power at the start of your turn until dropped. --}}
+  <div class="azeroth-sustaining">
+    <span class="azeroth-sustaining-label">{{localize "AZEROTH.Sheet.Sustaining"}}</span>
+    <ul class="azeroth-sustaining-list">
+      {{#each sustaining}}
+      <li><span>{{this.name}}</span>
+        <button type="button" class="azeroth-delete" data-action="stopSustaining" data-spell-id="{{this.spellId}}" data-cast="{{this.cast}}" data-tooltip="{{localize "AZEROTH.Sheet.StopSustaining"}}" aria-label="{{localize "AZEROTH.Sheet.StopSustaining"}}">&times;</button></li>
+      {{/each}}
+    </ul>
+  </div>
+  {{/if}}
+
+  {{!-- The conditions strip and the thresholds; the effect list sits lower (D-665). --}}
+  {{> systems/azeroth-rpg/templates/actor/partials/effects.hbs effects=effects noList=true}}
+
+  <div class="azeroth-fatigue">
+    <span>{{localize "AZEROTH.Sheet.Fatigue"}}</span>
+    <input type="number" name="system.fatigue" value="{{system.fatigue}}" min="0" max="6">
+  </div>
+
+  {{!-- Every effect in force, above Favorites (D-665): always drawn, so the
+        line that says there are none is where they would be. --}}
+  <div class="azeroth-effects">
+    {{> systems/azeroth-rpg/templates/actor/partials/effect-list.hbs effects=effects always=true}}
+  </div>
+
+  {{!-- Favorites (D-612): the starred rows, at the foot of Core (D-665),
+        fifteen at most. Each carries the one button its kind answers to. --}}
+  <h3 class="azeroth-panel-heading azeroth-favorites-heading">
+    {{localize "AZEROTH.Sheet.Favorites"}}
+    <span class="azeroth-favorites-count">{{favorites.count}} / {{favorites.max}}</span>
+  </h3>
+  <ul class="azeroth-favorites">
+    {{#each favorites.rows as |row|}}
+    <li class="azeroth-favorite azeroth-favorite--{{row.type}}" data-item-id="{{row.id}}">
+      {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=row.img rarityClass=row.rarityClass}}
+      <span class="azeroth-favorite-name" data-action="expandItem" role="button" tabindex="0" aria-expanded="false">{{row.name}}</span>
+      <span class="azeroth-favorite-meta">{{#if row.meta}}{{row.meta}}{{else if row.cost}}{{row.cost}}{{else if row.actionLabel}}{{localize row.actionLabel}}{{/if}}</span>
+      {{#if row.uses}}{{> systems/azeroth-rpg/templates/actor/partials/uses.hbs name=row.name uses=row.uses}}{{/if}}
+      {{#if row.castable}}<button type="button" class="azeroth-cast" data-action="castSpell">{{localize "AZEROTH.Sheet.Cast"}}</button>{{/if}}
+      {{#if row.attackable}}<button type="button" data-action="rollAttack">{{localize "AZEROTH.Sheet.Attack"}}</button>{{/if}}
+      {{#if (eq row.type "feature")}}{{#unless row.passive}}<button type="button" class="azeroth-use" data-action="useFeature"{{#unless row.available}} disabled{{/unless}}>{{localize "AZEROTH.Feature.Use"}}</button>{{/unless}}{{/if}}
+      {{#if row.usable}}<button type="button" class="azeroth-use" data-action="useGear">{{localize "AZEROTH.Feature.Use"}}</button>{{/if}}
+      <button type="button" class="azeroth-star is-favorite" data-action="toggleFavorite" data-tooltip="{{localize "AZEROTH.Sheet.Unstar"}}" aria-label="{{localize "AZEROTH.Sheet.Unstar"}}" aria-pressed="true"><i class="fa-solid fa-star"></i></button>
+      {{> systems/azeroth-rpg/templates/actor/partials/item-detail.hbs id=row.id detail=row.detail origin=row.origin description=row.description}}
+    </li>
+    {{else}}
+    <li class="azeroth-favorite azeroth-favorite--empty">{{localize "AZEROTH.Sheet.NoFavorites"}}</li>
+    {{/each}}
+  </ul>
+</section>

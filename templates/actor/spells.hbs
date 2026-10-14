@@ -1,0 +1,95 @@
+{{!--
+  The Spells tab (D-599, D-614): a sixth tab, wide - it spans the Skills
+  column like Gear and Progress. A header first: the Mana bar as Core draws
+  it (one partial, so the two cannot drift), and the spells 07 SS5 grants at
+  each casting class's tier against the spells held. Then the known spells
+  BY TIER, the school a chip on the row; Cast on every row goes through the
+  dialog (D-601). What a character may know is 07 SS1's access table;
+  nothing here enforces it (D2 SS12).
+--}}
+<section class="tab azeroth-panel azeroth-panel-wide {{tab.cssClass}}" data-tab="spells" data-group="primary">
+  <div class="azeroth-spells-header">
+    {{#each spells.pools}}
+    {{> systems/azeroth-rpg/templates/actor/partials/pool.hbs this}}
+    {{else}}
+    <div class="azeroth-pool">
+      <div class="azeroth-pool-head is-absent">
+        <span class="azeroth-pool-label">{{localize "AZEROTH.Sheet.NoPool"}}</span>
+        <span class="azeroth-pool-count">&mdash;</span>
+      </div>
+    </div>
+    {{/each}}
+
+    <dl class="azeroth-spells-known{{#if spells.short}} is-short{{/if}}">
+      <div>
+        <dt>{{localize "AZEROTH.Sheet.SpellsKnown"}}</dt>
+        <dd><strong>{{spells.count}}</strong>{{#if spells.known.length}} / {{spells.minimum}}{{/if}}</dd>
+      </div>
+      {{#each spells.known as |k|}}
+      <div class="azeroth-spells-known-class">
+        <dt>{{k.className}}</dt>
+        <dd>{{localize "AZEROTH.Sheet.SpellsMinimum" minimum=k.minimum tier=k.tier ability=(localize k.abilityAbbr) mod=(azerothSigned k.mod)}}</dd>
+      </div>
+      {{else}}
+      <div><dt></dt><dd class="azeroth-note">{{localize "AZEROTH.Sheet.NoCaster"}}</dd></div>
+      {{/each}}
+    </dl>
+  </div>
+
+  {{!-- IN A SHAPESHIFT FORM THE COLUMN IS FEROCITY (07, D-769), and these are
+        the words that say so: the number alone would read as Mana. --}}
+  {{#if spells.ferocityNote}}<p class="azeroth-note azeroth-spells-ferocity">{{spells.ferocityNote}}</p>{{/if}}
+
+  {{#each spells.tiers as |group|}}
+  <h3 class="azeroth-panel-heading azeroth-tier-heading" data-tier="{{group.tier}}">
+    {{localize "AZEROTH.Talent.Tier"}} {{group.tier}}
+    <span class="azeroth-school-count">{{group.spells.length}}</span>
+  </h3>
+  <ol class="azeroth-spell-list">
+    {{#each group.spells as |spell|}}
+    {{!-- `draggable` is core's own drag selector: dragging a spell to the
+          hotbar makes a macro that CASTS it (the lead, 2026-09-13). --}}
+    <li class="azeroth-spell draggable{{#if spell.sustaining}} is-sustaining{{/if}}" data-item-id="{{spell.id}}">
+      {{#if spell.img}}<img src="{{spell.img}}" alt="">{{else}}<span class="azeroth-spell-spacer"></span>{{/if}}
+      <span class="azeroth-spell-name" data-action="expandItem" role="button" tabindex="0" aria-expanded="false">{{spell.name}}</span>
+      <span class="azeroth-spell-school is-{{spell.school}}">{{#if spell.schoolLabel}}{{localize spell.schoolLabel}}{{/if}}</span>
+      <span class="azeroth-spell-mana{{#if spell.ferocity}} is-ferocity{{/if}}" data-tooltip="{{spell.manaTip}}" aria-label="{{spell.manaTip}}">{{azerothDash spell.mana}}</span>
+      <span class="azeroth-spell-action">{{#if spell.actionLabel}}{{localize spell.actionLabel}}{{/if}}</span>
+      {{!-- Always a cell, so the grid's tracks hold whether or not it is sustained. --}}
+      <span class="azeroth-spell-sustained">{{#if spell.sustaining}}<button type="button" class="azeroth-end-sustain" data-action="endSustain" data-tooltip="{{localize "AZEROTH.Sheet.EndSustain"}}">{{localize "AZEROTH.Sheet.Sustained"}} &times;</button>{{/if}}</span>
+      <button type="button" class="azeroth-cast" data-action="castSpell">{{localize "AZEROTH.Sheet.Cast"}}</button>
+      {{> systems/azeroth-rpg/templates/actor/partials/star.hbs favorite=spell.favorite}}
+      <button type="button" class="azeroth-open" data-action="openItem" data-tooltip="{{localize "AZEROTH.Sheet.Open"}}" aria-label="{{localize "AZEROTH.Sheet.Open"}}"><i class="fa-solid fa-pen-to-square"></i></button>
+      <button type="button" class="azeroth-delete" data-action="deleteItem" data-tooltip="{{localize "AZEROTH.Sheet.Delete"}}" aria-label="{{localize "AZEROTH.Sheet.Delete"}}">&times;</button>
+      {{> systems/azeroth-rpg/templates/actor/partials/item-detail.hbs id=spell.id detail=spell.detail description=spell.description}}
+    </li>
+    {{/each}}
+  </ol>
+  {{else}}
+  <p class="azeroth-note">{{localize "AZEROTH.Sheet.NoSpells"}}</p>
+  {{/each}}
+
+  {{#if spells.fromItems.length}}
+  {{!-- What the carried items cast (D-633): the item's DC or the bearer's, the uses, Cast. --}}
+  <h3 class="azeroth-panel-heading azeroth-tier-heading">{{localize "AZEROTH.Sheet.FromItems"}}<span class="azeroth-school-count">{{spells.fromItems.length}}</span></h3>
+  <ol class="azeroth-item-spells">
+    {{#each spells.fromItems as |s|}}
+    <li class="azeroth-item-spell" data-item-id="{{s.itemId}}" data-index="{{s.index}}">
+      <span class="azeroth-item-spell-name">{{s.name}}</span>
+      <span class="azeroth-item-spell-item{{#if s.rarityClass}} {{s.rarityClass}}{{/if}}">{{s.itemName}}</span>
+      <span class="azeroth-item-spell-dc">{{s.dcLabel}}</span>
+      <span class="azeroth-item-spell-uses">{{#if s.limited}}{{s.value}}/{{s.max}} {{s.perLabel}}{{else}}{{localize "AZEROTH.Forge.Unlimited"}}{{/if}}</span>
+      {{#if s.limited}}
+      <button type="button" class="azeroth-uses-step" data-action="stepSpellUses" data-index="{{s.index}}" data-delta="-1" aria-label="{{localize "AZEROTH.Sheet.UsesDown"}}"{{#unless s.value}} disabled{{/unless}}>&minus;</button>
+      <button type="button" class="azeroth-uses-step" data-action="stepSpellUses" data-index="{{s.index}}" data-delta="1" aria-label="{{localize "AZEROTH.Sheet.UsesUp"}}"{{#if s.full}} disabled{{/if}}>+</button>
+      {{/if}}
+      <button type="button" class="azeroth-cast" data-action="castItemSpell" data-index="{{s.index}}"{{#unless s.available}} disabled{{/unless}}>{{localize "AZEROTH.Sheet.Cast"}}</button>
+    </li>
+    {{/each}}
+  </ol>
+  {{/if}}
+
+  <div class="azeroth-add-row">
+    <button type="button" data-action="browseSpells">{{localize "AZEROTH.Sheet.AddSpell"}}</button>
+  </div>
+</section>

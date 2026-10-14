@@ -1,0 +1,3 @@
+# A LevelDB pack's CURRENT is text to git, and a Windows clone with
+# core.autocrlf would rewrite it to CRLF and corrupt the pack.
+packs/** binary

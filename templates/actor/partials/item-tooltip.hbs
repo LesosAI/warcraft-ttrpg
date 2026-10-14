@@ -1,0 +1,19 @@
+{{!--
+  THE CARD UNDER A TILE (D-738).
+
+  TEXT ONLY. It is rendered once per tile into `tile.tipHtml` and handed to
+  core through `data-tooltip-html`, which passes it through
+  `foundry.utils.cleanHTML` (14.367) — a `class` survives that and an event
+  handler does not, so nothing here may be a control.
+
+  `rules/bags.mjs#tipModel` composes every line; the words arrive localised in
+  a bag (D-677) because that module is pure. **The rarity and the kind are
+  said in WORDS**, so the tile's ring is never the only carrier (D5), and a
+  line with nothing to say is left out rather than drawn empty.
+--}}
+<div class="azeroth-item-tip-body">
+  <p class="azeroth-item-tip-name{{#if tip.rarityClass}} {{tip.rarityClass}}{{/if}}">{{tip.name}}</p>
+  {{#each tip.lines as |line|}}
+  <p class="azeroth-item-tip-line is-{{line.key}}">{{line.text}}</p>
+  {{/each}}
+</div>

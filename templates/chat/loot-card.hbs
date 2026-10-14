@@ -1,0 +1,56 @@
+{{!--
+  The loot card (D-721), in two modes and one template. Accent: gold.
+
+  OFFERED - who is offering how many finds and what purse, to whom - carries
+  the button that opens the shared window. SETTLED replaces it in place when
+  the loot is handed over: the reason it ended, a line per character with
+  @UUID links to what is now on their sheet, what was left behind, and what
+  could not be found. It is ONE message either way, because the settle locks
+  on the offer's own id (`keepId`), which is what stops a GM with two tabs
+  handing the same find out twice.
+
+  Every line is composed in `documents/loot-offer.mjs`. A line CARRYING A
+  `@UUID[...]` mark is printed with a triple stash, as the feature card's bound
+  lines are - core enriches the mark when the message renders, and an escaped
+  stash would print its punctuation instead - and everything else takes the
+  ordinary stash. What the composer splices into a triple-stashed line and the
+  enricher does not own (a character's name, a find's name where its world copy
+  has gone) is escaped there, because a name is a player's to type.
+--}}
+<div class="azeroth azeroth-card azeroth-card-loot" data-message-kind="{{kind}}">
+  {{> systems/azeroth-rpg/templates/chat/partials/card-header.hbs title=title subtitle=subtitle}}
+
+  <div class="azeroth-card-body">
+    {{#if text}}<p class="azeroth-card-line azeroth-loot-offered">{{text}}</p>{{/if}}
+
+    {{!-- WHO MAY OPEN THE WINDOW, on the card itself. The offered card is
+          GM-authored, so `dice/chat.mjs`'s ownership rule would strip this
+          from every player it is actually for; `data-offer-users` is what
+          that module reads to keep it for the invited and take it from
+          everybody else. A settled card has no window to open. --}}
+    {{#if open}}
+    <div class="azeroth-card-open" data-offer-users="{{userIds}}">
+      <button type="button" data-offer-id="{{offerId}}" data-action="openLootOffer">{{localize "AZEROTH.LootOffer.Card.Open"}}</button>
+    </div>
+    {{/if}}
+
+    {{#if reason}}<p class="azeroth-card-line azeroth-loot-reason">{{reason}}</p>{{/if}}
+
+    {{#each lines}}
+    <p class="azeroth-card-line azeroth-loot-gave">{{{this}}}</p>
+    {{/each}}
+
+    {{#if left.length}}
+    <p class="azeroth-card-line azeroth-loot-left-label"><strong>{{leftLabel}}</strong></p>
+    <ul class="azeroth-loot-left">
+      {{#each left}}<li>{{{this}}}</li>{{/each}}
+    </ul>
+    {{/if}}
+
+    {{!-- A note carries NO @UUID: it names a character or a find that could
+          not be found, so it is an ordinary escaped stash. --}}
+    {{#each notes}}
+    <p class="azeroth-note azeroth-loot-note">{{this}}</p>
+    {{/each}}
+  </div>
+</div>

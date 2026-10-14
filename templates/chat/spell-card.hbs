@@ -1,0 +1,223 @@
+{{!-- Spell card. Accent: alliance blue. --}}
+<div class="azeroth azeroth-card azeroth-card-spell" data-message-kind="spell">
+  {{> systems/azeroth-rpg/templates/chat/partials/card-header.hbs title=title subtitle=subtitle}}
+
+  <div class="azeroth-card-body">
+    {{#if source}}<p class="azeroth-card-source">{{source}}</p>{{/if}}
+    <dl class="azeroth-spell-fields">
+      {{#if mana}}<dt>{{localize "AZEROTH.Card.Mana"}}</dt><dd>{{mana}}</dd>{{/if}}
+      {{#if action}}<dt>{{localize "AZEROTH.Card.Action"}}</dt><dd>{{localize (lookup config.actions action)}}</dd>{{/if}}
+      {{#if range}}<dt>{{localize "AZEROTH.Card.Range"}}</dt><dd>{{range}}</dd>{{/if}}
+      {{#if target}}<dt>{{localize "AZEROTH.Card.Target"}}</dt><dd>{{target}}</dd>{{/if}}
+      {{#if duration}}<dt>{{localize "AZEROTH.Card.Duration"}}</dt><dd>{{duration}}</dd>{{/if}}
+    </dl>
+
+    {{#if rolled}}
+    <div class="azeroth-card-headline">
+      <span class="azeroth-total">{{total}}</span>
+      <span class="azeroth-versus">{{localize "AZEROTH.Roll.DC"}} {{azerothDash dc}}</span>
+      {{!-- The kept d20 and what was added to it (2026-09-07): the card
+            said only the total, so a 19 plus 1 read the same as a 4 plus 16. --}}
+      {{#if natural}}<span class="azeroth-natural" data-tooltip="{{localize "AZEROTH.Card.NaturalTip"}}">d20 {{natural}}{{#if modifier}} {{azerothSigned modifier}}{{/if}}</span>{{/if}}
+      <span class="azeroth-sl {{#if success}}is-success{{else}}is-failure{{/if}}">{{azerothSL sl}}</span>
+    </div>
+    {{> systems/azeroth-rpg/templates/chat/partials/verdict.hbs verdict=verdict}}
+    {{#if critical}}<p class="azeroth-flag is-critical">{{localize "AZEROTH.Roll.Critical"}}</p>{{/if}}
+    {{#if fumble}}<p class="azeroth-flag is-fumble">{{localize "AZEROTH.Roll.Fumble"}}</p>{{/if}}
+    {{!-- 07 §8 (the lead, 2026-09-26): a failed Casting Test costs the Mana
+          and nothing else, so the card offers no Resist and no Place area,
+          and says so in words rather than drawing a control that refuses. --}}
+    {{#if didNotGoOff}}<p class="azeroth-note azeroth-card-note azeroth-card-fizzled">{{localize "AZEROTH.Card.DidNotGoOff"}}</p>{{/if}}
+    {{#if healthCost}}<p class="azeroth-card-line azeroth-spell-cost"><span>{{localize "AZEROTH.Cast.HealthCost"}}</span><strong>&minus;{{healthCost}}</strong></p>{{/if}}
+    {{#if overchannel}}
+    <p class="azeroth-card-line">
+      <span>{{localize "AZEROTH.Cast.Overchannel"}}</span>
+      <strong>+{{overchannel.points}} SL</strong>
+      <em>{{localize "AZEROTH.Cast.OverchannelPaid" health=overchannel.health}}</em>
+    </p>
+    {{/if}}
+    {{/if}}
+
+    {{#if damage}}
+    <p class="azeroth-card-line azeroth-damage">
+      <span>{{localize "AZEROTH.Card.Damage"}}</span>
+      <strong>{{damage.final}}</strong>
+      <em>{{damage.explanation}}{{#if riderApplied}} · {{localize "AZEROTH.Card.RiderApplied" conditions=riderApplied}}{{/if}}</em>
+    </p>
+    {{/if}}
+
+    {{#if areaTick}}
+    {{!-- An area that strikes at the start of a turn (D-756): nothing lands on
+          the cast, and this says in words what lands later, and on whom. --}}
+    <p class="azeroth-card-line azeroth-area-tick">
+      <span>{{localize "AZEROTH.Card.AreaTickLabel"}}</span>
+      <strong>{{areaTick.text}}</strong>
+      <em>{{areaTick.note}}</em>
+    </p>
+    {{/if}}
+
+    {{#if tick}}
+    {{!-- What the Apply below lays ON THE CREATURE (D-770; O-144): damage or
+          healing at the start of each of its turns, and for how long, in
+          words. Nothing of it lands on the cast. --}}
+    <p class="azeroth-card-line azeroth-area-tick azeroth-tick">
+      <span>{{localize "AZEROTH.Tick.Label"}}</span>
+      <strong>{{tick.text}}</strong>
+      <em>{{tick.note}}</em>
+    </p>
+    {{/if}}
+    {{#if tickNoClock}}
+    {{!-- A counted tick with nothing to end it is not laid (the D-770 review,
+          item A): said in words, and no Apply is offered for it. --}}
+    <p class="azeroth-card-line azeroth-area-tick azeroth-tick">
+      <span>{{localize "AZEROTH.Tick.Label"}}</span>
+      <em>{{tickNoClock}}</em>
+    </p>
+    {{/if}}
+
+    {{#if temporaryHealth}}
+    {{!-- 05's temporary Health the Apply below grants with the effect it lays
+          (D-777), in words: it rides that effect and goes when it goes. --}}
+    <p class="azeroth-card-line azeroth-area-tick azeroth-temp-line">
+      <span>{{localize "AZEROTH.Temporary.Label"}}</span>
+      <em>{{temporaryHealth}}</em>
+    </p>
+    {{/if}}
+    {{#if floorLine}}
+    {{!-- 07's Aegis of the Light: the floor the Apply lays on each target (D-777). --}}
+    <p class="azeroth-card-line azeroth-area-tick azeroth-floor-line">
+      <span>{{localize "AZEROTH.AegisLight.Label"}}</span>
+      <em>{{floorLine}}</em>
+    </p>
+    {{/if}}
+    {{!-- The cross-class rulings (D-778), each a labelled line in words: the Speed
+          drop or the Slowed a hit laid, the forced move a failed Test or the area
+          makes, the escape a held or Stunned creature is given, a laid effect no
+          Dispel may end. Every row carries what it draws (D-609). --}}
+    {{#each crossLines}}
+    <p class="azeroth-card-line azeroth-area-tick azeroth-cross-line">
+      <span>{{this.label}}</span>
+      <em>{{this.text}}</em>
+    </p>
+    {{/each}}
+
+    {{> systems/azeroth-rpg/templates/chat/partials/heal.hbs heal=heal targets=targets speakerName=speakerName}}
+
+    {{#if resist}}
+    {{!-- 07 SS2: where the spell forces a creature to resist, it does so
+          against the Spell DC - a button the target's owner clicks (D-616).
+          A failure lands the conditions the entry names (2026-09-06).
+          D-726: one row per recorded target, each its own action block
+          naming the creature it belongs to, so `dice/chat.mjs` shows it to
+          that creature's owner and the GM and to nobody else. Every row
+          carries what it draws (D-609). With no target recorded, the one
+          button for the selected tokens. What each Test came to is written
+          above this block, in words, for every reader. A failed Casting Test
+          draws none of it: there is nothing to resist (the lead, 2026-09-26). --}}
+    <div class="azeroth-card-resists">
+      {{#each resistRows}}
+      <div class="azeroth-card-actions" data-resist-owner="{{this.actorUuid}}" data-resist-key="{{this.key}}">
+        <button type="button" data-action="resistTest" data-purpose="spell" data-target-index="{{this.index}}" data-resilience="{{this.resilience}}" data-dc="{{this.dc}}">
+          {{localize "AZEROTH.Card.ResistFor" name=this.name resilience=(localize this.label) dc=(azerothDash this.dc)}}
+        </button>
+      </div>
+      {{else}}
+      <div class="azeroth-card-actions">
+        <button type="button" data-action="resistTest" data-purpose="spell" data-resilience="{{resist.key}}" data-dc="{{resist.dc}}">
+          {{localize "AZEROTH.Card.ResistTest" resilience=(localize resist.label) dc=(azerothDash resist.dc)}}
+        </button>
+      </div>
+      {{/each}}
+      {{#if onFail}}<p class="azeroth-note azeroth-card-note">{{localize "AZEROTH.Card.OnFail" conditions=onFail}}</p>{{/if}}
+    </div>
+    {{/if}}
+
+    {{#if rider}}
+    {{!-- Ice Lance's shape (2026-09-06): the Rating against a target in a condition, as a button where the table knows the target is. --}}
+    <div class="azeroth-card-actions azeroth-card-rider">
+      {{#each rider.targets}}
+      <button type="button" data-action="applyDamage" data-target-index="{{this.index}}" data-damage="{{this.damage}}" data-rider="1">
+        {{localize "AZEROTH.Card.RiderTo" name=this.name conditions=../rider.conditions}} <strong>{{azerothDash this.damage}}</strong>
+      </button>
+      {{/each}}
+      {{#if rider.loose}}
+      <button type="button" data-action="applyDamage" data-damage="{{rider.loose}}" data-rider="1">
+        {{localize "AZEROTH.Card.RiderApply" conditions=rider.conditions}} <strong>{{rider.loose}}</strong>
+      </button>
+      {{/if}}
+    </div>
+    {{/if}}
+
+    {{#if applies}}
+    {{!-- A lasting spell laid on its targets (2026-09-06): the effect carries the entry's text and what it states. --}}
+    <div class="azeroth-card-actions azeroth-card-applies">
+      {{#if applies.self}}
+      <button type="button" data-action="applySpellEffect" data-self="1">{{localize "AZEROTH.Card.ApplySpellSelf" spell=title}}</button>
+      {{else}}
+      {{#each applies.targets}}
+      <button type="button" data-action="applySpellEffect" data-target-index="{{this.index}}">{{localize "AZEROTH.Card.ApplySpellTo" spell=../title name=this.name}}</button>
+      {{else}}
+      <button type="button" data-action="applySpellEffect">{{localize "AZEROTH.Card.ApplySpellControlled" spell=title}}</button>
+      {{/each}}
+      {{/if}}
+    </div>
+    {{/if}}
+
+    {{#if damage}}
+    <div class="azeroth-card-actions">
+      {{#each targets}}
+      <button type="button" data-action="applyDamage" data-target-index="{{this.index}}" data-damage="{{this.damage}}">
+        {{localize "AZEROTH.Card.ApplyTo" name=this.name}} <strong>{{azerothDash this.damage}}</strong>
+      </button>
+      {{else}}
+      <button type="button" data-action="applyDamage" data-damage="{{damage.final}}">
+        {{localize "AZEROTH.Card.ApplyDamage"}}
+      </button>
+      {{/each}}
+    </div>
+    {{/if}}
+
+    {{!-- 04's Shatter at rank 2 (D-775): a spell's Critical Injury on 19 or 20
+          against a target Entangled, Slowed or with its Speed dropped - the
+          attack card's own button, its one press recorded on the card. --}}
+    {{#if criticalInjury}}
+    <div class="azeroth-card-actions">
+      <button type="button" data-action="criticalInjury">
+        {{localize "AZEROTH.Card.RollCriticalInjury"}}
+      </button>
+    </div>
+    {{/if}}
+
+    {{#if talentPresses.length}}
+    {{!-- What a talent offers after the die (D-774): 04's Overload fires the
+          spell again at half its damage at the same targets, and Ancestral
+          Knowledge takes back the Mana a failed Test paid. Each strikes a use of
+          the counter its talent grants, and the door judges it again at the
+          press; a second press of either is refused in words. --}}
+    <div class="azeroth-card-actions azeroth-card-talent-presses">
+      {{#each talentPresses}}
+      <button type="button" data-action="talentPress" data-press="{{this.press}}">{{this.label}}</button>
+      {{/each}}
+    </div>
+    {{/if}}
+
+    {{#if effect}}<div class="azeroth-card-effect">{{{effect}}}</div>{{/if}}
+    {{!-- A taken talent that names this spell or its school (D-642). --}}
+    {{#each talentNotes}}<div class="azeroth-card-effect azeroth-card-talent"><strong>{{this.name}}.</strong> {{{this.effect}}}</div>{{/each}}
+
+    {{#if area}}
+    {{!-- Only where 07 §9's Target line describes a shape, and only where the
+          Casting Test succeeded (the lead, 2026-09-26). --}}
+    <div class="azeroth-card-actions">
+      <button type="button" data-action="placeArea">
+        {{localize "AZEROTH.Area.Place"}}
+        <span class="azeroth-area-shape">{{area.distanceFt}} ft {{area.shape}}</span>
+      </button>
+    </div>
+    {{/if}}
+  </div>
+
+  {{#if provenance.length}}
+  {{> systems/azeroth-rpg/templates/chat/partials/provenance.hbs provenance=provenance}}
+  {{/if}}
+</div>

@@ -1,0 +1,49 @@
+{{!--
+  ONE POOL ROW ON A CREATURE'S SHEET (D-705).
+
+  Lifted whole out of `npc-statistics.hbs`, which drew both pools inline, so
+  the Statistics tab and the Spells tab cannot draw the same pool two ways.
+
+  It carries **no Spend row**, deliberately: `spendPool` is the character
+  sheet's control and this sheet does not register it, so a Spend button here
+  would be a silent no-op (D-681). A creature's Power moves when it casts.
+
+  It DOES carry the stepper (the lead, 2026-09-13), because a GM moving a
+  creature's Power by hand is the same want as moving a character's, and this
+  sheet registers `stepPool` for it.
+
+  The context is `#pool()`'s own row: `{held, name, label, value, max, segments}`
+  plus the `key`, `title` and `editable` the sheet spreads on (D-609), where
+  `name` is already the LOCALIZATION KEY of the pool's type rather than its
+  key — so there is no `is-mana` class to hang a colour on here, as there is on
+  the character's `pool.hbs`.
+--}}
+<div class="azeroth-pool">
+  <div class="azeroth-pool-head{{#unless this.held}} is-absent{{/unless}}">
+    {{!-- Keyed on the NAME, not on `held`: a creature holding a pool its
+          block does not name (every non-Boss, since the tier's floor) has
+          `name` null, and keying on `held` printed an empty label. --}}
+    <span class="azeroth-pool-label">{{#if this.name}}{{localize this.name}}{{else}}{{localize this.label}}{{/if}}</span>
+    {{#if this.held}}{{#if this.editable}}
+    <span class="azeroth-pool-count azeroth-pool-step">
+      <button type="button" class="azeroth-uses-step" data-action="stepPool" data-delta="-1"
+              data-item-id="" data-kind="{{this.key}}"
+              aria-label="{{localize "AZEROTH.Sheet.PoolDown" name=(localize this.title)}}"{{#unless this.value}} disabled{{/unless}}>&minus;</button>
+      <input type="number" class="azeroth-pool-value" data-item-id="" data-kind="{{this.key}}"
+             value="{{this.value}}" min="0" max="{{this.max}}" step="1"
+             aria-label="{{localize "AZEROTH.Sheet.PoolValue" name=(localize this.title)}}">
+      <span class="azeroth-pool-of">/ {{this.max}}</span>
+      <button type="button" class="azeroth-uses-step" data-action="stepPool" data-delta="1"
+              data-item-id="" data-kind="{{this.key}}"
+              aria-label="{{localize "AZEROTH.Sheet.PoolUp" name=(localize this.title)}}"{{#if (eq this.value this.max)}} disabled{{/if}}>+</button>
+    </span>
+    {{else}}
+    <span class="azeroth-pool-count">{{this.value}} / {{this.max}}</span>
+    {{/if}}{{else}}
+    <span class="azeroth-pool-count">&mdash;</span>
+    {{/if}}
+  </div>
+  <div class="azeroth-pool-track">
+    {{#each this.segments}}<span class="azeroth-segment{{#if this.filled}} is-filled{{/if}}"></span>{{/each}}
+  </div>
+</div>

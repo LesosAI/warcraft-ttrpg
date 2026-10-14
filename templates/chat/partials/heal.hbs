@@ -1,0 +1,38 @@
+{{!--
+  The heal block (D-612, D-625): the amount, why, and Apply healing - per
+  target where the card named them, else to the controlled tokens, else to
+  the speaker. A drain heals the caster alone. Where the heal SPLITS (04's
+  Circle of Healing and Chain Heal: the further targets half; Cloudburst's
+  allies the whole; D-774) each target's button carries its own share, which
+  the row carries (D-609: a bare name inside `#each` is the row's).
+--}}
+{{#if heal}}
+<p class="azeroth-card-line azeroth-heal">
+  <span>{{localize "AZEROTH.Card.Heal"}}</span>
+  <strong>{{heal.amount}}</strong>
+  {{#if heal.explanation}}<em>{{heal.explanation}}</em>{{/if}}
+</p>
+<div class="azeroth-card-actions">
+  {{#if heal.self}}
+  <button type="button" data-action="applyHealing" data-self="1" data-heal="{{heal.amount}}">
+    {{localize "AZEROTH.Card.ApplyToSelf" name=speakerName}} <strong>{{heal.amount}}</strong>
+  </button>
+  {{else}}
+  {{#each targets}}
+  {{#if ../heal.perTarget}}
+  <button type="button" data-action="applyHealing" data-target-index="{{this.index}}" data-heal="{{this.healAmount}}">
+    {{localize "AZEROTH.Card.ApplyTo" name=this.name}} <strong>{{this.healAmount}}</strong>
+  </button>
+  {{else}}
+  <button type="button" data-action="applyHealing" data-target-index="{{this.index}}" data-heal="{{../heal.amount}}">
+    {{localize "AZEROTH.Card.ApplyTo" name=this.name}} <strong>{{../heal.amount}}</strong>
+  </button>
+  {{/if}}
+  {{else}}
+  <button type="button" data-action="applyHealing" data-heal="{{heal.amount}}">
+    {{localize "AZEROTH.Card.ApplyHealing"}}
+  </button>
+  {{/each}}
+  {{/if}}
+</div>
+{{/if}}

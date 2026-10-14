@@ -1,0 +1,8 @@
+{{!--
+  The star on a row (D-612): starred rows gather under Fatigue on Core,
+  fifteen at most. `favorite` is the row's; the actor caps the count.
+--}}
+<button type="button" class="azeroth-star{{#if favorite}} is-favorite{{/if}}" data-action="toggleFavorite"
+        data-tooltip="{{#if favorite}}{{localize "AZEROTH.Sheet.Unstar"}}{{else}}{{localize "AZEROTH.Sheet.Star"}}{{/if}}"
+        aria-label="{{#if favorite}}{{localize "AZEROTH.Sheet.Unstar"}}{{else}}{{localize "AZEROTH.Sheet.Star"}}{{/if}}"
+        aria-pressed="{{#if favorite}}true{{else}}false{{/if}}"><i class="fa-{{#if favorite}}solid{{else}}regular{{/if}} fa-star"></i></button>

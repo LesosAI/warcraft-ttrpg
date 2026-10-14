@@ -1,0 +1,55 @@
+{{!--
+  One socket of the Overview figure (D-689, redrawn to WoW's own character
+  pane 2026-09-20): a slot, and what is worn or held in it.
+
+  **THE SOCKET CARRIES NO WORDS.** The lead's reference is WoW's paper doll -
+  eight square icon-only sockets down each side of the figure and a row of
+  them beneath - so the icon in its rarity ring IS the tile. What it is is
+  said twice instead, and both are composed in `#overview`: in the
+  `aria-label`, which names the SLOT and then what is in it, and in the
+  tooltip, which is the Gear tab's own card through `rules/bags.mjs#tipModel`
+  (`data-tooltip-html` for a filled socket, the plain `data-tooltip` for an
+  empty one; the class comes off the `data-tooltip-class` on the figure).
+
+  **AN EMPTY SOCKET IS WoW's OWN SILHOUETTE** for that slot, from the pinned
+  paper-doll textures - `_overview.scss` keys it on `data-slot` - so an empty
+  Head reads as a helm and an empty Feet as a boot without a word on either.
+
+  **THE WHOLE TILE IS ONE CONTROL.** Filled or empty, it carries
+  `data-action="pickSlot"`, and the picker lists only what the character is
+  already carrying for that slot - never the compendium browser (the lead,
+  2026-09-09). A RIGHT CLICK is the second door (`itemContextMenu`): Edit,
+  Unequip, Star and the rest, the same menu a bag tile takes. There is no
+  double-click, because the single click already opens the picker.
+
+  **`data-slot` is on the tile itself**, because it is the drop zone as well
+  as the control - `dropZoneOf` answers by kind and `#dropOnSlot` refuses
+  anything the slot does not take, by name. A finger or a trinket draws two
+  tiles off one slot key, so those carry `data-index` too and a drop on
+  Finger 2 replaces what is in Finger 2.
+
+  **A barred Off hand carries NO action** (D-689): an exclusively two-handed
+  main hand leaves nothing for a shield, an Augment or a second blade, so
+  neither the picker nor a drop may reach the tile. It is greyed AND said in
+  words - the sentence is printed under the hands row by `overview.hbs`,
+  because a tooltip nobody hovers is not a refusal.
+
+  **There is no per-tile Unequip.** Twenty of them crowded the tab; *Take it
+  off* is the first row of the picker now.
+
+  It is a plate with a plain border and no `clip-path`: D11 SS9's bevelled
+  octagons cut off every element hung outside them, twice.
+--}}
+{{!-- No `is-mirrored`: the right column's plates used to run words-then-icon
+      so both columns' text faced the portrait, and a socket has no words to
+      turn round. --}}
+<div class="azeroth-slot-tile {{#if tile.filled}}is-filled{{else}}is-empty{{/if}}{{#if tile.barred}} is-barred{{/if}}"
+     data-slot="{{tile.slot}}"{{#if tile.numbered}} data-index="{{tile.index}}"{{/if}}{{#if tile.id}} data-item-id="{{tile.id}}"{{/if}}
+     aria-label="{{tile.ariaLabel}}"
+     {{#if tile.tipHtml}}data-tooltip-html="{{tile.tipHtml}}"{{else}}data-tooltip="{{tile.tip}}"{{/if}}
+     {{#if tile.barred}}role="button" aria-disabled="true"{{else if tile.editable}}data-action="pickSlot" role="button" tabindex="0"{{else}}role="img"{{/if}}>
+
+  {{#if tile.filled}}
+  {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=tile.img rarityClass=tile.rarityClass}}
+  {{/if}}
+</div>

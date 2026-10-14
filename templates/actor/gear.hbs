@@ -1,0 +1,98 @@
+{{!--
+  Spans the Skills column (D11 SS1), and is ONE CONTINUOUS DARK SLAB (the
+  lead, 2026-09-20): no parchment shows anywhere inside it, from the carry
+  line at the top to the add row at the foot. `_bags.scss` paints
+  `.azeroth-panel[data-tab="gear"]` under `.azeroth.sheet.actor.character`
+  alone; the creature's own Gear tab keeps the page.
+
+  **NO `<h3>`.** The bar's first run is called *Bags* now, so a heading of the
+  same word above it read as a label for that one run - and the tab button
+  already says GEAR. The carry line IS the slab's top strip, and the
+  `aria-label` on the section is what the heading used to give a reader
+  walking the landmarks.
+--}}
+<section class="tab azeroth-panel azeroth-panel-wide {{tab.cssClass}}" data-tab="gear" data-group="primary"
+         aria-label="{{localize "AZEROTH.Tab.gear"}}">
+  {{!-- What you are carrying against what you can, IN BAG SLOTS (05 *Speed
+        and movement*, 08 SS11; D-735). A BAR is right here where it was wrong
+        for XP: D-508 struck that one because "a bar implies a denominator,
+        and there is none", and this denominator is published. The state is in
+        WORDS beside the numbers, never colour alone (D5, CLAUDE.md SS22), and
+        so is the overflow - over capacity can only arise by LOSING capacity,
+        and the character has to be told which. --}}
+  <div class="azeroth-load is-{{load.state}}">
+    <div class="azeroth-load-head">
+      <span class="azeroth-load-label">{{localize "AZEROTH.Sheet.CarryCapacity"}}</span>
+      <span class="azeroth-load-count">{{localize "AZEROTH.Sheet.BagSlotsOf" used=load.carried max=load.capacity}}</span>
+      {{#if load.over}}<span class="azeroth-load-over">{{localize "AZEROTH.Sheet.BagSlotsOver" n=load.over}}</span>{{/if}}
+      {{#if load.penalty}}<span class="azeroth-load-state">{{localize load.label}} &middot; {{localize "AZEROTH.Sheet.LoadPenalty" n=load.penalty}}</span>{{/if}}
+      {{!-- The purse in copper (D-422), printed as the chapter prints it (D-636). --}}
+      <span class="azeroth-purse">{{localize "AZEROTH.Sheet.Purse"}}: <span class="azeroth-purse-coins">{{purse}}</span>{{#if editable}} <input type="number" name="system.coin" value="{{system.coin}}" min="0" step="1" aria-label="{{localize "AZEROTH.Sheet.PurseCopper"}}"> {{localize "AZEROTH.Sheet.Copper"}}{{/if}}</span>
+    </div>
+    <div class="azeroth-load-track" role="img" aria-label="{{localize "AZEROTH.Sheet.BagSlotsOf" used=load.carried max=load.capacity}}">
+      <span class="azeroth-load-fill" style="width: {{load.percent}}%"></span>
+    </div>
+  </div>
+
+  {{> systems/azeroth-rpg/templates/actor/partials/bag-bar.hbs bags=bags}}
+
+  {{!-- THE PANELS BEFORE THE INSPECTOR, in the DOM as well as on the page: a
+        test looking a control up by `[data-item-id="X"]` has to find the TILE
+        first and the hidden card second (D-738). --}}
+  <div class="azeroth-bags-layout{{#unless previewOpen}} is-preview-closed{{/unless}}">
+    <div class="azeroth-bags" data-tooltip-class="azeroth azeroth-item-tip">
+      {{#each bags.panels as |panel|}}
+      {{> systems/azeroth-rpg/templates/actor/partials/bag-panel.hbs panel=panel}}
+      {{/each}}
+    </div>
+
+    {{!--
+      ITEM PREVIEW, hidden and unhidden from its own title strip (the lead,
+      2026-09-20).
+
+      **WITH NOTHING SELECTED THE BODY SAYS NOTHING** - the section is the
+      strip alone. The old *What it is* heading and its *Pick something up
+      above* hint both went with the rename: the strip names the panel and an
+      empty panel beneath a button that says Hide is not a puzzle.
+
+      The body holds one PRERENDERED hidden card per thing, so a click on a
+      tile unhides one and re-renders nothing (D-738); closing the preview
+      hides the body and drops `.azeroth-bags-layout` to one column, so the
+      bags take the full width.
+
+      `data-bag-zone="inspector"` stays on the `<aside>` whether it is open or
+      shut: the drop table sends a foreign thing dropped here to the ordinary
+      pickup and one of the actor's own to nothing.
+    --}}
+    <aside class="azeroth-bag-inspector{{#unless previewOpen}} is-closed{{/unless}}" data-bag-zone="inspector">
+      <div class="azeroth-bag-inspector-strip">
+        <h4 class="azeroth-bag-inspector-head">{{localize "AZEROTH.Bags.Preview"}}</h4>
+        {{!-- A REAL BUTTON: focusable, pressable from the keyboard, carrying
+              its state in `aria-expanded` and naming what it controls. The
+              word changes with the state, so the chevron is never the only
+              carrier (D5). --}}
+        <button type="button" class="azeroth-bag-preview-toggle" data-action="togglePreview"
+                aria-expanded="{{previewOpen}}" aria-controls="{{previewId}}">
+          <span class="azeroth-bag-preview-word">{{#if previewOpen}}{{localize "AZEROTH.Bags.PreviewHide"}}{{else}}{{localize "AZEROTH.Bags.PreviewShow"}}{{/if}}</span>
+          <i class="fa-solid fa-chevron-up" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div class="azeroth-bag-inspector-body" id="{{previewId}}"{{#unless previewOpen}} hidden{{/unless}}>
+        {{#each bags.inspect as |row|}}
+        {{> systems/azeroth-rpg/templates/actor/partials/bag-inspector.hbs row=row}}
+        {{/each}}
+      </div>
+    </aside>
+  </div>
+
+  {{!-- Add opens the compendium browser on the kind (the lead, 2026-09-06); a
+        GM's right click on the button makes a blank one instead. Tidy carries
+        NO `data-type`, because `blankItemMenu` binds
+        `.azeroth-add-row button[data-type]` and a blank Tidy is not a thing. --}}
+  <div class="azeroth-add-row">
+    <button type="button" data-action="browseItems" data-type="weapon">{{localize "AZEROTH.Sheet.AddWeapon"}}</button>
+    <button type="button" data-action="browseItems" data-type="armor">{{localize "AZEROTH.Sheet.AddArmor"}}</button>
+    <button type="button" data-action="browseItems" data-type="gear">{{localize "AZEROTH.Sheet.AddGear"}}</button>
+    <button type="button" class="azeroth-forge-quiet" data-action="tidyBags" data-tooltip="{{localize "AZEROTH.Bags.TidyTip"}}">{{localize "AZEROTH.Bags.Tidy"}}</button>
+  </div>
+</section>

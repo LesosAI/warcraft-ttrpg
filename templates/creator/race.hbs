@@ -1,0 +1,20 @@
+{{!-- Step 1 (01 §2): eleven peoples as tiles; the chosen one's size and trait beside it. --}}
+<div class="azeroth-creator-tiles" role="radiogroup" aria-label="{{localize "AZEROTH.Creator.Step.race"}}">
+  {{#each pane.races as |r|}}
+  <label class="azeroth-creator-tile{{#if r.selected}} is-selected{{/if}}">
+    <input type="radio" name="race" value="{{r.uuid}}" data-creator="race" {{#if r.selected}}checked{{/if}}>
+    <span class="azeroth-creator-tile-name">{{r.name}}</span>
+    <span class="azeroth-creator-tile-meta">{{r.size}} · {{r.trait}}</span>
+  </label>
+  {{/each}}
+</div>
+{{#each pane.races as |r|}}
+{{#if r.selected}}
+<dl class="azeroth-creator-detail">
+  <dt>{{r.name}}</dt>
+  <dd class="azeroth-creator-prose"><strong>{{r.trait}}.</strong> {{{r.traitHtml}}}</dd>
+  <dt>{{localize "AZEROTH.Item.Languages"}}</dt><dd>{{r.languages}}</dd>
+  <dt>{{localize "AZEROTH.Item.ClassAccess"}}</dt><dd>{{r.classes}}</dd>
+</dl>
+{{/if}}
+{{/each}}

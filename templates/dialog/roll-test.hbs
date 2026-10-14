@@ -1,0 +1,286 @@
+{{!--
+  The roll dialog's body. DialogV2 wraps this in its own <form>, so there is
+  none here. Field names are the contract with roll-dialog.mjs#readForm:
+  dc, line-<id>, extraBoons, extraBanes, location, momentum. `attackMode` is
+  the contract with roll-dialog.mjs#switchAttackMode instead (D-731).
+--}}
+<div class="azeroth-dialog">
+  {{#if targetName}}
+  <p class="azeroth-dialog-target">{{localize "AZEROTH.Dialog.Target"}}: <strong>{{targetName}}</strong></p>
+  {{/if}}
+
+  {{#if attackModes}}
+  {{!-- 06 SS1 and 08 SS5's Thrown (D-731): a hand weapon that may be thrown is
+        struck in the hand or thrown, and the way swaps every line below that
+        depends on it. Bound on `change` by roll-dialog.mjs through
+        `data-attack-mode`, with NO data-action: an action fires on click
+        alone. A refused way stays in the list, greyed, and says why. --}}
+  <div class="azeroth-dialog-row azeroth-dialog-mode">
+    <label for="azeroth-dialog-mode">{{localize "AZEROTH.Dialog.AttackMode.Label"}}</label>
+    <select id="azeroth-dialog-mode" name="attackMode" data-attack-mode>
+      {{#each attackModes}}
+      <option value="{{this.mode}}" {{#if this.selected}}selected{{/if}} {{#if this.refused}}disabled{{/if}}>{{localize this.label}}</option>
+      {{/each}}
+    </select>
+    {{#each attackModes}}{{#if this.refused}}
+    <span class="azeroth-dialog-note azeroth-dialog-mode-refused">{{this.refused}}</span>
+    {{/if}}{{/each}}
+  </div>
+  {{/if}}
+
+  {{#if occasions}}
+  {{!-- 10 SS3's occasions, each carrying its DC; choosing one writes the DC. --}}
+  <div class="azeroth-dialog-row azeroth-dialog-occasion">
+    <label for="azeroth-dialog-occasion">{{localize "AZEROTH.Sheet.Occasion"}}</label>
+    <select id="azeroth-dialog-occasion" name="occasion">
+      {{#each occasions}}<option value="{{this.key}}" data-dc="{{this.dc}}">{{localize this.label}}{{#if this.dc}} (DC {{this.dc}}){{/if}}</option>{{/each}}
+    </select>
+  </div>
+  {{/if}}
+
+  {{#if casting}}
+  {{!-- 07 SS8: the Mana comes off first; Overchannel is Health for SL, never below 1. --}}
+  <div class="azeroth-dialog-row azeroth-dialog-casting">
+    <span class="azeroth-dialog-mana{{#unless casting.canPay}} is-short{{/unless}}">
+      {{#if casting.ferocity}}
+      {{!-- In a Shapeshift form the Mana is paid in Ferocity (07, D-769). --}}
+      {{localize "AZEROTH.Shape.FerocityForMana" mana=casting.mana}} <strong>{{casting.ferocity.cost}}</strong>
+      <span class="azeroth-dialog-note">&middot; {{casting.ferocity.value}} / {{casting.ferocity.max}}</span>
+      {{else}}
+      {{localize "AZEROTH.Card.Mana"}} <strong>{{casting.mana}}</strong>
+      {{!-- The dot keeps "Mana 2" and "0 / 20" from reading as one number (the eye, D-619). --}}
+      {{#if casting.pool}}<span class="azeroth-dialog-note">&middot; {{casting.pool.value}} / {{casting.pool.max}}</span>{{/if}}
+      {{/if}}
+    </span>
+    <label>{{localize "AZEROTH.Cast.Overchannel"}}
+      <input type="number" name="overchannel" value="0" min="0" max="{{casting.maxPoints}}" step="1"{{#unless casting.maxPoints}} disabled{{/unless}}>
+    </label>
+    <span class="azeroth-dialog-note">{{localize "AZEROTH.Cast.OverchannelNote" per=casting.perPoint max=casting.maxPoints}}</span>
+    {{!-- The Augment in hand (07 SS3, D-674): the box carries what it is
+          worth and the note names it. A totem is PLANTED, so the thirty feet
+          is the table's call and the note says so (D2 SS12). --}}
+    <label>{{localize "AZEROTH.Cast.Augment"}} <input type="number" name="augment" value="{{#if casting.augment}}{{casting.augment.value}}{{else}}0{{/if}}" step="1"></label>
+    {{#if casting.augment}}
+    <span class="azeroth-dialog-note">{{#if casting.augment.planted}}{{localize "AZEROTH.Augment.PlantedNote" name=casting.augment.name n=casting.augment.note}}{{else}}{{localize "AZEROTH.Augment.HeldNote" name=casting.augment.name}}{{/if}}</span>
+    {{/if}}
+    {{!-- What the next spell was promised (04's Nature's Grace, Predator's
+          Swiftness; D-771): already off the Mana above, named here. --}}
+    {{#each casting.discounts}}
+    <span class="azeroth-dialog-note">{{localize "AZEROTH.Cast.NextSpellNote" name=this.name n=this.amount}}</span>
+    {{/each}}
+    {{!-- What else the next spell was promised (04's Backdraft and Soul Fire;
+          D-775), in words the door composed. --}}
+    {{#each casting.promises}}
+    <span class="azeroth-dialog-note">{{this}}</span>
+    {{/each}}
+  </div>
+  {{#if casting.swift}}
+  {{!-- 04's Nature's Swiftness (D-771): unticked, a use the player spends;
+        greyed with its reason in words beneath it, never by the grey alone (D5). --}}
+  <label class="checkbox azeroth-dialog-line azeroth-dialog-swift{{#unless casting.swift.available}} is-refused{{/unless}}">
+    <input type="checkbox" name="swift"{{#unless casting.swift.available}} disabled{{/unless}}>
+    <span><strong>{{casting.swift.name}}</strong> {{localize "AZEROTH.Cast.Swift.Line"}}</span>
+    <span class="azeroth-dialog-note">{{localize "AZEROTH.Cast.Swift.Left" n=casting.swift.left max=casting.swift.max}}</span>
+  </label>
+  {{#if casting.swift.reason}}<p class="azeroth-dialog-note azeroth-dialog-rider-reason">{{casting.swift.reason}}</p>{{/if}}
+  {{/if}}
+  {{/if}}
+
+  {{#if damageLine}}
+  {{!-- What this blow deals and what it is about to meet (06 SS4, 08 SS7):
+        *Damage 4 Fire &middot; vs Ward 1*. The type is never colour alone. --}}
+  <p class="azeroth-dialog-row azeroth-dialog-damage">
+    <strong>{{damageLine.text}}</strong>
+    {{#if damageLine.note}}<span class="azeroth-dialog-note">&middot; {{damageLine.note}}</span>{{/if}}
+  </p>
+  {{/if}}
+
+  <div class="azeroth-dialog-row azeroth-dialog-dc">
+    <label for="azeroth-dialog-dc">{{localize "AZEROTH.Dialog.DC.Label"}}</label>
+    <input type="number" id="azeroth-dialog-dc" name="dc" value="{{dc}}" min="0" step="1" autofocus>
+    <span class="azeroth-dialog-note">{{localize dcSource}}</span>
+  </div>
+
+  {{#if warnings.length}}
+  <ul class="azeroth-dialog-warnings">
+    {{#each warnings}}<li>{{localize this}}</li>{{/each}}
+  </ul>
+  {{/if}}
+
+  <fieldset class="azeroth-dialog-lines">
+    <legend>{{localize "AZEROTH.Dialog.Automatic"}}</legend>
+    {{#if automatic.length}}
+    {{#each automatic}}
+    <label class="checkbox azeroth-dialog-line">
+      <input type="checkbox" name="line-{{this.id}}" checked>
+      {{!-- A line with a SOURCE says whose it is, as a judgement line already
+            does: *two Banes* alone reads as the tool's own arithmetic rather
+            than as the blow that landed (06 SS6, D-693). --}}
+      <span>{{#if this.name}}<strong>{{this.name}}</strong> {{/if}}{{localize this.label}}</span>
+      <span class="azeroth-dialog-cost">{{#if this.boons}}+{{this.boons}}{{/if}}{{#if this.banes}}&minus;{{this.banes}}{{/if}}{{#if this.modifier}}{{azerothSigned this.modifier}}{{/if}}</span>
+    </label>
+    {{/each}}
+    {{else}}
+    <p class="azeroth-dialog-note">{{localize "AZEROTH.Dialog.Nothing"}}</p>
+    {{/if}}
+  </fieldset>
+
+  {{#if judgement.length}}
+  <fieldset class="azeroth-dialog-lines">
+    <legend>{{localize "AZEROTH.Dialog.Judgement"}}</legend>
+    {{#each judgement}}
+    <label class="checkbox azeroth-dialog-line">
+      <input type="checkbox" name="line-{{this.id}}">
+      <span>{{#if this.name}}<strong>{{this.name}}</strong> {{/if}}{{localize this.label}}</span>
+      <span class="azeroth-dialog-cost">{{#if this.boons}}+{{this.boons}}{{/if}}{{#if this.banes}}&minus;{{this.banes}}{{/if}}{{#if this.modifier}}{{azerothSigned this.modifier}}{{/if}}</span>
+    </label>
+    {{/each}}
+  </fieldset>
+  {{/if}}
+
+  {{#if finisher}}
+  {{!-- 02 SS7's Finisher (D-711 phase 2): *spend all your Combo Points and add
+        that many to the damage of one attack*. Unchecked - how many points a
+        blow is worth is the player's call. --}}
+  <label class="checkbox azeroth-dialog-line azeroth-dialog-finisher">
+    <input type="checkbox" name="finisher">
+    {{!-- 04's Death Mark (D-773): against the target it named the Finisher
+          spends nothing and counts five, and the line says so in words. --}}
+    <span>{{#if finisher.free}}{{localize "AZEROTH.Dialog.FinisherFree" talent=finisher.free n=finisher.counts}}{{else}}{{localize "AZEROTH.Dialog.Finisher" n=finisher.value}}{{/if}}</span>
+    <span class="azeroth-dialog-note">{{finisher.value}} / {{finisher.max}}</span>
+  </label>
+  {{#if finisher.bleeding}}
+  {{!-- 04's Rupture (D-773): Bleeding in place of the Finisher's added damage.
+        A <select> read by readForm on change, so no data-action. --}}
+  <div class="azeroth-dialog-row azeroth-dialog-finisher-mode">
+    <label for="azeroth-dialog-finisher-mode">{{localize "AZEROTH.Dialog.FinisherMode"}}</label>
+    <select id="azeroth-dialog-finisher-mode" name="finisherMode">
+      <option value="damage" selected>{{localize "AZEROTH.Dialog.FinisherDamage"}}</option>
+      <option value="bleeding">{{localize "AZEROTH.Dialog.FinisherBleeding" talent=finisher.bleeding.name}}</option>
+    </select>
+  </div>
+  {{/if}}
+  {{/if}}
+
+  {{#if riders.length}}
+  {{!-- What a talent spends as part of this attack (04, D-770; the lead:
+        "Lines on attack dialog"). Unticked - spending a pool is the player's
+        call (D2 SS12) - priced, and a refused line greyed WITH its reason in
+        words beneath it, never by the grey alone (D5). `rider-<identifier>` is
+        readForm's contract, and the roll judges every tick again. --}}
+  <fieldset class="azeroth-dialog-lines azeroth-dialog-riders">
+    <legend>{{localize "AZEROTH.Rider.Legend"}}</legend>
+    {{#each riders}}
+    {{!-- A line paid before the blow from the Combat tab is drawn ticked and
+          greyed, and its words say so: it is not refused, so it does not
+          take the refused ink (D-770; the lead: "Either order"). --}}
+    <label class="checkbox azeroth-dialog-line azeroth-dialog-rider{{#if this.primed}} is-paid{{else}}{{#unless this.available}} is-refused{{/unless}}{{/if}}">
+      <input type="checkbox" name="rider-{{this.identifier}}" {{#if this.primed}}checked {{/if}}{{#unless this.available}}disabled{{/unless}}>
+      <span><strong>{{this.name}}</strong>{{#if this.does}} {{this.does}}{{/if}}</span>
+      <span class="azeroth-dialog-cost">{{this.price}}</span>
+    </label>
+    {{#if this.reason}}<p class="azeroth-dialog-note azeroth-dialog-rider-reason">{{this.reason}}</p>{{/if}}
+    {{/each}}
+  </fieldset>
+  {{/if}}
+
+  {{#if talentLines.length}}
+  {{!-- What a talent's counter or charge buys on this roll (04's Inner Focus,
+        Lava Burst and Static Charge; D-774). Unticked - spending a use is the
+        player's call (D2 SS12) - and a line with nothing left greyed WITH its
+        reason in words beneath it (D5). `tline-<identifier>` is readForm's
+        contract, and the workflow judges every tick again. --}}
+  <fieldset class="azeroth-dialog-lines azeroth-dialog-riders azeroth-dialog-talent-lines">
+    <legend>{{localize "AZEROTH.TalentLine.Legend"}}</legend>
+    {{#each talentLines}}
+    <label class="checkbox azeroth-dialog-line azeroth-dialog-rider{{#unless this.available}} is-refused{{/unless}}">
+      <input type="checkbox" name="tline-{{this.identifier}}"{{#unless this.available}} disabled{{/unless}}>
+      <span><strong>{{this.name}}</strong> {{this.does}}</span>
+      <span class="azeroth-dialog-cost">{{this.left}}</span>
+    </label>
+    {{#if this.reason}}<p class="azeroth-dialog-note azeroth-dialog-rider-reason">{{this.reason}}</p>{{/if}}
+    {{/each}}
+  </fieldset>
+  {{/if}}
+
+  {{#if damageLines.length}}
+  {{!-- What a talent adds to the DAMAGE, per rank (04, D-711 phase 2). A line
+        the door measured comes ticked; one the table decides comes unticked
+        (D2 SS12). The names carry the same `line-<id>` contract the Boon and
+        Bane lines do, so `readForm` reads all three the same way. --}}
+  <fieldset class="azeroth-dialog-lines azeroth-dialog-damage-lines">
+    <legend>{{localize "AZEROTH.Dialog.TalentDamage"}}</legend>
+    {{#each damageLines}}
+    <label class="checkbox azeroth-dialog-line">
+      <input type="checkbox" name="line-{{this.id}}" {{#if this.checked}}checked{{/if}}>
+      <span><strong>{{this.name}}</strong> {{localize this.label}}</span>
+      <span class="azeroth-dialog-cost">{{azerothSigned this.amount}}</span>
+    </label>
+    {{/each}}
+  </fieldset>
+  {{/if}}
+
+  {{#if reminders.length}}
+  {{!-- D-613: the passives that could bear on this roll, as notes. A feature
+        with a Boon or Bane of its own is a Situational line above instead. --}}
+  <fieldset class="azeroth-dialog-lines azeroth-dialog-reminders">
+    <legend>{{localize "AZEROTH.Dialog.Reminders"}}</legend>
+    <ul class="azeroth-dialog-reminder-list">
+      {{#each reminders}}
+      <li><strong>{{this.name}}</strong> <span>{{#if this.label}}{{localize this.label}}{{else}}{{this.text}}{{/if}}</span></li>
+      {{/each}}
+    </ul>
+  </fieldset>
+  {{/if}}
+
+  <div class="azeroth-dialog-row azeroth-dialog-extra">
+    <label>{{localize "AZEROTH.Dialog.Boons"}} <input type="number" name="extraBoons" value="0" min="0" max="3" step="1"></label>
+    <label>{{localize "AZEROTH.Dialog.Banes"}} <input type="number" name="extraBanes" value="0" min="0" max="3" step="1"></label>
+  </div>
+
+  {{#if isAttack}}
+  <div class="azeroth-dialog-row azeroth-dialog-location">
+    <label for="azeroth-dialog-location">{{localize "AZEROTH.Dialog.Location"}}</label>
+    <select id="azeroth-dialog-location" name="location">
+      {{#each locations}}
+      <option value="{{@key}}" {{#if (eq @key ../location)}}selected{{/if}}>{{localize this}}</option>
+      {{/each}}
+    </select>
+    {{#if momentum}}
+    <label class="azeroth-dialog-momentum">
+      <input type="checkbox" name="momentum" {{#unless momentum.canPay}}disabled{{/unless}}>
+      <span>{{localize "AZEROTH.Dialog.Momentum" cost=momentum.cost}}</span>
+      <span class="azeroth-dialog-note">{{momentum.value}} / {{momentum.max}}</span>
+    </label>
+    {{/if}}
+    <span class="azeroth-dialog-note">{{localize "AZEROTH.Sheet.CalledShotNote"}}</span>
+  </div>
+  {{/if}}
+
+  {{#if second}}
+  {{!-- 02 SS6's Extra Attack: ONE Attack, two rolls, and the two may split
+        (D-704). The pick is a token the user has targeted, or the same one. --}}
+  <div class="azeroth-dialog-row azeroth-dialog-second">
+    <label for="azeroth-dialog-second">{{localize "AZEROTH.Dialog.SecondAttack"}}</label>
+    <select id="azeroth-dialog-second" name="secondTarget">
+      <option value="same">{{localize "AZEROTH.Dialog.SecondSame"}}</option>
+      {{#each second.targets}}<option value="{{this.tokenId}}">{{this.name}}</option>{{/each}}
+    </select>
+    <span class="azeroth-dialog-note">{{localize "AZEROTH.Dialog.SecondNote"}}</span>
+  </div>
+  {{/if}}
+
+  {{#if modifiers.length}}
+  <dl class="azeroth-dialog-modifiers">
+    {{#each modifiers}}
+    <dt>{{localize this.label}}</dt>
+    <dd>{{azerothSigned this.value}}</dd>
+    {{/each}}
+  </dl>
+  {{/if}}
+
+  <p class="azeroth-dialog-formula">
+    <span>{{localize "AZEROTH.Dialog.Preview"}}</span>
+    <code class="azeroth-dialog-preview">{{preview}}</code>
+  </p>
+</div>

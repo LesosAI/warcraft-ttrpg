@@ -1,0 +1,21 @@
+{{!-- Step 10 (01 §8): a name, a face, and one sentence. --}}
+<div class="azeroth-forge-row">
+  <label for="azeroth-creator-name">{{localize "AZEROTH.Creator.Name"}}</label>
+  <input id="azeroth-creator-name" type="text" name="name" value="{{pane.name}}" data-creator="name" autocomplete="off">
+  <label for="azeroth-creator-img">{{localize "AZEROTH.Creator.Portrait"}}</label>
+  <span class="azeroth-forge-control azeroth-creator-portrait">
+    <img src="{{pane.img}}" alt="">
+    <input id="azeroth-creator-img" type="text" name="img" value="{{pane.img}}" data-creator="img">
+    {{#if pane.canBrowse}}<button type="button" data-action="creatorPortrait">{{localize "AZEROTH.Creator.Browse"}}</button>{{/if}}
+  </span>
+  <label for="azeroth-creator-motive">{{localize "AZEROTH.Creator.Motive"}}</label>
+  <input id="azeroth-creator-motive" type="text" name="motive" value="{{pane.motive}}" data-creator="motive" autocomplete="off">
+  {{#if pane.players}}
+  {{!-- The GM's door hands the character to a player on Finish (2026-09-06); a player's own door makes them its owner without asking. --}}
+  <label for="azeroth-creator-player">{{localize "AZEROTH.Creator.Player"}}</label>
+  <select id="azeroth-creator-player" name="player" data-creator="player">
+    <option value="">{{localize "AZEROTH.Creator.PlayerNone"}}</option>
+    {{#each pane.players as |u|}}<option value="{{u.id}}" {{#if u.selected}}selected{{/if}}>{{u.name}}</option>{{/each}}
+  </select>
+  {{/if}}
+</div>

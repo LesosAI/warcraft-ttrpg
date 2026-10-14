@@ -1,0 +1,15 @@
+{{!--
+  Why the number was what it was. NOT decoration (D11 SS5): the d20, the
+  attribute, Proficiency, the Rank, a called-shot penalty, Momentum spent.
+  A zero part is shown deliberately -- "+0 from Rank" is worth seeing.
+--}}
+<ol class="azeroth-provenance">
+  {{#each provenance}}
+  <li>
+    <span class="azeroth-provenance-label">{{#if this.label}}{{localize this.label}}{{else}}{{azerothLabel this.source}}{{/if}}</span>
+    <span class="azeroth-provenance-value">
+      {{#if this.formula}}{{this.formula}}{{else}}{{azerothSigned this.value}}{{/if}}
+    </span>
+  </li>
+  {{/each}}
+</ol>

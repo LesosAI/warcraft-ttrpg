@@ -1,0 +1,12 @@
+{{!--
+  The uses chip with its stepper (D-623): the uses in hand over the maximum
+  and the period, with a minus and a plus the owner may click. Sits inside a
+  row carrying data-item-id, which is how the handler finds the item.
+--}}
+<span class="azeroth-feature-chip azeroth-feature-uses azeroth-uses">
+  <button type="button" class="azeroth-uses-step" data-action="stepUses" data-delta="-1"
+          aria-label="{{localize "AZEROTH.Sheet.UsesDown" name=name}}"{{#unless uses.value}} disabled{{/unless}}>&minus;</button>
+  <span class="azeroth-uses-count">{{uses.value}}/{{uses.max}} {{localize uses.per}}</span>
+  <button type="button" class="azeroth-uses-step" data-action="stepUses" data-delta="1"
+          aria-label="{{localize "AZEROTH.Sheet.UsesUp" name=name}}"{{#if (eq uses.value uses.max)}} disabled{{/if}}>+</button>
+</span>

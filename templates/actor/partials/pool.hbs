@@ -1,0 +1,49 @@
+{{!--
+  One pool as Core draws it (D11 SS2): label, count, the spend row, and one
+  segment per point the CLASS allows - never a constant. Shared by Core and
+  the Spells header (D-614), so the two bars cannot drift apart.
+--}}
+<div class="azeroth-pool{{#if this.name}} is-{{this.name}}{{/if}}">
+  {{#if this.held}}
+  <div class="azeroth-pool-head">
+    <span class="azeroth-pool-label">{{localize this.label}}</span>
+    {{!--
+      The count, and a stepper either side of it (the lead, 2026-09-13): the
+      Spend row pays a cost, and a GM putting a point back after a miscount had
+      to open the class item. The box is NAMELESS — the value lives on
+      `system.classes[]` and no input could name it — so `change` is bound in
+      `_onRender` through `bindPoolInputs`; an `input` may not carry a
+      `data-action` at all, since actions fire on click.
+    --}}
+    {{#if this.editable}}
+    <span class="azeroth-pool-count azeroth-pool-step">
+      <button type="button" class="azeroth-uses-step" data-action="stepPool" data-delta="-1"
+              data-item-id="{{this.itemId}}" data-kind="{{this.kind}}"
+              aria-label="{{localize "AZEROTH.Sheet.PoolDown" name=(localize this.title)}}"{{#unless this.value}} disabled{{/unless}}>&minus;</button>
+      <input type="number" class="azeroth-pool-value" data-item-id="{{this.itemId}}" data-kind="{{this.kind}}"
+             value="{{this.value}}" min="0" max="{{this.max}}" step="1"
+             aria-label="{{localize "AZEROTH.Sheet.PoolValue" name=(localize this.title)}}">
+      <span class="azeroth-pool-of">/ {{this.max}}</span>
+      <button type="button" class="azeroth-uses-step" data-action="stepPool" data-delta="1"
+              data-item-id="{{this.itemId}}" data-kind="{{this.kind}}"
+              aria-label="{{localize "AZEROTH.Sheet.PoolUp" name=(localize this.title)}}"{{#if (eq this.value this.max)}} disabled{{/if}}>+</button>
+    </span>
+    {{else}}
+    <span class="azeroth-pool-count">{{this.value}} / {{this.max}}</span>
+    {{/if}}
+    <span class="azeroth-spend-row">
+      <input type="number" class="azeroth-spend" value="1" min="1" max="{{this.max}}" aria-label="{{localize "AZEROTH.Sheet.SpendAmount"}}">
+      <button type="button" data-action="spendPool" data-item-id="{{this.itemId}}" data-kind="{{this.kind}}">{{localize "AZEROTH.Sheet.Spend"}}</button>
+    </span>
+  </div>
+  <div class="azeroth-pool-track">
+    {{#each this.segments}}<span class="azeroth-segment{{#if this.filled}} is-filled{{/if}}"></span>{{/each}}
+  </div>
+  {{else}}
+  {{!-- A pool nobody has draws an em-dash, not an empty bar (D-509). --}}
+  <div class="azeroth-pool-head is-absent">
+    <span class="azeroth-pool-label">{{localize "AZEROTH.Sheet.NoPool"}}</span>
+    <span class="azeroth-pool-count">&mdash;</span>
+  </div>
+  {{/if}}
+</div>

@@ -1,0 +1,101 @@
+{{!--
+  One category's entries, with its own filters above them (D-607).
+
+  THE FACETS ARE MULTI-SELECT. They were single `<select>`s, so a reader could
+  ask for Rare items or Epic ones and never for both, and could not ask for a
+  weapon that is Fast AND Reach at all (the lead, 2026-09-07). Every control
+  here carries a `data-*` hook and NO `data-action`: a checkbox, a radio and a
+  text box emit `change` or `input`, never `click`, and the actions map fires
+  on click alone. `compendium-browser.mjs` binds one delegated listener for
+  each event on the window.
+--}}
+<div class="azeroth-browser-category" data-category="{{id}}">
+
+  <div class="azeroth-browser-tools">
+    <label class="azeroth-browser-sort">
+      <span>{{localize "AZEROTH.Browser.SortBy"}}</span>
+      <select data-sort-key aria-label="{{localize "AZEROTH.Browser.SortBy"}}">
+        {{#each sortKeys}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
+      </select>
+    </label>
+    <label class="azeroth-browser-sortdir">
+      <input type="checkbox" data-sort-dir {{#if sortDesc}}checked{{/if}}>
+      <span>{{localize "AZEROTH.Browser.Descending"}}</span>
+    </label>
+    <span class="azeroth-browser-count"></span>
+    <button type="button" data-action="clearFilters" class="azeroth-browser-clear" disabled>
+      {{localize "AZEROTH.Browser.ClearAll"}}
+    </button>
+  </div>
+
+  {{#if filters.length}}
+  <div class="azeroth-browser-facets">
+    {{#each filters}}
+    <details class="azeroth-browser-facet{{#if this.active}} is-active{{/if}}" data-facet="{{this.id}}" {{#if this.open}}open{{/if}}>
+      <summary>{{localize this.label}}</summary>
+
+      {{#if (eq this.kind "range")}}
+        {{!-- A price is typed in 08 SS2's coin and parsed back to copper (D-672),
+              so these are text boxes and not number spinners. --}}
+        <div class="azeroth-browser-range">
+          <label><span>{{localize "AZEROTH.Browser.From"}}</span>
+            <input type="text" data-facet-bound="min" value="{{this.min}}" spellcheck="false"
+                   inputmode="text" aria-label="{{localize "AZEROTH.Browser.From"}}"></label>
+          <label><span>{{localize "AZEROTH.Browser.To"}}</span>
+            <input type="text" data-facet-bound="max" value="{{this.max}}" spellcheck="false"
+                   inputmode="text" aria-label="{{localize "AZEROTH.Browser.To"}}"></label>
+        </div>
+      {{else}}
+        {{#if this.searchable}}
+        <input type="text" class="azeroth-browser-facet-search" data-facet-search="{{this.id}}"
+               placeholder="{{localize "AZEROTH.Browser.NarrowThese"}}" spellcheck="false"
+               aria-label="{{localize "AZEROTH.Browser.NarrowThese"}}">
+        {{/if}}
+
+        <ul class="azeroth-browser-facet-list">
+          {{#each this.options}}
+          <li data-value="{{this.value}}">
+            <label>
+              <input type="checkbox" data-facet-value="{{this.value}}" {{#if this.checked}}checked{{/if}}>
+              <span class="azeroth-browser-facet-label">{{this.label}}</span>
+              <span class="azeroth-browser-facet-count">{{this.count}}</span>
+            </label>
+          </li>
+          {{/each}}
+        </ul>
+
+        {{#if this.multiValued}}
+        {{!-- *Fast* AND *Reach* is a different question from *Fast* OR *Reach*,
+              and only one of them was askable before. --}}
+        <div class="azeroth-browser-mode" role="radiogroup"
+             aria-label="{{localize "AZEROTH.Browser.MatchMode"}}">
+          <label><input type="radio" name="mode-{{../id}}-{{this.id}}" data-facet-mode value="any"
+                        {{#unless (eq this.mode "all")}}checked{{/unless}}>
+            <span>{{localize "AZEROTH.Browser.AnyOf"}}</span></label>
+          <label><input type="radio" name="mode-{{../id}}-{{this.id}}" data-facet-mode value="all"
+                        {{#if (eq this.mode "all")}}checked{{/if}}>
+            <span>{{localize "AZEROTH.Browser.AllOf"}}</span></label>
+        </div>
+        {{/if}}
+      {{/if}}
+    </details>
+    {{/each}}
+
+    {{#if canGenerate}}
+    <button type="button" class="azeroth-browser-generate" data-action="generateAffixed">{{localize "AZEROTH.Affix.Title"}}</button>
+    {{/if}}
+  </div>
+  {{/if}}
+
+  <ol class="azeroth-browser-entries">
+    {{#each entries}}
+    {{!-- data-action opens it; DragDrop sets `draggable` itself. --}}
+    <li class="azeroth-browser-entry" data-uuid="{{this.uuid}}" data-action="openEntry">
+      {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=this.img rarityClass=this.rarityClass}}
+      <span class="azeroth-browser-name{{#if this.rarityClass}} {{this.rarityClass}}{{/if}}">{{this.name}}</span>
+      {{#if this.meta}}<span class="azeroth-browser-meta"{{#if this.metaTitle}} data-tooltip="{{this.metaTitle}}"{{/if}}>{{this.meta}}</span>{{/if}}
+    </li>
+    {{/each}}
+  </ol>
+  <p class="azeroth-browser-empty azeroth-note" hidden>{{localize "AZEROTH.Browser.NothingMatches"}}</p>
+</div>

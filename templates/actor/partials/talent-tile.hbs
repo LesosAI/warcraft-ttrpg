@@ -1,0 +1,64 @@
+{{!--
+  One talent tile (D11 §4, D-509, D-758): WoW's talent socket, drawn for the
+  class tree and for the race's eight.
+
+  * THE SOCKET IS A REAL <button>. It is what the keyboard reaches, and a
+    focused button inside the sheet's <form> is what makes core's
+    KeyboardManager stand aside, so Escape closes the card and never the
+    window (14.367, `hasFocus`). Core's `button > * { pointer-events: none }`
+    is why the card is a SIBLING of the socket and never a child of it.
+  * ICON ONLY on the tree: the name, the ranks and the state are the socket's
+    `aria-label`, the card and the badge. The racial row keeps its name and
+    tier under the socket, because all eight share the race's one image
+    (O-148).
+  * THE BADGE carries `taken/ranks` on its own plate; the ARROW is drawn in the
+    dependent tile, up across one tier gap to the prerequisite (`arrow` is an
+    object or null, never a number, so column 0 draws).
+  * THE CARD is the confirm step (D-509): hover, focus, or a click that pins
+    it. Nothing is spent until Learn is pressed.
+
+  Called with `talent=` and, from the racial row, `racial=true`.
+--}}
+<div class="azeroth-talent azeroth-talent--{{talent.state}}{{#if talent.taken}} azeroth-talent--taken{{/if}}{{#if racial}}{{#unless talent.taken}} azeroth-talent--untaken{{/unless}}{{/if}}"
+     data-item-id="{{talent._id}}"{{#unless racial}} data-column="{{talent.gridColumn}}"{{/unless}}>
+  <button type="button" class="azeroth-talent-socket" id="{{talent.socketId}}" data-action="toggleTalentCard"
+          aria-label="{{talent.label}}" aria-describedby="{{talent.bodyId}}"
+          aria-controls="{{talent.cardId}}" aria-expanded="false">
+    <img class="azeroth-talent-icon" src="{{talent.img}}" alt="" draggable="false">
+    <span class="azeroth-talent-rank" aria-hidden="true">{{talent.taken}}/{{talent.ranks}}</span>
+  </button>
+  {{#if talent.arrow}}<span class="azeroth-talent-arrow{{#if talent.arrow.met}} is-met{{/if}}" aria-hidden="true"></span>{{/if}}
+  {{#if racial}}
+  <span class="azeroth-talent-name">{{talent.name}}</span>
+  <span class="azeroth-talent-tierline">{{localize "AZEROTH.Talent.Tier"}} {{talent.tier}}</span>
+  {{/if}}
+  <div class="azeroth-talent-card" id="{{talent.cardId}}">
+    <h5>{{talent.name}}</h5>
+    <div class="azeroth-talent-card-body" id="{{talent.bodyId}}">
+      <p class="azeroth-talent-meta">
+        {{#if talent.origin}}{{talent.origin}}{{else}}{{localize "AZEROTH.Talent.Tier"}} {{talent.tier}}{{/if}}
+        &middot; {{talent.taken}}/{{talent.ranks}}
+      </p>
+      {{#if talent.requires}}
+      <p class="azeroth-talent-requires">{{localize "AZEROTH.Talent.Requires"}}: <strong>{{talent.requires}}</strong></p>
+      {{/if}}
+      <div class="azeroth-talent-effect">{{{talent.effect}}}</div>
+    </div>
+{{#if talent.uses}}{{#if talent.taken}}<div class="azeroth-talent-uses">{{> systems/azeroth-rpg/templates/actor/partials/uses.hbs name=talent.name uses=talent.uses}}</div>{{/if}}{{/if}}
+    {{#if talent.canTake}}
+    <button type="button" class="azeroth-talent-take" data-action="takeTalent" data-item-id="{{talent._id}}">{{talent.takeLabel}}</button>
+    {{else}}
+    <p class="azeroth-talent-locked">{{localize (concat "AZEROTH.Talent.Locked." talent.lockedBecause)}}</p>
+    {{/if}}
+    {{!-- 04 §1's refund (D-713): a point, or the race's pick, handed back
+          between fights. A refusal is said in WORDS where the button would be,
+          never by its absence alone. --}}
+    {{#if talent.taken}}
+      {{#if talent.untake.ok}}
+      <button type="button" class="azeroth-talent-untake" data-action="untakeTalent" data-item-id="{{talent._id}}">{{talent.untakeLabel}}</button>
+      {{else}}
+      <p class="azeroth-talent-locked">{{talent.untake.text}}</p>
+      {{/if}}
+    {{/if}}
+  </div>
+</div>

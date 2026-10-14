@@ -1,0 +1,19 @@
+{{!--
+  A prompt at a turn's boundary (D-628, D-629): the Poisoned Test at the
+  turn's end, the dying Test at its start. One Test button naming its actor,
+  and Stabilized where the track is the dying one. The Test 07 gives a held or
+  Stunned creature (D-778) names its Resilience and the effect it would end.
+--}}
+<div class="azeroth azeroth-card {{cardClass}}" data-message-kind="prompt">
+  {{> systems/azeroth-rpg/templates/chat/partials/card-header.hbs title=title subtitle=name}}
+
+  <div class="azeroth-card-body">
+    <p class="azeroth-card-text">{{text}}</p>
+    <div class="azeroth-card-actions">
+      <button type="button" data-action="resistTest" data-resilience="{{#if resilience}}{{resilience}}{{else}}body{{/if}}"{{#if dc}} data-dc="{{dc}}"{{/if}} data-actor-uuid="{{actorUuid}}" data-purpose="{{purpose}}"{{#if effectId}} data-effect-id="{{effectId}}"{{/if}}>{{testLabel}}</button>
+      {{#if stabilize}}
+      <button type="button" data-action="stabilize" data-actor-uuid="{{actorUuid}}">{{localize "AZEROTH.Combat.Stabilize"}}</button>
+      {{/if}}
+    </div>
+  </div>
+</div>

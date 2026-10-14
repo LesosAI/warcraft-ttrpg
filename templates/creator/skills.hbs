@@ -1,0 +1,30 @@
+{{!-- Step 5 (01 §4, D-479): the hundred experience on 02 §8's ladder; in-career at the cheap rate. --}}
+{{#if pane.human}}
+<div class="azeroth-forge-row">
+  <label for="azeroth-creator-adaptable">{{localize "AZEROTH.Creator.Adaptable"}}</label>
+  <select id="azeroth-creator-adaptable" name="adaptable" data-creator="adaptable">
+    <option value="">&mdash;</option>
+    {{#each pane.adaptableOptions as |o|}}<option value="{{o.key}}" {{#if o.selected}}selected{{/if}}>{{o.label}}</option>{{/each}}
+  </select>
+</div>
+{{/if}}
+<p class="azeroth-dialog-note">{{localize "AZEROTH.Creator.XpSpent" spent=pane.xp.spent of=pane.xp.of held=pane.xp.held}}</p>
+<ol class="azeroth-creator-skills">
+  {{#each pane.rows as |row|}}
+  {{!-- The name is a button: 02 §8's own words open UNDER the row, so the
+        skill you are reading about stays where your eye already is. The step
+        carried no explanation of any skill at all before (2026-09-07). --}}
+  <li class="azeroth-creator-skill{{#if row.inCareer}} is-in-career{{/if}}{{#if row.expanded}} is-open{{/if}}">
+    <button type="button" class="azeroth-creator-skill-name azeroth-creator-expand" data-action="creatorExpand" data-key="{{row.key}}" aria-expanded="{{row.expanded}}">{{#if row.inCareer}}<span class="azeroth-in-career" aria-hidden="true">●</span> {{/if}}{{row.label}}</button>
+    <span class="azeroth-creator-skill-ability">{{row.abilityAbbr}}</span>
+    <button type="button" class="azeroth-uses-step" data-action="creatorStepRank" data-skill="{{row.key}}" data-delta="-1" {{#unless row.canDown}}disabled{{/unless}} aria-label="{{localize "AZEROTH.Creator.Down"}}">−</button>
+    <span class="azeroth-creator-rank">{{row.rank}}</span>
+    <button type="button" class="azeroth-uses-step" data-action="creatorStepRank" data-skill="{{row.key}}" data-delta="1" {{#unless row.canUp}}disabled{{/unless}} aria-label="{{localize "AZEROTH.Creator.Up"}}">+</button>
+    <span class="azeroth-forge-cost">{{#if row.nextCost}}{{row.nextCost}}{{/if}}</span>
+    <span class="azeroth-creator-skill-total">{{azerothSigned row.total}}</span>
+    {{#if row.expanded}}
+    <div class="azeroth-creator-row-text azeroth-creator-entry">{{{row.text}}}</div>
+    {{/if}}
+  </li>
+  {{/each}}
+</ol>

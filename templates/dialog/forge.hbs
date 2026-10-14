@@ -1,0 +1,224 @@
+{{!--
+  The Forge (D-633). Every control re-renders the window on change so the
+  summary always says what the book makes of the current choices; Apply
+  writes the item, Reset returns it to its base. Every line at 13px, in ink.
+--}}
+<div class="azeroth-dialog">
+  <div class="azeroth-forge-item">
+    {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=item.img rarityClass=rarityClass}}
+    <span class="azeroth-forge-item-name{{#if rarityClass}} {{rarityClass}}{{/if}}">{{item.name}}</span>
+    <span class="azeroth-forge-item-type">{{item.type}}</span>
+  </div>
+
+  <h3 class="azeroth-forge-heading">{{localize "AZEROTH.Forge.Quality"}}</h3>
+  <div class="azeroth-forge-row">
+    <label for="azeroth-forge-rarity">{{localize "AZEROTH.Item.Rarity"}}</label>
+    <select id="azeroth-forge-rarity" name="rarity" data-forge="rarity">
+      {{#each rarities}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
+    </select>
+    <label for="azeroth-forge-name">{{localize "AZEROTH.Forge.Name"}}</label>
+    {{#if named}}
+    <input id="azeroth-forge-name" type="text" name="name" value="{{name}}" data-forge="name">
+    {{else}}
+    <input id="azeroth-forge-name" type="text" value="{{name}}" readonly aria-describedby="azeroth-forge-name-note">
+    {{/if}}
+  </div>
+  {{#unless named}}<p class="azeroth-dialog-note" id="azeroth-forge-name-note">{{localize "AZEROTH.Forge.NameGrammar"}}</p>{{/unless}}
+
+  <h3 class="azeroth-forge-heading">{{localize "AZEROTH.Forge.Affixes"}}</h3>
+  <div class="azeroth-forge-row">
+    {{#each prefixRows as |row|}}
+    <label for="azeroth-forge-prefix-{{row.index}}">{{localize "AZEROTH.Affix.Prefix"}}</label>
+    <span class="azeroth-forge-control">
+      <select id="azeroth-forge-prefix-{{row.index}}" name="prefix-{{row.index}}" data-forge="prefix">
+        <option value="">&mdash;</option>
+        {{#each row.options}}<option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
+      </select>
+      {{#if row.greaterAllowed}}
+      <label class="azeroth-forge-check"><input type="checkbox" name="greater-{{row.index}}" data-affix-name="{{row.affix.name}}" data-forge="greater" {{#if row.greater}}checked{{/if}}> {{localize "AZEROTH.Forge.Greater"}}</label>
+      {{/if}}
+    </span>
+    {{/each}}
+    <label for="azeroth-forge-suffix">{{localize "AZEROTH.Affix.Suffix"}}</label>
+    <select id="azeroth-forge-suffix" name="suffix" data-forge="suffix">
+      <option value="">&mdash;</option>
+      {{#each suffixOptions}}<option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
+    </select>
+  </div>
+  <p class="azeroth-dialog-note">{{localize "AZEROTH.Forge.AffixNote"}}</p>
+
+  <h3 class="azeroth-forge-heading">{{localize "AZEROTH.Item.Signature"}}</h3>
+  {{#if signature.allowed}}
+  <div class="azeroth-forge-row">
+    <label for="azeroth-forge-signature-kind">{{localize "AZEROTH.Forge.SignatureKind.Label"}}</label>
+    <select id="azeroth-forge-signature-kind" name="signatureKind" data-forge="signatureKind">
+      <option value="">{{localize "AZEROTH.Forge.SignatureKind.None"}}</option>
+      {{#each signature.kinds}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}} ({{this.cost}})</option>{{/each}}
+    </select>
+    <label for="azeroth-forge-signature-text">{{localize "AZEROTH.Forge.SignatureText"}}</label>
+    <textarea id="azeroth-forge-signature-text" name="signatureText" data-forge="signatureText" rows="3">{{signature.text}}</textarea>
+  </div>
+  {{!-- WHAT THE READER UNDERSTANDS, BEFORE A WORD IS TYPED (the lead,
+        2026-09-14). Closed by default and it toggles itself: a `<details>`
+        needs no `data-action`, and an action on a non-clickable element is
+        what `module/actions.test.mjs` fails. Every example is run through
+        `seedSignature` by `rules/signature-phrases.test.mjs`, so a row here
+        is a phrase that really fires. --}}
+  {{#if signature.phrases.length}}
+  <details class="azeroth-forge-phrases" {{#if signature.phrasesOpen}}open{{/if}}>
+    <summary>{{localize "AZEROTH.Forge.Phrases.Title"}}</summary>
+    <p class="azeroth-dialog-note">{{localize "AZEROTH.Forge.Phrases.Hint"}}</p>
+    {{#each signature.phrases as |group|}}
+    <p class="azeroth-forge-phrases-group">{{group.label}}</p>
+    <dl class="azeroth-forge-phrases-list">
+      {{#each group.rows as |row|}}
+      <dt>{{row.example}}</dt>
+      <dd>{{row.reads}}</dd>
+      {{/each}}
+    </dl>
+    {{/each}}
+  </details>
+  {{/if}}
+  {{!-- WHAT THE SYSTEM READ IN THOSE WORDS (D-692). The kind, the gate and one
+        line per part that will fire, off the same `seedSignature` Apply
+        stamps. No lines at all is the honest answer that nothing was read. --}}
+  {{#if signature.preview}}
+  <div class="azeroth-forge-preview">
+    <span class="azeroth-forge-preview-kind">
+      {{#if signature.preview.fires}}{{localize signature.preview.kindLabel}}{{else}}{{localize "AZEROTH.Forge.SignatureReadsNothing"}}{{/if}}
+    </span>
+    {{#if signature.preview.reason}}<span class="azeroth-forge-preview-why">{{localize signature.preview.reason}}</span>{{/if}}
+    {{#each signature.preview.gates as |g|}}<span class="azeroth-forge-preview-why">{{g}}</span>{{/each}}
+    {{#if signature.preview.pressGates.length}}
+    <span class="azeroth-forge-preview-why">{{localize "AZEROTH.Signature.PressOnly"}} {{#each signature.preview.pressGates as |g|}}{{#unless @first}} · {{/unless}}{{g}}{{/each}}</span>
+    {{/if}}
+    {{!-- A GATE COVERS ONLY ITS OWN SENTENCE (D-722), so a gated sentence
+          opens with a *Only where …* line of its own and its rules follow it.
+          `signatureSummary` writes both, which is why there is no second
+          shape here: a family added to the summariser reaches a branch and the
+          trunk at once. --}}
+    {{#if signature.preview.lines.length}}
+    <ul class="azeroth-forge-preview-lines">
+      {{#each signature.preview.lines as |line|}}<li>{{line}}</li>{{/each}}
+    </ul>
+    {{/if}}
+  </div>
+  {{/if}}
+  {{!-- TAKE ONE 08 SS20 ALREADY WROTE, or type your own above. Every Signature
+        had to be composed from nothing before (the lead, 2026-09-07). --}}
+  <div class="azeroth-picker azeroth-forge-signature-pick">
+    <input type="text" name="signatureSearch" value="{{signature.catalogueSearch}}" data-picker="signatures"
+           placeholder="{{localize "AZEROTH.Forge.SignatureSearch"}}" aria-label="{{localize "AZEROTH.Forge.SignatureSearch"}}" autocomplete="off">
+    {{!-- TYPED: the catalogue holds hundreds of Signatures since the Classic
+          finds landed (D-685), which is far too many to browse. --}}
+    <ul class="azeroth-picker-list" data-picker-list="signatures" data-picker-typed>
+      {{#each signature.catalogue as |sig index|}}
+      <li data-search="{{sig.search}}">
+        <span class="azeroth-forge-name">{{sig.from}}</span>
+        <span class="azeroth-forge-tier">{{sig.short}}</span>
+        <button type="button" data-action="forgeTakeSignature" data-index="{{index}}"
+                aria-label="{{localize "AZEROTH.Forge.TakeSignatureNamed" name=sig.from}}">{{localize "AZEROTH.Forge.TakeSignature"}}</button>
+      </li>
+      {{/each}}
+      <li class="azeroth-picker-none" hidden>{{localize "AZEROTH.Picker.NoMatch"}}</li>
+    </ul>
+  </div>
+  {{else}}
+  <p class="azeroth-dialog-note">{{localize "AZEROTH.Forge.SignatureNote"}}</p>
+  {{/if}}
+
+  <h3 class="azeroth-forge-heading">{{localize "AZEROTH.Item.Spells"}}</h3>
+  {{#if spells.allowed}}
+  <ol class="azeroth-forge-list">
+    {{#each spells.rows as |sp|}}
+    <li>
+      <span class="azeroth-forge-name">{{sp.name}} <span class="azeroth-forge-tier">{{localize "AZEROTH.Talent.Tier"}} {{sp.tier}}</span></span>
+      <label>{{localize "AZEROTH.Forge.SpellDC"}} <input type="number" name="spell-dc-{{sp.index}}" value="{{sp.dc}}" min="0" data-forge="spell" placeholder="{{localize "AZEROTH.Forge.BearersDC"}}"></label>
+      <label>{{localize "AZEROTH.Forge.SpellUses"}} <input type="number" name="spell-max-{{sp.index}}" value="{{sp.max}}" min="0" data-forge="spell"></label>
+      <select name="spell-per-{{sp.index}}" data-forge="spell" aria-label="{{localize "AZEROTH.Item.UsesPer"}}">
+        <option value="">{{localize "AZEROTH.Forge.Unlimited"}}</option>
+        {{#each sp.perOptions}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
+      </select>
+      <span class="azeroth-forge-cost">{{#if sp.cost}}{{sp.cost}} {{localize "AZEROTH.Forge.Points"}}{{else}}{{localize "AZEROTH.Forge.Unpriced"}}{{/if}}</span>
+      <button type="button" class="azeroth-forge-quiet" data-action="forgeRemoveSpell" data-index="{{sp.index}}" aria-label="{{localize "AZEROTH.Forge.RemoveSpell"}}">&times;</button>
+    </li>
+    {{/each}}
+  </ol>
+  <div class="azeroth-picker">
+    <input type="text" name="spellSearch" value="{{spells.search}}" data-picker="spells" placeholder="{{localize "AZEROTH.Forge.SpellSearch"}}" aria-label="{{localize "AZEROTH.Forge.SpellSearch"}}" autocomplete="off">
+    <ul class="azeroth-picker-list" data-picker-list="spells" data-picker-typed>
+      {{#each spells.options as |sp|}}
+      <li data-search="{{sp.search}}">
+        <span class="azeroth-forge-name">{{sp.name}}</span>
+        <span class="azeroth-forge-tier">{{sp.line}}</span>
+        <button type="button" data-action="forgeAddSpell" data-uuid="{{sp.uuid}}" aria-label="{{localize "AZEROTH.Picker.AddNamed" name=sp.name}}">{{localize "AZEROTH.Forge.AddSpell"}}</button>
+      </li>
+      {{/each}}
+      <li class="azeroth-picker-none" hidden>{{localize "AZEROTH.Picker.NoMatch"}}</li>
+    </ul>
+  </div>
+  <div class="azeroth-forge-add">
+    {{!-- The browser in pick mode (D-645): what you want when you do not know
+          the spell's name, where the typed picker is faster when you do. --}}
+    <button type="button" data-action="forgeBrowseSpell">{{localize "AZEROTH.Forge.BrowseSpell"}}</button>
+  </div>
+  <p class="azeroth-dialog-note">{{localize "AZEROTH.Forge.SpellNote"}}</p>
+  {{else}}
+  <p class="azeroth-dialog-note">{{localize "AZEROTH.Forge.SpellsNamedOnly"}}</p>
+  {{/if}}
+
+  <h3 class="azeroth-forge-heading">{{localize "AZEROTH.Forge.Effects"}}</h3>
+  <ol class="azeroth-forge-list">
+    {{#each effects as |e|}}
+    <li class="azeroth-forge-effect">
+      {{#if e.img}}<img src="{{e.img}}" alt="">{{/if}}
+      <span class="azeroth-forge-name">{{e.name}}</span>
+      <span>{{localize "AZEROTH.Forge.Changes" n=e.changes}}</span>
+      <button type="button" class="azeroth-forge-quiet" data-action="forgeEditEffect" data-effect-id="{{e.id}}">{{localize "AZEROTH.Forge.EditEffect"}}</button>
+      <button type="button" class="azeroth-forge-quiet" data-action="forgeRemoveEffect" data-effect-id="{{e.id}}" aria-label="{{localize "AZEROTH.Forge.RemoveEffect"}}">&times;</button>
+    </li>
+    {{else}}
+    <li class="azeroth-forge-none">{{localize "AZEROTH.Forge.NoEffects"}}</li>
+    {{/each}}
+  </ol>
+  {{!-- COPY ONE THE SYSTEM ALREADY HOLDS, changes and all — every condition in
+        A1 and every effect on a pack item. `Add effect` made a blank one and
+        nothing else, so each had to be composed change by change (2026-09-07). --}}
+  <div class="azeroth-picker azeroth-forge-effect-pick">
+    <input type="text" name="effectSearch" value="{{effectSearch}}" data-picker="effects"
+           placeholder="{{localize "AZEROTH.Forge.EffectSearch"}}" aria-label="{{localize "AZEROTH.Forge.EffectSearch"}}" autocomplete="off">
+    <ul class="azeroth-picker-list" data-picker-list="effects" data-picker-typed>
+      {{#each effectCatalogue as |e|}}
+      <li data-search="{{e.search}}">
+        {{#if e.img}}<img src="{{e.img}}" alt="" width="20" height="20">{{/if}}
+        <span class="azeroth-forge-name">{{e.name}}</span>
+        {{#if e.from}}<span class="azeroth-forge-tier">{{e.from}}</span>{{/if}}
+        <button type="button" data-action="forgeBrowseEffect" data-uuid="{{e.uuid}}"
+                aria-label="{{localize "AZEROTH.Picker.AddNamed" name=e.name}}">{{localize "AZEROTH.Forge.CopyEffect"}}</button>
+      </li>
+      {{/each}}
+      <li class="azeroth-picker-none" hidden>{{localize "AZEROTH.Picker.NoMatch"}}</li>
+    </ul>
+  </div>
+  <div class="azeroth-forge-add">
+    <button type="button" data-action="forgeAddEffect">{{localize "AZEROTH.Forge.AddEffect"}}</button>
+  </div>
+  <p class="azeroth-dialog-note">{{localize "AZEROTH.Forge.EffectNote"}}</p>
+
+  <div class="azeroth-forge-summary" aria-live="polite">
+    <span><strong>{{summary.name}}</strong></span>
+    <span>{{#if summary.band}}{{localize "AZEROTH.Forge.Spent" spent=summary.spent band=summary.band}}{{else}}{{localize "AZEROTH.Forge.Uncosted" spent=summary.spent}}{{/if}}{{#if summary.baseBudget}} &middot; {{localize "AZEROTH.Forge.BaseBudget" n=summary.baseBudget}}{{/if}}</span>
+    <span>{{#if summary.price}}{{localize "AZEROTH.Forge.Price" price=summary.price}}{{else}}{{localize "AZEROTH.Forge.NotSold"}}{{/if}}</span>
+    {{#if summary.reasons.length}}
+    <ul class="azeroth-forge-reasons">{{#each summary.reasons}}<li>{{this}}</li>{{/each}}</ul>
+    {{/if}}
+    {{#if summary.notes.length}}
+    <ul class="azeroth-forge-notes">{{#each summary.notes}}<li>{{this}}</li>{{/each}}</ul>
+    {{/if}}
+  </div>
+
+  <div class="azeroth-forge-buttons">
+    <button type="button" class="azeroth-forge-quiet" data-action="forgeReset">{{localize "AZEROTH.Forge.Reset"}}</button>
+    <button type="submit" {{#unless summary.ok}}aria-disabled="true"{{/unless}}>{{localize "AZEROTH.Forge.Apply"}}</button>
+  </div>
+</div>

@@ -1,0 +1,57 @@
+{{!-- Step 3 (01 §3, D-478): one of three methods, any player's pick; six scores and their modifiers. --}}
+<div class="azeroth-creator-methods" role="radiogroup" aria-label="{{localize "AZEROTH.Creator.Method.Label"}}">
+  {{#each pane.methods as |m|}}
+  <label class="azeroth-forge-check"><input type="radio" name="method" value="{{m.key}}" data-creator="method" {{#if m.selected}}checked{{/if}}> {{m.label}}</label>
+  {{/each}}
+</div>
+
+{{#if pane.isArray}}
+<p class="azeroth-dialog-note">{{localize "AZEROTH.Creator.ArrayIs" array=pane.array}}</p>
+{{/if}}
+{{#if pane.isPointBuy}}
+<p class="azeroth-dialog-note">{{localize "AZEROTH.Creator.PointsSpent" spent=pane.points.spent of=pane.points.of left=pane.points.left}}</p>
+{{/if}}
+{{#if pane.isRoll}}
+<div class="azeroth-forge-add">
+  {{#if pane.rolled}}
+  <span class="azeroth-creator-rolled">{{localize "AZEROTH.Creator.Rolled"}} {{pane.rolledText}}</span>
+  {{#unless pane.floorMet}}<button type="button" data-action="creatorReroll">{{localize "AZEROTH.Creator.Reroll"}}</button>{{/unless}}
+  {{else}}
+  <button type="button" data-action="creatorRoll">{{localize "AZEROTH.Creator.Roll" dice=pane.dice keep=pane.keep}}</button>
+  {{/if}}
+</div>
+{{#if pane.rolled}}{{#unless pane.floorMet}}<p class="azeroth-dialog-note">{{localize "AZEROTH.Creator.Note.rollFloor"}}</p>{{/unless}}{{/if}}
+{{/if}}
+
+<ol class="azeroth-forge-list azeroth-creator-abilities">
+  {{#each pane.abilityRows as |row|}}
+  <li data-ability="{{row.key}}">
+    {{!--
+      01 §3's *"A 16 in the ability your class fights or casts with"*, marked
+      on the row it applies to (the lead, 2026-09-13). INK, never gold, and
+      the words are on the tooltip and the aria-label as well as the glyph:
+      a mark that only a colour carries is no mark (D5).
+
+      The label keeps a span of its OWN: `checkText` measures leaves, and a
+      name span with an element inside it stops being one - the ability's word
+      would then be measured by nothing at all.
+    --}}
+    <span class="azeroth-forge-name azeroth-creator-ability">
+      <span class="azeroth-creator-ability-name">{{row.label}}</span>
+      {{#if row.primary}}<span class="azeroth-creator-primary" role="img" aria-label="{{row.primaryText}}" data-tooltip="{{row.primaryText}}">&#9733;</span>{{/if}}
+    </span>
+    {{#if ../pane.isPointBuy}}
+    <button type="button" class="azeroth-uses-step" data-action="creatorStepScore" data-ability="{{row.key}}" data-delta="-1" {{#unless row.canDown}}disabled{{/unless}} aria-label="{{localize "AZEROTH.Creator.Down"}}">−</button>
+    <span class="azeroth-creator-score">{{row.value}}</span>
+    <button type="button" class="azeroth-uses-step" data-action="creatorStepScore" data-ability="{{row.key}}" data-delta="1" {{#unless row.canUp}}disabled{{/unless}} aria-label="{{localize "AZEROTH.Creator.Up"}}">+</button>
+    <span class="azeroth-forge-cost">{{row.cost}} {{localize "AZEROTH.Creator.Points"}}</span>
+    {{else}}
+    <select name="ability-{{row.key}}" data-creator="ability" aria-label="{{row.label}}">
+      <option value="">&mdash;</option>
+      {{#each row.options as |o|}}<option value="{{o.value}}" {{#if o.selected}}selected{{/if}} {{#if o.disabled}}disabled{{/if}}>{{o.value}}</option>{{/each}}
+    </select>
+    {{/if}}
+    <span class="azeroth-creator-mod">{{row.modText}}</span>
+  </li>
+  {{/each}}
+</ol>

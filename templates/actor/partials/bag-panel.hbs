@@ -1,0 +1,78 @@
+{{!--
+  ONE BAG, DRAWN AS THE WELLS IT HAS (08 §11; D-738).
+
+  **The wells are FIXED**: a panel draws exactly its capacity, so a full bag
+  looks full and an empty one looks empty without reading a number. A
+  multi-slot thing is one tile followed by `size - 1` TAKEN wells, in a
+  contiguous run — `rules/bags.mjs#wellMap` lays them out at the wells
+  `slots.mjs#packPanel` chose, and a taken well never carries a second
+  `data-item-id` or every selector that finds a tile by id would find two of
+  it.
+
+  **EVERY CELL SAYS WHICH WELL IT IS** in `data-well` — a tile, a taken well
+  and an empty one alike — so a drop can name the well a reader aimed at and
+  not only the panel (the lead, 2026-09-20). The value is a STRING, because
+  `{{#if 0}}` is false in Handlebars and the first well of every panel would
+  otherwise carry no attribute at all. A GAP is drawn as a gap: the reader put
+  it there.
+
+  **NOTHING IS EVER HIDDEN.** What will not fit in the wells is drawn in the
+  over row beneath them with the count SAID IN WORDS, rather than dropped;
+  over capacity can only arise by LOSING capacity (a Strength drain, a size
+  change, a world migrated from 0.12.9) and the character has to be able to
+  see what to move.
+
+  The panel is the drop zone: `data-container-id` for a bag, `data-bag-zone`
+  for the figure. `dropZoneOf` reads the nearest of the two off the target.
+--}}
+<section class="azeroth-bag-panel is-{{panel.kind}}{{#if panel.overTiles.length}} is-over{{/if}}"
+         {{#if panel.zone}}data-bag-zone="{{panel.zone}}"{{else}}data-container-id="{{panel.containerId}}"{{/if}}>
+  <h4 class="azeroth-bag-panel-head">
+    <span class="azeroth-bag-panel-name{{#if panel.rarityClass}} {{panel.rarityClass}}{{/if}}">{{panel.label}}</span>
+    <span class="azeroth-bag-panel-count">{{panel.countLine}}</span>
+  </h4>
+  {{#if panel.reasonLine}}<p class="azeroth-bag-panel-note">{{panel.reasonLine}}</p>{{/if}}
+  <ol class="azeroth-bag-grid" role="listbox" aria-label="{{panel.label}}" style="--azeroth-bag-columns: {{panel.columns}}">
+    {{#each panel.cells as |cell|}}
+    {{#if cell.tile}}
+    {{> systems/azeroth-rpg/templates/actor/partials/bag-tile.hbs tile=cell.tile wellKey=cell.wellKey}}
+    {{else if cell.of}}
+    {{!-- A TAKEN WELL WEARS ITS OWNER'S ICON, GHOSTED, so a run that wraps
+          onto the next row can be told from its neighbour's without hovering.
+          The image is DECORATION: `alt=""`, inside an `aria-hidden` cell, not
+          draggable, and carrying no `data-item-id` of its own. The link glyph
+          stays, small in the corner, as the mark that says this is a
+          continuation rather than a second copy of the thing. --}}
+    <li class="azeroth-bag-well is-taken" data-of="{{cell.of}}" data-well="{{cell.wellKey}}" aria-hidden="true">
+      {{#if cell.img}}<img class="azeroth-bag-ghost" src="{{cell.img}}" alt="" draggable="false">{{/if}}
+      <i class="fa-solid fa-link" aria-hidden="true"></i>
+    </li>
+    {{else}}
+    <li class="azeroth-bag-well is-empty" data-well="{{cell.wellKey}}" aria-hidden="true"></li>
+    {{/if}}
+    {{/each}}
+  </ol>
+  {{#unless panel.cells.length}}
+  <p class="azeroth-bag-panel-note">{{panel.emptyLine}}</p>
+  {{/unless}}
+  {{#if panel.overTiles.length}}
+  {{!-- MOVE SOMETHING OUT, said and then DONE. `slots.mjs#arrange` finds the
+        room there is elsewhere; every write it makes lowers a panel's
+        overflow and raises nobody's, so the door judges them like any other
+        drag and no bypass is needed. --}}
+  <div class="azeroth-bag-over-head">
+    <span class="azeroth-bag-over-line">{{panel.overLine}}</span>
+    {{!-- `@root`, because a bare name inside an `#each` resolves against the
+          ROW and the partial is invoked from one (D-609). --}}
+    {{#if @root.editable}}
+    <button type="button" class="azeroth-bag-make-room" data-action="makeRoom"
+            data-tooltip="{{localize "AZEROTH.Bags.MakeRoomTip"}}">{{localize "AZEROTH.Bags.MakeRoom"}}</button>
+    {{/if}}
+  </div>
+  <ol class="azeroth-bag-grid azeroth-bag-over" role="listbox" aria-label="{{panel.overLabel}}" style="--azeroth-bag-columns: {{panel.columns}}">
+    {{#each panel.overTiles as |tile|}}
+    {{> systems/azeroth-rpg/templates/actor/partials/bag-tile.hbs tile=tile}}
+    {{/each}}
+  </ol>
+  {{/if}}
+</section>

@@ -1,0 +1,286 @@
+{{!--
+  The Overview tab (D-687, laid out as WoW's own paper doll by D-689): the
+  figure of every slot with what is worn or held in it, and a column beside
+  it saying what all of it is doing.
+
+  Spans the Skills column (D11 SS1), like Gear, Progress and Spells.
+
+  **Twenty sockets, eighteen keys**: eight down the left, eight down the
+  right, four hands beneath, and the Finger and Trinket slots draw two each.
+  The three rosters come from `rules/worn.mjs` and are ITERATED - a list
+  retyped here would be a second roster to keep in step.
+
+  **EACH SOCKET IS A SQUARE ICON AND NOTHING ELSE** (the lead's reference,
+  2026-09-20). D-689's plates printed the slot's label and the thing's name
+  and the right column's were MIRRORED so both columns' words faced the
+  portrait; a socket has no words to turn round, and the columns simply flank
+  the figure the way WoW's character pane does.
+
+  **Every tile carries `data-slot`, and that is its drop zone.** The sheet's
+  `dropZoneOf` answers BY KIND - `[data-slot]` here, `[data-container-id]` on
+  the Gear tab - so a ring dropped on a Finger tile is worn rather than
+  falling into the container path as a move to nowhere.
+
+  **An empty tile says *Empty* in words** (D5, CLAUDE.md SS22): an unfilled box
+  is a colour, and colour is never the only carrier. Since the sockets became
+  icon-only (the lead, 2026-09-20) those words live in each tile's
+  `aria-label` and in its tooltip; the figure carries the
+  `data-tooltip-class` both read, because core takes it off the nearest
+  ancestor that has one.
+--}}
+<section class="tab azeroth-panel azeroth-panel-wide {{tab.cssClass}}" data-tab="overview" data-group="primary">
+
+  <div class="azeroth-overview">
+
+    <div class="azeroth-overview-figure" data-tooltip-class="azeroth azeroth-item-tip">
+      <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Overview.Worn"}}</h3>
+      {{#if overview.nothing}}
+      <p class="azeroth-note">{{localize "AZEROTH.Overview.NothingWorn"}}</p>
+      {{/if}}
+
+      <div class="azeroth-doll">
+        <div class="azeroth-doll-column">
+          {{#each overview.left as |tile|}}
+          {{> systems/azeroth-rpg/templates/actor/partials/slot-tile.hbs tile=tile}}
+          {{/each}}
+        </div>
+
+        {{!-- The portrait between the columns. `alt` is empty: the name is on
+              the banner two inches above it and a repeat is noise to a reader
+              on a screen reader.
+
+              **THIS IS THE CHARACTER ART** (`system.art`, D-700), not the
+              token and not the directory portrait: the lead asked for *the
+              Character art shown between the gear tabs on Overview* and for a
+              way to set it from here. The image IS the control that sets it -
+              `editArt` opens a FilePicker and writes `system.art` - and it
+              falls back to `actor.img` while nothing is set, so the tab reads
+              as it always did on a character made before the field.
+
+              **The View button is a SECOND control with a second job**, drawn
+              only where art is set. The NPC banner's portrait opens the art
+              because that portrait is the TOKEN and the art is a different
+              image; here the portrait already IS the art, so clicking it to
+              see a larger copy of itself is the weaker gesture and setting it
+              is the ask. Two controls, both labelled, neither hidden. --}}
+        {{!-- `is-empty` where NOTHING has been set (D-700's `hasArt` reads the
+              stored field, never the resolved one). The fallback is core's
+              mystery-man, a white silhouette on nothing, and at the size the
+              figure grew to (the lead, 2026-09-20) it was the brightest thing
+              on the tab. The class is what lets the frame read as an EMPTY
+              FRAME rather than as a picture of somebody. --}}
+        <div class="azeroth-doll-portrait{{#unless overview.hasArt}} is-empty{{/unless}}">
+          <img src="{{overview.portrait}}" alt=""
+               {{#if editable}}data-action="editArt" data-tooltip="{{localize 'AZEROTH.Overview.SetArt'}}"{{/if}}>
+          {{#if overview.hasArt}}
+          <button type="button" class="azeroth-doll-art-view" data-action="viewArt"
+                  data-tooltip="{{localize 'AZEROTH.Sheet.ViewArt'}}">{{localize "AZEROTH.Overview.ViewArt"}}</button>
+          {{/if}}
+        </div>
+
+        {{!-- The right column takes the same socket as the left; only the
+              roster differs (`FIGURE_RIGHT`). --}}
+        <div class="azeroth-doll-column">
+          {{#each overview.right as |tile|}}
+          {{> systems/azeroth-rpg/templates/actor/partials/slot-tile.hbs tile=tile}}
+          {{/each}}
+        </div>
+      </div>
+
+      {{!-- The hands row is centred under the figure, so its heading is too:
+            left-aligned it read as an orphan at the foot of the left socket
+            column (the preview, 2026-09-20). --}}
+      <h4 class="azeroth-overview-heading azeroth-doll-heading">{{localize "AZEROTH.Overview.Hands"}}</h4>
+      <div class="azeroth-doll-hands">
+        {{#each overview.hands as |tile|}}
+        {{> systems/azeroth-rpg/templates/actor/partials/slot-tile.hbs tile=tile}}
+        {{/each}}
+      </div>
+
+      {{#if overview.barredNote}}
+      {{!-- WHY THE OFF HAND IS SHUT, IN WORDS (D-689). The socket is greyed
+            and carries no action; an icon-only tile has nowhere to say why,
+            and a tooltip nobody hovers is not a refusal - so the sentence is
+            printed here, under the row the socket is in. --}}
+      <p class="azeroth-doll-barred">{{overview.barredNote}}</p>
+      {{/if}}
+
+      {{#if overview.alsoReady}}
+      {{!-- 06 SS2 owns the hands and nothing in the book says a shield puts a
+            blade down, so a second equipped weapon is LISTED rather than
+            taken away (D-687). --}}
+      <h4 class="azeroth-overview-heading">{{localize "AZEROTH.Overview.AlsoReady"}}</h4>
+      <ul class="azeroth-overview-ready">
+        {{#each overview.alsoReady as |row|}}
+        <li data-item-id="{{row.id}}">
+          {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=row.img rarityClass=row.rarityClass}}
+          <span class="azeroth-overview-ready-name{{#if row.rarityClass}} {{row.rarityClass}}{{/if}}"
+                data-action="openItem" role="button" tabindex="0">{{row.name}}</span>
+        </li>
+        {{/each}}
+      </ul>
+      {{/if}}
+
+      {{!-- WHAT IS ACTING ON THE CHARACTER RIGHT NOW (the lead, 2026-09-20),
+            in the band of slab the figure leaves under the hands row - the
+            portrait is width-bound at 3:4 and cannot fill the height without
+            cropping, so that band was empty.
+
+            **ALWAYS DRAWN**, so the panel keeps its height and the tab does
+            not jump as a fight starts and stops, and so the line that says
+            there is nothing stands where the rows would be - the rule
+            `effect-list.hbs` keeps on Core with `always` (D-665). --}}
+      {{> systems/azeroth-rpg/templates/actor/partials/in-play.hbs inPlay=overview.inPlay}}
+    </div>
+
+    {{!-- What all of it is doing, on one screen. Every number here is derived
+          in `prepareDerivedData`; nothing on this list is stored. --}}
+    <div class="azeroth-overview-force">
+      {{!-- **STATS**, and it was *In force* until the lead read it (2026-09-20:
+            *Rephrase 'in force'. Idk what that means*). The pane says what the
+            gear and the effects give you, every plate under it names its own
+            section, and Stats is the game's own word for that. The two
+            ordinary English sentences elsewhere - *No effects in force.* on
+            Core and the Corruption note - are left alone. --}}
+      <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Overview.Stats"}}</h3>
+
+      {{#if overview.inForce.shape}}
+      {{!-- THE SHAPE WORN (02 §7, D-769), first: every number under it that
+            the block gives moved with it, and the line says whose they are. --}}
+      <h4 class="azeroth-overview-heading">{{localize "AZEROTH.Shape.Heading"}}</h4>
+      <p class="azeroth-force-line">{{overview.inForce.shape.line}}
+        <span class="azeroth-force-from">{{overview.inForce.shape.from}}</span></p>
+      {{#if overview.inForce.shape.ward}}<p class="azeroth-force-line">{{overview.inForce.shape.ward}}</p>{{/if}}
+      {{#if overview.inForce.shape.melded}}<p class="azeroth-force-line azeroth-force-from">{{overview.inForce.shape.melded}}</p>{{/if}}
+      {{/if}}
+
+      {{#if overview.inForce.abilities}}
+      <h4 class="azeroth-overview-heading">{{localize "AZEROTH.Overview.Attributes"}}</h4>
+      <dl class="azeroth-force-list">
+        {{#each overview.inForce.abilities as |row|}}
+        <dt>{{localize row.label}}</dt>
+        <dd><span class="azeroth-force-value">+{{row.points}}</span> <span class="azeroth-force-from">{{row.from}}</span></dd>
+        {{/each}}
+      </dl>
+      {{/if}}
+
+      {{#if overview.inForce.ward}}
+      <h4 class="azeroth-overview-heading">{{localize "AZEROTH.Sheet.Ward"}}</h4>
+      <dl class="azeroth-force-list">
+        {{#each overview.inForce.ward as |row|}}
+        <dt>{{localize row.label}}</dt>
+        <dd><span class="azeroth-force-value">{{row.value}}</span></dd>
+        {{/each}}
+      </dl>
+      {{/if}}
+
+      {{#if overview.inForce.spellpower}}
+      <h4 class="azeroth-overview-heading">{{localize "AZEROTH.Overview.Spellpower"}}</h4>
+      <dl class="azeroth-force-list">
+        {{#each overview.inForce.spellpower as |row|}}
+        <dt>{{localize row.label}}</dt>
+        <dd><span class="azeroth-force-value">+{{row.value}}</span></dd>
+        {{/each}}
+      </dl>
+      {{/if}}
+
+      {{#if overview.inForce.boons}}
+      <h4 class="azeroth-overview-heading">{{localize "AZEROTH.Overview.Boons"}}</h4>
+      <dl class="azeroth-force-list">
+        {{#each overview.inForce.boons as |row|}}
+        <dt>{{localize row.label}}</dt>
+        <dd><span class="azeroth-force-from">{{row.from}}</span></dd>
+        {{/each}}
+      </dl>
+      {{/if}}
+
+      {{#if overview.inForce.scalars}}
+      {{!-- What a worn thing adds to a number this column already prints
+            (08 SS20): Defense, the Attack Test, Speed, Initiative. The heading
+            below gives the TOTAL Defense, so this row is what moved it, and it
+            names the thing behind every point the way the Attributes row
+            does. --}}
+      <h4 class="azeroth-overview-heading">{{localize "AZEROTH.Overview.Bonuses"}}</h4>
+      <dl class="azeroth-force-list">
+        {{#each overview.inForce.scalars as |row|}}
+        <dt>{{localize row.label}}</dt>
+        <dd><span class="azeroth-force-value">+{{row.points}}</span> <span class="azeroth-force-from">{{row.from}}</span></dd>
+        {{/each}}
+      </dl>
+      {{/if}}
+
+      {{#if overview.inForce.fortitude}}
+      <h4 class="azeroth-overview-heading">{{localize "AZEROTH.Overview.Fortitude"}}</h4>
+      <p class="azeroth-force-line">{{localize "AZEROTH.Overview.FortitudeHealth" n=overview.inForce.fortitude}}</p>
+      {{/if}}
+
+      {{#if overview.inForce.signatures.length}}
+      {{!-- What the Signatures on what is WORN are doing (08 SS20, S3; D-692):
+            the item, what kind of Signature it carries, whether its gate holds
+            for this bearer, and a Use button where there is one to press. A
+            standing Signature draws as text with no button anywhere (D-681),
+            and a gate that fails is said in words rather than by a grey. --}}
+      <h4 class="azeroth-overview-heading">{{localize "AZEROTH.Signature.Heading"}}</h4>
+      <ul class="azeroth-force-signatures">
+        {{#each overview.inForce.signatures as |s|}}
+        {{!-- A ROW'S TEXT FLOOR IS 13px, not the column's 12 (D-608): every
+              one of these lines is inside a list item, so `.azeroth-force-from`
+              beside them would measure `small` on every one. --}}
+        <li data-item-id="{{s.id}}">
+          <span class="azeroth-force-signature-name{{#if s.rarityClass}} {{s.rarityClass}}{{/if}}"
+                data-action="openItem" role="button" tabindex="0">{{s.name}}</span>
+          {{#if s.kindLabel}}<span class="azeroth-force-signature-note">{{localize s.kindLabel}}</span>{{/if}}
+          {{#if s.pressable}}
+          <button type="button" class="azeroth-use" data-action="useSignature"{{#if s.refusal}} disabled{{/if}}>{{localize "AZEROTH.Feature.Use"}}</button>
+          {{/if}}
+          {{#if s.gateFails}}<span class="azeroth-force-signature-note">{{localize "AZEROTH.Signature.GateFails"}}</span>{{/if}}
+          {{!-- A GATE COVERS ONLY ITS OWN SENTENCE (D-722). This column is a
+                SUMMARY, so it names each gated sentence's gate and leaves the
+                holds/fails sentence to the Combat panel and the item sheet -
+                without the line a Signature half of which is a Shaman's reads
+                here as ungated. --}}
+          {{#each s.gatedParts as |part|}}
+          <span class="azeroth-force-signature-note">{{localize "AZEROTH.Signature.PartOnly"}} {{#each part.gates as |g|}}{{#unless @first}} · {{/unless}}{{#if g.value}}{{localize "AZEROTH.Signature.GateValue" kind=(localize g.label) value=g.value}}{{else}}{{localize g.label}}{{/if}}{{/each}}</span>
+          {{/each}}
+          {{#if s.refusalLabel}}<span class="azeroth-force-signature-note">{{localize s.refusalLabel}}</span>{{/if}}
+        </li>
+        {{/each}}
+      </ul>
+      {{/if}}
+
+      {{#if overview.inForce.augment}}
+      {{!-- 07 SS3: the Augment reaches the Casting Test and nothing else, so
+            the line says what it does rather than printing a bare number. --}}
+      <h4 class="azeroth-overview-heading">{{localize "AZEROTH.Overview.Casting"}}</h4>
+      <p class="azeroth-force-line">{{localize "AZEROTH.Augment.HeldNote" name=overview.inForce.augment.name}}</p>
+      <p class="azeroth-force-line"><span class="azeroth-force-value">+{{overview.inForce.augment.bonus}}</span>
+        <span class="azeroth-force-from">{{localize "AZEROTH.Overview.CastingTest"}}</span></p>
+      {{/if}}
+
+      {{!-- A heading and the number, never the word twice: the heading IS the
+            term here, and printing both read as a stutter in the shot. --}}
+      <h4 class="azeroth-overview-heading">{{localize "AZEROTH.Sheet.Defense"}}</h4>
+      <p class="azeroth-force-line"><span class="azeroth-force-value">{{azerothDash overview.inForce.defense}}</span></p>
+
+      <h4 class="azeroth-overview-heading">{{localize "AZEROTH.Sheet.ArmorPoints"}}</h4>
+      <dl class="azeroth-force-list">
+        {{#each overview.inForce.ap as |row|}}
+        <dt>{{localize row.label}}</dt>
+        <dd><span class="azeroth-force-value">{{row.value}}</span></dd>
+        {{/each}}
+      </dl>
+
+      {{!-- The same carry line the Gear tab's head prints, from the same
+            object (05 *Speed and movement*, 08 SS11; D-735): bag slots, with
+            the state in words beside the numbers and the overflow said in
+            words where there is any. --}}
+      <h4 class="azeroth-overview-heading">{{localize "AZEROTH.Sheet.CarryCapacity"}}</h4>
+      <p class="azeroth-force-line">
+        {{localize "AZEROTH.Sheet.BagSlotsOf" used=overview.inForce.load.carried max=overview.inForce.load.capacity}}
+        <span class="azeroth-force-from">{{localize overview.inForce.load.label}}</span>
+        {{#if overview.inForce.load.over}}<span class="azeroth-force-from">{{localize "AZEROTH.Sheet.BagSlotsOver" n=overview.inForce.load.over}}</span>{{/if}}
+      </p>
+    </div>
+
+  </div>
+</section>

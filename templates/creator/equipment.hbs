@@ -1,0 +1,73 @@
+{{!--
+  Step 8 (01 §6, D-480): ten silver in 08's catalogue, browsed inside the
+  window (D-638). The catalogue is SHELVED (2026-09-06): one section a kind
+  of thing - the weapon categories of 08 §7, the armor categories and the
+  shields of §8, the shelves of §9 to §17 - each opening on its summary, the
+  rows sorted by name or by cost on one toggle, and a row's name opening what
+  08 says of the item. A term typed in the picker opens every shelf and hides
+  the ones with nothing showing. The class's kit to start from, the road kit
+  marked.
+--}}
+<div class="azeroth-creator-shop">
+  <div class="azeroth-picker">
+    <div class="azeroth-creator-shop-bar">
+      <input type="text" name="itemSearch" value="{{pane.search}}" data-picker="items" placeholder="{{localize "AZEROTH.Creator.ItemSearch"}}" aria-label="{{localize "AZEROTH.Creator.ItemSearch"}}" autocomplete="off">
+      <button type="button" class="azeroth-forge-quiet azeroth-creator-sort" data-action="creatorSort" data-tooltip="{{localize "AZEROTH.Creator.Sort"}}" aria-label="{{localize "AZEROTH.Creator.Sort"}}">{{#if (eq pane.sort "cost")}}{{localize "AZEROTH.Creator.SortByCost"}}{{else}}{{localize "AZEROTH.Creator.SortByName"}}{{/if}}</button>
+    </div>
+    <ul class="azeroth-picker-list azeroth-creator-shelves" data-picker-list="items">
+      {{#each pane.shelves as |shelf|}}
+      <li class="azeroth-creator-shelf" data-shelf="{{shelf.key}}">
+        <details {{#if shelf.open}}open{{/if}}>
+          <summary><span class="azeroth-forge-name">{{shelf.label}}</span><span class="azeroth-forge-tier">{{shelf.count}}</span></summary>
+          <ol class="azeroth-creator-shelf-rows">
+            {{#each shelf.items as |i|}}
+            <li data-search="{{i.search}}" class="{{#if i.expanded}}is-open{{/if}}">
+              <button type="button" class="azeroth-creator-expand azeroth-forge-name" data-action="creatorExpand" data-key="{{i.uuid}}" aria-expanded="{{i.expanded}}">{{i.name}}</button>
+              <span class="azeroth-forge-cost">{{i.price}}</span>
+              <button type="button" data-action="creatorAddItem" data-picker-pick data-uuid="{{i.uuid}}" aria-label="{{localize "AZEROTH.Picker.AddNamed" name=i.name}}">{{localize "AZEROTH.Creator.AddItem"}}</button>
+              {{#if i.expanded}}
+              <div class="azeroth-creator-row-text azeroth-creator-entry">
+                {{#if i.description}}{{{i.description}}}{{else}}<p class="azeroth-forge-none">{{localize "AZEROTH.Sheet.NoDetail"}}</p>{{/if}}
+                {{#if i.detail}}<p class="azeroth-creator-row-meta">{{i.detail}}</p>{{/if}}
+              </div>
+              {{/if}}
+            </li>
+            {{/each}}
+          </ol>
+        </details>
+      </li>
+      {{/each}}
+      <li class="azeroth-picker-none" hidden>{{localize "AZEROTH.Picker.NoMatch"}}</li>
+    </ul>
+  </div>
+  <div class="azeroth-creator-cart-side">
+    {{#if pane.hasKit}}
+    <div class="azeroth-forge-add"><button type="button" class="azeroth-forge-quiet" data-action="creatorKit">{{localize "AZEROTH.Creator.Kit"}}</button></div>
+    {{/if}}
+    {{#if pane.missing}}<p class="azeroth-dialog-note">{{localize "AZEROTH.Creator.KitMissing" names=pane.missing}}</p>{{/if}}
+    <ol class="azeroth-forge-list azeroth-creator-cart">
+      {{#each pane.rows as |row|}}
+      <li class="{{#if row.expanded}}is-open{{/if}}">
+        {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=row.img rarityClass=row.rarityClass}}
+        <button type="button" class="azeroth-creator-expand azeroth-forge-name" data-action="creatorExpand" data-key="{{row.uuid}}" aria-expanded="{{row.expanded}}">{{row.name}}{{#if row.road}} <span class="azeroth-forge-tier">{{localize "AZEROTH.Creator.Road"}}</span>{{/if}}</button>
+        <span class="azeroth-forge-tier">{{row.type}}</span>
+        <button type="button" class="azeroth-uses-step" data-action="creatorStepQuantity" data-index="{{row.index}}" data-delta="-1" {{#if (eq row.quantity 1)}}disabled{{/if}} aria-label="{{localize "AZEROTH.Creator.Down"}}">−</button>
+        <span class="azeroth-creator-rank">{{row.quantity}}</span>
+        <button type="button" class="azeroth-uses-step" data-action="creatorStepQuantity" data-index="{{row.index}}" data-delta="1" aria-label="{{localize "AZEROTH.Creator.Up"}}">+</button>
+        <span class="azeroth-forge-cost">{{row.price}}{{#if (gt row.quantity 1)}} · {{row.total}}{{/if}}</span>
+        <button type="button" class="azeroth-forge-quiet" data-action="creatorRemoveItem" data-index="{{row.index}}" aria-label="{{localize "AZEROTH.Creator.RemoveItem"}}">&times;</button>
+        {{#if row.note}}<span class="azeroth-creator-row-note">{{row.note}}</span>{{/if}}
+        {{#if row.expanded}}
+        <div class="azeroth-creator-row-text azeroth-creator-entry">
+          {{#if row.description}}{{{row.description}}}{{else}}<p class="azeroth-forge-none">{{localize "AZEROTH.Sheet.NoDetail"}}</p>{{/if}}
+          {{#if row.detail}}<p class="azeroth-creator-row-meta">{{row.detail}}</p>{{/if}}
+        </div>
+        {{/if}}
+      </li>
+      {{else}}
+      <li class="azeroth-forge-none">{{localize "AZEROTH.Creator.CartEmpty"}}</li>
+      {{/each}}
+    </ol>
+    <p class="azeroth-creator-purse{{#if pane.purse.over}} is-over{{/if}}">{{localize "AZEROTH.Creator.Purse" of=pane.purse.of spent=pane.purse.spent change=pane.purse.change}}</p>
+  </div>
+</div>

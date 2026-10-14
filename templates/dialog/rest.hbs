@@ -1,0 +1,47 @@
+{{!--
+  The Short Rest window (05 §16, 08 §12; D-733): what is eaten and what is
+  drunk. Two independent picks, so two selects - the system's one chooser
+  (D-673) answers one list, and this is not one list.
+
+  THE FIRST PAINT IS COMPLETE. The numbers under each row are worked out once
+  through `rules/rest.mjs` on the actor's own snapshot, and the `render`
+  callback in `rest-dialog.mjs` touches only the footer button's `disabled`
+  and the reason line - ApplicationV2 freezes `options` and a write there
+  throws (D-731).
+
+  NO `data-action` ANYWHERE: DialogV2 has no actions map, an action fires on
+  click alone, and `module/actions.test.mjs` audits every template for one
+  no sheet registers. The selects are bound on `change`.
+
+  `{{o.selected}}` inside `{{#each}}` resolves against the row, which is why
+  every flag the loop needs is spread onto it (D-609).
+--}}
+<div class="azeroth-dialog azeroth-rest-dialog">
+  <div class="azeroth-dialog-row azeroth-rest-row">
+    <label for="azeroth-rest-food">{{localize "AZEROTH.Rest.Eat"}}</label>
+    <select id="azeroth-rest-food" name="food">
+      <option value="">{{localize "AZEROTH.Rest.None"}}</option>
+      {{#each food as |o|}}
+      <option value="{{o.value}}"{{#if o.selected}} selected{{/if}}>{{o.label}}{{#if o.tag}} ({{o.tag}}){{/if}}</option>
+      {{/each}}
+    </select>
+  </div>
+  <p class="azeroth-dialog-note">{{eatReturns}}{{#if hotMealReturns}} · {{hotMealReturns}}{{/if}}</p>
+
+  <div class="azeroth-dialog-row azeroth-rest-row">
+    <label for="azeroth-rest-drink">{{localize "AZEROTH.Rest.Drink"}}</label>
+    <select id="azeroth-rest-drink" name="drink">
+      <option value="">{{localize "AZEROTH.Rest.None"}}</option>
+      {{#each drink as |o|}}
+      <option value="{{o.value}}"{{#if o.selected}} selected{{/if}}>{{o.label}}</option>
+      {{/each}}
+    </select>
+  </div>
+  <p class="azeroth-dialog-note">{{drinkReturns}}</p>
+
+  {{#if focus}}<p class="azeroth-dialog-note">{{localize "AZEROTH.Rest.FocusAnyway"}}</p>{{/if}}
+
+  {{!-- Why the Rest button is greyed, in words beside it. Empty when there is
+        nothing to say, and the stylesheet hides an empty one. --}}
+  <p class="azeroth-dialog-note azeroth-rest-reason" data-rest-reason>{{reason}}</p>
+</div>

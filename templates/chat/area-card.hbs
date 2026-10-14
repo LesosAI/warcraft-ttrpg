@@ -1,0 +1,20 @@
+{{!--
+  An area's Test (D-757): a creature starting its turn in a placed area, or
+  entering one, makes the Resilience Test 07 names. The button is the spell
+  card's own Resist door (`dice/chat.mjs#resistTestFromCard`, purpose `area`),
+  naming the creature whose Test it is, so its owner and the GM see it and
+  nobody else (`data-resist-owner`). What a failure lands, and The Deep's
+  success, are said in words before the button.
+--}}
+<div class="azeroth azeroth-card azeroth-card-spell" data-message-kind="areaTest">
+  {{> systems/azeroth-rpg/templates/chat/partials/card-header.hbs title=title subtitle=name}}
+
+  <div class="azeroth-card-body">
+    <p class="azeroth-card-text">{{text}}</p>
+    {{#if fail}}<p class="azeroth-card-line">{{fail}}</p>{{/if}}
+    {{#if pass}}<p class="azeroth-card-line">{{pass}}</p>{{/if}}
+    <div class="azeroth-card-actions" data-resist-owner="{{actorUuid}}">
+      <button type="button" data-action="resistTest" data-purpose="area" data-resilience="{{resilience}}"{{#if dc}} data-dc="{{dc}}"{{/if}} data-actor-uuid="{{actorUuid}}" data-against="{{against}}">{{testLabel}}</button>
+    </div>
+  </div>
+</div>

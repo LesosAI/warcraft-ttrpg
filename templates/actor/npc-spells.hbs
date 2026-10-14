@@ -1,0 +1,89 @@
+{{!--
+  A CREATURE'S SPELLS (D-705): the character's Spells tab in 14's vocabulary.
+
+  Drawn only where the block casts (`#showsSpells`), so a Kobold keeps four
+  tabs. The NPC frame is already two columns with no Skills column, so this
+  takes none of the character sheet's wide-tab machinery.
+
+  A header first: the Power pool through the shared partial — a creature's
+  Power IS its Mana (D-647, `rules/pools.mjs`) — then the Spell DC and the
+  count, a number and a control with no explanatory copy (D-615). Then the
+  spells by tier, 14's own names first and what a GM gave it after, marked
+  with a WORD rather than a tint (D5).
+--}}
+<section class="tab azeroth-panel {{tab.cssClass}}" data-tab="spells" data-group="primary">
+  <div class="azeroth-spells-header">
+    {{> systems/azeroth-rpg/templates/actor/partials/npc-pool.hbs spells.powerPool}}
+
+    <dl class="azeroth-spells-known">
+      <div>
+        <dt>{{localize "AZEROTH.Sheet.SpellDC"}}</dt>
+        <dd>{{azerothDash spells.dc}}</dd>
+      </div>
+      <div>
+        <dt>{{localize "AZEROTH.Sheet.SpellsKnown"}}</dt>
+        <dd><strong>{{spells.count}}</strong></dd>
+      </div>
+    </dl>
+  </div>
+
+  {{#each spells.tiers as |group|}}
+  <h3 class="azeroth-panel-heading azeroth-tier-heading" data-tier="{{group.tier}}">
+    {{#if group.tier}}{{localize "AZEROTH.Talent.Tier"}} {{group.tier}}{{else}}{{localize "AZEROTH.Sheet.UnknownTier"}}{{/if}}
+    <span class="azeroth-school-count">{{group.spells.length}}</span>
+  </h3>
+  <ol class="azeroth-spell-list">
+    {{#each group.spells as |spell|}}
+    {{#if spell.given}}
+    {{!-- A spell a GM dropped on the creature: an Item it holds, so it takes
+          the character's own ten-track row, star, open and delete included. --}}
+    <li class="azeroth-spell{{#if spell.sustaining}} is-sustaining{{/if}}" data-item-id="{{spell.id}}">
+      {{#if spell.img}}<img src="{{spell.img}}" alt="">{{else}}<span class="azeroth-spell-spacer"></span>{{/if}}
+      <span class="azeroth-spell-name" data-action="expandItem" role="button" tabindex="0" aria-expanded="false">{{spell.name}}
+        <span class="azeroth-spell-mark">{{localize "AZEROTH.Sheet.GivenSpell"}}</span></span>
+      <span class="azeroth-spell-school is-{{spell.school}}">{{#if spell.schoolLabel}}{{localize spell.schoolLabel}}{{/if}}</span>
+      <span class="azeroth-spell-mana" data-tooltip="{{localize "AZEROTH.Card.Mana"}}">{{azerothDash spell.mana}}</span>
+      <span class="azeroth-spell-action">{{#if spell.actionLabel}}{{localize spell.actionLabel}}{{/if}}</span>
+      <span class="azeroth-spell-sustained">{{#if spell.sustaining}}<button type="button" class="azeroth-end-sustain" data-action="endSustain" data-tooltip="{{localize "AZEROTH.Sheet.EndSustain"}}">{{localize "AZEROTH.Sheet.Sustained"}} &times;</button>{{/if}}</span>
+      <button type="button" class="azeroth-cast" data-action="castSpell">{{localize "AZEROTH.Sheet.Cast"}}</button>
+      {{> systems/azeroth-rpg/templates/actor/partials/star.hbs favorite=spell.favorite}}
+      <button type="button" class="azeroth-open" data-action="openItem" data-tooltip="{{localize "AZEROTH.Sheet.Open"}}" aria-label="{{localize "AZEROTH.Sheet.Open"}}"><i class="fa-solid fa-pen-to-square"></i></button>
+      <button type="button" class="azeroth-delete" data-action="deleteItem" data-tooltip="{{localize "AZEROTH.Sheet.Delete"}}" aria-label="{{localize "AZEROTH.Sheet.Delete"}}">&times;</button>
+      {{> systems/azeroth-rpg/templates/actor/partials/item-detail.hbs id=spell.id detail=spell.detail description=spell.description}}
+    </li>
+    {{else}}
+    {{!-- 14's own name. It is not a document the creature holds, so there is
+          nothing to star, open or delete: six tracks rather than ten. The
+          `data-name` is what `castNamedSpell` reads, and `data-uuid` is what
+          ends a Sustain on a spell with no item id. --}}
+    <li class="azeroth-spell is-creature{{#if spell.sustaining}} is-sustaining{{/if}}{{#unless spell.known}} is-unknown{{/unless}}"
+        data-expand-id="{{spell.packId}}" data-name="{{spell.name}}"{{#if spell.uuid}} data-uuid="{{spell.uuid}}"{{/if}}>
+      {{#if spell.img}}<img src="{{spell.img}}" alt="">{{else}}<span class="azeroth-spell-spacer"></span>{{/if}}
+      {{#if spell.known}}
+      <span class="azeroth-spell-name" data-action="expandItem" role="button" tabindex="0" aria-expanded="false">{{spell.name}}</span>
+      {{else}}
+      <span class="azeroth-spell-name">{{spell.name}}</span>
+      {{/if}}
+      <span class="azeroth-spell-school is-{{spell.school}}">{{#if spell.schoolLabel}}{{localize spell.schoolLabel}}{{/if}}</span>
+      <span class="azeroth-spell-mana" data-tooltip="{{localize "AZEROTH.Card.Mana"}}">{{azerothDash spell.mana}}</span>
+      <span class="azeroth-spell-action">{{#if spell.actionLabel}}{{localize spell.actionLabel}}{{/if}}</span>
+      <span class="azeroth-spell-sustained">{{#if spell.sustaining}}<button type="button" class="azeroth-end-sustain" data-action="endSustain" data-tooltip="{{localize "AZEROTH.Sheet.EndSustain"}}">{{localize "AZEROTH.Sheet.Sustained"}} &times;</button>{{/if}}</span>
+      <button type="button" class="azeroth-cast" data-action="castSpell" data-name="{{spell.name}}"{{#unless spell.known}} disabled{{/unless}}>{{localize "AZEROTH.Sheet.Cast"}}</button>
+      {{!-- A refusal is said in WORDS beside the greyed control, never by the
+            grey alone. It takes the whole line under the row's cells. --}}
+      {{#if spell.refusal}}<span class="azeroth-spell-refusal">{{spell.refusal}}</span>{{/if}}
+      {{#if spell.known}}{{> systems/azeroth-rpg/templates/actor/partials/item-detail.hbs id=spell.packId detail=spell.detail description=spell.description}}{{/if}}
+    </li>
+    {{/if}}
+    {{/each}}
+  </ol>
+  {{else}}
+  <p class="azeroth-note">{{localize "AZEROTH.Sheet.NoSpells"}}</p>
+  {{/each}}
+
+  {{!-- Add opens the compendium browser on the spells; a GM's right click on
+        the button makes a blank one instead (`blankItemMenu`). --}}
+  <div class="azeroth-add-row">
+    <button type="button" data-action="browseItems" data-type="spell">{{localize "AZEROTH.Sheet.AddSpell"}}</button>
+  </div>
+</section>

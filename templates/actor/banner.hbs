@@ -1,0 +1,105 @@
+{{!--
+  The banner is PERSISTENT (D11 SS1): it stays across every tab, including the
+  corruption threshold badge, because a crossed rung has to be visible from
+  everywhere and not only from the Corruption tab.
+--}}
+<header class="azeroth-banner">
+  {{!-- THE PORTRAIT IS THE TOKEN (D-700). The lead set the Prototype Token's
+        Image Path and expected this to follow it - *the token art on the top
+        left* - and it drew `actor.img`, which is a different field, so nothing
+        propagated. `actor.img` stays the Actor directory's portrait and the
+        face on a chat card; it is the fallback here and nothing else.
+
+        **`data-edit` alone is DEAD in AppV2** (verified against 14.367):
+        `img[data-edit]` is read by `FormDataExtended` and by the disabled
+        toggle, and the CLICK is the core `editImage` ACTION - so this img
+        carried no door at all until the action was named beside it. The action
+        reads `dataset.edit` as a property path through `getProperty`, so a
+        nested one resolves.
+
+        **This is core's own shape, copied rather than invented.** Every
+        shipped sheet template writes the pair unconditionally -
+        `resources/app/templates/sheets/base-sheet.hbs`, `macro-config.hbs`,
+        `active-effect/header.hbs`, `cards/deck/header.hbs` - and
+        `roll-table/edit/results.hbs` writes `data-edit="results.{{i}}.img"`,
+        which is the nested path in core's own hand. None of them guards on
+        `editable`: a read-only sheet is greyed by `_toggleDisabled`, which is
+        the reason that method looks for `img[data-edit]` at all. --}}
+  <img class="azeroth-portrait" src="{{portrait.token}}" alt=""
+       data-action="editImage" data-edit="prototypeToken.texture.src"
+       {{#if editable}}data-tooltip="{{localize 'AZEROTH.Sheet.SetToken'}}"{{/if}}>
+
+  <div class="azeroth-identity">
+    <input class="azeroth-name" type="text" name="name" value="{{actor.name}}">
+    <div class="azeroth-identity-line">
+      {{#if system.size}}<span>{{localize (lookup config.sizes system.size)}}</span>{{/if}}
+      {{#if identity.race}}<span class="azeroth-race">{{identity.race}}</span>{{/if}}
+      {{#each identity.classes as |cls|}}
+      <span class="azeroth-class">{{cls.name}}{{#if cls.secondary}} {{cls.level}}{{/if}}</span>
+      {{/each}}
+      {{!-- Read-only here: the level is set on the Progress tab (D-611). --}}
+      <span class="azeroth-level">{{localize "AZEROTH.Sheet.Level"}} {{system.level}}</span>
+      <span class="azeroth-tier">{{localize "AZEROTH.Sheet.Tier"}} {{system.tier}}</span>
+      {{#if party}}<span class="azeroth-party-chip">{{localize "AZEROTH.Party.Label"}}</span>{{/if}}
+      {{!-- A sheet with neither race nor class offers the creator (D-636). --}}
+      {{#if canBuild}}<button type="button" class="azeroth-build" data-action="openCreator">{{localize "AZEROTH.Creator.Build"}}</button>{{/if}}
+    </div>
+    {{!-- The XP purse lives on the Progress tab alone (the lead, D-612); the
+          banner carries identity and the five callouts. --}}
+    {{!-- THE SHAPE WORN (02 §7, D-769): said in WORDS on every tab, with the
+          form's own portrait beside the line and the one door out of it. The
+          portrait above stays the character's token: the prototype is never
+          changed by a shape, only the tokens on the board are. --}}
+    {{#if shape}}
+    <div class="azeroth-shape-line">
+      {{#if shape.portrait}}<img class="azeroth-shape-portrait" src="{{shape.portrait}}" alt="">{{/if}}
+      <span class="azeroth-shape-name">{{shape.line}}</span>
+      {{#if editable}}<button type="button" class="azeroth-shape-leave" data-action="leaveShape">{{localize "AZEROTH.Shape.Leave"}}</button>{{/if}}
+    </div>
+    {{/if}}
+  </div>
+
+  {{!-- The five callouts of D11 SS1. --}}
+  <dl class="azeroth-callouts">
+    <div class="azeroth-callout">
+      <dt>{{localize "AZEROTH.Health.Label"}}</dt>
+      <dd>
+        <input type="number" name="system.health.value" value="{{system.health.value}}" min="0" step="1">
+        <span class="azeroth-of">/ {{system.health.max}}</span>
+        {{!-- 05's temporary Health (D-777; the lead: *"raise HP past max as temp
+              hp"*): drawn past the maximum, in words, its source and span in the
+              tooltip. --}}
+        {{#if temporaryHealth}}<span class="azeroth-of azeroth-temp-health" data-tooltip="{{temporaryHealth.tip}}">{{localize "AZEROTH.Health.Temporary" n=temporaryHealth.n}}</span>{{/if}}
+      </dd>
+    </div>
+    <div class="azeroth-callout">
+      <dt>{{localize "AZEROTH.Sheet.Defense"}}</dt><dd>{{system.defense}}</dd>
+    </div>
+    <div class="azeroth-callout">
+      <dt>{{localize "AZEROTH.Sheet.Initiative"}}</dt><dd>{{system.initiative}}</dd>
+    </div>
+    <div class="azeroth-callout">
+      {{!-- A second pace where something gives the character one (14 §1,
+            D-718): the NPC banner has printed both since D-530 and a
+            character had nowhere to hold one. Drawn only where it is set,
+            because a character who does not fly should read exactly as before. --}}
+      <dt>{{localize "AZEROTH.Sheet.Speed"}}</dt><dd data-tooltip="{{speedTitle}}">{{system.speed}} ft{{#if system.flyingSpeed}} <span class="azeroth-of">/ {{system.flyingSpeed}} {{localize "AZEROTH.Sheet.Flying"}}</span>{{/if}}</dd>
+      {{#if system.dying}}<dt>{{localize "AZEROTH.Sheet.Dying"}}</dt><dd class="azeroth-dying">{{system.deathSteps}} / {{config.DEATH_STEPS}}</dd>{{/if}}
+    </div>
+    <div class="azeroth-callout">
+      <dt>{{localize "AZEROTH.SpiritTether.Label"}}</dt>
+      <dd>{{system.spiritTether.value}} <span class="azeroth-of">/ {{system.spiritTether.max}}</span></dd>
+    </div>
+  </dl>
+
+  {{!-- Persistent threshold badge: visible from every tab. --}}
+  <div class="azeroth-threshold-badges">
+    {{#each corruption}}
+    {{#if this.crossed}}
+    <span class="azeroth-threshold is-{{this.key}}" data-tooltip="{{localize this.label}}">
+      {{localize this.label}} {{this.value}}
+    </span>
+    {{/if}}
+    {{/each}}
+  </div>
+</header>

@@ -1,0 +1,93 @@
+{{!--
+  The offer of loot (D-721): the one window the GM and every invited player
+  are looking at, drawn from the world setting that holds the offer.
+
+  EVERY STATE IS IN WORDS. A row says Open, Yours, Taken by Mira, You passed
+  or No longer exists, and a control that is not the reader's to press is
+  greyed AND has the reason printed beside it - colour and absence are never
+  the carriers (CLAUDE.md §12, D5 §8).
+
+  `mine`, `pending` and every `can…` are spread onto every row rather than
+  read off the root: a bare name inside `{{#each}}` resolves against the row
+  (D-609), so a control keyed on the context would draw for everybody.
+
+  The split among the players and the per-player pass are the TOOL's rulings,
+  not the book's, and the note at the foot says so on the window's own face -
+  the loot generator's rule (D-552, D-666).
+--}}
+<div class="azeroth-dialog azeroth-generator-frame">
+
+  <div class="azeroth-loot-offer-head">
+    {{#if label}}<span class="azeroth-loot-offer-label">{{label}}</span>{{/if}}
+    {{#if invited}}<span class="azeroth-loot-offer-invited">{{invited}}</span>{{/if}}
+    {{#unless empty}}<span class="azeroth-loot-offer-progress">{{progress}}</span>{{/unless}}
+    {{#if settling}}<p class="azeroth-loot-offer-banner">{{settling}}</p>{{/if}}
+    {{#if noGM}}<p class="azeroth-loot-offer-banner">{{noGM}}</p>{{/if}}
+    {{#if notInvited}}<p class="azeroth-note azeroth-loot-offer-aside">{{notInvited}}</p>{{/if}}
+  </div>
+
+  <div class="azeroth-generator-pane">
+    {{#if empty}}
+    <p class="azeroth-forge-none">{{empty}}</p>
+    {{else}}
+    <ol class="azeroth-forge-list azeroth-loot-offer-rows">
+      {{#each rows}}
+      {{!-- A SHARE THAT IS NOT THE READER'S GREYS AND SAYS WHOSE IT IS: the
+            ink token is the second carrier and the sentence beneath is the
+            first. An item row is never greyed - every invited player may take
+            one, and *Taken by Mira* is what says it is gone. --}}
+      <li data-row-id="{{this.id}}" class="{{#if this.isCoin}}azeroth-loot-offer-share {{#unless this.mine}}is-unavailable{{/unless}}{{/if}}">
+        {{#if this.isCoin}}
+        <span class="azeroth-icon azeroth-icon--empty"></span>
+        <span class="azeroth-forge-name">{{this.name}}</span>
+        {{else}}
+        {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=this.img rarityClass=this.rarityClass}}
+        {{!-- The name IS the control, and it keeps its rarity ink: no
+              `azeroth-forge-quiet`, whose 0-2-1 colour rule would beat the
+              0-2-0 rarity class in silence (O-101). --}}
+        {{#if this.canView}}
+        <button type="button" class="azeroth-loot-offer-name {{this.rarityClass}}" data-tooltip="{{this.viewLabel}}" data-uuid="{{this.uuid}}" data-action="lootOfferView">{{this.name}}</button>
+        {{else}}
+        <span class="azeroth-forge-name {{this.rarityClass}}">{{this.name}}</span>
+        {{/if}}
+        {{#if this.quantity}}<span class="azeroth-forge-cost">{{this.quantity}}</span>{{/if}}
+        {{/if}}
+
+        {{#if this.price}}<span class="azeroth-forge-cost">{{this.price}}</span>{{/if}}
+        <span class="azeroth-loot-offer-state">{{this.state}}</span>
+
+        {{!-- A claim in flight greys its own row's controls: the answer comes
+              from another client, and a button that still looks live is a
+              button somebody presses twice. --}}
+        {{#if this.canTake}}<button type="button" class="azeroth-forge-quiet"{{#if this.pending}} disabled{{/if}} data-action="lootOfferTake">{{localize "AZEROTH.LootOffer.Take"}}</button>{{/if}}
+        {{#if this.canRelease}}<button type="button" class="azeroth-forge-quiet"{{#if this.pending}} disabled{{/if}} data-action="lootOfferRelease">{{localize "AZEROTH.LootOffer.Release"}}</button>{{/if}}
+        {{#if this.canPass}}<button type="button" class="azeroth-forge-quiet"{{#if this.pending}} disabled{{/if}} data-action="lootOfferPass">{{localize "AZEROTH.LootOffer.Pass"}}</button>{{/if}}
+        {{#if this.canUnpass}}<button type="button" class="azeroth-forge-quiet"{{#if this.pending}} disabled{{/if}} data-action="lootOfferUnpass">{{localize "AZEROTH.LootOffer.Unpass"}}</button>{{/if}}
+
+        {{#if this.note}}<span class="azeroth-loot-offer-note">{{this.note}}</span>{{/if}}
+        {{#if this.refusal}}<span class="azeroth-loot-offer-refusal">{{this.refusal}}</span>{{/if}}
+      </li>
+      {{else}}
+      <li class="azeroth-forge-none">{{localize "AZEROTH.LootOffer.Empty"}}</li>
+      {{/each}}
+    </ol>
+    {{/if}}
+  </div>
+
+  {{!-- ON THE WINDOW'S OWN FACE, as the loot generator says of its odds
+        (D-552, D-666): 08 prices a find and publishes no rule for dividing
+        one, so the share and the pass are the tool's. --}}
+  <div class="azeroth-forge-summary" aria-live="polite">
+    <span>{{localize "AZEROTH.LootOffer.Note"}}</span>
+  </div>
+
+  {{#if isGM}}
+  <div class="azeroth-forge-buttons">
+    <button type="button" class="azeroth-forge-quiet"{{#unless canCancel}} disabled{{/unless}} data-action="lootOfferCancel">{{localize "AZEROTH.LootOffer.Cancel"}}</button>
+    {{#if canResume}}
+    <button type="button" data-action="lootOfferResume">{{localize "AZEROTH.LootOffer.Resume"}}</button>
+    {{/if}}
+    <button type="button"{{#unless canFinish}} disabled{{/unless}} data-action="lootOfferFinish">{{localize "AZEROTH.LootOffer.Finish"}}</button>
+  </div>
+  {{/if}}
+</div>

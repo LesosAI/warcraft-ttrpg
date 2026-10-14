@@ -1,0 +1,52 @@
+{{!--
+  The character creator (D-636): 01's ten steps as ten panes, one at a time,
+  the summary saying what the book makes of the step, Finish at the end.
+  Every control re-renders on change; the pane's controls read into the
+  state first. Every line at 13px in ink.
+--}}
+<div class="azeroth-dialog azeroth-creator-frame">
+  <nav class="azeroth-creator-steps" aria-label="{{localize "AZEROTH.Creator.Title"}}">
+    {{#each steps as |st|}}
+    <button type="button" class="azeroth-creator-step{{#if st.active}} is-active{{/if}}{{#if st.refused}} is-refused{{/if}}" data-action="creatorGo" data-step="{{st.key}}" aria-current="{{#if st.active}}step{{else}}false{{/if}}">
+      <span class="azeroth-creator-step-number">{{st.number}}</span>
+      <span class="azeroth-creator-step-label">{{st.label}}</span>
+    </button>
+    {{/each}}
+  </nav>
+
+  <h3 class="azeroth-forge-heading">{{stepIndex}}. {{stepLabel}}</h3>
+
+  <div class="azeroth-creator-pane">
+    {{#if (eq step "race")}}{{> systems/azeroth-rpg/templates/creator/race.hbs}}{{/if}}
+    {{#if (eq step "class")}}{{> systems/azeroth-rpg/templates/creator/class.hbs}}{{/if}}
+    {{#if (eq step "abilities")}}{{> systems/azeroth-rpg/templates/creator/abilities.hbs}}{{/if}}
+    {{#if (eq step "career")}}{{> systems/azeroth-rpg/templates/creator/career.hbs}}{{/if}}
+    {{#if (eq step "skills")}}{{> systems/azeroth-rpg/templates/creator/skills.hbs}}{{/if}}
+    {{#if (eq step "talents")}}{{> systems/azeroth-rpg/templates/creator/talents.hbs}}{{/if}}
+    {{#if (eq step "spells")}}{{> systems/azeroth-rpg/templates/creator/spells.hbs}}{{/if}}
+    {{#if (eq step "languages")}}{{> systems/azeroth-rpg/templates/creator/languages.hbs}}{{/if}}
+    {{#if (eq step "equipment")}}{{> systems/azeroth-rpg/templates/creator/equipment.hbs}}{{/if}}
+    {{#if (eq step "numbers")}}{{> systems/azeroth-rpg/templates/creator/numbers.hbs}}{{/if}}
+    {{#if (eq step "name")}}{{> systems/azeroth-rpg/templates/creator/name.hbs}}{{/if}}
+  </div>
+
+  <div class="azeroth-forge-summary" aria-live="polite">
+    <span>{{localize "AZEROTH.Creator.Running" health=summary.health defense=summary.defense change=summary.change}}</span>
+    {{#if summary.reasons.length}}
+    <ul class="azeroth-forge-reasons">{{#each summary.reasons}}<li>{{this}}</li>{{/each}}</ul>
+    {{/if}}
+    {{#if summary.notes.length}}
+    <ul class="azeroth-forge-notes">{{#each summary.notes}}<li>{{this}}</li>{{/each}}</ul>
+    {{/if}}
+    {{#if summary.elsewhere}}<span class="azeroth-creator-elsewhere">{{localize "AZEROTH.Creator.Elsewhere" n=summary.elsewhere}}</span>{{/if}}
+  </div>
+
+  <div class="azeroth-forge-buttons">
+    <button type="button" class="azeroth-forge-quiet" data-action="creatorCancel">{{localize "AZEROTH.Creator.Cancel"}}</button>
+    <button type="button" class="azeroth-forge-quiet" data-action="creatorBack" {{#unless canBack}}disabled{{/unless}}>{{localize "AZEROTH.Creator.Back"}}</button>
+    {{#if canNext}}
+    <button type="button" data-action="creatorNext">{{localize "AZEROTH.Creator.Next"}}</button>
+    {{/if}}
+    <button type="submit" {{#unless summary.ok}}aria-disabled="true"{{/unless}}>{{#if building}}{{localize "AZEROTH.Creator.Build"}}{{else}}{{localize "AZEROTH.Creator.Finish"}}{{/if}}</button>
+  </div>
+</div>

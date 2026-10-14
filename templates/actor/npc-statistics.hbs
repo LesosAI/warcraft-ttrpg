@@ -1,0 +1,115 @@
+{{!-- Armour by location is the sheet's centre (D11 SS6). --}}
+<section class="tab azeroth-panel {{tab.cssClass}}" data-tab="statistics" data-group="primary">
+  <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Sheet.ArmorPoints"}}</h3>
+  <dl class="azeroth-ap">
+    {{#each locations}}
+    <div class="azeroth-ap-location{{#if this.absent}} is-absent{{/if}}">
+      <dt>{{localize this.label}}</dt>
+      {{!-- A creature without a head cannot be called-shot to one (06 SS2), so
+            an absent location prints a dash and never a zero. --}}
+      <dd>{{azerothDash this.ap}}</dd>
+    </div>
+    {{/each}}
+    <div class="azeroth-ap-location">
+      <dt>{{localize "AZEROTH.Sheet.Ward"}}</dt>
+      {{!-- A school a Ward (D-644); none prints the dash, which is load-bearing (D-490). --}}
+      <dd>{{#each wards}}{{#unless @first}} · {{/unless}}{{this.value}} <span class="azeroth-of">{{localize this.label}}</span>{{else}}{{azerothDash null}}{{/each}}</dd>
+    </div>
+  </dl>
+  <div class="azeroth-rest azeroth-npc-rest">
+    <button type="button" data-action="shortRest">{{localize "AZEROTH.Sheet.ShortRest"}}</button>
+  </div>
+
+  <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Sheet.Attacks"}}</h3>
+  <ol class="azeroth-attacks">
+    {{#if hasAttacks}}
+    {{!-- Every column named (D-649). Drawn where EITHER list has a row: a
+          creature whose block prints none and whose GM handed it a sword had
+          five unlabelled columns. --}}
+    <li class="azeroth-attack azeroth-attack-head">
+      <span>{{localize "AZEROTH.Sheet.Attack"}}</span>
+      <span class="azeroth-attack-bonus">{{localize "AZEROTH.Sheet.Bonus"}}</span>
+      <span class="azeroth-attack-damage">{{localize "AZEROTH.Sheet.DMG"}}</span>
+      <span class="azeroth-attack-traits">{{localize "AZEROTH.Item.Traits"}}</span>
+      <span class="azeroth-attack-range">{{localize "AZEROTH.Item.Range"}}</span>
+    </li>
+    {{/if}}
+    {{#each system.attacks}}
+    <li class="azeroth-attack">
+      <button type="button" data-action="rollAttack" data-attack="{{@index}}">{{this.name}}</button>
+      <span class="azeroth-attack-bonus">{{azerothSigned this.bonus}}</span>
+      <span class="azeroth-attack-damage">{{azerothDash this.damage}}</span>
+      <span class="azeroth-attack-traits">{{#each this.traits}}{{this}}{{#unless @last}}, {{/unless}}{{else}}&mdash;{{/each}}</span>
+      <span class="azeroth-attack-range">{{#if this.range}}{{this.range}} ft{{else}}&mdash;{{/if}}</span>
+    </li>
+    {{/each}}
+    {{!-- **AND WHAT A GM PUT IN ITS HANDS** (the lead's N2, 2026-09-10): an
+          equipped weapon is an ADDITIONAL row beside the block's own, never
+          instead of one. 14's rows ORIGINATE in the chapter (D3 SS7) and are
+          untouched. The row carries `data-item-id` rather than `data-attack`,
+          which is what routes the click to `attackWithDialog` - the door a
+          character's swing already goes through. `Held` is a WORD, not a tint:
+          colour is never the only carrier (D5). --}}
+    {{#each heldAttacks as |row|}}
+    <li class="azeroth-attack azeroth-attack-held" data-item-id="{{row.itemId}}">
+      {{!-- The mark is a SIBLING of the button, not inside it: the row's button
+            is `display: block; width: 100%` for the block's own rows, so a chip
+            in its flow wrapped under the name and overprinted the Spells line
+            beneath the list (the shots, 2026-09-10). --}}
+      <span class="azeroth-attack-name">
+        <button type="button" data-action="rollAttack">{{row.name}}</button>
+        <span class="azeroth-attack-mark">{{localize "AZEROTH.Sheet.HeldWeapon"}}</span>
+      </span>
+      <span class="azeroth-attack-bonus">{{azerothSigned row.bonus}}</span>
+      <span class="azeroth-attack-damage">{{azerothDash row.damage}}</span>
+      <span class="azeroth-attack-traits">{{#each row.traits}}{{this}}{{#unless @last}}, {{/unless}}{{else}}&mdash;{{/each}}</span>
+      <span class="azeroth-attack-range">{{#if row.range}}{{row.range}} ft{{else}}&mdash;{{/if}}</span>
+    </li>
+    {{/each}}
+    {{#unless hasAttacks}}
+    <li class="azeroth-note">{{localize "AZEROTH.Sheet.NoAttacks"}}</li>
+    {{/unless}}
+  </ol>
+
+  {{!-- **EXTRA ATTACK IS A TRAIT A GM ADDS BY HAND** (14 SS1, D-704). No block
+        in the chapter carries it, by the lead's own call, so this checkbox is
+        the only door: it writes the actor flag `_hasExtraAttack` has read since
+        2026-09-07 with nothing ever setting it. It binds the flag directly, as
+        `skills.hbs` binds a Rank, so it carries no `data-action` - the sheet
+        submits on change and an action would fire on click alone. --}}
+  <label class="azeroth-npc-extra-attack">
+    <input type="checkbox" name="flags.azeroth-rpg.extraAttack" {{#if extraAttack}}checked{{/if}}{{#if extraAttackFromBlock}} disabled{{else}}{{#unless editable}} disabled{{/unless}}{{/if}}>
+    <span>{{localize "AZEROTH.Sheet.ExtraAttack"}}</span>
+    <span class="azeroth-note">{{#if extraAttackFromBlock}}{{localize "AZEROTH.Sheet.ExtraAttackFromBlock"}}{{else}}{{localize "AZEROTH.Sheet.ExtraAttackNote"}}{{/if}}</span>
+  </label>
+
+  {{!-- **THE SPELLS LINE IS A TAB NOW** (D-705). It was one paragraph of
+        inline Cast buttons here, with 07's entry on each name's tooltip:
+        what a spell did was readable only on hover, and a spell item dropped
+        on the creature was drawn nowhere at all. --}}
+
+  {{!-- Both pools, always drawn, even for a creature with neither (D-509).
+        Through the shared partial, so the Spells tab cannot draw the Power
+        pool differently from this one. --}}
+  <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Sheet.Pools"}}</h3>
+  {{#each pools}}
+  {{> systems/azeroth-rpg/templates/actor/partials/npc-pool.hbs this}}
+  {{/each}}
+
+  {{!-- 05 §11 and 06 §7: what a creature's Momentum buys (2026-09-06), the
+        character's own list. Use pays and posts the card. --}}
+  <h3 class="azeroth-panel-heading azeroth-combat-section">{{localize "AZEROTH.Sheet.Maneuvers"}}</h3>
+  <ol class="azeroth-maneuvers">
+    {{#each maneuvers as |m|}}
+    <li class="azeroth-maneuver{{#unless m.affordable}} is-spent{{/unless}}" data-expand-id="{{m.expandId}}">
+      <span class="azeroth-maneuver-cost">{{m.cost}}</span>
+      <span class="azeroth-maneuver-name" data-action="expandItem" role="button" tabindex="0" aria-expanded="false">{{localize m.label}}</span>
+      {{#if m.usable}}<button type="button" class="azeroth-use" data-action="useManeuver" data-maneuver="{{m.key}}"{{#unless m.affordable}} disabled{{/unless}}>{{localize "AZEROTH.Feature.Use"}}</button>{{/if}}
+      <div class="azeroth-item-detail azeroth-maneuver-detail" data-expand-id="{{m.expandId}}" hidden>
+        <p>{{localize m.text}}</p>
+        {{#unless m.usable}}<p class="azeroth-item-origin">{{localize "AZEROTH.Maneuver.CalledShotNote"}}</p>{{/unless}}
+      </div>
+    </li>
+    {{/each}}
+  </ol>
+</section>

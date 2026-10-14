@@ -1,0 +1,13 @@
+{{!-- One more attack a kill gave (04's Killing Spree and Beast Frenzy, D-773).
+      Posted from the one damage door (`effects/after-blow.mjs#offerKillStrikes`)
+      on whichever client applied the blow, so the button carries the striker:
+      `data-reaction-owner` shows it to whoever owns the striker and nobody else,
+      and `dice/chat.mjs#killStrikeFromCard` judges it again at the press. --}}
+<div class="azeroth azeroth-card azeroth-card-attack" data-message-kind="killStrike">
+  <div class="azeroth-card-body">
+    <p class="azeroth-card-line azeroth-fired"><span>{{name}}</span><em>{{text}}</em></p>
+    <div class="azeroth-card-actions" data-reaction-owner="{{strikerUuid}}">
+      <button type="button" data-action="killStrike" data-strike="{{identifier}}">{{label}}</button>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,410 @@
+{{!--
+  The world map (D-680). Three columns: the regions of the continent, the
+  plate, and the selected region's entry out of 12A or 12B.
+
+  NOTHING IS DRAWN ON THE PLATE AT REST. Only the region under the cursor and
+  the selected one light up, so the art carries the map.
+
+  NO `data-action` ON AN INPUT. The actions map fires on click alone, so a
+  select or a textarea wired that way looks connected and saves nothing; every
+  input carries `data-map` and the application binds `change`.
+
+  `asGM` is the GM MINUS the player preview, so one toggle shows the whole
+  window through a player's eyes. Every gate below reads it, never `isGM`.
+--}}
+
+<div class="azeroth-map {{#if editing}}is-editing{{/if}} {{#if wide}}is-wide{{/if}}">
+
+  <header class="azeroth-map-head">
+    <nav class="azeroth-map-continents">
+      {{#each continents}}
+        <button type="button" class="azeroth-map-continent {{#if active}}is-active{{/if}}"
+                data-action="mapContinent" data-continent="{{key}}"
+                aria-pressed="{{#if active}}true{{else}}false{{/if}}">{{label}}</button>
+      {{/each}}
+    </nav>
+
+    <ul class="azeroth-map-legend" aria-label="{{localize 'AZEROTH.Map.Legend'}}">
+      {{#each legend}}
+        <li class="azeroth-map-swatch is-{{key}}">
+          <span class="azeroth-map-chip" aria-hidden="true"></span>
+          <span class="azeroth-map-swatch-label">{{label}}</span>
+          <span class="azeroth-map-count">{{holds}}</span>
+        </li>
+      {{/each}}
+    </ul>
+
+    <button type="button" class="azeroth-map-head-button {{#if wide}}is-active{{/if}}"
+            data-action="mapToggleWide" aria-pressed="{{#if wide}}true{{else}}false{{/if}}">
+      <i class="fa-solid fa-up-right-and-down-left-from-center" inert></i>
+      <span>{{localize "AZEROTH.Map.Wide"}}</span>
+    </button>
+
+    {{#if isGM}}
+      <button type="button" class="azeroth-map-head-button {{#if preview}}is-active{{/if}}"
+              data-action="mapTogglePreview" aria-pressed="{{#if preview}}true{{else}}false{{/if}}">
+        <i class="fa-solid fa-eye" inert></i>
+        <span>{{localize "AZEROTH.Map.Preview"}}</span>
+      </button>
+      <button type="button" class="azeroth-map-head-button {{#if editing}}is-active{{/if}}"
+              data-action="mapToggleEdit" aria-pressed="{{#if editing}}true{{else}}false{{/if}}">
+        <i class="fa-solid fa-sliders" inert></i>
+        <span>{{localize "AZEROTH.Map.Configure"}}</span>
+      </button>
+      <button type="button" class="azeroth-map-head-button" data-action="mapReset">
+        <i class="fa-solid fa-rotate-left" inert></i>
+        <span>{{localize "AZEROTH.Map.Reset"}}</span>
+      </button>
+    {{/if}}
+  </header>
+
+  {{#if preview}}
+    <p class="azeroth-map-banner">{{localize "AZEROTH.Map.PreviewOn"}}</p>
+  {{/if}}
+  {{#if placing}}
+    <p class="azeroth-map-banner is-placing">{{localize "AZEROTH.Map.PlacingHint"}}</p>
+  {{/if}}
+
+  <div class="azeroth-map-body">
+
+    {{!-- The regions of this continent, in book order. --}}
+    <ol class="azeroth-map-list">
+      {{#each regions}}
+        <li>
+          <button type="button" class="azeroth-map-row is-{{control}} {{#if selected}}is-selected{{/if}} {{#if hidden}}is-hidden{{/if}}"
+                  data-action="mapSelect" data-region="{{key}}">
+            <span class="azeroth-map-row-flag {{#unless showControl}}is-unknown{{/unless}}" aria-hidden="true"></span>
+            <span class="azeroth-map-row-name">{{name}}</span>
+            <span class="azeroth-map-row-meta">
+              {{#if here}}<i class="fa-solid fa-location-dot azeroth-map-here"
+                             title="{{localize 'AZEROTH.Map.PartyHere'}}"></i>{{/if}}
+              {{#if tainted}}<i class="fa-solid fa-skull-crossbones azeroth-map-taint"
+                                title="{{localize 'AZEROTH.Taint.Label'}}"></i>{{/if}}
+              {{#if overridden}}<i class="fa-solid fa-pen azeroth-map-moved"
+                                   title="{{localize 'AZEROTH.Map.Overridden'}}"></i>{{/if}}
+              <span class="azeroth-map-row-tier">{{threat}}</span>
+            </span>
+          </button>
+          {{#if ../editing}}
+            <button type="button" class="azeroth-map-eye {{#if hidden}}is-off{{/if}}"
+                    data-action="mapShowRegion" data-region="{{key}}"
+                    data-shown="{{#if hidden}}true{{else}}false{{/if}}"
+                    title="{{#if hidden}}{{localize 'AZEROTH.Map.Show'}}{{else}}{{localize 'AZEROTH.Map.Hide'}}{{/if}}"
+                    aria-label="{{#if hidden}}{{localize 'AZEROTH.Map.Show'}}{{else}}{{localize 'AZEROTH.Map.Hide'}}{{/if}}">
+              <i class="fa-solid {{#if hidden}}fa-eye-slash{{else}}fa-eye{{/if}}" inert></i>
+            </button>
+          {{/if}}
+        </li>
+      {{/each}}
+    </ol>
+
+    {{!-- The plate. The frame is fixed; the stage inside it zooms and pans. --}}
+    <div class="azeroth-map-plate {{#if placing}}is-placing{{/if}}">
+      {{#if plate}}
+        <div class="azeroth-map-viewport">
+          <div class="azeroth-map-stage">
+            <img class="azeroth-map-image" src="{{plate.src}}" alt="" draggable="false">
+            <canvas class="azeroth-map-hot"></canvas>
+            <canvas class="azeroth-map-accent"></canvas>
+            {{!-- Transparent, on top, and the only layer that takes a pointer. --}}
+            <canvas class="azeroth-map-base"></canvas>
+          </div>
+          {{!-- Only the settlements the GM has chosen to mark.
+
+               OUTSIDE THE STAGE, on purpose. A pin inside it is scaled by the
+               zoom along with the plate, and no amount of counter-scaling
+               would stick: the inline transform was set and valid and the
+               computed matrix ignored it. Out here nothing scales them, and
+               `#applyView` puts each one where the plate has moved to. --}}
+          {{#each pins}}
+            <button type="button" class="azeroth-map-pin is-{{class}}"
+                    data-x="{{x}}" data-y="{{y}}"
+                    data-action="mapOpenPin" data-region="{{key}}" data-settlement="{{name}}"
+                    title="{{name}} — {{classLabel}}">
+              <span class="azeroth-map-pin-dot" aria-hidden="true"></span>
+              <span class="azeroth-map-pin-name">{{name}}</span>
+            </button>
+          {{/each}}
+        </div>
+        <div class="azeroth-map-zoom">
+          <button type="button" data-action="mapZoomOut" title="{{localize 'AZEROTH.Map.ZoomOut'}}"
+                  aria-label="{{localize 'AZEROTH.Map.ZoomOut'}}"><i class="fa-solid fa-minus" inert></i></button>
+          <button type="button" data-action="mapZoomFit" title="{{localize 'AZEROTH.Map.ZoomFit'}}"
+                  aria-label="{{localize 'AZEROTH.Map.ZoomFit'}}"><i class="fa-solid fa-expand" inert></i></button>
+          <button type="button" data-action="mapZoomIn" title="{{localize 'AZEROTH.Map.ZoomIn'}}"
+                  aria-label="{{localize 'AZEROTH.Map.ZoomIn'}}"><i class="fa-solid fa-plus" inert></i></button>
+        </div>
+        <span class="azeroth-map-hover" hidden></span>
+      {{else}}
+        <p class="azeroth-map-nothing">{{localize "AZEROTH.Map.PickRegion"}}</p>
+      {{/if}}
+    </div>
+
+    {{!-- The selected region's entry. --}}
+    <section class="azeroth-map-panel">
+      {{#if selected}}
+        <h2 class="azeroth-map-title is-{{selected.control}}">{{selected.name}}</h2>
+        <p class="azeroth-map-hook">{{selected.hook}}</p>
+
+        <dl class="azeroth-map-fields">
+          {{#if selected.showThreat}}
+            <dt>{{localize "AZEROTH.Map.Threat"}}</dt>
+            <dd>{{selected.threatText}}</dd>
+          {{/if}}
+          {{#if selected.showWeightClass}}
+            <dt>{{localize "AZEROTH.Map.WeightClass"}}</dt>
+            <dd>{{selected.weightClass}}</dd>
+          {{/if}}
+          {{#if selected.showTaint}}
+            <dt>{{localize "AZEROTH.Taint.Label"}}</dt>
+            <dd>
+              {{selected.taintText}}
+              {{#each selected.taint}}
+                <span class="azeroth-map-exposure is-{{track}}">{{label}}</span>
+              {{/each}}
+            </dd>
+          {{/if}}
+          {{#if selected.showHeldBy}}
+            <dt>{{localize "AZEROTH.Map.HeldBy"}}</dt>
+            <dd>{{selected.heldByText}}</dd>
+          {{/if}}
+        </dl>
+
+        {{!-- Control. Three states; the book's own sentence is above. --}}
+        {{#if selected.showControl}}
+          <div class="azeroth-map-control">
+            <span class="azeroth-map-control-label">{{localize "AZEROTH.Map.Control"}}</span>
+            {{#if asGM}}
+              <div class="azeroth-map-control-set" role="group"
+                   aria-label="{{localize 'AZEROTH.Map.SetControl'}}">
+                {{#each selected.controlOptions}}
+                  <button type="button" class="azeroth-map-control-button is-{{key}} {{#if active}}is-active{{/if}}"
+                          data-action="mapSetControl" data-region="{{../selected.key}}" data-control="{{key}}"
+                          aria-pressed="{{#if active}}true{{else}}false{{/if}}">{{label}}</button>
+                {{/each}}
+              </div>
+            {{else}}
+              <span class="azeroth-map-control-value is-{{selected.control}}">{{selected.controlLabel}}</span>
+            {{/if}}
+            {{#if selected.overridden}}
+              <span class="azeroth-map-moved-note">{{localize "AZEROTH.Map.Overridden"}}</span>
+            {{/if}}
+          </div>
+        {{/if}}
+
+        {{#if asGM}}
+          <div class="azeroth-map-party-set">
+            {{#if selected.here}}
+              <button type="button" data-action="mapClearParty">{{localize "AZEROTH.Map.ClearParty"}}</button>
+            {{else}}
+              <button type="button" data-action="mapMoveParty"
+                      data-region="{{selected.key}}">{{localize "AZEROTH.Map.MoveParty"}}</button>
+            {{/if}}
+          </div>
+        {{/if}}
+
+        {{!-- What this region opens. --}}
+        {{#if selected.sceneName}}
+          <button type="button" class="azeroth-map-link" data-action="mapOpenLink" data-uuid="{{selected.scene}}">
+            <i class="fa-solid fa-map" inert></i><span>{{selected.sceneName}}</span>
+          </button>
+        {{/if}}
+        {{#if selected.journalName}}
+          <button type="button" class="azeroth-map-link" data-action="mapOpenLink" data-uuid="{{selected.journal}}">
+            <i class="fa-solid fa-book-open" inert></i><span>{{selected.journalName}}</span>
+          </button>
+        {{/if}}
+
+        {{!-- Ways in. D-490 makes this reciprocal, so it is a real graph. --}}
+        {{#if selected.showWaysIn}}
+          <h3>{{localize "AZEROTH.Map.Roads"}}</h3>
+          {{#if selected.roads.length}}
+            <ul class="azeroth-map-roads">
+              {{#each selected.roads}}
+                <li>
+                  <button type="button" class="azeroth-map-road {{#if showControl}}is-{{control}}{{/if}}"
+                          data-action="mapSelect" data-region="{{key}}">{{label}}</button>
+                  <span class="azeroth-map-road-text">{{text}}</span>
+                </li>
+              {{/each}}
+            </ul>
+          {{else}}
+            <p class="azeroth-map-none">{{localize "AZEROTH.Map.NoRoad"}}</p>
+          {{/if}}
+        {{/if}}
+
+        {{!-- D-491's five fields, a block a settlement. --}}
+        <h3>{{localize "AZEROTH.Map.Settlements"}}</h3>
+        {{#if selected.settlements.length}}
+          <ul class="azeroth-map-settlements">
+            {{#each selected.settlements}}
+              <li class="azeroth-map-settlement {{#unless shown}}is-hidden{{/unless}}">
+                <span class="azeroth-map-settlement-head">
+                  <span class="azeroth-map-settlement-name">{{name}}</span>
+                  <span class="azeroth-map-class is-{{class}}">{{classLabel}}</span>
+                  {{#if pinned}}<i class="fa-solid fa-location-dot azeroth-map-pinned"
+                                   title="{{localize 'AZEROTH.Map.Pinned'}}"></i>{{/if}}
+                </span>
+                <span class="azeroth-map-settlement-held">{{heldBy}}</span>
+                <span class="azeroth-map-settlement-line">
+                  <span class="azeroth-map-label">{{localize "AZEROTH.Map.Trainers"}}</span>
+                  {{trainersLabel}}
+                  <span class="azeroth-map-label">{{localize "AZEROTH.Map.Quartermaster"}}</span>
+                  {{#if quartermaster}}{{quartermaster}}{{else}}&mdash;{{/if}}
+                </span>
+
+                {{#if sceneName}}
+                  <button type="button" class="azeroth-map-link is-small" data-action="mapOpenLink" data-uuid="{{scene}}">
+                    <i class="fa-solid fa-map" inert></i><span>{{sceneName}}</span>
+                  </button>
+                {{/if}}
+                {{#if journalName}}
+                  <button type="button" class="azeroth-map-link is-small" data-action="mapOpenLink" data-uuid="{{journal}}">
+                    <i class="fa-solid fa-book-open" inert></i><span>{{journalName}}</span>
+                  </button>
+                {{/if}}
+
+                {{#if ../editing}}
+                  <div class="azeroth-map-settlement-config">
+                    <button type="button" class="azeroth-map-eye {{#unless shown}}is-off{{/unless}}"
+                            data-action="mapShowSettlement" data-region="{{../selected.key}}" data-settlement="{{name}}"
+                            data-shown="{{#if shown}}false{{else}}true{{/if}}">
+                      <i class="fa-solid {{#if shown}}fa-eye{{else}}fa-eye-slash{{/if}}" inert></i>
+                      <span>{{#if shown}}{{localize "AZEROTH.Map.Shown"}}{{else}}{{localize "AZEROTH.Map.Hidden"}}{{/if}}</span>
+                    </button>
+                    <button type="button" class="azeroth-map-mark {{#if placing}}is-armed{{/if}}"
+                            data-action="mapMarkSettlement" data-region="{{../selected.key}}" data-settlement="{{name}}">
+                      <i class="fa-solid fa-location-crosshairs" inert></i>
+                      <span>{{#if placing}}{{localize "AZEROTH.Map.PlacingNow"}}{{else}}{{localize "AZEROTH.Map.Mark"}}{{/if}}</span>
+                    </button>
+                    {{#if pinned}}
+                      <button type="button" class="azeroth-map-mark" data-action="mapClearPin"
+                              data-region="{{../selected.key}}" data-settlement="{{name}}">
+                        <i class="fa-solid fa-xmark" inert></i><span>{{localize "AZEROTH.Map.Unmark"}}</span>
+                      </button>
+                    {{/if}}
+                    <label class="azeroth-map-field">
+                      <span>{{localize "AZEROTH.Map.LinkScene"}}</span>
+                      <select data-map="scene" data-region="{{../selected.key}}" data-settlement="{{name}}">
+                        <option value="">&mdash;</option>
+                        {{#each ../scenes}}
+                          <option value="{{uuid}}" {{#if (eq uuid ../scene)}}selected{{/if}}>{{name}}</option>
+                        {{/each}}
+                      </select>
+                    </label>
+                    <label class="azeroth-map-field">
+                      <span>{{localize "AZEROTH.Map.LinkJournal"}}</span>
+                      <select data-map="journal" data-region="{{../selected.key}}" data-settlement="{{name}}">
+                        <option value="">&mdash;</option>
+                        {{#each ../journals}}
+                          <option value="{{uuid}}" {{#if (eq uuid ../journal)}}selected{{/if}}>{{name}}</option>
+                        {{/each}}
+                      </select>
+                    </label>
+                  </div>
+                {{/if}}
+              </li>
+            {{/each}}
+          </ul>
+        {{else}}
+          <p class="azeroth-map-none">{{localize "AZEROTH.Map.NoSettlement"}}</p>
+        {{/if}}
+
+        {{!-- The GM's configuration for this region. --}}
+        {{#if editing}}
+          <div class="azeroth-map-config">
+            <h3>{{localize "AZEROTH.Map.PlayerView"}}</h3>
+            <p class="azeroth-map-hint">{{localize "AZEROTH.Map.PlayerViewHint"}}</p>
+            <ul class="azeroth-map-switches">
+              {{#each selected.fieldSwitches}}
+                <li>
+                  <button type="button" class="azeroth-map-eye {{#unless shown}}is-off{{/unless}}"
+                          data-action="mapShowField" data-region="{{../selected.key}}" data-field="{{field}}"
+                          data-shown="{{#if shown}}false{{else}}true{{/if}}">
+                    <i class="fa-solid {{#if shown}}fa-eye{{else}}fa-eye-slash{{/if}}" inert></i>
+                    <span>{{label}}</span>
+                  </button>
+                </li>
+              {{/each}}
+            </ul>
+
+            <h3>{{localize "AZEROTH.Map.Settlements"}}</h3>
+            <p class="azeroth-map-hint">{{localize "AZEROTH.Map.SettlementsHidden"}}</p>
+            <div class="azeroth-map-settlement-bulk">
+              <button type="button" class="azeroth-map-mark" data-action="mapShowAllSettlements"
+                      data-region="{{selected.key}}" data-shown="true">
+                <i class="fa-solid fa-eye" inert></i><span>{{localize "AZEROTH.Map.RevealAll"}}</span>
+              </button>
+              <button type="button" class="azeroth-map-mark" data-action="mapShowAllSettlements"
+                      data-region="{{selected.key}}" data-shown="false">
+                <i class="fa-solid fa-eye-slash" inert></i><span>{{localize "AZEROTH.Map.HideAll"}}</span>
+              </button>
+            </div>
+
+            <h3>{{localize "AZEROTH.Map.Links"}}</h3>
+            <label class="azeroth-map-field">
+              <span>{{localize "AZEROTH.Map.LinkScene"}}</span>
+              <select data-map="scene" data-region="{{selected.key}}">
+                <option value="">&mdash;</option>
+                {{#each scenes}}
+                  <option value="{{uuid}}" {{#if (eq uuid ../selected.scene)}}selected{{/if}}>{{name}}</option>
+                {{/each}}
+              </select>
+            </label>
+            <label class="azeroth-map-field">
+              <span>{{localize "AZEROTH.Map.LinkJournal"}}</span>
+              <select data-map="journal" data-region="{{selected.key}}">
+                <option value="">&mdash;</option>
+                {{#each journals}}
+                  <option value="{{uuid}}" {{#if (eq uuid ../selected.journal)}}selected{{/if}}>{{name}}</option>
+                {{/each}}
+              </select>
+            </label>
+
+            <label class="azeroth-map-field is-check">
+              <input type="checkbox" data-map="hideByDefault" {{checked hideByDefault}}>
+              <span>{{localize "AZEROTH.Map.HideByDefault"}}</span>
+            </label>
+            <p class="azeroth-map-hint">{{localize "AZEROTH.Map.HideByDefaultHint"}}</p>
+          </div>
+        {{/if}}
+
+        {{#if asGM}}
+          <h3>{{localize "AZEROTH.Map.Notes"}}</h3>
+          <textarea class="azeroth-map-note" data-map="note" data-region="{{selected.key}}"
+                    rows="4">{{selected.note}}</textarea>
+          <p class="azeroth-map-hint">{{localize "AZEROTH.Map.NotesHint"}}</p>
+        {{/if}}
+
+        <button type="button" class="azeroth-map-entry" data-action="mapReadEntry"
+                data-region="{{selected.key}}">
+          <i class="fa-solid fa-book-open" inert></i>
+          <span>{{localize "AZEROTH.Map.ReadEntry"}}</span>
+        </button>
+      {{else}}
+        <p class="azeroth-map-nothing">{{localize "AZEROTH.Map.PickRegion"}}</p>
+      {{/if}}
+
+      {{!-- Where the company is, and what the ground is doing to them. --}}
+      {{#if party}}
+        <aside class="azeroth-map-exposure-panel">
+          <h3>{{localize "AZEROTH.Map.Party"}}</h3>
+          <p><strong>{{party.region.name}}</strong></p>
+          <p class="azeroth-map-exposure is-{{party.track}}">{{party.label}}</p>
+        </aside>
+      {{/if}}
+
+      {{#if history.length}}
+        <details class="azeroth-map-history">
+          <summary>{{localize "AZEROTH.Map.History"}}</summary>
+          <ol>
+            {{#each history}}
+              <li class="azeroth-map-change is-{{to}}">{{label}}</li>
+            {{/each}}
+          </ol>
+        </details>
+      {{/if}}
+    </section>
+
+  </div>
+</div>

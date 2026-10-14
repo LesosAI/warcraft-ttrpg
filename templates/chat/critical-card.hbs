@@ -1,0 +1,44 @@
+{{!-- Critical Injury card. Accent: dark red. --}}
+<div class="azeroth azeroth-card azeroth-card-critical" data-message-kind="critical">
+  {{> systems/azeroth-rpg/templates/chat/partials/card-header.hbs title=title subtitle=subtitle}}
+
+  <div class="azeroth-card-body">
+    {{#if shrugged}}
+    {{!-- 14 §1: a Boss ignores the first two it takes in an encounter. The
+          card says so in words and says how many are left, because the count
+          is on the combatant where nobody can see it. --}}
+    <p class="azeroth-card-line">
+      <span>{{localize "AZEROTH.Card.Shrugged"}}</span>
+      <strong>{{localize "AZEROTH.Card.ShruggedLeft" n=shruggedLeft}}</strong>
+    </p>
+    {{else}}
+    <p class="azeroth-card-line">
+      <span>{{localize "AZEROTH.Card.Location"}}</span>
+      <strong>{{localize (lookup config.locations location)}}</strong>
+    </p>
+    <p class="azeroth-card-line">
+      <span>{{localize "AZEROTH.Card.Severity"}}</span>
+      <strong>{{roll}}</strong>
+      {{#if permanent}}<em class="is-permanent">{{localize "AZEROTH.Card.Permanent"}}</em>{{/if}}
+    </p>
+    {{#if twice}}
+    {{!-- 04's Unbreakable (D-772): rolled twice, the lower taken, both said; and
+          04's Ruin (D-775): the higher taken. The key says which. --}}
+    <p class="azeroth-card-line">
+      <span>{{twice.talent}}</span>
+      <strong>{{localize twice.key totals=twice.totals}}</strong>
+    </p>
+    {{/if}}
+    {{#if result}}
+    <div class="azeroth-card-effect">
+      <strong>{{result.name}}.</strong> {{{result.html}}}
+    </div>
+    {{/if}}
+    {{/if}}
+    {{#if canSuffer}}
+    <div class="azeroth-card-actions">
+      <button type="button" data-action="sufferInjury">{{localize "AZEROTH.Card.Suffer"}}</button>
+    </div>
+    {{/if}}
+  </div>
+</div>

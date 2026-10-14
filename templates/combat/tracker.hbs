@@ -1,0 +1,84 @@
+{{!--
+  Side-based tracker (D-256). Core's row markup, kept: `data-combatant-id`,
+  `activateCombatant`, the hide/defeated/ping controls, the effects. Dropped:
+  the initiative roll button - initiative is derived and never rolled. Added:
+  the side headers, the turn budget as pips with its spends, and Momentum.
+--}}
+<ol class="combat-tracker plain azeroth-tracker">
+  {{#if noGM}}<li class="azeroth-tracker-notice">{{localize "AZEROTH.Combat.NoGM"}}</li>{{/if}}
+  {{#if partyToAdd}}
+  {{!-- The Party (2026-09-06): every marked character into the fight in one click. --}}
+  <li class="azeroth-tracker-party"><button type="button" data-action="addParty">{{localize "AZEROTH.Combat.AddParty" n=partyToAdd}}</button></li>
+  {{/if}}
+  {{#each sides as |side|}}
+  <li class="azeroth-side azeroth-side-{{side.key}}{{#if side.leading}} is-leading{{/if}}">
+    <span class="azeroth-side-label">{{localize side.label}}</span>
+    {{#if side.leading}}<span class="azeroth-side-leads">{{localize "AZEROTH.Combat.Leads"}}</span>{{/if}}
+  </li>
+  {{#each side.turns as |turn|}}
+  <li class="combatant azeroth-combatant {{turn.css}}" data-combatant-id="{{turn.id}}" data-action="activateCombatant">
+    <img class="token-image" src="{{turn.img}}" alt="{{turn.name}}" loading="lazy">
+    <div class="token-name">
+      <strong class="name">{{turn.name}}</strong>
+      <div class="combatant-controls">
+        {{#if @root.isGM}}
+        <button type="button" class="inline-control combatant-control icon fa-solid fa-eye-slash {{#if turn.hidden}}active{{/if}}"
+                data-action="toggleHidden" data-tooltip aria-label="{{localize (ifThen turn.hidden "COMBATANT.Show" "COMBATANT.Hide")}}"></button>
+        <button type="button" class="inline-control combatant-control icon fa-solid fa-skull {{#if turn.isDefeated}}active{{/if}}"
+                data-action="toggleDefeated" data-tooltip aria-label="{{localize (ifThen turn.isDefeated "COMBATANT.UnmarkDefeated" "COMBATANT.MarkDefeated")}}"></button>
+        <button type="button" class="inline-control combatant-control icon fa-solid fa-right-left"
+                data-action="toggleSide" data-tooltip aria-label="{{localize "AZEROTH.Combat.ToggleSide"}}"></button>
+        {{/if}}
+        {{#if turn.canPing}}
+        <button type="button" class="inline-control combatant-control icon fa-solid fa-bullseye-arrow"
+                data-action="pingCombatant" data-tooltip aria-label="{{localize "COMBATANT.Ping"}}"></button>
+        {{/if}}
+        {{#unless @root.isGM}}
+        <button type="button" class="inline-control combatant-control icon fa-solid fa-arrows-to-eye"
+                data-action="panToCombatant" data-tooltip aria-label="{{localize "COMBATANT.PanTo"}}"></button>
+        {{/unless}}
+        <div class="token-effects" data-tooltip-html="{{turn.effects.tooltip}}">
+          {{#each turn.effects.icons}}<img class="token-effect" src="{{this.img}}" alt="{{this.name}}">{{/each}}
+        </div>
+      </div>
+      {{!-- The turn budget: two Half-Actions and a Reaction (D-012, D-255). --}}
+      <div class="azeroth-budget">
+        <span class="azeroth-pips" data-tooltip="{{localize "AZEROTH.Combat.HalfActions"}}">
+          {{#each turn.budget.halves}}<span class="azeroth-pip{{#if this.spent}} is-spent{{/if}}"></span>{{/each}}
+        </span>
+        <span class="azeroth-pips azeroth-pips-reaction" data-tooltip="{{localize "AZEROTH.Combat.Reaction"}}">
+          <span class="azeroth-pip azeroth-pip-reaction{{#if turn.budget.reaction.spent}} is-spent{{/if}}"></span>
+        </span>
+        {{#if turn.canSpend}}
+        <button type="button" class="azeroth-spend-action" data-action="spendHalf" data-tooltip="{{localize "AZEROTH.Combat.SpendHalf"}}" aria-label="{{localize "AZEROTH.Combat.SpendHalf"}}">{{localize "AZEROTH.Combat.Half"}}</button>
+        <button type="button" class="azeroth-spend-action" data-action="spendFull" data-tooltip="{{localize "AZEROTH.Combat.SpendFull"}}" aria-label="{{localize "AZEROTH.Combat.SpendFull"}}">{{localize "AZEROTH.Combat.Full"}}</button>
+        <button type="button" class="azeroth-spend-action" data-action="spendReaction" data-tooltip="{{localize "AZEROTH.Combat.SpendReaction"}}" aria-label="{{localize "AZEROTH.Combat.SpendReaction"}}">{{localize "AZEROTH.Combat.React"}}</button>
+        <button type="button" class="azeroth-spend-action" data-action="guard" data-tooltip="{{localize "AZEROTH.Combat.GuardTip"}}" aria-label="{{localize "AZEROTH.Combat.GuardTip"}}">{{localize "AZEROTH.Combat.Guard"}}</button>
+        {{/if}}
+        {{!-- The GM's undo on a spend the table decided did not happen (D-718).
+              A dashed edge and a turned arrow say it is a restore rather than a
+              spend, in two carriers, and each is drawn only where there IS
+              something to put back. --}}
+        {{#if @root.isGM}}
+        {{#if turn.budget.halfSpent}}
+        <button type="button" class="azeroth-spend-action azeroth-restore-action" data-action="restoreHalf" data-tooltip="{{localize "AZEROTH.Combat.RestoreHalf"}}" aria-label="{{localize "AZEROTH.Combat.RestoreHalf"}}"><i class="fa-solid fa-rotate-left"></i>{{localize "AZEROTH.Combat.Half"}}</button>
+        {{/if}}
+        {{#if turn.budget.reactionSpent}}
+        <button type="button" class="azeroth-spend-action azeroth-restore-action" data-action="restoreReaction" data-tooltip="{{localize "AZEROTH.Combat.RestoreReaction"}}" aria-label="{{localize "AZEROTH.Combat.RestoreReaction"}}"><i class="fa-solid fa-rotate-left"></i>{{localize "AZEROTH.Combat.React"}}</button>
+        {{/if}}
+        {{/if}}
+        {{#each turn.momenta as |m|}}
+        <span class="azeroth-tracker-momentum" data-tooltip="{{m.name}}">{{m.value}}/{{m.max}}</span>
+        {{/each}}
+      </div>
+    </div>
+    {{#if turn.resource includeZero=true}}
+    <div class="token-resource"><span class="resource">{{turn.resource}}</span></div>
+    {{/if}}
+    <div class="token-initiative">
+      <span class="azeroth-initiative" data-tooltip="{{localize "AZEROTH.Sheet.Initiative"}}">{{azerothDash turn.initiative}}</span>
+    </div>
+  </li>
+  {{/each}}
+  {{/each}}
+</ol>

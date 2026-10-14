@@ -1,0 +1,66 @@
+{{!--
+  WHAT A CREATURE IS CARRYING (the lead's N3, 2026-09-10).
+
+  The character's Gear tab, minus two things the lead ruled out: **containers**
+  (`gear.hbs`'s `{{#each containers}}` sections and every `data-container-id`
+  drop zone) and **the paper doll** (every `data-slot` control, which lives on
+  the character's Overview tab and never on this one). What is left is the same
+  rows through the same partial, the same carry line and the same purse.
+
+  The rows are still `draggable` — that is `carried-row.hbs`'s own class and
+  core's drag selector — but there is no zone on this tab for a drag to land
+  in, so a drop inside the list falls through to core's sort exactly as it does
+  on every untabbed surface.
+--}}
+<section class="tab azeroth-panel {{tab.cssClass}}" data-tab="gear" data-group="primary">
+  <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Sheet.Carried"}}</h3>
+  {{!-- What it is carrying against what it can (05 SS10, 08 SS11; D-675).
+        **A `—` STRENGTH HAS NO LIMIT** (14 SS1 prints the dash and `NpcData`
+        keeps it null): there is no denominator, so there is no bar and the
+        count says so in words rather than reading `12 / 0 lb`. --}}
+  <div class="azeroth-load is-{{load.state}}">
+    <div class="azeroth-load-head">
+      <span class="azeroth-load-label">{{localize "AZEROTH.Sheet.CarryCapacity"}}</span>
+      {{#if load.unlimited}}
+      <span class="azeroth-load-count">{{localize "AZEROTH.Sheet.CarriedNoLimit" used=load.carried}}</span>
+      {{else}}
+      <span class="azeroth-load-count">{{localize "AZEROTH.Sheet.CarriedOf" used=load.carried max=load.capacity}}</span>
+      {{/if}}
+      {{#if load.penalty}}<span class="azeroth-load-state">{{localize load.label}} &middot; {{localize "AZEROTH.Sheet.LoadPenalty" n=load.penalty}}</span>{{/if}}
+      {{!-- The purse in copper (08 SS2's coin, D-422), printed as the chapter
+            prints it. 14 states no purse: what a creature is carrying is a
+            world-level GM act, which is why the bestiary pack gains nothing. --}}
+      <span class="azeroth-purse">{{localize "AZEROTH.Sheet.Purse"}}: <span class="azeroth-purse-coins">{{purse}}</span>{{#if editable}} <input type="number" name="system.coin" value="{{system.coin}}" min="0" step="1" aria-label="{{localize "AZEROTH.Sheet.PurseCopper"}}"> {{localize "AZEROTH.Sheet.Copper"}}{{/if}}</span>
+    </div>
+    {{#unless load.unlimited}}
+    <div class="azeroth-load-track" role="img" aria-label="{{localize "AZEROTH.Sheet.CarriedOf" used=load.carried max=load.capacity}}">
+      <span class="azeroth-load-fill" style="width: {{load.percent}}%"></span>
+    </div>
+    {{/unless}}
+  </div>
+
+  {{!-- 08 SS9 locks an Augment to a class and a creature holds no class item,
+        so nothing refuses one here. Said in words rather than left silent. --}}
+  {{#if augmentNote}}<p class="azeroth-note azeroth-augment-note">{{augmentNote}}</p>{{/if}}
+
+  {{#if carried}}
+  {{#each carriedGroups as |group|}}
+  <h4 class="azeroth-gear-heading">{{localize group.label}}</h4>
+  <ol class="azeroth-carried">
+    {{#each group.items as |row|}}
+    {{> systems/azeroth-rpg/templates/actor/partials/carried-row.hbs row=row editable=@root.editable}}
+    {{/each}}
+  </ol>
+  {{/each}}
+  {{else}}
+  <p class="azeroth-note">{{localize "AZEROTH.Sheet.NothingCarried"}}</p>
+  {{/if}}
+
+  {{!-- Add opens the compendium browser on the kind; a GM's right click on the
+        button makes a blank one instead (`blankItemMenu`). --}}
+  <div class="azeroth-add-row">
+    <button type="button" data-action="browseItems" data-type="weapon">{{localize "AZEROTH.Sheet.AddWeapon"}}</button>
+    <button type="button" data-action="browseItems" data-type="armor">{{localize "AZEROTH.Sheet.AddArmor"}}</button>
+    <button type="button" data-action="browseItems" data-type="gear">{{localize "AZEROTH.Sheet.AddGear"}}</button>
+  </div>
+</section>

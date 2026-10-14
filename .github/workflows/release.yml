@@ -1,0 +1,40 @@
+# Written by Warcraft1e's tools/publish-public.mjs on every publish; edit it there.
+#
+# A tag v<version> builds the release a Foundry host installs from:
+#   system.json  the manifest (releases/latest/download/system.json)
+#   system.zip   the system, system.json at its root (releases/download/v<version>/system.zip)
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The tag names the manifest's version
+        run: |
+          version="$(jq -r .version system.json)"
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match system.json version ${version}" >&2
+            exit 1
+          fi
+          download="$(jq -r .download system.json)"
+          case "$download" in
+            */releases/download/${GITHUB_REF_NAME}/system.zip) ;;
+            *) echo "system.json download ${download} does not name ${GITHUB_REF_NAME}" >&2; exit 1 ;;
+          esac
+
+      - name: Build system.zip
+        run: zip -r -q system.zip . -x ".git/*" ".github/*"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" system.zip system.json --title "${GITHUB_REF_NAME}" --notes "Azeroth RPG ${GITHUB_REF_NAME}"

@@ -1,0 +1,210 @@
+{{!-- Class feature card (D-612). Accent: bronze. --}}
+<div class="azeroth azeroth-card azeroth-card-feature" data-message-kind="feature">
+  {{> systems/azeroth-rpg/templates/chat/partials/card-header.hbs title=title subtitle=subtitle}}
+
+  <div class="azeroth-card-body">
+    <dl class="azeroth-spell-fields">
+      {{#if action}}<dt>{{localize "AZEROTH.Card.Action"}}</dt><dd>{{localize (lookup config.actions action)}}</dd>{{/if}}
+      {{#if cost}}<dt>{{cost.label}}</dt><dd>{{cost.text}}</dd>{{/if}}
+      {{!-- 14 SS1's Boss Action points: what this cost and what is left this round. --}}
+      {{#if bossPoints}}<dt>{{localize "AZEROTH.Boss.Points"}}</dt><dd>{{bossPoints.cost}} &mdash; {{localize "AZEROTH.Boss.Left" n=bossPoints.left}}</dd>{{/if}}
+      {{#if uses}}<dt>{{localize "AZEROTH.Card.Uses"}}</dt><dd>{{uses.value}} / {{uses.max}}</dd>{{/if}}
+    </dl>
+    {{#if gained}}<p class="azeroth-card-line azeroth-gained"><strong>{{gained}}</strong></p>{{/if}}
+
+    {{#if rolled}}
+    <div class="azeroth-card-headline">
+      <span class="azeroth-total">{{total}}</span>
+      <span class="azeroth-versus">{{localize "AZEROTH.Roll.DC"}} {{azerothDash dc}}</span>
+      <span class="azeroth-sl {{#if success}}is-success{{else}}is-failure{{/if}}">{{azerothSL sl}}</span>
+    </div>
+    {{> systems/azeroth-rpg/templates/chat/partials/verdict.hbs verdict=verdict}}
+    {{#if critical}}<p class="azeroth-flag is-critical">{{localize "AZEROTH.Roll.Critical"}}</p>{{/if}}
+    {{#if fumble}}<p class="azeroth-flag is-fumble">{{localize "AZEROTH.Roll.Fumble"}}</p>{{/if}}
+    {{/if}}
+
+    {{> systems/azeroth-rpg/templates/chat/partials/heal.hbs heal=heal targets=targets speakerName=speakerName}}
+
+    {{#if damage}}
+    <p class="azeroth-card-line azeroth-damage">
+      <span>{{localize "AZEROTH.Card.Damage"}}</span>
+      <strong>{{damage.final}}</strong>
+      <em>{{damage.explanation}}</em>
+    </p>
+    <div class="azeroth-card-actions">
+      {{#each targets}}
+      <button type="button" data-action="applyDamage" data-target-index="{{this.index}}" data-damage="{{../damage.final}}">
+        {{localize "AZEROTH.Card.ApplyTo" name=this.name}} <strong>{{../damage.final}}</strong>
+      </button>
+      {{else}}
+      <button type="button" data-action="applyDamage" data-damage="{{damage.final}}">
+        {{localize "AZEROTH.Card.ApplyDamage"}}
+      </button>
+      {{/each}}
+    </div>
+    {{/if}}
+
+    {{!-- D-616: what happens next, as buttons. The attack the feature makes;
+          the target's Test with the DC on it; the area, pre-sized. The Use
+          paid the feature's action, so an attack it makes costs nothing more
+          (`data-budget="none"`, D-773): Kill Shot, Barrage and Divine Storm
+          charged a Half-Action a press on top of their own. --}}
+    {{#if attack}}
+    <div class="azeroth-card-actions">
+      <button type="button" data-action="attackFromCard" data-budget="none"{{#if noMomentum}} data-no-momentum="1"{{/if}}>{{localize "AZEROTH.Sheet.Attack"}}</button>
+      {{!-- How many the button makes, counted by each press (the architect's
+            review of D-773): a press past it is refused in words. --}}
+      {{#if attackAllowance}}<span class="azeroth-note">{{localize "AZEROTH.Feature.AttacksAllowed" n=attackAllowance}}</span>{{/if}}
+    </div>
+    {{/if}}
+
+    {{#if bound}}
+    {{!-- The creature the feature acts on and what it called (D-643); Sic 'Em's attack from the card. --}}
+    {{#each bound.lines}}<p class="azeroth-card-line"><span>{{{this}}}</span></p>{{/each}}
+    {{#if bound.attack}}
+    {{!-- ONE BUTTON PER CREATURE, and each one names which (the lead's item
+          24): a shaman standing four totems (D-710) had four lines and a
+          single button that always swung the first of them. A card with one
+          creature reads *Attack* as it always did. --}}
+    <div class="azeroth-card-actions">
+      {{#each bound.attacks as |b|}}
+      <button type="button" data-action="boundAttack" data-bound-uuid="{{b.uuid}}">{{#if ../bound.many}}{{localize "AZEROTH.Bound.Attack" name=b.name}}{{else}}{{localize "AZEROTH.Sheet.Attack"}}{{/if}}</button>
+      {{else}}
+      <button type="button" data-action="boundAttack">{{localize "AZEROTH.Sheet.Attack"}}</button>
+      {{/each}}
+    </div>
+    {{/if}}
+    {{/if}}
+
+    {{!-- The conditions the card lays (D-647; a list since D-771: Hurricane's
+          Slowed and Typhoon's Prone): on each target, or the selected tokens.
+          Each block carries what it draws, since a bare name inside `#each`
+          resolves against the row (D-609). --}}
+    {{#each inflicts as |inf|}}
+    <div class="azeroth-card-actions">
+      {{#each ../targets as |t|}}
+      <button type="button" data-action="applyCondition" data-condition="{{inf.condition}}" data-target-index="{{t.index}}"{{#if inf.value}} data-value="{{inf.value}}"{{/if}}{{#if inf.until}} data-until="{{inf.until}}"{{/if}}>
+        {{localize "AZEROTH.Card.InflictOn" condition=inf.label name=t.name}}{{#if inf.value}} {{inf.value}}{{/if}}
+      </button>
+      {{else}}
+      <button type="button" data-action="applyCondition" data-condition="{{inf.condition}}"{{#if inf.value}} data-value="{{inf.value}}"{{/if}}{{#if inf.until}} data-until="{{inf.until}}"{{/if}}>
+        {{localize "AZEROTH.Card.Inflict" condition=inf.label}}{{#if inf.value}} {{inf.value}}{{/if}}
+      </button>
+      {{/each}}
+      {{#if inf.untilLabel}}<span class="azeroth-note">{{inf.untilLabel}}</span>{{/if}}
+    </div>
+    {{/each}}
+
+    {{#if tick}}
+    {{!-- What the Apply below lays ON EACH TARGET (D-771; D-770's carrier):
+          02's Regrowth's lingering heal, 04's Wild Growth, in words. --}}
+    <p class="azeroth-card-line azeroth-area-tick azeroth-tick">
+      <span>{{localize "AZEROTH.Tick.Label"}}</span>
+      <strong>{{tick.text}}</strong>
+      <em>{{tick.note}}</em>
+    </p>
+    {{/if}}
+    {{#if tickNoClock}}
+    <p class="azeroth-card-line azeroth-area-tick azeroth-tick">
+      <span>{{localize "AZEROTH.Tick.Label"}}</span>
+      <em>{{tickNoClock}}</em>
+    </p>
+    {{/if}}
+    {{#if applies}}
+    {{!-- Laid by the spell card's own Apply (D-657's door), keyed by the feature. --}}
+    <div class="azeroth-card-actions azeroth-card-applies">
+      {{#each applies.targets}}
+      <button type="button" data-action="applySpellEffect" data-target-index="{{this.index}}">{{localize "AZEROTH.Card.ApplySpellTo" spell=../title name=this.name}}</button>
+      {{else}}
+      <button type="button" data-action="applySpellEffect">{{localize "AZEROTH.Card.ApplySpellControlled" spell=title}}</button>
+      {{/each}}
+    </div>
+    {{/if}}
+
+    {{#if laid}}
+    {{!-- The Bane the feature laid on the target (06 SS6's Pummel, D-693).
+          It is already on them - there is nothing to press - so this says what
+          landed and on whom, the way the drain line does. --}}
+    <p class="azeroth-card-line azeroth-laid-bane">
+      <span>{{laid.label}}</span><strong>{{laid.names}}</strong>
+    </p>
+    {{/if}}
+
+    {{#if summon}}
+    {{!-- What arrives, and where it stands (D-691, decision 2). The GM presses
+          the button and chooses the ground; the points were spent when the
+          action was used, not here. --}}
+    <div class="azeroth-card-actions">
+      <button type="button" data-action="placeSummon">
+        {{localize "AZEROTH.Summon.Place" count=summon.count name=summon.entry}}
+      </button>
+      <span class="azeroth-note">{{localize (lookup config.summonFrom summon.from)}}</span>
+    </div>
+    {{/if}}
+
+    {{#if resist}}
+    {{!-- A purpose names what the Test is FOR (02's Snare: the caught
+          creature's escape, an action spent and the Entangled ended; D-773). --}}
+    <div class="azeroth-card-actions">
+      <button type="button" data-action="resistTest" data-resilience="{{resist.key}}" data-dc="{{resist.dc}}"{{#if resist.purpose}} data-purpose="{{resist.purpose}}"{{/if}}>
+        {{#if resist.purpose}}{{localize "AZEROTH.Snare.EscapeButton" resilience=(localize resist.label) dc=(azerothDash resist.dc)}}{{else}}{{localize "AZEROTH.Card.ResistTest" resilience=(localize resist.label) dc=(azerothDash resist.dc)}}{{/if}}
+      </button>
+    </div>
+    {{/if}}
+    {{#if escape}}
+    {{!-- The Snare's escape where Explosive Trap's half took the Resist above
+          (D-773): the caught creature's action and its Reflex Test. --}}
+    <div class="azeroth-card-actions">
+      <button type="button" data-action="resistTest" data-purpose="snare" data-resilience="{{escape.key}}" data-dc="{{escape.dc}}">
+        {{localize "AZEROTH.Snare.EscapeButton" resilience=(localize escape.label) dc=(azerothDash escape.dc)}}
+      </button>
+    </div>
+    {{/if}}
+
+    {{#each poisonTests as |p|}}
+    {{!-- 04's Snake Trap (the lead, 2026-10-03, on O-178: "Yes, Dexterity";
+          D-779): a creature the Snare caught resists the poison with a Reflex
+          Test at the poison's own DC; a failure lays its ticks and conditions. --}}
+    <div class="azeroth-card-actions">
+      <button type="button" data-action="resistTest" data-purpose="poison" data-poison-index="0"{{#if p.named}} data-target-index="{{p.index}}"{{/if}} data-resilience="{{p.resilience}}" data-dc="{{p.dc}}">
+        {{localize "AZEROTH.SnakeTrap.Button" name=p.name poison=p.poison resilience=(localize p.label) dc=(azerothDash p.dc)}}
+      </button>
+    </div>
+    {{/each}}
+
+    {{#if lightwell}}
+    {{!-- 04's Lightwell (the lead, 2026-10-03, on O-184: "Other players spend a
+          half-action to expend a charge."; D-779): open to every player, and the
+          door judges the one token they control (`data-open-to`, `dice/chat.mjs`). --}}
+    <div class="azeroth-card-actions" data-open-to="all">
+      <button type="button" data-action="lightwellCharge">{{localize "AZEROTH.Lightwell.Take" n=lightwell.heal left=lightwell.left}}</button>
+    </div>
+    {{/if}}
+
+    {{#if area}}
+    <div class="azeroth-card-actions">
+      <button type="button" data-action="placeArea">
+        {{localize "AZEROTH.Area.Place"}}
+        <span class="azeroth-area-shape">{{area.distanceFt}} ft {{area.shape}}</span>
+      </button>
+    </div>
+    {{/if}}
+
+    {{#if chosen}}
+    {{!-- The option the menu feature chose (D-618, D-619): name, its tag, and
+          what it does - a creature's block linked first. --}}
+    <p class="azeroth-card-line azeroth-chosen">
+      <strong>{{chosen.name}}</strong>
+      {{#if chosen.tag}}<em>{{chosen.tag}}</em>{{/if}}
+    </p>
+    <div class="azeroth-card-effect">{{{chosen.html}}}</div>
+    {{/if}}
+
+    {{#if effect}}<div class="azeroth-card-effect">{{{effect}}}</div>{{/if}}
+    {{#if note}}<p class="azeroth-note">{{localize note}}</p>{{/if}}
+  </div>
+
+  {{#if provenance.length}}
+  {{> systems/azeroth-rpg/templates/chat/partials/provenance.hbs provenance=provenance}}
+  {{/if}}
+</div>

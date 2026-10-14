@@ -1,0 +1,327 @@
+{{!--
+  The NPC generator (D-637): 13 SS5's five steps as five sections, every
+  band figure an input with the table's suggestion beside it, the summary
+  saying what the chapter refuses and what it merely notes. Every control
+  re-renders on change; a figure typed over is the GM's. Every line at 13px.
+--}}
+<div class="azeroth-dialog azeroth-generator-frame">
+  <div class="azeroth-generator-pane">
+
+    {{!-- 1. Say what it is. --}}
+    <h3 class="azeroth-forge-heading">{{localize "AZEROTH.Generator.Section.What"}}</h3>
+    {{#unless rework}}
+    <div class="azeroth-picker">
+      <input type="text" name="startFrom" value="{{search.entry}}" data-picker="entries" placeholder="{{localize "AZEROTH.Generator.StartFrom"}}" aria-label="{{localize "AZEROTH.Generator.StartFrom"}}" autocomplete="off">
+      <ul class="azeroth-picker-list" data-picker-list="entries" data-picker-typed>
+        {{#each bestiary as |e|}}
+        <li data-search="{{e.search}}">
+          <span class="azeroth-forge-name">{{e.name}}</span>
+          <span class="azeroth-forge-tier">{{e.line}}</span>
+          <button type="button" data-action="generatorStartFrom" data-name="{{e.name}}" aria-label="{{localize "AZEROTH.Picker.LoadNamed" name=e.name}}">{{localize "AZEROTH.Generator.Load"}}</button>
+        </li>
+        {{/each}}
+        <li class="azeroth-picker-none" hidden>{{localize "AZEROTH.Picker.NoMatch"}}</li>
+      </ul>
+    </div>
+    {{#if from}}<p class="azeroth-dialog-note">{{localize "AZEROTH.Generator.From" name=from}}</p>{{/if}}
+    {{/unless}}
+    <div class="azeroth-forge-row">
+      <label for="azeroth-generator-name">{{localize "AZEROTH.Generator.Name"}}</label>
+      <input id="azeroth-generator-name" type="text" name="name" value="{{name}}" data-generator="name" autocomplete="off">
+      <label for="azeroth-generator-img">{{localize "AZEROTH.Creator.Portrait"}}</label>
+      <span class="azeroth-forge-control azeroth-creator-portrait">
+        <img src="{{img}}" alt="">
+        <input id="azeroth-generator-img" type="text" name="img" value="{{img}}" data-generator="img">
+        {{#if canBrowse}}<button type="button" data-action="generatorPortrait">{{localize "AZEROTH.Creator.Browse"}}</button>{{/if}}
+      </span>
+      <label for="azeroth-generator-type">{{localize "AZEROTH.Generator.Type"}}</label>
+      <span class="azeroth-forge-control">
+        <select id="azeroth-generator-type" name="creatureType" data-generator="creatureType">
+          {{#each identity.types}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
+        </select>
+        <label class="azeroth-forge-check"><input type="checkbox" name="mindless" data-generator="mindless" {{#if identity.mindless}}checked{{/if}}> {{localize "AZEROTH.Generator.Mindless"}}</label>
+      </span>
+      <label for="azeroth-generator-size">{{localize "AZEROTH.Item.Size"}}</label>
+      <span class="azeroth-forge-control">
+        <select id="azeroth-generator-size" name="size" data-generator="size">
+          {{#each identity.sizes}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
+        </select>
+        <label class="azeroth-forge-check">{{localize "AZEROTH.Item.Race"}}
+          <select name="race" data-generator="race">
+            {{#each identity.races}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
+          </select>
+        </label>
+      </span>
+      <label for="azeroth-generator-corruption">{{localize "AZEROTH.Browser.Corruption"}}</label>
+      <select id="azeroth-generator-corruption" name="corruption" data-generator="corruption">
+        {{#each identity.tracks}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
+      </select>
+      <label for="azeroth-generator-folder">{{localize "AZEROTH.Generator.Folder"}}</label>
+      <select id="azeroth-generator-folder" name="folder" data-generator="folder">
+        {{#each folders}}<option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}</option>{{/each}}
+      </select>
+    </div>
+
+    {{!-- 2. Choose a weight class and a tier. --}}
+    <h3 class="azeroth-forge-heading">{{localize "AZEROTH.Generator.Section.Weight"}}</h3>
+    <div class="azeroth-forge-row">
+      <label for="azeroth-generator-weight">{{localize "AZEROTH.Browser.WeightClass"}}</label>
+      <span class="azeroth-forge-control">
+        <select id="azeroth-generator-weight" name="weightClass" data-generator="weightClass">
+          {{#each identity.weightClasses}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
+        </select>
+        <label class="azeroth-forge-check">{{localize "AZEROTH.Sheet.Tier"}}
+          <select name="tier" data-generator="tier">
+            {{#each identity.tiers}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.value}}</option>{{/each}}
+          </select>
+        </label>
+        <span class="azeroth-forge-cost">{{localize "AZEROTH.Sheet.ThreatShare"}} {{identity.share}}</span>
+      </span>
+      {{#if identity.boss}}
+      <label for="azeroth-generator-dungeon">{{localize "AZEROTH.Sheet.Dungeon"}}</label>
+      <span class="azeroth-forge-control">
+        <input id="azeroth-generator-dungeon" type="text" name="dungeon" value="{{identity.dungeon}}" data-generator="dungeon">
+        <span class="azeroth-forge-cost">{{identity.bossLine}}</span>
+      </span>
+      {{/if}}
+      {{#if identity.beast}}
+      <label for="azeroth-generator-handling">{{localize "AZEROTH.Sheet.Handling"}}</label>
+      <input id="azeroth-generator-handling" type="number" name="handlingDC" value="{{identity.handlingDC}}" min="0" data-generator="handlingDC">
+      {{/if}}
+      {{!-- A swarm (13 SS4, D-646): one body for many, on a weight class that swarms. --}}
+      <label for="azeroth-generator-swarm">{{localize "AZEROTH.Sheet.Swarm"}}</label>
+      {{#if identity.canSwarm}}
+      <span class="azeroth-forge-control azeroth-generator-swarm">
+        <span class="azeroth-forge-check"><input id="azeroth-generator-swarm" type="checkbox" name="swarm" data-generator="swarm" {{#if identity.swarm.on}}checked{{/if}}> {{localize "AZEROTH.Generator.SwarmOf"}}</span>
+        <input type="number" name="swarm-members" value="{{identity.swarm.members}}" min="{{identity.swarm.from}}" data-generator="swarm" aria-label="{{localize "AZEROTH.Generator.SwarmMembers"}}" {{#unless identity.swarm.on}}disabled{{/unless}}>
+        <input type="text" name="swarm-of" value="{{identity.swarm.of}}" placeholder="{{localize "AZEROTH.Generator.SwarmOfName"}}" data-generator="swarm" aria-label="{{localize "AZEROTH.Generator.SwarmOfName"}}" {{#unless identity.swarm.on}}disabled{{/unless}}>
+        <span class="azeroth-forge-cost">{{identity.swarm.band}}</span>
+      </span>
+      {{else}}
+      <span class="azeroth-forge-cost" id="azeroth-generator-swarm">{{localize "AZEROTH.Generator.SwarmNever"}}</span>
+      {{/if}}
+    </div>
+
+    {{!-- 3. Take its numbers from the table. --}}
+    <h3 class="azeroth-forge-heading">{{localize "AZEROTH.Generator.Section.Numbers"}}</h3>
+    <div class="azeroth-generator-numbers">
+      <label>{{localize "AZEROTH.Health.Label"}} <input type="number" name="health" value="{{numbers.health}}" min="1" data-generator="health"> <span class="azeroth-generator-band">{{localize "AZEROTH.Generator.Band" n=numbers.healthNote}}</span></label>
+      <label>{{localize "AZEROTH.Sheet.Defense"}} <input type="number" name="defense" value="{{numbers.defense}}" min="0" data-generator="defense"> <span class="azeroth-generator-band">{{localize "AZEROTH.Generator.Band" n=numbers.defenseBand}}</span></label>
+      <label>{{localize "AZEROTH.Sheet.Initiative"}} <input type="number" name="initiative" value="{{numbers.initiative}}" data-generator="initiative"> <span class="azeroth-generator-band">{{localize "AZEROTH.Generator.Band" n=numbers.initiativeBand}}</span></label>
+      <label>{{localize "AZEROTH.Sheet.Speed"}} <input type="number" name="speed" value="{{numbers.speed}}" min="0" step="5" data-generator="speed"> ft
+        <span class="azeroth-forge-check"><input type="checkbox" name="flies" data-generator="flies" {{#if numbers.flies}}checked{{/if}}> {{numbers.flying}}</span></label>
+      <label>{{localize "AZEROTH.Generator.Armor"}}
+        <select name="armor" data-generator="armor">{{#each numbers.armors}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}</select>
+      </label>
+      <label>{{localize "AZEROTH.Sheet.ArmorPoints"}}
+        <input type="number" name="ap-body" value="{{numbers.ap.body}}" min="0" data-generator="ap" aria-label="{{localize "AZEROTH.Location.Body"}}">
+        <input type="number" name="ap-head" value="{{numbers.ap.head}}" min="0" data-generator="ap" aria-label="{{localize "AZEROTH.Location.Head"}}" {{#unless numbers.hasHead}}disabled{{/unless}}>
+        <input type="number" name="ap-limb" value="{{numbers.ap.limb}}" min="0" data-generator="ap" aria-label="{{localize "AZEROTH.Location.Limb"}}" {{#unless numbers.hasLimbs}}disabled{{/unless}}>
+        <span class="azeroth-generator-band">{{localize "AZEROTH.Generator.Band" n=numbers.apBand}}</span>
+      </label>
+      <label class="azeroth-generator-locations">
+        <span class="azeroth-forge-check"><input type="checkbox" name="hasHead" data-generator="hasHead" {{#if numbers.hasHead}}checked{{/if}}> {{localize "AZEROTH.Generator.HasHead"}}</span>
+        <span class="azeroth-forge-check"><input type="checkbox" name="hasLimbs" data-generator="hasLimbs" {{#if numbers.hasLimbs}}checked{{/if}}> {{localize "AZEROTH.Generator.HasLimbs"}}</span>
+      </label>
+      {{!-- One Ward a row, a school each (D-644); the band suggests the first. --}}
+      <div class="azeroth-generator-wards">
+        <span class="azeroth-generator-wards-label">{{localize "AZEROTH.Sheet.Ward"}} <span class="azeroth-generator-band">{{localize "AZEROTH.Generator.Band" n=numbers.wardBand}}</span></span>
+        <ol class="azeroth-forge-list azeroth-generator-ward-rows">
+          {{#each numbers.wards as |w|}}
+          <li>
+            <select name="ward-school-{{w.index}}" data-generator="ward" aria-label="{{localize "AZEROTH.Sheet.Ward"}}">{{#each w.options}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}</select>
+            <input type="number" name="ward-value-{{w.index}}" value="{{w.value}}" min="0" data-generator="ward" aria-label="{{localize "AZEROTH.Sheet.Ward"}}">
+            <button type="button" class="azeroth-forge-quiet" data-action="generatorRemoveWard" data-index="{{w.index}}" aria-label="{{localize "AZEROTH.Generator.Remove"}}">&times;</button>
+          </li>
+          {{/each}}
+        </ol>
+        {{#if numbers.wardOptions.length}}<div class="azeroth-forge-add"><button type="button" data-action="generatorAddWard">{{localize "AZEROTH.Generator.AddWard"}}</button></div>{{/if}}
+      </div>
+    </div>
+    <div class="azeroth-generator-scores">
+      {{#each numbers.scores as |sc|}}
+      <label class="azeroth-generator-score">
+        <span class="azeroth-generator-score-label">{{sc.label}}</span>
+        <input type="number" name="ability-{{sc.key}}" value="{{sc.value}}" min="3" max="20" data-generator="ability" {{#if sc.disabled}}disabled{{/if}}>
+        <span class="azeroth-generator-score-mod">{{sc.mod}}</span>
+      </label>
+      {{/each}}
+    </div>
+
+    {{!-- 4. Attacks, spells, one thing to do. --}}
+    <h3 class="azeroth-forge-heading">{{localize "AZEROTH.Sheet.Attacks"}}</h3>
+    <ol class="azeroth-forge-list azeroth-generator-attacks">
+      {{#each attacks as |a|}}
+      <li data-index="{{a.index}}">
+        <input type="text" name="attack-name-{{a.index}}" value="{{a.name}}" placeholder="{{localize "AZEROTH.Generator.AttackName"}}" data-generator="attack" class="azeroth-generator-attack-name" aria-label="{{localize "AZEROTH.Generator.AttackName"}}">
+        <select name="attack-ability-{{a.index}}" data-generator="attack" aria-label="{{localize "AZEROTH.Item.CastingAbility"}}">{{#each a.abilities}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}</select>
+        <label>{{localize "AZEROTH.Sheet.AttackBonus"}} <input type="number" name="attack-bonus-{{a.index}}" value="{{a.bonus}}" data-generator="attack"> <span class="azeroth-generator-band">{{localize "AZEROTH.Generator.Band" n=a.bonusBand}}</span></label>
+        <label>{{localize "AZEROTH.Item.Damage"}} <input type="number" name="attack-damage-{{a.index}}" value="{{a.damage}}" min="0" data-generator="attack"> <span class="azeroth-generator-band">{{localize "AZEROTH.Generator.Band" n=a.damageBand}}</span></label>
+        <label>{{localize "AZEROTH.Item.Range"}} <input type="number" name="attack-range-{{a.index}}" value="{{a.range}}" min="0" step="5" data-generator="attack" {{#unless a.ranged}}placeholder="—"{{/unless}}></label>
+        <button type="button" class="azeroth-forge-quiet" data-action="generatorRemoveAttack" data-index="{{a.index}}" aria-label="{{localize "AZEROTH.Generator.Remove"}}">&times;</button>
+        <input type="text" name="attack-traits-{{a.index}}" value="{{a.traits}}" placeholder="{{localize "AZEROTH.Item.Traits"}}" data-generator="attack" class="azeroth-generator-attack-traits" aria-label="{{localize "AZEROTH.Item.Traits"}}" autocomplete="off">
+        {{!-- 08 §5's traits, picked inside the window and appended to this attack (D-638), or
+              browsed and dropped (D-645). --}}
+        <button type="button" class="azeroth-forge-quiet" data-action="generatorBrowseTraits" data-index="{{a.index}}">{{localize "AZEROTH.Generator.Browse"}}</button>
+        <span class="azeroth-picker azeroth-generator-trait-picker">
+          <input type="text" name="attack-trait-search-{{a.index}}" data-picker="traits-{{a.index}}" placeholder="{{localize "AZEROTH.Generator.FindTrait"}}" aria-label="{{localize "AZEROTH.Generator.FindTrait"}}" autocomplete="off">
+          <ul class="azeroth-picker-list" data-picker-list="traits-{{a.index}}" data-picker-typed>
+            {{#each ../traitOptions as |t|}}
+            <li data-search="{{t.search}}">
+              <span class="azeroth-forge-name">{{t.name}}</span>
+              <button type="button" data-action="generatorAddTrait" data-index="{{a.index}}" data-name="{{t.name}}" aria-label="{{localize "AZEROTH.Picker.AddNamed" name=t.name}}">{{localize "AZEROTH.Picker.Add"}}</button>
+            </li>
+            {{/each}}
+            <li class="azeroth-picker-none" hidden>{{localize "AZEROTH.Picker.NoMatch"}}</li>
+          </ul>
+        </span>
+      </li>
+      {{/each}}
+    </ol>
+    <div class="azeroth-forge-add"><button type="button" data-action="generatorAddAttack">{{localize "AZEROTH.Generator.AddAttack"}}</button></div>
+
+    <h3 class="azeroth-forge-heading">{{localize "AZEROTH.Sheet.Spells"}}</h3>
+    <div class="azeroth-forge-row">
+      <label class="azeroth-forge-check"><input type="checkbox" name="caster" data-generator="caster" {{#if spells.caster}}checked{{/if}}> {{localize "AZEROTH.Generator.Casts"}}</label>
+      <span class="azeroth-forge-control">
+        {{#if spells.caster}}
+        <label class="azeroth-forge-check">{{localize "AZEROTH.Creator.Numbers.spellDC"}} <input type="number" name="spell-dc" value="{{spells.dc}}" min="0" data-generator="spell"></label>
+        <span class="azeroth-generator-band">{{localize "AZEROTH.Generator.Band" n=spells.dcBand}}</span>
+        {{/if}}
+      </span>
+    </div>
+    {{#if spells.caster}}
+    <ol class="azeroth-forge-list">
+      {{#each spells.names as |sp|}}
+      <li><span class="azeroth-forge-name">{{sp.name}}</span><button type="button" class="azeroth-forge-quiet" data-action="generatorRemoveSpell" data-index="{{sp.index}}" aria-label="{{localize "AZEROTH.Generator.Remove"}}">&times;</button></li>
+      {{/each}}
+    </ol>
+    <div class="azeroth-picker">
+      <input type="text" name="spellSearch" value="{{search.spell}}" data-picker="spells" placeholder="{{localize "AZEROTH.Creator.SpellSearch"}}" aria-label="{{localize "AZEROTH.Creator.SpellSearch"}}" autocomplete="off">
+      <ul class="azeroth-picker-list" data-picker-list="spells" data-picker-typed>
+        {{#each spells.options as |sp|}}
+        <li data-search="{{sp.search}}">
+          <span class="azeroth-forge-name">{{sp.name}}</span>
+          <span class="azeroth-forge-tier">{{sp.line}}</span>
+          <button type="button" data-action="generatorAddSpell" data-name="{{sp.name}}" aria-label="{{localize "AZEROTH.Picker.AddNamed" name=sp.name}}">{{localize "AZEROTH.Creator.AddSpell"}}</button>
+        </li>
+        {{/each}}
+        <li class="azeroth-picker-none" hidden>{{localize "AZEROTH.Picker.NoMatch"}}</li>
+      </ul>
+    </div>
+    {{/if}}
+
+    <h3 class="azeroth-forge-heading">{{localize "AZEROTH.Generator.Section.Thing"}}</h3>
+    <ol class="azeroth-forge-list azeroth-generator-abilities">
+      {{#each abilities as |ab|}}
+      <li>
+        <input type="text" name="ability-name-{{ab.index}}" value="{{ab.name}}" placeholder="{{localize "AZEROTH.Generator.AbilityName"}}" data-generator="ability" class="azeroth-forge-name" aria-label="{{localize "AZEROTH.Generator.AbilityName"}}">
+        <button type="button" class="azeroth-forge-quiet" data-action="generatorRemoveAbility" data-index="{{ab.index}}" aria-label="{{localize "AZEROTH.Generator.Remove"}}">&times;</button>
+        <textarea name="ability-text-{{ab.index}}" rows="2" data-generator="ability" aria-label="{{localize "AZEROTH.Generator.AbilityText"}}">{{ab.description}}</textarea>
+        {{> systems/azeroth-rpg/templates/dialog/partials/ability-automation.hbs prefix=ab.prefix index=ab.index list=ab.list auto=ab.auto}}
+      </li>
+      {{/each}}
+    </ol>
+    <div class="azeroth-forge-add"><button type="button" data-action="generatorAddAbility">{{localize "AZEROTH.Generator.AddAbility"}}</button></div>
+
+    {{#if bossActions.allowed}}
+    <h4 class="azeroth-creator-subheading">{{localize "AZEROTH.Sheet.BossActions"}} · {{bossActions.band}}</h4>
+    <ol class="azeroth-forge-list azeroth-generator-abilities">
+      {{#each bossActions.rows as |ba|}}
+      <li>
+        <input type="text" name="boss-name-{{ba.index}}" value="{{ba.name}}" placeholder="{{localize "AZEROTH.Generator.AbilityName"}}" data-generator="boss" class="azeroth-forge-name" aria-label="{{localize "AZEROTH.Generator.AbilityName"}}">
+        <select name="boss-cost-{{ba.index}}" data-generator="boss" aria-label="{{localize "AZEROTH.Generator.Cost"}}">
+          <option value="1" {{#if (eq ba.cost 1)}}selected{{/if}}>{{localize "AZEROTH.Generator.CostOne"}}</option>
+          <option value="2" {{#if (eq ba.cost 2)}}selected{{/if}}>{{localize "AZEROTH.Generator.CostTwo"}}</option>
+        </select>
+        <button type="button" class="azeroth-forge-quiet" data-action="generatorRemoveBossAction" data-index="{{ba.index}}" aria-label="{{localize "AZEROTH.Generator.Remove"}}">&times;</button>
+        <textarea name="boss-text-{{ba.index}}" rows="2" data-generator="boss" aria-label="{{localize "AZEROTH.Generator.AbilityText"}}">{{ba.description}}</textarea>
+        {{> systems/azeroth-rpg/templates/dialog/partials/ability-automation.hbs prefix=ba.prefix index=ba.index list=ba.list auto=ba.auto}}
+      </li>
+      {{/each}}
+    </ol>
+    <div class="azeroth-forge-add"><button type="button" data-action="generatorAddBossAction">{{localize "AZEROTH.Generator.AddBossAction"}}</button></div>
+    {{/if}}
+
+    {{!-- 5. The keywords, and Behavior. --}}
+    <h3 class="azeroth-forge-heading">{{localize "AZEROTH.Generator.Section.Keywords"}}</h3>
+    <ol class="azeroth-forge-list azeroth-generator-skills">
+      {{#each keywords.skills as |sk|}}
+      <li>
+        <select name="skill-key-{{sk.index}}" data-generator="skill" aria-label="{{localize "AZEROTH.Sheet.Skills"}}">{{#each sk.options}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}</select>
+        <label>{{localize "AZEROTH.Sheet.Rank"}} <input type="number" name="skill-rank-{{sk.index}}" value="{{sk.rank}}" min="1" max="{{../keywords.rankMax}}" data-generator="skill"></label>
+        <button type="button" class="azeroth-forge-quiet" data-action="generatorRemoveSkill" data-skill="{{sk.key}}" aria-label="{{localize "AZEROTH.Generator.Remove"}}">&times;</button>
+      </li>
+      {{/each}}
+    </ol>
+    <div class="azeroth-forge-add">
+      <select name="skillAdd" aria-label="{{localize "AZEROTH.Sheet.Skills"}}">{{#each keywords.skillOptions}}<option value="{{this.value}}">{{this.label}}</option>{{/each}}</select>
+      <button type="button" data-action="generatorAddSkill">{{localize "AZEROTH.Generator.AddSkill"}}</button>
+    </div>
+    <div class="azeroth-forge-row">
+      <span class="azeroth-forge-label">{{localize "AZEROTH.Sheet.Resilience"}}</span>
+      <span class="azeroth-forge-control">
+        {{#each keywords.resiliences as |r|}}<label class="azeroth-forge-check"><input type="checkbox" name="res-{{r.key}}" data-generator="res" {{#if r.checked}}checked{{/if}}> {{r.label}}</label>{{/each}}
+      </span>
+      <span class="azeroth-forge-label">{{localize "AZEROTH.Sheet.Immune"}}</span>
+      <span class="azeroth-forge-control">
+        {{#each keywords.damageTypes as |d|}}<label class="azeroth-forge-check"><input type="checkbox" name="immune-{{d.key}}" data-generator="immune" {{#if d.immune}}checked{{/if}}> {{d.label}}</label>{{/each}}
+      </span>
+      <span class="azeroth-forge-label">{{localize "AZEROTH.Sheet.Vulnerable"}}</span>
+      <span class="azeroth-forge-control">
+        {{#each keywords.damageTypes as |d|}}<label class="azeroth-forge-check"><input type="checkbox" name="vulnerable-{{d.key}}" data-generator="vulnerable" {{#if d.vulnerable}}checked{{/if}}> {{d.label}}</label>{{/each}}
+      </span>
+      <span class="azeroth-forge-label">{{localize "AZEROTH.Sheet.Inflicts"}}</span>
+      <span class="azeroth-forge-control">
+        {{#each keywords.conditions as |c|}}<label class="azeroth-forge-check"><input type="checkbox" name="inflicts-{{c.key}}" data-generator="inflicts" {{#if c.checked}}checked{{/if}}> {{c.label}}</label>{{/each}}
+        <button type="button" class="azeroth-forge-quiet" data-action="generatorSuggestInflicts">{{localize "AZEROTH.Generator.SuggestInflicts"}}</button>
+      </span>
+      <span class="azeroth-forge-label">{{localize "AZEROTH.Momentum.Label"}}</span>
+      <span class="azeroth-forge-control">
+        <select name="momentum-name" data-generator="pool">{{#each keywords.momentum.names}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}</select>
+        <input type="number" name="momentum-max" value="{{keywords.momentum.max}}" min="0" data-generator="pool" aria-label="{{localize "AZEROTH.Item.PoolCap"}}">
+      </span>
+      <span class="azeroth-forge-label">{{localize "AZEROTH.Sheet.Power"}}</span>
+      <span class="azeroth-forge-control">
+        <select name="power-name" data-generator="pool">{{#each keywords.power.names}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}</select>
+        <input type="number" name="power-max" value="{{keywords.power.max}}" min="0" data-generator="pool" aria-label="{{localize "AZEROTH.Item.PoolCap"}}">
+        {{#if keywords.power.band}}<span class="azeroth-generator-band">{{localize "AZEROTH.Generator.Band" n=keywords.power.band}}</span>{{/if}}
+      </span>
+    </div>
+
+    <h3 class="azeroth-forge-heading">{{localize "AZEROTH.Sheet.Behavior"}}</h3>
+    <textarea name="behavior" rows="2" data-generator="prose" aria-label="{{localize "AZEROTH.Sheet.Behavior"}}">{{prose.behavior}}</textarea>
+    {{#if identity.swarm.on}}
+    {{!-- 14's Swarm rider: what is true of this creature's swarm and nothing 13 already says. --}}
+    <div class="azeroth-forge-row">
+      <label for="azeroth-generator-swarm-note">{{localize "AZEROTH.Sheet.Swarm"}}</label>
+      <textarea id="azeroth-generator-swarm-note" name="swarmNote" rows="2" data-generator="prose">{{prose.swarm}}</textarea>
+    </div>
+    {{/if}}
+    <div class="azeroth-forge-row">
+      <label for="azeroth-generator-lore">{{localize "AZEROTH.Generator.Lore"}}</label>
+      <textarea id="azeroth-generator-lore" name="lore" rows="2" data-generator="prose">{{prose.lore}}</textarea>
+      <label for="azeroth-generator-tactics">{{localize "AZEROTH.Sheet.Tactics"}}</label>
+      <textarea id="azeroth-generator-tactics" name="tactics" rows="2" data-generator="prose">{{prose.tactics}}</textarea>
+      <label for="azeroth-generator-ecology">{{localize "AZEROTH.Sheet.Ecology"}}</label>
+      <textarea id="azeroth-generator-ecology" name="ecology" rows="2" data-generator="prose">{{prose.ecology}}</textarea>
+    </div>
+  </div>
+
+  <div class="azeroth-forge-summary" aria-live="polite">
+    <span>{{summary.line}}</span>
+    {{#if summary.reasons.length}}
+    <ul class="azeroth-forge-reasons">{{#each summary.reasons}}<li>{{this}}</li>{{/each}}</ul>
+    {{/if}}
+    {{#if summary.notes.length}}
+    <ul class="azeroth-forge-notes">{{#each summary.notes}}<li>{{this}}</li>{{/each}}</ul>
+    {{/if}}
+  </div>
+
+  <div class="azeroth-forge-buttons">
+    <button type="button" class="azeroth-forge-quiet" data-action="generatorCancel">{{localize "AZEROTH.Creator.Cancel"}}</button>
+    {{#if rework}}<button type="button" class="azeroth-forge-quiet" data-action="generatorReload">{{localize "AZEROTH.Generator.Reload"}}</button>{{/if}}
+    <button type="button" class="azeroth-forge-quiet" data-action="generatorResuggest">{{localize "AZEROTH.Generator.Resuggest"}}</button>
+    <button type="submit" {{#unless summary.ok}}aria-disabled="true"{{/unless}}>{{#if rework}}{{localize "AZEROTH.Generator.Apply"}}{{else}}{{localize "AZEROTH.Generator.Create"}}{{/if}}</button>
+  </div>
+</div>

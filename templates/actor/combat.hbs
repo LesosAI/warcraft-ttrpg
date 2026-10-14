@@ -1,0 +1,388 @@
+{{!--
+  The Combat tab (D11 SS1, D-617): the armour figure D11 planned, its three
+  tiles doubling as the called shot; Defense and Ward beside it; the weapons;
+  and the Momentum maneuvers open to anyone, name and cost. The called shot
+  is a PURCHASE, not a die roll (D-411, 06 SS2): the location is chosen here,
+  before the attack, and priced by the roll. The tile lit is view state on
+  the sheet; the hidden field carries it to the attack door.
+--}}
+<section class="tab azeroth-panel {{tab.cssClass}}" data-tab="combat" data-group="primary">
+
+  <div class="azeroth-combat-top">
+    <div class="azeroth-combat-figure">
+      <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Sheet.ArmorPoints"}}</h3>
+      {{!-- In a shape the Armor Points are the block's (D-769), and say so. --}}
+      {{#if combat.shape}}<p class="azeroth-shape-from">{{combat.shape.from}}</p>{{/if}}
+      <input type="hidden" data-field="azeroth-location" value="{{combat.location}}">
+      <div class="azeroth-figure" role="group" aria-label="{{localize "AZEROTH.Sheet.CalledShot"}}">
+        {{#each combat.tiles as |tile|}}
+        <button type="button" class="azeroth-figure-tile is-{{tile.key}}{{#if tile.selected}} is-selected{{/if}}"
+                data-action="calledShot" data-location="{{tile.key}}" aria-pressed="{{tile.selected}}">
+          <span class="azeroth-figure-label">{{localize tile.label}}</span>
+          <span class="azeroth-figure-ap">{{azerothDash tile.ap}}</span>
+          <span class="azeroth-figure-price">
+            {{#if tile.banes}}{{localize "AZEROTH.Sheet.Bane"}}{{#if tile.modifier}} {{azerothSigned tile.modifier}}{{/if}}{{else}}{{localize "AZEROTH.Sheet.CalledShotFree"}}{{/if}}
+          </span>
+        </button>
+        {{/each}}
+      </div>
+    </div>
+
+    <dl class="azeroth-combat-stats">
+      <div>
+        <dt>{{localize "AZEROTH.Sheet.Defense"}}</dt>
+        <dd class="azeroth-combat-big">{{azerothDash combat.defense}}</dd>
+        {{#if combat.shape}}<dd class="azeroth-shape-from">{{combat.shape.from}}</dd>{{/if}}
+      </div>
+      {{!-- A shape moves at its block's pace (D-769): the Speed is drawn here
+            beside the other two numbers the block gives, and names it. --}}
+      {{#if combat.shape}}
+      <div>
+        <dt>{{localize "AZEROTH.Sheet.Speed"}}</dt>
+        <dd>{{combat.shape.speed}} ft{{#if combat.shape.flying}} <span class="azeroth-of">/ {{combat.shape.flying}} {{localize "AZEROTH.Sheet.Flying"}}</span>{{/if}}</dd>
+        <dd class="azeroth-shape-from">{{combat.shape.from}}</dd>
+      </div>
+      {{/if}}
+      <div>
+        <dt>{{localize "AZEROTH.Sheet.CalledShot"}}</dt>
+        <dd>{{localize (lookup config.locations combat.location)}}</dd>
+      </div>
+      <div>
+        <dt>{{localize "AZEROTH.Sheet.Ward"}}</dt>
+        <dd>
+          {{#each combat.ward as |w|}}<span class="azeroth-feature-chip">{{localize w.label}} {{w.value}}</span>{{else}}&mdash;{{/each}}
+        </dd>
+      </div>
+    </dl>
+  </div>
+
+  {{#if combat.shape.melds}}
+  {{!-- THE SHAPE'S OWN ATTACKS (02 §7, D-769): the block's rows, through the
+        weapon door - the form's ability modifier and Proficiency, the printed
+        DMG as the Rating. What melded is said in WORDS under them (the lead:
+        *"Melds; Signatures count"*). --}}
+  <h3 class="azeroth-panel-heading azeroth-combat-section">{{combat.shape.attacksHeading}}</h3>
+  <ol class="azeroth-weapons azeroth-natural-attacks">
+    <li class="azeroth-weapon azeroth-weapon-head">
+      <span class="azeroth-weapon-icon"></span>
+      <span class="azeroth-weapon-name">{{localize "AZEROTH.Shape.Attack"}}</span>
+      <span class="azeroth-weapon-pen"></span>
+      <span class="azeroth-weapon-rating">{{localize "AZEROTH.Sheet.DMG"}}</span>
+      <span class="azeroth-weapon-range">{{localize "AZEROTH.Item.Range"}}</span>
+      <span class="azeroth-weapon-controls"></span>
+    </li>
+    {{#each combat.shape.attacks as |a|}}
+    <li class="azeroth-weapon" data-natural-index="{{a.index}}">
+      {{#if a.img}}<img class="azeroth-weapon-icon" src="{{a.img}}" alt="">{{else}}<span class="azeroth-weapon-icon"></span>{{/if}}
+      <span class="azeroth-weapon-name">{{a.name}}{{#if a.form}} <span class="azeroth-natural-form">{{a.form}}</span>{{/if}}</span>
+      <span class="azeroth-weapon-pen"></span>
+      <span class="azeroth-weapon-rating">{{azerothDash a.rating}}</span>
+      <span class="azeroth-weapon-range">{{#if a.range}}{{a.range}} ft{{else}}&mdash;{{/if}}</span>
+      <span class="azeroth-weapon-traits">{{#each a.traits}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}</span>
+      <span class="azeroth-weapon-controls">
+        <span class="azeroth-natural-bonus" data-tooltip="{{a.bonusTip}}">{{azerothSigned a.bonus}}</span>
+        <button type="button" data-action="rollNaturalAttack">{{localize "AZEROTH.Sheet.Attack"}}</button>
+      </span>
+    </li>
+    {{else}}
+    <li class="azeroth-weapon azeroth-weapon--empty">{{localize "AZEROTH.Shape.NoAttacks"}}</li>
+    {{/each}}
+  </ol>
+  {{#if combat.shape.melded}}<p class="azeroth-shape-melded">{{combat.shape.melded}}</p>{{/if}}
+  {{else}}
+  <h3 class="azeroth-panel-heading azeroth-combat-section">{{localize "AZEROTH.Sheet.Weapons"}}</h3>
+  <ol class="azeroth-weapons">
+    {{!-- Every column named (D-649): the header row sits on the row's own grid. --}}
+    <li class="azeroth-weapon azeroth-weapon-head">
+      <span class="azeroth-weapon-icon"></span>
+      <span class="azeroth-weapon-name">{{localize "AZEROTH.Sheet.Weapon"}}</span>
+      <span class="azeroth-weapon-pen"></span>
+      <span class="azeroth-weapon-rating">{{localize "AZEROTH.Sheet.DMG"}}</span>
+      <span class="azeroth-weapon-range">{{localize "AZEROTH.Item.Range"}}</span>
+      <span class="azeroth-weapon-controls"></span>
+    </li>
+    {{#each weapons}}
+    {{!-- `draggable` is core's own drag selector (ActorSheetV2, 14.367): a row
+          dragged to the hotbar becomes a macro that SWINGS it rather than
+          core's sheet-toggle one (the lead, 2026-09-13). The Ammunition list
+          below is NOT draggable - a bundle is nocked, never swung. --}}
+    <li class="azeroth-weapon draggable" data-item-id="{{this.id}}">
+      {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=this.img rarityClass=this.rarityClass}}
+      <span class="azeroth-weapon-name{{#if this.rarityClass}} {{this.rarityClass}}{{/if}}" data-action="expandItem" role="button" tabindex="0" aria-expanded="false">{{this.name}}</span>
+      <button type="button" class="azeroth-open" data-action="openItem" data-tooltip="{{localize "AZEROTH.Sheet.Open"}}" aria-label="{{localize "AZEROTH.Sheet.Open"}}"><i class="fa-solid fa-pen-to-square"></i></button>
+      <span class="azeroth-weapon-rating">{{azerothDash this.rating}}</span>
+      <span class="azeroth-weapon-range">{{#if this.range}}{{this.range}} ft{{else}}&mdash;{{/if}}</span>
+      <span class="azeroth-weapon-traits">{{#each this.traits}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}</span>
+      {{#if this.coating}}
+      {{!-- What is on the blade (08 SS13, D-670): named, and wiped off here. --}}
+      <span class="azeroth-carried-coating">{{localize "AZEROTH.Use.CoatedWith" name=this.coating}}
+        <button type="button" class="azeroth-chip-x" data-action="clearCoating" data-tooltip="{{localize "AZEROTH.Use.Wipe"}}" aria-label="{{localize "AZEROTH.Use.Wipe"}}">&times;</button></span>
+      {{/if}}
+      {{#if this.launcher}}
+      {{!-- The bundle nocked (08 §7, D-641): the launcher's own field, bound in _onRender. --}}
+      <label class="azeroth-weapon-ammo">
+        <span>{{localize "AZEROTH.Sheet.Ammunition"}}</span>
+        <select class="azeroth-ammo-select" aria-label="{{localize "AZEROTH.Sheet.Ammunition"}}"{{#unless this.editable}} disabled{{/unless}}>
+          {{#each this.ammo as |b|}}
+          <option value="{{b.id}}"{{#if b.selected}} selected{{/if}}>{{b.name}} ({{b.quantity}})</option>
+          {{else}}
+          <option value="">{{localize "AZEROTH.Sheet.NoAmmunition"}}</option>
+          {{/each}}
+        </select>
+      </label>
+      {{/if}}
+      <span class="azeroth-weapon-controls">
+        <button type="button" data-action="rollAttack">
+          {{localize "AZEROTH.Sheet.Attack"}}
+        </button>
+        {{> systems/azeroth-rpg/templates/actor/partials/star.hbs favorite=this.favorite}}
+        <button type="button" class="azeroth-equip{{#if this.equipped}} is-equipped{{/if}}" data-action="toggleEquipped"
+                data-tooltip="{{localize "AZEROTH.Sheet.Equip"}}" aria-pressed="{{this.equipped}}">
+          {{#if this.equipped}}{{localize "AZEROTH.Sheet.Equipped"}}{{else}}{{localize "AZEROTH.Sheet.Equip"}}{{/if}}
+        </button>
+        <button type="button" class="azeroth-delete" data-action="deleteItem" data-tooltip="{{localize "AZEROTH.Sheet.Delete"}}" aria-label="{{localize "AZEROTH.Sheet.Delete"}}">&times;</button>
+      </span>
+      {{> systems/azeroth-rpg/templates/actor/partials/item-detail.hbs id=this.id detail=this.detail description=this.description}}
+    </li>
+    {{else}}
+    <li class="azeroth-weapon azeroth-weapon--empty">{{localize "AZEROTH.Sheet.NoWeapons"}}</li>
+    {{/each}}
+  </ol>
+  {{/if}}
+
+  {{#if ammunition.length}}
+  {{!-- The bundles of shot (D-407, D-641): counted here, fired from the launcher's row. --}}
+  <h3 class="azeroth-panel-heading azeroth-combat-section">{{localize "AZEROTH.Sheet.Ammunition"}}</h3>
+  <ol class="azeroth-weapons azeroth-ammunition">
+    <li class="azeroth-weapon azeroth-weapon-head">
+      <span class="azeroth-weapon-icon"></span>
+      <span class="azeroth-weapon-name">{{localize "AZEROTH.Sheet.Ammunition"}}</span>
+      <span class="azeroth-weapon-pen"></span>
+      <span class="azeroth-weapon-fits">{{localize "AZEROTH.Item.Fits"}}</span>
+      <span class="azeroth-ammo-quantity">{{localize "AZEROTH.Sheet.Qty"}}</span>
+      <span class="azeroth-weapon-controls"></span>
+    </li>
+    {{#each ammunition}}
+    <li class="azeroth-weapon" data-item-id="{{this.id}}">
+      {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=this.img rarityClass=this.rarityClass}}
+      <span class="azeroth-weapon-name{{#if this.rarityClass}} {{this.rarityClass}}{{/if}}" data-action="expandItem" role="button" tabindex="0" aria-expanded="false">{{this.name}}</span>
+      <button type="button" class="azeroth-open" data-action="openItem" data-tooltip="{{localize "AZEROTH.Sheet.Open"}}" aria-label="{{localize "AZEROTH.Sheet.Open"}}"><i class="fa-solid fa-pen-to-square"></i></button>
+      <span class="azeroth-weapon-fits">{{this.fits}}</span>
+      <span class="azeroth-ammo-quantity">&times;{{this.quantity}}</span>
+      <span class="azeroth-weapon-controls">
+        {{> systems/azeroth-rpg/templates/actor/partials/star.hbs favorite=this.favorite}}
+        <button type="button" class="azeroth-delete" data-action="deleteItem" data-tooltip="{{localize "AZEROTH.Sheet.Delete"}}" aria-label="{{localize "AZEROTH.Sheet.Delete"}}">&times;</button>
+      </span>
+      {{> systems/azeroth-rpg/templates/actor/partials/item-detail.hbs id=this.id detail=this.detail description=this.description}}
+    </li>
+    {{/each}}
+  </ol>
+  {{/if}}
+
+  {{!-- The fight's controls (D-627, D-694): Guard; Disengage and Ready, 05's
+        two Half-Actions that 06 SS6's Reactions cannot do without; the
+        Ranger's mark; the Druid's form.
+
+        A chip says a state is standing, in WORDS - Disengaging is a status
+        icon as well, and colour is never the only carrier. The readied action
+        prints the trigger and the action as they were typed; Stand down is
+        its x, the way Clear the mark is the mark's. --}}
+  <div class="azeroth-combat-state">
+    <button type="button" data-action="guard" data-tooltip="{{localize "AZEROTH.Combat.GuardTip"}}">{{localize "AZEROTH.Combat.Guard"}}</button>
+    <button type="button" data-action="disengage" data-tooltip="{{localize "AZEROTH.Combat.DisengageTip"}}">{{localize "AZEROTH.Combat.Disengage"}}</button>
+    <button type="button" data-action="ready" data-tooltip="{{localize "AZEROTH.Combat.ReadyTip"}}">{{localize "AZEROTH.Combat.Ready"}}</button>
+    {{!-- Hide (D-717): a free Stealth Test once a round, and core's own
+          `invisible` carries the result. The book defines no Hidden condition
+          (O-113), so the chip says it in WORDS beside the status icon. --}}
+    <button type="button" data-action="stealth" data-tooltip="{{localize "AZEROTH.Combat.StealthTip"}}">{{localize "AZEROTH.Combat.Stealth"}}</button>
+    {{#if combat.disengaging}}
+    <span class="azeroth-state-chip">{{localize "AZEROTH.Combat.Disengaging"}}</span>
+    {{/if}}
+    {{#if combat.hidden}}
+    <span class="azeroth-state-chip">{{localize "AZEROTH.Combat.Hidden"}}
+      <button type="button" class="azeroth-chip-x" data-action="clearHidden" data-tooltip="{{localize "AZEROTH.Combat.ClearHidden"}}" aria-label="{{localize "AZEROTH.Combat.ClearHidden"}}">&times;</button></span>
+    {{/if}}
+    {{#if combat.freeMove}}
+    {{!-- 02 SS7's Sprint (D-712): the first Move of the fight costs no
+          Half-Action; and so does the Move a rider's spend buys (04's Feral
+          Charge, D-770). The chip is the budget's, so it goes out with the
+          Move rather than standing all fight beside a feature that is spent,
+          and its words name no single source. --}}
+    <span class="azeroth-state-chip" data-tooltip="{{localize "AZEROTH.Combat.FreeMoveTip"}}">{{localize "AZEROTH.Combat.FreeMove"}}</span>
+    {{/if}}
+    {{#if combat.ready}}
+    <span class="azeroth-state-chip">{{localize "AZEROTH.Combat.Readied" trigger=combat.ready.trigger action=combat.ready.action}}
+      <button type="button" class="azeroth-chip-x" data-action="clearReady" aria-label="{{localize "AZEROTH.Combat.ClearReady"}}">&times;</button></span>
+    {{/if}}
+    {{#if combat.canMark}}
+    <button type="button" data-action="markQuarry">{{localize "AZEROTH.Combat.Mark"}}</button>
+    {{#if combat.mark}}
+    <span class="azeroth-state-chip">{{localize "AZEROTH.Combat.Marked" name=combat.mark.name}}
+      <button type="button" class="azeroth-chip-x" data-action="clearMark" aria-label="{{localize "AZEROTH.Combat.ClearMark"}}">&times;</button></span>
+    {{/if}}
+    {{/if}}
+    {{#if combat.shape}}
+    {{!-- Any of the three shapes (D-769), named in words; its x is Leave. --}}
+    <span class="azeroth-state-chip">{{combat.shape.line}}
+      <button type="button" class="azeroth-chip-x" data-action="leaveShape" aria-label="{{localize "AZEROTH.Shape.Leave"}}">&times;</button></span>
+    {{/if}}
+    {{!-- A rider whose spend buys a move, paid BEFORE the blow (04's Feral
+          Charge; D-770, the lead: "Either order"): drawn in a fight alone.
+          Paid, it is a chip in words until the next attack this turn takes
+          it; refused, the button is greyed with its reason beside it (D5).
+          Everything a row draws is on the row (D-609). --}}
+    {{#each combat.charges as |c|}}
+    {{#if c.primed}}
+    <span class="azeroth-state-chip" data-rider="{{c.identifier}}">{{c.chip}}</span>
+    {{else}}
+    <button type="button" data-action="primeRider" data-rider="{{c.identifier}}" data-tooltip="{{c.tip}}"{{#unless c.available}} disabled{{/unless}}>{{c.name}} &middot; {{c.price}}</button>
+    {{#if c.reason}}<span class="azeroth-state-why">{{c.reason}}</span>{{/if}}
+    {{/if}}
+    {{/each}}
+  </div>
+
+  {{!-- 05 SS11 and 06 SS7: what a Momentum spend buys (D-626). The name
+        opens the book's sentence; Use pays and posts the card. --}}
+  <h3 class="azeroth-panel-heading azeroth-combat-section">{{localize "AZEROTH.Sheet.Maneuvers"}}</h3>
+  <ol class="azeroth-maneuvers">
+    {{#each combat.maneuvers as |m|}}
+    <li class="azeroth-maneuver{{#unless m.affordable}} is-spent{{/unless}}" data-expand-id="{{m.expandId}}">
+      <span class="azeroth-maneuver-cost">{{m.cost}}</span>
+      <span class="azeroth-maneuver-name" data-action="expandItem" role="button" tabindex="0" aria-expanded="false">{{localize m.label}}</span>
+      {{#if m.usable}}<button type="button" class="azeroth-use" data-action="useManeuver" data-maneuver="{{m.key}}"{{#unless m.affordable}} disabled{{/unless}}>{{localize "AZEROTH.Feature.Use"}}</button>{{/if}}
+      <div class="azeroth-item-detail azeroth-maneuver-detail" data-expand-id="{{m.expandId}}" hidden>
+        <p>{{localize m.text}}</p>
+        {{#if m.charge}}<p class="azeroth-item-origin">{{localize "AZEROTH.Maneuver.ChargeFree"}}</p>{{/if}}
+        {{#each m.rows as |r|}}<p class="azeroth-item-origin">{{localize "AZEROTH.Maneuver.CostFrom" name=r.name cost=r.cost}}</p>{{/each}}
+        {{#unless m.usable}}<p class="azeroth-item-origin">{{localize "AZEROTH.Maneuver.CalledShotNote"}}</p>{{/unless}}
+      </div>
+    </li>
+    {{/each}}
+  </ol>
+
+  {{!-- Features (02 §5, §7; D-612, D-620): granted by the class at its level
+        and by the race, withdrawn with them. An action has Use; a passive has
+        its text. At the foot of Combat since D-665: a feature is used in a fight. --}}
+  <h3 class="azeroth-panel-heading azeroth-combat-section">{{localize "AZEROTH.Feature.Heading"}}</h3>
+  <ul class="azeroth-features">
+    {{#each features as |f|}}
+    <li class="azeroth-feature draggable{{#if f.passive}} is-passive{{/if}}{{#unless f.available}} is-spent{{/unless}}" data-item-id="{{f.id}}">
+      <span class="azeroth-feature-name" data-action="expandItem" role="button" tabindex="0" aria-expanded="false">{{f.name}}</span>
+      <span class="azeroth-feature-meta">
+        {{#if f.actionLabel}}<span class="azeroth-feature-chip">{{localize f.actionLabel}}</span>{{/if}}
+        {{#if f.cost}}<span class="azeroth-feature-chip">{{f.cost}}</span>{{/if}}
+        {{#if f.casting}}<span class="azeroth-feature-chip">{{localize "AZEROTH.Item.CastingTest"}}</span>{{/if}}
+        {{!-- How many one use places (02 §7's Totem Mastery, D-710). --}}
+        {{#if f.picks}}<span class="azeroth-feature-chip">{{localize "AZEROTH.Feature.UpTo" count=f.picks}}</span>{{/if}}
+        {{#each f.modifiedBy}}<span class="azeroth-feature-chip azeroth-feature-chip--talent">{{this}}</span>{{/each}}
+        {{#if f.uses}}{{> systems/azeroth-rpg/templates/actor/partials/uses.hbs name=f.name uses=f.uses}}{{/if}}
+        {{#if f.passive}}<span class="azeroth-feature-chip">{{localize "AZEROTH.Feature.Kind.Passive"}}</span>{{/if}}
+      </span>
+      {{#unless f.passive}}
+      <button type="button" class="azeroth-use" data-action="useFeature"{{#unless f.available}} disabled{{/unless}}>{{localize "AZEROTH.Feature.Use"}}</button>
+      {{/unless}}
+      <button type="button" class="azeroth-star{{#if f.favorite}} is-favorite{{/if}}" data-action="toggleFavorite"
+              data-tooltip="{{#if f.favorite}}{{localize "AZEROTH.Sheet.Unstar"}}{{else}}{{localize "AZEROTH.Sheet.Star"}}{{/if}}"
+              aria-label="{{#if f.favorite}}{{localize "AZEROTH.Sheet.Unstar"}}{{else}}{{localize "AZEROTH.Sheet.Star"}}{{/if}}" aria-pressed="{{f.favorite}}"><i class="fa-{{#if f.favorite}}solid{{else}}regular{{/if}} fa-star"></i></button>
+      <div class="azeroth-item-detail azeroth-feature-effect" data-item-id="{{f.id}}" hidden>
+        {{#if f.origin}}<p class="azeroth-item-origin">{{f.origin}}</p>{{/if}}
+        {{#if f.known}}<p class="azeroth-item-origin">{{localize "AZEROTH.Feature.KnownLine"}}: {{f.known}}</p>{{/if}}
+        {{{f.effect}}}
+      </div>
+      {{!-- Why the Use is greyed, in words (D5): the Avatar of the Wild without
+            Heart of the Wild (D-769). The Signatures panel's own line. --}}
+      {{#if f.refusal}}<span class="azeroth-signature-why azeroth-feature-why">{{f.refusal}}</span>{{/if}}
+    </li>
+    {{else}}
+    <li class="azeroth-feature azeroth-feature--empty">{{localize "AZEROTH.Feature.NoFeatures"}}</li>
+    {{/each}}
+  </ul>
+
+  {{!-- Talents in play (D-623): taken talents with a limited use, so the
+        counter is a row and not only a hover card on Progress. --}}
+  {{#if usableTalents.length}}
+  <h3 class="azeroth-panel-heading azeroth-combat-section">{{localize "AZEROTH.Sheet.TalentsInPlay"}}</h3>
+  <ul class="azeroth-features azeroth-talents-in-play">
+    {{#each usableTalents as |t|}}
+    <li class="azeroth-feature{{#unless t.available}} is-spent{{/unless}}" data-item-id="{{t.id}}">
+      <span class="azeroth-feature-name" data-action="expandItem" role="button" tabindex="0" aria-expanded="false">{{t.name}}</span>
+      <span class="azeroth-feature-meta">{{> systems/azeroth-rpg/templates/actor/partials/uses.hbs name=t.name uses=t.uses}}</span>
+      <button type="button" class="azeroth-star{{#if t.favorite}} is-favorite{{/if}}" data-action="toggleFavorite"
+              data-tooltip="{{#if t.favorite}}{{localize "AZEROTH.Sheet.Unstar"}}{{else}}{{localize "AZEROTH.Sheet.Star"}}{{/if}}"
+              aria-label="{{#if t.favorite}}{{localize "AZEROTH.Sheet.Unstar"}}{{else}}{{localize "AZEROTH.Sheet.Star"}}{{/if}}" aria-pressed="{{t.favorite}}"><i class="fa-{{#if t.favorite}}solid{{else}}regular{{/if}} fa-star"></i></button>
+      <div class="azeroth-item-detail azeroth-feature-effect" data-item-id="{{t.id}}" hidden>
+        {{#if t.origin}}<p class="azeroth-item-origin">{{t.origin}}</p>{{/if}}
+        {{{t.effect}}}
+      </div>
+    </li>
+    {{/each}}
+  </ul>
+  {{/if}}
+
+  {{!-- Signatures (08 SS20, S3; D-692): what the things being WORN do, and the
+        career's own capability (03 SS5), which had reached no sheet at all.
+
+        The same shape as Talents in play above: a name, what it does, its
+        limit, a Use button. **A Use button ONLY where there is one to press** -
+        a standing Signature, one that fires off a blow and one that gives back
+        at the top of the turn are enforced elsewhere, so their rows are text
+        (D-681). A gate that does not hold and a use spent are said IN WORDS
+        beside the greyed control, never by the grey alone (D5).
+
+        A career's row is one of these now (D-692's Phase 6): `CareerData`
+        carries the descriptor, so the eight 03 SS5 gives a rest-bounded limit
+        count their uses and press like anything else. --}}
+  {{#if signatures.length}}
+  <h3 class="azeroth-panel-heading azeroth-combat-section">{{localize "AZEROTH.Signature.Heading"}}</h3>
+  <ul class="azeroth-features azeroth-signatures">
+    {{#each signatures as |s|}}
+    <li class="azeroth-feature draggable{{#unless s.fires}} is-passive{{/unless}}{{#if s.refusal}} is-spent{{/if}}" data-item-id="{{s.id}}">
+      {{!-- The career's icon too: the rows share a grid and a missing 20px
+            cell would step the whole list left on one of them. It takes the
+            common iron ring, which is what an unrarited thing gets. --}}
+      {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=s.img rarityClass=s.rarityClass}}
+      <span class="azeroth-feature-name{{#if s.rarityClass}} {{s.rarityClass}}{{/if}}" data-action="expandItem" role="button" tabindex="0" aria-expanded="false">{{s.name}}</span>
+      <span class="azeroth-feature-meta">
+        {{#if s.kindChip}}<span class="azeroth-feature-chip" data-tooltip="{{localize s.kindLabel}}">{{localize s.kindChip}}</span>{{/if}}
+        {{#if s.actionLabel}}<span class="azeroth-feature-chip">{{localize s.actionLabel}}</span>{{/if}}
+        {{#if s.cost}}<span class="azeroth-feature-chip">{{s.cost.amount}} {{localize s.cost.label}}</span>{{/if}}
+        {{#if s.uses}}<span class="azeroth-feature-chip azeroth-feature-uses">{{s.uses.value}}/{{s.uses.max}} {{localize s.uses.per}}</span>{{/if}}
+      </span>
+      {{#if s.pressable}}
+      <button type="button" class="azeroth-use" data-action="useSignature"{{#if s.refusal}} disabled{{/if}}>{{localize "AZEROTH.Feature.Use"}}</button>
+      {{/if}}
+      <div class="azeroth-item-detail azeroth-feature-effect" data-item-id="{{s.id}}" hidden>
+        {{#if s.origin}}<p class="azeroth-item-origin">{{s.origin}}</p>{{/if}}
+        {{{s.text}}}
+      </div>
+      {{#if s.gateFails}}<span class="azeroth-signature-why">{{localize "AZEROTH.Signature.GateFails"}}</span>{{/if}}
+      {{#each s.gates as |g|}}
+      <span class="azeroth-signature-why">{{#if g.value}}{{localize "AZEROTH.Signature.GateValue" kind=(localize g.label) value=g.value}}{{else}}{{localize g.label}}{{/if}}</span>
+      {{/each}}
+      {{!-- A GATE COVERS ONLY ITS OWN SENTENCE (D-722). One line a gated
+            sentence, carrying its own verdict in WORDS, because a Rogue whose
+            item retaliates for everybody and adds a Damage Rating for a Shaman
+            must read the refusal against the Damage Rating and nothing else. --}}
+      {{#each s.gatedParts as |part|}}
+      <span class="azeroth-signature-why">
+        {{localize "AZEROTH.Signature.PartOnly"}}
+        {{#each part.gates as |g|}}{{#unless @first}} · {{/unless}}{{#if g.value}}{{localize "AZEROTH.Signature.GateValue" kind=(localize g.label) value=g.value}}{{else}}{{localize g.label}}{{/if}}{{/each}}
+        {{#if part.holds}}{{localize "AZEROTH.Signature.PartHolds"}}{{/if}}
+        {{#if part.fails}}{{localize "AZEROTH.Signature.PartFails"}}{{/if}}
+      </span>
+      {{/each}}
+      {{!-- and the BUTTON's own gate, where the press is a gated sentence and
+            the trunk is not (D-722). --}}
+      {{#if s.pressGates.length}}
+      <span class="azeroth-signature-why">
+        {{localize "AZEROTH.Signature.PressOnly"}}
+        {{#each s.pressGates as |g|}}{{#unless @first}} · {{/unless}}{{#if g.value}}{{localize "AZEROTH.Signature.GateValue" kind=(localize g.label) value=g.value}}{{else}}{{localize g.label}}{{/if}}{{/each}}
+      </span>
+      {{/if}}
+      {{#if s.refusalLabel}}<span class="azeroth-signature-why">{{localize s.refusalLabel}}</span>{{/if}}
+      {{#if s.reason}}<span class="azeroth-signature-why">{{localize s.reason}}</span>{{/if}}
+    </li>
+    {{/each}}
+  </ul>
+  {{/if}}
+</section>

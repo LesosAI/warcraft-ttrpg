@@ -1,0 +1,26 @@
+{{!-- Step 2 (01 §2): nine classes across the window in 02 §7's order (D-638), those 02 §3 closes to the race in soft ink; the chosen one's five things. --}}
+<div class="azeroth-creator-tiles azeroth-creator-tiles-wide" role="radiogroup" aria-label="{{localize "AZEROTH.Creator.Step.class"}}">
+  {{#each pane.classes as |c|}}
+  <label class="azeroth-creator-tile{{#if c.selected}} is-selected{{/if}}{{#unless c.open}} is-unavailable{{/unless}}">
+    <input type="radio" name="cls" value="{{c.uuid}}" data-creator="cls" {{#if c.selected}}checked{{/if}}>
+    <span class="azeroth-creator-tile-name">{{c.name}}</span>
+    <span class="azeroth-creator-tile-meta">{{#if c.open}}{{c.frame}}{{#if c.pools}} · {{c.pools}}{{/if}}{{else}}{{localize "AZEROTH.Creator.NotOpen"}}{{/if}}</span>
+  </label>
+  {{/each}}
+</div>
+{{#each pane.classes as |c|}}
+{{#if c.selected}}
+<dl class="azeroth-creator-detail">
+  <dt>{{localize "AZEROTH.Item.Frame"}}</dt><dd>{{c.frame}}</dd>
+  {{#if c.pools}}<dt>{{localize "AZEROTH.Sheet.Pools"}}</dt><dd>{{c.pools}}</dd>{{/if}}
+  <dt>{{localize "AZEROTH.Item.Resiliences"}}</dt><dd>{{c.resiliences}}</dd>
+  <dt>{{localize "AZEROTH.Item.ArmorAccess"}}</dt><dd>{{c.armor}}{{#if c.shields}} · {{localize "AZEROTH.Item.Shields"}}{{/if}}</dd>
+  <dt>{{localize "AZEROTH.Item.WeaponAccess"}}</dt><dd>{{c.weapons}}</dd>
+  {{!-- 01 §3's sentence, both halves (the lead, 2026-09-13): the ability this
+        class FIGHTS with, and the one it casts with. The Ranger prints both,
+        and the star on the abilities step marks the same rows. --}}
+  {{#if c.fighting}}<dt>{{localize "AZEROTH.Creator.FightsWith"}}</dt><dd>{{c.fighting}}</dd>{{/if}}
+  {{#if c.casting}}<dt>{{localize "AZEROTH.Item.CastingAbility"}}</dt><dd>{{c.casting}}</dd>{{/if}}
+</dl>
+{{/if}}
+{{/each}}

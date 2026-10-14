@@ -1,0 +1,35 @@
+{{!-- The rest card (D-623): who rested and what came back. Accent: bronze. --}}
+<div class="azeroth azeroth-card azeroth-card-rest" data-message-kind="rest">
+  {{> systems/azeroth-rpg/templates/chat/partials/card-header.hbs title=title subtitle=name}}
+
+  <div class="azeroth-card-body">
+    {{#if lines.length}}
+    <dl class="azeroth-spell-fields">
+      {{#each lines as |l|}}<dt>{{l.label}}</dt><dd>{{l.value}}</dd>{{/each}}
+    </dl>
+    {{/if}}
+    {{!-- What was eaten and drunk for it (05 §16, 08 §12; D-733). The *Uses
+          restored* shape, since it is the same fact: what this rest spent. --}}
+    {{#if ate}}
+    <p class="azeroth-card-line"><span>{{localize "AZEROTH.Rest.Ate"}}</span><strong>{{ate}}</strong></p>
+    {{/if}}
+    {{#if drank}}
+    <p class="azeroth-card-line"><span>{{localize "AZEROTH.Rest.Drank"}}</span><strong>{{drank}}</strong></p>
+    {{/if}}
+    {{#if restored}}
+    <p class="azeroth-card-line"><span>{{localize "AZEROTH.Rest.UsesRestored"}}</span><strong>{{restored}}</strong></p>
+    {{/if}}
+    {{#if cleared}}
+    <p class="azeroth-card-line"><span>{{localize "AZEROTH.Rest.SunderedCleared"}}</span><strong>{{cleared}}</strong></p>
+    {{/if}}
+    {{#if diseased}}<p class="azeroth-flag">{{localize "AZEROTH.Rest.Diseased"}}</p>{{/if}}
+    {{!-- No food, no Health; no drink, no Mana (D-733). Said in words, because
+          a rest that gave nothing back otherwise reads as a broken button. --}}
+    {{#each flags as |f|}}<p class="azeroth-flag">{{f}}</p>{{/each}}
+    {{#if count}}
+    <p class="azeroth-card-line"><span>{{localize "AZEROTH.Rest.CountToday" count=count.value max=count.max}}</span></p>
+    {{#if count.over}}<p class="azeroth-flag">{{localize "AZEROTH.Rest.OverCount"}}</p>{{/if}}
+    {{/if}}
+    {{#if nothing}}<p class="azeroth-note">{{localize "AZEROTH.Rest.Nothing"}}</p>{{/if}}
+  </div>
+</div>

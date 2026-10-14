@@ -1,0 +1,45 @@
+{{!--
+  A Reaction OFFERED to somebody else (06 SS6, D-694): the Opportunity Attack
+  a departure provoked, and the Readied action waiting for its trigger.
+
+  **The card is posted by whoever moved, and read by whoever may answer.**
+  So every control carries `data-reaction-owner` and `dice/chat.mjs` strips
+  the row from any client that does not own that creature - without it the
+  mover would be offered the enemy's blow and the enemy would be offered
+  nothing, since the message is the mover's. A GM owns every actor and so
+  sees them all, which is what makes a creature's Opportunity Attack the
+  GM's to press.
+
+  One button, never a swing made for anybody: 06 gives the attack to the
+  threatener and the timing with it.
+--}}
+<div class="azeroth azeroth-card {{cardClass}}" data-message-kind="reaction">
+  {{> systems/azeroth-rpg/templates/chat/partials/card-header.hbs title=title subtitle=name}}
+
+  <div class="azeroth-card-body">
+    <p class="azeroth-card-text">{{text}}</p>
+    {{#if detail}}<p class="azeroth-card-text">{{detail}}</p>{{/if}}
+
+    {{#if opportunity}}
+    <div class="azeroth-card-actions" data-reaction-owner="{{ownerUuid}}">
+      <button type="button" data-action="opportunityAttack" data-actor-uuid="{{ownerUuid}}"
+              data-token-id="{{tokenId}}" data-scene-id="{{sceneId}}" data-distance="{{distance}}">
+        {{!-- `weapon`, never `with`: `with` is one of Handlebars' own block
+              helpers and a bare reference to it resolves to the helper before
+              it ever reaches the context. --}}
+        {{localize "AZEROTH.Reaction.OpportunityButton" name=weapon}}
+      </button>
+    </div>
+    {{/if}}
+
+    {{#if readied}}
+    <div class="azeroth-card-actions" data-reaction-owner="{{ownerUuid}}">
+      <button type="button" data-action="takeReadied" data-actor-uuid="{{ownerUuid}}">
+        {{localize "AZEROTH.Reaction.ReadiedButton"}}
+      </button>
+    </div>
+    {{/if}}
+
+    {{#if note}}<p class="azeroth-note">{{note}}</p>{{/if}}
+  </div>
+</div>

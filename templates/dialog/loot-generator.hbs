@@ -1,0 +1,171 @@
+{{!--
+  The loot generator (D-666): where the find is made, the odds the tool
+  rolls with, and the finds themselves — each one the GM may re-roll, lock,
+  swap, drop or leave unticked before Create makes them. Every bounded
+  choice is a select; a weight and a purse are figures. Every line at 13px.
+
+  THE ODDS ARE THE TOOL'S. The note under the second heading says so on the
+  window's own face: 08 publishes the grammar and 13 §8 says where a thing
+  came from, and neither prints a drop rate.
+--}}
+<div class="azeroth-dialog azeroth-generator-frame">
+  <div class="azeroth-generator-pane">
+
+    {{!-- 1. Where the find is made. --}}
+    <h3 class="azeroth-forge-heading">{{localize "AZEROTH.Loot.Section.Where"}}</h3>
+    <div class="azeroth-forge-row">
+      <label for="azeroth-loot-scenario">{{localize "AZEROTH.Loot.Scenario.Label"}}</label>
+      <span class="azeroth-forge-control">
+        <select id="azeroth-loot-scenario" name="scenario" data-loot="scenario">
+          {{#each scenarios}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
+        </select>
+        <label class="azeroth-forge-check">{{localize "AZEROTH.Sheet.Tier"}}
+          <select name="tier" data-loot="tier">
+            {{#each tiers}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.value}}</option>{{/each}}
+          </select>
+        </label>
+      </span>
+
+      {{#if hasDungeon}}
+      {{!-- 14 §14's index: every Boss holds somewhere, and the band names the
+            tier. A Boss scenario takes the same select (D-702's L2), and the
+            line beneath says what Classic loot the place is recorded to hold.
+            The option says the DUNGEON and nothing else (D-703): a dungeon's
+            loot is the whole dungeon's, not its one Boss's. --}}
+      <label for="azeroth-loot-dungeon">{{localize "AZEROTH.Loot.Dungeon"}}</label>
+      <span class="azeroth-forge-control">
+        <select id="azeroth-loot-dungeon" class="azeroth-loot-dungeon" name="dungeon" data-loot="dungeon">
+          <option value="">{{localize "AZEROTH.Loot.NoDungeon"}}</option>
+          {{#each dungeonGroups}}
+          <optgroup label="{{this.label}}">
+            {{#each this.entries}}<option value="{{this.uuid}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
+          </optgroup>
+          {{/each}}
+        </select>
+        {{#if dungeon}}<span class="azeroth-forge-cost">{{dungeon.line}}</span>{{/if}}
+        {{#if found}}<span class="azeroth-loot-found">{{found}}</span>{{/if}}
+      </span>
+
+      {{!-- Which boss, for the Boss scenario alone (D-703). The Classic
+            record's bosses, not 14 §14's — the book gives each dungeon one
+            Boss and a submenu of one is not a submenu. `data-loot` and the
+            window's own `change` binding, never a `data-action`. --}}
+      {{#if hasBossList}}
+      <label for="azeroth-loot-boss">{{localize "AZEROTH.Loot.Boss"}}</label>
+      <span class="azeroth-forge-control">
+        <select id="azeroth-loot-boss" class="azeroth-loot-dungeon" name="boss" data-loot="boss">
+          {{#each bosses}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
+        </select>
+      </span>
+      {{/if}}
+      {{/if}}
+
+      <label for="azeroth-loot-folder">{{localize "AZEROTH.Generator.Folder"}}</label>
+      <select id="azeroth-loot-folder" name="folder" data-loot="folder">
+        {{#each folders}}<option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}</option>{{/each}}
+      </select>
+    </div>
+
+    {{!-- 2. The odds, which are dials and not a rule. --}}
+    <h3 class="azeroth-forge-heading">{{localize "AZEROTH.Loot.Section.Odds"}}</h3>
+    <p class="azeroth-dialog-note">{{localize "AZEROTH.Loot.TableNote"}}</p>
+    <div class="azeroth-loot-dials">
+      <label for="azeroth-loot-count-low">{{localize "AZEROTH.Loot.Count"}}</label>
+      <span class="azeroth-forge-control">
+        <select id="azeroth-loot-count-low" name="countLow" data-loot="table" aria-label="{{localize "AZEROTH.Loot.CountLow"}}">
+          {{#each counts.low}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.value}}</option>{{/each}}
+        </select>
+        <span class="azeroth-forge-cost">{{localize "AZEROTH.Loot.To"}}</span>
+        <select name="countHigh" data-loot="table" aria-label="{{localize "AZEROTH.Loot.CountHigh"}}">
+          {{#each counts.high}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.value}}</option>{{/each}}
+        </select>
+      </span>
+
+      <label for="azeroth-loot-weight-common">{{localize "AZEROTH.Loot.Weight"}}</label>
+      <span class="azeroth-forge-control azeroth-loot-weights">
+        {{#each weights}}
+        <label class="azeroth-forge-check">{{this.label}}
+          <input id="azeroth-loot-weight-{{this.key}}" type="number" name="weight-{{this.key}}" value="{{this.value}}" min="0" data-loot="table">
+          <span class="azeroth-forge-cost">{{this.share}}</span>
+        </label>
+        {{/each}}
+      </span>
+
+      <label for="azeroth-loot-combat">{{localize "AZEROTH.Loot.CombatShare"}}</label>
+      <span class="azeroth-forge-control">
+        <select id="azeroth-loot-combat" name="combatShare" data-loot="table">
+          {{#each combat}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
+        </select>
+        <label class="azeroth-forge-check">{{localize "AZEROTH.Loot.NamedShare"}}
+          <select name="namedShare" data-loot="table">
+            {{#each named}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
+          </select>
+        </label>
+      </span>
+
+      <label for="azeroth-loot-days">{{localize "AZEROTH.Loot.Days"}}</label>
+      <span class="azeroth-forge-control">
+        <input id="azeroth-loot-days" type="number" name="days" value="{{days}}" min="0" data-loot="table">
+        <span class="azeroth-forge-cost">{{coin}}</span>
+      </span>
+    </div>
+
+    {{!-- 3. What was found. --}}
+    <h3 class="azeroth-forge-heading">{{localize "AZEROTH.Loot.Section.Rows"}}</h3>
+    <ol class="azeroth-forge-list azeroth-loot-rows">
+      {{#each rows}}
+      <li data-index="{{this.index}}">
+        <label class="azeroth-forge-check">
+          <input type="checkbox" name="accept-{{this.index}}" data-loot="row" {{#if this.accepted}}checked{{/if}} aria-label="{{localize "AZEROTH.Loot.Accept"}}">
+        </label>
+        {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=this.img rarityClass=this.rarityClass}}
+        <span class="azeroth-forge-name {{this.rarityClass}}">{{this.name}}{{#if this.quantity}} <span class="azeroth-forge-cost">{{this.quantity}}</span>{{/if}}</span>
+        <select name="row-rarity-{{this.index}}" data-loot="row" aria-label="{{localize "AZEROTH.Item.Rarity"}}" {{#if this.named}}disabled{{/if}}>
+          {{#each this.rarities}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
+        </select>
+        <select name="row-kind-{{this.index}}" data-loot="row" aria-label="{{localize "AZEROTH.Loot.Kind.Label"}}">
+          {{#each this.kinds}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
+        </select>
+        <span class="azeroth-forge-cost">{{this.price}}</span>
+        <button type="button" class="azeroth-forge-quiet" data-action="lootRerollRow">{{localize "AZEROTH.Loot.Reroll"}}</button>
+        <button type="button" class="azeroth-forge-quiet" data-action="lootLockRow" aria-pressed="{{this.locked}}">{{#if this.locked}}{{localize "AZEROTH.Loot.Unlock"}}{{else}}{{localize "AZEROTH.Loot.Lock"}}{{/if}}</button>
+        <button type="button" class="azeroth-forge-quiet" data-action="lootBrowseRow">{{localize "AZEROTH.Creator.Browse"}}</button>
+        <button type="button" class="azeroth-delete" data-action="lootRemoveRow" data-tooltip="{{localize "AZEROTH.Loot.Remove"}}" aria-label="{{localize "AZEROTH.Loot.Remove"}}">&times;</button>
+        {{#if this.detail}}<span class="azeroth-loot-detail">{{this.detail}}</span>{{/if}}
+        {{#if this.grants.length}}<span class="azeroth-loot-grants">{{#each this.grants}}{{this}}{{#unless @last}} · {{/unless}}{{/each}}</span>{{/if}}
+        {{#each this.notes}}<span class="azeroth-loot-detail">{{this}}</span>{{/each}}
+      </li>
+      {{else}}
+      <li class="azeroth-forge-none">{{localize "AZEROTH.Loot.Nothing"}}</li>
+      {{/each}}
+    </ol>
+    <div class="azeroth-forge-add">
+      <select name="addRarity" aria-label="{{localize "AZEROTH.Loot.AddRow"}}">
+        {{#each addRarities}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
+      </select>
+      <button type="button" class="azeroth-forge-quiet" data-action="lootAddRow">{{localize "AZEROTH.Loot.AddRow"}}</button>
+    </div>
+  </div>
+
+  <div class="azeroth-forge-summary" aria-live="polite">
+    <span>{{summary.line}}</span>
+    <span>{{coin}}</span>
+    {{#if summary.reasons.length}}
+    <ul class="azeroth-forge-reasons">{{#each summary.reasons}}<li>{{this}}</li>{{/each}}</ul>
+    {{/if}}
+    {{#if summary.notes.length}}
+    <ul class="azeroth-forge-notes">{{#each summary.notes}}<li>{{this}}</li>{{/each}}</ul>
+    {{/if}}
+  </div>
+
+  <div class="azeroth-forge-buttons">
+    <button type="button" class="azeroth-forge-quiet" data-action="lootCancel">{{localize "AZEROTH.Creator.Cancel"}}</button>
+    <button type="button" class="azeroth-forge-quiet" data-action="lootResuggest">{{localize "AZEROTH.Loot.Resuggest"}}</button>
+    <button type="button" class="azeroth-forge-quiet" data-action="lootRoll">{{localize "AZEROTH.Loot.Roll"}}</button>
+    {{!-- Offer to players (D-721): the same finds, made and handed over in
+          one press. The picker opens first, so a GM who thinks better of it
+          has created nothing. --}}
+    <button type="button" {{#unless summary.ok}}aria-disabled="true"{{/unless}} data-action="lootPresent">{{presentLabel}}</button>
+    <button type="submit" {{#unless summary.ok}}aria-disabled="true"{{/unless}}>{{createLabel}}</button>
+  </div>
+</div>

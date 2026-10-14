@@ -1,0 +1,95 @@
+{{!--
+  The item's fields, in the order the BOOK prints them (07 §9, D4 §10.1, 03 §2).
+  The order comes from module/applications/item-fields.mjs, which is unit-tested
+  against those chapters. An empty field is omitted on a locked sheet and kept on
+  an editable one, so it can be filled in.
+--}}
+<section class="azeroth-item__details">
+  <dl class="azeroth-item__fields">
+    {{#each fields as |field|}}
+      {{#if (eq field.type "table")}}
+        <div class="azeroth-item__field azeroth-item__field--wide">
+          <dt>{{field.label}}</dt>
+          <dd>
+            <table class="azeroth-item__table">
+              <thead>
+                <tr>{{#each field.columns as |col|}}<th>{{col.label}}</th>{{/each}}</tr>
+              </thead>
+              <tbody>
+                {{!-- `field` is a block param and reaches into this loop as it is;
+                      `../field.columns` looked for `field` ON the field and drew
+                      an empty row for every branch and feature (D-611). --}}
+                {{#each field.rows as |row|}}
+                  <tr>{{#each field.columns as |col|}}<td>{{#if (lookup row col.path)}}{{{lookup row col.path}}}{{else}}&mdash;{{/if}}</td>{{/each}}</tr>
+                {{/each}}
+              </tbody>
+            </table>
+          </dd>
+        </div>
+      {{else}}
+        <div class="azeroth-item__field">
+          {{!-- A locked field says WHY in a tooltip rather than by the absence
+                of a box: a talent's `taken` is the tree's to write (D-713). --}}
+          <dt{{#if field.hint}} data-tooltip="{{field.hint}}"{{/if}}>{{field.label}}</dt>
+          <dd>
+            {{!-- `field.editable`, never a bare `editable`: inside this #each the
+                  context is the field, and the bare name was undefined on every
+                  sheet (screenshot 5). --}}
+            {{#if (eq field.type "tags")}}
+              <ul class="azeroth-item__tags" data-path="{{field.name}}">
+                {{#each field.tags as |tag|}}
+                <li class="azeroth-item__tag">{{tag.label}}{{#if field.editable}}<button type="button" class="azeroth-item__tag-remove"
+                    data-action="removeTag" data-path="{{field.name}}" data-tag="{{tag.value}}"
+                    aria-label="{{localize "AZEROTH.Item.RemoveTag" tag=tag.label}}">&times;</button>{{/if}}</li>
+                {{else}}
+                {{#unless field.editable}}<li class="azeroth-item__tag azeroth-item__tag--none">&mdash;</li>{{/unless}}
+                {{/each}}
+              </ul>
+              {{#if field.editable}}
+              <span class="azeroth-item__tag-add">
+                {{#if field.options}}
+                {{!-- An enum's tags are picked, never typed (D-641). --}}
+                <select class="azeroth-item__tag-input" data-path="{{field.name}}" aria-label="{{localize "AZEROTH.Item.AddTag"}}">
+                  {{#each field.options as |opt|}}<option value="{{opt.value}}">{{opt.label}}</option>{{/each}}
+                </select>
+                {{else}}
+                <input type="text" class="azeroth-item__tag-input" data-path="{{field.name}}"
+                       aria-label="{{localize "AZEROTH.Item.AddTag"}}" placeholder="{{localize "AZEROTH.Item.AddTag"}}">
+                {{/if}}
+                <button type="button" data-action="addTag" data-path="{{field.name}}" aria-label="{{localize "AZEROTH.Item.AddTag"}}">+</button>
+              </span>
+              {{/if}}
+            {{else if (eq field.type "select")}}
+              {{#if field.editable}}
+                <select name="{{field.name}}"{{#if field.nullable}} data-nullable="1"{{/if}}>
+                  {{#each field.options as |opt|}}
+                    <option value="{{opt.value}}" {{#if opt.selected}}selected{{/if}}>{{opt.label}}</option>
+                  {{/each}}
+                </select>
+              {{else}}
+                {{azerothDash field.selectedLabel}}
+              {{/if}}
+            {{else if (eq field.type "coin")}}
+              {{!-- A price in the coin a shop would name (08 SS2, D-672).
+                    Typed the same way; `_processFormData` stores copper. --}}
+              {{#if field.editable}}
+                <input type="text" name="{{field.name}}" value="{{field.display}}" data-coin="1"
+                       inputmode="text" spellcheck="false" aria-label="{{field.label}}">
+              {{else}}
+                {{azerothDash field.display}}
+              {{/if}}
+            {{else if (eq field.type "checkbox")}}
+              <input type="checkbox" name="{{field.name}}" {{#if field.value}}checked{{/if}}
+                     {{#unless field.editable}}disabled{{/unless}}>
+            {{else if field.editable}}
+              <input type="{{#if (eq field.type "number")}}number{{else}}text{{/if}}"
+                     name="{{field.name}}" value="{{field.value}}">
+            {{else}}
+              {{azerothDash field.value}}
+            {{/if}}
+          </dd>
+        </div>
+      {{/if}}
+    {{/each}}
+  </dl>
+</section>

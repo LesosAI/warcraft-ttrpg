@@ -1,0 +1,11 @@
+{{!--
+  The verdict (D-622): the outcome in a word and 05 SS2's name for the margin,
+  so a card says Success or Failure - Hit or Miss on an attack - in words as
+  well as in the colour on the SL. One 13px line under the headline.
+--}}
+{{#if verdict}}
+<p class="azeroth-card-verdict {{#if verdict.success}}is-success{{else}}is-failure{{/if}}">
+  <strong>{{verdict.outcome}}</strong>
+  <span>{{verdict.margin}}</span>
+</p>
+{{/if}}

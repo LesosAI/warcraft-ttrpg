@@ -1,0 +1,298 @@
+{
+  "id": "azeroth-rpg",
+  "title": "Azeroth RPG",
+  "description": "Private homebrew d20 system — D&D 5e chassis with WFRP 4e-style complexity, set in the Warcraft III / classic WoW era. Not for distribution.",
+  "version": "0.12.24",
+  "url": "https://github.com/LesosAI/warcraft-ttrpg",
+  "manifest": "https://github.com/LesosAI/warcraft-ttrpg/releases/latest/download/system.json",
+  "download": "https://github.com/LesosAI/warcraft-ttrpg/releases/download/v0.12.24/system.zip",
+  "authors": [
+    {
+      "name": "Brad McCorkle"
+    }
+  ],
+  "compatibility": {
+    "minimum": "14",
+    "verified": "14.367"
+  },
+  "esmodules": [
+    "module/azeroth.mjs"
+  ],
+  "styles": [
+    "css/azeroth.css"
+  ],
+  "relationships": {
+    "requires": [
+      {
+        "id": "sequencer",
+        "type": "module",
+        "reason": "Plays every animation the system records."
+      },
+      {
+        "id": "JB2A_DnD5e",
+        "type": "module",
+        "reason": "Most of the spell and strike animations."
+      },
+      {
+        "id": "jaamod",
+        "type": "module",
+        "reason": "Jinker's Animated Art: the animations JB2A lacks."
+      },
+      {
+        "id": "psfx",
+        "type": "module",
+        "reason": "The sounds that play with the animations."
+      }
+    ]
+  },
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    }
+  ],
+  "documentTypes": {
+    "Actor": {
+      "character": {},
+      "npc": {}
+    },
+    "Item": {
+      "race": {},
+      "class": {},
+      "career": {},
+      "talent": {},
+      "talentTree": {},
+      "feature": {},
+      "legacy": {},
+      "profession": {},
+      "spell": {},
+      "weapon": {},
+      "armor": {},
+      "gear": {},
+      "trait": {}
+    },
+    "RegionBehavior": {
+      "difficultFor": {}
+    }
+  },
+  "packs": [
+    {
+      "name": "conditions",
+      "label": "Conditions",
+      "path": "packs/conditions",
+      "type": "ActiveEffect",
+      "system": "azeroth-rpg",
+      "flags": {
+        "azeroth-rpg": {
+          "types": []
+        }
+      }
+    },
+    {
+      "name": "talents",
+      "label": "Talents",
+      "path": "packs/talents",
+      "type": "Item",
+      "system": "azeroth-rpg",
+      "flags": {
+        "azeroth-rpg": {
+          "types": [
+            "talent"
+          ]
+        }
+      }
+    },
+    {
+      "name": "spells",
+      "label": "Spells",
+      "path": "packs/spells",
+      "type": "Item",
+      "system": "azeroth-rpg",
+      "flags": {
+        "azeroth-rpg": {
+          "types": [
+            "spell"
+          ]
+        }
+      }
+    },
+    {
+      "name": "careers",
+      "label": "Careers",
+      "path": "packs/careers",
+      "type": "Item",
+      "system": "azeroth-rpg",
+      "flags": {
+        "azeroth-rpg": {
+          "types": [
+            "career"
+          ]
+        }
+      }
+    },
+    {
+      "name": "races",
+      "label": "Races",
+      "path": "packs/races",
+      "type": "Item",
+      "system": "azeroth-rpg",
+      "flags": {
+        "azeroth-rpg": {
+          "types": [
+            "race"
+          ]
+        }
+      }
+    },
+    {
+      "name": "classes",
+      "label": "Classes",
+      "path": "packs/classes",
+      "type": "Item",
+      "system": "azeroth-rpg",
+      "flags": {
+        "azeroth-rpg": {
+          "types": [
+            "class"
+          ]
+        }
+      }
+    },
+    {
+      "name": "traits",
+      "label": "Traits",
+      "path": "packs/traits",
+      "type": "Item",
+      "system": "azeroth-rpg",
+      "flags": {
+        "azeroth-rpg": {
+          "types": [
+            "trait"
+          ]
+        }
+      }
+    },
+    {
+      "name": "weapons",
+      "label": "Weapons",
+      "path": "packs/weapons",
+      "type": "Item",
+      "system": "azeroth-rpg",
+      "flags": {
+        "azeroth-rpg": {
+          "types": [
+            "weapon"
+          ]
+        }
+      }
+    },
+    {
+      "name": "armor",
+      "label": "Armor",
+      "path": "packs/armor",
+      "type": "Item",
+      "system": "azeroth-rpg",
+      "flags": {
+        "azeroth-rpg": {
+          "types": [
+            "armor"
+          ]
+        }
+      }
+    },
+    {
+      "name": "gear",
+      "label": "Gear",
+      "path": "packs/gear",
+      "type": "Item",
+      "system": "azeroth-rpg",
+      "flags": {
+        "azeroth-rpg": {
+          "types": [
+            "gear"
+          ]
+        }
+      }
+    },
+    {
+      "name": "bestiary",
+      "label": "Bestiary",
+      "path": "packs/bestiary",
+      "type": "Actor",
+      "system": "azeroth-rpg",
+      "ownership": {
+        "PLAYER": "NONE",
+        "ASSISTANT": "OWNER"
+      },
+      "flags": {
+        "azeroth-rpg": {
+          "types": [
+            "npc"
+          ]
+        }
+      }
+    },
+    {
+      "name": "legacies",
+      "label": "Legacies",
+      "path": "packs/legacies",
+      "type": "Item",
+      "system": "azeroth-rpg",
+      "flags": {
+        "azeroth-rpg": {
+          "types": [
+            "legacy"
+          ]
+        }
+      }
+    },
+    {
+      "name": "affixes",
+      "label": "Affixes",
+      "path": "packs/affixes",
+      "type": "Item",
+      "system": "azeroth-rpg",
+      "flags": {
+        "azeroth-rpg": {
+          "types": [
+            "gear"
+          ]
+        }
+      }
+    },
+    {
+      "name": "rules",
+      "label": "Rules",
+      "path": "packs/rules",
+      "type": "JournalEntry",
+      "system": "azeroth-rpg",
+      "flags": {
+        "azeroth-rpg": {
+          "types": []
+        }
+      }
+    },
+    {
+      "name": "criticals",
+      "label": "Critical Injuries",
+      "path": "packs/criticals",
+      "type": "RollTable",
+      "system": "azeroth-rpg",
+      "ownership": {
+        "PLAYER": "NONE",
+        "ASSISTANT": "OWNER"
+      },
+      "flags": {
+        "azeroth-rpg": {
+          "types": []
+        }
+      }
+    }
+  ],
+  "primaryTokenAttribute": "health",
+  "grid": {
+    "distance": 5,
+    "units": "ft"
+  }
+}

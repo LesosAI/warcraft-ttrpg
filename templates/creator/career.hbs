@@ -1,0 +1,28 @@
+{{!-- Step 4 (01 §4, 03 §3): one tier 1 career, free; the Entry is the table's judgement. --}}
+{{#if isGM}}
+<label class="azeroth-forge-check azeroth-creator-gm"><input type="checkbox" name="allowTier2" data-creator="allowTier2" {{#if pane.allowTier2}}checked{{/if}}> {{localize "AZEROTH.Creator.AllowTier2"}}</label>
+{{/if}}
+{{#each pane.groups as |g|}}
+<h4 class="azeroth-creator-subheading">{{g.label}}</h4>
+<ul class="azeroth-forge-list azeroth-creator-careers" role="radiogroup" aria-label="{{g.label}}">
+  {{#each g.careers as |c|}}
+  <li class="{{#if c.selected}}is-selected{{/if}}">
+    <label class="azeroth-creator-row-label">
+      <input type="radio" name="career" value="{{c.uuid}}" data-creator="career" {{#if c.selected}}checked{{/if}}>
+      <span class="azeroth-forge-name">{{c.name}}{{#if (gt c.tier 1)}} <span class="azeroth-forge-tier">{{localize "AZEROTH.Item.Tier"}} {{c.tier}}</span>{{/if}}</span>
+      <span class="azeroth-creator-row-meta">{{c.inCareer}}</span>
+      {{#if c.foreign}}<span class="azeroth-state-chip">{{g.label}}</span>{{/if}}
+    </label>
+  </li>
+  {{/each}}
+</ul>
+{{/each}}
+{{#if pane.chosen}}
+<dl class="azeroth-creator-detail">
+  <dt>{{pane.chosen.name}}</dt><dd class="azeroth-creator-prose">{{{pane.chosen.html}}}</dd>
+  <dt>{{localize "AZEROTH.Item.Grantor"}}</dt><dd>{{pane.chosen.grantor}}</dd>
+  <dt>{{localize "AZEROTH.Item.Entry"}}</dt><dd>{{pane.chosen.entry}}</dd>
+  <dt>{{localize "AZEROTH.Item.InCareer"}}</dt><dd>{{pane.chosen.inCareer}}</dd>
+  {{#if pane.chosen.signature}}<dt>{{localize "AZEROTH.Item.Signature"}}</dt><dd class="azeroth-creator-prose"><strong>{{pane.chosen.signature}}.</strong> {{{pane.chosen.signatureHtml}}}</dd>{{/if}}
+</dl>
+{{/if}}

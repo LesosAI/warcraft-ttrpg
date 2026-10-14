@@ -1,0 +1,52 @@
+{{!--
+  Three tracks, 0 to 20, thresholds at 5 / 10 / 15 (D-457).
+  A threshold arrives automatically and is DERIVED from the number (D-458),
+  and the tracks never add together.
+--}}
+<section class="tab azeroth-panel {{tab.cssClass}}" data-tab="corruption" data-group="primary">
+  {{#each corruption}}
+  <div class="azeroth-track is-{{this.key}}">
+    <div class="azeroth-track-head">
+      <span class="azeroth-track-label">{{localize this.label}}</span>
+      <span class="azeroth-track-value">
+        <input type="number" name="system.corruption.{{this.key}}" value="{{this.value}}" min="0" max="{{this.max}}" step="1"
+               aria-label="{{localize this.label}}"> / {{this.max}}
+      </span>
+      <button type="button" data-action="exposure" data-track="{{this.key}}">{{localize "AZEROTH.Sheet.Exposure"}}</button>
+    </div>
+    <div class="azeroth-track-rungs">
+      {{#each this.rungs}}
+      <span class="azeroth-rung{{#if this.crossed}} is-crossed{{/if}}">{{this.at}}</span>
+      {{/each}}
+    </div>
+    {{#if this.terminal}}
+    <p class="azeroth-flag is-terminal">{{localize "AZEROTH.Corruption.Terminal"}}</p>
+    {{/if}}
+    {{!-- The rungs in force, in the chapter's words: applied where the system
+          can (healing, Vulnerable, Damage Rating, Ward, Speed, Fatigue, a
+          refused condition, the turn's tick, a dialog line) and noted where
+          the table judges (2026-09-06). --}}
+    {{#if this.inForce.length}}
+    <ol class="azeroth-rung-list">
+      {{#each this.inForce as |r|}}
+      <li class="azeroth-rung-row">
+        <p class="azeroth-rung-head"><strong>{{r.name}}</strong> <span class="azeroth-rung-at">{{r.at}}</span></p>
+        <p><span class="azeroth-rung-label">{{localize "AZEROTH.Corruption.Gain"}}</span> {{{r.gain}}}</p>
+        <p><span class="azeroth-rung-label">{{localize "AZEROTH.Corruption.Take"}}</span> {{{r.take}}}</p>
+        {{#if r.notes.length}}<p class="azeroth-note">{{#each r.notes}}{{this}}{{#unless @last}} · {{/unless}}{{/each}}</p>{{/if}}
+      </li>
+      {{/each}}
+    </ol>
+    {{/if}}
+    {{#if this.ending}}
+    <div class="azeroth-rung-row azeroth-rung-ending">
+      <p class="azeroth-rung-head"><strong>{{this.ending.name}}</strong></p>
+      <p><span class="azeroth-rung-label">{{localize "AZEROTH.Corruption.YouAre"}}</span> {{{this.ending.are}}}</p>
+      <p><span class="azeroth-rung-label">{{localize "AZEROTH.Corruption.YouAreNot"}}</span> {{{this.ending.areNot}}}</p>
+    </div>
+    {{/if}}
+  </div>
+  {{/each}}
+  {{!-- There is no total, and there is deliberately nowhere to print one. --}}
+  {{!-- No clarifier here (D-615): the rule that tracks never sum is the book's to state. --}}
+</section>

@@ -1,0 +1,92 @@
+{{!--
+  The stop door (D-730): every loop this screen is playing, and the two ways
+  to end one - the GM's Stop, which is for everyone, and a player's Hide,
+  which is their own screen.
+
+  EVERY STATE IS IN WORDS. A row says Playing, Stopped for everyone by Brad,
+  Hidden on this screen or Animations are off on this screen, and a control
+  that is not the reader's to press is greyed AND has the reason printed
+  beside it - colour and absence are never the carriers (CLAUDE.md §12, D5 §8).
+
+  `canStop`, `canHide`, `stopped` and `hiddenHere` are spread onto every row
+  rather than read off the root: a bare name inside `{{#each}}` resolves
+  against the row (D-609), so a control keyed on the context would draw for
+  everybody.
+
+  The scope select carries `data-animations-scope` and NO `data-action`: the
+  actions map fires on CLICK, and a select that fired on one would act before
+  the reader had chosen (D-677).
+--}}
+<div class="azeroth-dialog azeroth-generator-frame azeroth-animations-frame">
+
+  <div class="azeroth-animations-head">
+    {{#if unavailable}}<p class="azeroth-animations-banner">{{unavailable}}</p>{{/if}}
+    {{#if notDrawn}}<p class="azeroth-animations-banner">{{notDrawn}}</p>{{/if}}
+    {{#if isGM}}
+    <label class="azeroth-animations-scope" for="azeroth-animations-scope">{{scopeLabel}}</label>
+    <select id="azeroth-animations-scope" data-animations-scope>
+      {{#each scopes}}
+      <option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
+      {{/each}}
+    </select>
+    {{/if}}
+  </div>
+
+  <div class="azeroth-generator-pane">
+    {{#if empty}}
+    <p class="azeroth-forge-none">{{empty}}</p>
+    {{else}}
+    <ol class="azeroth-forge-list azeroth-animations-rows">
+      {{#each rows}}
+      {{!-- WHAT IT FOLLOWS IS ITS OWN LINE, and that is not decoration: with
+            the binding and the token names on the first line a row wrapped or
+            did not wrap depending on how long the creature's name happened to
+            be, so two rows of the same window had their buttons in different
+            places. The first line is now always name, state and controls. --}}
+      <li data-loop-key="{{this.key}}" class="{{#if this.stopped}}is-stopped{{/if}}">
+        <span class="azeroth-forge-name">{{this.name}}</span>
+        <span class="azeroth-animations-state">{{this.state}}</span>
+
+        {{!-- The GM's control. A player sees it greyed with the reason beside
+              it rather than not at all: a control that is simply absent says
+              nothing about whose it is. --}}
+        {{#if this.stopped}}
+        <button type="button" class="azeroth-forge-quiet"{{#unless this.canStop}} disabled{{/unless}} data-action="animationResume">{{localize "AZEROTH.Animation.Resume"}}</button>
+        {{else}}
+        <button type="button" class="azeroth-forge-quiet"{{#unless this.canStop}} disabled{{/unless}} data-action="animationStop">{{localize "AZEROTH.Animation.Stop"}}</button>
+        {{/if}}
+
+        {{#unless this.elsewhere}}
+        {{#if this.hiddenHere}}
+        <button type="button" class="azeroth-forge-quiet" data-action="animationShow">{{localize "AZEROTH.Animation.Show"}}</button>
+        {{else}}
+        <button type="button" class="azeroth-forge-quiet"{{#unless this.canHide}} disabled{{/unless}} data-action="animationHide">{{localize "AZEROTH.Animation.Hide"}}</button>
+        {{/if}}
+        {{/unless}}
+
+        <span class="azeroth-animations-follows">
+          <span class="azeroth-animations-binding">{{this.binding}}</span>
+          {{#if this.where}}<span class="azeroth-animations-where">{{this.where}}</span>{{/if}}
+        </span>
+        {{#if this.stopRefusal}}<span class="azeroth-animations-refusal">{{this.stopRefusal}}</span>{{/if}}
+      </li>
+      {{/each}}
+    </ol>
+    {{/if}}
+  </div>
+
+  {{!-- **A CONTROL THAT IS NOT YOURS IS GREYED, NEVER ABSENT** (D-730, the
+        lead, 2026-09-16). Stop all and Resume all used to be REMOVED for a
+        player and the sentence printed in their place, which makes absence the
+        carrier - the very thing every row above avoids. They are drawn and
+        disabled like every other control now, and the full sentence sits ONCE
+        beside them; the rows carry a two-word refusal, because six rows
+        printing a 24-word sentence is noise rather than an explanation. --}}
+  <div class="azeroth-forge-buttons">
+    <button type="button" class="azeroth-forge-quiet"{{#unless canStopAll}} disabled{{/unless}} data-action="animationStopAll">{{localize "AZEROTH.Animation.StopAll"}}</button>
+    <button type="button" class="azeroth-forge-quiet"{{#unless canResumeAll}} disabled{{/unless}} data-action="animationResumeAll">{{localize "AZEROTH.Animation.ResumeAll"}}</button>
+    <button type="button" class="azeroth-forge-quiet"{{#unless canHideAll}} disabled{{/unless}} data-action="animationHideAll">{{localize "AZEROTH.Animation.HideAll"}}</button>
+    <button type="button" class="azeroth-forge-quiet"{{#unless canShowAll}} disabled{{/unless}} data-action="animationShowAll">{{localize "AZEROTH.Animation.ShowAll"}}</button>
+    {{#unless isGM}}<span class="azeroth-animations-refusal">{{gmOnly}}</span>{{/unless}}
+  </div>
+</div>

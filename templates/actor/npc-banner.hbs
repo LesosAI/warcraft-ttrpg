@@ -1,0 +1,92 @@
+{{!-- The identity run, in D4 SS10.2's printed order. --}}
+<header class="azeroth-banner azeroth-banner-npc">
+  {{!-- THE FIELD IS `actor.img`, AND ON A PACK CREATURE THAT *IS* THE TOKEN
+        (D-688, wording corrected by D-700). `bestiary-art.mjs#tokenFor` is
+        stamped by the parser into `img` AND into
+        `prototypeToken.texture.src`, and migration 0.11.6 stamps both again in
+        an older world, so the two agree on all 164. The old note here said
+        *the portrait is the creature's TOKEN* full stop, which was true of the
+        picture and wrong about the field: on a creature a GM built the two can
+        differ, and this one follows `img`.
+
+        **Deliberately NOT changed to follow the prototype token.** The
+        character banner does (D-700), because a player sets a character's
+        token from the Prototype Token dialog and the top-left portrait did not
+        move with it. A creature's art arrives from the pack, so there is no
+        such gap here and no reason to move the field under a working sheet.
+
+        Clicking opens the full illustration where the entry has one. The
+        `{{else}}` branch below carries `data-edit` with no `data-action`, which
+        in AppV2 is a dead control - core wires `img[data-edit]` through the
+        `editImage` ACTION and nothing else - and it is left alone with the
+        rest of this sheet's behaviour. --}}
+  {{#if identity.hasArt}}
+  <img class="azeroth-portrait azeroth-portrait-token azeroth-portrait-viewable"
+       src="{{actor.img}}" alt="" data-action="viewArt"
+       data-tooltip="{{localize 'AZEROTH.Sheet.ViewArt'}}">
+  {{else}}
+  <img class="azeroth-portrait azeroth-portrait-token" src="{{actor.img}}" alt="" data-edit="img">
+  {{/if}}
+  <div class="azeroth-identity">
+    <input class="azeroth-name" type="text" name="name" value="{{actor.name}}">
+    <div class="azeroth-identity-line">
+      {{!-- A GM reworks the creature in the generator (D-637); the sheet stays a reading surface. --}}
+      {{#if reworkable}}<button type="button" class="azeroth-build" data-action="rework">{{localize "AZEROTH.Sheet.Rework"}}</button>{{/if}}
+      <strong>{{localize identity.weightClass}}</strong>
+      <span>{{localize identity.size}}</span>
+      <span>{{localize identity.creatureType}}{{#if identity.typeMarker}} ({{identity.typeMarker}}){{/if}}</span>
+      {{#if identity.race}}<span>{{identity.race}}</span>{{/if}}
+      <span>{{localize "AZEROTH.Sheet.Tier"}} {{identity.tier}}</span>
+      <span>{{localize "AZEROTH.Sheet.ThreatShare"}} {{azerothDash identity.threatShare}}</span>
+      {{#if identity.corruption}}<span class="azeroth-corruption-keyword">{{localize identity.corruption}}</span>{{/if}}
+      {{#if identity.handlingDC}}<span>{{localize "AZEROTH.Sheet.Handling"}} DC {{identity.handlingDC}}</span>{{/if}}
+      {{!-- One body for many (13 SS4, D-646); Thinned below half its Health. --}}
+      {{#if identity.swarm}}<span>{{identity.swarm.line}}</span>{{/if}}
+      {{#if identity.thinned}}<span class="azeroth-thinned">{{localize "AZEROTH.Sheet.Thinned"}}</span>{{/if}}
+    </div>
+    {{#if identity.dungeon}}
+    <div class="azeroth-identity-line">
+      <span>{{localize "AZEROTH.Sheet.Dungeon"}} <strong>{{identity.dungeon}}</strong></span>
+      <span>{{localize "AZEROTH.Sheet.PartyLevel"}} {{identity.partyLevel}}</span>
+      {{#if identity.bossDC}}<span>DC {{identity.bossDC}}</span>{{/if}}
+    </div>
+    {{/if}}
+    {{#if identity.bond}}
+    {{!-- The bond that holds this creature (D-643), and its release. --}}
+    <div class="azeroth-identity-line">
+      <span>{{identity.bond.line}}</span>
+      {{!-- A totem bound with nowhere to stand (02 §7, D-708). --}}
+      {{#if identity.bond.plantable}}<button type="button" class="azeroth-build" data-action="plantTotem">{{localize "AZEROTH.Totem.Plant"}}</button>{{/if}}
+      {{#if identity.bond.releasable}}<button type="button" class="azeroth-build" data-action="release">{{localize "AZEROTH.Bound.Release"}}</button>{{/if}}
+    </div>
+    {{else if identity.bindable}}
+    {{!-- A creature already in the world, bound after the fact (D-649). --}}
+    <div class="azeroth-identity-line">
+      <button type="button" class="azeroth-build" data-action="bindTo">{{localize "AZEROTH.Bound.BindTo"}}</button>
+    </div>
+    {{/if}}
+  </div>
+
+  <dl class="azeroth-callouts">
+    <div class="azeroth-callout">
+      <dt>{{localize "AZEROTH.Health.Label"}}</dt>
+      <dd><input type="number" name="system.health.value" value="{{system.health.value}}" min="0" step="1">
+      <span class="azeroth-of">/ {{system.health.max}}</span>
+      {{!-- 05's temporary Health (D-777), as the character's banner draws it. --}}
+      {{#if temporaryHealth}}<span class="azeroth-of azeroth-temp-health" data-tooltip="{{temporaryHealth.tip}}">{{localize "AZEROTH.Health.Temporary" n=temporaryHealth.n}}</span>{{/if}}</dd>
+    </div>
+    <div class="azeroth-callout">
+      <dt>{{localize "AZEROTH.Sheet.Defense"}}</dt><dd>{{system.defense}}</dd>
+    </div>
+    <div class="azeroth-callout">
+      <dt>{{localize "AZEROTH.Sheet.Initiative"}}</dt><dd>{{system.initiative}}</dd>
+    </div>
+    <div class="azeroth-callout">
+      <dt>{{localize "AZEROTH.Sheet.Speed"}}</dt>
+      {{!-- Both words are lang keys (CLAUDE.md §11); they were typed English
+            here and the character banner's own flying line would have made a
+            second copy of one of them (D-718). --}}
+      <dd>{{system.speed}} ft{{#if identity.flyingSpeed}} <span class="azeroth-of">/ {{identity.flyingSpeed}} {{localize "AZEROTH.Sheet.Flying"}}</span>{{/if}}{{#if system.mountedSpeed}} <span class="azeroth-of">/ {{system.mountedSpeed}} {{localize "AZEROTH.Sheet.Mounted"}}</span>{{/if}}</dd>
+    </div>
+  </dl>
+</header>

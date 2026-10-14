@@ -1,0 +1,24 @@
+{{!--
+  Every Active Effect the actor holds that is not a bare condition: toggle,
+  edit, delete. Drawn inside the effects partial on a creature, and on its
+  own above Favorites on a character's Core (D-665), where `always` keeps the
+  heading and prints the line that says there are none.
+--}}
+{{#if (or effects.rows.length always)}}
+<h3 class="azeroth-panel-heading">{{localize "AZEROTH.Effects.Effects"}}</h3>
+<ol class="azeroth-effect-list">
+  {{#each effects.rows as |e|}}
+  <li class="azeroth-effect{{#if e.disabled}} is-disabled{{/if}}" data-effect-id="{{e.id}}">
+    {{#if e.img}}<img src="{{e.img}}" alt="">{{/if}}
+    <span class="azeroth-effect-name" data-action="editEffect">{{e.name}}</span>
+    {{#if e.permanent}}<span class="azeroth-effect-flag">{{localize "AZEROTH.Card.Permanent"}}</span>{{/if}}
+    <button type="button" class="azeroth-effect-toggle" data-action="toggleEffect" aria-pressed="{{#unless e.disabled}}true{{else}}false{{/unless}}">
+      {{#if e.disabled}}{{localize "AZEROTH.Effects.Off"}}{{else}}{{localize "AZEROTH.Effects.On"}}{{/if}}
+    </button>
+    <button type="button" class="azeroth-delete" data-action="deleteEffect" data-tooltip="{{localize "AZEROTH.Sheet.Delete"}}" aria-label="{{localize "AZEROTH.Sheet.Delete"}}">&times;</button>
+  </li>
+  {{else}}
+  <li class="azeroth-effect azeroth-effect--empty">{{localize "AZEROTH.Effects.NoEffects"}}</li>
+  {{/each}}
+</ol>
+{{/if}}

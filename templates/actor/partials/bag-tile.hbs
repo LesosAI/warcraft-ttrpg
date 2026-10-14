@@ -1,0 +1,35 @@
+{{!--
+  ONE THING IN ONE WELL (08 §11, 05 *Speed and movement*; D-738).
+
+  The whole tile is one control: a click SELECTS it (the inspector beside the
+  panels is already rendered and is only unhidden, so nothing re-renders and
+  the selection survives), a double-click runs `tile.primary` — the action
+  `rules/bags.mjs#primaryAction` named — and a right click opens the row menu,
+  which binds to `li[data-item-id]`.
+
+  **ONE TEXT LEAF**, the count. A 44px well has room for a single corner badge
+  and two would overprint; everything else the thing could say is in the
+  tooltip and in the inspector. The star and the coating are ICONS and carry
+  no words, and the `aria-label` is a FORMAT key rather than joined words
+  (CLAUDE.md §11) so a screen reader hears the name, the rarity, the kind and
+  the size.
+
+  `tile.containerId` is set on the bag bar's own places ALONE: dropping a
+  thing on a worn bag's icon puts it in that bag, the way dropping it on the
+  bag's panel does. A tile in a panel never carries one — the panel around it
+  does, and `dropZoneOf` reads the nearest.
+
+  `wellKey` is the WELL this tile stands in, handed in by `bag-panel.hbs` and
+  absent everywhere else — the bar's places, the Stable and the over row have
+  no wells to aim at. It is a STRING, because `{{#if 0}}` is false and the
+  first well of every panel would otherwise lose its attribute.
+--}}
+<li class="azeroth-bag-tile draggable{{#if tile.favorite}} is-favorite{{/if}}{{#if tile.coating}} is-coated{{/if}}{{#if tile.equipped}} is-equipped{{/if}}"
+    data-item-id="{{tile.id}}"{{#if tile.containerId}} data-container-id="{{tile.containerId}}"{{/if}}{{#if wellKey}} data-well="{{wellKey}}"{{/if}}
+    data-action="selectItem" data-primary="{{tile.primary}}"
+    role="option" aria-selected="false" tabindex="0" aria-label="{{tile.ariaLabel}}" data-tooltip-html="{{tile.tipHtml}}">
+  {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=tile.img rarityClass=tile.rarityClass}}
+  {{#if tile.favorite}}<i class="azeroth-bag-mark azeroth-bag-mark-star fa-solid fa-star" aria-hidden="true"></i>{{/if}}
+  {{#if tile.coating}}<i class="azeroth-bag-mark azeroth-bag-mark-coat fa-solid fa-droplet" aria-hidden="true"></i>{{/if}}
+  {{#if tile.badge}}<span class="azeroth-bag-count">{{tile.badge}}</span>{{/if}}
+</li>

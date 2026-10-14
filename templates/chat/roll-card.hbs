@@ -1,0 +1,325 @@
+{{!-- Attack and Test card. Accent: horde red. 300px (D11 SS5). --}}
+<div class="azeroth azeroth-card azeroth-card-attack" data-message-kind="{{kind}}">
+  {{> systems/azeroth-rpg/templates/chat/partials/card-header.hbs title=title subtitle=subtitle}}
+
+  <div class="azeroth-card-body">
+    <div class="azeroth-card-headline">
+      <span class="azeroth-total">{{total}}</span>
+      <span class="azeroth-versus">{{localize "AZEROTH.Roll.DC"}} {{azerothDash dc}}</span>
+      {{!-- The kept d20 and what was added to it (2026-09-07): the card
+            said only the total, so a 19 plus 1 read the same as a 4 plus 16. --}}
+      {{#if natural}}<span class="azeroth-natural" data-tooltip="{{localize "AZEROTH.Card.NaturalTip"}}">d20 {{natural}}{{#if modifier}} {{azerothSigned modifier}}{{/if}}</span>{{/if}}
+      <span class="azeroth-sl {{#if success}}is-success{{else}}is-failure{{/if}}">{{azerothSL sl}}</span>
+    </div>
+    {{> systems/azeroth-rpg/templates/chat/partials/verdict.hbs verdict=verdict}}
+    {{!-- The Momentum the hit built (05 SS11, D-627), and Opening's trade. --}}
+    {{#each momentumGained as |g|}}
+    <p class="azeroth-card-line azeroth-momentum-gain"><span>{{g.label}}</span><strong>+{{g.gained}}</strong></p>
+    {{/each}}
+    {{#if opening}}
+    <div class="azeroth-card-actions">
+      <button type="button" data-action="openingCombo">{{localize "AZEROTH.Card.OpeningCombo"}}</button>
+    </div>
+    {{/if}}
+
+    {{#if critical}}<p class="azeroth-flag is-critical">{{localize "AZEROTH.Roll.Critical"}}</p>{{/if}}
+    {{#if fumble}}<p class="azeroth-flag is-fumble">{{localize "AZEROTH.Roll.Fumble"}}</p>{{/if}}
+
+    {{#if location}}
+    <p class="azeroth-card-line">
+      <span>{{localize "AZEROTH.Card.Location"}}</span>
+      <strong>{{localize (lookup config.locations location)}}</strong>
+      {{#if calledShotCost}}<em>{{calledShotCost}}</em>{{/if}}
+    </p>
+    {{/if}}
+
+    {{#if shot}}
+    {{!-- The shot fired, one marked off the bundle (08 §7, D-641). --}}
+    <p class="azeroth-card-line">
+      <span>{{localize "AZEROTH.Card.Shot"}}</span>
+      <strong>{{shot.name}}</strong>
+      <em>{{localize "AZEROTH.Card.ShotsLeft" n=shot.remaining}}</em>
+    </p>
+    {{/if}}
+
+    {{#if damage}}
+    {{!-- The TYPE in words beside the number (08 SS7, D-711 phase 2): a Greater
+          School enchantment converts what the blow deals, and the card said
+          nothing of it. Never colour alone. --}}
+    <p class="azeroth-card-line azeroth-damage">
+      <span>{{localize "AZEROTH.Card.Damage"}}</span>
+      <strong>{{damage.final}}{{#if damage.type}} {{damage.type}}{{/if}}</strong>
+      <em>{{damage.explanation}}</em>
+    </p>
+    {{/if}}
+
+    {{#if damage}}
+    <div class="azeroth-card-actions">
+      {{#each targets}}
+      {{!-- One row per target, with the damage mitigated against that target's own armour and Ward. --}}
+      <button type="button" data-action="applyDamage" data-target-index="{{this.index}}" data-damage="{{this.damage}}">
+        {{localize "AZEROTH.Card.ApplyTo" name=this.name}} <strong>{{azerothDash this.damage}}</strong>
+      </button>
+      {{else}}
+      <button type="button" data-action="applyDamage" data-damage="{{damage.final}}">
+        {{localize "AZEROTH.Card.ApplyDamage"}}
+      </button>
+      {{/each}}
+    </div>
+    {{/if}}
+
+    {{#if offHandStrike}}
+    {{!-- 06 SS1's Off-Hand Attack (D-711): it rides the Attack just made and
+          costs no Half-Action, once a round. The button is the attacker's -
+          `dice/chat.mjs` strips every `azeroth-card-actions` block from anybody
+          who owns neither the message nor the world - and the budget refuses a
+          second one in its own words at the door. --}}
+    <div class="azeroth-card-actions">
+      <button type="button" data-action="offHandFromCard" data-item-id="{{offHandStrike.id}}">
+        {{localize "AZEROTH.Card.OffHandStrike" name=offHandStrike.name}}
+      </button>
+    </div>
+    {{/if}}
+
+    {{#if extraStrikes.length}}
+    {{!-- 04's Flurry and Wide Swing (D-772): one extra attack off this blow,
+          the round's record its clock, judged again at the press. The label
+          says whom it may strike and at what Rating. --}}
+    <div class="azeroth-card-actions">
+      {{#each extraStrikes as |x|}}
+      <button type="button" data-action="extraStrike" data-strike="{{x.identifier}}" data-item-id="{{x.weaponId}}">{{x.label}}</button>
+      {{/each}}
+    </div>
+    {{/if}}
+
+    {{#if blowShare}}
+    {{!-- 04's Blade Flurry (D-773): half of what the blow dealt, on a second
+          enemy within its feet of the target - the creature the presser
+          targets. The round's record, the distance and the creature are all
+          judged again at the press. --}}
+    <div class="azeroth-card-actions">
+      <button type="button" data-action="blowShare">{{localize "AZEROTH.BlowShare.Button" talent=blowShare.name n=blowShare.half feet=blowShare.feet}}</button>
+    </div>
+    {{/if}}
+
+    {{#if guidance}}
+    {{!-- 04's Ancestral Guidance (D-774): Earthliving's heal again, on a friend
+          the presser targets within its feet of the shaman. The friend, the
+          distance and the presses (one a rank) are judged at the press. --}}
+    <div class="azeroth-card-actions">
+      <button type="button" data-action="guidanceHeal">{{guidance.label}}</button>
+    </div>
+    {{/if}}
+
+    {{#if fired.length}}
+    {{!-- The Effect traits the roll fired (08 §5, 2026-09-06): what each does, and the condition to lay where one names it. --}}
+    <div class="azeroth-card-fired">
+      {{#each fired as |f|}}
+      <p class="azeroth-card-line azeroth-fired"><span>{{f.name}}</span><em>{{f.text}}</em></p>
+      {{#if f.condition}}
+      <div class="azeroth-card-actions">
+        {{#each ../targets}}
+        <button type="button" data-action="applyCondition" data-condition="{{f.condition.id}}" data-target-index="{{this.index}}"{{#if f.condition.value}} data-value="{{f.condition.value}}"{{/if}}>
+          {{localize "AZEROTH.Card.InflictOn" condition=f.condition.label name=this.name}}{{#if f.condition.value}} {{f.condition.value}}{{/if}}
+        </button>
+        {{else}}
+        <button type="button" data-action="applyCondition" data-condition="{{f.condition.id}}"{{#if f.condition.value}} data-value="{{f.condition.value}}"{{/if}}>
+          {{localize "AZEROTH.Card.Inflict" condition=f.condition.label}}{{#if f.condition.value}} {{f.condition.value}}{{/if}}
+        </button>
+        {{/each}}
+      </div>
+      {{/if}}
+      {{#if f.poison}}
+      {{!-- 08 SS12's tick poison (O-114, D-770): the target's Resilience Test at
+            the poison's DC, through the spell card's own Resist door. A failure
+            lays the poison's ticks on the creature that failed; a success
+            leaves the weapon's damage alone. --}}
+      <div class="azeroth-card-actions">
+        {{#each ../targets}}
+        <button type="button" data-action="resistTest" data-purpose="poison" data-poison-index="{{f.poison.index}}" data-target-index="{{this.index}}" data-resilience="{{f.poison.resilience}}" data-dc="{{f.poison.dc}}">
+          {{localize "AZEROTH.Card.ResistFor" name=this.name resilience=(localize f.poison.label) dc=(azerothDash f.poison.dc)}}
+        </button>
+        {{else}}
+        <button type="button" data-action="resistTest" data-purpose="poison" data-poison-index="{{f.poison.index}}" data-resilience="{{f.poison.resilience}}" data-dc="{{f.poison.dc}}">
+          {{localize "AZEROTH.Card.ResistTest" resilience=(localize f.poison.label) dc=(azerothDash f.poison.dc)}}
+        </button>
+        {{/each}}
+      </div>
+      {{/if}}
+      {{#if f.intimidate}}
+      {{!-- 04's Intimidation (D-773): the target's Test at the companion's
+            owner's Spell DC, through the Resist door; a failure lays the Bane
+            for its rounds. --}}
+      <div class="azeroth-card-actions">
+        {{#each ../targets}}
+        <button type="button" data-action="resistTest" data-purpose="intimidation" data-intimidate-index="{{f.intimidate.index}}" data-target-index="{{this.index}}" data-resilience="{{f.intimidate.resilience}}" data-dc="{{f.intimidate.dc}}">
+          {{localize "AZEROTH.Card.ResistFor" name=this.name resilience=(localize f.intimidate.label) dc=(azerothDash f.intimidate.dc)}}
+        </button>
+        {{else}}
+        <button type="button" data-action="resistTest" data-purpose="intimidation" data-intimidate-index="{{f.intimidate.index}}" data-resilience="{{f.intimidate.resilience}}" data-dc="{{f.intimidate.dc}}">
+          {{localize "AZEROTH.Card.ResistTest" resilience=(localize f.intimidate.label) dc=(azerothDash f.intimidate.dc)}}
+        </button>
+        {{/each}}
+      </div>
+      {{/if}}
+      {{#if f.sunder}}
+      {{!-- Sundering's armor break (08 §5, D-691): the maneuver's own effect. --}}
+      <div class="azeroth-card-actions">
+        <button type="button" data-action="applySundered" data-sunder="{{f.sunder}}">
+          {{localize "AZEROTH.Card.SunderArmor" amount=f.sunder}}
+        </button>
+      </div>
+      {{/if}}
+      {{#if f.bane}}
+      {{!-- A Bane on the TARGET's next Attack Test (08 SS20's two finds). It
+            fired as a row and wrote nowhere until 06 SS6's carrier existed
+            (D-693); it lands on the creature struck, like the condition. --}}
+      <div class="azeroth-card-actions">
+        {{#each ../targets}}
+        <button type="button" data-action="layBane" data-kind="attack" data-banes="{{../f.bane}}" data-source="{{../f.name}}" data-target-index="{{this.index}}">
+          {{localize "AZEROTH.Reaction.LaidBanes" source=../f.name n=../f.bane kind=(localize "AZEROTH.TestKind.Attack")}}
+        </button>
+        {{else}}
+        <button type="button" data-action="layBane" data-kind="attack" data-banes="{{f.bane}}" data-source="{{f.name}}">
+          {{localize "AZEROTH.Reaction.LayButton"}}
+        </button>
+        {{/each}}
+      </div>
+      {{/if}}
+      {{#if f.allyHeal}}
+      {{!-- Healing that lands on somebody ELSE off a blow (Lawbringer Armor,
+            D-698). It carries no `data-self`, so `applyHealing` puts it on the
+            controlled or targeted token: which creature within the radius is
+            the table's call (D2 SS12), and the bearer's own healing was paid
+            at the attack door rather than drawn here. --}}
+      <div class="azeroth-card-actions">
+        <button type="button" data-action="applyHealing" data-heal="{{f.allyHeal.n}}">
+          {{localize "AZEROTH.Card.HealAlly" n=f.allyHeal.n feet=f.allyHeal.feet}}
+        </button>
+      </div>
+      {{/if}}
+      {{/each}}
+    </div>
+    {{/if}}
+    {{#if struckBack.length}}
+    {{!-- What the TARGET is wearing answers back (08 SS20, D-692): the damage
+          and the condition land on the ATTACKER, which is what `data-self`
+          means on both buttons - the card's own speaker, never a target row. --}}
+    <div class="azeroth-card-struck-back">
+      {{#each struckBack as |b|}}
+      <p class="azeroth-card-line azeroth-fired">
+        <span>{{b.name}}</span><em>{{b.text}}</em>
+      </p>
+      <div class="azeroth-card-actions">
+        {{#if b.damage}}
+        <button type="button" data-action="applyDamage" data-self="1" data-damage="{{b.damage}}"{{#if b.damageType}} data-damage-type="{{b.damageType}}"{{/if}}>
+          {{localize "AZEROTH.Signature.TakeBack" n=b.damage}}
+        </button>
+        {{/if}}
+        {{#if b.condition}}
+        <button type="button" data-action="applyCondition" data-self="1" data-condition="{{b.condition.id}}"{{#if b.condition.value}} data-value="{{b.condition.value}}"{{/if}}{{#if b.condition.until}} data-until="{{b.condition.until}}"{{/if}}>
+          {{localize "AZEROTH.Signature.TakeCondition" condition=b.condition.label}}
+        </button>
+        {{/if}}
+      </div>
+      {{/each}}
+    </div>
+    {{/if}}
+
+    {{#if onKill.length}}
+    {{!-- Gorehowl (08 SS20): *when an attack with it reduces a creature to 0
+          Health, every enemy within 30 feet that saw it takes a Bane on their
+          next Attack Test.* A kill is not a hit, so this is a LINE and not a
+          fired row - the card cannot know whether the blow finished anything.
+          WHO saw it is the table's, so the button reaches the SELECTED tokens
+          rather than the row that was struck (D-693). --}}
+    <div class="azeroth-card-on-kill">
+      {{#each onKill as |k|}}
+      <p class="azeroth-card-line azeroth-fired">
+        <span>{{localize "AZEROTH.Signature.OnKill" name=k.name}}</span><em>{{k.text}}</em>
+      </p>
+      {{#if k.bane}}
+      <div class="azeroth-card-actions">
+        <button type="button" data-action="layBane" data-kind="attack" data-banes="{{k.bane}}" data-source="{{k.name}}">
+          {{localize "AZEROTH.Reaction.LayButton"}}
+        </button>
+      </div>
+      {{/if}}
+      {{/each}}
+    </div>
+    {{/if}}
+
+    {{#if reactions.length}}
+    {{!-- 06 SS6's Parry and Block, shown to the DEFENDER (D-693). One row per
+          target, and `dice/chat.mjs` removes a row whose creature this client
+          does not own - the attacker owns the message and would otherwise see
+          every defender's controls. *Neither answers an attack you cannot
+          see* is the table's judgement (D2 SS12) and is a line, never a
+          refusal. --}}
+    <div class="azeroth-card-reactions">
+      {{#each reactions as |r|}}
+      <p class="azeroth-card-line azeroth-fired" data-reaction-owner="{{r.actorUuid}}">
+        <span>{{localize "AZEROTH.Reaction.Heading"}}</span><em>{{r.name}}</em>
+      </p>
+      <div class="azeroth-card-actions" data-reaction-owner="{{r.actorUuid}}">
+        {{#if r.block}}
+        <button type="button" data-action="reactBlock" data-target-index="{{r.index}}">
+          {{localize "AZEROTH.Reaction.BlockButton" name=r.block n=r.blockOff}}
+        </button>
+        {{/if}}
+        {{#if r.parry}}
+        <button type="button" data-action="reactParry" data-target-index="{{r.index}}">
+          {{localize "AZEROTH.Reaction.ParryButton" name=r.parry}}
+        </button>
+        {{/if}}
+      </div>
+      {{/each}}
+      <p class="azeroth-note" data-reaction-note="1">{{reactionNote}}</p>
+    </div>
+    {{/if}}
+    {{#if foresight.length}}
+    {{!-- 04's Foresight (the lead, 2026-10-03, on O-181: "Yes"; D-779): a priest
+          holding it presses 02's Ward from this card on the creature struck, and
+          the Ward answers this blow. Shown only to a client that owns such a
+          priest (`data-foresight`, `dice/chat.mjs`). --}}
+    {{#each foresight as |w|}}
+    <div class="azeroth-card-actions" data-foresight="1">
+      <button type="button" data-action="foresightWard" data-target-index="{{w.index}}">{{localize "AZEROTH.Foresight.Button" name=w.name}}</button>
+    </div>
+    {{/each}}
+    {{/if}}
+    {{#if evades.length}}
+    {{!-- 04's Elusive (D-773): an attack that missed or dealt nothing lets the
+          defender step away as though Disengaged, for its Energy. Shown to the
+          defender alone, as a Parry is (`data-reaction-owner`). --}}
+    {{#each evades as |e|}}
+    <div class="azeroth-card-actions" data-reaction-owner="{{e.actorUuid}}">
+      <button type="button" data-action="evade" data-actor-uuid="{{e.actorUuid}}">{{localize "AZEROTH.Evade.Button" name=e.name talent=e.talent feet=e.feet n=e.cost}}</button>
+    </div>
+    {{/each}}
+    {{/if}}
+    {{#if unreliable}}<p class="azeroth-flag is-fumble">{{localize "AZEROTH.Card.Unreliable"}}</p>{{/if}}
+    {{#each traitNotes}}<p class="azeroth-card-line azeroth-trait-note"><span>{{this.name}}</span><em>{{this.text}}</em></p>{{/each}}
+
+    {{#if traits.length}}
+    {{!-- What the weapon's or the attack's traits do (08 §5), and the block's
+          own ability where the attack names one (D-649). --}}
+    <dl class="azeroth-card-traits">
+      {{#each traits}}<dt>{{this.name}}</dt><dd>{{{this.html}}}</dd>{{/each}}
+    </dl>
+    {{/if}}
+
+    {{!-- 06 §8: a Critical Injury happens on a NATURAL 20 on an attack. The
+          other trigger is reaching 0 Health, which arrives through damage
+          rather than through a roll and so has no button here. --}}
+    {{#if criticalInjury}}
+    <div class="azeroth-card-actions">
+      <button type="button" data-action="criticalInjury">
+        {{localize "AZEROTH.Card.RollCriticalInjury"}}
+      </button>
+    </div>
+    {{/if}}
+  </div>
+
+  {{> systems/azeroth-rpg/templates/chat/partials/provenance.hbs provenance=provenance}}
+</div>

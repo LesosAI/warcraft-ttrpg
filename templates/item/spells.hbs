@@ -1,0 +1,29 @@
+{{!--
+  The spells an item casts (D-633): each at its own DC or the bearer's, as
+  often as it states. Cast is offered where an actor holds the item; the
+  stepper moves the uses by hand, as a feature's does. Added in the Forge.
+
+  A template part must render exactly one element, so the section is always
+  here and hidden when the item casts nothing.
+--}}
+<section class="azeroth-item__spells"{{#unless spells.length}} hidden{{/unless}}>
+  {{#if spells.length}}
+  <h2 class="azeroth-item__section-title">{{localize "AZEROTH.Item.Spells"}}</h2>
+  <ol class="azeroth-item-spells">
+    {{#each spells as |s|}}
+    <li class="azeroth-item-spell" data-index="{{s.index}}">
+      <span class="azeroth-item-spell-name">{{s.name}}</span>
+      <span class="azeroth-item-spell-dc">{{s.dcLabel}}</span>
+      <span class="azeroth-item-spell-uses">{{#if s.limited}}{{s.value}}/{{s.max}} {{s.perLabel}}{{else}}{{localize "AZEROTH.Forge.Unlimited"}}{{/if}}</span>
+      {{#if s.castable}}
+      <button type="button" class="azeroth-cast" data-action="castItemSpell" data-index="{{s.index}}"{{#unless s.available}} disabled{{/unless}}>{{localize "AZEROTH.Sheet.Cast"}}</button>
+      {{/if}}
+      {{#if s.steppable}}
+      <button type="button" class="azeroth-uses-step" data-action="stepSpellUses" data-index="{{s.index}}" data-delta="-1" aria-label="{{localize "AZEROTH.Sheet.UsesDown"}}"{{#unless s.value}} disabled{{/unless}}>&minus;</button>
+      <button type="button" class="azeroth-uses-step" data-action="stepSpellUses" data-index="{{s.index}}" data-delta="1" aria-label="{{localize "AZEROTH.Sheet.UsesUp"}}"{{#if s.full}} disabled{{/if}}>+</button>
+      {{/if}}
+    </li>
+    {{/each}}
+  </ol>
+  {{/if}}
+</section>

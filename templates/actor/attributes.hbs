@@ -1,0 +1,57 @@
+{{!--
+  NEVER BEHIND A TAB (D-506). The plate shows the score large with the modifier
+  and the save as corner chips.
+
+  D11 SS9: clip-path clips descendants, so the chips are SIBLINGS of the clipped
+  plate rather than children of it. This bit the artboards twice.
+--}}
+<section class="azeroth-attributes">
+  {{#each abilities}}
+  <div class="azeroth-attribute">
+    {{!--
+      An absent ability - a Mindless creature's Int or Cha (D4 SS10.2) - draws
+      an em-dash, NO action and NO modifier chip. An action on it would be a
+      silent no-op, and `azerothSigned null` printed +0, which is wrong twice.
+    --}}
+    <div class="azeroth-plate{{#if this.absent}} is-absent{{/if}}"
+         {{#unless this.absent}}data-action="rollAbility" role="button" tabindex="0"{{/unless}} data-ability="{{this.key}}"
+         data-tooltip="{{localize this.label}}"{{#if this.absent}} aria-disabled="true"{{/if}}>
+      {{!--
+        The score is written here, on the plate (01 §3: set at creation, moved
+        only by gear and a Legacy). An input inside the plate: a click into it
+        edits and the roll handler steps aside; the plate's own click rolls.
+      --}}
+      {{!-- The score AS WORN (2026-09-06): the total in the box, the base and
+            what the gear adds on hover. Nameless: the change handler writes
+            the base back net of every change on it, read off the live actor
+            (`rules/abilities.mjs#storedFromShown`, D-769). --}}
+      {{#if this.editable}}
+      <input class="azeroth-score" type="number" data-ability-score="{{this.key}}"
+             value="{{this.total}}" min="1" max="30" step="1" aria-label="{{localize this.label}}"{{#if this.formula}} data-tooltip="{{this.formula}}"{{/if}}>
+      {{else}}
+      <span class="azeroth-score"{{#if this.formula}} data-tooltip="{{this.formula}}"{{/if}}>{{azerothDash this.total}}</span>
+      {{/if}}
+      <span class="azeroth-attribute-label">{{localize this.label}}</span>
+    </div>
+    {{#unless this.absent}}
+    <span class="azeroth-chip azeroth-chip-mod">{{azerothSigned this.mod}}</span>
+    {{/unless}}
+    {{#if this.bonus}}
+    {{!-- A mark that the gear is in the number (08 §6); the formula is on the score's hover. --}}
+    <span class="azeroth-chip azeroth-chip-gear" data-tooltip="{{this.formula}}">{{azerothSigned this.bonus}}</span>
+    {{/if}}
+    {{#if this.form}}
+    {{!-- THE SCORE IS THE SHAPE'S (02 §7, D-769): said in a word, top left,
+          with the character's own score on its hover. A sibling of the clipped
+          plate, never inside it (D11 §9). --}}
+    <span class="azeroth-chip azeroth-chip-form" data-tooltip="{{this.form.tip}}" aria-label="{{this.form.tip}}">{{this.form.mark}}</span>
+    {{/if}}
+    {{#if this.resilience}}
+    {{!-- The Resilience this ability answers for is a Test, so the chip is a
+          button (Phase 3). A sibling of the clipped plate, never inside it. --}}
+    <button type="button" class="azeroth-chip azeroth-chip-save" data-action="rollResilience"
+            data-resilience="{{this.resilience}}" data-tooltip="{{localize (lookup ../config.resiliences this.resilience)}}">{{azerothSigned this.save}}</button>
+    {{/if}}
+  </div>
+  {{/each}}
+</section>

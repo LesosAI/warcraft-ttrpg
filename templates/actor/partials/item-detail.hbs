@@ -1,0 +1,20 @@
+{{!--
+  The inline detail under an item row (gear, weapon, spell): the item's
+  fields as the book prints them, read-only, opened by the row's name and
+  hidden until then. What is drawn comes from item-fields.mjs#fieldsFor, so
+  it cannot disagree with the item sheet.
+--}}
+<div class="azeroth-item-detail" data-item-id="{{id}}" hidden>
+  {{#if origin}}<p class="azeroth-item-origin">{{origin}}</p>{{/if}}
+  {{!-- What the entry says, before its fields (2026-09-06): the lore, the effect, a Signature, the grants. --}}
+  {{#if description}}<div class="azeroth-item-prose">{{{description}}}</div>{{/if}}
+  {{#if detail.length}}
+  <dl>
+    {{#each detail as |f|}}
+    <div><dt>{{f.label}}</dt><dd>{{azerothDash f.value}}</dd></div>
+    {{/each}}
+  </dl>
+  {{else}}
+  <p class="azeroth-note">{{localize "AZEROTH.Sheet.NoDetail"}}</p>
+  {{/if}}
+</div>

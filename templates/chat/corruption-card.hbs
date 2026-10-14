@@ -1,0 +1,41 @@
+{{!-- Corruption card. Accent: fel green. --}}
+<div class="azeroth azeroth-card azeroth-card-corruption" data-message-kind="corruption">
+  {{> systems/azeroth-rpg/templates/chat/partials/card-header.hbs title=title subtitle=subtitle}}
+
+  <div class="azeroth-card-body">
+    {{#if unresisted}}
+    {{!-- 10 §3: three occasions are agreed to rather than suffered — you take
+          the offer, you cast the spell, you keep the blade — so no Test is
+          made and the point lands. The card must not print a DC it never
+          rolled against. --}}
+    <div class="azeroth-card-headline">
+      <span class="azeroth-sl is-failure">{{localize "AZEROTH.Card.Exposed"}}</span>
+      <span class="azeroth-versus">{{localize "AZEROTH.Card.NoTest"}}</span>
+    </div>
+    {{else}}
+    <div class="azeroth-card-headline">
+      <span class="azeroth-total">{{total}}</span>
+      <span class="azeroth-versus">{{localize "AZEROTH.Roll.DC"}} {{azerothDash dc}}</span>
+      <span class="azeroth-sl {{#if success}}is-success{{else}}is-failure{{/if}}">
+        {{#if success}}{{localize "AZEROTH.Card.Resisted"}}{{else}}{{localize "AZEROTH.Card.Exposed"}}{{/if}}
+      </span>
+    </div>
+    {{> systems/azeroth-rpg/templates/chat/partials/verdict.hbs verdict=verdict}}
+    {{/if}}
+
+    <p class="azeroth-card-line">
+      <span>{{localize (lookup config.corruptionTracks track)}}</span>
+      <strong>{{from}} &rarr; {{to}}</strong>
+    </p>
+
+    {{#if crossed}}
+    <p class="azeroth-flag is-threshold">
+      {{localize "AZEROTH.Card.ThresholdCrossed"}} {{crossed}}
+    </p>
+    {{/if}}
+  </div>
+
+  {{#if provenance.length}}
+  {{> systems/azeroth-rpg/templates/chat/partials/provenance.hbs provenance=provenance}}
+  {{/if}}
+</div>

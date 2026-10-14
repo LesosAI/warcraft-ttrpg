@@ -1,0 +1,65 @@
+{{!--
+  THE BAG BAR (08 §11's *You wear up to four containers at once*; D-736).
+
+  WoW's own strip of bag icons, in three runs:
+
+  - the **four general places**, and the counted ones beside them — one
+    quiver, one bolt case, one powder horn, one bandolier, one scroll case;
+  - the **one mount or vehicle** that is with you, which adds its own wells
+    by its **Carries** figure (08 §15);
+  - the **Stable**, where every other mount and vehicle stands. A stabled
+    mount adds nothing and is carried by nobody, so it takes no bag slot and
+    it is still drawn, because nothing is ever hidden.
+
+  An EMPTY place is a drop zone and nothing else: `data-bag-zone` says what a
+  drop there means, and the place itself carries no `data-action`, so a click
+  on furniture does nothing rather than something surprising. A FILLED place
+  is an ordinary tile carrying its own `data-container-id`, so a thing dropped
+  on the icon goes in that bag and a CONTAINER takes its place.
+
+  **THE ZONE IS THE RUN, not the list of places inside it** (the lead,
+  2026-09-20: *I'm unable to drag a mount into the slot*). The box a reader
+  sees and aims at is `.azeroth-bag-bar-run` - its heading, its six pixels of
+  padding and the wells within them - and while the attribute sat on the
+  `<ol>` a drop on the word *Mount*, or anywhere in the padding, matched no
+  zone at all: `_onDropItem` handed the event back to core and the mount was
+  left exactly where it was. Every test aimed at the `<ol>` and so could not
+  see it. Whatever lights on a dragover is `zone.el`, so moving the attribute
+  moves the outline onto the same box.
+--}}
+<div class="azeroth-bag-bar">
+  <div class="azeroth-bag-bar-run" data-bag-zone="bar">
+    <h4 class="azeroth-bag-bar-head">{{localize "AZEROTH.Bags.Worn"}}</h4>
+    <ol class="azeroth-bag-places" role="listbox" aria-label="{{localize "AZEROTH.Bags.Worn"}}">
+      {{#each bags.bar as |place|}}
+      {{#if place.tile}}
+      {{> systems/azeroth-rpg/templates/actor/partials/bag-tile.hbs tile=place.tile}}
+      {{else}}
+      <li class="azeroth-bag-well is-empty is-place" data-tooltip="{{place.hint}}" aria-label="{{place.hint}}"><i class="fa-solid fa-plus" aria-hidden="true"></i></li>
+      {{/if}}
+      {{/each}}
+    </ol>
+  </div>
+
+  <div class="azeroth-bag-bar-run" data-bag-zone="mount">
+    <h4 class="azeroth-bag-bar-head">{{localize "AZEROTH.Bags.Mount"}}</h4>
+    <ol class="azeroth-bag-places" role="listbox" aria-label="{{localize "AZEROTH.Bags.Mount"}}">
+      {{#if bags.mount}}
+      {{> systems/azeroth-rpg/templates/actor/partials/bag-tile.hbs tile=bags.mount}}
+      {{else}}
+      <li class="azeroth-bag-well is-empty is-place" data-tooltip="{{localize "AZEROTH.Bags.EmptyMount"}}" aria-label="{{localize "AZEROTH.Bags.EmptyMount"}}"><i class="fa-solid fa-plus" aria-hidden="true"></i></li>
+      {{/if}}
+    </ol>
+  </div>
+
+  <div class="azeroth-bag-bar-run azeroth-bag-bar-stable" data-bag-zone="stable">
+    <h4 class="azeroth-bag-bar-head">{{localize "AZEROTH.Bags.Stable"}}</h4>
+    <ol class="azeroth-bag-places" role="listbox" aria-label="{{localize "AZEROTH.Bags.Stable"}}">
+      {{#each bags.stable as |tile|}}
+      {{> systems/azeroth-rpg/templates/actor/partials/bag-tile.hbs tile=tile}}
+      {{else}}
+      <li class="azeroth-bag-well is-empty is-place" data-tooltip="{{localize "AZEROTH.Bags.EmptyStable"}}" aria-label="{{localize "AZEROTH.Bags.EmptyStable"}}"><i class="fa-solid fa-horse" aria-hidden="true"></i></li>
+      {{/each}}
+    </ol>
+  </div>
+</div>

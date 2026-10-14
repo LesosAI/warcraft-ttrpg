@@ -1,0 +1,24 @@
+{{!-- Generate an affixed item (08 SS6): a base, a prefix, a suffix. Inside DialogV2's form. --}}
+<div class="azeroth-dialog">
+  <div class="azeroth-dialog-row">
+    <label for="azeroth-affix-base">{{localize "AZEROTH.Affix.Base"}}</label>
+    <select id="azeroth-affix-base" name="base">
+      {{#each bases}}<option value="{{this.id}}">{{this.name}} ({{localize (concat "TYPES.Item." this.type)}})</option>{{/each}}
+    </select>
+  </div>
+  <div class="azeroth-dialog-row">
+    <label for="azeroth-affix-prefix">{{localize "AZEROTH.Affix.Prefix"}}</label>
+    <select id="azeroth-affix-prefix" name="prefix">
+      <option value="">{{localize "AZEROTH.Browser.Any"}}</option>
+      {{#each prefixes}}<option value="{{this.id}}">{{this.name}} &middot; {{this.grants}} ({{this.cost}})</option>{{/each}}
+    </select>
+  </div>
+  <div class="azeroth-dialog-row">
+    <label for="azeroth-affix-suffix">{{localize "AZEROTH.Affix.Suffix"}}</label>
+    <select id="azeroth-affix-suffix" name="suffix">
+      <option value="">{{localize "AZEROTH.Browser.Any"}}</option>
+      {{#each suffixes}}<option value="{{this.id}}">{{this.name}} &middot; {{this.grants}} ({{this.cost}})</option>{{/each}}
+    </select>
+  </div>
+  <p class="azeroth-dialog-note">{{localize "AZEROTH.Affix.Note"}}</p>
+</div>

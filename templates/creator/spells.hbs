@@ -1,0 +1,50 @@
+{{!--
+  The spells step (07 §5, 2026-09-06): a caster's own pane rather than a
+  block under the talents. The count the class grants at level 1 heads it;
+  the chosen list and the picker below carry every eligible tier-1 spell of
+  the class's schools, and a row's name opens what the entry says - the
+  lore, then the effect - before it is taken (D-638 for the picker).
+--}}
+{{#if pane.spells.caster}}
+<h4 class="azeroth-creator-subheading">{{localize "AZEROTH.Creator.Spells"}} · {{localize "AZEROTH.Creator.SpellsCount" chosen=pane.spells.count required=pane.spells.required}}{{#if pane.className}} · {{pane.className}}{{/if}}</h4>
+<ol class="azeroth-forge-list azeroth-creator-spells">
+  {{#each pane.spells.chosen as |sp|}}
+  <li class="{{#if sp.expanded}}is-open{{/if}}">
+    <button type="button" class="azeroth-creator-expand azeroth-forge-name" data-action="creatorExpand" data-key="{{sp.uuid}}" aria-expanded="{{sp.expanded}}">{{sp.name}}</button>
+    <span class="azeroth-forge-tier">{{sp.school}}{{#if sp.mana}} · {{localize "AZEROTH.Item.Mana"}} {{sp.mana}}{{/if}}{{#if sp.action}} · {{sp.action}}{{/if}}</span>
+    {{#if sp.mechanics}}<span class="azeroth-creator-spell-mechanics">{{sp.mechanics}}</span>{{/if}}
+    <button type="button" class="azeroth-forge-quiet" data-action="creatorRemoveSpell" data-index="{{sp.index}}" aria-label="{{localize "AZEROTH.Creator.RemoveSpell"}}">&times;</button>
+    {{#if sp.expanded}}
+    <div class="azeroth-creator-row-text azeroth-creator-entry">
+      {{#if sp.lore}}<div class="azeroth-creator-lore">{{{sp.lore}}}</div>{{/if}}
+      <div class="azeroth-creator-effect">{{{sp.effect}}}</div>
+    </div>
+    {{/if}}
+  </li>
+  {{else}}
+  <li class="azeroth-forge-none">{{localize "AZEROTH.Creator.NoSpellsChosen"}}</li>
+  {{/each}}
+</ol>
+<div class="azeroth-picker">
+  <input type="text" name="spellSearch" value="{{pane.spells.search}}" data-picker="spells" placeholder="{{localize "AZEROTH.Creator.SpellSearch"}}" aria-label="{{localize "AZEROTH.Creator.SpellSearch"}}" autocomplete="off">
+  <ul class="azeroth-picker-list azeroth-creator-spell-options" data-picker-list="spells">
+    {{#each pane.spells.options as |sp|}}
+    <li data-search="{{sp.search}}" class="{{#if sp.expanded}}is-open{{/if}}">
+      <button type="button" class="azeroth-creator-expand azeroth-forge-name" data-action="creatorExpand" data-key="{{sp.uuid}}" aria-expanded="{{sp.expanded}}">{{sp.name}}</button>
+      <span class="azeroth-forge-tier">{{sp.school}}{{#if sp.mana}} · {{localize "AZEROTH.Item.Mana"}} {{sp.mana}}{{/if}}{{#if sp.action}} · {{sp.action}}{{/if}}</span>
+    {{#if sp.mechanics}}<span class="azeroth-creator-spell-mechanics">{{sp.mechanics}}</span>{{/if}}
+      <button type="button" data-action="creatorAddSpell" data-picker-pick data-uuid="{{sp.uuid}}" aria-label="{{localize "AZEROTH.Picker.AddNamed" name=sp.name}}">{{localize "AZEROTH.Creator.AddSpell"}}</button>
+      {{#if sp.expanded}}
+      <div class="azeroth-creator-row-text azeroth-creator-entry">
+        {{#if sp.lore}}<div class="azeroth-creator-lore">{{{sp.lore}}}</div>{{/if}}
+        <div class="azeroth-creator-effect">{{{sp.effect}}}</div>
+      </div>
+      {{/if}}
+    </li>
+    {{/each}}
+    <li class="azeroth-picker-none" hidden>{{localize "AZEROTH.Picker.NoMatch"}}</li>
+  </ul>
+</div>
+{{else}}
+<p class="azeroth-forge-none">{{localize "AZEROTH.Creator.NoSpellsForClass"}}</p>
+{{/if}}

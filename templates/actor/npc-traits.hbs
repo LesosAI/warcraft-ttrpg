@@ -1,0 +1,54 @@
+{{!-- Abilities and keywords. An ability states its rule here (D-533). --}}
+<section class="tab azeroth-panel {{tab.cssClass}}" data-tab="traits" data-group="primary">
+  <ol class="azeroth-abilities">
+    {{#each creatureAbilities}}
+    <li>{{#if this.usable}}<button type="button" class="azeroth-npc-use" data-action="useAbility" data-list="creatureAbilities" data-index="{{@index}}" title="{{localize this.kindLabel}}">{{localize "AZEROTH.Feature.Use"}}</button> {{/if}}<strong>{{this.name}}.</strong> {{{this.html}}}</li>
+    {{else}}
+    <li class="azeroth-note">{{localize "AZEROTH.Sheet.NoAbilities"}}</li>
+    {{/each}}
+  </ol>
+
+  {{#if bossActions.length}}
+  <h3 class="azeroth-panel-heading">
+    {{localize "AZEROTH.Sheet.BossActions"}} ({{system.bossActionCount}})
+    {{!-- What is left this round (14 SS1, D-691): they refresh at the top of
+          the round and unspent ones are lost. --}}
+    {{#if bossPoints}}<span class="azeroth-note">{{localize "AZEROTH.Boss.Held" value=bossPoints.value max=bossPoints.max}}</span>{{/if}}
+  </h3>
+  <ol class="azeroth-abilities">
+    {{#each bossActions}}
+    <li>{{#if this.usable}}<button type="button" class="azeroth-npc-use" data-action="useAbility" data-list="bossActions" data-index="{{@index}}" title="{{localize this.kindLabel}}">{{localize "AZEROTH.Feature.Use"}}</button> {{/if}}<strong>{{this.name}}.</strong> {{{this.html}}}{{#if this.cost}} (&times;{{this.cost}}){{/if}}</li>
+    {{/each}}
+  </ol>
+  {{/if}}
+
+  {{#if notes.swarmNote}}
+  {{!-- 14's Swarm rider (13 SS4, D-646): what is true of this creature's swarm. --}}
+  <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Sheet.Swarm"}}</h3>
+  <div class="azeroth-card-effect">{{{notes.swarmNote}}}</div>
+  {{/if}}
+
+  {{> systems/azeroth-rpg/templates/actor/partials/effects.hbs effects=effects}}
+
+  <dl class="azeroth-keywords">
+    {{!-- Skills at their Ranks (14 SS1); each is a Test. --}}
+    <div><dt>{{localize "AZEROTH.Sheet.Skills"}}</dt>
+      <dd>{{#each skills}}<button type="button" class="azeroth-npc-skill" data-action="rollSkill" data-skill="{{this.key}}">{{localize this.label}} {{this.rank}}</button> {{else}}&mdash;{{/each}}</dd></div>
+    {{!-- Every Resilience is a Test; the trained ones are marked. --}}
+    <div><dt>{{localize "AZEROTH.Sheet.Resilience"}}</dt>
+      <dd>{{#each resiliences}}<button type="button" class="azeroth-npc-skill{{#if this.trained}} is-trained{{/if}}" data-action="rollResilience" data-resilience="{{this.key}}">{{localize this.label}}{{#if this.trained}} &#x2713;{{/if}}</button> {{/each}}</dd></div>
+    <div><dt>{{localize "AZEROTH.Sheet.Immune"}}</dt>
+      <dd>{{#each system.immune}}{{this}} {{else}}&mdash;{{/each}}</dd></div>
+    <div><dt>{{localize "AZEROTH.Sheet.Vulnerable"}}</dt>
+      <dd>{{#each system.vulnerable}}{{this}} {{else}}&mdash;{{/each}}</dd></div>
+    <div><dt>{{localize "AZEROTH.Sheet.Inflicts"}}</dt>
+      <dd>{{#each system.inflicts}}{{localize (lookup ../config.conditions this)}} {{else}}&mdash;{{/each}}</dd></div>
+    {{!-- What the standing passives enforce (D-691): a refused condition is
+          refused at the toggle, and a sense is what the creature has. Both are
+          localised in the context, because both are PHRASES. --}}
+    <div><dt>{{localize "AZEROTH.Sheet.Refuses"}}</dt>
+      <dd>{{#each refuses}}{{this.label}}{{#unless @last}} &middot; {{/unless}}{{else}}&mdash;{{/each}}</dd></div>
+    <div><dt>{{localize "AZEROTH.Sheet.Senses"}}</dt>
+      <dd>{{#each senses}}{{this.label}}{{#unless @last}} &middot; {{/unless}}{{else}}&mdash;{{/each}}</dd></div>
+  </dl>
+</section>

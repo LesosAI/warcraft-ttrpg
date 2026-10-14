@@ -1,0 +1,78 @@
+{{!--
+  WHAT THE SELECTED THING IS, AND EVERY CONTROL ITS ROW USED TO CARRY (D-738).
+
+  **One of these is PRERENDERED, hidden, for every thing the character holds.**
+  That is what makes a click on a tile cost nothing: the sheet unhides one
+  `article` and hides the rest, so no part re-renders, the selection survives
+  a render that happens for another reason, and
+  `[data-item-id="X"] [data-action="…"]` still resolves for a test — the bags
+  come BEFORE this column in the DOM, so that selector finds the tile first
+  and this second.
+
+  **NEVER `item-detail.hbs`.** `#applyExpanded()` hides every
+  `.azeroth-item-detail[data-item-id]` that is not in the open set, so the
+  inspector's own fields would vanish the moment anything else was expanded.
+  The same `dl` is written out here instead.
+
+  A refused control is GREYED AND SAID IN WORDS beside it (D5), never by the
+  grey alone: *There is no bag slot for it* is the whole reason a character
+  cannot take their chain shirt off, and a dead button that says nothing
+  reads as a broken sheet.
+--}}
+<article class="azeroth-bag-inspect" data-item-id="{{row.id}}" hidden>
+  <header class="azeroth-bag-inspect-head">
+    {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=row.img rarityClass=row.rarityClass}}
+    <h4 class="azeroth-bag-inspect-name{{#if row.rarityClass}} {{row.rarityClass}}{{/if}}">{{row.name}}</h4>
+    {{> systems/azeroth-rpg/templates/actor/partials/star.hbs favorite=row.favorite}}
+  </header>
+
+  <p class="azeroth-bag-inspect-kind">{{row.kindLine}}</p>
+  {{#if row.bagLine}}<p class="azeroth-bag-inspect-line">{{row.bagLine}}</p>{{/if}}
+  {{#if row.placeLine}}<p class="azeroth-bag-inspect-line">{{row.placeLine}}</p>{{/if}}
+  {{#if row.coating}}
+  <p class="azeroth-bag-inspect-line">{{localize "AZEROTH.Use.CoatedWith" name=row.coating}}
+    <button type="button" class="azeroth-chip-x" data-action="clearCoating" data-tooltip="{{localize "AZEROTH.Use.Wipe"}}" aria-label="{{localize "AZEROTH.Use.Wipe"}}">&times;</button></p>
+  {{/if}}
+  {{#if row.charges}}
+  <p class="azeroth-bag-inspect-line">{{localize "AZEROTH.Container.Charges" value=row.charges.value max=row.charges.max unit=row.charges.unit}}</p>
+  {{/if}}
+
+  <div class="azeroth-bag-inspect-controls">
+    {{#if row.usable}}
+    <button type="button" class="azeroth-use" data-action="useGear">{{localize "AZEROTH.Feature.Use"}}{{#if row.quantity}} <span class="azeroth-bag-inspect-count">{{row.quantity}}</span>{{/if}}</button>
+    {{/if}}
+    {{#if row.charges}}
+    <button type="button" class="azeroth-use" data-action="spendCharge"{{#unless row.charges.value}} disabled{{/unless}}>{{localize "AZEROTH.Container.Spend"}}</button>
+    <button type="button" class="azeroth-forge-quiet" data-action="fillCharges">{{localize "AZEROTH.Container.Fill"}}</button>
+    {{/if}}
+    {{#if row.equippable}}
+    {{!-- Copied from `carried-row.hbs`, so the two doors carry the same word,
+          the same tooltip and the same pressed state (D-674, D-686). --}}
+    <button type="button" class="azeroth-equip{{#if row.equipped}} is-equipped{{/if}}" data-action="toggleEquipped"
+            data-tooltip="{{#if row.augment}}{{localize "AZEROTH.Augment.Tooltip" className=row.augment.className bonus=row.augment.bonus}}{{else}}{{localize "AZEROTH.Sheet.Equip"}}{{/if}}" aria-pressed="{{row.equipped}}">
+      {{#if row.equipped}}{{localize "AZEROTH.Sheet.Equipped"}}{{else}}{{localize "AZEROTH.Sheet.Equip"}}{{/if}}
+    </button>
+    {{/if}}
+    {{#if row.canPutIn}}
+    <button type="button" class="azeroth-forge-quiet" data-action="putInItem">{{localize "AZEROTH.Container.PutIn"}}</button>
+    {{/if}}
+    {{#if row.canTakeOut}}
+    <button type="button" class="azeroth-forge-quiet" data-action="takeOutItem"{{#if row.takeOutRefusal}} disabled{{/if}}>{{localize "AZEROTH.Container.TakeOut"}}</button>
+    {{/if}}
+    {{#if row.canSplit}}
+    <button type="button" class="azeroth-forge-quiet" data-action="splitStack">{{localize "AZEROTH.Bags.Split"}}</button>
+    {{/if}}
+    <button type="button" class="azeroth-forge-quiet" data-action="openItem">{{localize "AZEROTH.Sheet.Open"}}</button>
+    <button type="button" class="azeroth-delete" data-action="deleteItem" data-tooltip="{{localize "AZEROTH.Sheet.Delete"}}" aria-label="{{localize "AZEROTH.Sheet.Delete"}}">&times;</button>
+  </div>
+  {{#if row.takeOutRefusal}}<p class="azeroth-bag-inspect-refusal">{{row.takeOutRefusal}}</p>{{/if}}
+
+  {{#if row.description}}<div class="azeroth-item-prose">{{{row.description}}}</div>{{/if}}
+  {{#if row.detail.length}}
+  <dl class="azeroth-bag-inspect-fields">
+    {{#each row.detail as |f|}}
+    <div><dt>{{f.label}}</dt><dd>{{azerothDash f.value}}</dd></div>
+    {{/each}}
+  </dl>
+  {{/if}}
+</article>

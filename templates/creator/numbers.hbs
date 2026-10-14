@@ -1,0 +1,21 @@
+{{!-- Step 9 (01 §7, 05): every figure the sheet will show, computed from the choices above. Read-only. --}}
+<div class="azeroth-creator-figures">
+  {{#each pane.tiles as |t|}}
+  <div class="azeroth-creator-figure">
+    <span class="azeroth-creator-figure-label">{{t.label}}</span>
+    <span class="azeroth-creator-figure-value">{{t.value}}</span>
+    {{#if t.note}}<span class="azeroth-creator-figure-note">{{t.note}}</span>{{/if}}
+  </div>
+  {{/each}}
+</div>
+{{#if pane.spellsKnown}}<p class="azeroth-dialog-note">{{localize "AZEROTH.Creator.SpellsKnownIs" n=pane.spellsKnown}}</p>{{/if}}
+<ol class="azeroth-creator-skills is-static">
+  {{#each pane.skills as |row|}}
+  <li class="azeroth-creator-skill">
+    <span class="azeroth-creator-skill-name">{{row.label}}</span>
+    <span class="azeroth-creator-skill-ability">{{row.abilityAbbr}}</span>
+    <span class="azeroth-creator-rank">{{row.rank}}</span>
+    <span class="azeroth-creator-skill-total">{{row.total}}</span>
+  </li>
+  {{/each}}
+</ol>

@@ -1,0 +1,87 @@
+{{!--
+  WHAT IS ACTING ON THIS CHARACTER RIGHT NOW, in the band of slab under the
+  hands row (the lead, 2026-09-20: *Could use the open space in overview to
+  show currently active effects or conditions*).
+
+  **IT SHOWS AND IT CANCELS; IT DOES NOT APPLY.** Core's tab keeps the
+  fifteen-chip grid, which is where a condition is switched ON. This strip
+  draws only what is standing, names it, and lets the reader take it off -
+  which is how a buff bar behaves.
+
+  **IT IS A READING OF STATE HELD ELSEWHERE.** Every row comes from
+  `actions.mjs#effectsContext`, the same object Core's conditions grid and its
+  effect list are drawn from on this very render, put through
+  `rules/in-play.mjs#inPlay`. Nothing on this strip is stored and nothing here
+  decides a rule.
+
+  **ONE RULE, TWO DOORS.** The clear carries the SAME `data-action` Core's own
+  control calls - `toggleCondition` for a condition, `deleteEffect` for an
+  effect - and `effectAction` asks `clearRefusal` before it writes. So a row
+  the door would refuse draws NO control and prints the refusal in words
+  instead, and a row that draws a button is one the door will honour (D-681: a
+  control that does nothing is the fault this system keeps finding).
+
+  **The corruption rungs are NOT here.** They are badges on the banner, which
+  is persistent (D11 SS1), and a second copy would be two places to read one
+  number.
+
+  `eq` is CORE's helper and is a plain function, not a block one (14.367,
+  `client/applications/handlebars.mjs`): `{{#if (eq ..)}}` is the only way to
+  branch on it, and `{{#eq}}..{{/eq}}` renders the word *true*.
+
+  The panel keeps its height with nothing in it, so the tab does not jump as a
+  fight starts and stops; the one quiet line says there is nothing.
+--}}
+<div class="azeroth-in-play">
+  {{!-- A REGION'S TITLE, not a part of the figure (read off the shot,
+        2026-09-20): the tab names three regions - *Worn*, this, and *Stats* -
+        and a soft-ink sub-heading here read as a fourth part of the doll
+        rather than as the third pane. WoW's title gold measures 11.26:1 on
+        the panel and is the same treatment the two beside it take. --}}
+  <h3 class="azeroth-panel-heading">{{localize "AZEROTH.InPlay.Heading"}}</h3>
+  <ul class="azeroth-in-play-list">
+    {{#each inPlay.rows as |row|}}
+    <li class="azeroth-in-play-row azeroth-in-play-row--{{row.kind}}"
+        {{#if (eq row.kind "condition")}}data-condition="{{row.id}}"{{else}}data-effect-id="{{row.id}}"{{/if}}>
+
+      {{!-- The icon is `CONFIG.statusEffects`' own for a condition and the
+            effect's `img` for an effect, so the strip and the grid draw the
+            same picture. Decorative: the name is beside it. --}}
+      {{#if row.img}}<img class="azeroth-in-play-icon" src="{{row.img}}" alt="">{{/if}}
+
+      {{!-- A1's three valued conditions print their X beside the name and
+            everything else prints the name alone; `0` is never drawn. --}}
+      <span class="azeroth-in-play-name">{{#if row.label}}{{#if row.value}}{{localize "AZEROTH.InPlay.Valued" name=(localize row.label) n=row.value}}{{else}}{{localize row.label}}{{/if}}{{else}}{{row.name}}{{/if}}</span>
+
+      {{!-- CORE'S OWN SPAN, never one composed here: `duration.label` is what
+            core's effect sheet prints for the same document. A hand-toggled
+            condition carries no duration and never expires (D-628), so most
+            rows draw nothing at all. --}}
+      {{#if row.duration}}<span class="azeroth-in-play-when">{{row.duration}}</span>{{/if}}
+      {{#if row.permanent}}<span class="azeroth-in-play-when">{{localize "AZEROTH.Card.Permanent"}}</span>{{/if}}
+
+      {{#if row.clearable}}
+      {{!-- THE SAME DOOR CORE'S CONTROL USES. A condition's toggle is what
+            turns it off and an effect's delete is what removes it; neither
+            action is new and both are already registered on this sheet. --}}
+      {{#if (eq row.kind "condition")}}
+      <button type="button" class="azeroth-in-play-clear" data-action="toggleCondition" data-condition="{{row.id}}"
+              data-tooltip="{{localize 'AZEROTH.InPlay.Clear'}}"
+              aria-label="{{localize 'AZEROTH.InPlay.ClearNamed' name=(localize row.label)}}">&times;</button>
+      {{else}}
+      <button type="button" class="azeroth-in-play-clear" data-action="deleteEffect"
+              data-tooltip="{{localize 'AZEROTH.InPlay.Clear'}}"
+              aria-label="{{localize 'AZEROTH.InPlay.ClearNamed' name=row.name}}">&times;</button>
+      {{/if}}
+      {{else}}
+      {{!-- A REFUSAL IS SAID IN WORDS, never by a grey control or by silence
+            (D5 SS7, D-692). A greyed button here would be a lie twice over:
+            the door refuses it, so pressing it could never do anything. --}}
+      <span class="azeroth-in-play-note">{{localize row.reason}}</span>
+      {{/if}}
+    </li>
+    {{else}}
+    <li class="azeroth-in-play-row azeroth-in-play-row--empty">{{localize "AZEROTH.InPlay.Nothing"}}</li>
+    {{/each}}
+  </ul>
+</div>

@@ -1,0 +1,207 @@
+{{!--
+  The Progress tab (D11 §4). Spans the Skills column.
+
+  Two things above the fold, then the drill-down:
+
+  * The XP LEDGER, not a bar: levels are granted and XP is a purse you spend
+    (D-508). Nothing on this sheet is a progress bar.
+  * The talent tree, in D11 §4's three levels — branches, then one branch's
+    tree. The GATE IS POINTS SPENT IN THAT BRANCH, never character level, and
+    it is decided in `rules/talents.mjs` rather than here.
+--}}
+<section class="tab azeroth-panel azeroth-panel-wide {{tab.cssClass}}" data-tab="progress" data-group="primary">
+
+  <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Sheet.Experience"}}</h3>
+  <dl class="azeroth-ledger">
+    <div><dt>{{localize "AZEROTH.Sheet.Earned"}}</dt><dd>{{xp.earned}}</dd></div>
+    <div><dt>{{localize "AZEROTH.Sheet.Spent"}}</dt><dd>{{xp.spent}}{{#if xp.mismatch}} <span class="azeroth-ledger-mismatch" data-tooltip="{{localize "AZEROTH.Sheet.LedgerMismatch"}}">({{xp.ledgerTotal}})</span>{{/if}}</dd></div>
+    <div><dt>{{localize "AZEROTH.Sheet.UnspentXP"}}</dt><dd>{{xp.unspent}}</dd></div>
+  </dl>
+  {{#if isGM}}
+  {{!-- D-508: XP is granted. The GM's one control for it. --}}
+  <div class="azeroth-grant-row">
+    <input type="number" class="azeroth-grant" value="0" min="0" step="1" aria-label="{{localize "AZEROTH.Sheet.GrantAmount"}}">
+    <button type="button" data-action="grantXP">{{localize "AZEROTH.Sheet.GrantXP"}}</button>
+  </div>
+  {{/if}}
+  {{#if xp.ledger.length}}
+  <details class="azeroth-ledger-log">
+    <summary>{{localize "AZEROTH.Sheet.Ledger"}} ({{xp.ledger.length}})</summary>
+    <ol>
+      {{#each xp.ledger as |entry|}}
+      <li><span>{{entry.label}}</span><strong>{{entry.amount}}</strong></li>
+      {{/each}}
+    </ol>
+  </details>
+  {{/if}}
+
+  {{#if career.current}}
+  <h3 class="azeroth-panel-heading">
+    {{localize "AZEROTH.Career.Roads"}}
+    <span class="azeroth-career-current">
+      {{career.current.name}} &middot; {{localize "AZEROTH.Talent.Tier"}} {{career.current.tier}}
+    </span>
+  </h3>
+  <ul class="azeroth-career-exits">
+    {{#each career.exits as |exit|}}
+    <li class="azeroth-career-exit {{#unless exit.ok}}azeroth-career-exit--blocked{{/unless}}">
+      <span class="azeroth-career-exit-name">{{exit.name}}</span>
+      {{#unless exit.ok}}
+        <span class="azeroth-career-exit-needs">
+          {{localize "AZEROTH.Career.Needs"}} {{#each exit.requires}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
+        </span>
+      {{/unless}}
+      {{!-- 03's prose half. The GM judges it; the sheet only states it. --}}
+      {{#if exit.narrative}}
+        <span class="azeroth-career-exit-narrative">{{{exit.narrative}}}</span>
+      {{/if}}
+    </li>
+    {{/each}}
+  </ul>
+  {{/if}}
+
+  {{!-- D11 §4's "Classes" level: each class held and the features its level
+        has reached (02 §6). What is ahead is named, never drawn dimmed. --}}
+  <h3 class="azeroth-panel-heading azeroth-classes-heading">
+    {{localize "AZEROTH.Sheet.Classes"}}
+    {{!--
+      02 §9: a level is GRANTED, to the whole party at once. It is set here,
+      on Progress, once a class is held (D-611): a select, nameless so the form
+      never submits it - the change goes through `actor.setLevel`, which
+      writes the class array. The banner only reads it.
+    --}}
+    {{#if levelEditable}}
+    <label class="azeroth-level-control">
+      <span>{{localize "AZEROTH.Sheet.Level"}}</span>
+      <select class="azeroth-level-select" aria-label="{{localize "AZEROTH.Sheet.Level"}}">
+        {{#each levels as |l|}}<option value="{{l.value}}"{{#if l.selected}} selected{{/if}}>{{l.value}}</option>{{/each}}
+      </select>
+    </label>
+    {{/if}}
+  </h3>
+  <ul class="azeroth-classes">
+    {{#each classFeatures as |cls|}}
+    <li class="azeroth-class-entry" data-item-id="{{cls.id}}">
+      <div class="azeroth-class-head">
+        <span class="azeroth-class-name">{{cls.name}}</span>
+        <span class="azeroth-class-level">{{localize "AZEROTH.Sheet.Level"}} {{cls.level}}</span>
+        <button type="button" class="azeroth-open" data-action="openItem" data-item-id="{{cls.id}}"
+                data-tooltip="{{localize "AZEROTH.Sheet.Open"}}" aria-label="{{localize "AZEROTH.Sheet.Open"}}"><i class="fa-solid fa-pen-to-square"></i></button>
+      </div>
+      {{!-- The features reached, by name: the text and the Use button are
+            on the Core tab, where the feature items live (D-612). --}}
+      <p class="azeroth-class-reached">
+        {{#each cls.features as |f|}}<span class="azeroth-feature-chip">{{f.name}} <span class="azeroth-feature-level">{{f.level}}</span></span>{{/each}}
+      </p>
+      {{#if cls.next}}
+      <p class="azeroth-note azeroth-class-next">{{localize "AZEROTH.Sheet.NextFeature" level=cls.next.level name=cls.next.name}}</p>
+      {{/if}}
+    </li>
+    {{else}}
+    <li class="azeroth-class-entry azeroth-class-entry--empty">{{localize "AZEROTH.Sheet.NoClass"}}</li>
+    {{/each}}
+  </ul>
+
+  {{#if racial}}
+  {{!-- Racial talents (02 SS2, D-620): eight on their own currency - one at
+        creation and one at each tier increase. A tier above the character's
+        is locked and the card says so. The tile is the tree's, without the
+        arrow: nothing here requires anything. --}}
+  <h3 class="azeroth-panel-heading azeroth-talents-heading">
+    {{localize "AZEROTH.Talent.Racial" race=racial.race}}
+    <span class="azeroth-talent-points">
+      {{localize "AZEROTH.Talent.PicksLeft"}} <strong>{{racial.picksLeft}}</strong> / {{racial.picksTotal}}
+    </span>
+  </h3>
+  <div class="azeroth-racial-row">
+    {{#each racial.talents as |talent|}}
+    {{!-- The tree's own socket, states, badge and card (D-758), with the
+          name and tier kept under it: all eight share the race's image
+          (O-148). Every untaken tile fades (D-640), the locked one under its
+          grey icon; the badge does not. --}}
+    {{> systems/azeroth-rpg/templates/actor/partials/talent-tile.hbs talent=talent racial=true}}
+    {{/each}}
+  </div>
+  {{/if}}
+
+  <h3 class="azeroth-panel-heading azeroth-talents-heading">
+    {{localize "AZEROTH.Talent.Branches"}}
+    <span class="azeroth-talent-points">
+      {{localize "AZEROTH.Talent.PointsLeft"}} <strong>{{talents.pointsLeft}}</strong>
+    </span>
+  </h3>
+
+  {{#if talents.open}}
+    {{!--
+      Level 3: one branch's tree, as WoW Classic's talent frame (D-758).
+
+      THE RAIL is text on the slab - each tier's name and, while it is shut,
+      the points that open it - and it is aria-hidden: each tier row names
+      itself from its rail cell through `aria-labelledby`. THE FIELD is a dark
+      panel with the class's crest faint behind it, and NOTHING IN IT IS TEXT
+      but the badges on their plates and the card on its own ground. The two
+      line up by construction: the rail's padding is the field's edge and
+      padding, and both step a socket and a tier gap at a time.
+    --}}
+    <div class="azeroth-tree" data-branch="{{talents.open.key}}" role="region" aria-labelledby="{{talents.open.titleId}}">
+      <div class="azeroth-tree-head">
+        <button type="button" class="azeroth-tree-back" id="{{talents.open.backId}}" data-action="closeBranch">
+          &lsaquo; {{localize "AZEROTH.Talent.Back"}}
+        </button>
+        <h4 class="azeroth-tree-title" id="{{talents.open.titleId}}">
+          {{talents.open.className}} &middot; {{talents.open.branch}}
+        </h4>
+        <span class="azeroth-tree-spent">
+          {{localize "AZEROTH.Talent.Spent"}} <strong>{{talents.open.pointsSpent}}</strong>
+        </span>
+      </div>
+
+      <div class="azeroth-tree-body">
+        <div class="azeroth-tree-rail" aria-hidden="true">
+          {{#each talents.open.tiers as |tier|}}
+          <div class="azeroth-tree-rail-tier{{#unless tier.unlocked}} is-locked{{/unless}}" data-rail-tier="{{tier.tier}}" id="{{tier.railId}}">
+            <span class="azeroth-tree-rail-name">{{localize "AZEROTH.Talent.Tier"}} {{tier.tier}}</span>
+            {{#unless tier.unlocked}}
+            <span class="azeroth-tree-rail-gate">{{localize "AZEROTH.Talent.Gate" points=tier.gate}}</span>
+            {{/unless}}
+          </div>
+          {{/each}}
+        </div>
+
+        <div class="azeroth-tree-field">
+          {{#if talents.open.crest}}
+          <img class="azeroth-tree-crest" src="{{talents.open.crest}}" alt="" aria-hidden="true" draggable="false">
+          {{/if}}
+          {{#each talents.open.tiers as |tier|}}
+          <div class="azeroth-talent-tier{{#unless tier.unlocked}} azeroth-talent-tier--locked{{/unless}}"
+               data-tier="{{tier.tier}}" role="group" aria-labelledby="{{tier.railId}}">
+            {{#each tier.talents as |talent|}}
+            {{!-- The column is assigned so a talent sits in its prerequisite's
+                  column (D11 §4), in 04's row order otherwise (D-218). --}}
+            {{> systems/azeroth-rpg/templates/actor/partials/talent-tile.hbs talent=talent}}
+            {{/each}}
+          </div>
+          {{/each}}
+        </div>
+      </div>
+    </div>
+
+  {{else}}
+    {{!-- Levels 1 and 2: every branch the character holds, grouped by class. --}}
+    <ul class="azeroth-branches">
+      {{#each talents.branches as |branch|}}
+      <li class="azeroth-branch">
+        <button type="button" id="{{branch.buttonId}}" data-action="openBranch" data-branch="{{branch.key}}">
+          <span class="azeroth-branch-class">{{branch.className}}</span>
+          <span class="azeroth-branch-name">{{branch.branch}}</span>
+          <span class="azeroth-branch-spent">{{branch.spent}}</span>
+        </button>
+      </li>
+      {{else}}
+      <li class="azeroth-branch azeroth-branch--empty">
+        {{localize "AZEROTH.Talent.NoBranches"}}
+      </li>
+      {{/each}}
+    </ul>
+  {{/if}}
+</section>
