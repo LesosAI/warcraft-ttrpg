@@ -1,12 +1,7 @@
 # Azeroth RPG for Foundry VTT
 
 A d20 game system for Foundry Virtual Tabletop, set in the Warcraft III and
-classic World of Warcraft era. It has D&D 5e's chassis with WFRP 4e-style
-detail: hit locations and Armor Points, Success Levels, Momentum and Power,
-three corruption tracks, careers, talent trees and class features.
-
-This repository is the system's release build. It holds only what Foundry
-loads.
+classic World of Warcraft era.
 
 ## Install
 
