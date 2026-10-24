@@ -60,6 +60,12 @@ import { riderDoes, riderPrice, riderReason } from "../helpers/rider-words.mjs";
 import { FIRST_ATTACK_MARK, apWith, damagedTypeKey, firstAttackFor } from "../rules/class-talents.mjs";
 import { isEquippedShield } from "../rules/armor.mjs";
 import { meldsGear } from "../rules/shapes.mjs";
+// THE LEGACY BRANCHES' DOORS (B1): what a target is and who laid what it suffers
+// (door 17), read into every snapshot.
+import { creatureSnapshot, kindsOf } from "../rules/creature-kinds.mjs";
+import { laidByMap } from "../rules/talent-gates.mjs";
+// A throw a ticked rider makes on its own ability (04's Storm Bolt; the B6 review).
+import { riderThrowModifiers } from "../rules/wield.mjs";
 
 const TEMPLATE = "systems/azeroth-rpg/templates/dialog/roll-test.hbs";
 
@@ -129,7 +135,13 @@ export function targetSnapshots(targets = game.user?.targets ?? []) {
       deterred: deterrencesOf(actor),
       // **WHETHER ITS SPEED IS OTHERWISE REDUCED** (04's Shatter, D-775): a laid
       // effect lowering `system.speed` - a blow's drop, an area's (MY READING).
-      speedDropped: speedDroppedOf(actor)
+      speedDropped: speedDroppedOf(actor),
+      // **WHAT IT IS, AND WHO LAID WHAT IT SUFFERS** (the Legacy branches' door 17):
+      // D-753's kinds - 04's Laid to Rest's *an undead creature. A Forsaken counts as
+      // undead* - and each condition's `laidBy` (Cursed Prey's *a condition that you
+      // or one of your totems laid*; None Escape's *that you have Entangled*).
+      kinds: [...kindsOf(creatureSnapshot({ type: actor.type, system: s, race: actor.type === "character" ? (actor.items?.find?.(i => i.type === "race")?.name ?? null) : null }))].sort(),
+      laidBy: laidByMap((actor.effects ?? []).map(e => ({ statuses: [...(e.statuses ?? [])], flags: e.flags ?? {}, disabled: e.active === false })))
     });
   }
   return out;
@@ -322,6 +334,9 @@ function snapshotOf(actor, { kind, skill, targets, resilience = null, heavy = fa
     // The Banes a talent of whoever forced this Test lays on it (04's Vile
     // Concoction, D-773), as the door that opened it measured them.
     talentBanes: facts.talentBanes ?? null,
+    // And the Boon one gives the creature resisting (04's Drawn Across: *A Boss makes the
+    // Test with a Boon*; the Legacy branches' door 25), on a Resilience Test alone.
+    ...(kind === "resilience" && facts.talentBoons?.boons > 0 ? { talentBoons: facts.talentBoons } : {}),
     // What an ALLY'S AURA gives this Test (02 §7's Aura of Resolve, D-755): the
     // flag on the effect the aura door laid, never a change, and never spent.
     // Named the way the effect is, *Aura of Resolve (Uther)*; the Resilience is
@@ -333,7 +348,9 @@ function snapshotOf(actor, { kind, skill, targets, resilience = null, heavy = fa
     // And what an AREA lays on this Test while the roller stands in it (07's
     // Insect Swarm, Rimebind; D-757): a flag, never spent, and the table's
     // line where only the table can say whether it holds (Crucible's metal).
-    auraBanes: auraLine(auraBanesOn(s.auraBaneRows ?? [], kind), "banes"),
+    // A Bane naming its Resilience (04's Loa Drum, *Spirit Resilience Tests*; the
+    // Legacy branches' door 20) is the door's `resilience`, as the aura Boon's is.
+    auraBanes: auraLine(auraBanesOn(s.auraBaneRows ?? [], kind, resilience), "banes"),
     // The rungs that bear on this Test (10 §4, §5): the table's call, so judgement lines.
     corruption: corruptionLines(s.corruptionEffects, { kind, skill, skillAbility: skill ? (AZEROTH.skillAbility[skill] ?? null) : null }),
     // A Heavy weapon below Strength 13 (08 §5): the roller's own state, automatic.
@@ -372,15 +389,26 @@ function snapshotOf(actor, { kind, skill, targets, resilience = null, heavy = fa
  */
 function attackTalentLines(actor, target, range, facts = {}) {
   const talents = actor?.takenTalents?.() ?? [];
-  const wrath = targetBoonsWith(talents, { kind: "attack", health: target?.health ?? null, facts: { engagedOne: facts.engagedOne === true, shadowDamaged: shadowDamagedBy(actor, target) } });
+  // **AND WHAT A LEGACY'S BOON GATES ON** (the Legacy branches' doors 15, 17, 18): the
+  // target's conditions and kinds, what the user laid on it, the user's marks, what
+  // the user wields - the actor's one fact-builder - and the blow's own way (Cursed
+  // Prey's *Your melee attacks*).
+  const legacy = actor?.gateFacts?.(target) ?? {};
+  const wrath = targetBoonsWith(talents, {
+    kind: "attack", health: target?.health ?? null,
+    facts: { ...legacy, melee: range === "melee", ranged: range === "ranged", engagedOne: facts.engagedOne === true, shadowDamaged: shadowDamagedBy(actor, target) }
+  });
   const reckless = recklessFor(talents);
   const promised = actor?.pendingNextAttack?.() ?? { boons: 0, live: [] };
   const cancels = cancelledBanesFor(talents, { range });
   const deterred = target?.deterred ?? [];
   const deterBanes = deterred.reduce((n, d) => n + (Number(d.banes) || 0), 0);
   const opening = target ? (actor?.openingState?.(target, { hidden: facts.hidden === true }) ?? null) : null;
+  // A Boon the card's Use gave this attack (04's Fan of Knives at rank 2; door 26),
+  // on the talent line with its name.
+  const carded = Math.max(0, Math.trunc(Number(facts.cardBoons?.boons)) || 0);
   return {
-    talentBoons: { boons: wrath.boons, names: wrath.by },
+    talentBoons: { boons: wrath.boons + carded, names: [...wrath.by, ...(carded ? (facts.cardBoons?.names ?? []) : [])] },
     reckless: reckless ? { boons: reckless.boons, names: [reckless.name] } : null,
     nextAttackBoons: { boons: promised.boons, names: promised.live.filter(e => (e.boons ?? 0) > 0).map(e => e.name).filter(Boolean) },
     targetExposed: exposedBoonsOn(target?.exposed ?? [], { range }),
@@ -492,7 +520,11 @@ export function prepareRoll(actor, given) {
       engagedOne: spec.engagedOne === true,
       packFlank: spec.packFlank ?? null,
       hidden: spec.kind === "attack" && isHidden(actor),
-      talentBanes: spec.talentBanes?.banes > 0 ? spec.talentBanes : null
+      talentBanes: spec.talentBanes?.banes > 0 ? spec.talentBanes : null,
+      talentBoons: spec.talentBoons?.boons > 0 ? spec.talentBoons : null,
+      // The Boon a card's Use gives each of its attacks (04's Fan of Knives; the
+      // Legacy branches' door 26).
+      cardBoons: spec.cardBoons?.boons > 0 ? spec.cardBoons : null
     }
   }));
   // **A BANE A TALENT TAKES OFF IS SAID WITH ITS NAME** (04's Careful Shot,
@@ -585,7 +617,11 @@ function riderOffer(actor, spec, target = null) {
   // target is measured under it, left to the table where nothing was measured,
   // and not drawn where it is measured not to be.
   const opening = openingGate(actor?.openingState?.(target, { hidden: isHidden(actor) }) ?? null, target);
-  return actor?.riderLines?.({ weapon: spec.rangeKind ?? null, opening }) ?? [];
+  // The blow's OWN way off its strike record - a throw is `thrown`, where the
+  // variant's range kind says `ranged` - so a rider *as part of an attack with a
+  // Thrown weapon* rides a throw alone (04's Storm Bolt; the Legacy branches' B1);
+  // and the target, for a rider made free against it (Cursed Prey, door 17).
+  return actor?.riderLines?.({ weapon: spec.strike?.rangeKind ?? spec.rangeKind ?? null, opening, target }) ?? [];
 }
 
 /**
@@ -605,10 +641,15 @@ function finisherOffer(actor, spec, target = null) {
   if (spec.kind !== "attack" || spec.damage == null) return null;
   if (spec.offHand === true || spec.parry === true) return null;
   if (spec.budget === "none" || spec.budget === "reaction") return null;
-  if (!(actor?.items ?? []).some(i => i.type === "feature" && i.name === "Finisher")) return null;
-  const pool = (actor.system?.momenta ?? []).find(p => p.name === "comboPoints") ?? null;
-  const marked = namesTarget(actor.getFlag?.("azeroth-rpg", DEATH_MARK_FLAG) ?? null, target);
-  return finisherOfferOf(pool, finisherOptionsFor(actor.takenTalents?.() ?? []), { marked });
+  // **WHOSE FINISHER** (04's Supercharge: *Your Finisher class feature may be spent
+  // on an attack one of your constructs makes*; the Legacy branches' door 6): the
+  // striker's, or - a construct's blow - its tinker's (`AzerothActor#finisherPayer`,
+  // which `rollTest`'s payment reads too), with the tinker's talents laid over it.
+  const payer = actor?.finisherPayer?.() ?? actor;
+  if (!(payer?.items ?? []).some(i => i.type === "feature" && i.name === "Finisher")) return null;
+  const pool = (payer.system?.momenta ?? []).find(p => p.name === "comboPoints") ?? null;
+  const marked = namesTarget(payer.getFlag?.("azeroth-rpg", DEATH_MARK_FLAG) ?? null, target);
+  return finisherOfferOf(pool, finisherOptionsFor(payer.takenTalents?.() ?? []), { marked });
 }
 
 // The Damage lines the roller left ticked, summed, with their names, are
@@ -720,6 +761,8 @@ function readForm(form, p) {
   const finisherSpent = finisherOn ? (p.finisher.spends ?? p.finisher.value) : 0;
   const finisherFree = finisherOn && p.finisher.free ? p.finisher.free : null;
   const finisherMode = finisherOn && p.finisher.bleeding && f.finisherMode?.value === "bleeding" ? "bleeding" : "damage";
+  // And Shackle's Entangled in its place (04's Shackle; the Legacy branches' door 26).
+  const finisherChosen = finisherMode === "damage" && finisherOn && p.finisher.shackle && f.finisherMode?.value === "shackle" ? "shackle" : finisherMode;
   // The riders left ticked (D-770). A greyed line cannot be ticked; the roll
   // judges the rest again against the pools as they stand.
   const riders = (p.riders ?? []).filter(l => l.available && f[`rider-${l.identifier}`]?.checked).map(l => l.identifier);
@@ -729,7 +772,7 @@ function readForm(form, p) {
     ...damage,
     finisherSpent,
     finisherFree,
-    finisherMode,
+    finisherMode: finisherChosen,
     riders,
     talentLines,
     dc: Number.isFinite(dcRaw) ? dcRaw : p.dc,
@@ -772,6 +815,39 @@ function secondTargetsFrom(f, p) {
   if (!id || id === "same") return null;
   const pick = p.targets.find(t => t.tokenId === id) ?? null;
   return pick ? [pick] : null;
+}
+
+/** `+3` / `−2` / `+0`, as the template's own `azerothSigned` writes it. */
+function signed(value) {
+  const n = Number(value) || 0;
+  return n < 0 ? `−${Math.abs(n)}` : `+${n}`;
+}
+
+/**
+ * **THE LINES THE DIALOG LISTS ARE THE LINES THE ROLL TAKES** (04's Storm Bolt on a hammer
+ * that throws already: *an attack made with one uses Strength*; the B8a pass). The preview
+ * and the roll swap the way's Dexterity for the rider's Strength where the line is ticked
+ * (`rules/wield.mjs#riderThrowModifiers`), and the list beneath kept naming Dexterity. It
+ * is rewritten in place from the same lines the preview reads - the label localised, the
+ * value signed as the template writes it - and only where they differ from what is drawn.
+ *
+ * @param {HTMLFormElement} form
+ * @param {Array<{label: string, value: number}>} modifiers
+ */
+function drawModifiers(form, modifiers = []) {
+  const list = form?.querySelector?.(".azeroth-dialog-modifiers");
+  if (!list) return;
+  const lines = Array.isArray(modifiers) ? modifiers : [];
+  const key = JSON.stringify(lines.map(m => [m.label, Number(m.value) || 0]));
+  if (list.dataset.lines === key) return;
+  list.dataset.lines = key;
+  list.replaceChildren(...lines.flatMap(m => {
+    const dt = document.createElement("dt");
+    dt.textContent = game.i18n.localize(m.label);
+    const dd = document.createElement("dd");
+    dd.textContent = signed(m.value);
+    return [dt, dd];
+  }));
 }
 
 /** The formula for a choice, with the called shot folded in as the roll will fold it. */
@@ -901,7 +977,12 @@ async function dialogVariant(actor, spec) {
     modifiers,
     preview: formulaFor(initial, modifiers)
   };
-  return { p, modifiers, canPay, html: await renderTemplate(TEMPLATE, context) };
+  // A throw a ticked rider makes on its own ability (04's Storm Bolt; the B6 review):
+  // the lines the preview takes once that rider is ticked (`promptRoll`'s update).
+  const riderModifiers = resolved.riderModifiers?.identifier && Array.isArray(resolved.riderModifiers.modifiers)
+    ? { identifier: resolved.riderModifiers.identifier, modifiers: resolved.riderModifiers.modifiers.map(m => ({ label: m.label, value: m.value })) }
+    : null;
+  return { p, modifiers, canPay, riderModifiers, html: await renderTemplate(TEMPLATE, context) };
 }
 
 /**
@@ -1018,7 +1099,11 @@ export async function promptRoll(actor, spec) {
         const shown = current();
         const choice = readForm(form, shown.p);
         const preview = form.querySelector(".azeroth-dialog-preview");
-        if (preview) preview.textContent = formulaFor(choice, shown.modifiers);
+        // Storm Bolt ticked on a hammer that throws already: the preview AND the list of
+        // lines beneath it on Strength - the lines the roll takes (the B8a pass).
+        const lines = riderThrowModifiers({ riderModifiers: shown.riderModifiers ?? null }, choice.riders ?? []) ?? shown.modifiers;
+        if (preview) preview.textContent = formulaFor(choice, lines);
+        drawModifiers(form, lines);
         const momentumBox = form.elements.momentum;
         if (momentumBox) momentumBox.disabled = !shown.canPay || !choice.location || choice.location === "body";
       };

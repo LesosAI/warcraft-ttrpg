@@ -467,7 +467,9 @@ export function warlockTalentsBatch(context) {
       await setPool(warlock, "mana", 0);
       const posted = untilHook("createChatMessage", 30000, m => m.flags?.["azeroth-rpg"]?.kind === "critical");
       await victim.applyDamage(victim.system.health.value + 5, { struck: true, attack: false, type: "shadow", by: warlock, spell: true });
-      const card = await posted;
+      // `untilHook` hands back the hook's arguments, the message first (B8b: the array
+      // itself was read as the card and pushed for deletion).
+      const [card] = await posted;
       made.push(card);
       assert.lengthOf(card.rolls, 2, "the injury was rolled once");
       assert.include(textOf(card), game.i18n.format("AZEROTH.Card.CriticalTwiceHigher", { totals: card.rolls.map(r => r.total).join(", ") }));

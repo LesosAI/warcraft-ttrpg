@@ -50,9 +50,22 @@ import { layBane } from "./banes.mjs";
 // Entangled carries (Rimebind, Thornguard), Permafrost's feet on a Slowed it lays.
 import { forcedCheck } from "../rules/area-ticks.mjs";
 import { cleanForced } from "../rules/forced-movement.mjs";
-import { forceMove, forcedWords, regionCentreOf } from "./forced-movement.mjs";
+import { forceMove, forcedWords, putBack, regionCentreOf } from "./forced-movement.mjs";
+// THE LATER TESTS (the B9a pass; the lead: *"Build the triggers"*): a crossing of the
+// edge (Ring of Fire, Stormwall) and Nether Rift's Test at the caster's turn.
+import { casterTurnCheck, crossingOf, stopPoint } from "../rules/area-ticks.mjs";
+import { feetToPoint } from "../canvas/footprints.mjs";
+// 07's Nature's Grasp (the B9a pass): what its striker's failed Test lays.
+import { NO_OPPORTUNITY_FLAG, STRUCK_OF_FLAG } from "../rules/struck-tests.mjs";
 import { ESCAPE_FLAG, cleanEscape } from "../rules/escapes.mjs";
+// A standing trap, sprung by the first enemy to enter it (04's Shadow Trap; the
+// Legacy branches' door 26), and the one landing door that lays its condition.
+import { TRAP_FLAG, cleanTrap, springs } from "../rules/traps.mjs";
+import { inflictCondition } from "./inflict.mjs";
+import { landedText } from "../helpers/rider-words.mjs";
 import { addSlowedFeet } from "./speed-drop.mjs";
+// Drawn Across on a blow's source (the Legacy branches' door 25): the damage it deals, halved.
+import { dealtHalvedBy } from "../rules/legacy-uses.mjs";
 
 const SCOPE = "azeroth-rpg";
 
@@ -121,7 +134,9 @@ export function areaDamageOn({ actor, caster = null, spell = {}, damage } = {}) 
     schoolArmor: schoolArmorBySchool(s.schoolArmor)[school] ?? 0,
     immune: read.immune, vulnerable: s.vulnerable ?? [],
     slAddsToDamage: false,
-    extras: typed, wardBySchool: wardBySchool(s.ward), schoolArmorBySchool: schoolArmorBySchool(s.schoolArmor)
+    extras: typed, wardBySchool: wardBySchool(s.ward), schoolArmorBySchool: schoolArmorBySchool(s.schoolArmor),
+    // 04's Drawn Across on the caster (*the damage it deals is halved*; door 25).
+    dealtHalved: dealtHalvedBy(caster)
   });
 }
 
@@ -253,7 +268,9 @@ export function retaliationRows(holder, attacker) {
     const result = resolveDamage({
       rating: row.amount, sl: 0, kind: "magical", school: row.type,
       ward: wardBySchool(s.ward)[row.type] ?? 0, schoolArmor: schoolArmorBySchool(s.schoolArmor)[row.type] ?? 0,
-      immune: s.immune ?? [], vulnerable: s.vulnerable ?? [], slAddsToDamage: false
+      immune: s.immune ?? [], vulnerable: s.vulnerable ?? [], slAddsToDamage: false,
+      // The holder's own damage, Drawn Across on it halving it (door 25).
+      dealtHalved: dealtHalvedBy(holder)
     });
     out.push({
       name: row.name,
@@ -313,6 +330,8 @@ function outcomeWords(outcome, casterName) {
       : game.i18n.format("AZEROTH.Aura.BoonKind", { kind: game.i18n.localize(AZEROTH.testKinds[outcome.bane.kind] ?? outcome.bane.kind) });
     parts.push(game.i18n.format("AZEROTH.AreaTest.Bane", { test, until: untilWords(outcome.bane.until, casterName) }));
   }
+  // *It does not cross* (Ring of Fire, Stormwall; the B9a pass), said before its turn ending.
+  if (outcome.stop) parts.push(game.i18n.localize("AZEROTH.AreaTest.Stop"));
   if (outcome.lose) parts.push(game.i18n.localize("AZEROTH.AreaTest.Lose"));
   // Tempest's push (D-778).
   if (outcome.forced) parts.push(game.i18n.format(outcome.forced.toward === "toward" ? "AZEROTH.AreaTest.Pulled" : "AZEROTH.AreaTest.Pushed", { feet: outcome.forced.feet }));
@@ -326,11 +345,16 @@ function outcomeWords(outcome, casterName) {
  * owner and the GM see it and nobody else (`dice/chat.mjs`'s `data-resist-owner`
  * rule), at the caster's Spell DC as the card recorded it.
  *
+ * **AND ON CROSSING ITS EDGE, AND AT ITS CASTER'S TURN** (the B9a pass; the lead:
+ * *"Build the triggers"*): Ring of Fire's and Stormwall's crossing, whose card records
+ * where a creature that does not cross is put back (`extra.stopAt`), and Nether Rift's
+ * Test at the start of the caster's turns.
+ *
  * @param {{actor: Actor, token?: TokenDocument|null, region: RegionDocument, check: object,
- *   trigger: "turn"|"enter", caster?: Actor|null}} o
+ *   trigger: "turn"|"enter"|"cross"|"casterTurn", caster?: Actor|null, extra?: object}} o
  * @returns {Promise<ChatMessage|null>}
  */
-export async function postAreaTest({ actor, token = null, region, check, trigger, caster = null } = {}) {
+export async function postAreaTest({ actor, token = null, region, check, trigger, caster = null, extra = {} } = {}) {
   if (!actor || !region || !check?.resilience) return null;
   const f = region.flags?.[SCOPE] ?? {};
   const spell = f.spell ?? { name: region.name };
@@ -344,8 +368,8 @@ export async function postAreaTest({ actor, token = null, region, check, trigger
   const content = await renderTemplate("systems/azeroth-rpg/templates/chat/area-card.hbs", {
     title: spell.name ?? region.name,
     name: actor.name,
-    text: game.i18n.format(trigger === "enter" ? "AZEROTH.AreaTest.Enter" : "AZEROTH.AreaTest.Turn", {
-      name: actor.name, spell: spell.name ?? region.name, resilience, dc: dc ?? "—"
+    text: game.i18n.format(AREA_TEST_WORDS[trigger] ?? AREA_TEST_WORDS.turn, {
+      name: actor.name, spell: spell.name ?? region.name, resilience, dc: dc ?? "—", caster: caster?.name ?? ""
     }),
     fail: fail ? game.i18n.format("AZEROTH.AreaTest.OnFail", { outcome: fail }) : null,
     pass: pass ? game.i18n.format("AZEROTH.AreaTest.OnPass", { outcome: pass }) : null,
@@ -373,7 +397,104 @@ export async function postAreaTest({ actor, token = null, region, check, trigger
         // What a condition the failure lays carries (D-778): the escape 07 gives a
         // held creature (Rimebind, Thornguard) and the caster's Permafrost on a Slowed.
         escape: cleanEscape(f.escape ?? null),
-        slowing: Number(f.slowing?.feet) > 0 ? { feet: Math.trunc(Number(f.slowing.feet)), source: String(f.slowing.source ?? "") } : null
+        slowing: Number(f.slowing?.feet) > 0 ? { feet: Math.trunc(Number(f.slowing.feet)), source: String(f.slowing.source ?? "") } : null,
+        // Where a creature that does not cross is put back (the B9a pass).
+        ...(extra?.stopAt && Number.isFinite(Number(extra.stopAt.x)) && Number.isFinite(Number(extra.stopAt.y))
+          ? { stopAt: { x: Math.round(Number(extra.stopAt.x)), y: Math.round(Number(extra.stopAt.y)) } } : {})
+      }
+    } }
+  });
+}
+
+/** The words an area's Test card opens on, by the moment it is made at (D-757; the B9a pass). */
+const AREA_TEST_WORDS = Object.freeze({
+  turn: "AZEROTH.AreaTest.Turn",
+  enter: "AZEROTH.AreaTest.Enter",
+  cross: "AZEROTH.AreaTest.Cross",
+  casterTurn: "AZEROTH.AreaTest.CasterTurn"
+});
+
+/**
+ * **WHERE A CREATURE THAT DOES NOT CROSS IS PUT BACK** (07's Ring of Fire and Stormwall:
+ * *on a failure it does not cross*; the B9a pass): the token's position at the start of
+ * the crossing, snapped as core snaps a token, then that position as it stands, then the
+ * move's own waypoints before the crossing walked back towards its origin - the first on
+ * the side of the edge the creature crossed FROM, judged on the DOCUMENT
+ * (`testInsideRegion`), through the law's own pick (`rules/area-ticks.mjs#stopPoint`).
+ * Null where none is, and the card then says the creature could not be put back.
+ *
+ * @param {TokenDocument} document
+ * @param {RegionDocument} region
+ * @param {Array<{x: number, y: number}>} path  the move's origin and passed waypoints
+ * @param {{type: "enter"|"exit", from: {x: number, y: number}|null}} crossed
+ * @returns {{x: number, y: number}|null}
+ */
+function stopAtOf(document, region, path, crossed) {
+  // An EXIT starts inside the area, an ENTER outside it (14.367's segment contract).
+  const inside = crossed.type === "exit";
+  const onSide = p => document.testInsideRegion(region, { x: p.x, y: p.y }) === inside;
+  let snapped = null;
+  try {
+    snapped = crossed.from && typeof document.getSnappedPosition === "function" ? document.getSnappedPosition(crossed.from) : null;
+  } catch {
+    snapped = null;
+  }
+  const before = [];
+  for (const p of path ?? []) {
+    let same = false;
+    try {
+      same = onSide(p);
+    } catch {
+      same = false;
+    }
+    if (!same) break;
+    before.push(p);
+  }
+  return stopPoint([snapped, crossed.from, ...before.reverse()], onSide);
+}
+
+/**
+ * **POST A CREATURE'S TEST FOR A SPELL'S SPLASH AROUND ITS TARGET** (07's Stormfury:
+ * *Every creature within 15 feet of it makes a Reflex Resilience Test against your Spell
+ * DC or takes 10 Nature damage*; the B8a pass). The area Test card `postAreaTest` posts,
+ * through the same template and the spell card's own Resist door (purpose `area`), so the
+ * Test is made once, recorded on its card, and its failure's damage lands through
+ * `strikeFromArea` (`areaTestOutcome`) - and a pass lands nothing. No Region carries it: the
+ * card names the cast it came from, the caster and the target it splashed around.
+ *
+ * @param {{actor: Actor, token?: TokenDocument|null, check: object, caster?: Actor|null,
+ *   spell?: object, dc?: number|null, cast?: string|null, source?: object|null, around?: string,
+ *   feet?: number}} o
+ * @returns {Promise<ChatMessage|null>}
+ */
+export async function postSplashTest({ actor, token = null, check, caster = null, spell = {}, dc = null, cast = null, source = null, around = "", feet = 0 } = {}) {
+  if (!actor || !check?.resilience) return null;
+  const kinds = kindsOfActor(actor);
+  const resilience = game.i18n.localize(AZEROTH.resiliences[check.resilience] ?? check.resilience);
+  const fail = outcomeWords(checkOutcome(check, { success: false, kinds }), caster?.name ?? "");
+  const { renderTemplate } = foundry.applications.handlebars;
+  const content = await renderTemplate("systems/azeroth-rpg/templates/chat/area-card.hbs", {
+    title: spell?.name ?? "",
+    name: actor.name,
+    text: game.i18n.format("AZEROTH.Splash.Test", { name: actor.name, spell: spell?.name ?? "", around, feet, resilience, dc: dc ?? "—" }),
+    fail: fail ? game.i18n.format("AZEROTH.AreaTest.OnFail", { outcome: fail }) : null,
+    pass: game.i18n.localize("AZEROTH.Splash.OnPass"),
+    testLabel: game.i18n.format("AZEROTH.Card.ResistTest", { resilience, dc: dc ?? "—" }),
+    actorUuid: actor.uuid,
+    resilience: check.resilience,
+    dc,
+    against: ""
+  });
+  return ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor, token: token ?? undefined }),
+    content,
+    flags: { [SCOPE]: {
+      kind: "areaTest",
+      area: {
+        sceneId: token?.parent?.id ?? null, regionId: null, cast: cast ?? null,
+        caster: caster?.uuid ?? null, source: source ?? null, spell, dc: Number(dc) || null, trigger: "splash",
+        check: foundry.utils.deepClone(check), actorUuid: actor.uuid,
+        tokenId: token?.id ?? null, escape: null, slowing: null
       }
     } }
   });
@@ -402,7 +523,7 @@ function casterTurnStart(caster, fight) {
  * (`canvas/sustained-areas.mjs#sweepLeavers`). A condition the creature
  * already carried stands on its own and is not given the area's span.
  */
-async function landCondition(actor, id, until, area, caster) {
+async function landCondition(actor, id, until, area, caster, { messageId = null } = {}) {
   if (!AZEROTH.conditions?.[id]) return null;
   const had = actor.statuses?.has?.(id) === true;
   const fight = actor.activeFight?.() ?? null;
@@ -410,6 +531,16 @@ async function landCondition(actor, id, until, area, caster) {
   const effect = await applyCondition(actor, id, { until: timing });
   if (effect && until === "leaves" && !had) {
     await effect.setFlag(SCOPE, LEAVES_FLAG, { sceneId: area.sceneId ?? null, regionId: area.regionId ?? null });
+  }
+  // **07's NATURE'S GRASP** (the B9a pass): *... or be **Entangled** and unable to make
+  // Opportunity Attacks while it is held* - the bar rides the Entangled the Test laid
+  // (`rules/struck-tests.mjs#barredFromOpportunity`), and the effect names the Test card,
+  // so a hit turned into a miss takes it back off (`effects/struck-tests.mjs`). A
+  // condition the creature already carried is its own, and is left unmarked.
+  if (effect && area?.struck && !had) {
+    const marks = { [`flags.${SCOPE}.${STRUCK_OF_FLAG}`]: messageId };
+    if (area.struck.noOpportunity === true) marks[`flags.${SCOPE}.${NO_OPPORTUNITY_FLAG}`] = { condition: id, source: area.spell?.name ?? "" };
+    await effect.update(marks);
   }
   // **THE TEST 07 GIVES A HELD CREATURE** (Rimebind's and Thornguard's *it may repeat
   // the Test at the end of each of its turns*; D-778, O-159): the escape the area's
@@ -445,7 +576,7 @@ export async function areaTestOutcome({ actor, message, result } = {}) {
   if (outcome.damage) lines.push(...await strikeFromArea({ actor, caster, spell: area.spell ?? {}, damage: outcome.damage }));
   const landed = [];
   for (const { id, until } of outcome.statuses) {
-    if (await landCondition(actor, id, until, area, caster)) landed.push(id);
+    if (await landCondition(actor, id, until, area, caster, { messageId: message.id })) landed.push(id);
   }
   if (landed.length) lines.push(game.i18n.format("AZEROTH.AreaTest.Landed", { name: actor.name, conditions: conditionWords(landed), spell: spellName }));
   if (outcome.bane) {
@@ -453,6 +584,16 @@ export async function areaTestOutcome({ actor, message, result } = {}) {
     // never spent by the next roll (`rules/banes.mjs`' `lasting`).
     const laid = await layBane({ victim: actor, kind: outcome.bane.kind, banes: 1, source: spellName, by: caster, lasting: true });
     if (laid) lines.push(game.i18n.format("AZEROTH.AreaTest.BaneLaid", { name: actor.name, spell: spellName }));
+  }
+  // **IT DOES NOT CROSS** (07's Ring of Fire and Stormwall: *on a failure it does not
+  // cross and its turn ends*; the B9a pass): put back where the card recorded it stood
+  // on its own side of the edge, through the one door that moves a creature it did not
+  // walk - here, on the client that rolled its Test, which owns it - and then its turn.
+  if (outcome.stop) {
+    const scene = game.scenes?.get(area.sceneId ?? "") ?? null;
+    const token = (area.tokenId ? scene?.tokens?.get(area.tokenId) : null) ?? actor.getActiveTokens?.(false, true)?.find(t => t.parent?.id === scene?.id) ?? null;
+    const back = await putBack({ token, to: area.stopAt ?? null, name: actor.name });
+    lines.push(game.i18n.format(back.moved ? "AZEROTH.AreaTest.PutBack" : "AZEROTH.AreaTest.NotPutBack", { name: actor.name, spell: spellName }));
   }
   if (outcome.lose) {
     const fight = actor.activeFight?.() ?? null;
@@ -477,6 +618,57 @@ export async function areaTestOutcome({ actor, message, result } = {}) {
   }
   await postLines(actor, lines);
   return outcome;
+}
+
+/**
+ * **NETHER RIFT'S TEST AT ITS CASTER'S TURN** (07: *At the start of each of your turns
+ * every creature within 30 feet of the center makes a Body Resilience Test against your
+ * Spell DC or is pulled 15 feet toward it*; the B9a pass, the lead: *"Build the
+ * triggers"*), on the active GM's client at the start of the caster's own turn - the
+ * turn's work runs it after the upkeep, so an area whose Sustain went unpaid pulls
+ * nobody. Every area on the scene this caster's cast placed whose forced move is made at
+ * the caster's turn (`rules/area-ticks.mjs#casterTurnCheck`, off the Region's `forced`),
+ * still standing, and every creature within the move's feet of its centre - measured to
+ * the nearest of each creature's spaces (`canvas/footprints.mjs#feetToPoint`, D-732), the
+ * caster among them, as *every creature* reads - is posted its Test card, the failure's
+ * pull landed by the card's own door (`areaTestOutcome`). A creature that is down, and a
+ * token the GM has hidden, makes no Test. Answers how many cards were posted.
+ *
+ * @param {Scene} scene
+ * @param {Actor} caster  whose turn it is
+ * @param {TokenDocument|null} [token]  the caster's token on this scene
+ * @returns {Promise<number>}
+ */
+export async function casterTurnTests(scene, caster, token = null) {
+  if (!isWriter() || !scene?.regions || !caster || !sceneInWorld(scene)) return 0;
+  const now = worldClock();
+  let posted = 0;
+  for (const region of [...scene.regions].sort((a, b) => String(a.id).localeCompare(String(b.id)))) {
+    const f = region.flags?.[SCOPE] ?? {};
+    if (!f.cast) continue;
+    const source = f.source ?? null;
+    // The caster is the card's (the review, S3), or the token it recorded as the source.
+    const theirs = f.caster === caster.uuid
+      || Boolean(token && source?.tokenId === token.id && (!source.sceneId || source.sceneId === scene.id));
+    if (!theirs) continue;
+    const forced = cleanForced(f.forced ?? null);
+    const check = casterTurnCheck(forced);
+    if (!check) continue;
+    const row = areaRecord(region);
+    if (row && staleIn(scene, [row], now).length) continue;
+    const centre = regionCentreOf(region);
+    if (!centre) continue;
+    const within = Number(forced.within) || 0;
+    const reached = [...(scene.tokens ?? [])]
+      .filter(t => t.actor && t.hidden !== true && !isDown(t.actor))
+      .filter(t => (feetToPoint(t, centre) ?? Infinity) <= within + 1e-6)
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    for (const t of reached) {
+      if (!tokenInWorld(t) || !regionInWorld(region)) continue;
+      if (await postAreaTest({ actor: t.actor, token: t, region, check, trigger: "casterTurn", caster })) posted++;
+    }
+  }
+  return posted;
 }
 
 /** The fight a move on this scene is judged in: the mover's own, else the scene's started one. */
@@ -529,24 +721,48 @@ export async function enterAreas(document, movement, operation = {}) {
   const actor = document?.actor ?? null;
   if (!scene?.regions || !actor || !movement?.passed?.waypoints?.length || !sceneInWorld(scene)) return 0;
   const fight = fightOn(scene, actor);
-  if (!fight?.started) return 0;
-  if (fight.combatants.some(c => c.tokenId === document.id && c.isDefeated)) return 0;
+  // **A STANDING TRAP SPRINGS OUTSIDE A FIGHT TOO** (the lead, 2026-10-22, on 04's
+  // Shadow Trap: *"Also outside a fight"*): the trap is the one thing an area does on
+  // entering with no fight running; everything else below waits for one.
+  const inFight = Boolean(fight?.started);
+  if (inFight && fight.combatants.some(c => c.tokenId === document.id && c.isDefeated)) return 0;
   const path = [movement.origin, ...movement.passed.waypoints];
   const now = worldClock();
-  const turnKey = `${fight.id}.${fight.round}.${fight.turn}`;
+  const turnKey = inFight ? `${fight.id}.${fight.round}.${fight.turn}` : null;
   const ENTER = CONST.REGION_MOVEMENT_SEGMENTS.ENTER;
   const seen = new Set();
   let entered = 0;
   for (const region of scene.regions) {
     const f = region.flags?.[SCOPE] ?? {};
+    // **A STANDING TRAP, SPRUNG** (04's Shadow Trap: *The first enemy to come within 5
+    // feet of it is **Entangled** until it spends an action and passes a Reflex
+    // Resilience Test against your Spell DC*; the Legacy branches' door 26): the first
+    // of the setter's enemies whose own move enters it, in a started fight. Claimed
+    // once in the one area queue, so two moves judged together spring it once; the
+    // condition lands through the one landing door with the escape the Use resolved,
+    // and the trap is gone - *the first*.
+    const trap = cleanTrap(f[TRAP_FLAG] ?? null);
+    if (trap) {
+      if (await springTrap({ region, trap, document, actor, path, fight: inFight ? fight : null, scene, ENTER })) entered++;
+      continue;
+    }
     const tick = f.areaTick;
     if (!f.cast || !hasAreaTick(tick)) continue;
+    // **FROZEN RUNE WAITS WHETHER OR NOT A FIGHT DOES** (the B9a pass; the lead's ruling
+    // on 04's Shadow Trap, *"Also outside a fight"*, read for the one spell of that
+    // shape): a Test made by the FIRST creature ever to enter is a trap's, and is the one
+    // thing below an area does with no fight running.
+    const firstOnly = (tick.checks ?? []).some(c => c.first === true);
+    if (!inFight && !firstOnly) continue;
     if (seen.has(f.cast)) continue;
-    const striking = tick.enter?.rating !== null && tick.enter?.rating !== undefined;
-    const testing = (tick.checks ?? []).some(c => c.on !== "turn");
+    const striking = inFight && tick.enter?.rating !== null && tick.enter?.rating !== undefined;
+    const testing = (tick.checks ?? []).some(c => (c.on === "enter" || c.on === "both") && (inFight || c.first === true));
+    // **A CROSSING OF THE EDGE** (07's Ring of Fire and Stormwall; the B9a pass, the lead:
+    // *"Build the triggers"*): in either direction, so an EXIT is one too.
+    const crossing = inFight && (tick.checks ?? []).some(c => c.on === "cross");
     // Tempest's Test on entering, whose only outcome is the push (D-778).
-    const pushing = forcedCheck(cleanForced(f.forced ?? null));
-    if (!striking && !testing && !pushing) continue;
+    const pushing = inFight ? forcedCheck(cleanForced(f.forced ?? null)) : null;
+    if (!striking && !testing && !pushing && !crossing) continue;
     const row = areaRecord(region);
     if (row && staleIn(scene, [row], now).length) continue;
     let segments = [];
@@ -555,12 +771,26 @@ export async function enterAreas(document, movement, operation = {}) {
     } catch {
       segments = [];
     }
-    if (!segments.some(s => s.type === ENTER)) continue;
+    const into = segments.some(s => s.type === ENTER);
+    const crossed = crossing ? crossingOf(segments, { enter: ENTER, exit: CONST.REGION_MOVEMENT_SEGMENTS.EXIT }) : null;
+    if (!into && !crossed) continue;
     seen.add(f.cast);
     entered++;
     const caster = actorOf(f.caster);
     const casterToken = casterTokenOn(scene, f.source ?? null, caster);
-    const relation = relationTo({ caster, casterToken, actor, token: document, fight });
+    const relation = relationTo({ caster, casterToken, actor, token: document, fight: inFight ? fight : null });
+    // The creatures the cast named, which a row that spares them lets be (the B9a pass).
+    const named = Array.isArray(f.named) && f.named.includes(actor.uuid);
+    if (crossed) {
+      // *A creature crossing the ring in either direction makes a Reflex Resilience Test*:
+      // once on this move, where it would be put back recorded on its card.
+      const checks = checksFor(tick, "cross", { relation, named });
+      const stopAt = checks.some(c => c.fail?.stop === true) ? stopAtOf(document, region, path, crossed) : null;
+      for (const check of checks) {
+        if (tokenInWorld(document) && regionInWorld(region)) await postAreaTest({ actor, token: document, region, check, trigger: "cross", caster, extra: { stopAt } });
+      }
+    }
+    if (!into) continue;
     if (striking) {
       const damage = enterFor(tick, { relation, sl: f.sl ?? null });
       const inSpan = !(Number(tick.enter.rounds) > 0) || !areaLapsed({ lasts: { rounds: tick.enter.rounds }, placedAt: f.placedAt ?? null }, now);
@@ -573,7 +803,12 @@ export async function enterAreas(document, movement, operation = {}) {
         await postLines(actor, await strikeFromArea({ actor, caster, spell: f.spell ?? {}, damage }));
       }
     }
-    for (const check of checksFor(tick, "enter", { relation })) {
+    for (const check of checksFor(tick, "enter", { relation, named })) {
+      // Out of a fight only Frozen Rune's first entry is judged (above).
+      if (!inFight && check.first !== true) continue;
+      // **THE FIRST CREATURE TO ENTER, AND NO OTHER** (07's Frozen Rune; the B9a pass):
+      // claimed once in the one area queue, ever, as a standing trap is.
+      if (check.first === true && !(await claimEntry(region, "first", "entered"))) continue;
       if (tokenInWorld(document) && regionInWorld(region)) await postAreaTest({ actor, token: document, region, check, trigger: "enter", caster });
     }
     // **TEMPEST'S PUSH** (*one that fails a Reflex Resilience Test against your Spell
@@ -590,6 +825,40 @@ export async function enterAreas(document, movement, operation = {}) {
     }
   }
   return entered;
+}
+
+/**
+ * **ONE TRAP, SPRUNG OR NOT** (04's Shadow Trap; the Legacy branches' door 26): the
+ * move entered it on its own path, the mover is one of the setter's enemies
+ * (`rules/traps.mjs#springs` over `relationTo`), the claim is this move's, and the
+ * mover and the trap still stand - then the condition lands with its escape and the
+ * Region is deleted. Answers whether it sprang. **In a fight or out of one** (the
+ * lead: *"Also outside a fight"*): with no fight `relationTo` reads the tokens' sides,
+ * FRIENDLY against HOSTILE, and the escape is offered at the creature's next turn
+ * once a fight begins - its Test is on its own action.
+ *
+ * @returns {Promise<boolean>}
+ */
+async function springTrap({ region, trap, document, actor, path, fight, scene, ENTER }) {
+  let segments = [];
+  try {
+    segments = document.segmentizeRegionMovementPath(region, path);
+  } catch {
+    segments = [];
+  }
+  if (!segments.some(s => s.type === ENTER)) return false;
+  const setter = actorOf(trap.setter);
+  const relation = setter ? relationTo({ caster: setter, casterToken: casterTokenOn(scene, null, setter), actor, token: document, fight }) : "other";
+  // A GM-hidden token springs nothing, and its name is never said (the B3 review).
+  if (!springs(trap, { relation, hidden: document.hidden === true })) return false;
+  if (isDown(actor) || !tokenInWorld(document) || !regionInWorld(region)) return false;
+  const first = await claimEntry(region, "trap", "sprung");
+  if (!first || !tokenInWorld(document) || !regionInWorld(region)) return false;
+  const escape = cleanEscape(trap.escape ?? null);
+  const landed = await inflictCondition({ victim: actor, id: trap.condition, by: setter, name: document.name ?? actor.name, marks: escape ? { [ESCAPE_FLAG]: escape } : {} });
+  if (regionInWorld(region)) await region.delete();
+  if (actorInWorld(actor)) await postLines(actor, [game.i18n.format("AZEROTH.Trap.Sprung", { trap: trap.source, name: document.name ?? actor.name }), landedText(landed)]);
+  return true;
 }
 
 /**

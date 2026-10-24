@@ -398,8 +398,10 @@ export function generatorBatch(context) {
           assert.equal(auto.kind, "test");
           assert.equal(auto.dc, 12);
           assert.equal(auto.resist, "body");
-          assert.deepEqual(auto.damage, { amount: 5, type: "shadow" });
+          // *... or takes 5 shadow damage and is Diseased*: both the failure's (the B8a2 pass).
+          assert.deepEqual(auto.damage, { amount: 5, type: "shadow", half: false, onFail: true });
           assert.equal(auto.inflicts.condition, "diseased");
+          assert.isTrue(auto.inflicts.onFail, "the seed did not hand the Diseased to the Test");
           assert.ok(generator.element.querySelector("select[name='ability-auto-resist-0']"), "the Test fields did not open");
           const findings = checkText(generator.element);
           assert.deepEqual(findings, [], findings.map(f => `${f.kind} ${f.detail}`).join("; "));

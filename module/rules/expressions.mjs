@@ -18,10 +18,20 @@
  *   factor  := integer | name | "floor(" expr ")" | "ceil(" expr ")"
  *            | "(" expr ")" | "-" factor
  *   name    := rank | tier | level | sl | spent | weapon
+ *            | str | dex | con | int | wis | cha | prof
  *
  * `weapon` is the striker's own Damage Rating - the main-hand weapon's, or 08
  * §7's Unarmed 1 with none (04's Wrath of the Light: *Holy damage at your Damage
  * Rating*; D-772) - which the feature door hands in.
+ *
+ * **THE SIX ABILITY MODIFIERS AND PROFICIENCY** (the Legacy branches' door 16):
+ * 04's Critical Strike adds *half your Dexterity modifier, rounded up*
+ * (`ceil(dex/2)`), Wind Walk *your Dexterity modifier*, Bladestorm raises the
+ * Armor Points *by your Dexterity modifier*, and Thunder Clap's DC is *10 plus
+ * your Strength modifier plus your Proficiency Bonus* (`10+str+prof`; the lead:
+ * *"10 + Str modifier + Proficiency"*). Each is the CHARACTER's modifier as it
+ * stands, handed in by the door through `abilityScope`; one the door did not hand
+ * in reads 0, as every name here does.
  *
  * **A NAME OUTSIDE THE LIST, A WORD IT DOES NOT KNOW OR A DANGLING OPERATOR
  * READS AS NULL**, never as a guess: a descriptor saying something this cannot
@@ -30,8 +40,28 @@
  * preview with nothing spent yet is still a preview. No `eval`, no `Function`.
  */
 
+/** The six ability modifiers an amount may name (05 §1's abilities, by their keys). */
+export const ABILITY_NAMES = Object.freeze(["str", "dex", "con", "int", "wis", "cha"]);
+
 /** The names an amount may use, and what each is. */
-export const EXPRESSION_NAMES = Object.freeze(["rank", "tier", "level", "sl", "spent", "weapon"]);
+export const EXPRESSION_NAMES = Object.freeze(["rank", "tier", "level", "sl", "spent", "weapon", ...ABILITY_NAMES, "prof"]);
+
+/**
+ * **WHAT A DOOR HANDS IN FOR THE ABILITY NAMES** (door 16): each ability's
+ * modifier off the actor's derived `system`, and its Proficiency, as whole
+ * numbers - 0 for one the system does not carry (a Mindless creature's `—` Int is
+ * a null modifier, and no modifier is 0, never a 10). Pure: it reads a plain
+ * `system` shape, a document's or a test's.
+ *
+ * @param {{abilities?: Record<string, {mod?: number|null}>, proficiency?: number}} [system]
+ * @returns {{str: number, dex: number, con: number, int: number, wis: number, cha: number, prof: number}}
+ */
+export function abilityScope(system = {}) {
+  const out = {};
+  for (const key of ABILITY_NAMES) out[key] = Math.trunc(Number(system?.abilities?.[key]?.mod)) || 0;
+  out.prof = Math.trunc(Number(system?.proficiency)) || 0;
+  return out;
+}
 
 /** The functions an amount may call. Both round toward their own side, as 04 says. */
 const FUNCTIONS = Object.freeze({ floor: Math.floor, ceil: Math.ceil });

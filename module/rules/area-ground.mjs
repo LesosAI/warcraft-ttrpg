@@ -136,7 +136,9 @@ export const NON_SPELL_GROUND = Object.freeze({
   "Master of the Land": { reason: "movement penalties from non-magical sources, on targets named for a day: the table's" },
   "Surefooted": { reason: "a mount trait, and a mount carried in the Stable is no token that moves" },
   "Killing Ground": { reason: "a class feature's area, which records no cast for the reconciler to read" },
-  "Earthquake": { reason: "a class feature's area, which records no cast for the reconciler to read" }
+  "Earthquake": { reason: "a class feature's area, which records no cast for the reconciler to read" },
+  // 04's Blademaster (D-781): *Move up to your Speed, ignoring Difficult ground*.
+  "Wind Walk": { automated: "the Legacy branches' `onUse.freeMove {ignoresGround}` (door 25): one Move that costs no Half-Action, paid through `movement.mjs#paidDifficulty` at a foot a foot; its talent row is phase B6's (`LEGACY_ROWS_PENDING`)" }
 });
 
 /**

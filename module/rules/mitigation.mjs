@@ -137,6 +137,15 @@ export function spellDamage(rating, sl, ward = 0, times = 1) {
  * vulnerable, ward, armor, schoolArmor, wardTook}` - so the card can say each,
  * and the damage door can record each type the blow dealt. With none, the result
  * is exactly what it always was: no `parts`, no `mainDamage`.
+ *
+ * **THE DAMAGE ITS SOURCE DEALS, HALVED** (`dealtHalved`; the Legacy branches' door
+ * 25: 04's Drawn Across, *the damage it deals is halved, rounded down, until the end
+ * of its next turn*): the blow's worth - the Rating with its Success Level, the
+ * Head's 2 and a Signature's multiplier - halved, rounded down, BEFORE Armor Points
+ * and Ward (the plan's *As read*), and each second amount with it; a Vulnerable
+ * target's 2 is the target's and is added after. Every door that resolves a blow
+ * hands it the source's own reading (`rules/legacy-uses.mjs#dealtHalvedBy`), Boss
+ * Actions included; the result says `dealtHalved: true` so a card can name it.
  */
 export function resolveDamage({
   rating = 0,
@@ -159,18 +168,51 @@ export function resolveDamage({
   // An amount of the blow's own type rides its Rating (`typedExtras`).
   extras = [],
   wardBySchool = null,
-  schoolArmorBySchool = null
+  schoolArmorBySchool = null,
+  // Drawn Across on the blow's source (door 25): its worth halved before Armor and Ward.
+  dealtHalved = false,
+  // **HALF ON A PASSED TEST** (the lead: *"Build it everywhere"*; 07's *and half of
+  // that, rounded down, on a success*, `rules/resisted.mjs`): the worth halved,
+  // rounded down, before Armor Points and Ward - Drawn Across's own reading of a
+  // halving - and again where the source's damage is halved as well.
+  passedHalf = false,
+  // **THE DAMAGE BYPASSES ARMOR AND WARD** (the B8a2 pass; 07's *The target takes 20 Nature
+  // damage, bypassing armor and Ward*, stamped as a spell's `damage.bypass` -
+  // `rules/bypass.mjs`): no Armor Points, no Ward - off the damage or the Success Level -
+  // and no ally's aura Armor Points come off it, nor off a second amount it carries. Immune,
+  // Vulnerable and a halving stand: the words name armor and Ward and nothing else.
+  bypass = false
 } = {}) {
   const own = kind === "magical" ? school : "physical";
   const typed = typedExtras(extras, own);
+  const halved = dealtHalved === true || (dealtHalved && typeof dealtHalved === "object");
+  const halvings = (halved ? 1 : 0) + (passedHalf === true ? 1 : 0);
+  const past = bypass === true;
   const main = resolveOne({
-    rating: (Number(rating) || 0) + typed.merged, sl, kind, school, location, apByLocation, penetration, ward,
-    immune, vulnerable, slAddsToDamage, multiplier, schoolArmor
+    rating: (Number(rating) || 0) + typed.merged, sl, kind, school, location,
+    apByLocation: past ? {} : apByLocation, penetration, ward: past ? 0 : ward,
+    immune, vulnerable, slAddsToDamage, multiplier, schoolArmor: past ? 0 : schoolArmor, halved: halvings
   });
-  if (!typed.extras.length) return main;
-  const parts = typed.extras.map(x => extraPart(x, { immune, vulnerable, wardBySchool, schoolArmorBySchool, apByLocation, location }));
-  return { ...main, damage: main.damage + parts.reduce((n, p) => n + p.damage, 0), mainDamage: main.damage, parts };
+  const flagged = past ? { ...main, bypass: true } : main;
+  const marked = halvings ? { ...flagged, ...(halved ? { dealtHalved: true } : {}), ...(passedHalf === true ? { passedHalf: true } : {}) } : flagged;
+  if (!typed.extras.length) return marked;
+  const meets = past
+    ? { immune, vulnerable, wardBySchool: {}, schoolArmorBySchool: {}, apByLocation: {}, location }
+    : { immune, vulnerable, wardBySchool, schoolArmorBySchool, apByLocation, location };
+  const parts = typed.extras.map(x => extraPart(halvings ? { ...x, amount: worthOf(x.amount, halvings) } : x, meets));
+  return { ...marked, damage: marked.damage + parts.reduce((n, p) => n + p.damage, 0), mainDamage: marked.damage, parts };
 }
+
+/**
+ * A blow's worth, halved and rounded down once for each halving - where its source's
+ * damage is halved (door 25), and where a passed Test halves it (`passedHalf`). Two
+ * halvings are a quarter, rounded down: halving a whole number twice, rounding each
+ * time, is the same number.
+ */
+const worthOf = (n, halved) => {
+  const times = halved === true ? 1 : Math.max(0, Math.trunc(Number(halved)) || 0);
+  return times ? Math.floor(Math.max(0, n) / 2 ** times) : n;
+};
 
 /**
  * **THE SECOND AMOUNTS, SORTED OUT** (D-777): an amount of the blow's own type
@@ -205,8 +247,12 @@ export function typedExtras(extras = [], own = "physical") {
  * subtraction - and an ally's aura after the Ward (D-755); a physical amount
  * meets the Armor Points where the blow landed, with no Pierce and no Head bonus,
  * which are the weapon blow's own.
+ *
+ * **AND A SHARE OF A BLOW MOVED ONTO ITS HOLDER** (04's Shared Burden; the Legacy
+ * branches' B6b): one amount of the blow's type met by the holder's own mitigation
+ * (`blow-doors.mjs#burdenMet`), the same reading, never a second one.
  */
-function extraPart({ type, amount }, { immune = [], vulnerable = [], wardBySchool = null, schoolArmorBySchool = null, apByLocation = {}, location = "body" } = {}) {
+export function extraPart({ type, amount }, { immune = [], vulnerable = [], wardBySchool = null, schoolArmorBySchool = null, apByLocation = {}, location = "body" } = {}) {
   const base = { type, amount, immune: false, vulnerable: false, ward: null, armor: null, schoolArmor: 0, wardTook: 0 };
   if ((immune ?? []).includes(type)) return { ...base, damage: 0, immune: true };
   if ((vulnerable ?? []).includes(type)) return { ...base, damage: amount + VULNERABLE_DAMAGE_BONUS, vulnerable: true };
@@ -235,7 +281,8 @@ function resolveOne({
   vulnerable = [],
   slAddsToDamage = true,
   multiplier = 1,
-  schoolArmor = 0
+  schoolArmor = 0,
+  halved = false
 } = {}) {
   // A multiplier under 1 would mean the opposite of itself, and 08 §20 doubles
   // and nothing else; anything smaller is no multiplier at all.
@@ -273,20 +320,24 @@ function resolveOne({
   const vulnBonus = isVulnerable ? VULNERABLE_DAMAGE_BONUS : 0;
 
   // Vulnerable switches mitigation off: "Armor and Ward do not apply."
+  // Its 2 is the target's own, added after a halving of the blow's worth (door 25).
   if (isVulnerable) {
-    const damage = Math.max(0, times * (rating + (slAddsToDamage ? sl : 0) + headBonus) + vulnBonus);
+    const damage = Math.max(0, worthOf(times * (rating + (slAddsToDamage ? sl : 0) + headBonus), halved) + vulnBonus);
     return { damage, effectiveSL: sl, hit: true, immune: false, vulnerable: true, mitigation: 0, ...lane };
   }
 
   if (kind === "magical") {
-    const { effectiveSL, damage } = slAddsToDamage
-      ? applyWard(rating, sl, ward, times)
-      : spellDamage(rating, sl, ward, times);
+    // The Ward off the Success Level first (D-300), then the worth - halved where the
+    // source's damage is (door 25) - and the Ward off what is left.
+    // `applyWard`'s and `spellDamage`'s own arithmetic, with the worth halved between.
+    const w = Math.max(0, ward);
+    const effectiveSL = Math.max(0, sl - w);
+    const damage = Math.max(0, worthOf(times * (rating + (slAddsToDamage ? effectiveSL : 0)), halved) - w);
     // **WHAT THE WARD TOOK OFF THIS BLOW** (D-774): the damage with no Ward less
     // the damage with it, so a door after the die can say whether the Ward
     // prevented anything - 04's Atonement (*When your Ward class feature prevents
     // damage*) and Absorption read it at the one damage door.
-    const bare = slAddsToDamage ? applyWard(rating, sl, 0, times) : spellDamage(rating, sl, 0, times);
+    const bare = { damage: Math.max(0, worthOf(times * (rating + (slAddsToDamage ? Math.max(0, sl) : 0)), halved)) };
     const wardTook = Math.max(0, bare.damage - damage);
     // An aura's Armor Points come off what the Ward left, and the Success Level
     // never sees them (D-755). What they TOOK is never more than was left.
@@ -304,7 +355,7 @@ function resolveOne({
     };
   }
 
-  const before = times * (rating + sl + headBonus);
+  const before = worthOf(times * (rating + sl + headBonus), halved);
   const ap = armorAt(apByLocation, location) ?? 0;
   const effectiveAP = Math.max(0, ap - Math.max(0, penetration));
   return {

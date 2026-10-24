@@ -61,11 +61,21 @@
  *              never the check's: Rimebind's *with a Bane* is its own *every Test
  *              a creature makes while it stands in the area has a Bane*, which
  *              the `remains` row lays and the dialog reads. `on` "turn" | "enter" |
- *              "both"; `fail` `{rating, school, statuses, bane, until, lose,
+ *              "both" | "cross"; `fail` `{rating, school, statuses, bane, until, lose,
  *              kinds: [{kinds, not, statuses}]}`; `success` `{statuses,
  *              until}`; `until` "" | "leaves" | "casterTurnStart" |
  *              "endOfNextTurn"; `where` "" | "centre"; `gate` "" |
  *              "holds:<identifier>"; `exempt` "" | "caster".
+ *              **And, only on a row that names one** (the B9a pass; the lead:
+ *              *"Build the triggers"*), so every row stored before them keeps its
+ *              exact shape: `first` (Frozen Rune's *The first creature to enter
+ *              the space* - once an area, ever), `spares: "named"` (the creatures
+ *              named at the cast: Ring of Fire's *Name any number of creatures as
+ *              you cast: the ring lets them through*, Blackout's and The Deep's
+ *              *You and any creature you name as you cast*), `fail.stop` (*on a
+ *              failure it does not cross* - put back on its own side of the edge),
+ *              and `success.rating`/`success.school` (Ring of Fire's *on a success
+ *              it crosses and takes 5 Fire damage*).
  *   remains    [{when, who, kinds, exceptKinds, gear, bane, ward, boonAgainst,
  *              speed, healing, standFree}]   what stands on a creature WHILE it
  *              remains in the area (D-757): `when` "inside" (from the moment it
@@ -109,8 +119,14 @@ export const AREA_TICK_KINDS = CREATURE_KINDS;
 /** The subjects 07 writes. */
 export const AREA_TICK_WHO = Object.freeze(["enemy", "creature", "ally"]);
 
-/** When a Test is made: at the start of the creature's turn, on entering, or both (D-757). */
-export const AREA_CHECK_ON = Object.freeze(["turn", "enter", "both"]);
+/**
+ * When a Test is made: at the start of the creature's turn, on entering, or both
+ * (D-757); on CROSSING the area's edge in either direction (07's Ring of Fire and
+ * Stormwall; the B9a pass, the lead: *"Build the triggers"*); and at the start of
+ * the CASTER's turns (Nether Rift's, built at the door off its forced move,
+ * `casterTurnCheck`).
+ */
+export const AREA_CHECK_ON = Object.freeze(["turn", "enter", "both", "cross", "casterTurn"]);
 
 /**
  * How long what a failed Test lands lasts (D-757), in 07's own phrases:
@@ -368,8 +384,18 @@ function readEnter(list, base) {
 /*  The Tests (D-757)                            */
 /* -------------------------------------------- */
 
-/** When a sentence's Test is made: on entering, at the start of a turn, or both; null where it is no such clause. */
+/**
+ * A crossing of the area's edge (the B9a pass): Ring of Fire's *A creature crossing the
+ * ring in either direction*, Stormwall's *a creature that tries to cross*.
+ */
+const CROSS_TRIGGER = /\b[Aa] creature (?:crossing the ring\b|that tries to cross\b)/;
+/** Frozen Rune's *The first creature to enter the space*: one entry, ever (the B9a pass). */
+const FIRST_ENTRY = /^The first creature to enter the space\b/;
+
+/** When a sentence's Test is made: on entering, at the start of a turn, both, or on crossing the edge; null where it is no such clause. */
 function checkTrigger(s) {
+  if (CROSS_TRIGGER.test(s)) return "cross";
+  if (FIRST_ENTRY.test(s)) return "enter";
   if (/^(?:While you hold both, )?[Aa] creature that enters the area or (?:starts|begins) its turn (?:inside it|there|in it|inside|in the area)\b/.test(s)) return "both";
   if (/^A creature that enters the area\b(?! or)/.test(s)) return "enter";
   if (/\b(?:[Aa] creature|one) that (?:is not native to fire and )?(?:starts|begins) its turn (?:in the area|inside|in it|there|at the center)\b/.test(s)) return "turn";
@@ -395,6 +421,19 @@ function untilIn(text) {
  * it is **Slowed** only*. Null where the sentence states no outcome of its own.
  */
 function outcomeInSentence(rest) {
+  // **A CROSSING HELD OR PAID FOR** (the B9a pass): Ring of Fire's and Stormwall's
+  // *: on a failure it does not cross and its turn ends, and on a success it crosses
+  // and takes 5 Fire damage* / *and is **Slowed** until the end of its next turn*.
+  const cross = /^on a failure it does not cross and its turn ends, and on a success it crosses and (.+?)\.?$/i.exec(rest.replace(/^[:,]\s*/, ""));
+  if (cross) {
+    const dealt = /^takes (\d+) ([A-Z][a-z]+) damage\b/.exec(cross[1]);
+    return {
+      fail: { stop: true, lose: true },
+      success: dealt
+        ? { statuses: [], until: "", rating: Number(dealt[1]), school: schoolOf(dealt[2]) }
+        : { statuses: conditionsIn(cross[1]), until: untilIn(cross[1]) }
+    };
+  }
   const deep = /^:? ?on a failure it is (.+?) (until it leaves|until the end of its next turn|until the start of your next turn)?, and on a success it is (.+?) only\b/i.exec(rest.replace(/^[:,]\s*/, ""));
   if (deep) {
     const until = untilIn(deep[2] ?? "");
@@ -458,6 +497,11 @@ function outcomeAround(list) {
 function readChecks(list, fields = {}, body = "") {
   const out = [];
   const exempt = /\bYou and any creature you name as you cast\b/.test(body) ? "caster" : "";
+  // **THE CREATURES NAMED AT THE CAST ARE SPARED** (the B9a pass): Ring of Fire's *Name
+  // any number of creatures as you cast: the ring lets them through and does not burn
+  // them*, and Blackout's and The Deep's *You and any creature you name as you cast* -
+  // the cast's own targets, carried on the Region (`dice/chat.mjs#regionFlagsFromCard`).
+  const spares = /\bName any number of creatures as you cast\b|\bYou and any creature you name as you cast\b/.test(body) ? "named" : "";
   const holds = /\bWhile you hold both\b/.test(body) ? /\bsustaining \*\*([^*]+)\*\*/.exec(body) : null;
   for (let i = 0; i < list.length; i++) {
     const s = list[i];
@@ -473,10 +517,17 @@ function readChecks(list, fields = {}, body = "") {
     row.where = /\bat the center\b/.test(s) ? "centre" : "";
     row.gate = holds && /\bWhile you hold both\b/.test(s) ? `holds:${slug(holds[1])}` : "";
     row.exempt = exempt;
+    // Named only where the row has one (the B9a pass), so every other row keeps its shape.
+    if (FIRST_ENTRY.test(s)) row.first = true;
+    if (spares) row.spares = spares;
     const inSentence = outcomeInSentence(s.slice(test.index + test[0].length));
     if (inSentence) {
       Object.assign(row.fail, inSentence.fail ?? {});
-      if (inSentence.success) row.success = { statuses: inSentence.success.statuses ?? [], until: inSentence.success.until ?? "" };
+      if (inSentence.success) {
+        row.success = { statuses: inSentence.success.statuses ?? [], until: inSentence.success.until ?? "" };
+        // Ring of Fire's *on a success it crosses and takes 5 Fire damage*.
+        if (Number(inSentence.success.rating) > 0) Object.assign(row.success, { rating: Number(inSentence.success.rating), school: inSentence.success.school ?? null });
+      }
     } else {
       // *makes the same Test* reads the entry's own failure wherever it stands;
       // a Test of its own reads the sentences after it.
@@ -484,7 +535,8 @@ function readChecks(list, fields = {}, body = "") {
       if (!around) continue;
       Object.assign(row.fail, around);
     }
-    const lands = row.fail.rating !== null || row.fail.statuses.length || row.fail.bane || row.fail.lose || row.fail.kinds.length || row.success.statuses.length;
+    const lands = row.fail.rating !== null || row.fail.statuses.length || row.fail.bane || row.fail.lose || row.fail.kinds.length || row.success.statuses.length
+      || row.fail.stop === true || Number(row.success.rating) > 0;
     if (lands) out.push(row);
   }
   return out;
@@ -526,7 +578,9 @@ function readRemains(list, against = []) {
     row.who = subject.who;
     row.kinds = subject.kinds;
     let any = false;
-    if (/\bhas a Bane on (?:its )?Attack Tests while it remains\b/.test(s)) { row.bane = "attack"; any = true; }
+    // And Nether Rift's *A creature inside the area has a Bane on Attack Tests* (the B9a
+    // pass), which names no turn and holds from the moment it is inside.
+    if (/\bhas a Bane on (?:its )?Attack Tests while it remains\b/.test(s) || /^A creature inside the area has a Bane on Attack Tests\b/.test(s)) { row.bane = "attack"; any = true; }
     if (/^Every Test a creature makes while it stands in the area has a Bane\b/.test(s)) { row.bane = "all"; any = true; }
     const ward = /\bgains Ward (\d+) against ([A-Z][a-z]+)(?: and Ward \1 against ([A-Z][a-z]+))? until it leaves\b/.exec(s);
     if (ward) {
@@ -583,11 +637,18 @@ export const UNEXPRESSED = Object.freeze([
   { key: "standFree", re: /\bstand from \*\*Prone\*\* without spending movement\b/i, text: "standing from Prone costs no movement", covered: t => t.remains.some(r => r.standFree) },
   { key: "retaliate", re: /\bhits you with a melee attack\b/i, text: "damage to a creature that hits the caster in melee", covered: t => t.retaliate },
   // Tempest's push and Void Rift's pull (D-778; the lead: *"Yes."*): read by
-  // `readForced` and landed by the forced-movement door. Nether Rift's pull at the
-  // CASTER's turn is not (`FORCED_UNREAD`).
-  { key: "forced", re: /\b(?:pulled|pushed) \d+ feet toward\b/i, text: "forced movement", covered: (t, body) => ["enter", "turn"].includes(readForced(body)?.on) },
+  // `readForced` and landed by the forced-movement door - and Nether Rift's pull at the
+  // CASTER's turn (the B9a pass; the lead: *"Build the triggers"*), its Test posted by
+  // the turn's own door (`casterTurnCheck`).
+  { key: "forced", re: /\b(?:pulled|pushed) \d+ feet toward\b/i, text: "forced movement", covered: (t, body) => ["enter", "turn", "casterTurn"].includes(readForced(body)?.on) },
   { key: "held", re: /\bcannot leave the area without a second success\b/i, text: "a creature that failed cannot leave without a second success", covered: () => false },
-  { key: "named", re: /\bany creature you name as you cast\b/i, text: "the creatures named at the cast", covered: () => false },
+  // Blackout's and The Deep's *You and any creature you name as you cast* (the B9a pass):
+  // the cast's own targets are the creatures named, carried on the Region, and the row's
+  // `spares` lets them be.
+  { key: "named", re: /\bany creature you name as you cast\b/i, text: "the creatures named at the cast", covered: t => t.checks.some(c => c.spares === "named") },
+  // Nether Rift's *... and cannot take a Reaction*: nothing bars a creature's Reaction
+  // while it stands somewhere, so it stays the table's (the B9a pass).
+  { key: "noReaction", re: /\bcannot take a Reaction\b/i, text: "a creature inside cannot take a Reaction", covered: () => false },
   { key: "native", re: /\bnot native to fire\b/i, text: "a creature native to fire makes no Test: the table's to judge", covered: () => false },
   // Rimebind's and Thornguard's (D-778; the lead: *"Yes."*): the Entangled a
   // failure lands carries its escape, offered at the end of each of its turns
@@ -931,16 +992,22 @@ export function firstEntry(memory, tokenId, turnKey) {
  * second Sustain (Starweave's *While you hold both*) needs the caster to hold
  * it.
  *
+ * **A CROSSING IS ITS OWN MOMENT** (the B9a pass): a row made on crossing the edge
+ * (`cross`) answers a crossing and nothing else, and `both` - entering or a turn's start
+ * - never a crossing. **And a creature named at the cast is spared** a row that spares
+ * the named (`named`: Ring of Fire lets it through; Blackout and The Deep leave it be).
+ *
  * @param {object} tick
- * @param {"turn"|"enter"} trigger
- * @param {{relation?: string, atCentre?: boolean, holds?: Set<string>|string[]}} o
+ * @param {"turn"|"enter"|"cross"} trigger
+ * @param {{relation?: string, atCentre?: boolean, holds?: Set<string>|string[], named?: boolean}} o
  * @returns {object[]}  the check rows
  */
-export function checksFor(tick, trigger, { relation = "other", atCentre = false, holds = [] } = {}) {
+export function checksFor(tick, trigger, { relation = "other", atCentre = false, holds = [], named = false } = {}) {
   if (!hasAreaTick(tick)) return [];
   const held = holds instanceof Set ? holds : new Set(holds ?? []);
   return (tick.checks ?? []).filter(c => {
-    if (!(c.on === trigger || c.on === "both")) return false;
+    if (!(c.on === trigger || (c.on === "both" && (trigger === "turn" || trigger === "enter")))) return false;
+    if (c.spares === "named" && named === true) return false;
     if (c.exempt === "caster" && relation === "self") return false;
     if (tick.excludesCaster === true && relation === "self") return false;
     if (c.where === "centre" && !atCentre) return false;
@@ -1013,18 +1080,24 @@ export function holdsPoint(box, point) {
  * kind's conditions (Nether Collapse's demon is Frightened; anything else is
  * Stunned, Numbed, Entangled and Prone).
  *
+ * **A CROSSING'S TWO HALVES** (the B9a pass): Ring of Fire's and Stormwall's *on a
+ * failure it does not cross and its turn ends* - `stop`, the creature put back on its
+ * own side of the edge, and `lose`, its turn - and Ring of Fire's *on a success it
+ * crosses and takes 5 Fire damage*, the success's damage.
+ *
  * @param {object} check
  * @param {{success?: boolean, kinds?: Set<string>|string[]}} o
  * @returns {{damage: {rating: number, school: string|null}|null, statuses: Array<{id: string, until: string}>,
- *   bane: {kind: string, until: string}|null, lose: boolean}}
+ *   bane: {kind: string, until: string}|null, lose: boolean, stop: boolean}}
  */
 export function checkOutcome(check, { success = false, kinds = [] } = {}) {
   const k = kinds instanceof Set ? kinds : new Set(kinds ?? []);
-  const nothing = { damage: null, statuses: [], bane: null, lose: false, forced: null };
+  const nothing = { damage: null, statuses: [], bane: null, lose: false, forced: null, stop: false };
   if (!check) return nothing;
   const spanned = (ids, until) => ids.map(id => ({ id, until: until || CONDITION_DEFAULT_ENDS[id] || "" }));
   if (success) {
-    return { ...nothing, statuses: spanned(check.success?.statuses ?? [], check.success?.until ?? "") };
+    const dealt = Number(check.success?.rating) > 0 ? { rating: Number(check.success.rating), school: check.success.school ?? null } : null;
+    return { ...nothing, damage: dealt, statuses: spanned(check.success?.statuses ?? [], check.success?.until ?? "") };
   }
   const fail = check.fail ?? {};
   let statuses = [...(fail.statuses ?? [])];
@@ -1039,8 +1112,78 @@ export function checkOutcome(check, { success = false, kinds = [] } = {}) {
     bane: fail.bane ? { kind: fail.bane, until: fail.until || "endOfNextTurn" } : null,
     lose: fail.lose === true,
     // The forced move a failure makes (Tempest's push on entering; D-778).
-    forced: feet > 0 ? { feet, toward: fail.forced.toward === "toward" ? "toward" : "away" } : null
+    forced: feet > 0 ? { feet, toward: fail.forced.toward === "toward" ? "toward" : "away" } : null,
+    // *It does not cross* (the B9a pass): put back where it stood before the edge.
+    stop: fail.stop === true
   };
+}
+
+/**
+ * **NETHER RIFT'S TEST AT THE CASTER'S TURN** (07: *At the start of each of your turns
+ * every creature within 30 feet of the center makes a Body Resilience Test against your
+ * Spell DC or is pulled 15 feet toward it*; the B9a pass, the lead: *"Build the
+ * triggers"*): the area's forced move as a check row - `emptyCheck`'s whole shape, made
+ * at the caster's turn, whose failure is the pull - for the area door to post to every
+ * creature within the move's `within` feet of the centre and the card's door to land.
+ * Built at the door off the Region's `forced`, as Tempest's is (`forcedCheck`), never
+ * stamped on the spell. Null for a move that is not made at the caster's turn.
+ *
+ * @param {{on: string, feet: number, toward: string, resilience: string|null, within?: number}|null} forced
+ * @returns {object|null}
+ */
+export function casterTurnCheck(forced) {
+  if (!forced || forced.on !== "casterTurn" || !forced.resilience || !(Number(forced.feet) > 0) || !(Number(forced.within) > 0)) return null;
+  const row = emptyCheck();
+  row.on = "casterTurn";
+  row.resilience = forced.resilience;
+  row.fail.forced = { feet: Math.trunc(Number(forced.feet)), toward: forced.toward === "toward" ? "toward" : "away" };
+  return row;
+}
+
+/**
+ * **WHERE A CROSSING HAPPENS ON A MOVE'S PATH** (the B9a pass): the first segment of the
+ * path that ENTERS or EXITS the area - core's `TokenDocument#segmentizeRegionMovementPath`
+ * (14.367, `client/documents/token.mjs:3614`), whose ENTER segment starts outside the
+ * area and whose EXIT segment starts inside it - and the token's position at that
+ * segment's start: the side of the edge it stood on. Null where the move crossed nothing.
+ *
+ * @param {Array<{type: number|string, from?: {x: number, y: number}}>} segments
+ * @param {{enter: number|string, exit: number|string}} kinds  core's two segment types
+ * @returns {{type: "enter"|"exit", from: {x: number, y: number}|null}|null}
+ */
+export function crossingOf(segments = [], { enter, exit } = {}) {
+  for (const s of segments ?? []) {
+    if (s?.type !== enter && s?.type !== exit) continue;
+    const x = Number(s.from?.x);
+    const y = Number(s.from?.y);
+    return { type: s.type === enter ? "enter" : "exit", from: Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null };
+  }
+  return null;
+}
+
+/**
+ * **WHERE A CREATURE THAT DOES NOT CROSS IS PUT BACK** (the B9a pass): the first of the
+ * places offered that stands on the side of the edge the creature crossed FROM - the
+ * crossing segment's start, snapped to the grid, then the move's own waypoints walked
+ * back towards its origin - judged by `onSide` (the door's `testInsideRegion`). Null
+ * where none does, and the door then says so in words and moves nothing.
+ *
+ * @param {Array<{x: number, y: number}|null>} candidates  in the order to try them
+ * @param {(point: {x: number, y: number}) => boolean} onSide
+ * @returns {{x: number, y: number}|null}
+ */
+export function stopPoint(candidates = [], onSide = () => false) {
+  for (const p of candidates ?? []) {
+    if (!p || !Number.isFinite(Number(p.x)) || !Number.isFinite(Number(p.y))) continue;
+    let ok = false;
+    try {
+      ok = onSide({ x: Number(p.x), y: Number(p.y) }) === true;
+    } catch {
+      ok = false;
+    }
+    if (ok) return { x: Math.round(Number(p.x)), y: Math.round(Number(p.y)) };
+  }
+  return null;
 }
 
 /**
@@ -1114,6 +1257,10 @@ export function riderPayload(row, { judged = false } = {}) {
   const out = {};
   if (row?.bane) out.bane = judged ? { kind: row.bane, banes: 1, judged: true } : { kind: row.bane, banes: 1 };
   if (row?.ward?.amount) out.ward = { schools: [...(row.ward.schools ?? [])], amount: row.ward.amount };
+  // **A BOON ON A KIND OF TEST** (04's Burial Ground: *every friendly target inside it
+  // gains a Boon on Resilience Tests*; the Legacy branches' door 25): every Resilience
+  // where the kind is Resilience (`resilience: "all"`, `rules/auras.mjs#auraBoonsOn`).
+  if (row?.boon && row.boon !== "all") out.boon = row.boon === "resilience" ? { kind: "resilience", resilience: "all", boons: 1 } : { kind: row.boon, boons: 1 };
   if ((row?.boonAgainst ?? []).length) out.boon = { kind: "resilience", against: [...row.boonAgainst], boons: 1 };
   if (row?.speed) out.speed = row.speed;
   if (row?.healing === "half") out.healing = "half";
@@ -1231,6 +1378,7 @@ const testKind = v => (v === "all" || (typeof v === "string" && v in AZEROTH.tes
 function cleanCheckRow(r) {
   const fail = r?.fail && typeof r.fail === "object" ? r.fail : {};
   const success = r?.success && typeof r.success === "object" ? r.success : {};
+  const successRating = nullableNumber(success.rating ?? null);
   return {
     on: AREA_CHECK_ON.includes(r?.on) ? r.on : "turn",
     resilience: r?.resilience && AZEROTH.resiliences[r.resilience] ? r.resilience : null,
@@ -1246,12 +1394,21 @@ function cleanCheckRow(r) {
       lose: fail.lose === true,
       kinds: Array.isArray(fail.kinds) ? fail.kinds.filter(k => k && typeof k === "object").map(k => ({
         kinds: kindList(k.kinds), not: k.not === true, statuses: conditionList(k.statuses)
-      })) : []
+      })) : [],
+      // *It does not cross* (the B9a pass), named only where a row names it.
+      ...(fail.stop === true ? { stop: true } : {})
     },
     success: {
       statuses: conditionList(success.statuses),
-      until: AREA_UNTIL.includes(success.until) ? success.until : ""
-    }
+      until: AREA_UNTIL.includes(success.until) ? success.until : "",
+      // Ring of Fire's *on a success it crosses and takes 5 Fire damage* (the B9a pass).
+      ...(successRating > 0 ? { rating: successRating, school: success.school && AZEROTH.schools[success.school] ? success.school : null } : {})
+    },
+    // **THE B9a PASS'S TWO** (the lead: *"Build the triggers"*), named only where a row
+    // names one, so every row stored before them keeps its exact shape: Frozen Rune's
+    // first entry, and the creatures named at the cast that a row spares.
+    ...(r?.first === true ? { first: true } : {}),
+    ...(r?.spares === "named" ? { spares: "named" } : {})
   };
 }
 
@@ -1272,7 +1429,13 @@ function cleanRemainsRow(r) {
     boonAgainst: conditionList(r?.boonAgainst),
     speed: signedNumber(r?.speed ?? null),
     healing: r?.healing === "half" ? "half" : "",
-    standFree: r?.standFree === true
+    standFree: r?.standFree === true,
+    // **THE LEGACY BRANCHES' TWO** (04's Burial Ground; doors 11 and 25), named only
+    // where a row names one, so every stored row before them keeps its exact shape:
+    // *a Boon on Resilience Tests* (`boon`, a Test kind) and *an attack against a
+    // Dying friendly target inside it adds no Death Step* (`noDeathStep`).
+    ...(testKind(r?.boon) ? { boon: testKind(r.boon) } : {}),
+    ...(r?.noDeathStep === true ? { noDeathStep: true } : {})
   };
 }
 

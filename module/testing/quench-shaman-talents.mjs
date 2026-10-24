@@ -22,9 +22,10 @@
  * Every document a test makes is deleted in `after`.
  */
 
-import { cleanup, drainAreaWork, giveTurn, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings } from "./fixtures.mjs";
+import { cleanup, drainAreaWork, giveTurn, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings, tokenDrawn, tokenData } from "./fixtures.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
+import { AZEROTH } from "../config.mjs";
 
 /** Wait for a condition, or say what was being waited for. */
 async function until(fn, what, ms = 15000) {
@@ -80,12 +81,12 @@ async function sceneWith(placements) {
   const data = [];
   for (const { actor, x, y, side = "friendly" } of placements) {
     await actor.update({ "prototypeToken.actorLink": true });
-    data.push((await actor.getTokenDocument({
+    data.push((await tokenData(actor, {
       x, y, disposition: CONST.TOKEN_DISPOSITIONS[side === "friendly" ? "FRIENDLY" : "HOSTILE"]
-    })).toObject());
+    })));
   }
   await scene.createEmbeddedDocuments("Token", data);
-  for (let i = 0; i < 60 && !placements.every(p => p.actor.getActiveTokens(true).length); i++) {
+  for (let i = 0; i < 60 && !placements.every(p => tokenDrawn(p.actor.getActiveTokens(true)[0])); i++) {
     await new Promise(r => setTimeout(r, 100));
   }
   await settle();
@@ -301,7 +302,9 @@ export function shamanTalentsBatch(context) {
       const ghoul = await makeNpc("Plagued Ghoul");
       const combat = await fightWith([shaman, ghoul]);
       const mine = await giveTurn(combat, shaman);
-      const lash = game.i18n.format("AZEROTH.Stormlash.Card", { n: 2 });
+      // 04: *add Nature damage equal to your rank*; the card names the type (B8b: the
+      // expectation was built without it and read "+2 undefined damage").
+      const lash = game.i18n.format("AZEROTH.Stormlash.Card", { n: 2, type: game.i18n.localize(AZEROTH.damageTypes.nature) });
       const first = await strike(shaman, { targets: [rowOf(ghoul)], budget: "none" });
       assert.include(textOf(first), lash, "the first hit carried no Stormlash");
       const second = await strike(shaman, { targets: [rowOf(ghoul)], budget: "none" });
@@ -521,6 +524,9 @@ export function shamanTalentsBatch(context) {
       const first = await allyNamed("ZZ ShT Cloud First");
       const near = await allyNamed("ZZ ShT Cloud Near");
       const far = await allyNamed("ZZ ShT Cloud Far");
+      // Out of a fight a friend is a fellow member of the Party (D-755), never a
+      // token's disposition (B8b); the far one too, so only the 20 feet keep it out.
+      for (const a of [shaman, first, near, far]) await a.setParty(true);
       await sceneWith([{ actor: shaman, x: 2600, y: 1000 }, { actor: first, x: 1000, y: 1000 }, { actor: near, x: 1200, y: 1000 }, { actor: far, x: 2000, y: 1000 }]);
       assert.ok(await use(shaman, "Cloudburst"), "Cloudburst was refused");
       await until(() => shaman.getFlag("azeroth-rpg", "cloudburst"), "the promise laid");

@@ -28,6 +28,82 @@
  * (`ESCAPE_UNBUILT`) - a question for the lead, not a decision taken here.
  */
 
+/**
+ * **THE DC A POISONED CREATURE SHEDS ITS STACKS AGAINST, WHERE ITS LAYER NAMED ONE**
+ * (A1's Poisoned: *A Body Resilience Test at the end of each of your turns against
+ * the DC of the poison*; 04's Serpent Ward: *the DC to shed it is your Spell DC*; the
+ * Legacy branches' door 20). It rides the Poisoned effect's own flag, written with
+ * the condition through `effects/inflict.mjs`, and the turn-end prompt reads it. One
+ * effect carries one DC: **the highest any layer named** (the lead, 2026-10-22:
+ * *"Highest DC wins"*; `higherShedDc`), where it was the last layer's.
+ */
+export const SHED_DC_FLAG = "shedDc";
+
+/**
+ * **THE SHED DC A POISONED KEEPS AS ANOTHER LAYER LANDS** (the lead: *"Highest DC
+ * wins"*): the higher of what the effect carries and what the new layer names, its
+ * source with it; a layer naming none leaves the held one, and a tie keeps the held.
+ *
+ * @param {unknown} held  the effect's `SHED_DC_FLAG`
+ * @param {unknown} incoming  the landing layer's
+ * @returns {{dc: number, source: string}|null}
+ */
+export function higherShedDc(held, incoming) {
+  const a = cleanShedDc(held);
+  const b = cleanShedDc(incoming);
+  if (!a) return b;
+  if (!b) return a;
+  return b.dc > a.dc ? b : a;
+}
+
+/**
+ * **CUTTING GEAR** (the lead, 2026-10-22: *"Give constructs a trait or ability that
+ * allows them to end one Entangled condition per turn no action required."*; 14 §13's
+ * Tinker constructs: *Once each turn, the construct ends one Entangled condition on
+ * itself. This takes no action.*). **Keyed on the ability's NAME** (the lead's own
+ * reading of the ruling), so a GM's own construct carrying it frees itself too. Once a
+ * turn on the creature's own round's record (`turnMark`, D-779), through the queued
+ * combatant door (D-761); out of a fight there is no turn to count.
+ */
+export const CUTTING_GEAR = Object.freeze({ name: "Cutting Gear", condition: "entangled", mark: "cutting-gear" });
+
+/**
+ * Whether a creature's abilities name Cutting Gear (case and spacing forgiven).
+ *
+ * @param {Array<{name?: string}>} abilities  the block's `creatureAbilities`
+ */
+export function holdsCuttingGear(abilities = []) {
+  const want = CUTTING_GEAR.name.toLowerCase();
+  return (abilities ?? []).some(a => String(a?.name ?? "").replace(/\s+/g, " ").trim().replace(/\.$/, "").toLowerCase() === want);
+}
+
+/**
+ * Why Cutting Gear is refused, a `lang/en.json` key or null: no such ability, no
+ * Entangled to end, or used already this turn.
+ *
+ * @param {{holds?: boolean, entangled?: boolean, used?: boolean}} o
+ */
+export function cuttingGearRefusal({ holds = false, entangled = false, used = false } = {}) {
+  if (holds !== true) return "AZEROTH.CuttingGear.NotHeld";
+  if (entangled !== true) return "AZEROTH.CuttingGear.NotEntangled";
+  if (used === true) return "AZEROTH.CuttingGear.Spent";
+  return null;
+}
+
+/**
+ * A shed DC as an effect carries it, cleaned: `{dc, source}`, the DC a whole number
+ * above 0; null for anything else.
+ *
+ * @param {unknown} raw
+ * @returns {{dc: number, source: string}|null}
+ */
+export function cleanShedDc(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const dc = Math.trunc(Number(raw.dc));
+  if (!(dc > 0)) return null;
+  return { dc, source: typeof raw.source === "string" ? raw.source : "" };
+}
+
 /** The conditions the ruling's Test ends (*held or Stunned*). */
 export const ESCAPE_CONDITIONS = Object.freeze(["entangled", "stunned"]);
 
@@ -145,6 +221,56 @@ export function escapeRecord(read, { dc = null, talents = {}, caster = null, sou
     dc, banes: (Math.trunc(Number(read.banes)) || 0) + (Math.trunc(Number(talents?.banes)) || 0),
     failStun: talents?.failStun ?? null, talents: [...(talents?.by ?? [])], by: caster, source, cast
   });
+}
+
+/**
+ * **THE DCS A FEATURE'S ESCAPE MAY NAME** (the Legacy branches' door 19): the
+ * user's Spell DC (Bad Mojo, Shackle, Shadow Trap, The Vault Opens, Warden's Cage,
+ * the Net-o-Matic: *against your Spell DC*), or 10 + the Strength modifier +
+ * Proficiency (the lead's Warrior DC, door 16), for a class with no Spell DC.
+ */
+export const ESCAPE_DCS = Object.freeze(["spellDc", "str"]);
+
+/**
+ * **A FEATURE'S ESCAPE, AT THE RANK THE TALENT IS TAKEN** (door 19): the `escape`
+ * an `inflicts` entry of a talent's grant carries - `{on, resilience, dc, banes,
+ * minRank}` - with the Banes from `minRank` up (Bad Mojo's *At rank 2 that Test
+ * takes a Bane*, Shackle's *with a Bane at rank 2*), bound once by the feature
+ * sync, so the stamp holds the number. Null where the entry carries none.
+ *
+ * @param {{on?: string, resilience?: string, dc?: string, banes?: number, minRank?: number}|null} spec
+ * @param {number} [rank]
+ * @returns {{on: string|null, resilience: string|null, dc: string|null, banes: number}|null}
+ */
+export function boundFeatureEscape(spec, rank = 1) {
+  if (!spec || typeof spec !== "object") return null;
+  const r = Math.trunc(Number(rank)) || 1;
+  const banes = r >= (Number(spec.minRank) || 1) ? Math.max(0, Math.min(3, Math.trunc(Number(spec.banes)) || 0)) : 0;
+  return {
+    on: ESCAPE_ON.includes(spec.on) ? spec.on : null,
+    resilience: RESILIENCES.includes(spec.resilience) ? spec.resilience : null,
+    dc: ESCAPE_DCS.includes(spec.dc) ? spec.dc : null,
+    banes
+  };
+}
+
+/**
+ * **THE RECORD A FEATURE'S LANDED CONDITION CARRIES** (door 19): the stamped
+ * escape with its DC resolved at the Use - the Strength DC where the stamp names
+ * `str`, else the user's Spell DC (a creature's own DC, where the door hands that
+ * in) - and the user and the feature named, through `cleanEscape`. **The Strength DC
+ * only where it is named** (the B1 review): a user with no Spell DC records none, and
+ * the Test is then made at the table's DC rather than at the Warrior's. Null where the
+ * stamp names no escape the ruling builds (*held or Stunned*).
+ *
+ * @param {{on?: string|null, resilience?: string|null, dc?: string|null, banes?: number}|null} stamp
+ * @param {{condition?: string, spellDc?: number|null, strDc?: number|null, caster?: string|null, source?: string, cast?: string|null}} o
+ * @returns {object|null}
+ */
+export function featureEscapeRecord(stamp, { condition = null, spellDc = null, strDc = null, caster = null, source = "", cast = null } = {}) {
+  if (!stamp?.on || !stamp?.resilience) return null;
+  const dc = stamp.dc === "str" ? strDc : spellDc;
+  return cleanEscape({ condition, on: stamp.on, resilience: stamp.resilience, dc, banes: stamp.banes ?? 0, failStun: null, talents: [], by: caster, source, cast });
 }
 
 /**

@@ -121,6 +121,41 @@ export const REACTIONS = Object.freeze({
 export const DEFENSIVE = Object.freeze(["block", "parry"]);
 
 /* -------------------------------------------- */
+/*  No Reaction against you (door 14)            */
+/* -------------------------------------------- */
+
+/**
+ * **NO CREATURE MAY TAKE A REACTION AGAINST YOU** (the Legacy branches' door 14:
+ * 04's Wind Walk, *No creature may take a Reaction against you until your next
+ * turn*, and Bladestorm). The flag a creature's own Active Effect carries for the
+ * span - `{source}`, the talent that laid it - laid by the Use (`onUse.unanswered`)
+ * and expired by core (D-628). Read wherever a Reaction answers somebody: a
+ * Parry or a Block against its blow, an Opportunity Attack against its move,
+ * and a blow moved onto a holder (Guardian's `moves`).
+ */
+export const UNANSWERED_FLAG = "unanswered";
+
+/** The words a Reaction refused against such a creature is said in. */
+export const UNANSWERED_REFUSAL = "AZEROTH.Reaction.Refuse.Unanswered";
+
+/**
+ * What makes this creature unanswerable now: the sources its ACTIVE effects'
+ * `UNANSWERED_FLAG`s name, sorted, once each - empty where nothing does.
+ *
+ * @param {Array<object>} flagsList  each ACTIVE effect's `flags["azeroth-rpg"]`
+ * @returns {string[]}
+ */
+export function unansweredBy(flagsList = []) {
+  const out = new Set();
+  for (const flags of flagsList ?? []) {
+    const raw = flags?.[UNANSWERED_FLAG] ?? null;
+    if (!raw) continue;
+    out.add(typeof raw?.source === "string" && raw.source ? raw.source : "");
+  }
+  return [...out].sort();
+}
+
+/* -------------------------------------------- */
 /*  05's Half-Actions, and what module/ has      */
 /* -------------------------------------------- */
 
@@ -422,9 +457,18 @@ export function parryHolds(total, attackerTotal) {
  * @param {number} [o.reach]          the threatener's reach
  * @param {boolean} [o.disengaged]    the mover spent a Half-Action on Disengage
  * @param {boolean} [o.enemy]         06 says *an enemy*; an ally provokes nothing
+ * @param {boolean} [o.holds]         the threatener holds 04's Hold the Hall (the
+ *   Legacy branches' door 22): *An enemy within your reach that moves provokes an
+ *   Opportunity Attack from you, whether or not it leaves your reach*
+ * @param {number|null} [o.moving]    feet at the closest the mover stood to the
+ *   threatener WHILE it moved - every passed position but the last. MY READING,
+ *   for the lead: *an enemy within your reach that moves* is one that was inside
+ *   the reach and moved; one that walks in and stops has not moved within it.
+ *   05's Disengage (*Move up to your Speed without provoking Opportunity
+ *   Attacks*) still spares it.
  * @returns {{provoked: boolean, why: string}}
  */
-export function provokes({ before = null, after = null, reach = BASE_REACH, disengaged = false, enemy = true } = {}) {
+export function provokes({ before = null, after = null, reach = BASE_REACH, disengaged = false, enemy = true, holds = false, moving = null } = {}) {
   if (!enemy) return { provoked: false, why: "ally" };
   if (disengaged) return { provoked: false, why: "disengaged" };
   // `Number(null)` is 0 and 0 is finite, so a distance nothing measured would
@@ -433,6 +477,9 @@ export function provokes({ before = null, after = null, reach = BASE_REACH, dise
   const near = feet(before);
   const far = feet(after);
   if (near === null || far === null) return { provoked: false, why: "unmeasured" };
+  // **HOLD THE HALL** (door 22): a move made within the reach provokes, leaving or not.
+  const within = feet(moving);
+  if (holds === true && within !== null && within <= reach) return { provoked: true, why: "movedInReach" };
   if (near > reach) return { provoked: false, why: "neverInReach" };
   if (far <= reach) return { provoked: false, why: "stayedInReach" };
   return { provoked: true, why: "leftReach" };
@@ -531,20 +578,40 @@ export function readyEntry({ trigger = "", action = "", round = null, turn = nul
  * @param {Record<string, boolean>} [state.free]  a Reaction of this key left
  *   this round that costs no Reaction (04's Bladeturn for a Parry, Deflection
  *   for a Block; D-772), so a spent Reaction does not refuse it
+ * @param {boolean} [state.unanswered]  the creature the Reaction would answer
+ *   is one no creature may take a Reaction against (door 14: 04's Wind Walk,
+ *   Bladestorm) - `unansweredBy` of its effects is not empty
+ * @param {boolean} [state.lostToBlow]  the blow being answered took this
+ *   creature's Reaction (door 13: Bash, Concussive Shot): the Reaction that
+ *   answers it may be that one, so a spent Reaction does not refuse it
+ * @param {boolean} [state.spiritRealm]  the reactor walks the Spirit Realm (06 §10:
+ *   *You cannot touch the living world*; the Legacy branches' door 10) - Dying, or
+ *   by 04's The Crossing - and takes no Reaction in a fight or out of one
+ * @param {boolean} [state.noOpportunity]  the reactor is held from Opportunity Attacks
+ *   (07's Nature's Grasp: *... and unable to make Opportunity Attacks while it is held*;
+ *   the B9a pass) - `rules/struck-tests.mjs#barredFromOpportunity`
  * @returns {{ok: boolean, reason: string|null, with: string|null}}
  */
 export function canReact(key, {
   reactionsLeft = 1, inFight = true, alreadyReacted = false, meleeWeapons = [], shields = [],
-  attacks = [], leftReach = true, readied = null, classNames = [], pools = [], free = {}
+  attacks = [], leftReach = true, readied = null, classNames = [], pools = [], free = {},
+  unanswered = false, lostToBlow = false, spiritRealm = false, noOpportunity = false
 } = {}) {
   const row = REACTIONS[key] ?? null;
   if (!row) return { ok: false, reason: "AZEROTH.Reaction.Refuse.NoSuch", with: null };
   if (!row.built) return { ok: false, reason: "AZEROTH.Reaction.Refuse.NotBuilt", with: null };
+  // *No creature may take a Reaction against you* (door 14): before anything else
+  // is asked, because nothing the reactor holds would let it.
+  if (unanswered === true) return { ok: false, reason: UNANSWERED_REFUSAL, with: null };
+  // *You cannot touch the living world* (06 §10; door 10): a spirit answers no blow.
+  if (spiritRealm === true) return { ok: false, reason: "AZEROTH.Spirit.Refuse.Reaction", with: null };
+  // *Unable to make Opportunity Attacks while it is held* (07's Nature's Grasp; the B9a pass).
+  if (key === "opportunityAttack" && noOpportunity === true) return { ok: false, reason: "AZEROTH.Reaction.Refuse.Grasped", with: null };
   if (alreadyReacted) return { ok: false, reason: "AZEROTH.Reaction.Refuse.Already", with: null };
   // Out of a started fight there is no turn and no budget; 06 §6's one a round
   // is a rule about rounds, so it holds nobody outside one. A Reaction that
   // costs none this round (Bladeturn, Deflection) needs none left.
-  if (inFight && reactionsLeft < 1 && free?.[key] !== true) return { ok: false, reason: "AZEROTH.Reaction.Refuse.NoReaction", with: null };
+  if (inFight && reactionsLeft < 1 && free?.[key] !== true && lostToBlow !== true) return { ok: false, reason: "AZEROTH.Reaction.Refuse.NoReaction", with: null };
   // **WHAT IT COSTS, BEFORE WHAT IT IS MADE WITH** (06 §6, D-720). *A class
   // that builds Momentum, and 1 Momentum.* A Mage holding a longsword is
   // refused for the class rather than told to draw a weapon, because the

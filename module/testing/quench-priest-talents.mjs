@@ -21,7 +21,7 @@
  * Every document a test makes is deleted in `after`.
  */
 
-import { cleanup, drainAreaWork, giveTurn, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings } from "./fixtures.mjs";
+import { cleanup, drainAreaWork, giveTurn, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings, tokenDrawn, tokenData } from "./fixtures.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 import { castWithDialog } from "../applications/actions.mjs";
@@ -78,12 +78,12 @@ async function sceneWith(placements) {
   const data = [];
   for (const { actor, x, y, side = "friendly" } of placements) {
     await actor.update({ "prototypeToken.actorLink": true });
-    data.push((await actor.getTokenDocument({
+    data.push((await tokenData(actor, {
       x, y, disposition: CONST.TOKEN_DISPOSITIONS[side === "friendly" ? "FRIENDLY" : "HOSTILE"]
-    })).toObject());
+    })));
   }
   await scene.createEmbeddedDocuments("Token", data);
-  for (let i = 0; i < 60 && !placements.every(p => p.actor.getActiveTokens(true).length); i++) {
+  for (let i = 0; i < 60 && !placements.every(p => tokenDrawn(p.actor.getActiveTokens(true)[0])); i++) {
     await new Promise(r => setTimeout(r, 100));
   }
   await settle();
@@ -452,6 +452,9 @@ export function priestTalentsBatch(context) {
       const near = await makeCharacter({ name: "ZZ PrT Hymn Near", classes: [["Mage", 5]] });
       const far = await makeCharacter({ name: "ZZ PrT Hymn Far", classes: [["Mage", 5]] });
       await sceneWith([{ actor: priest, x: 1000, y: 1000 }, { actor: near, x: 1400, y: 1000 }, { actor: far, x: 2400, y: 1000 }]);
+      // Out of a fight an ally is a fellow member of the Party (D-755), never a token's
+      // disposition (B8b); the far one too, so only the 30 feet keep it out.
+      for (const a of [priest, near, far]) await a.setParty(true);
       for (const a of [priest, near, far]) await setPool(a, "mana", 0);
       const card = await use(priest, "Hymn of Hope");
       assert.ok(card, "Hymn of Hope was refused");
@@ -586,10 +589,12 @@ export function priestTalentsBatch(context) {
       await fallen.applyDamage(fallen.system.health.value + 5, { struck: true, attack: true, type: "shadow", by: priest });
       const card = await until(() => game.messages.contents.slice(count).find(m => m.flags?.["azeroth-rpg"]?.kind === "apparition"), "the apparition's card", 30000);
       made.push(card);
-      const names = card.flags["azeroth-rpg"].targets.map(t => t.name);
-      assert.include(names, "ZZ PrT Near");
-      assert.notInclude(names, "ZZ PrT Far", "an enemy 70 feet away was struck");
-      assert.notInclude(names, "ZZ PrT Fallen", "the fallen creature was struck again");
+      // By the actor: a target row carries its TOKEN's name, and the three tokens keep
+      // the pack's "Plagued Ghoul" whatever their actors were renamed (B8b).
+      const struck = card.flags["azeroth-rpg"].targets.map(t => t.actorId);
+      assert.include(struck, near.id, "the enemy 10 feet away was not struck");
+      assert.notInclude(struck, far.id, "an enemy 70 feet away was struck");
+      assert.notInclude(struck, fallen.id, "the fallen creature was struck again");
       assert.isTrue(card.flags["azeroth-rpg"].notAttack, "the apparition is an attack");
     });
 

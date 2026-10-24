@@ -12,7 +12,7 @@
  * measured and not assumed - that was the whole fault.
  */
 
-import { cleanup, made, makeCharacter, makeNpc, settle } from "./fixtures.mjs";
+import { cleanup, made, makeCharacter, makeNpc, settle, tokenDrawn, tokenData } from "./fixtures.mjs";
 import { attackWithDialog } from "../applications/actions.mjs";
 import { distanceBetween, prepareRoll } from "../applications/roll-dialog.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
@@ -31,12 +31,12 @@ async function sceneWith(placements) {
     // EVERY token core makes is HOSTILE by default (14.367's schema), so a
     // character and a ghoul sat on the same side and nothing was ever
     // Engaged. A test that means "an enemy" says which side it is on.
-    data.push((await actor.getTokenDocument({
+    data.push((await tokenData(actor, {
       x, y, disposition: CONST.TOKEN_DISPOSITIONS[side === "friendly" ? "FRIENDLY" : "HOSTILE"]
-    })).toObject());
+    })));
   }
   await scene.createEmbeddedDocuments("Token", data);
-  for (let i = 0; i < 60 && !placements.every(p => p.actor.getActiveTokens(true).length); i++) {
+  for (let i = 0; i < 60 && !placements.every(p => tokenDrawn(p.actor.getActiveTokens(true)[0])); i++) {
     await new Promise(r => setTimeout(r, 100));
   }
   await settle();

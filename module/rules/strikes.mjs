@@ -318,7 +318,9 @@ export const WEAPON_WORDS = Object.freeze([
  * the body words, which is what lets the two parts beat *claw* and *rifle*.
  */
 export const CREATURE_HEADS = Object.freeze([
-  ["firebolt", ["firebolt", "searing flame", "lava lash"]],
+  // A dragonling's *Flame jet* (D-781) is a jet of fire at range, as a Searing
+  // Totem's flame is.
+  ["firebolt", ["firebolt", "searing flame", "lava lash", "flame jet"]],
   ["shard", ["nether shard"]],
   ["shock", ["shock", "thunderstrike"]],
   ["saw", ["saw arm", "thresher arm"]],
@@ -344,7 +346,8 @@ export const CREATURE_HEADS = Object.freeze([
  */
 export const CREATURE_WORDS = Object.freeze([
   ["pincer", ["pincer", "pincers"]],
-  ["bite", ["bite", "bites", "jaws", "beak", "fangs"]],
+  // A *Peck* is a beak's strike (the Gnomish Battle Chicken, D-781).
+  ["bite", ["bite", "bites", "jaws", "beak", "fangs", "peck"]],
   ["claw", ["claw", "claws", "foreclaws", "talons"]],
   ["sting", ["sting", "stinger"]],
   ["shield", ["shield"]],
@@ -365,9 +368,9 @@ export const CREATURE_WORDS = Object.freeze([
  *   warhammer.
  * - **A bare body word whose owner the word cannot tell** (D-725). 14's only
  *   bare *Fists* is the Lordaeron Refugee's - a person's hands, so unarmed -
- *   and its only bare *Kick* is the Trained Mount's, which is hooves, so a
- *   slam. Appendix B runs both the other way. *Stone fists* and a person's
- *   *Roundhouse kick* still read by their words.
+ *   and a bare *Kick* is the Trained Mount's hooves or the Clockwork Gnome's
+ *   wind-up leg (D-781), a slam either way. Appendix B runs both the other way.
+ *   *Stone fists* and a person's *Roundhouse kick* still read by their words.
  */
 export const CREATURE_NAMED = Object.freeze({
   "fists": "unarmed",

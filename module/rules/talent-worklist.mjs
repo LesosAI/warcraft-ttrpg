@@ -130,3 +130,38 @@ export const WORKLIST_CEILING = Object.freeze({
   // temporary Health. 4 to 2 (D-779): Undying Rage and Bracing.
   warrior: 2
 });
+
+/**
+ * **THE LEGACY BRANCHES' ROWS, PENDING ON PHASE B6** (D-781; the plan's phase 5).
+ *
+ * The seven Legacy branches reached the talent pack in phase B5 - 84 talents,
+ * twelve to a branch - before their `rules/talent-effects.mjs` rows exist, and
+ * every test that holds a class's talents to their rows would go red on all 84.
+ * They are gated HERE and nowhere else, by class and then by branch in 04's own
+ * row order: a pending talent is held to having NO row (it is named, never
+ * skipped), and every other talent to having one. `talent-effects.test.mjs`
+ * holds this list to the pack both ways - every Legacy talent is pending or has
+ * a row, never both - so phase B6 empties it one row at a time, striking each
+ * identifier as its row lands, and the list ends empty.
+ *
+ * Data, not law: nothing in the system imports this file.
+ */
+export const LEGACY_ROWS_PENDING = Object.freeze({
+  // The Rogue's Warden and Tinker and the Shaman's Shadow Hunter and Spirit Walker:
+  // all forty-eight rows written in phase B6 (B6b), each struck here as it landed.
+  // The Warrior's Blademaster and Mountain King and the Ranger's Dark Ranger: all
+  // thirty-six written in phase B6 (B6a), each struck here as it landed. The list is
+  // EMPTY: every Legacy talent has its row, and the test holding it to the pack both
+  // ways now holds every Legacy talent to having one.
+});
+
+/** Every pending identifier of one class, flat, in the list's order. */
+export function pendingLegacyRows(className) {
+  const byBranch = LEGACY_ROWS_PENDING[String(className ?? "").toLowerCase()] ?? {};
+  return Object.values(byBranch).flat();
+}
+
+/** Whether a talent's row is still pending on phase B6. */
+export function legacyRowPending(className, identifier) {
+  return pendingLegacyRows(className).includes(identifier);
+}

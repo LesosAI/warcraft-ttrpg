@@ -55,6 +55,13 @@ export function riderDoes(line) {
       : game.i18n.format("AZEROTH.Rider.Does.ConditionBare", { condition: conditionLabel(does.condition.id) }));
   }
   if (does.prone) parts.push(game.i18n.localize("AZEROTH.Rider.Does.Prone"));
+  // A second condition on its own span (04's Shadow Strike's Slowed; the Legacy branches' B6).
+  for (const a of does.also ?? []) {
+    const words = a.value !== null && a.value !== undefined
+      ? game.i18n.format("AZEROTH.Rider.Does.Condition", { condition: conditionLabel(a.id), value: a.value })
+      : game.i18n.format("AZEROTH.Rider.Does.ConditionBare", { condition: conditionLabel(a.id) });
+    parts.push(a.until === "strikerTurnStart" ? `${words} ${game.i18n.localize("AZEROTH.Rider.Does.UntilYourTurn")}` : words);
+  }
   if (does.damage) parts.push(game.i18n.format("AZEROTH.Rider.Does.Damage", { n: does.damage }));
   // The Warrior's (D-772): a shield's own Rating, Health back on a hit, a target
   // that recovers none, a condition that waits on an SL, and a spend made only
@@ -74,9 +81,20 @@ export function riderDoes(line) {
   if (does.loseReaction) parts.push(game.i18n.localize("AZEROTH.Rider.Does.LoseReaction"));
   if (does.noCasting) parts.push(game.i18n.localize("AZEROTH.Rider.Does.NoCasting"));
   if (does.until === "strikerTurnStart") parts.push(game.i18n.localize("AZEROTH.Rider.Does.UntilYourTurn"));
+  // Storm Bolt's Stun, on the creature's own clock (the Legacy branches' B6).
+  if (does.until === "endOfNextTurn") parts.push(game.i18n.localize("AZEROTH.Rider.Does.UntilTheirTurnEnd"));
   if (line.needs === "opening") parts.push(game.i18n.localize("AZEROTH.Rider.Does.NeedsOpening"));
   // The Shaman's (D-774): a Bane on the target's next Test of a kind.
   if (does.bane?.banes) parts.push(game.i18n.format("AZEROTH.Rider.Does.Bane", { n: does.bane.banes, kind: game.i18n.localize(AZEROTH.testKinds?.[does.bane.kind] ?? does.bane.kind) }));
+  // The Legacy branches' (B1): a shot that spends no ammunition (Black Arrow), the
+  // throw the rider makes possible (Storm Bolt's hammer or mace), and whose talent
+  // made it free against this target (Cursed Prey's Jinx).
+  if (line.ammo === false) parts.push(game.i18n.localize("AZEROTH.Rider.Does.NoAmmo"));
+  if (line.throwAs) {
+    const types = (line.throwAs.types ?? []).map(t => game.i18n.localize(AZEROTH.weaponTypes?.[t] ?? t)).join(" / ");
+    parts.push(game.i18n.format("AZEROTH.Rider.Does.ThrowAs", { types, feet: line.throwAs.feet ?? 0 }));
+  }
+  if (line.freeBy) parts.push(game.i18n.format("AZEROTH.Rider.Does.FreeBy", { talent: line.freeBy }));
   return parts.join(" · ");
 }
 
@@ -149,7 +167,13 @@ export function riderCardText(paid, outcome, { hit = false, inFight = false, lan
         : game.i18n.format("AZEROTH.Rider.Card.ConditionBare", { condition: conditionLabel(outcome.condition.id) }));
     }
     if (outcome.prone) parts.push(game.i18n.localize("AZEROTH.Rider.Card.Prone"));
-    if (outcome.condition || outcome.prone) parts.push(game.i18n.localize("AZEROTH.Rider.Card.NoTarget"));
+    // A second condition on its own span (phase B6), said as the first is.
+    for (const a of outcome.also ?? []) {
+      parts.push(a.value !== null && a.value !== undefined
+        ? game.i18n.format("AZEROTH.Rider.Card.Condition", { condition: conditionLabel(a.id), value: a.value })
+        : game.i18n.format("AZEROTH.Rider.Card.ConditionBare", { condition: conditionLabel(a.id) }));
+    }
+    if (outcome.condition || outcome.prone || (outcome.also ?? []).length) parts.push(game.i18n.localize("AZEROTH.Rider.Card.NoTarget"));
   }
   if (outcome.damage) parts.push(game.i18n.format("AZEROTH.Rider.Card.Damage", { n: outcome.damage }));
   return parts.join(" ");

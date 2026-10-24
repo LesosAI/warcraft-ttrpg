@@ -27,7 +27,11 @@
  */
 
 export class RecordingPlayer {
-  /** Every cue played, newest last: `{id, steps, at}`. */
+  /**
+   * Every cue played, newest last: `{id, steps, record, at}`. `record` is what the
+   * law planned it from (the Legacy branches' door 2: one feature card plays a
+   * `use` and an `arrive`, and a test asks for each by its trigger).
+   */
   cues = [];
 
   /** Every loop ever played, newest last: `{key, hash, loop, at}`. */
@@ -71,12 +75,12 @@ export class RecordingPlayer {
   }
 
   /** @see module/animation/player.mjs */
-  playCue(steps) {
+  playCue(steps, record = null) {
     const list = Array.isArray(steps) ? steps : [];
     if (!list.length) return null;
     this.#next += 1;
     const id = `cue${this.#next}`;
-    this.cues.push({ id, steps: list, at: Date.now() });
+    this.cues.push({ id, steps: list, record, at: Date.now() });
     return id;
   }
 
@@ -123,6 +127,22 @@ export class RecordingPlayer {
   /** The word the law last refused a cue with, or null. */
   lastSkip() {
     return this.skips.at(-1)?.skip ?? null;
+  }
+
+  /**
+   * The cues one trigger played, oldest first - and, where a feature's key is
+   * named, that feature's alone (the Legacy branches' door 2).
+   *
+   * @param {string} trigger
+   * @param {string|null} [identifier]
+   */
+  cuesFor(trigger, identifier = null) {
+    return this.cues.filter(c => c.record?.trigger === trigger && (identifier === null || c.record?.identifier === identifier));
+  }
+
+  /** The skips one trigger was refused with, oldest first. */
+  skipsFor(trigger) {
+    return this.skips.filter(s => s.record?.trigger === trigger).map(s => s.skip);
   }
 
   /** Whether one loop key is playing here. */

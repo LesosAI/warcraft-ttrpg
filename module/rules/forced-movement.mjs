@@ -45,10 +45,12 @@
  * - *takes 4 Shadow damage at the start of each of its turns and is pulled 10 feet
  *   toward the center* (Void Rift) - `on: "turn"`, toward the area's centre.
  *
- * Nether Rift's *At the start of each of your turns every creature within 30 feet
- * of the center makes a Body Resilience Test ... or is pulled 15 feet toward it* is
- * a Test at the CASTER's turn, which no area door makes (`rules/ticks.mjs`
- * `casterTurn`), and stays the table's (`FORCED_UNREAD`).
+ * - *At the start of each of your turns every creature within 30 feet of the center
+ *   makes a Body Resilience Test against your Spell DC or is pulled 15 feet toward
+ *   it* (Nether Rift; the B9a pass, the lead: *"Build the triggers"*) - `on:
+ *   "casterTurn"`, a Test at the start of the CASTER's turns whose failure is the
+ *   pull, made by every creature `within` the feet of the area's centre
+ *   (`rules/area-ticks.mjs#casterTurnCheck`, posted by the turn's own door).
  */
 
 /** Which way a forced move goes. */
@@ -57,8 +59,8 @@ export const FORCED_TOWARD = Object.freeze(["away", "toward"]);
 /** What a forced move is measured from: the caster's token, or the area's centre. */
 export const FORCED_FROM = Object.freeze(["caster", "area"]);
 
-/** When a spell's forced move lands. */
-export const FORCED_ON = Object.freeze(["fail", "enter", "turn"]);
+/** When a spell's forced move lands: a failed Resist, entering, a turn's start in the area, or the caster's own turn (Nether Rift). */
+export const FORCED_ON = Object.freeze(["fail", "enter", "turn", "casterTurn"]);
 
 /** Why a forced move moved nothing, each said in words (`AZEROTH.Forced.Refuse.*`). */
 export const FORCED_REFUSALS = Object.freeze({
@@ -130,6 +132,26 @@ export function forcedPlan({ centre, from, feet = 0, toward = "away", grid = {} 
   return steps.length ? { ok: true, reason: null, steps } : nothing("atPoint");
 }
 
+/*
+ * 04's None Escape's *pulled to a space you choose within 10 feet of you* is no straight
+ * pull (the lead, 2026-10-21: *"A space you choose"*): the user picks each creature's
+ * space and the step door displaces it there (`rules/steps.mjs#pullRefusal`,
+ * `effects/steps.mjs#judgePull`). The straight pull B1 read it as is gone.
+ */
+
+/**
+ * **WHETHER THIS USER LAID THE CONDITION A CREATURE CARRIES** (None Escape's *that
+ * you have Entangled*; door 24): the condition effect's `laidBy` names the user.
+ *
+ * @param {object|null} flags  the condition effect's `flags["azeroth-rpg"]`
+ * @param {string|null} userUuid
+ */
+export function laidByOne(flags, userUuid) {
+  if (!userUuid) return false;
+  const laid = flags?.laidBy;
+  return Array.isArray(laid) && laid.includes(userUuid);
+}
+
 /**
  * **THE CANDIDATE THE DOOR TAKES, OR WHY NONE** (the review of D-778): core's
  * displacement passes through walls, so a move is made only where the walls can be
@@ -186,16 +208,21 @@ export function readForced(effectText, fields = {}) {
   // Void Rift: *at the start of each of its turns and is pulled N feet toward the center*.
   m = /\bat the start of each of its turns and is pulled (\d+) feet toward the cent(?:er|re)\b/.exec(text);
   if (m) return { on: "turn", feet: Number(m[1]), toward: "toward", from: "area", sl: null, resilience: null };
+  // Nether Rift: *At the start of each of your turns every creature within 30 feet of the
+  // center makes a Body Resilience Test against your Spell DC or is pulled 15 feet toward
+  // it* - the CASTER's turns, every creature within the feet (the B9a pass).
+  m = /\bAt the start of each of your turns every creature within (\d+) feet of the cent(?:er|re) makes an? (Body|Reflex|Spirit) Resilience Test against your Spell DC or is pulled (\d+) feet toward it\b/.exec(text);
+  if (m) return { on: "casterTurn", feet: Number(m[3]), toward: "toward", from: "area", sl: null, resilience: m[2].toLowerCase(), within: Number(m[1]) };
   return null;
 }
 
 /**
  * **EVERY FORCED-MOVEMENT SENTENCE IN 07 THE READER DOES NOT TAKE**, by name, with
- * its reason - the census in `forced-movement.test.mjs` fails a new one.
+ * its reason - the census in `forced-movement.test.mjs` fails a new one. Empty since
+ * the B9a pass read Nether Rift's pull at the caster's turn (the lead: *"Build the
+ * triggers"*).
  */
-export const FORCED_UNREAD = Object.freeze({
-  "Nether Rift": "a Test at the start of the CASTER's turn, which no area door makes (`rules/ticks.mjs` casterTurn): the pull is the table's"
-});
+export const FORCED_UNREAD = Object.freeze({});
 
 /**
  * The feet a `fail` move covers at this cast: 07's own number, the SL's where the
@@ -223,12 +250,16 @@ export function cleanForced(raw) {
   if (!raw || typeof raw !== "object") return null;
   const feet = Math.max(0, Math.trunc(Number(raw.feet)) || 0);
   if (!(feet > 0)) return null;
+  const within = Math.max(0, Math.trunc(Number(raw.within)) || 0);
   return {
     on: FORCED_ON.includes(raw.on) ? raw.on : "fail",
     feet,
     toward: FORCED_TOWARD.includes(raw.toward) ? raw.toward : "away",
     from: FORCED_FROM.includes(raw.from) ? raw.from : "caster",
-    resilience: ["body", "reflex", "spirit"].includes(raw.resilience) ? raw.resilience : null
+    resilience: ["body", "reflex", "spirit"].includes(raw.resilience) ? raw.resilience : null,
+    // Who the caster's-turn Test reaches (Nether Rift's *within 30 feet of the center*;
+    // the B9a pass), carried only where a move names it.
+    ...(within > 0 ? { within } : {})
   };
 }
 

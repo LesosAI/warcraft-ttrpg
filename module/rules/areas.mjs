@@ -48,6 +48,15 @@ export { ORIGINS };
 const DISTANCE = /(\d+)\s*ft\b/i;
 
 /**
+ * **ONE SPACE ON THE GROUND** (07's Frozen Rune: *Target A point on the ground*, and
+ * *The first creature to enter the space*; the B9a pass): a circle half of 05's
+ * five-foot square across, centred on the space the caster picks
+ * (`canvas/place.mjs#placeItemArea` puts the point at that space's centre), so a
+ * creature entering the square enters it and one beside it does not.
+ */
+export const SPACE_RADIUS_FT = 2.5;
+
+/**
  * Read a spell's Target line into an area, or `null` where the spell has no
  * area at all.
  *
@@ -63,6 +72,9 @@ export function areaFor(target) {
   if (typeof target !== "string") return null;
   const text = target.trim();
   if (!text) return null;
+
+  // Frozen Rune's space (the B9a pass): the one Target line naming a point and no feet.
+  if (/^A point on the ground$/i.test(text)) return { shape: "circle", distanceFt: SPACE_RADIUS_FT, origin: ORIGINS.POINT, space: true };
 
   const distance = text.match(DISTANCE);
   if (!distance) return null;

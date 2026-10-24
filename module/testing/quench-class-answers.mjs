@@ -220,7 +220,10 @@ export function classAnswersBatch(context) {
       await warrior.applyDamage(health(warrior) + 5, { struck: true, attack: false });
       const held = await until(() => warrior.effects.find(e => e.getFlag("azeroth-rpg", UNDYING_RAGE.flag)), "the held rounds' effect");
       assert.equal(health(warrior), 1, "the warrior was not held at 1");
-      assert.equal(poolOf(warrior, "rage").value, 0, "the Rage was not spent");
+      // All the Rage spent to the hold, then 02 §7's 1 for the blow that reached Health:
+      // the order `quench-talent-roots.mjs` pins for Unkillable (D-768). Which comes first
+      // is the lead's call, raised by B8b - Unkillable rebuilt by its own blow saves again.
+      assert.equal(poolOf(warrior, "rage").value, 1, "the Rage was not spent");
       assert.equal(held.getFlag("azeroth-rpg", UNDYING_RAGE.flag).rounds, 3, "not one round per 2 Rage");
       await warrior.applyHealing(3, { from: warrior });
       await until(() => !warrior.effects.has(held.id), "the heal cancelling the fall");

@@ -86,8 +86,40 @@ export const SHAPE_KINDS = Object.freeze({
     feature: "Metamorphosis", choice: "greaterDemons",
     ferocity: false, barsMana: false, melds: true, requires: null,
     endsAt: Object.freeze(["short", "long"])
+  }),
+  // **04's GNOMISH BATTLE RIG** (the Tinker's capstone; the Legacy branches' B2):
+  // *You take its form in 14-BESTIARY until your next Short Rest or Long Rest, or
+  // until you leave it as a Half-Action. You use its Strength, Dexterity,
+  // Constitution, Defense, Armor Points, Speed, size and attacks, and your armor and
+  // weapons meld into it. You keep your own Health, Energy, Combo Points, Spell DC,
+  // gadgets and talents ... While you wear it, your constructs add your tier to their
+  // damage. If you are reduced to 0 Health in it, you leave it.* The physical half
+  // and the melding are the other shapes' own (D-769), so nothing new reads it but
+  // `entry` - ONE block, picked by no menu (`choice: null`) - and `boundDamage`,
+  // the constructs' tier (`rules/bound.mjs#boundEffects`). The block's Ejector Seat
+  // (*its pilot is thrown to a space within 20 feet and lands Prone*) is the rig's
+  // Health reaching 0, and the pilot keeps their own Health (the talent's words), so
+  // the leave at 0 Health is the rule and the throw is the table's (MY READING).
+  battlerig: Object.freeze({
+    feature: "Gnomish Battle Rig", choice: null,
+    ferocity: false, barsMana: false, melds: true, requires: null,
+    endsAt: Object.freeze(["short", "long", "zeroHealth"]),
+    entry: "Gnomish Battle Rig",
+    boundDamage: "tier"
   })
 });
+
+/**
+ * **THE ONE 14 BLOCK A SHAPE WITH NO MENU TAKES** (the Gnomish Battle Rig's
+ * `entry`), or null for a shape picked off a menu.
+ *
+ * @param {string|null} kind
+ * @returns {string|null}
+ */
+export function shapeEntryOf(kind) {
+  const entry = SHAPE_KINDS[kind]?.entry ?? null;
+  return typeof entry === "string" && entry ? entry : null;
+}
 
 /**
  * **WHY A SHAPE CANNOT BE TAKEN AT ALL**, asked before the chooser opens and

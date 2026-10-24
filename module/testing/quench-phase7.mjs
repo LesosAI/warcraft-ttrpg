@@ -5,7 +5,7 @@
  * names its decision.
  */
 
-import { cleanup, settle, give, made, makeCharacter, makeNpc, openSheet, cardOf, dialogFor, untilHook, PACK_FOR } from "./fixtures.mjs";
+import { cleanup, settle, give, giveTurn, made, makeCharacter, makeNpc, openSheet, cardOf, dialogFor, untilHook, PACK_FOR, tokenData } from "./fixtures.mjs";
 import { checkText } from "./geometry.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
@@ -684,7 +684,17 @@ export function automationBatch(context) {
       await until(() => featureNamed(rogue, "Opening"));
       const ghoul = await makeNpc("Plagued Ghoul");
       const combat = await fight([rogue, ghoul], { [ghoul.id]: "hostile" });
-      const card = await face(15, () => attack(rogue, { targets: [{ ...snapshotOf(ghoul), size: ghoul.system.size }] }));
+      // The Rogue's own turn: a Half-Action is spent on it (the lead: *"Refuse
+      // off-turn Half-Actions"*).
+      await giveTurn(combat, rogue);
+      // **WHETHER IT HAS ACTED IS THE SNAPSHOT'S** (D-773): the roll dialog writes it
+      // off the target's combatant (`roll-dialog.mjs#targetSnapshots`, `acted`), and
+      // `openingState` reads nothing else. This case's hand-made snapshot carried
+      // none, which reads as *not in a fight* - so no target was ever under the
+      // Opening and the trade was never offered.
+      const acted = combat.getCombatantsByActor(ghoul)[0]?.getFlag("azeroth-rpg", "acted") === true;
+      assert.isFalse(acted, "the ghoul has acted already, so this case cannot show the Opening");
+      const card = await face(15, () => attack(rogue, { targets: [{ ...snapshotOf(ghoul), size: ghoul.system.size, acted }] }));
       assert.ok(card);
       const el = document.createElement("div");
       el.innerHTML = card.content;
@@ -713,13 +723,16 @@ export function automationBatch(context) {
       await paladin.update({ "prototypeToken.actorLink": true });
       await ally.update({ "prototypeToken.actorLink": true });
       await scene.createEmbeddedDocuments("Token", [
-        (await paladin.getTokenDocument({ x: 500, y: 500 })).toObject(),
-        (await ally.getTokenDocument({ x: 700, y: 500 })).toObject()
+        (await tokenData(paladin, { x: 500, y: 500 })),
+        (await tokenData(ally, { x: 700, y: 500 }))
       ]);
       for (let i = 0; i < 60 && !(paladin.getActiveTokens(true).length && ally.getActiveTokens(true).length); i++) await new Promise(r => setTimeout(r, 100));
       assert.isAtLeast(paladin.getActiveTokens(true).length, 1, "the Paladin's token never drew");
       await settle();
       const combat = await fight([warrior, paladin, ally], { [warrior.id]: "hostile" });
+      // The hostile Warrior's own turn: the friendly side leads a tie, and a Half-Action is
+      // spent on the creature's own turn (the lead: *"Refuse off-turn Half-Actions"*).
+      await giveTurn(combat, warrior);
       // The Warrior's card struck the ally: below half, Killing Blow pays 6 Rage.
       const snap = { ...snapshotOf(ally), size: ally.system.size };
       const card = await face(20, () => attack(warrior, { targets: [snap] }));

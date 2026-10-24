@@ -487,13 +487,25 @@ export function checkOverlap(root, { ignore = [] } = {}) {
   const view = viewOf(root);
   const leaves = leafText(root).filter(el => !matchesAny(el, ignore));
   const raw = leaves.map(rectOf);
-  const rects = leaves.map((el, i) => (unmeasurable(el, raw[i]) ? null : paintedRect(el, raw[i], view)));
+  // **A WORD THAT WRAPS IS TWO BOXES** (B8b). The bounding rect of an inline leaf
+  // broken across two lines runs from where its first line starts to where its
+  // second ends - the width of the paragraph - so a bold *Loose Bones* wrapped at
+  // the line's end "overprinted" the bold *Holy* earlier on the same line on the
+  // Risen Skeleton's Traits tab, which the reader sees cleanly set. Each line box
+  // (`getClientRects`) is painted and compared on its own; a block leaf has one.
+  const rects = leaves.map((el, i) => {
+    if (unmeasurable(el, raw[i])) return null;
+    const lines = [...el.getClientRects()].map(r => ({ left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }))
+      .filter(r => !hidden(r));
+    const parts = (lines.length ? lines : [raw[i]]).map(r => paintedRect(el, r, view)).filter(Boolean);
+    return parts.length ? parts : null;
+  });
   for (let i = 0; i < leaves.length; i++) {
     if (!rects[i]) continue;
     for (let j = i + 1; j < leaves.length; j++) {
       if (!rects[j]) continue;
       if (leaves[i].contains(leaves[j]) || leaves[j].contains(leaves[i])) continue;
-      if (overlaps(rects[i], rects[j], 2)) {
+      if (rects[i].some(a => rects[j].some(b => overlaps(a, b, 2)))) {
         findings.push({
           check: "overlap",
           kind: "overlap",

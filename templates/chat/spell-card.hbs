@@ -115,12 +115,19 @@
           above this block, in words, for every reader. A failed Casting Test
           draws none of it: there is nothing to resist (the lead, 2026-09-26). --}}
     <div class="azeroth-card-resists">
+      {{#if testGate}}<p class="azeroth-note azeroth-card-note">{{testGate}}</p>{{/if}}
       {{#each resistRows}}
+      {{#if this.gated}}
+      {{!-- Not this creature's Test (the B9a pass): Holy Wrath's living target, Earth
+            Shock's target holding no Sustain. Said to every reader, never a button. --}}
+      <p class="azeroth-note azeroth-card-note">{{this.gated}}</p>
+      {{else}}
       <div class="azeroth-card-actions" data-resist-owner="{{this.actorUuid}}" data-resist-key="{{this.key}}">
         <button type="button" data-action="resistTest" data-purpose="spell" data-target-index="{{this.index}}" data-resilience="{{this.resilience}}" data-dc="{{this.dc}}">
           {{localize "AZEROTH.Card.ResistFor" name=this.name resilience=(localize this.label) dc=(azerothDash this.dc)}}
         </button>
       </div>
+      {{/if}}
       {{else}}
       <div class="azeroth-card-actions">
         <button type="button" data-action="resistTest" data-purpose="spell" data-resilience="{{resist.key}}" data-dc="{{resist.dc}}">

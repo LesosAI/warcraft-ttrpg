@@ -40,11 +40,15 @@ import { laidBaneFlags, laidBoonFlags } from "../../effects/banes.mjs";
 // The Warrior's and the Paladin's kinds read on the model (D-772): Unyielding,
 // the schools named at a Long Rest, and a heal Mortal Strike blocks.
 import { PLATE_FLAG, plateWards, steadfastFor } from "../../rules/class-talents.mjs";
+// Armor a talent lets the class wear, and Encumbering's Speed given back (the Legacy branches' door 23).
+import { armorAccessFor } from "../../rules/class-talents.mjs";
 // 04's Frozen Core (D-775): a damage type a talent makes the character Immune to.
 import { damageImmunitiesFor } from "../../rules/class-talents.mjs";
 import { healingBlockedBy } from "../../rules/no-healing.mjs";
 // What an ally's aura lays on this character (D-755).
 import { auraBaneRows, auraBoonRows, auraHalvesHealing, auraStandsFree, emptySchoolArmor } from "../../rules/auras.mjs";
+// A condition a creature cannot be for a span (04's Unfettered; the Legacy branches' door 25).
+import { immunitiesFrom } from "../../rules/legacy-uses.mjs";
 import { SOURCE_MIGRATIONS } from "../../migrations/index.mjs";
 
 const fields = foundry.data.fields;
@@ -463,11 +467,16 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // **AND WHAT A TALENT REFUSES** (04's Unyielding: *you are immune to the
     // Prone condition*; D-772): the door `toggleStatusEffect` already refuses at.
     const steadfast = steadfastFor(talentRows);
+    // **AND WHAT A USE REFUSES FOR A SPAN** (04's Unfettered: *you cannot be **Slowed**
+    // until your next turn*; the Legacy branches' door 25): the conditions an active
+    // effect's `immuneTo` names, which ends with the effect.
+    const spanImmune = immunitiesFrom((this.parent?.effects ?? []).filter(e => e.active !== false && e.disabled !== true).map(e => e.flags?.["azeroth-rpg"] ?? {}));
     this.conditionImmunities = [...new Set([
       ...(this.conditionImmunities ?? []),
       ...rungs.immune,
       ...signature.conditionImmunities,
-      ...steadfast.immune
+      ...steadfast.immune,
+      ...spanImmune
     ])];
     this.damageRatingBonus = rungs.damageBonus;
     // **WHAT ADDS TO THE DAMAGE, BY LANE AND BY TYPE** (04, D-711 phase 2).
@@ -600,7 +609,10 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
         armorSpeed: effects.speed,
         encumbering: effects.encumbering === true,
         grants: grantsOn(suit, bearer),
-        load: this.load
+        load: this.load,
+        // 04's Warden's Mail at rank 2 (door 23): the Encumbering trait's Speed back.
+        waivesEncumbering: armorAccessFor(talentRows).waivesEncumbering,
+        weaponSpeed: wornWeapons.speed ?? 0
       });
     // Undeath's Speed cost, the track's "in total" (10 §6).
     if (rungs.speed) this.speedParts.push({ key: "corruption", value: rungs.speed });

@@ -20,7 +20,7 @@
  * Every document a test makes is deleted in `after`.
  */
 
-import { cleanup, drainAreaWork, give, giveTurn, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings } from "./fixtures.mjs";
+import { cleanup, drainAreaWork, give, giveTurn, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings, tokenDrawn, tokenData } from "./fixtures.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 import { attackWithDialog } from "../applications/actions.mjs";
@@ -78,12 +78,12 @@ async function sceneWith(placements, { width = 6000, height = 2000 } = {}) {
   const data = [];
   for (const { actor, x, y, side = "friendly" } of placements) {
     await actor.update({ "prototypeToken.actorLink": true });
-    data.push((await actor.getTokenDocument({
+    data.push((await tokenData(actor, {
       x, y, disposition: CONST.TOKEN_DISPOSITIONS[side === "friendly" ? "FRIENDLY" : "HOSTILE"]
-    })).toObject());
+    })));
   }
   await scene.createEmbeddedDocuments("Token", data);
-  for (let i = 0; i < 60 && !placements.every(p => p.actor.getActiveTokens(true).length); i++) {
+  for (let i = 0; i < 60 && !placements.every(p => tokenDrawn(p.actor.getActiveTokens(true)[0])); i++) {
     await new Promise(r => setTimeout(r, 100));
   }
   await settle();
@@ -135,6 +135,16 @@ async function setPool(actor, name, value) {
   const pool = poolOf(actor, name);
   await actor.updatePool({ itemId: pool.itemId, kind: pool.kind, value });
   await until(() => poolOf(actor, name).value === value, `${value} ${name}`);
+}
+
+/**
+ * Fill a pool to what it holds, and say how much that is: 02 makes Focus a pool of 6, and
+ * the batch had filled it to 10, which the pool's own cap refused (B8b).
+ */
+async function fill(actor, name) {
+  const max = poolOf(actor, name)?.max ?? 0;
+  await setPool(actor, name, max);
+  return max;
 }
 
 /** One attack straight through the workflow, the die pinned. */
@@ -200,9 +210,10 @@ export function rangerTalentsBatch(context) {
     it("STEADY AIM: an attack made with the dialog's Steady line ticked returns the rank in Focus", async function () {
       this.timeout(180000);
       const ranger = await rangerWith("ZZ RT Steady", { weapons: ["Shortbow"], ranks: { "Steady Aim": 2 } });
-      await setPool(ranger, "focus", 5);
+      const full = poolOf(ranger, "focus").max;
+      await setPool(ranger, "focus", full - 2);
       const card = await strike(ranger, { chosen: ["steady"], boons: 1 });
-      await until(() => poolOf(ranger, "focus").value === 7, "2 Focus back");
+      await until(() => poolOf(ranger, "focus").value === full, "2 Focus back");
       assert.include(labels(card), "Steady Aim", "the card does not name the talent");
     });
 
@@ -244,9 +255,9 @@ export function rangerTalentsBatch(context) {
       this.timeout(180000);
       const ranger = await rangerWith("ZZ RT Piercing", { weapons: ["Shortbow"], ranks: { "Piercing Shot": 3 } });
       const ghoul = await makeNpc("Plagued Ghoul");
-      await setPool(ranger, "focus", 10);
+      const full = await fill(ranger, "focus");
       const card = await strike(ranger, { targets: [rowOf(ghoul, { apByLocation: { body: 3, head: 3, limb: 3 } })], riders: ["piercing-shot"] });
-      assert.equal(poolOf(ranger, "focus").value, 7, "3 Focus not paid");
+      assert.equal(poolOf(ranger, "focus").value, full - 3, "3 Focus not paid");
       assert.include(formulas(card), game.i18n.format("AZEROTH.NextAttack.PierceRow", { n: 3 }), "the Pierce is not named");
       assert.equal(card.flags["azeroth-rpg"].damage.damage, card.flags["azeroth-rpg"].damageByTarget[0].damage);
     });
@@ -256,16 +267,16 @@ export function rangerTalentsBatch(context) {
       const ranger = await rangerWith("ZZ RT Barrage", { weapons: ["Shortbow"], ranks: { Barrage: 1 } });
       const ghouls = [];
       for (let i = 0; i < 5; i++) ghouls.push(await makeNpc("Plagued Ghoul"));
-      await setPool(ranger, "focus", 10);
+      const full = await fill(ranger, "focus");
       const said = await warnings(async () => { assert.isNull(await use(ranger, "Barrage", { targets: ghouls.map(g => rowOf(g)) })); });
       assert.include(said, game.i18n.format("AZEROTH.Barrage.TooMany", { name: "Barrage", n: 5, max: 4 }));
-      assert.equal(poolOf(ranger, "focus").value, 10, "a refused Barrage spent Focus");
+      assert.equal(poolOf(ranger, "focus").value, full, "a refused Barrage spent Focus");
       await talentNamed(ranger, "Chimaera Shot").update({ "system.taken": 1 });
       await until(() => talentNamed(ranger, "Chimaera Shot").system.taken === 1, "Chimaera Shot taken");
       const card = await use(ranger, "Barrage", { targets: ghouls.map(g => rowOf(g)) });
       assert.ok(card, "five targets were refused under Chimaera Shot");
       assert.equal(card.flags["azeroth-rpg"].area?.distanceFt, 15, "the circle did not widen to 15 feet");
-      await until(() => poolOf(ranger, "focus").value === 10 - 4 + 2, "the 2 Focus back for more than four");
+      await until(() => poolOf(ranger, "focus").value === full - 4 + 2, "the 2 Focus back for more than four");
       assert.ok(parsed(card).querySelector('[data-action="attackFromCard"][data-budget="none"]'), "the card's Attack charges the budget again");
     });
 
@@ -290,19 +301,19 @@ export function rangerTalentsBatch(context) {
       const ghoul = await makeNpc("Plagued Ghoul");
       const combat = await fightWith([ranger, ghoul]);
       await giveTurn(combat, ranger);
-      await setPool(ranger, "focus", 10);
+      await fill(ranger, "focus");
       await strike(ranger, { targets: [rowOf(ghoul)], riders: ["concussive-shot"] });
       const slowed = await until(() => ghoul.effects.find(e => e.statuses?.has("slowed")), "Slowed on the ghoul");
       assert.equal(slowed.duration?.expiry, "turnStart");
       assert.equal(slowed.start?.combatant, combat.getCombatantsByActor(ranger)[0].id, "not the Ranger's clock");
       const theirs = combat.getCombatantsByActor(ghoul)[0];
-      await until(() => theirs.budget?.reaction === 0, "the ghoul's Reaction gone");
+      await until(() => theirs.budget?.reactions === 0, "the ghoul's Reaction gone");
     });
 
     it("TRUESHOT: the rider hits without a roll at SL 3 at rank 2, whatever the die", async function () {
       this.timeout(180000);
       const ranger = await rangerWith("ZZ RT Trueshot", { weapons: ["Shortbow"], ranks: { "Aimed Volley": 1, Trueshot: 2 } });
-      await setPool(ranger, "focus", 10);
+      await fill(ranger, "focus");
       const card = await strike(ranger, { face: 1, dc: 30, riders: ["trueshot"] });
       assert.isTrue(card.rolls[0].outcome.success, "a natural 1 missed under Trueshot");
       assert.equal(card.rolls[0].outcome.sl, 3);
@@ -317,6 +328,9 @@ export function rangerTalentsBatch(context) {
       const mine = await giveTurn(combat, ranger);
       const card = await use(ranger, "Rapid Fire");
       assert.ok(card, "Rapid Fire was refused");
+      // *four attacks against one target per rank*: the allowance the feature's stamp
+      // carries now (B8b: `featureStamp` never wrote `attacks`, and the card allowed one).
+      assert.equal(card.flags["azeroth-rpg"].attacks?.allowed, 4, "the card does not allow rank 1's four attacks");
       const halves = mine.budget.halfActions;
       const button = parsed(card).querySelector('[data-action="attackFromCard"]');
       assert.equal(button?.dataset.budget, "none", "the Attack button charges the budget");
@@ -386,7 +400,7 @@ export function rangerTalentsBatch(context) {
       this.timeout(240000);
       const ranger = await rangerWith("ZZ RT Mend", { ranks: { "Hardy Companion": 1, "Mend Pet": 2 } });
       const wolf = await wolfFor(ranger);
-      await setPool(ranger, "focus", 10);
+      await fill(ranger, "focus");
       await wolf.update({ "system.health.value": 1 });
       await ranger.update({ "system.health.value": Math.max(1, ranger.system.health.max - 5) });
       const mine = ranger.system.health.value;
@@ -416,7 +430,10 @@ export function rangerTalentsBatch(context) {
       const ranger = await rangerWith("ZZ RT Intimidation", { level: 13, ranks: { Intimidation: 2 } });
       const wolf = await wolfFor(ranger);
       const ghoul = await makeNpc("Plagued Ghoul");
-      await fightWith([ranger, wolf, ghoul]);
+      const combat = await fightWith([ranger, wolf, ghoul]);
+      // The wolf's own turn: its blow spends a Half-Action (the lead: *"Refuse off-turn
+      // Half-Actions"*).
+      await giveTurn(combat, wolf);
       const card = await strike(wolf, { targets: [rowOf(ghoul)], ranged: false });
       const button = parsed(card).querySelector('[data-action="resistTest"][data-purpose="intimidation"]');
       assert.ok(button, "no Intimidation Test on the card");
@@ -465,7 +482,7 @@ export function rangerTalentsBatch(context) {
       const ghoul = await makeNpc("Plagued Ghoul");
       const combat = await fightWith([ranger, ghoul]);
       await giveTurn(combat, ranger);
-      await setPool(ranger, "focus", 10);
+      await fill(ranger, "focus");
       const speed = ghoul.system.speed;
       await strike(ranger, { targets: [rowOf(ghoul)], riders: ["wing-clip"] });
       await until(() => ghoul.system.speed === Math.max(0, speed - 20), "20 feet off the ghoul's Speed");
@@ -479,7 +496,7 @@ export function rangerTalentsBatch(context) {
       const ranger = await rangerWith("ZZ RT Deterrence", { ranks: { Deterrence: 2 } });
       const ghoul = await makeNpc("Plagued Ghoul");
       await fightWith([ranger, ghoul]);
-      await setPool(ranger, "focus", 10);
+      await fill(ranger, "focus");
       const card = await use(ranger, "Deterrence");
       assert.ok(card, "Deterrence was refused");
       await until(() => ranger.effects.find(e => e.getFlag("azeroth-rpg", "deterred")), "the Deterrence effect");
@@ -496,7 +513,11 @@ export function rangerTalentsBatch(context) {
       this.timeout(240000);
       const ranger = await rangerWith("ZZ RT Snare", { ranks: { Trapper: 1, "Snake Trap": 1, Entrapment: 1 } });
       const ghoul = await makeNpc("Plagued Ghoul");
+      // The escape button names no creature (a trap catches whoever enters it), so the
+      // door asks the selection: the caught creature presses it from its own token (B8b).
+      await sceneWith([{ actor: ranger, x: 1000, y: 1000 }, { actor: ghoul, x: 1300, y: 1000, side: "hostile" }]);
       const combat = await fightWith([ranger, ghoul]);
+      ghoul.getActiveTokens(true)[0].control({ releaseOthers: true });
       const card = await use(ranger, "Snare", { targets: [rowOf(ghoul)] });
       const escape = parsed(card).querySelector('[data-action="resistTest"][data-purpose="snare"]');
       assert.ok(escape, "no escape on the Snare's card");
@@ -532,6 +553,7 @@ export function rangerTalentsBatch(context) {
       await until(() => !ghoul.statuses.has("entangled"), "the ghoul free");
       await until(() => ghoul.system.health.value === before - 5, "Entrapment's 5");
       assert.equal(combat.getCombatantsByActor(ghoul)[0].budget.halfActions, halves - 2, "the escape did not spend its action");
+      canvas.tokens.releaseAll();
     });
 
     it("KILL SHOT: the card's Attack is made once, and a second press is refused in words before anything happens", async function () {

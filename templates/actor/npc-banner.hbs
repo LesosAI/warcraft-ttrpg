@@ -28,7 +28,11 @@
   <img class="azeroth-portrait azeroth-portrait-token" src="{{actor.img}}" alt="" data-edit="img">
   {{/if}}
   <div class="azeroth-identity">
-    <input class="azeroth-name" type="text" name="name" value="{{actor.name}}">
+    {{!-- A TEXTAREA, SO A LONG NAME WRAPS UNDER ITSELF (the lead, 2026-10-23: "Wrap to
+          two lines"): an input cannot wrap, and 14's Mithril Mechanical Dragonling was
+          cut at the banner's edge. One row, sized to its text (`field-sizing`, and
+          `actions.mjs#bindWrappingName` where a browser lacks it); Enter commits the name. --}}
+    <textarea class="azeroth-name" name="name" rows="1" spellcheck="false">{{actor.name}}</textarea>
     <div class="azeroth-identity-line">
       {{!-- A GM reworks the creature in the generator (D-637); the sheet stays a reading surface. --}}
       {{#if reworkable}}<button type="button" class="azeroth-build" data-action="rework">{{localize "AZEROTH.Sheet.Rework"}}</button>{{/if}}

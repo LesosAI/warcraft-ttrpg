@@ -211,13 +211,15 @@
         <span>{{b.name}}</span><em>{{b.text}}</em>
       </p>
       <div class="azeroth-card-actions">
+        {{!-- `data-struck-index` names the row struck (the B1 review): a hit a Parry
+              or Afterimage turned into a miss is answered by nothing. --}}
         {{#if b.damage}}
-        <button type="button" data-action="applyDamage" data-self="1" data-damage="{{b.damage}}"{{#if b.damageType}} data-damage-type="{{b.damageType}}"{{/if}}>
+        <button type="button" data-action="applyDamage" data-self="1" data-damage="{{b.damage}}"{{#if b.damageType}} data-damage-type="{{b.damageType}}"{{/if}}{{#if (ne b.index null)}} data-struck-index="{{b.index}}"{{/if}}>
           {{localize "AZEROTH.Signature.TakeBack" n=b.damage}}
         </button>
         {{/if}}
         {{#if b.condition}}
-        <button type="button" data-action="applyCondition" data-self="1" data-condition="{{b.condition.id}}"{{#if b.condition.value}} data-value="{{b.condition.value}}"{{/if}}{{#if b.condition.until}} data-until="{{b.condition.until}}"{{/if}}>
+        <button type="button" data-action="applyCondition" data-self="1" data-condition="{{b.condition.id}}"{{#if b.condition.value}} data-value="{{b.condition.value}}"{{/if}}{{#if b.condition.until}} data-until="{{b.condition.until}}"{{/if}}{{#if (ne b.index null)}} data-struck-index="{{b.index}}"{{/if}}>
           {{localize "AZEROTH.Signature.TakeCondition" condition=b.condition.label}}
         </button>
         {{/if}}
@@ -270,6 +272,13 @@
         {{#if r.parry}}
         <button type="button" data-action="reactParry" data-target-index="{{r.index}}">
           {{localize "AZEROTH.Reaction.ParryButton" name=r.parry}}
+        </button>
+        {{/if}}
+        {{!-- 04's Afterimage (the Legacy branches' door 13): the feature a talent grants
+              to turn this hit into a miss, through the feature's own door. --}}
+        {{#if r.negate}}
+        <button type="button" data-action="reactNegate" data-target-index="{{r.index}}" data-feature-id="{{r.negate.id}}">
+          {{localize "AZEROTH.Miss.NegateButton" name=r.negate.name}}
         </button>
         {{/if}}
       </div>

@@ -14,7 +14,7 @@ import { composite, contrast, parseColour, toHex } from "./colour.mjs";
 import { checkNoRawKeys } from "./expectations.mjs";
 import { AZEROTH } from "../config.mjs";
 import { coins } from "../helpers/coins.mjs";
-import { forgeDrop, fromPack, gearInspector, gearTab, gearTile, give, itemOf } from "./fixtures.mjs";
+import { forgeDrop, fromPack, gearInspector, gearTab, gearTile, give, itemOf, tokenData } from "./fixtures.mjs";
 import { affixOf } from "../applications/affix-dialog.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 import { canGoOn, nameFor, priceFor } from "../rules/affixes.mjs";
@@ -447,7 +447,7 @@ export function feedbackBatch(context) {
       await scene.view();
       const actor = await makeCharacter({ name: "ZZ Feedback Wounded", classes: [["Warrior", 5]] });
       await actor.update({ "prototypeToken.actorLink": true });
-      await scene.createEmbeddedDocuments("Token", [(await actor.getTokenDocument({ x: 200, y: 200 })).toObject()]);
+      await scene.createEmbeddedDocuments("Token", [await tokenData(actor, { x: 200, y: 200 })]);
       for (let i = 0; i < 60 && !actor.getActiveTokens(true).length; i++) await new Promise(r => setTimeout(r, 100));
       assert.isAtLeast(actor.getActiveTokens(true).length, 1, "the linked token never drew");
       // **DRAWN IS NOT VISIBLE, AND `_showHealthChange` SKIPS AN INVISIBLE

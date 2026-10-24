@@ -14,11 +14,13 @@ import { clearLightUsed } from "../effects/shadowform.mjs";
 import {
   freshTurn,
   gainHalfActions,
+  grantAtOnce,
   initiativeFor,
   loseTurn,
   restore,
   spend,
   turnOrder,
+  withReactionBack,
   withoutReaction
 } from "../rules/initiative.mjs";
 import { drainAtRoundEnd, fightStart, idleDecay, leaveFightPools } from "../rules/momentum.mjs";
@@ -48,6 +50,14 @@ import { healingAfterBlock } from "../rules/no-healing.mjs";
 // in three dimensions (D-732); and the one reading of a threatener's reach.
 import { feetBetweenFootprints, footprintOf } from "../canvas/footprints.mjs";
 import { reachOfActor } from "../canvas/engaged.mjs";
+// THE LEGACY BRANCHES' DOORS (B1): 02's Focus after a still turn (door 9), 04's
+// Unmoved on Bracing's measure (door 26), Hold the Hall's moving provocation and
+// its free Opportunity Attack (door 22), and no Reaction against the unanswered (door 14).
+// Engaged is measured in the combatant's own fight, off the token documents (the B1 review).
+import { engagedInFight } from "../canvas/engaged.mjs";
+import { FOCUS_POOL, focusRefills, turnMoved } from "../rules/rest.mjs";
+import { movingProvokesFor, stoodFor } from "../rules/class-talents.mjs";
+import { unansweredBy } from "../rules/reactions.mjs";
 // What a turn's Half-Actions pay for in feet (05 §10, D-718), charged at core's
 // measured COST so Difficult ground, a climb and a swim cost two feet a foot
 // (D-757) - step by step, and never by a creature whose Speed is held at 0.
@@ -79,11 +89,11 @@ import {
 // What an area does to a creature (D-756, D-757): the one door its damage and
 // healing land through, the Resist card its Tests post, and the one reading of
 // what a creature is and who it is to the caster.
-import { kindsOfActor, postAreaTest, relationTo, strikeFromArea } from "../effects/area-strikes.mjs";
+import { casterTurnTests, kindsOfActor, postAreaTest, relationTo, strikeFromArea } from "../effects/area-strikes.mjs";
 // Damage or healing laid on the creature itself, at the start of its turn (D-770).
 import { landTicks } from "../effects/ticks.mjs";
 // The round's record of the riders spent and paid before the blow (D-770).
-import { roundOnce, roundRiders, roundStruck } from "../rules/riders.mjs";
+import { roundOnce, roundRelease, roundRiders, roundStruck } from "../rules/riders.mjs";
 // Whether a creature and an area are still in the world after the turn's awaits.
 import { regionInWorld, tokenInWorld } from "../canvas/in-world.mjs";
 import { halvedHealing } from "../rules/auras.mjs";
@@ -97,7 +107,17 @@ import { WRITE_PATIENCE_MS, writeQueue } from "../rules/write-queue.mjs";
 import { upkeepCost, upkeepOf } from "../rules/upkeep.mjs";
 import { cleanForced } from "../rules/forced-movement.mjs";
 import { forceMove, forcedWords, regionCentreOf } from "../effects/forced-movement.mjs";
-import { escapesDue } from "../rules/escapes.mjs";
+import { SHED_DC_FLAG, cleanShedDc, escapesDue } from "../rules/escapes.mjs";
+// The tinker's constructs share one turn (04's The Bench; the Legacy branches' door 6).
+import { constructsFor, ownAfterShared, sharedAllowance, sharedSpent, sharedTurnAfter, sharedTurnGranted, sharedTurnLeft, sharedTurnRefunded, sharedView } from "../rules/constructs.mjs";
+// THE LEGACY BRANCHES' B3 (doors 10 and 25): a turn in the Spirit Realm (06 §10) - its
+// Half-Actions, no Reaction, its prompt and its body held still - the one prompt
+// writer and a construct's Cutting Gear (the lead's ruling). A thrall acts on its
+// owner's Initiative through its bond (`bondOf`), as every bound creature does.
+import { SPIRIT_REALM, realmTurnOffers } from "../rules/spirit-realm.mjs";
+import { dyingNow, realmRefusalFor, realmStateFor, realmTurnText } from "../effects/spirit-realm.mjs";
+import { postPrompt } from "../effects/prompts.mjs";
+import { CUTTING_GEAR, holdsCuttingGear } from "../rules/escapes.mjs";
 
 /** An area's forced move at a turn's start (07's Void Rift; D-778), off the Region's own record. */
 function turnForced(region) {
@@ -244,7 +264,10 @@ export class AzerothCombatant extends Combatant {
     const system = this.actor?.system;
     if (!system) return 10;
     if (this.actor.type === "npc") {
-      // A bound creature acts on its owner's Initiative (D2 §7, D-643).
+      // A bound creature acts on its owner's Initiative (D2 §7, D-643) - and so does a
+      // THRALL (04's Thrall of the Banshee: *acts on your Initiative*; the lead,
+      // 2026-10-22: *"... set to bound to the player by GM"*), whose bond is its own
+      // token's (`documents/bound.mjs#bondOf`), so it is this combatant's alone.
       const bond = bondOf(this.actor);
       const owner = bond?.ownerUuid ? fromUuidSync(bond.ownerUuid) : null;
       if (owner?.system?.abilities) return owner.system.initiative ?? initiativeFor({ dexMod: owner.system.abilities.dex?.mod ?? 0 });
@@ -269,7 +292,15 @@ export class AzerothCombatant extends Combatant {
    * its first turn of the fight.
    */
   get budget() {
-    return this.getFlag("azeroth-rpg", "budget") ?? freshTurn(this._turnFacts());
+    const own = this._ownBudget();
+    // **A CONSTRUCT'S TURN IS SHARED** (04's The Bench: *between them take one
+    // Half-Action and one Reaction each turn*; Remote Control's two; the Legacy
+    // branches' door 6): its own budget, each Half-Action and the Reaction no more
+    // than the tinker's constructs have left between them this round
+    // (`rules/constructs.mjs#sharedView`). Every reader - the tracker, the movement
+    // limit, a Use's refusal - reads this one view.
+    const shared = this._sharedTurn();
+    return shared ? sharedView(own, shared.left) : own;
   }
 
   async resetBudget() {
@@ -291,10 +322,201 @@ export class AzerothCombatant extends Combatant {
 
   /** What `freshTurn` reads off the creature: 02 §6's feature and 02 §7's free Move. */
   _turnFacts() {
+    // **A TURN IN THE SPIRIT REALM** (06 §10: *Take **one Half-Action** in the Spirit
+    // Realm. You cannot touch the living world*; 04's The Crossing at rank 2, *two
+    // Half-Actions a turn in the Spirit Realm rather than one, there and while you are
+    // Dying*; the Legacy branches' door 10): a character Dying or stepped across takes
+    // the realm's Half-Actions, no Reaction and no free Move - the realm's walk is the
+    // GM's, and the body does not move (`rules/spirit-realm.mjs#realmStateOf`).
+    const realm = this.actor?.type === "character" ? realmStateFor(this.actor) : null;
+    if (realm?.in) {
+      const own = this._ownHalfActions();
+      return {
+        extraAttack: this._hasExtraAttack(),
+        freeMove: 0,
+        halfActions: Math.min(Number.isInteger(own) ? own : 2, realm.halfActions),
+        reactions: realm.reactions
+      };
+    }
     return {
       extraAttack: this._hasExtraAttack(),
-      freeMove: this._freeMoves()
+      freeMove: this._freeMoves(),
+      // **THE HALF-ACTIONS A CALLED CREATURE TAKES OF ITS OWN** (04's Pocket Factory:
+      // *each takes one Half-Action a turn of its own*; the Legacy branches' door 6):
+      // the bond's number, else 05's two.
+      halfActions: this._ownHalfActions()
     };
+  }
+
+  /** This combatant's own turn as stored, before any shared turn clamps it (door 6). */
+  _ownBudget() {
+    return this.getFlag("azeroth-rpg", "budget") ?? freshTurn(this._turnFacts());
+  }
+
+  /**
+   * **WHY A CONSTRUCT'S SPEND WAS REFUSED, WHERE THE SHARED TURN IS WHY** (04's The
+   * Bench; the Legacy branches' door 6): the shared turn's own words where the
+   * construct's own budget would have paid, so the refusal says the constructs have
+   * spent it between them rather than that this one has nothing left. Null where
+   * nothing is shared or its own budget refuses too.
+   *
+   * @param {"half"|"action"|"full"|"reaction"} cost
+   * @param {object} [options]  `spend`'s
+   * @returns {string|null}  a lang key
+   */
+  _sharedRefusal(cost, options = {}) {
+    if (!this._sharedTurn()) return null;
+    if (!spend(this._ownBudget(), cost, { ...options, onTurn: options.onTurn ?? this.isCurrentTurn }).ok) return null;
+    return cost === "reaction" ? "AZEROTH.Construct.SharedReaction" : "AZEROTH.Construct.SharedHalves";
+  }
+
+  /**
+   * The Half-Actions this creature's bond gives it a turn, or null for 05's two (door 6).
+   * **A CONSTRUCT WHOSE TINKER IS NOT IN THE FIGHT** (the B2 review) takes the shared
+   * allowance as its own - one Half-Action, two with Remote Control - never 05's two:
+   * the tinker's talents say what the constructs take between them, and one alone is
+   * still between them.
+   */
+  _ownHalfActions() {
+    const bond = this.actor?.type === "npc" ? bondOf(this.actor) : null;
+    const n = bond?.halfActions;
+    if (Number.isInteger(n)) return n;
+    if (bond?.kind === "construct" && bond.ownerUuid && !this._sharedOwner()) {
+      let tinker = null;
+      try {
+        tinker = fromUuidSync(bond.ownerUuid);
+      } catch {
+        tinker = null;
+      }
+      return sharedAllowance(constructsFor(tinker?.takenTalents?.() ?? [], { tier: tinker?.system?.tier ?? 1 })).halfActions;
+    }
+    return null;
+  }
+
+  /** The tinker's combatant in this fight, for a construct; null otherwise (door 6). */
+  _sharedOwner() {
+    const actor = this.actor ?? null;
+    if (actor?.type !== "npc") return null;
+    const bond = bondOf(actor);
+    if (bond?.kind !== "construct" || !bond.ownerUuid) return null;
+    const fight = this.combat ?? this.parent ?? null;
+    if (!fight?.combatants) return null;
+    const ownerId = String(bond.ownerUuid).split(".").pop();
+    return fight.combatants.find(c => c.actorId === ownerId) ?? null;
+  }
+
+  /**
+   * **THE SHARED TURN THIS COMBATANT SPENDS FROM** (04's The Bench; the Legacy
+   * branches' door 6): for a construct whose tinker fights in this same fight, the
+   * tinker's combatant, the allowance the tinker's talents give (`sharedAllowance`:
+   * one Half-Action and one Reaction, Remote Control's two) and what is left of it
+   * this round. Null for anything else - and for a construct whose tinker is not in
+   * the fight, which then spends its own turn alone (MY READING, for the lead).
+   *
+   * @returns {{owner: Combatant, allowance: {halfActions: number, reactions: number}, left: {halfActions: number, reactions: number}}|null}
+   */
+  _sharedTurn() {
+    const owner = this._sharedOwner();
+    if (!owner) return null;
+    const tinker = owner.actor ?? null;
+    const allowance = sharedAllowance(constructsFor(tinker?.takenTalents?.() ?? [], { tier: tinker?.system?.tier ?? 1 }));
+    // The record standing since the tinker's own turn began (the B2 review): no round key.
+    return { owner, allowance, left: sharedTurnLeft(owner.getFlag("azeroth-rpg", "constructTurn") ?? null, allowance) };
+  }
+
+  /**
+   * **WHAT A CONSTRUCT'S SPEND TOOK OF THE SHARED TURN, RECORDED FIRST** (door 6):
+   * the Half-Actions and the Reaction between the view the spend was judged on and
+   * the one it would write, handed to the tinker's own queued door
+   * (`spendConstructTurn`), which reads the record when its turn comes - so two
+   * constructs spending at once cannot both take the last Half-Action. Answers the
+   * tinker's verdict, or null where nothing is shared or nothing was taken. A
+   * different combatant's queue, so it never waits on this one's (D-761).
+   *
+   * @param {object} before  the view the spend was judged on
+   * @param {object} after   what the spend would write
+   * @param {{force?: boolean}} [o]
+   */
+  async _spendShared(before, after, { force = false } = {}) {
+    const shared = this._sharedTurn();
+    if (!shared) return null;
+    const spent = sharedSpent(before, after);
+    if (!spent.halves && !spent.reactions) return null;
+    // **A RECORD THIS CLIENT CANNOT WRITE REFUSES THE SPEND IN WORDS** (the B2 review):
+    // it went through unrecorded, so a second construct could take the same Half-Action.
+    // A walk already made (`force`) cannot be refused, and is left unrecorded as before.
+    if (!shared.owner.isOwner) return force ? null : { ok: false, record: null, refusal: "AZEROTH.Construct.SharedNotYours" };
+    return shared.owner.spendConstructTurn(spent, { allowance: shared.allowance, force });
+  }
+
+  /**
+   * **WHAT THE TINKER'S CONSTRUCTS HAVE SPENT OF THEIR SHARED TURN** (04's The
+   * Bench; the Legacy branches' door 6): the round's record on THIS - the tinker's -
+   * combatant (`constructTurn`, one of `turn-stamp.mjs#BOOKKEEPING_FLAGS`), queued
+   * with this combatant's other bookkeeping (D-761) and read when its turn comes.
+   * Refused, with nothing written, past the allowance - unless `force`, a walk
+   * already made.
+   *
+   * @param {{halves?: number, reactions?: number}} spent
+   * @param {{allowance?: {halfActions: number, reactions: number}|null, force?: boolean}} [o]
+   * @returns {Promise<{ok: boolean, record: object, refusal: string|null}>}
+   */
+  async spendConstructTurn({ halves = 0, reactions = 0 } = {}, { allowance = null, force = false } = {}) {
+    return oneAtATime(this, async () => {
+      const next = sharedTurnAfter(this.getFlag("azeroth-rpg", "constructTurn") ?? null, this.combat?.round ?? 0, { halves, reactions }, allowance ?? sharedAllowance({}), { force });
+      if (!next.ok) return next;
+      await this.setFlag("azeroth-rpg", "constructTurn", next.record);
+      return next;
+    });
+  }
+
+  /**
+   * **ONE MORE HALF-ACTION ON THE SHARED TURN** (04's Remote Control at rank 2: *one
+   * of your constructs within 60 feet takes a Half-Action at once*; door 6), on this -
+   * the tinker's - combatant's record, queued like the rest. The construct's own
+   * Half-Action is its own door's (`grantHalfActions`).
+   *
+   * @param {number} [n]
+   */
+  async grantConstructHalf(n = 1) {
+    return oneAtATime(this, async () => {
+      const record = sharedTurnGranted(this.getFlag("azeroth-rpg", "constructTurn") ?? null, this.combat?.round ?? 0, n);
+      await this.setFlag("azeroth-rpg", "constructTurn", record);
+      return record;
+    });
+  }
+
+  /**
+   * **THE SHARED TURN STARTS OVER WITH THE TINKER'S OWN** (04's The Bench: *between them
+   * take one Half-Action and one Reaction each turn*; the B2 review): this - the tinker's
+   * - combatant's record cleared as its turn begins (`AzerothCombat#_onStartTurn`),
+   * queued behind any construct's spend still landing, so that spend counts against the
+   * turn it was made in. Answers whether a record went.
+   *
+   * @returns {Promise<{reset: boolean}>}
+   */
+  async resetConstructTurn() {
+    return oneAtATime(this, async () => {
+      if (this.getFlag("azeroth-rpg", "constructTurn") === undefined) return { reset: false };
+      await this.unsetFlag("azeroth-rpg", "constructTurn");
+      return { reset: true };
+    });
+  }
+
+  /**
+   * **A CONSTRUCT'S SPEND GIVEN BACK ON THE SHARED TURN** (the B2 review): the GM's undo
+   * (`restoreAction`) on a construct puts its Half-Action or its Reaction back on this -
+   * the tinker's - record as well, queued like the rest.
+   *
+   * @param {{halves?: number, reactions?: number}} refunded
+   * @returns {Promise<object|null>}  the record as it stands
+   */
+  async refundConstructTurn(refunded = {}) {
+    return oneAtATime(this, async () => {
+      const record = sharedTurnRefunded(this.getFlag("azeroth-rpg", "constructTurn") ?? null, refunded);
+      if (record) await this.setFlag("azeroth-rpg", "constructTurn", record);
+      return record;
+    });
   }
 
   /**
@@ -391,10 +613,18 @@ export class AzerothCombatant extends Combatant {
       // `isMove` inside `chargeMoves` is what lets Sprint's free Move pay for the
       // first one (D-712); without it the free Move on the budget would be
       // written and never read.
+      // The view the charge is judged on, read once more for the shared turn's
+      // record (door 6) - nothing is awaited between the two reads.
+      const before = this.budget;
       const charge = chargeMoves(this.budget, { paid, needed, onTurn: this.isCurrentTurn });
       if (charge.refusal) ui.notifications?.warn(game.i18n.format(charge.refusal.reason, charge.refusal.params ?? {}));
       // A fight ended under the move has no budget left to write to.
       if (charge.paid !== paid && this.parent?.combatants?.has(this.id) && game.combats?.has(this.parent.id)) {
+        // A construct's walk is the shared turn's too (door 6), recorded whatever is
+        // left: the walk is made, and the limit before it is the rule.
+        await this._spendShared(before, charge.budget, { force: true });
+        // The walk's Half-Actions off the construct's own budget, the view the clamp (B8b).
+        if (this._sharedTurn()) charge.budget = ownAfterShared(this._ownBudget(), before, charge.budget);
         await this.update({ flags: { "azeroth-rpg": { budget: charge.budget, moveHalves: charge.paid } } });
       }
       if (total > speed * Math.max(charge.paid, 1) && charge.paid < needed) {
@@ -435,7 +665,12 @@ export class AzerothCombatant extends Combatant {
       speed: system.speed ?? 0,
       flyingSpeed: system.flyingSpeed ?? null,
       swims: movementFactsOf(actor).swims,
-      stopped: stoppedBy(actor?.statuses ?? [])
+      // **THE BODY IN THE SPIRIT REALM DOES NOT MOVE** (06 §9; the B3 review): a Dying
+      // character at 0 by Bleeding, a tick or the sheet is never Prone, and walked on
+      // the realm's Half-Action. Its pace is held at 0 as Prone's is, so the limit
+      // refuses every foot (`movementAllowed`'s `stopped`); The Crossing's Speed 0 says
+      // the same for a body stepped across.
+      stopped: stoppedBy(actor?.statuses ?? []) || (actor?.type === "character" && realmStateFor(actor).in === true)
     }, actionOf(movement));
   }
 
@@ -514,11 +749,31 @@ export class AzerothCombatant extends Combatant {
    */
   async spendAction(cost, options = {}) {
     return oneAtATime(this, async () => {
-      const result = spend(this.budget, cost, { ...options, onTurn: options.onTurn ?? this.isCurrentTurn });
+      const before = this.budget;
+      const result = spend(before, cost, { ...options, onTurn: options.onTurn ?? this.isCurrentTurn });
       if (!result.ok) {
+        // A construct the SHARED turn refuses says so (door 6).
+        const sharedWhy = this._sharedRefusal(cost, options);
+        if (sharedWhy) {
+          const params = { name: this.name ?? "" };
+          ui.notifications?.warn(game.i18n.format(sharedWhy, params));
+          return { ...result, reason: sharedWhy, params };
+        }
         ui.notifications?.warn(game.i18n.format(result.reason, result.params ?? {}));
         return result;
       }
+      // **A CONSTRUCT SPENDS THE SHARED TURN FIRST** (04's The Bench; the Legacy
+      // branches' door 6): refused here, with nothing written, where another of the
+      // tinker's constructs took it meanwhile.
+      const shared = await this._spendShared(before, result.budget);
+      if (shared && !shared.ok) {
+        const params = { name: this.name ?? "" };
+        ui.notifications?.warn(game.i18n.format(shared.refusal, params));
+        return { ok: false, reason: shared.refusal, params, budget: before };
+      }
+      // **THE VIEW IS THE CLAMP, NEVER THE STORE** (door 6; B8b): a construct's spend
+      // comes off its own budget, or a Half-Action granted later reaches nothing.
+      if (this._sharedTurn()) result.budget = ownAfterShared(this._ownBudget(), before, result.budget);
       await this.setFlag("azeroth-rpg", "budget", result.budget);
       return result;
     });
@@ -541,11 +796,27 @@ export class AzerothCombatant extends Combatant {
    */
   async spendMoveAction() {
     return oneAtATime(this, async () => {
-      const result = spend(this.budget, "half", { onTurn: this.isCurrentTurn });
+      const before = this.budget;
+      const result = spend(before, "half", { onTurn: this.isCurrentTurn });
       if (!result.ok) {
+        const sharedWhy = this._sharedRefusal("half");
+        if (sharedWhy) {
+          const params = { name: this.name ?? "" };
+          ui.notifications?.warn(game.i18n.format(sharedWhy, params));
+          return { ...result, reason: sharedWhy, params };
+        }
         ui.notifications?.warn(game.i18n.format(result.reason, result.params ?? {}));
         return result;
       }
+      // A construct's Disengage spends the shared turn first (door 6).
+      const shared = await this._spendShared(before, result.budget);
+      if (shared && !shared.ok) {
+        const params = { name: this.name ?? "" };
+        ui.notifications?.warn(game.i18n.format(shared.refusal, params));
+        return { ok: false, reason: shared.refusal, params, budget: before };
+      }
+      // And off its own budget, the view being the clamp (door 6; B8b).
+      if (this._sharedTurn()) result.budget = ownAfterShared(this._ownBudget(), before, result.budget);
       const paid = this.getFlag("azeroth-rpg", "moveHalves") ?? 0;
       await this.update({ flags: { "azeroth-rpg": { budget: result.budget, moveHalves: paid + 1 } } });
       return result;
@@ -595,6 +866,22 @@ export class AzerothCombatant extends Combatant {
   }
 
   /**
+   * **A HALF-ACTION GIVEN TO BE TAKEN AT ONCE** (the lead: *"Refuse off-turn
+   * Half-Actions"*): 04's Remote Control's *one of your constructs takes a Half-Action
+   * at once*, and the Half-Action 05's Ready paid for, handed back when the trigger's
+   * Reaction is spent - each the one a door may spend outside this creature's own turn
+   * (`rules/initiative.mjs#grantAtOnce`). Off the creature's OWN budget, which a
+   * construct's shared view is clamped from (door 6, B8b). Queued with every other
+   * budget write and read when its turn comes (D-761): the combatant's eleventh budget
+   * door.
+   *
+   * @param {number} [n]
+   */
+  async grantAtOnce(n = 1) {
+    return oneAtATime(this, async () => this.setFlag("azeroth-rpg", "budget", grantAtOnce(this._ownBudget(), n)));
+  }
+
+  /**
    * **THE REACTION LOST** (04's Concussive Shot at rank 2, Waylay, Paralytic;
    * D-773): the one this combatant holds, spent, and nothing else
    * (`rules/initiative.mjs#withoutReaction`). 06 §6's Reaction refreshes at the
@@ -610,6 +897,49 @@ export class AzerothCombatant extends Combatant {
       if (!((Number(budget?.reactions) || 0) > 0)) return { lost: false };
       await this.setFlag("azeroth-rpg", "budget", withoutReaction(budget));
       return { lost: true };
+    });
+  }
+
+  /**
+   * **THE REACTION A WITHDRAWN HIT TOOK, GIVEN BACK** (the Legacy branches' door 13:
+   * a hit a Parry or Afterimage turned into a miss withdraws everything it laid -
+   * Bash's, Concussive Shot's lost Reaction; `rules/miss.mjs#missUndoes`). Back to
+   * one, never past it (`rules/initiative.mjs#withReactionBack`). Queued with every
+   * other budget write and read when its turn comes (D-761): the combatant's tenth
+   * budget door. Answers whether a Reaction came back.
+   *
+   * @returns {Promise<{regained: boolean}>}
+   */
+  async regainReaction() {
+    return oneAtATime(this, async () => {
+      const budget = this.budget;
+      if ((Number(budget?.reactions) || 0) >= 1) return { regained: false };
+      await this.setFlag("azeroth-rpg", "budget", withReactionBack(budget));
+      return { regained: true };
+    });
+  }
+
+  /**
+   * **WHAT THE TURN JUST ENDED DID, FOR THE NEXT ONE'S FOCUS** (02: *It refills at 2
+   * at the start of any turn in which you have neither moved nor been Engaged*; the
+   * Legacy branches' door 9): whether the turn moved - a Move paid, or a cast a
+   * talent counts as moving (Shadowcraft's Shadow Walk) - and whether the creature
+   * stood Engaged as it ended, written at `_onEndTurn` because the round's reset
+   * takes the Moves paid before the creature's next turn starts. Queued like the
+   * budget's own writes (D-761), never a `setFlag` beside them; `lastTurn` is one
+   * of `turn-stamp.mjs#BOOKKEEPING_FLAGS` and `_leaveFight` clears it.
+   *
+   * @param {{moved?: boolean, engaged?: boolean, round?: number|null}} o  `round` the
+   *   round the turn was in (core's `context.round`), else the fight's now
+   * @returns {Promise<object>}  the record as it stands
+   */
+  async recordTurnEnd({ moved = false, engaged = false, round = null } = {}) {
+    return oneAtATime(this, async () => {
+      const next = { round: Number.isFinite(Number(round)) && round !== null ? Number(round) : (this.combat?.round ?? 0), moved: moved === true, engaged: engaged === true };
+      const held = this.getFlag("azeroth-rpg", "lastTurn") ?? null;
+      if (held && held.round === next.round && held.moved === next.moved && held.engaged === next.engaged) return held;
+      await this.setFlag("azeroth-rpg", "lastTurn", next);
+      return next;
     });
   }
 
@@ -661,6 +991,25 @@ export class AzerothCombatant extends Combatant {
   }
 
   /**
+   * **THE ONCE-A-ROUND MARKS A WITHDRAWN HIT SPENT, GIVEN BACK** (door 13; the lead's
+   * *"Yes, take it back"* and O-171's *"No."*): the further gains' marks and a Fast
+   * weapon's point the hit took off the round's record (`rules/riders.mjs#roundRelease`),
+   * only while the record is still the round the hit was made in. Queued with the
+   * budget's and the record's other writes (D-761); `round` is one of
+   * `turn-stamp.mjs#BOOKKEEPING_FLAGS`.
+   *
+   * @param {{round: number, once?: string[], fast?: boolean}} o
+   * @returns {Promise<{released: boolean}>}
+   */
+  async releaseRoundMarks({ round, once = [], fast = false } = {}) {
+    return oneAtATime(this, async () => {
+      const next = roundRelease(this.getFlag("azeroth-rpg", "round") ?? null, Number(round), { once, fast });
+      if (next.changed) await this.setFlag("azeroth-rpg", "round", next.round);
+      return { released: next.changed };
+    });
+  }
+
+  /**
    * **STRUCK THIS ROUND** (05 §11: the Rage a round's blow keeps; D-627): the
    * round's record marked from the damage door (`AzerothActor#_struckBy`), queued
    * with the budget's and the record's other writes (D-761) and read when its turn
@@ -692,15 +1041,24 @@ export class AzerothCombatant extends Combatant {
       return { ok: false, reason, params: {}, budget: this.budget };
     }
     // Queued with every other budget write (D-761).
-    return oneAtATime(this, async () => {
-      const result = restore(this.budget, cost);
+    const done = await oneAtATime(this, async () => {
+      const before = this.budget;
+      const result = restore(before, cost);
       if (!result.ok) {
         ui.notifications?.warn(game.i18n.format(result.reason, result.params ?? {}));
         return result;
       }
+      // A construct's undo goes back on its own budget, no higher than its fresh turn (B8b).
+      if (this._sharedTurn()) result.budget = ownAfterShared(this._ownBudget(), before, result.budget, { cap: freshTurn(this._turnFacts()) });
       await this.setFlag("azeroth-rpg", "budget", result.budget);
       return result;
     });
+    // **AND ON THE TINKER'S SHARED RECORD** (the B2 review): a construct's undone spend is
+    // given back there too, through the tinker's own queued door - outside this queue, so
+    // neither waits on the other (D-761).
+    const shared = done?.ok ? this._sharedTurn() : null;
+    if (shared?.owner?.isOwner) await shared.owner.refundConstructTurn(cost === "reaction" ? { reactions: 1 } : { halves: 1 });
+    return done;
   }
 
   /**
@@ -721,7 +1079,17 @@ export class AzerothCombatant extends Combatant {
    *
    * A threatener with no Reaction left, one on its own side, one that is down
    * and one on another scene are all passed over: an offer nobody could take
-   * is a card everybody has to read.
+   * is a card everybody has to read. **Unless its first Opportunity Attack this
+   * round costs no Reaction** (04's Hold the Hall at rank 2; the Legacy branches'
+   * door 22), which `canReact` reads off the state's `free`. **And a mover no
+   * creature may take a Reaction against** (04's Wind Walk, Bladestorm; door 14)
+   * provokes nobody at all.
+   *
+   * **A threatener holding Hold the Hall** (*An enemy within your reach that moves
+   * provokes an Opportunity Attack from you, whether or not it leaves your reach*;
+   * door 22) is provoked by a move made within its reach: the closest the mover
+   * stood WHILE it moved - every measured position but the last - is handed to
+   * `provokes` as `moving`.
    *
    * **Measured between the nearest spaces, never the centres, and in three
    * dimensions** (D-732). A 3×3 boss's centre is ten feet from a rogue standing
@@ -743,17 +1111,20 @@ export class AzerothCombatant extends Combatant {
     const scene = mover?.parent ?? null;
     if (!combat || !mover || !scene || !scene.grid) return [];
     const disengaged = this.actor?.statuses?.has("disengaging") === true;
+    if (unansweredBy((this.actor?.effects ?? []).filter(e => e.active !== false).map(e => e.flags?.["azeroth-rpg"] ?? {})).length) return [];
     const threats = [];
     for (const other of combat.combatants) {
       if (other.id === this.id || other.side === this.side || other.isDefeated) continue;
       const threat = other.token;
       if (!threat || threat.parent?.id !== scene.id) continue;
-      if ((other.budget?.reactions ?? 0) < 1) continue;
       // What it would be struck with, so the button can say so; a threatener
-      // holding nothing is refused here rather than on a dead button.
-      const may = canReact("opportunityAttack", reactionStateOf(other.actor));
+      // holding nothing is refused here rather than on a dead button. A spent
+      // Reaction refuses it there too, unless its first Opportunity Attack this
+      // round is free (Hold the Hall at rank 2).
+      // Its OWN combatant in THIS fight (the B1 review): never the actor's other fight.
+      const may = canReact("opportunityAttack", reactionStateOf(other.actor, { combatant: other }));
       if (!may.ok) continue;
-      threats.push({ other, threat, may });
+      threats.push({ other, threat, may, holds: Boolean(movingProvokesFor(other.actor?.takenTalents?.() ?? [])) });
     }
     if (!threats.length) return [];
     const points = pathPoints(movement);
@@ -763,21 +1134,27 @@ export class AzerothCombatant extends Combatant {
     // once and measured against every threatener.
     const passed = points.map(p => footprintOf(mover, p));
     const after = footprintOf(mover, end);
+    // Where the mover stood WHILE it moved: every measured position but the end.
+    const during = points.at(-1) === end ? passed.slice(0, -1) : passed;
     const rows = [];
-    for (const { other, threat, may } of threats) {
+    for (const { other, threat, may, holds } of threats) {
       const from = footprintOf(threat);
       const reach = reachOfActor(other.actor);
-      const closest = passed.reduce((least, footprint) => {
+      const nearest = list => list.reduce((least, footprint) => {
         const d = feetBetweenFootprints(from, footprint, scene.grid);
         return d === null ? least : Math.min(least, d);
       }, Infinity);
+      const closest = nearest(passed);
+      const moving = holds ? nearest(during) : Infinity;
       const verdict = provokes({
         before: Number.isFinite(closest) ? closest : null,
         after: feetBetweenFootprints(from, after, scene.grid),
         reach,
         // 04's Anchor (D-772): *moving away from you provokes as normal* - a
         // Disengage does not spare the mover the reach of an Anchor's holder.
-        disengaged: disengaged && !((other.actor?.talentRanks?.("Anchor") ?? 0) > 0)
+        disengaged: disengaged && !((other.actor?.talentRanks?.("Anchor") ?? 0) > 0),
+        // 04's Hold the Hall (door 22): a move made within the reach provokes.
+        holds, moving: Number.isFinite(moving) ? moving : null
       });
       if (!verdict.provoked) continue;
       rows.push({
@@ -804,6 +1181,17 @@ export class AzerothCombatant extends Combatant {
   _hasExtraAttack() {
     return this.actor?.hasExtraAttack === true;
   }
+}
+
+/**
+ * Whether a creature holds 02's Focus pool (the Legacy branches' door 9): only its
+ * turns are recorded and measured for the refill, since measuring the enemies
+ * around a token is not free.
+ *
+ * @param {Actor|null} actor
+ */
+function holdsFocus(actor) {
+  return (actor?.poolSnapshot?.() ?? []).some(p => p?.kind === "power" && p.name === FOCUS_POOL);
 }
 
 /**
@@ -1056,7 +1444,8 @@ export function onPreMoveToken(document, movement) {
   // A Speed held at 0 is not a budget spent, and says so in its own words
   // (the final review of D-757): *Your Speed is 0* (A1).
   if (verdict.stopped) {
-    ui.notifications?.warn(game.i18n.format("AZEROTH.Combat.MoveStopped", { name: actor.name }));
+    // The Spirit Realm's body says so in its own words (the B3 review).
+    ui.notifications?.warn(realmRefusalFor(actor, "move") ?? game.i18n.format("AZEROTH.Combat.MoveStopped", { name: actor.name }));
     return false;
   }
   ui.notifications?.warn(game.i18n.format("AZEROTH.Combat.MoveRefused", {
@@ -1334,10 +1723,24 @@ export class AzerothCombat extends Combat {
   /** @inheritDoc */
   async _onStartTurn(combatant, context) {
     await super._onStartTurn(combatant, context);
-    // Reactions refresh at the start of your turn (06 SS6), and so do Energy
-    // and Focus (05 SS12: "refills 3 a turn", "refills 2 a turn").
+    // **02's FOCUS REFILLS ONLY AFTER A STILL TURN** (*It refills at 2 at the start of
+    // any turn in which you have neither moved nor been Engaged*; the Legacy branches'
+    // door 9): the creature's last turn's record, read BEFORE the reset below, and
+    // Engaged measured as this turn starts. It refilled on every turn before.
+    // **ENGAGED IS MEASURED IN THE COMBATANT'S OWN FIGHT** (the B1 review): its token
+    // and every other combatant's, on their scene's own grid (`engagedInFight`), never
+    // the viewed canvas - the active GM may be looking at another scene.
+    const still = holdsFocus(combatant.actor) ? focusRefills({
+      moved: combatant.getFlag("azeroth-rpg", "lastTurn")?.moved === true,
+      engaged: combatant.getFlag("azeroth-rpg", "lastTurn")?.engaged === true || engagedInFight(combatant)
+    }) : true;
+    // Reactions refresh at the start of your turn (06 SS6), and so does Energy
+    // (05 SS12: "refills 3 a turn"); Focus as above ("refills 2 a turn").
     await combatant.resetBudget();
-    await combatant.actor?.refillTurn?.();
+    // **A TINKER'S CONSTRUCTS START THEIR SHARED TURN WITH THE TINKER'S OWN** (04's The
+    // Bench, *each turn*; the B2 review), not with the round.
+    if (combatant.getFlag("azeroth-rpg", "constructTurn") !== undefined) await combatant.resetConstructTurn();
+    await combatant.actor?.refillTurn?.({ still });
     // Guard holds until your next turn (05 SS10).
     const actor = combatant.actor;
     if (actor?.statuses?.has("guarded")) await actor.toggleStatusEffect("guarded", { active: false });
@@ -1354,16 +1757,10 @@ export class AzerothCombat extends Combat {
    * gives a held or Stunned creature** (D-778): its Resilience, the effect it would
    * end, and the escape on the card's own flag, which its one press is recorded under.
    */
-  async _prompt(actor, { purpose, title, text, testLabel, dc = null, stabilize = false, cardClass = "azeroth-card-attack", resilience = "body", effectId = null, escape = null }) {
-    const { renderTemplate } = foundry.applications.handlebars;
-    const content = await renderTemplate("systems/azeroth-rpg/templates/chat/prompt-card.hbs", {
-      cardClass, title, name: actor.name, text, testLabel, dc, actorUuid: actor.uuid, purpose, stabilize, resilience, effectId
-    });
-    return ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor }),
-      content,
-      flags: { "azeroth-rpg": { kind: "prompt", purpose, actorUuid: actor.uuid, ...(escape ? { escape: { effectId, ...escape } } : {}) } }
-    });
+  async _prompt(actor, options) {
+    // **THE ONE PROMPT WRITER** (the Legacy branches' B3): `effects/prompts.mjs#postPrompt`,
+    // which the Death Step's own door posts 06 §10's offer through as well.
+    return postPrompt(actor, options);
   }
 
   /**
@@ -1384,6 +1781,23 @@ export class AzerothCombat extends Combat {
     const plain = (actor.effects ?? []).map(e => ({
       id: e.id, statuses: [...(e.statuses ?? [])], flags: e.flags ?? {}, disabled: e.disabled === true || e.active === false
     }));
+    // **CUTTING GEAR, OFFERED AS THE TURN BEGINS** (the lead, 2026-10-22: *"Give
+    // constructs a trait or ability that allows them to end one Entangled condition per
+    // turn no action required."*): a creature whose block names it, Entangled as its
+    // turn opens, is offered the free end on a prompt its owner sees - pressed through
+    // `effects/legacy-uses.mjs#useCuttingGear`, once a turn. The escape prompts below
+    // stand beside it.
+    if (on === "action" && holdsCuttingGear(actor.system?.creatureAbilities ?? [])) {
+      const held = plain.find(e => !e.disabled && e.statuses.includes(CUTTING_GEAR.condition));
+      if (held) {
+        const condition = game.i18n.localize(AZEROTH.conditions[CUTTING_GEAR.condition] ?? CUTTING_GEAR.condition);
+        await this._prompt(actor, {
+          purpose: "cuttingGear", noTest: true, cuttingGear: true, ownerSees: true, effectId: held.id,
+          title: game.i18n.localize("AZEROTH.CuttingGear.Title"),
+          text: game.i18n.format("AZEROTH.CuttingGear.Prompt", { name: actor.name, condition })
+        });
+      }
+    }
     for (const { id, escape } of escapesDue(plain, on)) {
       const resilience = game.i18n.localize(AZEROTH.resiliences[escape.resilience] ?? escape.resilience);
       const condition = game.i18n.localize(AZEROTH.conditions[escape.condition] ?? escape.condition);
@@ -1419,6 +1833,22 @@ export class AzerothCombat extends Combat {
         testLabel: game.i18n.format("AZEROTH.Card.ResistTest", { resilience: game.i18n.localize(AZEROTH.resiliences.body), dc: AZEROTH.DEATH_STEP_DC }),
         dc: AZEROTH.DEATH_STEP_DC,
         stabilize: true
+      });
+    }
+    // **THE TURN IN THE SPIRIT REALM** (06 §10: *On your turn, in this order: 1. Make the
+    // Body Resilience Test at DC 12 ... 2. Take one Half-Action in the Spirit Realm*; the
+    // Legacy branches' door 10): after the Death Step's own prompt, one card its owner
+    // sees - the Half-Actions the turn holds, Look, Speak, Walk and Refuse the GM's to
+    // answer, **Reach**'s Test (*Spirit Resilience at DC 18*) and, from the second Death
+    // Step, the offer (*The offer stands until you die or leave*), taken on the card.
+    const realm = actor.type === "character" ? realmStateFor(actor) : null;
+    const offers = realm ? realmTurnOffers(realm, { dying: dyingNow(actor), steps: actor.system?.deathSteps ?? 0 }) : { reach: false, offer: false };
+    if (offers.reach) {
+      await this._prompt(actor, {
+        purpose: "reach", resilience: SPIRIT_REALM.reach.resilience, dc: SPIRIT_REALM.reach.dc, cardClass: "azeroth-card-critical",
+        title: game.i18n.localize("AZEROTH.Spirit.Title"), text: realmTurnText(actor, realm),
+        testLabel: game.i18n.format("AZEROTH.Spirit.ReachTest", { resilience: game.i18n.localize(AZEROTH.resiliences[SPIRIT_REALM.reach.resilience]), dc: SPIRIT_REALM.reach.dc }),
+        offer: offers.offer, ownerSees: true
       });
     }
     const bleeding = actor.effects.filter(e => e.statuses?.has("bleeding")).map(e => e.getFlag("azeroth-rpg", "value") ?? 1);
@@ -1559,6 +1989,10 @@ export class AzerothCombat extends Combat {
     // the flag's own hook, which is queued ahead of this.
     const scene = combatant.token?.parent ?? null;
     if (scene) await growAreas(scene, actor, combatant.token).catch(err => console.warn("azeroth-rpg | an area did not grow", err));
+    // **NETHER RIFT'S TEST AT THE CASTER'S TURN** (the B9a pass; the lead: *"Build the
+    // triggers"*), after the upkeep as the growth is: every creature within the area's
+    // reach of its centre is posted its Test card, the failure the pull toward it.
+    if (scene) await casterTurnTests(scene, actor, combatant.token).catch(err => console.warn("azeroth-rpg | a caster's-turn Test was not posted", err));
     if (lines.length) {
       await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: lines.map(l => `<p class="azeroth-drain">${l}</p>`).join(""), flags: { "azeroth-rpg": { kind: "tick" } } });
     }
@@ -1644,7 +2078,11 @@ export class AzerothCombat extends Combat {
       // own Resist card, through the spell card's door, after its ticks land.
       if (source.region) {
         const holds = new Set((caster?.getFlag?.("azeroth-rpg", "sustaining") ?? []).map(e => e?.identifier).filter(Boolean));
-        for (const check of checksFor(source.tick, "turn", { relation, atCentre: atCentreOf(token, source.region), holds })) {
+        // Blackout's and The Deep's *You and any creature you name as you cast* (the B9a
+        // pass): a creature the cast named makes no Test.
+        const namedHere = source.region.flags?.["azeroth-rpg"]?.named;
+        const named = Array.isArray(namedHere) && namedHere.includes(actor.uuid);
+        for (const check of checksFor(source.tick, "turn", { relation, atCentre: atCentreOf(token, source.region), holds, named })) {
           tests.push({ region: source.region, check, caster });
         }
       }
@@ -1971,6 +2409,32 @@ export class AzerothCombat extends Combat {
       if (bracing && bracingAmount({ moved: (combatant.getFlag("azeroth-rpg", "moveHalves") ?? 0) > 0, rank: bracing.amount }) > 0) {
         await layBracing(actor, { amount: bracing.amount, name: bracing.name }).catch(err => console.warn("azeroth-rpg | Bracing", err));
       }
+      // **WHETHER THIS TURN MOVED** (the Legacy branches' doors 9 and 26): a Move
+      // paid, or a cast a talent counts as moving (Shadowcraft's Shadow Walk).
+      const roundRecord = combatant.getFlag("azeroth-rpg", "round") ?? {};
+      const paidMoves = combatant.getFlag("azeroth-rpg", "moveHalves") ?? 0;
+      // **THE ROUND THE TURN WAS IN** (the B1 review): core hands the ended turn's own
+      // round as `context.round`, and on the turn that ends a round `this.round` is
+      // already the next one - so a Shadow Walk's MOVED_MARK, written under the round
+      // that ended, was read as an older round's and the turn as still. `idleDecay`
+      // reads the same context in `_onEndRound`.
+      const turnRound = context?.round ?? this.round;
+      const turnDidMove = turnMoved({ paid: paidMoves, roundOnce: roundRecord.number === turnRound ? (roundRecord.once ?? []) : [] });
+      // **04's UNMOVED** (*When you end your turn without having moved, gain 2 Rage*):
+      // Bracing's own measure, into the pool, never past its maximum - the actor's
+      // own write, never the combatant's.
+      const stood = !turnDidMove && actor?.type === "character" ? stoodFor(actor.takenTalents?.() ?? []) : [];
+      for (const gain of stood) {
+        const pool = (actor.poolSnapshot?.() ?? []).find(p => p.name === gain.pool) ?? null;
+        if (!pool) continue;
+        const value = Math.min(pool.max, pool.value + gain.amount);
+        if (value > pool.value) await actor.updatePool({ itemId: pool.itemId, kind: pool.kind, value }).catch(err => console.warn("azeroth-rpg | Unmoved", err));
+      }
+      // **AND THE RECORD THE NEXT TURN'S FOCUS READS** (door 9): moved, and Engaged
+      // as the turn ends - for a creature holding Focus, where it can matter.
+      if (holdsFocus(actor)) {
+        await combatant.recordTurnEnd({ moved: turnDidMove, engaged: engagedInFight(combatant), round: turnRound }).catch(err => console.warn("azeroth-rpg | the turn's record", err));
+      }
       // *A creature that ends its turn there* (07's Slagfall, D-757): what the
       // area lays from the end of a turn inside it is armed now, on the area's
       // own flag - never a combatant write, which would move `previous`.
@@ -1980,12 +2444,19 @@ export class AzerothCombat extends Combat {
       // against the poison's DC; a success sheds a stack. The Test is a card
       // button - the table's roll, at the DC the table knows (D-628).
       if (actor?.statuses?.has("poisoned")) {
-        const stacks = actor.effects.find(e => e.statuses?.has("poisoned"))?.getFlag("azeroth-rpg", "value") ?? 1;
+        const poison = actor.effects.find(e => e.statuses?.has("poisoned")) ?? null;
+        const stacks = poison?.getFlag("azeroth-rpg", "value") ?? 1;
+        // **THE DC TO SHED IT, WHERE ITS LAYER NAMED ONE** (04's Serpent Ward: *the DC
+        // to shed it is your Spell DC*; the Legacy branches' door 20), else the table's.
+        const shed = cleanShedDc(poison?.getFlag("azeroth-rpg", SHED_DC_FLAG) ?? null);
         await this._prompt(actor, {
           purpose: "poisoned",
           title: game.i18n.localize(AZEROTH.conditions.poisoned),
-          text: game.i18n.format("AZEROTH.Combat.PoisonedPrompt", { name: actor.name, stacks }),
-          testLabel: game.i18n.localize("AZEROTH.Combat.PoisonedTest")
+          text: shed
+            ? game.i18n.format("AZEROTH.Combat.PoisonedPromptDc", { name: actor.name, stacks, dc: shed.dc, source: shed.source })
+            : game.i18n.format("AZEROTH.Combat.PoisonedPrompt", { name: actor.name, stacks }),
+          testLabel: game.i18n.localize("AZEROTH.Combat.PoisonedTest"),
+          ...(shed ? { dc: shed.dc } : {})
         });
       }
       // **THE TEST REPEATED AT THE END OF EACH OF ITS TURNS** (07's Absolute Zero,
@@ -2048,8 +2519,11 @@ export class AzerothCombat extends Combat {
     // `ready` is the trigger and the action a Ready named (06 SS6, D-694);
     // `moveHalves` is what the turn's movement has paid for.
     // `damaged` is who this creature has hurt in the fight (04's Elemental Fury
-    // and Lunar Guidance, D-711 phase 2).
-    for (const key of ["budget", "round", "lastHitRound", "acted", "heldPosition", "marked", "damageTypes", "ready", "moveHalves", "damaged"]) {
+    // and Lunar Guidance, D-711 phase 2). `lastTurn` is what its last turn did,
+    // for 02's Focus (the Legacy branches' door 9).
+    // `constructTurn` is what a tinker's constructs have spent of their shared turn
+    // (the Legacy branches' door 6).
+    for (const key of ["budget", "round", "lastHitRound", "acted", "heldPosition", "marked", "damageTypes", "ready", "moveHalves", "damaged", "lastTurn", "constructTurn"]) {
       if (combatant.getFlag("azeroth-rpg", key) !== undefined) await combatant.unsetFlag("azeroth-rpg", key);
     }
   }

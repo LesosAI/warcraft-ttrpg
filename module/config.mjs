@@ -187,6 +187,11 @@ AZEROTH.powerTypes = {
 // Every pool a feature may spend from (D-612): the five Momentum names and
 // the three Power names, one map so a select can offer them together.
 AZEROTH.poolTypes = { ...AZEROTH.momentumTypes, ...AZEROTH.powerTypes };
+// What a feature's COST may name: each pool by name, and 05 §11's kind word - 02 §5's
+// War Stomp spends *4 Momentum*, the Momentum pool a tauren's class holds, whichever it
+// is (`rules/pools.mjs#ANY_MOMENTUM`). Kept apart from `poolTypes`, which names a pool
+// a character can hold and a select can offer.
+AZEROTH.costPoolTypes = { momentum: "AZEROTH.Momentum.Label", ...AZEROTH.poolTypes };
 // What feeds Speed (05 §10, D-621), for the banner's tooltip.
 AZEROTH.speedParts = {
   race:    "AZEROTH.Speed.Race",
@@ -204,14 +209,18 @@ AZEROTH.speedParts = {
   // `+N Speed` off what is worn (08 §20's Signature, a haste rating on a
   // Classic find). Both models push this part and neither had a word for it,
   // so the tooltip printed the bare key `grant`.
-  grant: "AZEROTH.Speed.Grant"
+  grant: "AZEROTH.Speed.Grant",
+  // 04's Warden's Mail at rank 2: the Encumbering trait's Speed given back (door 23).
+  waived: "AZEROTH.Speed.Waived"
 };
 // The three kinds of shape a character may wear (02 §7, D-769): the law is
 // `rules/shapes.mjs#SHAPE_KINDS`, and `shapes.test.mjs` holds the two in step.
 AZEROTH.shapeKinds = {
   shapeshift:    "AZEROTH.Shape.Kind.Shapeshift",
   avatar:        "AZEROTH.Shape.Kind.Avatar",
-  metamorphosis: "AZEROTH.Shape.Kind.Metamorphosis"
+  metamorphosis: "AZEROTH.Shape.Kind.Metamorphosis",
+  // 04's Gnomish Battle Rig (the Legacy branches' B2), worn off its 14 block.
+  battlerig:     "AZEROTH.Shape.Kind.Battlerig"
 };
 // A class feature is a thing you do or a thing you are (02 §7, D-612).
 AZEROTH.featureKinds = {
@@ -673,18 +682,24 @@ AZEROTH.signatureBlows = {
 // was a string nothing localised, which `lang-unused.test.mjs` passed through
 // its parent-prefix fallback without a word (CLAUDE.md §11, §15). When a sheet
 // comes to draw one, the label arrives with its reader.
-AZEROTH.auraTargets = ["party", "allies"];
+// `enemies` is the Legacy branches' door 20: 04's Loa Drum, *every enemy within 30
+// feet of it* (`rules/distance.mjs#countsAsEnemy`), never the holder.
+AZEROTH.auraTargets = ["party", "allies", "enemies"];
 
 // WHERE AN AURA IS MEASURED FROM (D-755). The holder, or every token of every
 // demon bound to them - Demonic Pact's *within 20 feet of it* - so a warlock
-// with no token of their own still gives it.
-AZEROTH.auraCentres = ["self", "boundDemon"];
+// with no token of their own still gives it. `boundTotem` (door 20) is a totem
+// bound to the holder, named after the colon - Loa Drum's `boundTotem:Tremor`
+// (`rules/auras.mjs#auraCentreOf`).
+AZEROTH.auraCentres = ["self", "boundDemon", "boundTotem"];
 
 // WHAT AN AURA WAITS ON (D-755): Avenging Bulwark's *while you carry a shield*
 // and Tree of Life's *while the druid is a tree*, written `spell:<identifier>`
 // for the spell's laid effect. `rules/auras.mjs#auraGateOpen` reads the part
-// before the colon, and a kind outside this list fails closed.
-AZEROTH.auraGates = ["shield", "spell"];
+// before the colon, and a kind outside this list fails closed. `sustain:<identifier>`
+// (the Legacy branches' door 12: 04's Big Bad Voodoo, *While you Sustain it*) is a
+// Sustain entry of that identifier the holder holds.
+AZEROTH.auraGates = ["shield", "spell", "sustain"];
 
 // WHY A SIGNATURE IS STILL PROSE, in `abilityReasons`' shape (D-691). A kind
 // of `none` with no reason is a Signature nobody has read; a reason is one
@@ -790,7 +805,11 @@ AZEROTH.untilKinds = {
   encounter: "AZEROTH.Until.Encounter",
   // *Until the start of YOUR next turn* - the caster's (02's Hurricane, D-771):
   // the area vocabulary's own word (`rules/area-ticks.mjs#AREA_UNTIL`).
-  casterTurnStart: "AZEROTH.Until.CasterTurnStart"
+  casterTurnStart: "AZEROTH.Until.CasterTurnStart",
+  // *For one minute* (04's The Vault Opens, Banshee's Wail, Thrall of the Banshee;
+  // the Legacy branches' door 26): ten of the fight's rounds, or the world's minute
+  // (`effects/durations.mjs#minuteSpan`).
+  minute: "AZEROTH.Until.Minute"
 };
 // A creature's two pools, by kind: the block names no type (D-637).
 AZEROTH.npcPoolKinds = { momentum: "AZEROTH.Momentum.Label", power: "AZEROTH.Sheet.Power" };
@@ -805,7 +824,12 @@ AZEROTH.boundKinds = {
   demon: "AZEROTH.Bound.Kind.Demon",
   elemental: "AZEROTH.Bound.Kind.Elemental",
   totem: "AZEROTH.Bound.Kind.Totem",
-  summon: "AZEROTH.Bound.Kind.Summon"
+  summon: "AZEROTH.Bound.Kind.Summon",
+  // The Tinker's (the Legacy branches' door 6): built through 04's The Bench.
+  construct: "AZEROTH.Bound.Kind.Construct",
+  // 04's Thrall of the Banshee (the lead, 2026-10-22): one token's creature, bound while
+  // its Charmed stands, by the Use's door alone - the banner's Bind to never offers it.
+  thrall: "AZEROTH.Bound.Kind.Thrall"
 };
 
 // The ways a weapon is used to attack (06 §1, 08 §5's Thrown; D-731), in the
@@ -825,6 +849,25 @@ AZEROTH.attackModeRefusals = {
   hand: "AZEROTH.Attack.NoWay.Hand",
   thrown: "AZEROTH.Attack.NoWay.Thrown",
   shot: "AZEROTH.Attack.NoWay.Shot"
+};
+
+// 08 §7's Type column (the Legacy branches' door 15; the lead, phase 0: *"Type,
+// not kind"*): `rules/wield.mjs#WEAPON_TYPES` is the law and `legacy-doors.test.mjs`
+// holds the two in step, and both to the chapter. Stored as `system.weaponType`, never `type`.
+AZEROTH.weaponTypes = {
+  axe: "AZEROTH.WeaponType.Axe",
+  hammer: "AZEROTH.WeaponType.Hammer",
+  mace: "AZEROTH.WeaponType.Mace",
+  sword: "AZEROTH.WeaponType.Sword",
+  dagger: "AZEROTH.WeaponType.Dagger",
+  spear: "AZEROTH.WeaponType.Spear",
+  club: "AZEROTH.WeaponType.Club",
+  staff: "AZEROTH.WeaponType.Staff",
+  flail: "AZEROTH.WeaponType.Flail",
+  polearm: "AZEROTH.WeaponType.Polearm",
+  fist: "AZEROTH.WeaponType.Fist",
+  glaive: "AZEROTH.WeaponType.Glaive",
+  whip: "AZEROTH.WeaponType.Whip"
 };
 
 // What a launcher is, and what a shot is cut to (08 §7's Fits column, D-641).

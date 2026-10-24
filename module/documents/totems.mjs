@@ -34,19 +34,16 @@
 
 import { bondOf, worldActorOf } from "./bound.mjs";
 import { regionDataFor } from "../canvas/regions.mjs";
+// The ring every placed creature takes (the Legacy branches' door 4).
+import { RINGS, ringSpots } from "../rules/summon-places.mjs";
 
 export const PLANT_TOTEM_QUERY = "azeroth-rpg.plantTotem";
 
-/**
- * Where a totem is planted, in grid squares out from the shaman. 02 §7 says
- * *within 5 feet of you*, so the first ring is the whole of what the rule
- * allows; the outer rings are the fallback when every adjacent square is
- * occupied, and the GM drags it from there.
- */
-const RING = Object.freeze([[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]);
-
-/** How far out the search gives up and stacks the totem on the shaman's elbow. */
-const RINGS = 3;
+// Where a totem is planted, in grid squares out from the shaman: 02 §7 says
+// *within 5 feet of you*, so the first ring is the whole of what the rule
+// allows; the outer rings are the fallback when every adjacent square is
+// occupied, and the GM drags it from there. The ring is `rules/summon-places.mjs`'s
+// (`RING`, `RINGS`), one law since door 4.
 
 /** A radius past this is not a totem's, and is refused rather than drawn. */
 const MAX_FEET = 1000;
@@ -84,12 +81,6 @@ function tokensOf(actor) {
   return out;
 }
 
-/** Do two token footprints overlap, in pixels? */
-function overlaps(a, b) {
-  return (a.x < b.x + b.width) && (b.x < a.x + a.width)
-    && (a.y < b.y + b.height) && (b.y < a.y + a.height);
-}
-
 /**
  * The first square beside the shaman with nothing standing in it and the whole
  * footprint still on the canvas. Falls back to the first ring position,
@@ -104,18 +95,11 @@ export function freeSpot(scene, from, size) {
   // viewed or not (client/documents/scene.mjs, 14.367), so a totem planted on
   // a scene the GM is not looking at still lands on the board.
   const board = scene.dimensions?.rect ?? null;
-  const onBoard = box => !board
-    || (box.x >= board.x && box.y >= board.y
-      && box.x + box.width <= board.x + board.width
-      && box.y + box.height <= board.y + board.height);
-  for (let out = 1; out <= RINGS; out++) {
-    for (const [dx, dy] of RING) {
-      const spot = { x: from.x + dx * gx * out, y: from.y + dy * gy * out };
-      const box = { ...spot, width: size.width, height: size.height };
-      if (onBoard(box) && !standing.some(t => overlaps(t, box))) return spot;
-    }
-  }
-  return { x: from.x + gx, y: from.y };
+  // **ONE RING FOR EVERY PLACED CREATURE** (the Legacy branches' door 4): the
+  // squares round the shaman, ring by ring, and the first ring's first square
+  // where every one is taken - `rules/summon-places.mjs#ringSpots`, the law the
+  // summon door's picked point reads too.
+  return ringSpots({ origin: from, count: 1, cell: { w: gx, h: gy }, size, standing, board, includeOrigin: false, rings: RINGS })[0];
 }
 
 /**

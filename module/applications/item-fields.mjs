@@ -173,6 +173,8 @@ export const ITEM_FIELDS = Object.freeze({
   talent: Object.freeze([
     { path: "className", label: "AZEROTH.Item.Class", type: "text" },
     { path: "branch", label: "AZEROTH.Item.Branch", type: "text" },
+    // A Legacy's people (D-781); empty, and so not drawn, on a class's own three.
+    { path: "legacy", label: "AZEROTH.Item.LegacyPeople", type: "text" },
     { path: "tier", label: "AZEROTH.Item.BranchTier", type: "number" },
     { path: "ranks", label: "AZEROTH.Item.Ranks", type: "number" },
     // **THE TREE IS THE DOOR, AND THE GM KEEPS THE OVERRIDE** (04 §1, D-713;
@@ -200,7 +202,8 @@ export const ITEM_FIELDS = Object.freeze({
     { path: "level", label: "AZEROTH.Item.Level", type: "number" },
     { path: "kind", label: "AZEROTH.Item.FeatureKind", type: "select", choices: "featureKinds" },
     { path: "action", label: "AZEROTH.Item.Action", type: "select", choices: "actions" },
-    { path: "cost.pool", label: "AZEROTH.Item.CostPool", type: "select", choices: "poolTypes" },
+    // 05 §11's kind word too (02 §5's War Stomp spends *4 Momentum*; the B8a pass).
+    { path: "cost.pool", label: "AZEROTH.Item.CostPool", type: "select", choices: "costPoolTypes" },
     { path: "cost.amount", label: "AZEROTH.Item.CostAmount", type: "number" },
     { path: "casting", label: "AZEROTH.Item.CastingTest", type: "checkbox" },
     { path: "uses.value", label: "AZEROTH.Item.UsesLeft", type: "number" },
@@ -220,19 +223,13 @@ export const ITEM_FIELDS = Object.freeze({
     }
   ]),
 
+  // 04 §1's roster row and 02's *What it builds* (D-781). The lore is the
+  // description, which the sheet draws as prose; the branch is twelve talents.
   legacy: Object.freeze([
     { path: "race", label: "AZEROTH.Item.Race", type: "text" },
     { path: "className", label: "AZEROTH.Item.Class", type: "text" },
-    { path: "entry", label: "AZEROTH.Item.Entry", type: "text" },
-    { path: "rank", label: "AZEROTH.Item.Rank", type: "number" },
-    {
-      path: "ranks", label: "AZEROTH.Item.Ranks", type: "table",
-      columns: [
-        { path: "rank", label: "AZEROTH.Item.Rank" },
-        { path: "name", label: "AZEROTH.Item.Name" },
-        { path: "description", label: "AZEROTH.Item.Effect" }
-      ]
-    }
+    { path: "branch", label: "AZEROTH.Item.Branch", type: "text" },
+    { path: "builds", label: "AZEROTH.Item.Builds", type: "text" }
   ]),
 
   profession: Object.freeze([
@@ -270,6 +267,9 @@ export const ITEM_FIELDS = Object.freeze({
     { path: "rating", label: "AZEROTH.Item.Rating", type: "number" },
     { path: "range", label: "AZEROTH.Item.Range", type: "number" },
     { path: "traits", label: "AZEROTH.Item.Traits", type: "tags" },
+    // 08 §7's Type column (the Legacy branches' door 15): what Axe and Hammer and
+    // Storm Bolt read. A GM's own weapon is typed here; the parser stamps a pack's.
+    { path: "weaponType", label: "AZEROTH.Item.WeaponType", type: "select", choices: "weaponTypes" },
     // What it shoots with, and what a shot is cut to (08 §7's Fits column, D-641).
     { path: "launcher", label: "AZEROTH.Item.Launcher", type: "select", choices: "launcherKinds" },
     { path: "fits", label: "AZEROTH.Item.Fits", type: "tags", choices: "launcherKinds" },

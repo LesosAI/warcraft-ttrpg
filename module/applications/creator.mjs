@@ -29,11 +29,13 @@ import { featuresFor } from "../rules/class-features.mjs";
 import { RANK_MAX, rankCost } from "../rules/xp.mjs";
 import {
   ARRAY, CLASS_ORDER, METHODS, POINT_BUY, PURSE, ROLL_DICE, ROLL_KEEP, STARTING_XP, STEPS,
-  accessNote, inCareerSkills, kitRows, numbersFor, plan, pointBuyCost, pointBuyTotal,
+  accessNote, castingLine, inCareerSkills, kitRows, numbersFor, plan, pointBuyCost, pointBuyTotal, talentArmorFor,
   primaryAbilities, rankSpend,
   rollFloorMet, sideFor, skillUuid, spellsRequired, stepsFor, castsSpells, validate
 } from "../rules/creation.mjs";
 import { arrange } from "../rules/slots.mjs";
+// A Legacy's talents come with its people (04 §1, D-781).
+import { keptBy, owedTalents } from "../rules/legacy-branches.mjs";
 import { sectionTail } from "./browser-categories.mjs";
 import { SKILL_TEXT } from "../rules/skill-text.mjs";
 
@@ -154,7 +156,8 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     };
     const [races, classes, careers, talents, spells, weapons, armor, gear] = await Promise.all([
       docs(PACKS.races), docs(PACKS.classes), docs(PACKS.careers),
-      index(PACKS.talents, ["system.className", "system.branch", "system.tier", "system.race", "system.effect", "system.identifier", "system.ranks", "system.requires"]),
+      // `legacy` is the people a Legacy's twelve belong to (04 §1, D-781).
+      index(PACKS.talents, ["system.className", "system.branch", "system.legacy", "system.tier", "system.race", "system.effect", "system.identifier", "system.ranks", "system.requires"]),
       // The prose rides the index so a row can open on it without a second read (2026-09-06).
       index(PACKS.spells, ["system.tier", "system.school", "system.classes", "system.mana", "system.action",
         // 07 §9's mechanical run rides the index too, so a row SAYS what the
@@ -227,7 +230,9 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
       ranks: { ...s.ranks },
       adaptable: s.adaptable,
       racialTalent: s.racialTalent ? race?.talents?.find(t => t.name === s.racialTalent) ?? { name: s.racialTalent, tier: 99 } : null,
-      classTalent: classTalent ? { identifier: classTalent.identifier, name: classTalent.name, tier: classTalent.tier, className: classTalent.className } : null,
+      // The people a Legacy's talent belongs to rides along, so `validate` refuses
+      // one picked under another race in words (04 §1, D-781).
+      classTalent: classTalent ? { identifier: classTalent.identifier, name: classTalent.name, tier: classTalent.tier, className: classTalent.className, legacy: classTalent.legacy ?? "" } : null,
       spells: s.spells.map(uuid => this.#data.spells.find(sp => sp.uuid === uuid)).filter(Boolean),
       side: s.side,
       equipment: s.equipment.map(row => {
@@ -341,7 +346,11 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
         armor: (c.armor ?? []).filter(a => a !== "none").map(a => game.i18n.localize(AZEROTH.armorCategories[a] ?? a)).join(", ") || game.i18n.localize(AZEROTH.armorCategories.none),
         shields: Boolean(c.shields),
         weapons: c.weapons ?? "",
-        casting: c.castingAbility ? game.i18n.localize(AZEROTH.abilities[c.castingAbility]) : null,
+        // 02's own line, grade and all (`rules/creation.mjs#castingLine`): *Wisdom, for
+        // Spell DC only* for the Ranger and the Rogue, who cast nothing at level 1.
+        casting: (line => line ? game.i18n.format(`AZEROTH.Creator.CastingGrade.${line.grade}`, {
+          ability: game.i18n.localize(AZEROTH.abilities[line.ability] ?? line.ability)
+        }) : null)(castingLine(c)),
         // The other half of 01 §3's sentence (the lead, 2026-09-13). A class
         // that casts nothing printed nothing at all here, so the tile said
         // where the 16 goes only for the seven that cast.
@@ -488,14 +497,21 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     const branches = [];
     if (cls) {
       const names = (cls.branches ?? []).map(b => b.name);
-      const mine = this.#data.talents.filter(t => t.className === cls.name && !t.race && Number(t.tier) === 1);
-      for (const name of names.length ? names : [...new Set(mine.map(t => t.branch))]) {
-        const talents = await Promise.all(mine.filter(t => t.branch === name).sort((a, b) => a.name.localeCompare(b.name)).map(async t => ({
+      // The class's tier 1 talents, a Legacy's only where the race keeps it:
+      // an orc Warrior is offered Blademaster's three beside the class's own
+      // nine, a human Warrior is not (04 §1, D-781).
+      const mine = this.#data.talents.filter(t => t.className === cls.name && !t.race && Number(t.tier) === 1 && keptBy(t, race?.name ?? null));
+      const own = names.length ? names : [...new Set(mine.filter(t => !t.legacy).map(t => t.branch))];
+      const legacies = [...new Set(mine.filter(t => t.legacy).map(t => t.branch))];
+      for (const name of [...own, ...legacies]) {
+        const inBranch = mine.filter(t => t.branch === name);
+        const people = inBranch.find(t => t.legacy)?.legacy ?? "";
+        const talents = await Promise.all(inBranch.sort((a, b) => a.name.localeCompare(b.name)).map(async t => ({
           identifier: t.identifier, name: t.name, ranks: t.ranks ?? 1,
           selected: t.identifier === s.classTalent,
           html: await enrich(t.effect ?? "")
         })));
-        branches.push({ name, talents });
+        branches.push({ name: people ? game.i18n.format("AZEROTH.Talent.LegacyBranch", { branch: name, people }) : name, talents });
       }
     }
     const features = cls ? await Promise.all(featuresFor(cls, 1).map(async f => ({
@@ -615,9 +631,11 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     const priced = item => item.cost * (ogre && item.type === "armor" && !item.shield ? 2 : 1);
     const expanded = new Set(s.expanded ?? []);
     const rows = [];
+    // What the class talent picked adds to the Access (04's Warden's Mail; door 23).
+    const talentArmor = talentArmorFor(p);
     for (const [index, row] of p.equipment.entries()) {
       const price = row.cost === null ? 0 : priced(row);
-      const note = accessNote(row, p.cls);
+      const note = accessNote(row, p.cls, { extra: talentArmor });
       rows.push({
         index, uuid: row.uuid, name: row.name, img: row.img,
         type: game.i18n.localize(`TYPES.Item.${row.type}`),
@@ -926,7 +944,11 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
   /** Wait for the grant chain: the class's talents, the race's, and the race trait feature. */
   async #untilGranted(actor, proposal) {
     await actor._talentGrant?.catch?.(() => {});
-    const wantClass = proposal.cls ? 36 : 0;
+    // What the grant owes off the pack: the class's thirty-six, and a Legacy's
+    // twelve where the race keeps one on it (04 §1, D-781).
+    const wantClass = proposal.cls
+      ? owedTalents(this.#data.talents.map(t => ({ system: t })), { classNames: [proposal.cls.name], people: proposal.race?.name ?? null }).length
+      : 0;
     const wantRace = proposal.race ? 8 : 0;
     const done = () => {
       const classTalents = actor.items.filter(i => i.type === "talent" && !i.system?.race).length;

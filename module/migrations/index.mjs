@@ -46,6 +46,11 @@ import * as v01221 from "./0.12.21-spell-ticks.mjs";
 import * as v01222 from "./0.12.22-spell-reductions.mjs";
 import * as v01223 from "./0.12.23-temporary-health.mjs";
 import * as v01224 from "./0.12.24-cross-class.mjs";
+import * as v01225 from "./0.12.25-legacy-branches.mjs";
+import * as v01226 from "./0.12.26-resist-halves.mjs";
+import * as v01227 from "./0.12.27-fail-damage.mjs";
+import * as v01228 from "./0.12.28-marks.mjs";
+import * as v01229 from "./0.12.29-later-tests.mjs";
 import { forgetPacks } from "./walk.mjs";
 
 // Ordered oldest to newest. Add new entries at the end.
@@ -123,7 +128,27 @@ const CHAIN = [
   // clause (Absolute Zero, Stormwall), and the reasons the area and the tick no
   // longer carry (Tempest, Void Rift, Rimebind, Thornguard; Felfire Aura, Felstep),
   // every spell's three descriptors off its pack copy.
-  { version: "0.12.24", module: v01224 }
+  { version: "0.12.24", module: v01224 },
+  // The Legacies become talent branches (D-781): a character of a Legacy's people
+  // given the branch on the class it holds, a Legacy item rewritten whole as lore,
+  // 08 §7's Type on every weapon off its pack copy, and five undead made Mindless.
+  { version: "0.12.25", module: v01225 },
+  // Half the damage on a passed Test (the lead: *"Build it everywhere"*): every
+  // book-worded spell's `damage.half` off its pack copy, and nothing else.
+  { version: "0.12.26", module: v01226 },
+  // None of it on a passed Test where the failure deals it (Rimebind), and the splash
+  // around a spell's target (Stormfury): every book-worded spell's `damage.onFail` and
+  // `splash` off its pack copy, and nothing else.
+  { version: "0.12.27", module: v01227 },
+  // The damage that bypasses armor and Ward (Stormfury and eight more), and what a creature
+  // ability's Test governs (14's half on a pass, its spare, its condition): every book-worded
+  // spell's `damage.bypass` and every book-worded ability's three marks off their pack copies.
+  { version: "0.12.28", module: v01228 },
+  // The later Tests' doors (the lead: *"Build the triggers"*): Ring of Fire's and
+  // Stormwall's crossing, Frozen Rune's first entry, Nether Rift's Bane inside it, the
+  // creatures Blackout and The Deep name at the cast, and Holy Wrath's and Earth Shock's
+  // Test field: every book-worded spell's descriptor and Test off its pack copy.
+  { version: "0.12.29", module: v01229 }
 ];
 
 /**

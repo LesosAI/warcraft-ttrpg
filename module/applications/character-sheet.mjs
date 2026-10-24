@@ -35,18 +35,22 @@ import { chargeLines } from "../rules/riders.mjs";
 import { chargeControl } from "../helpers/rider-words.mjs";
 // A shape on the sheet (02 §7, D-769): its name, what melds, the attack's ability.
 import { SHAPE_ABILITIES, meldsGear, shapeKindOf, shapeRefusal } from "../rules/shapes.mjs";
-import { featurePrice } from "../rules/class-features.mjs";
+import { featurePrice, rungsChip } from "../rules/class-features.mjs";
 import { shapeLabel } from "../documents/shapes.mjs";
 import { attackAbility } from "../rules/ammunition.mjs";
 // Whether the character is out of sight, for the Combat tab's chip (D-717).
 import { isHidden } from "../effects/stealth.mjs";
 import { POINTS_AVAILABLE, buildTree, canTake, canTakeRacial, canUntake, canUntakeRacial, racialPicksFor, pointsSpent, talentPointsFor, tileState } from "../rules/talents.mjs";
+// Where a Legacy branch sits on its class's frame (04 §1, D-781).
+import { branchRank } from "../rules/legacy-branches.mjs";
 // The class's crest behind its tree, or null where there is no file (D-758).
 import { crestPath } from "../rules/crests.mjs";
 import { exitsFrom, isEligible } from "../rules/careers.mjs";
 import { tierForLevel, featuresUnlocked, secondaryLevel, secondaryTier } from "../rules/progression.mjs";
 import { manaPrice, showsSpells, spellsKnown } from "../rules/casting.mjs";
 import { onUseOf, talentEffect } from "../rules/talent-effects.mjs";
+// A Use whose first choice is free is pressed with its use spent (the B3 review).
+import { usesAskedLater } from "../rules/legacy-uses.mjs";
 import { hasUse } from "../rules/consumables.mjs";
 import { containerOf, hasCharges, isContainer, isWorn } from "../rules/containers.mjs";
 import { canCarry, heldAugment } from "../rules/augments.mjs";
@@ -1777,10 +1781,19 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     for (const item of owned) {
       const key = `${item.system.className}/${item.system.branch}`;
       if (!byBranch.has(key)) {
+        // A Legacy branch is marked with its people, in words (04 §1, D11 §4:
+        // *the frame draws it beside the other three and marks it with its
+        // people*): `Blademaster (Orc)`, as 04's own heading prints it. The key
+        // stays the class and the branch the talents carry.
+        const legacy = item.system.legacy || "";
         byBranch.set(key, {
           key,
           className: item.system.className,
-          branch: item.system.branch,
+          branch: legacy
+            ? game.i18n.format("AZEROTH.Talent.LegacyBranch", { branch: item.system.branch, people: legacy })
+            : item.system.branch,
+          branchName: item.system.branch,
+          legacy,
           talents: []
         });
       }
@@ -1805,16 +1818,17 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     }
 
     // In the class's own order - Arms, Fury, Bulwark as 02 §7 names them -
-    // and primary class first, rather than in whatever order the items sit.
-    const order = new Map();
-    for (const [ci, cls] of (this.actor.classItems ?? []).entries()) {
-      for (const [bi, b] of (cls.system?.branches ?? []).entries()) {
-        order.set(`${cls.name}/${b?.name ?? b}`, ci * 10 + bi);
-      }
-    }
-    const rank = key => order.get(key) ?? 100;
+    // and primary class first, rather than in whatever order the items sit; a
+    // class's Legacy fourth, after its own three (04 §1, D-781).
+    const classes = this.actor.classItems ?? [];
+    const rank = entry => {
+      const ci = classes.findIndex(c => c.name === entry.className);
+      if (ci < 0) return 100;
+      const own = (classes[ci].system?.branches ?? []).findIndex(b => (b?.name ?? b) === entry.branchName);
+      return branchRank({ classIndex: ci, ownIndex: own, legacy: Boolean(entry.legacy) });
+    };
     const branches = [...byBranch.values()]
-      .sort((a, b) => rank(a.key) - rank(b.key))
+      .sort((a, b) => (rank(a) - rank(b)) || a.key.localeCompare(b.key))
       .map(entry => ({
         ...entry,
         spent: pointsSpent(entry.talents),
@@ -3377,7 +3391,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // In a Shapeshift form a Mana price is paid in Ferocity (07, D-769); the
     // chip says what the Use takes, through the law the door pays with.
     const price = featurePrice(s.cost, { inShapeshiftForm: this.actor.inShapeshiftForm === true });
-    const poolLabel = price ? game.i18n.localize(AZEROTH.poolTypes[price.pool] ?? price.pool) : null;
+    // 05 §11's kind word reads as itself (02 §5's War Stomp: *4 Momentum*; the B8a pass).
+    const poolLabel = price ? game.i18n.localize(AZEROTH.costPoolTypes[price.pool] ?? price.pool) : null;
     // A shape the character cannot take at all (the lead: *"No Avatar without
     // it"*): the row greyed and the reason in words, through the rule the
     // door refuses with (`useFeature`'s 1a).
@@ -3400,10 +3415,20 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       level: s.level,
       passive: s.kind === "passive",
       actionLabel: s.action ? AZEROTH.actions[s.action] : null,
+      // **EVERY RUNG ITS USE MAY BE TAKEN AT** (04's Ethereal Form at rank 2: *you may use
+      // it as a Reaction*): the chip names both - *Half-Action or Reaction* - through the
+      // stamp's own `rungs`, which the door's chooser reads too. Null at one rung.
+      rungsText: rungsChip(s.action ?? null, s.rungs ?? [], {
+        label: r => game.i18n.localize(AZEROTH.actions[r] ?? r),
+        or: (first, second) => game.i18n.format("AZEROTH.Feature.RungEither", { first, second })
+      }),
       cost: poolLabel ? `${price.all ? game.i18n.localize("AZEROTH.Feature.SpendAll") : price.amount} ${poolLabel}` : null,
       casting: s.casting === true,
       uses: this.#usesRow(item),
-      available: item.system.available && !refusal,
+      // **A USE WHOSE FIRST CHOICE IS FREE STAYS PRESSABLE WITH ITS USE SPENT** (04's
+      // Ultrasafe Transporter: a pad is set over a Short Rest, and the Long Rest's one use
+      // is the travel's; the B3 review): the door greys the travel in words.
+      available: (item.system.available || usesAskedLater(use)) && !refusal,
       refusal,
       favorite: favorites.has(item.id),
       effect: await enrich(s.description, { relativeTo: item }),

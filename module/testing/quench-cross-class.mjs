@@ -25,7 +25,7 @@
  * deleted excepted.
  */
 
-import { cleanup, drainAreaWork, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings } from "./fixtures.mjs";
+import { cleanup, drainAreaWork, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings, tokenDrawn, tokenData } from "./fixtures.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 import { dispelOptionsOn } from "../effects/dispel.mjs";
@@ -77,9 +77,17 @@ async function fightWith(actors) {
 async function turnOf(combat, actor) {
   const mine = combat.getCombatantsByActor(actor)[0];
   const index = combat.turns.findIndex(c => c.id === mine.id);
-  if (index !== combat.turn) {
+  if (index > combat.turn) {
     const settled = untilHook("combatTurnChange", 60000, c => c.id === combat.id);
     await combat.update({ turn: index });
+    await settled;
+  }
+  // A creature EARLIER in the order is reached going forward, never by writing its
+  // index: core starts no turn on a move back, so its turn's start - the escape's
+  // prompt among it - never ran (B8b).
+  for (let i = 0; i <= combat.turns.length && combat.combatant?.id !== mine.id; i++) {
+    const settled = untilHook("combatTurnChange", 60000, c => c.id === combat.id);
+    await combat.nextTurn();
     await settled;
   }
   await until(() => combat.combatant?.id === mine.id, `${actor.name}'s turn`);
@@ -95,10 +103,10 @@ async function sceneWith(placements) {
   const data = [];
   for (const { actor, x, y, side = "friendly" } of placements) {
     await actor.update({ "prototypeToken.actorLink": true });
-    data.push((await actor.getTokenDocument({ x, y, disposition: CONST.TOKEN_DISPOSITIONS[side === "friendly" ? "FRIENDLY" : "HOSTILE"] })).toObject());
+    data.push((await tokenData(actor, { x, y, disposition: CONST.TOKEN_DISPOSITIONS[side === "friendly" ? "FRIENDLY" : "HOSTILE"] })));
   }
   await scene.createEmbeddedDocuments("Token", data);
-  for (let i = 0; i < 60 && !placements.every(p => p.actor.getActiveTokens(true).length); i++) await new Promise(r => setTimeout(r, 100));
+  for (let i = 0; i < 60 && !placements.every(p => tokenDrawn(p.actor.getActiveTokens(true)[0])); i++) await new Promise(r => setTimeout(r, 100));
   await settle();
   return scene;
 }

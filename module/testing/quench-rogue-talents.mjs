@@ -22,7 +22,8 @@
  * Every document a test makes is deleted in `after`.
  */
 
-import { cleanup, drainAreaWork, giveTurn, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings } from "./fixtures.mjs";
+import { cleanup, drainAreaWork, give, giveTurn, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings, tokenDrawn, tokenData } from "./fixtures.mjs";
+import { hitGain } from "../rules/momentum.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 import { reactWithDialog, reactionRows } from "../applications/actions.mjs";
@@ -63,7 +64,13 @@ async function fightWith(actors) {
   const combat = await Combat.create({});
   made.push(combat);
   await combat.activate();
-  await combat.createEmbeddedDocuments("Combatant", actors.map(a => ({ actorId: a.id })));
+  // By the token where the actor stands on the viewed scene, as a table makes a fight:
+  // the move charge finds its mover by `tokenId` alone (`combat.mjs#turnMover`), so a
+  // combatant with no token walks unmetered and Fleet Footed never fired (B8b).
+  await combat.createEmbeddedDocuments("Combatant", actors.map(a => {
+    const token = a.getActiveTokens(true)[0]?.document ?? null;
+    return token ? { actorId: a.id, tokenId: token.id, sceneId: token.parent.id } : { actorId: a.id };
+  }));
   const settled = untilHook("combatTurnChange", 60000, c => c.id === combat.id);
   await combat.startCombat();
   await settled;
@@ -80,12 +87,12 @@ async function sceneWith(placements) {
   const data = [];
   for (const { actor, x, y, side = "friendly" } of placements) {
     await actor.update({ "prototypeToken.actorLink": true });
-    data.push((await actor.getTokenDocument({
+    data.push((await tokenData(actor, {
       x, y, disposition: CONST.TOKEN_DISPOSITIONS[side === "friendly" ? "FRIENDLY" : "HOSTILE"]
-    })).toObject());
+    })));
   }
   await scene.createEmbeddedDocuments("Token", data);
-  for (let i = 0; i < 60 && !placements.every(p => p.actor.getActiveTokens(true).length); i++) {
+  for (let i = 0; i < 60 && !placements.every(p => tokenDrawn(p.actor.getActiveTokens(true)[0])); i++) {
     await new Promise(r => setTimeout(r, 100));
   }
   await settle();
@@ -251,7 +258,8 @@ export function rogueTalentsBatch(context) {
       await setPool(rogue, "comboPoints", 3);
       const card = await strike(rogue, { targets: [rowOf(ghoul)], finisherSpent: 3, dc: 2, budget: "none" });
       assert.isAtLeast(card.rolls[0].outcome.sl, 2);
-      await until(() => poolOf(rogue, "comboPoints").value >= 2, "two points back");
+      // 05 §11's gain on the Finisher's own hit, and Ruthlessness's two on top (B8b).
+      await until(() => poolOf(rogue, "comboPoints").value === hitGain(card.rolls[0].outcome.sl) + 2, "the hit's gain and two points back");
       assert.include(labels(card), "Ruthlessness");
     });
 
@@ -312,7 +320,7 @@ export function rogueTalentsBatch(context) {
         fail();
       }
       const theirs = combat.getCombatantsByActor(ghoul)[0];
-      await until(() => theirs.budget?.reaction === 0, "the ghoul's Reaction gone");
+      await until(() => theirs.budget?.reactions === 0, "the ghoul's Reaction gone");
       const caught = await until(() => ghoul.effects.find(e => e.statuses?.has("entangled")), "the ghoul Entangled");
       assert.deepEqual(caught.getFlag("azeroth-rpg", "paralytic"), { source: rogue.uuid });
       const pass = pinDie(20);
@@ -335,7 +343,8 @@ export function rogueTalentsBatch(context) {
       const bleed = await until(() => ghoul.effects.find(e => e.statuses?.has("bleeding")), "the Bleeding");
       assert.equal(bleed.getFlag("azeroth-rpg", "value"), 8, "2 x 3 + 2");
       assert.notInclude(labels(card), "AZEROTH.Card.FinisherSpent", "the points were also added to the damage");
-      assert.equal(poolOf(rogue, "comboPoints").value, 0);
+      // The three are spent; what stands is 05 §11's gain on the Finisher's own hit (B8b).
+      assert.equal(poolOf(rogue, "comboPoints").value, hitGain(card.rolls[0].outcome.sl), "the three spent, and the hit's own gain");
     });
 
     it("DEATH MARK: the Use names one target, and a Finisher against it spends nothing and counts five", async function () {
@@ -351,7 +360,8 @@ export function rogueTalentsBatch(context) {
       const card = await strike(rogue, { targets: [rowOf(ghoul)], finisherFree: "Death Mark", budget: "none" });
       assert.isAtLeast(poolOf(rogue, "comboPoints").value, 1, "the free Finisher spent points");
       assert.include(card.rolls[0].options.provenance.map(p => `${p.label}:${p.value}`), "Death Mark:5", "it did not count five");
-      await rogue.shortRest({ food: null, drink: null }).catch(() => null);
+      // 05 §16: a Short Rest takes food or drink, and one with neither is refused (B8b).
+      assert.ok(await rogue.shortRest({ food: await give(rogue, "Rations, one day") }), "the rest was refused");
       await until(() => !rogue.getFlag("azeroth-rpg", "deathMark"), "the mark gone at a rest");
     });
 
@@ -377,7 +387,10 @@ export function rogueTalentsBatch(context) {
       const rogue = await rogueWith("ZZ RoT Feint", { ranks: { Feint: 2 } });
       const ghoul = await makeNpc("Plagued Ghoul");
       const priest = await makeCharacter({ name: "ZZ RoT Feint Priest", classes: [["Priest", 3]] });
-      await fightWith([rogue, ghoul, priest]);
+      const combat = await fightWith([rogue, ghoul, priest]);
+      // The Rogue's own turn: Feint is a Half-Action (the lead: *"Refuse off-turn
+      // Half-Actions"*). The ghoul's blows ride `budget: "none"` and take no turn.
+      await giveTurn(combat, rogue);
       await setPool(rogue, "energy", 10);
       await use(rogue, "Feint", { targets: [rowOf(ghoul)] });
       const laid = await until(() => ghoul.effects.find(e => e.getFlag("azeroth-rpg", "laidBane")?.only?.actorId === rogue.id), "the Feint on the ghoul");
@@ -498,7 +511,7 @@ export function rogueTalentsBatch(context) {
       await strike(rogue, { targets: [rowOf(ghoul, { acted: true })], budget: "none" });
       await until(() => poolOf(rogue, "comboPoints").value >= 3, "05's point, Shadow Focus's one and Waylay's one");
       const theirs = combat.getCombatantsByActor(ghoul)[0];
-      await until(() => theirs.budget?.reaction === 0, "the ghoul's Reaction gone");
+      await until(() => theirs.budget?.reactions === 0, "the ghoul's Reaction gone");
     });
 
     it("CLOAK OF SHADOWS: the Reaction lays Ward a rank against the chosen school until the next turn", async function () {

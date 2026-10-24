@@ -27,6 +27,8 @@ import { cleanCapacity, cleanCharges } from "../../rules/containers.mjs";
 import { bagSlotsOf, cleanWell } from "../../rules/slots.mjs";
 import { augmentOf } from "../../rules/augments.mjs";
 import { cleanSlot } from "../../rules/worn.mjs";
+// 08 §7's Type column (the Legacy branches' door 15).
+import { cleanWeaponType } from "../../rules/wield.mjs";
 import { cleanProvision } from "../../rules/provisions.mjs";
 // 02 §7's Consecrated and 04's Sanctified Weapon (D-772): the trait a
 // Consecrated weapon carries, derived while the flag stands.
@@ -193,6 +195,14 @@ export class WeaponData extends foundry.abstract.TypeDataModel {
       rating: optionalNumberField({ min: 0 }),
       range: optionalNumberField({ min: 0 }),
       traits: traitsField(),
+      // **08 §7's TYPE** (the Legacy branches' door 15; the lead, phase 0: *"Type,
+      // not kind"*): axe, hammer, mace, sword, dagger, spear, club, staff, flail
+      // or polearm, stamped by the parser off the chapter's own Type column. NOT
+      // `type`, which is the Item document's own subtype. A free string the
+      // model cleans (`rules/wield.mjs#cleanWeaponType`), never a `choices` that
+      // would refuse a stored document at load (CLAUDE.md §15); null where the
+      // weapon names none.
+      weaponType: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
       ...chosenSchool(),
       ...itemEconomyFields(AZEROTH),
       equipped: new fields.BooleanField({ initial: false }),
@@ -224,6 +234,9 @@ export class WeaponData extends foundry.abstract.TypeDataModel {
       const kinds = Object.keys(AZEROTH.launcherKinds);
       if (source.launcher !== undefined && source.launcher !== null && !kinds.includes(source.launcher)) source.launcher = null;
       if (Array.isArray(source.fits)) source.fits = source.fits.filter(k => kinds.includes(k));
+      // 08 §7's Type (door 15): an unknown word is nulled, never refused - and only
+      // where the key is PRESENT, since this runs over partial updates too (D-671).
+      if ("weaponType" in source) source.weaponType = cleanWeaponType(source.weaponType);
       cleanSchool(source);
       cleanSignatureEffect(source);
       cleanWellField(source);

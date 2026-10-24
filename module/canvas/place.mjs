@@ -496,7 +496,7 @@ export async function placeSpellArea({ spell, actor = null } = {}) {
  *   line's length (D-775: Cone of Cold), through `rules/areas.mjs#lengthenArea`.
  * @returns {Promise<RegionDocument|null>}
  */
-export async function placeItemArea({ item = null, actor = null, areaText = null, name = null, color = null, token = null, guessToken = true, flags = null, widenFt = 0, lengthenFt = 0 } = {}) {
+export async function placeItemArea({ item = null, actor = null, areaText = null, name = null, color = null, token = null, guessToken = true, flags = null, widenFt = 0, lengthenFt = 0, accept = null } = {}) {
   const text = areaText ?? item?.system?.area ?? item?.system?.target ?? "";
   const label = name ?? item?.name ?? "";
   const area = lengthenArea(widenArea(areaFor(text), widenFt), lengthenFt);
@@ -526,10 +526,18 @@ export async function placeItemArea({ item = null, actor = null, areaText = null
   if (steps.origin === STEP_ORIGINS.TOKEN) {
     origin = { x: centre.x, y: centre.y };
   } else {
+    // `accept` holds the point to a caller's own rule and keeps the pick open on a
+    // refusal (`pickPoint`'s own option): 04's Cluster Rockets aims within 60 feet
+    // of a construct, not of the caster (the Legacy branches' door 6).
     origin = await pickPoint({
-      hint: game.i18n.format(steps.facing ? "AZEROTH.Area.ClickToStart" : "AZEROTH.Area.ClickToPlace", { name: label })
+      hint: game.i18n.format(steps.facing ? "AZEROTH.Area.ClickToStart" : "AZEROTH.Area.ClickToPlace", { name: label }),
+      ...(typeof accept === "function" ? { accept } : {})
     });
     if (!origin) return null;
+    // **ONE SPACE** (07's Frozen Rune, *The first creature to enter the space*; the B9a
+    // pass): the space the click fell in, at its centre - `rules/areas.mjs`' `space`
+    // circle is half a square across, so it covers that space and no other.
+    if (area.space === true && typeof scene.grid?.getCenterPoint === "function") origin = scene.grid.getCenterPoint(origin);
   }
 
   // A cone or a line points somewhere, and only the caster knows where.

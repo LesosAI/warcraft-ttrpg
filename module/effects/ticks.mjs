@@ -32,6 +32,8 @@
 
 import { AZEROTH } from "../config.mjs";
 import { hasTick, tickCountdown, tickHasClock, tickLanding, tickLineParts, tickToEnd, ticksDue } from "../rules/ticks.mjs";
+// 04's Drawn Across on the hand that laid an untyped tick (the B3 review).
+import { dealtHalvedBy, halvedAmount } from "../rules/legacy-uses.mjs";
 import { strikeFromArea } from "./area-strikes.mjs";
 import { actorInWorld } from "../canvas/in-world.mjs";
 import { spellTiming } from "./durations.mjs";
@@ -116,9 +118,12 @@ export async function landTicks(actor) {
       } else if (tick.kind === "damage") {
         // 08 §12's *N damage a turn*, which names no type: the printed number
         // lands, and no Armor Point or Ward reduces it (D-770, a reading for
-        // the lead). A blow of no type and no attack, by the poisoner's hand.
-        if (amount > 0) await actor.applyDamage(amount, { struck: true, attack: false, location: "body", type: null, by: hand });
-        lines.push(game.i18n.format("AZEROTH.Tick.Untyped", { name: actor.name, amount, source: spell.name }));
+        // the lead). A blow of no type and no attack, by the poisoner's hand -
+        // **halved where that hand is under 04's Drawn Across** (*the damage it deals
+        // is halved, rounded down*; the B3 review: no `resolveDamage` meets it).
+        const dealt = halvedAmount(amount, dealtHalvedBy(hand));
+        if (dealt > 0) await actor.applyDamage(dealt, { struck: true, attack: false, location: "body", type: null, by: hand });
+        lines.push(game.i18n.format("AZEROTH.Tick.Untyped", { name: actor.name, amount: dealt, source: spell.name }));
       } else {
         for (const line of await strikeFromArea({ actor, caster: hand, spell, heal: amount })) lines.push(line);
       }

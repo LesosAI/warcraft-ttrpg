@@ -21,8 +21,10 @@ export const BRANCH_GATES = Object.freeze([0, 4, 8, 12, 16]);
 
 /**
  * Talents per tier in every branch: three, three, three, two, one capstone.
- * All twenty-seven branches in 04 are this shape, which is what lets the tree
- * be laid out in three columns.
+ * All thirty-four branches in 04 are this shape - the classes' twenty-seven and
+ * the seven Legacies beside them (D-781) - which is what lets the tree be laid
+ * out in three columns. A Legacy branch is laid out here exactly as a class's
+ * own is; whose it is and who holds it is `rules/legacy-branches.mjs`'s.
  */
 export const BRANCH_SHAPE = Object.freeze([3, 3, 3, 2, 1]);
 
@@ -89,9 +91,10 @@ function rowOrder(a, b) {
 export const POINTS_AVAILABLE = 20;
 
 /**
- * 02 SS9: "Each level grants one talent point, spendable in any of your
- * three." So the points a character has to spend is its level, capped where
- * the trees cap (twenty). A GM override lives on the actor as a flag.
+ * 02 SS9: "Each level grants one talent point." 04 §1: *Spend each point in any
+ * of your branches* - a Legacy's among them, on the same twenty (D-781: *"Shared
+ * 20, a true spec"*). So the points a character has to spend is its level,
+ * capped where the trees cap (twenty). A GM override lives on the actor as a flag.
  */
 export function talentPointsFor(level = 1) {
   return Math.max(0, Math.min(POINTS_AVAILABLE, Math.trunc(Number(level)) || 0));

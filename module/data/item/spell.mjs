@@ -17,6 +17,7 @@ import {
 } from "../../rules/area-ticks.mjs";
 import { cleanAreaGround } from "../../rules/area-ground.mjs";
 import { TICK_KINDS, TICK_UNTIL, TICK_WHEN, cleanTick } from "../../rules/ticks.mjs";
+import { cleanSplash } from "../../rules/splash.mjs";
 import {
   choiceField,
   descriptionField,
@@ -60,7 +61,26 @@ export class SpellData extends foundry.abstract.TypeDataModel {
         // A spell's Damage Rating. Its Success Level does NOT add to it
         // (D-330) — SL gates riders and nothing else.
         rating: optionalNumberField({ min: 0 }),
-        school: choiceField(AZEROTH.schools)
+        school: choiceField(AZEROTH.schools),
+        // **HALF ON A PASSED TEST** (the lead: *"Build it everywhere"*): 07's *and
+        // half of that, rounded down, on a success*, read off the entry's own
+        // sentence by the parser (`rules/resisted.mjs#halvesOnPass`). The card's
+        // Apply lands the half on a creature whose Resist on that card passed.
+        // Migration 0.12.26 stamps a world's spells off their pack copies.
+        half: new fields.BooleanField({ initial: false }),
+        // **NONE OF IT ON A PASSED TEST** (the B8a pass): 07's Rimebind, *On a failure it
+        // takes 2 Frost damage* - the failure deals the Rating and a pass deals nothing,
+        // read off the entry's own sentence by the parser (`rules/resisted.mjs#noneOnPass`).
+        // The card's Apply lands nothing on a creature whose Resist on that card passed.
+        // Migration 0.12.27 stamps a world's spells off their pack copies.
+        onFail: new fields.BooleanField({ initial: false }),
+        // **THE DAMAGE BYPASSES ARMOR AND WARD** (the B8a2 pass): 07's *The target takes 20
+        // Nature damage, bypassing armor and Ward* on Stormfury and its eight kin, read off the
+        // entry's own sentence by the parser (`rules/bypass.mjs#bypassesArmorAndWard`). The
+        // card's mitigation takes neither Armor Points nor Ward off it
+        // (`rules/mitigation.mjs#resolveDamage`'s `bypass`). Migration 0.12.28 stamps a
+        // world's spells off their pack copies.
+        bypass: new fields.BooleanField({ initial: false })
       }),
       test: new fields.SchemaField({
         // The Resilience the target makes against your Spell DC, if any.
@@ -184,12 +204,25 @@ export class SpellData extends foundry.abstract.TypeDataModel {
               kinds: new fields.ArrayField(new fields.StringField({ required: true, blank: false, choices: [...AREA_TICK_KINDS] }), { initial: [] }),
               not: new fields.BooleanField({ initial: false }),
               statuses: new fields.ArrayField(new fields.StringField({ required: true, blank: false }), { initial: [] })
-            }), { initial: [] })
+            }), { initial: [] }),
+            // *On a failure it does not cross* (07's Ring of Fire and Stormwall; the B9a
+            // pass): put back on its own side of the edge.
+            stop: new fields.BooleanField({ initial: false })
           }),
           success: new fields.SchemaField({
             statuses: new fields.ArrayField(new fields.StringField({ required: true, blank: false }), { initial: [] }),
-            until: new fields.StringField({ required: true, blank: true, initial: "", choices: [...AREA_UNTIL] })
-          })
+            until: new fields.StringField({ required: true, blank: true, initial: "", choices: [...AREA_UNTIL] }),
+            // Ring of Fire's *on a success it crosses and takes 5 Fire damage* (the B9a pass).
+            rating: optionalNumberField({ min: 0 }),
+            school: choiceField(AZEROTH.schools)
+          }),
+          // **THE B9a PASS'S TWO** (the lead: *"Build the triggers"*): Frozen Rune's *The
+          // first creature to enter the space* - once an area, ever - and the creatures
+          // named at the cast a row spares (Ring of Fire, Blackout, The Deep). The model
+          // keeps them, or a spell embedded off the pack drops them and the door that
+          // reads them reads nothing.
+          first: new fields.BooleanField({ initial: false }),
+          spares: new fields.StringField({ required: true, blank: true, initial: "", choices: ["", "named"] })
         }), { initial: [] }),
         remains: new fields.ArrayField(new fields.SchemaField({
           when: new fields.StringField({ required: true, blank: false, initial: "inside", choices: [...AREA_REMAINS_WHEN] }),
@@ -245,6 +278,21 @@ export class SpellData extends foundry.abstract.TypeDataModel {
         sl: optionalNumberField(),
         spellpower: new fields.BooleanField({ initial: false }),
         reason: new fields.StringField({ required: true, blank: true, initial: "" })
+      }),
+
+      // WHAT THE SPELL DEALS AROUND ITS TARGET, A TEST AT A TIME (07's Stormfury: *Every
+      // creature within 15 feet of it makes a Reflex Resilience Test against your Spell DC
+      // or takes 10 Nature damage*; the B8a pass), read off the effect by
+      // `rules/splash.mjs#readSplash` and stamped by the parser on every spell - the whole
+      // shape, empty where the spell has none. `castSpell` posts each creature inside an
+      // area Test card; `reason` names what stays the table's. Migration 0.12.27 stamps a
+      // world's spells off their pack copies.
+      splash: new fields.SchemaField({
+        feet: optionalNumberField({ min: 0 }),
+        rating: optionalNumberField({ min: 0 }),
+        school: choiceField(AZEROTH.schools),
+        resilience: choiceField(AZEROTH.resiliences),
+        reason: new fields.StringField({ required: true, blank: true, initial: "" })
       })
     };
   }
@@ -271,6 +319,11 @@ export class SpellData extends foundry.abstract.TypeDataModel {
     if (source && typeof source === "object" && "tick" in source) {
       if (source.tick && typeof source.tick === "object" && !Array.isArray(source.tick)) cleanTick(source.tick);
       else delete source.tick;
+    }
+    // And the splash around the target (the B8a pass), only the keys handed in.
+    if (source && typeof source === "object" && "splash" in source) {
+      if (source.splash && typeof source.splash === "object" && !Array.isArray(source.splash)) cleanSplash(source.splash);
+      else delete source.splash;
     }
     return super.migrateData(source);
   }

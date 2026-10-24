@@ -24,7 +24,7 @@
  * own shape), so no awaited write and no other module's listener sees it.
  */
 
-import { cleanup, drainAreaWork, fromPack, made, makeCharacter, makeNpc, settle, PACK_FOR } from "./fixtures.mjs";
+import { cleanup, drainAreaWork, fromPack, made, makeCharacter, makeNpc, quietScrollingText, settle, PACK_FOR, tokenData } from "./fixtures.mjs";
 
 /** Wait for a condition, or say what was being waited for. */
 async function until(fn, what, ms = 20000) {
@@ -81,7 +81,7 @@ async function kaelen(name) {
 
 /** A token for this actor on the scene, from its own prototype, drawn. */
 async function place(scene, actor, { x, y, ...rest }) {
-  const data = (await actor.getTokenDocument({ x, y, ...rest })).toObject();
+  const data = (await tokenData(actor, { x, y, ...rest }));
   const [doc] = await scene.createEmbeddedDocuments("Token", [data]);
   await until(() => canvas.tokens.get(doc.id)?.center, `${actor.name}'s token drawn`);
   return doc;
@@ -92,9 +92,13 @@ export function visionBatch(context) {
 
   describe("A player character's token sees (D-759)", function () {
     let wasViewing = null;
+    // The dependent-tokens case lays an Invisible, whose two-second status text a scene
+    // switch tears down under core's animation (B8b; the Legacy batches' fixture).
+    let quietText = null;
 
-    before(function () {
+    before(async function () {
       wasViewing = game.scenes.active ?? canvas?.scene ?? null;
+      quietText = await quietScrollingText();
     });
 
     after(async function () {
@@ -105,6 +109,7 @@ export function visionBatch(context) {
       await drainAreaWork();
       for (const doc of made.filter(d => d instanceof Scene)) await doc.delete().catch(() => {});
       await cleanup();
+      await quietText?.();
     });
 
     it("gives a character the creator makes a token that sees what is lit in its line of sight, and nothing in the dark", async function () {
@@ -245,6 +250,41 @@ export function visionBatch(context) {
 
       // IDEMPOTENT: a second run has nothing left to do, here or anywhere.
       assert.equal(await migrate(() => {}), 0, "a second run touched documents again");
+    });
+
+    it("counts only the tokens a scene holds as an actor's dependents: a pending token document gets no Token built for it, and an Invisible lands clean (B8b)", async function () {
+      this.timeout(120000);
+      const scene = await Scene.create({ name: "ZZ Vision Dependents", width: 2000, height: 1500, grid: { size: 100, distance: 5, units: "ft" } });
+      made.push(scene);
+      await scene.view();
+      await until(() => canvas.ready && canvas.scene?.id === scene.id, "the scene viewed");
+      const actor = await makeCharacter({ name: "ZZ Vision Dependent" });
+      const real = await place(scene, actor, { x: 500, y: 500, actorLink: true });
+      // A token document the scene does not hold, kept here so it cannot be collected:
+      // core builds one of these for `_preCreate` on every token it creates
+      // (client/data/client-backend.mjs L92) and registers it as the actor's dependent.
+      const pending = new CONFIG.Token.documentClass(await tokenData(actor, { x: 800, y: 500 }), { parent: scene });
+      const failed = [];
+      const hook = Hooks.on("error", (location, error) => {
+        if (String(error?.message ?? "").includes(actor.uuid)) failed.push(error.message);
+      });
+      try {
+        assert.isNull(pending.id, "the stand-in for core's pending document carries an id");
+        assert.include(actor.getDependentTokens({ concreteOnly: false }), pending, "core no longer registers a document it constructs");
+        assert.deepEqual(actor.getDependentTokens().map(t => t.id), [real.id], "a document the scene does not hold counts as a dependent");
+        // An actor update visits the dependents; the pending one gets no undrawn Token.
+        await actor.update({ "system.health.value": 5 });
+        assert.isNull(pending._object, "an actor update built a Token for a document the scene does not hold");
+        // A special status reaches the real token alone, and the preparation stands.
+        await actor.toggleStatusEffect(CONFIG.specialStatusEffects.INVISIBLE, { active: true });
+        await until(() => actor.statuses.has(CONFIG.specialStatusEffects.INVISIBLE), "the Invisible laid");
+        await settle();
+        assert.deepEqual(failed, [], "the actor's data preparation failed");
+      } finally {
+        Hooks.off("error", hook);
+        actor._unregisterDependentToken?.(pending);
+        pending._object?.destroy?.();
+      }
     });
   });
 }

@@ -282,21 +282,33 @@ export function creatorBatch(context) {
       assert.include(mark("dex"), game.i18n.localize("AZEROTH.Creator.FightsWithTip"));
       assert.include(mark("wis"), game.i18n.localize("AZEROTH.Creator.CastsWithTip"));
 
-      // And the class card prints the fighting ability beside the casting one.
+      // And the class card prints the fighting ability beside the casting one, in
+      // 02's own words: *Wisdom, for Spell DC only* (`rules/creation.mjs#castingLine`).
       await creator.goTo("class");
       await settle();
       const detail = creator.element.querySelector(".azeroth-creator-detail")?.textContent ?? "";
       assert.include(detail, game.i18n.localize("AZEROTH.Creator.FightsWith"), "the class card does not name the fighting ability");
       assert.include(detail, game.i18n.localize("AZEROTH.Ability.Dex.Label"));
       assert.include(detail, game.i18n.localize("AZEROTH.Item.CastingAbility"));
+      const dcOnly = ability => game.i18n.format("AZEROTH.Creator.CastingGrade.dcOnly", { ability: game.i18n.localize(ability) });
+      assert.include(detail, dcOnly("AZEROTH.Ability.Wis.Label"), "the Ranger's card does not say its Wisdom is for its Spell DC only");
 
-      // A class that casts nothing still names one.
+      // **THE ROGUE TAKES INTELLIGENCE FOR ITS SPELL DC** (D-781: *"Use Intelligence in
+      // the formula"*; 02: *Intelligence, for Spell DC only*): the card says so in 02's
+      // words, and the abilities step stars it beside Dexterity, as it stars the Ranger's.
       await creator.setState({ cls: await uuidOf(PACK_FOR.class, "Rogue"), classTalent: null, spells: [] });
       await settle();
       const rogue = creator.element.querySelector(".azeroth-creator-detail")?.textContent ?? "";
       assert.include(rogue, game.i18n.localize("AZEROTH.Creator.FightsWith"));
-      assert.notInclude(rogue, game.i18n.localize("AZEROTH.Item.CastingAbility"), "a Rogue was given a casting ability");
-      assert.deepEqual(await starred(), ["dex"], "a Rogue's Dexterity is not starred");
+      assert.include(rogue, dcOnly("AZEROTH.Ability.Int.Label"), "a Rogue's card does not say its Intelligence is for its Spell DC only");
+      assert.notInclude(rogue, game.i18n.format("AZEROTH.Creator.CastingGrade.full", { ability: game.i18n.localize("AZEROTH.Ability.Int.Label") }), "a Rogue was called a caster");
+      assert.deepEqual(await starred(), ["dex", "int"], "a Rogue's Dexterity and Intelligence are not both starred");
+      // And a Mage's line names its grade.
+      await creator.setState({ cls: await uuidOf(PACK_FOR.class, "Mage"), classTalent: null, spells: [] });
+      await creator.goTo("class");
+      await settle();
+      assert.include(creator.element.querySelector(".azeroth-creator-detail")?.textContent ?? "",
+        game.i18n.format("AZEROTH.Creator.CastingGrade.full", { ability: game.i18n.localize("AZEROTH.Ability.Int.Label") }));
 
       await creator.close();
     });

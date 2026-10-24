@@ -25,6 +25,17 @@
  * bought with the Reaction is nothing to ride and a press outside the turn is
  * refused rather than charged.
  *
+ * **EVERY HALF-ACTION IS SPENT ON YOUR OWN TURN** (05: *On your turn you have two
+ * Half-Actions and one Reaction*; the lead, 2026-10-23: *"Refuse off-turn
+ * Half-Actions"*). Outside its owner's turn only the Reaction is open: a Use, an
+ * attack, a cast, a Stand, a gadget priced in Half-Actions, an action or a Full
+ * Action is refused in words - unless the Half-Action was given to be taken AT
+ * ONCE (`grantAtOnce`: 04's Remote Control, *one of your constructs within 60 feet
+ * takes a Half-Action at once*; 05's Ready, whose named action the Reaction takes
+ * when the trigger fires). A turn's leftover Half-Actions used to pay for a Use
+ * pressed on somebody else's turn, since the budget is reset only when the
+ * creature's own turn comes round again.
+ *
  * **Every refusal is an i18n key and its params**, never an English sentence
  * (CLAUDE.md §11): the tracker has to say why an action is unavailable, and
  * `AzerothCombatant#spendAction` is what localises it.
@@ -52,6 +63,9 @@ export const BUDGET_REFUSALS = Object.freeze({
   fullTakesReaction: "AZEROTH.Budget.Refuse.FullTakesReaction",
   offHandSpent: "AZEROTH.Budget.Refuse.OffHandSpent",
   offHandNotYourTurn: "AZEROTH.Budget.Refuse.OffHandNotYourTurn",
+  // Any Half-Action, action or Full Action outside its owner's turn (the lead:
+  // *"Refuse off-turn Half-Actions"*), with the at-once allowance spent.
+  notYourTurn: "AZEROTH.Budget.Refuse.NotYourTurn",
   nothingToRestore: "AZEROTH.Budget.Refuse.NothingToRestore"
 });
 
@@ -139,6 +153,17 @@ function freeMovesLeft(budget) {
 }
 
 /**
+ * The Half-Actions the budget holds TO BE TAKEN AT ONCE, whoever's turn it is
+ * (`grantAtOnce`); a budget that never had one holds none. Never more than the
+ * Half-Actions themselves: an at-once Half-Action is one of them.
+ */
+export function atOnceLeft(budget) {
+  const n = budget?.atOnce;
+  const held = typeof n === "number" && Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
+  return Math.min(held, Math.max(0, Math.trunc(Number(budget?.halfActions)) || 0));
+}
+
+/**
  * A fresh turn's budget. Reactions refresh at the start of your turn (06 §6),
  * and the off hand's one is per ROUND rather than per turn.
  *
@@ -151,11 +176,24 @@ function freeMovesLeft(budget) {
  * @param {boolean} [o.extraAttack]  02 §6's feature, a creature's trait or flag.
  * @param {number} [o.freeMove]      Moves this turn that cost no Half-Action
  *                                   (02 §7's Sprint, D-712).
+ * @param {number|null} [o.halfActions]  A turn of FEWER Half-Actions than 05's two,
+ *   where the creature's own words say so (04's Pocket Factory: *each takes one
+ *   Half-Action a turn of its own*; the Legacy branches' door 6). Never more than
+ *   two; null or absent is 05's two.
+ * @param {number|null} [o.reactions]  A turn with no Reaction, where the creature's
+ *   state says so (06 §10's Spirit Realm: *You cannot touch the living world*; the
+ *   Legacy branches' door 10). Never more than 06 §6's one; null or absent is it.
  */
-export function freshTurn({ extraAttack = false, freeMove = 0 } = {}) {
+export function freshTurn({ extraAttack = false, freeMove = 0, halfActions = null, reactions = null } = {}) {
+  const halves = halfActions === null || halfActions === undefined
+    ? HALF_ACTIONS_PER_TURN
+    : Math.max(0, Math.min(HALF_ACTIONS_PER_TURN, Math.trunc(Number(halfActions)) || 0));
+  const answers = reactions === null || reactions === undefined
+    ? REACTIONS_PER_TURN
+    : Math.max(0, Math.min(REACTIONS_PER_TURN, Math.trunc(Number(reactions)) || 0));
   return {
-    halfActions: HALF_ACTIONS_PER_TURN,
-    reactions: REACTIONS_PER_TURN,
+    halfActions: halves,
+    reactions: answers,
     // 06 §2: *You may make one each round.* Nothing counted it before D-704,
     // so two Half-Actions bought two off-hand blows.
     offHandAttacks: OFF_HAND_ATTACKS_PER_ROUND,
@@ -208,8 +246,11 @@ export function loseTurn(budget) {
  *                                       its own one a round (06 §2).
  * @param {boolean} [options.isMove]     Draws on a free Move first (D-712).
  * @param {boolean} [options.onTurn]     Whether it is this creature's turn.
- *                                       Only the off hand reads it, and the
- *                                       combatant is what knows (see below).
+ *                                       The combatant is what knows (see
+ *                                       below): outside it a Half-Action, an
+ *                                       action and a Full Action are refused
+ *                                       but for the at-once allowance, and the
+ *                                       off hand by its own name.
  */
 export function spend(budget, cost, { isAttack = false, isOffHand = false, isMove = false, onTurn = true } = {}) {
   const base = { half: 1, action: 2, full: 2, reaction: 0 }[cost];
@@ -249,6 +290,21 @@ export function spend(budget, cost, { isAttack = false, isOffHand = false, isMov
   const free = isMove ? Math.min(halves, freeMovesLeft(budget)) : 0;
   const owed = halves - free;
 
+  // **OUTSIDE YOUR OWN TURN, ONLY THE REACTION** (05; the lead, 2026-10-23:
+  // *"Refuse off-turn Half-Actions"*). The budget keeps a turn's unspent
+  // Half-Actions until the creature's next turn resets it, so a Use pressed on
+  // somebody else's turn spent them. Refused here - the one judgement every door
+  // reaches (`AzerothCombatant#spendAction`, `workflows.turnBudgetRefusal`, the
+  // walk's `chargeMoves`) - before anything is spent, unless the Half-Actions owed
+  // were given to be taken AT ONCE (`grantAtOnce`). A Full Action is a turn's
+  // whole and is never taken at once. Asked BEFORE the Half-Actions, so a turn with
+  // none left says it is not this creature's turn rather than that it is short.
+  const atOnce = atOnceLeft(budget);
+  const offTurn = onTurn === false && cost !== "reaction";
+  if (offTurn && (cost === "full" || owed < 1 || owed > atOnce)) {
+    return { ok: false, reason: BUDGET_REFUSALS.notYourTurn, params: {}, budget };
+  }
+
   if (cost === "reaction") {
     if (budget.reactions < 1) return { ok: false, reason: BUDGET_REFUSALS.noReaction, params: {}, budget };
   } else if (budget.halfActions < owed) {
@@ -279,9 +335,37 @@ export function spend(budget, cost, { isAttack = false, isOffHand = false, isMov
       // something to ride handed a free off-hand blow to anybody who had been
       // walked past. The card draws no button for a Reaction's blow either, and
       // this is the rule behind that.
-      attacked: budget.attacked === true || (isAttack && !isOffHand && cost !== "reaction")
+      attacked: budget.attacked === true || (isAttack && !isOffHand && cost !== "reaction"),
+      // The at-once allowance, where the budget holds the key: spent first by a
+      // spend outside the turn, and never more than the Half-Actions left. A budget
+      // that never had one is written exactly as before.
+      ...("atOnce" in (budget ?? {}) ? {
+        atOnce: Math.max(0, Math.min(atOnce - (offTurn ? owed : 0), budget.halfActions - owed))
+      } : {})
     }
   };
+}
+
+/**
+ * **A HALF-ACTION GIVEN TO BE TAKEN AT ONCE** (the lead's *"Refuse off-turn
+ * Half-Actions"*, and its two exceptions): 04's Remote Control at rank 2, *one of
+ * your constructs within 60 feet takes a Half-Action at once* - on the construct's
+ * own budget, while the shared turn's record carries its `extra`
+ * (`rules/constructs.mjs#sharedTurnGranted`); and 05's Ready, *When the trigger
+ * occurs, spend your Reaction to take it* - the Half-Action the Ready paid for, on
+ * the readier's budget once the trigger's Reaction is spent
+ * (`applications/combat-actions.mjs#takeReadied`), so the doors the action is taken
+ * through charge nothing more. A Half-Action gained, which `spend` lets a door take
+ * outside the turn; the turn's reset takes an unspent one away with the turn.
+ *
+ * @param {object} budget
+ * @param {number} [n]
+ * @returns {object}  the budget with the Half-Actions added and marked
+ */
+export function grantAtOnce(budget, n = 1) {
+  const add = Math.max(0, Math.trunc(Number(n)) || 0);
+  const gained = gainHalfActions(budget, add);
+  return { ...gained, atOnce: atOnceLeft(budget) + add };
 }
 
 /**
@@ -313,6 +397,21 @@ export function gainHalfActions(budget, n = 1) {
 export function withoutReaction(budget) {
   const b = budget && typeof budget === "object" ? budget : freshTurn();
   return { ...b, reactions: 0 };
+}
+
+/**
+ * **THE REACTION A WITHDRAWN HIT TOOK, GIVEN BACK** (the Legacy branches' door 13:
+ * a hit turned into a miss withdraws everything it laid - a Bash's, a Concussive
+ * Shot's lost Reaction). 06 §6's *one Reaction per round*: back to one, never
+ * past it. Whether one was taken by THIS blow is the card's record
+ * (`rules/miss.mjs#missUndoes`); this only writes the number.
+ *
+ * @param {object} budget
+ * @returns {object}
+ */
+export function withReactionBack(budget) {
+  const b = budget && typeof budget === "object" ? budget : freshTurn();
+  return { ...b, reactions: Math.max(1, Math.trunc(Number(b.reactions)) || 0) };
 }
 
 /**

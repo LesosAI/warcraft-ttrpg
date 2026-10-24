@@ -305,11 +305,24 @@
   .azeroth.azeroth-card .azeroth-card-mitigated strong {
     font-variant-numeric: tabular-nums;
   }
-  .azeroth.azeroth-card .azeroth-card-resisted > strong {
+  .azeroth.azeroth-card .azeroth-card-mitigated > strong {
     flex: 1 1 0;
     min-width: 0;
     overflow-wrap: anywhere;
+  }
+  .azeroth.azeroth-card .azeroth-card-resisted {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 6px;
+    row-gap: 1px;
+  }
+  .azeroth.azeroth-card .azeroth-card-resisted > strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
     font-variant-numeric: tabular-nums;
+  }
+  .azeroth.azeroth-card .azeroth-card-resisted > em {
+    grid-column: 2;
   }
   .azeroth.azeroth-card .azeroth-area-tick > strong {
     flex: 1 1 0;
@@ -434,6 +447,22 @@
     color: var(--azeroth-ink-light);
     font-size: 20px;
     font-weight: 700;
+  }
+  .azeroth.sheet.actor textarea.azeroth-name {
+    display: block;
+    min-height: 0;
+    height: auto;
+    padding: 0;
+    margin: 0;
+    resize: none;
+    overflow: hidden;
+    field-sizing: content;
+    font-family: inherit;
+    line-height: 1.2;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    box-shadow: none;
+    outline-offset: 2px;
   }
   .azeroth.sheet.actor .azeroth-identity-line {
     display: flex;
@@ -5362,7 +5391,7 @@
     color: var(--azeroth-ink-soft);
   }
   .azeroth-roll-dialog .azeroth-dialog-rider .azeroth-dialog-cost {
-    min-width: 0;
+    flex: none;
     white-space: nowrap;
   }
   .azeroth-roll-dialog .azeroth-dialog-rider.is-refused span {

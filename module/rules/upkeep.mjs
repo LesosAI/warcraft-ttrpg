@@ -107,6 +107,26 @@ export function upkeepCost(base = UPKEEP_DEFAULT, { free = false, less = 0, min 
 }
 
 /**
+ * **A TALENT'S STATED UPKEEP** (the Legacy branches' door 12: 04's Big Bad Voodoo,
+ * *Sustaining it costs 5 Mana a turn*): 04's own sentence for a Use that is Sustained,
+ * the census's detector (`talent-effects.mjs#CENSUS_DETECTORS.sustainUpkeep`) and
+ * the number a row's `onUse.sustain.upkeep` is held to (`statedUpkeepOf`).
+ */
+export const SUSTAIN_UPKEEP_RE = /\bSustaining it costs (\d+) Mana a turn\b/i;
+
+/**
+ * **THE UPKEEP A TALENT'S WORDS STATE**, or null where they state none: the Mana of
+ * `SUSTAIN_UPKEEP_RE`, and no Health (no talent in 04 asks Health a turn).
+ *
+ * @param {string} text  the talent's effect, HTML or flat
+ * @returns {{mana: number, health: number}|null}
+ */
+export function statedUpkeepOf(text) {
+  const m = SUSTAIN_UPKEEP_RE.exec(flat(text));
+  return m ? { mana: Number(m[1]), health: 0 } : null;
+}
+
+/**
  * **AN UPKEEP AS A SUSTAIN'S ENTRY STORES IT**: whole numbers from 0, or null.
  *
  * @param {unknown} raw

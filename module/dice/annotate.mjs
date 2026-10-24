@@ -31,6 +31,11 @@
 
 import { mitigatedDamage } from "../rules/reactions.mjs";
 import { resistKey, resistRecord, rowMatches } from "../rules/records.mjs";
+// What a failed Test landed, as the card records it (the B6 fix).
+import { landedOnFail, recordsResist } from "../rules/resisted.mjs";
+// A hit turned into a miss (the Legacy branches' door 13): the rider it paid for, back -
+// and the Momentum it built, off (the lead, 2026-10-21: *"Yes, take it back"*).
+import { everyRowWithdrawn, missRefunds, missWithdrawals, refundedValue, withdrawnValue } from "../rules/miss.mjs";
 
 export const ANNOTATE_QUERY = "azeroth-rpg.annotateCard";
 
@@ -38,15 +43,97 @@ export const ANNOTATE_QUERY = "azeroth-rpg.annotateCard";
  * Write the annotation here, on a client that owns the message.
  * @returns {Promise<object|null>} the annotated row
  */
-export async function annotateHere({ messageId, index, reaction, to, mitigated } = {}) {
+export async function annotateHere({ messageId, index, reaction, to, mitigated, withdrawn = false } = {}) {
   const message = game.messages.get(messageId);
   const i = Number(index);
   if (!message || !Number.isInteger(i) || i < 0) return null;
-  const rows = foundry.utils.deepClone(message.flags?.["azeroth-rpg"]?.damageByTarget ?? []);
+  const flags = message.flags?.["azeroth-rpg"] ?? {};
+  const rows = foundry.utils.deepClone(flags.damageByTarget ?? []);
   if (!rows[i]) return null;
-  rows[i] = { ...rows[i], reaction: reaction ?? null, to, mitigated };
-  await message.update({ "flags.azeroth-rpg.damageByTarget": rows });
+  const was = rows[i].withdrawn === true;
+  // **A HIT TURNED INTO A MISS** (the Legacy branches' door 13): the row says so, and
+  // the card's press of a Test the hit offered refuses in words from then on.
+  rows[i] = { ...rows[i], reaction: reaction ?? null, to, mitigated, ...(withdrawn === true || was ? { withdrawn: true } : {}) };
+  const update = { "flags.azeroth-rpg.damageByTarget": rows };
+  // **WHAT THE HIT GAVE THE STRIKER, SETTLED ONCE THE CARD HITS NOBODY** (door 13): the
+  // first withdrawal that leaves no row of the card a standing hit - a blow that landed
+  // on two is still a hit on the one nobody answered (`everyRowWithdrawn`) - and once,
+  // off the card's own record. This client owns the card, so it is the striker's or the
+  // GM's, and may write the striker's pools.
+  // - **A rider the attacker paid on the hit comes back** (Bloodthirst's *When one of
+  //   your attacks hits, spend 6 Rage*).
+  // - **The Momentum the hit built comes back off** (the lead, 2026-10-21: *"Yes, take it
+  //   back"*, which changes D-779's Parry too): every pool it raised, on whoever holds
+  //   it, never below nothing, and the card says in words what came off.
+  // - **The once-marks its further gains spent are given back** (O-171's *"No."*).
+  const settles = withdrawn === true && !was && flags.refunded !== true && everyRowWithdrawn(rows);
+  const refunds = settles ? missRefunds(flags.refundOnMiss ?? []) : [];
+  const takes = settles ? takeBackPlan(flags.momentumOnMiss ?? []) : [];
+  if (settles) {
+    update["flags.azeroth-rpg.refunded"] = true;
+    if (takes.length) update["flags.azeroth-rpg.momentumWithdrawn"] = takes.map(t => ({ name: t.name, pool: t.pool, amount: t.amount }));
+  }
+  await message.update(update);
+  for (const r of refunds) await refundOne(r);
+  for (const t of takes) await t.actor.updatePool({ itemId: t.itemId, kind: t.kind, value: t.value });
+  if (settles) await releaseOnce(flags.onceOnMiss ?? null);
   return rows[i];
+}
+
+/**
+ * **WHAT COMES BACK OFF, POOL BY POOL** (the lead: *"Yes, take it back"*): the card's
+ * record, summed by pool (`rules/miss.mjs#missWithdrawals`), each read off the pool as
+ * it stands now - a point already spent since is not taken twice - on a creature this
+ * client may write. A pool that would move nothing is no row.
+ *
+ * @param {Array<object>} built  the card's `momentumOnMiss`
+ * @returns {Array<{actor: Actor, name: string, itemId: string|null, kind: string, pool: string, value: number, amount: number}>}
+ */
+function takeBackPlan(built = []) {
+  const out = [];
+  for (const row of missWithdrawals(built)) {
+    let holder = null;
+    try {
+      holder = fromUuidSync(row.actorUuid);
+    } catch {
+      holder = null;
+    }
+    if (holder?.documentName !== "Actor" || !holder.isOwner) continue;
+    const now = (holder.poolSnapshot?.() ?? []).find(p => p.kind === row.kind && p.name === row.pool && (p.itemId ?? null) === (row.itemId ?? null)) ?? null;
+    if (!now) continue;
+    const value = withdrawnValue(now, row.amount);
+    if (value === now.value) continue;
+    out.push({ actor: holder, name: holder.name, itemId: now.itemId ?? null, kind: now.kind, pool: now.name, value, amount: now.value - value });
+  }
+  return out;
+}
+
+/** The once-marks a withdrawn hit's further gains spent, given back through the combatant's queued door. */
+async function releaseOnce(record) {
+  if (!record?.combatantUuid) return;
+  let combatant = null;
+  try {
+    combatant = fromUuidSync(record.combatantUuid);
+  } catch {
+    combatant = null;
+  }
+  if (combatant?.documentName !== "Combatant" || !combatant.isOwner || typeof combatant.releaseRoundMarks !== "function") return;
+  await combatant.releaseRoundMarks({ round: record.round, once: record.once ?? [], fast: record.fast === true });
+}
+
+/** One rider's price back into the attacker's pool, never past its maximum. */
+async function refundOne({ actorUuid, itemId, kind, pool, amount }) {
+  let attacker = null;
+  try {
+    attacker = fromUuidSync(actorUuid);
+  } catch {
+    attacker = null;
+  }
+  if (attacker?.documentName !== "Actor" || !attacker.isOwner) return;
+  const now = (attacker.poolSnapshot?.() ?? []).find(p => p.kind === kind && p.name === pool && (p.itemId ?? null) === (itemId ?? null)) ?? null;
+  if (!now) return;
+  const value = refundedValue(now, amount);
+  if (value !== now.value) await attacker.updatePool({ itemId: now.itemId, kind: now.kind, value });
 }
 
 /**
@@ -106,7 +193,9 @@ export function verifiedAnnotation({ messageId, index, user = null } = {}) {
   const to = mitigatedDamage(before, mark);
   return {
     ok: true,
-    payload: { messageId: message.id, index: i, reaction: mark.reaction ?? null, to, mitigated: before - to }
+    // `withdrawn` off the MARK the defender wrote (door 13): a Parry that held and
+    // Afterimage both negate, and nothing the payload says decides it.
+    payload: { messageId: message.id, index: i, reaction: mark.reaction ?? null, to, mitigated: before - to, withdrawn: mark.negate === true }
   };
 }
 
@@ -154,11 +243,14 @@ export async function annotateMitigation({ messageId = null, index = null, mark 
   if (!row) return null;
   const before = Math.max(0, Math.trunc(Number(row.damage)) || 0);
   const to = mitigatedDamage(before, mark);
-  const payload = { messageId, index: i, reaction, to, mitigated: before - to };
+  // A negating mark withdraws the hit (door 13). On the GM's client the handler
+  // works it out again off the defender's own mark (`verifiedAnnotation`).
+  const payload = { messageId, index: i, reaction, to, mitigated: before - to, withdrawn: mark?.negate === true };
   try {
     if (message.isOwner) return await annotateHere(payload);
     const gm = game.users.activeGM;
-    if (!gm) throw new Error(game.i18n.localize("AZEROTH.Bound.NoGM"));
+    // Its own words (the B1 fix run): it said *Binding needs a GM online*.
+    if (!gm) throw new Error(game.i18n.localize("AZEROTH.Card.AnnotateNoGM"));
     return await gm.query(ANNOTATE_QUERY, payload, { timeout: 15000 });
   } catch (err) {
     ui.notifications?.warn(err.message);
@@ -215,8 +307,8 @@ export function resisterOf(link) {
  * taken on trust but the two message ids**, and everything else comes off the
  * two cards:
  *
- * - the spell card is a spell card, and the Resilience card is one whose own
- *   `resistOf` names that spell card;
+ * - the spell card is a spell card - or, since the B6 fix, a feature's card - and the
+ *   Resilience card is one whose own `resistOf` names that card;
  * - the asker made the Resilience Test - they are its author - and owns the
  *   creature that made it, which is its speaker;
  * - on a card that recorded targets, the Test answers the row it names and that
@@ -236,7 +328,10 @@ export async function verifiedResist({ messageId, resultId, user = null } = {}) 
   const unlinked = { ok: false, reason: "AZEROTH.Card.ResistUnlinked" };
   const message = typeof messageId === "string" ? game.messages.get(messageId) ?? null : null;
   const flags = message?.flags?.["azeroth-rpg"] ?? {};
-  if (!message || flags.kind !== "spell") return unlinked;
+  // A spell's card, since the B6 fix a feature's, and since the B8a2 pass a creature's
+  // ability's: its Test is recorded too, which is what the Apply's half, its spare and a
+  // failure's conditions read (`rules/resisted.mjs#recordsResist`, the one list).
+  if (!message || !recordsResist(flags.kind)) return unlinked;
   const result = await messageArriving(resultId);
   const link = result?.flags?.["azeroth-rpg"]?.kind === "resilience" ? result.flags["azeroth-rpg"].resistOf ?? null : null;
   if (!link || link.messageId !== message.id) return unlinked;
@@ -301,7 +396,17 @@ export async function verifiedResist({ messageId, resultId, user = null } = {}) 
     at: result._stats?.modifiedTime ?? result.timestamp ?? null,
     previous: flags.resists?.[resistKey(ids)] ?? null
   });
-  return record ? { ok: true, record } : unlinked;
+  if (!record) return unlinked;
+  // **WHAT A FAILURE LANDED, SAID ON THE CARD** (the lead: *"Land automatically"*; the
+  // B6 fix): the conditions this card's Test governs - a feature's `onFailInflicts`, a
+  // spell's `onFail.statuses` - that the creature holds now that its failure has landed
+  // them, read off the creature here and never off what a payload says landed. The
+  // resister's door lands them before it asks for the record.
+  const governs = flags.kind === "feature" || flags.kind === "ability"
+    ? (flags.onFailInflicts ?? []).map(i => i?.condition).filter(Boolean)
+    : [...(flags.onFail?.statuses ?? [])];
+  const landed = landedOnFail({ conditions: governs, statuses: who.actor.statuses ?? [], success: record.success === true });
+  return { ok: true, record: landed.length ? { ...record, landed } : record };
 }
 
 /**

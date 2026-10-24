@@ -36,11 +36,12 @@
 
 import { loopsFor, plan, pruneKeys, visibleLoops } from "../rules/animation.mjs";
 import * as tables from "../rules/animation-table.mjs";
+import { stateCueVerdict } from "../rules/animation-records.mjs";
 import { animationAvailability, isSettled, loopsOn, setSettled } from "./availability.mjs";
 import { SequencerPlayer, warn } from "./player.mjs";
 import {
-  cardRecord, effectRecord, factsFor, markPrivacySeeded, notePrivacy, privateCasts,
-  regionRecord, resistCueRecord, stateSnapshot
+  cardPrivacyKey, cardRecord, cardRecords, effectRecord, effectRecords, effectUpdateRecords, factsFor, featureCardSeen,
+  liveFeatureCasts, markPrivacySeeded, notePrivacy, privateCasts, regionRecord, resistCueRecord, stateSnapshot
 } from "./records.mjs";
 import {
   animationHidden, animationStops, setAnimationHidden, setAnimationStops
@@ -124,7 +125,69 @@ function playCueFor(record) {
     player.noteSkip?.(skip ?? "no-anchor", record);
     return null;
   }
-  return player.playCue(steps);
+  // The record rides beside the steps (the Legacy branches' door 2): one card now
+  // plays a `use` and an `arrive`, and the recorder keeps which cue was which.
+  return player.playCue(steps, record);
+}
+
+/** Every cue a list of records implies, each planned on its own. */
+function playCuesFor(records) {
+  for (const record of records ?? []) {
+    // A state's or a trap's arrival that waits on its Use's card (the B4 review).
+    if (record?.awaitCard === true && record.privacy) holdForCard(record, Date.now());
+    else playCueFor(record);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  A state laid before its Use's card (the B4 review)                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * How long a state laid before its Use's card waits for the card. `workflows.useFeature`
+ * lays its states and THEN posts its card, so on every client a state can arrive before
+ * the one record that says whether the Use was private (D-729, carried to the features).
+ */
+const STATE_CUE_WAIT_MS = 1500;
+
+/** How recently a pair's card must have arrived to speak for a state arriving now. */
+const CARD_FRESH_MS = 10000;
+
+/** State cues waiting for their Use's card, by (user, feature) pair. */
+const awaitingCard = new Map();
+
+/**
+ * **HOLD A STATE'S CUE FOR ITS USE'S CARD**, and play it - or refuse it as `hidden` - as
+ * soon as the card has said whether this reader may see the Use, or once the wait is
+ * over (`rules/animation-records.mjs#stateCueVerdict`).
+ */
+function holdForCard(record, arrivedAt) {
+  if (settleStateCue(record, arrivedAt)) return;
+  const list = awaitingCard.get(record.privacy) ?? [];
+  list.push({ record, arrivedAt });
+  awaitingCard.set(record.privacy, list);
+  setTimeout(() => releaseAwaiting(record.privacy), STATE_CUE_WAIT_MS + 25);
+}
+
+/** Play one held cue if its verdict is in. Answers whether it was settled. */
+function settleStateCue(record, arrivedAt) {
+  const verdict = stateCueVerdict({
+    card: featureCardSeen(record.privacy), arrivedAt, now: Date.now(), freshMs: CARD_FRESH_MS, waitMs: STATE_CUE_WAIT_MS
+  });
+  if (!verdict.ready) return false;
+  const { awaitCard, ...rest } = record;
+  void awaitCard;
+  playCueFor({ ...rest, contentVisible: rest.contentVisible !== false && !verdict.private });
+  return true;
+}
+
+/** Every held cue of one pair whose verdict is in: a card arrived, or a wait ran out. */
+function releaseAwaiting(key) {
+  const list = awaitingCard.get(key);
+  if (!list?.length) return;
+  const left = list.filter(({ record, arrivedAt }) => !settleStateCue(record, arrivedAt));
+  if (left.length) awaitingCard.set(key, left);
+  else awaitingCard.delete(key);
 }
 
 /**
@@ -156,7 +219,14 @@ function explainOnce(reason) {
 function onChatMessage(message) {
   seedResistsOf(message);
   notePrivacy(message);
-  playCueFor(cardRecord(message));
+  // **A USE'S CARD SETTLES WHAT ITS USE LAID BEFORE IT** (the B4 review): the states and
+  // the trap held for this card are played, or refused as hidden, now.
+  const pair = cardPrivacyKey(message);
+  if (pair) releaseAwaiting(pair);
+  // **EVERY RECORD THE CARD IMPLIES** (the Legacy branches' door 2): the card's own,
+  // then a `hit` for each feature its blow rode, an `arrive` for its step, a `rise`
+  // for what it stood up and a `hold` for a hit it turned into a miss.
+  playCuesFor(cardRecords(message));
 }
 
 /**
@@ -207,7 +277,8 @@ function seedFromChat() {
   chatSeeded = true;
   for (const message of game.messages.contents) {
     seedResistsOf(message);
-    notePrivacy(message);
+    // A card already in chat is no card a state arriving now waits on (`at: 0`).
+    notePrivacy(message, { at: 0 });
   }
   // The walk above did the privacy half too, so the set must not walk again.
   markPrivacySeeded();
@@ -385,6 +456,9 @@ function liveCasts() {
       if (cast) casts.add(cast);
     }
   }
+  // A feature's loops key on what the feature laid (the Legacy branches' door 2): a
+  // state's effect and key, a mark's, a Region's own id.
+  for (const cast of liveFeatureCasts()) casts.add(cast);
   return casts;
 }
 
@@ -487,8 +561,14 @@ export function registerAnimationHooks() {
   // CUES.
   Hooks.on("createChatMessage", guarded("chat", message => onChatMessage(message)));
   Hooks.on("updateChatMessage", guarded("resist", message => onChatMessageUpdated(message)));
-  Hooks.on("createRegion", guarded("region", region => playCueFor(regionRecord(region))));
-  Hooks.on("createActiveEffect", guarded("effect", effect => playCueFor(effectRecord(effect))));
+  // Through the list door, which holds a trap set before its Use's card (the B4 review).
+  Hooks.on("createRegion", guarded("region", region => playCuesFor([regionRecord(region)].filter(Boolean))));
+  // A spell's laid effect and a feature's state arriving (the Legacy branches' door 2).
+  Hooks.on("createActiveEffect", guarded("effect", effect => playCuesFor(effectRecords(effect))));
+  // **AN EFFECT'S UPDATE IS AN EVENT TWICE OVER** (door 2): a floor catching a blow,
+  // and a condition's landing marks arriving after it was toggled on - read off the
+  // update's own diff, which is what keeps a re-render from cueing either again.
+  Hooks.on("updateActiveEffect", guarded("effect-update", (effect, changed) => playCuesFor(effectUpdateRecords(effect, changed))));
 
   // LOOPS. Everything that could move what the world holds.
   for (const hook of [
@@ -559,7 +639,7 @@ export const animations = {
   plan,
   loopsFor,
   tables,
-  records: { cardRecord, regionRecord, effectRecord, resistCueRecord, factsFor, stateSnapshot },
+  records: { cardRecord, cardRecords, regionRecord, effectRecord, effectRecords, effectUpdateRecords, resistCueRecord, factsFor, stateSnapshot },
   director: { reconcile: (options = { force: true }) => reconcileNow(options), setPlayer, resetPlayer, activeLoops, wantedLoops, prune: pruneAnimationKeys },
   // The player that draws nothing, so a batch, a macro or a Playwright script
   // can swap it in without knowing a module path (`quench-tests.mjs` already

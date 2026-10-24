@@ -19,7 +19,7 @@
  * is deleted in `after`.
  */
 
-import { cleanup, drainAreaWork, fromPack, give, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook, warnings } from "./fixtures.mjs";
+import { cleanup, drainAreaWork, fromPack, give, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook, warnings, tokenDrawn, tokenData } from "./fixtures.mjs";
 import { checkText } from "./geometry.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { attackWithDialog } from "../applications/actions.mjs";
@@ -113,12 +113,12 @@ async function sceneWith(placements) {
   const data = [];
   for (const { actor, x, y, side = "friendly" } of placements) {
     await actor.update({ "prototypeToken.actorLink": true });
-    data.push((await actor.getTokenDocument({
+    data.push((await tokenData(actor, {
       x, y, disposition: CONST.TOKEN_DISPOSITIONS[side === "friendly" ? "FRIENDLY" : "HOSTILE"]
-    })).toObject());
+    })));
   }
   await scene.createEmbeddedDocuments("Token", data);
-  for (let i = 0; i < 60 && !placements.every(p => p.actor.getActiveTokens(true).length); i++) {
+  for (let i = 0; i < 60 && !placements.every(p => tokenDrawn(p.actor.getActiveTokens(true)[0])); i++) {
     await new Promise(r => setTimeout(r, 100));
   }
   await settle();
@@ -409,7 +409,7 @@ export function shapesBatch(context) {
       await shapes().takeShape(druid, { kind: "shapeshift", entries: [bear] });
       await until(() => druid.shape, "the shape");
       const own = druid.prototypeToken.texture.src;
-      const data = (await druid.getTokenDocument({ x: 500, y: 500 })).toObject();
+      const data = (await tokenData(druid, { x: 500, y: 500 }));
       const [placed] = await scene.createEmbeddedDocuments("Token", [data]);
       assert.equal(placed._source.width, 2, "the new token does not wear the bear's footprint");
       assert.equal(placed._source.texture.src, bear.prototypeToken.texture.src, "the new token does not wear the bear's art");

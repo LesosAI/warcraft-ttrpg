@@ -269,7 +269,8 @@
     <li class="azeroth-feature draggable{{#if f.passive}} is-passive{{/if}}{{#unless f.available}} is-spent{{/unless}}" data-item-id="{{f.id}}">
       <span class="azeroth-feature-name" data-action="expandItem" role="button" tabindex="0" aria-expanded="false">{{f.name}}</span>
       <span class="azeroth-feature-meta">
-        {{#if f.actionLabel}}<span class="azeroth-feature-chip">{{localize f.actionLabel}}</span>{{/if}}
+        {{!-- Every rung the Use may be taken at (04's Ethereal Form at rank 2), else its own. --}}
+        {{#if f.rungsText}}<span class="azeroth-feature-chip">{{f.rungsText}}</span>{{else if f.actionLabel}}<span class="azeroth-feature-chip">{{localize f.actionLabel}}</span>{{/if}}
         {{#if f.cost}}<span class="azeroth-feature-chip">{{f.cost}}</span>{{/if}}
         {{#if f.casting}}<span class="azeroth-feature-chip">{{localize "AZEROTH.Item.CastingTest"}}</span>{{/if}}
         {{!-- How many one use places (02 §7's Totem Mastery, D-710). --}}

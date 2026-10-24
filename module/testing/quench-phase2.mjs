@@ -5,7 +5,7 @@
  * it with the automatic lines still counted, shift inverts.
  */
 
-import { cleanup, settle, untilHook, made, makeCharacter, makeNpc, openSheet, useAction, dialogFor } from "./fixtures.mjs";
+import { cleanup, settle, untilHook, made, makeCharacter, makeNpc, openSheet, useAction, dialogFor, tokenData } from "./fixtures.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { dialogId } from "../applications/roll-dialog.mjs";
 
@@ -202,8 +202,8 @@ export function rollDialogBatch(context) {
       // as nothing at all.
       for (let i = 0; i < 100 && !(canvas?.ready && canvas.scene?.id === scene.id); i++) await new Promise(r => setTimeout(r, 100));
       assert.isTrue(Boolean(canvas?.ready && canvas.scene?.id === scene.id), "the scene this test made is not the one being viewed");
-      const tokenData = await victim.getTokenDocument({ x: 100, y: 100 });
-      const [tokenDoc] = await scene.createEmbeddedDocuments("Token", [tokenData.toObject()]);
+      // The data alone, no throwaway TokenDocument left among the actor's dependents (B8b).
+      const [tokenDoc] = await scene.createEmbeddedDocuments("Token", [await tokenData(victim, { x: 100, y: 100 })]);
       // WAIT FOR THE DRAW, NOT FOR THE OBJECT. Core makes the placeable at
       // once and builds its `targetArrows` only after `await loadTexture` in
       // `Token#_draw` (14.367), so a target set in between makes the layer's

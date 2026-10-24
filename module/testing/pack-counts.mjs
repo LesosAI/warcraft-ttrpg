@@ -22,7 +22,10 @@
  */
 export const PACK_COUNTS = Object.freeze({
   conditions: { count: 15, why: "A1 holds fifteen (D-307, D-472, D-519, D-695)" },
-  talents: { count: 324, why: "9 classes x 3 branches x 12 (04 §2)" },
+  talents: {
+    count: 408, branches: 34, legacy: 84,
+    why: "9 classes x 3 branches x 12 (04 §2), plus the seven Legacy branches x 12 that 04 §1's roster gives four of them (D-781)"
+  },
   spells: { count: 406, why: "07 holds 406 across seven schools and five tiers" },
   careers: { count: 53, why: "03 holds 53 across four tiers" },
   races: { count: 11, why: "02 §5's eleven peoples" },
@@ -31,8 +34,11 @@ export const PACK_COUNTS = Object.freeze({
     count: 74,
     why: "08 §5: form 16 + cut 4 + effect 11 + enchantment 28 = 59, matching 06 §3's roster, plus 15 Mount traits that belong to 08 §15 alone (D-399)"
   },
-  bestiary: { count: 171, why: "14 holds 171 across five weight classes, the seven Totem blocks of 14 §13 among them (D-707), and its Spirit Wolf (D-776)" },
-  legacies: { count: 7, why: "15 §3's seven, four ranks each (D-581)" },
+  bestiary: {
+    count: 177,
+    why: "14 holds 177 across five weight classes, the seven Totem blocks of 14 §13 among them (D-707), its Spirit Wolf (D-776), and the tinker's five constructs and the Gnomish Battle Rig (D-781)"
+  },
+  legacies: { count: 7, why: "15 §2's seven, one per Legacy on 04 §1's roster, lore and no ranks (D-781)" },
   affixes: {
     count: 76,
     why: "08 §6: 27 prefixes + 12 attribute + 7 Ward + 7 Spellpower + 23 skill suffixes. The POOLS, not the cross-product — see D2 §8.1"

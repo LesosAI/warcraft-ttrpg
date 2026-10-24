@@ -26,6 +26,10 @@ import { carryFactor, classKey } from "./talent-effects.mjs";
 import { characterToken } from "./tokens.mjs";
 import { RANK_MAX, rankCost, rankCostBetween } from "./xp.mjs";
 import { spellsKnown } from "./casting.mjs";
+// Armor a talent adds to the class's Access (the Legacy branches' door 23).
+import { armorAccessFor } from "./class-talents.mjs";
+// A Legacy's talent is its people's alone (04 §1, D-781).
+import { keptBy } from "./legacy-branches.mjs";
 
 /** The ten steps, in 01 §1's order. Nothing in a step depends on a step below it. */
 export const STEPS = Object.freeze([
@@ -61,6 +65,26 @@ export function primaryAbilities(cls) {
     primary: AZEROTH.primaryAbility?.[identifier] ?? null,
     casting: cls?.castingAbility ?? null
   };
+}
+
+/**
+ * **02's CASTING LINE, AS THE CLASS CARD PRINTS IT** (02 §7's class tables:
+ * *Intelligence, full caster*, *Charisma, half caster*, *Wisdom, for Spell DC only*):
+ * the ability and its grade, off the class item - its `castingAbility` and its Power's
+ * `caster` - or null for a class that names no casting ability (the Warrior). The
+ * Ranger and the Rogue carry an ability for their Spell DC alone (D-781's *"Use
+ * Intelligence in the formula"*), so their grade is `dcOnly` and the card says so:
+ * it printed a bare *Intelligence* under *Casting ability* and read as though the
+ * Rogue cast.
+ *
+ * @param {{castingAbility?: string|null, power?: {caster?: string}}|null} cls
+ * @returns {{ability: string, grade: "full"|"half"|"dcOnly"}|null}
+ */
+export function castingLine(cls) {
+  const ability = typeof cls?.castingAbility === "string" && cls.castingAbility ? cls.castingAbility : null;
+  if (!ability) return null;
+  const caster = cls?.power?.caster ?? "none";
+  return { ability, grade: caster === "full" ? "full" : caster === "half" ? "half" : "dcOnly" };
 }
 
 /** Whether a class shows the spells step at all: it holds a Power pool that casts. */
@@ -394,12 +418,36 @@ export function kitOverBy(p = {}) {
   return ledger(settled, base).over;
 }
 
-/** Whether the class's Access covers an item (02 §7). Weapons are prose, so only armor answers. */
-export function accessNote(item, cls) {
+/**
+ * Whether the class's Access covers an item (02 §7). Weapons are prose, so only armor answers.
+ *
+ * **AND WHAT A TALENT ADDS** (04's Warden's Mail: *You may wear studded and mail
+ * armor*; the Legacy branches' door 23): `extra`, the categories
+ * `class-talents.mjs#armorAccessFor` reads off the talents taken (`talentArmorFor`).
+ *
+ * @param {object} item
+ * @param {object|null} cls
+ * @param {{extra?: string[]}} [o]
+ */
+export function accessNote(item, cls, { extra = [] } = {}) {
   if (!cls || item?.type !== "armor") return null;
   if (item.shield) return cls.shields ? null : "shieldAccess";
   const category = item.category ?? "none";
-  return category === "none" || cls.armor?.includes(category) ? null : "armorAccess";
+  return category === "none" || cls.armor?.includes(category) || (extra ?? []).includes(category) ? null : "armorAccess";
+}
+
+/**
+ * **THE ARMOR THE CREATOR'S TALENT PICK ADDS** (door 23): the categories the class
+ * talent chosen at step 9 lets the class wear, at rank 1 - the only rank a pick at
+ * creation holds.
+ *
+ * @param {{classTalent?: {identifier?: string, className?: string, name?: string, race?: string|null}|null}} p
+ * @returns {string[]}
+ */
+export function talentArmorFor(p = {}) {
+  const t = p?.classTalent ?? null;
+  if (!t?.identifier) return [];
+  return armorAccessFor([{ identifier: t.identifier, className: t.className, race: t.race ?? null, name: t.name ?? "", taken: 1 }]).categories;
 }
 
 /* -------------------------------------------- */
@@ -481,7 +529,7 @@ export function numbersFor(p = {}) {
  *   ranks       {skillKey: rank}
  *   adaptable   a skill key, for a Human
  *   racialTalent {name, tier} — a row of race.talents
- *   classTalent {identifier, name, tier, className}
+ *   classTalent {identifier, name, tier, className, legacy} — `legacy` the people of a Legacy's talent
  *   spells      [{uuid, name, tier, school, classes[]}]
  *   side        "alliance" | "horde" | null
  *   equipment   [{uuid, name, type, cost, quantity, category, shield, apBonus}]
@@ -554,7 +602,11 @@ export function validate(p = {}) {
   if (!p.classTalent) refuse("noClassTalent", "talents");
   else {
     if (p.cls && p.classTalent.className !== p.cls.name) refuse("classTalentNotOfClass", "talents", { name: p.classTalent.name });
-    else if ((p.classTalent.tier ?? 1) > 1) refuse("classTalentTier", "talents", { name: p.classTalent.name });
+    // A Legacy's talent is open from level 1 to its people alone (04 §1, D-781):
+    // an orc Warrior may take Wolf's Pace, a human Warrior may not.
+    else if (!keptBy(p.classTalent, p.race?.name ?? null)) {
+      refuse("classTalentNotYourPeople", "talents", { name: p.classTalent.name, people: p.classTalent.legacy });
+    } else if ((p.classTalent.tier ?? 1) > 1) refuse("classTalentTier", "talents", { name: p.classTalent.name });
   }
   const required = spellsRequired(p.cls, p.abilities);
   const chosen = p.spells ?? [];
@@ -573,8 +625,9 @@ export function validate(p = {}) {
   // 8 — the purse, and the class's Access.
   const spend = purseSpend(p.equipment ?? [], p.race);
   if (spend > PURSE) refuse("purseOverspent", "equipment", { copper: spend });
+  const talentArmor = talentArmorFor(p);
   for (const row of p.equipment ?? []) {
-    const code = accessNote(row, p.cls);
+    const code = accessNote(row, p.cls, { extra: talentArmor });
     if (code) note(code, "equipment", { name: row.name });
     if (row.type === "gear" && row.cost === null) note("augmentIssued", "equipment", { name: row.name });
   }

@@ -28,6 +28,10 @@ import { TEMP_HEALTH_QUERY, temporaryHealthQueryHandler } from "./effects/tempor
 import { BLOW_ASK_QUERY, BLOW_SHARE_QUERY, blowAskHandler, blowShareQueryHandler } from "./effects/blow-doors.mjs";
 import { DISPEL_QUERY, dispelQueryHandler } from "./effects/dispel.mjs";
 import { FORCED_QUERY, forcedMoveQueryHandler } from "./effects/forced-movement.mjs";
+import { STEP_QUERY, stepQueryHandler } from "./effects/steps.mjs";
+import { LEGACY_USE_QUERY, legacyUseQueryHandler } from "./effects/legacy-uses.mjs";
+import { DEATH_HOLD_QUERY, deathHoldQueryHandler } from "./effects/death-holds.mjs";
+import { OFFER_QUERY, offerQueryHandler } from "./effects/spirit-realm.mjs";
 
 /** Register at init. */
 export function registerQueries() {
@@ -105,4 +109,19 @@ export function registerQueries() {
   // token pushed or pulled where this client may not write it.
   CONFIG.queries[DISPEL_QUERY] = dispelQueryHandler;
   CONFIG.queries[FORCED_QUERY] = forcedMoveQueryHandler;
+  // The Legacy branches' bodies (B2, door 3): a token stepped to a chosen space -
+  // 02's Blink and Shadowstep, 04's Fade Step, 07's Shadow Walk and Dark Passage -
+  // where this client may not write it, the space judged again here.
+  CONFIG.queries[STEP_QUERY] = stepQueryHandler;
+  // The Legacy branches' B3 (doors 11 and 25): a holder asked to hold a Death Step back
+  // (04's Hold the Thread), on whoever answers for it; and what a Use writes on a
+  // creature this client does not own - a concealment, an Ethereal Form, a condition
+  // ended, a creature called back, a transporter's carry, Life Drain's Health and a
+  // thrall's Charmed - each judged again here off the user's own feature.
+  CONFIG.queries[DEATH_HOLD_QUERY] = deathHoldQueryHandler;
+  CONFIG.queries[LEGACY_USE_QUERY] = legacyUseQueryHandler;
+  // 06 §10's offer, taken by a player and priced by the GM (*the GM decides from the
+  // place*; the B3 review): the track and the price chosen on the GM's client, judged
+  // again there and written.
+  CONFIG.queries[OFFER_QUERY] = offerQueryHandler;
 }

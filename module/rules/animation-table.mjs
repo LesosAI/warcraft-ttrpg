@@ -68,6 +68,31 @@
  *                        recorded Resilience Test failed. Built, unused: the
  *                        three rows that would use it are the lead's to pick.
  *
+ * **A spell's card may record a STEP too** (07's Shadow Walk and Dark Passage,
+ * the Legacy branches' door 3): its cue at `cast` may place at `step-from`, and an
+ * `arrive` cue plays at `step-to`, both off the moves the card recorded.
+ *
+ * ## A feature's row (the Legacy branches' door 2)
+ *
+ * `FEATURE_ANIMATIONS` is keyed by the FEATURE'S KEY (`rules/animation-records.mjs
+ * #featureKeyOf`: the slug of the granting talent's name, a class feature's own, a
+ * gadget's key; a creature's ability is `ability:<slug>`) and takes the spell row's
+ * shape, with its own vocabulary (`FEATURE_TRIGGERS`, `FEATURE_BINDINGS` there):
+ *
+ *     { cues: [{trigger, steps}], loop?: {binding, layers}, strike? }   or   { reason }
+ *
+ *  - triggers `use`, `hit`, `hold`, `arrive`, `rise`, `effect`, `region`;
+ *  - bindings `effect`, `mark`, `region`, `sustain-self`;
+ *  - `strike`, a strike recipe in `STRIKE_ANIMATIONS`' own shape, which an attack
+ *    card plays INSTEAD of its form's where the card records the feature it was
+ *    made from or a bound attack patch that drew it (04's Serpent Ward: the
+ *    Searing totem's spit plays the patch's recipe, not the totem's strike form).
+ *
+ * A Use whose Casting Test failed plays nothing on any trigger, a `hit` cue on a
+ * blow that missed says `missed`, and the Tier 2 and higher spells a Legacy branch
+ * teaches - Darkward and Dark Passage - sit in `TAUGHT_SPELL_ANIMATIONS` beside the
+ * tier 1 table, so neither table's census is loosened for the other.
+ *
  * ## The shape of a step
  *
  * A recipe step is a PLACEMENT and a look; `plan` resolves the placement into
@@ -114,13 +139,18 @@ export const PLACES = Object.freeze([
   // Between two things
   "source>target", "target>source", "chain", "missiles", "channel", "channel-back",
   // Round a creature
-  "orbit"
+  "orbit",
+  // What a feature's or a spell's card RECORDED (the Legacy branches' door 2): where
+  // each mover a step moved stood before (`step-from`) and stands now (`step-to`),
+  // the line between (`step`), every creature the Use stood up (`risen`), and the
+  // striker whose blow a hold turned aside (`striker`).
+  "step-from", "step-to", "step", "risen", "striker"
 ]);
 
 /** The placements that draw between two points, and so may be stretched. */
 export const SPANNING_PLACES = Object.freeze([
   "source>target", "target>source", "chain", "missiles", "channel", "channel-back",
-  "region-line", "region-cone"
+  "region-line", "region-cone", "step"
 ]);
 
 /** The three libraries, by the root of their keys. */
@@ -213,7 +243,9 @@ export const FILTERS = Object.freeze({
   /** A pink-teal sound cue into a demonic one. */
   FEL_SOUND: Object.freeze({ hue: 95, saturate: 0.4 }),
   /** Blue into the Light's gold. */
-  GOLD_B: Object.freeze({ hue: 195, saturate: 0.45, brightness: 1.05 })
+  GOLD_B: Object.freeze({ hue: 195, saturate: 0.45, brightness: 1.05 }),
+  /** A blue splash into a serpent's venom green (04's Serpent Ward). */
+  VENOM_B: Object.freeze({ hue: -110, saturate: 0.35, brightness: 0.9 })
 });
 
 /* ------------------------------------------------------------------ */
@@ -262,9 +294,12 @@ function snd(asset, options = {}) {
   return Object.freeze({ kind: "sound", asset, ...options });
 }
 
-/** A cue: what plays on one trigger. */
-function cue(trigger, steps) {
-  return Object.freeze({ trigger, steps: Object.freeze(steps) });
+/**
+ * A cue: what plays on one trigger. A feature's `effect` cue may name the `state` it
+ * answers (`{state}`): the flag of the laid state whose arrival plays it.
+ */
+function cue(trigger, steps, { state = null } = {}) {
+  return Object.freeze({ trigger, steps: Object.freeze(steps), ...(state ? { state } : {}) });
 }
 
 /* ------------------------------------------------------------------ */
@@ -516,9 +551,13 @@ function silent(reason) {
   return Object.freeze({ reason });
 }
 
-/** A loop: what stands while the world holds the state it follows. */
-function loop(binding, layers) {
-  return Object.freeze({ binding, layers: Object.freeze(layers) });
+/**
+ * A loop: what stands while the world holds the state it follows. A feature's
+ * `effect` loop names the `state` it follows (`{state}`): the flag of the laid state,
+ * where a Use lays more than one (04's Wind Walk lays three).
+ */
+function loop(binding, layers, { state = null } = {}) {
+  return Object.freeze({ binding, layers: Object.freeze(layers), ...(state ? { state } : {}) });
 }
 
 /**
@@ -967,7 +1006,22 @@ export const SPELL_ANIMATIONS = Object.freeze({
   fade: {
     cues: [cue("cast", [fx("jb2a.smoke.puff.ring.01.white", { place: "source", scale: 1.1, filter: "DIM" })])]
   },
-  "shadow-walk": silent("the card records no positions"),
+  // **THE CARD RECORDS THE MOVE NOW** (the Legacy branches' doors 2 and 3): the
+  // departure where the priest stood, at cast, and the arrival where the step put
+  // them - both off the card's own `steps`, never off where the token stands when
+  // the card arrives, which is already the destination.
+  "shadow-walk": {
+    cues: [
+      cue("cast", [
+        fx("jb2a.misty_step.01.blue", { place: "step-from", scale: 1.1, filter: "SHADOW_B" }),
+        snd("psfx.2nd-level-spells.misty-step.v1.intro.generic", { volume: 0.7 })
+      ]),
+      cue("arrive", [
+        fx("jb2a.misty_step.02.blue", { place: "step-to", scale: 1.1, filter: "SHADOW_B" }),
+        snd("psfx.2nd-level-spells.misty-step.v1.outro.generic", { volume: 0.7 })
+      ])
+    ]
+  },
 
   /* ================= Fel ================= */
   "fel-bolt": {
@@ -1170,6 +1224,706 @@ export const SPELL_ANIMATIONS = Object.freeze({
 });
 
 /* ------------------------------------------------------------------ */
+/*  Spells above tier 1 that a Legacy branch teaches                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * **THE TIER 2 AND HIGHER SPELLS A LEGACY BRANCH TEACHES** (the Legacy branches'
+ * door 2): 04's Embrace the Shadows (*You know **Dark Passage***) and Shadow Hunt at
+ * rank 2 (*and at rank 2 **Darkward** and **Dark Passage** as well*). Shadow Walk and
+ * Shadow Ward, the other two they teach, are tier 1 and in `SPELL_ANIMATIONS`.
+ *
+ * **A SIBLING, NOT A ROW OF THE TIER 1 TABLE**, so that table's census - a row for
+ * every tier 1 spell and for nothing else - stays exactly as strict, and this one is
+ * held to 04's own words instead: `animation-table.test.mjs` reads every spell 04's
+ * branch tables teach and fails one above tier 1 with no row here, and a row here
+ * that no branch teaches.
+ */
+export const TAUGHT_SPELL_ANIMATIONS = Object.freeze({
+  // Shadow Ward's skin, on each ally the Ward reaches.
+  darkward: {
+    cues: [cue("cast|effect", [fx("jb2a.shimmer.01.blue", { place: "target", scale: 1.3, filter: "SHADOW_B" })])],
+    loop: loop("effect", [
+      fx("jb2a.shield_themed.below.eldritch_web.01.dark_purple", { place: "holder", scale: 1.4, below: true, opacity: 0.8 }),
+      fx("jb2a.shield_themed.above.eldritch_web.01.dark_purple", { place: "holder", scale: 1.4, opacity: 0.8 })
+    ])
+  },
+  // Shadow Walk's departure and arrival, once for every creature the step carried.
+  "dark-passage": {
+    cues: [
+      cue("cast", [
+        fx("jb2a.misty_step.01.blue", { place: "step-from", scale: 1.1, filter: "SHADOW_B", stagger: 90 }),
+        snd("psfx.2nd-level-spells.misty-step.v1.intro.generic", { volume: 0.8 })
+      ]),
+      cue("arrive", [
+        fx("jb2a.misty_step.02.blue", { place: "step-to", scale: 1.1, filter: "SHADOW_B", stagger: 90 }),
+        snd("psfx.2nd-level-spells.misty-step.v1.outro.generic", { volume: 0.8 })
+      ])
+    ]
+  }
+});
+
+/**
+ * Every spell row the law looks up: the tier 1 table and the taught one. No
+ * identifier is in both (`animation-table.test.mjs`).
+ */
+export const ALL_SPELL_ANIMATIONS = Object.freeze({ ...SPELL_ANIMATIONS, ...TAUGHT_SPELL_ANIMATIONS });
+
+/* ------------------------------------------------------------------ */
+/*  Features (the Legacy branches' door 2)                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * **WHAT A TALENT, A CLASS FEATURE, A GADGET OR A CREATURE'S ABILITY LOOKS LIKE**,
+ * keyed by the feature's key (`rules/animation-records.mjs#featureKeyOf`). The file
+ * comment gives the row's shape and its vocabulary.
+ *
+ * **02's Blink, Shadowstep and Avatar of the Wild proved the path** (phase B4); **the
+ * Legacy branches' rows are the treatment** (phase B7): every active talent of the seven
+ * branches, the Tinker's eight gadgets, the constructs' own abilities, the Gnomish Battle
+ * Rig's shape, and every state the branches lay - a mark, a concealment, an Ethereal
+ * Form, the Spirit Realm, a trap, a Sustain, a Stun or a hold with its escape, a bound
+ * attack's spit, an aura. A passive with nothing to see has no row.
+ *
+ * Four rules every row keeps, each held by `animation-table.test.mjs` against the
+ * talent table itself, so a row its door can never fire fails in Node:
+ *
+ * - **a trigger only where the feature fires it**: `use` on a feature the sync grants
+ *   (or a gadget, or a creature's ability), `hit` and `strike` on what an attack card
+ *   records (the card's own Attack, a bound attack patch, a rider), `rise` where the Use
+ *   stands something up, `arrive` where it moves something, `region` where it places
+ *   one, `hold` where it holds a blow or a Death Step;
+ * - **an `effect` cue or loop names the `state` it follows**, a flag the feature's own
+ *   door writes with its name - never a condition a failed Resist lays bare, which names
+ *   no feature at all (the B4 review);
+ * - **nothing is drawn on a creature before its Test**: a Use that asks a Resist plays at
+ *   its user, and the condition's picture waits for the landing's own marks;
+ * - **a creature's ability is never a state's** (`ability:` rows cue at `use` alone).
+ *
+ * `tools/animation/directions.mjs#FEATURE_DIRECTIONS` holds the direction each row
+ * was written from, and the loop rule is re-derived from it as the spells' is.
+ * **Every number is a starting value** (D-727), read against the frames in B8.
+ */
+export const FEATURE_ANIMATIONS = Object.freeze({
+  /* ---- 02 §7's Mage ---- */
+  blink: {
+    cues: [
+      cue("use", [
+        fx("jb2a.misty_step.01.blue", { place: "step-from", scale: 1.2 }),
+        snd("psfx.2nd-level-spells.misty-step.v1.intro.generic")
+      ]),
+      cue("arrive", [
+        fx("jb2a.misty_step.02.blue", { place: "step-to", scale: 1.2 }),
+        snd("psfx.2nd-level-spells.misty-step.v1.outro.generic")
+      ])
+    ]
+  },
+
+  /* ---- 02 §7's Rogue ---- */
+  shadowstep: {
+    cues: [
+      cue("use", [
+        fx("jb2a.smoke.puff.centered.grey", { place: "step-from", scale: 1.1, filter: "DARK" }),
+        snd("psfx.2nd-level-spells.misty-step.v1.intro.generic", { volume: 0.6 })
+      ]),
+      cue("arrive", [
+        fx("jb2a.misty_step.02.blue", { place: "step-to", scale: 1.1, filter: "SHADOW_B" }),
+        snd("psfx.2nd-level-spells.misty-step.v1.outro.generic", { volume: 0.6 })
+      ])
+    ]
+  },
+
+  /* ---- 02 §7's Druid ---- */
+  // The shape is a state (D-769's one Active Effect), so the loop follows the effect
+  // the Use laid and ends with it - a rest, 0 Health, the Half-Action to leave.
+  // Borderline: the form stands until a rest, and the stop door is the release valve.
+  "avatar-of-the-wild": {
+    cues: [cue("use", [
+      fx("jb2a.swirling_leaves.complete.02.green", { place: "source", scale: 1.6 }),
+      snd("psfx.casting.earth.001")
+    ])],
+    loop: loop("effect", [fx("jb2a.swirling_leaves.loop.02.green", { place: "holder", scale: 1.4, opacity: 0.5 })], { state: "shape" })
+  },
+
+  /* ---- 02 §5's racial Uses (the B8a2 pass) ---- */
+  // The tauren's stamp: the ground cracking and a ring of dust thrown out at the hooves.
+  // Nothing is drawn on an enemy: who falls Prone is its Test's, and the failure lands it.
+  "war-stomp": {
+    cues: [cue("use", [
+      fx("jb2a.impact.ground_crack.orange.02", { place: "source", scale: 2.2, below: true, filter: "EARTH" }),
+      fx("jb2a.smoke.puff.ring.01.white", { place: "source", scale: 2.4, delay: 120, filter: "EARTH" }),
+      snd(SOUNDS.blunt, { volume: 0.9 }),
+      snd("psfx.casting.earth.001", { delay: 150, volume: 0.7 })
+    ])]
+  },
+  // The troll's fury, flared at the Use, and an ember-glow under him for the encounter the
+  // Boon on his attacks lasts (the laid Boon's effect carries the encounter's `talentBuff`).
+  berserking: {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.fire.01.orange", { place: "source", scale: 1.4, filter: "DESATURATE" }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.6 })
+    ])],
+    loop: loop("effect", [fx("jb2a.flames.04.loop.orange", { place: "holder", scale: 1.3, below: true, opacity: 0.35 })], { state: "talentBuff" })
+  },
+  // The orc's word to a friend: a brief blessing on the creature named. The Boon itself
+  // waits for that creature's next Test and is spent by it.
+  "thralls-discipline": {
+    cues: [cue("use", [
+      fx("jb2a.bless.200px.intro.yellow", { place: "target", scale: 1.1 }),
+      snd(SOUNDS.boon, { volume: 0.7 })
+    ])]
+  },
+
+  /* ================= Blademaster (Orc Warrior) ================= */
+  // A Reaction at any time: the free Move is the player's own drag, so there is no
+  // step to record - the wind gathers at the blademaster, and stands on him while no
+  // blow may answer him (the `unanswered` state) and while he stays hidden at rank 2
+  // (the `concealed` one, which core's own invisible status hides from other eyes).
+  "wind-walk": {
+    cues: [cue("use", [
+      fx("jb2a.wind_stream.white", { place: "source", scale: 1.4, opacity: 0.85, hold: 900, fadeOut: 300 }),
+      snd(SOUNDS.gust, { volume: 0.8 })
+    ])],
+    loops: [
+      loop("effect", [fx("jb2a.wind_stream.white", { place: "holder", scale: 1.3, opacity: 0.4 })], { state: "unanswered" }),
+      loop("effect", [fx("jb2a.condition.boon.02.001.refraction", { place: "holder", scale: 1.2, opacity: 0.45 })], { state: "concealed" })
+    ]
+  },
+  // The creature named, and its marker for as long as the mark holds (door 18).
+  "the-challenge": {
+    cues: [cue("use", [
+      fx("jb2a.impact.013.001.orangeyellow", { place: "target", scale: 0.8 }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.5 })
+    ])],
+    loop: loop("mark", [fx("jb2a.ui.indicator.yellow.01.01", { place: "holder", scale: 1.1, opacity: 0.9 })])
+  },
+  // The hit turned into a miss, on the blademaster it was aimed at (the card's `hold`).
+  afterimage: {
+    cues: [cue("hold", [
+      fx("jb2a.misty_step.01.blue", { place: "target", scale: 1.2, filter: "DESATURATE", opacity: 0.8 }),
+      fx("jb2a.ui.miss.white", { place: "target", scale: 0.9, delay: 150 }),
+      snd(SOUNDS.swingLight, { volume: 0.7 })
+    ])]
+  },
+  // The storm gathered at the Use, standing for the round no blow may answer, and every
+  // blow its card's Attack makes a whirling cut rather than the blade's own swing.
+  bladestorm: {
+    cues: [cue("use", [
+      fx("jb2a.template_circle.whirl.intro.blue", { place: "source", scale: 2.2, filter: "DESATURATE" }),
+      snd(SOUNDS.swingHeavy)
+    ])],
+    loop: loop("effect", [fx("jb2a.template_circle.whirl.loop.blue", { place: "holder", scale: 2, opacity: 0.45, filter: "DESATURATE" })], { state: "unanswered" }),
+    strike: strike({ swing: melee("jb2a.melee_generic.whirlwind.01.orange", { heavy: true }), impact: blow(SOUNDS.slash) })
+  },
+
+  /* ================= Mountain King (Dwarf Warrior) ================= */
+  // A jolt on the blow that rode it, a beat after the weapon's own impact lands.
+  bash: {
+    cues: [cue("hit", [
+      fx("jb2a.impact.013.001.orangeyellow", { place: "target", scale: 0.7, delay: 420 }),
+      snd(SOUNDS.blunt, { delay: 420, volume: 0.8 })
+    ])]
+  },
+  // The hammer thrown and come back (*The weapon returns to your hand*), lightning where
+  // it lands. A shield's throw stands in for the hammer, as `thrown-hammer`'s does.
+  "storm-bolt": {
+    strike: strike({
+      swing: { asset: "jb2a.shield_attack.ranged.throw.01.white.01", place: "source>target", travel: "stretch", sound: snd(SOUNDS.swingHeavy) },
+      impact: { asset: "jb2a.static_electricity.01.blue", place: "target", scale: 0.9, waitFor: "travel", overlap: -250, sound: snd(SOUNDS.lightning) },
+      ret: fx("jb2a.shield_attack.ranged.return.01.white.01", { place: "target>source", travel: "stretch", delay: 500 }),
+      standIn: "visual"
+    })
+  },
+  "thunder-clap": {
+    cues: [cue("use", [
+      fx("jb2a.thunderwave.center.blue", { place: "source", area: 1 }),
+      snd("psfx.cantrips.thunderclap.v1"),
+      fx("jb2a.impact.ground_crack.orange.02", { place: "source", area: 0.6, below: true, delay: 150, filter: "EARTH" })
+    ])]
+  },
+  // The aura's Armor Point on each ally at the dwarf's shoulder (D-755's laid aura).
+  "shoulder-to-shoulder": {
+    loop: loop("effect", [fx("jb2a.shield_themed.below.molten_earth.01.orange", { place: "holder", scale: 1.3, below: true, opacity: 0.4, filter: "EARTH" })], { state: "aura" })
+  },
+  bedrock: {
+    cues: [cue("use", [
+      fx("jb2a.shield_themed.above.molten_earth.01.orange", { place: "source", scale: 1.4, filter: "EARTH", hold: 1200, fadeOut: 400 }),
+      snd("psfx.casting.earth.001")
+    ])]
+  },
+  // The encounter's Armor Points, Ward and Damage Rating ride one buff (`talentBuff`).
+  "the-mountain-wakes": {
+    cues: [cue("use", [
+      fx("jb2a.impact.ground_crack.orange.02", { place: "source", scale: 2.4, below: true, filter: "EARTH" }),
+      fx("jb2a.cast_generic.earth.01.browngreen", { place: "source", scale: 1.6 }),
+      snd("psfx.casting.earth.001")
+    ])],
+    loop: loop("effect", [
+      fx("jb2a.shield_themed.below.molten_earth.01.orange", { place: "holder", scale: 1.5, below: true, opacity: 0.6, filter: "EARTH" }),
+      fx("jb2a.shield_themed.above.molten_earth.01.orange", { place: "holder", scale: 1.5, opacity: 0.6, filter: "EARTH" })
+    ], { state: "talentBuff" })
+  },
+
+  /* ================= Dark Ranger (Forsaken Ranger) ================= */
+  // The rider's own arrow, and its mark for as long as the creature recovers nothing.
+  "black-arrow": {
+    strike: strike({
+      swing: { asset: "jb2a.arrow.poison.green.01", place: "source>target", travel: "stretch", filter: "DARK", sound: snd(SOUNDS.longbow, { bucketed: true }) },
+      impact: { asset: "jb2a.toll_the_dead.green.skull_smoke", place: "target", scale: 0.7, waitFor: "travel", overlap: -250, sound: snd(SOUNDS.necrotic, { volume: 0.7 }) }
+    }),
+    loop: loop("effect", [fx("jb2a.markers.skull.purple.01", { place: "holder", scale: 1.1, opacity: 0.55 })], { state: "noHealing" })
+  },
+  // The raise's own card (`effects/after-blow.mjs#raiseFallen`): the skeleton's token.
+  "dark-minion": {
+    cues: [cue("rise", [
+      fx("jb2a.toll_the_dead.green.skull_smoke", { place: "risen", scale: 1.2 }),
+      fx("jb2a.impact.ground_crack.orange.02", { place: "risen", scale: 1.1, below: true, filter: "DARK" }),
+      snd("psfx.cantrips.toll-the-dead.ominous-bell.001", { volume: 0.7 })
+    ])]
+  },
+  // At the ranger alone: who is Frightened is the Resist's, and 07's rule waits for it.
+  "banshees-wail": {
+    cues: [cue("use", [
+      fx("jb2a.toll_the_dead.green.shockwave", { place: "source", area: 1 }),
+      snd("psfx.incantations.feminine.001.reverb.harm.007")
+    ])]
+  },
+  "hush-of-the-grave": {
+    cues: [cue("region", [
+      fx("jb2a.template_circle.out_pulse.02.burst.bluewhite", { place: "region", area: 1, filter: "DARK" }),
+      fx("jb2a.markers.mute.dark_red.01", { place: "region", area: 0.3, delay: 300, hold: 1200, fadeOut: 400 }),
+      snd("psfx.cantrips.toll-the-dead.rasping-whispers.001", { volume: 0.8 })
+    ])]
+  },
+  // Drawn from the creature to the ranger.
+  "life-drain": {
+    cues: [cue("use", [
+      fx("jb2a.energy_strands.range.standard.purple.01", { place: "target>source", travel: "stretch" }),
+      snd(SOUNDS.strands, { bucketed: true }),
+      fx("jb2a.energy_strands.in.green.01", { place: "target", filter: "PURPLE_G", delay: 200 })
+    ])]
+  },
+  // The call at the ranger; the chains only when the creature's Test fails and its
+  // Charmed takes the thrall's mark (`effects/legacy-uses.mjs#bindThrall`).
+  "thrall-of-the-banshee": {
+    cues: [
+      cue("use", [
+        fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 1.6, filter: "SHADOW_B" }),
+        snd("psfx.incantations.whispers.fem.001.forward.standard.001", { volume: 0.8 })
+      ]),
+      cue("effect", [
+        fx("jb2a.markers.chain.spectral_standard.complete.02.blue", { place: "effect", scale: 1.2 }),
+        snd("psfx.incantations.whispers.fem.001.forward.standard.002", { volume: 0.6 })
+      ], { state: "thrall" })
+    ],
+    loop: loop("effect", [fx("jb2a.markers.chain.spectral_standard.loop.02.blue", { place: "holder", scale: 1.2, opacity: 0.7 })], { state: "thrall" })
+  },
+
+  /* ================= Warden (Night Elf Rogue) ================= */
+  // The trap set, the rune it stands as, and the chains on whatever it caught - the
+  // Entangled its spring lays carries the trap's name on its escape.
+  "shadow-trap": {
+    cues: [
+      cue("region", [
+        fx("jb2a.particle_burst.01.rune.bluepurple", { place: "region", area: 1, filter: "SHADOW_B" }),
+        snd("psfx.magic-signs.rune.v1.abjuration.intro", { volume: 0.7 })
+      ]),
+      cue("effect", [
+        fx("jb2a.markers.chain.spectral_standard.complete.02.blue", { place: "effect", scale: 1.2, filter: "SHADOW_B" }),
+        snd(SOUNDS.blunt, { volume: 0.4 })
+      ], { state: "escape" })
+    ],
+    loops: [
+      loop("region", [fx("jb2a.template_circle.symbol.normal.runes.orange", { place: "region", area: 1, below: true, opacity: 0.45, filter: "SHADOW_B" })]),
+      loop("effect", [fx("jb2a.markers.chain.spectral_standard.loop.02.blue", { place: "holder", scale: 1.2, opacity: 0.7, filter: "SHADOW_B" })], { state: "escape" })
+    ]
+  },
+  // The knives about the warden at the Use, and every attack its card makes a throw.
+  "fan-of-knives": {
+    cues: [cue("use", [
+      fx("jb2a.cloud_of_daggers.daggers.purple", { place: "source", scale: 1.8, hold: 900, fadeOut: 300, filter: "DESATURATE" }),
+      snd(SOUNDS.swingLight)
+    ])],
+    strike: strike({
+      swing: { asset: "jb2a.dagger.throw.01.white", place: "source>target", travel: "stretch", sound: snd(SOUNDS.swingLight) },
+      impact: blow(SOUNDS.slash, { volume: 0.6, scale: 0.35, waitFor: "travel", overlap: -250 }),
+      standIn: "sound"
+    })
+  },
+  // The rider's own throw, darkened, and the Bleeding it opens.
+  "shadow-strike": {
+    strike: strike({
+      swing: { asset: "jb2a.dagger.throw.01.white", place: "source>target", travel: "stretch", filter: "DARK", sound: snd(SOUNDS.swingLight) },
+      impact: { asset: "jb2a.liquid.splash02.red", place: "target", scale: 0.5, waitFor: "travel", overlap: -250, sound: snd(SOUNDS.slash, { volume: 0.7 }) }
+    })
+  },
+  unfettered: {
+    cues: [cue("use", [
+      fx("jb2a.particle_burst.01.circle.bluepurple", { place: "source", scale: 1, filter: "SHADOW_B" }),
+      snd(SOUNDS.gust, { volume: 0.6 })
+    ])]
+  },
+  // The Finisher's Entangled, whose escape carries Shackle's name (`finisherShackle`).
+  shackle: {
+    cues: [cue("effect", [
+      fx("jb2a.markers.chain.standard.complete.02.red", { place: "effect", scale: 1.2, filter: "DESATURATE" }),
+      snd(SOUNDS.blunt, { volume: 0.5 })
+    ], { state: "escape" })],
+    loop: loop("effect", [fx("jb2a.markers.chain.standard.loop.02.red", { place: "holder", scale: 1.2, opacity: 0.75, filter: "DESATURATE" })], { state: "escape" })
+  },
+  // On the creature watched, and only on a client that owns the warden (door 18).
+  "the-long-watch": {
+    loop: loop("mark", [fx("jb2a.ui.indicator.bluegreen.02.01", { place: "holder", scale: 1, opacity: 0.75 })])
+  },
+  "fade-step": {
+    cues: [
+      cue("use", [
+        fx("jb2a.misty_step.01.blue", { place: "step-from", scale: 1.1, filter: "SHADOW_B", movers: ["self"] }),
+        snd("psfx.2nd-level-spells.misty-step.v1.intro.generic", { volume: 0.6 })
+      ]),
+      cue("arrive", [
+        fx("jb2a.misty_step.02.blue", { place: "step-to", scale: 1.1, filter: "SHADOW_B", movers: ["self"] }),
+        snd("psfx.2nd-level-spells.misty-step.v1.outro.generic", { volume: 0.6 })
+      ])
+    ]
+  },
+  "the-vault-opens": {
+    cues: [
+      cue("use", [
+        fx("jb2a.template_circle.out_pulse.02.burst.bluewhite", { place: "source", area: 1, filter: "SHADOW_B" }),
+        snd("psfx.magic-signs.circle.v1.abjuration.intro", { volume: 0.8 })
+      ]),
+      cue("effect", [fx("jb2a.markers.chain.spectral_standard.complete.02.blue", { place: "effect", scale: 1.2 })], { state: "escape" })
+    ],
+    loop: loop("effect", [fx("jb2a.markers.chain.spectral_standard.loop.02.blue", { place: "holder", scale: 1.2, opacity: 0.7 })], { state: "escape" })
+  },
+  "wardens-cage": {
+    cues: [
+      cue("use", [fx("jb2a.cast_generic.02.blue", { place: "source", scale: 0.8, filter: "SHADOW_B" })]),
+      cue("effect", [
+        fx("jb2a.bubble.001.001.complete.blue", { place: "effect", scale: 1.3, filter: "SHADOW_B" }),
+        snd("psfx.magic-signs.circle.v1.abjuration.intro", { volume: 0.5 })
+      ], { state: "escape" })
+    ],
+    loop: loop("effect", [fx("jb2a.bubble.001.001.loop.blue", { place: "holder", scale: 1.3, opacity: 0.6, filter: "SHADOW_B" })], { state: "escape" })
+  },
+  // Every creature pulled, each its own drag and its own chains; the warden moves not.
+  "none-escape": {
+    cues: [
+      cue("use", [fx("jb2a.cast_generic.02.blue", { place: "source", scale: 1, filter: "SHADOW_B" })]),
+      cue("arrive", [
+        fx("jb2a.energy_strands.range.standard.purple.02", { place: "step", travel: "stretch", movers: ["pull"], filter: "SHADOW_B", stagger: 120 }),
+        fx("jb2a.markers.chain.spectral_standard.complete.02.blue", { place: "step-to", movers: ["pull"], scale: 1.1, stagger: 120, delay: 300 }),
+        snd(SOUNDS.strands, { bucketed: true })
+      ])
+    ]
+  },
+
+  /* ================= Tinker (Gnome Rogue) ================= */
+  // A construct built or rebuilt, where its token stands up.
+  "the-bench": {
+    cues: [cue("rise", [
+      fx("jb2a.fumes.steam.white", { place: "risen", scale: 1.3, opacity: 0.85 }),
+      fx("jb2a.static_electricity.02.blue", { place: "risen", scale: 0.9, delay: 200 }),
+      snd("psfx.cantrips.mending.v1.001.with-cast")
+    ])]
+  },
+  // Over the area the card placed; the construct it is fired from is recorded nowhere
+  // the Region carries, so no rocket is drawn from it.
+  "cluster-rockets": {
+    cues: [cue("region", [
+      fx("jb2a.explosion.01.orange", { place: "region-scatter", count: 4, area: [0.3, 0.45], stagger: 140 }),
+      fx("jb2a.explosion.shrapnel.bomb.01.black", { place: "region", area: 0.6, delay: 280 }),
+      snd(SOUNDS.explode),
+      snd(SOUNDS.explode, { delay: 420, volume: 0.7 })
+    ])]
+  },
+  "remote-control": {
+    cues: [cue("use", [
+      fx("jb2a.static_electricity.01.blue", { place: "source", scale: 0.6 }),
+      snd("psfx.cantrips.shocking-grasp.v1.001", { volume: 0.5 })
+    ])]
+  },
+  "arclight-spanner": {
+    cues: [cue("use", [
+      fx("jb2a.static_electricity.03.blue", { place: "target", scale: 0.9 }),
+      fx("jb2a.swirling_sparkles.01.blue", { place: "target", scale: 1, delay: 250 }),
+      snd("psfx.cantrips.mending.v1.001.with-cast")
+    ])]
+  },
+  "pocket-factory": {
+    cues: [cue("rise", [
+      fx("jb2a.smoke.puff.centered.grey", { place: "risen", scale: 1, stagger: 150 }),
+      fx("jb2a.static_electricity.02.blue", { place: "risen", scale: 0.8, stagger: 150, delay: 150 }),
+      snd("psfx.cantrips.mending.v1.001.with-cast", { volume: 0.8 })
+    ])]
+  },
+  // On the gnome and each creature carried, where the pad put them; a traveller taken
+  // to another scene has no token here to draw on.
+  "ultrasafe-transporter": {
+    cues: [cue("use", [
+      fx("jb2a.teleport.01.blue", { place: "source", scale: 1.4 }),
+      fx("jb2a.teleport.01.blue", { place: "targets", scale: 1.4, stagger: 120 }),
+      snd("psfx.2nd-level-spells.misty-step.v1.complete.generic")
+    ])]
+  },
+  // The shape (D-769's one Active Effect), as Avatar of the Wild's is.
+  "gnomish-battle-rig": {
+    cues: [cue("use", [
+      fx("jb2a.fumes.steam.white", { place: "source", scale: 2 }),
+      fx("jb2a.static_electricity.02.blue", { place: "source", scale: 1.6, delay: 200 }),
+      snd(SOUNDS.blunt)
+    ])],
+    loop: loop("effect", [fx("jb2a.fumes.steam.white", { place: "holder", scale: 1.3, opacity: 0.3 })], { state: "shape" })
+  },
+
+  /* ---- 04's eight gadgets ---- */
+  // The card's own Attack is the net's throw, and the web stands on the creature held.
+  "net-o-matic-projector": {
+    strike: strike({
+      swing: { asset: "jb2a.snowball_toss.white.01", place: "source>target", travel: "stretch", filter: "DARKEN", sound: snd(SOUNDS.swingLight) },
+      impact: { asset: "jb2a.web.01", place: "target", scale: 0.9, waitFor: "travel", overlap: -250, sound: snd(SOUNDS.blunt, { volume: 0.3 }) },
+      standIn: "visual"
+    }),
+    loop: loop("effect", [fx("jb2a.web.loop.002.white", { place: "holder", scale: 1.1, opacity: 0.75 })], { state: "escape" })
+  },
+  "gnomish-cloaking-device": {
+    cues: [
+      cue("use", [
+        fx("jb2a.static_electricity.01.blue", { place: "source", scale: 0.7 }),
+        snd("psfx.casting.generic.001", { volume: 0.6 })
+      ]),
+      cue("effect", [fx("jb2a.shimmer.01.blue", { place: "effect", scale: 1.2, opacity: 0.8 })], { state: "concealed" })
+    ],
+    loop: loop("effect", [fx("jb2a.condition.boon.02.001.refraction", { place: "holder", scale: 1.2, opacity: 0.45 })], { state: "concealed" })
+  },
+  "alarm-o-bot": {
+    cues: [cue("region", [
+      fx("jb2a.detect_magic.circle.blue", { place: "region", area: 1, opacity: 0.55 }),
+      snd("psfx.cantrips.light.v1.001", { volume: 0.7 })
+    ])]
+  },
+  "discombobulator-ray": {
+    cues: [cue("use", [
+      fx("jb2a.energy_beam.normal.bluepink.02", { place: "source>target", travel: "stretch" }),
+      snd("psfx.ranged-magic.generic.beam.001")
+    ])]
+  },
+  "gnomish-universal-remote": {
+    cues: [cue("use", [
+      fx("jb2a.ranged.03.instant.01.bluegreen", { place: "source>target", travel: "stretch" }),
+      snd("psfx.cantrips.shocking-grasp.v1.002", { volume: 0.7 }),
+      fx("jb2a.static_electricity.01.blue", { place: "target", scale: 0.8, delay: 300 })
+    ])]
+  },
+  "harm-prevention-belt": {
+    cues: [cue("use", [
+      fx("jb2a.shield.01.intro.blue", { place: "source", scale: 1.4 }),
+      snd("psfx.1st-level-spells.shield-spell.intro.v1.003", { volume: 0.8 })
+    ])]
+  },
+  recombobulator: {
+    cues: [cue("use", [
+      fx("jb2a.healing_generic.200px.blue", { place: "target", scale: 1.1 }),
+      fx("jb2a.static_electricity.01.blue", { place: "target", scale: 0.7, delay: 200 }),
+      snd("psfx.cantrips.mending.v1.001.with-cast")
+    ])]
+  },
+  "parachute-cloak": {
+    cues: [cue("use", [
+      fx("jb2a.swirling_feathers.outburst.01.textured", { place: "source", below: true, opacity: 0.8 }),
+      snd(SOUNDS.gust)
+    ])]
+  },
+
+  /* ---- 14 §13's constructs: their own abilities ---- */
+  // Each attack a construct makes already plays its form (Peck a bite, Claws a claw,
+  // the Flame jet a fire bolt, a Kick and the rig's Piston fist a slam; held by
+  // `animation-table.test.mjs`). Breath is no construct's alone - 14's Drake breathes
+  // its flight's school and Nefarian his own - so `ability:breath` takes no row.
+  "ability:battle-squawk": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 1.8, filter: "DESATURATE" }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.35 })
+    ])]
+  },
+  "ability:vent": {
+    cues: [cue("use", [
+      fx("jb2a.fire_ring.500px.red", { place: "source", sizeFt: 25, below: true, grow: 400, hold: 1000 }),
+      fx("jb2a.fumes.steam.white", { place: "source", scale: 1.6, delay: 150 }),
+      snd(SOUNDS.fire)
+    ])]
+  },
+  "ability:self-destruct": {
+    cues: [cue("use", [
+      fx("jb2a.explosion.01.orange", { place: "source", scale: 2.2 }),
+      fx("jb2a.explosion.shrapnel.bomb.01.black", { place: "source", scale: 2, delay: 120 }),
+      snd(SOUNDS.explode)
+    ])]
+  },
+  // Its own card (`effects/legacy-uses.mjs#useCuttingGear`), read by its speaker.
+  "ability:cutting-gear": {
+    cues: [cue("use", [
+      fx("jb2a.impact.013.001.orangeyellow", { place: "source", scale: 0.6 }),
+      snd(SOUNDS.slash, { volume: 0.6 })
+    ])]
+  },
+
+  /* ================= Shadow Hunter (Troll Shaman) ================= */
+  "trolls-blood": {
+    cues: [cue("use", [
+      fx("jb2a.healing_generic.burst.greenorange", { place: "target", scale: 1.1 }),
+      snd(SOUNDS.boon)
+    ])]
+  },
+  // On the blow that rode it, a beat after the weapon's own impact.
+  jinx: {
+    cues: [cue("hit", [
+      fx("jb2a.condition.curse.01.001.red", { place: "target", scale: 0.9, delay: 420, hold: 1200, fadeOut: 400 }),
+      snd("psfx.incantations.whispers.masc.001.forward.standard.001", { delay: 420, volume: 0.5 })
+    ])]
+  },
+  "voodoo-mending": {
+    cues: [cue("use", [
+      fx("jb2a.healing_generic.burst.greenorange", { place: "target", scale: 1.3 }),
+      fx("jb2a.markers.on_token_mask.complete.01.orange", { place: "target", scale: 1.1, delay: 200 }),
+      snd("psfx.1st-level-spells.cure-wounds.v1.001")
+    ])]
+  },
+  // The Searing totem's spit under the patch (door 20), and the Poisoned it lays,
+  // whose shed DC carries the talent's name.
+  "serpent-ward": {
+    strike: strike({
+      swing: { asset: "jb2a.ranged.04.projectile.01.green", place: "source>target", travel: "stretch", sound: snd("psfx.cantrips.poison-spray.v1", { volume: 0.8 }) },
+      impact: { asset: "jb2a.liquid.splash.blue", place: "target", scale: 0.6, filter: "VENOM_B", waitFor: "travel", overlap: -250, sound: snd(SOUNDS.necrotic, { volume: 0.5 }) }
+    }),
+    loop: loop("effect", [fx("jb2a.markers.poison.dark_green.01", { place: "holder", scale: 1.1, opacity: 0.65 })], { state: "shedDc" })
+  },
+  "evil-eye": {
+    cues: [cue("use", [
+      fx("jb2a.eyes.01.dark_green.many", { place: "source", area: 0.7, hold: 1400, fadeOut: 400 }),
+      snd("psfx.incantations.masculine.002.dry.harm.004", { volume: 0.8 })
+    ])]
+  },
+  // The aura's Bane on each enemy within 30 feet of the Tremor totem (door 20).
+  "loa-drum": {
+    loop: loop("effect", [fx("jb2a.markers.runes.dark_orange.01", { place: "holder", scale: 1.1, below: true, opacity: 0.45 })], { state: "aura" })
+  },
+  // The Stun's own escape carries the talent's name.
+  "bad-mojo": {
+    cues: [
+      cue("use", [
+        fx("jb2a.markers.on_token_mask.complete.01.orange", { place: "source", scale: 1 }),
+        snd("psfx.incantations.masculine.002.dry.harm.004", { volume: 0.8 })
+      ]),
+      cue("effect", [fx("jb2a.condition.curse.01.001.red", { place: "effect", scale: 1.1, hold: 1200, fadeOut: 400 })], { state: "escape" })
+    ],
+    loop: loop("effect", [fx("jb2a.markers.on_token_mask.loop.01.orange", { place: "holder", scale: 1.1, opacity: 0.85 })], { state: "escape" })
+  },
+  // Its own Sustain (`identifier: "big-bad-voodoo"`, held to the row's key by the
+  // census), and each catch of the floor its aura lays (07's Aegis floor's own write).
+  "big-bad-voodoo": {
+    cues: [
+      cue("use", [
+        fx("jb2a.healing_generic.burst.greenorange", { place: "source", scale: 2 }),
+        fx("jb2a.markers.on_token_mask.complete.01.orange", { place: "source", scale: 1.4, delay: 250 }),
+        snd("psfx.incantations.masculine.002.reverb.help.005")
+      ]),
+      cue("hold", [
+        fx("jb2a.markers.on_token_mask.complete.01.orange", { place: "targets", scale: 1.1 }),
+        fx("jb2a.healing_generic.burst.greenorange", { place: "targets", scale: 0.9, delay: 150 }),
+        snd(SOUNDS.boon)
+      ])
+    ],
+    loop: loop("sustain-self", [
+      fx("jb2a.markers.on_token_mask.loop.01.orange", { place: "holder", scale: 1.3, opacity: 0.8 }),
+      fx("jb2a.template_circle.aura.01.loop.large.bluepurple", { place: "holder", sizeFt: 40, below: true, opacity: 0.25, filter: "GREENGOLD" })
+    ])
+  },
+
+  /* ================= Spirit Walker (Tauren Shaman) ================= */
+  // The Death Step held back (`AzerothActor#takeDeathStep`'s card): holder to spared.
+  "hold-the-thread": {
+    cues: [cue("hold", [
+      fx("jb2a.energy_strands.range.standard.purple.02", { place: "source>target", travel: "stretch", filter: "GOLD_B" }),
+      fx("jb2a.shimmer.01.blue", { place: "target", scale: 1.3, delay: 250 }),
+      snd(SOUNDS.boon)
+    ])]
+  },
+  // Its Use from the sheet - the table's own door for a hit no card carried.
+  "shared-burden": {
+    cues: [cue("use", [
+      fx("jb2a.energy_strands.range.standard.purple.03", { place: "target>source", travel: "stretch", filter: "GOLD_B" }),
+      snd(SOUNDS.strands, { bucketed: true, volume: 0.7 })
+    ])]
+  },
+  "ancestors-hand": {
+    cues: [
+      cue("use", [fx("jb2a.spirit_guardians.blueyellow.ring", { place: "source", scale: 2.4, opacity: 0.7, hold: 1100, fadeOut: 400 })]),
+      cue("rise", [
+        fx("jb2a.divine_smite.caster.blueyellow", { place: "risen", scale: 1.1, stagger: 150 }),
+        fx("jb2a.healing_generic.burst.greenorange", { place: "risen", scale: 1, stagger: 150, delay: 200 }),
+        snd("psfx.1st-level-spells.cure-wounds.v1.001")
+      ])
+    ]
+  },
+  // The Spirit Realm's state on the shaman (door 10); the body stands where it was.
+  "the-crossing": {
+    cues: [cue("use", [
+      fx("jb2a.shimmer.01.blue", { place: "source", scale: 1.4 }),
+      fx("jb2a.smoke.puff.ring.01.white", { place: "source", opacity: 0.6 }),
+      snd("psfx.incantations.whispers.masc.001.forward.standard.003", { volume: 0.6 })
+    ])],
+    loop: loop("effect", [fx("jb2a.spirit_guardians.blueyellow.ring", { place: "holder", scale: 1.6, below: true, opacity: 0.4 })], { state: "spiritRealm" })
+  },
+  disenchant: {
+    cues: [cue("use", [
+      fx("jb2a.particle_burst.01.circle.bluepurple", { place: "targets", scale: 0.9, stagger: 120 }),
+      snd("psfx.magic-signs.circle.v1.abjuration.outro", { volume: 0.8 })
+    ])]
+  },
+  "burial-ground": {
+    cues: [cue("region", [
+      fx("jb2a.eyes.01.dark_green.few", { place: "region-scatter", count: 3, area: [0.12, 0.2], stagger: 250 }),
+      snd("psfx.cantrips.toll-the-dead.ominous-bell.001", { volume: 0.6 })
+    ])],
+    loop: loop("region", [fx("jb2a.spirit_guardians.blueyellow.ring", { place: "region", area: 1, below: true, mask: true, opacity: 0.35 })])
+  },
+  // On the shaman and each friend Kindred Spirits covers, each its own arrival.
+  "ethereal-form": {
+    cues: [cue("effect", [
+      fx("jb2a.shimmer.01.blue", { place: "effect", scale: 1.3 }),
+      snd("psfx.incantations.whispers.masc.001.forward.standard.003", { volume: 0.5 })
+    ], { state: "ethereal" })],
+    loop: loop("effect", [fx("jb2a.markers.smoke.ring.loop.bluepurple", { place: "holder", scale: 1.3, opacity: 0.5 })], { state: "ethereal" })
+  },
+  // The thread at the Use; the halving on the creature only once its Test has failed.
+  "drawn-across": {
+    cues: [
+      cue("use", [
+        fx("jb2a.energy_strands.range.standard.purple.03", { place: "source>target", travel: "stretch", filter: "GOLD_B" }),
+        snd(SOUNDS.strands, { bucketed: true, volume: 0.7 })
+      ]),
+      cue("effect", [fx("jb2a.shimmer.01.blue", { place: "effect", scale: 1.3, filter: "DIM" })], { state: "halvesDealt" })
+    ],
+    loop: loop("effect", [fx("jb2a.energy_field.01.blue", { place: "holder", scale: 1.2, opacity: 0.35 })], { state: "halvesDealt" })
+  },
+  "ancestral-spirit": {
+    cues: [
+      cue("use", [
+        fx("jb2a.divine_smite.caster.blueyellow", { place: "source", scale: 1.6 }),
+        snd("psfx.class-features.divine-smite.v1.001.caster", { volume: 0.7 })
+      ]),
+      cue("rise", [
+        fx("jb2a.divine_smite.caster.reversed.blueyellow", { place: "risen", scale: 1.3 }),
+        fx("jb2a.healing_generic.burst.greenorange", { place: "risen", scale: 1.2, delay: 300 }),
+        snd("psfx.1st-level-spells.cure-wounds.v1.001")
+      ])
+    ]
+  }
+});
+
+/* ------------------------------------------------------------------ */
 /*  Jinker's candidates, for the lead to pick from in Phase 5          */
 /* ------------------------------------------------------------------ */
 
@@ -1189,8 +1943,9 @@ export const SPELL_ANIMATIONS = Object.freeze({
  * nothing could express before the resist record existed (D-726). The binding
  * is built and unused.
  *
- * Keyed by identifier for a spell and by `strike:<form>` for a strike, so
- * Phase 5 can render a pair without matching prose.
+ * Keyed by identifier for a spell, by `strike:<form>` for a strike and by
+ * `feature:<key>` for a feature's row (the Legacy branches' phase B7), so Phase 5
+ * can render a pair without matching prose.
  */
 export const COMPARISONS = Object.freeze({
   immolate: { what: "loop", direction: "flames on the affected creature", draft: "jb2a.flames.04.loop.orange", candidate: "jaamod.condition.burning" },
@@ -1247,7 +2002,36 @@ export const COMPARISONS = Object.freeze({
   // Strikes.
   "strike:net": { what: "strike", direction: "the net landing on a hit", draft: "jb2a.web.01", candidate: "jaamod.traps.trap_net" },
   "strike:bullet": { what: "strike", direction: "the muzzle", draft: "jb2a.muzzle_flash.single.01.yellow", candidate: "jaamod.misc.gun_muzzle_flash" },
-  "strike:cannon": { what: "strike", direction: "the muzzle", draft: "jb2a.muzzle_flash.single.01.yellow", candidate: "jaamod.fire.canonfire" }
+  "strike:cannon": { what: "strike", direction: "the muzzle", draft: "jb2a.muzzle_flash.single.01.yellow", candidate: "jaamod.fire.canonfire" },
+  // **THE LEGACY BRANCHES' ROWS** (phase B7), keyed `feature:<key>` - the feature table's
+  // own key - so a pair is found without matching prose; the draft is what ships.
+  "feature:wind-walk": { what: "loop", direction: "a refraction for as long as the blademaster stays hidden", draft: "jb2a.condition.boon.02.001.refraction", candidate: "jaamod.condition.invisible" },
+  "feature:bladestorm": { what: "loop", direction: "a whirl of steel standing about the blademaster", draft: "jb2a.template_circle.whirl.loop.blue", candidate: "jaamod.spells_effects.blade_barrier", filter: "DESATURATE" },
+  "feature:thunder-clap": { what: "cue", direction: "a burst of thunder from the dwarf's feet", draft: "jb2a.thunderwave.center.blue", candidate: "jaamod.spells_effects.thunder_wave" },
+  "feature:the-mountain-wakes": { what: "cue", direction: "the ground cracking under the dwarf as the mountain wakes", draft: "jb2a.impact.ground_crack.orange.02", candidate: "jaamod.spells_effects.earth_tremor", filter: "EARTH" },
+  "feature:storm-bolt": { what: "strike", direction: "a crack of lightning where the hammer lands", draft: "jb2a.static_electricity.01.blue", candidate: "jaamod.sequencer_fx_master.lightning_blue" },
+  "feature:dark-minion": { what: "cue", direction: "the fallen rising as a skeleton", draft: "jb2a.toll_the_dead.green.skull_smoke", candidate: "jaamod.misc.emerging_arms" },
+  "feature:banshees-wail": { what: "cue", direction: "a wave of the banshee's wail from the ranger", draft: "jb2a.toll_the_dead.green.shockwave", candidate: "jaamod.spells_effects.fear" },
+  "feature:life-drain": { what: "cue", direction: "a channel drawn from the creature to the ranger", draft: "jb2a.energy_strands.range.standard.purple.01", candidate: "jaamod.sequencer_fx_master.green_ray", filter: "PURPLE_G" },
+  "feature:thrall-of-the-banshee": { what: "loop", direction: "the thrall's binding, standing on it for as long as it is bound", draft: "jb2a.markers.chain.spectral_standard.loop.02.blue", candidate: "jaamod.condition.charmed" },
+  "feature:shadow-trap": { what: "loop", direction: "the trap standing on the ground", draft: "jb2a.template_circle.symbol.normal.runes.orange", candidate: "jaamod.traps.bear_trap" },
+  "feature:fan-of-knives": { what: "cue", direction: "a cloud of knives about the warden", draft: "jb2a.cloud_of_daggers.daggers.purple", candidate: "jaamod.spells_effects.cloudof_daggers_s" },
+  "feature:the-vault-opens": { what: "loop", direction: "spectral chains on each creature held", draft: "jb2a.markers.chain.spectral_standard.loop.02.blue", candidate: "jaamod.spells_effects.chain1" },
+  "feature:shackle": { what: "loop", direction: "iron chains on the creature the Finisher holds", draft: "jb2a.markers.chain.standard.loop.02.red", candidate: "jaamod.spells_effects.chain2", filter: "DESATURATE" },
+  "feature:wardens-cage": { what: "loop", direction: "a cage of shadow about the creature Stunned", draft: "jb2a.bubble.001.001.loop.blue", candidate: "jaamod.condition.stunned" },
+  "feature:alarm-o-bot": { what: "cue", direction: "the alarm set over its area", draft: "jb2a.detect_magic.circle.blue", candidate: "jaamod.spells_effects.alarm" },
+  "feature:gnomish-cloaking-device": { what: "loop", direction: "a refraction on each creature hidden", draft: "jb2a.condition.boon.02.001.refraction", candidate: "jaamod.condition.invisible" },
+  "feature:net-o-matic-projector": { what: "strike", direction: "the net landing on a hit", draft: "jb2a.web.01", candidate: "jaamod.traps.trap_net" },
+  "feature:arclight-spanner": { what: "cue", direction: "sparks of repair on the construct", draft: "jb2a.static_electricity.03.blue", candidate: "jaamod.misc.welder_sparks" },
+  "feature:pocket-factory": { what: "cue", direction: "smoke where each clockwork gnome assembles", draft: "jb2a.smoke.puff.centered.grey", candidate: "jaamod.misc.dust_poof" },
+  "feature:ultrasafe-transporter": { what: "cue", direction: "a teleport onto the pad", draft: "jb2a.teleport.01.blue", candidate: "jaamod.sci_fi.teleporter" },
+  "feature:serpent-ward": { what: "loop", direction: "a poison mark on the creature the totem's venom struck", draft: "jb2a.markers.poison.dark_green.01", candidate: "jaamod.condition.poisoned" },
+  "feature:evil-eye": { what: "cue", direction: "a crowd of eyes about the troll", draft: "jb2a.eyes.01.dark_green.many", candidate: "jaamod.misc.eyes_blink.green" },
+  "feature:bad-mojo": { what: "loop", direction: "the voodoo curse on the creature Stunned", draft: "jb2a.markers.on_token_mask.loop.01.orange", candidate: "jaamod.condition.cursed" },
+  "feature:big-bad-voodoo": { what: "loop", direction: "a ring standing about the troll while it is Sustained", draft: "jb2a.template_circle.aura.01.loop.large.bluepurple", candidate: "jaamod.spells_effects.auraof_life", filter: "GREENGOLD" },
+  "feature:the-crossing": { what: "loop", direction: "a ring of spirits about the body left standing", draft: "jb2a.spirit_guardians.blueyellow.ring", candidate: "jaamod.spells_effects.spirit_guardians_trans50" },
+  "feature:burial-ground": { what: "loop", direction: "a ring of spirits over the ground blessed", draft: "jb2a.spirit_guardians.blueyellow.ring", candidate: "jaamod.spells_effects.spirit_guardians" },
+  "feature:ability:self-destruct": { what: "cue", direction: "the clockwork gnome bursting", draft: "jb2a.explosion.01.orange", candidate: "jaamod.misc.fire_boom" }
 });
 
 /* ------------------------------------------------------------------ */
@@ -1270,13 +2054,28 @@ function strikeSteps(row) {
   return out;
 }
 
-/** Every step a spell row can play, over every cue and every loop layer. */
+/**
+ * Every step a spell row or a feature row can play, over every cue and every loop
+ * layer - and a feature row's strike override, whose steps play on an attack card.
+ */
 function spellSteps(row) {
   if (!row || row.reason) return [];
   const out = [];
   for (const c of row.cues ?? []) out.push(...c.steps);
-  for (const layer of row.loop?.layers ?? []) out.push(layer);
+  for (const lp of loopsOf(row)) for (const layer of lp.layers ?? []) out.push(layer);
+  if (row.strike?.swing) out.push(...strikeSteps(row.strike));
   return out;
+}
+
+/**
+ * Every loop a row carries: a spell's `loop`, or a feature row's `loops` (one a binding;
+ * 04's Shadow Trap stands one on the trap and one on what it caught). The law reads the
+ * same through `rules/animation.mjs#rowLoops`.
+ */
+export function loopsOf(row) {
+  if (!row || row.reason) return [];
+  if (Array.isArray(row.loops)) return row.loops.filter(Boolean);
+  return row.loop ? [row.loop] : [];
 }
 
 /**
@@ -1298,7 +2097,8 @@ export function allAssetKeys() {
       if (step.secondary) keys.add(step.secondary);
     }
   }
-  for (const row of Object.values(SPELL_ANIMATIONS)) {
+  // The tier 1 spells, the taught ones above tier 1, and the features (door 2).
+  for (const row of [...Object.values(SPELL_ANIMATIONS), ...Object.values(TAUGHT_SPELL_ANIMATIONS), ...Object.values(FEATURE_ANIMATIONS)]) {
     for (const step of spellSteps(row)) {
       if (step.asset) keys.add(step.asset);
       if (step.secondary) keys.add(step.secondary);
@@ -1338,13 +2138,22 @@ export function comparisonAssetKeys() {
  */
 export function loopIdentifiers(binding, table = SPELL_ANIMATIONS) {
   return Object.entries(table)
-    .filter(([, row]) => row?.loop?.binding === binding)
+    .filter(([, row]) => loopsOf(row).some(lp => lp.binding === binding))
     .map(([identifier]) => identifier)
     .sort();
 }
 
-/** Every step of a row, for a test or a reader. Strikes and spells alike. */
+/** Every step of a row, for a test or a reader. Strikes, spells and features alike. */
 export function stepsOf(row) {
   if (!row) return [];
   return row.swing ? strikeSteps(row) : spellSteps(row);
+}
+
+/**
+ * The feature table's strike recipe builder, for a row whose attack card plays an
+ * override (the file comment): `{swing, launch, impact, ret, standIn}`, the shape
+ * `STRIKE_ANIMATIONS` takes, frozen the same way.
+ */
+export function strikeRecipe(parts) {
+  return strike(parts);
 }

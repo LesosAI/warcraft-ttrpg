@@ -25,6 +25,21 @@ import { THINNED_RATING_DROP, thinnedRating } from "../rules/swarm.mjs";
 import { fieldsFor } from "./item-fields.mjs";
 import { shouldPrompt } from "../settings.mjs";
 import { OVERCHANNEL_MAX_POINTS, castingDC, grantingClass, isHealingSpell, manaPrice, maxOverchannel, overchannelPerPoint, spellManaCost, statedCastingDC, swiftCast, takeNextSpell } from "../rules/casting.mjs";
+// THE LEGACY BRANCHES' DOORS (B1): a spell a talent pays in another pool (door 8),
+// the ability scope (door 16), a throw a rider makes possible (door 15), and no
+// Reaction against the unanswered (door 14).
+import { castCanPay, castingManaPool } from "../rules/casting.mjs";
+import { spellPoolFor } from "../rules/class-talents.mjs";
+import { abilityScope } from "../rules/expressions.mjs";
+import { riderThrowModifiers, throwAsWeapon } from "../rules/wield.mjs";
+import { throwAsOffer } from "../rules/riders.mjs";
+import { unansweredBy } from "../rules/reactions.mjs";
+import { reactionLostToBlow } from "../rules/miss.mjs";
+import { withdrawHit, withdrawnWords } from "../effects/miss.mjs";
+import { onUseLegacy } from "../rules/class-talents.mjs";
+// A Reaction's answer is written on the striker's card (the B1 fix run): with no GM to
+// write a card this client did not post, it is refused before anything is spent.
+import { cardPressUnrecordable } from "../effects/card-presses.mjs";
 // The Mage's and the Warlock's (D-775): what the cast's dialog reads - the
 // talents' discounts and Icy Veins' state, a restated DC, Overchanneller's
 // relief - and the Combustion fact on a damage line.
@@ -43,7 +58,8 @@ import { EXTRA_ATTACK_ROLLS_BUILD_MOMENTUM, rollsPerAttack } from "../rules/init
 import { heldRating } from "../rules/held-attacks.mjs";
 import { weaponTraitEffects } from "../rules/weapon-traits.mjs";
 // What a blow is struck with, as a form the card records (D-725).
-import { rowAttackModes, strikeFor, strikeForRow, weaponFacts } from "../rules/strikes.mjs";
+import { STRIKE_FORMS, rowAttackModes, strikeFor, strikeForRow, weaponFacts } from "../rules/strikes.mjs";
+import { gadgetByKey } from "../rules/gadgets.mjs";
 import { maneuverCost } from "../rules/maneuvers.mjs";
 import { defaultChoice, distanceBetween, promptRoll, targetSnapshots } from "./roll-dialog.mjs";
 import { countsAsAlly, defaultAttackMode, engagedCount, reachOf, thrownRange } from "../rules/distance.mjs";
@@ -63,7 +79,7 @@ import { asksFact, flankingFor, freeReactionRowsFor, packFlanks, parryGainsFor, 
 // D-779: the lead's class answers - a Parry of a ranged blow, Main Gauche's turn, and
 // what a Parry takes back off (O-166, O-180).
 import { blademasterFor, flametongueFor, rangedParryFor } from "../rules/class-talents.mjs";
-import { blademasterReaches, flametongueStrike, parryReaches, parryUndoes, turnMark } from "../rules/class-answers.mjs";
+import { blademasterReaches, flametongueStrike, parryReaches, turnMark } from "../rules/class-answers.mjs";
 import { isHidden } from "../effects/stealth.mjs";
 // What a talent adds to a blow's damage, per rank (04, D-711 phase 2).
 import { FORM_LANE, castAsFor, damageChosen, damageLinesFor, damageRowsFor, featureDamageLane, onUseOf, talentEffect } from "../rules/talent-effects.mjs";
@@ -89,6 +105,14 @@ import { grantsOn } from "../rules/grants.mjs";
 import { SYNCED_REASONS, clearRefusal } from "../rules/in-play.mjs";
 import { blowFacts, gateHolds, hasSignature, isPressable as signaturePressable, mergeWeaponEffects, pressGates, pressRefusal, signatureEffectOf, signatureEffects } from "../rules/signatures.mjs";
 import { AzerothCompendiumBrowser } from "./compendium-browser.mjs";
+// THE LEGACY BRANCHES' B3: where a creature stands (06 §10's Spirit Realm, door 10) and
+// Drawn Across on a blow's source (door 25).
+import { realmStateFor } from "../effects/spirit-realm.mjs";
+import { dealtHalvedBy } from "../rules/legacy-uses.mjs";
+// A construct's Cutting Gear, read by its name (the lead's ruling).
+import { holdsCuttingGear } from "../rules/escapes.mjs";
+// 07's Nature's Grasp's bar on Opportunity Attacks (the B9a pass).
+import { barredFromOpportunity } from "../rules/struck-tests.mjs";
 
 /**
  * WHAT THE THINGS THE TARGET IS WEARING ANSWER BACK (08 SS20, D-692).
@@ -111,18 +135,21 @@ import { AzerothCompendiumBrowser } from "./compendium-browser.mjs";
  */
 function struckBackRows(targets = [], attacker = null) {
   const out = [];
-  for (const snapshot of targets) {
+  // **WHICH ROW OF THE CARD WAS STRUCK** (the B1 review): a hit a Parry or Afterimage
+  // turns into a miss struck nobody, so what answers it is refused at the press
+  // (`dice/chat.mjs`, `data-struck-index`) - *a creature that hits you* was not hit.
+  for (const [index, snapshot] of targets.entries()) {
     const actor = targetActorOf(snapshot);
     if (!actor) continue;
     const effects = signatureEffects([...(actor.items ?? [])], {
       ...(actor.signatureTurnState ?? {}),
       target: { creatureType: attacker?.system?.creatureType ?? null, acted: null }
     });
-    for (const row of effects.whenStruck) out.push({ ...row, target: snapshot.name ?? actor.name });
+    for (const row of effects.whenStruck) out.push({ ...row, target: snapshot.name ?? actor.name, index });
     // **AND WHAT THE TARGET SUSTAINS** (07's Immolation, D-757): *a creature
     // that hits you with a melee attack takes 2 Fire damage*, in this row's
     // shape, marked `melee` for the roll to judge once the blow's way is final.
-    for (const row of retaliationRows(actor, attacker)) out.push({ ...row, target: snapshot.name ?? actor.name });
+    for (const row of retaliationRows(actor, attacker)) out.push({ ...row, target: snapshot.name ?? actor.name, index });
   }
   return out;
 }
@@ -164,9 +191,14 @@ function damagedAlready(actor, target) {
  * @returns {object[]}  the dialog's `damageLines`, or [] where no row applies
  */
 function talentDamageLines(actor, { lane, type, target = null, extraFacts = () => ({}), alsoSpell = false } = {}) {
-  const rows = damageRowsFor(actor.takenTalents?.() ?? [], { lane, type, alsoSpell });
+  // The amount at the door's ability scope (the Legacy branches' door 16).
+  const rows = damageRowsFor(actor.takenTalents?.() ?? [], { lane, type, alsoSpell, scope: abilityScope(actor.system) });
   if (!rows.length) return [];
   return damageLinesFor(rows, {
+    // **WHAT A LEGACY'S GATE READS** (doors 15, 17, 18): what is wielded and worn, the
+    // target's conditions and kinds, what the user laid on it, the user's marks -
+    // the actor's one fact-builder (`AzerothActor#gateFacts`).
+    ...(actor.gateFacts?.(target) ?? {}),
     // *Against a target that has taken damage from you.* The mark is the
     // ATTACKER's own combatant flag, written where the blow was applied.
     damagedTarget: damagedAlready(actor, target),
@@ -174,6 +206,9 @@ function talentDamageLines(actor, { lane, type, target = null, extraFacts = () =
     boundDemon: boundOf(actor, "demon").length > 0,
     // *While in a Shapeshift form* (02 §7): the Avatar is not one (D-251, D-769).
     form: actor.inShapeshiftForm === true,
+    // 04's Engineering Upgrade on the Gnomish Battle Rig's Piston fist (the lead:
+    // *"Yes, the fist too"*; the Legacy branches' B2): the roller wears the rig.
+    battleRig: actor.shape?.kind === "battlerig",
     // 04's Shadowform (D-774): no Holy dealt and no heal given since the priest's
     // last turn - readable in a fight, the table's line out of one.
     shadowform: shadowformHolds({ fightId: actor.activeFight?.()?.id ?? null, mark: actor.getFlag?.("azeroth-rpg", SHADOWFORM_FLAG) ?? null }) === true,
@@ -208,10 +243,18 @@ function targetActorOf(t) {
  * nobody, so `inFight` is false and the Reaction is free - which is the same
  * ruling `workflows.spendTurnBudget` already makes for every other action.
  */
-export function reactionStateOf(actor, { messageId = null } = {}) {
-  const fight = actor?.activeFight?.() ?? null;
-  const combatant = fight?.getCombatantsByActor?.(actor)?.[0] ?? null;
+export function reactionStateOf(actor, { messageId = null, against = null, targetIndex = null, combatant: given = null } = {}) {
+  // **THE COMBATANT, WHERE THE DOOR KNOWS IT** (the B1 review): the Opportunity Attack
+  // check walks one fight's combatants, so it hands each threatener's own - an actor in
+  // two started fights, or an unlinked token sharing its actor with another, is then
+  // read in the fight that is asking. Without one, the actor's started fight.
+  const fight = given?.combat ?? actor?.activeFight?.() ?? null;
+  const combatant = given ?? fight?.getCombatantsByActor?.(actor)?.[0] ?? null;
   const answered = actor?.getFlag?.("azeroth-rpg", "reacted") ?? null;
+  // **THE BLOW ITSELF TOOK THIS CREATURE'S REACTION** (the Legacy branches' door 13:
+  // a Bash, a Concussive Shot): the Reaction that answers it may be that one.
+  const card = messageId ? (game.messages?.get(messageId) ?? null) : null;
+  const lostToBlow = Number.isInteger(targetIndex) && reactionLostToBlow(card?.flags?.["azeroth-rpg"]?.landedOnHit ?? [], targetIndex);
   // **WHAT IS IN HAND IS `readyWeapons`** (D-769): in a shape, the block's
   // attack rows - held and melee by nature, so a natural attack parries (the
   // plan's reading) - and a melded sword is in no hand at all.
@@ -263,9 +306,39 @@ export function reactionStateOf(actor, { messageId = null } = {}) {
     // does — `parryPoolFor` is the law and this only hands it the snapshot.
     pools: actor?.poolSnapshot?.() ?? [],
     // **A PARRY OR A BLOCK THAT COSTS NO REACTION THIS ROUND** (04's Bladeturn
-    // and Deflection, D-772): a spent Reaction does not refuse it.
-    free: { parry: Boolean(freeReactionOf(actor, "parry")), block: Boolean(freeReactionOf(actor, "block")) }
+    // and Deflection, D-772): a spent Reaction does not refuse it. **And the first
+    // Opportunity Attack of a round** (04's Hold the Hall at rank 2; door 22).
+    free: {
+      parry: Boolean(freeReactionOf(actor, "parry", { combatant: given })), block: Boolean(freeReactionOf(actor, "block", { combatant: given })),
+      opportunityAttack: Boolean(freeReactionOf(actor, "opportunityAttack", { combatant: given }))
+    },
+    // **NO CREATURE MAY TAKE A REACTION AGAINST IT** (04's Wind Walk, Bladestorm; the
+    // Legacy branches' door 14): the creature being answered - the blow's striker,
+    // the mover - carries the span.
+    unanswered: unansweredOf(against).length > 0,
+    lostToBlow,
+    // **A SPIRIT ANSWERS NO BLOW** (06 §10: *You cannot touch the living world, and
+    // nothing in the fight can touch you*; the Legacy branches' door 10): a character
+    // Dying or stepped across by 04's The Crossing takes no Reaction (`canReact`).
+    spiritRealm: realmStateFor(actor).in === true,
+    // **HELD FROM OPPORTUNITY ATTACKS** (07's Nature's Grasp: *... or be **Entangled** and
+    // unable to make Opportunity Attacks while it is held*; the B9a pass): while the
+    // Entangled its striker's Test laid holds (`rules/struck-tests.mjs`).
+    noOpportunity: barredFromOpportunity(actor?.effects?.contents ?? [])
   };
+}
+
+/**
+ * **WHAT MAKES A CREATURE UNANSWERABLE NOW** (the Legacy branches' door 14): the
+ * sources its active effects' `UNANSWERED_FLAG` names, or none - none for no
+ * creature at all.
+ *
+ * @param {Actor|null} actor
+ * @returns {string[]}
+ */
+export function unansweredOf(actor) {
+  if (!actor) return [];
+  return unansweredBy((actor.effects ?? []).filter(e => e.active !== false).map(e => e.flags?.["azeroth-rpg"] ?? {}));
 }
 
 /**
@@ -280,10 +353,11 @@ export function reactionStateOf(actor, { messageId = null } = {}) {
  * @param {"parry"|"block"} key
  * @returns {{identifier: string, name: string, count: number, mark: string, combatant: Combatant}|null}
  */
-function freeReactionOf(actor, key) {
-  const fight = actor?.activeFight?.() ?? null;
-  const combatant = fight?.getCombatantsByActor?.(actor)?.[0] ?? null;
-  if (!combatant) return null;
+function freeReactionOf(actor, key, { combatant: given = null } = {}) {
+  // The combatant the door knows, else the actor's in its started fight (the B1 review).
+  const fight = given?.combat ?? actor?.activeFight?.() ?? null;
+  const combatant = given ?? fight?.getCombatantsByActor?.(actor)?.[0] ?? null;
+  if (!combatant || !fight) return null;
   const round = combatant.getFlag("azeroth-rpg", "round") ?? {};
   const used = round.number === fight.round ? (round.once ?? []) : [];
   // **EVERY TALENT THAT FREES ONE, IN TURN** (04's Combat Reflexes beside
@@ -400,6 +474,9 @@ export function reactionRows(targets = [], { attacker = null, hidden = false } =
   // 04's Ghostly Strike (*An attack you make while hidden cannot be Parried or
   // Blocked*; D-773), for a blow struck from hiding.
   if (attacker && unanswerableWith(attacker.takenTalents?.() ?? [], { hidden: hidden === true })) return [];
+  // **AND A STRIKER NO CREATURE MAY TAKE A REACTION AGAINST** (04's Wind Walk and
+  // Bladestorm; the Legacy branches' door 14): no Parry, no Block, no Afterimage.
+  if (attacker && unansweredOf(attacker).length) return [];
   const out = [];
   for (const [index, snapshot] of targets.entries()) {
     const actor = targetActorOf(snapshot);
@@ -407,17 +484,45 @@ export function reactionRows(targets = [], { attacker = null, hidden = false } =
     const rows = defensiveReactions(reactionStateOf(actor));
     const block = rows.find(r => r.key === "block") ?? {};
     const parry = rows.find(r => r.key === "parry") ?? {};
-    if (!block.ok && !parry.ok) continue;
+    // **A HIT TURNED INTO A MISS** (04's Afterimage: *As a Reaction when an attack
+    // hits you, spend 6 Rage. The attack misses*; the Legacy branches' door 13): the
+    // feature a talent grants with `onUse.mitigate: "negate"` and a use left, pressed
+    // from this row through the feature's own door, which judges it all again.
+    const negate = negateFeatureOf(actor);
+    if (!block.ok && !parry.ok && !negate) continue;
     out.push({
       index,
       name: snapshot.name ?? actor.name,
       actorUuid: actor.uuid,
       block: block.ok ? block.with : null,
       blockOff: blockOffFor(actor),
-      parry: parry.ok ? parry.with : null
+      parry: parry.ok ? parry.with : null,
+      negate
     });
   }
   return out;
+}
+
+/**
+ * **THE FEATURE THAT TURNS THIS CREATURE'S HIT INTO A MISS** (04's Afterimage; door
+ * 13): a granted feature whose talent's `onUse` negates, with a use left - the
+ * first by name. Null where it holds none, so the card draws no button.
+ *
+ * @param {Actor} actor  the creature struck
+ * @returns {{id: string, name: string}|null}
+ */
+export function negateFeatureOf(actor) {
+  if (actor?.type !== "character") return null;
+  const found = (actor.items ?? []).filter(item => {
+    if (item.type !== "feature") return false;
+    const grantId = item.getFlag?.("azeroth-rpg", "feature")?.talentId ?? null;
+    const granting = grantId ? actor.items.get(grantId) ?? null : null;
+    if (!granting) return false;
+    const row = talentEffect(granting.system?.className, granting.system?.identifier, granting.system?.race ?? null);
+    if (!onUseLegacy(onUseOf(row), { rank: granting.system?.taken ?? 1 }).negate) return false;
+    return !(item.system?.uses?.per && (item.system.uses.value ?? 0) <= 0);
+  }).sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+  return found[0] ? { id: found[0].id, name: found[0].name } : null;
 }
 
 /**
@@ -449,10 +554,16 @@ export async function reactWithDialog(actor, reaction, { attackTotal = null, mes
     ui.notifications?.warn(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: actor.name }));
     return null;
   }
-  const may = canReact(reaction, reactionStateOf(actor, { messageId }));
+  // The blow's striker (the Legacy branches' door 14: no Reaction against one Wind
+  // Walk or Bladestorm holds unanswerable), and whether the blow took this creature's
+  // own Reaction (door 13: the answer may be that one).
+  const striker = messageId ? (ChatMessage.getSpeakerActor(game.messages?.get(messageId)?.speaker ?? {}) ?? null) : null;
+  const state = reactionStateOf(actor, { messageId, against: striker, targetIndex });
+  const may = canReact(reaction, state);
   if (!may.ok) {
     ui.notifications?.warn(game.i18n.format(may.reason, {
-      name: actor.name, reaction: game.i18n.localize(AZEROTH.reactions[reaction] ?? reaction)
+      name: actor.name, reaction: game.i18n.localize(AZEROTH.reactions[reaction] ?? reaction),
+      source: unansweredOf(striker).join(", ")
     }));
     return null;
   }
@@ -463,6 +574,16 @@ export async function reactWithDialog(actor, reaction, { attackTotal = null, mes
   const stands = standingMarkRefusal(actor.getFlag?.("azeroth-rpg", "mitigate") ?? null, { door: "reaction" });
   if (stands) {
     ui.notifications?.warn(game.i18n.format(stands.key, { name: actor.name, ...stands.params }));
+    return null;
+  }
+  // **THE ANSWER IS WRITTEN ON THE STRIKER'S CARD** (the B1 review; D-774's review): a
+  // Parry that holds and a Block annotate the card they answer, on the GM's client
+  // where this one may not write it - so with no GM online the Reaction is refused
+  // here, before the Anticipation mark, the free mark or the Reaction is spent, exactly
+  // as Afterimage's own Use is.
+  const answeredCard = messageId ? (game.messages?.get(messageId) ?? null) : null;
+  if (answeredCard && cardPressUnrecordable(answeredCard)) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Card.PressNoGM"));
     return null;
   }
   // **A PARRY ANSWERS A MELEE BLOW** (the lead, 2026-10-03, on O-180: *"Parry is
@@ -499,14 +620,23 @@ export async function reactWithDialog(actor, reaction, { attackTotal = null, mes
   // **UNLESS THIS ONE COSTS NONE** (04's Bladeturn and Deflection, D-772): the
   // round's next free mark, taken through the queued door, in place of the
   // Reaction - and where another press took it first, the Reaction is paid.
-  const free = freeReactionOf(actor, reaction);
+  // **THE REACTION THE BLOW TOOK IS THE ONE THAT ANSWERS IT** (the Legacy branches'
+  // door 13): a creature a Bash left with none spends none here - the blow already
+  // took it - and the withdrawal then gives nothing back (`answeredWithLost`). **Asked
+  // BEFORE the free mark** (the B1 fix run): a Bladeturn's free Parry is taken only
+  // where something would otherwise pay, so the lost Reaction answering keeps it for a
+  // later blow.
+  const answeredWithLost = state.lostToBlow === true && (state.reactionsLeft ?? 0) < 1;
   let freeBy = null;
-  if (free?.combatant?.isOwner && (await free.combatant.markRoundOnce(free.mark))?.added === true) freeBy = free.name;
-  if (!freeBy && !(await game.system.azeroth.workflows.spendTurnBudget(actor, "reaction"))) return null;
+  if (!answeredWithLost) {
+    const free = freeReactionOf(actor, reaction);
+    if (free?.combatant?.isOwner && (await free.combatant.markRoundOnce(free.mark))?.added === true) freeBy = free.name;
+  }
+  if (!freeBy && !answeredWithLost && !(await game.system.azeroth.workflows.spendTurnBudget(actor, "reaction"))) return null;
   await actor.setFlag("azeroth-rpg", "reacted", { messageId: messageId ?? null, reaction });
   return reaction === "block"
     ? blockNow(actor, may.with, messageId, targetIndex, { freeBy })
-    : parryNow(actor, may.with, { attackTotal, messageId, targetIndex, event, freeBy });
+    : parryNow(actor, may.with, { attackTotal, messageId, targetIndex, event, freeBy, answeredWithLost });
 }
 
 /**
@@ -603,7 +733,9 @@ function retortOf(actor, messageId) {
     rating: retort.amount, sl: 0, kind: type ? "magical" : "physical", school: type,
     ward: type ? (target.wardBySchool?.[type] ?? 0) : 0,
     schoolArmor: type ? (target.schoolArmor?.[type] ?? 0) : 0,
-    immune: target.immune ?? [], vulnerable: target.vulnerable ?? [], slAddsToDamage: false
+    immune: target.immune ?? [], vulnerable: target.vulnerable ?? [], slAddsToDamage: false,
+    // The blocker's own damage, 04's Drawn Across on it halving it (the Legacy branches' door 25).
+    dealtHalved: dealtHalvedBy(actor)
   });
   return { name: retort.name, target, type, result };
 }
@@ -618,7 +750,7 @@ function retortOf(actor, messageId) {
  * not an attack - no Critical Injury on a natural 20, and the verdict reads
  * Success rather than Hit.
  */
-async function parryNow(actor, weaponName, { attackTotal, messageId, targetIndex = null, event, freeBy = null }) {
+async function parryNow(actor, weaponName, { attackTotal, messageId, targetIndex = null, event, freeBy = null, answeredWithLost = false }) {
   // What is in hand is `readyWeapons` (D-769): a natural attack parries.
   const ready = actor.readyWeapons?.() ?? (actor.items ?? []).filter(i => i.type === "weapon" && i.system?.equipped);
   const weapon = ready.find(w => w.name === weaponName) ?? ready[0] ?? null;
@@ -704,7 +836,8 @@ async function parryNow(actor, weaponName, { attackTotal, messageId, targetIndex
     // **04's PERFECT TIMING** (*A Parry that reduces an attack's damage to 0 builds
     // 1 Combo Point*; D-773): 06 §6's Parry is all or nothing, so one that holds
     // is one that reduces the attack to 0. Never past the pool's cap.
-    for (const gain of parryGainsFor(actor.takenTalents?.() ?? [])) {
+    // A gain whose gate reads what is worn and held (04's Read the Blade; door 15).
+    for (const gain of parryGainsFor(actor.takenTalents?.() ?? [], { facts: actor.gateFacts?.() ?? null })) {
       const pool = (actor.poolSnapshot?.() ?? []).find(p => p.name === gain.pool) ?? null;
       if (!pool) continue;
       const value = Math.min(pool.max, pool.value + gain.amount);
@@ -715,20 +848,16 @@ async function parryNow(actor, weaponName, { attackTotal, messageId, targetIndex
     // O-166: *"No"* to *does a Parry leave a landed condition on?*; D-779): each
     // condition the card recorded landing on THIS defender with the blow - a rider's,
     // Deep Cut's, Ferocious Bite's, Rupture's Bleeding - is taken off, or put back to
-    // the value it had before the blow (`class-answers.mjs#parryUndoes`). The
-    // defender is this client's own (`reactWithDialog` asked).
-    const record = messageId && Number.isInteger(targetIndex)
-      ? (game.messages?.get(messageId)?.flags?.["azeroth-rpg"]?.landedOnHit ?? []).filter(r => r?.index === targetIndex)
-      : [];
-    const undone = [];
-    for (const u of parryUndoes(record)) {
-      const effect = actor.effects?.find?.(e => e.statuses?.has?.(u.id)) ?? null;
-      if (!effect) continue;
-      if (u.remove) await actor.toggleStatusEffect(u.id, { active: false });
-      else await effect.setFlag("azeroth-rpg", "value", u.value);
-      undone.push(game.i18n.localize(AZEROTH.conditions[u.id] ?? u.id) + (u.remove ? "" : ` ${u.value}`));
-    }
-    if (undone.length) built += ` ${game.i18n.format("AZEROTH.Reaction.ParryUndid", { name: actor.name, conditions: undone.join(", ") })}`;
+    // the value it had before the blow (`class-answers.mjs#parryUndoes`). **And
+    // everything else the hit laid** (the lead: *"Conditions only apply on hit unless
+    // otherwise stated"*; the Legacy branches' door 13): a Speed drop, a no-healing
+    // mark, a Bane, the Reaction it took - through the one withdrawal door Afterimage
+    // shares (`effects/miss.mjs#withdrawHit`). The defender is this client's own
+    // (`reactWithDialog` asked).
+    const undone = await withdrawHit(actor, { messageId, index: targetIndex, answeredWithLost });
+    if (undone.conditions.length) built += ` ${game.i18n.format("AZEROTH.Reaction.ParryUndid", { name: actor.name, conditions: undone.conditions.join(", ") })}`;
+    const more = withdrawnWords(actor.name, { ...undone, conditions: [] });
+    if (more) built += ` ${more}`;
   }
   // `paid` is never null here: the branch above returns on an unpaid Parry.
   const cost = ` ${game.i18n.format("AZEROTH.Reaction.ParryCost", { n: paid.cost, pool: paid.name })}`
@@ -802,17 +931,20 @@ export async function takeOpportunity(actor, { tokenId = null, sceneId = null, d
     ui.notifications?.warn(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: actor.name }));
     return null;
   }
-  const may = canReact("opportunityAttack", reactionStateOf(actor, { messageId }));
-  if (!may.ok) {
-    ui.notifications?.warn(game.i18n.format(may.reason, {
-      name: actor.name, reaction: game.i18n.localize(AZEROTH.reactions.opportunityAttack)
-    }));
-    return null;
-  }
   // Aim at whoever is leaving, before anything is spent: a target that cannot
   // be set is worth saying so about while the Reaction is still in hand.
   const scene = (sceneId && game.scenes.get(sceneId)) || canvas?.scene || null;
   const token = tokenId && scene ? scene.tokens.get(tokenId) : null;
+  // **NO REACTION AGAINST A MOVER WIND WALK HOLDS** (the Legacy branches' door 14),
+  // judged at the press - a card is a record of a moment.
+  const may = canReact("opportunityAttack", reactionStateOf(actor, { messageId, against: token?.actor ?? null }));
+  if (!may.ok) {
+    ui.notifications?.warn(game.i18n.format(may.reason, {
+      name: actor.name, reaction: game.i18n.localize(AZEROTH.reactions.opportunityAttack),
+      source: unansweredOf(token?.actor ?? null).join(", ")
+    }));
+    return null;
+  }
   const onCanvas = Boolean(token) && canvas?.scene?.id === scene?.id && Boolean(canvas.tokens?.get(tokenId));
   // **AND WHAT THE USER HAD TARGETED IS PUT BACK** (the lead, 2026-09-13).
   // `setTargets` REPLACES the set (14.367, `mode: "replace"` by default), and
@@ -837,8 +969,15 @@ export async function takeOpportunity(actor, { tokenId = null, sceneId = null, d
     if (onCanvas) canvas.tokens.setTargets([tokenId]);
     else ui.notifications?.info(game.i18n.format("AZEROTH.Reaction.OpportunityOffScene", { name: token?.name ?? "" }));
 
-    // 06 §6: one Reaction a round, paid before the die.
-    if (!(await game.system.azeroth.workflows.spendTurnBudget(actor, "reaction"))) return null;
+    // 06 §6: one Reaction a round, paid before the die. **UNLESS IT COSTS NONE** (04's
+    // Hold the Hall at rank 2: *your first Opportunity Attack each round costs no
+    // Reaction*; the Legacy branches' door 22): the round's free mark, taken through
+    // the queued door, in place of the Reaction - and where another press took it
+    // first, the Reaction is paid.
+    const freeOpportunity = freeReactionOf(actor, "opportunityAttack");
+    const freeTaken = Boolean(freeOpportunity?.combatant?.isOwner) && (await freeOpportunity.combatant.markRoundOnce(freeOpportunity.mark))?.added === true;
+    if (!freeTaken && !(await game.system.azeroth.workflows.spendTurnBudget(actor, "reaction"))) return null;
+    if (freeTaken) ui.notifications?.info(game.i18n.format("AZEROTH.Reaction.FreeBy", { talent: freeOpportunity.name }));
     await actor.setFlag("azeroth-rpg", "reacted", { messageId: messageId ?? null, reaction: "opportunityAttack" });
 
     // **AN OPPORTUNITY ATTACK PREFERS THE HAND AND NEVER FORCES IT** (D-731's
@@ -857,7 +996,7 @@ export async function takeOpportunity(actor, { tokenId = null, sceneId = null, d
       // through - which is the whole point of routing a creature's held weapon
       // there rather than teaching the block's own path about Items.
       const held = heldFor(actor, may.with);
-      if (held) return await attackWithDialog(actor, held, event, { budget: "none", atDistance: distance, mode: handIfAny(attackModes(held.system)) });
+      if (held) return await attackWithDialog(actor, held, event, { budget: "none", atDistance: distance, mode: handIfAny(attackModes(held.system)), opportunity: true });
       // A name that matches neither is a card the world has moved under; the
       // block's first row is what this has always fallen back to.
       if (rows.length) return await npcAttackWithDialog(actor, 0, event, { title, budget: "none", mode: handIfAny(rowAttackModes(rows[0])) });
@@ -869,7 +1008,9 @@ export async function takeOpportunity(actor, { tokenId = null, sceneId = null, d
       ui.notifications?.warn(game.i18n.format("AZEROTH.Reaction.Refuse.NoWeapon", { name: actor.name }));
       return null;
     }
-    return await attackWithDialog(actor, weapon, event, { budget: "none", atDistance: distance, mode: handIfAny(attackModes(weapon.system)) });
+    // An Opportunity Attack is marked one (the Legacy branches' door 22): 04's Hold the
+    // Hall's *On a hit it is knocked Prone* rides it alone (`hitLays`, `when: "opportunity"`).
+    return await attackWithDialog(actor, weapon, event, { budget: "none", atDistance: distance, mode: handIfAny(attackModes(weapon.system)), opportunity: true });
   } finally {
     // Only where this replaced them, and only while the same scene is still
     // in view: `setTargets` reads ids off the viewed canvas, so putting a
@@ -905,7 +1046,7 @@ export async function rollWithDialog(actor, spec, event = null) {
   // roller left ticked arrives back as `extraRating` and `damageRows`.
   // `talentLineOffer` is the dialog's own input too (D-774): what the roller
   // ticked arrives back as `talentLines`, the identifiers alone.
-  const { skill, casting, occasions, fallbackDC, fallbackSource, heavyBane, damageLines, talentLineOffer, run, rolls, modes, ...roll } = withAttackMode(spec, choice.mode);
+  const { skill, casting, occasions, fallbackDC, fallbackSource, heavyBane, damageLines, talentLineOffer, run, rolls, modes, riderModifiers, ...roll } = withAttackMode(spec, choice.mode);
   void skill; void casting; void occasions; void fallbackDC; void fallbackSource; void heavyBane; void damageLines; void talentLineOffer; void modes;
   // The second roll's target is the dialog's answer and never the roll's input.
   const { secondTargets, ...picked } = choice;
@@ -913,10 +1054,14 @@ export async function rollWithDialog(actor, spec, event = null) {
   // The spec's own provenance rows (an item's name, a bond's damage bonus, a
   // swarm's note) join the dialog's circumstance row rather than losing to it.
   const provenanceExtra = [...(roll.provenanceExtra ?? []), ...(picked.provenanceExtra ?? [])];
+  // **A THROW MADE ON A TICKED RIDER'S ABILITY** (04's Storm Bolt with a hammer that
+  // throws already: *an attack made with one uses Strength*; the B6 review): the
+  // thrown way's lines on Strength where the rider is ticked, its own otherwise.
+  const baseModifiers = riderThrowModifiers({ riderModifiers }, picked.riders ?? []) ?? roll.modifiers;
   // A checked line with a flat number joins the modifiers (a rung's +1, 10 §4).
   const modifiers = picked.modifier
-    ? [...(roll.modifiers ?? []), { label: "AZEROTH.Dialog.Circumstance", value: picked.modifier }]
-    : roll.modifiers;
+    ? [...(baseModifiers ?? []), { label: "AZEROTH.Dialog.Circumstance", value: picked.modifier }]
+    : baseModifiers;
   const args = { actor, ...roll, ...picked, ...(modifiers !== roll.modifiers ? { modifiers } : {}), provenanceExtra };
   const card = await workflow(args);
   // **ONE ATTACK, TWO CARDS** (02 §6, D-704). The two rolls may be at different
@@ -990,9 +1135,9 @@ export async function castWithDialog(actor, spell, event = null) {
     itemId: c.id, schools: c.system?.schools ?? [], castingAbility: c.system?.castingAbility ?? null
   }));
   const grant = grantingClass(classes, sys.school);
-  const powers = actor.system.powers ?? [];
-  const pool = powers.find(p => p.name === "mana" && grant && p.itemId === grant.itemId)
-    ?? powers.find(p => p.name === "mana") ?? null;
+  // The Mana pool, read the one way the cast reads it (the B1 review): a creature's
+  // Power pool whatever its block names it (`casting.mjs#castingManaPool`).
+  const pool = castingManaPool({ creature: actor.type === "npc", powers: actor.system.powers ?? [], snapshot: actor.poolSnapshot?.() ?? [], grantItemId: grant?.itemId ?? null });
   const health = actor.system.health?.value ?? 0;
   // **WHAT THE CAST WILL CHARGE, READ THE WAY `castSpell` PAYS IT** (D-768):
   // the entry's Mana less a Signature naming the spell and one scoped to its
@@ -1007,7 +1152,12 @@ export async function castWithDialog(actor, spell, event = null) {
   // promise named in words.
   const talentsNow = actor.takenTalents?.() ?? [];
   const take = takeNextSpell(pending.live ?? [], { action: sys.action ?? null, healing: isHealingSpell(sys) });
-  const discount = spellDiscountFor(talentsNow, { school: sys.school ?? null, mana: sys.mana ?? 0, states: veinsStates(flaggedEffects(actor, VEINS_FLAG).map(r => r.flag)) });
+  // In the pool the cast pays, as `castSpell` reads it (04's Shadowcraft's Focus; the
+  // Legacy branches' B6).
+  const discount = spellDiscountFor(talentsNow, {
+    school: sys.school ?? null, mana: sys.mana ?? 0, states: veinsStates(flaggedEffects(actor, VEINS_FLAG).map(r => r.flag)),
+    pool: spellPoolFor(talentsNow, { name: spell.name, school: sys.school ?? null })?.pool ?? null
+  });
   const mana = spellManaCost({ mana: sys.mana ?? 0, name: spell.name, school: sys.school }, actor.system?.signatureEffects, { next: take.amount, less: discount.amount });
   // 02's Overchannel Mastery (D-779): an Overchannel costs the Mana once more a cast.
   const mastery = actor.hasFeature?.("Overchannel Mastery") === true;
@@ -1043,12 +1193,16 @@ export async function castWithDialog(actor, spell, event = null) {
   } : null;
   // **IN A SHAPESHIFT FORM THE PRICE IS FEROCITY** (07, D-769), read through
   // the same `manaPrice` the cast pays by, so the dialog says what it will take.
+  // **AND A POOL A TALENT NAMES** (04's Shadowcraft: *paying Focus where 07-MAGIC
+  // asks for Mana*; the Legacy branches' door 8), with the ability it casts with.
   const inForm = actor.inShapeshiftForm === true;
-  const price = manaPrice(mana, { inShapeshiftForm: inForm });
+  const talentPool = spellPoolFor(talentsNow, { name: spell.name, school: sys.school ?? null });
+  const payPool = talentPool ? ((actor.poolSnapshot?.() ?? []).find(p => p.name === talentPool.pool) ?? null) : null;
+  const price = manaPrice(mana, { inShapeshiftForm: inForm, pool: talentPool?.pool ?? null });
   const ferocity = price.pool === "ferocity"
     ? ((actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === "ferocity") ?? null)
     : null;
-  const ability = grant?.castingAbility ?? null;
+  const ability = talentPool?.ability ?? grant?.castingAbility ?? null;
   const modifiers = [];
   if (ability) modifiers.push({ label: AZEROTH.abilities[ability], value: actor.system.abilities?.[ability]?.mod ?? 0 });
   modifiers.push({ label: "AZEROTH.Sheet.Proficiency", value: actor.system.proficiency ?? 0 });
@@ -1075,15 +1229,18 @@ export async function castWithDialog(actor, spell, event = null) {
     casting: {
       tier: sys.tier,
       mana,
-      pool: pool ? { name: pool.name, value: pool.value, max: pool.max } : null,
+      // The pool the price comes out of: a talent's (door 8), else the Mana.
+      pool: payPool ? { name: payPool.name, value: payPool.value, max: payPool.max } : (pool ? { name: pool.name, value: pool.value, max: pool.max } : null),
+      // The word the price is said in where a talent names another pool (door 8).
+      payLabel: talentPool ? (AZEROTH.poolTypes[talentPool.pool] ?? null) : null,
       // What a Shapeshift form pays instead (07, D-769): the Ferocity it costs
       // and the pool it comes out of.
       ferocity: price.pool === "ferocity"
         ? { cost: price.amount, value: ferocity?.value ?? 0, max: ferocity?.max ?? 0 }
         : null,
-      canPay: price.pool === "ferocity"
-        ? Boolean(ferocity) && ferocity.value >= price.amount
-        : (!pool || mana === 0 || pool.value >= mana),
+      // **A PRICE WITH NOTHING TO PAY IT CANNOT BE PAID** (door 8): the one reading
+      // beside `castRefusal` - it said *can pay* for a class holding no Mana.
+      canPay: castCanPay({ price, pool, ferocity, payPool }),
       health,
       perPoint: overchannelPerPoint(sys.tier),
       // 04's Overchanneller (D-775): the Health off the price lets a point more be paid.
@@ -1194,7 +1351,7 @@ export async function castItemSpell(actor, item, index, event = null) {
  * from an incoming attack's card at the creature the card records, and names the
  * blow it answers. A feature that makes no Casting Test takes them as given.
  */
-export async function useFeatureWithDialog(actor, item, event = null, { targets = null, foresight = null } = {}) {
+export async function useFeatureWithDialog(actor, item, event = null, { targets = null, foresight = null, answers = null } = {}) {
   const sys = item.system;
   const run = game.system.azeroth.workflows.useFeature;
   // **WHAT A TALENT ADDS TO A FEATURE'S DAMAGE** (04, D-768): the lines the
@@ -1217,13 +1374,17 @@ export async function useFeatureWithDialog(actor, item, event = null, { targets 
     const grantId = item.getFlag?.("azeroth-rpg", "feature")?.talentId ?? null;
     const granting = grantId ? actor.items.get(grantId) ?? null : null;
     const row = granting ? talentEffect(granting.system?.className, granting.system?.identifier, granting.system?.race ?? null) : null;
-    const use = onUseOf(row);
+    // A gadget's Use is the gadget's (the Legacy branches' door 7), never the
+    // Gadgeteer row's that granted it - the Use door reads it the same way.
+    const gadget = item.getFlag?.("azeroth-rpg", "feature")?.gadget ? gadgetByKey(item.getFlag("azeroth-rpg", "feature").gadget) : null;
+    const use = gadget ? (gadget.onUse ?? {}) : onUseOf(row);
     // **WHOM THE USE IS AIMED AT, THROUGH THE ONE READING** (D-774): 02's Ward,
     // Silence, Guardian Spirit and Reincarnation's friend - and every D-772 and
     // D-773 Use that reads its targets, which were refused from this button.
     const aims = featureAims({ name: item.name, lays: sys.lays ?? null, attack: sys.attack === true, onUse: use, barrage: Boolean(row?.barrage) });
     const aimedAt = Array.isArray(targets) ? targets : (aims ? targetSnapshots() : null);
-    return run({ actor, item, ...(aimedAt ? { targets: aimedAt } : {}), ...(foresight ? { foresight } : {}), ...(damageLines.length ? damageChosen(damageLines) : {}) });
+    // The incoming card a Reaction answers (04's Afterimage; the Legacy branches' door 13).
+    return run({ actor, item, ...(aimedAt ? { targets: aimedAt } : {}), ...(foresight ? { foresight } : {}), ...(answers ? { answers } : {}), ...(damageLines.length ? damageChosen(damageLines) : {}) });
   }
   const casting = (actor.classItems ?? []).find(c => c.system?.castingAbility)?.system?.castingAbility ?? null;
   const modifiers = [];
@@ -1262,7 +1423,7 @@ export async function useFeatureWithDialog(actor, item, event = null, { targets 
  * spell card's failure, an area's (D-757) - which is what lets a Boon *against
  * **Frightened** and **Charmed*** reach it; null leaves it the table's line.
  */
-export function resilienceWithDialog(actor, resilience, event = null, { dc = null, link = null, source = null, against = null, talentBanes = null } = {}) {
+export function resilienceWithDialog(actor, resilience, event = null, { dc = null, link = null, source = null, against = null, talentBanes = null, talentBoons = null } = {}) {
   if (!AZEROTH.resiliences[resilience]) return null;
   return rollWithDialog(actor, {
     kind: "resilience",
@@ -1278,6 +1439,9 @@ export function resilienceWithDialog(actor, resilience, event = null, { dc = nul
     // The Banes a talent of whoever forced this Test lays on it (04's Vile
     // Concoction, D-773): an automatic line, named.
     ...(talentBanes?.banes > 0 ? { talentBanes } : {}),
+    // And the Boon a talent of whoever forced it gives the creature resisting (04's Drawn
+    // Across: *A Boss makes the Test with a Boon*; the Legacy branches' door 25), named.
+    ...(talentBoons?.boons > 0 ? { talentBoons } : {}),
     run: game.system.azeroth.workflows.rollResilience
   }, event);
 }
@@ -1345,7 +1509,7 @@ function packFlankOf(actor, targetToken) {
  * has not got is refused in words; no caller in `module/` forces one, and the
  * attacks batch pins the refusal by calling this door with a Javelin in the hand.
  */
-export async function attackWithDialog(actor, weapon, event = null, { location = "body", dc = null, damage = true, offHand = false, budget = null, gainsMomentum = true, atDistance = null, riposte = false, mode = null, ratingDelta = 0 } = {}) {
+export async function attackWithDialog(actor, weapon, event = null, { location = "body", dc = null, damage = true, offHand = false, budget = null, gainsMomentum = true, atDistance = null, riposte = false, mode = null, ratingDelta = 0, opportunity = false, landsOnHit = null, cardBoons = null, fromFeature = null } = {}) {
   if (!weapon || weapon.type !== "weapon") return null;
   // **A MELDED WEAPON IS SWUNG BY NOBODY** (the lead: *"Melds; Signatures
   // count"*, D-769). Every door the sheet draws reads `readyWeapons`, so this is
@@ -1508,10 +1672,17 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
   // 04's Longshot (D-773): *Your weapon's maximum Range increases by 25% per
   // rank* - the farthest the band allows, never where its Bane begins.
   const shape = { launcher: sys.launcher ?? null, range: sys.range ?? null, traits: traitNames, longshot: rangeStretchFor(actor.takenTalents?.() ?? []).percent };
+  // **A HAMMER OR A MACE THROWN FOR STORM BOLT** (04: *For this attack a weapon of the
+  // hammer or mace type counts as Thrown (20 ft), and an attack made with one uses
+  // Strength*; the Legacy branches' door 15): the throw is a way of striking this
+  // weapon while a rider that makes it can be paid - its line available on a throw -
+  // and `rollTest` refuses that throw unless the line is ticked.
+  const throwAs = actor.type === "character" && !sys.isLauncher ? throwAsOffer(actor.riderLines?.({ weapon: "thrown" }) ?? []) : null;
+  const struckShape = throwAs ? throwAsWeapon({ ...shape, weaponType: sys.weaponType ?? null }, throwAs) : shape;
   const targetToken = [...(game.user.targets ?? [])][0] ?? null;
   const targetActor = targetToken?.actor ?? null;
   const distance = atDistance ?? (targetActor ? distanceBetween(actor, targetActor) : null);
-  const plan = attackPlan(shape, { distance, engaged: engagedNow(actor), mode });
+  const plan = attackPlan(struckShape, { distance, engaged: engagedNow(actor), mode });
   // **A WAY THE WEAPON HAS NOT GOT IS REFUSED IN WORDS** (D-731's review). A
   // caller that settles the way is never quietly handed another: a Javelin
   // forced into the hand used to be thrown. `mode` is this door's public option,
@@ -1550,16 +1721,27 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
   ];
   // One roll spec per way: what the dialog draws for it and what the card
   // records. A refused way rides along so the dialog can grey it and say why.
+  // The throw Storm Bolt made (door 15): its own Thrown trait on the strike record,
+  // so the card records a throw - and the rider it needs, for `rollTest` to judge.
+  const thrownByRider = struckShape !== shape ? (struckShape.throwAs ?? null) : null;
   const modes = Object.fromEntries(plan.modes.map(m => {
     const v = plan.variants[m];
+    const byRider = m === "thrown" && thrownByRider;
     return [m, {
       modifiers: modifiersFor(v.ability),
       rangeKind: v.rangeKind,
       rangeBand: v.band,
       engaged: v.engaged,
       // What it is struck with (D-725), the way it is struck (D-731).
-      strike: strikeFor(facts, { ammunition: ammunitionFacts, mode: m }),
-      refused: v.refused
+      strike: strikeFor(byRider ? { ...facts, traits: struckShape.traits } : facts, { ammunition: ammunitionFacts, mode: m }),
+      refused: v.refused,
+      ...(byRider ? { throwAs: thrownByRider } : {}),
+      // **A HAMMER THAT THROWS ALREADY, THROWN FOR STORM BOLT** (the B6 review): the
+      // throw stays a Dexterity throw unless the rider is ticked, and then it is made on
+      // the rider's ability (`rollWithDialog`, `wield.mjs#riderThrowModifiers`).
+      ...(m === "thrown" && struckShape.riderAbility?.identifier
+        ? { riderModifiers: { identifier: struckShape.riderAbility.identifier, modifiers: modifiersFor(struckShape.riderAbility.ability) } }
+        : {})
     }];
   }));
   // A shape's natural attack records its block row's own words (D-769): a
@@ -1690,6 +1872,14 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
     ...(engagedOneTarget ? { engagedOne: true } : {}),
     ...(packFlank ? { packFlank } : {}),
     ...(riposte === true ? { riposte: true } : {}),
+    // An Opportunity Attack (the Legacy branches' door 22): Hold the Hall's Prone rides it.
+    ...(opportunity === true ? { opportunity: true } : {}),
+    // What this blow's hit lays whatever it strikes (04's Net-o-Matic Projector; the
+    // Legacy branches' door 7), read by `workflows.rollTest`.
+    ...(Array.isArray(landsOnHit) && landsOnHit.length ? { landsOnHit } : {}),
+    // A Boon the card's Use gives each of its attacks (04's Fan of Knives at rank 2;
+    // door 26), read by the dialog as a talent's Boon.
+    ...((Number(cardBoons?.boons) || 0) > 0 ? { cardBoons: { boons: Math.trunc(Number(cardBoons.boons)), names: [...(cardBoons.names ?? [])] } } : {}),
     heavyBane: weaponEffects.heavyBane,
     // **THE WAY IT OPENS ON, AND EVERY WAY IT MAY BE STRUCK** (D-731). The top
     // level is the default way's, so anything reading the spec before a way is
@@ -1706,6 +1896,9 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
     weaponId: weapon.id ?? null,
     // What it is struck with (D-725); an Extra Attack's second roll inherits it.
     strike: chosen.strike,
+    // The feature card it was made from (the Legacy branches' door 2), a record as
+    // `strike` is; an Extra Attack's second roll inherits it the same way.
+    ...(fromFeature ? { fromFeature } : {}),
     // The off hand (D-409) and the budget an attack spends (D-630).
     ...(offHand ? { offHand: true } : {}),
     ...(budget ? { budget } : {}),
@@ -1756,13 +1949,18 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
  * moves: the card had simply never been able to reach a creature, because
  * `attackFromCard` looked for an Item and every creature held none (2026-09-10).
  */
-export async function npcAttackWithDialog(actor, index, event = null, { title = null, targets = null, attack: override = null, bossAction = false, budget = null, dc = null, damage = true, gainsMomentum = true, mode = null } = {}) {
+export async function npcAttackWithDialog(actor, index, event = null, { title = null, targets = null, attack: override = null, bossAction = false, budget = null, dc = null, damage = true, gainsMomentum = true, mode = null, fromFeature = null } = {}) {
   const attack = override ?? actor?.system?.attacks?.[index];
   if (!attack) return null;
   const sys = actor.system;
   const bonus = sys.damageBonus ?? 0;
   // What the traits do to the damage (D-647): Pierce, and a school trait.
-  const spec = attackSpecFor(attack, await traitSchools());
+  // **AND WHAT THE OWNER'S TALENT MAKES OF IT** (the Legacy branches' door 20: 04's
+  // Serpent Ward, *Its attack deals Nature damage rather than Fire*): the derived
+  // school `rules/bound.mjs#boundEffects` overrides, a magical blow of that school.
+  const traitSpec = attackSpecFor(attack, await traitSchools());
+  const patchedSchool = typeof sys.attackSchool === "string" && sys.attackSchool && AZEROTH.schools?.[sys.attackSchool] ? sys.attackSchool : null;
+  const spec = patchedSchool ? { ...traitSpec, kind: "magical", school: patchedSchool } : traitSpec;
   // A swarm's attack (13 §4, D-646): every target it is engaged with, resolved
   // one by one on the card; Thinned, two off the Rating and a Bane from the
   // dialog's own line.
@@ -1840,6 +2038,11 @@ export async function npcAttackWithDialog(actor, index, event = null, { title = 
     });
   }
   const strike = strikeForRow(attack, { index, title, mode: way });
+  // The form a talent's patch draws the strike as (door 20), where it is one of
+  // `STRIKE_FORMS`: the animation layer reads the record, never the talent. The
+  // record is this call's own, so it is written in place.
+  const patchedForm = typeof sys.attackForm === "string" && STRIKE_FORMS.includes(sys.attackForm) ? sys.attackForm : null;
+  if (patchedForm) Object.assign(strike, { form: patchedForm, via: strike.via ?? "named", reason: null });
   // **A CREATURE ROLLS TWICE TOO** (D-704's L1). The trait is a GM's to add and
   // 14 carries it on no block; where it is on, the creature's blow goes through
   // the same two-roll door a character's does. A Boss Action that attacks is an
@@ -1860,6 +2063,9 @@ export async function npcAttackWithDialog(actor, index, event = null, { title = 
     weaponEffects,
     // What it is struck with (D-725).
     strike,
+    // The feature card that made it - a bound creature commanded from its owner's
+    // card (the Legacy branches' door 2) - a record as `strike` is.
+    ...(fromFeature ? { fromFeature } : {}),
     // What the TARGET is wearing answers back on a hit (08 §20, D-692): a
     // creature's blow lands on a character wearing a Skullflame Shield too.
     struckBack: struckBackRows(targets ?? targetSnapshots(), actor),
@@ -1946,6 +2152,10 @@ export async function traitSchools() {
 export async function useAbilityWithDialog(actor, list, index, event = null) {
   const row = actor?.system?.[list]?.[index] ?? null;
   const a = row?.automation ?? null;
+  // **CUTTING GEAR** (the lead, 2026-10-22: *"Give constructs a trait or ability that
+  // allows them to end one Entangled condition per turn no action required."*): read by
+  // its NAME, whatever its automation says, and pressed through the one ability door.
+  if (row && holdsCuttingGear([row])) return game.system.azeroth.workflows.useAbility({ actor, list, index, targets: [] });
   // A `passive` kind is standing and has nothing to press (D-691): the sheet
   // draws no button for one, and this is the same refusal at the door.
   if (!row || !isPressable(a)) return null;
@@ -2555,6 +2765,42 @@ export async function effectAction(actor, action, target) {
 export function bindPlateKeys(root) {
   bindKeyActivation(root, ".azeroth-plate[data-action]");
   bindKeyActivation(root, '[data-action="expandItem"]');
+}
+
+/**
+ * **A CREATURE'S NAME WRAPS UNDER ITSELF** (the lead, 2026-10-23: *"Wrap to two
+ * lines"*). The NPC banner's name is a one-row `<textarea>` - an `<input>` cannot wrap,
+ * and 14's *Mithril Mechanical Dragonling* was cut at the banner's edge. The stylesheet
+ * sizes it to its text where the browser knows `field-sizing: content`; this sizes it
+ * where it does not, keeps a pasted line break out of a name, and makes Enter commit
+ * the name (the form submits on `change`, which the blur raises) rather than break a
+ * line in it. Idempotent per element; a render's fresh element is bound afresh.
+ */
+export function bindWrappingName(root) {
+  // Where the browser sizes the field itself, an inline height would only pin it
+  // against the window's own resizing: the script sizes nothing there.
+  const native = globalThis.CSS?.supports?.("field-sizing", "content") === true;
+  for (const el of root?.querySelectorAll?.("textarea.azeroth-name") ?? []) {
+    const fit = () => {
+      if (native) return;
+      el.style.height = "auto";
+      // A minimised or hidden sheet measures nothing: one row stands until it can.
+      const h = el.scrollHeight;
+      if (h > 0) el.style.height = `${h}px`;
+    };
+    fit();
+    if (el.dataset.azerothName) continue;
+    el.dataset.azerothName = "1";
+    el.addEventListener("input", () => {
+      if (/[\r\n]/.test(el.value)) el.value = el.value.replace(/\s*[\r\n]+\s*/g, " ");
+      fit();
+    });
+    el.addEventListener("keydown", event => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      el.blur();
+    });
+  }
 }
 
 /** Enter or Space activates a non-button element that carries an action. Idempotent per element. */

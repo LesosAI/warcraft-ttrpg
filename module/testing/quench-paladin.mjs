@@ -16,7 +16,7 @@
  * `combatTurnChange` is called only once they are done.
  */
 
-import { cleanup, drainAreaWork, fromPack, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings } from "./fixtures.mjs";
+import { cleanup, drainAreaWork, fromPack, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings, tokenDrawn, tokenData } from "./fixtures.mjs";
 import { CARD_ACTIONS, regionFlagsFromCard } from "../dice/chat.mjs";
 import { pixelsPerFoot, placeArea } from "../canvas/regions.mjs";
 import { sweepAreas } from "../canvas/sustained-areas.mjs";
@@ -57,10 +57,10 @@ async function place(scene, placements) {
   const data = [];
   for (const { actor, x, y, disposition = "FRIENDLY" } of placements) {
     await actor.update({ "prototypeToken.actorLink": true });
-    data.push((await actor.getTokenDocument({ x, y, disposition: CONST.TOKEN_DISPOSITIONS[disposition] })).toObject());
+    data.push((await tokenData(actor, { x, y, disposition: CONST.TOKEN_DISPOSITIONS[disposition] })));
   }
   const tokens = await scene.createEmbeddedDocuments("Token", data);
-  await until(() => placements.every(p => p.actor.getActiveTokens(true).length), "every token drawn");
+  await until(() => placements.every(p => tokenDrawn(p.actor.getActiveTokens(true)[0])), "every token drawn, its texture loaded and its arrows made");
   await settle();
   return tokens;
 }
@@ -605,7 +605,7 @@ export function paladinBatch(context) {
       // in the same call (quench-phase12's press follows the call the same way).
       const [owned] = await sorceress.createEmbeddedDocuments("Item", [blizzard.toObject()]);
       const [token] = await scene.createEmbeddedDocuments("Token", [
-        (await sorceress.getTokenDocument({ x: 300, y: 300, actorLink: false, disposition: CONST.TOKEN_DISPOSITIONS.HOSTILE })).toObject()
+        (await tokenData(sorceress, { x: 300, y: 300, actorLink: false, disposition: CONST.TOKEN_DISPOSITIONS.HOSTILE }))
       ]);
       await until(() => canvas.tokens.get(token.id), "the unlinked token drawn");
       const tokens = [token];
@@ -641,7 +641,7 @@ export function paladinBatch(context) {
         const second = await makeNpc("Sorceress");
         await second.update({ name: "ZZ Token Sorceress", "prototypeToken.actorLink": false });
         const [own] = await scene.createEmbeddedDocuments("Token", [
-          (await second.getTokenDocument({ x: 300, y: 600, actorLink: false, disposition: CONST.TOKEN_DISPOSITIONS.HOSTILE })).toObject()
+          (await tokenData(second, { x: 300, y: 600, actorLink: false, disposition: CONST.TOKEN_DISPOSITIONS.HOSTILE }))
         ]);
         tokens.push(own);
         await until(() => canvas.tokens.get(own.id), "the second unlinked token drawn");
@@ -668,7 +668,7 @@ export function paladinBatch(context) {
       const held = { spellId: null, uuid: "Compendium.azeroth-rpg.spells.Item.zzStoppedSpell01", name: "ZZ Held Spell", cast: "zzStoppedCast001", itemId: null };
       await sorceress.setFlag("azeroth-rpg", "sustaining", [held]);
       const [token] = await scene.createEmbeddedDocuments("Token", [
-        (await sorceress.getTokenDocument({ x: 300, y: 900, actorLink: false, disposition: CONST.TOKEN_DISPOSITIONS.HOSTILE })).toObject()
+        (await tokenData(sorceress, { x: 300, y: 900, actorLink: false, disposition: CONST.TOKEN_DISPOSITIONS.HOSTILE }))
       ]);
       const tokens = [token];
       try {

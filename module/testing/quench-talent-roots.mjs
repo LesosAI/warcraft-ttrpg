@@ -18,7 +18,7 @@
  * test makes is deleted in `after`.
  */
 
-import { cleanup, drainAreaWork, fromPack, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings, PACK_FOR } from "./fixtures.mjs";
+import { cleanup, drainAreaWork, fromPack, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings, PACK_FOR, tokenDrawn, tokenData } from "./fixtures.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { useFeatureWithDialog } from "../applications/actions.mjs";
 import { strikeFromArea } from "../effects/area-strikes.mjs";
@@ -79,12 +79,12 @@ async function sceneWith(placements) {
   const data = [];
   for (const { actor, x, y, side = "friendly" } of placements) {
     await actor.update({ "prototypeToken.actorLink": true });
-    data.push((await actor.getTokenDocument({
+    data.push((await tokenData(actor, {
       x, y, disposition: CONST.TOKEN_DISPOSITIONS[side === "friendly" ? "FRIENDLY" : "HOSTILE"]
-    })).toObject());
+    })));
   }
   await scene.createEmbeddedDocuments("Token", data);
-  for (let i = 0; i < 60 && !placements.every(p => p.actor.getActiveTokens(true).length); i++) {
+  for (let i = 0; i < 60 && !placements.every(p => tokenDrawn(p.actor.getActiveTokens(true)[0])); i++) {
     await new Promise(r => setTimeout(r, 100));
   }
   await settle();

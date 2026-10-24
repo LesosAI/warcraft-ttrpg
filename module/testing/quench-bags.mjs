@@ -782,6 +782,12 @@ export function bagsBatch(context) {
       this.timeout(240000);
       const held = game.user.getFlag("azeroth-rpg", "gearPreview");
       try {
+        // **A READER WHO HAS NEVER TOUCHED IT**, made so rather than assumed: the flag
+        // is the GM USER's and outlives every run, so a run that stopped between a
+        // press and its restore - the full run whose renderer crashed - left it shut,
+        // and this case then read the world's state as the sheet's default.
+        if (held !== undefined) await game.user.unsetFlag("azeroth-rpg", "gearPreview");
+        await until(() => game.user.getFlag("azeroth-rpg", "gearPreview") === undefined, "the reader's preview state to be cleared");
         const { actor, sheet } = await onGear("ZZ Gear Preview", { bags: ["Backpack"] });
         const [torch] = await tryGive(actor, "Torch");
         await redraw(sheet);
@@ -1899,11 +1905,13 @@ export function bagsBatch(context) {
         forgeDrop(inspector, { type: "Item", uuid: another.uuid });
         await until(() => actor.items.size === before + 1, "a foreign thing dropped on the preview to be picked up");
       }
-      // Put the reader's own preference back: it lives on `game.user`.
+      // Put the reader's own preference back: it lives on `game.user`, and the press
+      // does not await its write - wait for it, or the next sheet opened reads it shut.
       await redraw(sheet);
       if (gearTab(sheet).querySelector(".azeroth-bag-inspector-body").hidden) {
         gearTab(sheet).querySelector('[data-action="togglePreview"]').click();
         await settle();
+        await until(() => game.user.getFlag("azeroth-rpg", "gearPreview") === true, "the reader's preview state to come back open");
       }
     });
 
@@ -2156,6 +2164,9 @@ export function bagsBatch(context) {
         await settle();
         assert.isTrue(sheet.element.querySelector(".azeroth-bag-inspector-body").hidden,
           "the preview did not shut");
+        // The press writes the reader's flag without being awaited: wait for it, or
+        // the restore below can land first and the press's `false` outlive the batch.
+        await until(() => game.user.getFlag("azeroth-rpg", "gearPreview") === false, "the press's write to land");
         const shutLayout = checkSheet(sheet.element, { expectColumns: 4, text: false });
         assert.deepEqual(shutLayout, [], formatFindings(shutLayout));
         const shutText = checkText(sheet.element, { requireGroundWithin: true });

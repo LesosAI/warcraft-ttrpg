@@ -25,9 +25,12 @@ export const NO_HEALING_QUERY = "azeroth-rpg.noHealing";
 /** The icon the mark wears. */
 const NO_HEALING_ICON = "icons/svg/blood.svg";
 
-/** What one laying came to, for the card. */
-function landing(name, landed, reason = null) {
-  return { name: String(name ?? ""), landed, reason };
+/**
+ * What one laying came to, for the card - and the effect it made, so a hit turned
+ * into a miss deletes exactly that one (the Legacy branches' door 13).
+ */
+function landing(name, landed, reason = null, effectId = null) {
+  return { name: String(name ?? ""), landed, reason, effectId: typeof effectId === "string" && effectId ? effectId : null };
 }
 
 /** Lay it here; the caller has already established that this client may. */
@@ -48,7 +51,7 @@ async function layHere({ victim, striker, source }) {
     ...span,
     flags: { "azeroth-rpg": { [NO_HEALING_FLAG]: { source } } }
   }]);
-  return landing(victim.name, Boolean(made), made ? null : "refused");
+  return landing(victim.name, Boolean(made), made ? null : "refused", made?.id ?? null);
 }
 
 /** The GM-side handler. Throws with the reason. */
@@ -75,7 +78,7 @@ export async function layNoHealing({ victim, striker, source = "", name = "" } =
     const gm = game.users.activeGM;
     if (!gm) throw new Error(game.i18n.localize("AZEROTH.Rider.Inflict.NoGM"));
     const done = await gm.query(NO_HEALING_QUERY, { victimUuid: victim.uuid, strikerUuid: striker?.uuid ?? null, source }, { timeout: 15000 });
-    return done && typeof done === "object" ? landing(done.name ?? victim.name, done.landed === true, done.reason ?? null) : landing(victim.name, false, "error");
+    return done && typeof done === "object" ? landing(done.name ?? victim.name, done.landed === true, done.reason ?? null, done.effectId ?? null) : landing(victim.name, false, "error");
   } catch (err) {
     ui.notifications?.warn(err.message);
     return landing(victim.name, false, "error");

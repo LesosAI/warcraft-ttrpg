@@ -13,18 +13,18 @@ import { abilityModifier } from "../rules/abilities.mjs";
 import { applyExposure, castingCorruption, thresholdsCrossed } from "../rules/corruption.mjs";
 import { explainDamage, resolveDamage } from "../rules/mitigation.mjs";
 import { AzerothRoll } from "./azeroth-roll.mjs";
-import { resultName } from "../rules/resolution.mjs";
+import { resultName, succeeded } from "../rules/resolution.mjs";
 import { areaFor, lengthenArea, widenArea } from "../rules/areas.mjs";
 // An area that strikes at the start of a turn (D-756): the cast deals none of
 // it, and the tick adds what the caster STANDS on, as the cast does.
 import { areaCarriesSpell, castDealsDamage, castHeals, hasAreaTick, roundsIn, tickParts } from "../rules/area-ticks.mjs";
 import { standingFeatureBonus, standingSpellBonus } from "../rules/spell-bonus.mjs";
 import { calledShotCost } from "../rules/modifiers.mjs";
-import { NEXT_SPELL_FLAG, castRefusal, castingDC, grantingClass, isHealingSpell, manaPrice, overchannelCost, overchannelledSL, payFromNow, spellDCFor, spellManaCost, statedCastingDC, swiftCast, takeNextSpell } from "../rules/casting.mjs";
+import { NEXT_SPELL_FLAG, castRefusal, castingDC, castingManaPool, grantingClass, isHealingSpell, manaPrice, overchannelCost, overchannelledSL, payFromNow, spellDCFor, spellManaCost, statedCastingDC, swiftCast, takeNextSpell } from "../rules/casting.mjs";
 import { resilienceAbility, resilienceRows } from "../rules/resilience.mjs";
 import { injuryConditions } from "../rules/injuries.mjs";
 import { enrich } from "../helpers/enrich.mjs";
-import { CONSECRATED, CONSECRATED_FLAG, SNARE, cardAttackAllowance, consecratedTrait, evaluateAmount, featurePayment, formsKnown, mainHandOf, payingPool, weaponRatingOf } from "../rules/class-features.mjs";
+import { CONSECRATED, CONSECRATED_FLAG, SNARE, cardAttackAllowance, consecratedTrait, evaluateAmount, featurePayment, formsKnown, mainHandOf, payingPool, paysOnSuccess, resistDcFor, rungChoice, weaponRatingOf } from "../rules/class-features.mjs";
 // Shapeshift, the Avatar of the Wild and Metamorphosis (02 §7, D-769): the law,
 // and the one writer of a shape.
 // The free shift's own law and its once-a-round mark (04's Savage Shift, D-771).
@@ -36,8 +36,8 @@ import { maneuverCost, sizeNote, sunderAmount } from "../rules/maneuvers.mjs";
 import { HAMMER_OF_JUSTICE_SPELL, appliesHammerOfJustice, furtherGains, gainOnHit, momentumAfter, refundOnSpend } from "../rules/momentum.mjs";
 import { applyCondition, spellTiming, untilEndOfNextTurn, untilNextTurn } from "../effects/durations.mjs";
 // 06 SS6 (D-693): a Bane laid on ANOTHER creature - Pummel's two, Gorehowl's one.
-import { layBane, layBoon, spendLaidBanes, spendLaidBoons } from "../effects/banes.mjs";
-import { blockReduction, canReact, meleeInHand, parryHolds, shieldsHeld, standingMarkRefusal } from "../rules/reactions.mjs";
+import { endBane, layBane, layBoon, spendLaidBanes, spendLaidBoons } from "../effects/banes.mjs";
+import { UNANSWERED_FLAG, blockReduction, canReact, meleeInHand, parryHolds, shieldsHeld, standingMarkRefusal, unansweredBy } from "../rules/reactions.mjs";
 import { POISON_ROUNDS, coatingAction, coatingFired, endsOnHit, flatten, goesOn, hasUse, poisonTick, runAfter, spendOne } from "../rules/consumables.mjs";
 import { sustainLimit } from "../rules/turn-effects.mjs";
 import { standardDC } from "../rules/modifiers.mjs";
@@ -60,7 +60,7 @@ import { endTickAndHeal, tickEffectsOf, tickLaidBy, tickWords } from "../effects
 // the cast and the Use, the next attack's promise, a heal Mortal Strike blocks,
 // a Boon laid on somebody else, and Beacon's chosen creature.
 import {
-  EXPOSED_FLAG, PLATE_FLAG, calledShotFor, criticalRollCount, extraStrikesFor, freeHealingFor, hitConditionsFor,
+  EXPOSED_FLAG, PLATE_FLAG, boonSpan, calledShotFor, criticalRollCount, extraStrikesFor, freeHealingFor, hitConditionsFor,
   lowerRoll, manaBackFor, nextRoundMark, offHandPenaltyFor, onUseLays, onUseNextAttack, recklessFor, waives
 } from "../rules/class-talents.mjs";
 // The Ranger's and the Rogue's kinds (D-773): what each reads at the attack, the
@@ -72,6 +72,13 @@ import {
   ruptureBleeding, steadyReturnFor, unseenComboFor
 } from "../rules/class-talents.mjs";
 import { forcedSl, riderPierce } from "../rules/riders.mjs";
+// THE LEGACY BRANCHES' DOORS (B1): a throw a rider makes possible (door 15), a shot
+// not spent (door 26), a cast counted as moving (door 9).
+import { spendsShot, throwRefusedFor } from "../rules/riders.mjs";
+// A rider's second condition on its own span (04's Shadow Strike; the Legacy branches' B6).
+import { riderConditionSpan } from "../rules/riders.mjs";
+import { MOVED_MARK } from "../rules/rest.mjs";
+import { abilityScope } from "../rules/expressions.mjs";
 // The Priest's and the Shaman's kinds (D-774): 02's Ward and the talents on it,
 // whom a heal reaches, what a counter or a charge buys on a roll, what a cast's
 // card offers after the die, a blow's riders that cost nothing, and 02's
@@ -91,6 +98,10 @@ import {
   counterspellFor, curseFor, extendTickRounds, extendedSpan, freeUseFor, higherRoll, immuneAsWardFor, immuneReadAsWard, isSacrificed, lifeTapChoices,
   lifeTapFor, onUseMageWarlock, overchannelReliefFor, ruinFor, sacrificeRecord, sacrificedWardChanges, soulFireRefusal, spanExtensionFor,
   spellCriticalFor, spellDcFor, spellDiscountFor, spellHealthFor, speedReducedFact, sustainsFor, swappableEffects, veinsStates
+} from "../rules/class-talents.mjs";
+// THE LEGACY BRANCHES' KINDS (B1): what each reads at the cast, the attack and the Use.
+import {
+  castMovesFor, offHandBuildsFor, onUseLegacy, pierceFor, selfHitTestsFor, slDamageFor, spellPoolFor
 } from "../rules/class-talents.mjs";
 import { stealSustain } from "../effects/sustain-steal.mjs";
 import { swapEffects } from "../effects/soul-swap.mjs";
@@ -125,7 +136,7 @@ import { layNextSpell } from "../effects/next-spell.mjs";
 import { nameSymbiosisPartner } from "../effects/symbiosis.mjs";
 import { partnerRefusal } from "../rules/symbiosis.mjs";
 import { adopt, bind, bondOf, boundCount, boundOf, commandDemon, featureForKind, heldNames, release, syncBoundFor } from "../documents/bound.mjs";
-import { bindingFor, capacity, eligible, summonRefusal, totemBlock } from "../rules/bound.mjs";
+import { bindingFor, boundAttacksFor, capacity, eligible, summonRefusal, totemBlock } from "../rules/bound.mjs";
 // A totem is planted, and the ground it holds is drawn (02 §7, D-708).
 import { plantTotem, plantedLine } from "../documents/totems.mjs";
 import { totemAura } from "../rules/totems.mjs";
@@ -138,11 +149,23 @@ import { gateHolds, isPressable, pressGates, pressRefusal, signatureEffectOf, si
 // on one and both handlers below said *no Mana pool* to a creature holding one.
 // And `poolNamed` is the same reading for a COST — `poolFor` below matched a
 // pool by name alone, so a Signature that costs a pool refused on all 164.
-import { manaPool, poolNamed } from "../rules/pools.mjs";
+import { ANY_MOMENTUM, manaPool, poolNamed } from "../rules/pools.mjs";
 // Attacking and casting end a Hide (D-717).
 import { isHidden, reveal } from "../effects/stealth.mjs";
 // 06 §5's Engaged, for a creature's casting ability, which has no dialog (D-732).
-import { creaturesWithin, engagedNow, enemyDistances, feetBetweenTokens, reachOfActor } from "../canvas/engaged.mjs";
+import { allyOf, creaturesInArea, creaturesWithin, engagedNow, enemyDistances, feetBetweenTokens, reachOfActor } from "../canvas/engaged.mjs";
+// An area Use's own targets, and what a Resist on its card governs (the B6 fix; the
+// lead: *"Measure the area"*, *"Build it everywhere"*, *"Land automatically"*).
+import { gatherOf, landsAtOnce } from "../rules/area-gather.mjs";
+// And whether 07 asks a spell's Test at the cast at all, and the half an ability's passed
+// Test leaves (the B8a2 pass).
+import { castTestGate, castTestOf, castTestRefusal, governed, passedHalf } from "../rules/resisted.mjs";
+// What a creature is, for a cast Test only a kind makes (Holy Wrath's undead; the B9a pass).
+import { creatureSnapshot, kindsOf } from "../rules/creature-kinds.mjs";
+// 07's Nature's Grasp: the Test the next blow on the caster asks (the B9a pass).
+import { cleanStruckTest, readStruckTest } from "../rules/struck-tests.mjs";
+// What a spell deals around its target, a Test at a time (07's Stormfury; the B8a pass).
+import { splashCheck } from "../rules/splash.mjs";
 // What a budget would refuse, asked without spending (the architect's review of D-773).
 import { spend as judgeSpend } from "../rules/initiative.mjs";
 // Who resisted a spell (D-726): the key a target's row records under, and the
@@ -157,12 +180,20 @@ import { dispelGatesOn, dispelOptionsOn, endEffects, unstableStrikes } from "../
 import {
   escapeTalentsFor, pushFor, raptureFor, slowingFor, spellPushFor, undispellableFor
 } from "../rules/class-talents.mjs";
-import { cleanForced, forcedFeet, readForced } from "../rules/forced-movement.mjs";
+import { cleanForced, forcedFeet, laidByOne, readForced } from "../rules/forced-movement.mjs";
 import { forceMove, forcedWords } from "../effects/forced-movement.mjs";
-import { escapeRecord, readEscape } from "../rules/escapes.mjs";
+import { escapeRecord, featureEscapeRecord, readEscape } from "../rules/escapes.mjs";
+// THE LEGACY BRANCHES' USES (B1): a hit turned into a miss (door 13), the wield
+// gate (door 15), the two marks (door 18) and a condition for one minute (door 26).
+import { withdrawHit, withdrawnWords } from "../effects/miss.mjs";
+import { negateRefusal, reactionLostToBlow } from "../rules/miss.mjs";
+import { annotateMitigation } from "./annotate.mjs";
+import { cardPressUnrecordable } from "../effects/card-presses.mjs";
+import { wieldRefusal } from "../rules/wield.mjs";
+import { CHALLENGE_FLAG, CHALLENGE_TURN_MARK, WATCH_FLAG, bearingTo, challengeRefusal, cleanMark, markOf, markReplaced, marksFrom, watchRefusal } from "../rules/marks.mjs";
 import { readUpkeep } from "../rules/upkeep.mjs";
 import { SLOWED_FEET_FLAG, readSpeedDrop, speedDropAt } from "../rules/slowing.mjs";
-import { clockRounds, roundsOrClock, untilEndOfNextTurnOrRound, untilNextTurnOrRound } from "../effects/durations.mjs";
+import { clockRounds, minuteSpan, roundsOrClock, untilEndOfNextTurnOrRound, untilNextTurnOrRound } from "../effects/durations.mjs";
 // D-779: the lead's class answers of 2026-10-03 (O-166 to O-195).
 import {
   DEVOURING_PLAGUE, FLAMETONGUE, LIGHTWELL, aegisSchools, chosenWardRemains, curseRoom, lavaLashSpread, parryReaches,
@@ -176,6 +207,44 @@ import { ROUNDS_PER_MINUTE } from "../rules/area-ticks.mjs";
 import { pickPoint } from "../canvas/place.mjs";
 import { placeArea, schoolColor } from "../canvas/regions.mjs";
 import { feetToPoint } from "../canvas/footprints.mjs";
+// THE LEGACY BRANCHES' BODIES (B2): a step to a chosen point (door 3), a called
+// creature placed (door 4), the constructs, their shared turn and their tinker
+// (door 6), the gadgets (door 7), a trap (door 26), Shackle (door 26) and the
+// Gnomish Battle Rig.
+import { ESCAPE_FLAG, SHED_DC_FLAG } from "../rules/escapes.mjs";
+import { FEATURE_STEPS, STEP_REFUSALS, partyRadius, partyStep, readSpellStep, stepHeldBy, stepOf } from "../rules/steps.mjs";
+import { judgeStep, pickPull, pickStep, pulledWords, stepTo, stepWords, steppedWords } from "../effects/steps.mjs";
+import { placeOf, placeRefusal } from "../rules/summon-places.mjs";
+import { placeSummon } from "../documents/summon.mjs";
+import { CONSTRUCTS, CONSTRUCT_KIT, constructEligible, constructsFor, isWrecked, rebuildTime } from "../rules/constructs.mjs";
+import { BLUEPRINT_FLAG, DEVICE_SECTION, GADGETS, GADGET_REASONS, OVERCLOCK_FLAG, blueprintFor, cleanOverclock, gadgetByKey, gadgetChangeRefusal, gadgetsKnownFor, knownGadgets, knownRowOf, overclockFor } from "../rules/gadgets.mjs";
+import { GRAVE_BOND_RESISTED_FLAG, graveBondFor, resistedBonds, withResistedBond } from "../rules/bound.mjs";
+import { TRAP_FLAG, cleanTrap, trapArea, trapOf, trapsToLift } from "../rules/traps.mjs";
+import { shackleRounds } from "../rules/class-talents.mjs";
+import { shapeEntryOf } from "../rules/shapes.mjs";
+// THE LEGACY BRANCHES' B3 (doors 10, 11, 12 and 25): the Spirit Realm and Ethereal Form
+// (06 §10; 04's The Crossing, Ethereal Form, Kindred Spirits), a death hold's sheet
+// refusal, and the Uses that write beyond their descriptor.
+import { crossingOf, etherealAlliesFor, etherealAlliesRefusal, featureRestoresOnly, restoresOnly } from "../rules/spirit-realm.mjs";
+import { attackRefusalFor, castNamesSelf, castRefusalFor, crossInto, crossed, layEthereal, realmRefusalFor } from "../effects/spirit-realm.mjs";
+import { reviveRefusal } from "../rules/death-holds.mjs";
+import {
+  CONCEAL_FLAG, IMMUNE_FLAG, PAD_FLAG, areaDispelReaches, armorChanges, cleanPad, concealStrike, cureRefusal, dealtHalvedBy, halvesDealtRefusal, isThrallBond,
+  onUseSpirits, summonedOrBound, thrallRefusal, transportFatigues, transportRefusal, usesAskedLater
+} from "../rules/legacy-uses.mjs";
+import { cureCondition, curableConditionsOn, layStateOn, reviveCreature, reviveFacts, tokenFightsNow, transportTo, useCuttingGear } from "../effects/legacy-uses.mjs";
+// 04's Ancestor's Hand: every Dying friend in reach, lifted (the Legacy branches' B6).
+import { liftDying } from "../effects/legacy-uses.mjs";
+import { dyingNow } from "../effects/spirit-realm.mjs";
+// Disenchant's area reads each creature's standing on its own scene (the B3 review).
+import { combatantIn, standingOf } from "../canvas/engaged.mjs";
+import { holdsCuttingGear } from "../rules/escapes.mjs";
+import { HIDDEN_STATUS } from "../rules/stealth.mjs";
+import { SUMMONED_FLAG } from "../documents/summon.mjs";
+import { worldActorOf } from "../documents/bound.mjs";
+// What a Use, an attack and a step record for the animation layer (the Legacy
+// branches' door 2): records of what happened, as `source` and `strike` are.
+import { abilityKeyOf, cleanFromFeature, featureKeyOf, risenRecord, tokenRef } from "../rules/animation-records.mjs";
 
 /**
  * **THE FINISHER AS IT STANDS NOW** (02 §7 with 04's Death Mark, Rupture and
@@ -186,9 +255,14 @@ import { feetToPoint } from "../canvas/footprints.mjs";
  * @param {object|null} target  the first target snapshot
  */
 function finisherStateOf(actor, target) {
-  const pool = (actor?.system?.momenta ?? []).find(p => p.name === "comboPoints") ?? null;
-  const marked = namesTarget(actor?.getFlag?.("azeroth-rpg", DEATH_MARK_FLAG) ?? null, target);
-  return finisherOffer(pool, finisherOptionsFor(actor.takenTalents()), { marked });
+  // **WHOSE COMBO POINTS** (04's Supercharge: *Your Finisher class feature may be
+  // spent on an attack one of your constructs makes*; the Legacy branches' door 6):
+  // the striker's own, or - a construct's blow - its tinker's (`AzerothActor
+  // #finisherPayer`), with the tinker's talents laid over it.
+  const payer = actor?.finisherPayer?.() ?? actor;
+  const pool = (payer?.system?.momenta ?? []).find(p => p.name === "comboPoints") ?? null;
+  const marked = namesTarget(payer?.getFlag?.("azeroth-rpg", DEATH_MARK_FLAG) ?? null, target);
+  return finisherOffer(pool, finisherOptionsFor(payer?.takenTalents?.() ?? []), { marked });
 }
 
 /**
@@ -209,6 +283,52 @@ function companionOwnerOf(actor) {
   } catch {
     return null;
   }
+}
+
+/**
+ * **THE OWNER ANY BOUND CREATURE FIGHTS FOR** (D-643's bond): the world actor its
+ * bond names, whatever the kind - a totem's shaman (04's Serpent Ward), a
+ * construct's tinker (04's Supercharge; the Legacy branches' doors 6 and 20).
+ *
+ * @param {Actor} actor
+ * @returns {Actor|null}
+ */
+function boundOwnerOf(actor) {
+  if (actor?.type !== "npc") return null;
+  const bond = bondOf(actor);
+  if (!bond?.ownerUuid) return null;
+  try {
+    const owner = fromUuidSync(bond.ownerUuid);
+    return owner?.documentName === "Actor" ? owner : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * **WHAT AN ATTACK CARD RECORDS OF WHAT DREW ITS BLOW** (the Legacy branches' door
+ * 2), for the animation layer to read as it reads `strike` (D-725): the feature card
+ * the attack was made from (`fromFeature {messageId, key}`), the bound attack patches
+ * that shaped it - the owner's `boundAttack` rows on this creature, door 20's own
+ * reading (`patchedBy`) - and the riders ridden with it (`ridden`), each a key the
+ * feature table is filed under. Written hit or miss: a `hit` cue on a miss is the
+ * law's word `missed`, never a silence. Empty keys are left off.
+ *
+ * @param {{actor: Actor, fromFeature?: object|null, riderRows?: Array<{identifier?: string}>}} o
+ * @returns {{fromFeature?: object, patchedBy?: string[], ridden?: string[]}}
+ */
+function attackRecords({ actor, fromFeature = null, riderRows = [] } = {}) {
+  const out = {};
+  const from = cleanFromFeature(fromFeature);
+  if (from) out.fromFeature = from;
+  const owner = boundOwnerOf(actor);
+  const patchedBy = owner
+    ? boundAttacksFor(owner.takenTalents?.() ?? [], { kind: bondOf(actor)?.kind ?? null, name: actor.name ?? "" }).map(r => r.identifier)
+    : [];
+  if (patchedBy.length) out.patchedBy = patchedBy;
+  const ridden = [...new Set((riderRows ?? []).map(p => p?.identifier).filter(id => typeof id === "string" && id))].sort();
+  if (ridden.length) out.ridden = ridden;
+  return out;
 }
 
 /**
@@ -383,7 +503,9 @@ function parryOffered(rows = [], { actor = null, list = [], strike = null } = {}
     const ranged = typeof defender?.takenTalents === "function" ? rangedParryFor(defender.takenTalents()) : null;
     const verdict = parryReaches({ rangeKind, feet: feetBetweenTokens(from, tokenOfTarget(t)), ranged, used: roundUsedOf(defender) });
     return verdict.ok ? row : { ...row, parry: null };
-  }).filter(row => row?.block || row?.parry);
+  // A row Afterimage alone answers stays (the Legacy branches' door 13): *when an
+  // attack hits you* is any attack, a shot or a throw as well.
+  }).filter(row => row?.block || row?.parry || row?.negate);
 }
 
 /**
@@ -698,6 +820,10 @@ export async function rollTest({
   source = null,
   strike = null,
   answers = null,
+  // **THE FEATURE CARD THIS ATTACK WAS MADE FROM** (the Legacy branches' door 2):
+  // `{messageId, key}`, handed in by the card's Attack button
+  // (`dice/chat.mjs#attackFromCardNow`), a record as `strike` is.
+  fromFeature = null,
   // **WHICH SPELL CARD'S RESIST THIS TEST ANSWERS** (D-726): the row, the
   // creature and the cast, as `rules/records.mjs#resistLink` builds them.
   // Named here on purpose - `rollResilience` hands its caller's keys on with
@@ -721,7 +847,19 @@ export async function rollTest({
   talentLines = [],
   // **THE SECOND ROLL OF AN EXTRA ATTACK** (D-774): one Attack, two rolls (D-704),
   // so what *a melee attack* earns (Earthliving) rides the first roll alone.
-  secondRoll = false
+  secondRoll = false,
+  // **AN OPPORTUNITY ATTACK** (the Legacy branches' door 22): 04's Hold the Hall's *On
+  // a hit it is knocked Prone* rides one alone (`hitLays` with `when: "opportunity"`).
+  opportunity = false,
+  // **A THROW A RIDER MADE POSSIBLE** (04's Storm Bolt; door 15): the rider's
+  // identifier, from the way the dialog chose - the throw is refused without it.
+  throwAs = null,
+  // **WHAT THIS ATTACK'S HIT LAYS, WHATEVER STRIKES IT** (the Legacy branches' door 7:
+  // 04's Net-o-Matic Projector, *On a hit it is Entangled until it spends an action
+  // and passes a Reflex Resilience Test against your Spell DC*): `[{condition, value,
+  // until, escape}]`, each landing on every target the card records through the one
+  // landing door, its escape at the striker's Spell DC - and withdrawn with the hit.
+  landsOnHit = []
 } = {}) {
   // The targets, read once and first: the Finisher and the riders are judged
   // against the first before anything is spent (D-773).
@@ -731,6 +869,17 @@ export async function rollTest({
   // below takes the Hide: Find Weakness, Waylay, Subterfuge, Shadow Focus and
   // Cheap Shot all ask it. A Parry is no attack.
   const hiddenAtRoll = kind === "attack" && !parry ? isHidden(actor) : false;
+  // **THE SPIRIT REALM AND ETHEREAL FORM REFUSE AN ATTACK** (06 §10: *You cannot touch the
+  // living world*; 04's Ethereal Form: *While it holds you cannot attack*; the Legacy
+  // branches' door 10), in words and before anything below is judged or spent. A Parry
+  // is no attack: the Reaction door refuses a spirit's (`rules/reactions.mjs#canReact`).
+  if (kind === "attack" && !parry) {
+    const refusedAttack = attackRefusalFor(actor);
+    if (refusedAttack) {
+      ui.notifications?.warn(refusedAttack);
+      return null;
+    }
+  }
   // 0. **EVERY REFUSAL, BEFORE ANYTHING IS SPENT** (D-768's order: judgement,
   // budget, reveal, payment; the lead, 2026-10-03: *"Keeps the Half-Action"*).
   // An empty bundle, a called shot the pool cannot pay and a rider that cannot
@@ -779,7 +928,7 @@ export async function rollTest({
   // A rider that needs the Opening (04's Garrote, D-773) is judged against the
   // target as it stands now, through the one reading the dialog asked.
   const riderLinesNow = riderAttack
-    ? (actor?.riderLines?.({ weapon: strike?.rangeKind ?? null, opening: openingGate(actor?.openingState?.(first, { hidden: hiddenAtRoll }) ?? null, first) }) ?? [])
+    ? (actor?.riderLines?.({ weapon: strike?.rangeKind ?? null, opening: openingGate(actor?.openingState?.(first, { hidden: hiddenAtRoll }) ?? null, first), target: first }) ?? [])
     : [];
   const primedLines = riderLinesNow.filter(l => l.primed);
   const primedIds = primedLines.map(l => l.identifier);
@@ -812,6 +961,17 @@ export async function rollTest({
       return null;
     }
   }
+  // **A THROW A RIDER MAKES POSSIBLE IS MADE ONLY AS PART OF IT** (04's Storm Bolt: *For
+  // this attack a weapon of the hammer or mace type counts as Thrown*; the Legacy
+  // branches' door 15): a hammer thrown with its line left unticked is refused in
+  // words, nothing spent. The second roll of an Extra Attack is the same Attack.
+  if (riderAttack && throwAs && !secondRoll) {
+    const needs = throwRefusedFor({ throwAs }, [...riderPicks, ...primedIds], riderLinesNow);
+    if (needs) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Wield.ThrowNeedsRider", { weapon: title, talent: needs }));
+      return null;
+    }
+  }
   // **THE FINISHER, JUDGED AGAIN** (D-773): what it spends, what it counts and
   // whether Rupture's Bleeding is on offer, read the way the dialog read it.
   // Death Mark's free use holds only while the mark still names this target - a
@@ -832,13 +992,51 @@ export async function rollTest({
     ui.notifications?.warn(game.i18n.format("AZEROTH.Finisher.MarkGone", { talent: finisherFree }));
     return null;
   }
+  // **A HIT'S OTHER WRITES ON A CREATURE THIS CLIENT DOES NOT OWN NEED A GM** (the B2
+  // review): what this attack lays whatever strikes it (04's Net-o-Matic's Entangled,
+  // `landsOnHit`), Shackle's Entangled bought with the Finisher's points, and what a
+  // bound creature's hit lays by its owner's talents (Serpent Ward's venom,
+  // `boundAttacksFor`'s lays) all land through the GM's client - and with none online
+  // they were paid for and laid nothing. Refused here with the riders' own, nothing spent.
+  if (kind === "attack" && !parry && list.length) {
+    const boundOwner = boundOwnerOf(actor);
+    const lays = (Array.isArray(landsOnHit) && landsOnHit.some(l => AZEROTH.conditions?.[l?.condition]))
+      || (finisherMode === "shackle" && Boolean(finisherNow?.shackle))
+      || (Boolean(boundOwner) && boundAttacksFor(boundOwner.takenTalents?.() ?? [], { kind: bondOf(actor)?.kind ?? null, name: actor.name ?? "" })
+        .some(row => (row.lays ?? []).some(l => AZEROTH.conditions?.[l?.condition])));
+    if (lays && gmAbsentForActors(list.map(t => targetActorOf(t)))) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Rider.Inflict.NoGM"));
+      return null;
+    }
+  }
   // **WHAT THE WARRIOR'S AND THE PALADIN'S TALENTS READ AT AN ATTACK** (D-772),
   // off the taken rows once: the Head's called shot, the off hand's −2, a
   // Critical Injury against a hurt target, a condition at an SL, Reckless, an
   // extra attack off the card. And the next attack's promise (Precise Strike,
   // Follow Through, Vengeance), read now and TAKEN once the attack is paid for.
   const talentsHeld = kind === "attack" ? actor.takenTalents() : [];
+  // **WHAT A LEGACY'S GATE READS AT THIS BLOW** (the Legacy branches' doors 15, 17 and
+  // 18): what is wielded and worn, the first target's conditions and kinds, what this
+  // creature laid on it, its marks - the actor's one fact-builder - and the blow's own
+  // way. And the striker's ability modifiers for an amount that names one (door 16).
+  const gateFacts = kind === "attack" && !parry
+    ? { ...(actor?.gateFacts?.(first) ?? {}), melee: (strike?.rangeKind ?? null) === "melee", ranged: Boolean(strike?.rangeKind) && strike.rangeKind !== "melee" }
+    : {};
+  const abilities = abilityScope(actor?.system ?? {});
+  // **AN OFF-HAND BLOW THAT BUILDS, AND HITS HARDER** (04's Axe and Hammer: *While you
+  // hold melee weapons of two different types, one in each hand ... your Off-Hand
+  // Attack builds Rage as your other hits do and deals 1 more damage per rank*; door 26).
+  const offHandBuild = kind === "attack" && offHand && !parry ? offHandBuildsFor(talentsHeld, { facts: gateFacts, scope: abilities }) : { builds: false, damage: 0, by: [] };
+  // What 05 §11's gain on a hit reads as the off hand: an off hand that builds is read as any other hand.
+  const momentumOffHand = offHand && !offHandBuild.builds;
   const promised = riderAttack ? (actor?.pendingNextAttack?.() ?? null) : null;
+  // **WHAT THE ATTACK THAT ENDS A CONCEALMENT ADDS** (04's Wind Walk at rank 2: *until
+  // you next attack, and that attack adds your Dexterity modifier to its damage*; the B6
+  // review): read off the concealment before the reveal below takes it - in a fight or
+  // out of one, since the hiding is what the attack ends.
+  const concealHit = riderAttack
+    ? concealStrike((actor?.effects ?? []).filter(e => e.active !== false).map(e => e.flags?.["azeroth-rpg"]?.[CONCEAL_FLAG] ?? null))
+    : { damage: 0, by: [] };
   // In a started fight an attack spends the turn's Half-Action - a Reaction
   // where the card says so - and a budget that cannot pay refuses the roll with
   // the rule's reason (D-630). **Each Half-Action may be an Attack** (05 §10,
@@ -864,16 +1062,21 @@ export async function rollTest({
   // where there is nothing to clear, so this costs a flag read on every roll.
   // An ACTION taken while hidden (D-773): 04's Master of Shadows and a Shadow
   // Dance leave the Hide standing (`effects/stealth.mjs#reveal`).
-  if (kind === "attack" && !parry) await reveal(actor, { acting: true });
+  if (kind === "attack" && !parry) await reveal(actor, { acting: true, kind: "attack" });
   // Pay first, everything judged above: one marked off the bundle (08 §7,
   // D-407), then the Momentum off the primary pool (06 SS7) before any die is
   // rolled.
   let fired0 = null;
-  if (bundle) {
+  // **A SHOT A RIDER SPENDS NONE OF** (04's Black Arrow: *The attack spends no
+  // ammunition*; the Legacy branches' door 26): a rider this attack pays saying
+  // `ammo: false` keeps the bundle whole - the shot is still the bundle's, so its
+  // Rating and its traits ride the blow as before.
+  const shotKeptBy = (plan?.paid ?? []).find(p => p.line?.ammo === false)?.name ?? null;
+  if (bundle && spendsShot(plan?.paid ?? [])) {
     const remaining = spendShot(bundleLeft);
     await bundle.update({ "system.quantity": remaining });
     fired0 = { itemId: bundle.id, name: bundle.name, remaining };
-  }
+  } else if (bundle) fired0 = { itemId: bundle.id, name: bundle.name, remaining: bundleLeft };
   // **OFF THE POOL AS IT STANDS NOW** (the D-770 review, item D): the pool read
   // for the judgement was read before the budget's queued spend and the reveal,
   // and writing `value - spent` off THAT wrote over anything that moved it in
@@ -897,13 +1100,21 @@ export async function rollTest({
   let finisher = 0;
   let finisherCounted = 0;
   let finisherBleeding = 0;
+  // Shackle's rounds of Entangled in place of the added damage (door 26).
+  let finisherShackle = 0;
+  // Who pays: the striker, or a construct's tinker (04's Supercharge, door 6).
+  const finisherPayer = finisherNow ? (actor?.finisherPayer?.() ?? actor) : null;
   if (finisherNow) {
-    const combo = (actor?.system?.momenta ?? []).find(p => p.name === "comboPoints") ?? null;
+    const combo = (finisherPayer?.system?.momenta ?? []).find(p => p.name === "comboPoints") ?? null;
     const paidPoints = finisherFree ? 0 : Math.min(Math.trunc(Number(finisherSpent)) || 0, combo?.value ?? 0);
-    if (paidPoints > 0) await actor.updatePool({ itemId: combo.itemId, kind: "momentum", value: combo.value - paidPoints });
+    if (paidPoints > 0) await finisherPayer.updatePool({ itemId: combo.itemId, kind: "momentum", value: combo.value - paidPoints });
     finisherCounted = finisherFree ? finisherNow.counts : paidPoints;
     if (finisherMode === "bleeding" && finisherNow.bleeding) finisherBleeding = ruptureBleeding(finisherNow.bleeding, finisherCounted);
+    else if (finisherMode === "shackle" && finisherNow.shackle) finisherShackle = shackleRounds(finisherNow.shackle, finisherCounted);
     else finisher = finisherCounted;
+    if (finisherPayer && finisherPayer !== actor && paidPoints > 0) {
+      provenanceExtra = [...provenanceExtra, { label: "AZEROTH.Construct.FinisherPaid", value: null, formula: game.i18n.format("AZEROTH.Construct.FinisherPaidRow", { n: paidPoints, owner: finisherPayer.name }) }];
+    }
   }
   // **AND THE RIDERS** (D-770). The round's record first, through the
   // combatant's own queued door (D-761): the once-a-round riders marked, and a
@@ -985,6 +1196,8 @@ export async function rollTest({
   if (momentumSpent > 0) {
     roll.options.provenance.push({ label: "AZEROTH.Dialog.MomentumSpent", value: null, formula: `-${momentumSpent}` });
   }
+  // The shot a rider kept (door 26), named on the card.
+  if (shotKeptBy) roll.options.provenance.push({ label: shotKeptBy, value: null, formula: game.i18n.localize("AZEROTH.Rider.Card.NoAmmo") });
 
   // **TRUESHOT** (D-773): a hit at a set SL without a roll, carried on the
   // options so the card read back off its message says the same.
@@ -995,9 +1208,13 @@ export async function rollTest({
   // **WHAT AN ATTACK FROM HIDING IGNORES** (04's Find Weakness, D-773) and
   // Piercing Shot's Pierce, each named on the card beside the next attack's.
   const hiddenRow = hiddenAtRoll ? hiddenAttackFor(talentsHeld) : { pierce: 0, loseReaction: false, by: [] };
-  const talentPierce = riderPierceN + hiddenRow.pierce;
+  // **ARMOR POINTS A GATE LETS THE BLOW IGNORE** (04's The Long Watch: *your attacks
+  // against it ignore 2 Armor Points*; the Legacy branches' door 17).
+  const gatePierce = kind === "attack" && !parry ? pierceFor(talentsHeld, { facts: gateFacts, scope: abilities }) : { pierce: 0, by: [] };
+  const talentPierce = riderPierceN + hiddenRow.pierce + gatePierce.pierce;
   if (riderPierceN > 0) roll.options.provenance.push({ label: riderPaidAll.filter(p => p.line?.onHit?.pierce).map(p => p.name).join(", "), value: null, formula: game.i18n.format("AZEROTH.NextAttack.PierceRow", { n: riderPierceN }) });
   if (hiddenRow.pierce > 0) roll.options.provenance.push({ label: hiddenRow.by.join(", "), value: null, formula: game.i18n.format("AZEROTH.NextAttack.PierceRow", { n: hiddenRow.pierce }) });
+  if (gatePierce.pierce > 0) roll.options.provenance.push({ label: gatePierce.by.join(", "), value: null, formula: game.i18n.format("AZEROTH.NextAttack.PierceRow", { n: gatePierce.pierce }) });
   // Keen's wider Critical Injury (08 §5).
   if (weaponEffects?.criticalOn && weaponEffects.criticalOn < 20) roll.options.criticalOn = weaponEffects.criticalOn;
   // **EXECUTIONER** (04: *You inflict a Critical Injury on 19 or 20 against a
@@ -1007,7 +1224,9 @@ export async function rollTest({
   // And 04's Deadeye (*While your Quarry is full*) and Master Duellist (*While
   // you are Engaged with exactly one enemy*), each gate read the one way (D-773).
   if (kind === "attack" && !parry) {
-    const exec = criticalRangeFor(talentsHeld, { health: first?.health ?? null, pools: actor?.poolSnapshot?.() ?? [], facts: { engagedOne: engagedOne === true } });
+    // And a Legacy's gate (Mak'gora's *Against the creature you named with The
+    // Challenge*; the Legacy branches' door 18), through the actor's one fact-builder.
+    const exec = criticalRangeFor(talentsHeld, { health: first?.health ?? null, pools: actor?.poolSnapshot?.() ?? [], facts: { ...gateFacts, engagedOne: engagedOne === true } });
     if (exec.on && exec.on < (roll.options.criticalOn ?? 20)) {
       roll.options.criticalOn = exec.on;
       roll.options.provenance.push({ label: exec.by.join(", "), value: null, formula: game.i18n.format("AZEROTH.Card.CriticalOn", { n: exec.on }) });
@@ -1069,9 +1288,34 @@ export async function rollTest({
   // on the card for `applications/actions.mjs#parryNow` (`class-answers.mjs#parryUndoes`).
   const landedOnHit = [];
   const recordLanding = (index, landing) => {
-    if (landing?.landed) landedOnHit.push({ index, id: landing.id, landed: true, had: landing.had ?? null, prior: landing.prior ?? null });
+    // And the layer this landing ADDED to the condition's `laidBy` (the B1 review), so a
+    // withdrawn hit takes it back off a condition the creature already had.
+    if (landing?.landed) landedOnHit.push({ index, id: landing.id, landed: true, had: landing.had ?? null, prior: landing.prior ?? null, ...(landing.laidByAdded ? { laidByAdded: landing.laidByAdded } : {}) });
     return landing;
   };
+  // **AND EVERYTHING ELSE A HIT LAYS** (the lead: *"Conditions only apply on hit unless
+  // otherwise stated"*; the Legacy branches' door 13): a Reaction it took, a Speed
+  // drop, a no-healing mark, a Bane - each with the effect it made - and a Test the
+  // card offers on the hit, each row of `rules/miss.mjs#HIT_RECORD_KINDS`, so a Parry
+  // that holds or 04's Afterimage withdraws the lot (`effects/miss.mjs#withdrawHit`).
+  const recordHit = (index, row) => {
+    if (Number.isInteger(index) && row?.kind) landedOnHit.push({ index, ...row });
+  };
+  // **WHAT THE HIT BUILT, FOR A MISS TO TAKE BACK** (the lead, 2026-10-21: *"Yes, take
+  // it back"*; door 13): every pool the hit raised, on whoever holds it - the striker's
+  // Momentum and a Power pool's further gain, a construct's tinker's Combo Points, a
+  // companion's owner's Quarry, a Finisher's returned Combo Points - and the round's
+  // once-marks its further gains spent (O-171: a hit that gains nothing spends no
+  // once). `dice/annotate.mjs` takes it back when the card hits nobody any more.
+  const builtOnHit = [];
+  const recordBuilt = (who, gains) => {
+    for (const g of gains ?? []) {
+      if ((g?.gained ?? 0) > 0 && who?.uuid) builtOnHit.push({ actorUuid: who.uuid, itemId: g.itemId ?? null, kind: g.kind, pool: g.name, amount: g.gained });
+    }
+  };
+  const onceMarkedOnHit = [];
+  let fastMarkedOnHit = false;
+  let onceOnMiss = null;
   for (const id of riderLost) {
     const line = riderLinesNow.find(l => l.identifier === id) ?? null;
     fired.push({ key: "rider", name: line?.name ?? id, text: riderReason({ key: RIDER_REFUSALS.once, params: { name: line?.name ?? id, pool: line?.pool ?? "", cost: line?.cost ?? 0, value: 0 } }) });
@@ -1082,20 +1326,37 @@ export async function rollTest({
     ? settleRiders({ paid: paidOnHit }, { pools: actor?.poolSnapshot?.() ?? [] })
     : { paid: [], writes: [] };
   if (settledOnHit.writes.length) await actor.updatePool(settledOnHit.writes);
+  // **WHAT THE HIT WAS PAID, FOR A MISS TO GIVE BACK** (the Legacy branches' door 13:
+  // Bloodthirst's *When one of your attacks hits, spend 6 Rage*): the riders paid on
+  // the hit, by pool, refunded once if a Parry or Afterimage withdraws it
+  // (`dice/annotate.mjs`) - once EVERY row of the card is withdrawn, since a blow that
+  // landed on two is still a hit on the one nobody answered (the B1 fix run: the same
+  // settle as the Momentum the hit built, `rules/miss.mjs#everyRowWithdrawn`).
+  const poolsAfterHit = actor?.poolSnapshot?.() ?? [];
+  const refundOnMiss = outcome.success && list.length > 0
+    ? settledOnHit.paid.filter(p => (Number(p.spent) || 0) > 0).map(p => {
+      const pool = poolsAfterHit.find(x => x.name === p.pool) ?? null;
+      return { actorUuid: actor.uuid, itemId: pool?.itemId ?? null, kind: pool?.kind ?? null, pool: p.pool, amount: p.spent };
+    }).filter(r => r.kind)
+    : [];
   const riderRows = [
     ...settled.paid.map(p => ({ ...p, primed: false })),
     ...(outcome.success ? settledOnHit.paid : paidOnHit.map(p => ({ ...p, spent: 0 }))).map(p => ({ ...p, primed: false })),
     ...primedLines.map(line => ({ identifier: line.identifier, name: line.name, pool: line.pool, spent: line.cost ?? 0, line, primed: true }))
   ];
   for (const p of riderRows) {
-    const done = outcomeOfLine(p.line, { hit: outcome.success, spent: p.spent, tier: actor?.system?.tier ?? 1, sl: outcome.sl });
+    // The striker's ability modifiers (door 16), for an amount that names one.
+    const done = outcomeOfLine(p.line, { hit: outcome.success, spent: p.spent, tier: actor?.system?.tier ?? 1, sl: outcome.sl, abilities });
     const lay = riderConditions(done);
     // **THE STRIKER'S CLOCK AND WHAT THE CONDITION CARRIES** (D-773): Concussive
     // Shot's *until your next turn* is the striker's next turn start, keyed on the
     // striker's combatant (D-628's rule for a clock that is somebody else's); out
     // of a fight it holds as a hand-laid condition does. Garrote's Bleeding
     // carries *cannot cast while that Bleeding lasts* on its own effect.
-    const riderSpan = done.until === "strikerTurnStart" ? untilNextTurn(actor) : null;
+    // **AND THE CREATURE'S OWN NEXT TURN** (04's Storm Bolt: *Stunned until the end of
+    // its next turn*; the Legacy branches' B6): the word itself, which the landing door
+    // resolves on the creature struck, keyed on ITS combatant (`applyCondition`, D-628).
+    const riderSpan = done.until === "strikerTurnStart" ? untilNextTurn(actor) : (done.until === "endOfNextTurn" ? "endOfNextTurn" : null);
     const riderMarks = done.noCasting ? { [NO_CASTING_FLAG]: { source: p.name } } : {};
     let landed = null;
     if (lay.length && list.length) {
@@ -1104,7 +1365,10 @@ export async function rollTest({
         const victim = targetActorOf(t);
         for (const c of lay) {
           const own = c.id === done.condition?.id;
-          landed.push(recordLanding(ti, await inflictCondition({ victim, id: c.id, value: c.value, by: actor, name: t?.name ?? "", until: riderSpan, marks: own ? riderMarks : {} })));
+          // Each on its own span (the Legacy branches' B6: Shadow Strike's Bleeding keeps
+          // A1's count, its Slowed the striker's next turn - `riderConditionSpan`).
+          const span = riderConditionSpan(c, riderSpan, c.also ? untilNextTurn(actor) : null);
+          landed.push(recordLanding(ti, await inflictCondition({ victim, id: c.id, value: c.value, by: actor, name: t?.name ?? "", until: span, marks: own ? riderMarks : {} })));
         }
       }
     }
@@ -1112,7 +1376,11 @@ export async function rollTest({
     // combatant's own queued door (D-761) on the GM's client where needed.
     if (done.loseReaction && list.length) {
       const lost = [];
-      for (const t of list) lost.push(reactionLossText(await loseReaction({ victim: targetActorOf(t), by: actor, name: t?.name ?? "" })));
+      for (const [ti, t] of list.entries()) {
+        const loss = await loseReaction({ victim: targetActorOf(t), by: actor, name: t?.name ?? "" });
+        if (loss?.lost) recordHit(ti, { kind: "reaction", lost: true });
+        lost.push(reactionLossText(loss));
+      }
       fired.push({ key: "rider", name: p.name, text: lost.join(" ") });
     }
     // Wing Clip's *Speed drops 10 feet per rank until your next turn*: a span
@@ -1120,9 +1388,10 @@ export async function rollTest({
     if ((done.speedDrop ?? 0) > 0 && list.length) {
       const span = untilNextTurn(actor);
       const words = [];
-      for (const t of list) {
+      for (const [ti, t] of list.entries()) {
         if (!span) { words.push(game.i18n.format("AZEROTH.SpeedDrop.NoFight", { name: t?.name ?? "", feet: done.speedDrop })); continue; }
         const dropped = await laySpeedDrop({ victim: targetActorOf(t), feet: done.speedDrop, source: p.name, by: actor, span, name: t?.name ?? "" });
+        if (dropped?.landed) recordHit(ti, { kind: "speedDrop", landed: true, effectId: dropped.effectId ?? null, source: p.name });
         // The feet that LANDED: the door adds the striker's Permafrost (D-778).
         words.push(game.i18n.format(dropped?.landed ? "AZEROTH.SpeedDrop.Landed" : "AZEROTH.SpeedDrop.NotLanded", { name: dropped?.name || t?.name || "", feet: dropped?.landed ? dropped.feet : done.speedDrop }));
       }
@@ -1141,7 +1410,11 @@ export async function rollTest({
     let noHealing = null;
     if (outcome.success && done.noHealing && list.length) {
       noHealing = [];
-      for (const t of list) noHealing.push(await layNoHealing({ victim: targetActorOf(t), striker: actor, source: p.name, name: t?.name ?? "" }));
+      for (const [ti, t] of list.entries()) {
+        const mark = await layNoHealing({ victim: targetActorOf(t), striker: actor, source: p.name, name: t?.name ?? "" });
+        if (mark?.landed) recordHit(ti, { kind: "noHealing", landed: true, effectId: mark.effectId ?? null, source: p.name });
+        noHealing.push(mark);
+      }
     }
     // **A BANE ON THE TARGET'S NEXT TEST** (04's Stormstrike: *takes a Bane on its
     // next attack. At rank 2 it takes two Banes*; D-774), landing with the blow as
@@ -1149,9 +1422,13 @@ export async function rollTest({
     // §6's door - a count, spent by that creature's next Test of the kind.
     const banedOn = [];
     if (outcome.success && done.bane && list.length) {
-      for (const t of list) {
+      for (const [ti, t] of list.entries()) {
         const victim = targetActorOf(t);
-        if (victim && await layBane({ victim, kind: done.bane.kind, banes: done.bane.banes, source: p.name, by: actor })) banedOn.push(t?.name ?? victim.name);
+        const laid = victim ? await layBane({ victim, kind: done.bane.kind, banes: done.bane.banes, source: p.name, by: actor }) : null;
+        if (laid) {
+          banedOn.push(t?.name ?? victim.name);
+          recordHit(ti, { kind: "bane", landed: true, effectId: laid.effectId ?? null, source: p.name });
+        }
       }
     }
     // **04's LAVA LASH** (*Your Stormstrike spreads any Fire effect on the target to
@@ -1182,7 +1459,13 @@ export async function rollTest({
     // A rider's damage of a NAMED type (04's Stormstrike's Nature; D-777) is a
     // second amount of that type; one naming none rides the blow's own.
     fired.push({ key: "rider", name: p.name, text, condition: buttons[0] ?? null, extraDamage: done.damage, extraType: done.damageType ?? null });
-    for (const c of buttons.slice(1)) fired.push({ key: "rider", name: p.name, text: game.i18n.localize("AZEROTH.Rider.Card.Prone"), condition: c });
+    // A further button's words are its own condition's (a second condition, B6), else Prone's.
+    for (const c of buttons.slice(1)) {
+      const words = c.id === "prone" ? game.i18n.localize("AZEROTH.Rider.Card.Prone")
+        : game.i18n.format(c.value !== null && c.value !== undefined ? "AZEROTH.Rider.Card.Condition" : "AZEROTH.Rider.Card.ConditionBare",
+          { condition: game.i18n.localize(AZEROTH.conditions[c.id] ?? c.id), value: c.value });
+      fired.push({ key: "rider", name: p.name, text: words, condition: c });
+    }
     if (done.damage) riderDamageRows.push({ name: p.name, amount: done.damage, type: done.damageType ?? null });
   }
   // **A CONDITION AN ATTACK LAYS AT AN SL** (04's Deep Cut: *When an attack of
@@ -1190,7 +1473,9 @@ export async function rollTest({
   // with the blow, as a rider's condition lands (the lead, 2026-10-03: *"Lands
   // automatically"*), and a button where the card records no target.
   if (kind === "attack" && !parry) {
-    for (const hit of hitConditionsFor(talentsHeld, { sl: outcome.sl, hit: outcome.success })) {
+    // And on an Opportunity Attack alone where the row says so (04's Hold the Hall:
+    // *On a hit it is knocked Prone*; the Legacy branches' door 22).
+    for (const hit of hitConditionsFor(talentsHeld, { sl: outcome.sl, hit: outcome.success, opportunity: opportunity === true })) {
       let landed = null;
       if (list.length) {
         landed = [];
@@ -1228,6 +1513,8 @@ export async function rollTest({
       for (const row of companionHitTestsFor(ownerTalents)) {
         const index = intimidations.length;
         intimidations.push({ name: row.name, bane: row.bane });
+        // A Test the hit offers (door 13): withdrawn with the hit, target by target.
+        for (const ti of list.keys()) recordHit(ti, { kind: "test", name: row.name });
         fired.push({
           key: "talent", name: row.name,
           text: game.i18n.format("AZEROTH.Intimidation.Card", { n: row.bane.rounds, banes: row.bane.banes }),
@@ -1236,6 +1523,84 @@ export async function rollTest({
       }
     }
   }
+  // **WHAT A BOUND CREATURE'S HIT LAYS BY ITS OWNER'S TALENTS** (04's Serpent Ward:
+  // *a creature it hits is **Poisoned** 1, and the DC to shed it is your Spell DC. At
+  // rank 2 that creature is also **Slowed** until the end of its next turn*; the
+  // Legacy branches' door 20): each condition the owner's `boundAttack` rows lay, on
+  // every target the card records, through the one landing door - the shed DC the
+  // OWNER's Spell DC, written on the condition's own effect for the turn-end prompt.
+  const boundOwnerNow = kind === "attack" && !parry && outcome.success ? boundOwnerOf(actor) : null;
+  const boundKindNow = boundOwnerNow ? (bondOf(actor)?.kind ?? null) : null;
+  if (boundOwnerNow) {
+    for (const row of boundAttacksFor(boundOwnerNow.takenTalents?.() ?? [], { kind: boundKindNow, name: actor.name ?? "" })) {
+      for (const lay of row.lays) {
+        if (!AZEROTH.conditions?.[lay.condition]) continue;
+        const shedDc = lay.shed === "spellDc" ? (boundOwnerNow.system?.spellDC ?? boundOwnerNow.system?.spells?.dc ?? null) : null;
+        const marks = shedDc ? { [SHED_DC_FLAG]: { dc: shedDc, source: row.name } } : {};
+        let landed = null;
+        if (list.length) {
+          landed = [];
+          for (const [ti, t] of list.entries()) {
+            landed.push(recordLanding(ti, await inflictCondition({ victim: targetActorOf(t), id: lay.condition, value: lay.value, by: actor, name: t?.name ?? "", until: lay.until, marks })));
+          }
+        }
+        fired.push({
+          key: "talent", name: row.name,
+          text: landed ? landed.map(landedText).join(" ") : game.i18n.format("AZEROTH.Talent.Card.LaysOnHit", { condition: game.i18n.localize(AZEROTH.conditions[lay.condition] ?? lay.condition), value: lay.value ?? "" }),
+          condition: landed ? null : { id: lay.condition, value: lay.value }
+        });
+      }
+    }
+  }
+  // **A CONSTRUCT'S HIT BUILDS ITS TINKER'S COMBO POINTS** (04's Supercharge at rank 2:
+  // *your constructs' hits build your Combo Points and keep them from draining*;
+  // door 6): 02 §7's gain on the tinker's own pool, in the tinker's fight, and the
+  // tinker's last hit marked this round, which is what keeps the points from
+  // draining (`rules/momentum.mjs#idleDecay`). Written where this client may write
+  // the tinker - the construct's controller is the tinker's player.
+  if (boundOwnerNow && boundKindNow === "construct" && gainsMomentum && !offHand && boundOwnerNow.isOwner) {
+    const ownerFight = boundOwnerNow.activeFight?.() ?? null;
+    if (ownerFight && constructsFor(boundOwnerNow.takenTalents?.() ?? [], { tier: boundOwnerNow.system?.tier ?? 1 }).buildsCombo) {
+      const comboBuilt = gainOnHit({ pools: (boundOwnerNow.poolSnapshot?.() ?? []).filter(p => p.name === "comboPoints"), sl: outcome.sl });
+      if (comboBuilt.length) {
+        await boundOwnerNow.updatePool(comboBuilt.map(g => ({ itemId: g.itemId, kind: g.kind, value: g.value })));
+        recordBuilt(boundOwnerNow, comboBuilt);
+        roll.options.provenance.push({ label: "AZEROTH.Construct.Supercharge", value: null, formula: game.i18n.format("AZEROTH.Construct.ComboBuilt", { n: comboBuilt[0].gained, name: boundOwnerNow.name }) });
+      }
+      const tinkerCombatant = ownerFight.getCombatantsByActor(boundOwnerNow)?.[0] ?? null;
+      if (tinkerCombatant?.isOwner) await tinkerCombatant.setFlag("azeroth-rpg", "lastHitRound", ownerFight.round);
+    }
+  }
+  // **A TEST THE USER'S OWN HIT FORCES** (04's Keening Arrows: *Once a round, when a
+  // ranged attack of yours reaches SL 2, the target makes a Spirit Resilience Test
+  // against your Spell DC or is Frightened of you for one round per rank*; the Legacy
+  // branches' door 26): Intimidation's own button, a failure laying the condition for
+  // its rounds rather than a Bane (`dice/chat.mjs#rollResists`), the round's once
+  // marked through the queued door before the button is offered.
+  if (kind === "attack" && !parry && outcome.success) {
+    const mine = fight ? (fight.getCombatantsByActor(actor)?.[0] ?? null) : null;
+    for (const row of selfHitTestsFor(talentsHeld, { sl: outcome.sl, hit: true, rangeKind: strike?.rangeKind ?? null, used: roundUsedOf(actor) })) {
+      if (row.once === "round" && mine?.isOwner && !((await mine.markRoundOnce(row.identifier))?.added === true)) continue;
+      const index = intimidations.length;
+      intimidations.push({ name: row.name, condition: row.condition, rounds: row.rounds });
+      for (const ti of list.keys()) recordHit(ti, { kind: "test", name: row.name });
+      fired.push({
+        key: "talent", name: row.name,
+        text: game.i18n.format("AZEROTH.HitTest.Card", { condition: game.i18n.localize(AZEROTH.conditions[row.condition] ?? row.condition), n: row.rounds }),
+        intimidate: { index, resilience: row.resilience, label: AZEROTH.resiliences[row.resilience], dc: actor.system?.spellDC ?? null }
+      });
+    }
+  }
+  // **DAMAGE A HIT ADDS AT AN SL, AFTER THE DIE** (04's Critical Strike: *an attack of
+  // yours that reaches SL 2 adds half your Dexterity modifier, rounded up, to its
+  // damage. At rank 2 an attack that reaches SL 3 adds twice that instead and ignores
+  // Armor Points*; the Legacy branches' door 26): a fired row riding the blow's own
+  // Rating, its gate (*While you wield a two-handed weapon*) read by the one predicate.
+  const slDamage = kind === "attack" && !parry && damage ? slDamageFor(talentsHeld, { sl: outcome.sl, hit: outcome.success, facts: gateFacts, scope: abilities }) : [];
+  for (const row of slDamage) {
+    fired.push({ key: "talent", name: row.name, text: game.i18n.format(row.ignoresArmor ? "AZEROTH.SlDamage.CardIgnores" : "AZEROTH.SlDamage.Card", { n: row.amount, sl: row.sl }), extraDamage: row.amount });
+  }
+  const slIgnoresArmor = slDamage.some(r => r.ignoresArmor === true);
   // **AN ATTACK MADE WHILE HIDDEN** (D-773), hit or miss - *a target you
   // attack*: 04's Waylay takes the Reaction it holds, *until its next turn* being
   // 06 §6's own refresh; Subterfuge holds it under the Opening for its rounds,
@@ -1268,13 +1633,72 @@ export async function rollTest({
       condition: landed ? null : { id: "bleeding", value: finisherBleeding }
     });
   }
+  // **SHACKLE'S ENTANGLED** (04: *Your Finisher class feature may, instead of adding
+  // damage, leave the target of a hit Entangled for one round per Combo Point spent.
+  // Ending it takes an action and a Reflex Resilience Test against your Spell DC, with
+  // a Bane at rank 2*; the Legacy branches' door 26): on the hit, through the one
+  // landing door, for the rounds counted (the world's rounds out of a fight), and
+  // carrying the escape at the payer's Spell DC (door 19's record).
+  if (finisherShackle > 0 && outcome.success) {
+    const shackle = finisherNow.shackle;
+    const who = finisherPayer ?? actor;
+    const record = featureEscapeRecord(shackle.escape ?? null, {
+      condition: shackle.condition, spellDc: who.system?.spellDC ?? who.system?.spells?.dc ?? null,
+      strDc: resistDcFor({ kind: "str", strMod: who.system?.abilities?.str?.mod ?? 0, proficiency: who.system?.proficiency ?? 0 }),
+      caster: who.uuid, source: shackle.name
+    });
+    const span = roundsOrClock(who, finisherShackle);
+    let landed = null;
+    if (list.length) {
+      landed = [];
+      for (const [ti, t] of list.entries()) {
+        landed.push(recordLanding(ti, await inflictCondition({ victim: targetActorOf(t), id: shackle.condition, by: actor, name: t?.name ?? "", until: span, marks: record ? { [ESCAPE_FLAG]: record } : {} })));
+      }
+    }
+    fired.push({
+      key: "talent", name: shackle.name,
+      text: landed ? landed.map(landedText).join(" ") : game.i18n.format("AZEROTH.Shackle.Card", { condition: game.i18n.localize(AZEROTH.conditions[shackle.condition] ?? shackle.condition), n: finisherShackle }),
+      condition: landed ? null : { id: shackle.condition, value: null }
+    });
+    roll.options.provenance.push({ label: shackle.name, value: null, formula: game.i18n.format("AZEROTH.Shackle.Row", { n: finisherShackle }) });
+  }
+  // **WHAT THIS ATTACK'S HIT LAYS, WHATEVER STRIKES IT** (the Legacy branches' door 7:
+  // 04's Net-o-Matic Projector): each condition on every target the card records,
+  // with its escape at the striker's Spell DC.
+  if (kind === "attack" && !parry && outcome.success && Array.isArray(landsOnHit) && landsOnHit.length) {
+    for (const lay of landsOnHit) {
+      if (!lay?.condition || !AZEROTH.conditions?.[lay.condition]) continue;
+      const record = featureEscapeRecord(lay.escape ?? null, {
+        condition: lay.condition, spellDc: actor.system?.spellDC ?? actor.system?.spells?.dc ?? null,
+        strDc: resistDcFor({ kind: "str", strMod: actor.system?.abilities?.str?.mod ?? 0, proficiency: actor.system?.proficiency ?? 0 }),
+        caster: actor.uuid, source: lay.source ?? title
+      });
+      let landed = null;
+      if (list.length) {
+        landed = [];
+        for (const [ti, t] of list.entries()) {
+          landed.push(recordLanding(ti, await inflictCondition({ victim: targetActorOf(t), id: lay.condition, value: lay.value ?? null, by: actor, name: t?.name ?? "", until: lay.until ?? null, marks: record ? { [ESCAPE_FLAG]: record } : {} })));
+        }
+      }
+      fired.push({
+        key: "talent", name: lay.source ?? title,
+        text: landed ? landed.map(landedText).join(" ") : game.i18n.format("AZEROTH.Talent.Card.LaysOnHit", { condition: game.i18n.localize(AZEROTH.conditions[lay.condition] ?? lay.condition), value: lay.value ?? "" }),
+        condition: landed ? null : { id: lay.condition, value: lay.value ?? null }
+      });
+    }
+  }
   // **RUTHLESSNESS** (04: *When your Finisher class feature reaches SL 2, 1 Combo
-  // Point per rank returns to you*; D-773), on a Finisher that counted.
+  // Point per rank returns to you*; D-773), on a Finisher that counted - to whoever
+  // paid it (a construct's tinker, door 6).
   if (finisherCounted > 0 && finisherNow?.back && outcome.success && outcome.sl >= finisherNow.back.sl) {
-    const combo = (actor.poolSnapshot?.() ?? []).find(p => p.name === "comboPoints") ?? null;
+    const backTo = finisherPayer ?? actor;
+    const combo = (backTo.poolSnapshot?.() ?? []).find(p => p.name === "comboPoints") ?? null;
     if (combo) {
       const value = Math.min(combo.max, combo.value + finisherNow.back.amount);
-      if (value > combo.value) await actor.updatePool({ itemId: combo.itemId, kind: combo.kind, value });
+      if (value > combo.value) await backTo.updatePool({ itemId: combo.itemId, kind: combo.kind, value });
+      // What the SL returned is Combo Points the hit built (MY READING of the lead's
+      // *"Yes, take it back"*): a withdrawn Finisher takes them back off (door 13).
+      recordBuilt(backTo, [{ itemId: combo.itemId, kind: combo.kind, name: combo.name, gained: value - combo.value }]);
       roll.options.provenance.push({ label: finisherNow.back.name, value: null, formula: game.i18n.format("AZEROTH.Card.Returned", { n: value - combo.value, pool: game.i18n.localize(AZEROTH.poolTypes.comboPoints) }) });
     }
   }
@@ -1323,6 +1747,8 @@ export async function rollTest({
     }
     f.poison = { index: poisons.length, resilience: f.resist.resilience, label: AZEROTH.resiliences[f.resist.resilience], dc: f.resist.dc ?? null };
     poisons.push({ name: f.name, tick: laidPoison });
+    // A Test the hit offers (door 13): withdrawn with the hit, target by target.
+    for (const ti of list.keys()) recordHit(ti, { kind: "test", name: f.name });
   }
   // **A ROW THAT MAY FIRE ONLY ONCE A ROUND** (08 SS20, D-696). Dal'Rend's
   // Sacred Charge says *the first time you hit each round* and Sulfuron Hammer
@@ -1436,8 +1862,14 @@ export async function rollTest({
   // a Static Charge to add your tier to that damage*; D-774): where it lands.
   const charged = chargeLine && damage && outcome.success && await spendCharge(actor) ? chargeLine.amount : 0;
   if (charged) roll.options.provenance.push({ label: chargeLine.name, value: charged });
-  const talentRating = Math.max(0, Math.trunc(Number(extraRating)) || 0) + finisher + (damage ? promisedDamage : 0) + charged;
+  const talentRating = Math.max(0, Math.trunc(Number(extraRating)) || 0) + finisher + (damage ? promisedDamage : 0) + charged
+    // Axe and Hammer's damage on the off hand (door 26).
+    + (damage ? offHandBuild.damage : 0)
+    // Wind Walk's Dexterity, on the attack that ended its hiding (the B6 review).
+    + (damage ? concealHit.damage : 0);
   if (damage) {
+    if (offHandBuild.damage > 0) roll.options.provenance.push({ label: offHandBuild.by.join(", "), value: offHandBuild.damage });
+    if (concealHit.damage > 0) roll.options.provenance.push({ label: concealHit.by.join(", "), value: concealHit.damage });
     // The TALENT'S OWN NAME is the label, as `castSpell`'s talent rows have
     // been since 2026-09-07: a row carrying a `formula` prints the formula
     // INSTEAD of the value, so a name in that slot loses the number.
@@ -1458,6 +1890,10 @@ export async function rollTest({
     // The next attack's promised damage, by the talent that promised it (D-772).
     for (const e of promised?.live ?? []) if ((e.damage ?? 0) > 0) roll.options.provenance.push({ label: e.name, value: e.damage });
   }
+  // **04's DRAWN ACROSS ON THE STRIKER** (*the damage it deals is halved, rounded down*;
+  // the Legacy branches' door 25): the blow's worth halved before Armor Points and Ward,
+  // read off the striker as the one damage door's every caller reads it.
+  const halvedBy = damage ? dealtHalvedBy(actor) : null;
   const mitigate = t => resolveDamage({
     rating: (damage.rating ?? 0) + extraDamage + talentRating,
     sl: outcome.sl,
@@ -1467,8 +1903,12 @@ export async function rollTest({
     apByLocation: t?.apByLocation ?? {},
     // And the Armor Points the next attack was promised it ignores (04's
     // Precise Strike, D-772), on the blow's own Pierce - and what Piercing Shot
-    // and an attack from hiding ignore (D-773).
-    penetration: (damage.penetration ?? 0) + promisedPierce + talentPierce,
+    // and an attack from hiding ignore (D-773). **Every one of them, where a hit at
+    // an SL ignores Armor Points** (04's Critical Strike at rank 2; door 26): the
+    // Pierce raised to the target's own Armor Points at the location struck.
+    penetration: slIgnoresArmor
+      ? Math.max((damage.penetration ?? 0) + promisedPierce + talentPierce, Math.trunc(Number(t?.apByLocation?.[location ?? "body"])) || 0)
+      : (damage.penetration ?? 0) + promisedPierce + talentPierce,
     ward: damage.school ? (t?.wardBySchool?.[damage.school] ?? 0) : 0,
     // What an ally's aura adds after the Ward, on a magical blow (04's
     // Avenging Bulwark, D-755). `resolveDamage` takes it on that lane alone.
@@ -1480,9 +1920,11 @@ export async function rollTest({
     // because 08 §6's grammar only adds and adding lands after the SL.
     multiplier: damage.multiplier ?? 1,
     // The blow's second amounts, each met by the target's own type (D-777).
-    extras: typedExtras, wardBySchool: t?.wardBySchool ?? {}, schoolArmorBySchool: t?.schoolArmor ?? {}
+    extras: typedExtras, wardBySchool: t?.wardBySchool ?? {}, schoolArmorBySchool: t?.schoolArmor ?? {},
+    dealtHalved: halvedBy
   });
   const hit = Boolean(damage) && outcome.success;
+  if (hit && halvedBy) roll.options.provenance.push({ label: halvedBy.source, value: null, formula: game.i18n.localize("AZEROTH.HalvesDealt.Row") });
   const damageByTarget = list.map(t => (hit ? mitigate(t) : null));
   const damageResult = hit ? (damageByTarget[0] ?? mitigate(first)) : null;
 
@@ -1515,11 +1957,15 @@ export async function rollTest({
       // Critical Injury (Seal Fate), and damage dealt to a creature already
       // Bleeding (Blood Sport).
       const facts = {
+        // And what a Legacy's gate reads (doors 15, 17): Run to Ground's *a target
+        // that is Slowed, Entangled or Stunned*, Bloodied Blade's wield gates.
+        ...gateFacts,
         hidden: hiddenAtRoll,
         critical: outcome.critical === true && !parry,
         bleedingDealt: hit && list.some((t, i) => (t?.statuses ?? []).includes("bleeding") && (damageByTarget[i]?.damage ?? 0) > 0)
       };
-      const further = !offHand && combatant.isOwner
+      // An off hand that builds is read as any other hand (04's Axe and Hammer; door 26).
+      const further = !momentumOffHand && combatant.isOwner
         ? momentumOnHitFor(actor.takenTalents(), { sl: outcome.sl, form: inForm, onTurn: fight.combatant?.id === combatant.id, used: usedOnce, facts })
         : { byPool: {}, fired: [] };
       const poolExtra = { ...further.byPool };
@@ -1540,7 +1986,7 @@ export async function rollTest({
           // **NOT SPENT ON A HIT THAT GAINS NOTHING** (D-779; the lead, 2026-10-03,
           // on O-171: *"No."*): a pool already full - or filled by 05's own gain -
           // keeps the once for a later hit (`momentum.mjs#furtherGains`).
-          const gainArgs = { pools: actor.poolSnapshot?.() ?? [], sl: outcome.sl, offHand, againstMark, inForm, extra: fastDue ? weaponEffects.fastMomentum : 0, always: signatureMomentum, poolExtra };
+          const gainArgs = { pools: actor.poolSnapshot?.() ?? [], sl: outcome.sl, offHand: momentumOffHand, againstMark, inForm, extra: fastDue ? weaponEffects.fastMomentum : 0, always: signatureMomentum, poolExtra };
           if (!furtherGains(gainArgs, f.pool, f.amount)) {
             poolExtra[f.pool] = Math.max(0, (poolExtra[f.pool] ?? 0) - f.amount);
             continue;
@@ -1550,6 +1996,8 @@ export async function rollTest({
             poolExtra[f.pool] = Math.max(0, (poolExtra[f.pool] ?? 0) - f.amount);
             continue;
           }
+          // The once this hit spent, given back if the hit is withdrawn (door 13).
+          onceMarkedOnHit.push(f.identifier);
         }
         furtherGiven.push(f);
       }
@@ -1558,7 +2006,7 @@ export async function rollTest({
       // of Momentum, and this Signature names the off hand as the thing it pays
       // for. The row's once-a-round mark was already spent above, so anything
       // still on `fired` is due.
-      momentumGained = gainOnHit({ pools: actor.poolSnapshot?.() ?? [], sl: outcome.sl, offHand, againstMark, inForm, extra: fastDue ? weaponEffects.fastMomentum : 0, always: signatureMomentum, poolExtra });
+      momentumGained = gainOnHit({ pools: actor.poolSnapshot?.() ?? [], sl: outcome.sl, offHand: momentumOffHand, againstMark, inForm, extra: fastDue ? weaponEffects.fastMomentum : 0, always: signatureMomentum, poolExtra });
       // A row naming a POWER pool returns into it (04's Aimed Volley, D-773):
       // 05's gain reaches the Momentum pools alone.
       const powerBack = powerReturns(actor.poolSnapshot?.() ?? [], poolExtra);
@@ -1569,6 +2017,9 @@ export async function rollTest({
       }
       if (momentumGained.length) await actor.updatePool(momentumGained.map(g => ({ itemId: g.itemId, kind: g.kind, value: g.value })));
       if (powerBack.length) await actor.updatePool(powerBack.map(g => ({ itemId: g.itemId, kind: g.kind, value: g.value })));
+      // What the hit built on the striker, for a withdrawal to take back (door 13).
+      recordBuilt(actor, momentumGained);
+      recordBuilt(actor, powerBack);
       if (fastDue && momentumGained.length) roll.options.provenance.push({ label: "AZEROTH.Card.FastMomentum", value: null, formula: `+${weaponEffects.fastMomentum}` });
       if (signatureMomentum && momentumGained.length) {
         roll.options.provenance.push({ label: "AZEROTH.Card.SignatureMomentum", value: null, formula: `+${signatureMomentum}` });
@@ -1579,7 +2030,12 @@ export async function rollTest({
         if (!round.struck || (fastDue && !offHand && momentumGained.length)) {
           await combatant.setFlag("azeroth-rpg", "round", { ...(sameRound ? round : {}), number: fight.round, struck: true, fast: (sameRound && round.fast) || (fastDue && !offHand && momentumGained.length > 0) });
         }
-        if (!offHand) await combatant.setFlag("azeroth-rpg", "lastHitRound", fight.round);
+        if (!momentumOffHand) await combatant.setFlag("azeroth-rpg", "lastHitRound", fight.round);
+        // The Fast point this hit had, given back with the hit (door 13).
+        fastMarkedOnHit = fastDue && !offHand && momentumGained.length > 0;
+      }
+      if (onceMarkedOnHit.length || fastMarkedOnHit) {
+        onceOnMiss = { combatantUuid: combatant.uuid, round: fight.round, once: [...onceMarkedOnHit].sort(), fast: fastMarkedOnHit };
       }
       // 02's Opening trade, through the one reading the dialog and Garrote ask
       // (`AzerothActor#openingState`, D-773): a target not yet acted, or one a
@@ -1596,10 +2052,11 @@ export async function rollTest({
     const shared = companionQuarryFor(ownerTalents);
     if (shared && companionOwner.isOwner) {
       const ownerMark = companionOwner.getFlag?.("azeroth-rpg", "mark") ?? null;
-      const built = gainOnHit({ pools: (companionOwner.poolSnapshot?.() ?? []).filter(p => p.name === "quarry"), sl: outcome.sl, againstMark: namesTarget(ownerMark, first) });
-      if (built.length) {
-        await companionOwner.updatePool(built.map(g => ({ itemId: g.itemId, kind: g.kind, value: g.value })));
-        roll.options.provenance.push({ label: shared.name, value: null, formula: game.i18n.format("AZEROTH.Card.SharedQuarry", { n: built[0].gained, name: companionOwner.name }) });
+      const quarryBuilt = gainOnHit({ pools: (companionOwner.poolSnapshot?.() ?? []).filter(p => p.name === "quarry"), sl: outcome.sl, againstMark: namesTarget(ownerMark, first) });
+      if (quarryBuilt.length) {
+        await companionOwner.updatePool(quarryBuilt.map(g => ({ itemId: g.itemId, kind: g.kind, value: g.value })));
+        recordBuilt(companionOwner, quarryBuilt);
+        roll.options.provenance.push({ label: shared.name, value: null, formula: game.i18n.format("AZEROTH.Card.SharedQuarry", { n: quarryBuilt[0].gained, name: companionOwner.name }) });
       }
     }
   }
@@ -1697,7 +2154,10 @@ export async function rollTest({
           // Greater Flaming blade and a mace printed the same line.
           // And every second amount's own type beside it (D-777): *Physical + Nature*.
           type: damageTypeWords(damageResult),
-          explanation: damageExplanation(damageResult, { ...damage, rating: (damage.rating ?? 0) + extraDamage + talentRating, penetration: (damage.penetration ?? 0) + promisedPierce + talentPierce }, outcome.sl)
+          explanation: damageExplanation(damageResult, { ...damage, rating: (damage.rating ?? 0) + extraDamage + talentRating, penetration: (damage.penetration ?? 0) + promisedPierce + talentPierce }, outcome.sl, {
+            // A hit at an SL that ignores Armor Points says so, naming the talent (the B1 review).
+            ignoresArmor: slIgnoresArmor ? slDamage.filter(r => r.ignoresArmor === true).map(r => r.name).join(", ") : null
+          })
         }
       : null,
     targets: list.map((t, index) => ({ ...t, index, damage: damageByTarget[index]?.damage ?? null })),
@@ -1765,6 +2225,9 @@ export async function rollTest({
         name: row.name,
         text: row.text,
         target: row.target ?? "",
+        // The row of the card it answers (the B1 review): a hit turned into a miss
+        // is answered by nothing.
+        index: Number.isInteger(row.index) ? row.index : null,
         damage: row.damage?.amount ?? null,
         // The kind the blow back is, so 14's Regeneration can withhold (D-691).
         damageType: row.damage?.type ?? null,
@@ -1854,8 +2317,14 @@ export async function rollTest({
       // Banes, Blade Flurry's half, and the defenders Elusive lets step away.
       ...(riposte === true ? { riposte: true } : {}),
       // What the blow landed with no button pressed, by target (D-779): a Parry that
-      // holds takes it back off (`applications/actions.mjs#parryNow`).
+      // holds takes it back off (`applications/actions.mjs#parryNow`) - and, since the
+      // Legacy branches' door 13, everything else the hit laid, and what it was paid.
       ...(landedOnHit.length ? { landedOnHit } : {}),
+      ...(refundOnMiss.length ? { refundOnMiss } : {}),
+      // And the Momentum the hit built, with the once-marks its further gains spent (the
+      // lead: *"Yes, take it back"*), taken back once the card hits nobody.
+      ...(builtOnHit.length ? { momentumOnMiss: builtOnHit } : {}),
+      ...(onceOnMiss ? { onceOnMiss } : {}),
       ...(intimidations.length ? { intimidations } : {}),
       ...(blowShare ? { blowShare } : {}),
       ...(evades.length ? { evades } : {}),
@@ -1867,6 +2336,11 @@ export async function rollTest({
       // tells a reader this Attack Test was not an attack.
       source: source ?? null,
       ...(kind === "attack" && strike ? { strike } : {}),
+      // **WHAT ELSE DREW THE BLOW, AND WHAT IT CARRIED** (the Legacy branches' door
+      // 2): the feature card it was made from, the bound attack patches that shaped
+      // it (04's Serpent Ward on the Searing totem), and the riders ridden with it -
+      // whatever the die said, since a miss is the animation layer's word to say.
+      ...(kind === "attack" && !parry ? attackRecords({ actor, fromFeature, riderRows }) : {}),
       ...(parry ? { parry: true } : {}),
       // **`answers` IS A RECORD WITH NO READER YET, AND DELIBERATELY SO**
       // (D-724). Nothing in `module/` or `templates/` reads it: the
@@ -1997,7 +2471,7 @@ async function spendLimitedRows(fired, { actor, fight } = {}) {
  * invisible, because the card printed the REDUCED number. `explainDamage` is
  * the pure rule; the words are here.
  */
-function damageExplanation(result, damage, sl) {
+function damageExplanation(result, damage, sl, { ignoresArmor = null } = {}) {
   const e = explainDamage(result, { rating: damage.rating ?? 0, sl });
   if (e.immune) return game.i18n.localize("AZEROTH.Card.Immune");
   const sum = e.parts
@@ -2006,7 +2480,12 @@ function damageExplanation(result, damage, sl) {
   const bits = [sum];
   if (e.vulnerable) bits.push(game.i18n.localize("AZEROTH.Card.Vulnerable"));
   else if (e.note?.kind === "ward") bits.push(game.i18n.format("AZEROTH.Card.VsWard", { ward: e.note.ward }));
-  else if (e.note?.kind === "pierce") {
+  // **ARMOR POINTS IGNORED ARE SAID SO** (04's Critical Strike at rank 2: *ignores Armor
+  // Points*; the B1 review): the Pierce was raised to the AP struck, and the card said
+  // *(- Pierce N)* where the blow ignored the armor outright.
+  else if ((e.note?.kind === "pierce" || e.note?.kind === "armor") && ignoresArmor) {
+    bits.push(game.i18n.format("AZEROTH.Card.IgnoresAP", { ap: e.note.ap, source: ignoresArmor }));
+  } else if (e.note?.kind === "pierce") {
     bits.push(`${game.i18n.format("AZEROTH.Card.VsAP", { ap: e.note.ap })} ${game.i18n.format("AZEROTH.Card.PierceNote", { pierce: e.note.pierce })}`);
   } else if (e.note?.kind === "armor") bits.push(game.i18n.format("AZEROTH.Card.VsAP", { ap: e.note.ap }));
   // An ally's aura after the Ward (D-755), named rather than folded in.
@@ -2093,17 +2572,33 @@ function damageTypeWords(result = {}) {
 export function turnBudgetRefusal(actor, action) {
   const cost = { half: "half", action: "action", full: "full", reaction: "reaction" }[action] ?? null;
   if (!cost) return null;
+  // **A SPIRIT TAKES NO REACTION** (06 §10; the Legacy branches' door 10), in a fight or out.
+  if (cost === "reaction" && realmRefusalFor(actor, "reaction")) return { reason: "AZEROTH.Spirit.Refuse.Reaction", params: { name: actor?.name ?? "" } };
   const fight = actor?.activeFight?.() ?? null;
   if (!fight) return null;
   const combatant = fight.getCombatantsByActor(actor)?.[0] ?? null;
   if (!combatant) return null;
   const judged = judgeSpend(combatant.budget, cost, { onTurn: combatant.isCurrentTurn });
-  return judged.ok ? null : { reason: judged.reason, params: judged.params ?? {} };
+  if (judged.ok) return null;
+  // **A CONSTRUCT THE SHARED TURN REFUSES SAYS SO** (the B2 review): the escape, the
+  // Snare's, Lightwell's and the blow doors' pre-checks gave it the generic *no
+  // Half-Action left*, where `spendAction` says the constructs have spent it between them.
+  const shared = combatant._sharedRefusal?.(cost, { onTurn: combatant.isCurrentTurn }) ?? null;
+  if (shared) return { reason: shared, params: { name: combatant.name ?? "" } };
+  return { reason: judged.reason, params: judged.params ?? {} };
 }
 
 export async function spendTurnBudget(actor, action) {
   const cost = { half: "half", action: "action", full: "full", reaction: "reaction" }[action] ?? null;
   if (!cost) return true;
+  // **A SPIRIT TAKES NO REACTION** (06 §10; the Legacy branches' door 10), in a fight or out.
+  if (cost === "reaction") {
+    const spirit = realmRefusalFor(actor, "reaction");
+    if (spirit) {
+      ui.notifications?.warn(spirit);
+      return false;
+    }
+  }
   const fight = actor?.activeFight?.() ?? null;
   if (!fight) return true;
   const combatant = fight.getCombatantsByActor(actor)?.[0] ?? null;
@@ -2149,7 +2644,12 @@ export async function castSpell({
     itemId: c.id, schools: c.system?.schools ?? [], castingAbility: c.system?.castingAbility ?? null
   }));
   const grant = grantingClass(classes, school);
-  const ability = grant?.castingAbility ?? null;
+  // **A SPELL A TALENT PAYS IN ANOTHER POOL, AND CASTS WITH ANOTHER ABILITY** (04's
+  // Shadowcraft: *Cast them with Wisdom, paying Focus where 07-MAGIC asks for
+  // Mana*; the Legacy branches' door 8): the talent's pool and ability, where it
+  // names this spell. An item's casting and a free cast pay nothing either way.
+  const talentPool = viaItem || free ? null : spellPoolFor(actor?.takenTalents?.() ?? [], { name: spell.name, school });
+  const ability = talentPool?.ability ?? grant?.castingAbility ?? null;
   const abilityMod = ability ? (actor.system.abilities?.[ability]?.mod ?? 0) : 0;
   const proficiency = actor.system.proficiency ?? 0;
   const list = targets ?? [];
@@ -2161,9 +2661,22 @@ export async function castSpell({
   // the form and the Health price were asked after, so a cast refused for a
   // short pool cost the Half-Action and the cover for nothing.
   // `rules/casting.mjs#castRefusal` asks all three; nothing below it refuses.
-  const powers = actor.system.powers ?? [];
-  const pool = powers.find(p => p.name === "mana" && grant && p.itemId === grant.itemId)
-    ?? powers.find(p => p.name === "mana") ?? null;
+  // The Mana pool - a creature's Power pool whatever its block names it (the B1 review;
+  // `casting.mjs#castingManaPool`, the one reading the dialog shares).
+  // **THE SPIRIT REALM AND ETHEREAL FORM CAST ONLY WHAT RESTORES HEALTH** (06 §10 with
+  // 04's The Crossing: *you may cast spells that restore Health on any creature but
+  // yourself*; Ethereal Form: *you cannot ... cast, except spells that restore Health*;
+  // the Legacy branches' door 10): the one healing-only filter both states share
+  // (`rules/spirit-realm.mjs#castFilterRefusal`), before anything is spent. An item's
+  // casting and a free cast are the caster's own casting.
+  // **A HEAL THAT ALSO BURNS IS NO HEAL HERE** (the B3 review): `restoresOnly` - it
+  // restores Health and deals nothing (Holy Nova, Halo, Starsurge and their kin passed).
+  const filtered = castRefusalFor(actor, { heals: restoresOnly(sys), selfTargeted: castNamesSelf(actor, list) });
+  if (filtered) {
+    ui.notifications?.warn(filtered);
+    return null;
+  }
+  const pool = castingManaPool({ creature: actor.type === "npc", powers: actor.system.powers ?? [], snapshot: actor.poolSnapshot?.() ?? [], grantItemId: grant?.itemId ?? null });
   // **ONE NAMED SPELL, AND ONE WHOLE SCHOOL, IMPROVED BY WHAT IS WORN** (08 §20,
   // D-698; the lead, 2026-09-14: *spell and/or a school should be possible*):
   // `empowers[name].cost` and `spellCost[school]` - the SPELL's own school, since
@@ -2185,7 +2698,9 @@ export async function castSpell({
   // spells cost 2 less Mana, to a minimum of 2*; Icy Veins: *your Frost spells
   // cost 1 less Mana per rank*; D-775), against the entry's own Mana. An item's
   // casting and a free cast pay none and take none.
-  const discount = viaItem || free ? { amount: 0, by: [] } : spellDiscountFor(talentsNow, { school, mana: sys.mana ?? 0, states: veinsStates(flaggedEffects(actor, VEINS_FLAG).map(r => r.flag)) });
+  // The pool the cast is paid in, so a discount named in one pool (04's Shadowcraft's
+  // Focus; the Legacy branches' B6) reaches no other.
+  const discount = viaItem || free ? { amount: 0, by: [] } : spellDiscountFor(talentsNow, { school, mana: sys.mana ?? 0, states: veinsStates(flaggedEffects(actor, VEINS_FLAG).map(r => r.flag)), pool: talentPool?.pool ?? null });
   const manaDue = spellManaCost({ mana: sys.mana ?? 0, name: spell.name, school }, actor.system?.signatureEffects, { viaItem: Boolean(viaItem) || Boolean(free), next: take.amount, less: discount.amount });
   // **WHAT A COUNTER OR A CHARGE BUYS, JUDGED AGAIN** (D-774): a ticked line no
   // longer offered - its counter or charge spent since the dialog opened -
@@ -2253,11 +2768,23 @@ export async function castSpell({
   // rounded up (D-769). `casting.mjs#manaPrice` is the one reading.
   const inForm = actor.inShapeshiftForm === true;
   const ferocity = inForm ? ((actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === "ferocity") ?? null) : null;
-  const price = manaPrice(mana, { inShapeshiftForm: inForm });
+  // The pool a talent pays in (door 8): the actor's own pool of that name.
+  const payPool = talentPool ? ((actor.poolSnapshot?.() ?? []).find(p => p.name === talentPool.pool) ?? null) : null;
+  const price = manaPrice(mana, { inShapeshiftForm: inForm, pool: talentPool?.pool ?? null });
   // 04's Garrote (D-773): *cannot cast while that Bleeding lasts* - the
   // Bleeding's own effect carries the mark, so it ends with the Bleeding.
   const noCasting = noCastingFrom((actor.effects ?? []).filter(e => e.active !== false).map(e => e.flags?.["azeroth-rpg"] ?? {}));
-  const refused = castRefusal({ mana, pool, inForm, ferocity, health, overchannelHealth: oc.health, spellHealth, noCasting });
+  const refused = castRefusal({ mana, pool, inForm, ferocity, health, overchannelHealth: oc.health, spellHealth, noCasting, payWith: talentPool?.pool ?? null, payPool });
+  // **A PRICE WITH NOTHING TO PAY IT** (door 8): a learned spell on a class that
+  // holds no Mana was cast free; it is refused in words now, nothing spent.
+  if (refused?.reason === "NoPool") {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Cast.NoPool", { name: spell.name, pool: game.i18n.localize(AZEROTH.poolTypes[refused.pool] ?? refused.pool ?? ""), n: refused.amount ?? mana }));
+    return null;
+  }
+  if (refused?.reason === "NoPower") {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Cast.NoPower", { name: spell.name, pool: game.i18n.localize(AZEROTH.poolTypes[refused.pool] ?? refused.pool ?? ""), n: refused.amount ?? mana, talent: talentPool?.name ?? "" }));
+    return null;
+  }
   if (refused?.reason === "Garroted") {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Cast.Garroted", { name: spell.name, by: refused.by.join(", ") }));
     return null;
@@ -2353,6 +2880,39 @@ export async function castSpell({
   // said in words. An item's casting is the caster's spell too (READING).
   const aegisNamed = await nameAegisSchools(actor, { heals: isHealingSpell(sys), name: spell.name });
 
+  // **A SPELL THAT MOVES ITS CASTER TO A CHOSEN SPACE** (07's Shadow Walk: *You move
+  // up to 30 feet to a space you can see*; Dark Passage: *You and each target move up
+  // to 60 feet to spaces you can see*; the Legacy branches' door 3): the space picked
+  // now, before the budget and the Mana - a dismissed pick costs nothing - and the
+  // tokens moved once the Casting Test succeeds. Darkness and shadow at both ends
+  // are the table's, and the pick's hint says so.
+  const spellStep = readSpellStep(sys.effect ?? "");
+  let stepPicked = null;
+  if (spellStep) {
+    const casterDoc = actor.getActiveTokens?.(true)?.[0]?.document ?? null;
+    if (casterDoc?.parent && casterDoc.parent.id === canvas?.scene?.id) {
+      // **THE PARTY IS THE BURST'S ALLIES** (07's Dark Passage: *Target: Each ally within
+      // 10 ft*; the B2 review): every creature the caster counts as an ally (D-755's one
+      // rule) inside the circle the spell's Target line reads, targeted or not - and no
+      // enemy, whatever is targeted. It moved every targeted token, enemies included.
+      const radius = spellStep.who === "selfAndTargets" ? partyRadius(sys.target ?? "") : null;
+      const party = radius !== null
+        ? creaturesWithin(actor, radius, { who: "ally" }).map(r => r.token?.document ?? null).filter(d => d && d.id !== casterDoc.id && d.parent?.id === casterDoc.parent.id)
+        : [];
+      if ([casterDoc, ...party].some(d => !d.isOwner) && !game.user.isGM && !game.users.activeGM) {
+        ui.notifications?.warn(stepWords("noGM", { name: spell.name, feet: spellStep.feet }));
+        return null;
+      }
+      const stepName = casterDoc.name ?? actor.name;
+      const picked = await pickStep(casterDoc, {
+        feet: spellStep.feet, sight: spellStep.sight, name: stepName, except: party.map(d => d.id),
+        hint: spellStep.shadow ? game.i18n.format("AZEROTH.Step.PickShadow", { name: stepName, feet: spellStep.feet }) : null
+      });
+      if (!picked) return null;
+      stepPicked = { doc: casterDoc, from: { x: casterDoc.x, y: casterDoc.y }, to: picked.to, party };
+    } else stepPicked = { skipped: true };
+  }
+
   // 1b. The turn's budget, in a fight (2026-09-06): the spell's Action line, or
   // the rung Nature's Swiftness casts it at (D-771). Asked once every refusal
   // has passed, so a refusal leaves the Half-Action.
@@ -2362,7 +2922,7 @@ export async function castSpell({
   // has already agreed the cast happens, so from here it is being made
   // whatever the Test does. Quiet where nothing is hidden. A cast is an action
   // (D-773): Master of Shadows and a Shadow Dance leave the Hide standing.
-  await reveal(actor, { acting: true });
+  await reveal(actor, { acting: true, kind: "cast" });
 
   // 2. Pay: everything judged above, so nothing here can be half done. In a
   // Shapeshift form the price is Ferocity and the Mana is never touched (D-769).
@@ -2387,6 +2947,10 @@ export async function castSpell({
   } else if (pool && mana > 0 && price.pool === "mana") {
     const manaNow = poolsNow.find(p => p.itemId === pool.itemId && p.kind === "power" && p.name === pool.name) ?? pool;
     await actor.updatePool({ itemId: pool.itemId, kind: "power", value: payFromNow(manaNow.value, mana).value }, extra);
+  } else if (payPool && price.pool === payPool.name && price.amount > 0) {
+    // In the pool a talent names (door 8: Shadowcraft's Focus), off the pool as it stands now.
+    const payNow = poolsNow.find(p => p.itemId === payPool.itemId && p.kind === payPool.kind && p.name === payPool.name) ?? payPool;
+    await actor.updatePool({ itemId: payPool.itemId, kind: payPool.kind, value: payFromNow(payNow.value, price.amount).value }, extra);
   } else if (Object.keys(extra).length) await actor.update(extra);
   // Nature's Swiftness's use, struck once the cast is paid for (D-771).
   const castSwift = (Boolean(swiftCounter) || Boolean(swiftRow?.perRound)) && !free && castAction !== sys.action;
@@ -2415,6 +2979,17 @@ export async function castSpell({
   // spell was cast either way. Unresisted: 10 §3 puts this among the
   // occasions *agreed to rather than suffered*, so there is no Test.
   await accrueCastingCorruption(actor, spell);
+
+  // 2c. **A CAST THAT COUNTS AS MOVING** (04's Shadowcraft: *Shadow Walk counts as
+  // moving for your Focus*; the lead: *"Yes"*; the Legacy branches' door 9): the
+  // round's record marked through the queued door, so the turn's end records a move
+  // and the next turn's Focus refill waits (`rules/rest.mjs#turnMoved`).
+  const movesBy = viaItem || free ? null : castMovesFor(talentsNow, { name: spell.name });
+  if (movesBy) {
+    const fightOfCast = actor.activeFight?.() ?? null;
+    const castCombatant = fightOfCast ? (fightOfCast.getCombatantsByActor(actor)?.[0] ?? null) : null;
+    if (castCombatant?.isOwner) await castCombatant.markRoundOnce(MOVED_MARK);
+  }
 
   // **WHICH CAST THIS IS** (D-724): one key the card, the Sustain entry and
   // everything later laid or placed from the card all carry. It is generated
@@ -2511,6 +3086,11 @@ export async function castSpell({
     roll.options.provenance.push({ label: "AZEROTH.Modifier.LaidBoon", value: null, formula: blessed.join(", ") });
   }
   const success = outcome.success;
+  // **THE STEP, NOW THAT THE SPELL WENT OFF** (door 3): the caster displaced to the
+  // space picked, and Dark Passage's targets each by the caster's own displacement,
+  // so the party arrives as it stood - each space judged again for its room, and
+  // one refused said and left. A failed Casting Test moves nobody (07 §8).
+  const stepLines = await castStepLines({ actor, spell, step: spellStep, picked: stepPicked, success });
   // **ASCENDANCE** (04: *your Fire and Nature damage spells count as reaching one
   // SL higher until your next turn*; D-774): the SL everything after the die
   // reads, never whether the Test succeeded (MY READING, for the lead).
@@ -2633,7 +3213,9 @@ export async function castSpell({
   // and never a Ward the spell's own school ignores. An item's casting is the
   // caster's spell too.
   const typedSpell = typedLaneExtras(actor.system, "spell");
-  const mitigate = (t, forced = null, { typed = true } = {}) => {
+  // 04's Drawn Across on the caster (door 25): the spell's damage halved before Ward.
+  const halvedCast = dealtHalvedBy(actor);
+  const mitigate = (t, forced = null, { typed = true, passed = false } = {}) => {
     const read = immuneReadAsWard({ immune: t?.immune ?? [], ward: Math.max(0, (t?.wardBySchool?.[damageSchool] ?? 0) - wardPierce), school: damageSchool, asWard });
     return resolveDamage({
       rating: forced ?? (rating === null ? 0 : ratingFor(t).rating + extras), sl, kind: "magical", school: damageSchool,
@@ -2642,7 +3224,12 @@ export async function castSpell({
       schoolArmor: t?.schoolArmor?.[damageSchool] ?? 0,
       immune: read.immune, vulnerable: t?.vulnerable ?? [],
       slAddsToDamage: false,
-      extras: typed ? typedSpell : [], wardBySchool: t?.wardBySchool ?? {}, schoolArmorBySchool: t?.schoolArmor ?? {}
+      extras: typed ? typedSpell : [], wardBySchool: t?.wardBySchool ?? {}, schoolArmorBySchool: t?.schoolArmor ?? {},
+      dealtHalved: halvedCast,
+      // Half on a passed Test (the lead: *"Build it everywhere"*), before Armor and Ward.
+      passedHalf: passed,
+      // 07's *bypassing armor and Ward* (the B8a2 pass): neither comes off it.
+      bypass: sys.damage?.bypass === true
     });
   };
   // **AN AREA THAT STRIKES AT THE START OF A TURN DEALS NOTHING ON THE CAST**
@@ -2651,6 +3238,7 @@ export async function castSpell({
   // targeted when the Paladin cast. The tick carries it now, and the card
   // offers no damage, no Apply and no rider for it.
   const hit = rating !== null && success && castDealsDamage(sys);
+  if (hit && halvedCast) roll.options.provenance.push({ label: halvedCast.source, value: null, formula: game.i18n.localize("AZEROTH.HalvesDealt.Row") });
   // **A STATIC CHARGE SPENT ON THIS DAMAGE** (04: *When you deal damage you may
   // spend a Static Charge to add your tier to that damage*; D-774): where the
   // spell deals it, off the flag as it stands now.
@@ -2658,6 +3246,20 @@ export async function castSpell({
   if (charged) roll.options.provenance.push({ label: chargeLine.name, value: charged });
   const damageByTarget = list.map(t => (hit ? mitigate(t, charged ? (ratingFor(t).rating ?? 0) + extras + charged : null) : null));
   const damageResult = hit ? (damageByTarget[0] ?? mitigate(null, charged ? (rating ?? 0) + charged : null)) : null;
+  // **WHAT A CREATURE THAT PASSES ITS TEST TAKES** (07's *and half of that, rounded down,
+  // on a success*, stamped as `damage.half` off the entry's own sentence; the lead:
+  // *"Build it everywhere"*): each row's half, halved before the same creature's Ward, and
+  // the one button's, ready for the card's Apply to land on a creature whose Resist on
+  // this card is recorded as passed (`rules/resisted.mjs#halvesFor`).
+  const halfOnPass = hit && sys.damage?.half === true && Boolean(sys.test?.resilience);
+  const passedByTarget = halfOnPass ? list.map(t => mitigate(t, charged ? (ratingFor(t).rating ?? 0) + extras + charged : null, { passed: true })) : [];
+  const damagePassed = halfOnPass ? mitigate(null, charged ? (rating ?? 0) + charged : null, { passed: true }).damage : null;
+  // **AND WHAT IT TAKES WHERE ITS FAILURE IS WHAT DEALS THE DAMAGE** (07's Rimebind: *On a
+  // failure it takes 2 Frost damage*, stamped as `damage.onFail` off the entry's own
+  // sentence; the B8a pass): nothing - the card's Apply lands none of it on a creature
+  // whose Resist on this card is recorded as passed (`rules/resisted.mjs#sparedFor`), and
+  // the damage line says so in words.
+  const noneOnPass = hit && !halfOnPass && sys.damage?.onFail === true && Boolean(sys.test?.resilience);
   // **SHATTER AT RANK 2** (04: *At rank 2 they inflict a Critical Injury on 19 or 20
   // against such a target*; D-775): a spell that struck, its die on the face or
   // above, against a first target Entangled, Slowed or with its Speed dropped. The
@@ -2822,13 +3424,33 @@ export async function castSpell({
   // 04's Permafrost on a Slowed this spell lays (D-778): the caster's feet, carried
   // on the card for whichever door lays it - the Resist's failure, a placed area's.
   const slowing = viaItem ? null : slowingFor(talentsNow);
+  // **THE TEST THE NEXT BLOW ASKS** (07's Nature's Grasp: *The next creature to hit you
+  // with a melee attack must pass a Reflex Resilience Test against your Spell DC or be
+  // **Entangled***; the B9a pass, the lead: *"Build the triggers"*): read off the entry's
+  // words at the cast, at THIS caster's Spell DC, and laid on the caster by the card's
+  // Apply with the spell's own effect - the active GM's door answers the blow
+  // (`effects/struck-tests.mjs`). A record of the cast (D-724), never read off the caster again.
+  const struckRead = success ? readStruckTest(sys.effect) : null;
+  const struckTest = struckRead ? cleanStruckTest({ ...struckRead, dc: spellDC, caster: actor.uuid, spell: spell.name, cast }) : null;
+  const struckLines = struckTest ? [game.i18n.format(struckTest.noOpportunity ? "AZEROTH.Struck.CardLineNoOpportunity" : "AZEROTH.Struck.CardLine", {
+    name: actor.name, spell: spell.name, dc: struckTest.dc ?? "—",
+    resilience: game.i18n.localize(AZEROTH.resiliences[struckTest.resilience] ?? struckTest.resilience),
+    conditions: struckTest.statuses.map(id => game.i18n.localize(AZEROTH.conditions[id] ?? id)).join(", ")
+  })] : [];
   // **A FAILED CAST OFFERS NO RESIST** (the lead, 2026-09-26; 07 §8: *A failed
   // Casting Test costs the Mana and nothing else. The spell does not go off*).
   // There is nothing to resist, so the card draws no row and no button, and
   // says in words why (`didNotGoOff`); a Resist pressed on a card written
   // before this is refused at the door (`dice/chat.mjs#resistTestFromCard`).
-  const resist = success && sys.test?.resilience
-    ? { key: sys.test.resilience, label: AZEROTH.resiliences[sys.test.resilience], dc: spellDC }
+  // **AND ONLY WHERE 07 ASKS THE TEST AT THE CAST** (the B8a2 pass; the lead: *"Build them
+  // now"*): Thornguard, Entangling Vines, Frozen Ground, Hailstorm, Starweave, The Deep,
+  // Nether Collapse and their kin ask it of a creature entering the area, starting its
+  // turn there, crossing it or striking the caster - the area's own Test card makes it
+  // then (D-756, D-757) - so their card offers none, and Thornguard's failure no longer
+  // lays its Entangled on whoever was targeted (`rules/resisted.mjs#castTestOf`).
+  const castTest = castTestOf(sys);
+  const resist = success && castTest
+    ? { key: castTest, label: AZEROTH.resiliences[castTest], dc: spellDC }
     : null;
   // **ONE RESIST ROW PER RECORDED TARGET** (07 §2, D-616, D-726). The Test is
   // the TARGET's to make and the card is the caster's, so each row names its
@@ -2836,6 +3458,21 @@ export async function castSpell({
   // the GM and to nobody else. Every row carries whole what the template
   // draws: a bare name inside `#each` resolves against the row (D-609).
   // With no target recorded the card draws the one button it always had.
+  // **WHO MAY MAKE IT, AND WHAT A FAILURE ENDS** (the B9a pass; 07 now prints Holy
+  // Wrath's and Earth Shock's **Test**): Holy Wrath's *an undead creature that fails*,
+  // Enslave Demon's and Compel's *A demon that fails*, Earth Shock's *If it is holding a
+  // Sustained spell it must pass ... or lose it* (`rules/resisted.mjs#castTestGate`). A
+  // target that does not qualify is drawn no button and told why in words; the press
+  // judges again off the creature as it stands.
+  const testGate = resist ? castTestGate(sys.effect) : null;
+  const gateOf = t => {
+    const victim = targetActorOf(t);
+    const why = testGate ? castTestRefusal(testGate, {
+      kinds: kindsOf(creatureSnapshot({ type: victim?.type ?? null, system: victim?.system ?? null, race: victim?.raceItem?.name ?? null })),
+      sustaining: (victim?.getFlag?.("azeroth-rpg", "sustaining") ?? []).length
+    }) : null;
+    return why ? game.i18n.format(why, { name: t?.name ?? victim?.name ?? "", spell: spell.name }) : null;
+  };
   const resistRows = resist
     ? list.map((t, index) => ({
         index,
@@ -2844,9 +3481,40 @@ export async function castSpell({
         key: resistKey(t),
         resilience: resist.key,
         label: resist.label,
-        dc: resist.dc
+        dc: resist.dc,
+        // Not this creature's Test (the B9a pass): said, never a button.
+        gated: gateOf(t)
       }))
     : [];
+  const testGateLine = testGate ? game.i18n.format(testGate.holds === "sustain"
+    ? (testGate.loses === "sustain" ? "AZEROTH.Card.TestGate.SustainLine" : "AZEROTH.Card.TestGate.HoldsLine")
+    : "AZEROTH.Card.TestGate.KindLine", {
+    spell: spell.name, kinds: (testGate.kinds ?? []).map(k => game.i18n.localize(`AZEROTH.CreatureKind.${k}`)).join(", ")
+  }) : null;
+  // **WHAT THE SPELL DEALS AROUND ITS TARGET, A TEST AT A TIME** (07's Stormfury: *Every
+  // creature within 15 feet of it makes a Reflex Resilience Test against your Spell DC or
+  // takes 10 Nature damage*; the B8a pass). Nothing carried the 10: on a cast that struck,
+  // every creature still standing within the splash's feet of the first target's token -
+  // the target itself, whose Test the entry names, and the caster where they stand inside -
+  // is measured now, and once the card stands each is posted the area Test card its failure
+  // lands through (`effects/area-strikes.mjs#postSplashTest`); a pass lands nothing. Said on
+  // the card in words, with what stays the table's. A target on no viewed board is measured
+  // nowhere, and the splash is the table's.
+  const splashRow = hit ? splashCheck(sys.splash) : null;
+  const splashFrom = splashRow ? tokenOfTarget(first) : null;
+  const splashed = splashFrom ? creaturesWithin(actor, Number(sys.splash.feet), { from: splashFrom, who: "creature" }) : [];
+  const splashLines = [];
+  if (splashRow) {
+    const words = {
+      spell: spell.name, feet: sys.splash.feet, around: first?.name ?? "", rating: splashRow.fail.rating,
+      school: game.i18n.localize(AZEROTH.schools[splashRow.fail.school] ?? splashRow.fail.school ?? ""),
+      resilience: game.i18n.localize(AZEROTH.resiliences[splashRow.resilience] ?? splashRow.resilience), dc: spellDC ?? "—",
+      names: splashed.map(r => r.token.name ?? r.actor?.name ?? "").join(", ")
+    };
+    splashLines.push(game.i18n.format(splashFrom ? (splashed.length ? "AZEROTH.Splash.Line" : "AZEROTH.Splash.None") : "AZEROTH.Splash.Unmeasured", words));
+    if (sys.splash.reason) splashLines.push(game.i18n.format("AZEROTH.Splash.Table", { spell: spell.name, reason: sys.splash.reason }));
+  }
+
   // **WHAT A TALENT DOES TO THE AREA** (D-756): Consecrated Ground's rank 2
   // radius is 10 feet wider, so the card offers a *30 ft circle* and the Region
   // it places is that size; its Difficult ground rides the card to the Region
@@ -2858,6 +3526,19 @@ export async function castSpell({
   // the Region to take.
   const areaTick = hasAreaTick(sys.areaTick) ? foundry.utils.deepClone(sys.areaTick) : null;
   const tickLine = areaTick ? areaTickLine(areaTick, { widen: spellArea.widen }) : null;
+  // **THE CREATURES NAMED AT THE CAST** (07's Ring of Fire: *Name any number of creatures
+  // as you cast: the ring lets them through and does not burn them*; Blackout's and The
+  // Deep's *You and any creature you name as you cast*; the B9a pass): the creatures this
+  // cast targets, as D-779's Barrier reads its chosen, carried to the Region its card
+  // places, and said on the card in words.
+  const namedAtCast = success && (areaTick?.checks ?? []).some(c => c.spares === "named")
+    ? [...new Set(list.map(t => targetActorOf(t)?.uuid).filter(Boolean))]
+    : [];
+  const namedLines = namedAtCast.length || (success && (areaTick?.checks ?? []).some(c => c.spares === "named"))
+    ? [game.i18n.format(namedAtCast.length ? "AZEROTH.Area.NamedAtCast" : "AZEROTH.Area.NoneNamed", {
+        spell: spell.name, names: list.filter(t => namedAtCast.includes(targetActorOf(t)?.uuid)).map(t => t?.name ?? "").join(", ")
+      })]
+    : [];
   // What a tick's standing bonuses are keyed by, carried beside it (the review,
   // S6): the Region's `spell` block, the Sustain entry and the laid effect all
   // take it, because a spell cast by name from the pack or through an item is
@@ -3035,20 +3716,27 @@ export async function castSpell({
     fumble: outcome.fumble,
     overchannel: oc.points ? oc : null,
     healthCost: spellHealth || null,
-    damage: damageResult ? { final: damageResult.damage, explanation: spellDamageExplanation(damageResult, (first ? ratingFor(first).rating + extras : rating) + charged) } : null,
+    damage: damageResult ? {
+      final: damageResult.damage,
+      // A damage its Test's failure deals says so on the line (the B8a pass).
+      // And one that bypasses armor and Ward says so (the B8a2 pass).
+      explanation: [spellDamageExplanation(damageResult, (first ? ratingFor(first).rating + extras : rating) + charged), noneOnPass ? game.i18n.localize("AZEROTH.Card.DamageOnFail") : null, damageResult.bypass === true ? game.i18n.localize("AZEROTH.Card.Bypass") : null].filter(Boolean).join(" · ")
+    } : null,
     // Shatter's Critical Injury at rank 2 (D-775): the attack card's own button.
     criticalInjury: Boolean(spellCritical),
     riderApplied: rider && hit && first && ratingFor(first).applied ? riderContext?.conditions ?? null : null,
     rider: riderContext,
     applies,
     // The Resist Test's failure lands the conditions the entry names (2026-09-06).
-    onFail: failStatuses.length ? failStatuses.map(id => game.i18n.localize(AZEROTH.conditions[id] ?? id)).join(", ") : null,
+    onFail: resist && failStatuses.length ? failStatuses.map(id => game.i18n.localize(AZEROTH.conditions[id] ?? id)).join(", ") : null,
     heal,
     speakerName: actor.name,
     source: viaItem ? game.i18n.format("AZEROTH.Card.FromItem", { name: viaItem.name })
       : (free ? game.i18n.format("AZEROTH.Cast.FreeBy", { name: free.by ?? "" }) : null),
     resist,
     resistRows,
+    // Who may make it, in words (the B9a pass).
+    testGate: testGateLine,
     // **A FAILED CAST PLACES NOTHING, AND THE CARD OFFERS NOTHING TO PLACE**
     // (the lead, 2026-09-26). The card's `flags.area` below keeps the shape
     // the animation layer's record carries, which refuses a failed cast off
@@ -3070,7 +3758,7 @@ export async function castSpell({
     // Speed drop or the Slowed a hit laid, the forced move a failed Test or the
     // area makes, the escape a held or Stunned creature is given, and a laid
     // effect no Dispel may end.
-    crossLines: crossCardLines({ speedLines, forced, escape, undispellable }),
+    crossLines: crossCardLines({ speedLines, forced, escape, undispellable, stepLines, splashLines, namedLines, struckLines }),
     targets: list.map((t, index) => ({ ...t, index, damage: damageByTarget[index]?.damage ?? null, healAmount: healByTarget[index] ?? null })),
     // **WHAT THE CARD OFFERS AFTER THE DIE** (D-774): Overload's second firing and
     // Ancestral Knowledge's Mana back, each a button that strikes a use.
@@ -3081,7 +3769,7 @@ export async function castSpell({
     provenance: roll.provenance
   });
 
-  return ChatMessage.create({
+  const spellCard = await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
     content,
     rolls: [roll],
@@ -3100,6 +3788,10 @@ export async function castSpell({
         cast,
         success,
         source: source ?? null,
+        // **WHERE THE SPELL MOVED ITS CASTER AND ITS PARTY** (07's Shadow Walk and Dark
+        // Passage; the Legacy branches' door 2): each move's centre before and after,
+        // made by `castStepLines` on the pick it answered.
+        ...(stepPicked?.made?.length ? { steps: stepPicked.made } : {}),
         // **WHO HOLDS THE CAST** (the review, S3): the actor the Sustain entry
         // is written on, which the speaker is not when a world creature is cast
         // from while an unlinked token speaks for it. `dice/chat.mjs#casterOf`.
@@ -3128,6 +3820,10 @@ export async function castSpell({
         targets: list,
         damageByTarget,
         riderByTarget,
+        // The half a passed Test leaves, by row and on the one button (the B6 fix).
+        ...(halfOnPass ? { halfOnPass: true, passedByTarget, damagePassed } : {}),
+        // And nothing, where the failure is what deals it (the B8a pass).
+        ...(noneOnPass ? { noneOnPass: true } : {}),
         heal: heal?.amount ?? null,
         sl,
         overchannel: oc.points,
@@ -3138,6 +3834,10 @@ export async function castSpell({
         ...(aegisNamed ? { aegis: aegisNamed } : {}),
         ...(take.miracle && success ? { miracle: true } : {}),
         ...(chosenWard ? { chosenWard } : {}),
+        // The creatures named at the cast, for the area to spare (the B9a pass).
+        ...(namedAtCast.length ? { named: namedAtCast } : {}),
+        // What the next blow on the caster asks of its striker, for the Apply to lay (the B9a pass).
+        ...(struckTest ? { struckTest } : {}),
         // What the card's buttons lay (2026-09-06): the effect, its timing, the failure's conditions.
         // A spell that lays only its tick lays an effect of no changes (D-770).
         // **WHAT A TALENT LAYS MORE OF** (04's Pain Suppression: *Each rank adds 1
@@ -3153,7 +3853,12 @@ export async function castSpell({
         // THE TICK THE APPLY LAYS (D-770), stamped at this cast: the number, the
         // hand, the spell and the cast, as `rules/ticks.mjs#layTick` made it.
         tick: laidTick,
-        onFail: failStatuses.length ? { resilience: sys.onFail?.resilience ?? null, statuses: [...failStatuses] } : null,
+        // Only where the card offers its Test (the B8a2 pass): a Test 07 asks later lands
+        // through the area's own card, never through this one.
+        onFail: resist && failStatuses.length ? { resilience: sys.onFail?.resilience ?? null, statuses: [...failStatuses] } : null,
+        // Who may make the card's Test and what a failure ends (the B9a pass), judged again
+        // at the press (`dice/chat.mjs#rollResists`).
+        ...(testGate ? { testGate } : {}),
         // What the card's after-the-die buttons read (D-774): Overload's half and
         // its same targets, and the Mana a failed Test paid.
         ...(overload ? { overload } : {}),
@@ -3174,6 +3879,24 @@ export async function castSpell({
       }
     }
   });
+  // **THE SPLASH'S TESTS, ONCE THE CARD STANDS** (07's Stormfury; the B8a pass): one area
+  // Test card for each creature measured, made once and landed at the spell card's own
+  // Resist door. Guarded and said in words: the cast has gone off whatever a card does.
+  if (spellCard && splashRow && splashed.length) {
+    try {
+      const { postSplashTest } = await import("../effects/area-strikes.mjs");
+      for (const r of splashed) {
+        await postSplashTest({
+          actor: r.actor, token: r.token?.document ?? null, check: splashRow, caster: actor, spell: tickSpell,
+          dc: spellDC ?? null, cast, source: source ?? null, around: first?.name ?? "", feet: Number(sys.splash.feet) || 0
+        });
+      }
+    } catch (err) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Splash.PostFailed", { spell: spell.name }));
+      console.warn("azeroth-rpg | splash", err);
+    }
+  }
+  return spellCard;
 }
 
 /**
@@ -3202,6 +3925,52 @@ function castTemporary(spell, talents = [], actor = null) {
 }
 
 /**
+ * **A SPELL'S STEP, MADE** (07's Shadow Walk and Dark Passage; the Legacy branches'
+ * door 3): the caster's token displaced to the space picked before the payment, and
+ * each of Dark Passage's targets by the same displacement (`rules/steps.mjs
+ * #partyStep`), every space judged again for its room - the other movers excepted,
+ * since they are moving too - here or on the GM's client. Lines for the card: what
+ * moved, what was refused and why, a failed Test's *moved nobody*, and a caster with
+ * no token on the viewed scene left to the table.
+ *
+ * @returns {Promise<string[]>}
+ */
+async function castStepLines({ actor, spell, step = null, picked = null, success = false } = {}) {
+  if (!step || !picked) return [];
+  if (picked.skipped) return [game.i18n.format("AZEROTH.Step.NoTokenLine", { name: actor.name, feet: step.feet })];
+  if (!success) return [game.i18n.format("AZEROTH.Step.NotCast", { name: spell.name })];
+  const movers = [picked.doc, ...picked.party];
+  const except = movers.map(d => d.id);
+  const lines = [];
+  // **EVERY MOVE MADE, ON THE PICK IT ANSWERS** (the Legacy branches' door 2): the card
+  // records them as `steps`, which the animation layer plays a departure and an
+  // arrival off.
+  picked.made = [];
+  // The caster's own step, and each ally's as a `party` one (the B2 review, item h).
+  const moved = await stepTo({ token: picked.doc, to: picked.to, feet: step.feet, by: actor, except, move: { kind: "self", itemUuid: spell.uuid } });
+  lines.push(steppedWords(moved, { feet: step.feet, source: spell.name }));
+  if (moved.step) picked.made.push(moved.step);
+  if (!moved.moved || !picked.party.length) return lines;
+  const grid = picked.doc.parent?.grid ?? null;
+  const sizeX = Number(grid?.sizeX ?? grid?.size) || 100;
+  const sizeY = Number(grid?.sizeY ?? grid?.size) || 100;
+  for (const spot of partyStep(picked.from, picked.to, picked.party.map(d => ({ id: d.id, x: d.x, y: d.y })))) {
+    const doc = picked.party.find(d => d.id === spot.id);
+    if (!doc?.parent) continue;
+    const centre = { x: spot.x + ((doc.width ?? 1) * sizeX) / 2, y: spot.y + ((doc.height ?? 1) * sizeY) / 2 };
+    const judged = judgeStep(doc, centre, { feet: step.feet, sight: "seen", except, askSight: false });
+    if (judged.refusal) {
+      lines.push(stepWords(judged.refusal, { name: doc.name ?? "", feet: step.feet }));
+      continue;
+    }
+    const carried = await stepTo({ token: doc, to: judged.to, feet: step.feet, by: actor, except, move: { kind: "party", itemUuid: spell.uuid } });
+    lines.push(steppedWords(carried, { feet: step.feet, source: spell.name }));
+    if (carried.step) picked.made.push(carried.step);
+  }
+  return lines;
+}
+
+/**
  * **WHAT THE CROSS-CLASS RULINGS PUT ON A SPELL'S CARD, IN WORDS** (D-778): one
  * labelled line each - the Speed drop or the Slowed a hit laid (07's Frostbolt, Ice
  * Spear, Wrath), the forced move a failed Test or the area makes (Blast Wave, Gust
@@ -3212,15 +3981,25 @@ function castTemporary(spell, talents = [], actor = null) {
  * @param {{speedLines?: string[], forced?: object|null, escape?: object|null, undispellable?: {by: string}|null}} o
  * @returns {Array<{label: string, text: string}>}
  */
-function crossCardLines({ speedLines = [], forced = null, escape = null, undispellable = null } = {}) {
+function crossCardLines({ speedLines = [], forced = null, escape = null, undispellable = null, stepLines = [], splashLines = [], namedLines = [], struckLines = [] } = {}) {
   const out = [];
   const label = key => game.i18n.localize(key);
+  // Where the spell moved its caster and its targets (the Legacy branches' door 3).
+  for (const text of stepLines) out.push({ label: label("AZEROTH.Step.Label"), text });
+  // The creatures named at the cast, whom the area lets be (the B9a pass).
+  for (const text of namedLines) out.push({ label: label("AZEROTH.Area.NamedLabel"), text });
+  // What the next blow on the caster asks of its striker (the B9a pass).
+  for (const text of struckLines) out.push({ label: label("AZEROTH.Struck.Label"), text });
+  // Whom the spell's splash reaches around its target, and what stays the table's (the B8a pass).
+  for (const text of splashLines) out.push({ label: label("AZEROTH.Splash.Label"), text });
   for (const text of speedLines) out.push({ label: label("AZEROTH.SpeedDrop.Label"), text });
   if (forced) {
     out.push({
       label: label("AZEROTH.Forced.Label"),
       text: game.i18n.format(`AZEROTH.Forced.CardLine.${forced.on}${forced.toward === "toward" ? "Toward" : "Away"}`, {
-        feet: forced.feet, resilience: game.i18n.localize(AZEROTH.resiliences[forced.resilience] ?? forced.resilience ?? "")
+        feet: forced.feet, resilience: game.i18n.localize(AZEROTH.resiliences[forced.resilience] ?? forced.resilience ?? ""),
+        // Nether Rift's reach at the caster's turn (the B9a pass).
+        within: forced.within ?? ""
       })
     });
   }
@@ -3457,6 +4236,622 @@ function spellDamageExplanation(result, rating) {
 
 /* -------------------------------------------- */
 
+/* -------------------------------------------- */
+/*  The Legacy branches' B3 Uses (door 25)       */
+/* -------------------------------------------- */
+
+/** The Armor Point locations a creature HAS: a null is no such location (06 §2). */
+function apLocationsOn(actor) {
+  const ap = actor?.system?.ap ?? {};
+  return Object.keys(AZEROTH.locations ?? {}).filter(k => ap[k] !== null && ap[k] !== undefined);
+}
+
+/**
+ * **04's THE MOUNTAIN WAKES' ARMOR, ON THE USE'S OWN ENCOUNTER EFFECT** (*Until the
+ * encounter ends your Armor Points rise by 2, you have Ward 2 against every school*;
+ * the Legacy branches' door 25): the changes `rules/legacy-uses.mjs#armorChanges` lays,
+ * every one `final`, merged into the damage buff the same Use switches on - one effect
+ * a Use, lifted by `_leaveFight` with every encounter buff - or an encounter effect of
+ * their own where the row has no damage buff.
+ *
+ * @param {{until: string, amount: number|null, changes: Array<object>}|null} buff  `damageBuffFor`'s
+ * @param {object|null} plan  `judgeSpiritUses`'
+ * @param {Actor} actor
+ */
+function withSpiritArmor(buff, plan, actor) {
+  const armor = plan?.armor ?? null;
+  if (!armor) return buff;
+  const changes = armorChanges(armor, { apLocations: apLocationsOn(actor), schools: Object.keys(AZEROTH.schools ?? {}) });
+  if (!changes.length) return buff;
+  if (buff) return { ...buff, changes: [...buff.changes, ...changes] };
+  // **OR UNTIL THE USER'S NEXT TURN** (04's Bladestorm: *Until your next turn your Armor
+  // Points rise by your Dexterity modifier*; the Legacy branches' B6): the armor's own
+  // span where the Use switches on no damage buff (`legacy-uses.mjs#ARMOR_SPANS`).
+  return { until: armor.until ?? "encounter", amount: null, changes };
+}
+
+/**
+ * **A SUSTAIN A USE HOLDS, WITH ITS STATED UPKEEP** (04's Big Bad Voodoo: *While you
+ * Sustain it ... Sustaining it costs 5 Mana a turn*; the Legacy branches' door 12): an
+ * entry on the user's `sustaining` - the flag 05 §12's turn charges at the entry's own
+ * upkeep (`rules/upkeep.mjs#upkeepOf`) and every door that ends a Sustain clears - under
+ * 05 §12's limit, the oldest dropped first, as Flametongue's (D-779) is held.
+ *
+ * @param {Actor} actor
+ * @param {{name: string, identifier: string, upkeep: {mana: number, health: number}|null, poolItemId?: string|null}} o
+ * @returns {Promise<string>}  the card's line
+ */
+async function holdUseSustain(actor, { name, identifier, upkeep = null, poolItemId = null } = {}) {
+  const sustaining = foundry.utils.deepClone(actor.getFlag("azeroth-rpg", "sustaining") ?? []);
+  const cost = { mana: Math.max(0, Math.trunc(Number(upkeep?.mana)) || 0), health: Math.max(0, Math.trunc(Number(upkeep?.health)) || 0) };
+  sustaining.push({
+    spellId: null, uuid: null, name, itemId: poolItemId, cast: foundry.utils.randomID(),
+    identifier, targets: [], source: null, upkeep: cost
+  });
+  const features = actor.items.filter(i => i.type === "feature").map(i => ({ name: i.name }));
+  const more = sustainsFor(actor.takenTalents?.() ?? [], {
+    holdsWeave: features.some(f => f.name === "Shape the Weave"),
+    archmageStanding: (actor.effects ?? []).some(e => e.active !== false && e.getFlag?.("azeroth-rpg", "identifier") === "archmage")
+  });
+  const limit = sustainLimit({ features, extra: more.more });
+  while (sustaining.length > limit) {
+    const dropped = sustaining.shift();
+    ui.notifications?.info(game.i18n.format("AZEROTH.Combat.SustainEnded", { name: actor.name, spell: dropped.name }));
+  }
+  await actor.setFlag("azeroth-rpg", "sustaining", sustaining);
+  return game.i18n.format("AZEROTH.Sustain.Held", { name, n: cost.mana });
+}
+
+/**
+ * **WHAT THE LEGACY BRANCHES' B3 USES NEED, JUDGED AND PICKED BEFORE ANYTHING IS PAID**
+ * (door 25; D-768's order: every refusal, then the budget, the reveal and the
+ * payment). `rules/legacy-uses.mjs#onUseSpirits` reads the granting talent's (or the
+ * gadget's) `onUse` at the rank; each mechanism here is judged off the world as this
+ * client holds it, and each pick - a condition, a point, the effects an area's dispel
+ * ends, the transporter's choice - is made now, so a dismissed one costs nothing.
+ *
+ * Answers `null` where the Use is refused (said in words, or a pick dismissed), `{early}`
+ * where the Use is done without a payment (the Crossing stepped back from, a
+ * transporter pad set over a Short Rest), and otherwise the plan the writes read.
+ *
+ * @param {{actor: Actor, item: Item, sys: object, onUse: object|null, rank: number, list: object[],
+ *   talentRow: object|null, ownToken: Token|null}} o
+ * @returns {Promise<object|null>}
+ */
+async function judgeSpiritUses({ actor, item, sys, onUse, rank, list, talentRow, ownToken }) {
+  const tier = actor.system?.tier ?? 1;
+  const spirits = onUseSpirits(onUse, { rank, tier, scope: abilityScope(actor.system ?? {}), conditions: Object.keys(AZEROTH.conditions ?? {}) });
+  const plan = { spirits };
+  const aimed = list.filter(t => targetActorOf(t));
+  const warn = (key, data = {}) => {
+    ui.notifications?.warn(game.i18n.format(key, { name: item.name, ...data }));
+    return null;
+  };
+
+  // **04's HOLD THE THREAD IS ASKED AT THE STEP** (*As a Reaction ... A creature within
+  // 30 feet that would take a Death Step does not take it*; door 11): the counter the
+  // talent grants is struck by the hold itself (`effects/death-holds.mjs`), never
+  // pressed from the sheet.
+  if (talentRow?.deathHold) return warn("AZEROTH.DeathHold.SheetUse", { feet: Math.max(0, Math.trunc(Number(talentRow.deathHold.feet)) || 0) });
+  // **A BLOW TAKEN ONTO THE HOLDER IS ASKED IN THE BLOW** (04's Guardian and Shared Burden;
+  // D-777, the Legacy branches' B6): pressed from the sheet it paid its price and its
+  // Reaction for nothing, so it is refused in words before anything is spent. The feet at
+  // the rank (Guardian's 10 at rank 2).
+  if (talentRow?.moves) {
+    const reach = [talentRow.moves, ...(talentRow.moves.atRank ?? []).filter(c => rank >= (Number(c?.rank) || Infinity))]
+      .reduce((feet, c) => (c?.feet !== undefined ? Math.max(0, Math.trunc(Number(c.feet)) || 0) : feet), 0);
+    return warn("AZEROTH.BlowDoor.SheetUse", { feet: reach });
+  }
+
+  // **04's THE CROSSING** (*You step into the Spirit Realm for up to one minute and step
+  // back where you left*; door 10): stepping back is free, before the minute is out.
+  const crossing = crossingOf(onUse, rank);
+  if (crossing) {
+    if (crossed(actor)) {
+      const ids = (actor.effects ?? []).filter(e => e.flags?.["azeroth-rpg"]?.spiritRealm).map(e => e.id);
+      if (ids.length) await actor.deleteEmbeddedDocuments("ActiveEffect", ids);
+      const posted = await ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor }),
+        content: `<p class="azeroth-drain">${game.i18n.format("AZEROTH.Spirit.SteppedBack", { name: actor.name, feature: item.name })}</p>`,
+        flags: { "azeroth-rpg": { kind: "spiritRealm" } }
+      });
+      return { early: posted };
+    }
+    plan.crossing = crossing;
+  }
+
+  // **A CONCEALMENT** (the Gnomish Cloaking Device: *You and every ally within 10 feet
+  // are hidden, even while observed, for one minute*; Wind Walk at rank 2): the allies
+  // measured now, between the nearest squares (D-732); one this client does not own is
+  // hidden on the GM's client, so with none online the Use is refused first.
+  if (spirits.conceal) {
+    const allies = spirits.conceal.allies && ownToken
+      ? creaturesWithin(actor, spirits.conceal.feet, { who: "ally", except: [ownToken.id] }).filter(r => r.actor && r.actor.uuid !== actor.uuid)
+      : [];
+    if (gmAbsentForActors(allies.map(r => r.actor))) return warn("AZEROTH.LegacyUse.NoGM");
+    plan.conceal = { ...spirits.conceal, allies: allies.map(r => ({ actor: r.actor, feet: r.feet })) };
+  }
+
+  // **ONE CONDITION ENDED** (Voodoo Mending: *A friendly target within 30 feet ... one
+  // condition of your choice on it ends, **Charmed** and **Stunned** included*; the
+  // Recombobulator; Arclight Spanner): the creature targeted, else the user; the
+  // condition chosen through the one chooser (D-673) where it carries more than one.
+  if (spirits.cures) {
+    const one = aimed[0] ?? null;
+    const target = one ? targetActorOf(one) : actor;
+    if (!target) return warn("AZEROTH.Card.TargetGone");
+    const refused = cureRefusal(spirits.cures, { hostile: target.uuid !== actor.uuid && !allyOf(actor, target) });
+    if (refused) return warn(refused, { target: one?.name ?? target.name });
+    if (target.uuid !== actor.uuid && gmAbsentForActors([target])) return warn("AZEROTH.LegacyUse.NoGM");
+    const open = curableConditionsOn(target, spirits.cures);
+    let id = open[0] ?? null;
+    if (open.length > 1) {
+      const pick = await chooseOption(item, open.map(c => ({ key: c, name: game.i18n.localize(AZEROTH.conditions[c] ?? c), description: "" })), null, {
+        label: "AZEROTH.Cure.End", prompt: game.i18n.format("AZEROTH.Cure.Prompt", { target: one?.name ?? target.name })
+      });
+      if (!pick) return null;
+      id = pick.key;
+    }
+    plan.cure = { target, id, name: one?.name ?? target.name };
+  }
+
+  // **AN AREA'S DISPEL** (04's Disenchant: *On success, end one effect on each creature
+  // within 15 feet of a point within 60 feet, or two at rank 2. A summoned or bound
+  // creature there also takes Nature damage equal to twice your tier*): the point picked
+  // within the feet of the user's token, every creature whose space reaches the radius,
+  // and - for each - the effects 02's Dispel's law lets it end (`dispelOptionsOn`),
+  // chosen now. Ended on the Test's success (`landSpiritCasting`).
+  if (spirits.areaDispel) {
+    const d = spirits.areaDispel;
+    if (!ownToken?.document?.parent || ownToken.document.parent.id !== canvas?.scene?.id) return warn("AZEROTH.Disenchant.NoToken");
+    const at = await pickPoint({
+      hint: game.i18n.format("AZEROTH.Disenchant.Pick", { name: item.name, feet: d.within, radius: d.radius }),
+      accept: point => {
+        const feet = feetToPoint(ownToken, point);
+        if (feet !== null && feet <= d.within) return true;
+        ui.notifications?.warn(game.i18n.format("AZEROTH.Disenchant.PickTooFar", { name: item.name, feet: d.within }));
+        return false;
+      }
+    });
+    if (!at) return null;
+    // **THE SCENE'S OWN TOKENS, NEVER A DEFEATED OR A HIDDEN ONE** (the B3 review): the
+    // viewed board's placeables put a GM-hidden creature and a defeated one in a player's
+    // chooser (`rules/legacy-uses.mjs#areaDispelReaches`, over `standingOf`).
+    const scene = ownToken.document.parent;
+    const fightNow = actor.activeFight?.() ?? null;
+    const gmHere = game.user?.isGM === true;
+    const defeatedStatus = CONFIG.specialStatusEffects?.DEFEATED ?? "dead";
+    const inside = [...(scene.tokens ?? [])]
+      .filter(doc => {
+        if (!doc.actor) return false;
+        const standing = standingOf(doc, combatantIn(fightNow, doc.actor, doc), fightNow);
+        return areaDispelReaches({ ...standing, defeated: standing.defeated || doc.actor.statuses?.has?.(defeatedStatus) === true }, { gm: gmHere });
+      })
+      .map(doc => ({ token: doc.object ?? doc, actor: doc.actor, feet: feetToPoint(doc, at) }))
+      .filter(r => r.feet !== null && r.feet <= d.radius)
+      .sort((a, b) => String(a.token.name ?? "").localeCompare(String(b.token.name ?? "")) || String(a.token.id).localeCompare(String(b.token.id)));
+    if (gmAbsentForActors(inside.map(r => r.actor))) return warn("AZEROTH.Dispel.NoGM");
+    const picks = [];
+    for (const r of inside) {
+      const rows = dispelOptionsOn(r.actor);
+      const open = rows.filter(x => x.available);
+      if (!open.length) continue;
+      const options = rows.map(x => ({
+        key: x.id, name: x.name, available: x.available, reason: x.reason,
+        tag: x.available ? null : dispelRefusalWords(x),
+        description: r.actor.effects.get(x.id)?.description ?? ""
+      }));
+      const answer = await chooseOption(item, options, null, {
+        max: Math.min(d.count, open.length), label: "AZEROTH.Dispel.End",
+        prompt: game.i18n.format("AZEROTH.Disenchant.Prompt", { target: r.token.name ?? r.actor.name, n: d.count })
+      });
+      const chosen = answer === null ? [] : (Array.isArray(answer) ? answer : [answer]);
+      if (!chosen.length) return null;
+      const closed = chosen.find(c => c.available === false);
+      if (closed) return warn("AZEROTH.Dispel.Refused", { name: closed.name, reason: closed.tag ?? "" });
+      const ids = chosen.map(c => c.key);
+      picks.push({ target: r.actor, name: r.token.name ?? r.actor.name, ids, names: chosen.map(c => c.name), gated: dispelGatesOn(r.actor, ids) });
+    }
+    const struck = d.damage
+      ? inside.filter(r => summonedOrBound({ bond: bondOf(r.actor), summoned: r.actor.getFlag?.("azeroth-rpg", SUMMONED_FLAG) ?? null })).map(r => r.token)
+      : [];
+    if (!picks.length && !struck.length) return warn("AZEROTH.Disenchant.Nothing", { radius: d.radius });
+    plan.areaDispel = { at, picks, struck, damage: d.damage };
+  }
+
+  // **A THRALL** (04's Thrall of the Banshee: *A creature within 30 feet that is not a
+  // Boss makes a Spirit Resilience Test against your Spell DC or is **Charmed** by you
+  // for one minute*): one creature targeted, within the feet, never a Boss - bound on
+  // the card's Resist failing (`dice/chat.mjs#rollResists`).
+  if (spirits.thrall) {
+    const one = aimed[0] ?? null;
+    const target = one ? targetActorOf(one) : null;
+    const apart = one ? feetBetweenTokens(ownToken, tokenOfTarget(one)) : null;
+    // **ONE OF THE GM'S CREATURES, BOUND ONCE, ON THE GM'S CLIENT** (the lead, 2026-10-22:
+    // *"Have the creature stat block for the token set to bound to the player by GM who can
+    // then remove it"*): never a character, never a creature bound already, and - the
+    // bind being the GM's write - refused here with no GM online, before anything is paid.
+    const refused = thrallRefusal({
+      named: aimed.length, boss: target?.system?.isBoss === true, distance: apart, feet: spirits.thrall.feet,
+      self: Boolean(target) && target.uuid === actor.uuid, character: target?.type === "character", bound: Boolean(target && bondOf(target))
+    });
+    if (refused) return warn(refused, { target: one?.name ?? "", feet: spirits.thrall.feet });
+    if (gmAbsentFor({ owned: [false], isGM: game.user?.isGM === true, gmActive: Boolean(game.users?.activeGM) })) return warn("AZEROTH.LegacyUse.NoGM");
+    // The creature the card's Resist binds, and its row on the card (the B3 review).
+    plan.thrall = {
+      ...spirits.thrall, target, index: list.indexOf(one),
+      record: { actorUuid: target.uuid, sceneId: one.sceneId ?? null, tokenId: one.tokenId ?? null, actorId: one.actorId ?? null, name: one.name ?? target.name }
+    };
+  }
+
+  // **A CREATURE CALLED BACK** (04's Ancestral Spirit): one creature, within the feet,
+  // whose THIRD Death Step came since the end of the user's last turn, with a Tether
+  // left and never called back this way before (`rules/death-holds.mjs#reviveRefusal`).
+  if (spirits.revive) {
+    const one = aimed[0] ?? null;
+    // **THE CREATURE THE DYING TRACK WROTE ON** (the B3 review): the token's own actor - for
+    // an unlinked one, never its world actor, which carries none of its steps.
+    const target = one ? targetActorOf(one) : null;
+    const apart = one ? feetBetweenTokens(ownToken, tokenOfTarget(one)) : null;
+    const facts = target ? reviveFacts(actor, target, { distance: apart, feet: spirits.revive.feet }) : {};
+    const refused = reviveRefusal({ ...facts, named: aimed.length, feet: spirits.revive.feet });
+    if (refused) return warn(refused, { target: one?.name ?? "", feet: spirits.revive.feet });
+    if (gmAbsentForActors([target])) return warn("AZEROTH.LegacyUse.NoGM");
+    plan.revive = { target, distance: apart, name: one?.name ?? target?.name ?? "" };
+  }
+
+  // **EVERY DYING FRIEND IN REACH, LIFTED** (04's Ancestor's Hand: *Every Dying friendly
+  // target within 30 feet restores Health equal to your tier per rank and stands*; the
+  // Legacy branches' B6): the allies within the feet who are Dying (06 §9), measured now,
+  // between the nearest squares (D-732). None there refuses in words before anything is
+  // paid, as does one this client cannot write on with no GM online.
+  if (spirits.lift) {
+    const near = ownToken
+      ? creaturesWithin(actor, spirits.lift.feet, { who: "ally", except: [ownToken.id] }).filter(r => r.actor && r.actor.uuid !== actor.uuid)
+      : [];
+    const dying = near.filter(r => dyingNow(r.actor));
+    if (!dying.length) return warn("AZEROTH.Lift.NoneDying", { feet: spirits.lift.feet });
+    if (gmAbsentForActors(dying.map(r => r.actor))) return warn("AZEROTH.LegacyUse.NoGM");
+    plan.lift = { amount: spirits.lift.amount, feet: spirits.lift.feet, dying: dying.map(r => ({ actor: r.actor, feet: r.feet, token: r.token ?? null })) };
+  }
+
+  // **THE TRANSPORTER** (04's Ultrasafe Transporter): set a pad (*Over a Short Rest*:
+  // never in a fight, no action and no use - done now, with nothing paid), or travel to
+  // it (*Once per Long Rest, as a Full Action, you and up to two willing creatures per
+  // rank within 10 feet of you arrive on the pad*), judged now.
+  if (spirits.transporter) {
+    const t = spirits.transporter;
+    const pad = cleanPad(actor.getFlag("azeroth-rpg", PAD_FLAG) ?? null);
+    const padScene = Boolean(pad && game.scenes?.get(pad.sceneId));
+    // **THE LONG REST'S ONE USE IS THE TRAVEL'S** (the B3 review): asked here, after the
+    // choice - `useFeature`'s *A use left?* lets a transporter through
+    // (`usesAskedLater`) - so a spent use greys the travel and never the pad.
+    const spent = Boolean(sys.uses?.per) && (Number(sys.uses?.value) || 0) <= 0;
+    const travelTag = spent ? game.i18n.format("AZEROTH.Transporter.Refuse.Spent", { name: item.name })
+      : padScene ? null : game.i18n.localize(pad ? "AZEROTH.Transporter.Refuse.PadGone" : "AZEROTH.Transporter.Refuse.NoPad");
+    const choice = await chooseOption(item, [
+      { key: "set", name: game.i18n.localize("AZEROTH.Transporter.Set"), description: pad ? game.i18n.format("AZEROTH.Transporter.SetReplaces", { scene: pad.sceneName }) : "" },
+      {
+        key: "travel", name: game.i18n.localize("AZEROTH.Transporter.Travel"),
+        description: pad ? game.i18n.format("AZEROTH.Transporter.TravelTo", { scene: pad.sceneName, n: t.count, feet: t.feet }) : "",
+        available: padScene && !spent, tag: travelTag
+      }
+    ], null, { prompt: game.i18n.format("AZEROTH.Transporter.Prompt", { name: item.name }) });
+    if (!choice) return null;
+    const inFight = Boolean(actor.activeFight?.()?.started);
+    const tokenDoc = ownToken?.document ?? null;
+    if (choice.key === "set") {
+      const refused = transportRefusal("set", { inFight, token: Boolean(tokenDoc) });
+      if (refused) return warn(refused);
+      const centre = tokenDoc.getCenterPoint?.() ?? { x: tokenDoc.x, y: tokenDoc.y };
+      await actor.setFlag("azeroth-rpg", PAD_FLAG, { sceneId: tokenDoc.parent.id, x: Math.round(centre.x), y: Math.round(centre.y), sceneName: tokenDoc.parent.name ?? "", source: item.name });
+      const posted = await ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor }),
+        content: `<p class="azeroth-drain">${game.i18n.format(pad ? "AZEROTH.Transporter.SetAgain" : "AZEROTH.Transporter.SetLine", { name: actor.name, feature: item.name, scene: tokenDoc.parent.name ?? "" })}</p>`,
+        flags: { "azeroth-rpg": { kind: "transporterPad" } }
+      });
+      return { early: posted };
+    }
+    const others = aimed.filter(x => {
+      const a = targetActorOf(x);
+      return a && a.uuid !== actor.uuid;
+    });
+    const far = others.some(x => (feetBetweenTokens(ownToken, tokenOfTarget(x)) ?? Infinity) > t.feet);
+    const hostile = others.some(x => !allyOf(actor, targetActorOf(x)));
+    const docs = [tokenDoc, ...others.map(x => tokenDocOfTarget(x)).filter(Boolean)].filter(Boolean);
+    // **NOT TO ANOTHER SCENE WHILE A TRAVELLER FIGHTS** (the B3 review): the carry makes the
+    // token anew on the pad's scene and deletes the old one, which orphans its combatant.
+    const refused = transportRefusal("travel", {
+      pad, padScene, token: Boolean(tokenDoc), others: others.length, allowed: t.count, far, hostile, spent,
+      inFight: docs.some(doc => tokenFightsNow(doc)), padHere: Boolean(pad) && tokenDoc?.parent?.id === pad.sceneId
+    });
+    if (refused) return warn(refused, { n: t.count, feet: t.feet });
+    const needsGM = docs.some(doc => !doc.isOwner) || docs.some(doc => doc.parent?.id !== pad.sceneId);
+    if (needsGM && !game.user?.isGM && !game.users?.activeGM) return warn("AZEROTH.LegacyUse.NoGM");
+    plan.transport = { pad, docs };
+  }
+
+  // **ETHEREAL FORM, AND KINDRED SPIRITS' FRIENDS** (*Your Ethereal Form also covers one
+  // friendly target within 30 feet per rank*): with the talent, the creatures targeted
+  // besides the user - no more than it covers, each friendly and within its feet. Without
+  // it the Use covers the user alone, whatever is targeted.
+  if (spirits.ethereal) {
+    const kin = etherealAlliesFor(actor.takenTalents?.() ?? [], talentEffect, (expr, scope) => evaluateAmount(String(expr), scope));
+    const others = kin ? aimed.filter(x => {
+      const a = targetActorOf(x);
+      return a && a.uuid !== actor.uuid;
+    }) : [];
+    if (others.length) {
+      const refused = etherealAlliesRefusal({
+        named: others.length, allowed: kin.count,
+        far: others.some(x => (feetBetweenTokens(ownToken, tokenOfTarget(x)) ?? Infinity) > kin.feet),
+        hostile: others.some(x => !allyOf(actor, targetActorOf(x)))
+      });
+      if (refused) return warn(refused, { talent: kin.name, n: kin.count, feet: kin.feet });
+      if (gmAbsentForActors(others.map(x => targetActorOf(x)))) return warn("AZEROTH.LegacyUse.NoGM");
+    }
+    plan.ethereal = { allies: others.map(x => ({ actor: targetActorOf(x), name: x.name ?? "", feet: feetBetweenTokens(ownToken, tokenOfTarget(x)) })) };
+  }
+
+  // **A SUSTAIN OF ITS OWN** (04's Big Bad Voodoo; door 12): one at a time. Flametongue's
+  // is D-779's own door and is left to it.
+  if (spirits.sustain && spirits.sustain.identifier !== FLAMETONGUE.identifier) {
+    if ((actor.getFlag("azeroth-rpg", "sustaining") ?? []).some(e => e?.identifier === spirits.sustain.identifier)) return warn("AZEROTH.Sustain.AlreadyHeld");
+    plan.sustain = spirits.sustain;
+  }
+  if (spirits.immunity) plan.immunity = spirits.immunity;
+  if (spirits.freeMove) plan.freeMove = spirits.freeMove;
+  if (spirits.armor) plan.armor = spirits.armor;
+  plan.healsDealt = spirits.healsDealt === true;
+  // **DRAWN ACROSS NAMES ITS ONE CREATURE** (*a creature within 30 feet makes a Spirit
+  // Resilience Test*; the B3 review): the card's Resist halves that creature alone, so
+  // one is named, never the user, and recorded with its row on the card.
+  plan.halvesDealt = null;
+  if (spirits.halvesDealt) {
+    const one = aimed[0] ?? null;
+    const target = one ? targetActorOf(one) : null;
+    const refusedHalving = halvesDealtRefusal({ named: aimed.length, self: Boolean(target) && target.uuid === actor.uuid });
+    if (refusedHalving) return warn(refusedHalving);
+    plan.halvesDealt = {
+      ...spirits.halvesDealt, index: list.indexOf(one),
+      record: { actorUuid: target.uuid, sceneId: one.sceneId ?? null, tokenId: one.tokenId ?? null, actorId: one.actorId ?? null, name: one.name ?? target.name }
+    };
+  }
+  return plan;
+}
+
+/**
+ * **WHAT THE B3 USES WRITE, NOW THAT THEY ARE PAID FOR** (door 25): each judged in
+ * `judgeSpiritUses`, before the payment. The lines the card says.
+ *
+ * @param {object|null} plan
+ * @param {{actor: Actor, item: Item, poolItemId?: string|null}} o
+ * @returns {Promise<string[]>}
+ */
+async function writeSpiritUses(plan, { actor, item, poolItemId = null }) {
+  const lines = [];
+  if (!plan) return lines;
+  // The Crossing (door 10): the state on the user, to the minute.
+  if (plan.crossing) {
+    const laid = await crossInto(actor, { source: item.name, minutes: plan.crossing.minutes, img: item.img });
+    lines.push(game.i18n.format(laid ? "AZEROTH.Spirit.Crossed" : "AZEROTH.Spirit.NotCrossed", { name: actor.name, n: plan.crossing.minutes }));
+  }
+  // A concealment: on the user, then each ally measured.
+  if (plan.conceal) {
+    const span = plan.conceal.until === "minute" ? minuteSpan(actor) : null;
+    const mine = await layState(actor, {
+      // And what the attack that ends it adds (04's Wind Walk at rank 2; the B6 review).
+      flag: CONCEAL_FLAG, data: { source: item.name, by: actor.uuid, ends: [...plan.conceal.ends], ...(plan.conceal.damage > 0 ? { damage: plan.conceal.damage } : {}) }, statuses: [HIDDEN_STATUS], img: item.img, span,
+      name: game.i18n.format("AZEROTH.Conceal.Name", { source: item.name }),
+      description: `<p>${game.i18n.format("AZEROTH.Conceal.Text", { source: item.name })}</p>`,
+      sameAs: raw => raw?.source === item.name
+    });
+    const hidden = mine ? [actor.name] : [];
+    for (const a of plan.conceal.allies) {
+      const done = await layStateOn({ target: a.actor, kind: "conceal", by: actor, item, source: item.name, ends: plan.conceal.ends, span: plan.conceal.until === "minute" ? minuteSpan(a.actor) : null, feet: a.feet, img: item.img });
+      if (done.landed) hidden.push(done.name);
+    }
+    lines.push(game.i18n.format(plan.conceal.until === "attack" ? "AZEROTH.Conceal.LineAttack" : "AZEROTH.Conceal.Line", { names: hidden.join(", ") || "\u2014", feature: item.name }));
+  }
+  // One condition ended.
+  if (plan.cure) {
+    if (!plan.cure.id) lines.push(game.i18n.format("AZEROTH.Cure.Nothing", { target: plan.cure.name }));
+    else {
+      const done = await cureCondition({ target: plan.cure.target, id: plan.cure.id, by: actor, item });
+      lines.push(game.i18n.format(done.ended ? "AZEROTH.Cure.Ended" : "AZEROTH.Cure.NotEnded", { target: plan.cure.name, condition: game.i18n.localize(AZEROTH.conditions[plan.cure.id] ?? plan.cure.id) }));
+    }
+  }
+  // A creature called back.
+  if (plan.revive) {
+    const done = await reviveCreature({ target: plan.revive.target, by: actor, item, distance: plan.revive.distance });
+    // Whether it stood, for the Use's card to record (the Legacy branches' door 2).
+    plan.revive.risen = done.risen === true;
+    lines.push(game.i18n.format(done.risen ? "AZEROTH.Revive.Risen" : "AZEROTH.Revive.NotRisen", { target: plan.revive.name, n: done.health }));
+  }
+  // Ancestor's Hand's Dying friends (phase B6): each healed through the one healing door
+  // and stood, here or on the GM's client - judged again there off the user's own row.
+  if (plan.lift) {
+    const stood = [];
+    plan.lift.risen = [];
+    for (const d of plan.lift.dying) {
+      const done = await liftDying({ target: d.actor, by: actor, item, feet: d.feet });
+      if (!done.lifted) continue;
+      stood.push(done.name);
+      const tokenId = d.token?.document?.id ?? d.token?.id ?? null;
+      if (tokenId) plan.lift.risen.push({ sceneId: d.token?.document?.parent?.id ?? null, tokenIds: [tokenId] });
+    }
+    lines.push(stood.length
+      ? game.i18n.format("AZEROTH.Lift.Line", { feature: item.name, names: stood.join(", "), n: plan.lift.amount })
+      : game.i18n.format("AZEROTH.Lift.Nobody", { feature: item.name }));
+  }
+  // The transporter's carry, each creature its own d6.
+  if (plan.transport) {
+    const moved = await transportTo({ by: actor, item, docs: plan.transport.docs, pad: plan.transport.pad });
+    for (const m of moved) {
+      const roll = await new Roll("1d6").evaluate();
+      let fatigued = false;
+      if (m.moved && transportFatigues(roll.total)) {
+        let who = null;
+        try {
+          who = m.actorUuid ? fromUuidSync(m.actorUuid) : null;
+        } catch {
+          who = null;
+        }
+        if (who) fatigued = (await inflictCondition({ victim: who, id: "fatigued", by: actor, name: m.name })).landed === true;
+      }
+      lines.push(game.i18n.format(m.moved ? (fatigued ? "AZEROTH.Transporter.ArrivedFatigued" : "AZEROTH.Transporter.Arrived") : "AZEROTH.Transporter.NotMoved", { name: m.name, scene: m.scene, n: roll.total }));
+    }
+    if (!moved.length) lines.push(game.i18n.format("AZEROTH.Transporter.NoneMoved", { feature: item.name }));
+    lines.push(game.i18n.localize("AZEROTH.Transporter.Reason.Continent"));
+  }
+  // Ethereal Form, on the user and Kindred Spirits' friends, to the USER's next turn.
+  if (plan.ethereal) {
+    const span = untilNextTurnOrRound(actor);
+    const laid = await layEthereal(actor, { source: item.name, span, img: item.img });
+    const covered = laid ? [actor.name] : [];
+    for (const a of plan.ethereal.allies) {
+      const done = await layStateOn({ target: a.actor, kind: "ethereal", by: actor, item, source: item.name, span, feet: a.feet, img: item.img });
+      if (done.landed) covered.push(done.name);
+    }
+    lines.push(game.i18n.format("AZEROTH.Ethereal.Line", { names: covered.join(", ") || "\u2014", feature: item.name }));
+  }
+  // A timed immunity: the conditions ended, then refused until the span ends.
+  if (plan.immunity) {
+    const names = plan.immunity.conditions.map(id => game.i18n.localize(AZEROTH.conditions[id] ?? id));
+    const ended = [];
+    if (plan.immunity.ends) {
+      for (const id of plan.immunity.conditions) {
+        if (!actor.statuses?.has?.(id)) continue;
+        const done = await cureCondition({ target: actor, id, by: actor, item });
+        if (done.ended) ended.push(game.i18n.localize(AZEROTH.conditions[id] ?? id));
+      }
+    }
+    const span = plan.immunity.until === "userTurnEnd" ? untilEndOfNextTurnOrRound(actor) : untilNextTurnOrRound(actor);
+    await layState(actor, {
+      flag: IMMUNE_FLAG, data: { conditions: [...plan.immunity.conditions], source: item.name }, img: item.img, span,
+      name: game.i18n.format("AZEROTH.Immune.Name", { source: item.name }),
+      sameAs: raw => raw?.source === item.name
+    });
+    lines.push(game.i18n.format(ended.length ? "AZEROTH.Immune.LineEnded" : "AZEROTH.Immune.Line", { name: actor.name, conditions: names.join(", "), ended: ended.join(", ") }));
+  }
+  // A Sustain of its own, its upkeep the row's.
+  if (plan.sustain) lines.push(await holdUseSustain(actor, { name: item.name, identifier: plan.sustain.identifier, upkeep: plan.sustain.upkeep, poolItemId }));
+  // A Move that costs no Half-Action (D-712's door), the ground ignored for it.
+  if (plan.freeMove) {
+    const fight = actor.activeFight?.() ?? null;
+    const mine = fight?.started ? (fight.getCombatantsByActor(actor)?.[0] ?? null) : null;
+    if (mine?.isOwner) await mine.grantFreeMove(1);
+    if (plan.freeMove.ignoresGround) {
+      const stale = (actor.effects ?? []).filter(e => e.flags?.["azeroth-rpg"]?.freeWalk?.source === item.name).map(e => e.id);
+      if (stale.length) await actor.deleteEmbeddedDocuments("ActiveEffect", stale);
+      await actor.createEmbeddedDocuments("ActiveEffect", [{
+        name: game.i18n.format("AZEROTH.FreeWalk.Name", { source: item.name }), img: item.img ?? "icons/svg/wingfoot.svg", origin: actor.uuid,
+        ...(untilNextTurnOrRound(actor) ?? {}),
+        flags: { "azeroth-rpg": { [IGNORES_GROUND_FLAG]: true, freeWalk: { source: item.name } } }
+      }]);
+    }
+    lines.push(game.i18n.format(plan.freeMove.ignoresGround ? "AZEROTH.FreeWalk.LineGround" : "AZEROTH.FreeWalk.Line", { name: actor.name, feature: item.name }));
+  }
+  // The Mountain Wakes' Armor Points and Ward, written with the Use's encounter buff.
+  if (plan.armor) {
+    // Bladestorm's are until the warrior's next turn (the Legacy branches' B6).
+    lines.push(plan.armor.until === "userTurnStart"
+      ? game.i18n.format("AZEROTH.UseArmor.UntilTurn", { name: actor.name, ap: plan.armor.ap, feature: item.name })
+      : game.i18n.format("AZEROTH.MountainWakes.Line", { name: actor.name, ap: plan.armor.ap, ward: plan.armor.ward }));
+  }
+  return lines;
+}
+
+/**
+ * **WHAT A B3 CASTING USE LANDS ON ITS SUCCESS** (04's Disenchant: *make a Casting
+ * Test. On success ...*; door 25): each creature's chosen effects ended through 02's
+ * Dispel's one door (`effects/dispel.mjs#endEffects`, the feature named so the GM's
+ * handler judges it), Everlasting Affliction's gates and Unstable Affliction's answer
+ * as 02's Dispel takes them, and the summoned or bound creatures there struck on a card
+ * of their own. A failed Test ends nothing.
+ *
+ * @param {object|null} plan
+ * @param {{actor: Actor, item: Item, success: boolean, tierNow: number, extraRolls: Roll[]}} o
+ * @returns {Promise<string[]>}
+ */
+async function landSpiritCasting(plan, { actor, item, success, tierNow, extraRolls }) {
+  const lines = [];
+  const d = plan?.areaDispel ?? null;
+  if (!d) return lines;
+  if (!success) {
+    lines.push(game.i18n.format("AZEROTH.Disenchant.Failed", { name: item.name }));
+    return lines;
+  }
+  for (const pick of d.picks) {
+    const nameOf = Object.fromEntries(pick.ids.map((id, i) => [id, pick.names[i] ?? id]));
+    const blocked = [];
+    for (const g of pick.gated) {
+      const gateDc = castingDC({ tier: tierNow, targetDefense: pick.target.system?.defense ?? null });
+      const test = await gateCastingTest(actor, { dc: gateDc });
+      extraRolls.push(test);
+      const passed = gatePassed(test.outcome, g.sl);
+      if (!passed) blocked.push(g.id);
+      lines.push(game.i18n.format(passed ? "AZEROTH.Dispel.GatePassed" : "AZEROTH.Dispel.GateFailed", {
+        effect: nameOf[g.id] ?? g.id, talent: g.by, total: test.total, dc: gateDc, sl: test.outcome?.sl ?? 0, need: g.sl
+      }));
+    }
+    const ids = pick.ids.filter(id => !blocked.includes(id));
+    const done = ids.length ? await endEffects({ dispeller: actor, target: pick.target, ids, name: pick.name, featureId: item.id }) : { name: pick.name, ended: [], kept: [] };
+    lines.push(done.ended.length
+      ? game.i18n.format("AZEROTH.Dispel.Ended", { target: pick.name, effects: done.ended.map(e => e.name).join(", ") })
+      : game.i18n.format("AZEROTH.Dispel.EndedNone", { target: pick.name }));
+    for (const line of await unstableStrikes({ dispeller: actor, ended: done.ended })) lines.push(line);
+  }
+  if (d.damage && d.struck.length) {
+    const { targetSnapshots } = await import("../applications/roll-dialog.mjs");
+    const { strikeCard } = await import("../effects/after-blow.mjs");
+    const type = d.damage.type ?? "nature";
+    const posted = await strikeCard({
+      holder: actor, targets: targetSnapshots(d.struck), amount: d.damage.amount, type, name: item.name, kind: "disenchant",
+      subtitle: game.i18n.format("AZEROTH.Disenchant.Subtitle", { name: actor.name }),
+      explanation: game.i18n.format("AZEROTH.Disenchant.Explanation", { n: d.damage.amount, type: game.i18n.localize(AZEROTH.schools[type] ?? type) })
+    });
+    if (posted) lines.push(game.i18n.format("AZEROTH.Disenchant.Struck", { names: d.struck.map(t => t.name ?? "").join(", "), n: d.damage.amount }));
+  }
+  return lines;
+}
+
+/**
+ * **WHAT THE CARD CARRIES FOR A B3 USE'S OTHER DOORS** (door 25): Life Drain's drainer
+ * (the Apply heals it by what the blow took), and - on a Use that landed - Drawn
+ * Across's halving and Thrall of the Banshee's owner, each laid by the card's Resist
+ * failing (`dice/chat.mjs#rollResists`).
+ *
+ * @param {object|null} plan
+ * @param {{actor: Actor, item: Item, success?: boolean}} o
+ */
+function spiritCardFlags(plan, { actor, item, success = true }) {
+  if (!plan) return {};
+  const out = {};
+  if (plan.healsDealt) out.healsDealt = { by: actor.uuid, name: item.name };
+  // Each with the ONE creature the Use named (the B3 review): the card's Resist lands on
+  // it alone (`dice/chat.mjs#rollResists`, `rules/legacy-uses.mjs#namesCreature`).
+  if (plan.halvesDealt && success) {
+    out.halvesDealt = { by: actor.uuid, name: item.name, until: plan.halvesDealt.until, bossBoon: plan.halvesDealt.bossBoon === true, target: plan.halvesDealt.record ?? null };
+  }
+  if (plan.thrall && success) out.thrall = { by: actor.uuid, ownerName: actor.name, source: item.name, minutes: plan.thrall.minutes, target: plan.thrall.record ?? null };
+  return out;
+}
+
+/**
+ * **THE ROW ON THE CARD THE USE'S RESIST NAMES** (the B3 review): the index, in the card's
+ * own `targets`, of the one creature Thrall of the Banshee or Drawn Across named - so the
+ * Resist button is that creature's (`data-target-index`, `dice/chat.mjs#resistersOf`'s
+ * second door) and never every token the presser holds. Null for any other Use.
+ *
+ * @param {object|null} plan  `judgeSpiritUses`'
+ * @returns {string|null}
+ */
+function spiritResistIndex(plan) {
+  const index = plan?.thrall?.index ?? plan?.halvesDealt?.index ?? -1;
+  return Number.isInteger(index) && index >= 0 ? String(index) : null;
+}
+
 /**
  * Use a class feature (02 \u00a77, D-612). The order is the spell's: refuse
  * where a use or the pool is short, pay, make the Casting Test if the
@@ -3480,26 +4875,79 @@ export async function useFeature({
   // **THE CARD A WARD ANSWERS** (04's Foresight; the lead, 2026-10-03, on O-181:
   // *"Yes"*; D-779): `{messageId, index}` of the incoming attack's card the Ward was
   // pressed from (`dice/chat.mjs#foresightWardFromCard`).
-  foresight = null
+  foresight = null,
+  // **THE CARD A HIT-INTO-A-MISS ANSWERS** (04's Afterimage; the Legacy branches'
+  // door 13): `{messageId, index}` of the incoming attack's card and the row struck,
+  // as `dice/chat.mjs#negateFromCard` hands it. A negating Use refuses without it.
+  answers = null,
+  // **WHO IS USING IT** (D-724, the Legacy branches' door 2): the token the roll
+  // dialog found before it opened, for a casting feature; taken here otherwise.
+  source = null
 } = {}) {
   const sys = item.system;
-  const list = targets ?? [];
+  // A copy, never the caller's own array: an area Use replaces it with the creatures it
+  // gathers (the B6 fix; the lead: *"Measure the area"*), and Cloudburst adds to it.
+  const list = [...(targets ?? [])];
   const first = list[0] ?? null;
   // A talent's grant scales by the rank taken (D-642).
   const grantFlag = item.getFlag?.("azeroth-rpg", "feature") ?? {};
   const grantingTalent = grantFlag.talentId ? actor.items.get(grantFlag.talentId) ?? null : null;
+  // **WHAT THE CARD RECORDS FOR THE ANIMATION LAYER** (the Legacy branches' door 2):
+  // who used it - taken now, before any pick or chooser, by the roll dialog's own rule
+  // (`roll-dialog.mjs#sourceOf`, D-724) - and which feature it is, by the key its row
+  // is filed under (`rules/animation-records.mjs#featureKeyOf`); then what the Use
+  // moved, stood up and held, gathered by the doors below as they happen.
+  const useSource = tokenRef(source) ?? (await import("../applications/roll-dialog.mjs")).sourceOf(actor);
+  const useKey = featureKeyOf({ gadget: grantFlag.gadget ?? null, talent: grantingTalent?.name ?? null, name: item.name });
+  const stepsMade = [];
+  const risenMade = [];
+  const noteRisen = placed => {
+    const risen = risenRecord(placed);
+    if (risen) risenMade.push(risen);
+  };
+  let holdMade = null;
   const rank = grantingTalent ? (grantingTalent.system?.taken ?? grantFlag.rank ?? 1) : (grantFlag.rank ?? 1);
+  // **A GADGET'S USE IS THE GADGET'S** (the Legacy branches' door 7): a feature the
+  // sync granted for a gadget known reads what its Use does off 04's Gadgets table
+  // (`rules/gadgets.mjs`), never off the Gadgeteer row that granted it - the row
+  // below is the gadget's own, so no buff or rider of the Gadgeteer's reaches it.
+  const gadget = grantFlag.gadget ? gadgetByKey(grantFlag.gadget) : null;
   // The granting talent's row: a damage buff the Use switches on (D-711), and
   // what the Use does beyond its descriptor (D-771's `onUse`).
-  const talentRow = grantingTalent
+  const talentRow = gadget ? { onUse: gadget.onUse ?? {} } : grantingTalent
     ? talentEffect(grantingTalent.system?.className, grantingTalent.system?.identifier, grantingTalent.system?.race ?? null)
     : null;
   const onUse = onUseOf(talentRow);
 
-  // 1. A use left?
-  if (sys.uses?.per && sys.uses.value <= 0) {
+  // 1. A use left? **Not yet for a Use whose first choice is free** (04's Ultrasafe
+  // Transporter: a pad is set over a Short Rest, and the Long Rest's one use is the
+  // travel's; the B3 review): `judgeSpiritUses` asks it of the travel alone.
+  if (sys.uses?.per && sys.uses.value <= 0 && !usesAskedLater(onUse)) {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Feature.NoUses", { name: item.name }));
     return null;
+  }
+
+  // 1-. **THE SPIRIT REALM REFUSES A USE** (06 §10: *You cannot touch the living world*;
+  // the Legacy branches' door 10): every feature but a way back from Dying (02's
+  // Reincarnation, which 06 names), and stepping back from 04's The Crossing, which is
+  // free. **And Ethereal Form refuses a casting feature that restores no Health** (*you
+  // cannot ... cast, except spells that restore Health*): a casting feature casts (the
+  // lead's *"Yes, casting features count"*, D-777), through the one filter.
+  const crossingNow = crossingOf(onUse, rank);
+  if (!(crossingNow && crossed(actor))) {
+    const spirit = realmRefusalFor(actor, "feature", { wayBack: item.name === REINCARNATION.feature });
+    if (spirit) {
+      ui.notifications?.warn(spirit);
+      return null;
+    }
+  }
+  if (sys.casting) {
+    // A casting feature that restores Health and deals nothing (the B3 review).
+    const filtered = castRefusalFor(actor, { heals: featureRestoresOnly(sys, onUse), selfTargeted: castNamesSelf(actor, list) });
+    if (filtered) {
+      ui.notifications?.warn(filtered);
+      return null;
+    }
   }
 
   // 1+. **WHAT THE USE NEEDS, ASKED BEFORE ANYTHING IS PAID** (D-771, D-768's
@@ -3513,10 +4961,150 @@ export async function useFeature({
   // A mark already standing - a Parry or a Block not yet applied, a halving
   // pressed before - is never written over: the use, the pool or the Reaction
   // it was bought with would be lost in silence (`standingMarkRefusal`, D-771).
+  // **A MARK THAT ANSWERS ONE CARD IS A REACTION'S** (the B1 review): 04's Afterimage
+  // (`negate`) is pressed from an incoming card and writes a mark bound to it, as a
+  // Parry does - so a Parry's or a Block's mark standing on ANOTHER card, not yet
+  // applied, is that card's and refuses it no more than it refuses a Parry; a mark
+  // with no card (Survival Instincts, a Signature's halving) still does.
   if (onUse?.mitigate) {
-    const stands = standingMarkRefusal(actor.getFlag("azeroth-rpg", "mitigate") ?? null, { door: "use" });
+    const stands = standingMarkRefusal(actor.getFlag("azeroth-rpg", "mitigate") ?? null, { door: onUse.mitigate === "negate" ? "reaction" : "use" });
     if (stands) {
       ui.notifications?.warn(game.i18n.format(stands.key, { name: actor.name, ...stands.params }));
+      return null;
+    }
+  }
+  // **THE LEGACY BRANCHES' USES, JUDGED BEFORE ANYTHING IS PAID** (B1; D-768's
+  // order). `rules/class-talents.mjs#onUseLegacy` reads the granting talent's row at
+  // the rank, its amounts in the user's ability modifiers (door 16).
+  const legacy = onUseLegacy(onUse, { rank, tier: actor.system?.tier ?? 1, scope: abilityScope(actor.system) });
+  // *While you wield a two-handed weapon* (04's Bladestorm; door 15): read off what
+  // is in hand and worn now, refused in words.
+  if (legacy.wields.length) {
+    const needs = wieldRefusal(legacy.wields, actor.gateFacts?.()?.wield ?? null);
+    if (needs) {
+      ui.notifications?.warn(game.i18n.format(needs, { name: item.name }));
+      return null;
+    }
+  }
+  // *As a Reaction when an attack hits you ... The attack misses* (04's Afterimage;
+  // door 13): the incoming card's row, the user's own, a hit not yet turned into a
+  // miss, from a striker a Reaction may be taken against (door 14). Where the blow
+  // itself took the user's Reaction (a Bash), the Reaction that answers it is that
+  // one, so none is spent and none comes back (`answeredWithLost`).
+  let negating = null;
+  if (legacy.negate) {
+    const card = answers?.messageId ? (game.messages?.get(answers.messageId) ?? null) : null;
+    const index = Number.isInteger(answers?.index) ? answers.index : null;
+    const cardFlags = card?.flags?.["azeroth-rpg"] ?? {};
+    const struck = index !== null ? targetActorOf(cardFlags.targets?.[index] ?? null) : null;
+    const striker = card ? (ChatMessage.getSpeakerActor(card.speaker) ?? null) : null;
+    const strikerUnanswered = unansweredBy((striker?.effects ?? []).filter(e => e.active !== false).map(e => e.flags?.["azeroth-rpg"] ?? {}));
+    const refused = negateRefusal({
+      named: Boolean(card) && index !== null,
+      own: Boolean(struck) && (struck.uuid === actor.uuid || struck.id === actor.id),
+      hit: index !== null && Boolean(cardFlags.damageByTarget?.[index]),
+      withdrawn: index !== null && cardFlags.damageByTarget?.[index]?.withdrawn === true,
+      unanswered: strikerUnanswered.length > 0
+    });
+    if (refused) {
+      ui.notifications?.warn(game.i18n.format(refused, { name: item.name, source: strikerUnanswered.join(", ") }));
+      return null;
+    }
+    // The card is the striker's: the miss is written on it on the GM's client where
+    // this one may not write it, so with no GM online the Use is refused before its
+    // Rage and its Reaction are spent (D-774's review; the Parry's annotation's door).
+    if (cardPressUnrecordable(card)) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Card.PressNoGM"));
+      return null;
+    }
+    const fightOfNegate = actor.activeFight?.() ?? null;
+    const mineOfNegate = fightOfNegate?.getCombatantsByActor?.(actor)?.[0] ?? null;
+    negating = {
+      messageId: card.id, index,
+      answeredWithLost: sys.action === "reaction" && Boolean(mineOfNegate)
+        && reactionLostToBlow(cardFlags.landedOnHit ?? [], index) && (mineOfNegate.budget?.reactions ?? 0) < 1
+    };
+  }
+  // **NO REACTION AGAINST A CREATURE NOBODY MAY TAKE ONE AGAINST** (door 14, the B1
+  // review: 04's Wind Walk and Bladestorm, *No creature may take a Reaction against
+  // you*): a Use that is itself a Reaction - 02's Pummel, Counterspell - taken at a
+  // creature the state holds is refused in words before anything is paid. Only one
+  // AGAINST it: a target the user counts as an ally (D-755's one reading) is answered
+  // for, not against - Foresight's Ward, Hold the Thread - and Afterimage asked its
+  // striker above.
+  if (sys.action === "reaction" && !legacy.negate) {
+    const heldAgainst = list.map(t => targetActorOf(t)).filter(a => a && a.uuid !== actor.uuid && !allyOf(actor, a))
+      .flatMap(a => unansweredBy((a.effects ?? []).filter(e => e.active !== false).map(e => e.flags?.["azeroth-rpg"] ?? {})));
+    if (heldAgainst.length) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Reaction.Refuse.Unanswered", { source: [...new Set(heldAgainst)].sort().join(", ") }));
+      return null;
+    }
+  }
+  // **THE CHALLENGE AND THE LONG WATCH NAME ONE CREATURE** (door 18). With nothing
+  // targeted and a Watch standing, the Use says where the watched creature is and
+  // spends nothing (*you know its direction and rough distance*).
+  let marking = null;
+  if (legacy.mark) {
+    const aimed = list.filter(t => targetActorOf(t));
+    if (legacy.mark === "watch" && !aimed.length) return reportWatch(actor);
+    const self = aimed.some(t => {
+      const a = targetActorOf(t);
+      return Boolean(a) && (a.uuid === actor.uuid || a.id === actor.id);
+    });
+    let refused = null;
+    let markCombatant = null;
+    if (legacy.mark === "challenge") {
+      const fightOfMark = actor.activeFight?.() ?? null;
+      markCombatant = fightOfMark?.getCombatantsByActor?.(actor)?.[0] ?? null;
+      const r = markCombatant?.getFlag("azeroth-rpg", "round") ?? {};
+      refused = challengeRefusal({
+        named: aimed.length, self, inFight: Boolean(markCombatant),
+        onTurn: Boolean(markCombatant) && fightOfMark.combatant?.id === markCombatant.id,
+        used: r.number === fightOfMark?.round ? (r.once ?? []) : []
+      });
+    } else refused = watchRefusal({ named: aimed.length, self });
+    if (refused) {
+      ui.notifications?.warn(game.i18n.format(refused, { name: item.name }));
+      return null;
+    }
+    const target = aimed[0];
+    const standing = legacy.mark === "challenge"
+      ? marksFrom({ effects: (actor.effects ?? []).filter(e => e.active !== false).map(e => e.flags?.["azeroth-rpg"] ?? {}) }).challenge
+      : cleanMark(actor.getFlag("azeroth-rpg", WATCH_FLAG) ?? null);
+    const replaced = markReplaced(standing, markOf(target));
+    const replacedActor = replaced ? targetActorOf(replaced) : null;
+    // The Challenge's Bane is laid on the creature named and ended on the first, each
+    // through the GM's client where this one does not own it: with none online,
+    // refused before anything is paid (D-774's review).
+    if (legacy.mark === "challenge" && gmAbsentForActors([targetActorOf(target), replacedActor])) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Rider.Inflict.NoGM"));
+      return null;
+    }
+    marking = { kind: legacy.mark, target, combatant: markCombatant, replaced, replacedActor };
+  }
+  // **EVERY CREATURE YOU HAVE ENTANGLED, PULLED TO YOU** (04's None Escape; door 24):
+  // within its feet, measured between the nearest spaces (D-732), of any side - a
+  // neutral one included, as *every creature* says - held by an Entangled whose effect
+  // names the user (`laidBy`, door 17). None held, no token to pull them to, or one a
+  // GM must move and none online, is refused before anything is paid. Where each
+  // lands is the user's to choose (the lead: *"A space you choose"*), picked below
+  // once the price is known to be payable.
+  let pulling = [];
+  const ownTokenOfPull = legacy.pullEntangled ? (actor.getActiveTokens?.(true)?.[0] ?? null) : null;
+  if (legacy.pullEntangled) {
+    const reach = legacy.pullEntangled.feet;
+    pulling = (ownTokenOfPull ? (canvas?.tokens?.placeables ?? []) : [])
+      .filter(t => t && t !== ownTokenOfPull && t.actor && t.document?.parent?.id === ownTokenOfPull.document?.parent?.id)
+      .map(t => ({ token: t, actor: t.actor, feet: feetBetweenTokens(ownTokenOfPull, t) }))
+      .filter(r => r.feet !== null && r.feet <= reach
+        && (r.actor.effects ?? []).some(e => e.active !== false && e.statuses?.has?.("entangled") && laidByOne(e.flags?.["azeroth-rpg"] ?? {}, actor.uuid)))
+      .sort((a, b) => String(a.token.name ?? "").localeCompare(String(b.token.name ?? "")) || String(a.token.id).localeCompare(String(b.token.id)));
+    if (!pulling.length) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Pull.NoneHeld", { name: item.name, feet: reach }));
+      return null;
+    }
+    if (gmAbsentForActors(pulling.map(r => r.actor))) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Forced.NoGM"));
       return null;
     }
   }
@@ -3574,8 +5162,14 @@ export async function useFeature({
   // end of your next turn*, *one round per rank* - is then the world's clock
   // (`effects/durations.mjs#untilEndOfNextTurnOrRound`, `roundsOrClock`).
   const lays = onUse?.laysBane || onUse?.laysBoon ? onUseLays(onUse, rank) : { bane: null, boon: null };
+  // **02's RACIAL BOONS** (the B8a2 pass): the troll's Berserking lays its Boon on the user
+  // (`onUse.self`) for the encounter, and names nobody; the orc's Thrall's Discipline names one
+  // friendly creature *within 60 feet* (`lays.boon.feet`), measured where both stand (D-732).
+  const boonWhere = boonSpan(lays.boon, onUse);
   let laysOn = null;
-  if (lays.bane || lays.boon) {
+  if (lays.boon && boonWhere.self && !lays.bane) {
+    laysOn = { t: null, actor };
+  } else if (lays.bane || lays.boon) {
     const aimed = (targets ?? []).map(t => ({ t, actor: targetActorOf(t) })).filter(r => r.actor);
     if (aimed.length !== 1) {
       ui.notifications?.warn(game.i18n.format("AZEROTH.Laid.OneTarget", { name: item.name }));
@@ -3588,6 +5182,20 @@ export async function useFeature({
         ui.notifications?.warn(game.i18n.format("AZEROTH.Laid.NotFriendly", { name: item.name, target: aimed[0].actor.name }));
         return null;
       }
+    }
+    // *within 60 feet* (Thrall's Discipline), where both tokens stand; unmeasured, the table's.
+    const boonReach = lays.boon?.feet ?? 0;
+    const apart = boonReach > 0 ? feetBetweenTokens(actor.getActiveTokens?.(true)?.[0] ?? null, tokenOfTarget(aimed[0].t)) : null;
+    if (apart !== null && apart > boonReach) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Laid.TooFar", { name: item.name, target: aimed[0].t?.name ?? aimed[0].actor.name, feet: boonReach }));
+      return null;
+    }
+    // **A BANE OR A BOON LAID ON ANOTHER'S CREATURE IS WRITTEN ON THE GM'S CLIENT** (the
+    // B8a2 pass, `rules/gm-writes.mjs#gmAbsentFor`): with no GM online it was refused only
+    // after the Use had paid - Taunt's and Blessing's too. Refused here, before anything is spent.
+    if (gmAbsentForActors([aimed[0].actor])) {
+      ui.notifications?.warn(game.i18n.localize(lays.boon ? "AZEROTH.Laid.BoonNoGM" : "AZEROTH.Laid.BaneNoGM"));
+      return null;
     }
     laysOn = aimed[0];
   }
@@ -3621,7 +5229,11 @@ export async function useFeature({
   // through the one chooser where Second Beast holds two; none refuses in words.
   let healsBound = null;
   if (sys.bound?.action === "heal") {
-    const held = boundOf(actor, sys.bound.kind);
+    // **A WRECKED CONSTRUCT IS REBUILT, NEVER HEALED** (04's The Bench: *rebuilding
+    // one wrecked at 0 Health* takes a rest; the Legacy branches' door 6): 04's
+    // Arclight Spanner reaches the constructs standing, and one at 0 Health is left
+    // out of its list.
+    const held = boundOf(actor, sys.bound.kind).filter(b => !isWrecked({ kind: bondOf(b)?.kind ?? null, health: b.system?.health?.value ?? null }));
     if (!held.length) {
       ui.notifications?.warn(game.i18n.format("AZEROTH.Bound.NoCreature", { name: actor.name, kind: game.i18n.localize(AZEROTH.boundKinds[sys.bound.kind] ?? sys.bound.kind) }));
       return null;
@@ -3641,6 +5253,20 @@ export async function useFeature({
   if (barrage?.refused) {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Barrage.TooMany", { name: item.name, n: list.length, max: barrageLimits.targets }));
     return null;
+  }
+  // **EACH TARGET WITHIN THE FEET OF THE USER** (04's Fan of Knives: *attack up to two
+  // enemies within 10 feet of you*; the Legacy branches' B6): one named farther, measured
+  // between the nearest squares (D-732), is refused in words before anything is paid.
+  if (barrageLimits?.within) {
+    const from = actor.getActiveTokens?.(true)?.[0] ?? null;
+    const far = list.filter(t => {
+      const feet = from ? feetBetweenTokens(from, tokenOfTarget(t)) : null;
+      return feet !== null && feet > barrageLimits.within;
+    });
+    if (far.length) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Barrage.TooFar", { name: item.name, names: far.map(t => t.name ?? "").join(", "), feet: barrageLimits.within }));
+      return null;
+    }
   }
   // The Ranger's and the Rogue's Uses at the rank (D-773). A state that lasts
   // *until your next turn* or *the end of your next turn* takes the fight's turn,
@@ -3829,7 +5455,8 @@ export async function useFeature({
   // **02's BLINK** (*move 20 feet to a point you have seen*), with 04's Improved
   // Blink's reach and Slow Time's friend (*on a friendly target you can see within
   // 30 feet instead of on yourself*): the mover named, judged now. The move itself
-  // is the table's (no door places a token).
+  // is the step door's (the Legacy branches' door 3): its space picked below, before
+  // anything is paid, and the token moved once the Use is.
   let blink = null;
   if (item.name === BLINK.feature) {
     const reach = blinkFor(talentsNow);
@@ -4134,6 +5761,242 @@ export async function useFeature({
     return null;
   }
 
+  // **THE LEGACY BRANCHES' BODIES, JUDGED BEFORE ANYTHING IS PAID** (B2; D-768's
+  // order: every refusal, then the budget, the reveal and the payment). Each pick
+  // below is a judgement too - dismissed, it costs nothing.
+  const fightForBodies = actor.activeFight?.() ?? null;
+  const ownTokenDoc = ownToken?.document ?? null;
+  // 04's The Bench (*Building one takes a Short Rest and a tinker's kit*) and
+  // Gadgeteer (*Changing one you know takes a week of downtime*): outside a fight,
+  // and the build with a tinker's kit carried (door 6, door 7).
+  if (sys.choice === "constructs") {
+    if (fightForBodies) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Construct.Refuse.InFight", { name: item.name }));
+      return null;
+    }
+    if (!actor.items.some(i => i.type === "gear" && i.system?.identifier === CONSTRUCT_KIT && (i.system?.quantity ?? 1) > 0)) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Construct.Refuse.NoKit", { name: item.name }));
+      return null;
+    }
+  }
+  if (sys.choice === "gadgets") {
+    const refused = gadgetChangeRefusal({ inFight: Boolean(fightForBodies) });
+    if (refused) {
+      ui.notifications?.warn(game.i18n.format(refused, { name: item.name }));
+      return null;
+    }
+  }
+  // **A GADGET AIMED AT ONE CREATURE** (04's Discombobulator Ray, *A creature within
+  // 30 feet*; the Gnomish Universal Remote, *A Construct within 30 feet*; door 7):
+  // one creature targeted, within the feet where both stand, and of the kind named.
+  if (onUse?.aim) {
+    const aimed = list.filter(t => targetActorOf(t));
+    if (aimed.length !== 1) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Laid.OneTarget", { name: item.name }));
+      return null;
+    }
+    const apart = feetBetweenTokens(ownToken, tokenOfTarget(aimed[0]));
+    if (apart !== null && apart > (Number(onUse.aim.feet) || 0)) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Laid.TooFar", { name: item.name, target: aimed[0].name ?? "", feet: onUse.aim.feet }));
+      return null;
+    }
+    const kinds = Array.isArray(onUse.aim.kinds) ? onUse.aim.kinds : [];
+    const struckType = targetActorOf(aimed[0])?.system?.creatureType ?? aimed[0]?.creatureType ?? null;
+    if (kinds.length && !kinds.includes(struckType)) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Gadget.WrongKind", { name: item.name, target: aimed[0].name ?? "", kind: kinds.map(k => game.i18n.localize(AZEROTH.creatureTypes?.[k] ?? k)).join(", ") }));
+      return null;
+    }
+    // *A friendly target* (04's Troll's Blood and Voodoo Mending; the Legacy branches' B6):
+    // the user, or a creature the user counts as an ally (D-755's one reading).
+    const aimedActor = targetActorOf(aimed[0]);
+    if (onUse.aim.friendly === true && aimedActor && aimedActor.uuid !== actor.uuid && !allyOf(actor, aimedActor)) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Laid.NotFriendly", { name: item.name, target: aimed[0].name ?? aimedActor.name }));
+      return null;
+    }
+  }
+  // **A GADGET WHOSE ATTACK LAYS A CONDITION NEEDS A GM FOR A CREATURE THIS CLIENT DOES
+  // NOT OWN** (04's Net-o-Matic Projector; the B2 review): its card's attack lays the
+  // Entangled through the GM's client, so with none online the gadget's use would be
+  // spent on a net that lands on nobody - refused before anything is paid. With nothing
+  // targeted the net's creature is not known yet, and is counted as somebody else's,
+  // as a summons' bind is.
+  if (onUse?.gadgetAttack && (onUse.gadgetAttack.inflicts ?? []).length) {
+    const owned = list.length ? list.map(t => targetActorOf(t)?.isOwner === true) : [false];
+    if (gmAbsentFor({ owned, isGM: game.user?.isGM === true, gmActive: Boolean(game.users?.activeGM) })) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Rider.Inflict.NoGM"));
+      return null;
+    }
+  }
+  // **A STEP TO A CHOSEN POINT** (the Legacy branches' door 3): 02's Blink (its
+  // reach `blinkFor`'s, its mover Slow Time's friend where one is named) and
+  // Shadowstep, and a talent's `onUse.step` (04's Fade Step). The space is picked
+  // now, before anything is paid; the token is moved once it is. A mover with no
+  // token on the viewed scene is moved by the table, said on the card.
+  const ownStep = item.name === BLINK.feature
+    ? { feet: blink?.reach?.feet ?? FEATURE_STEPS.Blink.feet, sight: FEATURE_STEPS.Blink.sight, refuseWhile: [] }
+    : (item.name === "Shadowstep" && sys.className === "Rogue" ? { ...FEATURE_STEPS.Shadowstep, refuseWhile: [] } : stepOf(onUse, rank));
+  let stepping = null;
+  if (ownStep) {
+    const heldBy = stepHeldBy(ownStep.refuseWhile, actor.statuses ?? []);
+    if (heldBy) {
+      ui.notifications?.warn(game.i18n.format(STEP_REFUSALS.held, { name: item.name, condition: game.i18n.localize(AZEROTH.conditions[heldBy] ?? heldBy) }));
+      return null;
+    }
+    const moverDoc = blink?.who ? (tokenDocOfTarget(blink.who) ?? null) : ownTokenDoc;
+    if (!moverDoc?.parent || moverDoc.parent.id !== canvas?.scene?.id) stepping = { skipped: true, name: blink?.who?.name ?? actor.name, feet: ownStep.feet };
+    else {
+      if (!moverDoc.isOwner && !game.user.isGM && !game.users.activeGM) {
+        ui.notifications?.warn(stepWords("noGM", { name: moverDoc.name ?? "", feet: ownStep.feet }));
+        return null;
+      }
+      const picked = await pickStep(moverDoc, { feet: ownStep.feet, sight: ownStep.sight, name: moverDoc.name ?? actor.name });
+      if (!picked) return null;
+      // Slow Time's ally is a `friend` step, the user's own a `self` one: what the GM's
+      // client judges the move by (the B2 review, item h).
+      stepping = { doc: moverDoc, to: picked.to, feet: ownStep.feet, name: moverDoc.name ?? actor.name, kind: blink?.who ? "friend" : "self" };
+    }
+  }
+  // **ONE OF YOUR CONSTRUCTS TAKES A HALF-ACTION AT ONCE** (04's Remote Control at
+  // rank 2; door 6): a construct standing within the feet, picked through the one
+  // chooser where two stand, in a fight - out of one there is no turn to give it.
+  let constructHalf = null;
+  if (onUse?.constructHalf) {
+    if (!fightForBodies) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Construct.NoFight", { name: item.name }));
+      return null;
+    }
+    const feetHalf = Math.max(0, Number(onUse.constructHalf.feet) || 0);
+    const near = boundOf(actor, "construct").filter(c => (c.system?.health?.value ?? 0) > 0).map(c => ({ c, token: c.getActiveTokens?.(true)?.[0] ?? null }))
+      .filter(r => r.token && (feetBetweenTokens(ownToken, r.token) ?? Infinity) <= feetHalf);
+    if (!near.length) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Construct.NoneNear", { name: item.name, feet: feetHalf }));
+      return null;
+    }
+    const pickHalf = near.length === 1 ? near[0] : await (async () => {
+      const answer = await chooseOption(item, near.map(r => ({ key: r.c.uuid, name: r.c.name, description: "" })), null);
+      return answer ? (near.find(r => r.c.uuid === answer.key) ?? null) : null;
+    })();
+    if (!pickHalf) return null;
+    const theirs = fightForBodies.getCombatantsByActor(pickHalf.c)?.[0] ?? fightForBodies.combatants.find(cb => cb.tokenId === pickHalf.token.id) ?? null;
+    if (!theirs) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Construct.NotInFight", { name: pickHalf.c.name }));
+      return null;
+    }
+    constructHalf = { construct: pickHalf.c, combatant: theirs, owner: fightForBodies.getCombatantsByActor(actor)?.[0] ?? null };
+  }
+  // **A FEATURE AIMED FROM A CONSTRUCT** (04's Cluster Rockets: *One of your
+  // constructs fires at a point within 60 feet of it*; door 6): the construct whose
+  // token the card's area is measured from, picked now.
+  let aimFrom = null;
+  if (onUse?.aimFrom?.kind === "construct") {
+    const standing = boundOf(actor, "construct").filter(c => (c.system?.health?.value ?? 0) > 0).map(c => ({ c, token: c.getActiveTokens?.(true)?.[0] ?? null })).filter(r => r.token);
+    if (!standing.length) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Construct.NoneStanding", { name: item.name }));
+      return null;
+    }
+    const pickFrom = standing.length === 1 ? standing[0] : await (async () => {
+      const answer = await chooseOption(item, standing.map(r => ({ key: r.c.uuid, name: r.c.name, description: "" })), null);
+      return answer ? (standing.find(r => r.c.uuid === answer.key) ?? null) : null;
+    })();
+    if (!pickFrom) return null;
+    aimFrom = { tokenUuid: pickFrom.token.document.uuid, name: pickFrom.c.name, feet: Math.max(0, Number(onUse.aimFrom.feet) || 0) };
+  } else if (onUse?.aimFrom?.kind === "self" && ownTokenDoc) {
+    // **AN AREA AT A POINT WITHIN THE USER'S REACH** (04's Hush of the Grave: *Every enemy
+    // within 15 feet of a point within 60 feet*; the Legacy branches' B6): the card's point
+    // held to the feet from the user's own token, the construct's door aimed from the user.
+    // With no token on the board the point is the table's, as a spell's is.
+    aimFrom = { tokenUuid: ownTokenDoc.uuid, name: actor.name, feet: Math.max(0, Number(onUse.aimFrom.feet) || 0) };
+  }
+  // **WHAT AN AREA USE MEASURES, AND WHERE** (the lead: *"Measure the area"*; the B6
+  // fix): a circle about the user is measured once the Use lands (3c); one on the ground
+  // is aimed NOW, before anything is paid - the point picked within the feet of the token
+  // the Use aims from (Cluster Rockets' construct, Hush of the Grave's ranger), a press
+  // farther refused in words and the pick kept open, and a pick dismissed costs nothing.
+  // With nothing to aim from on this board the point is the table's, as before: the card
+  // keeps its Place area and its buttons reach the selected tokens.
+  const gatherPlan = gatherOf({ who: sys.who ?? null, area: sys.area ?? "" });
+  let gatherAt = null;
+  if (gatherPlan?.origin === "point" && aimFrom?.tokenUuid && canvas?.scene) {
+    const aimToken = fromUuidSync(aimFrom.tokenUuid);
+    if (aimToken?.parent?.id === canvas.scene.id) {
+      const reachFt = Math.max(0, Number(aimFrom.feet) || 0);
+      gatherAt = await pickPoint({
+        hint: game.i18n.format("AZEROTH.Gather.Pick", { feature: item.name, feet: reachFt, from: aimFrom.name ?? "" }),
+        accept: point => {
+          const feet = feetToPoint(aimToken, point);
+          if (feet !== null && feet <= reachFt) return true;
+          ui.notifications?.warn(game.i18n.format("AZEROTH.Gather.PickTooFar", { feet: reachFt, from: aimFrom.name ?? "" }));
+          return false;
+        }
+      });
+      if (!gatherAt) return null;
+    }
+  }
+  // **WHAT THE AREA LAYS AT ONCE IS WRITTEN ON EVERY CREATURE IT REACHES** (the lead:
+  // *"Land automatically"*; Thunder Clap's Slowed): a creature this client does not own
+  // is written on the GM's client, so with no GM online the Use is refused here, before
+  // anything is spent (`rules/gm-writes.mjs#gmAbsentFor`).
+  if (gatherPlan && landsAtOnce(sys.inflicts ?? [], { resisted: Boolean(sys.resist) }).length) {
+    const reached = creaturesInArea(actor, gatherPlan, { point: gatherAt });
+    if (reached && gmAbsentForActors(reached.map(r => r.actor))) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Rider.Inflict.NoGM"));
+      return null;
+    }
+  }
+  // **A TRAP SET AT A POINT** (04's Shadow Trap: *set a trap at a point within 30
+  // feet ... One may stand at a time, or two at rank 2*; door 26): the point picked
+  // within the feet of the setter's token, before anything is paid.
+  const trap = trapOf(onUse, rank);
+  let trapAt = null;
+  if (trap) {
+    if (!ownTokenDoc || !canvas?.scene) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Trap.NoToken", { name: item.name }));
+      return null;
+    }
+    trapAt = await pickPoint({
+      hint: game.i18n.format("AZEROTH.Trap.Pick", { name: item.name, feet: trap.within }),
+      accept: point => {
+        const feet = feetToPoint(ownToken, point);
+        if (feet !== null && feet <= trap.within) return true;
+        ui.notifications?.warn(game.i18n.format("AZEROTH.Trap.PickTooFar", { name: item.name, feet: trap.within }));
+        return false;
+      }
+    });
+    if (!trapAt) return null;
+  }
+  // **WHERE WHAT THE FEATURE CALLS ASSEMBLES** (04's Pocket Factory: *assemble in
+  // spaces within 30 feet*; door 4): a point picked within the feet, before anything
+  // is paid; with no token on the viewed scene the creatures are bound and placed by
+  // the table, said on the card.
+  const place = (sys.summons?.count ?? 0) > 0 ? placeOf(onUse) : null;
+  // **WHAT IS CALLED IS MADE ON THE GM'S CLIENT** (D-643's bind, door 4's tokens):
+  // with no GM online a player's call would pay and make nothing, so it is refused
+  // first (`rules/gm-writes.mjs#gmAbsentFor`), as every such door is.
+  if ((sys.summons?.count ?? 0) > 0 && gmAbsentFor({ owned: [false], isGM: game.user?.isGM === true, gmActive: Boolean(game.users?.activeGM) })) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Bound.NoGM"));
+    return null;
+  }
+  let placeAt = null;
+  if (place && ownTokenDoc && canvas?.scene) {
+    placeAt = await pickPoint({
+      hint: game.i18n.format("AZEROTH.Place.Pick", { name: item.name, feet: place.within }),
+      accept: point => {
+        const refused = placeRefusal({ within: place.within, apart: feetToPoint(ownToken, point) });
+        if (!refused) return true;
+        ui.notifications?.warn(game.i18n.format(`AZEROTH.Place.Refuse.${refused === "far" ? "Far" : "Unmeasured"}`, { name: item.name, feet: place.within }));
+        return false;
+      }
+    });
+    if (!placeAt) return null;
+  }
+
+  // 1-b. **THE LEGACY BRANCHES' B3 USES, JUDGED AND PICKED BEFORE ANYTHING IS PAID**
+  // (door 25; doors 10, 11 and 12's Uses): `judgeSpiritUses` above. A Use it finishes
+  // with nothing to pay - The Crossing stepped back from, a pad set - returns here.
+  const spiritsPlan = await judgeSpiritUses({ actor, item, sys, onUse, rank, list, talentRow, ownToken });
+  if (!spiritsPlan) return null;
+  if (spiritsPlan.early !== undefined) return spiritsPlan.early;
+
   // 1a. **A SHAPE THE CHARACTER CANNOT TAKE AT ALL** (D-769; the lead,
   // 2026-10-03: *"No Avatar without it"*): the Avatar of the Wild without 04's
   // Heart of the Wild, refused in words before the chooser opens and before
@@ -4153,6 +6016,8 @@ export async function useFeature({
   let picks = [];
   // The shape this use takes, judged at 1b and written at step 2 (D-769).
   let shapeTake = null;
+  // The wrecked construct The Bench rebuilds, picked at 1b (the Legacy branches' door 6).
+  let rebuilding = null;
   // The creatures the picks bound, carried past the payment: a totem is
   // PLANTED once the Half-Action and the Mana are paid, never before
   // (02 §7, D-708). One entry everywhere but Totem Mastery.
@@ -4219,6 +6084,10 @@ export async function useFeature({
     // checklist Totem Mastery's is (D-710's one chooser, never a second dialog):
     // one form, or two merged.
     if (sys.choice === "forms" && (sys.picks ?? 1) > 1) allowed = Math.trunc(sys.picks);
+    // **04's GADGETEER: AS MANY AS THE RANKS KNOW** (*two gadgets ... or four at rank
+    // 2*; Engineering Upgrade's *one more gadget per rank*; door 7): the checklist,
+    // opened on the gadgets known.
+    if (sys.choice === "gadgets") allowed = Math.max(1, gadgetsKnownFor(talentsNow).known);
     const answer = await chooseOption(item, options, note, { max: allowed });
     picks = answer === null ? [] : (Array.isArray(answer) ? answer : [answer]);
     if (!picks.length) return null;
@@ -4315,8 +6184,31 @@ export async function useFeature({
       if (!school) return null;
       aegisSchool = school.key;
     }
+    // **04's GRAVE BOND: THE TEST IN PLACE OF THE HANDLING TEST** (the Legacy branches'
+    // door 26): rolled now, before anything is bound or paid - a creature that
+    // resists binds nothing and the Use costs nothing.
+    for (const pick of binding?.kind === "companion" ? picks : []) {
+      if (!pick.graveBond || pick.held || !pick.uuid) continue;
+      // A creature that resisted before is never tried again (02's Companion; the B2
+      // review): the menu greys it, and the pick is refused here as well, in words.
+      if (resistedBonds(actor.getFlag("azeroth-rpg", GRAVE_BOND_RESISTED_FLAG)).includes(pick.uuid)) {
+        ui.notifications?.warn(game.i18n.format("AZEROTH.GraveBond.TriedBefore", { name: pick.name ?? "", talent: graveBondFor(talentsNow)?.name ?? "" }));
+        return null;
+      }
+      const creature = await fromUuid(pick.uuid);
+      // The Resilience the row names (`graveBond.resist`; the B6 review: it was never read).
+      const bond = graveBondFor(talentsNow);
+      if (!creature || await graveBondTest({ owner: actor, creature, talent: bond?.name ?? "", uuid: pick.uuid, resilience: bond?.resist ?? "spirit" })) return null;
+    }
     let boundRefused = false;
     for (const pick of binding ? picks : []) {
+      // **A WRECKED CONSTRUCT REBUILT** (04's The Bench: *and so does rebuilding one
+      // wrecked at 0 Health*; door 6): the construct already held, stood up once the
+      // Use is paid for - no second bind.
+      if (pick.rebuild) {
+        rebuilding = boundOf(actor, "construct").find(b => b.uuid === pick.uuid) ?? null;
+        continue;
+      }
       if (pick.held) {
         // Already bound to this character: nothing to make, nothing to pay for.
         ui.notifications?.info(game.i18n.format("AZEROTH.Bound.AlreadyHeld", { owner: actor.name, name: pick.name }));
@@ -4345,6 +6237,23 @@ export async function useFeature({
     // A form taken is a form LEARNED (D-619), and it is recorded once the shift
     // is paid for, beside the shape itself (step 2b; D-769) - a shift refused
     // learns nothing.
+  }
+  // **A SHAPE NO MENU PICKS** (04's Gnomish Battle Rig: *You take its form in
+  // 14-BESTIARY*; the Legacy branches' B2): the kind's one block, read off the
+  // bestiary pack by name before anything is paid, as every other shape's is - a
+  // block the pack does not hold refuses the Use in words.
+  if (!shapeTake && !sys.choice) {
+    const kindHere = shapeKindOf({ name: item.name, choice: null });
+    const entryName = shapeEntryOf(kindHere);
+    if (entryName) {
+      const found = (await bestiaryEntries()).find(e => e.name === entryName) ?? null;
+      const forms = found ? await formsFrom([found.uuid]) : [];
+      if (!forms.length) {
+        ui.notifications?.warn(game.i18n.format("AZEROTH.Shape.NoBlock", { name: item.name, form: entryName }));
+        return undoBinds();
+      }
+      shapeTake = { kind: kindHere, forms, ward: null };
+    }
   }
 
   // 1c. A feature that dismisses a bound creature (Demonic Sacrifice, D-643)
@@ -4505,14 +6414,62 @@ export async function useFeature({
   // And Improved Blink at rank 2's free Blink (D-775), judged at step 1.
   if (freeMana || blinkFree) Object.assign(payment, { spent: 0, refusal: null });
   if (payment.refusal === "NoPool") {
+    // 05 §11's kind word names its own pool too (02 §5's War Stomp: *4 Momentum*).
     ui.notifications?.warn(game.i18n.format("AZEROTH.Feature.NoPool",
-      { name: item.name, pool: game.i18n.localize(AZEROTH.poolTypes[sys.cost.pool] ?? sys.cost.pool), amount: sys.cost.amount }));
+      { name: item.name, pool: game.i18n.localize(AZEROTH.costPoolTypes[sys.cost.pool] ?? sys.cost.pool), amount: sys.cost.amount }));
     return undoBinds();
   }
   if (payment.refusal === "Short") {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Feature.NoPool",
       { name: item.name, pool: game.i18n.localize(AZEROTH.poolTypes[pool.name] ?? pool.name), amount: payment.spent }));
     return undoBinds();
+  }
+
+  // 1e. **THE RUNG A USE OF TWO IS TAKEN AT** (04's Ethereal Form: *At rank 2 you may use
+  // it as a Reaction*; the B6 review - a second way, never the only one): out of a fight
+  // the Use's own, in one the rung the turn can still pay, and where it can pay both the
+  // one chooser asks which, before anything is spent - a dismissed chooser costs nothing.
+  // Whose turn it is (B8b): off its own turn only the Reaction is open.
+  const rungMine = actor.activeFight?.()?.getCombatantsByActor?.(actor)?.[0] ?? null;
+  const rungPlan = rungChoice({
+    action: sys.action ?? null, rungs: sys.rungs ?? [], inFight: Boolean(actor.activeFight?.()),
+    onTurn: rungMine ? rungMine.isCurrentTurn === true : true,
+    payable: r => !turnBudgetRefusal(actor, r)
+  });
+  let rungNow = rungPlan.rung;
+  if (rungPlan.ask) {
+    const pickRung = await chooseOption(item, rungPlan.ask.map(r => ({ key: r, name: game.i18n.localize(AZEROTH.actions[r] ?? r), description: "" })), null,
+      { prompt: game.i18n.format("AZEROTH.Feature.RungPrompt", { name: item.name }) });
+    if (!pickRung) return undoBinds();
+    rungNow = pickRung.key;
+  }
+  // The rung this Use spends: Nature's Swiftness's Half-Action, else the one taken.
+  const actionNow = swiftLine ? "half" : (rungNow ?? null);
+
+  // 1e+. **WHERE EACH PULLED CREATURE LANDS** (04's None Escape: *pulled to a space you
+  // choose within 10 feet of you*; the lead, 2026-10-21: *"A space you choose"*): one
+  // pick for each creature held, in name order, once the price and the turn are known
+  // to be payable - asked of the budget without spending it - so a dismissed pick makes
+  // no Use and spends nothing. Each space is measured from the USER's footprint (D-732)
+  // and may hold no other creature and no space already chosen; a creature's own space
+  // leaves it where it stands, said on the card.
+  const pullPlan = [];
+  if (pulling.length) {
+    const short = turnBudgetRefusal(actor, actionNow);
+    if (short) {
+      ui.notifications?.warn(game.i18n.format(short.reason, short.params ?? {}));
+      return undoBinds();
+    }
+    const holderName = ownTokenOfPull?.name ?? actor.name;
+    const taken = [];
+    for (const r of pulling) {
+      const picked = await pickPull(r.token, {
+        holder: ownTokenOfPull, within: legacy.pullEntangled.within, name: r.token.name ?? r.actor.name, holderName, source: item.name, taken
+      });
+      if (!picked) return undoBinds();
+      if (!picked.stays) taken.push(picked.box);
+      pullPlan.push({ token: r.token, name: r.token.name ?? r.actor.name, to: picked.to, stays: picked.stays, holderName });
+    }
   }
 
   // 1f. The turn's budget, in a fight (2026-09-06): the feature's action.
@@ -4543,14 +6500,20 @@ export async function useFeature({
   // Moves paid in one write (D-761), so the walk is not charged a second time.
   if (ps.walk && mine) {
     if (!(await mine.spendMoveAction()).ok) return undoBinds();
-  } else if (!(await spendTurnBudget(actor, shiftFree ? null : (swiftLine ? "half" : (sys.action ?? null))))) return undoBinds();
+  } else if (negating?.answeredWithLost) {
+    // **THE REACTION THE BLOW TOOK IS THE ONE THAT ANSWERS IT** (04's Afterimage
+    // against a Bash; the Legacy branches' door 13): none is left to spend, so none
+    // is - and the withdrawal gives none back (`effects/miss.mjs#withdrawHit`).
+  } else if (!(await spendTurnBudget(actor, shiftFree ? null : actionNow))) return undoBinds();
 
-  // 2. Pay: judged in 1e, so nothing here can be half done. **02's CURSE PAYS ON
-  // ITS SUCCESS** (*make a Casting Test. On success, spend 4 Mana*; D-775): judged
-  // here like any price - a Curse that could not pay on its success is refused
-  // before anything is spent - and taken off once the Test has succeeded.
-  const curseDue = curse && sys.casting ? payment.spent : 0;
-  const spent = curseDue ? 0 : payment.spent;
+  // 2. Pay: judged in 1e, so nothing here can be half done. **A PRICE PAID ON THE TEST'S
+  // SUCCESS** (02's Mass Mend, Shadow Word: Death, Divine Hymn and Curse: *make a Casting
+  // Test. On success, spend N Mana*; D-775 built it for the Curse by its name, the B8a2 pass
+  // for every row marked so - `rules/class-features.mjs#paysOnSuccess`): judged here like any
+  // price - a Use that could not pay on its success is refused before anything is spent -
+  // and taken off once the Test has succeeded.
+  const successDue = paysOnSuccess(sys) ? payment.spent : 0;
+  const spent = successDue ? 0 : payment.spent;
   if (sys.cost?.pool) {
     // **OFF THE POOL AS IT STANDS NOW** (the final review of D-768 to D-775;
     // `rollTest`'s rule since D-770): the pool was read for the judgement before
@@ -4634,7 +6597,8 @@ export async function useFeature({
   // **A second press replaces the first** rather than stacking, which is the
   // same rule `useSignature` keeps for a Signature's own effect.
   let buffed = null;
-  const buff = damageBuffFor(talentRow, rank);
+  // The Mountain Wakes' Armor Points and Ward ride the same encounter effect (door 25).
+  const buff = withSpiritArmor(damageBuffFor(talentRow, rank), spiritsPlan, actor);
   // **AND THE RIDERS IT MAKES CHEAPER, ON THE SAME EFFECT** (04's Berserk,
   // D-771): *your attacks in a Shapeshift form cost 1 less Ferocity, to a
   // minimum of 1*. The talent's discount rider is switched on by this effect's
@@ -4648,7 +6612,9 @@ export async function useFeature({
     if (stale.length) await actor.deleteEmbeddedDocuments("ActiveEffect", stale);
     // Out of a fight *until the end of your next turn* is a round of the world's
     // clock (D-778's reading for O-161): it stood with no span at all, and so for good.
-    const timing = buff.until === "endOfNextTurn" ? untilEndOfNextTurnOrRound(actor) : null;
+    // And *until your next turn* (04's Bladestorm's Armor Points; the Legacy branches' B6).
+    const timing = buff.until === "endOfNextTurn" ? untilEndOfNextTurnOrRound(actor)
+      : (buff.until === "userTurnStart" ? untilNextTurnOrRound(actor) : null);
     await actor.createEmbeddedDocuments("ActiveEffect", [{
       name: item.name,
       img: item.img,
@@ -4671,6 +6637,117 @@ export async function useFeature({
   if (onUse?.mitigate === "halve") {
     await actor.setFlag("azeroth-rpg", "mitigate", { name: item.name, halve: true, amount: null });
     usedLines.push(game.i18n.format("AZEROTH.Signature.WillHalve", { name: item.name }));
+  }
+  // **THE LEGACY BRANCHES' USES, NOW THAT THEY ARE PAID FOR** (B1). Each was judged
+  // before the payment.
+  // Afterimage (door 13): the blow's own one-attack mark, negating - so its card's
+  // Apply deals nothing - the card's row written as a miss, and everything the hit
+  // laid on the user withdrawn through the Parry's own door.
+  if (negating) {
+    const mark = { name: item.name, halve: false, amount: null, negate: true, reaction: "negate", messageId: negating.messageId };
+    await actor.setFlag("azeroth-rpg", "mitigate", mark);
+    await actor.setFlag("azeroth-rpg", "reacted", { messageId: negating.messageId, reaction: "negate" });
+    await annotateMitigation({ messageId: negating.messageId, index: negating.index, mark, reaction: "negate" });
+    const undone = await withdrawHit(actor, { messageId: negating.messageId, index: negating.index, answeredWithLost: negating.answeredWithLost });
+    // **THE HOLD, FOR THE CARD** (the Legacy branches' door 2): the card turned aside and
+    // the striker whose blow went through, off that card's own record (D-724).
+    holdMade = {
+      kind: "negate", messageId: negating.messageId, index: negating.index,
+      striker: tokenRef(game.messages?.get(negating.messageId)?.flags?.["azeroth-rpg"]?.source ?? null)
+    };
+    usedLines.push(game.i18n.format("AZEROTH.Miss.Negated", { name: actor.name, feature: item.name }));
+    const more = withdrawnWords(actor.name, undone);
+    if (more) usedLines.push(more);
+  }
+  // Wind Walk and Bladestorm (door 14): *No creature may take a Reaction against you
+  // until your next turn* - a state on the user every Reaction door reads, out of a
+  // fight a round of the world's clock (D-778).
+  if (legacy.unanswered) {
+    const span = legacy.unanswered.until === "userTurnEnd" ? untilEndOfNextTurnOrRound(actor) : untilNextTurnOrRound(actor);
+    const laid = await layState(actor, {
+      flag: UNANSWERED_FLAG, data: { source: item.name }, name: item.name, img: item.img, span,
+      sameAs: raw => raw?.source === item.name
+    });
+    if (laid) usedLines.push(game.i18n.format("AZEROTH.Unanswered.Line", { name: actor.name, feature: item.name }));
+  }
+  // The Challenge (door 18): *Until the end of your next turn it takes a Bane on
+  // attacks against anybody but you ... Naming another creature ends it on the
+  // first* - the Bane laid as Taunt's is (D-772), the mark an effect on the user
+  // spanned to the end of its next turn, and the turn's one naming marked.
+  if (marking?.kind === "challenge") {
+    const victim = targetActorOf(marking.target);
+    const ownTokenOfMark = actor.getActiveTokens?.(true)?.[0] ?? null;
+    if (marking.replaced) {
+      await endBane({ victim: marking.replacedActor, source: item.name, by: actor });
+      usedLines.push(game.i18n.format("AZEROTH.Mark.ChallengeEnded", { target: marking.replaced.name }));
+    }
+    // Named again, the creature's Bane is laid afresh rather than doubled.
+    if (!marking.replaced) await endBane({ victim, source: item.name, by: actor });
+    const span = untilEndOfNextTurnOrRound(actor);
+    await layBane({
+      victim, kind: "attack", banes: 1, source: item.name, by: actor, lasting: true,
+      except: { actorId: actor.id, tokenId: ownTokenOfMark?.id ?? null }, span
+    });
+    const named = markOf(marking.target);
+    // The feature that named it, beside the creature (the Legacy branches' door 2): the
+    // animation layer finds the mark's row by it. `cleanMark` reads past it.
+    if (named) named.source = item.name;
+    await layState(actor, {
+      flag: CHALLENGE_FLAG, data: named, img: item.img, span,
+      name: game.i18n.format("AZEROTH.Mark.EffectName", { target: named?.name ?? "" })
+    });
+    if (marking.combatant?.isOwner) await marking.combatant.markRoundOnce(CHALLENGE_TURN_MARK);
+    usedLines.push(game.i18n.format("AZEROTH.Mark.Challenged", { name: actor.name, target: named?.name ?? "" }));
+  }
+  // The Long Watch (door 18): the mark on the user's own actor, seen by its owners
+  // alone (the lead: *"Yes"*), and where the creature is now.
+  if (marking?.kind === "watch") {
+    const named = markOf(marking.target);
+    // The feature that laid it, as the Challenge's mark carries it (door 2).
+    if (named) named.source = item.name;
+    await actor.setFlag("azeroth-rpg", WATCH_FLAG, named);
+    if (marking.replaced) usedLines.push(game.i18n.format("AZEROTH.Mark.WatchEnded", { name: actor.name, target: marking.replaced.name }));
+    usedLines.push(game.i18n.format("AZEROTH.Mark.Watched", { name: actor.name, target: named?.name ?? "" }), watchBearingLine(actor, named));
+  }
+  // None Escape (door 24; the lead: *"A space you choose"*): each creature displaced to
+  // the space the user chose for it - metered at nothing and provoking nothing, here or
+  // on the GM's client as a `pull` the GM judges again off this feature (the B2 review,
+  // item h) - and it stays Entangled. One left in its own space is said so.
+  for (const p of pullPlan) {
+    const words = { feet: legacy.pullEntangled.within, holder: p.holderName, source: item.name };
+    if (p.stays) {
+      usedLines.push(pulledWords({ stays: true, name: p.name }, words));
+      continue;
+    }
+    const moved = await stepTo({ token: p.token.document, to: p.to, by: actor, move: { kind: "pull", itemUuid: item.uuid } });
+    usedLines.push(pulledWords(moved, words));
+    // A pulled creature's move is a step the card records too (door 2).
+    if (moved.step) stepsMade.push(moved.step);
+  }
+  // A condition the Use lays on the user (04's Ancestral Spirit, *You gain
+  // **Fatigued***; door 26), through the one landing door.
+  if (legacy.self && AZEROTH.conditions?.[legacy.self.condition]) {
+    const span = legacy.self.until === "endOfNextTurn" ? untilEndOfNextTurnOrRound(actor)
+      : legacy.self.until === "nextTurn" ? untilNextTurnOrRound(actor)
+        : legacy.self.until === "minute" ? minuteSpan(actor) : null;
+    const landed = await inflictCondition({ victim: actor, id: legacy.self.condition, value: legacy.self.value, by: actor, name: actor.name, until: span });
+    if (landed.landed) {
+      usedLines.push(game.i18n.format("AZEROTH.Feature.SelfCondition", {
+        name: actor.name, feature: item.name,
+        condition: game.i18n.localize(AZEROTH.conditions[legacy.self.condition]) + (landed.value ? ` ${landed.value}` : "")
+      }));
+    }
+  }
+  // **THE LEGACY BRANCHES' B3 USES, NOW THAT THEY ARE PAID FOR** (door 25), each judged
+  // in `judgeSpiritUses` before the payment.
+  usedLines.push(...(await writeSpiritUses(spiritsPlan, { actor, item, poolItemId: pool?.itemId ?? null })));
+  // **A CREATURE CALLED BACK STANDS** (04's Ancestral Spirit; door 2): the token the
+  // Use named, as `judgeSpiritUses` named it - the first target that is a creature.
+  // **AND EVERY DYING FRIEND ANCESTOR'S HAND STOOD** (the Legacy branches' B6), each on its token.
+  for (const r of spiritsPlan?.lift?.risen ?? []) noteRisen(r);
+  if (spiritsPlan?.revive?.risen) {
+    const called = tokenRef(list.filter(t => targetActorOf(t))[0] ?? null);
+    if (called) noteRisen({ sceneId: called.sceneId, tokenIds: [called.tokenId] });
   }
   if (onUse?.gain?.pool) {
     const into = (actor.poolSnapshot?.() ?? []).find(p => p.name === onUse.gain.pool) ?? null;
@@ -4712,9 +6789,13 @@ export async function useFeature({
     await nameBeacon(actor, beaconPartner);
     usedLines.push(game.i18n.format("AZEROTH.Beacon.Line", { partner: beaconPartner.name }));
   }
-  // Precise Strike: *Your next attack this turn ignores 1 Armor Point per rank*.
-  if (onUse?.nextAttack && grantingTalent) {
-    const grant = onUseNextAttack(onUse, { identifier: grantingTalent.system?.identifier, name: grantingTalent.name }, { rank, tier: actor.system.tier ?? 1 });
+  // Precise Strike: *Your next attack this turn ignores 1 Armor Point per rank*. **And a
+  // promise a rank makes** (04's Wind Walk at rank 2: *that attack adds your Dexterity
+  // modifier to its damage*; the Legacy branches' B6): read at the rank, and nothing laid
+  // or said where it promises nothing - a Dexterity of +0 adds none.
+  const promise = grantingTalent ? onUseNextAttack(onUse, { identifier: grantingTalent.system?.identifier, name: grantingTalent.name }, { rank, tier: actor.system.tier ?? 1, scope: abilityScope(actor.system) }) : null;
+  if (promise && (promise.boons > 0 || promise.penetration > 0 || promise.damage > 0)) {
+    const grant = promise;
     const laid = grant ? await layNextAttack(actor, [grant], { quiet: true }) : [];
     usedLines.push(laid.length
       ? game.i18n.format(`AZEROTH.NextAttack.Laid.${grant.lasts}`, { name: actor.name, talent: grantingTalent.name })
@@ -4741,7 +6822,19 @@ export async function useFeature({
     });
     if (done) usedLines.push(game.i18n.format(only ? "AZEROTH.Feint.Line" : "AZEROTH.Laid.BaneLine", { target: laysOn.actor.name, n: lays.bane.banes, name: actor.name }));
   }
-  if (laysOn && lays.boon) {
+  if (laysOn && lays.boon && boonWhere.encounter) {
+    // **FOR THE ENCOUNTER** (02's Berserking: *Your attacks gain a Boon until the end of the
+    // encounter*; the B8a2 pass): lasting - every attack takes it and none spends it - and
+    // carried on the effect `_leaveFight` lifts at the fight's end (`encounter`). Out of a
+    // fight it stands until the next one ends, as Seal of Command's encounter buff does.
+    const done = await layBoon({ victim: laysOn.actor, kind: lays.boon.kinds === "all" ? "all" : lays.boon.kinds, boons: lays.boon.boons, source: item.name, by: actor, lasting: true, encounter: true });
+    if (done) {
+      usedLines.push(game.i18n.format("AZEROTH.Blessing.LineEncounter", {
+        target: laysOn.actor.name, n: lays.boon.boons,
+        kind: game.i18n.localize(lays.boon.kinds === "all" ? "AZEROTH.Blessing.EveryTest" : (AZEROTH.testKinds[lays.boon.kinds] ?? lays.boon.kinds))
+      }));
+    }
+  } else if (laysOn && lays.boon) {
     const fightNowForBoon = actor.activeFight?.() ?? null;
     // *Every Test they make this round* (rank 2): a span to the round's end,
     // keyed on the blessed creature's own combatant; out of a fight there is no
@@ -5007,12 +7100,24 @@ export async function useFeature({
     await freeCounter.update({ "system.uses.value": Math.max(0, (freeCounter.system?.uses?.value ?? 1) - 1) });
     usedLines.push(game.i18n.format("AZEROTH.Blink.Free", { talent: freeRow.name, name: item.name }));
   }
-  // 02's Blink: who moves and how far, said in words - placing the token is the
-  // table's (no door moves a creature it does not walk).
-  if (blink) {
+  // 02's Blink: who moves and how far, said in words where no token is moved - and
+  // where one is, the step's own line below says where it went (the Legacy branches'
+  // door 3: *"02's Blink and Shadowstep move no token"*).
+  if (blink && !(stepping?.doc && stepping.to)) {
     usedLines.push(blink.who
       ? game.i18n.format("AZEROTH.Blink.LineFriend", { name: blink.who.name ?? "", feet: blink.reach.feet, talents: blink.reach.by.join(", ") })
       : game.i18n.format("AZEROTH.Blink.Line", { name: actor.name, feet: blink.reach.feet }));
+  }
+  // **THE STEP, NOW THAT IT IS PAID FOR** (door 3): the token displaced to the space
+  // picked - metered at nothing and provoking nothing - here or on the GM's client;
+  // a mover with no token on the viewed scene is the table's to place.
+  if (stepping?.doc && stepping.to) {
+    const moved = await stepTo({ token: stepping.doc, to: stepping.to, feet: stepping.feet, by: actor, move: { kind: stepping.kind, itemUuid: item.uuid } });
+    usedLines.push(steppedWords(moved, { feet: stepping.feet, source: item.name }));
+    // Where it stood and where it landed, for the card (the Legacy branches' door 2).
+    if (moved.step) stepsMade.push(moved.step);
+  } else if (stepping?.skipped) {
+    usedLines.push(game.i18n.format("AZEROTH.Step.NoTokenLine", { name: stepping.name, feet: stepping.feet }));
   }
   // Spellsteal: the Sustain chosen ends through the one door, on the GM's client
   // where the caster is another's.
@@ -5101,9 +7206,25 @@ export async function useFeature({
         ui.notifications?.warn(game.i18n.format("AZEROTH.Bound.NoEntry", { name }));
         continue;
       }
-      const made = await bind({ owner: actor, feature: item, entry, kind: "summon", until: sys.summons.until ?? "encounter", count: sys.summons.count });
+      const made = await bind({
+        owner: actor, feature: item, entry, kind: "summon", until: sys.summons.until ?? "encounter", count: sys.summons.count,
+        // *each takes one Half-Action a turn of its own* (04's Pocket Factory; door 6).
+        halfActions: place?.halfActions ?? null
+      });
       // The uuid rides it so the card can make the name a draggable link.
       if (made) called.push({ name: made.name, uuid: made.uuid ?? null, count: sys.summons.count });
+      // **AND ITS TOKENS STAND WHERE THE POINT WAS PICKED** (door 4), on the owner's
+      // side and in the owner's fight, through the GM's client (`TOKEN_CREATE` is an
+      // ASSISTANT's) - the summon door's own handler, judging the bond again there.
+      if (made && place) {
+        if (placeAt) {
+          const placed = await placeSummon({ summoner: actor, actor: made, count: sys.summons.count, at: placeAt, sceneId: ownTokenDoc?.parent?.id ?? null });
+          noteRisen(placed);
+          usedLines.push(placed?.count
+            ? game.i18n.format("AZEROTH.Place.Placed", { count: placed.count, name: made.name })
+            : game.i18n.format("AZEROTH.Place.NotPlaced", { name: made.name }));
+        } else usedLines.push(game.i18n.format("AZEROTH.Place.NoTokenLine", { name: made.name }));
+      }
     }
   }
   // 2c. A TOTEM IS PLANTED (02 §7, D-708): one token beside the shaman and
@@ -5118,6 +7239,128 @@ export async function useFeature({
   for (const b of boundAll.filter(b => b.kind === "totem")) {
     const aura = totemAura({ name: b.option?.name ?? b.actor.name, description: b.option?.description ?? "" });
     planted.push({ totem: b.actor, placed: await plantTotem({ owner: actor, totem: b.actor, aura }) });
+    noteRisen(planted.at(-1).placed);
+  }
+  // **A CONSTRUCT BUILT STANDS BESIDE ITS TINKER** (04's The Bench; the Legacy
+  // branches' doors 4 and 6): its token placed through the summon door, and the card
+  // says how long the build takes - *a Short Rest and a tinker's kit*, the time the
+  // table spends.
+  for (const b of boundAll.filter(b => b.kind === "construct")) {
+    const placed = ownTokenDoc ? await placeSummon({ summoner: actor, actor: b.actor, count: 1, sceneId: ownTokenDoc.parent?.id ?? null }) : null;
+    noteRisen(placed);
+    usedLines.push(game.i18n.format(placed?.count ? "AZEROTH.Construct.Built" : "AZEROTH.Construct.BuiltNoToken", {
+      // *Building one takes a Short Rest and a tinker's kit* - whatever the construct;
+      // only the Arcanite Dragonling's REBUILD takes a Long Rest.
+      name: b.actor.name, time: game.i18n.localize("AZEROTH.Construct.Time.short")
+    }));
+  }
+  // **A WRECKED CONSTRUCT REBUILT** (door 6): back to its whole Health, its token put
+  // down beside the tinker where it stands on no scene, and the time it took said -
+  // ten minutes with Arclight Spanner at rank 2, a Long Rest for the Arcanite
+  // Dragonling, else a Short Rest.
+  if (rebuilding) {
+    const max = rebuilding.system?.health?.max ?? 0;
+    if (rebuilding.isOwner) await rebuilding.update({ "system.health.value": max });
+    const standingNow = game.scenes?.some?.(s => s.tokens.some(t => t.actorId === rebuilding.id)) === true;
+    if (!standingNow && ownTokenDoc) {
+      const rebuilt = await placeSummon({ summoner: actor, actor: rebuilding, count: 1, sceneId: ownTokenDoc.parent?.id ?? null });
+      noteRisen(rebuilt);
+    }
+    const given = constructsFor(talentsNow, { tier: tierNow });
+    usedLines.push(game.i18n.format("AZEROTH.Construct.Rebuilt", {
+      name: rebuilding.name, n: max,
+      time: game.i18n.localize(`AZEROTH.Construct.Time.${rebuildTime({ name: bondOf(rebuilding)?.entryName ?? rebuilding.name, tenMinutes: given.tenMinutes })}`)
+    }));
+  }
+  // **ONE OF YOUR CONSTRUCTS TAKES A HALF-ACTION AT ONCE** (04's Remote Control at
+  // rank 2; door 6): one more Half-Action on the construct's own budget AND on the
+  // shared turn, each through its combatant's own queued door (D-761). **At once**:
+  // the one Half-Action a door may spend outside the construct's own turn (the lead:
+  // *"Refuse off-turn Half-Actions"*; `rules/initiative.mjs#grantAtOnce`).
+  if (constructHalf) {
+    if (constructHalf.owner?.isOwner) await constructHalf.owner.grantConstructHalf(1);
+    if (constructHalf.combatant?.isOwner) await constructHalf.combatant.grantAtOnce(1);
+    usedLines.push(game.i18n.format("AZEROTH.Construct.HalfGranted", { name: constructHalf.construct.name }));
+  }
+  // **THE TRAP, SET** (04's Shadow Trap; door 26): a Region of its radius on the point
+  // picked, carrying the setter, the condition and its escape at the setter's Spell
+  // DC; one past the standing count takes up the setter's oldest of this talent.
+  if (trap && trapAt && canvas?.scene) {
+    const escape = featureEscapeRecord(trap.escape ?? null, {
+      condition: trap.condition, spellDc: actor.system?.spellDC ?? actor.system?.spells?.dc ?? null,
+      strDc: resistDcFor({ kind: "str", strMod: actor.system?.abilities?.str?.mod ?? 0, proficiency: actor.system?.proficiency ?? 0 }),
+      caster: actor.uuid, source: item.name
+    });
+    // **THE FEATURE'S OWN KEY** (the B4 review): the key its animation row is filed under
+    // (`featureKeyOf`, the gadget's or the granting talent's slug), never a stored
+    // identifier core's slug may have written - a gadget's trap was filed under the
+    // talent that granted the gadget.
+    const identifier = useKey;
+    // **EVERY SCENE'S TRAPS COUNT** (the B2 review): a trap left on another scene still
+    // stands, so the count reads the whole world's, keyed by scene and Region.
+    // **THROUGH AN ARRAY** (found live in B8b): core's Collection has `map` and `filter`
+    // and no `flatMap`, so `game.scenes.flatMap` threw and every Shadow Trap's Use posted
+    // no card.
+    const held = Array.from(game.scenes ?? []).flatMap(s => Array.from(s.regions ?? []).map(r => ({ id: `${s.id}.${r.id}`, trap: r.flags?.["azeroth-rpg"]?.[TRAP_FLAG] ?? null })));
+    const lift = trapsToLift(held, { setter: actor.uuid, identifier, standing: trap.standing });
+    for (const key of lift) {
+      const [sceneId, regionId] = key.split(".");
+      const scene = game.scenes?.get(sceneId) ?? null;
+      if (scene?.regions?.has(regionId)) await scene.deleteEmbeddedDocuments("Region", [regionId]);
+    }
+    const region = await placeArea({
+      areaText: trapArea(trap.radius), name: item.name, scene: canvas.scene, origin: trapAt, color: null,
+      flags: { [TRAP_FLAG]: { setter: actor.uuid, identifier, source: item.name, condition: trap.condition, escape, who: "enemy", setAt: game.time?.worldTime ?? 0 } }
+    });
+    usedLines.push(game.i18n.format(region ? "AZEROTH.Trap.Set" : "AZEROTH.Trap.NotSet", {
+      name: item.name, condition: game.i18n.localize(AZEROTH.conditions[trap.condition] ?? trap.condition), n: trap.standing
+    }));
+    if (lift.length) usedLines.push(game.i18n.format("AZEROTH.Trap.Lifted", { name: item.name, n: lift.length }));
+  }
+  // **WHAT A GADGET LEAVES TO THE TABLE** (door 7), in words: the Cloaking Device's
+  // hide and the Recombobulator's ended condition until door 25 reads them, the
+  // Alarm-o-Bot's watch, the Parachute Cloak's fall.
+  if (gadget?.reason && GADGET_REASONS[gadget.reason]) usedLines.push(game.i18n.localize(GADGET_REASONS[gadget.reason]));
+  // **THE GADGETS KNOWN** (04's Gadgeteer; door 7): what the checklist named, the
+  // feature's `known`, which the sync grants a feature each for.
+  if (sys.choice === "gadgets" && picks.length) {
+    await item.update({ "system.known": picks.map(p => knownRowOf(gadgetByKey(p.key) ?? { key: p.key, name: p.name })) });
+    await actor.syncClassFeatures?.();
+    usedLines.push(game.i18n.format("AZEROTH.Gadget.Known", { names: picks.map(p => p.name).join(", ") }));
+  }
+  // **OVERCLOCK** (02's gnome; door 7): the gadget named is MARKED (the B2 review: it
+  // struck the gadget's use and fired nothing) - its next Use works one step better,
+  // says so on its card and spends its own use, which is *then breaks* - until the
+  // encounter ends or a rest; the device named is said in words.
+  if (sys.choice === "overclock" && chosen) {
+    const marked = chosen.featureId ? actor.items.get(chosen.featureId) ?? null : null;
+    if (marked) await marked.setFlag("azeroth-rpg", OVERCLOCK_FLAG, { by: item.name, fight: actor.activeFight?.()?.id ?? null });
+    usedLines.push(game.i18n.format(marked ? "AZEROTH.Overclock.Gadget" : "AZEROTH.Overclock.Device", { name: chosen.name, talent: item.name }));
+  }
+  // **AN OVERCLOCKED GADGET'S OWN USE** (02's gnome; the B2 review): one step better, said
+  // on this card - what one step better is stays the table's - and the mark comes off
+  // with the use this Use has spent, which is the gadget breaking until a Short Rest.
+  const overclocked = gadget ? cleanOverclock(item.getFlag?.("azeroth-rpg", OVERCLOCK_FLAG) ?? null) : null;
+  if (overclocked) {
+    usedLines.push(game.i18n.format("AZEROTH.Overclock.Fired", { name: item.name, talent: overclocked.by }));
+    await item.unsetFlag("azeroth-rpg", OVERCLOCK_FLAG);
+  }
+  // **MEKKATORQUE'S BLUEPRINT** (02's gnome; door 7): a gadget built stands as one
+  // known with its own use, a device built is carried - each until the next Long
+  // Rest (*It works for a day*), and a second build replaces the first.
+  if (sys.choice === "blueprint" && chosen) {
+    const held = actor.getFlag("azeroth-rpg", BLUEPRINT_FLAG) ?? null;
+    if (held?.itemId && actor.items.has(held.itemId)) await actor.deleteEmbeddedDocuments("Item", [held.itemId]);
+    if (chosen.gadget) {
+      await actor.setFlag("azeroth-rpg", BLUEPRINT_FLAG, { gadget: chosen.key, itemId: null, talentId: grantingTalent?.id ?? null });
+      await actor.syncClassFeatures?.();
+    } else if (chosen.uuid) {
+      const device = await fromUuid(chosen.uuid);
+      const data = device ? device.toObject() : null;
+      const [madeDevice] = data ? await actor.createEmbeddedDocuments("Item", [{ ...data, flags: { ...(data.flags ?? {}), "azeroth-rpg": { ...(data.flags?.["azeroth-rpg"] ?? {}), [BLUEPRINT_FLAG]: true } } }]) : [];
+      await actor.setFlag("azeroth-rpg", BLUEPRINT_FLAG, { gadget: null, itemId: madeDevice?.id ?? null, talentId: grantingTalent?.id ?? null });
+    }
+    usedLines.push(game.i18n.format("AZEROTH.Blueprint.Built", { name: chosen.name, talent: item.name }));
   }
   // A buff on the bound creature for the fight (Bestial Wrath, Demonic
   // Empowerment): switched on by the talent's identifier at its rank, and
@@ -5176,26 +7419,32 @@ export async function useFeature({
     if (await gainCharge(actor, sl)) roll.options.provenance.push({ label: "AZEROTH.TalentLine.ChargeGained", value: null, formula: game.i18n.format("AZEROTH.TalentLine.ChargesNow", { n: Number(actor.getFlag("azeroth-rpg", CHARGE_FLAG)) || 0 }) });
   }
 
-  // 3a. **WHAT THE MAGE'S AND THE WARLOCK'S CASTING USES DO ON A SUCCESS** (D-775).
-  // 02's Curse: *On success, spend 4 Mana* - judged at 1e, paid now; a failed Test
-  // costs nothing and offers no Resist.
-  // **A SUCCESS THE POOL CAN NO LONGER PAY LAYS NOTHING** (the architect's review
-  // of D-775): Mana spent between the judgement and the success leaves the 4 short;
-  // the Curse then pays nothing and forces no Test, said in words, rather than
-  // taking what is left and cursing anyway.
-  let cursePaid = 0;
-  let curseShort = false;
-  if (curseDue > 0 && success) {
+  // 3a. **WHAT A USE PAYS ON ITS SUCCESS** (D-775 for 02's Curse; the B8a2 pass for every
+  // price 02 names *On success*: Mass Mend's 6, Shadow Word: Death's 8, Divine Hymn's 15,
+  // the Curse's 4) - judged at 1e, paid now; a failed Test costs nothing and does nothing.
+  // **A SUCCESS THE POOL CAN NO LONGER PAY DOES NOTHING** (the architect's review of D-775):
+  // a price spent between the judgement and the success leaves it short; the Use then pays
+  // nothing and lands nothing - no heal, no damage, no Test forced, no area - said in words,
+  // rather than taking what is left and going off anyway. The card keeps the Test's own
+  // verdict (`tested`); every outcome below reads `success`, which such a success leaves
+  // false, as it is for a failed Test.
+  let successPaid = 0;
+  let successShort = false;
+  const successPool = game.i18n.localize(AZEROTH.poolTypes[pool?.name] ?? pool?.name ?? "");
+  if (successDue > 0 && success) {
     const now = actor.poolSnapshot?.().find(p => p.itemId === pool?.itemId && p.kind === pool?.kind) ?? null;
-    curseShort = !now || now.value < curseDue;
-    if (curseShort) {
-      ui.notifications?.warn(game.i18n.format("AZEROTH.Curse.Short", { name: item.name, n: curseDue }));
-      usedLines.push(game.i18n.format("AZEROTH.Curse.Short", { name: item.name, n: curseDue }));
+    successShort = !now || now.value < successDue;
+    if (successShort) {
+      const short = game.i18n.format("AZEROTH.Feature.OnSuccess.Short", { name: item.name, n: successDue, pool: successPool });
+      ui.notifications?.warn(short);
+      usedLines.push(short);
     } else {
-      cursePaid = curseDue;
-      await actor.updatePool({ itemId: now.itemId, kind: now.kind, value: now.value - cursePaid });
+      successPaid = successDue;
+      await actor.updatePool({ itemId: now.itemId, kind: now.kind, value: now.value - successPaid });
     }
-  } else if (curseDue > 0) usedLines.push(game.i18n.format("AZEROTH.Curse.Unpaid", { name: item.name }));
+  } else if (successDue > 0) usedLines.push(game.i18n.format("AZEROTH.Feature.OnSuccess.Unpaid", { name: item.name, pool: successPool }));
+  const tested = success;
+  if (successShort) success = false;
   // 04's Haunt: each tick of the warlock's on the target raised, and the heal its
   // death returns carried on them - through the GM's client where it is another's.
   if (haunting && success) {
@@ -5223,12 +7472,38 @@ export async function useFeature({
     }
   }
 
+  // 3b. **WHAT A B3 CASTING USE LANDS ON ITS SUCCESS** (04's Disenchant; door 25).
+  usedLines.push(...(await landSpiritCasting(spiritsPlan, { actor, item, success, tierNow, extraRolls })));
+
+  // 3c. **AN AREA USE GATHERS ITS OWN TARGETS** (the lead: *"Measure the area"*; the B6
+  // fix): every creature inside the circle that the row's `who` names - measured from the
+  // user's footprint, or from the point picked before anything was paid - is the card's
+  // target, so its Apply, Resist and Inflict work per creature, each against its own Ward.
+  // Never a defeated creature, never a token hidden from the user. A Use whose Test failed
+  // reaches nobody, and one that can measure nothing keeps the creatures the table
+  // targeted (D-647's shape), as it always did.
+  let areaMeasured = false;
+  if (gatherPlan && success) {
+    const inside = creaturesInArea(actor, gatherPlan, { point: gatherAt });
+    if (inside) {
+      areaMeasured = true;
+      const { targetSnapshots } = await import("../applications/roll-dialog.mjs");
+      list.splice(0, list.length, ...targetSnapshots(inside.map(r => r.token)));
+      const words = { feature: item.name, who: game.i18n.localize(`AZEROTH.Gather.Who.${gatherPlan.who}`), feet: gatherPlan.feet };
+      usedLines.push(list.length
+        ? game.i18n.format("AZEROTH.Gather.Line", { ...words, names: list.map(t => t.name ?? "").join(", ") })
+        : game.i18n.format("AZEROTH.Gather.None", words));
+    }
+  }
+
   // 4. The numbers, on success, at the rank taken (D-642) - and the Rating of
   // the weapon in the main hand, for 04's Wrath of the Light (*Holy damage at
   // your Damage Rating*; D-772), Unarmed's 1 with none.
   const scope = {
     tier: actor.system.tier ?? 1, level: actor.system.level ?? 1, sl, rank,
-    weapon: weaponRatingOf((actor.readyWeapons?.() ?? []).map(w => ({ ...(w.system ?? {}) })))
+    weapon: weaponRatingOf((actor.readyWeapons?.() ?? []).map(w => ({ ...(w.system ?? {}) }))),
+    // The ability modifiers and Proficiency (the Legacy branches' door 16).
+    ...abilityScope(actor.system)
   };
   // Swiftmend's heal has LANDED with the end (step 2's `onUse.ends`, D-771):
   // the card says so in words and draws no button that would heal it twice.
@@ -5284,6 +7559,18 @@ export async function useFeature({
   const laidFeatureTick = stampedFeatureTick && tickHasClock(stampedFeatureTick, { duration: null, carrierInFight: carriersFight, casterInFight: casterFightsNow })
     ? stampedFeatureTick : null;
   const featureTickNoClock = stampedFeatureTick && !laidFeatureTick ? game.i18n.format("AZEROTH.Tick.NoClock", { spell: item.name }) : null;
+  // **THE TEST THAT ENDS EACH CONDITION THE CARD OFFERS** (the Legacy branches' door
+  // 19: Bad Mojo, Shackle, Shadow Trap, The Vault Opens, Warden's Cage): the stamped
+  // escape with its DC resolved now - the Spell DC, or the Strength one - written on
+  // the card for `dice/chat.mjs#applyConditionFromCard` to lay with the condition.
+  const inflictEscapes = success ? Object.fromEntries((sys.inflicts ?? []).map(i => {
+    const record = featureEscapeRecord(i?.escape ?? null, {
+      condition: i?.condition ?? null, spellDc: actor.system.spellDC ?? actor.system.spells?.dc ?? null,
+      strDc: resistDcFor({ kind: "str", strMod: actor.system.abilities?.str?.mod ?? 0, proficiency: actor.system.proficiency ?? 0 }),
+      caster: actor.uuid, source: item.name
+    });
+    return record ? [record.condition, record] : null;
+  }).filter(Boolean)) : {};
   // **THE CONDITIONS THE CARD OFFERS ON EACH TARGET** (02's Hurricane, 04's
   // Typhoon at rank 2; D-771), on a Use that landed.
   // A condition offered from an SL (04's Pyroblast at rank 2; D-775) is offered
@@ -5294,11 +7581,51 @@ export async function useFeature({
         label: game.i18n.localize(AZEROTH.conditions[i.condition]),
         value: i.value ?? null,
         until: i.until ?? null,
-        untilLabel: i.until ? game.i18n.localize(AZEROTH.untilKinds[i.until] ?? i.until) : null
+        untilLabel: i.until ? game.i18n.localize(AZEROTH.untilKinds[i.until] ?? i.until) : null,
+        // **WHETHER THE CARD'S TEST GOVERNS IT** (the lead: *"Land automatically"*; the
+        // B6 review on Thunder Clap): a failure lays it at once, so its button stands
+        // only for a creature whose Test the card has not recorded.
+        onFail: i.onFail === true
       }))
     : [];
+  // The conditions a failed Resist on this card lands (`dice/chat.mjs#rollResists`), as
+  // the card offers them - only where the card offers a Test at all.
+  const onFailInflicts = sys.resist ? governed(inflicts).onFail.map(i => ({ condition: i.condition, value: i.value, until: i.until })) : [];
+  // **WHAT THE MEASURED AREA LAYS AT ONCE** (the lead: *"Land automatically"*; the B6
+  // fix - *Thunder Clap's Slowed lands on everyone (unresisted); its Prone only on a
+  // failure*): each condition no Test of the card's governs (`rules/area-gather.mjs
+  // #landsAtOnce`), laid on every creature the Use measured through the Inflict door
+  // (`effects/inflict.mjs#inflictCondition`: on the GM's client for a creature this one
+  // does not own, judged before anything was paid), with the escape the Use recorded
+  // for it, Permafrost's feet on a Slowed and its span - a turn's span held to the
+  // world's clock out of a fight (D-778). The card says what landed on whom and draws
+  // no button for it; a Use that measured nothing keeps D-647's buttons.
+  const landedAtOnce = areaMeasured ? landsAtOnce(inflicts, { resisted: Boolean(sys.resist) }) : [];
+  if (landedAtOnce.length) {
+    const slowNow = landedAtOnce.some(i => i.condition === "slowed") ? slowingFor(talentsNow) : null;
+    for (const t of list) {
+      const victim = targetActorOf(t);
+      for (const i of landedAtOnce) {
+        const until = i.until === "casterTurnStart" ? untilNextTurnOrRound(actor)
+          : i.until === "minute" ? (victim ? minuteSpan(victim) : null)
+            : i.until === "endOfNextTurn" ? (victim ? untilEndOfNextTurnOrRound(victim) : null)
+              : (i.until || null);
+        const escapeRec = inflictEscapes[i.condition] ?? null;
+        const marks = {
+          ...(escapeRec ? { [ESCAPE_FLAG]: escapeRec } : {}),
+          ...(i.condition === "slowed" && slowNow?.feet > 0 ? { [SLOWED_FEET_FLAG]: { feet: slowNow.feet, source: slowNow.by.join(", ") } } : {})
+        };
+        usedLines.push(landedText(await inflictCondition({ victim, id: i.condition, value: i.value ?? null, by: actor, name: t?.name ?? "", until, marks })));
+      }
+    }
+  }
   let damage = null;
   let damageByTarget = [];
+  // The half a passed Test leaves, by row and on the card's one button (the B6 fix).
+  let passedByTarget = [];
+  let damagePassed = null;
+  // And nothing, where the Test's failure is what deals the damage (the B8a pass).
+  let noneOnPass = false;
   // Why a feature's damage was what it was, for a card with no roll to carry it.
   const damageProvenance = [];
   if (success && sys.damage?.amount) {
@@ -5322,29 +7649,56 @@ export async function useFeature({
     if (standing.lane) damageProvenance.push({ label: "AZEROTH.Card.TalentDamage", value: standing.lane });
     if (standing.corruption) damageProvenance.push({ label: "AZEROTH.Corruption.DamageBonus", value: standing.corruption });
     if (lineBonus) for (const row of damageRows ?? []) damageProvenance.push({ label: row.name, value: row.amount });
+    // 04's Drawn Across on the user (door 25): the feature's damage halved before Ward.
+    const halvedFeature = dealtHalvedBy(actor);
+    if (halvedFeature) damageProvenance.push({ label: halvedFeature.source, value: null, formula: game.i18n.localize("AZEROTH.HalvesDealt.Row") });
     if (roll) roll.options.provenance.push(...damageProvenance);
     // What a standing effect adds to every blow of the feature's lane AS ITS OWN
     // TYPE (04's Arcane Power on a casting feature - the lead: *"Yes, casting
     // features count"*; D-777): a second amount, met by its own Ward.
     const featureTyped = typedLaneExtras(actor.system, featureDamageLane(sys));
-    const mitigate = t => resolveDamage({
-      rating, sl: 0, kind: "magical", school,
+    // **THE LANE ITS TYPE NAMES** (the lead: *"Measure the area"* - *each creature's Ward and
+    // Armor Points subtracted*): a school's damage meets the creature's Ward, and a physical
+    // or untyped one (the lead: *"Untyped counts as physical"*) its Body Armor Points.
+    const lane = school && school !== "physical" ? "magical" : "physical";
+    const mitigate = (t, { passed = false } = {}) => resolveDamage({
+      rating, sl: 0, kind: lane, school, location: "body", apByLocation: t?.apByLocation ?? {},
       ward: t?.wardBySchool?.[school] ?? 0,
       // An ally's aura, after the Ward (04's Avenging Bulwark, D-755).
       schoolArmor: t?.schoolArmor?.[school] ?? 0,
       immune: t?.immune ?? [], vulnerable: t?.vulnerable ?? [], slAddsToDamage: false,
-      extras: featureTyped, wardBySchool: t?.wardBySchool ?? {}, schoolArmorBySchool: t?.schoolArmor ?? {}
+      extras: featureTyped, wardBySchool: t?.wardBySchool ?? {}, schoolArmorBySchool: t?.schoolArmor ?? {},
+      dealtHalved: halvedFeature,
+      // Half on a passed Test (the lead: *"Build it everywhere"*), before Armor and Ward.
+      passedHalf: passed
     });
     damageByTarget = list.map(t => mitigate(t));
+    // **WHAT A CREATURE THAT PASSES ITS TEST TAKES** (04's Life Drain and Cluster Rockets,
+    // *half that, rounded down, on a success*; Explosive Trap's *for half*): each row's
+    // half, met by the same creature's own Ward, ready for the card's Apply to land once
+    // that creature's Resist on this card is recorded as passed (`rules/resisted.mjs`).
+    // Only where the Use offers its Test - a failed Casting Test offers none.
+    if (sys.damage.half === true && sys.resist && !successShort) {
+      passedByTarget = list.map(t => mitigate(t, { passed: true }));
+      damagePassed = mitigate(null, { passed: true }).damage;
+    }
+    // **NONE OF IT ON A PASSED TEST, WHERE THE FAILURE DEALS IT** (02's Shadow Word: Death:
+    // *On a failed save, the target takes your level plus the SL bonus ... in Shadow
+    // damage*; the B8a pass): the card's Apply lands nothing on a creature whose Resist on
+    // this card passed (`rules/resisted.mjs#sparedFor`) - only where the Use offers its Test.
+    noneOnPass = sys.damage.onFail === true && sys.damage.half !== true && Boolean(sys.resist) && !successShort;
     const result = damageByTarget[0] ?? mitigate(null);
     // The Rating the mitigation took from, so `6 − 1` reads off the number the
     // lane and the lines made rather than the bare base (D-768).
-    damage = { final: result.damage, explanation: spellDamageExplanation(result, rating) };
+    damage = {
+      final: result.damage,
+      explanation: [spellDamageExplanation(result, rating), noneOnPass ? game.i18n.localize("AZEROTH.Card.DamageOnFail") : null].filter(Boolean).join(" · ")
+    };
   }
   // A failed Casting Test forces no Resist (02's Curse: *On success ... force a
-  // target ... to make a Spirit Resilience Test*; D-775), nor a Curse its pool
-  // could no longer pay for.
-  const resist = sys.resist && success && !curseShort
+  // target ... to make a Spirit Resilience Test*; D-775), nor a Use whose price
+  // on its success the pool could no longer pay (the B8a2 pass).
+  const resist = sys.resist && success && !successShort
     // A CREATURE'S SPELL DC IS `system.spells.dc` (14 §1's `**Spells** (DC n)`
     // run); `system.spellDC` is the character's derived one and does not exist
     // on the other model. This was the third copy of the same read and the only
@@ -5354,13 +7708,42 @@ export async function useFeature({
     // - and the Gear tab is exactly that door (the lead's N3), so a feature a
     // GM hands a creature would have posted a Resist button with no DC on it.
     ? {
-        key: sys.resist, label: AZEROTH.resiliences[sys.resist], dc: actor.system.spellDC ?? actor.system.spells?.dc ?? null,
+        key: sys.resist, label: AZEROTH.resiliences[sys.resist],
+        // **THE DC IT IS RESISTED AGAINST** (the Legacy branches' door 16; the lead on
+        // 04's Thunder Clap: *"10 + Str modifier + Proficiency"*): the Strength one where
+        // the feature's `resistDc` names it, else the Spell DC (a creature's own), else
+        // none - the table's (the B1 review: never the Strength one in silence).
+        dc: resistDcFor({
+          kind: sys.resistDc ?? null, spellDC: actor.system.spellDC ?? actor.system.spells?.dc ?? null,
+          strMod: actor.system.abilities?.str?.mod ?? 0, proficiency: actor.system.proficiency ?? 0,
+          // 05 §3's Standard DC at the user's own tier (02 §5's War Stomp; the B8a pass).
+          tier: actor.system.tier ?? 1
+        }),
         // 02's Snare (D-773): with no trap damage on the card its Test IS the
         // caught creature's escape; with Explosive Trap's damage it is the half,
         // and the escape is a button of its own below.
-        purpose: item.name === SNARE.feature && !damage ? "snare" : null
+        purpose: item.name === SNARE.feature && !damage ? "snare" : null,
+        // The one creature Thrall of the Banshee or Drawn Across named resists it (the B3 review).
+        targetIndex: spiritResistIndex(spiritsPlan)
       }
     : null;
+  // **ONE RESIST ROW PER CREATURE THE CARD RECORDS** (D-726's rows, on a feature's card -
+  // the B6 fix): each row names its creature's uuid, so `dice/chat.mjs` shows it to that
+  // creature's owner and the GM, and the Test it makes is RECORDED on this card - which is
+  // what the Apply's half (*"Build it everywhere"*) and a failure's conditions (*"Land
+  // automatically"*) read. The one creature Thrall of the Banshee or Drawn Across named is
+  // the one row; a Test with a purpose of its own (the Snare's escape) keeps its button.
+  const resistRows = resist && !resist.purpose
+    ? list.map((t, index) => ({
+        index,
+        name: t?.name ?? "",
+        actorUuid: targetActorOf(t)?.uuid ?? "",
+        key: resistKey(t),
+        resilience: resist.key,
+        label: resist.label,
+        dc: resist.dc
+      })).filter(r => resist.targetIndex === null || String(r.index) === String(resist.targetIndex))
+    : [];
   const escape = item.name === SNARE.feature && damage && success
     ? { key: SNARE.resilience, label: AZEROTH.resiliences[SNARE.resilience], dc: actor.system.spellDC ?? actor.system.spells?.dc ?? null }
     : null;
@@ -5384,7 +7767,12 @@ export async function useFeature({
   // feature - a Use whose Test failed places nothing and pushes nobody.
   const areaPush = success && area ? pushFor(talentsNow, { feature: item.name }) : null;
   if (areaPush) usedLines.push(game.i18n.format("AZEROTH.Forced.AreaPush", { feet: areaPush.feet, talent: areaPush.by.join(", ") }));
-  const attack = sys.attack === true;
+  // **A GADGET THAT ATTACKS** (04's Net-o-Matic Projector: *Make a ranged attack
+  // against a creature within 40 feet. On a hit it is Entangled*; the Legacy
+  // branches' door 7): the card's own Attack, made with the gadget
+  // (`rules/gadgets.mjs#gadgetWeapon`) and laying what its hit lays.
+  const gadgetAttack = onUse?.gadgetAttack && typeof onUse.gadgetAttack === "object" ? onUse.gadgetAttack : null;
+  const attack = sys.attack === true || Boolean(gadgetAttack);
   // **HOW MANY ATTACKS THE CARD'S BUTTON MAKES** (the architect's review of
   // D-773): every press costs nothing more, so the card records its allowance and
   // the press counts against it (`dice/chat.mjs#attackFromCard`). One per
@@ -5452,33 +7840,44 @@ export async function useFeature({
   // form came out of Ferocity, and `spent` is that Ferocity. `inForm` is the
   // state the price was judged in, before step 2b changed the shape.
   const paidFrom = payingPool(sys.cost?.pool ?? null, { inShapeshiftForm: inForm });
-  const costLabel = paidFrom ? game.i18n.localize(AZEROTH.poolTypes[paidFrom] ?? paidFrom) : null;
+  // A price in 05 §11's kind word names the pool that paid it (02 §5's War Stomp: the
+  // tauren's Rage, Quarry or Ferocity; the B8a pass).
+  const paidPool = paidFrom === ANY_MOMENTUM ? (pool?.name ?? ANY_MOMENTUM) : paidFrom;
+  const costLabel = paidPool ? game.i18n.localize(AZEROTH.costPoolTypes[paidPool] ?? paidPool) : null;
   const content = await renderTemplate(TEMPLATE.feature, {
     config: AZEROTH,
     title: item.name,
     subtitle: sys.className,
-    action: sys.action,
-    // 02's Curse's Mana is what its success paid (D-775).
-    cost: costLabel ? { label: costLabel, text: sys.cost.all ? game.i18n.localize("AZEROTH.Feature.SpendAll") : String(spent + cursePaid) } : null,
+    // The rung this Use was taken at (04's Ethereal Form's Reaction at rank 2; the B6 review).
+    action: rungNow ?? sys.action,
+    // A price paid on the success is what the success paid (D-775; the B8a2 pass).
+    cost: costLabel ? { label: costLabel, text: sys.cost.all ? game.i18n.localize("AZEROTH.Feature.SpendAll") : String(spent + successPaid) } : null,
     uses,
     rolled: Boolean(roll),
     total: roll?.total ?? null,
     dc: resolvedDC,
     sl,
-    success,
-    verdict: roll ? verdictFor({ sl, success }) : null,
+    // The Test's own verdict, whatever its success could pay for (the B8a2 pass).
+    success: tested,
+    verdict: roll ? verdictFor({ sl, success: tested }) : null,
     critical: roll?.outcome?.critical ?? false,
     fumble: roll?.outcome?.fumble ?? false,
     heal,
     speakerName: actor.name,
     damage,
     resist,
+    // One Resist row per creature the card records, each its owner's (the B6 fix).
+    resistRows,
     // The Snare's escape where Explosive Trap's half took the Resist (D-773).
     escape,
-    area,
+    // **AN AREA THE USE PLACED ITSELF IS NOT OFFERED AGAIN** (the B6 fix): a circle on
+    // the ground the Use aimed and measured is set down below, once the card stands.
+    area: gatherAt ? null : area,
     attack,
     // How many attacks the button makes (the architect's review of D-773).
     attackAllowance,
+    // A gadget's attack lays what it lays and deals no damage of its own (door 7).
+    attackNoDamage: Boolean(gadgetAttack) && !(Number(gadgetAttack.damage) > 0),
     // Divine Storm's attacks gain no Zeal (02 SS7).
     noMomentum: attack && item.name === "Divine Storm",
     // The option chosen, or ALL of them where the use took several (D-710):
@@ -5515,8 +7914,9 @@ export async function useFeature({
       // A free shift (04's Savage Shift, D-771).
       shiftFree ? game.i18n.format("AZEROTH.Shape.FreeShift", { talent: "Savage Shift" }) : null
     ].filter(Boolean).join(" · ") || null,
-    // The conditions the card offers on each target (D-771).
-    inflicts,
+    // The conditions the card offers on each target (D-771) - less what the measured
+    // area laid at once, which the note says landed (the B6 fix).
+    inflicts: landedAtOnce.length ? inflicts.filter(i => !landedAtOnce.includes(i)) : inflicts,
     // What the Apply lays at the start of each target's turns (02's Regrowth,
     // 04's Wild Growth; D-771), in words, and the Apply itself - or why a
     // counted tick with nothing to end it is not offered.
@@ -5541,6 +7941,8 @@ export async function useFeature({
   const posted = await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
     content,
+    // The Long Watch's Use is seen by the user's owners alone (door 18; the lead: *"Yes"*).
+    ...(marking?.kind === "watch" ? { whisper: ownersOf(actor) } : {}),
     // The Casting Tests a Dispel's gates made (04's Everlasting Affliction, D-778) ride beside the Use's own.
     rolls: [...(roll ? [roll] : []), ...extraRolls],
     flags: { "azeroth-rpg": { kind: "feature", itemId: item.id, targets: list, damageByTarget, heal: healsBound ? null : healAmount, sl, area,
@@ -5549,7 +7951,17 @@ export async function useFeature({
       // The card's Attack allowance, counted by each press (the architect's
       // review of D-773), and 02's Snare, whose Inflict marks its own Entangled.
       ...(attack ? { attacks: { allowed: attackAllowance } } : {}),
+      // And the Boon each attack gains (04's Fan of Knives at rank 2: *each attack gains
+      // a Boon*; the Legacy branches' door 26), drawn as a ticked line on its dialog.
+      ...(attack && (barrageLimits?.boons ?? 0) > 0 ? { attackBoons: { boons: barrageLimits.boons, by: barrageLimits.by } } : {}),
       ...(item.name === SNARE.feature ? { snare: true } : {}),
+      // **WHAT THE CARD'S ATTACK IS MADE WITH, AND WHAT ITS HIT LAYS** (the Legacy
+      // branches' door 7): the gadget's own (`dice/chat.mjs#attackFromCardNow`).
+      ...(gadgetAttack ? { gadgetAttack: { name: item.name, range: Math.max(0, Math.trunc(Number(gadgetAttack.range)) || 0), damage: Math.max(0, Math.trunc(Number(gadgetAttack.damage)) || 0), inflicts: (gadgetAttack.inflicts ?? []).map(i => ({ ...i })) } } : {}),
+      // **THE CONSTRUCT THE AREA IS AIMED FROM** (04's Cluster Rockets: *fires at a
+      // point within 60 feet of it*; door 6): its token, and the feet the card's
+      // Place area holds the point to (`dice/chat.mjs#placeAreaFromCard`).
+      ...(aimFrom ? { aimFrom } : {}),
       // D-779: Lightwell's font (its Region, charges and heal), Snake Trap's poison
       // (the tick a failed Test lays, `dice/chat.mjs#rollResists`), and the schools
       // Divine Aegis was named for (read by the heal button and the tick).
@@ -5557,11 +7969,28 @@ export async function useFeature({
       ...(trapPoisons.length ? { poisons: trapPoisons } : {}),
       ...(aegisNamed ? { aegis: aegisNamed } : {}),
       // Whether the Use's Casting Test succeeded (D-775): a failed one places
-      // nothing (`dice/chat.mjs#placeAreaFromCard`).
+      // nothing (`dice/chat.mjs#placeAreaFromCard`) - and a success its price on the
+      // success could not pay went off no more than a failure did (the B8a2 pass).
       ...(sys.casting ? { success } : {}),
+      // Life Drain's drainer, Drawn Across's halving and a thrall's owner (door 25).
+      ...spiritCardFlags(spiritsPlan, { actor, item, success }),
+      // Each offered condition's escape (door 19), keyed by the condition.
+      ...(Object.keys(inflictEscapes).length ? { inflictEscapes } : {}),
+      // **WHAT THE CARD'S TEST GOVERNS, AND WHAT ITS DAMAGE IS** (the B6 fix; the lead:
+      // *"Build it everywhere"*, *"Land automatically"*): the damage's type, which the
+      // damage door records; the half a passed Test leaves on each row and on the one
+      // button (`dice/chat.mjs#applyDamageToTargets`); the conditions a failed Resist
+      // lands at once (`rollResists`); and the circle the Use measured, and where.
+      ...(damage && sys.damage?.type ? { damageType: sys.damage.type } : {}),
+      ...(damage && damagePassed !== null ? { halfOnPass: true, passedByTarget, damagePassed } : {}),
+      // And nothing on a pass, where the failure deals it (the B8a pass).
+      ...(damage && noneOnPass && resist ? { noneOnPass: true } : {}),
+      ...(resist && onFailInflicts.length ? { onFailInflicts } : {}),
+      ...(gatherPlan && success ? { gathered: { who: gatherPlan.who, feet: gatherPlan.feet, origin: gatherPlan.origin,
+        ...(gatherAt ? { at: { x: gatherAt.x, y: gatherAt.y, sceneId: canvas?.scene?.id ?? null } } : {}) } } : {}),
       // 02's Curse (D-775): the minutes a failed Resist's Bane lasts, Malediction's
       // and Everlasting Affliction's added (`dice/chat.mjs#rollResists`).
-      ...(curse && success && !curseShort ? { curse: { minutes: curse.minutes } } : {}),
+      ...(curse && success && !successShort ? { curse: { minutes: curse.minutes } } : {}),
       // 04's Firestorm (D-775): what `dice/chat.mjs#regionFlagsFromCard` copies onto
       // the Region - which Use placed it, who holds it, the tick and its span.
       ...(useAreaTick ? {
@@ -5589,11 +8018,97 @@ export async function useFeature({
         identifier: null,
         duration: null,
         effectHTML: await enrich(sys.description ?? "", { relativeTo: item })
-      } : {}) } }
+      } : {}),
+      // **WHO USED IT, WHICH FEATURE, AND WHAT IT MOVED, STOOD UP OR HELD** (the
+      // Legacy branches' door 2; D-724's records): the token that acted, taken before
+      // any pick; the key the feature's row is filed under; whether a Casting Test was
+      // made (`success` beside it says how it went); each move a step made, centres
+      // before and after; the tokens a summon, a construct, a totem or a revive stood
+      // up; and a hit this Use turned into a miss. AFTER every spread above, since
+      // Firestorm's area writes a `source` of its own, and records of what happened as
+      // `damageByTarget` is - `module/animation/records.mjs#cardRecords` reads them.
+      source: useSource ?? null,
+      featureKey: useKey,
+      casting: sys.casting === true,
+      ...(stepsMade.length ? { steps: stepsMade } : {}),
+      ...(risenMade.length ? { risen: risenMade } : {}),
+      ...(holdMade ? { hold: holdMade } : {}) } }
   });
+  // **THE CIRCLE THE USE AIMED, SET DOWN WHERE IT WAS MEASURED** (the B6 fix; the lead:
+  // *"Measure the area"*): a Use on the ground that gathered its targets at the point it
+  // picked places its Region there once its card stands - with the card's own record on
+  // it (`regionFlagsFromCard`), what a cue or a loop reads - and its card offers no Place
+  // area. A Use whose Test failed places nothing (07 §8, D-775). Guarded: the board's
+  // drawing never undoes the Use.
+  if (posted && gatherAt && success && area && canvas?.scene && gathered(posted)) {
+    try {
+      const { regionFlagsFromCard } = await import("./chat.mjs");
+      await placeArea({
+        item, areaText: sys.area ?? "", name: item.name, scene: canvas.scene, origin: { x: gatherAt.x, y: gatherAt.y },
+        rotation: 0, token: null, attach: false, flags: regionFlagsFromCard(posted, actor, item)
+      });
+    } catch (err) {
+      // Said in words, never through `console.error` (CLAUDE.md §16: the smoke run fails
+      // on any console error): the Use has been paid and its card stands.
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Gather.PlaceFailed", { feature: item.name }));
+      console.warn("azeroth-rpg | a gathered area could not be drawn", err);
+    }
+  }
   // Hammer of Justice at rank 2 (D-772), after the card that paid for it.
   if (hammerFalls) await hammerAfterUse(actor, item, list);
   return posted;
+}
+
+/** Whether a feature's card records the circle its Use measured (the B6 fix). */
+function gathered(message) {
+  return Boolean(message?.flags?.["azeroth-rpg"]?.gathered);
+}
+
+/** The users who own this creature - its player and the GM - for a card only they see. */
+function ownersOf(actor) {
+  return (game.users?.contents ?? []).filter(u => actor?.testUserPermission?.(u, "OWNER")).map(u => u.id).sort();
+}
+
+/**
+ * **WHERE THE WATCHED CREATURE IS, IN WORDS** (04's The Long Watch: *you know its
+ * direction and rough distance*; door 18): `rules/marks.mjs#bearingTo` between the
+ * user's token and the creature's on the scene being viewed, or that it cannot be
+ * found there.
+ *
+ * @param {Actor} actor
+ * @param {{tokenId?: string|null, sceneId?: string|null, name?: string}|null} mark
+ * @returns {string}
+ */
+function watchBearingLine(actor, mark) {
+  const own = actor?.getActiveTokens?.(true)?.[0] ?? null;
+  const theirs = mark ? tokenOfTarget(mark) : null;
+  const grid = canvas?.grid ?? null;
+  const bearing = own && theirs ? bearingTo(own.center, theirs.center, { size: grid?.size ?? 100, distance: grid?.distance ?? 5 }) : null;
+  const target = mark?.name ?? "";
+  return bearing
+    ? game.i18n.format("AZEROTH.Mark.Bearing", { target, feet: bearing.feet, direction: game.i18n.localize(`AZEROTH.Mark.Compass.${bearing.direction}`) })
+    : game.i18n.format("AZEROTH.Mark.BearingUnmeasured", { target });
+}
+
+/**
+ * **THE WATCH ASKED WITH NOTHING TARGETED** (door 18): where the watched creature
+ * is, on a card the user's owners alone see, spending nothing - or that nobody is
+ * watched.
+ *
+ * @param {Actor} actor
+ */
+async function reportWatch(actor) {
+  const mark = cleanMark(actor?.getFlag?.("azeroth-rpg", WATCH_FLAG) ?? null);
+  if (!mark) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Mark.NoWatch", { name: actor?.name ?? "" }));
+    return null;
+  }
+  return ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor }),
+    content: `<p class="azeroth-drain">${foundry.utils.escapeHTML(watchBearingLine(actor, mark))}</p>`,
+    whisper: ownersOf(actor),
+    flags: { "azeroth-rpg": { kind: "watch" } }
+  });
 }
 
 /**
@@ -5641,9 +8156,22 @@ async function hammerAfterUse(actor, item, list) {
 export async function useAbility({ actor, list = "creatureAbilities", index = 0, dc = null, boons = 0, banes = 0, targets = null } = {}) {
   const row = actor?.system?.[list]?.[index] ?? null;
   const a = row?.automation ?? null;
+  // **CUTTING GEAR** (the lead, 2026-10-22: *"Give constructs a trait or ability that
+  // allows them to end one Entangled condition per turn no action required."*): by its
+  // NAME, its own door (`effects/legacy-uses.mjs#useCuttingGear`) - no action, once a turn.
+  if (row && holdsCuttingGear([row])) return useCuttingGear(actor);
   if (!row || !hasAutomation(a) || a.kind === "spell") return null;
+  // 06 §10 (door 10): a spirit touches nothing, whatever its block says.
+  const spiritAbility = realmRefusalFor(actor, "ability");
+  if (spiritAbility) {
+    ui.notifications?.warn(spiritAbility);
+    return null;
+  }
   const lst = targets ?? [];
   const first = lst[0] ?? null;
+  // **WHO USED IT, TAKEN NOW** (D-724; the Legacy branches' door 2): the creature's
+  // token by the roll dialog's own rule, for the card's record.
+  const abilitySource = (await import("../applications/roll-dialog.mjs")).sourceOf(actor);
 
   // 1. A use left?
   const usesMax = a.uses?.max ?? 0;
@@ -5727,34 +8255,88 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
   // 4. The numbers.
   const testDC = abilityDC(a, actor.system);
   const heal = success && (a.heal ?? 0) > 0 ? { amount: a.heal, explanation: String(a.heal) } : null;
+  // **A FAILED CASTING TEST FORCES NO RESIST** (D-775's rule for a casting Use, carried to
+  // a creature's casting ability by the B8a2 pass): the ability did not go off.
+  const resist = a.resist && success ? { key: a.resist, label: AZEROTH.resiliences[a.resist], dc: testDC } : null;
+  // **WHAT A PASSED TEST LEAVES OF THE DAMAGE, OFF 14's WORDS** (the B8a2 pass; the lead:
+  // *"Build them now"*, *"Build it everywhere"*): *or half on a Resilience (Reflex) Test* -
+  // the half, each row's met by its own creature's mitigation - and the Wild Kodo's *makes a
+  // Resilience (Reflex) Test at DC 14 or takes 3 damage* - none of it. The card's Apply lands
+  // either on a creature whose Resist THIS card recorded as passed (`rules/resisted.mjs
+  // #halvesFor`, `#sparedFor`); a failure, and a creature with no Test recorded, take the whole.
+  const halfOnPass = Boolean(resist) && a.damage?.half === true;
+  const noneOnPass = Boolean(resist) && !halfOnPass && a.damage?.onFail === true;
   let damage = null;
   let damageByTarget = [];
+  let passedByTarget = [];
+  let damagePassed = null;
   if (success && (a.damage?.amount ?? 0) > 0) {
     const type = a.damage.type ?? null;
-    const untyped = { damage: a.damage.amount, effectiveSL: sl, hit: true, immune: false, vulnerable: false, mitigation: 0 };
-    const mitigate = t => (type === null ? untyped : resolveDamage({
+    // 04's Drawn Across on the creature (door 25), its Boss Actions included: the damage
+    // it deals halved, untyped damage too - and a passed Test's half after it.
+    const halvedAbility = dealtHalvedBy(actor);
+    const untypedOf = passed => {
+      const worth = halvedAbility ? Math.floor(a.damage.amount / 2) : a.damage.amount;
+      return {
+        damage: passed ? passedHalf(worth) : worth, effectiveSL: sl, hit: true, immune: false, vulnerable: false, mitigation: 0,
+        ...(halvedAbility ? { dealtHalved: true } : {}), ...(passed ? { passedHalf: true } : {})
+      };
+    };
+    const mitigate = (t, { passed = false } = {}) => (type === null ? untypedOf(passed) : resolveDamage({
       rating: a.damage.amount, sl: 0, kind: type === "physical" ? "physical" : "magical", school: type,
       apByLocation: t?.apByLocation ?? {}, ward: t?.wardBySchool?.[type] ?? 0,
       // An ally's aura, after the Ward (D-755); the physical lane ignores it.
       schoolArmor: t?.schoolArmor?.[type] ?? 0,
-      immune: t?.immune ?? [], vulnerable: t?.vulnerable ?? [], slAddsToDamage: false
+      immune: t?.immune ?? [], vulnerable: t?.vulnerable ?? [], slAddsToDamage: false,
+      dealtHalved: halvedAbility,
+      // Half on a passed Test, before Armor Points and Ward (the B6 fix's reading).
+      passedHalf: passed
     }));
     damageByTarget = lst.map(t => mitigate(t));
+    if (halfOnPass) {
+      passedByTarget = lst.map(t => mitigate(t, { passed: true }));
+      damagePassed = mitigate(null, { passed: true }).damage;
+    }
     const result = damageByTarget[0] ?? mitigate(null);
-    damage = { final: result.damage, explanation: spellDamageExplanation(result, a.damage.amount) };
+    damage = {
+      final: result.damage,
+      explanation: [spellDamageExplanation(result, a.damage.amount), noneOnPass ? game.i18n.localize("AZEROTH.Card.DamageOnFail") : null].filter(Boolean).join(" · ")
+    };
   }
-  const resist = a.resist ? { key: a.resist, label: AZEROTH.resiliences[a.resist], dc: testDC } : null;
+  // **ONE RESIST ROW PER CREATURE THE CARD RECORDS** (D-726's rows; the feature card's since
+  // the B6 fix, a creature's ability's since the B8a2 pass): each row names its creature's
+  // uuid, so `dice/chat.mjs` shows it to that creature's owner and the GM, and the Test it
+  // makes is RECORDED on this card - what the Apply's half, its spare and a failure's
+  // condition read. With no creature recorded, the one button, unrecorded, as before.
+  const resistRows = resist
+    ? lst.map((t, i) => ({
+        index: i,
+        name: t?.name ?? "",
+        actorUuid: targetActorOf(t)?.uuid ?? "",
+        key: resistKey(t),
+        resilience: resist.key,
+        label: resist.label,
+        dc: resist.dc
+      }))
+    : [];
   const area = areaFor(a.area ?? "");
   const attack = a.kind === "attack";
   // A LIST, one block per condition (the feature card's shape since D-771,
-  // where Hurricane lays Slowed and Typhoon Prone beside it).
-  const inflicts = a.inflicts?.condition ? [{
+  // where Hurricane lays Slowed and Typhoon Prone beside it). A casting ability
+  // whose Test failed lays nothing (07 §8; the B8a2 pass).
+  const inflicts = success && a.inflicts?.condition ? [{
     condition: a.inflicts.condition,
     label: game.i18n.localize(AZEROTH.conditions[a.inflicts.condition] ?? a.inflicts.condition),
     value: a.inflicts.value ?? null,
     until: a.inflicts.until ?? null,
-    untilLabel: a.inflicts.until ? game.i18n.localize(AZEROTH.untilKinds[a.inflicts.until] ?? a.inflicts.until) : null
+    untilLabel: a.inflicts.until ? game.i18n.localize(AZEROTH.untilKinds[a.inflicts.until] ?? a.inflicts.until) : null,
+    // **WHETHER THE CARD'S TEST GOVERNS IT** (the lead: *"Land automatically"*; the B8a2
+    // pass): 14's *... or takes 3 damage and is knocked **Prone***, a failure lays it at
+    // once, so its button stands only for a creature whose Test the card has not recorded.
+    onFail: a.inflicts.onFail === true && Boolean(resist)
   }] : [];
+  // The conditions a failed Resist on this card lands (`dice/chat.mjs#rollResists`).
+  const onFailInflicts = resist ? governed(inflicts).onFail.map(i => ({ condition: i.condition, value: i.value, until: i.until })) : [];
 
   // 5. Strike a use: the row is written whole, an array being what it is.
   let uses = null;
@@ -5796,6 +8378,8 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
     speakerName: actor.name,
     damage,
     resist,
+    // One Resist row per creature the card records (the B8a2 pass).
+    resistRows,
     area,
     attack,
     inflicts,
@@ -5812,6 +8396,13 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
     flags: { "azeroth-rpg": {
       kind: "ability", list, index, title: row.name, targets: lst, damageByTarget, heal: heal?.amount ?? null, sl, area,
       damageType: a.damage?.type ?? null,
+      // **WHAT THE CARD'S RECORDED TEST GOVERNS** (the B8a2 pass): the half a pass leaves on
+      // each row and on the one button, the none a pass leaves where the failure deals it, and
+      // the conditions a failure lands at once (`dice/chat.mjs#applyDamageToTargets`,
+      // `#rollResists`) - 14's words, through the doors a feature's card already reads.
+      ...(damage && halfOnPass ? { halfOnPass: true, passedByTarget, damagePassed } : {}),
+      ...(damage && noneOnPass ? { noneOnPass: true } : {}),
+      ...(resist && onFailInflicts.length ? { onFailInflicts } : {}),
       // AN ABILITY THAT ATTACKS AND NAMES NO NUMBERS SWINGS THE BLOCK'S OWN
       // LINE (D-691). Ten entries carried `kind: "attack"` with an empty
       // `attack` descriptor, so the card's button rolled at Bonus 0 for 0
@@ -5820,7 +8411,14 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
       attack: attack ? attackFor(a, actor) : null,
       // What the Place button calls up (D-691, decision 2).
       summon: summon ? { ...summon, bossAction: isBossAction } : null,
-      bossAction: isBossAction
+      bossAction: isBossAction,
+      // **WHO USED IT, WHICH ABILITY, AND HOW ITS TEST WENT** (D-724; the Legacy
+      // branches' door 2): the creature's token, the key its row is filed under in
+      // the feature table (`ability:<slug>`), and whether a Casting Test was made.
+      source: abilitySource ?? null,
+      featureKey: abilityKeyOf(row.name),
+      casting: a.casting === true,
+      success
     } }
   });
 }
@@ -5871,6 +8469,12 @@ function attackFor(a, actor) {
 export async function useGear({ actor, item, targets = null } = {}) {
   const use = item?.system?.use ?? null;
   if (!actor || !item || !hasUse(use)) return null;
+  // 06 §10 (door 10): *You cannot touch the living world* - a thing carried stays where it is.
+  const spiritGear = realmRefusalFor(actor, "gear");
+  if (spiritGear) {
+    ui.notifications?.warn(spiritGear);
+    return null;
+  }
   const lst = targets ?? [];
 
   // 1. Is there one to use?
@@ -6173,6 +8777,12 @@ export function refuseSignaturePress({ actor, item } = {}) {
 export async function useSignature({ actor, item, targets = null } = {}) {
   const signature = signatureEffectOf(item);
   if (!actor || !item || !signature) return null;
+  // 06 §10 (door 10): a spirit presses nothing it carries.
+  const spiritSignature = realmRefusalFor(actor, "signature");
+  if (spiritSignature) {
+    ui.notifications?.warn(spiritSignature);
+    return null;
+  }
 
   // 1. Refuse, NAMING WHY - and through the SAME function the `spell` branch
   //    goes through, so neither door can drift from the other.
@@ -6463,6 +9073,14 @@ export async function featureMenu(actor, item) {
     }));
     return { options, note: null };
   }
+  // **THE TINKER'S AND THE GNOME'S MENUS** (the Legacy branches' doors 6 and 7): a
+  // talent's grant with no class level to gate them by - The Bench's constructs,
+  // Gadgeteer's gadgets, Overclock's and Mekkatorque's Blueprint's - so they answer
+  // before the class lookup, as Adaptable's skills do.
+  if (sys.choice === "constructs") return constructMenu(actor);
+  if (sys.choice === "gadgets") return gadgetMenu(actor, item);
+  if (sys.choice === "overclock") return overclockMenu(actor);
+  if (sys.choice === "blueprint") return blueprintMenu(actor);
   const classId = item.getFlag("azeroth-rpg", "feature")?.classId ?? null;
   const classes = actor.classItems ?? [];
   const index = classes.findIndex(c => c.id === classId);
@@ -6550,16 +9168,26 @@ export async function featureMenu(actor, item) {
     const bonded = new Set([...held.map(b => bondOf(b)?.entryUuid), ...held.map(b => b.uuid)]);
     const order = Object.keys(AZEROTH.weightClasses);
     const tier = actor.system.tier ?? 1;
+    // **04's GRAVE BOND** (*Your Companion class feature may bond a **Mindless** Undead
+    // that is not a Boss*; the Legacy branches' door 26): the undead listed beside the
+    // beasts, an undead that is not Mindless never, a Boss greyed in words - and the
+    // pick carries the Spirit Resilience Test that binds in place of the Handling Test.
+    const graveBond = graveBondFor(talents);
+    // The undead that resisted this bonder's Grave Bond before, greyed in words (02's
+    // Companion: *On a failure that beast will not be tried again*; the B2 review).
+    const resisted = new Set(resistedBonds(actor.getFlag("azeroth-rpg", GRAVE_BOND_RESISTED_FLAG)));
     // 14's entries and the GM's own beasts (D-650), gated by the talent, the
     // Handling DC and the character's tier; held ones tagged, never greyed.
-    const options = [...(await bestiaryEntries()), ...worldCreatures(["beast", "dragonkin"], { owner: actor })]
-      .filter(e => (e.creatureType === "beast" || e.creatureType === "dragonkin") && e.name !== "Avatar")
+    const options = [...(await bestiaryEntries()), ...worldCreatures(["beast", "dragonkin", ...(graveBond ? ["undead"] : [])], { owner: actor })]
+      .filter(e => (e.creatureType === "beast" || e.creatureType === "dragonkin" || (graveBond && e.creatureType === "undead")) && e.name !== "Avatar")
       .sort((a, b) => (order.indexOf(a.weightClass) - order.indexOf(b.weightClass)) || ((a.tier ?? 1) - (b.tier ?? 1)) || a.name.localeCompare(b.name))
       .map(e => {
         const option = creatureOption(e);
-        const fit = eligible("companion", e, { talents, tier });
-        if (fit.reason === "NotBeast") return null;
+        const fit = eligible("companion", e, { talents, tier, graveBond: Boolean(graveBond) });
+        if (fit.reason === "NotBeast" || fit.reason === "NotMindless") return null;
         if (bonded.has(e.uuid)) return { ...option, tag: game.i18n.localize("AZEROTH.Feature.Bonded"), available: true, held: true };
+        if (fit.test === "spirit" && resisted.has(e.uuid)) return { ...option, tag: game.i18n.format("AZEROTH.GraveBond.ResistedTag", { talent: graveBond.name }), available: false };
+        if (fit.test === "spirit") return { ...option, tag: game.i18n.format("AZEROTH.GraveBond.Tag", { tag: option.tag, talent: graveBond.name }), available: true, graveBond: true };
         return { ...option, tag: fit.ok ? option.tag : ineligibleTag(fit.reason, e), available: fit.ok };
       })
       .filter(Boolean);
@@ -6650,11 +9278,13 @@ const ELEMENTALS_SECTION = /Elementals, Oozes and Constructs/;
 async function bestiaryEntries() {
   const pack = game.packs.get("azeroth-rpg.bestiary");
   if (!pack) return [];
-  const index = await pack.getIndex({ fields: ["system.creatureType", "system.weightClass", "system.tier", "system.description", "system.source.section", "system.handlingDC"] });
+  const index = await pack.getIndex({ fields: ["system.creatureType", "system.weightClass", "system.tier", "system.description", "system.source.section", "system.handlingDC", "system.typeMarker"] });
   return index.map(e => ({
     uuid: e.uuid,
     name: e.name,
     creatureType: e.system?.creatureType ?? null,
+    // The block's marker - *Mindless* - which 04's Grave Bond reads (door 26).
+    typeMarker: e.system?.typeMarker ?? null,
     weightClass: e.system?.weightClass ?? null,
     tier: e.system?.tier ?? 1,
     handlingDC: e.system?.handlingDC ?? null,
@@ -6670,11 +9300,14 @@ async function bestiaryEntries() {
  * owner is listed as held; one bound to another character is not listed.
  */
 function worldCreatures(types = [], { owner = null } = {}) {
+  // A thrall is bound for its minute (04's Thrall of the Banshee; the B3 fix run) and is
+  // offered to nobody - not even as held by its owner, whose bond it is not.
   return game.actors
-    .filter(a => a.type === "npc" && types.includes(a.system?.creatureType) && (!bondOf(a) || bondOf(a).ownerUuid === owner?.uuid))
+    .filter(a => a.type === "npc" && types.includes(a.system?.creatureType) && (!bondOf(a) || (bondOf(a).ownerUuid === owner?.uuid && !isThrallBond(bondOf(a)))))
     .map(a => ({
       uuid: a.uuid, name: a.name, creatureType: a.system.creatureType ?? null, weightClass: a.system.weightClass ?? null,
-      tier: a.system.tier ?? 1, handlingDC: a.system.handlingDC ?? null, section: "", description: a.system.lore ?? "", world: true
+      tier: a.system.tier ?? 1, handlingDC: a.system.handlingDC ?? null, section: "", description: a.system.lore ?? "", world: true,
+      typeMarker: a.system.typeMarker ?? null
     }));
 }
 
@@ -6694,7 +9327,150 @@ function creatureOption(e) {
 function ineligibleTag(reason, entry) {
   if (reason === "NoHandling") return game.i18n.localize("AZEROTH.Bound.NoHandling");
   if (reason === "Tier") return game.i18n.format("AZEROTH.Bound.TierAbove", { tier: entry.tier ?? 1 });
+  // 04's Grave Bond (door 26): *that is not a Boss*.
+  if (reason === "Boss") return game.i18n.localize("AZEROTH.GraveBond.BossTag");
   return null;
+}
+
+/**
+ * **04's GRAVE BOND: THE TEST THAT BINDS** (*In place of the Handling Test, it makes
+ * a Spirit Resilience Test against your Spell DC, and on a failure it is bound to
+ * you*; the Legacy branches' door 26): the creature's own Spirit Resilience
+ * (`resilienceModifiers` off the entry or the GM's creature), rolled by the Use at
+ * the pick, against the bonder's Spell DC, said on a card - MY READING, for the lead:
+ * the remains have no token to roll a Resist card of their own. Answers whether the
+ * creature RESISTED, which binds nothing; no Spell DC binds nothing either, in words.
+ *
+ * @param {{owner: Actor, creature: Actor, talent: string}} o
+ * @returns {Promise<boolean>}
+ */
+async function graveBondTest({ owner, creature, talent, uuid = null, resilience = "spirit" }) {
+  const dc = owner.system?.spellDC ?? owner.system?.spells?.dc ?? null;
+  if (!(Number(dc) > 0)) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.GraveBond.NoDC", { talent, name: owner.name }));
+    return true;
+  }
+  // **THE RESILIENCE THE ROW NAMES** (`graveBondFor`'s `resist`; the B6 review: the key
+  // was decorative and the Test always rolled Spirit) - 04's Spirit, as stamped.
+  const bonus = resilienceModifiers(creature, AZEROTH.resiliences?.[resilience] ? resilience : "spirit").reduce((n, r) => n + (Number(r.value) || 0), 0);
+  const roll = await new Roll(`1d20 + ${bonus}`).evaluate();
+  const resisted = succeeded(roll.total, Number(dc));
+  // **A CREATURE THAT RESISTS IS NOT TRIED AGAIN** (02's Companion: *On a failure that
+  // beast will not be tried again*; the B2 review): recorded on the bonder under the
+  // uuid the pick named, before the card, so the menu greys it from now on.
+  if (resisted && owner.isOwner) {
+    const key = uuid ?? creature.uuid ?? null;
+    await owner.setFlag("azeroth-rpg", GRAVE_BOND_RESISTED_FLAG, withResistedBond(owner.getFlag("azeroth-rpg", GRAVE_BOND_RESISTED_FLAG) ?? [], key));
+  }
+  await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor: owner }),
+    rolls: [roll],
+    content: `<p>${game.i18n.format(resisted ? "AZEROTH.GraveBond.Resisted" : "AZEROTH.GraveBond.Failed", { name: creature.name, talent, dc, total: roll.total })}</p>`
+  });
+  return resisted;
+}
+
+/**
+ * **THE BENCH'S MENU** (04's The Bench: *You build constructs from the
+ * **Constructs** table below, one whose tier is no higher than yours*; the Legacy
+ * branches' door 6): the table's four, each linked to its block in 14 and greyed
+ * above the tinker's tier or where the pack holds no block; then every construct
+ * held - a wrecked one offered as its rebuild, a standing one listed as held.
+ *
+ * @param {Actor} actor
+ */
+async function constructMenu(actor) {
+  const entries = await bestiaryEntries();
+  const tier = actor.system?.tier ?? 1;
+  const options = CONSTRUCTS.map(c => {
+    const block = entries.find(e => e.name === c.name) ?? null;
+    const fit = constructEligible({ name: c.name }, { tier });
+    const tag = !block ? game.i18n.localize("AZEROTH.Construct.NoBlockTag")
+      : (fit.ok ? `${game.i18n.localize("AZEROTH.Sheet.Tier")} ${c.tier}` : game.i18n.format("AZEROTH.Bound.TierAbove", { tier: c.tier }));
+    return { key: c.name.slugify(), uuid: block?.uuid ?? null, name: c.name, tier: c.tier, available: Boolean(block) && fit.ok, tag, description: block?.description ?? "" };
+  });
+  for (const b of boundOf(actor, "construct")) {
+    const wrecked = isWrecked({ kind: "construct", health: b.system?.health?.value ?? null });
+    options.push(wrecked
+      ? { key: `rebuild:${b.uuid}`, uuid: b.uuid, name: game.i18n.format("AZEROTH.Construct.RebuildOption", { name: b.name }), available: true, rebuild: true, tag: game.i18n.localize("AZEROTH.Construct.WreckedTag"), description: "" }
+      : { key: `held:${b.uuid}`, uuid: b.uuid, name: b.name, available: true, held: true, tag: game.i18n.localize("AZEROTH.Construct.StandingTag"), description: "" });
+  }
+  const room = capacity("construct", { level: actor.system?.level ?? 1, talents: actor.takenTalents?.() ?? [] });
+  const names = heldNames(actor, "construct");
+  return { options, note: game.i18n.format("AZEROTH.Construct.MenuNote", { n: room }) + (names.length ? " " + game.i18n.format("AZEROTH.Bound.Held", { names: names.join(", ") }) : "") };
+}
+
+/** A gadget's Effect cell, bold as the chapter sets it. */
+function gadgetHTML(gadget) {
+  return `<p>${String(gadget?.text ?? "").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")}</p>`;
+}
+
+/**
+ * **GADGETEER'S MENU** (04: *You know two gadgets from the **Gadgets** table below, or
+ * four at rank 2*; Engineering Upgrade's *one more gadget per rank*; door 7): the
+ * table's eight as a checklist, the ones known ticked, the count the ranks give in
+ * the note. The checklist's ceiling is `useFeature`'s.
+ *
+ * @param {Actor} actor
+ * @param {Item} item  the Gadgeteer feature
+ */
+function gadgetMenu(actor, item) {
+  const allowed = gadgetsKnownFor(actor.takenTalents?.() ?? []).known;
+  const known = new Set(knownGadgets(item.system?.known ?? []).map(g => g.key));
+  const options = GADGETS.map(g => ({
+    key: g.key, name: g.name, available: true, checked: known.has(g.key),
+    tag: known.has(g.key) ? game.i18n.localize("AZEROTH.Feature.Known") : g.useText,
+    description: gadgetHTML(g)
+  }));
+  return { options, note: game.i18n.format("AZEROTH.Gadget.MenuNote", { n: allowed }) };
+}
+
+/**
+ * **OVERCLOCK'S MENU** (02's gnome: *a device you built or a gadget you know works
+ * one step better and then breaks*; door 7): the gadgets known, each with its own
+ * use left (one spent is greyed and said), and the 08 §13 devices carried - which
+ * of them you built is the table's.
+ *
+ * @param {Actor} actor
+ */
+function overclockMenu(actor) {
+  const reach = overclockFor(actor.takenTalents?.() ?? []) ?? { gadgets: true, devices: true };
+  const options = [];
+  if (reach.gadgets) {
+    for (const f of actor.items.filter(i => i.type === "feature" && i.getFlag("azeroth-rpg", "feature")?.gadget).sort((a, b) => a.name.localeCompare(b.name))) {
+      const left = f.system?.uses?.per ? (f.system.uses.value ?? 0) : 1;
+      options.push({ key: f.id, featureId: f.id, name: f.name, gadget: true, available: left > 0,
+        tag: left > 0 ? game.i18n.localize("AZEROTH.Overclock.GadgetTag") : game.i18n.localize("AZEROTH.Overclock.SpentTag"), description: f.system?.description ?? "" });
+    }
+  }
+  if (reach.devices) {
+    for (const i of actor.items.filter(x => x.type === "gear" && DEVICE_SECTION.test(x.system?.source?.section ?? "")).sort((a, b) => a.name.localeCompare(b.name))) {
+      options.push({ key: i.id, uuid: i.uuid, name: i.name, device: true, available: true, tag: game.i18n.localize("AZEROTH.Overclock.DeviceTag"), description: i.system?.description ?? "" });
+    }
+  }
+  return { options, note: game.i18n.localize(options.length ? "AZEROTH.Overclock.Note" : "AZEROTH.Overclock.Nothing") };
+}
+
+/**
+ * **MEKKATORQUE'S BLUEPRINT'S MENU** (02's gnome: *build one device from
+ * **08-EQUIPMENT** or one gadget from **04-TALENTS** that you have the parts for, at
+ * no cost in gold*; door 7): 04's eight gadgets and 08 §13's devices off the gear
+ * pack, each linked to its entry. *That you have the parts for* is the table's.
+ */
+async function blueprintMenu(actor) {
+  // **WHAT THE TALENT'S ROW SAYS IT BUILDS** (the B2 review: `blueprintFor` had no
+  // caller), the way Overclock's menu reads `overclockFor`: 04's gadgets and 08 §13's
+  // devices each only where the row reaches them.
+  const reach = blueprintFor(actor?.takenTalents?.() ?? []) ?? { gadgets: true, devices: true };
+  const options = reach.gadgets
+    ? GADGETS.map(g => ({ key: g.key, name: g.name, gadget: true, available: true, tag: game.i18n.localize("AZEROTH.Blueprint.GadgetTag"), description: gadgetHTML(g) }))
+    : [];
+  const pack = reach.devices ? game.packs.get("azeroth-rpg.gear") : null;
+  const index = pack ? await pack.getIndex({ fields: ["system.source.section", "system.description"] }) : [];
+  for (const e of [...index].filter(e => DEVICE_SECTION.test(e.system?.source?.section ?? "")).sort((a, b) => a.name.localeCompare(b.name))) {
+    options.push({ key: e.uuid, uuid: e.uuid, name: e.name, device: true, available: true, tag: game.i18n.localize("AZEROTH.Blueprint.DeviceTag"), description: e.system?.description ?? "" });
+  }
+  return { options, note: game.i18n.localize("AZEROTH.Blueprint.Note") };
 }
 
 /** What the card prints for the option chosen: the block's link first, where there is one. */
@@ -7037,7 +9813,7 @@ async function accrueCastingCorruption(actor, spell) {
  * @param {{track: string, points: number, occasion: string}} o
  * @returns {Promise<ChatMessage|null>}
  */
-async function accrueCorruption(actor, { track, points = 1, occasion = "" } = {}) {
+export async function accrueCorruption(actor, { track, points = 1, occasion = "" } = {}) {
   if (!actor || actor.type !== "character" || !AZEROTH.corruptionTracks[track]) return null;
   const from = actor.system.corruption?.[track] ?? 0;
   // `applyExposure` with `failed: true` is the unresisted case: the point
@@ -7291,6 +10067,12 @@ export async function sufferInjury({ actor, location = "body", band = null, resu
 export async function useManeuver({ actor, key, targets = null } = {}) {
   const entry = AZEROTH.maneuvers.find(m => m.key === key);
   if (!actor || !entry) return null;
+  // 06 §10 (door 10): a spirit makes no maneuver in the living world.
+  const spiritManeuver = realmRefusalFor(actor, "maneuver");
+  if (spiritManeuver) {
+    ui.notifications?.warn(spiritManeuver);
+    return null;
+  }
   if (key === "calledShot") {
     ui.notifications?.info(game.i18n.localize("AZEROTH.Maneuver.NotAUse"));
     return null;

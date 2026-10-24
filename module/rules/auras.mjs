@@ -157,6 +157,21 @@ function deepFreeze(value) {
  *   rank*. The friendly target is somebody else (MY READING, for the lead: the
  *   holder within 5 feet of themselves would make the clause say nothing).
  * - `armor` (D-772) adds Armor Points at every location the creature has.
+ * - `targets: "enemies"` and `bane` (the Legacy branches' door 20: 04's Loa Drum,
+ *   *While your **Tremor** totem stands, every enemy within 30 feet of it takes a
+ *   Bane on Spirit Resilience Tests*; the lead, phase 0: *"Every Spirit Resilience
+ *   Test"*): the aura reaches the holder's ENEMIES (`rules/distance.mjs
+ *   #countsAsEnemy`), never the holder, and lays a standing Bane - the area Bane's
+ *   own payload, which may name a Resilience - read by the roll dialog and never
+ *   spent.
+ * - `centre: "boundTotem:<name>"` (door 20): every token of a totem bound to the
+ *   holder whose name holds `<name>` - Loa Drum's Tremor totem.
+ * - `healthFloor` (the Legacy branches' door 12: 04's Big Bad Voodoo, *no ally within
+ *   20 feet of you other than yourself may be reduced below 1 Health by any source*):
+ *   the laid effect carries 07's Aegis floor's own flag (`rules/blow-doors.mjs
+ *   #FLOOR_FLAG`, `stay` the number, `noCritical` false - *It does not stop a
+ *   Critical Injury or anything a Critical Injury does*), so the ONE hold at 1 holds
+ *   it, at the damage door and where Health is lost; gated `sustain:<identifier>`.
  *
  * FROZEN ALL THE WAY DOWN: a talent's patch that forgot to copy the aura before
  * widening it would widen the TABLE, for every Paladin in the world, and a
@@ -168,9 +183,42 @@ function deepFreeze(value) {
 export function aura({
   feet, targets = "allies", centre = "self", excludeOwner = false, gate = null,
   boon = null, schoolArmor = null, floor = null, spellDamage = null, damageReduction = null,
-  armor = null, holderOnly = false
+  armor = null, holderOnly = false, bane = null, healthFloor = null
 } = {}) {
-  return deepFreeze({ feet, targets, centre, excludeOwner, gate, boon, schoolArmor, floor, spellDamage, damageReduction, armor, holderOnly });
+  // `bane` (door 20) and `healthFloor` (door 12) are carried only where a row names
+  // one, so every descriptor before them keeps its exact shape.
+  return deepFreeze({
+    feet, targets, centre, excludeOwner, gate, boon, schoolArmor, floor, spellDamage, damageReduction, armor, holderOnly,
+    ...(bane ? { bane } : {}), ...(healthFloor ? { healthFloor } : {})
+  });
+}
+
+/**
+ * **WHERE AN AURA IS MEASURED FROM, AS A KIND**: the part of `centre` before the
+ * colon - `boundTotem:Tremor` is a `boundTotem` centre naming the Tremor totem
+ * (door 20). The vocabulary is `AZEROTH.auraCentres`.
+ *
+ * @param {string|null} centre
+ * @returns {{kind: string|null, name: string|null}}
+ */
+export function auraCentreOf(centre) {
+  if (typeof centre !== "string" || !centre) return { kind: null, name: null };
+  const at = centre.indexOf(":");
+  if (at < 0) return { kind: centre, name: null };
+  const name = centre.slice(at + 1).trim();
+  return { kind: centre.slice(0, at), name: name || null };
+}
+
+/**
+ * **WHETHER A TOTEM STANDS** (04's Loa Drum: *While your **Tremor** totem stands*; the B2
+ * review): a totem at 0 Health, or one marked defeated, is destroyed, and an aura
+ * centred on it reaches nobody. A Health nothing stores is no reason to call it down.
+ *
+ * @param {{health?: number|null, defeated?: boolean}} o
+ */
+export function totemStands({ health = null, defeated = false } = {}) {
+  if (defeated === true) return false;
+  return !(typeof health === "number" && Number.isFinite(health) && health <= 0);
 }
 
 /**
@@ -259,6 +307,10 @@ function cleanBoon(raw) {
   if (!kind || !boons) return null;
   const against = cleanConditions(raw.against);
   if (kind !== "resilience") return against.length ? { kind, resilience: null, against, boons } : { kind, resilience: null, boons };
+  // **EVERY RESILIENCE** (04's Burial Ground: *a Boon on Resilience Tests*; the Legacy
+  // branches' door 25): named `all`, so it is a word the row chose and never a word
+  // the row forgot - which is what the rule above refuses.
+  if (raw.resilience === "all" && !against.length) return { kind, resilience: "all", boons };
   const resilience = typeof raw.resilience === "string" && raw.resilience in AZEROTH.resiliences ? raw.resilience : null;
   if (against.length) return { kind, resilience, against, boons };
   return resilience ? { kind, resilience, boons } : null;
@@ -276,7 +328,13 @@ function cleanBane(raw) {
   const kind = raw.kind === "all" || (typeof raw.kind === "string" && raw.kind in AZEROTH.testKinds) ? raw.kind : null;
   const banes = atLeast(raw.banes, 1);
   if (!kind || !banes) return null;
-  return raw.judged === true ? { kind, banes, judged: true } : { kind, banes };
+  // **WHICH RESILIENCE** (door 20: 04's Loa Drum, *a Bane on Spirit Resilience
+  // Tests*), named only where the row names one, so every area Bane before it keeps
+  // its exact shape - and a Resilience Bane naming none of the vocabulary is none.
+  const resilience = kind === "resilience" && typeof raw.resilience === "string" && raw.resilience in AZEROTH.resiliences ? raw.resilience : null;
+  if (kind === "resilience" && raw.resilience !== undefined && raw.resilience !== null && !resilience) return null;
+  const out = resilience ? { kind, resilience, banes } : { kind, banes };
+  return raw.judged === true ? { ...out, judged: true } : out;
 }
 
 /** Ward ADDED against some schools (Hallowed Ground's *gains Ward 2*), resolved, or null. */
@@ -346,7 +404,32 @@ export function auraPayloadOf(row = {}) {
   // Tidecall's *may stand from **Prone** without spending movement*: a flag
   // `AzerothActor#toggleStatusEffect` reads, like the Boon, never a change.
   if (src.standFree === true) out.standFree = true;
+  // **A FLOOR UNDER HEALTH** (the Legacy branches' door 12: 04's Big Bad Voodoo, *no
+  // ally ... may be reduced below 1 Health by any source*): the Health the creature
+  // stays at, laid as 07's Aegis floor's own flag (`healthFloorFlag`) and never a change.
+  const healthFloor = atLeast(src.healthFloor, 1);
+  if (healthFloor) out.healthFloor = healthFloor;
   return out;
+}
+
+/**
+ * **THE FLOOR A HEALTH-FLOOR AURA LAYS** (door 12), in 07's Aegis floor's own shape
+ * (`rules/blow-doors.mjs#floorOf`), so `effects/blow-doors.mjs#aegisFloor` - the
+ * first of the ONE hold's order, at the damage door and where Health is lost - holds
+ * the creature with no second door. **`noCritical` is false**: 04's *It does not stop
+ * a Critical Injury or anything a Critical Injury does*, where 07's Aegis refuses the
+ * injuries of a creature it held. A Critical Injury's own drop to 0 writes the Health
+ * straight (`workflows.sufferInjury`) and never meets a floor. Null where the payload
+ * lays none.
+ *
+ * @param {object} row  a planned row or a payload
+ * @param {{by?: string|null, name?: string}} [o]  the holder's uuid and the source's name
+ * @returns {{stay: number, by: string|null, name: string, held: false, noCritical: false}|null}
+ */
+export function healthFloorFlag(row = {}, { by = null, name = "" } = {}) {
+  const stay = auraPayloadOf(row).healthFloor ?? null;
+  if (!stay) return null;
+  return { stay, by: typeof by === "string" && by ? by : null, name: String(name ?? ""), held: false, noCritical: false };
 }
 
 /**
@@ -387,6 +470,12 @@ export function auraReaches(aura, candidate = {}) {
   // measures for the holder's own candidate.
   if (aura.holderOnly === true) return self && candidate.allyNear === true;
   if (self && aura.excludeOwner === true) return false;
+  // **AN AURA ON THE HOLDER'S ENEMIES** (door 20: Loa Drum's *every enemy within 30
+  // feet of it*): never the holder, and only a creature the holder's side counts as
+  // an enemy (`countsAsEnemy`, measured by the pass).
+  if (aura.targets === "enemies") {
+    if (self || candidate.enemy !== true) return false;
+  }
   if (!self && aura.targets === "party" && candidate.party !== true) return false;
   if (!self && aura.targets === "allies" && candidate.ally !== true) return false;
   const feet = candidate.feet;
@@ -460,7 +549,8 @@ export function auraChanges(row = {}, { type = null, apLocations = null } = {}) 
  */
 export function auraGives(row = {}, candidate = {}) {
   const p = auraPayloadOf(row);
-  return Boolean(p.boon) || Boolean(p.bane) || Boolean(p.healing) || Boolean(p.standFree) || auraChanges(row, candidate).length > 0;
+  return Boolean(p.boon) || Boolean(p.bane) || Boolean(p.healing) || Boolean(p.standFree) || Boolean(p.healthFloor)
+    || auraChanges(row, candidate).length > 0;
 }
 
 /**
@@ -630,7 +720,8 @@ export function auraMagnitude(row = {}) {
   const p = auraPayloadOf(row);
   return (p.damageReduction ?? 0) + (p.boon?.boons ?? 0) + (p.schoolArmor?.amount ?? 0)
     + (p.floor?.ap ?? 0) + (p.floor?.ward ?? 0) + (p.spellDamage ?? 0) + (p.armor ?? 0)
-    + (p.bane?.banes ?? 0) + (p.ward?.amount ?? 0) + Math.abs(p.speed ?? 0) + (p.healing ? 1 : 0) + (p.standFree ? 1 : 0);
+    + (p.bane?.banes ?? 0) + (p.ward?.amount ?? 0) + Math.abs(p.speed ?? 0) + (p.healing ? 1 : 0) + (p.standFree ? 1 : 0)
+    + (p.healthFloor ? 1 : 0);
 }
 
 /**
@@ -667,8 +758,13 @@ export function strongestPerGroup(rows = []) {
  * read fails closed** - the same rule `signatures.mjs#gateHolds` keeps - because
  * dropping it would turn *while you carry a shield* into *always*.
  *
- * @param {string|null} gate  null, `shield` or `spell:<identifier>`
- * @param {{shield?: boolean, spells?: string[]}} facts
+ * **A SUSTAIN HELD** (the Legacy branches' door 12: 04's Big Bad Voodoo, *While you
+ * Sustain it*): `sustain:<identifier>` holds while the holder's `sustaining` holds an
+ * entry of that identifier - the flag 05 §12's turn charges and every door that ends
+ * a Sustain clears (`workflows.endSustain`, 0 Health, a Critical Injury).
+ *
+ * @param {string|null} gate  null, `shield`, `spell:<identifier>` or `sustain:<identifier>`
+ * @param {{shield?: boolean, spells?: string[], sustains?: string[]}} facts
  */
 export function auraGateOpen(gate, facts = {}) {
   if (gate === null || gate === undefined || gate === "") return true;
@@ -676,6 +772,7 @@ export function auraGateOpen(gate, facts = {}) {
   if (!AZEROTH.auraGates.includes(kind)) return false;
   if (kind === "shield") return facts.shield === true;
   if (kind === "spell") return Boolean(value) && (facts.spells ?? []).includes(value);
+  if (kind === "sustain") return Boolean(value) && (facts.sustains ?? []).includes(value);
   return false;
 }
 
@@ -734,7 +831,8 @@ export function ownerAuras(sources = [], facts = {}) {
       readsOwnArmor: ownArmor,
       ...auraPayloadOf({ ...a, schoolArmor })
     };
-    if (!AZEROTH.auraCentres.includes(row.centre)) continue;
+    // A centre names its kind before any colon (`boundTotem:Tremor`, door 20).
+    if (!AZEROTH.auraCentres.includes(auraCentreOf(row.centre).kind)) continue;
     if (auraStands(row)) out.push(row);
   }
   return out.sort((x, y) => (x.key < y.key ? -1 : x.key > y.key ? 1 : 0));
@@ -862,6 +960,8 @@ export function auraBoonsOn(rows = [], kind = null, resilience = null, against =
       continue;
     }
     if (boon.kind !== "resilience") auto.push({ row, boon });
+    // Every Resilience (door 25's Burial Ground): any Resilience Test, named or not.
+    else if (boon.resilience === "all") auto.push({ row, boon });
     else if (!resilience) judged.push({ row, boon });
     else if (boon.resilience === resilience) auto.push({ row, boon });
   }
@@ -903,17 +1003,27 @@ export function auraBaneRows(effects = []) {
  * on this kind of Test or on `all`, ticked; one the table judges (`judged`),
  * an unticked line.
  *
+ * **A RESILIENCE BANE THAT NAMES ITS RESILIENCE** (door 20: Loa Drum's *Spirit
+ * Resilience Tests*) is read as the aura Boon's twin: ticked on a Test of that
+ * Resilience, the table's line on a Resilience Test whose door did not say which,
+ * and nothing on another.
+ *
  * @param {Array<object>} rows  `auraBaneRows`
  * @param {string|null} kind
+ * @param {string|null} [resilience]  the Test's Resilience, where its door says
  * @returns {{banes: number, sources: Array<{source: string, owner: string}>,
  *   judged: {banes: number, sources: Array<{source: string, owner: string}>}}}
  */
-export function auraBanesOn(rows = [], kind = null) {
+export function auraBanesOn(rows = [], kind = null, resilience = null) {
   const auto = [];
   const judged = [];
   for (const row of rows ?? []) {
     const bane = cleanBane(row);
     if (!bane || !(bane.kind === kind || bane.kind === "all")) continue;
+    if (bane.resilience) {
+      if (!resilience) { judged.push({ row, bane }); continue; }
+      if (bane.resilience !== resilience) continue;
+    }
     (bane.judged ? judged : auto).push({ row, bane });
   }
   const sum = list => list.reduce((n, { bane }) => n + bane.banes, 0);

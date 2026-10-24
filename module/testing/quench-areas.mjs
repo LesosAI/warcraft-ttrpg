@@ -19,8 +19,9 @@
  */
 
 import {
-  cleanup, drainAreaWork, errorsDuring, fromPack, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook, warnings
+  cleanup, drainAreaWork, errorsDuring, fromPack, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook, warnings, tokenDrawn, tokenData
 } from "./fixtures.mjs";
+import { ESCAPE_FLAG } from "../rules/escapes.mjs";
 import { CARD_ACTIONS, regionFlagsFromCard } from "../dice/chat.mjs";
 import { pixelsPerFoot, placeArea } from "../canvas/regions.mjs";
 import { reconcileGround, sweepAreas } from "../canvas/sustained-areas.mjs";
@@ -71,10 +72,10 @@ async function place(scene, placements) {
   const data = [];
   for (const { actor, x, y, disposition = "FRIENDLY" } of placements) {
     await actor.update({ "prototypeToken.actorLink": true });
-    data.push((await actor.getTokenDocument({ x, y, disposition: CONST.TOKEN_DISPOSITIONS[disposition] })).toObject());
+    data.push((await tokenData(actor, { x, y, disposition: CONST.TOKEN_DISPOSITIONS[disposition] })));
   }
   const tokens = await scene.createEmbeddedDocuments("Token", data);
-  await until(() => placements.every(p => p.actor.getActiveTokens(true).length), "every token drawn");
+  await until(() => placements.every(p => tokenDrawn(p.actor.getActiveTokens(true)[0])), "every token drawn, its texture loaded and its arrows made");
   await settle();
   return tokens;
 }
@@ -672,6 +673,296 @@ export function areasBatch(context) {
       }
     });
 
+    /* ---- 07's later Tests: a crossing, the first entry, the caster's turn (the B9a pass) ---- */
+
+    it("RING OF FIRE (the B9a pass): a creature crossing the ring makes its Test - a failure puts it back on its own side and ends its turn, a pass crosses and takes 5 Fire - and a creature named at the cast crosses untested", async function () {
+      this.timeout(300000);
+      // 07: *A creature crossing the ring in either direction makes a Reflex Resilience
+      // Test against your Spell DC: on a failure it does not cross and its turn ends, and
+      // on a success it crosses and takes 5 Fire damage. Name any number of creatures as
+      // you cast: the ring lets them through and does not burn them* (the lead: *"Build the
+      // triggers"*).
+      const ring = await fromPack("azeroth-rpg.spells", "Ring of Fire");
+      const mage = await makeNpc("Sorceress");
+      await mage.update({ name: "ZZ Ring Sorceress" });
+      await fillPower(mage);
+      const held = await makeCharacter({ name: "ZZ Ring Held", classes: [["Warrior", 3]] });
+      const passer = await makeCharacter({ name: "ZZ Ring Passer", classes: [["Warrior", 3]] });
+      const friend = await makeCharacter({ name: "ZZ Ring Friend", classes: [["Warrior", 3]] });
+      // The ring is a 60 ft radius at (2000, 1200), 1200 px: each walker starts outside it
+      // and walks fifteen feet east across its edge.
+      const tokens = await place(scene, [
+        { actor: mage, x: 3700, y: 2200, disposition: "HOSTILE" },
+        { actor: held, x: 600, y: 1100 },
+        { actor: passer, x: 600, y: 1300 },
+        { actor: friend, x: 600, y: 900 }
+      ]);
+      let combat = null;
+      try {
+        const card = await cast(mage, ring, [{ tokenId: tokenOf(friend).id, sceneId: scene.id, actorId: friend.id, name: friend.name }]);
+        assert.ok(card, "Ring of Fire was refused");
+        made.push(card);
+        assert.isTrue(card.flags["azeroth-rpg"].success, "a natural 18 failed the Casting Test");
+        assert.deepEqual(card.flags["azeroth-rpg"].named, [friend.uuid], "the card does not record the creature named at the cast");
+        const region = await placeArea({ item: ring, scene, origin: { x: 2000, y: 1200 }, flags: regionFlagsFromCard(card, mage, ring), widenFt: card.flags["azeroth-rpg"].widen });
+        assert.ok(region, "no Region was placed for the ring");
+        assert.deepEqual(region.getFlag("azeroth-rpg", "named"), [friend.uuid], "the area does not carry the creature named at the cast");
+        for (const a of [held, passer, friend]) assert.isFalse(tokenOf(a).testInsideRegion(region), `${a.name} starts inside the ring`);
+        combat = await fightOver(scene, [held, passer, friend]);
+
+        // A FAILURE: put back where it stood before the edge, and its turn ends.
+        const mine = await giveTurn(combat, held);
+        const heldToken = tokenOf(held);
+        let since = game.messages.size;
+        const crossed = entering(heldToken, entered => entered > 0);
+        assert.isTrue(await heldToken.move({ x: 900, y: 1100 }), "the walk across the ring was refused");
+        await crossed;
+        await until(() => heldToken.x === 900, "the walk across to land", 10000);
+        const [heldCard] = await until(() => areaCards(since, held).length && areaCards(since, held), "the crossing's Test card");
+        made.push(heldCard);
+        const area = heldCard.flags["azeroth-rpg"].area;
+        assert.equal(area.trigger, "cross", "the card does not say it is a crossing's Test");
+        assert.ok(area.stopAt, "the card records nowhere to put the creature back");
+        const button = buttonOn(heldCard, '[data-action="resistTest"][data-purpose="area"]');
+        assert.ok(button, "the crossing's card carries no Resist");
+        assert.equal(button.dataset.resilience, "reflex");
+        const fail = pinDie(1);
+        try {
+          await CARD_ACTIONS.resistTest(button, heldCard);
+        } finally {
+          fail();
+        }
+        await until(() => heldToken.x === area.stopAt.x && heldToken.y === area.stopAt.y, "the failure putting the creature back", 15000);
+        assert.isFalse(heldToken.testInsideRegion(region), "the creature that failed was put back inside the ring");
+        await until(() => mine.budget.halfActions === 0, "the failure ending its turn");
+        await until(() => game.messages.contents.slice(since).some(m => m.content.includes(game.i18n.format("AZEROTH.AreaTest.PutBack", { name: held.name, spell: "Ring of Fire" }))), "the put-back said in words");
+
+        // A PASS: across, and 5 Fire through its Ward.
+        await giveTurn(combat, passer);
+        const passerToken = tokenOf(passer);
+        const full = health(passer);
+        const expected = areaDamageOn({ actor: passer, caster: mage, spell: region.getFlag("azeroth-rpg", "spell"), damage: { rating: 5, school: "fire" } }).damage;
+        since = game.messages.size;
+        const across = entering(passerToken, entered => entered > 0);
+        assert.isTrue(await passerToken.move({ x: 900, y: 1300 }), "the second walk across was refused");
+        await across;
+        await until(() => passerToken.x === 900, "the second walk to land", 10000);
+        const [passCard] = await until(() => areaCards(since, passer).length && areaCards(since, passer), "the second crossing's Test card");
+        made.push(passCard);
+        const pass = pinDie(20);
+        try {
+          await CARD_ACTIONS.resistTest(buttonOn(passCard, '[data-action="resistTest"][data-purpose="area"]'), passCard);
+        } finally {
+          pass();
+        }
+        await until(() => health(passer) === full - expected, "the pass's 5 Fire");
+        assert.isTrue(passerToken.testInsideRegion(region), "the creature that passed did not cross");
+
+        // NAMED AT THE CAST: through, untested.
+        await giveTurn(combat, friend);
+        const friendToken = tokenOf(friend);
+        since = game.messages.size;
+        const through = entering(friendToken, entered => entered > 0);
+        assert.isTrue(await friendToken.move({ x: 900, y: 900 }), "the named creature's walk was refused");
+        await through;
+        await until(() => friendToken.x === 900, "the named creature's walk to land", 10000);
+        await settle();
+        assert.lengthOf(areaCards(since, friend), 0, "the ring asked a Test of a creature named at the cast");
+        assert.isTrue(friendToken.testInsideRegion(region), "the named creature was stopped");
+      } finally {
+        await game.system.azeroth.workflows.endAllSustains({ actor: mage }).catch(() => {});
+        await clearBoard(scene, combat, tokens);
+      }
+    });
+
+    it("STORMWALL (the B9a pass): a creature that tries to cross the line makes its Test - a failure puts it back and ends its turn, a pass crosses Slowed until the end of its next turn", async function () {
+      this.timeout(300000);
+      // 07: *a creature that tries to cross makes a Body Resilience Test against your Spell
+      // DC: on a failure it does not cross and its turn ends, and on a success it crosses
+      // and is **Slowed** until the end of its next turn.*
+      const wall = await fromPack("azeroth-rpg.spells", "Stormwall");
+      const shaman = await makeNpc("Sorceress");
+      await shaman.update({ name: "ZZ Wall Sorceress" });
+      await fillPower(shaman);
+      const stopped = await makeCharacter({ name: "ZZ Wall Stopped", classes: [["Warrior", 3]] });
+      const crosser = await makeCharacter({ name: "ZZ Wall Crosser", classes: [["Warrior", 3]] });
+      // A 40 ft line east from (1000, 1500), five feet wide: y 1450 to 1550. Each walker
+      // starts north of it and walks twenty-five feet south across it.
+      const tokens = await place(scene, [
+        { actor: shaman, x: 3700, y: 200, disposition: "HOSTILE" },
+        { actor: stopped, x: 1100, y: 1200 },
+        { actor: crosser, x: 1400, y: 1200 }
+      ]);
+      let combat = null;
+      try {
+        const { region } = await castAndPlace(scene, shaman, wall, { x: 1000, y: 1500 });
+        combat = await fightOver(scene, [stopped, crosser]);
+
+        const mine = await giveTurn(combat, stopped);
+        const stoppedToken = tokenOf(stopped);
+        let since = game.messages.size;
+        const tried = entering(stoppedToken, entered => entered > 0);
+        assert.isTrue(await stoppedToken.move({ x: 1100, y: 1700 }), "the walk across the wall was refused");
+        await tried;
+        await until(() => stoppedToken.y === 1700, "the walk to land", 10000);
+        const [stopCard] = await until(() => areaCards(since, stopped).length && areaCards(since, stopped), "the wall's Test card");
+        made.push(stopCard);
+        const area = stopCard.flags["azeroth-rpg"].area;
+        assert.equal(area.trigger, "cross");
+        assert.ok(area.stopAt, "the card records nowhere to put the creature back");
+        const button = buttonOn(stopCard, '[data-action="resistTest"][data-purpose="area"]');
+        assert.equal(button?.dataset?.resilience, "body", "the wall's Test is not a Body Test");
+        const fail = pinDie(1);
+        try {
+          await CARD_ACTIONS.resistTest(button, stopCard);
+        } finally {
+          fail();
+        }
+        await until(() => stoppedToken.x === area.stopAt.x && stoppedToken.y === area.stopAt.y, "the failure putting the creature back", 15000);
+        assert.isBelow(stoppedToken.y, 1450, "the creature that failed was not put back on its own side");
+        await until(() => mine.budget.halfActions === 0, "the failure ending its turn");
+
+        await giveTurn(combat, crosser);
+        const crosserToken = tokenOf(crosser);
+        since = game.messages.size;
+        const across = entering(crosserToken, entered => entered > 0);
+        assert.isTrue(await crosserToken.move({ x: 1400, y: 1700 }), "the second walk across was refused");
+        await across;
+        await until(() => crosserToken.y === 1700, "the second walk to land", 10000);
+        const [passCard] = await until(() => areaCards(since, crosser).length && areaCards(since, crosser), "the second crossing's Test card");
+        made.push(passCard);
+        await withoutScrollingText(async () => {
+          const pass = pinDie(20);
+          try {
+            await CARD_ACTIONS.resistTest(buttonOn(passCard, '[data-action="resistTest"][data-purpose="area"]'), passCard);
+          } finally {
+            pass();
+          }
+          await until(() => crosser.statuses.has("slowed"), "the pass's Slowed");
+        });
+        assert.equal(crosserToken.y, 1700, "the creature that passed did not cross");
+        const slowed = crosser.effects.find(e => e.statuses?.has("slowed"));
+        assert.equal(slowed?.duration?.expiry, "turnEnd", "the Slowed does not end with the creature's next turn");
+      } finally {
+        await clearBoard(scene, combat, tokens);
+      }
+    });
+
+    it("FROZEN RUNE (the B9a pass): the first creature to enter the space makes its Test, in a fight or out of one, and no creature after it; a failure Entangles with the escape 07 gives", async function () {
+      this.timeout(300000);
+      // 07: *The first creature to enter the space must pass a Reflex Resilience Test against
+      // your Spell DC or be **Entangled** until it spends an action and passes another*. Out of
+      // a fight too: the lead's ruling on 04's Shadow Trap (*"Also outside a fight"*), read for
+      // the one spell of that shape (the implementer's reading, for the lead).
+      const rune = await fromPack("azeroth-rpg.spells", "Frozen Rune");
+      const mage = await makeNpc("Sorceress");
+      await mage.update({ name: "ZZ Rune Sorceress" });
+      await fillPower(mage);
+      const first = await makeCharacter({ name: "ZZ Rune First", classes: [["Warrior", 3]] });
+      const second = await makeCharacter({ name: "ZZ Rune Second", classes: [["Warrior", 3]] });
+      const tokens = await place(scene, [
+        { actor: mage, x: 3700, y: 200, disposition: "HOSTILE" },
+        { actor: first, x: 800, y: 1100 },
+        { actor: second, x: 1000, y: 1000 }
+      ]);
+      try {
+        // A point on the ground: one space, the square at (1100, 1100).
+        const { region } = await castAndPlace(scene, mage, rune, { x: 1150, y: 1150 });
+        assert.isFalse(tokenOf(first).testInsideRegion(region), "the first walker starts on the rune");
+        assert.isNull(game.combats.find(c => c.started && (c.scene?.id === scene.id || c.combatants.some(cb => [first.id, second.id].includes(cb.actorId)))) ?? null,
+          "a fight is running on the board, so this proves nothing about out of one");
+        let since = game.messages.size;
+        const firstToken = tokenOf(first);
+        const onto = entering(firstToken, entered => entered > 0);
+        assert.isTrue(await firstToken.move({ x: 1100, y: 1100 }), "the walk onto the rune was refused");
+        await onto;
+        const [runeCard] = await until(() => areaCards(since, first).length && areaCards(since, first), "the first entry's Test card");
+        made.push(runeCard);
+        assert.equal(runeCard.flags["azeroth-rpg"].area.trigger, "enter");
+        // The second creature walks over the same space: no Test, ever.
+        since = game.messages.size;
+        const secondToken = tokenOf(second);
+        const over = entering(secondToken, entered => entered > 0);
+        assert.isTrue(await secondToken.move({ x: 1200, y: 1200 }), "the walk over the rune was refused");
+        await over;
+        await until(() => secondToken.x === 1200, "the walk over to land", 10000);
+        await settle();
+        assert.lengthOf(areaCards(since, second), 0, "the rune asked a Test of a creature after the first");
+        await withoutScrollingText(async () => {
+          const fail = pinDie(1);
+          try {
+            await CARD_ACTIONS.resistTest(buttonOn(runeCard, '[data-action="resistTest"][data-purpose="area"]'), runeCard);
+          } finally {
+            fail();
+          }
+          await until(() => first.statuses.has("entangled"), "the failure's Entangled");
+        });
+        const held = first.effects.find(e => e.statuses?.has("entangled"));
+        assert.ok(held?.getFlag("azeroth-rpg", ESCAPE_FLAG), "the Entangled carries no escape");
+      } finally {
+        await game.system.azeroth.workflows.endAllSustains({ actor: mage }).catch(() => {});
+        await clearBoard(scene, null, tokens);
+      }
+    });
+
+    it("NETHER RIFT (the B9a pass): at the start of its caster's turn every creature within 30 feet of the centre makes a Body Test, a failure pulled 15 feet toward it; a creature inside has a Bane on Attack Tests", async function () {
+      this.timeout(300000);
+      // 07: *At the start of each of your turns every creature within 30 feet of the center
+      // makes a Body Resilience Test against your Spell DC or is pulled 15 feet toward it. A
+      // creature inside the area has a Bane on Attack Tests* (the lead: *"Build the triggers"*).
+      const rift = await fromPack("azeroth-rpg.spells", "Nether Rift");
+      const mage = await makeNpc("Sorceress");
+      await mage.update({ name: "ZZ Rift Sorceress" });
+      await fillPower(mage);
+      const pulled = await makeCharacter({ name: "ZZ Rift Pulled", classes: [["Warrior", 3]] });
+      const inside = await makeCharacter({ name: "ZZ Rift Inside", classes: [["Warrior", 3]] });
+      // A 15 ft radius at (2050, 1150), 300 px: the pulled one stands 20 feet east of the
+      // centre, outside the area and inside its 30 feet; the other stands at its centre.
+      const tokens = await place(scene, [
+        { actor: mage, x: 200, y: 200, disposition: "HOSTILE" },
+        { actor: pulled, x: 2400, y: 1100 },
+        { actor: inside, x: 2000, y: 1100 }
+      ]);
+      let combat = null;
+      try {
+        const { region } = await castAndPlace(scene, mage, rift, { x: 2050, y: 1150 });
+        assert.isFalse(tokenOf(pulled).testInsideRegion(region), "the pulled one starts inside the rift");
+        assert.isTrue(tokenOf(inside).testInsideRegion(region), "the other does not stand inside the rift");
+        await until(() => auraBanesOn(inside.system.auraBaneRows ?? [], "attack").banes === 1, "the rift's Bane on the Attack Tests of a creature inside it");
+        assert.equal(auraBanesOn(pulled.system.auraBaneRows ?? [], "attack").banes ?? 0, 0, "a creature outside the rift carries its Bane");
+        // The caster's turn starts: the upkeep, then the Tests.
+        const since = game.messages.size;
+        combat = await fightOver(scene, [mage]);
+        const [pullCard] = await until(() => areaCards(since, pulled).length && areaCards(since, pulled), "the pulled one's Test card at the caster's turn");
+        made.push(pullCard);
+        assert.equal(pullCard.flags["azeroth-rpg"].area.trigger, "casterTurn", "the card does not say it is the caster's turn's Test");
+        const [stayCard] = await until(() => areaCards(since, inside).length && areaCards(since, inside), "the inside one's Test card");
+        made.push(stayCard);
+        assert.lengthOf(areaCards(since, mage), 0, "the caster, a hundred feet off, was asked the rift's Test");
+        const pulledToken = tokenOf(pulled);
+        const fail = pinDie(1);
+        try {
+          await CARD_ACTIONS.resistTest(buttonOn(pullCard, '[data-action="resistTest"][data-purpose="area"]'), pullCard);
+        } finally {
+          fail();
+        }
+        await until(() => pulledToken.x === 2100 && pulledToken.y === 1100, "the failure pulling the creature 15 feet toward the centre", 15000);
+        const insideToken = tokenOf(inside);
+        const pass = pinDie(20);
+        try {
+          await CARD_ACTIONS.resistTest(buttonOn(stayCard, '[data-action="resistTest"][data-purpose="area"]'), stayCard);
+        } finally {
+          pass();
+        }
+        await until(() => stayCard.getFlag("azeroth-rpg", "areaResult"), "the pass recorded");
+        await settle();
+        assert.deepEqual({ x: insideToken.x, y: insideToken.y }, { x: 2000, y: 1100 }, "a passed Test moved the creature");
+      } finally {
+        await game.system.azeroth.workflows.endAllSustains({ actor: mage }).catch(() => {});
+        await clearBoard(scene, combat, tokens);
+      }
+    });
+
     /* ---- Immolation's answer to a blow ------------------------------------ */
 
     it("answers a melee hit on an Immolating caster on the attacker's card, and a thrown one not at all", async function () {
@@ -1042,7 +1333,7 @@ export function areasBatch(context) {
       const doomed = await Scene.create({ name: "ZZ Areas Doomed", width: 1000, height: 1000, grid: { size: 100, distance: 5, units: "ft" } });
       made.push(doomed);
       const ghoul = await makeNpc("Plagued Ghoul");
-      const [token] = await doomed.createEmbeddedDocuments("Token", [(await ghoul.getTokenDocument({ x: 100, y: 100, actorLink: false })).toObject()]);
+      const [token] = await doomed.createEmbeddedDocuments("Token", [(await tokenData(ghoul, { x: 100, y: 100, actorLink: false }))]);
       assert.isFalse(token.actorLink, "the token is linked, so its actor outlives the scene and this proves nothing");
       // What a failed Resist against 07's Slow lays out of a fight - *Instant,
       // 1 minute* on the token's own actor (`effects/durations.mjs#spellTiming`),

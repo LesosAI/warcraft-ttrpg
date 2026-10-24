@@ -22,6 +22,10 @@
  */
 
 import { HIDDEN_STATUS } from "../rules/stealth.mjs";
+// A concealment's own end (the Legacy branches' door 25: 04's Gnomish Cloaking Device,
+// *It ends for each of you who attacks or casts a spell*; Wind Walk at rank 2, *until
+// you next attack*).
+import { CONCEAL_FLAG, concealEnds } from "../rules/legacy-uses.mjs";
 // What keeps a Hide standing through an action (04's Master of Shadows and
 // Shadow Dance, D-773).
 import { keepsHidden } from "../rules/class-talents.mjs";
@@ -61,16 +65,44 @@ export async function conceal(actor) {
  * Shadow Dance standing (*count as hidden until the end of your next turn even
  * while observed*) leave it. The fight's end and the sheet's x are no action.
  *
+ * **A CONCEALMENT ENDS BY ITS OWN WORDS** (the Legacy branches' door 25): `kind` says
+ * which act this is - `attack` or `cast` - and every concealment effect on the actor
+ * whose words end at that act is taken off first (`rules/legacy-uses.mjs#concealEnds`):
+ * the Cloaking Device's at either, Wind Walk's at an attack alone. It is the device's
+ * own sentence, so Master of Shadows and a Shadow Dance - which keep a HIDE - leave it
+ * to end. Core's `toggleStatusEffect` deletes every effect that carries the status
+ * alone, so a Hide revealed takes a concealment standing beside it with it (MY
+ * READING, for the lead: one invisibility, ended once).
+ *
  * @param {Actor} actor
- * @param {{force?: boolean, acting?: boolean}} [options]  `force` clears a GM's own invisibility too.
+ * @param {{force?: boolean, acting?: boolean, kind?: "attack"|"cast"|null}} [options]  `force` clears a GM's own invisibility too.
  * @returns {Promise<boolean>} whether anything was cleared
  */
-export async function reveal(actor, { force = false, acting = false } = {}) {
+export async function reveal(actor, { force = false, acting = false, kind = null } = {}) {
   if (!actor) return false;
-  if (acting && !force && (keepsHidden(actor.takenTalents?.() ?? []) || dancing(actor))) return false;
+  const ended = acting && (kind === "attack" || kind === "cast") ? await endConcealments(actor, kind) : false;
+  if (acting && !force && (keepsHidden(actor.takenTalents?.() ?? []) || dancing(actor))) return ended;
   const ours = actor.getFlag?.("azeroth-rpg", HIDDEN_FLAG) === true;
-  if (!ours && !force) return false;
+  if (!ours && !force) return ended;
   if (isHidden(actor)) await actor.toggleStatusEffect(HIDDEN_STATUS, { active: false });
   if (ours) await actor.unsetFlag("azeroth-rpg", HIDDEN_FLAG);
+  return true;
+}
+
+/**
+ * The concealments that end at this act, deleted (door 25). Quiet where there are
+ * none, and only where this client may write the actor - an attack or a cast is made
+ * by the creature's own owner.
+ *
+ * @param {Actor} actor
+ * @param {"attack"|"cast"} kind
+ * @returns {Promise<boolean>}
+ */
+async function endConcealments(actor, kind) {
+  const ids = (actor.effects ?? [])
+    .filter(e => concealEnds(e.flags?.["azeroth-rpg"]?.[CONCEAL_FLAG] ?? null, kind))
+    .map(e => e.id);
+  if (!ids.length || !actor.isOwner) return false;
+  await actor.deleteEmbeddedDocuments("ActiveEffect", ids.filter(id => actor.effects.has(id)));
   return true;
 }

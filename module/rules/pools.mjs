@@ -52,6 +52,15 @@ import { AZEROTH } from "../config.mjs";
 export const MANA = "mana";
 
 /**
+ * **05 §11's KIND WORD, AS A COST** (02 §5's War Stomp: *Spend a Half-Action and 4
+ * Momentum*; the B8a pass). A tauren may be a Warrior, a Ranger, a Shaman or a Druid, so
+ * the racial talent's price names no pool: it is the Momentum pool the character holds -
+ * Rage, Quarry or Ferocity - and a Shaman, who holds none, cannot pay it.
+ * `AZEROTH.costPoolTypes` carries its word.
+ */
+export const ANY_MOMENTUM = "momentum";
+
+/**
  * Which half of 05 §11 a pool name belongs to, off `config.mjs`'s own two maps.
  * `null` for a word that is neither, so a caller can fail closed on it.
  *
@@ -98,6 +107,14 @@ export function poolKind(name) {
 export function poolNamed(pools = [], name = null, { itemId = null } = {}) {
   if (!name) return null;
   const list = Array.isArray(pools) ? pools : [];
+  // **A COST THAT NAMES THE KIND** (`ANY_MOMENTUM`): the paying class's own Momentum pool
+  // where it holds one, else the first the creature holds - the primary's, which is the
+  // maneuver's reading (`AzerothActor#momentumPayer`: `momenta[0]`). A racial talent's
+  // grant names no class, so it takes the primary's.
+  if (name === ANY_MOMENTUM) {
+    const momenta = list.filter(p => p?.kind === "momentum");
+    return momenta.find(p => itemId && p.itemId === itemId) ?? momenta[0] ?? null;
+  }
   const named = list.filter(p => p?.name === name);
   if (named.length) return named.find(p => p.itemId === itemId) ?? named[0];
   const kind = poolKind(name);

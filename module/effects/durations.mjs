@@ -77,6 +77,25 @@ export function roundsOrClock(actor, rounds = 1) {
 }
 
 /**
+ * *For one minute* (the Legacy branches' door 26: 04's The Vault Opens, Banshee's
+ * Wail, Thrall of the Banshee): ten of the fight's rounds in the creature's started
+ * fight - 05's *Round - ~6 seconds* - and the world's minute out of one, the span
+ * 02's Curse has laid its Bane for since D-775.
+ *
+ * @param {Actor} actor  the creature the condition lands on
+ * @param {number} [minutes]
+ */
+export function minuteSpan(actor, minutes = 1) {
+  const n = Math.max(1, Math.trunc(Number(minutes)) || 1);
+  return fightRounds(actor, n * 10) ?? spellTiming(actor, { value: n, units: "minutes" });
+}
+
+/** The fight's rounds where the creature has a started fight, else null. */
+function fightRounds(actor, rounds) {
+  return actor?.activeFight?.() ? spellTiming(actor, { value: rounds, units: "rounds", expiry: "turnEnd" }) : null;
+}
+
+/**
  * Put a condition on an actor with a duration (D-628): the status through
  * `toggleStatusEffect`, then the duration written onto the effect it made.
  * With no fight running the condition is applied and holds, as it would by

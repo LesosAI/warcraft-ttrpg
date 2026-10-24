@@ -13,7 +13,7 @@
  * Every document a test makes is deleted in `after`.
  */
 
-import { cleanup, dialogFor, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook, useAction } from "./fixtures.mjs";
+import { cleanup, dialogFor, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook, useAction, tokenDrawn, tokenData, quietScrollingText } from "./fixtures.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 // The GM-side door a player's Parry or Block asks through (D-720): what it
 // refuses is the half no unit test can reach.
@@ -22,7 +22,15 @@ import { reactionRows, takeOpportunity } from "../applications/actions.mjs";
 import { clearReady, disengage, readyWith } from "../applications/combat-actions.mjs";
 import { defaultChoice } from "../applications/roll-dialog.mjs";
 import { MOVEMENT_LIMIT_SETTING, ROLL_DIALOG_SETTING } from "../settings.mjs";
-import { BLOCK_REDUCTION, PUMMEL_BANES } from "../rules/reactions.mjs";
+import { BLOCK_REDUCTION, PUMMEL_BANES, SHIELDBEARER, SHIELDBEARER_REDUCTION, blockReduction } from "../rules/reactions.mjs";
+
+/**
+ * **WHAT A BLOCK TAKES OFF FOR THIS DEFENDER** (06 §6's four; 02 §7's Shieldbearer,
+ * *While carrying a shield, **Block** reduces damage by 5 rather than 4*, built in
+ * D-772): the rule's own number, read the way the door reads it. Three cases below
+ * block with a Warrior and pinned 06's four after Shieldbearer made it five.
+ */
+const blockOf = actor => blockReduction({ shieldbearer: actor?.hasFeature?.(SHIELDBEARER) === true });
 
 /** Wait for a condition, or say what was being waited for. */
 async function until(fn, what, ms = 15000) {
@@ -107,12 +115,12 @@ async function sceneWith(placements) {
   const data = [];
   for (const { actor, x, y, side = "hostile" } of placements) {
     await actor.update({ "prototypeToken.actorLink": true });
-    data.push((await actor.getTokenDocument({
+    data.push((await tokenData(actor, {
       x, y, disposition: CONST.TOKEN_DISPOSITIONS[side === "friendly" ? "FRIENDLY" : "HOSTILE"]
-    })).toObject());
+    })));
   }
   await scene.createEmbeddedDocuments("Token", data);
-  for (let i = 0; i < 60 && !placements.every(p => p.actor.getActiveTokens(true).length); i++) {
+  for (let i = 0; i < 60 && !placements.every(p => tokenDrawn(p.actor.getActiveTokens(true)[0])); i++) {
     await new Promise(r => setTimeout(r, 100));
   }
   await settle();
@@ -223,11 +231,18 @@ export function reactionBatch(context) {
   describe("06 §6's Reactions (D-693, D-694)", function () {
     let restore = null;
     let wasViewing = null;
+    let quietText = null;
     before(async function () {
       restore = game.settings.get("azeroth-rpg", ROLL_DIALOG_SETTING);
       // The setting is the STRING "skip" or "always", never a boolean: a test
       // that sets it false opens every dialog and hangs on the first one.
       await game.settings.set("azeroth-rpg", ROLL_DIALOG_SETTING, "skip");
+      // **CORE'S STATUS TEXT, OFF FOR THE BATCH** (B9b, B8b's fix for the Legacy
+      // batches): a Disengage, a Prone or a Bane floats core's two-second text
+      // over a token, and the next case's `scene.view()` tears the canvas down
+      // under it - *reading 'position'* and *reading 'off'*, two page errors on a
+      // run whose 21 tests all passed (`fixtures.mjs#quietScrollingText`).
+      quietText = await quietScrollingText();
       // Deleting a VIEWED scene tears the canvas down and leaves the world
       // with none, which every later run then starts from (D-669's batch).
       wasViewing = game.scenes.active ?? canvas?.scene ?? null;
@@ -247,11 +262,16 @@ export function reactionBatch(context) {
       if (wasViewing && !wasViewing.name?.startsWith("ZZ ")) await wasViewing.view().catch(() => {});
       for (const doc of made.filter(d => d instanceof Scene)) await doc.delete().catch(() => {});
       await cleanup();
+      // **AND THE STATUS TEXT BACK ONLY ONCE THE SCENES HAVE GONE** (B9b): a fight
+      // deleted lifts what it laid - Disengage's status among them - and core floats
+      // that as text for two seconds, so restoring the setting before the fights
+      // went let the teardown's own scene switch tear a text down mid-animation.
+      await quietText?.();
     });
 
     /* ---- Block ------------------------------------------------------------ */
 
-    it("Blocks a real attack for four, spends the Reaction, and the blow lands four lighter", async function () {
+    it("Blocks a real attack for 06 §6's four - a Warrior's Shieldbearer five - spends the Reaction, and the blow lands that much lighter", async function () {
       this.timeout(120000);
       const attacker = await makeCharacter({ name: "ZZ React Attacker", classes: [["Warrior", 5]] });
       const victim = await makeCharacter({ name: "ZZ React Blocker", classes: [["Warrior", 5]], armor: ["Buckler"] });
@@ -259,8 +279,14 @@ export function reactionBatch(context) {
       assert.ok(shield, "the fixture did not embed a shield");
       await shield.update({ "system.equipped": true });
       await until(() => victim.items.get(shield.id)?.system?.equipped === true, "the shield being held");
+      // 02 §7's level 1 Shieldbearer is the Warrior's own: its Block is five (D-772).
+      const block = blockOf(victim);
+      assert.equal(block, SHIELDBEARER_REDUCTION, "a Warrior's Block is not Shieldbearer's five");
 
       const combat = await fightWith([attacker, victim]);
+      // The attacker's own turn: a Half-Action is spent on it (the lead: *"Refuse
+      // off-turn Half-Actions"*), and the Block is the defender's Reaction off it.
+      await giveTurn(combat, attacker);
       const mine = combat.getCombatantsByActor(victim)[0];
       assert.equal(mine.budget.reactions, 1, "the defender started the fight with no Reaction");
 
@@ -271,19 +297,19 @@ export function reactionBatch(context) {
       assert.include(card.content, 'data-action="reactBlock"',
         "the attack card offers no Block: `reactionRows` never reached the template");
       const damage = card.getFlag("azeroth-rpg", "damageByTarget")?.[0]?.damage ?? 0;
-      assert.isAbove(damage, BLOCK_REDUCTION, "the blow is too light for a Block to be visible");
+      assert.isAbove(damage, block, "the blow is too light for a Block to be visible");
 
       await CARD_ACTIONS.reactBlock({ dataset: { targetIndex: "0" } }, card);
       const mark = victim.getFlag("azeroth-rpg", "mitigate");
       assert.ok(mark, "the Block recorded nothing for `applyDamage` to spend");
-      assert.equal(mark.amount, BLOCK_REDUCTION, "a Block took off something other than 06 §6's four");
+      assert.equal(mark.amount, block, "a Block took off something other than the rule's number");
       await until(() => combat.getCombatantsByActor(victim)[0].budget.reactions === 0,
         "the Reaction being spent");
 
       const health = victim.system.health.value;
       await CARD_ACTIONS.applyDamage({ dataset: { targetIndex: "0", damage: String(damage) } }, card);
-      assert.equal(victim.system.health.value, Math.max(0, health - (damage - BLOCK_REDUCTION)),
-        "the Block did not take four off the blow that landed");
+      assert.equal(victim.system.health.value, Math.max(0, health - (damage - block)),
+        "the Block did not take its number off the blow that landed");
       assert.isNotOk(victim.getFlag("azeroth-rpg", "mitigate"), "the Block was not spent by the blow");
     });
 
@@ -293,6 +319,9 @@ export function reactionBatch(context) {
       const victim = await makeCharacter({ name: "ZZ React Twice", classes: [["Warrior", 5]], armor: ["Buckler"] });
       await victim.items.find(i => i.name === "Buckler").update({ "system.equipped": true });
       const combat = await fightWith([attacker, victim]);
+      // The attacker's own turn: the blow spends its Half-Action (the lead: *"Refuse off-turn
+      // Half-Actions"*). The answer is the victim's Reaction, which takes no turn.
+      await giveTurn(combat, attacker);
 
       const first = await attackCard(attacker, victim);
       await CARD_ACTIONS.reactBlock({ dataset: { targetIndex: "0" } }, first);
@@ -342,7 +371,9 @@ export function reactionBatch(context) {
       this.timeout(90000);
       const attacker = await makeCharacter({ name: "ZZ React Attacker 3", classes: [["Warrior", 5]] });
       const bare = await makeCharacter({ name: "ZZ React Bare", classes: [["Mage", 5]] });
-      await fightWith([attacker, bare]);
+      // The attacker's own turn: the blow spends its Half-Action (the lead: *"Refuse off-turn
+      // Half-Actions"*). The answer is the victim's Reaction, which takes no turn.
+      await giveTurn(await fightWith([attacker, bare]), attacker);
       const card = await attackCard(attacker, bare);
       // No shield, so no button either - a control never appears where the
       // door would refuse.
@@ -367,6 +398,9 @@ export function reactionBatch(context) {
       await sword.update({ "system.equipped": true });
       await until(() => victim.items.get(sword.id)?.system?.equipped === true, "the sword being drawn");
       const combat = await fightWith([attacker, victim]);
+      // The attacker's own turn: the blow spends its Half-Action (the lead: *"Refuse off-turn
+      // Half-Actions"*). The answer is the victim's Reaction, which takes no turn.
+      await giveTurn(combat, attacker);
       // **A PARRY COSTS 1 MOMENTUM** (06 §6, D-720), and 02 §7 starts every
       // fight with the pool at 0 - so the Warrior pays for it, and without
       // this the card would offer no Parry at all.
@@ -438,6 +472,9 @@ export function reactionBatch(context) {
       await dagger.update({ "system.equipped": true });
       await until(() => rogue.items.get(dagger.id)?.system?.equipped === true, "the dagger being drawn");
       const combat = await fightWith([attacker, rogue]);
+      // The attacker's own turn: the blow spends its Half-Action (the lead: *"Refuse off-turn
+      // Half-Actions"*). The answer is the victim's Reaction, which takes no turn.
+      await giveTurn(combat, attacker);
 
       // Combo Points in hand and Energy empty: 06 names ENERGY, so this is a
       // refusal and the Combo Points are not touched.
@@ -483,6 +520,9 @@ export function reactionBatch(context) {
       }
       await until(() => shaman.items.filter(i => i.system?.equipped).length >= 2, "the mace and the shield in hand");
       const combat = await fightWith([attacker, shaman]);
+      // The attacker's own turn: the blow spends its Half-Action (the lead: *"Refuse off-turn
+      // Half-Actions"*). The answer is the victim's Reaction, which takes no turn.
+      await giveTurn(combat, attacker);
       assert.isNotOk(shaman.system.momenta.length, "a Shaman was given a Momentum pool");
 
       const card = await attackCard(attacker, shaman);
@@ -512,16 +552,20 @@ export function reactionBatch(context) {
       const victim = await makeCharacter({ name: "ZZ Annotate Blocker", classes: [["Warrior", 5]], armor: ["Buckler"] });
       await victim.items.find(i => i.name === "Buckler").update({ "system.equipped": true });
       const combat = await fightWith([attacker, victim]);
+      // The attacker's own turn (the lead: *"Refuse off-turn Half-Actions"*).
+      await giveTurn(combat, attacker);
+      // A Warrior's Block is Shieldbearer's five (02 §7, D-772), not 06 §6's four.
+      const block = blockOf(victim);
 
       const card = await attackCard(attacker, victim);
       const damage = card.getFlag("azeroth-rpg", "damageByTarget")?.[0]?.damage ?? 0;
-      assert.isAbove(damage, BLOCK_REDUCTION, "the blow is too light for the number to move");
+      assert.isAbove(damage, block, "the blow is too light for the number to move");
       await CARD_ACTIONS.reactBlock({ dataset: { targetIndex: "0" } }, card);
       await until(() => card.getFlag("azeroth-rpg", "damageByTarget")?.[0]?.reaction === "block",
         "the card being annotated");
       const row = card.getFlag("azeroth-rpg", "damageByTarget")[0];
-      assert.equal(row.to, damage - BLOCK_REDUCTION, "the annotated number is not what will land");
-      assert.equal(row.mitigated, BLOCK_REDUCTION, "the annotation does not say how much was taken off");
+      assert.equal(row.to, damage - block, "the annotated number is not what will land");
+      assert.equal(row.mitigated, block, "the annotation does not say how much was taken off");
       assert.equal(row.damage, damage,
         "the stored damage was patched: `applyDamage` would then take the four off twice");
 
@@ -546,7 +590,7 @@ export function reactionBatch(context) {
         Hooks.callAll("renderChatMessageHTML", card, box);
         const button = box.querySelector('button[data-action="applyDamage"][data-target-index="0"]');
         assert.ok(button, "the card has no Apply button for the row");
-        assert.equal(button.dataset.damage, String(damage - BLOCK_REDUCTION), "the button still carries the full blow");
+        assert.equal(button.dataset.damage, String(damage - block), "the button still carries the full blow");
         assert.include(box.textContent.replace(/\s+/g, " "), game.i18n.localize("AZEROTH.Card.Answered"),
           "the card never says a Reaction answered");
         const said = box.querySelector(".azeroth-card-mitigated");
@@ -565,6 +609,8 @@ export function reactionBatch(context) {
       const victim = await makeCharacter({ name: "ZZ Mark Victim", classes: [["Warrior", 5]], armor: ["Buckler"] });
       await victim.items.find(i => i.name === "Buckler").update({ "system.equipped": true });
       const combat = await fightWith([attacker, victim]);
+      // The attacker's own turn (the lead: *"Refuse off-turn Half-Actions"*).
+      await giveTurn(combat, attacker);
 
       const blocked = await attackCard(attacker, victim);
       await CARD_ACTIONS.reactBlock({ dataset: { targetIndex: "0" } }, blocked);
@@ -596,11 +642,12 @@ export function reactionBatch(context) {
       assert.equal(victim.getFlag("azeroth-rpg", "mitigate")?.messageId, blocked.id,
         "a blow with no card behind it spent the Block");
 
-      // And the blow it WAS pressed against still lands four lighter.
+      // And the blow it WAS pressed against still lands the Block's number lighter:
+      // a Warrior's is Shieldbearer's five (02 §7, D-772).
       const blockedDamageValue = blocked.getFlag("azeroth-rpg", "damageByTarget")[0].damage;
       const now = victim.system.health.value;
       await CARD_ACTIONS.applyDamage({ dataset: { targetIndex: "0", damage: String(blockedDamageValue) } }, blocked);
-      assert.equal(victim.system.health.value, Math.max(0, now - (blockedDamageValue - BLOCK_REDUCTION)),
+      assert.equal(victim.system.health.value, Math.max(0, now - (blockedDamageValue - blockOf(victim))),
         "the Block did not answer the attack it was pressed against");
     });
 
@@ -614,9 +661,13 @@ export function reactionBatch(context) {
       const victim = await makeCharacter({ name: "ZZ Forge Victim", classes: [["Warrior", 5]], armor: ["Buckler"] });
       await victim.items.find(i => i.name === "Buckler").update({ "system.equipped": true });
       const combat = await fightWith([attacker, victim]);
+      // The attacker's own turn (the lead: *"Refuse off-turn Half-Actions"*).
+      await giveTurn(combat, attacker);
+      // A Warrior's Block is Shieldbearer's five (02 §7, D-772): the GM's own arithmetic.
+      const block = blockOf(victim);
       const card = await attackCard(attacker, victim);
       const damage = card.getFlag("azeroth-rpg", "damageByTarget")[0].damage;
-      assert.isAbove(damage, BLOCK_REDUCTION, "the blow is too light for the number to move");
+      assert.isAbove(damage, block, "the blow is too light for the number to move");
 
       const stranger = await User.create({ name: "ZZ Quench Stranger", role: CONST.USER_ROLES.PLAYER });
       try {
@@ -642,12 +693,12 @@ export function reactionBatch(context) {
         assert.include(refused.message, victim.name, "the refusal does not say whose row it is");
 
         // 3. And the numbers are the GM's own arithmetic, never the caller's:
-        // the same forged payload from an OWNER lands on the Block's four.
+        // the same forged payload from an OWNER lands on the Block's own number.
         await annotateQueryHandler({ messageId: card.id, index: 0, reaction: "parry", to: 0, mitigated: 99 },
           { user: game.user });
         const row = card.getFlag("azeroth-rpg", "damageByTarget")[0];
-        assert.equal(row.to, damage - BLOCK_REDUCTION, "the caller's number was taken on trust");
-        assert.equal(row.mitigated, BLOCK_REDUCTION, "the caller's mitigation was taken on trust");
+        assert.equal(row.to, damage - block, "the caller's number was taken on trust");
+        assert.equal(row.mitigated, block, "the caller's mitigation was taken on trust");
         assert.equal(row.reaction, "block", "the caller's word for the Reaction was taken on trust");
       } finally {
         await stranger.delete().catch(() => {});
@@ -669,6 +720,9 @@ export function reactionBatch(context) {
       await sword.update({ "system.equipped": true });
       await until(() => victim.items.get(sword.id)?.system?.equipped === true, "the sword being drawn");
       const combat = await fightWith([attacker, victim]);
+      // The attacker's own turn: the blow spends its Half-Action (the lead: *"Refuse off-turn
+      // Half-Actions"*). The answer is the victim's Reaction, which takes no turn.
+      await giveTurn(combat, attacker);
       await fillPool(victim, "rage", 6);
       const card = await attackCard(attacker, victim, { face: 5 });
 
@@ -706,6 +760,9 @@ export function reactionBatch(context) {
       await sword.update({ "system.equipped": true });
       await until(() => victim.items.get(sword.id)?.system?.equipped === true, "the sword being drawn");
       const combat = await fightWith([attacker, victim]);
+      // The attacker's own turn: the blow spends its Half-Action (the lead: *"Refuse off-turn
+      // Half-Actions"*). The answer is the victim's Reaction, which takes no turn.
+      await giveTurn(combat, attacker);
       await fillPool(victim, "rage", 6);
       const card = await attackCard(attacker, victim, { face: 5 });
 
@@ -1157,6 +1214,39 @@ export function reactionBatch(context) {
       // Stand down leaves nothing behind, whether or not there is anything to drop.
       await clearReady(actor);
       assert.isNotOk(mine().getFlag("azeroth-rpg", "ready"));
+    });
+
+    it("TAKES A READIED ACTION ON ANOTHER'S TURN AT ONCE (the B9a pass): the Reaction buys back the one Half-Action the Ready paid for, and the next is refused in words", async function () {
+      this.timeout(180000);
+      // 05: *When the trigger occurs, spend your Reaction to take it* - on somebody else's
+      // turn, where a Half-Action is otherwise refused (the lead, 2026-10-23: *"Refuse
+      // off-turn Half-Actions"*). The Ready paid for the action on the readier's own turn,
+      // so taking it gives that Half-Action back to be spent at once
+      // (`rules/initiative.mjs#grantAtOnce`), through the attack's own door.
+      const readier = await makeCharacter({ name: "ZZ Ready At Once", classes: [["Warrior", 5]] });
+      const foe = await makeCharacter({ name: "ZZ Ready Trigger", classes: [["Warrior", 5]] });
+      const combat = await fightWith([readier, foe]);
+      const mine = () => combat.getCombatantsByActor(readier)[0];
+      await giveTurn(combat, readier);
+      assert.ok(await readyWith(readier, { trigger: "the foe raises its blade", action: "Strike it" }), "Ready stored nothing");
+      await until(() => mine().budget.halfActions === 1, "Ready paying its Half-Action");
+      // The trigger comes on the foe's turn.
+      await giveTurn(combat, foe);
+      const card = game.messages.filter(m => m.flags?.["azeroth-rpg"]?.reaction === "readied" && m.speaker?.actor === readier.id).at(-1);
+      assert.ok(card, "Ready posted no card");
+      made.push(card);
+      await CARD_ACTIONS.takeReadied(buttonOn(card, "takeReadied"), card);
+      await until(() => mine().budget.reactions === 0, "the Reaction spent on the trigger");
+      await until(() => (mine().getFlag("azeroth-rpg", "budget")?.atOnce ?? 0) === 1, "the readied Half-Action given to be taken at once");
+      const struck = await attackCard(readier, foe);
+      assert.ok(struck, "the readied attack was refused on the foe's turn");
+      made.push(struck);
+      await until(() => (mine().getFlag("azeroth-rpg", "budget")?.atOnce ?? 0) === 0, "the at-once Half-Action spent");
+      // Only that one: the readier's own leftover Half-Action is its own turn's.
+      let late = null;
+      const said = await noticesFrom("warn", async () => { late = await attackCard(readier, foe); });
+      assert.isNull(late, "a second attack landed on the foe's turn");
+      assert.include(said, game.i18n.localize("AZEROTH.Budget.Refuse.NotYourTurn"), `the second attack was not refused in words: ${JSON.stringify(said)}`);
     });
 
     it("refuses Ready outside a fight, in words", async function () {

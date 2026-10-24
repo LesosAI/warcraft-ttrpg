@@ -138,6 +138,34 @@ export async function forceMove({ token = null, from = null, feet = 0, toward = 
 }
 
 /**
+ * **A CREATURE THAT DOES NOT CROSS, PUT BACK ON ITS OWN SIDE** (07's Ring of Fire and
+ * Stormwall: *on a failure it does not cross and its turn ends*; the B9a pass, the lead:
+ * *"Build the triggers"*): its token returned to the position the crossing recorded -
+ * the side of the edge it stood on before it crossed (`rules/area-ticks.mjs#stopPoint`) -
+ * as a displacement, the one way this system moves a creature it did not walk: no Move
+ * spent, no area entered, no Opportunity Attack. Only where this client may write the
+ * token - the area Test's door runs on the client that rolled the creature's Test, which
+ * owns it - and said in words where it may not, or where no position was recorded.
+ *
+ * @param {{token: TokenDocument|null, to: {x: number, y: number}|null, name?: string}} o
+ * @returns {Promise<{name: string, feet: number, moved: boolean, reason: string|null}>}
+ */
+export async function putBack({ token = null, to = null, name = "" } = {}) {
+  if (!token?.parent) return result(name, 0, false, "gone");
+  const at = to && Number.isFinite(Number(to.x)) && Number.isFinite(Number(to.y)) ? { x: Math.round(Number(to.x)), y: Math.round(Number(to.y)) } : null;
+  if (!at) return result(token.name ?? name, 0, false, "unmeasured");
+  if (!token.isOwner) return result(token.name ?? name, 0, false, "notYours");
+  if (Math.round(token.x) === at.x && Math.round(token.y) === at.y) return result(token.name ?? name, 0, true, null);
+  try {
+    const done = await token.move({ x: at.x, y: at.y, action: "displace" });
+    return done === false ? result(token.name ?? name, 0, false, "walled") : result(token.name ?? name, 0, true, null);
+  } catch (err) {
+    ui.notifications?.warn(err.message);
+    return result(token.name ?? name, 0, false, "gone");
+  }
+}
+
+/**
  * **WHAT A FORCED MOVE CAME TO, IN WORDS**, for a card's line: *Ghoul is pushed 10
  * ft*, or why it was not.
  *

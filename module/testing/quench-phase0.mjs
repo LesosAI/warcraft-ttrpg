@@ -166,6 +166,22 @@ export function geometryExtendedBatch(context) {
       assert.deepEqual(checkOverlap(root, { ignore: [".azeroth-chip"] }), []);
     });
 
+    // A BOLD PHRASE WRAPPED AT A LINE'S END (B8b): its bounding rect spans the
+    // paragraph across both lines, and the Risen Skeleton's Traits tab reported
+    // *"Holy" and "Loose Bones" overprint* on prose set cleanly. Line boxes, not
+    // the union, are what can overprint.
+    it("checkOverlap: a phrase wrapped across two lines overprints nothing beside it on either", function () {
+      const root = build(`<p style="width:150px;margin:0;font:16px/20px monospace">aa <strong>Holy</strong> <strong>Loose Bones</strong> cc</p>`);
+      const wrapped = root.querySelectorAll("strong")[1];
+      assert.isAtLeast(wrapped.getClientRects().length, 2, "the fixture did not wrap the phrase");
+      assert.deepEqual(checkOverlap(root), [], "a wrapped phrase was reported overprinting a word on its line");
+    });
+
+    it("checkOverlap: an inline word pulled over its neighbour on one line DOES overprint", function () {
+      const root = build(`<p style="width:300px;margin:0;font:16px/20px monospace"><strong>first</strong><strong style="margin-left:-24px">second</strong></p>`);
+      assert.isAtLeast(checkOverlap(root).length, 1, "a real inline overprint went unreported");
+    });
+
     // THE SHEET'S OWN SHAPE SINCE D-734: a scrolling body column, and the tab
     // strip hanging in the band beneath it. `getBoundingClientRect` knows
     // nothing about a clip, so a row below the column's fold keeps a rect on

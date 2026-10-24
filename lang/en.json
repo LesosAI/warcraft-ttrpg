@@ -164,7 +164,8 @@
       "Backup": "Azeroth RPG is about to migrate this world's data. Back the world up before continuing.",
       "Begin": "Azeroth RPG | migrating world data to {version}",
       "Done": "Azeroth RPG | migration to {version} complete: {count} document(s) updated",
-      "Failed": "Azeroth RPG | migration to {version} failed. See the console."
+      "Failed": "Azeroth RPG | migration to {version} failed. See the console.",
+      "LegacyTitles": "A Legacy is a talent branch now, and its ranks are gone. These characters held a Legacy title: {names}. Each keeps the Legacy item as lore, and a character of its people who holds its class has the branch on the Progress tab, untaken."
     },
     "School": {
       "Fire": "Fire",
@@ -441,6 +442,8 @@
         "NoMomentum": "{name} has no point left to spend on a Parry.",
         "NoWeapon": "{name} has nothing in hand to strike with.",
         "NotLeaving": "{name} has no departure to answer.",
+        "Grasped": "{name} is held fast and can make no Opportunity Attack while it is held.",
+        "Unanswered": "No creature may take a Reaction against it ({source}).",
         "NoReady": "{name} readied no action to take.",
         "NotYours": "{name} is not yours to react with.",
         "Gone": "The creature that would react is gone.",
@@ -600,6 +603,21 @@
       "TierAgain": "Hot meal",
       "TalentMana": "{name}: +{n} Mana"
     },
+    "WeaponType": {
+      "Axe": "Axe",
+      "Hammer": "Hammer",
+      "Mace": "Mace",
+      "Sword": "Sword",
+      "Dagger": "Dagger",
+      "Spear": "Spear",
+      "Club": "Club",
+      "Staff": "Staff",
+      "Flail": "Flail",
+      "Polearm": "Polearm",
+      "Fist": "Fist",
+      "Glaive": "Glaive",
+      "Whip": "Whip"
+    },
     "Launcher": {
       "Bow": "Bow",
       "Sling": "Sling",
@@ -636,7 +654,8 @@
       "EndOfNextTurn": "until the end of its next turn",
       "NextTurn": "until its next turn",
       "Encounter": "for the encounter",
-      "CasterTurnStart": "until the start of the caster's next turn"
+      "CasterTurnStart": "until the start of the caster's next turn",
+      "Minute": "for one minute"
     },
     "Swarm": {
       "Attack": "Swarm",
@@ -653,7 +672,9 @@
         "Demon": "Bound demon",
         "Elemental": "Elemental",
         "Totem": "Totem",
-        "Summon": "Summoned"
+        "Summon": "Summoned",
+        "Construct": "Construct",
+        "Thrall": "Thrall"
       },
       "Folder": "Bound",
       "UnboundFolder": "Unbound",
@@ -690,7 +711,10 @@
         "DemonicEmpowerment": "Demonic Empowerment",
         "DemonicAscendance": "Demonic Ascendance",
         "CallOfFlame": "Call of Flame",
-        "Signature": "Signature"
+        "Signature": "Signature",
+        "AttackPatch": "Attack changed",
+        "BattleRig": "Battle Rig worn",
+        "ConstructTalent": "Tinker's work"
       }
     },
     "Card": {
@@ -724,9 +748,20 @@
       "ResistTest": "{resilience} Resilience Test, DC {dc}",
       "ResistFor": "{name}: {resilience} Resilience Test, DC {dc}",
       "ResistOutcome": "{name}: {outcome} ({total} vs DC {dc})",
-      "ResistNeedsGM": "A GM must be online to record this Resilience Test on the spell's card.",
+      "ResistNeedsGM": "A GM must be online to record this Resilience Test on its card.",
       "ResistUnlinked": "That Resilience Test was not made from this card's Resist.",
       "ResistFailedCast": "{name} did not go off, so there is nothing to resist: a failed Casting Test lands nothing.",
+      "ResistNotAtCast": "{name} asks its Test later - of a creature entering the area, starting its turn there, crossing it or striking its caster - never at the cast, so this card has nothing to resist.",
+      "TestGate": {
+        "Kind": "{name} is not of the kind {spell}'s Test names, so it makes no Test.",
+        "Sustain": "{name} holds no Sustained spell, so {spell} asks it no Test.",
+        "KindLine": "Only {kinds} makes {spell}'s Test.",
+        "HoldsLine": "Only a creature holding a Sustained spell makes {spell}'s Test.",
+        "SustainLine": "Only a creature holding a Sustained spell makes {spell}'s Test, and on a failure it loses that spell.",
+        "WhichLost": "{name} failed {spell}'s Test: which Sustained spell does it lose?",
+        "NoneLost": "{name} failed {spell}'s Test, and no Sustained spell was named to lose.",
+        "Lost": "{name} loses {spell}."
+      },
       "DidNotGoOff": "The spell does not go off: a failed Casting Test costs the Mana and nothing else.",
       "NoWeapon": "No weapon to attack with.",
       "OffHandStrike": "Off-hand strike with {name}",
@@ -746,6 +781,15 @@
       "RiderApply": "Against a target that is {conditions}:",
       "OnFail": "A failure: {conditions}",
       "OnFailLanded": "{name} failed: {conditions}.",
+      "OnFailInflict": "lands at once on a failed Test",
+      "ResistHalf": "takes half the damage",
+      "ResistNone": "takes none of the damage",
+      "ResistLanded": "{conditions} landed",
+      "PassedHalf": "{name} passed the Test and takes half the damage: {n}.",
+      "PassedNone": "{name} passed the Test and takes none of the damage.",
+      "DamageOnFail": "dealt only on a failed Test",
+      "Bypass": "bypasses Armor Points and Ward",
+      "InflictResolved": "{name}'s Test is recorded on this card: {condition} is the Test's to lay, not a button's.",
       "ApplySpellSelf": "Apply {spell} to yourself",
       "ApplySpellTo": "Apply {spell} to {name}",
       "ApplySpellControlled": "Apply {spell} to the selected tokens",
@@ -765,6 +809,7 @@
       "FinisherSpent": "Finisher (Combo Points spent)",
       "Blocked": "{name} Blocked {n}, leaving {to}",
       "Parried": "{name} Parried it, leaving {to}",
+      "Negated": "{name} turned it into a miss, leaving {to}",
       "AnnotateFailed": "That card no longer has the row the Reaction answered.",
       "AnnotateNoMark": "{name} has no Reaction standing against that attack.",
       "VsAP": "vs AP {ap}",
@@ -839,7 +884,10 @@
       "PartWard": "+ {n} {type}, vs Ward {ward}",
       "PartArmor": "+ {n} {type}, vs AP {ap}",
       "PartRow": "+{n} {type} damage, an amount of its own",
-      "Warded": "{name}'s Ward took {n} off: {to}"
+      "Warded": "{name}'s Ward took {n} off: {to}",
+      "IgnoresAP": "vs AP {ap}, ignored ({source})",
+      "AnnotateNoGM": "No GM is online to write the answer on a card you did not post.",
+      "NotNamed": "This Test is the one {target} makes, the creature the Use named: {name} rolls nothing."
     },
     "Sheet": {
       "NewItem": "New {type}",
@@ -1076,7 +1124,10 @@
       "Speed": "Speed changes by {feet} ft.",
       "HealingHalved": "Healing received is halved.",
       "StandFree": "Standing from Prone costs no Half-Action.",
-      "Armor": "Your Armor Points rise by {ap} while another friendly creature stands within {feet} feet of you."
+      "Armor": "Your Armor Points rise by {ap} while another friendly creature stands within {feet} feet of you.",
+      "ReachTotem": "Within {feet} ft of {owner}'s {totem} totem.",
+      "BoonResilienceAll": "Resilience Tests",
+      "HealthFloor": "No source may reduce you below {n} Health while {owner} sustains it. It does not stop a Critical Injury or anything a Critical Injury does."
     },
     "NpcTab": {
       "statistics": "Statistics",
@@ -1167,6 +1218,8 @@
       "Branch": "Branch",
       "BranchTier": "Branch tier",
       "Branches": "Branches",
+      "Builds": "What it builds",
+      "LegacyPeople": "Legacy of",
       "FeatureKind": "Kind",
       "CostPool": "Costs from",
       "CostAmount": "Cost",
@@ -1214,6 +1267,7 @@
       "Provenance": "Provenance",
       "Quantity": "Quantity",
       "Launcher": "Launcher",
+      "WeaponType": "Type",
       "Fits": "Fits",
       "TagNotAllowed": "{tag} is not a {label} of {name}.",
       "Provision": "Food or drink",
@@ -1266,11 +1320,20 @@
       "FailedCast": "{name} did not go off, so there is no area to place: a failed Casting Test places nothing.",
       "AlreadyPlaced": "{name}'s area is already on the board. Take that one off before placing it again.",
       "AlreadyPlacedSustained": "{name}'s area is already on the board, and taking it off ends the Sustain.",
-      "SustainTakenOff": "{spell}'s area was taken off the board, so {name} no longer sustains it."
+      "SustainTakenOff": "{spell}'s area was taken off the board, so {name} no longer sustains it.",
+      "NamedLabel": "Named",
+      "NamedAtCast": "Named as {spell} was cast, and spared its Test: {names}.",
+      "NoneNamed": "Nobody was named as {spell} was cast: target the creatures to name before casting it."
     },
     "AreaTest": {
       "Turn": "{name} starts its turn in {spell}: a {resilience} Resilience Test against DC {dc}.",
       "Enter": "{name} enters {spell}: a {resilience} Resilience Test against DC {dc}.",
+      "Cross": "{name} tries to cross {spell}: a {resilience} Resilience Test against DC {dc}.",
+      "Struck": "{name} hits {holder} with a melee attack, and {spell} answers: a {resilience} Resilience Test against DC {dc}.",
+      "CasterTurn": "{caster}'s turn begins and {name} stands within reach of {spell}: a {resilience} Resilience Test against DC {dc}.",
+      "Stop": "it does not cross",
+      "PutBack": "{name} does not cross {spell}, and is back on its own side.",
+      "NotPutBack": "{name} does not cross {spell}, but could not be moved back: put its token on its own side of the edge by hand.",
       "OnFail": "On a failure: {outcome}.",
       "OnPass": "On a success: {outcome}.",
       "Damage": "{rating} {school} damage",
@@ -1425,13 +1488,15 @@
       "Weapon": "Encumbering weapon",
       "Encumbered": "What you carry",
       "Block": "Stat block",
-      "Grant": "What you wear"
+      "Grant": "What you wear",
+      "Waived": "Encumbering waived (talent)"
     },
     "Feature": {
       "Kind": {
         "Action": "Action",
         "Passive": "Passive"
       },
+      "SelfCondition": "{name} is {condition} ({feature}).",
       "Per": {
         "Short": "per Short Rest",
         "Long": "per Long Rest",
@@ -1458,6 +1523,8 @@
       "NoUses": "{name} has no uses left until its rest.",
       "NotYet": "{name} is not yet learned: it arrives at level {level}.",
       "NotYetTag": "not yet, level {level}",
+      "RungPrompt": "Use {name} as which?",
+      "RungEither": "{first} or {second}",
       "Greater": "greater, from level 11",
       "UpToThree": "Up to three: use the feature once for each.",
       "CompanionNote": "A Handling Test against the DC on its entry in 14-BESTIARY; you hold one bond at a time.",
@@ -1514,11 +1581,17 @@
       "Learned": "{name}: {form} is now a known form.",
       "NeedsForm": "{name} needs a Shapeshift form.",
       "AttacksSpent": "{name}'s card has made its {n} attacks: none is left.",
-      "AttacksAllowed": "{n} attacks from this card"
+      "AttacksAllowed": "{n} attacks from this card",
+      "OnSuccess": {
+        "Unpaid": "{name} failed its Casting Test: no {pool} was spent, and it does nothing.",
+        "Short": "{name} succeeded, but the {n} {pool} it costs is no longer there: nothing is paid and it does nothing."
+      }
     },
     "Talent": {
       "Branches": "Talent branches",
       "Branch": "Branch",
+      "LegacyBranch": "{branch} ({people})",
+      "LegacySyncFailed": "{name}: the Legacy branches could not be brought in line with the race held. The race's change stands.",
       "Points": "Talent points",
       "PointsLeft": "Unspent",
       "Spent": "Spent here",
@@ -1592,7 +1665,13 @@
         "boundDemon": "while you control a Bound Demon",
         "riposte": "on a Riposte",
         "flanking": "against a target you are flanking",
-        "judgement": "if its condition holds"
+        "judgement": "if its condition holds",
+        "targetHas": "against a target suffering a condition it names",
+        "targetKind": "against a creature of the kind it names",
+        "laidByUser": "against a target suffering a condition you or your totem laid",
+        "watched": "against the creature you are watching",
+        "challenged": "against the creature you challenged",
+        "wields": "while you wield and wear what it asks"
       },
       "SecondAttack": "Second attack",
       "SecondSame": "The same target",
@@ -1613,7 +1692,8 @@
       "FinisherBleeding": "{talent}: Bleeding in place of the added damage",
       "FinisherDamage": "The points added to the damage",
       "FinisherFree": "Finisher against {talent}'s target: spend no Combo Points, count {n}",
-      "FinisherMode": "Finisher"
+      "FinisherMode": "Finisher",
+      "FinisherShackle": "{talent}: Entangled in place of the added damage"
     },
     "Tick": {
       "Label": "Each turn",
@@ -1662,8 +1742,12 @@
         "LoseReaction": "on a hit, the target loses its Reaction",
         "NoCasting": "it cannot cast while that Bleeding lasts",
         "UntilYourTurn": "until your next turn",
+        "UntilTheirTurnEnd": "until the end of its next turn",
         "NeedsOpening": "a target under your Opening",
-        "Bane": "on a hit, {n} Bane on its next {kind}"
+        "Bane": "on a hit, {n} Bane on its next {kind}",
+        "NoAmmo": "spends no ammunition",
+        "ThrowAs": "a {types} counts as Thrown ({feet} ft), on Strength",
+        "FreeBy": "free against this target ({talent})"
       },
       "Refused": {
         "NoPool": "{name} spends {pool}, which you do not hold.",
@@ -1694,7 +1778,8 @@
         "NoHealingNoFight": "{name} is in no fight, so no turn ends the block, and none is laid.",
         "NoHealingNot": "The block on {name}'s healing was not laid.",
         "NotPaidMissed": "The blow missed: no {pool} spent.",
-        "Bane": "{names} take(s) {n} Bane on the next attack."
+        "Bane": "{names} take(s) {n} Bane on the next attack.",
+        "NoAmmo": "spends no ammunition"
       },
       "Prime": {
         "Tip": "Pay {price} now: one Move this turn costs no Half-Action, and your next attack this turn is the charge.",
@@ -1788,6 +1873,8 @@
       "HealthCost": "Health",
       "HealthCostRow": "{health} Health, paid on the cast",
       "NoMana": "{name} costs {mana} Mana, and there is not that much in the pool.",
+      "NoPool": "{name} costs {n} {pool}, and you hold no {pool} to pay it with.",
+      "NoPower": "{name} costs {n} {pool} through {talent}, and there is not that much in the pool.",
       "NoUses": "{item} has no casting of {name} left until it refreshes.",
       "SpellMissing": "{name} is no longer in the spells pack.",
       "InForm": "{name} needs Mana, and none can be spent in the {form} form.",
@@ -1838,7 +1925,8 @@
       "Handled": "Something handled, at the table's DC",
       "HostileSchools": "Two classes that do not agree",
       "CastTierFive": "Cast {name}",
-      "Metamorphosis": "{name}: the form of a greater demon"
+      "Metamorphosis": "{name}: the form of a greater demon",
+      "SpiritOffer": "{name}: the offer in the Spirit Realm"
     },
     "Effects": {
       "Conditions": "Conditions",
@@ -1860,6 +1948,7 @@
         "FullTakesReaction": "A Full Action also takes your Reaction, and it is already spent.",
         "OffHandSpent": "An Off-Hand Attack has already been made this round.",
         "OffHandNotYourTurn": "An Off-Hand Attack is made in your own turn, and it is not your turn.",
+        "NotYourTurn": "It is not your turn. A Half-Action, an action or a Full Action is spent on your own turn; outside it only a Reaction can be taken.",
         "NothingToRestore": "Nothing has been spent to put back."
       }
     },
@@ -1957,14 +2046,16 @@
       "SustainFree": "{name} holds {spell} at no cost.",
       "SustainPaidMana": "{name} pays {mana} Mana in upkeep on {count} sustained.",
       "SustainPaidHealth": "{name} pays {health} Health in upkeep on {count} sustained.",
-      "SustainPaidBoth": "{name} pays {mana} Mana and {health} Health in upkeep on {count} sustained."
+      "SustainPaidBoth": "{name} pays {mana} Mana and {health} Health in upkeep on {count} sustained.",
+      "PoisonedPromptDc": "{name} is Poisoned {stacks}: a Body Resilience Test against DC {dc} ({source}) sheds a stack."
     },
     "Shape": {
       "Heading": "Shape",
       "Kind": {
         "Shapeshift": "Shapeshift form",
         "Avatar": "Avatar of the Wild",
-        "Metamorphosis": "Metamorphosis"
+        "Metamorphosis": "Metamorphosis",
+        "Battlerig": "Gnomish Battle Rig"
       },
       "EffectName": {
         "shapeshift": "{name} form",
@@ -2038,6 +2129,11 @@
       "FightsWith": "Fighting ability",
       "FightsWithTip": "The ability this class fights with",
       "CastsWithTip": "The ability this class casts with",
+      "CastingGrade": {
+        "full": "{ability}, full caster",
+        "half": "{ability}, half caster",
+        "dcOnly": "{ability}, for Spell DC only"
+      },
       "NoSpellsForClass": "This class casts nothing.",
       "NoSpellsChosen": "No spell chosen yet.",
       "Player": "Player",
@@ -2141,6 +2237,7 @@
         "racialTalentTier": "{name} is above tier 1.",
         "noClassTalent": "Spend the talent point.",
         "classTalentNotOfClass": "{name} is not on this class's trees.",
+        "classTalentNotYourPeople": "{name} is on the {people}'s Legacy branch, which only the {people} keep.",
         "classTalentTier": "{name} is above tier 1.",
         "spellCount": "This class knows {required} spells at level 1; {chosen} chosen.",
         "spellTier": "{name} is above tier 1.",
@@ -2999,7 +3096,10 @@
       "LastingText": "{n} Boon on every Test this creature makes until the round ends.",
       "NextText": "{n} Boon on the next Test this creature makes, spent by that Test.",
       "LineNext": "{target} gains {n} Boon on their next Test",
-      "LineRound": "{target} gains {n} Boon on every Test this round"
+      "LineRound": "{target} gains {n} Boon on every Test this round",
+      "LineEncounter": "{target} gains {n} Boon on every {kind} Test until the encounter ends",
+      "EncounterText": "{n} Boon on every {kind} Test this creature makes until the encounter ends.",
+      "EveryTest": "kind of"
     },
     "Consecrated": {
       "Line": "{weapon} carries {trait} until the next use",
@@ -3030,7 +3130,10 @@
       "BaneLine": "{target} takes {n} Bane attacking anyone but {name}",
       "NotFriendly": "{name} names a friendly creature, and {target} is hostile.",
       "OneTarget": "{name} names one creature: target exactly one.",
-      "TooFar": "{name}: {target} is more than {feet} feet away."
+      "TooFar": "{name}: {target} is more than {feet} feet away.",
+      "BaneNoGM": "No GM is online to lay the Bane on a creature you do not own.",
+      "BaneEndNoGM": "No GM is online to end the Bane on a creature you do not own.",
+      "BoonNoGM": "No GM is online to lay the Boon on a creature you do not own."
     },
     "NextAttack": {
       "BoonRow": "{n} Boon on this attack",
@@ -3059,7 +3162,8 @@
     },
     "Barrage": {
       "Refund": "{talent}: {n} {pool} returned for more than four targets.",
-      "TooMany": "{name} attacks up to {max} targets, and {n} are targeted."
+      "TooMany": "{name} attacks up to {max} targets, and {n} are targeted.",
+      "TooFar": "{name} reaches only within {feet} feet of you: {names} stand farther."
     },
     "BlowShare": {
       "Button": "{talent}: {n} damage to a second enemy within {feet} ft",
@@ -3286,8 +3390,6 @@
     "Curse": {
       "Laid": "{name} takes a Bane on every Test for {n} minute(s).",
       "TooMany": "{name} names at most {max} creature(s).",
-      "Unpaid": "{name} failed: no Mana was spent and nobody makes the Test.",
-      "Short": "{name} succeeded, but the {n} Mana it costs is no longer there: nothing is paid and nobody makes the Test.",
       "Standing": "{name}: {n} of your curses already stand, and the feature allows {max}. A curse moved by Soul Swap still counts."
     },
     "Death": {
@@ -3399,6 +3501,8 @@
       "Moved": "{holder} takes the blow aimed at {name} ({talent}): {n} damage.",
       "AskGuardian": "{talent}: {name} is hit for {n} damage within your reach. Take the hit in full? It costs {cost} {pool} and your Reaction.",
       "AskRighteous": "{talent}: {name} is struck within your reach. Make yourself its target and take {n} damage, your Ward 1 against its school counted? It costs {cost} {pool} and your Reaction.",
+      "AskBurden": "{talent}: {name} is struck within your reach. Take {n} of that damage onto yourself, the rest staying with them? It costs {cost} {pool} and your Reaction.",
+      "SheetUse": "{name} is asked as a blow lands on a friendly target within {feet} feet. It is not pressed from the sheet.",
       "AskHold": "{talent}: {name} would drop to 0 Health. Hold them at 1 instead? {n} uses left.",
       "AskHoldHeal": "{talent}: {name} would drop to 0 Health. Hold them at 1 and restore {heal} Health? {n} uses left.",
       "Held": "{holder}'s {talent} holds {name} at 1 Health.",
@@ -3472,7 +3576,9 @@
         "enterAway": "A creature that fails its {resilience} Test on first entering is pushed {feet} ft toward the edge.",
         "enterToward": "A creature that fails its {resilience} Test on first entering is pulled {feet} ft toward the centre.",
         "turnAway": "A creature starting its turn inside is pushed {feet} ft toward the edge.",
-        "turnToward": "A creature starting its turn inside is pulled {feet} ft toward the centre."
+        "turnToward": "A creature starting its turn inside is pulled {feet} ft toward the centre.",
+        "casterTurnAway": "At the start of each of the caster's turns, every creature within {within} ft of the centre makes a {resilience} Test, and is pushed {feet} ft away from it on a failure.",
+        "casterTurnToward": "At the start of each of the caster's turns, every creature within {within} ft of the centre makes a {resilience} Test, and is pulled {feet} ft toward it on a failure."
       },
       "Refuse": {
         "AtPoint": "{name} stands on the point it would be moved from, and is not moved ({source}).",
@@ -3583,6 +3689,448 @@
       "NoPriest": "Select the token of the priest who holds Foresight.",
       "Answered": "The Ward answers the blow on {name}: {n} less damage.",
       "NotAnswered": "The Ward is laid on {name}, and the blow is of no school it guards."
+    },
+    "Wield": {
+      "Needs": {
+        "TwoHanded": "{name} needs a two-handed weapon in hand.",
+        "NoSuit": "{name} needs no armor in your Chest slot.",
+        "TwoTypes": "{name} needs melee weapons of two different types, one in each hand.",
+        "HammerOrMace": "{name} needs a hammer or a mace in hand."
+      },
+      "ThrowNeedsRider": "{weapon} is thrown only as part of {talent}: tick its line to throw it."
+    },
+    "Mark": {
+      "OneTarget": "{name} names one creature: target it, and only it.",
+      "NotYourTurn": "{name} is named on your own turn.",
+      "SpentThisTurn": "{name} has already been named this turn.",
+      "NotSelf": "{name} names another creature, never yourself.",
+      "Challenged": "{name} challenges {target} until the end of their next turn.",
+      "ChallengeEnded": "The Challenge on {target} ends.",
+      "Watched": "{name} watches {target} until their next Long Rest: {target} is {feet} ft to the {direction}.",
+      "WatchEnded": "{name} no longer watches {target}.",
+      "Bearing": "{target} is {feet} ft to the {direction}.",
+      "BearingUnmeasured": "{target} cannot be found on this scene.",
+      "NoWatch": "{name} is watching nobody.",
+      "EffectName": "The Challenge: {target}",
+      "Compass": {
+        "north": "north",
+        "northeast": "northeast",
+        "east": "east",
+        "southeast": "southeast",
+        "south": "south",
+        "southwest": "southwest",
+        "west": "west",
+        "northwest": "northwest"
+      }
+    },
+    "Miss": {
+      "NegateButton": "{name}: the attack misses",
+      "Negated": "{name} turns the hit into a miss ({feature}).",
+      "Withdrawn": "Withdrawn from {name} with the hit: {what}.",
+      "Reaction": "the Reaction it took",
+      "TestWithdrawn": "The hit on {name} was turned into a miss, so it offers this Test no longer.",
+      "NeedsCard": "{name} answers an attack that hit you: press it on that attack's card.",
+      "NotYours": "{name} answers a hit on you, and this row of the card is somebody else's.",
+      "NotAHit": "{name} answers a hit, and this attack did not hit.",
+      "AlreadyMissed": "{name}: this hit has already been turned into a miss.",
+      "InjuryWithdrawn": "The hit on {name} was turned into a miss, so it inflicts no Critical Injury.",
+      "PressWithdrawn": "The hit on {name} was turned into a miss, so it lays nothing.",
+      "ApplyWithdrawn": "The hit on {name} was turned into a miss: there is no damage to apply.",
+      "StruckBackWithdrawn": "The hit on {name} was turned into a miss, so nothing answers it.",
+      "AttackWithdrawn": "The attack was turned into a miss on every creature it hit, so it gives this no longer.",
+      "TakenBack": "Taken back with the hit",
+      "TakenBackPart": "{name}: {n} {pool}"
+    },
+    "Gather": {
+      "Line": "{feature} reaches {who} within {feet} ft: {names}.",
+      "None": "{feature} reaches {who} within {feet} ft, and none stands there.",
+      "Pick": "Click the point {feature} strikes, within {feet} ft of {from}.",
+      "PickTooFar": "That point is more than {feet} ft from {from}.",
+      "PlaceFailed": "{feature}: the area could not be drawn on the board. Its targets were measured and its card stands.",
+      "Who": {
+        "enemy": "every enemy",
+        "creature": "every creature",
+        "ally": "every friendly target"
+      }
+    },
+    "Unanswered": {
+      "Line": "No creature may take a Reaction against {name} until their next turn ({feature})."
+    },
+    "Pull": {
+      "NoneHeld": "{name}: no creature within {feet} ft is Entangled by you.",
+      "Pick": "{source}: choose a space within {feet} ft of {holder} for {name}. Press its own space to leave it where it stands.",
+      "Pulled": "{name} is pulled to a space within {feet} ft of {holder} and stays Entangled ({source}).",
+      "Stays": "{name} is left where it stands and stays Entangled ({source}).",
+      "Refuse": {
+        "Far": "{name}: that space is more than {feet} ft from {holder}.",
+        "Occupied": "{name}: another creature stands in that space, or it is chosen for another.",
+        "Unmeasured": "{name}: that space cannot be measured from {holder}."
+      }
+    },
+    "HitTest": {
+      "Card": "The target makes the Test or is {condition} for {n} round(s).",
+      "Laid": "{name} failed the Test against {talent}: {condition} for {n} round(s)."
+    },
+    "SlDamage": {
+      "Card": "+{n} damage at SL {sl}.",
+      "CardIgnores": "+{n} damage at SL {sl}, ignoring Armor Points."
+    },
+    "Blueprint": {
+      "Built": "{talent}: {name} is built, and works until your next Long Rest.",
+      "DeviceTag": "device",
+      "GadgetTag": "gadget",
+      "Note": "Build one device or one gadget at no cost in gold. Whether you have the parts for it is the table's call. It works until your next Long Rest."
+    },
+    "Construct": {
+      "AimGone": "{feature}: {name} no longer stands on this scene, so there is nothing to fire from.",
+      "AimTooFar": "That point is more than {feet} feet from {name}.",
+      "Built": "{name} is built and stands beside you. Building it takes {time}.",
+      "BuiltNoToken": "{name} is built. Building it takes {time}; place its token by hand.",
+      "ComboBuilt": "+{n} Combo Points to {name}",
+      "FinisherPaid": "Finisher (Supercharge)",
+      "FinisherPaidRow": "{n} of {owner}'s Combo Points",
+      "HalfGranted": "{name} takes a Half-Action at once.",
+      "MenuNote": "You hold up to {n} at a time. Building or rebuilding one takes a Short Rest and a tinker's kit.",
+      "NoBlockTag": "no block in the bestiary",
+      "NoFight": "{name} gives a construct a Half-Action in a fight, and you are in none.",
+      "NoneNear": "{name}: none of your constructs stands within {feet} feet.",
+      "NoneStanding": "{name}: none of your constructs stands on this scene.",
+      "NotInFight": "{name} is not in this fight.",
+      "RebuildOption": "Rebuild {name}",
+      "Rebuilt": "{name} is rebuilt at {n} Health. Rebuilding it takes {time}.",
+      "Refuse": {
+        "InFight": "{name}: building or rebuilding a construct takes a Short Rest, and you are in a fight.",
+        "NoKit": "{name}: building a construct takes a tinker's kit, and you carry none.",
+        "NotOnTable": "{name} is not on the Constructs table.",
+        "Standing": "{name} already stands.",
+        "Tier": "{name}'s tier is above yours."
+      },
+      "SharedHalves": "{name}: your constructs have no Half-Action left between them this turn.",
+      "SharedReaction": "{name}: your constructs have used their Reaction between them this turn.",
+      "StandingTag": "standing",
+      "Supercharge": "Supercharge",
+      "Time": {
+        "short": "a Short Rest",
+        "long": "a Long Rest",
+        "tenMinutes": "ten minutes"
+      },
+      "WreckedNoHeal": "{name} is wrecked and takes no healing until it is rebuilt.",
+      "WreckedTag": "wrecked",
+      "SharedNotYours": "{name}: the shared turn is recorded on your tinker's combatant, which you cannot write, so nothing is spent."
+    },
+    "Gadget": {
+      "InFight": "{name}: changing the gadgets you know takes a week of downtime, and you are in a fight.",
+      "Known": "Gadgets known: {names}.",
+      "MenuNote": "You know {n}. Each one you know may be used once between Short Rests.",
+      "Reason": {
+        "Falling": "The fall is the table's: a walking pace down and no damage from landing.",
+        "Watch": "The watch is the table's: for 8 hours a creature that comes within 30 feet is revealed and the alarm wakes everyone near it."
+      },
+      "WrongKind": "{name}: {target} is not a {kind}."
+    },
+    "GraveBond": {
+      "BossTag": "a Boss: Grave Bond cannot bond it",
+      "Failed": "{talent}: the {name} makes a Spirit Resilience Test against DC {dc} and rolls {total}. It fails, and is bound to you.",
+      "NoDC": "{talent}: {name} has no Spell DC for the remains to resist against.",
+      "Resisted": "{talent}: the {name} makes a Spirit Resilience Test against DC {dc} and rolls {total}. It resists, and nothing is bound.",
+      "Tag": "{tag} · {talent}",
+      "ResistedTag": "resisted your {talent}: it will not be tried again",
+      "TriedBefore": "{talent}: {name} resisted you before, and will not be tried again."
+    },
+    "Overclock": {
+      "Device": "{talent}: {name} works one step better this once. What one step better is is the table's call.",
+      "DeviceTag": "device carried",
+      "Gadget": "{talent}: {name} is overclocked. Its next use works one step better and then it breaks until your next Short Rest; unused, the overclock ends with the encounter.",
+      "GadgetTag": "gadget known",
+      "Note": "Which device you built is the table's call.",
+      "Nothing": "You know no gadget and carry no device.",
+      "SpentTag": "spent until a Short Rest",
+      "Fired": "{name} is overclocked ({talent}): it works one step better, and then breaks until your next Short Rest. What one step better is is the table's call."
+    },
+    "Place": {
+      "NoTokenLine": "{name} is bound. With no token on this scene, place it by hand.",
+      "NotPlaced": "{name} is bound, but no token could be placed.",
+      "Pick": "{name}: click a point within {feet} feet of you where they assemble. Right-click or Escape to cancel.",
+      "Placed": "{count} × {name} assemble at the point chosen.",
+      "Refuse": {
+        "Far": "{name}: that point is more than {feet} feet from you.",
+        "NoToken": "{name}: you have no token on this scene to measure from.",
+        "Unmeasured": "{name}: that point cannot be measured from your token."
+      }
+    },
+    "Raise": {
+      "Full": "{talent}: you control {n} already, so the {name} does not rise.",
+      "Risen": "{talent}: the {name} rises as a {entry} that acts on {owner}'s Initiative until the encounter ends.",
+      "RisenNoToken": "{talent}: the {name} rises as a {entry} bound to {owner}. Place its token by hand.",
+      "Failed": "{name} could not be raised: its fall stands."
+    },
+    "Splash": {
+      "Label": "Around the target",
+      "Line": "{spell} reaches every creature within {feet} ft of {around}: {names}. Each makes a {resilience} Resilience Test against DC {dc} on a card of its own, and takes {rating} {school} on a failure and nothing on a success.",
+      "None": "{spell}: nobody stands within {feet} ft of {around}.",
+      "Unmeasured": "{spell}: {around} stands on no board this client views, so the creatures within {feet} ft are the table's to name.",
+      "Table": "{spell}: {reason} stay the table's.",
+      "Test": "{name} is within {feet} ft of {around}: a {resilience} Resilience Test against {spell}, DC {dc}.",
+      "OnPass": "On a success: no damage.",
+      "PostFailed": "{spell}: the Tests around its target could not be posted. Its card stands."
+    },
+    "Struck": {
+      "Label": "The next blow",
+      "CardLine": "{spell} waits on {name}: the next creature to hit them with a melee attack makes a {resilience} Resilience Test against DC {dc} or is {conditions}. Lay it with Apply.",
+      "CardLineNoOpportunity": "{spell} waits on {name}: the next creature to hit them with a melee attack makes a {resilience} Resilience Test against DC {dc} or is {conditions}, and makes no Opportunity Attack while held. Lay it with Apply.",
+      "Fail": "it is {conditions}",
+      "FailNoOpportunity": "it is {conditions}, and makes no Opportunity Attack while it is held",
+      "Pass": "On a success: nothing. The spell has ended either way.",
+      "Withdrawn": "The blow that would have answered {spell} was turned into a miss, so {name} makes no Test.",
+      "Undone": "{name}'s blow on {holder} was turned into a miss: {spell} waits again, and anything its Test laid is taken off."
+    },
+    "Shackle": {
+      "Card": "{condition} for {n} rounds: lay it with the button.",
+      "Row": "Entangled {n} rounds"
+    },
+    "Step": {
+      "Label": "Step",
+      "Moved": "{name} steps up to {feet} ft ({source}), provoking nothing.",
+      "NoTokenLine": "{name} may move up to {feet} feet. With no token on this scene, move it by hand.",
+      "NotCast": "{name} did not go off, so nobody moves.",
+      "Pick": "{name}: click a space you can see within {feet} feet. Right-click or Escape to cancel.",
+      "PickSeen": "{name}: click a space within {feet} feet. Right-click or Escape to cancel.",
+      "PickShadow": "{name}: click a space you can see within {feet} feet. Both ends must be in darkness or in shadow, which is the table's call. Right-click or Escape to cancel.",
+      "Refuse": {
+        "Far": "{name}: that space is more than {feet} feet away.",
+        "Gone": "{name} could not be moved.",
+        "Held": "{name} cannot be used while {condition}.",
+        "NoGM": "No GM is online to move a creature you do not own.",
+        "NoToken": "{name} has no token on this scene.",
+        "Occupied": "{name}: another creature stands in that space.",
+        "Same": "{name} already stands there.",
+        "Unmeasured": "{name}: that space cannot be measured.",
+        "Unseen": "{name}: you cannot see that space.",
+        "Unallowed": "{name} is not a creature this step may move there."
+      }
+    },
+    "Trap": {
+      "Lifted": "{name}: {n} older trap taken up, so no more stand than the talent allows.",
+      "NoToken": "{name}: you have no token on this scene to set a trap from.",
+      "NotSet": "{name}: the trap could not be set.",
+      "Pick": "{name}: click a point within {feet} feet of you to set the trap. Right-click or Escape to cancel.",
+      "PickTooFar": "{name}: that point is more than {feet} feet from you.",
+      "Set": "{name} is set: the first enemy to come within it is {condition}. Up to {n} may stand at a time.",
+      "Sprung": "{trap} springs on {name}."
+    },
+    "Conceal": {
+      "Name": "{source}: hidden",
+      "Text": "{source}: hidden, even while observed, until it ends as its words say.",
+      "Line": "Hidden, even while observed, for one minute: {names} ({feature}). It ends for each of you who attacks or casts a spell.",
+      "LineAttack": "Hidden, even while observed, until the next attack: {names} ({feature}).",
+      "TooFar": "{name} is more than {feet} feet away.",
+      "NotAlly": "{name} is not an ally."
+    },
+    "Cure": {
+      "NotFriendly": "{name}: {target} is not a friendly target.",
+      "NotOn": "{name} does not carry {condition}.",
+      "End": "End it",
+      "Prompt": "The condition on {target} to end.",
+      "Nothing": "{target} carries no condition this can end.",
+      "Ended": "{condition} ends on {target}.",
+      "NotEnded": "{condition} could not be ended on {target}."
+    },
+    "CuttingGear": {
+      "Title": "Cutting Gear",
+      "Prompt": "{name} is {condition}. Its Cutting Gear ends one {condition} condition once each turn, with no action.",
+      "Button": "Cut free",
+      "Cut": "{name}'s Cutting Gear ends one {condition} condition.",
+      "NotHeld": "{name} has no Cutting Gear.",
+      "NotEntangled": "{name} is not {condition}.",
+      "Spent": "{name} has used its Cutting Gear this turn."
+    },
+    "DeathHold": {
+      "Ask": "{holder}: {name} would take a Death Step. Spend your Reaction and {mana} {pool} on {talent} to hold it back? {n} use left.",
+      "Held": "{holder} holds {name} back from a Death Step ({talent}).",
+      "Spared": "{name} is inside {area}: the attack adds no Death Step.",
+      "SheetUse": "{name} is asked when a creature within {feet} feet would take a Death Step. It is not pressed from the sheet.",
+      "Unpaid": "{name}: {talent} held the Death Step, but its Reaction could not be paid.",
+      "AskFailed": "{name}: nobody could be asked to hold the Death Step back, and it is taken.",
+      "Refuse": {
+        "unknown": "{name} does not hold {talent}.",
+        "down": "{name} is down and cannot hold anyone back.",
+        "noUses": "{name}: {talent} has no use left until a Short Rest.",
+        "tooFar": "{name} is no longer within {feet} feet.",
+        "short": "{name} has too little Mana for {talent}.",
+        "noReaction": "{name} has no Reaction left.",
+        "self": "{name} cannot hold back their own Death Step.",
+        "realm": "{name} is in the Spirit Realm and takes no Reaction."
+      }
+    },
+    "Disenchant": {
+      "NoToken": "{name}: your token must stand on the scene being viewed to choose the point.",
+      "Pick": "{name}: click a point within {feet} feet. Every creature within {radius} feet of it loses an effect.",
+      "PickTooFar": "{name}: the point must be within {feet} feet.",
+      "Prompt": "Choose up to {n} effect on {target} to end.",
+      "Nothing": "{name}: nothing within {radius} feet of that point has an effect this may end.",
+      "Failed": "{name}: the Casting Test failed, and nothing ends.",
+      "Subtitle": "Struck by {name}",
+      "Explanation": "{n} {type} to a summoned or bound creature",
+      "Struck": "Summoned or bound: {names} take {n} damage. Apply it on its card."
+    },
+    "Drain": {
+      "Healed": "{name} recovers {n} Health ({source}) from the damage {target} took.",
+      "Failed": "{source}: the Health drained from {target} could not be restored. The blow stands."
+    },
+    "Ethereal": {
+      "Name": "{source}: ethereal",
+      "Text": "{source}: until your next turn physical damage you take is halved, rounded down. While it holds you cannot attack or cast, except spells that restore Health.",
+      "Halved": "{name} is ethereal ({source}): {to} of {from} damage lands.",
+      "Line": "Ethereal until the user's next turn: {names} ({feature}).",
+      "Refuse": {
+        "Attack": "{name} cannot attack while {source} holds.",
+        "Cast": "{name} cannot cast while {source} holds, except spells that restore Health.",
+        "TooMany": "{talent} covers {n} friendly target: target no more.",
+        "NotFriendly": "{talent} covers friendly targets alone.",
+        "TooFar": "{talent} covers a friendly target within {feet} feet."
+      }
+    },
+    "FreeWalk": {
+      "Name": "{source}: ignoring Difficult ground",
+      "Line": "{name} may move up to their Speed ({feature}).",
+      "LineGround": "{name} may move up to their Speed, ignoring Difficult ground ({feature})."
+    },
+    "HalvesDealt": {
+      "Row": "damage dealt halved",
+      "Name": "{source}: damage dealt halved",
+      "Text": "{source}: the damage it deals is halved, rounded down, until the end of its next turn.",
+      "Laid": "The damage {name} deals is halved until the end of its next turn ({source}).",
+      "OneTarget": "{name}: target the one creature it is laid on.",
+      "NotSelf": "{name}: it is laid on another creature, never on you."
+    },
+    "Immune": {
+      "Name": "{source}: immune",
+      "Line": "{name} cannot be {conditions} until their next turn.",
+      "LineEnded": "{ended} ends on {name}, who cannot be {conditions} until their next turn."
+    },
+    "LegacyUse": {
+      "NoGM": "No GM is online to write this on a creature you do not own.",
+      "NotHeld": "{name} does not hold {feature}, or its Use does not do that."
+    },
+    "MountainWakes": {
+      "Line": "{name}: until the encounter ends, Armor Points +{ap} and Ward {ward} against every school."
+    },
+    "UseArmor": {
+      "UntilTurn": "{name}: Armor Points +{ap} until their next turn ({feature})."
+    },
+    "Revive": {
+      "OneTarget": "{name}: target the one creature to call back.",
+      "NotCharacter": "{name}: {target} takes no Death Steps.",
+      "NotThird": "{name}: {target} has not taken its third Death Step.",
+      "TooFar": "{name}: {target} is more than {feet} feet away.",
+      "TooLate": "{name}: the third Death Step of {target} came before the end of your last turn.",
+      "NoTether": "{name}: {target} has no Spirit's Tether left and does not return.",
+      "Twice": "{name}: {target} has returned this way before, and no creature returns this way twice.",
+      "Risen": "{target} stands at {n} Health with the Death Steps cleared, and spends no Spirit's Tether.",
+      "NotRisen": "{target} could not be called back."
+    },
+    "Lift": {
+      "NoneDying": "{name}: no Dying friendly target is within {feet} feet.",
+      "Line": "{feature}: {names} restore {n} Health and stand.",
+      "Nobody": "{feature}: nobody it reached was still Dying.",
+      "NotDying": "{name} is no longer Dying.",
+      "NotFriendly": "{name} is not a friendly target.",
+      "TooFar": "{name} is more than {feet} feet away."
+    },
+    "Spirit": {
+      "Title": "The Spirit Realm",
+      "Name": "{source}: in the Spirit Realm",
+      "Text": "{source}: you stand in the Spirit Realm for up to {n} minute. Your body stands where you left it and takes no actions.",
+      "Turn": "{name} is in the Spirit Realm: {n} Half-Action this turn, and no Reaction. Look, Speak, Walk and Refuse are the GM's to answer. Reach is a Spirit Resilience Test at DC {dc}, and what it touches is the GM's.",
+      "TurnHeals": "{name} is in the Spirit Realm: {n} Half-Action this turn, and no Reaction. A spell that restores Health may be cast on any creature but {name}. Look, Speak, Walk and Refuse are the GM's to answer. Reach is a Spirit Resilience Test at DC {dc}, and what it touches is the GM's.",
+      "ReachTest": "Reach: {resilience} Resilience Test, DC {dc}",
+      "Reach": {
+        "NotThere": "{name} is no longer in the Spirit Realm."
+      },
+      "Crossed": "{name} steps into the Spirit Realm for up to {n} minute. The body stands where it was left.",
+      "NotCrossed": "{name} could not step into the Spirit Realm.",
+      "SteppedBack": "{name} steps back from the Spirit Realm ({feature}).",
+      "Refuse": {
+        "Attack": "{name} is in the Spirit Realm and cannot touch the living world: no attack.",
+        "Cast": "{name} is in the Spirit Realm: no spell is cast from there.",
+        "CastSelf": "{name} is in the Spirit Realm: a spell that restores Health may be cast on any creature but yourself.",
+        "CastNoTarget": "{name} is in the Spirit Realm: target the creature the spell restores, which may not be you.",
+        "Feature": "{name} is in the Spirit Realm and cannot touch the living world: no Use.",
+        "Gear": "{name} is in the Spirit Realm and cannot touch the living world: nothing carried is used.",
+        "Signature": "{name} is in the Spirit Realm and cannot touch the living world: no Signature.",
+        "Maneuver": "{name} is in the Spirit Realm and cannot touch the living world: no maneuver.",
+        "Ability": "{name} is in the Spirit Realm and cannot touch the living world: no ability.",
+        "Reaction": "{name} is in the Spirit Realm and takes no Reaction.",
+        "Stand": "{name} is in the Spirit Realm: the body does not stand.",
+        "Move": "{name} is in the Spirit Realm: the body does not move.",
+        "Action": "{name} is in the Spirit Realm and cannot touch the living world: no Guard, Disengage, Ready, Hide, mark or rider paid ahead."
+      },
+      "Offer": {
+        "Title": "Something notices you",
+        "Prompt": "{name} takes the second Death Step, and something notices. The offer: stand up now, at 1 Health, with the Death Steps cleared. The price is Corruption, and the GM names the track and the price. It stands until {name} dies or leaves.",
+        "Take": "Take the offer",
+        "Gone": "{name}: the offer no longer stands.",
+        "NotYourTurn": "{name}: the offer is taken on your own turn.",
+        "NoGM": "{name}: the GM names the offer's track and price, and no GM is online.",
+        "Asked": "{name} takes the offer: the GM names the track and the price.",
+        "Declined": "{name}: the GM named no price, and the offer still stands.",
+        "TrackPrompt": "The track the price is paid in. The GM names it from the place.",
+        "PricePrompt": "The price. The GM names it.",
+        "Price1": "{n} Corruption",
+        "Price2": "{n} Corruption",
+        "Price3": "{n} Corruption",
+        "Taken": "{name} takes the offer: {n} {track} Corruption, and stands at 1 Health with the Death Steps cleared.",
+        "Failed": "{name}: the offer could not be posted. The Death Step stands."
+      }
+    },
+    "Sustain": {
+      "AlreadyHeld": "{name} is already sustained.",
+      "Held": "{name} is sustained: {n} Mana a turn."
+    },
+    "Thrall": {
+      "OneTarget": "{name}: target the one creature to make your thrall.",
+      "NotSelf": "{name}: you cannot make yourself your thrall.",
+      "NotCreature": "{name}: {target} is a character, and a thrall is one of the GM's creatures.",
+      "Boss": "{name}: {target} is a Boss and cannot be made a thrall.",
+      "AlreadyBound": "{name}: {target} is bound already, and takes no second bond.",
+      "NotNamed": "{target} is not the creature {name} named, and cannot be made its thrall.",
+      "TooFar": "{name}: {target} is more than {feet} feet away.",
+      "Reason": {
+        "Obeys": "What the thrall does is the table's: it obeys your spoken commands, and it remembers all of it."
+      },
+      "Bound": "{name} is Charmed by {owner} for {n} minute: it obeys spoken commands and acts on the Initiative of {owner}.",
+      "NotBound": "{name} could not be made the thrall of {owner}.",
+      "Released": "{name} is no longer the thrall of {owner}.",
+      "ReleaseFailed": "{name}: its bond as a thrall could not be released. Release it from its banner."
+    },
+    "Transporter": {
+      "Set": "Set a pad where you stand",
+      "Travel": "Travel to the pad",
+      "Prompt": "{name}: set a pad, or travel to it?",
+      "SetReplaces": "Replaces the pad on {scene}.",
+      "TravelTo": "To the pad on {scene}, with up to {n} willing creatures within {feet} feet.",
+      "SetLine": "{name} sets a transporter pad on {scene} ({feature}).",
+      "SetAgain": "{name} sets a new transporter pad on {scene}, and the old one is gone ({feature}).",
+      "Arrived": "{name} arrives on the pad on {scene} (d6: {n}).",
+      "ArrivedFatigued": "{name} arrives on the pad on {scene}, Fatigued (d6: {n}).",
+      "NotMoved": "{name} could not be carried to the pad (d6: {n}).",
+      "NoneMoved": "{feature}: nobody could be carried to the pad.",
+      "Reason": {
+        "Continent": "Whether the pad stands on the same continent is the table's.",
+        "Willing": "Who is willing is the table's: a creature you count as an ally travels."
+      },
+      "Refuse": {
+        "NoChoice": "{name}: choose to set a pad or to travel to it.",
+        "Spent": "{name}: the travel's use is spent until a Long Rest. A pad may still be set.",
+        "NoPad": "No transporter pad is set: set one over a Short Rest first.",
+        "PadGone": "The scene the transporter pad stood on is gone.",
+        "NoToken": "The user's token must stand on the scene.",
+        "SetInFight": "{name}: a pad is set over a Short Rest, never in a fight.",
+        "TooMany": "{name}: up to {n} willing creatures travel with you.",
+        "NotWilling": "Only a willing creature travels: one you count as an ally.",
+        "TooFar": "Every creature travelling stands within {feet} feet of you ({name}).",
+        "FightScene": "{name}: the pad stands on another scene, and a creature travelling is in a fight."
+      }
     }
   },
   "TYPES": {

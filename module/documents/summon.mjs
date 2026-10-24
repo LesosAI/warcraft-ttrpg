@@ -24,13 +24,13 @@
  * timing of a Boss Action itself.
  */
 
-import { actorFolder } from "./bound.mjs";
+import { actorFolder, bondOf, worldActorOf } from "./bound.mjs";
 import { prototypeTokenFor } from "../rules/bestiary.mjs";
+// The ring every placed creature takes (the Legacy branches' door 4), one law for
+// this door and the totem's.
+import { ringSpots } from "../rules/summon-places.mjs";
 
 export const SUMMON_QUERY = "azeroth-rpg.summon";
-
-/** Where a summoned body stands, in grid squares out from the summoner. */
-const RING = Object.freeze([[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]);
 
 /** The flag that says which pack entry a world actor stands in for. */
 export const SUMMONED_FLAG = "summonedFrom";
@@ -71,42 +71,94 @@ async function summonedActor(entryName) {
 }
 
 /**
+ * The token a summoner stands on, on the scene it is on - **the scene the caller
+ * named first** (the B2 review: this handler runs on the GM's client for a player's
+ * call, and the GM's viewed scene is not the player's - a linked summoner standing on
+ * two scenes rang its bodies round the wrong one, into the wrong fight), then the
+ * viewed scene, then the active one, then any (`documents/totems.mjs#ownerToken`'s
+ * reading).
+ *
+ * @param {Actor} summoner
+ * @param {string|null} [sceneId]  the scene the summoner's token stood on where the call was made
+ */
+function summonerToken(summoner, sceneId = null) {
+  if (summoner.isToken) return summoner.token;
+  const world = worldActorOf(summoner);
+  const seen = new Set();
+  const named = typeof sceneId === "string" && sceneId ? (game.scenes?.get(sceneId) ?? null) : null;
+  for (const scene of [named, canvas?.scene ?? null, game.scenes?.active ?? null, ...(game.scenes ?? [])]) {
+    if (!scene || seen.has(scene.id)) continue;
+    seen.add(scene.id);
+    const token = scene.tokens.find(t => t.actorId === world.id);
+    if (token) return token;
+  }
+  return null;
+}
+
+/**
  * The GM-side handler: import the block, place the bodies, and put them in
  * the fight on the summoner's side. Throws with the reason, which travels
  * back to the caller as the refusal.
+ *
+ * **AND A CREATURE ALREADY BOUND, AT A POINT** (the Legacy branches' door 4): with
+ * `actorUuid`, the world actor a bond made (`documents/bound.mjs#bind`) - 04's
+ * Pocket Factory's gnomes, Dark Minion's skeleton, The Bench's construct - judged
+ * here as bound to THIS summoner, a uuid being no permission; with `at`, the canvas
+ * point picked, whose square is the first the ring tries. Both absent is a Boss
+ * Action's call, exactly as before: imported once into the Summoned folder and rung
+ * round the summoner.
  */
-export async function summonQueryHandler({ summonerUuid, entry, count = 1, side = "summoner" } = {}, { user = null } = {}) {
+export async function summonQueryHandler({ summonerUuid, entry = null, count = 1, side = "summoner", actorUuid = null, at = null, sceneId = null } = {}, { user = null } = {}) {
   const summoner = await fromUuid(summonerUuid);
   if (!summoner || summoner.documentName !== "Actor") throw new Error(game.i18n.localize("AZEROTH.Summon.NoSummoner"));
   if (user && !summoner.testUserPermission(user, "OWNER")) throw new Error(game.i18n.localize("AZEROTH.Bound.NotOwner"));
 
-  const token = summoner.isToken ? summoner.token : (summoner.getActiveTokens()[0]?.document ?? null);
-  const scene = token?.parent ?? canvas?.scene ?? null;
+  const token = summonerToken(summoner, sceneId);
+  const scene = token?.parent ?? null;
   if (!token || !scene) throw new Error(game.i18n.format("AZEROTH.Summon.NoGround", { name: summoner.name }));
 
-  const actor = await summonedActor(entry);
-  const size = scene.grid.size;
-  const width = Math.max(1, actor.prototypeToken?.width ?? 1);
+  let actor;
+  if (actorUuid) {
+    actor = worldActorOf(await fromUuid(actorUuid));
+    if (actor?.documentName !== "Actor" || bondOf(actor)?.ownerUuid !== worldActorOf(summoner).uuid) {
+      throw new Error(game.i18n.format("AZEROTH.Bound.NoEntry", { name: actor?.name ?? actorUuid }));
+    }
+  } else actor = await summonedActor(entry);
+  const cell = { w: scene.grid.sizeX ?? scene.grid.size, h: scene.grid.sizeY ?? scene.grid.size };
+  const prototype = actor.prototypeToken.toObject();
+  const size = { width: Math.max(1, prototype.width ?? 1) * cell.w, height: Math.max(1, prototype.height ?? 1) * cell.h };
   const many = Math.max(1, Math.trunc(Number(count)) || 1);
   // The summoner's own side, which is what *acts on his side* means; a token
   // has no side of its own beyond its disposition, and the tracker reads that.
   const disposition = side === "opposing"
     ? -(token.disposition || CONST.TOKEN_DISPOSITIONS.HOSTILE)
     : token.disposition;
-
-  const rows = [];
-  for (let i = 0; i < many; i++) {
-    const [dx, dy] = RING[i % RING.length];
-    const out = (1 + Math.floor(i / RING.length)) * width;
-    rows.push({
-      ...actor.prototypeToken.toObject(),
-      actorId: actor.id,
-      actorLink: false,
-      disposition,
-      x: token.x + dx * size * out,
-      y: token.y + dy * size * out
-    });
+  // Where the first one stands: the picked point's square, else the summoner's
+  // own square rung round (D-691's ring, one law since door 4).
+  const point = at && Number.isFinite(Number(at.x)) && Number.isFinite(Number(at.y)) ? { x: Number(at.x), y: Number(at.y) } : null;
+  let origin = { x: token.x, y: token.y };
+  if (point) {
+    const raw = { x: point.x - size.width / 2, y: point.y - size.height / 2 };
+    try {
+      origin = scene.grid.getSnappedPoint(raw, { mode: CONST.GRID_SNAPPING_MODES.TOP_LEFT_CORNER });
+    } catch {
+      origin = raw;
+    }
   }
+  const standing = scene.tokens.map(t => ({ x: t.x, y: t.y, width: (t.width ?? 1) * cell.w, height: (t.height ?? 1) * cell.h }));
+  const spots = ringSpots({ origin, count: many, cell, size, standing, board: scene.dimensions?.rect ?? null, includeOrigin: Boolean(point) });
+
+  const rows = spots.map(spot => ({
+    ...prototype,
+    actorId: actor.id,
+    // A bound creature's prototype says whether its tokens are its own (D-643): a
+    // construct is held and linked, a called set unlinked so each carries its Health.
+    actorLink: actorUuid ? prototype.actorLink === true : false,
+    disposition,
+    elevation: token.elevation ?? 0,
+    x: Math.round(spot.x),
+    y: Math.round(spot.y)
+  }));
   const placed = await scene.createEmbeddedDocuments("Token", rows);
 
   // Into the fight beside the summoner, where there is one.
@@ -116,15 +168,22 @@ export async function summonQueryHandler({ summonerUuid, entry, count = 1, side 
       tokenId: t.id, sceneId: scene.id, actorId: actor.id
     })));
   }
-  return { count: placed.length, name: actor.name, inFight: Boolean(fight) };
+  return { count: placed.length, name: actor.name, inFight: Boolean(fight), tokenIds: placed.map(t => t.id), sceneId: scene.id };
 }
 
 /**
  * Place what an ability called up. Runs the handler here for a GM and asks
  * the active GM's client otherwise; the refusal is shown rather than thrown.
+ *
+ * `actor` (a creature a bond made) and `at` (a picked canvas point) are door 4's
+ * (`summonQueryHandler`). `sceneId` is the scene the summoner's token stood on where
+ * the call was made (the B2 review): the GM's client finds the token there first.
  */
-export async function placeSummon({ summoner, entry, count = 1, side = "summoner" }) {
-  const payload = { summonerUuid: summoner.uuid, entry, count, side };
+export async function placeSummon({ summoner, entry = null, count = 1, side = "summoner", actor = null, at = null, sceneId = null }) {
+  const payload = {
+    summonerUuid: summoner.uuid, entry, count, side, actorUuid: actor?.uuid ?? null, at: at ? { x: at.x, y: at.y } : null,
+    sceneId: typeof sceneId === "string" && sceneId ? sceneId : null
+  };
   try {
     if (game.user.isGM) return await summonQueryHandler(payload, { user: game.user });
     const gm = game.users.activeGM;

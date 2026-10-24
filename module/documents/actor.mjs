@@ -21,7 +21,9 @@
  */
 
 import { addClassEntry, hostileExposures, poolsFor, removeClassEntry, secondaryLevel, setCharacterLevel } from "../rules/progression.mjs";
-import { evaluateAmount, featurePatchesFor, featureTickStamp, featuresFor, raceTraitFor, refreshes, usesMaxFor } from "../rules/class-features.mjs";
+import { evaluateAmount, featurePatchesFor, featureRungs, featureTickStamp, featuresFor, raceTraitFor, refreshes, usesMaxFor } from "../rules/class-features.mjs";
+// Whom an area Use reaches (the B6 fix; the lead: *"Measure the area"*).
+import { cleanWho } from "../rules/area-gather.mjs";
 import { grantsFor, healBonusFor, healingPatchesFor, passivesFor, patchFeature, patchesFor, spellGrantsFor, talentEffectDiff, wardPierceFor } from "../rules/talent-effects.mjs";
 // 02's healing features that name one target, which Divine Providence's chip reaches (D-778).
 import { HEALS_ONE_TARGET } from "../rules/class-talents.mjs";
@@ -53,7 +55,18 @@ import { shareBeacon } from "../effects/beacon.mjs";
 // and the roll's payment both read through `riderLines`.
 import { riderDiscountsOf, ridersFor } from "../rules/riders.mjs";
 import { boundOf, releaseAll, releaseAtLongRest, syncBoundFor } from "./bound.mjs";
+// The Legacy branches' B2: the tinker's constructs and gadgets, the gnome's two talents.
+import { constructsFor, isWrecked } from "../rules/constructs.mjs";
+import { BLUEPRINT_FLAG, GADGETS_SPENT_FLAG, OVERCLOCK_ENDS, OVERCLOCK_FLAG, cleanBlueprint, gadgetByKey, gadgetFeature, gadgetSpentSwap, gadgetsKnownFor, knownGadgets } from "../rules/gadgets.mjs";
+// THE LEGACY BRANCHES' DOORS (B1): one fact-builder for a row's gate (doors 15, 17,
+// 18), the ability scope (door 16), and the Watch cleared at a Long Rest (door 18).
+import { wieldFacts } from "../rules/wield.mjs";
+import { WATCH_FLAG, marksFrom } from "../rules/marks.mjs";
+import { targetFactsOf } from "../rules/talent-gates.mjs";
+import { abilityScope } from "../rules/expressions.mjs";
 import { usesAfterRestamp, usesStamp } from "../rules/uses.mjs";
+// A Legacy branch embeds only with its people (04 §1; D-781, door 1).
+import { legacyResync, owedTalents } from "../rules/legacy-branches.mjs";
 import { fatigueState } from "../rules/fatigue.mjs";
 import { gainWhenStruck, unkillableFloor } from "../rules/momentum.mjs";
 // What a blow does beyond its target, run from the one damage door (D-768).
@@ -74,6 +87,15 @@ import { wouldDrop } from "../rules/blow-doors.mjs";
 // What another creature does to a blow, asked as it lands (D-777): a blow moved,
 // a blow divided, a creature held at 1, and 07's Aegis floor.
 import { aegisFloor, askToHold, divideBlow, landShares, redirectBlow } from "../effects/blow-doors.mjs";
+// THE LEGACY BRANCHES' B3 (doors 10, 11 and 25): a Death Step held back or spared, the
+// third one recorded, 06 §10's offer at the second, Ethereal Form's halving at the one
+// damage door, and Life Drain's Health back off what the blow took.
+import { askDeathHold, burialSpares } from "../effects/death-holds.mjs";
+import { THIRD_STEP_FLAG, deathStepDue, thirdStepAt } from "../rules/death-holds.mjs";
+import { OFFER, etherealTaken, offerStands } from "../rules/spirit-realm.mjs";
+import { dyingNow, etherealOn, realmRefusalFor } from "../effects/spirit-realm.mjs";
+import { postPrompt } from "../effects/prompts.mjs";
+import { drainHeal } from "../effects/legacy-uses.mjs";
 // The ONE ally rule, for a door that holds both actors (D-755, D-777).
 import { allyOf } from "../canvas/engaged.mjs";
 import { restCard } from "../dice/rest-card.mjs";
@@ -102,22 +124,33 @@ import { auraBoonsOn, auraStamp, halvedHealing } from "../rules/auras.mjs";
 // exactly that (D-755's review).
 import { defaultChoice } from "../applications/roll-dialog.mjs";
 
+/** What the talent grant reads off the pack's index: the class, the people, and a racial talent's race. */
+const TALENT_INDEX_FIELDS = Object.freeze(["system.className", "system.identifier", "system.legacy", "system.race"]);
+
 /**
  * Embed a class's talents from the pack: every talent whose `className` is
  * the class item's name, skipping any the actor already holds by identifier
  * (a fixture or a GM may have added some by hand). One create call per
  * grant, so the sheet re-renders once.
  *
+ * **A LEGACY'S TWELVE COME ONLY WITH ITS PEOPLE** (04 §1, D-781): a Blademaster
+ * talent is a Warrior's, embedded on an orc Warrior and on no other, through
+ * `rules/legacy-branches.mjs#owedTalents`. `people` is the race the character
+ * holds as the class lands - handed in, because a race arriving in the same
+ * batch as a stale one leaves two race items on the actor until the old one's
+ * delete lands.
+ *
  * @param {Actor} actor
  * @param {Item[]} classItems  The class items just created on the actor.
+ * @param {{people?: string|null}} [o]  the race the character holds, by name
  */
-async function grantClassTalents(actor, classItems) {
+async function grantClassTalents(actor, classItems, { people = actor.raceItem?.name ?? null } = {}) {
   const pack = game.packs.get("azeroth-rpg.talents");
   if (!pack || !classItems.length) return;
-  const names = new Set(classItems.map(c => c.name));
-  const index = await pack.getIndex({ fields: ["system.className", "system.identifier"] });
+  const names = [...new Set(classItems.map(c => c.name))];
+  const index = await pack.getIndex({ fields: [...TALENT_INDEX_FIELDS] });
   const held = new Set(actor.items.filter(i => i.type === "talent").map(i => i.system?.identifier));
-  const wanted = index.filter(e => names.has(e.system?.className) && !held.has(e.system?.identifier));
+  const wanted = owedTalents(index, { classNames: names, people }).filter(e => !held.has(e.system?.identifier));
   if (!wanted.length) return;
   const docs = await Promise.all(wanted.map(e => pack.getDocument(e._id)));
   // The actor may have been deleted while the pack was read (a test's
@@ -178,6 +211,54 @@ async function grantRaceTalents(actor, race) {
 }
 
 /**
+ * **THE LEGACY BRANCHES A CHARACTER'S PEOPLE KEEPS, AND NO OTHER** (04 §1, D-781):
+ * the resync a race's arrival, change and departure make. The new people's
+ * branch on every class held is embedded untaken; another people's is withdrawn
+ * whole, taken ranks and all, and the points spent in it come back with it,
+ * because spent points are read off the talents held (`rules/legacy-branches.mjs`
+ * says why that is not D-713's refund). What a withdrawn talent granted leaves
+ * through the feature sync, run after.
+ *
+ * `people` is handed in by the race's arrival (two race items stand together
+ * until a stale one's delete lands); the departure reads the race left.
+ *
+ * @param {Actor} actor
+ * @param {{people?: string|null}} [o]
+ * @returns {Promise<{embedded: number, withdrawn: number}>}
+ */
+async function syncLegacyTalents(actor, { people = actor.raceItem?.name ?? null } = {}) {
+  const none = { embedded: 0, withdrawn: 0 };
+  if (actor.type !== "character") return none;
+  const pack = game.packs.get("azeroth-rpg.talents");
+  if (!pack) return none;
+  const gone = () => (actor.isToken ? !actor.token?.parent : !game.actors.has(actor.id));
+  if (gone()) return none;
+  // Every class item the actor holds: `_preCreate` refuses a third, so these are
+  // the classes, linked or about to be.
+  const classNames = [...new Set(actor.items.filter(i => i.type === "class").map(i => i.name))];
+  const held = actor.items
+    .filter(i => i.type === "talent" && !i.system?.race)
+    .map(i => ({ id: i.id, className: i.system?.className ?? "", identifier: i.system?.identifier ?? "", legacy: i.system?.legacy ?? "" }));
+  const index = await pack.getIndex({ fields: [...TALENT_INDEX_FIELDS] });
+  const { embed, withdraw } = legacyResync({ held, index, classNames, people });
+  if (!embed.length && !withdraw.length) return none;
+  try {
+    // Only what is still there: a class leaving at the same moment takes its
+    // own talents with it (`_onDeleteDescendantDocuments`).
+    const still = withdraw.filter(id => actor.items.has(id));
+    if (still.length) await actor.deleteEmbeddedDocuments("Item", still);
+    if (embed.length) {
+      const docs = await Promise.all(embed.map(e => pack.getDocument(e._id)));
+      if (!gone()) await actor.createEmbeddedDocuments("Item", docs.filter(Boolean).map(d => d.toObject()));
+    }
+    if (withdraw.length && !gone()) await actor.syncClassFeatures?.();
+  } catch (err) {
+    if (!gone()) throw err;
+  }
+  return { embedded: embed.length, withdrawn: withdraw.length };
+}
+
+/**
  * **A HEALING FEATURE'S STAMP WITH THE `healing` ROWS LAID ON IT** (the lead,
  * 2026-10-03, on O-160: *"Yes."* to *does "your healing features" count a healing
  * feature the character holds from a second class?*; D-778): Devotion's and Holy
@@ -216,19 +297,33 @@ function featureStamp(cls, f, { tier = 1, level = 1 } = {}) {
     level: f.level,
     kind: f.kind,
     action: f.action ?? null,
-    cost: { pool: f.cost?.pool ?? null, amount: f.cost?.amount ?? 0, all: f.cost?.all === true },
+    // And when it is paid: on the Test's success, where 02 says so (the B8a2 pass).
+    cost: { pool: f.cost?.pool ?? null, amount: f.cost?.amount ?? 0, all: f.cost?.all === true, on: f.cost?.on === "success" ? "success" : null },
     casting: f.casting === true,
     dc: f.dc ?? null,
     uses: { value: usesMax, max: usesMax, per: f.uses?.per ?? null },
     heal: f.heal ?? null,
-    damage: { amount: f.damage ? String(f.damage.amount) : null, type: f.damage?.type ?? null },
+    // And whether a passed Test takes half of it (the lead: *"Build it everywhere"*), or
+    // none of it, where the failure is what deals it (02's Shadow Word: Death; the B8a pass).
+    damage: { amount: f.damage ? String(f.damage.amount) : null, type: f.damage?.type ?? null, half: f.damage?.half === true, onFail: f.damage?.onFail === true },
     resist: f.resist ?? null,
+    // Whom its area reaches (the lead: *"Measure the area"*), and every rung its Use
+    // may spend (04's Ethereal Form at rank 2) - the whole shapes, so `same()` holds.
+    who: cleanWho(f.who),
+    rungs: featureRungs(f.action ?? null, f.rungs),
+    // The DC the Resist is made against (the Legacy branches' door 16), or null.
+    resistDc: typeof f.resistDc === "string" && f.resistDc ? f.resistDc : null,
     extraAttack: f.extraAttack === true,
     // The shape the Extra Attack needs (02 §7's Druid, D-769), or null.
     extraAttackIn: f.extraAttackIn ?? null,
     // 02 §7's Sprint (D-712): the Moves this turn that cost no Half-Action.
     freeMove: Math.max(0, Math.trunc(Number(f.freeMove ?? 0)) || 0),
     attack: f.attack === true,
+    // HOW MANY presses the card's Attack allows (the architect's review of D-773): `each`,
+    // an amount in `rank` (04's Rapid Fire, `4*rank`), or null for one. **NEVER STAMPED
+    // UNTIL THE LIVE RUN** (B8b): the schema held it and `cardAttackAllowance` read it, so
+    // 02's Divine Storm and 04's Whirlwind, Rapid Fire and Bladestorm allowed one press each.
+    attacks: typeof f.attacks === "string" && f.attacks.trim() ? f.attacks.trim() : null,
     area: f.area ?? "",
     choice: f.choice ?? null,
     // How many the menu takes in one use (02 §7's Totem Mastery, D-710).
@@ -258,7 +353,18 @@ function featureStamp(cls, f, { tier = 1, level = 1 } = {}) {
       // The SL the Casting Test must reach for the card to offer it (04's
       // Pyroblast at rank 2: *a Casting Test at SL 3 or better also applies
       // Stun*; D-775), null where any success offers it.
-      sl: Number.isInteger(i.sl) && i.sl > 0 ? i.sl : null
+      sl: Number.isInteger(i.sl) && i.sl > 0 ? i.sl : null,
+      // The Test to end it (the Legacy branches' door 19), bound at the rank by
+      // `grantsFor`: THE WHOLE SHAPE, nulls included, so `same()` matches the
+      // schema's initials on a feature that carries none.
+      escape: {
+        on: typeof i.escape?.on === "string" && i.escape.on ? i.escape.on : null,
+        resilience: typeof i.escape?.resilience === "string" && i.escape.resilience ? i.escape.resilience : null,
+        dc: typeof i.escape?.dc === "string" && i.escape.dc ? i.escape.dc : null,
+        banes: Math.max(0, Math.min(3, Math.trunc(Number(i.escape?.banes)) || 0))
+      },
+      // Whether the card's Test governs it (the lead: *"Land automatically"*).
+      onFail: i.onFail === true
     })),
     reminder: {
       kinds: f.reminder?.kinds ?? [],
@@ -282,6 +388,14 @@ async function spellFromPack(name) {
   const index = await pack.getIndex();
   const entry = index.find(e => e.name === name);
   return entry ? pack.getDocument(entry._id) : null;
+}
+
+/**
+ * A suit worn or a weapon held (the Legacy branches' door 15): what a wield-gated
+ * passive reads, so its arrival or its going re-syncs the talents' effects.
+ */
+function wornOrWielded(item) {
+  return (item?.type === "armor" || item?.type === "weapon") && item?.system?.equipped === true;
 }
 
 /** Deep equality over plain data, with null and undefined the same absence. */
@@ -371,6 +485,27 @@ export class AzerothActor extends Actor {
   prepareData() {
     super.prepareData();
     this.system?.afterFinalPhase?.();
+  }
+
+  /**
+   * @inheritDoc
+   *
+   * **ONLY THE TOKENS A SCENE HOLDS ARE THIS ACTOR'S DEPENDENTS** (found live in B8b;
+   * 14.367's own `concreteOnly`, which core's JSDoc says becomes the default in v15).
+   * Core registers EVERY TokenDocument it constructs with a scene as one of its
+   * actor's dependents (client/documents/token.mjs L434) - among them the pending
+   * document `ClientDatabaseBackend##preCreateDocumentArray` builds for `_preCreate`
+   * on every token created (client/data/client-backend.mjs L92), which stays
+   * registered until it is collected - and then visits all of them with the
+   * default `false`: an actor update reads `.object` on each
+   * (`TokenDocument#_onRelatedUpdate`), building an undrawn Token for one on the
+   * viewed scene, and the next special status (Invisible, Blind) reaches that
+   * Token in `Actor#prepareData` and throws on its missing mesh - *Failed data
+   * preparation*, and the real token's own refresh skipped. A caller that wants
+   * the pending ones asks for them by name (`concreteOnly: false`).
+   */
+  getDependentTokens({ concreteOnly = true, ...options } = {}) {
+    return super.getDependentTokens({ ...options, concreteOnly });
   }
 
   /* -------------------------------------------- */
@@ -585,7 +720,8 @@ export class AzerothActor extends Actor {
     // A shield created ALREADY IN HAND moves Shield of Faith (D-648, D-768):
     // the sync ran only on an `equipped` or `shield` UPDATE, so a shield dropped
     // straight into the off hand gave no Defense until something else re-synced.
-    if (this.type === "character" && documents.some(d => isEquippedShield(d))) {
+    // And a suit or a weapon arriving in hand moves a wield-gated passive (door 15).
+    if (this.type === "character" && documents.some(d => isEquippedShield(d) || wornOrWielded(d))) {
       this.syncTalentEffects().catch(err => console.error("azeroth-rpg | talent effects", err));
     }
 
@@ -647,8 +783,14 @@ export class AzerothActor extends Actor {
       const classes = documents.filter(d => d.type === "class");
       if (classes.length || race) {
         let grant = linked;
-        if (classes.length) grant = grant.then(() => grantClassTalents(this, classes));
+        // The race the character holds as the class lands: the one arriving with
+        // it, else the one it already has (a Legacy comes with its people, D-781).
+        const people = (race ?? this.raceItem)?.name ?? null;
+        if (classes.length) grant = grant.then(() => grantClassTalents(this, classes, { people }));
         if (race) grant = grant.then(() => grantRaceTalents(this, race));
+        // A race arriving or changing brings its people's Legacy branch onto every
+        // class held and takes another people's away (04 §1, D-781).
+        if (race) grant = grant.then(() => this.syncLegacyBranches({ people: race.name }));
         // Exposed so a caller that means to delete the actor straight after
         // (a test's teardown) can wait for it: the server logs a refused
         // create to the console before the rejection reaches any catch.
@@ -677,8 +819,9 @@ export class AzerothActor extends Actor {
 
     // A shield deleted WHILE HELD takes Shield of Faith's Defense with it (D-648,
     // D-768). The deleted documents still carry their data, and the collection
-    // no longer holds them, so the sync reads the hand as it now is.
-    if (this.type === "character" && documents.some(d => isEquippedShield(d))) {
+    // no longer holds them, so the sync reads the hand as it now is. A suit or a
+    // weapon deleted while worn or held moves a wield-gated passive (door 15).
+    if (this.type === "character" && documents.some(d => isEquippedShield(d) || wornOrWielded(d))) {
       this.syncTalentEffects().catch(err => console.error("azeroth-rpg | talent effects", err));
     }
 
@@ -728,9 +871,41 @@ export class AzerothActor extends Actor {
         .map(i => i.id);
       if (orphaned.length) this.deleteEmbeddedDocuments("Item", orphaned);
       if (this.type === "character") this.syncClassFeatures();
+      // And its Legacy branch (04 §1, D-781): the people left is the race still
+      // held, or none, and the resync withdraws every branch it does not keep.
+      // After any grant still landing, so a class granted in the same moment is
+      // not given its Legacy twice.
+      if (this.type === "character") {
+        // A resync that fails is said in words and warned of, never logged as an
+        // error (CLAUDE.md §16: the smoke run fails on any console error): the race's
+        // change stands either way.
+        Promise.resolve(this._talentGrant).catch(() => {})
+          .then(() => this.syncLegacyBranches({ people: this.raceItem?.name ?? null }))
+          .catch(err => {
+            ui.notifications?.warn(game.i18n.format("AZEROTH.Talent.LegacySyncFailed", { name: this.name }));
+            console.warn("azeroth-rpg | Legacy branches", err);
+          });
+      }
     }
 
     if (Object.keys(update).length) this.update(update);
+  }
+
+  /**
+   * **THE CHARACTER'S LEGACY BRANCHES, BROUGHT INTO LINE WITH ITS PEOPLE** (04 §1,
+   * D-781): its people's Legacy embedded on every class it holds, another
+   * people's withdrawn. One write at a time on this actor - a race's arrival and
+   * the stale race's departure each ask, and the second must read what the first
+   * wrote rather than delete the same talents again.
+   *
+   * @param {{people?: string|null}} [o]  the race to sync to, by name; the one held by default
+   * @returns {Promise<{embedded: number, withdrawn: number}>}
+   */
+  syncLegacyBranches({ people } = {}) {
+    const run = () => syncLegacyTalents(this, people === undefined ? {} : { people });
+    const next = (this._legacySync ?? Promise.resolve()).catch(() => {}).then(run);
+    this._legacySync = next;
+    return next;
   }
 
   /**
@@ -743,6 +918,8 @@ export class AzerothActor extends Actor {
    */
   async delete(operation = {}) {
     await this._talentGrant?.catch?.(() => {});
+    // And a race's Legacy resync (D-781), which embeds and withdraws on its own queue.
+    await this._legacySync?.catch?.(() => {});
     await this._featureSync?.catch?.(() => {});
     // And the talent effects' own queue (D-768), so no effect is written onto
     // an actor the server has already deleted.
@@ -907,6 +1084,9 @@ export class AzerothActor extends Actor {
       .filter(i => i.type === "talent" && (i.system.taken ?? 0) > 0)
       .map(i => ({
         id: i.id, identifier: i.system.identifier, className: i.system.className, branch: i.system.branch,
+        // A racial talent's people (02 §5): `RACE_TALENT_EFFECTS` is keyed by it, so a
+        // gnome's Overclock and Mekkatorque's Blueprint grant their Uses (B2, door 7).
+        race: i.system.race ?? null,
         tier: i.system.tier ?? 0, name: i.name, effect: i.system.effect, taken: i.system.taken, img: i.img
       }))
       .sort((a, b) => String(a.branch ?? "").localeCompare(String(b.branch ?? ""))
@@ -944,6 +1124,36 @@ export class AzerothActor extends Actor {
         cls: { id: talent.id, name: talent.className, img: talent.img }, f: withHealingPatches(feature, taken), talentId: talent.id, rank: feature.rank
       });
     }
+    // **EACH GADGET KNOWN IS A FEATURE WITH ITS OWN USE** (04's Gadgeteer: *Each
+    // gadget you know may be used once between Short Rests*; the Legacy branches'
+    // door 7): the gadgets the Gadgeteer feature's chooser named (`system.known`), as
+    // many as the ranks know (`gadgetsKnownFor`: Gadgeteer's two or four, Engineering
+    // Upgrade's one a rank), keyed by the granting talent and the gadget, so each
+    // keeps its own counter. A rank taken back drops the last named.
+    const gadgetsAllowed = gadgetsKnownFor(taken).known;
+    const gadgetGrants = (item, talentId) => {
+      const talent = taken.find(t => t.id === talentId) ?? null;
+      return { cls: { id: talentId, name: talent?.className ?? item.system?.className ?? "", img: talent?.img ?? item.img }, talentId, rank: talent?.taken ?? 1 };
+    };
+    for (const item of this.items.filter(i => i.type === "feature" && i.system?.choice === "gadgets")) {
+      const talentId = item.getFlag("azeroth-rpg", "feature")?.talentId ?? null;
+      if (!talentId || !taken.some(t => t.id === talentId)) continue;
+      for (const gadget of knownGadgets(item.system?.known ?? [], gadgetsAllowed)) {
+        wanted.set(`${talentId}/${gadget.name}`, { ...gadgetGrants(item, talentId), f: gadgetFeature(gadget), gadget: gadget.key });
+      }
+    }
+    // **AND THE GADGET MEKKATORQUE'S BLUEPRINT BUILT** (02's gnome: *build one ...
+    // gadget from 04-TALENTS ... It works for a day*): one more, keyed by the racial
+    // talent, until the Long Rest takes the flag.
+    const blueprint = cleanBlueprint(this.getFlag("azeroth-rpg", BLUEPRINT_FLAG));
+    const builtGadget = blueprint?.gadget ? gadgetByKey(blueprint.gadget) : null;
+    if (builtGadget && blueprint.talentId && taken.some(t => t.id === blueprint.talentId)) {
+      const talent = taken.find(t => t.id === blueprint.talentId);
+      wanted.set(`${blueprint.talentId}/${builtGadget.name}`, {
+        cls: { id: blueprint.talentId, name: talent.className || (talent.race ?? ""), img: talent.img }, f: gadgetFeature(builtGadget),
+        talentId: blueprint.talentId, rank: talent.taken ?? 1, gadget: builtGadget.key
+      });
+    }
 
     const owned = this.items.filter(i => i.type === "feature");
     const held = new Map();
@@ -961,10 +1171,12 @@ export class AzerothActor extends Actor {
     // that moves the tier writes `system.classes`, whose update syncs again, so
     // the counter follows it.
     const tier = this.system?.tier ?? 1;
-    for (const [key, { cls, f, talentId = null, rank = null }] of wanted) {
+    for (const [key, { cls, f, talentId = null, rank = null, gadget = null }] of wanted) {
       const stamp = featureStamp(cls, f, { tier, level });
       const item = held.get(key);
-      const flag = { classId: cls.id, name: f.name, ...(talentId ? { talentId, rank } : {}) };
+      // A gadget's feature names its gadget (door 7): `useFeature` reads its Use off
+      // 04's Gadgets table by that key, never off the talent that granted it.
+      const flag = { classId: cls.id, name: f.name, ...(talentId ? { talentId, rank } : {}), ...(gadget ? { gadget } : {}) };
       if (!item) {
         creates.push({
           name: f.name, type: "feature", img: cls.img, system: stamp,
@@ -1012,9 +1224,25 @@ export class AzerothActor extends Actor {
     }
 
     const doomed = [...stale, ...staleSpells].filter(id => this.items.has(id));
+    // **A GADGET SWAPPED OUT AND BACK KEEPS ITS SPENT USE** (04's Gadgeteer; the B2
+    // review): what a withdrawn gadget had left is recorded, and a gadget granted again
+    // takes it - never a fresh use without a Short Rest (`rules/gadgets.mjs#gadgetSpentSwap`).
+    const swap = gadgetSpentSwap(this.getFlag("azeroth-rpg", GADGETS_SPENT_FLAG) ?? {}, {
+      withdrawn: doomed.map(id => this.items.get(id)).filter(i => i?.type === "feature" && i.getFlag("azeroth-rpg", "feature")?.gadget)
+        .map(i => ({ gadget: i.getFlag("azeroth-rpg", "feature").gadget, value: i.system?.uses?.value ?? 0, max: i.system?.uses?.max ?? 0 })),
+      granted: creates.map(c => c.flags?.["azeroth-rpg"]?.feature?.gadget).filter(Boolean)
+    });
+    for (const c of creates) {
+      const key = c.flags?.["azeroth-rpg"]?.feature?.gadget ?? null;
+      if (key && key in swap.values && c.system?.uses) c.system = { ...c.system, uses: { ...c.system.uses, value: Math.min(c.system.uses.max ?? 0, swap.values[key]) } };
+    }
     if (doomed.length) await this.deleteEmbeddedDocuments("Item", doomed);
     if (updates.length) await this.updateEmbeddedDocuments("Item", updates);
     if (creates.length) await this.createEmbeddedDocuments("Item", creates);
+    // Replaced whole: a flag object is merged, and a gadget's record that went must go.
+    if (swap.changed && this.isOwner) {
+      await this.update({ [`flags.azeroth-rpg.${GADGETS_SPENT_FLAG}`]: foundry.data.operators.ForcedReplacement.create(swap.record) });
+    }
     // The creatures bound to this character take its talents' effects (D-643),
     // and the character its own passives (D-648).
     await this.syncBound().catch(err => console.error("azeroth-rpg | bound sync", err));
@@ -1060,7 +1288,11 @@ export class AzerothActor extends Actor {
     // to this character (D-643). MY READING, for the lead: a bound totem stands,
     // its token placed or not - the bond is the totem, the token the board's.
     const totem = boundOf(this, "totem").length > 0;
-    const desired = passivesFor(taken, { form, shield: shield && !(shape && meldsGear(shape.kind)), totem });
+    // *While you wear no armor in your Chest slot*, *While you wield a two-handed
+    // weapon* (04's Wolf's Pace, Blade Circle; the Legacy branches' door 15): what is
+    // worn and held, measured by the one law - melded weapons wielded by nobody.
+    const wield = wieldFacts([...this.items], { melded: Boolean(shape && meldsGear(shape.kind)) });
+    const desired = passivesFor(taken, { form, shield: shield && !(shape && meldsGear(shape.kind)), totem, wield });
     const held = this.effects
       .filter(e => e.getFlag("azeroth-rpg", "talentEffect"))
       .map(e => ({ id: e.id, identifier: e.getFlag("azeroth-rpg", "talentEffect"), changes: e.system?.changes ?? [] }));
@@ -1095,8 +1327,11 @@ export class AzerothActor extends Actor {
     if (this.type !== "character" || collection !== "items" || game.user.id !== userId) return;
     const moved = documents.some((doc, i) => doc.type === "talent" && foundry.utils.hasProperty(changes[i] ?? {}, "system.taken"));
     if (moved) this.syncClassFeatures();
-    // A shield equipped or set down moves Shield of Faith (D-648).
-    const worn = documents.some((doc, i) => doc.type === "armor" && (foundry.utils.hasProperty(changes[i] ?? {}, "system.equipped") || foundry.utils.hasProperty(changes[i] ?? {}, "system.shield")));
+    // A shield equipped or set down moves Shield of Faith (D-648). **And a suit or
+    // a weapon taken up or set down moves a wield-gated passive** (04's Wolf's Pace,
+    // Blade Circle; the Legacy branches' door 15): the hand it is in, the type it is.
+    const worn = documents.some((doc, i) => (doc.type === "armor" && (foundry.utils.hasProperty(changes[i] ?? {}, "system.equipped") || foundry.utils.hasProperty(changes[i] ?? {}, "system.shield")))
+      || (doc.type === "weapon" && ["system.equipped", "system.offHand", "system.weaponType"].some(k => foundry.utils.hasProperty(changes[i] ?? {}, k))));
     if (worn) this.syncTalentEffects().catch(err => console.error("azeroth-rpg | talent effects", err));
     // ONE THING IN EACH SLOT, WHATEVER DOOR IT CAME THROUGH (08 §11, D-686).
     // The Gear tab's button asks `displacedBy` before it writes, and the item
@@ -1257,6 +1492,15 @@ export class AzerothActor extends Actor {
       updates.push({ _id: item.id, "system.signatureEffect.use.uses.value": uses.max });
       names.push(item.name);
     }
+    // **AN OVERCLOCK ENDS WITH THE ENCOUNTER, OR AT A REST** (02's gnome; the B2 review):
+    // the mark Overclock leaves on a gadget's feature (`rules/gadgets.mjs#OVERCLOCK_FLAG`)
+    // comes off unused - it is the next Use's, and *once per encounter* is its clock.
+    if (OVERCLOCK_ENDS.includes(event)) {
+      for (const item of this.items) {
+        if (!item.flags?.["azeroth-rpg"]?.[OVERCLOCK_FLAG]) continue;
+        updates.push({ _id: item.id, [`flags.azeroth-rpg.${OVERCLOCK_FLAG}`]: foundry.data.operators.ForcedDeletion.create() });
+      }
+    }
     // ONE ENTRY PER DOCUMENT. A piece of gear can carry both a `use` of its
     // own and a Signature, and core takes the last of two rows naming the same
     // `_id` - so the second refill would have silently discarded the first.
@@ -1265,6 +1509,10 @@ export class AzerothActor extends Actor {
       return map;
     }, new Map()).values()];
     if (merged.length) await this.updateEmbeddedDocuments("Item", merged);
+    // A rest refreshes every gadget's use, so the record a swap kept goes with it (the B2 review).
+    if ((event === "short" || event === "long") && this.getFlag("azeroth-rpg", GADGETS_SPENT_FLAG) !== undefined && this.isOwner) {
+      await this.unsetFlag("azeroth-rpg", GADGETS_SPENT_FLAG);
+    }
     return names;
   }
 
@@ -1459,6 +1707,9 @@ export class AzerothActor extends Actor {
   async longRest() {
     // **AN AVATAR OR A METAMORPHOSIS ENDS WITH THE REST** (02 §7, D-769).
     await endShapeAt(this, "long");
+    // **THE LONG WATCH ENDS WITH IT** (04: *Until your next Long Rest you know its
+    // direction and rough distance*; the Legacy branches' door 18): the user's own flag.
+    if (this.getFlag?.("azeroth-rpg", WATCH_FLAG)) await this.unsetFlag("azeroth-rpg", WATCH_FLAG);
     // **AND EVERY TEMPORARY HEALTH IS LOST** (05: *no rest returns it*; the
     // rulings' READING, 2026-10-03, for the lead: lost at a Long Rest whatever its
     // span; D-777).
@@ -1510,6 +1761,16 @@ export class AzerothActor extends Actor {
     // again until your next Long Rest*.
     if (this.type === "character") await releaseAtLongRest(this);
     if (this.getFlag("azeroth-rpg", SACRIFICED_FLAG)) await this.unsetFlag("azeroth-rpg", SACRIFICED_FLAG);
+    // **WHAT MEKKATORQUE'S BLUEPRINT BUILT WORKS FOR A DAY** (02's gnome; the Legacy
+    // branches' door 7; MY READING: the day is the Long Rest's): the device carried
+    // goes, the gadget's flag goes and the sync takes its feature, and the Use the
+    // rest gives back builds the next.
+    const built = cleanBlueprint(this.getFlag("azeroth-rpg", BLUEPRINT_FLAG));
+    if (this.getFlag("azeroth-rpg", BLUEPRINT_FLAG) !== undefined) {
+      if (built?.itemId && this.items.has(built.itemId)) await this.deleteEmbeddedDocuments("Item", [built.itemId]);
+      await this.unsetFlag("azeroth-rpg", BLUEPRINT_FLAG);
+      if (built?.gadget) await this.syncClassFeatures();
+    }
     const restored = await this.resetUses("long");
     const cleared = await this.clearSundered();
     if (this.getFlag("azeroth-rpg", "shortRests")) await this.unsetFlag("azeroth-rpg", "shortRests");
@@ -1553,11 +1814,14 @@ export class AzerothActor extends Actor {
   }
 
   /** 05 §12: Energy and Focus refill at the start of the turn. */
-  async refillTurn() {
+  async refillTurn({ still = false } = {}) {
     // 04's Adrenaline (D-773): *Your Energy pool returns 1 more per rank at the
     // start of your turn*, beside 05 §12's own refill.
     const extra = this.type === "character" ? turnStartRestoreFor(this.takenTalents()).byPool : {};
-    const changes = turnRefill(this.poolSnapshot(), { extra });
+    // 02's Focus refills only after a still turn (the Legacy branches' door 9):
+    // `still` is the combat door's measure, and a caller that names none refills
+    // no Focus (`rules/rest.mjs#turnRefill`, a gate closed by default).
+    const changes = turnRefill(this.poolSnapshot(), { extra, still: still === true });
     return changes.length ? this.updatePool(changes) : this;
   }
 
@@ -1846,11 +2110,39 @@ export class AzerothActor extends Actor {
    * @param {{amount?: number}} [options]  what is due
    * @returns {{actor: Actor, pool: object, shared: boolean}|null}
    */
+  /**
+   * **WHOSE COMBO POINTS A FINISHER ON THIS CREATURE'S BLOW SPENDS** (02 §7; 04's
+   * Supercharge: *Your Finisher class feature may be spent on an attack one of your
+   * constructs makes*; the Legacy branches' door 6): its own - or, a construct whose
+   * tinker holds the talent and whom this client may write, the tinker. The roll
+   * dialog's offer and `rollTest`'s payment both read it, so they cannot disagree.
+   * A sibling of `momentumPayer` rather than a branch of it: Supercharge pays the
+   * Finisher alone, and a maneuver's Momentum is no Finisher.
+   *
+   * @returns {Actor}
+   */
+  finisherPayer() {
+    if (this.type !== "npc") return this;
+    const bond = this.getFlag?.("azeroth-rpg", "bond") ?? null;
+    if (bond?.kind !== "construct" || !bond.ownerUuid) return this;
+    let owner = null;
+    try {
+      owner = fromUuidSync(bond.ownerUuid);
+    } catch {
+      owner = null;
+    }
+    if (owner?.documentName !== "Actor" || !owner.isOwner) return this;
+    return constructsFor(owner.takenTalents?.() ?? [], { tier: owner.system?.tier ?? 1 }).finisher ? owner : this;
+  }
+
   momentumPayer({ amount = 0 } = {}) {
     const own = this.system?.momenta?.[0] ?? (this.poolSnapshot?.() ?? []).find(p => p.kind === "momentum") ?? null;
     let owner = null;
     let quarry = null;
-    if (!own && this.type === "npc") {
+    // A companion's Ranger is asked WHATEVER the companion's own pool: every creature
+    // holds the tool's Momentum floor, so this read `!own` and never reached the
+    // Quarry at all - the price decides, in `momentumPayer` (found live in B8b).
+    if (this.type === "npc") {
       const bond = this.getFlag?.("azeroth-rpg", "bond") ?? null;
       if (bond?.kind === "companion" && bond.ownerUuid) {
         try {
@@ -1906,7 +2198,7 @@ export class AzerothActor extends Actor {
    *   one that needs it (04's Garrote, D-773) - null where nothing could say
    * @returns {Array<object>} `rules/riders.mjs#ridersFor`'s lines; none for a creature
    */
-  riderLines({ weapon = null, opening = null } = {}) {
+  riderLines({ weapon = null, opening = null, target = null } = {}) {
     if (this.type !== "character") return [];
     const fight = this.activeFight();
     const combatant = fight ? fight.getCombatantsByActor(this)?.[0] ?? null : null;
@@ -1925,8 +2217,44 @@ export class AzerothActor extends Actor {
       usedThisRound,
       primed,
       activeDiscounts: riderDiscountsOf(this.effects.filter(e => e.active !== false).map(e => e.flags?.["azeroth-rpg"] ?? {})),
-      tier: this.system?.tier ?? 1
+      tier: this.system?.tier ?? 1,
+      // **WHAT THE TARGET IS, FOR A RIDER MADE FREE AGAINST IT** (04's Cursed Prey at
+      // rank 2: *your Jinx costs no Mana against it*; the Legacy branches' door 17),
+      // through the one fact-builder; null where nobody is targeted.
+      facts: target ? this.gateFacts(target) : null,
+      // And the striker's ability modifiers for an amount that names one (door 16).
+      abilities: abilityScope(this.system)
     });
+  }
+
+  /**
+   * **WHAT A ROW'S GATE READS ABOUT THIS CREATURE AND ONE TARGET** (the Legacy
+   * branches' doors 15, 17 and 18): the ONE builder every door hands
+   * `rules/talent-gates.mjs#gateHolds` - the attack's dialog lines, the roll's gains
+   * after the die, the card's damage, a rider's free cost.
+   *
+   * - `wield`: `rules/wield.mjs#wieldFacts` off what this creature holds - a shape
+   *   melds the weapons (D-769);
+   * - `target`: `targetFactsOf` the snapshot - its conditions, its kinds, what this
+   *   creature or one of its totems laid on it, and whether this creature's marks
+   *   name it;
+   * - `challenged`, `watched`: the two mark facts as names, for a row whose `when`
+   *   is the word (Mak'gora's `critical`, The Challenge's `targetBoon`).
+   *
+   * @param {object|null} target  a target snapshot (`roll-dialog.mjs#targetSnapshots`)
+   * @returns {{wield: object, target: object|null, challenged: boolean, watched: boolean}}
+   */
+  gateFacts(target = null) {
+    const shape = this.type === "character" ? (this.shape ?? null) : null;
+    const wield = wieldFacts([...(this.items ?? [])], { melded: Boolean(shape && meldsGear(shape.kind)) });
+    const marks = marksFrom({
+      effects: (this.effects ?? []).filter(e => e.active !== false).map(e => e.flags?.["azeroth-rpg"] ?? {}),
+      watch: this.getFlag?.("azeroth-rpg", WATCH_FLAG) ?? null
+    });
+    // *You or one of your totems* (04's Cursed Prey): the totems bound to this creature.
+    const own = [this.uuid, ...(this.type === "character" ? boundOf(this, "totem").map(t => t.uuid) : [])];
+    const facts = targetFactsOf(target, { own, marks });
+    return { wield, target: facts, challenged: facts?.challenged === true, watched: facts?.watched === true };
   }
 
   /**
@@ -2047,6 +2375,14 @@ export class AzerothActor extends Actor {
    */
   async applyHealing(amount, { from = null, spell = false, feature = false, shared = false, featureName = null, overflow = false, overflowSource = "", aegis = null, unreduced = false } = {}) {
     const before = this.system?.health?.value ?? 0;
+    // **A WRECKED CONSTRUCT TAKES NO HEALING** (04's The Bench: *rebuilding one
+    // wrecked at 0 Health* takes a Short Rest and a tinker's kit; the Legacy
+    // branches' door 6): The Bench's rebuild stands it up, and a heal is no rebuild
+    // (MY READING, for the lead). Said, and nothing lands.
+    if (this.type === "npc" && isWrecked({ kind: this.getFlag?.("azeroth-rpg", "bond")?.kind ?? null, health: before }) && Math.trunc(amount) > 0) {
+      ui.notifications?.info(game.i18n.format("AZEROTH.Construct.WreckedNoHeal", { name: this.name }));
+      return this;
+    }
     let healed = Math.max(0, Math.trunc(amount));
     // **04's MIRACLE** (the lead, 2026-10-03, on O-185: *"That healing spell amoutn
     // can't be reduced."*; D-779): a heal the card or its tick marks `unreduced` is
@@ -2231,6 +2567,18 @@ export class AzerothActor extends Actor {
     // refusal leaves the condition where it is.
     // An area that lets a creature stand for nothing (07's Tidecall, D-757:
     // *may stand from **Prone** without spending movement*) waives the charge.
+    // **THE BODY IN THE SPIRIT REALM DOES NOT STAND** (06 §9: *Your body falls Prone and
+    // does not move*; the B3 review): the realm's one Half-Action paid for a Stand, and
+    // the Dying character walked on its next turn. Refused in words before anything is
+    // spent; a door that stands the creature up for nothing (`free` - 06 §10's offer
+    // taken, Ancestral Spirit's return) is no Stand and passes.
+    if (!wants && statusId === "prone" && this.type === "character" && !options.free) {
+      const spirit = realmRefusalFor(this, "stand");
+      if (spirit) {
+        ui.notifications?.warn(spirit);
+        return false;
+      }
+    }
     if (!wants && statusId === "prone" && this.type === "character" && !options.free && this.system?.standsFree !== true) {
       if (!(await game.system.azeroth.workflows.spendTurnBudget(this, "half"))) return false;
     }
@@ -2244,17 +2592,87 @@ export class AzerothActor extends Actor {
     return super.toggleStatusEffect(statusId, options);
   }
 
-  /** A Death Step (06 SS8): the third is the end, said once in chat and nothing more. */
+  /**
+   * A Death Step (06 SS8): the third is the end, said once in chat and nothing more.
+   * EVERY Death Step comes through here - a failed Test at the turn's start, Bleeding
+   * on the Dying, an attack against a Dying creature - so the Legacy branches' door 11
+   * and 06 §10's offer have one door:
+   *
+   * - **04's Hold the Thread, asked BEFORE the step is written** (*A creature within 30
+   *   feet that would take a Death Step does not take it*): every holder in reach, in
+   *   turn, through the blow doors' own query pattern (`effects/death-holds.mjs
+   *   #askDeathHold`); a yes paid its Reaction, its Mana and a use, and no step is taken.
+   * - **The third step is recorded as it is taken** (`flags.azeroth-rpg.thirdStep`,
+   *   `rules/death-holds.mjs#thirdStepAt`): 04's Ancestral Spirit reads *since the end
+   *   of your last turn* off it.
+   * - **06 §10's offer at the second step** (*When you take your second Death Step,
+   *   something notices you*): a prompt the character's owner sees, its Take button
+   *   the offer's own door (`effects/spirit-realm.mjs#takeOffer`). It stands until the
+   *   character dies or leaves, so each Dying turn after offers it again
+   *   (`AzerothCombat#_turnTicks`).
+   */
   async takeDeathStep() {
     if (this.type !== "character") return this;
+    // **STILL DUE, BEFORE THE ASK AND AFTER IT** (the B3 review; `rules/death-holds.mjs
+    // #deathStepDue`): at 0 Health or below and short of the third step. A character
+    // already at its third is past every hold, so none is asked or paid for; and a
+    // holder's dialog stands open up to `ASK_MS`, so a heal, a Tether or the offer that
+    // landed meanwhile leaves no step to write - and no DeathStepsOut card.
+    const due = () => deathStepDue({
+      type: this.type, health: this.system?.health?.value ?? null, steps: this.system?.deathSteps ?? 0, max: AZEROTH.DEATH_STEPS
+    });
+    if (!due()) return this;
+    let held = { held: false };
+    try {
+      held = await askDeathHold({ target: this });
+    } catch (err) {
+      // The ask failing takes the step, said in words and warned of (CLAUDE.md §16).
+      ui.notifications?.warn(game.i18n.format("AZEROTH.DeathHold.AskFailed", { name: this.name }));
+      console.warn("azeroth-rpg | hold the thread", err);
+    }
+    if (!held.held && !due()) return this;
+    if (held.held) {
+      await ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor: this }),
+        content: `<p class="azeroth-drain">${game.i18n.format("AZEROTH.DeathHold.Held", { holder: held.holder?.name ?? "", name: this.name, talent: held.name ?? "" })}</p>`,
+        // **WHO HELD WHOM, BY WHICH TALENT** (the Legacy branches' door 2): the tokens
+        // the reach was measured between and the talent's key, for the hold's cue.
+        flags: { "azeroth-rpg": {
+          kind: "deathHold",
+          featureKey: typeof held.identifier === "string" && held.identifier ? held.identifier : null,
+          source: held.holderToken ?? null,
+          targets: held.targetToken ? [held.targetToken] : []
+        } }
+      });
+      return this;
+    }
     const steps = Math.min(AZEROTH.DEATH_STEPS, (this.system?.deathSteps ?? 0) + 1);
-    await this.update({ "system.deathSteps": steps });
+    const fight = this.activeFight?.() ?? null;
+    const started = Boolean(fight?.started);
+    const third = thirdStepAt({
+      steps, max: AZEROTH.DEATH_STEPS, combatId: started ? fight.id : null, round: started ? fight.round : null,
+      turn: started ? fight.turn : null, time: game.time?.worldTime ?? 0
+    });
+    await this.update({ "system.deathSteps": steps, ...(third ? { [`flags.azeroth-rpg.${THIRD_STEP_FLAG}`]: third } : {}) });
     const key = steps >= AZEROTH.DEATH_STEPS ? "AZEROTH.Combat.DeathStepsOut" : "AZEROTH.Combat.DeathStep";
     await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor: this }),
       content: `<p class="azeroth-drain">${game.i18n.format(key, { name: this.name, steps, max: AZEROTH.DEATH_STEPS })}</p>`,
       flags: { "azeroth-rpg": { kind: "deathStep", steps } }
     });
+    if (steps === OFFER.step && offerStands({ dying: dyingNow(this), steps })) {
+      try {
+        await postPrompt(this, {
+          purpose: "spiritOffer", noTest: true, offer: true, ownerSees: true, cardClass: "azeroth-card-critical",
+          title: game.i18n.localize("AZEROTH.Spirit.Offer.Title"),
+          text: game.i18n.format("AZEROTH.Spirit.Offer.Prompt", { name: this.name })
+        });
+      } catch (err) {
+        // The prompt failing leaves the step written, said in words (CLAUDE.md §16).
+        ui.notifications?.warn(game.i18n.format("AZEROTH.Spirit.Offer.Failed", { name: this.name }));
+        console.warn("azeroth-rpg | the offer", err);
+      }
+    }
     return this;
   }
 
@@ -2314,9 +2732,12 @@ export class AzerothActor extends Actor {
    *   `damage`: what the damage door records of each type, and what a priest's
    *   Ward took off each.
    */
-  async applyDamage(damage, { struck = false, attack = true, location = "body", type = null, messageId = null, by = null, riposte = false, wardTook = 0, spell = false, ignite = false, moved = false, shared = false, parts = null } = {}) {
+  async applyDamage(damage, { struck = false, attack = true, location = "body", type = null, messageId = null, by = null, riposte = false, wardTook = 0, spell = false, ignite = false, moved = false, shared = false, parts = null, drain = null } = {}) {
     let amount = Math.max(0, Math.trunc(damage));
     const before = this.system?.health?.value ?? 0;
+    // What the blow found, Health and temporary Health both, for 04's Life Drain (*You
+    // recover Health equal to the damage it takes*; door 25), read once it is written.
+    const tookFrom = before + Math.max(0, Math.trunc(Number(this.system?.health?.temp)) || 0);
     const max = this.system?.health?.max ?? 0;
     // The shape as the blow found it (D-769): reaching 0 ends an Avatar on the
     // write itself, so `_struckBy` is told what stood before it.
@@ -2369,7 +2790,38 @@ export class AzerothActor extends Actor {
       } catch (err) {
         console.error("azeroth-rpg | blow moved", err);
       }
-      if (redirected.moved) return this;
+      // **A SHARE MOVED LEAVES THE REST HERE** (04's Shared Burden: *Half the damage that
+      // gets past its Armor Points and Ward, rounded down, is dealt to you instead*; the
+      // Legacy branches' B6): what the holder did not take lands on this creature through
+      // the rest of this door, its second amounts still its own. Guardian's whole blow
+      // keeps none, as before.
+      if (redirected.moved) {
+        if (!(Number(redirected.kept) > 0)) return this;
+        amount = Math.trunc(Number(redirected.kept));
+      }
+    }
+    // **04's ETHEREAL FORM** (*Until your next turn physical damage you take is halved,
+    // rounded down*; the Legacy branches' door 10): the physical share of what reaches
+    // this creature - after its own Parry or Block and after a blow moved onto it lands
+    // through its own door, before every standing reduction (a halving halves the whole
+    // blow first, the mark's own rule). A blow's second amounts keep their own types
+    // (D-777); one of an unnamed type is read as physical (MY READING, for the lead: a
+    // creature's attack row names no type for its claws).
+    const ethereal = amount > 0 ? etherealOn(this) : null;
+    if (ethereal) {
+      // Each second amount's own share of what is left of the blow, never more than
+      // is left (a Block may have taken some of it), and the blow's own type the rest.
+      let left = amount;
+      const shares = (parts ?? []).map(p => {
+        const d = Math.min(left, Math.max(0, Math.trunc(Number(p?.damage)) || 0));
+        left -= d;
+        return { type: p?.type ?? null, damage: d };
+      });
+      const share = etherealTaken({ main: left, mainType: type, parts: shares });
+      if (share.halved > 0) {
+        ui.notifications?.info(game.i18n.format("AZEROTH.Ethereal.Halved", { name: this.name, source: ethereal.source, from: amount, to: share.total }));
+        amount = share.total;
+      }
     }
     // **WHAT SOMEBODY ELSE'S SIGNATURE TAKES OFF** (the Bulwark of Tyr's Hand,
     // 08 SS20; D-696): *every other member of your party within 15 feet takes 5
@@ -2426,6 +2878,26 @@ export class AzerothActor extends Actor {
     const hold = await this._holdAtOne({ before, amount, attack, struck });
     amount = hold.amount;
     await this.adjustHealth(-amount, { temp: soaked.temp });
+    // **04's LIFE DRAIN** (*You recover Health equal to the damage it takes*; the Legacy
+    // branches' door 25): what this blow took off this creature's Health and temporary
+    // Health, given to the drainer through the one healing door - here where this client
+    // may write it, else on the GM's client, held there to the card's own number.
+    // Guarded: the drainer's heal never undoes the blow.
+    if (drain?.by && amount >= 0) {
+      try {
+        const left = (this.system?.health?.value ?? 0) + Math.max(0, Math.trunc(Number(this.system?.health?.temp)) || 0);
+        const took = Math.max(0, tookFrom - left);
+        const healer = took > 0 ? fromUuidSync(drain.by) : null;
+        if (healer?.documentName === "Actor") {
+          const healed = await drainHeal({ healer, amount: took, messageId: drain.messageId ?? messageId, index: Number.isInteger(drain.index) ? drain.index : null, name: drain.name ?? "" });
+          if (healed > 0) ui.notifications?.info(game.i18n.format("AZEROTH.Drain.Healed", { name: healer.name, n: healed, source: drain.name ?? "", target: this.name }));
+        }
+      } catch (err) {
+        // The blow stands; the drainer's heal failing is said in words (CLAUDE.md §16).
+        ui.notifications?.warn(game.i18n.format("AZEROTH.Drain.Failed", { source: drain.name ?? "", target: this.name }));
+        console.warn("azeroth-rpg | life drain", err);
+      }
+    }
     // The others' shares of a divided blow, once this creature's is written.
     if (division) {
       try {
@@ -2633,7 +3105,13 @@ export class AzerothActor extends Actor {
           }
         }
       } else if (before === 0 && attack) {
-        await this.takeDeathStep();
+        // **04's BURIAL GROUND AT RANK 2** (*an attack against a **Dying** friendly target
+        // inside it adds no Death Step*; the Legacy branches' door 11): the area this
+        // creature stands in, its caster's ally, says so (`effects/death-holds.mjs
+        // #burialSpares`), and the attack's step is not taken.
+        const spared = burialSpares(this);
+        if (spared !== null) ui.notifications?.info(game.i18n.format("AZEROTH.DeathHold.Spared", { name: this.name, area: spared }));
+        else await this.takeDeathStep();
       }
     }
     const combat = this.activeFight();

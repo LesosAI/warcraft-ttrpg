@@ -35,6 +35,8 @@
  * answered (CLARIFY in the rulings) and nothing here builds it.
  */
 
+import { extraPart } from "./mitigation.mjs";
+
 /**
  * The order the holds are tried in: 07's Aegis floor (free), the creature's
  * own Unkillable and Cauterize (automatic, as built since D-768 and D-775), then
@@ -45,8 +47,17 @@ export const HOLD_ORDER = Object.freeze(["aegis", "unkillable", "cauterize", "in
 /** The holds a holder is ASKED for: another creature's talent and its use. */
 export const ASKED_HOLDS = Object.freeze(["intervention", "spiritShell", "guardianSpirit"]);
 
-/** The moves a holder is asked for. */
-export const MOVE_KINDS = Object.freeze(["guardian", "righteous"]);
+/**
+ * The moves a holder is asked for. `burden` is 04's Shared Burden (the Legacy branches'
+ * phase B6): *As a Reaction when an attack or spell damages a friendly target within 30
+ * feet, spend 2 Mana. Half the damage that gets past its Armor Points and Ward, rounded
+ * down, is dealt to you instead, or all of it at rank 2* - a SHARE moved, the rest
+ * staying where it was aimed (`movedAmount`'s `share`, `keptAmount`).
+ */
+export const MOVE_KINDS = Object.freeze(["guardian", "righteous", "burden"]);
+
+/** What a burden move takes: half the blow, rounded down, or all of it. */
+export const MOVE_SHARES = Object.freeze(["half", "all"]);
 
 const whole = v => Math.max(0, Math.trunc(Number(v)) || 0);
 
@@ -136,9 +147,12 @@ export function moveJudgement(row = {}, {
 } = {}) {
   if (!row?.kind || !MOVE_KINDS.includes(row.kind)) return { ok: false, reason: "unknown" };
   if (!(whole(amount) > 0)) return { ok: false, reason: "nothing" };
+  // A burden's half of 1 is nothing to take (the Legacy branches' B6: Shared Burden).
+  if (row.kind === "burden" && !(movedAmount({ kind: "burden", amount, share: row.share }) > 0)) return { ok: false, reason: "nothing" };
   if (self === true) return { ok: false, reason: "self" };
   if (row.kind === "guardian" && attack !== true) return { ok: false, reason: "notAttack" };
-  if (row.kind === "righteous" && !(attack === true || spell === true)) return { ok: false, reason: "notAttack" };
+  // Shield of the Righteous's *a spell or attack*, and Shared Burden's *an attack or spell*.
+  if ((row.kind === "righteous" || row.kind === "burden") && !(attack === true || spell === true)) return { ok: false, reason: "notAttack" };
   if (fromCard !== true) return { ok: false, reason: "notAttack" };
   if (holderUp !== true) return { ok: false, reason: "down" };
   if (friendly !== true) return { ok: false, reason: "notFriendly" };
@@ -160,10 +174,73 @@ export function moveJudgement(row = {}, {
  *   `schools` the seven school keys
  * @returns {number}
  */
-export function movedAmount({ kind = "guardian", amount = 0, type = null, ward = 1, schools = [] } = {}) {
+export function movedAmount({ kind = "guardian", amount = 0, type = null, ward = 1, schools = [], share = "half" } = {}) {
   const a = whole(amount);
+  // **SHARED BURDEN'S SHARE** (the Legacy branches' B6): *Half the damage that gets past
+  // its Armor Points and Ward, rounded down, ... or all of it at rank 2* - the amount the
+  // damage door is handed is already past them (`AzerothActor#applyDamage`).
+  if (kind === "burden") return share === "all" ? a : Math.floor(a / 2);
   if (kind !== "righteous" || !type || !(schools ?? []).includes(type)) return a;
   return Math.max(0, a - whole(ward));
+}
+
+/**
+ * **WHAT THE CREATURE A BLOW WAS AIMED AT STILL TAKES, ONCE A SHARE OF IT MOVED** (the
+ * Legacy branches' B6: Shared Burden): the blow less what moved, never below nothing.
+ * Guardian and Shield of the Righteous move the whole blow, so it keeps none.
+ *
+ * @param {{kind?: string, amount?: number, moved?: number}} o
+ * @returns {number}
+ */
+export function keptAmount({ kind = "guardian", amount = 0, moved = 0 } = {}) {
+  if (kind !== "burden") return 0;
+  return Math.max(0, whole(amount) - whole(moved));
+}
+
+/**
+ * **WHAT THE HOLDER TAKES OF A SHARED BURDEN** (04's Shared Burden; the plan's *As
+ * read*: *the share lands through your own damage door ... so your own Armor Points and
+ * Ward reduce it*; the Legacy branches' B6b): the share met by the HOLDER's own
+ * mitigation as one amount of the blow's type, through `mitigation.mjs#extraPart` - the
+ * Armor Points where the blow landed for a physical blow (or one of no type, MY
+ * READING, as Ethereal Form reads a creature's claws), the Ward of its school once for
+ * a magical one, an ally's aura after it, and the holder's own Immune and Vulnerable.
+ * **Guardian and Shield of the Righteous are untouched**: their whole blow moves as
+ * the number it would have dealt (*"just move the damage as directed"*, D-777).
+ *
+ * A HALF moves as the blow's own type and carries none of its second amounts, which
+ * stay on the creature struck; ALL of it (rank 2) moves with them, each met by its own
+ * type (`parts`, `resolveDamage`'s), the blow's own type the rest. The parts handed
+ * back carry what the HOLDER's mitigation took, for the holder's door to record.
+ *
+ * @param {{share?: number, type?: string|null, location?: string, parts?: Array<object>|null,
+ *   holder?: {apByLocation?: object, wardBySchool?: object|null, schoolArmorBySchool?: object|null,
+ *   immune?: string[], vulnerable?: string[]}}} o
+ * @returns {{damage: number, wardTook: number, parts: Array<object>|null}}
+ */
+export function burdenMet({ share = 0, type = null, location = "body", holder = {}, parts = null } = {}) {
+  const maps = {
+    immune: holder?.immune ?? [], vulnerable: holder?.vulnerable ?? [], wardBySchool: holder?.wardBySchool ?? null,
+    schoolArmorBySchool: holder?.schoolArmorBySchool ?? null, apByLocation: holder?.apByLocation ?? {}, location
+  };
+  const typeOf = t => (typeof t === "string" && t ? t : "physical");
+  let left = whole(share);
+  let damage = 0;
+  let wardTook = 0;
+  const carried = Array.isArray(parts) ? [] : null;
+  for (const p of Array.isArray(parts) ? parts : []) {
+    if (!p || typeof p !== "object") continue;
+    const amount = Math.min(left, whole(p.damage));
+    left -= amount;
+    const met = extraPart({ type: typeOf(p.type), amount }, maps);
+    damage += whole(met.damage);
+    wardTook += whole(met.wardTook);
+    carried.push({ ...p, damage: whole(met.damage), wardTook: whole(met.wardTook) });
+  }
+  const main = extraPart({ type: typeOf(type), amount: left }, maps);
+  damage += whole(main.damage);
+  wardTook += whole(main.wardTook);
+  return { damage, wardTook, parts: carried };
 }
 
 /**
@@ -240,13 +317,49 @@ export function floorOf(flagsList = []) {
 }
 
 /**
+ * **EVERY FLOOR ON A CREATURE** (the B3 review): each effect's floor, cleaned, in the
+ * order the effects stand, with its `index` there. `floorOf` reads the first alone,
+ * and with 04's Big Bad Voodoo's aura floor laid FIRST a later Aegis of the Light was
+ * never marked as having held - so it lost its Critical Injury refusal and its heal
+ * at its end.
+ *
+ * @param {Array<object>} flagsList  each effect's `flags["azeroth-rpg"]`
+ * @returns {Array<{index: number, stay: number, by: string|null, name: string, held: boolean, noCritical: boolean}>}
+ */
+export function floorsOf(flagsList = []) {
+  const out = [];
+  (flagsList ?? []).forEach((f, index) => {
+    const one = floorOf([f]);
+    if (one) out.push({ index, ...one });
+  });
+  return out;
+}
+
+/**
+ * **WHAT THE FLOORS ON A CREATURE HOLD OF A BLOW** (07: *no target may be reduced below
+ * N Health by any source*; the B3 review): a blow that would drop the creature is held
+ * at the highest floor's number, and EVERY floor standing has held it - each is
+ * marked, so each keeps its own words (Aegis's Critical Injury refusal and its end's
+ * heal) whichever was laid first.
+ *
+ * @param {{before?: number, amount?: number, floors?: Array<{index: number, stay: number}>}} o
+ * @returns {{saved: boolean, amount: number, held: number[]}}  `held` the floors' indexes
+ */
+export function floorsHolding({ before = 0, amount = 0, floors = [] } = {}) {
+  const list = Array.isArray(floors) ? floors : [];
+  if (!list.length) return { saved: false, amount: whole(amount), held: [] };
+  const stay = Math.max(...list.map(f => Math.max(1, Math.trunc(Number(f.stay)) || 1)));
+  const saved = heldAt({ before, amount, stay });
+  return saved.saved ? { saved: true, amount: saved.amount, held: list.map(f => f.index) } : { saved: false, amount: saved.amount, held: [] };
+}
+
+/**
  * Whether a creature takes no Critical Injury now: an Aegis floor that has held
  * it stands on it (07: *every Critical Injury it would have taken it does not
- * take*).
+ * take*) - ANY such floor, never the first floor alone (the B3 review).
  *
  * @param {Array<object>} flagsList
  */
 export function floorRefusesCritical(flagsList = []) {
-  const floor = floorOf(flagsList);
-  return Boolean(floor?.held && floor.noCritical);
+  return floorsOf(flagsList).some(f => f.held && f.noCritical);
 }

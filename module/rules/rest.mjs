@@ -156,14 +156,59 @@ export function longRest({ health, conMod = 0, tier = 1, fatigue = 0, pools = []
 export const REFILL_PER_TURN = AZEROTH.POWER_REFILL_PER_TURN;
 
 /**
- * @param {PoolSnapshot[]} pools
- * @param {{extra?: Record<string, number>}} [o]  what a talent adds to a pool's
- *   refill (04's Adrenaline: *Your Energy pool returns 1 more per rank at the
- *   start of your turn*; D-773), by pool name, on a pool that refills at all
+ * **02's FOCUS REFILLS ONLY AFTER A STILL TURN** (the Legacy branches' door 9):
+ * *Focus is a pool of 6, and you begin every fight full. It refills at 2 at the
+ * start of any turn in which you have neither moved nor been Engaged.* The turn
+ * `_onStartTurn` refilled Focus on every turn, which 02 never said. The plan's
+ * reading (its door 9: *moved or Engaged last turn*): *a turn in which you have
+ * neither moved nor been Engaged* is the creature's LAST turn - it has done nothing
+ * in the one just starting. MY READING beside it, for the lead: *been Engaged* is
+ * Engaged when that turn ended or as this one starts (an enemy that walked up
+ * between the two Engaged it). Energy refills as before.
  */
-export function turnRefill(pools = [], { extra = {} } = {}) {
+export const FOCUS_POOL = "focus";
+
+/** The round's-record mark a cast that counts as moving leaves (04's Shadowcraft's Shadow Walk; door 9). */
+export const MOVED_MARK = "moved";
+
+/**
+ * Whether Focus refills at the start of this turn.
+ *
+ * @param {{moved?: boolean, engaged?: boolean}} o  the last turn's move, and Engaged
+ *   at its end or now
+ */
+export function focusRefills({ moved = false, engaged = false } = {}) {
+  return moved !== true && engaged !== true;
+}
+
+/**
+ * **WHETHER A TURN MOVED, FOR THE RECORD ITS END WRITES** (door 9): a Move the turn
+ * paid for (`moveHalves`, the measure 04's Bracing reads), or a cast a talent counts
+ * as moving (Shadowcraft's Shadow Walk; the lead: *"Yes"*), marked on the round's
+ * record (`MOVED_MARK`).
+ *
+ * @param {{paid?: number, roundOnce?: string[]}} o  `paid` the Moves the turn paid
+ *   for (the combatant's `moveHalves`, read and handed in under another name: the
+ *   budget's census reads every place that names the flag)
+ */
+export function turnMoved({ paid = 0, roundOnce = [] } = {}) {
+  return (Math.trunc(Number(paid)) || 0) > 0 || (roundOnce ?? []).includes(MOVED_MARK);
+}
+
+/**
+ * @param {PoolSnapshot[]} pools
+ * @param {{extra?: Record<string, number>, still?: boolean}} [o]  what a talent adds to a pool's
+ *   refill (04's Adrenaline: *Your Energy pool returns 1 more per rank at the
+ *   start of your turn*; D-773), by pool name, on a pool that refills at all;
+ *   and `still` - `focusRefills`' answer - without which Focus refills nothing
+ *   (door 9). **It defaults CLOSED** (the lead's rule for a gate: a default that
+ *   grants is a leak by construction): a caller that does not say the turn was
+ *   still refills no Focus. Energy is not gated.
+ */
+export function turnRefill(pools = [], { extra = {}, still = false } = {}) {
   return pools.flatMap(p => {
     if (p.kind !== "power") return [];
+    if (p.name === FOCUS_POOL && still !== true) return [];
     const rate = REFILL_PER_TURN[p.name];
     const more = Math.max(0, Math.trunc(Number(extra?.[p.name])) || 0);
     if (!rate || p.value >= p.max) return [];

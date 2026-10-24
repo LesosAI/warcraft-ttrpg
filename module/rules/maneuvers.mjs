@@ -7,6 +7,7 @@
  *  - Sunder Armor (Warrior feature): Sunder costs 2 instead of 4.
  *  - Sundering Blows (talent): Sunder costs 2 less per rank, to a minimum of 2.
  *  - Deflecting at Greater grade (08 SS6): Riposte costs 2.
+ *  - Return Stroke (talent, the Blademaster's): Riposte costs 2 less per rank.
  *  - Charge (Warrior feature): the first Overbear or Sunder each encounter
  *    costs nothing and grants 1 Rage.
  * Wild Bond is the companion's Sunder, not a price, and is not here.
@@ -53,6 +54,17 @@ export function maneuverCost(key, { features = [], talents = [], grants = [], ch
   if (key === "riposte" && grants.some(g => /Deflecting \(Greater\)/i.test(String(g)))) {
     cost = Math.min(cost, 2);
     rows.push({ name: "Deflecting (Greater)", cost });
+  }
+  // **04's RETURN STROKE** (the Legacy branches' B6: *Your Riposte costs 2 Rage less per
+  // rank*; the lead, phase 0: *"Keep it free"* - rank 2's Riposte costs nothing): off
+  // whatever price stands once a price is set, never below nothing - Sundering Blows'
+  // order, the setter before the reducer (MY READING, for the lead).
+  if (key === "riposte") {
+    const stroke = ranksOf(talents, "Return Stroke");
+    if (stroke > 0) {
+      cost = Math.max(0, cost - 2 * stroke);
+      rows.push({ name: "Return Stroke", cost });
+    }
   }
   if (chargeAvailable && (key === "sunder" || key === "overbear")) {
     cost = 0;

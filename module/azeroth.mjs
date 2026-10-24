@@ -25,10 +25,13 @@ import { registerInWorldHooks } from "./canvas/in-world.mjs";
 // actions and the Region behavior at `init`, and what entering an area does.
 import { registerMovementCosts } from "./canvas/behaviors.mjs";
 import { registerAreaStrikeHooks } from "./effects/area-strikes.mjs";
+import { registerStruckTestHooks } from "./effects/struck-tests.mjs";
 // The damage door's rulings (D-777): temporary Health that ends with the effect
 // carrying it, and 07's Aegis floor's heal when it goes.
 import { registerTemporaryHealthHooks } from "./effects/temporary-health.mjs";
 import { registerBlowDoorHooks } from "./effects/blow-doors.mjs";
+// A thrall released when its Charmed ends (the Legacy branches' door 25).
+import { registerLegacyUseHooks } from "./effects/legacy-uses.mjs";
 // D-779: Undying Rage's fall when its held rounds run out, and Bracing lifted by a move.
 import { registerClassAnswerHooks } from "./effects/class-answers.mjs";
 import { registerMeasureControls } from "./canvas/measure.mjs";
@@ -178,7 +181,11 @@ Hooks.once("init", () => {
     // The animation layer (D-729): the law, the tables, the records, the
     // reconciler and the stop door. `director.setPlayer` is how a batch swaps
     // the real Sequencer player for `testing/animation-recorder.mjs`.
-    animations
+    animations,
+    // False until the ready hook's migrations and feature sync have finished
+    // (set in that hook's `finally`), for the e2e harness and a macro that must
+    // not write while a migration is walking the world (B8b).
+    readyWorkDone: false
   };
   // A player's bind runs on the GM's client through v14's User#query (D-643).
   registerQueries();
@@ -234,6 +241,7 @@ Hooks.once("init", () => {
   // both on the client that deleted the effect.
   registerTemporaryHealthHooks();
   registerBlowDoorHooks();
+  registerLegacyUseHooks();
   registerClassAnswerHooks();
   // 05 §10's movement costs and 07's Difficult ground (D-757). At `init`,
   // because core turns a movement action's `costMultiplier` into its cost
@@ -243,6 +251,9 @@ Hooks.once("init", () => {
   // holds *until it leaves*, on the active GM's client.
   registerMovementCosts();
   registerAreaStrikeHooks();
+  // 07's Nature's Grasp (the B9a pass): the next melee hit on its holder asks the striker
+  // a Test, on the active GM's client, and a hit turned into a miss lays it again.
+  registerStruckTestHooks();
   // The Measure control (D-616): core hides its own in V14.
   registerMeasureControls();
   // The animation layer (D-729): the cue hooks, the loop reconciler and the
@@ -313,21 +324,32 @@ Hooks.once("setup", async () => {
 });
 
 Hooks.once("ready", async () => {
-  await runMigrations();
-  // Every character's features are brought back into step with the table
-  // (D-621): a descriptor that moved under a granted feature reaches the
-  // world here, with no migration to write for it. Idempotent and quiet.
-  if (game.user.isGM) {
-    const touched = { created: 0, updated: 0, deleted: 0 };
-    for (const actor of game.actors.filter(a => a.type === "character")) {
-      const n = await actor.syncClassFeatures?.();
-      for (const k of Object.keys(touched)) touched[k] += n?.[k] ?? 0;
-      // And the Fatigue track's statuses (D-624), the same way.
-      await actor.syncFatigue?.();
+  // **`game.ready` IS TRUE BEFORE THIS WORK IS DONE**: core calls the ready
+  // hooks without awaiting them, so the migration chain and the feature sync
+  // below run on after the world reports ready. `readyWorkDone` says when they
+  // have finished, and the e2e harness's `joinAsGM` waits for it: the first
+  // load after an upgrade ran migration 0.12.25 while a Quench batch made an
+  // orc Warrior, and the migration, having read the orc's talents before the
+  // class's grant landed, embedded Blademaster's twelve a second time (B8b).
+  try {
+    await runMigrations();
+    // Every character's features are brought back into step with the table
+    // (D-621): a descriptor that moved under a granted feature reaches the
+    // world here, with no migration to write for it. Idempotent and quiet.
+    if (game.user.isGM) {
+      const touched = { created: 0, updated: 0, deleted: 0 };
+      for (const actor of game.actors.filter(a => a.type === "character")) {
+        const n = await actor.syncClassFeatures?.();
+        for (const k of Object.keys(touched)) touched[k] += n?.[k] ?? 0;
+        // And the Fatigue track's statuses (D-624), the same way.
+        await actor.syncFatigue?.();
+      }
+      if (touched.created || touched.updated || touched.deleted) {
+        console.log(`azeroth-rpg | features refreshed: ${touched.created} granted, ${touched.updated} restamped, ${touched.deleted} withdrawn`);
+      }
     }
-    if (touched.created || touched.updated || touched.deleted) {
-      console.log(`azeroth-rpg | features refreshed: ${touched.created} granted, ${touched.updated} restamped, ${touched.deleted} withdrawn`);
-    }
+  } finally {
+    if (game.system.azeroth) game.system.azeroth.readyWorkDone = true;
   }
   // Phase 7 lands the OFL faces (D5). Until then the fallback stack draws the
   // sheet, and this says so once rather than leaving a wrong face to be noticed.

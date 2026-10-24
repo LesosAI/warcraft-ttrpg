@@ -144,7 +144,12 @@ export function attackModeOf(weapon, mode = null) {
  * Dagger in the hand, and a Javelin is a throw because it has no other way.
  */
 export function attackAbility(weapon, mode = null) {
-  return attackModeOf(weapon, mode) === "hand" ? "str" : "dex";
+  const used = attackModeOf(weapon, mode);
+  // **A THROW A TALENT MAKES ON STRENGTH** (04's Storm Bolt: *an attack made with
+  // one uses Strength*; the Legacy branches' door 15): `wield.mjs#throwAsWeapon`
+  // names the ability the throw it adds is made with.
+  if (used === "thrown" && (weapon?.throwAbility === "str" || weapon?.throwAbility === "dex")) return weapon.throwAbility;
+  return used === "hand" ? "str" : "dex";
 }
 
 /** A shot: it fits something and carries a Rating. Mill-ground powder fits a firearm and is not a shot. */

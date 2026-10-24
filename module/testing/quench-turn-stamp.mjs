@@ -32,7 +32,7 @@
  * during some later batch.
  */
 
-import { cleanup, fromPack, made, settle, untilHook } from "./fixtures.mjs";
+import { cleanup, fromPack, made, settle, untilHook, tokenDrawn, tokenData } from "./fixtures.mjs";
 import { MOVEMENT_LIMIT_SETTING } from "../settings.mjs";
 
 /** Wait for a condition, or say what was being waited for. */
@@ -132,10 +132,10 @@ async function kobold(name, initiative) {
 async function place(scene, placements) {
   const data = [];
   for (const { actor, x, y } of placements) {
-    data.push((await actor.getTokenDocument({ x, y, disposition: CONST.TOKEN_DISPOSITIONS.HOSTILE })).toObject());
+    data.push((await tokenData(actor, { x, y, disposition: CONST.TOKEN_DISPOSITIONS.HOSTILE })));
   }
   const tokens = await scene.createEmbeddedDocuments("Token", data);
-  await until(() => placements.every(p => p.actor.getActiveTokens(true).length), "every token drawn");
+  await until(() => placements.every(p => tokenDrawn(p.actor.getActiveTokens(true)[0])), "every token drawn, its texture loaded and its arrows made");
   await settle();
   return tokens;
 }

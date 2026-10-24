@@ -77,11 +77,20 @@ import { manaPrice } from "./casting.mjs";
 // ONE reader for an amount expression (the D-770 review, item B): a feature's,
 // a talent's, a rider's and a tick's.
 import { evaluateExpression } from "./expressions.mjs";
+// 05 §3's Standard Test at a tier (the B8a pass: 02's War Stomp's Resist DC).
+import { standardDC } from "./modifiers.mjs";
 
 // The descriptor vocabulary, shared with `rules/talent-effects.mjs` (D-642).
 export const passive = (extra = {}) => ({ kind: "passive", action: null, cost: null, casting: false, uses: null, heal: null, damage: null, resist: null, ...extra });
 export const action = (extra = {}) => ({ kind: "action", action: "action", cost: null, casting: false, uses: null, heal: null, damage: null, resist: null, ...extra });
 export const cost = (pool, amount) => ({ pool, amount });
+/**
+ * **A PRICE PAID ON THE TEST'S SUCCESS** (the B8a2 pass; 02's *make a Casting Test. On
+ * success, spend 8 Mana*): the price, marked `on: "success"`, which the Use judges before
+ * anything is spent and takes off only once its Casting Test has succeeded
+ * (`paysOnSuccess`). A failed Test pays nothing.
+ */
+export const onSuccess = price => ({ ...price, on: "success" });
 export const once = per => ({ max: 1, per });
 /**
  * A patch laid on another feature's stamp. `rules/talent-effects.mjs` has
@@ -185,11 +194,20 @@ export const CLASS_FEATURES = Object.freeze({
     "Mend": action({ action: "half", cost: cost("mana", 2), casting: true, heal: "2*tier+sl" }),
     "Ward": action({ action: "reaction", cost: cost("mana", 2), choice: "schools" }),
     "Dispel": action({ action: "action", cost: cost("mana", 4) }),
-    "Mass Mend": action({ action: "full", cost: cost("mana", 6), casting: true, heal: "tier", area: "Each ally within 20 ft" }),
+    // *As a Full Action, make a Casting Test. On success, spend 6 Mana to restore Health ...*
+    // (02 §7): the price is the success's (`onSuccess`; the B8a2 pass), and a failed Test
+    // costs nothing. So are Shadow Word: Death's 8, Divine Hymn's 15 and the Warlock's Curse.
+    "Mass Mend": action({ action: "full", cost: onSuccess(cost("mana", 6)), casting: true, heal: "tier", area: "Each ally within 20 ft" }),
     "Sustained Faith": passive(),
-    "Shadow Word: Death": action({ action: "action", cost: cost("mana", 8), casting: true, damage: { amount: "level+sl", type: "shadow" }, resist: "spirit" }),
+    // *On success, spend 8 Mana to force a target to make a Spirit Resilience Test against
+    // your Spell DC. On a failed save, the target takes your level plus the SL bonus of the
+    // Casting Test in Shadow damage* (02 §7): the damage is the failure's (`onFail`; the
+    // B8a pass), so the card's Apply lands none of it on a target whose Test passed - it
+    // dealt the whole whatever the Test came to.
+    // And its 8 Mana is paid on the success (the B8a2 pass): it was paid before the Test.
+    "Shadow Word: Death": action({ action: "action", cost: onSuccess(cost("mana", 8)), casting: true, damage: { amount: "level+sl", type: "shadow", onFail: true }, resist: "spirit" }),
     "Resurrection": action({ action: "full", cost: cost("mana", 20), casting: true, dc: 22, uses: once("long") }),
-    "Divine Hymn": action({ action: "action", cost: cost("mana", 15), casting: true, area: "Each ally within 60 ft", choice: "schools" })
+    "Divine Hymn": action({ action: "action", cost: onSuccess(cost("mana", 15)), casting: true, area: "Each ally within 60 ft", choice: "schools" })
   },
   shaman: {
     "Totem": action({ action: "half", cost: cost("mana", 2), area: "A 30 ft radius centered on you", choice: "totems" }),
@@ -208,7 +226,12 @@ export const CLASS_FEATURES = Object.freeze({
     "Totem Mastery": passive({ modifies: mod("Totem", { picks: 4, area: "A 60 ft radius centered on you" }) }),
     "Bloodlust": action({ action: "full", cost: cost("mana", 8), area: "Each ally within 30 ft" }),
     "Elemental Bond": action({ action: "action", cost: cost("mana", 12), choice: "elementals" }),
-    "Earthquake": action({ action: "full", cost: cost("mana", 15), resist: "reflex" })
+    // *Everyone in this area must make a Reflex Resilience Test against your Spell DC. On
+    // failure, they are knocked **Prone*** (02 §7; the lead: *"Land automatically"*, the
+    // Legacy branches' B6 fix): the Prone was never on the card. A failure on it lays the
+    // Prone at once (`onFail`); the dropped weapons and the minute of Difficult ground
+    // stay the table's, and its circle names no size, so it measures nobody.
+    "Earthquake": action({ action: "full", cost: cost("mana", 15), resist: "reflex", inflicts: [{ condition: "prone", value: null, until: null, onFail: true }] })
   },
   mage: {
     "Evocation": action({ action: "action", uses: once("short"), restore: "halfMana" }),
@@ -224,7 +247,9 @@ export const CLASS_FEATURES = Object.freeze({
     "Life Tap": action({ action: "half", note: "AZEROTH.Feature.Note.LifeTap" }),
     "Bound Demon": action({ action: "full", cost: cost("mana", 4), choice: "demons" }),
     "Drain": action({ action: "reaction", cost: cost("mana", 4) }),
-    "Curse": action({ action: "action", cost: cost("mana", 4), casting: true, resist: "spirit" }),
+    // *On success, spend 4 Mana* (02 §7; D-775 paid it on the success by the feature's name
+    // alone): the row's own `onSuccess` now, the door every such price shares (the B8a2 pass).
+    "Curse": action({ action: "action", cost: onSuccess(cost("mana", 4)), casting: true, resist: "spirit" }),
     "Greater Demon": passive(),
     "Soul Harvest": passive(),
     "Ritual of the Steed": passive(),
@@ -250,7 +275,18 @@ export const CLASS_FEATURES = Object.freeze({
       inflicts: [{ condition: "slowed", value: null, until: "casterTurnStart" }]
     }),
     "Dreamwalk": passive(),
-    "Entangling Roots": action({ action: "action", cost: cost("mana", 8), casting: true, resist: "reflex", area: "A 20 ft radius on the ground" }),
+    // *On success, any number of targets within a 20-foot area are **Entangled** until
+    // each spends an action and passes a Reflex Resilience Test against your Spell DC*
+    // (02 §7). The Reflex Test is the ESCAPE, not a Resist: the row carried `resist:
+    // "reflex"`, so the card offered a Test at the cast that governed nothing, and no
+    // Entangled to lay (found beside the Legacy branches' B6 fix). The Entangled is a
+    // button per target the caster chose, Hurricane's shape (D-771), carrying its
+    // escape on the action at the Spell DC (door 19's record), which the creature's own
+    // turn prompts (`AzerothCombat#_escapePrompts`).
+    "Entangling Roots": action({
+      action: "action", cost: cost("mana", 8), casting: true, area: "A 20 ft radius on the ground",
+      inflicts: [{ condition: "entangled", value: null, until: null, escape: { on: "action", resilience: "reflex", dc: "spellDc" } }]
+    }),
     "Hibernate": passive({ uses: once("long") }),
     "Avatar of the Wild": action({ action: "full", cost: cost("mana", 15), choice: "avatar" })
   }
@@ -494,7 +530,7 @@ export function featurePatchesFor(features = [], featureName) {
  * `floor` and `ceil` - and `amounts.test.mjs` runs every amount string in the
  * tables and the packs through both and holds them to the same number.
  */
-export function evaluateAmount(expr, { tier = 1, level = 1, sl = 0, rank = 1, weapon = 0 } = {}) {
+export function evaluateAmount(expr, { tier = 1, level = 1, sl = 0, rank = 1, weapon = 0, str = 0, dex = 0, con = 0, int = 0, wis = 0, cha = 0, prof = 0 } = {}) {
   if (expr === null || expr === undefined) return null;
   if (typeof expr === "number") return expr;
   if (!String(expr).trim()) return 0;
@@ -505,8 +541,44 @@ export function evaluateAmount(expr, { tier = 1, level = 1, sl = 0, rank = 1, we
     rank: Number(rank) || 0,
     // The striker's own Damage Rating (04's Wrath of the Light, D-772): 0 where
     // the door hands in none, as every name the caller did not give reads.
-    weapon: Math.max(0, Number(weapon) || 0)
+    weapon: Math.max(0, Number(weapon) || 0),
+    // **THE ABILITY MODIFIERS AND PROFICIENCY** (door 16): the door's own
+    // `expressions.mjs#abilityScope`; 0 where it hands in none. A modifier may be
+    // negative, and is passed as it is.
+    str: Number(str) || 0, dex: Number(dex) || 0, con: Number(con) || 0,
+    int: Number(int) || 0, wis: Number(wis) || 0, cha: Number(cha) || 0,
+    prof: Number(prof) || 0
   });
+}
+
+/**
+ * **WHICH DC A USE'S RESIST IS MADE AGAINST** (door 16; the lead on 04's Thunder
+ * Clap: *"10 + Str modifier + Proficiency"*): `str` is 10 + the Strength modifier
+ * + Proficiency, and ONLY where the feature names it; `spellDc`, or nothing named,
+ * is the Spell DC - the character's derived one, or a creature's own (14's
+ * `**Spells** (DC n)`), which the door hands in - and null where there is none (the
+ * B1 review: a class with no Spell DC took the Strength one in silence, so every
+ * Rogue's *against your Spell DC* read as the Warrior's DC until 02's Intelligence
+ * line is stamped). A null DC is the table's, as a Resist with no DC always was.
+ *
+ * **`standard` IS 05 §3's STANDARD TEST AT THE USER'S TIER** (02 §5's War Stomp: *a
+ * Reflex Resilience Test at a Standard DC for your tier — 12, 16, 20 or 24*; the B8a
+ * pass): `rules/modifiers.mjs#standardDC`, the roll dialog's own fallback, at the tier the
+ * door hands in - a DC kind no door read before, so the racial talent had no row.
+ */
+export const RESIST_DCS = Object.freeze(["spellDc", "str", "standard"]);
+
+/**
+ * The DC a feature's card offers its Resist at.
+ *
+ * @param {{kind?: "spellDc"|"str"|"standard"|null, spellDC?: number|null, strMod?: number, proficiency?: number, tier?: number}} o
+ * @returns {number|null}
+ */
+export function resistDcFor({ kind = null, spellDC = null, strMod = 0, proficiency = 0, tier = 1 } = {}) {
+  if (kind === "str") return 10 + (Math.trunc(Number(strMod)) || 0) + (Math.trunc(Number(proficiency)) || 0);
+  if (kind === "standard") return standardDC(tier);
+  const spell = Math.trunc(Number(spellDC));
+  return spellDC !== null && spellDC !== undefined && Number.isFinite(spell) ? spell : null;
 }
 
 /**
@@ -690,11 +762,12 @@ export function bindRank(expr, rank = 1) {
     if ((m = /^(\d+)$/.exec(body))) { constant += sign * Number(m[1]); continue; }
     if ((m = /^(?:(\d+)\*)?rank$/.exec(body))) { constant += sign * (m[1] ? Number(m[1]) : 1) * r; continue; }
     if ((m = /^(tier|level)\*rank$/.exec(body) ?? /^rank\*(tier|level)$/.exec(body))) { addVar(m[1], sign * r); continue; }
-    if ((m = /^(?:(\d+)\*)?(tier|level|sl)$/.exec(body))) { addVar(m[2], sign * (m[1] ? Number(m[1]) : 1)); continue; }
+    // The ability modifiers and Proficiency (door 16) stay for the Use, as `tier` does.
+    if ((m = /^(?:(\d+)\*)?(tier|level|sl|str|dex|con|int|wis|cha|prof)$/.exec(body))) { addVar(m[2], sign * (m[1] ? Number(m[1]) : 1)); continue; }
     return expr;
   }
   const parts = [];
-  for (const name of ["tier", "level", "sl"]) {
+  for (const name of ["tier", "level", "sl", "str", "dex", "con", "int", "wis", "cha", "prof"]) {
     const k = vars.get(name) ?? 0;
     if (!k) continue;
     const term = Math.abs(k) === 1 ? name : `${Math.abs(k)}*${name}`;
@@ -742,6 +815,73 @@ export function usesMaxFor(uses, { rank = 1, tier = 1, level = 1 } = {}) {
   return max ?? 0;
 }
 
+/** The rungs a Use may be taken at (D-255's ladder). */
+export const FEATURE_RUNGS = Object.freeze(["half", "action", "full", "reaction"]);
+
+/**
+ * **EVERY RUNG A USE MAY SPEND, ITS OWN FIRST** (04's Ethereal Form: *As a
+ * Half-Action, spend 6 Mana ... At rank 2 you may use it as a Reaction*; the B6
+ * review). A rank's clause that ADDS a rung lays `rungs` beside the grant's own
+ * `action`, which stays the first: the Use asks which through the one chooser where
+ * more than one can be paid, and a Use of one rung carries none - an empty list,
+ * which is every feature but this one.
+ *
+ * @param {string|null} action  the Use's own rung
+ * @param {unknown} rungs       the rungs a clause names
+ * @returns {string[]}
+ */
+export function featureRungs(action, rungs = []) {
+  const out = [];
+  for (const r of [action, ...(Array.isArray(rungs) ? rungs : [])]) {
+    if (FEATURE_RUNGS.includes(r) && !out.includes(r)) out.push(r);
+  }
+  return out.length > 1 ? out : [];
+}
+
+/**
+ * **EVERY RUNG A USE MAY BE TAKEN AT, AS ITS CHIP SAYS IT** (04's Ethereal Form: *As a
+ * Half-Action ... At rank 2 you may use it as a Reaction*): the sheet's chip named the
+ * Use's own rung alone, so a rank 2 Ethereal Form read *Half-Action* beside a Use the
+ * door offers as a Reaction too. Composed here, the localised words handed in from the
+ * sheet (CLAUDE.md §4): each rung's word, its own first, joined two at a time by `or` -
+ * *Half-Action or Reaction*. Null for a Use of one rung, which keeps its own label.
+ *
+ * @param {string|null} action  the Use's own rung
+ * @param {unknown} rungs       the stamped rungs (`FeatureData.rungs`)
+ * @param {{label?: (rung: string) => string, or?: (first: string, second: string) => string}} [words]
+ * @returns {string|null}
+ */
+export function rungsChip(action, rungs = [], { label = r => r, or = (first, second) => `${first} or ${second}` } = {}) {
+  const all = featureRungs(action, rungs);
+  if (all.length < 2) return null;
+  return all.map(r => label(r)).reduce((first, second) => or(first, second));
+}
+
+/**
+ * **THE RUNG A USE IS TAKEN AT** (the B6 review on Ethereal Form): with one rung,
+ * the Use's own; with several, out of a fight the Use's own (no turn is spent), and
+ * in one the rungs the turn can still pay - the one alone where only one can, and the
+ * chooser's answer where more than one can. Null `ask` means nothing to ask.
+ *
+ * **OFF ITS OWN TURN ONLY THE REACTION IS OPEN** (05: two Half-Actions and a Reaction
+ * each turn; found live in B8b). The budget the payment asks keeps a turn's unspent
+ * Half-Actions until the creature's next turn resets it, and `initiative.mjs#spend`
+ * reads whose turn it is for the off hand alone - so off the shaman's turn both of
+ * Ethereal Form's rungs read as payable and the chooser asked, where the Use is the
+ * Reaction. `onTurn` is the creature's own turn in its fight.
+ *
+ * @param {{action?: string|null, rungs?: string[], inFight?: boolean, onTurn?: boolean, payable?: (rung: string) => boolean}} o
+ * @returns {{rung: string|null, ask: string[]|null}}
+ */
+export function rungChoice({ action = null, rungs = [], inFight = false, onTurn = true, payable = () => true } = {}) {
+  const all = Array.isArray(rungs) && rungs.length > 1 ? rungs : [];
+  if (!all.length || !inFight) return { rung: action ?? null, ask: null };
+  const open = all.filter(r => (onTurn !== false || r === "reaction") && payable(r) === true);
+  if (!open.length) return { rung: action ?? null, ask: null };
+  if (open.length === 1) return { rung: open[0], ask: null };
+  return { rung: null, ask: open };
+}
+
 /**
  * **WHAT A FEATURE'S USE COSTS, AND WHETHER THE POOL CAN PAY IT**, judged
  * before anything is spent (D-768; the lead, 2026-10-03: *Keeps the
@@ -772,6 +912,22 @@ export function featurePayment({ cost = null, pool = null, discount = 0, times =
   const due = Math.max(0, (Number(cost.amount) || 0) - (Number(discount) || 0)) * Math.max(1, Math.trunc(Number(times)) || 1);
   const spent = cost.pool === "mana" ? manaPrice(due, { inShapeshiftForm }).amount : due;
   return { spent, refusal: value < spent ? "Short" : null };
+}
+
+/**
+ * **WHETHER A USE PAYS ITS PRICE ONLY ON ITS TEST'S SUCCESS** (the B8a2 pass; 02's Mass
+ * Mend, Shadow Word: Death, Divine Hymn and Curse: *make a Casting Test. On success, spend
+ * N Mana*): a feature that makes a Casting Test and whose price is marked `on: "success"`
+ * (`onSuccess`). `useFeature` judges the price with every other before anything is spent,
+ * pays nothing at the payment, and takes it off once the Test has succeeded - and a success
+ * the pool can no longer pay does nothing at all, said in words. D-775 built this for the
+ * Curse alone, by its name; it is the row's word now, and the one door.
+ *
+ * @param {{casting?: boolean, cost?: {on?: string|null}|null}|null} sys  a feature's stamp or row
+ * @returns {boolean}
+ */
+export function paysOnSuccess(sys) {
+  return sys?.casting === true && sys?.cost?.on === "success";
 }
 
 /**

@@ -14,11 +14,14 @@
 
 import { AZEROTH } from "../config.mjs";
 import { injuryConditions } from "./injuries.mjs";
+import { CUTTING_GEAR } from "./escapes.mjs";
 import { standardDC } from "./modifiers.mjs";
 import { parseGrant } from "./grants.mjs";
 // 08 §7's Greater School enchantment and 08 §5's Pierce, in one place for the
 // creature's attack row and the character's weapon alike.
 import { weaponDamageSpec } from "./damage-spec.mjs";
+// What an ability's Test governs, in 14's words (the B8a2 pass).
+import { abilityGoverns, abilityHalvesOnPass, abilityNoneOnPass } from "./resisted.mjs";
 
 export const ABILITY_KINDS = Object.freeze(["none", "attack", "test", "spell", "heal", "utility", "passive", "summon"]);
 
@@ -35,11 +38,15 @@ export function emptyAutomation() {
     dc: null,
     uses: { max: null, value: null, per: null },
     heal: null,
-    damage: { amount: null, type: null },
+    // `half`: a passed Test takes half of it; `onFail`: a passed Test takes none of it (the
+    // B8a2 pass; the B6 and B8a marks on a spell's and a feature's damage), off 14's words.
+    damage: { amount: null, type: null, half: false, onFail: false },
     resist: null,
     attack: { bonus: null, damage: null, traits: [] },
     area: "",
-    inflicts: { condition: null, value: null, until: null },
+    // `onFail`: the Test governs it - a failure lands it at once and a pass leaves it off
+    // (the lead: *"Land automatically"*; the B8a2 pass).
+    inflicts: { condition: null, value: null, until: null, onFail: false },
     spell: "",
     note: "",
     // Standing, never pressed (D-691). `grants` are 08 §6 grant sentences and
@@ -113,7 +120,10 @@ export function cleanAutomation(raw) {
   out.dc = num(raw.dc);
   out.uses = { max: num(raw.uses?.max), value: num(raw.uses?.value), per: oneOf(raw.uses?.per, Object.keys(AZEROTH.abilityUsesPer)) };
   out.heal = num(raw.heal);
-  out.damage = { amount: num(raw.damage?.amount), type: oneOf(raw.damage?.type, Object.keys(AZEROTH.damageTypes)) };
+  out.damage = {
+    amount: num(raw.damage?.amount), type: oneOf(raw.damage?.type, Object.keys(AZEROTH.damageTypes)),
+    half: raw.damage?.half === true, onFail: raw.damage?.onFail === true
+  };
   out.resist = oneOf(raw.resist, Object.keys(AZEROTH.resiliences));
   out.attack = {
     bonus: num(raw.attack?.bonus), damage: num(raw.attack?.damage),
@@ -122,7 +132,8 @@ export function cleanAutomation(raw) {
   out.area = typeof raw.area === "string" ? raw.area : "";
   out.inflicts = {
     condition: oneOf(raw.inflicts?.condition, Object.keys(AZEROTH.conditions)),
-    value: num(raw.inflicts?.value), until: oneOf(raw.inflicts?.until, Object.keys(AZEROTH.untilKinds))
+    value: num(raw.inflicts?.value), until: oneOf(raw.inflicts?.until, Object.keys(AZEROTH.untilKinds)),
+    onFail: raw.inflicts?.onFail === true
   };
   out.spell = typeof raw.spell === "string" ? raw.spell : "";
   out.note = typeof raw.note === "string" ? raw.note : "";
@@ -167,6 +178,27 @@ const COUNTS = Object.freeze({ a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, f
  * pace; sixteen blocks carry it and its prose is deliberately atmospheric.
  */
 const ON_THE_BLOCK = new Set(["Winged"]);
+
+/**
+ * **ABILITIES ANOTHER DOOR READS BY THEIR OWN NAME**, which the seed must not
+ * read flat (the Legacy branches; D-781's constructs and battle rig):
+ *
+ * - **Cutting Gear** (the lead: *"Give constructs a trait or ability that allows
+ *   them to end one Entangled condition per turn no action required."*) is
+ *   `rules/escapes.mjs#CUTTING_GEAR`, pressed from the Traits row and routed by
+ *   this name before the descriptor is read (`workflows.useAbility`). Read flat,
+ *   *ends one **Entangled** condition on itself* seeded an Entangled the
+ *   construct LAYS - D-691's Netherborn fault, a button on the wrong creature.
+ * - **Ejector Seat** (14's Gnomish Battle Rig: *When the rig drops to 0 Health,
+ *   its pilot is thrown to a space within 20 feet and lands **Prone***) is the
+ *   PILOT's fall, never a target's: the rig's end at 0 Health is the shape's own
+ *   rule (`rules/shapes.mjs#SHAPE_KINDS.battlerig`) and where the pilot lands is
+ *   the table's. Read flat it seeded a Prone the rig inflicts.
+ */
+const OWN_DOOR = Object.freeze({
+  [CUTTING_GEAR.name]: Object.freeze({ kind: "utility" }),
+  "Ejector Seat": Object.freeze({ kind: "none", reason: "tableCall" })
+});
 
 /**
  * A creature 14 names IN BOLD. The chapter marks every block it points at
@@ -236,7 +268,7 @@ const AURA_HEAL = /\bwithin\s+\d+\s*(?:feet|ft)\s+(?:of\s+[\w'’]+\s+)?(?:recov
 const GRANTS_TO_OTHERS = /\b(?:every|each|a|an|any|one)\s+(?:other\s+)?[\w'’ -]{0,25}?creature\b[^.]{0,90}?\btakes?\b|\bevery\s+[a-z'’-]+\s+within\b|\bevery creature under\b/i;
 
 /** A clause the tool cannot judge: light, sight, a charge, standing somewhere. */
-const TABLE_CALL = /\b(?:in daylight|by daylight|under an open night sky|it can see|he can see|she can see|they can see|inside the [a-z ]+|standing on|in the open|from dusk|at night|in darkness|on a turn in which)\b/i;
+const TABLE_CALL = /\b(?:in daylight|by daylight|under an open night sky|it can see|he can see|she can see|they can see|inside the [a-z ]+|standing on|in the open|from dusk|at night|in darkness|(?:on|in) a turn in which)\b/i;
 
 /**
  * A refusal the tool must not read flat: *by anything of its own size or
@@ -262,6 +294,7 @@ export function seedAutomation(prose = "", { name = "" } = {}) {
   // on the Speed row, so its prose is free to say *fights from the air* and
   // there is nothing here left to automate.
   if (ON_THE_BLOCK.has(String(name).trim())) return { kind: "none", reason: "onTheBlock" };
+  if (Object.hasOwn(OWN_DOOR, String(name).trim())) return { ...OWN_DOOR[String(name).trim()] };
   const types = Object.keys(AZEROTH.damageTypes);
   const typed = [...text.matchAll(/\b(\d+)\s+(fire|frost|arcane|nature|shadow|holy|fel|physical)\s+damage\b/gi)]
     .map(m => ({ amount: Number(m[1]), type: m[2].toLowerCase() }))
@@ -289,6 +322,16 @@ export function seedAutomation(prose = "", { name = "" } = {}) {
   if (resists.length === 1) seed.resist = resists[0];
   const conditions = injuryConditions(text).conditions;
   if (conditions.length === 1) seed.inflicts = { condition: conditions[0].id, value: conditions[0].value ?? null, until: null };
+  // **WHAT THE TEST GOVERNS** (the B8a2 pass; the lead: *"Build them now"*, *"Build it
+  // everywhere"*, *"Land automatically"*): a damage a pass halves (*or half on a Resilience
+  // (Reflex) Test*) or spares whole (the Wild Kodo's *makes a Resilience (Reflex) Test at DC
+  // 14 or takes 3 damage*), and a condition the Test hands to its failure - each named only
+  // where it is true, so a seed the words mark nothing on keeps its shape.
+  if (seed.damage && seed.resist) {
+    if (abilityHalvesOnPass(text)) seed.damage.half = true;
+    else if (abilityNoneOnPass(text)) seed.damage.onFail = true;
+  }
+  if (seed.inflicts && seed.resist && abilityGoverns(text, seed.inflicts.condition)) seed.inflicts.onFail = true;
   const action = /\bas an?\s+(Reaction|Half-Action|Full Action|action)\b/i.exec(text);
   if (action) seed.action = { reaction: "reaction", "half-action": "half", "full action": "full", action: "action" }[action[1].toLowerCase()] ?? null;
   const once = /\bonce per\s+(Short Rest|Long Rest|encounter|fight)\b/i.exec(text);
@@ -340,7 +383,12 @@ export function seedAutomation(prose = "", { name = "" } = {}) {
   }
 
   // *attacks the nearest creature* is the TARGET attacking, never this block.
-  const attacks = /\b(makes? an attack|attack Test|to hit|attacks (?:every|each)\b|attacks at the end\b|at (?:his|her|its|the same) Bonus)\b/i.test(text);
+  // And an Attack Test a Boon or Bane LANDS ON is somebody else's (D-707's
+  // reading of a Resilience, applied to an attack): the Gnomish Battle Chicken's
+  // *Each ally within 10 feet of it gains a Boon on its next Attack Test* is a
+  // squawk that gives, and read off the full text it was an attack the chicken
+  // made (D-781's constructs).
+  const attacks = /\b(makes? an attack|attack Test|to hit|attacks (?:every|each)\b|attacks at the end\b|at (?:his|her|its|the same) Bonus)\b/i.test(forced);
   // `passive` is the kind of an entry with NOTHING TO PRESS. What stands lives
   // on `automation.passive` whatever the kind, so an entry that both senses
   // and inflicts keeps its button and its senses both (D-691).
@@ -542,7 +590,10 @@ function gateFor(text, near) {
   // A charge, the light and the sky are the table's call: the tool can measure
   // a distance and not a straight line (D2 SS12).
   if (TABLE_CALL.test(text)) return false;
-  if (/\bon a turn in which\b|\bwhile\b|\bagainst\b/i.test(text)) return false;
+  // *On* a turn or *in* one (the Rifleman's Steady: *a Boon on an attack Test made
+  // in a turn in which it did not move*): read as `on` alone, the Boon stood on
+  // every attack the rifleman made, moving or not (D-781's seed pass).
+  if (/\b(?:on|in) a turn in which\b|\bwhile\b|\bagainst\b/i.test(text)) return false;
   return null;
 }
 
@@ -571,9 +622,14 @@ export function mergeSeed(automation, seed) {
   if (out.dc === null && seed.dc !== undefined) out.dc = seed.dc;
   if (out.resist === null && seed.resist) out.resist = seed.resist;
   if (out.heal === null && seed.heal !== undefined) out.heal = seed.heal;
-  if (out.damage.amount === null && seed.damage) out.damage = { amount: seed.damage.amount, type: seed.damage.type ?? null };
+  // The marks travel with the figure they mark (the B8a2 pass): the whole shape, every key.
+  if (out.damage.amount === null && seed.damage) {
+    out.damage = { amount: seed.damage.amount, type: seed.damage.type ?? null, half: seed.damage.half === true, onFail: seed.damage.onFail === true };
+  }
   if (out.uses.max === null && seed.uses) out.uses = { ...seed.uses };
-  if (out.inflicts.condition === null && seed.inflicts) out.inflicts = { ...seed.inflicts };
+  if (out.inflicts.condition === null && seed.inflicts) {
+    out.inflicts = { condition: seed.inflicts.condition, value: seed.inflicts.value ?? null, until: seed.inflicts.until ?? null, onFail: seed.inflicts.onFail === true };
+  }
   if (!out.area && seed.area) out.area = seed.area;
   return out;
 }

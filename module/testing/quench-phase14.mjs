@@ -6,7 +6,7 @@
  * choice is not the thing under test, and open the dialog where it is.
  */
 
-import { cleanup, gearInspector, gearTab, give, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook } from "./fixtures.mjs";
+import { cleanup, gearInspector, gearTab, give, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook } from "./fixtures.mjs";
 import { attackWithDialog } from "../applications/actions.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { checkText } from "./geometry.mjs";
@@ -454,6 +454,9 @@ export function consumableBatch(context) {
       await settled;
       await until(() => combat.combatants.every(c => c.getFlag("azeroth-rpg", "budget") !== undefined),
         "every combatant's budget landing");
+      // The plain hand's own turn: its coating takes a Half-Action of it (the lead: *"Refuse
+      // off-turn Half-Actions"*). Deft Hands' takes none, so it is made off its turn.
+      await giveTurn(combat, plain);
 
       await use(plain, await give(plain, "Spider's kiss"));
       await until(() => combat.getCombatantsByActor(plain)[0].budget.halfActions === 1,

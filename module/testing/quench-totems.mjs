@@ -13,7 +13,7 @@
  * (`TokenDocument._onDeleteOperation`, 14.367).
  */
 
-import { cleanup, made, makeCharacter, pinDie, settle } from "./fixtures.mjs";
+import { cleanup, made, makeCharacter, pinDie, settle, tokenData } from "./fixtures.mjs";
 import { checkText } from "./geometry.mjs";
 // A bound creature's blow, and the card's Apply (the lead's item 24).
 import { npcAttackWithDialog } from "../applications/actions.mjs";
@@ -135,7 +135,7 @@ export function totemBatch(context) {
       const actor = await makeCharacter({ name, classes: [["Shaman", level]] });
       await until(() => featureNamed(actor, "Totem"), "the Shaman's Totem feature", 20000);
       await actor.update({ "prototypeToken.actorLink": true });
-      const data = (await actor.getTokenDocument({ x, y, disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY })).toObject();
+      const data = (await tokenData(actor, { x, y, disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY }));
       await scene.createEmbeddedDocuments("Token", [data]);
       await until(() => tokenOf(scene, actor), `${name}'s token`);
       await fillPools(actor);
@@ -424,7 +424,7 @@ export function totemBatch(context) {
 
       // AND THE SECOND DOOR: the banner plants it once the shaman is standing.
       await actor.update({ "prototypeToken.actorLink": true });
-      const data = (await actor.getTokenDocument({ x: 2500, y: 2200, disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY })).toObject();
+      const data = (await tokenData(actor, { x: 2500, y: 2200, disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY }));
       await scene.createEmbeddedDocuments("Token", [data]);
       await until(() => tokenOf(scene, actor), "the shaman's token");
       const sheet = totem.sheet;

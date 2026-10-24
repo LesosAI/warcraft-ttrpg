@@ -38,9 +38,9 @@
     <div><dt>{{localize "AZEROTH.Sheet.Resilience"}}</dt>
       <dd>{{#each resiliences}}<button type="button" class="azeroth-npc-skill{{#if this.trained}} is-trained{{/if}}" data-action="rollResilience" data-resilience="{{this.key}}">{{localize this.label}}{{#if this.trained}} &#x2713;{{/if}}</button> {{/each}}</dd></div>
     <div><dt>{{localize "AZEROTH.Sheet.Immune"}}</dt>
-      <dd>{{#each system.immune}}{{this}} {{else}}&mdash;{{/each}}</dd></div>
+      <dd>{{#each system.immune}}{{localize (lookup ../config.damageTypes this)}} {{else}}&mdash;{{/each}}</dd></div>
     <div><dt>{{localize "AZEROTH.Sheet.Vulnerable"}}</dt>
-      <dd>{{#each system.vulnerable}}{{this}} {{else}}&mdash;{{/each}}</dd></div>
+      <dd>{{#each system.vulnerable}}{{localize (lookup ../config.damageTypes this)}} {{else}}&mdash;{{/each}}</dd></div>
     <div><dt>{{localize "AZEROTH.Sheet.Inflicts"}}</dt>
       <dd>{{#each system.inflicts}}{{localize (lookup ../config.conditions this)}} {{else}}&mdash;{{/each}}</dd></div>
     {{!-- What the standing passives enforce (D-691): a refused condition is

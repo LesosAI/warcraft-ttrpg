@@ -18,6 +18,8 @@ import { AZEROTH } from "../config.mjs";
 import { ROUND_SECONDS } from "./area-ticks.mjs";
 // 07's *The Druid in a form*: 1 Ferocity for every 2 Mana, rounded up (D-769).
 import { ferocityFor } from "./shapes.mjs";
+// A creature's Power pool IS its Mana (the lead, 2026-09-10).
+import { manaPool } from "./pools.mjs";
 
 /** 07 §2: two numbers cover every spell. */
 export function castingDC({ tier = 1, targetDefense = null } = {}) {
@@ -367,14 +369,41 @@ export function swiftCast({ row = null, spellAction = null, healing = false, use
  * feature (`class-features.mjs#featurePayment`) alike - the plan's reading
  * that 07's sentence reaches a Mana-cost feature too, flagged for the lead.
  *
+ * **AND A POOL A TALENT NAMES** (04's Shadowcraft: *paying Focus where 07-MAGIC
+ * asks for Mana*; the Legacy branches' door 8): `pool` - `class-talents.mjs
+ * #spellPoolFor`'s answer - takes 07's number as it stands, in that pool. It is
+ * asked first: the talent names the price, and no Druid holds one.
+ *
  * @param {number} mana  the price in Mana, every discount already taken off
- * @param {{inShapeshiftForm?: boolean}} [o]
- * @returns {{pool: "mana"|"ferocity", amount: number}}
+ * @param {{inShapeshiftForm?: boolean, pool?: string|null}} [o]
+ * @returns {{pool: string, amount: number}}
  */
-export function manaPrice(mana = 0, { inShapeshiftForm = false } = {}) {
+export function manaPrice(mana = 0, { inShapeshiftForm = false, pool = null } = {}) {
   const m = Math.max(0, Number(mana) || 0);
+  if (typeof pool === "string" && pool && pool !== "mana" && m > 0) return { pool, amount: m };
   if (inShapeshiftForm && m > 0) return { pool: "ferocity", amount: ferocityFor(m) };
   return { pool: "mana", amount: m };
+}
+
+/**
+ * **THE POOL A CAST'S MANA COMES OUT OF** (the B1 review), the ONE reading `castSpell`
+ * and `castWithDialog` share. A character's is its Mana pool - the granting class's,
+ * where it holds two (02 §10) - and NEVER another Power pool: a Rogue's Energy and a
+ * Ranger's Focus pay no spell's Mana, so a learned spell on a class with no Mana is
+ * refused (door 8). A CREATURE's is its Power pool, whatever the block names it (the
+ * lead, 2026-09-10: *a creature's Power pool IS its Mana*; `rules/pools.mjs#manaPool`):
+ * a pool named `mana`, else the only Power pool. Door 8's refusal turned a creature
+ * whose pool bore another name from casting free to not casting at all.
+ *
+ * @param {{creature?: boolean, powers?: Array<{itemId?: string|null, name?: string}>, snapshot?: Array<object>, grantItemId?: string|null}} o
+ *   `powers` a character's `system.powers`; `snapshot` a creature's `poolSnapshot()`
+ * @returns {object|null}
+ */
+export function castingManaPool({ creature = false, powers = [], snapshot = [], grantItemId = null } = {}) {
+  if (creature) return manaPool(snapshot);
+  const list = Array.isArray(powers) ? powers : [];
+  return list.find(p => p?.name === "mana" && grantItemId && p.itemId === grantItemId)
+    ?? list.find(p => p?.name === "mana") ?? null;
 }
 
 /**
@@ -396,20 +425,50 @@ export function manaPrice(mana = 0, { inShapeshiftForm = false } = {}) {
  *   a Garrote laid, and `noCasting` names what laid it. Asked FIRST - nothing about
  *   the Mana matters to a caster who cannot cast at all.
  *
+ * - **NoPool** (the Legacy branches' door 8): a price with NO pool to pay it -
+ *   a learned spell on a class that holds no Mana (a Warrior, a Rogue, a Ranger
+ *   with no talent naming another pool) used to be cast free, because the Mana
+ *   was asked only where a Mana pool existed. `payWith` names the pool a talent
+ *   pays in instead (Shadowcraft's Focus), and `payPool` is that pool;
+ * - **NoPower**: the pool a talent names holds less than the price.
+ *
  * @param {{mana: number, pool: {value: number}|null, inForm?: boolean, ferocity?: {value: number}|null,
- *   health?: number, overchannelHealth?: number, spellHealth?: number, noCasting?: string[]}} o
- * @returns {{reason: "Garroted"|"InForm"|"NoFerocity"|"NoMana"|"NoHealth", amount?: number, by?: string[]}|null}
+ *   health?: number, overchannelHealth?: number, spellHealth?: number, noCasting?: string[],
+ *   payWith?: string|null, payPool?: {value: number}|null}} o
+ * @returns {{reason: "Garroted"|"InForm"|"NoFerocity"|"NoPool"|"NoPower"|"NoMana"|"NoHealth", amount?: number, by?: string[], pool?: string}|null}
  */
-export function castRefusal({ mana = 0, pool = null, inForm = false, ferocity = null, health = 0, overchannelHealth = 0, spellHealth = 0, noCasting = [] } = {}) {
+export function castRefusal({ mana = 0, pool = null, inForm = false, ferocity = null, health = 0, overchannelHealth = 0, spellHealth = 0, noCasting = [], payWith = null, payPool = null } = {}) {
   const barred = (noCasting ?? []).filter(n => typeof n === "string" && n);
   if (barred.length) return { reason: "Garroted", by: barred };
-  const price = manaPrice(mana, { inShapeshiftForm: inForm });
+  const price = manaPrice(mana, { inShapeshiftForm: inForm, pool: payWith });
   if (price.pool === "ferocity") {
     if (!ferocity) return { reason: "InForm" };
     if ((ferocity.value ?? 0) < price.amount) return { reason: "NoFerocity", amount: price.amount };
-  } else if (pool && mana > 0 && (pool.value ?? 0) < mana) return { reason: "NoMana" };
+  } else if (price.pool !== "mana") {
+    if (!payPool) return { reason: "NoPool", pool: price.pool, amount: price.amount };
+    if ((payPool.value ?? 0) < price.amount) return { reason: "NoPower", pool: price.pool, amount: price.amount };
+  } else if (mana > 0) {
+    if (!pool) return { reason: "NoPool", pool: "mana", amount: mana };
+    if ((pool.value ?? 0) < mana) return { reason: "NoMana" };
+  }
   if (spellHealth > 0 && health - overchannelHealth - spellHealth < 1) return { reason: "NoHealth" };
   return null;
+}
+
+/**
+ * **WHETHER THE DIALOG MAY SAY THE CAST CAN BE PAID** (door 8): the pool that pays -
+ * Mana, Ferocity in a form, or a pool a talent names - holds the price, and a
+ * price with no pool to pay it can never be paid. `castWithDialog`'s `canPay`,
+ * the ONE reading beside `castRefusal`.
+ *
+ * @param {{price: {pool: string, amount: number}, pool?: {value: number}|null, ferocity?: {value: number}|null, payPool?: {value: number}|null}} o
+ */
+export function castCanPay({ price, pool = null, ferocity = null, payPool = null } = {}) {
+  const amount = Math.max(0, Number(price?.amount) || 0);
+  if (amount === 0) return true;
+  if (price.pool === "ferocity") return Boolean(ferocity) && (ferocity.value ?? 0) >= amount;
+  if (price.pool !== "mana") return Boolean(payPool) && (payPool.value ?? 0) >= amount;
+  return Boolean(pool) && (pool.value ?? 0) >= amount;
 }
 
 /**

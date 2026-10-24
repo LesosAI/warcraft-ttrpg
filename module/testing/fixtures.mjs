@@ -70,6 +70,71 @@ export async function cleanup() {
 export const settle = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
 /**
+ * **A TOKEN OBJECT IS NOT A DRAWN TOKEN** (B8b). `actor.getActiveTokens()` hands
+ * back the placeable as soon as core has made it, while its `_draw` is still
+ * awaiting the texture load, and `targetArrows` is assigned only after that
+ * await (14.367 `canvas/placeables/token.mjs` L1204-1262). Core's ticker draws the
+ * arrows of every token the user targets on every frame
+ * (`canvas/layers/tokens.mjs#animateTargets`, L448-466), so a token targeted
+ * before its draw reached that line threw *Cannot read properties of undefined
+ * (reading 'clear')* into whatever test was running. Wait for this before
+ * targeting a token a test has just placed.
+ *
+ * @param {Token|null|undefined} token
+ * @returns {boolean}
+ */
+export const tokenDrawn = token => Boolean(token && !token.destroyed && token.targetArrows);
+
+/**
+ * **A TOKEN'S DATA, AND NO THROWAWAY TOKEN DOCUMENT LEFT BEHIND** (B8b).
+ * `Actor#getTokenDocument` builds a TokenDocument on the viewed scene, and every
+ * TokenDocument registers itself as one of its actor's dependent tokens as it
+ * initialises (14.367 `documents/token.mjs#_initialize`, held in an IterableWeakSet
+ * until it is collected). Core's next update of that actor walks its dependents
+ * (`Actor#_updateDependentTokens` -> `TokenDocument#_onRelatedUpdate`) and reads
+ * `object` off each, which BUILDS an undrawn preview Token for the throwaway
+ * (`CanvasDocument#object`); the next special status the actor takes - Hidden, Blind,
+ * flying - reaches that Token's missing mesh in `Actor#prepareData`
+ * (`Token#_configureFilterEffect`) and fails the actor's data preparation: *Cannot
+ * read properties of undefined (reading 'filters')*. Probed live: fourteen such
+ * Tokens in one Blademaster run, and Wind Walk's hiding threw on two of them. The
+ * system never calls `getTokenDocument`, and core's own drop draws its preview and
+ * destroys it, so this is the fixtures' to stop: read the data, then take the
+ * throwaway off the actor's dependents (`_unregisterDependentToken`, 14.367).
+ *
+ * @param {Actor} actor
+ * @param {object} [data]  merged over the prototype token, as `getTokenDocument` takes it
+ * @returns {Promise<object>}  the token's data, for `createEmbeddedDocuments`
+ */
+export async function tokenData(actor, data = {}) {
+  const doc = await actor.getTokenDocument(data);
+  const raw = doc.toObject();
+  actor._unregisterDependentToken?.(doc);
+  return raw;
+}
+
+/**
+ * **CORE'S SCROLLING STATUS TEXT, OFF FOR A BATCH** (B8b; `quench-phase12.mjs`'s
+ * `withoutScrollingText` has the reason). `ActiveEffect#_displayScrollingStatus`
+ * floats a PIXI text over a token for two seconds and nothing awaits it, so a batch
+ * that lays a condition and then views another scene tears the canvas down under a
+ * running animation: core throws *Cannot read properties of null (reading
+ * 'position')* out of `#animateFrame` and *(reading 'off')* out of `PreciseText
+ * #destroy` - page errors, which fail the run. The Legacy batches lay effects and
+ * change scenes in nearly every case, and three of them hit it in one chain.
+ * Call it in a batch's `before`; await what it returns in `after`.
+ *
+ * @returns {Promise<() => Promise<void>>}  puts the setting back as it was
+ */
+export async function quietScrollingText() {
+  const before = game.settings.get("core", "scrollingStatusText");
+  if (before !== false) await game.settings.set("core", "scrollingStatusText", false);
+  return async () => {
+    if (before !== false) await game.settings.set("core", "scrollingStatusText", before);
+  };
+}
+
+/**
  * Record every `ui.notifications.warn` while `fn` runs, and say nothing.
  *
  * **A REFUSAL IS SAID IN WORDS** (D-737), so a test that expects one has to

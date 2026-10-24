@@ -32,6 +32,8 @@ import { wardMapOf, wardSchoolsNamed } from "../../rules/ward.mjs";
 import { isThinned } from "../../rules/swarm.mjs";
 // What an ally's aura lays on this creature (D-755).
 import { auraBaneRows, auraBoonRows, auraHalvesHealing, auraStandsFree, emptySchoolArmor } from "../../rules/auras.mjs";
+// A condition a creature cannot be for a span (04's Unfettered; the Legacy branches' door 25).
+import { immunitiesFrom } from "../../rules/legacy-uses.mjs";
 import { cleanAutomation, passiveEffects } from "../../rules/ability-automation.mjs";
 import { signatureEffects } from "../../rules/signatures.mjs";
 import { emptyByTestKind, laidBaneRows, laidBaneTotals, laidBoonRows } from "../../rules/banes.mjs";
@@ -57,14 +59,25 @@ function automationField() {
     dc: optionalNumberField({ min: 0 }),
     uses: new fields.SchemaField({ max: optionalNumberField({ min: 0 }), value: optionalNumberField({ min: 0 }), per: choiceField(AZEROTH.abilityUsesPer) }),
     heal: optionalNumberField({ min: 0 }),
-    damage: new fields.SchemaField({ amount: optionalNumberField({ min: 0 }), type: choiceField(AZEROTH.damageTypes) }),
+    // `half` and `onFail`: what a passed Test leaves of it (the B8a2 pass; 14's *or half on a
+    // Resilience (Reflex) Test*, the Wild Kodo's *... or takes 3 damage*). New keys with
+    // initials, stamped off the pack copy by migration 0.12.28.
+    damage: new fields.SchemaField({
+      amount: optionalNumberField({ min: 0 }), type: choiceField(AZEROTH.damageTypes),
+      half: new fields.BooleanField({ initial: false }), onFail: new fields.BooleanField({ initial: false })
+    }),
     resist: choiceField(AZEROTH.resiliences),
     attack: new fields.SchemaField({
       bonus: optionalNumberField(), damage: optionalNumberField({ min: 0 }),
       traits: new fields.ArrayField(new fields.StringField(), { initial: [] })
     }),
     area: new fields.StringField({ required: true, blank: true, initial: "" }),
-    inflicts: new fields.SchemaField({ condition: choiceField(AZEROTH.conditions), value: optionalNumberField({ min: 1 }), until: choiceField(AZEROTH.untilKinds) }),
+    // `onFail`: the Test governs it - a failure lands it at once (the lead: *"Land
+    // automatically"*; the B8a2 pass).
+    inflicts: new fields.SchemaField({
+      condition: choiceField(AZEROTH.conditions), value: optionalNumberField({ min: 1 }), until: choiceField(AZEROTH.untilKinds),
+      onFail: new fields.BooleanField({ initial: false })
+    }),
     spell: new fields.StringField({ required: true, blank: true, initial: "" }),
     note: new fields.StringField({ required: true, blank: true, initial: "" }),
     // Why an entry is still prose (D-691): recorded, so the census can print
@@ -460,7 +473,9 @@ export class NpcData extends foundry.abstract.TypeDataModel {
     this.conditionImmunities = [...new Set([
       ...(this.conditionImmunities ?? []),
       ...passives.conditionImmunities,
-      ...signature.conditionImmunities
+      ...signature.conditionImmunities,
+      // What a Use refuses for a span (04's Unfettered; door 25), off its active effects.
+      ...immunitiesFrom((this.parent?.effects ?? []).filter(e => e.active !== false && e.disabled !== true).map(e => e.flags?.["azeroth-rpg"] ?? {}))
     ])];
     // **`refuses` IS THE BLOCK'S OWN ROW** and stays the creature's: 14 §1
     // prints what the creature IS, and a helm it happens to be carrying is not
@@ -482,6 +497,14 @@ export class NpcData extends foundry.abstract.TypeDataModel {
     // The block's attack Bonus is inside an array an effect cannot reach, so
     // the standing bonus sits beside it and the attack door adds it.
     this.attackBonus = passives.attack;
+    // **WHAT AN OWNER'S TALENT MAKES OF A BOUND CREATURE'S ATTACK** (the Legacy
+    // branches' door 20: 04's Serpent Ward, *Your Searing totem spits venom. Its
+    // attack deals Nature damage rather than Fire*): two derived words, empty here,
+    // which `rules/bound.mjs#boundEffects`' `final`-phase `override` writes - the
+    // attack's school and the form its strike is drawn as. Strings from the start,
+    // so core's unguided change reads their type; `npcAttackWithDialog` reads them.
+    this.attackSchool = "";
+    this.attackForm = "";
     for (const [key, points] of Object.entries(passives.abilities)) {
       const ability = this.abilities[key];
       if (!ability || ability.value === null || ability.value === undefined || !points) continue;

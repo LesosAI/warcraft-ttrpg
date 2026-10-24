@@ -5,7 +5,7 @@
  * throw adds Dexterity where a swing adds Strength.
  */
 
-import { cleanup, give, made, makeCharacter, makeNpc, openSheet, pinDie, settle, useAction } from "./fixtures.mjs";
+import { cleanup, give, made, makeCharacter, makeNpc, openSheet, pinDie, settle, useAction, tokenData } from "./fixtures.mjs";
 import { npcAttackWithDialog } from "../applications/actions.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 import { totemBlock } from "../rules/bound.mjs";
@@ -680,7 +680,7 @@ export function boundBatch(context) {
       const scene = await Scene.create({ name: "ZZ Bound Scene", width: 1000, height: 1000, grid: { size: 100 } });
       made.push(scene);
       // An unlinked token, as one placed before the bond would be: its actor is a copy.
-      const [tokenDoc] = await scene.createEmbeddedDocuments("Token", [(await wolf.getTokenDocument({ x: 100, y: 100, actorLink: false })).toObject()]);
+      const [tokenDoc] = await scene.createEmbeddedDocuments("Token", [(await tokenData(wolf, { x: 100, y: 100, actorLink: false }))]);
       const copy = tokenDoc.actor;
       assert.ok(copy?.isToken, "the token's actor is not a synthetic one");
       assert.equal(B().bondOf(copy)?.ownerUuid, ranger.uuid, "the token's sheet does not read the world actor's bond");

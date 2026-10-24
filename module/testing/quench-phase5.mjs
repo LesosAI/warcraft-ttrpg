@@ -369,10 +369,16 @@ export function toolsBatch(context) {
       assert.equal(target.system.ward?.arcane, 0, "an unequipped Ward is still counted");
       await worn.update({ "system.equipped": true });
 
-      // Documents: the index does not carry `system.damage`.
-      const spell = (await game.packs.get(PACK_FOR.spell).getDocuments())
-        .find(d => d.system.school === "arcane" && (d.system.damage?.rating ?? 0) >= 2);
-      assert.ok(spell, "no damaging Arcane spell");
+      // A spell NAMED, whose one target takes its Rating at the cast: the first
+      // damaging Arcane spell the pack handed back was anybody's guess, and since
+      // the B8a pass that can be a tick (Ley Wound), an area that strikes at the
+      // start of a turn (Starfall) or damage past armor and Ward (Disintegration) -
+      // none of which writes a per-target number for the Ward to come off.
+      const spell = (await game.packs.get(PACK_FOR.spell).getDocuments()).find(d => d.name === "Arcane Missiles");
+      assert.ok(spell, "no Arcane Missiles in the pack");
+      assert.equal(spell.system.school, "arcane");
+      assert.isAtLeast(spell.system.damage?.rating ?? 0, 2, "Arcane Missiles deals too little for Ward 1 to show");
+      assert.isNotTrue(spell.system.damage?.bypass, "the spell chosen bypasses Ward");
       const caster = await makeCharacter({ name: "ZZ Tools Caster", classes: [["Mage", 5]], spells: [spell.name] });
       const pool = caster.system.powers.find(p => p.name === "mana");
       await caster.updatePool({ itemId: pool.itemId, kind: "power", value: pool.max });

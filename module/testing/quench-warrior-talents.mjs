@@ -20,7 +20,7 @@
  * Every document a test makes is deleted in `after`.
  */
 
-import { cleanup, drainAreaWork, giveTurn, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings } from "./fixtures.mjs";
+import { cleanup, drainAreaWork, giveTurn, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings, tokenDrawn, tokenData } from "./fixtures.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 import { disengage } from "../applications/combat-actions.mjs";
@@ -77,12 +77,12 @@ async function sceneWith(placements) {
   const data = [];
   for (const { actor, x, y, side = "friendly" } of placements) {
     await actor.update({ "prototypeToken.actorLink": true });
-    data.push((await actor.getTokenDocument({
+    data.push((await tokenData(actor, {
       x, y, disposition: CONST.TOKEN_DISPOSITIONS[side === "friendly" ? "FRIENDLY" : "HOSTILE"]
-    })).toObject());
+    })));
   }
   await scene.createEmbeddedDocuments("Token", data);
-  for (let i = 0; i < 60 && !placements.every(p => p.actor.getActiveTokens(true).length); i++) {
+  for (let i = 0; i < 60 && !placements.every(p => tokenDrawn(p.actor.getActiveTokens(true)[0])); i++) {
     await new Promise(r => setTimeout(r, 100));
   }
   await settle();
@@ -219,7 +219,9 @@ export function warriorTalentsBatch(context) {
       this.timeout(180000);
       const warrior = await warriorWith("ZZ WT Wide Swing", { weapons: ["Battleaxe"], ranks: { "Wide Swing": 1 } });
       const axe = itemNamed(warrior, "Battleaxe");
-      const high = await strike(warrior, { weapon: axe, face: 15, dc: 2 });
+      // `strike` hands the roll no modifier, so the margin is the face less the DC:
+      // 05 §2's SL 3 takes 15 (B8b: 15 against 2 is 13, SL 2).
+      const high = await strike(warrior, { weapon: axe, face: 18, dc: 0 });
       assert.isAtLeast(high.rolls[0].outcome.sl, 3);
       const button = parsed(high).querySelector('[data-action="extraStrike"][data-strike="wide-swing"]');
       assert.ok(button, "no Cleave button at SL 3");
@@ -396,7 +398,10 @@ export function warriorTalentsBatch(context) {
     it("WOUNDED BEAST: an attack that gets through deals the rank more, and a tick does not", async function () {
       this.timeout(180000);
       const warrior = await warriorWith("ZZ WT Wounded", { weapons: ["Longsword"], ranks: { "Wounded Beast": 2 } });
-      const full = warrior.system.health.max;
+      // The Health the fixture left, not the maximum: a character is made at the
+      // schema's 10 whatever its maximum derives to (B8b).
+      const full = warrior.system.health.value;
+      assert.isAtLeast(full, 9, "room for both blows");
       await warrior.applyDamage(3, { struck: true, attack: true });
       await until(() => warrior.system.health.value === full - 5, "3 and the rank's 2");
       await warrior.applyDamage(3, { struck: true, attack: false });
@@ -409,6 +414,9 @@ export function warriorTalentsBatch(context) {
       this.timeout(240000);
       const warrior = await warriorWith("ZZ WT Wall", { weapons: ["Longsword"], armor: ["Kite shield"], ranks: { "Shield Wall": 2 } });
       const ally = await makeCharacter({ name: "ZZ WT Wall Ally", classes: [["Priest", 3]] });
+      // Out of a fight a friend is a fellow member of the Party (D-755's
+      // `countsAsAlly`), never a token's disposition (B8b).
+      for (const a of [warrior, ally]) await a.setParty(true);
       await sceneWith([{ actor: warrior, x: 1000, y: 1000 }, { actor: ally, x: 1100, y: 1000 }]);
       const card = await reactWithDialog(warrior, "block", {});
       assert.ok(card, "the Block was refused");

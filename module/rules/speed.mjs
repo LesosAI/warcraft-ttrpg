@@ -25,13 +25,27 @@ export const GREATER_MUFFLED = /Muffled \(Greater\)/i;
  * @param {boolean} [input.encumbering]     Whether the suit's category is Encumbering.
  * @param {string[]} [input.grants]         The suit's affix grants.
  * @param {string} [input.load]             `rules/size.mjs#loadState` (D-675).
+ * @param {boolean} [input.waivesEncumbering]  04's Warden's Mail at rank 2: *the
+ *   **Encumbering** trait does not reduce your Speed* (the Legacy branches' door 23;
+ *   `class-talents.mjs#armorAccessFor`)
+ * @param {number} [input.weaponSpeed]      what an Encumbering weapon worn costs (08 §5), so the
+ *   waiver gives that back too
  * @returns {{key: string, value: number}[]}
  */
-export function speedParts({ raceSpeed = null, armorSpeed = 0, encumbering = false, grants = [], load = "unencumbered" } = {}) {
+export function speedParts({ raceSpeed = null, armorSpeed = 0, encumbering = false, grants = [], load = "unencumbered", waivesEncumbering = false, weaponSpeed = 0 } = {}) {
   const parts = [{ key: "race", value: Number.isFinite(raceSpeed) ? raceSpeed : BASE_SPEED }];
   if (armorSpeed) parts.push({ key: "armor", value: armorSpeed });
-  if (encumbering && grants.some(g => GREATER_MUFFLED.test(String(g)))) {
+  const muffled = encumbering && grants.some(g => GREATER_MUFFLED.test(String(g)));
+  if (muffled) {
     parts.push({ key: "muffled", value: ENCUMBERING_SPEED_PENALTY });
+  }
+  // **THE TRAIT DOES NOT REDUCE YOUR SPEED** (Warden's Mail at rank 2; door 23): the
+  // suit's Encumbering given back once - never a second time beside Muffled - and,
+  // MY READING for the lead, an Encumbering weapon's too, since the sentence names the
+  // trait and not the suit.
+  if (waivesEncumbering === true) {
+    const back = (encumbering && !muffled ? ENCUMBERING_SPEED_PENALTY : 0) + Math.max(0, -(Number(weaponSpeed) || 0));
+    if (back > 0) parts.push({ key: "waived", value: back });
   }
   // What you are carrying (05 §10, D-675). A PART rather than a condition:
   // the state is derived from the load every time data is prepared, and a

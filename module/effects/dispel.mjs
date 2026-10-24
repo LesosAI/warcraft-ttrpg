@@ -27,6 +27,10 @@ import { cleanEffectIds, dispelGated, dispelJudgement, dispelOptions, ongoingOwn
 import { dispelGateFor, unstableFor } from "../rules/class-talents.mjs";
 import { wardBySchool } from "../rules/ward.mjs";
 import { strikeCard } from "./after-blow.mjs";
+// An area's dispel (04's Disenchant; the Legacy branches' door 25), judged off the
+// dispeller's own feature.
+import { featureOnUse } from "./legacy-uses.mjs";
+import { onUseSpirits } from "../rules/legacy-uses.mjs";
 
 /** The query an end on a creature this client does not own goes through. */
 export const DISPEL_QUERY = "azeroth-rpg.dispel";
@@ -124,10 +128,27 @@ async function endHere({ target, ids }) {
 }
 
 /**
- * The GM-side handler (`DISPEL_QUERY`). Throws with the reason, which travels back
- * to the caller as the refusal.
+ * **WHETHER THE DISPELLER'S FEATURE IS AN AREA'S DISPEL** (04's Disenchant: *end one
+ * effect on each creature within 15 feet of a point*; the Legacy branches' door 25):
+ * the feature the request names, its Use read at the rank off the granting talent
+ * (`effects/legacy-uses.mjs#featureOnUse`).
+ *
+ * @param {Actor} dispeller
+ * @param {string|null} featureId
  */
-export async function dispelQueryHandler({ targetUuid = null, dispellerUuid = null, ids = [] } = {}, { user = null } = {}) {
+function areaDispelHeld(dispeller, featureId) {
+  const item = featureId ? (dispeller?.items?.get?.(featureId) ?? null) : null;
+  if (item?.type !== "feature") return false;
+  const { onUse, rank } = featureOnUse(dispeller, item);
+  return Boolean(onUseSpirits(onUse, { rank }).areaDispel);
+}
+
+/**
+ * The GM-side handler (`DISPEL_QUERY`). Throws with the reason, which travels back
+ * to the caller as the refusal. A dispeller holds 02's Dispel, or the feature the
+ * request names is an area's dispel (04's Disenchant; door 25).
+ */
+export async function dispelQueryHandler({ targetUuid = null, dispellerUuid = null, ids = [], featureId = null } = {}, { user = null } = {}) {
   const target = targetUuid ? await fromUuid(targetUuid) : null;
   if (target?.documentName !== "Actor") throw new Error(game.i18n.localize("AZEROTH.Card.TargetGone"));
   if (user) {
@@ -135,7 +156,7 @@ export async function dispelQueryHandler({ targetUuid = null, dispellerUuid = nu
     if (dispeller?.documentName !== "Actor" || !dispeller.testUserPermission(user, "OWNER")) {
       throw new Error(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: dispeller?.name ?? "" }));
     }
-    if (!dispeller.hasFeature?.("Dispel")) throw new Error(game.i18n.format("AZEROTH.Dispel.NoFeature", { name: dispeller.name }));
+    if (!dispeller.hasFeature?.("Dispel") && !areaDispelHeld(dispeller, featureId)) throw new Error(game.i18n.format("AZEROTH.Dispel.NoFeature", { name: dispeller.name }));
   }
   return endHere({ target, ids });
 }
@@ -143,16 +164,18 @@ export async function dispelQueryHandler({ targetUuid = null, dispellerUuid = nu
 /**
  * **END THE EFFECTS SELECTED ON ONE CREATURE**, and say what came of it.
  *
- * @param {{dispeller: Actor, target: Actor|null, ids: string[], name?: string}} o
+ * @param {{dispeller: Actor, target: Actor|null, ids: string[], name?: string, featureId?: string|null}} o
+ *   `featureId` the area dispel's own feature (04's Disenchant; door 25), which the
+ *   GM's handler judges the request by
  * @returns {Promise<{name: string, ended: Array<{id: string, name: string, owner: string|null}>, kept: string[], error?: boolean}>}
  */
-export async function endEffects({ dispeller, target, ids = [], name = "" } = {}) {
+export async function endEffects({ dispeller, target, ids = [], name = "", featureId = null } = {}) {
   if (!target) return { name, ended: [], kept: [...ids], error: true };
   try {
     if (target.isOwner) return await endHere({ target, ids });
     const gm = game.users?.activeGM ?? null;
     if (!gm) throw new Error(game.i18n.localize("AZEROTH.Dispel.NoGM"));
-    const done = await gm.query(DISPEL_QUERY, { targetUuid: target.uuid, dispellerUuid: dispeller?.uuid ?? null, ids: cleanEffectIds(ids) }, { timeout: 15000 });
+    const done = await gm.query(DISPEL_QUERY, { targetUuid: target.uuid, dispellerUuid: dispeller?.uuid ?? null, ids: cleanEffectIds(ids), featureId: featureId ?? null }, { timeout: 15000 });
     return done && typeof done === "object"
       ? { name: done.name ?? target.name, ended: Array.isArray(done.ended) ? done.ended : [], kept: Array.isArray(done.kept) ? done.kept : [] }
       : { name: target.name, ended: [], kept: [...ids], error: true };

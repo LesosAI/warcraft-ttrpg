@@ -23,7 +23,7 @@
  * Every document a test makes is deleted in `after`.
  */
 
-import { cleanup, giveTurn, made, makeBoss, makeCharacter, makeNpc, dialogFor, fromPack, pinDie, settle, untilHook, PACK_FOR } from "./fixtures.mjs";
+import { cleanup, giveTurn, made, makeBoss, makeCharacter, makeNpc, dialogFor, fromPack, pinDie, settle, untilHook, PACK_FOR, tokenData } from "./fixtures.mjs";
 import { attackWithDialog, castWithDialog, npcAttackWithDialog, reactionRows } from "../applications/actions.mjs";
 // Where a distance between tokens is measured (D-732).
 import { distanceBetween, enemyDistances } from "../applications/roll-dialog.mjs";
@@ -119,6 +119,8 @@ export function attacksPerRoundBatch(context) {
       const sword = await arm(actor, "Longsword");
       const foe = await makeNpc("Kobold");
       const combat = await fightWith([actor, foe]);
+      // Its own turn: a Half-Action is spent on it (the lead: *"Refuse off-turn Half-Actions"*).
+      await giveTurn(combat, actor);
       const me = combatantOf(combat, actor);
       const unpin = pinDie(18);
       try {
@@ -150,6 +152,8 @@ export function attacksPerRoundBatch(context) {
       const sword = await arm(actor, "Longsword");
       const foe = await makeNpc("Kobold");
       const combat = await fightWith([actor, foe]);
+      // Its own turn: a Half-Action is spent on it (the lead: *"Refuse off-turn Half-Actions"*).
+      await giveTurn(combat, actor);
       const me = combatantOf(combat, actor);
       const unpin = pinDie(18);
       let cards;
@@ -176,7 +180,8 @@ export function attacksPerRoundBatch(context) {
       assert.isFalse(actor.hasExtraAttack, "level 4 should not hold Extra Attack");
       const sword = await arm(actor, "Longsword");
       const foe = await makeNpc("Kobold");
-      await fightWith([actor, foe]);
+      // Its own turn: a Half-Action is spent on it (the lead: *"Refuse off-turn Half-Actions"*).
+      await giveTurn(await fightWith([actor, foe]), actor);
       const unpin = pinDie(18);
       let cards;
       try {
@@ -196,6 +201,8 @@ export function attacksPerRoundBatch(context) {
       const sword = await arm(actor, "Longsword");
       const foe = await makeNpc("Kobold");
       const combat = await fightWith([actor, foe]);
+      // Its own turn: a Half-Action is spent on it (the lead: *"Refuse off-turn Half-Actions"*).
+      await giveTurn(combat, actor);
       const me = combatantOf(combat, actor);
       const unpin = pinDie(18);
       try {
@@ -374,21 +381,27 @@ export function attacksPerRoundBatch(context) {
       assert.equal(me.budget.halfActions, halves, "the refused blow spent a Half-Action anyway");
       assert.equal(me.budget.offHandAttacks, 1, "the refused blow was counted against the round's one");
 
-      // And a card struck on this creature's turn carries the button, while one
-      // struck on another's does not: a control nobody may press is not drawn.
+      // And a card struck on this creature's turn carries the button.
       assert.include(card.content, 'data-action="offHandFromCard"',
         "the turn's own card carries no off-hand button");
+      // **A MAIN-HAND BLOW ON ANOTHER'S TURN IS REFUSED TOO** (the lead: *"Refuse off-turn
+      // Half-Actions"*): it would spend a Half-Action of a turn nobody is taking, so it is
+      // refused in words with nothing spent - and no card struck on another creature's
+      // turn is left to carry the off hand's button.
       const unpin3 = pinDie(18);
-      let elsewhere;
+      let elsewhere = [];
+      let offTurn = [];
       try {
-        elsewhere = (await cardsFrom(actor, () => attackWithDialog(actor, main)))[0] ?? null;
+        offTurn = await noticesFrom("warn", async () => {
+          elsewhere = await cardsFrom(actor, () => attackWithDialog(actor, main));
+        });
       } finally {
         unpin3();
       }
-      if (elsewhere) {
-        assert.notInclude(elsewhere.content, 'data-action="offHandFromCard"',
-          "a blow struck on somebody else's turn drew the off hand's button");
-      }
+      assert.lengthOf(elsewhere, 0, "a main-hand blow landed on another creature's turn");
+      assert.include(offTurn, game.i18n.localize("AZEROTH.Budget.Refuse.NotYourTurn"),
+        `the off-turn blow was not refused in words: ${JSON.stringify(offTurn)}`);
+      assert.equal(me.budget.halfActions, halves, "the refused main-hand blow spent a Half-Action anyway");
     });
 
     /* ---- 14 §1: a creature Attacks as 05 gives it -------------------------- */
@@ -399,6 +412,8 @@ export function attacksPerRoundBatch(context) {
       assert.equal(boss.system.weightClass, "boss", "the fixture did not give a Boss");
       const party = await makeCharacter({ name: "ZZ Boss Victim", classes: [["Warrior", 1]] });
       const combat = await fightWith([boss, party]);
+      // Its own turn: a Half-Action is spent on it (the lead: *"Refuse off-turn Half-Actions"*).
+      await giveTurn(combat, boss);
       // 14 §1's exemption is gone with the limit it was an exemption from
       // (D-711): the budget carries no Attack counter for anybody.
       assert.notProperty(combatantOf(combat, boss).budget, "attacks",
@@ -429,6 +444,8 @@ export function attacksPerRoundBatch(context) {
       assert.equal(foe.system.weightClass, "standard", "the fixture did not give a Standard");
       const party = await makeCharacter({ name: "ZZ Standard Victim", classes: [["Warrior", 1]] });
       const combat = await fightWith([foe, party]);
+      // Its own turn: a Half-Action is spent on it (the lead: *"Refuse off-turn Half-Actions"*).
+      await giveTurn(combat, foe);
       assert.notProperty(combatantOf(combat, foe).budget, "attacks", "a Standard still carries an Attack counter");
       const unpin = pinDie(18);
       try {
@@ -452,7 +469,8 @@ export function attacksPerRoundBatch(context) {
       await foe.setFlag("azeroth-rpg", "extraAttack", true);
       await until(() => foe.hasExtraAttack === true, "the GM's Extra Attack flag");
       const party = await makeCharacter({ name: "ZZ Twice-Struck", classes: [["Warrior", 1]] });
-      await fightWith([foe, party]);
+      // Its own turn: a Half-Action is spent on it (the lead: *"Refuse off-turn Half-Actions"*).
+      await giveTurn(await fightWith([foe, party]), foe);
       const unpin = pinDie(18);
       let cards;
       try {
@@ -568,7 +586,7 @@ export function attacksPerRoundBatch(context) {
       const data = [];
       for (const [who, x, side] of [[actor, 500, "FRIENDLY"], [a, 600, "HOSTILE"], [b, 400, "HOSTILE"]]) {
         await who.update({ "prototypeToken.actorLink": true });
-        data.push((await who.getTokenDocument({ x, y: 500, disposition: CONST.TOKEN_DISPOSITIONS[side] })).toObject());
+        data.push((await tokenData(who, { x, y: 500, disposition: CONST.TOKEN_DISPOSITIONS[side] })));
       }
       await scene.createEmbeddedDocuments("Token", data);
       await until(() => [actor, a, b].every(w => w.getActiveTokens(true).length), "the tokens to be placed");
@@ -643,7 +661,7 @@ export function attacksPerRoundBatch(context) {
       made.push(scene);
       await scene.view();
       await actor.update({ "prototypeToken.actorLink": true });
-      const data = (await actor.getTokenDocument({ x: 500, y: 500, disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY })).toObject();
+      const data = (await tokenData(actor, { x: 500, y: 500, disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY }));
       const [placed] = await scene.createEmbeddedDocuments("Token", [data]);
       await until(() => canvas.ready && canvas.scene?.id === scene.id && actor.getActiveTokens(true).length === 1, "the swordsman's token on the viewed scene");
       // Nothing selected: the only token there is is the one that swings.
@@ -811,9 +829,9 @@ export function attacksPerRoundBatch(context) {
     /** A token for an actor on this describe's scene, drawn and linked. */
     async function placeOn(actor, x, { y = 500, side = "hostile" } = {}) {
       await actor.update({ "prototypeToken.actorLink": true });
-      const data = (await actor.getTokenDocument({
+      const data = (await tokenData(actor, {
         x, y, disposition: CONST.TOKEN_DISPOSITIONS[side === "friendly" ? "FRIENDLY" : "HOSTILE"]
-      })).toObject();
+      }));
       const [doc] = await scene.createEmbeddedDocuments("Token", [data]);
       await until(() => canvas.tokens.get(doc.id)?.center, `${actor.name}'s token drawn`, 20000);
       return doc;
@@ -1147,9 +1165,9 @@ export function attacksPerRoundBatch(context) {
     /** A linked token for an actor at a pixel position, drawn. */
     async function standOn(scene, actor, x, y, side = "hostile") {
       await actor.update({ "prototypeToken.actorLink": true });
-      const data = (await actor.getTokenDocument({
+      const data = (await tokenData(actor, {
         x, y, disposition: CONST.TOKEN_DISPOSITIONS[side.toUpperCase()]
-      })).toObject();
+      }));
       const [doc] = await scene.createEmbeddedDocuments("Token", [data]);
       // DRAWN, not merely placed: a centre exists as soon as the document does,
       // and core's target animation calls `_drawTargetArrows` on every targeted

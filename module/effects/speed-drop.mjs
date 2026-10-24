@@ -107,7 +107,9 @@ async function dropHere({ victim, feet, source, originUuid, span }) {
   }).map(e => e.id);
   if (stale.length) await victim.deleteEmbeddedDocuments("ActiveEffect", stale);
   const [made] = await victim.createEmbeddedDocuments("ActiveEffect", [dropData({ feet: n, source, originUuid, span })]);
-  return { name: victim.name, feet: n, landed: Boolean(made) };
+  // The effect it made, so a hit turned into a miss deletes exactly that one (the
+  // Legacy branches' door 13, `rules/miss.mjs`).
+  return { name: victim.name, feet: n, landed: Boolean(made), effectId: made?.id ?? null };
 }
 
 /** The GM-side handler: the asker must own what struck. Throws with the reason. */
@@ -127,19 +129,24 @@ export async function speedDropQueryHandler({ victimUuid = null, feet = 0, sourc
  * Drop a creature's Speed by some feet for a span, and say what came of it.
  *
  * @param {{victim: Actor|null, feet: number, source?: string, by?: Actor|null,
- *   span?: {duration: object, start: object}|null, name?: string}} o
+ *   span?: {duration: object, start: object}|null, name?: string}} o  `name` is the
+ *   target's as the card's row names it - its TOKEN's - and the result reports it
  * @returns {Promise<{name: string, feet: number, landed: boolean}>}
  */
 export async function laySpeedDrop({ victim = null, feet = 0, source = "", by = null, span = null, name = "" } = {}) {
+  // **THE CREATURE AS THE CARD'S ROW NAMES IT** (the lead's *"The token's name"*, on
+  // `effects/inflict.mjs#inflictCondition`, the sibling landing door this one copies):
+  // the drop's line names the token the row names, the actor's only where none is given.
+  const named = row => (name && row && typeof row === "object" ? { ...row, name: String(name) } : row);
   if (!victim) return { name, feet: 0, landed: false };
   const originUuid = by?.uuid ?? null;
   try {
-    if (victim.isOwner) return await dropHere({ victim, feet, source, originUuid, span });
+    if (victim.isOwner) return named(await dropHere({ victim, feet, source, originUuid, span }));
     const gm = game.users.activeGM;
     if (!gm) throw new Error(game.i18n.localize("AZEROTH.Rider.Inflict.NoGM"));
-    return await gm.query(SPEED_DROP_QUERY, { victimUuid: victim.uuid, feet, source, originUuid, span }, { timeout: 15000 });
+    return named(await gm.query(SPEED_DROP_QUERY, { victimUuid: victim.uuid, feet, source, originUuid, span }, { timeout: 15000 }));
   } catch (err) {
     ui.notifications?.warn(err.message);
-    return { name: victim.name, feet: 0, landed: false };
+    return named({ name: victim.name, feet: 0, landed: false });
   }
 }

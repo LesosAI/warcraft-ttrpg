@@ -3,16 +3,29 @@
   turn's end, the dying Test at its start. One Test button naming its actor,
   and Stabilized where the track is the dying one. The Test 07 gives a held or
   Stunned creature (D-778) names its Resilience and the effect it would end.
+  The Legacy branches' B3: the Spirit Realm's Reach (a Test like any other) and
+  06 §10's offer (no Test: its own Take button), and a construct's Cutting Gear
+  (a free end of one Entangled). `ownerSees` names the creature's owner as the
+  block's audience (`data-reaction-owner`), so a player whose creature it is sees
+  a prompt the GM's client posted.
 --}}
 <div class="azeroth azeroth-card {{cardClass}}" data-message-kind="prompt">
   {{> systems/azeroth-rpg/templates/chat/partials/card-header.hbs title=title subtitle=name}}
 
   <div class="azeroth-card-body">
     <p class="azeroth-card-text">{{text}}</p>
-    <div class="azeroth-card-actions">
+    <div class="azeroth-card-actions"{{#if ownerSees}} data-reaction-owner="{{actorUuid}}"{{/if}}>
+      {{#unless noTest}}
       <button type="button" data-action="resistTest" data-resilience="{{#if resilience}}{{resilience}}{{else}}body{{/if}}"{{#if dc}} data-dc="{{dc}}"{{/if}} data-actor-uuid="{{actorUuid}}" data-purpose="{{purpose}}"{{#if effectId}} data-effect-id="{{effectId}}"{{/if}}>{{testLabel}}</button>
+      {{/unless}}
       {{#if stabilize}}
       <button type="button" data-action="stabilize" data-actor-uuid="{{actorUuid}}">{{localize "AZEROTH.Combat.Stabilize"}}</button>
+      {{/if}}
+      {{#if offer}}
+      <button type="button" data-action="takeOffer" data-actor-uuid="{{actorUuid}}">{{localize "AZEROTH.Spirit.Offer.Take"}}</button>
+      {{/if}}
+      {{#if cuttingGear}}
+      <button type="button" data-action="cuttingGear" data-actor-uuid="{{actorUuid}}"{{#if effectId}} data-effect-id="{{effectId}}"{{/if}}>{{localize "AZEROTH.CuttingGear.Button"}}</button>
       {{/if}}
     </div>
   </div>

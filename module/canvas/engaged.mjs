@@ -13,7 +13,9 @@
  */
 
 import { countsAsAlly, countsAsEnemy, isEngaged, threatReach } from "../rules/distance.mjs";
-import { feetBetweenFootprints, footprintOf } from "./footprints.mjs";
+import { feetBetweenFootprints, feetToPoint, footprintOf } from "./footprints.mjs";
+// Whom an area Use gathers (the B6 fix; the lead: *"Measure the area"*).
+import { gathers, insideCircle } from "../rules/area-gather.mjs";
 
 /**
  * The reach an actor threatens with (06 §5): five feet, or ten with a **Reach**
@@ -215,6 +217,40 @@ export function engagedNow(actor) {
 }
 
 /**
+ * **WHETHER A COMBATANT IS ENGAGED, IN ITS OWN FIGHT** (02's Focus: *a turn in which
+ * you have neither moved nor been Engaged*; the Legacy branches' door 9, the B1
+ * review). The turn's boundaries run on the active GM's client, which may be viewing
+ * another scene than the fight's - and `engagedNow` reads the VIEWED board, so a
+ * Ranger beside an enemy on an unviewed scene refilled as though alone. This reads
+ * the fight itself: the combatant's own token DOCUMENT and every other combatant's on
+ * the same scene, measured between the nearest spaces on that scene's own grid
+ * (D-732, as `AzerothCombatant#opportunities` measures a departure), each judged an
+ * enemy by the tracker's sides (`countsAsEnemy`). False where nothing can be measured.
+ *
+ * @param {Combatant|null} combatant
+ * @returns {boolean}
+ */
+export function engagedInFight(combatant) {
+  const fight = combatant?.combat ?? combatant?.parent ?? null;
+  const mine = combatant?.token ?? null;
+  const scene = mine?.parent ?? null;
+  if (!fight || !mine || !scene?.grid || !combatant.actor) return false;
+  const roller = standingOf(mine, combatant, fight);
+  const gm = globalThis.game?.user?.isGM === true;
+  const own = footprintOf(mine);
+  const distances = [];
+  for (const other of fight.combatants ?? []) {
+    if (!other || other.id === combatant.id || !other.actor) continue;
+    const theirs = other.token ?? null;
+    if (!theirs || theirs.parent?.id !== scene.id) continue;
+    if (!countsAsEnemy(roller, standingOf(theirs, other, fight), { gm })) continue;
+    const feet = feetBetweenFootprints(own, footprintOf(theirs), scene.grid);
+    if (feet !== null) distances.push(feet);
+  }
+  return isEngaged(distances, reachOfActor(combatant.actor));
+}
+
+/**
  * **THE CREATURES WITHIN SO MANY FEET OF A TOKEN, THAT STAND IN A RELATION TO AN
  * ACTOR** (D-774): every token on the viewed scene `rules/distance.mjs#countsAsAlly`
  * (or `#countsAsEnemy`) says is the actor's ally (or enemy), measured between the
@@ -225,9 +261,14 @@ export function engagedNow(actor) {
  * ally (the lead's D-755 reading of *friendly*); `except` names the tokens to
  * leave out. Sorted by name, so a card a person reads never wobbles.
  *
+ * **`creature` IS EVERY CREATURE STILL STANDING** (07's Stormfury: *Every creature within
+ * 15 feet of it*; the B8a pass): an area Use's own reading (`rules/area-gather.mjs
+ * #gathers`) - never a defeated creature or one at 0 Health, never a token hidden from a
+ * reader who is no GM - the actor's own token among them where it stands inside.
+ *
  * @param {Actor} actor  whose allies or enemies
  * @param {number} feet
- * @param {{from?: Token|null, who?: "ally"|"enemy", except?: string[]}} [o]  `except` token ids
+ * @param {{from?: Token|null, who?: "ally"|"enemy"|"creature", except?: string[]}} [o]  `except` token ids
  * @returns {Array<{token: Token, actor: Actor, feet: number}>}
  */
 export function creaturesWithin(actor, feet, { from = null, who = "ally", except = [] } = {}) {
@@ -252,13 +293,71 @@ export function creaturesWithin(actor, feet, { from = null, who = "ally", except
   for (const token of board.tokens.placeables) {
     if (!token.actor || (except ?? []).includes(token.id)) continue;
     const theirs = combatantOf(token);
+    // The actor's own token is never hidden from the actor (`creaturesInArea`'s rule).
     const counts = who === "enemy"
       ? countsAsEnemy(roller, standingOf(token, theirs, fight), { gm })
-      : countsAsAlly(self, allyStandingOf({ token, combatant: theirs, fight }));
+      : who === "creature"
+        ? gathers("creature", { other: token === mine ? { ...standingOf(token, theirs, fight), hidden: false } : standingOf(token, theirs, fight), gm })
+        : countsAsAlly(self, allyStandingOf({ token, combatant: theirs, fight }));
     if (!counts) continue;
     const d = token === origin ? 0 : feetBetweenFootprints(at, footprintOf(token), grid);
     if (d === null || d > Number(feet)) continue;
     out.push({ token, actor: token.actor, feet: d });
+  }
+  return out.sort((a, b) => String(a.token.name ?? "").localeCompare(String(b.token.name ?? "")) || String(a.token.id).localeCompare(String(b.token.id)));
+}
+
+/**
+ * **THE CREATURES AN AREA USE GATHERS** (the B6 fix; the lead: *"Measure the area"*):
+ * every token on the viewed scene inside the circle `rules/area-gather.mjs#gatherOf`
+ * measured, that the circle's word names - an enemy by the tracker's sides or the
+ * dispositions (`countsAsEnemy`), an ally by D-755's one reading (`countsAsAlly`, the
+ * user their own ally), or any creature still standing - and never a defeated one or a
+ * token hidden from a reader who is no GM (`gathers`). A circle about the user is
+ * measured from the user's footprint between the nearest squares (D-732); one at a
+ * point, from the point to each creature's nearest square. Sorted by name, then id, so
+ * a card a person reads never wobbles.
+ *
+ * Null - nothing measured, which is not the same as nobody inside - where the user has
+ * no token on this board for a circle about them, or a placed circle has no point.
+ *
+ * @param {Actor} actor  the user
+ * @param {{who: string, origin: "self"|"point", feet: number}|null} plan
+ * @param {{point?: {x: number, y: number}|null}} [o]
+ * @returns {Array<{token: Token, actor: Actor, feet: number}>|null}
+ */
+export function creaturesInArea(actor, plan, { point = null } = {}) {
+  const board = globalThis.canvas;
+  if (!plan || !board?.tokens) return null;
+  const mine = actor?.getActiveTokens?.(true)?.[0] ?? null;
+  if (plan.origin === "self" && !mine) return null;
+  if (plan.origin === "point" && !point) return null;
+  const grid = mine?.document?.parent?.grid ?? board.grid ?? null;
+  const fight = actor?.activeFight?.() ?? null;
+  const combatantOf = token => {
+    try {
+      return fight?.getCombatantsByToken?.(token.document)?.[0] ?? null;
+    } catch {
+      return null;
+    }
+  };
+  const gm = globalThis.game?.user?.isGM === true;
+  const ownCombatant = mine ? combatantOf(mine) : (fight?.getCombatantsByActor?.(actor)?.[0] ?? null);
+  const roller = standingOf(mine ?? { actor }, ownCombatant, fight);
+  const holder = allyStandingOf({ token: mine, actor, combatant: ownCombatant, fight });
+  const own = mine ? footprintOf(mine) : null;
+  const out = [];
+  for (const token of board.tokens.placeables) {
+    if (!token.actor) continue;
+    const theirs = combatantOf(token);
+    // The user's own token is never hidden from the user.
+    const other = token === mine ? { ...standingOf(token, theirs, fight), hidden: false } : standingOf(token, theirs, fight);
+    if (!gathers(plan.who, { roller, other, holder, otherAlly: allyStandingOf({ token, combatant: theirs, fight }), gm })) continue;
+    const feet = plan.origin === "self"
+      ? (token === mine ? 0 : feetBetweenFootprints(own, footprintOf(token), grid))
+      : feetToPoint(token, point);
+    if (!insideCircle(feet, plan.feet)) continue;
+    out.push({ token, actor: token.actor, feet });
   }
   return out.sort((a, b) => String(a.token.name ?? "").localeCompare(String(b.token.name ?? "")) || String(a.token.id).localeCompare(String(b.token.id)));
 }

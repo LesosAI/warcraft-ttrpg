@@ -92,6 +92,9 @@ function effectFor(loop) {
   const binding = loop?.binding ?? null;
   if (binding === "effect") {
     const actor = tokenDoc(loop.anchors?.[0])?.actor ?? null;
+    // A FEATURE'S STATE carries no `cast` (the Legacy branches' door 2): the loop
+    // names the effect itself, and its key's cast is the effect and the feature.
+    if (loop.effectId) return actor?.effects?.get?.(loop.effectId) ?? null;
     return [...(actor?.effects ?? [])].find(e => e.flags?.["azeroth-rpg"]?.cast === loop.cast) ?? null;
   }
   if (binding !== "effect-region") return null;
@@ -308,9 +311,12 @@ export class SequencerPlayer {
    * immediate steps first, so the order inside each group is the table's.
    *
    * @param {object[]} steps  from `rules/animation.mjs#plan`
+   * @param {object|null} [record]  the record the steps were planned from; the
+   *   recorder keeps it, and nothing here reads it
    * @returns {string|null}  the cue's id, which names its sections
    */
-  playCue(steps) {
+  playCue(steps, record = null) {
+    void record;
     const list = Array.isArray(steps) ? steps : [];
     if (!list.length) return null;
     const id = foundry.utils.randomID();

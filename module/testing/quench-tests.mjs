@@ -125,6 +125,44 @@ import { crossClassBatch } from "./quench-cross-class.mjs";
 // Divine Aegis, Flametongue, the standing Curses, Shared Quarry and Devouring
 // Plague. Written in D-779 and not run there.
 import { classAnswersBatch } from "./quench-class-answers.mjs";
+// The Legacy branches' doors (phase B1): what is wielded and worn, no Reaction
+// against a creature Wind Walk holds, a hit turned into a miss, a creature's Use
+// at the Warrior's DC with its Stun's escape, the gate facts and the marks, a
+// spell on a class with no Mana, and Focus after a still turn. Written in B1 and
+// not run there.
+import { legacyDoorsBatch } from "./quench-legacy-doors.mjs";
+// The Legacy branches' bodies (phase B2): Blink, Shadow Walk and Dark Passage moving
+// their tokens, a called creature placed at a point, two constructs sharing a turn,
+// the gnome's Blueprint and Overclock and the Net-o-Matic, and a Shadow Trap sprung
+// by the first enemy. Written in B2 and not run there.
+import { legacyBodiesBatch } from "./quench-legacy-bodies.mjs";
+// The Legacy branches' spirits (phase B3): a Dying character's turn in the Spirit
+// Realm, its refusals and 06 §10's offer, Ethereal Form's halving, Burial Ground's
+// spared step, an aura's floor, the Cloaking Device and the Recombobulator, Drawn
+// Across's halving, a thrall, Cutting Gear, a trap outside a fight and the highest
+// shed DC. Written in B3 and not run there.
+import { legacySpiritsBatch } from "./quench-legacy-spirits.mjs";
+// The Legacy branches' door 1 (B5): a Legacy's twelve on a character of its
+// people, the race's resync, the Progress tab's fourth branch, the creator's
+// Forsaken Ranger and migration 0.12.25. Written in B5 and not run there.
+import { legacyBranchesBatch } from "./quench-legacy-branches.mjs";
+// The Legacy branches' rows (phase B6b): the Warden's, the Tinker's, the Shadow
+// Hunter's and the Spirit Walker's talents pressed on a character of their people -
+// a trap sprung, a construct built and sharing its turn, a gadget chosen and used,
+// Big Bad Voodoo's floor, the Spirit Realm entered and a Death Step held. Written in
+// B6b and not run there.
+import { legacyWardenBatch } from "./quench-legacy-warden.mjs";
+import { legacyTinkerBatch } from "./quench-legacy-tinker.mjs";
+import { legacyShadowHunterBatch } from "./quench-legacy-shadow-hunter.mjs";
+import { legacySpiritWalkerBatch } from "./quench-legacy-spirit-walker.mjs";
+// The Legacy branches' rows (phase B6a): the Blademaster's, the Mountain King's and the
+// Dark Ranger's talents pressed on a character of their people - a Parry's Rage, Wind
+// Walk's hiding, a Mace thrown for Storm Bolt, a step inside the reach provoking, a
+// Shadow Walk cast on Focus, a Black Arrow's fallen raised and a thrall bound. Written
+// in B6a and not run there.
+import { legacyBlademasterBatch } from "./quench-legacy-blademaster.mjs";
+import { legacyMountainKingBatch } from "./quench-legacy-mountain-king.mjs";
+import { legacyDarkRangerBatch } from "./quench-legacy-dark-ranger.mjs";
 // The counts live in ONE place and both readers take them from there
 // (CLAUDE.md §9); a second copy here went stale twice in a day.
 import { PACK_COUNTS } from "./pack-counts.mjs";
@@ -395,6 +433,39 @@ export function registerQuenchTests() {
     });
     quench.registerBatch("azeroth-rpg.class-answers", classAnswersBatch, {
       displayName: "AZEROTH: The class answers (D-779)"
+    });
+    quench.registerBatch("azeroth-rpg.legacy-doors", legacyDoorsBatch, {
+      displayName: "AZEROTH: The Legacy branches' doors (B1)"
+    });
+    quench.registerBatch("azeroth-rpg.legacy-bodies", legacyBodiesBatch, {
+      displayName: "AZEROTH: The Legacy branches' bodies (B2)"
+    });
+    quench.registerBatch("azeroth-rpg.legacy-spirits", legacySpiritsBatch, {
+      displayName: "AZEROTH: The Legacy branches' spirits (B3)"
+    });
+    quench.registerBatch("azeroth-rpg.legacy-branches", legacyBranchesBatch, {
+      displayName: "AZEROTH: The Legacy branches, door 1 (B5)"
+    });
+    quench.registerBatch("azeroth-rpg.legacy-warden", legacyWardenBatch, {
+      displayName: "AZEROTH: The Warden's twelve (B6b)"
+    });
+    quench.registerBatch("azeroth-rpg.legacy-tinker", legacyTinkerBatch, {
+      displayName: "AZEROTH: The Tinker's twelve (B6b)"
+    });
+    quench.registerBatch("azeroth-rpg.legacy-shadow-hunter", legacyShadowHunterBatch, {
+      displayName: "AZEROTH: The Shadow Hunter's twelve (B6b)"
+    });
+    quench.registerBatch("azeroth-rpg.legacy-spirit-walker", legacySpiritWalkerBatch, {
+      displayName: "AZEROTH: The Spirit Walker's twelve (B6b)"
+    });
+    quench.registerBatch("azeroth-rpg.legacy-blademaster", legacyBlademasterBatch, {
+      displayName: "AZEROTH: The Blademaster's twelve (B6a)"
+    });
+    quench.registerBatch("azeroth-rpg.legacy-mountain-king", legacyMountainKingBatch, {
+      displayName: "AZEROTH: The Mountain King's twelve (B6a)"
+    });
+    quench.registerBatch("azeroth-rpg.legacy-dark-ranger", legacyDarkRangerBatch, {
+      displayName: "AZEROTH: The Dark Ranger's twelve (B6a)"
     });
   });
 }
@@ -1302,11 +1373,12 @@ function packBatch(context) {
       assert.equal(index.size, PACK_COUNTS.conditions.count, PACK_COUNTS.conditions.why);
     });
 
-    it("holds 324 talents: nine classes, three branches, twelve each", async function () {
+    it("holds the talents 04 prints: nine classes, three branches, twelve each, and the seven Legacy branches", async function () {
       const pack = game.packs.get("azeroth-rpg.talents");
       assert.ok(pack, "the talents pack did not load");
       const index = await pack.getIndex();
-      assert.equal(index.size, 324);
+      // The ONE place the count lives (D-690): 408 since the Legacy branches (D-781).
+      assert.equal(index.size, PACK_COUNTS.talents.count, PACK_COUNTS.talents.why);
     });
 
     it("organizes the big packs into folders, not one flat list (D-593)", async function () {
@@ -1316,7 +1388,9 @@ function packBatch(context) {
       // of spelling. The folder tree is the book's own organization.
       const cases = [
         { pack: "spells", folders: 42, top: "Fire", nested: "Tier 1" },
-        { pack: "talents", folders: 36, top: "Mage", nested: null },
+        // A folder a class and one a branch: 9 + 34 since the seven Legacy branches
+        // (D-781), read off the one place the counts live (D-690).
+        { pack: "talents", folders: PACK_COUNTS.classes.count + PACK_COUNTS.talents.branches, top: "Mage", nested: null },
         { pack: "bestiary", folders: 13, top: null, nested: null },
         // §20's named weapons join §7's eight categories (D-632), and the
         // Classic finds add `Classic loot` with a folder per zone (D-685):
@@ -1645,11 +1719,15 @@ function packBatch(context) {
       assert.deepEqual(g.ward, { shadow: 2 }, "the pack's Ward is not the map (D-644)");
       assert.equal(g.speed, 30);
       assert.equal(g.initiative, 10);
-      // Str 14 (+2) ... Int 3 (-4)
+      // Str 14 (+2) ... Int — ... Cha —: D4 §10.2's example is Mindless now
+      // (D-781: *"Accept it; dash Int and Cha"*), and a dash is no modifier of -5.
       assert.equal(g.abilities.str.value, 14);
       assert.equal(g.abilities.str.mod, 2);
-      assert.equal(g.abilities.int.value, 3);
-      assert.equal(g.abilities.int.mod, -4);
+      assert.equal(g.typeMarker, "Mindless", "the ghoul lost its Mindless");
+      assert.isNull(g.abilities.int.value, "a Mindless creature prints a dash for Intelligence");
+      assert.isNull(g.abilities.int.mod, "a dash became a modifier");
+      assert.isNull(g.abilities.cha.value, "a Mindless creature prints a dash for Charisma");
+      assert.isNull(g.abilities.cha.mod);
       assert.lengthOf(g.attacks, 2);
       assert.equal(g.attacks[0].name, "Claws");
       assert.equal(g.attacks[0].bonus, 4);
@@ -1704,16 +1782,13 @@ function packBatch(context) {
       assert.equal((await game.packs.get("azeroth-rpg.affixes").getIndex()).size, 76);
     });
 
-    it("moves ability scores on a Legacy's ranks 2 and 4 alone (D-588)", async function () {
+    it("holds a Legacy as the lore of a talent branch, with no ranks (D-781, retiring D-588)", async function () {
       const pack = game.packs.get("azeroth-rpg.legacies");
       const index = await pack.getIndex();
       const doc = await pack.getDocument(index.find(e => e.name === "Blademaster")._id);
-      assert.lengthOf(doc.system.ranks, 4);
-      for (const rank of doc.system.ranks) {
-        const moves = rank.abilityUp !== null;
-        assert.equal(moves, rank.rank === 2 || rank.rank === 4,
-          `rank ${rank.rank} should ${rank.rank % 2 === 0 ? "" : "not "}move scores`);
-      }
+      assert.equal(doc.system.branch, "Blademaster");
+      assert.equal(doc.system.race, "Orc");
+      assert.notProperty(doc.system.toObject(), "ranks", "a Legacy still carries the retired title's ranks");
     });
 
     it("generates an affixed instance rather than storing the cross-product", async function () {
@@ -2092,6 +2167,22 @@ function combatBatch(context) {
       for (const a of actors) await a.delete();
     });
 
+    /**
+     * Point this never-started fight's turn at a combatant for `fn`, and put it back
+     * after. **A HALF-ACTION IS SPENT IN YOUR OWN TURN** (05; the lead: *"Refuse off-turn
+     * Half-Actions"*), and nobody holds a turn in a fight that never started, so every
+     * Half-Action through the combatant's own door is refused there.
+     */
+    async function onTurnOf(c, fn) {
+      const held = combat.turn;
+      await combat.update({ turn: combat.turns.findIndex(t => t.id === c.id) });
+      try {
+        return await fn();
+      } finally {
+        await combat.update({ turn: held ?? null });
+      }
+    }
+
     it("uses the system's Combat and Combatant classes", function () {
       assert.equal(CONFIG.Combat.documentClass.name, "AzerothCombat");
       assert.equal(CONFIG.Combatant.documentClass.name, "AzerothCombatant");
@@ -2117,44 +2208,71 @@ function combatBatch(context) {
 
     it("refuses a third Half-Action and says why, in the lang file's words", async function () {
       const c = combat.combatants.contents[0];
-      await c.resetBudget();
-      assert.isTrue((await c.spendAction("half")).ok);
-      assert.isTrue((await c.spendAction("half")).ok);
-      const third = await c.spendAction("half");
-      assert.isFalse(third.ok);
-      // The reason is an i18n KEY now (D-711), and the toast is the sentence.
-      assert.equal(third.reason, "AZEROTH.Budget.Refuse.NeedsHalves");
-      assert.match(game.i18n.format(third.reason, third.params), /Half-Action/);
-      await c.resetBudget();
+      await onTurnOf(c, async () => {
+        await c.resetBudget();
+        assert.isTrue((await c.spendAction("half")).ok);
+        assert.isTrue((await c.spendAction("half")).ok);
+        const third = await c.spendAction("half");
+        assert.isFalse(third.ok);
+        // The reason is an i18n KEY now (D-711), and the toast is the sentence.
+        assert.equal(third.reason, "AZEROTH.Budget.Refuse.NeedsHalves");
+        assert.match(game.i18n.format(third.reason, third.params), /Half-Action/);
+        await c.resetBudget();
+      });
     });
 
     it("lets the GM put a spent Half-Action or the Reaction back (D-718)", async function () {
       const c = combat.combatants.contents[0];
-      await c.resetBudget();
-      await c.spendAction("full");
-      assert.equal(c.budget.halfActions, 0);
-      assert.equal(c.budget.reactions, 0);
-      assert.isTrue((await c.restoreAction("half")).ok);
-      assert.equal(c.budget.halfActions, 1);
-      assert.isTrue((await c.restoreAction("reaction")).ok);
-      assert.equal(c.budget.reactions, 1);
-      // And it never buys a third: a full turn has nothing to put back.
-      await c.restoreAction("half");
-      const refused = await c.restoreAction("half");
-      assert.isFalse(refused.ok);
-      assert.equal(refused.reason, "AZEROTH.Budget.Refuse.NothingToRestore");
-      assert.equal(c.budget.halfActions, 2);
-      await c.resetBudget();
+      await onTurnOf(c, async () => {
+        await c.resetBudget();
+        await c.spendAction("full");
+        assert.equal(c.budget.halfActions, 0);
+        assert.equal(c.budget.reactions, 0);
+        assert.isTrue((await c.restoreAction("half")).ok);
+        assert.equal(c.budget.halfActions, 1);
+        assert.isTrue((await c.restoreAction("reaction")).ok);
+        assert.equal(c.budget.reactions, 1);
+        // And it never buys a third: a full turn has nothing to put back.
+        await c.restoreAction("half");
+        const refused = await c.restoreAction("half");
+        assert.isFalse(refused.ok);
+        assert.equal(refused.reason, "AZEROTH.Budget.Refuse.NothingToRestore");
+        assert.equal(c.budget.halfActions, 2);
+        await c.resetBudget();
+      });
     });
 
     it("makes a Full Action take the Reaction as well (D-255)", async function () {
       const c = combat.combatants.contents[0];
+      await onTurnOf(c, async () => {
+        await c.resetBudget();
+        const result = await c.spendAction("full");
+        assert.isTrue(result.ok);
+        assert.equal(result.budget.halfActions, 0);
+        assert.equal(result.budget.reactions, 0);
+        await c.resetBudget();
+      });
+    });
+
+    it("refuses a Half-Action and a Full Action on nobody's turn, in words, and still takes the Reaction", async function () {
+      // 05 (the lead, 2026-10-23: *"Refuse off-turn Half-Actions"*): the budget keeps a
+      // turn's unspent Half-Actions until its owner's next turn, so a spend on somebody
+      // else's turn - or on nobody's, in a fight that never started - spent them.
+      const c = combat.combatants.contents[0];
       await c.resetBudget();
-      const result = await c.spendAction("full");
-      assert.isTrue(result.ok);
-      assert.equal(result.budget.halfActions, 0);
-      assert.equal(result.budget.reactions, 0);
-      await c.resetBudget();
+      try {
+        assert.isNull(combat.combatant ?? null, "the fixture's fight holds a turn");
+        for (const cost of ["half", "action", "full"]) {
+          const refused = await c.spendAction(cost);
+          assert.isFalse(refused.ok, `a ${cost} was spent on nobody's turn`);
+          assert.equal(refused.reason, "AZEROTH.Budget.Refuse.NotYourTurn");
+        }
+        assert.equal(c.budget.halfActions, 2, "a refused spend took a Half-Action");
+        assert.isTrue((await c.spendAction("reaction")).ok, "the Reaction was refused off the turn");
+        assert.equal(c.budget.reactions, 0, "the Reaction was not taken");
+      } finally {
+        await c.resetBudget();
+      }
     });
 
     it("draws the restore buttons on the tracker only where something was spent (D-718)", async function () {
@@ -2177,7 +2295,7 @@ function combatBatch(context) {
       assert.isNull(restore("restoreHalf"), "a full turn offers a Half-Action to put back");
       assert.isNull(restore("restoreReaction"), "a full turn offers a Reaction to put back");
 
-      await c.spendAction("half");
+      await onTurnOf(c, () => c.spendAction("half"));
       await ui.combat.render({ force: true });
       // **RE-QUERY AFTER EVERY RENDER**: a control held across one is detached.
       const half = restore("restoreHalf");
@@ -2199,19 +2317,19 @@ function combatBatch(context) {
 
     it("allows an Attack for each Half-Action, and the off hand rides one (D-711)", async function () {
       const c = combat.combatants.contents[0];
-      await c.resetBudget();
-      assert.isTrue((await c.spendAction("half", { isAttack: true })).ok);
-      assert.isTrue((await c.spendAction("half", { isAttack: true })).ok, "the second Attack was refused");
-      assert.isFalse((await c.spendAction("half", { isAttack: true })).ok, "a third Attack was allowed");
-      await c.resetBudget();
-      // **THE OFF HAND IS MADE IN YOUR OWN TURN** (06 §1, D-720), and this
-      // fight is never started: `combat.combatant` is null, so nobody holds a
-      // turn and every off-hand spend through the combatant's own door is
-      // refused. The turn is pointed at this combatant for the rides below and
-      // put back in the `finally`.
+      // **A HALF-ACTION IS SPENT IN YOUR OWN TURN** (05; the lead: *"Refuse off-turn
+      // Half-Actions"*), and so is the off hand (06 §1, D-720) - and this fight is never
+      // started: `combat.combatant` is null, so nobody holds a turn and every Half-Action
+      // through the combatant's own door is refused. The turn is pointed at this
+      // combatant for the spends below and put back in the `finally`.
       const held = combat.turn;
       await combat.update({ turn: combat.turns.findIndex(t => t.id === c.id) });
       try {
+        await c.resetBudget();
+        assert.isTrue((await c.spendAction("half", { isAttack: true })).ok);
+        assert.isTrue((await c.spendAction("half", { isAttack: true })).ok, "the second Attack was refused");
+        assert.isFalse((await c.spendAction("half", { isAttack: true })).ok, "a third Attack was allowed");
+        await c.resetBudget();
         // The off hand costs nothing after an Attack, and both Half-Actions stand.
         assert.isTrue((await c.spendAction("half", { isAttack: true })).ok);
         assert.isTrue((await c.spendAction("half", { isAttack: true, isOffHand: true })).ok);
@@ -2228,6 +2346,14 @@ function combatBatch(context) {
         const late = await c.spendAction("half", { isAttack: true, isOffHand: true });
         assert.isFalse(late.ok, "an off-hand blow was allowed on nobody's turn");
         assert.equal(late.reason, "AZEROTH.Budget.Refuse.OffHandNotYourTurn");
+        // **AND SO IS A MAIN-HAND HALF-ACTION**, by its own name, with the Half-Action left
+        // standing; a Reaction takes no turn and is still taken.
+        const left = c.budget.halfActions;
+        const offTurn = await c.spendAction("half", { isAttack: true });
+        assert.isFalse(offTurn.ok, "a Half-Action was spent on nobody's turn");
+        assert.equal(offTurn.reason, "AZEROTH.Budget.Refuse.NotYourTurn");
+        assert.equal(c.budget.halfActions, left, "the refused Half-Action was spent anyway");
+        assert.isTrue((await c.spendAction("reaction")).ok, "a Reaction was refused on nobody's turn");
       } finally {
         await combat.update({ turn: held ?? null });
         await c.resetBudget();
@@ -3928,7 +4054,8 @@ function migrationBatch(context) {
       // rebuilt pack is asserted first, in words.
       const index = await game.packs.get(TALENTS_PACK).getIndex({ fields: ["sort", "system.className", "system.identifier"] });
       const rowOf = rowsFromIndex(index);
-      assert.equal(rowOf.size, 324, "the talents pack carries no row order: it was not rebuilt from packs-src");
+      // The ONE place the count lives (D-690): 408 since the Legacy branches (D-781).
+      assert.equal(rowOf.size, PACK_COUNTS.talents.count, "the talents pack carries no row order: it was not rebuilt from packs-src");
 
       const actor = await makeCharacter({ name: "ZZ Row Order", classes: [["Warrior", 1]] });
       try {
@@ -4358,13 +4485,20 @@ function usableBatch(context) {
       let spell;
 
       before(async function () {
-        this.timeout(30000);
-        caster = await Actor.create({ name: "ZZ Caster", type: "character" });
+        this.timeout(60000);
+        // A CASTER WITH A POOL TO PAY FROM, and a spell named rather than the
+        // index's first: a classless character holds no Mana, and door 8 of the
+        // Legacy branches refuses a cast with no pool to pay it (it was cast free),
+        // so the card this case waits for was never posted. `contents[0]` is
+        // whatever the index happens to hold first (CLAUDE.md §14).
+        caster = await makeCharacter({ name: "ZZ Caster", classes: [["Mage", 1]], spells: ["Frostbolt"] });
         made.push(caster);
-        const pack = game.packs.get("azeroth-rpg.spells");
-        const index = await pack.getIndex();
-        const source = await pack.getDocument(index.contents[0]._id);
-        [spell] = await caster.createEmbeddedDocuments("Item", [source.toObject()]);
+        spell = caster.items.find(i => i.type === "spell" && i.name === "Frostbolt");
+        if (!spell) throw new Error("the Mage holds no Frostbolt");
+        const pool = caster.system.powers.find(p => p.name === "mana");
+        if (!pool) throw new Error("the Mage holds no Mana pool");
+        await caster.updatePool({ itemId: pool.itemId, kind: "power", value: pool.max });
+        for (let i = 0; i < 100 && caster.system.powers.find(p => p.name === "mana").value !== pool.max; i++) await new Promise(r => setTimeout(r, 50));
       });
 
       it("offers Cast on an owned spell's sheet", async function () {

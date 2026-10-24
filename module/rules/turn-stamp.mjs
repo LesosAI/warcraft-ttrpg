@@ -61,13 +61,19 @@ export const FLAG_SCOPE = "azeroth-rpg";
  *  - `ready`: a Readied action (06 §6, D-694).
  *  - `heldPosition`: cleared with the fight's flags; nothing writes it now.
  *  - `criticalsIgnored`: a Boss's first two Critical Injuries (14 §1).
+ *  - `lastTurn`: what its last turn did - moved, Engaged - for 02's Focus (the
+ *    Legacy branches' door 9), written at the turn's end.
+ *  - `constructTurn`: what the owner's constructs have spent of their one shared
+ *    turn this round (04's The Bench and Remote Control; the Legacy branches' door
+ *    6), on the OWNER's combatant, written through its queued door.
  *
  * A NEW combatant flag is classified here or in `ORDER_FLAGS` before it ships:
  * the census in `turn-stamp.test.mjs` fails on one that is in neither.
  */
 export const BOOKKEEPING_FLAGS = Object.freeze([
   "budget", "moveHalves", "acted", "round", "lastHitRound", "damageTypes",
-  "damaged", "marked", "ready", "heldPosition", "criticalsIgnored"
+  "damaged", "marked", "ready", "heldPosition", "criticalsIgnored", "lastTurn",
+  "constructTurn"
 ]);
 
 /**

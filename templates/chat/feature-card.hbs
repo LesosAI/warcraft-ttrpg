@@ -51,7 +51,7 @@
           charged a Half-Action a press on top of their own. --}}
     {{#if attack}}
     <div class="azeroth-card-actions">
-      <button type="button" data-action="attackFromCard" data-budget="none"{{#if noMomentum}} data-no-momentum="1"{{/if}}>{{localize "AZEROTH.Sheet.Attack"}}</button>
+      <button type="button" data-action="attackFromCard" data-budget="none"{{#if noMomentum}} data-no-momentum="1"{{/if}}{{#if attackNoDamage}} data-no-damage="1"{{/if}}>{{localize "AZEROTH.Sheet.Attack"}}</button>
       {{!-- How many the button makes, counted by each press (the architect's
             review of D-773): a press past it is refused in words. --}}
       {{#if attackAllowance}}<span class="azeroth-note">{{localize "AZEROTH.Feature.AttacksAllowed" n=attackAllowance}}</span>{{/if}}
@@ -80,18 +80,23 @@
           Slowed and Typhoon's Prone): on each target, or the selected tokens.
           Each block carries what it draws, since a bare name inside `#each`
           resolves against the row (D-609). --}}
+    {{!-- A condition the card's Test governs (`data-on-fail`, the B6 fix; the lead:
+          "Land automatically") lands at once on a failed Resist, so its button is
+          taken off the row of a creature whose Test the card has recorded
+          (`dice/chat.mjs#showResolved`), and says so in words. --}}
     {{#each inflicts as |inf|}}
     <div class="azeroth-card-actions">
       {{#each ../targets as |t|}}
-      <button type="button" data-action="applyCondition" data-condition="{{inf.condition}}" data-target-index="{{t.index}}"{{#if inf.value}} data-value="{{inf.value}}"{{/if}}{{#if inf.until}} data-until="{{inf.until}}"{{/if}}>
+      <button type="button" data-action="applyCondition" data-condition="{{inf.condition}}" data-target-index="{{t.index}}"{{#if inf.value}} data-value="{{inf.value}}"{{/if}}{{#if inf.until}} data-until="{{inf.until}}"{{/if}}{{#if inf.onFail}} data-on-fail="1"{{/if}}>
         {{localize "AZEROTH.Card.InflictOn" condition=inf.label name=t.name}}{{#if inf.value}} {{inf.value}}{{/if}}
       </button>
       {{else}}
-      <button type="button" data-action="applyCondition" data-condition="{{inf.condition}}"{{#if inf.value}} data-value="{{inf.value}}"{{/if}}{{#if inf.until}} data-until="{{inf.until}}"{{/if}}>
+      <button type="button" data-action="applyCondition" data-condition="{{inf.condition}}"{{#if inf.value}} data-value="{{inf.value}}"{{/if}}{{#if inf.until}} data-until="{{inf.until}}"{{/if}}{{#if inf.onFail}} data-on-fail="1"{{/if}}>
         {{localize "AZEROTH.Card.Inflict" condition=inf.label}}{{#if inf.value}} {{inf.value}}{{/if}}
       </button>
       {{/each}}
       {{#if inf.untilLabel}}<span class="azeroth-note">{{inf.untilLabel}}</span>{{/if}}
+      {{#if inf.onFail}}<span class="azeroth-note">{{localize "AZEROTH.Card.OnFailInflict"}}</span>{{/if}}
     </div>
     {{/each}}
 
@@ -144,11 +149,26 @@
 
     {{#if resist}}
     {{!-- A purpose names what the Test is FOR (02's Snare: the caught
-          creature's escape, an action spent and the Entangled ended; D-773). --}}
-    <div class="azeroth-card-actions">
-      <button type="button" data-action="resistTest" data-resilience="{{resist.key}}" data-dc="{{resist.dc}}"{{#if resist.purpose}} data-purpose="{{resist.purpose}}"{{/if}}>
-        {{#if resist.purpose}}{{localize "AZEROTH.Snare.EscapeButton" resilience=(localize resist.label) dc=(azerothDash resist.dc)}}{{else}}{{localize "AZEROTH.Card.ResistTest" resilience=(localize resist.label) dc=(azerothDash resist.dc)}}{{/if}}
-      </button>
+          creature's escape, an action spent and the Entangled ended; D-773).
+          ONE ROW PER CREATURE THE CARD RECORDS (D-726's rows, the B6 fix): each
+          its owner's and the GM's, and the Test it makes recorded on this card -
+          what the Apply's half and a failure's conditions read. A Use that names
+          ONE creature (04's Thrall of the Banshee, Drawn Across; the B3 review)
+          has that row alone. With no creature recorded, the one button. --}}
+    <div class="azeroth-card-resists">
+      {{#each resistRows}}
+      <div class="azeroth-card-actions" data-resist-owner="{{this.actorUuid}}" data-resist-key="{{this.key}}">
+        <button type="button" data-action="resistTest" data-target-index="{{this.index}}" data-resilience="{{this.resilience}}" data-dc="{{this.dc}}">
+          {{localize "AZEROTH.Card.ResistFor" name=this.name resilience=(localize this.label) dc=(azerothDash this.dc)}}
+        </button>
+      </div>
+      {{else}}
+      <div class="azeroth-card-actions">
+        <button type="button" data-action="resistTest" data-resilience="{{resist.key}}" data-dc="{{resist.dc}}"{{#if resist.purpose}} data-purpose="{{resist.purpose}}"{{/if}}{{#if resist.targetIndex}} data-target-index="{{resist.targetIndex}}"{{/if}}>
+          {{#if resist.purpose}}{{localize "AZEROTH.Snare.EscapeButton" resilience=(localize resist.label) dc=(azerothDash resist.dc)}}{{else}}{{localize "AZEROTH.Card.ResistTest" resilience=(localize resist.label) dc=(azerothDash resist.dc)}}{{/if}}
+        </button>
+      </div>
+      {{/each}}
     </div>
     {{/if}}
     {{#if escape}}

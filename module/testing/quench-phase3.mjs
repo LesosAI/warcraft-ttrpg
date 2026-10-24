@@ -151,8 +151,10 @@ export function configuredRollsBatch(context) {
       const npc = await makeNpc("Plagued Ghoul");
       const sheet = await openSheet(npc);
       try {
-        const name = sheet.element.querySelector('input[name="name"]');
-        assert.equal(name?.value, npc.name, "the NPC name input renders empty");
+        // A TEXTAREA since B9b (the lead: *"Wrap to two lines"*), so a long name wraps.
+        const name = sheet.element.querySelector('[name="name"]');
+        assert.equal(name?.tagName, "TEXTAREA", "the NPC name is not the wrapping field");
+        assert.equal(name?.value, npc.name, "the NPC name field renders empty");
         const health = sheet.element.querySelector('input[name="system.health.value"]');
         assert.ok(health, "no Health input on the NPC banner");
         const wait = untilHook("updateActor", 5000, a => a.id === npc.id);
@@ -160,6 +162,31 @@ export function configuredRollsBatch(context) {
         health.dispatchEvent(new Event("change", { bubbles: true }));
         await wait;
         assert.equal(npc.system.health.value, 2, "the NPC Health input did not save");
+      } finally {
+        await sheet.close();
+      }
+    });
+
+    it("the NPC banner's name WRAPS under itself and writes the creature through the form (the lead: \"Wrap to two lines\")", async function () {
+      this.timeout(30000);
+      const npc = await makeNpc("Mithril Mechanical Dragonling");
+      const sheet = await openSheet(npc);
+      try {
+        const field = () => sheet.element.querySelector('textarea.azeroth-name[name="name"]');
+        assert.ok(field(), "the banner draws no wrapping name");
+        assert.equal(field().value, npc.name);
+        // Two lines at the banner's own size, and nothing cut: the field is as tall as its text.
+        const style = getComputedStyle(field());
+        const lines = Math.round(field().getBoundingClientRect().height / parseFloat(style.lineHeight));
+        assert.isAtLeast(lines, 2, `"${npc.name}" did not wrap under itself (${lines} line)`);
+        assert.isAtMost(field().scrollHeight - field().clientHeight, 1, "the wrapped name is cut");
+        assert.equal(style.fontSize, "20px", "the wrapped name is not at the banner's full size");
+        // D-603: written through the field and read back off the document.
+        const wait = untilHook("updateActor", 5000, a => a.id === npc.id);
+        field().value = "ZZ Mithril Mechanical Dragonling, Rebuilt";
+        field().dispatchEvent(new Event("change", { bubbles: true }));
+        await wait;
+        assert.equal(npc.name, "ZZ Mithril Mechanical Dragonling, Rebuilt", "the name field did not save");
       } finally {
         await sheet.close();
       }

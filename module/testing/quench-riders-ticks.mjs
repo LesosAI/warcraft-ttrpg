@@ -30,7 +30,7 @@
  * makes is deleted in `after`.
  */
 
-import { cleanup, dialogFor, drainAreaWork, fromPack, give, giveTurn, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings } from "./fixtures.mjs";
+import { cleanup, dialogFor, drainAreaWork, fromPack, give, giveTurn, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings, tokenDrawn, tokenData } from "./fixtures.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { attackWithDialog } from "../applications/actions.mjs";
 import { prepareRoll } from "../applications/roll-dialog.mjs";
@@ -64,12 +64,12 @@ async function sceneWith(placements) {
   const data = [];
   for (const { actor, x, y, side = "friendly" } of placements) {
     await actor.update({ "prototypeToken.actorLink": true });
-    data.push((await actor.getTokenDocument({
+    data.push((await tokenData(actor, {
       x, y, disposition: CONST.TOKEN_DISPOSITIONS[side === "friendly" ? "FRIENDLY" : "HOSTILE"]
-    })).toObject());
+    })));
   }
   await scene.createEmbeddedDocuments("Token", data);
-  for (let i = 0; i < 60 && !placements.every(p => p.actor.getActiveTokens(true).length); i++) {
+  for (let i = 0; i < 60 && !placements.every(p => tokenDrawn(p.actor.getActiveTokens(true)[0])); i++) {
     await new Promise(r => setTimeout(r, 100));
   }
   await settle();
@@ -189,6 +189,11 @@ export function ridersTicksBatch(context) {
       const druid = await feralDruid("ZZ Rider Mangle", { ferocity: 3, ranks: { Mangle: 2 } });
       const ghoul = await makeNpc("Plagued Ghoul");
       await sceneWith([{ actor: druid, x: 1000, y: 1000 }, { actor: ghoul, x: 1100, y: 1000, side: "hostile" }]);
+      // The ghoul's TOKEN named apart from its actor (the lead, 2026-10-23: *"The token's
+      // name"*): the card's landed line names the token its row names.
+      const tokenDoc = ghoul.getActiveTokens(true)[0].document;
+      await tokenDoc.update({ name: "Ghoul under the claws" });
+      await until(() => tokenDoc.name === "Ghoul under the claws", "the ghoul's token named");
       target(ghoul);
       await game.settings.set("azeroth-rpg", ROLL_DIALOG_SETTING, "always");
       const claws = druid.readyWeapons()[0];
@@ -221,9 +226,15 @@ export function ridersTicksBatch(context) {
       await until(() => ghoul.statuses?.has("bleeding"), "Bleeding on the ghoul with no button pressed");
       const bleeding = ghoul.effects.find(e => e.statuses?.has("bleeding"));
       assert.equal(bleeding.getFlag("azeroth-rpg", "value"), 2, "the ghoul bleeds at the wrong value");
+      // On whom: the TOKEN the row names, never the actor's name (the lead: *"The token's
+      // name"*; this pinned the actor's until B9b).
+      assert.equal(card.flags["azeroth-rpg"].targets?.[0]?.name, "Ghoul under the claws", "the row does not carry the token's name");
       assert.include(textOf(card), game.i18n.format("AZEROTH.Rider.Card.Landed", {
-        name: ghoul.name, condition: game.i18n.localize(AZEROTH.conditions.bleeding), value: 2
+        name: "Ghoul under the claws", condition: game.i18n.localize(AZEROTH.conditions.bleeding), value: 2
       }), "the card does not say what landed on whom");
+      assert.notInclude(textOf(card), game.i18n.format("AZEROTH.Rider.Card.Landed", {
+        name: ghoul.name, condition: game.i18n.localize(AZEROTH.conditions.bleeding), value: 2
+      }), "the landed line names the actor, not the token");
       assert.isNull(parsed(card).querySelector('[data-action="applyCondition"][data-condition="bleeding"]'), "the card still offers a button for what already landed");
     });
 

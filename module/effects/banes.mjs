@@ -153,14 +153,58 @@ async function layHere({ victim, kind, banes, source, originUuid, lasting = fals
   const [made] = await victim.createEmbeddedDocuments("ActiveEffect", [
     baneData({ victim, kind: row.kind, banes: row.banes, source: row.source, originUuid, lasting: row.lasting === true, except: row.except ?? null, only: row.only ?? null, span })
   ]);
-  return made ? { name: victim.name, kind: row.kind, banes: row.banes, source: row.source } : null;
+  // And the effect it made, so a hit turned into a miss deletes exactly that one
+  // (the Legacy branches' door 13, `rules/miss.mjs`).
+  return made ? { name: victim.name, kind: row.kind, banes: row.banes, source: row.source, effectId: made.id } : null;
+}
+
+/**
+ * **A LAID BANE ENDED BY ITS SOURCE** (04's The Challenge: *Naming another creature
+ * ends it on the first*; the Legacy branches' door 18): every Bane on the victim
+ * this source and this layer laid, deleted - here where this client owns the
+ * victim. The GM-side handler takes the same arguments through `LAY_BANE_QUERY`
+ * with `end: true`.
+ *
+ * @returns {Promise<number>}  how many were ended
+ */
+async function endHere({ victim, source, originUuid }) {
+  const doomed = (victim?.effects ?? []).filter(e => {
+    const held = e.flags?.["azeroth-rpg"]?.[LAID_BANE_FLAG] ?? null;
+    return held && String(held.source ?? "") === String(source ?? "") && (e.origin ?? null) === (originUuid ?? null);
+  }).map(e => e.id);
+  if (doomed.length) await victim.deleteEmbeddedDocuments("ActiveEffect", doomed);
+  return doomed.length;
+}
+
+/**
+ * End the Banes a source laid on a creature: here where this client owns it, else
+ * on the active GM's client through the laying door's own query. A creature that
+ * is gone has nothing to end. The refusal is shown, never thrown.
+ *
+ * @param {{victim: Actor|null, source: string, by?: Actor|null}} o
+ * @returns {Promise<number>}
+ */
+export async function endBane({ victim = null, source = "", by = null } = {}) {
+  if (!victim) return 0;
+  const originUuid = by?.uuid ?? null;
+  try {
+    if (victim.isOwner) return await endHere({ victim, source, originUuid });
+    const gm = game.users.activeGM;
+    // Its own words (the B1 review): it said *Binding needs a GM online*.
+    if (!gm) throw new Error(game.i18n.localize("AZEROTH.Laid.BaneEndNoGM"));
+    const done = await gm.query(LAY_BANE_QUERY, { end: true, victimUuid: victim.uuid, source, originUuid }, { timeout: 15000 });
+    return Math.max(0, Math.trunc(Number(done?.ended)) || 0);
+  } catch (err) {
+    ui.notifications?.warn(err.message);
+    return 0;
+  }
 }
 
 /**
  * The GM-side handler. Throws with the reason, which travels back to the
  * caller as the refusal.
  */
-export async function layBaneQueryHandler({ victimUuid, kind, banes, source, originUuid, lasting = false, except = null, only = null, span = null } = {}, { user = null } = {}) {
+export async function layBaneQueryHandler({ victimUuid, kind, banes, source, originUuid, lasting = false, except = null, only = null, span = null, end = false } = {}, { user = null } = {}) {
   const victim = await fromUuid(victimUuid);
   if (!victim || victim.documentName !== "Actor") throw new Error(game.i18n.localize("AZEROTH.Reaction.Refuse.Gone"));
   // The layer has to own what laid it; the victim is the GM's business.
@@ -169,6 +213,14 @@ export async function layBaneQueryHandler({ victimUuid, kind, banes, source, ori
     if (origin?.documentName === "Actor" && !origin.testUserPermission(user, "OWNER")) {
       throw new Error(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: origin.name }));
     }
+  }
+  // **AN END, NOT A LAYING** (door 18: The Challenge's *Naming another creature ends
+  // it on the first*): only what this layer and this source laid, and nothing else.
+  // A request that names no layer ends nothing - an anonymous end would reach every
+  // Bane of that source on the creature.
+  if (end === true) {
+    if (!originUuid) return { ended: 0 };
+    return { ended: await endHere({ victim, source: String(source ?? ""), originUuid }) };
   }
   const done = await layHere({ victim, kind, banes, source, originUuid, lasting: lasting === true, except, only, span });
   if (!done) throw new Error(game.i18n.localize("AZEROTH.Reaction.Refuse.Unreadable"));
@@ -207,7 +259,8 @@ export async function layBane({ victim, kind, banes, source = "", by = null, las
   try {
     if (victim.isOwner) return await layHere({ victim, kind, banes, source, originUuid, lasting: lasting === true, except, only, span });
     const gm = game.users.activeGM;
-    if (!gm) throw new Error(game.i18n.localize("AZEROTH.Bound.NoGM"));
+    // Its own words (the B1 fix run): it said *Binding needs a GM online*.
+    if (!gm) throw new Error(game.i18n.localize("AZEROTH.Laid.BaneNoGM"));
     return await gm.query(LAY_BANE_QUERY, payload, { timeout: 15000 });
   } catch (err) {
     ui.notifications?.warn(err.message);
@@ -244,9 +297,18 @@ export async function spendLaidBanes(actor, kind, { target = null } = {}) {
 /*  A Boon laid on somebody else (D-772)         */
 /* -------------------------------------------- */
 
-/** The create data for one laid Boon: the Bane's shape, upgraded. */
-function boonData({ kind, boons, source, originUuid, lasting = false, span = null }) {
+/**
+ * The create data for one laid Boon: the Bane's shape, upgraded. **An encounter's** (02's
+ * Berserking: *until the end of the encounter*; the B8a2 pass) is lasting, and carries the
+ * two flags `AzerothCombat#_leaveFight` already lifts at a fight's end (`talentBuff` naming
+ * its source, `until: "encounter"`) - the encounter span Seal of Command's buff has, and no
+ * second lift beside it.
+ */
+function boonData({ kind, boons, source, originUuid, lasting = false, span = null, encounter = false }) {
   const label = kind === "all" ? "AZEROTH.Blessing.LaidAll" : "AZEROTH.Blessing.LaidKind";
+  const words = encounter
+    ? game.i18n.format("AZEROTH.Blessing.EncounterText", { n: boons, kind: game.i18n.localize(kind === "all" ? "AZEROTH.Blessing.EveryTest" : (AZEROTH.testKinds[kind] ?? kind)) })
+    : game.i18n.format(lasting ? "AZEROTH.Blessing.LastingText" : "AZEROTH.Blessing.NextText", { n: boons });
   return {
     name: game.i18n.format(label, {
       source: source || game.i18n.localize("AZEROTH.Reaction.Heading"),
@@ -255,16 +317,19 @@ function boonData({ kind, boons, source, originUuid, lasting = false, span = nul
     }),
     img: BOON_ICON,
     origin: originUuid ?? null,
-    description: `<p>${game.i18n.format(lasting ? "AZEROTH.Blessing.LastingText" : "AZEROTH.Blessing.NextText", { n: boons })}</p>`,
+    description: `<p>${words}</p>`,
     // NO `system.changes`: a Boon is dice (CLAUDE.md §6).
     ...(span && typeof span === "object" ? span : {}),
-    flags: { "azeroth-rpg": { [LAID_BOON_FLAG]: lasting ? { kind, boons, source, lasting: true } : { kind, boons, source } } }
+    flags: { "azeroth-rpg": {
+      [LAID_BOON_FLAG]: lasting || encounter ? { kind, boons, source, lasting: true } : { kind, boons, source },
+      ...(encounter ? { talentBuff: source, until: "encounter" } : {})
+    } }
   };
 }
 
 /** Lay it here; the caller has established this client may. A second from the same source replaces the first. */
-async function layBoonHere({ victim, kind, boons, source, originUuid, lasting = false, span = null }) {
-  const row = cleanLaidBoon({ kind, boons, source, lasting });
+async function layBoonHere({ victim, kind, boons, source, originUuid, lasting = false, span = null, encounter = false }) {
+  const row = cleanLaidBoon({ kind, boons, source, lasting: lasting || encounter });
   if (!row) return null;
   const stale = (victim.effects ?? []).filter(e => {
     const held = cleanLaidBoon(e.flags?.["azeroth-rpg"]?.[LAID_BOON_FLAG] ?? null);
@@ -272,13 +337,13 @@ async function layBoonHere({ victim, kind, boons, source, originUuid, lasting = 
   }).map(e => e.id);
   if (stale.length) await victim.deleteEmbeddedDocuments("ActiveEffect", stale);
   const [made] = await victim.createEmbeddedDocuments("ActiveEffect", [
-    boonData({ kind: row.kind, boons: row.boons, source: row.source, originUuid, lasting: row.lasting === true, span })
+    boonData({ kind: row.kind, boons: row.boons, source: row.source, originUuid, lasting: row.lasting === true, span, encounter: encounter === true })
   ]);
   return made ? { name: victim.name, kind: row.kind, boons: row.boons, source: row.source } : null;
 }
 
 /** The GM-side handler: the layer must own what laid it. Throws with the reason. */
-export async function layBoonQueryHandler({ victimUuid, kind, boons, source, originUuid, lasting = false, span = null } = {}, { user = null } = {}) {
+export async function layBoonQueryHandler({ victimUuid, kind, boons, source, originUuid, lasting = false, span = null, encounter = false } = {}, { user = null } = {}) {
   const victim = await fromUuid(victimUuid);
   if (!victim || victim.documentName !== "Actor") throw new Error(game.i18n.localize("AZEROTH.Reaction.Refuse.Gone"));
   if (user && originUuid) {
@@ -287,7 +352,7 @@ export async function layBoonQueryHandler({ victimUuid, kind, boons, source, ori
       throw new Error(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: origin.name }));
     }
   }
-  const done = await layBoonHere({ victim, kind, boons, source, originUuid, lasting: lasting === true, span });
+  const done = await layBoonHere({ victim, kind, boons, source, originUuid, lasting: lasting === true, span, encounter: encounter === true });
   if (!done) throw new Error(game.i18n.localize("AZEROTH.Reaction.Refuse.Unreadable"));
   return done;
 }
@@ -299,19 +364,22 @@ export async function layBoonQueryHandler({ victimUuid, kind, boons, source, ori
  * span (`lasting`) every Test in it takes. Here where this client owns the
  * creature, on the active GM's client otherwise; the refusal is shown.
  *
- * @param {{victim: Actor, kind: string, boons: number, source?: string, by?: Actor|null, lasting?: boolean, span?: object|null}} o
+ * `encounter` holds it until the fight ends (02's Berserking; the B8a2 pass).
+ *
+ * @param {{victim: Actor, kind: string, boons: number, source?: string, by?: Actor|null, lasting?: boolean, span?: object|null, encounter?: boolean}} o
  */
-export async function layBoon({ victim, kind, boons, source = "", by = null, lasting = false, span = null } = {}) {
+export async function layBoon({ victim, kind, boons, source = "", by = null, lasting = false, span = null, encounter = false } = {}) {
   if (!victim) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.Reaction.Refuse.Gone"));
     return null;
   }
   const originUuid = by?.uuid ?? null;
   try {
-    if (victim.isOwner) return await layBoonHere({ victim, kind, boons, source, originUuid, lasting: lasting === true, span });
+    if (victim.isOwner) return await layBoonHere({ victim, kind, boons, source, originUuid, lasting: lasting === true, span, encounter: encounter === true });
     const gm = game.users.activeGM;
-    if (!gm) throw new Error(game.i18n.localize("AZEROTH.Bound.NoGM"));
-    return await gm.query(LAY_BOON_QUERY, { victimUuid: victim.uuid, kind, boons, source, originUuid, lasting: lasting === true, span }, { timeout: 15000 });
+    // Its own words (the B1 fix run): it said *Binding needs a GM online*.
+    if (!gm) throw new Error(game.i18n.localize("AZEROTH.Laid.BoonNoGM"));
+    return await gm.query(LAY_BOON_QUERY, { victimUuid: victim.uuid, kind, boons, source, originUuid, lasting: lasting === true, span, encounter: encounter === true }, { timeout: 15000 });
   } catch (err) {
     ui.notifications?.warn(err.message);
     return null;

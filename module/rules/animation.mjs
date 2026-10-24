@@ -51,6 +51,29 @@
  *       effect {id, sceneId, tokenId, actorId}
  *     }
  *
+ * **A FEATURE'S RECORD** (the Legacy branches' door 2) is `kind: "feature"` and
+ * reads `FEATURE_ANIMATIONS` by its `identifier` - the feature's key - on the
+ * triggers `use`, `hit`, `hold`, `arrive`, `rise`, `effect` and `region`:
+ *
+ *     {
+ *       trigger, kind: "feature", sceneId, identifier, casting, success,
+ *       source, targets, area,
+ *       steps  [{sceneId, tokenId, kind, from {x, y}, to {x, y}}],   // centres, px
+ *       risen  [{sceneId, tokenIds}],
+ *       hold   {kind, messageId, index, striker {sceneId, tokenId}},
+ *       hit,   // a `hit` record's own verdict: the blow's
+ *       effect {id, sceneId, tokenId, actorId}, region {id, sceneId, shape},
+ *       states [flag],   // a laid state's: the flags that named its feature
+ *       privacy          // the (user, feature) pair it answers to (D-729)
+ *     }
+ *
+ * A SPELL's card may carry `steps` too (Shadow Walk, Dark Passage) and plays an
+ * `arrive` cue off them; an ATTACK's record may carry `fromFeature {messageId, key,
+ * success}` (that card's own verdict), `patchedBy [key]` and `ridden [key]`, which pick
+ * a feature row's `strike` recipe over the form's. A cue at `effect` may name the
+ * `state` it answers, a step's placement the `movers` it draws (`MOVE_KINDS`), and a
+ * feature row may carry `loops` - one a binding - where a spell's carries one `loop`.
+ *
  * ## The facts
  *
  *     {
@@ -62,8 +85,9 @@
  */
 
 import {
-  FILTERS, LIBRARY_BY_ROOT, SPELL_ANIMATIONS, STRIKE_ANIMATIONS, libraryOf
+  ALL_SPELL_ANIMATIONS, FEATURE_ANIMATIONS, FILTERS, LIBRARY_BY_ROOT, STRIKE_ANIMATIONS, libraryOf, loopsOf
 } from "./animation-table.mjs";
+import { cleanSteps, risenTokens } from "./animation-records.mjs";
 
 /** The prefix every key this system writes into Sequencer's manager carries. */
 export const LOOP_PREFIX = "azeroth-rpg:loop";
@@ -80,6 +104,9 @@ export const CUE_PREFIX = "azeroth-rpg:cue";
 export const SKIPS = Object.freeze([
   "hidden", "other-scene", "parry", "no-form", "no-row", "reason",
   "failed-cast", "not-this-trigger", "resisted", "recorded-targets",
+  // A feature's `hit` cue on a blow that missed (the Legacy branches' door 2): the
+  // rider was ridden and the feature card made the attack, and nothing landed.
+  "missed",
   "no-anchor", "library-off", "sounds-off"
 ]);
 
@@ -276,6 +303,17 @@ function seen(token) {
   return Boolean(token?.visible);
 }
 
+/**
+ * **THE MOVES A STEP'S PLACEMENT DRAWS** (the B4 review): every move the card recorded,
+ * or only those of the kinds its recipe's `movers` names (`rules/animation-records.mjs
+ * #MOVE_KINDS`) - 04's None Escape pulls every creature it holds and moves nobody else,
+ * and a departure written for the user must not draw at each creature pulled.
+ */
+function stepsFor(record, recipe) {
+  const moves = cleanSteps(record?.steps);
+  return Array.isArray(recipe?.movers) ? moves.filter(s => recipe.movers.includes(s.kind)) : moves;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Building a step                                                    */
 /* ------------------------------------------------------------------ */
@@ -361,12 +399,15 @@ function skipped(skip) {
  *
  * @param {object} record  see the file comment
  * @param {object} facts   see the file comment
- * @param {{spells?: object, strikes?: object}} [tables]
+ * @param {{spells?: object, strikes?: object, features?: object}} [tables]
  * @returns {{skip: string|null, steps: object[]}}
  */
 export function plan(record, facts = {}, tables = {}) {
-  const spells = tables.spells ?? SPELL_ANIMATIONS;
+  // The tier 1 spells and the ones a Legacy branch teaches above tier 1, the
+  // strikes, and the features (the Legacy branches' door 2).
+  const spells = tables.spells ?? ALL_SPELL_ANIMATIONS;
   const strikes = tables.strikes ?? STRIKE_ANIMATIONS;
+  const features = tables.features ?? FEATURE_ANIMATIONS;
   if (!record) return skipped("no-row");
 
   // 1. Nothing a reader may not read. A card the chat selector hid is not
@@ -377,7 +418,9 @@ export function plan(record, facts = {}, tables = {}) {
   const where = record.sceneId ?? record.source?.sceneId ?? record.region?.sceneId ?? record.effect?.sceneId ?? null;
   if (where && facts.sceneId && where !== facts.sceneId) return skipped("other-scene");
 
-  const built = record.kind === "attack" ? planAttack(record, facts, strikes) : planSpell(record, facts, spells);
+  const built = record.kind === "attack" ? planAttack(record, facts, strikes, features)
+    : record.kind === "feature" ? planFeature(record, facts, features)
+      : planSpell(record, facts, spells);
   if (built.skip) return built;
 
   // 3. The per-step pass: a sound where sounds are off, an anchor this user
@@ -410,12 +453,18 @@ export function plan(record, facts = {}, tables = {}) {
  * AT ALL - a bite, with nothing to swing, plays a small bite beside the target
  * instead.
  */
-function planAttack(record, facts, strikes) {
+function planAttack(record, facts, strikes, features = {}) {
   // A Parry Test posts an attack card and carries a strike of its own. It is a
   // Reaction, not an attack, and nothing about it animates.
   if (record.parry === true) return skipped("parry");
+  // **A FEATURE'S OWN STRIKE, WHERE THE CARD SAYS ONE DREW IT** (the Legacy
+  // branches' door 2): the feature card the attack was made from, then a bound
+  // attack patch (04's Serpent Ward's spit on the Searing totem) - the first whose
+  // row carries a `strike` recipe plays instead of the form's. A record naming
+  // neither, or naming a row with no recipe, plays its form exactly as before.
+  const override = strikeOverride(record, features);
   const form = record.strike?.form ?? null;
-  const recipe = form && Object.hasOwn(strikes, form) ? strikes[form] : null;
+  const recipe = override ?? (form && Object.hasOwn(strikes, form) ? strikes[form] : null);
   if (!recipe) return skipped("no-form");
 
   const source = tokenOf(facts, record.source?.tokenId);
@@ -468,6 +517,77 @@ function planSpell(record, facts, spells) {
   const targets = Array.isArray(record.targets) ? record.targets : [];
   if (trigger === "effect" && targets.length) return skipped("recorded-targets");
 
+  return cueSteps(record, facts, cues, trigger);
+}
+
+/**
+ * **A FEATURE** (the Legacy branches' door 2): the row by the feature's key, the
+ * verdict, the trigger, and only then the steps - the spell's order.
+ *
+ * - **A Use whose Casting Test failed plays nothing, on ANY trigger** (07 §8, carried
+ *   to a casting feature by D-775): the card records `casting` and `success`, and a
+ *   record that says nothing of either is no success.
+ * - **A `hit` cue waits for a hit**: the attack card's own verdict, `missed` where the
+ *   blow did not land - the rider was ridden, the card's attack was made, and nothing
+ *   of the feature's reached the target.
+ * - A feature's `effect` trigger is the state ARRIVING on its holder, and is no
+ *   fallback: it plays whatever the Use's card recorded, since the card's own cue is
+ *   the `use` one.
+ */
+function planFeature(record, facts, features) {
+  const id = record.identifier ?? null;
+  const row = id && Object.hasOwn(features, id) ? features[id] : null;
+  if (!row) return skipped("no-row");
+  if (row.reason) return skipped("reason");
+  if (record.success !== true) return skipped("failed-cast");
+  const trigger = record.trigger ?? "use";
+  // **A STATE'S ARRIVAL PLAYS THE CUE FOR ITS OWN STATE** (the B4 review's B7 half): a
+  // cue naming a `state` answers only an arrival whose flags named it (`record.states`),
+  // so one of three states a Use lays cues once rather than three times.
+  const cues = (row.cues ?? []).filter(c => c.trigger === trigger && stateMatches(c.state, record.states));
+  if (!cues.length) return skipped("not-this-trigger");
+  if (trigger === "hit" && record.hit !== true) return skipped("missed");
+  return cueSteps(record, facts, cues, trigger);
+}
+
+/**
+ * Whether a cue's or a loop's `state` (a flag key, or a list of them) answers the flags a
+ * laid state was named in. A cue or a loop naming none answers every one.
+ */
+export function stateMatches(want, states) {
+  if (want === undefined || want === null) return true;
+  const wanted = Array.isArray(want) ? want : [want];
+  const held = Array.isArray(states) ? states : [];
+  return wanted.some(s => held.includes(s));
+}
+
+/**
+ * The strike recipe a feature row draws an attack card's blow with, or null: the
+ * feature card the attack was made from (`fromFeature`) - **only where that card's Use
+ * landed** (the B4 review: a failed Use's attack drew the feature's strike) - then each
+ * bound attack patch that drew it (`patchedBy`), then each rider it carried (`ridden`:
+ * 04's Black Arrow, Storm Bolt and Shadow Strike draw their own shot), the first whose
+ * row carries a `strike`.
+ */
+function strikeOverride(record, features = {}) {
+  const from = record?.fromFeature?.success === false ? null : record?.fromFeature?.key;
+  const keys = [
+    from,
+    ...(Array.isArray(record?.patchedBy) ? record.patchedBy : []),
+    ...(Array.isArray(record?.ridden) ? record.ridden : [])
+  ].filter(k => typeof k === "string" && k);
+  for (const key of keys) {
+    const row = Object.hasOwn(features, key) ? features[key] : null;
+    if (row?.strike?.swing) return row.strike;
+  }
+  return null;
+}
+
+/**
+ * The steps a row's cues come to on this client, for a spell or a feature alike:
+ * the anchors resolved, every sound gated on its own picture.
+ */
+function cueSteps(record, facts, cues, trigger) {
   const source = tokenOf(facts, record.source?.tokenId);
   // WHAT A `cast|effect` ROW AIMS AT. At cast it is the recorded target; on
   // the effect trigger - which fires only where the cast recorded nothing to
@@ -563,7 +683,9 @@ function addSteps(steps, recipe, context) {
   // **AND A SOUND ON AN UNSEEN ANCHOR IS DROPPED TOO.** A swoosh at a hidden
   // creature announces where it is stood as plainly as a picture would.
   if (recipe.kind === "sound") {
-    const spot = soundAnchor({ place, record, facts, source, firstTarget });
+    // A sound naming no placement is heard where the picture before it was, and over the
+    // same movers that picture's `movers` named (a step's own filter, below).
+    const spot = soundAnchor({ place, record, facts, source, firstTarget, follow: recipe.place ? recipe : follow });
     // **A SOUND WITH NO ANCHOR IS NOT A SOUND.** `chooseSource` answers null
     // rather than guess among a caster's two uncontrolled tokens (D-724), and
     // a step carrying neither `at` nor `on` would be played non-positionally:
@@ -682,6 +804,69 @@ function addSteps(steps, recipe, context) {
     case "source>target": return between(source, firstTarget);
     case "target>source": return between(firstTarget, source);
 
+    // **WHERE A STEP'S MOVERS STOOD AND STAND** (the Legacy branches' door 2): every
+    // move the card recorded, at its departure (`step-from`) or its arrival
+    // (`step-to`), each a point in canvas pixels. **Never `on` the token**: by the
+    // time the card arrives the token is already at the destination, and a step
+    // placed on the token would draw a departure on the arrival. A recipe's `scale`
+    // is still a multiple of that token's width, worked out here into `size`; a
+    // mover this client does not hold is no anchor, and one it cannot see drops its
+    // step as any other unseen anchor does.
+    case "step-from":
+    case "step-to": {
+      const end = place === "step-from" ? "from" : "to";
+      stepsFor(record, recipe).forEach((s, index) => {
+        const token = tokenOf(facts, s.tokenId);
+        if (!token) return;
+        const scale = num(recipe.scale);
+        const width = token.width || (pxPerFt ?? 0) * 5;
+        steps.push({
+          ...step(recipe, {
+            at: { x: s[end].x, y: s[end].y },
+            size: scale !== null && width > 0 ? scale * width : sizeOf(recipe, { diameter, pxPerFt }),
+            index,
+            delay: (num(recipe.delay) ?? 0) + index * (num(recipe.stagger) ?? 0)
+          }),
+          ...mark,
+          ...(seen(token) ? {} : { unseen: true })
+        });
+      });
+      return;
+    }
+
+    // The line a step's mover crossed, from where it stood to where it stands: a
+    // trail or a dash, stretched like any span.
+    case "step": {
+      stepsFor(record, recipe).forEach((s, index) => {
+        const token = tokenOf(facts, s.tokenId);
+        if (!token) return;
+        steps.push({
+          ...step(recipe, {
+            from: { x: s.from.x, y: s.from.y }, to: { x: s.to.x, y: s.to.y },
+            feet: feetBetween(s.from, s.to, pxPerFt),
+            index,
+            delay: (num(recipe.delay) ?? 0) + index * (num(recipe.stagger) ?? 0)
+          }),
+          ...mark,
+          ...(seen(token) ? {} : { unseen: true })
+        });
+      });
+      return;
+    }
+
+    // Every creature the Use stood up - a summon, a construct, a totem, a raise, a
+    // revive - on its own token, which is where it stands now.
+    case "risen": {
+      risenTokens(record.risen).forEach((r, index) => {
+        const token = tokenOf(facts, r.tokenId);
+        if (token) at(token, { index, delay: (num(recipe.delay) ?? 0) + index * (num(recipe.stagger) ?? 0) });
+      });
+      return;
+    }
+
+    // The striker whose blow a hold turned aside (04's Afterimage).
+    case "striker": return at(tokenOf(facts, record.hold?.striker?.tokenId));
+
     // Exactly three darts to the FIRST target, staggered. The conditional
     // fourth needs a secondary target nothing records.
     case "missiles": {
@@ -734,7 +919,7 @@ function addSteps(steps, recipe, context) {
  * is chosen by, and it is the span of the action rather than the span of the
  * sound - a launch heard at the caster is still a 60 ft shot.
  */
-function soundAnchor({ place, record, facts, source, firstTarget }) {
+function soundAnchor({ place, record, facts, source, firstTarget, follow = null }) {
   const pxPerFt = num(facts.pxPerFt);
   const spot = (token) => (token
     ? { at: { x: token.x, y: token.y }, on: token.id, ...(seen(token) ? {} : { unseen: true }) }
@@ -767,6 +952,27 @@ function soundAnchor({ place, record, facts, source, firstTarget }) {
       const cone = coneEnds(record.region?.shape ?? null);
       return cone ? { at: { ...cone.apex }, feet: cone.radius / (pxPerFt || 1) } : spot(source);
     }
+    // A step's sound is heard where the first mover left, arrived, or set out
+    // across; one mover this client does not hold is no anchor for it.
+    case "step-from":
+    case "step-to":
+    case "step": {
+      const first = stepsFor(record, follow ?? {}).find(s => tokenOf(facts, s.tokenId)) ?? null;
+      if (!first) return null;
+      const token = tokenOf(facts, first.tokenId);
+      const point = place === "step-to" ? first.to : first.from;
+      return {
+        at: { x: point.x, y: point.y },
+        ...(place === "step" ? { feet: feetBetween(first.from, first.to, pxPerFt) ?? undefined } : {}),
+        ...(seen(token) ? {} : { unseen: true })
+      };
+    }
+    case "risen": {
+      const first = risenTokens(record.risen).map(r => tokenOf(facts, r.tokenId)).find(Boolean) ?? null;
+      return spot(first) ?? spot(source);
+    }
+    case "striker":
+      return spot(tokenOf(facts, record.hold?.striker?.tokenId)) ?? spot(source);
     default:
       return spot(source) ?? spot(firstTarget);
   }
@@ -804,12 +1010,22 @@ function soundAnchor({ place, record, facts, source, firstTarget }) {
  * `sustain-resisted` rows the lead has not picked are exercised the same way
  * (D-727).
  *
+ * **AND WHAT A FEATURE LAID** (the Legacy branches' door 2), read off the rows the
+ * snapshot marks `kind: "feature"` and looked up in `FEATURE_ANIMATIONS` by the
+ * feature's key:
+ *
+ *     sustains: [{..., kind: "feature", tokenIds}]   // the holder's own tokens, where no source was recorded
+ *     effects:  [{id, cast, identifier, kind: "feature", active, sceneId, tokenId, name, source}]
+ *     marks:    [{kind: "challenge"|"watch", identifier, cast, owned, name, target {sceneId, tokenId}}]
+ *     regions:  [{id, sceneId, cast, identifier, kind: "feature", shape}]
+ *
  * @param {object} state
- * @param {{table?: object}} [tables]
+ * @param {{table?: object, features?: object}} [tables]
  * @returns {Array<{key, binding, cast, identifier, name, sceneId, anchors, hash, layers}>}
  */
 export function loopsFor(state = {}, tables = {}) {
-  const spells = tables.table ?? SPELL_ANIMATIONS;
+  const spells = tables.table ?? ALL_SPELL_ANIMATIONS;
+  const features = tables.features ?? FEATURE_ANIMATIONS;
   const sceneId = state.sceneId ?? null;
   const loops = [];
   const seenKeys = new Set();
@@ -821,6 +1037,12 @@ export function loopsFor(state = {}, tables = {}) {
   };
 
   for (const entry of state.sustains ?? []) {
+    // A Sustain a FEATURE's Use began (04's Big Bad Voodoo, Flametongue): its own
+    // table, and the holder's own tokens where the entry recorded no source.
+    if (entry?.kind === "feature") {
+      for (const loop of featureSustainLoops(state, entry, features)) add(loop);
+      continue;
+    }
     // An entry written before D-724 carries no `cast`, and a loop keyed on
     // nothing would collide with every other. It is skipped.
     const cast = entry?.cast ?? null;
@@ -830,24 +1052,30 @@ export function loopsFor(state = {}, tables = {}) {
     const caster = tokenOf(state, entry.source?.tokenId);
     const target = tokenOf(state, entry.targets?.[0]?.tokenId);
 
-    if (binding === "sustain-self") add(build({ state, row, entry, binding, cast, anchors: [caster], holder: caster }));
-    else if (binding === "sustain-target") add(build({ state, row, entry, binding, cast, anchors: [target], holder: target }));
-    else if (binding === "sustain-channel") add(build({ state, row, entry, binding, cast, anchors: [target, caster], holder: target, other: caster }));
+    const loop = row.loop;
+    if (binding === "sustain-self") add(build({ state, loop, entry, binding, cast, anchors: [caster], holder: caster }));
+    else if (binding === "sustain-target") add(build({ state, loop, entry, binding, cast, anchors: [target], holder: target }));
+    else if (binding === "sustain-channel") add(build({ state, loop, entry, binding, cast, anchors: [target, caster], holder: target, other: caster }));
     else if (binding === "sustain-region") {
       for (const region of regionsFor(state, cast, entry.identifier)) {
-        add(build({ state, row, entry, binding, cast, anchors: [{ id: region.id }], region }));
+        add(build({ state, loop, entry, binding, cast, anchors: [{ id: region.id }], region }));
       }
     } else if (binding === "sustain-resisted") {
       // Built and unused: the three rows that would take it are Appendix C's,
       // and the lead has not picked them (D-727).
       for (const resist of resistsFor(state, cast)) {
         const token = tokenOf(state, resist.tokenId);
-        add(build({ state, row, entry, binding, cast, anchors: [token], holder: token }));
+        add(build({ state, loop, entry, binding, cast, anchors: [token], holder: token }));
       }
     }
   }
 
   for (const effect of state.effects ?? []) {
+    // A state a FEATURE laid, on its holder (the Legacy branches' door 2).
+    if (effect?.kind === "feature") {
+      add(featureEffectLoop(state, effect, features));
+      continue;
+    }
     const cast = effect?.cast ?? null;
     const row = rowFor(spells, effect?.identifier);
     if (!cast || !row?.loop || !String(row.loop.binding).startsWith("effect")) continue;
@@ -855,17 +1083,97 @@ export function loopsFor(state = {}, tables = {}) {
     if (effect.sceneId && sceneId && effect.sceneId !== sceneId) continue;
     const holder = tokenOf(state, effect.tokenId);
     const entry = { identifier: effect.identifier, name: effect.name ?? null, source: effect.source ?? null };
-    if (row.loop.binding === "effect") {
-      add(build({ state, row, entry, binding: "effect", cast, anchors: [holder], holder, other: tokenOf(state, effect.source?.tokenId) }));
+    const loop = row.loop;
+    if (loop.binding === "effect") {
+      add(build({ state, loop, entry, binding: "effect", cast, anchors: [holder], holder, other: tokenOf(state, effect.source?.tokenId) }));
     } else {
       // Flare: while its Region AND its laid effect both exist.
       for (const region of regionsFor(state, cast, effect.identifier)) {
-        add(build({ state, row, entry, binding: "effect-region", cast, anchors: [{ id: region.id }, { id: effect.id }], region }));
+        add(build({ state, loop, entry, binding: "effect-region", cast, anchors: [{ id: region.id }, { id: effect.id }], region }));
       }
     }
   }
 
+  // **A FEATURE'S MARK, ON THE CREATURE MARKED** (04's The Challenge and The Long
+  // Watch; the Legacy branches' doors 2 and 18). The Long Watch's stands only on a
+  // client that owns the warden - its owners and the GM (the lead: *"Yes"*: *visible
+  // only to its owner*) - so every other screen works out no such loop at all, and
+  // the stop window cannot list one either.
+  for (const mark of state.marks ?? []) {
+    const loop = loopFor(rowFor(features, mark?.identifier), "mark");
+    if (!mark?.cast || !loop) continue;
+    if (mark.kind === "watch" && mark.owned !== true) continue;
+    if (mark.target?.sceneId && sceneId && mark.target.sceneId !== sceneId) continue;
+    const marked = tokenOf(state, mark.target?.tokenId);
+    const entry = { identifier: mark.identifier, name: mark.name ?? null, privacy: mark.privacy ?? null };
+    add(build({ state, loop, entry, binding: "mark", cast: mark.cast, anchors: [marked], holder: marked }));
+  }
+
+  // **A FEATURE'S REGION, WHILE IT STANDS** (04's Shadow Trap; an area placed from a
+  // feature's card). **`shown` IS THIS READER'S OWN** (the B4 review's MUST-FIX): the
+  // snapshot works it out as v14's `Region#isVisible` does off the layer, so a Region
+  // the GM hid stands no picture for a player, one set to its observers stands for
+  // whoever the Region's own ownership lets observe it, and the GM sees what the GM's
+  // board draws.
+  for (const region of state.regions ?? []) {
+    if (region?.kind !== "feature" || !region.cast) continue;
+    const loop = loopFor(rowFor(features, region.identifier), "region");
+    if (!loop) continue;
+    if (region.sceneId && sceneId && region.sceneId !== sceneId) continue;
+    if (region.shown === false) continue;
+    const entry = { identifier: region.identifier, name: region.name ?? null, privacy: region.privacy ?? null };
+    add(build({ state, loop, entry, binding: "region", cast: region.cast, anchors: [{ id: region.id }], region }));
+  }
+
   return loops;
+}
+
+/**
+ * The loop a row carries for one binding (`animation-table.mjs#loopsOf`: a spell's
+ * `loop`, or a feature row's `loops` - 04's Shadow Trap stands one picture on the trap
+ * and another on the creature it caught) - for a laid state, the first whose `state`
+ * answers the flags the effect named (`stateMatches`) - or null.
+ */
+function loopFor(row, binding, states = null) {
+  return loopsOf(row).find(l => l.binding === binding && (binding !== "effect" || stateMatches(l.state, states))) ?? null;
+}
+
+/**
+ * A FEATURE'S SUSTAIN, AS LOOPS (the Legacy branches' door 2): on the source the
+ * entry recorded, else on each of the holder's OWN tokens - its synthetic token, or
+ * its linked ones - which is who holds it. `holdUseSustain` writes no source, and an
+ * unlinked copy of the holder's world actor is another creature, never this one.
+ */
+function featureSustainLoops(state, entry, features) {
+  const cast = entry?.cast ?? null;
+  const loop = loopFor(rowFor(features, entry?.identifier), "sustain-self");
+  if (!cast || !loop) return [];
+  const ids = entry.source?.tokenId ? [entry.source.tokenId] : (Array.isArray(entry.tokenIds) ? entry.tokenIds : []);
+  const out = [];
+  for (const id of ids) {
+    const holder = tokenOf(state, id);
+    out.push(build({ state, loop, entry, binding: "sustain-self", cast, anchors: [holder], holder }));
+  }
+  return out;
+}
+
+/**
+ * A STATE A FEATURE LAID, AS A LOOP (the Legacy branches' door 2): on its holder,
+ * while the effect is there and active - **the loop for THAT state** (the B4 review's
+ * B7 half: a row's effect loop names the flag it follows, and an effect whose flags
+ * named the feature otherwise stands none). The loop names the effect, which is what
+ * `module/animation/player.mjs` ties it to.
+ */
+function featureEffectLoop(state, effect, features) {
+  const loop = loopFor(rowFor(features, effect?.identifier), "effect", effect?.states ?? []);
+  if (!effect?.cast || !loop) return null;
+  if (effect.active === false) return null;
+  const sceneId = state.sceneId ?? null;
+  if (effect.sceneId && sceneId && effect.sceneId !== sceneId) return null;
+  const holder = tokenOf(state, effect.tokenId);
+  const entry = { identifier: effect.identifier, name: effect.name ?? null, source: effect.source ?? null, privacy: effect.privacy ?? null };
+  const built = build({ state, loop, entry, binding: "effect", cast: effect.cast, anchors: [holder], holder, other: tokenOf(state, effect.source?.tokenId) });
+  return built ? { ...built, effectId: effect.id ?? null } : null;
 }
 
 /** The table row for an identifier, or null. */
@@ -873,10 +1181,16 @@ function rowFor(spells, identifier) {
   return identifier && Object.hasOwn(spells, identifier) ? spells[identifier] : null;
 }
 
-/** The Regions on the viewed scene that this cast placed. */
+/**
+ * The Regions on the viewed scene that this cast placed. A feature's Region is its own,
+ * and one this reader is not shown stands no picture (the B4 review, pulled in for the
+ * spells beside the features).
+ */
 function regionsFor(state, cast, identifier) {
   return (state.regions ?? []).filter(r => r
+    && r.kind !== "feature"
     && r.cast === cast
+    && r.shown !== false
     && (!identifier || !r.identifier || r.identifier === identifier)
     && (!state.sceneId || !r.sceneId || r.sceneId === state.sceneId));
 }
@@ -896,7 +1210,7 @@ function resistsFor(state, cast) {
  * **A LOOP ON A TOKEN THE GM HAS HIDDEN IS DROPPED FOR PLAYERS.** A standing
  * flame over an invisible creature says where it is.
  */
-function build({ state, row, entry, binding, cast, anchors, holder = null, other = null, region = null }) {
+function build({ state, loop, entry, binding, cast, anchors, holder = null, other = null, region = null }) {
   const ids = anchors.map(a => a?.id ?? null);
   if (ids.some(id => !id)) return null;
   for (const anchor of anchors) {
@@ -905,7 +1219,7 @@ function build({ state, row, entry, binding, cast, anchors, holder = null, other
   const sceneId = state.sceneId ?? null;
   const key = [LOOP_PREFIX, binding, cast, sceneId ?? "-", ...ids].join(":");
   const layers = [];
-  for (const recipe of row.loop.layers) {
+  for (const recipe of loop?.layers ?? []) {
     const made = layerOf(recipe, { state, holder, other, region });
     for (const one of made) layers.push(one);
   }
@@ -917,7 +1231,11 @@ function build({ state, row, entry, binding, cast, anchors, holder = null, other
     sceneId,
     anchors: ids,
     hash: hashOf({ layers: hashable(layers), binding }),
-    layers
+    layers,
+    // **THE (USER, FEATURE) PAIR WHAT A USE LAID ANSWERS TO** (the B4 review): a feature's
+    // loop is dropped where this client knows the Use's card was private, as a spell's
+    // is by its cast (`visibleLoops`). Left off where nothing names one.
+    ...(entry.privacy ? { privacy: entry.privacy } : {})
   };
 }
 
@@ -1066,7 +1384,15 @@ function castSet(value) {
 export function visibleLoops(loops, { stops = {}, hidden = {}, loopsOn = true, privateCasts = null } = {}) {
   if (loopsOn === false) return [];
   const secret = castSet(privateCasts);
-  return (loops ?? []).filter(loop => !stops?.[loop.key] && !hidden?.[loop.key] && !secret.has(loop.cast));
+  return (loops ?? []).filter(loop => !stops?.[loop.key] && !hidden?.[loop.key] && !isPrivate(loop, secret));
+}
+
+/**
+ * Whether this client may not see a loop: its cast's card is private here, or - for
+ * what a feature's Use laid - the (user, feature) pair's last card was (the B4 review).
+ */
+function isPrivate(loop, secret) {
+  return secret.has(loop.cast) || (typeof loop.privacy === "string" && secret.has(loop.privacy));
 }
 
 /**
@@ -1081,7 +1407,7 @@ export function visibleLoops(loops, { stops = {}, hidden = {}, loopsOn = true, p
  */
 export function animationRows(loops, { stops = {}, hidden = {}, loopsOn = true, isGM = false, privateCasts = null } = {}) {
   const secret = castSet(privateCasts);
-  return (loops ?? []).filter(loop => !secret.has(loop.cast)).map(loop => {
+  return (loops ?? []).filter(loop => !isPrivate(loop, secret)).map(loop => {
     const stop = stops?.[loop.key] ?? null;
     const state = stop ? "stopped" : (loopsOn === false ? "off" : (hidden?.[loop.key] ? "hidden" : "playing"));
     return {

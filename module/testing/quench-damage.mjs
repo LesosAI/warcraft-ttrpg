@@ -16,7 +16,7 @@
  * Every document a test makes is deleted in `after`.
  */
 
-import { cleanup, fromPack, made, makeCharacter, makeNpc, pinDie, settle, untilHook, PACK_FOR } from "./fixtures.mjs";
+import { cleanup, fromPack, giveTurn, made, makeCharacter, makeNpc, pinDie, settle, untilHook, PACK_FOR, tokenDrawn, tokenData } from "./fixtures.mjs";
 import { attackWithDialog, npcAttackWithDialog } from "../applications/actions.mjs";
 // The card's own Apply, pressed rather than imitated: the `damaged` mark is
 // written on that path and nothing else (D-681).
@@ -51,12 +51,12 @@ async function sceneWith(placements) {
     await actor.update({ "prototypeToken.actorLink": true });
     // Every token core makes is HOSTILE by default (14.367's schema), so a
     // test that means "an enemy" says which side it is on.
-    data.push((await actor.getTokenDocument({
+    data.push((await tokenData(actor, {
       x, y, disposition: CONST.TOKEN_DISPOSITIONS[side === "friendly" ? "FRIENDLY" : "HOSTILE"]
-    })).toObject());
+    })));
   }
   await scene.createEmbeddedDocuments("Token", data);
-  for (let i = 0; i < 60 && !placements.every(p => p.actor.getActiveTokens(true).length); i++) {
+  for (let i = 0; i < 60 && !placements.every(p => tokenDrawn(p.actor.getActiveTokens(true)[0])); i++) {
     await new Promise(r => setTimeout(r, 100));
   }
   await settle();
@@ -273,6 +273,9 @@ export function damagePipelineBatch(context) {
       await sceneWith([{ actor, x: 500, y: 500, side: "friendly" }, { actor: npc, x: 600, y: 500 }]);
       target(npc);
       const combat = await fightWith([actor, npc]);
+      // The Shaman's own turn: a Half-Action is spent on it (the lead: *"Refuse off-turn
+      // Half-Actions"*), and the two swings are its two.
+      await giveTurn(combat, actor);
       const hammer = await arm(actor, "Sulfuras, Hand of Ragnaros");
 
       const swing = async () => {
@@ -393,7 +396,10 @@ export function damagePipelineBatch(context) {
 
       // **THE DIALOG OFFERS IT**, and not on the three blows 02 excludes.
       const spec = { kind: "attack", title: "Quench Finisher", damage: { rating: dagger.system.rating, kind: "physical" } };
-      assert.deepEqual(prepareRoll(actor, spec).finisher, { value: 3, max: 5 },
+      // The offer carries more than the pool since D-773 (what is spent and counted,
+      // Death Mark's free one, Rupture's Bleeding, Ruthlessness's points back, door 26's
+      // Shackle), so the case names the pool's half and what a plain Finisher spends.
+      assert.include(prepareRoll(actor, spec).finisher, { value: 3, max: 5, spends: 3, counts: 3, free: null },
         "the roll dialog offers no Finisher to a Rogue holding Combo Points");
       assert.isNull(prepareRoll(actor, { ...spec, offHand: true }).finisher, "an off-hand blow was offered a Finisher");
       assert.isNull(prepareRoll(actor, { ...spec, parry: true }).finisher, "a Parry was offered a Finisher");

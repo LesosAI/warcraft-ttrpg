@@ -287,6 +287,13 @@ export class TalentData extends foundry.abstract.TypeDataModel {
       // leave them alone.
       race: new fields.StringField({ required: false, blank: true, initial: "" }),
       branch: new fields.StringField({ required: false, blank: true, initial: "" }),
+      // **THE PEOPLE WHO KEEP THIS BRANCH**, on a Legacy's twelve (04 §1, D-781):
+      // `Orc` on Blademaster's, "" on a class's own three. NOT `race`, which marks
+      // a RACIAL talent and which every class-tree reader filters out - a Legacy
+      // talent is a CLASS talent, on the class's points and its tree, that the
+      // grant embeds only on a character of this people
+      // (`rules/legacy-branches.mjs`). A free string, as `race` and `className` are.
+      legacy: new fields.StringField({ required: false, blank: true, initial: "" }),
       tier: new fields.NumberField({ required: true, integer: true, initial: 1, min: 1, max: 5 }),
       ranks: new fields.NumberField({ required: true, integer: true, initial: 1, min: 1, max: 3 }),
       taken: new fields.NumberField({ required: true, integer: true, initial: 0, min: 0 }),
@@ -328,10 +335,18 @@ export class FeatureData extends foundry.abstract.TypeDataModel {
       kind: new fields.StringField({ required: true, blank: false, initial: "passive", choices: ["action", "passive"] }),
       action: choiceField(AZEROTH.actions),
       cost: new fields.SchemaField({
+        // Every pool by name, and 05 §11's kind word `momentum` (02 §5's War Stomp: *4
+        // Momentum*, the class's own pool; the B8a pass). A value ADDED to the choices
+        // refuses nothing a world stores, and the sync restamps at world load (D-621).
         pool: new fields.StringField({ required: false, nullable: true, blank: false, initial: null,
-          choices: () => [...Object.keys(AZEROTH.momentumTypes), ...Object.keys(AZEROTH.powerTypes)] }),
+          choices: () => Object.keys(AZEROTH.costPoolTypes) }),
         amount: new fields.NumberField({ required: true, integer: true, initial: 0, min: 0 }),
-        all: new fields.BooleanField({ initial: false })
+        all: new fields.BooleanField({ initial: false }),
+        // **WHEN IT IS PAID** (the B8a2 pass; 02's *make a Casting Test. On success, spend 8
+        // Mana*): `success` where the price is the Test's success's (`rules/class-features.mjs
+        // #paysOnSuccess`), null where it is paid with the Use. A free string (CLAUDE.md §15);
+        // a new key with an initial, restamped by the sync at world load (D-621) - no migration.
+        on: new fields.StringField({ required: false, nullable: true, blank: false, initial: null })
       }),
       casting: new fields.BooleanField({ initial: false }),
       dc: optionalNumberField({ min: 1 }),
@@ -339,9 +354,36 @@ export class FeatureData extends foundry.abstract.TypeDataModel {
       heal: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
       damage: new fields.SchemaField({
         amount: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
-        type: choiceField(AZEROTH.damageTypes)
+        type: choiceField(AZEROTH.damageTypes),
+        // **HALF ON A PASSED TEST** (the lead: *"Build it everywhere"*; 04's Life Drain
+        // and Cluster Rockets, *half that, rounded down, on a success*, and Explosive
+        // Trap's *for half*): the card's Apply lands the half on a creature whose
+        // Resist on it passed (`rules/resisted.mjs`). A new key with an initial,
+        // restamped by the sync at world load (D-621) - no migration.
+        half: new fields.BooleanField({ initial: false }),
+        // **NONE OF IT ON A PASSED TEST** (02's Shadow Word: Death, *On a failed save, the
+        // target takes ...*; the B8a pass): the card's Apply lands nothing on a creature
+        // whose Resist on it passed. Restamped by the sync at world load - no migration.
+        onFail: new fields.BooleanField({ initial: false })
       }),
       resist: choiceField(AZEROTH.resiliences),
+      // **WHOM ITS AREA REACHES** (the lead: *"Measure the area"*): `enemy`, `creature`
+      // or `ally` - the Use gathers the creatures inside its circle that the word
+      // names and the card's buttons work per creature (`rules/area-gather.mjs`). A
+      // free string (CLAUDE.md §15), null for an area the table's selection reaches
+      // (D-647); a new key with an initial, restamped at world load (D-621).
+      who: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+      // **THE OTHER RUNG A USE MAY BE TAKEN AT** (04's Ethereal Form: *At rank 2 you may
+      // use it as a Reaction*): every rung the Use may spend, its own `action` first,
+      // asked through the one chooser where more than one can be paid. Empty for a Use
+      // of one rung. Free strings; a new key with an initial, restamped at world load.
+      rungs: new fields.ArrayField(new fields.StringField({ required: true, blank: false }), { initial: [] }),
+      // **THE DC ITS RESIST IS MADE AGAINST** (the Legacy branches' door 16; the lead
+      // on 04's Thunder Clap: *"10 + Str modifier + Proficiency"*): a
+      // `rules/class-features.mjs#RESIST_DCS` word, or null for the Spell DC. A free
+      // string (CLAUDE.md §15); a new key with an initial, restamped by the sync at
+      // world load (D-621) - no migration.
+      resistDc: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
       extraAttack: new fields.BooleanField({ initial: false }),
       // The kind of shape the Extra Attack needs (D-769): the Druid's is *while
       // in a Shapeshift form* (02 §7), and null is none. A free string with no
@@ -369,8 +411,14 @@ export class FeatureData extends foundry.abstract.TypeDataModel {
       // "forms", "beasts" and "avatar" the bestiary; "schools" the config;
       // "warCry" the feature's own two; "poisons" what the character carries.
       // "skills" is Adaptable's (D-636): the one skill always in-career.
+      // The Legacy branches' B2 (doors 6 and 7): "constructs" is 04's The Bench's
+      // table, "gadgets" Gadgeteer's, "overclock" and "blueprint" the gnome's two
+      // racial talents (02 §5). Values ADDED to the list refuse nothing a world
+      // stores, and the sync restamps every held feature at world load (D-621): no
+      // migration, the precedent of `picks` and `aura`.
       choice: new fields.StringField({ required: false, nullable: true, blank: false, initial: null,
-        choices: ["totems", "elementals", "forms", "demons", "greaterDemons", "beasts", "avatar", "warCry", "schools", "poisons", "skills"] }),
+        choices: ["totems", "elementals", "forms", "demons", "greaterDemons", "beasts", "avatar", "warCry", "schools", "poisons", "skills",
+          "constructs", "gadgets", "overclock", "blueprint"] }),
       // How many the menu takes in ONE use (02 §7's Totem Mastery, D-710):
       // one Half-Action places up to four totems, each paying its own Mana.
       // One everywhere else, and the sync stamps it off the feature table -
@@ -396,11 +444,13 @@ export class FeatureData extends foundry.abstract.TypeDataModel {
       // The talents that changed this feature's stamp (D-642), by name.
       modifiedBy: new fields.ArrayField(new fields.StringField({ required: true, blank: false }), { initial: [] }),
       // A creature the feature acts on, and how (D-642; the door is D-643's).
+      // `construct` and `build` are the Legacy branches' door 6 (04's The Bench and
+      // Arclight Spanner), added to the lists: nothing stored is refused (D-621).
       bound: new fields.SchemaField({
         kind: new fields.StringField({ required: false, nullable: true, blank: false, initial: null,
-          choices: ["companion", "demon", "elemental", "totem", "summon"] }),
+          choices: ["companion", "demon", "elemental", "totem", "summon", "construct"] }),
         action: new fields.StringField({ required: false, nullable: true, blank: false, initial: null,
-          choices: ["attack", "heal", "buff", "dismiss", "bind"] })
+          choices: ["attack", "heal", "buff", "dismiss", "bind", "build"] })
       }),
       // What the feature calls: 14's entries, how many, for how long.
       summons: new fields.SchemaField({
@@ -439,7 +489,25 @@ export class FeatureData extends foundry.abstract.TypeDataModel {
         // The Casting Test's SL the card needs before it offers this condition
         // (04's Pyroblast at rank 2; D-775): null for any success. A new key with
         // an initial, restamped by the sync at world load (D-621) - no migration.
-        sl: new fields.NumberField({ required: false, nullable: true, integer: true, initial: null, min: 1 })
+        sl: new fields.NumberField({ required: false, nullable: true, integer: true, initial: null, min: 1 }),
+        // **THE TEST TO END IT** (the Legacy branches' door 19: Bad Mojo, Shadow
+        // Trap, Warden's Cage, The Vault Opens): `rules/escapes.mjs#boundFeatureEscape`'s
+        // shape, the Banes bound at the rank, the DC a word resolved at the Use.
+        // Free strings (CLAUDE.md §15); the whole shape with its initials, so the
+        // sync's stamp and a stored copy compare key for key. A new key with
+        // initials, restamped by the sync at world load (D-621) - no migration.
+        escape: new fields.SchemaField({
+          on: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+          resilience: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+          dc: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+          banes: new fields.NumberField({ required: true, integer: true, initial: 0, min: 0, max: 3 })
+        }),
+        // **WHETHER THE CARD'S TEST GOVERNS IT** (the lead: *"Land automatically"*): a
+        // condition laid on a FAILED Resist (04's Thunder Clap's Prone at rank 2, and
+        // every *makes a ... Resilience Test ... or is X*), which lands at once on the
+        // creature that failed it; unmarked, the Test leaves it alone (Thunder Clap's
+        // Slowed). A new key with an initial, restamped at world load (D-621).
+        onFail: new fields.BooleanField({ initial: false })
       }), { initial: [] }),
       // What the roll dialog reminds the roller of (D-613): the kinds of
       // Test it bears on, a line of text, and the Boon or Bane the book names.
@@ -519,28 +587,47 @@ export class TalentTreeData extends foundry.abstract.TypeDataModel {
 /* -------------------------------------------- */
 
 /**
- * A Legacy (15, D-581). Seven fields and four ranks. A Legacy REPLACES the
- * career (02 §11) and cannot be lost (D-579) — the holders may disown you and
- * the ranks stay.
+ * A Legacy (04 §1, 15; D-781): the REFERENCE document for one people's fourth
+ * talent branch. **The branch itself is twelve talents** in the `talents` pack,
+ * each carrying `legacy` (the people), and what a character holds is those; this
+ * item holds what the book says ABOUT the branch - 15's lore in `description`
+ * (the item sheet's prose block), 04 §1's people and class, the branch's name on
+ * that class's tree, and 02's *What it builds*. Nothing mechanical reads it.
+ *
+ * Until D-781 it was a title: seven fields, four ranks bought with XP from level
+ * 15, ability shifts at ranks 2 and 4 (D-581, D-588), replacing the career. Every
+ * one of those is gone, so `migrateData` drops them and migration 0.12.25 rewrites
+ * a world's copies whole.
  */
 export class LegacyData extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     return {
       ...base(),
+      // The people who keep it (04 §1), as the race item names them.
       race: new fields.StringField({ required: false, blank: true, initial: "" }),
+      // The class whose tree carries it as a fourth branch.
       className: new fields.StringField({ required: false, blank: true, initial: "" }),
-      entry: new fields.StringField({ required: false, blank: true, initial: "" }),
-      rank: new fields.NumberField({ required: true, integer: true, initial: 1, min: 1, max: 4 }),
-      ranks: new fields.ArrayField(new fields.SchemaField({
-        rank: new fields.NumberField({ required: true, integer: true, min: 1, max: 4, initial: 1 }),
-        name: new fields.StringField({ required: true, blank: false }),
-        description: descriptionField(),
-        // Ranks 2 and 4 each raise one ability by 2 and lower another by 1,
-        // permanently, and may carry a score past 20 (D-588).
-        abilityUp: choiceField(AZEROTH.abilities),
-        abilityDown: choiceField(AZEROTH.abilities)
-      }), { initial: [], max: 4 })
+      // The branch's name on that tree: `TalentData.branch` on its twelve.
+      branch: new fields.StringField({ required: false, blank: true, initial: "" }),
+      // 02 SS7's *What it builds*, in the Branches table's own words.
+      builds: new fields.StringField({ required: false, blank: true, initial: "" })
     };
+  }
+
+  /** The retired title's fields, which a stored Legacy may still carry (D-781). */
+  static RETIRED = Object.freeze(["entry", "rank", "ranks"]);
+
+  /**
+   * Drop the retired title's fields before the schema reads the source - only
+   * where they are present, since this runs over partial updates too (D-671).
+   * Nothing would refuse them (the schema simply no longer names them); this is
+   * what keeps a stale key from being carried on.
+   */
+  static migrateData(source) {
+    if (source && typeof source === "object") {
+      for (const key of LegacyData.RETIRED) if (key in source) delete source[key];
+    }
+    return super.migrateData(source);
   }
 }
 

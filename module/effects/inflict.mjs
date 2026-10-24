@@ -24,9 +24,11 @@ import { applyCondition } from "./durations.mjs";
 import { NO_CASTING_FLAG, PARALYTIC_FLAG } from "../rules/class-talents.mjs";
 // What a landed condition carries since D-778: the Test 07 gives a held or Stunned
 // creature to end it, and Permafrost's feet on a Slowed.
-import { ESCAPE_FLAG, cleanEscape } from "../rules/escapes.mjs";
+import { ESCAPE_FLAG, SHED_DC_FLAG, cleanEscape, cleanShedDc, higherShedDc } from "../rules/escapes.mjs";
 import { SLOWED_FEET_FLAG } from "../rules/slowing.mjs";
 import { addSlowedFeet } from "./speed-drop.mjs";
+// Who laid a condition, on its own effect (the Legacy branches' door 17).
+import { LAID_BY_FLAG, laidByWith } from "../rules/talent-gates.mjs";
 
 export const INFLICT_QUERY = "azeroth-rpg.inflictCondition";
 
@@ -50,6 +52,10 @@ function cleanMarks(marks) {
   }
   const escape = cleanEscape(marks?.[ESCAPE_FLAG] ?? null);
   if (escape) out[ESCAPE_FLAG] = escape;
+  // The DC a Poisoned is shed against, where its layer named one (04's Serpent Ward;
+  // the Legacy branches' door 20): `{dc, source}`.
+  const shed = cleanShedDc(marks?.[SHED_DC_FLAG] ?? null);
+  if (shed) out[SHED_DC_FLAG] = shed;
   const feet = Math.max(0, Math.trunc(Number(marks?.[SLOWED_FEET_FLAG]?.feet)) || 0);
   if (feet > 0) out[SLOWED_FEET_FLAG] = { feet, source: String(marks[SLOWED_FEET_FLAG].source ?? "") };
   return out;
@@ -81,11 +87,17 @@ function valueOf(value) {
  * rungs, 14's passives, a block's immunities), `refused` (the door laid nothing),
  * `gone` (no such creature now) or `error` (the write failed, said already).
  */
-function landing(name, id, value, landed, reason = null, { had = null, prior = null } = {}) {
+function landing(name, id, value, landed, reason = null, { had = null, prior = null, laidByAdded = null } = {}) {
   // **WHAT THE CREATURE HELD BEFORE** (D-779): whether it already had the condition
   // and at what value, so a Parry that holds can take back what this blow laid
-  // (`rules/class-answers.mjs#parryUndoes`).
-  return { name: String(name ?? ""), id, value: valueOf(value), landed, reason, had: typeof had === "boolean" ? had : null, prior: valueOf(prior) };
+  // (`rules/class-answers.mjs#parryUndoes`). **And the layer this landing ADDED to
+  // its `laidBy`** (the B1 review): a creature that already had the condition keeps
+  // the effect when the hit is withdrawn, and the striker this landing named on it
+  // has to come back off (`rules/miss.mjs#missUndoes`' `strips`).
+  return {
+    name: String(name ?? ""), id, value: valueOf(value), landed, reason, had: typeof had === "boolean" ? had : null, prior: valueOf(prior),
+    laidByAdded: typeof laidByAdded === "string" && laidByAdded ? laidByAdded : null
+  };
 }
 
 /**
@@ -93,7 +105,7 @@ function landing(name, id, value, landed, reason = null, { had = null, prior = n
  * An immunity is asked first, so the card can say so: the actor's own door
  * would refuse it too, in 10-CORRUPTION's words, which are wrong for a block.
  */
-async function inflictHere({ victim, id, value, until = null, marks = {} }) {
+async function inflictHere({ victim, id, value, until = null, marks = {}, byUuid = null }) {
   if ((victim.system?.conditionImmunities ?? []).includes(id)) return landing(victim.name, id, value, false, "immune");
   const had = victim.statuses?.has?.(id) === true;
   const prior = had ? (victim.effects?.find?.(e => e.statuses?.has?.(id))?.getFlag?.("azeroth-rpg", "value") ?? null) : null;
@@ -102,12 +114,35 @@ async function inflictHere({ victim, id, value, until = null, marks = {} }) {
   // effect the condition rides, so the mark ends with the condition.
   const kept = cleanMarks(marks);
   const { [SLOWED_FEET_FLAG]: slowedFeet = null, ...flagsOnly } = kept;
+  // **WHO LAID IT** (the Legacy branches' door 17: Cursed Prey's *a condition that
+  // you or one of your totems laid*; door 24's *that you have Entangled*): the
+  // striker's uuid appended to the effect's `laidBy`, in the marks' own write - and
+  // recorded as ADDED by this landing, so a withdrawn hit takes exactly it back off.
+  let laidByAdded = null;
+  if (effect && typeof byUuid === "string" && byUuid) {
+    const held = effect.flags?.["azeroth-rpg"]?.[LAID_BY_FLAG] ?? [];
+    const next = laidByWith(held, byUuid);
+    if (next.length !== laidByWith(held, null).length) {
+      flagsOnly[LAID_BY_FLAG] = next;
+      laidByAdded = byUuid;
+    }
+  }
+  // **THE HIGHEST DC WINS** (the lead, 2026-10-22, on a Poisoned whose layers name
+  // different DCs to shed it: *"Highest DC wins"*): a layer's DC is kept only where
+  // it is higher than the one the effect already carries, and a layer naming none
+  // leaves the held one alone (`rules/escapes.mjs#higherShedDc`).
+  if (effect && flagsOnly[SHED_DC_FLAG]) {
+    const heldShed = cleanShedDc(effect.flags?.["azeroth-rpg"]?.[SHED_DC_FLAG] ?? null);
+    const kept = higherShedDc(heldShed, flagsOnly[SHED_DC_FLAG]);
+    if (heldShed && kept && kept.dc === heldShed.dc && kept.source === heldShed.source) delete flagsOnly[SHED_DC_FLAG];
+    else flagsOnly[SHED_DC_FLAG] = kept;
+  }
   if (effect && Object.keys(flagsOnly).length) {
     await effect.update(Object.fromEntries(Object.entries(flagsOnly).map(([k, v]) => [`flags.azeroth-rpg.${k}`, v])));
   }
   // Permafrost's feet on a Slowed (D-778): changes of their own on the same effect.
   if (effect && id === "slowed" && slowedFeet) await addSlowedFeet(effect, slowedFeet);
-  return landing(victim.name, id, value, Boolean(effect), effect ? null : "refused", { had, prior });
+  return landing(victim.name, id, value, Boolean(effect), effect ? null : "refused", { had, prior, laidByAdded });
 }
 
 /**
@@ -125,7 +160,7 @@ export async function inflictQueryHandler({ victimUuid, id, value = null, origin
       throw new Error(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: origin?.name ?? "" }));
     }
   }
-  return inflictHere({ victim, id, value, until, marks });
+  return inflictHere({ victim, id, value, until, marks, byUuid: originUuid });
 }
 
 /**
@@ -136,7 +171,8 @@ export async function inflictQueryHandler({ victimUuid, id, value = null, origin
  * @param {string} o.id          an `AZEROTH.conditions` key
  * @param {number|null} [o.value]
  * @param {Actor|null} [o.by]    the creature that struck
- * @param {string} [o.name]      the target's name on the card, for a creature that is gone
+ * @param {string} [o.name]      the target's name as the card's row names it - its
+ *   TOKEN's - which the landing reports; the actor's own name only where none is given
  * @param {object|string|null} [o.until]  the condition's span (D-773): the striker's
  *   next turn start, as `effects/durations.mjs#untilNextTurn` builds it, or none
  * @param {Record<string, {source: string}>} [o.marks]  what the landed effect
@@ -144,16 +180,25 @@ export async function inflictQueryHandler({ victimUuid, id, value = null, origin
  * @returns {Promise<{name: string, id: string, value: number|null, landed: boolean, reason: string|null}>}
  */
 export async function inflictCondition({ victim, id, value = null, by = null, name = "", until = null, marks = {} } = {}) {
+  // **THE CREATURE AS THE CARD'S ROW NAMES IT** (the lead, 2026-10-23: *"The token's
+  // name"*). Every caller hands the row's own name - a token's - and the landing used
+  // to report the ACTOR's, so Thunder Clap's card said *ZZ Plagued Ghoul gains Slowed*
+  // twice under rows named *Ghoul beside* and *Ghoul at 10 ft*, and two creatures of
+  // one kind could not be told apart. The GM's handler cannot know the card's name, so
+  // the name is laid on here, on every path, the actor's kept where none was given.
+  const named = row => (name ? { ...row, name: String(name) } : row);
   if (!victim) return landing(name, id, value, false, "gone");
-  if (!AZEROTH.conditions?.[id]) return landing(victim.name, id, value, false, "refused");
+  if (!AZEROTH.conditions?.[id]) return named(landing(victim.name, id, value, false, "refused"));
   try {
-    if (victim.isOwner) return await inflictHere({ victim, id, value, until, marks });
+    if (victim.isOwner) return named(await inflictHere({ victim, id, value, until, marks, byUuid: by?.uuid ?? null }));
     const gm = game.users.activeGM;
     if (!gm) throw new Error(game.i18n.localize("AZEROTH.Rider.Inflict.NoGM"));
     const done = await gm.query(INFLICT_QUERY, { victimUuid: victim.uuid, id, value: valueOf(value), originUuid: by?.uuid ?? null, until: cleanUntil(until), marks: cleanMarks(marks) }, { timeout: 15000 });
-    return done && typeof done === "object" ? landing(done.name ?? victim.name, id, value, done.landed === true, done.reason ?? null, { had: done.had ?? null, prior: done.prior ?? null }) : landing(victim.name, id, value, false, "error");
+    return named(done && typeof done === "object"
+      ? landing(done.name ?? victim.name, id, value, done.landed === true, done.reason ?? null, { had: done.had ?? null, prior: done.prior ?? null, laidByAdded: done.laidByAdded ?? null })
+      : landing(victim.name, id, value, false, "error"));
   } catch (err) {
     ui.notifications?.warn(err.message);
-    return landing(victim.name, id, value, false, "error");
+    return named(landing(victim.name, id, value, false, "error"));
   }
 }

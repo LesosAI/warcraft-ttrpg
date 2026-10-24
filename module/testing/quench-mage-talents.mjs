@@ -22,9 +22,11 @@
  * Every document a test makes is deleted in `after`.
  */
 
-import { cleanup, drainAreaWork, giveTurn, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings } from "./fixtures.mjs";
+import { cleanup, drainAreaWork, giveTurn, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings, tokenDrawn, tokenData } from "./fixtures.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
+// Blink moves its token now (the Legacy branches' door 3): the test answers the pick.
+import { pickState } from "../canvas/place.mjs";
 
 /** Wait for a condition, or say what was being waited for. */
 async function until(fn, what, ms = 15000) {
@@ -38,6 +40,15 @@ async function until(fn, what, ms = 15000) {
 }
 
 const workflows = () => game.system.azeroth.workflows;
+
+/** Press the 2D board at a canvas point, as a browser does (`quench-pick-state.mjs`'s shape). */
+function pressBoard(point) {
+  const client = canvas.clientCoordinatesFromCanvas(point);
+  canvas.app.view.dispatchEvent(new PointerEvent("pointerdown", {
+    clientX: client.x, clientY: client.y, button: 0, buttons: 1,
+    pointerId: 1, pointerType: "mouse", isPrimary: true, bubbles: true, cancelable: true
+  }));
+}
 const featureNamed = (actor, name) => actor.items.find(i => i.type === "feature" && i.name === name) ?? null;
 const talentNamed = (actor, name) => actor.items.find(i => i.type === "talent" && i.name === name) ?? null;
 const spellNamed = (actor, name) => actor.items.find(i => i.type === "spell" && i.name === name) ?? null;
@@ -47,6 +58,23 @@ const textOf = message => (parsed(message).body.textContent ?? "").replace(/\s+/
 const formulas = card => (card.rolls[0]?.options?.provenance ?? []).map(p => p.formula).filter(Boolean);
 const labels = card => (card.rolls[0]?.options?.provenance ?? []).map(p => p.label).filter(Boolean);
 const usesOf = (actor, name) => featureNamed(actor, name)?.system?.uses?.value ?? null;
+
+/**
+ * The strike card posted since `count` that names this creature (`effects/after-blow.mjs
+ * #strikeAround`: Living Bomb's and Cauterize's Fire is a card with an Apply at each
+ * enemy, D-775), its Apply pressed for it (B8b: the batch waited for the Health to fall
+ * with nothing pressed).
+ */
+async function applyStrikeOn(count, victim, what) {
+  const card = await until(() => game.messages.contents.slice(count).find(m => m.flags?.["azeroth-rpg"]?.kind === "apparition"
+    && (m.flags["azeroth-rpg"].targets ?? []).some(t => t.actorId === victim.id)), what, 30000);
+  made.push(card);
+  const index = card.flags["azeroth-rpg"].targets.findIndex(t => t.actorId === victim.id);
+  const button = parsed(card).querySelector(`[data-action="applyDamage"][data-target-index="${index}"]`);
+  if (!button) throw new Error(`${what}: the card offers no Apply for ${victim.name}`);
+  await CARD_ACTIONS.applyDamage(button, card);
+  return card;
+}
 const sustained = actor => actor.getFlag("azeroth-rpg", "sustaining") ?? [];
 
 /** A target snapshot with no token, at a Defense of 10, as `targetSnapshots` shapes one. */
@@ -62,7 +90,12 @@ async function fightWith(actors) {
   const combat = await Combat.create({});
   made.push(combat);
   await combat.activate();
-  await combat.createEmbeddedDocuments("Combatant", actors.map(a => ({ actorId: a.id })));
+  // By the token where the actor stands on the viewed scene, as a table makes a fight,
+  // so the sides a measured strike reads are the tracker's own (B8b).
+  await combat.createEmbeddedDocuments("Combatant", actors.map(a => {
+    const token = a.getActiveTokens(true)[0]?.document ?? null;
+    return token ? { actorId: a.id, tokenId: token.id, sceneId: token.parent.id } : { actorId: a.id };
+  }));
   const settled = untilHook("combatTurnChange", 60000, c => c.id === combat.id);
   await combat.startCombat();
   await settled;
@@ -79,12 +112,12 @@ async function sceneWith(placements) {
   const data = [];
   for (const { actor, x, y, side = "friendly" } of placements) {
     await actor.update({ "prototypeToken.actorLink": true });
-    data.push((await actor.getTokenDocument({
+    data.push((await tokenData(actor, {
       x, y, disposition: CONST.TOKEN_DISPOSITIONS[side === "friendly" ? "FRIENDLY" : "HOSTILE"]
-    })).toObject());
+    })));
   }
   await scene.createEmbeddedDocuments("Token", data);
-  for (let i = 0; i < 60 && !placements.every(p => p.actor.getActiveTokens(true).length); i++) {
+  for (let i = 0; i < 60 && !placements.every(p => tokenDrawn(p.actor.getActiveTokens(true)[0])); i++) {
     await new Promise(r => setTimeout(r, 100));
   }
   await settle();
@@ -212,8 +245,16 @@ export function mageTalentsBatch(context) {
       });
       assert.include(said.join(" "), game.i18n.format("AZEROTH.Laid.NotFriendly", { name: "Blink", target: ghoul.getActiveTokens(true)[0].name }));
       assert.equal(poolOf(mage, "mana").value, before, "the refusal cost Mana");
-      const card = await use(mage, "Blink", { targets: targetSnapshots([ally.getActiveTokens(true)[0]]) });
-      assert.include(textOf(card), game.i18n.format("AZEROTH.Blink.LineFriend", { name: ally.getActiveTokens(true)[0].name, feet: 20, talents: "Slow Time" }));
+      // **THE FRIEND IS MOVED TO THE SPACE PICKED** (the Legacy branches' door 3: *"02's
+      // Blink and Shadowstep move no token"*): the pick opens on the ally's token, a
+      // press two squares on lands it there, and the card says so.
+      const allyToken = ally.getActiveTokens(true)[0];
+      const pending = use(mage, "Blink", { targets: targetSnapshots([allyToken]) });
+      await until(() => pickState()?.mode === "point", "Blink's pick");
+      pressBoard({ x: 1450, y: 1250 });
+      const card = await pending;
+      assert.include(textOf(card), game.i18n.format("AZEROTH.Step.Moved", { name: allyToken.name, feet: 20, source: "Blink" }));
+      await until(() => allyToken.document.x === 1400 && allyToken.document.y === 1200, "the ally displaced to the space picked");
     });
 
     it("OVERCHANNELLER: an Overchannel's Health is the rank less, and the card says so", async function () {
@@ -346,6 +387,9 @@ export function mageTalentsBatch(context) {
       this.timeout(180000);
       const mage = await mageWith("ZZ MaT Ignite", { ranks: { Ignite: 2 } });
       const ghoul = await makeNpc("Plagued Ghoul");
+      // 04's *at the start of its next turn* is a counted tick, laid only where something
+      // counts it down (`tickHasClock`, D-770): on a creature in a started fight (B8b).
+      await fightWith([mage, ghoul]);
       await ghoul.applyDamage(3, { struck: true, attack: false, type: "fire", by: mage, spell: true });
       const laid = await until(() => ghoul.effects.find(e => e.getFlag("azeroth-rpg", "tick")?.ignite === true), "Ignite's tick");
       assert.equal(laid.getFlag("azeroth-rpg", "tick").amount, 2);
@@ -378,6 +422,9 @@ export function mageTalentsBatch(context) {
       const mage = await mageWith("ZZ MaT Combust", { ranks: { Fireball: 1, Ignite: 1, Combustion: 2 } });
       const ghoul = await makeNpc("Plagued Ghoul");
       await sceneWith([{ actor: mage, x: 1000, y: 1000 }, { actor: ghoul, x: 1300, y: 1000, side: "hostile" }]);
+      // Ignite burns only where a turn counts it down (D-770; B8b).
+      const combat = await fightWith([mage, ghoul]);
+      const mine = await giveTurn(combat, mage);
       const token = ghoul.getActiveTokens(true)[0];
       const { castWithDialog } = await import("../applications/actions.mjs");
       const spell = await until(() => spellNamed(mage, "Fireball"), "Fireball learned");
@@ -391,6 +438,7 @@ export function mageTalentsBatch(context) {
         assert.notInclude(labels(card), "Combustion", "Combustion rode a target not yet burning");
         await ghoul.applyDamage(1, { struck: true, attack: false, type: "fire", by: mage, spell: true });
         await until(() => ghoul.effects.some(e => e.getFlag("azeroth-rpg", "tick")?.ignite === true), "Ignite burning");
+        await mine.resetBudget();
         await fill(mage, "mana");
         unpin = pinDie(18);
         try { card = await castWithDialog(mage, spell); } finally { unpin(); }
@@ -434,10 +482,14 @@ export function mageTalentsBatch(context) {
       const ghoul = await makeNpc("Plagued Ghoul");
       const second = await makeNpc("Plagued Ghoul");
       await sceneWith([{ actor: mage, x: 500, y: 1000 }, { actor: ghoul, x: 1000, y: 1000, side: "hostile" }, { actor: second, x: 1100, y: 1000, side: "hostile" }]);
+      // Ignite burns only where a turn counts it down (D-770; B8b).
+      await fightWith([mage, ghoul, second]);
       await ghoul.applyDamage(1, { struck: true, attack: false, type: "fire", by: mage, spell: true });
       await until(() => ghoul.effects.some(e => e.getFlag("azeroth-rpg", "tick")?.ignite === true), "Ignite burning");
       const before = second.system.health.value;
+      const count = game.messages.size;
       await ghoul.applyDamage(ghoul.system.health.value + 5, { struck: true, attack: true, type: "physical", by: mage });
+      await applyStrikeOn(count, second, "the bomb's card naming the creature beside");
       await until(() => second.system.health.value < before, "the bomb's Fire on the creature beside");
     });
 
@@ -476,9 +528,11 @@ export function mageTalentsBatch(context) {
       await sceneWith([{ actor: mage, x: 1000, y: 1000 }, { actor: ghoul, x: 1100, y: 1000, side: "hostile" }]);
       const counter = await until(() => featureNamed(mage, "Cauterize"), "the counter granted");
       const before = ghoul.system.health.value;
+      const count = game.messages.size;
       await mage.applyDamage(mage.system.health.value + 10, { struck: true, attack: true, type: "physical", by: ghoul });
       await until(() => mage.system.health.value === 1, "held at 1");
       await until(() => mage.items.get(counter.id)?.system?.uses?.value === 0, "the use struck");
+      await applyStrikeOn(count, ghoul, "Cauterize's card naming the enemy beside");
       await until(() => ghoul.system.health.value < before, "the Fire on the enemy beside");
       await mage.applyDamage(mage.system.health.value + 10, { struck: true, attack: true, type: "physical", by: ghoul });
       await until(() => mage.system.health.value === 0, "the second blow is not caught");

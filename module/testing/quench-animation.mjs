@@ -13,7 +13,19 @@
  *    see a recorder that moved (D-681, the commonest fault here);
  *  - **Sequencer itself**: a loop in the manager, ended by a deleted effect, a
  *    deleted token, a GM's Stop and a scene change, and every asset key the
- *    table ships resolving to an exact leaf of the live database.
+ *    table ships resolving to an exact leaf of the live database;
+ *  - **a feature's Use** (the Legacy branches' door 2): 02's Blink and Shadowstep
+ *    pressed from the sheet's own Use, the pick answered on the board, and the
+ *    `use` and `arrive` cues read back off the recorder at the points the card
+ *    recorded - and a Use with no row saying `no-row`. Written in phase B4 and
+ *    NOT run there (the phase was offline);
+ *  - **the Legacy branches' rows** (phase B7): one case a branch, each pressed from
+ *    the sheet's own control - Wind Walk, Thunder Clap and Bash, Shadow Trap and The
+ *    Long Watch, The Bench, Black Arrow and Dark Minion, Big Bad Voodoo, Ethereal Form
+ *    - and the B4 review's six: a floor's catch through its effect's update, one
+ *    landing one cue, a `rise` on a token still drawing, a `missed` rider, a GM-hidden
+ *    Region, and The Long Watch on a screen that does not own the warden. Written in
+ *    phase B7 and NOT run there either.
  *
  * ## How it drives
  *
@@ -49,7 +61,16 @@
  * made - so this batch passes whether the lead has the module on or off.
  */
 
-import { cleanup, made, makeCharacter, makeNpc, pinDie, settle, warnings } from "./fixtures.mjs";
+import { cleanup, dialogFor, drainAreaWork, give, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle, tokenDrawn, untilHook, warnings, tokenData } from "./fixtures.mjs";
+// The Legacy branches' rows (phase B7): what their doors lay, by the constants the doors write.
+import { boundOf } from "../documents/bound.mjs";
+import { FLOOR_FLAG } from "../rules/blow-doors.mjs";
+import { TRAP_FLAG } from "../rules/traps.mjs";
+import { WATCH_FLAG } from "../rules/marks.mjs";
+import { ESCAPE_FLAG } from "../rules/escapes.mjs";
+import { NO_HEALING_FLAG } from "../rules/no-healing.mjs";
+// The pick a step opens on the board (the Legacy branches' doors 2 and 3).
+import { cancelPick, pickState } from "../canvas/place.mjs";
 import { checkText } from "./geometry.mjs";
 import { attackWithDialog, castWithDialog, npcAttackWithDialog, reactionRows } from "../applications/actions.mjs";
 import { CARD_ACTIONS, regionFlagsFromCard } from "../dice/chat.mjs";
@@ -218,12 +239,14 @@ export function animationBatch(context) {
     /** A token for an actor on the batch's scene, drawn and ready to be aimed at. */
     async function place(actor, { x, y, side = "hostile", hidden = false }) {
       await actor.update({ "prototypeToken.actorLink": true });
-      const data = (await actor.getTokenDocument({
+      const data = (await tokenData(actor, {
         x, y, hidden,
         disposition: CONST.TOKEN_DISPOSITIONS[side === "friendly" ? "FRIENDLY" : "HOSTILE"]
-      })).toObject();
+      }));
       const [doc] = await scene.createEmbeddedDocuments("Token", [data]);
-      await until(() => canvas.tokens.get(doc.id)?.center, `${actor.name}'s token drawn`, 20000);
+      // Drawn, not merely made: `center` is there before the texture load, and a token
+      // targeted before its arrows exist throws in core's ticker (`fixtures.mjs#tokenDrawn`).
+      await until(() => tokenDrawn(canvas.tokens.get(doc.id)), `${actor.name}'s token drawn`, 20000);
       return doc;
     }
 
@@ -974,6 +997,654 @@ export function animationBatch(context) {
         // And with EVERY library off there is nothing to draw, said in a word.
         const none = planCue(record, { ...facts, libraries: [] });
         assert.equal(none.skip, "library-off", "a cue with no library said the wrong thing");
+      });
+    });
+
+    /* ------------------------------------------------------------------ */
+    /*  A feature's Use (the Legacy branches' door 2)                      */
+    /* ------------------------------------------------------------------ */
+
+    describe("A feature's Use, pressed from the sheet's own control (door 2)", function () {
+      /**
+       * **PRESS A STEP FROM THE SHEET AND ANSWER ITS PICK ON THE BOARD**: the feature's
+       * own Use on the Combat tab - never `useFeature` called by hand, which cannot see
+       * the button (D-774's lesson) - the pick waited for, the board pressed at a
+       * canvas point, and the card it posts.
+       */
+      async function stepFromSheet(actor, feature, point) {
+        const sheet = await openSheet(actor);
+        try {
+          const control = sheet.element.querySelector(`section[data-tab="combat"] [data-item-id="${feature.id}"] [data-action="useFeature"]`)
+            ?? sheet.element.querySelector(`[data-item-id="${feature.id}"] [data-action="useFeature"]`);
+          assert.ok(control, `the sheet draws no Use for ${feature.name}`);
+          const posted = untilHook("createChatMessage", 30000, m => m.speaker?.actor === actor.id && m.flags?.["azeroth-rpg"]?.kind === "feature");
+          recorder.reset();
+          control.click();
+          await until(() => pickState()?.mode === "point", `${feature.name}'s pick`);
+          pressBoard(point);
+          // `untilHook` resolves with the hook's ARGUMENTS (`fixtures.mjs`): the card is
+          // the first. Taking the list as the card read `flags` off an array (phase B7).
+          const [card] = await posted;
+          made.push(card);
+          return card;
+        } finally {
+          cancelPick();
+          await sheet.close();
+        }
+      }
+
+      /**
+       * **WHAT A STEP'S TWO CUES CAME TO**: the `use` at the space left and the
+       * `arrive` at the space picked, each read off the record the card carried and
+       * neither ever placed ON the token, which stands at the destination by then.
+       */
+      async function assertStepCues(card, { key, token, before, after, departs, arrives }) {
+        const flags = card.flags["azeroth-rpg"];
+        assert.equal(flags.featureKey, key, "the card does not name its feature by the key its row is filed under");
+        assert.equal(flags.source?.tokenId, token.id, "the card does not name who used it");
+        assert.equal(flags.casting, false, `${key} makes no Casting Test`);
+        const move = flags.steps?.[0] ?? null;
+        assert.ok(move, "the card recorded no move");
+        assert.equal(move.tokenId, token.id);
+        assert.deepEqual(move.from, before, "the move's departure is not where the token's centre stood");
+        assert.deepEqual(move.to, after, "the move's arrival is not the space picked");
+
+        await until(() => recorder.cuesFor("use", key).length === 1 && recorder.cuesFor("arrive", key).length === 1,
+          `${key}'s use and arrive cues (cues: ${recorder.cues.map(c => `${c.record?.trigger}:${c.record?.identifier}`)}, skips: ${recorder.skips.map(s => s.skip)})`);
+        const departure = recorder.cuesFor("use", key)[0].steps;
+        const arrival = recorder.cuesFor("arrive", key)[0].steps;
+        const leaves = departure.find(s => s.kind === "effect");
+        const lands = arrival.find(s => s.kind === "effect");
+        assert.equal(leaves.asset, departs);
+        assert.equal(lands.asset, arrives);
+        assert.deepEqual(leaves.at, before, "the departure was not drawn where the token stood");
+        assert.deepEqual(lands.at, after, "the arrival was not drawn where the token landed");
+        assert.notProperty(leaves, "on", "the departure was placed on the token, which has already left");
+        assert.notProperty(lands, "on", "the arrival rides the token rather than the recorded point");
+        // A step's `scale` is a multiple of the mover's width, worked out into a size.
+        assert.isAbove(leaves.size, 0, "the departure has no size");
+        // Each sound beside its picture, at the same point.
+        assert.deepEqual(departure.find(s => s.kind === "sound")?.at, before, "the departure was heard somewhere else");
+        assert.deepEqual(arrival.find(s => s.kind === "sound")?.at, after, "the arrival was heard somewhere else");
+        // And the law refused nothing on the way.
+        assert.lengthOf(recorder.skipsFor("use"), 0, `the use cue was refused: ${recorder.skipsFor("use")}`);
+      }
+
+      it("02's Blink departs where the mage stood and arrives where the pick put them", async function () {
+        this.timeout(180000);
+        const mage = await makeCharacter({ name: "ZZ Anim Blinker", classes: [["Mage", 3]] });
+        const doc = await place(mage, { x: 2200, y: 1500, side: "friendly" });
+        try {
+          const pool = mage.poolSnapshot().find(p => p.name === "mana");
+          await mage.updatePool({ itemId: pool.itemId, kind: pool.kind, value: pool.max });
+          await until(() => mage.poolSnapshot().find(p => p.name === "mana").value === pool.max, "the mage's Mana");
+          const blink = await until(() => mage.items.find(i => i.type === "feature" && i.name === "Blink"), "Blink granted");
+          // 15 feet east: one square's width from the token's own centre, inside 20.
+          const card = await stepFromSheet(mage, blink, { x: 2550, y: 1550 });
+          await until(() => doc.x === 2500 && doc.y === 1500, "the mage displaced to the space picked");
+          await assertStepCues(card, {
+            key: "blink", token: doc, before: { x: 2250, y: 1550 }, after: { x: 2550, y: 1550 },
+            departs: "jb2a.misty_step.01.blue", arrives: "jb2a.misty_step.02.blue"
+          });
+        } finally {
+          await doc.delete().catch(() => {});
+        }
+      });
+
+      it("02's Shadowstep does the same, darkened, at its own reach", async function () {
+        this.timeout(240000);
+        const rogue = await makeCharacter({ name: "ZZ Anim Shadowstepper", classes: [["Rogue", 20]] });
+        const doc = await place(rogue, { x: 2200, y: 1800, side: "friendly" });
+        try {
+          // Shadowstep spends 4 Combo Points (02 §7).
+          const combo = rogue.poolSnapshot().find(p => p.name === "comboPoints");
+          assert.ok(combo, "a Rogue holds no Combo Points");
+          await rogue.updatePool({ itemId: combo.itemId, kind: combo.kind, value: combo.max });
+          await until(() => rogue.poolSnapshot().find(p => p.name === "comboPoints").value === combo.max, "the rogue's Combo Points");
+          const step = await until(() => rogue.items.find(i => i.type === "feature" && i.name === "Shadowstep"), "Shadowstep granted");
+          // 25 feet east, inside its 60 and in sight on a board with no walls.
+          const card = await stepFromSheet(rogue, step, { x: 2750, y: 1850 });
+          await until(() => doc.x === 2700 && doc.y === 1800, "the rogue displaced to the space picked");
+          await assertStepCues(card, {
+            key: "shadowstep", token: doc, before: { x: 2250, y: 1850 }, after: { x: 2750, y: 1850 },
+            departs: "jb2a.smoke.puff.centered.grey", arrives: "jb2a.misty_step.02.blue"
+          });
+          // Shadowed, as the row writes it.
+          assert.equal(recorder.cuesFor("use", "shadowstep")[0].steps[0].filter, "DARK");
+          assert.equal(recorder.cuesFor("arrive", "shadowstep")[0].steps[0].filter, "SHADOW_B");
+        } finally {
+          await doc.delete().catch(() => {});
+        }
+      });
+
+      it("a feature with no row in the table says `no-row` rather than drawing nothing in silence", async function () {
+        this.timeout(120000);
+        // 02's Second Wind: a Use with no row (yet), recorded and refused in a word.
+        const warrior = await makeCharacter({ name: "ZZ Anim Second Wind", classes: [["Warrior", 3]] });
+        const doc = await place(warrior, { x: 2600, y: 900, side: "friendly" });
+        try {
+          const wind = await until(() => warrior.items.find(i => i.type === "feature" && i.name === "Second Wind"), "Second Wind granted");
+          // Second Wind costs 6 Rage (02 §6): a fresh Warrior holds none, so the Use was
+          // refused for its price and posted nothing (B8b).
+          const rage = warrior.poolSnapshot().find(p => p.name === "rage");
+          await warrior.updatePool({ itemId: rage.itemId, kind: rage.kind, value: rage.max });
+          await until(() => warrior.poolSnapshot().find(p => p.name === "rage")?.value === rage.max, "the Warrior's Rage full");
+          recorder.reset();
+          const card = await game.system.azeroth.workflows.useFeature({ actor: warrior, item: wind });
+          assert.ok(card, "Second Wind posted no card");
+          made.push(card);
+          assert.equal(card.flags["azeroth-rpg"].featureKey, "second-wind");
+          await until(() => recorder.skipsFor("use").length >= 1, "the law's answer to Second Wind's Use");
+          assert.include(recorder.skipsFor("use"), "no-row");
+          assert.lengthOf(recorder.cuesFor("use", "second-wind"), 0);
+        } finally {
+          await doc.delete().catch(() => {});
+        }
+      });
+    });
+
+    /* ------------------------------------------------------------------ */
+    /*  The Legacy branches' rows (phase B7), and the B4 review's cases      */
+    /* ------------------------------------------------------------------ */
+
+    describe("The Legacy branches' rows, pressed from the sheet (phase B7)", function () {
+      /**
+       * One case a Legacy branch, each pressed from the sheet's own control and read back
+       * off the recorder - and the B4 review's six: a floor's catch through its effect's
+       * update (Big Bad Voodoo), one condition landing playing one cue (Shadow Trap's
+       * spring), a `rise` on a token still drawing (The Bench, Dark Minion), a `missed`
+       * rider (Bash), a GM-hidden Region (the trap) and The Long Watch on a screen that
+       * does not own the warden. Written in phase B7 and NOT run there (the phase was
+       * offline); every document a case makes is taken up in its own `finally`.
+       */
+      const featureNamed = (actor, name) => actor.items.find(i => i.type === "feature" && i.name === name) ?? null;
+      const talentNamed = (actor, name) => actor.items.find(i => i.type === "talent" && i.name === name) ?? null;
+      const poolOf = (actor, name) => actor.poolSnapshot().find(p => p.name === name) ?? null;
+      const wanted = key => api().director.reconcile().filter(l => l.identifier === key);
+
+      /** A hero of one people and one class, the Legacy's twelve on the sheet and these ranks taken. */
+      async function legacyHero(name, { race, className, level = 9, ranks = {}, weapons = [], abilities = null }) {
+        const hero = await makeCharacter({ name, race, classes: [[className, level]], weapons, ...(abilities ? { abilities } : {}) });
+        await until(() => hero.items.filter(i => i.type === "talent" && i.system?.legacy === race).length === 12, `${name}'s Legacy twelve`, 30000);
+        for (const n of weapons) {
+          const item = await until(() => hero.items.find(i => i.name === n && ["weapon", "armor", "gear"].includes(i.type)), `${n} held`);
+          if (/arrows|bolts/i.test(n)) continue;
+          await item.update({ "system.equipped": true });
+          await until(() => hero.items.get(item.id)?.system?.equipped === true, `${n} in hand`);
+        }
+        for (const [talent, rank] of Object.entries(ranks)) {
+          const t = await until(() => talentNamed(hero, talent), `${talent} on the sheet`);
+          await t.update({ "system.taken": rank });
+          await until(() => talentNamed(hero, talent)?.system?.taken === rank, `${talent} at rank ${rank}`);
+        }
+        await settle();
+        return hero;
+      }
+
+      /** Set a pool to a value (AFTER any fight starts, which begins every Momentum pool at 0). */
+      async function setPool(actor, name, value) {
+        const pool = poolOf(actor, name);
+        if (!pool) throw new Error(`${actor.name} holds no ${name}`);
+        await actor.updatePool({ itemId: pool.itemId, kind: pool.kind, value });
+        await until(() => poolOf(actor, name).value === value, `${actor.name}'s ${value} ${name}`);
+      }
+
+      /** A started fight holding these actors by their tokens, its turn events landed (D-627). */
+      async function fightWith(actors) {
+        const combat = await Combat.create({ scene: canvas.scene?.id ?? null });
+        made.push(combat);
+        await combat.activate();
+        await combat.createEmbeddedDocuments("Combatant", actors.map(a => {
+          const doc = a.getActiveTokens?.(true)?.[0]?.document ?? null;
+          return doc ? { actorId: a.id, tokenId: doc.id, sceneId: doc.parent.id } : { actorId: a.id };
+        }));
+        const turned = untilHook("combatTurnChange", 60000, c => c.id === combat.id);
+        await combat.startCombat();
+        await turned;
+        await until(() => combat.combatants.every(c => c.getFlag("azeroth-rpg", "budget") !== undefined), "every combatant's budget landing", 30000);
+        return combat;
+      }
+
+      /** The chooser a feature opened, its option picked by name and pressed. */
+      async function choose(feature, name) {
+        const app = await until(() => {
+          const found = foundry.applications.instances.get(`azeroth-choose-${feature.id}`);
+          return found?.rendered && found.element?.querySelector(".azeroth-choose") ? found : null;
+        }, `${feature.name}'s chooser`);
+        const select = app.element.querySelector("#azeroth-choose-select");
+        if (select) {
+          const option = [...select.options].find(o => o.textContent.trim().startsWith(name));
+          if (!option) throw new Error(`${feature.name}'s chooser offers no ${name}`);
+          select.value = option.value;
+        } else {
+          for (const box of app.element.querySelectorAll('input[name="choice"]')) {
+            box.checked = (box.closest("label")?.textContent?.trim() ?? "").startsWith(name);
+          }
+        }
+        app.element.querySelector('button[data-action="choose"]').click();
+      }
+
+      /**
+       * **PRESS THE COMBAT TAB'S USE FOR ONE FEATURE AND TAKE ITS CARD** - never `useFeature`
+       * by hand, which cannot see the button (D-774) - the die pinned, a point pick
+       * answered on the board, a chooser's option picked, the recorder reset first.
+       */
+      async function useFromSheet(actor, feature, { face = 15, point = null, option = null, targets = [] } = {}) {
+        const sheet = await openSheet(actor);
+        const unpin = pinDie(face);
+        canvas.tokens.setTargets(targets.map(t => t.id));
+        try {
+          sheet.changeTab("combat", "primary");
+          await settle();
+          const control = sheet.element.querySelector(`section[data-tab="combat"] [data-item-id="${feature.id}"] [data-action="useFeature"]`)
+            ?? sheet.element.querySelector(`[data-item-id="${feature.id}"] [data-action="useFeature"]`);
+          assert.ok(control, `the sheet draws no Use for ${feature.name}`);
+          const posted = untilHook("createChatMessage", 60000, m => m.speaker?.actor === actor.id && m.flags?.["azeroth-rpg"]?.kind === "feature");
+          recorder.reset();
+          control.click();
+          if (point) {
+            await until(() => pickState()?.mode === "point", `${feature.name}'s pick`);
+            pressBoard(point);
+          }
+          if (option) await choose(feature, option);
+          const [card] = await posted;
+          made.push(card);
+          return card;
+        } finally {
+          unpin();
+          cancelPick();
+          canvas.tokens.setTargets([]);
+          await sheet.close();
+        }
+      }
+
+      /** The sheet's Attack for one weapon, these rider lines ticked on the real dialog (D-770). */
+      async function attackWithRiders(actor, weapon, target, { riders = [], face = 20 } = {}) {
+        await game.settings.set("azeroth-rpg", ROLL_DIALOG_SETTING, "always");
+        const sheet = await openSheet(actor);
+        const unpin = pinDie(face);
+        canvas.tokens.setTargets([target.id]);
+        try {
+          sheet.changeTab("combat", "primary");
+          await settle();
+          const posted = untilHook("createChatMessage", 30000, m => m.speaker?.actor === actor.id && m.flags?.["azeroth-rpg"]?.kind === "attack");
+          recorder.reset();
+          const control = sheet.element.querySelector(`section[data-tab="combat"] .azeroth-weapon[data-item-id="${weapon.id}"] [data-action="rollAttack"]`);
+          assert.ok(control, `no Attack on the Combat tab for ${weapon.name}`);
+          control.click();
+          const dialog = await dialogFor(actor, 8000);
+          assert.ok(dialog, "the attack dialog did not open");
+          for (const id of riders) {
+            const box = dialog.element.querySelector(`input[name="rider-${id}"]`);
+            assert.ok(box, `the dialog draws no ${id} line`);
+            assert.isFalse(box.disabled, `the ${id} line was greyed`);
+            box.checked = true;
+          }
+          dialog.element.querySelector('button[data-action="roll"]').click();
+          const [card] = await posted;
+          made.push(card);
+          return card;
+        } finally {
+          unpin();
+          canvas.tokens.setTargets([]);
+          await sheet.close();
+          await game.settings.set("azeroth-rpg", ROLL_DIALOG_SETTING, "skip");
+        }
+      }
+
+      /** Take up what a case placed and made: its tokens, its fights, the creatures it bound. */
+      async function takeUp({ docs = [], combats = [], actors = [] } = {}) {
+        // **OUR PASSES FIRST, THEN ONLY WHAT THE WORLD STILL HOLDS** (B8b). A pass still owed
+        // (an area's, an arrival's) wrote to a token this had just deleted - *undefined id
+        // [...] does not exist* - and a fight's end deletes the creatures it called with their
+        // tokens (`_leaveFight`, on the active GM's client and unawaited), so the Risen
+        // Skeleton's token was deleted twice and the server logged the refusal.
+        await drainAreaWork().catch(() => {});
+        for (const combat of combats) {
+          if (combat && game.combats.has(combat.id)) await combat.delete().catch(() => {});
+        }
+        if (combats.length) {
+          const called = actors.filter(a => a?.getFlag?.("azeroth-rpg", "bond"));
+          for (let i = 0; i < 100 && called.some(a => game.actors.has(a.id)); i++) await new Promise(r => setTimeout(r, 50));
+        }
+        const held = doc => Boolean(doc?.id && doc.parent?.getEmbeddedCollection?.(doc.documentName)?.has?.(doc.id));
+        for (const actor of actors) {
+          for (const doc of (canvas.scene?.tokens ?? []).filter(t => t.actorId === actor?.id)) {
+            if (held(doc)) await doc.delete().catch(() => {});
+          }
+        }
+        for (const doc of docs) if (held(doc)) await doc.delete().catch(() => {});
+        for (const actor of actors) if (actor && game.actors.has(actor.id)) await actor.delete().catch(() => {});
+        await drainAreaWork().catch(() => {});
+      }
+
+      it("BLADEMASTER: Wind Walk at rank 2 from the sheet gathers the wind at the orc, and stands two pictures - the wind while no blow may answer him, the refraction while he is hidden - and none for the free walk", async function () {
+        this.timeout(240000);
+        const orc = await legacyHero("ZZ Anim Wind Walker", { race: "Orc", className: "Warrior", level: 5, ranks: { "Wind Walk": 2 } });
+        const doc = await place(orc, { x: 2000, y: 200, side: "friendly" });
+        try {
+          await setPool(orc, "rage", 6);
+          const wind = await until(() => featureNamed(orc, "Wind Walk"), "Wind Walk granted");
+          const card = await useFromSheet(orc, wind);
+          assert.equal(card.flags["azeroth-rpg"].featureKey, "wind-walk", "the card does not name its feature");
+          await until(() => recorder.cuesFor("use", "wind-walk").length === 1, `Wind Walk's use cue (skips: ${recorder.skips.map(s => s.skip)})`);
+          const gust = recorder.cuesFor("use", "wind-walk")[0].steps.find(s => s.kind === "effect");
+          assert.equal(gust.asset, "jb2a.wind_stream.white");
+          assert.equal(gust.on, doc.id, "the wind did not gather at the orc");
+          const loops = await until(() => {
+            const list = wanted("wind-walk");
+            return list.length === 2 ? list : null;
+          }, "Wind Walk's two standing pictures");
+          assert.sameMembers(loops.map(l => l.layers[0].asset), ["jb2a.wind_stream.white", "jb2a.condition.boon.02.001.refraction"],
+            "the two pictures are not the wind's and the refraction's: the free walk stood one too, or a state stood none");
+          for (const l of loops) assert.deepEqual(l.anchors, [doc.id], "a Wind Walk picture stands off the orc");
+          for (const l of loops) assert.isTrue(recorder.isPlaying(l.key), `${l.key} is not playing`);
+        } finally {
+          await takeUp({ docs: [doc] });
+        }
+      });
+
+      it("MOUNTAIN KING: Thunder Clap from the sheet bursts at the dwarf, sized from its own 10 feet; Bash on the real dialog jolts the ghoul on a hit and says `missed` on a miss (the B4 review)", async function () {
+        this.timeout(300000);
+        const dwarf = await legacyHero("ZZ Anim Thunder", { race: "Dwarf", className: "Warrior", level: 9, ranks: { "Thunder Clap": 1, Bash: 1 }, weapons: ["Battleaxe"] });
+        const ghoul = await makeNpc("Plagued Ghoul");
+        await ghoul.update({ name: "ZZ Anim Thunder Ghoul" });
+        const mine = await place(dwarf, { x: 2000, y: 700, side: "friendly" });
+        const theirs = await place(ghoul, { x: 2100, y: 700 });
+        try {
+          await setPool(dwarf, "rage", 10);
+          const clap = await until(() => featureNamed(dwarf, "Thunder Clap"), "Thunder Clap granted");
+          await useFromSheet(dwarf, clap);
+          await until(() => recorder.cuesFor("use", "thunder-clap").length === 1, `Thunder Clap's cue (skips: ${recorder.skips.map(s => s.skip)})`);
+          const steps = recorder.cuesFor("use", "thunder-clap")[0].steps;
+          const wave = steps.find(s => s.asset === "jb2a.thunderwave.center.blue");
+          assert.ok(wave, "the clap drew no thunder");
+          assert.equal(wave.on, mine.id, "the thunder did not burst at the dwarf");
+          // *Every enemy within 10 feet of you*: twenty feet across, 400px on this grid.
+          assert.closeTo(wave.size, 400, 1, "the thunder is not the clap's own 20 feet across");
+          assert.include(steps.map(s => s.asset), "psfx.cantrips.thunderclap.v1");
+
+          // Bash, ticked on the real dialog: a miss rode the rider and landed nothing.
+          const axe = dwarf.items.find(i => i.name === "Battleaxe");
+          await setPool(dwarf, "rage", 10);
+          const missed = await attackWithRiders(dwarf, axe, theirs, { riders: ["bash"], face: 1 });
+          assert.isFalse(missed.rolls[0].outcome.success, "a natural 1 landed; the board moved");
+          assert.include(missed.flags["azeroth-rpg"].ridden ?? [], "bash", "the attack card does not record the rider it rode");
+          await until(() => recorder.skipsFor("hit").includes("missed"), `Bash's \`missed\` (skips: ${recorder.skips.map(s => `${s.record?.trigger}:${s.skip}`)})`);
+          assert.lengthOf(recorder.cuesFor("hit", "bash"), 0, "a missed Bash drew its jolt");
+          // And a hit jolts the ghoul, a beat after the axe's own impact.
+          await setPool(dwarf, "rage", 10);
+          await attackWithRiders(dwarf, axe, theirs, { riders: ["bash"], face: 20 });
+          await until(() => recorder.cuesFor("hit", "bash").length === 1, "Bash's jolt on the hit");
+          const jolt = recorder.cuesFor("hit", "bash")[0].steps.find(s => s.kind === "effect");
+          assert.equal(jolt.on, theirs.id, "the jolt did not land on the ghoul");
+          assert.isAbove(jolt.delay ?? 0, 0, "the jolt landed before the blow");
+        } finally {
+          await takeUp({ docs: [mine, theirs] });
+        }
+      });
+
+      it("WARDEN: Shadow Trap from the sheet - its rune at the Region once its card has spoken, standing while the trap does and NEVER on a player's board the GM hid it from (the MUST-FIX); a ghoul springing it plays exactly one cue (the B4 review) and wears the chains", async function () {
+        this.timeout(300000);
+        const warden = await legacyHero("ZZ Anim Trapper", { race: "Night Elf", className: "Rogue", level: 3, ranks: { "Shadow Trap": 1 } });
+        const ghoul = await makeNpc("Plagued Ghoul");
+        await ghoul.update({ name: "ZZ Anim Trap Ghoul" });
+        const mine = await place(warden, { x: 2000, y: 1100, side: "friendly" });
+        const theirs = await place(ghoul, { x: 2700, y: 1100 });
+        try {
+          await setPool(warden, "energy", 10);
+          const trap = await until(() => featureNamed(warden, "Shadow Trap"), "Shadow Trap granted");
+          await useFromSheet(warden, trap, { point: { x: 2350, y: 1150 } });
+          const region = await until(() => scene.regions.find(r => r.flags?.["azeroth-rpg"]?.[TRAP_FLAG]?.setter === warden.uuid), "the trap's Region");
+          // **FILED UNDER THE FEATURE'S OWN KEY** (the B4 review).
+          assert.equal(region.flags["azeroth-rpg"][TRAP_FLAG].identifier, "shadow-trap");
+          // The Region was laid BEFORE the card; its cue waited for the card and then played.
+          await until(() => recorder.cuesFor("region", "shadow-trap").length === 1, `the trap's region cue (skips: ${recorder.skips.map(s => `${s.record?.trigger}:${s.skip}`)})`);
+          const rune = recorder.cuesFor("region", "shadow-trap")[0].steps.find(s => s.kind === "effect");
+          const centre = { x: region.shapes[0].x, y: region.shapes[0].y };
+          assert.closeTo(rune.at.x, centre.x, 1, "the rune was not drawn on the trap");
+          assert.closeTo(rune.at.y, centre.y, 1);
+          const standing = await until(() => wanted("shadow-trap").find(l => l.binding === "region"), "the trap's standing rune");
+          assert.deepEqual(standing.anchors, [region.id]);
+
+          // **A REGION THE GM HAS HIDDEN STANDS NOTHING ON A PLAYER'S BOARD** (the MUST-FIX).
+          await region.update({ hidden: true });
+          await until(() => scene.regions.get(region.id)?.hidden === true, "the trap hidden");
+          const asGM = api().loopsFor(api().records.stateSnapshot()).filter(l => l.identifier === "shadow-trap");
+          assert.lengthOf(asGM, 1, "the GM lost the hidden trap's rune");
+          const asThem = asPlayer(() => api().loopsFor(api().records.stateSnapshot())).filter(l => l.identifier === "shadow-trap");
+          assert.lengthOf(asThem, 0, "a player was shown the rune of a trap the GM hid");
+          const recordFor = asPlayer(() => api().records.regionRecord(scene.regions.get(region.id)));
+          assert.isFalse(recordFor.contentVisible, "a player's record of the hidden trap is not hidden");
+          assert.equal(planCue(recordFor, api().records.factsFor(recordFor)).skip, "hidden");
+          await region.update({ hidden: false });
+          await until(() => scene.regions.get(region.id)?.hidden === false, "the trap shown again");
+
+          // The ghoul walks into it: ONE landing, ONE cue (create and the marks' update).
+          recorder.reset();
+          await theirs.update({ x: 2300, y: 1100 });
+          // The landing is a create and then its marks' update: wait for the escape itself,
+          // never the status alone (B8b: the status was read before the marks had landed).
+          const held = await until(() => ghoul.effects.find(e => e.statuses?.has("entangled") && e.getFlag("azeroth-rpg", ESCAPE_FLAG)), "the trap's Entangled on the ghoul, with its escape");
+          assert.equal(held?.getFlag("azeroth-rpg", ESCAPE_FLAG)?.source, "Shadow Trap", "the Entangled does not name the trap on its escape");
+          await until(() => recorder.cuesFor("effect", "shadow-trap").length >= 1, "the spring's cue");
+          await new Promise(r => setTimeout(r, 2000));
+          assert.lengthOf(recorder.cuesFor("effect", "shadow-trap"), 1, "one landing cued more than once");
+          assert.equal(recorder.cuesFor("effect", "shadow-trap")[0].steps[0].on, theirs.id, "the chains closed somewhere else");
+          const chains = await until(() => wanted("shadow-trap").find(l => l.binding === "effect"), "the chains standing on the ghoul");
+          assert.deepEqual(chains.anchors, [theirs.id]);
+        } finally {
+          await takeUp({ docs: [mine, theirs] });
+        }
+      });
+
+      it("WARDEN: The Long Watch stands its marker on the creature watched for the warden's owners, and on no screen that does not own the warden (the B4 review)", async function () {
+        this.timeout(240000);
+        const warden = await legacyHero("ZZ Anim Watcher", { race: "Night Elf", className: "Rogue", level: 9, ranks: { "The Long Watch": 1 } });
+        const ghoul = await makeNpc("Plagued Ghoul");
+        await ghoul.update({ name: "ZZ Anim Watched Ghoul" });
+        const mine = await place(warden, { x: 2000, y: 1500, side: "friendly" });
+        const theirs = await place(ghoul, { x: 2400, y: 1500 });
+        let card = null;
+        try {
+          const watch = await until(() => featureNamed(warden, "The Long Watch"), "The Long Watch granted");
+          card = await useFromSheet(warden, watch, { targets: [theirs] });
+          await until(() => warden.getFlag("azeroth-rpg", WATCH_FLAG)?.tokenId === theirs.id, "the watch on the ghoul");
+          const marker = await until(() => wanted("the-long-watch")[0], "the watch's marker");
+          assert.equal(marker.binding, "mark");
+          assert.deepEqual(marker.anchors, [theirs.id], "the marker does not stand on the creature watched");
+          // A screen that does not own the warden works out no such loop at all.
+          Object.defineProperty(warden, "isOwner", { value: false, configurable: true });
+          try {
+            const elsewhere = asPlayer(() => api().loopsFor(api().records.stateSnapshot())).filter(l => l.identifier === "the-long-watch");
+            assert.lengthOf(elsewhere, 0, "a non-owner's screen stood the warden's watch");
+          } finally {
+            delete warden.isOwner;
+          }
+          // And the whispered card itself is private there: the pair is noted, the loop dropped.
+          Object.defineProperty(card, "isContentVisible", { value: false, configurable: true });
+          notePrivacy(card);
+          assert.isTrue(privateCasts().has(`feature:${warden.id}:the-long-watch`), "the whispered card's pair was not noted");
+          assert.lengthOf(api().director.wantedLoops().filter(l => l.identifier === "the-long-watch"), 0, "a private watch was still wanted");
+        } finally {
+          if (card) {
+            delete card.isContentVisible;
+            notePrivacy(card);
+          }
+          await takeUp({ docs: [mine, theirs] });
+        }
+      });
+
+      it("TINKER: The Bench builds a Gnomish Battle Chicken out of a fight, and its `rise` plays on the construct's token even while that token is still drawing (the MUST-FIX)", async function () {
+        this.timeout(300000);
+        const gnome = await legacyHero("ZZ Anim Tinker", { race: "Gnome", className: "Rogue", level: 3, ranks: { "The Bench": 1 }, abilities: { dex: 16, int: 16 } });
+        await give(gnome, "Tinker's kit");
+        const mine = await place(gnome, { x: 2000, y: 1800, side: "friendly" });
+        let chicken = null;
+        try {
+          const bench = await until(() => featureNamed(gnome, "The Bench"), "The Bench granted");
+          const card = await useFromSheet(gnome, bench, { option: "Gnomish Battle Chicken" });
+          chicken = await until(() => boundOf(gnome, "construct")[0] ?? null, "the construct bound", 30000);
+          const doc = await until(() => scene.tokens.find(t => t.actorId === chicken.id), "the construct's token on the board", 30000);
+          assert.deepEqual((card.flags["azeroth-rpg"].risen ?? []).flatMap(r => r.tokenIds), [doc.id], "the card does not record the token that stood up");
+          await until(() => recorder.cuesFor("rise", "the-bench").length === 1, `The Bench's rise (skips: ${recorder.skips.map(s => `${s.record?.trigger}:${s.skip}`)})`);
+          assert.notInclude(recorder.skipsFor("rise"), "no-anchor", "the rise was refused for a token still drawing");
+          const steam = recorder.cuesFor("rise", "the-bench")[0].steps.find(s => s.kind === "effect");
+          assert.equal(steam.on, doc.id, "the steam did not rise where the construct stands");
+        } finally {
+          await takeUp({ docs: [mine], actors: chicken ? [chicken] : [] });
+        }
+      });
+
+      it("DARK RANGER: Black Arrow on the real dialog shoots its own dark arrow and stands its mark on the ghoul; the marked ghoul's fall raises a skeleton, whose `rise` plays on its token", async function () {
+        this.timeout(300000);
+        const ranger = await legacyHero("ZZ Anim Black Arrow", { race: "Forsaken", className: "Ranger", level: 13, ranks: { "Black Arrow": 1, "Dark Minion": 1 }, weapons: ["Shortbow", "Hunting arrows"], abilities: { dex: 16, wis: 14, con: 12 } });
+        const ghoul = await makeNpc("Plagued Ghoul");
+        await ghoul.update({ name: "ZZ Anim Arrow Ghoul" });
+        const mine = await place(ranger, { x: 2400, y: 300, side: "friendly" });
+        const theirs = await place(ghoul, { x: 2700, y: 300 });
+        let combat = null;
+        let risen = null;
+        try {
+          combat = await fightWith([ranger, ghoul]);
+          await giveTurn(combat, ranger);
+          await setPool(ranger, "focus", 5);
+          const bow = ranger.items.find(i => i.name === "Shortbow");
+          const card = await attackWithRiders(ranger, bow, theirs, { riders: ["black-arrow"], face: 20 });
+          assert.isTrue(card.rolls[0].outcome.success, "the pinned 20 missed");
+          await until(() => recorder.cues.some(c => c.record?.kind === "attack"), "the shot's cue");
+          const shot = recorder.cues.find(c => c.record?.kind === "attack").steps[0];
+          assert.equal(shot.asset, "jb2a.arrow.poison.green.01", "the shot played the bow's own arrow, not Black Arrow's");
+          assert.equal(shot.filter, "DARK");
+          await until(() => ghoul.effects.some(e => e.flags?.["azeroth-rpg"]?.[NO_HEALING_FLAG]?.source === "Black Arrow"), "the no-healing mark");
+          const mark = await until(() => wanted("black-arrow")[0], "Black Arrow's mark standing");
+          assert.deepEqual(mark.anchors, [theirs.id]);
+          // The marked ghoul falls; Dark Minion's skeleton rises on the board.
+          recorder.reset();
+          await ghoul.applyDamage(ghoul.system.health.value + 5, { struck: true, attack: false, location: "body", type: null });
+          risen = await until(() => boundOf(ranger, "summon").find(a => a.getFlag("azeroth-rpg", "bond")?.sourceName === "Dark Minion"), "the Risen Skeleton bound", 30000);
+          const doc = await until(() => scene.tokens.find(t => t.actorId === risen.id), "the skeleton's token", 30000);
+          await until(() => recorder.cuesFor("rise", "dark-minion").length === 1, `Dark Minion's rise (skips: ${recorder.skips.map(s => `${s.record?.trigger}:${s.skip}`)})`);
+          assert.equal(recorder.cuesFor("rise", "dark-minion")[0].steps.find(s => s.kind === "effect").on, doc.id, "the grave smoke did not rise where the skeleton stands");
+        } finally {
+          await takeUp({ docs: [mine, theirs], combats: combat ? [combat] : [], actors: risen ? [risen] : [] });
+        }
+      });
+
+      it("SHADOW HUNTER: Big Bad Voodoo stands its mask while it is Sustained, and its floor's catch - an UPDATE of the floor's effect - plays the mask on the ally held at 1 (the B4 review)", async function () {
+        this.timeout(300000);
+        const troll = await legacyHero("ZZ Anim Voodoo", { race: "Troll", className: "Shaman", level: 16, ranks: { "The Loa Gather": 1, "Big Bad Voodoo": 1 }, abilities: { wis: 16, str: 14 } });
+        const ally = await makeCharacter({ name: "ZZ Anim Voodoo Ally", classes: [["Warrior", 5]] });
+        for (const a of [troll, ally]) await a.setParty(true);
+        const mine = await place(troll, { x: 2500, y: 700, side: "friendly" });
+        const theirs = await place(ally, { x: 2700, y: 700, side: "friendly" });
+        try {
+          const mana = poolOf(troll, "mana");
+          await setPool(troll, "mana", mana.max);
+          const voodoo = await until(() => featureNamed(troll, "Big Bad Voodoo"), "Big Bad Voodoo granted");
+          await useFromSheet(troll, voodoo);
+          const held = await until(() => (troll.getFlag("azeroth-rpg", "sustaining") ?? []).find(e => e?.identifier === "big-bad-voodoo"), "the Sustain under its key");
+          const mask = await until(() => wanted("big-bad-voodoo")[0], "the voodoo's standing mask");
+          assert.equal(mask.binding, "sustain-self");
+          assert.deepEqual(mask.anchors, [mine.id], "the mask does not stand on the troll");
+          // The floor on the ally, and a blow it holds at 1: the floor's catch is written as
+          // an update of its effect, and the update is the cue.
+          await drainAreaWork();
+          await until(() => ally.effects.find(e => e.getFlag("azeroth-rpg", FLOOR_FLAG)), "the floor on the ally", 30000);
+          await ally.update({ "system.health.value": ally.system.health.max });
+          recorder.reset();
+          await ally.applyDamage(999, { struck: true });
+          await until(() => ally.system.health.value === 1, "the ally held at 1");
+          await until(() => recorder.cuesFor("hold", "big-bad-voodoo").length === 1, `the floor's catch (skips: ${recorder.skips.map(s => `${s.record?.trigger}:${s.skip}`)})`);
+          const caught = recorder.cuesFor("hold", "big-bad-voodoo")[0].steps.filter(s => s.kind === "effect");
+          assert.isTrue(caught.every(s => s.on === theirs.id), "the catch was drawn off the ally held");
+          // The Sustain dropped, the mask is no longer wanted.
+          await game.system.azeroth.workflows.endSustain({ actor: troll, cast: held.cast });
+          await until(() => wanted("big-bad-voodoo").length === 0, "the mask gone with the Sustain");
+        } finally {
+          await takeUp({ docs: [mine, theirs] });
+        }
+      });
+
+      it("SPIRIT WALKER: Ethereal Form's arrival waits for its card and then plays on the shaman, its ghost stands while the form does - and not where the Use's card is private (the B4 review)", async function () {
+        this.timeout(240000);
+        const tauren = await legacyHero("ZZ Anim Ethereal", { race: "Tauren", className: "Shaman", level: 9, ranks: { "Ethereal Form": 1 }, abilities: { wis: 16, con: 14 } });
+        await tauren.setParty(true);
+        const mine = await place(tauren, { x: 2500, y: 1800, side: "friendly" });
+        let card = null;
+        try {
+          const mana = poolOf(tauren, "mana");
+          await setPool(tauren, "mana", mana.max);
+          const form = await until(() => featureNamed(tauren, "Ethereal Form"), "Ethereal Form granted");
+          card = await useFromSheet(tauren, form);
+          await until(() => tauren.effects.some(e => e.flags?.["azeroth-rpg"]?.ethereal), "the form on the shaman");
+          // The state was laid BEFORE the card: its cue waited for the card, then played.
+          await until(() => recorder.cuesFor("effect", "ethereal-form").length === 1, `the form's arrival (skips: ${recorder.skips.map(s => `${s.record?.trigger}:${s.skip}`)})`);
+          const arrival = recorder.cuesFor("effect", "ethereal-form")[0];
+          assert.deepEqual(arrival.record.states, ["ethereal"], "the arrival does not name the state it answers");
+          assert.equal(arrival.steps.find(s => s.kind === "effect").on, mine.id);
+          const ghost = await until(() => wanted("ethereal-form")[0], "the form's ghost standing");
+          assert.deepEqual(ghost.anchors, [mine.id]);
+          assert.equal(ghost.privacy, `feature:${tauren.id}:ethereal-form`, "the loop names no privacy pair");
+          // The same Use's card made private here: what the Use laid stands no picture.
+          Object.defineProperty(card, "isContentVisible", { value: false, configurable: true });
+          notePrivacy(card);
+          assert.lengthOf(api().director.wantedLoops().filter(l => l.identifier === "ethereal-form"), 0, "a private Use's state still stood its picture");
+          assert.lengthOf(animationRows(api().loopsFor(api().records.stateSnapshot()), { privateCasts: privateCasts(), isGM: true }).filter(r => r.identifier === "ethereal-form"), 0,
+            "the stop window listed a private Use's state");
+        } finally {
+          if (card) {
+            delete card.isContentVisible;
+            notePrivacy(card);
+          }
+          await takeUp({ docs: [mine] });
+        }
+      });
+
+      // ---- The B8a2 pass (written offline, not run): 02 §5's racial Uses. ----
+      it("RACIAL USES (the B8a2 pass): War Stomp from the sheet stamps at the tauren and draws nothing on an enemy; Berserking flares at the troll, its glow stands while the encounter's Boon does and goes when the fight ends", async function () {
+        this.timeout(240000);
+        const tauren = await makeCharacter({ name: "ZZ Anim Stomp", race: "Tauren", classes: [["Warrior", 5]], abilities: { str: 16, con: 14 } });
+        const troll = await makeCharacter({ name: "ZZ Anim Berserk", race: "Troll", classes: [["Warrior", 5]], abilities: { str: 16, con: 14 } });
+        for (const [hero, name] of [[tauren, "War Stomp"], [troll, "Berserking"]]) {
+          const talent = await until(() => talentNamed(hero, name), `${name} among the racial eight`);
+          await talent.update({ "system.taken": 1 });
+          await until(() => featureNamed(hero, name), `${name}'s Use granted`);
+        }
+        const ghoul = await makeNpc("Plagued Ghoul");
+        await ghoul.update({ name: "ZZ Anim Stomp Ghoul" });
+        const stomper = await place(tauren, { x: 2000, y: 1200, side: "friendly" });
+        const near = await place(ghoul, { x: 2100, y: 1200 });
+        const rager = await place(troll, { x: 2600, y: 1200, side: "friendly" });
+        let combat = null;
+        try {
+          combat = await fightWith([tauren, troll, ghoul]);
+          // Each Use is a Half-Action, made on its own creature's turn (the lead: *"Refuse
+          // off-turn Half-Actions"*).
+          await giveTurn(combat, tauren);
+          await setPool(tauren, "rage", 6);
+          const card = await useFromSheet(tauren, featureNamed(tauren, "War Stomp"));
+          assert.equal(card.flags["azeroth-rpg"].featureKey, "war-stomp", "the card does not name War Stomp");
+          await until(() => recorder.cuesFor("use", "war-stomp").length === 1, `War Stomp's use cue (skips: ${recorder.skips.map(s => s.skip)})`);
+          const stamp = recorder.cuesFor("use", "war-stomp")[0].steps.filter(s => s.kind === "effect");
+          assert.sameMembers(stamp.map(s => s.asset), ["jb2a.impact.ground_crack.orange.02", "jb2a.smoke.puff.ring.01.white"]);
+          for (const s of stamp) assert.equal(s.on, stomper.id, "the stamp drew off the tauren");
+          assert.notInclude(stamp.map(s => s.on), near.id, "the stamp drew on an enemy before its Test");
+          // Berserking: the flare at the troll, and the glow standing on the encounter's Boon.
+          await giveTurn(combat, troll);
+          await setPool(troll, "rage", 6);
+          await useFromSheet(troll, featureNamed(troll, "Berserking"));
+          await until(() => recorder.cuesFor("use", "berserking").length === 1, "Berserking's flare");
+          assert.equal(recorder.cuesFor("use", "berserking")[0].steps.find(s => s.kind === "effect").on, rager.id, "the flare drew off the troll");
+          const glow = await until(() => wanted("berserking")[0], "Berserking's glow standing");
+          assert.deepEqual(glow.anchors, [rager.id], "the glow stands off the troll");
+          await combat.delete();
+          combat = null;
+          await until(() => !troll.effects.some(e => e.flags?.["azeroth-rpg"]?.talentBuff === "Berserking"), "the encounter's Boon lifted at the fight's end");
+          await until(() => wanted("berserking").length === 0, "the glow gone with the Boon");
+        } finally {
+          await takeUp({ docs: [stomper, near, rager], combats: combat ? [combat] : [], actors: [tauren, troll] });
+        }
       });
     });
 

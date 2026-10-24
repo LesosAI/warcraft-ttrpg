@@ -61,7 +61,7 @@ import { talentEffect } from "./talent-effects.mjs";
 import { evaluateAmount } from "./class-features.mjs";
 // A Use's area that strikes at the start of a turn takes D-756's whole shape
 // (04's Firestorm, D-775).
-import { emptyAreaTick } from "./area-ticks.mjs";
+import { emptyAreaTick, emptyRemains } from "./area-ticks.mjs";
 // Rupture's *twice the Combo Points spent plus your rank* names `spent`, which a
 // feature's scope does not carry (D-773): the riders' own evaluator reads it.
 import { evaluateExpression } from "./expressions.mjs";
@@ -70,6 +70,13 @@ import { evaluateExpression } from "./expressions.mjs";
 import { ASKED_HOLDS, heldAt } from "./blow-doors.mjs";
 // What a grant of temporary Health is (05; D-777).
 import { TEMP_SPANS } from "./temporary-health.mjs";
+// ONE reading of a row's gate (the Legacy branches' doors 15, 17 and 18).
+import { gateHolds } from "./talent-gates.mjs";
+// The two marks a Use names (door 18).
+import { MARK_KINDS } from "./marks.mjs";
+// A Finisher's Shackle carries the escape a feature's condition carries (door 19's
+// binding at the rank; the Legacy branches' B2, door 26).
+import { boundFeatureEscape } from "./escapes.mjs";
 
 /** A taken talent's rank, a whole number from 1. */
 const rankOf = talent => Math.max(1, Math.trunc(Number(talent?.taken) || 0));
@@ -149,11 +156,19 @@ export function calledShotFor(talents = [], rowOf = talentEffect) {
  * @param {{sl?: number, hit?: boolean}} o
  * @returns {Array<{identifier: string, name: string, id: string, value: number|null}>}
  */
-export function hitConditionsFor(talents = [], { sl = 0, hit = false } = {}, rowOf = talentEffect) {
+export function hitConditionsFor(talents = [], { sl = 0, hit = false, opportunity = false } = {}, rowOf = talentEffect) {
   if (!hit) return [];
   const out = [];
   for (const { talent, row, rank } of rowsOfKind(talents, "hitLays", rowOf)) {
     if (!row.condition) continue;
+    // **A COMPANION'S ROW IS THE COMPANION'S** (found reading this for door 22):
+    // 04's Ferocious Bite (*When your companion's attack reaches SL 2*) is read off
+    // the owner's talents by `companionHitConditionsFor` alone, and this laid its
+    // Bleeding on the Ranger's OWN hits at SL 2 as well.
+    if (row.via === "companion") continue;
+    // **ON AN OPPORTUNITY ATTACK ALONE** (04's Hold the Hall: *On a hit it is
+    // knocked Prone*; the Legacy branches' door 22): `when: "opportunity"`.
+    if (row.when === "opportunity" && opportunity !== true) continue;
     if ((Math.trunc(Number(sl)) || 0) < (Number(row.sl) || 0)) continue;
     if (row.value === null || row.value === undefined) {
       out.push({ identifier: talent.identifier, name: talent.name, id: row.condition, value: null });
@@ -739,14 +754,21 @@ export function beaconShares({ healedUuid = null, chosenUuid = null, fromHolder 
  * target you can see gains a Boon on their next Test. At rank 2 it applies to
  * every Test they make this round*).
  *
+ * **AND 02's RACIAL BOONS** (the B8a2 pass): the orc's Thrall's Discipline - *a friendly
+ * target you can see within 60 feet a Boon on their next Test* - is Blessing's shape with a
+ * reach (`feet`, measured where both tokens stand), and the troll's Berserking - *Your
+ * attacks gain a Boon until the end of the encounter* - lays it on the user (`onUse.self`)
+ * for the encounter (`until: "encounter"`): lasting, and lifted when the fight ends.
+ *
  * @param {object|null} onUse  the granting talent's `onUse`
  * @param {number} rank
  * @returns {{bane: {kind: string, banes: number, except: boolean, until: string|null, rounds: number}|null,
- *   boon: {kinds: string, boons: number, until: string}|null}}
+ *   boon: {kinds: string, boons: number, until: string, feet?: number}|null}}
  */
 export function onUseLays(onUse, rank = 1) {
   const bane = onUse?.laysBane ? atRankOf(onUse.laysBane, rank) : null;
   const boon = onUse?.laysBoon ? atRankOf(onUse.laysBoon, rank) : null;
+  const reach = Math.max(0, Math.trunc(Number(boon?.feet)) || 0);
   return {
     bane: bane ? {
       kind: bane.kind, banes: amount(bane.banes ?? 1, { rank }), except: bane.except === "user",
@@ -755,8 +777,26 @@ export function onUseLays(onUse, rank = 1) {
       // creature the Bane bears on, where Taunt's `except` is the one it spares.
       ...(bane.only === "user" ? { only: true } : {})
     } : null,
-    boon: boon ? { kinds: boon.kinds ?? "all", boons: amount(boon.boons ?? 1, { rank }), until: boon.until ?? "next" } : null
+    boon: boon ? {
+      kinds: boon.kinds ?? "all", boons: amount(boon.boons ?? 1, { rank }), until: boon.until ?? "next",
+      ...(reach > 0 ? { feet: reach } : {})
+    } : null
   };
+}
+
+/**
+ * **WHERE A USE'S BOON IS LAID, AND WHETHER IT IS THE ENCOUNTER'S** (the B8a2 pass): on the
+ * creature the user targeted, or on the user where the row says `self` (02's Berserking: *Your
+ * attacks gain a Boon*); and `encounter` where it holds *until the end of the encounter* -
+ * LASTING, none spending it, lifted when the fight ends. A count (`next`) and Blessing's round
+ * (`round`) are the door's as they were.
+ *
+ * @param {{until?: string}|null} boon  `onUseLays(...).boon`
+ * @param {{self?: boolean}|null} onUse  the granting talent's `onUse`
+ * @returns {{self: boolean, encounter: boolean}}
+ */
+export function boonSpan(boon, onUse = null) {
+  return { self: onUse?.self === true, encounter: boon?.until === "encounter" };
 }
 
 /**
@@ -768,14 +808,20 @@ export function onUseLays(onUse, rank = 1) {
  * @param {{identifier: string, name: string}} talent
  * @param {{rank?: number, tier?: number}} [scope]
  */
-export function onUseNextAttack(onUse, talent, { rank = 1, tier = 1 } = {}) {
-  const n = onUse?.nextAttack ?? null;
+export function onUseNextAttack(onUse, talent, { rank = 1, tier = 1, scope = {} } = {}) {
+  // **A PROMISE A RANK MAKES** (04's Wind Walk: *At rank 2 ... that attack adds your
+  // Dexterity modifier to its damage*; the Legacy branches' B6): the Use's clauses at the
+  // rank laid over it, so a rank-2 promise is no promise at rank 1.
+  const n = onUse ? (atRankOf(onUse, rank).nextAttack ?? null) : null;
   if (!n || !talent?.identifier) return null;
+  // The user's ability modifiers (the Legacy branches' door 16: Wind Walk at rank 2,
+  // *that attack adds your Dexterity modifier to its damage*), read at the Use.
+  const where = { ...(scope ?? {}), rank, tier };
   return {
     source: talent.identifier, name: talent.name ?? "",
-    boons: amount(n.boons ?? 0, { rank, tier }),
-    penetration: amount(n.penetration ?? 0, { rank, tier }),
-    damage: amount(n.damage ?? 0, { rank, tier }),
+    boons: amount(n.boons ?? 0, where),
+    penetration: amount(n.penetration ?? 0, where),
+    damage: amount(n.damage ?? 0, where),
     lasts: n.lasts
   };
 }
@@ -1005,7 +1051,9 @@ export function criticalRangeFor(talents = [], { health = null, pools = [], fact
     if (!Number.isFinite(Number(r.on))) continue;
     if (r.below !== undefined && r.below !== null && !healthBelow(health, r.below)) continue;
     if (r.while && !poolGateHolds(r.while, pools)) continue;
-    if (r.when && facts?.[r.when] !== true) continue;
+    // A fact name, or a gate object (the Legacy branches' doors 15, 17, 18: Mak'gora's
+    // `challenged`), through the one predicate - a fact name reads as it always did.
+    if (r.when && gateHolds(r.when, facts ?? {}) !== true) continue;
     on = on === null ? Number(r.on) : Math.min(on, Number(r.on));
     by.push(talent.name);
   }
@@ -1030,7 +1078,9 @@ export function targetBoonsWith(talents = [], { kind = "attack", health = null, 
     // Casting Test, and at rank 2 *your attacks do as well*; D-774).
     if (!(Array.isArray(r.on) ? r.on : [r.kind]).includes(kind)) continue;
     if (r.below !== undefined && r.below !== null && !healthBelow(health, r.below)) continue;
-    if (r.when && facts?.[r.when] !== true) continue;
+    // And a gate object (doors 15, 17, 18: The Challenge's `challenged`, Dread's
+    // `targetHas`, Cursed Prey's `laidByUser`), read by the one predicate.
+    if (r.when && gateHolds(r.when, facts ?? {}) !== true) continue;
     const n = Math.max(0, Math.trunc(Number(r.boons ?? 1)) || 0);
     if (!n) continue;
     boons += n;
@@ -1165,12 +1215,23 @@ export function killStrikesFor(talents = [], { who = "self", riposte = false } =
  * @returns {{targets: number|null, widen: number, refund: {pool: string, amount: number, over: number}|null, by: string[]}}
  */
 export function grantLimitsFor(talents = [], grant, rowOf = talentEffect) {
-  const out = { targets: null, widen: 0, refund: null, by: [] };
-  for (const { talent, row } of rowsOfKind(talents, "barrage", rowOf)) {
-    if (row.grant !== grant) continue;
+  const out = { targets: null, widen: 0, refund: null, boons: 0, within: null, by: [] };
+  for (const { talent, row: raw, rank } of rowsOfKind(talents, "barrage", rowOf)) {
+    if (raw.grant !== grant) continue;
+    // A rank's clause laid over the row (04's Fan of Knives: *up to two enemies
+    // within 10 feet of you, or three at rank 2 ... At rank 2 each attack gains a
+    // Boon*; the Legacy branches' door 26).
+    const row = atRankOf(raw, rank);
     if (Number.isFinite(Number(row.targets))) out.targets = Math.max(out.targets ?? 0, Math.trunc(Number(row.targets)));
     if (Number(row.widen) > 0) out.widen = Math.max(out.widen, Math.trunc(Number(row.widen)));
     if (row.refund?.pool && Number(row.refund.amount) > 0) out.refund = { pool: row.refund.pool, amount: Math.trunc(Number(row.refund.amount)), over: Math.trunc(Number(row.refund.over)) || 0 };
+    // **A BOON ON EACH ATTACK THE CARD MAKES** (Fan of Knives at rank 2): carried on
+    // the card's attack allowance and drawn on every attack's dialog as a ticked line.
+    if (Number(row.boons) > 0) out.boons = Math.max(out.boons, Math.trunc(Number(row.boons)));
+    // **HOW FAR FROM THE USER EACH TARGET MAY STAND** (Fan of Knives: *up to two enemies
+    // within 10 feet of you*; the Legacy branches' B6), the nearest any row names - the Use
+    // refuses one named farther before anything is paid.
+    if (Number(row.within) > 0) out.within = out.within === null ? Math.trunc(Number(row.within)) : Math.min(out.within, Math.trunc(Number(row.within)));
     out.by.push(talent.name);
   }
   return out;
@@ -1428,17 +1489,29 @@ export const DEATH_MARK_FLAG = "deathMark";
  *   having spent five*): `free` and `counts`, against the target named.
  * - **Ruthlessness** (*When your Finisher class feature reaches SL 2, 1 Combo
  *   Point per rank returns to you*): `back {sl, amount}`.
+ * - **Shackle** (the Legacy branches' door 26: *Your Finisher class feature may,
+ *   instead of adding damage, leave the target of a hit Entangled for one round per
+ *   Combo Point spent. Ending it takes an action and a Reflex Resilience Test against
+ *   your Spell DC, with a Bane at rank 2*): `shackle {condition, escape}`, the escape
+ *   bound at the rank (`rules/escapes.mjs#boundFeatureEscape`). *Instead of adding
+ *   damage* is Rupture's own reading: the Finisher's added damage, the attack's own
+ *   still lands.
  *
  * @param {Array} talents
  * @returns {{bleeding: {name: string, rank: number, expr: string}|null, mark: {name: string, counts: number}|null,
- *   back: {name: string, sl: number, amount: number}|null}}
+ *   back: {name: string, sl: number, amount: number}|null,
+ *   shackle: {name: string, rank: number, condition: string, escape: object|null}|null}}
  */
 export function finisherOptionsFor(talents = [], rowOf = talentEffect) {
-  const out = { bleeding: null, mark: null, back: null };
+  const out = { bleeding: null, mark: null, back: null, shackle: null };
   for (const { talent: t, patch: m, rank } of patchRowsOf(talents, "Finisher", rowOf)) {
     if (m.bleeding && !out.bleeding) out.bleeding = { name: t.name, rank, expr: String(m.bleeding) };
     if (m.free === true && !out.mark) out.mark = { name: t.name, counts: Math.max(1, at(m.counts ?? 5, { rank })) };
     if (m.back && !out.back) out.back = { name: t.name, sl: Math.trunc(Number(m.back.sl)) || 0, amount: at(m.back.amount ?? "rank", { rank }) };
+    if (m.shackle && typeof m.shackle === "object" && !out.shackle) {
+      const condition = typeof m.shackle.condition === "string" && /^[a-z]+$/.test(m.shackle.condition) ? m.shackle.condition : "entangled";
+      out.shackle = { name: t.name, rank, condition, escape: boundFeatureEscape(m.shackle.escape ?? null, rank) };
+    }
   }
   return out;
 }
@@ -1466,8 +1539,27 @@ export function finisherOffer(pool, options = {}, { marked = false } = {}) {
     spends: free ? 0 : value,
     counts: free ? free.counts : value,
     free: free ? free.name : null,
-    bleeding: options?.bleeding ?? null
+    bleeding: options?.bleeding ?? null,
+    // Shackle's Entangled in place of the added damage (door 26).
+    shackle: options?.shackle ?? null,
+    // Ruthlessness's Combo Points back at an SL (D-773). The attack door reads
+    // `finisherNow.back` off THIS object, and it was dropped here, so the point
+    // never came back (found live in B8b).
+    back: options?.back ?? null
   };
+}
+
+/**
+ * **SHACKLE'S ENTANGLED FOR THE POINTS A FINISHER COUNTED** (*for one round per
+ * Combo Point spent*): the rounds, 0 where nothing was counted.
+ *
+ * @param {{condition: string}|null} shackle
+ * @param {number} counted
+ * @returns {number}
+ */
+export function shackleRounds(shackle, counted = 0) {
+  if (!shackle) return 0;
+  return Math.max(0, Math.trunc(Number(counted)) || 0);
 }
 
 /**
@@ -1511,12 +1603,19 @@ export const FLEET_FOOTED_FLAG = "fleetFooted";
  * builds 1 Combo Point*): what a Parry that holds builds. 06 §6's Parry is all
  * or nothing, so a Parry that holds is one that reduces the attack to 0.
  *
+ * **AND A GAIN WITH A GATE** (04's Read the Blade: *While you wear no armor in your
+ * Chest slot, a successful Parry gives 2 Rage per rank*; the Legacy branches' door
+ * 15): a row's `when`, read by the one predicate against what the parrier wears
+ * and holds (`AzerothActor#gateFacts`) - never given where it could not tell.
+ *
  * @param {Array} talents
+ * @param {{facts?: object|null}} [o]
  * @returns {Array<{pool: string, amount: number, name: string}>}
  */
-export function parryGainsFor(talents = [], rowOf = talentEffect) {
+export function parryGainsFor(talents = [], { facts = null } = {}, rowOf = talentEffect) {
   const out = [];
   for (const { talent, row, rank } of rowsOfKind(talents, "parry", rowOf)) {
+    if (row.when !== undefined && row.when !== null && gateHolds(row.when, facts ?? {}) !== true) continue;
     const n = at(row.gain?.amount ?? 1, { rank });
     if (n > 0 && row.gain?.pool) out.push({ pool: row.gain.pool, amount: n, name: talent.name });
   }
@@ -1541,7 +1640,10 @@ export function parryGainsFor(talents = [], rowOf = talentEffect) {
  */
 export function freeReactionRowsFor(talents = [], reaction, rowOf = talentEffect) {
   const out = [];
-  for (const { talent, row, rank } of rowsOfKind(talents, "freeReaction", rowOf)) {
+  for (const { talent, row: raw, rank } of rowsOfKind(talents, "freeReaction", rowOf)) {
+    // A rank's clause laid over the row (04's Hold the Hall: *At rank 2 your first
+    // Opportunity Attack each round costs no Reaction*; the Legacy branches' door 22).
+    const row = atRankOf(raw, rank);
     if (row.reaction !== reaction) continue;
     const count = at(row.count ?? 1, { rank });
     if (count > 0) out.push({ identifier: talent.identifier, name: talent.name, count, per: row.per === "turn" ? "turn" : "round", needs: row.needs ?? null });
@@ -2418,8 +2520,25 @@ export function featureAims({ name = "", lays = null, attack = false, onUse = nu
   if (lays?.kind || attack === true || barrage === true) return true;
   const o = onUse ?? {};
   // 04's Soul Swap and Haunt name their creatures (D-775); Thunderstorm moves the
-  // ones it names (D-778).
+  // ones it names (D-778). A Boon the Use lays on its user (02's Berserking; the B8a2
+  // pass) names nobody, so it is handed none, as Second Wind is.
+  if (o.laysBoon && o.self === true && !o.laysBane) return false;
   if (o.ends || o.partner || o.beacon || o.laysBane || o.laysBoon || o.deathMark || o.inflicts || o.aims || o.swap || o.haunt || o.push) return true;
+  // A gadget aimed at one creature, its attack, and the Recombobulator's *creature you
+  // touch* (04's Gadgets; the Legacy branches' door 7).
+  if (o.aim || o.gadgetAttack || o.cures) return true;
+  // The Challenge and The Long Watch name one creature (the Legacy branches' door 18).
+  if (MARK_KINDS.includes(o.mark)) return true;
+  // Thrall of the Banshee names the one creature its Resist binds (door 25, D-784; the
+  // Legacy branches' B6): from the sheet it was refused *names one creature* whatever
+  // was targeted.
+  if (o.thrall) return true;
+  // Ancestral Spirit names the creature it calls back, the Ultrasafe Transporter the
+  // willing creatures it carries, and Ethereal Form with Kindred Spirits the friends it
+  // covers (door 25; the Legacy branches' B6b): from the sheet each was handed nobody, so
+  // the revive was refused *target the one creature* and the travel and the form went
+  // alone whatever was targeted. Ethereal Form without the talent still covers its user.
+  if (o.revive || o.transporter || o.ethereal) return true;
   // 02's Blink (Slow Time's friend) and Counterspell (Spellsteal's caster), D-775;
   // and 02's Dispel, whose one target (and Rapture's second) the Use ends effects
   // on (D-778).
@@ -3100,12 +3219,19 @@ export function veinsStates(flags = []) {
  *   `states` a Use's standing discounts (Icy Veins), off the caster's effects
  * @returns {{amount: number, by: Array<{name: string, amount: number}>}}
  */
-export function spellDiscountFor(talents = [], { school = null, mana = 0, states = [] } = {}, rowOf = talentEffect) {
+export function spellDiscountFor(talents = [], { school = null, mana = 0, states = [], pool = null } = {}, rowOf = talentEffect) {
   const by = [];
   let left = Math.max(0, Math.trunc(Number(mana)) || 0);
   if (!school || left <= 0) return { amount: 0, by };
   for (const { talent, row, rank } of rowsOfKind(talents, "spellCost", rowOf)) {
     if (!(row.schools ?? []).includes(school)) continue;
+    // **FROM A RANK, AND IN ONE POOL** (04's Shadowcraft: *At rank 2 your Shadow spells
+    // cost 1 Focus less*; the Legacy branches' B6): `minRank` the rank it begins at, and
+    // `pool` the pool the cast must be PAID in - a Shadow spell a Priest-Ranger pays in
+    // Mana is not one that costs a Focus less. The caller names the pool the cast pays
+    // (`spellPoolFor`'s, else Mana).
+    if (rank < (Math.trunc(Number(row.minRank)) || 1)) continue;
+    if (typeof row.pool === "string" && row.pool && row.pool !== (pool ?? "mana")) continue;
     const floor = Math.max(0, Math.trunc(Number(row.min)) || 0);
     const n = Math.min(at(row.less ?? 0, { rank }), Math.max(0, left - floor));
     if (n <= 0) continue;
@@ -3380,9 +3506,11 @@ export function swappableEffects(effects = [], { caster = null } = {}) {
  * 02's Curse: *As an action, make a Casting Test. On success, spend 4 Mana and force
  * a target you can see to make a Spirit Resilience Test against your Spell DC. If
  * they fail, all Tests they make have a Bane for 1 minute.* The Mana is paid on the
- * Test's success (D-775, found beside Pandemic: it was paid before the Test).
+ * Test's success (D-775, found beside Pandemic: it was paid before the Test) - by the
+ * feature row's own `onSuccess` price now, the door every *On success, spend* shares
+ * (`class-features.mjs#paysOnSuccess`; the B8a2 pass), and no longer by this name.
  */
-export const CURSE = Object.freeze({ feature: "Curse", targets: 1, bane: { kind: "all", banes: 1 }, minutes: 1, payOn: "success" });
+export const CURSE = Object.freeze({ feature: "Curse", targets: 1, bane: { kind: "all", banes: 1 }, minutes: 1 });
 
 /**
  * **WHAT A WARLOCK'S CURSE REACHES, AND FOR HOW LONG** (04's Pandemic: *Your Curse
@@ -3608,12 +3736,18 @@ export const VEINS_FLAG = "icyVeins";
  */
 export function onUseMageWarlock(onUse, { rank = 1, tier = 1 } = {}) {
   const o = onUse ?? {};
+  // A use's area at the rank (04's Burial Ground at rank 2; the Legacy branches' door
+  // 25), its riders with it: what stands on a creature while it remains inside.
+  const tick = o.areaTick ? atRankOf(o.areaTick, rank) : null;
   return {
     veins: o.veins ? {
       boons: Math.max(0, Math.trunc(Number(o.veins.boons)) || 0), schools: [...(o.veins.schools ?? [])],
       less: at(o.veins.less ?? "rank", { rank }), until: o.veins.until ?? "userTurnEnd"
     } : null,
-    areaTick: o.areaTick ? useAreaTick({ who: o.areaTick.who, amount: at(o.areaTick.amount ?? "tier", { rank, tier }), type: o.areaTick.type ?? null, rounds: o.areaTick.rounds ?? null }) : null,
+    areaTick: tick ? useAreaTick({
+      who: tick.who, amount: tick.remains && tick.amount === undefined ? 0 : at(tick.amount ?? "tier", { rank, tier }),
+      type: tick.type ?? null, rounds: tick.rounds ?? null, remains: tick.remains ?? []
+    }) : null,
     haunt: o.haunt ? { add: at(o.haunt.add ?? "rank", { rank, tier }), heal: at(o.haunt.heal ?? "tier", { rank, tier }) } : null,
     swap: o.swap ? { feet: Math.max(0, Number(o.swap.feet) || 0) } : null,
     sacrifice: o.sacrifice ? { ward: o.sacrifice.ward === true } : null,
@@ -3631,15 +3765,23 @@ export function onUseMageWarlock(onUse, { rank = 1, tier = 1 } = {}) {
  * D-756's descriptor's whole shape, the number worked out at the Use, so the Region
  * placed from the card carries it as a spell's carries its own (`_areaTicks`).
  *
- * @param {{who?: string, amount?: number, type?: string|null, rounds?: number|null}} o
+ * **AND WHAT IT LAYS ON WHO REMAINS INSIDE** (04's Burial Ground: *For one minute,
+ * every friendly target inside it gains a Boon on Resilience Tests. At rank 2 an
+ * attack against a Dying friendly target inside it adds no Death Step*; the Legacy
+ * branches' doors 11 and 25): `remains`, each row whole in D-757's rider shape, the
+ * keys a row names laid over `emptyRemains()` - read by the aura pass
+ * (`effects/auras.mjs#areaRows`) and the step's door (`AzerothActor#_struckBy`).
+ *
+ * @param {{who?: string, amount?: number, type?: string|null, rounds?: number|null, remains?: Array<object>}} o
  */
-export function useAreaTick({ who = "creature", amount = 0, type = null, rounds = null } = {}) {
+export function useAreaTick({ who = "creature", amount = 0, type = null, rounds = null, remains = [] } = {}) {
   const n = Math.max(0, Math.trunc(Number(amount)) || 0);
   return {
     ...emptyAreaTick(),
     who,
     damage: { rating: n > 0 ? n : null, school: type },
-    lasts: { rounds: Number(rounds) > 0 ? Math.trunc(Number(rounds)) : null }
+    lasts: { rounds: Number(rounds) > 0 ? Math.trunc(Number(rounds)) : null },
+    remains: (Array.isArray(remains) ? remains : []).filter(r => r && typeof r === "object").map(r => ({ ...emptyRemains(), ...r }))
   };
 }
 
@@ -3779,6 +3921,31 @@ export function guardianFor(talents = [], rowOf = talentEffect) {
     kind: "guardian", identifier: first.talent.identifier, name: first.talent.name, talentId: first.talent.id ?? null,
     feet: Math.max(0, Number(row.feet) || 0),
     cost: { pool: row.cost?.pool ?? "rage", amount: at(row.cost?.amount ?? 0, { rank: first.rank }) }
+  };
+}
+
+/**
+ * **04's SHARED BURDEN** (*As a Reaction when an attack or spell damages a friendly
+ * target within 30 feet, spend 2 Mana. Half the damage that gets past its Armor Points
+ * and Ward, rounded down, is dealt to you instead, or all of it at rank 2*; the Legacy
+ * branches' phase B6), at its rank, or null: the `moves` row of kind `burden`, asked in
+ * the blow by `effects/blow-doors.mjs#redirectBlow` as Guardian is, its `share` what
+ * moves (`rules/blow-doors.mjs#movedAmount`), met by the holder's own Armor Points and
+ * Ward as it lands (`rules/blow-doors.mjs#burdenMet`).
+ *
+ * @param {Array} talents  the HOLDER's
+ * @returns {{kind: "burden", identifier: string, name: string, talentId: string|null, feet: number,
+ *   cost: {pool: string, amount: number}, share: "half"|"all"}|null}
+ */
+export function burdenFor(talents = [], rowOf = talentEffect) {
+  const [first] = rowsOfKind(talents, "moves", rowOf).filter(r => r.row.kind === "burden");
+  if (!first) return null;
+  const row = atRankOf(first.row, first.rank);
+  return {
+    kind: "burden", identifier: first.talent.identifier, name: first.talent.name, talentId: first.talent.id ?? null,
+    feet: Math.max(0, Number(row.feet) || 0),
+    cost: { pool: row.cost?.pool ?? "mana", amount: at(row.cost?.amount ?? 0, { rank: first.rank }) },
+    share: row.share === "all" ? "all" : "half"
   };
 }
 
@@ -4323,4 +4490,285 @@ export function lavaLashFor(talents = [], rowOf = talentEffect) {
 export function blademasterFor(talents = [], rowOf = talentEffect) {
   const [first] = rowsOfKind(talents, "blademaster", rowOf);
   return first ? { name: first.talent.name } : null;
+}
+
+/* ======================================================================== */
+/*  THE LEGACY BRANCHES' KINDS (the approved plan's phase B1)               */
+/* ======================================================================== */
+
+/*
+ * The doors the seven Legacy branches ride (their rows land in phase B6). One
+ * reader a kind, each called by ONE door (named beside it); `legacy-doors.test.mjs`
+ * holds each to the plan's words and each door to its call. A gate (`when`) is
+ * `rules/talent-gates.mjs#gateHolds`' grammar everywhere below.
+ *
+ *   damage        gained `sl`, `steps` and `ignoresArmor`: damage a hit at an SL
+ *                 adds after the die (Critical Strike) - `slDamageFor`, `rollTest`
+ *   pierce        `{amount, when}`: Armor Points an attack ignores while a gate holds
+ *                 (The Long Watch's *your attacks against it ignore 2*) - `pierceFor`
+ *   offHand       gained `builds`, `damage` and `when` (Axe and Hammer) -
+ *                 `offHandBuildsFor`, `rollTest`
+ *   stood         `{gain: {pool, amount}}`: a turn ended without a move (Unmoved) -
+ *                 `stoodFor`, `AzerothCombat#_onEndTurn`, beside Bracing
+ *   hitTest       gained `via: "self"` with `condition`, `rounds`, `sl`, `once`,
+ *                 `weapon` (Keening Arrows) - `selfHitTestsFor`, `rollTest`
+ *   armorAccess   `{categories, waivesEncumbering, atRank}` (Warden's Mail) -
+ *                 `armorAccessFor`, `creation.mjs#accessNote` and the Speed's parts
+ *   provokes      `{moving: true}` (Hold the Hall) - `movingProvokesFor`,
+ *                 `AzerothCombatant#opportunities`
+ *   hitLays       gained `when: "opportunity"`; `freeReaction` gained
+ *                 `reaction: "opportunityAttack"` and `atRank` (Hold the Hall)
+ *   spell         gained `pool`, `ability` and `moves` (Shadowcraft) -
+ *                 `spellPoolFor`, `castMovesFor`, `castSpell`
+ *   onUse         gained `mitigate: "negate"` (Afterimage), `unanswered` (Wind Walk,
+ *                 Bladestorm), `mark` (The Challenge, The Long Watch), `wields`
+ *                 (Bladestorm), `pullEntangled` (None Escape) and `self` (Ancestral
+ *                 Spirit's Fatigued) - `onUseLegacy`, `workflows.useFeature`
+ */
+
+/** A rank's expression with the door's ability scope (door 16) in it. */
+const scoped = (expr, rank, scope = {}) => amount(expr, { ...(scope ?? {}), rank });
+
+/**
+ * **DAMAGE A HIT ADDS AT AN SL, AFTER THE DIE** (04's Critical Strike: *While you
+ * wield a two-handed weapon, an attack of yours that reaches SL 2 adds half your
+ * Dexterity modifier, rounded up, to its damage. At rank 2 an attack that reaches
+ * SL 3 adds twice that instead and ignores Armor Points*; the Legacy branches' door
+ * 26): a `damage` row carrying `sl`, its gate held, at the highest of its `steps`
+ * the roll reached - the row's own SL first, and a rank's `steps` beside it, each
+ * `{sl, amount, ignoresArmor}`, *instead* of the one below. It never draws a
+ * dialog line (`talent-effects.mjs#damageRowsFor` passes it over), since the SL
+ * does not exist until the roll.
+ *
+ * @param {Array} talents
+ * @param {{sl?: number, hit?: boolean, facts?: object, scope?: object, lane?: "attack"|"spell"}} o
+ * @returns {Array<{identifier: string, name: string, amount: number, ignoresArmor: boolean, sl: number}>}
+ */
+export function slDamageFor(talents = [], { sl = 0, hit = false, facts = {}, scope = {}, lane = "attack" } = {}, rowOf = talentEffect) {
+  if (!hit) return [];
+  const out = [];
+  const reached = Math.trunc(Number(sl)) || 0;
+  for (const { talent, row: raw, rank } of rowsOfKind(talents, "damage", rowOf)) {
+    if (!(Number(raw.sl) > 0)) continue;
+    if (!(raw.applies === "both" || raw.applies === lane)) continue;
+    const row = atRankOf(raw, rank);
+    if (row.when && gateHolds(row.when, facts ?? {}) !== true) continue;
+    const steps = [{ sl: row.sl, amount: row.amount, ignoresArmor: row.ignoresArmor === true }, ...(row.steps ?? [])]
+      .filter(s => Number(s?.sl) > 0 && reached >= Number(s.sl))
+      .sort((a, b) => Number(b.sl) - Number(a.sl));
+    const step = steps[0];
+    if (!step) continue;
+    const n = scoped(step.amount ?? "rank", rank, scope);
+    if (n <= 0 && step.ignoresArmor !== true) continue;
+    out.push({ identifier: talent.identifier, name: talent.name, amount: n, ignoresArmor: step.ignoresArmor === true, sl: Number(step.sl) });
+  }
+  return out;
+}
+
+/**
+ * **ARMOR POINTS AN ATTACK IGNORES WHILE A GATE HOLDS** (04's The Long Watch: *your
+ * attacks against it ignore 2 Armor Points*; the Legacy branches' door 17): summed,
+ * with the talents.
+ *
+ * @param {Array} talents  the ATTACKER's
+ * @param {{facts?: object, scope?: object}} o
+ * @returns {{pierce: number, by: string[]}}
+ */
+export function pierceFor(talents = [], { facts = {}, scope = {} } = {}, rowOf = talentEffect) {
+  let pierce = 0;
+  const by = [];
+  for (const { talent, row: raw, rank } of rowsOfKind(talents, "pierce", rowOf)) {
+    const row = atRankOf(raw, rank);
+    if (row.when && gateHolds(row.when, facts ?? {}) !== true) continue;
+    const n = scoped(row.amount ?? "rank", rank, scope);
+    if (n <= 0) continue;
+    pierce += n;
+    by.push(talent.name);
+  }
+  return { pierce, by };
+}
+
+/**
+ * **AN OFF-HAND ATTACK THAT BUILDS, AND HITS HARDER, WHILE A GATE HOLDS** (04's Axe
+ * and Hammer: *While you hold melee weapons of two different types, one in each
+ * hand, such as an axe and a hammer, your Off-Hand Attack builds Rage as your other
+ * hits do and deals 1 more damage per rank*; the Legacy branches' door 26): whether
+ * 06 §2's *the off hand builds none* is lifted, and the damage added. An `offHand`
+ * row with neither is Second Strike's `noPenalty` alone, read by
+ * `offHandPenaltyFor`.
+ *
+ * @param {Array} talents
+ * @param {{facts?: object, scope?: object}} o
+ * @returns {{builds: boolean, damage: number, by: string[]}}
+ */
+export function offHandBuildsFor(talents = [], { facts = {}, scope = {} } = {}, rowOf = talentEffect) {
+  const out = { builds: false, damage: 0, by: [] };
+  for (const { talent, row: raw, rank } of rowsOfKind(talents, "offHand", rowOf)) {
+    const row = atRankOf(raw, rank);
+    if (row.builds !== true && (row.damage === undefined || row.damage === null)) continue;
+    if (row.when && gateHolds(row.when, facts ?? {}) !== true) continue;
+    if (row.builds === true) out.builds = true;
+    out.damage += row.damage === undefined || row.damage === null ? 0 : scoped(row.damage, rank, scope);
+    out.by.push(talent.name);
+  }
+  return out;
+}
+
+/**
+ * **WHAT A TURN ENDED WITHOUT A MOVE GIVES** (04's Unmoved: *When you end your turn
+ * without having moved, gain 2 Rage*; the Legacy branches' door 26): one row a
+ * talent, its pool and amount at the rank. `AzerothCombat#_onEndTurn` reads it off
+ * the same measure as Bracing's (the turn's Moves paid).
+ *
+ * @param {Array} talents
+ * @returns {Array<{identifier: string, name: string, pool: string, amount: number}>}
+ */
+export function stoodFor(talents = [], rowOf = talentEffect) {
+  const out = [];
+  for (const { talent, row: raw, rank } of rowsOfKind(talents, "stood", rowOf)) {
+    const row = atRankOf(raw, rank);
+    const gain = row.gain ?? null;
+    if (!gain?.pool) continue;
+    const n = at(gain.amount ?? "rank", { rank });
+    if (n > 0) out.push({ identifier: talent.identifier, name: talent.name, pool: gain.pool, amount: n });
+  }
+  return out;
+}
+
+/**
+ * **A TEST THE USER'S OWN HIT FORCES** (04's Keening Arrows: *Once a round, when a
+ * ranged attack of yours reaches SL 2, the target makes a Spirit Resilience Test
+ * against your Spell DC or is Frightened of you for one round per rank*; the Legacy
+ * branches' door 26): `hitTest` with `via: "self"`, at the hit's SL, of the blow's
+ * family (`weapon`: melee or ranged), once a round where it says so. The card offers
+ * the Test per target, at the user's Spell DC, and a failure lays the condition for
+ * the rounds.
+ *
+ * @param {Array} talents
+ * @param {{sl?: number, hit?: boolean, rangeKind?: string|null, used?: string[]}} o
+ * @returns {Array<{identifier: string, name: string, resilience: string, condition: string, rounds: number, once: string|null}>}
+ */
+export function selfHitTestsFor(talents = [], { sl = 0, hit = false, rangeKind = null, used = [] } = {}, rowOf = talentEffect) {
+  if (!hit) return [];
+  const family = !rangeKind ? null : (rangeKind === "melee" ? "melee" : "ranged");
+  const out = [];
+  for (const { talent, row: raw, rank } of rowsOfKind(talents, "hitTest", rowOf)) {
+    const row = atRankOf(raw, rank);
+    if (row.via !== "self" || !row.resilience || !row.condition) continue;
+    if (Number(row.sl) > 0 && (Math.trunc(Number(sl)) || 0) < Number(row.sl)) continue;
+    if (row.weapon && family !== row.weapon) continue;
+    if (row.once === "round" && (used ?? []).includes(talent.identifier)) continue;
+    const rounds = at(row.rounds ?? "rank", { rank });
+    if (rounds < 1) continue;
+    out.push({ identifier: talent.identifier, name: talent.name, resilience: row.resilience, condition: row.condition, rounds, once: row.once ?? null });
+  }
+  return out;
+}
+
+/**
+ * **ARMOR A TALENT LETS A CLASS WEAR** (04's Warden's Mail: *You may wear studded and
+ * mail armor. At rank 2 the Encumbering trait does not reduce your Speed*; the
+ * Legacy branches' door 23): the categories added to the class's own Access, and
+ * whether Encumbering's 5 feet are given back.
+ *
+ * @param {Array} talents
+ * @returns {{categories: string[], waivesEncumbering: boolean, by: string[]}}
+ */
+export function armorAccessFor(talents = [], rowOf = talentEffect) {
+  const categories = new Set();
+  let waivesEncumbering = false;
+  const by = [];
+  for (const { talent, row: raw, rank } of rowsOfKind(talents, "armorAccess", rowOf)) {
+    const row = atRankOf(raw, rank);
+    for (const c of row.categories ?? []) if (typeof c === "string" && c) categories.add(c);
+    if (row.waivesEncumbering === true) waivesEncumbering = true;
+    by.push(talent.name);
+  }
+  return { categories: [...categories].sort(), waivesEncumbering, by };
+}
+
+/**
+ * **A MOVE INSIDE THE HOLDER'S REACH PROVOKES** (04's Hold the Hall: *An enemy within
+ * your reach that moves provokes an Opportunity Attack from you, whether or not it
+ * leaves your reach*; the Legacy branches' door 22): the talent, or null.
+ *
+ * @param {Array} talents  the THREATENER's
+ * @returns {{name: string}|null}
+ */
+export function movingProvokesFor(talents = [], rowOf = talentEffect) {
+  const [first] = rowsOfKind(talents, "provokes", rowOf).filter(r => r.row?.moving === true);
+  return first ? { name: first.talent.name } : null;
+}
+
+/**
+ * **THE POOL A SPELL IS PAID FROM, WHERE A TALENT NAMES ONE** (04's Shadowcraft: *You
+ * know Shadow Ward and Shadow Walk. Cast them with Wisdom, paying Focus where
+ * 07-MAGIC asks for Mana*; the Legacy branches' door 8): the pool and the casting
+ * ability, for a spell the row names by name or by school, or null where 07's Mana
+ * is the price.
+ *
+ * @param {Array} talents  the CASTER's
+ * @param {{name?: string, school?: string|null}} o
+ * @returns {{pool: string, ability: string|null, name: string}|null}
+ */
+export function spellPoolFor(talents = [], { name = "", school = null } = {}, rowOf = talentEffect) {
+  for (const { talent, row } of rowsOfKind(talents, "spell", rowOf)) {
+    if (typeof row.pool !== "string" || !row.pool) continue;
+    const named = (row.names ?? []).includes(name) || (school && (row.schools ?? []).includes(school));
+    if (!named) continue;
+    return { pool: row.pool, ability: typeof row.ability === "string" && row.ability ? row.ability : null, name: talent.name };
+  }
+  return null;
+}
+
+/**
+ * **A CAST THAT COUNTS AS MOVING** (04's Shadowcraft: *Shadow Walk counts as moving
+ * for your Focus*; the lead: *"Yes"*; the Legacy branches' door 9): the talent
+ * whose `spell.moves` names this spell, or null. `castSpell` marks the turn's
+ * record so the next turn's Focus refill is withheld.
+ *
+ * @param {Array} talents  the CASTER's
+ * @param {{name?: string}} o
+ * @returns {{name: string}|null}
+ */
+export function castMovesFor(talents = [], { name = "" } = {}, rowOf = talentEffect) {
+  for (const { talent, row } of rowsOfKind(talents, "spell", rowOf)) {
+    if ((row.moves ?? []).includes(name)) return { name: talent.name };
+  }
+  return null;
+}
+
+/**
+ * **WHAT THE LEGACY BRANCHES' USES DO BEYOND THEIR DESCRIPTOR** (B1), at the rank:
+ *
+ * - `negate`: 04's Afterimage, *As a Reaction when an attack hits you, spend 6 Rage.
+ *   The attack misses* - `onUse.mitigate: "negate"`, pressed from the incoming card
+ *   (door 13);
+ * - `unanswered`: Wind Walk's and Bladestorm's *No creature may take a Reaction
+ *   against you until your next turn* (door 14), `{until}`;
+ * - `mark`: The Challenge's and The Long Watch's naming (door 18);
+ * - `wields`: what must be in hand (Bladestorm's *while you wield a two-handed
+ *   weapon*; door 15);
+ * - `pullEntangled`: None Escape's *Every creature within 60 feet that you have
+ *   Entangled is pulled to a space you choose within 10 feet of you* (door 24),
+ *   `{feet, within}`;
+ * - `self`: a condition the Use lays on the user (Ancestral Spirit's *You gain
+ *   Fatigued*; door 26), `{condition, value, until}`.
+ *
+ * @param {object|null} onUse  the granting talent's
+ * @param {{rank?: number, tier?: number, scope?: object}} [o]
+ */
+export function onUseLegacy(onUse, { rank = 1, tier = 1, scope = {} } = {}) {
+  const o = onUse ? atRankOf(onUse, rank) : {};
+  const list = v => (Array.isArray(v) ? v.filter(x => typeof x === "string" && x) : (typeof v === "string" && v ? [v] : []));
+  const pull = o.pullEntangled ?? null;
+  const self = o.self ?? null;
+  return {
+    negate: o.mitigate === "negate",
+    unanswered: o.unanswered ? { until: ["userTurnStart", "userTurnEnd"].includes(o.unanswered.until) ? o.unanswered.until : "userTurnStart" } : null,
+    mark: MARK_KINDS.includes(o.mark) ? o.mark : null,
+    wields: list(o.wields),
+    pullEntangled: pull ? { feet: Math.max(0, at(pull.feet ?? 60, { rank, tier, ...scope })), within: Math.max(0, at(pull.within ?? 10, { rank, tier, ...scope })) } : null,
+    self: self?.condition ? { condition: String(self.condition), value: self.value === null || self.value === undefined ? null : at(self.value, { rank, tier, ...scope }), until: self.until ?? null } : null
+  };
 }

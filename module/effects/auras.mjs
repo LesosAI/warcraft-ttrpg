@@ -69,10 +69,10 @@
 
 import { AZEROTH } from "../config.mjs";
 import {
-  AURA_FALLBACK_ICON, AURA_FLAG, AURA_ICONS, AURA_VERSION, auraChanges, auraGives, auraLaidHere, auraPayloadOf, auraPlan,
-  diffAuras, excludesHolder, followUp, ownerAuras, payloadFromFlag, strongestPerGroup
+  AURA_FALLBACK_ICON, AURA_FLAG, AURA_ICONS, AURA_VERSION, auraCentreOf, auraChanges, auraGives, auraLaidHere, auraPayloadOf, auraPlan,
+  diffAuras, excludesHolder, followUp, ownerAuras, payloadFromFlag, strongestPerGroup, totemStands
 } from "../rules/auras.mjs";
-import { countsAsAlly } from "../rules/distance.mjs";
+import { countsAsAlly, countsAsEnemy } from "../rules/distance.mjs";
 import { auraSpellGates, talentAuraOf, talentAurasFor } from "../rules/talent-effects.mjs";
 import { feetBetweenFootprints, footprintOf } from "../canvas/footprints.mjs";
 import { allyStandingOf, combatantIn } from "../canvas/engaged.mjs";
@@ -88,6 +88,10 @@ import { ARMED_FLAG, actorOf, areaRecord, casterTokenOn, staleIn, worldClock } f
 import { kindsOfActor, relationTo } from "./area-strikes.mjs";
 // Whether a creature the pass writes to is still in the world (the full-suite fix of D-757).
 import { actorInWorld, sceneInWorld } from "../canvas/in-world.mjs";
+// A floor under Health an aura lays, in 07's Aegis floor's own flag (the Legacy
+// branches' door 12: 04's Big Bad Voodoo).
+import { FLOOR_FLAG } from "../rules/blow-doors.mjs";
+import { healthFloorFlag } from "../rules/auras.mjs";
 
 /** The pass in flight, and whether anything asked for another while it ran. */
 let RUNNING = null;
@@ -190,7 +194,10 @@ function spellOf(effect) {
  *   carrying and has not switched off (Tree of Life's *while the druid is a
  *   tree*);
  * - `bodyAP`, the holder's CURRENT Body Armor Points, prepared and after every
- *   effect, because the Bulwark gives *your Armor Points*.
+ *   effect, because the Bulwark gives *your Armor Points*;
+ * - `sustains`, the identifiers of the Sustains the holder holds (04's Big Bad Voodoo:
+ *   *While you Sustain it*; the Legacy branches' door 12), off the `sustaining` flag
+ *   every door that ends a Sustain clears.
  */
 function holderFacts(actor) {
   const spells = new Set();
@@ -206,7 +213,8 @@ function holderFacts(actor) {
     shield: !(shape && meldsGear(shape.kind))
       && (actor?.items ?? []).some(i => i.type === "armor" && i.system?.shield === true && i.system?.equipped === true),
     spells: [...spells].sort(),
-    bodyAP: Math.max(0, Math.trunc(Number(actor?.system?.ap?.body ?? 0)) || 0)
+    bodyAP: Math.max(0, Math.trunc(Number(actor?.system?.ap?.body ?? 0)) || 0),
+    sustains: [...new Set((actor?.getFlag?.("azeroth-rpg", "sustaining") ?? []).map(e => e?.identifier).filter(id => typeof id === "string" && id))].sort()
   };
 }
 
@@ -247,6 +255,8 @@ function laidHere(stamp, scene) {
 
 /** A Boon's Test, in words: *Spirit Resilience Tests*, *Attack Tests*. */
 function boonTest(boon) {
+  // *A Boon on Resilience Tests* (04's Burial Ground; door 25): every Resilience.
+  if (boon.kind === "resilience" && boon.resilience === "all") return game.i18n.localize("AZEROTH.Aura.BoonResilienceAll");
   if (boon.kind === "resilience") {
     return game.i18n.format("AZEROTH.Aura.BoonResilience", { resilience: game.i18n.localize(AZEROTH.resiliences[boon.resilience] ?? boon.resilience) });
   }
@@ -263,7 +273,10 @@ function auraDescription(row, shown = {}) {
   const owner = shown.ownerName ?? "";
   // An aura on its holder alone says its own condition instead (D-772).
   if (shown.feet && !shown.holderOnly) {
-    lines.push(game.i18n.format(shown.centre === "boundDemon" ? "AZEROTH.Aura.ReachDemon" : "AZEROTH.Aura.Reach", { feet: shown.feet, owner }));
+    const totem = auraCentreOf(shown.centre);
+    lines.push(totem.kind === "boundTotem"
+      ? game.i18n.format("AZEROTH.Aura.ReachTotem", { feet: shown.feet, owner, totem: totem.name ?? "" })
+      : game.i18n.format(shown.centre === "boundDemon" ? "AZEROTH.Aura.ReachDemon" : "AZEROTH.Aura.Reach", { feet: shown.feet, owner }));
   }
   // An area's rider (D-757): it stands while the creature is inside.
   if (shown.centre === "region") lines.push(game.i18n.format("AZEROTH.Aura.Inside", { area: shown.area ?? "" }));
@@ -292,6 +305,8 @@ function auraDescription(row, shown = {}) {
   if (p.spellDamage) lines.push(game.i18n.format("AZEROTH.Aura.SpellDamage", { n: p.spellDamage }));
   if (p.armor) lines.push(game.i18n.format("AZEROTH.Aura.Armor", { ap: p.armor, feet: shown.feet ?? 0 }));
   if (p.damageReduction) lines.push(game.i18n.format("AZEROTH.Signature.Aura.Text", { n: p.damageReduction }));
+  // A floor under Health (04's Big Bad Voodoo; door 12).
+  if (p.healthFloor) lines.push(game.i18n.format("AZEROTH.Aura.HealthFloor", { n: p.healthFloor, owner }));
   return lines.map(line => `<p>${line}</p>`).join("");
 }
 
@@ -302,6 +317,15 @@ function auraDescription(row, shown = {}) {
  */
 function auraData(row, shown = {}) {
   const owner = row.owner ?? shown.ownerName ?? "";
+  // **A FLOOR UNDER HEALTH IS 07's AEGIS FLOOR'S OWN FLAG** (04's Big Bad Voodoo: *no
+  // ally within 20 feet of you other than yourself may be reduced below 1 Health by any
+  // source*; the Legacy branches' door 12): written beside the aura's, so the ONE hold
+  // at 1 (`effects/blow-doors.mjs#aegisFloor`) holds the ally with no second door, at
+  // the damage door and where Health is lost alike. It never refuses a Critical Injury
+  // (`noCritical` false: *It does not stop a Critical Injury or anything a Critical
+  // Injury does*), and a Critical Injury's own drop to 0 is written straight and never
+  // meets it.
+  const floor = healthFloorFlag(row, { by: row.origin ?? null, name: row.name ?? "" });
   return {
     name: game.i18n.format("AZEROTH.Aura.EffectName", { source: row.name, owner }),
     img: shown.img || AURA_FALLBACK_ICON,
@@ -321,7 +345,7 @@ function auraData(row, shown = {}) {
       // reach the text states, and the scene whose pass laid it, which is the
       // one pass that may lift it from a creature that has since left.
       feet: row.feet ?? null, scene: row.scene ?? null
-    } } }
+    }, ...(floor ? { [FLOOR_FLAG]: floor } : {}) } }
   };
 }
 
@@ -391,6 +415,24 @@ function centresOf(scene, holder, centre) {
     const demons = new Set(boundOf(worldActorOf(holder), "demon").map(actor => actor.id));
     if (!demons.size) return [];
     return (scene?.tokens ?? []).filter(t => demons.has(t.actorId)).map(t => t.object).filter(Boolean);
+  }
+  // **A TOTEM THE HOLDER STANDS** (04's Loa Drum: *While your **Tremor** totem
+  // stands, every enemy within 30 feet of it*; the Legacy branches' door 20): every
+  // token of a totem bound to the holder whose name holds the centre's word. A
+  // totem not planted on this scene is a centre that reaches nobody.
+  const named = auraCentreOf(centre);
+  if (named.kind === "boundTotem") {
+    const word = String(named.name ?? "").toLowerCase();
+    const totems = new Set(boundOf(worldActorOf(holder), "totem").filter(a => !word || String(a.name ?? "").toLowerCase().includes(word)).map(actor => actor.id));
+    if (!totems.size) return [];
+    // **A DESTROYED TOTEM CENTRES NOTHING** (the B2 review: Loa Drum's *While your Tremor
+    // totem stands*): a totem token at 0 Health, or defeated in the tracker or by its
+    // status, is no centre (`rules/auras.mjs#totemStands`).
+    const defeated = CONFIG.specialStatusEffects?.DEFEATED ?? "dead";
+    return (scene?.tokens ?? []).filter(t => totems.has(t.actorId) && totemStands({
+      health: t.actor?.system?.health?.value ?? null,
+      defeated: t.actor?.statuses?.has?.(defeated) === true || t.combatant?.isDefeated === true
+    })).map(t => t.object).filter(Boolean);
   }
   const own = tokenOn(scene, holder);
   return own ? [own] : [];
@@ -626,6 +668,10 @@ async function syncAurasNow(scene) {
         self: actor.uuid === holder.uuid,
         party: actor.isParty === true,
         ally: countsAsAlly(holderStanding, theirs),
+        // The holder's ENEMY (door 20's Loa Drum), the tracker's sides in a fight and
+        // FRIENDLY against HOSTILE outside one; the pass runs on the GM's client, so
+        // a hidden creature counts.
+        enemy: countsAsEnemy(holderStanding, theirs, { gm: true }),
         feet: nearestFeet(centres, token, footprints),
         type: actor.type,
         apLocations: apLocationsOf(actor)
@@ -760,7 +806,10 @@ export function registerAuraHooks() {
       // *Aura of Resolve (Uther)*, and `auraSignature` compares the name, so
       // the pass re-lays each under the new one. The pass renames nothing, so
       // this cannot answer itself.
-      || ("name" in (changes ?? {}) && holdsAura(actor));
+      || ("name" in (changes ?? {}) && holdsAura(actor))
+      // A SUSTAIN TAKEN OR ENDED (04's Big Bad Voodoo, *While you Sustain it*; door 12):
+      // the gate an aura of the holder's reads.
+      || (flagMoved(changes, "sustaining") && holdsAura(actor));
     if (moved) nudge();
   });
 

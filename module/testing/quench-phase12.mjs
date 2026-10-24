@@ -17,7 +17,7 @@
  * Every test makes its own documents and `cleanup` removes them.
  */
 
-import { cleanup, inspect, made, makeCharacter, makeNpc, openSheet, pinDie, settle, cardOf, fromPack, PACK_FOR, untilHook } from "./fixtures.mjs";
+import { cleanup, inspect, made, makeCharacter, makeNpc, openSheet, pinDie, settle, cardOf, fromPack, PACK_FOR, untilHook, tokenData } from "./fixtures.mjs";
 import { checkText } from "./geometry.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 // The GM-side door a Resist row's record goes through (D-726): what it refuses
@@ -80,9 +80,9 @@ function notice() {
  */
 async function fightOnAScene(scene, actor, { y = 500 } = {}) {
   await actor.update({ "prototypeToken.actorLink": true });
-  const data = (await actor.getTokenDocument({
+  const data = (await tokenData(actor, {
     x: 500, y, disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY
-  })).toObject();
+  }));
   const [token] = await scene.createEmbeddedDocuments("Token", [data]);
   for (let i = 0; i < 60 && !canvas.ready; i++) await new Promise(r => setTimeout(r, 100));
   await settle();
@@ -1105,7 +1105,7 @@ export function spellEffectBatch(context) {
         await withoutScrollingText(async () => {
           await scene.view();
           await until(() => canvas.ready && canvas.scene?.id === scene.id, "the gone-row scene on the board", 15000);
-          const data = (await npc.getTokenDocument({ x: 600, y: 600 })).toObject();
+          const data = (await tokenData(npc, { x: 600, y: 600 }));
           const [doomed, survivor] = await scene.createEmbeddedDocuments("Token", [data, { ...data, x: 900 }]);
           assert.isFalse(doomed.actorLink, "the tokens are linked, so they are not siblings off one actor");
           assert.equal(doomed.actor.id, survivor.actor.id, "two unlinked tokens off one actor do not share its id");
@@ -1216,7 +1216,7 @@ export function spellEffectBatch(context) {
           await scene.view();
           await until(() => canvas.ready && canvas.scene?.id === scene.id, "the hidden-target scene on the board", 15000);
           const place = async (actor, x, hidden) => {
-            const data = (await actor.getTokenDocument({ x, y: 600, hidden })).toObject();
+            const data = (await tokenData(actor, { x, y: 600, hidden }));
             const [doc] = await scene.createEmbeddedDocuments("Token", [data]);
             return doc;
           };
@@ -1380,7 +1380,7 @@ export function spellEffectBatch(context) {
         await scene.view();
         await until(() => canvas.ready && canvas.scene?.id === scene.id, "the Blizzard scene on the board", 15000);
         await mage.update({ "prototypeToken.actorLink": true });
-        const [token] = await scene.createEmbeddedDocuments("Token", [(await mage.getTokenDocument({ x: 600, y: 600 })).toObject()]);
+        const [token] = await scene.createEmbeddedDocuments("Token", [(await tokenData(mage, { x: 600, y: 600 }))]);
         await until(() => mage.getActiveTokens(false, true).length === 1, "the mage's token standing on the board", 15000);
         const onBoard = { sceneId: scene.id, tokenId: token.id };
 
@@ -1463,7 +1463,7 @@ export function spellEffectBatch(context) {
         await scene.view();
         await until(() => canvas.ready && canvas.scene?.id === scene.id, "the cone scene on the board", 15000);
         // Somebody else's token, standing and SELECTED; the mage has none here.
-        const [other] = await scene.createEmbeddedDocuments("Token", [(await bystander.getTokenDocument({ x: 600, y: 600 })).toObject()]);
+        const [other] = await scene.createEmbeddedDocuments("Token", [(await tokenData(bystander, { x: 600, y: 600 }))]);
         await until(() => canvas.tokens.get(other.id), "the bystander's token drawn", 15000);
         canvas.tokens.activate();
         canvas.tokens.get(other.id).control({ releaseOthers: true });
@@ -1686,8 +1686,12 @@ export function creatorSpellsBatch(context) {
           ranks: { athletics: 1 },
           adaptable: "athletics",
           racialTalent: "Refugee's Road",
-          classTalent: (await game.packs.get(PACK_FOR.talent).getIndex({ fields: ["system.className", "system.tier", "system.race", "system.identifier"] }))
-            .find(t => t.system.className === "Warrior" && t.system.tier === 1 && !t.system.race)?.system.identifier,
+          // A Warrior's OWN tier 1 talent: since the Legacy branches the index also
+          // holds Blademaster's and Mountain King's, a human may take neither (04 §1,
+          // D-781), and the first the index handed back was refused at Finish with
+          // `classTalentNotYourPeople` - the creator's own judgement, correctly.
+          classTalent: (await game.packs.get(PACK_FOR.talent).getIndex({ fields: ["system.className", "system.tier", "system.race", "system.identifier", "system.legacy"] }))
+            .find(t => t.system.className === "Warrior" && t.system.tier === 1 && !t.system.race && !t.system.legacy)?.system.identifier,
           spells: [],
           equipment: road,
           name: "ZZ Handed Over",

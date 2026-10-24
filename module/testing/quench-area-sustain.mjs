@@ -25,7 +25,7 @@
  */
 
 import {
-  cleanup, drainAreaWork, errorsDuring, fromPack, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings
+  cleanup, drainAreaWork, errorsDuring, fromPack, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings, tokenDrawn, tokenData
 } from "./fixtures.mjs";
 import { CARD_ACTIONS, regionFlagsFromCard } from "../dice/chat.mjs";
 import { placeArea } from "../canvas/regions.mjs";
@@ -86,10 +86,10 @@ async function place(scene, placements) {
   const data = [];
   for (const { actor, x, y, disposition = "FRIENDLY" } of placements) {
     await actor.update({ "prototypeToken.actorLink": true });
-    data.push((await actor.getTokenDocument({ x, y, disposition: CONST.TOKEN_DISPOSITIONS[disposition] })).toObject());
+    data.push((await tokenData(actor, { x, y, disposition: CONST.TOKEN_DISPOSITIONS[disposition] })));
   }
   const tokens = await scene.createEmbeddedDocuments("Token", data);
-  await until(() => placements.every(p => p.actor.getActiveTokens(true).length), "every token drawn");
+  await until(() => placements.every(p => tokenDrawn(p.actor.getActiveTokens(true)[0])), "every token drawn, its texture loaded and its arrows made");
   await settle();
   return tokens;
 }

@@ -2322,10 +2322,16 @@ function buildDoc({ record, parsed, shape, tier, zone, rarity, chosen, found = [
   };
 
   if (shape.type === "weapon") {
+    // 08 §7's Type off the base (D-782's door 15): a found hammer is a hammer, as a
+    // Rare longsword is a longsword. After `traits`, where `WeaponData` and the §7
+    // rows carry it, so the common run is rebuilt rather than spread.
+    const { identifier, description, source, traits: cut, ...tail } = common;
     return {
       name, type: "weapon", img: "icons/svg/sword.svg",
       system: {
-        ...common,
+        identifier, description, source, traits: cut,
+        weaponType: system.weaponType ?? null,
+        ...tail,
         rating: system.rating === null || system.rating === undefined ? null : system.rating + ratingPoints,
         range: system.range ?? null,
         offHand: shape.offHand,

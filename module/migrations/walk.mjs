@@ -86,8 +86,12 @@ export function rawSystem(doc) {
  * else the actor holds, and four separate writes would each be judged against
  * a half-migrated collection. It carries `azerothBags: "bypass"`, because
  * `AzerothItem`'s operation hooks judge exactly the state this is repairing.
+ *
+ * **`embeds(actorDoc)` is the fourth builder** (D-781): item DATA to create on
+ * one actor, in ONE `createEmbeddedDocuments` call - the Legacy branch a world's
+ * characters were owed before the pack held one. It carries the same bypass.
  */
-export async function walkWorld({ item = null, actor = null, items = null } = {}, log = console.log) {
+export async function walkWorld({ item = null, actor = null, items = null, embeds = null } = {}, log = console.log) {
   let touched = 0;
 
   const applyToItem = async (doc, where) => {
@@ -114,6 +118,12 @@ export async function walkWorld({ item = null, actor = null, items = null } = {}
       await doc.updateEmbeddedDocuments("Item", batch, { render: false, diff: false, azerothBags: "bypass" });
       log(`azeroth-rpg | ${where}: ${doc.name} (${doc.id}) — ${batch.length} item(s) rehoused`);
       touched += batch.length;
+    }
+    const made = embeds ? await embeds(doc) : null;
+    if (made?.length) {
+      await doc.createEmbeddedDocuments("Item", made, { render: false, azerothBags: "bypass" });
+      log(`azeroth-rpg | ${where}: ${doc.name} (${doc.id}) — ${made.length} item(s) embedded`);
+      touched += made.length;
     }
   };
 

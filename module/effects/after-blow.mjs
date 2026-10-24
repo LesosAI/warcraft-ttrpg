@@ -25,7 +25,13 @@ import { killingBlowRage, zealFromBlow } from "../rules/momentum.mjs";
 import { allyDownFor, avengedBy, killRewardsFor, killStrikesFor } from "../rules/class-talents.mjs";
 import { layNextAttack } from "./next-attack.mjs";
 // Whose companion struck the blow (04's Beast Frenzy, D-773).
-import { bondOf } from "../documents/bound.mjs";
+import { bind, bondOf, boundOf, worldActorOf } from "../documents/bound.mjs";
+// 04's Dark Minion (the Legacy branches' door 5): a creature Black Arrow marked rises.
+import { markOwners, raiseFor, raiseRefusal, raiseRowsFor } from "../rules/raise.mjs";
+import { NO_HEALING_FLAG } from "../rules/no-healing.mjs";
+import { placeSummon } from "../documents/summon.mjs";
+// What a raise records for the animation layer (the Legacy branches' door 2).
+import { risenRecord, slugOf } from "../rules/animation-records.mjs";
 // The Priest's (D-774): Vampiric Touch's Health back off a Shadow blow, Shadowy
 // Apparition's strike on the enemies around a creature that died suffering the
 // priest's Shadow, and Shadowform's mark for a Holy blow dealt.
@@ -39,6 +45,8 @@ import { layTickBy } from "./ticks.mjs";
 import { manaPool } from "../rules/pools.mjs";
 import { creaturesWithin } from "../canvas/engaged.mjs";
 import { resolveDamage } from "../rules/mitigation.mjs";
+// Drawn Across on a blow's source (the Legacy branches' door 25).
+import { dealtHalvedBy } from "../rules/legacy-uses.mjs";
 import { markLightUsed } from "./shadowform.mjs";
 import { AZEROTH } from "../config.mjs";
 
@@ -51,6 +59,79 @@ export const VENGEANCE_QUERY = "azeroth-rpg.vengeance";
 
 /** The feet a Paladin's Zeal reaches for a friendly target (02 §7, 04's Righteous Fury). */
 const ZEAL_REACH_FEET = 20;
+
+/** A bestiary entry by its name, or null (the raise's Risen Skeleton). */
+async function bestiaryEntryNamed(name) {
+  const pack = game.packs.get("azeroth-rpg.bestiary");
+  if (!pack || !name) return null;
+  const index = await pack.getIndex();
+  const found = index.find(e => e.name === name) ?? null;
+  return found ? pack.getDocument(found._id) : null;
+}
+
+/**
+ * **THE FALLEN CREATURE RISES FOR WHOEVER MARKED IT** (04's Dark Minion; the Legacy
+ * branches' door 5): every archer whose no-healing mark the creature still carries
+ * (`rules/no-healing.mjs`, Black Arrow's - the mark IS the *before the end of your
+ * next turn* window) and whose `raise` row names that mark's talent - one more
+ * Risen Skeleton bound to the archer as a summon until the encounter ends
+ * (`documents/bound.mjs#bind`), its token put down where the creature fell, on the
+ * archer's side and in the archer's fight (door 4's `placeSummon`). Past *one per
+ * rank* nothing rises and the card says so. The bind is the archer's to make - the
+ * archer's player or a GM, which is whoever applies the blow at a table - and a
+ * client that may make neither leaves it to the table (MY READING, for the lead).
+ *
+ * @param {{target: Actor}} o
+ */
+async function raiseFallen({ target }) {
+  const marks = (target.effects ?? []).filter(e => e.flags?.["azeroth-rpg"]?.[NO_HEALING_FLAG])
+    .map(e => ({ origin: e.origin ?? null, source: e.flags["azeroth-rpg"][NO_HEALING_FLAG]?.source ?? "", active: e.active !== false }));
+  if (!marks.length) return;
+  for (const ownerUuid of markOwners(marks)) {
+    let owner = null;
+    try {
+      owner = fromUuidSync(ownerUuid);
+    } catch {
+      owner = null;
+    }
+    if (owner?.documentName !== "Actor" || !owner.isOwner) continue;
+    const row = raiseFor(marks, owner.uuid, raiseRowsFor(owner.takenTalents?.() ?? []));
+    if (!row) continue;
+    const held = boundOf(worldActorOf(owner), "summon").filter(a => bondOf(a)?.sourceName === row.name).length;
+    const refused = raiseRefusal({ held, count: row.count });
+    if (refused) {
+      await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor: owner }), content: `<p>${game.i18n.format(refused, { name: target.name, talent: row.name, n: row.count })}</p>` });
+      continue;
+    }
+    const entry = await bestiaryEntryNamed(row.entry);
+    if (!entry) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Summon.NoEntry", { name: row.entry }));
+      continue;
+    }
+    const made = await bind({ owner, feature: null, entry, kind: "summon", until: row.until, count: 1, sourceName: row.name });
+    if (!made) continue;
+    const fell = target.getActiveTokens?.(true)?.[0]?.document ?? null;
+    const grid = fell?.parent?.grid ?? null;
+    const at = fell && grid ? { x: fell.x + ((fell.width ?? 1) * (grid.sizeX ?? grid.size)) / 2, y: fell.y + ((fell.height ?? 1) * (grid.sizeY ?? grid.size)) / 2 } : null;
+    // On the scene it fell on (the B2 review), never the GM's viewed one.
+    const placed = await placeSummon({ summoner: owner, actor: made, count: 1, at, sceneId: fell?.parent?.id ?? null });
+    // **WHAT ROSE, AND BY WHOSE TALENT** (the Legacy branches' door 2): a summon's
+    // arrival card, as `dice/chat.mjs#placeSummonFromCard` writes one - the raise's
+    // talent by its key, the archer's token, and the token that stood up.
+    const risen = risenRecord(placed);
+    const archer = owner.getActiveTokens?.(true, true)?.[0] ?? null;
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: owner }),
+      content: `<p>${game.i18n.format(placed?.count ? "AZEROTH.Raise.Risen" : "AZEROTH.Raise.RisenNoToken", { name: target.name, entry: made.name, owner: owner.name, talent: row.name })}</p>`,
+      flags: { "azeroth-rpg": {
+        kind: "summon", entry: made.name, count: placed?.count ?? 0,
+        featureKey: slugOf(row.name) || null,
+        source: archer ? { sceneId: archer.parent?.id ?? null, tokenId: archer.id } : null,
+        risen: risen ? [risen] : []
+      } }
+    });
+  }
+}
 
 /**
  * @param {{target: Actor, before: number, attacker?: Actor|null, riposte?: boolean, attack?: boolean,
@@ -100,6 +181,20 @@ export async function afterBlow({ target, before, attacker = null, riposte = fal
     }
   }
   if (!combat) return;
+  // **A CREATURE BLACK ARROW MARKED RISES** (04's Dark Minion: *When a creature hit
+  // by your **Black Arrow** drops to 0 Health before the end of your next turn, it
+  // rises as a **Risen Skeleton** that acts on your Initiative until the encounter
+  // ends. You may control one per rank*; the Legacy branches' door 5). In a fight,
+  // whoever's blow it was; guarded, because it is bookkeeping beyond the target.
+  if (before > 0 && after === 0 && target.type === "npc") {
+    try {
+      await raiseFallen({ target });
+    } catch (err) {
+      // The fall stands; a rise that fails is said in words (CLAUDE.md §16).
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Raise.Failed", { name: target.name }));
+      console.warn("azeroth-rpg | dark minion", err);
+    }
+  }
   // 04's Killing Blow: *When you reduce a target below half Health, gain 6 Rage.*
   if (attacker?.isOwner) {
     const rage = killingBlowRage({ before, after, max, ranks: attacker.talentRanks?.("Killing Blow") ?? 0 });
@@ -467,7 +562,9 @@ export async function strikeCard({ holder, targets = [], amount = 0, type = null
   const damageByTarget = targets.map(t => resolveDamage({
     rating: n, sl: 0, kind: "magical", school: type,
     ward: t?.wardBySchool?.[type] ?? 0, schoolArmor: t?.schoolArmor?.[type] ?? 0,
-    immune: t?.immune ?? [], vulnerable: t?.vulnerable ?? [], slAddsToDamage: false
+    immune: t?.immune ?? [], vulnerable: t?.vulnerable ?? [], slAddsToDamage: false,
+    // The holder's own damage, 04's Drawn Across on it halving it (the Legacy branches' door 25).
+    dealtHalved: dealtHalvedBy(holder)
   }));
   const content = await foundry.applications.handlebars.renderTemplate("systems/azeroth-rpg/templates/chat/feature-card.hbs", {
     config: AZEROTH, title: name, subtitle,

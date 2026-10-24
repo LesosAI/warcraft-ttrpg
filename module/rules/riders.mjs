@@ -108,10 +108,36 @@
  *
  * `spent` is what was ACTUALLY paid - for a rider of `"all"`, whatever the pool
  * held when the attack rolled.
+ *
+ * **THE LEGACY BRANCHES'** (B1) added, each named only where a rider carries it:
+ *
+ *   weapon    gained `"thrown"`: the blow is THROWN (04's Storm Bolt: *As part of an
+ *             attack with a Thrown weapon*), read off the strike record's own way
+ *   ammo      `false`: the shot spends no ammunition (Black Arrow: *The attack
+ *             spends no ammunition*) - `rollTest` marks nothing off the bundle
+ *   throwAs   `{types, feet, ability}`: for this attack a weapon of one of those
+ *             08 §7 types counts as `Thrown (feet ft)` and is thrown with that
+ *             ability (Storm Bolt's hammer or mace, on Strength) -
+ *             `wield.mjs#throwAsWeapon` adds the throw at the attack door, and
+ *             `rollTest` refuses that throw unless this line is ticked
+ *
+ * and a talent's `riderCost` row - `{riders, free, when, minRank}` - makes another
+ * talent's rider free while its gate holds against the target (Cursed Prey at
+ * rank 2: *your Jinx costs no Mana against it*; door 17), read here through the
+ * `facts` the door measured. And an `onHit` expression may name an ability
+ * modifier (door 16), from the `abilities` the door hands in.
+ *
+ * **PHASE B6** added `onHit.also`: `[{condition, value, until}]`, a SECOND condition the
+ * hit lays on a span of its own (04's Shadow Strike: *the target gains Bleeding equal to
+ * your rank and is Slowed until the start of your next turn* - the Bleeding is A1's own
+ * count and keeps no span, the Slowed the striker's next turn). `riderConditions` lists
+ * it last, marked `also`, and `riderConditionSpan` is the one reading of its span.
  */
 
 import { talentEffect } from "./talent-effects.mjs";
 import { evaluateExpression } from "./expressions.mjs";
+// ONE reading of a gate (doors 15 and 17): Cursed Prey's *against it*.
+import { gateHolds } from "./talent-gates.mjs";
 
 /** The effect flag a switched-on discount rider is read off (Berserk's Use lays it, D-771). */
 export const RIDER_DISCOUNT_FLAG = "riderDiscount";
@@ -122,8 +148,8 @@ export const RIDER_ONCE = Object.freeze(["round"]);
 /** What a rider's spend may buy beside the blow. */
 export const RIDER_MOVES = Object.freeze(["speed"]);
 
-/** Which blows a rider may ride. */
-export const RIDER_WEAPONS = Object.freeze(["melee", "ranged"]);
+/** Which blows a rider may ride: a throw is a ranged blow, and `thrown` asks for one (B1, Storm Bolt). */
+export const RIDER_WEAPONS = Object.freeze(["melee", "ranged", "thrown"]);
 
 /** When a rider is paid (D-772): null is when the attack rolls, `hit` only once it lands. */
 export const RIDER_PAYS = Object.freeze(["hit"]);
@@ -131,8 +157,13 @@ export const RIDER_PAYS = Object.freeze(["hit"]);
 /** What a rider's blow needs: a shield in hand (D-772), a target under the Opening (D-773). */
 export const RIDER_NEEDS = Object.freeze(["shield", "opening"]);
 
-/** How long a rider's condition and Speed drop last (D-773): until the striker's next turn starts. */
-export const RIDER_UNTIL = Object.freeze(["strikerTurnStart"]);
+/**
+ * How long a rider's condition and Speed drop last (D-773): until the striker's next
+ * turn starts - or, for a condition, until the end of the creature's OWN next turn
+ * (04's Storm Bolt: *the target is Stunned until the end of its next turn*; the Legacy
+ * branches' B6), keyed on its own combatant at the landing (D-628).
+ */
+export const RIDER_UNTIL = Object.freeze(["strikerTurnStart", "endOfNextTurn"]);
 
 /** How long a rider's `noHealing` lasts (D-772): Mortal Strike's *until the end of your next turn*. */
 export const RIDER_NO_HEALING = Object.freeze(["strikerTurnEnd"]);
@@ -180,6 +211,30 @@ export function onHitAt(rider, rank = 1) {
     if ((Number(rank) || 0) >= (Number(clause?.rank) || Infinity)) Object.assign(base, clause.onHit ?? {});
   }
   return base;
+}
+
+/**
+ * **THE SL ONE EFFECT OF A HIT WAITS ON, OFF THE CLAUSE THAT GAVE IT** (04's Bash: *On
+ * a hit the target loses its Reaction. At rank 2 a hit at SL 2 also knocks it Prone*;
+ * the Legacy branches' B6). `onHitAt` lays a rank's clause over the row, so its `sl`
+ * would gate the row's own Reaction too: here the row's `onHit.sl` gates the keys the
+ * row's `onHit` names, and a rank's clause's `sl` - or its want of one - the keys THAT
+ * clause names, the latest clause the rank reached winning. A line handed in for a row
+ * (no `atRank`) reads its merged `onHit` as it always did.
+ *
+ * @param {object} rider  the row's `rider`, or a line's merged copy
+ * @param {number} rank
+ * @param {string} key  an `onHit` key: `condition`, `prone`, `loseReaction`, `speedDrop`, `bane`
+ * @returns {number|null}  the SL, or null where nothing gates it
+ */
+export function slFor(rider, rank = 1, key = "condition") {
+  const own = rider?.onHit && Object.hasOwn(rider.onHit, key) ? (rider.onHit.sl ?? null) : null;
+  let gate = own;
+  for (const clause of rider?.atRank ?? []) {
+    if ((Number(rank) || 0) < (Number(clause?.rank) || Infinity)) continue;
+    if (clause?.onHit && Object.hasOwn(clause.onHit, key)) gate = clause.onHit.sl ?? null;
+  }
+  return gate;
 }
 
 /**
@@ -249,12 +304,23 @@ function takenRiders(talents = [], rowOf = talentEffect) {
  * @param {{hit?: boolean, spent?: number, rank?: number, tier?: number, sl?: number}} o
  * @returns {{move: string|null, condition: {id: string, value: number|null}|null, prone: boolean, damage: number}}
  */
-export function riderOutcome(rider, { hit = false, spent = 0, rank = 1, tier = 1, sl = 0 } = {}) {
+export function riderOutcome(rider, { hit = false, spent = 0, rank = 1, tier = 1, sl = 0, abilities = {} } = {}) {
   const on = onHitAt(rider, rank);
-  const scope = { rank, tier, spent, sl };
+  // The striker's ability modifiers (door 16), as `expressions.mjs#abilityScope` hands them.
+  const scope = { ...(abilities ?? {}), rank, tier, spent, sl };
   // **A CONDITION AT AN SL** (Shield Slam's rank 2, D-772: *a hit at SL 2 also
   // applies Stun*): the condition and Prone land only where the hit reached it.
-  const reached = on.sl === null || on.sl === undefined || (Math.trunc(Number(sl)) || 0) >= Number(on.sl);
+  // **EACH CLAUSE'S SL GATES WHAT THAT CLAUSE ADDS** (04's Bash: *On a hit the target
+  // loses its Reaction. At rank 2 a hit at SL 2 also knocks it Prone*; Storm Bolt: *On a
+  // hit at SL 2 the target is Stunned ... At rank 2 any hit also costs the target its
+  // Reaction*; the Legacy branches' B6): `slFor` reads the SL off the clause that gave
+  // the key, so a rank's `sl` never holds the row's own effects to it, nor the row's
+  // `sl` a rank's.
+  const reachedFor = key => {
+    const gate = slFor(rider, rank, key);
+    return gate === null || gate === undefined || (Math.trunc(Number(sl)) || 0) >= Number(gate);
+  };
+  const reached = reachedFor("condition");
   let condition = null;
   if (hit && reached && on.condition) {
     if (on.value === null || on.value === undefined) condition = { id: on.condition, value: null };
@@ -264,7 +330,7 @@ export function riderOutcome(rider, { hit = false, spent = 0, rank = 1, tier = 1
     }
   }
   const damage = hit && on.damage ? Math.max(0, Math.trunc(evaluateExpression(on.damage, scope) ?? 0)) : 0;
-  const out = { move: rider?.move ?? null, condition, prone: hit && reached && on.prone === true, damage };
+  const out = { move: rider?.move ?? null, condition, prone: hit && reachedFor("prone") && on.prone === true, damage };
   // **THE TYPE THE DAMAGE IS, WHERE THE ROW NAMES ONE** (04's Stormstrike: *the
   // target takes Nature damage equal to your tier*; D-777, the lead: *"Different
   // damage types in one attack are possible"*): a second amount on the blow, met
@@ -284,14 +350,30 @@ export function riderOutcome(rider, { hit = false, spent = 0, rank = 1, tier = 1
   if (on.forced !== null && on.forced !== undefined) out.forced = Math.max(0, Math.trunc(Number(on.forced)) || 0);
   // Concussive Shot's and Wing Clip's span, and what lands with the hit.
   if (on.until) out.until = on.until;
-  if (on.loseReaction === true) out.loseReaction = hit && reached;
-  if (on.speedDrop !== null && on.speedDrop !== undefined) out.speedDrop = hit && reached ? Math.max(0, Math.trunc(evaluateExpression(on.speedDrop, scope) ?? 0)) : 0;
+  if (on.loseReaction === true) out.loseReaction = hit && reachedFor("loseReaction");
+  if (on.speedDrop !== null && on.speedDrop !== undefined) out.speedDrop = hit && reachedFor("speedDrop") ? Math.max(0, Math.trunc(evaluateExpression(on.speedDrop, scope) ?? 0)) : 0;
   // Garrote's *cannot cast while that Bleeding lasts*, on the Bleeding it laid.
   if (on.noCasting === true) out.noCasting = hit && reached && condition !== null;
   // Stormstrike's Bane on the target's next attack (D-774), named only where carried.
   if (on.bane?.kind) {
     const banes = Math.max(0, Math.trunc(evaluateExpression(on.bane.banes ?? 1, scope) ?? 0));
-    out.bane = hit && reached && banes > 0 ? { kind: on.bane.kind, banes } : null;
+    out.bane = hit && reachedFor("bane") && banes > 0 ? { kind: on.bane.kind, banes } : null;
+  }
+  // **A SECOND CONDITION THE HIT LAYS, ON ITS OWN SPAN** (04's Shadow Strike: *the target
+  // gains Bleeding equal to your rank and is Slowed until the start of your next turn*;
+  // the Legacy branches' phase B6): `onHit.also`, each `{condition, value, until}`, named
+  // only where a rider carries one. Its value reads as the first condition's does - a
+  // number at nothing lays nothing - and its span is its own, never the first one's.
+  if (Array.isArray(on.also) && on.also.length) {
+    out.also = !(hit && reachedFor("also")) ? [] : on.also
+      .filter(a => a && typeof a.condition === "string" && /^[a-z]+$/.test(a.condition))
+      .map(a => {
+        const until = RIDER_UNTIL.includes(a.until) ? a.until : null;
+        if (a.value === null || a.value === undefined) return { id: a.condition, value: null, until };
+        const n = Math.trunc(evaluateExpression(a.value, scope) ?? 0);
+        return n > 0 ? { id: a.condition, value: n, until } : null;
+      })
+      .filter(Boolean);
   }
   return out;
 }
@@ -339,8 +421,8 @@ export function riderPierce(paid = [], { tier = 1 } = {}) {
  * @param {object} line  a `ridersFor` line
  * @param {{hit?: boolean, spent?: number, tier?: number, sl?: number}} [o]
  */
-export function outcomeOfLine(line, { hit = false, spent = 0, tier = 1, sl = 0 } = {}) {
-  return riderOutcome(line?.row ?? line, { hit, spent, rank: line?.rank ?? 1, tier, sl });
+export function outcomeOfLine(line, { hit = false, spent = 0, tier = 1, sl = 0, abilities = {} } = {}) {
+  return riderOutcome(line?.row ?? line, { hit, spent, rank: line?.rank ?? 1, tier, sl, abilities });
 }
 
 /**
@@ -355,7 +437,27 @@ export function riderConditions(outcome) {
   const out = [];
   if (outcome?.condition?.id) out.push({ id: outcome.condition.id, value: outcome.condition.value ?? null });
   if (outcome?.prone === true && !out.some(c => c.id === "prone")) out.push({ id: "prone", value: null });
+  // The second condition a hit lays (Shadow Strike's Slowed; phase B6), last, once
+  // each, marked `also` with its own span - which the landing door lays it under.
+  for (const a of Array.isArray(outcome?.also) ? outcome.also : []) {
+    if (a?.id && !out.some(c => c.id === a.id)) out.push({ id: a.id, value: a.value ?? null, until: a.until ?? null, also: true });
+  }
   return out;
+}
+
+/**
+ * **THE SPAN ONE LANDED CONDITION TAKES** (phase B6's `onHit.also`): the rider's own
+ * span for its first condition and Prone - the old rule, unchanged - and an `also`
+ * condition's own, `strikerTurnStart` the striker's next turn's start, or none.
+ *
+ * @param {{also?: boolean, until?: string|null}} condition  `riderConditions`' row
+ * @param {object|null} riderSpan  the span the rider's `until` gave its first condition
+ * @param {object|null} strikerTurnSpan  the striker's next turn's span, as the door reads it
+ * @returns {object|null}
+ */
+export function riderConditionSpan(condition, riderSpan = null, strikerTurnSpan = null) {
+  if (condition?.also !== true) return riderSpan;
+  return condition.until === "strikerTurnStart" ? strikerTurnSpan : null;
 }
 
 /**
@@ -401,17 +503,22 @@ export function riderWritesOnTarget(line, { tier = 1 } = {}) {
  *   from, so what it does is read off the row and never off the line
  *   (`outcomeOfLine`)
  */
-export function ridersFor(talents = [], { pools = [], form = false, weapon = null, shield = false, opening = null, usedThisRound = [], primed = [], activeDiscounts = [], tier = 1, rowOf = talentEffect } = {}) {
+export function ridersFor(talents = [], { pools = [], form = false, weapon = null, shield = false, opening = null, usedThisRound = [], primed = [], activeDiscounts = [], tier = 1, facts = null, abilities = {}, rowOf = talentEffect } = {}) {
   const rows = takenRiders(talents, rowOf);
   const discounts = rows
     .filter(r => r.rider.discount && activeDiscounts.includes(r.talent.identifier))
     .map(r => r.rider.discount);
+  const frees = freeRiderCosts(talents, facts, rowOf);
   const family = weaponFamily(weapon);
   const out = [];
   for (const { talent, rider, rank } of rows) {
     if (!rider.cost) continue;
     if (rider.form === true && form !== true) continue;
-    if (rider.weapon && family && rider.weapon !== family) continue;
+    // **AS PART OF AN ATTACK WITH A THROWN WEAPON** (04's Storm Bolt; B1): the blow's
+    // own way is `thrown`; a melee or a ranged gate reads the family as before.
+    if (rider.weapon === "thrown") {
+      if (weapon !== "thrown") continue;
+    } else if (rider.weapon && family && rider.weapon !== family) continue;
     // **A BLOW STRUCK WITH A SHIELD NEEDS ONE** (Shield Slam, D-772): with none
     // held - or one melded into a shape - the line can never hold, and is not
     // drawn (D-711 phase 2's rule for a line that can never hold).
@@ -423,7 +530,10 @@ export function ridersFor(talents = [], { pools = [], form = false, weapon = nul
     if (rider.needs === "opening" && opening === false) continue;
     const pool = (pools ?? []).find(p => p?.name === rider.cost.pool) ?? null;
     const all = rider.cost.amount === "all";
-    const cost = all ? null : discountedCost(rider.cost.amount, rider.cost.pool, discounts);
+    // **FREE AGAINST THIS TARGET** (Cursed Prey at rank 2; B1): a talent's
+    // `riderCost` naming this rider, its gate held - *all* is never made free.
+    const freeBy = !all ? (frees.get(talent.identifier) ?? null) : null;
+    const cost = all ? null : (freeBy ? 0 : discountedCost(rider.cost.amount, rider.cost.pool, discounts));
     const value = Math.max(0, Math.trunc(Number(pool?.value) || 0));
     const spend = all ? value : cost;
     const params = { name: talent.name, pool: rider.cost.pool, cost: cost ?? value, value };
@@ -454,14 +564,90 @@ export function ridersFor(talents = [], { pools = [], form = false, weapon = nul
       onHit: onHitAt(rider, rank),
       // What it would do on a hit that reached every SL a clause asks for, so
       // the line can say *at SL 2, Stunned* rather than nothing.
-      does: riderOutcome(rider, { hit: true, spent: spend ?? 0, rank, tier, sl: 6 }),
+      does: riderOutcome(rider, { hit: true, spent: spend ?? 0, rank, tier, sl: 6, abilities }),
       available: reason === null,
       primed: Boolean(pool) && isPrimed,
       reason,
-      row: rider
+      row: rider,
+      // **B1's KEYS, NAMED ONLY WHERE CARRIED**: the shot spent or not (Black Arrow),
+      // the throw the rider makes possible (Storm Bolt), and whose talent made it free.
+      ...(rider.ammo === false ? { ammo: false } : {}),
+      ...(rider.throwAs ? { throwAs: { ...rider.throwAs, identifier: talent.identifier } } : {}),
+      ...(freeBy ? { freeBy } : {})
     });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name) || a.identifier.localeCompare(b.identifier));
+}
+
+/** The kinds a `riderCost` row frees. */
+export const RIDER_COSTS = Object.freeze(["free"]);
+
+/**
+ * **WHICH RIDERS A TALENT MAKES FREE AGAINST THIS TARGET** (04's Cursed Prey at rank
+ * 2: *your Jinx costs no Mana against it* - *a creature suffering a condition that
+ * you or one of your totems laid*; the Legacy branches' door 17): a taken row's
+ * `riderCost {riders, free, when, minRank}`, at its rank, its gate held against the
+ * facts the door measured (`talent-gates.mjs#gateHolds`; never where it could not
+ * tell). A map of the rider's identifier to the talent's name.
+ *
+ * @param {Array} talents
+ * @param {object|null} facts  `{target, wield, ...}`, or null where none was measured
+ * @param {Function} [rowOf]
+ * @returns {Map<string, string>}
+ */
+export function freeRiderCosts(talents = [], facts = null, rowOf = talentEffect) {
+  const out = new Map();
+  if (!facts) return out;
+  for (const t of talents ?? []) {
+    const rank = Math.trunc(Number(t?.taken) || 0);
+    if (rank < 1) continue;
+    const row = rowOf(t.className, t.identifier, t.race ?? null)?.riderCost ?? null;
+    if (!row || row.free !== true || rank < (Number(row.minRank) || 1)) continue;
+    if (row.when && gateHolds(row.when, facts) !== true) continue;
+    for (const id of row.riders ?? []) if (typeof id === "string" && id && !out.has(id)) out.set(id, t.name);
+  }
+  return out;
+}
+
+/**
+ * **THE THROW A TICKED RIDER MAKES POSSIBLE** (04's Storm Bolt: *For this attack a
+ * weapon of the hammer or mace type counts as Thrown (20 ft)*; B1): the `throwAs`
+ * of the first rider line that carries one and is AVAILABLE, so the attack door
+ * offers the throw only while the rider could be paid - `rollTest` then refuses
+ * the throw unless that line is ticked.
+ *
+ * @param {Array<object>} lines  `ridersFor`'s
+ * @returns {{identifier: string, types: string[], feet: number, ability: string|null}|null}
+ */
+export function throwAsOffer(lines = []) {
+  const line = (lines ?? []).find(l => l?.throwAs && l.available === true) ?? null;
+  return line ? { ...line.throwAs } : null;
+}
+
+/**
+ * **WHETHER A THROW IS REFUSED FOR WANT OF ITS RIDER** (Storm Bolt's *For this
+ * attack*): a blow struck by a throw `throwAsWeapon` made, whose rider is not among
+ * the ones this attack pays or primed. The talent's name for the words, or null.
+ *
+ * @param {{throwAs?: string|null}|null} strike  the variant's own record of the throw
+ * @param {string[]} paying  the rider identifiers this attack pays or primed
+ * @param {Array<object>} lines  `ridersFor`'s, for the name
+ * @returns {string|null}
+ */
+export function throwRefusedFor(strike, paying = [], lines = []) {
+  const id = strike?.throwAs ?? null;
+  if (!id || (paying ?? []).includes(id)) return null;
+  return (lines ?? []).find(l => l?.identifier === id)?.name ?? id;
+}
+
+/**
+ * **WHETHER THIS ATTACK SPENDS ITS SHOT** (04's Black Arrow: *The attack spends no
+ * ammunition*; B1): false where a rider it pays or primed says `ammo: false`.
+ *
+ * @param {Array<{line?: object}>} paid
+ */
+export function spendsShot(paid = []) {
+  return !(paid ?? []).some(p => p?.line?.ammo === false);
 }
 
 /**
@@ -616,6 +802,30 @@ export function roundOnce(round, number, key) {
   if (typeof key !== "string" || !key) return { round: { ...(same ? round : {}), number, once: held.sort() }, added: false, changed: !same };
   if (held.includes(key)) return { round: { ...round, once: held.sort() }, added: false, changed: false };
   return { round: { ...(same ? round : {}), number, once: [...held, key].sort() }, added: true, changed: true };
+}
+
+/**
+ * **THE ONCE-A-ROUND MARKS A WITHDRAWN HIT SPENT, GIVEN BACK** (door 13; the lead's
+ * *"Yes, take it back"* and O-171's *"No."* - a hit that gains nothing spends no once):
+ * the further gains' marks the hit took (`once`) come off the round's record, and a
+ * Fast weapon's point the hit had (`fast`) is had no longer, so a later hit this round
+ * may take them. Only the record of the round the hit was made in: a record of a later
+ * round is that round's, and nothing in it is this hit's. Written by the queued
+ * combatant door `releaseRoundMarks` (D-761).
+ *
+ * @param {{number?: number, once?: string[], fast?: boolean}|null} round  the combatant's `round` flag
+ * @param {number} number  the round the hit was made in
+ * @param {{once?: string[], fast?: boolean}} [o]
+ * @returns {{round: object|null, changed: boolean}}
+ */
+export function roundRelease(round, number, { once = [], fast = false } = {}) {
+  if (!round || round.number !== number) return { round: round ?? null, changed: false };
+  const freed = new Set((once ?? []).filter(k => typeof k === "string" && k));
+  const held = (round.once ?? []).filter(k => typeof k === "string" && k);
+  const kept = held.filter(k => !freed.has(k)).sort();
+  const unFast = fast === true && round.fast === true;
+  if (kept.length === held.length && !unFast) return { round, changed: false };
+  return { round: { ...round, once: kept, ...(unFast ? { fast: false } : {}) }, changed: true };
 }
 
 /**

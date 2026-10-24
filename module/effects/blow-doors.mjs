@@ -36,14 +36,27 @@
 import { AZEROTH } from "../config.mjs";
 import { creaturesWithin } from "../canvas/engaged.mjs";
 import {
-  ASKED_HOLDS, FLOOR_FLAG, divideEvenly, floorOf, heldAt, holdJudgement, moveJudgement, movedAmount, movedParts, wouldDrop
+  ASKED_HOLDS, FLOOR_FLAG, divideEvenly, floorOf, floorsHolding, floorsOf, heldAt, holdJudgement, moveJudgement, movedAmount, movedParts, wouldDrop
 } from "../rules/blow-doors.mjs";
 import {
   RIGHTEOUS, SPIRIT_LINK_FLAG, aegisHealFor, guardianFor, holdRowsFor, righteousReach, spiritLinkFor
 } from "../rules/class-talents.mjs";
+// 04's Shared Burden: a SHARE of the blow moved, the rest kept, the share met by the
+// holder's own Armor Points and Ward (the Legacy branches' B6).
+import { burdenMet, keptAmount } from "../rules/blow-doors.mjs";
+import { wardBySchool } from "../rules/ward.mjs";
+import { schoolArmorBySchool } from "../rules/auras.mjs";
+import { burdenFor } from "../rules/class-talents.mjs";
 import { gmAbsentFor } from "../rules/gm-writes.mjs";
 import { wardsOn } from "./wards.mjs";
 import { bondOf } from "../documents/bound.mjs";
+// No Reaction against a creature Wind Walk or Bladestorm holds (the Legacy branches' door 14).
+import { unansweredBy } from "../rules/reactions.mjs";
+
+/** Whether no creature may take a Reaction against this one now (door 14). */
+function unanswered(actor) {
+  return unansweredBy((actor?.effects ?? []).filter(e => e.active !== false).map(e => e.flags?.["azeroth-rpg"] ?? {})).length > 0;
+}
 
 /** The query a holder is asked through, on whoever answers for it. */
 export const BLOW_ASK_QUERY = "azeroth-rpg.blowAsk";
@@ -51,12 +64,19 @@ export const BLOW_ASK_QUERY = "azeroth-rpg.blowAsk";
 /** The query a share of a divided blow lands through, on the active GM. */
 export const BLOW_SHARE_QUERY = "azeroth-rpg.blowShare";
 
-/** How long the asker waits, and how long the dialog stays open: the second is shorter, so a late answer is never a yes. */
-const ASK_MS = 30000;
-const ANSWER_MS = 25000;
+/**
+ * How long the asker waits, and how long the dialog stays open: the second is shorter,
+ * so a late answer is never a yes. Exported for the Death-Step hold's own ask (the
+ * Legacy branches' door 11, `effects/death-holds.mjs`), which keeps the same pattern.
+ */
+export const ASK_MS = 30000;
+export const ANSWER_MS = 25000;
 
-/** The feet the widest move reaches: Guardian's 10 at rank 2, Guardian of the Weak's 20. */
-const MOVE_SEARCH_FEET = 20;
+/**
+ * The feet the widest move reaches: Guardian's 10 at rank 2, Guardian of the Weak's 20,
+ * and Shared Burden's 30 (the Legacy branches' B6). Each move judges its own feet.
+ */
+const MOVE_SEARCH_FEET = 30;
 
 /** Every distance on a scene: a hold that asks no distance measures everything there. */
 const ANYWHERE = 1e6;
@@ -121,13 +141,13 @@ async function ask(holder, payload) {
 
 /**
  * The yes or no, on the answering client: a dialog that closes itself as no
- * before the asker stops waiting.
+ * before the asker stops waiting. Exported for the Death-Step hold (door 11).
  *
  * @param {Actor} holder
  * @param {{title: string, text: string}} o
  * @returns {Promise<boolean>}
  */
-async function confirmHere(holder, { title, text }) {
+export async function confirmHere(holder, { title, text }) {
   const { DialogV2 } = foundry.applications.api;
   let dialog = null;
   const answer = DialogV2.confirm({
@@ -163,6 +183,9 @@ function movesOf(holder) {
   const talents = holder.takenTalents?.() ?? [];
   const guardian = guardianFor(talents);
   if (guardian) out.push(guardian);
+  // 04's Shared Burden (the Legacy branches' B6): a share of the blow, half or all.
+  const burden = burdenFor(talents);
+  if (burden) out.push(burden);
   const feature = (holder.items ?? []).find(i => i.type === "feature" && i.name === RIGHTEOUS.feature) ?? null;
   if (feature) {
     out.push({
@@ -184,6 +207,10 @@ function movesOf(holder) {
  */
 export async function redirectBlow({ target, amount = 0, type = null, attack = false, spell = false, messageId = null, by = null, location = "body", parts = null } = {}) {
   if (!target || !(amount > 0) || !messageId) return { moved: false };
+  // **A BLOW NO REACTION MAY ANSWER** (04's Wind Walk and Bladestorm: *No creature
+  // may take a Reaction against you*; the Legacy branches' door 14): the move is a
+  // Reaction against the striker, so a striker it holds is never asked about.
+  if (unanswered(by)) return { moved: false };
   const origin = tokenOf(target);
   if (!origin) return { moved: false };
   const near = creaturesWithin(target, MOVE_SEARCH_FEET, { who: "ally", except: [origin.id] });
@@ -195,14 +222,18 @@ export async function redirectBlow({ target, amount = 0, type = null, attack = f
         poolValue: poolValue(holder, row.cost?.pool), reactionLeft: reactionLeft(holder), holderUp: standing(holder), fromCard: true
       });
       if (!judged.ok) continue;
-      const moved = movedAmount({ kind: row.kind, amount, type, ward: RIGHTEOUS.ward, schools: Object.keys(AZEROTH.schools) });
+      const moved = movedAmount({ kind: row.kind, amount, type, ward: RIGHTEOUS.ward, schools: Object.keys(AZEROTH.schools), share: row.share ?? "half" });
       const answer = await ask(holder, {
         act: "move", kind: row.kind, holderUuid: holder.uuid, targetUuid: target.uuid, amount, moved, type,
         attack: attack === true, spell: spell === true, messageId, byUuid: by?.uuid ?? null, location, feet, parts
       });
       if (answer?.moved) {
-        ui.notifications?.info(game.i18n.format("AZEROTH.BlowDoor.Moved", { holder: holder.name, name: target.name, talent: row.name, n: answer.amount ?? moved }));
-        return { moved: true, to: holder, amount: answer.amount ?? moved, name: row.name };
+        const took = answer.amount ?? moved;
+        ui.notifications?.info(game.i18n.format("AZEROTH.BlowDoor.Moved", { holder: holder.name, name: target.name, talent: row.name, n: took }));
+        // **WHAT STAYS WHERE IT WAS AIMED** (04's Shared Burden: *Half the damage ... is
+        // dealt to you instead*; the Legacy branches' B6): a share moved leaves the rest to
+        // the creature struck, and Guardian's whole blow none (`keptAmount`).
+        return { moved: true, to: holder, amount: took, name: row.name, kept: keptAmount({ kind: row.kind, amount, moved: took }) };
       }
     }
   }
@@ -217,15 +248,21 @@ export async function redirectBlow({ target, amount = 0, type = null, attack = f
 async function moveHere({ holder, target, kind, amount, moved, type, attack, spell, messageId, by, location, feet, parts, remote = false }) {
   const row = movesOf(holder).find(r => r.kind === kind) ?? null;
   if (!row) return { moved: false, reason: "unknown" };
+  // Judged again on the holder's client (door 14): the striker may have taken Wind
+  // Walk since the asker asked.
+  if (unanswered(by)) return { moved: false, reason: "unanswered" };
   const judge = () => moveJudgement(row, {
     attack, spell, amount, self: holder.uuid === target.uuid, friendly: true, distance: feet,
     poolValue: poolValue(holder, row.cost?.pool), reactionLeft: reactionLeft(holder), holderUp: standing(holder), fromCard: Boolean(messageId)
   });
   const first = judge();
   if (!first.ok) return { moved: false, reason: first.reason };
+  // **A SHARE IS THE HOLDER'S OWN ROW'S** (04's Shared Burden; the Legacy branches' B6):
+  // worked out again here off the holder's rank, never taken off the request.
+  if (kind === "burden") moved = movedAmount({ kind, amount, share: row.share ?? "half" });
   const yes = await confirmHere(holder, {
     title: row.name,
-    text: game.i18n.format(kind === "righteous" ? "AZEROTH.BlowDoor.AskRighteous" : "AZEROTH.BlowDoor.AskGuardian", {
+    text: game.i18n.format(kind === "righteous" ? "AZEROTH.BlowDoor.AskRighteous" : (kind === "burden" ? "AZEROTH.BlowDoor.AskBurden" : "AZEROTH.BlowDoor.AskGuardian"), {
       holder: holder.name, name: target.name, n: moved, cost: row.cost?.amount ?? 0,
       pool: game.i18n.localize(AZEROTH.poolTypes[row.cost?.pool] ?? row.cost?.pool ?? ""), talent: row.name
     })
@@ -246,7 +283,21 @@ async function moveHere({ holder, target, kind, amount, moved, type, attack, spe
   // temporary Health and its own holds - and never a second move or a division.
   // Its second amounts go with it, but not what the struck creature's Ward took
   // off them: the holder's Ward never met this blow (`movedParts`).
-  const landing = holder.applyDamage(moved, { struck: true, attack, spell, location, type, messageId, by, moved: true, parts: movedParts(parts) });
+  // **A SHARE OF THE BLOW** (04's Shared Burden; the Legacy branches' B6): the half
+  // carries none of its second amounts, which stay with the rest on the creature struck,
+  // and the share is met by the HOLDER's own Armor Points and Ward (the plan's *As read*:
+  // *so your own Armor Points and Ward reduce it*) through `rules/blow-doors.mjs
+  // #burdenMet`, what that Ward took handed to the holder's door with it.
+  const met = kind === "burden" ? burdenMet({
+    share: moved, type, location, parts: moved < amount ? null : parts,
+    holder: {
+      apByLocation: holder.system?.ap ?? {}, wardBySchool: wardBySchool(holder.system?.ward), schoolArmorBySchool: schoolArmorBySchool(holder.system?.schoolArmor),
+      immune: holder.system?.immune ?? [], vulnerable: holder.system?.vulnerable ?? []
+    }
+  }) : null;
+  const landing = met
+    ? holder.applyDamage(met.damage, { struck: true, attack, spell, location, type, messageId, by, moved: true, wardTook: met.wardTook, parts: met.parts })
+    : holder.applyDamage(moved, { struck: true, attack, spell, location, type, messageId, by, moved: true, parts: movedParts(parts) });
   // **ANSWERED ONCE IT IS PAID, WHERE ANOTHER CLIENT ASKED** (the review of D-777):
   // the asker stops waiting at ASK_MS and then lands the blow where it was aimed,
   // and the holder's own door can outlast that - a hold it asks in turn is a
@@ -499,13 +550,29 @@ export async function blowAskHandler(payload = {}, { user = null } = {}) {
  * @returns {Promise<{amount: number, held: {kind: "aegis", name: string}|null}>}
  */
 export async function aegisFloor({ target, before = 0, amount = 0 } = {}) {
-  const effect = (target?.effects ?? []).find(e => e.active !== false && e.flags?.["azeroth-rpg"]?.[FLOOR_FLAG]) ?? null;
-  if (!effect) return { amount, held: null };
-  const floor = floorOf([effect.flags["azeroth-rpg"]]);
-  const saved = heldAt({ before, amount, stay: floor.stay });
+  // **EVERY FLOOR STANDING HOLDS IT, AND EACH IS MARKED** (the B3 review): the first
+  // floor alone was read and marked, so 04's Big Bad Voodoo's aura floor laid first left
+  // a later Aegis of the Light unmarked - no Critical Injury refusal, no heal at its end.
+  const effects = (target?.effects ?? []).filter(e => e.active !== false && e.flags?.["azeroth-rpg"]?.[FLOOR_FLAG]);
+  if (!effects.length) return { amount, held: null };
+  const floors = floorsOf(effects.map(e => e.flags["azeroth-rpg"]));
+  const saved = floorsHolding({ before, amount, floors });
   if (!saved.saved) return { amount, held: null };
-  if (!floor.held) await effect.update({ [`flags.azeroth-rpg.${FLOOR_FLAG}.held`]: true });
-  return { amount: saved.amount, held: { kind: "aegis", name: floor.name } };
+  for (const f of floors) {
+    const effect = effects[f.index];
+    if (!saved.held.includes(f.index) || !effect) continue;
+    // **EVERY CATCH IS WRITTEN ON THE FLOOR** (the Legacy branches' door 2): its count
+    // rises with each blow it holds, so every client sees the catch as an update of the
+    // effect and plays the floor's `hold` cue (`module/animation/records.mjs
+    // #effectUpdateRecords`). Only the first catch was written before, as `held`.
+    const caught = (Math.trunc(Number(effect.flags?.["azeroth-rpg"]?.[FLOOR_FLAG]?.caught)) || 0) + 1;
+    await effect.update({
+      ...(f.held ? {} : { [`flags.azeroth-rpg.${FLOOR_FLAG}.held`]: true }),
+      [`flags.azeroth-rpg.${FLOOR_FLAG}.caught`]: caught
+    });
+  }
+  const names = [...new Set(floors.map(f => f.name).filter(Boolean))];
+  return { amount: saved.amount, held: { kind: "aegis", name: names.join(", ") } };
 }
 
 /**
@@ -520,6 +587,9 @@ export function registerBlowDoorHooks() {
     const floor = floorOf([effect?.flags?.["azeroth-rpg"] ?? {}]);
     const actor = effect?.parent;
     if (!floor?.held || actor?.documentName !== "Actor") return;
+    // An aura's floor (04's Big Bad Voodoo; the Legacy branches' door 12) is no Aegis:
+    // its end restores nothing.
+    if (effect?.flags?.["azeroth-rpg"]?.aura) return;
     const caster = actorAt(floor.by);
     const heal = caster ? aegisHealFor(caster.takenTalents?.() ?? [], { tier: caster.system?.tier ?? 1 }) : null;
     if (!heal) return;

@@ -21,7 +21,7 @@
  * Every document a test makes is deleted in `after`.
  */
 
-import { cleanup, drainAreaWork, give, giveTurn, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings } from "./fixtures.mjs";
+import { cleanup, drainAreaWork, give, giveTurn, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings, tokenDrawn, tokenData } from "./fixtures.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 import { reactWithDialog } from "../applications/actions.mjs";
@@ -77,12 +77,12 @@ async function sceneWith(placements) {
   const data = [];
   for (const { actor, x, y, side = "friendly" } of placements) {
     await actor.update({ "prototypeToken.actorLink": true });
-    data.push((await actor.getTokenDocument({
+    data.push((await tokenData(actor, {
       x, y, disposition: CONST.TOKEN_DISPOSITIONS[side === "friendly" ? "FRIENDLY" : "HOSTILE"]
-    })).toObject());
+    })));
   }
   await scene.createEmbeddedDocuments("Token", data);
-  for (let i = 0; i < 60 && !placements.every(p => p.actor.getActiveTokens(true).length); i++) {
+  for (let i = 0; i < 60 && !placements.every(p => tokenDrawn(p.actor.getActiveTokens(true)[0])); i++) {
     await new Promise(r => setTimeout(r, 100));
   }
   await settle();
@@ -500,6 +500,9 @@ export function paladinTalentsBatch(context) {
       this.timeout(300000);
       const paladin = await paladinWith("ZZ PT Duty", { ranks: { "Sacred Duty": 2 } });
       const ally = await makeCharacter({ name: "ZZ PT Duty Ally", classes: [["Warrior", 3]] });
+      // Out of a fight a friend is a fellow member of the Party (D-755), never a
+      // token's disposition (B8b).
+      for (const a of [paladin, ally]) await a.setParty(true);
       await sceneWith([{ actor: paladin, x: 1000, y: 1000 }, { actor: ally, x: 2000, y: 1000 }]);
       await drainAreaWork();
       const base = paladin.system.ap?.body ?? 0;

@@ -18,14 +18,19 @@
 
 import { AZEROTH } from "../config.mjs";
 import { hasAutomation, isPressable } from "../rules/ability-automation.mjs";
+// A construct's Cutting Gear (the lead's ruling, 2026-10-22): pressed by its name.
+import { holdsCuttingGear } from "../rules/escapes.mjs";
 import { enrich, enrichRows } from "../helpers/enrich.mjs";
-import { bindPlateKeys, bindPoolInputs, bindScoreInputs, castNamedSpell, maneuversContext, stepPool, useAbilityWithDialog } from "./actions.mjs";
+import { bindPlateKeys, bindPoolInputs, bindScoreInputs, bindWrappingName, castNamedSpell, maneuversContext, stepPool, useAbilityWithDialog } from "./actions.mjs";
 import { targetSnapshots } from "./roll-dialog.mjs";
 import { attackWithDialog, blankItemMenu, browseItems, effectAction, effectsContext, npcAttackWithDialog, resilienceWithDialog, rollAbility, rollWithDialog, useGearWithDialog } from "./actions.mjs";
 // The Spells tab (D-705): the character's own row shape over 14's block.
 import { castWithDialog, detailFields, detailProse } from "./actions.mjs";
 import { showsCreatureSpells } from "../rules/casting.mjs";
-import { adopt, bondOf, featureForKind, release, worldActorOf } from "../documents/bound.mjs";
+import { adopt, bondOf, featureForKind, release, releaseThrallBond, worldActorOf } from "../documents/bound.mjs";
+// A thrall's bond is its Use's alone, and its release the token's (the lead's ruling of 2026-10-22).
+import { BINDABLE_KINDS } from "../rules/bound.mjs";
+import { isThrallBond } from "../rules/legacy-uses.mjs";
 // A totem bound off the table, planted from its own banner (02 §7, D-708).
 import { plantTotem } from "../documents/totems.mjs";
 import { bareName, totemAura } from "../rules/totems.mjs";
@@ -391,8 +396,9 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
     // preparation, so a Use button on its row would do nothing at all.
     const usable = rows => rows.map(row => ({
       ...row,
-      usable: this.isEditable && isPressable(row.automation),
-      kindLabel: hasAutomation(row.automation) ? AZEROTH.abilityKinds[row.automation.kind] : null
+      // Cutting Gear is read by its NAME (the lead's ruling) and has a Use of its own.
+      usable: this.isEditable && (isPressable(row.automation) || holdsCuttingGear([row])),
+      kindLabel: hasAutomation(row.automation) ? AZEROTH.abilityKinds[row.automation.kind] : (holdsCuttingGear([row]) ? "AZEROTH.CuttingGear.Title" : null)
     }));
     context.creatureAbilities = usable(await enrichRows(system.creatureAbilities, { relativeTo: actor }));
     context.bossActions = usable(await enrichRows(system.bossActions, { relativeTo: actor }));
@@ -477,6 +483,8 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
       for (const stale of this.element.querySelectorAll('[data-application-part="spells"], section[data-tab="spells"]')) stale.remove();
     }
     bindPlateKeys(this.element);
+    // The banner's name wraps under itself (the lead: *"Wrap to two lines"*).
+    bindWrappingName(this.element);
     bindScoreInputs(this);
     // The pool's value typed straight in (the lead, 2026-09-13): nameless, so
     // `change` is bound here rather than on a `data-action`.
@@ -888,7 +896,7 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
       <label>${game.i18n.localize("AZEROTH.Bound.Character")}
         <select name="owner">${characters.map((a, i) => option(a.uuid, a.name, i === 0)).join("")}</select></label>
       <label>${game.i18n.localize("AZEROTH.Bound.As")}
-        <select name="kind">${Object.entries(AZEROTH.boundKinds).map(([k, l]) => option(k, game.i18n.localize(l), k === guess)).join("")}</select></label>
+        <select name="kind">${Object.entries(AZEROTH.boundKinds).filter(([k]) => BINDABLE_KINDS.includes(k)).map(([k, l]) => option(k, game.i18n.localize(l), k === guess)).join("")}</select></label>
     </div>`;
     const { DialogV2 } = foundry.applications.api;
     const choice = await DialogV2.wait({
@@ -972,6 +980,9 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
   /** Release the bond (D-643): the owner or the GM, from the banner. */
   static async #onRelease() {
     const bond = bondOf(this.actor);
+    // **A THRALL'S IS ITS TOKEN'S** (the lead, 2026-10-22: *"... by GM who can then remove
+    // it"*): released on this sheet's own actor, its side and its Charmed with it.
+    if (isThrallBond(bond)) return releaseThrallBond(this.actor);
     const owner = bond?.ownerUuid ? await fromUuid(bond.ownerUuid) : null;
     if (!owner) return worldActorOf(this.actor).unsetFlag("azeroth-rpg", "bond");
     return release(owner, worldActorOf(this.actor).uuid);

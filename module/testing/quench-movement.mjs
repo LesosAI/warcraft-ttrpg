@@ -69,7 +69,7 @@
  * held-back latency, since a charge that never comes has no event to wait for.
  */
 
-import { cleanup, made, makeCharacter, settle, untilHook, warnings } from "./fixtures.mjs";
+import { cleanup, made, makeCharacter, settle, untilHook, warnings, tokenDrawn, tokenData } from "./fixtures.mjs";
 import { MOVEMENT_LIMIT_SETTING } from "../settings.mjs";
 // Disengage's own door, as the Combat tab presses it (05, D-694).
 import { disengage } from "../applications/combat-actions.mjs";
@@ -157,10 +157,10 @@ async function place(scene, placements) {
   const data = [];
   for (const { actor, x, y } of placements) {
     await actor.update({ "prototypeToken.actorLink": true });
-    data.push((await actor.getTokenDocument({ x, y, disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY })).toObject());
+    data.push((await tokenData(actor, { x, y, disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY })));
   }
   const tokens = await scene.createEmbeddedDocuments("Token", data);
-  await until(() => placements.every(p => p.actor.getActiveTokens(true).length), "every token drawn");
+  await until(() => placements.every(p => tokenDrawn(p.actor.getActiveTokens(true)[0])), "every token drawn, its texture loaded and its arrows made");
   await settle();
   return tokens;
 }
@@ -836,7 +836,7 @@ export function movementBatch(context) {
       const walker = await makeCharacter({ name: "ZZ Undrawn Walker", classes: [["Warrior", 3]] });
       await walker.update({ "prototypeToken.actorLink": true });
       const start = { x: 455, y: 523 };
-      const data = (await walker.getTokenDocument({ ...start, disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY })).toObject();
+      const data = (await tokenData(walker, { ...start, disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY }));
       const tokens = await ten.createEmbeddedDocuments("Token", [data]);
       const token = ten.tokens.find(t => t.actorId === walker.id);
       let combat = null;

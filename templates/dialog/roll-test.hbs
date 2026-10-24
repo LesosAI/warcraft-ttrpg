@@ -47,7 +47,8 @@
       {{localize "AZEROTH.Shape.FerocityForMana" mana=casting.mana}} <strong>{{casting.ferocity.cost}}</strong>
       <span class="azeroth-dialog-note">&middot; {{casting.ferocity.value}} / {{casting.ferocity.max}}</span>
       {{else}}
-      {{localize "AZEROTH.Card.Mana"}} <strong>{{casting.mana}}</strong>
+      {{!-- A talent's own pool says its own word (04's Shadowcraft's Focus, B1 door 8). --}}
+      {{#if casting.payLabel}}{{localize casting.payLabel}}{{else}}{{localize "AZEROTH.Card.Mana"}}{{/if}} <strong>{{casting.mana}}</strong>
       {{!-- The dot keeps "Mana 2" and "0 / 20" from reading as one number (the eye, D-619). --}}
       {{#if casting.pool}}<span class="azeroth-dialog-note">&middot; {{casting.pool.value}} / {{casting.pool.max}}</span>{{/if}}
       {{/if}}
@@ -149,14 +150,16 @@
     <span>{{#if finisher.free}}{{localize "AZEROTH.Dialog.FinisherFree" talent=finisher.free n=finisher.counts}}{{else}}{{localize "AZEROTH.Dialog.Finisher" n=finisher.value}}{{/if}}</span>
     <span class="azeroth-dialog-note">{{finisher.value}} / {{finisher.max}}</span>
   </label>
-  {{#if finisher.bleeding}}
-  {{!-- 04's Rupture (D-773): Bleeding in place of the Finisher's added damage.
+  {{#if (or finisher.bleeding finisher.shackle)}}
+  {{!-- 04's Rupture (D-773): Bleeding in place of the Finisher's added damage;
+        04's Shackle (the Legacy branches' door 26): Entangled a round a point.
         A <select> read by readForm on change, so no data-action. --}}
   <div class="azeroth-dialog-row azeroth-dialog-finisher-mode">
     <label for="azeroth-dialog-finisher-mode">{{localize "AZEROTH.Dialog.FinisherMode"}}</label>
     <select id="azeroth-dialog-finisher-mode" name="finisherMode">
       <option value="damage" selected>{{localize "AZEROTH.Dialog.FinisherDamage"}}</option>
-      <option value="bleeding">{{localize "AZEROTH.Dialog.FinisherBleeding" talent=finisher.bleeding.name}}</option>
+      {{#if finisher.bleeding}}<option value="bleeding">{{localize "AZEROTH.Dialog.FinisherBleeding" talent=finisher.bleeding.name}}</option>{{/if}}
+      {{#if finisher.shackle}}<option value="shackle">{{localize "AZEROTH.Dialog.FinisherShackle" talent=finisher.shackle.name}}</option>{{/if}}
     </select>
   </div>
   {{/if}}

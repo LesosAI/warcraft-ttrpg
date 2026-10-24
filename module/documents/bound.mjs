@@ -17,8 +17,12 @@
  */
 
 import { AZEROTH } from "../config.mjs";
-import { bindingFor, boundEffects, boundSignatureEffects, capacity, healthAfterMaxChange } from "../rules/bound.mjs";
+import { bindingFor, boundEffects, boundSignatureEffects, capacity, eligible, healthAfterMaxChange } from "../rules/bound.mjs";
+// Dark Minion's count, judged on the GM's client (the B2 review).
+import { raiseRefusal, raiseRowsFor } from "../rules/raise.mjs";
 import { prototypeTokenFor } from "../rules/bestiary.mjs";
+// A thrall's bond (04's Thrall of the Banshee; the lead's ruling of 2026-10-22).
+import { THRALL_FLAG, isThrallBond } from "../rules/legacy-uses.mjs";
 
 export const BIND_QUERY = "azeroth-rpg.bind";
 export const UNBIND_QUERY = "azeroth-rpg.unbind";
@@ -35,9 +39,67 @@ export function worldActorOf(actor) {
   return actor.isToken ? (game.actors.get(actor.id) ?? actor) : actor;
 }
 
-/** The bond a creature carries, or null - read off the world actor. */
+/**
+ * The bond a creature carries, or null - read off the world actor, and **a thrall's off
+ * its own token** (04's Thrall of the Banshee; the lead, 2026-10-22: *"Have the
+ * creature stat block for the token set to bound to the player by GM who can then
+ * remove it"*): a thrall is ONE creature, so its bond is written on the token's own
+ * actor - an unlinked token's delta - and read there where the world actor carries
+ * none. No other bond is ever written on a token.
+ */
 export function bondOf(actor) {
-  return worldActorOf(actor)?.getFlag?.("azeroth-rpg", FLAG) ?? null;
+  const world = worldActorOf(actor)?.getFlag?.("azeroth-rpg", FLAG) ?? null;
+  if (world) return world;
+  const own = actor?.isToken ? (actor.getFlag?.("azeroth-rpg", FLAG) ?? null) : null;
+  return isThrallBond(own) ? own : null;
+}
+
+/**
+ * **A THRALL'S BOND, WRITTEN** (the lead's ruling of 2026-10-22): `rules/legacy-uses.mjs
+ * #thrallBond`'s record on the token's own actor, on the client that may write it - the
+ * GM's (`effects/legacy-uses.mjs#bindThrall` runs there alone). No ownership, no folder,
+ * no prototype token: the bond is the stat block's mark, the tracker's side and
+ * Initiative, and the GM's release.
+ *
+ * @param {Actor} actor  the token's own actor
+ * @param {object} bond  `thrallBond`'s
+ */
+export async function writeThrallBond(actor, bond) {
+  if (!actor?.isOwner || !isThrallBond(bond)) return null;
+  await actor.update({ [`flags.azeroth-rpg.${FLAG}`]: bond });
+  return actor;
+}
+
+/**
+ * **A THRALL RELEASED** (the lead: *"... by GM who can then remove it"*; the Charmed's
+ * one minute): the token's side put back, the bond taken off, and - pressed from the
+ * banner - the thrall's Charmed ended with it, so the two never part. Idempotent: the
+ * Charmed's deletion runs this again and finds no bond.
+ *
+ * @param {Actor} actor  the token's own actor (or a linked thrall's world actor)
+ * @param {{endCharmed?: boolean}} [o]
+ * @returns {Promise<Actor|null>}
+ */
+export async function releaseThrallBond(actor, { endCharmed = true } = {}) {
+  const bond = actor?.getFlag?.("azeroth-rpg", FLAG) ?? null;
+  if (!isThrallBond(bond) || !actor.isOwner) return null;
+  const restore = bond.restore ?? {};
+  let token = null;
+  try {
+    token = restore.tokenUuid ? await fromUuid(restore.tokenUuid) : null;
+  } catch {
+    token = null;
+  }
+  if (token?.documentName === "Token" && Number.isInteger(restore.disposition) && token.disposition !== restore.disposition) {
+    await token.update({ disposition: restore.disposition });
+  }
+  await actor.unsetFlag("azeroth-rpg", FLAG);
+  if (endCharmed) {
+    const ids = (actor.effects ?? []).filter(e => e.flags?.["azeroth-rpg"]?.[THRALL_FLAG]).map(e => e.id);
+    if (ids.length) await actor.deleteEmbeddedDocuments("ActiveEffect", ids);
+  }
+  ui.notifications?.info(game.i18n.format("AZEROTH.Thrall.Released", { name: actor.name, owner: bond.ownerName ?? "" }));
+  return actor;
 }
 
 /** The names of what an owner holds of a kind, for a refusal or a note. */
@@ -59,9 +121,17 @@ export function boundCount(owner, kind) {
   return boundOf(owner, kind).filter(a => !bondOf(a)?.uncounted).length;
 }
 
-/** The owner's talents as the rule reads them. */
+/**
+ * The owner's talents as the rule reads them: by identifier for the rows keyed so
+ * (D-643's), and with the class, the people and the name so a row read by KIND
+ * finds them (the Legacy branches' door 6: a construct's capacity and its numbers,
+ * door 20's attack patch).
+ */
 function talentsOf(owner) {
-  return owner.items.filter(i => i.type === "talent").map(i => ({ identifier: i.system.identifier, taken: i.system.taken ?? 0 }));
+  return owner.items.filter(i => i.type === "talent").map(i => ({
+    identifier: i.system.identifier, taken: i.system.taken ?? 0,
+    className: i.system.className ?? "", race: i.system.race ?? null, name: i.name
+  }));
 }
 
 /**
@@ -113,7 +183,7 @@ function ownershipFor(owner) {
  * built by `rules/bound.mjs#totemBlock`). One actor stands for a multiple
  * summon, its tokens unlinked so each carries its own Health.
  */
-export async function createBoundActor({ owner, feature = null, entry = null, block = null, kind, until = null, uncounted = false, school = null, count = 1 }) {
+export async function createBoundActor({ owner, feature = null, entry = null, block = null, kind, until = null, uncounted = false, school = null, count = 1, sourceName = null, halfActions = null }) {
   const data = entry
     ? entry.toObject()
     : { name: block.name, type: "npc", img: block.img ?? "icons/svg/mystery-man.svg", system: block.system };
@@ -131,9 +201,15 @@ export async function createBoundActor({ owner, feature = null, entry = null, bl
         ...(data.flags?.["azeroth-rpg"] ?? {}),
         [FLAG]: {
           ownerUuid: owner.uuid, ownerName: owner.name, kind,
-          sourceId: feature?.id ?? null, sourceName: feature?.name ?? null,
+          // What made it: the feature, or - a creature no feature called, Dark
+          // Minion's risen dead (the Legacy branches' door 5) - the talent's name.
+          sourceId: feature?.id ?? null, sourceName: feature?.name ?? (typeof sourceName === "string" && sourceName ? sourceName : null),
           entryUuid: entry?.uuid ?? null, entryName: data.name,
-          until, uncounted, school, count, since: Date.now()
+          until, uncounted, school, count, since: Date.now(),
+          // The Half-Actions each takes a turn of its own, where fewer than 05's two
+          // (04's Pocket Factory, door 6: *each takes one Half-Action a turn of its
+          // own*); `AzerothCombatant#_turnFacts` reads it.
+          ...(Number.isInteger(halfActions) && halfActions >= 0 && halfActions < 2 ? { halfActions } : {})
         }
       }
     }
@@ -150,7 +226,7 @@ export async function createBoundActor({ owner, feature = null, entry = null, bl
  * character, the entry must be 14's, and the kind must have room. Throws
  * with the reason, which travels back to the caller as the refusal.
  */
-export async function bindQueryHandler({ ownerUuid, featureId = null, entryUuid = null, block = null, kind, until = null, uncounted = false, school = null, count = 1 } = {}, { user = null } = {}) {
+export async function bindQueryHandler({ ownerUuid, featureId = null, entryUuid = null, block = null, kind, until = null, uncounted = false, school = null, count = 1, sourceName = null, halfActions = null } = {}, { user = null } = {}) {
   const owner = await fromUuid(ownerUuid);
   if (!owner || owner.documentName !== "Actor") throw new Error(game.i18n.localize("AZEROTH.Bound.NoOwner"));
   if (user && !owner.testUserPermission(user, "OWNER")) throw new Error(game.i18n.localize("AZEROTH.Bound.NotOwner"));
@@ -160,13 +236,43 @@ export async function bindQueryHandler({ ownerUuid, featureId = null, entryUuid 
   }
   if (!entry && !block?.system) throw new Error(game.i18n.format("AZEROTH.Bound.NoEntry", { name: block?.name ?? "" }));
   const feature = featureId ? owner.items.get(featureId) ?? null : null;
+  // **A CONSTRUCT IS ONE OF THE TABLE'S, AT THE TINKER'S TIER** (04's The Bench; the B2
+  // review: only the capacity was judged here, so a uuid named any creature): judged on
+  // this client off the entry's own name and the owner's tier.
+  if (kind === "construct") {
+    const fit = eligible("construct", { name: entry?.name ?? block?.name ?? "" }, { tier: owner.system?.tier ?? 1 });
+    if (!fit.ok) throw new Error(game.i18n.format(fit.reason === "Tier" ? "AZEROTH.Construct.Refuse.Tier" : "AZEROTH.Construct.Refuse.NotOnTable", { name: entry?.name ?? block?.name ?? "" }));
+  }
   const room = capacity(kind, { level: owner.system.level ?? 1, talents: talentsOf(owner) });
   if (!uncounted && boundCount(owner, kind) >= room) {
     throw new Error(game.i18n.format("AZEROTH.Bound.Full", { owner: owner.name, count: room, kind: game.i18n.localize(AZEROTH.boundKinds[kind] ?? kind), names: heldNames(owner, kind).join(", ") }));
   }
-  const actor = await createBoundActor({ owner, feature, entry, block, kind, until, uncounted, school, count });
-  return { uuid: actor.uuid };
+  // **A RAISE'S OWN COUNT, JUDGED HERE** (04's Dark Minion: *You may control one per
+  // rank*; the B2 review): the cap is read off the OWNER's talents on this client -
+  // never the asker's word - with the raises already in flight counted, so two
+  // creatures dropping at once cannot both rise past it.
+  const raise = kind === "summon" && sourceName ? (raiseRowsFor(talentsOf(owner)).find(r => r.name === sourceName) ?? null) : null;
+  const flightKey = raise ? `${owner.uuid}|${sourceName}` : null;
+  if (raise) {
+    const held = boundOf(owner, "summon").filter(a => bondOf(a)?.sourceName === sourceName).length + (RAISES_IN_FLIGHT.get(flightKey) ?? 0);
+    const refused = raiseRefusal({ held, count: raise.count });
+    if (refused) throw new Error(game.i18n.format(refused, { name: entry?.name ?? block?.name ?? "", talent: raise.name, n: raise.count }));
+    RAISES_IN_FLIGHT.set(flightKey, (RAISES_IN_FLIGHT.get(flightKey) ?? 0) + 1);
+  }
+  try {
+    const actor = await createBoundActor({ owner, feature, entry, block, kind, until, uncounted, school, count, sourceName, halfActions });
+    return { uuid: actor.uuid };
+  } finally {
+    if (flightKey) {
+      const left = (RAISES_IN_FLIGHT.get(flightKey) ?? 1) - 1;
+      if (left > 0) RAISES_IN_FLIGHT.set(flightKey, left);
+      else RAISES_IN_FLIGHT.delete(flightKey);
+    }
+  }
 }
+
+/** The raises this client is making now, by owner and talent, counted against the cap (the B2 review). */
+const RAISES_IN_FLIGHT = new Map();
 
 /** The GM-side handler of a release that deletes: a called creature and its tokens. */
 export async function unbindQueryHandler({ uuid } = {}, { user = null } = {}) {
@@ -197,10 +303,10 @@ async function askGM(name, handler, payload) {
  * must be, the owner's talents laid on it, the refusal shown where there is
  * one. Resolves to the bound actor, or null.
  */
-export async function bind({ owner, feature = null, entry = null, block = null, kind, until = null, uncounted = false, school = null, count = 1 }) {
+export async function bind({ owner, feature = null, entry = null, block = null, kind, until = null, uncounted = false, school = null, count = 1, sourceName = null, halfActions = null }) {
   const payload = {
     ownerUuid: owner.uuid, featureId: feature?.id ?? null, entryUuid: entry?.uuid ?? null, block,
-    kind, until, uncounted, school, count
+    kind, until, uncounted, school, count, sourceName, halfActions
   };
   let uuid;
   try {
@@ -236,7 +342,9 @@ export function featureForKind(owner, kind) {
  */
 export async function adopt({ owner, actor, kind, feature = null, until = null, uncounted = false, school = null }) {
   actor = worldActorOf(actor);
-  if (!owner || owner.type !== "character" || !actor || actor.type !== "npc" || !AZEROTH.boundKinds[kind]) return null;
+  // A thrall is bound by its own door, on the token (`writeThrallBond`), never adopted:
+  // adopt links and turns every token of the world actor for good.
+  if (!owner || owner.type !== "character" || !actor || actor.type !== "npc" || !AZEROTH.boundKinds[kind] || kind === "thrall") return null;
   if (!actor.isOwner) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.Bound.NotOwner"));
     return null;
@@ -349,6 +457,15 @@ export async function releaseAtLongRest(owner) {
  * its tokens. The feature's `known` forgets it either way.
  */
 export async function release(owner, uuid) {
+  // **A THRALL IS RELEASED ON ITS OWN TOKEN** (the lead's ruling of 2026-10-22): its bond
+  // is the token's actor's, never the world actor's, and its side and Charmed go with it.
+  let named = null;
+  try {
+    named = uuid ? await fromUuid(uuid) : null;
+  } catch {
+    named = null;
+  }
+  if (named?.documentName === "Actor" && isThrallBond(named.getFlag?.("azeroth-rpg", FLAG) ?? null)) return releaseThrallBond(named);
   for (const feature of owner.items.filter(i => i.type === "feature" && (i.system.known ?? []).some(k => k.uuid === uuid))) {
     await feature.update({ "system.known": feature.system.known.filter(k => k.uuid !== uuid).map(k => ({ uuid: k.uuid, name: k.name })) });
   }
@@ -431,12 +548,18 @@ export async function syncBoundFor(owner, { encounter } = {}) {
     // Whether the owner wears Metamorphosis (02 §7, D-769): Demonic
     // Ascendance's *While you hold that form, your Bound Demons add your tier to
     // their damage*. It was `false` and nothing set it.
-    inMetamorphosis: owner.shape?.kind === "metamorphosis"
+    inMetamorphosis: owner.shape?.kind === "metamorphosis",
+    // And the shape itself (the Legacy branches' B2): 04's Gnomish Battle Rig,
+    // *While you wear it, your constructs add your tier to their damage*.
+    shapeKind: owner.shape?.kind ?? null
   };
   let touched = 0;
   for (const bound of boundOf(owner)) {
     if (!bound.isOwner) continue;
     const bond = bondOf(bound);
+    // A thrall takes none of its owner's talents or Signatures (the lead's ruling of
+    // 2026-10-22): it is the GM's creature, obeying for a minute.
+    if (isThrallBond(bond)) continue;
     // The school chosen at the summoning rides the bond (04's Demonic Aegis at rank
     // 2, D-775), and `boundEffects` lays its Ward.
     const creature = { name: bound.name, ap: bound._source.system?.ap ?? {}, weightClass: bound.system.weightClass, tier: bound.system.tier, school: bond?.school ?? null };

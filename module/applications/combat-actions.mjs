@@ -10,8 +10,8 @@ import { AZEROTH } from "../config.mjs";
 import { lossOnGuard } from "../rules/momentum.mjs";
 import { canReact, disengageRefusal, readyEntry } from "../rules/reactions.mjs";
 // Who holds a mover with Anchor (04, D-772).
-import { anchoredBy } from "../canvas/engaged.mjs";
-import { reactionStateOf, rollWithDialog } from "./actions.mjs";
+import { allyOf, anchoredBy } from "../canvas/engaged.mjs";
+import { reactionStateOf, rollWithDialog, unansweredOf } from "./actions.mjs";
 // Hiding (D-717): the law, and the one place the status is written.
 import { STEALTH_SKILL, markStealth, stealthAllowed } from "../rules/stealth.mjs";
 import { conceal, isHidden, reveal } from "../effects/stealth.mjs";
@@ -24,11 +24,29 @@ import { layNextSpell } from "../effects/next-spell.mjs";
 // A rider paid before the blow (D-770; the lead: *"Either order"*).
 import { RIDER_REFUSALS, primeJudgement, settleRiders } from "../rules/riders.mjs";
 import { poolLabel, riderReason } from "../helpers/rider-words.mjs";
+// The Spirit Realm closes the fight's own controls (06 §10; the B3 review).
+import { realmRefusalFor } from "../effects/spirit-realm.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 
 function fightOf(actor) {
   return actor.activeFight?.() ?? null;
+}
+
+/**
+ * **THE SPIRIT REALM REFUSES THE FIGHT'S OWN CONTROLS** (06 §10: *You cannot touch the
+ * living world*; the B3 review): Guard, Disengage, Ready, Hide, the Ranger's mark and a
+ * rider paid before the blow are the living world's - the realm's one Half-Action is
+ * spent on 06 §10's own five - so each is refused in words before anything is asked or
+ * spent. True where it was refused.
+ *
+ * @param {Actor} actor
+ * @returns {boolean}
+ */
+function realmBars(actor) {
+  const spirit = realmRefusalFor(actor, "action");
+  if (spirit) ui.notifications?.warn(spirit);
+  return Boolean(spirit);
 }
 
 function combatantOf(actor) {
@@ -46,6 +64,7 @@ function combatantOf(actor) {
  * and the card land either way.
  */
 export async function guard(actor) {
+  if (realmBars(actor)) return null;
   const combatant = combatantOf(actor);
   if (combatant) {
     const spent = await combatant.spendAction("half");
@@ -95,6 +114,7 @@ export async function guard(actor) {
  * press was refused a Move it had just bought.
  */
 export async function disengage(actor) {
+  if (realmBars(actor)) return null;
   // **NOT WHILE AN ANCHOR HOLDS YOU** (04's Anchor: *Enemies Engaged with you
   // cannot Disengage*; D-772), refused in words before the Half-Action is spent
   // (D-768's order). Measured on the viewed scene; nothing placed is nobody holding.
@@ -173,6 +193,7 @@ export function stealthTestSpec(actor) {
  * dismissed dialog rolls nothing, spends nothing and marks nothing.
  */
 export async function hide(actor, event = null) {
+  if (realmBars(actor)) return null;
   const combat = fightOf(actor);
   const combatant = combatantOf(actor);
   const may = stealthAllowed(combatant?.getFlag("azeroth-rpg", "round") ?? null, combat?.round ?? null);
@@ -229,6 +250,8 @@ export async function clearHidden(actor) {
  * nothing - the same bargain every roll dialog makes.
  */
 export async function ready(actor) {
+  // Refused before the dialog opens, so nothing is asked for nothing.
+  if (realmBars(actor)) return null;
   const asked = await askForReady();
   if (!asked) return null;
   return readyWith(actor, asked);
@@ -239,6 +262,7 @@ export async function ready(actor) {
  * (CLAUDE.md §5's `apply(state)`) and a macro can name both halves.
  */
 export async function readyWith(actor, { trigger = "", action = "" } = {}) {
+  if (realmBars(actor)) return null;
   const combat = fightOf(actor);
   const combatant = combatantOf(actor);
   if (!combat || !combatant) {
@@ -339,15 +363,29 @@ export async function takeReadied(actor, { messageId = null } = {}) {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: actor.name }));
     return null;
   }
-  const may = canReact("readied", reactionStateOf(actor, { messageId }));
+  // **AGAINST WHOM** (door 14, the B1 review: no creature may take a Reaction against one
+  // Wind Walk or Bladestorm holds): the trigger is the table's to name, so the readied
+  // action answers the creature the user has targeted, and is refused against one the
+  // state holds - a creature this client counts as the user's ally is answered FOR.
+  const aimed = [...(game.user?.targets ?? [])][0]?.actor ?? null;
+  const against = aimed && aimed.uuid !== actor.uuid && !allyOf(actor, aimed) ? aimed : null;
+  const may = canReact("readied", reactionStateOf(actor, { messageId, against }));
   if (!may.ok) {
     ui.notifications?.warn(game.i18n.format(may.reason, {
-      name: actor.name, reaction: game.i18n.localize(AZEROTH.reactions.readied)
+      name: actor.name, reaction: game.i18n.localize(AZEROTH.reactions.readied), source: unansweredOf(against).join(", ")
     }));
     return null;
   }
   if (!(await game.system.azeroth.workflows.spendTurnBudget(actor, "reaction"))) return null;
   await actor.setFlag("azeroth-rpg", "reacted", { messageId: messageId ?? null, reaction: "readied" });
+  // **THE ACTION THE READY PAID FOR, TAKEN NOW** (05: *When the trigger occurs, spend
+  // your Reaction to take it*; the lead: *"Refuse off-turn Half-Actions"*): the
+  // Half-Action the Ready spent on the readier's turn, handed back to be taken at once,
+  // so the door the action is taken through - an attack, a cast, a Use - charges
+  // nothing more and is not refused outside the readier's turn
+  // (`rules/initiative.mjs#grantAtOnce`). The turn's reset takes an unspent one away.
+  const readier = combatantOf(actor);
+  if (readier?.isOwner) await readier.grantAtOnce(1);
   await clearReady(actor);
   return ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
@@ -364,6 +402,7 @@ export async function takeReadied(actor, { messageId = null } = {}) {
 export async function markQuarry(actor) {
   const quarry = (actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === "quarry") ?? null;
   if (!quarry) return null;
+  if (realmBars(actor)) return null;
   const token = [...(game.user?.targets ?? [])][0] ?? null;
   if (!token) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.Card.NoTargets"));
@@ -417,6 +456,7 @@ export async function clearMark(actor) {
  * @returns {Promise<{identifier: string, spent: number}|null>}
  */
 export async function primeRider(actor, identifier) {
+  if (realmBars(actor)) return null;
   const combat = fightOf(actor);
   const combatant = combatantOf(actor);
   const line = (actor?.riderLines?.() ?? []).find(l => l.identifier === identifier) ?? null;

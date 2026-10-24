@@ -254,6 +254,13 @@ import { CLASS_FEATURES, action, bindRank, cost, evaluateAmount, mod, once } fro
 import { aura, auraStamp } from "./auras.mjs";
 // An area's words widened by a patch (Empowered Mending, D-774).
 import { widenAreaText } from "./areas.mjs";
+// ONE reading of a row's gate (the Legacy branches' doors 15, 17 and 18): a
+// target's condition or kind, the user's marks, what the user wields and wears.
+import { gateHolds, gateLabel, wieldFails } from "./talent-gates.mjs";
+// A feature's condition's own escape, bound at the rank (the Legacy branches' door 19).
+import { boundFeatureEscape } from "./escapes.mjs";
+// A summon's count by rank, bound at the stamp (the Legacy branches' door 4).
+import { summonCountAt } from "./summon-places.mjs";
 
 const uses = (max, per) => ({ max, per });
 const grant = (extra = {}) => action(extra);
@@ -278,13 +285,18 @@ const none = reason => ({ automated: "none", reason });
  * What a talent spends as part of an attack (D-770), in `rules/riders.mjs`'s
  * shape: every key present, so a row never differs in shape from another.
  */
-const rider = (pool, amount, { once = null, form = false, weapon = null, move = null, onHit = {}, atRank = [], discount = null, pays = null, needs = null, strike = null } = {}) => ({
+const rider = (pool, amount, { once = null, form = false, weapon = null, move = null, onHit = {}, atRank = [], discount = null, pays = null, needs = null, strike = null, ammo = undefined, throwAs = undefined } = {}) => ({
   cost: { pool, amount }, once, form, weapon, move,
   onHit: { condition: null, value: null, damage: null, prone: false, heal: null, noHealing: null, sl: null, ...onHit },
   atRank, discount,
   // D-772: paid on a hit alone (Bloodthirst), struck with a shield (Shield Slam)
   // at a Rating of its own.
-  pays, needs, strike
+  pays, needs, strike,
+  // B1 (the Legacy branches' doors 15 and 26), NAMED ONLY WHERE A ROW CARRIES ONE so
+  // every rider before them keeps its shape: no ammunition spent (Black Arrow), and
+  // the throw a hammer or a mace makes for this attack (Storm Bolt).
+  ...(ammo === false ? { ammo: false } : {}),
+  ...(throwAs ? { throwAs } : {})
 });
 
 /**
@@ -306,6 +318,45 @@ export const RACE_TALENT_EFFECTS = Object.freeze({
     // source of Difficult ground, a GM's own drawn rubble included.
     "mountain-bred": { automated: "inline", movement: { ignoresGround: true, climbsFree: true } }
   },
+  gnome: {
+    // 02 §5, tier 3: *Once per encounter, a device you built or a gadget you know
+    // works one step better and then breaks. This costs no action* (the lead, phase 0:
+    // *"Yes, gadgets too"*; the Legacy branches' B2). A counter, its Use costing no
+    // action: the one chooser names the gadget known (04's Gadgeteer) or the device
+    // carried (08 §13) that works one step better, and the gadget's own use is
+    // struck - *then breaks* is the gadget spent until it comes back at a Short Rest
+    // (MY READING, for the lead). What *one step better* is stays the table's (D2
+    // §12), and the card says so in words.
+    overclock: {
+      grants: grant({ action: null, uses: uses(1, "encounter"), choice: "overclock" }),
+      overclock: { gadgets: true, devices: true },
+      reason: "what one step better is - a longer reach, a harder Test, a second target - is the table's call (D2 §12); the door names the gadget or device and strikes the gadget's use"
+    },
+    // 02 §5, tier 4: *Between Long Rests, build one device from 08-EQUIPMENT or one
+    // gadget from 04-TALENTS that you have the parts for, at no cost in gold. It works
+    // for a day* (the lead: *"Yes, gadgets too"*). A Use once a Long Rest whose one
+    // chooser lists every gadget and every 08 §13 device: a gadget stands as a
+    // gadget known with its own use, a device is carried, each until the next Long
+    // Rest (*It works for a day*; MY READING: the day is the Long Rest's).
+    "mekkatorque's-blueprint": {
+      grants: grant({ action: null, uses: uses(1, "long"), choice: "blueprint" }),
+      blueprint: { gadgets: true, devices: true }
+    }
+  },
+  orc: {
+    // 02 §5, tier 3: *Spend 4 Momentum to grant a friendly target you can see within 60
+    // feet a Boon on their next Test. This costs no action* (the B8a2 pass: it had no row).
+    // 04's Blessing's shape (D-772): one friendly creature targeted, measured where both
+    // tokens stand (*within 60 feet*), its Boon laid through the one door
+    // (`effects/banes.mjs#layBoon`) and spent by its next Test; 4 of 05 §11's kind word
+    // `momentum` - the Momentum pool the orc's class holds, War Stomp's reading
+    // (`rules/pools.mjs#ANY_MOMENTUM`), refused in words for a class with none. *You can
+    // see* is the table's, as Blessing's is.
+    "thrall's-discipline": {
+      grants: grant({ action: null, cost: cost("momentum", 4) }),
+      onUse: { laysBoon: { kinds: "all", boons: 1, until: "next", feet: 60 }, friendly: true }
+    }
+  },
   goblin: {
     // 02 §5: *The bag slots you carry yourself are doubled and nobody asks
     // how.* The only line in the book that changes capacity by name. A goblin
@@ -321,6 +372,24 @@ export const RACE_TALENT_EFFECTS = Object.freeze({
     // next world load because the row no longer asks for one.
     "pack-hobgoblin": { automated: "inline", carry: 2 }
   },
+  tauren: {
+    // 02 §5, tier 2: *Spend a Half-Action and 4 Momentum. Every enemy within 5 feet makes a
+    // Reflex Resilience Test at a Standard DC for your tier — 12, 16, 20 or 24. On a failure
+    // it is knocked **Prone*** (the B8a pass: it had no row, and the Standard DC for a tier
+    // was a DC kind no door read). A Use: the Half-Action; 4 of the Momentum pool the
+    // tauren's class holds (`rules/pools.mjs#ANY_MOMENTUM` - a Shaman holds none and is
+    // refused in words); every enemy within 5 feet gathered by the Use itself (the lead:
+    // *"Measure the area"*); each one's Reflex Test at 05 §3's Standard DC for the tauren's
+    // tier (`resistDc: "standard"`); and the Prone its failure lands at once (`onFail`; the
+    // lead: *"Land automatically"*).
+    "war-stomp": {
+      grants: grant({
+        action: "half", cost: cost("momentum", 4), area: "A 5 ft radius centered on you", who: "enemy",
+        resist: "reflex", resistDc: "standard",
+        inflicts: [{ condition: "prone", value: null, until: null, onFail: true }]
+      })
+    }
+  },
   troll: {
     // 02 §5: *You swim at full Speed and hold your breath for ten minutes*
     // (the final review of D-757). INLINE, beside Mountain-Bred: the movement
@@ -328,7 +397,17 @@ export const RACE_TALENT_EFFECTS = Object.freeze({
     // (`canvas/behaviors.mjs#movementFactsOf`), so a Darkspear swims a foot a
     // foot at its Speed where 05 charges everybody else two. The breath is the
     // table's.
-    "island-blood": { automated: "inline", movement: { swimsFree: true } }
+    "island-blood": { automated: "inline", movement: { swimsFree: true } },
+    // 02 §5, tier 3: *Once per Short Rest, spend a Half-Action and 4 Momentum. Your attacks
+    // gain a Boon until the end of the encounter* (the B8a2 pass: it had no row). A Use: the
+    // Half-Action, 4 of the class's Momentum pool (War Stomp's reading), once a Short Rest;
+    // the Boon laid on the troll's OWN Attack Tests through the one door
+    // (`effects/banes.mjs#layBoon`), LASTING - every attack takes it and none spends it - and
+    // lifted when the troll leaves the fight (`AzerothCombat#_leaveFight`'s encounter lift).
+    berserking: {
+      grants: grant({ action: "half", cost: cost("momentum", 4), uses: uses(1, "short") }),
+      onUse: { laysBoon: { kinds: "attack", boons: 1, until: "encounter" }, self: true }
+    }
   }
 });
 
@@ -494,7 +573,173 @@ export const TALENT_EFFECTS = Object.freeze({
     "shield-slam": { rider: rider("rage", 6, { needs: "shield", weapon: "melee", strike: { rating: 4 }, atRank: [{ rank: 2, onHit: { condition: "stunned", sl: 2 } }] }) },
     // *While you carry a shield, roll any Critical Injury against you twice and
     // take the lower result* (D-772): read by name at the Critical Injury's roll.
-    "unbreakable": { automated: "inline" }
+    "unbreakable": { automated: "inline" },
+    // ---- Blademaster (Orc; the Legacy branches, D-781) ----
+    // **THE LEGACY BRANCHES' ROWS** (the plan's phase B6): every one rides a door
+    // phases B1 to B3 built, named beside it; `warrior-talents.test.mjs` holds each
+    // number to 04's own Effect cell at every rank.
+    // *While you wear no armor in your Chest slot, your Speed rises by 5 feet per
+    // rank*: an owner-side passive gated on what is worn (door 15's `noSuit` - only a
+    // suit fills the Chest tile), laid again by the sync on every equip.
+    "wolfs-pace": { passive: passive([add("system.speed", "5*rank")], { wields: ["noSuit"] }) },
+    // *While you wear no armor in your Chest slot, a successful Parry gives 2 Rage per
+    // rank* (the lead's own wording): read at the Parry that holds (`parryGainsFor`).
+    "read-the-blade": { parry: { gain: { pool: "rage", amount: "2*rank" }, when: { wields: ["noSuit"] } } },
+    // *When an attack of yours reaches SL 2, gain 1 further Rage per rank*: a further
+    // gain on the hit (`momentumOnHitFor`), Aimed Volley's shape with no once.
+    "telling-blow": { momentum: { pool: "rage", amount: "rank", sl: 2, form: false } },
+    // *As a Reaction at any time, spend 4 Rage. Move up to your Speed, ignoring Difficult
+    // ground. No creature may take a Reaction against you until your next turn. At rank 2
+    // you are also hidden, even while observed, until you next attack, and that attack
+    // adds your Dexterity modifier to its damage* (the lead, phase 0: *"No limit"* - the
+    // Reaction is the limit): one Move that costs no Half-Action and ignores the ground
+    // (door 25), the unanswered state (door 14), and at rank 2 the concealment the next
+    // attack ends, CARRYING THE DEXTERITY THAT ATTACK ADDS (`conceal.damage`, read at the
+    // Use; `rules/legacy-uses.mjs#concealStrike`): *that attack* is the one that ends the
+    // hiding, whenever it comes - the B6 review found a promise held to the encounter,
+    // which out of a fight was never laid while the hiding was.
+    "wind-walk": {
+      grants: grant({ action: "reaction", cost: cost("rage", 4) }),
+      onUse: {
+        unanswered: true, freeMove: { ignoresGround: true },
+        atRank: [{ rank: 2, conceal: { until: "attack", damage: "dex" } }]
+      }
+    },
+    // *Your Riposte costs 2 Rage less per rank* (the lead, phase 0: *"Keep it free"* at
+    // rank 2): `rules/maneuvers.mjs#maneuverCost` reads it by name, off whatever price
+    // stands, never below nothing.
+    "return-stroke": { automated: "inline" },
+    // *Once per turn, name a creature that can see you. This costs no action and no Rage.
+    // Until the end of your next turn it takes a Bane on attacks against anybody but you,
+    // and your attacks against it gain a Boon. Naming another creature ends it on the
+    // first*: door 18's mark with its Bane, once on each of your own turns, and the Boon
+    // its fact gates (`targetBoonsWith`).
+    "the-challenge": {
+      grants: grant({ action: null }),
+      onUse: { mark: "challenge" },
+      targetBoon: { kind: "attack", boons: 1, when: "challenged" },
+      reason: "whether the creature named can see you is the table's (D2 §12)"
+    },
+    // *While you wield a two-handed weapon, an attack of yours that reaches SL 2 adds
+    // half your Dexterity modifier, rounded up, to its damage. At rank 2 an attack that
+    // reaches SL 3 adds twice that instead and ignores Armor Points*: damage after the
+    // die at its SL (door 26), the wield gate read off the hands (door 15).
+    "critical-strike": {
+      damage: damage(["all"], "attack", {
+        amount: "ceil(dex/2)", sl: 2, when: { wields: ["twoHanded"] },
+        atRank: [{ rank: 2, steps: [{ sl: 3, amount: "2*ceil(dex/2)", ignoresArmor: true }] }]
+      })
+    },
+    // *While you wield a two-handed weapon and wear no armor in your Chest slot, your
+    // Defense rises by 1 per rank*: a passive gated on both.
+    "blade-circle": { passive: passive([add("system.defense", "rank")], { wields: ["twoHanded", "noSuit"] }) },
+    // *Against the creature you named with The Challenge, you inflict a Critical Injury on
+    // 19 or 20. At rank 2 this applies on 18 to 20*: the mark's fact (door 18).
+    "makgora": { critical: { on: 19, when: "challenged", atRank: [{ rank: 2, on: 18 }] } },
+    // *As a Reaction when an attack hits you, spend 6 Rage. The attack misses. You may use
+    // this a number of times equal to your rank per Short Rest*: pressed from the incoming
+    // card beside Parry and Block, the hit withdrawn whole (door 13).
+    "afterimage": {
+      grants: grant({ action: "reaction", cost: cost("rage", 6), uses: uses("rank", "short") }),
+      onUse: { mitigate: "negate" }
+    },
+    // *While you wield a two-handed weapon and wear no armor in your Chest slot, when an
+    // attack of yours inflicts a Critical Injury, gain 3 Rage per rank*: a further gain on
+    // the attack's own Critical Injury, both wield facts read off the hands.
+    "bloodied-blade": { momentum: { pool: "rage", amount: "3*rank", form: false, when: ["critical", { wields: ["twoHanded", "noSuit"] }] } },
+    // *As a Full Action while you wield a two-handed weapon, spend 10 Rage. Move up to your
+    // Speed. No creature may take a Reaction against you until your next turn. Make one
+    // attack against every enemy that comes within your reach during the move, rolled
+    // separately, each enemy once. Until your next turn your Armor Points rise by your
+    // Dexterity modifier*: the wield refused in words, the free Move, the unanswered
+    // state, one press of the card's Attack for each creature named (Whirlwind's shape),
+    // and the Armor Points on the Use's own effect until the warrior's next turn.
+    "bladestorm": {
+      grants: grant({ action: "full", cost: cost("rage", 10), attack: true, attacks: "each" }),
+      onUse: { wields: ["twoHanded"], unanswered: true, freeMove: {}, armor: { ap: "dex", until: "userTurnStart" } },
+      reason: "which enemies come within reach during the move is the table's to name: target them before the Use and the card's Attack makes one roll for each, as Whirlwind's does"
+    },
+    // ---- Mountain King (Dwarf; the Legacy branches, D-781) ----
+    // *As part of a melee attack, spend 2 Rage. On a hit the target loses its Reaction. At
+    // rank 2 a hit at SL 2 also knocks it Prone*: a rider whose rank clause's SL gates that
+    // clause alone (`riders.mjs#riderOutcome`), so the Reaction goes on any hit.
+    "bash": { rider: rider("rage", 2, { weapon: "melee", onHit: { loseReaction: true }, atRank: [{ rank: 2, onHit: { prone: true, sl: 2 } }] }) },
+    // *Your Second Wind class feature restores 1 more Health per rank*: a patch, its rank
+    // bound into the stamp (D-768).
+    "stout-heart": { modifies: mod("Second Wind", { heal: { add: "rank" } }) },
+    // *While you hold melee weapons of two different types, one in each hand, such as an
+    // axe and a hammer, your Off-Hand Attack builds Rage as your other hits do and deals 1
+    // more damage per rank* (the lead, phase 0: *"Type, not kind"*): read at the off-hand
+    // blow off 08 §7's Type (door 26).
+    "axe-and-hammer": { offHand: { builds: true, damage: "rank", when: { wields: ["twoTypes"] } } },
+    // *As part of an attack with a Thrown weapon, spend 6 Rage. For this attack a weapon of
+    // the hammer or mace type counts as Thrown (20 ft), and an attack made with one uses
+    // Strength. On a hit at SL 2 the target is Stunned until the end of its next turn. At
+    // rank 2 any hit also costs the target its Reaction. The weapon returns to your hand*: a
+    // rider on a throw, the throw a hammer or a mace makes on Strength (door 15), the Stun
+    // spanned to the creature's own next turn, and the Reaction taken on any hit at rank 2.
+    "storm-bolt": {
+      rider: rider("rage", 6, {
+        weapon: "thrown", throwAs: { types: ["hammer", "mace"], feet: 20, ability: "str" },
+        onHit: { condition: "stunned", sl: 2, until: "endOfNextTurn" },
+        atRank: [{ rank: 2, onHit: { loseReaction: true } }]
+      }),
+      reason: "*The weapon returns to your hand* asks nothing: no door takes a thrown weapon out of the hand"
+    },
+    // *When you end your turn without having moved, gain 2 Rage*: Bracing's own measure.
+    "unmoved": { stood: { gain: { pool: "rage", amount: 2 } } },
+    // *Your Charge class feature applies to one more Overbear or Sunder each encounter per
+    // rank*: Charge's own count of uses, 1 and the rank, struck by each maneuver it frees.
+    "rockslide": { modifies: mod("Charge", { uses: { max: "1+rank" } }) },
+    // *As a Half-Action, spend 6 Rage. Every enemy within 10 feet of you takes Nature damage
+    // equal to your tier and is Slowed until the end of its next turn. At rank 2 each also
+    // makes a Body Resilience Test against a DC of 10 plus your Strength modifier plus your
+    // Proficiency Bonus, and is knocked Prone on a failure* (the lead, phase 0: *"10 + Str
+    // modifier + Proficiency"*): the Use gathers every enemy within 10 feet (`who`; the
+    // lead: *"Measure the area"*), the card's damage and Slowed on each of them whatever
+    // the Test comes to - neither is the Test's (no `half`, no `onFail`) - and from rank 2
+    // its Resist at the Strength DC (door 16), whose failure alone lays the Prone, at once
+    // (`onFail`; the lead: *"Land automatically"*). THE ONE ROW (with Wrath of the Light)
+    // WHOSE TEST GOVERNS ONE CLAUSE AND NOT THE OTHERS (the B6 review).
+    "thunder-clap": {
+      grants: grant({
+        action: "half", cost: cost("rage", 6), area: "A 10 ft radius centered on you", who: "enemy",
+        damage: { amount: "tier", type: "nature" },
+        inflicts: [{ condition: "slowed", value: null, until: "endOfNextTurn" }, { condition: "prone", value: null, minRank: 2, onFail: true }],
+        atRank: [{ rank: 2, resist: "body", resistDc: "str" }]
+      })
+    },
+    // *Friendly targets within 5 feet of you, other than you, gain 1 Armor Point. At rank 2
+    // this reaches 10 feet*: an aura on every ally in reach but the dwarf (D-755), its
+    // reach 5 feet a rank.
+    "shoulder-to-shoulder": { aura: aura({ feet: "5*rank", excludeOwner: true, armor: 1 }) },
+    // *Your attacks deal 1 more damage per rank against a target that is Prone, Slowed or
+    // Stunned*: a dialog line its gate ticks off the target's own conditions (door 17).
+    "hammer-and-anvil": { damage: damage(["all"], "attack", { when: { targetHas: ["prone", "slowed", "stunned"] } }) },
+    // *As a Reaction when an attack hits you, spend 4 Rage. You take half its damage,
+    // rounded down. You may use this a number of times equal to your rank per Short Rest*:
+    // Survival Instincts' halving mark, spent by the blow that lands.
+    "bedrock": {
+      grants: grant({ action: "reaction", cost: cost("rage", 4), uses: uses("rank", "short") }),
+      onUse: { mitigate: "halve" }
+    },
+    // *An enemy within your reach that moves provokes an Opportunity Attack from you,
+    // whether or not it leaves your reach. On a hit it is knocked Prone. At rank 2 your
+    // first Opportunity Attack each round costs no Reaction* (door 22).
+    "hold-the-hall": {
+      provokes: { moving: true },
+      hitLays: { condition: "prone", when: "opportunity" },
+      freeReaction: { reaction: "opportunityAttack", count: 0, atRank: [{ rank: 2, count: 1 }] }
+    },
+    // *As a Half-Action, spend 10 Rage. Until the encounter ends your Armor Points rise by
+    // 2, you have Ward 2 against every school, and your weapon attacks add 2 to their
+    // Damage Rating. You may use this once per Long Rest*: one encounter effect on the
+    // dwarf carrying all three (door 25), lifted when the fight ends.
+    "the-mountain-wakes": {
+      grants: grant({ action: "half", cost: cost("rage", 10), uses: once("long") }),
+      onUse: { armor: { ap: 2, ward: 2 } },
+      damage: damage(["all"], "attack", { amount: 2, until: "encounter" })
+    }
   },
   // **THE PALADIN'S THIRTY-SIX** (D-772, the talent plan's Phase 5).
   paladin: {
@@ -550,7 +795,10 @@ export const TALENT_EFFECTS = Object.freeze({
     // against your Spell DC or is blinded until your next turn* (D-772): the
     // damage is the main-hand weapon's Rating (`weapon`, MY READING, for the
     // lead), and Blinded is a button per target, until the paladin's turn starts.
-    "wrath-of-the-light": { grants: grant({ action: "full", cost: cost("zeal", 10), resist: "spirit", area: "A 20 ft radius centered on you", damage: { amount: "weapon", type: "holy" }, inflicts: [{ condition: "blinded", value: null, until: "casterTurnStart" }] }) },
+    // The B6 fix (the lead: *"Measure the area"*, *"Land automatically"*): every enemy
+    // within 20 feet gathered, the Holy on each whatever its Test comes to, and the
+    // Blinded the Test's alone - laid at once on a failure (`onFail`).
+    "wrath-of-the-light": { grants: grant({ action: "full", cost: cost("zeal", 10), resist: "spirit", area: "A 20 ft radius centered on you", who: "enemy", damage: { amount: "weapon", type: "holy" }, inflicts: [{ condition: "blinded", value: null, until: "casterTurnStart", onFail: true }] }) },
     // ---- Benediction ----
     // *As a Half-Action, spend 2 Mana. A friendly target you can see gains a Boon
     // on their next Test. At rank 2 it applies to every Test they make this
@@ -778,7 +1026,9 @@ export const TALENT_EFFECTS = Object.freeze({
       modifies: mod("Snare", { poison: { resilience: "reflex", reach: "first" }, atRank: [{ rank: 2, poison: { resilience: "reflex", reach: "all" } }] }),
       reason: "which dose the Snare spends is the lead's (CLARIFY, O-178): nothing is marked off the poison carried, and the table marks the dose it judges"
     },
-    "explosive-trap": { modifies: mod("Snare", { damage: { amount: "3*rank", type: "fire" }, resist: "reflex" }) },
+    // *Each makes a Reflex Resilience Test against your Spell DC for half, rounded down*
+    // (the lead: *"Build it everywhere"*): the half a passed Test leaves (`half`).
+    "explosive-trap": { modifies: mod("Snare", { damage: { amount: "3*rank", type: "fire", half: true }, resist: "reflex" }) },
     // *You may apply a poison you carry without spending an action. At rank 2 the
     // poison needs no Test to take hold* (D-773).
     "coated-blades": { coating: { free: true, atRank: [{ rank: 2, noTest: true }] } },
@@ -802,6 +1052,106 @@ export const TALENT_EFFECTS = Object.freeze({
       modifies: mod("Snare", { action: null }),
       landwise: { feet: 30 },
       reason: "*leave no trail* is the table's (a Survival Test's terms, D2 §12), and a Speed reduction - a condition, a load - is no terrain"
+    },
+    // ---- Dark Ranger (Forsaken; the Legacy branches, D-781) ----
+    // **THE LEGACY BRANCHES' ROWS** (the plan's phase B6): every one rides a door
+    // phases B1 to B3 built, named beside it; `ranger-talents.test.mjs` holds each
+    // number to 04's own Effect cell at every rank. The Dark Ranger's Spell DC is
+    // Wisdom's (the lead, phase 0), the Ranger class item's `castingAbility`.
+    // *Once a round, when a ranged attack of yours reaches SL 2, the target makes a Spirit
+    // Resilience Test against your Spell DC or is Frightened of you for one round per
+    // rank* (door 26): the Test's button on the attack's card, its failure laying
+    // Frightened for the rounds, the round's once marked before it is offered.
+    "keening-arrows": { hitTest: { via: "self", resilience: "spirit", condition: "frightened", rounds: "rank", sl: 2, once: "round", weapon: "ranged" } },
+    // *Your Companion class feature may bond a Mindless Undead that is not a Boss. Spend
+    // the hour over its remains rather than with food. In place of the Handling Test, it
+    // makes a Spirit Resilience Test against your Spell DC, and on a failure it is bound to
+    // you* (the lead, phase 0: *"Use wisdom based formula"*, *"The undead resists your
+    // Spell DC"*, *"No cap"*): the Companion's chooser opens to them and rolls their Test
+    // at the pick (door 26).
+    "grave-bond": {
+      graveBond: { resist: "spirit" },
+      reason: "the hour spent over the remains rather than with food is the table's, as the Companion's own hour is (D2 §12)"
+    },
+    // *You know Shadow Ward and Shadow Walk. Cast them with Wisdom, paying Focus where
+    // 07-MAGIC asks for Mana. Shadow Walk counts as moving for your Focus. At rank 2 your
+    // Shadow spells cost 1 Focus less* (the lead, phase 0: *"Yes"*, Shadow Walk counts as
+    // moving): the two spells taught, paid and cast as door 8 reads them, the move door 9
+    // reads, and from rank 2 a Focus off every Shadow spell paid in Focus.
+    "shadowcraft": {
+      spell: { names: ["Shadow Ward", "Shadow Walk"], learn: true, pool: "focus", ability: "wis", moves: ["Shadow Walk"] },
+      spellCost: { schools: ["shadow"], less: 1, minRank: 2, pool: "focus" }
+    },
+    // *As part of a ranged attack, spend 2 Focus. The attack spends no ammunition. On a hit
+    // the target takes Shadow damage equal to your rank and recovers no Health until the end
+    // of your next turn*: a rider spending no shot (door 26), its Shadow a second amount on
+    // the blow met by its own Ward (D-777), and Mortal Strike's mark - which Dark Minion's
+    // raise reads by this talent's name.
+    "black-arrow": { rider: rider("focus", 2, { weapon: "ranged", ammo: false, onHit: { damage: "rank", type: "shadow", noHealing: "strikerTurnEnd" } }) },
+    // *You need no sleep and cannot be Frightened. You may speak with a creature that died
+    // within the hour, and it answers as it was*: Frightened refused at the condition door.
+    "cold-company": {
+      steadfast: { immune: ["frightened"] },
+      reason: "needing no sleep, and speaking with a creature that died within the hour, are the table's (D2 §12): no door counts sleep, and the dead's answers are the GM's to give"
+    },
+    // *You know Dark Passage, cast as Shadowcraft casts*: taught, paid in Focus and cast
+    // with Wisdom; Shadowcraft's rank 2 reaches it as the Shadow spell it is.
+    "embrace-the-shadows": { spell: { names: ["Dark Passage"], learn: true, pool: "focus", ability: "wis" } },
+    // *When a creature hit by your Black Arrow drops to 0 Health before the end of your next
+    // turn, it rises as a Risen Skeleton that acts on your Initiative until the encounter
+    // ends. You may control one per rank* (door 5): off Black Arrow's own mark.
+    "dark-minion": { raise: { from: "black-arrow", entry: "Risen Skeleton", until: "encounter", count: "rank" } },
+    // *As a Half-Action, spend 2 Quarry. Every enemy within 20 feet that can hear you makes a
+    // Spirit Resilience Test against your Spell DC or is Frightened of you for one minute. You
+    // may use this a number of times equal to your rank per Short Rest*: every enemy within
+    // 20 feet gathered (`who`), and the Frightened laid at once on each that fails (`onFail`).
+    "banshees-wail": {
+      grants: grant({
+        action: "half", cost: cost("quarry", 2), uses: uses("rank", "short"), area: "A 20 ft radius centered on you", who: "enemy", resist: "spirit",
+        inflicts: [{ condition: "frightened", value: null, until: "minute", onFail: true }]
+      }),
+      reason: "whether each enemy can hear the wail is the table's (D2 §12)"
+    },
+    // *Your attacks against a Frightened creature gain a Boon and deal 1 more damage per
+    // rank*: a Boon and a damage line, both gated on the target's own condition (door 17).
+    "dread": {
+      targetBoon: { kind: "attack", boons: 1, when: { targetHas: ["frightened"] } },
+      damage: damage(["all"], "attack", { when: { targetHas: ["frightened"] } })
+    },
+    // *As a Half-Action, spend 4 Focus. Every enemy within 15 feet of a point within 60 feet
+    // makes a Spirit Resilience Test against your Spell DC or is Silenced until the start of
+    // your next turn. You may use this a number of times equal to your rank per Short Rest*:
+    // the point picked within 60 feet of the ranger's own token (`aimFrom`, Cluster
+    // Rockets' door aimed from the user), every enemy within 15 feet of it gathered
+    // (`who`), and the Silenced laid at once on each that fails (`onFail`), keyed on the
+    // ranger's own turn.
+    "hush-of-the-grave": {
+      grants: grant({
+        action: "half", cost: cost("focus", 4), uses: uses("rank", "short"), area: "A 15 ft radius on the ground", who: "enemy", resist: "spirit",
+        inflicts: [{ condition: "silenced", value: null, until: "casterTurnStart", onFail: true }]
+      }),
+      onUse: { aimFrom: { kind: "self", feet: 60 } }
+    },
+    // *As a Half-Action, spend 3 Quarry. A creature within 60 feet makes a Body Resilience
+    // Test against your Spell DC, taking Shadow damage equal to twice your tier plus your
+    // rank on a failure and half that, rounded down, on a success. You recover Health equal
+    // to the damage it takes* (door 25's `healsDealt`): one creature named within 60 feet,
+    // and the half its passed Test leaves landed by the card's own Apply (`half`; the lead:
+    // *"Build it everywhere"*) - so the drain heals what the half took.
+    "life-drain": {
+      grants: grant({ action: "half", cost: cost("quarry", 3), resist: "body", damage: { amount: "2*tier+rank", type: "shadow", half: true } }),
+      onUse: { healsDealt: true, aim: { feet: 60 } }
+    },
+    // *Once per Long Rest, as a Full Action, spend 4 Focus. A creature within 30 feet that is
+    // not a Boss makes a Spirit Resilience Test against your Spell DC or is Charmed by you for
+    // one minute, obeys your spoken commands and acts on your Initiative. It remembers all of
+    // it* (the lead: *"Have the creature stat block for the token set to bound to the player
+    // by GM who can then remove it"*): the named creature's failed Resist lays the Charmed
+    // and D-643's bond on its own token (door 25, D-784).
+    "thrall-of-the-banshee": {
+      grants: grant({ action: "full", cost: cost("focus", 4), uses: once("long"), resist: "spirit" }),
+      onUse: { thrall: { feet: 30, minutes: 1 } },
+      reason: "obeying spoken commands is the GM's to play, and what the thrall remembers is the table's (D2 §12)"
     }
   },
   // **THE ROGUE'S THIRTY-SIX** (D-773, the talent plan's Phase 7).
@@ -934,7 +1284,207 @@ export const TALENT_EFFECTS = Object.freeze({
     "subterfuge": { modifies: mod("Opening", { marks: "rank" }) },
     // *Taking actions while hidden does not make you visible* (D-773): the attack
     // and the cast leave the Hide standing.
-    "master-of-shadows": { stealth: { keep: true } }
+    "master-of-shadows": { stealth: { keep: true } },
+    // ---- Warden (the Night Elf's Legacy; D-781, the Legacy branches' phase B6) ----
+    // *You may wear studded and mail armor. At rank 2 the Encumbering trait does not
+    // reduce your Speed* (door 23): the categories added to the class's own Access,
+    // which `creation.mjs#accessNote` reads, and Encumbering's 5 feet given back in
+    // the Speed's parts (`class-talents.mjs#armorAccessFor`).
+    "wardens-mail": { armorAccess: { categories: ["studded", "mail"], atRank: [{ rank: 2, waivesEncumbering: true }] } },
+    // *As a Half-Action, spend 3 Energy and set a trap at a point within 30 feet. The
+    // first enemy to come within 5 feet of it is Entangled until it spends an action
+    // and passes a Reflex Resilience Test against your Spell DC. One may stand at a
+    // time, or two at rank 2* (door 26): the point picked before anything is paid, the
+    // trap a Region the first enemy springs (`rules/traps.mjs`), its Entangled carrying
+    // the escape at the Rogue's Spell DC (Intelligence, D-781).
+    "shadow-trap": {
+      grants: grant({ action: "half", cost: cost("energy", 3) }),
+      onUse: { trap: { within: 30, radius: 5, condition: "entangled", escape: { on: "action", resilience: "reflex", dc: "spellDc" }, standing: 1, atRank: [{ rank: 2, standing: 2 }] } }
+    },
+    // *Once a round, a hit against a target that is Slowed, Entangled or Stunned builds
+    // 1 more Combo Point per rank* (door 17): a further gain on the hit, gated on the
+    // target's conditions (`talent-gates.mjs#gateHolds`), the round's record its clock
+    // (`momentumOnHitFor`).
+    "run-to-ground": { momentum: { pool: "comboPoints", amount: "rank", once: "round", when: { targetHas: ["slowed", "entangled", "stunned"] } } },
+    // *As an action, spend 4 Energy to attack up to two enemies within 10 feet of you,
+    // or three at rank 2. Roll each attack separately. At rank 2 each attack gains a
+    // Boon* (door 26): Barrage's shape - the Use refuses a third target (a fourth at
+    // rank 2) and one past 10 feet of the Rogue before anything is paid (`within`), the
+    // card's Attack makes one attack a creature named, and at rank 2 each draws its Boon
+    // as a ticked line (`cardBoons`).
+    "fan-of-knives": {
+      grants: grant({ action: "action", cost: cost("energy", 4), attack: true }),
+      barrage: { grant: "fan-of-knives", targets: 2, within: 10, atRank: [{ rank: 2, targets: 3, boons: 1 }] }
+    },
+    // *As a Half-Action, spend 3 Energy and make a thrown attack. On a hit the target
+    // gains Bleeding equal to your rank and is Slowed until the start of your next
+    // turn*: the Half-Action IS the attack (05's Attack), so it is a rider on a THROWN
+    // blow's own dialog (D-770; B1's `weapon: "thrown"`), counted against the round's
+    // one Attack as any attack is. Its Bleeding and its Slowed land with the hit, the
+    // Slowed on the striker's clock (`onHit.also`, phase B6's widening of the rider).
+    "shadow-strike": { rider: rider("energy", 3, { weapon: "thrown", onHit: { condition: "bleeding", value: "rank", also: [{ condition: "slowed", until: "strikerTurnStart" }] } }) },
+    // *As a Reaction, spend 2 Energy. Slowed ends on you, and you cannot be Slowed until
+    // your next turn. At rank 2 the same holds for Entangled* (door 25): the conditions
+    // ended and refused until the user's next turn (`IMMUNE_FLAG`), and A1's *cannot be
+    // X* is read as ending it too (the plan's *As read*).
+    "unfettered": {
+      grants: grant({ action: "reaction", cost: cost("energy", 2) }),
+      onUse: { immunity: { conditions: ["slowed"], ends: true, until: "userTurnStart", atRank: [{ rank: 2, conditions: ["slowed", "entangled"] }] } }
+    },
+    // *Your Finisher class feature may, instead of adding damage, leave the target of a
+    // hit Entangled for one round per Combo Point spent. Ending it takes an action and a
+    // Reflex Resilience Test against your Spell DC, with a Bane at rank 2* (door 26): a
+    // Finisher mode on the attack's dialog, the patch carrying the escape
+    // (`class-talents.mjs#finisherOptionsFor`, `shackleRounds`).
+    "shackle": { modifies: mod("Finisher", { shackle: { condition: "entangled", escape: { on: "action", resilience: "reflex", dc: "spellDc", banes: 1, minRank: 2 } } }) },
+    // *As a Half-Action, mark one creature you can see. Until your next Long Rest you
+    // know its direction and rough distance, it does not know you have done this, and
+    // your attacks against it ignore 2 Armor Points. Marking another ends the first*
+    // (door 18): the mark on the Rogue's own flag, its card whispered to the owners (the
+    // lead: *"Yes"*), a Use with nothing targeted reporting the bearing, and the Pierce
+    // on every attack the gate names (`pierceFor`).
+    "the-long-watch": { grants: grant({ action: "half" }), onUse: { mark: "watch" }, pierce: { amount: 2, when: { watched: true } } },
+    // *As a Reaction when an enemy ends its move within 10 feet of you, spend 4 Energy.
+    // Move to a space you can see within 20 feet, or 30 feet at rank 2, provoking
+    // nothing. You cannot do this while Entangled* (door 3): the space picked before
+    // anything is paid, the token displaced (no Opportunity Attack), refused while
+    // Entangled (`rules/steps.mjs#stepOf`).
+    "fade-step": {
+      grants: grant({ action: "reaction", cost: cost("energy", 4) }),
+      onUse: { step: { feet: 20, sight: "see", refuseWhile: ["entangled"], atRank: [{ rank: 2, feet: 30 }] } },
+      reason: "*when an enemy ends its move within 10 feet of you* is the Reaction's trigger, judged by the player who presses it (D2 §12): no door records where another creature's move ended"
+    },
+    // *As a Full Action, every enemy within 20 feet makes a Reflex Resilience Test
+    // against your Spell DC. On a failure it is Entangled for one minute, and ending it
+    // takes an action and a Reflex Resilience Test against your Spell DC. Usable a number
+    // of times equal to your rank between Long Rests* (doors 19 and 26): every enemy within
+    // 20 feet gathered (`who`), each one's Resist on the card, and its failure laying the
+    // minute's Entangled with its escape at once (`onFail`; *"Land automatically"*).
+    "the-vault-opens": {
+      grants: grant({
+        action: "full", uses: uses("rank", "long"), area: "A 20 ft radius centered on you", who: "enemy", resist: "reflex",
+        inflicts: [{ condition: "entangled", until: "minute", escape: { on: "action", resilience: "reflex", dc: "spellDc" }, onFail: true }]
+      })
+    },
+    // *As a Half-Action, spend 4 Energy. A creature within 30 feet makes a Reflex
+    // Resilience Test against your Spell DC or is Stunned. It makes a Body Resilience
+    // Test against your Spell DC at the end of each of its turns, and a success ends it.
+    // Usable a number of times equal to your rank between Short Rests* (door 19): one
+    // creature, within 30 feet (`onUse.aim`), its Stun carrying the turn's-end escape and
+    // laid at once on its failed Reflex Test (`onFail`; *"Land automatically"*).
+    "wardens-cage": {
+      grants: grant({
+        action: "half", cost: cost("energy", 4), uses: uses("rank", "short"), resist: "reflex",
+        inflicts: [{ condition: "stunned", escape: { on: "turnEnd", resilience: "body", dc: "spellDc" }, onFail: true }]
+      }),
+      onUse: { aim: { feet: 30 } }
+    },
+    // *Once per Short Rest, as a Half-Action, spend 5 Energy. Every creature within 60
+    // feet that you have Entangled is pulled to a space you choose within 10 feet of
+    // you, and stays Entangled* (door 24; the lead: *"A space you choose"*): one pick a
+    // creature, each a displacement the GM's client judges again.
+    "none-escape": { grants: grant({ action: "half", cost: cost("energy", 5), uses: once("short") }), onUse: { pullEntangled: { feet: 60, within: 10 } } },
+    // ---- Tinker (the Gnome's Legacy; D-781, the Legacy branches' phase B6) ----
+    // *You build constructs from the Constructs table below, one whose tier is no higher
+    // than yours. Building one takes a Short Rest and a tinker's kit, and so does
+    // rebuilding one wrecked at 0 Health. You hold one at a time. Your constructs act on
+    // your Initiative ... and between them take one Half-Action and one Reaction each
+    // turn* (door 6): the one chooser over 04's table at the gnome's tier
+    // (`rules/constructs.mjs`), the bind (D-643's sixth kind) and its token, the shared
+    // turn on the gnome's combatant.
+    "the-bench": {
+      grants: grant({ action: null, choice: "constructs" }),
+      constructs: { holds: 1 },
+      reason: "*Building one takes a Short Rest* is the table's clock (D2 §12): the Use is refused in a fight and without a tinker's kit, builds or rebuilds on its pick, and says on its card how long the work takes"
+    },
+    // *You know two gadgets from the Gadgets table below, or four at rank 2. Each gadget
+    // you know may be used once between Short Rests. Changing one you know takes a week
+    // of downtime* (door 7): the one chooser over 04's eight, each gadget known a feature
+    // with its own use (`rules/gadgets.mjs`).
+    "gadgeteer": {
+      grants: grant({ action: null, choice: "gadgets" }),
+      gadgets: { known: "2*rank" },
+      reason: "*Changing one you know takes a week of downtime* is the table's clock (D2 §12): the chooser is refused in a fight, and a gadget swapped out and back keeps the use it had spent"
+    },
+    // *Constructs you build with The Bench gain Health equal to three times your tier
+    // per rank. At rank 3 they also gain 1 Armor Point* (door 6): laid on each construct
+    // through `rules/bound.mjs#boundEffects`.
+    "reinforced-plating": { constructs: { health: "3*tier*rank", atRank: [{ rank: 3, ap: 1 }] } },
+    // *As a Half-Action, spend 4 Energy. One of your constructs fires at a point within
+    // 60 feet of it. Every creature within 10 feet of that point makes a Reflex
+    // Resilience Test against your Spell DC, taking Fire damage equal to your tier plus
+    // twice your rank on a failure and half that, rounded down, on a success. Usable a
+    // number of times equal to your tier between Short Rests* (door 6): the construct
+    // picked, the point picked within its 60 feet (`onUse.aimFrom`), every creature within
+    // 10 feet of it gathered - allies and the gnome included (`who`; the lead: *"Measure
+    // the area"*) - and the half a passed Test leaves landed by the card's Apply (`half`;
+    // *"Build it everywhere"*).
+    "cluster-rockets": {
+      grants: grant({ action: "half", cost: cost("energy", 4), uses: uses("tier", "short"), resist: "reflex", area: "A 10 ft radius on the ground", who: "creature", damage: { amount: "tier+2*rank", type: "fire", half: true } }),
+      onUse: { aimFrom: { kind: "construct", feet: 60 } }
+    },
+    // *Your constructs take two Half-Actions each turn between them, rather than one. At
+    // rank 2, as a Reaction, spend 2 Energy: one of your constructs within 60 feet takes
+    // a Half-Action at once* (door 6): the shared turn's allowance, and the rank's
+    // Reaction granting the Half-Action on both budgets.
+    "remote-control": {
+      constructs: { halfActions: 2 },
+      grants: grant({ action: "reaction", cost: cost("energy", 2), minRank: 2 }),
+      onUse: { constructHalf: { feet: 60 } }
+    },
+    // *As a Half-Action, spend 3 Energy. A construct within 30 feet recovers Health equal
+    // to your tier per rank, and one condition on it ends ... At rank 2 rebuilding a
+    // wrecked construct takes ten minutes rather than a Short Rest* (doors 6 and 25): ONE
+    // construct named within 30 feet (`aim.kinds`, the B3 review - without it the cure
+    // fell on the gnome), its condition chosen and ended, the card's heal on it; a
+    // wrecked one takes no healing (`AzerothActor#applyHealing`).
+    "arclight-spanner": {
+      grants: grant({ action: "half", cost: cost("energy", 3), heal: "tier*rank" }),
+      onUse: { cures: 1, aim: { feet: 30, kinds: ["construct"] } },
+      constructs: { atRank: [{ rank: 2, tenMinutes: true }] },
+      reason: "*Outside a fight, ten minutes' work repairs a broken weapon or suit of armor, or opens a mechanical lock whose DC is no higher than your Spell DC* is the table's (D2 §12): nothing in the system breaks an item or stands a lock for the work to mend or open"
+    },
+    // *Your constructs' attacks and your Gnomish Battle Rig's attacks deal 1 more damage
+    // per rank, and you know one more gadget per rank* (doors 6 and 7; the lead: *"Yes,
+    // the fist too"*): on each construct's own damage bonus, a line on the rig's blow, and
+    // the gadgets known.
+    "engineering-upgrade": {
+      constructs: { damage: "rank" },
+      gadgets: { known: "rank" },
+      damage: damage(["all"], "attack", { when: "battleRig" })
+    },
+    // *As an action, spend 4 Energy. Two Clockwork Gnomes, or three at rank 2, assemble
+    // in spaces within 30 feet and stay until the encounter ends. They are not
+    // constructs you hold, and each takes one Half-Action a turn of its own. Usable a
+    // number of times equal to your rank between Short Rests* (door 4): a summon by rank,
+    // placed at a point picked within 30 feet, each bound for the encounter with its own
+    // Half-Action (`rules/summon-places.mjs`).
+    "pocket-factory": {
+      grants: grant({ action: "action", cost: cost("energy", 4), uses: uses("rank", "short"), summons: summons(["Clockwork Gnome"], "1+rank") }),
+      onUse: { place: { within: 30, halfActions: 1 } }
+    },
+    // *You may hold two constructs at once. They still share one turn* (door 6).
+    "assembly-line": { constructs: { holds: 1 } },
+    // *Your Finisher class feature may be spent on an attack one of your constructs
+    // makes. At rank 2 your constructs' hits build your Combo Points and keep them from
+    // draining* (door 6): `AzerothActor#finisherPayer`, and a construct's hit building
+    // the gnome's points and marking the gnome's last hit.
+    "supercharge": { constructs: { finisher: true, atRank: [{ rank: 2, buildsCombo: true }] } },
+    // *Over a Short Rest, set a transporter pad where you stand; setting another removes
+    // the first. Once per Long Rest, as a Full Action, you and up to two willing creatures
+    // per rank within 10 feet of you arrive on the pad from anywhere on the same
+    // continent. Roll a d6 for each; on a 1 that creature arrives Fatigued* (door 25).
+    "ultrasafe-transporter": {
+      grants: grant({ action: "full", uses: once("long") }),
+      onUse: { transporter: { feet: 10, perRank: 2 } },
+      reason: "*from anywhere on the same continent* is the table's (D2 §12), and the card says so: the pad is set over a Short Rest with nothing paid, and the travel is the Full Action and the Long Rest's one use"
+    },
+    // *Once per Short Rest, as a Full Action, spend 5 Energy and climb into your Gnomish
+    // Battle Rig. You take its form in 14-BESTIARY until your next Short Rest or Long
+    // Rest, or until you leave it as a Half-Action ... If you are reduced to 0 Health in
+    // it, you leave it* (D-769's door; the lead: *"Rename it Gnomish Battle Rig"*): the
+    // feature's name is `rules/shapes.mjs#SHAPE_KINDS.battlerig`'s, taken with no menu.
+    "gnomish-battle-rig": { grants: grant({ action: "full", cost: cost("energy", 5), uses: once("short") }) }
   },
   // **THE PRIEST'S THIRTY-SIX** (D-774, the talent plan's Phase 8): every talent
   // built or carrying its reason, each kind read by the one door
@@ -1341,7 +1891,196 @@ export const TALENT_EFFECTS = Object.freeze({
     "undying-spirit": { modifies: mod("Reincarnation", { returnAt: "half", ally: { feet: 30 } }) },
     // *You know Ancestral Tide. Each target also regains 4 Health at the start of
     // their next turn* (D-774): a tick the cast stamps (D-770's carrier).
-    "ancestral-tide": { spell: { names: ["Ancestral Tide"], learn: true, addTick: { kind: "heal", amount: 4, rounds: 1 } } }
+    "ancestral-tide": { spell: { names: ["Ancestral Tide"], learn: true, addTick: { kind: "heal", amount: 4, rounds: 1 } } },
+    // ---- Shadow Hunter (the Troll's Legacy; D-781, the Legacy branches' phase B6) ----
+    // *As a Half-Action, spend 2 Mana. A friendly target within 30 feet restores Health
+    // equal to your rank plus 1 at the start of each of its turns for one minute*
+    // (D-770's carrier): one friendly creature within 30 feet (`onUse.aim`), the card's
+    // Apply laying the tick for ten of its turns.
+    "trolls-blood": {
+      grants: grant({ action: "half", cost: cost("mana", 2), tick: { kind: "heal", amount: "rank+1", rounds: 10 } }),
+      onUse: { aim: { feet: 30, friendly: true } }
+    },
+    // *You know Hex. At rank 2 sustaining it costs no Mana* (D-778's upkeep): the spell
+    // embedded, and its Sustain's Mana nothing from rank 2 (`upkeepFor`).
+    "witch-doctor": { spell: { names: ["Hex"], learn: true }, upkeep: { spells: ["Hex"], free: true, minRank: 2 } },
+    // *Once a round, as part of a melee attack, spend 2 Mana. On a hit the target takes a
+    // Bane on its next Resilience Test, or two Banes at rank 2* (D-770, D-774's laid
+    // Bane): a line on a melee attack's dialog, the Bane landing with the hit.
+    "jinx": { rider: rider("mana", 2, { once: "round", weapon: "melee", onHit: { bane: { kind: "resilience", banes: 1 } }, atRank: [{ rank: 2, onHit: { bane: { kind: "resilience", banes: 2 } } }] }) },
+    // *As a Half-Action, spend 5 Mana. A friendly target within 30 feet restores Health
+    // equal to twice your tier plus your rank, and one condition of your choice on it
+    // ends, Charmed and Stunned included* (door 25): one friendly creature within 30
+    // feet, its condition chosen through the one chooser before anything is paid, the
+    // card's heal on it.
+    "voodoo-mending": {
+      grants: grant({ action: "half", cost: cost("mana", 5), heal: "2*tier+rank" }),
+      onUse: { cures: { count: 1, friendly: true }, aim: { feet: 30, friendly: true } }
+    },
+    // *Your Searing totem spits venom. Its attack deals Nature damage rather than Fire,
+    // and a creature it hits is Poisoned 1, and the DC to shed it is your Spell DC. At
+    // rank 2 that creature is also Slowed until the end of its next turn* (door 20): the
+    // bound totem's attack patched, its hit laying what the row lays.
+    "serpent-ward": { boundAttack: { kind: "totem", match: "Searing", school: "nature", lays: [{ condition: "poisoned", value: 1, shed: "spellDc" }, { condition: "slowed", until: "endOfNextTurn", minRank: 2 }] } },
+    // *Your melee attacks gain a Boon against a creature suffering a condition that you
+    // or one of your totems laid. At rank 2 your Jinx costs no Mana against it* (door
+    // 17): the Boon an automatic line where the gate holds, and Jinx's line priced at
+    // nothing there (`riders.mjs#freeRiderCosts`).
+    "cursed-prey": {
+      targetBoon: { kind: "attack", boons: 1, when: ["melee", { laidByUser: true }] },
+      riderCost: { riders: ["jinx"], free: true, when: { laidByUser: true }, minRank: 2 }
+    },
+    // *You know Shadow Ward and Shadow Walk, and at rank 2 Darkward and Dark Passage as
+    // well. You cast them at your own Casting Test and Spell DC. Holding them is no
+    // exposure under 10-CORRUPTION* (door 25): the spells by rank (`spellNamesAtRank`),
+    // cast at the shaman's own Mana, Test and DC. Holding a spell exposes nothing in the
+    // system - 10's only casting exposure is a tier 5 Fel or Shadow spell, and these are
+    // tiers 1 and 2 - so there is nothing to waive.
+    "shadow-hunt": { spell: { names: ["Shadow Ward", "Shadow Walk"], learn: true, atRank: [{ rank: 2, names: ["Darkward", "Dark Passage"] }] } },
+    // *As a Half-Action, spend 5 Mana and make a Casting Test. On success, every enemy
+    // within 15 feet of you makes a Spirit Resilience Test against your Spell DC. On a
+    // failure it is Frightened of you until the end of its next turn, and at rank 2 it
+    // is Slowed as well*: every enemy within 15 feet gathered on a success (`who`), each
+    // one's Resist on the card, and its failure laying the Frightened - and the rank's
+    // Slowed beside it - at once (`onFail`; *"Land automatically"*).
+    "evil-eye": {
+      grants: grant({
+        action: "half", cost: cost("mana", 5), casting: true, resist: "spirit", area: "A 15 ft radius centered on you", who: "enemy",
+        inflicts: [{ condition: "frightened", until: "endOfNextTurn", onFail: true }, { condition: "slowed", until: "endOfNextTurn", minRank: 2, onFail: true }]
+      })
+    },
+    // *While your Tremor totem stands, every enemy within 30 feet of it takes a Bane on
+    // Spirit Resilience Tests* (door 20; the lead: *"Every Spirit Resilience Test"*): an
+    // aura on the shaman's ENEMIES, centred on the bound Tremor totem.
+    "loa-drum": { aura: aura({ feet: 30, targets: "enemies", centre: "boundTotem:Tremor", bane: { kind: "resilience", resilience: "spirit", banes: 1 } }) },
+    // *You may have one more totem standing than your tier allows* (`bound.mjs#capacity`).
+    "the-loa-gather": { totems: { more: 1 } },
+    // *As an action, spend 10 Mana and make a Casting Test. On success, a creature within
+    // 30 feet makes a Spirit Resilience Test against your Spell DC. On a failure it is
+    // Stunned until it passes the Test again at the end of one of its turns. At rank 2
+    // that Test takes a Bane* (door 19): one creature within 30 feet, its Stun carrying
+    // the turn's-end escape, the rank's Bane bound at the stamp, and the Stun laid at once
+    // on its failed Spirit Test (`onFail`; *"Land automatically"*).
+    "bad-mojo": {
+      grants: grant({
+        action: "action", cost: cost("mana", 10), casting: true, resist: "spirit",
+        inflicts: [{ condition: "stunned", escape: { on: "turnEnd", resilience: "spirit", dc: "spellDc", banes: 1, minRank: 2 }, onFail: true }]
+      }),
+      onUse: { aim: { feet: 30 } }
+    },
+    // *Once per Long Rest, as a Full Action, spend 15 Mana. While you Sustain it, no ally
+    // within 20 feet of you other than yourself may be reduced below 1 Health by any
+    // source. It does not stop a Critical Injury or anything a Critical Injury does.
+    // Sustaining it costs 5 Mana a turn* (door 12): a Sustain of its own, keyed
+    // `big-bad-voodoo` (the animation layer's loop reads the key), and an aura gated on
+    // it laying 07's Aegis floor's own flag, `noCritical` false.
+    "big-bad-voodoo": {
+      grants: grant({ action: "full", cost: cost("mana", 15), uses: once("long") }),
+      onUse: { sustain: { identifier: "big-bad-voodoo", upkeep: { mana: 5 } } },
+      aura: aura({ feet: 20, targets: "allies", excludeOwner: true, gate: "sustain:big-bad-voodoo", healthFloor: 1 })
+    },
+    // ---- Spirit Walker (the Tauren's Legacy; D-781, the Legacy branches' phase B6) ----
+    // *You have Ward against Nature and Shadow equal to your rank. As a Reaction, spend 2
+    // Mana. A creature within 30 feet that would take a Death Step does not take it. You
+    // may use this a number of times equal to your rank per Short Rest* (door 11): the
+    // standing Ward, the hold asked at the one Death Step door, and the counter the hold
+    // strikes (`effects/death-holds.mjs`) - never pressed from the sheet.
+    "hold-the-thread": {
+      passive: passive([add("system.ward.nature", "rank"), add("system.ward.shadow", "rank")]),
+      deathHold: { feet: 30, cost: { pool: "mana", amount: 2 } },
+      grants: grant({ action: "reaction", cost: cost("mana", 2), uses: uses("rank", "short") })
+    },
+    // *As a Reaction when an attack or spell damages a friendly target within 30 feet,
+    // spend 2 Mana. Half the damage that gets past its Armor Points and Ward, rounded
+    // down, is dealt to you instead, or all of it at rank 2* (D-777's move, phase B6's
+    // widening): asked IN the blow, as Guardian is, the share met by the Spirit Walker's
+    // own Armor Points and Ward (the plan's *As read*; `blow-doors.mjs#burdenMet`) and
+    // landing through their own damage door, the rest staying where it was aimed.
+    "shared-burden": {
+      grants: grant({ action: "reaction", cost: cost("mana", 2) }),
+      moves: { kind: "burden", feet: 30, cost: { pool: "mana", amount: 2 }, share: "half", atRank: [{ rank: 2, share: "all" }] }
+    },
+    // *Your spells and attacks deal 1 more damage per rank to an undead creature. A
+    // Forsaken counts as undead* (door 17): a Damage line on both lanes, ticked where the
+    // target's kinds hold undead (`creature-kinds.mjs`, the Forsaken included).
+    "laid-to-rest": { damage: damage(["all"], "both", { when: { targetKind: ["undead"] } }) },
+    // *As a Half-Action, spend 4 Mana. Every Dying friendly target within 30 feet
+    // restores Health equal to your tier per rank and stands* (phase B6's `lift`): every
+    // ally within the feet who is Dying, measured before anything is paid, healed
+    // through the one healing door and stood up from Prone.
+    "ancestors-hand": {
+      grants: grant({ action: "half", cost: cost("mana", 4) }),
+      onUse: { lift: { feet: 30, heal: "tier*rank" } }
+    },
+    // *As a Full Action, spend 4 Mana. You step into the Spirit Realm for up to one
+    // minute and step back where you left ... While you are in the Spirit Realm, by this
+    // or while Dying, you may cast spells that restore Health on any creature but
+    // yourself. At rank 2 you take two Half-Actions a turn in the Spirit Realm rather
+    // than one, there and while you are Dying* (door 10).
+    "the-crossing": {
+      grants: grant({ action: "full", cost: cost("mana", 4) }),
+      onUse: { crossing: { minutes: 1 } },
+      spiritRealm: { heals: "others", halfActions: 1, atRank: [{ rank: 2, halfActions: 2 }] }
+    },
+    // *As an action, spend 4 Mana and make a Casting Test. On success, end one effect on
+    // each creature within 15 feet of a point within 60 feet, or two at rank 2. A
+    // summoned or bound creature there also takes Nature damage equal to twice your
+    // tier* (door 25): 02's Dispel's law over every creature in the area, the effects
+    // chosen before anything is paid and ended on the success.
+    "disenchant": {
+      grants: grant({ action: "action", cost: cost("mana", 4), casting: true }),
+      onUse: { areaDispel: { within: 60, radius: 15, count: 1, atRank: [{ rank: 2, count: 2 }], damage: { amount: "2*tier", type: "nature" } } }
+    },
+    // *As an action, spend 6 Mana and make a Casting Test. On success, choose a 15 ft
+    // radius on the ground within 60 feet. For one minute, every friendly target inside
+    // it gains a Boon on Resilience Tests. At rank 2 an attack against a Dying friendly
+    // target inside it adds no Death Step* (doors 11 and 25): Firestorm's area, its
+    // `remains` the Boon and the spared step, and the card's area held within 60 feet
+    // of the shaman's own token (`aimFrom`, Hush of the Grave's door).
+    "burial-ground": {
+      grants: grant({ action: "action", cost: cost("mana", 6), casting: true, area: "A 15 ft radius on the ground" }),
+      onUse: {
+        areaTick: { who: "ally", rounds: 10, remains: [{ who: "ally", boon: "resilience" }], atRank: [{ rank: 2, remains: [{ who: "ally", boon: "resilience" }, { who: "ally", noDeathStep: true }] }] },
+        aimFrom: { kind: "self", feet: 60 }
+      },
+      auraReason: "the Boon on Resilience Tests is the placed area's own payload on whoever remains inside it (D-757's `remains`), read at the roll; nothing is laid on an ally standing in reach of the shaman, so it is no aura"
+    },
+    // *As a Half-Action, spend 6 Mana. Until your next turn physical damage you take is
+    // halved, rounded down, and you may move through the space of any creature. While it
+    // holds you cannot attack or cast, except spells that restore Health. At rank 2 you
+    // may use it as a Reaction* (door 10): the state to the user's next turn, the halving
+    // at the one damage door; nothing in the system stops a walk through another
+    // creature's space, so the passage needs no door. **Rank 2 ADDS the Reaction** (the
+    // B6 review: *you may use it as a Reaction* is a second way, never the only one): both
+    // rungs on the one feature (`rungs`), the Use asking which where the turn can pay both
+    // (`class-features.mjs#rungChoice`).
+    "ethereal-form": {
+      grants: grant({ action: "half", cost: cost("mana", 6), atRank: [{ rank: 2, rungs: ["half", "reaction"] }] }),
+      onUse: { ethereal: { until: "userTurnStart" } }
+    },
+    // *Your Reincarnation class feature may be used twice between Long Rests*.
+    "the-way-back": { modifies: mod("Reincarnation", { uses: { max: 2, per: "long" } }) },
+    // *As a Half-Action, spend 8 Mana and make a Casting Test. On success, a creature
+    // within 30 feet makes a Spirit Resilience Test against your Spell DC. A Boss makes
+    // the Test with a Boon. On a failure, the damage it deals is halved, rounded down,
+    // until the end of its next turn* (door 25): the one creature named, its failed
+    // Resist laying the halving that every damage door reads off a blow's source.
+    "drawn-across": {
+      grants: grant({ action: "half", cost: cost("mana", 8), casting: true, resist: "spirit" }),
+      onUse: { halvesDealt: { until: "endOfNextTurn", bossBoon: true }, aim: { feet: 30 } }
+    },
+    // *Your Ethereal Form also covers one friendly target within 30 feet per rank* (door 10).
+    "kindred-spirits": { etherealAllies: { feet: 30, count: "rank" } },
+    // *Once per Long Rest, as a Full Action, spend 15 Mana. A creature within 30 feet that
+    // took its third Death Step since the end of your last turn stands at half its
+    // maximum Health, rounded down, with its Death Steps cleared, and spends no Spirit's
+    // Tether. You gain Fatigued. A creature with no Spirit's Tether left does not return,
+    // and no creature returns this way twice* (doors 11 and 25; the lead: *"Until the GM
+    // moves the clock"*).
+    "ancestral-spirit": {
+      grants: grant({ action: "full", cost: cost("mana", 15), uses: once("long") }),
+      onUse: { revive: { feet: 30 }, self: { condition: "fatigued" } }
+    }
   },
   // **THE MAGE'S THIRTY-SIX** (D-775, the talent plan's Phase 10): every talent
   // built or carrying its reason, each kind read by the one door
@@ -1881,12 +2620,16 @@ export const TALENT_EFFECTS = Object.freeze({
     // laid - before anything is paid - and then ends it and heals at once,
     // through the GM's client where the druid does not own the target.
     "swiftmend": { grants: grant({ action: "half", heal: "2*tier+rank" }), onUse: { ends: "healTick" } },
-    "tranquillity": { grants: grant({ action: "full", cost: cost("mana", 10), heal: "2*tier", area: "Each ally within 30 ft" }) },
+    // *Every friendly target within 30 feet restores Health equal to twice your tier*: the
+    // allies the Use measures (`who`; the lead: *"Measure the area"*), the druid among them
+    // (D-755), each with a heal button of their own.
+    "tranquillity": { grants: grant({ action: "full", cost: cost("mana", 10), heal: "2*tier", area: "Each ally within 30 ft", who: "ally" }) },
     // *On success, every friendly target within 20 feet restores Health equal
     // to your tier at the start of each of their turns for a number of rounds
     // equal to your rank* (D-771). A TICK laid by the card's Apply on each ally,
-    // never a heal at the use - which is what the row used to do.
-    "wild-growth": { grants: grant({ action: "action", cost: cost("mana", 5), casting: true, tick: { kind: "heal", amount: "tier", rounds: "rank" }, area: "Each ally within 20 ft" }) },
+    // never a heal at the use - which is what the row used to do - and the allies
+    // the Use measures (`who`; the lead: *"Measure the area"*), each with its own Apply.
+    "wild-growth": { grants: grant({ action: "action", cost: cost("mana", 5), casting: true, tick: { kind: "heal", amount: "tier", rounds: "rank" }, area: "Each ally within 20 ft", who: "ally" }) },
     // Use counters and passives (D-648).
     // *A healing spell of yours costs a Half-Action rather than an action. You
     // may use this a number of times equal to your rank per Short Rest*
@@ -1971,6 +2714,10 @@ export const DAMAGE_FACTS = Object.freeze({
   shadowform: true,
   // 04's Combustion (D-775): the target carries an Ignite tick this roller laid.
   ignited: true,
+  // 04's Engineering Upgrade (*your Gnomish Battle Rig's attacks deal 1 more damage
+  // per rank*; the lead: *"Yes, the fist too"*): the roller wears the Gnomish Battle
+  // Rig (`AzerothActor#shape`, the Legacy branches' B2).
+  battleRig: true,
   // **THE TABLE'S CALL** (D2 §12), so never auto-checked.
   flanking: false,
   judgement: false
@@ -1996,14 +2743,19 @@ function typeMatches(types = [], type = "physical") {
  *   the school for magical damage and `physical` otherwise (06 §4).
  * @returns {Array<{identifier, name, rank, amount, when, form, types}>}
  */
-export function damageRowsFor(talents = [], { lane = "attack", type = "physical", alsoSpell = false } = {}) {
+export function damageRowsFor(talents = [], { lane = "attack", type = "physical", alsoSpell = false, scope = {} } = {}, rowOf = talentEffect) {
   const out = [];
-  for (const { talent, entry } of takenRows(talents)) {
+  for (const { talent, entry } of takenRows(talents, rowOf)) {
     const d = entry.damage;
     if (!d) continue;
     // A bound creature's own bonus never reaches the owner's roll (D-643), and
     // an `until` row is switched on by using the feature, not by rolling.
     if (d.via || d.until) continue;
+    // **AN SL-KEYED ROW LANDS AFTER THE DIE** (the Legacy branches' door 26: 04's
+    // Critical Strike, *an attack of yours that reaches SL 2 adds ...*): it is no
+    // dialog line, since the Success Level does not exist until the roll -
+    // `slDamageFor` is its one reader, inside `rollTest`.
+    if (Number(d.sl) > 0) continue;
     // **A WEAPON BLOW THAT COUNTS AS A SPELL'S** (04's Elemental Blademaster; the
     // lead, 2026-10-03, on O-190; D-779): `alsoSpell` lets a spell row reach the
     // attack lane where the door found the blow magical.
@@ -2014,7 +2766,8 @@ export function damageRowsFor(talents = [], { lane = "attack", type = "physical"
       identifier: talent.identifier,
       name: talent.name,
       rank,
-      amount: evaluateAmount(String(d.amount ?? "rank"), { rank }) ?? rank,
+      // The door's ability scope (door 16): an amount may name a modifier.
+      amount: evaluateAmount(String(d.amount ?? "rank"), { ...scope, rank }) ?? rank,
       when: d.when ?? null,
       form: d.form === true,
       types: [...(d.types ?? [])]
@@ -2036,9 +2789,18 @@ export function damageRowsFor(talents = [], { lane = "attack", type = "physical"
  */
 export function damageLinesFor(rows = [], facts = {}) {
   const out = [];
+  // **A GATE OBJECT IS READ BY THE ONE PREDICATE** (the Legacy branches' doors 15
+  // and 17, `rules/talent-gates.mjs`): a target's condition or kind, the user's
+  // marks, what the user wields and wears. The TABLE's own facts (flanking, a
+  // judgement) never tick a line through it either (D2 §12).
+  const doorFacts = Object.fromEntries(Object.entries(facts ?? {}).filter(([k]) => DAMAGE_FACTS[k] !== false));
   for (const row of rows) {
     if (row.form && facts.form !== true) continue;
-    const readable = row.when === null || DAMAGE_FACTS[row.when] === true;
+    // A line whose wield half fails can never hold this roll (door 15), the form
+    // row's rule: *While you wield a two-handed weapon* with none in hand.
+    if (wieldFails(row.when, facts.wield ?? null)) continue;
+    const named = row.when === null || typeof row.when === "string";
+    const readable = row.when === null || (typeof row.when === "string" && DAMAGE_FACTS[row.when] === true);
     out.push({
       id: `talent-damage-${row.identifier}`,
       identifier: row.identifier,
@@ -2046,8 +2808,8 @@ export function damageLinesFor(rows = [], facts = {}) {
       amount: row.amount,
       when: row.when,
       // The words are `lang/en.json`'s; this module is pure and names the key.
-      label: `AZEROTH.Dialog.DamageWhen.${row.when ?? "always"}`,
-      checked: row.when === null ? true : (readable && facts[row.when] === true)
+      label: `AZEROTH.Dialog.DamageWhen.${gateLabel(row.when)}`,
+      checked: row.when === null ? true : (named ? (readable && facts[row.when] === true) : gateHolds(row.when, doorFacts) === true)
     });
   }
   return out;
@@ -2299,6 +3061,14 @@ export const CENSUS_DETECTORS = Object.freeze({
       || Boolean(e.healing?.heal)
       // And D-779's: a font whose charges heal (Lightwell).
       || Boolean(e.onUse?.lightwell)
+      // And the Legacy branches' (B3): Health back for the damage a Use dealt (Life
+      // Drain's *You recover Health equal to the damage it takes*).
+      || e.onUse?.healsDealt === true
+      // And phase B6's: every Dying friend in reach restored and stood (Ancestor's
+      // Hand, `onUse.lift`), and the ONE cast filter that lets *spells that restore
+      // Health* through - from the Spirit Realm (The Crossing's `spiritRealm.heals`)
+      // and under Ethereal Form (`rules/spirit-realm.mjs#castFilterRefusal`).
+      || Boolean(e.onUse?.lift) || e.spiritRealm?.heals === "others" || Boolean(e.onUse?.ethereal)
   },
   // *Your Fortitude rises by 2 per rank*, *your Defense rises by 1 per rank*.
   risesBy: {
@@ -2308,6 +3078,9 @@ export const CENSUS_DETECTORS = Object.freeze({
     covers: e => Boolean(e.passive || e.damage || e.aura || e.range || e.moved || e.firstAttack) || modifiesOf(e).some(m => Object.keys(m).length > 1)
       // And D-779's: Armor Points a turn without a move lays (Bracing).
       || Boolean(e.bracing)
+      // And the Legacy branches' (B3): Armor Points and Ward a Use lays for the
+      // encounter (The Mountain Wakes' *your Armor Points rise by 2*).
+      || Boolean(e.onUse?.armor)
   },
   // A number per rank beside Defense, Armor Points or Ward: *1 more Defense per
   // rank*, *Ward 1 per rank*, *ignore 2 Armor Points per rank*. Not *your Ward
@@ -2326,7 +3099,10 @@ export const CENSUS_DETECTORS = Object.freeze({
       || e.spell?.ignoresWard || e.castLine?.pierce || e.firstAttack
       // And D-779's: Bracing's Armor Points, and the Ward 07's Barrier gives the
       // creatures chosen (Barrier's rank).
-      || e.bracing || e.chosenWard)
+      || e.bracing || e.chosenWard
+      // And the Legacy branches' (B1): Armor Points a gated attack ignores (The Long
+      // Watch's *your attacks against it ignore 2 Armor Points*).
+      || e.pierce)
   },
   // 05's temporary Health (D-777): a grant at the healing door or on a named
   // spell (`tempHealth`), or a Use's own (Last Stand's `onUse.tempHealth`).
@@ -2372,6 +3148,13 @@ export const CENSUS_DETECTORS = Object.freeze({
       || modifiesOf(e).some(m => [m, ...(m.atRank ?? [])].some(c => Array.isArray(c?.inflicts) && c.inflicts.some(i => i?.condition)))
       // And D-778's: a Stun a failed escape lays (Deep Freeze).
       || Boolean(e.escape?.failStun)
+      // And the Legacy branches' bodies (B2): a trap's condition (Shadow Trap's *is
+      // Entangled until*) and what a bound creature's hit lays (Serpent Ward's *is
+      // also Slowed until*).
+      || Boolean(e.onUse?.trap?.condition) || (e.boundAttack?.lays ?? []).some(l => l?.condition)
+      // And B1's own, which no cover named: a condition the Use lays on its user
+      // (Ancestral Spirit's *You gain **Fatigued***, door 26).
+      || Boolean(e.onUse?.self?.condition)
   },
   // A row whose trigger IS a Success Level (D-771): Nature's Grace's next
   // spell and Primal Fury's further Ferocity. And D-772's: Deep Cut's
@@ -2387,6 +3170,9 @@ export const CENSUS_DETECTORS = Object.freeze({
       // And D-778's: a Dispel that ends the holder's effect only at an SL
       // (Everlasting Affliction at rank 2).
       || Number(e.dispelGate?.sl) > 0
+      // And the Legacy branches' (B1): damage a hit adds at an SL (Critical Strike,
+      // door 26), and a Test the user's own hit forces at one (Keening Arrows).
+      || Number(e.damage?.sl) > 0 || Number(e.hitTest?.sl) > 0
   },
   // A widened Critical Injury range (Executioner, D-772), and a spell's (Shatter, D-775).
   criticalRange: {
@@ -2525,10 +3311,10 @@ function modifiesOf(entry) {
 }
 
 /** Only the talents taken, with their rows. */
-function takenRows(talents = []) {
+function takenRows(talents = [], rowOf = talentEffect) {
   return talents
     .filter(t => (Number(t?.taken) || 0) > 0)
-    .map(t => ({ talent: t, entry: talentEffect(t.className, t.identifier, t.race) }))
+    .map(t => ({ talent: t, entry: rowOf(t.className, t.identifier, t.race) }))
     .filter(r => r.entry);
 }
 
@@ -2537,8 +3323,8 @@ function takenRows(talents = []) {
  * for the talent, carrying its text, its rank and where it came from.
  * @param {Array<{identifier, className, branch?, name, effect?, taken}>} talents
  */
-export function grantsFor(talents = []) {
-  return takenRows(talents)
+export function grantsFor(talents = [], rowOf = talentEffect) {
+  return takenRows(talents, rowOf)
     .filter(({ entry }) => entry.grants)
     // **A GRANT A RANK REACHES** (04's Improved Blink: *At rank 2 it costs no
     // Mana once per Short Rest*; D-775): the counter is granted from that rank,
@@ -2546,14 +3332,30 @@ export function grantsFor(talents = []) {
     .filter(({ talent, entry }) => (Number(talent.taken) || 1) >= (Number(entry.grants.minRank) || 1))
     .map(({ talent, entry }) => {
       const rank = Number(talent.taken) || 1;
-      const { minRank: _minRank, ...grants } = entry.grants;
+      const { minRank: _minRank, atRank: rankClauses = [], ...grants } = entry.grants;
+      // **A RANK'S CLAUSE LAID OVER THE GRANT** (the Legacy branches' door 26:
+      // 04's Ethereal Form, *At rank 2 you may use it as a Reaction*): every
+      // `atRank` the rank has reached, `{rank, action, ...}`, in order.
+      for (const clause of Array.isArray(rankClauses) ? rankClauses : []) {
+        if (rank >= (Number(clause?.rank) || Infinity)) {
+          const { rank: _cr, ...rest } = clause;
+          Object.assign(grants, rest);
+        }
+      }
       // A condition the card offers from a rank (04's Pyroblast: *At rank 2 a
       // Casting Test at SL 3 or better also applies Stun*; D-775): dropped below
-      // it, its `sl` kept for the Use.
+      // it, its `sl` kept for the Use. **And its escape bound at the rank** (door
+      // 19: Bad Mojo's *At rank 2 that Test takes a Bane*), so the stamp holds it.
       if (Array.isArray(grants.inflicts)) {
         grants.inflicts = grants.inflicts
           .filter(i => rank >= (Number(i?.minRank) || 1))
-          .map(({ minRank: _r, ...i }) => i);
+          .map(({ minRank: _r, ...i }) => (i.escape ? { ...i, escape: boundFeatureEscape(i.escape, rank) } : i));
+      }
+      // **HOW MANY A SUMMON CALLS, AT THE RANK** (the Legacy branches' door 4: 04's
+      // Pocket Factory, *Two Clockwork Gnomes, or three at rank 2* - `"1+rank"`):
+      // bound into a number here, since the feature's stamp holds a number.
+      if (grants.summons && typeof grants.summons === "object") {
+        grants.summons = { ...grants.summons, count: summonCountAt(grants.summons.count, rank) };
       }
       return {
         talent,
@@ -2819,11 +3621,37 @@ export function movementFactsFor(talents = []) {
   return out;
 }
 
-/** The spells the talents taken know ("You know Dispersion"), by name, with the talent. */
-export function spellGrantsFor(talents = []) {
-  return takenRows(talents)
+/**
+ * The spells the talents taken know ("You know Dispersion"), by name, with the talent.
+ *
+ * **AND THE ONES A RANK ADDS** (the Legacy branches' door 25: 04's Shadow Hunt, *You
+ * know Shadow Ward and Shadow Walk, and at rank 2 Darkward and Dark Passage as
+ * well*): a `spell.atRank [{rank, names}]` clause the rank has reached adds its names
+ * beside the row's own, each once; a rank taken back withdraws them with the sync's
+ * own stale sweep (`AzerothActor#_syncClassFeaturesNow`).
+ */
+export function spellGrantsFor(talents = [], rowOf = talentEffect) {
+  return takenRows(talents, rowOf)
     .filter(({ entry }) => entry.spell?.learn)
-    .flatMap(({ talent, entry }) => (entry.spell.names ?? []).map(name => ({ talent, name })));
+    .flatMap(({ talent, entry }) => spellNamesAtRank(entry.spell, Number(talent.taken) || 1).map(name => ({ talent, name })));
+}
+
+/**
+ * A spell row's names at a rank: its own, then every `atRank` clause's the rank has
+ * reached, each once and in that order.
+ *
+ * @param {{names?: string[], atRank?: Array<{rank: number, names?: string[]}>}} spell
+ * @param {number} rank
+ * @returns {string[]}
+ */
+export function spellNamesAtRank(spell, rank = 1) {
+  const out = [];
+  const take = list => { for (const n of list ?? []) if (typeof n === "string" && n && !out.includes(n)) out.push(n); };
+  take(spell?.names);
+  for (const clause of Array.isArray(spell?.atRank) ? spell.atRank : []) {
+    if ((Number(rank) || 0) >= (Number(clause?.rank) || Infinity)) take(clause?.names);
+  }
+  return out;
 }
 
 /**
@@ -2834,9 +3662,9 @@ export function spellGrantsFor(talents = []) {
  * @param {Array<{identifier, className, name, taken, img?}>} talents
  * @param {{form?: boolean, shield?: boolean}} [state]
  */
-export function passivesFor(talents = [], { form = false, shield = false, totem = false } = {}) {
+export function passivesFor(talents = [], { form = false, shield = false, totem = false, wield = null } = {}, rowOf = talentEffect) {
   const out = [];
-  for (const { talent, entry } of takenRows(talents)) {
+  for (const { talent, entry } of takenRows(talents, rowOf)) {
     const p = entry.passive;
     if (!p) continue;
     if (p.when === "form" && !form) continue;
@@ -2844,6 +3672,14 @@ export function passivesFor(talents = [], { form = false, shield = false, totem 
     // *While a totem of yours stands* (04's Earthen Shield, D-774): a totem
     // bound to the character (D-643).
     if (p.when === "totem" && !totem) continue;
+    // **WHAT THE USER WIELDS AND WEARS** (the Legacy branches' door 15): 04's
+    // Wolf's Pace's *While you wear no armor in your Chest slot*, Blade Circle's
+    // *While you wield a two-handed weapon and wear no armor in your Chest slot* -
+    // `{wields: [...]}`, laid only where the sync measured every fact true
+    // (`rules/wield.mjs#wieldFacts`). An amount here names no ability modifier
+    // (door 16): a laid effect's value is fixed when it is written and would not
+    // move with the score, so a row that needs one names v14's `@` data path.
+    if (p.when && typeof p.when === "object" && gateHolds(p.when, { wield }) !== true) continue;
     const rank = Number(talent.taken) || 1;
     const changes = p.changes.map(c => ({
       key: c.key, type: c.type ?? "add", phase: "final",
@@ -2913,13 +3749,22 @@ export function talentEffectDiff(desired = [], held = []) {
  * @param {Array<{identifier, className, race?, name, taken}>} talents
  * @returns {Array<{talent: object, identifier: string, name: string, rank: number, aura: object}>}
  */
-export function talentAurasFor(talents = []) {
+export function talentAurasFor(talents = [], rowOf = talentEffect) {
   const out = [];
-  for (const { talent, entry } of takenRows(talents)) {
+  for (const { talent, entry } of takenRows(talents, rowOf)) {
     if (!entry.aura) continue;
     const rank = Number(talent.taken) || 1;
     const amount = v => (typeof v === "string" ? (evaluateAmount(v, { rank }) ?? 0) : v);
-    out.push({ talent, identifier: talent.identifier, name: talent.name, rank, aura: auraStamp(entry.aura, { amount }) });
+    const stamped = auraStamp(entry.aura, { amount });
+    // **A BANE THE AURA LAYS** (the Legacy branches' door 20: 04's Loa Drum, *a Bane on
+    // Spirit Resilience Tests*): carried beside the stamp - a feature's stored aura
+    // has no `bane` in its schema, and a talent's is read here fresh every pass.
+    // **AND A FLOOR UNDER HEALTH** (door 12: 04's Big Bad Voodoo), the same way.
+    const beside = {
+      ...(entry.aura.bane ? { bane: { ...entry.aura.bane } } : {}),
+      ...(entry.aura.healthFloor ? { healthFloor: amount(entry.aura.healthFloor) } : {})
+    };
+    out.push({ talent, identifier: talent.identifier, name: talent.name, rank, aura: Object.keys(beside).length ? { ...stamped, ...beside } : stamped });
   }
   return out;
 }
@@ -3050,10 +3895,10 @@ export function nextSpellGrants(talents = [], { on = "", sl = null } = {}) {
  *   `used` the once-a-turn rows the round's record already holds
  * @returns {{byPool: Record<string, number>, fired: Array<{identifier: string, name: string, pool: string, amount: number, once: string|null}>}}
  */
-export function momentumOnHitFor(talents = [], { sl = 0, form = false, onTurn = true, used = [], facts = {} } = {}) {
+export function momentumOnHitFor(talents = [], { sl = 0, form = false, onTurn = true, used = [], facts = {} } = {}, rowOf = talentEffect) {
   const byPool = {};
   const fired = [];
-  for (const { talent, entry } of takenRows(talents)) {
+  for (const { talent, entry } of takenRows(talents, rowOf)) {
     const rank = rankOfTaken(talent);
     // A rank's clause laid over the row (04's Waylay: *At rank 2 that attack
     // builds 1 further Combo Point*; D-773).
@@ -3064,8 +3909,13 @@ export function momentumOnHitFor(talents = [], { sl = 0, form = false, onTurn = 
     // **A FACT ABOUT THIS BLOW** (D-773): an attack made while hidden (Shadow
     // Focus, Waylay), the attack's own Critical Injury (Seal Fate), a target
     // affected by Bleeding the blow damaged (Blood Sport) - each measured by the
-    // roll and handed in; an unmeasured one never holds.
-    if (m.when && facts?.[m.when] !== true) continue;
+    // roll and handed in; an unmeasured one never holds. **And a gate object**
+    // (the Legacy branches' doors 15 and 17, `rules/talent-gates.mjs`): Run to
+    // Ground's *a target that is Slowed, Entangled or Stunned*, Bloodied Blade's
+    // *While you wield a two-handed weapon and wear no armor in your Chest slot* -
+    // a gain after the die is given only where the gate HOLDS, never where the door
+    // could not tell.
+    if (m.when && gateHolds(m.when, facts ?? {}) !== true) continue;
     if (m.once === "turn" && (!onTurn || (used ?? []).includes(talent.identifier))) continue;
     // *Once a round* (04's Aimed Volley, Shadow Focus; D-773): any turn, once.
     if (m.once === "round" && (used ?? []).includes(talent.identifier)) continue;
