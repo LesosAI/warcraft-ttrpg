@@ -42,7 +42,7 @@ export const SUMMONED_FLAG = "summonedFrom";
  * in creation data** (verified in `common/data/fields.mjs` at 14.367), so
  * writing it here would have made a second copy on every summon.
  */
-async function summonedActor(entryName) {
+export async function summonedActor(entryName) {
   const pack = game.packs.get("azeroth-rpg.bestiary");
   if (!pack) throw new Error(game.i18n.localize("AZEROTH.Summon.NoPack"));
   const index = await pack.getIndex();

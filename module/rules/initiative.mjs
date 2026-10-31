@@ -42,6 +42,7 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+import { ancientDreadAction } from "./ancient-dread.mjs";
 
 /** Two sides. Neutral acts with the side it is not hostile to; the GM decides. */
 export const SIDES = Object.freeze(["friendly", "hostile"]);
@@ -52,7 +53,7 @@ export const REACTIONS_PER_TURN = AZEROTH.REACTIONS_PER_TURN;
 /** *You may make one each round* (06 §2). */
 export const OFF_HAND_ATTACKS_PER_ROUND = 1;
 
-/** 02 §6's *two attacks each time you Attack* — rolls, not Attack actions. */
+/** One additional roll per Attack action; its weapon is explicitly chosen in the popup. */
 export const ROLLS_PER_EXTRA_ATTACK = 2;
 
 /** Every refusal `spend` and `restore` can return, as i18n keys. */
@@ -84,7 +85,9 @@ export const EXTRA_ATTACK_ROLLS_BUILD_MOMENTUM = true;
  * How many Attack Tests one Attack action rolls (02 §6).
  *
  * - **Extra Attack is two rolls in one Attack**, not a second Attack action.
- * - **It does not double the off hand** (06 §2, in those words).
+ * - It does not double the normal offhand attack. The extra roll may use an
+ *   offhand weapon without spending that normal once-per-round attack (lead,
+ *   2026-10-29); its weapon choice does not change the number of extra rolls.
  * - A blow struck as a **Reaction** is one attack and no more: 06 §6 gives the
  *   Opportunity Attack as *one attack against them at the moment they leave*,
  *   a Parry is not an attack at all, and 06 §7's Riposte is a Reaction's blow.
@@ -252,7 +255,9 @@ export function loseTurn(budget) {
  *                                       but for the at-once allowance, and the
  *                                       off hand by its own name.
  */
-export function spend(budget, cost, { isAttack = false, isOffHand = false, isMove = false, onTurn = true } = {}) {
+export function spend(budget, cost, { isAttack = false, isOffHand = false, isMove = false, onTurn = true, attackSlowed = false } = {}) {
+  cost = ancientDreadAction(cost, { affected: attackSlowed,
+    attack: isAttack && !(isOffHand && budget.attacked === true) });
   const base = { half: 1, action: 2, full: 2, reaction: 0 }[cost];
   if (base === undefined) {
     return { ok: false, reason: BUDGET_REFUSALS.noSuchCost, params: { cost: String(cost) }, budget };
@@ -276,7 +281,7 @@ export function spend(budget, cost, { isAttack = false, isOffHand = false, isMov
   // the lead's ruling in the decision, and the only reading under which the off
   // hand is not simply a free extra attack every turn.
   const rides = isAttack && isOffHand && cost !== "reaction";
-  const halves = rides ? (budget.attacked === true ? 0 : 1) : base;
+  const halves = rides ? (budget.attacked === true ? 0 : attackSlowed ? base : 1) : base;
 
   // **ONE OFF-HAND ATTACK A ROUND** (06 §2: *You may make one each round*),
   // asked BEFORE the Half-Actions so a second one is refused by its own rule

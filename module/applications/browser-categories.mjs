@@ -10,6 +10,10 @@
 
 import { AZEROTH } from "../config.mjs";
 import { coins, copperFrom } from "../helpers/coins.mjs";
+import { GADGETS_PACK, GADGET_ENTRY_FLAG } from "../rules/gadgets.mjs";
+
+/** Where a gadget's entry carries 04's Use cell (`rules/gadgets.mjs#GADGET_ENTRY_FLAG`). */
+const GADGET_USE = `flags.azeroth-rpg.${GADGET_ENTRY_FLAG}.use`;
 
 /**
  * Packs the browser deliberately does not carry.
@@ -34,6 +38,18 @@ export const CATEGORIES = Object.freeze({
       className: { label: "AZEROTH.Browser.Class", path: "system.className" },
       branch: { label: "AZEROTH.Browser.Branch", path: "system.branch" },
       tier: { label: "AZEROTH.Browser.BranchTier", path: "system.tier" }
+    })
+  },
+  // 04's Gadgets table, the Tinker's eight (the lead, 2026-10-24: *"I also do not see
+  // them in the compendium browser"*). The facet is 04's own Use cell, off the entry's
+  // mark: a feature's `action` has no word for *One minute*, and none for the trigger a
+  // Reaction waits on.
+  gadgets: {
+    pack: GADGETS_PACK,
+    label: "AZEROTH.Browser.Gadgets",
+    fields: [GADGET_USE],
+    filters: () => ({
+      use: { label: "AZEROTH.Item.Use", path: GADGET_USE }
     })
   },
   spells: {
@@ -253,6 +269,9 @@ export function summary(key, entry) {
   const enumLabel = (map, v) => (v && map?.[v] ? loc(map[v]) : null);
   switch (key) {
     case "talents": parts.push(s.className, s.branch, tier(s.tier)); break;
+    // 04's Use cell: *Half-Action*, *One minute*, or the Reaction and what it waits on.
+    // Prose, so cut to a row's width as a career's Grantor is.
+    case "gadgets": parts.push(clip(f[GADGET_ENTRY_FLAG]?.use)); break;
     case "spells": parts.push(enumLabel(AZEROTH.schools, s.school), tier(s.tier), s.mana != null ? `${s.mana} ${loc("AZEROTH.Card.Mana")}` : null); break;
     case "careers": parts.push(enumLabel(AZEROTH.careerTiers, s.tier), clip(s.grantor)); break;
     case "classes": parts.push(enumLabel(AZEROTH.frames, s.frame), ...(s.schools ?? []).map(k => enumLabel(AZEROTH.schools, k))); break;

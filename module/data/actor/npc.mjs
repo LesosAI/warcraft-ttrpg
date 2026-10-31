@@ -17,6 +17,7 @@
  */
 
 import { AZEROTH } from "../../config.mjs";
+import { dispersionFor } from "../../rules/dispersion.mjs";
 import { abilityModifier } from "../../rules/abilities.mjs";
 import { trackStates } from "../../rules/corruption.mjs";
 import { carryCapacity, flyingPace, loadState } from "../../rules/size.mjs";
@@ -34,12 +35,16 @@ import { isThinned } from "../../rules/swarm.mjs";
 import { auraBaneRows, auraBoonRows, auraHalvesHealing, auraStandsFree, emptySchoolArmor } from "../../rules/auras.mjs";
 // A condition a creature cannot be for a span (04's Unfettered; the Legacy branches' door 25).
 import { immunitiesFrom } from "../../rules/legacy-uses.mjs";
+import { invulnerabilityPotionActive } from "../../rules/invulnerability-potion.mjs";
+import { wisdomBonus } from "../../rules/distilled-wisdom.mjs";
 import { cleanAutomation, passiveEffects } from "../../rules/ability-automation.mjs";
 import { signatureEffects } from "../../rules/signatures.mjs";
 import { emptyByTestKind, laidBaneRows, laidBaneTotals, laidBoonRows } from "../../rules/banes.mjs";
 import { laidBaneFlags, laidBoonFlags } from "../../effects/banes.mjs";
 // A heal Mortal Strike's blow blocks (04, D-772): the character's own reading.
 import { healingBlockedBy } from "../../rules/no-healing.mjs";
+import { sentinelHalvesHealing } from "../../rules/sentinel-mortal-strike.mjs";
+import { sentinelEnrageBonus } from "../../rules/sentinel-enrage.mjs";
 import { nearbyCreatures } from "../../effects/passives.mjs";
 // 05's temporary Health, its stored value cleaned where present (D-777).
 import { cleanTempSource } from "../../rules/temporary-health.mjs";
@@ -387,6 +392,7 @@ export class NpcData extends foundry.abstract.TypeDataModel {
     // comment that the numbers are the tool's; a block that states a pool
     // keeps what it states.
     const pools = creaturePools(this);
+    pools.power += wisdomBonus(this.parent?.effects, { itemId: null, name: this.power?.name ?? null });
     this.powerMax = pools.power;
     this.momentumMax = pools.momentum;
     // **A POOL NOTHING STORES A VALUE FOR STANDS FULL** (D-705). The floor
@@ -401,6 +407,7 @@ export class NpcData extends foundry.abstract.TypeDataModel {
     // MOMENTUM IS NOT SEEDED: 05 §11 GAINS it, and a creature that walks into
     // a fight with 10 Momentum is a different game.
     if (this.power.value === null || this.power.value === undefined) this.power.value = pools.power;
+    this.power.value = Math.max(0, Math.min(pools.power, this.power.value));
     this.powers = pools.power > 0
       ? [{ itemId: null, name: this.power?.name ?? "mana", value: this.power?.value ?? 0, max: pools.power }]
       : [];
@@ -457,7 +464,9 @@ export class NpcData extends foundry.abstract.TypeDataModel {
     // WHAT IT IS HOLDING AND WHO IS HOLDING IT are read ONCE, here. The grant
     // pass further down reads the same two, so the standing grants, the
     // Signatures and the Armor Points cannot disagree about either.
-    const items = [...(this.parent?.items ?? [])];
+    const carriedItems = [...(this.parent?.items ?? [])];
+    // Retain carried items and their equipped state while their use is suspended.
+    const items = dispersionFor(this.parent) ? [] : carriedItems;
     const bearer = this.parent?.signatureState ?? {};
     const signature = signatureEffects(items, bearer);
     // The whole aggregate, because five readers already key on this exact path
@@ -467,6 +476,7 @@ export class NpcData extends foundry.abstract.TypeDataModel {
     // one school gains, and the Overview column. Setting it is what moves all
     // five onto creatures at once.
     this.signatureEffects = signature;
+    if (invulnerabilityPotionActive(this.parent?.effects ?? [])) this.immune = [...new Set([...(this.immune ?? []), "physical"])];
     // **EVERY LINE ADDS TO WHAT IS THERE** and never recomputes from `_source`
     // (D-691's own scar): the `initial` phase lands before this method, so a
     // plain assignment writes an Active Effect's own point back out again.
@@ -497,6 +507,10 @@ export class NpcData extends foundry.abstract.TypeDataModel {
     // The block's attack Bonus is inside an array an effect cannot reach, so
     // the standing bonus sits beside it and the attack door adds it.
     this.attackBonus = passives.attack;
+    const sentinelEnrage = sentinelEnrageBonus({ health: this.health,
+      pack: this.parent?.flags?.["azeroth-rpg"]?.sentinelPack, actorUuid: this.parent?.uuid, abilities: this.creatureAbilities });
+    this.attackBonus += sentinelEnrage;
+    this.damageBonus += sentinelEnrage;
     // **WHAT AN OWNER'S TALENT MAKES OF A BOUND CREATURE'S ATTACK** (the Legacy
     // branches' door 20: 04's Serpent Ward, *Your Searing totem spits venom. Its
     // attack deals Nature damage rather than Fire*): two derived words, empty here,
@@ -537,7 +551,8 @@ export class NpcData extends foundry.abstract.TypeDataModel {
     // What an area lays while it stands there (07, D-757), the character's
     // three lines: the Banes the dialog reads, halved healing, a free stand.
     this.auraBaneRows = auraBaneRows(this.parent?.effects ?? []);
-    this.healingHalved = auraHalvesHealing(this.parent?.effects ?? []);
+    this.healingHalved = auraHalvesHealing(this.parent?.effects ?? [])
+      || sentinelHalvesHealing(this.parent?.effects ?? []);
     // **A BLOW THAT LEFT IT RECOVERING NONE** (04's Mortal Strike, D-772): a
     // troll's Regeneration as much as anybody's heal, read by every door.
     const blocked = healingBlockedBy(this.parent?.effects ?? []);
@@ -689,7 +704,7 @@ export class NpcData extends foundry.abstract.TypeDataModel {
     // would have Overloaded a Mindless ooze with one dagger.
     this.carryCapacity = carryCapacity(this.abilities.str.value, this.size);
     // What is inside a container is free and the container weighs its own row.
-    this.carried = carriedTotal(items);
+    this.carried = carriedTotal(carriedItems);
     this.load = loadState(this.carried, this.abilities.str.value, this.size);
 
     // Speed as PARTS (CLAUDE.md §4: *encumbrance is a Speed part, not a

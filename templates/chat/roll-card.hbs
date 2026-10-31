@@ -281,11 +281,22 @@
           {{localize "AZEROTH.Miss.NegateButton" name=r.negate.name}}
         </button>
         {{/if}}
+        {{#if r.phaseShift}}
+        <button type="button" data-action="phaseShift" data-target-index="{{r.index}}">
+          {{localize "AZEROTH.PhaseShift.Button"}}
+        </button>
+        {{/if}}
       </div>
       {{/each}}
       <p class="azeroth-note" data-reaction-note="1">{{reactionNote}}</p>
     </div>
     {{/if}}
+    <div class="azeroth-card-actions" data-attack-reaction-review data-gm-only hidden>
+      <button type="button" data-action="reviewAttackReaction">{{localize "AZEROTH.AttackReactionReview.Title"}}</button>
+    </div>
+    <div class="azeroth-card-actions" data-attack-transfer-review data-gm-only hidden>
+      <button type="button" data-action="reviewAttackTransfer">{{localize "AZEROTH.AttackTransferReview.Title"}}</button>
+    </div>
     {{#if foresight.length}}
     {{!-- 04's Foresight (the lead, 2026-10-03, on O-181: "Yes"; D-779): a priest
           holding it presses 02's Ward from this card on the creature struck, and

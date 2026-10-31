@@ -1,0 +1,11 @@
+<p>{{localize "AZEROTH.SoulLink.ReviewInstructions"}}</p>
+<p><strong>{{stage}}</strong></p>
+<dl>
+  <dt>{{localize "AZEROTH.SoulLink.Caster"}}</dt><dd>{{caster}}{{#if missing}} — {{localize "AZEROTH.SoulLink.Unavailable"}}{{/if}}</dd>
+  <dt>{{localize "AZEROTH.SoulLink.AttemptedRecipient"}}</dt><dd>{{recipient}}</dd>
+  <dt>{{localize "AZEROTH.SoulLink.Previous"}}</dt>
+  <dd>{{#if previous}}{{previous.name}} — {{previous.recipient}} ({{previous.id}}; {{previous.cast}}){{else}}{{localize "AZEROTH.SoulLink.NoneRecorded"}}{{/if}}</dd>
+  <dt>{{localize "AZEROTH.SoulLink.Current"}}</dt>
+  <dd>{{#each current}}<p>{{name}} — {{recipient}} ({{id}}; {{cast}})</p>{{else}}{{localize "AZEROTH.SoulLink.NonePresent"}}{{/each}}</dd>
+</dl>
+<label class="checkbox"><input type="checkbox" name="acknowledged">{{localize "AZEROTH.SoulLink.Acknowledge"}}</label>

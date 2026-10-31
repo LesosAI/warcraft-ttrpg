@@ -525,6 +525,16 @@ function standingSignatureFields() {
       school: choiceField(AZEROTH.schools),
       amount: optionalNumberField({ min: 1 })
     }),
+    chosenSpellDamage: new fields.SchemaField({
+      school: choiceField(AZEROTH.schools),
+      attribute: choiceField(AZEROTH.abilities),
+      skill: choiceField(AZEROTH.skills),
+      casting: new fields.BooleanField({ initial: false })
+    }),
+    chosenSpellHealing: new fields.BooleanField({ initial: false }),
+    firstParryTest: new fields.BooleanField({ initial: false }),
+    weaponKillReward: new fields.BooleanField({ initial: false }),
+    scalingHitDamage: new fields.BooleanField({ initial: false }),
     // What a whole SCHOOL'S spells cost, less (the lead, 2026-09-14: *spell
     // and/or a school should be possible*). `empowers.cost` below is the same
     // rule scoped to ONE spell by name; this is `spellDamage`'s exact mirror
@@ -714,6 +724,11 @@ function branchField() {
     damageMultiplier: standing.damageMultiplier,
     damageRatingSet: standing.damageRatingSet,
     spellDamage: standing.spellDamage,
+    chosenSpellDamage: standing.chosenSpellDamage,
+    chosenSpellHealing: standing.chosenSpellHealing,
+    firstParryTest: standing.firstParryTest,
+    weaponKillReward: standing.weaponKillReward,
+    scalingHitDamage: standing.scalingHitDamage,
     spellCost: standing.spellCost,
     healingBonus: standing.healingBonus,
     corruptionReduction: standing.corruptionReduction,
@@ -766,6 +781,11 @@ export function signatureField() {
     damageMultiplier: standing.damageMultiplier,
     damageRatingSet: standing.damageRatingSet,
     spellDamage: standing.spellDamage,
+    chosenSpellDamage: standing.chosenSpellDamage,
+    chosenSpellHealing: standing.chosenSpellHealing,
+    firstParryTest: standing.firstParryTest,
+    weaponKillReward: standing.weaponKillReward,
+    scalingHitDamage: standing.scalingHitDamage,
     spellCost: standing.spellCost,
     healingBonus: standing.healingBonus,
     corruptionReduction: standing.corruptionReduction,

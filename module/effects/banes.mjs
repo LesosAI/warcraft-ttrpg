@@ -38,6 +38,8 @@
 import { AZEROTH } from "../config.mjs";
 import { LAID_BANE_FLAG, LAID_BOON_FLAG, baneSpentBy, boonSpentBy, cleanLaidBane, cleanLaidBoon } from "../rules/banes.mjs";
 import { untilEndOfNextTurn } from "./durations.mjs";
+import { sentinelRejectsTaunt } from "./sentinel-taunt.mjs";
+import { refuseIceBlockTarget } from "./ice-block-protection.mjs";
 
 export const LAY_BANE_QUERY = "azeroth-rpg.layBane";
 
@@ -82,7 +84,7 @@ export function laidBaneFlags(actor) {
   for (const effect of actor?.effects ?? []) {
     if (effect.active === false) continue;
     const raw = effect.flags?.["azeroth-rpg"]?.[LAID_BANE_FLAG] ?? null;
-    if (raw) out.push(raw);
+    if (raw && !sentinelRejectsTaunt(actor, raw.source)) out.push(raw);
   }
   return out;
 }
@@ -101,7 +103,7 @@ function laidBaneEffects(actor, kind = null) {
  * which is what lets the query handler and the local path share it. A LASTING
  * one (D-757) keeps its flag and its span, and nothing spends it.
  */
-function baneData({ victim, kind, banes, source, originUuid, lasting = false, except = null, only = null, span = null }) {
+function baneData({ victim, kind, banes, source, originUuid, lasting = false, except = null, only = null, span = null, stackGroup = null }) {
   // A span the layer names - Taunt's *until the end of your next turn* is the
   // WARRIOR's, Judgement's *one round per rank* its own count (D-772) - else the
   // victim's own next turn, the backstop it always was.
@@ -124,6 +126,7 @@ function baneData({ victim, kind, banes, source, originUuid, lasting = false, ex
     ...timing,
     flags: { "azeroth-rpg": { [LAID_BANE_FLAG]: {
       kind, banes, source,
+      ...(stackGroup ? { stackGroup } : {}),
       // The creature it spares (D-772): *attacking anyone but you*.
       ...(except ? { except } : {}),
       // And the one creature it bears on (04's Feint, D-773): *against you*.
@@ -142,8 +145,10 @@ function baneData({ victim, kind, banes, source, originUuid, lasting = false, ex
  * its own effect (D-657). Two different sources stack, and the dice ceiling
  * takes care of the arithmetic.
  */
-async function layHere({ victim, kind, banes, source, originUuid, lasting = false, except = null, only = null, span = null }) {
-  const row = cleanLaidBane({ kind, banes, source, lasting, except, only });
+async function layHere({ victim, kind, banes, source, originUuid, lasting = false, except = null, only = null, span = null, stackGroup = null }) {
+  if (refuseIceBlockTarget(victim)) return null;
+  if (sentinelRejectsTaunt(victim, source)) return null;
+  const row = cleanLaidBane({ kind, banes, source, lasting, except, only, stackGroup });
   if (!row) return null;
   const stale = laidBaneEffects(victim, row.kind).filter(e => {
     const held = e.flags?.["azeroth-rpg"]?.[LAID_BANE_FLAG] ?? {};
@@ -151,7 +156,7 @@ async function layHere({ victim, kind, banes, source, originUuid, lasting = fals
   }).map(e => e.id);
   if (stale.length) await victim.deleteEmbeddedDocuments("ActiveEffect", stale);
   const [made] = await victim.createEmbeddedDocuments("ActiveEffect", [
-    baneData({ victim, kind: row.kind, banes: row.banes, source: row.source, originUuid, lasting: row.lasting === true, except: row.except ?? null, only: row.only ?? null, span })
+    baneData({ victim, kind: row.kind, banes: row.banes, source: row.source, originUuid, lasting: row.lasting === true, except: row.except ?? null, only: row.only ?? null, span, stackGroup: row.stackGroup ?? null })
   ]);
   // And the effect it made, so a hit turned into a miss deletes exactly that one
   // (the Legacy branches' door 13, `rules/miss.mjs`).
@@ -204,7 +209,7 @@ export async function endBane({ victim = null, source = "", by = null } = {}) {
  * The GM-side handler. Throws with the reason, which travels back to the
  * caller as the refusal.
  */
-export async function layBaneQueryHandler({ victimUuid, kind, banes, source, originUuid, lasting = false, except = null, only = null, span = null, end = false } = {}, { user = null } = {}) {
+export async function layBaneQueryHandler({ victimUuid, kind, banes, source, originUuid, lasting = false, except = null, only = null, span = null, stackGroup = null, end = false } = {}, { user = null } = {}) {
   const victim = await fromUuid(victimUuid);
   if (!victim || victim.documentName !== "Actor") throw new Error(game.i18n.localize("AZEROTH.Reaction.Refuse.Gone"));
   // The layer has to own what laid it; the victim is the GM's business.
@@ -222,7 +227,7 @@ export async function layBaneQueryHandler({ victimUuid, kind, banes, source, ori
     if (!originUuid) return { ended: 0 };
     return { ended: await endHere({ victim, source: String(source ?? ""), originUuid }) };
   }
-  const done = await layHere({ victim, kind, banes, source, originUuid, lasting: lasting === true, except, only, span });
+  const done = await layHere({ victim, kind, banes, source, originUuid, lasting: lasting === true, except, only, span, stackGroup });
   if (!done) throw new Error(game.i18n.localize("AZEROTH.Reaction.Refuse.Unreadable"));
   return done;
 }
@@ -241,6 +246,8 @@ export async function layBaneQueryHandler({ victimUuid, kind, banes, source, ori
  * @param {Actor|null} [o.by]  who laid it
  * @param {boolean} [o.lasting]  a span rather than a count (D-757): every Test
  *   of the kind until the effect's own clock runs out, and never spent
+ * @param {string|null} [o.stackGroup] explicit non-stacking group, validated
+ *   by cleanLaidBane; currently only Torment/Suffering's shared group
  * @param {{actorId: string|null, tokenId: string|null}|null} [o.except]  the one
  *   creature the Bane spares (04's Taunt and Judgement: *anyone but you*; D-772)
  * @param {{duration: object, start: object}|null} [o.span]  the effect's own
@@ -249,15 +256,15 @@ export async function layBaneQueryHandler({ victimUuid, kind, banes, source, ori
  *   creature the Bane bears on (04's Feint: *the target's next attack against
  *   you*; D-773), spent only by an attack against it
  */
-export async function layBane({ victim, kind, banes, source = "", by = null, lasting = false, except = null, only = null, span = null } = {}) {
+export async function layBane({ victim, kind, banes, source = "", by = null, lasting = false, except = null, only = null, span = null, stackGroup = null } = {}) {
   if (!victim) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.Reaction.Refuse.Gone"));
     return null;
   }
   const originUuid = by?.uuid ?? null;
-  const payload = { victimUuid: victim.uuid, kind, banes, source, originUuid, lasting: lasting === true, except, only, span };
+  const payload = { victimUuid: victim.uuid, kind, banes, source, originUuid, lasting: lasting === true, except, only, span, stackGroup };
   try {
-    if (victim.isOwner) return await layHere({ victim, kind, banes, source, originUuid, lasting: lasting === true, except, only, span });
+    if (victim.isOwner) return await layHere({ victim, kind, banes, source, originUuid, lasting: lasting === true, except, only, span, stackGroup });
     const gm = game.users.activeGM;
     // Its own words (the B1 fix run): it said *Binding needs a GM online*.
     if (!gm) throw new Error(game.i18n.localize("AZEROTH.Laid.BaneNoGM"));
@@ -329,6 +336,7 @@ function boonData({ kind, boons, source, originUuid, lasting = false, span = nul
 
 /** Lay it here; the caller has established this client may. A second from the same source replaces the first. */
 async function layBoonHere({ victim, kind, boons, source, originUuid, lasting = false, span = null, encounter = false }) {
+  if (refuseIceBlockTarget(victim)) return null;
   const row = cleanLaidBoon({ kind, boons, source, lasting: lasting || encounter });
   if (!row) return null;
   const stale = (victim.effects ?? []).filter(e => {

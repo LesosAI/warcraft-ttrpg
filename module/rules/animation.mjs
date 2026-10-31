@@ -1083,7 +1083,13 @@ export function loopsFor(state = {}, tables = {}) {
     if (effect.sceneId && sceneId && effect.sceneId !== sceneId) continue;
     const holder = tokenOf(state, effect.tokenId);
     const entry = { identifier: effect.identifier, name: effect.name ?? null, source: effect.source ?? null };
-    const loop = row.loop;
+    let loop = row.loop;
+    // Older cosmetic carriers have no charge record and retain three orbs.
+    // A tracked shield draws exactly its remaining charges; zero draws none.
+    if (effect.identifier === "lightning-shield" && effect.charges !== undefined) {
+      if (!Number.isInteger(effect.charges) || effect.charges < 1 || effect.charges > 3) continue;
+      loop = { ...loop, layers: loop.layers.map(layer => layer.place === "orbit" ? { ...layer, count: effect.charges } : layer) };
+    }
     if (loop.binding === "effect") {
       add(build({ state, loop, entry, binding: "effect", cast, anchors: [holder], holder, other: tokenOf(state, effect.source?.tokenId) }));
     } else {

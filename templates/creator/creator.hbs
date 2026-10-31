@@ -5,18 +5,25 @@
   state first. Every line at 13px in ink.
 --}}
 <div class="azeroth-dialog azeroth-creator-frame">
+  <header class="azeroth-creator-identity">
+    <img src="{{identity.img}}" alt="">
+    <strong>{{identity.name}}</strong>
+    {{#if identity.race}}<span>{{identity.race}}</span>{{/if}}
+    {{#if identity.cls}}<span>{{identity.cls}}</span>{{/if}}
+    <span>{{localize "AZEROTH.Creator.StartingLevel"}}</span>
+  </header>
   <nav class="azeroth-creator-steps" aria-label="{{localize "AZEROTH.Creator.Title"}}">
     {{#each steps as |st|}}
     <button type="button" class="azeroth-creator-step{{#if st.active}} is-active{{/if}}{{#if st.refused}} is-refused{{/if}}" data-action="creatorGo" data-step="{{st.key}}" aria-current="{{#if st.active}}step{{else}}false{{/if}}">
       <span class="azeroth-creator-step-number">{{st.number}}</span>
       <span class="azeroth-creator-step-label">{{st.label}}</span>
+      {{#if st.complete}}<i class="fa-solid fa-check" aria-label="{{localize 'AZEROTH.Creator.StepComplete'}}"></i>{{/if}}
     </button>
     {{/each}}
   </nav>
 
-  <h3 class="azeroth-forge-heading">{{stepIndex}}. {{stepLabel}}</h3>
-
   <div class="azeroth-creator-pane">
+    <h3 class="azeroth-forge-heading">{{stepLabel}}</h3>
     {{#if (eq step "race")}}{{> systems/azeroth-rpg/templates/creator/race.hbs}}{{/if}}
     {{#if (eq step "class")}}{{> systems/azeroth-rpg/templates/creator/class.hbs}}{{/if}}
     {{#if (eq step "abilities")}}{{> systems/azeroth-rpg/templates/creator/abilities.hbs}}{{/if}}
@@ -30,6 +37,7 @@
     {{#if (eq step "name")}}{{> systems/azeroth-rpg/templates/creator/name.hbs}}{{/if}}
   </div>
 
+  <footer class="azeroth-creator-footer">
   <div class="azeroth-forge-summary" aria-live="polite">
     <span>{{localize "AZEROTH.Creator.Running" health=summary.health defense=summary.defense change=summary.change}}</span>
     {{#if summary.reasons.length}}
@@ -47,6 +55,7 @@
     {{#if canNext}}
     <button type="button" data-action="creatorNext">{{localize "AZEROTH.Creator.Next"}}</button>
     {{/if}}
-    <button type="submit" {{#unless summary.ok}}aria-disabled="true"{{/unless}}>{{#if building}}{{localize "AZEROTH.Creator.Build"}}{{else}}{{localize "AZEROTH.Creator.Finish"}}{{/if}}</button>
+    {{#unless canNext}}<button type="submit" {{#unless summary.ok}}disabled{{/unless}}>{{#if building}}{{localize "AZEROTH.Creator.Build"}}{{else}}{{localize "AZEROTH.Creator.Finish"}}{{/if}}</button>{{/unless}}
   </div>
+  </footer>
 </div>

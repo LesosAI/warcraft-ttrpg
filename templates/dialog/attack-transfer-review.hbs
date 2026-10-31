@@ -1,0 +1,11 @@
+<p>{{localize "AZEROTH.AttackTransferReview.Explain"}}</p>
+{{#each rows}}
+<section>
+  <p><strong>{{kind}} — {{name}}</strong><br>{{status}}</p>
+  <ul>{{#each delivery}}<li>{{name}}: {{damageText}}</li>{{/each}}</ul>
+</section>
+{{/each}}
+<p>{{localize "AZEROTH.AttackTransferReview.PlanNote"}}</p>
+<label>{{localize "AZEROTH.AttackTransferReview.Hit"}}
+<select name="hit">{{#each rows}}<option value="{{index}}">{{kind}} — {{name}}</option>{{/each}}</select></label>
+<p><label><input type="checkbox" name="acknowledged"> {{localize "AZEROTH.AttackTransferReview.Acknowledge"}}</label></p>

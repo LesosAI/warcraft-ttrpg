@@ -21,17 +21,27 @@
 --}}
 <div class="azeroth-talent azeroth-talent--{{talent.state}}{{#if talent.taken}} azeroth-talent--taken{{/if}}{{#if racial}}{{#unless talent.taken}} azeroth-talent--untaken{{/unless}}{{/if}}"
      data-item-id="{{talent._id}}"{{#unless racial}} data-column="{{talent.gridColumn}}"{{/unless}}>
+  {{#if creator}}
+  <button type="button" class="azeroth-talent-socket" id="{{talent.socketId}}" data-action="creatorInspectTalent"
+          data-key="{{#if racial}}{{talent.name}}{{else}}{{talent.identifier}}{{/if}}" data-racial="{{#if racial}}true{{else}}false{{/if}}"
+          aria-label="{{talent.label}}" aria-controls="{{@root.creatorDetailId}}">
+    <img class="azeroth-talent-icon" src="{{talent.img}}" alt="" draggable="false">
+    <span class="azeroth-talent-rank" aria-hidden="true">{{talent.taken}}/{{talent.ranks}}</span>
+  </button>
+  {{else}}
   <button type="button" class="azeroth-talent-socket" id="{{talent.socketId}}" data-action="toggleTalentCard"
           aria-label="{{talent.label}}" aria-describedby="{{talent.bodyId}}"
           aria-controls="{{talent.cardId}}" aria-expanded="false">
     <img class="azeroth-talent-icon" src="{{talent.img}}" alt="" draggable="false">
     <span class="azeroth-talent-rank" aria-hidden="true">{{talent.taken}}/{{talent.ranks}}</span>
   </button>
+  {{/if}}
   {{#if talent.arrow}}<span class="azeroth-talent-arrow{{#if talent.arrow.met}} is-met{{/if}}" aria-hidden="true"></span>{{/if}}
   {{#if racial}}
   <span class="azeroth-talent-name">{{talent.name}}</span>
   <span class="azeroth-talent-tierline">{{localize "AZEROTH.Talent.Tier"}} {{talent.tier}}</span>
   {{/if}}
+  {{#unless creator}}
   <div class="azeroth-talent-card" id="{{talent.cardId}}">
     <h5>{{talent.name}}</h5>
     <div class="azeroth-talent-card-body" id="{{talent.bodyId}}">
@@ -61,4 +71,5 @@
       {{/if}}
     {{/if}}
   </div>
+  {{/unless}}
 </div>

@@ -8,12 +8,15 @@
  * the active GM's client through `CONFIG.queries` where it may not (never
  * `game.socket`, D-643).
  *
- * Rank 2's *you may Sustain that effect yourself instead* is a question for the
- * lead: a Sustain, what it laid and the area it placed answer to the caster who
- * cast it, and nothing moves one to another caster.
+ * Rank 2 ruling (2026-10-30): move the effect onto the stealing Mage, who
+ * sustains and pays for it. This module implements ENDING only; the paid
+ * transfer coordinator is spellsteal-use.mjs. See the automation audit's
+ * SPELLSTEAL.md for supported carrier shapes and outstanding work.
  */
 
 import { counterspellFor } from "../rules/class-talents.mjs";
+import { refuseIceBlockTarget } from "./ice-block-protection.mjs";
+import { refuseDispersion } from "./dispersion-protection.mjs";
 
 /** The query a Sustain held by a creature this client does not own is ended through. */
 export const STEAL_SUSTAIN_QUERY = "azeroth-rpg.stealSustain";
@@ -25,7 +28,9 @@ function keyOf(entry = {}) {
 }
 
 /** End the Sustain on a caster this client may write; the entry ended, or null. */
-async function endHere(caster, key) {
+async function endHere(caster, key, mage) {
+  if (refuseIceBlockTarget(caster) || refuseIceBlockTarget(mage)) return null;
+  if (refuseDispersion(caster, "target")) return null;
   const ended = await game.system.azeroth.workflows.endSustain({
     actor: caster, cast: key.cast, spellId: key.spellId, uuid: key.uuid, notice: "AZEROTH.Spellsteal.Ended"
   });
@@ -40,8 +45,18 @@ async function endHere(caster, key) {
  */
 export async function stealSustain({ caster = null, entry = null, by = null } = {}) {
   if (!caster || !entry || !by) return null;
+  if (!game.user?.id || !by.testUserPermission?.(game.user, "OWNER")) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: by.name }));
+    return null;
+  }
+  if (typeof by.takenTalents !== "function" || !counterspellFor(by.takenTalents()).steals) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Spellsteal.NoTalent", { name: by.name }));
+    return null;
+  }
+  if (refuseIceBlockTarget(caster) || refuseIceBlockTarget(by)) return null;
+  if (refuseDispersion(caster, "target")) return null;
   const key = keyOf(entry);
-  if (caster.isOwner) return endHere(caster, key);
+  if (caster.isOwner) return endHere(caster, key, by);
   const gm = game.users?.activeGM ?? null;
   if (!gm) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.Spellsteal.NoGM"));
@@ -62,16 +77,23 @@ export async function stealSustain({ caster = null, entry = null, by = null } = 
  * GM's client holds it. Throws with the reason.
  */
 export async function stealSustainQueryHandler({ casterUuid = null, mageUuid = null, cast = null, spellId = null, uuid = null } = {}, { user = null } = {}) {
+  const requireWriter = () => {
+    if (!user?.id || !game.user?.isGM || game.users?.activeGM?.id !== game.user.id) {
+      throw new Error(game.i18n.localize("AZEROTH.Spellsteal.QueryAuthority"));
+    }
+  };
+  requireWriter();
   const caster = casterUuid ? await fromUuid(casterUuid) : null;
   const mage = mageUuid ? await fromUuid(mageUuid) : null;
+  requireWriter();
   if (caster?.documentName !== "Actor" || mage?.documentName !== "Actor") throw new Error(game.i18n.localize("AZEROTH.Card.TargetGone"));
-  if (user && !mage.testUserPermission(user, "OWNER")) {
+  if (!mage.testUserPermission(user, "OWNER")) {
     throw new Error(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: mage.name }));
   }
   if (typeof mage.takenTalents !== "function" || !counterspellFor(mage.takenTalents()).steals) {
     throw new Error(game.i18n.format("AZEROTH.Spellsteal.NoTalent", { name: mage.name }));
   }
-  const ended = await endHere(caster, { cast, spellId, uuid });
+  const ended = await endHere(caster, { cast, spellId, uuid }, mage);
   if (!ended) throw new Error(game.i18n.format("AZEROTH.Spellsteal.NothingHeld", { target: caster.name }));
   return ended;
 }

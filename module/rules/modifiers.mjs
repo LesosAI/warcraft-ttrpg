@@ -160,6 +160,8 @@ export function situationalModifiers({
   poisoned = 0,
   armorBanes = [],
   targetStatuses = [],
+  lesserInvisible = false,
+  targetLesserInvisible = false,
   range = null,
   rangeBand = null,
   outOfReachNote = null,
@@ -188,6 +190,7 @@ export function situationalModifiers({
   targetDeterred = null,
   talentBanes = null,
   opening = null,
+  untrained = [],
   resilience = null
 } = {}) {
   const has = id => statuses.includes(id);
@@ -227,6 +230,14 @@ export function situationalModifiers({
   const auto = (id, cost) => push(automatic, id, cost, true);
   const judge = (id, cost) => push(judgement, id, cost, false);
   const isTest = kind === "skill" || kind === "attack" || kind === "casting";
+  if (untrained.length) auto("untrained", { banes: 1, name: untrained.join(", ") });
+
+  // Lesser Invisibility uses 07's defensive penalty, not an attacker's
+  // generic unseen Boon. Moving unnoticed is narrower than every skill Test.
+  if (targetLesserInvisible === true && (kind === "attack" || kind === "casting"))
+    auto("lesserInvisibleTarget", { banes: 2 });
+  if (lesserInvisible === true && kind === "skill")
+    judge("lesserInvisibleMovement", { boons: 1 });
 
   // ---- automatic: the roller's own state ----------------------------------
   // 05: Fatigue 3 is a Bane on Skill and Attack Tests; 5 puts one on

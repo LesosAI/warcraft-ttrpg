@@ -23,11 +23,13 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+import { sustainEntryTransferPending } from "../rules/sustain-entry-transfer.mjs";
 import {
   areaLapsed, checkOutcome, checksFor, enterFor, hasAreaTick, relationOf, tickFor
 } from "../rules/area-ticks.mjs";
 import { creatureSnapshot, kindsOf } from "../rules/creature-kinds.mjs";
 import { resolveDamage } from "../rules/mitigation.mjs";
+import { buffetStacks } from "../rules/flame-buffet.mjs";
 import { wardBySchool } from "../rules/ward.mjs";
 import { schoolArmorBySchool } from "../rules/auras.mjs";
 import { standingSpellBonus, typedLaneExtras } from "../rules/spell-bonus.mjs";
@@ -62,6 +64,7 @@ import { ESCAPE_FLAG, cleanEscape } from "../rules/escapes.mjs";
 // Legacy branches' door 26), and the one landing door that lays its condition.
 import { TRAP_FLAG, cleanTrap, springs } from "../rules/traps.mjs";
 import { inflictCondition } from "./inflict.mjs";
+import { triggerSnareRegion } from "./snare-trigger.mjs";
 import { landedText } from "../helpers/rider-words.mjs";
 import { addSlowedFeet } from "./speed-drop.mjs";
 // Drawn Across on a blow's source (the Legacy branches' door 25): the damage it deals, halved.
@@ -106,7 +109,7 @@ export function relationTo({ caster = null, casterToken = null, actor, token = n
  *   takesSpellpower?: boolean}, damage: {rating: number, school: string|null}}} o
  * @returns {ReturnType<typeof resolveDamage>}
  */
-export function areaDamageOn({ actor, caster = null, spell = {}, damage } = {}) {
+export function areaDamageOn({ actor, caster = null, spell = {}, damage, signatureExtras = [] } = {}) {
   const spellName = spell?.name ?? "";
   const school = damage?.school ?? null;
   const talentRows = caster?.takenTalents ? spellDamageFor(caster.takenTalents(), { name: spellName, school: spell?.school ?? null }) : [];
@@ -130,11 +133,12 @@ export function areaDamageOn({ actor, caster = null, spell = {}, damage } = {}) 
   const typed = caster && spellBlowOf(spell) ? typedLaneExtras(caster.system, "spell") : [];
   return resolveDamage({
     rating: (Number(damage?.rating) || 0) + bonus, sl: 0, kind: "magical", school,
+    fireTakenBonus: buffetStacks([...(actor?.effects ?? [])], game.time?.worldTime),
     ward: read.ward,
     schoolArmor: schoolArmorBySchool(s.schoolArmor)[school] ?? 0,
     immune: read.immune, vulnerable: s.vulnerable ?? [],
     slAddsToDamage: false,
-    extras: typed, wardBySchool: wardBySchool(s.ward), schoolArmorBySchool: schoolArmorBySchool(s.schoolArmor),
+    extras: [...typed, ...signatureExtras], wardBySchool: wardBySchool(s.ward), schoolArmorBySchool: schoolArmorBySchool(s.schoolArmor),
     // 04's Drawn Across on the caster (*the damage it deals is halved*; door 25).
     dealtHalved: dealtHalvedBy(caster)
   });
@@ -162,8 +166,12 @@ export function spellBlowOf(spell = {}) {
  *   takesSpellpower?: boolean}, damage?: {rating: number, school: string|null}|null, heal?: number|null}} o
  * @returns {Promise<string[]>} the lines for the card
  */
-export async function strikeFromArea({ actor, caster = null, spell = {}, damage = null, heal = null } = {}) {
+export async function strikeFromArea({ actor, caster = null, spell = {}, damage = null, heal = null, signatureExtras = [], damageOutcome = null, healingOutcome = null } = {}) {
   const lines = [];
+  // Preserve the historical lines return value. Signature delivery needs the
+  // actual committed loss, including prevention at the Actor damage door.
+  if (damageOutcome) Object.assign(damageOutcome, {complete:false, amount:0, dealtDamage:false, transferred:false, transfers:[]});
+  if (healingOutcome) Object.assign(healingOutcome, {complete:false,restored:0});
   // Every caller strikes AFTER something it awaited - a turn's update, a move's
   // claim, a Resist's roll - and a creature whose token or scene went in the
   // meantime takes nothing: the server refuses a write into a deleted scene
@@ -172,9 +180,10 @@ export async function strikeFromArea({ actor, caster = null, spell = {}, damage 
   const spellName = spell?.name ?? "";
   if (damage) {
     const school = damage.school ?? null;
-    const result = areaDamageOn({ actor, caster, spell, damage });
+    const result = areaDamageOn({ actor, caster, spell, damage, signatureExtras });
     const type = game.i18n.localize(AZEROTH.schools[school] ?? school ?? "");
     if (result.immune) {
+      if (damageOutcome) damageOutcome.complete = true;
       lines.push(game.i18n.format("AZEROTH.Combat.AreaTickImmune", { name: actor.name, type, spell: spellName }));
     } else {
       // A Ward that takes it all leaves nothing to land: no Rage, no
@@ -192,8 +201,10 @@ export async function strikeFromArea({ actor, caster = null, spell = {}, damage 
           struck: true, attack: false, location: "body", type: school, by: caster, wardTook: result.wardTook ?? 0,
           spell: spellBlowOf(spell), ignite: spell?.ignite === true,
           // Each second amount of its own type (D-777), already in the damage.
-          parts: result.parts ?? null
+          parts: result.parts ?? null, outcome: damageOutcome
         });
+      } else if (result.damage === 0 && actorInWorld(actor) && damageOutcome) {
+        damageOutcome.complete = true;
       }
       lines.push(game.i18n.format(result.vulnerable ? "AZEROTH.Combat.AreaTickVulnerable" : "AZEROTH.Combat.AreaTick",
         { name: actor.name, amount: result.damage, type, spell: spellName }));
@@ -212,10 +223,10 @@ export async function strikeFromArea({ actor, caster = null, spell = {}, damage 
       const more = feature ? 0 : Math.max(0, Math.trunc(Number(caster?.system?.signatureEffects?.empowers?.[spellName]?.heal) || 0));
       const before = health.value ?? 0;
       // A tick's Divine Aegis schools and Miracle's unreduced heal ride to the door (D-779).
-      await actor.applyHealing(heal + more, { from: caster ?? null, spell: !feature, feature, aegis: spell?.aegis ?? null, unreduced: spell?.unreduced === true });
+      await actor.applyHealing(heal + more, { from: caster ?? null, spell: !feature, feature, aegis: spell?.aegis ?? null, unreduced: spell?.unreduced === true, outcome:healingOutcome });
       const healed = (actor.system?.health?.value ?? before) - before;
       if (healed > 0) lines.push(game.i18n.format("AZEROTH.Combat.AreaTickHeal", { name: actor.name, amount: healed, spell: spellName }));
-    }
+    } else if(healingOutcome&&actorInWorld(actor))healingOutcome.complete=true;
   }
   return lines;
 }
@@ -239,6 +250,7 @@ export function retaliationRows(holder, attacker) {
   const out = [];
   if (!holder || !attacker || isDown(holder)) return out;
   for (const entry of holder.getFlag?.(SCOPE, "sustaining") ?? []) {
+    if (sustainEntryTransferPending(entry, holder.uuid)) continue;
     const item = entry?.areaTick ? null : (holder.items?.get?.(entry?.spellId) ?? null);
     const tick = entry?.areaTick ?? item?.system?.areaTick ?? null;
     if (!hasAreaTick(tick) || tick.retaliate !== true) continue;
@@ -267,6 +279,7 @@ export function retaliationRows(holder, attacker) {
     const s = attacker.system ?? {};
     const result = resolveDamage({
       rating: row.amount, sl: 0, kind: "magical", school: row.type,
+      fireTakenBonus: buffetStacks([...(attacker.effects ?? [])], game.time?.worldTime),
       ward: wardBySchool(s.ward)[row.type] ?? 0, schoolArmor: schoolArmorBySchool(s.schoolArmor)[row.type] ?? 0,
       immune: s.immune ?? [], vulnerable: s.vulnerable ?? [], slAddsToDamage: false,
       // The holder's own damage, Drawn Across on it halving it (door 25).
@@ -734,6 +747,10 @@ export async function enterAreas(document, movement, operation = {}) {
   let entered = 0;
   for (const region of scene.regions) {
     const f = region.flags?.[SCOPE] ?? {};
+    if (f.featureKey === "snare") {
+      if (await triggerSnareRegion({ region, document, path, enterType: ENTER, inflict: inflictCondition })) entered++;
+      continue;
+    }
     // **A STANDING TRAP, SPRUNG** (04's Shadow Trap: *The first enemy to come within 5
     // feet of it is **Entangled** until it spends an action and passes a Reflex
     // Resilience Test against your Spell DC*; the Legacy branches' door 26): the first

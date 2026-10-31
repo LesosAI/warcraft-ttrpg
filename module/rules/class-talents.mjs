@@ -3581,14 +3581,19 @@ export const COUNTERSPELL = Object.freeze({ feature: "Counterspell", feet: 30 })
  * is Sustaining*; D-775): whether the Use ends one of the caster's Sustains.
  *
  * @param {Array} talents
- * @returns {{steals: boolean, by: string[]}}
+ * @returns {{steals: boolean, transfers: boolean, by: string[]}}
  */
 export function counterspellFor(talents = [], rowOf = talentEffect) {
   const by = [];
+  let transfers = false;
   for (const { talent, patch, rank } of patchRowsOf(talents, COUNTERSPELL.feature, rowOf)) {
-    if (atRankOf(patch, rank).steals === true) by.push(talent.name);
+    const row = atRankOf(patch, rank);
+    if (row.steals === true) {
+      by.push(talent.name);
+      transfers ||= row.transfers === true;
+    }
   }
-  return { steals: by.length > 0, by };
+  return { steals: by.length > 0, transfers, by };
 }
 
 /* ---- Demonology ------------------------------------------------------------ */
@@ -4381,15 +4386,15 @@ export function landwiseFor(talents = [], rowOf = talentEffect) {
 /**
  * **04's FORESIGHT** (*You may spend a Reaction to use your Ward class feature after
  * an attack is rolled*; the lead, 2026-10-03, on O-181: *"Yes"* to *does a Ward
- * pressed from an incoming card answer that blow?*): the talent, or null. Rank 2's
- * *after the damage is known* is the lead's (CLARIFY, O-181).
+ * pressed from an incoming card answer that blow?*): the talent and current rank,
+ * or null. Rank 1 precedes damage reveal; rank 2 may also answer after reveal.
  *
  * @param {Array} talents  the PRIEST's
- * @returns {{identifier: string, name: string}|null}
+ * @returns {{identifier: string, name: string, rank: number}|null}
  */
 export function foresightFor(talents = [], rowOf = talentEffect) {
   const [first] = rowsOfKind(talents, "foresight", rowOf);
-  return first ? { identifier: first.talent.identifier, name: first.talent.name } : null;
+  return first ? { identifier: first.talent.identifier, name: first.talent.name, rank: first.rank } : null;
 }
 
 /**

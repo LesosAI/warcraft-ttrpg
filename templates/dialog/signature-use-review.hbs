@@ -1,0 +1,6 @@
+<p><strong>{{actor}}</strong></p>
+<p>{{localize "AZEROTH.Signature.Review.Health" health=health.value temp=health.temp}}</p>
+<p>{{localize "AZEROTH.Signature.Review.Budget" halves=halves}}</p>
+<ul>{{#each entries}}<li><strong>{{id}}</strong><br>{{#if shot}}{{localize "AZEROTH.Signature.Cannonball.Shot" target=shot.target.actorId dc=shot.dc damage=shot.damage passed=shot.passedDamage}}{{else}}{{localize "AZEROTH.Signature.Review.Values" healing=healing temporary=temporaryHealth}}{{/if}}</li>{{/each}}</ul>
+<p>{{localize "AZEROTH.Signature.Review.Help"}}</p>
+<label><input type="checkbox" name="acknowledged"> {{localize "AZEROTH.Signature.Review.Acknowledge"}}</label>

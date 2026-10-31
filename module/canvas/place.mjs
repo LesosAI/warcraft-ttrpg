@@ -494,9 +494,10 @@ export async function placeSpellArea({ spell, actor = null } = {}) {
  *   (D-756: Consecrated Ground's rank 2), through `rules/areas.mjs#widenArea`.
  * @param {number} [options.lengthenFt]  Feet a talent adds to a cone's or a
  *   line's length (D-775: Cone of Cold), through `rules/areas.mjs#lengthenArea`.
+ * @param {Function|null} [options.createArea] Optional authoritative writer after a confirmed pick.
  * @returns {Promise<RegionDocument|null>}
  */
-export async function placeItemArea({ item = null, actor = null, areaText = null, name = null, color = null, token = null, guessToken = true, flags = null, widenFt = 0, lengthenFt = 0, accept = null } = {}) {
+export async function placeItemArea({ item = null, actor = null, areaText = null, name = null, color = null, token = null, guessToken = true, flags = null, widenFt = 0, lengthenFt = 0, accept = null, createArea = null } = {}) {
   const text = areaText ?? item?.system?.area ?? item?.system?.target ?? "";
   const label = name ?? item?.name ?? "";
   const area = lengthenArea(widenArea(areaFor(text), widenFt), lengthenFt);
@@ -550,7 +551,7 @@ export async function placeItemArea({ item = null, actor = null, areaText = null
     if (rotation === null) return null;
   }
 
-  return placeArea({
+  return (createArea ?? placeArea)({
     item, areaText: text, name: label, color, scene, origin, rotation,
     token: caster, attach: steps.attach, flags, widenFt, lengthenFt
   });

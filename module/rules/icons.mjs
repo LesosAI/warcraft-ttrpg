@@ -91,6 +91,9 @@ export const CORE_FALLBACK = Object.freeze({
 export const TYPE_FALLBACK = Object.freeze({
   career: "icons/svg/tower-flag.svg",
   class: "icons/svg/combat.svg",
+  // 04's gadgets, the one pack of features (the lead, 2026-10-24): every one a
+  // Classic engineering device.
+  feature: "icons/svg/clockwork.svg",
   legacy: "icons/svg/statue.svg",
   race: "icons/svg/mystery-man.svg",
   spell: "icons/svg/explosion.svg",

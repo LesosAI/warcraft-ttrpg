@@ -1,0 +1,7 @@
+<p>{{description}}</p>
+<fieldset>
+  <legend>{{localize "AZEROTH.Starfall.Choose"}}</legend>
+  {{#each candidates}}
+    <label><input type="checkbox" name="starfall-target" value="{{uuid}}"> {{name}}</label><br>
+  {{/each}}
+</fieldset>

@@ -30,6 +30,7 @@
  */
 
 import { mitigatedDamage } from "../rules/reactions.mjs";
+import { requestSignatureHitWithdrawal } from "../effects/signature-hit-withdrawal.mjs";
 import { resistKey, resistRecord, rowMatches } from "../rules/records.mjs";
 // What a failed Test landed, as the card records it (the B6 fix).
 import { landedOnFail, recordsResist } from "../rules/resisted.mjs";
@@ -77,6 +78,10 @@ export async function annotateHere({ messageId, index, reaction, to, mitigated, 
   for (const r of refunds) await refundOne(r);
   for (const t of takes) await t.actor.updatePool({ itemId: t.itemId, kind: t.kind, value: t.value });
   if (settles) await releaseOnce(flags.onceOnMiss ?? null);
+  if (withdrawn===true && !was && flags.signatureHitBonuses) {
+    const result=await requestSignatureHitWithdrawal(message,i);
+    if(!result.ok)ui.notifications?.warn(game.i18n.localize('AZEROTH.Signature.WithdrawalPending'));
+  }
   return rows[i];
 }
 

@@ -1,50 +1,55 @@
-{{!--
-  The spells step (07 §5, 2026-09-06): a caster's own pane rather than a
-  block under the talents. The count the class grants at level 1 heads it;
-  the chosen list and the picker below carry every eligible tier-1 spell of
-  the class's schools, and a row's name opens what the entry says - the
-  lore, then the effect - before it is taken (D-638 for the picker).
---}}
 {{#if pane.spells.caster}}
-<h4 class="azeroth-creator-subheading">{{localize "AZEROTH.Creator.Spells"}} · {{localize "AZEROTH.Creator.SpellsCount" chosen=pane.spells.count required=pane.spells.required}}{{#if pane.className}} · {{pane.className}}{{/if}}</h4>
-<ol class="azeroth-forge-list azeroth-creator-spells">
-  {{#each pane.spells.chosen as |sp|}}
-  <li class="{{#if sp.expanded}}is-open{{/if}}">
-    <button type="button" class="azeroth-creator-expand azeroth-forge-name" data-action="creatorExpand" data-key="{{sp.uuid}}" aria-expanded="{{sp.expanded}}">{{sp.name}}</button>
-    <span class="azeroth-forge-tier">{{sp.school}}{{#if sp.mana}} · {{localize "AZEROTH.Item.Mana"}} {{sp.mana}}{{/if}}{{#if sp.action}} · {{sp.action}}{{/if}}</span>
-    {{#if sp.mechanics}}<span class="azeroth-creator-spell-mechanics">{{sp.mechanics}}</span>{{/if}}
-    <button type="button" class="azeroth-forge-quiet" data-action="creatorRemoveSpell" data-index="{{sp.index}}" aria-label="{{localize "AZEROTH.Creator.RemoveSpell"}}">&times;</button>
-    {{#if sp.expanded}}
-    <div class="azeroth-creator-row-text azeroth-creator-entry">
-      {{#if sp.lore}}<div class="azeroth-creator-lore">{{{sp.lore}}}</div>{{/if}}
-      <div class="azeroth-creator-effect">{{{sp.effect}}}</div>
+<p class="azeroth-creator-allowance">{{localize "AZEROTH.Creator.SpellsChosen" chosen=pane.spells.count required=pane.spells.required}}</p>
+<div class="azeroth-creator-choice-layout">
+  <div class="azeroth-creator-catalogue">
+    <div class="azeroth-creator-spell-toolbar">
+      <input type="search" name="spellSearch" value="{{pane.spells.search}}" placeholder="{{localize 'AZEROTH.Creator.SpellSearch'}}" aria-label="{{localize 'AZEROTH.Creator.SpellSearch'}}" autocomplete="off">
+      <label>{{localize "AZEROTH.Creator.SortSpells"}}<select name="spellSort" data-creator="spellSort">
+        <option value="name" {{#if (eq pane.spells.sort "name")}}selected{{/if}}>{{localize "AZEROTH.Creator.SortName"}}</option>
+        <option value="mana" {{#if (eq pane.spells.sort "mana")}}selected{{/if}}>{{localize "AZEROTH.Item.Mana"}}</option>
+      </select></label>
     </div>
-    {{/if}}
-  </li>
-  {{else}}
-  <li class="azeroth-forge-none">{{localize "AZEROTH.Creator.NoSpellsChosen"}}</li>
-  {{/each}}
-</ol>
-<div class="azeroth-picker">
-  <input type="text" name="spellSearch" value="{{pane.spells.search}}" data-picker="spells" placeholder="{{localize "AZEROTH.Creator.SpellSearch"}}" aria-label="{{localize "AZEROTH.Creator.SpellSearch"}}" autocomplete="off">
-  <ul class="azeroth-picker-list azeroth-creator-spell-options" data-picker-list="spells">
-    {{#each pane.spells.options as |sp|}}
-    <li data-search="{{sp.search}}" class="{{#if sp.expanded}}is-open{{/if}}">
-      <button type="button" class="azeroth-creator-expand azeroth-forge-name" data-action="creatorExpand" data-key="{{sp.uuid}}" aria-expanded="{{sp.expanded}}">{{sp.name}}</button>
-      <span class="azeroth-forge-tier">{{sp.school}}{{#if sp.mana}} · {{localize "AZEROTH.Item.Mana"}} {{sp.mana}}{{/if}}{{#if sp.action}} · {{sp.action}}{{/if}}</span>
-    {{#if sp.mechanics}}<span class="azeroth-creator-spell-mechanics">{{sp.mechanics}}</span>{{/if}}
-      <button type="button" data-action="creatorAddSpell" data-picker-pick data-uuid="{{sp.uuid}}" aria-label="{{localize "AZEROTH.Picker.AddNamed" name=sp.name}}">{{localize "AZEROTH.Creator.AddSpell"}}</button>
-      {{#if sp.expanded}}
-      <div class="azeroth-creator-row-text azeroth-creator-entry">
-        {{#if sp.lore}}<div class="azeroth-creator-lore">{{{sp.lore}}}</div>{{/if}}
-        <div class="azeroth-creator-effect">{{{sp.effect}}}</div>
-      </div>
-      {{/if}}
-    </li>
-    {{/each}}
-    <li class="azeroth-picker-none" hidden>{{localize "AZEROTH.Picker.NoMatch"}}</li>
-  </ul>
+    <div class="azeroth-creator-spell-filters">
+      <label>{{localize "AZEROTH.Creator.SchoolFilter"}}<select name="spellSchool" data-creator="spellSchool"><option value="">{{localize "AZEROTH.Creator.AllSchools"}}</option>{{#each pane.spells.schools}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}} ({{count}})</option>{{/each}}</select></label>
+      <label>{{localize "AZEROTH.Creator.ActionFilter"}}<select name="spellAction" data-creator="spellAction"><option value="">{{localize "AZEROTH.Creator.AllActions"}}</option>{{#each pane.spells.actions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}} ({{count}})</option>{{/each}}</select></label>
+      <label>{{localize "AZEROTH.Creator.MaxMana"}}<input type="number" name="spellMana" min="0" step="1" value="{{pane.spells.mana}}" data-creator="spellMana"></label>
+      <button type="button" data-action="creatorClearSpellFilters">{{localize "AZEROTH.Creator.ClearFilters"}}</button>
+    </div>
+    <p>{{localize "AZEROTH.Creator.EligibleSpells" count=pane.spells.options.length total=pane.spells.total}}</p>
+    <ul class="azeroth-creator-spell-results">
+      {{#each pane.spells.options as |sp|}}
+      <li class="{{#if sp.inspected}}is-inspected{{/if}}">
+        <img src="{{sp.img}}" alt="">
+        <div><button type="button" id="{{@root.creatorDetailId}}-spell-{{@index}}" class="azeroth-creator-expand" data-action="creatorInspectSpell" data-uuid="{{sp.uuid}}" aria-pressed="{{sp.inspected}}">{{sp.name}}</button>
+          <span>{{sp.schoolLabel}} · {{sp.mana}} {{localize "AZEROTH.Item.Mana"}} · {{sp.actionLabel}}</span>
+          <span>{{sp.range}} · {{sp.target}} · {{sp.durationText}}</span>
+        </div>
+        {{#if sp.selected}}<span>{{localize "AZEROTH.Creator.Chosen"}}</span>{{else}}<button type="button" data-action="creatorAddSpell" data-uuid="{{sp.uuid}}" {{#unless sp.canAdd}}disabled{{/unless}} aria-label="{{localize 'AZEROTH.Picker.AddNamed' name=sp.name}}">{{localize "AZEROTH.Creator.AddSpell"}}</button>{{/if}}
+      </li>
+      {{else}}<li>{{localize "AZEROTH.Creator.NoFilteredSpells"}}</li>{{/each}}
+    </ul>
+  </div>
+  <aside class="azeroth-creator-inspector" id="{{creatorDetailId}}">
+    {{#with pane.spells.detail}}
+    <h4>{{name}}</h4><img class="azeroth-creator-detail-icon" src="{{img}}" alt="">
+    <p>{{schoolLabel}} · {{mana}} {{localize "AZEROTH.Item.Mana"}} · {{actionLabel}}</p>
+    <dl class="azeroth-creator-detail">
+      <dt>{{localize "AZEROTH.Creator.SpellRange"}}</dt><dd>{{range}}</dd>
+      <dt>{{localize "AZEROTH.Creator.SpellTarget"}}</dt><dd>{{target}}</dd>
+      <dt>{{localize "AZEROTH.Creator.SpellDuration"}}</dt><dd>{{durationText}}</dd>
+    </dl>
+    <div class="azeroth-creator-rules">{{{effect}}}</div>
+    {{#if lore}}<details><summary>{{localize "AZEROTH.Creator.SpellLore"}}</summary>{{{lore}}}</details>{{/if}}
+    {{#if selected}}<button type="button" data-action="creatorRemoveSpell" data-uuid="{{uuid}}">{{localize "AZEROTH.Creator.RemoveSpell"}}</button>
+    {{else}}<button type="button" data-action="creatorAddSpell" data-uuid="{{uuid}}" {{#unless canAdd}}disabled{{/unless}}>{{localize "AZEROTH.Creator.AddSpell"}}</button>{{/if}}
+    {{/with}}
+    {{#if pane.spells.full}}<p>{{localize "AZEROTH.Creator.SpellLimitReached"}}</p>{{/if}}
+    <hr><h4>{{localize "AZEROTH.Creator.YourSpells"}} · {{pane.spells.count}} / {{pane.spells.required}}</h4>
+    <ul class="azeroth-creator-chosen-spells">
+      {{#each pane.spells.chosen as |sp|}}
+      <li><button type="button" class="azeroth-creator-expand" data-action="creatorInspectSpell" data-uuid="{{sp.uuid}}">{{sp.name}}</button><button type="button" data-action="creatorRemoveSpell" data-uuid="{{sp.uuid}}" aria-label="{{localize 'AZEROTH.Creator.RemoveNamedSpell' name=sp.name}}">×</button></li>
+      {{else}}<li>{{localize "AZEROTH.Creator.NoSpellsChosen"}}</li>{{/each}}
+    </ul>
+  </aside>
 </div>
-{{else}}
-<p class="azeroth-forge-none">{{localize "AZEROTH.Creator.NoSpellsForClass"}}</p>
-{{/if}}
+{{else}}<p>{{localize "AZEROTH.Creator.NoSpellsForClass"}}</p>{{/if}}

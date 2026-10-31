@@ -1,0 +1,13 @@
+<article class="azeroth-card">
+  <header><h3>{{title}}</h3><p>{{speakerName}}</p></header>
+  <p>{{localize "AZEROTH.Signature.Piccolo.Test" dc=dc}}</p>
+  {{#each targets}}
+  <section data-piccolo-target="{{@index}}">
+    <h4>{{name}}</h4>
+    <p data-piccolo-state>{{localize "AZEROTH.Signature.Piccolo.AwaitingSave"}}</p>
+    <div class="azeroth-card-actions" data-resist-owner="{{uuid}}">
+      <button type="button" data-action="piccoloSave" data-index="{{@index}}">{{localize "AZEROTH.Signature.Piccolo.Roll"}}</button>
+    </div>
+  </section>
+  {{/each}}
+</article>

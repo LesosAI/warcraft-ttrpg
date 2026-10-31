@@ -1,0 +1,15 @@
+<p>{{localize "AZEROTH.Conflagrate.ReviewInstructions"}}</p>
+<dl>
+  <dt>{{localize "AZEROTH.Conflagrate.ReviewTarget"}}</dt><dd>{{target}}</dd>
+  <dt>{{localize "AZEROTH.Conflagrate.ReviewDamage"}}</dt><dd>{{damage}}</dd>
+</dl>
+<ul>
+  {{#each sources}}
+  <li>{{name}} — {{cast}}: <strong>{{status}}</strong></li>
+  {{/each}}
+</ul>
+{{#if remaining}}<p>{{localize "AZEROTH.Conflagrate.Remaining" n=remaining}}</p>{{/if}}
+<label class="checkbox">
+  <input type="checkbox" name="acknowledged" {{#if remaining}}disabled{{/if}}>
+  {{localize "AZEROTH.Conflagrate.Acknowledge"}}
+</label>

@@ -14,6 +14,7 @@
       <input type="text" name="itemSearch" value="{{pane.search}}" data-picker="items" placeholder="{{localize "AZEROTH.Creator.ItemSearch"}}" aria-label="{{localize "AZEROTH.Creator.ItemSearch"}}" autocomplete="off">
       <button type="button" class="azeroth-forge-quiet azeroth-creator-sort" data-action="creatorSort" data-tooltip="{{localize "AZEROTH.Creator.Sort"}}" aria-label="{{localize "AZEROTH.Creator.Sort"}}">{{#if (eq pane.sort "cost")}}{{localize "AZEROTH.Creator.SortByCost"}}{{else}}{{localize "AZEROTH.Creator.SortByName"}}{{/if}}</button>
     </div>
+    <label class="azeroth-creator-training-filter"><input type="checkbox" name="showUntrainedGear" data-creator {{checked pane.showUntrainedGear}}> {{localize "AZEROTH.Training.ShowUntrained"}}</label>
     <ul class="azeroth-picker-list azeroth-creator-shelves" data-picker-list="items">
       {{#each pane.shelves as |shelf|}}
       <li class="azeroth-creator-shelf" data-shelf="{{shelf.key}}">
@@ -21,7 +22,7 @@
           <summary><span class="azeroth-forge-name">{{shelf.label}}</span><span class="azeroth-forge-tier">{{shelf.count}}</span></summary>
           <ol class="azeroth-creator-shelf-rows">
             {{#each shelf.items as |i|}}
-            <li data-search="{{i.search}}" class="{{#if i.expanded}}is-open{{/if}}">
+            <li data-search="{{i.search}}" class="{{#if i.expanded}}is-open{{/if}}{{#if i.trainingTip}} azeroth-untrained{{/if}}"{{#if i.trainingTip}} data-tooltip="{{i.trainingTip}}"{{/if}}>
               <button type="button" class="azeroth-creator-expand azeroth-forge-name" data-action="creatorExpand" data-key="{{i.uuid}}" aria-expanded="{{i.expanded}}">{{i.name}}</button>
               <span class="azeroth-forge-cost">{{i.price}}</span>
               <button type="button" data-action="creatorAddItem" data-picker-pick data-uuid="{{i.uuid}}" aria-label="{{localize "AZEROTH.Picker.AddNamed" name=i.name}}">{{localize "AZEROTH.Creator.AddItem"}}</button>
@@ -47,8 +48,8 @@
     {{#if pane.missing}}<p class="azeroth-dialog-note">{{localize "AZEROTH.Creator.KitMissing" names=pane.missing}}</p>{{/if}}
     <ol class="azeroth-forge-list azeroth-creator-cart">
       {{#each pane.rows as |row|}}
-      <li class="{{#if row.expanded}}is-open{{/if}}">
-        {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=row.img rarityClass=row.rarityClass}}
+      <li class="{{#if row.expanded}}is-open{{/if}}{{#if row.trainingTip}} azeroth-untrained{{/if}}"{{#if row.trainingTip}} data-tooltip="{{row.trainingTip}}"{{/if}}>
+        {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=row.img rarityClass=row.rarityClass trainingTip=row.trainingTip}}
         <button type="button" class="azeroth-creator-expand azeroth-forge-name" data-action="creatorExpand" data-key="{{row.uuid}}" aria-expanded="{{row.expanded}}">{{row.name}}{{#if row.road}} <span class="azeroth-forge-tier">{{localize "AZEROTH.Creator.Road"}}</span>{{/if}}</button>
         <span class="azeroth-forge-tier">{{row.type}}</span>
         <button type="button" class="azeroth-uses-step" data-action="creatorStepQuantity" data-index="{{row.index}}" data-delta="-1" {{#if (eq row.quantity 1)}}disabled{{/if}} aria-label="{{localize "AZEROTH.Creator.Down"}}">−</button>

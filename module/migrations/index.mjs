@@ -51,6 +51,31 @@ import * as v01226 from "./0.12.26-resist-halves.mjs";
 import * as v01227 from "./0.12.27-fail-damage.mjs";
 import * as v01228 from "./0.12.28-marks.mjs";
 import * as v01229 from "./0.12.29-later-tests.mjs";
+import * as v01230 from "./0.12.30-gadget-links.mjs";
+import * as v01231 from "./0.12.31-gadgeteer-tier.mjs";
+import * as v01232 from "./0.12.32-sacrifice-text.mjs";
+import * as v01233 from "./0.12.33-blood-pact-cost.mjs";
+import * as v01234 from "./0.12.34-miracle-text.mjs";
+import * as v01235 from "./0.12.35-searing-fire.mjs";
+import * as v01236 from "./0.12.36-restorative-potion.mjs";
+import * as v01237 from "./0.12.37-chromatic-flask.mjs";
+import * as v01238 from "./0.12.38-signature-skill.mjs";
+import * as v01239 from "./0.12.39-signature-casting.mjs";
+import * as v01240 from "./0.12.40-approved-spell-signatures.mjs";
+import * as v01241 from "./0.12.41-approved-charms.mjs";
+import * as v01242 from "./0.12.42-signature-healing.mjs";
+import * as v01243 from "./0.12.43-approved-healing-signatures.mjs";
+import * as v01244 from "./0.12.44-signature-parry.mjs";
+import * as v01245 from "./0.12.45-approved-conqueror.mjs";
+import * as v01246 from "./0.12.46-approved-cannonball.mjs";
+import * as v01247 from "./0.12.47-signature-kill-reward.mjs";
+import * as v01248 from "./0.12.48-approved-kill-signatures.mjs";
+import * as v01249 from "./0.12.49-signature-hit-damage.mjs";
+import * as v01250 from "./0.12.50-approved-horseman.mjs";
+import * as v01251 from "./0.12.51-approved-piccolo.mjs";
+import * as v01252 from "./0.12.52-approved-jangthraze.mjs";
+import * as v01253 from "./0.12.53-approved-helmet.mjs";
+import * as v01254 from "./0.12.54-approved-idols.mjs";
 import { forgetPacks } from "./walk.mjs";
 
 // Ordered oldest to newest. Add new entries at the end.
@@ -148,7 +173,35 @@ const CHAIN = [
   // Stormwall's crossing, Frozen Rune's first entry, Nether Rift's Bane inside it, the
   // creatures Blackout and The Deep name at the cast, and Holy Wrath's and Earth Shock's
   // Test field: every book-worded spell's descriptor and Test off its pack copy.
-  { version: "0.12.29", module: v01229 }
+  { version: "0.12.29", module: v01229 },
+  // Gadgeteer links the gadgets it names (the lead, 2026-10-24): every held copy of a
+  // talent whose pack copy links the Gadgets compendium takes the pack's text, while its
+  // words are still the book's.
+  { version: "0.12.30", module: v01230 },
+  { version: "0.12.31", module: v01231 },
+  { version: "0.12.32", module: v01232 },
+  { version: "0.12.33", module: v01233 },
+  { version: "0.12.34", module: v01234 },
+  { version: "0.12.35", module: v01235 },
+  { version: "0.12.36", module: v01236 },
+  { version: "0.12.37", module: v01237 },
+  { version: "0.12.38", module: v01238 },
+  { version: "0.12.39", module: v01239 },
+  { version: "0.12.40", module: v01240 },
+  { version: "0.12.41", module: v01241 },
+  { version: "0.12.42", module: v01242 },
+  { version: "0.12.43", module: v01243 },
+  { version: "0.12.44", module: v01244 },
+  { version: "0.12.45", module: v01245 },
+  { version: "0.12.46", module: v01246 },
+  { version: "0.12.47", module: v01247 },
+  { version: "0.12.48", module: v01248 },
+  { version: "0.12.49", module: v01249 },
+  { version: "0.12.50", module: v01250 },
+  { version: "0.12.51", module: v01251 },
+  { version: "0.12.52", module: v01252 },
+  { version: "0.12.53", module: v01253 },
+  { version: "0.12.54", module: v01254 }
 ];
 
 /**

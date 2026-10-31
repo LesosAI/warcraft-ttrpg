@@ -23,6 +23,7 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+import { iceBlockFor } from "../rules/ice-block.mjs";
 import { cleanEffectIds, dispelGated, dispelJudgement, dispelOptions, ongoingOwner, spellCasterOf } from "../rules/dispel.mjs";
 import { dispelGateFor, unstableFor } from "../rules/class-talents.mjs";
 import { wardBySchool } from "../rules/ward.mjs";
@@ -88,7 +89,10 @@ export function archmageCasters(effects = []) {
  */
 export function dispelOptionsOn(actor) {
   const effects = (actor?.effects ?? []).map(plainEffect);
-  return dispelOptions(effects, { archmage: archmageCasters(effects) });
+  const options = dispelOptions(effects, { archmage: archmageCasters(effects) });
+  return iceBlockFor(actor)
+    ? options.map(row => ({ ...row, available: false, reason: "iceBlock", by: null }))
+    : options;
 }
 
 /**
@@ -116,6 +120,7 @@ export function dispelGatesOn(target, ids = []) {
 /** End them here; the caller has established that this client may. Judged again. */
 async function endHere({ target, ids }) {
   const want = new Set(cleanEffectIds(ids));
+  if (iceBlockFor(target)) return { name: target.name, ended: [], kept: [...want].sort() };
   const effects = (target.effects ?? []).filter(e => want.has(e.id)).map(plainEffect);
   const archmage = archmageCasters(effects);
   const ended = effects

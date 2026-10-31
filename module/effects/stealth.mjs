@@ -22,6 +22,7 @@
  */
 
 import { HIDDEN_STATUS } from "../rules/stealth.mjs";
+import { actorRevealedByMobileFlare } from "./mobile-alert-visibility.mjs";
 // A concealment's own end (the Legacy branches' door 25: 04's Gnomish Cloaking Device,
 // *It ends for each of you who attacks or casts a spell*; Wind Walk at rank 2, *until
 // you next attack*).
@@ -30,6 +31,8 @@ import { CONCEAL_FLAG, concealEnds } from "../rules/legacy-uses.mjs";
 // Shadow Dance, D-773).
 import { keepsHidden } from "../rules/class-talents.mjs";
 import { dancing } from "./talent-states.mjs";
+import { endNpcSneak } from "./npc-sneak.mjs";
+import { refuseIceBlockTarget } from "./ice-block-protection.mjs";
 
 /** The flag that says this invisibility is a Hide and nothing else. */
 export const HIDDEN_FLAG = "hidden";
@@ -37,6 +40,12 @@ export const HIDDEN_FLAG = "hidden";
 /** Whether this actor is out of sight, by any door. */
 export function isHidden(actor) {
   return actor?.statuses?.has?.(HIDDEN_STATUS) === true;
+}
+
+/** Effective concealment for a particular attack. Keep isHidden's raw check
+ * for removing/ending an underlying Hide even while Flare suppresses it. */
+export function isHiddenFor(actor, source = null) {
+  return isHidden(actor) && !actorRevealedByMobileFlare(actor, source);
 }
 
 /**
@@ -48,7 +57,9 @@ export function isHidden(actor) {
  */
 export async function conceal(actor) {
   if (!actor) return false;
+  if (refuseIceBlockTarget(actor)) return false;
   if (!isHidden(actor)) await actor.toggleStatusEffect(HIDDEN_STATUS, { active: true });
+  if (refuseIceBlockTarget(actor)) return false;
   if (actor.getFlag("azeroth-rpg", HIDDEN_FLAG) !== true) await actor.setFlag("azeroth-rpg", HIDDEN_FLAG, true);
   return true;
 }
@@ -80,7 +91,9 @@ export async function conceal(actor) {
  */
 export async function reveal(actor, { force = false, acting = false, kind = null } = {}) {
   if (!actor) return false;
-  const ended = acting && (kind === "attack" || kind === "cast") ? await endConcealments(actor, kind) : false;
+  const sneakEnded = await endNpcSneak(actor, { event: acting ? kind : "reveal" });
+  const concealmentEnded = acting && (kind === "attack" || kind === "cast") ? await endConcealments(actor, kind) : false;
+  const ended = sneakEnded || concealmentEnded;
   if (acting && !force && (keepsHidden(actor.takenTalents?.() ?? []) || dancing(actor))) return ended;
   const ours = actor.getFlag?.("azeroth-rpg", HIDDEN_FLAG) === true;
   if (!ours && !force) return ended;

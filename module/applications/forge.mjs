@@ -471,6 +471,8 @@ export class AzerothForge extends HandlebarsApplicationMixin(ApplicationV2) {
       ...line.params,
       ...(line.params.type ? { type: game.i18n.localize(AZEROTH.damageTypes[line.params.type] ?? line.params.type) } : {}),
       ...(line.params.school ? { school: game.i18n.localize(AZEROTH.schools[line.params.school] ?? line.params.school) } : {}),
+      ...(line.params.attribute ? { attribute: game.i18n.localize(AZEROTH.abilities[line.params.attribute] ?? line.params.attribute) } : {}),
+      ...(line.params.skill ? { skill: game.i18n.localize(AZEROTH.skills[line.params.skill] ?? line.params.skill) } : {}),
       ...(line.params.track ? { track: game.i18n.localize(AZEROTH.corruptionTracks[line.params.track] ?? line.params.track) } : {}),
       ...(line.params.pool ? { pool: game.i18n.localize(AZEROTH.poolTypes[line.params.pool] ?? line.params.pool) } : {}),
       ...(line.params.per ? { per: game.i18n.localize(AZEROTH.usesPer[line.params.per] ?? line.params.per) } : {}),

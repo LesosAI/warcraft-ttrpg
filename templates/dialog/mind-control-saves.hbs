@@ -1,0 +1,9 @@
+<p>{{target}} · DC {{dc}}</p>
+<p>{{localize "AZEROTH.MindControl.Saves.Explain"}}</p>
+<label>{{localize "AZEROTH.MindControl.Saves.Attempt"}}
+  <select name="attempt">
+    <option value="">{{localize "AZEROTH.MindControl.Saves.Choose"}}</option>
+    {{#each rows}}<option value="{{@index}}">{{localize "AZEROTH.MindControl.Saves.Round"}} {{round}}, {{localize "AZEROTH.MindControl.Saves.Turn"}} {{turn}} — {{#if cancelled}}{{localize "AZEROTH.MindControl.Saves.Cancelled"}}{{else}}{{localize "AZEROTH.MindControl.Saves.Interrupted"}}{{/if}}</option>{{/each}}
+  </select>
+</label>
+<p><label><input type="checkbox" name="acknowledged"> {{localize "AZEROTH.MindControl.Saves.Acknowledge"}}</label></p>

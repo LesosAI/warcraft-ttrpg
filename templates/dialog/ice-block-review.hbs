@@ -1,0 +1,7 @@
+<p>{{localize "AZEROTH.IceBlock.ReviewInstructions"}}</p>
+<p><strong>{{caster}}</strong>{{#if missing}} — {{localize "AZEROTH.IceBlock.Unavailable"}}{{/if}}</p>
+<h3>{{localize "AZEROTH.IceBlock.PreviousConditions"}}</h3>
+{{#each previous}}<p><strong>{{name}}</strong> ({{id}})<br>{{conditions}}<br>{{changes}}</p>{{else}}<p>{{localize "AZEROTH.IceBlock.NoneRecorded"}}</p>{{/each}}
+<h3>{{localize "AZEROTH.IceBlock.CurrentEffects"}}</h3>
+{{#each current}}<p><strong>{{name}}</strong> ({{id}})<br>{{conditions}}<br>{{changes}}</p>{{else}}<p>{{localize "AZEROTH.IceBlock.NonePresent"}}</p>{{/each}}
+<label class="checkbox"><input type="checkbox" name="acknowledged">{{localize "AZEROTH.IceBlock.Acknowledge"}}</label>

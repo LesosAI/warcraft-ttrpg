@@ -21,6 +21,7 @@ import { hasUse } from "../rules/consumables.mjs";
 import { hasCharges } from "../rules/containers.mjs";
 import { isWornSlot } from "../rules/worn.mjs";
 import { rarityClass } from "../helpers/rarity.mjs";
+import { reloadStatus } from "./reload.mjs";
 
 /**
  * The three subtypes that are things rather than progression. Private: an
@@ -45,6 +46,7 @@ export function carriedRows(actor) {
     .map(item => ({
       id: item.id,
       name: item.name,
+      reloadStatus: reloadStatus(item),
       img: item.img,
       type: item.type,
       weight: item.system.weight ?? null,

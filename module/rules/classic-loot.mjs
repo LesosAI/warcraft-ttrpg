@@ -52,7 +52,7 @@ import { baseArmorPoints } from "./armor.mjs";
 import { bonusAtTier } from "./augments.mjs";
 import { isWornSlot } from "./worn.mjs";
 import { damageIn, parseTooltip } from "./classic-tooltip.mjs";
-import { emptySignature, gate } from "./signatures.mjs";
+import { emptySignature, gate, signatureEffectOf, hasSignature } from "./signatures.mjs";
 import {
   ABILITY_NAMED, CONDITION_WORD, CREATURE_WORD, ENCHANT_OF_SCHOOL, OVERRIDES, REASON_TEXT,
   SCHOOL_OF_CLASS, SETS, STAT_MAP, SUMMON_ENTRY, TEMPLATES, USE_ATTRIBUTE, baseRowFor, zoneFor
@@ -2219,6 +2219,17 @@ export function convert(record, ctx = {}) {
   }
 
   if (override) applyOverride(doc, override, how);
+  // Only a complete, explicitly approved rule replacement resolves a
+  // placeholder. A prose edit alone must not certify the old descriptor.
+  if (override?.signatureApproved === true && typeof override.signature === "string"
+    && override.signature.trim() && override.signatureEffect && hasSignature(doc.system.signatureEffect)) {
+    for (let index = flagged.length - 1; index >= 0; index--) {
+      if (!["signature:unwritten", "set:bonus"].includes(flagged[index].code)) continue;
+      how.push({ kind: "signature-replaced", from: flagged[index].note, because: override.note ?? "the lead's approved rule" });
+      flagged.splice(index, 1);
+    }
+    doc.flags["azeroth-rpg"].classic.signatureOverride = true;
+  }
 
   // The legality gate: 08 §4 to §6 and §20, read through the Forge's own
   // planner. A document the chapter would refuse is never emitted.
@@ -2384,6 +2395,15 @@ function applyOverride(doc, override, how) {
     if (override[key] === undefined) continue;
     doc.system[key] = override[key];
     how.push({ kind: "override", to: key, because: override.note ?? "the lead's hand" });
+  }
+  if (override.signatureEffect !== undefined) {
+    if (typeof override.signature !== "string" || !override.signature.trim()) {
+      throw new Error("A signatureEffect override requires its matching signature text");
+    }
+    const descriptor = signatureEffectOf({ signatureEffect: override.signatureEffect });
+    if (!descriptor) throw new Error("A signatureEffect override must be a descriptor object");
+    doc.system.signatureEffect = descriptor;
+    how.push({ kind: "override", to: "signatureEffect", because: override.note ?? "the lead's hand" });
   }
   if (override.grants !== undefined) {
     doc.flags["azeroth-rpg"].grants = override.grants;

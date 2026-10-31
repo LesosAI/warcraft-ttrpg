@@ -4,6 +4,7 @@
  */
 
 import { resolveDamage } from "./mitigation.mjs";
+import { sustainEntryTransferPending } from "./sustain-entry-transfer.mjs";
 
 /**
  * Bleeding X at the start of your turn (A1): lose X Health, armor and Ward
@@ -40,11 +41,11 @@ export function bleedTick({ bleeding = [], dying = false, health = 0 } = {}) {
  * tick is silent.
  *
  * @param {{scorched?: number[], dying?: boolean, health?: number,
- *          immune?: string[], vulnerable?: string[], school?: string}} o
+ *          immune?: string[], vulnerable?: string[], school?: string, fireTakenBonus?: number}} o
  * @returns {{health: number, burned: number, immune: boolean, vulnerable: boolean}}
  */
 export function scorchTick({
-  scorched = [], dying = false, health = 0, immune = [], vulnerable = [], school = "fire"
+  scorched = [], dying = false, health = 0, immune = [], vulnerable = [], school = "fire", fireTakenBonus = 0
 } = {}) {
   const total = scorched.reduce((n, v) => n + Math.max(0, Math.trunc(Number(v)) || 0), 0);
   if (total <= 0) return { health, burned: 0, immune: false, vulnerable: false };
@@ -54,7 +55,7 @@ export function scorchTick({
   // `auras.test.mjs` names this call as the one exempt caller.
   const r = resolveDamage({
     rating: total, sl: 0, kind: "magical", school,
-    ward: 0, immune, vulnerable, slAddsToDamage: false
+    ward: 0, immune, vulnerable, fireTakenBonus, slAddsToDamage: false
   });
   if (dying) return { health, burned: 0, immune: r.immune, vulnerable: r.vulnerable };
   return {
@@ -112,8 +113,10 @@ export function upkeep(entries = [], pools = [], { costOf = () => 1, health = nu
   const kept = [];
   const ended = [];
   const free = [];
+  const suspended = [];
   const paid = { mana: 0, health: 0 };
   for (const entry of entries) {
+    if (sustainEntryTransferPending(entry)) { kept.push(entry); suspended.push(entry); continue; }
     const raw = costOf(entry);
     const cost = raw && typeof raw === "object" ? raw : { mana: raw, health: 0 };
     const mana = Math.max(0, Math.trunc(Number(cost.mana)) || 0);
@@ -134,5 +137,5 @@ export function upkeep(entries = [], pools = [], { costOf = () => 1, health = nu
     const value = remaining.get(p.itemId);
     if (value !== undefined && value !== p.value) updates.push({ itemId: p.itemId, kind: "power", value });
   }
-  return { updates, kept, ended, free, paid, health: start !== null && healthLeft !== start ? healthLeft : null };
+  return { updates, kept, ended, free, suspended, paid, health: start !== null && healthLeft !== start ? healthLeft : null };
 }

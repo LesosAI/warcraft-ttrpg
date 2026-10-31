@@ -21,7 +21,7 @@
 --}}
 <article class="azeroth-bag-inspect" data-item-id="{{row.id}}" hidden>
   <header class="azeroth-bag-inspect-head">
-    {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=row.img rarityClass=row.rarityClass}}
+    {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=row.img rarityClass=row.rarityClass trainingTip=row.trainingTip}}
     <h4 class="azeroth-bag-inspect-name{{#if row.rarityClass}} {{row.rarityClass}}{{/if}}">{{row.name}}</h4>
     {{> systems/azeroth-rpg/templates/actor/partials/star.hbs favorite=row.favorite}}
   </header>

@@ -60,7 +60,7 @@
   <ul class="azeroth-favorites">
     {{#each favorites.rows as |row|}}
     <li class="azeroth-favorite azeroth-favorite--{{row.type}}" data-item-id="{{row.id}}">
-      {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=row.img rarityClass=row.rarityClass}}
+      {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=row.img rarityClass=row.rarityClass trainingTip=row.trainingTip}}
       <span class="azeroth-favorite-name" data-action="expandItem" role="button" tabindex="0" aria-expanded="false">{{row.name}}</span>
       <span class="azeroth-favorite-meta">{{#if row.meta}}{{row.meta}}{{else if row.cost}}{{row.cost}}{{else if row.actionLabel}}{{localize row.actionLabel}}{{/if}}</span>
       {{#if row.uses}}{{> systems/azeroth-rpg/templates/actor/partials/uses.hbs name=row.name uses=row.uses}}{{/if}}

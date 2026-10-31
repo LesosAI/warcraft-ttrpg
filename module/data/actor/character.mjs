@@ -5,6 +5,8 @@
  */
 
 import { AZEROTH } from "../../config.mjs";
+import { deathStepLimitFor } from "../../rules/sacrifice.mjs";
+import { dispersionFor } from "../../rules/dispersion.mjs";
 import { grantsFor, grantsOn } from "../../rules/grants.mjs";
 import { signatureEffects } from "../../rules/signatures.mjs";
 import { corruptionEffects } from "../../rules/corruption-effects.mjs";
@@ -45,10 +47,13 @@ import { armorAccessFor } from "../../rules/class-talents.mjs";
 // 04's Frozen Core (D-775): a damage type a talent makes the character Immune to.
 import { damageImmunitiesFor } from "../../rules/class-talents.mjs";
 import { healingBlockedBy } from "../../rules/no-healing.mjs";
+import { sentinelHalvesHealing } from "../../rules/sentinel-mortal-strike.mjs";
 // What an ally's aura lays on this character (D-755).
 import { auraBaneRows, auraBoonRows, auraHalvesHealing, auraStandsFree, emptySchoolArmor } from "../../rules/auras.mjs";
 // A condition a creature cannot be for a span (04's Unfettered; the Legacy branches' door 25).
 import { immunitiesFrom } from "../../rules/legacy-uses.mjs";
+import { invulnerabilityPotionActive } from "../../rules/invulnerability-potion.mjs";
+import { wisdomBonus } from "../../rules/distilled-wisdom.mjs";
 import { SOURCE_MIGRATIONS } from "../../migrations/index.mjs";
 
 const fields = foundry.data.fields;
@@ -131,7 +136,7 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
       // 06 SS8's dying track (D-629): a failed DC 12 Body Resilience Test at
       // the start of a turn at 0 Health takes a step; Bleeding while dying
       // takes one; the third is the end. Cleared by healing and by a Tether.
-      deathSteps: new fields.NumberField({ required: true, integer: true, initial: 0, min: 0, max: AZEROTH.DEATH_STEPS }),
+      deathSteps: new fields.NumberField({ required: true, integer: true, initial: 0, min: 0, max: AZEROTH.SACRIFICE_DEATH_STEPS }),
 
       // Each track runs 0-20. Thresholds at 5/10/15 are derived, never stored
       // (D-457, D-458) — crossing one is a function of the number.
@@ -289,6 +294,9 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     const shape = this.parent?.shape ?? null;
     const physical = shape?.physical ?? null;
     const melded = Boolean(shape && meldsGear(shape.kind));
+    // Dispersion preserves inventory and equipped flags, but suspends gear benefits.
+    // Unlike shapeshifting, it does not retain affixes or signatures.
+    const usableGear = dispersionFor(this.parent) ? [] : [...(this.parent?.items ?? [])];
 
     // What is worn grants (08 §6, 2026-09-06): the attribute family lands on
     // the score's TOTAL - the stored value stays the creation score, since
@@ -297,7 +305,7 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // keeps its delta. Spellpower by school, a Boon by skill and Fortitude
     // ride to the cast, the dialog and the Health maximum. Derived, never
     // stored. **Affixes on a melded thing still grant** (the lead).
-    const worn = grantsFor((this.parent?.items ?? []).map(i => ({
+    const worn = grantsFor(usableGear.map(i => ({
       equipped: i.system?.equipped === true, name: i.name, grants: grantsOn(i, bearer)
     })));
     this.grants = worn;
@@ -369,6 +377,7 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // Pools. The cap is the class's; the stored value is clamped to it.
     // Mana scales with level (02 §6), so the level is part of the lookup.
     const pools = poolsFor(classItems, this.level);
+    for (const pool of pools.powers) pool.max += wisdomBonus(this.parent?.effects, pool);
     // A talent that lifts a cap (04, D-627): Zealotry, Hunter's Mark. Items
     // are prepared before the actor's derived data, so the ranks are here.
     const taken = (this.parent?.items ?? []).filter(i => i.type === "talent" && (i.system?.taken ?? 0) > 0);
@@ -451,13 +460,14 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     this.vulnerable = [...rungs.vulnerable];
     // What the Signatures on what is WORN add up to (08 §20, D-692). Read
     // here, applied below beside the numbers each of them belongs to.
-    const signature = signatureEffects([...(this.parent?.items ?? [])], bearer);
+    const signature = signatureEffects(usableGear, bearer);
     this.signatureEffects = signature;
 
     // Damage types the character is Immune to: none from the tracks; the
     // conditions the body refuses are a separate list. **AND A TALENT'S** (04's
     // Frozen Core: *You are Immune (Frost)*; D-775).
     this.immune = damageImmunitiesFor(talentRows);
+    if (invulnerabilityPotionActive(this.parent?.effects ?? [])) this.immune = [...new Set([...this.immune, "physical"])];
     // **EVERY LINE ADDS TO WHAT IS THERE** (D-691's own scar). This key is
     // derived rather than stored, so an `initial`-phase Active Effect that
     // wrote one would land before this method and a plain assignment would
@@ -565,8 +575,8 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // with it. What is worn still GRANTS - its affixes above and its Signature
     // below (Stormrage Raiment's points per tier) - and Thick Hide's `final`
     // change lands on these numbers.
-    const suit = melded ? null : this.parent?.items?.find(i => i.type === "armor" && i.system?.equipped && !i.system?.shield);
-    const shield = melded ? null : this.parent?.items?.find(i => i.type === "armor" && i.system?.equipped && i.system?.shield);
+    const suit = melded ? null : usableGear.find(i => i.type === "armor" && i.system?.equipped && !i.system?.shield);
+    const shield = melded ? null : usableGear.find(i => i.type === "armor" && i.system?.equipped && i.system?.shield);
     const category = suit?.system?.category ?? "none";
     const cuts = suit?.system?.cuts ?? [];
     const effects = suitEffects(category, cuts, { shield: Boolean(shield) });
@@ -589,7 +599,7 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     this.encumbering = effects.encumbering;
     // An Encumbering weapon worn (08 §5, 2026-09-06): Speed down 5, a Bane on
     // Stealth. A melded weapon is in nobody's hand (D-769).
-    const wornWeapons = wornWeaponEffects((melded ? [] : (this.parent?.items ?? []))
+    const wornWeapons = wornWeaponEffects((melded ? [] : usableGear)
       .filter(i => i.type === "weapon" && i.system?.equipped === true).map(i => i.system?.traits ?? []));
     this.armorBanes = [...effects.banes, ...wornWeapons.banes.filter(b => !effects.banes.includes(b))];
 
@@ -637,8 +647,12 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // nowhere (D-769). In memory only: `flyingSpeed` is the GM's stored field,
     // no input on the sheet writes it, and leaving the shape reads it again.
     if (physical) this.flyingSpeed = physical.flies ? flyingPace(this.tier) : null;
+    // Derived anew each preparation, so leaving a form removes its swimming
+    // restrictions and breathing traits immediately.
+    this.senses = [...(physical?.movementSenses ?? [])];
     // Dying is Health at 0 (06 SS8): derived, never stored.
     this.dying = (this.health?.value ?? 0) <= 0;
+    this.deathStepLimit = deathStepLimitFor(talents);
 
     // **WHAT SOMEBODY ELSE'S SIGNATURE TAKES OFF EVERY BLOW** (the Bulwark of
     // Tyr's Hand, 08 §20; D-696). Derived and never stored, so it exists here
@@ -665,7 +679,8 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // halved healing, which every healing door reads, and Tidecall's free
     // stand, which the Prone toggle reads.
     this.auraBaneRows = auraBaneRows(this.parent?.effects ?? []);
-    this.healingHalved = auraHalvesHealing(this.parent?.effects ?? []);
+    this.healingHalved = auraHalvesHealing(this.parent?.effects ?? [])
+      || sentinelHalvesHealing(this.parent?.effects ?? []);
     // **AND A BLOW THAT LEFT IT RECOVERING NONE** (04's Mortal Strike; D-772):
     // the mark's flag on an effect, read by every healing door.
     const blocked = healingBlockedBy(this.parent?.effects ?? []);
@@ -717,7 +732,7 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // Ward by school, from the Ward grants on what is worn (08 SS6, D-607).
     // A grant rides on `flags.azeroth-rpg.grants` (a generated item) or on the
     // affix item's own flag (the affix worn as a thing). Derived, never stored.
-    this.ward = wardFor((this.parent?.items ?? []).map(i => ({
+    this.ward = wardFor(usableGear.map(i => ({
       equipped: i.system?.equipped === true, grants: grantsOn(i, bearer)
     })));
     // A rung's Ward joins the worn (10 §6's Shadow; §9's Fel and Shadow).

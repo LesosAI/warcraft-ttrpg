@@ -1,0 +1,4 @@
+{{!-- The Horned Viking Helmet's knockdown off a confirmed hit, on the attack card. Drawn
+      by applications/helmet-hit-use.mjs#showHelmetUse for the wearer's owner, one row per
+      target with the first helmet that may answer it; greyed while the rest use is spent. --}}
+<button type="button" data-action="helmetUse" data-index="{{index}}" data-item-id="{{itemId}}"{{#if disabled}} disabled{{/if}}>{{localize "AZEROTH.Signature.Helmet.Use" name=name target=target dc=dc}}</button>

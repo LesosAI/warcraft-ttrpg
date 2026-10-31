@@ -20,16 +20,23 @@ export const PROMPT_TEMPLATE = "systems/azeroth-rpg/templates/chat/prompt-card.h
  */
 export async function postPrompt(actor, {
   purpose, title, text, testLabel = "", dc = null, stabilize = false, cardClass = "azeroth-card-attack", resilience = "body",
-  effectId = null, escape = null, noTest = false, offer = false, cuttingGear = false, ownerSees = false
+  effectId = null, escape = null, noTest = false, offer = false, cuttingGear = false, ownerSees = false, seduction = false,
+  whisper = null, blind = false
 } = {}) {
   const { renderTemplate } = foundry.applications.handlebars;
+  const seductionMessageUuid = seduction && effectId
+    ? [...(actor.effects ?? [])].find(effect => effect.id === effectId)?.flags?.["azeroth-rpg"]?.seduction?.messageUuid : null;
   const content = await renderTemplate(PROMPT_TEMPLATE, {
     cardClass, title, name: actor.name, text, testLabel, dc, actorUuid: actor.uuid, purpose, stabilize, resilience, effectId,
-    noTest, offer, cuttingGear, ownerSees
+    noTest, offer, cuttingGear, ownerSees, seduction
   });
   return ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
     content,
-    flags: { "azeroth-rpg": { kind: "prompt", purpose, actorUuid: actor.uuid, ...(escape ? { escape: { effectId, ...escape } } : {}) } }
+    ...(Array.isArray(whisper) ? { whisper: [...whisper], blind: Boolean(blind) } : {}),
+    flags: { "azeroth-rpg": { kind: "prompt", purpose, actorUuid: actor.uuid,
+      ...(seduction && effectId ? { seduction: { effectId, ...(seductionMessageUuid ? { messageUuid: seductionMessageUuid } : {}) } } : {}),
+      ...(purpose === "poisoned" && effectId ? { poisoned: { effectId } } : {}),
+      ...(escape ? { escape: { effectId, ...escape } } : {}) } }
   });
 }

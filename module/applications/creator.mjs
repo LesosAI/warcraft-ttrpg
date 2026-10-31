@@ -20,6 +20,7 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+import { augmentOf, canCarry } from "../rules/augments.mjs";
 import { enrich } from "../helpers/enrich.mjs";
 import { coins } from "../helpers/coins.mjs";
 import { rarityClass } from "../helpers/rarity.mjs";
@@ -36,7 +37,9 @@ import {
 import { arrange } from "../rules/slots.mjs";
 // A Legacy's talents come with its people (04 §1, D-781).
 import { keptBy, owedTalents } from "../rules/legacy-branches.mjs";
-import { sectionTail } from "./browser-categories.mjs";
+import { sectionTail, matchesFilter, sortEntries, facetOptions } from "./browser-categories.mjs";
+import { startingTalents, startingSpell, draftTree, invalidatedChoices } from "../rules/creator-choices.mjs";
+import { crestPath } from "../rules/crests.mjs";
 import { SKILL_TEXT } from "../rules/skill-text.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -57,9 +60,15 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     classes: ["azeroth", "azeroth-roll-dialog", "azeroth-forge", "azeroth-creator"],
     tag: "form",
     window: { title: "AZEROTH.Creator.Title", resizable: true },
-    position: { width: 760, height: 820 },
+    position: { width: 1180, height: 860 },
     form: { handler: AzerothCharacterCreator.#onSubmit, submitOnChange: false, closeOnSubmit: false },
     actions: {
+      creatorBranch: AzerothCharacterCreator.#onBranch,
+      creatorInspectTalent: AzerothCharacterCreator.#onInspectTalent,
+      creatorChooseTalent: AzerothCharacterCreator.#onChooseTalent,
+      creatorUndoTalent: AzerothCharacterCreator.#onUndoTalent,
+      creatorInspectSpell: AzerothCharacterCreator.#onInspectSpell,
+      creatorClearSpellFilters: AzerothCharacterCreator.#onClearSpellFilters,
       creatorGo: AzerothCharacterCreator.#onGo,
       creatorBack: AzerothCharacterCreator.#onBack,
       creatorNext: AzerothCharacterCreator.#onNext,
@@ -96,6 +105,7 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
   #state = null;
   /** The packs, read once. */
   #data = null;
+  #searchTimer = null;
 
   /** @inheritDoc */
   get title() {
@@ -150,14 +160,14 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
       const entries = await pack.getIndex({ fields });
       return entries.map(e => ({
         uuid: `Compendium.${id}.${pack.documentName}.${e._id}`,
-        name: e.name, img: e.img, type: e.type,
+        name: e.name, img: e.img, type: e.type, sort: e.sort ?? 0, flags: e.flags ?? {},
         ...(e.system ?? {})
       }));
     };
     const [races, classes, careers, talents, spells, weapons, armor, gear] = await Promise.all([
       docs(PACKS.races), docs(PACKS.classes), docs(PACKS.careers),
       // `legacy` is the people a Legacy's twelve belong to (04 §1, D-781).
-      index(PACKS.talents, ["system.className", "system.branch", "system.legacy", "system.tier", "system.race", "system.effect", "system.identifier", "system.ranks", "system.requires"]),
+      index(PACKS.talents, ["sort", "system.className", "system.branch", "system.legacy", "system.tier", "system.race", "system.effect", "system.identifier", "system.ranks", "system.requires"]),
       // The prose rides the index so a row can open on it without a second read (2026-09-06).
       index(PACKS.spells, ["system.tier", "system.school", "system.classes", "system.mana", "system.action",
         // 07 §9's mechanical run rides the index too, so a row SAYS what the
@@ -171,11 +181,11 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
       // with no `capacity` adds none. A field the index does not carry reads as
       // absent rather than as an error, so the refusal would simply be wrong.
       index(PACKS.weapons, ["system.cost", "system.rarity", "system.rating", "system.range", "system.quantity", "system.source", "system.traits", "system.description",
-        "system.weight", "system.launcher", "system.fits"]),
+        "system.weight", "system.launcher", "system.fits", "system.identifier", "system.weaponType", "flags.azeroth-rpg"]),
       index(PACKS.armor, ["system.cost", "system.rarity", "system.category", "system.shield", "system.apBonus", "system.source", "system.traits", "system.description",
         "system.weight"]),
       index(PACKS.gear, ["system.cost", "system.rarity", "system.quantity", "system.source", "system.traits", "system.description",
-        "system.weight", "system.capacity", "system.slot"])
+        "system.weight", "system.capacity", "system.slot", "flags.azeroth-rpg"])
     ]);
     const catalogue = [...weapons, ...armor, ...gear]
       .filter(i => (i.rarity ?? "common") === "common")
@@ -200,8 +210,10 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
       equipment: [],
       kitLoadedFor: null,
       itemSearch: "", spellSearch: "",
+      talentBranch: null, inspectedTalent: null, inspectedRacial: false,
+      inspectedSpell: null, spellSchool: "", spellAction: "", spellMana: "", spellSort: "name",
       // The shelves open, the rows opened on their entry, the sort (2026-09-06).
-      shelves: [], expanded: [], itemSort: "name",
+      shelves: [], expanded: [], itemSort: "name", showUntrainedGear: false,
       // The GM's door hands the character to a player; null keeps it the GM's.
       player: null,
       name: this.actor?.name ?? "",
@@ -281,6 +293,8 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
 
     return Object.assign(context, {
       step: s.step,
+      creatorDetailId: this.id + "-choice-detail",
+      identity: { name: s.name || game.i18n.localize("AZEROTH.Creator.NewCharacter"), race: p.race?.name, cls: p.cls?.name, img: p.cls?.img ?? p.race?.img ?? s.img },
       stepIndex: index + 1,
       stepCount: steps.length,
       stepLabel: game.i18n.localize(`AZEROTH.Creator.Step.${s.step}`),
@@ -288,14 +302,22 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
         key, number: i + 1,
         label: game.i18n.localize(`AZEROTH.Creator.Step.${key}`),
         active: key === s.step,
-        refused: reasonsAt(key).length
+        refused: reasonsAt(key).length,
+        complete: i < index && !reasonsAt(key).length
       })),
       canBack: index > 0,
       canNext: index < steps.length - 1,
       pane,
+      review: s.step === "numbers" ? [
+        { step: "race", label: game.i18n.localize("AZEROTH.Creator.Step.race"), value: p.race?.name },
+        { step: "class", label: game.i18n.localize("AZEROTH.Creator.Step.class"), value: p.cls?.name },
+        { step: "career", label: game.i18n.localize("AZEROTH.Creator.Step.career"), value: p.career?.name },
+        { step: "talents", label: game.i18n.localize("AZEROTH.Creator.Step.talents"), value: [p.racialTalent?.name, p.classTalent?.name].filter(Boolean).join(", ") },
+        ...(castsSpells(p.cls) ? [{ step: "spells", label: game.i18n.localize("AZEROTH.Creator.Step.spells"), value: p.spells.map(sp => sp.name).join(", ") }] : [])
+      ] : [],
       summary: {
         ok: v.ok,
-        reasons: reasonsAt(s.step).map(r => say("AZEROTH.Creator.Refused", r)),
+        reasons: (["numbers", "name"].includes(s.step) ? v.reasons : reasonsAt(s.step)).map(r => say("AZEROTH.Creator.Refused", r)),
         notes: notesAt(s.step).map(n => say("AZEROTH.Creator.Note", n)),
         elsewhere: v.reasons.filter(r => r.step !== s.step).length,
         health: numbers.health,
@@ -486,94 +508,73 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
   }
 
   async #talentsPane(s, p) {
-    const race = p.race;
-    const cls = p.cls;
-    const racial = await Promise.all((race?.talents ?? []).map(async t => ({
-      name: t.name, tier: t.tier,
-      selected: t.name === s.racialTalent,
-      available: (t.tier ?? 1) <= 1,
-      html: await enrich(t.description ?? "")
-    })));
-    const branches = [];
-    if (cls) {
-      const names = (cls.branches ?? []).map(b => b.name);
-      // The class's tier 1 talents, a Legacy's only where the race keeps it:
-      // an orc Warrior is offered Blademaster's three beside the class's own
-      // nine, a human Warrior is not (04 §1, D-781).
-      const mine = this.#data.talents.filter(t => t.className === cls.name && !t.race && Number(t.tier) === 1 && keptBy(t, race?.name ?? null));
-      const own = names.length ? names : [...new Set(mine.filter(t => !t.legacy).map(t => t.branch))];
-      const legacies = [...new Set(mine.filter(t => t.legacy).map(t => t.branch))];
-      for (const name of [...own, ...legacies]) {
-        const inBranch = mine.filter(t => t.branch === name);
-        const people = inBranch.find(t => t.legacy)?.legacy ?? "";
-        const talents = await Promise.all(inBranch.sort((a, b) => a.name.localeCompare(b.name)).map(async t => ({
-          identifier: t.identifier, name: t.name, ranks: t.ranks ?? 1,
-          selected: t.identifier === s.classTalent,
-          html: await enrich(t.effect ?? "")
-        })));
-        branches.push({ name: people ? game.i18n.format("AZEROTH.Talent.LegacyBranch", { branch: name, people }) : name, talents });
+    const mine = startingTalents(this.#data.talents, p.cls, p.race);
+    const branchNames = [...new Set([...(p.cls?.branches ?? []).map(b => b.name), ...mine.map(t => t.branch)])];
+    if (!branchNames.includes(s.talentBranch)) s.talentBranch = branchNames[0] ?? null;
+    const branches = branchNames.map(name => ({ name, active: name === s.talentBranch,
+      label: mine.find(t => t.branch === name)?.legacy
+        ? game.i18n.format("AZEROTH.Talent.LegacyBranch", { branch: name, people: mine.find(t => t.branch === name).legacy }) : name }));
+    const tree = draftTree(mine.filter(t => t.branch === s.talentBranch), s.classTalent);
+    tree.crest = crestPath(p.cls?.identifier);
+    const racial = (p.race?.talents ?? []).map((t, i) => ({ ...t,
+      _id: t.name, img: p.race.img, racial: true, taken: s.racialTalent === t.name ? 1 : 0, ranks: 1,
+      state: s.racialTalent === t.name ? "maxed" : Number(t.tier ?? 1) <= 1 ? "available" : "locked",
+      label: t.name + ": " + (s.racialTalent === t.name ? "1/1" : "0/1") + ", " + game.i18n.localize("AZEROTH.Talent.Tier") + " " + (t.tier ?? 1), socketId: this.id + "-racial-" + i,
+      canChoose: Number(t.tier ?? 1) <= 1 && !s.racialTalent }));
+    for (const tier of tree.tiers) {
+      tier.railId = this.id + "-tier-" + tier.tier;
+      for (const t of tier.talents) {
+        t.gridColumn = t.column + 1;
+        t.label = t.name + ": " + t.taken + "/" + t.ranks + ", " + game.i18n.localize("AZEROTH.Talent.State." + t.state);
+        t.socketId = this.id + "-talent-" + t.identifier;
       }
     }
-    const features = cls ? await Promise.all(featuresFor(cls, 1).map(async f => ({
-      name: f.name, html: await enrich(f.description ?? "")
-    }))) : [];
-    return {
-      racial, raceName: race?.name ?? null,
-      branches, className: cls?.name ?? null,
-      features
-    };
+    const inspect = s.inspectedRacial
+      ? racial.find(t => t.name === s.inspectedTalent)
+      : tree.tiers.flatMap(t => t.talents).find(t => t.identifier === s.inspectedTalent);
+    const selected = inspect ?? tree.tiers[0]?.talents[0] ?? racial[0];
+    const detail = selected ? { ...selected, racial: Boolean(selected.racial),
+      key: selected.racial ? selected.name : selected.identifier,
+      canChoose: selected.racial ? selected.canChoose : selected.canTake,
+      html: await enrich(selected.effect ?? selected.description ?? ""),
+      reason: selected.racial ? (Number(selected.tier ?? 1) > 1 ? "raceTier" : "racePicks") : selected.lockedBecause } : null;
+    return { racial, branches, tree, detail, className: p.cls?.name, raceName: p.race?.name,
+      classChosen: Boolean(s.classTalent), racialChosen: Boolean(s.racialTalent),
+      selectedClassName: mine.find(t => t.identifier === s.classTalent)?.name,
+      selectedRacialName: s.racialTalent,
+      features: p.cls ? await Promise.all(featuresFor(p.cls, 1).map(async f => ({ name: f.name, html: await enrich(f.description ?? "") }))) : [] };
   }
 
-  /**
-   * The spells step (07 §5, 2026-09-06): the count the class grants at level
-   * 1, the spells chosen, and every eligible tier-1 spell of the class's
-   * schools - each row opening on the entry's lore and effect, enriched, so
-   * a spell is read before it is taken.
-   */
   async #spellsPane(s, p) {
-    const cls = p.cls;
-    const required = spellsRequired(cls, p.abilities);
-    const eligible = cls ? this.#data.spells.filter(sp =>
-      Number(sp.tier) === 1 && cls.schools?.includes(sp.school)
-      && (!Array.isArray(sp.classes) || !sp.classes.length || sp.classes.includes(cls.name))) : [];
-    const expanded = new Set(s.expanded ?? []);
-    const row = async (sp, extra = {}) => ({
-      uuid: sp.uuid, name: sp.name, search: sp.name.toLowerCase(),
-      school: game.i18n.localize(AZEROTH.schools[sp.school] ?? sp.school),
-      mana: sp.mana ?? null,
-      action: AZEROTH.actions[sp.action] ? game.i18n.localize(AZEROTH.actions[sp.action]) : null,
-      // The mechanics, on the row. 07 §9's order: Range, Target, Duration,
-      // Damage — the four a player weighs one tier-1 spell against another by.
-      mechanics: [
-        sp.range || null,
-        sp.target || null,
-        sp.duration?.text || null,
-        sp.damage?.rating ? game.i18n.format("AZEROTH.Creator.SpellDamage", {
-          rating: sp.damage.rating,
-          school: game.i18n.localize(AZEROTH.schools[sp.damage.school ?? sp.school] ?? "")
-        }) : null
-      ].filter(Boolean).join(" · "),
-      expanded: expanded.has(sp.uuid),
-      lore: expanded.has(sp.uuid) ? await enrich(sp.description ?? "") : "",
-      effect: expanded.has(sp.uuid) ? await enrich(sp.effect ?? "") : "",
-      ...extra
-    });
-    const chosen = [];
-    for (const [i, uuid] of s.spells.entries()) {
-      const sp = this.#data.spells.find(e => e.uuid === uuid);
-      if (sp) chosen.push(await row(sp, { index: i }));
-    }
-    const options = [];
-    for (const sp of eligible.filter(sp => !s.spells.includes(sp.uuid)).sort((a, b) => a.name.localeCompare(b.name))) options.push(await row(sp));
-    return {
-      className: cls?.name ?? null,
-      spells: {
-        required, chosen, count: chosen.length,
-        caster: castsSpells(cls),
-        options,
-        search: s.spellSearch ?? ""
-      }
-    };
+    const required = spellsRequired(p.cls, p.abilities);
+    const eligible = this.#data.spells.filter(sp => startingSpell(sp, p.cls));
+    const definitions = { school: { path: "school", kind: "choice" }, action: { path: "action", kind: "choice" }, mana: { path: "mana", kind: "range" } };
+    const states = new Map([
+      ["school", { values: new Set(s.spellSchool ? [s.spellSchool] : []) }],
+      ["action", { values: new Set(s.spellAction ? [s.spellAction] : []) }],
+      ["mana", { min: null, max: s.spellMana === "" ? null : Number(s.spellMana) }]
+    ]);
+    const term = String(s.spellSearch ?? "").trim().toLocaleLowerCase();
+    const matching = eligible.filter(sp => [sp.name, sp.effect, sp.description].join(" ").replace(/<[^>]*>/g, " ").toLocaleLowerCase().includes(term));
+    const filtered = matching.filter(sp => Object.entries(definitions).every(([key, def]) => matchesFilter(sp, def, states.get(key))));
+    const row = sp => ({ ...sp, schoolLabel: game.i18n.localize(AZEROTH.schools[sp.school] ?? sp.school),
+      actionLabel: AZEROTH.actions[sp.action] ? game.i18n.localize(AZEROTH.actions[sp.action]) : sp.action,
+      selected: s.spells.includes(sp.uuid), inspected: s.inspectedSpell === sp.uuid,
+      canAdd: startingSpell(sp, p.cls) && !s.spells.includes(sp.uuid) && s.spells.length < required,
+      index: s.spells.indexOf(sp.uuid), durationText: sp.duration?.text ?? "" });
+    const options = sortEntries(filtered, s.spellSort === "mana" ? "mana" : "name").map(row);
+    const chosen = s.spells.map(uuid => this.#data.spells.find(sp => sp.uuid === uuid)).filter(Boolean).map(row);
+    const inspected = this.#data.spells.find(sp => sp.uuid === s.inspectedSpell && (startingSpell(sp, p.cls) || s.spells.includes(sp.uuid)))
+      ?? options[0] ?? chosen[0];
+    const detail = inspected ? { ...row(inspected), lore: await enrich(inspected.description ?? ""), effect: await enrich(inspected.effect ?? "") } : null;
+    if (detail) s.inspectedSpell = detail.uuid;
+    for (const option of options) option.inspected = option.uuid === detail?.uuid;
+    return { className: p.cls?.name, spells: { required, chosen, count: chosen.length, caster: castsSpells(p.cls),
+      options, detail, search: s.spellSearch, school: s.spellSchool, action: s.spellAction, mana: s.spellMana, sort: s.spellSort,
+      full: chosen.length >= required, total: eligible.length,
+      schools: facetOptions(matching, definitions, states, "school").map(r => ({ ...r, selected: r.value === s.spellSchool, label: game.i18n.localize(AZEROTH.schools[r.value] ?? r.value) })),
+      actions: facetOptions(matching, definitions, states, "action").map(r => ({ ...r, selected: r.value === s.spellAction, label: game.i18n.localize(AZEROTH.actions[r.value] ?? r.value) }))
+    } };
   }
 
   #languagesPane(s, p, numbers) {
@@ -644,7 +645,8 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
         price: row.cost === null ? game.i18n.localize("AZEROTH.Creator.Issued") : coins(price),
         total: coins(price * row.quantity),
         road: row.road,
-        note: note ? game.i18n.format(`AZEROTH.Creator.Note.${note}`, { name: row.name }) : null,
+        trainingTip: note ? game.i18n.localize(`AZEROTH.Training.${note.replace("Access", "")}`) : null,
+        note: note ? game.i18n.format(`AZEROTH.Creator.Note.${note === "weaponAccess" ? "untrainedWeapon" : note}`, { name: row.name }) : null,
         expanded: expanded.has(row.uuid),
         description: expanded.has(row.uuid) ? await enrich(row.description ?? "") : "",
         detail: expanded.has(row.uuid) ? AzerothCharacterCreator.detailOf(row) : ""
@@ -658,10 +660,16 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     const sort = s.itemSort === "cost" ? "cost" : "name";
     const byShelf = new Map();
     for (const i of this.#data.catalogue) {
+      const access = accessNote(i, p.cls, { extra: talentArmor });
+      const augment = augmentOf(i);
+      const wrongAugment = augment && p.cls && !canCarry(augment.category, [p.cls.name]);
+      if ((access || wrongAugment) && !s.showUntrainedGear) continue;
       const shelf = AzerothCharacterCreator.shelfOf(i);
       if (!byShelf.has(shelf.key)) byShelf.set(shelf.key, { ...shelf, items: [] });
       byShelf.get(shelf.key).items.push({
         uuid: i.uuid, name: i.name, search: i.name.toLowerCase(),
+        trainingTip: access ? game.i18n.localize(`AZEROTH.Training.${access.replace("Access", "")}`)
+          : wrongAugment ? game.i18n.format("AZEROTH.Augment.NotYours", { name: i.name, className: augment.className }) : null,
         cost: i.cost == null ? -1 : priced(i),
         price: i.cost == null ? game.i18n.localize("AZEROTH.Creator.Issued") : coins(priced(i)),
         expanded: expanded.has(i.uuid),
@@ -682,6 +690,7 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
       shelves,
       sort,
       search: s.itemSearch ?? "",
+      showUntrainedGear: s.showUntrainedGear === true,
       purse: { of: coins(PURSE), spent: coins(numbers.spent), change: coins(numbers.coin), over: numbers.coin < 0 }
     };
   }
@@ -743,9 +752,43 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
   _onRender(context, options) {
     super._onRender(context, options);
     for (const el of this.element.querySelectorAll("[data-creator]")) {
-      el.addEventListener("change", () => {
+      el.addEventListener("change", async () => {
+        const before = this.state;
         this.#readForm();
+        if (el.name === "race" || el.name === "cls") {
+          const changes = invalidatedChoices(this.#state, { race: this.#raceDoc(), cls: this.#classDoc(), talents: this.#data.talents, spells: this.#data.spells });
+          if (changes.removed.length) {
+            const yes = await foundry.applications.api.DialogV2.confirm({
+              window: { title: game.i18n.localize("AZEROTH.Creator.ChangeChoices") },
+              content: "<p>" + foundry.utils.escapeHTML(game.i18n.format("AZEROTH.Creator.ChangeChoicesHint", { names: changes.removed.join(", ") })) + "</p>",
+              rejectClose: false
+            });
+            if (!yes) this.#state = before;
+            else Object.assign(this.#state, changes.patch, { inspectedTalent: null, inspectedSpell: null, talentBranch: null });
+          }
+        }
         this.render();
+      });
+    }
+    const spellSearch = this.element.querySelector("input[name=spellSearch]");
+    spellSearch?.addEventListener("input", () => {
+      clearTimeout(this.#searchTimer);
+      this.#state.spellSearch = spellSearch.value;
+      this.#searchTimer = setTimeout(async () => {
+        if (!this.rendered) return;
+        const focused = document.activeElement === spellSearch;
+        const caret = spellSearch.selectionStart;
+        await this.render();
+        if (focused) {
+          const input = this.element.querySelector("input[name=spellSearch]");
+          input?.focus(); input?.setSelectionRange(caret, caret);
+        }
+      }, 180);
+    });
+    for (const socket of this.element.querySelectorAll('[data-action="creatorInspectTalent"]')) {
+      socket.addEventListener("focus", () => {
+        if (this.#state.inspectedTalent === socket.dataset.key && this.#state.inspectedRacial === (socket.dataset.racial === "true")) return;
+        AzerothCharacterCreator.#onInspectTalent.call(this, null, socket);
       });
     }
     bindPickers(this.element);
@@ -811,7 +854,12 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     const player = value("player"); if (player !== undefined) s.player = player || null;
     // The pickers' terms, so a render redraws the list filtered as it was.
     const itemSearch = value("itemSearch"); if (itemSearch !== undefined) s.itemSearch = itemSearch;
+    const showUntrained = this.element.querySelector("input[name=showUntrainedGear]");
+    if (showUntrained) s.showUntrainedGear = showUntrained.checked;
     const spellSearch = value("spellSearch"); if (spellSearch !== undefined) s.spellSearch = spellSearch;
+    for (const key of ["spellSchool", "spellAction", "spellMana", "spellSort"]) {
+      const v = value(key); if (v !== undefined) s[key] = v;
+    }
   }
 
   /* -------------------------------------------- */
@@ -965,7 +1013,67 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
 
   static async #onSubmit() {
     this.#readForm();
+    // Enter in a search or numeric field must not create the actor early.
+    if (this.#state.step !== "name") return null;
     return this.apply();
+  }
+
+  async #refreshChoice(target) {
+    const id = target?.id;
+    await this.render();
+    if (id) this.element.querySelector("#" + CSS.escape(id))?.focus();
+  }
+
+  static async #onBranch(event, target) {
+    this.#readForm();
+    this.#state.talentBranch = target.dataset.branch;
+    this.#state.inspectedTalent = null;
+    this.#state.inspectedRacial = false;
+    return this.#refreshChoice(target);
+  }
+
+  static async #onInspectTalent(event, target) {
+    this.#readForm();
+    this.#state.inspectedTalent = target.dataset.key;
+    this.#state.inspectedRacial = target.dataset.racial === "true";
+    return this.#refreshChoice(target);
+  }
+
+  static async #onChooseTalent(event, target) {
+    this.#readForm();
+    const racial = target.dataset.racial === "true";
+    const p = this.#proposal();
+    if (racial) {
+      const choice = p.race?.talents?.find(t => t.name === target.dataset.key && Number(t.tier ?? 1) <= 1);
+      if (!choice || this.#state.racialTalent) return;
+      this.#state.racialTalent = choice.name;
+    } else {
+      const mine = startingTalents(this.#data.talents, p.cls, p.race);
+      const choice = mine.find(t => t.identifier === target.dataset.key);
+      const legal = choice && draftTree(mine.filter(t => t.branch === choice.branch), this.#state.classTalent)
+        .tiers.flatMap(t => t.talents).find(t => t.identifier === choice.identifier)?.canTake;
+      if (!legal) return;
+      this.#state.classTalent = choice.identifier;
+    }
+    return this.render();
+  }
+
+  static async #onUndoTalent(event, target) {
+    this.#readForm();
+    this.#state[target.dataset.racial === "true" ? "racialTalent" : "classTalent"] = null;
+    return this.render();
+  }
+
+  static async #onInspectSpell(event, target) {
+    this.#readForm();
+    this.#state.inspectedSpell = target.dataset.uuid;
+    return this.#refreshChoice(target);
+  }
+
+  static async #onClearSpellFilters() {
+    clearTimeout(this.#searchTimer);
+    Object.assign(this.#state, { spellSearch: "", spellSchool: "", spellAction: "", spellMana: "", spellSort: "name" });
+    return this.render();
   }
 
   static async #onGo(event, target) {
@@ -1077,13 +1185,15 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
       ui.notifications?.warn(game.i18n.format("AZEROTH.Creator.NoSpell", { name: input?.value ?? "" }));
       return;
     }
+    if (!startingSpell(entry, cls) || this.#state.spells.length >= spellsRequired(cls, this.#state.abilities)) return;
     if (!this.#state.spells.includes(entry.uuid)) this.#state.spells.push(entry.uuid);
     this.render();
   }
 
   static async #onRemoveSpell(event, target) {
     this.#readForm();
-    this.#state.spells.splice(Number(target.dataset.index), 1);
+    const index = target.dataset.uuid ? this.#state.spells.indexOf(target.dataset.uuid) : Number(target.dataset.index);
+    if (Number.isInteger(index) && index >= 0) this.#state.spells.splice(index, 1);
     this.render();
   }
 

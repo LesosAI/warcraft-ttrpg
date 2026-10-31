@@ -1,0 +1,6 @@
+<p>{{localize "AZEROTH.Signature.Piccolo.Review.Record" target=target stage=stage dc=dc total=total}}</p>
+{{#if missing}}<p>{{localize "AZEROTH.Signature.Piccolo.Review.Missing"}}</p>{{/if}}
+<p>{{localize "AZEROTH.Signature.Piccolo.Review.Effects"}}</p>
+<ul>{{#each effects}}<li>{{name}} ({{id}})</li>{{else}}<li>{{localize "AZEROTH.Signature.Piccolo.Review.None"}}</li>{{/each}}</ul>
+<p>{{localize "AZEROTH.Signature.Piccolo.Review.Help"}}</p>
+<label><input type="checkbox" name="acknowledged"> {{localize "AZEROTH.Signature.Piccolo.Review.Acknowledge"}}</label>

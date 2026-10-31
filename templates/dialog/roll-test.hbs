@@ -16,7 +16,7 @@
         `data-attack-mode`, with NO data-action: an action fires on click
         alone. A refused way stays in the list, greyed, and says why. --}}
   <div class="azeroth-dialog-row azeroth-dialog-mode">
-    <label for="azeroth-dialog-mode">{{localize "AZEROTH.Dialog.AttackMode.Label"}}</label>
+    <label for="azeroth-dialog-mode">{{#if castTestChoices}}{{localize "AZEROTH.Blademaster.Choice"}}{{else}}{{localize "AZEROTH.Dialog.AttackMode.Label"}}{{/if}}</label>
     <select id="azeroth-dialog-mode" name="attackMode" data-attack-mode>
       {{#each attackModes}}
       <option value="{{this.mode}}" {{#if this.selected}}selected{{/if}} {{#if this.refused}}disabled{{/if}}>{{localize this.label}}</option>
@@ -60,10 +60,14 @@
     {{!-- The Augment in hand (07 SS3, D-674): the box carries what it is
           worth and the note names it. A totem is PLANTED, so the thirty feet
           is the table's call and the note says so (D2 SS12). --}}
+    {{#unless casting.noAugment}}
     <label>{{localize "AZEROTH.Cast.Augment"}} <input type="number" name="augment" value="{{#if casting.augment}}{{casting.augment.value}}{{else}}0{{/if}}" step="1"></label>
     {{#if casting.augment}}
     <span class="azeroth-dialog-note">{{#if casting.augment.planted}}{{localize "AZEROTH.Augment.PlantedNote" name=casting.augment.name n=casting.augment.note}}{{else}}{{localize "AZEROTH.Augment.HeldNote" name=casting.augment.name}}{{/if}}</span>
     {{/if}}
+    {{else}}
+    <span class="azeroth-dialog-note">{{localize "AZEROTH.Blademaster.NoAugment"}}</span>
+    {{/unless}}
     {{!-- What the next spell was promised (04's Nature's Grace, Predator's
           Swiftness; D-771): already off the Mana above, named here. --}}
     {{#each casting.discounts}}
@@ -85,6 +89,14 @@
   </label>
   {{#if casting.swift.reason}}<p class="azeroth-dialog-note azeroth-dialog-rider-reason">{{casting.swift.reason}}</p>{{/if}}
   {{/if}}
+  {{/if}}
+
+  {{#if casting.conflagrate}}
+  <label class="checkbox azeroth-dialog-line">
+    <input type="checkbox" name="conflagrateBurning">
+    <span>{{localize "AZEROTH.Conflagrate.Environmental"}}</span>
+  </label>
+  <p class="azeroth-dialog-note">{{localize "AZEROTH.Conflagrate.EnvironmentalNote"}}</p>
   {{/if}}
 
   {{#if damageLine}}
@@ -261,6 +273,16 @@
   {{/if}}
 
   {{#if second}}
+  {{#if extraWeapons}}
+  <div class="azeroth-dialog-row azeroth-dialog-extra-weapon">
+    <label for="azeroth-dialog-extra-weapon">{{localize "AZEROTH.Dialog.ExtraWeapon"}}</label>
+    <select id="azeroth-dialog-extra-weapon" name="extraWeapon" required>
+      <option value="" selected disabled>{{localize "AZEROTH.Dialog.ExtraWeaponRequired"}}</option>
+      {{#each extraWeapons}}<option value="{{this.id}}" {{#if this.disabled}}disabled{{/if}}>{{this.label}}</option>{{/each}}
+    </select>
+    <span class="azeroth-dialog-note">{{localize "AZEROTH.Dialog.ExtraWeaponNote"}}</span>
+  </div>
+  {{/if}}
   {{!-- 02 SS6's Extra Attack: ONE Attack, two rolls, and the two may split
         (D-704). The pick is a token the user has targeted, or the same one. --}}
   <div class="azeroth-dialog-row azeroth-dialog-second">

@@ -1,0 +1,12 @@
+<p>{{localize "AZEROTH.Starfall.Review"}}</p>
+{{#if valid}}
+<p>{{summary}}</p>
+{{#if rows.length}}
+<ul>
+  {{#each rows}}<li>{{name}} — {{status}}</li>{{/each}}
+</ul>
+{{/if}}
+{{else}}
+<p>{{localize "AZEROTH.Starfall.ReviewMalformed"}}</p>
+{{/if}}
+<p>{{localize "AZEROTH.Starfall.ReviewInstructions"}}</p>

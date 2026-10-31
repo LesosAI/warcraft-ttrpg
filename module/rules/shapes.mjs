@@ -305,6 +305,11 @@ function num(v) {
 export function snapshotOf(source = {}, { uuid = null } = {}) {
   const s = source?.system ?? {};
   const attacks = Array.isArray(s.attacks) ? s.attacks : [];
+  // Source documents do not contain derived senses. Keep only physical
+  // locomotion and breathing, never the form's magical or combat passives.
+  const movementSenses = [...new Set([...(s.creatureAbilities ?? []), ...(s.bossActions ?? [])]
+    .flatMap(row => row?.automation?.passive?.senses ?? []))]
+    .filter(sense => ["swim", "swimFast", "aquaticOnly", "waterBreathing"].includes(sense));
   return {
     uuid: uuid ?? source?.uuid ?? null,
     name: String(source?.name ?? ""),
@@ -313,6 +318,7 @@ export function snapshotOf(source = {}, { uuid = null } = {}) {
     ap: Object.fromEntries(LOCATIONS.map(l => [l, num(s.ap?.[l])])),
     speed: num(s.speed),
     flies: s.flies === true,
+    movementSenses,
     size: isSize(s.size) ? String(s.size).toLowerCase() : DEFAULT_SIZE,
     attacks: attacks.filter(a => a?.name).map(a => ({
       name: String(a.name),
@@ -356,6 +362,10 @@ export function physicalHalf(forms = []) {
     ap: Object.fromEntries(LOCATIONS.map(l => [l, pick(f => f.ap?.[l])])),
     speed: pick(f => f.speed),
     flies: list.some(f => f.flies === true),
+    // Chimera can use either body's movement: a land-capable half removes
+    // the restriction, while either half can supply swimming or gills.
+    movementSenses: [...new Set(list.flatMap(f => f.movementSenses ?? []))]
+      .filter(sense => sense !== "aquaticOnly" || list.every(f => (f.movementSenses ?? []).includes(sense))),
     size,
     attacks: list.flatMap((f, formIndex) => (f.attacks ?? []).map(a => ({ ...a, traits: [...(a.traits ?? [])], form: String(f.name ?? ""), formIndex })))
   };

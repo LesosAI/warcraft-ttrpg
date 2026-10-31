@@ -232,7 +232,20 @@ export function rangerTalentsBatch(context) {
       const unpin = pinDie(15);
       let card = null;
       try {
-        card = await attackWithDialog(ranger, ranger.items.get(bow.id));
+        const pending = attackWithDialog(ranger, ranger.items.get(bow.id));
+        const { dialogFor } = await import("./fixtures.mjs");
+        const dialog = await dialogFor(ranger, 8000);
+        assert.ok(dialog, "Extra Attack's required choice did not open");
+        const select = dialog.element.querySelector('[name="extraWeapon"]');
+        assert.ok(select, "Extra Attack has no weapon chooser");
+        assert.equal(select.value, "", "Extra Attack was chosen without the player");
+        const roll = dialog.element.querySelector('button[data-action="roll"]');
+        assert.isTrue(roll.disabled, "Roll was enabled without an Extra Attack choice");
+        select.value = "current";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        await until(() => !dialog.element.querySelector('button[data-action="roll"]').disabled, "chosen Extra Attack enables Roll");
+        dialog.element.querySelector('button[data-action="roll"]').click();
+        card = await pending;
       } finally {
         unpin();
       }

@@ -1,0 +1,4 @@
+<p><strong>{{actor}}</strong>{{#if missing}} — actor is missing{{/if}}</p>
+<p>Check the form against the recorded cast. Correct any missing or duplicate form manually before closing this delivery attempt. Reviewing does not cast again, change effects, refund Mana, or restore a use.</p>
+<ul>{{#each effects}}<li>{{name}} ({{id}}){{#if disabled}} — disabled{{/if}}</li>{{else}}<li>No effects remain.</li>{{/each}}</ul>
+<label><input type="checkbox" name="acknowledged"> I checked and reconciled the form and want to close this delivery attempt.</label>

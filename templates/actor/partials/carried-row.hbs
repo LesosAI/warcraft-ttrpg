@@ -9,8 +9,8 @@
   the row already carries the item id core's `_onDragStart` reads.
 --}}
 <li class="azeroth-carried-item draggable" data-item-id="{{row.id}}">
-  {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=row.img rarityClass=row.rarityClass}}
-  <span class="azeroth-carried-name{{#if row.rarityClass}} {{row.rarityClass}}{{/if}}" data-action="expandItem" role="button" tabindex="0" aria-expanded="false">{{row.name}}</span>
+  {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=row.img rarityClass=row.rarityClass trainingTip=row.trainingTip}}
+  <span class="azeroth-carried-name{{#if row.rarityClass}} {{row.rarityClass}}{{/if}}" data-action="expandItem" role="button" tabindex="0" aria-expanded="false">{{row.name}}{{#if row.reloadStatus}} <small class="azeroth-reload-status" data-tooltip="{{row.reloadStatus}}">— {{row.reloadStatus}}</small>{{/if}}</span>
   {{!-- Which of 08 SS11's slots it is worn in (D-686). A word, not a colour:
         the tab lists a ring and a signet ring side by side and nothing else
         on the row says the two are worn in different places. --}}

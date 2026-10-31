@@ -18,6 +18,12 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+import { untrainedForRoll } from "../rules/equipment-training.mjs";
+import { signatureSkillChoices } from "../rules/signature-skill-choices.mjs";
+import { symbiosisSkillPartners } from "../effects/symbiosis-skills.mjs";
+import { innerFireHitSnapshot } from "../effects/inner-fire-hit.mjs";
+import { buffetStacks } from "../rules/flame-buffet.mjs";
+import { npcBackstabLines } from "../rules/npc-backstab.mjs";
 import { TALENT_CANCELLED, calledShotCost, countModifiers, previewFormula, situationalModifiers, standardDC } from "../rules/modifiers.mjs";
 import { conditionValues } from "../effects/conditions.mjs";
 import { corruptionLines } from "../rules/corruption-effects.mjs";
@@ -36,10 +42,12 @@ import { deterrencesOf, flaggedEffects } from "../effects/talent-states.mjs";
 // Icy Veins' Boon on a Casting Test, and 07's Archmage's.
 import { ARCHMAGE, VEINS_FLAG, archmageBoons, castingBoonsFor, speedReducedFact, veinsStates } from "../rules/class-talents.mjs";
 import { boundOf } from "../documents/bound.mjs";
-import { isHidden } from "../effects/stealth.mjs";
+import { isHiddenFor } from "../effects/stealth.mjs";
+import { lesserInvisibilityActive } from "../rules/lesser-invisibility.mjs";
 import { featureReminders } from "../rules/class-features.mjs";
 // The Damage lines kept, one function for this dialog and the feature door (D-768).
 import { damageChosen } from "../rules/talent-effects.mjs";
+import { extraAttackSelection, secondAttackChoice } from "../rules/second-attack-choice.mjs";
 import { wardBySchool } from "../rules/ward.mjs";
 // What an ally's aura lays on the roller and on the target (D-755): a Boon on a
 // Test, and Armor Points after the Ward.
@@ -92,10 +100,14 @@ export function targetSnapshots(targets = game.user?.targets ?? []) {
       actorId: actor.id,
       name: token.name ?? actor.name,
       defense: s.defense ?? null,
+      lesserInvisible: lesserInvisibilityActive(actor.effects, actor.uuid, game.time?.worldTime)
+        && isHiddenFor(actor, { tokenId: token.id, sceneId: token.scene?.id ?? token.document?.parent?.id ?? null }),
       // **AND ROCKBITER'S RISE AGAINST THE FIRST ATTACK EACH ROUND** (04, D-774):
       // the target's own talent, while it holds a shield and no attack has marked
       // its round yet (`rules/class-talents.mjs#firstAttackFor`).
       apByLocation: apWith({ body: s.ap?.body ?? 0, head: s.ap?.head ?? 0, limb: s.ap?.limb ?? 0 }, firstAttackApOf(actor)),
+      innerFire: innerFireHitSnapshot(actor),
+      fireTakenBonus: buffetStacks([...(actor.effects ?? [])], game.time?.worldTime),
       absent: ["body", "head", "limb"].filter(k => s.ap && (s.ap[k] === null || s.ap[k] === undefined)),
       // A creature's map and a character's table are one shape (D-607, D-644).
       wardBySchool: wardBySchool(s.ward),
@@ -287,6 +299,8 @@ function snapshotOf(actor, { kind, skill, targets, resilience = null, heavy = fa
     poisoned: poisoned ? (poisoned.getFlag?.("azeroth-rpg", "value") ?? 1) : 0,
     armorBanes: s.armorBanes ?? [],
     targetStatuses: targets[0]?.statuses ?? [],
+    targetLesserInvisible: targets[0]?.lesserInvisible === true,
+    lesserInvisible: facts.lesserInvisible === true,
     // 06: what the distance costs, where the tokens let it be measured (D-669).
     range,
     rangeBand,
@@ -320,7 +334,7 @@ function snapshotOf(actor, { kind, skill, targets, resilience = null, heavy = fa
     // because *the next Casting Test it makes* is a count and not a span.
     // A Bane that spares one creature (04's Taunt and Judgement, D-772) is read
     // against the creature this Test is at.
-    laidBanes: laidBanesOn(s.laidBaneRows ?? [], kind, { target: targets[0] ?? null }),
+    laidBanes: laidBanesOn(s.laidBaneRows ?? [], kind, { target: targets[0] ?? null, targets }),
     // **A BOON SOMEBODY ELSE LAID** (04's Blessing, D-772): the Bane's twin.
     laidBoons: laidBoonsOn(s.laidBoonRows ?? [], kind),
     // **WHAT THE TALENTS GIVE AN ATTACK** (D-772), never a Parry (06 §6: not an
@@ -344,7 +358,7 @@ function snapshotOf(actor, { kind, skill, targets, resilience = null, heavy = fa
     // it the table's line. A Boon against a CONDITION (07's Hallowed Ground,
     // D-757) reaches a Test whose door says it resists that condition
     // (`against`), and is the table's line where the door says nothing.
-    auraBoons: auraLine(auraBoonsOn(s.auraBoonRows ?? [], kind, resilience, against), "boons"),
+    auraBoons: auraLine(auraBoonsOn(s.auraBoonRows ?? [], kind, resilience, against, { skill }), "boons"),
     // And what an AREA lays on this Test while the roller stands in it (07's
     // Insect Swarm, Rimebind; D-757): a flag, never spent, and the table's
     // line where only the table can say whether it holds (Crucible's metal).
@@ -478,7 +492,10 @@ function castingTalentLines(actor, target, kind) {
  * @param {"boons"|"banes"} key
  */
 function auraLine(on, key) {
-  const name = ({ source, owner }) => (owner ? game.i18n.format("AZEROTH.Aura.EffectName", { source, owner }) : source);
+  const name = ({ source, owner, condition }) => {
+    const label = owner ? game.i18n.format("AZEROTH.Aura.EffectName", { source, owner }) : source;
+    return condition ? game.i18n.format("AZEROTH.Aura.ConditionalSource", { source: label, condition: game.i18n.localize(condition) }) : label;
+  };
   return {
     [key]: on[key],
     names: on.sources.map(name).filter(Boolean),
@@ -496,17 +513,18 @@ export function prepareRoll(actor, given) {
   // the hand or thrown carries a variant per way; everything below reads the
   // chosen one, so the lines, the modifiers and the preview are one blow.
   const spec = withAttackMode(given, given?.mode ?? null);
+  const test = spec.testProfile ? {...spec,...spec.testProfile,kind:"attack"} : spec;
   const targets = spec.targets ?? targetSnapshots();
   // And who is acting, beside who is aimed at and before `DialogV2.wait`
   // (D-724): both the dialog and a skipped one carry this into the workflow.
   const source = sourceOf(actor, spec.source ?? null);
-  const situational = situationalModifiers(snapshotOf(actor, {
-    kind: spec.kind, skill: spec.skill ?? null, targets, resilience: spec.resilience ?? null,
-    heavy: spec.heavyBane === true,
+  const situational = situationalModifiers({ ...snapshotOf(actor, {
+    kind: test.kind, skill: spec.skill ?? null, targets, resilience: spec.resilience ?? null,
+    heavy: test.heavyBane === true,
     // 06's reach and range (D-669): measured at the door and passed through.
-    range: spec.rangeKind ?? null, rangeBand: spec.rangeBand ?? null, engaged: spec.engaged === true,
+    range: test.rangeKind ?? null, rangeBand: test.rangeBand ?? null, engaged: test.engaged === true,
     // 08 §20 (D-692): the Banes an equipped Signature cancels on this roll.
-    cancelsBane: spec.weaponEffects?.cancelsBane ?? [],
+    cancelsBane: test.weaponEffects?.cancelsBane ?? [],
     // 06 §6: this Attack Test is a Parry, so a worn Boon that names the Parry
     // reaches it as well as one that names Attack Tests.
     parry: spec.parry === true,
@@ -517,20 +535,27 @@ export function prepareRoll(actor, given) {
     // as the target (Master Duellist), Pack Tactics' flanking, whether the roller
     // is hidden now (Cheap Shot's Opening), and a talent's Banes on this Test.
     facts: {
-      engagedOne: spec.engagedOne === true,
-      packFlank: spec.packFlank ?? null,
-      hidden: spec.kind === "attack" && isHidden(actor),
+      lesserInvisible: lesserInvisibilityActive(actor.effects, actor.uuid, game.time?.worldTime) && isHiddenFor(actor, source),
+      engagedOne: test.engagedOne === true,
+      packFlank: test.packFlank ?? null,
+      hidden: test.kind === "attack" && isHiddenFor(actor, source),
       talentBanes: spec.talentBanes?.banes > 0 ? spec.talentBanes : null,
       talentBoons: spec.talentBoons?.boons > 0 ? spec.talentBoons : null,
       // The Boon a card's Use gives each of its attacks (04's Fan of Knives; the
       // Legacy branches' door 26).
       cardBoons: spec.cardBoons?.boons > 0 ? spec.cardBoons : null
     }
-  }));
+  }), untrained: untrainedForRoll(actor, test) });
+  for (const partner of symbiosisSkillPartners(actor, { kind: test.kind, skill: spec.skill, source })) {
+    situational.automatic.push({
+      id: `symbiosis-${partner.uuid}`, label: "AZEROTH.Symbiosis.SkillBoon",
+      name: partner.name, boons: 1, banes: 0, modifier: 0, checked: true
+    });
+  }
   // **A BANE A TALENT TAKES OFF IS SAID WITH ITS NAME** (04's Careful Shot,
   // D-773): the pure rule raises the warning's key; the names are composed here.
   if (situational.warnings.includes(TALENT_CANCELLED)) {
-    const by = cancelledBanesFor(actor?.takenTalents?.() ?? [], { range: spec.rangeKind ?? null }).by;
+    const by = cancelledBanesFor(actor?.takenTalents?.() ?? [], { range: test.rangeKind ?? null }).by;
     situational.warnings = situational.warnings.map(w => (w === TALENT_CANCELLED ? game.i18n.format(TALENT_CANCELLED, { names: by.join(", ") }) : w));
   }
   const target = targets[0] ?? null;
@@ -549,9 +574,11 @@ export function prepareRoll(actor, given) {
   const reminders = featureReminders(
     (actor.items ?? []).filter(i => i.type === "feature").map(i => ({ name: i.name, reminder: i.system?.reminder ?? null })),
     (actor.items ?? []).filter(i => i.type === "talent").map(i => ({ name: i.name, taken: i.system?.taken ?? 0, effect: i.system?.effect ?? "" })),
-    spec.kind ?? "skill"
+    test.kind ?? "skill"
   );
   situational.judgement.push(...reminders.lines);
+  situational.judgement.push(...signatureSkillChoices({kind:test.kind,skill:spec.skill,
+    signatures:actor.system?.signatureEffects?.scalingHitDamage??[]}));
   // **THE OPENING, MEASURED** (02 §7, D-773): where the door found the target
   // under it, the line is automatic and named, and the feature's own reminder -
   // the table's line - is not raised beside it to be ticked twice.
@@ -561,6 +588,7 @@ export function prepareRoll(actor, given) {
   return {
     targets,
     source,
+    extraWeapons: spec.extraWeapons ?? null,
     // The way this blow is struck, where the weapon offers a choice (D-731).
     mode: spec.modes ? (spec.mode ?? null) : null,
     situational,
@@ -580,7 +608,7 @@ export function prepareRoll(actor, given) {
     // What a talent adds to the damage, per rank (04, D-711 phase 2). The door
     // decided which rows could apply and which facts hold; this only carries
     // them, so a skipped dialog takes the same auto-checked set.
-    damageLines: spec.damageLines ?? [],
+    damageLines: [...(spec.damageLines ?? []), ...npcBackstabLines(actor, spec)],
     // **FINISHER** (02 §7, the lead's item 11): *spend all your Combo Points
     // and add that many to the damage of one attack.* A checkbox on the
     // attack's own dialog, because the spending and the blow are one act - as
@@ -616,7 +644,7 @@ function riderOffer(actor, spec, target = null) {
   // A rider that needs the Opening (04's Garrote, D-773) is drawn where the
   // target is measured under it, left to the table where nothing was measured,
   // and not drawn where it is measured not to be.
-  const opening = openingGate(actor?.openingState?.(target, { hidden: isHidden(actor) }) ?? null, target);
+  const opening = openingGate(actor?.openingState?.(target, { hidden: isHiddenFor(actor, spec.source) }) ?? null, target);
   // The blow's OWN way off its strike record - a throw is `thrown`, where the
   // variant's range kind says `ranged` - so a rider *as part of an attack with a
   // Thrown weapon* rides a throw alone (04's Storm Bolt; the Legacy branches' B1);
@@ -689,6 +717,7 @@ export function defaultChoice(actor, spec) {
   const damage = damageChosen(p.damageLines);
   return {
     ...damage,
+    damageChoices: p.damageLines.filter(line => line.checked).map(line => line.id),
     // A skipped dialog spends no Combo Points: how many a blow is worth is the
     // player's call, and a skip is not a decision to empty the pool.
     finisherSpent: 0,
@@ -734,6 +763,14 @@ function circumstanceRow(lines, extraBoons, extraBanes) {
   return [{ label: "AZEROTH.Dialog.Circumstance", value: null, formula: names.join(", ") }];
 }
 
+/** Rebuild the second roll's automatic facts and the words explaining them. */
+export function refreshedSecondAttackChoice(actor, spec, previous, choice) {
+  const next = prepareRoll(actor, spec);
+  const refreshed = secondAttackChoice(previous, next, choice);
+  return { ...refreshed.choice,
+    provenanceExtra: circumstanceRow(refreshed.lines, refreshed.extraBoons, refreshed.extraBanes) };
+}
+
 /** Read the form into a choice. Shared by the live preview and the Roll button. */
 function readForm(form, p) {
   const f = form.elements;
@@ -749,7 +786,7 @@ function readForm(form, p) {
   // Casting: Overchannel points, clamped to what the Health can pay; a manual Augment.
   const maxPoints = p.casting?.maxPoints ?? 0;
   const overchannel = Math.min(maxPoints, Math.max(0, Math.trunc(Number(f.overchannel?.value)) || 0));
-  const augment = Math.trunc(Number(f.augment?.value)) || 0;
+  const augment = p.casting?.noAugment ? 0 : Math.trunc(Number(f.augment?.value)) || 0;
   // Nature's Swiftness (D-771): ticked, and only where the line is live.
   const swift = Boolean(p.casting?.swift?.available) && f.swift?.checked === true;
   // The Damage lines still ticked (04, D-711 phase 2).
@@ -770,11 +807,13 @@ function readForm(form, p) {
   const talentLines = (p.talentLines ?? []).filter(l => l.available && f[`tline-${l.identifier}`]?.checked).map(l => l.identifier);
   return {
     ...damage,
+    damageChoices: p.damageLines.filter(line => f[`line-${line.id}`]?.checked).map(line => line.id),
     finisherSpent,
     finisherFree,
     finisherMode: finisherChosen,
     riders,
     talentLines,
+    conflagrateBurning: p.casting?.conflagrate === true && f.conflagrateBurning?.checked === true,
     dc: Number.isFinite(dcRaw) ? dcRaw : p.dc,
     boons,
     banes,
@@ -796,6 +835,7 @@ function readForm(form, p) {
     mode: p.mode,
     // Where the second roll of an Extra Attack goes (02 §6, D-704).
     secondTargets: secondTargetsFrom(f, p),
+    extraWeapon: extraAttackSelection(p.extraWeapons, f.extraWeapon?.value)?.id ?? null,
     chosen: lines.filter(l => l.checked).map(l => l.id),
     provenanceExtra: circumstanceRow(lines, extraBoons, extraBanes)
   };
@@ -872,6 +912,7 @@ function formulaFor(choice, modifiers) {
 function attackModeOptions(spec, chosen) {
   const modes = spec?.modes;
   if (!modes || typeof modes !== "object") return null;
+  if (spec.castTestChoices) return Object.entries(spec.castTestChoices).map(([mode,label])=>({mode,label,selected:mode===chosen,refused:null}));
   const keys = Object.keys(modes).filter(key => Object.hasOwn(modes, key) && Object.hasOwn(AZEROTH.attackModes, key));
   if (keys.length < 2) return null;
   return keys.map(key => ({
@@ -915,6 +956,7 @@ async function dialogVariant(actor, spec) {
     // bound on `change` in `promptRoll` with no `data-action` (an action fires
     // on click alone).
     attackModes: attackModeOptions(resolved, p.mode),
+    castTestChoices: spec.castTestChoices ?? null,
     title: spec.title,
     kind: spec.kind,
     dc: p.dc,
@@ -969,6 +1011,7 @@ async function dialogVariant(actor, spec) {
     second: (spec.rolls ?? 1) > 1
       ? { targets: p.targets.map(t => ({ tokenId: t.tokenId, name: t.name })) }
       : null,
+    extraWeapons: spec.extraWeapons ?? null,
     casting: p.casting,
     occasions: spec.occasions ?? null,
     momentum: p.momentum
@@ -1024,6 +1067,11 @@ function switchAttackMode(form, variants, state, key) {
     // A rider ticked is the same spend whichever way the blow is struck (D-770).
     riders: new Set((from.p.riders ?? []).filter(l => f[`rider-${l.identifier}`]?.checked).map(l => l.identifier)),
     secondTarget: f.secondTarget?.value ?? null,
+    extraWeapon: f.extraWeapon?.value ?? null,
+    overchannel: f.overchannel?.value ?? null,
+    swift: f.swift?.checked === true,
+    conflagrateBurning: f.conflagrateBurning?.checked === true,
+    talentLines: new Set((from.p.talentLines ?? []).filter(l=>f[`tline-${l.identifier}`]?.checked).map(l=>l.identifier)),
     damage: new Set(from.p.damageLines.filter(l => f[`line-${l.id}`]?.checked).map(l => l.id)),
     lines: carriedLines(from.p.situational, to.p.situational, allFrom.filter(l => f[`line-${l.id}`]?.checked).map(l => l.id))
   };
@@ -1045,6 +1093,13 @@ function switchAttackMode(form, variants, state, key) {
     if (box) box.checked = line.primed === true || (line.available && kept.riders.has(line.identifier));
   }
   if (g.secondTarget && kept.secondTarget !== null) g.secondTarget.value = kept.secondTarget;
+  if (g.extraWeapon && kept.extraWeapon !== null) g.extraWeapon.value = kept.extraWeapon;
+  if (g.overchannel && kept.overchannel !== null) g.overchannel.value = kept.overchannel;
+  if (g.swift) g.swift.checked = kept.swift;
+  if (g.conflagrateBurning) g.conflagrateBurning.checked = kept.conflagrateBurning;
+  for (const line of to.p.talentLines ?? []) {
+    const box=g[`tline-${line.identifier}`];if (box) box.checked=line.available && kept.talentLines.has(line.identifier);
+  }
   for (const line of [...to.p.situational.automatic, ...to.p.situational.judgement]) {
     const box = g[`line-${line.id}`];
     if (box) box.checked = kept.lines.has(line.id);
@@ -1090,7 +1145,10 @@ export async function promptRoll(actor, spec) {
       label: "AZEROTH.Dialog.Roll",
       icon: "fa-solid fa-dice-d20",
       default: true,
-      callback: (event, button) => readForm(button.form, current().p)
+      callback: (event, button) => {
+        const choice = readForm(button.form, current().p);
+        return current().p.extraWeapons && !choice.extraWeapon ? null : choice;
+      }
     }],
     render: (event, dialog) => {
       const form = dialog.element.querySelector("form");
@@ -1098,6 +1156,8 @@ export async function promptRoll(actor, spec) {
       const update = () => {
         const shown = current();
         const choice = readForm(form, shown.p);
+        const rollButton = form.querySelector('button[data-action="roll"]');
+        if (rollButton) rollButton.disabled = Boolean(shown.p.extraWeapons) && !choice.extraWeapon;
         const preview = form.querySelector(".azeroth-dialog-preview");
         // Storm Bolt ticked on a hammer that throws already: the preview AND the list of
         // lines beneath it on Strength - the lines the roll takes (the B8a pass).

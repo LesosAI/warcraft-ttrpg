@@ -156,6 +156,20 @@ export function heldAugment(items = []) {
   return null;
 }
 
+/** Approved relic signatures require the active Augment and its class, not
+ * merely an equipped flag. Keep other signatures' existing gates unchanged. */
+export function signatureAugmentAllowed(item, items = [], classNames = []) {
+  const identifier=item?.system?.identifier ?? item?.identifier;
+  const required={
+    'idol-of-brutality':'idol', 'idol-of-ferocity':'idol',
+    'libram-of-hope':'libram', 'libram-of-truth':'libram'
+  };
+  if (!Object.hasOwn(required,identifier)) return true;
+  const held=heldAugment(items);
+  return Boolean(classNames.length && held?.item === item && held.category === required[identifier]
+    && canCarry(held.category,classNames));
+}
+
 /** Every Augment carried, held or not - what the sheet lists and the menu offers. */
 export function carriedAugments(items = []) {
   const out = [];

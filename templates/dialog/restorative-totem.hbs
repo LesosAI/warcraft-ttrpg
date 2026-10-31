@@ -1,0 +1,14 @@
+<p>{{description}}</p>
+{{#if health}}
+  <fieldset><legend>{{localize "AZEROTH.RestorativeTotem.Targets"}}</legend>
+  {{#each targets}}
+    <label><input type="checkbox" name="target" value="{{id}}" {{#if disabled}}disabled{{/if}}> {{name}}{{#if reason}} — {{reason}}{{/if}}</label><br>
+  {{/each}}
+  </fieldset>
+{{else}}
+  <label>{{localize "AZEROTH.RestorativeTotem.Pool"}}
+    <select name="pool"><option value="">{{localize "AZEROTH.RestorativeTotem.SelectPool"}}</option>
+    {{#each pools}}<option value="{{id}}">{{name}} ({{value}} / {{max}})</option>{{/each}}
+    </select>
+  </label>
+{{/if}}

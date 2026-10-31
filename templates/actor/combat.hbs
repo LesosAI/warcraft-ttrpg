@@ -7,6 +7,7 @@
   the sheet; the hidden field carries it to the attack door.
 --}}
 <section class="tab azeroth-panel {{tab.cssClass}}" data-tab="combat" data-group="primary">
+  {{#if canConfigureCombatSheet}}<button type="button" data-action="configureCombatSheet"><i class="fa-solid fa-gear" aria-hidden="true"></i> {{localize "AZEROTH.CombatSheet.Configure"}}</button>{{/if}}
 
   <div class="azeroth-combat-top">
     <div class="azeroth-combat-figure">
@@ -107,7 +108,7 @@
           core's sheet-toggle one (the lead, 2026-09-13). The Ammunition list
           below is NOT draggable - a bundle is nocked, never swung. --}}
     <li class="azeroth-weapon draggable" data-item-id="{{this.id}}">
-      {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=this.img rarityClass=this.rarityClass}}
+      {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=this.img rarityClass=this.rarityClass trainingTip=this.trainingTip}}
       <span class="azeroth-weapon-name{{#if this.rarityClass}} {{this.rarityClass}}{{/if}}" data-action="expandItem" role="button" tabindex="0" aria-expanded="false">{{this.name}}</span>
       <button type="button" class="azeroth-open" data-action="openItem" data-tooltip="{{localize "AZEROTH.Sheet.Open"}}" aria-label="{{localize "AZEROTH.Sheet.Open"}}"><i class="fa-solid fa-pen-to-square"></i></button>
       <span class="azeroth-weapon-rating">{{azerothDash this.rating}}</span>
@@ -164,7 +165,7 @@
     </li>
     {{#each ammunition}}
     <li class="azeroth-weapon" data-item-id="{{this.id}}">
-      {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=this.img rarityClass=this.rarityClass}}
+      {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=this.img rarityClass=this.rarityClass trainingTip=this.trainingTip}}
       <span class="azeroth-weapon-name{{#if this.rarityClass}} {{this.rarityClass}}{{/if}}" data-action="expandItem" role="button" tabindex="0" aria-expanded="false">{{this.name}}</span>
       <button type="button" class="azeroth-open" data-action="openItem" data-tooltip="{{localize "AZEROTH.Sheet.Open"}}" aria-label="{{localize "AZEROTH.Sheet.Open"}}"><i class="fa-solid fa-pen-to-square"></i></button>
       <span class="azeroth-weapon-fits">{{this.fits}}</span>
@@ -243,7 +244,8 @@
 
   {{!-- 05 SS11 and 06 SS7: what a Momentum spend buys (D-626). The name
         opens the book's sentence; Use pays and posts the card. --}}
-  <h3 class="azeroth-panel-heading azeroth-combat-section">{{localize "AZEROTH.Sheet.Maneuvers"}}</h3>
+  {{#if showManeuvers}}
+  <details class="azeroth-combat-group" data-combat-section="maneuvers"{{#if combatSections.maneuvers}} open{{/if}}><summary class="azeroth-panel-heading azeroth-combat-section">{{localize "AZEROTH.Sheet.Maneuvers"}}</summary>
   <ol class="azeroth-maneuvers">
     {{#each combat.maneuvers as |m|}}
     <li class="azeroth-maneuver{{#unless m.affordable}} is-spent{{/unless}}" data-expand-id="{{m.expandId}}">
@@ -259,11 +261,13 @@
     </li>
     {{/each}}
   </ol>
+  </details>
+  {{/if}}
 
   {{!-- Features (02 §5, §7; D-612, D-620): granted by the class at its level
         and by the race, withdrawn with them. An action has Use; a passive has
         its text. At the foot of Combat since D-665: a feature is used in a fight. --}}
-  <h3 class="azeroth-panel-heading azeroth-combat-section">{{localize "AZEROTH.Feature.Heading"}}</h3>
+  <details class="azeroth-combat-group" data-combat-section="features"{{#if combatSections.features}} open{{/if}}><summary class="azeroth-panel-heading azeroth-combat-section">{{localize "AZEROTH.Feature.Heading"}}</summary>
   <ul class="azeroth-features">
     {{#each features as |f|}}
     <li class="azeroth-feature draggable{{#if f.passive}} is-passive{{/if}}{{#unless f.available}} is-spent{{/unless}}" data-item-id="{{f.id}}">
@@ -298,11 +302,12 @@
     <li class="azeroth-feature azeroth-feature--empty">{{localize "AZEROTH.Feature.NoFeatures"}}</li>
     {{/each}}
   </ul>
+  </details>
 
   {{!-- Talents in play (D-623): taken talents with a limited use, so the
         counter is a row and not only a hover card on Progress. --}}
   {{#if usableTalents.length}}
-  <h3 class="azeroth-panel-heading azeroth-combat-section">{{localize "AZEROTH.Sheet.TalentsInPlay"}}</h3>
+  <details class="azeroth-combat-group" data-combat-section="talents"{{#if combatSections.talents}} open{{/if}}><summary class="azeroth-panel-heading azeroth-combat-section">{{localize "AZEROTH.Sheet.TalentsInPlay"}}</summary>
   <ul class="azeroth-features azeroth-talents-in-play">
     {{#each usableTalents as |t|}}
     <li class="azeroth-feature{{#unless t.available}} is-spent{{/unless}}" data-item-id="{{t.id}}">
@@ -318,6 +323,7 @@
     </li>
     {{/each}}
   </ul>
+  </details>
   {{/if}}
 
   {{!-- Signatures (08 SS20, S3; D-692): what the things being WORN do, and the
@@ -334,14 +340,14 @@
         carries the descriptor, so the eight 03 SS5 gives a rest-bounded limit
         count their uses and press like anything else. --}}
   {{#if signatures.length}}
-  <h3 class="azeroth-panel-heading azeroth-combat-section">{{localize "AZEROTH.Signature.Heading"}}</h3>
+  <details class="azeroth-combat-group" data-combat-section="signatures"{{#if combatSections.signatures}} open{{/if}}><summary class="azeroth-panel-heading azeroth-combat-section">{{localize "AZEROTH.Signature.Heading"}}</summary>
   <ul class="azeroth-features azeroth-signatures">
     {{#each signatures as |s|}}
     <li class="azeroth-feature draggable{{#unless s.fires}} is-passive{{/unless}}{{#if s.refusal}} is-spent{{/if}}" data-item-id="{{s.id}}">
       {{!-- The career's icon too: the rows share a grid and a missing 20px
             cell would step the whole list left on one of them. It takes the
             common iron ring, which is what an unrarited thing gets. --}}
-      {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=s.img rarityClass=s.rarityClass}}
+      {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=s.img rarityClass=s.rarityClass trainingTip=s.trainingTip}}
       <span class="azeroth-feature-name{{#if s.rarityClass}} {{s.rarityClass}}{{/if}}" data-action="expandItem" role="button" tabindex="0" aria-expanded="false">{{s.name}}</span>
       <span class="azeroth-feature-meta">
         {{#if s.kindChip}}<span class="azeroth-feature-chip" data-tooltip="{{localize s.kindLabel}}">{{localize s.kindChip}}</span>{{/if}}
@@ -385,5 +391,6 @@
     </li>
     {{/each}}
   </ul>
+  </details>
   {{/if}}
 </section>

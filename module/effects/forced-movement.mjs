@@ -25,6 +25,7 @@
 import { FORCED_REFUSALS, forcedPlan, forcedStep } from "../rules/forced-movement.mjs";
 import { refusesPushFor } from "../rules/class-talents.mjs";
 import { shapeCentre } from "../rules/area-ticks.mjs";
+import { dispersionRefusal } from "../rules/dispersion.mjs";
 
 /** The query a move of a token this client does not own goes through. */
 export const FORCED_QUERY = "azeroth-rpg.forcedMove";
@@ -82,6 +83,7 @@ function blocked(token, to) {
 async function moveHere({ token, from, feet, toward }) {
   const actor = token.actor ?? null;
   const name = token.name ?? actor?.name ?? "";
+  if (dispersionRefusal(actor, "forcedMove")) return result(name, 0, false, "dispersion");
   if (toward !== "toward" && actor && typeof actor.takenTalents === "function" && refusesPushFor(actor.takenTalents())) {
     return result(name, 0, false, "immovable");
   }
@@ -124,6 +126,7 @@ export async function forcedMoveQueryHandler({ tokenUuid = null, from = null, fe
  */
 export async function forceMove({ token = null, from = null, feet = 0, toward = "away", by = null, name = "" } = {}) {
   if (!token?.parent) return result(name, 0, false, "gone");
+  if (dispersionRefusal(token.actor, "forcedMove")) return result(token.name ?? name, 0, false, "dispersion");
   if (!from) return result(token.name, 0, false, "unmeasured");
   try {
     if (token.isOwner) return await moveHere({ token, from, feet, toward });
@@ -152,6 +155,7 @@ export async function forceMove({ token = null, from = null, feet = 0, toward = 
  */
 export async function putBack({ token = null, to = null, name = "" } = {}) {
   if (!token?.parent) return result(name, 0, false, "gone");
+  if (dispersionRefusal(token.actor, "forcedMove")) return result(token.name ?? name, 0, false, "dispersion");
   const at = to && Number.isFinite(Number(to.x)) && Number.isFinite(Number(to.y)) ? { x: Math.round(Number(to.x)), y: Math.round(Number(to.y)) } : null;
   if (!at) return result(token.name ?? name, 0, false, "unmeasured");
   if (!token.isOwner) return result(token.name ?? name, 0, false, "notYours");
@@ -173,6 +177,7 @@ export async function putBack({ token = null, to = null, name = "" } = {}) {
  * @param {{toward?: "away"|"toward", source?: string}} [o]
  */
 export function forcedWords(r, { toward = "away", source = "" } = {}) {
+  if (r?.reason === "dispersion") return game.i18n.localize("AZEROTH.Dispersion.Restricted");
   if (r?.moved) return game.i18n.format(toward === "toward" ? "AZEROTH.Forced.Pulled" : "AZEROTH.Forced.Pushed", { name: r.name, feet: r.feet, source });
   return game.i18n.format(FORCED_REFUSALS[r?.reason] ?? "AZEROTH.Forced.Refuse.Nothing", { name: r?.name ?? "", source });
 }

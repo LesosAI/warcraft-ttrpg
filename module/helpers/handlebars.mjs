@@ -14,6 +14,25 @@ const TEMPLATES = [
   "systems/azeroth-rpg/templates/chat/partials/verdict.hbs",
   "systems/azeroth-rpg/templates/chat/partials/heal.hbs",
   "systems/azeroth-rpg/templates/chat/partials/card-header.hbs",
+  // A card's controls drawn at render time by the hook's show functions
+  // (`helpers/card-partials.mjs`; the lead's option A, 2026-10-31). Drawn
+  // SYNCHRONOUSLY off the registered partial, so one missing here is drawn only
+  // once it has loaded; `module/dice/card-partials.test.mjs` holds every path
+  // a module draws to this list.
+  "systems/azeroth-rpg/templates/chat/partials/piccolo-review.hbs",
+  "systems/azeroth-rpg/templates/chat/partials/cannonball-review.hbs",
+  "systems/azeroth-rpg/templates/chat/partials/jangthraze-use.hbs",
+  "systems/azeroth-rpg/templates/chat/partials/helmet-use.hbs",
+  "systems/azeroth-rpg/templates/chat/partials/mind-control-review.hbs",
+  "systems/azeroth-rpg/templates/chat/partials/mind-control-saves.hbs",
+  "systems/azeroth-rpg/templates/chat/partials/earth-shock-review.hbs",
+  "systems/azeroth-rpg/templates/chat/partials/soul-link-review.hbs",
+  "systems/azeroth-rpg/templates/chat/partials/ice-block-review.hbs",
+  "systems/azeroth-rpg/templates/chat/partials/dispersion-creation-review.hbs",
+  "systems/azeroth-rpg/templates/chat/partials/snare-placement-review.hbs",
+  "systems/azeroth-rpg/templates/chat/partials/explosive-trap-resist.hbs",
+  "systems/azeroth-rpg/templates/chat/partials/foresight-reveal.hbs",
+  "systems/azeroth-rpg/templates/chat/partials/dispersion-reaction.hbs",
   "systems/azeroth-rpg/templates/chat/roll-card.hbs",
   "systems/azeroth-rpg/templates/chat/spell-card.hbs",
   "systems/azeroth-rpg/templates/chat/corruption-card.hbs",
@@ -63,6 +82,7 @@ const TEMPLATES = [
   // partial `progress.hbs` names and this list does not hold THROWS at
   // render and takes the whole Progress part down with it (D-705).
   "systems/azeroth-rpg/templates/actor/partials/talent-tile.hbs",
+  "systems/azeroth-rpg/templates/actor/partials/talent-tree-body.hbs",
   "systems/azeroth-rpg/templates/chat/rest-card.hbs",
   "systems/azeroth-rpg/templates/chat/maneuver-card.hbs",
   "systems/azeroth-rpg/templates/chat/prompt-card.hbs",

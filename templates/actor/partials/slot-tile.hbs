@@ -50,6 +50,6 @@
      {{#if tile.barred}}role="button" aria-disabled="true"{{else if tile.editable}}data-action="pickSlot" role="button" tabindex="0"{{else}}role="img"{{/if}}>
 
   {{#if tile.filled}}
-  {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=tile.img rarityClass=tile.rarityClass}}
+  {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=tile.img rarityClass=tile.rarityClass trainingTip=tile.trainingTip}}
   {{/if}}
 </div>

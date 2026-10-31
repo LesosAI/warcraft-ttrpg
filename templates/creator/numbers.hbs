@@ -1,4 +1,9 @@
 {{!-- Step 9 (01 §7, 05): every figure the sheet will show, computed from the choices above. Read-only. --}}
+<ul class="azeroth-creator-review">
+  {{#each review}}
+  <li><strong>{{label}}</strong><span>{{value}}</span><button type="button" data-action="creatorGo" data-step="{{step}}">{{localize "AZEROTH.Creator.ReviewChange"}}</button></li>
+  {{/each}}
+</ul>
 <div class="azeroth-creator-figures">
   {{#each pane.tiles as |t|}}
   <div class="azeroth-creator-figure">

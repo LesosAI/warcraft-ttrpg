@@ -28,7 +28,7 @@
     data-item-id="{{tile.id}}"{{#if tile.containerId}} data-container-id="{{tile.containerId}}"{{/if}}{{#if wellKey}} data-well="{{wellKey}}"{{/if}}
     data-action="selectItem" data-primary="{{tile.primary}}"
     role="option" aria-selected="false" tabindex="0" aria-label="{{tile.ariaLabel}}" data-tooltip-html="{{tile.tipHtml}}">
-  {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=tile.img rarityClass=tile.rarityClass}}
+  {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=tile.img rarityClass=tile.rarityClass trainingTip=tile.trainingTip}}
   {{#if tile.favorite}}<i class="azeroth-bag-mark azeroth-bag-mark-star fa-solid fa-star" aria-hidden="true"></i>{{/if}}
   {{#if tile.coating}}<i class="azeroth-bag-mark azeroth-bag-mark-coat fa-solid fa-droplet" aria-hidden="true"></i>{{/if}}
   {{#if tile.badge}}<span class="azeroth-bag-count">{{tile.badge}}</span>{{/if}}

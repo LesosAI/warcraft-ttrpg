@@ -319,6 +319,7 @@ export const RACE_TALENT_EFFECTS = Object.freeze({
     "mountain-bred": { automated: "inline", movement: { ignoresGround: true, climbsFree: true } }
   },
   gnome: {
+    "escape-artist": { escapeAction: "half", reason: "rules/escapes.mjs escapeAction reduces Entangled and grapple escapes; chat escape and Snare payment read it" },
     // 02 §5, tier 3: *Once per encounter, a device you built or a gadget you know
     // works one step better and then breaks. This costs no action* (the lead, phase 0:
     // *"Yes, gadgets too"*; the Legacy branches' B2). A counter, its Use costing no
@@ -357,7 +358,19 @@ export const RACE_TALENT_EFFECTS = Object.freeze({
       onUse: { laysBoon: { kinds: "all", boons: 1, until: "next", feet: 60 }, friendly: true }
     }
   },
+  ogre: {
+    "two-heads": {
+      castingBoon: { boons: 1 },
+      gap: "Odd-dice forced failure and 1 Power return await the ruling for Casting Tests rolling other than two dice."
+    },
+    "bellow": {
+      grants: grant({ action: "half", uses: uses(1, "encounter") }),
+      onUse: { laysBane: { kind: "all", banes: 1, until: "next", many: true, feet: 20, hearing: true } }
+    },
+    "stonemaul-grip": { disarmImmune: true, reason: "rules/stonemaul-grip.mjs guards Disarm selection, application and held-weapon restrictions" }
+  },
   goblin: {
+    "rocket-jump": { grants: grant({ action: "half", uses: uses(1, "encounter") }), onUse: { rocketJump: true } },
     // 02 §5: *The bag slots you carry yourself are doubled and nobody asks
     // how.* The only line in the book that changes capacity by name. A goblin
     // is Small (×½ on 05's ladder), so this returns them to a Medium load.
@@ -391,6 +404,10 @@ export const RACE_TALENT_EFFECTS = Object.freeze({
     }
   },
   troll: {
+    "da-voodoo": {
+      grants: grant({ action: "half", uses: uses(1, "encounter") }),
+      onUse: { sight: true, laysBane: { kind: "all", banes: 1, until: "next" } }
+    },
     // 02 §5: *You swim at full Speed and hold your breath for ten minutes*
     // (the final review of D-757). INLINE, beside Mountain-Bred: the movement
     // door reads `movementFactsFor` when it prices a step and paces a swim
@@ -472,30 +489,21 @@ export const TALENT_EFFECTS = Object.freeze({
     // your rank in this talent* (D-772): a rider ticked on the dialog and paid
     // only when the blow lands (MY READING, for the lead).
     "bloodthirst": { rider: rider("rage", 6, { pays: "hit", onHit: { heal: "rank" } }) },
-    // *Your Off-Hand Attacks do not take the −2* is built (D-772). *Once a round,
-    // when an Attack Test misses, spend 4 Rage to roll it again and take the new
-    // result* is not.
+    // A failed Test offers the reroll before its consequences are resolved;
+    // its original action, ammunition and riders are never paid a second time.
     "second-strike": {
       offHand: { noPenalty: true },
-      gap: "the re-roll of a missed Attack Test: no door rolls a posted attack again with what it was made with (the dialog's lines, the called shot, the riders paid) and takes the new result"
+      reroll: { pool: "rage", cost: 4, rank2: 2, per: "round" }
     },
     "frenzy": { automated: "inline" },
     // *When an attack or effect of yours reduces a target to 0 Health, gain a
     // Half-Action. At rank 2 you also gain 2 Rage* (D-772).
     "rampage": { kill: { halfActions: 1, atRank: [{ rank: 2, gain: { pool: "rage", amount: 2 } }] } },
-    // *Your attacks cannot be Parried or Blocked* (the card offers neither;
-    // D-772). *Armor Points still apply* needs nothing. *You may wield a
-    // two-handed weapon in each hand* is NOT BUILT: D-689's two-way bar on the
-    // off hand is read by `rules/worn.mjs` (`figureSlots`, `handFor`,
-    // `displacedBy`) and by the bag law's judge (`rules/slots.mjs`, which strips
-    // the talents before it judges, D-737), so lifting it for one talent means
-    // threading the talent through every equip door and the master rule - and
-    // half of that would let a two-hander into the off hand for the judge to
-    // take back out. *Neither counts as being held in two hands for Versatile*
-    // waits on it.
+    // The equipment law reads the taken talent before filtering physical items.
+    // Each weapon takes one hand; the category remains two-handed for talent
+    // gates, and no Versatile benefit is granted by this exception.
     "titans-presence": {
-      unanswerable: true,
-      gap: "a two-handed weapon in each hand: D-689's bar is read by the figure, handFor, displacedBy and the bag law's judge (D-737), which strips the talents before it judges, so lifting it for one talent is threaded through every equip door at once or not at all"
+      unanswerable: true
     },
     // *While you hold more than 7 Rage, recover 1 Health per rank at the start of
     // each of your turns* (D-772): `AzerothCombat#_turnTicks`.
@@ -513,7 +521,7 @@ export const TALENT_EFFECTS = Object.freeze({
     // (`class-answers.mjs#undyingRageHold`, `undyingFalls`).
     "undying-rage": {
       undying: { per: 2 },
-      reason: "whether a blow in the held rounds is floored at 1 is the lead's (CLARIFY, O-173): such a blow is not held, and out of a fight the rounds are the table's"
+      reason: "Lead ruling 2026-10-29: only the triggering hit leaves 1 Health; subsequent damage applies normally. Out of a fight the rounds are the table's."
     },
     // ---- Bulwark ----
     // *While a friendly target is within 5 feet of you, your Block reduces 1 more
@@ -825,14 +833,11 @@ export const TALENT_EFFECTS = Object.freeze({
     // *When a Casting Test of yours reaches SL 2 or better, 1 Mana per rank
     // returns to you* (D-772): a spell's and a casting feature's.
     "illumination": { manaBack: { sl: 2, amount: "rank" } },
-    // *As a Reaction, spend 4 Mana to take a Critical Injury a target within 30
-    // feet would take. You may have one more Critical Injury before dying. At rank
-    // 2 the range is 60 feet.* A QUESTION for the lead (D-772): D-777's ruling on
-    // moved damage (O-155) left *one more Critical Injury before dying* unanswered
-    // (CLARIFY), so nothing of it is built.
+    // Approved 2026-10-29: four Death Steps at either rank. The injury application
+    // coordinator offers the original injury at 30/60 feet before applying it,
+    // pays Reaction + 4 Mana, and guards the card against repeat application.
     "sacrifice": {
-      grants: grant({ action: "reaction", cost: cost("mana", 4) }),
-      gap: "06 counts no Critical Injuries before dying (dying is a result on the table), so *one more before dying* has no rule to change - the lead's answer on moved damage (D-777) left it unanswered; and no door moves an INJURY, as D-777's moves a blow's damage"
+      grants: grant({ action: "reaction", cost: cost("mana", 4) })
     },
     // *Choose a friendly target you know during a Long Rest. When another target
     // within 120 feet of you restores Health from your spells and effects, your
@@ -1024,7 +1029,7 @@ export const TALENT_EFFECTS = Object.freeze({
     // Reflex Test at the poison's DC, its failure laying the poison's ticks.
     "snake-trap": {
       modifies: mod("Snare", { poison: { resilience: "reflex", reach: "first" }, atRank: [{ rank: 2, poison: { resilience: "reflex", reach: "all" } }] }),
-      reason: "which dose the Snare spends is the lead's (CLARIFY, O-178): nothing is marked off the poison carried, and the table marks the dose it judges"
+      reason: "one chosen poison dose is spent per trap at either rank; automatic Snare Region triggering, geometric poison eligibility and one placement per card are implemented; interrupted-delivery recovery and remaining boundary acceptance remain under remediation"
     },
     // *Each makes a Reflex Resilience Test against your Spell DC for half, rounded down*
     // (the lead: *"Build it everywhere"*): the half a passed Test leaves (`half`).
@@ -1397,14 +1402,12 @@ export const TALENT_EFFECTS = Object.freeze({
       constructs: { holds: 1 },
       reason: "*Building one takes a Short Rest* is the table's clock (D2 §12): the Use is refused in a fight and without a tinker's kit, builds or rebuilds on its pick, and says on its card how long the work takes"
     },
-    // *You know two gadgets from the Gadgets table below, or four at rank 2. Each gadget
-    // you know may be used once between Short Rests. Changing one you know takes a week
-    // of downtime* (door 7): the one chooser over 04's eight, each gadget known a feature
-    // with its own use (`rules/gadgets.mjs`).
+    // Gadgeteer's one rank grants 2 + character tier known gadgets. The Bench
+    // replaces one during a Long Rest; each has its own Short Rest use.
     "gadgeteer": {
       grants: grant({ action: null, choice: "gadgets" }),
-      gadgets: { known: "2*rank" },
-      reason: "*Changing one you know takes a week of downtime* is the table's clock (D2 §12): the chooser is refused in a fight, and a gadget swapped out and back keeps the use it had spent"
+      gadgets: { known: "2+tier" },
+      reason: "During a Long Rest, The Bench lets you replace one known gadget. Initial learning and newly earned slots can be filled outside a fight; replacing a gadget never refreshes a spent use."
     },
     // *Constructs you build with The Bench gain Health equal to three times your tier
     // per rank. At rank 3 they also gain 1 Armor Point* (door 6): laid on each construct
@@ -1516,7 +1519,7 @@ export const TALENT_EFFECTS = Object.freeze({
     "foresight": {
       modifies: mod("Ward"),
       foresight: true,
-      reason: "rank 2's *after the damage is known* is the lead's (CLARIFY, O-181): the card shows the roll and its damage at once, so the Ward answers either moment"
+      reason: "Rank 1 answers before damage reveal; rank 2 may also answer afterwards, before Apply. Payment/delivery coordination and interrupted-operation recovery remain under audit."
     },
     // *You know Pain Suppression. Each rank adds 1 to the damage it prevents*
     // (D-774): the spell's own *reduced by 3* on the laid effect, and the rank on it.
@@ -1640,8 +1643,7 @@ export const TALENT_EFFECTS = Object.freeze({
     // reduces (`casting.mjs#takeNextSpell`'s `miracle`).
     "miracle": {
       grants: counter(1, "long"),
-      onUse: { miracle: true },
-      auraReason: "the lead made Miracle the next healing spell's (O-185): its 60 feet is drafted out of 04 (book-edits-2 d20)"
+      onUse: { miracle: true }
     },
     // ---- Shadow ----
     // *You know Shadow Word: Pain. Each rank adds 1 to its Damage Rating*
@@ -1675,10 +1677,10 @@ export const TALENT_EFFECTS = Object.freeze({
       reason: "the Use pays, makes its Casting Test and offers the target's Spirit Test; a creature acting under another's direction, its Test repeated at the end of each of its turns, is the table's (D2 §12)"
     },
     // *You know Dispersion. Each rank lets you cast it once more before you finish
-    // a Short Rest.* 07 §4's own once-a-Short-Rest gate is enforced nowhere (O-110).
+    // a Short Rest.* The per-spell character gate is rules/spell-limits.mjs.
     "dispersion": {
       spell: { names: ["Dispersion"], learn: true },
-      reason: "07 §4's *A tier 4 spell may be cast once, and not again until you finish a Short Rest* is enforced nowhere (O-110), so there is no gate for the rank to raise; the castings are the table's to count until O-110 is built"
+      reason: "rules/spell-limits.mjs adds one cast per taken rank to Dispersion's base allowance; effects/spell-limits.mjs pays the turn budget and records the use together on the active GM, and the actor's resetUses refreshes it at a Short or Long Rest"
     },
     // *Your Shadow Word: Pain damage doubles for one round when a target drops
     // below half Health, once per target* (D-779; the lead, 2026-10-03, on O-186:
@@ -1723,7 +1725,8 @@ export const TALENT_EFFECTS = Object.freeze({
     // *You know Chain Lightning. Each rank adds one further arc.*
     "chain-lightning": {
       spell: { names: ["Chain Lightning"], learn: true },
-      reason: "07's arcs are the creatures the caster targets: the card strikes every creature targeted and no door counts a spell's targets, so a further arc is one more creature the table lets the caster name"
+      arcBonus: 1,
+      reason: "rules/chain-lightning.mjs enforces three hits plus one per rank before payment. Per-arc range, target choice and return arcs remain pending; the table currently selects the arc targets."
     },
     // *After a Casting Test you make meets or exceeds SL 3, your next spell costs 2
     // less Mana per rank* (D-774): Nature's Grace's shape (D-771).
@@ -1731,8 +1734,7 @@ export const TALENT_EFFECTS = Object.freeze({
     // *You know Earth Shock. At rank 2 the target is also unable to take a Reaction
     // until the end of its next turn.*
     "earth-shock": {
-      spell: { names: ["Earth Shock"], learn: true },
-      gap: "rank 2 has no carrier: D-773's lost Reaction is the one held now, and 06's Reaction comes back at the start of the creature's next turn, so a Reaction barred THROUGH that turn needs the turn's reset to read a bar it does not have"
+      spell: { names: ["Earth Shock"], learn: true }
     },
     // *A Fire spell of yours ignores 2 Ward per rank. You may use this a number of
     // times equal to your tier per Short Rest* (D-768's counter; D-774's line on a
@@ -1764,7 +1766,7 @@ export const TALENT_EFFECTS = Object.freeze({
     // each round, immediately after your own.*
     "elemental-mastery": {
       modifies: mod("Elemental Bond"),
-      reason: "a second turn each round is the tracker's to give, and it gives one turn a combatant (side-based order, D-256): the table runs the elemental's second turn, its budget restored by the GM's own door (D-718)"
+      reason: "rules/elemental-turns.mjs adds a second slot immediately after the owner in AzerothCombat's turn order; both slots use the same combatant, ordinary start/end events and refreshed turn budget, with shared once-per-round marks"
     },
     // *A Storm elemental, an Earth elemental and a Fire elemental appear*: ONE
     // of each. `count` is how many of EACH entry are called, so the 3 this row
@@ -1840,13 +1842,14 @@ export const TALENT_EFFECTS = Object.freeze({
     // shaman (`class-answers.mjs#blademasterReaches`).
     "elemental-blademaster": {
       blademaster: true,
-      reason: "*you may make Casting Tests with your Attack Test instead* is not built: the ruling named what the attacks reach, and a Casting Test made off the Attack Test's modifiers has no line on the casting dialog (O-229)"
+      reason: "Casting Tests with your Attack Test use the selected readied attack's calculation without Augment (actions.mjs, roll-dialog.mjs, workflows.castSpell). GM and player combat acceptance passed. O-229 retains an open range interpretation: the current implementation keeps spell range rather than weapon range."
     },
     // ---- Restoration ----
     // *You know Healing Wave. Each rank adds 1 to the Health it restores* (D-774).
     "healing-wave": { spell: { names: ["Healing Wave"], learn: true, heal: 1 } },
     // *Your Healing Stream totem restores 1 more Health per rank ...*
-    "healing-stream-totem": none("the Healing Stream totem's own heal is the table's (D-707: the six totems that do not attack carry their effect as an aura reason), so there is no number for the rank to raise"),
+    "healing-stream-totem": { restorativeTotem: "Healing Stream",
+      reason: "rules/restorative-totems.mjs adds Health and target count by rank; the owner's turn offers the GM-coordinated recovery" },
     // *A Casting Test of yours that fails costs no Mana. You may use this a number
     // of times equal to your rank per Short Rest* (D-774): a button on the failed
     // card, the Mana back and a use struck.
@@ -1860,7 +1863,8 @@ export const TALENT_EFFECTS = Object.freeze({
     // the Health down).
     "earthliving": { earthliving: { heal: "floor(tier/2)+rank", melee: true } },
     // *Your Mana Tide totem returns 1 more Mana per rank ...*
-    "mana-tide-totem": none("the Mana Tide totem's own Mana is the table's (D-707's aura reason), so there is no number for the rank to raise; the ground the totem holds is drawn from 02's row"),
+    "mana-tide-totem": { restorativeTotem: "Mana Tide",
+      reason: "rules/restorative-totems.mjs adds Mana and range by rank; each recipient chooses a Mana pool on their turn" },
     // *You may cast Healing Wave as a Half-Action once a round, or twice a round at
     // rank 2* (D-774): Nature's Swiftness's line (D-771), its clock the round's record.
     "riptide": { spell: { names: ["Healing Wave"] }, castAs: { action: "half", from: "action", spells: ["Healing Wave"], perRound: "rank" } },
@@ -2143,7 +2147,7 @@ export const TALENT_EFFECTS = Object.freeze({
     // rank 1 ends one Sustain the creature targeted holds, through the GM's
     // client where it is another's (`effects/sustain-steal.mjs`).
     "spellsteal": {
-      modifies: mod("Counterspell", { steals: true }),
+      modifies: mod("Counterspell", { steals: true, atRank: [{ rank: 2, transfers: true }] }),
       gap: "rank 2's *you may Sustain that effect yourself instead* has no door: a Sustain, the effects it laid and the area it placed answer to the caster who cast it (D-724, D-756), and nothing moves one to another caster"
     },
     // *Your Shape the Weave class feature Sustains 1 further effect per rank,
@@ -2246,7 +2250,7 @@ export const TALENT_EFFECTS = Object.freeze({
     // *You know Ice Block. At rank 2 you may end it early on your turn at no cost.*
     "ice-block": {
       spell: { names: ["Ice Block"], learn: true },
-      reason: "07's Ice Block lays nothing (*nothing can affect you* is the table's), so there is no effect for rank 2 to end early"
+      reason: "Ice Block casting creates timed protection and clears condition effects; rank 2 has an own-turn early-end control. Full external-effect immunity and uncertain-write recovery acceptance remain under review."
     },
     // *Your spells gain a Boon against a target that is Entangled or Slowed, or
     // whose Speed is otherwise reduced. At rank 2 they inflict a Critical Injury
@@ -2335,7 +2339,7 @@ export const TALENT_EFFECTS = Object.freeze({
     // class feature rather than from one you merely command.*
     "blood-pact": {
       spell: { names: ["Blood Pact"], learn: true },
-      reason: "07's Blood Pact carries no descriptor - its Health off a demon and its Mana are the table's - so which demon pays is the table's too"
+      reason: "The Blood Pact spell workflow confirms a donor, restricts this talent to the Bound Demon class feature, and transfers Health into the granting Mana pool through the GM. Interrupted transfers require review."
     },
     // *As a Half-Action, name a target within 30 feet suffering an ongoing effect
     // of yours and a second target within 30 feet of the first. Every ongoing
@@ -2380,7 +2384,8 @@ export const TALENT_EFFECTS = Object.freeze({
     },
     "soul-link": {
       spell: { names: ["Soul Link"], learn: true },
-      reason: "07's Soul Link moves half of every blow the warlock takes onto the linked creature, past its armor and Ward. The damage door moves and divides a blow since D-777 (Spirit Link Totem's division), but Soul Link's link has no carrier - its Apply lays nothing the door reads, and nothing breaks it at 60 feet or at 0 Health - so the share, and the share rank 2's Ward would apply to, are the table's"
+      automated: "inline", // The damage preparation adapter reads the rank; delivery remains partial below.
+      reason: "Soul Link now has consent, successful-cast replacement and an identified carrier with Health, range and time cleanup. Its approved per-type split and rank-2 Ward calculation are tested, but damage delivery remains unwired: transferred damage and the caster's adjusted share still require table handling. Interrupted-cast recovery and broader player acceptance remain under review."
     },
     "demonic-empowerment": {
       grants: grant({ action: "half", cost: cost("mana", 3), bound: bound("demon", "buff") }),
@@ -2402,7 +2407,7 @@ export const TALENT_EFFECTS = Object.freeze({
     // type per rank. At rank 2 your Casting Tests gain a Boon while you control a
     // Bound Demon* (D-775: the Boon an automatic line on the Casting Test).
     "demonic-knowledge": {
-      damage: damage(["fel", "shadow"], "both", { when: "boundDemon" }),
+      damage: damage(["fel", "shadow"], "spell", { features: true, when: "boundDemon" }),
       castingBoon: { boons: 1, while: "boundDemon", minRank: 2 }
     },
     // *While you control a Bound Demon, you and every friendly target within 20
@@ -2437,7 +2442,7 @@ export const TALENT_EFFECTS = Object.freeze({
     // *Each rank adds 1 to its Damage Rating, before Immolate doubles it.*
     "conflagrate": {
       spell: { names: ["Conflagrate"], learn: true, damage: 1 },
-      reason: "the rank rides the Rating; 07's own doubling against a target burning from Immolate is the table's, as the spell carries no descriptor for it"
+      reason: "the rank rides the Rating before the Conflagrate casting workflow doubles it against Immolate; GM queries consume the recorded Sustains and apply damage once"
     },
     // *When one of your spells inflicts a Critical Injury, roll twice on the table
     // and take the higher result. At rank 2 you also gain 2 Mana* (D-775): read
@@ -2521,16 +2526,14 @@ export const TALENT_EFFECTS = Object.freeze({
     // The Use names the partner - the one creature the user has targeted - and
     // the bond holds until the next Long Rest; `rules/symbiosis.mjs` is the
     // law and `AzerothActor#applyHealing` the door. *Each of you gains a Boon
-    // on a Skill Test in which the other holds the higher Skill Rank* turns on
-    // two Ranks compared at each Test and 30 feet: the table's call (D2 §12,
-    // D-755), said here and built nowhere.
+    // on a Skill Test in which the other holds the higher Skill Rank* is read
+    // at each Test by effects/symbiosis-skills.mjs and shared roll preparation.
     "symbiosis": {
       grants: grant({ action: null, uses: once("long") }),
       onUse: { partner: true },
       shares: { heal: "half" },
-      // The aura census's own word for an ally-radius sentence a built row
-      // leaves to the table (Spirit Link Totem's shape, D-755).
-      auraReason: "the Boon on a Skill Test is two Skill Ranks compared within 30 feet at each Test, the table's (D2 §12)"
+      // This is a per-Test comparison, not a persistent aura effect.
+      auraReason: "the Skill Boon compares live bonded partners' Skill Ranks within 30 feet in effects/symbiosis-skills.mjs and prepareRoll; unknown geometry remains the table's judgement"
     },
     "wrath": { spell: { names: ["Wrath"], learn: true, damage: 1 } },
     // *After you cast a Nature spell, your next Arcane spell adds your rank to
@@ -2743,7 +2746,7 @@ function typeMatches(types = [], type = "physical") {
  *   the school for magical damage and `physical` otherwise (06 §4).
  * @returns {Array<{identifier, name, rank, amount, when, form, types}>}
  */
-export function damageRowsFor(talents = [], { lane = "attack", type = "physical", alsoSpell = false, scope = {} } = {}, rowOf = talentEffect) {
+export function damageRowsFor(talents = [], { lane = "attack", type = "physical", alsoSpell = false, feature = false, scope = {} } = {}, rowOf = talentEffect) {
   const out = [];
   for (const { talent, entry } of takenRows(talents, rowOf)) {
     const d = entry.damage;
@@ -2759,7 +2762,10 @@ export function damageRowsFor(talents = [], { lane = "attack", type = "physical"
     // **A WEAPON BLOW THAT COUNTS AS A SPELL'S** (04's Elemental Blademaster; the
     // lead, 2026-10-03, on O-190; D-779): `alsoSpell` lets a spell row reach the
     // attack lane where the door found the blow magical.
-    if (!laneMatches(d.applies, lane) && !(alsoSpell === true && laneMatches(d.applies, "spell"))) continue;
+    // A feature need not make a Casting Test. Keep its provenance separate
+    // from the damage lane so "spells and features" never includes ordinary weapons.
+    if (!laneMatches(d.applies, lane) && !(alsoSpell === true && laneMatches(d.applies, "spell"))
+      && !(feature === true && d.features === true)) continue;
     if (!typeMatches(d.types, type)) continue;
     const rank = Number(talent.taken) || 1;
     out.push({
@@ -3051,6 +3057,7 @@ export const CENSUS_DETECTORS = Object.freeze({
     covers: e => Boolean(e.grants?.heal || e.grants?.tick || e.tick || e.heal?.add || e.shares?.heal || e.turnStart?.heal || e.beacon?.share)
       || riderHeals(e.rider) || modifiesOf(e).some(m => m.heal || m.tickRounds || m.atone?.heal)
       || Boolean(e.drain?.heal || e.earthliving?.heal || e.spell?.addTick)
+      || e.restorativeTotem === "Healing Stream"
       // And D-775's: Siphon's turn-start Health, and Health on a death (Soul
       // Reaper's, Haunt's).
       || Boolean(e.siphon || e.death?.heal || e.onUse?.haunt?.heal)

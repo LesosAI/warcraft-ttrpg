@@ -437,6 +437,31 @@ function conditionsIn(text, known = []) {
   return out;
 }
 
+/** The four-condition potion has both a prevention and a removal clause. */
+function freeActionPotionConditions(use, known) {
+  if (!["draught", "elixir", "restore"].includes(use?.kind)) return [];
+  const note = String(use.note ?? "").trim().replace(/\s+/g, " ");
+  if (note !== "For ten minutes you cannot be made **Slowed**, **Entangled**, **Stunned** or **Prone**, and any of the four already on you ends.") return [];
+  return conditionsIn(note, known);
+}
+
+/** Explicit removals, including the existing held Free Action Potion note. */
+export function consumableEnds(use, known = []) {
+  return [...new Set([...(use?.ends ?? []), ...freeActionPotionConditions(use, known)])];
+}
+
+/** Explicit timed immunity notes, including existing held Free action draughts. */
+export function consumableImmunities(use, known = []) {
+  if (!["draught", "elixir", "restore"].includes(use?.kind)) return [];
+  if (!(use.duration?.value > 0) || !use.duration?.units) return [];
+  const potion = freeActionPotionConditions(use, known);
+  if (potion.length) return potion;
+  const note = String(use.note ?? "").trim();
+  const match = /^Immune to (\*\*[^*]+\*\*) for (?:a|an|one|\d+) (?:minute|hour|round|turn|day)s?\.?$/i.exec(note);
+  if (!match) return [];
+  return conditionsIn(match[1], known);
+}
+
 /** *for ten minutes*, *for an hour*, *for a minute*, *for six hours* → a duration. */
 export function durationIn(text) {
   const WORDS = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, ten: 10, twenty: 20, thirty: 30 };
@@ -592,7 +617,7 @@ export function seedUse({ name = "", section = "", description = "" } = {}, { co
   const speed = /Speed \+(\d+) feet/.exec(effect);
   const armorPoint = /\+(\d+) Armor Point/.exec(effect);
   // *End **Numbed*** opens a row and *and end **Bleeding*** closes one.
-  const ends = /\bends?\b\s+((?:\*\*[^*]+\*\*(?:,?\s*(?:and\s+)?)?)+)/i.exec(effect);
+  const ends = /\bends?\b\s+(?:every instance of\s+)?((?:\*\*[^*]+\*\*(?:,?\s*(?:and\s+)?)?)+)/i.exec(effect);
 
   for (const m of restore) {
     if (m[2] === "Health") use.heal.health = Number(m[1]);
@@ -612,6 +637,10 @@ export function seedUse({ name = "", section = "", description = "" } = {}, { co
   // and named for it*), so the school is the table's to say.
   const ward = /Ward (\d+) in one named school/.exec(effect);
   if (ward) use.note = effect;
+  const allWard = /gain Ward (\d+) in every school\. It does not stack with a Ward you already carry; take the higher\./i.exec(effect);
+  if (allWard) for (const school of schools) {
+    use.changes.push({key:`system.ward.${school}`,type:"upgrade",value:allWard[1],phase:"final"});
+  }
 
   const carries = use.heal.health !== null || use.heal.mana !== null || use.heal.fatigue !== null
     || use.changes.length || use.ends.length;

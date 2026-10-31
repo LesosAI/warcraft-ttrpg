@@ -4,18 +4,29 @@
   own above Favorites on a character's Core (D-665), where `always` keeps the
   heading and prints the line that says there are none.
 --}}
-{{#if (or effects.rows.length always)}}
+{{#if (or effects.signatureParryReview (or effects.signatureUseReview (or (or effects.rows.length effects.dispersionEndingReview) (or effects.antivenomReview always))))}}
 <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Effects.Effects"}}</h3>
+{{#if effects.dispersionEndingReview}}<button type="button" data-action="reviewDispersionAftermath">Review Dispersion aftermath</button>{{/if}}
+{{#if effects.antivenomReview}}<button type="button" data-action="reviewAntivenom">{{localize "AZEROTH.Use.Antivenom.Review"}}</button>{{/if}}
+{{#if effects.signatureUseReview}}<button type="button" data-action="reviewSignatureUses">{{localize "AZEROTH.Signature.Review.Title"}}</button>{{/if}}
+{{#if effects.signatureParryReview}}<button type="button" data-action="reviewSignatureParry">{{localize "AZEROTH.Signature.ParryReview.Title"}}</button>{{/if}}
 <ol class="azeroth-effect-list">
   {{#each effects.rows as |e|}}
   <li class="azeroth-effect{{#if e.disabled}} is-disabled{{/if}}" data-effect-id="{{e.id}}">
     {{#if e.img}}<img src="{{e.img}}" alt="">{{/if}}
     <span class="azeroth-effect-name" data-action="editEffect">{{e.name}}</span>
+    {{#if e.mindControlSaves}}<button type="button" data-action="mindControlSaves">{{localize "AZEROTH.MindControl.Saves.Title"}}</button>{{/if}}
     {{#if e.permanent}}<span class="azeroth-effect-flag">{{localize "AZEROTH.Card.Permanent"}}</span>{{/if}}
+    {{#if e.iceBlock}}
+    <button type="button" data-action="deleteEffect" data-tooltip="{{localize "AZEROTH.IceBlock.CannotEnd"}}"{{#unless e.canEndIceBlock}} disabled{{/unless}}>{{localize "AZEROTH.IceBlock.End"}}</button>
+    {{else if e.dispersion}}
+    <button type="button" data-action="deleteEffect" data-tooltip="{{localize "AZEROTH.Dispersion.CannotEnd"}}"{{#unless e.canEndDispersion}} disabled{{/unless}}>{{localize "AZEROTH.Dispersion.End"}}</button>
+    {{else}}
     <button type="button" class="azeroth-effect-toggle" data-action="toggleEffect" aria-pressed="{{#unless e.disabled}}true{{else}}false{{/unless}}">
       {{#if e.disabled}}{{localize "AZEROTH.Effects.Off"}}{{else}}{{localize "AZEROTH.Effects.On"}}{{/if}}
     </button>
     <button type="button" class="azeroth-delete" data-action="deleteEffect" data-tooltip="{{localize "AZEROTH.Sheet.Delete"}}" aria-label="{{localize "AZEROTH.Sheet.Delete"}}">&times;</button>
+    {{/if}}
   </li>
   {{else}}
   <li class="azeroth-effect azeroth-effect--empty">{{localize "AZEROTH.Effects.NoEffects"}}</li>

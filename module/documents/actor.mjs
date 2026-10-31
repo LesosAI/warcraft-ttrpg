@@ -21,6 +21,10 @@
  */
 
 import { addClassEntry, hostileExposures, poolsFor, removeClassEntry, secondaryLevel, setCharacterLevel } from "../rules/progression.mjs";
+import { hasCauseInsanity } from "../rules/cause-insanity.mjs";
+import { hasReaverEnrage } from "../rules/reaver-enrage.mjs";
+import { hasGhoulEnrage } from "../rules/ghoul-enrage.mjs";
+import { hasPredatoryEnrage } from "../rules/predatory-enrage.mjs";
 import { evaluateAmount, featurePatchesFor, featureRungs, featureTickStamp, featuresFor, raceTraitFor, refreshes, usesMaxFor } from "../rules/class-features.mjs";
 // Whom an area Use reaches (the B6 fix; the lead: *"Measure the area"*).
 import { cleanWho } from "../rules/area-gather.mjs";
@@ -39,6 +43,7 @@ import { BEACON_FLAG, DEATH_MARK_FLAG, PLATE_FLAG, openingFor, restBonusFor, tur
 // What a counter or a charge buys on a roll's own dialog (D-774).
 import { CHARGE_FLAG, talentLinesFor } from "../rules/class-talents.mjs";
 import { untilEndOfNextTurnOrRound, untilNextTurnOrRound } from "../effects/durations.mjs";
+import { askStabilizer } from "../effects/gadget-reactions.mjs";
 // D-779: the lead's class answers - Shared Quarry's payer, Undying Rage's hold,
 // Divine Aegis's Ward and Miracle's heal at the one healing door.
 import { companionSpendsFor, undyingRageFor } from "../rules/class-talents.mjs";
@@ -71,6 +76,7 @@ import { fatigueState } from "../rules/fatigue.mjs";
 import { gainWhenStruck, unkillableFloor } from "../rules/momentum.mjs";
 // What a blow does beyond its target, run from the one damage door (D-768).
 import { afterBlow, strikeAround } from "../effects/after-blow.mjs";
+import * as mindControlHarm from "../effects/mind-control-harm.mjs";
 // What a blow on a creature carrying a priest's Ward does for the priest (04's
 // Atonement and Absorption; D-774).
 import { afterWardedBlow } from "../effects/wards.mjs";
@@ -92,7 +98,10 @@ import { aegisFloor, askToHold, divideBlow, landShares, redirectBlow } from "../
 // damage door, and Life Drain's Health back off what the blow took.
 import { askDeathHold, burialSpares } from "../effects/death-holds.mjs";
 import { THIRD_STEP_FLAG, deathStepDue, thirdStepAt } from "../rules/death-holds.mjs";
-import { OFFER, etherealTaken, offerStands } from "../rules/spirit-realm.mjs";
+import { OFFER, offerStands } from "../rules/spirit-realm.mjs";
+import { damageTransferStages } from "../rules/damage-transfer-stages.mjs";
+import { invulnerabilityPotionActive, preventPhysicalDamage } from "../rules/invulnerability-potion.mjs";
+import { consumeAttackTransfer } from "../effects/attack-transfer.mjs";
 import { dyingNow, etherealOn, realmRefusalFor } from "../effects/spirit-realm.mjs";
 import { postPrompt } from "../effects/prompts.mjs";
 import { drainHeal } from "../effects/legacy-uses.mjs";
@@ -100,11 +109,17 @@ import { drainHeal } from "../effects/legacy-uses.mjs";
 import { allyOf } from "../canvas/engaged.mjs";
 import { restCard } from "../dice/rest-card.mjs";
 import { burnTether, longRest, shortRest, turnRefill } from "../rules/rest.mjs";
+import { restoreSpellUses } from "../effects/spell-limits.mjs";
+import { restoreApprovedSignatureUses } from "../effects/approved-signature-use.mjs";
 // What a Short Rest eats and drinks (05 SS16, 08 SS12; D-733).
 import { FOOD_KINDS, isProvision, restPicks } from "../rules/provisions.mjs";
 import { spendOne } from "../rules/consumables.mjs";
 
 import { AZEROTH } from "../config.mjs";
+import { projectionPhaseFor } from "../rules/image-projection.mjs";
+import { refuseIceBlockTarget } from "../effects/ice-block-protection.mjs";
+import { refuseDispersion } from "../effects/dispersion-protection.mjs";
+import { dispersionFor } from "../rules/dispersion.mjs";
 import { healingReceived } from "../rules/corruption-effects.mjs";
 import { heldAugment } from "../rules/augments.mjs";
 import { displacedBy } from "../rules/worn.mjs";
@@ -462,6 +477,19 @@ export class AzerothActor extends Actor {
   prepareBaseData() {
     super.prepareBaseData(); // REQUIRED — see the note above.
     // Subtype work belongs in the DataModel, not here.
+  }
+
+  /** V14 applies transferred Item effects through this iterator in both phases.
+   * Dispersion keeps equipment intact but suspends its transferred effects;
+   * actor-owned effects and non-equipment grants retain core behavior. */
+  *allApplicableEffects() {
+    const dispersed = Boolean(dispersionFor(this));
+    for (const effect of super.allApplicableEffects()) {
+      const parent = effect.parent;
+      if (dispersed && parent?.documentName === "Item"
+          && ["weapon", "armor", "gear"].includes(parent.type)) continue;
+      yield effect;
+    }
   }
 
   /** @inheritDoc */
@@ -982,9 +1010,9 @@ export class AzerothActor extends Actor {
       // (`NpcData#prepareDerivedData`). Read off the stored field alone, this
       // returned NO power pool for any of them — so `manaPool` found nothing,
       // a spell dropped on a Kobold cast for free, and the sheet's own pool
-      // row disagreed with this one. The stored maximum still wins where the
-      // block states it.
-      const powerMax = s.power?.max ?? s.powerMax ?? null;
+      // row disagreed with this one. The derived maximum includes the printed
+      // base and any temporary pool-specific cap bonus.
+      const powerMax = s.powerMax ?? s.power?.max ?? null;
       if (powerMax !== null && powerMax !== undefined) {
         out.push({ itemId: null, kind: "power", name: s.power.name ?? null, value: s.power.value ?? 0, max: powerMax });
       }
@@ -1023,7 +1051,7 @@ export class AzerothActor extends Actor {
         // Kobold's Spells tab spent nothing at all and the tab still drew
         // `4 / 4` — the sheet's `#pool()` had taken the derived maximum since
         // D-637 and this had not.
-        const max = pool?.max ?? this.system?.[`${kind}Max`] ?? null;
+        const max = this.system?.[`${kind}Max`] ?? pool?.max ?? null;
         if (max === null || max === undefined) continue;
         const next = Math.max(0, Math.min(max, Math.trunc(value)));
         if (next !== (pool?.value ?? 0)) update[`system.${kind}.value`] = next;
@@ -1127,10 +1155,10 @@ export class AzerothActor extends Actor {
     // **EACH GADGET KNOWN IS A FEATURE WITH ITS OWN USE** (04's Gadgeteer: *Each
     // gadget you know may be used once between Short Rests*; the Legacy branches'
     // door 7): the gadgets the Gadgeteer feature's chooser named (`system.known`), as
-    // many as the ranks know (`gadgetsKnownFor`: Gadgeteer's two or four, Engineering
+    // many as the tier and ranks allow (Gadgeteer's 2 + tier, Engineering
     // Upgrade's one a rank), keyed by the granting talent and the gadget, so each
     // keeps its own counter. A rank taken back drops the last named.
-    const gadgetsAllowed = gadgetsKnownFor(taken).known;
+    const gadgetsAllowed = gadgetsKnownFor(taken, undefined, { tier: this.system?.tier ?? 1 }).known;
     const gadgetGrants = (item, talentId) => {
       const talent = taken.find(t => t.id === talentId) ?? null;
       return { cls: { id: talentId, name: talent?.className ?? item.system?.className ?? "", img: talent?.img ?? item.img }, talentId, rank: talent?.taken ?? 1 };
@@ -1437,6 +1465,12 @@ export class AzerothActor extends Actor {
    * question is how two of them come to disagree.
    */
   get hasExtraAttack() {
+    // Cause Insanity grants the ordinary two-roll Attack while its timed
+    // carrier is active. A boolean keeps it from stacking past Extra Attack.
+    if (hasCauseInsanity(this)) return true;
+    if (hasReaverEnrage(this, game.time?.worldTime)) return true;
+    if (hasGhoulEnrage(this, game.time?.worldTime)) return true;
+    if (hasPredatoryEnrage(this, game.time?.worldTime)) return true;
     if (this.type === "character") {
       // **A DRUID'S IS IN A SHAPESHIFT FORM ALONE** (02 §7: *while in a
       // Shapeshift form*; D-769). It was an ungated passive, so a Druid in no
@@ -1461,6 +1495,8 @@ export class AzerothActor extends Actor {
    * @returns {Promise<string[]>}
    */
   async resetUses(event) {
+    await restoreApprovedSignatureUses(this, event);
+    await restoreSpellUses(this, event);
     const due = this.items.filter(i => i.system?.uses?.per && refreshes(i.system.uses.per, event)
       && i.system.uses.value < i.system.uses.max);
     const updates = due.map(i => ({ _id: i.id, "system.uses.value": i.system.uses.max }));
@@ -1667,7 +1703,7 @@ export class AzerothActor extends Actor {
       // take. Read off the stored field alone this skipped for the 123
       // creatures that store none, so the Power those now SPEND could never
       // be filled again from this sheet's own Short Rest button.
-      const powerMax = power?.max ?? this.system?.powerMax ?? null;
+      const powerMax = this.system?.powerMax ?? power?.max ?? null;
       const update = { "system.health.value": r.health };
       if (powerMax !== null && powerMax !== undefined) update["system.power.value"] = Math.min(powerMax, (power?.value ?? 0) + Math.floor(powerMax / 2));
       await this.update(update);
@@ -1727,7 +1763,7 @@ export class AzerothActor extends Actor {
     else {
       const power = this.system?.power;
       // As the Short Rest above: the stated maximum, else the tier's floor (D-705).
-      const powerMax = power?.max ?? this.system?.powerMax ?? null;
+      const powerMax = this.system?.powerMax ?? power?.max ?? null;
       const update = { "system.health.value": r.health };
       if (powerMax !== null && powerMax !== undefined) update["system.power.value"] = powerMax;
       await this.update(update);
@@ -1799,6 +1835,11 @@ export class AzerothActor extends Actor {
         provenanceExtra: [...choice.provenanceExtra, ...auraBoonProvenance(this, resilience, choice)]
       });
     }
+    // Gadgeteer's replacement is offered within this Long Rest, never banked
+    // as permission to change gadgets later in an encounter.
+    const gadgeteer = this.items.find(i => i.type === "feature" && i.system?.choice === "gadgets");
+    const bench = this.takenTalents?.().some(t => t.className === "Rogue" && t.identifier === "the-bench" && t.taken > 0);
+    if (gadgeteer && bench) await game.system.azeroth.workflows.useFeature({ actor: this, item: gadgeteer, gadgetRest: true });
     return this;
   }
 
@@ -1925,9 +1966,15 @@ export class AzerothActor extends Actor {
    * @param {number} delta
    * @param {{temp?: number|null}} [o]
    */
-  async adjustHealth(delta, { temp = null } = {}) {
+  async adjustHealth(delta, { temp = null, damage = false } = {}) {
+    if (refuseIceBlockTarget(this)) return this;
+    if (damage === true && refuseDispersion(this, "damage")) return this;
     const health = this.system?.health;
     if (!health) return this;
+    if (projectionPhaseFor(this) && (delta < 0 || (temp !== null && temp < (health.temp ?? 0)))) {
+      ui.notifications?.info(game.i18n.localize("AZEROTH.ImageProjection.Protected"));
+      return this;
+    }
     const max = typeof health.max === "number" ? health.max : Infinity;
     const value = Math.max(0, Math.min(max, (health.value ?? 0) + Math.trunc(delta)));
     const update = {};
@@ -1940,7 +1987,23 @@ export class AzerothActor extends Actor {
       }
     }
     if (!Object.keys(update).length) return this;
-    const written = await this.update(update);
+    const damageApplied = damage === true
+      ? Math.max(0, (health.value ?? 0) - value) + (temp === null ? 0 : Math.max(0, wholeTemp(health.temp) - wholeTemp(temp))) : 0;
+    const controlHarm = damageApplied > 0 && this.effects?.some(effect => effect.flags?.["azeroth-rpg"]?.mindControl)
+      ? mindControlHarm : null;
+    const controlSnapshot = controlHarm?.mindControlHarmSnapshot(this) ?? [];
+    const controlHealthBefore = (this.system.health.value ?? 0) + wholeTemp(this.system.health.temp);
+    const written = damageApplied > 0
+      ? await this.update(update, { azerothDamageApplied: damageApplied })
+      : await this.update(update);
+    if (controlSnapshot.length) {
+      const remaining = (this.system.health.value ?? 0) + wholeTemp(this.system.health.temp);
+      try { await controlHarm.endMindControlOnDamage(this, controlSnapshot, Math.max(0, Math.min(damageApplied, controlHealthBefore - remaining))); }
+      catch (error) {
+        console.warn("azeroth-rpg | Mind Control damage release", error);
+        ui.notifications?.warn("Damage was applied, but Mind Control could not be removed. Check the target's effects.");
+      }
+    }
     if (!("system.health.value" in update)) return written;
     // What 0 Health ended (05 §12, 06 §9; M1) is over before the door that
     // wrote it goes on: `_onUpdate` began it on this client, during the update.
@@ -1960,10 +2023,16 @@ export class AzerothActor extends Actor {
    * @param {number} amount
    */
   async takeStraightDamage(amount) {
+    if (refuseIceBlockTarget(this)) return this;
+    if (refuseDispersion(this, "damage")) return this;
+    if (projectionPhaseFor(this)) {
+      ui.notifications?.info(game.i18n.localize("AZEROTH.ImageProjection.Protected"));
+      return this;
+    }
     const soaked = absorbDamage({ temp: this.system?.health?.temp ?? 0, amount });
     if (soaked.absorbed > 0) ui.notifications?.info(game.i18n.format("AZEROTH.Temporary.Absorbed", { name: this.name, n: soaked.absorbed }));
     const left = await this._floorOnly(soaked.amount);
-    return this.adjustHealth(-left, { temp: soaked.temp });
+    return this.adjustHealth(-left, { temp: soaked.temp, damage: true });
   }
 
   /**
@@ -1974,6 +2043,11 @@ export class AzerothActor extends Actor {
    * @param {number} amount
    */
   async loseHealth(amount) {
+    if (refuseIceBlockTarget(this)) return this;
+    if (projectionPhaseFor(this)) {
+      ui.notifications?.info(game.i18n.localize("AZEROTH.ImageProjection.Protected"));
+      return this;
+    }
     const left = await this._floorOnly(Math.max(0, Math.trunc(Number(amount)) || 0));
     return this.adjustHealth(-left);
   }
@@ -2373,7 +2447,14 @@ export class AzerothActor extends Actor {
    *   temporary Health (07's Grave Coil and Exsanguinate; D-777)
    * @param {string} [o.overflowSource]  the spell that keeps it, for the record
    */
-  async applyHealing(amount, { from = null, spell = false, feature = false, shared = false, featureName = null, overflow = false, overflowSource = "", aegis = null, unreduced = false } = {}) {
+  async applyHealing(amount, { from = null, spell = false, feature = false, shared = false, featureName = null, overflow = false, overflowSource = "", aegis = null, unreduced = false, outcome = null } = {}) {
+    // Optional receipt for once-per-turn healing signatures. The Actor remains
+    // the return value; incomplete downstream writes are never proof of delivery.
+    if (outcome) Object.assign(outcome, { complete: false, restored: 0 });
+    if (refuseIceBlockTarget(this)) {
+      if (outcome) outcome.complete = true;
+      return this;
+    }
     const before = this.system?.health?.value ?? 0;
     // **A WRECKED CONSTRUCT TAKES NO HEALING** (04's The Bench: *rebuilding one
     // wrecked at 0 Health* takes a Short Rest and a tinker's kit; the Legacy
@@ -2381,6 +2462,7 @@ export class AzerothActor extends Actor {
     // (MY READING, for the lead). Said, and nothing lands.
     if (this.type === "npc" && isWrecked({ kind: this.getFlag?.("azeroth-rpg", "bond")?.kind ?? null, health: before }) && Math.trunc(amount) > 0) {
       ui.notifications?.info(game.i18n.format("AZEROTH.Construct.WreckedNoHeal", { name: this.name }));
+      if (outcome) outcome.complete = true;
       return this;
     }
     let healed = Math.max(0, Math.trunc(amount));
@@ -2448,6 +2530,7 @@ export class AzerothActor extends Actor {
     // takes the effect off with the fall it was counting to, marked so the delete
     // hook knows it was a heal (`effects/undying-rage.mjs`).
     const restoredNow = Math.max(0, (this.system?.health?.value ?? before) - before);
+    if (outcome) outcome.restored = restoredNow;
     if (restoredNow > 0) {
       const held = (this.effects ?? []).filter(e => e.flags?.["azeroth-rpg"]?.[UNDYING_RAGE.flag]).map(e => e.id);
       if (held.length && this.isOwner) {
@@ -2516,6 +2599,7 @@ export class AzerothActor extends Actor {
         }
       }
     }
+    if (outcome) outcome.complete = true;
     return this;
   }
 
@@ -2589,6 +2673,7 @@ export class AzerothActor extends Actor {
       }));
       return false;
     }
+    if (wants && statusId === "prone" && !this.statuses?.has("prone") && await askStabilizer(this)) return false;
     return super.toggleStatusEffect(statusId, options);
   }
 
@@ -2619,7 +2704,7 @@ export class AzerothActor extends Actor {
     // holder's dialog stands open up to `ASK_MS`, so a heal, a Tether or the offer that
     // landed meanwhile leaves no step to write - and no DeathStepsOut card.
     const due = () => deathStepDue({
-      type: this.type, health: this.system?.health?.value ?? null, steps: this.system?.deathSteps ?? 0, max: AZEROTH.DEATH_STEPS
+      type: this.type, health: this.system?.health?.value ?? null, steps: this.system?.deathSteps ?? 0, max: this.system?.deathStepLimit ?? AZEROTH.DEATH_STEPS
     });
     if (!due()) return this;
     let held = { held: false };
@@ -2646,18 +2731,19 @@ export class AzerothActor extends Actor {
       });
       return this;
     }
-    const steps = Math.min(AZEROTH.DEATH_STEPS, (this.system?.deathSteps ?? 0) + 1);
+    const maxSteps = this.system?.deathStepLimit ?? AZEROTH.DEATH_STEPS;
+    const steps = Math.min(maxSteps, (this.system?.deathSteps ?? 0) + 1);
     const fight = this.activeFight?.() ?? null;
     const started = Boolean(fight?.started);
     const third = thirdStepAt({
-      steps, max: AZEROTH.DEATH_STEPS, combatId: started ? fight.id : null, round: started ? fight.round : null,
+      steps, max: maxSteps, combatId: started ? fight.id : null, round: started ? fight.round : null,
       turn: started ? fight.turn : null, time: game.time?.worldTime ?? 0
     });
     await this.update({ "system.deathSteps": steps, ...(third ? { [`flags.azeroth-rpg.${THIRD_STEP_FLAG}`]: third } : {}) });
-    const key = steps >= AZEROTH.DEATH_STEPS ? "AZEROTH.Combat.DeathStepsOut" : "AZEROTH.Combat.DeathStep";
+    const key = steps >= maxSteps ? "AZEROTH.Combat.DeathStepsOut" : "AZEROTH.Combat.DeathStep";
     await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor: this }),
-      content: `<p class="azeroth-drain">${game.i18n.format(key, { name: this.name, steps, max: AZEROTH.DEATH_STEPS })}</p>`,
+      content: `<p class="azeroth-drain">${game.i18n.format(key, { name: this.name, steps, max: maxSteps })}</p>`,
       flags: { "azeroth-rpg": { kind: "deathStep", steps } }
     });
     if (steps === OFFER.step && offerStands({ dying: dyingNow(this), steps })) {
@@ -2732,8 +2818,50 @@ export class AzerothActor extends Actor {
    *   `damage`: what the damage door records of each type, and what a priest's
    *   Ward took off each.
    */
-  async applyDamage(damage, { struck = false, attack = true, location = "body", type = null, messageId = null, by = null, riposte = false, wardTook = 0, spell = false, ignite = false, moved = false, shared = false, parts = null, drain = null } = {}) {
+  async applyDamage(damage, { struck = false, attack = true, location = "body", type = null, messageId = null, by = null, riposte = false, wardTook = 0, spell = false, ignite = false, moved = false, shared = false, parts = null, drain = null, transfer = null, outcome = null } = {}) {
+    // Optional local receipt; retain the historical Actor return value. This
+    // reports this actor's committed Health/temp loss, never guesses shares.
+    const report = outcome && typeof outcome === "object" ? outcome : null;
+    if (report) Object.assign(report, { targetUuid:this.uuid, complete:false, amount:0, dealtDamage:false, transferred:false, transfers:[] });
+    const completeOutcome = () => { if (report) report.complete = true; return this; };
+    if (refuseIceBlockTarget(this) || refuseDispersion(this, "damage")) {
+      if (transfer) await consumeAttackTransfer(transfer, { target: this, messageId }).note("protected");
+      return completeOutcome();
+    }
+    if (projectionPhaseFor(this)) {
+      if (transfer) await consumeAttackTransfer(transfer, { target: this, messageId }).note("protected");
+      ui.notifications?.info(game.i18n.localize("AZEROTH.ImageProjection.Protected"));
+      return completeOutcome();
+    }
+    // Pin the original charged armor before any reaction or damage write.
+    let innerFireSnapshot = null;
+    if (struck && attack && !spell && !ignite && !moved && !shared && messageId) {
+      const { innerFireHitSnapshot } = await import("../effects/inner-fire-hit.mjs");
+      innerFireSnapshot = innerFireHitSnapshot(this);
+    }
+    const preparedTransfer = transfer ? consumeAttackTransfer(transfer, { target: this, messageId }) : null;
+    const dispersedNow = async () => {
+      if (!refuseDispersion(this, "damage")) return false;
+      if (preparedTransfer) await preparedTransfer.note("protected");
+      if (report) report.complete = true;
+      return true;
+    };
+    const linkedTransfer = preparedTransfer?.candidate?.kind === "soulLink" ? preparedTransfer.candidate.plan : null;
     let amount = Math.max(0, Math.trunc(damage));
+    let potionProtected = false;
+    const preventPotionPhysical = () => {
+      if (!invulnerabilityPotionActive(this.effects)) return;
+      potionProtected = true;
+      const protectedDamage = preventPhysicalDamage({ damage: amount, type, parts });
+      amount = protectedDamage.damage;
+      parts = protectedDamage.parts;
+      if (!protectedDamage.prevented) return;
+      ui.notifications?.info(game.i18n.format("AZEROTH.Use.InvulnerabilityPrevented", { name: this.name, n: protectedDamage.prevented }));
+    };
+    // Direct callers and cards captured before the potion may still carry
+    // physical damage. Filter typed components before scalar actor reductions.
+    // Soul Link supplies its already-resolved retained share below instead.
+    if (!linkedTransfer) preventPotionPhysical();
     const before = this.system?.health?.value ?? 0;
     // What the blow found, Health and temporary Health both, for 04's Life Drain (*You
     // recover Health equal to the damage it takes*; door 25), read once it is written.
@@ -2783,11 +2911,34 @@ export class AzerothActor extends Actor {
     // was aimed with - and a yes lands what is left of it on the holder through
     // the holder's own door; this creature takes none of it, and nothing of the
     // blow runs here. Guarded: a door beyond this creature never cancels its blow.
-    if (struck && !moved && !shared && amount > 0) {
+    if (await dispersedNow()) return this;
+    if (linkedTransfer) {
+      amount = linkedTransfer.damage.caster.damage;
+      type = linkedTransfer.damage.caster.type;
+      wardTook = linkedTransfer.damage.caster.wardTook;
+      parts = linkedTransfer.damage.caster.parts ?? null;
+      preventPotionPhysical();
+    }
+    let transferUsed = moved || shared || Boolean(linkedTransfer);
+    if (struck && !transferUsed && amount > 0) {
       let redirected = { moved: false };
       try {
-        redirected = await redirectBlow({ target: this, amount, type, attack, spell, messageId, by, location, parts });
+        if (preparedTransfer) {
+          const selected = preparedTransfer.candidate?.kind === "redirect" ? preparedTransfer.candidate.plan.key : null;
+          if (selected !== null) await preparedTransfer.note("redirectPending");
+          redirected = await redirectBlow({ target: this, amount, type, attack, spell, messageId, by, location, parts, selection: selected });
+          if (selected !== null) {
+            if (!redirected.moved) {
+              await preparedTransfer.note(redirected.reason === "declined" ? "redirectDeclined" : "redirectChanged");
+              // A declined Guardian cannot silently bypass an active Soul Link
+              // or substitute another transfer after the target made its choice.
+              throw Error("Selected redirection did not land");
+            }
+            await preparedTransfer.note("redirectApplied");
+          }
+        } else redirected = await redirectBlow({ target: this, amount, type, attack, spell, messageId, by, location, parts });
       } catch (err) {
+        if (preparedTransfer) throw err;
         console.error("azeroth-rpg | blow moved", err);
       }
       // **A SHARE MOVED LEAVES THE REST HERE** (04's Shared Burden: *Half the damage that
@@ -2796,7 +2947,11 @@ export class AzerothActor extends Actor {
       // the rest of this door, its second amounts still its own. Guardian's whole blow
       // keeps none, as before.
       if (redirected.moved) {
-        if (!(Number(redirected.kept) > 0)) return this;
+        // One transfer effect per hit (lead ruling): the retained part of a
+        // Shared Burden hit cannot also be divided by Spirit Link Totem.
+        transferUsed = true;
+        if (report) { report.transferred = true; report.transfers.push(redirected.damageOutcome ?? {complete:false}); }
+        if (!(Number(redirected.kept) > 0)) return completeOutcome();
         amount = Math.trunc(Number(redirected.kept));
       }
     }
@@ -2807,20 +2962,17 @@ export class AzerothActor extends Actor {
     // blow first, the mark's own rule). A blow's second amounts keep their own types
     // (D-777); one of an unnamed type is read as physical (MY READING, for the lead: a
     // creature's attack row names no type for its claws).
-    const ethereal = amount > 0 ? etherealOn(this) : null;
+    if (await dispersedNow()) return this;
+    const ethereal = !linkedTransfer && amount > 0 ? (preparedTransfer
+      ? preparedTransfer.input.ethereal ? { source: "Ethereal Form" } : null : etherealOn(this)) : null;
+    const damageStages = linkedTransfer
+      ? { standingDamage: amount, standingTook: linkedTransfer.damage.plan.standingPrevented }
+      : damageTransferStages({ amount, type, parts, ethereal: Boolean(ethereal),
+        standing: preparedTransfer?.input.standingReduction ?? this.system?.damageReduction ?? 0 });
     if (ethereal) {
-      // Each second amount's own share of what is left of the blow, never more than
-      // is left (a Block may have taken some of it), and the blow's own type the rest.
-      let left = amount;
-      const shares = (parts ?? []).map(p => {
-        const d = Math.min(left, Math.max(0, Math.trunc(Number(p?.damage)) || 0));
-        left -= d;
-        return { type: p?.type ?? null, damage: d };
-      });
-      const share = etherealTaken({ main: left, mainType: type, parts: shares });
-      if (share.halved > 0) {
-        ui.notifications?.info(game.i18n.format("AZEROTH.Ethereal.Halved", { name: this.name, source: ethereal.source, from: amount, to: share.total }));
-        amount = share.total;
+      if (damageStages.etherealPrevented > 0) {
+        ui.notifications?.info(game.i18n.format("AZEROTH.Ethereal.Halved", { name: this.name, source: ethereal.source, from: amount, to: damageStages.etherealDamage }));
+        amount = damageStages.etherealDamage;
       }
     }
     // **WHAT SOMEBODY ELSE'S SIGNATURE TAKES OFF** (the Bulwark of Tyr's Hand,
@@ -2836,33 +2988,45 @@ export class AzerothActor extends Actor {
     // readily as on a blow**, since `struck` is not tested: *from every source*
     // is the sentence. A1's Bleeding and Scorched go through `adjustHealth`
     // rather than this door and are untouched, exactly as armor and Ward are.
-    const standing = Math.max(0, Math.trunc(this.system?.damageReduction ?? 0));
+    const standing = preparedTransfer?.input.standingReduction ?? Math.max(0, Math.trunc(this.system?.damageReduction ?? 0));
     // What the standing reduction took off this blow (D-774): a priest's Ward
     // carrying Shield Discipline's reduction prevented that much (Atonement).
-    const beforeStanding = amount;
-    if (standing > 0 && amount > 0) amount = Math.max(0, amount - standing);
-    const standingTook = beforeStanding - amount;
+    amount = damageStages.standingDamage;
+    const standingTook = damageStages.standingTook;
+    // Keep surviving additional lanes bounded after the flat reduction, before
+    // a new Wounded Beast amount is added to the main lane.
+    if (potionProtected) preventPotionPhysical();
     // **WOUNDED BEAST'S PRICE** (04: *every attack that damages you deals 1 more
     // damage per rank*; D-772). It was built for the Rating the Warrior deals and
     // never for what an attack on them deals. An ATTACK that still gets through
     // after the mark and the standing reduction - a tick, a hazard and a
     // retaliation are no attack - and read by name, the inline row's own way.
-    const woundedRanks = struck && attack ? (this.talentRanks?.("Wounded Beast") ?? 0) : 0;
+    const woundedRanks = linkedTransfer ? 0 : preparedTransfer?.input.woundedRanks
+      ?? (struck && attack ? (this.talentRanks?.("Wounded Beast") ?? 0) : 0);
     if (woundedRanks > 0 && amount > 0) {
       const taken = woundedBeastTaken({ amount, attack: true, ranks: woundedRanks });
       ui.notifications?.info(game.i18n.format("AZEROTH.Card.WoundedBeastTaken", { name: this.name, from: amount, to: taken }));
       amount = taken;
     }
+    // Wounded Beast can add new damage of the main type after protection.
+    // Only re-read lanes already normalized above; never reinterpret stale
+    // physical parts after an intervening Ethereal Form halving.
+    if (potionProtected) preventPotionPhysical();
     // **DIVIDED AMONG A SPIRIT LINK** (04's Spirit Link Totem; D-777): what this
     // creature takes is divided evenly among every ally within 20 feet of the
     // totem, no one asked; this creature keeps its share and the remainder, and
     // the others' land once its own Health is written. Judged before anything is
     // written: a share another user's creature takes needs a GM.
     let division = null;
-    if (struck && !moved && !shared && amount > 0) {
+    if (struck && !transferUsed && amount > 0) {
       try {
-        division = divideBlow({ target: this, amount });
+        if (preparedTransfer) {
+          const selected = preparedTransfer.candidate?.kind === "division" ? preparedTransfer.candidate.plan.key : null;
+          division = divideBlow({ target: this, amount, selection: selected });
+          if (selected !== null && !division) throw Error("Selected division changed");
+        } else division = divideBlow({ target: this, amount });
       } catch (err) {
+        if (preparedTransfer) throw err;
         console.error("azeroth-rpg | blow divided", err);
       }
       if (division) amount = division.keep;
@@ -2876,8 +3040,66 @@ export class AzerothActor extends Actor {
     // **THE ONE HOLD AT 1** (D-777): 07's Aegis floor, then the creature's own
     // Unkillable and Cauterize, then another creature's talent, asked in the blow.
     const hold = await this._holdAtOne({ before, amount, attack, struck });
+    if (await dispersedNow()) return this;
     amount = hold.amount;
-    await this.adjustHealth(-amount, { temp: soaked.temp });
+    const seductionHarm = by?.uuid ? await import("../effects/seduction-harm.mjs") : null;
+    const seductionSnapshot = seductionHarm?.seductionHarmSnapshot(this, by) ?? [];
+    const healthBeforeSeductionHarm = (this.system?.health?.value ?? 0) + Math.max(0, Number(this.system?.health?.temp) || 0);
+    const devourMagic = struck && attack && !spell && !shared && !ignite && !moved && by?.type === "npc" && messageId
+      ? await import("../effects/devour-magic-wound.mjs") : null;
+    const devourWound = devourMagic?.captureDevourMagicWound({ target: this, attacker: by, messageId });
+    if (preparedTransfer) await preparedTransfer.note("originalPending");
+    if (await dispersedNow()) return this;
+    const healthBeforeWrite = (this.system?.health?.value ?? 0) + Math.max(0, Number(this.system?.health?.temp) || 0);
+    await this.adjustHealth(-amount, { temp: soaked.temp, damage: true });
+    const healthAfterWrite = (this.system?.health?.value ?? 0) + Math.max(0, Number(this.system?.health?.temp) || 0);
+    if (report) {
+      report.amount = Math.max(0, Math.min(amount + soaked.absorbed, healthBeforeWrite - healthAfterWrite));
+      report.dealtDamage = report.amount > 0;
+      report.transferred = report.transferred || Boolean(division?.others?.some(part => part.share > 0) || linkedTransfer);
+    }
+    if (healthAfterWrite === healthBeforeWrite && await dispersedNow()) return this;
+    if (preparedTransfer) await preparedTransfer.note("originalApplied");
+    if (devourWound) {
+      const recorded = await devourMagic.recordDevourMagicWound(devourWound, amount + soaked.absorbed);
+      if (!recorded.ok) ui.notifications?.warn(game.i18n.localize("AZEROTH.DevourMagic.WoundUnconfirmed"));
+      else if (recorded.wounded) {
+        try {
+          const { postDevourMagicPrompt } = await import("../effects/devour-magic-use.mjs");
+          if (!await postDevourMagicPrompt({ message: game.messages.get(messageId), target: this })) throw Error("Missing prompt");
+        } catch (error) {
+          console.warn("azeroth-rpg | Devour Magic prompt", error);
+          ui.notifications?.warn(game.i18n.localize("AZEROTH.DevourMagic.PromptFailed"));
+        }
+      }
+    }
+    if (seductionSnapshot.length) {
+      const healthAfter = (this.system?.health?.value ?? 0) + Math.max(0, Number(this.system?.health?.temp) || 0);
+      const harmed = Math.max(0, Math.min(amount + soaked.absorbed, healthBeforeSeductionHarm - healthAfter));
+      try {
+        await seductionHarm.endSeductionOnDamage(this, seductionSnapshot, harmed);
+      } catch (error) {
+        console.warn("azeroth-rpg | Seduction cleanup could not be confirmed", error);
+        ui.notifications?.warn("Damage was applied, but Seduction could not be removed. Check the target's effects.");
+      }
+    }
+    if (innerFireSnapshot) {
+      const remaining = (this.system?.health?.value ?? 0) + Math.max(0, Number(this.system?.health?.temp) || 0);
+      const damageApplied = Math.max(0, Math.min(amount + soaked.absorbed, tookFrom - remaining));
+      const { requestInnerFireHit } = await import("../effects/inner-fire-hit-query.mjs");
+      await requestInnerFireHit({ messageId, snapshot: innerFireSnapshot, damageApplied });
+    }
+    // Fear ends on damage from its caster, including damage absorbed by
+    // temporary Health. A negated or fully prevented blow ends nothing.
+    if (amount + soaked.absorbed > 0 && by?.uuid) {
+      try {
+        const { endFearOnDamage } = await import("../effects/fear.mjs");
+        await endFearOnDamage(this, by, amount + soaked.absorbed);
+      } catch (error) {
+        console.warn("azeroth-rpg | Fear cleanup", error);
+        ui.notifications?.warn(game.i18n.localize("AZEROTH.Card.FearCleanupFailed"));
+      }
+    }
     // **04's LIFE DRAIN** (*You recover Health equal to the damage it takes*; the Legacy
     // branches' door 25): what this blow took off this creature's Health and temporary
     // Health, given to the drainer through the one healing door - here where this client
@@ -2901,10 +3123,25 @@ export class AzerothActor extends Actor {
     // The others' shares of a divided blow, once this creature's is written.
     if (division) {
       try {
-        await landShares({ target: this, plan: division, type, by });
+        if (preparedTransfer) await landShares({ target: this, plan: division, type, by, strict: true, outcomes: report?.transfers,
+          beforeShare: actor => preparedTransfer.note(`sharePending:${actor.uuid}`),
+          afterShare: actor => preparedTransfer.note(`shareApplied:${actor.uuid}`) });
+        else await landShares({ target: this, plan: division, type, by, outcomes: report?.transfers });
       } catch (err) {
+        if (preparedTransfer) throw err;
         console.error("azeroth-rpg | blow divided", err);
       }
+    }
+    if (linkedTransfer) {
+      const share = linkedTransfer.damage.recipient;
+      await preparedTransfer.note("recipientPending");
+      if (fromUuidSync(linkedTransfer.recipient.uuid) !== linkedTransfer.recipient) throw Error("Soul Link recipient changed");
+      // A transferred share is damage, not another Attack Test against its recipient.
+      const shareOutcome = report ? {} : null;
+      if (report) report.transfers.push(shareOutcome);
+      await linkedTransfer.recipient.applyDamage(share.damage, { struck: true, attack: false, spell, location,
+        type: share.type, messageId, by, shared: true, wardTook: 0, parts: share.parts ?? null, outcome: shareOutcome });
+      await preparedTransfer.note("recipientApplied");
     }
     // The enemies around it take the Fire once the Health is written.
     if (hold.cauterized) {
@@ -2924,7 +3161,7 @@ export class AzerothActor extends Actor {
         console.error("azeroth-rpg | guardian spirit", err);
       }
     }
-    if (!struck) return this;
+    if (!struck) return completeOutcome();
     await this._struckBy({ before, amount, location, type, attack, max, shapeKind, by, spell, parts });
     // What the blow does beyond its target, once, whatever door it came through
     // (D-768): the card's Apply, an area's tick, a failed area Test. **GUARDED**:
@@ -2936,7 +3173,7 @@ export class AzerothActor extends Actor {
       // damage type, which Vampiric Touch, Twisted Faith's mark and Shadowform's
       // Holy read (D-774) - and whether a spell dealt it and whether it was
       // Ignite's own tick (D-775), which Shadowburn and Ignite read.
-      await afterBlow({ target: this, before, attacker: by, riposte: riposte === true, attack: attack === true, type, spell: spell === true, ignite: ignite === true });
+      await afterBlow({ target: this, before, attacker: by, riposte: riposte === true, attack: attack === true, type, spell: spell === true, ignite: ignite === true, messageId });
     } catch (err) {
       console.error("azeroth-rpg | afterBlow", err);
     }
@@ -2949,7 +3186,7 @@ export class AzerothActor extends Actor {
     } catch (err) {
       console.error("azeroth-rpg | ward", err);
     }
-    return this;
+    return completeOutcome();
   }
 
   /**
@@ -3001,7 +3238,8 @@ export class AzerothActor extends Actor {
     // 1 Health for one round per 2 Rage spent, then fall as usual*; D-779): in a
     // started fight, all the Rage spent and an effect counting the rounds to the fall
     // (`effects/class-answers.mjs#undyingFall` lands it; a heal cancels it, `applyHealing`). A hold
-    // already counting is not begun again (CLARIFY, O-173: blows in the held rounds).
+    // already counting is not begun again: only the triggering hit is held
+    // (lead ruling 2026-10-29); subsequent damage applies normally.
     if (this.type === "character") {
       const undying = undyingRageFor(this.takenTalents());
       const fightNow = this.activeFight?.() ?? null;

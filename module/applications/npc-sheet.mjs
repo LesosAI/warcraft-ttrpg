@@ -17,6 +17,9 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+import { isSearingAttack } from "../rules/searing-totem.mjs";
+import { reviewSearingUses } from "./searing-totem-review.mjs";
+import { reviewChainLightningCast } from "./chain-lightning-review.mjs";
 import { hasAutomation, isPressable } from "../rules/ability-automation.mjs";
 // A construct's Cutting Gear (the lead's ruling, 2026-10-22): pressed by its name.
 import { holdsCuttingGear } from "../rules/escapes.mjs";
@@ -46,6 +49,7 @@ import { heldAugment } from "../rules/augments.mjs";
 import { heldAttackRows } from "../rules/held-attacks.mjs";
 // 05's temporary Health on the banner (D-777).
 import { temporaryHealthContext } from "../effects/temporary-health.mjs";
+import { npcReloadMenu } from "./reload.mjs";
 
 const { HandlebarsApplicationMixin } = foundry.applications.api;
 const { ActorSheetV2 } = foundry.applications.sheets;
@@ -61,6 +65,9 @@ function standsAnywhere(actor) {
 }
 
 export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
+  static #onReviewChainLightningCast() { return reviewChainLightningCast(this.actor); }
+  static #onReviewSearingUses() { return reviewSearingUses(this.actor); }
+
   /** @inheritDoc */
   static DEFAULT_OPTIONS = {
     classes: ["azeroth", "sheet", "actor", "npc"],
@@ -68,8 +75,10 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
     window: { resizable: true },
     form: { submitOnChange: true },
     actions: {
+      reviewChainLightningCast: AzerothNpcSheet.#onReviewChainLightningCast,
       // A creature spends its Momentum on 06 §7's table like anyone (2026-09-06).
       useManeuver: AzerothNpcSheet.#onUseManeuver,
+      reviewSearingUses: AzerothNpcSheet.#onReviewSearingUses,
       // A point in or out of a pool by hand (the lead, 2026-09-13). The Spend
       // row is still the character sheet's alone.
       stepPool: AzerothNpcSheet.#onStepPool,
@@ -88,6 +97,11 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
       stepCondition: AzerothNpcSheet.#onEffectAction,
       toggleEffect: AzerothNpcSheet.#onEffectAction,
       editEffect: AzerothNpcSheet.#onEffectAction,
+      mindControlSaves: AzerothNpcSheet.#onEffectAction,
+      reviewDispersionAftermath: AzerothNpcSheet.#onEffectAction,
+      reviewAntivenom: AzerothNpcSheet.#onEffectAction,
+      reviewSignatureUses: AzerothNpcSheet.#onEffectAction,
+      reviewSignatureParry: AzerothNpcSheet.#onEffectAction,
       deleteEffect: AzerothNpcSheet.#onEffectAction,
       shortRest: AzerothNpcSheet.#onShortRest,
       rework: AzerothNpcSheet.#onRework,
@@ -305,6 +319,8 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
     context.system = system;
     // npc-banner.hbs binds {{actor.name}} and {{actor.img}} - see the character sheet.
     context.actor = this.actor;
+    context.canReviewChainCast = game.user.isGM && this.actor.getFlag("azeroth-rpg", "chainLightningCast")?.stage === "pending";
+    context.reviewSearing = game.user.isGM && (system.attacks ?? []).some(attack => isSearingAttack(attack, bondOf(this.actor)));
     context.effects = effectsContext(this.actor);
     context.tabs = this._prepareTabs("primary");
 
@@ -496,12 +512,14 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
     // render - and `createItem` would otherwise be registered with no door.
     if (this.#blankMenuFor !== this.element) {
       this.#blankMenu = blankItemMenu(this);
+      this.#reloadMenu = npcReloadMenu(this);
       this.#blankMenuFor = this.element;
     }
   }
 
   /** @type {object|null} */
   #blankMenu = null;
+  #reloadMenu = null;
   /** @type {HTMLElement|null} */
   #blankMenuFor = null;
 
@@ -578,9 +596,9 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
   #pool(pool, derivedMax = null) {
     // Held by its value: the block prints `Power 10` and names no type, so
     // every Boss's Power read as an em-dash while this keyed on the name (D-637).
-    // The block's own maximum where it states one, else the floor the tier
-    // gives it; a pool of 0 is still not held, so a dash rather than `0 / 0`.
-    const max = pool?.max ?? derivedMax ?? null;
+    // Derived maximum includes the printed base or tier floor and temporary
+    // bonuses; a pool of 0 is still not held, so a dash rather than `0 / 0`.
+    const max = derivedMax ?? pool?.max ?? null;
     const held = max !== null && max !== undefined && max > 0;
     const value = pool?.value ?? 0;
     return {

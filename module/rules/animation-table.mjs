@@ -224,6 +224,8 @@ export const FILTERS = Object.freeze({
   GREENGOLD: Object.freeze({ hue: 60, saturate: 0.25 }),
   /** An orange ground crack into earth and dust. */
   EARTH: Object.freeze({ hue: -15, saturate: -0.45, brightness: 0.85 }),
+  /** A liquid splash darkened to sticky brown-black pitch. */
+  TAR: Object.freeze({ tint: "#30251b", saturate: -0.8, brightness: 0.65 }),
   /** A cold breath cone emptied into moving air. */
   AIR: Object.freeze({ saturate: -0.75, brightness: 1.15 }),
   /** A projectile darkened for the Shadow school. */
@@ -245,7 +247,12 @@ export const FILTERS = Object.freeze({
   /** Blue into the Light's gold. */
   GOLD_B: Object.freeze({ hue: 195, saturate: 0.45, brightness: 1.05 }),
   /** A blue splash into a serpent's venom green (04's Serpent Ward). */
-  VENOM_B: Object.freeze({ hue: -110, saturate: 0.35, brightness: 0.9 })
+  VENOM_B: Object.freeze({ hue: -110, saturate: 0.35, brightness: 0.9 }),
+  /**
+   * A red curse into a troll's voodoo green (02 §5's Da Voodoo). It starts near `FEL_R`
+   * and is kept apart from it, so a hex and a demon's work can be tuned apart.
+   */
+  VOODOO_R: Object.freeze({ hue: 100, saturate: 0.3, brightness: 0.9 })
 });
 
 /* ------------------------------------------------------------------ */
@@ -1267,7 +1274,17 @@ export const TAUGHT_SPELL_ANIMATIONS = Object.freeze({
  * Every spell row the law looks up: the tier 1 table and the taught one. No
  * identifier is in both (`animation-table.test.mjs`).
  */
-export const ALL_SPELL_ANIMATIONS = Object.freeze({ ...SPELL_ANIMATIONS, ...TAUGHT_SPELL_ANIMATIONS });
+export const NPC_SPELL_ANIMATIONS = Object.freeze({
+  "mind-flay": {
+    cues: [cue("cast", [
+      fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "target", filter: "PSYCHIC", scale: 0.7 }),
+      snd(SOUNDS.psychic, { volume: 0.2 })
+    ])],
+    loop: loop("sustain-channel", [fx("jb2a.energy_strands.range.standard.purple.01", { place: "channel", travel: "stretch", opacity: 0.6 })])
+  }
+});
+
+export const ALL_SPELL_ANIMATIONS = Object.freeze({ ...SPELL_ANIMATIONS, ...TAUGHT_SPELL_ANIMATIONS, ...NPC_SPELL_ANIMATIONS });
 
 /* ------------------------------------------------------------------ */
 /*  Features (the Legacy branches' door 2)                             */
@@ -1372,6 +1389,56 @@ export const FEATURE_ANIMATIONS = Object.freeze({
       fx("jb2a.bless.200px.intro.yellow", { place: "target", scale: 1.1 }),
       snd(SOUNDS.boon, { volume: 0.7 })
     ])]
+  },
+  // The ogre's Bellow (the lead: *"fix and build the animations according to their lore
+  // appearance"*): the roar the table's creatures roar with, a ring of sound thrown out across
+  // the twenty feet it carries, and the ring striking each creature he names. Forty-five feet
+  // across: twenty feet out from either side of the ogre's square, the nearest-square measure
+  // the Use's door reads (D-732) - a character's token is one square whatever its people's size.
+  // Its Bane asks no Test and lands on every creature named at once, so they take the jolt at
+  // the Use; the Bane itself waits for each one's next Test, and nothing stands.
+  bellow: {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 1.6, filter: "DESATURATE" }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.8 }),
+      fx("jb2a.soundwave.01.blue", { place: "source", sizeFt: 45, opacity: 0.85, filter: "AIR", delay: 120 }),
+      fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "targets", scale: 0.8, filter: "AIR", delay: 380, stagger: 70 })
+    ])]
+  },
+  // The troll's hex: the Shadow Hunter's voodoo mask flaring at the troll in green-gold, spoken
+  // in the troll's own voice (Evil Eye's and Bad Mojo's), a bolt of voodoo thrown to the one
+  // creature he can see, and a curse settling over it in the loa's green - Jinx's curse,
+  // recoloured. The Bane asks no Test and lands at once, so the curse plays on the creature at
+  // the Use; the Bane waits for its next Test. The mask comes first so the voice has a picture
+  // to sound beside, and the bolt last of the three so the curse waits for it to land.
+  "da-voodoo": {
+    cues: [cue("use", [
+      fx("jb2a.markers.on_token_mask.complete.01.orange", { place: "source", scale: 0.8, filter: "GREENGOLD" }),
+      snd("psfx.incantations.masculine.002.dry.harm.004", { volume: 0.6 }),
+      fx("jb2a.eldritch_blast.purple", { place: "source>target", travel: "stretch", scale: 0.7, delay: 200 }),
+      fx("jb2a.condition.curse.01.001.red", { place: "target", scale: 0.9, filter: "VOODOO_R", waitFor: "travel", overlap: -250, hold: 1200, fadeOut: 400 }),
+      snd(SOUNDS.necrotic, { volume: 0.5, waitFor: "travel", overlap: -250 })
+    ])]
+  },
+  // The goblin's rocket belt: the blast and the smoke where he took off, a streak of rocket
+  // fire along the line he flew, and the dust where he lands - each at the spaces the jump's
+  // card recorded (`effects/rocket-jump-plan.mjs#rocketJumpSteps`), never on the token, which
+  // is already in the air. A jump that stopped records no move and draws nothing. The card is
+  // posted as the flight begins and core moves a token about six squares a second
+  // (`CONFIG.Token.movement.defaultSpeed`), so the landing waits most of a second.
+  "rocket-jump": {
+    cues: [
+      cue("use", [
+        fx("jb2a.explosion.01.orange", { place: "step-from", movers: ["self"], scale: 1.1, below: true }),
+        fx("jb2a.smoke.puff.centered.grey", { place: "step-from", movers: ["self"], scale: 1.3, delay: 150 }),
+        snd("psfx.3rd-level-spells.fireball.v1.001.beam", { volume: 0.7 }),
+        fx("jb2a.fireball.beam.orange", { place: "step", movers: ["self"], travel: "stretch", scale: 0.5, opacity: 0.8 })
+      ]),
+      cue("arrive", [
+        fx("jb2a.smoke.puff.ring.01.white", { place: "step-to", movers: ["self"], scale: 1.4, filter: "EARTH", delay: 650 }),
+        snd("psfx.creature.movement.flight.landing.impact.small", { volume: 0.8, delay: 650 })
+      ])
+    ]
   },
 
   /* ================= Blademaster (Orc Warrior) ================= */
@@ -1677,7 +1744,7 @@ export const FEATURE_ANIMATIONS = Object.freeze({
     loop: loop("effect", [fx("jb2a.fumes.steam.white", { place: "holder", scale: 1.3, opacity: 0.3 })], { state: "shape" })
   },
 
-  /* ---- 04's eight gadgets ---- */
+  /* ---- 04's gadgets ---- */
   // The card's own Attack is the net's throw, and the web stands on the creature held.
   "net-o-matic-projector": {
     strike: strike({
@@ -1736,15 +1803,1081 @@ export const FEATURE_ANIMATIONS = Object.freeze({
     ])]
   },
 
+  "polarity-retrieval-coil": {
+    cues: [cue("use", [
+      fx("jb2a.static_electricity.01.blue", { place: "source", scale: 0.5 }),
+      snd("psfx.cantrips.shocking-grasp.v1.002", { volume: 0.35 })
+    ])]
+  },
+  "gnomish-mind-control-cap": {
+    cues: [cue("use", [
+      fx("jb2a.static_electricity.01.blue", { place: "source", scale: 0.6 }),
+      fx("jb2a.ranged.03.instant.01.bluegreen", { place: "source>target", travel: "stretch" }),
+      snd("psfx.casting.generic.001", { volume: 0.4 })
+    ])]
+  },
+  "gnomish-death-ray": {
+    cues: [cue("use", [
+      fx("jb2a.static_electricity.01.blue", { place: "source", scale: 0.7 }),
+      snd("psfx.casting.generic.001", { volume: 0.5 })
+    ])],
+    strike: strike({
+      swing: { asset: "jb2a.energy_beam.normal.blue.01", place: "source>target", travel: "stretch", sound: snd("psfx.ranged-magic.generic.beam.001", { volume: 0.6 }) },
+      impact: { asset: "jb2a.explosion.01.orange", place: "target", scale: 0.4, waitFor: "travel", overlap: -200, sound: snd(SOUNDS.fire, { volume: 0.4 }) },
+      standIn: "visual"
+    })
+  },
+  "deepdive-rebreather": {
+    cues: [cue("use", [
+      fx("jb2a.bubble.001.001.complete.blue", { place: "target", scale: 0.6, opacity: 0.5 }),
+      snd(SOUNDS.gust, { volume: 0.2 })
+    ])]
+  },
+  "gnomish-shrink-ray": {
+    cues: [cue("use", [
+      fx("jb2a.energy_beam.normal.blue.01", { place: "source>target", travel: "stretch", scale: 0.35 }),
+      snd("psfx.ranged-magic.generic.beam.001", { volume: 0.3 })
+    ])]
+  },
+  "gyroscopic-stabilizer": {
+    cues: [cue("use", [
+      fx("jb2a.static_electricity.01.blue", { place: "source", scale: 0.35, opacity: 0.4 }),
+      snd(SOUNDS.blunt, { volume: 0.15 })
+    ])]
+  },
+  "flash-pulse-projector": {
+    cues: [cue("use", [
+      fx("jb2a.static_electricity.01.blue", { place: "source", scale: 0.8, opacity: 0.7 }),
+      snd("psfx.cantrips.shocking-grasp.v1.002", { volume: 0.4 })
+    ])]
+  },
+  "emergency-foam-sprayer": {
+    cues: [cue("use", [
+      fx("jb2a.fumes.steam.white", { place: "target", scale: 0.8, opacity: 0.7 }),
+      snd(SOUNDS.gust, { volume: 0.35 })
+    ])]
+  },
+
   /* ---- 14 §13's constructs: their own abilities ---- */
   // Each attack a construct makes already plays its form (Peck a bite, Claws a claw,
   // the Flame jet a fire bolt, a Kick and the rig's Piston fist a slam; held by
   // `animation-table.test.mjs`). Breath is no construct's alone - 14's Drake breathes
   // its flight's school and Nefarian his own - so `ability:breath` takes no row.
+  "ability:static-discharge": {
+    cues: [cue("use", [
+      fx("jb2a.chain_lightning.primary.blue", { place: "source>target", travel: "stretch" }),
+      snd(SOUNDS.lightning)
+    ])]
+  },
+  "ability:acid-spit": {
+    cues: [cue("use", [
+      fx("jb2a.ranged.04.projectile.01.green", { place: "source>target", travel: "stretch", scale: 0.7 }),
+      snd("psfx.cantrips.poison-spray.v1", { volume: 0.35 })
+    ])]
+  },
+  "ability:venom-spit": {
+    cues: [cue("use", [
+      fx("jb2a.ranged.04.projectile.01.green", { place: "source>target", travel: "stretch", scale: 0.7 }),
+      snd("psfx.cantrips.poison-spray.v1", { volume: 0.35 })
+    ])]
+  },
+  "ability:dredge-poison": {
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.01.01", { place: "target", scale: 0.4, opacity: 0.65 }),
+      snd("psfx.cantrips.poison-spray.v1", { volume: 0.2 })
+    ])]
+  },
+  "ability:virulent-poison": {
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.01.01", { place: "target", scale: 0.4, opacity: 0.65 }),
+      snd("psfx.cantrips.poison-spray.v1", { volume: 0.2 })
+    ])]
+  },
+  "ability:stormhide-discharge": {
+    cues: [cue("use", [
+      fx("jb2a.chain_lightning.primary.blue", { place: "source>target", travel: "stretch" }),
+      snd(SOUNDS.lightning)
+    ])]
+  },
+  "ability:elder-discharge": {
+    cues: [cue("use", [
+      fx("jb2a.chain_lightning.primary.blue", { place: "source>target", travel: "stretch" }),
+      snd(SOUNDS.lightning)
+    ])]
+  },
+  "ability:crawler-sweep": {
+    cues: [cue("use", [
+      fx("jb2a.melee_generic.creature_attack.fist.001.red", { place: "source>target", filter: "DESATURATE" }),
+      snd(SOUNDS.blunt)
+    ])]
+  },
+  "ability:mauling-sweep": {
+    cues: [cue("use", [
+      fx("jb2a.greatclub.standard.white", { place: "source>target" }),
+      snd(SOUNDS.blunt)
+    ])]
+  },
+  "ability:rage-talon-buffet": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", filter: "DESATURATE", scale: 1.5 }),
+      snd(SOUNDS.blunt)
+    ])]
+  },
+  "ability:drag-down": {
+    cues: [cue("use", [
+      fx("jb2a.melee_generic.creature_attack.fist.001.red", { place: "target", filter: "DESATURATE", scale: 0.5 }),
+      snd(SOUNDS.blunt)
+    ])]
+  },
+  "ability:cleft-venom": {
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.01.01", { place: "target", scale: 0.5 }),
+      snd(SOUNDS.blunt, { volume: 0.15 })
+    ])]
+  },
+  "ability:deathlash-venom": {
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.01.01", { place: "target", scale: 0.5 }),
+      snd(SOUNDS.blunt, { volume: 0.15 })
+    ])]
+  },
+  "ability:deathclasp-venom": {
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.01.01", { place: "target", scale: 0.5 }),
+      snd(SOUNDS.blunt, { volume: 0.15 })
+    ])]
+  },
+  "ability:rockjaw-sweep": {
+    cues: [cue("use", [
+      fx("jb2a.club.melee.01.white", { place: "source>target" }),
+      snd(SOUNDS.blunt)
+    ])]
+  },
+  "ability:wyvern-venom": {
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.01.01", { place: "target", scale: 0.5 }),
+      snd(SOUNDS.blunt, { volume: 0.15 })
+    ])]
+  },
+  "ability:worker-venom": {
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.01.01", { place: "target", scale: 0.5 }),
+      snd(SOUNDS.blunt, { volume: 0.15 })
+    ])]
+  },
+  "ability:creeper-venom": {
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.01.01", { place: "target", scale: 0.5 }),
+      snd(SOUNDS.blunt, { volume: 0.15 })
+    ])]
+  },
+  "ability:wasp-venom": {
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.01.01", { place: "target", scale: 0.6 }),
+      snd(SOUNDS.blunt, { volume: 0.15 })
+    ])]
+  },
+  "ability:vekniss-itch": {
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.01.01", { place: "target", scale: 0.4 }),
+      snd(SOUNDS.blunt, { volume: 0.12 })
+    ])]
+  },
+  "ability:entangling-roots": {
+    cues: [cue("use", [
+      fx("jb2a.vine.complete.nature.single.01.green", { place: "target", below: true }),
+      snd("psfx.1st-level-spells.entangle.vines.v1.001.intro", { volume: 0.4 })
+    ])]
+  },
+  "ability:molten-smash": {
+    cues: [cue("use", [
+      fx("jb2a.melee_generic.creature_attack.fist.001.red", { place: "target", filter: "DESATURATE", scale: 0.8 }),
+      snd(SOUNDS.blunt, { volume: 0.3 })
+    ])]
+  },
+  "ability:pack-rekindling": {
+    cues: [cue("use", [
+      fx("jb2a.impact.fire.01.orange", { place: "target", scale: 0.5 }),
+      snd(SOUNDS.fire, { volume: 0.2 })
+    ])]
+  },
+  "ability:knock-away": {
+    cues: [cue("use", [
+      fx("jb2a.melee_generic.creature_attack.fist.001.red", { place: "target", filter: "DESATURATE", scale: 0.6 }),
+      snd(SOUNDS.blunt, { volume: 0.3 })
+    ])]
+  },
+  "ability:wild-regeneration": {
+    cues: [cue("use", [
+      fx("jb2a.healing_generic.200px.green", { place: "source", scale: 1.2 }),
+      snd(SOUNDS.boon, { volume: 0.3 })
+    ])]
+  },
+  "ability:vampiric-aura": {
+    cues: [cue("use", [
+      fx("jb2a.healing_generic.200px.green", { place: "source", scale: 0.8 }),
+      snd(SOUNDS.boon, { volume: 0.25 })
+    ])]
+  },
+  "ability:sleep": {
+    cues: [cue("use", [
+      fx("jb2a.shimmer.01.blue", { place: "target", scale: 1.1, filter: "SHADOW_B" }),
+      snd("psfx.cantrips.mind-sliver.v1", { volume: 0.25 })
+    ])]
+  },
+  "ability:enveloping-winds": {
+    cues: [cue("use", [
+      fx("jb2a.wind_stream.white", { place: "target", scale: 1.1, opacity: 0.7, hold: 700, fadeOut: 300 }),
+      snd(SOUNDS.gust, { volume: 0.3 })
+    ])]
+  },
+  "ability:enveloping-gale": {
+    cues: [cue("use", [
+      fx("jb2a.wind_stream.white", { place: "target", scale: 1.1, opacity: 0.7, hold: 700, fadeOut: 300 }),
+      snd(SOUNDS.gust, { volume: 0.3 })
+    ])]
+  },
+  "ability:blazing-wave": {
+    cues: [cue("use", [
+      fx("jb2a.explosion.08.orange", { place: "source", scale: 1.3 }),
+      fx("jb2a.impact.fire.01.orange", { place: "target", scale: 0.65 }),
+      snd(SOUNDS.fire, { volume: 0.3 })
+    ])]
+  },
+  "ability:felguard-blast-wave": {
+    cues: [cue("use", [
+      fx("jb2a.fire_ring.500px.red", { place: "source", sizeFt: 20, below: true, grow: 400, hold: 700 }),
+      fx("jb2a.impact.fire.01.orange", { place: "target", scale: 0.65 }),
+      snd(SOUNDS.fire, { volume: 0.3 })
+    ])]
+  },
+  "ability:felguard-mortal-strike": {
+    cues: [cue("use", [
+      fx("jb2a.liquid.splash02.red", { place: "target", scale: 0.35, opacity: 0.6 }),
+      snd(SOUNDS.slash, { volume: 0.2 })
+    ])]
+  },
+  "ability:searing-pulse": {
+    cues: [cue("use", [
+      fx("jb2a.impact.fire.01.orange", { place: "source", scale: 0.8 }),
+      snd(SOUNDS.fire, { volume: 0.22 })
+    ])]
+  },
+  "ability:infernal-arrival": {
+    cues: [cue("use", [
+      fx("jb2a.impact.ground_crack.orange.02", { place: "source", scale: 1.5, below: true, filter: "GREENGOLD" }),
+      snd(SOUNDS.blunt, { volume: 0.35 })
+    ])]
+  },
+  "ability:fel-shod-ground": {
+    cues: [cue("region", [snd(SOUNDS.fire, { volume: 0.12 })])],
+    loop: loop("region", [
+      fx("jb2a.ground_cracks.01.orange", { place: "region", area: 1, below: true, filter: "GREENGOLD", opacity: 0.65 })
+    ])
+  },
+  "ability:infernal-immolation": {
+    cues: [cue("use", [
+      fx("jb2a.impact.fire.01.orange", { place: "target", scale: 0.4, opacity: 0.6, filter: "GREENGOLD" }),
+      snd(SOUNDS.fire, { volume: 0.15 })
+    ])]
+  },
+  "ability:flame-buffet": {
+    cues: [cue("use", [
+      fx("jb2a.scorching_ray.01.orange", { place: "source>target", travel: "stretch", speed: 1.4 }),
+      snd("psfx.2nd-level-spells.scorching-ray.v1", { bucketed: true, volume: 0.3 }),
+      fx("jb2a.impact.fire.01.orange", { place: "target", scale: 0.55, waitFor: "travel", overlap: -250 })
+    ])]
+  },
+  "ability:fireball-volley": {
+    cues: [cue("use", [
+      fx("jb2a.fire_bolt.orange", { place: "source>target", travel: "stretch" }),
+      snd("psfx.cantrips.fire-bolt.v1", { bucketed: true, volume: 0.3 }),
+      fx("jb2a.explosion.01.orange", { place: "target", scale: 0.8, waitFor: "travel", overlap: -250 }),
+      snd(SOUNDS.fire, { waitFor: "travel", overlap: -250, volume: 0.3 })
+    ])]
+  },
+  "ability:shock": {
+    cues: [cue("use", [
+      fx("jb2a.static_electricity.01.blue", { place: "target", scale: 0.65 }),
+      snd(SOUNDS.lightning, { volume: 0.3 })
+    ])]
+  },
+  "ability:frost-shot": {
+    cues: [cue("use", [
+      fx("jb2a.impact_themed.ice_shard.blue", { place: "target", scale: 0.5 }),
+      snd(SOUNDS.cold, { volume: 0.25 })
+    ])]
+  },
+  "ability:sunder-armor": {
+    cues: [cue("use", [
+      fx("jb2a.melee_generic.creature_attack.fist.001.red", { place: "target", filter: "DESATURATE", scale: 0.5 }),
+      snd(SOUNDS.blunt, { volume: 0.25 })
+    ])]
+  },
+  "ability:fist-of-ragnaros": {
+    cues: [cue("use", [
+      fx("jb2a.impact.ground_crack.orange.02", { place: "source", scale: 1, below: true, filter: "EARTH" }),
+      fx("jb2a.melee_generic.creature_attack.fist.001.red", { place: "target", filter: "DESATURATE", scale: 0.7 }),
+      snd(SOUNDS.blunt, { volume: 0.35 })
+    ])]
+  },
+  "ability:shadow-shock": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 1.2, filter: "SHADOW_B" }),
+      fx("jb2a.impact.004.blue", { place: "target", scale: 0.6, filter: "SHADOW_B" }),
+      snd("psfx.cantrips.mind-sliver.v1", { volume: 0.3 })
+    ])]
+  },
+  "ability:pummel": {
+    cues: [cue("use", [
+      fx("jb2a.melee_generic.creature_attack.fist.001.red", { place: "target", filter: "DESATURATE", scale: 0.5 }),
+      snd(SOUNDS.blunt, { volume: 0.25 })
+    ])]
+  },
+  "ability:dire-growl": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 0.8, filter: "DESATURATE" }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.25 })
+    ])]
+  },
+  "ability:sonic-burst": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 1.2, filter: "DESATURATE" }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.35 })
+    ])]
+  },
+  "ability:tutor-silence": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 0.9, filter: "DESATURATE" }),
+      snd(SOUNDS.psychic, { volume: 0.2 })
+    ])]
+  },
+  "ability:banshee-curse": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 0.6, filter: "DESATURATE" }),
+      snd(SOUNDS.psychic, { volume: 0.2 })
+    ])]
+  },
+  "ability:vilebranch-shrink": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 0.6, filter: "PURPLE_B" }),
+      snd(SOUNDS.psychic, { volume: 0.2 })
+    ])]
+  },
+  "ability:mobile-alert-warning": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 0.7, filter: "DESATURATE" }),
+      snd("psfx.cantrips.toll-the-dead.ominous-bell.001", { volume: 0.3 })
+    ])]
+  },
+  "ability:mobile-alert-arrival": {
+    cues: [cue("use", [
+      fx("jb2a.aura_themed.01.outward.complete.metal.01.grey", { place: "source", scale: 0.7 }),
+      snd(SOUNDS.blunt, { volume: 0.25 })
+    ])]
+  },
+  "ability:mobile-alert-flare": {
+    cues: [cue("use", [
+      fx("jb2a.markers.light.intro.blue", { place: "source", scale: 0.8, filter: "WARM" }),
+      snd("psfx.cantrips.light.v1.001", { volume: 0.3 })
+    ])]
+  },
+  "ability:bleakheart-curse": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 0.6, filter: "PURPLE_B" }),
+      snd(SOUNDS.psychic, { volume: 0.2 })
+    ])]
+  },
+  "ability:bleakheart-chest-pains": {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "source", scale: 0.6, filter: "PURPLE_B" }),
+      snd(SOUNDS.psychic, { volume: 0.25 })
+    ])]
+  },
+  "ability:anti-magic-shield": {
+    cues: [cue("use", [
+      fx("jb2a.shimmer.01.blue", { place: "source", scale: 0.8, opacity: 0.6, hold: 250, fadeOut: 300 }),
+      snd(SOUNDS.psychic, { volume: 0.2 })
+    ])]
+  },
+  "ability:inner-fire": {
+    cues: [cue("use", [
+      fx("jb2a.shimmer.01.blue", { place: "source", scale: 0.8, opacity: 0.6, hold: 250, fadeOut: 300, filter: "GOLD_B" }),
+      snd(SOUNDS.psychic, { volume: 0.2 })
+    ])]
+  },
+  "ability:npc-sneak": {
+    cues: [cue("use", [
+      fx("jb2a.shimmer.01.blue", { place: "source", scale: 0.6, opacity: 0.3, hold: 150, fadeOut: 300, filter: "DESATURATE" }),
+      snd(SOUNDS.psychic, { volume: 0.1 })
+    ])]
+  },
+  "ability:spell-lock": {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "target", scale: 0.45, opacity: 0.7, filter: "PURPLE_B" }),
+      snd(SOUNDS.psychic, { volume: 0.25 })
+    ])]
+  },
+  "ability:phase-shift": {
+    cues: [cue("use", [
+      fx("jb2a.shimmer.01.blue", { place: "source", scale: 0.6, opacity: 0.45, hold: 150, fadeOut: 300, filter: "PURPLE_B" }),
+      snd(SOUNDS.psychic, { volume: 0.15 })
+    ])]
+  },
+  "ability:seduction-charm": {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "target", scale: 0.45, opacity: 0.5, filter: "PURPLE_B" }),
+      snd(SOUNDS.psychic, { volume: 0.15 })
+    ])]
+  },
+  "ability:devour-magic-result": {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "target", scale: 0.4, opacity: 0.55, filter: "GREENGOLD" }),
+      snd(SOUNDS.psychic, { volume: 0.15 })
+    ])]
+  },
+  "ability:tainted-blood": {
+    cues: [cue("use", [
+      fx("jb2a.impact.005.orange", { place: "source", scale: 0.5, opacity: 0.55, filter: "GREENGOLD" }),
+      snd(SOUNDS.psychic, { volume: 0.15 })
+    ])]
+  },
+  "ability:tainted-blood-stack": {
+    cues: [cue("use", [
+      fx("jb2a.impact.005.orange", { place: "target", scale: 0.35, opacity: 0.4, filter: "GREENGOLD" }),
+      snd(SOUNDS.psychic, { volume: 0.1 })
+    ])]
+  },
+  "ability:lesser-invisibility": {
+    cues: [cue("use", [
+      fx("jb2a.shimmer.01.blue", { place: "source", scale: 0.6, opacity: 0.3, hold: 150, fadeOut: 300, filter: "DESATURATE" }),
+      snd(SOUNDS.psychic, { volume: 0.1 })
+    ])]
+  },
+  "ability:npc-disarm": {
+    cues: [cue("use", [
+      fx("jb2a.aura_themed.01.outward.complete.metal.01.grey", { place: "target", scale: 0.45, opacity: 0.65 }),
+      snd(SOUNDS.blunt, { volume: 0.2 })
+    ])]
+  },
+  "ability:syndicate-whirlwind": {
+    cues: [cue("use", [
+      fx("jb2a.wind_stream.white", { place: "source", scale: 0.65, opacity: 0.45, hold: 400, fadeOut: 300 }),
+      snd(SOUNDS.swingHeavy, { volume: 0.3 })
+    ])]
+  },
+  "ability:death-singer-screech": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 1.1, filter: "DESATURATE" }),
+      snd(SOUNDS.psychic, { volume: 0.3 })
+    ])]
+  },
+  "ability:image-projection": {
+    cues: [cue("use", [
+      fx("jb2a.shimmer.01.blue", { place: "target", scale: 0.8, opacity: 0.7, hold: 250, fadeOut: 300 }),
+      snd(SOUNDS.psychic, { volume: 0.2 })
+    ])]
+  },
+  "ability:lightning-cloud": {
+    cues: [cue("region", [
+      fx("jb2a.static_electricity.01.blue", { place: "region", area: 0.7, opacity: 0.6 }),
+      snd(SOUNDS.lightning, { volume: 0.35 })
+    ])],
+    loop: loop("region", [
+      fx("jb2a.static_electricity.01.blue", { place: "region", area: 1, below: true, mask: true, opacity: 0.3 })
+    ])
+  },
+  "ability:plague-cloud": {
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.01.01", { place: "target", scale: 0.5, opacity: 0.6 }),
+      snd("psfx.cantrips.poison-spray.v1", { volume: 0.25 })
+    ])]
+  },
+  "ability:cauterizing-flames": {
+    cues: [cue("use", [
+      fx("jb2a.impact.fire.01.orange", { place: "target", scale: 0.5 }),
+      snd(SOUNDS.fire, { volume: 0.2 })
+    ])]
+  },
+  "ability:ground-stomp": {
+    cues: [cue("use", [
+      fx("jb2a.impact.ground_crack.orange.02", { place: "source", scale: 1.2, below: true, filter: "EARTH" }),
+      fx("jb2a.smoke.puff.ring.01.white", { place: "source", scale: 1.4, delay: 120, filter: "EARTH" }),
+      snd("psfx.casting.earth.001", { volume: 0.35 })
+    ])]
+  },
+  "ability:summon-earth-rumbler": {
+    cues: [cue("use", [
+      fx("jb2a.smoke.puff.ring.01.white", { place: "target", scale: 1.2, below: true, filter: "EARTH" }),
+      snd("psfx.casting.earth.001", { volume: 0.35 })
+    ])]
+  },
+  "ability:summon-fire-elemental": {
+    cues: [cue("use", [
+      fx("jb2a.impact.fire.01.orange", { place: "target", scale: 0.8, below: true }),
+      snd(SOUNDS.fire, { volume: 0.25 })
+    ])]
+  },
+  "ability:demon-guardian-arrival": {
+    cues: [cue("use", [
+      fx("jb2a.smoke.puff.ring.01.white", { place: "target", scale: 0.8, below: true, filter: "PURPLE_B" }),
+      snd(SOUNDS.psychic, { volume: 0.25 })
+    ])]
+  },
+  "ability:npc-searing-totem": {
+    cues: [cue("use", [
+      fx("jb2a.impact.fire.01.orange", { place: "target", scale: 0.35, below: true }),
+      snd(SOUNDS.fire, { volume: 0.2 })
+    ])]
+  },
+  "ability:summon-carrion-scarab": {
+    cues: [cue("use", [
+      fx("jb2a.smoke.puff.ring.01.white", { place: "target", scale: 0.45, below: true, filter: "EARTH" }),
+      snd("psfx.casting.earth.001", { volume: 0.2 })
+    ])]
+  },
+  "ability:jadefire": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.fire.01.orange", { place: "source", scale: 0.7, filter: "FEL_O" }),
+      snd(SOUNDS.fire, { volume: 0.2 })
+    ])]
+  },
+  "ability:frost-armor-slow": {
+    cues: [cue("use", [
+      fx("jb2a.impact_themed.ice_shard.blue", { place: "target", scale: 0.35 }),
+      snd(SOUNDS.cold, { volume: 0.15 })
+    ])]
+  },
+  "ability:jadefire-retaliation": {
+    cues: [cue("use", [
+      fx("jb2a.impact.fire.01.orange", { place: "target", scale: 0.4, filter: "FEL_O" }),
+      snd(SOUNDS.fire, { volume: 0.15 })
+    ])]
+  },
+  "ability:made-of-fire-retaliation": {
+    cues: [cue("use", [
+      fx("jb2a.impact.fire.01.orange", { place: "target", scale: 0.35 }),
+      snd(SOUNDS.fire, { volume: 0.15 })
+    ])]
+  },
+  "ability:ancient-hysteria": {
+    cues: [cue("use", [
+      fx("jb2a.condition.curse.01.001.red", { place: "target", scale: 0.7, hold: 800, fadeOut: 400 }),
+      snd("psfx.incantations.whispers.masc.001.forward.standard.001", { volume: 0.25 })
+    ])]
+  },
+  "ability:ancient-dread": {
+    cues: [cue("use", [
+      fx("jb2a.condition.curse.01.001.red", { place: "target", scale: 0.5, opacity: 0.5, hold: 800, fadeOut: 400 }),
+      snd("psfx.incantations.whispers.masc.001.forward.standard.001", { volume: 0.2 })
+    ])]
+  },
+  "ability:ancient-despair": {
+    cues: [cue("use", [
+      fx("jb2a.condition.curse.01.001.red", { place: "target", scale: 0.4, opacity: 0.4, hold: 600, fadeOut: 400 }),
+      snd("psfx.incantations.whispers.masc.001.forward.standard.001", { volume: 0.2 })
+    ])]
+  },
+  "ability:lava-breath": {
+    cues: [cue("use", [
+      fx("jb2a.impact.fire.01.orange", { place: "target", scale: 0.8 }),
+      snd(SOUNDS.fire, { volume: 0.4 })
+    ])]
+  },
+  "ability:withering-heat": {
+    cues: [cue("use", [
+      fx("jb2a.impact.fire.01.orange", { place: "target", scale: 0.4, opacity: 0.6 }),
+      snd(SOUNDS.fire, { volume: 0.2 })
+    ])]
+  },
+  "ability:dredge-sickness": {
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.01.01", { place: "source", scale: 0.9, opacity: 0.6 }),
+      snd("psfx.cantrips.poison-spray.v1", { volume: 0.25 })
+    ])]
+  },
+  "ability:tetanus": {
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.01.01", { place: "source", scale: 0.35, opacity: 0.5 }),
+      snd("psfx.cantrips.poison-spray.v1", { volume: 0.2 })
+    ])]
+  },
+  "ability:maggot-slime": {
+    cues: [cue("use", [
+      fx("jb2a.ranged.04.projectile.01.green", { place: "source>target", travel: "stretch", scale: 0.5 }),
+      snd("psfx.cantrips.poison-spray.v1", { volume: 0.25 })
+    ])]
+  },
+  "ability:qiraji-mind-blast": {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "source", filter: "PSYCHIC", scale: 1.1 }),
+      snd(SOUNDS.psychic, { volume: 0.3 })
+    ])]
+  },
+  "ability:sentinel-shadow-storm": {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "target", filter: "PSYCHIC", scale: 0.65 }),
+      snd(SOUNDS.psychic, { volume: 0.3 })
+    ])]
+  },
+  "ability:sentinel-mana-burn": {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "target", filter: "PSYCHIC", scale: 0.55 }),
+      snd(SOUNDS.psychic, { volume: 0.25 })
+    ])]
+  },
+  "ability:sentinel-thorns": {
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.01.01", { place: "target", scale: 0.55 }),
+      snd(SOUNDS.generic, { volume: 0.2 })
+    ])]
+  },
+  "ability:sentinel-enrage": {
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.01.01", { place: "source", scale: 0.85 }),
+      snd(SOUNDS.blunt, { volume: 0.3 })
+    ])]
+  },
+  "ability:sentinel-mending": {
+    cues: [cue("use", [
+      fx("jb2a.healing_generic.200px.green", { place: "source", scale: 0.65 }),
+      snd(SOUNDS.boon, { volume: 0.15 })
+    ])]
+  },
+  "ability:sentinel-pack": {
+    cues: [cue("use", [
+      fx("jb2a.healing_generic.200px.green", { place: "source", scale: 1.1 }),
+      snd(SOUNDS.boon, { volume: 0.3 })
+    ])]
+  },
+  "ability:sentinel-thunderclap": {
+    cues: [cue("use", [
+      fx("jb2a.static_electricity.01.blue", { place: "source", scale: 1.1 }),
+      snd(SOUNDS.lightning, { volume: 0.35 })
+    ])]
+  },
+  "ability:cause-insanity": {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "target", filter: "PSYCHIC", scale: 0.7 }),
+      snd(SOUNDS.psychic, { volume: 0.25 })
+    ])]
+  },
+  "ability:qiraji-mind-flay": {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "target", filter: "PSYCHIC", scale: 0.7 }),
+      snd(SOUNDS.psychic, { volume: 0.25 })
+    ])]
+  },
+  "ability:dying-mind": {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "source", filter: "PSYCHIC", scale: 1.3 }),
+      snd(SOUNDS.psychic, { volume: 0.35 })
+    ])]
+  },
+  "ability:maggot-goo": {
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.01.01", { place: "source", scale: 0.8, opacity: 0.7 }),
+      snd("psfx.cantrips.poison-spray.v1", { volume: 0.4 })
+    ])]
+  },
+  "ability:nullify-mana": {
+    cues: [cue("use", [
+      fx("jb2a.particle_burst.01.circle.bluepurple", { place: "target", scale: 0.5 }),
+      snd(SOUNDS.generic, { volume: 0.3 })
+    ])]
+  },
+  "ability:destroyer-drain-mana": {
+    cues: [cue("use", [
+      fx("jb2a.particle_burst.01.circle.bluepurple", { place: "target", scale: 0.5 }),
+      snd(SOUNDS.generic, { volume: 0.3 })
+    ])]
+  },
+  "ability:obsidian-purge": {
+    cues: [cue("use", [
+      fx("jb2a.particle_burst.01.circle.bluepurple", { place: "source", scale: 1.4 }),
+      snd(SOUNDS.generic, { volume: 0.45 })
+    ])]
+  },
+  "ability:sticky-tar": {
+    cues: [cue("use", [
+      fx("jb2a.liquid.splash.blue", { place: "target", scale: 0.5, filter: "TAR" }),
+      snd(SOUNDS.blunt, { volume: 0.15 })
+    ])]
+  },
+  "ability:burning-tar": {
+    cues: [cue("use", [
+      fx("jb2a.liquid.splash.blue", { place: "target", scale: 0.5, filter: "TAR" }),
+      fx("jb2a.flames.02.orange", { place: "target", scale: 0.45, hold: 500, fadeOut: 250 }),
+      snd(SOUNDS.fire, { volume: 0.35 })
+    ])]
+  },
+  "ability:bloodpetal-root-pulse": {
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.01.01", { place: "target", scale: 0.3 }),
+      snd(SOUNDS.blunt, { volume: 0.08 })
+    ])]
+  },
+  "ability:stinger-charge": {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "target", scale: 0.4 }),
+      snd(SOUNDS.blunt, { volume: 0.25 })
+    ])]
+  },
+  "ability:vekniss-catalyst": {
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.01.01", { place: "target", scale: 0.8 }),
+      snd(SOUNDS.blunt, { volume: 0.12 })
+    ])]
+  },
+  "ability:catalyst-pulse": {
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.01.01", { place: "target", scale: 0.35 }),
+      snd(SOUNDS.blunt, { volume: 0.08 })
+    ])]
+  },
+  "ability:catalyst-charge": {
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.01.01", { place: "target", scale: 0.7 }),
+      snd(SOUNDS.blunt, { volume: 0.35 })
+    ])]
+  },
+  "ability:hydra-sweep": {
+    cues: [cue("use", [
+      fx("jb2a.melee_generic.creature_attack.fist.001.red", { place: "target", filter: "DESATURATE", scale: 0.8 }),
+      snd(SOUNDS.blunt)
+    ])]
+  },
+  "ability:crystal-gaze": {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "source", scale: 0.55, filter: "PSYCHIC" }),
+      snd(SOUNDS.psychic, { volume: 0.3 })
+    ])]
+  },
+  "ability:tendon-rip": {
+    cues: [cue("use", [
+      fx("jb2a.melee_generic.creature_attack.fist.001.red", { place: "target", filter: "DESATURATE", scale: 0.5 }),
+      snd(SOUNDS.blunt, { volume: 0.25 })
+    ])]
+  },
+  "ability:stunning-lash": {
+    cues: [cue("use", [
+      fx("jb2a.melee_generic.creature_attack.fist.001.red", { place: "target", filter: "DESATURATE", scale: 0.65 }),
+      snd(SOUNDS.blunt, { volume: 0.3 })
+    ])]
+  },
+  "ability:thunderstomp": {
+    cues: [cue("use", [
+      fx("jb2a.thunderwave.center.blue", { place: "source", sizeFt: 10 }),
+      fx("jb2a.impact.ground_crack.orange.02", { place: "source", scale: 0.8, below: true, filter: "EARTH" }),
+      snd("psfx.cantrips.thunderclap.v1")
+    ])]
+  },
+  "ability:trample": {
+    cues: [cue("use", [
+      fx("jb2a.impact.ground_crack.orange.02", { place: "source", sizeFt: 10, below: true, filter: "EARTH" }),
+      snd(SOUNDS.blunt, { volume: 0.5 })
+    ])]
+  },
+  "ability:terrifying-screech": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 1.4, filter: "DESATURATE" }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.35 })
+    ])]
+  },
+  "ability:qiraji-cleave": {
+    cues: [cue("use", [snd(SOUNDS.blunt, { volume: 0.15 })])]
+  },
+  "ability:reaver-cleave": {
+    cues: [cue("use", [snd(SOUNDS.blunt, { volume: 0.15 })])]
+  },
+  "ability:guard-cleave": {
+    cues: [cue("use", [snd(SOUNDS.blunt, { volume: 0.15 })])]
+  },
+  "ability:ghoul-cleave": {
+    cues: [cue("use", [snd(SOUNDS.blunt, { volume: 0.15 })])]
+  },
+  "ability:mighty-blow": {
+    cues: [cue("use", [snd(SOUNDS.blunt, { volume: 0.15 })])]
+  },
+  "ability:royal-trample": {
+    cues: [cue("use", [snd(SOUNDS.blunt, { volume: 0.15 })])]
+  },
+  "ability:vicious-rend": {
+    cues: [cue("use", [snd(SOUNDS.blunt, { volume: 0.15 })])]
+  },
+  "ability:rending-claws": {
+    cues: [cue("use", [snd(SOUNDS.blunt, { volume: 0.15 })])]
+  },
+  "ability:flesh-rot": {
+    cues: [cue("use", [snd(SOUNDS.blunt, { volume: 0.15 })])]
+  },
+  "ability:flesh-rot-wound": {
+    cues: [cue("use", [
+      fx("jb2a.melee_generic.creature_attack.fist.001.red", { place: "target", filter: "DESATURATE", scale: 0.45 }),
+      snd(SOUNDS.blunt, { volume: 0.2 })
+    ])]
+  },
+  "ability:rending-claws-wound": {
+    cues: [cue("use", [
+      fx("jb2a.melee_generic.creature_attack.fist.001.red", { place: "target", filter: "DESATURATE", scale: 0.4 }),
+      snd(SOUNDS.blunt, { volume: 0.2 })
+    ])]
+  },
+  "ability:vicious-rend-wound": {
+    cues: [cue("use", [
+      fx("jb2a.melee_generic.creature_attack.fist.001.red", { place: "target", filter: "DESATURATE", scale: 0.4 }),
+      snd(SOUNDS.blunt, { volume: 0.2 })
+    ])]
+  },
+  "ability:terrifying-roar": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 0.7, filter: "DESATURATE" }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.15 })
+    ])]
+  },
+  "ability:geyser": {
+    cues: [cue("use", [
+      fx("jb2a.water_splash.circle.01.blue", { place: "source", scale: 1.2, below: true }),
+      snd("psfx.casting.water.001", { volume: 0.35 })
+    ])]
+  },
+  "ability:chilled": {
+    // A quiet blue wash for the debuff; no projectile or shattering impact.
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.02.blue", { place: "target", scale: 0.45, opacity: 0.45 }),
+      snd("psfx.cantrips.ray-of-frost.v1", { volume: 0.15 })
+    ])]
+  },
+  "ability:frost-shock": {
+    // The normal ability card announces the burst; mitigation stays on the card.
+    cues: [cue("use", [
+      fx("jb2a.impact_themed.ice_shard.blue", { place: "target", scale: 0.65 }),
+      snd(SOUNDS.cold, { volume: 0.3 })
+    ])]
+  },
+  "ability:localized-toxin": {
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.01.01", { place: "target", scale: 0.4, opacity: 0.65 }),
+      snd("psfx.cantrips.poison-spray.v1", { volume: 0.2 })
+    ])]
+  },
+  "ability:deadly-poison": {
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.01.01", { place: "source", scale: 1.1, opacity: 0.65 }),
+      snd("psfx.cantrips.poison-spray.v1", { volume: 0.35 })
+    ])]
+  },
+  "ability:mighty-blow-push": {
+    cues: [cue("use", [
+      fx("jb2a.melee_generic.creature_attack.fist.001.red", { place: "target", filter: "DESATURATE", scale: 0.6 }),
+      snd(SOUNDS.blunt, { volume: 0.3 })
+    ])]
+  },
+  "ability:guard-net": {
+    cues: [cue("use", [
+      fx("jb2a.web.01", { place: "target", scale: 0.9 }),
+      snd(SOUNDS.blunt, { volume: 0.2 })
+    ])]
+  },
+  "ability:reaver-enrage": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 1.1, filter: "DESATURATE" }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.25 })
+    ])]
+  },
+  "ability:ghoul-enrage": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 0.7, filter: "DESATURATE" }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.2 })
+    ])]
+  },
+  "ability:surge-shock": {
+    cues: [cue("use", [
+      fx("jb2a.static_electricity.01.blue", { place: "source", scale: 0.6 }),
+      snd(SOUNDS.lightning, { volume: 0.2 })
+    ])]
+  },
+  "ability:fireguard-immolate": {
+    cues: [cue("use", [
+      fx("jb2a.impact.fire.01.orange", { place: "target", scale: 0.8 }),
+      snd("psfx.casting.fire.001", { volume: 0.3 })
+    ])]
+  },
+  "ability:fireguard-fire-blast": {
+    cues: [cue("use", [
+      fx("jb2a.impact.fire.01.orange", { place: "target", scale: 1 }),
+      snd(SOUNDS.fire, { volume: 0.35 })
+    ])]
+  },
+  "ability:walking-bomb-explosion": {
+    cues: [cue("use", [
+      fx("jb2a.explosion.shrapnel.bomb.01.black", { place: "source", sizeFt: 20 }),
+      snd(SOUNDS.explode, { volume: 0.4 })
+    ])]
+  },
+  "ability:aberration-arcane-blast": {
+    cues: [cue("use", [
+      fx("jb2a.particle_burst.01.circle.bluepurple", { place: "source", sizeFt: 20 }),
+      snd(SOUNDS.generic, { volume: 0.3 })
+    ])]
+  },
+  "ability:unraveling-mana": {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "source", sizeFt: 20, filter: "PSYCHIC" }),
+      snd(SOUNDS.psychic, { volume: 0.25 })
+    ])]
+  },
+  "ability:lightning-shield-discharge": {
+    cues: [cue("use", [
+      fx("jb2a.static_electricity.01.blue", { place: "target", scale: 0.8 }),
+      snd(SOUNDS.lightning, { volume: 0.3 })
+    ])]
+  },
+  "ability:golem-stomp": {
+    cues: [cue("use", [
+      fx("jb2a.impact.ground_crack.orange.02", { place: "source", sizeFt: 20, below: true, filter: "EARTH" }),
+      snd(SOUNDS.blunt, { volume: 0.4 })
+    ])]
+  },
+  "ability:crushing-knockdown": {
+    cues: [cue("use", [
+      fx("jb2a.impact.ground_crack.orange.02", { place: "target", scale: 0.5, below: true, filter: "EARTH" }),
+      snd(SOUNDS.blunt, { volume: 0.4 })
+    ])]
+  },
+  "ability:torment": { cues: [cue("use", SCHOOL_CUES.shadow)] },
+  "ability:soothing-kiss": { cues: [cue("use", SCHOOL_CUES.shadow)] },
+  "ability:lash-of-pain": { cues: [cue("use", SCHOOL_CUES.shadow)] },
+  "ability:consume-shadows": { cues: [cue("use", SCHOOL_CUES.shadow)] },
+  "ability:blood-pact": { cues: [cue("use", [...SCHOOL_CUES.fel,
+    snd("psfx.1st-level-spells.dissonant-whispers.v1.001", { volume: 0.5 })])] },
+  "ability:fire-shield": { cues: [cue("use", [
+    fx("jb2a.cast_generic.fire.01.orange", { place: "target", scale: 0.7 }),
+    snd(SOUNDS.fire, { volume: 0.5 })
+  ])] },
+  "ability:fire-shield-discharge": { cues: [cue("use", [
+    fx("jb2a.impact.fire.01.orange", { place: "target", scale: 0.5 }),
+    snd(SOUNDS.fire, { volume: 0.4 })
+  ])] },
+  "ability:suffering": { cues: [cue("use", [
+    fx("jb2a.cast_generic.02.blue", { place: "source", sizeFt: 20, filter: "SHADOW_B", opacity: 0.65 }),
+    snd("psfx.1st-level-spells.dissonant-whispers.v1.001", { volume: 0.7 })
+  ])] },
+  "ability:avalanchions-trample": {
+    cues: [cue("use", [
+      fx("jb2a.impact.ground_crack.orange.02", { place: "source", sizeFt: 10, below: true, filter: "EARTH" }),
+      snd(SOUNDS.blunt, { volume: 0.4 })
+    ])]
+  },
+  "ability:ground-tremor": {
+    cues: [cue("use", [
+      fx("jb2a.impact.ground_crack.orange.02", { place: "source", sizeFt: 20, below: true, filter: "EARTH" }),
+      snd(SOUNDS.blunt, { volume: 0.3 })
+    ])]
+  },
+  "ability:hurled-boulder": {
+    cues: [cue("use", [
+      fx("jb2a.boulder.toss.02.01.stone.brown", { place: "source>target", travel: "stretch" }),
+      snd(SOUNDS.swingHeavy, { volume: 0.3 }),
+      fx("jb2a.impact.ground_crack.orange.02", { place: "target", scale: 0.5, below: true, filter: "EARTH", waitFor: "travel", overlap: -250 }),
+      snd(SOUNDS.blunt, { volume: 0.4, waitFor: "travel" })
+    ])]
+  },
+  "ability:golem-trample": {
+    cues: [cue("use", [
+      fx("jb2a.impact.ground_crack.orange.02", { place: "source", sizeFt: 10, below: true, filter: "EARTH" }),
+      snd(SOUNDS.blunt, { volume: 0.4 })
+    ])]
+  },
+  "ability:terrify": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 0.7, filter: "DESATURATE" }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.15 })
+    ])]
+  },
+  "ability:predatory-enrage": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 0.9, filter: "DESATURATE" }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.2 })
+    ])]
+  },
+  "ability:crushridge-fallen-kin-rage": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 0.9, filter: "DESATURATE" }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.2 })
+    ])]
+  },
+  "ability:crushridge-call-for-kin": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 1.4, filter: "DESATURATE" }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.3 })
+    ])]
+  },
+  "ability:demoralizing-roar": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 1.1, filter: "DESATURATE" }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.25 })
+    ])]
+  },
+  "ability:qiraji-vengeance": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 1.1, filter: "DESATURATE" }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.25 })
+    ])]
+  },
+  "ability:frightening-shout": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 1.4, filter: "DESATURATE" }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.35 }),
+      fx("jb2a.shimmer.01.blue", { place: "target", scale: 0.6, filter: "DESATURATE" })
+    ])]
+  },
+  "ability:screech": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 1.4, filter: "DESATURATE" }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.25 })
+    ])]
+  },
   "ability:battle-squawk": {
     cues: [cue("use", [
       fx("jb2a.cast_generic.sound.01.pinkteal", { place: "source", scale: 1.8, filter: "DESATURATE" }),
       snd("psfx.creature.dragons.roar.small", { volume: 0.35 })
+    ])]
+  },
+  "ability:ice-blast": {
+    cues: [cue("use", [
+      fx("jb2a.fire_ring.500px.red", { place: "source", sizeFt: 20, below: true, grow: 400, hold: 700, filter: "AIR" }),
+      snd(SOUNDS.gust)
+    ])]
+  },
+  "ability:reflection-field": {
+    cues: [cue("use", [
+      fx("jb2a.particle_burst.01.circle.bluepurple", { place: "source", scale: 1.4 }),
+      snd(SOUNDS.generic)
+    ])]
+  },
+  "ability:mass-nullify": {
+    cues: [cue("use", [
+      fx("jb2a.particle_burst.01.circle.bluepurple", { place: "source", scale: 1 }),
+      snd(SOUNDS.generic, { volume: 0.3 })
+    ])]
+  },
+  "ability:reflection-return": {
+    cues: [cue("use", [
+      fx("jb2a.magic_missile.purple", { place: "source>target", travel: "stretch", delay: 600 }),
+      snd("psfx.1st-level-spells.magic-missile.v1", { delay: 600, volume: 0.3 })
+    ])]
+  },
+  "ability:flame-spray": {
+    cues: [cue("use", [
+      fx("jb2a.flames.02.orange", { place: "source", scale: 0.7, hold: 600, fadeOut: 250 }),
+      snd(SOUNDS.fire)
+    ])]
+  },
+  "ability:fire-nova": {
+    cues: [cue("use", [
+      fx("jb2a.fire_ring.500px.red", { place: "source", sizeFt: 20, below: true, grow: 400, hold: 700 }),
+      snd(SOUNDS.fire)
     ])]
   },
   "ability:vent": {
@@ -2098,7 +3231,7 @@ export function allAssetKeys() {
     }
   }
   // The tier 1 spells, the taught ones above tier 1, and the features (door 2).
-  for (const row of [...Object.values(SPELL_ANIMATIONS), ...Object.values(TAUGHT_SPELL_ANIMATIONS), ...Object.values(FEATURE_ANIMATIONS)]) {
+  for (const row of [...Object.values(ALL_SPELL_ANIMATIONS), ...Object.values(FEATURE_ANIMATIONS)]) {
     for (const step of spellSteps(row)) {
       if (step.asset) keys.add(step.asset);
       if (step.secondary) keys.add(step.secondary);

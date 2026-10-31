@@ -360,6 +360,33 @@ export function creatorBatch(context) {
 
     // ---- the window ---------------------------------------------------------
 
+    it("uses the shared Tinker tree as a draft, with inspection before choosing", async function () {
+      this.timeout(60000);
+      const creator = creatorOf(null);
+      const actorsBefore = game.actors.size;
+      try {
+        await creator.render({ force: true });
+        await creator.setState({ race: await uuidOf(PACK_FOR.race, "Gnome"), cls: await uuidOf(PACK_FOR.class, "Rogue"), step: "talents", talentBranch: "Tinker" });
+        await settle();
+        const sockets = () => [...creator.element.querySelectorAll('.azeroth-tree [data-action="creatorInspectTalent"]')];
+        assert.lengthOf(sockets(), 12);
+        assert.lengthOf(creator.element.querySelectorAll('.azeroth-tree [data-tier]'), 5);
+        const first = sockets()[0];
+        const key = first.dataset.key;
+        first.click();
+        await until(() => creator.state.inspectedTalent === key, "talent inspection");
+        assert.isNull(creator.state.classTalent, "inspection spent the point");
+        await settle();
+        creator.element.querySelector('[data-action="creatorChooseTalent"]').click();
+        await until(() => creator.state.classTalent === key, "draft talent chosen");
+        await settle();
+        assert.ok(creator.element.querySelector('.azeroth-tree .azeroth-talent--taken'));
+        creator.element.querySelector('[data-action="creatorUndoTalent"][data-racial="false"]').click();
+        await until(() => creator.state.classTalent === null, "draft point returned");
+        assert.equal(game.actors.size, actorsBefore, "draft editing created an actor");
+      } finally { await creator.close(); }
+    });
+
     it("renders every step at the floor, with Kaelen's choices in it", async function () {
       this.timeout(120000);
       const creator = creatorOf(null);

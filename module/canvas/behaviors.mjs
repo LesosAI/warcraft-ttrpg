@@ -91,11 +91,12 @@ export function landwiseNear(token) {
 }
 
 export function movementFactsOf(actor) {
-  if (!actor) return { ignoresGround: false, climbsFree: false, swimsFree: false, swims: 0 };
+  if (!actor) return { ignoresGround: false, climbsFree: false, swimsFree: false, swims: 0, aquaticOnly: false };
   const talents = movementFactsFor(actor.takenTalents?.() ?? []);
   const laid = (actor.effects ?? []).some(e => e.active !== false && e.flags?.["azeroth-rpg"]?.[IGNORES_GROUND_FLAG] === true);
   const swims = Math.max(talents.swimsFree ? 1 : 0, swimMultiplier(actor.system?.senses ?? []));
-  return { ignoresGround: talents.ignoresGround || laid, climbsFree: talents.climbsFree, swimsFree: swims > 0, swims };
+  const aquaticOnly = new Set(actor.system?.senses ?? []).has("aquaticOnly");
+  return { ignoresGround: talents.ignoresGround || laid, climbsFree: talents.climbsFree, swimsFree: swims > 0, swims, aquaticOnly };
 }
 
 /**

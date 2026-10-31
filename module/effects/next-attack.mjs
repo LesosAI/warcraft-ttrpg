@@ -11,6 +11,7 @@
  */
 
 import { NEXT_ATTACK_FLAG, afterTake, mergeNextAttack, nextAttackEntry } from "../rules/next-attack.mjs";
+import { refuseIceBlockTarget } from "./ice-block-protection.mjs";
 
 /**
  * Lay these promises on the attacker, said in words.
@@ -22,6 +23,7 @@ import { NEXT_ATTACK_FLAG, afterTake, mergeNextAttack, nextAttackEntry } from ".
  */
 export async function layNextAttack(actor, grants = [], { quiet = false } = {}) {
   if (!actor || !grants?.length) return [];
+  if (refuseIceBlockTarget(actor)) return [];
   const now = actor.fightTurnNow?.() ?? null;
   const laid = grants.map(g => nextAttackEntry(g, now)).filter(Boolean);
   if (!laid.length) {

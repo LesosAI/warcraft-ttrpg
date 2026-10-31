@@ -44,6 +44,7 @@ import {
 // 04's Shared Burden: a SHARE of the blow moved, the rest kept, the share met by the
 // holder's own Armor Points and Ward (the Legacy branches' B6).
 import { burdenMet, keptAmount } from "../rules/blow-doors.mjs";
+import { buffetStacks } from "../rules/flame-buffet.mjs";
 import { wardBySchool } from "../rules/ward.mjs";
 import { schoolArmorBySchool } from "../rules/auras.mjs";
 import { burdenFor } from "../rules/class-talents.mjs";
@@ -197,22 +198,22 @@ function movesOf(holder) {
 }
 
 /**
- * **A BLOW TAKEN ONTO SOMEBODY ELSE** (04's Guardian; 02's Shield of the
- * Righteous with Guardian of the Weak; D-777). Each ally in reach who could take
- * it is asked in turn; the first yes takes it.
+ * Eligible redirections, read without prompting, paying or applying damage.
+ * The unified original-target chooser can inspect these before executing one.
  *
  * @param {{target: Actor, amount: number, type?: string|null, attack?: boolean, spell?: boolean,
  *   messageId?: string|null, by?: Actor|null, location?: string, parts?: Array|null}} blow
- * @returns {Promise<{moved: boolean, to?: Actor, amount?: number, name?: string}>}
+ * @returns {Array<{key: string, holder: Actor, row: object, feet: number, moved: number}>}
  */
-export async function redirectBlow({ target, amount = 0, type = null, attack = false, spell = false, messageId = null, by = null, location = "body", parts = null } = {}) {
-  if (!target || !(amount > 0) || !messageId) return { moved: false };
+export function redirectCandidates({ target, amount = 0, type = null, attack = false, spell = false, messageId = null, by = null } = {}) {
+  if (!target || !(amount > 0) || !messageId) return [];
   // **A BLOW NO REACTION MAY ANSWER** (04's Wind Walk and Bladestorm: *No creature
   // may take a Reaction against you*; the Legacy branches' door 14): the move is a
   // Reaction against the striker, so a striker it holds is never asked about.
-  if (unanswered(by)) return { moved: false };
+  if (unanswered(by)) return [];
   const origin = tokenOf(target);
-  if (!origin) return { moved: false };
+  if (!origin) return [];
+  const candidates = [], seen = new Set();
   const near = creaturesWithin(target, MOVE_SEARCH_FEET, { who: "ally", except: [origin.id] });
   for (const { actor: holder, feet } of near) {
     if (!holder || holder.uuid === target.uuid) continue;
@@ -222,19 +223,45 @@ export async function redirectBlow({ target, amount = 0, type = null, attack = f
         poolValue: poolValue(holder, row.cost?.pool), reactionLeft: reactionLeft(holder), holderUp: standing(holder), fromCard: true
       });
       if (!judged.ok) continue;
+      const key = JSON.stringify([holder.uuid, row.kind]);
+      if (seen.has(key)) continue;
+      seen.add(key);
       const moved = movedAmount({ kind: row.kind, amount, type, ward: RIGHTEOUS.ward, schools: Object.keys(AZEROTH.schools), share: row.share ?? "half" });
-      const answer = await ask(holder, {
-        act: "move", kind: row.kind, holderUuid: holder.uuid, targetUuid: target.uuid, amount, moved, type,
-        attack: attack === true, spell: spell === true, messageId, byUuid: by?.uuid ?? null, location, feet, parts
-      });
-      if (answer?.moved) {
-        const took = answer.amount ?? moved;
-        ui.notifications?.info(game.i18n.format("AZEROTH.BlowDoor.Moved", { holder: holder.name, name: target.name, talent: row.name, n: took }));
-        // **WHAT STAYS WHERE IT WAS AIMED** (04's Shared Burden: *Half the damage ... is
-        // dealt to you instead*; the Legacy branches' B6): a share moved leaves the rest to
-        // the creature struck, and Guardian's whole blow none (`keptAmount`).
-        return { moved: true, to: holder, amount: took, name: row.name, kept: keptAmount({ kind: row.kind, amount, moved: took }) };
-      }
+      candidates.push({ key, holder, row, feet, moved });
+    }
+  }
+  return candidates;
+}
+
+/** Selection is one freshly eligible candidate key, or null for no transfer.
+ * Undefined preserves the existing sequential path until the unified chooser is wired.
+ * Discovery never asks, pays, or writes; a stale selection never substitutes another holder. */
+export async function redirectBlow({ target, amount = 0, type = null, attack = false, spell = false, messageId = null, by = null, location = "body", parts = null, selection = undefined } = {}) {
+  if (selection === null) return { moved: false };
+  const blow = { target, amount, type, attack, spell, messageId, by };
+  const candidates = redirectCandidates(blow).filter(c => selection === undefined || c.key === selection);
+  if (selection !== undefined && !candidates.length) return { moved: false, reason: "choiceChanged" };
+  for (const candidate of candidates) {
+    // A previous holder's response can change resources, range or eligibility.
+    const fresh = redirectCandidates(blow).find(c => c.key === candidate.key);
+    if (!fresh) continue;
+    const { holder, row, feet, moved } = fresh;
+    const answer = await ask(holder, {
+      act: "move", kind: row.kind, holderUuid: holder.uuid, targetUuid: target.uuid, amount, moved, type,
+      attack: attack === true, spell: spell === true, messageId, byUuid: by?.uuid ?? null, location, feet, parts,
+      awaitDelivery: selection !== undefined
+    });
+    if (answer?.moved) {
+      const took = answer.amount ?? moved;
+      ui.notifications?.info(game.i18n.format("AZEROTH.BlowDoor.Moved", { holder: holder.name, name: target.name, talent: row.name, n: took }));
+      // **WHAT STAYS WHERE IT WAS AIMED** (04's Shared Burden: *Half the damage ... is
+      // dealt to you instead*; the Legacy branches' B6): a share moved leaves the rest to
+      // the creature struck, and Guardian's whole blow none (`keptAmount`).
+      return { moved: true, to: holder, amount: took, name: row.name, kept: keptAmount({ kind: row.kind, amount, moved: took }), damageOutcome: answer.damageOutcome };
+    }
+    if (selection !== undefined) {
+      if (answer?.reason === "error" || !answer) throw Error("Transfer delivery unconfirmed");
+      return { moved: false, reason: answer.reason ?? "choiceChanged" };
     }
   }
   return { moved: false };
@@ -292,12 +319,14 @@ async function moveHere({ holder, target, kind, amount, moved, type, attack, spe
     share: moved, type, location, parts: moved < amount ? null : parts,
     holder: {
       apByLocation: holder.system?.ap ?? {}, wardBySchool: wardBySchool(holder.system?.ward), schoolArmorBySchool: schoolArmorBySchool(holder.system?.schoolArmor),
+      fireTakenBonus: buffetStacks([...(holder.effects ?? [])], game.time?.worldTime),
       immune: holder.system?.immune ?? [], vulnerable: holder.system?.vulnerable ?? []
     }
   }) : null;
+  const damageOutcome = {};
   const landing = met
-    ? holder.applyDamage(met.damage, { struck: true, attack, spell, location, type, messageId, by, moved: true, wardTook: met.wardTook, parts: met.parts })
-    : holder.applyDamage(moved, { struck: true, attack, spell, location, type, messageId, by, moved: true, parts: movedParts(parts) });
+    ? holder.applyDamage(met.damage, { struck: true, attack, spell, location, type, messageId, by, moved: true, wardTook: met.wardTook, parts: met.parts, outcome: damageOutcome })
+    : holder.applyDamage(moved, { struck: true, attack, spell, location, type, messageId, by, moved: true, parts: movedParts(parts), outcome: damageOutcome });
   // **ANSWERED ONCE IT IS PAID, WHERE ANOTHER CLIENT ASKED** (the review of D-777):
   // the asker stops waiting at ASK_MS and then lands the blow where it was aimed,
   // and the holder's own door can outlast that - a hold it asks in turn is a
@@ -308,7 +337,7 @@ async function moveHere({ holder, target, kind, amount, moved, type, attack, spe
     return { moved: true, amount: moved };
   }
   await landing;
-  return { moved: true, amount: moved };
+  return { moved: true, amount: moved, damageOutcome };
 }
 
 /* -------------------------------------------- */
@@ -319,20 +348,18 @@ async function moveHere({ holder, target, kind, amount, moved, type, attack, spe
 const isTotem = actor => bondOf(actor)?.kind === "totem";
 
 /**
- * **WHAT A LINKED ALLY TAKES, DIVIDED** (04's Spirit Link Totem; D-777): the
- * first link whose totem still stands and holds this creature within its feet,
- * and the shares - the creature struck first, keeping the remainder. Null where
- * no link reaches it, where it is alone in it, or where a share would land on a
- * creature this client does not own with no GM online (said in words).
+ * All standing Spirit Link Totems reaching the target, read without writes or
+ * notifications. The original target keeps each plan's remainder. Candidates
+ * that need an absent GM remain visible as unavailable for the future chooser.
  *
  * @param {{target: Actor, amount: number}} o
- * @returns {{name: string, keep: number, others: Array<{actor: Actor, share: number}>}|null}
+ * @returns {Array<object>} Current source identity, recipient group and shares.
  */
-export function divideBlow({ target, amount = 0 } = {}) {
-  if (!target || !(amount > 0)) return null;
+export function divisionCandidates({ target, amount = 0 } = {}) {
+  if (!target || !(amount > 0)) return [];
   const board = globalThis.canvas;
-  if (!board?.tokens || !tokenOf(target)) return null;
-  const seen = new Set();
+  if (!board?.tokens || !tokenOf(target)) return [];
+  const seen = new Set(), candidates = [];
   for (const token of board.tokens.placeables) {
     const shaman = token.actor;
     if (!shaman || seen.has(shaman.uuid)) continue;
@@ -354,13 +381,27 @@ export function divideBlow({ target, amount = 0 } = {}) {
     const plan = { name: row.name, keep: shares[0], others: others.map((r, i) => ({ actor: r.actor, share: shares[i + 1] })) };
     // A share another user's creature takes is written on the GM's client: with
     // none online the blow is not divided, before anything is written.
-    if (gmAbsentFor({ owned: plan.others.map(o => o.actor.isOwner), isGM: game.user.isGM, gmActive: Boolean(game.users?.activeGM) })) {
-      ui.notifications?.warn(game.i18n.format("AZEROTH.BlowDoor.LinkNoGM", { name: target.name, talent: row.name }));
-      return null;
-    }
-    return plan;
+    const available = !gmAbsentFor({ owned: plan.others.map(o => o.actor.isOwner), isGM: game.user.isGM, gmActive: Boolean(game.users?.activeGM) });
+    candidates.push({ ...plan, available, holderUuid: shaman.uuid, holderName: shaman.name,
+      totemUuid: totem.uuid, tokenUuid: totemToken.document?.uuid ?? null,
+      key: JSON.stringify([shaman.uuid, totem.uuid, totemToken.document?.uuid ?? null,
+        group.map(r => r.actor.uuid).sort()]) });
   }
-  return null;
+  return candidates;
+}
+
+/** Rebuild the plan from current geometry; never switch a stale explicit choice
+ * to another totem or recipient group. Omitted selection retains the legacy first option. */
+export function divideBlow({ target, amount = 0, selection = undefined } = {}) {
+  if (selection === null) return null;
+  const candidates = divisionCandidates({ target, amount });
+  const plan = selection === undefined ? candidates[0] : candidates.find(c => c.key === selection);
+  if (!plan) return null;
+  if (!plan.available) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.BlowDoor.LinkNoGM", { name: target.name, talent: plan.name }));
+    return null;
+  }
+  return plan;
 }
 
 /**
@@ -370,17 +411,23 @@ export function divideBlow({ target, amount = 0 } = {}) {
  *
  * @param {{target: Actor, plan: object, type?: string|null, by?: Actor|null, parts?: Array|null}} o
  */
-export async function landShares({ target, plan, type = null, by = null } = {}) {
+export async function landShares({ target, plan, type = null, by = null, strict = false, beforeShare = null, afterShare = null, outcomes = null } = {}) {
   const said = [];
   for (const { actor, share } of plan?.others ?? []) {
     if (!(share > 0)) continue;
+    const damageOutcome = {};
+    if (Array.isArray(outcomes)) outcomes.push(damageOutcome);
     try {
-      if (actor.isOwner) await actor.applyDamage(share, { struck: true, attack: false, location: "body", type, by, shared: true });
+      if (beforeShare) await beforeShare(actor);
+      if (actor.isOwner) await actor.applyDamage(share, { struck: true, attack: false, location: "body", type, by, shared: true, outcome: damageOutcome });
       else {
-        await game.users.activeGM.query(BLOW_SHARE_QUERY, { victimUuid: actor.uuid, strikerUuid: target.uuid, amount: share, type, byUuid: by?.uuid ?? null }, { timeout: 15000 });
+        const result = await game.users.activeGM.query(BLOW_SHARE_QUERY, { victimUuid: actor.uuid, strikerUuid: target.uuid, amount: share, type, byUuid: by?.uuid ?? null }, { timeout: 15000 });
+        if (result?.damageOutcome) Object.assign(damageOutcome, result.damageOutcome);
       }
+      if (afterShare) await afterShare(actor);
       said.push(game.i18n.format("AZEROTH.BlowDoor.Share", { name: actor.name, n: share }));
     } catch (err) {
+      if (strict) throw err;
       ui.notifications?.warn(err.message);
     }
   }
@@ -398,8 +445,9 @@ export async function blowShareQueryHandler({ victimUuid = null, strikerUuid = n
   if (victim?.documentName !== "Actor" || struck?.documentName !== "Actor") throw new Error(game.i18n.localize("AZEROTH.Card.TargetGone"));
   if (user && !struck.testUserPermission(user, "OWNER")) throw new Error(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: struck.name }));
   const n = Math.max(0, Math.trunc(Number(amount)) || 0);
-  if (n > 0) await victim.applyDamage(n, { struck: true, attack: false, location: "body", type: type ?? null, by: actorAt(byUuid), shared: true });
-  return { landed: n };
+  const damageOutcome = {};
+  if (n > 0) await victim.applyDamage(n, { struck: true, attack: false, location: "body", type: type ?? null, by: actorAt(byUuid), shared: true, outcome: damageOutcome });
+  return { landed: n, damageOutcome };
 }
 
 /* -------------------------------------------- */
@@ -524,7 +572,8 @@ export async function blowAskHandler(payload = {}, { user = null } = {}) {
       by: actorAt(payload.byUuid), location: payload.location ?? "body",
       feet: typeof payload.feet === "number" ? payload.feet : null, parts: Array.isArray(payload.parts) ? payload.parts : null,
       // Asked by ANOTHER client, which stops waiting at ASK_MS (`moveHere`).
-      remote: Boolean(user?.id) && user.id !== game.user?.id
+       remote: Boolean(user?.id) && user.id !== game.user?.id
+         && !(payload.awaitDelivery === true && user?.isGM && user.id === game.users?.activeGM?.id)
     });
   }
   if (payload.act === "hold") {

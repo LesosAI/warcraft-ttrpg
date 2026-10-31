@@ -48,6 +48,8 @@ import { BASE_SLOTS, REFUSALS, admit, judge, judgeDelete } from "../rules/slots.
 import { SORT_STEP, nextSort } from "../rules/bags.mjs";
 // A find still on offer is taken from the loot window, never dragged (D-721).
 import { underOffer } from "../rules/loot-offer.mjs";
+// A Gadgets-compendium entry is a reference, never a sheet's (the lead, 2026-10-24).
+import { isGadgetEntry } from "../rules/gadgets.mjs";
 
 /** The item subtypes that are THINGS. A talent, a spell or a class is never judged. */
 const PHYSICAL = new Set(["weapon", "armor", "gear"]);
@@ -146,6 +148,17 @@ export class AzerothItem extends Item {
     // and had nothing created in its place.
     if (actor?.documentName === "Actor" && underOffer(data) && options?.azerothLootSettle !== true) {
       ui.notifications?.warn(game.i18n.format("AZEROTH.LootOffer.UnderOffer", { name: data.name ?? "" }));
+      return false;
+    }
+    // **A GADGETS-COMPENDIUM ENTRY IS NEVER A SHEET'S** (the lead, 2026-10-24). A gadget a
+    // character knows is the feature the sync grants for Gadgeteer's pick or Mekkatorque's
+    // Blueprint (`AzerothActor#_syncClassFeaturesNow`), keyed by the talent that knows it.
+    // An entry dragged out of the browser would be a gadget with a use of its own and
+    // nothing granting it - used once, and withdrawn as stale at the next sync. Refused on
+    // every actor, in words, whatever the door: the entry's mark rides on the data, as an
+    // offered find's does (`rules/gadgets.mjs#isGadgetEntry`).
+    if (actor?.documentName === "Actor" && isGadgetEntry(data)) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Gadget.EntryRefused", { name: data.name ?? "" }));
       return false;
     }
     return allowed;

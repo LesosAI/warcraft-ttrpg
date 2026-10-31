@@ -722,6 +722,8 @@ AZEROTH.signatureReasons = {
 AZEROTH.signatureRefusals = {
   gate:    "AZEROTH.Signature.Refusal.Gate",
   spent:   "AZEROTH.Signature.Refusal.Spent",
+  pending: "AZEROTH.Signature.Refusal.Pending",
+  unequipped: "AZEROTH.Signature.Refusal.Unequipped",
   noSpell: "AZEROTH.Signature.Refusal.NoSpell"
 };
 
@@ -767,7 +769,8 @@ AZEROTH.passiveWhen = {
 // names and no condition carries.
 AZEROTH.refusalExtras = {
   forcedMovement: "AZEROTH.Refusal.ForcedMovement",
-  surprise: "AZEROTH.Refusal.Surprise"
+  surprise: "AZEROTH.Refusal.Surprise",
+  sleep: "AZEROTH.Refusal.Sleep"
 };
 // What a creature senses or how it moves (D-691). One vocabulary, because 14
 // writes both in the same sentence - *swims at twice its Speed and breathes
@@ -777,6 +780,7 @@ AZEROTH.creatureSenses = {
   waterBreathing: "AZEROTH.Sense.WaterBreathing",
   swim: "AZEROTH.Sense.Swim",
   swimFast: "AZEROTH.Sense.SwimFast",
+  aquaticOnly: "AZEROTH.Sense.AquaticOnly",
   wallWalking: "AZEROTH.Sense.WallWalking",
   phasing: "AZEROTH.Sense.Phasing"
 };
@@ -1004,6 +1008,8 @@ AZEROTH.SHORT_RESTS_PER_DAY = 2;
 AZEROTH.FATIGUE_SLOWED_AT = 4;
 // 06 §8: three Death Steps end the track (D-629).
 AZEROTH.DEATH_STEPS = 3;
+// 04 Sacrifice, lead ruling 2026-10-29: four at either rank.
+AZEROTH.SACRIFICE_DEATH_STEPS = 4;
 AZEROTH.DEATH_STEP_DC = 12;
 AZEROTH.FATIGUE_BANE_AT = 3;
 AZEROTH.FATIGUE_RESILIENCE_BANE_AT = 5;

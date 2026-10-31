@@ -254,7 +254,7 @@ export function blurbOf(row) {
  * than rendering blank at the table.
  */
 export const TIP_PATHS = Object.freeze([
-  "name", "type", "system", "rarityClass", "bagLine", "coating", "usable"
+  "name", "type", "system", "rarityClass", "bagLine", "coating", "usable", "trainingTip"
 ]);
 
 /** Fill `{name}` placeholders. The sheet's i18n does this; the bag carries the template. */
@@ -300,6 +300,7 @@ export function tipModel(row, { words = {}, place = null, slot = null } = {}) {
   add("kind", [words.kind?.[kind], rarity ? words.rarity?.[rarity] : null]
     .filter(Boolean).join(" · "));
   add("bag", row?.bagLine);
+  add("training", row?.trainingTip);
   // WHICH SLOT IT IS WORN IN, on the figure. It stands where `place` stands on
   // the Gear tab and never beside it: a paper-doll tile has one answer to
   // *where is this* and it is the tile the reader is pointing at.

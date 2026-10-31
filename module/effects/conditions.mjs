@@ -66,6 +66,9 @@ const CHANGES = {
  * by id, which is how core registers its own.
  */
 export function registerConditions() {
+  // Core uses this configured status for sight sources and detection modes.
+  // Our condition is "blinded", not core's default "blind" (V14.367).
+  CONFIG.specialStatusEffects.BLIND = "blinded";
   for (const [id, label] of Object.entries(AZEROTH.conditions)) {
     // A1 §4's OWN WORDS, so hovering the icon says what the condition does
     // and what ends it. The registration carried a name and nothing else, so

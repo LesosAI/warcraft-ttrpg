@@ -306,6 +306,14 @@ function cleanBoon(raw) {
   const boons = atLeast(raw.boons, 1);
   if (!kind || !boons) return null;
   const against = cleanConditions(raw.against);
+  // A named skill is a restriction, never a hint that may be discarded.
+  // Paranoia's detection purpose remains a table judgement on Perception.
+  if (Object.hasOwn(raw, "skill")) {
+    if (kind !== "skill" || typeof raw.skill !== "string" || !Object.hasOwn(AZEROTH.skillAbility, raw.skill) || against.length) return null;
+    if (Object.hasOwn(raw, "condition") && (raw.judged !== true || typeof raw.condition !== "string" || !raw.condition.trim())) return null;
+    return { kind, resilience: null, boons, skill: raw.skill, ...(raw.judged === true ? { judged: true } : {}),
+      ...(Object.hasOwn(raw, "condition") ? { condition: raw.condition } : {}) };
+  }
   if (kind !== "resilience") return against.length ? { kind, resilience: null, against, boons } : { kind, resilience: null, boons };
   // **EVERY RESILIENCE** (04's Burial Ground: *a Boon on Resilience Tests*; the Legacy
   // branches' door 25): named `all`, so it is a word the row chose and never a word
@@ -866,7 +874,9 @@ export function auraStamp(raw, { amount = v => v } = {}) {
     centre: typeof a.centre === "string" ? a.centre : null,
     excludeOwner: a.excludeOwner === true,
     gate: typeof a.gate === "string" && a.gate ? a.gate : null,
-    boon: { kind: a.boon?.kind ?? null, resilience: a.boon?.resilience ?? null, boons: n(a.boon?.boons) },
+    boon: { kind: a.boon?.kind ?? null, resilience: a.boon?.resilience ?? null, boons: n(a.boon?.boons),
+      ...(a.boon && Object.hasOwn(a.boon, "skill") ? { skill: a.boon.skill, ...(a.boon.judged === true ? { judged: true } : {}),
+        ...(Object.hasOwn(a.boon, "condition") ? { condition: a.boon.condition } : {}) } : {}) },
     schoolArmor: { schools: cleanSchools(a.schoolArmor?.schools), from: a.schoolArmor?.from ?? null },
     floor: { ap: n(a.floor?.ap), ward: n(a.floor?.ward) },
     spellDamage: n(a.spellDamage),
@@ -943,16 +953,20 @@ export function auraBoonRows(effects = []) {
  * @param {string|null} [resilience]
  * @param {string[]|null} [against]  the conditions this Test resists, where its
  *   door knows them; null where it does not
+ * @param {{skill?: string|null}} [options] named skill restrictions fail closed
+ *   when the roll does not name its skill; judged purposes stay optional
  * @returns {{boons: number, sources: Array<{source: string, owner: string}>,
  *   judged: {boons: number, sources: Array<{source: string, owner: string}>}}}
  */
-export function auraBoonsOn(rows = [], kind = null, resilience = null, against = null) {
+export function auraBoonsOn(rows = [], kind = null, resilience = null, against = null, { skill = null } = {}) {
   const auto = [];
   const judged = [];
   const resisting = Array.isArray(against) ? new Set(against) : null;
   for (const row of rows ?? []) {
     const boon = cleanBoon(row);
     if (!boon || boon.kind !== kind) continue;
+    if (boon.skill && boon.skill !== skill) continue;
+    if (boon.judged === true) { judged.push({ row, boon }); continue; }
     if (boon.against?.length) {
       if (boon.resilience && resilience && boon.resilience !== resilience) continue;
       if (!resisting) judged.push({ row, boon });
@@ -966,7 +980,8 @@ export function auraBoonsOn(rows = [], kind = null, resilience = null, against =
     else if (boon.resilience === resilience) auto.push({ row, boon });
   }
   const sum = list => list.reduce((n, { boon }) => n + boon.boons, 0);
-  const who = list => list.map(({ row }) => ({ source: String(row.source ?? ""), owner: String(row.owner ?? "") }));
+  const who = list => list.map(({ row, boon }) => ({ source: String(row.source ?? ""), owner: String(row.owner ?? ""),
+    ...(boon.condition ? { condition: boon.condition } : {}) }));
   return { boons: sum(auto), sources: who(auto), judged: { boons: sum(judged), sources: who(judged) } };
 }
 

@@ -49,6 +49,13 @@ import { resolveDamage } from "../rules/mitigation.mjs";
 import { dealtHalvedBy } from "../rules/legacy-uses.mjs";
 import { markLightUsed } from "./shadowform.mjs";
 import { AZEROTH } from "../config.mjs";
+import { requestVampiricAura } from "./vampiric-aura.mjs";
+import { requestSignatureKillRewards } from "./signature-kill-rewards.mjs";
+import { requestSentinelThorns } from "./sentinel-thorns.mjs";
+import { requestJadefireRetaliation } from "./jadefire-retaliation.mjs";
+import { requestMadeOfFireRetaliation } from "./made-of-fire-retaliation.mjs";
+import { requestFrostArmor } from "./frost-armor.mjs";
+import { requestBleakheartHit } from "./bleakheart-hit.mjs";
 
 /**
  * The query a Vengeance holder another user owns is reached through, on the
@@ -141,11 +148,55 @@ async function raiseFallen({ target }) {
  *   the blow was 06 §7's Riposte (04's Killing Spree, D-773); `spell` whether a
  *   spell dealt it and `ignite` whether it was Ignite's own tick (D-775).
  */
-export async function afterBlow({ target, before, attacker = null, riposte = false, attack = true, type = null, spell = false, ignite = false }) {
+export async function afterBlow({ target, before, attacker = null, riposte = false, attack = true, type = null, spell = false, ignite = false, messageId = null }) {
   if (!target) return;
   const after = target.system?.health?.value ?? 0;
   const max = target.system?.health?.max ?? 0;
   const combat = target.activeFight?.() ?? null;
+  if (attack && !spell && !ignite && before > 0 && after === 0) {
+    try {
+      await requestSignatureKillRewards({ attacker, target, before, after, messageId });
+    } catch (error) {
+      console.warn("azeroth-rpg | Weapon kill signature request could not be confirmed", error);
+    }
+  }
+  if (attack && !spell && !ignite && before > 0) {
+    try {
+      const fire = await requestMadeOfFireRetaliation({ attacker, target, before, after, messageId });
+      if (fire?.claimed && !fire.ok) ui.notifications?.warn("Made of Fire could not be fully resolved. Check its attack-card receipt and the attacker's Health before correcting it.");
+    } catch (error) { console.warn("azeroth-rpg | Made of Fire request could not be confirmed", error); }
+    try {
+      const curse = await requestBleakheartHit({ attacker, target, before, after, messageId });
+      if (curse?.claimed && !curse.ok) ui.notifications?.warn("Curse of the Bleakheart could not be fully resolved. Check its attack receipt and the victim's effects before correcting it.");
+    } catch (error) {
+      console.warn("azeroth-rpg | Bleakheart curse request could not be confirmed", error);
+    }
+    try {
+      const frost = await requestFrostArmor({ attacker, target, before, after, messageId });
+      if (frost?.claimed && !frost.ok) ui.notifications?.warn("Frost Armor could not be fully resolved. Check its attack-card receipt and the attacker's effects before correcting it.");
+    } catch (error) {
+      console.warn("azeroth-rpg | Frost Armor request could not be confirmed", error);
+    }
+    try {
+      const jadefire = await requestJadefireRetaliation({ attacker, target, before, after, messageId });
+      if (jadefire?.claimed && !jadefire.ok) ui.notifications?.warn("Jadefire could not be fully resolved. Check its attack-card receipt and the attacker's Health before correcting it.");
+    } catch (error) {
+      console.warn("azeroth-rpg | Jadefire request could not be confirmed", error);
+    }
+    try {
+      const thorns = await requestSentinelThorns({ attacker, target, before, after, messageId });
+      if (thorns?.claimed && !thorns.ok) ui.notifications?.warn("Sentinel Thorns could not be fully resolved. Check its attack-card receipt and the attacker's Health before correcting it.");
+    } catch (error) {
+      console.warn("azeroth-rpg | Sentinel Thorns request could not be confirmed", error);
+    }
+  }
+  if (attack && !spell && !ignite && before > after) {
+    try {
+      await requestVampiricAura({ attacker, target, before, after, messageId });
+    } catch (error) {
+      console.warn("azeroth-rpg | Vampiric Aura request could not be confirmed", error);
+    }
+  }
   // **WHO THIS ATTACKER HAS DAMAGED** (04's Elemental Fury and Lunar Guidance:
   // *against a target that has taken damage from you*), on the ATTACKER's own
   // combatant, keyed by the victim's token; `_leaveFight` clears it. And with
@@ -561,6 +612,7 @@ export async function strikeCard({ holder, targets = [], amount = 0, type = null
   if (!holder || !targets.length || !(n > 0)) return null;
   const damageByTarget = targets.map(t => resolveDamage({
     rating: n, sl: 0, kind: "magical", school: type,
+    fireTakenBonus: t?.fireTakenBonus ?? 0,
     ward: t?.wardBySchool?.[type] ?? 0, schoolArmor: t?.schoolArmor?.[type] ?? 0,
     immune: t?.immune ?? [], vulnerable: t?.vulnerable ?? [], slAddsToDamage: false,
     // The holder's own damage, 04's Drawn Across on it halving it (the Legacy branches' door 25).

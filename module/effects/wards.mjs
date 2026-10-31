@@ -42,11 +42,74 @@
 import { AZEROTH } from "../config.mjs";
 import { WARD_BASE, WARD_FLAG, wardChanges, wardOptionsFor, wardPrevented, wardSchools } from "../rules/class-talents.mjs";
 // D-779: a Ward pressed from an incoming card answers that blow (04's Foresight).
-import { annotateMitigation } from "../dice/annotate.mjs";
+import { foresightDamage } from "../rules/foresight-damage.mjs";
+import { markAnswers, mitigatedDamage } from "../rules/reactions.mjs";
 import { foresightFor } from "../rules/class-talents.mjs";
+import { refuseIceBlockTarget } from "./ice-block-protection.mjs";
+import { resolveAttackOperation } from "./attack-resolution-state.mjs";
+import { foresightTimingAllows } from "../rules/foresight-timing.mjs";
 
 /** The query a Ward laid on, or Mana returned to, a creature this client does not own goes through. */
 export const WARD_QUERY = "azeroth-rpg.priestWard";
+const committing = new Map();
+const payingPriests = new Set();
+const committedContext = (priest, answers, token) => {
+  const context = committing.get(token);
+  return context?.priest === priest && context.answers.messageId === answers?.messageId
+    && context.answers.index === Number(answers?.index) ? context : null;
+};
+
+/** An opaque GM-local capability; never accepted from a query payload. */
+export function foresightCommitValid(priest, answers, token) {
+  return committedContext(priest, answers, token)?.valid() === true;
+}
+
+/** Execute the ordinary Ward workflow under the same claim as its delivery. */
+async function useForesightHere({ priest, victim, item, answers, school, user }) {
+  const clean = cleanAnswers(answers);
+  if (!clean || !user?.id || !game.user?.isGM || game.users?.activeGM?.id !== game.user.id
+    || item?.parent !== priest || item.type !== "feature" || item.name !== WARD_BASE.feature
+    || !priest.testUserPermission(user, "OWNER") || !AZEROTH.schools[school]) return { ok: false, reason: "permission" };
+  const { turnBudgetRefusal } = await import("../dice/workflows.mjs");
+  const unavailable = turnBudgetRefusal(priest, item.system?.action ?? null);
+  if (unavailable) return { ok: false, reason: "budget", refusal: unavailable };
+  if (payingPriests.has(priest.uuid)) return { ok: false, reason: "busy" };
+  const { message, valid } = foresightContext(priest, victim, clean);
+  const eligible = () => valid() && priest.testUserPermission(user, "OWNER") && fromUuidSync(item.uuid) === item;
+  payingPriests.add(priest.uuid);
+  const token = Symbol("Foresight use"); let posted;
+  try {
+    const result = await resolveAttackOperation({ message, index: clean.index, targetUuid: victim.uuid, operation: "ward", wardBy: priest.uuid, validate: eligible,
+      execute: async ({ valid: stillValid }) => {
+        const context = { priest, victim, answers: clean, valid: stillValid, delivered: false };
+        committing.set(token, context);
+        const { useFeature } = await import("../dice/workflows.mjs");
+        if (!stillValid()) return { ok: false };
+        posted = await useFeature({ actor: priest, item, targets: [structuredClone(message.flags["azeroth-rpg"].targets[clean.index])],
+          foresight: clean, foresightSchool: school, foresightCommit: token });
+        return { ok: context.delivered && posted?.documentName === "ChatMessage" && stillValid() };
+      } });
+    return result.ok ? { ok: true, messageUuid: posted.uuid } : result;
+  } finally { committing.delete(token); payingPriests.delete(priest.uuid); }
+}
+
+/** Called only after the local chooser and affordability checks. The GM
+ * recomputes all prices and spends inside the durable attack claim. */
+export async function requestForesightUse({ priest, target, item, answers, school }) {
+  try {
+    const data = { act: "use", priestUuid: priest.uuid, victimUuid: target.uuid, featureUuid: item.uuid, answers, school };
+    const result = game.user?.isGM && game.users?.activeGM?.id === game.user.id
+      ? await wardQueryHandler(data, { user: game.user })
+      : await game.users?.activeGM?.query(WARD_QUERY, data, { timeout: 60000 });
+    if (result?.ok) return await fromUuid(result.messageUuid);
+    if (result?.reason === "budget" && result.refusal?.reason) {
+      ui.notifications?.warn(game.i18n.format(result.refusal.reason, result.refusal.params ?? {}));
+      return null;
+    }
+  } catch (error) { console.warn("azeroth-rpg | Foresight delivery unconfirmed", error); }
+  ui.notifications?.warn(game.i18n.localize("AZEROTH.Foresight.ResolutionRefused"));
+  return null;
+}
 
 /** Resolve an actor by uuid, quietly. */
 function actorAt(uuid) {
@@ -105,7 +168,8 @@ function cleanSpan(span) {
 
 /** The card and row a Ward answers, as a query may carry them, or none (D-779). */
 function cleanAnswers(answers) {
-  const i = Math.trunc(Number(answers?.index));
+  if (!["number", "string"].includes(typeof answers?.index) || String(answers.index).trim() === "") return null;
+  const i = Number(answers.index);
   return answers && typeof answers.messageId === "string" && answers.messageId && Number.isInteger(i) && i >= 0
     ? { messageId: answers.messageId, index: i } : null;
 }
@@ -113,27 +177,102 @@ function cleanAnswers(answers) {
 /**
  * **A WARD THAT ANSWERS THE BLOW IT WAS PRESSED FROM** (04's Foresight; the lead,
  * 2026-10-03, on O-181: *"Yes"*; D-779): the card's damage was worked out against
- * the Ward the creature had as the roll was made, so the Ward laid now takes its
- * amount off THAT blow as a one-blow mark the damage door spends - the mark a Block
- * rides (`rules/reactions.mjs#mitigatedDamage`), annotated on the card - where the
- * blow is of a school the Ward covers. A mark already standing is never written
- * over. Answers what it took off, 0 for nothing.
+ * the Ward the creature had as the roll was made. Recompute that recorded hit
+ * with this use's Ward delta. Block and halving remain separate actor marks;
+ * Apply consumes them after the revised Ward calculation.
  */
-async function answerBlow(victim, ward, answers, name) {
+async function answerBlow(victim, ward, answers, before, stillValid = () => true) {
   const message = answers ? (game.messages?.get(answers.messageId) ?? null) : null;
-  const type = message?.flags?.["azeroth-rpg"]?.damageType ?? null;
-  if (!message || !type || !(ward.schools ?? []).includes(type)) return 0;
-  if (victim.getFlag("azeroth-rpg", "mitigate")) return 0;
-  const mark = { name, halve: false, amount: Math.max(1, Math.trunc(Number(ward.amount)) || 1), negate: false, reaction: "ward", messageId: message.id };
-  await victim.setFlag("azeroth-rpg", "mitigate", mark);
-  await annotateMitigation({ messageId: message.id, index: answers.index, mark, reaction: "ward" });
-  return mark.amount;
+  if (!stillValid()) throw new Error("Foresight target changed");
+  const rows = structuredClone(message?.flags?.["azeroth-rpg"]?.damageByTarget ?? []);
+  const row = rows[answers.index];
+  const changed = foresightDamage(row, { schools: ward.schools, before, after: victim.system?.ward ?? {} });
+  if (!changed) throw new Error("Foresight damage provenance is unavailable");
+  const held = victim.getFlag("azeroth-rpg", "mitigate");
+  const mark = markAnswers(held, message.id) ? held : null;
+  const to = mitigatedDamage(changed.resolution.damage, mark);
+  const prevented = (row.foresightPrevented ?? 0) + changed.prevented;
+  rows[answers.index] = { ...row, ...changed.resolution, foresightPrevented: prevented,
+    reaction: mark?.reaction ?? "ward", to, mitigated: prevented + changed.resolution.damage - to };
+  const updated = await message.update({ "flags.azeroth-rpg.damageByTarget": rows });
+  if (!stillValid()) throw new Error("Foresight target changed");
+  if (!updated || JSON.stringify(message.flags?.["azeroth-rpg"]?.damageByTarget?.[answers.index]) !== JSON.stringify(rows[answers.index]))
+    throw new Error("Foresight mitigation was not confirmed");
+  return changed.prevented;
+}
+
+/** Current card identity, shared by pre-payment admission and the locked writer. */
+function foresightContext(priest, victim, answers) {
+  const message = game.messages?.get(answers.messageId);
+  const target = () => {
+    const row = message?.flags?.["azeroth-rpg"]?.targets?.[answers.index];
+    return row?.sceneId && row?.tokenId ? fromUuidSync(`Scene.${row.sceneId}.Token.${row.tokenId}`)?.actor
+      : !row?.sceneId && !row?.tokenId && row?.actorId ? game.actors.get(row.actorId) : null;
+  };
+  const valid = () => {
+    const flags = message?.flags?.["azeroth-rpg"], row = flags?.damageByTarget?.[answers.index];
+    return message?.documentName === "ChatMessage" && flags?.kind === "attack" && !flags.parry && !flags.notAttack
+      && fromUuidSync(priest.uuid) === priest && fromUuidSync(victim.uuid) === victim && target() === victim
+      && priest.hasFeature?.("Ward") === true
+      && foresightTimingAllows(foresightFor(priest.takenTalents?.() ?? [])?.rank,
+        message.getFlag("azeroth-rpg", "attackResolution")?.damageRevealed)
+      && row?.hit === true && row.withdrawn !== true && Number.isFinite(row.damage) && row.damage >= 0
+      && foresightDamage(row) !== null;
+  };
+  return { message, valid };
+}
+
+/** Read-only admission; it does not reserve the attack or replace the GM lock.
+ * The private continuation also checks its active GM claim before spending. */
+export function foresightAdmission({ priest, target, answers, commit = null } = {}) {
+  const clean = cleanAnswers(answers);
+  if (!clean) return "answer";
+  if (!game.users?.activeGM) return "noGM";
+  if (!priest?.isOwner || !target) return "target";
+  if (commit !== null) {
+    const context = committedContext(priest, clean, commit);
+    return context?.victim === target && context.valid() ? null : "commit";
+  }
+  const { message, valid } = foresightContext(priest, target, clean);
+  if (!valid()) return "changed";
+  const state = message.getFlag("azeroth-rpg", "attackResolution");
+  if (state?.version !== 1 || !Array.isArray(state.targets)) return "unknownDelivery";
+  if (state.targets[clean.index]?.targetUuid !== target.uuid) return "targetChanged";
+  if (state.targets.some(row => !["pending", "applied", "phased"].includes(row?.stage))) return "reconcile";
+  if (state.targets[clean.index].stage !== "pending") return "resolved";
+  if (state.targets[clean.index].wardedBy?.includes(priest.uuid)) return "alreadyWarded";
+  if (refuseIceBlockTarget(target)) return "iceBlock";
+  return null;
 }
 
 /** Lay it here; the caller has established that this client may. */
-async function layHere({ priest, victim, ward, span, img = null, description = "", answers = null }) {
+async function layHere({ priest, victim, ward, span, img = null, description = "", answers = null, commit = null }) {
+  if (!answers) return layWardEffect({ priest, victim, ward, span, img, description });
+  if (refuseIceBlockTarget(victim)) return { name: victim.name, landed: false, reason: "iceBlock", answered: 0 };
+  if (commit !== null) {
+    const context = committedContext(priest, answers, commit);
+    if (context?.victim !== victim || context.delivered || !context.valid()) return { name: victim.name, landed: false, reason: "commit", answered: 0 };
+    const landed = await layWardEffect({ priest, victim, ward, span, img, description, answers, stillValid: context.valid });
+    context.delivered = landed.landed === true;
+    return landed;
+  }
+  const { message, valid } = foresightContext(priest, victim, answers);
+  let landed;
+  const resolution = await resolveAttackOperation({ message, index: answers.index, targetUuid: victim.uuid, operation: "ward", wardBy: priest.uuid, validate: valid,
+    execute: async ({ valid: stillValid }) => {
+      landed = await layWardEffect({ priest, victim, ward, span, img, description, answers, stillValid });
+      return { ok: landed.landed === true };
+    } });
+  return resolution.ok ? landed : { name: victim.name, landed: false, reason: resolution.reason, answered: 0 };
+}
+
+async function layWardEffect({ priest, victim, ward, span, img = null, description = "", answers = null, stillValid = () => true }) {
+  if (refuseIceBlockTarget(victim)) return { name: victim.name, landed: false, reason: "iceBlock", answered: 0 };
+  const before = answers ? structuredClone(victim.system?.ward ?? {}) : null;
   const stale = (victim.effects ?? []).filter(e => e.flags?.["azeroth-rpg"]?.[WARD_FLAG]?.by === priest.uuid).map(e => e.id);
   if (stale.length) await victim.deleteEmbeddedDocuments("ActiveEffect", stale);
+  if (refuseIceBlockTarget(victim)) return { name: victim.name, landed: false, reason: "iceBlock", answered: 0 };
+  if (!stillValid()) throw new Error("Foresight target changed");
   const name = game.i18n.format(ward.undispellable ? "AZEROTH.Ward.EffectNameAegis" : "AZEROTH.Ward.EffectName", {
     schools: schoolWords(ward.schools), name: priest.name
   });
@@ -143,7 +282,9 @@ async function layHere({ priest, victim, ward, span, img = null, description = "
     ...(span ?? {}),
     flags: { "azeroth-rpg": { [WARD_FLAG]: { by: priest.uuid, priestName: priest.name, ...ward } } }
   }]);
-  const answered = made && answers ? await answerBlow(victim, ward, answers, name) : 0;
+  if (!stillValid()) throw new Error("Foresight target changed");
+  if (refuseIceBlockTarget(victim)) return { name: victim.name, landed: Boolean(made), reason: "iceBlock", answered: 0 };
+  const answered = made && answers ? await answerBlow(victim, ward, answers, before, stillValid) : 0;
   return { name: victim.name, landed: Boolean(made), reason: made ? null : "refused", answered };
 }
 
@@ -160,14 +301,16 @@ async function layHere({ priest, victim, ward, span, img = null, description = "
  * @param {string} [o.name]  the target's name on the card, for a creature that is gone
  * @returns {Promise<{name: string, landed: boolean, reason: string|null}>}
  */
-export async function layWard({ priest, target, ward, span = null, img = null, description = "", name = "", answers = null } = {}) {
+export async function layWard({ priest, target, ward, span = null, img = null, description = "", name = "", answers = null, commit = null } = {}) {
   if (!target) return { name, landed: false, reason: "gone" };
   const clean = cleanWard(ward);
   if (!clean.schools.length) return { name: target.name, landed: false, reason: "refused" };
   // The card a Foresight Ward answers (D-779).
   const answering = cleanAnswers(answers);
+  if (answers !== null && !answering) return { name: target.name, landed: false, reason: "answer", answered: 0 };
   try {
-    if (target.isOwner) return await layHere({ priest, victim: target, ward: clean, span: cleanSpan(span), img, description, answers: answering });
+    const authoritative = game.user?.isGM === true && game.users?.activeGM?.id === game.user.id;
+    if (target.isOwner && (!answering || authoritative)) return await layHere({ priest, victim: target, ward: clean, span: cleanSpan(span), img, description, answers: answering, commit });
     const gm = game.users?.activeGM ?? null;
     if (!gm) throw new Error(game.i18n.localize("AZEROTH.Ward.NoGM"));
     const done = await gm.query(WARD_QUERY, {
@@ -182,6 +325,7 @@ export async function layWard({ priest, target, ward, span = null, img = null, d
 
 /** Mana back into the priest's pool, never past its maximum, here. Answers what landed. */
 async function absorbHere(priest, amount) {
+  if (refuseIceBlockTarget(priest)) return 0;
   const pool = (priest.poolSnapshot?.() ?? []).find(p => p.name === "mana") ?? null;
   if (!pool || !(amount > 0)) return 0;
   const value = Math.min(pool.max, pool.value + amount);
@@ -199,7 +343,7 @@ async function absorbHere(priest, amount) {
  *   wrote the blow - and that creature carry this priest's Ward laid with
  *   Absorption's Mana. Judged again off the world as the GM holds it.
  */
-export async function wardQueryHandler({ act = "lay", priestUuid = null, victimUuid = null, ward = {}, span = null, img = null, description = "", answers = null } = {}, { user = null } = {}) {
+export async function wardQueryHandler({ act = "lay", priestUuid = null, victimUuid = null, featureUuid = null, school = null, ward = {}, span = null, img = null, description = "", answers = null } = {}, { user = null } = {}) {
   const priest = priestUuid ? await fromUuid(priestUuid) : null;
   const victim = victimUuid ? await fromUuid(victimUuid) : null;
   if (priest?.documentName !== "Actor" || victim?.documentName !== "Actor") throw new Error(game.i18n.localize("AZEROTH.Card.TargetGone"));
@@ -214,6 +358,7 @@ export async function wardQueryHandler({ act = "lay", priestUuid = null, victimU
   }
   if (user && !priest.testUserPermission(user, "OWNER")) throw new Error(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: priest.name }));
   if (!priest.hasFeature?.("Ward")) throw new Error(game.i18n.format("AZEROTH.Ward.NoFeature", { name: priest.name }));
+  if (act === "use") return useForesightHere({ priest, victim, item: featureUuid ? await fromUuid(featureUuid) : null, answers, school, user });
   // What the Ward carries is worked out again off the priest's own talents; the
   // request names only the school the chooser picked.
   const asked = cleanWard(ward);
@@ -226,7 +371,12 @@ export async function wardQueryHandler({ act = "lay", priestUuid = null, victimU
   if (!schools.length) return { name: victim.name, landed: false, reason: "refused" };
   // A Ward answering a card's blow is the priest's Foresight's to press (D-779),
   // judged again here off the priest's own talents.
-  const answering = cleanAnswers(answers) && foresightFor(priest.takenTalents?.() ?? []) ? cleanAnswers(answers) : null;
+  const answering = cleanAnswers(answers);
+  if (answers !== null && !answering) return { name: victim.name, landed: false, reason: "answer", answered: 0 };
+  if (answering && !foresightFor(priest.takenTalents?.() ?? [])) return { name: victim.name, landed: false, reason: "foresight", answered: 0 };
+  // A player's answering Ward must pay through the Use coordinator, not the
+  // low-level ordinary-Ward writer. GM fixture/manual writes remain available.
+  if (answering && !user?.isGM) return { name: victim.name, landed: false, reason: "paymentRequired", answered: 0 };
   return layHere({ priest, victim, ward: rebuilt, span: cleanSpan(span), img, description, answers: answering });
 }
 

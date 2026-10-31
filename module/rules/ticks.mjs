@@ -125,7 +125,7 @@ const SPELLPOWER = String.raw`, and 1 further (?<sp>[A-Z][a-z]+) damage on (?:th
  * said in the reason, and the tick still built.
  */
 const BESIDE = Object.freeze([
-  { re: /^ and its Speed drops by \d+ feet while sustaining this spell$/, text: "its Speed drop while the spell is sustained is not built" },
+  { re: /^ and its Speed drops by \d+ feet while sustaining this spell$/, text: null }, // spell-effects seeds the same carrier's Speed change
   { re: /^, and its Health maximum drops by \d+ while both run$/, text: "its Health maximum drop while both run is not built" }
 ]);
 
@@ -155,7 +155,7 @@ const SHAPES = [
     if (rest && !beside) return null;
     return {
       tick: { kind: "damage", type: schoolOf(m.groups.w), amount: m.groups.n, rounds: spanRounds(m.groups.span, fields?.duration), spellpower: Boolean(m.groups.sp) },
-      beside: beside ? [beside.text] : []
+      beside: beside?.text ? [beside.text] : []
     };
   },
   // *The target takes 4 Arcane damage, then 2 Arcane damage at the start of each

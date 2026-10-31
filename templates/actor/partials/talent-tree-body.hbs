@@ -1,0 +1,20 @@
+<div class="azeroth-tree-body">
+  <div class="azeroth-tree-rail" aria-hidden="true">
+    {{#each tree.tiers as |tier|}}
+    <div class="azeroth-tree-rail-tier{{#unless tier.unlocked}} is-locked{{/unless}}" data-rail-tier="{{tier.tier}}" id="{{tier.railId}}">
+      <span class="azeroth-tree-rail-name">{{localize "AZEROTH.Talent.Tier"}} {{tier.tier}}</span>
+      {{#unless tier.unlocked}}<span class="azeroth-tree-rail-gate">{{localize "AZEROTH.Talent.Gate" points=tier.gate}}</span>{{/unless}}
+    </div>
+    {{/each}}
+  </div>
+  <div class="azeroth-tree-field">
+    {{#if tree.crest}}<img class="azeroth-tree-crest" src="{{tree.crest}}" alt="" aria-hidden="true" draggable="false">{{/if}}
+    {{#each tree.tiers as |tier|}}
+    <div class="azeroth-talent-tier{{#unless tier.unlocked}} azeroth-talent-tier--locked{{/unless}}" data-tier="{{tier.tier}}" role="group" aria-labelledby="{{tier.railId}}">
+      {{#each tier.talents as |talent|}}
+      {{> systems/azeroth-rpg/templates/actor/partials/talent-tile.hbs talent=talent creator=../../creator}}
+      {{/each}}
+    </div>
+    {{/each}}
+  </div>
+</div>

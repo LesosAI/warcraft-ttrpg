@@ -202,8 +202,15 @@ const MAY_IGNORE = /\bmay ignore (?:one |a |any )?(?:\*\*[A-Za-z]+(?: \d+)?\*\*)
  */
 export function seedSpellEffects({ effect = "", duration = {}, target = "", damage = {} } = {}) {
   const hasDamage = damage?.rating !== null && damage?.rating !== undefined;
+  // Mind Flay's movement penalty belongs to the same sustained carrier as
+  // its damage tick. Keep this narrow: damaging spells must not inherit
+  // every condition mentioned in their prose as an unconditional effect.
+  const sustainedSlow = hasDamage && duration?.kind === "sustained"
+    && /^One creature$/i.test(String(target).trim())
+    ? /\bThe target takes \d+ [A-Z][a-z]+ damage at the start of each of its turns and its Speed drops by (\d+) feet while sustaining this spell\./.exec(flatText(effect)) : null;
   return {
-    applies: hasDamage ? null : seedApplies(effect, duration, target),
+    applies: sustainedSlow ? { changes: [{ key: "system.speed", type: "add", value: String(-Number(sustainedSlow[1])) }], statuses: [] }
+      : hasDamage ? null : seedApplies(effect, duration, target),
     rider: hasDamage ? seedRider(effect) : null,
     onFail: seedOnFail(effect),
     cost: seedCost(effect)

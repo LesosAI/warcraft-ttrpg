@@ -1,0 +1,4 @@
+{{!-- Jangthraze the Protector's reward off a confirmed hit, on the attack card. Drawn by
+      applications/signature-hit-use.mjs#showJangthrazeUse for the wielder's owner, on the
+      first row the hit can still pay; greyed while the shared rest use is spent. --}}
+<button type="button" data-action="jangthrazeUse" data-index="{{index}}"{{#if disabled}} disabled{{/if}}>{{localize "AZEROTH.Signature.HitUse.Gain" name=name n=n}}</button>

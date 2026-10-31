@@ -45,6 +45,15 @@ export class AzerothCombatTracker extends CombatTracker {
 
   /* -------------------------------------------- */
 
+  /** A row identifies a turn slot as well as its shared combatant. Core already
+   * determines the active row by index, including adjacent turns of one actor. */
+  async _prepareTurnContext(combat, combatant, index) {
+    const context = await super._prepareTurnContext(combat, combatant, index);
+    const slot = combat.turnSlots?.[index];
+    return { ...context, turnIndex: index, turnSlot: slot?.key ?? `normal:${combatant.id}`,
+      extraTurn: slot?.extra === true, slotSide: slot?.side ?? combatant.side };
+  }
+
   /** @inheritDoc */
   async _prepareTrackerContext(context, options) {
     await super._prepareTrackerContext(context, options);
@@ -61,7 +70,7 @@ export class AzerothCombatTracker extends CombatTracker {
       const momenta = (combatant.actor?.poolSnapshot?.() ?? []).filter(p => p.kind === "momentum")
         .map(p => ({ name: game.i18n.localize(AZEROTH.momentumTypes[p.name] ?? p.name), value: p.value, max: p.max }));
       Object.assign(turn, {
-        side: combatant.side,
+        side: turn.slotSide ?? combatant.side,
         budget: {
           halfActions: budget.halfActions,
           reactions: budget.reactions,

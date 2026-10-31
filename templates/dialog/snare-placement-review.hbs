@@ -1,0 +1,7 @@
+<p>{{localize "AZEROTH.Snare.ReviewInstructions"}}</p>
+<p><strong>{{localize "AZEROTH.Snare.ReviewScene"}}</strong> {{scene}}</p>
+<p><strong>{{localize "AZEROTH.Snare.ReviewRegion"}}</strong> {{region}} ({{regionId}})</p>
+<p role="status">{{reason}}</p>
+{{#if canConfirm}}
+<label class="checkbox"><input type="checkbox" name="acknowledged">{{localize "AZEROTH.Snare.ReviewAcknowledge"}}</label>
+{{/if}}

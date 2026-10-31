@@ -29,6 +29,7 @@
 
 import { FLEET_FOOTED_FLAG, OPENING_HELD_FLAG, OPENING_MARK_FLAG, namesTarget } from "../rules/class-talents.mjs";
 import { HIDDEN_STATUS } from "../rules/stealth.mjs";
+import { refuseIceBlockTarget } from "./ice-block-protection.mjs";
 
 /** The flag Deterrence's Banes stand under, on the creature attacked. */
 export const DETERRED_FLAG = "deterred";
@@ -61,11 +62,13 @@ export function flaggedEffects(actor, flag) {
  */
 export async function layState(actor, { flag, data, name, img = null, changes = [], statuses = [], span = null, sameAs = () => true, description = "" } = {}) {
   if (!actor) return null;
+  if (refuseIceBlockTarget(actor)) return null;
   const stale = (actor.effects ?? []).filter(e => {
     const raw = e.flags?.["azeroth-rpg"]?.[flag] ?? null;
     return raw && sameAs(raw);
   }).map(e => e.id);
   if (stale.length) await actor.deleteEmbeddedDocuments("ActiveEffect", stale);
+  if (refuseIceBlockTarget(actor)) return null;
   const [made] = await actor.createEmbeddedDocuments("ActiveEffect", [{
     name, img: img ?? "icons/svg/aura.svg", origin: actor.uuid, description,
     ...(statuses.length ? { statuses } : {}),

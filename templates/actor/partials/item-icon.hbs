@@ -13,9 +13,9 @@
   icon is framed the same way and only the colour changes.
 --}}
 {{#if img}}
-<span class="azeroth-icon {{#if rarityClass}}{{rarityClass}}{{else}}azeroth-rarity-common{{/if}}">
+<span class="azeroth-icon {{#if rarityClass}}{{rarityClass}}{{else}}azeroth-rarity-common{{/if}}{{#if trainingTip}} azeroth-untrained{{/if}}"{{#if trainingTip}} data-tooltip="{{trainingTip}}" aria-label="{{trainingTip}}"{{/if}}>
   <img src="{{img}}" alt="">
 </span>
 {{else}}
-<span class="azeroth-icon azeroth-icon--empty"></span>
+<span class="azeroth-icon azeroth-icon--empty{{#if trainingTip}} azeroth-untrained{{/if}}"{{#if trainingTip}} data-tooltip="{{trainingTip}}" aria-label="{{trainingTip}}"{{/if}}></span>
 {{/if}}

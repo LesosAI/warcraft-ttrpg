@@ -68,6 +68,7 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+import { PARANOIA, paranoiaSource } from "../rules/paranoia.mjs";
 import {
   AURA_FALLBACK_ICON, AURA_FLAG, AURA_ICONS, AURA_VERSION, auraCentreOf, auraChanges, auraGives, auraLaidHere, auraPayloadOf, auraPlan,
   diffAuras, excludesHolder, followUp, ownerAuras, payloadFromFlag, strongestPerGroup, totemStands
@@ -134,6 +135,9 @@ function plain(html) {
 export function auraSourcesOf(actor) {
   if (!actor) return [];
   const out = [];
+  const paranoia = paranoiaSource({ uuid: actor.uuid, type: actor.type, health: actor.system?.health?.value,
+    abilities: actor.system?.creatureAbilities, img: actor.img || AURA_FALLBACK_ICON });
+  if (paranoia) out.push(paranoia);
   for (const row of actor.system?.signatureEffects?.auras ?? []) {
     if (row.targets === "party" && actor.isParty !== true) continue;
     const item = actor.items?.get?.(row.key) ?? null;
@@ -255,6 +259,7 @@ function laidHere(stamp, scene) {
 
 /** A Boon's Test, in words: *Spirit Resilience Tests*, *Attack Tests*. */
 function boonTest(boon) {
+  if (boon.kind === "skill" && boon.condition) return game.i18n.localize(boon.condition);
   // *A Boon on Resilience Tests* (04's Burial Ground; door 25): every Resilience.
   if (boon.kind === "resilience" && boon.resilience === "all") return game.i18n.localize("AZEROTH.Aura.BoonResilienceAll");
   if (boon.kind === "resilience") {
@@ -464,9 +469,15 @@ function feetBetween(from, to, footprints) {
 }
 
 /** The nearest of an aura's centres to one token, or null where none measured. */
-function nearestFeet(centres, to, footprints) {
+function nearestFeet(centres, to, footprints, { sameLevel = false } = {}) {
   let best = null;
   for (const from of centres) {
+    if (sameLevel) {
+      const origin = from?.document, target = to?.document;
+      const level = origin?._source?.level;
+      if (!origin?.parent || origin.parent !== target?.parent || typeof level !== "string"
+        || level !== target?._source?.level || !origin.parent.levels?.get(level)) continue;
+    }
     const feet = feetBetween(from, to, footprints);
     if (feet !== null && (best === null || feet < best)) best = feet;
   }
@@ -672,7 +683,7 @@ async function syncAurasNow(scene) {
         // FRIENDLY against HOSTILE outside one; the pass runs on the GM's client, so
         // a hidden creature counts.
         enemy: countsAsEnemy(holderStanding, theirs, { gm: true }),
-        feet: nearestFeet(centres, token, footprints),
+        feet: nearestFeet(centres, token, footprints, { sameLevel: source.group === PARANOIA.group }),
         type: actor.type,
         apLocations: apLocationsOf(actor)
       }));
@@ -792,12 +803,14 @@ export function registerAuraHooks() {
   // that changes sides - its disposition - changes who is whose ally out of a
   // fight (D-755), and a height changes a three-dimensional distance (D-732).
   Hooks.on("updateToken", (document, changes) => {
-    if ("disposition" in changes) nudge();
+    if (["disposition", "level", "actorId", "actorLink"].some(key => key in changes)) nudge();
     if (!("x" in changes) && !("y" in changes) && !("elevation" in changes)) return;
     arrived(document).then(nudge, () => {});
   });
   Hooks.on("updateActor", (actor, changes) => {
     const moved = foundry.utils.hasProperty(changes, "system.health.value")
+      || foundry.utils.hasProperty(changes, "system.creatureAbilities")
+      || Object.hasOwn(changes, "system.creatureAbilities")
       || flagMoved(changes, "party")
       // A bond made or released moves Demonic Pact's centre and who is bound to
       // the Party (D-643, D-755).

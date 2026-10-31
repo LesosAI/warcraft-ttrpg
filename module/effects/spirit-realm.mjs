@@ -43,7 +43,7 @@ export function dyingNow(actor) {
   return isDying({
     type: actor?.type ?? null, health: actor?.system?.health?.value ?? null,
     stabilized: actor?.getFlag?.("azeroth-rpg", "stabilized") === true,
-    steps: actor?.system?.deathSteps ?? 0, max: AZEROTH.DEATH_STEPS
+    steps: actor?.system?.deathSteps ?? 0, max: actor?.system?.deathStepLimit ?? AZEROTH.DEATH_STEPS
   });
 }
 

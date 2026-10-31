@@ -201,6 +201,17 @@ export function isTwoHanded(item) {
   return gripOf(item) === "two-handed" && !item?.system?.launcher;
 }
 
+/** 04 Fury: a taken Titan's Presence permits a two-handed weapon in each hand.
+ * Accept owned Items and the flat takenTalents snapshot; class order is irrelevant. */
+export function hasTitansPresence(items = []) {
+  return [...(items ?? [])].some(item => {
+    const talent = item?.system ?? item;
+    return (!item?.type || item.type === "talent")
+      && String(talent?.className ?? "").toLowerCase() === "warrior"
+      && talent?.identifier === "titans-presence" && Number(talent?.taken) > 0;
+  });
+}
+
 /* -------------------------------------------- */
 /*  The figure the Overview tab draws (D-689)    */
 /* -------------------------------------------- */
@@ -301,7 +312,7 @@ export function figureSlots(items = []) {
   }
   filled.ammo = ammo;
 
-  filled.twoHanded = isTwoHanded(filled.mainHand);
+  filled.twoHanded = isTwoHanded(filled.mainHand) && !hasTitansPresence(all);
 
   const drawn = new Set([filled.mainHand, offWeapon, filled.ranged, filled.ammo].filter(Boolean));
   filled.alsoReady = weapons.filter(w => !drawn.has(w));
@@ -344,7 +355,7 @@ export function handFor(item, items = []) {
   const sys = item?.system ?? {};
   if (sys.launcher) return "ranged";
   if (isShot(sys)) return "mainHand";
-  if (isTwoHanded(item)) return "mainHand";
+  if (isTwoHanded(item) && !hasTitansPresence(items)) return "mainHand";
 
   // The item is judged against what ELSE is held. In production it has not
   // been equipped yet, so the distinction never shows; asked about a weapon
@@ -473,7 +484,7 @@ function isTwoHandedMain(item) {
  * @param {{index?: number}} [options]  which tile of a capacity-2 slot was used
  * @returns {Array} the equipped items to unequip, in the order they were given
  */
-export function displacedBy(item, items, { index } = {}) {
+export function displacedBy(item, items, { index, titansPresence = hasTitansPresence(items) } = {}) {
   if (!item) return [];
   const all = [...(items ?? [])].filter(Boolean);
   const same = other => other === item
@@ -504,9 +515,9 @@ export function displacedBy(item, items, { index } = {}) {
   }
 
   // The two-handed grip, both ways (D-689).
-  if (isTwoHandedMain(item)) {
+  if (!titansPresence && isTwoHandedMain(item)) {
     for (const other of equipped) if (isOffHandThing(other)) victims.add(other);
-  } else if (isOffHandThing(item)) {
+  } else if (!titansPresence && isOffHandThing(item)) {
     for (const other of equipped) if (isTwoHandedMain(other)) victims.add(other);
   }
 

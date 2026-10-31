@@ -27,6 +27,13 @@
       {{#if cuttingGear}}
       <button type="button" data-action="cuttingGear" data-actor-uuid="{{actorUuid}}"{{#if effectId}} data-effect-id="{{effectId}}"{{/if}}>{{localize "AZEROTH.CuttingGear.Button"}}</button>
       {{/if}}
+      {{#if seduction}}
+      <button type="button" data-action="seductionRoute">{{localize "AZEROTH.Seduction.Route"}}</button>
+      <button type="button" data-action="seductionEndHarm" data-gm-only title="{{localize 'AZEROTH.Seduction.HarmHint'}}">{{localize "AZEROTH.Seduction.HarmEnd"}}</button>
+      {{/if}}
+      {{#if devourMagic}}
+      <button type="button" data-action="devourMagic">{{localize "AZEROTH.DevourMagic.Button"}}</button>
+      {{/if}}
     </div>
   </div>
 </div>

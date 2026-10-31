@@ -1,0 +1,7 @@
+<p><strong>{{name}}</strong></p>
+<p>{{localize "AZEROTH.ChainLightning.Review.Explain"}}</p>
+{{#if cards.length}}
+<p>{{localize "AZEROTH.ChainLightning.Review.Cards"}}</p>
+<ul>{{#each cards}}<li><a class="content-link" data-uuid="{{uuid}}" style="color: inherit;">{{label}}</a></li>{{/each}}</ul>
+{{else}}<p>{{localize "AZEROTH.ChainLightning.Review.NoCard"}}</p>{{/if}}
+<p><label><input type="checkbox" name="acknowledged"> {{localize "AZEROTH.ChainLightning.Review.Acknowledge"}}</label></p>

@@ -1,0 +1,10 @@
+<p><strong>{{name}}</strong></p>
+<p>{{localize "AZEROTH.Reload.Explain"}}</p>
+<p><label>{{#if isShot}}{{localize "AZEROTH.Reload.ShotQuestion"}}{{else}}{{localize "AZEROTH.Reload.PaymentQuestion"}}{{/if}}
+  <select name="occurred">
+    <option value="">{{localize "AZEROTH.Reload.Choose"}}</option>
+    <option value="yes">{{localize "AZEROTH.Reload.Yes"}}</option>
+    <option value="no">{{localize "AZEROTH.Reload.No"}}</option>
+  </select>
+</label></p>
+<p><label><input type="checkbox" name="acknowledged"> {{localize "AZEROTH.Reload.Acknowledge"}}</label></p>

@@ -18,6 +18,8 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+import { actorTraining, trainingWarning } from "../rules/equipment-training.mjs";
+import { showsManeuvers } from "../rules/combat-sheet.mjs";
 import { attackWithDialog, bindKeyActivation, bindPlateKeys, bindPoolInputs, bindScoreInputs, blankItemMenu, browseItems, browseSpells, containersFor, grantsOf, maneuversContext, castItemSpell, castWithDialog, detailFields, effectAction, effectsContext, exposeWithDialog, itemContextMenu, putInContainer, resilienceWithDialog, rollAbility, rollWithDialog, signatureContext, skillContextMenu, skillTooltip, stepPool, useFeatureWithDialog, useGearWithDialog, useSignatureWithDialog, wearable } from "./actions.mjs";
 import { hasSignature } from "../rules/signatures.mjs";
 import { inPlay } from "../rules/in-play.mjs";
@@ -29,6 +31,7 @@ import { maneuverCost } from "../rules/maneuvers.mjs";
 import { targetSnapshots } from "./roll-dialog.mjs";
 // A Short Rest asks what is eaten and drunk before it rests (05 §16, D-733).
 import { shortRestWithDialog } from "./rest-dialog.mjs";
+import { reviewChainLightningCast } from "./chain-lightning-review.mjs";
 import { clearHidden, clearMark, clearReady, disengage, guard, hide, leaveShapeControl, markQuarry, primeRider, ready } from "./combat-actions.mjs";
 // A rider paid before the blow, the Combat tab's control (D-770).
 import { chargeLines } from "../rules/riders.mjs";
@@ -61,6 +64,9 @@ import { BLURB_KINDS, TILE_KINDS, TILE_PLACES, badgeOf, buildPanels, gridStep, k
 // A find still under offer is taken from the loot window, never dragged
 // (D-721). The sheet asks the document's own question before it writes.
 import { underOffer } from "../rules/loot-offer.mjs";
+// And a Gadgets-compendium entry is never a sheet's (the lead, 2026-10-24): the
+// same question, asked the same way, before any drop zone writes.
+import { isGadgetEntry } from "../rules/gadgets.mjs";
 // The derived bag-slot line, composed once and drawn on the tooltip, the
 // inspector and the item sheet alike (D-677: the words arrive in a bag).
 import { derivedValue } from "./item-fields.mjs";
@@ -173,6 +179,7 @@ function dropZoneOf(event) {
 }
 
 export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
+  static #onReviewChainLightningCast() { return reviewChainLightningCast(this.actor); }
   /** @inheritDoc */
   static DEFAULT_OPTIONS = {
     classes: ["azeroth", "sheet", "actor", "character"],
@@ -186,6 +193,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     window: { resizable: true },
     form: { submitOnChange: true },
     actions: {
+      reviewChainLightningCast: AzerothCharacterSheet.#onReviewChainLightningCast,
+      configureCombatSheet: AzerothCharacterSheet.#onConfigureCombatSheet,
       rollSkill: AzerothCharacterSheet.#onRollSkill,
       rollAbility: AzerothCharacterSheet.#onRollAbility,
       shortRest: AzerothCharacterSheet.#onShortRest,
@@ -238,6 +247,11 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       stepCondition: AzerothCharacterSheet.#onEffectAction,
       toggleEffect: AzerothCharacterSheet.#onEffectAction,
       editEffect: AzerothCharacterSheet.#onEffectAction,
+      mindControlSaves: AzerothCharacterSheet.#onEffectAction,
+      reviewDispersionAftermath: AzerothCharacterSheet.#onEffectAction,
+      reviewAntivenom: AzerothCharacterSheet.#onEffectAction,
+      reviewSignatureUses: AzerothCharacterSheet.#onEffectAction,
+      reviewSignatureParry: AzerothCharacterSheet.#onEffectAction,
       deleteEffect: AzerothCharacterSheet.#onEffectAction,
       expandItem: AzerothCharacterSheet.#onExpandItem,
       useFeature: AzerothCharacterSheet.#onUseFeature,
@@ -393,6 +407,10 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
 
     context.config = AZEROTH;
     context.system = system;
+    context.canConfigureCombatSheet = game.user.isGM;
+    context.showManeuvers = showsManeuvers(system, this.actor.getFlag("azeroth-rpg", "showManeuvers"));
+    context.combatSections = Object.fromEntries(["maneuvers", "features", "talents", "signatures"].map(key =>
+      [key, game.user.getFlag("azeroth-rpg", `combatSections.${key}`) !== false]));
     context.tabs = this._prepareTabs("primary");
 
     // The grid loses a track when the active tab spans the Skills column, and
@@ -455,6 +473,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // sheet - Health, Fatigue, the tracks - had ever saved (found 2026-09-02
     // by a probe, after a corruption input "did not fire").
     context.actor = this.actor;
+    context.canReviewChainCast = game.user.isGM && this.actor.getFlag("azeroth-rpg", "chainLightningCast")?.stage === "pending";
     // The three images (D-700), resolved once for the banner and the Overview
     // tab rather than bound field-by-field in two templates.
     context.portrait = this.#portraits();
@@ -529,6 +548,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // the Overview, whose In-force column summarises the same rows — one
     // judgement, so the summary and the controls cannot disagree.
     context.signatures = await this.#signatures();
+    for (const row of context.signatures) row.trainingTip = this.#trainingTip(this.actor.items.get(row.id));
     // The Overview tab's figure and its In force column (D-687). Assembled
     // after `load`, because the carry line is the same object the Gear tab's
     // head line reads and there is one of it — and after `effects`, because
@@ -656,6 +676,15 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
    */
   _onRender(context, options) {
     super._onRender(context, options);
+    for (const section of this.element.querySelectorAll("details[data-combat-section]")) {
+      if (section.dataset.collapseBound) continue;
+      section.dataset.collapseBound = "1";
+      section.addEventListener("toggle", () => {
+        const key = `combatSections.${section.dataset.combatSection}`;
+        if ((game.user.getFlag("azeroth-rpg", key) !== false) === section.open) return;
+        void game.user.setFlag("azeroth-rpg", key, section.open);
+      });
+    }
     // Core replaces the parts it rendered and leaves the rest standing, so a
     // Spells part rendered while the sheet had a spell outlives the tab that
     // named it (D-639). Take it down with the tab.
@@ -741,6 +770,12 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
    * @inheritDoc
    */
   async _onDropItem(event, item) {
+    // **A GADGETS-COMPENDIUM ENTRY GOES STRAIGHT TO THE CREATE** (the lead, 2026-10-24),
+    // whose veto refuses it in words (`AzerothItem#_preCreate`): no zone below may put
+    // anything away for it first (D-745's order), or answer with a refusal of its own - a
+    // feature dropped on the figure is *not worn* and on a slot *does not fit* before the
+    // create says why again.
+    if (isGadgetEntry(item) && this.actor.uuid !== item.parent?.uuid) return super._onDropItem(event, item);
     const zone = dropZoneOf(event);
     if (zone === null || !this.actor.isOwner) return super._onDropItem(event, item);
     if (zone.kind === "slot") return this.#dropOnSlot(event, item, zone.slot, zone.index);
@@ -1369,7 +1404,13 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
 
   /** The prose under a row, enriched once per item however many lists carry it. */
   async #describeRows(rows) {
+    for (const row of rows) row.trainingTip = this.#trainingTip(this.actor.items.get(row.id));
     return describeRows(this.actor, rows);
+  }
+
+  #trainingTip(item) {
+    const warning = trainingWarning(item, actorTraining(this.actor));
+    return warning ? game.i18n.localize(`AZEROTH.Training.${warning}`) : null;
   }
 
   /** The row's name opens its inline detail; the state survives a re-render. */
@@ -2873,6 +2914,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     const place = this.#placeOf(item.id, led, names);
     const row = {
       ...described,
+      trainingTip: this.#trainingTip(item),
       id: item.id,
       name: item.name,
       img: item.img,
@@ -2976,6 +3018,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     const sys = item.system ?? {};
     const tip = tipModel({
       name: item.name,
+      trainingTip: this.#trainingTip(item),
       type: item.type,
       system: sys,
       rarityClass: rarityClass(sys.rarity),
@@ -3053,6 +3096,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         index: index ?? null,
         numbered: Number.isInteger(index),
         filled: Boolean(item),
+        trainingTip: this.#trainingTip(item),
         id: item?.id ?? null,
         img: item?.img ?? null,
         rarityClass: item ? rarityClass(item.system?.rarity) : null,
@@ -3113,6 +3157,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       nothing: ![...left, ...right, ...hands].some(t => t.filled),
       alsoReady: figure.alsoReady.map(item => ({
         id: item.id,
+        trainingTip: this.#trainingTip(item),
         name: item.name,
         img: item.img,
         rarityClass: rarityClass(item.system?.rarity)
@@ -3689,6 +3734,24 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
    * Its own `DialogV2`, because the system's one chooser answers ONE list and
    * this asks for a number.
    */
+  static async #onConfigureCombatSheet() {
+    if (!game.user.isGM) return;
+    const localize = key => foundry.utils.escapeHTML(game.i18n.localize(`AZEROTH.CombatSheet.${key}`));
+    const checked = this.actor.getFlag("azeroth-rpg", "showManeuvers") === true;
+    const choice = await foundry.applications.api.DialogV2.prompt({
+      window: { title: game.i18n.localize("AZEROTH.CombatSheet.Configure") },
+      classes: ["azeroth"],
+      content: `<label><input type="checkbox" name="showManeuvers" ${checked ? "checked" : ""}> ${localize("ShowManeuvers")}</label><p>${localize("Hint")}</p>`,
+      ok: {
+        label: game.i18n.localize("AZEROTH.CombatSheet.Save"),
+        callback: (event, button) => ({ show: button.form.elements.showManeuvers.checked })
+      },
+      rejectClose: false
+    });
+    if (!choice || !game.user.isGM) return;
+    await this.actor.setFlag("azeroth-rpg", "showManeuvers", choice.show);
+  }
+
   static async #onSplitStack(event, target) {
     if (!this.isEditable) return null;
     const item = this.actor.items.get(target.closest("[data-item-id]")?.dataset.itemId);

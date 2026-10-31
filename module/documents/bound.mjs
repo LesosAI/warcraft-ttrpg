@@ -23,10 +23,16 @@ import { raiseRefusal, raiseRowsFor } from "../rules/raise.mjs";
 import { prototypeTokenFor } from "../rules/bestiary.mjs";
 // A thrall's bond (04's Thrall of the Banshee; the lead's ruling of 2026-10-22).
 import { THRALL_FLAG, isThrallBond } from "../rules/legacy-uses.mjs";
+import { commandDemonReturn } from "../rules/command-demon-return.mjs";
+import { commandDemonRangeRefusal } from "../effects/command-demon-range.mjs";
+import { verifyCommandDemonSight } from "../effects/command-demon-sight-query.mjs";
 
 export const BIND_QUERY = "azeroth-rpg.bind";
 export const UNBIND_QUERY = "azeroth-rpg.unbind";
+export const RELEASE_COMMAND_QUERY = "azeroth-rpg.releaseCommandDemon";
 const FLAG = "bond";
+const releasingCommands = new Set();
+const commandingDemons = new Set();
 
 /**
  * The world actor behind a token's synthetic one (D-650). A bond lives on
@@ -359,6 +365,13 @@ export async function adopt({ owner, actor, kind, feature = null, until = null, 
   }
   const folder = await boundFolder();
   const source = actor._stats?.compendiumSource ?? null;
+  const commandReturn = kind === "demon" && until === "longRest" && uncounted === true ? {
+    version: 1, ownership: structuredClone(actor.ownership ?? {}), granted: ownershipFor(owner),
+    disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY, prototype: actor.prototypeToken.disposition,
+    // UUIDs are values: Foundry expands dots in object keys during updates.
+    tokens: [...game.scenes].flatMap(scene => scene.tokens.filter(t => t.actorId === actor.id)
+      .map(t => ({ uuid: t.uuid, disposition: t.disposition })))
+  } : null;
   await actor.update({
     folder: folder?.id ?? actor.folder?.id ?? null,
     ownership: { ...(actor.ownership ?? {}), ...ownershipFor(owner) },
@@ -372,7 +385,8 @@ export async function adopt({ owner, actor, kind, feature = null, until = null, 
       // `releaseAtLongRest` reads it.
       until: until === "longRest" ? "longRest" : null, uncounted: uncounted === true,
       // Demonic Aegis's school, chosen at the pick (04 at rank 2; D-775).
-      school: typeof school === "string" && school ? school : null, count: 1, since: Date.now()
+      school: typeof school === "string" && school ? school : null, count: 1, since: Date.now(),
+      ...(commandReturn ? { commandReturn } : {})
     }
   });
   if (feature && !(feature.system.known ?? []).some(k => k.uuid === actor.uuid)) {
@@ -402,18 +416,50 @@ export const ADOPT_QUERY = "azeroth-rpg.adopt";
  *
  * @returns {Promise<{uuid: string}>}
  */
-export async function adoptQueryHandler({ ownerUuid = null, actorUuid = null, featureId = null } = {}, { user = null } = {}) {
+export async function adoptQueryHandler({ ownerUuid = null, actorUuid = null, featureId = null, placement = null } = {}, { user = null } = {}) {
+  if (!game.user.isGM || !user) throw new Error(game.i18n.localize("AZEROTH.Bound.NotOwner"));
   const owner = ownerUuid ? await fromUuid(ownerUuid) : null;
-  if (owner?.documentName !== "Actor") throw new Error(game.i18n.localize("AZEROTH.Bound.NoOwner"));
-  if (user && !owner.testUserPermission(user, "OWNER")) throw new Error(game.i18n.localize("AZEROTH.Bound.NotOwner"));
+  if (owner?.documentName !== "Actor" || owner.type !== "character") throw new Error(game.i18n.localize("AZEROTH.Bound.NoOwner"));
+  if (!owner.testUserPermission(user, "OWNER")) throw new Error(game.i18n.localize("AZEROTH.Bound.NotOwner"));
   const target = worldActorOf(actorUuid ? await fromUuid(actorUuid) : null);
+  if (!owner.testUserPermission(user, "OWNER")) throw new Error(game.i18n.localize("AZEROTH.Bound.NotOwner"));
   if (target?.documentName !== "Actor" || target.type !== "npc") throw new Error(game.i18n.localize("AZEROTH.Card.TargetGone"));
-  if (target.system?.creatureType !== "demon") throw new Error(game.i18n.format("AZEROTH.CommandDemon.NotDemon", { target: target.name }));
-  if (bondOf(target)) throw new Error(game.i18n.format("AZEROTH.CommandDemon.Bound", { target: target.name }));
-  const feature = featureId ? owner.items.get(featureId) ?? null : null;
-  const made = await adopt({ owner, actor: target, kind: "demon", feature, until: "longRest", uncounted: true });
-  if (!made) throw new Error(game.i18n.format("AZEROTH.CommandDemon.Refused", { target: target.name }));
-  return { uuid: made.uuid };
+  if (commandingDemons.has(target.uuid)) throw new Error(game.i18n.localize("AZEROTH.CommandDemon.Pending"));
+  if (releasingCommands.has(target.uuid)) throw new Error(game.i18n.localize("AZEROTH.CommandDemon.ReleasePending"));
+  commandingDemons.add(target.uuid);
+  try {
+    if (target.system?.creatureType !== "demon") throw new Error(game.i18n.format("AZEROTH.CommandDemon.NotDemon", { target: target.name }));
+    if (bondOf(target)) throw new Error(game.i18n.format("AZEROTH.CommandDemon.Bound", { target: target.name }));
+    const feature = featureId ? owner.items.get(featureId) ?? null : null;
+    // Read the granting talent now: a feature can outlive a refund while its
+    // asynchronous class-feature sync is pending. The class's Bound Demon is
+    // not authority to grant this temporary, uncounted command.
+    const talentId = feature?.getFlag("azeroth-rpg", "feature")?.talentId;
+    const talent = talentId ? owner.items.get(talentId) : null;
+    if (feature?.type !== "feature" || feature.system?.identifier !== "command-demon"
+      || talent?.type !== "talent" || talent.system?.identifier !== "command-demon"
+      || talent.system?.className !== "Warlock" || !(talent.system?.taken > 0)) {
+      throw new Error(game.i18n.localize("AZEROTH.CommandDemon.NoTalent"));
+    }
+    const rangeRefusal = commandDemonRangeRefusal(owner, target, placement);
+    if (rangeRefusal) throw new Error(game.i18n.localize(rangeRefusal));
+    const sightRefusal = await verifyCommandDemonSight(owner, target, placement, user);
+    if (sightRefusal) throw new Error(game.i18n.localize(sightRefusal));
+    if (!owner.testUserPermission(user, "OWNER")) throw new Error(game.i18n.localize("AZEROTH.Bound.NotOwner"));
+    if (owner.items.get(featureId) !== feature || owner.items.get(talentId) !== talent || !(talent.system.taken > 0)
+      || feature.system.identifier !== "command-demon" || talent.system.identifier !== "command-demon"
+      || talent.system.className !== "Warlock" || feature.getFlag("azeroth-rpg", "feature")?.talentId !== talentId) {
+      throw new Error(game.i18n.localize("AZEROTH.CommandDemon.NoTalent"));
+    }
+    if (target.system.creatureType !== "demon" || bondOf(target)) throw new Error(game.i18n.format("AZEROTH.CommandDemon.Refused", { target: target.name }));
+    const moved = commandDemonRangeRefusal(owner, target, placement);
+    if (moved) throw new Error(game.i18n.localize(moved));
+    const made = await adopt({ owner, actor: target, kind: "demon", feature, until: "longRest", uncounted: true });
+    if (!made) throw new Error(game.i18n.format("AZEROTH.CommandDemon.Refused", { target: target.name }));
+    return { uuid: made.uuid };
+  } finally {
+    commandingDemons.delete(target.uuid);
+  }
 }
 
 /**
@@ -425,12 +471,11 @@ export async function adoptQueryHandler({ ownerUuid = null, actorUuid = null, fe
  * @param {{owner: Actor, actor: Actor, feature?: Item|null}} o
  * @returns {Promise<Actor|null>}
  */
-export async function commandDemon({ owner, actor, feature = null }) {
+export async function commandDemon({ owner, actor, feature = null, placement = null }) {
   const target = worldActorOf(actor);
   if (!owner || !target) return null;
-  if (target.isOwner) return adopt({ owner, actor: target, kind: "demon", feature, until: "longRest", uncounted: true });
   try {
-    const { uuid } = await askGM(ADOPT_QUERY, adoptQueryHandler, { ownerUuid: owner.uuid, actorUuid: target.uuid, featureId: feature?.id ?? null });
+    const { uuid } = await askGM(ADOPT_QUERY, adoptQueryHandler, { ownerUuid: owner.uuid, actorUuid: target.uuid, featureId: feature?.id ?? null, placement });
     return uuid ? await fromUuid(uuid) : null;
   } catch (err) {
     ui.notifications?.warn(err.message);
@@ -451,6 +496,65 @@ export async function releaseAtLongRest(owner) {
   }
 }
 
+/** A temporary command's permission grant ends on the GM, even when the
+ * player's Long Rest initiated it. Keep the bond until the final actor write
+ * so a failed token/folder/effect cleanup can be retried without guessing. */
+export async function releaseCommandQueryHandler({ ownerUuid, actorUuid } = {}, { user } = {}) {
+  if (!game.user?.isGM) throw new Error(game.i18n.localize("AZEROTH.Bound.NoGM"));
+  const owner = ownerUuid ? await fromUuid(ownerUuid) : null;
+  const actor = worldActorOf(actorUuid ? await fromUuid(actorUuid) : null);
+  if (owner?.documentName !== "Actor" || actor?.documentName !== "Actor" || !user
+    || !owner.testUserPermission(user, "OWNER")) throw new Error(game.i18n.localize("AZEROTH.Bound.NotOwner"));
+  // The bond may not exist yet, or may have been written before adoption's
+  // feature/effect/token writes finish. Neither state permits release to race it.
+  if (commandingDemons.has(actor.uuid)) throw new Error(game.i18n.localize("AZEROTH.CommandDemon.Pending"));
+  const bond = bondOf(actor);
+  if (!bond) return { released: true };
+  if (bond.ownerUuid !== owner.uuid || bond.kind !== "demon" || bond.until !== "longRest" || bond.uncounted !== true)
+    throw new Error(game.i18n.localize("AZEROTH.Bound.NotOwner"));
+  if (releasingCommands.has(actor.uuid)) throw new Error(game.i18n.localize("AZEROTH.CommandDemon.ReleasePending"));
+  releasingCommands.add(actor.uuid);
+  const expected = JSON.stringify(bond);
+  const valid = () => {
+    if (!owner.testUserPermission(user, "OWNER") || JSON.stringify(bondOf(actor)) !== expected)
+      throw new Error(game.i18n.localize("AZEROTH.CommandDemon.ReleaseChanged"));
+  };
+  const current = () => ({ ownership: actor.ownership, prototype: actor.prototypeToken.disposition,
+    tokens: [...game.scenes].flatMap(scene => scene.tokens.filter(t => t.actorId === actor.id)
+      .map(t => ({ uuid: t.uuid, disposition: t.disposition }))) });
+  try {
+    const plan = bond.commandReturn ? commandDemonReturn(bond.commandReturn, current()) : null;
+    if (bond.commandReturn && !plan) throw new Error(game.i18n.localize("AZEROTH.CommandDemon.ReturnReview"));
+    for (const feature of owner.items.filter(i => i.type === "feature" && (i.system.known ?? []).some(k => k.uuid === actor.uuid))) {
+      valid();
+      await feature.update({ "system.known": feature.system.known.filter(k => k.uuid !== actor.uuid).map(k => ({ uuid: k.uuid, name: k.name })) });
+    }
+    const effects = actor.effects.filter(e => e.getFlag("azeroth-rpg", FLAG)).map(e => e.id);
+    valid(); if (effects.length) await actor.deleteEmbeddedDocuments("ActiveEffect", effects);
+    for (const row of plan?.tokens ?? []) {
+      valid();
+      const token = await fromUuid(row.uuid);
+      if (token?.actorId === actor.id && token.disposition === bond.commandReturn.disposition)
+        await token.update({ disposition: row.disposition });
+    }
+    const folder = await boundFolder();
+    valid();
+    if (folder?.id && actor.folder?.id === folder.id) {
+      const unbound = await unboundFolder();
+      valid(); if (unbound?.id) await actor.update({ folder: unbound.id });
+    }
+    valid();
+    const finalPlan = bond.commandReturn ? commandDemonReturn(bond.commandReturn, current()) : null;
+    if (bond.commandReturn && !finalPlan) throw new Error(game.i18n.localize("AZEROTH.CommandDemon.ReturnReview"));
+    if (finalPlan?.tokens.length) throw new Error(game.i18n.localize("AZEROTH.CommandDemon.ReleaseChanged"));
+    await actor.update({ ...(finalPlan?.actor ?? {}), "flags.azeroth-rpg.-=bond": null });
+    if (bondOf(actor)) throw new Error(game.i18n.localize("AZEROTH.CommandDemon.ReleaseUnconfirmed"));
+    if (!bond.commandReturn) ui.notifications?.warn(game.i18n.localize("AZEROTH.CommandDemon.LegacyPermissions"));
+    ui.notifications?.info(game.i18n.format("AZEROTH.Bound.Released", { owner: owner.name, name: actor.name }));
+    return { released: true };
+  } finally { releasingCommands.delete(actor.uuid); }
+}
+
 /**
  * Release a bond: the owner's effects and the flag come off a held creature,
  * which stays in the folder; a creature called for the encounter goes, with
@@ -466,6 +570,11 @@ export async function release(owner, uuid) {
     named = null;
   }
   if (named?.documentName === "Actor" && isThrallBond(named.getFlag?.("azeroth-rpg", FLAG) ?? null)) return releaseThrallBond(named);
+  const commanded = worldActorOf(named), commandBond = bondOf(commanded);
+  if (commandBond?.kind === "demon" && commandBond.until === "longRest" && commandBond.uncounted === true) {
+    const result = await askGM(RELEASE_COMMAND_QUERY, releaseCommandQueryHandler, { ownerUuid: owner.uuid, actorUuid: commanded.uuid });
+    return result?.released ? commanded : null;
+  }
   for (const feature of owner.items.filter(i => i.type === "feature" && (i.system.known ?? []).some(k => k.uuid === uuid))) {
     await feature.update({ "system.known": feature.system.known.filter(k => k.uuid !== uuid).map(k => ({ uuid: k.uuid, name: k.name })) });
   }

@@ -485,7 +485,7 @@ export function actionOf(movement) {
  * @param {string} [action]  A `CONFIG.Token.movement.actions` key.
  * @returns {number} feet, never negative
  */
-export function paceFor({ speed = 0, flyingSpeed = null, swims = 0, stopped = false } = {}, action = "walk") {
+export function paceFor({ speed = 0, flyingSpeed = null, swims = 0, aquaticOnly = false, stopped = false } = {}, action = "walk") {
   if (stopped) return 0;
   const ground = Math.max(0, Math.trunc(Number(speed)) || 0);
   const flying = Math.max(0, Math.trunc(Number(flyingSpeed)) || 0);
@@ -495,6 +495,9 @@ export function paceFor({ speed = 0, flyingSpeed = null, swims = 0, stopped = fa
   if (action === FLY_ACTION && flying > 0) return flying;
   const swimming = Math.max(0, Math.trunc(Number(swims)) || 0);
   if (action === SWIM_ACTION && swimming > 0) return ground * swimming;
+  // A fish's printed Speed is its water pace, not permission to walk on land.
+  // An independently granted flying pace above still permits magical flight.
+  if (aquaticOnly) return 0;
   return ground;
 }
 

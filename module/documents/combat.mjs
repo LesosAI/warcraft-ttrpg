@@ -11,6 +11,8 @@
 
 // Shadowform's mark, cleared at the end of the holder's own turn (D-774).
 import { clearLightUsed } from "../effects/shadowform.mjs";
+import { iceBlockFor } from "../rules/ice-block.mjs";
+import { restoreCombatEffectTracking } from "../effects/combat-effect-registry.mjs";
 import {
   freshTurn,
   gainHalfActions,
@@ -25,12 +27,27 @@ import {
 } from "../rules/initiative.mjs";
 import { drainAtRoundEnd, fightStart, idleDecay, leaveFightPools } from "../rules/momentum.mjs";
 import { bleedTick, scorchTick, sustainLimit, upkeep } from "../rules/turn-effects.mjs";
+import { sustainEntryTransferPending } from "../rules/sustain-entry-transfer.mjs";
+import { buffetStacks } from "../rules/flame-buffet.mjs";
 import { liftSpellEffects } from "../dice/workflows.mjs";
 import { AZEROTH } from "../config.mjs";
+import { reactionBarred, REACTION_BAR_REASON } from "../rules/reaction-bar.mjs";
+import { elementalTurnSlots, matchingTurnSlot } from "../rules/elemental-turns.mjs";
+import { MIND_CONTROL_SCHEDULE, mindControlScheduledSlots } from "../rules/mind-control-schedule.mjs";
+import { prepareMindControlRound } from "../effects/mind-control-round.mjs";
+import { endMindControlTurn } from "../effects/mind-control-turn-end.mjs";
 import { gateHolds } from "../rules/ability-automation.mjs";
 import { bondOf, boundOf, endBoundEncounter } from "./bound.mjs";
 // 06 §5's departure and 06 §6's Reaction (D-694).
 import { canReact, provokes } from "../rules/reactions.mjs";
+import { attackSlowedFor } from "../rules/chilled.mjs";
+import { despairRefusal } from "../rules/ancient-despair.mjs";
+import { phaseShiftRefusal } from "../rules/phase-shift.mjs";
+import { seductionRefusal } from "../effects/seduction-refusal.mjs";
+import { sleepRefusal } from "../rules/dreadlord-sleep.mjs";
+import { projectionRefusal } from "../rules/image-projection.mjs";
+import { permittedDespairWalk } from "../effects/despair-walk-permission.mjs";
+import { consumeRocketJump } from "../effects/rocket-jump-permission.mjs";
 // The Warrior's turn-start Health (04's Blood Craze) and a heal Mortal Strike
 // blocks (D-772).
 import { fleetFootedFor, turnStartHealFor } from "../rules/class-talents.mjs";
@@ -92,6 +109,16 @@ import {
 import { casterTurnTests, kindsOfActor, postAreaTest, relationTo, strikeFromArea } from "../effects/area-strikes.mjs";
 // Damage or healing laid on the creature itself, at the start of its turn (D-770).
 import { landTicks } from "../effects/ticks.mjs";
+import { advanceVekniss } from "../effects/vekniss.mjs";
+import { advanceBloodpetal } from "../effects/bloodpetal.mjs";
+import { advanceDredgePoison } from "../effects/dredge-poison.mjs";
+import { advanceVirulentPoison } from "../effects/virulent-poison.mjs";
+import { advanceFireguardBurn } from "../effects/fireguard-burn.mjs";
+import { advanceFleshRot } from "../effects/flesh-rot.mjs";
+import { advanceToxicPoison } from "../effects/toxic-horror.mjs";
+import { advanceWildRegeneration } from "../effects/wild-regeneration.mjs";
+import { advanceSentinelMending } from "../effects/sentinel-mending.mjs";
+import { advanceMindFlay } from "../effects/qiraji-mind-flay-clock.mjs";
 // The round's record of the riders spent and paid before the blow (D-770).
 import { roundOnce, roundRelease, roundRiders, roundStruck } from "../rules/riders.mjs";
 // Whether a creature and an area are still in the world after the turn's awaits.
@@ -107,7 +134,7 @@ import { WRITE_PATIENCE_MS, writeQueue } from "../rules/write-queue.mjs";
 import { upkeepCost, upkeepOf } from "../rules/upkeep.mjs";
 import { cleanForced } from "../rules/forced-movement.mjs";
 import { forceMove, forcedWords, regionCentreOf } from "../effects/forced-movement.mjs";
-import { SHED_DC_FLAG, cleanShedDc, escapesDue } from "../rules/escapes.mjs";
+import { SHED_DC_FLAG, cleanShedDc, escapesDue, escapeAction } from "../rules/escapes.mjs";
 // The tinker's constructs share one turn (04's The Bench; the Legacy branches' door 6).
 import { constructsFor, ownAfterShared, sharedAllowance, sharedSpent, sharedTurnAfter, sharedTurnGranted, sharedTurnLeft, sharedTurnRefunded, sharedView } from "../rules/constructs.mjs";
 // THE LEGACY BRANCHES' B3 (doors 10 and 25): a turn in the Spirit Realm (06 §10) - its
@@ -222,6 +249,32 @@ export class AzerothCombatant extends Combatant {
     const live = typeof combat?._order === "function" ? combat._order() : null;
     // DELETED, never set to undefined: the server asks `"combatTurn" in operation`.
     if (leavesTurnAlone(operation.updates, { standing, live })) delete operation.combatTurn;
+    else AzerothCombatant._preserveExtraSlot(operation, "update", documents);
+    return allowed;
+  }
+
+  /** Core 14.367 preserves a combatant by its first occurrence. Preserve an
+   * Elemental Mastery occurrence by its slot key instead when the order changes. */
+  static _preserveExtraSlot(operation, kind, documents) {
+    const combat = operation.parent;
+    const slot = combat?.turnSlots?.[combat.turn];
+    if (!slot?.extra) return;
+    const copy = combat.clone();
+    if (kind === "delete") for (const id of operation.ids ?? []) copy.combatants.delete(id);
+    else copy.updateSource({combatants: kind === "create" ? documents.map(d => d.toObject()) : operation.updates});
+    const index = matchingTurnSlot(copy._turnSlots(), slot.key);
+    if (index >= 0) { operation.combatTurn = index; operation.turnEvents = false; }
+  }
+
+  static async _preCreateOperation(documents, operation, user) {
+    const allowed = await super._preCreateOperation(documents, operation, user);
+    if (allowed !== false) AzerothCombatant._preserveExtraSlot(operation, "create", documents);
+    return allowed;
+  }
+
+  static async _preDeleteOperation(documents, operation, user) {
+    const allowed = await super._preDeleteOperation(documents, operation, user);
+    if (allowed !== false) AzerothCombatant._preserveExtraSlot(operation, "delete", documents);
     return allowed;
   }
 
@@ -665,6 +718,7 @@ export class AzerothCombatant extends Combatant {
       speed: system.speed ?? 0,
       flyingSpeed: system.flyingSpeed ?? null,
       swims: movementFactsOf(actor).swims,
+      aquaticOnly: movementFactsOf(actor).aquaticOnly,
       // **THE BODY IN THE SPIRIT REALM DOES NOT MOVE** (06 §9; the B3 review): a Dying
       // character at 0 by Bleeding, a tick or the sheet is never Prone, and walked on
       // the realm's Half-Action. Its pace is held at 0 as Prone's is, so the limit
@@ -750,7 +804,41 @@ export class AzerothCombatant extends Combatant {
   async spendAction(cost, options = {}) {
     return oneAtATime(this, async () => {
       const before = this.budget;
-      const result = spend(before, cost, { ...options, onTurn: options.onTurn ?? this.isCurrentTurn });
+      if (iceBlockFor(this.actor)) {
+        const reason = "AZEROTH.IceBlock.Protected";
+        ui.notifications?.warn(game.i18n.localize(reason));
+        return { ok: false, reason, params: {}, budget: before };
+      }
+      if (cost === "reaction" && reactionBarred(this.actor)) {
+        ui.notifications?.warn(game.i18n.localize(REACTION_BAR_REASON));
+        return { ok: false, reason: REACTION_BAR_REASON, params: {}, budget: before };
+      }
+      const projection = projectionRefusal(this.actor, "action");
+      if (projection) {
+        ui.notifications?.warn(game.i18n.localize(projection));
+        return { ok: false, reason: projection, params: {}, budget: before };
+      }
+      const sleeping = sleepRefusal(this.actor, "action");
+      if (sleeping) {
+        ui.notifications?.warn(game.i18n.localize(sleeping));
+        return { ok: false, reason: sleeping, params: {}, budget: before };
+      }
+      const despair = despairRefusal(this.actor, "action");
+      if (despair) {
+        ui.notifications?.warn(game.i18n.localize(despair));
+        return { ok: false, reason: despair, params: {}, budget: before };
+      }
+      const phaseShift = phaseShiftRefusal(this.actor, "action");
+      if (phaseShift) {
+        ui.notifications?.warn(game.i18n.localize(phaseShift));
+        return { ok: false, reason: phaseShift, params: {}, budget: before };
+      }
+      const seduction = seductionRefusal(this.actor, "action");
+      if (seduction) {
+        ui.notifications?.warn(game.i18n.localize(seduction));
+        return { ok: false, reason: seduction, params: {}, budget: before };
+      }
+      const result = spend(before, cost, { ...options, attackSlowed: attackSlowedFor(this.actor, options), onTurn: options.onTurn ?? this.isCurrentTurn });
       if (!result.ok) {
         // A construct the SHARED turn refuses says so (door 6).
         const sharedWhy = this._sharedRefusal(cost, options);
@@ -774,7 +862,9 @@ export class AzerothCombatant extends Combatant {
       // **THE VIEW IS THE CLAMP, NEVER THE STORE** (door 6; B8b): a construct's spend
       // comes off its own budget, or a Half-Action granted later reaches nothing.
       if (this._sharedTurn()) result.budget = ownAfterShared(this._ownBudget(), before, result.budget);
-      await this.setFlag("azeroth-rpg", "budget", result.budget);
+      // Carry the cause with the same write. A decreased budget can also be
+      // an enemy taking a Reaction; channel interruption needs an actual spend.
+      await this.update({ "flags.azeroth-rpg.budget": result.budget }, { azerothActionSpent: cost });
       return result;
     });
   }
@@ -797,6 +887,31 @@ export class AzerothCombatant extends Combatant {
   async spendMoveAction() {
     return oneAtATime(this, async () => {
       const before = this.budget;
+      if (iceBlockFor(this.actor)) {
+        const reason = "AZEROTH.IceBlock.Protected";
+        ui.notifications?.warn(game.i18n.localize(reason));
+        return { ok: false, reason, params: {}, budget: before };
+      }
+      const projection = projectionRefusal(this.actor, "move");
+      if (projection) {
+        ui.notifications?.warn(game.i18n.localize(projection));
+        return { ok: false, reason: projection, params: {}, budget: before };
+      }
+      const sleeping = sleepRefusal(this.actor, "action");
+      if (sleeping) {
+        ui.notifications?.warn(game.i18n.localize(sleeping));
+        return { ok: false, reason: sleeping, params: {}, budget: before };
+      }
+      const despair = despairRefusal(this.actor, "action");
+      if (despair) {
+        ui.notifications?.warn(game.i18n.localize(despair));
+        return { ok: false, reason: despair, params: {}, budget: before };
+      }
+      const phaseShift = phaseShiftRefusal(this.actor, "movement");
+      if (phaseShift) {
+        ui.notifications?.warn(game.i18n.localize(phaseShift));
+        return { ok: false, reason: phaseShift, params: {}, budget: before };
+      }
       const result = spend(before, "half", { onTurn: this.isCurrentTurn });
       if (!result.ok) {
         const sharedWhy = this._sharedRefusal("half");
@@ -1270,8 +1385,13 @@ export function onMoveToken(document, movement, operation, user) {
   // a GM's reposition, a shape's resize with its centre held - is no creature
   // moving (`rules/movement.mjs#creatureMoved`, the reading areas already take),
   // so it offers no Opportunity Attack. Its feet are metered as before: nothing.
-  return combatant.spendMovement(movement)
-    .then(() => (creatureMoved(movement, operation) ? offerOpportunities(combatant, movement) : []))
+  // Check the private walking permission synchronously, while token.move is
+  // still running. The later budget queue must not outlive that permission.
+  const rocketJump = consumeRocketJump(document, movement);
+  const paid = permittedDespairWalk(document, movement)
+    ? Promise.resolve(null) : combatant.spendMovement(movement);
+  return paid
+    .then(() => (!rocketJump && creatureMoved(movement, operation) ? offerOpportunities(combatant, movement) : []))
     .catch(err => console.error("azeroth-rpg | opportunity attack", err));
 }
 
@@ -1425,6 +1545,7 @@ function historyProbe(document, action) {
  * tracker's own Restore as the undo for a Half-Action spent wrongly (D-718).
  */
 export function onPreMoveToken(document, movement) {
+  if (permittedDespairWalk(document, movement)) return true;
   if (!movementLimited()) return true;
   // **A DISPLACEMENT SPENDS NO FEET, SO THE LIMIT NEVER REFUSES ONE** (D-769):
   // the turn's history is in the metered sum too, so a creature that had
@@ -1502,6 +1623,32 @@ function movementSteps(document, movement) {
 }
 
 export class AzerothCombat extends Combat {
+  async _preUpdate(changed, options, user) {
+    const allowed = await super._preUpdate(changed, options, user);
+    if (allowed === false) return false;
+    const prepared = prepareMindControlRound(this, changed, options);
+    if (!prepared.ok) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.MindControl.ScheduleUnresolved"));
+      return false;
+    }
+    return allowed;
+  }
+
+  /** Core 14.367 only rebuilds populated turns for combatant updates. A saved
+   * control schedule is a Combat flag, so refresh its slots explicitly while
+   * leaving the old current state for core's normal transition bookkeeping. */
+  _onUpdate(changed, options, userId) {
+    const flags = changed.flags?.["azeroth-rpg"];
+    const scheduleChanged = flags && (Object.hasOwn(flags, MIND_CONTROL_SCHEDULE)
+      || Object.hasOwn(flags, `-=${MIND_CONTROL_SCHEDULE}`));
+    if (scheduleChanged || (Object.hasOwn(changed, "round") && this.getFlag("azeroth-rpg", MIND_CONTROL_SCHEDULE))) {
+      const prior = this.current;
+      this.setupTurns();
+      this.current = prior;
+    }
+    return super._onUpdate(changed, options, userId);
+  }
+
   /**
    * @inheritDoc
    *
@@ -1518,10 +1665,8 @@ export class AzerothCombat extends Combat {
   setupTurns() {
     this.turns ||= [];
 
-    const order = this._order();
-    const turns = this.combatants.contents
-      .slice()
-      .sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+    this.turnSlots = this._turnSlots();
+    const turns = this.turnSlots.map(slot => this.combatants.get(slot.id));
 
     if (this.turn !== null) {
       if (this.turn < 0) this.turn = 0;
@@ -1550,13 +1695,26 @@ export class AzerothCombat extends Combat {
    * holds for anything reachable from a getter core reads early.
    */
   _order() {
-    const shaped = this.combatants.map(c => ({
+    return this._turnSlots().map(slot => slot.id);
+  }
+
+  _turnSlots() {
+    return mindControlScheduledSlots(this._baseTurnSlots(), this.getFlag("azeroth-rpg", MIND_CONTROL_SCHEDULE), this.round);
+  }
+
+  /** Unmodified side/extra-turn ordering for control placement and restoration. */
+  _baseTurnSlots() {
+    const shaped = this.combatants.map((c, sourceOrder) => ({
       id: c.id,
+      sourceOrder,
       name: c.name,
       side: c.side,
-      initiative: c.derivedInitiative
+      initiative: c.derivedInitiative,
+      actorUuid: c.actor?.isToken && c.actorId ? `Actor.${c.actorId}` : c.actor?.uuid,
+      talents: c.actor?.takenTalents?.() ?? [],
+      bond: bondOf(c.actor)
     }));
-    return turnOrder(shaped).map(c => c.id);
+    return elementalTurnSlots(turnOrder(shaped));
   }
 
   /**
@@ -1670,11 +1828,27 @@ export class AzerothCombat extends Combat {
    * the sidebar still empties its Momentum and restores its encounter uses.
    */
 
+  /** Resolve landing effects on the designated GM, from the tokens' own scene. */
+  async _infernalArrivals(combatants) {
+    if (!combatants.some(c => c.actor?.system?.creatureAbilities?.some(a => a.name === "Arrival"))) return;
+    try {
+      const { advanceInfernalArrivals } = await import("../effects/infernal-arrival.mjs");
+      const result = await advanceInfernalArrivals(this, combatants);
+      if (!result?.ok || result.results?.some(row => row.feedbackError)) {
+        ui.notifications?.warn(game.i18n.localize("AZEROTH.Infernal.ArrivalUnconfirmed"));
+      }
+    } catch (error) {
+      console.warn("azeroth-rpg | Infernal Arrival", error);
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Infernal.ArrivalUnconfirmed"));
+    }
+  }
+
   /** @inheritDoc */
   async _onEnter(combatant) {
     await super._onEnter(combatant);
     // A late joiner enters as the others began (02 SS7).
     if (this.started) await this._fightStart(combatant);
+    if (this.started) await this._infernalArrivals([combatant]);
     // A character's bound creatures on the scene join beside it (D2 §7, D-643).
     const owner = combatant.actor;
     if (owner?.type === "character" && this.scene) {
@@ -1703,6 +1877,9 @@ export class AzerothCombat extends Combat {
   /** @inheritDoc */
   async _onStartRound(context) {
     await super._onStartRound(context);
+    // Core awaits round-start before the first turn. Tracker preparation alone
+    // must never trigger a landing; the combat ledger prevents rewind/re-entry.
+    if (context.round === 1 && !context.skipped) await this._infernalArrivals([...this.combatants]);
     // The order is re-derived each round, so a Dexterity or a level that
     // moved mid-fight counts, whoever advanced the round; every budget is
     // fresh, the off hand's one blow being per ROUND (06 SS2).
@@ -1722,6 +1899,7 @@ export class AzerothCombat extends Combat {
 
   /** @inheritDoc */
   async _onStartTurn(combatant, context) {
+    restoreCombatEffectTracking(combatant, {...context, combat: this});
     await super._onStartTurn(combatant, context);
     // **02's FOCUS REFILLS ONLY AFTER A STILL TURN** (*It refills at 2 at the start of
     // any turn in which you have neither moved nor been Engaged*; the Legacy branches'
@@ -1745,6 +1923,31 @@ export class AzerothCombat extends Combat {
     const actor = combatant.actor;
     if (actor?.statuses?.has("guarded")) await actor.toggleStatusEffect("guarded", { active: false });
     await this._turnTicks(combatant);
+    try {
+      const { advanceInfernalImmolation } = await import("../effects/infernal-immolation.mjs");
+      const immolation = await advanceInfernalImmolation(this, combatant);
+      if (!immolation.ok || immolation.results.some(row => row.feedbackError)) {
+        ui.notifications?.warn(game.i18n.localize("AZEROTH.Infernal.TickUnconfirmed"));
+      }
+    } catch (error) {
+      console.warn("azeroth-rpg | Infernal Immolation turn", error);
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Infernal.TickUnconfirmed"));
+    }
+    // Resolve the next-turn command after start-of-turn harm, which may have
+    // ended the charm. Claim it before posting so a repeated lifecycle call
+    // cannot instruct the creature to take another compelled turn.
+    try {
+      const { beginSeductionTurn } = await import("../effects/seduction-turn.mjs");
+      const commands = await beginSeductionTurn(this, combatant);
+      for (const effect of commands) {
+        await this._prompt(actor, { purpose: "seduction", noTest: true, ownerSees: true, seduction: true,
+          effectId: effect.id, title: "Seduction",
+          text: "Spend this turn moving toward the succubus that Charmed you. Use normal movement limits and a legal path. The charm ends at the end of this turn, or if the succubus or one of its allies harms you." });
+      }
+    } catch (error) {
+      console.warn("azeroth-rpg | Seduction turn could not be confirmed", error);
+      ui.notifications?.warn("Seduction's turn instruction could not be confirmed. Check the target's effect before resolving its turn.");
+    }
     // **AN ESCAPE ON THE CREATURE'S OWN ACTION** (07's Frost Nova: *Entangled until it
     // spends an action and passes another Reflex Resilience Test*; D-778): offered as
     // its turn begins, the action spent only by a Test it makes.
@@ -1778,6 +1981,11 @@ export class AzerothCombat extends Combat {
   async _escapePrompts(combatant, on) {
     const actor = combatant?.actor ?? null;
     if (!actor || combatant.isDefeated) return;
+    if (on === "turnEnd") {
+      const { repairCompelEscapes } = await import("../effects/compel.mjs");
+      const repaired = await repairCompelEscapes(actor);
+      if (repaired.unresolved) ui.notifications?.warn(game.i18n.format("AZEROTH.Compel.RepeatUnresolved", { name: actor.name }));
+    }
     const plain = (actor.effects ?? []).map(e => ({
       id: e.id, statuses: [...(e.statuses ?? [])], flags: e.flags ?? {}, disabled: e.disabled === true || e.active === false
     }));
@@ -1802,9 +2010,11 @@ export class AzerothCombat extends Combat {
       const resilience = game.i18n.localize(AZEROTH.resiliences[escape.resilience] ?? escape.resilience);
       const condition = game.i18n.localize(AZEROTH.conditions[escape.condition] ?? escape.condition);
       await this._prompt(actor, {
-        purpose: "escape", resilience: escape.resilience, effectId: id, escape, dc: escape.dc,
+        purpose: "escape", ownerSees: true, resilience: escape.resilience, effectId: id, escape, dc: escape.dc,
         title: game.i18n.format("AZEROTH.Escape.Title", { condition }),
-        text: game.i18n.format(on === "action" ? "AZEROTH.Escape.PromptAction" : "AZEROTH.Escape.PromptTurnEnd", {
+        text: game.i18n.format(on === "action"
+          ? (escapeAction(actor.takenTalents?.() ?? [], escape) === "half" ? "AZEROTH.Escape.PromptHalf" : "AZEROTH.Escape.PromptAction")
+          : "AZEROTH.Escape.PromptTurnEnd", {
           name: actor.name, condition, source: escape.source, resilience, dc: escape.dc ?? "—", banes: escape.banes
         }),
         testLabel: game.i18n.format("AZEROTH.Card.ResistTest", { resilience, dc: escape.dc ?? "—" })
@@ -1824,12 +2034,12 @@ export class AzerothCombat extends Combat {
     // turn opens with a DC 12 Body Resilience Test - the table's roll, from
     // a card - and a failure takes a Death Step.
     if (actor.type === "character" && (actor.system?.health?.value ?? 0) <= 0 && !actor.getFlag("azeroth-rpg", "stabilized")
-      && (actor.system?.deathSteps ?? 0) < AZEROTH.DEATH_STEPS) {
+      && (actor.system?.deathSteps ?? 0) < (actor.system?.deathStepLimit ?? AZEROTH.DEATH_STEPS)) {
       await this._prompt(actor, {
         purpose: "deathStep",
         cardClass: "azeroth-card-critical",
         title: game.i18n.localize("AZEROTH.Sheet.Dying"),
-        text: game.i18n.format("AZEROTH.Combat.DyingPrompt", { name: actor.name, steps: actor.system.deathSteps ?? 0, max: AZEROTH.DEATH_STEPS }),
+        text: game.i18n.format("AZEROTH.Combat.DyingPrompt", { name: actor.name, steps: actor.system.deathSteps ?? 0, max: actor.system?.deathStepLimit ?? AZEROTH.DEATH_STEPS }),
         testLabel: game.i18n.format("AZEROTH.Card.ResistTest", { resilience: game.i18n.localize(AZEROTH.resiliences.body), dc: AZEROTH.DEATH_STEP_DC }),
         dc: AZEROTH.DEATH_STEP_DC,
         stabilize: true
@@ -1877,6 +2087,7 @@ export class AzerothCombat extends Combat {
       const health = actor.system?.health?.value ?? 0;
       const burn = scorchTick({
         scorched, health, dying: health <= 0,
+        fireTakenBonus: buffetStacks([...(actor.effects ?? [])], game.time?.worldTime),
         immune: actor.system?.immune ?? [],
         vulnerable: actor.system?.vulnerable ?? [],
         school: AZEROTH.SCORCHED_SCHOOL
@@ -1957,9 +2168,10 @@ export class AzerothCombat extends Combat {
       // Health is the caster's own, never below 1 (05, *Spending Health*).
       const holdTalents = actor.type === "character" ? (actor.takenTalents?.() ?? []) : [];
       const weave = actor.hasFeature?.("Shape the Weave") === true;
+      const activeHeld = sustaining.filter(entry => !sustainEntryTransferPending(entry)).length;
       const costOf = entry => upkeepCost(
         upkeepOf(entry, actor.items?.get?.(entry?.spellId)?.system ?? null),
-        upkeepFor(holdTalents, { name: entry?.name ?? "", held: sustaining.length, weave })
+        upkeepFor(holdTalents, { name: entry?.name ?? "", held: activeHeld, weave })
       );
       const r = upkeep(sustaining, actor.poolSnapshot(), { costOf, health: actor.system?.health?.value ?? null });
       if (r.updates.length) await actor.updatePool(r.updates, r.health !== null ? { "system.health.value": r.health } : {});
@@ -1969,25 +2181,41 @@ export class AzerothCombat extends Combat {
         for (const e of r.ended) {
           lines.push(game.i18n.format("AZEROTH.Combat.SustainEnded", { name: actor.name, spell: e.name }));
           // What the Sustain held goes with it (D-657; closes O-93).
-          await liftSpellEffects(actor, actor.items.get(e.spellId)?.uuid ?? e.uuid ?? null);
+          await liftSpellEffects(actor, actor.items.get(e.spellId)?.uuid ?? e.uuid ?? null, e.cast ?? null);
         }
       }
       // What the upkeep came to, in words (D-778): the Mana and the Health paid -
       // Felstep's is Health alone, Felfire Aura's both.
-      if (r.kept.length - r.free.length > 0) {
+      const paidCount = r.kept.length - r.free.length - r.suspended.length;
+      if (paidCount > 0) {
         const paidKey = r.paid.health > 0
           ? (r.paid.mana > 0 ? "AZEROTH.Combat.SustainPaidBoth" : "AZEROTH.Combat.SustainPaidHealth")
           : "AZEROTH.Combat.SustainPaidMana";
         lines.push(game.i18n.format(paidKey, {
-          name: actor.name, count: r.kept.length - r.free.length, mana: r.paid.mana, health: r.paid.health
+          name: actor.name, count: paidCount, mana: r.paid.mana, health: r.paid.health
         }));
       }
       for (const e of r.free) lines.push(game.i18n.format("AZEROTH.Combat.SustainFree", { name: actor.name, spell: e.name }));
+      for (const e of r.suspended) lines.push(game.i18n.format("AZEROTH.Spellsteal.UpkeepSuspended", { name: actor.name, spell: e.name }));
     }
     // **HOARFROST GROWS** at the start of each of its caster's turns (07,
     // D-757), after the upkeep: an area whose Sustain went unpaid is swept by
     // the flag's own hook, which is queued ahead of this.
     const scene = combatant.token?.parent ?? null;
+    // Capture Starfall only after upkeep. Later placement/movement cannot
+    // manufacture a missed start-of-turn strike through the player query.
+    if (scene) {
+      const { beginStarfallTurn } = await import("../effects/starfall-turn.mjs");
+      const starfall = await beginStarfallTurn(this, combatant);
+      if (!starfall.ok) console.warn("azeroth-rpg | Starfall turn snapshot unconfirmed", starfall.reason);
+      else {
+        const { postStarfallOffers } = await import("../effects/starfall-offers.mjs");
+        await postStarfallOffers(this).catch(error => {
+          console.warn("azeroth-rpg | Starfall offer", error);
+          ui.notifications?.warn(game.i18n.localize("AZEROTH.Starfall.Unavailable"));
+        });
+      }
+    }
     if (scene) await growAreas(scene, actor, combatant.token).catch(err => console.warn("azeroth-rpg | an area did not grow", err));
     // **NETHER RIFT'S TEST AT THE CASTER'S TURN** (the B9a pass; the lead: *"Build the
     // triggers"*), after the upkeep as the growth is: every creature within the area's
@@ -2090,7 +2318,16 @@ export class AzerothCombat extends Combat {
       if (!payload) continue;
       // The ONE door an area's damage and healing land through (D-757): the
       // tick, an entry and a failed Test all strike through it.
-      for (const line of await strikeFromArea({ actor, caster, spell: source.spell ?? {}, damage: payload.damage, heal: payload.heal })) lines.push(line);
+      if(source.region?.flags?.['azeroth-rpg']?.signatureHealingCast&&payload.heal>0){
+        const {landSignatureAreaHealing}=await import('../effects/signature-healing-areas.mjs');
+        const snapshot=JSON.stringify({tick:source.tick,payload});
+        const result=await landSignatureAreaHealing({combat:this,combatant,source,payload,validate:()=>
+          tickSources(scene,token,worldClock()).some(current=>current.region===source.region&&current.caster===caster
+            &&JSON.stringify({tick:current.tick,payload:tickFor(current.tick,{kinds:kindsOfActor(actor),
+              relation:relationTo({caster,casterToken:current.casterToken,actor,token,fight:this})})})===snapshot)});
+        if(!result.ok){console.warn('azeroth-rpg | signature area healing unresolved',result.reason);continue;}
+        lines.push(...result.lines);
+      }else for (const line of await strikeFromArea({ actor, caster, spell: source.spell ?? {}, damage: payload.damage, heal: payload.heal })) lines.push(line);
       // **AND THE PULL BESIDE IT** (07's Void Rift: *takes 4 Shadow damage at the
       // start of each of its turns and is pulled 10 feet toward the center*; D-778,
       // the lead on O-158: *"Yes."*): toward the area's own centre, through the one
@@ -2137,7 +2374,18 @@ export class AzerothCombat extends Combat {
     const actor = combatant?.actor ?? null;
     if (!actor) return [];
     if (combatant.isDefeated || (actor.type === "npc" && (actor.system?.health?.value ?? 0) <= 0)) return [];
-    return landTicks(actor);
+    const lines = await landTicks(actor, {combat:this,combatant});
+    lines.push(...await advanceVekniss(actor, this));
+    lines.push(...await advanceBloodpetal(actor, this));
+    lines.push(...await advanceDredgePoison(actor, this));
+    lines.push(...await advanceVirulentPoison(actor, this));
+    lines.push(...await advanceFireguardBurn(actor, this));
+    lines.push(...await advanceFleshRot(actor, this));
+    lines.push(...await advanceToxicPoison(actor, this));
+    lines.push(...await advanceWildRegeneration(actor, this));
+    lines.push(...await advanceSentinelMending(actor, this));
+    lines.push(...await advanceMindFlay(actor, this));
+    return lines;
   }
 
   /**
@@ -2377,6 +2625,7 @@ export class AzerothCombat extends Combat {
 
   /** @inheritDoc */
   async _onEndTurn(combatant, context) {
+    restoreCombatEffectTracking(combatant, {...context, combat: this});
     await super._onEndTurn(combatant, context);
     // Core re-records `previous` from the current state on EVERY combatant
     // write (`#onModifyCombatants`), and the turnEnd expiry refresh that runs
@@ -2444,13 +2693,14 @@ export class AzerothCombat extends Combat {
       // against the poison's DC; a success sheds a stack. The Test is a card
       // button - the table's roll, at the DC the table knows (D-628).
       if (actor?.statuses?.has("poisoned")) {
-        const poison = actor.effects.find(e => e.statuses?.has("poisoned")) ?? null;
+        const poison = actor.effects.find(e => e.active !== false && e.disabled !== true && e.statuses?.has("poisoned")) ?? null;
         const stacks = poison?.getFlag("azeroth-rpg", "value") ?? 1;
         // **THE DC TO SHED IT, WHERE ITS LAYER NAMED ONE** (04's Serpent Ward: *the DC
         // to shed it is your Spell DC*; the Legacy branches' door 20), else the table's.
         const shed = cleanShedDc(poison?.getFlag("azeroth-rpg", SHED_DC_FLAG) ?? null);
         await this._prompt(actor, {
           purpose: "poisoned",
+          effectId: poison?.id ?? null,
           title: game.i18n.localize(AZEROTH.conditions.poisoned),
           text: shed
             ? game.i18n.format("AZEROTH.Combat.PoisonedPromptDc", { name: actor.name, stacks, dc: shed.dc, source: shed.source })
@@ -2463,6 +2713,10 @@ export class AzerothCombat extends Combat {
       // Rimebind, Thornguard ...; D-778): Poisoned's shape, a card and no combatant
       // write, so `previous` stands.
       await this._escapePrompts(combatant, "turnEnd").catch(err => console.warn("azeroth-rpg | an escape prompt", err));
+      const controls = await endMindControlTurn(this, combatant, context)
+        .catch(error => { console.warn("azeroth-rpg | Mind Control repeat", error); return [{ok:false,reason:"pending"}]; });
+      if (controls.some(result => !result.ok && result.reason !== "resolved"))
+        ui.notifications?.warn(game.i18n.localize("AZEROTH.MindControl.RepeatUnresolved"));
     } finally {
       if (previous && this.previous) Object.assign(this.previous, previous);
     }
@@ -2599,6 +2853,7 @@ function selfTicksOf(actor) {
   const out = [];
   const itemOf = (id, uuid) => actor.items?.get?.(id) ?? actor.items?.find?.(i => i.type === "spell" && i.uuid === uuid) ?? null;
   for (const entry of actor.getFlag?.("azeroth-rpg", "sustaining") ?? []) {
+    if (sustainEntryTransferPending(entry, actor.uuid)) continue;
     const item = entry?.areaTick && entry?.tickSpell ? null : itemOf(entry?.spellId, entry?.uuid);
     const tick = entry?.areaTick ?? item?.system?.areaTick;
     if (!hasAreaTick(tick) || tick.centre !== "self") continue;

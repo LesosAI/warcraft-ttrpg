@@ -79,6 +79,7 @@ export const CONDITION_REFUSALS = Object.freeze({
  * @returns {string|null}
  */
 export function clearRefusal(row, { actorType = "character" } = {}) {
+  if (row?.iceBlock && !row.canEndIceBlock) return "AZEROTH.IceBlock.CannotEnd";
   if (!row) return null;
   if (row.kind === "condition") return CONDITION_REFUSALS[actorType]?.[row.id] ?? null;
   return SYNCED_REASONS[row.synced] ?? null;
@@ -130,6 +131,7 @@ export function inPlay({ conditions = [], effects = [], actorType = "character" 
     if (e?.active === false) continue;
     rows.push({
       kind: "effect",
+      ...(e.iceBlock ? { iceBlock: true, canEndIceBlock: e.canEndIceBlock === true } : {}),
       key: `effect:${e.id}`,
       id: e.id,
       label: null,

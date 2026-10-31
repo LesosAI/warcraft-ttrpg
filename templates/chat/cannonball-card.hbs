@@ -1,0 +1,9 @@
+<article class="azeroth-card">
+  <header><h3>{{title}}</h3><p>{{speakerName}}</p></header>
+  <p>{{localize "AZEROTH.Signature.Cannonball.Shot" target=targetName dc=dc damage=damage passed=passedDamage}}</p>
+  {{#unless rangeMeasured}}<p>{{localize "AZEROTH.Signature.Cannonball.Unmeasured"}}</p>{{/unless}}
+  <p data-cannonball-state>{{localize "AZEROTH.Signature.Cannonball.AwaitingSave"}}</p>
+  <div class="azeroth-card-actions" data-resist-owner="{{targetUuid}}">
+    <button type="button" data-action="cannonballSave">{{localize "AZEROTH.Signature.Cannonball.Roll"}}</button>
+  </div>
+</article>

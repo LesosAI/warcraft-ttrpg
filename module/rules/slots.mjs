@@ -56,7 +56,7 @@
 import { accepts, containerOf, isWorn, kindOfItem } from "./containers.mjs";
 import { CARRY_MULTIPLIER, DEFAULT_SIZE, loadLine } from "./size.mjs";
 import { NOT_CARRIED, sectionParts } from "./weight.mjs";
-import { displacedBy, figureSlots } from "./worn.mjs";
+import { displacedBy, figureSlots, hasTitansPresence } from "./worn.mjs";
 import { isShot } from "./ammunition.mjs";
 
 /* -------------------------------------------- */
@@ -975,6 +975,7 @@ function overByKey(led) {
  * @returns {{ok: boolean, reason: string|null, data: object|null, placements: Array<object|null>}}
  */
 export function judge(items, base, updates = []) {
+  const titansPresence = hasTitansPresence(items);
   const list = [...(updates ?? [])];
   const changes = list.map(systemChange);
   const placements = list.map(() => null);
@@ -1122,7 +1123,7 @@ export function judge(items, base, updates = []) {
     const item = id ? nextById.get(id) : null;
     if (!item || isMount(item) || sysOf(byId.get(id)).equipped === true) continue;
     const vacated = placeBefore.get(id);
-    for (const victim of displacedBy(item, next)) {
+    for (const victim of displacedBy(item, next, { titansPresence })) {
       const vid = idOf(victim);
       if (!vid || displaced.some(d => d.id === vid)) continue;
       if (homeless.some(h => h.id === vid) || spilling.some(s => s.id === vid)) continue;
@@ -1207,10 +1208,11 @@ export function judge(items, base, updates = []) {
  * @returns {{ok: boolean, reason: string|null, data: object|null, placements: Array<{_id: string, system: object}>}}
  */
 export function wearNew(items, base, newcomer, { index } = {}) {
+  const titansPresence = hasTitansPresence(items);
   const all = things(items);
   const worn = { ...newcomer, system: { ...sysOf(newcomer), equipped: true, container: null } };
   const withIt = [...all, worn];
-  const victims = displacedBy(worn, withIt, { index }).filter(v => idOf(v));
+  const victims = displacedBy(worn, withIt, { index, titansPresence }).filter(v => idOf(v));
   // Measured with the victims out, exactly as `judge` does and for the same
   // reason: they are still equipped in `withIt`, so a ledger that kept them
   // would charge them nothing and then `houseIn` would charge them once more.

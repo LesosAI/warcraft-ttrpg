@@ -123,9 +123,9 @@ export const UNDYING_RAGE = Object.freeze({ talent: "Undying Rage", per: 2, flag
  * A blow that would take the warrior from above 0 to 0, the talent held, in a
  * started fight (READING: *one round* is a fight's round, so out of a fight it
  * is the table's), and Rage enough for a round: all the Rage is spent and the
- * warrior stays at 1. A hold already standing is never begun again - and whether
- * a blow in the held rounds is floored at 1 is the lead's (CLARIFY, O-173), so
- * such a blow is not held here.
+ * warrior stays at 1. A hold already standing is never begun again. The lead
+ * confirmed 2026-10-29 that only the triggering hit is held; subsequent damage
+ * applies normally and can reduce Health to 0.
  *
  * @param {{before?: number, amount?: number, rage?: number, holds?: boolean, inFight?: boolean, standing?: boolean}} o
  * @returns {{saved: boolean, amount: number, rounds: number, spent: number}}

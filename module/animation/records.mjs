@@ -45,6 +45,7 @@ import { TRAP_FLAG } from "../rules/traps.mjs";
 import { FLOOR_FLAG } from "../rules/blow-doors.mjs";
 import { CUTTING_GEAR } from "../rules/escapes.mjs";
 import { librariesOn, soundsOn } from "./availability.mjs";
+import { reflectionPaths } from "../rules/reflection.mjs";
 
 /**
  * The spells whose row loops on a recorded Resilience Test, which is the only
@@ -435,6 +436,20 @@ export function cardRecords(message) {
   const primary = cardRecord(message);
   if (!primary) return [];
   const out = [primary];
+  if (primary.kind === "spell") {
+    const paths = reflectionPaths(flagsOf(message));
+    if (paths.length) {
+      // The spell travels to the protected creature; only its returned payload
+      // targets the caster. The second cue is an indicator, not a second cast.
+      primary.targets = [...primary.targets];
+      for (const path of paths) {
+        primary.targets[path.index] = path.source;
+        out.push(featureRecord({ trigger: "use", contentVisible: primary.contentVisible,
+          sceneId: primary.sceneId, identifier: "ability:reflection-return",
+          source: tokenRef(path.source), targets: [tokenRef(path.target)] }));
+      }
+    }
+  }
   if (primary.kind === "attack" && primary.parry !== true) {
     for (const key of hitKeysOf(flagsOf(message))) {
       // **THE FEATURE CARD'S OWN VERDICT** (the B4 review): the key the attack was made
@@ -947,6 +962,8 @@ export function stateSnapshot({ resisted = RESISTED_IDENTIFIERS } = {}) {
           tokenId,
           actorId: actor.id,
           name: flags.spellName ?? effect.name ?? null,
+          ...(flags.identifier === "lightning-shield" && flags.lightningShield
+            ? { charges: flags.lightningShield.charges } : {}),
           source
         });
       }

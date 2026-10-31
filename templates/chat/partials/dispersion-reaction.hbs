@@ -1,0 +1,7 @@
+{{!-- Dispersion cast as a Reaction to the hit on one row, on the attack or spell card.
+      Drawn by applications/dispersion-reaction.mjs#showDispersionReactions for the struck
+      creature's owner, where the creature holds the spell and may still react. The row
+      names its audience as a Parry's does. --}}
+<div class="azeroth-card-actions" data-dispersion-reaction data-reaction-owner="{{actorUuid}}">
+  <button type="button" data-action="dispersionReaction" data-target-index="{{index}}">{{localize "AZEROTH.Dispersion.Reaction" name=name}}</button>
+</div>

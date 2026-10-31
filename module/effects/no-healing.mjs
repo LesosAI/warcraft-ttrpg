@@ -19,6 +19,7 @@
 
 import { NO_HEALING_FLAG } from "../rules/no-healing.mjs";
 import { untilEndOfNextTurn } from "./durations.mjs";
+import { refuseIceBlockTarget } from "./ice-block-protection.mjs";
 
 export const NO_HEALING_QUERY = "azeroth-rpg.noHealing";
 
@@ -35,6 +36,7 @@ function landing(name, landed, reason = null, effectId = null) {
 
 /** Lay it here; the caller has already established that this client may. */
 async function layHere({ victim, striker, source }) {
+  if (refuseIceBlockTarget(victim)) return landing(victim.name, false, "iceBlock");
   const span = striker ? untilEndOfNextTurn(striker) : null;
   if (!span) return landing(victim.name, false, "noFight");
   const stale = (victim.effects ?? []).filter(e => {
@@ -42,6 +44,7 @@ async function layHere({ victim, striker, source }) {
     return held && (e.origin ?? null) === (striker?.uuid ?? null);
   }).map(e => e.id);
   if (stale.length) await victim.deleteEmbeddedDocuments("ActiveEffect", stale);
+  if (refuseIceBlockTarget(victim)) return landing(victim.name, false, "iceBlock");
   const [made] = await victim.createEmbeddedDocuments("ActiveEffect", [{
     name: game.i18n.format("AZEROTH.NoHealing.EffectName", { source }),
     img: NO_HEALING_ICON,

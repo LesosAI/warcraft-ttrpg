@@ -131,7 +131,10 @@ export function onUseSpirits(onUse, { rank = 1, tier = 1, scope = {}, conditions
   const cures = typeof o.cures === "number" || (o.cures && typeof o.cures === "object") ? (() => {
     const c = typeof o.cures === "number" ? { count: o.cures } : o.cures;
     const count = Math.max(1, at(c.count ?? 1, s));
-    return { count, friendly: c.friendly === true, except: conditionList(c.except, conditions) };
+    return {
+      count, friendly: c.friendly === true, except: conditionList(c.except, conditions),
+      ...(c.only !== undefined ? { only: conditionList(c.only, conditions) } : {})
+    };
   })() : null;
   const dispel = o.areaDispel && typeof o.areaDispel === "object" ? (() => {
     const d = atRankOfRow(o.areaDispel, rank);
@@ -170,6 +173,7 @@ export function onUseSpirits(onUse, { rank = 1, tier = 1, scope = {}, conditions
   return {
     conceal,
     cures,
+    ...(o.waterBreathing ? { waterBreathing: { minutes: Math.max(1, whole(o.waterBreathing.minutes) || 1) } } : {}),
     areaDispel: dispel,
     healsDealt: o.healsDealt === true,
     thrall: o.thrall && typeof o.thrall === "object" ? { feet: whole(o.thrall.feet), minutes: Math.max(1, whole(o.thrall.minutes) || 1) } : null,
@@ -245,9 +249,10 @@ export function concealStrike(flags = []) {
  * @param {{conditions?: string[], except?: string[]}} [o]  `conditions` A1's ids
  * @returns {string[]}
  */
-export function curableOn(statuses = [], { conditions = [], except = [] } = {}) {
+export function curableOn(statuses = [], { conditions = [], except = [], only = null } = {}) {
   const held = new Set([...(statuses ?? [])].map(String));
-  return (conditions ?? []).filter(id => held.has(id) && !(except ?? []).includes(id)).sort();
+  return (conditions ?? []).filter(id => held.has(id) && !(except ?? []).includes(id)
+    && (only === null || only.includes(id))).sort();
 }
 
 /**
@@ -605,7 +610,12 @@ export function legacyUseFaults(entry, { conditions = [], schools = [], pools = 
     const c = typeof u.cures === "number" ? { count: u.cures } : u.cures;
     if (!(Number(num(c?.count ?? 1)) >= 1)) faults.push("onUse.cures.count");
     for (const id of c?.except ?? []) if (!conditions.includes(id)) faults.push(`onUse.cures.except ${id}`);
+    if (c?.only !== undefined) {
+      if (!Array.isArray(c.only) || !c.only.length) faults.push("onUse.cures.only");
+      else for (const id of c.only) if (!conditions.includes(id)) faults.push(`onUse.cures.only ${id}`);
+    }
   }
+  if (u?.waterBreathing && !(whole(u.waterBreathing.minutes) > 0)) faults.push("onUse.waterBreathing.minutes");
   if (u?.areaDispel) {
     if (!(whole(u.areaDispel.within) > 0) || !(whole(u.areaDispel.radius) > 0)) faults.push("onUse.areaDispel.feet");
     if (!(Number(num(u.areaDispel.count ?? 1)) >= 1)) faults.push("onUse.areaDispel.count");

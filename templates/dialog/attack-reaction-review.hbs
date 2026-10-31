@@ -1,0 +1,5 @@
+<p>{{localize "AZEROTH.AttackReactionReview.Explain"}}</p>
+<label>{{localize "AZEROTH.AttackReactionReview.Attempt"}}
+<select name="hit">{{#each rows}}<option value="{{index}}">{{operation}} — {{name}}{{#if priest}} ({{priest}}){{/if}}</option>{{/each}}</select></label>
+<p><label><input type="checkbox" name="acknowledged"> {{localize "AZEROTH.AttackReactionReview.Acknowledge"}}</label></p>
+{{#if hasDispersion}}<p><label><input type="checkbox" name="damageReconciled"> {{localize "AZEROTH.AttackReactionReview.DispersionDamage"}}</label></p>{{/if}}

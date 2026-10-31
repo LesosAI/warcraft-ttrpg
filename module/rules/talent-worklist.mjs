@@ -37,14 +37,8 @@ export const TALENT_WORKLIST = Object.freeze({
   mage: Object.freeze({
     "spellsteal": ["gap"]
   }),
-  // D-772 (the talent plan's Phase 5): two lines left, each a `gap` whose reason
-  // is on the row. D-777 built 07's floor at 1 Health and Aegis of the Light's
-  // heal on it, and one is left: Sacrifice's *one more Critical Injury before
-  // dying* has no rule in 06 to change, and the lead's ruling on moved damage
-  // left it unanswered (CLARIFY).
-  paladin: Object.freeze({
-    "sacrifice": ["gap"]
-  }),
+  // 2026-10-29: Sacrifice's approved fourth Death Step and injury-transfer door.
+  paladin: Object.freeze({}),
   // D-774 (the talent plan's Phase 8): nine lines left, each a `gap` whose reason
   // is on the row and each a QUESTION for the lead. D-777 built temporary Health
   // (Power Word: Shield, Light's Grace) and D-778 02's Dispel (Rapture; the lead:
@@ -65,11 +59,10 @@ export const TALENT_WORKLIST = Object.freeze({
   // D-774 (the talent plan's Phase 9): five lines left, each a `gap` whose reason
   // is on the row. D-778 built Thunderstorm's push (the lead: *"Yes."*), and
   // D-779 three on the lead's answers - Flametongue's Sustain, Lava Lash's
-  // Scorched and Elemental Blademaster's magical blows - and one is left: Earth
-  // Shock's rank 2 has no carrier for a Reaction barred through a turn.
-  shaman: Object.freeze({
-    "earth-shock": ["gap"]
-  }),
+  // Scorched and Elemental Blademaster's magical blows. The 2026-10-29 audit
+  // adds Earth Shock's timed Reaction carrier. Other partial clauses remain
+  // tracked by the automation audit rather than this implementation-table census.
+  shaman: Object.freeze({}),
   // D-775 (the talent plan's Phase 11): two lines left, each waiting on what 02's
   // Dispel ends. D-778 built Dispel (the lead: *"selected Effects, not
   // conditions."*) and both on it - Unstable Affliction's *ends one of your ongoing
@@ -81,10 +74,7 @@ export const TALENT_WORKLIST = Object.freeze({
   // (*"Next move"*). Two are left: Second Strike's re-roll (no door rolls a posted
   // attack again) and Titan's Presence's two-handed weapon in each hand (D-689's
   // bar is read at every equip door and by the bag law's judge, D-737).
-  warrior: Object.freeze({
-    "second-strike": ["gap"],
-    "titans-presence": ["gap"]
-  })
+  warrior: Object.freeze({})
 });
 
 /** How many `(talent, detector)` lines each class holds today. May only fall (D-768). */
@@ -102,7 +92,7 @@ export const WORKLIST_CEILING = Object.freeze({
   // 13 to 2 (D-772): every Paladin talent built but Aegis of the Light's heal
   // and Sacrifice, each a gap with its reason. 2 to 1 (D-777): 07's floor and
   // Aegis of the Light's heal on it.
-  paladin: 1,
+  paladin: 0,
   // 19 to 9 (D-774): every Priest talent built but nine, each a gap with its
   // question for the lead. 9 to 7 (D-777): Power Word: Shield's and Light's
   // Grace's temporary Health. 7 to 6 (D-778): Rapture, on 02's Dispel. 6 to 0
@@ -118,7 +108,7 @@ export const WORKLIST_CEILING = Object.freeze({
   // 15 to 5 (D-774): every Shaman talent built but five, each a gap with its
   // reason, four of them questions for the lead. 5 to 4 (D-778): Thunderstorm's
   // push. 4 to 1 (D-779): Flametongue, Lava Lash, Elemental Blademaster.
-  shaman: 1,
+  shaman: 0,
   // 14 to 13 (D-769): Demonic Ascendance's gap is built - the shape is read.
   // 13 to 2 (D-775): every Warlock talent built but Unstable Affliction and
   // Everlasting Affliction's rank 2, both waiting on what Dispel ends. 2 to 0
@@ -128,7 +118,7 @@ export const WORKLIST_CEILING = Object.freeze({
   // Strike's re-roll, Titan's Presence's second weapon, Undying Rage and
   // Bracing, each a gap with its reason. 5 to 4 (D-777): Last Stand's
   // temporary Health. 4 to 2 (D-779): Undying Rage and Bracing.
-  warrior: 2
+  warrior: 0
 });
 
 /**

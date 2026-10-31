@@ -1,0 +1,7 @@
+<p>{{localize "AZEROTH.RestorativeTotem.ReviewInstructions"}}</p>
+<ul>
+{{#each targets}}
+  <li><a href="#" data-totem-actor="{{uuid}}">{{name}}</a>: {{status}}{{#if confirmed}} (+{{restored}}){{/if}}</li>
+{{/each}}
+</ul>
+<label><input type="checkbox" name="acknowledged"> {{localize "AZEROTH.RestorativeTotem.Acknowledge"}}</label>

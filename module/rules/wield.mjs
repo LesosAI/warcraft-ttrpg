@@ -33,8 +33,15 @@
  * fails closed.
  */
 
-import { figureSlots } from "./worn.mjs";
+import { figureSlots, isTwoHanded } from "./worn.mjs";
 import { isShot } from "./ammunition.mjs";
+
+/** Ordinary Attack follows the equipped hand; special strikes keep their own economy. */
+export function attackOffHand(weapon, { offHand = null, budget = null, damage = true, opportunity = false, riposte = false, fromFeature = null } = {}) {
+  return offHand ?? (weapon?.type === "weapon" && weapon.system?.equipped === true && weapon.system?.offHand === true
+    && damage !== false && (budget === null || budget === "half")
+    && !opportunity && !riposte && !fromFeature);
+}
 
 /**
  * 08 §7's Type column, in the order the item sheet's select offers it: the lead's
@@ -84,7 +91,8 @@ export function wieldFacts(items = [], { melded = false } = {}) {
   const mainType = inTheHand(main) ? cleanWeaponType(main.system?.weaponType) : null;
   const offType = inTheHand(off) ? cleanWeaponType(off.system?.weaponType) : null;
   return {
-    twoHanded: !melded && figure.twoHanded === true,
+    // Talent gates ask for the weapon category, not whether it occupies both hands.
+    twoHanded: !melded && isTwoHanded(figure.mainHand),
     noSuit: figure.body === null,
     twoTypes: Boolean(mainType && offType && mainType !== offType),
     hammerOrMace: HAMMER_TYPES.includes(mainType),

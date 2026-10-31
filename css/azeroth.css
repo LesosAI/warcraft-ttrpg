@@ -60,6 +60,12 @@
     --azeroth-undeath: #8a9a3b;
     --azeroth-critical: #5c1010;
     --azeroth-titlebar: #211d18;
+    --azeroth-creator-charcoal: #11181b;
+    --azeroth-creator-well: #0c1114;
+    --azeroth-creator-gold: #e5c47a;
+    --azeroth-creator-brass: #958052;
+    --azeroth-creator-selected: #30291b;
+    --azeroth-creator-blue: #172b40;
     --azeroth-tab: #17140f;
     --azeroth-tab-hover: #2a241c;
     --azeroth-tab-active: #362b1c;
@@ -1970,6 +1976,14 @@
   }
   .azeroth.sheet.actor .azeroth-combat-section {
     margin-top: 16px;
+  }
+  .azeroth.sheet.actor details.azeroth-combat-group > summary {
+    cursor: pointer;
+    display: list-item;
+    list-style: disclosure-closed inside;
+  }
+  .azeroth.sheet.actor details.azeroth-combat-group[open] > summary {
+    list-style-type: disclosure-open;
   }
   .azeroth.sheet.actor .azeroth-combat-top {
     display: grid;
@@ -4602,7 +4616,7 @@
     line-height: 1.4;
     color: var(--azeroth-ink-soft);
   }
-  .azeroth.sheet.actor.character {
+  .azeroth.sheet.actor.character, .azeroth.azeroth-creator {
     --azeroth-talent-socket: 44px;
     --azeroth-talent-col-gap: 32px;
     --azeroth-talent-tier-gap: 28px;
@@ -4610,22 +4624,22 @@
     --azeroth-tree-gutter: 12px;
     --azeroth-tree-field: 300px;
   }
-  .azeroth.sheet.actor.character .azeroth-talents-heading {
+  .azeroth.sheet.actor.character .azeroth-talents-heading, .azeroth.azeroth-creator .azeroth-talents-heading {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
     gap: 0.5rem;
     margin-top: 1rem;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-points strong {
+  .azeroth.sheet.actor.character .azeroth-talent-points strong, .azeroth.azeroth-creator .azeroth-talent-points strong {
     font-size: 1.1em;
   }
-  .azeroth.sheet.actor.character .azeroth-classes {
+  .azeroth.sheet.actor.character .azeroth-classes, .azeroth.azeroth-creator .azeroth-classes {
     margin: 0 0 10px;
     padding: 0;
     list-style: none;
   }
-  .azeroth.sheet.actor.character .azeroth-class-entry {
+  .azeroth.sheet.actor.character .azeroth-class-entry, .azeroth.azeroth-creator .azeroth-class-entry {
     margin-bottom: 6px;
     padding: 6px 8px;
     border: 1px solid var(--azeroth-page-rule);
@@ -4633,38 +4647,38 @@
     color: var(--azeroth-page-ink);
     font-size: 13px;
   }
-  .azeroth.sheet.actor.character .azeroth-class-entry--empty {
+  .azeroth.sheet.actor.character .azeroth-class-entry--empty, .azeroth.azeroth-creator .azeroth-class-entry--empty {
     font-style: italic;
   }
-  .azeroth.sheet.actor.character .azeroth-class-head {
+  .azeroth.sheet.actor.character .azeroth-class-head, .azeroth.azeroth-creator .azeroth-class-head {
     display: flex;
     align-items: center;
     gap: 8px;
   }
-  .azeroth.sheet.actor.character .azeroth-class-name {
+  .azeroth.sheet.actor.character .azeroth-class-name, .azeroth.azeroth-creator .azeroth-class-name {
     font-weight: 600;
     font-size: 14px;
   }
-  .azeroth.sheet.actor.character .azeroth-class-level {
+  .azeroth.sheet.actor.character .azeroth-class-level, .azeroth.azeroth-creator .azeroth-class-level {
     font-size: 13px;
     color: var(--azeroth-page-ink-soft);
   }
-  .azeroth.sheet.actor.character .azeroth-feature-level {
+  .azeroth.sheet.actor.character .azeroth-feature-level, .azeroth.azeroth-creator .azeroth-feature-level {
     font-weight: 400;
     font-size: 13px;
     color: var(--azeroth-page-ink-soft);
   }
-  .azeroth.sheet.actor.character .azeroth-class-next {
+  .azeroth.sheet.actor.character .azeroth-class-next, .azeroth.azeroth-creator .azeroth-class-next {
     margin: 4px 0 0;
     font-size: 13px;
   }
-  .azeroth.sheet.actor.character .azeroth-classes-heading {
+  .azeroth.sheet.actor.character .azeroth-classes-heading, .azeroth.azeroth-creator .azeroth-classes-heading {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
   }
-  .azeroth.sheet.actor.character .azeroth-level-control {
+  .azeroth.sheet.actor.character .azeroth-level-control, .azeroth.azeroth-creator .azeroth-level-control {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -4674,7 +4688,7 @@
     letter-spacing: 0;
     color: var(--azeroth-page-ink);
   }
-  .azeroth.sheet.actor.character .azeroth-level-select {
+  .azeroth.sheet.actor.character .azeroth-level-select, .azeroth.azeroth-creator .azeroth-level-select {
     width: auto;
     height: auto;
     padding: 1px 4px;
@@ -4684,7 +4698,7 @@
     border: 1px solid var(--azeroth-page-edge);
     color: var(--azeroth-page-ink);
   }
-  .azeroth.sheet.actor.character .azeroth-branches {
+  .azeroth.sheet.actor.character .azeroth-branches, .azeroth.azeroth-creator .azeroth-branches {
     list-style: none;
     margin: 0;
     padding: 0;
@@ -4692,7 +4706,7 @@
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 0.4rem;
   }
-  .azeroth.sheet.actor.character .azeroth-branch button {
+  .azeroth.sheet.actor.character .azeroth-branch button, .azeroth.azeroth-creator .azeroth-branch button {
     width: 100%;
     height: auto;
     min-height: 0;
@@ -4709,50 +4723,50 @@
     cursor: pointer;
     transition: none;
   }
-  .azeroth.sheet.actor.character .azeroth-branch button:hover, .azeroth.sheet.actor.character .azeroth-branch button:focus-visible {
+  .azeroth.sheet.actor.character .azeroth-branch button:hover, .azeroth.sheet.actor.character .azeroth-branch button:focus-visible, .azeroth.azeroth-creator .azeroth-branch button:hover, .azeroth.azeroth-creator .azeroth-branch button:focus-visible {
     background: var(--azeroth-page-well-lit);
     border-color: var(--azeroth-page-accent);
     color: var(--azeroth-page-ink);
   }
-  .azeroth.sheet.actor.character .azeroth-branch button:focus-visible {
+  .azeroth.sheet.actor.character .azeroth-branch button:focus-visible, .azeroth.azeroth-creator .azeroth-branch button:focus-visible {
     outline: 2px solid var(--azeroth-alliance-gold);
     outline-offset: 1px;
   }
-  .azeroth.sheet.actor.character .azeroth-branch button:focus:not(:focus-visible) {
+  .azeroth.sheet.actor.character .azeroth-branch button:focus:not(:focus-visible), .azeroth.azeroth-creator .azeroth-branch button:focus:not(:focus-visible) {
     outline: none;
     box-shadow: none;
   }
-  .azeroth.sheet.actor.character .azeroth-branch-class {
+  .azeroth.sheet.actor.character .azeroth-branch-class, .azeroth.azeroth-creator .azeroth-branch-class {
     grid-area: class;
     font-size: 0.8125rem;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--azeroth-page-ink-soft);
   }
-  .azeroth.sheet.actor.character .azeroth-branch-name {
+  .azeroth.sheet.actor.character .azeroth-branch-name, .azeroth.azeroth-creator .azeroth-branch-name {
     grid-area: name;
     font-weight: 600;
   }
-  .azeroth.sheet.actor.character .azeroth-branch-spent {
+  .azeroth.sheet.actor.character .azeroth-branch-spent, .azeroth.azeroth-creator .azeroth-branch-spent {
     grid-area: spent;
     align-self: center;
     font-size: 1.15rem;
     font-weight: 700;
     color: var(--azeroth-page-ink);
   }
-  .azeroth.sheet.actor.character .azeroth-branch--empty {
+  .azeroth.sheet.actor.character .azeroth-branch--empty, .azeroth.azeroth-creator .azeroth-branch--empty {
     padding: 0.6rem;
     color: var(--azeroth-page-ink-soft);
     font-style: italic;
   }
-  .azeroth.sheet.actor.character .azeroth-tree-head {
+  .azeroth.sheet.actor.character .azeroth-tree-head, .azeroth.azeroth-creator .azeroth-tree-head {
     display: grid;
     grid-template-columns: auto 1fr auto;
     align-items: center;
     gap: 0.5rem;
     margin-bottom: 8px;
   }
-  .azeroth.sheet.actor.character .azeroth-tree-back {
+  .azeroth.sheet.actor.character .azeroth-tree-back, .azeroth.azeroth-creator .azeroth-tree-back {
     height: auto;
     min-height: 0;
     padding: 3px 8px;
@@ -4760,11 +4774,11 @@
     line-height: 1.2;
     cursor: pointer;
   }
-  .azeroth.sheet.actor.character .azeroth-tree-back:focus:not(:focus-visible) {
+  .azeroth.sheet.actor.character .azeroth-tree-back:focus:not(:focus-visible), .azeroth.azeroth-creator .azeroth-tree-back:focus:not(:focus-visible) {
     outline: none;
     box-shadow: none;
   }
-  .azeroth.sheet.actor.character .azeroth-tree-title {
+  .azeroth.sheet.actor.character .azeroth-tree-title, .azeroth.azeroth-creator .azeroth-tree-title {
     margin: 0;
     font-family: inherit;
     font-size: 14px;
@@ -4773,22 +4787,22 @@
     border: none;
     color: var(--azeroth-page-heading);
   }
-  .azeroth.sheet.actor.character .azeroth-tree-spent {
+  .azeroth.sheet.actor.character .azeroth-tree-spent, .azeroth.azeroth-creator .azeroth-tree-spent {
     font-size: 13px;
   }
-  .azeroth.sheet.actor.character .azeroth-tree-body {
+  .azeroth.sheet.actor.character .azeroth-tree-body, .azeroth.azeroth-creator .azeroth-tree-body {
     display: grid;
     grid-template-columns: var(--azeroth-tree-rail) var(--azeroth-tree-field);
     column-gap: var(--azeroth-tree-gutter);
     align-items: start;
   }
-  .azeroth.sheet.actor.character .azeroth-tree-rail {
+  .azeroth.sheet.actor.character .azeroth-tree-rail, .azeroth.azeroth-creator .azeroth-tree-rail {
     display: grid;
     grid-auto-rows: var(--azeroth-talent-socket);
     row-gap: var(--azeroth-talent-tier-gap);
     padding-top: 13px;
   }
-  .azeroth.sheet.actor.character .azeroth-tree-rail-tier {
+  .azeroth.sheet.actor.character .azeroth-tree-rail-tier, .azeroth.azeroth-creator .azeroth-tree-rail-tier {
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -4796,23 +4810,23 @@
     gap: 2px;
     text-align: right;
   }
-  .azeroth.sheet.actor.character .azeroth-tree-rail-name {
+  .azeroth.sheet.actor.character .azeroth-tree-rail-name, .azeroth.azeroth-creator .azeroth-tree-rail-name {
     font-size: 13px;
     line-height: 1.2;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--azeroth-page-ink);
   }
-  .azeroth.sheet.actor.character .azeroth-tree-rail-tier.is-locked .azeroth-tree-rail-name {
+  .azeroth.sheet.actor.character .azeroth-tree-rail-tier.is-locked .azeroth-tree-rail-name, .azeroth.azeroth-creator .azeroth-tree-rail-tier.is-locked .azeroth-tree-rail-name {
     color: var(--azeroth-page-ink-soft);
   }
-  .azeroth.sheet.actor.character .azeroth-tree-rail-gate {
+  .azeroth.sheet.actor.character .azeroth-tree-rail-gate, .azeroth.azeroth-creator .azeroth-tree-rail-gate {
     font-size: 13px;
     line-height: 1.2;
     font-style: italic;
     color: var(--azeroth-page-ink-soft);
   }
-  .azeroth.sheet.actor.character .azeroth-tree-field {
+  .azeroth.sheet.actor.character .azeroth-tree-field, .azeroth.azeroth-creator .azeroth-tree-field {
     position: relative;
     box-sizing: border-box;
     display: grid;
@@ -4824,7 +4838,7 @@
     border: 1px solid var(--azeroth-stone);
     border-radius: 3px;
   }
-  .azeroth.sheet.actor.character .azeroth-tree-crest {
+  .azeroth.sheet.actor.character .azeroth-tree-crest, .azeroth.azeroth-creator .azeroth-tree-crest {
     position: absolute;
     inset: 0;
     width: 100%;
@@ -4837,26 +4851,26 @@
     pointer-events: none;
     user-select: none;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-tier {
+  .azeroth.sheet.actor.character .azeroth-talent-tier, .azeroth.azeroth-creator .azeroth-talent-tier {
     display: grid;
     grid-template-columns: repeat(3, var(--azeroth-talent-socket));
     column-gap: var(--azeroth-talent-col-gap);
     justify-content: center;
     height: var(--azeroth-talent-socket);
   }
-  .azeroth.sheet.actor.character .azeroth-talent-tier > .azeroth-talent {
+  .azeroth.sheet.actor.character .azeroth-talent-tier > .azeroth-talent, .azeroth.azeroth-creator .azeroth-talent-tier > .azeroth-talent {
     grid-row: 1;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-tier > .azeroth-talent[data-column="1"] {
+  .azeroth.sheet.actor.character .azeroth-talent-tier > .azeroth-talent[data-column="1"], .azeroth.azeroth-creator .azeroth-talent-tier > .azeroth-talent[data-column="1"] {
     grid-column: 1;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-tier > .azeroth-talent[data-column="2"] {
+  .azeroth.sheet.actor.character .azeroth-talent-tier > .azeroth-talent[data-column="2"], .azeroth.azeroth-creator .azeroth-talent-tier > .azeroth-talent[data-column="2"] {
     grid-column: 2;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-tier > .azeroth-talent[data-column="3"] {
+  .azeroth.sheet.actor.character .azeroth-talent-tier > .azeroth-talent[data-column="3"], .azeroth.azeroth-creator .azeroth-talent-tier > .azeroth-talent[data-column="3"] {
     grid-column: 3;
   }
-  .azeroth.sheet.actor.character .azeroth-talent {
+  .azeroth.sheet.actor.character .azeroth-talent, .azeroth.azeroth-creator .azeroth-talent {
     --azeroth-talent-ring: var(--azeroth-stone);
     --azeroth-talent-ink: var(--azeroth-ink-light-soft);
     position: relative;
@@ -4865,16 +4879,18 @@
     align-items: center;
   }
   .azeroth.sheet.actor.character .azeroth-talent--available,
-  .azeroth.sheet.actor.character .azeroth-talent--raisable {
+  .azeroth.sheet.actor.character .azeroth-talent--raisable, .azeroth.azeroth-creator .azeroth-talent--available,
+  .azeroth.azeroth-creator .azeroth-talent--raisable {
     --azeroth-talent-ring: var(--azeroth-green-text);
     --azeroth-talent-ink: var(--azeroth-green-text);
   }
   .azeroth.sheet.actor.character .azeroth-talent--held,
-  .azeroth.sheet.actor.character .azeroth-talent--maxed {
+  .azeroth.sheet.actor.character .azeroth-talent--maxed, .azeroth.azeroth-creator .azeroth-talent--held,
+  .azeroth.azeroth-creator .azeroth-talent--maxed {
     --azeroth-talent-ring: var(--azeroth-alliance-gold);
     --azeroth-talent-ink: var(--azeroth-gold-text);
   }
-  .azeroth.sheet.actor.character .azeroth-talent-socket {
+  .azeroth.sheet.actor.character .azeroth-talent-socket, .azeroth.azeroth-creator .azeroth-talent-socket {
     position: relative;
     display: block;
     flex: none;
@@ -4894,7 +4910,7 @@
     cursor: pointer;
     transition: none;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-socket::before {
+  .azeroth.sheet.actor.character .azeroth-talent-socket::before, .azeroth.azeroth-creator .azeroth-talent-socket::before {
     content: "";
     position: absolute;
     inset: 0;
@@ -4903,18 +4919,18 @@
     border-color: var(--azeroth-stone-light) var(--azeroth-slot) var(--azeroth-slot) var(--azeroth-stone-light);
     pointer-events: none;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-socket:hover, .azeroth.sheet.actor.character .azeroth-talent-socket:focus {
+  .azeroth.sheet.actor.character .azeroth-talent-socket:hover, .azeroth.sheet.actor.character .azeroth-talent-socket:focus, .azeroth.azeroth-creator .azeroth-talent-socket:hover, .azeroth.azeroth-creator .azeroth-talent-socket:focus {
     background-color: var(--azeroth-slot);
     border-color: var(--azeroth-talent-ring);
     color: var(--azeroth-ink-light);
     box-shadow: 0 0 0 1px var(--azeroth-slot);
     outline: none;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-socket:focus-visible {
+  .azeroth.sheet.actor.character .azeroth-talent-socket:focus-visible, .azeroth.azeroth-creator .azeroth-talent-socket:focus-visible {
     outline: 2px solid var(--azeroth-ink-light);
     outline-offset: 2px;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-icon {
+  .azeroth.sheet.actor.character .azeroth-talent-icon, .azeroth.azeroth-creator .azeroth-talent-icon {
     display: block;
     width: 36px;
     height: 36px;
@@ -4923,13 +4939,13 @@
     border-radius: 1px;
     object-fit: cover;
   }
-  .azeroth.sheet.actor.character .azeroth-talent--locked .azeroth-talent-icon {
+  .azeroth.sheet.actor.character .azeroth-talent--locked .azeroth-talent-icon, .azeroth.azeroth-creator .azeroth-talent--locked .azeroth-talent-icon {
     filter: grayscale(1) brightness(0.75);
   }
-  .azeroth.sheet.actor.character .azeroth-talent:not(.azeroth-talent--locked) > .azeroth-talent-socket:hover .azeroth-talent-icon {
+  .azeroth.sheet.actor.character .azeroth-talent:not(.azeroth-talent--locked) > .azeroth-talent-socket:hover .azeroth-talent-icon, .azeroth.azeroth-creator .azeroth-talent:not(.azeroth-talent--locked) > .azeroth-talent-socket:hover .azeroth-talent-icon {
     filter: brightness(1.15);
   }
-  .azeroth.sheet.actor.character .azeroth-talent-rank {
+  .azeroth.sheet.actor.character .azeroth-talent-rank, .azeroth.azeroth-creator .azeroth-talent-rank {
     position: absolute;
     left: calc(50% + 5px);
     bottom: -6px;
@@ -4947,7 +4963,7 @@
     border-radius: 2px;
     pointer-events: none;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-arrow {
+  .azeroth.sheet.actor.character .azeroth-talent-arrow, .azeroth.azeroth-creator .azeroth-talent-arrow {
     --azeroth-talent-arrow-ink: var(--azeroth-stone);
     position: absolute;
     top: calc(1px - var(--azeroth-talent-tier-gap));
@@ -4958,10 +4974,10 @@
     pointer-events: none;
     background: linear-gradient(to top right, transparent 50%, var(--azeroth-slot) 50%) left bottom/6px 8px no-repeat, linear-gradient(to top left, transparent 50%, var(--azeroth-slot) 50%) right bottom/6px 8px no-repeat;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-arrow.is-met {
+  .azeroth.sheet.actor.character .azeroth-talent-arrow.is-met, .azeroth.azeroth-creator .azeroth-talent-arrow.is-met {
     --azeroth-talent-arrow-ink: var(--azeroth-alliance-gold);
   }
-  .azeroth.sheet.actor.character .azeroth-talent-arrow::before {
+  .azeroth.sheet.actor.character .azeroth-talent-arrow::before, .azeroth.azeroth-creator .azeroth-talent-arrow::before {
     content: "";
     position: absolute;
     top: 1px;
@@ -4971,7 +4987,7 @@
     background-color: var(--azeroth-talent-arrow-ink);
     box-shadow: 0 0 0 1px var(--azeroth-slot);
   }
-  .azeroth.sheet.actor.character .azeroth-talent-arrow::after {
+  .azeroth.sheet.actor.character .azeroth-talent-arrow::after, .azeroth.azeroth-creator .azeroth-talent-arrow::after {
     content: "";
     position: absolute;
     bottom: 1px;
@@ -4982,7 +4998,7 @@
     border-left: 5px solid transparent;
     border-right: 5px solid transparent;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-card {
+  .azeroth.sheet.actor.character .azeroth-talent-card, .azeroth.azeroth-creator .azeroth-talent-card {
     --azeroth-rarity-uncommon: var(--azeroth-rarity-uncommon-dark);
     --azeroth-rarity-rare: var(--azeroth-rarity-rare-dark);
     --azeroth-rarity-epic: var(--azeroth-rarity-epic-dark);
@@ -5003,7 +5019,7 @@
     text-align: left;
     cursor: default;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-card::before {
+  .azeroth.sheet.actor.character .azeroth-talent-card::before, .azeroth.azeroth-creator .azeroth-talent-card::before {
     content: "";
     position: absolute;
     top: 0;
@@ -5011,48 +5027,51 @@
     right: 100%;
     width: 12px;
   }
-  .azeroth.sheet.actor.character .azeroth-talent:is(:hover, :focus-within, .is-pinned):not(.is-dismissed) > .azeroth-talent-card {
+  .azeroth.sheet.actor.character .azeroth-talent:is(:hover, :focus-within, .is-pinned):not(.is-dismissed) > .azeroth-talent-card, .azeroth.azeroth-creator .azeroth-talent:is(:hover, :focus-within, .is-pinned):not(.is-dismissed) > .azeroth-talent-card {
     display: block;
   }
-  .azeroth.sheet.actor.character .azeroth-tree {
+  .azeroth.sheet.actor.character .azeroth-tree, .azeroth.azeroth-creator .azeroth-tree {
     container: azeroth-tree/inline-size;
   }
   @container azeroth-tree (width < 654px) {
-    .azeroth.sheet.actor.character .azeroth-talent-tier > .azeroth-talent[data-column="3"] > .azeroth-talent-card {
+    .azeroth.sheet.actor.character .azeroth-talent-tier > .azeroth-talent[data-column="3"] > .azeroth-talent-card, .azeroth.azeroth-creator .azeroth-talent-tier > .azeroth-talent[data-column="3"] > .azeroth-talent-card {
       left: auto;
       right: calc(100% + 10px);
     }
-    .azeroth.sheet.actor.character .azeroth-talent-tier > .azeroth-talent[data-column="3"] > .azeroth-talent-card::before {
+    .azeroth.sheet.actor.character .azeroth-talent-tier > .azeroth-talent[data-column="3"] > .azeroth-talent-card::before, .azeroth.azeroth-creator .azeroth-talent-tier > .azeroth-talent[data-column="3"] > .azeroth-talent-card::before {
       right: auto;
       left: 100%;
     }
   }
   @container azeroth-tree (width < 578px) {
-    .azeroth.sheet.actor.character .azeroth-talent-tier > .azeroth-talent[data-column="2"] > .azeroth-talent-card {
+    .azeroth.sheet.actor.character .azeroth-talent-tier > .azeroth-talent[data-column="2"] > .azeroth-talent-card, .azeroth.azeroth-creator .azeroth-talent-tier > .azeroth-talent[data-column="2"] > .azeroth-talent-card {
       left: auto;
       right: calc(100% + 10px);
     }
-    .azeroth.sheet.actor.character .azeroth-talent-tier > .azeroth-talent[data-column="2"] > .azeroth-talent-card::before {
+    .azeroth.sheet.actor.character .azeroth-talent-tier > .azeroth-talent[data-column="2"] > .azeroth-talent-card::before, .azeroth.azeroth-creator .azeroth-talent-tier > .azeroth-talent[data-column="2"] > .azeroth-talent-card::before {
       right: auto;
       left: 100%;
     }
   }
   .azeroth.sheet.actor.character .azeroth-racial-row > .azeroth-talent:nth-child(4n+3) > .azeroth-talent-card,
-  .azeroth.sheet.actor.character .azeroth-racial-row > .azeroth-talent:nth-child(4n) > .azeroth-talent-card {
+  .azeroth.sheet.actor.character .azeroth-racial-row > .azeroth-talent:nth-child(4n) > .azeroth-talent-card, .azeroth.azeroth-creator .azeroth-racial-row > .azeroth-talent:nth-child(4n+3) > .azeroth-talent-card,
+  .azeroth.azeroth-creator .azeroth-racial-row > .azeroth-talent:nth-child(4n) > .azeroth-talent-card {
     left: auto;
     right: calc(100% + 10px);
   }
   .azeroth.sheet.actor.character .azeroth-racial-row > .azeroth-talent:nth-child(4n+3) > .azeroth-talent-card::before,
-  .azeroth.sheet.actor.character .azeroth-racial-row > .azeroth-talent:nth-child(4n) > .azeroth-talent-card::before {
+  .azeroth.sheet.actor.character .azeroth-racial-row > .azeroth-talent:nth-child(4n) > .azeroth-talent-card::before, .azeroth.azeroth-creator .azeroth-racial-row > .azeroth-talent:nth-child(4n+3) > .azeroth-talent-card::before,
+  .azeroth.azeroth-creator .azeroth-racial-row > .azeroth-talent:nth-child(4n) > .azeroth-talent-card::before {
     right: auto;
     left: 100%;
   }
   .azeroth.sheet.actor.character .azeroth-talent-tier[data-tier="4"] .azeroth-talent-card,
-  .azeroth.sheet.actor.character .azeroth-talent-tier[data-tier="5"] .azeroth-talent-card {
+  .azeroth.sheet.actor.character .azeroth-talent-tier[data-tier="5"] .azeroth-talent-card, .azeroth.azeroth-creator .azeroth-talent-tier[data-tier="4"] .azeroth-talent-card,
+  .azeroth.azeroth-creator .azeroth-talent-tier[data-tier="5"] .azeroth-talent-card {
     top: auto;
     bottom: -4px;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-card h5 {
+  .azeroth.sheet.actor.character .azeroth-talent-card h5, .azeroth.azeroth-creator .azeroth-talent-card h5 {
     margin: 0 0 3px;
     padding: 0;
     border: none;
@@ -5064,24 +5083,25 @@
     text-shadow: none;
   }
   .azeroth.sheet.actor.character .azeroth-talent-meta,
-  .azeroth.sheet.actor.character .azeroth-talent-requires {
+  .azeroth.sheet.actor.character .azeroth-talent-requires, .azeroth.azeroth-creator .azeroth-talent-meta,
+  .azeroth.azeroth-creator .azeroth-talent-requires {
     margin: 0 0 4px;
     font-size: 13px;
     line-height: 1.35;
     color: var(--azeroth-ink-light-soft);
   }
-  .azeroth.sheet.actor.character .azeroth-talent-requires strong {
+  .azeroth.sheet.actor.character .azeroth-talent-requires strong, .azeroth.azeroth-creator .azeroth-talent-requires strong {
     color: var(--azeroth-ink-light);
   }
-  .azeroth.sheet.actor.character .azeroth-talent-effect {
+  .azeroth.sheet.actor.character .azeroth-talent-effect, .azeroth.azeroth-creator .azeroth-talent-effect {
     font-size: 13px;
     line-height: 1.4;
     color: var(--azeroth-ink-light);
   }
-  .azeroth.sheet.actor.character .azeroth-talent-effect p {
+  .azeroth.sheet.actor.character .azeroth-talent-effect p, .azeroth.azeroth-creator .azeroth-talent-effect p {
     margin: 0 0 5px;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-card > button {
+  .azeroth.sheet.actor.character .azeroth-talent-card > button, .azeroth.azeroth-creator .azeroth-talent-card > button {
     display: block;
     width: 100%;
     height: auto;
@@ -5095,75 +5115,75 @@
     cursor: pointer;
     transition: none;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-card > button.azeroth-talent-take {
+  .azeroth.sheet.actor.character .azeroth-talent-card > button.azeroth-talent-take, .azeroth.azeroth-creator .azeroth-talent-card > button.azeroth-talent-take {
     background: var(--azeroth-page-accent);
     color: var(--azeroth-ink);
     border: 1px solid var(--azeroth-page-accent);
   }
-  .azeroth.sheet.actor.character .azeroth-talent-card > button.azeroth-talent-take:hover {
+  .azeroth.sheet.actor.character .azeroth-talent-card > button.azeroth-talent-take:hover, .azeroth.azeroth-creator .azeroth-talent-card > button.azeroth-talent-take:hover {
     background: var(--azeroth-page-accent);
     color: var(--azeroth-ink);
     border-color: var(--azeroth-alliance-gold);
   }
-  .azeroth.sheet.actor.character .azeroth-talent-card > button.azeroth-talent-take:focus {
+  .azeroth.sheet.actor.character .azeroth-talent-card > button.azeroth-talent-take:focus, .azeroth.azeroth-creator .azeroth-talent-card > button.azeroth-talent-take:focus {
     outline: none;
     box-shadow: none;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-card > button.azeroth-talent-take:focus-visible {
+  .azeroth.sheet.actor.character .azeroth-talent-card > button.azeroth-talent-take:focus-visible, .azeroth.azeroth-creator .azeroth-talent-card > button.azeroth-talent-take:focus-visible {
     outline: 2px solid var(--azeroth-alliance-gold);
     outline-offset: 1px;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-card > button.azeroth-talent-untake {
+  .azeroth.sheet.actor.character .azeroth-talent-card > button.azeroth-talent-untake, .azeroth.azeroth-creator .azeroth-talent-card > button.azeroth-talent-untake {
     background: var(--azeroth-iron);
     color: var(--azeroth-ink-light);
     border: 1px solid var(--azeroth-stone);
     transition: none;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-card > button.azeroth-talent-untake:hover:not(:disabled), .azeroth.sheet.actor.character .azeroth-talent-card > button.azeroth-talent-untake:focus-visible {
+  .azeroth.sheet.actor.character .azeroth-talent-card > button.azeroth-talent-untake:hover:not(:disabled), .azeroth.sheet.actor.character .azeroth-talent-card > button.azeroth-talent-untake:focus-visible, .azeroth.azeroth-creator .azeroth-talent-card > button.azeroth-talent-untake:hover:not(:disabled), .azeroth.azeroth-creator .azeroth-talent-card > button.azeroth-talent-untake:focus-visible {
     background: var(--azeroth-stone-dark);
     color: var(--azeroth-ink-light);
     border-color: var(--azeroth-alliance-gold);
   }
-  .azeroth.sheet.actor.character .azeroth-talent-card > button.azeroth-talent-untake:focus-visible {
+  .azeroth.sheet.actor.character .azeroth-talent-card > button.azeroth-talent-untake:focus-visible, .azeroth.azeroth-creator .azeroth-talent-card > button.azeroth-talent-untake:focus-visible {
     outline: 2px solid var(--azeroth-alliance-gold);
     outline-offset: 1px;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-card > button.azeroth-talent-untake:disabled {
+  .azeroth.sheet.actor.character .azeroth-talent-card > button.azeroth-talent-untake:disabled, .azeroth.azeroth-creator .azeroth-talent-card > button.azeroth-talent-untake:disabled {
     background: var(--azeroth-panel-dark);
     color: var(--azeroth-ink-light-soft);
     border-color: var(--azeroth-slot-edge);
     cursor: default;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-card > button.azeroth-talent-untake:focus:not(:focus-visible) {
+  .azeroth.sheet.actor.character .azeroth-talent-card > button.azeroth-talent-untake:focus:not(:focus-visible), .azeroth.azeroth-creator .azeroth-talent-card > button.azeroth-talent-untake:focus:not(:focus-visible) {
     outline: none;
     box-shadow: none;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-locked {
+  .azeroth.sheet.actor.character .azeroth-talent-locked, .azeroth.azeroth-creator .azeroth-talent-locked {
     margin: 6px 0 0;
     font-size: 13px;
     line-height: 1.35;
     font-style: italic;
     color: var(--azeroth-page-alarm);
   }
-  .azeroth.sheet.actor.character .azeroth-racial-row {
+  .azeroth.sheet.actor.character .azeroth-racial-row, .azeroth.azeroth-creator .azeroth-racial-row {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 14px 6px;
     justify-items: center;
     margin: 0 0 12px;
   }
-  .azeroth.sheet.actor.character .azeroth-racial-row > .azeroth-talent {
+  .azeroth.sheet.actor.character .azeroth-racial-row > .azeroth-talent, .azeroth.azeroth-creator .azeroth-racial-row > .azeroth-talent {
     width: 100%;
     max-width: 120px;
   }
-  .azeroth.sheet.actor.character .azeroth-talent-name {
+  .azeroth.sheet.actor.character .azeroth-talent-name, .azeroth.azeroth-creator .azeroth-talent-name {
     margin-top: 8px;
     font-size: 13px;
     line-height: 1.35;
     text-align: center;
     color: var(--azeroth-page-ink);
   }
-  .azeroth.sheet.actor.character .azeroth-talent-tierline {
+  .azeroth.sheet.actor.character .azeroth-talent-tierline, .azeroth.azeroth-creator .azeroth-talent-tierline {
     font-size: 13px;
     line-height: 1.35;
     font-weight: 700;
@@ -5171,27 +5191,30 @@
   }
   .azeroth.sheet.actor.character .azeroth-racial-row .azeroth-talent--untaken > .azeroth-talent-socket .azeroth-talent-icon,
   .azeroth.sheet.actor.character .azeroth-racial-row .azeroth-talent--untaken > .azeroth-talent-name,
-  .azeroth.sheet.actor.character .azeroth-racial-row .azeroth-talent--untaken > .azeroth-talent-tierline {
+  .azeroth.sheet.actor.character .azeroth-racial-row .azeroth-talent--untaken > .azeroth-talent-tierline, .azeroth.azeroth-creator .azeroth-racial-row .azeroth-talent--untaken > .azeroth-talent-socket .azeroth-talent-icon,
+  .azeroth.azeroth-creator .azeroth-racial-row .azeroth-talent--untaken > .azeroth-talent-name,
+  .azeroth.azeroth-creator .azeroth-racial-row .azeroth-talent--untaken > .azeroth-talent-tierline {
     opacity: 0.65;
   }
   .azeroth.sheet.actor.character .azeroth-racial-row .azeroth-talent--untaken > .azeroth-talent-name,
-  .azeroth.sheet.actor.character .azeroth-racial-row .azeroth-talent--untaken > .azeroth-talent-tierline {
+  .azeroth.sheet.actor.character .azeroth-racial-row .azeroth-talent--untaken > .azeroth-talent-tierline, .azeroth.azeroth-creator .azeroth-racial-row .azeroth-talent--untaken > .azeroth-talent-name,
+  .azeroth.azeroth-creator .azeroth-racial-row .azeroth-talent--untaken > .azeroth-talent-tierline {
     color: var(--azeroth-page-ink);
   }
-  .azeroth.sheet.actor.character .azeroth-career-current {
+  .azeroth.sheet.actor.character .azeroth-career-current, .azeroth.azeroth-creator .azeroth-career-current {
     float: right;
     font-size: 0.8125rem;
     font-weight: 400;
     color: var(--azeroth-page-ink-soft);
   }
-  .azeroth.sheet.actor.character .azeroth-career-exits {
+  .azeroth.sheet.actor.character .azeroth-career-exits, .azeroth.azeroth-creator .azeroth-career-exits {
     list-style: none;
     margin: 0 0 0.5rem;
     padding: 0;
     display: grid;
     gap: 0.3rem;
   }
-  .azeroth.sheet.actor.character .azeroth-career-exit {
+  .azeroth.sheet.actor.character .azeroth-career-exit, .azeroth.azeroth-creator .azeroth-career-exit {
     display: grid;
     grid-template-columns: auto 1fr;
     gap: 0 0.4rem;
@@ -5199,18 +5222,18 @@
     border-left: 3px solid var(--azeroth-page-accent);
     background: var(--azeroth-page-quote);
   }
-  .azeroth.sheet.actor.character .azeroth-career-exit--blocked {
+  .azeroth.sheet.actor.character .azeroth-career-exit--blocked, .azeroth.azeroth-creator .azeroth-career-exit--blocked {
     border-left-color: var(--azeroth-page-edge);
     color: var(--azeroth-page-ink-soft);
   }
-  .azeroth.sheet.actor.character .azeroth-career-exit-name {
+  .azeroth.sheet.actor.character .azeroth-career-exit-name, .azeroth.azeroth-creator .azeroth-career-exit-name {
     font-weight: 600;
   }
-  .azeroth.sheet.actor.character .azeroth-career-exit-needs {
+  .azeroth.sheet.actor.character .azeroth-career-exit-needs, .azeroth.azeroth-creator .azeroth-career-exit-needs {
     font-size: 0.8125rem;
     color: var(--azeroth-page-alarm);
   }
-  .azeroth.sheet.actor.character .azeroth-career-exit-narrative {
+  .azeroth.sheet.actor.character .azeroth-career-exit-narrative, .azeroth.azeroth-creator .azeroth-career-exit-narrative {
     grid-column: 1/-1;
     font-size: 0.8125rem;
     font-style: italic;
@@ -6544,6 +6567,538 @@
     color: var(--azeroth-ink-light);
     font-weight: 700;
   }
+  .azeroth.azeroth-creator {
+    --azeroth-page: var(--azeroth-stone-dark);
+    --azeroth-page-ink: var(--azeroth-ink-light);
+    --azeroth-page-ink-soft: var(--azeroth-ink-light-soft);
+    --azeroth-page-heading: var(--azeroth-gold-text);
+    --azeroth-page-accent: var(--azeroth-alliance-blue-dark);
+    --azeroth-page-alarm: var(--azeroth-horde-red-dark);
+    --azeroth-page-panel: var(--azeroth-panel-dark);
+    --azeroth-page-edge: var(--azeroth-stone);
+    --azeroth-page-rule: var(--azeroth-slot-edge);
+    --azeroth-page-hairline: var(--azeroth-slot-edge);
+    --azeroth-page-field: var(--azeroth-slot);
+    --azeroth-page-well: var(--azeroth-slot);
+    --azeroth-page-well-lit: var(--azeroth-iron);
+    --azeroth-page-quote: var(--azeroth-panel-dark);
+    --azeroth-page-row: var(--azeroth-panel-dark);
+    --azeroth-page-hover: var(--azeroth-slot);
+    --azeroth-page-chip: var(--azeroth-iron);
+    --azeroth-void: var(--azeroth-void-dark);
+    --azeroth-rarity-uncommon: var(--azeroth-rarity-uncommon-dark);
+    --azeroth-rarity-rare: var(--azeroth-rarity-rare-dark);
+    --azeroth-rarity-epic: var(--azeroth-rarity-epic-dark);
+    --azeroth-rarity-legendary: var(--azeroth-rarity-legendary-dark);
+    --azeroth-ink: var(--azeroth-ink-light);
+    --azeroth-ink-soft: var(--azeroth-ink-light-soft);
+    --azeroth-parchment: var(--azeroth-stone-dark);
+    --azeroth-alliance-blue: var(--azeroth-alliance-blue-dark);
+    --azeroth-horde-red: var(--azeroth-horde-red-dark);
+    --azeroth-stone-dark: var(--azeroth-creator-well);
+    --azeroth-panel-dark: var(--azeroth-creator-charcoal);
+    --azeroth-slot: var(--azeroth-creator-well);
+    --azeroth-gold-text: var(--azeroth-creator-gold);
+    color: var(--azeroth-ink-light);
+    max-width: 100vw;
+    max-height: 100vh;
+    container-type: inline-size;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-frame {
+    display: grid;
+    grid-template-columns: 160px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 12px;
+    background: var(--azeroth-stone-dark);
+    border: 2px solid var(--azeroth-stone);
+    border-top-color: var(--azeroth-gold-text);
+    padding: 12px;
+    overflow: hidden;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-identity {
+    grid-column: 1/-1;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--azeroth-stone);
+    color: var(--azeroth-gold-text);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-identity img {
+    width: 36px;
+    height: 36px;
+    object-fit: cover;
+    border: 1px solid var(--azeroth-stone);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-steps {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    gap: 5px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-step {
+    display: grid;
+    grid-template-columns: 20px 1fr 14px;
+    justify-items: start;
+    align-items: center;
+    text-align: left;
+    padding: 9px 7px;
+    min-height: 36px;
+    border: 1px solid transparent;
+    background: var(--azeroth-panel-dark);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-step.is-active {
+    border-color: var(--azeroth-gold-text);
+    color: var(--azeroth-gold-text);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-step.is-refused:not(.is-active) {
+    border: 1px solid transparent;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-step i {
+    color: var(--azeroth-ink-light);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-pane {
+    display: block;
+    overflow-y: auto;
+    padding: 0 6px 12px 0;
+  }
+  .azeroth.azeroth-creator .azeroth-forge-heading {
+    margin-top: 0;
+    color: var(--azeroth-gold-text);
+  }
+  .azeroth.azeroth-creator h4 {
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--azeroth-gold-text);
+    margin: 8px 0;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-footer {
+    grid-column: 1/-1;
+    border-top: 1px solid var(--azeroth-stone);
+    padding-top: 6px;
+  }
+  .azeroth.azeroth-creator .azeroth-forge-summary {
+    max-height: 100px;
+    overflow-y: auto;
+    background: var(--azeroth-panel-dark);
+  }
+  .azeroth.azeroth-creator :where(button:not(.azeroth-talent-socket):not(.azeroth-creator-expand):not(.azeroth-creator-step)) {
+    background: var(--azeroth-iron);
+    color: var(--azeroth-ink-light);
+    border: 1px solid var(--azeroth-stone);
+    transition: none;
+  }
+  .azeroth.azeroth-creator :where(button:not(.azeroth-talent-socket):not(.azeroth-creator-expand):not(.azeroth-creator-step)):hover:not(:disabled), .azeroth.azeroth-creator :where(button:not(.azeroth-talent-socket):not(.azeroth-creator-expand):not(.azeroth-creator-step)):focus-visible {
+    background: var(--azeroth-stone-dark);
+    color: var(--azeroth-ink-light);
+    border-color: var(--azeroth-alliance-gold);
+  }
+  .azeroth.azeroth-creator :where(button:not(.azeroth-talent-socket):not(.azeroth-creator-expand):not(.azeroth-creator-step)):focus-visible {
+    outline: 2px solid var(--azeroth-alliance-gold);
+    outline-offset: 1px;
+  }
+  .azeroth.azeroth-creator :where(button:not(.azeroth-talent-socket):not(.azeroth-creator-expand):not(.azeroth-creator-step)):disabled {
+    background: var(--azeroth-panel-dark);
+    color: var(--azeroth-ink-light-soft);
+    border-color: var(--azeroth-slot-edge);
+    cursor: default;
+  }
+  .azeroth.azeroth-creator :where(button:not(.azeroth-talent-socket):not(.azeroth-creator-expand):not(.azeroth-creator-step)) {
+    height: auto;
+    min-height: 28px;
+  }
+  .azeroth.azeroth-creator input:not([type=radio]):not([type=checkbox]), .azeroth.azeroth-creator select, .azeroth.azeroth-creator textarea {
+    background: var(--azeroth-slot);
+    color: var(--azeroth-ink-light);
+    border: 1px solid var(--azeroth-stone);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-tile {
+    background: var(--azeroth-panel-dark);
+    border-color: var(--azeroth-stone);
+  }
+  .azeroth.azeroth-creator .azeroth-picker-list, .azeroth.azeroth-creator .azeroth-forge-preview, .azeroth.azeroth-creator .azeroth-forge-phrases {
+    background: var(--azeroth-panel-dark);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-tile.is-selected {
+    border-color: var(--azeroth-gold-text);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-choice-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 270px;
+    gap: 16px;
+    align-items: start;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-catalogue {
+    min-width: 0;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-inspector {
+    position: sticky;
+    top: 0;
+    border: 1px solid var(--azeroth-stone);
+    padding: 12px;
+    background: var(--azeroth-panel-dark);
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-detail-icon {
+    width: 52px;
+    height: 52px;
+    object-fit: cover;
+    border: 1px solid var(--azeroth-gold-text);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-rules {
+    margin: 12px 0;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-branches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 12px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-branches button.is-active {
+    border-color: var(--azeroth-gold-text);
+    color: var(--azeroth-gold-text);
+  }
+  .azeroth.azeroth-creator .azeroth-racial-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 12px 0 18px;
+  }
+  .azeroth.azeroth-creator .azeroth-racial-row .azeroth-talent {
+    flex: 0 0 85px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-granted {
+    margin-top: 14px;
+    padding: 10px;
+    border-top: 1px solid var(--azeroth-stone);
+  }
+  .azeroth.azeroth-creator .azeroth-tree-body {
+    grid-template-columns: 100px minmax(240px, 1fr);
+  }
+  .azeroth.azeroth-creator .azeroth-tree-field {
+    width: 100%;
+  }
+  .azeroth.azeroth-creator .azeroth-tree {
+    margin: 0;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-spell-toolbar, .azeroth.azeroth-creator .azeroth-creator-spell-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-spell-toolbar input {
+    flex: 1 1 180px;
+    min-width: 100px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-spell-filters label, .azeroth.azeroth-creator .azeroth-creator-spell-toolbar label {
+    display: grid;
+    gap: 4px;
+    font-size: 13px;
+    flex: 1 1 100px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-spell-filters input {
+    width: 100%;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-spell-results, .azeroth.azeroth-creator .azeroth-creator-chosen-spells {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-spell-results > li {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 6px;
+    margin: 4px 0;
+    border: 1px solid var(--azeroth-stone);
+    background: var(--azeroth-panel-dark);
+    font-size: 13px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-spell-results > li > img {
+    width: 36px;
+    height: 36px;
+    object-fit: cover;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-spell-results > li > div {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-spell-results > li > div > span {
+    color: var(--azeroth-ink-light-soft);
+    overflow-wrap: anywhere;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-spell-results > li.is-inspected {
+    border-color: var(--azeroth-gold-text);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-spell-results > li > button {
+    flex: 0 0 auto;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-chosen-spells li {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 7px;
+    font-size: 13px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-chosen-spells li > button:last-child {
+    flex: 0 0 28px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-expand {
+    color: var(--azeroth-ink-light);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-review {
+    list-style: none;
+    margin: 0 0 16px;
+    padding: 0;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-review li {
+    display: grid;
+    grid-template-columns: 100px 1fr auto;
+    gap: 10px;
+    align-items: center;
+    padding: 8px;
+    border-bottom: 1px solid var(--azeroth-stone);
+    font-size: 13px;
+  }
+  .azeroth.azeroth-creator :focus-visible {
+    outline: 2px solid var(--azeroth-gold-text);
+    outline-offset: 2px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-frame {
+    position: relative;
+    gap: 10px;
+    border: 10px solid var(--azeroth-stone);
+    border-image: url("../assets/ui/frame-9slice.png") 20/10px round;
+    padding: 10px;
+    box-shadow: inset 0 0 0 1px var(--azeroth-creator-brass), inset 0 0 0 4px var(--azeroth-creator-well);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-frame::after {
+    content: "";
+    position: absolute;
+    inset: 3px;
+    pointer-events: none;
+    border: 1px solid var(--azeroth-creator-brass);
+    background: linear-gradient(135deg, var(--azeroth-gold-text) 0 2px, transparent 3px) top left, linear-gradient(225deg, var(--azeroth-gold-text) 0 2px, transparent 3px) top right, linear-gradient(45deg, var(--azeroth-gold-text) 0 2px, transparent 3px) bottom left, linear-gradient(315deg, var(--azeroth-gold-text) 0 2px, transparent 3px) bottom right;
+    background-size: 18px 18px;
+    background-repeat: no-repeat;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-identity {
+    padding: 4px 8px 12px;
+    border-bottom: 1px solid var(--azeroth-creator-brass);
+    box-shadow: 0 2px 0 var(--azeroth-creator-charcoal);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-identity strong {
+    font-size: 17px;
+    letter-spacing: 0.025em;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-identity > span {
+    font-size: 13px;
+    color: var(--azeroth-ink-light-soft);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-identity img {
+    border: 1px solid var(--azeroth-gold-text);
+    border-radius: 50%;
+    box-shadow: 0 0 0 3px var(--azeroth-creator-well), 0 0 0 4px var(--azeroth-creator-brass);
+    margin-right: 5px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-steps {
+    padding: 8px 8px 8px 0;
+    border-right: 1px solid var(--azeroth-creator-brass);
+    gap: 7px;
+    background: var(--azeroth-creator-well);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-step {
+    grid-template-columns: 25px 1fr 14px;
+    column-gap: 7px;
+    padding: 9px 7px;
+    background: var(--azeroth-creator-well);
+    border-radius: 2px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-step .azeroth-creator-step-number {
+    display: grid;
+    place-items: center;
+    width: 23px;
+    height: 23px;
+    border: 1px solid var(--azeroth-creator-brass);
+    border-radius: 50%;
+    color: var(--azeroth-gold-text);
+    font-weight: 400;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-step.is-active {
+    background: var(--azeroth-creator-selected);
+    border: 1px solid var(--azeroth-gold-text);
+    box-shadow: inset 0 0 0 2px var(--azeroth-creator-well), 0 0 0 1px var(--azeroth-creator-brass);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-step:hover:not(.is-active) {
+    background: var(--azeroth-creator-charcoal);
+    border-color: var(--azeroth-creator-brass);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-step i {
+    color: var(--azeroth-rarity-uncommon-dark);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-pane {
+    padding: 8px 12px 14px;
+    background: var(--azeroth-creator-charcoal);
+    border: 1px solid var(--azeroth-creator-brass);
+  }
+  .azeroth.azeroth-creator .azeroth-forge-heading {
+    font-size: 25px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    border: 0;
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-inspector {
+    border-color: var(--azeroth-creator-brass);
+    background: var(--azeroth-creator-well);
+    box-shadow: inset 0 0 0 3px var(--azeroth-creator-charcoal);
+    padding: 14px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-inspector h4 {
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--azeroth-creator-brass);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-detail-icon {
+    padding: 2px;
+    background: var(--azeroth-creator-well);
+    box-shadow: 0 0 0 2px var(--azeroth-creator-brass);
+    border-radius: 2px;
+    margin: 5px 2px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-branches {
+    gap: 3px;
+    border-bottom: 1px solid var(--azeroth-creator-brass);
+    padding-bottom: 1px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-branches button {
+    flex: 1 1 90px;
+    background: var(--azeroth-creator-well);
+    border-color: var(--azeroth-creator-brass);
+    border-radius: 3px 3px 0 0;
+    min-height: 34px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-branches button.is-active {
+    background: var(--azeroth-creator-selected);
+    color: var(--azeroth-gold-text);
+    border-color: var(--azeroth-gold-text);
+    box-shadow: inset 0 0 0 2px var(--azeroth-creator-well);
+  }
+  .azeroth.azeroth-creator .azeroth-tree-field {
+    border-color: var(--azeroth-creator-brass);
+    background: var(--azeroth-creator-well);
+    box-shadow: inset 0 0 0 3px var(--azeroth-creator-charcoal);
+  }
+  .azeroth.azeroth-creator .azeroth-tree-rail-name {
+    color: var(--azeroth-gold-text);
+  }
+  .azeroth.azeroth-creator .azeroth-racial-row {
+    padding: 12px;
+    border: 1px solid var(--azeroth-creator-brass);
+    background: var(--azeroth-creator-well);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-spell-results > li {
+    border-color: var(--azeroth-slot-edge);
+    border-radius: 3px;
+    padding: 10px;
+    background: var(--azeroth-creator-well);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-spell-results > li.is-inspected {
+    border-color: var(--azeroth-alliance-blue-dark);
+    background: var(--azeroth-creator-blue);
+    box-shadow: inset 0 0 0 2px var(--azeroth-creator-well);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-spell-results > li > img {
+    border: 1px solid var(--azeroth-creator-brass);
+    padding: 2px;
+    background: var(--azeroth-creator-well);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-spell-results > li > button,
+  .azeroth.azeroth-creator .azeroth-creator-inspector > button,
+  .azeroth.azeroth-creator .azeroth-forge-buttons > button {
+    background: var(--azeroth-creator-charcoal);
+    border: 1px solid var(--azeroth-creator-brass);
+    box-shadow: inset 0 0 0 2px var(--azeroth-creator-well);
+    border-radius: 2px;
+    padding: 6px 14px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-spell-results > li > button:hover:not(:disabled),
+  .azeroth.azeroth-creator .azeroth-creator-inspector > button:hover:not(:disabled),
+  .azeroth.azeroth-creator .azeroth-forge-buttons > button:hover:not(:disabled) {
+    border-color: var(--azeroth-gold-text);
+    background: var(--azeroth-creator-selected);
+  }
+  .azeroth.azeroth-creator .azeroth-forge-buttons > [data-action=creatorNext],
+  .azeroth.azeroth-creator .azeroth-forge-buttons > [type=submit],
+  .azeroth.azeroth-creator .azeroth-creator-inspector > [data-action=creatorChooseTalent],
+  .azeroth.azeroth-creator .azeroth-creator-inspector > [data-action=creatorAddSpell] {
+    border-color: var(--azeroth-gold-text);
+    background: var(--azeroth-creator-selected);
+    color: var(--azeroth-gold-text);
+  }
+  .azeroth.azeroth-creator .azeroth-forge-buttons {
+    gap: 10px;
+    padding-top: 6px;
+  }
+  .azeroth.azeroth-creator .azeroth-forge-buttons > [data-action=creatorBack] {
+    margin-right: auto;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-footer {
+    border-color: var(--azeroth-creator-brass);
+  }
+  .azeroth.azeroth-creator .azeroth-forge-summary {
+    border: 0;
+    border-left: 2px solid var(--azeroth-creator-brass);
+    background: var(--azeroth-creator-well);
+    margin: 4px 0 8px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-tile.is-selected {
+    background: var(--azeroth-creator-selected);
+    border-color: var(--azeroth-gold-text);
+    box-shadow: inset 0 0 0 2px var(--azeroth-creator-well);
+  }
+  @container (max-width: 1000px) {
+    .azeroth.azeroth-creator .azeroth-creator-choice-layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .azeroth.azeroth-creator .azeroth-creator-inspector {
+      position: static;
+    }
+  }
+  @container (max-width: 650px) {
+    .azeroth.azeroth-creator .azeroth-creator-frame {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .azeroth.azeroth-creator .azeroth-creator-steps {
+      flex-direction: row;
+      overflow-x: auto;
+    }
+    .azeroth.azeroth-creator .azeroth-creator-step {
+      flex: 0 0 130px;
+    }
+    .azeroth.azeroth-creator .azeroth-creator-pane {
+      grid-row: 3;
+    }
+    .azeroth.azeroth-creator .azeroth-creator-frame {
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+    }
+    .azeroth.azeroth-creator .azeroth-creator-tiles-wide {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .azeroth.azeroth-creator .azeroth-creator-shop {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
   .azeroth-tracker .azeroth-side {
     display: flex;
     align-items: baseline;
@@ -7654,5 +8209,16 @@
   }
   :where(.azeroth) .azeroth-animations-rows li button {
     color: var(--azeroth-ink);
+  }
+  .azeroth .azeroth-icon.azeroth-untrained,
+  .azeroth .azeroth-creator-shop li.azeroth-untrained {
+    outline: 2px solid #f04b4b !important;
+    outline-offset: 1px;
+  }
+  .azeroth .azeroth-creator-training-filter {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-block: 0.5rem;
   }
 }

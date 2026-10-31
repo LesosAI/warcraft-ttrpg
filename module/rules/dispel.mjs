@@ -49,6 +49,7 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+import { sustainTransferPending } from "./sustain-transfer-suspension.mjs";
 
 /** 02's Dispel as the book prints it: one target, within 30 feet. */
 export const DISPEL = Object.freeze({ feature: "Dispel", feet: 30, targets: 1 });
@@ -61,6 +62,8 @@ const WARD_FLAG = "priestWard";
 
 /** Why an effect is greyed, each with the key its words are under. */
 export const DISPEL_REFUSALS = Object.freeze({
+  transfer: "AZEROTH.Dispel.Refuse.Transfer",
+  iceBlock: "AZEROTH.IceBlock.Protected",
   condition: "AZEROTH.Dispel.Refuse.Condition",
   status: "AZEROTH.Dispel.Refuse.Status",
   aura: "AZEROTH.Dispel.Refuse.Aura",
@@ -127,6 +130,7 @@ export function dispelJudgement(effect, { archmage = [] } = {}) {
   const f = flagsOf(effect);
   const statuses = statusesOf(effect);
   const refuse = (reason, extra = {}) => ({ ok: false, reason, by: null, conditions: [], ...extra });
+  if (sustainTransferPending(effect)) return refuse("transfer");
   const conditions = statuses.filter(s => AZEROTH.conditions?.[s]);
   if (conditions.length) return refuse("condition", { conditions: [...conditions].sort() });
   if (statuses.length && !Object.keys(f).length) return refuse("status");

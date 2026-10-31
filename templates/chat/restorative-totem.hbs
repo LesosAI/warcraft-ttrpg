@@ -1,0 +1,21 @@
+<div class="azeroth azeroth-card azeroth-card-spell" data-message-kind="prompt">
+  {{> systems/azeroth-rpg/templates/chat/partials/card-header.hbs title=title subtitle=name}}
+  <div class="azeroth-card-body">
+    <p class="azeroth-card-text">{{description}}</p>
+    {{#if reviewed}}
+      <p>{{localize "AZEROTH.RestorativeTotem.Reviewed"}}</p>
+    {{else if done}}
+      <p>{{localize "AZEROTH.RestorativeTotem.Restored"}}</p>
+      <ul>{{#each results}}<li>{{name}}: +{{amount}}</li>{{/each}}</ul>
+    {{else if uncertain}}
+      <p>{{localize "AZEROTH.RestorativeTotem.Uncertain"}}</p>
+      <div class="azeroth-card-actions" data-gm-only>
+        <button type="button" data-action="reviewTotem">{{localize "AZEROTH.RestorativeTotem.Review"}}</button>
+      </div>
+    {{else}}
+      <div class="azeroth-card-actions" data-reaction-owner="{{actorUuid}}">
+        <button type="button" data-action="restoreTotem">{{localize "AZEROTH.RestorativeTotem.Choose"}}</button>
+      </div>
+    {{/if}}
+  </div>
+</div>

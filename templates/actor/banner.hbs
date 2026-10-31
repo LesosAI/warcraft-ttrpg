@@ -43,6 +43,7 @@
       {{#if party}}<span class="azeroth-party-chip">{{localize "AZEROTH.Party.Label"}}</span>{{/if}}
       {{!-- A sheet with neither race nor class offers the creator (D-636). --}}
       {{#if canBuild}}<button type="button" class="azeroth-build" data-action="openCreator">{{localize "AZEROTH.Creator.Build"}}</button>{{/if}}
+      {{#if canReviewChainCast}}<button type="button" class="azeroth-build" data-action="reviewChainLightningCast">{{localize "AZEROTH.ChainLightning.Review.Title"}}</button>{{/if}}
     </div>
     {{!-- The XP purse lives on the Progress tab alone (the lead, D-612); the
           banner carries identity and the five callouts. --}}
@@ -84,7 +85,7 @@
             character had nowhere to hold one. Drawn only where it is set,
             because a character who does not fly should read exactly as before. --}}
       <dt>{{localize "AZEROTH.Sheet.Speed"}}</dt><dd data-tooltip="{{speedTitle}}">{{system.speed}} ft{{#if system.flyingSpeed}} <span class="azeroth-of">/ {{system.flyingSpeed}} {{localize "AZEROTH.Sheet.Flying"}}</span>{{/if}}</dd>
-      {{#if system.dying}}<dt>{{localize "AZEROTH.Sheet.Dying"}}</dt><dd class="azeroth-dying">{{system.deathSteps}} / {{config.DEATH_STEPS}}</dd>{{/if}}
+      {{#if system.dying}}<dt>{{localize "AZEROTH.Sheet.Dying"}}</dt><dd class="azeroth-dying">{{system.deathSteps}} / {{system.deathStepLimit}}</dd>{{/if}}
     </div>
     <div class="azeroth-callout">
       <dt>{{localize "AZEROTH.SpiritTether.Label"}}</dt>

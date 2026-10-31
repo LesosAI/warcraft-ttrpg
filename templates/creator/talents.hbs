@@ -1,42 +1,45 @@
-{{!-- Step 6 (01 §5): one racial talent, every level-1 feature, one talent point. A caster's spells have their own step (2026-09-06). --}}
-<h4 class="azeroth-creator-subheading">{{localize "AZEROTH.Creator.Racial"}}{{#if pane.raceName}} · {{pane.raceName}}{{/if}}</h4>
-<ul class="azeroth-forge-list azeroth-creator-talents" role="radiogroup" aria-label="{{localize "AZEROTH.Creator.Racial"}}">
-  {{#each pane.racial as |t|}}
-  <li class="{{#if t.selected}}is-selected{{/if}}{{#unless t.available}} is-unavailable{{/unless}}">
-    <label class="azeroth-creator-row-label">
-      <input type="radio" name="racialTalent" value="{{t.name}}" data-creator="racialTalent" {{#if t.selected}}checked{{/if}} {{#unless t.available}}disabled{{/unless}}>
-      <span class="azeroth-forge-name">{{t.name}}{{#unless t.available}} <span class="azeroth-forge-tier">{{localize "AZEROTH.Creator.NotYetTier" tier=t.tier}}</span>{{/unless}}</span>
-      <span class="azeroth-creator-prose azeroth-creator-row-text">{{{t.html}}}</span>
-    </label>
-  </li>
-  {{else}}
-  <li class="azeroth-forge-none">{{localize "AZEROTH.Creator.NoRace"}}</li>
-  {{/each}}
-</ul>
-
-<h4 class="azeroth-creator-subheading">{{localize "AZEROTH.Creator.ClassTalent"}}{{#if pane.className}} · {{pane.className}}{{/if}}</h4>
-{{#each pane.branches as |b|}}
-<p class="azeroth-creator-branch">{{b.name}}</p>
-<ul class="azeroth-forge-list azeroth-creator-talents" role="radiogroup" aria-label="{{b.name}}">
-  {{#each b.talents as |t|}}
-  <li class="{{#if t.selected}}is-selected{{/if}}">
-    <label class="azeroth-creator-row-label">
-      <input type="radio" name="classTalent" value="{{t.identifier}}" data-creator="classTalent" {{#if t.selected}}checked{{/if}}>
-      <span class="azeroth-forge-name">{{t.name}}{{#if (gt t.ranks 1)}} <span class="azeroth-forge-tier">{{localize "AZEROTH.Item.Ranks"}} {{t.ranks}}</span>{{/if}}</span>
-      <span class="azeroth-creator-prose azeroth-creator-row-text">{{{t.html}}}</span>
-    </label>
-  </li>
-  {{/each}}
-</ul>
-{{else}}
-<p class="azeroth-forge-none">{{localize "AZEROTH.Creator.NoClass"}}</p>
-{{/each}}
-
-{{#if pane.features.length}}
-<h4 class="azeroth-creator-subheading">{{localize "AZEROTH.Creator.Features"}}</h4>
-<ul class="azeroth-forge-list azeroth-creator-features">
-  {{#each pane.features as |f|}}
-  <li><span class="azeroth-forge-name">{{f.name}}</span><span class="azeroth-creator-prose azeroth-creator-row-text">{{{f.html}}}</span></li>
-  {{/each}}
-</ul>
-{{/if}}
+<div class="azeroth-creator-choice-layout">
+  <div class="azeroth-creator-catalogue">
+    <h4>{{localize "AZEROTH.Creator.Racial"}} · {{pane.raceName}}</h4>
+    <div class="azeroth-racial-row">
+      {{#each pane.racial as |talent|}}
+      {{> systems/azeroth-rpg/templates/actor/partials/talent-tile.hbs talent=talent racial=true creator=true}}
+      {{/each}}
+    </div>
+    <h4>{{localize "AZEROTH.Creator.ClassTalent"}} · {{pane.className}}</h4>
+    <nav class="azeroth-creator-branches" aria-label="{{localize 'AZEROTH.Talent.Branches'}}">
+      {{#each pane.branches as |branch|}}
+      <button type="button" id="{{@root.creatorDetailId}}-branch-{{@index}}" data-action="creatorBranch" data-branch="{{branch.name}}" aria-pressed="{{branch.active}}" class="{{#if branch.active}}is-active{{/if}}">{{branch.label}}</button>
+      {{/each}}
+    </nav>
+    {{#if pane.branches.length}}
+    <div class="azeroth-tree">
+      {{> systems/azeroth-rpg/templates/actor/partials/talent-tree-body.hbs tree=pane.tree creator=true}}
+    </div>
+    {{else}}<p>{{localize "AZEROTH.Creator.NoClass"}}</p>{{/if}}
+    <details class="azeroth-creator-granted">
+      <summary>{{localize "AZEROTH.Creator.Features"}}</summary>
+      {{#each pane.features as |feature|}}<h4>{{feature.name}}</h4><div>{{{feature.html}}}</div>{{/each}}
+    </details>
+  </div>
+  <aside class="azeroth-creator-inspector" id="{{creatorDetailId}}">
+    {{#with pane.detail}}
+    <h4>{{name}}</h4>
+    <img class="azeroth-creator-detail-icon" src="{{img}}" alt="">
+    <p>{{localize "AZEROTH.Talent.Tier"}} {{tier}} · {{taken}}/{{ranks}}</p>
+    {{#if requires}}<p>{{localize "AZEROTH.Talent.Requires"}}: {{requires}}</p>{{/if}}
+    <div class="azeroth-creator-rules">{{{html}}}</div>
+    {{#if taken}}
+    <button type="button" data-action="creatorUndoTalent" data-racial="{{racial}}">{{localize "AZEROTH.Creator.UndoChoice"}}</button>
+    {{else if canChoose}}
+    <button type="button" data-action="creatorChooseTalent" data-key="{{key}}" data-racial="{{racial}}">{{localize "AZEROTH.Creator.ChooseTalent"}}</button>
+    {{else}}<p class="azeroth-creator-choice-reason">{{localize (concat "AZEROTH.Talent.Locked." reason)}}</p>{{/if}}
+    {{/with}}
+    <hr>
+    <h4>{{localize "AZEROTH.Creator.YourChoices"}}</h4>
+    <p>{{localize "AZEROTH.Creator.ClassTalent"}}: {{#if pane.classChosen}}1 / 1 — {{pane.selectedClassName}}{{else}}0 / 1{{/if}}</p>
+    {{#if pane.classChosen}}<button type="button" data-action="creatorUndoTalent" data-racial="false">{{localize "AZEROTH.Creator.UndoClass"}}</button>{{/if}}
+    <p>{{localize "AZEROTH.Creator.Racial"}}: {{#if pane.racialChosen}}1 / 1 — {{pane.selectedRacialName}}{{else}}0 / 1{{/if}}</p>
+    {{#if pane.racialChosen}}<button type="button" data-action="creatorUndoTalent" data-racial="true">{{localize "AZEROTH.Creator.UndoRacial"}}</button>{{/if}}
+  </aside>
+</div>

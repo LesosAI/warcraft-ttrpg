@@ -1,0 +1,118 @@
+export const FLESH_ROT_RECEIPTS = "fleshRotReceipts";
+const busy = new Set();
+const writer = () => globalThis.game?.user?.isGM === true && game.users?.activeGM?.id === game.user.id;
+
+/** Claim before payment; retain uncertain strikes, attack cards and wounds.
+ * resolve owns the hit check and wound, and receives the actual attack card. */
+export async function runFleshRot({ actor, requestId, validate, pay, roll, resolve } = {}) {
+  const refuse = reason => ({ ok: false, reason });
+  if (!writer() || !actor?.uuid || typeof requestId !== "string" || !requestId.trim()
+    || [validate, pay, roll, resolve].some(fn => typeof fn !== "function")) return refuse("invalid");
+  if (busy.has(actor.uuid)) return refuse("busy");
+  busy.add(actor.uuid);
+  const read = () => actor.getFlag("azeroth-rpg", FLESH_ROT_RECEIPTS) ?? [];
+  const current = () => writer() && fromUuidSync(actor.uuid) === actor;
+  let records, record, expected, paymentStarted = false;
+  const save = async next => {
+    if (!current() || JSON.stringify(read()) !== JSON.stringify(expected)) throw new Error("Flesh Rot receipt changed");
+    await actor.setFlag("azeroth-rpg", FLESH_ROT_RECEIPTS, [...records, next]);
+    if (!current() || JSON.stringify(read()) !== JSON.stringify([...records, next])) throw new Error("Flesh Rot receipt unconfirmed");
+    record = next;
+    expected = structuredClone([...records, next]);
+  };
+  try {
+    records = structuredClone(read());
+    expected = structuredClone(records);
+    if (!Array.isArray(records)) return refuse("receiptInvalid");
+    if (records.some(row => row?.requestId === requestId)) return refuse("alreadyClaimed");
+    if (records.some(row => !["complete", "cancelled"].includes(row?.stage))) return refuse("reconcile");
+    if (!current() || !await validate() || !current()) return refuse("changed");
+    await save({ requestId, stage: "claimed", paid: false, consumed: false, attackCardId: null });
+    const valid = async () => current() && JSON.stringify(read()) === JSON.stringify([...records, record])
+      && await validate() && current() && JSON.stringify(read()) === JSON.stringify([...records, record]);
+    const strike = await roll({ valid, pay: async () => {
+      if (paymentStarted || !await valid()) return false;
+      paymentStarted = true;
+      await save({ ...record, stage: "paying", paid: null, consumed: null });
+      if (!await valid()) return false;
+      const payment = await pay();
+      if (payment?.paid !== true || payment.consumed !== true) {
+        await save({ ...record, stage: payment?.paid === false && payment.consumed === false ? "cancelled" : "unresolved",
+          paid: payment?.paid ?? null, consumed: payment?.consumed ?? null });
+        return false;
+      }
+      await save({ ...record, stage: "striking", paid: true, consumed: true });
+      return await valid();
+    }, checkpoint: async ({ strike, uuid, cards, skipped } = {}) => {
+      if (!await valid() || record.paid !== true || record.consumed !== true || record.attackCardId !== null
+        || strike !== 0 || typeof uuid !== "string" || !uuid.trim() || !Array.isArray(cards) || cards.length !== 1
+        || typeof cards[0] !== "string" || !game.messages?.get(cards[0]) || !Array.isArray(skipped) || skipped.length)
+        return false;
+      await save({ ...record, attackCardId: cards[0], strikeTarget: uuid });
+      return await valid();
+    } });
+    const card = strike?.card;
+    if (!strike?.ok || !card?.id || card.id !== record.attackCardId || record.paid !== true || record.consumed !== true) {
+      await save({ ...record, stage: !paymentStarted || record.stage === "cancelled" ? "cancelled" : "unresolved", attackCardId: record.attackCardId ?? card?.id ?? null });
+      return refuse(strike?.reason ?? "strikeUnresolved");
+    }
+    await save({ ...record, stage: "resolving", attackCardId: card.id });
+    if (!await valid()) return refuse("changed");
+    const result = await resolve({ card, valid, checkpoint: async details => {
+      if (!await valid()) return false;
+      await save({ ...record, progress: details });
+      return await valid();
+    } });
+    await save({ ...record, stage: result?.ok === true ? (result.pending === true ? "awaitingApply" : "complete") : "unresolved", result });
+    return { ok: result?.ok === true, paid: true, consumed: true, attackCardId: card.id, result };
+  } catch (error) {
+    console.warn("azeroth-rpg | Flesh Rot requires reconciliation", error); return refuse("writeUncertain");
+  } finally { busy.delete(actor.uuid); }
+}
+
+/** Continue only from the normal attack's accepted Apply. The caller verifies
+ * ownership, tokens and the Apply event; this door claims the saved attack
+ * before applying the wound, without paying or rolling the attack again. */
+export async function resumeFleshRot({ actor, card, validate, resolve } = {}) {
+  const refuse = reason => ({ ok: false, reason });
+  if (!writer() || !actor?.uuid || !card?.id || typeof validate !== "function"
+    || typeof resolve !== "function") return refuse("invalid");
+  if (busy.has(actor.uuid)) return refuse("busy");
+  busy.add(actor.uuid);
+  const read = () => actor.getFlag("azeroth-rpg", FLESH_ROT_RECEIPTS) ?? [];
+  const current = () => writer() && fromUuidSync(actor.uuid) === actor && game.messages?.get(card.id) === card;
+  let expected;
+  try {
+    expected = structuredClone(read());
+    if (!Array.isArray(expected)) return refuse("receiptInvalid");
+    const matches = expected.map((row, index) => ({ row, index })).filter(({ row }) => row?.attackCardId === card.id);
+    if (matches.length !== 1) return refuse("receiptInvalid");
+    const { row, index } = matches[0];
+    if (row.stage !== "awaitingApply" || row.paid !== true || row.consumed !== true) return refuse("alreadyClaimed");
+    const unchanged = () => current() && JSON.stringify(read()) === JSON.stringify(expected);
+    const valid = async () => unchanged() && await validate() && unchanged();
+    const save = async details => {
+      if (!unchanged()) throw new Error("Flesh Rot receipt changed");
+      const next = structuredClone(expected);
+      next[index] = { ...next[index], ...details };
+      await actor.setFlag("azeroth-rpg", FLESH_ROT_RECEIPTS, next);
+      if (!current() || JSON.stringify(read()) !== JSON.stringify(next)) throw new Error("Flesh Rot receipt unconfirmed");
+      expected = next;
+    };
+    if (!await valid()) return refuse("changed");
+    await save({ stage: "resolving", result: null });
+    if (!await valid()) return refuse("changed");
+    const result = await resolve({ card, valid, checkpoint: async progress => {
+      if (!await valid()) return false;
+      await save({ progress });
+      return await valid();
+    } });
+    // A resumed Apply must finish or remain uncertain; it cannot enqueue itself.
+    const ok = result?.ok === true && result.pending !== true;
+    await save({ stage: ok ? "complete" : "unresolved", result });
+    return { ok, paid: true, consumed: true, attackCardId: card.id, result };
+  } catch (error) {
+    console.warn("azeroth-rpg | Flesh Rot Apply requires reconciliation", error);
+    return refuse("writeUncertain");
+  } finally { busy.delete(actor.uuid); }
+}

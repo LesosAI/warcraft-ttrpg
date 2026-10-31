@@ -113,7 +113,7 @@
       <ul class="azeroth-overview-ready">
         {{#each overview.alsoReady as |row|}}
         <li data-item-id="{{row.id}}">
-          {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=row.img rarityClass=row.rarityClass}}
+          {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=row.img rarityClass=row.rarityClass trainingTip=row.trainingTip}}
           <span class="azeroth-overview-ready-name{{#if row.rarityClass}} {{row.rarityClass}}{{/if}}"
                 data-action="openItem" role="button" tabindex="0">{{row.name}}</span>
         </li>

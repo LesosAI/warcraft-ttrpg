@@ -20,12 +20,27 @@
  *   Vestments do not touch it), and only healing that goes through the one
  *   healing door counts - a rest's recovery is written by the rest and is not
  *   shared.
- * - **The Boon** turns on two Skill Ranks compared within 30 feet at each Test:
- *   the table's (D2 §12), said on the talent's row and built nowhere.
+ * - **The Boon** turns on two Skill Ranks compared within 30 feet at each Test.
+ *   `effects/symbiosis-skills.mjs` reads the live partners and geometry for
+ *   shared roll preparation. Unknown geometry remains the table's judgement.
  */
 
 /** The actor flag the bond stands under, on the druid. */
 export const SYMBIOSIS_FLAG = "symbiosis";
+
+/**
+ * Whether one bonded partner grants the other's Skill Test a Boon.
+ * The caller resolves the live bond and measures distance; unknown geometry
+ * cannot establish the 30-foot requirement. Compare Skill Ranks, not totals
+ * including attributes or other Test modifiers. This does not decide stacking
+ * between multiple bonds.
+ */
+export function symbiosisSkillBoon({ kind, rank, partnerRank, distance } = {}) {
+  return kind === "skill"
+    && Number.isInteger(rank) && rank >= 0
+    && Number.isInteger(partnerRank) && partnerRank > rank
+    && Number.isFinite(distance) && distance >= 0 && distance <= 30;
+}
 
 /** Why a partner cannot be named, as `lang/en.json` keys. */
 export const SYMBIOSIS_REFUSALS = Object.freeze({

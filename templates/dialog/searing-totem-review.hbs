@@ -1,0 +1,10 @@
+<p><strong>{{name}}</strong></p>
+<p>{{localize "AZEROTH.Bound.SearingReview.Explain"}}</p>
+<label>{{localize "AZEROTH.Bound.SearingReview.Receipt"}}
+  <select name="receipt">
+    {{#each rows}}
+    <option value="{{@index}}">{{localize "AZEROTH.Bound.SearingReview.Turn" round=round turn=turn}} — {{targets}}</option>
+    {{/each}}
+  </select>
+</label>
+<p><label><input type="checkbox" name="acknowledged"> {{localize "AZEROTH.Bound.SearingReview.Acknowledge"}}</label></p>

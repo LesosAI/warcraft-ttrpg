@@ -3,6 +3,11 @@
   {{> systems/azeroth-rpg/templates/chat/partials/card-header.hbs title=title subtitle=subtitle}}
 
   <div class="azeroth-card-body">
+    {{#if bloodPactSpell}}
+    <div class="azeroth-card-actions" data-blood-pact-review data-gm-only hidden>
+      <button type="button" data-action="reviewBloodPactSpell">{{localize "AZEROTH.BloodPactSpell.Review"}}</button>
+    </div>
+    {{/if}}
     {{#if source}}<p class="azeroth-card-source">{{source}}</p>{{/if}}
     <dl class="azeroth-spell-fields">
       {{#if mana}}<dt>{{localize "AZEROTH.Card.Mana"}}</dt><dd>{{mana}}</dd>{{/if}}
@@ -208,6 +213,19 @@
     </div>
     {{/if}}
 
+    {{#if chainLightning}}
+    <div class="azeroth-card-actions" data-chain-hit-review data-gm-only hidden>
+      <button type="button" data-action="reviewChainLightningHit">{{localize "AZEROTH.ChainLightning.HitReview.Title"}}</button>
+    </div>
+    {{/if}}
+    {{#if conflagrate}}
+    <div data-conflagrate-status hidden>
+      <p class="azeroth-card-line" data-conflagrate-note></p>
+      <div class="azeroth-card-actions" data-gm-only>
+        <button type="button" data-action="reviewConflagrate">{{localize "AZEROTH.Conflagrate.Review"}}</button>
+      </div>
+    </div>
+    {{/if}}
     {{#if effect}}<div class="azeroth-card-effect">{{{effect}}}</div>{{/if}}
     {{!-- A taken talent that names this spell or its school (D-642). --}}
     {{#each talentNotes}}<div class="azeroth-card-effect azeroth-card-talent"><strong>{{this.name}}.</strong> {{{this.effect}}}</div>{{/each}}

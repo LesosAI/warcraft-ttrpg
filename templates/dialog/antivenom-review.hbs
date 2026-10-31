@@ -1,0 +1,6 @@
+<p>{{actor}} — {{receipt.itemName}}</p>
+<p>{{localize "AZEROTH.Use.Antivenom.ReviewState" stage=receipt.stage quantity=quantity}}</p>
+<p>{{receipt.effectName}}: {{#if effectPresent}}{{localize "AZEROTH.Use.Antivenom.StillPresent"}}{{else}}{{localize "AZEROTH.Use.Antivenom.Absent"}}{{/if}}</p>
+<p>{{localize "AZEROTH.Use.Antivenom.Budget" halves=halves}}</p>
+<p>{{localize "AZEROTH.Use.Antivenom.ReviewHelp"}}</p>
+<label><input type="checkbox" name="acknowledged"> {{localize "AZEROTH.Use.Antivenom.Acknowledge"}}</label>

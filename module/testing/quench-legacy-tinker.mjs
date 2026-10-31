@@ -8,14 +8,20 @@
  *   kit, out of a fight, its one chooser builds a Gnomish Battle Chicken bound to the
  *   gnome as a construct - which, in a fight, spends the ONE Half-Action the
  *   constructs share on the tinker's record, and has none left after;
- * - Gadgeteer's checklist names two gadgets, each granted its own Use once a Short
+ * - Gadgeteer's checklist grants 2 + tier choices, each with its own Use once a Short
  *   Rest, and the Recombobulator, pressed on the sheet at a Deafened ally, ends it
  *   and spends its use;
  * - the Arclight Spanner mends one construct targeted - the tier a rank, one
  *   condition on it ended - and refuses a creature that is no construct in words;
  * - Pocket Factory, pressed on the sheet in a fight, assembles two Clockwork Gnomes
  *   at the point picked within 30 feet, each in the fight with one Half-Action of
- *   its own.
+ *   its own;
+ * - the Gadgets compendium (the lead, 2026-10-24): the browser lists 04's eight,
+ *   Gadgeteer's text, its chooser and Overclock's and the Blueprint's menus link each
+ *   entry, migration 0.12.30 repairs a copy staled on purpose, and an entry dropped
+ *   on the bags or the figure, or created through the Item door, makes nothing and is
+ *   refused once, in words. It needs the `gadgets` pack built and the server
+ *   restarted, since a running world loads no pack it did not start with.
  *
  * Written in B6b and NOT run (the brief: offline, Vitest only). The packs must be
  * built from the current `packs-src/` first (`npm run packs:build`): the Legacy
@@ -26,12 +32,20 @@
  */
 
 import { cleanup, drainAreaWork, give, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook, warnings, tokenDrawn, quietScrollingText, tokenData } from "./fixtures.mjs";
+// The Gadgets compendium (the lead, 2026-10-24): the browser, the links, the drop.
+import { bagZone, browserOpen, forgeDrop } from "./fixtures.mjs";
+import { GADGETS, GADGETS_PACK, GADGET_ENTRY_FLAG, GADGET_UUID_PREFIX, withoutGadgetLinks } from "../rules/gadgets.mjs";
+import { PACK_COUNTS } from "./pack-counts.mjs";
+import { migrate as migrateGadgetLinks } from "../migrations/0.12.30-gadget-links.mjs";
+import { forgetPacks } from "../migrations/walk.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 import { cancelPick, pickState } from "../canvas/place.mjs";
 import { CONSTRUCT_TURN_FLAG } from "../rules/constructs.mjs";
 import { boundOf, bondOf } from "../documents/bound.mjs";
 import { applyCondition } from "../effects/durations.mjs";
+import { spendLaidBanes } from "../effects/banes.mjs";
+import { npcAttackWithDialog } from "../applications/actions.mjs";
 import { AZEROTH } from "../config.mjs";
 
 /** Wait for a condition, or say what was being waited for. */
@@ -186,7 +200,7 @@ export function legacyTinkerBatch(context) {
       canvas?.tokens?.setTargets?.([]);
       for (const app of [...foundry.applications.instances.values()]) {
         const id = String(app.id ?? "");
-        if (id.startsWith("azeroth-roll-") || id.startsWith("azeroth-choose-")) await app.close().catch(() => {});
+        if (id.startsWith("azeroth-roll-") || id.startsWith("azeroth-choose-") || id.startsWith("azeroth-blow-ask-")) await app.close().catch(() => {});
       }
       if (restore !== null) await game.settings.set("azeroth-rpg", ROLL_DIALOG_SETTING, restore);
       await quietText?.();
@@ -398,7 +412,7 @@ export function legacyTinkerBatch(context) {
       await until(() => health(ally) === Math.max(0, allyBefore - flags.damageByTarget[at(ally)].damage), "the whole on the ally that failed");
     });
 
-    it("GADGETEER: the checklist names two gadgets, each its own Use once a Short Rest; the Recombobulator pressed at a Deafened ally ends it and spends its use", async function () {
+    it("GADGETEER: choosing two of the available slots grants separate uses; the Recombobulator ends Deafened and spends its use", async function () {
       this.timeout(240000);
       const gnome = await tinkerWith("ZZ LT Gadgeteer", { level: 3, ranks: { Gadgeteer: 1 } });
       const ally = await makeCharacter({ name: "ZZ LT Gadget Ally", classes: [["Warrior", 3]] });
@@ -427,6 +441,439 @@ export function legacyTinkerBatch(context) {
         canvas.tokens.setTargets([]);
       }
       await until(() => gnome.items.get(recomb.id)?.system?.uses?.value === 0, "the gadget's use spent");
+    });
+
+    it("SHRINK RAY: reduces an NPC's outgoing weapon damage, preserves its size, and expires", async function () {
+      this.timeout(240000);
+      const gnome = await tinkerWith("ZZ LT Shrink", { level: 3, ranks: { Gadgeteer: 1 } });
+      const victim = await makeNpc("Defias Footpad");
+      const scene = await sceneWith([{ actor: gnome, x: 1000, y: 1000 }, { actor: victim, x: 1100, y: 1000 }]);
+      const gadgeteer = await until(() => featureNamed(gnome, "Gadgeteer"), "Gadgeteer granted");
+      const pending = workflows().useFeature({ actor: gnome, item: gadgeteer });
+      await pick(await chooser(gadgeteer), ["Gnomish Shrink Ray"]);
+      const learned = await pending;
+      if (learned) made.push(learned);
+      const ray = await until(() => gadgetNamed(gnome, "Gnomish Shrink Ray"), "Shrink Ray granted");
+      const size = victim.system.size;
+      const width = tokenOf(victim).document.width;
+      const attack = async () => {
+        canvas.tokens.setTargets([tokenOf(gnome).id]);
+        const unpin = pinDie(19);
+        try {
+          const card = await npcAttackWithDialog(victim, 0);
+          made.push(card);
+          return card.flags["azeroth-rpg"].damage?.damage;
+        } finally { unpin(); canvas.tokens.setTargets([]); }
+      };
+      const before = await attack();
+      assert.isNumber(before);
+      const card = await workflows().useFeature({ actor: gnome, item: ray,
+        targets: [{ actorId: victim.id, sceneId: scene.id, tokenId: tokenOf(victim).id, name: victim.name }] });
+      made.push(card);
+      const unpin = pinDie(1);
+      try { await CARD_ACTIONS.resistTest(parsed(card).querySelector('[data-action="resistTest"]'), card); }
+      finally { unpin(); }
+      const effect = () => victim.effects.find(e => e.getFlag("azeroth-rpg", "gadgetShrink"));
+      await until(effect, "Shrink Ray effect");
+      assert.equal(await attack(), Math.max(0, before - gnome.system.tier));
+      assert.equal(victim.system.size, size);
+      assert.equal(tokenOf(victim).document.width, width);
+      await game.time.advance(7);
+      await until(() => !effect(), "Shrink Ray expires");
+      assert.equal(await attack(), before);
+    });
+
+    it("STABILIZER: cannot activate early, prevents one knockdown, and spends its Reaction and use", async function () {
+      this.timeout(240000);
+      const gnome = await tinkerWith("ZZ LT Stabilizer", { level: 3, ranks: { Gadgeteer: 1 } });
+      const foe = await makeNpc("Defias Footpad");
+      await sceneWith([{ actor: gnome, x: 1000, y: 1000 }, { actor: foe, x: 1100, y: 1000 }]);
+      const gadgeteer = await until(() => featureNamed(gnome, "Gadgeteer"), "Gadgeteer granted");
+      const pending = workflows().useFeature({ actor: gnome, item: gadgeteer });
+      await pick(await chooser(gadgeteer), ["Gyroscopic Stabilizer"]);
+      const learned = await pending;
+      if (learned) made.push(learned);
+      const device = await until(() => gadgetNamed(gnome, "Gyroscopic Stabilizer"), "Stabilizer granted");
+      let early;
+      await warnings(async () => { early = await workflows().useFeature({ actor: gnome, item: device }); });
+      assert.isNull(early);
+      assert.equal(device.system.uses.value, 1);
+      const fight = await fightWith([gnome, foe]);
+      const knockdown = applyCondition(gnome, "prone");
+      const prompt = await until(() => [...foundry.applications.instances.values()]
+        .find(a => String(a.id ?? "").startsWith(`azeroth-blow-ask-${gnome.id}`) && a.rendered), "Stabilizer Reaction prompt");
+      prompt.element.querySelector('[data-action="yes"]').click();
+      assert.isNull(await knockdown);
+      assert.isFalse(gnome.statuses.has("prone"));
+      assert.equal(gnome.items.get(device.id).system.uses.value, 0);
+      assert.isNotNull(workflows().turnBudgetRefusal(gnome, "reaction"));
+      await applyCondition(gnome, "prone");
+      assert.isTrue(gnome.statuses.has("prone"), "the stabilizer granted continuing immunity");
+      await fight.delete();
+    });
+
+    it("DEATH RAY: refuses lethal Health costs, pays once, and offers a Fire attack", async function () {
+      this.timeout(240000);
+      const gnome = await tinkerWith("ZZ LT Death Ray", { level: 3, ranks: { Gadgeteer: 1 } });
+      const victim = await makeNpc("Defias Footpad");
+      const scene = await sceneWith([{ actor: gnome, x: 1000, y: 1000 }, { actor: victim, x: 1200, y: 1000 }]);
+      const gadgeteer = await until(() => featureNamed(gnome, "Gadgeteer"), "Gadgeteer granted");
+      const pending = workflows().useFeature({ actor: gnome, item: gadgeteer });
+      await pick(await chooser(gadgeteer), ["Gnomish Death Ray"]);
+      const learned = await pending;
+      if (learned) made.push(learned);
+      const ray = await until(() => gadgetNamed(gnome, "Gnomish Death Ray"), "Death Ray granted");
+      const target = { actorId: victim.id, sceneId: scene.id, tokenId: tokenOf(victim).id, name: victim.name };
+      const tier = gnome.system.tier;
+      await gnome.update({ "system.health.value": tier });
+      let result;
+      await warnings(async () => { result = await workflows().useFeature({ actor: gnome, item: ray, targets: [target] }); });
+      assert.isNull(result);
+      assert.equal(health(gnome), tier);
+      assert.equal(gnome.items.get(ray.id).system.uses.value, 1);
+      await gnome.update({ "system.health.value": tier + 1 });
+      const card = await workflows().useFeature({ actor: gnome, item: ray, targets: [target] });
+      made.push(card);
+      assert.equal(health(gnome), 1);
+      assert.equal(gnome.items.get(ray.id).system.uses.value, 0);
+      assert.include(card.flags["azeroth-rpg"].gadgetAttack, { damageType: "fire", damage: 2 + 2 * tier, maxRange: 40 });
+      canvas.tokens.setTargets([tokenOf(victim).id]);
+      const unpin = pinDie(15);
+      try {
+        const shot = await CARD_ACTIONS.attackFromCard(parsed(card).querySelector('[data-action="attackFromCard"]'), card);
+        assert.isOk(shot, "the Death Ray produced no attack card");
+        made.push(shot);
+        assert.equal(shot.flags["azeroth-rpg"].damageType, "fire");
+        assert.equal(health(gnome), 1, "rolling the attack charged Health again");
+      } finally { unpin(); canvas.tokens.setTargets([]); }
+    });
+
+    it("FLASH-PULSE: cancellation is free, the cone catches allies, and its Bane lasts for one attack", async function () {
+      this.timeout(240000);
+      const gnome = await tinkerWith("ZZ LT Flash", { level: 3, ranks: { Gadgeteer: 1 } });
+      const ally = await makeCharacter({ name: "ZZ LT Flash Ally", classes: [["Warrior", 3]] });
+      const enemy = await makeNpc("Defias Footpad");
+      const outside = await makeNpc("Defias Footpad");
+      const scene = await sceneWith([
+        { actor: gnome, x: 1000, y: 1000 }, { actor: ally, x: 1100, y: 1000 },
+        { actor: enemy, x: 1200, y: 1000 }, { actor: outside, x: 1000, y: 1400 }
+      ]);
+      const gadgeteer = await until(() => featureNamed(gnome, "Gadgeteer"), "Gadgeteer granted");
+      const learn = workflows().useFeature({ actor: gnome, item: gadgeteer });
+      await pick(await chooser(gadgeteer), ["Flash-Pulse Projector"]);
+      const learned = await learn;
+      if (learned) made.push(learned);
+      const flash = await until(() => gadgetNamed(gnome, "Flash-Pulse Projector"), "Flash-Pulse granted");
+      const before = scene.regions.size;
+      const canceled = workflows().useFeature({ actor: gnome, item: flash });
+      await until(() => pickState()?.mode === "facing", "Flash-Pulse cone preview");
+      cancelPick();
+      assert.isNull(await canceled);
+      assert.equal(gnome.items.get(flash.id).system.uses.value, 1);
+      assert.equal(scene.regions.size, before);
+      const pending = workflows().useFeature({ actor: gnome, item: flash });
+      await until(() => pickState()?.mode === "facing", "Flash-Pulse cone preview again");
+      pressBoard({ x: 1700, y: 1050 });
+      const card = await pending;
+      made.push(card);
+      const doc = () => game.messages.get(card.id);
+      const targets = card.flags["azeroth-rpg"].gadgetTargets.map(t => t.actorUuid);
+      assert.include(targets, ally.uuid);
+      assert.include(targets, enemy.uuid);
+      assert.notInclude(targets, outside.uuid);
+      const bane = actor => actor.effects.find(e => e.getFlag("azeroth-rpg", "laidBane")?.source === flash.name);
+      for (const [actor, face] of [[enemy, 20], [ally, 1]]) {
+        const index = doc().flags["azeroth-rpg"].targets.findIndex(t => t.tokenId === tokenOf(actor).id);
+        const button = parsed(doc()).querySelector(`[data-action="resistTest"][data-target-index="${index}"]`);
+        assert.isNotNull(button);
+        const unpin = pinDie(face);
+        try { await CARD_ACTIONS.resistTest(button, doc()); } finally { unpin(); }
+      }
+      assert.isNotOk(bane(enemy), "a passed Reflex Test received a Bane");
+      await until(() => bane(ally), "a failed Reflex Test receives a Bane");
+      assert.equal(bane(ally).duration.value, 6);
+      await spendLaidBanes(ally, "skill");
+      assert.isOk(bane(ally), "a skill Test consumed the next-attack Bane");
+      await spendLaidBanes(ally, "attack");
+      await until(() => !bane(ally), "the next attack consumes the Bane");
+    });
+
+    it("MIND CONTROL CAP: refuses Bosses without spending, charms only its named Humanoid, and expires outside combat", async function () {
+      this.timeout(240000);
+      const gnome = await tinkerWith("ZZ LT Cap", { level: 3, ranks: { Gadgeteer: 1 } });
+      const victim = await makeNpc("Defias Footpad");
+      const other = await makeNpc("Defias Footpad");
+      const scene = await sceneWith([
+        { actor: gnome, x: 1000, y: 1000 }, { actor: victim, x: 1100, y: 1000 },
+        { actor: other, x: 1200, y: 1000 }
+      ]);
+      const gadgeteer = await until(() => featureNamed(gnome, "Gadgeteer"), "Gadgeteer granted");
+      const pending = workflows().useFeature({ actor: gnome, item: gadgeteer });
+      await pick(await chooser(gadgeteer), ["Gnomish Mind Control Cap"]);
+      const learned = await pending;
+      if (learned) made.push(learned);
+      const cap = await until(() => gadgetNamed(gnome, "Gnomish Mind Control Cap"), "Mind Control Cap granted");
+      const row = a => ({ actorId: a.id, sceneId: scene.id, tokenId: tokenOf(a).id, name: a.name });
+      const originalWeight = victim.system.weightClass;
+      await victim.update({ "system.weightClass": "boss" });
+      let result;
+      const said = await warnings(async () => {
+        result = await workflows().useFeature({ actor: gnome, item: cap, targets: [row(victim)] });
+      });
+      assert.isNull(result);
+      assert.include(said, game.i18n.format("AZEROTH.Gadget.BossImmune", { name: cap.name }));
+      assert.equal(gnome.items.get(cap.id).system.uses.value, 1, "a Boss consumed the gadget");
+      await victim.update({ "system.weightClass": originalWeight });
+      const card = await workflows().useFeature({ actor: gnome, item: cap, targets: [row(victim)] });
+      made.push(card);
+      assert.equal(card.flags["azeroth-rpg"].gadgetTarget.actorUuid, victim.uuid);
+      const doc = () => game.messages.get(card.id);
+      const button = parsed(doc()).querySelector('[data-action="resistTest"]');
+      assert.isNotNull(button, "no Spirit Test on the card");
+      // The target becoming a Boss after use must not make an old card a bypass.
+      await victim.update({ "system.weightClass": "boss" });
+      await warnings(async () => { await CARD_ACTIONS.resistTest(button, doc()); });
+      assert.isFalse(victim.statuses.has("charmed"));
+      assert.isEmpty(doc().flags["azeroth-rpg"].resists ?? {});
+      await victim.update({ "system.weightClass": originalWeight });
+      const unpin = pinDie(1);
+      try { await CARD_ACTIONS.resistTest(button, doc()); } finally { unpin(); }
+      await until(() => victim.statuses.has("charmed"), "failed Test charms the target");
+      assert.isFalse(other.statuses.has("charmed"), "another creature was charmed");
+      const effect = victim.effects.find(e => e.statuses.has("charmed"));
+      assert.equal(effect.duration.units, "seconds");
+      assert.equal(effect.duration.value, 6);
+      await game.time.advance(7);
+      await until(() => !victim.statuses.has("charmed"), "the cap's charm expires");
+      assert.equal(gnome.items.get(cap.id).system.uses.value, 0);
+    });
+
+    it("REBREATHER: touch range, one hour on the wearer, no Speed change, and expiry", async function () {
+      this.timeout(240000);
+      const gnome = await tinkerWith("ZZ LT Rebreather", { level: 3, ranks: { Gadgeteer: 1 } });
+      const wearer = await makeCharacter({ name: "ZZ LT Diver", classes: [["Warrior", 3]] });
+      const scene = await sceneWith([{ actor: gnome, x: 1000, y: 1000 }, { actor: wearer, x: 1300, y: 1000 }]);
+      const gadgeteer = await until(() => featureNamed(gnome, "Gadgeteer"), "Gadgeteer granted");
+      const pending = workflows().useFeature({ actor: gnome, item: gadgeteer });
+      await pick(await chooser(gadgeteer), ["Deepdive Rebreather"]);
+      const learned = await pending;
+      if (learned) made.push(learned);
+      const device = await until(() => gadgetNamed(gnome, "Deepdive Rebreather"), "Rebreather granted");
+      const row = { actorId: wearer.id, tokenId: tokenOf(wearer).id, sceneId: scene.id, name: wearer.name };
+      let result;
+      await warnings(async () => { result = await workflows().useFeature({ actor: gnome, item: device, targets: [row] }); });
+      assert.isNull(result, "fitted a rebreather beyond touch range");
+      assert.equal(gnome.items.get(device.id).system.uses.value, 1);
+      await tokenOf(wearer).document.update({ x: 1100 });
+      await settle();
+      const speed = JSON.stringify(wearer.system.speed);
+      made.push(await workflows().useFeature({ actor: gnome, item: device, targets: [row] }));
+      const effect = () => wearer.effects.find(e => e.getFlag("azeroth-rpg", "waterBreathing"));
+      await until(effect, "rebreather effect on its wearer");
+      assert.equal(effect().duration.units, "minutes");
+      assert.equal(effect().duration.value, 60);
+      assert.equal(JSON.stringify(wearer.system.speed), speed, "the rebreather changed Speed");
+      await game.time.advance(3599);
+      assert.isOk(effect(), "the rebreather expired before one hour");
+      await game.time.advance(2);
+      await until(() => !effect(), "the rebreather expires after one hour");
+      assert.equal(gnome.items.get(device.id).system.uses.value, 0);
+    });
+
+    it("FOAM SPRAYER: the sheet ends all Scorched, leaves other conditions, and spends one use", async function () {
+      this.timeout(240000);
+      const gnome = await tinkerWith("ZZ LT Foam", { level: 3, ranks: { Gadgeteer: 1 } });
+      const ally = await makeCharacter({ name: "ZZ LT Foam Ally", classes: [["Warrior", 3]] });
+      await sceneWith([{ actor: gnome, x: 1000, y: 1000 }, { actor: ally, x: 1100, y: 1000 }]);
+      const gadgeteer = await until(() => featureNamed(gnome, "Gadgeteer"), "Gadgeteer granted");
+      const pending = workflows().useFeature({ actor: gnome, item: gadgeteer });
+      await pick(await chooser(gadgeteer), ["Emergency Foam Sprayer", "Polarity Retrieval Coil"]);
+      const learned = await pending;
+      if (learned) made.push(learned);
+      const foam = await until(() => gadgetNamed(gnome, "Emergency Foam Sprayer"), "Foam Sprayer granted");
+      await until(() => gadgetNamed(gnome, "Polarity Retrieval Coil"), "Retrieval Coil granted");
+      await applyCondition(ally, "scorched", { value: 3 });
+      await applyCondition(ally, "poisoned", { value: 2 });
+      await until(() => ally.statuses.has("scorched") && ally.statuses.has("poisoned"), "the two conditions");
+      canvas.tokens.setTargets([tokenOf(ally).id]);
+      const sheet = await openSheet(gnome);
+      try {
+        sheet.changeTab("combat", "primary");
+        await settle();
+        await pressForCard(useControl(sheet, foam), gnome, 15);
+        await until(() => !ally.statuses.has("scorched"), "Scorched ended");
+        assert.isTrue(ally.statuses.has("poisoned"), "foam cured Poisoned");
+        assert.equal(ally.effects.find(e => e.statuses.has("poisoned")).getFlag("azeroth-rpg", "value"), 2);
+        await until(() => gnome.items.get(foam.id)?.system.uses.value === 0, "foam use spent");
+      } finally {
+        await sheet.close();
+        canvas.tokens.setTargets([]);
+      }
+    });
+
+    it("GADGETEER TIER: three initial choices, the menu allowance, and one replacement through The Bench during a Long Rest", async function () {
+      this.timeout(240000);
+      const gnome = await tinkerWith("ZZ LT Gadget Tier", { level: 3, ranks: { Gadgeteer: 1, "The Bench": 1 } });
+      const gadgeteer = await until(() => featureNamed(gnome, "Gadgeteer"), "Gadgeteer granted");
+      assert.equal(talentNamed(gnome, "Gadgeteer").system.ranks, 1);
+      let pending = workflows().useFeature({ actor: gnome, item: gadgeteer });
+      const menu = await chooser(gadgeteer);
+      assert.include(menu.element.textContent, "Choose up to 3 gadgets");
+      assert.include(menu.element.textContent, "During a Long Rest");
+      await pick(menu, ["Recombobulator", "Net-o-Matic Projector", "Alarm-o-Bot"]);
+      const first = await pending;
+      if (first) made.push(first);
+      await until(() => gnome.items.filter(i => i.getFlag("azeroth-rpg", "feature")?.gadget).length === 3, "three gadgets granted");
+      const recomb = gadgetNamed(gnome, "Recombobulator");
+      await recomb.update({ "system.uses.value": 0 });
+      await warnings(async () => {
+        pending = workflows().useFeature({ actor: gnome, item: gadgeteer });
+        await pick(await chooser(gadgeteer), ["Recombobulator", "Net-o-Matic Projector", "Parachute Cloak"]);
+        assert.isNull(await pending, "a known gadget was replaced outside a Long Rest");
+      });
+      assert.isNotNull(gadgetNamed(gnome, "Alarm-o-Bot"));
+      assert.equal(gadgetNamed(gnome, "Recombobulator").system.uses.value, 0, "refused replacement refreshed a use");
+      const before = new Set(game.messages.contents.map(m => m.id));
+      pending = gnome.longRest();
+      await pick(await chooser(gadgeteer, 30000), ["Recombobulator", "Net-o-Matic Projector", "Parachute Cloak"]);
+      await pending;
+      for (const message of game.messages) if (!before.has(message.id)) made.push(message);
+      await until(() => gadgetNamed(gnome, "Parachute Cloak") && !gadgetNamed(gnome, "Alarm-o-Bot"), "the Long Rest replacement");
+      assert.equal(gadgetNamed(gnome, "Recombobulator").system.uses.value, 1, "the Long Rest did not restore its use");
+    });
+
+    for (const [level, upgrade, allowance] of [[3, 0, 3], [3, 2, 5], [20, 0, 6], [20, 2, 8]]) {
+      it(`GADGET ALLOWANCE: level ${level}, Engineering Upgrade ${upgrade}, ${allowance} choices through the live menu`, async function () {
+        this.timeout(240000);
+        const gnome = await tinkerWith(`ZZ LT Allowance ${level}-${upgrade}`, {
+          level, ranks: { Gadgeteer: 1, ...(upgrade ? { "Engineering Upgrade": upgrade } : {}) }
+        });
+        const gadgeteer = await until(() => featureNamed(gnome, "Gadgeteer"), "Gadgeteer granted");
+        assert.equal(talentNamed(gnome, "Gadgeteer").system.ranks, 1, "Gadgeteer still offers a second rank");
+        const pending = workflows().useFeature({ actor: gnome, item: gadgeteer });
+        const menu = await chooser(gadgeteer);
+        assert.include(menu.element.textContent, `Choose up to ${allowance} gadgets`);
+        const names = GADGETS.slice(0, allowance).map(gadget => gadget.name);
+        await pick(menu, names);
+        const card = await pending;
+        if (card) made.push(card);
+        await until(() => gnome.items.filter(item => item.getFlag("azeroth-rpg", "feature")?.gadget).length === allowance,
+          `${allowance} gadgets granted`);
+        for (const name of names) {
+          const gadget = gadgetNamed(gnome, name);
+          assert.ok(gadget, `${name} was not granted`);
+          assert.deepEqual({ max: gadget.system.uses.max, per: gadget.system.uses.per }, { max: 1, per: "short" });
+        }
+      });
+    }
+
+    it("GADGETS COMPENDIUM: the browser lists all sixteen, Gadgeteer's text and the three menus link each entry, a stale copy is repaired, and an entry dropped on a sheet creates nothing and says why", async function () {
+      this.timeout(240000);
+      // **THE PACK, BUILT AND LOADED** (the lead: *"I also do not see them in the compendium
+      // browser"*): as many entries as 04 prints rows, each one of GADGETS.
+      const pack = game.packs.get(GADGETS_PACK);
+      assert.ok(pack, "the world holds no Gadgets compendium: build the packs and restart the server");
+      const index = await pack.getIndex({ fields: ["system.identifier", `flags.azeroth-rpg.${GADGET_ENTRY_FLAG}`] });
+      assert.equal(index.size, PACK_COUNTS.gadgets.count, PACK_COUNTS.gadgets.why);
+      assert.sameMembers([...index].map(e => e.name), GADGETS.map(g => g.name));
+      const browser = await browserOpen("gadgets");
+      try {
+        const rows = [...browser.element.querySelectorAll('[data-category="gadgets"] .azeroth-browser-entry')];
+        assert.sameMembers(rows.map(r => r.querySelector(".azeroth-browser-name")?.textContent.trim()), GADGETS.map(g => g.name), "the browser's Gadgets category");
+      } finally {
+        await browser.close();
+      }
+
+      // **GADGETEER'S TEXT LINKS EACH ENTRY** (the lead: *"the gadget table is not linked
+      // within the talent gadgeteer"*), on the copy a tinker holds, enriched as its card is.
+      const gnome = await tinkerWith("ZZ LT Gadget Entries", { level: 3, ranks: { Gadgeteer: 1 } });
+      const talent = await until(() => talentNamed(gnome, "Gadgeteer"), "Gadgeteer on the sheet");
+      const linksIn = async html => {
+        const enriched = await foundry.applications.ux.TextEditor.implementation.enrichHTML(html);
+        return [...new DOMParser().parseFromString(enriched, "text/html").querySelectorAll("a.content-link[data-uuid]")]
+          .filter(a => a.dataset.uuid.startsWith(GADGET_UUID_PREFIX));
+      };
+      const linked = await linksIn(talent.system.effect);
+      assert.deepEqual(linked.map(a => a.textContent.trim()), GADGETS.map(g => g.name), "Gadgeteer does not link the eight in 04's order");
+      for (const a of linked) {
+        const entry = await fromUuid(a.dataset.uuid);
+        assert.ok(entry?.getFlag("azeroth-rpg", GADGET_ENTRY_FLAG), `${a.textContent} links nothing`);
+      }
+
+      // **A COPY HELD BEFORE THE LINKS IS REPAIRED** (0.12.30): staled on purpose, and the
+      // migration puts the pack's text back.
+      const linkedText = talent.system.effect;
+      await talent.update({ "system.effect": withoutGadgetLinks(linkedText) });
+      await until(() => !talent.system.effect.includes(GADGET_UUID_PREFIX), "the copy staled");
+      try {
+        await migrateGadgetLinks(() => {});
+      } finally {
+        // The chain's own cache of the packs read, emptied as `runMigrations` empties it.
+        forgetPacks();
+      }
+      await until(() => talentNamed(gnome, "Gadgeteer")?.system?.effect === linkedText, "the stale copy repaired from the pack");
+
+      // **THE CHOOSER'S ROWS LINK THEIR ENTRIES**, and a dismissed chooser chooses nothing.
+      const gadgeteer = await until(() => featureNamed(gnome, "Gadgeteer"), "Gadgeteer granted");
+      const pending = workflows().useFeature({ actor: gnome, item: gadgeteer });
+      const app = await chooser(gadgeteer);
+      try {
+        const rowLinks = [...app.element.querySelectorAll(".azeroth-choose-option dd a.content-link[data-uuid]")];
+        assert.deepEqual(rowLinks.map(a => a.textContent.trim()), GADGETS.map(g => g.name), "the chooser's rows do not link their entries");
+        for (const a of rowLinks) assert.isTrue(a.dataset.uuid.startsWith(GADGET_UUID_PREFIX), `${a.textContent} links outside the Gadgets compendium`);
+      } finally {
+        await app.close();
+      }
+      assert.isNull(await pending, "a dismissed chooser chose something");
+
+      // **OVERCLOCK'S AND MEKKATORQUE'S BLUEPRINT'S ROWS LINK THE SAME ENTRIES** - their
+      // menus read whole: a gadget known for Overclock's, all sixteen for the Blueprint's.
+      await gadgeteer.update({ "system.known": [{ uuid: "gadget:recombobulator", name: "Recombobulator" }] });
+      await gnome.syncClassFeatures();
+      await until(() => gnome.items.some(i => i.type === "feature" && i.name === "Recombobulator" && i.getFlag("azeroth-rpg", "feature")?.gadget), "the Recombobulator known");
+      const overclock = await workflows().featureMenu(gnome, { name: "ZZ Overclock", system: { choice: "overclock" } });
+      const recombRow = overclock.options.find(o => o.name === "Recombobulator");
+      assert.ok((await linksIn(recombRow?.description ?? "")).length, "Overclock's row does not link its entry");
+      const blueprint = await workflows().featureMenu(gnome, { name: "ZZ Blueprint", system: { choice: "blueprint" } });
+      for (const g of GADGETS) {
+        const row = blueprint.options.find(o => o.gadget && o.key === g.key);
+        assert.deepEqual((await linksIn(row?.description ?? "")).map(a => a.textContent.trim()), [g.name], `Blueprint's ${g.name} row does not link its entry`);
+      }
+
+      // **AN ENTRY DROPPED ON A SHEET CREATES NOTHING AND SAYS WHY**, once, wherever it lands:
+      // the bags, the figure, and the Item door a macro would use.
+      const entry = await fromUuid(linked[0].dataset.uuid);
+      const refusal = game.i18n.format("AZEROTH.Gadget.EntryRefused", { name: entry.name });
+      const held = gnome.items.size;
+      const sheet = await openSheet(gnome);
+      try {
+        sheet.changeTab("gear", "primary");
+        await settle();
+        const onBags = await warnings(async () => {
+          forgeDrop(bagZone(sheet, ""), { type: "Item", uuid: entry.uuid });
+          await sleep(800);
+        });
+        assert.equal(gnome.items.size, held, "a gadget's entry reached the bags");
+        assert.deepEqual(onBags, [refusal], "the bags' refusal was not said once, in words");
+        sheet.changeTab("overview", "primary");
+        await settle();
+        const figure = sheet.element.querySelector('section[data-tab="overview"] [data-slot]');
+        assert.ok(figure, "the Overview draws no tile to drop on");
+        const onFigure = await warnings(async () => {
+          forgeDrop(figure, { type: "Item", uuid: entry.uuid });
+          await sleep(800);
+        });
+        assert.equal(gnome.items.size, held, "a gadget's entry reached the figure");
+        assert.deepEqual(onFigure, [refusal], "the figure's refusal was not said once, in words");
+      } finally {
+        await sheet.close();
+      }
+      const byMacro = await warnings(async () => {
+        const createdNow = await gnome.createEmbeddedDocuments("Item", [entry.toObject()]);
+        assert.lengthOf(createdNow, 0, "the Item door made an entry on the sheet");
+      });
+      assert.deepEqual(byMacro, [refusal]);
+      assert.equal(gnome.items.size, held, "a gadget's entry reached the sheet");
     });
 
     it("ARCLIGHT SPANNER: one construct targeted is mended by the tier a rank and a condition on it ended; a creature that is no construct is refused in words", async function () {

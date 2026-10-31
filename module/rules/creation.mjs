@@ -28,6 +28,7 @@ import { RANK_MAX, rankCost, rankCostBetween } from "./xp.mjs";
 import { spellsKnown } from "./casting.mjs";
 // Armor a talent adds to the class's Access (the Legacy branches' door 23).
 import { armorAccessFor } from "./class-talents.mjs";
+import { trainingProfile, trainingWarning } from "./equipment-training.mjs";
 // A Legacy's talent is its people's alone (04 §1, D-781).
 import { keptBy } from "./legacy-branches.mjs";
 
@@ -419,7 +420,7 @@ export function kitOverBy(p = {}) {
 }
 
 /**
- * Whether the class's Access covers an item (02 §7). Weapons are prose, so only armor answers.
+ * Whether class and talent training cover an item (02 §7). Shared with owned gear.
  *
  * **AND WHAT A TALENT ADDS** (04's Warden's Mail: *You may wear studded and mail
  * armor*; the Legacy branches' door 23): `extra`, the categories
@@ -430,10 +431,8 @@ export function kitOverBy(p = {}) {
  * @param {{extra?: string[]}} [o]
  */
 export function accessNote(item, cls, { extra = [] } = {}) {
-  if (!cls || item?.type !== "armor") return null;
-  if (item.shield) return cls.shields ? null : "shieldAccess";
-  const category = item.category ?? "none";
-  return category === "none" || cls.armor?.includes(category) || (extra ?? []).includes(category) ? null : "armorAccess";
+  const warning = trainingWarning(item, trainingProfile({ classes: cls ? [cls] : [], extraArmor: extra }));
+  return warning ? `${warning}Access` : null;
 }
 
 /**
@@ -628,7 +627,7 @@ export function validate(p = {}) {
   const talentArmor = talentArmorFor(p);
   for (const row of p.equipment ?? []) {
     const code = accessNote(row, p.cls, { extra: talentArmor });
-    if (code) note(code, "equipment", { name: row.name });
+    if (code) note(code === "weaponAccess" ? "untrainedWeapon" : code, "equipment", { name: row.name });
     if (row.type === "gear" && row.cost === null) note("augmentIssued", "equipment", { name: row.name });
   }
   if (p.race?.identifier === "ogre" && (p.equipment ?? []).some(r => r.type === "armor" && !r.shield)) {

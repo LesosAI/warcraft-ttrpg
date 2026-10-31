@@ -12,6 +12,7 @@
  */
 
 import { NEXT_SPELL_FLAG } from "../rules/casting.mjs";
+import { refuseIceBlockTarget } from "./ice-block-protection.mjs";
 
 /**
  * Lay these grants on the actor, said in words.
@@ -23,6 +24,7 @@ import { NEXT_SPELL_FLAG } from "../rules/casting.mjs";
  */
 export async function layNextSpell(actor, grants = []) {
   if (!actor || !grants?.length) return [];
+  if (refuseIceBlockTarget(actor)) return [];
   const now = actor.fightTurnNow?.() ?? null;
   const held = (actor.getFlag?.("azeroth-rpg", NEXT_SPELL_FLAG) ?? []).filter(e => e && typeof e === "object");
   const laid = grants.map(g => ({

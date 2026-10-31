@@ -22,10 +22,8 @@
  * Zero) are written on the escape when the condition lands - a record of the
  * cast, never read off the caster again (D-724).
  *
- * **Held or Stunned** is the ruling's own scope: `ESCAPE_CONDITIONS` is Entangled
- * and Stunned. 07 states the same Test, in the same words, for Slowed, Frightened
- * and Silenced; the reader names those and the door leaves them the table's
- * (`ESCAPE_UNBUILT`) - a question for the lead, not a decision taken here.
+ * The NPC expansion also implements Frightened's stated repeat Test, needed
+ * by Dread Weaver's Fear. Slowed and Silenced remain separately unbuilt.
  */
 
 /**
@@ -38,6 +36,14 @@
  * *"Highest DC wins"*; `higherShedDc`), where it was the last layer's.
  */
 export const SHED_DC_FLAG = "shedDc";
+
+/** 02's Gnome Escape Artist changes the action cost, never the escape Test. */
+export function escapeAction(talents = [], { condition, on = "action", action = "action" } = {}) {
+  if (on !== "action") return null;
+  if (action !== "action" || !["entangled", "grappled", "grapple"].includes(condition)) return action;
+  return talents.some(t => String(t.race ?? "").toLowerCase() === "gnome"
+    && t.identifier === "escape-artist" && Number(t.taken) > 0) ? "half" : action;
+}
 
 /**
  * **THE SHED DC A POISONED KEEPS AS ANOTHER LAYER LANDS** (the lead: *"Highest DC
@@ -104,8 +110,8 @@ export function cleanShedDc(raw) {
   return { dc, source: typeof raw.source === "string" ? raw.source : "" };
 }
 
-/** The conditions the ruling's Test ends (*held or Stunned*). */
-export const ESCAPE_CONDITIONS = Object.freeze(["entangled", "stunned"]);
+/** Conditions supported by the repeat-Test door, including Fear for the NPC expansion. */
+export const ESCAPE_CONDITIONS = Object.freeze(["entangled", "stunned", "frightened"]);
 
 /** When the Test is offered: on the creature's own action, or at the end of its turns. */
 export const ESCAPE_ON = Object.freeze(["action", "turnEnd"]);
@@ -116,8 +122,8 @@ export const ESCAPE_FLAG = "escape";
 /** The spans a failed escape's Stun may take (04's Deep Freeze). */
 export const ESCAPE_STUN_SPANS = Object.freeze(["casterTurnEnd"]);
 
-/** The conditions 07 gives the same Test for and the ruling did not name. */
-export const ESCAPE_UNBUILT = Object.freeze(["slowed", "frightened", "silenced"]);
+/** Conditions with written repeat Tests whose automation is still outstanding. */
+export const ESCAPE_UNBUILT = Object.freeze(["slowed", "silenced"]);
 
 /**
  * **EVERY TEST 07 REPEATS THAT ENDS NO CONDITION**, by name, with its reason: the
@@ -194,7 +200,7 @@ export function readEscapeAny(effectText, fields = {}) {
 
 /**
  * The escape the door BUILDS: `readEscapeAny`'s, where the condition is one the
- * ruling names (*held or Stunned*), else null.
+ * supported by the repeat-Test door, else null.
  *
  * @param {string} effectText
  * @param {{test?: {resilience?: string|null}}} [fields]
@@ -282,9 +288,14 @@ export function featureEscapeRecord(stamp, { condition = null, spellDc = null, s
  */
 export function cleanEscape(raw) {
   if (!raw || typeof raw !== "object") return null;
-  if (!ESCAPE_CONDITIONS.includes(raw.condition) || !ESCAPE_ON.includes(raw.on) || !RESILIENCES.includes(raw.resilience)) return null;
+  // Compel has its own Charmed carrier and an explicit end-turn Spirit Test.
+  // This exception does not give every Charmed effect a repeat Test.
+  const compel = raw.identifier === "compel" && raw.condition === "charmed"
+    && raw.on === "turnEnd" && raw.resilience === "spirit";
+  if ((!ESCAPE_CONDITIONS.includes(raw.condition) && !compel) || !ESCAPE_ON.includes(raw.on) || !RESILIENCES.includes(raw.resilience)) return null;
   const dc = Math.trunc(Number(raw.dc));
   return {
+    ...(compel ? { identifier: "compel" } : {}),
     condition: raw.condition,
     on: raw.on,
     resilience: raw.resilience,

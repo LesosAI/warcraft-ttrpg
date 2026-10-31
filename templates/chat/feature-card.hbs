@@ -163,7 +163,7 @@
         </button>
       </div>
       {{else}}
-      <div class="azeroth-card-actions">
+      <div class="azeroth-card-actions"{{#if (eq resist.purpose "snare")}} data-open-to="all"{{/if}}>
         <button type="button" data-action="resistTest" data-resilience="{{resist.key}}" data-dc="{{resist.dc}}"{{#if resist.purpose}} data-purpose="{{resist.purpose}}"{{/if}}{{#if resist.targetIndex}} data-target-index="{{resist.targetIndex}}"{{/if}}>
           {{#if resist.purpose}}{{localize "AZEROTH.Snare.EscapeButton" resilience=(localize resist.label) dc=(azerothDash resist.dc)}}{{else}}{{localize "AZEROTH.Card.ResistTest" resilience=(localize resist.label) dc=(azerothDash resist.dc)}}{{/if}}
         </button>
@@ -174,7 +174,7 @@
     {{#if escape}}
     {{!-- The Snare's escape where Explosive Trap's half took the Resist above
           (D-773): the caught creature's action and its Reflex Test. --}}
-    <div class="azeroth-card-actions">
+    <div class="azeroth-card-actions" data-open-to="all">
       <button type="button" data-action="resistTest" data-purpose="snare" data-resilience="{{escape.key}}" data-dc="{{escape.dc}}">
         {{localize "AZEROTH.Snare.EscapeButton" resilience=(localize escape.label) dc=(azerothDash escape.dc)}}
       </button>

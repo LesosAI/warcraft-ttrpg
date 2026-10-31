@@ -595,11 +595,19 @@ export function readyEntry({ trigger = "", action = "", round = null, turn = nul
 export function canReact(key, {
   reactionsLeft = 1, inFight = true, alreadyReacted = false, meleeWeapons = [], shields = [],
   attacks = [], leftReach = true, readied = null, classNames = [], pools = [], free = {},
-  unanswered = false, lostToBlow = false, spiritRealm = false, noOpportunity = false
+  unanswered = false, lostToBlow = false, spiritRealm = false, noOpportunity = false, disoriented = false, asleep = false, phaseShifted = false, seduced = false, reactionBarred = false, iceBlocked = false, dispersed = false
 } = {}) {
   const row = REACTIONS[key] ?? null;
   if (!row) return { ok: false, reason: "AZEROTH.Reaction.Refuse.NoSuch", with: null };
   if (!row.built) return { ok: false, reason: "AZEROTH.Reaction.Refuse.NotBuilt", with: null };
+  if (iceBlocked === true) return { ok: false, reason: "AZEROTH.IceBlock.Protected", with: null };
+  if (dispersed === true && ["block", "parry", "opportunityAttack"].includes(key))
+    return { ok: false, reason: "AZEROTH.Dispersion.Restricted", with: null };
+  if (reactionBarred === true) return { ok: false, reason: "AZEROTH.ReactionBar.Refused", with: null };
+  if (phaseShifted === true) return { ok: false, reason: "AZEROTH.PhaseShift.CannotAct", with: null };
+  if (seduced === true) return { ok: false, reason: "AZEROTH.Seduction.MustApproach", with: null };
+  if (asleep === true) return { ok: false, reason: "AZEROTH.Sleep.CannotAct", with: null };
+  if (disoriented === true) return { ok: false, reason: "AZEROTH.AncientDespair.CannotAct", with: null };
   // *No creature may take a Reaction against you* (door 14): before anything else
   // is asked, because nothing the reactor holds would let it.
   if (unanswered === true) return { ok: false, reason: UNANSWERED_REFUSAL, with: null };

@@ -1,0 +1,4 @@
+<p>{{localize "AZEROTH.ChainLightning.HitReview.Explain"}}</p>
+<label>{{localize "AZEROTH.ChainLightning.HitReview.Hit"}}
+<select name="hit">{{#each rows}}<option value="{{index}}">{{localize "AZEROTH.ChainLightning.HitReview.Row" number=number name=name damage=damage}}</option>{{/each}}</select></label>
+<p><label><input type="checkbox" name="acknowledged"> {{localize "AZEROTH.ChainLightning.HitReview.Acknowledge"}}</label></p>

@@ -215,12 +215,13 @@ export function keptAmount({ kind = "guardian", amount = 0, moved = 0 } = {}) {
  *
  * @param {{share?: number, type?: string|null, location?: string, parts?: Array<object>|null,
  *   holder?: {apByLocation?: object, wardBySchool?: object|null, schoolArmorBySchool?: object|null,
- *   immune?: string[], vulnerable?: string[]}}} o
+ *   immune?: string[], vulnerable?: string[], fireTakenBonus?: number}}} o
  * @returns {{damage: number, wardTook: number, parts: Array<object>|null}}
  */
 export function burdenMet({ share = 0, type = null, location = "body", holder = {}, parts = null } = {}) {
   const maps = {
     immune: holder?.immune ?? [], vulnerable: holder?.vulnerable ?? [], wardBySchool: holder?.wardBySchool ?? null,
+    fireTakenBonus: holder?.fireTakenBonus ?? 0,
     schoolArmorBySchool: holder?.schoolArmorBySchool ?? null, apByLocation: holder?.apByLocation ?? {}, location
   };
   const typeOf = t => (typeof t === "string" && t ? t : "physical");

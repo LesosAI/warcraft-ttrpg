@@ -71,7 +71,7 @@ export function standingOf(token, combatant, fight) {
     defeated: combatant?.isDefeated === true,
     health: typeof health === "number" ? health : null,
     // Hidden by the GM, or Hidden by D-717's `invisible`: a player cannot see it.
-    hidden: doc?.hidden === true || actor?.statuses?.has?.("invisible") === true
+    hidden: doc?.hidden === true || (doc?.hasStatusEffect?.("invisible") ?? actor?.statuses?.has?.("invisible")) === true
   };
 }
 

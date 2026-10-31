@@ -1,0 +1,5 @@
+<p><strong>{{actor}}</strong></p>
+<p>Check whether Numbed was applied and whether its duration has already elapsed. Reconcile it manually before closing the selected delivery attempt. Review does not create, remove, extend or repeat Numbed.</p>
+<label>Pending delivery <select name="effectId"><option value="">Choose a delivery</option>{{#each pending}}<option value="{{id}}">{{id}} — cast {{cast}}</option>{{/each}}</select></label>
+<ul>{{#each effects}}<li>{{name}} ({{id}})</li>{{else}}<li>No effects remain.</li>{{/each}}</ul>
+<label><input type="checkbox" name="acknowledged"> I reconciled this Numbed aftermath and want to close its delivery attempt.</label>

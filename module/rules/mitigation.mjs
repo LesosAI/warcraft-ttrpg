@@ -87,6 +87,7 @@ export function spellDamage(rating, sl, ward = 0, times = 1) {
  *
  * @param {object} o
  * @param {number} o.rating           Damage Rating of the weapon or spell.
+ * @param {number} [o.fireTakenBonus] Active Flame Buffet stacks (0–5), read by the caller from the target.
  * @param {number} o.sl               Success Level of the attack or cast.
  * @param {"physical"|"magical"} o.kind
  * @param {string} [o.school]         For magical damage: the school it belongs to.
@@ -181,7 +182,9 @@ export function resolveDamage({
   // `rules/bypass.mjs`): no Armor Points, no Ward - off the damage or the Success Level -
   // and no ally's aura Armor Points come off it, nor off a second amount it carries. Immune,
   // Vulnerable and a halving stand: the words name armor and Ward and nothing else.
-  bypass = false
+  bypass = false,
+  // Target-side Flame Buffet: after source scaling, before mitigation.
+  fireTakenBonus = 0
 } = {}) {
   const own = kind === "magical" ? school : "physical";
   const typed = typedExtras(extras, own);
@@ -191,14 +194,14 @@ export function resolveDamage({
   const main = resolveOne({
     rating: (Number(rating) || 0) + typed.merged, sl, kind, school, location,
     apByLocation: past ? {} : apByLocation, penetration, ward: past ? 0 : ward,
-    immune, vulnerable, slAddsToDamage, multiplier, schoolArmor: past ? 0 : schoolArmor, halved: halvings
+    immune, vulnerable, slAddsToDamage, multiplier, schoolArmor: past ? 0 : schoolArmor, halved: halvings, fireTakenBonus
   });
   const flagged = past ? { ...main, bypass: true } : main;
   const marked = halvings ? { ...flagged, ...(halved ? { dealtHalved: true } : {}), ...(passedHalf === true ? { passedHalf: true } : {}) } : flagged;
   if (!typed.extras.length) return marked;
   const meets = past
-    ? { immune, vulnerable, wardBySchool: {}, schoolArmorBySchool: {}, apByLocation: {}, location }
-    : { immune, vulnerable, wardBySchool, schoolArmorBySchool, apByLocation, location };
+    ? { immune, vulnerable, wardBySchool: {}, schoolArmorBySchool: {}, apByLocation: {}, location, fireTakenBonus }
+    : { immune, vulnerable, wardBySchool, schoolArmorBySchool, apByLocation, location, fireTakenBonus };
   const parts = typed.extras.map(x => extraPart(halvings ? { ...x, amount: worthOf(x.amount, halvings) } : x, meets));
   return { ...marked, damage: marked.damage + parts.reduce((n, p) => n + p.damage, 0), mainDamage: marked.damage, parts };
 }
@@ -252,9 +255,11 @@ export function typedExtras(extras = [], own = "physical") {
  * branches' B6b): one amount of the blow's type met by the holder's own mitigation
  * (`blow-doors.mjs#burdenMet`), the same reading, never a second one.
  */
-export function extraPart({ type, amount }, { immune = [], vulnerable = [], wardBySchool = null, schoolArmorBySchool = null, apByLocation = {}, location = "body" } = {}) {
+export function extraPart({ type, amount }, { immune = [], vulnerable = [], wardBySchool = null, schoolArmorBySchool = null, apByLocation = {}, location = "body", fireTakenBonus = 0 } = {}) {
   const base = { type, amount, immune: false, vulnerable: false, ward: null, armor: null, schoolArmor: 0, wardTook: 0 };
   if ((immune ?? []).includes(type)) return { ...base, damage: 0, immune: true };
+  const bonus = fireBonusFor(type, amount, fireTakenBonus);
+  if (bonus) { base.fireTakenBonus = bonus; amount += bonus; }
   if ((vulnerable ?? []).includes(type)) return { ...base, damage: amount + VULNERABLE_DAMAGE_BONUS, vulnerable: true };
   if (type === "physical") {
     const ap = armorAt(apByLocation, location) ?? 0;
@@ -265,6 +270,10 @@ export function extraPart({ type, amount }, { immune = [], vulnerable = [], ward
   const aura = Math.max(0, Math.trunc(Number(schoolArmorBySchool?.[type])) || 0);
   const taken = Math.min(aura, afterWard);
   return { ...base, ward, schoolArmor: taken, wardTook: amount - afterWard, damage: afterWard - taken };
+}
+
+function fireBonusFor(type, worth, bonus) {
+  return type === "fire" && worth > 0 && Number.isInteger(bonus) && bonus >= 1 && bonus <= 5 ? bonus : 0;
 }
 
 /** The mitigation of ONE amount of ONE type: the whole of `resolveDamage` before D-777. */
@@ -282,7 +291,8 @@ function resolveOne({
   slAddsToDamage = true,
   multiplier = 1,
   schoolArmor = 0,
-  halved = false
+  halved = false,
+  fireTakenBonus = 0
 } = {}) {
   // A multiplier under 1 would mean the opposite of itself, and 08 §20 doubles
   // and nothing else; anything smaller is no multiplier at all.
@@ -322,8 +332,11 @@ function resolveOne({
   // Vulnerable switches mitigation off: "Armor and Ward do not apply."
   // Its 2 is the target's own, added after a halving of the blow's worth (door 25).
   if (isVulnerable) {
-    const damage = Math.max(0, worthOf(times * (rating + (slAddsToDamage ? sl : 0) + headBonus), halved) + vulnBonus);
-    return { damage, effectiveSL: sl, hit: true, immune: false, vulnerable: true, mitigation: 0, ...lane };
+    const worth = worthOf(times * (rating + (slAddsToDamage ? sl : 0) + headBonus), halved);
+    const bonus = fireBonusFor(type, worth, fireTakenBonus);
+    const damage = Math.max(0, worth + bonus + vulnBonus);
+    return { damage, effectiveSL: sl, hit: true, immune: false, vulnerable: true, mitigation: 0, ...lane,
+      ...(bonus ? { fireTakenBonus: bonus } : {}) };
   }
 
   if (kind === "magical") {
@@ -332,12 +345,15 @@ function resolveOne({
     // `applyWard`'s and `spellDamage`'s own arithmetic, with the worth halved between.
     const w = Math.max(0, ward);
     const effectiveSL = Math.max(0, sl - w);
-    const damage = Math.max(0, worthOf(times * (rating + (slAddsToDamage ? effectiveSL : 0)), halved) - w);
+    const worth = worthOf(times * (rating + (slAddsToDamage ? effectiveSL : 0)), halved);
+    const bonus = fireBonusFor(type, worth, fireTakenBonus);
+    const damage = Math.max(0, worth + bonus - w);
     // **WHAT THE WARD TOOK OFF THIS BLOW** (D-774): the damage with no Ward less
     // the damage with it, so a door after the die can say whether the Ward
     // prevented anything - 04's Atonement (*When your Ward class feature prevents
     // damage*) and Absorption read it at the one damage door.
-    const bare = { damage: Math.max(0, worthOf(times * (rating + (slAddsToDamage ? Math.max(0, sl) : 0)), halved)) };
+    const bareWorth = worthOf(times * (rating + (slAddsToDamage ? Math.max(0, sl) : 0)), halved);
+    const bare = { damage: Math.max(0, bareWorth + fireBonusFor(type, bareWorth, fireTakenBonus)) };
     const wardTook = Math.max(0, bare.damage - damage);
     // An aura's Armor Points come off what the Ward left, and the Success Level
     // never sees them (D-755). What they TOOK is never more than was left.
@@ -351,7 +367,8 @@ function resolveOne({
       mitigation: Math.max(0, ward),
       ...lane,
       schoolArmor: taken,
-      wardTook
+      wardTook,
+      ...(bonus ? { fireTakenBonus: bonus } : {})
     };
   }
 
@@ -404,7 +421,8 @@ export function explainDamage(result = {}, { rating = 0, sl = 0, slAddsToDamage 
     n: Math.max(0, Math.trunc(Number(p.damage)) || 0), amount: Math.max(0, Math.trunc(Number(p.amount)) || 0),
     type: p.type, immune: p.immune === true, vulnerable: p.vulnerable === true,
     ward: p.ward !== null && p.ward !== undefined ? Math.max(0, Math.trunc(Number(p.ward)) || 0) : null,
-    armor: p.armor !== null && p.armor !== undefined ? Math.max(0, Math.trunc(Number(p.armor)) || 0) : null
+    armor: p.armor !== null && p.armor !== undefined ? Math.max(0, Math.trunc(Number(p.armor)) || 0) : null,
+    ...(p.fireTakenBonus > 0 ? { fireTakenBonus: p.fireTakenBonus } : {})
   }));
   const withExtras = out => (extras.length ? { ...out, extras } : out);
   if (result.immune) return withExtras({ parts: [], immune: true, vulnerable: false, note: null });
@@ -412,6 +430,7 @@ export function explainDamage(result = {}, { rating = 0, sl = 0, slAddsToDamage 
   // A spell's Success Level gates riders and never adds (D-330), so it is not
   // a part of the sum on that lane.
   if (slAddsToDamage) parts.push({ n: Math.trunc(Number(sl)) || 0, sign: "+" });
+  if (result.fireTakenBonus > 0) parts.push({ n: result.fireTakenBonus, sign: "+" });
   if (result.vulnerable) {
     return withExtras({ parts, immune: false, vulnerable: true, note: { kind: "vulnerable", n: VULNERABLE_DAMAGE_BONUS } });
   }

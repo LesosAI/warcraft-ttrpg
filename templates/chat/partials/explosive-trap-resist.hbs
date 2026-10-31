@@ -1,0 +1,5 @@
+{{!-- One caught creature's Reflex Test against an Explosive Trap, on the Snare's feature
+      card. Drawn by applications/explosive-trap-card.mjs#showExplosiveTrapState into that
+      creature's row, for its owner alone, once the trigger has resolved and named it. The
+      rows are known only after the card is posted, so they are drawn when it renders. --}}
+<button type="button" data-action="resistExplosiveTrap" data-actor-uuid="{{actorUuid}}">{{localize "AZEROTH.ExplosiveTrap.Resist" name=name dc=dc}}</button>

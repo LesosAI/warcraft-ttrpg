@@ -232,7 +232,103 @@ export function knownAs(name) {
  * rule; a rule that is wrong is fixed in the law. This is for the items whose
  * conversion the lead wants to write by hand.
  */
-export const OVERRIDES = Object.freeze({});
+export const OVERRIDES = Object.freeze({
+  9394: {
+    signature:'<p>Once per Short Rest, while worn and usable, after you hit with a melee weapon you may force that target to make a Body Resilience Test against DC 10 + your own Strength modifier (minimum 0) + your Athletics Skill Ranks. On failure it becomes Prone. The helmet deals no additional damage and costs no additional action. Identical copies share the character\'s use; switching copies does not refresh it.</p>',
+    signatureEffect:{kind:'onHit',use:{uses:{per:'short',max:1,value:1}}},signatureApproved:true,
+    note:'Approved F05 Horned Viking Helmet knockdown: SIGNATURE-PROPOSALS.md; player and interrupted-use recovery acceptance remain under audit.'
+  },
+  11086: {
+    signature:'<p>Once per Short Rest, after you hit with this weapon while it is equipped and usable, you may gain temporary Health equal to twice your own Constitution modifier (minimum 0) until the encounter ends. Temporary Health does not stack. This reward costs no additional action. Identical copies share the character\'s use; switching copies does not refresh it.</p>',
+    signatureEffect:{kind:'onHit',use:{uses:{per:'short',max:1,value:1}}},signatureApproved:true,
+    note:'Approved F05 Jangthraze optional hit reward: SIGNATURE-PROPOSALS.md; player and recovery acceptance remain under audit.'
+  },
+  38175: {
+    signature:'<p>While equipped and usable, once per turn when you hit with this weapon, deal additional Fire damage equal to your Intimidation Skill Ranks plus that attack\'s SL to the target. Identical copies share this limit. Outside combat, use this bonus at most once per six seconds. Switching copies or leaving combat does not refresh it.</p>',
+    signatureEffect:{kind:'standing',scalingHitDamage:true},signatureApproved:true,
+    note:'Approved F05 Horseman hit signature: SIGNATURE-PROPOSALS.md; native player, multi-target and recovery acceptance remain under audit.'
+  },
+  23198: {
+    signature:'<p>While this is your active Augment and you are in Black Bear or Ironfur Bear form (including a Chimera containing either), once per turn, a natural-weapon hit deals additional Physical damage equal to your own Constitution modifier (minimum 0). Identical copies share this limit. Outside combat, use this bonus at most once per six seconds. Switching copies or leaving combat does not refresh it.</p>',
+    signatureEffect:{kind:'standing',scalingHitDamage:true},signatureApproved:true,
+    note:'Approved F05 Idol of Brutality: SIGNATURE-PROPOSALS.md; player, turn refresh and recovery acceptance remain under audit.'
+  },
+  22397: {
+    signature:'<p>While this is your active Augment and you are in Mountain Lion form (including a Chimera containing it), once per turn, a natural-weapon hit deals additional Physical damage equal to your own Dexterity modifier (minimum 0). Identical copies share this limit. Outside combat, use this bonus at most once per six seconds. Switching copies or leaving combat does not refresh it.</p>',
+    signatureEffect:{kind:'standing',scalingHitDamage:true},signatureApproved:true,
+    note:'Approved F05 Idol of Ferocity: SIGNATURE-PROPOSALS.md; player, turn refresh and recovery acceptance remain under audit.'
+  },
+  17104: {
+    signature:'<p>While equipped and usable, once per turn when an attack with this weapon reduces a hostile creature from above 0 Health to 0 Health, gain temporary Health equal to your own Strength modifier (minimum 0) plus the successful attack\'s SL until the encounter ends. Temporary Health does not stack. Identical copies share this limit. Outside combat, use this reward at most once per six seconds. Switching copies or leaving combat does not refresh it.</p>',
+    signatureEffect:{kind:'standing',weaponKillReward:true},signatureApproved:true,
+    note:'Approved F05 Spinal Reaper weapon-kill reward: SIGNATURE-PROPOSALS.md; native and recovery acceptance remain under audit.'
+  },
+  18722: {
+    signature:'<p>While worn and usable, once per turn when your melee weapon attack reduces a hostile creature from above 0 Health to 0 Health, restore Health to yourself equal to your own Constitution modifier (minimum 0). Identical copies share this limit. Outside combat, use this reward at most once per six seconds. Switching copies or leaving combat does not refresh it.</p>',
+    signatureEffect:{kind:'standing',weaponKillReward:true},signatureApproved:true,
+    note:'Approved F05 Death Grips weapon-kill reward: SIGNATURE-PROPOSALS.md; native and recovery acceptance remain under audit.'
+  },
+  13382: {
+    signature:'<p>Once per Short Rest, while equipped and usable, spend a Half-Action to fire one cannon shot at one creature within 30 feet. The target makes a Reflex Test against DC 10 + your own Intelligence modifier (minimum 0) + your Tinkering Skill Ranks. On failure it takes Physical damage equal to twice that Intelligence modifier + your Tinkering Skill Ranks; on success it takes half, rounded down, before armor. This is one shot, not a summoned creature. The use belongs to the character; switching copies does not refresh it.</p>',
+    signatureEffect:{kind:'use',use:{action:'half',uses:{per:'short',max:1,value:1}}},signatureApproved:true,
+    note:'Approved F05 Cannonball Runner single shot: SIGNATURE-PROPOSALS.md; player controls and interruption recovery remain under audit.'
+  },
+  13379: {
+    signature:'<p>Once per Short Rest, while equipped and usable, spend a Half-Action and choose up to your Performance Skill Ranks in creatures within 15 feet that can hear you. Each makes a Spirit Resilience Test against DC 10 + your own Charisma modifier (minimum 0) + your Performance Skill Ranks. On failure, its next Attack Test before the end of its next turn suffers one Bane. No use is spent if no legal recipient is selected. Identical copies do not stack and share the character\'s use; switching copies does not refresh it. This is a distraction, not Charmed or control of actions.</p>',
+    signatureEffect:{kind:'use',use:{action:'half',uses:{per:'short',max:1,value:1}}},signatureApproved:true,
+    note:'Approved F05 Piccolo distraction: SIGNATURE-PROPOSALS.md; player, expiry and recovery acceptance remain under audit.'
+  },
+  21331: {
+    signature:'<p>While worn and usable, add your Warfare Skill Ranks to your first Parry Test each turn. Normal Parry costs apply. Identical copies do not stack. Outside combat, use this bonus at most once per six seconds. Switching copies or leaving combat does not refresh it.</p>',
+    signatureEffect:{kind:'standing',firstParryTest:true},signatureApproved:true,
+    note:'Approved F05 Conqueror Parry ruling: SIGNATURE-PROPOSALS.md; player display and interrupted-use recovery remain under audit.'
+  },
+  21407: {
+    signature:'<p>While equipped and usable, once per turn when your spell restores Health, add your own Wisdom modifier (minimum 0) to one chosen recipient, once per casting on its first healing. This shares one Unending Life bonus with Cloak of Unending Life; the two do not stack. Outside combat, use this bonus at most once per six seconds. Switching copies or leaving combat does not refresh it.</p>',
+    signatureEffect:{kind:'standing',chosenSpellHealing:true},signatureApproved:true,
+    note:'Approved F05 healing signature: SIGNATURE-PROPOSALS.md; area/channel delivery and recovery remain under audit.'
+  },
+  21409: {
+    signature:'<p>While equipped and usable, once per turn when your spell restores Health, add your own Wisdom modifier (minimum 0) to one chosen recipient, once per casting on its first healing. This shares one Unending Life bonus with Mace of Unending Life; the two do not stack. Outside combat, use this bonus at most once per six seconds. Switching copies or leaving combat does not refresh it.</p>',
+    signatureEffect:{kind:'standing',chosenSpellHealing:true},signatureApproved:true,
+    note:'Approved F05 healing signature: SIGNATURE-PROPOSALS.md; area/channel delivery and recovery remain under audit.'
+  },
+  22401: {
+    signature:'<p>While this is your active held Augment and you have Paladin class access, once per turn when a spell granted by your Paladin class restores Health, add your own Charisma modifier (minimum 0) to one chosen recipient, once per casting on its first healing. Identical copies do not stack. Outside combat, use this bonus at most once per six seconds. Switching copies or leaving combat does not refresh it.</p>',
+    signatureEffect:{kind:'standing',chosenSpellHealing:true},signatureApproved:true,
+    note:'Approved F05 healing signature: SIGNATURE-PROPOSALS.md; area/channel delivery and recovery remain under audit.'
+  },
+  37128: {
+    signature:'<p>Once per Short Rest, while equipped and usable, spend a Half-Action to gain temporary Health equal to twice your own Constitution modifier (minimum 0) until the encounter ends. This use belongs to the character; switching copies does not refresh it.</p>',
+    signatureEffect:{kind:'use',use:{action:'half',uses:{per:'short',max:1,value:1}}},
+    signatureApproved:true,note:'Approved F05 Balebrew Charm: SIGNATURE-PROPOSALS.md.'
+  },
+  37127: {
+    signature:'<p>Once per Short Rest, while equipped and usable, spend a Half-Action to restore Health to yourself equal to your own Constitution modifier (minimum 0) plus your Medicine Skill Ranks. This use belongs to the character; switching copies does not refresh it.</p>',
+    signatureEffect:{kind:'use',use:{action:'half',uses:{per:'short',max:1,value:1}}},
+    signatureApproved:true,note:'Approved F05 Brightbrew Charm: SIGNATURE-PROPOSALS.md.'
+  },
+  21128: {
+    signature: '<p>While equipped and usable, your Arcane spells add your own Intelligence modifier (minimum 0) as Arcane damage to one chosen recipient, once per casting when the spell first deals damage. Identical copies do not stack.</p>',
+    signatureEffect: {kind:'standing',chosenSpellDamage:{school:'arcane',attribute:'int'}},
+    signatureApproved:true,note:'Approved F05 signature: SIGNATURE-PROPOSALS.md; specialized area/channel delivery remains under audit.'
+  },
+  21415: {
+    signature: '<p>While equipped and usable, your Arcane spells add your Arcana Skill Rank as Arcane damage to one chosen recipient, once per casting when the spell first deals damage. Identical copies do not stack; this stacks with Staff of the Qiraji Prophets.</p>',
+    signatureEffect: {kind:'standing',chosenSpellDamage:{school:'arcane',skill:'arcana'}},
+    signatureApproved:true,note:'Approved F05 signature: SIGNATURE-PROPOSALS.md; specialized area/channel delivery remains under audit.'
+  },
+  22400: {
+    signature: '<p>While this is your active held Augment and you have Paladin class access, your Holy spells add your Spirit Lore Skill Rank as Holy damage to one chosen recipient, once per casting when the spell first deals damage. Identical copies do not stack.</p>',
+    signatureEffect: {kind:'standing',chosenSpellDamage:{school:'holy',skill:'spiritLore'}},
+    signatureApproved:true,note:'Approved F05 signature: SIGNATURE-PROPOSALS.md; specialized area/channel delivery remains under audit.'
+  },
+  18354: {
+    signature: '<p>While equipped and usable, your Fire spells add the granting class\'s own casting ability modifier (minimum 0) as Fire damage to one chosen recipient, once per casting when the spell first deals damage. Use the class granting that spell, not an unrelated primary class; substituting an Attack Test does not change this modifier. Identical copies do not stack.</p>',
+    signatureEffect: {kind:'standing',chosenSpellDamage:{school:'fire',casting:true}},
+    signatureApproved:true,note:'Approved F05 signature: SIGNATURE-PROPOSALS.md; specialized area/channel delivery remains under audit.'
+  }
+});
 
 /** A WoW attribute line to the attribute 05 §1 names. Spirit is Wisdom. */
 export const STAT_MAP = Object.freeze({

@@ -41,6 +41,8 @@ import { AZEROTH } from "../config.mjs";
 
 /** The flag a laid Bane rides on, under the system's own namespace. */
 export const LAID_BANE_FLAG = "laidBane";
+/** Torment and Suffering share one Bane across all sources. */
+export const DEMON_TORMENT_GROUP = "demon-torment";
 
 /** The kinds of Test a Bane may be laid on: the roll dialog's own four. */
 export const BANE_KINDS = Object.freeze(Object.keys(AZEROTH.testKinds));
@@ -95,6 +97,16 @@ export function cleanLaidBane(raw) {
   // against, in the same shape.
   const only = cleanExcept(raw.only);
   const kept = { ...row, ...(except ? { except } : {}), ...(only ? { only } : {}) };
+  if (raw.stackGroup === DEMON_TORMENT_GROUP && kind === "attack" && raw.lasting === true && except && !only) {
+    kept.stackGroup = DEMON_TORMENT_GROUP;
+    kept.banes = 1;
+  }
+  // Approved Piccolo copies share one distraction, consumed by the next
+  // Attack Test. Do not authorize this group for lasting or targeted Banes.
+  if (raw.stackGroup === "piccolo-of-the-flaming-fire" && kind === "attack" && raw.lasting !== true && !except && !only) {
+    kept.stackGroup = "piccolo-of-the-flaming-fire";
+    kept.banes = 1;
+  }
   return raw.lasting === true ? { ...kept, lasting: true } : kept;
 }
 
@@ -171,10 +183,21 @@ export function laidBaneRows(raws = []) {
 /** The totals by kind of Test, in `emptyLaidBanes`' shape. A Bane on every Test counts on each. */
 export function laidBaneTotals(rows = []) {
   const out = emptyLaidBanes();
-  for (const row of laidBaneRows(rows)) {
+  for (const row of collapseBaneGroups(laidBaneRows(rows))) {
     for (const kind of row.kind === "all" ? BANE_KINDS : [row.kind]) out[kind] += row.banes;
   }
   return out;
+}
+
+/** Collapse only explicit, validated groups; ordinary sources remain additive. */
+function collapseBaneGroups(rows) {
+  const seen = new Set();
+  return rows.filter(row => {
+    if (!row.stackGroup) return true;
+    if (seen.has(row.stackGroup)) return false;
+    seen.add(row.stackGroup);
+    return true;
+  });
 }
 
 /**
@@ -188,28 +211,34 @@ export function laidBaneTotals(rows = []) {
  *
  * @param {Array<object>} rows
  * @param {string} kind
- * @param {{target?: {actorId?: string|null, tokenId?: string|null}|null}} [o]
+ * @param {{target?: {actorId?: string|null, tokenId?: string|null}|null, targets?: Array<object>|null}} [o]
  * @returns {{banes: number, names: string[], judged: {banes: number, names: string[]}}}
  */
-export function laidBanesOn(rows = [], kind, { target = null } = {}) {
+export function laidBanesOn(rows = [], kind, { target = null, targets = null } = {}) {
   // A Bane on every Test (D-773) bears on this one too, and one laid against one
   // creature alone (Feint) only on a Test against it: `baneBears` is the reading.
   const mine = laidBaneRows(rows).filter(r => r.kind === kind || r.kind === "all");
   const bears = [];
   const judged = [];
   for (const r of mine) {
-    const verdict = baneBears(r, kind, target);
+    // Demon taunts spare an attack that includes their source among ANY of
+    // its targets. Existing Taunt/Feint semantics remain per-target.
+    const comparisons = r.stackGroup === DEMON_TORMENT_GROUP && Array.isArray(targets) && targets.length
+      ? targets.map(t => againstSpared(r.except, t)) : null;
+    const verdict = comparisons
+      ? (comparisons.includes(true) ? false : comparisons.includes(null) ? null : true)
+      : baneBears(r, kind, target);
     if (verdict === false) continue;
     if (verdict === null) judged.push(r);
     else bears.push(r);
   }
   const out = {
-    banes: bears.reduce((n, r) => n + r.banes, 0),
+    banes: collapseBaneGroups(bears).reduce((n, r) => n + r.banes, 0),
     names: bears.map(r => r.source).filter(Boolean)
   };
   // Only where there is one: every Bane before D-772 spares nobody, and reads
   // back in exactly the shape it always did.
-  if (judged.length) out.judged = { banes: judged.reduce((n, r) => n + r.banes, 0), names: judged.map(r => r.source).filter(Boolean) };
+  if (judged.length) out.judged = { banes: collapseBaneGroups(judged).filter(r => !r.stackGroup || !bears.some(b => b.stackGroup === r.stackGroup)).reduce((n, r) => n + r.banes, 0), names: judged.map(r => r.source).filter(Boolean) };
   return out;
 }
 

@@ -36,6 +36,8 @@
     <div class="azeroth-identity-line">
       {{!-- A GM reworks the creature in the generator (D-637); the sheet stays a reading surface. --}}
       {{#if reworkable}}<button type="button" class="azeroth-build" data-action="rework">{{localize "AZEROTH.Sheet.Rework"}}</button>{{/if}}
+      {{#if reviewSearing}}<button type="button" class="azeroth-build" data-action="reviewSearingUses">{{localize "AZEROTH.Bound.SearingReview.Title"}}</button>{{/if}}
+      {{#if canReviewChainCast}}<button type="button" class="azeroth-build" data-action="reviewChainLightningCast">{{localize "AZEROTH.ChainLightning.Review.Title"}}</button>{{/if}}
       <strong>{{localize identity.weightClass}}</strong>
       <span>{{localize identity.size}}</span>
       <span>{{localize identity.creatureType}}{{#if identity.typeMarker}} ({{identity.typeMarker}}){{/if}}</span>

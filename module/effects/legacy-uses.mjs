@@ -47,6 +47,7 @@ import { bondOf, releaseThrallBond, worldActorOf, writeThrallBond } from "../doc
 import { CUTTING_GEAR, cuttingGearRefusal, holdsCuttingGear } from "../rules/escapes.mjs";
 import { turnMark } from "../rules/class-answers.mjs";
 import { minuteSpan } from "./durations.mjs";
+import { refuseIceBlockTarget } from "./ice-block-protection.mjs";
 
 /** The query a write on a creature this client does not own goes through. */
 export const LEGACY_USE_QUERY = "azeroth-rpg.legacyUse";
@@ -124,6 +125,11 @@ async function viaGM(payload) {
  * @param {{source: string, by: string|null, ends?: string[], img?: string|null, span?: object|null}} o
  */
 function stateData(kind, { source, by = null, ends = null, img = null, span = null } = {}) {
+  if (kind === "waterBreathing") return {
+    flag: "waterBreathing", data: { source, by }, img, span, name: source,
+    description: `<p>${game.i18n.localize("AZEROTH.Gadget.RebreatherEffect")}</p>`,
+    sameAs: raw => raw?.source === source
+  };
   if (kind === "conceal") {
     return {
       flag: CONCEAL_FLAG, data: { source, by, ends: Array.isArray(ends) && ends.length ? [...ends] : ["attack", "cast"] }, statuses: [HIDDEN_STATUS], img, span,
@@ -153,6 +159,7 @@ export async function layStateOn({ target, kind, by, item, source, ends = null, 
   if (!target) return { landed: false, name };
   try {
     if (target.isOwner) {
+      if (kind === "waterBreathing") return await stateHere({ by, item, target, kind, span, feet });
       const made = await layState(target, stateData(kind, { source, by: by?.uuid ?? null, ends, img, span }));
       return { landed: Boolean(made), name };
     }
@@ -171,6 +178,12 @@ async function stateHere({ by, item, target, kind, span, feet }) {
   const tokenTarget = target.getActiveTokens?.(true)?.[0] ?? null;
   const measured = tokenBy && tokenTarget ? feetBetweenTokens(tokenBy, tokenTarget) : null;
   const apart = measured ?? (typeof feet === "number" ? feet : null);
+  if (kind === "waterBreathing") {
+    if (!uses.waterBreathing) throw new Error(game.i18n.format("AZEROTH.LegacyUse.NotHeld", { name: by.name, feature: item.name }));
+    if (apart !== null && apart > 5) throw new Error(game.i18n.format("AZEROTH.Laid.TooFar", { name: item.name, target: target.name, feet: 5 }));
+    const made = await layState(target, stateData(kind, { source: item.name, by: by.uuid, img: item.img, span: minuteSpan(target, uses.waterBreathing.minutes) }));
+    return { landed: Boolean(made), name: target.name };
+  }
   if (kind === "conceal") {
     if (!uses.conceal?.allies) throw new Error(game.i18n.format("AZEROTH.LegacyUse.NotHeld", { name: by.name, feature: item.name }));
     if (apart === null || apart > uses.conceal.feet) throw new Error(game.i18n.format("AZEROTH.Conceal.TooFar", { name: target.name, feet: uses.conceal.feet }));
@@ -203,7 +216,10 @@ async function stateHere({ by, item, target, kind, span, feet }) {
  */
 export function curableConditionsOn(target, cure = {}) {
   const refused = Object.keys(CONDITION_REFUSALS[target?.type ?? "character"] ?? {});
-  return curableOn(target?.statuses ?? [], { conditions: Object.keys(AZEROTH.conditions ?? {}), except: [...refused, ...(cure?.except ?? [])] });
+  return curableOn(target?.statuses ?? [], {
+    conditions: Object.keys(AZEROTH.conditions ?? {}),
+    except: [...refused, ...(cure?.except ?? [])], only: cure?.only ?? null
+  });
 }
 
 /** End one condition here, as A1 §2 ends one. Answers whether anything carried it. */
@@ -258,7 +274,7 @@ export function reviveFacts(user, target, { distance = null, feet = 30 } = {}) {
   });
   return {
     named: 1, character: target?.type === "character", distance, feet,
-    steps: target?.system?.deathSteps ?? 0, max: AZEROTH.DEATH_STEPS, recent,
+    steps: target?.system?.deathSteps ?? 0, max: target?.system?.deathStepLimit ?? AZEROTH.DEATH_STEPS, recent,
     tether: target?.system?.spiritTether?.value ?? 0,
     returned: Boolean(cleanReturned(target?.getFlag?.("azeroth-rpg", RETURNED_FLAG) ?? null))
   };
@@ -400,6 +416,10 @@ async function transportHere(docs, pad) {
   for (const [i, doc] of docs.entries()) {
     const spot = spots[i] ?? spots[0] ?? { x: pad.x, y: pad.y };
     const name = doc.name ?? doc.actor?.name ?? "";
+    if (refuseIceBlockTarget(doc.actor)) {
+      out.push({ name, moved: false, scene: scene.name, actorUuid: doc.actor?.uuid ?? null });
+      continue;
+    }
     if (doc.parent?.id === scene.id) {
       const moved = await doc.move({ x: Math.round(spot.x), y: Math.round(spot.y), action: "displace" });
       out.push({ name, moved: moved !== false, scene: scene.name, actorUuid: doc.actor?.uuid ?? null });

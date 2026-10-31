@@ -13,9 +13,11 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+import { FIREGUARD } from "./fireguard.mjs";
 import { injuryConditions } from "./injuries.mjs";
 import { CUTTING_GEAR } from "./escapes.mjs";
 import { standardDC } from "./modifiers.mjs";
+import { MANA_SHOCK } from "./mana-surge.mjs";
 import { parseGrant } from "./grants.mjs";
 // 08 §7's Greater School enchantment and 08 §5's Pierce, in one place for the
 // creature's attack row and the character's weapon alike.
@@ -196,6 +198,171 @@ const ON_THE_BLOCK = new Set(["Winged"]);
  *   the table's. Read flat it seeded a Prone the rig inflicts.
  */
 const OWN_DOOR = Object.freeze({
+  "Fireguard Immolate": Object.freeze({ kind: "utility", action: FIREGUARD.immolate.action, dc: FIREGUARD.immolate.dc,
+    cost: { pool: "power", amount: FIREGUARD.immolate.mana } }),
+  "Fireguard Fire Blast": Object.freeze({ kind: "utility", action: FIREGUARD.blast.action, dc: FIREGUARD.blast.dc,
+    cost: { pool: "power", amount: FIREGUARD.blast.mana } }),
+  // Use opens the GM reset dialog; the burst itself only runs on death.
+  "Dying Mind": Object.freeze({ kind: "utility", action: "free" }),
+  "Unraveling Mana": Object.freeze({ kind: "utility", action: "free" }),
+  "Aberration Arcane Blast": Object.freeze({ kind: "utility", action: "action", dc: 17, cost: { pool: "power", amount: 3 } }),
+  "Obsidian Reservoir": Object.freeze({ kind: "utility", action: "free" }),
+  // Actor.hasExtraAttack reads this named passive; the ordinary Attack
+  // workflow performs two rolls without adding Actions or Reaction attacks.
+  "Multiattack (Double Attack)": Object.freeze({ kind: "passive" }),
+  // Actor#hasExtraAttack supplies the two-roll budget; the NPC attack door
+  // enforces Shifting Aggression before each normal melee roll.
+  "Extra Attack": Object.freeze({ kind: "passive" }),
+  "Shifting Aggression": Object.freeze({ kind: "passive" }),
+  // The confirmed melee-hit GM query resolves the blast and destroys its source.
+  "Contact Detonation": Object.freeze({ kind: "passive" }),
+  // The confirmed melee-hit query owns the proc; its timed carrier owns pain.
+  "Curse of the Bleakheart": Object.freeze({ kind: "passive" }),
+  "Made of Fire": Object.freeze({ kind: "passive" }),
+  "Virulent Poison": Object.freeze({ kind: "passive" }),
+  "Drain Mana": Object.freeze({ kind: "utility", action: "action", dc: 20 }),
+  "Obsidian Purge": Object.freeze({ kind: "utility", action: "action", dc: 20, cost: { pool: "power", amount: 12 } }),
+  "Pack Rekindling": Object.freeze({ kind: "utility", action: "free" }),
+  "Ancient Special": Object.freeze({ kind: "utility", action: "free" }),
+  "Serrated Bite": Object.freeze({ kind: "utility", action: "half", uses: { max: 1, value: 1, per: "short" } }),
+  "Nullify Mana": Object.freeze({ kind: "utility", action: "action", cost: { pool: "mana", amount: 2 }, dc: 15, uses: { max: 1, value: 1, per: "short" } }),
+  "Dire Growl": Object.freeze({ kind: "utility", action: "half", dc: 16, uses: { max: 1, value: 1, per: "short" } }),
+  "Sonic Burst": Object.freeze({ kind: "utility", action: "action", dc: 17, uses: { max: 1, value: 1, per: "short" } }),
+  "Smash": Object.freeze({ kind: "utility", action: "action", dc: 18, uses: { max: 1, value: 1, per: "short" } }),
+  "Knock Away": Object.freeze({ kind: "utility", action: "half", dc: 18, uses: { max: 1, value: 1, per: "short" } }),
+  "Plague Cloud": Object.freeze({ kind: "utility", action: "action", dc: 16, uses: { max: 1, value: 1, per: "short" } }),
+  "Lightning Cloud": Object.freeze({ kind: "utility", action: "action", cost: { pool: "power", amount: 3 }, uses: { max: 1, value: 1, per: "short" } }),
+  "Summon Earth Rumbler": Object.freeze({ kind: "utility", action: "action" }),
+  "Summon Fire Elemental": Object.freeze({ kind: "utility", action: "action" }),
+  "Summon Voidwalker Guardian": Object.freeze({ kind: "utility", action: "action" }),
+  "Summon Imp Guardian": Object.freeze({ kind: "utility", action: "action" }),
+  "Summon Hellcaller Guardian": Object.freeze({ kind: "utility", action: "action" }),
+  "Raise Alarm": Object.freeze({ kind: "utility", action: "action" }),
+  // Detection is reviewed by mobile-alert-detection before Raise Alarm pays.
+  "Intruder Scanner": Object.freeze({ kind: "passive" }),
+  "Backstab": Object.freeze({ kind: "passive" }),
+  "Sneak": Object.freeze({ kind: "utility", action: "free" }),
+  "Disarm": Object.freeze({ kind: "utility", action: "action" }),
+  "Shield Slam": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "encounter" } }),
+  "Whirlwind": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "encounter" } }),
+  "Crushridge Kin": Object.freeze({ kind: "utility", action: null }),
+  "Fallen-Kin Rage": Object.freeze({ kind: "utility", action: null }),
+  "Call for Kin": Object.freeze({ kind: "passive", uses: { max: 1, value: 1, per: "encounter" } }),
+  "Summon Carrion Scarab": Object.freeze({ kind: "utility", action: "action", uses: { max: 3, value: 3, per: "short" } }),
+  "Searing Totem": Object.freeze({ kind: "utility", action: "half", cost: { pool: "power", amount: 2 } }),
+  "Image Projection": Object.freeze({ kind: "utility", action: "action", cost: { pool: "power", amount: 4 }, uses: { max: 1, value: 1, per: "short" } }),
+  "Tutor Silence": Object.freeze({ kind: "utility", action: "half", dc: 20, cost: { pool: "power", amount: 2 }, uses: { max: 1, value: 1, per: "short" } }),
+  "Banshee Curse": Object.freeze({ kind: "utility", action: "action", dc: 17, cost: { pool: "power", amount: 2 } }),
+  "Vilebranch Shrink": Object.freeze({ kind: "utility", action: "action", dc: 17, cost: { pool: "power", amount: 2 } }),
+  "Tetanus": Object.freeze({ kind: "utility", action: "action", dc: 12 }),
+  "Inner Fire": Object.freeze({ kind: "utility", action: "action", cost: { pool: "power", amount: 2 } }),
+  "Anti-Magic Shield": Object.freeze({ kind: "utility", action: "action", cost: { pool: "power", amount: 3 }, uses: { max: 1, value: 1, per: "short" } }),
+  "Death Singer Screech": Object.freeze({ kind: "utility", action: "half", dc: 17, cost: { pool: "power", amount: 2 }, uses: { max: 1, value: 1, per: "short" } }),
+  "Cauterizing Flames": Object.freeze({ kind: "utility", action: "action", dc: 18, uses: { max: 1, value: 1, per: "short" } }),
+  "Ground Stomp": Object.freeze({ kind: "utility", action: "action", dc: 18, uses: { max: 1, value: 1, per: "short" } }),
+  "Ancient Hysteria": Object.freeze({ kind: "utility", action: "action", dc: 18, uses: { max: 1, value: 1, per: "short" } }),
+  "Ancient Dread": Object.freeze({ kind: "utility", action: "action", dc: 18, uses: { max: 1, value: 1, per: "short" } }),
+  "Ancient Despair": Object.freeze({ kind: "utility", action: "action", dc: 18, uses: { max: 1, value: 1, per: "short" } }),
+  "Withering Heat": Object.freeze({ kind: "utility", action: "action", dc: 18, uses: { max: 1, value: 1, per: "short" } }),
+  "Dredge Sickness": Object.freeze({ kind: "utility", action: "action", dc: 17, uses: { max: 1, value: 1, per: "short" } }),
+  "Maggot Slime": Object.freeze({ kind: "utility", action: "half", dc: 15, uses: { max: 1, value: 1, per: "short" } }),
+  "Maggot Goo": Object.freeze({ kind: "passive" }),
+  "Wild Regeneration": Object.freeze({ kind: "utility", action: "action", cost: { pool: "power", amount: 3 }, uses: { max: 1, value: 1, per: "short" } }),
+  "Jadefire": Object.freeze({ kind: "utility", action: "half", cost: { pool: "power", amount: 2 }, uses: { max: 1, value: 1, per: "short" } }),
+  "Cause Insanity": Object.freeze({ kind: "utility", action: "action", dc: 20, cost: { pool: "power", amount: 4 }, uses: { max: 1, value: 1, per: "short" } }),
+  "Qiraji Mind Flay": Object.freeze({ kind: "utility", action: "action", dc: 20, cost: { pool: "power", amount: 4 } }),
+  "Sleep": Object.freeze({ kind: "utility", action: "action", dc: 18, cost: { pool: "power", amount: 2 } }),
+  "Vampiric Aura": Object.freeze({ kind: "passive" }),
+  "Sunder Armor": Object.freeze({ kind: "utility", action: "action", dc: 20 }),
+  "Fist of Ragnaros": Object.freeze({ kind: "utility", action: "action", dc: 20, cost: { pool: "power", amount: 2 }, uses: { max: 1, value: 1, per: "short" } }),
+  "Qiraji Mind Blast": Object.freeze({ kind: "utility", action: "action", dc: 20, cost: { pool: "power", amount: 3 } }),
+  "Shadow Shock": Object.freeze({ kind: "utility", action: "action", dc: 20, cost: { pool: "power", amount: 3 } }),
+  "Enveloping Winds": Object.freeze({ kind: "utility", action: "action", dc: 16, cost: { pool: "power", amount: 2 }, uses: { max: 1, value: 1, per: "short" } }),
+  "Frost Shot": Object.freeze({ kind: "utility", action: "action", cost: { pool: "power", amount: 2 } }),
+  "Sentinel Mortal Strike": Object.freeze({ kind: "utility", action: "action" }),
+  "Sentinel Mending": Object.freeze({ kind: "passive" }),
+  "Sentinel Pack": Object.freeze({ kind: "utility", action: "free" }),
+  "Fire and Arcane Reflection": Object.freeze({ kind: "passive" }),
+  "Shadow and Frost Reflection": Object.freeze({ kind: "passive" }),
+  "Sentinel Enrage": Object.freeze({ kind: "passive" }),
+  "Sentinel Thorns": Object.freeze({ kind: "passive" }),
+  "Sentinel Shadow Storm": Object.freeze({ kind: "utility", action: "action", dc: 20 }),
+  "Sentinel Thunderclap": Object.freeze({ kind: "utility", action: "action", dc: 20 }),
+  "Sentinel Mana Burn": Object.freeze({ kind: "utility", action: "action", dc: 20 }),
+  "Sentinel Knock Away": Object.freeze({ kind: "utility", action: "action", dc: 20 }),
+  "Qiraji Cleave": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "short" } }),
+  "Reaver Cleave": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "short" } }),
+  "Guard Cleave": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "encounter" } }),
+  "Ghoul Cleave": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "encounter" } }),
+  "Ghoul Enrage": Object.freeze({ kind: "utility", action: "half", uses: { max: 1, value: 1, per: "encounter" } }),
+  "Rending Claws": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "encounter" } }),
+  "Flesh Rot": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "encounter" } }),
+  "Mighty Blow": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "encounter" } }),
+  "Royal Trample": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "encounter" } }),
+  "Terrifying Roar": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "encounter" } }),
+  "Geyser": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "encounter" } }),
+  "Localized Toxin": Object.freeze({ kind: "utility", action: "action" }),
+  "Chilled": Object.freeze({ kind: "utility", action: "action" }),
+  "Enveloping Gale": Object.freeze({ kind: "utility", action: "action", dc: 17,
+    cost: { pool: "power", amount: 3 }, uses: { max: 1, value: 1, per: "short" } }),
+  "Blazing Wave": Object.freeze({ kind: "utility", action: "action", dc: 17,
+    cost: { pool: "power", amount: 3 }, uses: { max: 1, value: 1, per: "short" } }),
+  "Felguard Blast Wave": Object.freeze({ kind: "utility", action: "action", dc: 17,
+    cost: { pool: "power", amount: 3 } }),
+  "Searing Pulse": Object.freeze({ kind: "utility", action: "action", cost: { pool: "power", amount: 2 } }),
+  "Flame Buffet": Object.freeze({ kind: "utility", action: "action", dc: 17, cost: { pool: "power", amount: 2 } }),
+  "Crushing Knockdown": Object.freeze({ kind: "utility", action: "action", dc: 17,
+    uses: { max: 1, value: 1, per: "short" } }),
+  "Torment": Object.freeze({ kind: "utility", action: "half" }),
+  "Lash of Pain": Object.freeze({ kind: "utility", action: "action", cost: { pool: "power", amount: 2 } }),
+  "Lesser Invisibility": Object.freeze({ kind: "utility", action: "action", cost: { pool: "power", amount: 2 } }),
+  "Paranoia": Object.freeze({ kind: "passive" }),
+  "Spell Lock": Object.freeze({ kind: "utility", action: "reaction", dc: 14,
+    uses: { max: 1, value: 1, per: "short" } }),
+  "Tainted Blood": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "short" } }),
+  "Consume Shadows": Object.freeze({ kind: "utility", action: null, uses: { max: 1, value: 1, per: "short" } }),
+  "Fire Shield": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "short" } }),
+  "Blood Pact": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "short" } }),
+  "Blood Pact": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "short" } }),
+  "Soothing Kiss": Object.freeze({ kind: "utility", action: "half", dc: 15,
+    cost: { pool: "power", amount: 1 }, uses: { max: 1, value: 1, per: "short" } }),
+  "Suffering": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "short" } }),
+  "Avalanchion's Trample": Object.freeze({ kind: "utility", action: "action", dc: 17,
+    uses: { max: 1, value: 1, per: "short" } }),
+  "Ground Tremor": Object.freeze({ kind: "utility", action: "action", dc: 17,
+    uses: { max: 1, value: 1, per: "short" } }),
+  "Hurled Boulder": Object.freeze({ kind: "utility", action: "action", dc: 17 }),
+  "Fireball Volley": Object.freeze({ kind: "utility", action: "action", dc: 17,
+    cost: { pool: "power", amount: 4 }, uses: { max: 1, value: 1, per: "short" } }),
+  "Shock": Object.freeze({ kind: "test", action: "action", dc: 17, resist: "body",
+    cost: { pool: "power", amount: 2 }, damage: { amount: 9, type: "nature", half: true } }),
+  "Frost Shock": Object.freeze({ kind: "test", action: "action", dc: 17, resist: "body",
+    cost: { pool: "power", amount: 3 }, damage: { amount: 9, type: "frost", half: true },
+    inflicts: { condition: "slowed", until: "endOfNextTurn", onFail: true } }),
+  "Deadly Poison": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "encounter" } }),
+  "Vicious Rend": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "encounter" } }),
+  "Guard Net": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "encounter" } }),
+  "Reaver Enrage": Object.freeze({ kind: "utility", action: "half", uses: { max: 1, value: 1, per: "short" } }),
+  "Surge Shock": Object.freeze({ kind: "test", action: MANA_SHOCK.action, dc: MANA_SHOCK.dc,
+    cost: { pool: "power", amount: MANA_SHOCK.mana }, resist: MANA_SHOCK.resilience,
+    damage: { amount: MANA_SHOCK.damage, type: MANA_SHOCK.damageType, half: true } }),
+  "Golem Stomp": Object.freeze({ kind: "utility", action: "action", dc: 17, uses: { max: 1, value: 1, per: "short" } }),
+  "Golem Trample": Object.freeze({ kind: "utility", action: "action", dc: 17, uses: { max: 1, value: 1, per: "short" } }),
+  "Predatory Enrage": Object.freeze({ kind: "utility", action: "half", uses: { max: 1, value: 1, per: "short" } }),
+  "Demoralizing Roar": Object.freeze({ kind: "utility", action: "half", dc: 17, uses: { max: 1, value: 1, per: "short" } }),
+  "Vengeance": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "short" } }),
+  "Frightening Shout": Object.freeze({ kind: "utility", action: "action", dc: 20, uses: { max: 1, value: 1, per: "short" } }),
+  "Venom Spit": Object.freeze({ kind: "utility", action: "half", dc: 17, uses: { max: 1, value: 1, per: "short" } }),
+  "Dredge Poison": Object.freeze({ kind: "utility", action: "half", dc: 17, uses: { max: 1, value: 1, per: "short" } }),
+  "Elder Thrash": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "short" } }),
+  "Pummel": Object.freeze({ kind: "utility", action: "reaction", uses: { max: 1, value: 1, per: "short" } }),
+  "Sticky Tar": Object.freeze({ kind: "utility", action: "reaction", uses: { max: 1, value: 1, per: "short" } }),
+  "Burning Tar": Object.freeze({ kind: "utility", action: "reaction", uses: { max: 1, value: 1, per: "short" } }),
+  "Entangling Roots": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "short" } }),
+  "Mass Nullify": Object.freeze({ kind: "utility", action: "half", uses: { max: 1, value: 1, per: "short" } }),
+  "Vekniss Itch": Object.freeze({ kind: "utility", action: "half", uses: { max: 1, value: 1, per: "short" } }),
+  "Stinger Charge": Object.freeze({ kind: "utility", action: "half" }),
+  "Reflection Field": Object.freeze({ kind: "utility", action: "half", uses: { max: 1, value: 1, per: "short" } }),
   [CUTTING_GEAR.name]: Object.freeze({ kind: "utility" }),
   "Ejector Seat": Object.freeze({ kind: "none", reason: "tableCall" })
 });
@@ -286,6 +453,13 @@ const QUALIFIED = /\bby anything\b|\bunless\b|^\s*while\b/i;
  * The HTML matters, not only the text: `<strong>` is how 14 names the block
  * a summon calls (D-691), so the raw run is read before it is stripped.
  */
+export function delegatedAbilitySpell(prose = "") {
+  const match = /^Uses the (.+?) spell( on itself)?[.]$/i.exec(plain(prose));
+  const names = boldNames(prose);
+  return match && names.length === 1 && names[0] === match[1]
+    ? { name: names[0], self: Boolean(match[2]) } : null;
+}
+
 export function seedAutomation(prose = "", { name = "" } = {}) {
   const text = plain(prose);
   const seed = {};
@@ -294,7 +468,19 @@ export function seedAutomation(prose = "", { name = "" } = {}) {
   // on the Speed row, so its prose is free to say *fights from the air* and
   // there is nothing here left to automate.
   if (ON_THE_BLOCK.has(String(name).trim())) return { kind: "none", reason: "onTheBlock" };
-  if (Object.hasOwn(OWN_DOOR, String(name).trim())) return { ...OWN_DOOR[String(name).trim()] };
+  if (Object.hasOwn(OWN_DOOR, String(name).trim())
+    && !(String(name).trim() === "Wild Regeneration" && delegatedAbilitySpell(prose))) {
+    const own = { ...OWN_DOOR[String(name).trim()] };
+    if (["Entangling Roots", "Sticky Tar", "Burning Tar", "Maggot Slime", "Banshee Curse"].includes(String(name).trim())) {
+      const dcs = distinct([...text.matchAll(/\bDC\s*(\d+)\b/g)].map(m => Number(m[1])));
+      if (dcs.length === 1) own.dc = dcs[0];
+    }
+    return own;
+  }
+  // Explicit whole-ability spell delegation only. A mention elsewhere must not
+  // discard the creature's own cost, damage, targeting or recharge clauses.
+  const delegatedSpell = delegatedAbilitySpell(prose);
+  if (delegatedSpell) return { kind: "spell", spell: delegatedSpell.name };
   const types = Object.keys(AZEROTH.damageTypes);
   const typed = [...text.matchAll(/\b(\d+)\s+(fire|frost|arcane|nature|shadow|holy|fel|physical)\s+damage\b/gi)]
     .map(m => ({ amount: Number(m[1]), type: m[2].toLowerCase() }))
@@ -322,6 +508,12 @@ export function seedAutomation(prose = "", { name = "" } = {}) {
   if (resists.length === 1) seed.resist = resists[0];
   const conditions = injuryConditions(text).conditions;
   if (conditions.length === 1) seed.inflicts = { condition: conditions[0].id, value: conditions[0].value ?? null, until: null };
+  // Read only an explicit TARGET sentence here. A loose "its next turn"
+  // elsewhere in the ability could refer to the creature using it.
+  if (seed.inflicts) {
+    const targetEnd = new RegExp(`\\bthe target is ${seed.inflicts.condition} until the end of its next turn\\b`, "i");
+    if (targetEnd.test(text)) seed.inflicts.until = "endOfNextTurn";
+  }
   // **WHAT THE TEST GOVERNS** (the B8a2 pass; the lead: *"Build them now"*, *"Build it
   // everywhere"*, *"Land automatically"*): a damage a pass halves (*or half on a Resilience
   // (Reflex) Test*) or spares whole (the Wild Kodo's *makes a Resilience (Reflex) Test at DC
@@ -473,6 +665,7 @@ const REFUSE_RE = /\bcannot be ([^.;]+?)(?:,? and\b|[.;]|$)/gi;
 const SENSES = Object.freeze([
   [/\bsees? in the dark\b/i, "darkvision"],
   [/\bbreathes? water\b/i, "waterBreathing"],
+  [/\bmoves? only by swimming\b/i, "aquaticOnly"],
   [/\bswims? at twice (?:its|his|her|their) Speed\b/i, "swimFast"],
   [/\bswims? at (?:its|his|her|their|full) Speed\b/i, "swim"],
   [/\bmoves? on walls and ceilings\b/i, "wallWalking"],
@@ -503,6 +696,7 @@ function readPassive(text) {
     }
     if (/\bmoved against (?:its|his|her|their) will\b/i.test(clause)) push("forcedMovement");
     if (/\bsurprised\b/i.test(clause)) push("surprise");
+    if (/\bput to sleep\b/i.test(clause)) push("sleep");
   }
   const senses = [];
   for (const [re, key] of SENSES) if (re.test(text) && !senses.includes(key)) senses.push(key);
@@ -619,6 +813,10 @@ export function mergeSeed(automation, seed) {
   if (!out.summon.entry && seed.summon) out.summon = { ...out.summon, ...seed.summon };
   if (out.tick.heal === null && seed.tick) out.tick = { ...out.tick, ...seed.tick };
   if (out.action === null && seed.action) out.action = seed.action;
+  if (out.cost.pool === null && out.cost.amount === null && seed.cost) {
+    const cost = cleanAutomation({ cost: seed.cost }).cost;
+    if (cost.pool && cost.amount !== null && cost.amount >= 0) out.cost = cost;
+  }
   if (out.dc === null && seed.dc !== undefined) out.dc = seed.dc;
   if (out.resist === null && seed.resist) out.resist = seed.resist;
   if (out.heal === null && seed.heal !== undefined) out.heal = seed.heal;
@@ -631,6 +829,7 @@ export function mergeSeed(automation, seed) {
     out.inflicts = { condition: seed.inflicts.condition, value: seed.inflicts.value ?? null, until: seed.inflicts.until ?? null, onFail: seed.inflicts.onFail === true };
   }
   if (!out.area && seed.area) out.area = seed.area;
+  if (out.kind === "spell" && !out.spell && seed.kind === "spell" && seed.spell) out.spell = seed.spell;
   return out;
 }
 
@@ -706,7 +905,7 @@ export function passiveEffects(rows = [], state = {}) {
     // nothing in 14 writes *while X, it cannot be Charmed*.
     for (const id of p.refuses ?? []) {
       if (!out.refuses.includes(id)) out.refuses.push(id);
-      if (id in AZEROTH.conditions && !out.conditionImmunities.includes(id)) out.conditionImmunities.push(id);
+      if ((id in AZEROTH.conditions || id === "sleep") && !out.conditionImmunities.includes(id)) out.conditionImmunities.push(id);
     }
     for (const s of p.senses ?? []) if (!out.senses.includes(s)) out.senses.push(s);
     if (!(p.grants ?? []).length) continue;

@@ -22,6 +22,7 @@
 import { AZEROTH } from "../config.mjs";
 import { applyCondition } from "./durations.mjs";
 import { NO_CASTING_FLAG, PARALYTIC_FLAG } from "../rules/class-talents.mjs";
+import { SNARE_FLAG } from "../rules/class-features.mjs";
 // What a landed condition carries since D-778: the Test 07 gives a held or Stunned
 // creature to end it, and Permafrost's feet on a Slowed.
 import { ESCAPE_FLAG, SHED_DC_FLAG, cleanEscape, cleanShedDc, higherShedDc } from "../rules/escapes.mjs";
@@ -41,7 +42,7 @@ export const INFLICT_QUERY = "azeroth-rpg.inflictCondition";
  * `rules/escapes.mjs#cleanEscape`) and the feet 04's Permafrost adds to a Slowed
  * (`slowedFeet`, `{feet, source}`).
  */
-const MARKS = Object.freeze([NO_CASTING_FLAG, PARALYTIC_FLAG]);
+const MARKS = Object.freeze([NO_CASTING_FLAG, PARALYTIC_FLAG, SNARE_FLAG]);
 
 /** The marks a request carries, cleaned: each a `{source}` object, or dropped. */
 function cleanMarks(marks) {

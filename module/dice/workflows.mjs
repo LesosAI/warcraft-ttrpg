@@ -8,18 +8,54 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+import { approvedRestSignature, requestApprovedSignatureUse, SIGNATURE_USE_AUTHORITY } from "../effects/approved-signature-use.mjs";
+import {approvedHitSignature,charmUseView,SIGNATURE_USES_FLAG} from '../rules/approved-signature-uses.mjs';
+import { prepareChosenSignatures, signatureRecipientKey } from "../effects/chosen-signature-casting.mjs";
+import { prepareHealingSignatures } from "../effects/chosen-signature-healing.mjs";
+import { chosenSignatureExtras } from "../rules/signature-scaling.mjs";
+import { signatureDeliverySeed } from "../rules/signature-delivery.mjs";
+import { offerSecondStrike } from "../effects/second-strike.mjs";
+import { applyInjuryOnce } from "../effects/injury-application.mjs";
+import { spellLimitRefusal, spendSpellBudget } from "../effects/spell-limits.mjs";
+import { validDispersionExecution } from "../effects/dispersion-reaction-cast.mjs";
+import { earthShockBars, reactionBarred, REACTION_BAR_REASON } from "../rules/reaction-bar.mjs";
+import { applyEarthShockBar } from "../effects/reaction-bar.mjs";
+import { crushridgeMeleeBonus } from "../rules/crushridge.mjs";
+import { taintedBloodAttackRating } from "../rules/tainted-blood.mjs";
+import { attackResolutionSeed } from "../effects/attack-resolution-state.mjs";
+import { phaseShiftRefusal } from "../rules/phase-shift.mjs";
+import { iceBlockFor } from "../rules/ice-block.mjs";
+import { refuseDispersion } from "../effects/dispersion-protection.mjs";
+import { seductionRefusal } from "../effects/seduction-refusal.mjs";
+import { despairRefusal } from "../rules/ancient-despair.mjs";
+import { sleepRefusal } from "../rules/dreadlord-sleep.mjs";
+import { projectionRefusal } from "../rules/image-projection.mjs";
+import { refuseAncientDespair } from "../effects/ancient-despair-refusal.mjs";
+import { refuseMobileAlertAttack } from "../effects/mobile-alert-restrictions.mjs";
+import { refuseDisarmedAttack } from "../effects/npc-disarm.mjs";
+import { stonemaulGrip } from "../rules/stonemaul-grip.mjs";
+import { shieldSlamShield } from "../rules/npc-shield-slam.mjs";
 import { effectDuration, riderRating } from "../rules/spell-effects.mjs";
 import { abilityModifier } from "../rules/abilities.mjs";
 import { applyExposure, castingCorruption, thresholdsCrossed } from "../rules/corruption.mjs";
-import { explainDamage, resolveDamage } from "../rules/mitigation.mjs";
+import { explainDamage } from "../rules/mitigation.mjs";
+import { resolveRecordedDamage as resolveDamage } from "../rules/damage-record.mjs";
+import { explosiveTrapSnapshot, explosiveTrapDamage } from "../rules/explosive-trap.mjs";
+import { blastRadius } from "../rules/blast-radius.mjs";
+import { featureReady } from "../effects/feature-ready.mjs";
 import { AzerothRoll } from "./azeroth-roll.mjs";
+import { routeSignatureHit, prepareSignatureHitTarget } from "../effects/signature-hit-routing.mjs";
+import { hitBonusDamageForTarget } from "../rules/signature-hit-target.mjs";
 import { resultName, succeeded } from "../rules/resolution.mjs";
 import { areaFor, lengthenArea, widenArea } from "../rules/areas.mjs";
 // An area that strikes at the start of a turn (D-756): the cast deals none of
 // it, and the tick adds what the caster STANDS on, as the cast does.
 import { areaCarriesSpell, castDealsDamage, castHeals, hasAreaTick, roundsIn, tickParts } from "../rules/area-ticks.mjs";
 import { standingFeatureBonus, standingSpellBonus } from "../rules/spell-bonus.mjs";
-import { calledShotCost } from "../rules/modifiers.mjs";
+import { calledShotCost, situationalModifiers } from "../rules/modifiers.mjs";
+import { endLesserInvisibility } from "../effects/lesser-invisibility.mjs";
+import { requestSpellLockWindow, completeSpellLockWindow } from "../effects/spell-lock-query.mjs";
+import { completeSpellLockGates } from "../effects/spell-lock-gates.mjs";
 import { NEXT_SPELL_FLAG, castRefusal, castingDC, castingManaPool, grantingClass, isHealingSpell, manaPrice, overchannelCost, overchannelledSL, payFromNow, spellDCFor, spellManaCost, statedCastingDC, swiftCast, takeNextSpell } from "../rules/casting.mjs";
 import { resilienceAbility, resilienceRows } from "../rules/resilience.mjs";
 import { injuryConditions } from "../rules/injuries.mjs";
@@ -38,10 +74,19 @@ import { applyCondition, spellTiming, untilEndOfNextTurn, untilNextTurn } from "
 // 06 SS6 (D-693): a Bane laid on ANOTHER creature - Pummel's two, Gorehowl's one.
 import { endBane, layBane, layBoon, spendLaidBanes, spendLaidBoons } from "../effects/banes.mjs";
 import { UNANSWERED_FLAG, blockReduction, canReact, meleeInHand, parryHolds, shieldsHeld, standingMarkRefusal, unansweredBy } from "../rules/reactions.mjs";
-import { POISON_ROUNDS, coatingAction, coatingFired, endsOnHit, flatten, goesOn, hasUse, poisonTick, runAfter, spendOne } from "../rules/consumables.mjs";
+import { POISON_ROUNDS, coatingAction, coatingFired, consumableEnds, consumableImmunities, endsOnHit, flatten, goesOn, hasUse, poisonTick, runAfter, spendOne } from "../rules/consumables.mjs";
+import { wardingElixir, wardingElixirChange } from "../rules/consumable-schools.mjs";
+import { thistleTeaRefill } from "../rules/thistle-tea.mjs";
+import { WISDOM_FLAG, isDistilledWisdom } from "../rules/distilled-wisdom.mjs";
+import { isAntivenom } from "../rules/antivenom.mjs";
+import { INVULNERABILITY_POTION_FLAG, isInvulnerabilityPotion } from "../rules/invulnerability-potion.mjs";
+import { useAntivenom } from "../effects/antivenom-use.mjs";
+import { acquireConsumableUse } from "../effects/consumable-use-lock.mjs";
 import { sustainLimit } from "../rules/turn-effects.mjs";
 import { standardDC } from "../rules/modifiers.mjs";
 import { spendShot } from "../rules/ammunition.mjs";
+import { weaponReloadState } from "../effects/reload-state.mjs";
+import { requestReloadShot } from "../effects/reload-shot-query.mjs";
 import { firedTraits } from "../rules/weapon-traits.mjs";
 // What a talent spends as part of an attack (04, D-770): the plan the roll pays
 // by, the payment off the pools as they stand when it is made, what the blow
@@ -90,7 +135,7 @@ import {
   reincarnationRefusal, refundFor, roundMarksLeft, spellAddsFor, spellHealFor, spellOnFailFor, spellTickFor, stormlashFor,
   talentLinesTaken, wardOptionsFor, wardSchools, wardTargetRefusal
 } from "../rules/class-talents.mjs";
-import { layWard } from "../effects/wards.mjs";
+import { foresightAdmission, foresightCommitValid, requestForesightUse, layWard } from "../effects/wards.mjs";
 // The Mage's and the Warlock's kinds (D-775): what each reads at the cast, the
 // Use, the card and a Critical Injury's roll.
 import {
@@ -104,8 +149,14 @@ import {
   castMovesFor, offHandBuildsFor, onUseLegacy, pierceFor, selfHitTestsFor, slDamageFor, spellPoolFor
 } from "../rules/class-talents.mjs";
 import { stealSustain } from "../effects/sustain-steal.mjs";
+import { requestSpellstealUse, spellstealUseChoice, spellstealUseValid, finishSpellstealUse } from "../effects/spellsteal-use.mjs";
+import { spendSnakeTrapDose } from "../effects/snake-trap-dose.mjs";
+import { sameSnakeTrapRule, snakeTrapDosePlan } from "../rules/snake-trap-dose.mjs";
+import { refuseSustainTransferStart } from "../effects/sustain-transfer-admission.mjs";
+import { endSustainsPlan, sustainEntryTransferPending } from "../rules/sustain-entry-transfer.mjs";
 import { swapEffects } from "../effects/soul-swap.mjs";
 import { hauntTarget } from "../effects/haunt.mjs";
+import { commandDemonSightRefusal } from "../effects/command-demon-sight.mjs";
 import { giveMana, raiseAlly } from "../effects/gifts.mjs";
 import { markLightUsed } from "../effects/shadowform.mjs";
 // Spirit Walk's *ignoring Difficult ground* (D-774): the terrain door's own flag (D-757).
@@ -124,6 +175,9 @@ import { laySpeedDrop } from "../effects/speed-drop.mjs";
 import { CLOAK_FLAG, DETERRED_FLAG, flaggedEffects, holdOpening, layShadowDance, layState, markOpening } from "../effects/talent-states.mjs";
 import { layPoison } from "../effects/ticks.mjs";
 import { layNextAttack, takeNextAttack } from "../effects/next-attack.mjs";
+import { attackTestPromises } from "../rules/blademaster-test.mjs";
+import { spellHitCondition } from "../rules/spell-hit-condition.mjs";
+import { chainLightningTargetRefusal } from "../rules/chain-lightning.mjs";
 import { layNoHealing } from "../effects/no-healing.mjs";
 import { nameBeacon } from "../effects/beacon.mjs";
 import {
@@ -144,6 +198,8 @@ import { abilityDC, hasAutomation, spendBossPoints } from "../rules/ability-auto
 import { BOSS, ignoresCritical } from "../rules/bestiary.mjs";
 // 08 SS20 (D-692): the pressed half, and the judgement all three surfaces share.
 import { gateHolds, isPressable, pressGates, pressRefusal, signatureEffectOf, signatureProse } from "../rules/signatures.mjs";
+import {deliverJangthrazeHit} from '../effects/signature-hit-use.mjs';
+import {publishHelmetHit} from '../effects/helmet-hit-use.mjs';
 // WHICH POOL IS THE MANA POOL (D-637's own pitfall, 2026-09-10): a creature's
 // block names no pool type, so `find(p => p.name === "mana")` matched nothing
 // on one and both handlers below said *no Mana pool* to a creature holding one.
@@ -151,7 +207,7 @@ import { gateHolds, isPressable, pressGates, pressRefusal, signatureEffectOf, si
 // pool by name alone, so a Signature that costs a pool refused on all 164.
 import { ANY_MOMENTUM, manaPool, poolNamed } from "../rules/pools.mjs";
 // Attacking and casting end a Hide (D-717).
-import { isHidden, reveal } from "../effects/stealth.mjs";
+import { isHiddenFor, reveal } from "../effects/stealth.mjs";
 // 06 §5's Engaged, for a creature's casting ability, which has no dialog (D-732).
 import { allyOf, creaturesInArea, creaturesWithin, engagedNow, enemyDistances, feetBetweenTokens, reachOfActor } from "../canvas/engaged.mjs";
 // An area Use's own targets, and what a Resist on its card governs (the B6 fix; the
@@ -204,8 +260,8 @@ import {
 } from "../rules/class-talents.mjs";
 import { OVERCHANNEL_MAX_POINTS, overchannelPrice, takeForFeature } from "../rules/casting.mjs";
 import { ROUNDS_PER_MINUTE } from "../rules/area-ticks.mjs";
-import { pickPoint } from "../canvas/place.mjs";
-import { placeArea, schoolColor } from "../canvas/regions.mjs";
+import { pickPoint, pickFacing } from "../canvas/place.mjs";
+import { placeArea, regionDataFor, schoolColor } from "../canvas/regions.mjs";
 import { feetToPoint } from "../canvas/footprints.mjs";
 // THE LEGACY BRANCHES' BODIES (B2): a step to a chosen point (door 3), a called
 // creature placed (door 4), the constructs, their shared turn and their tinker
@@ -217,7 +273,13 @@ import { judgeStep, pickPull, pickStep, pulledWords, stepTo, stepWords, steppedW
 import { placeOf, placeRefusal } from "../rules/summon-places.mjs";
 import { placeSummon } from "../documents/summon.mjs";
 import { CONSTRUCTS, CONSTRUCT_KIT, constructEligible, constructsFor, isWrecked, rebuildTime } from "../rules/constructs.mjs";
-import { BLUEPRINT_FLAG, DEVICE_SECTION, GADGETS, GADGET_REASONS, OVERCLOCK_FLAG, blueprintFor, cleanOverclock, gadgetByKey, gadgetChangeRefusal, gadgetsKnownFor, knownGadgets, knownRowOf, overclockFor } from "../rules/gadgets.mjs";
+import { stabilizerIsTriggered } from "../effects/gadget-reactions.mjs";
+// Each gadget's row and card link its entry in the Gadgets compendium (`GADGETS_PACK`,
+// `gadgetLinkLine`; the lead, 2026-10-24).
+import {
+  BLUEPRINT_FLAG, DEVICE_SECTION, GADGETS, GADGETS_PACK, GADGET_REASONS, OVERCLOCK_FLAG, blueprintFor, cleanOverclock, gadgetByKey,
+  gadgetChangeRefusal, gadgetSelectionRefusal, gadgetTargetRefusal, gadgetAttackAt, gadgetHealthCost, gadgetLinkLine, gadgetsKnownFor, knownGadgets, knownRowOf, overclockFor, shrinkAmount
+} from "../rules/gadgets.mjs";
 import { GRAVE_BOND_RESISTED_FLAG, graveBondFor, resistedBonds, withResistedBond } from "../rules/bound.mjs";
 import { TRAP_FLAG, cleanTrap, trapArea, trapOf, trapsToLift } from "../rules/traps.mjs";
 import { shackleRounds } from "../rules/class-talents.mjs";
@@ -357,6 +419,7 @@ async function sustainFlametongue(actor, { name = FLAMETONGUE.talent, poolItemId
   const limit = sustainLimit({ features, extra: more.more });
   while (sustaining.length > limit) {
     const dropped = sustaining.shift();
+    await liftSpellEffects(actor, actor.items.get(dropped.spellId)?.uuid ?? dropped.uuid ?? null, dropped.cast ?? null);
     ui.notifications?.info(game.i18n.format("AZEROTH.Combat.SustainEnded", { name: actor.name, spell: dropped.name }));
   }
   await actor.setFlag("azeroth-rpg", "sustaining", sustaining);
@@ -505,7 +568,7 @@ function parryOffered(rows = [], { actor = null, list = [], strike = null } = {}
     return verdict.ok ? row : { ...row, parry: null };
   // A row Afterimage alone answers stays (the Legacy branches' door 13): *when an
   // attack hits you* is any attack, a shot or a throw as well.
-  }).filter(row => row?.block || row?.parry || row?.negate);
+  }).filter(row => row?.block || row?.parry || row?.negate || row?.phaseShift);
 }
 
 /**
@@ -538,6 +601,12 @@ function targetActorOf(t) {
   const scene = (t?.sceneId && game.scenes.get(t.sceneId)) || canvas?.scene || null;
   const token = t?.tokenId ? scene?.tokens?.get(t.tokenId) : null;
   return token?.actor ?? (t?.actorId ? game.actors.get(t.actorId) : null) ?? null;
+}
+
+/** Resolve again at payment: a snapshot predating Dispersion is not permission
+ * to target its owner now. Reject the whole selection without silently changing it. */
+function refuseDispersedTargets(targets = []) {
+  return (targets ?? []).some(target => refuseDispersion(targetActorOf(target), "target"));
 }
 
 /**
@@ -824,11 +893,14 @@ export async function rollTest({
   // `{messageId, key}`, handed in by the card's Attack button
   // (`dice/chat.mjs#attackFromCardNow`), a record as `strike` is.
   fromFeature = null,
+  npcShieldSlamShieldId = null,
   // **WHICH SPELL CARD'S RESIST THIS TEST ANSWERS** (D-726): the row, the
   // creature and the cast, as `rules/records.mjs#resistLink` builds them.
   // Named here on purpose - `rollResilience` hands its caller's keys on with
   // `...rest`, and a key this list does not name is dropped without a word.
   resistOf = null,
+  // Preserve which Resilience was actually rolled for validated effect answers.
+  resilience = null,
   // **THE LINES THE ROLLER LEFT TICKED** (D-772), by id, as the dialog's choice
   // carries them: 04's Reckless lays its exposure only where its own Boon was
   // taken.
@@ -861,14 +933,29 @@ export async function rollTest({
   // landing door, its escape at the striker's Spell DC - and withdrawn with the hit.
   landsOnHit = []
 } = {}) {
+  if (kind === "attack" && !parry && refuseDispersion(actor, "attack")) return null;
+  if (parry && weaponId && refuseDispersion(actor, "gear")) return null;
+  if (refuseAncientDespair(actor, kind)) return null;
+  if (kind === "attack" && refuseDisarmedAttack(actor, { weaponId, strike })) return null;
+  if (npcShieldSlamShieldId !== null && (actor?.type !== "npc" || kind !== "attack" || parry
+    || typeof npcShieldSlamShieldId !== "string"
+    || !shieldSlamShield([...(actor.items?.values() ?? [])], npcShieldSlamShieldId))) {
+    ui.notifications?.warn("Shield Slam requires its selected shield to remain equipped.");
+    return null;
+  }
+  if (kind === "attack" && !parry && refuseMobileAlertAttack(actor, source)) return null;
   // The targets, read once and first: the Finisher and the riders are judged
   // against the first before anything is spent (D-773).
   const list = targets ?? (target ? [target] : []);
+  const signatureTarget=kind==='attack'&&!parry&&damage
+    ?await prepareSignatureHitTarget({actor,weaponId,strike,targets:list,choose:chooseOption}):{ok:true,index:-1};
+  if(!signatureTarget.ok)return null;
   const first = target ?? list[0] ?? null;
+  if (kind === "attack" && !parry && refuseDispersedTargets(list)) return null;
   // **WHETHER THIS ATTACK IS MADE WHILE HIDDEN** (D-773), read before the reveal
   // below takes the Hide: Find Weakness, Waylay, Subterfuge, Shadow Focus and
   // Cheap Shot all ask it. A Parry is no attack.
-  const hiddenAtRoll = kind === "attack" && !parry ? isHidden(actor) : false;
+  const hiddenAtRoll = kind === "attack" && !parry ? isHiddenFor(actor, source) : false;
   // **THE SPIRIT REALM AND ETHEREAL FORM REFUSE AN ATTACK** (06 §10: *You cannot touch the
   // living world*; 04's Ethereal Form: *While it holds you cannot attack*; the Legacy
   // branches' door 10), in words and before anything below is judged or spent. A Parry
@@ -890,6 +977,12 @@ export async function rollTest({
   // Recovering what was shot is the GM's call and is never automated.
   let bundle = null;
   let bundleLeft = 0;
+  const reloadInfo = kind === "attack" && !parry && strike?.rangeKind === "ranged" && weaponId
+    ? weaponReloadState(actor, weaponId) : null;
+  if (reloadInfo?.cost !== null && reloadInfo && reloadInfo.remaining !== 0) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Reload.Unloaded"));
+    return null;
+  }
   if (ammunition?.itemId) {
     bundle = actor?.items?.get(ammunition.itemId) ?? null;
     bundleLeft = bundle?.system?.quantity ?? 0;
@@ -1047,11 +1140,36 @@ export async function rollTest({
   // `useReaction` spends the Reaction before it opens the dialog's roll, so
   // nothing is owed here.
   const fight = kind === "attack" ? (actor?.activeFight?.() ?? null) : null;
+  const crushridgeRating = crushridgeMeleeBonus(actor, { kind, parry, rangeKind: strike?.rangeKind, now: game.time?.worldTime });
+  if (kind === "attack" && !fight && budget !== "none") {
+    const { interruptWhirlwindForAction } = await import("../effects/syndicate-whirlwind-use.mjs");
+    if (!await interruptWhirlwindForAction(actor)) return null;
+    const { interruptConsumeFor } = await import("../effects/consume-shadows-use.mjs");
+    if (!await interruptConsumeFor(actor)) return null;
+  }
+  let reloadReservation = null;
+  let reloadPaymentStarted = false;
+  let reloadMessage = null;
+  if (parry && weaponId && refuseDispersion(actor, "gear")) return null;
+  if (kind === "attack" && !parry && refuseDispersion(actor, "attack")) return null;
+  if (kind === "attack" && !parry && refuseDispersedTargets(list)) return null;
+  if (reloadInfo && reloadInfo.cost !== null) {
+    const reserved = await requestReloadShot(reloadInfo.weapon, {expected: structuredClone(reloadInfo.state)});
+    if (!reserved.ok) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Reload.Pending"));
+      return null;
+    }
+    reloadReservation = reserved.reservation;
+  }
+  try {
+  if (kind === "attack" && !parry && refuseDispersion(actor, "attack")) return null;
+  if (kind === "attack" && !parry && refuseDispersedTargets(list)) return null;
   if (fight && !bossAction && budget !== "none") {
     const combatant = fight.getCombatantsByActor(actor)?.[0] ?? null;
     if (combatant) {
-      const spent = await combatant.spendAction(budget ?? "half", { isAttack: true, isOffHand: offHand });
-      if (!spent.ok) return null;
+      reloadPaymentStarted = true;
+      const spent = await combatant.spendAction(budget ?? "half", { isAttack: true, isOffHand: offHand, rangeKind: strike?.rangeKind });
+      if (!spent.ok) { reloadPaymentStarted = false; return null; }
     }
   }
   // **AN ATTACK ENDS A HIDE** (D-717): the blow is the thing that gives you
@@ -1062,6 +1180,7 @@ export async function rollTest({
   // where there is nothing to clear, so this costs a flag read on every roll.
   // An ACTION taken while hidden (D-773): 04's Master of Shadows and a Shadow
   // Dance leave the Hide standing (`effects/stealth.mjs#reveal`).
+  reloadPaymentStarted = true;
   if (kind === "attack" && !parry) await reveal(actor, { acting: true, kind: "attack" });
   // Pay first, everything judged above: one marked off the bundle (08 §7,
   // D-407), then the Momentum off the primary pool (06 SS7) before any die is
@@ -1179,7 +1298,7 @@ export async function rollTest({
     allModifiers.push({ label: "AZEROTH.Card.CalledShotPenalty", value: shot.modifier });
   }
 
-  const roll = AzerothRoll.build({
+  let roll = AzerothRoll.build({
     dc,
     modifiers: allModifiers,
     boons,
@@ -1242,6 +1361,7 @@ export async function rollTest({
     if ((e.boons ?? 0) > 0) roll.options.provenance.push({ label: e.name, value: null, formula: game.i18n.format("AZEROTH.NextAttack.BoonRow", { n: e.boons }) });
   }
   await roll.evaluate();
+  roll = await offerSecondStrike(actor, roll, { kind, parry });
   const outcome = roll.outcome;
   // 06 §6 (D-693): a Bane somebody laid on this creature is spent by the Test
   // it was laid for - *on the NEXT Casting Test it makes* is a count, not a
@@ -1301,6 +1421,20 @@ export async function rollTest({
   const recordHit = (index, row) => {
     if (Number.isInteger(index) && row?.kind) landedOnHit.push({ index, ...row });
   };
+  // Resolve before posting this attack card. Its landedOnHit ledger then
+  // contains the stun before a defender can answer with Parry/Afterimage.
+  if (npcShieldSlamShieldId && actor?.type === "npc" && kind === "attack" && !parry && outcome.success) {
+    const { resolveShieldSlamHit } = await import("../effects/npc-shield-slam-hit.mjs");
+    for (const [ti, t] of list.entries()) {
+      const resolved = await resolveShieldSlamHit({ victim: targetActorOf(t), by: actor, outcome,
+        roll: rollResilience, inflict: inflictCondition, until: untilEndOfNextTurnOrRound });
+      if (resolved.landing) recordLanding(ti, resolved.landing);
+      fired.push({ key: "ability", name: "Shield Slam", text: resolved.reason === "unresolved"
+        ? "Body Test unresolved. Resolve the stun manually; do not repeat the attack."
+        : resolved.resisted ? "Body Test passed; no stun."
+          : resolved.landing ? landedText(resolved.landing) : "Stun could not be confirmed." });
+    }
+  }
   // **WHAT THE HIT BUILT, FOR A MISS TO TAKE BACK** (the lead, 2026-10-21: *"Yes, take
   // it back"*; door 13): every pool the hit raised, on whoever holds it - the striker's
   // Momentum and a Power pool's further gain, a construct's tinker's Combo Points, a
@@ -1815,6 +1949,11 @@ export async function rollTest({
     }
   }
   await spendLimitedRows(fired, { actor, fight });
+  const publishAttackCard = async ({bonuses=[],receipt=null,valid=()=>true}={}) => {
+  if(!valid())throw Error('Signature hit authorization changed before damage calculation');
+  for(const bonus of bonuses)fired.push({name:bonus.name,key:'signature',
+    text:game.i18n.format('AZEROTH.Signature.HitBonus',{n:bonus.extraDamage,
+      type:game.i18n.localize(AZEROTH.damageTypes[bonus.extraType]??bonus.extraType)})});
   // **A SECOND AMOUNT OF ITS OWN TYPE** (D-777; the lead, 2026-10-03: *"Different
   // damage types in one attack are possible"*): a fired row whose damage names a
   // type other than the blow's own - Stormlash's and Stormstrike's Nature, a
@@ -1865,9 +2004,11 @@ export async function rollTest({
   const talentRating = Math.max(0, Math.trunc(Number(extraRating)) || 0) + finisher + (damage ? promisedDamage : 0) + charged
     // Axe and Hammer's damage on the off hand (door 26).
     + (damage ? offHandBuild.damage : 0)
+    + (damage ? crushridgeRating : 0)
     // Wind Walk's Dexterity, on the attack that ended its hiding (the B6 review).
     + (damage ? concealHit.damage : 0);
   if (damage) {
+    if (crushridgeRating > 0) roll.options.provenance.push({ label: "Fallen-Kin Rage", value: crushridgeRating });
     if (offHandBuild.damage > 0) roll.options.provenance.push({ label: offHandBuild.by.join(", "), value: offHandBuild.damage });
     if (concealHit.damage > 0) roll.options.provenance.push({ label: concealHit.by.join(", "), value: concealHit.damage });
     // The TALENT'S OWN NAME is the label, as `castSpell`'s talent rows have
@@ -1894,8 +2035,22 @@ export async function rollTest({
   // the Legacy branches' door 25): the blow's worth halved before Armor Points and Ward,
   // read off the striker as the one damage door's every caller reads it.
   const halvedBy = damage ? dealtHalvedBy(actor) : null;
-  const mitigate = t => resolveDamage({
-    rating: (damage.rating ?? 0) + extraDamage + talentRating,
+  const shrink = kind === "attack" && !parry ? shrinkAmount([...(actor.effects ?? [])]) : 0;
+  // Reduce the combined melee Rating once, before halving, Armor or Ward.
+  // Separate damage components retain their own amounts and mitigation.
+  const rawAttackRating = damage ? (damage.rating ?? 0) + extraDamage + talentRating : 0;
+  const ratingWithBonus = extra => taintedBloodAttackRating(rawAttackRating+extra, {
+    effects: actor.effects?.values?.() ?? actor.effects ?? [], ownerUuid: actor.uuid, now: game.time?.worldTime,
+    meleeAttack: kind === "attack" && !parry && strike?.rangeKind === "melee"
+  }) ?? (rawAttackRating+extra);
+  const attackRating=ratingWithBonus(0);
+  if (damage && outcome.success && attackRating < rawAttackRating)
+    roll.options.provenance.push({ label: "Tainted Blood", value: attackRating - rawAttackRating });
+  const mitigate = (t,index=-1) => {
+  const bonus=hitBonusDamageForTarget(bonuses,index,blowType);
+  return resolveDamage({
+    fireTakenBonus: t?.fireTakenBonus ?? 0,
+    rating: ratingWithBonus(bonus.rating),
     sl: outcome.sl,
     kind: damage.kind ?? "physical",
     school: damage.school ?? null,
@@ -1920,12 +2075,13 @@ export async function rollTest({
     // because 08 §6's grammar only adds and adding lands after the SL.
     multiplier: damage.multiplier ?? 1,
     // The blow's second amounts, each met by the target's own type (D-777).
-    extras: typedExtras, wardBySchool: t?.wardBySchool ?? {}, schoolArmorBySchool: t?.schoolArmor ?? {},
+    extras: [...typedExtras,...bonus.extras], wardBySchool: t?.wardBySchool ?? {}, schoolArmorBySchool: t?.schoolArmor ?? {},
     dealtHalved: halvedBy
-  });
+  }, { shrink });
+  };
   const hit = Boolean(damage) && outcome.success;
   if (hit && halvedBy) roll.options.provenance.push({ label: halvedBy.source, value: null, formula: game.i18n.localize("AZEROTH.HalvesDealt.Row") });
-  const damageByTarget = list.map(t => (hit ? mitigate(t) : null));
+  const damageByTarget = list.map((t,index) => (hit ? mitigate(t,index) : null));
   const damageResult = hit ? (damageByTarget[0] ?? mitigate(first)) : null;
 
   // Momentum on a hit (05 SS11, D-627): every pool the actor holds gains by
@@ -2125,6 +2281,8 @@ export async function rollTest({
     ? extraStrikeOffers(actor, { talents: talentsHeld, sl: outcome.sl, traits: (traits ?? []).map(t => t?.name ?? t), fight, weaponId })
     : [];
 
+  const foresightOffered = Boolean(kind === "attack" && !parry && outcome.success && damageResult
+    && list.length && foresightHeld());
   const content = await renderTemplate(TEMPLATE.roll, {
     config: AZEROTH,
     kind,
@@ -2154,7 +2312,7 @@ export async function rollTest({
           // Greater Flaming blade and a mace printed the same line.
           // And every second amount's own type beside it (D-777): *Physical + Nature*.
           type: damageTypeWords(damageResult),
-          explanation: damageExplanation(damageResult, { ...damage, rating: (damage.rating ?? 0) + extraDamage + talentRating, penetration: (damage.penetration ?? 0) + promisedPierce + talentPierce }, outcome.sl, {
+          explanation: damageExplanation(damageResult, { ...damage, rating: attackRating, penetration: (damage.penetration ?? 0) + promisedPierce + talentPierce }, outcome.sl, {
             // A hit at an SL that ignores Armor Points says so, naming the talent (the B1 review).
             ignoresArmor: slIgnoresArmor ? slDamage.filter(r => r.ignoresArmor === true).map(r => r.name).join(", ") : null
           })
@@ -2265,12 +2423,15 @@ export async function rollTest({
     // *"Parry is limited to melee unless a feature allows ranged parry."*): a ranged
     // or thrown blow keeps a defender's Parry only where 04's Anticipation reaches it
     // (`parryOffered`), and a row left with neither button goes.
-    reactions: (kind === "attack" && !parry && outcome.success && damageResult ? parryOffered(reactions, { actor, list, strike }) : []),
+    reactions: (kind === "attack" && !parry
+      ? outcome.success && damageResult ? parryOffered(reactions, { actor, list, strike })
+        : (reactions ?? []).filter(row => row.phaseShift).map(row => ({ ...row, block: null, parry: null, negate: null }))
+      : []),
     // **A WARD PRESSED FROM THIS CARD** (04's Foresight; the lead, 2026-10-03, on
-    // O-181: *"Yes"*; D-779): a magical blow that landed offers a priest holding the
+    // O-181: *"Yes"*; D-779): a blow that landed offers a priest holding the
     // talent 02's Ward on each creature struck - shown to that priest's owner alone
     // (`dice/chat.mjs`) and offered only where such a priest exists.
-    foresight: (kind === "attack" && !parry && outcome.success && damageResult && damage?.school && AZEROTH.schools[damage.school] && foresightHeld())
+    foresight: foresightOffered
       ? list.map((t, index) => ({ index, name: t?.name ?? "" }))
       : [],
     // *Parry cannot be used against an attack you cannot see, and neither can
@@ -2296,12 +2457,30 @@ export async function rollTest({
   // nothing a caller slipped in beside them, and only on a Resilience card.
   const resisted = kind === "resilience" ? resistLink(resistOf ?? {}) : null;
 
-  return ChatMessage.create({
+  // Phase Shift and Apply must agree on whether this new attack has landed.
+  // Freeze document identities; an older card without this record is unknown.
+  const phaseTargets = kind === "attack" && !parry ? list.map(t => targetActorOf(t)) : [];
+  // Jangthraze's optional reward is offered only after this hit is confirmed.
+  // Ordinary targets need the same Apply/Parry receipt as Phase Shift targets.
+  const hitUseWeapon=kind==='attack'&&!parry?actor?.items?.get(weaponId):null;
+  const hitUseReceipt=hitUseWeapon?.system.identifier==='jangthraze-the-protector'
+    &&hitUseWeapon.system.signatureEffect?.kind==='onHit'
+    ||hitUseWeapon?.type==='weapon'&&strike?.rangeKind==='melee'&&actor.items.some(item=>
+      item.system.identifier==='horned-viking-helmet'&&item.system.equipped===true&&item.system.signatureEffect?.kind==='onHit');
+  const attackResolution = hitUseReceipt || foresightOffered || phaseTargets.some(target => target?.type === "npc"
+    && target.system?.creatureAbilities?.some(ability => ability.name === "Phase Shift"))
+    ? attackResolutionSeed(phaseTargets.map(target => target?.uuid), { damageRevealed: !foresightOffered }) : null;
+
+  if(!valid())throw Error('Signature hit authorization changed before publication');
+  reloadMessage = await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
     content,
     rolls: [roll],
     // Maim draws the Critical Injury on the Limb table whatever the blow struck (08 §5).
     flags: { "azeroth-rpg": { kind, location: criticalLocation ?? location, struck: location, damage: damageResult, targets: list, damageByTarget, momentumSpent, offHand,
+      ...(receipt?{signatureHitBonuses:receipt}:{}),
+      ...(attackResolution ? { attackResolution } : {}),
+      ...(reloadReservation ? {reloadShot:{shotId:reloadReservation.shotId,weaponUuid:reloadInfo.weapon.uuid}} : {}),
       // WHAT KIND OF DAMAGE THIS WAS (D-691). It reached the mitigation and
       // stopped there, so nothing downstream could tell Fire from a mace -
       // which is what 14's Regeneration asks.
@@ -2353,8 +2532,23 @@ export async function rollTest({
       ...(answers ? { answers } : {}),
       // And which spell card's row a Resilience Test answered (D-726), which is
       // what lets the record on that card be built from THIS card's roll.
-      ...(resisted ? { resistOf: resisted } : {}) } }
+      ...(resisted ? { resistOf: resisted } : {}),
+      ...(kind === "resilience" && AZEROTH.resiliences[resilience] ? { resilience } : {}) } }
   });
+  return reloadMessage;
+  };
+  return kind==='attack'&&!parry&&damage&&outcome.success
+    ? await routeSignatureHit({actor,roll,weaponId,idolSource:signatureTarget.idolSource,targets:list,targetIndex:signatureTarget.index,publish:publishAttackCard})
+    : await publishAttackCard();
+  } finally {
+    if (reloadReservation) {
+      const result = reloadMessage || !reloadPaymentStarted
+        ? await requestReloadShot(reloadInfo.weapon, {reservation:reloadReservation,
+          ...(reloadMessage ? {messageUuid:reloadMessage.uuid} : {cancel:true})}, true)
+        : {ok:false};
+      if (!result.ok) ui.notifications?.warn(game.i18n.localize("AZEROTH.Reload.Pending"));
+    }
+  }
 }
 
 /**
@@ -2493,6 +2687,7 @@ function damageExplanation(result, damage, sl, { ignoresArmor = null } = {}) {
   // And each second amount of its own type (D-777).
   const parts = partsWords(e.extras);
   if (parts) bits.push(parts);
+  if (result.shrinkReduction) bits.push(game.i18n.format("AZEROTH.Gadget.ShrinkDamage", { n: result.shrinkReduction }));
   return bits.join(" · ");
 }
 
@@ -2570,6 +2765,18 @@ function damageTypeWords(result = {}) {
  * @returns {{reason: string, params: object}|null}
  */
 export function turnBudgetRefusal(actor, action) {
+  if (iceBlockFor(actor)) return { reason: "AZEROTH.IceBlock.Protected", params: {} };
+  if (action === "reaction" && reactionBarred(actor)) return { reason: REACTION_BAR_REASON, params: {} };
+  const projection = projectionRefusal(actor, "action");
+  if (projection) return { reason: projection, params: {} };
+  const sleeping = sleepRefusal(actor, "action");
+  if (sleeping) return { reason: sleeping, params: {} };
+  const despair = despairRefusal(actor, "action");
+  if (despair) return { reason: despair, params: {} };
+  const phaseShift = phaseShiftRefusal(actor, "action");
+  if (phaseShift) return { reason: phaseShift, params: {} };
+  const seduction = seductionRefusal(actor, "action");
+  if (seduction) return { reason: seduction, params: {} };
   const cost = { half: "half", action: "action", full: "full", reaction: "reaction" }[action] ?? null;
   if (!cost) return null;
   // **A SPIRIT TAKES NO REACTION** (06 §10; the Legacy branches' door 10), in a fight or out.
@@ -2589,6 +2796,11 @@ export function turnBudgetRefusal(actor, action) {
 }
 
 export async function spendTurnBudget(actor, action) {
+  if (action === "reaction" && reactionBarred(actor)) {
+    ui.notifications?.warn(game.i18n.localize(REACTION_BAR_REASON));
+    return false;
+  }
+  if (refuseAncientDespair(actor, "action")) return false;
   const cost = { half: "half", action: "action", full: "full", reaction: "reaction" }[action] ?? null;
   if (!cost) return true;
   // **A SPIRIT TAKES NO REACTION** (06 §10; the Legacy branches' door 10), in a fight or out.
@@ -2600,7 +2812,12 @@ export async function spendTurnBudget(actor, action) {
     }
   }
   const fight = actor?.activeFight?.() ?? null;
-  if (!fight) return true;
+  if (!fight) {
+    const { interruptWhirlwindForAction } = await import("../effects/syndicate-whirlwind-use.mjs");
+    if (!await interruptWhirlwindForAction(actor)) return false;
+    const { interruptConsumeFor } = await import("../effects/consume-shadows-use.mjs");
+    return interruptConsumeFor(actor);
+  }
   const combatant = fight.getCombatantsByActor(actor)?.[0] ?? null;
   if (!combatant) return true;
   const spent = await combatant.spendAction(cost);
@@ -2610,6 +2827,8 @@ export async function spendTurnBudget(actor, action) {
 export async function castSpell({
   actor,
   spell,
+  attackTest = null,
+  modifier = 0,
   dc = null,
   boons = 0,
   banes = 0,
@@ -2636,9 +2855,57 @@ export async function castSpell({
   // **WHAT A TALENT'S COUNTER OR CHARGE BUYS ON THIS CAST** (D-774): the
   // identifiers the roller ticked - Inner Focus's free Mana, Lava Burst's Ward
   // ignored, Static Charge's tier - judged again here before anything is spent.
-  talentLines = []
+  talentLines = [],
+  conflagrateBurning = false,
+  chainExecution = null,
+  dispersionExecution = null
 } = {}) {
+  if (dispersionExecution && !validDispersionExecution(dispersionExecution, actor, spell)) return null;
+  if (refuseDispersion(actor, "cast")) return null;
+  if (refuseDispersedTargets(targets)) return null;
+  if (spell?.system?.identifier === "chain-lightning") {
+    if (source == null) {
+      const { chainLightningSource } = await import("../effects/chain-lightning-source.mjs");
+      source = chainLightningSource(actor, targets);
+    }
+    if (!source?.sceneId || !source?.tokenId) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.ChainLightning.SourceRequired"));
+      return null;
+    }
+    const bridge = await import("../effects/chain-lightning-cast.mjs");
+    if (!bridge.isChainLightningExecution(chainExecution)) return bridge.requestChainLightningCast(actor, spell, {
+      attackTest, modifier, dc, boons, banes, overchannel, augment, targets, provenanceExtra,
+      extraRating, damageRows, viaItem, source, swift, talentLines
+    });
+  }
+  if (refuseAncientDespair(actor, "casting")) return null;
+  if (spell?.system?.duration?.kind === "sustained" && refuseSustainTransferStart(actor)) return null;
+  const chainRefusal=chainLightningTargetRefusal(spell,targets,viaItem ? [] : actor.takenTalents?.() ?? []);
+  if(chainRefusal){ui.notifications?.warn(game.i18n.format("AZEROTH.ChainLightning.TooMany",chainRefusal));return null;}
+  // Resolve scene-backed GM casts from one chosen initial target. Keep the
+  // initial target alone for the Casting Test and its Reflection window.
+  const chainTools = spell?.system?.identifier === "chain-lightning" && source?.sceneId
+    && game.user?.isGM && game.users?.activeGM?.id === game.user.id
+    ? await import("../effects/chain-lightning-path.mjs") : null;
+  if (chainTools && !chainTools.resolveChainLightningPath({ actor, spell, source, targets, viaItem }).ok) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.ChainLightning.BeforeFailed"));
+    return null;
+  }
+  let chainUnresolved = false, chainPrivate = false;
+  const attackCalculation = attackTest ? await (await import("../applications/actions.mjs")).prepareBlademasterTest(actor,attackTest,{targets}) : null;
+  if (attackTest && !attackCalculation) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Blademaster.Unavailable"));
+    return null;
+  }
+  const attackPromises=attackCalculation ? attackTestPromises(actor.pendingNextAttack?.() ?? {}) : null;
+  const limited = spellLimitRefusal(actor, spell);
+  if (limited) { ui.notifications?.warn(limited); return null; }
   const sys = spell.system;
+  const reactionBar = earthShockBars(actor.takenTalents?.() ?? [], { identifier: sys.identifier, viaItem });
+  if (reactionBar && !game.users.activeGM) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.ReactionBar.NeedGM"));
+    return null;
+  }
   const school = sys.school;
   const classes = (actor?.classItems ?? []).map(c => ({
     itemId: c.id, schools: c.system?.schools ?? [], castingAbility: c.system?.castingAbility ?? null
@@ -2652,8 +2919,61 @@ export async function castSpell({
   const ability = talentPool?.ability ?? grant?.castingAbility ?? null;
   const abilityMod = ability ? (actor.system.abilities?.[ability]?.mod ?? 0) : 0;
   const proficiency = actor.system.proficiency ?? 0;
-  const list = targets ?? [];
-  const first = list[0] ?? null;
+  let list = [...(targets ?? [])];
+  let first = list[0] ?? null;
+
+  const compelTools = sys.identifier === "compel" ? await import("../effects/compel.mjs") : null;
+  const compelledTarget = compelTools?.compelTarget(list) ?? null;
+  if (compelTools && !compelledTarget) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Compel.BeforeFailed"));
+    return null;
+  }
+
+  const soulLinkTools = sys.identifier === "soul-link" ? await import("../effects/soul-link-casting.mjs") : null;
+  const iceBlockTools = sys.identifier === "ice-block" ? await import("../effects/ice-block-casting.mjs") : null;
+  const dispersionTools = sys.identifier === "dispersion" ? await import("../effects/dispersion-casting.mjs") : null;
+  if (dispersionTools && !(await dispersionTools.requestDispersionPreparation(actor, spell))?.ok) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Dispersion.BeforeFailed"));
+    return null;
+  }
+  if (iceBlockTools && !(await iceBlockTools.requestIceBlockPreparation(actor, spell))?.ok) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.IceBlock.BeforeFailed"));
+    return null;
+  }
+  const soulLinkPreparation = soulLinkTools ? await soulLinkTools.requestSoulLinkPreparation(actor, spell, list, source) : null;
+  if (soulLinkTools && !soulLinkPreparation?.ok) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.SoulLink.BeforeFailed"));
+    return null;
+  }
+
+  const bloodPactTools = sys.identifier === "blood-pact" ? await import("../effects/blood-pact-spell.mjs") : null;
+  let bloodPactSpell = null;
+  if (bloodPactTools) {
+    bloodPactSpell = await bloodPactTools.requestBloodPactSpellPreparation(actor, spell, list, source);
+    if (!bloodPactSpell?.ok) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.BloodPactSpell.BeforeFailed"));
+      return null;
+    }
+    const choice = await chooseOption(spell, [
+      { key: "use", name: game.i18n.localize("AZEROTH.BloodPactSpell.Confirm"),
+        description: game.i18n.format("AZEROTH.BloodPactSpell.Preview", { name: bloodPactSpell.donorName,
+          before: bloodPactSpell.health.before, after: bloodPactSpell.health.after, mana: bloodPactSpell.pool.restored }) },
+      { key: "cancel", name: game.i18n.localize("AZEROTH.BloodPactSpell.Cancel"), description: "" }
+    ], null, { prompt: game.i18n.localize("AZEROTH.BloodPactSpell.Prompt") });
+    if (choice?.key !== "use") return null;
+    const confirmed = await bloodPactTools.requestBloodPactSpellPreparation(actor, spell, list, source);
+    if (!confirmed?.ok || JSON.stringify(confirmed) !== JSON.stringify(bloodPactSpell)) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.BloodPactSpell.BeforeFailed"));
+      return null;
+    }
+  }
+
+  const conflagrateTools = sys.identifier === "conflagrate" ? await import("../effects/conflagrate.mjs") : null;
+  let conflagrate = conflagrateTools ? await conflagrateTools.requestConflagratePreparation(actor, spell, list, {burning:conflagrateBurning}) : null;
+  if (conflagrateTools && !conflagrate?.ok) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Conflagrate.BeforeFailed"));
+    return null;
+  }
 
   // 1. **EVERY REFUSAL, BEFORE ANYTHING IS SPENT** (D-768; the lead,
   // 2026-10-03, asked *does the caster keep the Half-Action?*: *Keeps the
@@ -2671,6 +2991,10 @@ export async function castSpell({
   // casting and a free cast are the caster's own casting.
   // **A HEAL THAT ALSO BURNS IS NO HEAL HERE** (the B3 review): `restoresOnly` - it
   // restores Health and deals nothing (Holy Nova, Halo, Starsurge and their kin passed).
+  if (sys.identifier === "mana-burn" && (list.length !== 1 || (!game.user?.isGM && !game.users?.activeGM))) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.ManaBurn.BeforeFailed"));
+    return null;
+  }
   const filtered = castRefusalFor(actor, { heals: restoresOnly(sys), selfTargeted: castNamesSelf(actor, list) });
   if (filtered) {
     ui.notifications?.warn(filtered);
@@ -2836,6 +3160,13 @@ export async function castSpell({
   // the cast is paid for.
   const backdraft = take.cast && castAction === "action" ? take.cast : null;
   if (backdraft) castAction = "half";
+  const { ancientDreadAction, hasAncientDread } = await import("../rules/ancient-dread.mjs");
+  const beforeDreadAction = castAction;
+  castAction = ancientDreadAction(castAction, { affected: hasAncientDread(actor), casting: true });
+  if (castAction !== beforeDreadAction) provenanceExtra = [...provenanceExtra, {
+    label: "AZEROTH.AncientDread.Label", value: null,
+    formula: game.i18n.format("AZEROTH.AncientDread.CastingCost", { cost: game.i18n.localize(AZEROTH.actions[castAction]) })
+  }];
 
   // **WHOM A HEAL REACHES** (04's Chain Heal: *one further friendly target within
   // 10 feet per rank*; D-774): with the talent, no more named than it reaches, the
@@ -2913,10 +3244,90 @@ export async function castSpell({
     } else stepPicked = { skipped: true };
   }
 
+  // Review before payment; redirect only after the original Casting Test wins.
+  const { prepareReflection } = await import("../effects/reflection-review.mjs");
+  const { reflectionPlan } = await import("../rules/reflection.mjs");
+  source ??= (await import("../applications/roll-dialog.mjs")).sourceOf(actor);
+  const reflectionReview = await prepareReflection({ actor, spell, source, targets: list });
+  if (!reflectionReview?.ok) {
+    if (reflectionReview?.reason !== "cancelled") ui.notifications?.warn("Reflection could not be resolved. Check the caster, targets, and active GM before casting again.");
+    return null;
+  }
+  const cast = foundry.utils.randomID();
+  const reflectedPlan = reflectionPlan({ castId: cast, caster: reflectionReview.caster, targets: list,
+    fields: reflectionReview.fields, harmful: reflectionReview.harmful, school: sys.school, area: Boolean(areaFor(sys.target ?? "")) });
+  if (!reflectedPlan.ok) {
+    ui.notifications?.warn("Reflection needs further GM review. Nothing was spent.");
+    return null;
+  }
+
+  let cureReview = null;
+  if (spell.name === "Cure Poison") {
+    const { prepareCurePoison } = await import("../effects/cure-poison-use.mjs");
+    cureReview = await prepareCurePoison({ actor, spell, source, targets: list });
+    if (!cureReview?.ok) {
+      if (cureReview?.reason !== "cancelled") ui.notifications?.warn(game.i18n.localize("AZEROTH.CurePoison.BeforeFailed"));
+      return null;
+    }
+  }
+
+  // Single-recipient signature choices precede every action/resource payment.
+  const chosenSignaturePreparation = (castDealsDamage(sys) || sys.tick?.kind === "damage")
+    ? await prepareChosenSignatures({actor,spell,targets:list,choose:chooseOption,readTargets:()=>list.filter(t=>{
+      if(t.sceneId || t.tokenId) return game.scenes.get(t.sceneId)?.tokens.get(t.tokenId)?.actor?.id===t.actorId;
+      return Boolean(game.actors.get(t.actorId));
+    })}) : {ok:true,bonuses:[]};
+  if(!chosenSignaturePreparation.ok) {
+    if(chosenSignaturePreparation.reason!=="cancelled") ui.notifications?.warn(game.i18n.localize("AZEROTH.Signature.ChosenTargetRequired"));
+    return null;
+  }
+
+  const healingClassNow=()=>{
+    const held=actor.classItems??[];
+    const current=grantingClass(held.map(c=>({itemId:c.id,schools:c.system?.schools??[],castingAbility:c.system?.castingAbility??null})),school);
+    return held.find(c=>c.id===current?.itemId)?.name??null;
+  };
+  // Drains heal their caster, never the creature damaged. Preserve the source
+  // token identity when present; ordinary spells retain their chosen targets.
+  const healingRecipients=sys.heal?.fromDamage
+    ? [{actorId:actor.id,name:actor.name,...(source?.sceneId&&source?.tokenId?{sceneId:source.sceneId,tokenId:source.tokenId}:{})}]
+    : list;
+  const healingSignaturePreparation=(isHealingSpell(sys)||Boolean(sys.heal?.fromDamage))
+    ? await prepareHealingSignatures({actor,spell,grantingClass:healingClassNow(),readGrantingClass:healingClassNow,
+      targets:healingRecipients,choose:chooseOption,readTargets:()=>healingRecipients.filter(t=>{
+        if(t.sceneId||t.tokenId)return game.scenes.get(t.sceneId)?.tokens.get(t.tokenId)?.actor?.id===t.actorId;
+        return Boolean(game.actors.get(t.actorId));
+      })}) : {ok:true,bonuses:[]};
+  if(!healingSignaturePreparation.ok){
+    if(healingSignaturePreparation.reason!=="cancelled")ui.notifications?.warn(game.i18n.localize("AZEROTH.Signature.ChosenTargetRequired"));
+    return null;
+  }
+
   // 1b. The turn's budget, in a fight (2026-09-06): the spell's Action line, or
   // the rung Nature's Swiftness casts it at (D-771). Asked once every refusal
   // has passed, so a refusal leaves the Half-Action.
-  if (!(await spendTurnBudget(actor, castAction))) return null;
+  if (refuseDispersion(actor, "cast")) return null;
+  if (refuseDispersedTargets(list)) return null;
+  if (compelTools && compelTools.compelTarget(list) !== compelledTarget) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Compel.BeforeFailed"));
+    return null;
+  }
+  if (sys.duration?.kind === "sustained" && refuseSustainTransferStart(actor)) return null;
+  // **A GM-RUN CAST'S CLAIM IS ASKED LAST, BEFORE THE BUDGET AND NEVER AFTER IT**
+  // (D-768; the lead: *"I don't want a half-action wasted bug"*): Chain
+  // Lightning's request and Dispersion's Reaction were asked again after the
+  // budget and after the Hide, and a claim that moved while either write was in
+  // flight returned in silence with the Half-Action or the Reaction spent. From
+  // the budget on the cast is made; what moved is the coordinator's to settle
+  // off the card (`chain-lightning-cast.mjs` keeps the claim pending, and
+  // `dispersion-reaction-resolution.mjs` annotates no blow that changed).
+  if (chainExecution && !chainExecution.valid()) return null;
+  if (dispersionExecution && !validDispersionExecution(dispersionExecution, actor, spell)) return null;
+  if (chainExecution) chainExecution.started = true;
+  if (!(await spendSpellBudget(actor, spell, castAction, spendTurnBudget))) {
+    if (chainExecution) chainExecution.started = false;
+    return null;
+  }
 
   // 1c. **A CAST ENDS A HIDE** (D-717), before the Mana is paid: the budget
   // has already agreed the cast happens, so from here it is being made
@@ -2953,7 +3364,7 @@ export async function castSpell({
     await actor.updatePool({ itemId: payPool.itemId, kind: payPool.kind, value: payFromNow(payNow.value, price.amount).value }, extra);
   } else if (Object.keys(extra).length) await actor.update(extra);
   // Nature's Swiftness's use, struck once the cast is paid for (D-771).
-  const castSwift = (Boolean(swiftCounter) || Boolean(swiftRow?.perRound)) && !free && castAction !== sys.action;
+  const castSwift = (Boolean(swiftCounter) || Boolean(swiftRow?.perRound)) && !free && beforeDreadAction !== sys.action;
   if (castSwift && swiftCounter) await swiftCounter.update({ "system.uses.value": Math.max(0, (swiftCounter.system?.uses?.value ?? 1) - 1) });
   // Riptide's once a round, marked through the queued door (D-761); a mark another
   // door took first leaves this cast its Half-Action as Adrenaline's does (D-773).
@@ -2993,20 +3404,29 @@ export async function castSpell({
 
   // **WHICH CAST THIS IS** (D-724): one key the card, the Sustain entry and
   // everything later laid or placed from the card all carry. It is generated
-  // here and is NOT the message id, for four reasons. The Sustain entry below
+  // before payment and is NOT the message id, for four reasons. The Sustain entry below
   // is written before the card exists. Creating the card first would change
   // what a Sustain's own tests wait on, and would lose the Sustain the Mana has
   // already paid for if the card's creation threw. A message made with a fixed
   // `_id` and `keepId` overwrites rather than locks (D-721). And the key has to
   // outlive the card: a GM clearing the chat mid-fight must not orphan a
   // Blizzard somebody is still holding.
-  const cast = foundry.utils.randomID();
 
   // 3. The Test.
-  const modifiers = [];
-  if (ability) modifiers.push({ label: AZEROTH.abilities[ability], value: abilityMod });
-  modifiers.push({ label: "AZEROTH.Sheet.Proficiency", value: proficiency });
-  if (Number(augment)) modifiers.push({ label: "AZEROTH.Cast.Augment", value: Number(augment) });
+  const spellLock = await requestSpellLockWindow({ actor, source,
+    test: { kind: "spell", itemUuid: spell.uuid } });
+  if (!spellLock?.ok) {
+    ui.notifications?.warn("The casting reaction window could not be confirmed. No Casting Test was rolled. Check the spell's paid costs and reaction records before trying again.");
+    return null;
+  }
+  const modifiers = attackCalculation ? attackCalculation.modifiers.map(row=>({...row})) : [];
+  if (!attackCalculation) {
+    if (ability) modifiers.push({ label: AZEROTH.abilities[ability], value: abilityMod });
+    modifiers.push({ label: "AZEROTH.Sheet.Proficiency", value: proficiency });
+    if (Number(augment)) modifiers.push({ label: "AZEROTH.Cast.Augment", value: Number(augment) });
+  } else if (Number.isFinite(Number(modifier)) && Number(modifier)) {
+    modifiers.push({label:"AZEROTH.Dialog.Circumstance",value:Number(modifier)});
+  }
   // **THE DC THE ENTRY STATES, OR A TALENT RESTATES** (07: *Make a Casting Test
   // against DC 26*; 04's Sunfire and Cataclysm: *against DC 22 rather than 26*;
   // D-775), where no dialog handed one in. An item's casting reads the entry's own
@@ -3015,8 +3435,15 @@ export async function castSpell({
   const statedDc = (viaItem ? null : spellDcFor(talentsNow, { name: spell.name })) ?? statedCastingDC(sys.effect);
   const resolvedDC = dc ?? statedDc ?? castingDC({ tier: sys.tier, targetDefense: first?.defense ?? null });
   const roll = AzerothRoll.build({
-    dc: resolvedDC, modifiers, boons, banes, kind: "casting", rollData: actor.getRollData()
+    dc: resolvedDC, modifiers, boons, banes: banes + spellLock.banes, kind: attackCalculation ? "attack" : "casting", rollData: actor.getRollData()
   });
+  if (attackCalculation) {
+    roll.options.attackTest = {...attackTest};
+    roll.options.provenance.push({label:"AZEROTH.Blademaster.Row",value:null,formula:attackCalculation.title});
+  }
+  roll.options.spellLock = { castId: spellLock.castId, banes: spellLock.banes };
+  if (spellLock.banes > 0) roll.options.provenance.push({ label: "Spell Lock", value: null,
+    formula: `${spellLock.banes} ${spellLock.banes === 1 ? "Bane" : "Banes"}` });
   roll.options.provenance.push(...provenanceExtra);
   // What the talents took off the Mana, by name (D-775).
   for (const d of discount.by) roll.options.provenance.push({ label: d.name, value: null, formula: game.i18n.format("AZEROTH.Cast.NextSpellRow", { n: d.amount }) });
@@ -3076,16 +3503,45 @@ export async function castSpell({
   // 06 §6 (D-693): Pummel's two Banes land on *the next Casting Test it
   // makes*, and this is that Test. Spent after the die, whatever the roller
   // did with the dialog's line.
-  const pummelled = await spendLaidBanes(actor, "casting");
+  if (attackPromises) await takeNextAttack(actor,attackPromises);
+  const pummelled = await spendLaidBanes(actor, attackCalculation ? "attack" : "casting");
   if (pummelled.length) {
     roll.options.provenance.push({ label: "AZEROTH.Modifier.LaidBane", value: null, formula: pummelled.join(", ") });
   }
   // And a Boon somebody laid (04's Blessing, D-772): spent the same way.
-  const blessed = await spendLaidBoons(actor, "casting");
+  const blessed = await spendLaidBoons(actor, attackCalculation ? "attack" : "casting");
   if (blessed.length) {
     roll.options.provenance.push({ label: "AZEROTH.Modifier.LaidBoon", value: null, formula: blessed.join(", ") });
   }
   const success = outcome.success;
+  const reflectedTargets = success && reflectedPlan.reflections.length ? [...list] : null;
+  if (reflectedTargets) {
+    list = reflectedPlan.targets;
+    first = list[0] ?? null;
+    roll.options.provenance.push({ label: "Reflection Field", value: null,
+      formula: `${reflectedPlan.reflections.length} target effect(s) returned toward the caster.` });
+  }
+  if (chainTools && success) {
+    const route = chainTools.resolveChainLightningPath({ actor, spell, source, targets: list, viaItem });
+    chainUnresolved = !route.ok;
+    if (route.ok) {
+      const { targetSnapshots } = await import("../applications/roll-dialog.mjs");
+      list = targetSnapshots(route.tokens.map(token => ({ id: token.id, name: token.name, actor: token.actor, scene: token.parent })));
+      chainPrivate = route.tokens.some(token => token.hidden === true);
+    } else {
+      // The cast is already paid. Post its roll without damage controls;
+      // never guess a route or invite the player to pay for the cast again.
+      list = [];
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.ChainLightning.RouteUnresolved"));
+    }
+    first = list[0] ?? null;
+  }
+  // Read the final recipient after reflection. A failed read is a paid,
+  // unresolved cast, never permission to use guessed damage or repeat payment.
+  if (conflagrateTools && success) {
+    conflagrate = await conflagrateTools.requestConflagratePreparation(actor, spell, list, {burning:!reflectedTargets && conflagrateBurning});
+    if (!conflagrate?.ok) ui.notifications?.warn(game.i18n.localize("AZEROTH.Conflagrate.Unresolved"));
+  }
   // **THE STEP, NOW THAT THE SPELL WENT OFF** (door 3): the caster displaced to the
   // space picked, and Dark Passage's targets each by the caster's own displacement,
   // so the party arrives as it stood - each space judged again for its room, and
@@ -3213,18 +3669,22 @@ export async function castSpell({
   // and never a Ward the spell's own school ignores. An item's casting is the
   // caster's spell too.
   const typedSpell = typedLaneExtras(actor.system, "spell");
+  const conflagrateRules = conflagrateTools ? await import("../rules/conflagrate.mjs") : null;
+  const castRating = value => conflagrateRules
+    ? conflagrateRules.conflagrateRating(value, conflagrate?.targets?.[0] ?? {}).rating ?? 0 : value;
   // 04's Drawn Across on the caster (door 25): the spell's damage halved before Ward.
   const halvedCast = dealtHalvedBy(actor);
-  const mitigate = (t, forced = null, { typed = true, passed = false } = {}) => {
+  const mitigate = (t, forced = null, { typed = true, passed = false, signatureIndex = null } = {}) => {
     const read = immuneReadAsWard({ immune: t?.immune ?? [], ward: Math.max(0, (t?.wardBySchool?.[damageSchool] ?? 0) - wardPierce), school: damageSchool, asWard });
     return resolveDamage({
-      rating: forced ?? (rating === null ? 0 : ratingFor(t).rating + extras), sl, kind: "magical", school: damageSchool,
+      rating: castRating(forced ?? (rating === null ? 0 : ratingFor(t).rating + extras)), sl, kind: "magical", school: damageSchool,
+      fireTakenBonus: t?.fireTakenBonus ?? 0,
       ward: read.ward,
       // An ally's aura, after the Ward (04's Avenging Bulwark, D-755).
       schoolArmor: t?.schoolArmor?.[damageSchool] ?? 0,
       immune: read.immune, vulnerable: t?.vulnerable ?? [],
       slAddsToDamage: false,
-      extras: typed ? typedSpell : [], wardBySchool: t?.wardBySchool ?? {}, schoolArmorBySchool: t?.schoolArmor ?? {},
+      extras: typed ? [...typedSpell, ...chosenSignatureExtras(chosenSignaturePreparation.bonuses,list.map(signatureRecipientKey),signatureIndex)] : [], wardBySchool: t?.wardBySchool ?? {}, schoolArmorBySchool: t?.schoolArmor ?? {},
       dealtHalved: halvedCast,
       // Half on a passed Test (the lead: *"Build it everywhere"*), before Armor and Ward.
       passedHalf: passed,
@@ -3237,14 +3697,21 @@ export async function castSpell({
   // enemy that STARTS ITS TURN inside, and the card applied it to whoever was
   // targeted when the Paladin cast. The tick carries it now, and the card
   // offers no damage, no Apply and no rider for it.
-  const hit = rating !== null && success && castDealsDamage(sys);
+  const hit = rating !== null && success && !chainUnresolved && castDealsDamage(sys)
+    && (!conflagrateTools || (conflagrate?.ok && conflagrate.targets[0].burning));
   if (hit && halvedCast) roll.options.provenance.push({ label: halvedCast.source, value: null, formula: game.i18n.localize("AZEROTH.HalvesDealt.Row") });
   // **A STATIC CHARGE SPENT ON THIS DAMAGE** (04: *When you deal damage you may
   // spend a Static Charge to add your tier to that damage*; D-774): where the
   // spell deals it, off the flag as it stands now.
   const charged = hit && chargeLine && await spendCharge(actor) ? chargeLine.amount : 0;
   if (charged) roll.options.provenance.push({ label: chargeLine.name, value: charged });
-  const damageByTarget = list.map(t => (hit ? mitigate(t, charged ? (ratingFor(t).rating ?? 0) + extras + charged : null) : null));
+  const damageByTarget = list.map((t,index) => (hit ? mitigate(t, charged ? (ratingFor(t).rating ?? 0) + extras + charged : null,{signatureIndex:index}) : null));
+  // Current Mana is read when Apply is pressed. Store each possible shortage
+  // through the SAME mitigation path, so Ward and halving meet the whole hit.
+  const manaBurn = hit && sys.identifier === "mana-burn"
+    ? list.map((t,index) => Array.from({ length: 4 }, (_, shortage) =>
+      mitigate(t, (ratingFor(t).rating ?? 0) + extras + charged + shortage,{signatureIndex:index})))
+    : null;
   const damageResult = hit ? (damageByTarget[0] ?? mitigate(null, charged ? (rating ?? 0) + charged : null)) : null;
   // **WHAT A CREATURE THAT PASSES ITS TEST TAKES** (07's *and half of that, rounded down,
   // on a success*, stamped as `damage.half` off the entry's own sentence; the lead:
@@ -3252,7 +3719,7 @@ export async function castSpell({
   // the one button's, ready for the card's Apply to land on a creature whose Resist on
   // this card is recorded as passed (`rules/resisted.mjs#halvesFor`).
   const halfOnPass = hit && sys.damage?.half === true && Boolean(sys.test?.resilience);
-  const passedByTarget = halfOnPass ? list.map(t => mitigate(t, charged ? (ratingFor(t).rating ?? 0) + extras + charged : null, { passed: true })) : [];
+  const passedByTarget = halfOnPass ? list.map((t,index) => mitigate(t, charged ? (ratingFor(t).rating ?? 0) + extras + charged : null, { passed: true, signatureIndex:index })) : [];
   const damagePassed = halfOnPass ? mitigate(null, charged ? (rating ?? 0) + charged : null, { passed: true }).damage : null;
   // **AND WHAT IT TAKES WHERE ITS FAILURE IS WHAT DEALS THE DAMAGE** (07's Rimebind: *On a
   // failure it takes 2 Frost damage*, stamped as `damage.onFail` off the entry's own
@@ -3276,6 +3743,18 @@ export async function castSpell({
   // place, carrying Permafrost's feet on its own effect. Out of a fight there is no
   // turn to end it on and it is the table's, said in words (Wing Clip's rule, D-773).
   const speedLines = [];
+  const conditionLines = [];
+  const hitCondition = hit && !sys.test?.resilience ? spellHitCondition(sys.effect,{success,sl}) : null;
+  if (hitCondition) for (const target of list) {
+    const victim=targetActorOf(target);
+    const name=target?.name ?? victim?.name ?? "";
+    const span=victim ? untilEndOfNextTurn(victim) : null;
+    if (!span) {
+      conditionLines.push(game.i18n.format("AZEROTH.SpellHitCondition.NoTurn",{name,spell:spell.name,condition:game.i18n.localize(AZEROTH.conditions[hitCondition.status])}));
+      continue;
+    }
+    conditionLines.push(landedText(await inflictCondition({victim,id:hitCondition.status,by:actor,name,until:span})));
+  }
   const dropNow = hit && !viaItem ? speedDropAt(speedRead, { sl, success }) : { feet: 0, slowed: false };
   if ((dropNow.feet > 0 || dropNow.slowed) && list.length) {
     const span = untilEndOfNextTurn(actor);
@@ -3313,7 +3792,7 @@ export async function castSpell({
   const undispellable = !viaItem ? undispellableFor(talentsNow, { spell: spell.name }) : null;
   // The rider as a button, per target not already in the condition.
   const riderForced = rider ? (rider.mode === "add" ? sys.damage.rating + rider.rating : rider.rating) + extras : null;
-  const riderByTarget = rider && hit ? list.map(t => (ratingFor(t).applied ? null : mitigate(t, riderForced).damage)) : [];
+  const riderByTarget = rider && hit ? list.map((t,index) => (ratingFor(t).applied ? null : mitigate(t, riderForced,{signatureIndex:index}).damage)) : [];
   const riderContext = rider && hit ? {
     conditions: rider.statuses.map(id => game.i18n.localize(AZEROTH.conditions[id] ?? id)).join(", "),
     rating: riderForced,
@@ -3352,6 +3831,8 @@ export async function castSpell({
     : null;
   const stampedTick = extendedTick ? {
     ...extendedTick,
+    ...(chosenSignaturePreparation.bonuses.length && extendedTick.kind === "damage" ? {signatureCast:cast} : {}),
+    ...(healingSignaturePreparation.bonuses.length && extendedTick.kind === "heal" ? {signatureHealingCast:cast} : {}),
     ...(plagued && extendedTick.kind === "damage" ? { doubled: plague?.landings ?? 2 } : {}),
     ...(aegisNamed && extendedTick.kind === "heal" ? { aegis: aegisNamed } : {}),
     ...(take.miracle && extendedTick.kind === "heal" ? { unreduced: true } : {})
@@ -3402,7 +3883,7 @@ export async function castSpell({
   // at the cast was never 07's rule for an area on the ground. **And wherever a
   // tick is laid** (D-770): Moonfire carries a Damage, so it lays no effect of
   // its own words, and the effect is what carries its 2 at the next turn.
-  const applies = (sys.applies?.active || laidTick || floor) && success && !areaCarriesSpell(sys) ? {
+  const applies = !["compel", "soul-link"].includes(sys.identifier) && (sys.applies?.active || laidTick || floor) && success && !areaCarriesSpell(sys) ? {
     self: selfCast,
     targets: list.map((t, index) => ({ index, name: t.name }))
   } : null;
@@ -3676,6 +4157,7 @@ export async function castSpell({
     const limit = sustainLimit({ features, extra: more.more });
     while (sustaining.length > limit) {
       const dropped = sustaining.shift();
+      await liftSpellEffects(actor, actor.items.get(dropped.spellId)?.uuid ?? dropped.uuid ?? null, dropped.cast ?? null);
       ui.notifications?.info(game.i18n.format("AZEROTH.Combat.SustainEnded", { name: actor.name, spell: dropped.name }));
     }
     await actor.setFlag("azeroth-rpg", "sustaining", sustaining);
@@ -3694,6 +4176,9 @@ export async function castSpell({
   }
 
   const content = await renderTemplate(TEMPLATE.spell, {
+    chainLightning: sys.identifier === "chain-lightning",
+    conflagrate: Boolean(conflagrateTools),
+    bloodPactSpell: Boolean(bloodPactTools),
     config: AZEROTH,
     title: spell.name,
     subtitle: game.i18n.localize(AZEROTH.schools[school] ?? ""),
@@ -3720,7 +4205,7 @@ export async function castSpell({
       final: damageResult.damage,
       // A damage its Test's failure deals says so on the line (the B8a pass).
       // And one that bypasses armor and Ward says so (the B8a2 pass).
-      explanation: [spellDamageExplanation(damageResult, (first ? ratingFor(first).rating + extras : rating) + charged), noneOnPass ? game.i18n.localize("AZEROTH.Card.DamageOnFail") : null, damageResult.bypass === true ? game.i18n.localize("AZEROTH.Card.Bypass") : null].filter(Boolean).join(" · ")
+      explanation: [spellDamageExplanation(damageResult, castRating((first ? ratingFor(first).rating + extras : rating) + charged)), noneOnPass ? game.i18n.localize("AZEROTH.Card.DamageOnFail") : null, damageResult.bypass === true ? game.i18n.localize("AZEROTH.Card.Bypass") : null].filter(Boolean).join(" · ")
     } : null,
     // Shatter's Critical Injury at rank 2 (D-775): the attack card's own button.
     criticalInjury: Boolean(spellCritical),
@@ -3731,8 +4216,14 @@ export async function castSpell({
     onFail: resist && failStatuses.length ? failStatuses.map(id => game.i18n.localize(AZEROTH.conditions[id] ?? id)).join(", ") : null,
     heal,
     speakerName: actor.name,
-    source: viaItem ? game.i18n.format("AZEROTH.Card.FromItem", { name: viaItem.name })
+    source: [viaItem ? game.i18n.format("AZEROTH.Card.FromItem", { name: viaItem.name })
       : (free ? game.i18n.format("AZEROTH.Cast.FreeBy", { name: free.by ?? "" }) : null),
+      chainUnresolved ? game.i18n.localize("AZEROTH.ChainLightning.RouteUnresolved") : null,
+      conflagrateTools && success ? game.i18n.localize(!conflagrate?.ok ? "AZEROTH.Conflagrate.Unresolved"
+        : !conflagrate.targets[0].burning ? "AZEROTH.Conflagrate.Fizzle"
+        : conflagrate.targets[0].immolates.length ? "AZEROTH.Conflagrate.Immolate"
+        : conflagrate.targets[0].manualBurning ? "AZEROTH.Conflagrate.EnvironmentalCard" : "AZEROTH.Conflagrate.Burning") : null
+    ].filter(Boolean).join(" · ") || null,
     resist,
     resistRows,
     // Who may make it, in words (the B9a pass).
@@ -3758,7 +4249,7 @@ export async function castSpell({
     // Speed drop or the Slowed a hit laid, the forced move a failed Test or the
     // area makes, the escape a held or Stunned creature is given, and a laid
     // effect no Dispel may end.
-    crossLines: crossCardLines({ speedLines, forced, escape, undispellable, stepLines, splashLines, namedLines, struckLines }),
+    crossLines: crossCardLines({ speedLines, conditionLines, forced, escape, undispellable, stepLines, splashLines, namedLines, struckLines }),
     targets: list.map((t, index) => ({ ...t, index, damage: damageByTarget[index]?.damage ?? null, healAmount: healByTarget[index] ?? null })),
     // **WHAT THE CARD OFFERS AFTER THE DIE** (D-774): Overload's second firing and
     // Ancestral Knowledge's Mana back, each a button that strikes a use.
@@ -3771,20 +4262,37 @@ export async function castSpell({
 
   const spellCard = await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
+    ...(chainPrivate ? { whisper: [...game.users].filter(user => user.isGM).map(user => user.id) } : {}),
     content,
     rolls: [roll],
     flags: {
       "azeroth-rpg": {
         kind: "spell",
+        spellLockCaster: actor.uuid,
+        reactionBar: reactionBar && success,
+        spellLockCasts: [spellLock.castId],
         spellId: spell.id,
         // A compendium spell has no id on the actor, so carry the uuid too.
         spellUuid: spell.uuid,
+        ...(cureReview?.ticket ? { cureTicket: cureReview.ticket } : {}),
         // WHAT WAS CAST, WHICH CAST, WHETHER IT WORKED AND WHO CAST IT (D-724).
         // `success` is this workflow's own verdict as it was decided above, so
         // a reader never re-derives it from the roll; `source` is the caster's
         // token and has nothing to do with the render context's `source`, which
         // is the *From item* line.
         identifier: sys.identifier ?? null,
+        ...(chainTools ? { chainLightningRoute: { automatic: true, unresolved: chainUnresolved } } : {}),
+        ...(chainExecution ? { chainLightningRequestId: chainExecution.requestId } : {}),
+        ...(conflagrateTools ? { conflagrate } : {}),
+        ...(bloodPactTools ? { bloodPactSpell } : {}),
+        ...(soulLinkTools ? { soulLinkPreparation } : {}),
+        ...(success && healingSignaturePreparation.bonuses.length ? {
+          chosenHealingBonuses:healingSignaturePreparation.bonuses
+        } : {}),
+        ...(success && chosenSignaturePreparation.bonuses.length ? {
+          chosenSignatureBonuses:chosenSignaturePreparation.bonuses,
+          chosenSignatureDelivery:signatureDeliverySeed({cast,bonuses:chosenSignaturePreparation.bonuses})
+        } : {}),
         cast,
         success,
         source: source ?? null,
@@ -3819,12 +4327,22 @@ export async function castSpell({
         tickSpell,
         targets: list,
         damageByTarget,
+        // A return arc is another hit even when it names the same actor.
+        // Seed only new cards; old cards provide no proof of prior delivery.
+        ...(hit && (sys.identifier === "chain-lightning" || (chosenSignaturePreparation.bonuses.length
+          && !["mana-burn", "conflagrate"].includes(sys.identifier))) ? {
+          attackResolution: attackResolutionSeed(list.map(target => targetActorOf(target)?.uuid))
+        } : {}),
         riderByTarget,
+        ...(manaBurn ? { manaBurn } : {}),
+        ...(reflectedTargets ? { reflections: reflectedPlan.reflections, originalTargets: reflectedTargets } : {}),
         // The half a passed Test leaves, by row and on the one button (the B6 fix).
         ...(halfOnPass ? { halfOnPass: true, passedByTarget, damagePassed } : {}),
         // And nothing, where the failure is what deals it (the B8a pass).
         ...(noneOnPass ? { noneOnPass: true } : {}),
         heal: heal?.amount ?? null,
+        ...(healingSignaturePreparation.bonuses.length ? {healingSignatureSelf:heal?.self===true,
+          healingSignatureAmounts:healByTarget,healingSignatureCaster:actor.uuid} : {}),
         sl,
         overchannel: oc.points,
         // **WHAT D-779's ANSWERS CARRY TO THE DOORS AFTER THE CAST**: the schools
@@ -3879,6 +4397,43 @@ export async function castSpell({
       }
     }
   });
+  if (spellCard && conflagrateTools && success && conflagrate?.ok && conflagrate.targets[0].burning) {
+    const consumed = await conflagrateTools.requestConflagrateConsumption(spellCard);
+    if (!consumed?.ok) ui.notifications?.warn(game.i18n.localize("AZEROTH.Conflagrate.Unresolved"));
+  }
+  if (spellCard && bloodPactTools && success) {
+    const result = await bloodPactTools.requestBloodPactSpellResolution(spellCard);
+    if (!result?.ok) ui.notifications?.warn(game.i18n.localize("AZEROTH.BloodPactSpell.Unresolved"));
+  }
+  if (spellCard && soulLinkTools && success) {
+    const result = await soulLinkTools.requestSoulLinkResolution(spellCard);
+    if (!result?.ok) ui.notifications?.warn(game.i18n.localize("AZEROTH.SoulLink.Unresolved"));
+  }
+  if (spellCard && iceBlockTools && success) {
+    const result = await iceBlockTools.requestIceBlockResolution(spellCard);
+    if (!result?.ok) ui.notifications?.warn(game.i18n.localize("AZEROTH.IceBlock.Unresolved"));
+  }
+  if (spellCard && dispersionTools && success) {
+    const result = await dispersionTools.requestDispersionResolution(spellCard);
+    if (!result?.ok) ui.notifications?.warn(game.i18n.localize("AZEROTH.Dispersion.Unresolved"));
+  }
+  if (spellCard && cureReview?.ticket) {
+    try {
+      const { finishCurePoison } = await import("../effects/cure-poison-use.mjs");
+      const result = await finishCurePoison(cureReview.ticket, spellCard.id);
+      if (!result?.ok) ui.notifications?.warn(game.i18n.localize("AZEROTH.CurePoison.AfterFailed"));
+    } catch (error) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.CurePoison.AfterFailed"));
+      console.warn("azeroth-rpg | Cure Poison", error);
+    }
+  }
+  if (spellCard && reactionBar && success) {
+    try { await applyEarthShockBar(spellCard); }
+    catch (error) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.ReactionBar.ApplyFailed"));
+      console.warn("azeroth-rpg | Earth Shock restriction", error);
+    }
+  }
   // **THE SPLASH'S TESTS, ONCE THE CARD STANDS** (07's Stormfury; the B8a pass): one area
   // Test card for each creature measured, made once and landed at the spell card's own
   // Resist door. Guarded and said in words: the cast has gone off whatever a card does.
@@ -3896,6 +4451,8 @@ export async function castSpell({
       console.warn("azeroth-rpg | splash", err);
     }
   }
+  const aftermath = await completeSpellLockWindow({ actor, castId: spellLock.castId, message: spellCard });
+  if (!aftermath?.ok) ui.notifications?.warn("The spell resolved, but Spell Lock's resistance or Silence could not be confirmed. Check the reaction records; do not repeat the spell.");
   return spellCard;
 }
 
@@ -3981,7 +4538,7 @@ async function castStepLines({ actor, spell, step = null, picked = null, success
  * @param {{speedLines?: string[], forced?: object|null, escape?: object|null, undispellable?: {by: string}|null}} o
  * @returns {Array<{label: string, text: string}>}
  */
-function crossCardLines({ speedLines = [], forced = null, escape = null, undispellable = null, stepLines = [], splashLines = [], namedLines = [], struckLines = [] } = {}) {
+function crossCardLines({ speedLines = [], conditionLines = [], forced = null, escape = null, undispellable = null, stepLines = [], splashLines = [], namedLines = [], struckLines = [] } = {}) {
   const out = [];
   const label = key => game.i18n.localize(key);
   // Where the spell moved its caster and its targets (the Legacy branches' door 3).
@@ -3993,6 +4550,7 @@ function crossCardLines({ speedLines = [], forced = null, escape = null, undispe
   // Whom the spell's splash reaches around its target, and what stays the table's (the B8a pass).
   for (const text of splashLines) out.push({ label: label("AZEROTH.Splash.Label"), text });
   for (const text of speedLines) out.push({ label: label("AZEROTH.SpeedDrop.Label"), text });
+  for (const text of conditionLines) out.push({label:label("AZEROTH.Condition.Label"),text});
   if (forced) {
     out.push({
       label: label("AZEROTH.Forced.Label"),
@@ -4045,14 +4603,23 @@ function dispelRefusalWords(row) {
  * @param {{dc: number}} o
  * @returns {Promise<AzerothRoll>}
  */
-async function gateCastingTest(actor, { dc }) {
+export async function gateCastingTest(actor, { dc, source = null }) {
+  const gateSource = source ?? (await import("../applications/roll-dialog.mjs")).sourceOf(actor);
+  const spellLock = await requestSpellLockWindow({ actor, source: gateSource, test: { kind: "gate" } });
+  if (!spellLock?.ok) {
+    ui.notifications?.warn("The casting reaction window could not be confirmed. No gate Casting Test was rolled. Check the operation's paid costs and reaction records before trying again.");
+    return null;
+  }
   const casting = (actor.classItems ?? []).find(c => c.system?.castingAbility)?.system?.castingAbility ?? null;
   const modifiers = [];
   if (casting) modifiers.push({ label: AZEROTH.abilities[casting], value: actor.system.abilities?.[casting]?.mod ?? 0 });
   modifiers.push({ label: "AZEROTH.Sheet.Proficiency", value: actor.system.proficiency ?? 0 });
   // A Casting Test made while Engaged takes its Bane (06 §5), as every casting roll does.
   const engaged = engagedNow(actor);
-  const roll = AzerothRoll.build({ dc, modifiers, boons: 0, banes: engaged ? 1 : 0, kind: "casting", rollData: actor.getRollData() });
+  const roll = AzerothRoll.build({ dc, modifiers, boons: 0, banes: (engaged ? 1 : 0) + spellLock.banes, kind: "casting", rollData: actor.getRollData() });
+  roll.options.spellLock = { castId: spellLock.castId, banes: spellLock.banes };
+  if (spellLock.banes > 0) roll.options.provenance.push({ label: "Spell Lock", value: null,
+    formula: `${spellLock.banes} ${spellLock.banes === 1 ? "Bane" : "Banes"}` });
   if (engaged) roll.options.provenance.push({ label: "AZEROTH.Dialog.Circumstance", value: null, formula: game.i18n.localize("AZEROTH.Modifier.EngagedCasting") });
   await roll.evaluate();
   return roll;
@@ -4060,21 +4627,30 @@ async function gateCastingTest(actor, { dc }) {
 
 /**
  * Lift a spell's laid effects (D-657) from every actor the user can write:
- * the world's actors and the viewed scene's tokens, where the effect's
+ * the world's actors and every scene's tokens, where the effect's
  * `spell` flag is the spell's uuid and its origin is the caster. What a
  * Sustain held ends with it (the lead, 2026-09-06; closes O-93).
  */
-export async function liftSpellEffects(actor, spellUuid) {
+export async function liftSpellEffects(actor, spellUuid, cast = null) {
   if (!spellUuid) return 0;
   const seen = new Set();
   const carriers = [];
   for (const a of game.actors ?? []) carriers.push(a);
-  for (const token of canvas?.scene?.tokens ?? []) if (token.actor && !seen.has(token.actor.uuid)) carriers.push(token.actor);
+  for (const scene of game.scenes ?? []) {
+    for (const token of scene.tokens ?? []) if (token.actor) carriers.push(token.actor);
+  }
   let lifted = 0;
   for (const carrier of carriers) {
     if (seen.has(carrier.uuid) || !carrier.isOwner) continue;
     seen.add(carrier.uuid);
-    const ids = carrier.effects.filter(e => e.getFlag("azeroth-rpg", "spell") === spellUuid && (!e.origin || e.origin === actor.uuid)).map(e => e.id);
+    const ids = carrier.effects.filter(e =>
+      // New sustained carriers have one writer: the active-GM lifecycle sweep.
+      // That writer also reaches targets the caster's player cannot modify.
+      e.getFlag("azeroth-rpg", "sustained") !== true &&
+      e.getFlag("azeroth-rpg", "spell") === spellUuid &&
+      (!e.origin || e.origin === actor.uuid) &&
+      (!cast || e.getFlag("azeroth-rpg", "cast") === cast)
+    ).map(e => e.id);
     if (!ids.length) continue;
     await carrier.deleteEmbeddedDocuments("ActiveEffect", ids);
     lifted += ids.length;
@@ -4100,6 +4676,10 @@ export async function endSustain({ actor, spellId = null, uuid = null, cast = nu
     ? sustaining.findIndex(s => s?.cast === cast)
     : sustaining.findIndex(s => (spellId && s.spellId === spellId) || (uuid && s.uuid === uuid));
   if (index === -1) return null;
+  if (sustainEntryTransferPending(sustaining[index], actor.uuid)) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Spellsteal.TransferPending", { name: actor.name, spell: sustaining[index].name }));
+    return null;
+  }
   const [ended] = sustaining.splice(index, 1);
   // **A TOKEN ACTOR WRITES AN EMPTY LIST** (the final review of D-757), as
   // `endAllSustains` below does: an unset on a synthetic actor's delta lets
@@ -4107,7 +4687,7 @@ export async function endSustain({ actor, spellId = null, uuid = null, cast = nu
   if (sustaining.length || actor.isToken) await actor.setFlag("azeroth-rpg", "sustaining", sustaining);
   else await actor.unsetFlag("azeroth-rpg", "sustaining");
   const spell = actor.items.get(ended.spellId) ?? null;
-  await liftSpellEffects(actor, spell?.uuid ?? ended.uuid ?? null);
+  await liftSpellEffects(actor, spell?.uuid ?? ended.uuid ?? null, ended.cast ?? null);
   ui.notifications?.info(game.i18n.format(notice, { name: actor.name, spell: ended.name }));
   return ended;
 }
@@ -4144,13 +4724,15 @@ export function endAllSustains({ actor } = {}) {
   const run = async () => {
     const held = actor.getFlag?.("azeroth-rpg", "sustaining") ?? [];
     if (!held.length) return [];
-    if (actor.isToken) await actor.setFlag("azeroth-rpg", "sustaining", []);
+    const { ended, retained } = endSustainsPlan(held, actor.uuid);
+    if (retained.length || actor.isToken) await actor.setFlag("azeroth-rpg", "sustaining", retained);
     else await actor.unsetFlag("azeroth-rpg", "sustaining");
-    for (const entry of held) {
-      await liftSpellEffects(actor, actor.items.get(entry?.spellId)?.uuid ?? entry?.uuid ?? null);
+    for (const entry of ended) {
+      await liftSpellEffects(actor, actor.items.get(entry?.spellId)?.uuid ?? entry?.uuid ?? null, entry?.cast ?? null);
       ui.notifications?.info(game.i18n.format("AZEROTH.Combat.SustainEnded", { name: actor.name, spell: entry?.name ?? "" }));
     }
-    return held;
+    if (retained.length) ui.notifications?.warn(game.i18n.format("AZEROTH.Spellsteal.TransferInterrupted", { name: actor.name }));
+    return ended;
   };
   const prior = SUSTAIN_ENDS.get(key) ?? Promise.resolve([]);
   const next = prior.then(run, run);
@@ -4296,6 +4878,7 @@ async function holdUseSustain(actor, { name, identifier, upkeep = null, poolItem
   const limit = sustainLimit({ features, extra: more.more });
   while (sustaining.length > limit) {
     const dropped = sustaining.shift();
+    await liftSpellEffects(actor, actor.items.get(dropped.spellId)?.uuid ?? dropped.uuid ?? null, dropped.cast ?? null);
     ui.notifications?.info(game.i18n.format("AZEROTH.Combat.SustainEnded", { name: actor.name, spell: dropped.name }));
   }
   await actor.setFlag("azeroth-rpg", "sustaining", sustaining);
@@ -4327,6 +4910,13 @@ async function judgeSpiritUses({ actor, item, sys, onUse, rank, list, talentRow,
     ui.notifications?.warn(game.i18n.format(key, { name: item.name, ...data }));
     return null;
   };
+
+  if (spirits.waterBreathing) {
+    const target = aimed[0] ? targetActorOf(aimed[0]) : actor;
+    if (!target) return warn("AZEROTH.Card.TargetGone");
+    if (gmAbsentForActors([target])) return warn("AZEROTH.LegacyUse.NoGM");
+    plan.waterBreathing = { target, feet: feetBetweenTokens(ownToken, tokenOfTarget(aimed[0])) };
+  }
 
   // **04's HOLD THE THREAD IS ASKED AT THE STEP** (*As a Reaction ... A creature within
   // 30 feet that would take a Death Step does not take it*; door 11): the counter the
@@ -4654,6 +5244,11 @@ async function writeSpiritUses(plan, { actor, item, poolItemId = null }) {
     lines.push(game.i18n.format(plan.conceal.until === "attack" ? "AZEROTH.Conceal.LineAttack" : "AZEROTH.Conceal.Line", { names: hidden.join(", ") || "\u2014", feature: item.name }));
   }
   // One condition ended.
+  if (plan.waterBreathing) {
+    const done = await layStateOn({ target: plan.waterBreathing.target, kind: "waterBreathing", by: actor, item,
+      source: item.name, feet: plan.waterBreathing.feet, img: item.img });
+    lines.push(game.i18n.format(done.landed ? "AZEROTH.Gadget.RebreatherApplied" : "AZEROTH.Gadget.RebreatherFailed", { name: done.name }));
+  }
   if (plan.cure) {
     if (!plan.cure.id) lines.push(game.i18n.format("AZEROTH.Cure.Nothing", { target: plan.cure.name }));
     else {
@@ -4774,7 +5369,7 @@ async function writeSpiritUses(plan, { actor, item, poolItemId = null }) {
  * @param {{actor: Actor, item: Item, success: boolean, tierNow: number, extraRolls: Roll[]}} o
  * @returns {Promise<string[]>}
  */
-async function landSpiritCasting(plan, { actor, item, success, tierNow, extraRolls }) {
+async function landSpiritCasting(plan, { actor, item, success, tierNow, extraRolls, source = null }) {
   const lines = [];
   const d = plan?.areaDispel ?? null;
   if (!d) return lines;
@@ -4787,7 +5382,8 @@ async function landSpiritCasting(plan, { actor, item, success, tierNow, extraRol
     const blocked = [];
     for (const g of pick.gated) {
       const gateDc = castingDC({ tier: tierNow, targetDefense: pick.target.system?.defense ?? null });
-      const test = await gateCastingTest(actor, { dc: gateDc });
+      const test = await gateCastingTest(actor, { dc: gateDc, source });
+      if (!test) return null;
       extraRolls.push(test);
       const passed = gatePassed(test.outcome, g.sl);
       if (!passed) blocked.push(g.id);
@@ -4864,6 +5460,7 @@ function spiritResistIndex(plan) {
  */
 export async function useFeature({
   actor, item, dc = null, boons = 0, banes = 0, targets = null, provenanceExtra = [],
+  gadgetRest = false,
   // The Damage lines a talent put on the dialog and the roller left ticked - or,
   // with no dialog, the ones that came ticked (04, D-711 phase 2; D-768). The
   // feature's own lane, read exactly as `castSpell` reads the spell lane's.
@@ -4876,6 +5473,10 @@ export async function useFeature({
   // *"Yes"*; D-779): `{messageId, index}` of the incoming attack's card the Ward was
   // pressed from (`dice/chat.mjs#foresightWardFromCard`).
   foresight = null,
+  // GM-local continuation capability and the already selected school. The
+  // capability is never serialized or accepted from a player query.
+  foresightCommit = null, foresightSchool = null,
+  spellstealCommit = null,
   // **THE CARD A HIT-INTO-A-MISS ANSWERS** (04's Afterimage; the Legacy branches'
   // door 13): `{messageId, index}` of the incoming attack's card and the row struck,
   // as `dice/chat.mjs#negateFromCard` hands it. A negating Use refuses without it.
@@ -4884,14 +5485,51 @@ export async function useFeature({
   // dialog found before it opened, for a casting feature; taken here otherwise.
   source = null
 } = {}) {
+  if (item?.getFlag?.("azeroth-rpg", "feature")?.gadget && refuseDispersion(actor, "gear")) return null;
+  if (spellstealCommit !== null && !spellstealUseValid(actor, item, spellstealCommit)) return null;
+  if (!(await featureReady(actor, item))) return null;
+  if (refuseAncientDespair(actor, "feature")) return null;
   const sys = item.system;
   // A copy, never the caller's own array: an area Use replaces it with the creatures it
   // gathers (the B6 fix; the lead: *"Measure the area"*), and Cloudburst adds to it.
   const list = [...(targets ?? [])];
   const first = list[0] ?? null;
+  // An answering Ward must never fall back to an ordinary (paid) Ward.
+  // Check again after asynchronous choices, immediately before the budget.
+  const refuseForesight = () => {
+    if (foresight === null) return false;
+    const refused = item.name !== WARD_BASE.feature || list.length !== 1
+      || foresightAdmission({ priest: actor, target: targetActorOf(list[0]), answers: foresight, commit: foresightCommit });
+    if (!refused) return false;
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Foresight.CannotAnswer"));
+    return true;
+  };
+  if (refuseForesight()) return null;
   // A talent's grant scales by the rank taken (D-642).
   const grantFlag = item.getFlag?.("azeroth-rpg", "feature") ?? {};
   const grantingTalent = grantFlag.talentId ? actor.items.get(grantFlag.talentId) ?? null : null;
+  let mindControlTarget = null;
+  const refuseMindControl = () => {
+    if (grantingTalent?.system?.identifier !== "mind-control") return false;
+    const row = list.length === 1 ? list[0] : null;
+    const target = row?.sceneId && row?.tokenId ? fromUuidSync(`Scene.${row.sceneId}.Token.${row.tokenId}`)?.actor
+      : row?.actorId && !row.sceneId && !row.tokenId ? game.actors.get(row.actorId) : null;
+    if (!target || (mindControlTarget && mindControlTarget !== target)) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.MindControl.OneTarget"));
+      return true;
+    }
+    if (iceBlockFor(actor) || iceBlockFor(target)) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.IceBlock.Protected"));
+      return true;
+    }
+    mindControlTarget = target;
+    return false;
+  };
+  if (refuseMindControl()) return null;
+  if (grantingTalent?.system?.className === "Paladin" && grantingTalent.system.identifier === "sacrifice") {
+    ui.notifications?.info(game.i18n.localize("AZEROTH.Sacrifice.Trigger"));
+    return null;
+  }
   // **WHAT THE CARD RECORDS FOR THE ANIMATION LAYER** (the Legacy branches' door 2):
   // who used it - taken now, before any pick or chooser, by the roll dialog's own rule
   // (`roll-dialog.mjs#sourceOf`, D-724) - and which feature it is, by the key its row
@@ -4912,12 +5550,21 @@ export async function useFeature({
   // (`rules/gadgets.mjs`), never off the Gadgeteer row that granted it - the row
   // below is the gadget's own, so no buff or rider of the Gadgeteer's reaches it.
   const gadget = grantFlag.gadget ? gadgetByKey(grantFlag.gadget) : null;
+  if (gadget?.onUse?.preventsProne && !stabilizerIsTriggered(actor)) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Gadget.StabilizerTrigger"));
+    return null;
+  }
   // The granting talent's row: a damage buff the Use switches on (D-711), and
   // what the Use does beyond its descriptor (D-771's `onUse`).
   const talentRow = gadget ? { onUse: gadget.onUse ?? {} } : grantingTalent
     ? talentEffect(grantingTalent.system?.className, grantingTalent.system?.identifier, grantingTalent.system?.race ?? null)
     : null;
   const onUse = onUseOf(talentRow);
+  if (onUse?.rocketJump === true) {
+    const { requestRocketJump } = await import("../effects/rocket-jump-use.mjs");
+    return requestRocketJump(actor, item, useSource);
+  }
+  if (onUse?.sustain && refuseSustainTransferStart(actor)) return null;
 
   // 1. A use left? **Not yet for a Use whose first choice is free** (04's Ultrasafe
   // Transporter: a pad is set over a Short Rest, and the Long Rest's one use is the
@@ -5136,6 +5783,10 @@ export async function useFeature({
       return null;
     }
     partner = aimed[0].actor;
+    if (iceBlockFor(actor) || iceBlockFor(partner)) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.IceBlock.Protected"));
+      return null;
+    }
   }
   // **WHAT D-772's USES NEED, ASKED HERE TOO** - before anything is paid.
   // Beacon names one friendly creature, Symbiosis's way (04: *Choose a friendly
@@ -5154,6 +5805,10 @@ export async function useFeature({
       return null;
     }
     beaconPartner = aimed[0].actor;
+    if (iceBlockFor(actor) || iceBlockFor(beaconPartner)) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.IceBlock.Protected"));
+      return null;
+    }
   }
   // Taunt's and Judgement's Bane, and Blessing's Boon, land on ONE creature the
   // user has targeted (04: *A target that can see you*, *The target*, *A friendly
@@ -5166,13 +5821,20 @@ export async function useFeature({
   // (`onUse.self`) for the encounter, and names nobody; the orc's Thrall's Discipline names one
   // friendly creature *within 60 feet* (`lays.boon.feet`), measured where both stand (D-732).
   const boonWhere = boonSpan(lays.boon, onUse);
+  if (onUse?.sight === true && actor.statuses?.has("blinded")) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Laid.NeedsSight", { name: item.name }));
+    return null;
+  }
   let laysOn = null;
+  let baneTargets = [];
   if (lays.boon && boonWhere.self && !lays.bane) {
     laysOn = { t: null, actor };
   } else if (lays.bane || lays.boon) {
-    const aimed = (targets ?? []).map(t => ({ t, actor: targetActorOf(t) })).filter(r => r.actor);
-    if (aimed.length !== 1) {
-      ui.notifications?.warn(game.i18n.format("AZEROTH.Laid.OneTarget", { name: item.name }));
+    const aimed = [...new Map((targets ?? []).map(t => ({ t, actor: targetActorOf(t) }))
+      .filter(r => r.actor).map(r => [r.actor.uuid, r])).values()];
+    const many = onUse?.laysBane?.many === true && !lays.boon;
+    if (!aimed.length || (!many && aimed.length !== 1)) {
+      ui.notifications?.warn(game.i18n.format(many ? "AZEROTH.Laid.SomeTargets" : "AZEROTH.Laid.OneTarget", { name: item.name }));
       return null;
     }
     if (lays.boon && onUse?.friendly) {
@@ -5184,20 +5846,34 @@ export async function useFeature({
       }
     }
     // *within 60 feet* (Thrall's Discipline), where both tokens stand; unmeasured, the table's.
-    const boonReach = lays.boon?.feet ?? 0;
-    const apart = boonReach > 0 ? feetBetweenTokens(actor.getActiveTokens?.(true)?.[0] ?? null, tokenOfTarget(aimed[0].t)) : null;
-    if (apart !== null && apart > boonReach) {
-      ui.notifications?.warn(game.i18n.format("AZEROTH.Laid.TooFar", { name: item.name, target: aimed[0].t?.name ?? aimed[0].actor.name, feet: boonReach }));
-      return null;
+    const boonReach = lays.boon?.feet ?? onUse?.laysBane?.feet ?? 0;
+    for (const chosen of aimed) {
+      const apart = boonReach > 0 ? feetBetweenTokens(actor.getActiveTokens?.(true)?.[0] ?? null, tokenOfTarget(chosen.t)) : null;
+      if (apart !== null && apart > boonReach) {
+        ui.notifications?.warn(game.i18n.format("AZEROTH.Laid.TooFar", { name: item.name, target: chosen.t?.name ?? chosen.actor.name, feet: boonReach }));
+        return null;
+      }
+      if (onUse?.laysBane?.hearing === true && chosen.actor.statuses?.has("deafened")) {
+        ui.notifications?.warn(game.i18n.format("AZEROTH.Laid.CannotHear", { name: item.name, target: chosen.actor.name }));
+        return null;
+      }
     }
     // **A BANE OR A BOON LAID ON ANOTHER'S CREATURE IS WRITTEN ON THE GM'S CLIENT** (the
     // B8a2 pass, `rules/gm-writes.mjs#gmAbsentFor`): with no GM online it was refused only
     // after the Use had paid - Taunt's and Blessing's too. Refused here, before anything is spent.
-    if (gmAbsentForActors([aimed[0].actor])) {
+    if (gmAbsentForActors(aimed.map(r => r.actor))) {
       ui.notifications?.warn(game.i18n.localize(lays.boon ? "AZEROTH.Laid.BoonNoGM" : "AZEROTH.Laid.BaneNoGM"));
       return null;
     }
     laysOn = aimed[0];
+    baneTargets = aimed;
+    if (lays.bane) {
+      const { sentinelRejectsTaunt } = await import("../effects/sentinel-taunt.mjs");
+      if (sentinelRejectsTaunt(laysOn.actor, item.name)) {
+        ui.notifications?.warn("This Sentinel's Knock Away power protects it from Taunt. Nothing was spent.");
+        return null;
+      }
+    }
   }
   // A Long Rest's school (Blessed Plate, Warded Plate) comes off the Use's own
   // chooser (`choice: "schools"`, asked at 1b) and is written once paid.
@@ -5303,6 +5979,10 @@ export async function useFeature({
   // **WHAT THE PRIEST'S AND THE SHAMAN'S USES NEED, ASKED HERE TOO** (D-774) -
   // before anything is paid.
   const tierNow = actor.system?.tier ?? 1;
+  if (gadgetHealthCost(gadget, { tier: tierNow, health: actor.system?.health?.value ?? 0 }).refused) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Gadget.HealthRefused", { name: item.name }));
+    return null;
+  }
   const ps = onUsePriestShaman(onUse, { rank, tier: tierNow });
   // A state that lasts *until your next turn* (Ascendance, Doom Winds, Silence's
   // *cannot cast until your next turn*) and a walk made this turn (Spirit Walk)
@@ -5490,20 +6170,38 @@ export async function useFeature({
       return null;
     }
     const caster = aimed.length ? targetActorOf(aimed[0]) : null;
-    const apart = caster ? feetBetweenTokens(ownToken, tokenOfTarget(aimed[0])) : null;
+    const apart = caster && spellstealCommit === null ? feetBetweenTokens(ownToken, tokenOfTarget(aimed[0])) : null;
     if (apart !== null && apart > COUNTERSPELL.feet) {
       ui.notifications?.warn(game.i18n.format("AZEROTH.Laid.TooFar", { name: item.name, target: aimed[0].name ?? "", feet: COUNTERSPELL.feet }));
       return null;
     }
     const held = caster ? sustainsOf(caster) : [];
+    const transferChoice = spellstealCommit !== null ? spellstealUseChoice(actor, item, spellstealCommit) : null;
+    if (spellstealCommit !== null && (!transferChoice || transferChoice.casterUuid !== caster?.uuid
+      || !held.some(entry => entry.cast === transferChoice.cast))) return null;
     if (held.length) {
-      const pick = held.length === 1 ? { key: "0" } : await chooseOption(item, held.map((e, i) => ({ key: String(i), name: e.name, description: "" })), null, { prompt: game.i18n.format("AZEROTH.Spellsteal.Prompt", { target: caster.name }) });
+      const pick = transferChoice ? { key: String(held.findIndex(entry => entry.cast === transferChoice.cast)) }
+        : held.length === 1 ? { key: "0" } : await chooseOption(item, held.map((e, i) => ({ key: String(i), name: e.name, description: "" })), null, { prompt: game.i18n.format("AZEROTH.Spellsteal.Prompt", { target: caster.name }) });
       if (!pick) return null;
       if (gmAbsentForActors([caster])) {
         ui.notifications?.warn(game.i18n.localize("AZEROTH.Spellsteal.NoGM"));
         return null;
       }
       stealing = { caster, entry: held[Number(pick.key)] ?? held[0] };
+      if (spellstealCommit === null && counterspellFor(talentsNow).transfers) {
+        const mode = await chooseOption(item, [
+          { key: "end", name: game.i18n.localize("AZEROTH.Spellsteal.EndChoice"), description: "" },
+          { key: "transfer", name: game.i18n.localize("AZEROTH.Spellsteal.TransferChoice"),
+            description: game.i18n.localize("AZEROTH.Spellsteal.TransferDescription") }
+        ], null, { prompt: game.i18n.format("AZEROTH.Spellsteal.ModePrompt", { spell: stealing.entry.name }) });
+        if (!mode) return null;
+        if (mode.key === "transfer") {
+          const token = ownToken?.document ?? ownToken;
+          return requestSpellstealUse({ mage: actor, caster, item, entry: stealing.entry,
+            source: source ?? (token?.parent?.id && token?.id ? { sceneId: token.parent.id, tokenId: token.id } : null),
+            target: aimed[0]?.tokenId || aimed[0]?.sceneId ? { sceneId: aimed[0].sceneId, tokenId: aimed[0].tokenId } : null });
+        }
+      }
     }
   }
   // **04's SOUL SWAP** (*name a target within 30 feet suffering an ongoing effect of
@@ -5576,7 +6274,24 @@ export async function useFeature({
       ui.notifications?.warn(game.i18n.localize("AZEROTH.Bound.NoGM"));
       return null;
     }
-    commanding = { target, name: aimed[0].name ?? target.name };
+    const sourceDoc = ownToken?.document;
+    const placement = sourceDoc || aimed[0].tokenId ? {
+      source: sourceDoc ? { sceneId: sourceDoc.parent?.id, tokenId: sourceDoc.id } : null,
+      target: { sceneId: aimed[0].sceneId, tokenId: aimed[0].tokenId }
+    } : null;
+    const sightRefusal = () => {
+      if (actor.statuses?.has("blinded")) return "AZEROTH.CommandDemon.CannotSee";
+      if (!placement) return null; // Off-scene visibility remains the table's call.
+      const source = tokenOfTarget(placement.source);
+      if (source?.actor?.uuid !== actor.uuid) return "AZEROTH.CommandDemon.SightUnavailable";
+      return commandDemonSightRefusal(source, tokenOfTarget(placement.target));
+    };
+    const unseen = sightRefusal();
+    if (unseen) {
+      ui.notifications?.warn(game.i18n.localize(unseen));
+      return null;
+    }
+    commanding = { target, name: aimed[0].name ?? target.name, placement, sightRefusal };
   }
   // **02's LIFE TAP** (*spend any amount of Health to gain twice that much Mana*),
   // with 04's Improved Life Tap: the Health chosen now through the one chooser,
@@ -5665,6 +6380,7 @@ export async function useFeature({
   // through the one chooser before anything is paid - a chooser dismissed costs
   // nothing, and a Ranger carrying none sets the Snare with none, said in words.
   let trapPoison = null;
+  let trapDose = null;
   // What D-779's answers say on the card, gathered before the Use's own lines are.
   const answerLines = [];
   const snake = item.name === SNARE.feature ? snakeTrapFor(talentsNow) : null;
@@ -5676,6 +6392,8 @@ export async function useFeature({
         { prompt: game.i18n.format("AZEROTH.SnakeTrap.Prompt", { talent: snake.name }) });
       if (!pick) return null;
       trapPoison = carried.find(i => i.id === pick.key) ?? null;
+      if (!trapPoison) return null;
+      trapDose = { trapId: foundry.utils.randomID(), expectedUse: structuredClone(trapPoison.system.use), expectedSnake: structuredClone(snake) };
     } else answerLines.push(game.i18n.format("AZEROTH.SnakeTrap.NoPoison", { talent: snake.name }));
   }
   // **04's DIVINE AEGIS** (the lead, 2026-10-03, on O-183: *"The caster"*; D-779): a
@@ -5767,7 +6485,7 @@ export async function useFeature({
   const fightForBodies = actor.activeFight?.() ?? null;
   const ownTokenDoc = ownToken?.document ?? null;
   // 04's The Bench (*Building one takes a Short Rest and a tinker's kit*) and
-  // Gadgeteer (*Changing one you know takes a week of downtime*): outside a fight,
+  // Gadgeteer's learning and Long Rest replacement: outside a fight,
   // and the build with a tinker's kit carried (door 6, door 7).
   if (sys.choice === "constructs") {
     if (fightForBodies) {
@@ -5809,6 +6527,14 @@ export async function useFeature({
     // *A friendly target* (04's Troll's Blood and Voodoo Mending; the Legacy branches' B6):
     // the user, or a creature the user counts as an ally (D-755's one reading).
     const aimedActor = targetActorOf(aimed[0]);
+    const gadgetRefusal = gadgetTargetRefusal(gadget, aimedActor?.system ?? {});
+    if (gadgetRefusal) {
+      ui.notifications?.warn(game.i18n.format(gadgetRefusal, {
+        name: item.name, target: aimed[0].name ?? aimedActor?.name ?? "",
+        kind: kinds.map(k => game.i18n.localize(AZEROTH.creatureTypes?.[k] ?? k)).join(", ")
+      }));
+      return null;
+    }
     if (onUse.aim.friendly === true && aimedActor && aimedActor.uuid !== actor.uuid && !allyOf(actor, aimedActor)) {
       ui.notifications?.warn(game.i18n.format("AZEROTH.Laid.NotFriendly", { name: item.name, target: aimed[0].name ?? aimedActor.name }));
       return null;
@@ -5915,6 +6641,30 @@ export async function useFeature({
   // With nothing to aim from on this board the point is the table's, as before: the card
   // keeps its Place area and its buttons reach the selected tokens.
   const gatherPlan = gatherOf({ who: sys.who ?? null, area: sys.area ?? "" });
+  // The flash is aimed before payment. A temporary Region uses core's own token
+  // containment geometry without creating a document or leaving an abandoned area.
+  let gadgetCone = null;
+  if (onUse?.nextAttackBane) {
+    if (!ownToken?.document?.parent || ownToken.document.parent.id !== canvas?.scene?.id) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Gadget.ConeNeedsToken", { name: item.name }));
+      return null;
+    }
+    const coneArea = areaFor(sys.area);
+    const origin = { x: ownToken.center.x, y: ownToken.center.y };
+    const rotation = await pickFacing({ origin, area: coneArea, scene: canvas.scene, label: item.name });
+    if (rotation === null) return null;
+    const data = regionDataFor({ item, areaText: sys.area, scene: canvas.scene, token: ownToken, origin, rotation, attach: false });
+    const region = new CONFIG.Region.documentClass(data, { parent: canvas.scene });
+    const inside = (creaturesInArea(actor, { who: "creature", origin: "self", feet: coneArea.distanceFt }) ?? [])
+      .filter(r => r.token.document.testInsideRegion(region));
+    if (gmAbsentForActors(inside.map(r => r.actor))) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.LegacyUse.NoGM"));
+      return null;
+    }
+    const { targetSnapshots } = await import("../applications/roll-dialog.mjs");
+    list.splice(0, list.length, ...targetSnapshots(inside.map(r => r.token)));
+    gadgetCone = { origin, rotation };
+  }
   let gatherAt = null;
   if (gatherPlan?.origin === "point" && aimFrom?.tokenUuid && canvas?.scene) {
     const aimToken = fromUuidSync(aimFrom.tokenUuid);
@@ -6084,14 +6834,26 @@ export async function useFeature({
     // checklist Totem Mastery's is (D-710's one chooser, never a second dialog):
     // one form, or two merged.
     if (sys.choice === "forms" && (sys.picks ?? 1) > 1) allowed = Math.trunc(sys.picks);
-    // **04's GADGETEER: AS MANY AS THE RANKS KNOW** (*two gadgets ... or four at rank
-    // 2*; Engineering Upgrade's *one more gadget per rank*; door 7): the checklist,
-    // opened on the gadgets known.
-    if (sys.choice === "gadgets") allowed = Math.max(1, gadgetsKnownFor(talentsNow).known);
-    const answer = await chooseOption(item, options, note, { max: allowed });
+    // Gadgeteer's 2 + character tier, plus Engineering Upgrade's ranks. The
+    // checklist opens on the gadgets known; replacement is checked below.
+    if (sys.choice === "gadgets") allowed = Math.max(1, gadgetsKnownFor(talentsNow, undefined, { tier: actor.system?.tier ?? 1 }).known);
+    const answer = foresightCommit !== null
+      ? options.find(option => option.key === foresightSchool && option.available !== false) ?? null
+      : await chooseOption(item, options, note, { max: allowed });
     picks = answer === null ? [] : (Array.isArray(answer) ? answer : [answer]);
     if (!picks.length) return null;
     chosen = picks[0];
+    if (sys.choice === "gadgets") {
+      const refused = gadgetSelectionRefusal({
+        known: item.system?.known ?? [], selected: picks.map(p => p.key), allowed,
+        longRest: gadgetRest,
+        bench: talentsNow.some(t => t.className === "Rogue" && t.identifier === "the-bench" && t.taken > 0)
+      });
+      if (refused) {
+        ui.notifications?.warn(game.i18n.format(refused, { name: item.name, n: allowed }));
+        return null;
+      }
+    }
     // 04's Demonic Sacrifice (*The dismissed demon cannot be summoned again until
     // your next Long Rest*; D-775): greyed in the chooser with its reason, and
     // refused in those words rather than as a level not yet reached.
@@ -6498,6 +7260,31 @@ export async function useFeature({
   // **SPIRIT WALK'S HALF-ACTION IS THE MOVE** (04: *As a Half-Action, move your
   // Speed without provoking*; D-774): Disengage's own door, the budget and the
   // Moves paid in one write (D-761), so the walk is not charged a second time.
+  const gadgetCost = gadgetHealthCost(gadget, { tier: tierNow, health: actor.system?.health?.value ?? 0 });
+  if (gadgetCost.refused) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Gadget.HealthRefused", { name: item.name }));
+    return undoBinds();
+  }
+  if (onUse?.sustain && refuseSustainTransferStart(actor)) return undoBinds();
+  if (trapDose && (!game.users?.activeGM || actor.items.get(trapPoison.id) !== trapPoison
+    || actor.items.get(item.id) !== item || !sameSnakeTrapRule(snakeTrapFor(actor.takenTalents()), trapDose.expectedSnake)
+    || !snakeTrapDosePlan({ item: trapPoison.toObject(), ...trapDose }).ok)) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.SnakeTrap.DoseRefused"));
+    return undoBinds();
+  }
+  if (item?.getFlag?.("azeroth-rpg", "feature")?.gadget && refuseDispersion(actor, "gear")) return undoBinds();
+  if (refuseForesight() || refuseMindControl()) return undoBinds();
+  if (foresight !== null) {
+    const unavailable = turnBudgetRefusal(actor, actionNow);
+    if (unavailable) {
+      ui.notifications?.warn(game.i18n.format(unavailable.reason, unavailable.params ?? {}));
+      return undoBinds();
+    }
+  }
+  if (foresight !== null && foresightCommit === null) {
+    return requestForesightUse({ priest: actor, target: targetActorOf(wardOn[0]), item, answers: foresight, school: wardSchoolsNow[0] });
+  }
+  if (spellstealCommit !== null && !spellstealUseValid(actor, item, spellstealCommit)) return undoBinds();
   if (ps.walk && mine) {
     if (!(await mine.spendMoveAction()).ok) return undoBinds();
   } else if (negating?.answeredWithLost) {
@@ -6505,6 +7292,20 @@ export async function useFeature({
     // against a Bash; the Legacy branches' door 13): none is left to spend, so none
     // is - and the withdrawal gives none back (`effects/miss.mjs#withdrawHit`).
   } else if (!(await spendTurnBudget(actor, shiftFree ? null : actionNow))) return undoBinds();
+  if (foresightCommit !== null && !foresightCommitValid(actor, foresight, foresightCommit)) return null;
+  if (spellstealCommit !== null && !spellstealUseValid(actor, item, spellstealCommit)) return null;
+
+  // The budget spend awaits a document write. Recheck Health afterwards so a
+  // concurrent hit cannot make the ray underpay or raise its user to 1 Health.
+  // A failed effect after this point still used the attempted action.
+  if (gadgetCost.cost > 0) {
+    const currentCost = gadgetHealthCost(gadget, { tier: tierNow, health: actor.system?.health?.value ?? 0 });
+    if (currentCost.refused) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Gadget.HealthRefused", { name: item.name }));
+      return undoBinds();
+    }
+    await actor.update({ "system.health.value": actor.system.health.value - currentCost.cost });
+  }
 
   // 2. Pay: judged in 1e, so nothing here can be half done. **A PRICE PAID ON THE TEST'S
   // SUCCESS** (02's Mass Mend, Shadow Word: Death, Divine Hymn and Curse: *make a Casting
@@ -6521,7 +7322,13 @@ export async function useFeature({
     // item and kind, a gain landing in between kept, and one that fell short pays
     // what it holds (`casting.mjs#payFromNow`).
     const poolNow = (actor.poolSnapshot?.() ?? []).find(p => p.itemId === pool.itemId && p.kind === pool.kind && p.name === pool.name) ?? pool;
+    if (foresightCommit !== null && (poolNow.value < spent || !foresightCommitValid(actor, foresight, foresightCommit))) return null;
+    if (spellstealCommit !== null && (poolNow.value < spent || !spellstealUseValid(actor, item, spellstealCommit))) return null;
     if (spent > 0) await actor.updatePool({ itemId: pool.itemId, kind: pool.kind, value: payFromNow(poolNow.value, spent).value });
+    if (spellstealCommit !== null && (!spellstealUseValid(actor, item, spellstealCommit)
+      || (actor.poolSnapshot?.() ?? []).find(p => p.itemId === pool.itemId && p.kind === pool.kind)?.value !== poolNow.value - spent)) return null;
+    if (foresightCommit !== null && (!foresightCommitValid(actor, foresight, foresightCommit)
+      || (actor.poolSnapshot?.() ?? []).find(p => p.itemId === pool.itemId && p.kind === pool.kind)?.value !== poolNow.value - spent)) return null;
     // Hammer of Justice (04): 5 or more Zeal at once and 1 a rank returns (D-627).
     if (spent >= 5 && pool.name === "zeal") {
       const now = actor.poolSnapshot().find(p => p.itemId === pool.itemId && p.kind === pool.kind);
@@ -6630,6 +7437,9 @@ export async function useFeature({
   // **WHAT THE TALENT'S USE DOES BEYOND ITS DESCRIPTOR** (D-771), now that it
   // is paid for. Each was judged at step 1. D-779's own lines first.
   const usedLines = [...answerLines];
+  if (gadgetCost.cost > 0) {
+    usedLines.push(game.i18n.format("AZEROTH.Gadget.HealthPaid", { name: item.name, n: gadgetCost.cost }));
+  }
   // Survival Instincts: *reduce the damage of one attack against you by half,
   // rounded down* - the one-attack mark a Block and a Parry ride, spent by the
   // next attack that lands (`AzerothActor#applyDamage`) - *and gain 1 Ferocity
@@ -6774,8 +7584,9 @@ export async function useFeature({
   }
   // Symbiosis: *name a friendly target*, the bond until the next Long Rest.
   if (partner) {
-    await nameSymbiosisPartner(actor, partner);
-    usedLines.push(game.i18n.format("AZEROTH.Symbiosis.Line", { partner: partner.name }));
+    const named = await nameSymbiosisPartner(actor, partner);
+    usedLines.push(named ? game.i18n.format("AZEROTH.Symbiosis.Line", { partner: partner.name })
+      : game.i18n.localize("AZEROTH.IceBlock.Protected"));
   }
   // **WHAT D-772's USES DO, NOW THAT THEY ARE PAID FOR.** Each was judged at
   // step 1.
@@ -6786,8 +7597,9 @@ export async function useFeature({
   }
   // Beacon: *Choose a friendly target you know*, until the next Long Rest.
   if (beaconPartner) {
-    await nameBeacon(actor, beaconPartner);
-    usedLines.push(game.i18n.format("AZEROTH.Beacon.Line", { partner: beaconPartner.name }));
+    const named = await nameBeacon(actor, beaconPartner);
+    usedLines.push(named ? game.i18n.format("AZEROTH.Beacon.Line", { partner: beaconPartner.name })
+      : game.i18n.localize("AZEROTH.IceBlock.Protected"));
   }
   // Precise Strike: *Your next attack this turn ignores 1 Armor Point per rank*. **And a
   // promise a rank makes** (04's Wind Walk at rank 2: *that attack adds your Dexterity
@@ -6803,7 +7615,7 @@ export async function useFeature({
   }
   // Taunt's and Judgement's Bane on attacks against anyone but the user, and
   // Blessing's Boon, on the one creature targeted.
-  if (laysOn && lays.bane) {
+  for (const laysOn of lays.bane ? baneTargets : []) {
     const own = actor.getActiveTokens?.(true)?.[0] ?? null;
     // **04's FEINT** (*The target's next attack against you takes a Bane per
     // rank*; D-773): a COUNT, spent by the target's next attack AGAINST the user
@@ -6813,11 +7625,12 @@ export async function useFeature({
     // Out of a fight the span is the world's clock (D-778, O-161): Judgement's *one
     // round per rank* N rounds of it, Taunt's *until the end of your next turn* one,
     // and Feint's count its backstop one round where the target has no turn either.
-    const span = only ? (laysOn.actor.activeFight?.() ? null : clockRounds(1)) : (lays.bane.rounds > 0
+    const nextTest = lays.bane.until === "next";
+    const span = nextTest ? {} : only ? (laysOn.actor.activeFight?.() ? null : clockRounds(1)) : (lays.bane.rounds > 0
       ? roundsOrClock(actor, lays.bane.rounds)
       : untilEndOfNextTurnOrRound(actor));
     const done = await layBane({
-      victim: laysOn.actor, kind: lays.bane.kind, banes: lays.bane.banes, source: item.name, by: actor, lasting: !only,
+      victim: laysOn.actor, kind: lays.bane.kind, banes: lays.bane.banes, source: item.name, by: actor, lasting: !only && !nextTest,
       except: lays.bane.except ? { actorId: actor.id, tokenId: own?.id ?? null } : null, only, span
     });
     if (done) usedLines.push(game.i18n.format(only ? "AZEROTH.Feint.Line" : "AZEROTH.Laid.BaneLine", { target: laysOn.actor.name, n: lays.bane.banes, name: actor.name }));
@@ -6968,6 +7781,7 @@ export async function useFeature({
         priest: actor, target: targetActorOf(t), name: t?.name ?? "", span, img: item.img, description,
         // A Ward pressed from the incoming card answers its blow (D-779).
         answers: foresight && wardOn.length === 1 ? foresight : null,
+        commit: foresightCommit,
         ward: {
           schools: wardSchoolsNow, amount: WARD_BASE.amount, reduction: wardOpts.reduction, undispellable: wardOpts.undispellable, absorb: wardOpts.absorb, atone: wardOpts.atone,
           undispellableBy: (wardOpts.by?.undispellable ?? []).join(", ")
@@ -7071,7 +7885,8 @@ export async function useFeature({
       const blocked = [];
       for (const g of pick.gated) {
         const gateDc = castingDC({ tier: tierNow, targetDefense: pick.target.system?.defense ?? null });
-        const test = await gateCastingTest(actor, { dc: gateDc });
+        const test = await gateCastingTest(actor, { dc: gateDc, source: useSource });
+        if (!test) return null;
         extraRolls.push(test);
         const passed = gatePassed(test.outcome, g.sl);
         if (!passed) blocked.push(g.id);
@@ -7122,8 +7937,14 @@ export async function useFeature({
   // Spellsteal: the Sustain chosen ends through the one door, on the GM's client
   // where the caster is another's.
   if (stealing) {
-    const ended = await stealSustain({ caster: stealing.caster, entry: stealing.entry, by: actor });
-    usedLines.push(game.i18n.format(ended ? "AZEROTH.Spellsteal.Line" : "AZEROTH.Spellsteal.NotEnded", { target: stealing.caster.name, spell: stealing.entry.name }));
+    if (spellstealCommit !== null) {
+      const result = await finishSpellstealUse(actor, item, spellstealCommit);
+      usedLines.push(game.i18n.format(result.ok ? "AZEROTH.Spellsteal.Transferred" : "AZEROTH.Spellsteal.TransferReview",
+        { name: actor.name, target: stealing.caster.name, spell: stealing.entry.name }));
+    } else {
+      const ended = await stealSustain({ caster: stealing.caster, entry: stealing.entry, by: actor });
+      usedLines.push(game.i18n.format(ended ? "AZEROTH.Spellsteal.Line" : "AZEROTH.Spellsteal.NotEnded", { target: stealing.caster.name, spell: stealing.entry.name }));
+    }
   }
   // Icy Veins: the state on the mage until the end of their next turn, read by
   // the Casting Test's line and the cast's Mana (`rules/class-talents.mjs#veinsStates`).
@@ -7342,7 +8163,9 @@ export async function useFeature({
   // with the use this Use has spent, which is the gadget breaking until a Short Rest.
   const overclocked = gadget ? cleanOverclock(item.getFlag?.("azeroth-rpg", OVERCLOCK_FLAG) ?? null) : null;
   if (overclocked) {
-    usedLines.push(game.i18n.format("AZEROTH.Overclock.Fired", { name: item.name, talent: overclocked.by }));
+    usedLines.push(onUse?.gadgetAttack?.overclockDamage
+      ? game.i18n.format("AZEROTH.Gadget.OverclockRating", { n: onUse.gadgetAttack.overclockDamage })
+      : game.i18n.format("AZEROTH.Overclock.Fired", { name: item.name, talent: overclocked.by }));
     await item.unsetFlag("azeroth-rpg", OVERCLOCK_FLAG);
   }
   // **MEKKATORQUE'S BLUEPRINT** (02's gnome; door 7): a gadget built stands as one
@@ -7380,16 +8203,26 @@ export async function useFeature({
 
   // 3. The Test, where the feature makes one.
   let roll = null;
+  let spellLock = null;
   let sl = 0;
   let success = true;
   let resolvedDC = null;
   if (sys.casting) {
+    spellLock = await requestSpellLockWindow({ actor, source: useSource ?? null,
+      test: { kind: "feature", itemUuid: item.uuid } });
+    if (!spellLock?.ok) {
+      ui.notifications?.warn("The casting reaction window could not be confirmed. No Casting Test was rolled. Check the feature's paid costs and reaction records before trying again.");
+      return null;
+    }
     const casting = (actor.classItems ?? []).find(c => c.system?.castingAbility)?.system?.castingAbility ?? null;
     const modifiers = [];
     if (casting) modifiers.push({ label: AZEROTH.abilities[casting], value: actor.system.abilities?.[casting]?.mod ?? 0 });
     modifiers.push({ label: "AZEROTH.Sheet.Proficiency", value: actor.system.proficiency ?? 0 });
     resolvedDC = dc ?? sys.dc ?? castingDC({ tier: actor.system.tier ?? 1, targetDefense: first?.defense ?? null });
-    roll = AzerothRoll.build({ dc: resolvedDC, modifiers, boons, banes, kind: "casting", rollData: actor.getRollData() });
+    roll = AzerothRoll.build({ dc: resolvedDC, modifiers, boons, banes: banes + spellLock.banes, kind: "casting", rollData: actor.getRollData() });
+    roll.options.spellLock = { castId: spellLock.castId, banes: spellLock.banes };
+    if (spellLock.banes > 0) roll.options.provenance.push({ label: "Spell Lock", value: null,
+      formula: `${spellLock.banes} ${spellLock.banes === 1 ? "Bane" : "Banes"}` });
     roll.options.provenance.push(...provenanceExtra);
     await roll.evaluate();
     // A feature that makes a Casting Test is a Casting Test (06 §6, D-693).
@@ -7454,7 +8287,11 @@ export async function useFeature({
   // 04's Command Demon: the demon bound until the next Long Rest, counted against
   // nothing - D-649's adopt, through the GM's client where it is another's.
   if (commanding && success) {
-    const held = await commandDemon({ owner: actor, actor: commanding.target, feature: featureForKind(actor, "demon") ?? item });
+    // Keep the talent's provenance: substituting Bound Demon here also made
+    // this temporary command eligible for Blood Pact's class-feature restriction.
+    const unseen = commanding.sightRefusal();
+    if (unseen) ui.notifications?.warn(game.i18n.localize(unseen));
+    const held = unseen ? null : await commandDemon({ owner: actor, actor: commanding.target, feature: item, placement: commanding.placement });
     usedLines.push(game.i18n.format(held ? "AZEROTH.CommandDemon.Line" : "AZEROTH.CommandDemon.NotBound", { name: actor.name, demon: commanding.name }));
   }
   // **04's THUNDERSTORM'S PUSH** (*On success, any number of targets within 15 feet
@@ -7473,7 +8310,9 @@ export async function useFeature({
   }
 
   // 3b. **WHAT A B3 CASTING USE LANDS ON ITS SUCCESS** (04's Disenchant; door 25).
-  usedLines.push(...(await landSpiritCasting(spiritsPlan, { actor, item, success, tierNow, extraRolls })));
+  const spiritLines = await landSpiritCasting(spiritsPlan, { actor, item, success, tierNow, extraRolls, source: useSource });
+  if (spiritLines === null) return null;
+  usedLines.push(...spiritLines);
 
   // 3c. **AN AREA USE GATHERS ITS OWN TARGETS** (the lead: *"Measure the area"*; the B6
   // fix): every creature inside the circle that the row's `who` names - measured from the
@@ -7628,6 +8467,7 @@ export async function useFeature({
   let noneOnPass = false;
   // Why a feature's damage was what it was, for a card with no roll to carry it.
   const damageProvenance = [];
+  let explosiveTrap = null;
   if (success && sys.damage?.amount) {
     const base = evaluateAmount(sys.damage.amount, scope) ?? 0;
     const school = sys.damage.type ?? null;
@@ -7657,12 +8497,20 @@ export async function useFeature({
     // TYPE (04's Arcane Power on a casting feature - the lead: *"Yes, casting
     // features count"*; D-777): a second amount, met by its own Ward.
     const featureTyped = typedLaneExtras(actor.system, featureDamageLane(sys));
+    // A set trap retains the feature's prepared damage and DC. Its victims are
+    // captured later by Region entry, independently of Snake Trap's poison rank.
+    if (item.name === SNARE.feature && school === "fire" && sys.damage.half === true) {
+      explosiveTrap = explosiveTrapSnapshot({ rating, extras: featureTyped, dealtHalved: halvedFeature,
+        dc: actor.system.spellDC ?? actor.system.spells?.dc ?? null });
+    }
     // **THE LANE ITS TYPE NAMES** (the lead: *"Measure the area"* - *each creature's Ward and
     // Armor Points subtracted*): a school's damage meets the creature's Ward, and a physical
     // or untyped one (the lead: *"Untyped counts as physical"*) its Body Armor Points.
     const lane = school && school !== "physical" ? "magical" : "physical";
-    const mitigate = (t, { passed = false } = {}) => resolveDamage({
+    const mitigate = (t, { passed = false } = {}) => explosiveTrap
+      ? explosiveTrapDamage(explosiveTrap, t ?? {}, { passed }) : resolveDamage({
       rating, sl: 0, kind: lane, school, location: "body", apByLocation: t?.apByLocation ?? {},
+      fireTakenBonus: t?.fireTakenBonus ?? 0,
       ward: t?.wardBySchool?.[school] ?? 0,
       // An ally's aura, after the Ward (04's Avenging Bulwark, D-755).
       schoolArmor: t?.schoolArmor?.[school] ?? 0,
@@ -7771,7 +8619,7 @@ export async function useFeature({
   // against a creature within 40 feet. On a hit it is Entangled*; the Legacy
   // branches' door 7): the card's own Attack, made with the gadget
   // (`rules/gadgets.mjs#gadgetWeapon`) and laying what its hit lays.
-  const gadgetAttack = onUse?.gadgetAttack && typeof onUse.gadgetAttack === "object" ? onUse.gadgetAttack : null;
+  const gadgetAttack = gadgetAttackAt(gadget, { tier: tierNow, overclocked: Boolean(overclocked) });
   const attack = sys.attack === true || Boolean(gadgetAttack);
   // **HOW MANY ATTACKS THE CARD'S BUTTON MAKES** (the architect's review of
   // D-773): every press costs nothing more, so the card records its allowance and
@@ -7810,10 +8658,17 @@ export async function useFeature({
   // D-779): the poison named at step 1, stamped for the card - its tick and the
   // conditions its failure lays - and a Reflex Test at the poison's own DC on the
   // first creature the Snare names as caught, or on every one at rank 2. The dose
-  // is the lead's (CLARIFY, O-178): nothing is marked off what is carried.
+  // is one per trap at either rank (lead ruling, 2026-10-30).
   const trapPoisons = [];
   const trapTests = [];
-  if (trapPoison && snake) {
+  if (trapPoison && snake && success) {
+    try {
+      trapPoison = await spendSnakeTrapDose({ actor, feature: item, poison: trapPoison, ...trapDose });
+      if (!trapPoison?.system?.use) throw new Error("Missing poison receipt");
+    } catch {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.SnakeTrap.DoseUncertain"));
+      return null;
+    }
     const use = trapPoison.system?.use ?? {};
     const tick = poisonTick(use);
     trapPoisons.push({ name: trapPoison.name, tick: tick ? layTick(tick, { source: actor.uuid, name: trapPoison.name }) : null, statuses: [...(use.statuses ?? [])] });
@@ -7864,15 +8719,15 @@ export async function useFeature({
     fumble: roll?.outcome?.fumble ?? false,
     heal,
     speakerName: actor.name,
-    damage,
-    resist,
+    damage: item.name === SNARE.feature ? null : damage,
+    resist: item.name === SNARE.feature && damage ? null : resist,
     // One Resist row per creature the card records, each its owner's (the B6 fix).
-    resistRows,
+    resistRows: item.name === SNARE.feature ? [] : resistRows,
     // The Snare's escape where Explosive Trap's half took the Resist (D-773).
     escape,
     // **AN AREA THE USE PLACED ITSELF IS NOT OFFERED AGAIN** (the B6 fix): a circle on
     // the ground the Use aimed and measured is set down below, once the card stands.
-    area: gatherAt ? null : area,
+    area: gatherAt || gadgetCone ? null : area,
     attack,
     // How many attacks the button makes (the architect's review of D-773).
     attackAllowance,
@@ -7946,6 +8801,13 @@ export async function useFeature({
     // The Casting Tests a Dispel's gates made (04's Everlasting Affliction, D-778) ride beside the Use's own.
     rolls: [...(roll ? [roll] : []), ...extraRolls],
     flags: { "azeroth-rpg": { kind: "feature", itemId: item.id, targets: list, damageByTarget, heal: healsBound ? null : healAmount, sl, area,
+      ...(grantingTalent?.system?.identifier === "mind-control" && resist && success ? {
+        mindControlCast: { version: 1, casterUuid: actor.uuid, featureUuid: item.uuid, dc: resist.dc }
+      } : {}),
+      ...(spellLock ? { spellLockCaster: actor.uuid, spellLockCasts: [spellLock.castId] } : {}),
+      ...(gadget?.onUse?.aim ? { gadgetTarget: { actorUuid: targetActorOf(list[0])?.uuid ?? "", name: list[0]?.name ?? "" } } : {}),
+      ...(gadget?.onUse?.shrink ? { gadgetShrink: { amount: tierNow } } : {}),
+      ...(gadgetCone ? { gadgetTargets: list.map(t => ({ actorUuid: targetActorOf(t)?.uuid ?? "", name: t.name ?? "" })), gadgetCone } : {}),
       ...(areaPush ? { push: { feet: areaPush.feet, from: "area", toward: "away", by: areaPush.by.join(", ") } } : {}),
       ...(featureSlowing ? { slowing: { feet: featureSlowing.feet, source: featureSlowing.by.join(", ") } } : {}),
       // The card's Attack allowance, counted by each press (the architect's
@@ -7955,9 +8817,10 @@ export async function useFeature({
       // a Boon*; the Legacy branches' door 26), drawn as a ticked line on its dialog.
       ...(attack && (barrageLimits?.boons ?? 0) > 0 ? { attackBoons: { boons: barrageLimits.boons, by: barrageLimits.by } } : {}),
       ...(item.name === SNARE.feature ? { snare: true } : {}),
+      ...(explosiveTrap ? { explosiveTrap } : {}),
       // **WHAT THE CARD'S ATTACK IS MADE WITH, AND WHAT ITS HIT LAYS** (the Legacy
       // branches' door 7): the gadget's own (`dice/chat.mjs#attackFromCardNow`).
-      ...(gadgetAttack ? { gadgetAttack: { name: item.name, range: Math.max(0, Math.trunc(Number(gadgetAttack.range)) || 0), damage: Math.max(0, Math.trunc(Number(gadgetAttack.damage)) || 0), inflicts: (gadgetAttack.inflicts ?? []).map(i => ({ ...i })) } } : {}),
+      ...(gadgetAttack ? { gadgetAttack: { name: item.name, range: Math.max(0, Math.trunc(Number(gadgetAttack.range)) || 0), maxRange: gadgetAttack.maxRange ?? null, damageType: gadgetAttack.damageType ?? null, damage: Math.max(0, Math.trunc(Number(gadgetAttack.damage)) || 0), inflicts: (gadgetAttack.inflicts ?? []).map(i => ({ ...i })) } } : {}),
       // **THE CONSTRUCT THE AREA IS AIMED FROM** (04's Cluster Rockets: *fires at a
       // point within 60 feet of it*; door 6): its token, and the feet the card's
       // Place area holds the point to (`dice/chat.mjs#placeAreaFromCard`).
@@ -7966,7 +8829,8 @@ export async function useFeature({
       // (the tick a failed Test lays, `dice/chat.mjs#rollResists`), and the schools
       // Divine Aegis was named for (read by the heal button and the tick).
       ...(well ? { lightwell: well } : {}),
-      ...(trapPoisons.length ? { poisons: trapPoisons } : {}),
+      ...(trapPoisons.length ? { poisons: trapPoisons,
+        snakeTrap: { version: 1, trapId: trapDose.trapId, reach: snake.reach, catches: [] } } : {}),
       ...(aegisNamed ? { aegis: aegisNamed } : {}),
       // Whether the Use's Casting Test succeeded (D-775): a failed one places
       // nothing (`dice/chat.mjs#placeAreaFromCard`) - and a success its price on the
@@ -8055,7 +8919,23 @@ export async function useFeature({
     }
   }
   // Hammer of Justice at rank 2 (D-772), after the card that paid for it.
+  if (posted && gadgetCone && success && canvas?.scene) {
+    try {
+      const { regionFlagsFromCard } = await import("./chat.mjs");
+      await placeArea({ item, areaText: sys.area, name: item.name, scene: canvas.scene,
+        origin: gadgetCone.origin, rotation: gadgetCone.rotation, token: ownToken,
+        attach: false, flags: regionFlagsFromCard(posted, actor, item) });
+    } catch (err) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Gather.PlaceFailed", { feature: item.name }));
+      console.warn("azeroth-rpg | gadget cone could not be drawn", err);
+    }
+  }
   if (hammerFalls) await hammerAfterUse(actor, item, list);
+  await completeSpellLockGates({ actor, rolls: extraRolls, message: posted });
+  if (spellLock) {
+    const aftermath = await completeSpellLockWindow({ actor, castId: spellLock.castId, message: posted });
+    if (!aftermath?.ok) ui.notifications?.warn("The feature resolved, but Spell Lock's resistance or Silence could not be confirmed. Check the reaction records; do not repeat the feature.");
+  }
   return posted;
 }
 
@@ -8154,6 +9034,49 @@ async function hammerAfterUse(actor, item, list) {
  * `actions.mjs#castNamedSpell` and never arrives here.
  */
 export async function useAbility({ actor, list = "creatureAbilities", index = 0, dc = null, boons = 0, banes = 0, targets = null } = {}) {
+  if (list === "creatureAbilities" && actor?.system?.creatureAbilities?.[index]?.name === "Arrival") {
+    const { isInfernalArrival } = await import("../rules/infernal.mjs");
+    if (isInfernalArrival(actor.system.creatureAbilities[index])) {
+      ui.notifications?.info(game.i18n.localize("AZEROTH.Infernal.AutomaticArrival"));
+      return null;
+    }
+  }
+  if (list === "creatureAbilities" && actor?.system?.creatureAbilities?.[index]?.name === "Immolation") {
+    const { isInfernalImmolation } = await import("../rules/infernal.mjs");
+    if (isInfernalImmolation(actor.system.creatureAbilities[index])) {
+      ui.notifications?.info(game.i18n.localize("AZEROTH.Infernal.AutomaticImmolation"));
+      return null;
+    }
+  }
+  if (list === "creatureAbilities" && actor?.system?.creatureAbilities?.[index]?.name === "Crushridge Kin") {
+    const { resumeCrushridgeDeath } = await import("../effects/crushridge-death-resume.mjs");
+    const result = await resumeCrushridgeDeath(actor);
+    if (!result?.ok) ui.notifications?.warn("Crushridge Kin reviews a saved death on the active GM's client. There must be a pending observed death; partially applied effects require reconciliation.");
+    return result;
+  }
+  // This control is GM encounter maintenance, never a paid cast or a manual
+  // death burst. It remains accessible while the creature is incapacitated.
+  if (list === "creatureAbilities" && actor?.system?.creatureAbilities?.[index]?.name === "Dying Mind") {
+    const { resetDyingMind } = await import("../effects/mindslayer-death.mjs");
+    return resetDyingMind(actor);
+  }
+  if (list === "creatureAbilities" && actor?.system?.creatureAbilities?.[index]?.name === "Unraveling Mana") {
+    const { resetAberrationDeath } = await import("../effects/arcane-aberration-death.mjs");
+    return resetAberrationDeath(actor);
+  }
+  if (list === "creatureAbilities" && actor?.system?.creatureAbilities?.[index]?.name === "Aberration Arcane Blast") {
+    const { requestAberrationBlast } = await import("../effects/arcane-aberration-blast.mjs");
+    return requestAberrationBlast(actor, index);
+  }
+  if (list === "creatureAbilities" && actor?.system?.creatureAbilities?.[index]?.name === "Obsidian Reservoir") {
+    const { resetDestroyerEncounter } = await import("../effects/obsidian-encounter.mjs");
+    return resetDestroyerEncounter(actor);
+  }
+  if (list === "creatureAbilities" && actor?.system?.creatureAbilities?.[index]?.name === "Sentinel Pack") {
+    const { manageSentinelPack } = await import("../effects/anubisath-pack-menu.mjs");
+    return manageSentinelPack(actor);
+  }
+  if (refuseAncientDespair(actor, "ability")) return null;
   const row = actor?.system?.[list]?.[index] ?? null;
   const a = row?.automation ?? null;
   // **CUTTING GEAR** (the lead, 2026-10-22: *"Give constructs a trait or ability that
@@ -8168,10 +9091,420 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
     return null;
   }
   const lst = targets ?? [];
+  if (list === "creatureAbilities" && row.name === "Pack Rekindling") {
+    const { configureCoreHoundPack } = await import("../effects/core-hound-pack-configure.mjs");
+    return configureCoreHoundPack(actor);
+  }
+  if (list === "creatureAbilities" && row.name === "Ancient Special") {
+    const { configureAncientSpecial } = await import("../effects/ancient-core-hound-choice.mjs");
+    return configureAncientSpecial(actor);
+  }
+  if (list === "creatureAbilities" && row.name === "Serrated Bite") {
+    const { useSerratedBite } = await import("../effects/serrated-bite-use.mjs");
+    return useSerratedBite(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && ["Sticky Tar", "Burning Tar"].includes(row.name)) {
+    ui.notifications?.info(game.i18n.localize("AZEROTH.Tar.TriggeredUse"));
+    return null;
+  }
+  if (list === "creatureAbilities" && row.name === "Entangling Roots") {
+    const { requestBloodpetalRoots } = await import("../effects/bloodpetal-use.mjs");
+    return requestBloodpetalRoots(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Nullify Mana") {
+    const { requestNullifyMana } = await import("../effects/nullify-mana.mjs");
+    return requestNullifyMana(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Dire Growl") {
+    const { requestDireGrowl } = await import("../effects/dire-growl.mjs");
+    return requestDireGrowl(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Sonic Burst") {
+    const { requestSonicBurst } = await import("../effects/sonic-burst.mjs");
+    return requestSonicBurst(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Smash") {
+    const { requestMoltenSmash } = await import("../effects/molten-smash.mjs");
+    return requestMoltenSmash(actor, index);
+  }
+  if (list === "creatureAbilities" && ["Knock Away", "Sentinel Knock Away"].includes(row.name)) {
+    const { requestKnockAway } = await import("../effects/knock-away.mjs");
+    return requestKnockAway(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Plague Cloud") {
+    const { requestPlagueCloud } = await import("../effects/plague-cloud-use.mjs");
+    return requestPlagueCloud(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Lightning Cloud") {
+    const { requestLightningCloud } = await import("../effects/lightning-cloud-use.mjs");
+    return requestLightningCloud(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Summon Earth Rumbler") {
+    const { requestStoneGuardian } = await import("../documents/stone-guardian.mjs");
+    return requestStoneGuardian(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Summon Fire Elemental") {
+    const { requestFireGuardian } = await import("../documents/fire-guardian.mjs");
+    return requestFireGuardian(actor, index);
+  }
+  if (list === "creatureAbilities" && ["Summon Imp Guardian", "Summon Voidwalker Guardian", "Summon Hellcaller Guardian"].includes(row.name)) {
+    const { requestDemonGuardian } = await import("../documents/demon-guardian.mjs");
+    return requestDemonGuardian(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Raise Alarm") {
+    const { requestMobileAlert } = await import("../effects/mobile-alert-use.mjs");
+    return requestMobileAlert(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Searing Totem") {
+    const { requestNpcSearingTotem } = await import("../documents/npc-searing-totem.mjs");
+    return requestNpcSearingTotem(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Summon Carrion Scarab") {
+    const { requestCarrionScarab } = await import("../documents/carrion-scarab-use.mjs");
+    return requestCarrionScarab(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Image Projection") {
+    const { requestImageProjection } = await import("../documents/image-projection-use.mjs");
+    return requestImageProjection(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Tutor Silence") {
+    const { requestTutorSilence } = await import("../effects/tutor-silence-use.mjs");
+    return requestTutorSilence(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Banshee Curse") {
+    const { requestBansheeCurse } = await import("../effects/banshee-curse-use.mjs");
+    return requestBansheeCurse(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Vilebranch Shrink") {
+    const { requestVilebranchShrink } = await import("../effects/vilebranch-shrink-use.mjs");
+    return requestVilebranchShrink(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Tetanus") {
+    const { requestTetanus } = await import("../effects/tetanus-use.mjs");
+    return requestTetanus(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Inner Fire") {
+    const { requestInnerFire } = await import("../effects/inner-fire-use.mjs");
+    return requestInnerFire(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Sneak") {
+    const { requestNpcSneak } = await import("../effects/npc-sneak-use.mjs");
+    return requestNpcSneak(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Disarm") {
+    const { requestNpcDisarm } = await import("../effects/npc-disarm-use.mjs");
+    return requestNpcDisarm(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Shield Slam") {
+    const { requestNpcShieldSlam } = await import("../effects/npc-shield-slam-use.mjs");
+    return requestNpcShieldSlam(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Whirlwind") {
+    const { requestWhirlwind } = await import("../effects/syndicate-whirlwind-use.mjs");
+    return requestWhirlwind(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Fallen-Kin Rage") {
+    const { requestCrushridgeExtraAttack } = await import("../effects/crushridge-extra-attack-use.mjs");
+    return requestCrushridgeExtraAttack(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Death Singer Screech") {
+    const { requestDeathSingerScreech } = await import("../effects/death-singer-screech-use.mjs");
+    return requestDeathSingerScreech(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Anti-Magic Shield") {
+    const { requestAntiMagicShield } = await import("../effects/anti-magic-shield-use.mjs");
+    return requestAntiMagicShield(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Cauterizing Flames") {
+    const { requestCauterizingFlames } = await import("../effects/cauterizing-flames-use.mjs");
+    return requestCauterizingFlames(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Ground Stomp") {
+    const { requestGroundStomp } = await import("../effects/ground-stomp-use.mjs");
+    return requestGroundStomp(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Ancient Hysteria") {
+    const { requestAncientHysteria } = await import("../effects/ancient-hysteria-use.mjs");
+    return requestAncientHysteria(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Ancient Dread") {
+    const { requestAncientDread } = await import("../effects/ancient-dread-use.mjs");
+    return requestAncientDread(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Ancient Despair") {
+    const { requestAncientDespair } = await import("../effects/ancient-despair-use.mjs");
+    return requestAncientDespair(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Withering Heat") {
+    const { requestWitheringHeat } = await import("../effects/withering-heat-use.mjs");
+    return requestWitheringHeat(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Dredge Sickness") {
+    const { requestDredgeSickness } = await import("../effects/dredge-sickness-use.mjs");
+    return requestDredgeSickness(actor, index);
+  }
+  if (list === "creatureAbilities" && ["Venom Spit", "Dredge Poison"].includes(row.name)) {
+    const { requestDredgePoison } = await import("../effects/dredge-poison-use.mjs");
+    return requestDredgePoison(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Maggot Slime") {
+    const { requestMaggotSlime } = await import("../effects/maggot-slime-use.mjs");
+    return requestMaggotSlime(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Wild Regeneration" && row.automation?.kind === "utility") {
+    const { requestWildRegeneration } = await import("../effects/wild-regeneration-use.mjs");
+    return requestWildRegeneration(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Jadefire" && row.automation?.kind === "utility") {
+    const { requestJadefire } = await import("../effects/jadefire-use.mjs");
+    return requestJadefire(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Cause Insanity") {
+    const { requestCauseInsanity } = await import("../effects/cause-insanity-use.mjs");
+    return requestCauseInsanity(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Qiraji Mind Flay") {
+    const { requestQirajiMindFlay } = await import("../effects/qiraji-mind-flay-use.mjs");
+    return requestQirajiMindFlay(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Drain Mana") {
+    const { requestDestroyerDrain } = await import("../effects/obsidian-drain-use.mjs");
+    return requestDestroyerDrain(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Obsidian Purge") {
+    const { requestDestroyerPurge } = await import("../effects/obsidian-purge-use.mjs");
+    return requestDestroyerPurge(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Sleep" && row.automation?.kind === "utility") {
+    const { requestDreadlordSleep } = await import("../effects/dreadlord-sleep-use.mjs");
+    return requestDreadlordSleep(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Enveloping Winds" && row.automation?.kind === "utility") {
+    const { requestEnvelopingWinds } = await import("../effects/enveloping-winds-use.mjs");
+    return requestEnvelopingWinds(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Enveloping Gale" && row.automation?.kind === "utility") {
+    const { requestEnvelopingGale } = await import("../effects/enveloping-gale-use.mjs");
+    return requestEnvelopingGale(actor, index);
+  }
+  if (list === "creatureAbilities" && ["Blazing Wave", "Searing Pulse", "Felguard Blast Wave"].includes(row.name) && row.automation?.kind === "utility") {
+    const { requestBlazingAbility } = await import("../effects/blazing-invader-use.mjs");
+    return requestBlazingAbility(actor, index);
+  }
+  if (list === "creatureAbilities" && ["Flame Buffet", "Fireball Volley"].includes(row.name) && row.automation?.kind === "utility") {
+    const { requestCharrAbility } = await import("../effects/charr-use.mjs");
+    return requestCharrAbility(actor, index);
+  }
+  if (list === "creatureAbilities" && ["Crushing Knockdown", "Avalanchion's Trample", "Ground Tremor", "Hurled Boulder"].includes(row.name) && row.automation?.kind === "utility") {
+    const { requestEarthInvasionAbility } = await import("../effects/earth-invasion-use.mjs");
+    return requestEarthInvasionAbility(actor, index);
+  }
+  if (list === "creatureAbilities" && ["Torment", "Suffering", "Soothing Kiss"].includes(row.name) && row.automation?.kind === "utility") {
+    const { requestDemonTaunt } = await import("../effects/demon-taunt-use.mjs");
+    return requestDemonTaunt(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Lash of Pain" && row.automation?.kind === "utility") {
+    const { requestLashOfPain } = await import("../effects/lash-of-pain-use.mjs");
+    return requestLashOfPain(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Consume Shadows" && row.automation?.kind === "utility") {
+    const { requestConsumeShadows } = await import("../effects/consume-shadows-use.mjs");
+    return requestConsumeShadows(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Blood Pact" && row.automation?.kind === "utility") {
+    const { requestBloodPact } = await import("../effects/blood-pact-use.mjs");
+    return requestBloodPact(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Fire Shield" && row.automation?.kind === "utility") {
+    const { requestFireShield } = await import("../effects/fire-shield-use.mjs");
+    return requestFireShield(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Spell Lock") {
+    ui.notifications?.info("Spell Lock is offered to the GM when a creature within 30 feet makes a Casting Test. Choose it in that reaction window; this button spends nothing.");
+    return null;
+  }
+  if (list === "creatureAbilities" && row.name === "Phase Shift") {
+    ui.notifications?.info("Use Phase Shift on the incoming attack's chat card. This button spends nothing.");
+    return null;
+  }
+  if (list === "creatureAbilities" && row.name === "Tainted Blood") {
+    const { requestTaintedBlood } = await import("../effects/tainted-blood-use.mjs");
+    return requestTaintedBlood(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Lesser Invisibility" && row.automation?.kind === "utility") {
+    const { requestLesserInvisibility } = await import("../effects/lesser-invisibility-use.mjs");
+    return requestLesserInvisibility(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Frost Shot" && row.automation?.kind === "utility") {
+    const { requestFrostShot } = await import("../effects/frost-shot-use.mjs");
+    return requestFrostShot(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && ["Sentinel Mortal Strike", "Mortal Strike"].includes(row.name) && row.automation?.kind === "utility") {
+    const { requestSentinelStrike } = await import("../effects/sentinel-strike-use.mjs");
+    return requestSentinelStrike(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Sentinel Mana Burn" && row.automation?.kind === "utility") {
+    const { requestSentinelManaBurn } = await import("../effects/sentinel-mana-burn-use.mjs");
+    return requestSentinelManaBurn(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Reaver Cleave" && row.automation?.kind === "utility") {
+    const { requestReaverCleave } = await import("../effects/reaver-cleave-use.mjs");
+    return requestReaverCleave(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Guard Cleave" && row.automation?.kind === "utility") {
+    const { requestGuardCleave } = await import("../effects/guard-cleave-use.mjs");
+    return requestGuardCleave(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Ghoul Cleave" && row.automation?.kind === "utility") {
+    const { requestGhoulCleave } = await import("../effects/ghoul-cleave-use.mjs");
+    return requestGhoulCleave(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Mighty Blow" && row.automation?.kind === "utility") {
+    const { requestMightyBlow } = await import("../effects/mighty-blow-use.mjs");
+    return requestMightyBlow(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Royal Trample" && row.automation?.kind === "utility") {
+    const { requestRoyalTrample } = await import("../effects/royal-trample-use.mjs");
+    return requestRoyalTrample(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Terrifying Roar" && row.automation?.kind === "utility") {
+    const { requestTerrifyingRoar } = await import("../effects/terrifying-roar-use.mjs");
+    return requestTerrifyingRoar(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Geyser" && row.automation?.kind === "utility") {
+    const { requestGeyser } = await import("../effects/geyser-use.mjs");
+    return requestGeyser(actor, index);
+  }
+  if (list === "creatureAbilities" && ["Localized Toxin", "Deadly Poison"].includes(row.name) && row.automation?.kind === "utility") {
+    const { requestToxicPoison } = await import("../effects/toxic-horror-use.mjs");
+    return requestToxicPoison(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Chilled" && row.automation?.kind === "utility") {
+    const { requestChilled } = await import("../effects/chilled-use.mjs");
+    return requestChilled(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Vicious Rend" && row.automation?.kind === "utility") {
+    const { requestViciousRend } = await import("../effects/vicious-rend-use.mjs");
+    return requestViciousRend(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Guard Net" && row.automation?.kind === "utility") {
+    const { requestGuardNet } = await import("../effects/guard-net-use.mjs");
+    return requestGuardNet(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Ghoul Enrage" && row.automation?.kind === "utility") {
+    const { requestGhoulEnrage } = await import("../effects/ghoul-enrage-use.mjs");
+    return requestGhoulEnrage(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Rending Claws" && row.automation?.kind === "utility") {
+    const { requestRendingClaws } = await import("../effects/rending-claws-use.mjs");
+    return requestRendingClaws(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Flesh Rot" && row.automation?.kind === "utility") {
+    const { requestFleshRot } = await import("../effects/flesh-rot-use.mjs");
+    return requestFleshRot(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Reaver Enrage" && row.automation?.kind === "utility") {
+    const { requestReaverEnrage } = await import("../effects/reaver-enrage-use.mjs");
+    return requestReaverEnrage(actor, index);
+  }
+  if (list === "creatureAbilities" && row.name === "Predatory Enrage" && row.automation?.kind === "utility") {
+    const { requestPredatoryEnrage } = await import("../effects/predatory-enrage-use.mjs");
+    return requestPredatoryEnrage(actor, index);
+  }
+  if (list === "creatureAbilities" && ["Golem Stomp", "Golem Trample"].includes(row.name) && row.automation?.kind === "utility") {
+    const { requestWarGolemAttack } = await import("../effects/war-golem-use.mjs");
+    return requestWarGolemAttack(actor, index, row.name === "Golem Stomp" ? "stomp" : "trample");
+  }
+  if (list === "creatureAbilities" && ["Fireguard Immolate", "Fireguard Fire Blast"].includes(row.name) && row.automation?.kind === "utility") {
+    const { requestFireguardCast } = await import("../effects/fireguard-use.mjs");
+    return requestFireguardCast(actor, index, row.name === "Fireguard Immolate" ? "immolate" : "blast");
+  }
+  if (list === "creatureAbilities" && row.name === "Demoralizing Roar" && row.automation?.kind === "utility") {
+    const { requestDemoralizingRoar } = await import("../effects/demoralizing-roar-use.mjs");
+    return requestDemoralizingRoar(actor, index);
+  }
+  if (list === "creatureAbilities" && ["Qiraji Cleave", "Vengeance"].includes(row.name) && row.automation?.kind === "utility") {
+    const { requestChampionStrikes } = await import("../effects/qiraji-champion-use.mjs");
+    return requestChampionStrikes(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Frightening Shout" && row.automation?.kind === "utility") {
+    const { requestChampionShout } = await import("../effects/qiraji-shout.mjs");
+    return requestChampionShout(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && ["Sunder Armor", "Fist of Ragnaros", "Shadow Shock", "Qiraji Mind Blast", "Sentinel Shadow Storm", "Sentinel Thunderclap"].includes(row.name)
+    && row.automation?.kind === "utility") {
+    const { requestFlamewakerAbility } = await import("../effects/flamewaker-use.mjs");
+    return requestFlamewakerAbility(actor, index);
+  }
+  if (list === "creatureAbilities" && ["Elder Thrash", "Pummel"].includes(row.name)) {
+    const { requestElderAbility } = await import("../effects/elder-diemetradon.mjs");
+    return requestElderAbility(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Stinger Charge") {
+    const { requestStingerCharge } = await import("../effects/vekniss-charge-use.mjs");
+    return requestStingerCharge(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Vekniss Itch") {
+    const { requestVeknissItch } = await import("../effects/vekniss-use.mjs");
+    return requestVeknissItch(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Mass Nullify") {
+    const { requestMassNullify } = await import("../effects/nullifier-use.mjs");
+    return requestMassNullify(actor, index, lst);
+  }
+  if (list === "creatureAbilities" && row.name === "Reflection Field") {
+    const { requestReflectionField } = await import("../effects/reflection-use.mjs");
+    return requestReflectionField(actor, index, lst);
+  }
   const first = lst[0] ?? null;
   // **WHO USED IT, TAKEN NOW** (D-724; the Legacy branches' door 2): the creature's
   // token by the roll dialog's own rule, for the card's record.
   const abilitySource = (await import("../applications/roll-dialog.mjs")).sourceOf(actor);
+
+  if (list === "creatureAbilities" && row.name === "Seduction") {
+    const { seductionTargetValid } = await import("../effects/seduction-target.mjs");
+    if (!seductionTargetValid(actor, abilitySource, lst)) {
+      ui.notifications?.warn("Seduction requires one creature within 30 feet on the same scene level.");
+      return null;
+    }
+  }
+
+  if (list === "creatureAbilities" && ["Tendon Rip", "Terrify"].includes(row.name)) {
+    const { tendonRipTargetValid } = await import("../effects/tendon-rip.mjs");
+    if (!tendonRipTargetValid(actor, abilitySource, lst)) {
+      ui.notifications?.warn(game.i18n.localize(row.name === "Terrify"
+        ? "AZEROTH.Terrify.TargetRequired" : "AZEROTH.TendonRip.TargetRequired"));
+      return null;
+    }
+  }
+  if (list === "creatureAbilities" && row.name === "Surge Shock") {
+    const { surgeShockTargetValid } = await import("../effects/surge-shock.mjs");
+    if (!surgeShockTargetValid(actor, abilitySource, lst)) {
+      ui.notifications?.warn("Surge Shock requires one other creature within 30 feet on the same scene.");
+      return null;
+    }
+  }
+  if (list === "creatureAbilities" && row.name === "Frost Shock") {
+    const { frostShockTargetValid } = await import("../effects/frost-shock.mjs");
+    if (!frostShockTargetValid(actor, abilitySource, lst)) {
+      ui.notifications?.warn("Frost Shock requires one other creature within 30 feet on the same scene level.");
+      return null;
+    }
+  }
+  if (list === "creatureAbilities" && row.name === "Shock") {
+    const { windreaverShockTargetValid } = await import("../effects/windreaver-shock.mjs");
+    if (!windreaverShockTargetValid(actor, abilitySource, lst)) {
+      ui.notifications?.warn("Shock requires one other living creature within 20 feet on the same scene level.");
+      return null;
+    }
+  }
+  if (list === "creatureAbilities" && row.name === "Acid Spit") {
+    const { acidSpitTargetValid } = await import("../effects/acid-spit.mjs");
+    if (!acidSpitTargetValid(actor, abilitySource, lst)) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.AcidSpit.TargetRequired"));
+      return null;
+    }
+  }
 
   // 1. A use left?
   const usesMax = a.uses?.max ?? 0;
@@ -8223,19 +9556,38 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
     await actor.updatePool({ itemId: null, kind: payFrom.kind, value: payFrom.value - spent });
   }
 
+  // This ability is committed now. Refused selections and payments above
+  // leave concealment standing; a paid ability ends it even without a Test.
+  await endLesserInvisibility(actor, { event: "ability" });
+
   // 3. The Test, where the ability casts.
   let roll = null;
+  let spellLock = null;
   let sl = 0;
   let success = true;
   let resolvedDC = null;
   if (a.casting) {
+    spellLock = await requestSpellLockWindow({ actor, source: abilitySource ?? null,
+      test: { kind: "ability", list, index } });
+    if (!spellLock?.ok) {
+      ui.notifications?.warn("The casting reaction window could not be confirmed. No Casting Test was rolled. Check the ability's paid costs and reaction records before trying again.");
+      return null;
+    }
     const modifiers = [{ label: "AZEROTH.Sheet.Proficiency", value: actor.system.proficiency ?? 0 }];
     resolvedDC = dc ?? castingDC({ tier: actor.system.tier ?? 1, targetDefense: first?.defense ?? null });
     // **06 §5: A CASTING TEST MADE WHILE ENGAGED TAKES A BANE** (D-732's review).
     // This door has no dialog, so the measured Bane is added here and named on
     // the card, as the dialog's own automatic line would be.
     const engaged = engagedNow(actor);
-    roll = AzerothRoll.build({ dc: resolvedDC, modifiers, boons, banes: banes + (engaged ? 1 : 0), kind: "casting", rollData: actor.getRollData() });
+    const invisibleTarget = situationalModifiers({ kind: "casting", targetLesserInvisible: first?.lesserInvisible === true })
+      .automatic.find(line => line.id === "lesserInvisibleTarget");
+    roll = AzerothRoll.build({ dc: resolvedDC, modifiers, boons, banes: banes + (engaged ? 1 : 0) + (invisibleTarget?.banes ?? 0) + spellLock.banes, kind: "casting", rollData: actor.getRollData() });
+    roll.options.spellLock = { castId: spellLock.castId, banes: spellLock.banes };
+    if (spellLock.banes > 0) roll.options.provenance.push({ label: "Spell Lock", value: null,
+      formula: `${spellLock.banes} ${spellLock.banes === 1 ? "Bane" : "Banes"}` });
+    if (invisibleTarget) {
+      roll.options.provenance.push({ label: "AZEROTH.Dialog.Circumstance", value: null, formula: game.i18n.localize(invisibleTarget.label) });
+    }
     if (engaged) {
       roll.options.provenance.push({ label: "AZEROTH.Dialog.Circumstance", value: null, formula: game.i18n.localize("AZEROTH.Modifier.EngagedCasting") });
     }
@@ -8284,6 +9636,7 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
     };
     const mitigate = (t, { passed = false } = {}) => (type === null ? untypedOf(passed) : resolveDamage({
       rating: a.damage.amount, sl: 0, kind: type === "physical" ? "physical" : "magical", school: type,
+      fireTakenBonus: t?.fireTakenBonus ?? 0,
       apByLocation: t?.apByLocation ?? {}, ward: t?.wardBySchool?.[type] ?? 0,
       // An ally's aura, after the Ward (D-755); the physical lane ignores it.
       schoolArmor: t?.schoolArmor?.[type] ?? 0,
@@ -8389,12 +9742,13 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
     provenance: roll?.provenance ?? []
   });
 
-  return ChatMessage.create({
+  const message = await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
     content,
     rolls: roll ? [roll] : [],
     flags: { "azeroth-rpg": {
       kind: "ability", list, index, title: row.name, targets: lst, damageByTarget, heal: heal?.amount ?? null, sl, area,
+      ...(spellLock ? { spellLockCaster: actor.uuid, spellLockCasts: [spellLock.castId] } : {}),
       damageType: a.damage?.type ?? null,
       // **WHAT THE CARD'S RECORDED TEST GOVERNS** (the B8a2 pass): the half a pass leaves on
       // each row and on the one button, the none a pass leaves where the failure deals it, and
@@ -8421,6 +9775,11 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
       success
     } }
   });
+  if (spellLock) {
+    const aftermath = await completeSpellLockWindow({ actor, castId: spellLock.castId, message });
+    if (!aftermath?.ok) ui.notifications?.warn("The ability resolved, but Spell Lock's resistance or Silence could not be confirmed. Check the reaction records; do not repeat the ability.");
+  }
+  return message;
 }
 
 /**
@@ -8467,8 +9826,17 @@ function attackFor(a, actor) {
  * @returns {Promise<ChatMessage|null>}
  */
 export async function useGear({ actor, item, targets = null } = {}) {
+  if (refuseDispersion(actor, "gear")) return null;
+  if (refuseAncientDespair(actor, "gear")) return null;
   const use = item?.system?.use ?? null;
   if (!actor || !item || !hasUse(use)) return null;
+  if (isAntivenom(use)) return useAntivenom(actor, item);
+  const releaseUse = acquireConsumableUse(actor);
+  if (!releaseUse) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Use.Busy"));
+    return null;
+  }
+  try {
   // 06 §10 (door 10): *You cannot touch the living world* - a thing carried stays where it is.
   const spiritGear = realmRefusalFor(actor, "gear");
   if (spiritGear) {
@@ -8495,6 +9863,28 @@ export async function useGear({ actor, item, targets = null } = {}) {
   // (D-768; the lead, 2026-10-03: *Keeps the Half-Action*): a coating with
   // nothing to go on, or a chooser dismissed, used to cost the Half-Action it
   // had already taken.
+  const schools = Object.keys(AZEROTH.schools);
+  const warding = wardingElixir(use, item.name, schools);
+  const invulnerability = isInvulnerabilityPotion(use);
+  const wisdom = isDistilledWisdom(use);
+  const wisdomPool = wisdom ? manaPool(actor.poolSnapshot?.() ?? []) : null;
+  if (wisdom && (!wisdomPool || !Number.isFinite(wisdomPool.max) || wisdomPool.max <= 0)) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Use.NoMana"));
+    return null;
+  }
+  let wardSchool = warding?.school ?? null;
+  if (warding && !wardSchool) {
+    const snapshot = JSON.stringify(use), name = item.name;
+    const choice = await chooseOption(item, schools.map(key => ({key, name:game.i18n.localize(AZEROTH.schools[key]), description:""})), null,
+      {prompt:game.i18n.localize("AZEROTH.Use.WardSchool")});
+    if (!choice || !wardingElixirChange(warding, choice.key, schools)) return null;
+    if (!actor.isOwner || actor.items.get(item.id) !== item || item.parent !== actor || item.name !== name
+      || item.system.quantity !== held || JSON.stringify(item.system.use) !== snapshot) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Use.Changed"));
+      return null;
+    }
+    wardSchool = choice.key;
+  }
   let onto = null;
   if (use.target === "item") {
     onto = await chooseCoatingTarget(actor, item, use);
@@ -8512,6 +9902,7 @@ export async function useGear({ actor, item, targets = null } = {}) {
     // action*; D-773).
     coatedBlades: coatingTalentsFor(actor.takenTalents()).free
   }) === null && use.action !== null;
+  if (refuseDispersion(actor, "gear")) return null;
   if (!(await spendTurnBudget(actor, freeApply ? null : (use.action ?? null)))) return null;
 
   // 5. Mark one off - paid first, as Mana and a shot are. `spendOne` is the
@@ -8538,7 +9929,7 @@ export async function useGear({ actor, item, targets = null } = {}) {
     await actor.update({ "system.xp.earned": earned });
     lines.push(game.i18n.format("AZEROTH.Use.GrantedXp", { xp: use.xp, name: actor.name }));
   }
-  const timing = spellTiming(actor, durationOf(use)) ?? {};
+  const timing = invulnerability ? untilEndOfNextTurnOrRound(actor) : spellTiming(actor, warding?.duration ?? durationOf(use)) ?? {};
   if (use.target === "item" && onto) {
     const fight = actor.activeFight?.() ?? null;
     await onto.setFlag("azeroth-rpg", "coating", {
@@ -8571,6 +9962,28 @@ export async function useGear({ actor, item, targets = null } = {}) {
     lines.push(game.i18n.format("AZEROTH.Use.LaidOn", { name: item.name, item: onto.name }));
     if (freeApply) lines.push(game.i18n.localize("AZEROTH.Use.FreeApply"));
   } else {
+    const teaRefill = thistleTeaRefill(use, actor.classItems ?? [], actor.poolSnapshot?.() ?? []);
+    if (wisdomPool) {
+      const current = actor.poolSnapshot().find(p => p.kind === 'power' && p.itemId === wisdomPool.itemId && p.name === wisdomPool.name);
+      if (!current) throw new Error('Distilled Wisdom recipient pool changed during payment');
+      const before = current.value;
+      const carrier = [...actor.effects].find(e => e.flags?.['azeroth-rpg']?.[WISDOM_FLAG]?.version === 1);
+      const data = {
+        name: item.name, img: item.img, origin: actor.uuid, disabled: false,
+        ...timing,
+        flags: { 'azeroth-rpg': { [WISDOM_FLAG]: { version: 1, itemId: current.itemId ?? null, poolName: current.name ?? null } } }
+      };
+      if (carrier) await carrier.update(data);
+      else await actor.createEmbeddedDocuments('ActiveEffect', [data]);
+      const raised = actor.poolSnapshot().find(p => p.kind === 'power' && p.itemId === current.itemId && p.name === current.name);
+      await actor.updatePool({ itemId: current.itemId, kind: 'power', value: Math.min(raised.max, before + 6) });
+      lines.push(game.i18n.format('AZEROTH.Use.Mana', { n: Math.min(6, raised.max - before) }));
+      lines.push(game.i18n.format('AZEROTH.Use.Lasts', { name: item.name }));
+    }
+    if (teaRefill) {
+      await actor.updatePool(teaRefill);
+      lines.push(game.i18n.format("AZEROTH.Use.ComboFilled", { n: teaRefill.value }));
+    }
     if (use.heal?.health) {
       await actor.applyHealing(use.heal.health, { from: actor });
       lines.push(game.i18n.format("AZEROTH.Use.Health", { n: use.heal.health }));
@@ -8594,22 +10007,28 @@ export async function useGear({ actor, item, targets = null } = {}) {
         lines.push(game.i18n.format("AZEROTH.Use.Fatigue", { n: use.heal.fatigue }));
       } else lines.push(game.i18n.localize("AZEROTH.Use.NoFatigue"));
     }
-    for (const id of use.ends ?? []) {
+    for (const id of consumableEnds(use, Object.keys(AZEROTH.conditions))) {
       const label = game.i18n.localize(AZEROTH.conditions[id] ?? id);
       if (actor.statuses?.has?.(id)) {
         await actor.toggleStatusEffect(id, { active: false });
-        lines.push(game.i18n.format("AZEROTH.Use.Ended", { condition: label }));
+        const report = actor.statuses?.has?.(id) ? "AZEROTH.Use.NotEnded" : "AZEROTH.Use.Ended";
+        lines.push(game.i18n.format(report, { condition: label }));
       } else lines.push(game.i18n.format("AZEROTH.Use.NotHeld", { condition: label }));
     }
-    if ((use.changes ?? []).length) {
+    const immuneConditions = consumableImmunities(use, Object.keys(AZEROTH.conditions));
+    const wardChange = wardingElixirChange(warding, wardSchool, schools);
+    const useChanges = [...(use.changes ?? []), ...(wardChange ? [wardChange] : [])];
+    if (useChanges.length || immuneConditions.length || invulnerability) {
       await actor.createEmbeddedDocuments("ActiveEffect", [{
-        name: item.name,
+        name: wardChange ? `${item.name} (${game.i18n.localize(AZEROTH.schools[wardSchool])})` : item.name,
         img: item.img,
         origin: actor.uuid,
         description: await enrich(item.system.description, { relativeTo: item }),
-        system: { changes: use.changes.map(c => ({ key: c.key, type: c.type ?? "add", value: String(c.value ?? ""), phase: c.phase ?? "final" })) },
+        system: { changes: useChanges.map(c => ({ key: c.key, type: c.type ?? "add", value: String(c.value ?? ""), phase: c.phase ?? "final" })) },
         ...timing,
-        flags: { "azeroth-rpg": { consumable: item.system.identifier || item.name } }
+        flags: { "azeroth-rpg": { consumable: item.system.identifier || item.name,
+          ...(invulnerability ? { [INVULNERABILITY_POTION_FLAG]: { version: 1 } } : {}),
+          ...(immuneConditions.length ? { [IMMUNE_FLAG]: { conditions: immuneConditions, source: item.name } } : {}) } }
       }]);
       lines.push(game.i18n.format("AZEROTH.Use.Lasts", { name: item.name }));
     }
@@ -8648,7 +10067,7 @@ export async function useGear({ actor, item, targets = null } = {}) {
     label: game.i18n.localize(AZEROTH.conditions[use.statuses[0]] ?? use.statuses[0]),
     value: null, until: null, untilLabel: null
   }] : [];
-  const area = areaFor(use.area ?? "");
+  const area = blastRadius(areaFor(use.area ?? ""), actor.takenTalents?.() ?? [], { explosive: use.kind === "explosive" });
 
   const content = await renderTemplate(TEMPLATE.feature, {
     config: AZEROTH,
@@ -8672,7 +10091,7 @@ export async function useGear({ actor, item, targets = null } = {}) {
     provenance: []
   });
 
-  return ChatMessage.create({
+  return await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
     content,
     flags: { "azeroth-rpg": {
@@ -8681,6 +10100,7 @@ export async function useGear({ actor, item, targets = null } = {}) {
       heal: null, sl: 0, area
     } }
   });
+  } finally { releaseUse(); }
 }
 
 /** The time a coating or a draught lasts, in `spellTiming`'s shape. */
@@ -8717,10 +10137,20 @@ function durationOf(use) {
  * @param {{actor: Actor, item: Item}} o
  * @returns {boolean} true where it refused and said so
  */
-export function refuseSignaturePress({ actor, item } = {}) {
+export function refuseSignaturePress({ actor, item, approved = null } = {}) {
   const signature = signatureEffectOf(item);
   if (!actor || !item || !signature) return true;
-  if (!isPressable(signature)) {
+  const shared=charmUseView(item.system?.identifier,actor.getFlag?.('azeroth-rpg',SIGNATURE_USES_FLAG),item.system?.equipped===true);
+  if(shared){
+    const authorized=approved?.authority===SIGNATURE_USE_AUTHORITY&&approved.valid();
+    if(shared.refusal&&!authorized){
+      ui.notifications?.warn(game.i18n.localize(AZEROTH.signatureRefusals[shared.refusal]));return true;
+    }
+    signature.use.uses={value:authorized?1:shared.value,max:1,per:'short'};
+  }
+  const hitUse=approved?.authority===SIGNATURE_USE_AUTHORITY&&approved.hit
+    &&approvedHitSignature(item.system?.identifier)&&signature.kind==='onHit'&&approved.valid();
+  if (!isPressable(signature)&&!hitUse) {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Signature.NotPressable", { name: item.name }));
     return true;
   }
@@ -8733,7 +10163,7 @@ export function refuseSignaturePress({ actor, item } = {}) {
   // read the same function, so the sheet and the door cannot drift.
   const press = pressGates(signature);
   const holds = gateHolds(press, actor.signatureTurnState ?? {});
-  const refusal = pressRefusal(signature, { holds, spells: (item.system?.spells ?? []).length });
+  const refusal = hitUse&&!holds?'gate':pressRefusal(signature, { holds, spells: (item.system?.spells ?? []).length });
   if (!refusal) return false;
   const why = game.i18n.localize(AZEROTH.signatureRefusals[refusal] ?? refusal);
   ui.notifications?.warn(refusal === "gate"
@@ -8774,7 +10204,16 @@ export function refuseSignaturePress({ actor, item } = {}) {
  * @param {{actor: Actor, item: Item, targets?: object[]}} o
  * @returns {Promise<ChatMessage|null>}
  */
-export async function useSignature({ actor, item, targets = null } = {}) {
+export async function useSignature({ actor, item, targets = null, approved = null } = {}) {
+  // Dispersion and Ancient Despair refuse BEFORE an approved use is asked of the
+  // GM (D-768: every refusal before anything is written). The approved door
+  // claims the use on the active GM's client before it runs, so a refusal met
+  // only there wrote a pending claim and said nothing to the player who pressed.
+  if (refuseDispersion(actor, "gear")) return null;
+  if (refuseAncientDespair(actor, "signature")) return null;
+  if(approvedRestSignature(item?.system?.identifier)&&approved?.authority!==SIGNATURE_USE_AUTHORITY)
+    return requestApprovedSignatureUse(actor,item,targets??[]);
+  if(approved?.authority!==SIGNATURE_USE_AUTHORITY)approved=null;
   const signature = signatureEffectOf(item);
   if (!actor || !item || !signature) return null;
   // 06 §10 (door 10): a spirit presses nothing it carries.
@@ -8786,7 +10225,18 @@ export async function useSignature({ actor, item, targets = null } = {}) {
 
   // 1. Refuse, NAMING WHY - and through the SAME function the `spell` branch
   //    goes through, so neither door can drift from the other.
-  if (refuseSignaturePress({ actor, item })) return null;
+  if (refuseSignaturePress({ actor, item, approved })) return null;
+
+  // The approved optional reward follows an already-paid, confirmed hit. It
+  // spends its shared rest allowance, never another Half-Action or pool cost.
+  if(approved?.hit&&item.system?.identifier==='jangthraze-the-protector'){
+    return deliverJangthrazeHit({actor,item,hit:approved.hit,values:approved.values,
+      valid:approved.valid,paid:approved.paid});
+  }
+  if(approved?.hit&&item.system?.identifier==='horned-viking-helmet'){
+    return publishHelmetHit({actor,item,hit:approved.hit,values:approved.values,
+      valid:approved.valid,paid:approved.paid});
+  }
 
   // A spell casts through the Forge's own door (D-633), never here: the caller
   // routes it (`actions.mjs#useSignatureWithDialog`), and a press that reached
@@ -8797,6 +10247,11 @@ export async function useSignature({ actor, item, targets = null } = {}) {
   }
   const lst = targets ?? [];
   const use = signature.use;
+  if(approved){
+    if(!approved.valid())return null;
+    use.action='half';
+    if(approved.values.healing!==undefined)use.heal.health=approved.values.healing;
+  }
 
   // 2. **THE POOL IS ASKED BEFORE THE BUDGET** (D-768; the lead, 2026-10-03:
   // *Keeps the Half-Action*). Battlegear of Wrath's *spend 4 Rage as a
@@ -8819,7 +10274,20 @@ export async function useSignature({ actor, item, targets = null } = {}) {
   }
 
   // 3. The turn's budget, in a fight, once nothing can refuse (D-659, D-768).
+  if (refuseDispersion(actor, "gear")) return null;
+  // **AN APPROVED USE'S CLAIM IS ASKED LAST, BEFORE THE BUDGET AND NEVER AFTER
+  // IT** (D-768; the lead: *"I don't want a half-action wasted bug"*). It was
+  // asked again once the budget had landed, so a claim that moved while the
+  // write was in flight - the item edited, a target gone, the GM handed over -
+  // returned with the Half-Action spent and nothing delivered. Judge, spend,
+  // commit: from the budget on the use is made, and the coordinator settles
+  // its record off what this door delivered (`effects/approved-signature-use.mjs`).
+  // Never a refund through the GM's undo (`restoreAction`): that write can be
+  // refused, or land on a later turn once the turn has moved.
+  if (approved && !approved.valid()) return null;
   if (!(await spendTurnBudget(actor, use.action ?? null))) return null;
+  // Paid for from here: the claim records it, and nothing below refuses.
+  approved?.paid();
 
   // 3b. Pay.
   if (payFrom && spent > 0) await actor.updatePool({ itemId: payFrom.itemId, kind: payFrom.kind, value: payFrom.value - spent });
@@ -8891,17 +10359,47 @@ export async function useSignature({ actor, item, targets = null } = {}) {
   // encounter*; D-777), read off the item's own sentence and granted to the
   // bearer through 05's law.
   const markTemp = readTemporaryHealth(signatureProse(item));
-  const markAmount = markTemp?.amount ? Math.max(0, Math.trunc(Number(evaluateAmount(markTemp.amount, { level: actor.system?.level ?? 1, tier: actor.system?.tier ?? 1 }))) || 0) : 0;
+  const markAmount = approved?.values.temporaryHealth ?? (markTemp?.amount ? Math.max(0, Math.trunc(Number(evaluateAmount(markTemp.amount, { level: actor.system?.level ?? 1, tier: actor.system?.tier ?? 1 }))) || 0) : 0);
   if (markAmount > 0) {
-    const done = await actor.grantTemporaryHealth(markAmount, { source: item.name, span: markTemp.span === "encounter" ? "encounter" : "longRest" });
+    const done = await actor.grantTemporaryHealth(markAmount, { source: item.name, span: approved || markTemp?.span === "encounter" ? "encounter" : "longRest" });
     lines.push(game.i18n.format(done.landed ? "AZEROTH.Temporary.Line" : "AZEROTH.Temporary.LineKept", { name: actor.name, n: markAmount, held: done.temp }));
   }
 
   // 5. Strike the use, before the card is built so the card prints what is left.
   let uses = null;
-  if (use.uses?.per) {
+  if (approved) uses={value:0,max:1};
+  else if (use.uses?.per) {
     await item.update({ "system.signatureEffect.use.uses.value": Math.max(0, (use.uses.value ?? 0) - 1) });
     uses = { value: item.system.signatureEffect.use.uses.value, max: use.uses.max };
+  }
+
+  // **THE CARD IS POSTED WHATEVER MOVED SINCE THE BUDGET** (D-768): the use is
+  // paid for and its record is the card, whose own presses judge each target
+  // again (`piccolo-resolution.mjs`, `cannonball-resolution.mjs`). Asking the
+  // claim here dropped the card and kept the Half-Action and the pool.
+  if(approved?.performance){
+    const performance=structuredClone(approved.performance);
+    const targets=performance.targets.map(row=>({...row,state:'awaitingSave',
+      name:row.ref.name??fromUuidSync(row.uuid)?.name??row.ref.actorId}));
+    const content=await renderTemplate('systems/azeroth-rpg/templates/chat/piccolo-card.hbs',{
+      title:item.name,speakerName:actor.name,dc:performance.dc,targets
+    });
+    return ChatMessage.create({speaker:ChatMessage.getSpeaker({actor}),content,
+      flags:{'azeroth-rpg':{kind:'signature',identifier:'piccolo-of-the-flaming-fire',itemId:item.id,
+        piccolo:{...performance,targets,name:item.name,casterUuid:actor.uuid,itemUuid:item.uuid}}}});
+  }
+
+  // A saved Cannonball shot has its own resistance/delivery lifecycle. Never
+  // expose the generic damage Apply door, which could bypass its Reflex Test.
+  if(approved?.shot){
+    const shot=structuredClone(approved.shot);
+    const content=await renderTemplate('systems/azeroth-rpg/templates/chat/cannonball-card.hbs',{
+      title:item.name,speakerName:actor.name,targetName:shot.target.name??shot.target.actorId,
+      damage:shot.damage,passedDamage:shot.passedDamage,dc:shot.dc,rangeMeasured:shot.rangeMeasured,targetUuid:shot.targetUuid
+    });
+    return ChatMessage.create({speaker:ChatMessage.getSpeaker({actor}),content,
+      flags:{'azeroth-rpg':{kind:'signature',identifier:'cannonball-runner',itemId:item.id,
+        cannonball:{...shot,casterUuid:actor.uuid,itemUuid:item.uuid,state:'awaitingSave'}}}});
   }
 
   // 6. ONE CARD, the feature's own.
@@ -9406,21 +10904,43 @@ function gadgetHTML(gadget) {
 }
 
 /**
- * **GADGETEER'S MENU** (04: *You know two gadgets from the **Gadgets** table below, or
- * four at rank 2*; Engineering Upgrade's *one more gadget per rank*; door 7): the
- * table's eight as a checklist, the ones known ticked, the count the ranks give in
- * the note. The checklist's ceiling is `useFeature`'s.
+ * **EACH GADGET'S ENTRY IN THE GADGETS COMPENDIUM**, by key (the lead, 2026-10-24: *"the
+ * gadget table is not linked within the talent gadgeteer"*): its uuid and name, for the
+ * link a menu row opens its text on - and so the link the Use's card prints, since
+ * `chosenHTML` prints a pick's text whole. Empty where the pack is not loaded (a world not
+ * restarted since it was built), and a row then prints no link rather than a broken one.
+ *
+ * @returns {Promise<Map<string, {uuid: string, name: string}>>}
+ */
+async function gadgetEntriesByKey() {
+  const pack = game.packs.get(GADGETS_PACK);
+  if (!pack) return new Map();
+  const index = await pack.getIndex({ fields: ["system.identifier"] });
+  return new Map(index.map(e => [e.system?.identifier ?? null, { uuid: e.uuid, name: e.name }]).filter(([key]) => key));
+}
+
+/** A gadget's text in a menu: the link to its entry, then its Effect cell. */
+function gadgetRowHTML(gadget, entries) {
+  return gadgetLinkLine({ uuid: entries.get(gadget?.key)?.uuid ?? null, name: gadget?.name }) + gadgetHTML(gadget);
+}
+
+/**
+ * **GADGETEER'S MENU**: 2 + character tier, plus Engineering Upgrade's ranks.
+ * The table's gadgets as a checklist, the ones known ticked, the allowance in
+ * the note, each row opening on its entry's link. The checklist's ceiling is
+ * `useFeature`'s.
  *
  * @param {Actor} actor
  * @param {Item} item  the Gadgeteer feature
  */
-function gadgetMenu(actor, item) {
-  const allowed = gadgetsKnownFor(actor.takenTalents?.() ?? []).known;
+async function gadgetMenu(actor, item) {
+  const allowed = gadgetsKnownFor(actor.takenTalents?.() ?? [], undefined, { tier: actor.system?.tier ?? 1 }).known;
   const known = new Set(knownGadgets(item.system?.known ?? []).map(g => g.key));
+  const entries = await gadgetEntriesByKey();
   const options = GADGETS.map(g => ({
     key: g.key, name: g.name, available: true, checked: known.has(g.key),
     tag: known.has(g.key) ? game.i18n.localize("AZEROTH.Feature.Known") : g.useText,
-    description: gadgetHTML(g)
+    description: gadgetRowHTML(g, entries)
   }));
   return { options, note: game.i18n.format("AZEROTH.Gadget.MenuNote", { n: allowed }) };
 }
@@ -9428,19 +10948,22 @@ function gadgetMenu(actor, item) {
 /**
  * **OVERCLOCK'S MENU** (02's gnome: *a device you built or a gadget you know works
  * one step better and then breaks*; door 7): the gadgets known, each with its own
- * use left (one spent is greyed and said), and the 08 §13 devices carried - which
- * of them you built is the table's.
+ * use left (one spent is greyed and said) and its row opening on its entry's link, and
+ * the 08 §13 devices carried - which of them you built is the table's.
  *
  * @param {Actor} actor
  */
-function overclockMenu(actor) {
+async function overclockMenu(actor) {
   const reach = overclockFor(actor.takenTalents?.() ?? []) ?? { gadgets: true, devices: true };
   const options = [];
   if (reach.gadgets) {
+    const entries = await gadgetEntriesByKey();
     for (const f of actor.items.filter(i => i.type === "feature" && i.getFlag("azeroth-rpg", "feature")?.gadget).sort((a, b) => a.name.localeCompare(b.name))) {
       const left = f.system?.uses?.per ? (f.system.uses.value ?? 0) : 1;
+      const entry = entries.get(f.getFlag("azeroth-rpg", "feature").gadget) ?? null;
       options.push({ key: f.id, featureId: f.id, name: f.name, gadget: true, available: left > 0,
-        tag: left > 0 ? game.i18n.localize("AZEROTH.Overclock.GadgetTag") : game.i18n.localize("AZEROTH.Overclock.SpentTag"), description: f.system?.description ?? "" });
+        tag: left > 0 ? game.i18n.localize("AZEROTH.Overclock.GadgetTag") : game.i18n.localize("AZEROTH.Overclock.SpentTag"),
+        description: gadgetLinkLine({ uuid: entry?.uuid ?? null, name: f.name }) + (f.system?.description ?? "") });
     }
   }
   if (reach.devices) {
@@ -9462,8 +10985,10 @@ async function blueprintMenu(actor) {
   // caller), the way Overclock's menu reads `overclockFor`: 04's gadgets and 08 §13's
   // devices each only where the row reaches them.
   const reach = blueprintFor(actor?.takenTalents?.() ?? []) ?? { gadgets: true, devices: true };
+  // Each gadget's row opens on its entry's link, as Gadgeteer's do (the lead, 2026-10-24).
+  const entries = reach.gadgets ? await gadgetEntriesByKey() : new Map();
   const options = reach.gadgets
-    ? GADGETS.map(g => ({ key: g.key, name: g.name, gadget: true, available: true, tag: game.i18n.localize("AZEROTH.Blueprint.GadgetTag"), description: gadgetHTML(g) }))
+    ? GADGETS.map(g => ({ key: g.key, name: g.name, gadget: true, available: true, tag: game.i18n.localize("AZEROTH.Blueprint.GadgetTag"), description: gadgetRowHTML(g, entries) }))
     : [];
   const pack = reach.devices ? game.packs.get("azeroth-rpg.gear") : null;
   const index = pack ? await pack.getIndex({ fields: ["system.source.section", "system.description"] }) : [];
@@ -9575,8 +11100,11 @@ function bindSelectAll(dialog) {
  *
  * @returns {Promise<object|object[]|null>}
  */
-export async function chooseOption(item, options, note = null, { label = "AZEROTH.Feature.Use", prompt = null, max = 1, selectAll = false } = {}) {
+export async function chooseOption(item, options, note = null, { label = "AZEROTH.Feature.Use", prompt = null, max = 1, selectAll = false, timeoutMs = 0 } = {}) {
   const { DialogV2 } = foundry.applications.api;
+  const openedAt = Date.now();
+  let shown = null, expired = false, timer = null;
+  const closeExpired = () => { Promise.resolve(shown?.close?.()).catch(error => console.warn("azeroth-rpg | timed chooser close", error)); };
   const count = Math.max(1, Math.trunc(Number(max) || 1));
   const many = count > 1;
   const content = await renderTemplate(TEMPLATE.choose, {
@@ -9605,7 +11133,7 @@ export async function chooseOption(item, options, note = null, { label = "AZEROT
   // A callback that returns null falls through to the button's own action
   // (`DialogV2#_onClickButton`, 14.367: `?? button?.action`), so the multiple
   // case ALWAYS returns an array - an empty one reads as "nothing chosen".
-  const answer = await DialogV2.wait({
+  const waiting = DialogV2.wait({
     id: `azeroth-choose-${item.id}`,
     classes: ["azeroth", "azeroth-roll-dialog"],
     window: { title: item.name },
@@ -9617,9 +11145,11 @@ export async function chooseOption(item, options, note = null, { label = "AZEROT
     // watches it vanish from the card (D-681's rule, the other way round).
     // `capTicks` runs FIRST, so the Select all row it is kept in step with is
     // reading boxes whose greying has already settled.
-    render: many
-      ? (event, dialog) => { capTicks(dialog, count); if (selectAll === true) bindSelectAll(dialog); }
-      : undefined,
+    render: (event, dialog) => {
+      shown = dialog;
+      if (expired) { closeExpired(); return; }
+      if (many) { capTicks(dialog, count); if (selectAll === true) bindSelectAll(dialog); }
+    },
     buttons: [{
       action: "choose", label, default: true,
       callback: (event, button) => many
@@ -9627,6 +11157,10 @@ export async function chooseOption(item, options, note = null, { label = "AZEROT
         : Number(button.form.elements.choice?.value)
     }]
   });
+  const answer = await (Number.isFinite(timeoutMs) && timeoutMs > 0
+    ? Promise.race([waiting, new Promise(resolve => {
+      timer = setTimeout(() => { expired = true; closeExpired(); resolve(null); }, Math.max(0, timeoutMs - (Date.now() - openedAt)));
+    })]) : waiting).finally(() => clearTimeout(timer));
   if (many) {
     // More ticked than the use allows: the first `count`, in the list's order.
     const picked = (Array.isArray(answer) ? answer : [])
@@ -9694,6 +11228,7 @@ export async function rollResilience({ actor, resilience, modifiers = null, ...r
     kind: "resilience",
     title: game.i18n.localize(AZEROTH.resiliences[resilience]),
     ...rest,
+    resilience,
     modifiers: modifiers?.length ? modifiers : resilienceModifiers(actor, resilience)
   });
 }
@@ -10004,8 +11539,11 @@ export async function ruinMana(caster, ruin) {
  * Fatigue it counts, and on the 20 band Health 0 - which begins dying and
  * does no more than that (D-082). Permanent on the 18-19 band.
  */
-export async function sufferInjury({ actor, location = "body", band = null, result = null } = {}) {
+export async function sufferInjury({ actor, location = "body", band = null, result = null, messageId = null, coordinated = false } = {}) {
   if (!actor) return null;
+  if (!coordinated) return applyInjuryOnce({ actor, location, band, result, messageId });
+  if (!game.user.isGM) throw new Error(game.i18n.localize("AZEROTH.Sacrifice.NeedGM"));
+  if (iceBlockFor(actor)) return null;
   const name = result?.name ?? game.i18n.localize("AZEROTH.Card.CriticalInjury");
   const permanent = band?.permanent === true;
   const dying = band?.dying === true;
@@ -10016,7 +11554,9 @@ export async function sufferInjury({ actor, location = "body", band = null, resu
   // At 0 Health the Sustain has already ended and this finds nothing (M1).
   const drained = (actor.poolSnapshot?.() ?? []).filter(p => p.kind === "momentum" && (p.value ?? 0) > 0);
   if (drained.length) await actor.updatePool(drained.map(p => ({ itemId: p.itemId, kind: "momentum", value: momentumAfter(p.value, { criticalInjury: true }) })));
+  if (iceBlockFor(actor)) return null;
   await endAllSustains({ actor });
+  if (iceBlockFor(actor)) return null;
   const { conditions, fatigue, speed, nextTurn } = injuryConditions(`${result?.name ?? ""} ${result?.description ?? ""}`);
   await actor.createEmbeddedDocuments("ActiveEffect", [{
     name: game.i18n.format("AZEROTH.Card.InjuryEffect", { name }),
@@ -10036,11 +11576,13 @@ export async function sufferInjury({ actor, location = "body", band = null, resu
   }]);
 
   for (const c of conditions) {
+    if (iceBlockFor(actor)) return null;
     // A result that runs "until the end of your next turn" expires on its own (D-628).
     await applyCondition(actor, c.id, { value: c.value ?? null, until: nextTurn ? "endOfNextTurn" : null });
   }
 
   const update = {};
+  if (iceBlockFor(actor)) return null;
   if (fatigue) update["system.fatigue"] = Math.min(AZEROTH.FATIGUE_MAX, (actor.system.fatigue ?? 0) + fatigue);
   if (dying) update["system.health.value"] = 0;
   if (Object.keys(update).length) await actor.update(update);
@@ -10067,6 +11609,10 @@ export async function sufferInjury({ actor, location = "body", band = null, resu
 export async function useManeuver({ actor, key, targets = null } = {}) {
   const entry = AZEROTH.maneuvers.find(m => m.key === key);
   if (!actor || !entry) return null;
+  if (key === "disarm" && (targets ?? []).some(target => stonemaulGrip(targetActorOf(target)?.takenTalents?.() ?? []))) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.StonemaulGrip.Immune"));
+    return null;
+  }
   // 06 §10 (door 10): a spirit makes no maneuver in the living world.
   const spiritManeuver = realmRefusalFor(actor, "maneuver");
   if (spiritManeuver) {

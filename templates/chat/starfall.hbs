@@ -1,0 +1,14 @@
+<div class="azeroth azeroth-card azeroth-card-spell" data-message-kind="prompt">
+  {{> systems/azeroth-rpg/templates/chat/partials/card-header.hbs title="Starfall" subtitle=name}}
+  <div class="azeroth-card-body">
+    {{#if resolved}}<p>{{localize "AZEROTH.Starfall.Done"}}</p>
+    {{else if review}}<p>{{localize "AZEROTH.Starfall.Review"}}</p>
+    {{else if expired}}<p>{{localize "AZEROTH.Starfall.Unavailable"}}</p>
+    {{else}}<p>{{localize "AZEROTH.Starfall.Offer"}}</p>{{/if}}
+    {{#unless resolved}}{{#unless expired}}
+    <div class="azeroth-card-actions" data-reaction-owner="{{actorUuid}}">
+      <button type="button" data-action="chooseStarfall">{{#if review}}{{localize "AZEROTH.Starfall.ReviewTitle"}}{{else}}{{localize "AZEROTH.Starfall.Choose"}}{{/if}}</button>
+    </div>
+    {{/unless}}{{/unless}}
+  </div>
+</div>

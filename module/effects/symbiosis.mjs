@@ -13,6 +13,7 @@
 
 import { SYMBIOSIS_FLAG, bondPartners, sharedHeal } from "../rules/symbiosis.mjs";
 import { talentEffect } from "../rules/talent-effects.mjs";
+import { iceBlockFor } from "../rules/ice-block.mjs";
 
 /** The query a share for a creature this client does not own goes through. */
 export const SHARE_HEAL_QUERY = "azeroth-rpg.shareHeal";
@@ -123,7 +124,7 @@ export async function shareHealQueryHandler({ partnerUuid = null, healedUuid = n
  * @param {Actor} partner
  */
 export async function nameSymbiosisPartner(druid, partner) {
-  if (!druid || !partner) return null;
+  if (!druid || !partner || iceBlockFor(druid) || iceBlockFor(partner)) return null;
   await druid.setFlag("azeroth-rpg", SYMBIOSIS_FLAG, { partner: partner.uuid, name: partner.name });
   ui.notifications?.info(game.i18n.format("AZEROTH.Symbiosis.Named", { name: druid.name, partner: partner.name }));
   return partner;

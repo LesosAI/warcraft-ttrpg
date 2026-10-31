@@ -37,6 +37,9 @@ import { dealtHalvedBy, halvedAmount } from "../rules/legacy-uses.mjs";
 import { strikeFromArea } from "./area-strikes.mjs";
 import { actorInWorld } from "../canvas/in-world.mjs";
 import { spellTiming } from "./durations.mjs";
+import { MIND_FLAY_FLAG } from "../rules/qiraji-mind-flay.mjs";
+import { mindFlayChannelLive } from "./qiraji-mind-flay-lifecycle.mjs";
+import { sustainedSpellLive } from "./sustained-spells.mjs";
 
 /** The flag a laid tick lives under, in the system's scope. */
 export const TICK_FLAG = "tick";
@@ -79,7 +82,7 @@ function handOf(uuid) {
  * @param {Actor} actor
  * @returns {Promise<string[]>}
  */
-export async function landTicks(actor) {
+export async function landTicks(actor, {combat = null, combatant = null} = {}) {
   const lines = [];
   if (!actor || !actorInWorld(actor)) return lines;
   const due = ticksDue(tickEffectsOf(actor).map(e => ({ id: e.id, tick: tickOn(e) })));
@@ -91,6 +94,15 @@ export async function landTicks(actor) {
     if (actor.type === "npc" && (actor.system?.health?.value ?? 0) <= 0) break;
     if (!actor.effects.get(id)) continue;
     try {
+      // A channel needs its living caster and recorded tokens at the instant
+      // damage lands. Hook cleanup can still be waiting on another write.
+      const carrier = actor.effects.get(id);
+      if (!sustainedSpellLive(carrier)) continue;
+      const channel = carrier?.flags?.["azeroth-rpg"]?.[MIND_FLAY_FLAG];
+      // Dedicated channels persist their pulse claim before damage; the
+      // ordinary countdown must not apply the same damage a second time.
+      if (channel && carrier.flags["azeroth-rpg"].qirajiMindFlayClock) continue;
+      if (channel && !mindFlayChannelLive(channel, carrier)) continue;
       const hand = handOf(tick.source);
       // A class feature's tick (02's Regrowth, 04's Wild Growth; D-771) heals
       // as the feature does: Gift of Nature reaches it, a spell's Vestments do not.
@@ -103,6 +115,20 @@ export async function landTicks(actor) {
         // Miracle's heal nothing reduces, both read at the one healing door.
         aegis: tick.aegis ?? null, unreduced: tick.unreduced === true
       };
+      if (tick.signatureHealingCast) {
+        const {landSignatureHealingTick}=await import('./signature-healing-ticks.mjs');
+        const result=await landSignatureHealingTick({actor,carrier,tick,combat,combatant,caster:hand,spell});
+        if(result.ok)lines.push(...result.lines);
+        else console.warn('azeroth-rpg | signature healing tick unresolved',result.reason);
+        continue;
+      }
+      if (tick.signatureCast) {
+        const {landSignatureTick} = await import("./signature-ticks.mjs");
+        const result = await landSignatureTick({actor,carrier,tick,combat,combatant,caster:hand,spell});
+        if (result.ok) lines.push(...result.lines);
+        else console.warn("azeroth-rpg | signature tick unresolved", result.reason);
+        continue;
+      }
       // **04's DEVOURING PLAGUE** (the lead, 2026-10-03, on O-186: *"tick on cast, and
       // 1 turn after."*; D-779): a tick still carrying doubled landings deals twice its
       // number, and one fewer is left (`rules/ticks.mjs#tickLanding`).

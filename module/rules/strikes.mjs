@@ -373,6 +373,7 @@ export const CREATURE_WORDS = Object.freeze([
  *   *Stone fists* and a person's *Roundhouse kick* still read by their words.
  */
 export const CREATURE_NAMED = Object.freeze({
+  "vine lash": "tentacle",
   "fists": "unarmed",
   "ironfoe's return": "warhammer",
   "kick": "slam",

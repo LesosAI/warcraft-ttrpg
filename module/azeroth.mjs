@@ -17,9 +17,60 @@ import { registerChatHooks } from "./dice/chat.mjs";
 import { registerPassiveHooks } from "./effects/passives.mjs";
 import { registerAuraHooks } from "./effects/auras.mjs";
 import { registerSustainedAreaHooks } from "./canvas/sustained-areas.mjs";
+import { registerSustainedSpellHooks } from "./effects/sustained-spells.mjs";
+import { registerSoulLinkHooks } from "./effects/soul-link.mjs";
+import { registerImageProjectionHooks } from "./effects/image-projection-lifecycle.mjs";
+import { registerProjectionProtectionHooks } from "./effects/image-projection-protection.mjs";
+import { registerIceBlockProtectionHooks } from "./effects/ice-block-protection.mjs";
+import {registerDispersionProtectionHooks} from "./effects/dispersion-protection.mjs";
 // A deleted scene's tokens leave core's effect registry, and a write the area
 // and aura passes owe a deleted scene is never sent (the full-suite fix of D-757).
 import { registerDurationHooks } from "./effects/durations.mjs";
+import { registerNpcSearingTotemHooks } from "./documents/npc-searing-totem-hooks.mjs";
+import { registerCarrionScarabHooks } from "./documents/carrion-scarab-lifecycle.mjs";
+import { registerFelShodHooks } from "./canvas/fel-shod.mjs";
+import { registerReflectionHooks } from "./effects/reflection.mjs";
+import { registerVeknissHooks } from "./effects/vekniss.mjs";
+import { registerBloodpetalHooks } from "./effects/bloodpetal.mjs";
+import { registerDredgePoisonHooks } from "./effects/dredge-poison.mjs";
+import { registerVirulentPoisonHooks } from "./effects/virulent-poison.mjs";
+import { registerFireguardBurnHooks } from "./effects/fireguard-burn.mjs";
+import { registerFleshRotHooks } from "./effects/flesh-rot.mjs";
+import { registerToxicPoisonHooks } from "./effects/toxic-horror.mjs";
+import { registerVirulentHitHooks } from "./effects/virulent-hit.mjs";
+import { registerLightningShieldReviewHooks } from "./effects/lightning-shield-review.mjs";
+import { registerFireShieldReviewHooks } from "./effects/fire-shield-review.mjs";
+import { registerWildRegenerationHooks } from "./effects/wild-regeneration.mjs";
+import { registerMindFlayClockHooks } from "./effects/qiraji-mind-flay-clock.mjs";
+import { registerDestroyerEncounterHooks } from "./effects/obsidian-encounter.mjs";
+import { registerMindFlayLifecycleHooks } from "./effects/qiraji-mind-flay-lifecycle.mjs";
+import { registerDreadlordSleepHooks } from "./effects/dreadlord-sleep.mjs";
+import { registerConsumeShadowsHooks } from "./effects/consume-shadows-hooks.mjs";
+import { registerLesserInvisibilityHooks } from "./effects/lesser-invisibility-hooks.mjs";
+import { registerCoreHoundPackHooks } from "./effects/core-hound-pack-hooks.mjs";
+import { registerMaggotGooHooks } from "./effects/maggot-goo-hooks.mjs";
+import { registerMindslayerDeathHooks } from "./effects/mindslayer-death-hooks.mjs";
+import { registerAberrationDeathHooks } from "./effects/arcane-aberration-death-hooks.mjs";
+import { registerBleakheartHooks } from "./effects/bleakheart-hooks.mjs";
+import { registerMobileAlertHooks } from "./effects/mobile-alert-hooks.mjs";
+import { registerNpcSneakHooks } from "./effects/npc-sneak.mjs";
+import { registerWhirlwindInterruptions } from "./effects/syndicate-whirlwind-interruptions.mjs";
+import { registerWhirlwindLifecycle } from "./effects/syndicate-whirlwind-lifecycle.mjs";
+import { registerCrushridgeDeathHooks } from "./effects/crushridge-death-hooks.mjs";
+import { registerCrushridgeHelpHooks } from "./effects/crushridge-call-for-kin.mjs";
+import { registerMobileFlareVisibility } from "./effects/mobile-alert-visibility.mjs";
+import { registerTokenShrinkHooks } from "./canvas/token-shrink.mjs";
+import { registerSentinelPackHooks } from "./effects/anubisath-pack-hooks.mjs";
+import { registerSentinelStrikeHooks } from "./effects/sentinel-mortal-strike.mjs";
+import { registerSentinelMendingHooks } from "./effects/sentinel-mending.mjs";
+import { registerSentinelEnrageHooks } from "./effects/sentinel-enrage.mjs";
+import { registerSerratedBiteHooks } from "./effects/serrated-bite.mjs";
+import { registerFrostShotHooks } from "./effects/frost-shot.mjs";
+import { registerFrostArmorHooks } from "./effects/frost-armor.mjs";
+import { registerFrostShotChange } from "./effects/frost-shot-change.mjs";
+import { registerAncientDespairMovement } from "./effects/ancient-despair-movement.mjs";
+import { registerSeductionMovement } from "./effects/seduction-movement.mjs";
+import { registerTarReactionHooks } from "./effects/tar-reactions.mjs";
 import { registerInWorldHooks } from "./canvas/in-world.mjs";
 // Difficult ground and what a foot costs (D-757): the terrain, the movement
 // actions and the Region behavior at `init`, and what entering an area does.
@@ -51,6 +102,7 @@ import { attackWithDialog, castWithDialog, npcAttackWithDialog } from "./applica
 import * as affixes from "./rules/affixes.mjs";
 import { AzerothRoll } from "./dice/azeroth-roll.mjs";
 import { preloadTemplates, registerHelpers } from "./helpers/handlebars.mjs";
+import { registerMindControlHooks } from "./effects/mind-control-hooks.mjs";
 import { AzerothCharacterSheet } from "./applications/character-sheet.mjs";
 import { AzerothNpcSheet } from "./applications/npc-sheet.mjs";
 import { AzerothItemSheet } from "./applications/item-sheet.mjs";
@@ -59,6 +111,8 @@ import { registerBrowserButton } from "./applications/browser-button.mjs";
 import { AzerothCharacterCreator } from "./applications/creator.mjs";
 import { registerCreatorButton } from "./applications/creator-button.mjs";
 import { registerQueries } from "./queries.mjs";
+import { registerRestorativeTotemHooks } from "./effects/restorative-totem-offers.mjs";
+import { recoverStarfallOffers, registerStarfallRecoveryHooks } from "./effects/starfall-recovery.mjs";
 import * as bound from "./documents/bound.mjs";
 // A shape is one Active Effect and one writer (02 §7, D-769).
 import * as shapes from "./documents/shapes.mjs";
@@ -93,6 +147,7 @@ Hooks.once("init", () => {
   // load-bearing on V14: Actor#prepareBaseData clears the Active Effect phase
   // tracker and skipping it throws on the second data preparation.
   CONFIG.Actor.documentClass = AzerothActor;
+  registerMobileFlareVisibility();
   CONFIG.Item.documentClass = AzerothItem;
   // Side-based turn order. Initiative is never rolled (D-256), so the sort is
   // replaced rather than the formula configured.
@@ -115,6 +170,7 @@ Hooks.once("init", () => {
   registerConditions();
   // A pool's cap raised by an effect is the system's own change type (2026-09-06).
   registerPoolChange();
+  registerFrostShotChange();
   // A condition the system applied with a duration goes when it expires
   // (D-628) rather than lingering suppressed on the sheet. Only effects the
   // system creates carry a duration.
@@ -123,6 +179,46 @@ Hooks.once("init", () => {
   // registry, as core does for a token deleted on its own: left in it, the
   // next expiry deletes them in a batch the server refuses.
   registerDurationHooks();
+  registerReflectionHooks();
+  registerVeknissHooks();
+  registerBloodpetalHooks();
+  registerDredgePoisonHooks();
+  registerVirulentPoisonHooks();
+  registerFireguardBurnHooks();
+  registerFleshRotHooks();
+  registerToxicPoisonHooks();
+  registerVirulentHitHooks();
+  registerLightningShieldReviewHooks();
+  registerFireShieldReviewHooks();
+  registerWildRegenerationHooks();
+  registerMindFlayLifecycleHooks();
+  registerMindFlayClockHooks();
+  registerDestroyerEncounterHooks();
+  registerDreadlordSleepHooks();
+  registerConsumeShadowsHooks();
+  registerLesserInvisibilityHooks();
+  registerCoreHoundPackHooks();
+  registerMaggotGooHooks();
+  registerMindslayerDeathHooks();
+  registerAberrationDeathHooks();
+  registerBleakheartHooks();
+  registerMobileAlertHooks();
+  registerNpcSneakHooks();
+  registerWhirlwindInterruptions();
+  registerWhirlwindLifecycle();
+  registerCrushridgeDeathHooks();
+  registerCrushridgeHelpHooks();
+  registerTokenShrinkHooks();
+  registerSentinelPackHooks();
+  registerSentinelStrikeHooks();
+  registerSentinelMendingHooks();
+  registerSentinelEnrageHooks();
+  registerSerratedBiteHooks();
+  registerFrostShotHooks();
+  registerFrostArmorHooks();
+  registerAncientDespairMovement();
+  registerSeductionMovement();
+  registerTarReactionHooks();
   // A bound totem deleted moves its shaman's passives (04's Earthen Shield, D-774).
   bound.registerBoundHooks();
 
@@ -189,6 +285,8 @@ Hooks.once("init", () => {
   };
   // A player's bind runs on the GM's client through v14's User#query (D-643).
   registerQueries();
+  registerRestorativeTotemHooks();
+  registerStarfallRecoveryHooks();
 
   // A sheet row dragged onto the hotbar (the lead, 2026-09-13). Core's own
   // `hotbarDrop` makes a macro that OPENS the item's sheet; this makes one
@@ -224,6 +322,9 @@ Hooks.once("init", () => {
   // (D-691): data preparation is where the gate is judged, and nothing else
   // prepares a bystander's data.
   registerPassiveHooks();
+  registerNpcSearingTotemHooks();
+  registerCarrionScarabHooks();
+  registerFelShodHooks();
   // A Signature that stands on somebody ELSE (08 §20's Bulwark of Tyr's Hand,
   // D-696): the same nudge as the passives above, plus the write - the effect
   // lands on the ally, so the active GM's client is the one that keeps it.
@@ -233,6 +334,13 @@ Hooks.once("init", () => {
   // is the one that deletes.
   registerInWorldHooks();
   registerSustainedAreaHooks();
+  registerSustainedSpellHooks();
+  registerSoulLinkHooks();
+  registerMindControlHooks();
+  registerProjectionProtectionHooks();
+  registerIceBlockProtectionHooks();
+  registerDispersionProtectionHooks();
+  registerImageProjectionHooks();
   // A shape on the board (D-769): a token placed for a shifted character wears
   // the shape, and a shape effect deleted by any door is leaving the shape.
   shapes.registerShapeHooks();
@@ -351,6 +459,7 @@ Hooks.once("ready", async () => {
   } finally {
     if (game.system.azeroth) game.system.azeroth.readyWorkDone = true;
   }
+  await recoverStarfallOffers();
   // Phase 7 lands the OFL faces (D5). Until then the fallback stack draws the
   // sheet, and this says so once rather than leaving a wrong face to be noticed.
   const faces = ["EB Garamond", "Alegreya", "Germania One"];

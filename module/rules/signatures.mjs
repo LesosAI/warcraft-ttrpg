@@ -136,6 +136,7 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+import { signatureAugmentAllowed } from "./augments.mjs";
 import { parseGrant } from "./grants.mjs";
 import { auraStands, cleanAura, emptyAura } from "./auras.mjs";
 import { gateHolds as whenHolds } from "./ability-automation.mjs";
@@ -238,6 +239,11 @@ export function emptySignature() {
     // cast.* Scoped to ONE SCHOOL'S SPELLS: a flat `+1 Damage Rating` grant on
     // the bearer would raise the hammer in their hand as readily as the spell.
     spellDamage: { school: null, amount: null },
+    chosenSpellDamage: { school: null, attribute: null, skill: null, casting: false },
+    chosenSpellHealing: false,
+    firstParryTest: false,
+    weaponKillReward: false,
+    scalingHitDamage: false,
     // **WHAT A SCHOOL'S SPELLS COST, LESS** (the lead, 2026-09-14). Asked
     // whether a Signature could say *if a Shaman wields this, reduce Lightning
     // Shield's mana cost by 2*, the lead answered: *spell and/or a school
@@ -439,7 +445,7 @@ export function emptySignature() {
  */
 export const BRANCH_FAMILIES = Object.freeze([
   "grants", "refuses", "criticalOn", "damageMultiplier", "damageRatingSet",
-  "spellDamage", "spellCost", "healingBonus", "corruptionReduction", "cancelsBane",
+  "spellDamage", "chosenSpellDamage", "chosenSpellHealing", "firstParryTest", "weaponKillReward", "scalingHitDamage", "spellCost", "healingBonus", "corruptionReduction", "cancelsBane",
   "blockBonus", "armorPointsPerTier", "aura", "empowers", "bound",
   "onHit", "onKill", "whenStruck", "tick"
 ]);
@@ -604,6 +610,16 @@ function standingCleaners() {
     spellDamage: v => nested(v, {
       school: s => oneOf(s, Object.keys(AZEROTH.schools)),
       amount: a => atLeast(a, 1)
+    }),
+    chosenSpellHealing: v => v === true,
+    firstParryTest: v => v === true,
+    weaponKillReward: v => v === true,
+    scalingHitDamage: v => v === true,
+    chosenSpellDamage: v => nested(v, {
+      school: s => oneOf(s, Object.keys(AZEROTH.schools)),
+      attribute: a => oneOf(a, ["str", "dex", "con", "int", "wis", "cha"]),
+      skill: s => oneOf(s, Object.keys(AZEROTH.skills)),
+      casting: v => v === true
     }),
     // The Mana a school's spells cost, less (the lead, 2026-09-14). The same
     // guard as the line above it: a school outside `AZEROTH.schools` is nulled
@@ -1310,6 +1326,13 @@ export function signatureEffects(items = [], state = {}, { weaponId = null } = {
     grants: [], damageRating: 0, refuses: [], conditionImmunities: [],
     criticalOn: null, damageMultiplier: null, damageRatingSet: null,
     spellDamage: {},
+    // Kept out of the aggregate school bonus: these need one chosen recipient
+    // and an attribute snapshot at cast commitment, not a bonus to every hit.
+    chosenSpellDamage: [],
+    chosenSpellHealing: [],
+    firstParryTest: [],
+    weaponKillReward: [],
+    scalingHitDamage: [],
     // What a school's spells cost, LESS, keyed by school (the lead,
     // 2026-09-14). `castSpell` reads it by the spell's own school beside
     // `empowers[name].cost`, and both come off the Mana together.
@@ -1338,6 +1361,7 @@ export function signatureEffects(items = [], state = {}, { weaponId = null } = {
     // A thing in the pack is not worn (08 §6), exactly as `grantsFor` has it.
     const equipped = item?.equipped ?? item?.system?.equipped ?? false;
     if (!equipped) continue;
+    if (!signatureAugmentAllowed(item,items,state.classes ?? [])) continue;
     // Another weapon in the other hand is not the one making this attack.
     const type = item?.type ?? null;
     if (weaponId !== null && type === "weapon" && (item?.id ?? null) !== weaponId) continue;
@@ -1403,6 +1427,28 @@ function applyPart(out, part, { item, name, text, state }) {
   if (part.spellDamage.school && part.spellDamage.amount) {
     const school = part.spellDamage.school;
     out.spellDamage[school] = (out.spellDamage[school] ?? 0) + part.spellDamage.amount;
+  }
+  if (part.chosenSpellHealing === true) out.chosenSpellHealing.push({
+    itemId:item.id ?? item._id ?? null, identifier:item.system?.identifier ?? item.identifier ?? null, name
+  });
+  if (part.firstParryTest === true) out.firstParryTest.push({
+    itemId:item.id ?? item._id ?? null, identifier:item.system?.identifier ?? item.identifier ?? null, name
+  });
+  if (part.weaponKillReward === true) out.weaponKillReward.push({
+    itemId:item.id ?? item._id ?? null, identifier:item.system?.identifier ?? item.identifier ?? null, name
+  });
+  if (part.scalingHitDamage === true) out.scalingHitDamage.push({
+    itemId:item.id ?? item._id ?? null, identifier:item.system?.identifier ?? item.identifier ?? null, name
+  });
+  if (part.chosenSpellDamage?.school && (part.chosenSpellDamage.attribute || part.chosenSpellDamage.skill || part.chosenSpellDamage.casting)) {
+    out.chosenSpellDamage.push({
+      itemId: item.id ?? item._id ?? null,
+      identifier: item.system?.identifier ?? item.identifier ?? null,
+      name, school: part.chosenSpellDamage.school,
+      ...(part.chosenSpellDamage.attribute ? {attribute:part.chosenSpellDamage.attribute} : {}),
+      ...(part.chosenSpellDamage.skill ? {skill:part.chosenSpellDamage.skill} : {}),
+      ...(part.chosenSpellDamage.casting ? {casting:true} : {})
+    });
   }
   // The Mana off a whole school's spells, summed by school — `spellDamage`'s
   // exact mirror one line up, because the two are one sentence apart in the
@@ -2017,7 +2063,9 @@ function seedGates(flat, classes) {
   // *against undead and demons* - the creature STRUCK, never the bearer. The
   // window is short on purpose: the rest of the sentence is what the blow
   // does, and *a creature reduced to 0 Health* is not a second gate.
-  const against = flat.toLowerCase().indexOf("against ");
+  // *A Reflex Test against DC 10 + your Intelligence modifier* names a Test's
+  // DC and no creature at all (`againstClause`), so it is no gate to read.
+  const against = againstClause(flat);
   let struck = false;
   if (against >= 0) {
     const run = flat.slice(against + "against ".length, against + "against ".length + AGAINST_WINDOW);
@@ -2046,6 +2094,23 @@ function seedGates(flat, classes) {
 
 /** How far past *against* a creature type may be named. */
 const AGAINST_WINDOW = 60;
+
+/**
+ * *against DC 10 + ...*, *against your Spell DC*, *against a Standard DC*: the
+ * DC a Test is made against (D4's own wording), which says nothing of the
+ * creature struck. Cannonball Runner and the Piccolo of the Flaming Fire write
+ * it, and reading it as an unqualifiable target clause dropped their sentence.
+ */
+const AGAINST_DC = /^against (?:(?:a|an|the|your|its|their)\s+)?(?:[a-z]+\s+)?DC\b/i;
+
+/** Where the first *against* that could name the creature struck stands, or -1. */
+function againstClause(flat) {
+  const lower = flat.toLowerCase();
+  for (let at = lower.indexOf("against "); at >= 0; at = lower.indexOf("against ", at + 1)) {
+    if (!AGAINST_DC.test(flat.slice(at))) return at;
+  }
+  return -1;
+}
 
 /** What is true while the thing is worn. */
 function seedStanding(out, flat) {
@@ -2321,6 +2386,11 @@ function firesUse(use) {
 function seedStands(d) {
   return Boolean(d.grants.length || d.refuses.length || d.criticalOn !== null
     || d.damageMultiplier !== null || d.damageRatingSet !== null || d.spellDamage.school
+    || d.chosenSpellHealing === true
+    || d.firstParryTest === true
+    || d.weaponKillReward === true
+    || d.scalingHitDamage === true
+    || (d.chosenSpellDamage?.school && (d.chosenSpellDamage.attribute || d.chosenSpellDamage.skill || d.chosenSpellDamage.casting))
     // A Mana discount is true while the thing is worn, by school or by name.
     // Without these two the seeder would read the lead's own sentence, write
     // the descriptor and hand back `kind: "none"` — right code that says of
@@ -2547,6 +2617,17 @@ function partLines(d) {
   if (d.damageMultiplier) say("DamageMultiplier", { n: d.damageMultiplier });
   if (d.damageRatingSet !== null && d.damageRatingSet !== undefined) say("DamageRatingSet", { n: d.damageRatingSet });
   if (d.spellDamage?.school && d.spellDamage?.amount) say("SpellDamage", { n: d.spellDamage.amount, school: d.spellDamage.school });
+  if (d.chosenSpellHealing === true) say("ChosenSpellHealing");
+  if (d.firstParryTest === true) say("FirstParryTest");
+  if (d.weaponKillReward === true) say("WeaponKillReward");
+  if (d.scalingHitDamage === true) say("ScalingHitDamage");
+  if (d.chosenSpellDamage?.school && d.chosenSpellDamage?.attribute) say("ChosenSpellDamage", {
+    school: d.chosenSpellDamage.school, attribute: d.chosenSpellDamage.attribute
+  });
+  if (d.chosenSpellDamage?.school && d.chosenSpellDamage?.skill) say("ChosenSkillSpellDamage", {
+    school: d.chosenSpellDamage.school, skill: d.chosenSpellDamage.skill
+  });
+  if (d.chosenSpellDamage?.school && d.chosenSpellDamage?.casting) say("ChosenCastingSpellDamage", {school:d.chosenSpellDamage.school});
   if (d.spellCost?.school && d.spellCost?.amount) say("SpellCost", { n: d.spellCost.amount, school: d.spellCost.school });
   if (d.healingBonus) say("HealingBonus", { n: d.healingBonus });
   if (d.corruptionReduction?.track && d.corruptionReduction?.amount) {
