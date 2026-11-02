@@ -32,6 +32,7 @@
  */
 
 import { BLINK, blinkFor, onUseLegacy } from "../rules/class-talents.mjs";
+import { spellCrossingFrom } from "../rules/spell-crossing.mjs";
 import { onUseOf, talentEffect } from "../rules/talent-effects.mjs";
 import { abilityScope } from "../rules/expressions.mjs";
 import { laidByOne } from "../rules/forced-movement.mjs";
@@ -246,7 +247,7 @@ export async function pickPull(token, { holder, within = 10, name = "", holderNa
 export function stepAllowance(by, item) {
   if (!by || !item) return null;
   if (item.type === "spell") {
-    const step = readSpellStep(item.system?.effect ?? "");
+    const step = readSpellStep(item.system?.effect ?? "") ?? spellCrossingFrom(item);
     if (!step) return null;
     return { feet: step.feet, friend: null, party: step.who === "selfAndTargets" ? partyRadius(item.system?.target ?? "") : null, pull: null };
   }
@@ -334,7 +335,7 @@ export function judgeMove({ token, centre, kind, allowance, holder, by, except =
 /** Move it here; the caller has established that this client may write the token. */
 async function stepHere(doc, to) {
   const done = await doc.move({ x: to.x, y: to.y, action: "displace" });
-  return done !== false;
+  return done === true && doc.x === to.x && doc.y === to.y;
 }
 
 /**

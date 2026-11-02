@@ -1,4 +1,5 @@
 import { cleanAreaTick, emptyAreaTick, hasAreaTick } from "./area-ticks.mjs";
+import { mirrorImageState } from './mirror-image.mjs';
 
 const shapeMatches = (value, shape) => {
   if (Array.isArray(shape)) return Array.isArray(value) && value.length === 0;
@@ -9,10 +10,24 @@ const shapeMatches = (value, shape) => {
 const stable = value => Array.isArray(value) ? value.map(stable) : value && typeof value === "object"
   ? Object.fromEntries(Object.keys(value).sort().map(key => [key, stable(value[key])])) : value;
 
-/** Immolation's complete runtime carrier is its held record. It contains no
- * token/actor references: the current holder supplies centre and damage source.
+/** Allow reviewed spells whose complete runtime carrier is their held record.
  * Reject extensions until their relocation semantics have been reviewed. */
 export function isRecordCarriedSustain(entry) {
+  // These defenses live on the held cast. Recipient preparation rebases the
+  // pool and source/targets; Mirror Image retains its exact remaining count.
+  // Neither transfer manufactures an Active Effect or replenishes resources.
+  const mirror=entry?.identifier==='mirror-image'&&entry.name==='Mirror Image';
+  if(mirror || entry?.identifier==='mana-shield'&&entry.name==='Mana Shield'){
+    const keys=new Set(['spellId','uuid','name','itemId','cast','identifier','targets','source','upkeep']);
+    if(mirror){
+      if(!mirrorImageState(entry))return false;
+      keys.add('mirrorImages');
+    }
+    return typeof entry.cast==='string'&&entry.cast.trim().length>0
+      &&typeof entry.uuid==='string'&&entry.uuid.trim().length>0
+      &&Object.hasOwn(entry,'itemId')&&(entry.itemId===null||typeof entry.itemId==='string'&&entry.itemId.trim().length>0)
+      &&Object.keys(entry).every(key=>keys.has(key));
+  }
   const tick = entry?.areaTick, spell = entry?.tickSpell;
   if (entry?.name !== "Immolation" || spell?.name !== "Immolation" || spell.school !== "fire"
     || !Object.keys(spell).every(key => ["name", "school", "tier", "takesSpellpower"].includes(key))

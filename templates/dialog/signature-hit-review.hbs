@@ -1,0 +1,6 @@
+<p><strong>{{actor}}</strong></p>
+<ul>{{#each attempts}}<li>{{id}} — {{event}}</li>{{/each}}</ul>
+<p>{{localize "AZEROTH.Signature.HitReview.Help"}}</p>
+<ul>{{#each cards}}<li>{{localize "AZEROTH.Signature.HitReview.Card"}}: {{this}}</li>{{/each}}</ul>
+<ul>{{#each pools}}<li>{{name}}: {{value}}</li>{{/each}}</ul>
+<label><input type="checkbox" name="acknowledged"> {{localize "AZEROTH.Signature.HitReview.Acknowledge"}}</label>

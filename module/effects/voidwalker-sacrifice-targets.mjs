@@ -76,7 +76,9 @@ export function prepareVoidwalkerInterception(targets, snapshot) {
 export function refreshVoidwalkerInterception(previous, secondTargets, snapshot) {
   if (!previous?.ok || !Array.isArray(previous.originalTargets) || typeof snapshot !== "function")
     return { ok: false, reason: "targets" };
-  const sameToken = (a, b) => a?.sceneId === b?.sceneId && a?.tokenId === b?.tokenId;
+  const sameToken = (a, b) => a?.tokenId || b?.tokenId
+    ? a?.sceneId === b?.sceneId && a?.tokenId === b?.tokenId
+    : Boolean(a?.actorId && a.actorId === b?.actorId && !a.sceneId && !b.sceneId);
   const intended = [];
   for (const selected of secondTargets?.length ? secondTargets : previous.originalTargets) {
     if (!secondTargets?.length) { intended.push(selected); continue; }
@@ -86,6 +88,17 @@ export function refreshVoidwalkerInterception(previous, secondTargets, snapshot)
   }
   const fresh = [];
   for (const target of intended) {
+    // Ordinary actor-only attacks have no token or interception geometry.
+    // Refresh their live defenses without pretending that all tokenless actors
+    // are the same target. A broken scene/token reference still refuses below.
+    if (!target.sceneId && !target.tokenId && target.actorId) {
+      const actor = resolve(`Actor.${target.actorId}`);
+      if (!actor || actor.id !== target.actorId) return { ok: false, reason: "targetChanged" };
+      const current = snapshot({ id: null, parent: null, actor, name: actor.name ?? target.name });
+      if (!current || !sameToken(current, target)) return { ok: false, reason: "targetChanged" };
+      fresh.push(current);
+      continue;
+    }
     const token = game.scenes?.get(target.sceneId)?.tokens?.get(target.tokenId);
     const record = previous.interceptions.find(row => sameToken(row.intended, target));
     if (!token?.actor || record && resolve(record.intended.actorUuid) !== token.actor

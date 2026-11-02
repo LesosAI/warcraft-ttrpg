@@ -38,22 +38,29 @@ function roundMark(identifier, count, used = []) {
 }
 
 /**
- * **A MARK FOR ONE TURN OF THE FIGHT** (04's Main Gauche as the lead reworked it:
- * *Main gauge can be reworked to allow 1 parry per turn without spending a
- * reaction*; D-779): `identifier@<turn>` on the round's record, which a new round
- * clears - so a mark per turn index is a mark per creature's turn. Null where
- * this turn's mark is spent, or where there is no turn to name.
+ * A mark per use on this creature's turn, cleared with the round record.
+ * Main Gauche grants one use per rank (lead, 2026-11-01). The first mark keeps
+ * its legacy `identifier@<turn>` shape; later uses append `:2`, etc.
+ * Null when all uses are spent or there is no turn to name.
  *
  * @param {string} identifier
  * @param {number|null} turn  the fight's `turn` index
  * @param {string[]} used  the round record's `once` list
+ * @param {number} count  available uses this turn, default one
  * @returns {string|null}
  */
-export function turnMark(identifier, turn, used = []) {
+export function turnMark(identifier, turn, used = [], count = 1) {
   const t = Math.trunc(Number(turn));
   if (!identifier || !Number.isFinite(t) || t < 0 || turn === null || turn === undefined) return null;
   const key = `${identifier}@${t}`;
-  return (used ?? []).includes(key) ? null : key;
+  const limit = Math.trunc(Number(count));
+  if (!Number.isFinite(limit) || limit < 1) return null;
+  // Keep the original first-use key: saved rounds and single-use callers retain it.
+  for (let n = 1; n <= limit; n++) {
+    const mark = n === 1 ? key : `${key}:${n}`;
+    if (!(used ?? []).includes(mark)) return mark;
+  }
+  return null;
 }
 
 /**

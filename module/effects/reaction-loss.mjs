@@ -38,6 +38,8 @@ async function loseHere(victim) {
   const combatant = combatantOf(victim);
   if (!combatant) return loss(victim?.name, false, "noFight");
   const done = await combatant.loseReaction();
+  if (combatantOf(victim) !== combatant || ![true, false].includes(done?.lost)
+    || combatant.budget?.reactions !== 0) return loss(victim.name, false, "error");
   return loss(victim.name, done?.lost === true, done?.lost === true ? null : "none");
 }
 

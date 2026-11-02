@@ -57,8 +57,9 @@ export function searingUseHandler(payload = {}, { user = game.user } = {}) {
       if (!row || row.userId !== user.id || row.stage !== "pending") return refuse("record");
       // Finishing cannot release capacity; it only permits the still-unused
       // second target. The original target list remains charged for this turn.
-      await fight.setFlag(SCOPE, FLAG, rows.map(r => r === row ? { ...r, stage: "done" } : r));
-      return { ok: true };
+      const next = rows.map(r => r === row ? { ...r, stage: "done" } : r);
+      await fight.setFlag(SCOPE, FLAG, next);
+      return gmHere() && same(fight.getFlag(SCOPE, FLAG), next) ? { ok: true } : refuse("pending");
     }
     const c = context(payload, user);
     if (!c.ok) return c;

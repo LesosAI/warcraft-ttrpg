@@ -15,6 +15,7 @@ export const INJURY_QUERY = "azeroth-rpg.injuryApplication";
 export const SACRIFICE_QUERY = "azeroth-rpg.sacrificeConsent";
 const FLAG = "injuryApplication";
 let queue = Promise.resolve();
+const active = new Set();
 const workflows = () => game.system.azeroth.workflows;
 const text = (key, data = {}) => game.i18n.format(`AZEROTH.Sacrifice.${key}`, data);
 
@@ -45,12 +46,13 @@ export async function sacrificeConsentHandler({ holderUuid, targetUuid } = {}, {
   });
 }
 
-async function recipientFor(target, record = async () => {}) {
+async function recipientFor(target, record = async () => {}, ensure = () => {}) {
   const scene = ownTokenOf(target)?.parent;
   const holders = [...new Map([...(scene?.tokens ?? [])].filter(t => t.actor)
     .map(t => [t.actor.uuid, t.actor])).values()]
     .sort((a, b) => String(a.name).localeCompare(String(b.name)));
   for (const holder of holders) {
+    ensure();
     if (iceBlockFor(target)) return null;
     if (!facts(holder, target).offer) continue;
     const who = answererOf(holder);
@@ -62,6 +64,7 @@ async function recipientFor(target, record = async () => {}) {
         ? await sacrificeConsentHandler(payload, { user: game.user })
         : await who.query(SACRIFICE_QUERY, payload, { timeout: ASK_MS });
     } catch { /* No consent means no transfer; the remote query cannot mutate. */ }
+    ensure();
     if (iceBlockFor(target)) return null;
     if (yes !== true) continue;
     // Re-read the scene, rank, pools and turn after the answer, not cached distances.
@@ -71,10 +74,15 @@ async function recipientFor(target, record = async () => {}) {
     if (iceBlockFor(target)) return null;
     if (iceBlockFor(holder)) continue;
     if (!(await workflows().spendTurnBudget(holder, "reaction"))) continue;
+    ensure();
     if (iceBlockFor(target) || iceBlockFor(holder)) return null;
     const current = poolNamed(holder.poolSnapshot?.() ?? [], "mana", { itemId: pool.itemId });
-    if (!current || current.value < offer.cost) throw new Error(text("PaymentChanged"));
+    if (!current || current.itemId !== pool.itemId || current.kind !== pool.kind || current.value < offer.cost) throw new Error(text("PaymentChanged"));
     await holder.updatePool({ itemId: current.itemId, kind: current.kind, value: current.value - offer.cost });
+    ensure();
+    const paid = poolNamed(holder.poolSnapshot?.() ?? [], 'mana', { itemId: current.itemId });
+    if (!paid || paid.itemId !== current.itemId || paid.kind !== current.kind || paid.value !== current.value - offer.cost)
+      throw new Error(text('PaymentChanged'));
     await record({ recipientUuid: holder.uuid, transferred: true, cost: offer.cost, payment: "paid" });
     return holder;
   }
@@ -92,15 +100,36 @@ export async function injuryQueryHandler(payload = {}, { user } = {}) {
   if (!actor?.testUserPermission(user, "OWNER")) throw new Error(text("Unauthorized"));
   const args = message ? { actor, location: flags.location, band: flags.band, result: flags.result }
     : { actor, location: payload.location, band: payload.band, result: payload.result };
+  const writerId = game.user.id;
+  const authority = () => game.user?.isGM && game.user.id === writerId && game.users.activeGM?.id === writerId
+    && actor.testUserPermission(user, 'OWNER') && (!message || game.messages.get(message.id) === message);
   const run = async () => {
+    if (!authority()) throw new Error(text('NeedGM'));
     const previous = message?.getFlag("azeroth-rpg", FLAG);
     if (previous?.state === "done") return previous.recipientUuid;
     if (previous) throw new Error(text("Interrupted"));
+    const claimId = foundry.utils.randomID();
+    let claimed = false;
+    const ensure = () => {
+      if (!authority()) throw new Error(text('NeedGM'));
+      if (message && claimed && message.getFlag('azeroth-rpg', FLAG)?.claimId !== claimId) throw new Error(text('Interrupted'));
+    };
+    const record = async details => {
+      ensure();
+      if (!message) return;
+      const expected = {...message.getFlag('azeroth-rpg', FLAG), ...details, claimId, writerId};
+      await message.setFlag('azeroth-rpg', FLAG, expected);
+      ensure();
+      const saved = message.getFlag('azeroth-rpg', FLAG);
+      if (!saved || Object.entries(expected).some(([key,value]) => JSON.stringify(saved[key]) !== JSON.stringify(value)))
+        throw new Error(text('Interrupted'));
+      claimed = true;
+    };
     const protectedAtStart = Boolean(iceBlockFor(actor));
-    if (message) await message.setFlag("azeroth-rpg", FLAG, { state: "pending", at: Date.now() });
+    await record({ state: 'pending', at: Date.now() });
     const prevented = async () => {
       const held = message?.getFlag("azeroth-rpg", FLAG) ?? {};
-      if (message) await message.setFlag("azeroth-rpg", FLAG, {
+      await record({
         ...held, state: "done", prevented: "iceBlock", recipientUuid: null, transferred: false,
         attemptedRecipientUuid: held.recipientUuid ?? null
       });
@@ -109,30 +138,73 @@ export async function injuryQueryHandler(payload = {}, { user } = {}) {
     try {
       if (protectedAtStart || iceBlockFor(actor)) return await prevented();
       const recipient = await recipientFor(actor, async details => {
-        if (message) await message.setFlag("azeroth-rpg", FLAG, { state: "pending", ...details });
-      });
+        await record({ state: "pending", ...details });
+      }, ensure);
+      ensure();
       if (!recipient || iceBlockFor(actor) || iceBlockFor(recipient)) return await prevented();
-      if (message && recipient.uuid === actor.uuid) await message.setFlag("azeroth-rpg", FLAG, {
+      if (recipient.uuid === actor.uuid) await record({
         state: "pending", recipientUuid: actor.uuid, transferred: false, payment: "none"
       });
       if (iceBlockFor(actor) || iceBlockFor(recipient)) return await prevented();
       // Private callback avoids recursively offering Sacrifice on a transferred injury.
       const applied = await workflows().sufferInjury({ ...args, actor: recipient, coordinated: true });
       if (applied === null) return await prevented();
-      if (message) await message.setFlag("azeroth-rpg", FLAG, {
+      await record({
         state: "done", recipientUuid: recipient.uuid, transferred: recipient.uuid !== actor.uuid
       });
       return recipient.uuid;
     } catch (error) {
-      if (message) await message.setFlag("azeroth-rpg", FLAG, {
+      if (message && authority() && message.getFlag('azeroth-rpg', FLAG)?.claimId === claimId) await record({
         ...message.getFlag("azeroth-rpg", FLAG), state: "interrupted", at: Date.now()
       });
       throw error;
     }
   };
-  const result = queue.then(run, run);
+  const tracked = async () => {
+    if (message) active.add(message.id);
+    try { return await run(); } finally { if (message) active.delete(message.id); }
+  };
+  const result = queue.then(tracked, tracked);
   queue = result.catch(() => {});
   return result;
+}
+
+const reviewHere = () => game.user?.isGM && game.users.activeGM?.id === game.user.id;
+const reviewActor = uuid => { try { return fromUuidSync(uuid); } catch { return null; } };
+const injurySnapshot = actor => actor ? structuredClone({uuid:actor.uuid,name:actor.name,health:actor.system?.health,
+  pools:actor.poolSnapshot?.()??[],effects:Array.from(actor.effects??[]).map(effect=>effect.toObject()),
+  combat:actor.activeFight?.()?.getCombatantsByActor?.(actor)?.map(c=>({uuid:c.uuid,budget:c.budget}))??[]}) : null;
+
+/** Review only records a GM's manual reconciliation; it cannot replay delivery. */
+export function injuryRecoveryViews(actor) {
+  if (!reviewHere() || !actor) return [];
+  return Array.from(game.messages?.values?.()??[]).flatMap(message=>{
+    const record=message.getFlag('azeroth-rpg',FLAG);
+    if(message.flags?.['azeroth-rpg']?.kind!=='critical' || !['pending','interrupted'].includes(record?.state)
+      || ChatMessage.getSpeakerActor(message.speaker)?.uuid!==actor.uuid)return [];
+    return [structuredClone({actorUuid:actor.uuid,messageId:message.id,record,
+      target:injurySnapshot(actor),recipient:injurySnapshot(reviewActor(record.recipientUuid))})];
+  });
+}
+
+export async function reviewInjuryApplication({actorUuid,expected,acknowledged=false}={}) {
+  if(!reviewHere() || acknowledged!==true)return {ok:false,reason:'permission'};
+  if(active.has(expected?.messageId))return {ok:false,reason:'busy'};
+  const run=async()=>{
+    if(!reviewHere())return {ok:false,reason:'permission'};
+    const actor=reviewActor(actorUuid),message=game.messages.get(expected?.messageId);
+    const current=injuryRecoveryViews(actor).find(view=>view.messageId===message?.id);
+    if(!current || JSON.stringify(current)!==JSON.stringify(expected))return {ok:false,reason:'changed'};
+    const record=current.record;
+    if(record.state==='pending' && (!record.writerId || (record.writerId!==game.user.id&&game.users.get?.(record.writerId)?.active)))
+      return {ok:false,reason:'writerActive'};
+    const reviewed={...record,state:'reviewed',reviewedFrom:record.state,reviewedBy:game.user.id,reviewedAt:Date.now()};
+    await message.setFlag('azeroth-rpg',FLAG,reviewed);
+    if(!reviewHere() || game.messages.get(message.id)!==message || JSON.stringify(message.getFlag('azeroth-rpg',FLAG))!==JSON.stringify(reviewed))
+      return {ok:false,reason:'unconfirmed'};
+    return {ok:true};
+  };
+  const result=queue.then(run,run);queue=result.catch(()=>{});return result;
 }
 
 export async function applyInjuryOnce({ actor, messageId = null, location, band, result }) {

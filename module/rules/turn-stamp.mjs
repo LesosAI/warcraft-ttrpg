@@ -46,7 +46,8 @@ export const FLAG_SCOPE = "azeroth-rpg";
 /**
  * **THE FIGHT'S BOOKKEEPING ON A COMBATANT**: every flag the system writes on
  * one that the turn order does not read. They are the flags `_leaveFight`
- * clears as *the fight's flags*, plus a Boss's shrugged-off Critical Injuries.
+ * clears as *the fight's flags*, plus a Boss's shrugged-off Critical Injuries
+ * and the receipts two of the active GM's doors keep (Crushridge, Immolation).
  * The lead named four - the budget, the Moves paid, `acted` and the round's
  * record - and the rest are the same kind of write, made on the same beats: an
  * attack's `lastHitRound` rides one write behind its `round`, and `damageTypes`
@@ -66,14 +67,23 @@ export const FLAG_SCOPE = "azeroth-rpg";
  *  - `constructTurn`: what the owner's constructs have spent of their one shared
  *    turn this round (04's The Bench and Remote Control; the Legacy branches' door
  *    6), on the OWNER's combatant, written through its queued door.
+ *  - `lunarDamage`: whom the combatant has dealt Arcane or Nature damage since the
+ *    start of its last turn (04's Lunar Guidance, `rules/lunar-guidance.mjs`),
+ *    written where damage lands and advanced at each of its turns.
+ *  - `crushridgeExtraAttacks`: the receipts of a Crushridge extra attack, each claim
+ *    written before its roll (`effects/crushridge-extra-attack-state.mjs`).
+ *  - `infernalImmolationTicks`: the receipts of an Infernal's Immolation at the start
+ *    of a creature's turn, each pulse saved before its damage
+ *    (`effects/infernal-immolation.mjs`).
  *
  * A NEW combatant flag is classified here or in `ORDER_FLAGS` before it ships:
- * the census in `turn-stamp.test.mjs` fails on one that is in neither.
+ * the census in `turn-stamp.test.mjs` fails on one that is in neither, whether it
+ * is named by a literal or through a constant.
  */
 export const BOOKKEEPING_FLAGS = Object.freeze([
   "budget", "moveHalves", "acted", "round", "lastHitRound", "damageTypes",
   "damaged", "marked", "ready", "heldPosition", "criticalsIgnored", "lastTurn",
-  "constructTurn"
+  "constructTurn", "lunarDamage", "crushridgeExtraAttacks", "infernalImmolationTicks"
 ]);
 
 /**

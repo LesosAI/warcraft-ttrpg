@@ -11,6 +11,36 @@ const gmHere = () => game.user?.isGM === true && game.users?.activeGM?.id === ga
 const position = t => ({ x: t.x, y: t.y, elevation: t.elevation, level: t.level });
 const same = (a,b) => JSON.stringify(a) === JSON.stringify(b);
 
+export function rocketJumpRecoveryViews(actor){
+  return [...(actor?.items??[])].flatMap(item=>{
+    const receipt=item.flags?.[scope]?.rocketJump;
+    if(!receipt||!['claimed','paid'].includes(receipt.phase))return [];
+    const tokens=[...(game.scenes??[])].flatMap(scene=>[...scene.tokens].filter(t=>t.actor===actor)
+      .map(t=>({uuid:t.uuid,...position(t)}))).sort((a,b)=>a.uuid.localeCompare(b.uuid));
+    const fight=actor.activeFight?.(),combatant=fight?.getCombatantsByActor?.(actor)?.[0];
+    return [{actorUuid:actor.uuid,itemUuid:item.uuid,receipt:structuredClone(receipt),uses:structuredClone(item.system.uses),
+      health:structuredClone(actor.system.health),budget:combatant?structuredClone(combatant.budget):null,tokens}];
+  });
+}
+
+/** Reconcile only the saved receipt, after the GM settles movement and costs. */
+export async function reviewRocketJump({actorUuid,expected,acknowledged=false}={}){
+  if(!gmHere()||acknowledged!==true)return {ok:false,reason:'authority'};
+  const actor=await fromUuid(actorUuid),item=actor?.items.get(expected?.itemUuid?.split('.').at(-1));
+  if(!actor||!item||busy.has(actor.uuid))return {ok:false,reason:'busy'};
+  const current=()=>rocketJumpRecoveryViews(actor).find(row=>row.itemUuid===item.uuid);
+  if(!same(current(),expected))return {ok:false,reason:'changed'};
+  const old=expected.receipt,writer=game.user.id;
+  if(!old.writerId||old.writerId!==writer&&game.users.get(old.writerId)?.active)return {ok:false,reason:'writerActive'};
+  busy.add(actor.uuid);
+  try{
+    const reviewed={...old,phase:'reviewed',reviewedBy:writer,reviewedAt:Date.now()};
+    await item.setFlag(scope,'rocketJump',reviewed);
+    return {ok:gmHere()&&game.user.id===writer&&same(item.flags?.[scope]?.rocketJump,reviewed)};
+  }catch{return {ok:false,reason:'uncertain'};}
+  finally{busy.delete(actor.uuid);}
+}
+
 /** An unfinished receipt blocks replay: two documents pay for this movement. */
 export async function rocketJumpHandler({ tokenUuid, itemUuid, from, to, requestId } = {}, { user } = {}) {
   const no = reason => ({ ok: false, reason });
@@ -30,7 +60,7 @@ export async function rocketJumpHandler({ tokenUuid, itemUuid, from, to, request
     && !realmRefusalFor(actor,"feature") && clock() === initialClock;
   if (!valid() || !same(position(token),from)) return no("changed");
   const receipt = item.flags?.[scope]?.rocketJump;
-  if (receipt?.requestId === requestId || (receipt && receipt.phase !== "complete")) return no("receipt");
+  if (receipt?.requestId === requestId || (receipt && !['complete','reviewed'].includes(receipt.phase))) return no("receipt");
   if (item.system.uses?.per !== "encounter" || !(item.system.uses.value > 0)) return no("uses");
   const { turnBudgetRefusal } = await import("../dice/workflows.mjs");
   if (busy.has(actor.uuid) || !valid() || !same(position(token),from)
@@ -41,7 +71,7 @@ export async function rocketJumpHandler({ tokenUuid, itemUuid, from, to, request
   let claimed = false;
   try {
     const uses = item.system.uses.value;
-    await item.setFlag(scope,"rocketJump",{requestId,phase:"claimed",from,to:plan.to,clock:initialClock,writerId:game.user.id});
+    await item.setFlag(scope,"rocketJump",{requestId,phase:"claimed",tokenUuid,from,to:plan.to,clock:initialClock,writerId:game.user.id});
     claimed = true;
     const current = () => valid() && item.flags?.[scope]?.rocketJump?.requestId === requestId;
     if (!current() || !same(position(token),from) || item.system.uses.value !== uses || turnBudgetRefusal(actor,"half")) return no("review");
@@ -50,7 +80,7 @@ export async function rocketJumpHandler({ tokenUuid, itemUuid, from, to, request
     if (fight && (!combatant || !(await combatant.spendMoveAction()).ok)) return no("review");
     if (!current() || !same(position(token),from) || item.system.uses.value !== uses) return no("review");
     await item.update({"system.uses.value":uses-1,[`flags.${scope}.rocketJump.phase`]:"paid"});
-    if (!current()) return no("review");
+    if (!current()||item.system.uses.value!==uses-1||item.flags[scope].rocketJump.phase!=='paid') return no("review");
     const checked = planRocketJump(token,to);
     if (!checked.ok || !same(checked.to,plan.to) || !same(position(token),from)) return no("review");
     const moved = await withRocketJump({token,to:plan.to,valid:current,
@@ -75,6 +105,7 @@ export async function rocketJumpHandler({ tokenUuid, itemUuid, from, to, request
       }}});
     if (!current() || !message?.id) return no("review");
     await item.update({[`flags.${scope}.rocketJump.phase`] : "complete",[`flags.${scope}.rocketJump.messageId`]:message.id});
+    if(!current()||item.flags[scope].rocketJump.phase!=='complete'||item.flags[scope].rocketJump.messageId!==message.id)return no('review');
     return {ok:true,moved:moved===true,messageUuid:message.uuid};
   } catch(error) {
     console.warn("azeroth-rpg | Rocket Jump",error);

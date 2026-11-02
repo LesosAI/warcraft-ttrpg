@@ -230,6 +230,9 @@
     {{!-- A taken talent that names this spell or its school (D-642). --}}
     {{#each talentNotes}}<div class="azeroth-card-effect azeroth-card-talent"><strong>{{this.name}}.</strong> {{{this.effect}}}</div>{{/each}}
 
+    {{#if dismissEverburn}}
+    <div class="azeroth-card-actions"><button type="button" data-action="dismissEverburn">{{localize "AZEROTH.Everburn.Dismiss"}}</button><button type="button" data-action="touchEverburn" data-gm-only>{{localize "AZEROTH.Everburn.Touch"}}</button></div>
+    {{/if}}
     {{#if area}}
     {{!-- Only where 07 §9's Target line describes a shape, and only where the
           Casting Test succeeded (the lead, 2026-09-26). --}}

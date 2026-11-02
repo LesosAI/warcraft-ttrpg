@@ -8,6 +8,7 @@ import { ADOPT_QUERY, BIND_QUERY, UNBIND_QUERY, RELEASE_COMMAND_QUERY, adoptQuer
 import { SUMMON_QUERY, summonQueryHandler } from "./documents/summon.mjs";
 import { ROCKET_JUMP_QUERY, rocketJumpHandler } from "./effects/rocket-jump-use.mjs";
 import { SEARING_USE_QUERY, searingUseHandler } from "./effects/searing-totem-use.mjs";
+import { SECOND_STRIKE_QUERY, secondStrikeQueryHandler } from "./effects/second-strike.mjs";
 import { COMMAND_DEMON_SIGHT_QUERY, commandDemonSightHandler } from "./effects/command-demon-sight-query.mjs";
 import { ICE_BLOCK_END_QUERY, endIceBlock } from "./effects/ice-block-ending.mjs";
 import { DISPERSION_END_QUERY, endDispersion } from "./effects/dispersion-end-request.mjs";
@@ -49,6 +50,10 @@ import { SHARE_HEAL_QUERY, shareHealQueryHandler } from "./effects/symbiosis.mjs
 import { WARD_QUERY, wardQueryHandler } from "./effects/wards.mjs";
 import { GIFT_QUERY, giftQueryHandler } from "./effects/gifts.mjs";
 import { CARD_PRESS_QUERY, cardPressQueryHandler } from "./effects/card-presses.mjs";
+import { SIGNATURE_RETALIATION_QUERY, signatureRetaliationHandler } from './effects/signature-retaliation.mjs';
+import {EVERBURN_DISMISS_QUERY,dismissEverburn} from './effects/everburn-dismiss.mjs';
+import {SPELL_CROSSING_QUERY,deliverSpellCrossing} from './effects/spell-crossing-delivery.mjs';
+import {SEALING_FLAME_CAST_QUERY,sealingFlameCast,SEALING_FLAME_HOLD_QUERY,sealingFlameHoldQuery,SEALING_FLAME_FINISH_QUERY,sealingFlameFinishQuery} from './effects/sealing-flame-reaction.mjs';
 import { STEAL_SUSTAIN_QUERY, stealSustainQueryHandler } from "./effects/sustain-steal.mjs";
 import { SPELLSTEAL_USE_QUERY, spellstealUseHandler } from "./effects/spellsteal-use.mjs";
 import { SNAKE_TRAP_DOSE_QUERY, snakeTrapDoseHandler } from "./effects/snake-trap-dose.mjs";
@@ -63,6 +68,7 @@ import { DISPEL_QUERY, dispelQueryHandler } from "./effects/dispel.mjs";
 import { NULLIFY_QUERY, massNullifyQueryHandler } from "./effects/nullifier-use.mjs";
 import { CURE_QUERY, curePoisonQueryHandler } from "./effects/cure-poison-use.mjs";
 import { ANTIVENOM_QUERY, antivenomQueryHandler } from "./effects/antivenom-use.mjs";
+import { CONSUMABLE_RECEIPT_QUERY, consumableReceiptHandler } from "./effects/consumable-receipt.mjs";
 import { MANA_BURN_QUERY, manaBurnQueryHandler } from "./effects/mana-burn.mjs";
 import { APPROVED_SIGNATURE_USE_QUERY, approvedSignatureUseQueryHandler } from "./effects/approved-signature-use.mjs";
 import {CANNONBALL_RESOLVE_QUERY,CANNONBALL_SAVE_QUERY,resolveCannonball,performCannonballSave} from './effects/cannonball-resolution.mjs';
@@ -154,6 +160,15 @@ import { ATTACK_APPLY_QUERY, CHAIN_LIGHTNING_HIT_REVIEW_QUERY, attackApplyQueryH
 import { ATTACK_REACTION_REVIEW_QUERY, attackReactionReviewHandler } from "./effects/attack-reaction-review.mjs";
 import { ATTACK_TRANSFER_REVIEW_QUERY, attackTransferReviewHandler } from "./effects/attack-transfer-review.mjs";
 import { MIND_CONTROL_REVIEW_QUERY, mindControlReviewHandler } from "./effects/mind-control-review-query.mjs";
+import { ELUNES_REGARD_QUERY, elunesRegardHandler } from "./effects/elunes-regard.mjs";
+import { HUNGER_MASTERED_QUERY, hungerMasteredHandler } from "./effects/hunger-mastered.mjs";
+import { KODO_BOND_QUERY, kodoBondHandler } from "./effects/kodo-bond.mjs";
+import { ZALAZANE_QUERY, zalazaneHandler } from "./effects/zalazanes-lesson.mjs";
+import { MIND_SOOTHE_QUERY, mindSootheHandler } from "./effects/mind-soothe.mjs";
+import { GADGET_RESISTANCE_QUERY, gadgetResistanceHandler } from './effects/gadget-resistance.mjs';
+import { BELLOW_USE_QUERY, bellowUseHandler } from "./effects/bellow-use.mjs";
+import { DOMINATION_QUERY, dominationDeliveryHandler } from './effects/domination-delivery.mjs';
+import { MILITIA_CLAIM_QUERY, MILITIA_TRAIN_QUERY, militiaClaimHandler, militiaTrainHandler } from "./effects/militia-drill.mjs";
 import { RELOAD_QUERY, RELOAD_REVIEW_QUERY, reloadQueryHandler, reloadReviewQueryHandler } from "./effects/reload-query.mjs";
 import { RESERVE_SHOT_QUERY, FINISH_SHOT_QUERY, reserveReloadShotHandler, finishReloadShotHandler } from "./effects/reload-shot-query.mjs";
 import { CHAIN_LIGHTNING_CAST_QUERY, CHAIN_LIGHTNING_REVIEW_QUERY, chainLightningCastHandler, chainLightningReviewHandler } from "./effects/chain-lightning-cast.mjs";
@@ -189,6 +204,12 @@ import { SOUL_LINK_PREPARE, SOUL_LINK_RESOLVE, SOUL_LINK_REVIEW_QUERY, prepareSo
 
 /** Register at init. */
 export function registerQueries() {
+  CONFIG.queries[EVERBURN_DISMISS_QUERY]=dismissEverburn;
+  CONFIG.queries[SPELL_CROSSING_QUERY]=deliverSpellCrossing;
+  CONFIG.queries[SEALING_FLAME_CAST_QUERY]=sealingFlameCast;
+  CONFIG.queries[SEALING_FLAME_HOLD_QUERY]=sealingFlameHoldQuery;
+  CONFIG.queries[SEALING_FLAME_FINISH_QUERY]=sealingFlameFinishQuery;
+  CONFIG.queries[SIGNATURE_RETALIATION_QUERY]=signatureRetaliationHandler;
   CONFIG.queries[ROCKET_JUMP_QUERY] = rocketJumpHandler;
   CONFIG.queries[ICE_BLOCK_END_QUERY] = endIceBlock;
   CONFIG.queries[DISPERSION_END_QUERY] = endDispersion;
@@ -216,6 +237,16 @@ export function registerQueries() {
   CONFIG.queries[ATTACK_REACTION_REVIEW_QUERY] = attackReactionReviewHandler;
   CONFIG.queries[ATTACK_TRANSFER_REVIEW_QUERY] = attackTransferReviewHandler;
   CONFIG.queries[MIND_CONTROL_REVIEW_QUERY] = mindControlReviewHandler;
+  CONFIG.queries[ELUNES_REGARD_QUERY] = elunesRegardHandler;
+  CONFIG.queries[HUNGER_MASTERED_QUERY] = hungerMasteredHandler;
+  CONFIG.queries[KODO_BOND_QUERY] = kodoBondHandler;
+  CONFIG.queries[ZALAZANE_QUERY] = zalazaneHandler;
+  CONFIG.queries[MIND_SOOTHE_QUERY] = mindSootheHandler;
+  CONFIG.queries[GADGET_RESISTANCE_QUERY] = gadgetResistanceHandler;
+  CONFIG.queries[BELLOW_USE_QUERY] = bellowUseHandler;
+  CONFIG.queries[DOMINATION_QUERY] = dominationDeliveryHandler;
+  CONFIG.queries[MILITIA_CLAIM_QUERY] = militiaClaimHandler;
+  CONFIG.queries[MILITIA_TRAIN_QUERY] = militiaTrainHandler;
   CONFIG.queries[RELOAD_QUERY] = reloadQueryHandler;
   CONFIG.queries[RELOAD_REVIEW_QUERY] = reloadReviewQueryHandler;
   CONFIG.queries[RESERVE_SHOT_QUERY] = reserveReloadShotHandler;
@@ -325,6 +356,7 @@ export function registerQueries() {
   CONFIG.queries[STANDALONE_PARRY_QUERY] = standaloneParryQueryHandler;
   CONFIG.queries[CURE_QUERY] = curePoisonQueryHandler;
   CONFIG.queries[ANTIVENOM_QUERY] = antivenomQueryHandler;
+  CONFIG.queries[CONSUMABLE_RECEIPT_QUERY] = consumableReceiptHandler;
   CONFIG.queries[STINGER_QUERY] = stingerQueryHandler;
   CONFIG.queries[VEKNISS_QUERY] = veknissQueryHandler;
   CONFIG.queries[BLOODPETAL_QUERY] = bloodpetalQueryHandler;
@@ -450,6 +482,7 @@ export function registerQueries() {
   CONFIG.queries[REACTION_BAR_QUERY] = reactionBarQueryHandler;
   CONFIG.queries[RESTORATIVE_TOTEM_QUERY] = restorativeTotemQueryHandler;
   CONFIG.queries[SEARING_USE_QUERY] = searingUseHandler;
+  CONFIG.queries[SECOND_STRIKE_QUERY] = secondStrikeQueryHandler;
   CONFIG.queries[STARFALL_QUERY] = deliverStarfall;
   CONFIG.queries[LEGACY_USE_QUERY] = legacyUseQueryHandler;
   // 06 §10's offer, taken by a player and priced by the GM (*the GM decides from the

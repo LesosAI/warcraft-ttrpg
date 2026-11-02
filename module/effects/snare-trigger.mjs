@@ -5,7 +5,8 @@ const SCOPE = "azeroth-rpg";
 
 /** Called by the active-GM movement door. The card owns the durable trigger claim. */
 export async function triggerSnareRegion({ region, document, path, enterType, inflict } = {}) {
-  const authority = () => game.user?.isGM && game.users?.activeGM?.id === game.user.id;
+  const writerId = game.user?.id;
+  const authority = () => game.user?.isGM && game.user.id === writerId && game.users?.activeGM?.id === writerId;
   const scene = region?.parent;
   const actor = document?.actor;
   const regionFlags = region?.flags?.[SCOPE];
@@ -38,6 +39,7 @@ export async function triggerSnareRegion({ region, document, path, enterType, in
   const plan = snareTriggerPlan({ held: flags.snareTrigger ?? null, regionUuid: region.uuid,
     tokenUuid: document.uuid, actorUuid: actor.uuid, reach, inside });
   if (!plan.ok) return false;
+  plan.record.writerId = writerId;
   pending.add(message.id);
   try {
     const setter = await fromUuid(regionFlags.caster);
@@ -50,8 +52,44 @@ export async function triggerSnareRegion({ region, document, path, enterType, in
       // Do not relabel an unrelated Entangled effect as this Snare's escape.
       marks: actor.statuses?.has("entangled") ? {} : { snare: { source: setter.uuid } } });
     // Never retry a claimed delivery. An interrupted write remains visibly claimed for review.
-    if (live()) await message.update({ "flags.azeroth-rpg.snareTrigger.phase": outcome && outcome.reason !== "error" ? "resolved" : "review",
-      "flags.azeroth-rpg.snareTrigger.condition": { landed: outcome?.landed === true, reason: outcome?.reason ?? null } });
-    return true;
+    if (!live() || JSON.stringify(message.flags?.[SCOPE]?.snareTrigger) !== JSON.stringify(plan.record)) return false;
+    const completed = { ...plan.record, phase: outcome && outcome.reason !== "error" ? "resolved" : "review",
+      condition: { landed: outcome?.landed === true, reason: outcome?.reason ?? null } };
+    await message.update({ "flags.azeroth-rpg.snareTrigger": completed });
+    return live() && JSON.stringify(message.flags?.[SCOPE]?.snareTrigger) === JSON.stringify(completed);
   } finally { pending.delete(message.id); }
+}
+
+const reviewHere = () => game.user?.isGM && game.users?.activeGM?.id === game.user.id;
+
+export function snareTriggerRecoveryViews(actor) {
+  if (!reviewHere() || !actor) return [];
+  return Array.from(game.messages?.values?.() ?? []).flatMap(message => {
+    const flags = message.flags?.[SCOPE], record = flags?.snareTrigger;
+    if (flags?.kind !== 'feature' || flags.featureKey !== 'snare' || record?.actorUuid !== actor.uuid
+      || !['claimed', 'review'].includes(record.phase)) return [];
+    return [structuredClone({ actorUuid: actor.uuid, messageId: message.id, record,
+      target: { health: actor.system?.health, effects: Array.from(actor.effects ?? []).map(effect => effect.toObject()) } })];
+  });
+}
+
+/** The GM reconciles Entangled manually; recorded blast/poison targets then remain usable. */
+export async function reviewSnareTrigger({ actorUuid, expected, acknowledged = false } = {}) {
+  if (!reviewHere() || acknowledged !== true) return { ok: false, reason: 'permission' };
+  const id = expected?.messageId, writerId = game.user.id;
+  if (pending.has(id)) return { ok: false, reason: 'busy' };
+  const actor = fromUuidSync(actorUuid), message = game.messages.get(id);
+  const current = snareTriggerRecoveryViews(actor).find(row => row.messageId === id);
+  if (!current || JSON.stringify(current) !== JSON.stringify(expected)) return { ok: false, reason: 'changed' };
+  if (!current.record.writerId || (current.record.writerId !== writerId && game.users.get(current.record.writerId)?.active))
+    return { ok: false, reason: 'writerActive' };
+  const reviewed = { ...current.record, phase: 'resolved', reviewedFrom: current.record.phase,
+    reviewedBy: writerId, reviewedAt: Date.now() };
+  pending.add(id);
+  try {
+    await message.update({ 'flags.azeroth-rpg.snareTrigger': reviewed });
+    return reviewHere() && game.user.id === writerId && game.messages.get(id) === message
+      && JSON.stringify(message.flags?.[SCOPE]?.snareTrigger) === JSON.stringify(reviewed)
+      ? { ok: true } : { ok: false, reason: 'unconfirmed' };
+  } finally { pending.delete(id); }
 }

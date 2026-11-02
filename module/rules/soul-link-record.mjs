@@ -24,7 +24,7 @@ const same = (a, b) => {
 /** Validate recorded mitigation before computing two typed delivery rows.
  * Old cards and unexplained edits cannot authorize reconstructed damage.
  * The caller still owns link eligibility, claims, reactions and actor writes. */
-export function soulLinkRecordedDamage(row, { rank = 0, flatReduction = 0, negate = false, ethereal = false, standingReduction = 0, woundedRanks = 0, halve = false } = {}) {
+export function soulLinkRecordedDamage(row, { rank = 0, flatReduction = 0, negate = false, ethereal = false, standingReduction = 0, woundedRanks = 0, halve = false, preventPhysical = false } = {}) {
   const source = row?.mitigationSource;
   if (row?.withdrawn === true || row?.hit !== true) return { ok: false, reason: "notHit" };
   if (source?.version !== 1 || !source.input || typeof source.input !== "object" || Array.isArray(source.input))
@@ -38,9 +38,12 @@ export function soulLinkRecordedDamage(row, { rank = 0, flatReduction = 0, negat
       || ["parts", "mainDamage", "shrinkReduction"].some(key => !(key in expected) && key in row))
       return { ok: false, reason: "changed" };
     const options = { rank, shrink, flatReduction, negate, ethereal, standingReduction, woundedRanks };
-    const plan = soulLinkDamage(source.input, { ...options, halve });
+    // Validate the historical row above, then account for protection gained
+    // after publication before dividing the current incoming hit.
+    const input=preventPhysical?{...source.input,immune:[...new Set([...(source.input.immune??[]),'physical'])]}:source.input;
+    const plan = soulLinkDamage(input, { ...options, halve });
     if (!plan) {
-      const unhalved = halve === true && !negate ? soulLinkDamage(source.input, options) : null;
+      const unhalved = halve === true && !negate ? soulLinkDamage(input, options) : null;
       return { ok: false, reason: unhalved ? "halvingPending" : "input" };
     }
     const delivery = recipient => {

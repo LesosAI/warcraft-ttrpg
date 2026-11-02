@@ -231,7 +231,7 @@
                 data-action="openItem" role="button" tabindex="0">{{s.name}}</span>
           {{#if s.kindLabel}}<span class="azeroth-force-signature-note">{{localize s.kindLabel}}</span>{{/if}}
           {{#if s.pressable}}
-          <button type="button" class="azeroth-use" data-action="useSignature"{{#if s.refusal}} disabled{{/if}}>{{localize "AZEROTH.Feature.Use"}}</button>
+      <button type="button" class="azeroth-use" data-action="useSignature"{{#if s.refusal}} disabled{{/if}}{{#if s.refusalLabel}} data-tooltip="{{localize s.refusalLabel}}"{{/if}}>{{localize "AZEROTH.Feature.Use"}}</button>
           {{/if}}
           {{#if s.gateFails}}<span class="azeroth-force-signature-note">{{localize "AZEROTH.Signature.GateFails"}}</span>{{/if}}
           {{!-- A GATE COVERS ONLY ITS OWN SENTENCE (D-722). This column is a

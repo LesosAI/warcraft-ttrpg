@@ -8,6 +8,15 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const writer = message => globalThis.game?.user?.isGM === true
   && game.users?.activeGM?.id === game.user.id && fromUuidSync(message?.uuid) === message;
 
+/** Share the attack writer's lock with a multi-receipt acknowledged review. */
+export async function withAttackResolutionReviewLock(message, execute) {
+  if (!writer(message)) return {ok:false,reason:'authority'};
+  if (busy.has(message.uuid)) return {ok:false,reason:'busy'};
+  busy.add(message.uuid);
+  try { return await execute(); }
+  finally { busy.delete(message.uuid); }
+}
+
 /** Seed only when creating a new attack card. Missing records on old cards
  * do not establish that damage has never been applied. Target UUIDs must be
  * resolved by the caller from the actual target documents. */
@@ -56,7 +65,7 @@ export async function resolveAttackOperation({ message, index, targetUuid, opera
       if (!unchanged()) throw Error("Attack resolution changed");
       const next = structuredClone(expected);
       next.targets[index].stage = stage;
-      if (operation === "apply" && stage === "applying" && message.flags?.["azeroth-rpg"]?.identifier === "chain-lightning") {
+      if (operation === "apply" && stage === "applying") {
         next.targets[index].writerId = game.user.id;
       }
       if (["warding", "blocking", "parrying", "dispersing"].includes(stage)) next.targets[index].writerId = game.user.id;
@@ -161,7 +170,7 @@ export async function reviewAttackTransfer({ message, index, expected, acknowled
   if (acknowledged !== true) return refuse("acknowledgement");
   const flags = message.flags?.["azeroth-rpg"];
   const eligible = flags?.kind === "attack" && !flags.parry && !flags.notAttack
-    || flags?.kind === "spell" && flags.identifier === "chain-lightning" && flags.success === true;
+    || flags?.kind === "spell" && flags.success === true && flags.attackResolution?.version === 1;
   if (!eligible) return refuse("card");
   if (busy.has(message.uuid)) return refuse("busy");
   busy.add(message.uuid);

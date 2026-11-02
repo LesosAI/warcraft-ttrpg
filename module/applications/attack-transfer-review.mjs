@@ -7,7 +7,7 @@ const describe = row => {
   return lanes.map(lane => `${lane.damage}${lane.type ? ` ${lane.type}` : ''}`).join(' + ');
 };
 const eligible = flags => flags?.kind === "attack" && !flags.parry && !flags.notAttack
-  || flags?.kind === "spell" && flags.identifier === "chain-lightning" && flags.success === true;
+  || flags?.kind === "spell" && flags.success === true && flags.attackResolution?.version === 1;
 const rowsFor = flags => (Array.isArray(flags?.attackResolution?.targets) ? flags.attackResolution.targets : []).flatMap((hit, index) => {
   const receipt = transferReviewRow(flags.attackResolution, flags[TRANSFER_DELIVERIES], index);
   if (!receipt) return [];
@@ -43,7 +43,10 @@ export async function reviewAttackTransferFromCard(message) {
       { action: 'cancel', label: words('Cancel'), default: true, callback: () => -1 }],
     render: (_event, dialog) => {
       const form = dialog.element.querySelector('form');
-      const update = () => { form.querySelector('[data-action="review"]').disabled = form.elements.acknowledged?.checked !== true; };
+      const update = event => {
+        if (event?.target === form.elements.hit) form.elements.acknowledged.checked = false;
+        form.querySelector('[data-action="review"]').disabled = form.elements.acknowledged?.checked !== true;
+      };
       form.addEventListener('change', update); update();
     }
   });

@@ -23,6 +23,8 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+import {heldSpellRetaliations} from './spell-retaliation-sources.mjs';
+import { areaTransferRefusal } from "./pending-area-transfer.mjs";
 import { sustainEntryTransferPending } from "../rules/sustain-entry-transfer.mjs";
 import {
   areaLapsed, checkOutcome, checksFor, enterFor, hasAreaTick, relationOf, tickFor
@@ -201,7 +203,7 @@ export async function strikeFromArea({ actor, caster = null, spell = {}, damage 
           struck: true, attack: false, location: "body", type: school, by: caster, wardTook: result.wardTook ?? 0,
           spell: spellBlowOf(spell), ignite: spell?.ignite === true,
           // Each second amount of its own type (D-777), already in the damage.
-          parts: result.parts ?? null, outcome: damageOutcome
+          parts: result.parts ?? null, outcome: damageOutcome, healthFloor: damage?.healthFloor ?? null
         });
       } else if (result.damage === 0 && actorInWorld(actor) && damageOutcome) {
         damageOutcome.complete = true;
@@ -249,6 +251,17 @@ export async function strikeFromArea({ actor, caster = null, spell = {}, damage 
 export function retaliationRows(holder, attacker) {
   const out = [];
   if (!holder || !attacker || isDown(holder)) return out;
+  for(const source of heldSpellRetaliations(holder)){
+    const caster=fromUuidSync(source.casterUuid);
+    const result=areaDamageOn({actor:attacker,caster,spell:source.spell,damage:source.damage});
+    out.push({name:source.name,melee:true,
+      text:game.i18n.format(result.immune?'AZEROTH.Card.AreaRetaliateImmune':'AZEROTH.Card.AreaRetaliate',{
+        spell:source.name,name:holder.name,attacker:attacker.name,amount:result.damage,
+        type:game.i18n.localize(AZEROTH.schools[source.damage.school])}),
+      signatureRetaliation:{cast:source.cast,casterUuid:source.casterUuid,holderUuid:holder.uuid,
+        spellUuid:source.spellUuid,messageUuid:source.messageUuid,spellRetaliation:true},
+      damage:{amount:result.immune?null:result.damage,type:source.damage.school},condition:{}});
+  }
   for (const entry of holder.getFlag?.(SCOPE, "sustaining") ?? []) {
     if (sustainEntryTransferPending(entry, holder.uuid)) continue;
     const item = entry?.areaTick ? null : (holder.items?.get?.(entry?.spellId) ?? null);
@@ -266,6 +279,7 @@ export function retaliationRows(holder, attacker) {
         amount: result.damage, type: game.i18n.localize(AZEROTH.schools[school] ?? school ?? "")
       }),
       melee: true,
+      ...(entry.signatureDamageCast===entry.cast&&entry.cast ? {signatureRetaliation:{cast:entry.cast,casterUuid:holder.uuid,spellUuid:entry.uuid??null}} : {}),
       damage: { amount: result.immune ? null : result.damage, type: school },
       condition: {}
     });
@@ -402,6 +416,7 @@ export async function postAreaTest({ actor, token = null, region, check, trigger
       kind: "areaTest",
       area: {
         sceneId: region.parent?.id ?? null, regionId: region.id, cast: f.cast ?? null,
+        ...(f.signatureDamageCast ? { signatureDamageCast: f.signatureDamageCast, signatureMessageId: f.messageId } : {}),
         caster: f.caster ?? null, source: f.source ?? null, spell, dc, trigger,
         check: foundry.utils.deepClone(check), actorUuid: actor.uuid,
         // The creature's own token, which the Test's link back to this card
@@ -580,24 +595,39 @@ async function landCondition(actor, id, until, area, caster, { messageId = null 
  */
 export async function areaTestOutcome({ actor, message, result } = {}) {
   const area = message?.flags?.[SCOPE]?.area ?? null;
-  if (!actor || !area?.check || !result) return null;
+  if (!actor || !area?.check || !result || areaTransferRefusal(area)) return null;
   const success = result.rolls?.[0]?.outcome?.success === true;
   const outcome = checkOutcome(area.check, { success, kinds: kindsOfActor(actor) });
   const caster = actorOf(area.caster);
   const spellName = area.spell?.name ?? "";
   const lines = [];
-  if (outcome.damage) lines.push(...await strikeFromArea({ actor, caster, spell: area.spell ?? {}, damage: outcome.damage }));
   const landed = [];
+  const describeLanded = () => {
+    if (landed.length) lines.push(game.i18n.format("AZEROTH.AreaTest.Landed", { name: actor.name, conditions: conditionWords(landed), spell: spellName }));
+    landed.length = 0;
+  };
+  const interrupted = async () => {
+    describeLanded();
+    lines.push(game.i18n.localize("AZEROTH.AreaTest.TransferInterrupted"));
+    await postLines(actor, lines);
+    return null;
+  };
+  // Signature damage was delivered on the GM while recording this save.
+  // The owner's continuation handles only the remaining non-damage riders.
+  if (outcome.damage && !area.signatureDamageCast) lines.push(...await strikeFromArea({ actor, caster, spell: area.spell ?? {}, damage: outcome.damage }));
+  if (areaTransferRefusal(area)) return interrupted();
   for (const { id, until } of outcome.statuses) {
     if (await landCondition(actor, id, until, area, caster, { messageId: message.id })) landed.push(id);
+    if (areaTransferRefusal(area)) return interrupted();
   }
-  if (landed.length) lines.push(game.i18n.format("AZEROTH.AreaTest.Landed", { name: actor.name, conditions: conditionWords(landed), spell: spellName }));
+  describeLanded();
   if (outcome.bane) {
     // A Bane on this kind of Test UNTIL the end of its next turn - lasting,
     // never spent by the next roll (`rules/banes.mjs`' `lasting`).
     const laid = await layBane({ victim: actor, kind: outcome.bane.kind, banes: 1, source: spellName, by: caster, lasting: true });
     if (laid) lines.push(game.i18n.format("AZEROTH.AreaTest.BaneLaid", { name: actor.name, spell: spellName }));
   }
+  if (areaTransferRefusal(area)) return interrupted();
   // **IT DOES NOT CROSS** (07's Ring of Fire and Stormwall: *on a failure it does not
   // cross and its turn ends*; the B9a pass): put back where the card recorded it stood
   // on its own side of the edge, through the one door that moves a creature it did not
@@ -608,6 +638,7 @@ export async function areaTestOutcome({ actor, message, result } = {}) {
     const back = await putBack({ token, to: area.stopAt ?? null, name: actor.name });
     lines.push(game.i18n.format(back.moved ? "AZEROTH.AreaTest.PutBack" : "AZEROTH.AreaTest.NotPutBack", { name: actor.name, spell: spellName }));
   }
+  if (areaTransferRefusal(area)) return interrupted();
   if (outcome.lose) {
     const fight = actor.activeFight?.() ?? null;
     const combatant = fight?.getCombatantsByActor?.(actor)?.[0] ?? null;
@@ -618,6 +649,7 @@ export async function areaTestOutcome({ actor, message, result } = {}) {
       lines.push(game.i18n.format("AZEROTH.AreaTest.Lost", { name: actor.name, spell: spellName }));
     }
   }
+  if (areaTransferRefusal(area)) return interrupted();
   // **THE FORCED MOVE A FAILURE MAKES** (07's Tempest: *is pushed 10 feet toward the
   // edge*; D-778, the lead on O-158: *"Yes."*): away from the area's own centre,
   // through the one door - the creature's token on the area's scene, here, on the
@@ -668,7 +700,7 @@ export async function casterTurnTests(scene, caster, token = null) {
     const check = casterTurnCheck(forced);
     if (!check) continue;
     const row = areaRecord(region);
-    if (row && staleIn(scene, [row], now).length) continue;
+    if (row && (row.transferPending === true || staleIn(scene, [row], now).length)) continue;
     const centre = regionCentreOf(region);
     if (!centre) continue;
     const within = Number(forced.within) || 0;
@@ -747,6 +779,16 @@ export async function enterAreas(document, movement, operation = {}) {
   let entered = 0;
   for (const region of scene.regions) {
     const f = region.flags?.[SCOPE] ?? {};
+    if(f.endTurnDamage?.touch===true){
+      const {deliverGroundTouchDamage}=await import('./end-turn-damage.mjs');
+      const result=await deliverGroundTouchDamage({region,document,movement,path,enterType:ENTER});
+      if(result.ok){
+        entered++;
+        if(result.lines?.length && tokenInWorld(document) && regionInWorld(region) && actorInWorld(actor)) await postLines(actor,result.lines);
+      }
+      else if(!['notContact','context'].includes(result.reason))console.warn('azeroth-rpg | ground touch damage unresolved',result.reason);
+      continue;
+    }
     if (f.featureKey === "snare") {
       if (await triggerSnareRegion({ region, document, path, enterType: ENTER, inflict: inflictCondition })) entered++;
       continue;
@@ -781,7 +823,7 @@ export async function enterAreas(document, movement, operation = {}) {
     const pushing = inFight ? forcedCheck(cleanForced(f.forced ?? null)) : null;
     if (!striking && !testing && !pushing && !crossing) continue;
     const row = areaRecord(region);
-    if (row && staleIn(scene, [row], now).length) continue;
+    if (row && (row.transferPending === true || staleIn(scene, [row], now).length)) continue;
     let segments = [];
     try {
       segments = document.segmentizeRegionMovementPath(region, path);
@@ -817,7 +859,34 @@ export async function enterAreas(document, movement, operation = {}) {
       // The claim waited in the queue: the mover and the area are asked again
       // (the full-suite fix of D-757), as `strikeFromArea` asks of the creature.
       if (damage && inSpan && first && !isDown(actor) && tokenInWorld(document) && regionInWorld(region)) {
-        await postLines(actor, await strikeFromArea({ actor, caster, spell: f.spell ?? {}, damage }));
+        if (f.signatureDamageCast) {
+          const { deliverSignatureAreaDamage } = await import('./signature-area-delivery.mjs');
+          const message = game.messages.get(f.messageId);
+          // Snapshot after claimEntry, which itself changes the Region flags.
+          const saved = JSON.stringify(region.flags?.[SCOPE]);
+          const eventId = tick.enter.once ? turnKey : movement.id;
+          const valid = () => isWriter() && tokenInWorld(document) && document.actor === actor
+            && regionInWorld(region) && sceneInWorld(scene) && !isDown(actor)
+            && fightOn(scene, actor) === fight && fight.started
+            && `${fight.id}.${fight.round}.${fight.turn}` === turnKey
+            && JSON.stringify(region.flags?.[SCOPE]) === saved
+            && actorOf(f.caster) === caster && casterTokenOn(scene, f.source ?? null, caster) === casterToken
+            && relationTo({ caster, casterToken, actor, token: document, fight }) === relation
+            && !staleIn(scene, [areaRecord(region)], worldClock()).length
+            && (!(Number(tick.enter.rounds) > 0)
+              || !areaLapsed({ lasts: { rounds: tick.enter.rounds }, placedAt: f.placedAt ?? null }, worldClock()));
+          const result = message && eventId && message.flags?.[SCOPE]?.cast === f.signatureDamageCast
+            && f.signatureDamageCast === f.cast
+            ? await deliverSignatureAreaDamage({ message, caster, actor, token: document,
+              spell: f.spell ?? {}, damage, event: `areaEnter:${f.cast}:${document.uuid}:${eventId}`, validate: valid })
+            : { ok: false, reason: 'context' };
+          if (result.ok) {
+            if (tokenInWorld(document) && regionInWorld(region) && actorInWorld(actor)) await postLines(actor, result.lines);
+          } else console.warn('azeroth-rpg | signature area entry unresolved', result.reason);
+        } else {
+          const lines = await strikeFromArea({ actor, caster, spell: f.spell ?? {}, damage });
+          if (tokenInWorld(document) && regionInWorld(region) && actorInWorld(actor)) await postLines(actor, lines);
+        }
       }
     }
     for (const check of checksFor(tick, "enter", { relation, named })) {

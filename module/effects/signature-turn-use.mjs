@@ -54,6 +54,118 @@ export function signatureTurnContext(actor){
   turn:fight?`${fight.round}:${fight.turn}:${fight.combatant?.id??''}`:null};
 }
 
+const killIds=['death-grips','spinal-reaper'];
+const healingIds=['unending-life','libram-of-hope'];
+export function healingSignatureTurnReviewState(actor){
+ const records=structuredClone(actor.getFlag('azeroth-rpg',SIGNATURE_TURN_FLAG)??{});
+ const pending=healingIds.filter(id=>records[id]?.version===1&&records[id]?.pending);
+ const state={records,health:structuredClone(actor.system?.health??{})};
+ return {...state,pending,expected:JSON.stringify(state)};
+}
+
+/** Internal allowance step of healing recovery. The outer coordinator must hold
+ * affected card queues and validate recipient/carrier snapshots. This step never
+ * marks a healing receipt delivered, heals, or refunds a spent allowance. */
+export async function reviewHealingSignatureTurns(actor,{expected,acknowledged=false,validate}={}){
+ if(!authoritative(actor)||acknowledged!==true)return {ok:false,reason:'authority'};
+ if(typeof validate!=='function')return {ok:false,reason:'context'};
+ if(busy.has(actor.uuid))return {ok:false,reason:'busy'};
+ busy.add(actor.uuid);
+ try{
+  const state=healingSignatureTurnReviewState(actor);
+  if(state.expected!==expected||validate()!==true)return {ok:false,reason:'changed'};
+  if(!state.pending.length)return {ok:true,already:true};
+  let completed=state.records;
+  for(const identifier of state.pending){
+   const pending=state.records[identifier].pending;
+   if(pending.writer!==game.user.id&&game.users.get(pending.writer)?.active)return {ok:false,reason:'writerActive'};
+   completed=finishSignatureTurn(completed,{identifier:identifier==='unending-life'?'mace-of-unending-life':identifier,event:pending.event,writer:pending.writer,committed:true});
+   if(!completed)return {ok:false,reason:'invalid'};
+   completed[identifier].review={by:game.user.id,event:pending.event,at:Date.now()};
+  }
+  if(!authoritative(actor)||validate()!==true)return {ok:false,reason:'changed'};
+  await actor.setFlag('azeroth-rpg',SIGNATURE_TURN_FLAG,completed);
+  return {ok:authoritative(actor)&&validate()===true&&same(actor.getFlag('azeroth-rpg',SIGNATURE_TURN_FLAG),completed)};
+ }catch{return {ok:false,reason:'uncertain'};}
+ finally{busy.delete(actor.uuid);}
+}
+const hitIds=['the-horsemans-blade','idol-of-brutality','idol-of-ferocity','band-of-veiled-shadows'];
+export function hitSignatureReviewState(actor){
+ const records=actor.getFlag('azeroth-rpg',SIGNATURE_TURN_FLAG)??{};
+ const pending=hitIds.filter(id=>records[id]?.version===1&&records[id]?.pending);
+ const events=new Set(pending.map(id=>records[id].pending.event));
+ const cards=(game.messages?.filter(message=>{
+  const receipt=message.getFlag('azeroth-rpg','signatureHitBonuses');
+  return receipt?.actorUuid===actor.uuid&&events.has(receipt.event);
+ })??[]).map(message=>({id:message.id,data:message.toObject()}));
+ const state={records,cards,health:structuredClone(actor.system?.health??{}),pools:actor.poolSnapshot?.()??[],
+  budget:actor.activeFight?.()?.getCombatantsByActor(actor)?.[0]?.budget??null};
+ return {...state,pending,expected:JSON.stringify(state)};
+}
+
+/** Reconcile an interrupted hit publication without publishing, applying damage,
+ * or refunding its allowance. Missing cards/items do not erase the actor record.
+ * The GM must settle any already published attack separately before acknowledging. */
+export async function reviewHitSignatures(actor,{expected,acknowledged=false}={}){
+ if(!authoritative(actor)||acknowledged!==true)return {ok:false,reason:'authority'};
+ if(busy.has(actor.uuid))return {ok:false,reason:'busy'};
+ busy.add(actor.uuid);
+ try{
+  const state=hitSignatureReviewState(actor);
+  if(!state.pending.length||state.expected!==expected)return {ok:false,reason:'changed'};
+  let completed=state.records;
+  for(const identifier of state.pending){
+   const pending=state.records[identifier].pending;
+   if(pending.writer!==game.user.id&&game.users.get(pending.writer)?.active)return {ok:false,reason:'writerActive'};
+   completed=finishSignatureTurn(completed,{identifier,event:pending.event,writer:pending.writer,committed:true});
+   if(!completed)return {ok:false,reason:'invalid'};
+   completed[identifier].review={by:game.user.id,event:pending.event,at:Date.now()};
+  }
+  await actor.setFlag('azeroth-rpg',SIGNATURE_TURN_FLAG,completed);
+  return {ok:authoritative(actor)&&same(actor.getFlag('azeroth-rpg',SIGNATURE_TURN_FLAG),completed)};
+ }catch{return {ok:false,reason:'uncertain'};}
+ finally{busy.delete(actor.uuid);}
+}
+
+export function killSignatureReviewState(actor){
+ const records=actor.getFlag('azeroth-rpg',SIGNATURE_TURN_FLAG)??{};
+ const pending=killIds.filter(id=>records[id]?.version===1&&records[id]?.pending);
+ const state={records,health:structuredClone(actor.system?.health??{}),
+  cards:pending.map(id=>{
+   const event=records[id].pending.event;
+   const messageId=typeof event==='string'&&event.startsWith('weapon-kill:')?event.split(':')[1]:null;
+   const message=game.messages?.get(messageId);
+   return {id,event,messageId,exists:Boolean(message),receipt:structuredClone(message?.getFlag('azeroth-rpg','signatureWeaponKill')?.[id]??null)};
+  })};
+ return {...state,pending,expected:JSON.stringify(state)};
+}
+
+/** Explicit GM reconciliation of actor-held kill allowances. Old cards stay
+ * non-replayable; this never grants or refunds Health/temporary Health. */
+export async function reviewKillSignatures(actor,{expected,acknowledged=false}={}){
+ const {killRewardInFlight}=await import('./signature-kill-rewards.mjs');
+ if(!authoritative(actor)||acknowledged!==true)return {ok:false,reason:'authority'};
+ if(busy.has(actor.uuid))return {ok:false,reason:'busy'};
+ busy.add(actor.uuid);
+ try{
+  const state=killSignatureReviewState(actor);
+  if(!state.pending.length||state.expected!==expected)return {ok:false,reason:'changed'};
+  if(state.cards.some(card=>killRewardInFlight(card.messageId)))return {ok:false,reason:'busy'};
+  let completed=state.records;
+  for(const identifier of state.pending){
+   const pending=state.records[identifier].pending;
+   if(pending.writer!==game.user.id&&game.users.get(pending.writer)?.active)return {ok:false,reason:'writerActive'};
+   if(typeof pending.event!=='string'||!pending.event.startsWith('weapon-kill:')||!pending.event.endsWith(`:${identifier}`))return {ok:false,reason:'invalid'};
+   completed=finishSignatureTurn(completed,{identifier,event:pending.event,writer:pending.writer,committed:true});
+   if(!completed)return {ok:false,reason:'invalid'};
+   completed[identifier].review={by:game.user.id,event:pending.event,at:Date.now()};
+  }
+  await actor.setFlag('azeroth-rpg',SIGNATURE_TURN_FLAG,completed);
+  return {ok:authoritative(actor)&&same(actor.getFlag('azeroth-rpg',SIGNATURE_TURN_FLAG),completed)};
+ }catch{return {ok:false,reason:'uncertain'};}
+ finally{busy.delete(actor.uuid);}
+}
+
 /** Internal coordinator. The authenticated caller validates the triggering
  * card, selected recipient, equipped source and saved amount. No client-supplied
  * amount or public query is accepted here. Pending claims survive uncertain

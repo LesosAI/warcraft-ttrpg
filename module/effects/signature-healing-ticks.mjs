@@ -44,10 +44,10 @@ async function land({actor,carrier,tick,combat,combatant,caster,spell},stamp,mes
  const event=`heal:${carrier.uuid}:${combat.id}:${stamp.round}:${stamp.turn}:${stamp.combatant}`;
  const prior=carrier.getFlag(scope,receiptKey);
  if(prior?.phase==='pending')return refuse('review');
- if(prior?.event===event)return prior.phase==='complete'?{ok:true,already:true,lines:[]}:refuse('review');
+ if(prior?.event===event)return ['complete','reviewed'].includes(prior.phase)?{ok:true,already:true,lines:[]}:refuse('review');
  try{
   if(!valid())return refuse('changed');
-  const claim={version:1,event,phase:'pending',writer:game.user.id,cast:tick.cast};
+  const claim={version:1,event,phase:'pending',writer:game.user.id,cast:tick.cast,tickBefore:structuredClone(tick),messageUuid:message.uuid,review:null};
   await carrier.setFlag(scope,receiptKey,claim);
   const held=()=>valid()&&same(carrier.getFlag(scope,receiptKey),claim);
   if(!held())return refuse('claimUncertain');

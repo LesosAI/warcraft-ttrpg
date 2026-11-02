@@ -45,8 +45,9 @@ async function landTick({actor,carrier,tick,combat,combatant,caster,spell},stamp
   const cards=cardsFor(tick);
   if(cards.length!==1||cards[0]!==expectedMessage)return refuse('cast');
   const message=cards[0],flags=message.flags[scope],state=flags.chosenSignatureDelivery;
+  if(flags.signatureDamageRecovery&&flags.signatureDamageRecovery.state!=='complete')return refuse('review');
   if(state?.version!==1||state.cast!==tick.cast||!Array.isArray(state.entries)
-    ||!Array.isArray(flags.chosenSignatureBonuses)||!flags.chosenSignatureBonuses.length
+    ||!Array.isArray(flags.chosenSignatureBonuses)||(!flags.chosenSignatureBonuses.length&&flags.signatureDamageRecovery?.bonusesClosed!==true)
     ||!same(state.entries.map(e=>e.bonus),flags.chosenSignatureBonuses))return refuse('plan');
   const references=flags.targets?.filter(ref=>targetActor(ref)===actor&&ref.actorId===actor.id)??[];
   // A moved carrier (for example Soul Swap) keeps its ordinary tick. Moving
@@ -66,9 +67,10 @@ async function landTick({actor,carrier,tick,combat,combatant,caster,spell},stamp
   const event=`tick:${carrier.uuid}:${stamp.combat}:${stamp.round}:${stamp.turn}:${stamp.combatant}`;
   const previous=carrier.getFlag(scope,receiptKey);
   if(previous?.phase==='pending')return refuse('review');
-  if(previous?.event===event)return previous.phase==='complete'?{ok:true,already:true,lines:[]}:refuse('review');
+  if(previous?.event===event)return ['complete','reviewed'].includes(previous.phase)?{ok:true,already:true,lines:[]}:refuse('review');
   if(!valid())return refuse('changed');
-  const claimed={version:1,event,phase:'pending',writer:game.user.id,cast:tick.cast};
+  const claimed={version:1,event,phase:'pending',writer:game.user.id,cast:tick.cast,
+   tickBefore:structuredClone(tick),messageUuid:message.uuid,review:null};
   await carrier.setFlag(scope,receiptKey,claimed);
   const claimedLive=()=>valid()&&same(carrier.getFlag(scope,receiptKey),claimed);
   if(!claimedLive())return refuse('claimUncertain');

@@ -22,6 +22,7 @@
 
 import { addClassEntry, hostileExposures, poolsFor, removeClassEntry, secondaryLevel, setCharacterLevel } from "../rules/progression.mjs";
 import { hasCauseInsanity } from "../rules/cause-insanity.mjs";
+import { racialTalentIcon } from "../rules/icons.mjs";
 import { hasReaverEnrage } from "../rules/reaver-enrage.mjs";
 import { hasGhoulEnrage } from "../rules/ghoul-enrage.mjs";
 import { hasPredatoryEnrage } from "../rules/predatory-enrage.mjs";
@@ -90,6 +91,7 @@ import {
 } from "../rules/temporary-health.mjs";
 import { healTempFor } from "../rules/class-talents.mjs";
 import { wouldDrop } from "../rules/blow-doors.mjs";
+import { damageAboveHealthFloor } from "../rules/sealing-flame.mjs";
 // What another creature does to a blow, asked as it lands (D-777): a blow moved,
 // a blow divided, a creature held at 1, and 07's Aegis floor.
 import { aegisFloor, askToHold, divideBlow, landShares, redirectBlow } from "../effects/blow-doors.mjs";
@@ -119,7 +121,8 @@ import { AZEROTH } from "../config.mjs";
 import { projectionPhaseFor } from "../rules/image-projection.mjs";
 import { refuseIceBlockTarget } from "../effects/ice-block-protection.mjs";
 import { refuseDispersion } from "../effects/dispersion-protection.mjs";
-import { dispersionFor } from "../rules/dispersion.mjs";
+import { offerElunesRegard } from "../effects/elunes-regard.mjs";
+import { dispersionFor, dispersionSuppressesEquipmentEffect } from "../rules/dispersion.mjs";
 import { healingReceived } from "../rules/corruption-effects.mjs";
 import { heldAugment } from "../rules/augments.mjs";
 import { displacedBy } from "../rules/worn.mjs";
@@ -199,7 +202,7 @@ async function grantRaceTalents(actor, race) {
     .map(t => ({
       name: t.name,
       type: "talent",
-      img: race.img,
+      img: racialTalentIcon(race.name, t.name, race.img),
       system: {
         identifier: t.name.slugify(),
         description: t.description ?? "",
@@ -212,7 +215,7 @@ async function grantRaceTalents(actor, race) {
         ranks: 1,
         taken: 0,
         requires: null,
-        uses: usesStamp(t.description ?? "")
+        uses: usesStamp(t.description ?? "", { arc: true })
       }
     }));
   if (!docs.length) return;
@@ -479,15 +482,18 @@ export class AzerothActor extends Actor {
     // Subtype work belongs in the DataModel, not here.
   }
 
+  /** Offer result replacement before a Test's outcome-dependent effects run. */
+  async offerElunesRegard(roll) { return offerElunesRegard(this, roll); }
+
   /** V14 applies transferred Item effects through this iterator in both phases.
    * Dispersion keeps equipment intact but suspends its transferred effects;
    * actor-owned effects and non-equipment grants retain core behavior. */
   *allApplicableEffects() {
     const dispersed = Boolean(dispersionFor(this));
+    const physicalItemUuids = dispersed ? new Set([...this.items]
+      .filter(item => ["weapon", "armor", "gear"].includes(item.type)).map(item => item.uuid)) : null;
     for (const effect of super.allApplicableEffects()) {
-      const parent = effect.parent;
-      if (dispersed && parent?.documentName === "Item"
-          && ["weapon", "armor", "gear"].includes(parent.type)) continue;
+      if (dispersed && dispersionSuppressesEquipmentEffect(effect, physicalItemUuids)) continue;
       yield effect;
     }
   }
@@ -839,6 +845,12 @@ export class AzerothActor extends Actor {
    */
   _onDeleteDescendantDocuments(parent, collection, documents, ids, options, userId) {
     super._onDeleteDescendantDocuments(parent, collection, documents, ids, options, userId);
+    // Immunity suppresses the condition, not the stored Fatigue track. Restore
+    // its statuses when the carrier ends; another live immunity still gates them.
+    if (parent === this && collection === "effects" && this.type === "character" && this.isOwner
+      && game.user.id === userId && documents.some(d => d.flags?.["azeroth-rpg"]?.immuneTo?.conditions?.includes("slowed"))) {
+      this.syncFatigue().catch(err => console.warn("azeroth-rpg | fatigue after immunity", err));
+    }
     if (collection !== "items" || game.user.id !== userId) return;
 
     // A launcher whose bundle left has nothing nocked (D-641).
@@ -1038,7 +1050,7 @@ export class AzerothActor extends Actor {
    * @param {{itemId: string, kind: "power"|"momentum", value: number}[]|object} changes
    * @param {object} [extra]  Other fields to write in the same update.
    */
-  async updatePool(changes, extra = {}) {
+  async updatePool(changes, extra = {}, options = {}) {
     const list = Array.isArray(changes) ? changes : [changes];
     if (!list.length && !Object.keys(extra).length) return this;
     if (this.type === "npc") {
@@ -1056,7 +1068,7 @@ export class AzerothActor extends Actor {
         const next = Math.max(0, Math.min(max, Math.trunc(value)));
         if (next !== (pool?.value ?? 0)) update[`system.${kind}.value`] = next;
       }
-      return Object.keys(update).length ? this.update(update) : this;
+      return Object.keys(update).length ? this.update(update, options) : this;
     }
     const snapshot = this.poolSnapshot();
     const classes = (this.system?.classes ?? []).map(c => ({ ...c, power: { ...c.power }, momentum: { ...c.momentum } }));
@@ -1072,7 +1084,7 @@ export class AzerothActor extends Actor {
     // A write that moves nothing is skipped: the fight's end zeroes twice
     // (before the confirm and again on exit) and the second is silent.
     if (!moved && !Object.keys(extra).length) return this;
-    return this.update({ "system.classes": classes, ...extra });
+    return this.update({ "system.classes": classes, ...extra }, options);
   }
 
   /**
@@ -1206,6 +1218,11 @@ export class AzerothActor extends Actor {
       // 04's Gadgets table by that key, never off the talent that granted it.
       const flag = { classId: cls.id, name: f.name, ...(talentId ? { talentId, rank } : {}), ...(gadget ? { gadget } : {}) };
       if (!item) {
+        if (talentId && stamp.uses?.per === "arc") {
+          const originalUses = this.items.get(talentId)?.system?.uses;
+          stamp.uses.value = originalUses?.per === "arc"
+            ? Math.max(0, Math.min(stamp.uses.max, Number(originalUses.value) || 0)) : 0;
+        }
         creates.push({
           name: f.name, type: "feature", img: cls.img, system: stamp,
           flags: { "azeroth-rpg": { feature: flag } }
@@ -1352,6 +1369,11 @@ export class AzerothActor extends Actor {
    */
   _onUpdateDescendantDocuments(parent, collection, documents, changes, options, userId) {
     super._onUpdateDescendantDocuments(parent, collection, documents, changes, options, userId);
+    if (parent === this && collection === "effects" && this.type === "character" && this.isOwner
+      && game.user.id === userId && documents.some((d, i) => d.flags?.["azeroth-rpg"]?.immuneTo?.conditions?.includes("slowed")
+        || foundry.utils.hasProperty(changes[i] ?? {}, "flags.azeroth-rpg.immuneTo"))) {
+      this.syncFatigue().catch(err => console.warn("azeroth-rpg | fatigue after immunity update", err));
+    }
     if (this.type !== "character" || collection !== "items" || game.user.id !== userId) return;
     const moved = documents.some((doc, i) => doc.type === "talent" && foundry.utils.hasProperty(changes[i] ?? {}, "system.taken"));
     if (moved) this.syncClassFeatures();
@@ -1411,11 +1433,12 @@ export class AzerothActor extends Actor {
     const has = id => this.statuses?.has(id) ?? false;
     if (state.fatigued !== has("fatigued")) await this.toggleStatusEffect("fatigued", { active: state.fatigued });
     const own = this.effects.find(e => e.statuses?.has("slowed") && e.getFlag("azeroth-rpg", "fromFatigue"));
-    if (state.slowed && !own && !has("slowed")) {
+    const slowed = state.slowed && !(this.system?.conditionImmunities ?? []).includes("slowed");
+    if (slowed && !own && !has("slowed")) {
       await this.toggleStatusEffect("slowed", { active: true });
       const made = this.effects.find(e => e.statuses?.has("slowed"));
       if (made) await made.setFlag("azeroth-rpg", "fromFatigue", true);
-    } else if (!state.slowed && own) {
+    } else if (!slowed && own) {
       await own.delete();
     }
     if (state.collapse) {
@@ -1798,16 +1821,31 @@ export class AzerothActor extends Actor {
     if (this.type === "character") await releaseAtLongRest(this);
     if (this.getFlag("azeroth-rpg", SACRIFICED_FLAG)) await this.unsetFlag("azeroth-rpg", SACRIFICED_FLAG);
     // **WHAT MEKKATORQUE'S BLUEPRINT BUILT WORKS FOR A DAY** (02's gnome; the Legacy
-    // branches' door 7; MY READING: the day is the Long Rest's): the device carried
+    // branches' door 7; next Long Rest approved by the lead, 2026-11-01): the device carried
     // goes, the gadget's flag goes and the sync takes its feature, and the Use the
     // rest gives back builds the next.
     const built = cleanBlueprint(this.getFlag("azeroth-rpg", BLUEPRINT_FLAG));
     if (this.getFlag("azeroth-rpg", BLUEPRINT_FLAG) !== undefined) {
-      if (built?.itemId && this.items.has(built.itemId)) await this.deleteEmbeddedDocuments("Item", [built.itemId]);
+      const expected = JSON.stringify(this.getFlag("azeroth-rpg", BLUEPRINT_FLAG));
+      const expiring = [...this.items.values()].filter(item => item.id === built?.itemId
+        || (built?.gadget && item.type === "feature"
+          && item.flags?.["azeroth-rpg"]?.feature?.gadget === built.gadget
+          && item.flags["azeroth-rpg"].feature.talentId === built.talentId)).map(item => item.id);
+      if (expiring.length) await this.deleteEmbeddedDocuments("Item", expiring);
+      if (expiring.some(id => this.items.has(id))
+        || JSON.stringify(this.getFlag("azeroth-rpg", BLUEPRINT_FLAG)) !== expected)
+        throw new Error(game.i18n.localize("AZEROTH.Blueprint.CleanupUnconfirmed"));
       await this.unsetFlag("azeroth-rpg", BLUEPRINT_FLAG);
+      if (this.getFlag("azeroth-rpg", BLUEPRINT_FLAG) != null)
+        throw new Error(game.i18n.localize("AZEROTH.Blueprint.CleanupUnconfirmed"));
       if (built?.gadget) await this.syncClassFeatures();
     }
     const restored = await this.resetUses("long");
+    // Sealing Flame limits the recipient, not the caster. An unresolved
+    // reservation requires review; only a consumed benefit resets at rest.
+    if (this.getFlag('azeroth-rpg','sealingFlameRecipient')?.state === 'used') {
+      await this.unsetFlag('azeroth-rpg','sealingFlameRecipient');
+    }
     const cleared = await this.clearSundered();
     if (this.getFlag("azeroth-rpg", "shortRests")) await this.unsetFlag("azeroth-rpg", "shortRests");
     await restCard({ actor: this, kind: "long", gains: r.gains, restored, cleared, diseased });
@@ -1966,7 +2004,7 @@ export class AzerothActor extends Actor {
    * @param {number} delta
    * @param {{temp?: number|null}} [o]
    */
-  async adjustHealth(delta, { temp = null, damage = false } = {}) {
+  async adjustHealth(delta, { temp = null, damage = false, manaShield = null } = {}) {
     if (refuseIceBlockTarget(this)) return this;
     if (damage === true && refuseDispersion(this, "damage")) return this;
     const health = this.system?.health;
@@ -1986,14 +2024,17 @@ export class AzerothActor extends Actor {
         if (left === 0 && this.getFlag("azeroth-rpg", TEMP_FLAG)) update[`flags.azeroth-rpg.${TEMP_FLAG}`] = null;
       }
     }
-    if (!Object.keys(update).length) return this;
+    if (!Object.keys(update).length && !manaShield) return this;
     const damageApplied = damage === true
       ? Math.max(0, (health.value ?? 0) - value) + (temp === null ? 0 : Math.max(0, wholeTemp(health.temp) - wholeTemp(temp))) : 0;
     const controlHarm = damageApplied > 0 && this.effects?.some(effect => effect.flags?.["azeroth-rpg"]?.mindControl)
       ? mindControlHarm : null;
     const controlSnapshot = controlHarm?.mindControlHarmSnapshot(this) ?? [];
     const controlHealthBefore = (this.system.health.value ?? 0) + wholeTemp(this.system.health.temp);
-    const written = damageApplied > 0
+    const written = manaShield
+      ? await (await import('../effects/mana-shield-payment.mjs')).commitManaShieldHealth({actor:this,plan:manaShield,update,
+        options:damageApplied>0?{azerothDamageApplied:damageApplied}:{}})
+      : damageApplied > 0
       ? await this.update(update, { azerothDamageApplied: damageApplied })
       : await this.update(update);
     if (controlSnapshot.length) {
@@ -2031,8 +2072,10 @@ export class AzerothActor extends Actor {
     }
     const soaked = absorbDamage({ temp: this.system?.health?.temp ?? 0, amount });
     if (soaked.absorbed > 0) ui.notifications?.info(game.i18n.format("AZEROTH.Temporary.Absorbed", { name: this.name, n: soaked.absorbed }));
-    const left = await this._floorOnly(soaked.amount);
-    return this.adjustHealth(-left, { temp: soaked.temp, damage: true });
+    const {manaShieldFor}=await import('../effects/mana-shield-payment.mjs');
+    const shield=manaShieldFor(this,soaked.amount);
+    const left = await this._floorOnly(shield?.damage??soaked.amount);
+    return this.adjustHealth(-left, { temp: soaked.temp, damage: true, manaShield:shield });
   }
 
   /**
@@ -2818,7 +2861,7 @@ export class AzerothActor extends Actor {
    *   `damage`: what the damage door records of each type, and what a priest's
    *   Ward took off each.
    */
-  async applyDamage(damage, { struck = false, attack = true, location = "body", type = null, messageId = null, by = null, riposte = false, wardTook = 0, spell = false, ignite = false, moved = false, shared = false, parts = null, drain = null, transfer = null, outcome = null } = {}) {
+  async applyDamage(damage, { struck = false, attack = true, location = "body", type = null, messageId = null, by = null, riposte = false, wardTook = 0, spell = false, ignite = false, moved = false, shared = false, parts = null, drain = null, transfer = null, outcome = null, healthFloor = null } = {}) {
     // Optional local receipt; retain the historical Actor return value. This
     // reports this actor's committed Health/temp loss, never guesses shares.
     const report = outcome && typeof outcome === "object" ? outcome : null;
@@ -3037,13 +3080,19 @@ export class AzerothActor extends Actor {
     const soaked = absorbDamage({ temp: this.system?.health?.temp ?? 0, amount });
     if (soaked.absorbed > 0) ui.notifications?.info(game.i18n.format("AZEROTH.Temporary.Absorbed", { name: this.name, n: soaked.absorbed }));
     amount = soaked.amount;
+    const {manaShieldFor}=await import('../effects/mana-shield-payment.mjs');
+    const shield=manaShieldFor(this,amount);
+    if(shield)amount=shield.damage;
     // **THE ONE HOLD AT 1** (D-777): 07's Aegis floor, then the creature's own
     // Unkillable and Cauterize, then another creature's talent, asked in the blow.
+    amount = damageAboveHealthFloor(this.system?.health?.value, amount, healthFloor);
     const hold = await this._holdAtOne({ before, amount, attack, struck });
     if (await dispersedNow()) return this;
     amount = hold.amount;
     const seductionHarm = by?.uuid ? await import("../effects/seduction-harm.mjs") : null;
     const seductionSnapshot = seductionHarm?.seductionHarmSnapshot(this, by) ?? [];
+    const mindSootheHarm = await import("../effects/mind-soothe.mjs");
+    const mindSootheBefore = mindSootheHarm.mindSootheSnapshot(this);
     const healthBeforeSeductionHarm = (this.system?.health?.value ?? 0) + Math.max(0, Number(this.system?.health?.temp) || 0);
     const devourMagic = struck && attack && !spell && !shared && !ignite && !moved && by?.type === "npc" && messageId
       ? await import("../effects/devour-magic-wound.mjs") : null;
@@ -3051,9 +3100,19 @@ export class AzerothActor extends Actor {
     if (preparedTransfer) await preparedTransfer.note("originalPending");
     if (await dispersedNow()) return this;
     const healthBeforeWrite = (this.system?.health?.value ?? 0) + Math.max(0, Number(this.system?.health?.temp) || 0);
-    await this.adjustHealth(-amount, { temp: soaked.temp, damage: true });
+    await this.adjustHealth(-amount, { temp: soaked.temp, damage: true, manaShield:shield });
     const healthAfterWrite = (this.system?.health?.value ?? 0) + Math.max(0, Number(this.system?.health?.temp) || 0);
+    if (mindSootheBefore.length) {
+      try {
+        await mindSootheHarm.endMindSootheOnDamage(this, mindSootheBefore,
+          Math.max(0, Math.min(amount + soaked.absorbed, healthBeforeWrite - healthAfterWrite)));
+      } catch (error) {
+        console.warn("azeroth-rpg | Mind Soothe cleanup", error);
+        ui.notifications?.warn(game.i18n.localize("AZEROTH.Compel.MindSootheCleanup"));
+      }
+    }
     if (report) {
+      report.manaAbsorbed=shield?.absorbed??0;
       report.amount = Math.max(0, Math.min(amount + soaked.absorbed, healthBeforeWrite - healthAfterWrite));
       report.dealtDamage = report.amount > 0;
       report.transferred = report.transferred || Boolean(division?.others?.some(part => part.share > 0) || linkedTransfer);
@@ -3143,6 +3202,10 @@ export class AzerothActor extends Actor {
         type: share.type, messageId, by, shared: true, wardTook: 0, parts: share.parts ?? null, outcome: shareOutcome });
       await preparedTransfer.note("recipientApplied");
     }
+    if (hold.sealingFlame) {
+      const {requestSealingFlameFinish} = await import('../effects/sealing-flame-reaction.mjs');
+      await requestSealingFlameFinish(this,hold.sealingFlame);
+    }
     // The enemies around it take the Fire once the Health is written.
     if (hold.cauterized) {
       const cauterized = hold.cauterized;
@@ -3173,7 +3236,8 @@ export class AzerothActor extends Actor {
       // damage type, which Vampiric Touch, Twisted Faith's mark and Shadowform's
       // Holy read (D-774) - and whether a spell dealt it and whether it was
       // Ignite's own tick (D-775), which Shadowburn and Ignite read.
-      await afterBlow({ target: this, before, attacker: by, riposte: riposte === true, attack: attack === true, type, spell: spell === true, ignite: ignite === true, messageId });
+      await afterBlow({ target: this, before, attacker: by, riposte: riposte === true, attack: attack === true, type, spell: spell === true, ignite: ignite === true, messageId,
+        delivered: {amount: Math.max(0, Math.min(amount + soaked.absorbed, healthBeforeWrite - healthAfterWrite)), type, parts} });
     } catch (err) {
       console.error("azeroth-rpg | afterBlow", err);
     }
@@ -3273,6 +3337,9 @@ export class AzerothActor extends Actor {
     } catch (err) {
       console.error("azeroth-rpg | held at 1", err);
     }
+    const {requestSealingFlameHold} = await import('../effects/sealing-flame-reaction.mjs');
+    const sealingFlame = await requestSealingFlameHold(this,{before,amount});
+    if (sealingFlame) return sealingFlame;
     return { amount, held: null };
   }
 

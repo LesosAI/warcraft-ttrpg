@@ -2,5 +2,5 @@
       applications/mind-control-review.mjs#showMindControlReview where the card holds no
       block of its own, shown to a GM while the creation is still applying. --}}
 <div class="azeroth-card-actions" data-mind-control-review>
-  <button type="button" data-action="reviewMindControl">{{localize "AZEROTH.MindControl.Review.Title"}}</button>
+  <button type="button" data-action="reviewMindControl">{{#if activation}}{{localize "AZEROTH.MindControl.Review.ActivateTitle"}}{{else}}{{localize "AZEROTH.MindControl.Review.Title"}}{{/if}}</button>
 </div>

@@ -44,6 +44,7 @@ export async function rollDisarmSide(actor, picked, { valid, source = null, defe
         banes: args.banes, kind: "attack", rollData: actor.getRollData?.() ?? {} });
       roll.options.provenance.push(...(args.provenanceExtra ?? []));
       await roll.evaluate();
+      await actor.offerElunesRegard?.(roll);
       const explanation = roll.options.provenance.map(part => {
         const label = game.i18n.localize(part.label);
         return `${foundry.utils.escapeHTML(label)}: ${foundry.utils.escapeHTML(String(part.formula ?? part.value ?? ""))}`;

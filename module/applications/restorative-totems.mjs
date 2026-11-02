@@ -30,15 +30,15 @@ export async function chooseRestorativeTotem(message) {
   const choice=await foundry.applications.api.DialogV2.wait({
     window:{title:restoration.name},classes:["azeroth","azeroth-restorative-totem"],position:{width:440},
     content,rejectClose:false,buttons:[
-      {action:"restore",label:text("Restore"),default:true,callback:(_event,button)=>{const choice=read(button.form);return valid(choice)?choice:null;}},
-      {action:"cancel",label:text("Cancel"),callback:()=>null}
+      {action:"restore",label:text("Restore"),default:true,callback:(_event,button)=>{const choice=read(button.form);return valid(choice)?choice:false;}},
+      {action:"cancel",label:text("Cancel"),callback:()=>false}
     ],render:(_event,dialog)=>{
       const form=dialog.element.querySelector("form");
       const update=()=>{form.querySelector('[data-action="restore"]').disabled=!valid(read(form));};
       form.addEventListener("change",update);update();
     }
   });
-  if (!choice) return null;
+  if (!Array.isArray(choice?.targets) || !valid(choice)) return null;
   const result=await requestRestorativeTotem({...offer,...choice});
   if (!result?.ok) ui.notifications.warn(text(["reconcile","writeUncertain"].includes(result?.reason)?"Uncertain":"Unavailable"));
   else ui.notifications.info(text(result.already?"Already":"Restored"));

@@ -21,13 +21,13 @@
         a bare number beside a name reads as a quantity. --}}
   <span class="azeroth-carried-weight">{{#if row.weight}}{{localize "AZEROTH.Sheet.Pounds" n=row.weight}}{{else}}{{azerothDash row.weight}}{{/if}}</span>
   {{#if row.usable}}
-  <button type="button" class="azeroth-use" data-action="useGear">{{localize "AZEROTH.Feature.Use"}}{{#if row.quantity}} <span class="azeroth-carried-count">{{row.quantity}}</span>{{/if}}</button>
+  <button type="button" class="azeroth-use" data-action="useGear"{{#if row.useRefusal}} disabled data-tooltip="{{localize row.useRefusal}}"{{/if}}>{{localize "AZEROTH.Feature.Use"}}{{#if row.quantity}} <span class="azeroth-carried-count">{{row.quantity}}</span>{{/if}}</button>
   {{/if}}
   {{#if row.charges}}
   {{!-- A waterskin holds a day, and is filled again (08 SS11, 09 SS5). --}}
   <span class="azeroth-carried-charges">{{localize "AZEROTH.Container.Charges" value=row.charges.value max=row.charges.max unit=row.charges.unit}}</span>
-  <button type="button" class="azeroth-use" data-action="spendCharge"{{#unless row.charges.value}} disabled{{/unless}}>{{localize "AZEROTH.Container.Spend"}}</button>
-  <button type="button" class="azeroth-forge-quiet" data-action="fillCharges">{{localize "AZEROTH.Container.Fill"}}</button>
+  <button type="button" class="azeroth-use" data-action="spendCharge"{{#if row.useRefusal}} disabled data-tooltip="{{localize row.useRefusal}}"{{else}}{{#unless row.charges.value}} disabled{{/unless}}{{/if}}>{{localize "AZEROTH.Container.Spend"}}</button>
+  <button type="button" class="azeroth-forge-quiet" data-action="fillCharges"{{#if row.useRefusal}} disabled data-tooltip="{{localize row.useRefusal}}"{{/if}}>{{localize "AZEROTH.Container.Fill"}}</button>
   {{/if}}
   {{#if row.equippable}}
   {{!-- Equip and Equipped, whatever the thing is (the lead, 2026-09-07): an

@@ -623,7 +623,7 @@ export class NpcData extends foundry.abstract.TypeDataModel {
     // creature's spell. The creature's OWN passives grant it too and nothing
     // read those either - `passiveEffects` has returned `spellpower` since
     // D-691 and no line in this model consumed it.
-    this.spellpower = { ...(this.spellpower ?? {}) };
+    this.spellpower = { ...Object.fromEntries(Object.keys(AZEROTH.schools).map(key => [key, 0])), ...(this.spellpower ?? {}) };
     for (const bag of [passives.spellpower, worn.spellpower]) {
       for (const [school, n] of Object.entries(bag ?? {})) {
         if (n) this.spellpower[school] = (this.spellpower[school] ?? 0) + n;

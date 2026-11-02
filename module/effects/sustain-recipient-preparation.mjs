@@ -26,7 +26,7 @@ export async function prepareSustainRecipient({ caster, recipient, cast, source 
   const protectedParticipant = () => [caster, recipient].some(actor => iceBlockFor(actor) || dispersionFor(actor));
   if (protectedParticipant()) return refuse("protectedParticipant");
   if (!sourceValid()) return refuse("source");
-  const initial = previewSustainRelocation({ caster, recipient, cast });
+  const initial = previewSustainRelocation({ caster, recipient, cast, source: selectedSource });
   if (!initial.ok) return initial;
   if (sustainEntryTransferPending(initial.inventory.entry, caster.uuid)) return refuse("pendingSourceTransfer");
   const originalSpell = initial.inventory.entry.upkeep == null ? await fromUuid(initial.inventory.entry.uuid) : null;
@@ -34,7 +34,7 @@ export async function prepareSustainRecipient({ caster, recipient, cast, source 
   if (protectedParticipant()) return refuse("protectedParticipant");
   if (!sourceValid()) return refuse("source");
   // Loading a compendium can yield. Re-read the entire preparation afterward.
-  const preview = previewSustainRelocation({ caster, recipient, cast });
+  const preview = previewSustainRelocation({ caster, recipient, cast, source: selectedSource });
   if (!preview.ok) return preview;
   const entry = preview.inventory.entry;
   if (sustainEntryTransferPending(entry, caster.uuid)) return refuse("pendingSourceTransfer");

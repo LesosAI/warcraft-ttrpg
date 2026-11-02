@@ -248,6 +248,11 @@ export const OVERRIDES = Object.freeze({
     signatureEffect:{kind:'standing',scalingHitDamage:true},signatureApproved:true,
     note:'Approved F05 Horseman hit signature: SIGNATURE-PROPOSALS.md; native player, multi-target and recovery acceptance remain under audit.'
   },
+  21405: {
+    signature:'<p>While worn and usable, gain one Boon on Stealth Tests to hide in dim light or darkness. Once per turn, when your weapon attack hits a target from which you were Hidden when the Test began, add your Stealth Skill Ranks to that hit\'s primary damage. Confirm Hidden relative to that target in the attack popup; the general Hidden state alone does not qualify. The hiding Boon remains a situational choice. Identical copies share this limit. Outside combat, use this damage bonus at most once per six seconds. Switching copies or leaving combat does not refresh it.</p>',
+    signatureEffect:{kind:'standing',scalingHitDamage:true},signatureApproved:true,
+    note:'Approved F05 Band and target-specific confirmation; native acceptance remains under audit.'
+  },
   23198: {
     signature:'<p>While this is your active Augment and you are in Black Bear or Ironfur Bear form (including a Chimera containing either), once per turn, a natural-weapon hit deals additional Physical damage equal to your own Constitution modifier (minimum 0). Identical copies share this limit. Outside combat, use this bonus at most once per six seconds. Switching copies or leaving combat does not refresh it.</p>',
     signatureEffect:{kind:'standing',scalingHitDamage:true},signatureApproved:true,
@@ -324,7 +329,7 @@ export const OVERRIDES = Object.freeze({
     signatureApproved:true,note:'Approved F05 signature: SIGNATURE-PROPOSALS.md; specialized area/channel delivery remains under audit.'
   },
   18354: {
-    signature: '<p>While equipped and usable, your Fire spells add the granting class\'s own casting ability modifier (minimum 0) as Fire damage to one chosen recipient, once per casting when the spell first deals damage. Use the class granting that spell, not an unrelated primary class; substituting an Attack Test does not change this modifier. Identical copies do not stack.</p>',
+    signature: '<p>While equipped and usable, your Fire spells add the granting class\'s own casting ability modifier (minimum 0) as Fire damage to one chosen recipient, once per casting when the spell first deals damage. Use the class granting that spell, not an unrelated primary class. A spell without a granting class uses the casting attribute actually used for its Test; substituting an Attack Test does not change this modifier. Identical copies do not stack.</p>',
     signatureEffect: {kind:'standing',chosenSpellDamage:{school:'fire',casting:true}},
     signatureApproved:true,note:'Approved F05 signature: SIGNATURE-PROPOSALS.md; specialized area/channel delivery remains under audit.'
   }

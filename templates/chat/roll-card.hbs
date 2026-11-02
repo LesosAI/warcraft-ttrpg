@@ -214,7 +214,7 @@
         {{!-- `data-struck-index` names the row struck (the B1 review): a hit a Parry
               or Afterimage turned into a miss is answered by nothing. --}}
         {{#if b.damage}}
-        <button type="button" data-action="applyDamage" data-self="1" data-damage="{{b.damage}}"{{#if b.damageType}} data-damage-type="{{b.damageType}}"{{/if}}{{#if (ne b.index null)}} data-struck-index="{{b.index}}"{{/if}}>
+        <button type="button" data-action="applyDamage" data-self="1" data-damage="{{b.damage}}"{{#if b.signatureRetaliation}} data-retaliation-cast="{{b.signatureRetaliation.cast}}"{{/if}}{{#if b.damageType}} data-damage-type="{{b.damageType}}"{{/if}}{{#if (ne b.index null)}} data-struck-index="{{b.index}}"{{/if}}>
           {{localize "AZEROTH.Signature.TakeBack" n=b.damage}}
         </button>
         {{/if}}

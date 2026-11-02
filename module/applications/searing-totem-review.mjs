@@ -14,7 +14,10 @@ export async function reviewSearingUses(actor) {
     { action: "cancel", label: words("Cancel"), default: true, callback: () => -1 }],
     render: (_event, dialog) => {
       const form = dialog.element.querySelector("form");
-      const update = () => { form.querySelector('[data-action="review"]').disabled = form.elements.acknowledged?.checked !== true; };
+      const update = event => {
+        if (event?.target === form.elements.receipt) form.elements.acknowledged.checked = false;
+        form.querySelector('[data-action="review"]').disabled = form.elements.acknowledged?.checked !== true;
+      };
       form.addEventListener("change", update); update();
     }
   });

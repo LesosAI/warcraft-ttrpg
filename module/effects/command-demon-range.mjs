@@ -10,7 +10,8 @@ export function commandDemonRangeRefusal(owner, target, placement = null) {
     ? game.scenes?.get(row.sceneId)?.tokens.get(row.tokenId) : null;
   const source = tokenAt(placement?.source), destination = tokenAt(placement?.target);
   if (!source || !destination || source.actor?.uuid !== owner?.uuid
-    || destination.actorId !== target?.id || source.parent?.id !== destination.parent?.id
+    || destination.actorId !== target?.id || destination.actor?.uuid !== target?.uuid
+    || source.parent?.id !== destination.parent?.id
     || source._source?.level !== destination._source?.level) return "AZEROTH.CommandDemon.PlacementChanged";
   const distance = feetApart(source, destination);
   if (!Number.isFinite(distance)) return "AZEROTH.CommandDemon.PlacementChanged";

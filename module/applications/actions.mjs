@@ -1,4 +1,8 @@
 import {reloadMenuEntries} from "./reload.mjs";
+import {healingSignatureReviewState} from '../effects/signature-healing-review.mjs';
+import {damageSignatureCards} from '../effects/signature-damage-review.mjs';
+import {orphanDamageCasts} from '../effects/signature-damage-orphans.mjs';
+import { enslaveMinuteDue } from '../rules/enslave-clock.mjs';
 
 /**
  * Sheet actions shared by the character and NPC sheets, and the one door
@@ -12,6 +16,7 @@ import {reloadMenuEntries} from "./reload.mjs";
  */
 
 import { AZEROTH } from "../config.mjs";
+import { confirmBandExtraAttack } from './signature-band-confirmation.mjs';
 import { reactionBarred } from "../rules/reaction-bar.mjs";
 import { attackReactionRefusal } from "../rules/attack-reaction-state.mjs";
 import { blockCommitValid, requestAttackBlock } from "../effects/attack-block.mjs";
@@ -27,7 +32,7 @@ import { hasDreadlordSleep } from "../rules/dreadlord-sleep.mjs";
 import { phaseShiftRefusal } from "../rules/phase-shift.mjs";
 import { iceBlockFor } from "../rules/ice-block.mjs";
 import { canEndIceBlock, requestEndIceBlock } from "../effects/ice-block-ending.mjs";
-import { dispersionFor } from "../rules/dispersion.mjs";
+import { dispersionFor, dispersionRefusal } from "../rules/dispersion.mjs";
 import { canEndDispersion, requestEndDispersion } from "../effects/dispersion-end-request.mjs";
 import { seductionRefusal } from "../effects/seduction-refusal.mjs";
 import { enrich } from "../helpers/enrich.mjs";
@@ -107,6 +112,7 @@ import { blademasterReaches, flametongueStrike, parryReaches, turnMark } from ".
 import { isHiddenFor } from "../effects/stealth.mjs";
 // What a talent adds to a blow's damage, per rank (04, D-711 phase 2).
 import { FORM_LANE, castAsFor, damageChosen, damageLinesFor, damageRowsFor, featureDamageLane, onUseOf, talentEffect } from "../rules/talent-effects.mjs";
+import { LUNAR_DAMAGE_FLAG, lunarDamageQualifies } from "../rules/lunar-guidance.mjs";
 // The one reading of a lane (D-768). Aliased: `attackWithDialog` keeps a local
 // `laneBonus` number, and an import of the same name would be shadowed by it.
 import { laneBonus as laneBonusFor } from "../rules/spell-bonus.mjs";
@@ -227,6 +233,7 @@ function talentDamageLines(actor, { lane, type, target = null, extraFacts = () =
     // *Against a target that has taken damage from you.* The mark is the
     // ATTACKER's own combatant flag, written where the blow was applied.
     damagedTarget: damagedAlready(actor, target),
+    lunarTarget: lunarDamageQualifies(actor.activeFight?.()?.getCombatantsByActor?.(actor)?.[0]?.getFlag("azeroth-rpg", LUNAR_DAMAGE_FLAG), damageKeyFor(target)),
     // *While you control a Bound Demon* (D-643).
     boundDemon: boundOf(actor, "demon").length > 0,
     // *While in a Shapeshift form* (02 §7): the Avatar is not one (D-251, D-769).
@@ -341,6 +348,10 @@ export function reactionStateOf(actor, { messageId = null, against = null, targe
     // Legacy branches' door 14): the creature being answered - the blow's striker,
     // the mover - carries the span.
     unanswered: unansweredOf(against).length > 0,
+    // The attack reveals a hidden striker before defenders answer. Ghostly
+    // Strike reads that attack's saved concealment, never the later live status.
+    cannotParryOrBlock: Boolean(against && unanswerableWith(against.takenTalents?.() ?? [],
+      { hidden: card?.getFlag?.('azeroth-rpg', 'hiddenAtRoll') === true })),
     lostToBlow,
     // **A SPIRIT ANSWERS NO BLOW** (06 §10: *You cannot touch the living world, and
     // nothing in the fight can touch you*; the Legacy branches' door 10): a character
@@ -396,15 +407,13 @@ function freeReactionOf(actor, key, { combatant: given = null } = {}) {
   // Bladeturn; D-773): *one further Reaction each round per rank, usable only to
   // Parry* is Bladeturn's door with its own count, and a character holding both
   // has both - the first with a mark left is the one taken.
-  // **AND 04's MAIN GAUCHE, REWORKED** (the lead, 2026-10-03, on O-180: *"Main gauge
-  // can be reworked to allow 1 parry per turn without spending a reaction."*;
-  // D-779): with a melee weapon in each hand, one Parry each turn of the fight costs
-  // no Reaction - its mark names the fight's turn (`class-answers.mjs#turnMark`).
+  // Main Gauche: with a melee weapon in each hand, one Parry per rank each turn
+  // costs no Reaction (lead, 2026-11-01). Marks name both the turn and use.
   const ready = actor.readyWeapons?.() ?? (actor.items ?? []).filter(i => i.type === "weapon");
   const dualMelee = meleeInHand(ready.map(i => ({ name: i.name, ...i.system }))).length >= 2;
   for (const row of freeReactionRowsFor(actor.takenTalents?.() ?? [], key)) {
     if (row.needs === "dualMelee" && !dualMelee) continue;
-    const mark = row.per === "turn" ? turnMark(row.identifier, fight.turn, used) : nextRoundMark(row.identifier, row.count, used);
+    const mark = row.per === "turn" ? turnMark(row.identifier, fight.turn, used, row.count) : nextRoundMark(row.identifier, row.count, used);
     if (mark) return { ...row, mark, combatant };
   }
   return null;
@@ -1200,12 +1209,14 @@ export async function rollWithDialog(actor, spec, event = null) {
       ...secondRollOverrides(actor, { ...args, ...nextRoll }, nextRoll.targets),
       source: args.source, modifiers: nextModifiers,
       provenanceExtra: [...(nextRoll.provenanceExtra ?? []), ...(refreshed.provenanceExtra ?? [])] };
-    await wrapWorkflow(nextRun ?? game.system.azeroth.workflows.rollTest)(second);
+    const confirmed=await confirmBandExtraAttack(actor,second);
+    if(confirmed)await wrapWorkflow(nextRun ?? game.system.azeroth.workflows.rollTest)(confirmed);
     return card;
   }
   // The second card records the same blow: `strike` and `source` ride `args`
   // and nothing the second roll overrides names either (D-724, D-725).
-  await workflow({ ...args, ...secondRollOverrides(actor, args, secondTargets) });
+  const confirmed=await confirmBandExtraAttack(actor,{ ...args, ...secondRollOverrides(actor, args, secondTargets) });
+  if(confirmed)await workflow(confirmed);
   return card;
 }
 
@@ -1345,7 +1356,7 @@ export async function castWithDialog(actor, spell, event = null, { targets = nul
   // ticked here would add to nothing - the tick reads what stands at a turn.
   const tickOnly = sys.damage?.rating !== null && sys.damage?.rating !== undefined && !castDealsDamage(sys);
   const spellLines = tickOnly ? [] : talentDamageLines(actor, {
-    lane: "spell", type: sys.damage?.school ?? sys.school ?? "physical", target: targetSnapshots()[0] ?? null
+    lane: "spell", type: sys.damage?.school ?? sys.school ?? "physical", target: (targets ?? targetSnapshots())[0] ?? null
   });
   const castingSpec = {
     kind: "casting",
@@ -2804,7 +2815,8 @@ export function signatureContext(item, actor = null) {
   // the click, which is the drift S3 exists to prevent.
   const press = pressGates(signature);
   const pressHolds = state ? gateHolds(press, state) : true;
-  const refusal = shared?.refusal ?? (state ? pressRefusal(signature, { holds: pressHolds, spells }) : null);
+  const gearRefusal = dispersionRefusal(actor, "gear");
+  const refusal = gearRefusal ?? shared?.refusal ?? (state ? pressRefusal(signature, { holds: pressHolds, spells }) : null);
   const use = signature.use ?? {};
   const clause = g => ({
     kind: g.kind,
@@ -2854,7 +2866,7 @@ export function signatureContext(item, actor = null) {
       : [],
     pressable: signaturePressable(signature),
     refusal,
-    refusalLabel: refusal ? AZEROTH.signatureRefusals[refusal] ?? null : null,
+    refusalLabel: gearRefusal ?? (refusal ? AZEROTH.signatureRefusals[refusal] ?? null : null),
     actionLabel: use.action ? AZEROTH.actions[use.action] ?? null : null,
     cost: use.cost?.pool && use.cost?.amount
       ? { amount: use.cost.amount, label: AZEROTH.poolTypes[use.cost.pool] ?? use.cost.pool }
@@ -2970,6 +2982,14 @@ export function effectsContext(actor) {
       canEndIceBlock: block?.id === e.id && canEndIceBlock(actor),
       mindControlSaves: Boolean(globalThis.game?.user?.isGM && globalThis.game?.users?.activeGM===globalThis.game.user
         && e.getFlag("azeroth-rpg", "mindControl")),
+      dominationOrder: Boolean(globalThis.game?.user?.isGM && globalThis.game?.users?.activeGM===globalThis.game.user
+        && ["dominate", "enslave-demon"].includes(e.getFlag("azeroth-rpg", "identifier"))),
+      mindSootheHarm: Boolean(globalThis.game?.user?.isGM && globalThis.game?.users?.activeGM===globalThis.game.user
+        && e.getFlag('azeroth-rpg', 'identifier') === 'mind-soothe' && !e.disabled && e.active !== false),
+      enslaveMinute: Boolean(globalThis.game?.user?.isGM && globalThis.game?.users?.activeGM===globalThis.game.user
+        && enslaveMinuteDue(e.flags?.['azeroth-rpg'], game.time?.worldTime) !== null),
+      enslaveClockReview: Boolean(globalThis.game?.user?.isGM && globalThis.game?.users?.activeGM===globalThis.game.user
+        && e.getFlag('azeroth-rpg', 'identifier') === 'enslave-demon' && !Number.isFinite(e.getFlag('azeroth-rpg', 'enslaveNextSave'))),
       // Core's own reading: neither disabled nor suppressed.
       active: e.active !== false,
       permanent: e.getFlag("azeroth-rpg", "permanent") === true,
@@ -2985,13 +3005,26 @@ export function effectsContext(actor) {
   const dispersionEndingReview = game.user?.isGM && game.users?.activeGM?.id === game.user.id
     && Object.values(actor.getFlag("azeroth-rpg", "dispersionEndings") ?? {}).some(r => r?.version === 1 && r.state === "creating");
   const antivenom = actor.getFlag("azeroth-rpg", "antivenomUse");
+  const consumable=actor.getFlag('azeroth-rpg','consumableUse');
+  const consumableReview=game.user?.isGM&&game.users?.activeGM?.id===game.user.id
+    &&!!consumable&&!['complete','reviewed','cancelled'].includes(consumable.stage);
   const antivenomReview = game.user?.isGM && game.users?.activeGM?.id === game.user.id
     && !!antivenom && !["complete", "reviewed"].includes(antivenom.stage);
   const signatureUseReview=game.user?.isGM&&game.users?.activeGM?.id===game.user.id
     &&Object.entries(actor.getFlag?.('azeroth-rpg',SIGNATURE_USES_FLAG)??{}).some(([id,row])=>approvedRestSignature(id)&&row?.state==='pending');
   const signatureParryReview=game.user?.isGM&&game.users?.activeGM?.id===game.user.id
     &&Boolean(actor.getFlag?.('azeroth-rpg','signatureTurnUses')?.['conquerors-battlegear']?.pending);
-  return { conditions, rows, thresholds, dispersionEndingReview, antivenomReview, signatureUseReview, signatureParryReview };
+  const signatureKillReview=game.user?.isGM&&game.users?.activeGM?.id===game.user.id
+    &&(['death-grips','spinal-reaper'].some(id=>actor.getFlag?.('azeroth-rpg','signatureTurnUses')?.[id]?.pending)
+      ||[...(game.messages?.values?.()??[])].some(message=>ChatMessage.getSpeakerActor(message.speaker)===actor
+        &&!message.getFlag('azeroth-rpg','signatureWeaponKillReview')
+        &&['death-grips','spinal-reaper'].some(id=>message.getFlag('azeroth-rpg','signatureWeaponKill')?.[id]?.state==='pending')));
+  const signatureHitReview=game.user?.isGM&&game.users?.activeGM?.id===game.user.id
+    &&['the-horsemans-blade','idol-of-brutality','idol-of-ferocity','band-of-veiled-shadows']
+      .some(id=>actor.getFlag?.('azeroth-rpg','signatureTurnUses')?.[id]?.pending);
+  const signatureHealingReview=game.user?.isGM&&game.users?.activeGM?.id===game.user.id&&healingSignatureReviewState(actor).pending;
+  const signatureDamageReview=game.user?.isGM&&game.users?.activeGM?.id===game.user.id&&(damageSignatureCards(actor).length>0||orphanDamageCasts(actor).length>0||['reserved','uncertain'].includes(actor.getFlag?.('azeroth-rpg','sealingFlameRecipient')?.state));
+  return { conditions, rows, thresholds, dispersionEndingReview, antivenomReview, consumableReview, signatureUseReview, signatureParryReview, signatureKillReview, signatureHitReview, signatureHealingReview, signatureDamageReview };
 }
 
 /**
@@ -3027,9 +3060,48 @@ export async function effectAction(actor, action, target) {
       const {reviewSignatureParry}=await import('./signature-parry-review.mjs');
       return reviewSignatureParry(actor);
     }
+    case "reviewSignatureHit": {
+      const {reviewSignatureHit}=await import('./signature-hit-review.mjs');
+      return reviewSignatureHit(actor);
+    }
+    case "reviewSignatureHealing": {
+      const {reviewSignatureHealing}=await import('./signature-healing-review.mjs');
+      return reviewSignatureHealing(actor);
+    }
+    case "reviewSignatureDamage": {
+      const {reviewSignatureDamage}=await import('./signature-damage-review.mjs');
+      return reviewSignatureDamage(actor);
+    }
+    case "reviewSignatureKills": {
+      const {reviewSignatureKills}=await import('./signature-kill-review.mjs');
+      return reviewSignatureKills(actor);
+    }
     case "mindControlSaves": {
       const {mindControlSavesForEffect}=await import("./mind-control-saves.mjs");
       return mindControlSavesForEffect(actor,effect);
+    }
+    case "dominationOrder": {
+      const { dominationOrderSave } = await import('./domination-orders.mjs');
+      return dominationOrderSave(actor, effect);
+    }
+    case 'mindSootheHarm': {
+      if (!game.user?.isGM || game.users?.activeGM?.id !== game.user.id) return null;
+      const { mindSootheSnapshot, endMindSootheForHarm } = await import('../effects/mind-soothe.mjs');
+      const snapshot = mindSootheSnapshot(actor);
+      if (!snapshot.length) return null;
+      const confirmed = await foundry.applications.api.DialogV2.confirm({
+        window: { title: game.i18n.localize('AZEROTH.MindSootheHarm.Title') },
+        content: `<p>${game.i18n.localize('AZEROTH.MindSootheHarm.Confirm')}</p>`, rejectClose: false
+      });
+      return confirmed ? endMindSootheForHarm(actor, snapshot) : null;
+    }
+    case "enslaveMinute": {
+      const { dominationOrderSave } = await import('./domination-orders.mjs');
+      return dominationOrderSave(actor, effect, { reason: 'minute', dueAt: enslaveMinuteDue(effect.flags?.['azeroth-rpg'], game.time?.worldTime) });
+    }
+    case 'enslaveClockReview': {
+      const { reconcileEnslaveClockDialog } = await import('./domination-orders.mjs');
+      return reconcileEnslaveClockDialog(actor, effect);
     }
     case "reviewDispersionAftermath": {
       const {reviewDispersionAftermath}=await import("./dispersion-aftermath-review.mjs");
@@ -3038,6 +3110,10 @@ export async function effectAction(actor, action, target) {
     case "reviewAntivenom": {
       const {reviewAntivenomUse}=await import("./antivenom-review.mjs");
       return reviewAntivenomUse(actor);
+    }
+    case "reviewConsumable": {
+      const {reviewConsumableUse}=await import('./consumable-review.mjs');
+      return reviewConsumableUse(actor);
     }
     case "toggleCondition":
       // Fatigued is the condition that puts a point on the track (A1, D-624):

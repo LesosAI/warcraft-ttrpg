@@ -1,5 +1,5 @@
-/** Whole-cast planning for equivalent ordinary actor effects. No document writes.
- * Regions and unequal target bundles need their own reviewed transfer policy.
+/** Whole-cast planning for ordinary actor effects. No document writes.
+ * Unequal target bundles use the counterspelled caster's own version.
  */
 import { sustainEffectRelocation } from "./sustain-effect-relocation.mjs";
 import { isRecordCarriedSustain } from "./sustain-record-carrier.mjs";
@@ -12,6 +12,21 @@ const signature = effect => {
   for (const key of ["_id", "uuid", "parentUuid", "_stats"]) delete data[key];
   return JSON.stringify(stable(data));
 };
+
+/** Shared by ID allocation and final planning so unequal bundle sizes agree. */
+export function sustainCarrierParent(inventory, recipientUuid) {
+  const bundles = new Map();
+  for (const effect of inventory.effects) {
+    const rows = bundles.get(effect.parentUuid) ?? [];
+    rows.push(signature(effect)); bundles.set(effect.parentUuid, rows);
+  }
+  const parents = [...bundles.keys()].sort();
+  if (!parents.length) return null;
+  const expected = JSON.stringify(bundles.get(parents[0]).sort());
+  const unequal = [...bundles.values()].some(rows => JSON.stringify(rows.sort()) !== expected);
+  if (unequal) return bundles.has(inventory.casterUuid) ? inventory.casterUuid : null;
+  return bundles.has(recipientUuid) ? recipientUuid : parents[0];
+}
 
 export function sustainCastRelocation({ inventory, recipientUuid, destinationIds = [], recipientEffects } = {}) {
   const refuse = reason => ({ ok: false, reason });
@@ -41,11 +56,9 @@ export function sustainCastRelocation({ inventory, recipientUuid, destinationIds
     rows.push({ effect, signature: signature(effect) }); bundles.set(effect.parentUuid, rows);
   }
   for (const rows of bundles.values()) rows.sort((a, b) => a.signature.localeCompare(b.signature) || a.effect.uuid.localeCompare(b.effect.uuid));
-  const parents = [...bundles.keys()].sort();
-  const chosen = bundles.has(recipientUuid) ? recipientUuid : parents[0];
+  const chosen = sustainCarrierParent(inventory, recipientUuid);
+  if (!chosen) return refuse("missingCasterCarrier");
   const selected = bundles.get(chosen);
-  const expected = JSON.stringify(selected.map(row => row.signature));
-  if ([...bundles.values()].some(rows => JSON.stringify(rows.map(row => row.signature)) !== expected)) return refuse("unequalTargetState");
   const onRecipient = chosen === recipientUuid;
   if (!onRecipient && (destinationIds.length !== selected.length || new Set(destinationIds).size !== destinationIds.length)) return refuse("destinationIds");
   const moves = selected.map(({ effect }, index) => sustainEffectRelocation({ effect,

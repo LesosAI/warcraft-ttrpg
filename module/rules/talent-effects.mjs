@@ -310,6 +310,16 @@ const rider = (pool, amount, { once = null, form = false, weapon = null, move = 
  * effect is prose stays prose.
  */
 export const RACE_TALENT_EFFECTS = Object.freeze({
+  human: {
+    'militia-drill': { grants: grant({ action: null }), onUse: { militiaDrill: true } }
+  },
+  "blood-elf": {
+    "the-hunger-mastered": { grants: grant({ action: null, uses: uses(1, "arc") }), onUse: { restoreAllPower: true } }
+  },
+  "night-elf": {
+    "elune's-light": { grants: grant({ action: null }), onUse: { elunesLight: true } },
+    "elune's-regard": { automated: "inline", failedTestSuccess: { sl: 0, per: "arc" }, reason: "Actor.offerElunesRegard replaces a failed Test with success at SL 0 before consequences; the active GM spends its arc counter." }
+  },
   dwarf: {
     // 02 §5: *Climbing and **Difficult ground** cost you no extra movement*
     // (D-757). INLINE: the one terrain door reads `movementFactsFor` when it
@@ -386,6 +396,7 @@ export const RACE_TALENT_EFFECTS = Object.freeze({
     "pack-hobgoblin": { automated: "inline", carry: 2 }
   },
   tauren: {
+    'kodo-bond': { grants: grant({ action: null }), onUse: { kodoBond: true } },
     // 02 §5, tier 2: *Spend a Half-Action and 4 Momentum. Every enemy within 5 feet makes a
     // Reflex Resilience Test at a Standard DC for your tier — 12, 16, 20 or 24. On a failure
     // it is knocked **Prone*** (the B8a pass: it had no row, and the Standard DC for a tier
@@ -404,6 +415,7 @@ export const RACE_TALENT_EFFECTS = Object.freeze({
     }
   },
   troll: {
+    "zalazane's-lesson": { grants: grant({ action: null, uses: uses(1, "arc") }), onUse: { zalazane: true } },
     "da-voodoo": {
       grants: grant({ action: "half", uses: uses(1, "encounter") }),
       onUse: { sight: true, laysBane: { kind: "all", banes: 1, until: "next" } }
@@ -1223,7 +1235,7 @@ export const TALENT_EFFECTS = Object.freeze({
     // with a melee weapon in each hand, one Parry each turn costs no Reaction -
     // Bladeturn's door, counted on the fight's turn (`class-answers.mjs#turnMark`).
     // 04's words are drafted for the lead in `book-edits-2.md` (a).
-    "main-gauche": { freeReaction: { reaction: "parry", count: 1, per: "turn", needs: "dualMelee" }, reworked: "O-180" },
+    "main-gauche": { freeReaction: { reaction: "parry", count: "rank", per: "turn", needs: "dualMelee" }, reworked: "O-180" },
     // *Your Energy pool returns 1 more per rank at the start of your turn. Once a
     // round per rank, you may spend 2 Energy to gain 1 Combo Point* (D-773).
     "adrenaline": {
@@ -2148,7 +2160,7 @@ export const TALENT_EFFECTS = Object.freeze({
     // client where it is another's (`effects/sustain-steal.mjs`).
     "spellsteal": {
       modifies: mod("Counterspell", { steals: true, atRank: [{ rank: 2, transfers: true }] }),
-      gap: "rank 2's *you may Sustain that effect yourself instead* has no door: a Sustain, the effects it laid and the area it placed answer to the caster who cast it (D-724, D-756), and nothing moves one to another caster"
+      gap: "rank 2 transfers reviewed sustained effects, areas and record-only defenses; specialized Mind Control transfer still requires its targeting ruling and implementation. Remaining carrier and recovery acceptance is tracked in the automation audit's SPELLSTEAL.md."
     },
     // *Your Shape the Weave class feature Sustains 1 further effect per rank,
     // and the Mana each costs at the start of your turn is reduced by the number
@@ -2491,15 +2503,13 @@ export const TALENT_EFFECTS = Object.freeze({
     "moonfire": { spell: { names: ["Moonfire"], learn: true }, tick: { spells: ["Moonfire"], add: "rank" } },
     // *Each rank adds 1 to the Health it restores each turn* (D-771).
     "rejuvenation": { spell: { names: ["Rejuvenation"], learn: true }, tick: { spells: ["Rejuvenation"], add: "rank" } },
-    // *It strikes two creatures of your choice inside the area each turn
-    // rather than one* (D-771). 07's own strike - *one creature of your choice
-    // inside the area* at the start of the CASTER's turn - is the table's
-    // (`ticks.mjs#UNTICKED`'s casterChoice, the pack's reason), so the second
-    // creature is the table's with it: there is no door to widen.
+    // The caster-turn chooser now delivers the talent's two distinct targets.
+    // Keep the incomplete census disposition until Starweave's exact-area
+    // association and Sustain policy are settled and integrated.
     "starfall": {
       spell: { names: ["Starfall"], learn: true },
       automated: "none",
-      reason: "07's Starfall strikes a creature of the caster's choice at the caster's turn, which is the table's (the spell's own reason), so the second creature is the table's too"
+      reason: "Caster-turn target selection and damage are automated through the Starfall chooser; Starweave area/Sustain integration remains incomplete pending its rules decisions"
     },
     "starfire": { spell: { names: ["Starfire"], learn: true, damage: 1 } },
     // *After a Casting Test you make meets or exceeds SL 2, your next spell
@@ -2678,7 +2688,7 @@ export const TALENT_EFFECTS = Object.freeze({
     // last turn.* The damaged mark is the attacker's own flag; WHICH school
     // was dealt is not recorded, so the line comes checked and the table may
     // untick it.
-    "lunar-guidance": { damage: damage(["arcane", "nature"], "spell", { when: "damagedTarget" }) },
+    "lunar-guidance": { damage: damage(["arcane", "nature"], "spell", { when: "lunarTarget" }) },
     // *While in a Shapeshift form, your attacks add 1 damage per rank against
     // a target you are flanking.* The form is the actor's Shapeshift shape
     // (`AzerothActor#inShapeshiftForm`, D-769); flanking is the table's call
@@ -2706,6 +2716,7 @@ export const DAMAGE_LANES = Object.freeze(["attack", "spell"]);
 export const DAMAGE_FACTS = Object.freeze({
   // The attacker's own combatant flag, written where a blow is applied.
   damagedTarget: true,
+  lunarTarget: true,
   // Measured: exactly one enemy inside the roller's reach (06, D-669).
   engagedOne: true,
   // The bond (D-643).

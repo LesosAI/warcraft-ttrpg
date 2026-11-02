@@ -534,7 +534,12 @@ export async function leaveShapeControl(actor) {
     cost = leaveCost({ kind: shape.kind, inFight: true, swiftLeft: swift?.system?.uses?.value ?? 0 });
   }
   if (cost === "counter") {
-    await swift.update({ "system.uses.value": Math.max(0, (swift.system.uses.value ?? 1) - 1) });
+    const remaining = Math.max(0, (swift.system.uses.value ?? 1) - 1);
+    await swift.update({ "system.uses.value": remaining });
+    if (actor.items.get(swift.id) !== swift || swift.system.uses.value !== remaining) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Shape.SwiftPaymentUnconfirmed"));
+      return null;
+    }
     ui.notifications?.info(game.i18n.format("AZEROTH.Shape.LeftSwift", { name: actor.name, form: shapeLabel(shape), talent: swift.name }));
     // *... and your next spell that turn costs 2 Mana less* (04's Predator's
     // Swiftness, D-771): laid where the counter is spent, held to this turn.

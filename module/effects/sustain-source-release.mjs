@@ -3,6 +3,7 @@ import { suspendSustainTransferEffect } from "../rules/sustain-transfer-suspensi
 import { iceBlockFor } from "../rules/ice-block.mjs";
 import { dispersionFor } from "../rules/dispersion.mjs";
 import { hasTransferCarrierPlan } from "../rules/sustain-record-carrier.mjs";
+import { sustainRegionStagePlans } from "../rules/sustain-region-stage-plans.mjs";
 
 const scope = "azeroth-rpg";
 const stable = value => Array.isArray(value) ? value.map(stable) : value && typeof value === "object"
@@ -13,11 +14,16 @@ const same = (a, b) => JSON.stringify(stable(a)) === JSON.stringify(stable(b));
  * recipient stays suspended until the coordinator durably completes and releases
  * the transaction. No endSustain call: it would also destroy the relocated cast. */
 export async function releaseSustainTransferSource({ plan, receipt, validate } = {}) {
+  const regionPlan = plan?.inventory?.regions?.length || plan?.regionTransfers?.length
+    ? sustainRegionStagePlans(plan) : { ok: true, regions: [] };
+  const regionsOnly = regionPlan.ok && regionPlan.regions.length > 0 && plan?.relocation?.ok
+    && Array.isArray(plan.relocation.moves) && plan.relocation.moves.length === 0
+    && Array.isArray(plan.relocation.removals) && plan.relocation.removals.length === 0;
   if (typeof validate !== "function" || receipt?.version !== 1 || receipt.state !== "claimed"
     || receipt.attempted !== "releaseSource" || !same(receipt.completed, ["holdRecipient", "relocateCarriers"])
     || !["casterUuid", "recipientUuid", "cast", "transactionId"].every(key => typeof plan?.[key] === "string"
       && plan[key].length > 0 && receipt[key] === plan[key]) || plan.casterUuid === plan.recipientUuid
-    || !hasTransferCarrierPlan(plan)) {
+    || !regionPlan.ok || (!hasTransferCarrierPlan(plan) && !regionsOnly)) {
     throw Error("Invalid source release stage");
   }
   plan = structuredClone(plan); receipt = structuredClone(receipt);
@@ -56,6 +62,13 @@ export async function releaseSustainTransferSource({ plan, receipt, validate } =
         || !same(effect.toObject(), data)) throw Error("Transferred carrier changed");
     }
     if (plan.relocation.removals.some(row => fromUuidSync(row.uuid))) throw Error("Original carrier remains");
+    for (const row of regionPlan.regions) {
+      if (fromUuidSync(row.original.uuid)) throw Error("Original Region remains");
+      const region = fromUuidSync(row.destination.uuid);
+      if (region?.documentName !== 'Region' || region.parent?.uuid !== row.destination.parentUuid
+        || !same({ ...region.toObject(), uuid: region.uuid, parentUuid: region.parent.uuid }, row.destination))
+        throw Error("Transferred Region changed");
+    }
   };
   await check();
   const retained = lists[0].filter(entry => entry.cast !== plan.cast);

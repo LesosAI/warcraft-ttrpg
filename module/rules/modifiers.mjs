@@ -162,6 +162,7 @@ export function situationalModifiers({
   targetStatuses = [],
   lesserInvisible = false,
   targetLesserInvisible = false,
+  targetMirrorImages = false,
   range = null,
   rangeBand = null,
   outOfReachNote = null,
@@ -230,6 +231,7 @@ export function situationalModifiers({
   const auto = (id, cost) => push(automatic, id, cost, true);
   const judge = (id, cost) => push(judgement, id, cost, false);
   const isTest = kind === "skill" || kind === "attack" || kind === "casting";
+  if(targetMirrorImages===true && (kind==='attack'||kind==='casting'))auto('targetMirrorImages',{banes:1});
   if (untrained.length) auto("untrained", { banes: 1, name: untrained.join(", ") });
 
   // Lesser Invisibility uses 07's defensive penalty, not an attacker's

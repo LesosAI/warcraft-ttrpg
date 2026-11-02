@@ -326,7 +326,8 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
         ? { value: stored, total: stored + ability.bonus, mod: abilityModifier(stored + ability.bonus) + delta }
         : null;
     }
-    this.spellpower = { ...worn.spellpower };
+    // Final-phase ADD changes need a numeric base even for an untrained school.
+    this.spellpower = { ...Object.fromEntries(Object.keys(AZEROTH.schools).map(key => [key, 0])), ...worn.spellpower };
     this.skillBoons = worn.boons;
 
     // ---- what the roll dialog reads off the ROLLER (06 §6, D-693) ----------

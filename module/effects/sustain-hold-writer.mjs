@@ -3,6 +3,8 @@ import { suspendSustainTransferEffect } from "../rules/sustain-transfer-suspensi
 import { iceBlockFor } from "../rules/ice-block.mjs";
 import { dispersionFor } from "../rules/dispersion.mjs";
 import { hasTransferCarrierPlan } from "../rules/sustain-record-carrier.mjs";
+import { sustainRegionStagePlans } from '../rules/sustain-region-stage-plans.mjs';
+import { writeSustainRegionHold } from './sustain-region-hold-writer.mjs';
 
 const scope = "azeroth-rpg";
 const stable = value => Array.isArray(value) ? value.map(stable) : value && typeof value === "object"
@@ -14,14 +16,16 @@ const snapshot = effect => ({ ...effect.toObject(), uuid: effect.uuid, parentUui
  * Capacity replacement needs its own durable ending stage; refuse it here rather
  * than removing an existing spell without tracking its effects and upkeep. */
 export async function writeSustainTransferHolds({ plan, receipt, validate } = {}) {
+  const regionPlan = plan?.inventory?.regions?.length || plan?.regionTransfers?.length
+    ? sustainRegionStagePlans(plan) : {ok:true,regions:[]};
   if (typeof validate !== "function" || receipt?.version !== 1 || receipt.state !== "claimed"
     || receipt.attempted !== "holdRecipient" || !same(receipt.completed, [])
     || !["casterUuid", "recipientUuid", "cast", "transactionId"].every(key => typeof plan?.[key] === "string"
       && plan[key].length > 0 && receipt[key] === plan[key]) || plan.casterUuid === plan.recipientUuid
     || !plan.inventory?.ok || !plan.capacity?.ok || !Array.isArray(plan.capacity.retained)
     || !Array.isArray(plan.capacity.dropped) || plan.capacity.dropped.length
-    || !Array.isArray(plan.inventory.effects) || (!plan.inventory.effects.length && !hasTransferCarrierPlan(plan))
-    || !Array.isArray(plan.inventory.regions) || plan.inventory.regions.length
+    || !Array.isArray(plan.inventory.effects) || (!plan.inventory.effects.length && !hasTransferCarrierPlan(plan) && !regionPlan.regions?.length)
+    || !Array.isArray(plan.inventory.regions) || !regionPlan.ok
     || plan.inventory.casterUuid !== plan.casterUuid || plan.inventory.cast !== plan.cast
     || plan.recipientEntry?.cast !== plan.cast) throw Error("Invalid transfer hold plan");
   plan = structuredClone(plan); receipt = structuredClone(receipt);
@@ -44,7 +48,8 @@ export async function writeSustainTransferHolds({ plan, receipt, validate } = {}
     if (!result.ok) throw Error("Cannot suspend transfer carrier");
     patches.set(row.uuid, result.patch);
   }
-  const check = async () => {
+  const regions = new Map(regionPlan.regions.map(row=>[row.original.uuid,row.original]));
+  const check = async (skipRegion = null) => {
     if (await validate() !== true) throw Error("Transfer claim changed");
     if (!game.user?.isGM || game.users?.activeGM?.id !== game.user.id) throw Error("Transfer authority changed");
     for (const [index, actor] of actors.entries()) {
@@ -55,8 +60,22 @@ export async function writeSustainTransferHolds({ plan, receipt, validate } = {}
       const effect = fromUuidSync(uuid);
       if (effect?.documentName !== "ActiveEffect" || !same(snapshot(effect), row)) throw Error("Transfer carrier changed");
     }
+    for(const [uuid,row] of regions) {
+      if(uuid===skipRegion)continue;
+      const region=fromUuidSync(uuid);
+      if(region?.documentName!=='Region'||!same(snapshot(region),row))throw Error('Transfer Region changed');
+    }
+    for(const row of regionPlan.regions) if(fromUuidSync(row.destination.uuid))throw Error('Transfer Region destination occupied');
   };
   await check();
+  // Mark Regions inert before changing held records. The inner writer verifies
+  // its own intermediate snapshots; the outer check covers every other carrier.
+  for(const row of regionPlan.regions) {
+    const result=await writeSustainRegionHold({region:row.original,destinationUuid:row.destination.uuid,receipt,
+      validate:async()=>{await check(row.original.uuid);return true;}});
+    if(!same(result.snapshot,row.held))throw Error('Unconfirmed Region hold');
+    regions.set(row.original.uuid,row.held);await check();
+  }
   for (const [index, actor] of actors.entries()) {
     const next = index === 0 ? lists[0].map(entry => entry.cast === plan.cast ? held[0].entry : entry)
       : [...lists[1], held[1].entry];
@@ -69,9 +88,9 @@ export async function writeSustainTransferHolds({ plan, receipt, validate } = {}
     await check();
     await fromUuidSync(uuid).update(patch);
     const row = effects.get(uuid);
-    effects.set(uuid, { ...row, disabled: true, flags: { ...row.flags,
+    effects.set(uuid, { ...row, ...(patch.origin ? { origin: patch.origin } : {}), disabled: true, flags: { ...row.flags,
       [scope]: { ...row.flags[scope], sustainTransfer: patch[`flags.${scope}.sustainTransfer`] } } });
     await check();
   }
-  return { casterEntry: held[0].entry, recipientEntry: held[1].entry, suspended: [...effects.keys()] };
+  return { casterEntry: held[0].entry, recipientEntry: held[1].entry, suspended: [...effects.keys(),...regions.keys()] };
 }

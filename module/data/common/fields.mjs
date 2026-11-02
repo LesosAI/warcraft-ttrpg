@@ -93,13 +93,14 @@ export function traitsField() {
 /**
  * How often a thing may be used between refreshes (D-612, D-623): the uses
  * in hand, the maximum, and what restores them - a Short Rest, a Long Rest
- * or the encounter's end. `per` null means unlimited.
+ * or the encounter's end. Story-arc uses require an explicit campaign reset;
+ * ordinary rests never restore them. `per` null means unlimited.
  */
 export function usesField() {
   return new fields.SchemaField({
     value: new fields.NumberField({ required: true, integer: true, initial: 0, min: 0 }),
     max: new fields.NumberField({ required: true, integer: true, initial: 0, min: 0 }),
     per: new fields.StringField({ required: false, nullable: true, blank: false, initial: null,
-      choices: ["short", "long", "encounter"] })
+      choices: ["short", "long", "encounter", "arc"] })
   });
 }

@@ -18,8 +18,10 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+import { mirrorImageBanes } from "../rules/mirror-image.mjs";
 import { untrainedForRoll } from "../rules/equipment-training.mjs";
-import { signatureSkillChoices } from "../rules/signature-skill-choices.mjs";
+import { signatureSkillChoices, signatureHiddenChoices } from "../rules/signature-skill-choices.mjs";
+import { militiaDrillChoice, militiaDrillSelection, MILITIA_DRILL_FLAG } from "../rules/militia-drill.mjs";
 import { symbiosisSkillPartners } from "../effects/symbiosis-skills.mjs";
 import { innerFireHitSnapshot } from "../effects/inner-fire-hit.mjs";
 import { buffetStacks } from "../rules/flame-buffet.mjs";
@@ -145,6 +147,7 @@ export function targetSnapshots(targets = game.user?.targets ?? []) {
       // And what its own Deterrence lays on attacks against it (04: *Attacks
       // against you take a Bane per rank until the start of your next turn*; D-773).
       deterred: deterrencesOf(actor),
+      mirrorImageBanes: s.health?.value>0 ? mirrorImageBanes(actor.getFlag("azeroth-rpg","sustaining")) : 0,
       // **WHETHER ITS SPEED IS OTHERWISE REDUCED** (04's Shatter, D-775): a laid
       // effect lowering `system.speed` - a blow's drop, an area's (MY READING).
       speedDropped: speedDroppedOf(actor),
@@ -300,6 +303,7 @@ function snapshotOf(actor, { kind, skill, targets, resilience = null, heavy = fa
     armorBanes: s.armorBanes ?? [],
     targetStatuses: targets[0]?.statuses ?? [],
     targetLesserInvisible: targets[0]?.lesserInvisible === true,
+    targetMirrorImages: (targets[0]?.mirrorImageBanes??0)>0,
     lesserInvisible: facts.lesserInvisible === true,
     // 06: what the distance costs, where the tokens let it be measured (D-669).
     range,
@@ -577,8 +581,11 @@ export function prepareRoll(actor, given) {
     test.kind ?? "skill"
   );
   situational.judgement.push(...reminders.lines);
+  situational.judgement.push(...militiaDrillChoice(actor.getFlag?.('azeroth-rpg', MILITIA_DRILL_FLAG), test.kind));
   situational.judgement.push(...signatureSkillChoices({kind:test.kind,skill:spec.skill,
     signatures:actor.system?.signatureEffects?.scalingHitDamage??[]}));
+  situational.judgement.push(...signatureHiddenChoices({...spec,kind:test.kind,
+    targets:spec.targets??(spec.target?[spec.target]:[]),signatures:actor.system?.signatureEffects?.scalingHitDamage??[]}));
   // **THE OPENING, MEASURED** (02 §7, D-773): where the door found the target
   // under it, the line is automatic and named, and the feature's own reminder -
   // the table's line - is not raised beside it to be ticked twice.
@@ -1147,6 +1154,7 @@ export async function promptRoll(actor, spec) {
       default: true,
       callback: (event, button) => {
         const choice = readForm(button.form, current().p);
+        if (!militiaDrillSelection(actor.getFlag?.('azeroth-rpg', MILITIA_DRILL_FLAG), choice.chosen, spec.kind).ok) return null;
         return current().p.extraWeapons && !choice.extraWeapon ? null : choice;
       }
     }],
@@ -1157,7 +1165,8 @@ export async function promptRoll(actor, spec) {
         const shown = current();
         const choice = readForm(form, shown.p);
         const rollButton = form.querySelector('button[data-action="roll"]');
-        if (rollButton) rollButton.disabled = Boolean(shown.p.extraWeapons) && !choice.extraWeapon;
+        if (rollButton) rollButton.disabled = (Boolean(shown.p.extraWeapons) && !choice.extraWeapon)
+          || !militiaDrillSelection(actor.getFlag?.('azeroth-rpg', MILITIA_DRILL_FLAG), choice.chosen, spec.kind).ok;
         const preview = form.querySelector(".azeroth-dialog-preview");
         // Storm Bolt ticked on a hammer that throws already: the preview AND the list of
         // lines beneath it on Strength - the lines the roll takes (the B8a pass).

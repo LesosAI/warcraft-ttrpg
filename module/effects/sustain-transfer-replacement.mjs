@@ -1,5 +1,6 @@
 import { readSustainTransferInventory } from "./sustain-transfer-inventory.mjs";
 import { reconcileSustainedSpells } from "./sustained-spells.mjs";
+import { sweepAreas } from "../canvas/sustained-areas.mjs";
 
 const scope = "azeroth-rpg";
 const stable = value => Array.isArray(value) ? value.map(stable) : value && typeof value === "object"
@@ -32,6 +33,21 @@ export async function replaceSustainsForTransfer({ mage, plan, validate, save })
     await check();
     await reconcileSustainedSpells();
     await check();
+    // Await the same serialized, marked cleanup used by ordinary Sustain
+    // endings. Restrict it to the inventoried Regions, including other scenes.
+    for (const region of row.regions) {
+      await check();
+      const current = fromUuidSync(region.uuid);
+      if (!current) continue;
+      const flags = current.flags?.[scope];
+      if (flags?.cast !== row.cast || flags.caster !== mage.uuid || flags.sustained !== true) {
+        throw Error("Replacement Region identity changed");
+      }
+      const scene = fromUuidSync(region.parentUuid);
+      if (!scene) throw Error("Replacement scene missing");
+      await sweepAreas({ scenes: [scene], caster: mage.uuid, ids: [region._id] });
+      await check();
+    }
     if ([...row.effects, ...row.regions].some(doc => fromUuidSync(doc.uuid))) throw Error("Replacement cleanup unconfirmed");
     await save({ state: "pending", attempted: null, completed: [...completed], inventories: replacements });
   }

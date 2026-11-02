@@ -22,6 +22,7 @@ import { hasCharges } from "../rules/containers.mjs";
 import { isWornSlot } from "../rules/worn.mjs";
 import { rarityClass } from "../helpers/rarity.mjs";
 import { reloadStatus } from "./reload.mjs";
+import { dispersionRefusal } from "../rules/dispersion.mjs";
 
 /**
  * The three subtypes that are things rather than progression. Private: an
@@ -41,6 +42,7 @@ const PHYSICAL = Object.freeze(["weapon", "armor", "gear"]);
  */
 export function carriedRows(actor) {
   const kinds = new Set(PHYSICAL);
+  const useRefusal = dispersionRefusal(actor, "gear");
   return [...(actor?.items ?? [])]
     .filter(i => kinds.has(i.type))
     .map(item => ({
@@ -63,6 +65,7 @@ export function carriedRows(actor) {
       rarityClass: rarityClass(item.system.rarity),
       // What Use does, where 08 gives the thing one (D-668).
       usable: hasUse(item.system.use),
+      useRefusal,
       quantity: item.type === "gear" ? (item.system.quantity ?? null) : null,
       // A stone, an oil or a poison laid on this thing, while it lasts (D-670).
       coating: item.getFlag("azeroth-rpg", "coating")?.name ?? null,

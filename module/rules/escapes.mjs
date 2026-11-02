@@ -35,6 +35,7 @@
  * effect carries one DC: **the highest any layer named** (the lead, 2026-10-22:
  * *"Highest DC wins"*; `higherShedDc`), where it was the last layer's.
  */
+import { sustainTransferPending } from "./sustain-transfer-suspension.mjs";
 export const SHED_DC_FLAG = "shedDc";
 
 /** 02's Gnome Escape Artist changes the action cost, never the escape Test. */
@@ -290,12 +291,12 @@ export function cleanEscape(raw) {
   if (!raw || typeof raw !== "object") return null;
   // Compel has its own Charmed carrier and an explicit end-turn Spirit Test.
   // This exception does not give every Charmed effect a repeat Test.
-  const compel = raw.identifier === "compel" && raw.condition === "charmed"
+  const compel = ["compel", "dominate"].includes(raw.identifier) && raw.condition === "charmed"
     && raw.on === "turnEnd" && raw.resilience === "spirit";
   if ((!ESCAPE_CONDITIONS.includes(raw.condition) && !compel) || !ESCAPE_ON.includes(raw.on) || !RESILIENCES.includes(raw.resilience)) return null;
   const dc = Math.trunc(Number(raw.dc));
   return {
-    ...(compel ? { identifier: "compel" } : {}),
+    ...(compel ? { identifier: raw.identifier } : {}),
     condition: raw.condition,
     on: raw.on,
     resilience: raw.resilience,
@@ -319,13 +320,23 @@ export function cleanEscape(raw) {
  * @param {"action"|"turnEnd"} on
  * @returns {Array<{id: string, escape: object}>}
  */
+export function escapeOfEffect(effect) {
+  if (!effect || effect.disabled === true || effect.active === false || sustainTransferPending(effect)) return null;
+  const escape = cleanEscape(effect.flags?.["azeroth-rpg"]?.[ESCAPE_FLAG]);
+  return escape && [...(effect.statuses ?? [])].includes(escape.condition) ? escape : null;
+}
+
+export function escapeEffectMatches(effect, expected) {
+  const escape = escapeOfEffect(effect);
+  return Boolean(escape && expected && JSON.stringify(escape) === JSON.stringify(expected));
+}
+
 export function escapesDue(effects = [], on = "turnEnd") {
   const out = [];
   for (const e of effects ?? []) {
-    if (!e?.id || e.disabled === true) continue;
-    const escape = cleanEscape(e.flags?.["azeroth-rpg"]?.[ESCAPE_FLAG] ?? null);
+    if (!e?.id) continue;
+    const escape = escapeOfEffect(e);
     if (!escape || escape.on !== on) continue;
-    if (![...(e.statuses ?? [])].includes(escape.condition)) continue;
     out.push({ id: String(e.id), escape });
   }
   return out.sort((a, b) => a.id.localeCompare(b.id));

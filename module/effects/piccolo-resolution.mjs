@@ -68,8 +68,9 @@ export async function resolvePiccolo({messageUuid,index}={}, {user}={}){
     if(!valid()||card?.author?.id!==user.id||card?.speaker?.actor!==target.id||flags?.kind!=='resilience'
       ||flags.resilience!=='spirit'||link?.messageId!==message.id||link.cast!==key||link.index!==index
       ||link.actorId!==target.id||link.sceneId!==(ref.sceneId??null)||link.tokenId!==(ref.tokenId??null)
-      ||link.identifier!==PICCOLO_IDENTIFIER||!Number.isFinite(roll?.total))return {ok:false,reason:'saveUncertain'};
-    const result=piccoloResistance(expected,{targetUuid:target.uuid,total:roll.total});
+      ||link.identifier!==PICCOLO_IDENTIFIER||!Number.isFinite(roll?.total)
+      ||roll?.options?.dc!==expected.dc||typeof roll?.outcome?.success!=='boolean')return {ok:false,reason:'saveUncertain'};
+    const result=piccoloResistance(expected,{targetUuid:target.uuid,total:roll.total,success:roll.outcome.success});
     if(!result)return {ok:false,reason:'resistance'};
     await save({state:'applying',save:{uuid:card.uuid,total:roll.total,passed:result.passed}});
     let effect=null;

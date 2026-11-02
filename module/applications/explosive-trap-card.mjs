@@ -46,7 +46,7 @@ export function showExplosiveTrapState(message, html) {
       if (button) row.append(button);
     } else {
       const text = document.createElement("span");
-      text.textContent = words(claim?.phase === "complete" ? "Complete" : claim ? "Review" : "Unavailable", {
+      text.textContent = words(claim?.phase === "complete" ? "Complete" : claim?.phase === "reviewed" ? "Reviewed" : claim ? "Review" : "Unavailable", {
         name: actor.name, damage: claim?.damage?.damage ?? 0 }); row.append(text);
     }
     section.append(row);

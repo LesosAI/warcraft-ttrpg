@@ -595,7 +595,7 @@ export function readyEntry({ trigger = "", action = "", round = null, turn = nul
 export function canReact(key, {
   reactionsLeft = 1, inFight = true, alreadyReacted = false, meleeWeapons = [], shields = [],
   attacks = [], leftReach = true, readied = null, classNames = [], pools = [], free = {},
-  unanswered = false, lostToBlow = false, spiritRealm = false, noOpportunity = false, disoriented = false, asleep = false, phaseShifted = false, seduced = false, reactionBarred = false, iceBlocked = false, dispersed = false
+  unanswered = false, cannotParryOrBlock = false, lostToBlow = false, spiritRealm = false, noOpportunity = false, disoriented = false, asleep = false, phaseShifted = false, seduced = false, reactionBarred = false, iceBlocked = false, dispersed = false
 } = {}) {
   const row = REACTIONS[key] ?? null;
   if (!row) return { ok: false, reason: "AZEROTH.Reaction.Refuse.NoSuch", with: null };
@@ -611,6 +611,8 @@ export function canReact(key, {
   // *No creature may take a Reaction against you* (door 14): before anything else
   // is asked, because nothing the reactor holds would let it.
   if (unanswered === true) return { ok: false, reason: UNANSWERED_REFUSAL, with: null };
+  if (cannotParryOrBlock === true && ['parry','block'].includes(key))
+    return { ok: false, reason: 'AZEROTH.Reaction.Refuse.Unparryable', with: null };
   // *You cannot touch the living world* (06 §10; door 10): a spirit answers no blow.
   if (spiritRealm === true) return { ok: false, reason: "AZEROTH.Spirit.Refuse.Reaction", with: null };
   // *Unable to make Opportunity Attacks while it is held* (07's Nature's Grasp; the B9a pass).

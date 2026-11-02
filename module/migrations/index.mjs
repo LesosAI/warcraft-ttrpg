@@ -58,6 +58,7 @@ import * as v01233 from "./0.12.33-blood-pact-cost.mjs";
 import * as v01234 from "./0.12.34-miracle-text.mjs";
 import * as v01235 from "./0.12.35-searing-fire.mjs";
 import * as v01236 from "./0.12.36-restorative-potion.mjs";
+import * as v01259 from "./0.12.59-consumable-rulings.mjs";
 import * as v01237 from "./0.12.37-chromatic-flask.mjs";
 import * as v01238 from "./0.12.38-signature-skill.mjs";
 import * as v01239 from "./0.12.39-signature-casting.mjs";
@@ -76,6 +77,19 @@ import * as v01251 from "./0.12.51-approved-piccolo.mjs";
 import * as v01252 from "./0.12.52-approved-jangthraze.mjs";
 import * as v01253 from "./0.12.53-approved-helmet.mjs";
 import * as v01254 from "./0.12.54-approved-idols.mjs";
+import * as v01255 from "./0.12.55-racial-arc-uses.mjs";
+import * as v01256 from "./0.12.56-approved-racial-text.mjs";
+import * as v01257 from "./0.12.57-militia-groups.mjs";
+import * as v01258 from "./0.12.58-racial-clarifications.mjs";
+import * as v01260 from './0.12.60-shaman-rulings.mjs';
+import * as v01261 from './0.12.61-approved-band.mjs';
+import * as v01262 from './0.12.62-parry-demon-rulings.mjs';
+import * as v01263 from './0.12.63-mind-control-sustain.mjs';
+import * as v01264 from './0.12.64-racial-arc-followup.mjs';
+import * as v01265 from './0.12.65-pimgib-fallback-text.mjs';
+import * as v01266 from './0.12.66-blueprint-expiry-text.mjs';
+import * as v01267 from './0.12.67-mountain-lion-text.mjs';
+import * as v01268 from './0.12.68-reviewed-ability-icons.mjs';
 import { forgetPacks } from "./walk.mjs";
 
 // Ordered oldest to newest. Add new entries at the end.
@@ -201,7 +215,21 @@ const CHAIN = [
   { version: "0.12.51", module: v01251 },
   { version: "0.12.52", module: v01252 },
   { version: "0.12.53", module: v01253 },
-  { version: "0.12.54", module: v01254 }
+  { version: "0.12.54", module: v01254 },
+  { version: "0.12.55", module: v01255 },
+  { version: "0.12.56", module: v01256 },
+  { version: "0.12.57", module: v01257 },
+  { version: "0.12.58", module: v01258 },
+  { version: "0.12.59", module: v01259 },
+  { version: "0.12.60", module: v01260 },
+  { version: "0.12.61", module: v01261 },
+  { version: "0.12.62", module: v01262 },
+  { version: "0.12.63", module: v01263 },
+  { version: "0.12.64", module: v01264 },
+  { version: "0.12.65", module: v01265 },
+  { version: "0.12.66", module: v01266 },
+  { version: "0.12.67", module: v01267 },
+  { version: "0.12.68", module: v01268 }
 ];
 
 /**

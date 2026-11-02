@@ -1,0 +1,6 @@
+<p>{{localize "AZEROTH.HungerMastered.ReviewExplain"}}</p>
+<select name="attempt" aria-label="{{localize 'AZEROTH.HungerMastered.ReviewTitle'}}">
+  {{#each rows}}<option value="{{index}}">{{name}}</option>{{/each}}
+</select>
+{{#each rows}}<div data-attempt="{{index}}"><pre>{{details}}</pre></div>{{/each}}
+<label><input type="checkbox" name="acknowledged"> {{localize "AZEROTH.HungerMastered.ReviewAcknowledge"}}</label>

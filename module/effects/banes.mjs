@@ -40,6 +40,15 @@ import { LAID_BANE_FLAG, LAID_BOON_FLAG, baneSpentBy, boonSpentBy, cleanLaidBane
 import { untilEndOfNextTurn } from "./durations.mjs";
 import { sentinelRejectsTaunt } from "./sentinel-taunt.mjs";
 import { refuseIceBlockTarget } from "./ice-block-protection.mjs";
+import { bellowDeliveryRefusal } from './bellow-delivery.mjs';
+import { dispersionRefusal } from '../rules/dispersion.mjs';
+
+function refuseLaidTarget(actor) {
+  if (refuseIceBlockTarget(actor)) return true;
+  const reason = dispersionRefusal(actor, 'target');
+  if (reason) globalThis.ui?.notifications?.info?.(game.i18n.localize(reason));
+  return Boolean(reason);
+}
 
 export const LAY_BANE_QUERY = "azeroth-rpg.layBane";
 
@@ -145,8 +154,17 @@ function baneData({ victim, kind, banes, source, originUuid, lasting = false, ex
  * its own effect (D-657). Two different sources stack, and the dice ceiling
  * takes care of the arithmetic.
  */
-async function layHere({ victim, kind, banes, source, originUuid, lasting = false, except = null, only = null, span = null, stackGroup = null }) {
-  if (refuseIceBlockTarget(victim)) return null;
+async function layHere({ victim, kind, banes, source, originUuid, lasting = false, except = null, only = null, span = null, stackGroup = null, requiresHearing = false, bellowDelivery = null }) {
+  const hearingRefused = () => {
+    const reason = bellowDeliveryRefusal(victim, originUuid, bellowDelivery);
+    if (reason) throw new Error(game.i18n.format(reason === 'range' ? 'AZEROTH.Laid.TooFar'
+      : reason === 'hearing' ? 'AZEROTH.Laid.CannotHearDelivery' : 'AZEROTH.Reaction.Refuse.Gone',
+    { name: source, target: victim.name, feet: 20 }));
+    if (requiresHearing !== true || !victim.statuses?.has('deafened')) return false;
+    throw new Error(game.i18n.format('AZEROTH.Laid.CannotHearDelivery', { name: source, target: victim.name }));
+  };
+  hearingRefused();
+  if (refuseLaidTarget(victim)) return null;
   if (sentinelRejectsTaunt(victim, source)) return null;
   const row = cleanLaidBane({ kind, banes, source, lasting, except, only, stackGroup });
   if (!row) return null;
@@ -155,6 +173,10 @@ async function layHere({ victim, kind, banes, source, originUuid, lasting = fals
     return String(held.source ?? "") === row.source && (e.origin ?? null) === (originUuid ?? null);
   }).map(e => e.id);
   if (stale.length) await victim.deleteEmbeddedDocuments("ActiveEffect", stale);
+  hearingRefused();
+  if (refuseLaidTarget(victim) || sentinelRejectsTaunt(victim, source)) return null;
+  if (stale.some(id => (victim.effects ?? []).some(effect => effect.id === id)))
+    throw new Error(game.i18n.localize('AZEROTH.Laid.ReplacementUnconfirmed'));
   const [made] = await victim.createEmbeddedDocuments("ActiveEffect", [
     baneData({ victim, kind: row.kind, banes: row.banes, source: row.source, originUuid, lasting: row.lasting === true, except: row.except ?? null, only: row.only ?? null, span, stackGroup: row.stackGroup ?? null })
   ]);
@@ -209,7 +231,7 @@ export async function endBane({ victim = null, source = "", by = null } = {}) {
  * The GM-side handler. Throws with the reason, which travels back to the
  * caller as the refusal.
  */
-export async function layBaneQueryHandler({ victimUuid, kind, banes, source, originUuid, lasting = false, except = null, only = null, span = null, stackGroup = null, end = false } = {}, { user = null } = {}) {
+export async function layBaneQueryHandler({ victimUuid, kind, banes, source, originUuid, lasting = false, except = null, only = null, span = null, stackGroup = null, requiresHearing = false, bellowDelivery = null, end = false } = {}, { user = null } = {}) {
   const victim = await fromUuid(victimUuid);
   if (!victim || victim.documentName !== "Actor") throw new Error(game.i18n.localize("AZEROTH.Reaction.Refuse.Gone"));
   // The layer has to own what laid it; the victim is the GM's business.
@@ -227,7 +249,7 @@ export async function layBaneQueryHandler({ victimUuid, kind, banes, source, ori
     if (!originUuid) return { ended: 0 };
     return { ended: await endHere({ victim, source: String(source ?? ""), originUuid }) };
   }
-  const done = await layHere({ victim, kind, banes, source, originUuid, lasting: lasting === true, except, only, span, stackGroup });
+  const done = await layHere({ victim, kind, banes, source, originUuid, lasting: lasting === true, except, only, span, stackGroup, requiresHearing, bellowDelivery });
   if (!done) throw new Error(game.i18n.localize("AZEROTH.Reaction.Refuse.Unreadable"));
   return done;
 }
@@ -244,6 +266,7 @@ export async function layBaneQueryHandler({ victimUuid, kind, banes, source, ori
  * @param {number} o.banes
  * @param {string} o.source  what laid it, for the dialog's own line
  * @param {Actor|null} [o.by]  who laid it
+ * @param {boolean} [o.requiresHearing] refuse a Deafened recipient at delivery
  * @param {boolean} [o.lasting]  a span rather than a count (D-757): every Test
  *   of the kind until the effect's own clock runs out, and never spent
  * @param {string|null} [o.stackGroup] explicit non-stacking group, validated
@@ -256,15 +279,15 @@ export async function layBaneQueryHandler({ victimUuid, kind, banes, source, ori
  *   creature the Bane bears on (04's Feint: *the target's next attack against
  *   you*; D-773), spent only by an attack against it
  */
-export async function layBane({ victim, kind, banes, source = "", by = null, lasting = false, except = null, only = null, span = null, stackGroup = null } = {}) {
+export async function layBane({ victim, kind, banes, source = "", by = null, lasting = false, except = null, only = null, span = null, stackGroup = null, requiresHearing = false, bellowDelivery = null } = {}) {
   if (!victim) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.Reaction.Refuse.Gone"));
     return null;
   }
   const originUuid = by?.uuid ?? null;
-  const payload = { victimUuid: victim.uuid, kind, banes, source, originUuid, lasting: lasting === true, except, only, span, stackGroup };
+  const payload = { victimUuid: victim.uuid, kind, banes, source, originUuid, lasting: lasting === true, except, only, span, stackGroup, requiresHearing, bellowDelivery };
   try {
-    if (victim.isOwner) return await layHere({ victim, kind, banes, source, originUuid, lasting: lasting === true, except, only, span, stackGroup });
+    if (victim.isOwner) return await layHere({ victim, kind, banes, source, originUuid, lasting: lasting === true, except, only, span, stackGroup, requiresHearing, bellowDelivery });
     const gm = game.users.activeGM;
     // Its own words (the B1 fix run): it said *Binding needs a GM online*.
     if (!gm) throw new Error(game.i18n.localize("AZEROTH.Laid.BaneNoGM"));
@@ -336,7 +359,7 @@ function boonData({ kind, boons, source, originUuid, lasting = false, span = nul
 
 /** Lay it here; the caller has established this client may. A second from the same source replaces the first. */
 async function layBoonHere({ victim, kind, boons, source, originUuid, lasting = false, span = null, encounter = false }) {
-  if (refuseIceBlockTarget(victim)) return null;
+  if (refuseLaidTarget(victim)) return null;
   const row = cleanLaidBoon({ kind, boons, source, lasting: lasting || encounter });
   if (!row) return null;
   const stale = (victim.effects ?? []).filter(e => {
@@ -344,6 +367,9 @@ async function layBoonHere({ victim, kind, boons, source, originUuid, lasting = 
     return held && held.source === row.source && (e.origin ?? null) === (originUuid ?? null);
   }).map(e => e.id);
   if (stale.length) await victim.deleteEmbeddedDocuments("ActiveEffect", stale);
+  if (stale.some(id => (victim.effects ?? []).some(effect => effect.id === id)))
+    throw new Error(game.i18n.localize('AZEROTH.Laid.ReplacementUnconfirmed'));
+  if (refuseLaidTarget(victim)) return null;
   const [made] = await victim.createEmbeddedDocuments("ActiveEffect", [
     boonData({ kind: row.kind, boons: row.boons, source: row.source, originUuid, lasting: row.lasting === true, span, encounter: encounter === true })
   ]);

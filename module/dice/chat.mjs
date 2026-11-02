@@ -7,14 +7,20 @@
  */
 
 import { placeItemArea } from "../canvas/place.mjs";
+import {endTurnDamageStamp} from '../rules/end-turn-damage.mjs';
+import { areaTransferRefusal } from "../effects/pending-area-transfer.mjs";
+import { gadgetResistanceRequest, gadgetResistancePresses } from '../effects/gadget-resistance.mjs';
+import { reviewGadgetResistance, showGadgetRecovery } from '../applications/gadget-resistance-review.mjs';
 import { showConflagrateState, reviewConflagrate } from "../applications/conflagrate-review.mjs";
 import {requestCannonballSave,showCannonballState} from '../effects/cannonball-resolution.mjs';
+import {registerChatAuthorityHooks} from './chat-authority.mjs';
 import {requestPiccoloSave,showPiccoloState} from '../effects/piccolo-resolution.mjs';
 import {reviewPiccolo} from '../applications/piccolo-review.mjs';
 import {showJangthrazeUse,useJangthraze} from '../applications/signature-hit-use.mjs';
 import {showHelmetUse,useHelmet} from '../applications/helmet-hit-use.mjs';
 import {showHelmetState,requestHelmetSave} from '../effects/helmet-resolution.mjs';
 import {reviewCannonball} from '../applications/cannonball-review.mjs';
+import {reviewHelmet} from '../applications/helmet-review.mjs';
 import { showBloodPactSpellState, reviewBloodPactSpellCard } from "../applications/blood-pact-spell-card.mjs";
 import { showSoulLinkCreationState, reviewSoulLinkCreationCard } from "../applications/soul-link-card.mjs";
 import { showIceBlockCreationState, reviewIceBlockCreationCard } from "../applications/ice-block-card.mjs";
@@ -58,7 +64,7 @@ import { healAlly } from "../effects/gifts.mjs";
 // A card's talent press recorded where this client may not write the card (the
 // architect's review of D-774), and the judgement every door asks before a spend.
 import { cardPressUnrecordable, claimCardPress } from "../effects/card-presses.mjs";
-import { claimSnakeTrapCatch } from "../effects/snake-trap-catches.mjs";
+import { claimSnakeTrapCatch, finishSnakeTrapCatch, assertSnakeTrapDelivery } from "../effects/snake-trap-catches.mjs";
 import { snakeTrapCatchPlan } from "../rules/snake-trap-catches.mjs";
 import { snareOwnsCondition, snarePoisonEligible } from "../rules/snare-trigger.mjs";
 import { placeSnareFromCard } from "../effects/snare-placement.mjs";
@@ -83,6 +89,7 @@ import { sunderedChanges } from "../rules/maneuvers.mjs";
 import { applyCondition, clockRounds, minuteSpan, roundsOrClock, spellTiming, untilEndOfNextTurn, untilEndOfNextTurnOrRound, untilNextTurn } from "../effects/durations.mjs";
 // A heal over time's Ward, asked as it is laid (04's Nature's Ward, D-771).
 import { tickWardChanges, tickWardFor } from "../rules/talent-effects.mjs";
+import { HEALING_AREA_WARD, healingAreaWardStamp, isHealingWardArea } from "../rules/healing-area-ward.mjs";
 // Damage or healing laid on a creature at the start of each of its turns
 // (D-770): a spell's rides its Apply, a poison's its failed Test.
 import { hasTick, tickHasClock } from "../rules/ticks.mjs";
@@ -91,7 +98,7 @@ import { POOL_CHANGE_TYPE } from "../rules/pool-change.mjs";
 import { areaResultWords, areaTestName, recordAreaTest, recordResist, resisterOf, targetActorOf } from "./annotate.mjs";
 // Who acted (D-724) and who resisted (D-726), as the cards record them.
 import { sourceOf } from "../applications/roll-dialog.mjs";
-import { orderedResists, resistLink } from "../rules/records.mjs";
+import { orderedResists, resistLink, resistKey } from "../rules/records.mjs";
 // A timed area's span, counted in rounds (D-756).
 import { roundsIn } from "../rules/area-ticks.mjs";
 // What an area's Test lands, rolled through this card door (D-757), and the
@@ -109,7 +116,7 @@ import { UNDISPELLABLE_FLAG } from "../rules/dispel.mjs";
 import { STRUCK_TEST_FLAG, cleanStruckTest, struckRefusal } from "../rules/struck-tests.mjs";
 import { cleanForced } from "../rules/forced-movement.mjs";
 import { forceFromRegion, forceMove, forcedWords, regionCentreOf } from "../effects/forced-movement.mjs";
-import { ESCAPE_FLAG, SHED_DC_FLAG, cleanShedDc, cleanEscape, escapeRefusal, escapeAction } from "../rules/escapes.mjs";
+import { ESCAPE_FLAG, SHED_DC_FLAG, cleanShedDc, cleanEscape, escapeRefusal, escapeAction, escapeOfEffect, escapeEffectMatches } from "../rules/escapes.mjs";
 import { addSlowedFeet } from "../effects/speed-drop.mjs";
 // THE B6 FIX (the lead: *"Build it everywhere"*, *"Land automatically"*): the half a
 // passed Test leaves, what a card's Test governs, and Permafrost's feet on a Slowed a
@@ -165,6 +172,7 @@ function refuseWithdrawn(message, index, key) {
 }
 
 export function registerChatHooks() {
+  registerChatAuthorityHooks();
   Hooks.on("renderChatMessageHTML", (message, html) => {
     const card = html.querySelector(".azeroth-card");
     if (!card) return;
@@ -387,6 +395,7 @@ function hiddenFromReader(record) {
  * gated on ownership, which would take the result off the table it is for.
  */
 function showResists(message, html) {
+  showGadgetRecovery(message, html);
   const flags = message.flags?.["azeroth-rpg"] ?? {};
   // A spell's card, a feature's since its Test is recorded too (the B6 fix), and a creature's
   // ability's since the B8a2 pass - the one list (`rules/resisted.mjs#recordsResist`).
@@ -408,6 +417,15 @@ function showResists(message, html) {
       dc: record.dc ?? dash
     });
     line.append(label, said);
+    if (game.user.isGM && resistedGadget(flags) && Number.isInteger(record.index)) {
+      const original = html.querySelector('[data-action="resistTest"]');
+      if (original) {
+        const override = document.createElement('button'); override.type = 'button';
+        Object.assign(override.dataset, original.dataset, {action:'overrideGadgetResist', targetIndex:String(record.index)});
+        override.textContent = game.i18n.localize('AZEROTH.Card.GadgetResistOverride');
+        line.append(override);
+      }
+    }
     // **WHAT THE TEST CAME TO, IN WORDS** (the B6 fix; the lead: *"Build it everywhere"*,
     // *"Land automatically"*): a pass on a card whose damage halves on one takes half; a
     // failure names the conditions it landed - read off the creature when the Test was
@@ -524,6 +542,18 @@ function ownsActor(uuid) {
  * is exactly the silent no-op the audit exists to catch.
  */
 export const CARD_ACTIONS = {
+  touchEverburn: async (_button,message) => {
+    const {touchEverburn}=await import('../effects/everburn-touch.mjs');
+    const result=await touchEverburn(message);
+    if(!result.ok&&result.reason!=='cancelled')ui.notifications.warn(game.i18n.localize('AZEROTH.Everburn.TouchUnresolved'));
+    return result;
+  },
+  dismissEverburn: async (_button,message) => {
+    const {requestEverburnDismiss}=await import('../effects/everburn-dismiss.mjs');
+    const result=await requestEverburnDismiss(message);
+    if(!result.ok)ui.notifications.warn(game.i18n.localize('AZEROTH.Everburn.Unresolved'));
+    return result;
+  },
   cannonballSave: (_button,message) => requestCannonballSave(message),
   piccoloSave: (button,message) => requestPiccoloSave(message,Number(button.dataset.index)),
   reviewPiccolo: (button,message) => reviewPiccolo(message,Number(button.dataset.index)),
@@ -531,6 +561,7 @@ export const CARD_ACTIONS = {
   helmetUse: (button,message) => useHelmet(message,Number(button.dataset.index),button.dataset.itemId),
   helmetSave: (_button,message) => requestHelmetSave(message),
   reviewCannonball: (_button,message) => reviewCannonball(message),
+  reviewHelmet: (_button,message) => reviewHelmet(message),
   reviewChainLightningHit: (_button, message) => reviewChainLightningDamage(message),
   reviewAttackReaction: (_button, message) => reviewAttackReactionFromCard(message),
   reviewAttackTransfer: (_button, message) => reviewAttackTransferFromCard(message),
@@ -551,6 +582,19 @@ export const CARD_ACTIONS = {
   // D-616: the target's Test with the DC on the button, and the attack a
   // feature makes, both through the dialog.
   resistTest: (button, message) => resistTestFromCard(button, message),
+  reviewGadgetResistance: (button, message) => reviewGadgetResistance(message, button.dataset.claimKey),
+  overrideGadgetResist: async (button, message) => {
+    if (!game.user?.isGM || !resistedGadget(message.flags?.['azeroth-rpg'])) return null;
+    const confirmed = await foundry.applications.api.DialogV2.wait({
+      window:{title:game.i18n.localize('AZEROTH.Card.GadgetResistOverride')},
+      classes:['azeroth','azeroth-gadget-resist-override'],
+      content:`<p>${game.i18n.localize('AZEROTH.Card.GadgetResistOverrideHelp')}</p>`,rejectClose:false,
+      buttons:[{action:'confirm',label:game.i18n.localize('AZEROTH.Card.GadgetResistOverride'),callback:()=>true},
+        {action:'cancel',label:game.i18n.localize('AZEROTH.ChainLightning.Review.Cancel'),default:true,callback:()=>false}]
+    });
+    if (confirmed !== true || !game.user?.isGM) return null;
+    return resistTestFromCard(button,message,{gadgetOverride:true});
+  },
   attackFromCard: (button, message) => attackFromCard(button, message),
   // 06 §1's Off-Hand Attack, riding the blow this card records (D-711).
   offHandFromCard: (button, message) => offHandFromCard(button, message),
@@ -877,6 +921,7 @@ async function criticalInjuryFromCard(message) {
  */
 async function placeAreaFromCard(message) {
   const flags = message.flags?.["azeroth-rpg"] ?? {};
+  if(flags.identifier==='everburn'&&flags.everburnDismissed===true)return null;
   if (flags.kind === "feature" && flags.featureKey === "snare"
     && (flags.snarePlacement != null || flags.snareTrigger != null)) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.Snare.PlacementRefused"));
@@ -1032,7 +1077,9 @@ export function regionFlagsFromCard(message, actor, item) {
   return {
     cast: flags.cast ?? null,
     messageId: message?.id ?? null,
+    ...endTurnDamageStamp(flags,'area'),
     ...(flags.success===true&&flags.chosenHealingBonuses?.length?{signatureHealingCast:flags.cast}:{}),
+    ...(flags.success===true&&flags.chosenSignatureBonuses?.length?{signatureDamageCast:flags.cast,signatureDamageSpellUuid:flags.spellUuid??item?.uuid??null}:{}),
     identifier: flags.identifier ?? null,
     source,
     caster: flags.caster ?? actor?.uuid ?? null,
@@ -1191,7 +1238,7 @@ function casterTokenOf(recorded, actor) {
  * (`dice/annotate.mjs#recordAreaTest`), and what it lands landed only where the
  * record was written - so a second press anywhere, on any client, lands nothing.
  */
-async function resistTestFromCard(button, message) {
+async function resistTestFromCard(button, message, {gadgetOverride=false} = {}) {
   const resilience = button.dataset.resilience;
   const dc = Number(button.dataset.dc) || null;
   const flags0 = message.flags?.["azeroth-rpg"] ?? {};
@@ -1222,6 +1269,8 @@ async function resistTestFromCard(button, message) {
     return null;
   }
   const area = button.dataset.purpose === "area";
+  const gadget = !button.dataset.purpose && resistedGadget(flags0);
+  if (gadget && GADGET_RESIST_PRESSES.has(message.id)) return null;
   if (area) {
     const refused = areaTestRefusal(message);
     if (refused) {
@@ -1231,9 +1280,11 @@ async function resistTestFromCard(button, message) {
     AREA_PRESSES.add(message.id);
     button.disabled = true;
   }
+  if (gadget) GADGET_RESIST_PRESSES.add(message.id);
   try {
-    await rollResists(button, message, { resilience, dc, area });
+    await rollResists(button, message, { resilience, dc, area, gadgetOverride:gadgetOverride && game.user?.isGM === true });
   } finally {
+    if (gadget) GADGET_RESIST_PRESSES.delete(message.id);
     if (area) {
       AREA_PRESSES.delete(message.id);
       button.disabled = false;
@@ -1243,6 +1294,9 @@ async function resistTestFromCard(button, message) {
 
 /** The area cards a press is in flight on, on this client (`resistTestFromCard`). */
 const AREA_PRESSES = new Set();
+const GADGET_RESIST_PRESSES = gadgetResistancePresses;
+const resistedGadget = flags => flags?.kind === 'feature'
+  && ['discombobulator-ray','gnomish-universal-remote','gnomish-mind-control-cap'].some(key => flags.featureKey === key || flags.featureKey === `gadget:${key}`);
 
 /**
  * **A SUSTAINED SPELL LOST TO A FAILED TEST** (07's Earth Shock: *If it is holding a
@@ -1293,7 +1347,15 @@ const ESCAPE_PRESSES = new Set();
  *
  * @param {{actor: Actor, effect: ActiveEffect, escape: object, passed: boolean}} o
  */
+function currentEscape(actor, effect, escape) {
+  const current = actor.effects.get(effect?.id);
+  const valid = current === effect && escapeEffectMatches(current, escape);
+  if (!valid) ui.notifications?.warn(game.i18n.format("AZEROTH.Escape.NotHeld", { name: actor.name }));
+  return valid;
+}
+
 async function escapeOutcome({ actor, effect, escape, passed }) {
+  if (!currentEscape(actor, effect, escape)) return;
   const condition = game.i18n.localize(AZEROTH.conditions[escape.condition] ?? escape.condition);
   const lines = [];
   if (passed) {
@@ -1362,6 +1424,8 @@ function forcedFromOf(message, forced, scene) {
  * press of it still in flight on this client.
  */
 function areaTestRefusal(message) {
+  const transferRefusal = areaTransferRefusal(message.flags?.["azeroth-rpg"]?.area);
+  if (transferRefusal) return game.i18n.format(transferRefusal, { name: areaTestName(message) });
   const done = message.flags?.["azeroth-rpg"]?.areaResult ?? null;
   if (done) return game.i18n.format("AZEROTH.AreaTest.Already", areaResultWords(done));
   if (AREA_PRESSES.has(message.id)) return game.i18n.format("AZEROTH.AreaTest.Pending", { name: areaTestName(message) });
@@ -1390,7 +1454,7 @@ function areaTestLink(message, actor) {
 }
 
 /** Roll the card's Test for each resister and land what it lands (`resistTestFromCard`). */
-async function rollResists(button, message, { resilience, dc, area }) {
+async function rollResists(button, message, { resilience, dc, area, gadgetOverride=false }) {
   if (!button.dataset.purpose && snareOwnsCondition(message.flags?.["azeroth-rpg"], "entangled")) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.ExplosiveTrap.Refused")); return;
   }
@@ -1401,6 +1465,20 @@ async function rollResists(button, message, { resilience, dc, area }) {
   // Whoever posted the card: the Snare's maker, the poisoner, the companion's owner's hand.
   const maker = ChatMessage.getSpeakerActor(message.speaker);
   for (const { actor, link, source } of rollers) {
+    const gadgetDelivery = !purpose && resistedGadget(message.flags?.['azeroth-rpg']);
+    const gadgetPrevious = gadgetDelivery ? orderedResists(message.flags['azeroth-rpg'].resists)
+      .find(record => resisterOf(record)?.actor?.uuid === actor.uuid)?.resultId
+      ?? message.flags['azeroth-rpg'].gadgetResistClaims?.[resistKey(link)]?.resultId ?? null : null;
+    if (gadgetDelivery && message.flags['azeroth-rpg'].gadgetResistClaims?.[resistKey(link)]?.state === 'pending') {
+      ui.notifications?.warn(game.i18n.localize('AZEROTH.Card.GadgetResistPending'));
+      continue;
+    }
+    if (!purpose && resistedGadget(message.flags?.['azeroth-rpg']) && !gadgetOverride
+      && (message.flags['azeroth-rpg'].gadgetResistClaims?.[resistKey(link)]
+        || orderedResists(message.flags['azeroth-rpg'].resists).some(record => resisterOf(record)?.actor?.uuid === actor.uuid))) {
+      ui.notifications?.warn(game.i18n.localize('AZEROTH.Card.GadgetResistResolved'));
+      continue;
+    }
     const snakeTrap = purpose === "poison" && message.flags?.["azeroth-rpg"]?.kind === "feature"
       && message.flags["azeroth-rpg"].featureKey === "snare";
     if (snakeTrap && (!game.users?.activeGM || !actor.isOwner
@@ -1435,12 +1513,17 @@ async function rollResists(button, message, { resilience, dc, area }) {
     // pull clear of, and a turn with no action left cannot pay - asked of the
     // budget without spending it. The action is spent once the Test is confirmed
     // (the architect's review), so a dismissed dialog costs nothing.
+    let snareHeld = [];
+    const currentSnare = () => snareHeld.filter(effect => actor.effects.get(effect.id) === effect
+      && effect.active !== false && effect.flags?.['azeroth-rpg']?.[SNARE_FLAG]?.source === maker?.uuid);
     if (purpose === "snare") {
       const refused = snareEscapeRefusal({ entangled: snareHolds(activeFlagsOf(actor), maker?.uuid ?? null) });
       if (refused) {
         ui.notifications?.warn(game.i18n.format(refused, { name: actor.name }));
         continue;
       }
+      snareHeld = (actor.effects ?? []).filter(effect => effect.active !== false
+        && effect.flags?.['azeroth-rpg']?.[SNARE_FLAG]?.source === maker?.uuid);
       const short = game.system.azeroth.workflows.turnBudgetRefusal(actor, escapeAction(actor.takenTalents?.() ?? [], { condition: "entangled", action: SNARE.action }));
       if (short) {
         ui.notifications?.warn(game.i18n.format(short.reason, short.params ?? {}));
@@ -1488,8 +1571,8 @@ async function rollResists(button, message, { resilience, dc, area }) {
     let escapeHeld = null;
     if (purpose === "escape") {
       const effect = actor.effects.get(button.dataset.effectId ?? "") ?? null;
-      const escape = cleanEscape(effect?.flags?.["azeroth-rpg"]?.[ESCAPE_FLAG] ?? null);
-      const held = Boolean(effect && escape && effect.statuses?.has?.(escape.condition));
+      const escape = escapeOfEffect(effect);
+      const held = Boolean(effect && escape);
       const short = held && escape.on === "action" ? game.system.azeroth.workflows.turnBudgetRefusal(actor, escapeAction(actor.takenTalents?.() ?? [], escape)) : null;
       const refused = escapeRefusal({
         held, on: escape?.on ?? "turnEnd", budgetShort: Boolean(short),
@@ -1543,7 +1626,7 @@ async function rollResists(button, message, { resilience, dc, area }) {
     try {
       result = await resilienceWithDialog(actor, resilience, null, { dc: poisonHeld?.dc ?? dc, link: tie, source, against, ...(talentBanes ? { talentBanes } : {}), ...(talentBoons ? { talentBoons } : {}) });
       if (snakeTrap && typeof result?.rolls?.[0]?.outcome?.success === "boolean"
-        && !(await claimSnakeTrapCatch(message, actor))) {
+        && !(await claimSnakeTrapCatch(message, actor, result))) {
         ui.notifications?.warn(game.i18n.localize("AZEROTH.SnakeTrap.CatchRefused"));
         continue;
       }
@@ -1562,6 +1645,7 @@ async function rollResists(button, message, { resilience, dc, area }) {
       // action spends it (the Snare's rule); a budget another door emptied in
       // between refuses in its own words, the press recorded and nothing landed.
       if (purpose === "escape" && result) {
+        if (!currentEscape(actor, escapeHeld.effect, escapeHeld.escape)) continue;
         // The talent or budget may change while the popup is open. Refuse an
         // unaffordable new cost before consuming this prompt's one press.
         const action = escapeAction(actor.takenTalents?.() ?? [], escapeHeld.escape);
@@ -1576,14 +1660,30 @@ async function rollResists(button, message, { resilience, dc, area }) {
           ui.notifications?.warn(game.i18n.format(why, { name: actor.name }));
           continue;
         }
+        if (!currentEscape(actor, escapeHeld.effect, escapeHeld.escape)) continue;
         if (escapeHeld.escape.on === "action" && !(await game.system.azeroth.workflows.spendTurnBudget(actor, escapeAction(actor.takenTalents?.() ?? [], escapeHeld.escape)))) continue;
       }
     } finally {
       if (escapeHeld || poisonHeld) ESCAPE_PRESSES.delete(message.id);
     }
+    if (gadgetDelivery) {
+      if (!result) continue;
+      const claimed = await gadgetResistanceRequest({ messageId: message.id, resultId: result.id,
+        override: gadgetOverride, expected: gadgetPrevious });
+      if (!claimed.ok) {
+        ui.notifications?.warn(game.i18n.localize('AZEROTH.Card.GadgetResistPending'));
+        continue;
+      }
+    }
     // The Snare's action, now that the Test is confirmed; a budget another press
     // emptied in the meantime refuses in its own words and nothing lands.
-    if (purpose === "snare" && result && !(await game.system.azeroth.workflows.spendTurnBudget(actor, escapeAction(actor.takenTalents?.() ?? [], { condition: "entangled", action: SNARE.action })))) continue;
+    if (purpose === "snare" && result) {
+      if (!currentSnare().length) {
+        ui.notifications?.warn(game.i18n.format('AZEROTH.Snare.NotCaught', {name:actor.name}));
+        continue;
+      }
+      if (!(await game.system.azeroth.workflows.spendTurnBudget(actor, escapeAction(actor.takenTalents?.() ?? [], { condition: "entangled", action: SNARE.action })))) continue;
+    }
     if (purpose === "reach" && result && !(await game.system.azeroth.workflows.spendTurnBudget(actor, "half"))) continue;
     const passed = result?.rolls?.[0]?.outcome?.success === true;
     // The Snare's escape, landed (D-773): a pass ends the Entangled, and 04's
@@ -1591,8 +1691,13 @@ async function rollResists(button, message, { resilience, dc, area }) {
     // *N damage* is (D-770), and no attack.
     if (purpose === "snare" && result && passed) {
       // Only the Entangled this Snare laid (the architect's review of D-773).
-      const held = (actor.effects ?? []).filter(e => e.flags?.["azeroth-rpg"]?.[SNARE_FLAG]?.source === maker?.uuid).map(e => e.id);
-      if (held.length) await actor.deleteEmbeddedDocuments("ActiveEffect", held);
+      const held = currentSnare().map(effect => effect.id);
+      if (!held.length) continue;
+      const removed = await actor.deleteEmbeddedDocuments("ActiveEffect", held);
+      if (held.some(id => actor.effects.has(id) || !removed?.some(effect => effect.id === id))) {
+        ui.notifications?.warn(game.i18n.localize('AZEROTH.Snare.EscapeUnconfirmed'));
+        continue;
+      }
       const trap = maker && typeof maker.takenTalents === "function" ? snareEscapeFor(maker.takenTalents()) : null;
       const lines = [game.i18n.format("AZEROTH.Snare.Escaped", { name: actor.name })];
       if (trap) {
@@ -1728,26 +1833,31 @@ async function rollResists(button, message, { resilience, dc, area }) {
     if (button.dataset.purpose === "spell" && result && !result.rolls?.[0]?.outcome?.success) {
       const flags = message.flags?.["azeroth-rpg"] ?? {};
       const timing = spellTiming(actor, flags.duration ?? null);
+      if (flags.identifier === "mind-soothe") {
+        const { requestMindSoothe } = await import("../effects/mind-soothe.mjs");
+        await requestMindSoothe(actor, message, result);
+      }
       // **WHAT THE LANDED CONDITION CARRIES** (D-778): the escape 07 gives a held or
       // Stunned creature (Frost Nova's, Absolute Zero's ...; O-159), and 04's
       // Permafrost's feet on a Slowed the caster's spell laid (O-165).
       const escape = cleanEscape(flags.escape ?? null);
+      let dominationConfirmed = true;
       for (const id of flags.onFail?.statuses ?? []) {
         if (!AZEROTH.conditions?.[id]) continue;
         if (flags.identifier === "fear" && id === "frightened") {
           await layFear(actor, { escape, spellUuid: flags.spellUuid, spellImg: flags.spellImg, timing });
           continue;
         }
-        if (flags.identifier === "compel" && id === "charmed") {
-          const { layCompel } = await import("../effects/compel.mjs");
-          await layCompel(actor, message, timing, result);
+        if (["compel", "dominate", "enslave-demon"].includes(flags.identifier) && id === "charmed") {
+          const { requestDomination } = await import("../effects/domination-delivery.mjs");
+          dominationConfirmed = (await requestDomination(actor, message, result))?.ok === true;
           continue;
         }
         const effect = await applyCondition(actor, id, { until: timing });
         if (effect && escape?.condition === id) await effect.setFlag("azeroth-rpg", ESCAPE_FLAG, escape);
         if (effect && id === "slowed" && Number(flags.slowing?.feet) > 0) await addSlowedFeet(effect, flags.slowing);
       }
-      if (flags.onFail?.statuses?.length) {
+      if (flags.onFail?.statuses?.length && dominationConfirmed) {
         ui.notifications?.info(game.i18n.format("AZEROTH.Card.OnFailLanded", {
           name: actor.name, conditions: flags.onFail.statuses.map(id => game.i18n.localize(AZEROTH.conditions[id] ?? id)).join(", ")
         }));
@@ -1773,6 +1883,9 @@ async function rollResists(button, message, { resilience, dc, area }) {
     // (`dice/annotate.mjs#verifiedResist` reads it off the creature) - and is what the
     // card's Apply reads to land the half on a creature that passed.
     if (link && result) await recordResist({ message, result });
+    if (gadgetDelivery && result) await gadgetResistanceRequest({
+      action: 'complete', messageId: message.id, resultId: result.id
+    });
     // **THE TEST 07 GIVES A HELD OR STUNNED CREATURE** (D-778; the lead: *"Yes."*):
     // the prompt a held creature's turn posted, rolled here. A pass ends the
     // condition the escape rides; a failure keeps it, and 04's Deep Freeze lays a
@@ -1787,20 +1900,29 @@ async function rollResists(button, message, { resilience, dc, area }) {
     // **04's PARALYTIC** (D-773): a failure loses the creature its Reaction, and at
     // rank 2 it is Entangled *until it passes a Resilience Test against your
     // poisons* - which the next passed Test of this poisoner's ends.
+    let trapDeliveryState = 'complete';
+    const checkTrapDelivery = () => { if (snakeTrap && result) assertSnakeTrapDelivery(message, actor, result); };
+    try {
+    checkTrapDelivery();
     if (purpose === "poison" && result && maker && typeof maker.takenTalents === "function") {
       const paralytic = poisonFailFor(maker.takenTalents());
       if (!passed && paralytic.loseReaction) {
         const lost = await loseReaction({ victim: actor, by: maker });
+        checkTrapDelivery();
+        if (snakeTrap && lost?.reason === 'error') trapDeliveryState = 'interrupted';
         ui.notifications?.info(reactionLossText(lost));
       }
       if (!passed && paralytic.entangle) {
         const landed = await inflictCondition({ victim: actor, id: "entangled", by: maker, name: actor.name, marks: { [PARALYTIC_FLAG]: { source: maker.uuid } } });
+        checkTrapDelivery();
+        if (snakeTrap && landed?.reason === 'error') trapDeliveryState = 'interrupted';
         if (landed.landed) ui.notifications?.info(game.i18n.format("AZEROTH.Paralytic.Entangled", { name: actor.name, talent: paralytic.name }));
       }
       if (passed) {
         const held = (actor.effects ?? []).filter(e => e.statuses?.has?.("entangled") && e.flags?.["azeroth-rpg"]?.[PARALYTIC_FLAG]?.source === maker.uuid);
         if (held.length && actor.isOwner) {
           await actor.deleteEmbeddedDocuments("ActiveEffect", held.map(e => e.id));
+          checkTrapDelivery();
           ui.notifications?.info(game.i18n.format("AZEROTH.Paralytic.Freed", { name: actor.name }));
         }
       }
@@ -1813,6 +1935,8 @@ async function rollResists(button, message, { resilience, dc, area }) {
       for (const id of poison?.statuses ?? []) {
         if (!AZEROTH.conditions?.[id]) continue;
         const effect = await applyCondition(actor, id, {});
+        checkTrapDelivery();
+        if (snakeTrap && !effect) trapDeliveryState = 'interrupted';
         if (effect) ui.notifications?.info(game.i18n.format("AZEROTH.Card.OnFailLanded", { name: actor.name, conditions: game.i18n.localize(AZEROTH.conditions[id]) }));
       }
       const rounds = poison?.tick?.rounds ?? null;
@@ -1820,6 +1944,8 @@ async function rollResists(button, message, { resilience, dc, area }) {
       // fight it has none: nothing would end it (the D-770 review, item A).
       // The ONE landing Coated Blades' no-Test poison shares (D-773).
       const held = hasTick(poison?.tick) ? await poisonTakesHold(actor, poison.tick) : null;
+      checkTrapDelivery();
+      if (snakeTrap && hasTick(poison?.tick) && !held?.landed) trapDeliveryState = 'interrupted';
       if (held?.reason === "noClock") {
         ui.notifications?.warn(game.i18n.format("AZEROTH.Tick.NoClockOn", { spell: poison.tick.name, name: actor.name }));
       } else if (held?.landed) {
@@ -1827,6 +1953,12 @@ async function rollResists(button, message, { resilience, dc, area }) {
           name: actor.name, poison: poison.tick.name, amount: poison.tick.amount, rounds: rounds ?? 0
         }));
       }
+    }
+    if (snakeTrap && result && !(await finishSnakeTrapCatch(message, actor, result, trapDeliveryState)))
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.SnakeTrap.CatchRefused"));
+    } catch (error) {
+      if (snakeTrap && result) await finishSnakeTrapCatch(message, actor, result, 'interrupted');
+      throw error;
     }
     // Poisoned (A1): each success sheds one stack.
     if (button.dataset.purpose === "poisoned" && result?.rolls?.[0]?.outcome?.success) {
@@ -2481,6 +2613,12 @@ async function applyDamageToTargets(button, message, recordedAttack = false, tra
   // melee hit spend no Parry or Block mark the swinger holds against an attack,
   // and add no Death Step to a dying swinger (06 §9 counts an attack).
   if (button.dataset.self !== undefined) {
+    if(button.dataset.retaliationCast){
+      const {requestSignatureRetaliation}=await import('../effects/signature-retaliation.mjs');
+      const result=await requestSignatureRetaliation({message,index:Number(button.dataset.struckIndex),cast:button.dataset.retaliationCast});
+      if(!result.ok)ui.notifications?.warn(game.i18n.localize('AZEROTH.Signature.RetaliationUnresolved'));
+      return result;
+    }
     // *A creature that hits you* (08 §20's thorns, 07's Immolation): a hit a Parry or
     // Afterimage turned into a miss struck nobody, so nothing answers it (door 13).
     if (refuseWithdrawn(message, button.dataset.struckIndex, "AZEROTH.Miss.StruckBackWithdrawn")) return;
@@ -2667,6 +2805,12 @@ async function applyHealingToTargets(button, message) {
   // A class feature's heal (D-771): what 04's Gift of Nature reaches beside a
   // spell's - *your healing spells and features* - and the Vestments do not.
   const feature = flags.kind === "feature";
+  // Dreamstate already healed its Druid during Use; this card reaches the other resters.
+  const canHeal = actor => {
+    if (!flags.dreamstateHealed || actor?.uuid !== flags.dreamstateHealed) return true;
+    ui.notifications?.info(game.i18n.localize("AZEROTH.Dreamstate.AlreadyHealed"));
+    return false;
+  };
   // A drain heals the caster and nobody else (D-625). **AND WHAT WOULD LAND ABOVE
   // THE MAXIMUM IS KEPT** where the entry says so (07's Grave Coil and
   // Exsanguinate: *any of it above your Health maximum is kept as temporary
@@ -2677,6 +2821,7 @@ async function applyHealingToTargets(button, message) {
       ui.notifications?.warn(game.i18n.localize("AZEROTH.Card.ActorGone"));
       return;
     }
+    if (!canHeal(self)) return;
     return self.applyHealing(amount, { overflow: flags.healOverflow === true, overflowSource: flags.spellName ?? "" });
   }
   // The healer is the speaker: a rung reduces what another creature's healing does (10 §4).
@@ -2693,11 +2838,12 @@ async function applyHealingToTargets(button, message) {
       ui.notifications?.warn(game.i18n.localize("AZEROTH.Card.TargetGone"));
       return;
     }
+    if (!canHeal(actor)) return;
     return actor.applyHealing(amount, { from, spell, feature, featureName, ...riders });
   }
   const controlled = canvas.tokens?.controlled ?? [];
   if (controlled.length) {
-    for (const token of controlled) await token.actor?.applyHealing(amount, { from, spell, feature, featureName, ...riders });
+    for (const token of controlled) if (canHeal(token.actor)) await token.actor?.applyHealing(amount, { from, spell, feature, featureName, ...riders });
     return;
   }
   const speaker = ChatMessage.getSpeakerActor(message.speaker);
@@ -2709,6 +2855,7 @@ async function applyHealingToTargets(button, message) {
   // passed no giver, so what the healer adds - Gift of Nature, and the
   // Vestments' *a Priest healing themselves is still the giver* - never reached
   // a heal that fell back to the one who gave it.
+  if (!canHeal(speaker)) return;
   return speaker.applyHealing(amount, { from: speaker, spell, feature, featureName, ...riders });
 }
 
@@ -3122,10 +3269,14 @@ async function applySpellEffectFromCard(button, message) {
     return;
   }
   if (flags.identifier === "lightning-shield") return requestLightningShieldApply(message);
+  if (flags.identifier === "mind-soothe") {
+    ui.notifications?.info(game.i18n.localize("AZEROTH.Compel.MindSootheResistance"));
+    return;
+  }
   // Compel lands only with its failed resistance. A legacy generic Apply must
   // neither bypass that Test nor replace its identified Charmed carrier.
-  if (flags.identifier === "compel") {
-    ui.notifications?.info(game.i18n.localize("AZEROTH.Compel.UseResistance"));
+  if (["compel", "dominate", "enslave-demon"].includes(flags.identifier)) {
+    ui.notifications?.info(game.i18n.localize("AZEROTH.Compel.DominationResistance"));
     return;
   }
   if (flags.identifier === "soul-link") {
@@ -3147,7 +3298,8 @@ async function applySpellEffectFromCard(button, message) {
   // A self-centred tick rides the effect it is carried by (Tree of Life), with
   // what its standing bonuses are keyed by: a spell cast by name from the pack
   // is on no actor for the tick to read it back from (the review, S6).
-  const selfTick = flags.areaTick?.centre === "self" ? { areaTick: flags.areaTick, tickSpell: flags.tickSpell ?? null } : {};
+  const selfTick = flags.areaTick?.centre === "self" ? { areaTick: flags.areaTick, tickSpell: flags.tickSpell ?? null,
+    ...(flags.chosenSignatureBonuses?.length ? {signatureDamageCast:flags.cast} : {}) } : {};
   const spellUuid = flags.spellUuid ?? null;
   const applies = flags.applies ?? { changes: [], statuses: [] };
   // **THE TICK THE CAST STAMPED** (D-770): damage or healing at the start of
@@ -3168,12 +3320,13 @@ async function applySpellEffectFromCard(button, message) {
   // effects also grant Ward 1 per rank against Nature or against Shadow, chosen
   // when the effect begins*; D-771): asked of whoever lays it, once a press,
   // and carried on the laid effect as its own `final` change.
-  const layer = tick?.kind === "heal" ? casterOf(message) : null;
+  const wardArea = isHealingWardArea(flags.areaTick);
+  const layer = tick?.kind === "heal" || wardArea ? casterOf(message) : null;
   const ward = layer?.takenTalents ? tickWardFor(layer.takenTalents()) : null;
   // Asked only where this press lays the heal on somebody: a creature this
   // client may write, whose tick has a clock to end on (the D-770 review, item A).
   const laysAHeal = Boolean(ward) && actors.some(a => a.isOwner
-    && tickHasClock(tick, { duration: flags.duration ?? null, carrierInFight: Boolean(a.activeFight?.()), casterInFight: casterFights }));
+    && (wardArea || tickHasClock(tick, { duration: flags.duration ?? null, carrierInFight: Boolean(a.activeFight?.()), casterInFight: casterFights })));
   let wardSchool = null;
   if (laysAHeal) {
     const talent = layer.items?.get(ward.talentId) ?? null;
@@ -3186,6 +3339,7 @@ async function applySpellEffectFromCard(button, message) {
     wardSchool = pick?.key ?? null;
   }
   const wardChanges = tickWardChanges(ward, wardSchool);
+  const areaWard = healingAreaWardStamp(flags.areaTick, ward, wardSchool);
   for (const actor of actors) {
     if (refuseProjectionTarget(actor)) continue;
     if (flags.identifier === "mind-flay" && String(actor.system?.typeMarker ?? "").trim().toLowerCase() === "mindless") {
@@ -3230,6 +3384,9 @@ async function applySpellEffectFromCard(button, message) {
     const timing = (holder ? untilEndOfNextTurn(holder) : null) ?? spellTiming(actor, flags.duration ?? null) ?? {};
     // A condition the body refuses stays off (10 §4, §6).
     const statuses = (applies.statuses ?? []).filter(id => AZEROTH.conditions?.[id] && !(actor.system?.conditionImmunities ?? []).includes(id));
+    const {spellRetaliationCarrier} = await import('../rules/spell-retaliation-sources.mjs');
+    const retaliationCarrier = flags.spellRetaliation?.descriptor?.recipient === 'target'
+      ? spellRetaliationCarrier(flags,message.uuid,actor.uuid) : null;
     const [laid] = await actor.createEmbeddedDocuments("ActiveEffect", [{
       name: flags.spellName ?? message.flavor ?? "Spell",
       img: flags.spellImg ?? "icons/svg/aura.svg",
@@ -3249,6 +3406,9 @@ async function applySpellEffectFromCard(button, message) {
         identifier: flags.identifier ?? null, cast: flags.cast ?? null, messageId: message.id,
         ...(flags.sustained === true ? { sustained: true } : {}),
         ...selfTick,
+        ...(areaWard ? { [HEALING_AREA_WARD]: areaWard } : {}),
+        ...endTurnDamageStamp(flags,'self'),
+        ...(retaliationCarrier ? {spellRetaliation:retaliationCarrier} : {}),
         ...(tickHere ? { [TICK_FLAG]: foundry.utils.deepClone(tickHere) } : {}),
         // *You ignore **Difficult ground*** (Firewalk, Ghost Wolf, Blessing of
         // Freedom ...; D-757): the terrain door reads it for every source of

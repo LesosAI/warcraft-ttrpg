@@ -46,8 +46,16 @@ import { foresightDamage } from "../rules/foresight-damage.mjs";
 import { markAnswers, mitigatedDamage } from "../rules/reactions.mjs";
 import { foresightFor } from "../rules/class-talents.mjs";
 import { refuseIceBlockTarget } from "./ice-block-protection.mjs";
+import { dispersionRefusal } from '../rules/dispersion.mjs';
 import { resolveAttackOperation } from "./attack-resolution-state.mjs";
 import { foresightTimingAllows } from "../rules/foresight-timing.mjs";
+
+function wardTargetRefusal(actor) {
+  if (refuseIceBlockTarget(actor)) return 'iceBlock';
+  const reason = dispersionRefusal(actor, 'target');
+  if (reason) globalThis.ui?.notifications?.info?.(game.i18n.localize(reason));
+  return reason ? 'dispersion' : null;
+}
 
 /** The query a Ward laid on, or Mana returned to, a creature this client does not own goes through. */
 export const WARD_QUERY = "azeroth-rpg.priestWard";
@@ -241,14 +249,16 @@ export function foresightAdmission({ priest, target, answers, commit = null } = 
   if (state.targets.some(row => !["pending", "applied", "phased"].includes(row?.stage))) return "reconcile";
   if (state.targets[clean.index].stage !== "pending") return "resolved";
   if (state.targets[clean.index].wardedBy?.includes(priest.uuid)) return "alreadyWarded";
-  if (refuseIceBlockTarget(target)) return "iceBlock";
+  const protection = wardTargetRefusal(target);
+  if (protection) return protection;
   return null;
 }
 
 /** Lay it here; the caller has established that this client may. */
 async function layHere({ priest, victim, ward, span, img = null, description = "", answers = null, commit = null }) {
   if (!answers) return layWardEffect({ priest, victim, ward, span, img, description });
-  if (refuseIceBlockTarget(victim)) return { name: victim.name, landed: false, reason: "iceBlock", answered: 0 };
+  const protection = wardTargetRefusal(victim);
+  if (protection) return { name: victim.name, landed: false, reason: protection, answered: 0 };
   if (commit !== null) {
     const context = committedContext(priest, answers, commit);
     if (context?.victim !== victim || context.delivered || !context.valid()) return { name: victim.name, landed: false, reason: "commit", answered: 0 };
@@ -267,11 +277,15 @@ async function layHere({ priest, victim, ward, span, img = null, description = "
 }
 
 async function layWardEffect({ priest, victim, ward, span, img = null, description = "", answers = null, stillValid = () => true }) {
-  if (refuseIceBlockTarget(victim)) return { name: victim.name, landed: false, reason: "iceBlock", answered: 0 };
+  let protection = wardTargetRefusal(victim);
+  if (protection) return { name: victim.name, landed: false, reason: protection, answered: 0 };
   const before = answers ? structuredClone(victim.system?.ward ?? {}) : null;
   const stale = (victim.effects ?? []).filter(e => e.flags?.["azeroth-rpg"]?.[WARD_FLAG]?.by === priest.uuid).map(e => e.id);
   if (stale.length) await victim.deleteEmbeddedDocuments("ActiveEffect", stale);
-  if (refuseIceBlockTarget(victim)) return { name: victim.name, landed: false, reason: "iceBlock", answered: 0 };
+  protection = wardTargetRefusal(victim);
+  if (protection) return { name: victim.name, landed: false, reason: protection, answered: 0 };
+  if (stale.some(id => (victim.effects ?? []).some(effect => effect.id === id)))
+    throw new Error("The previous Ward could not be removed. No replacement was created; ask the GM to review the existing Ward.");
   if (!stillValid()) throw new Error("Foresight target changed");
   const name = game.i18n.format(ward.undispellable ? "AZEROTH.Ward.EffectNameAegis" : "AZEROTH.Ward.EffectName", {
     schools: schoolWords(ward.schools), name: priest.name
@@ -283,7 +297,8 @@ async function layWardEffect({ priest, victim, ward, span, img = null, descripti
     flags: { "azeroth-rpg": { [WARD_FLAG]: { by: priest.uuid, priestName: priest.name, ...ward } } }
   }]);
   if (!stillValid()) throw new Error("Foresight target changed");
-  if (refuseIceBlockTarget(victim)) return { name: victim.name, landed: Boolean(made), reason: "iceBlock", answered: 0 };
+  protection = wardTargetRefusal(victim);
+  if (protection) return { name: victim.name, landed: Boolean(made), reason: protection, answered: 0 };
   const answered = made && answers ? await answerBlow(victim, ward, answers, before, stillValid) : 0;
   return { name: victim.name, landed: Boolean(made), reason: made ? null : "refused", answered };
 }

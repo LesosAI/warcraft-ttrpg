@@ -25,6 +25,7 @@
 import { BEACON_FLAG, beaconFor, beaconShares } from "../rules/class-talents.mjs";
 import { sharedHeal } from "../rules/symbiosis.mjs";
 import { iceBlockFor } from "../rules/ice-block.mjs";
+import { dispersionRefusal } from '../rules/dispersion.mjs';
 import { feetApart } from "../canvas/footprints.mjs";
 
 /** The query a share for a creature this client does not own goes through. */
@@ -136,7 +137,12 @@ export async function beaconHealQueryHandler({ healerUuid = null, healedUuid = n
  */
 export async function nameBeacon(holder, chosen) {
   if (!holder || !chosen || iceBlockFor(holder) || iceBlockFor(chosen)) return null;
-  await holder.setFlag("azeroth-rpg", BEACON_FLAG, { partner: chosen.uuid, name: chosen.name });
+  if (dispersionRefusal(holder, 'target') || dispersionRefusal(chosen, 'target')) return null;
+  const bond = { partner: chosen.uuid, name: chosen.name };
+  await holder.setFlag("azeroth-rpg", BEACON_FLAG, { ...bond });
+  const saved = holder.getFlag("azeroth-rpg", BEACON_FLAG);
+  if (saved?.partner !== bond.partner || saved?.name !== bond.name)
+    throw new Error("Beacon bond write is unconfirmed");
   ui.notifications?.info(game.i18n.format("AZEROTH.Beacon.Named", { name: holder.name, partner: chosen.name }));
   return chosen;
 }

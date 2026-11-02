@@ -77,26 +77,27 @@ export function qirajiStaffAmount({spellSchool, damaging = false, ownModifiers =
  * Same signature on two copies is one option, with a fixed numerical amount.
  * This leaves recipient selection explicit and preserves provenance for cards.
  */
-export function chosenSignatureOptions({signatures = [], spellSchool, ownModifiers = {}, skillRanks = {}, classes = []} = {}) {
+export function chosenSignatureOptions({signatures = [], spellSchool, ownModifiers = {}, skillRanks = {}, classes = [], castingAbility = null} = {}) {
   const seen = new Set(), options = [];
   for (const signature of signatures) {
     if (signature?.school !== spellSchool || typeof signature.identifier !== 'string' || !signature.identifier
       || typeof signature.itemId !== 'string' || !signature.itemId || seen.has(signature.identifier)) continue;
     // Exactly one source: malformed mixed descriptors must not silently pick one.
     if ([signature.attribute,signature.skill,signature.casting===true].filter(Boolean).length !== 1) continue;
-    // Same school-first order as casting, without its primary-caster fallback:
-    // a signature requires an actual granting class and never an Attack stat.
+    // Prefer the school-granting class. With no grant, the approved fallback
+    // is the casting workflow's actual attribute, never an Attack substitution.
     const grant=signature.casting ? classes.find(row=>row.schools?.includes(spellSchool)) : null;
-    if(signature.casting && (!grant?.itemId || !ATTRIBUTES.has(grant.castingAbility)))continue;
+    const castAttribute=grant ? grant.castingAbility : castingAbility;
+    if(signature.casting && ((grant&&!grant.itemId)||!ATTRIBUTES.has(castAttribute)))continue;
     const rank = skillRanks[signature.skill] ?? 0;
     const amount = signature.skill
       ? (Object.hasOwn(AZEROTH.skills,signature.skill) && Number.isInteger(rank) && rank >= 0 ? rank : null)
-      : attributeSignatureAmount(signature.casting ? grant.castingAbility : signature.attribute, ownModifiers);
+      : attributeSignatureAmount(signature.casting ? castAttribute : signature.attribute, ownModifiers);
     if (amount === null || amount <= 0) continue;
     seen.add(signature.identifier);
     options.push({identifier:signature.identifier,itemId:signature.itemId,name:String(signature.name ?? ''),
       school:spellSchool,...(signature.skill ? {skill:signature.skill} : signature.casting
-        ? {casting:true,classId:grant.itemId,attribute:grant.castingAbility} : {attribute:signature.attribute}),amount});
+        ? {casting:true,classId:grant?.itemId??null,attribute:castAttribute} : {attribute:signature.attribute}),amount});
   }
   return options;
 }

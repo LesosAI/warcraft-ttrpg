@@ -6,6 +6,14 @@ const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const authoritative=message=>globalThis.game?.user?.isGM===true
   && game.users?.activeGM?.id===game.user.id && fromUuidSync(message?.uuid)===message;
 
+/** Shared by delivery and explicit GM reconciliation; never break a live write. */
+export async function withSignatureDeliveryLock(message,execute){
+  if(!message?.uuid||typeof execute!=='function')return {ok:false,reason:'context'};
+  if(busy.has(message.uuid))return {ok:false,reason:'busy'};
+  busy.add(message.uuid);
+  try{return await execute();}finally{busy.delete(message.uuid);}
+}
+
 /** Called only by an authenticated delivery path after target admission.
  * The callback must report whether the hit actually dealt damage, not whether
  * a chat card was posted. Pending writes are preserved on any uncertain result.
@@ -13,8 +21,7 @@ const authoritative=message=>globalThis.game?.user?.isGM===true
  */
 export async function deliverChosenSignature({message,cast,recipient,event,validate,execute}={}) {
   if(!message?.uuid||typeof validate!=='function'||typeof execute!=='function'||!authoritative(message))return {ok:false,reason:'authority'};
-  if(busy.has(message.uuid))return {ok:false,reason:'busy'};
-  busy.add(message.uuid);
+  return withSignatureDeliveryLock(message,async()=>{
   try{
     const writer=game.user.id;
     const original=structuredClone(message.getFlag('azeroth-rpg',SIGNATURE_DELIVERY_FLAG));
@@ -39,5 +46,5 @@ export async function deliverChosenSignature({message,cast,recipient,event,valid
     if(!valid()||!same(message.getFlag('azeroth-rpg',SIGNATURE_DELIVERY_FLAG),complete))return {ok:false,reason:'completionUncertain'};
     return {ok:true,dealtDamage};
   }catch{return {ok:false,reason:'writeUncertain'};}
-  finally{busy.delete(message.uuid);}
+  });
 }

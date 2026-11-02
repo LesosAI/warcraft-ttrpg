@@ -1,4 +1,4 @@
-import {helmetHitValues,HELMET_IDENTIFIER} from '../rules/horned-helmet.mjs';
+import {helmetHitValues,helmetNaturalStrike,HELMET_IDENTIFIER} from '../rules/horned-helmet.mjs';
 import {SIGNATURE_HIT_USES} from './signature-hit-use.mjs';
 const resolve=uuid=>{try{return fromUuidSync(uuid);}catch{return null;}};
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
@@ -17,14 +17,17 @@ export function prepareHelmetHit({actor,item,hit}={}){
       ||ChatMessage.getSpeakerActor(message.speaker)!==actor)return null;
     const flags=message.flags?.['azeroth-rpg']??{},ref=flags.targets?.[index],target=targetOf(ref);
     const weapon=actor.items.get(flags.strike?.weapon?.id),damage=flags.damageByTarget?.[index],resolution=flags.attackResolution?.targets?.[index];
-    if(!target||weapon?.type!=='weapon'||!actor.readyWeapons?.().includes(weapon)
+    const readyWeapons = actor.readyWeapons?.() ?? [];
+    const natural = helmetNaturalStrike(flags.strike, { readyWeapons, npcAttacks: actor.type === 'npc' ? actor.system.attacks ?? [] : [] });
+    if(!target||(!natural&&(weapon?.type!=='weapon'||!readyWeapons.includes(weapon)))
       ||flags.attackResolution?.version!==1||resolution?.targetUuid!==target.uuid)return null;
     const ownModifiers=Object.fromEntries(Object.entries(actor.system.abilities??{}).map(([key,value])=>[key,value.own?.mod??value.mod]));
     const skillRanks=actor.type==='npc'?actor.system.skills??{}:actor.getFlag('azeroth-rpg','skillRanks')??{};
     const values=helmetHitValues({kind:flags.kind,success:message.rolls?.[0]?.outcome?.success,parry:flags.parry,notAttack:flags.notAttack,
-      weaponId:weapon.id,rangeKind:flags.strike.rangeKind,hit:damage?.hit,withdrawn:damage?.withdrawn,stage:resolution.stage,
+      weaponId:weapon?.id,naturalAttack:Boolean(natural),rangeKind:flags.strike.rangeKind,hit:damage?.hit,withdrawn:damage?.withdrawn,stage:resolution.stage,
       preventedByDispersion:resolution.preventedByDispersion,ownModifiers,skillRanks});
-    return values?{hit:{messageUuid:message.uuid,index,targetUuid:target.uuid,target:structuredClone(ref),weaponId:weapon.id},
+    return values?{hit:{messageUuid:message.uuid,index,targetUuid:target.uuid,target:structuredClone(ref),weaponId:weapon?.id ?? null,
+      ...(natural ? { natural } : {})},
       values,damage:structuredClone(damage),resolution:structuredClone(resolution)}:null;
   };
   const snapshot=read();if(!snapshot)return {ok:false,reason:'hit'};

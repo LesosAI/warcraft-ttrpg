@@ -117,11 +117,13 @@ export async function restorativeTotemQueryHandler(payload = {}, {user = game.us
       await save([...expected,receipt]);
       for (const row of plans) {
         if (!unchanged()) return refuse("changed");
-        const before = restoration.resource === "health" ? row.actor.system.health.value
-          : poolsOf(row.actor).find(p=>poolId(p)===poolId(row.pool))?.value;
         receipt = {...receipt,targets:receipt.targets.map(t=>t.tokenUuid===row.id?{...t,stage:"applying"}:t)};
         await save(expected.map(r=>r.key===key?receipt:r));
         if (!unchanged()) return refuse("changed");
+        // The claim write yields: another action may change Health/Mana meanwhile.
+        // Read immediately before restoration, not before awaiting that write.
+        const before = restoration.resource === "health" ? row.actor.system.health.value
+          : poolsOf(row.actor).find(p=>poolId(p)===poolId(row.pool))?.value;
         if (restoration.resource === "health") await row.actor.applyHealing(restoration.amount,{from:owner,feature:true,featureName:restoration.name});
         else await row.actor.updatePool({itemId:row.pool.itemId,kind:row.pool.kind,value:before+restoration.amount});
         const after = restoration.resource === "health" ? row.actor.system.health.value

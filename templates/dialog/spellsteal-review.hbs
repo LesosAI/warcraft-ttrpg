@@ -1,0 +1,19 @@
+<p>{{localize "AZEROTH.Spellsteal.RecoveryExplain"}}</p>
+<label>{{localize "AZEROTH.Spellsteal.RecoveryAttempt"}}
+  <select name="attempt">
+    {{#each rows}}<option value="{{index}}">{{spellName}} — {{casterName}} → {{mageName}}</option>{{/each}}
+  </select>
+</label>
+{{#each rows}}
+<section data-attempt="{{index}}">
+  <p>{{localize "AZEROTH.Spellsteal.RecoveryPhase"}}: {{phase}} · {{localize "AZEROTH.Spellsteal.RecoveryEffects"}}: {{effectCount}}</p>
+  <p>{{localize "AZEROTH.Spellsteal.RecoveryRegions"}}: {{regionCount}}</p>
+  <p>{{localize "AZEROTH.Spellsteal.RecoveryReplacement"}}: {{replacement}} · {{localize "AZEROTH.Spellsteal.RecoveryActivation"}}: {{activation}}</p>
+  <select aria-label="{{localize 'AZEROTH.Spellsteal.RecoveryAction'}}">
+    <option value="">{{localize "AZEROTH.Spellsteal.RecoveryChoose"}}</option>
+    <option value="confirm" {{#unless canConfirm}}disabled{{/unless}}>{{localize "AZEROTH.Spellsteal.RecoveryConfirm"}}</option>
+    <option value="end">{{#if row.delivery}}{{localize "AZEROTH.Spellsteal.RecoveryEnd"}}{{else}}{{localize "AZEROTH.Spellsteal.RecoveryClose"}}{{/if}}</option>
+  </select>
+</section>
+{{/each}}
+<label><input type="checkbox" name="acknowledged"> {{localize "AZEROTH.Spellsteal.RecoveryAcknowledge"}}</label>

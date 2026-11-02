@@ -485,6 +485,13 @@ export function shapeDamageBonus(shape) {
   return shape?.kind === "metamorphosis" ? METAMORPHOSIS.damageRating : 0;
 }
 
+/** 02's Beast forms, with the lead's specific Mountain Lion exception (2026-11-01). */
+export function isShapeshiftForm(entry = {}) {
+  return entry.creatureType === "beast"
+    && (["chaff", "standard"].includes(entry.weightClass)
+      || (entry.name === "Mountain Lion" && entry.weightClass === "soldier"));
+}
+
 /**
  * **HOW MANY OF THESE FORMS ONE SHIFT MAY LEARN** (02 §7's Forms table, D-619):
  * *a form taken is a form learned*, and no more forms are known than the table

@@ -1,4 +1,6 @@
 <p>{{target}} · DC {{dc}}</p>
+{{#if legacy}}<p>{{localize "AZEROTH.MindControl.Saves.Legacy"}}</p>
+<p><label><input type="checkbox" name="upgradeAcknowledged"> {{localize "AZEROTH.MindControl.Saves.UpgradeAcknowledge"}}</label></p>{{/if}}
 <p>{{localize "AZEROTH.MindControl.Saves.Explain"}}</p>
 <label>{{localize "AZEROTH.MindControl.Saves.Attempt"}}
   <select name="attempt">

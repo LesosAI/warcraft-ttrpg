@@ -33,19 +33,43 @@ export function mindControlPlacement(slots = [], {casterId,targetId,currentKey =
   return {slots:result,moved:targetIndex !== casterIndex+1,reason:null};
 }
 
-/** Plan all controls together; refuse contradictory adjacency constraints. */
+/** A caster's controlled creatures form one consecutive group, in base turn
+ * order. Preserve completed turns and refuse conflicting controllers. */
 export function mindControlOrder(base,links,{previous=[],currentKey=null}={}) {
   let slots=preserveTurnProgress(base,previous,currentKey);
   if (!slots) return {ok:false,reason:"unknownTurn"};
-  const placed=[];
+  const groups=new Map(),placed=[];
   for(const link of links) {
-    const plan=mindControlPlacement(slots,{...link,currentKey});
-    if(plan.reason && plan.reason!=="nextRound") return {ok:false,reason:plan.reason};
-    slots=plan.slots;if(!plan.reason) placed.push(link);
+    const targets=groups.get(link.casterId) ?? new Set();
+    targets.add(link.targetId);groups.set(link.casterId,targets);
   }
-  for(const link of placed) {
-    const caster=slots.findIndex(slot=>slot.id===link.casterId && !slot.extra);
-    if(slots[caster+1]?.id!==link.targetId || slots[caster+1]?.extra)
+  for(const [casterId,targets] of groups) {
+    const ordered=[...targets].sort((a,b)=>base.findIndex(s=>s.id===a && !s.extra)-base.findIndex(s=>s.id===b && !s.extra));
+    const active=[];
+    // Inserting in reverse retains the group's ordinary relative order.
+    for(const targetId of ordered.reverse()) {
+      const plan=mindControlPlacement(slots,{casterId,targetId,currentKey});
+      if(plan.reason && plan.reason!=="nextRound") return {ok:false,reason:plan.reason};
+      slots=plan.slots;if(!plan.reason) active.unshift(targetId);
+      if(plan.reason==="nextRound") {
+        const oldTarget=previous.findIndex(s=>s.id===targetId && !s.extra);
+        const oldCursor=previous.findIndex(s=>s.key===currentKey);
+        // The caster has acted: keep a pending target's existing position.
+        // Rebuilding from base order here would undo the rest of a group as
+        // soon as its first creature acts or its control ends.
+        if(oldTarget>oldCursor && oldCursor>=0) {
+          const target=slots.find(s=>s.id===targetId && !s.extra);
+          const next=previous.slice(oldTarget+1).find(s=>slots.some(row=>row.key===s.key));
+          slots=slots.filter(s=>s!==target);
+          slots.splice(next ? slots.findIndex(s=>s.key===next.key) : slots.length,0,target);
+        }
+      }
+    }
+    placed.push({casterId,targets:active});
+  }
+  for(const {casterId,targets} of placed) {
+    const caster=slots.findIndex(slot=>slot.id===casterId && !slot.extra);
+    if(targets.some((id,index)=>slots[caster+index+1]?.id!==id || slots[caster+index+1]?.extra))
       return {ok:false,reason:"conflictingPlacement"};
   }
   return {ok:true,slots};

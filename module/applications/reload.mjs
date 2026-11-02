@@ -51,9 +51,9 @@ export async function reviewReloadFromSheet(weapon) {
     position:{width:540},content,rejectClose:false,
     buttons:[{action:"review",label:words("Confirm"),callback:(_event,button)=>{
       const form=button.form;
-      if (form.elements.acknowledged?.checked !== true || !["yes","no"].includes(form.elements.occurred?.value)) return null;
+      if (form.elements.acknowledged?.checked !== true || !["yes","no"].includes(form.elements.occurred?.value)) return false;
       return {acknowledged:true,[isShot ? "fired" : "paid"]:form.elements.occurred.value === "yes"};
-    }},{action:"cancel",label:words("Cancel"),default:true,callback:()=>null}],
+    }},{action:"cancel",label:words("Cancel"),default:true,callback:()=>false}],
     render:(_event,dialog)=>{
       const form=dialog.element.querySelector("form");
       const update=()=>{form.querySelector('[data-action="review"]').disabled=
@@ -61,7 +61,7 @@ export async function reviewReloadFromSheet(weapon) {
       form.addEventListener("change",update);update();
     }
   });
-  if (!decision) return null;
+  if (decision?.acknowledged!==true || typeof decision[isShot?'fired':'paid']!=='boolean') return null;
   const result=await requestWeaponReloadReview(weapon,expected,decision);
   ui.notifications[result.ok ? "info" : "warn"](words(result.ok ? "Reviewed" : "Pending"));
   return result;

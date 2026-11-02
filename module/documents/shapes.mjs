@@ -177,6 +177,7 @@ export async function takeShape(actor, { kind, entries = [], forms = null, ward 
   if (!snapshots.length) return null;
   const before = actor.shape;
   const data = shapeEffectData(actor, { kind, forms: snapshots, ward });
+  const expectedShape = JSON.stringify(data.flags["azeroth-rpg"][SHAPE_FLAG]);
   const held = shapeEffectsOf(actor);
   let effect = null;
   try {
@@ -188,6 +189,10 @@ export async function takeShape(actor, { kind, entries = [], forms = null, ward 
       effect = actor.effects.get(keep.id) ?? null;
     } else {
       [effect] = await actor.createEmbeddedDocuments("ActiveEffect", [data], { [SHAPE_OPTION]: true });
+    }
+    if (!effect || actor.effects.get(effect.id) !== effect
+      || JSON.stringify(effect.getFlag("azeroth-rpg", SHAPE_FLAG)) !== expectedShape) {
+      throw new Error("The requested shape was not confirmed on the actor");
     }
   } catch (err) {
     // THE EFFECT IS THE SHAPE: one that could not be written is no shape, said

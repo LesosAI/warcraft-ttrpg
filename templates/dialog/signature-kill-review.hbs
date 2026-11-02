@@ -1,0 +1,5 @@
+<p><strong>{{actor}}</strong></p>
+<p>{{localize "AZEROTH.Signature.KillReview.Health" health=health temp=temp}}</p>
+<ul>{{#each rows}}<li><strong>{{name}}</strong>{{#if missing}} — {{localize "AZEROTH.Signature.KillReview.Missing"}}{{/if}}</li>{{/each}}</ul>
+<p>{{localize "AZEROTH.Signature.KillReview.Help"}}</p>
+<label><input type="checkbox" name="acknowledged"> {{localize "AZEROTH.Signature.KillReview.Acknowledge"}}</label>

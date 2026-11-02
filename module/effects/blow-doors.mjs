@@ -413,15 +413,15 @@ export function divideBlow({ target, amount = 0, selection = undefined } = {}) {
  */
 export async function landShares({ target, plan, type = null, by = null, strict = false, beforeShare = null, afterShare = null, outcomes = null } = {}) {
   const said = [];
-  for (const { actor, share } of plan?.others ?? []) {
+  for (const { actor, share, parts = null } of plan?.others ?? []) {
     if (!(share > 0)) continue;
     const damageOutcome = {};
     if (Array.isArray(outcomes)) outcomes.push(damageOutcome);
     try {
       if (beforeShare) await beforeShare(actor);
-      if (actor.isOwner) await actor.applyDamage(share, { struck: true, attack: false, location: "body", type, by, shared: true, outcome: damageOutcome });
+      if (actor.isOwner) await actor.applyDamage(share, { struck: true, attack: false, location: "body", type, parts: movedParts(parts), by, shared: true, outcome: damageOutcome });
       else {
-        const result = await game.users.activeGM.query(BLOW_SHARE_QUERY, { victimUuid: actor.uuid, strikerUuid: target.uuid, amount: share, type, byUuid: by?.uuid ?? null }, { timeout: 15000 });
+        const result = await game.users.activeGM.query(BLOW_SHARE_QUERY, { victimUuid: actor.uuid, strikerUuid: target.uuid, amount: share, type, parts: movedParts(parts), byUuid: by?.uuid ?? null }, { timeout: 15000 });
         if (result?.damageOutcome) Object.assign(damageOutcome, result.damageOutcome);
       }
       if (afterShare) await afterShare(actor);
@@ -439,14 +439,14 @@ export async function landShares({ target, plan, type = null, by = null, strict 
  * The GM-side handler (`BLOW_SHARE_QUERY`): the asker must own the creature the
  * blow STRUCK - it was their client that divided it.
  */
-export async function blowShareQueryHandler({ victimUuid = null, strikerUuid = null, amount = 0, type = null, byUuid = null } = {}, { user = null } = {}) {
+export async function blowShareQueryHandler({ victimUuid = null, strikerUuid = null, amount = 0, type = null, parts = null, byUuid = null } = {}, { user = null } = {}) {
   const victim = victimUuid ? await fromUuid(victimUuid) : null;
   const struck = strikerUuid ? await fromUuid(strikerUuid) : null;
   if (victim?.documentName !== "Actor" || struck?.documentName !== "Actor") throw new Error(game.i18n.localize("AZEROTH.Card.TargetGone"));
   if (user && !struck.testUserPermission(user, "OWNER")) throw new Error(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: struck.name }));
   const n = Math.max(0, Math.trunc(Number(amount)) || 0);
   const damageOutcome = {};
-  if (n > 0) await victim.applyDamage(n, { struck: true, attack: false, location: "body", type: type ?? null, by: actorAt(byUuid), shared: true, outcome: damageOutcome });
+  if (n > 0) await victim.applyDamage(n, { struck: true, attack: false, location: "body", type: type ?? null, parts: movedParts(parts), by: actorAt(byUuid), shared: true, outcome: damageOutcome });
   return { landed: n, damageOutcome };
 }
 

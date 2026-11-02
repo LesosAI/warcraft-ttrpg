@@ -29,6 +29,7 @@ import { bind, bondOf, boundOf, worldActorOf } from "../documents/bound.mjs";
 // 04's Dark Minion (the Legacy branches' door 5): a creature Black Arrow marked rises.
 import { markOwners, raiseFor, raiseRefusal, raiseRowsFor } from "../rules/raise.mjs";
 import { NO_HEALING_FLAG } from "../rules/no-healing.mjs";
+import { LUNAR_DAMAGE_FLAG, lunarDamageTypes, recordLunarDamage } from "../rules/lunar-guidance.mjs";
 import { placeSummon } from "../documents/summon.mjs";
 // What a raise records for the animation layer (the Legacy branches' door 2).
 import { risenRecord, slugOf } from "../rules/animation-records.mjs";
@@ -148,7 +149,7 @@ async function raiseFallen({ target }) {
  *   the blow was 06 §7's Riposte (04's Killing Spree, D-773); `spell` whether a
  *   spell dealt it and `ignite` whether it was Ignite's own tick (D-775).
  */
-export async function afterBlow({ target, before, attacker = null, riposte = false, attack = true, type = null, spell = false, ignite = false, messageId = null }) {
+export async function afterBlow({ target, before, attacker = null, riposte = false, attack = true, type = null, spell = false, ignite = false, messageId = null, delivered = null }) {
   if (!target) return;
   const after = target.system?.health?.value ?? 0;
   const max = target.system?.health?.max ?? 0;
@@ -202,7 +203,7 @@ export async function afterBlow({ target, before, attacker = null, riposte = fal
   // combatant, keyed by the victim's token; `_leaveFight` clears it. And with
   // WHICH damage type (04's Twisted Faith: *a target dealt Shadow damage by you*;
   // D-774).
-  await markDamaged({ attacker, target, dealt: before - after, type });
+  await markDamaged({ attacker, target, dealt: before - after, type, delivered });
   // **THE PRIEST'S** (D-774): Shadowform's mark where the blow was Holy, and
   // Vampiric Touch's Health where it was Shadow and reduced the target's Health.
   if (attacker && type === "holy" && before - after > 0) await markLightUsed(attacker);
@@ -471,12 +472,18 @@ export async function vengeanceQueryHandler({ holderUuid = null, fallenUuid = nu
  * the pair, and the attacker is the one whose dialog reads it. Written only by
  * a client that owns the combatant, like every other round flag.
  */
-export async function markDamaged({ attacker, target, dealt = 0, type = null }) {
-  if (!attacker || !target || dealt <= 0) return;
+export async function markDamaged({ attacker, target, dealt = 0, type = null, delivered = null }) {
+  if (!attacker || !target || (dealt <= 0 && !(delivered?.amount > 0))) return;
   const fight = attacker.activeFight?.() ?? null;
   const combatant = fight ? fight.getCombatantsByActor(attacker)?.[0] ?? null : null;
   if (!combatant?.isOwner) return;
   const key = target.getActiveTokens?.(true)[0]?.id ?? target.id;
+  const lunar = recordLunarDamage(combatant.getFlag("azeroth-rpg", LUNAR_DAMAGE_FLAG), {
+    key, type, dealt: delivered?.amount ?? dealt,
+    ...(delivered ? {types: lunarDamageTypes(delivered)} : {})
+  });
+  if (lunar) await combatant.setFlag("azeroth-rpg", LUNAR_DAMAGE_FLAG, lunar);
+  if (dealt <= 0) return;
   // The damage type rides the same map under `key:type` (04's Twisted Faith,
   // D-774), so every reader of `damaged[key]` reads exactly what it did.
   const typed = type ? damagedTypeKey(key, type) : null;

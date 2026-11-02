@@ -31,6 +31,7 @@ import { armorAccessFor } from "./class-talents.mjs";
 import { trainingProfile, trainingWarning } from "./equipment-training.mjs";
 // A Legacy's talent is its people's alone (04 §1, D-781).
 import { keptBy } from "./legacy-branches.mjs";
+import { startingRacialState } from "./creator-choices.mjs";
 
 /** The ten steps, in 01 §1's order. Nothing in a step depends on a step below it. */
 export const STEPS = Object.freeze([
@@ -597,6 +598,7 @@ export function validate(p = {}) {
     const row = p.race?.talents?.find(t => t.name === p.racialTalent.name);
     if (!row) refuse("racialTalentNotOfRace", "talents", { name: p.racialTalent.name });
     else if ((row.tier ?? 1) > tierForLevel(STARTING_LEVEL)) refuse("racialTalentTier", "talents", { name: row.name });
+    else if (!startingRacialState(row, p.race, p.cls).ok) refuse("racialTalentEligibility", "talents", { name: row.name });
   }
   if (!p.classTalent) refuse("noClassTalent", "talents");
   else {

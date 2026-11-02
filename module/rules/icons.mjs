@@ -21,9 +21,19 @@
  */
 
 import icons from "./icon-map.json" with { type: "json" };
+import reviewedAbilities from "./spell-talent-icons.json" with { type: "json" };
 
 /** Where the art lives, served by Foundry as part of the system directory. */
 export const ICON_DIR = "systems/azeroth-rpg/assets/art/items";
+
+const RACIAL_ICONS = new Map(Object.values(reviewedAbilities)
+  .filter(row => row.source === "02-CHARACTER-OPTIONS" && row.race)
+  .map(row => [`${row.race}:${row.name}`, `${ICON_DIR}/${row.icon}.png`]));
+
+/** The creator and the race grant use the same per-talent art; homebrew keeps its fallback. */
+export function racialTalentIcon(raceName, talentName, fallback) {
+  return RACIAL_ICONS.get(`${raceName}:${talentName}`) ?? fallback;
+}
 
 /**
  * The core Foundry icon a kind falls back to. These are the icons the packs

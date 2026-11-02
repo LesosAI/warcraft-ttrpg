@@ -36,8 +36,9 @@ function defensesOf(actor) {
 
 /** The request supplies identities only. Damage and success come from saved data. */
 async function resolveExplosiveTrapNow({ messageId, actorUuid, resultId } = {}, { user } = {}) {
+  const writerId = game.user?.id;
   const authority = () => Boolean(user?.id && game.users?.get(user.id) === user
-    && game.user?.isGM && game.users?.activeGM?.id === game.user.id);
+    && game.user?.isGM && game.user.id === writerId && game.users?.activeGM?.id === writerId);
   if (!authority() || typeof messageId !== "string" || typeof actorUuid !== "string"
     || typeof resultId !== "string" || pending.has(messageId)) return { ok: false, reason: "unavailable" };
   const message = game.messages.get(messageId), result = game.messages.get(resultId);
@@ -65,6 +66,7 @@ async function resolveExplosiveTrapNow({ messageId, actorUuid, resultId } = {}, 
       claims: flags.explosiveTrapClaims, actorUuid, resultId, passed: facts.success,
       target });
     if (!plan.ok) return plan;
+    plan.claim.writerId = writerId;
     // The claim survives an uncertain acknowledgement or interrupted damage write.
     // No automatic retry or refund is safe once this write has been attempted.
     reserved = true;
@@ -88,6 +90,46 @@ async function resolveExplosiveTrapNow({ messageId, actorUuid, resultId } = {}, 
     console.warn("azeroth-rpg | Explosive Trap resolution could not be confirmed", error);
     return { ok: false, reason: "uncertain", claimed: reserved };
   } finally { pending.delete(messageId); }
+}
+
+const reviewHere = () => game.user?.isGM && game.users?.activeGM?.id === game.user.id;
+
+/** Acknowledgement records manual reconciliation; it never retries damage. */
+export function explosiveTrapRecoveryViews(actor) {
+  if (!reviewHere() || !actor) return [];
+  return Array.from(game.messages?.values?.() ?? []).flatMap(message => {
+    const flags = message.flags?.[SCOPE];
+    if (flags?.kind !== 'feature' || flags.featureKey !== 'snare') return [];
+    return (flags.explosiveTrapClaims ?? []).filter(row => row.actorUuid === actor.uuid && row.phase === 'claimed')
+      .map(claim => structuredClone({ actorUuid: actor.uuid, messageId: message.id, resultId: claim.resultId,
+        claims: flags.explosiveTrapClaims, source: [flags.explosiveTrap, flags.snareTrigger],
+        target: { health: actor.system?.health, pools: actor.poolSnapshot?.() ?? [],
+          effects: Array.from(actor.effects ?? []).map(effect => effect.toObject()) } }));
+  });
+}
+
+export async function reviewExplosiveTrap({ actorUuid, expected, acknowledged = false } = {}) {
+  if (!reviewHere() || acknowledged !== true) return { ok: false, reason: 'permission' };
+  const key = expected?.messageId;
+  if (typeof key !== 'string' || pending.has(key) || queues.has(key)) return { ok: false, reason: 'busy' };
+  const writerId = game.user.id;
+  const run = async () => {
+    if (!reviewHere() || game.user.id !== writerId) return { ok: false, reason: 'permission' };
+    const actor = fromUuidSync(actorUuid), message = game.messages.get(key);
+    const current = explosiveTrapRecoveryViews(actor).find(row => row.messageId === key && row.resultId === expected.resultId);
+    if (!current || JSON.stringify(current) !== JSON.stringify(expected)) return { ok: false, reason: 'changed' };
+    const claim = current.claims.find(row => row.actorUuid === actorUuid && row.resultId === expected.resultId);
+    if (!claim.writerId || (claim.writerId !== writerId && game.users.get(claim.writerId)?.active))
+      return { ok: false, reason: 'writerActive' };
+    const reviewed = current.claims.map(row => row === claim ? { ...row, phase: 'reviewed', reviewedBy: writerId, reviewedAt: Date.now() } : row);
+    await message.update({ [`flags.${SCOPE}.explosiveTrapClaims`]: reviewed });
+    return reviewHere() && game.user.id === writerId && game.messages.get(key) === message
+      && JSON.stringify(message.flags?.[SCOPE]?.explosiveTrapClaims) === JSON.stringify(reviewed)
+      ? { ok: true } : { ok: false, reason: 'unconfirmed' };
+  };
+  const task = Promise.resolve().then(run);
+  queues.set(key, task);
+  try { return await task; } finally { if (queues.get(key) === task) queues.delete(key); }
 }
 
 export async function resolveExplosiveTrap(message, actor, result) {

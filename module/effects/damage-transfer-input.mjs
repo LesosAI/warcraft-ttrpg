@@ -1,6 +1,7 @@
 import { BLOCK_REDUCTION, blockReduction, markAnswers, mitigatedDamage } from "../rules/reactions.mjs";
 import { damageTransferStages } from "../rules/damage-transfer-stages.mjs";
 import { etherealOn } from "./spirit-realm.mjs";
+import {invulnerabilityPotionActive,preventPhysicalDamage} from '../rules/invulnerability-potion.mjs';
 
 const whole = n => Math.max(0, Math.trunc(Number(n)) || 0);
 const resolve = uuid => { try { return fromUuidSync(uuid); } catch { return null; } };
@@ -31,11 +32,13 @@ export function readDamageTransferInput({ target, row, messageId = null, type = 
   // Read Ethereal even if ordinary Ward reduced this record to zero: Soul Link
   // reconstructs pre-Ward damage and may still have a Physical component.
   const ethereal = Boolean(etherealOn(target));
-  const stages = damageTransferStages({ amount: mitigatedDamage(row.damage, mark), type, parts: row.parts,
+  const potionProtected=invulnerabilityPotionActive(target.effects??[]);
+  const currentDamage=potionProtected?preventPhysicalDamage({damage:row.damage,type,parts:row.parts}):row;
+  const stages = damageTransferStages({ amount: mitigatedDamage(currentDamage.damage, mark), type, parts: currentDamage.parts,
     ethereal, standing: standingReduction, woundedRanks, attack });
   return { target, row, messageId, type, attack, spell, by, moved, shared,
     redirectAmount: stages.redirectAmount, divisionAmount: stages.divisionAmount,
     flatReduction, negate, halve, ethereal, standingReduction, woundedRanks,
-    sourceState: structuredClone({ mark, ethereal, standingReduction, woundedRanks,
+    sourceState: structuredClone({ mark, ethereal, standingReduction, woundedRanks, potionProtected,
       health: target.system?.health ?? null }) };
 }

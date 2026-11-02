@@ -1,9 +1,10 @@
 import {conflagrateState} from '../rules/conflagrate.mjs';
 import {sustainedSpellLive} from './sustained-spells.mjs';
 import {queueSignatureCard} from './signature-card-queue.mjs';
-import {deliverChosenSignature} from './signature-delivery.mjs';
+import {deliverChosenSignature,withSignatureDeliveryLock} from './signature-delivery.mjs';
 import {signatureApplyRows} from '../rules/signature-apply.mjs';
 import {signatureRecipientKey} from '../rules/signature-scaling.mjs';
+import {hasMirrorImage,interceptMirrorImage} from './mirror-image-hit.mjs';
 
 const SCOPE='azeroth-rpg';
 const CLAIM='conflagrateClaim';
@@ -20,6 +21,37 @@ export const CONFLAGRATE_DAMAGE_QUERY='azeroth-rpg.conflagrateDamage';
 export const CONFLAGRATE_REVIEW_QUERY='azeroth-rpg.conflagrateReview';
 const targetOf=row=>row?.sceneId&&row?.tokenId ? game.scenes.get(row.sceneId)?.tokens.get(row.tokenId)?.actor
   : !row?.sceneId&&!row?.tokenId ? game.actors.get(row?.actorId) : null;
+
+/** Only an orphaned target claim needs this door; surviving cards use their own review. */
+export function orphanConflagrateViews(actor) {
+  if(!writer())return [];
+  const claim=actor?.getFlag(SCOPE,CLAIM);
+  if(!claim||claim.targetUuid!==actor.uuid||game.messages.get(claim.messageId))return [];
+  const sources=(claim.immolates??[]).map(source=>({ ...source,
+    remaining:(resolve(source.casterUuid)?.getFlag(SCOPE,'sustaining')??[]).some(row=>row.cast===source.cast)
+      ||[...(actor.effects??[])].some(effect=>effect.id===source.effectId&&effect.origin===source.casterUuid
+        &&effect.flags?.[SCOPE]?.cast===source.cast&&effect.flags?.[SCOPE]?.identifier==='immolate') }));
+  return [{actorUuid:actor.uuid,messageId:claim.messageId,claim:structuredClone(claim),sources,
+    health:structuredClone(actor.system?.health??{})}];
+}
+
+export async function reviewOrphanConflagrate({actorUuid,expected,acknowledged=false}={}) {
+  if(!writer()||!acknowledged)return {ok:false,reason:'permission'};
+  const originalWriter=game.user.id;
+  const run=async()=>{
+    if(!writer()||game.user.id!==originalWriter)return {ok:false,reason:'authority'};
+    const actor=resolve(actorUuid),view=orphanConflagrateViews(actor)[0];
+    if(!view||JSON.stringify(view)!==JSON.stringify(expected))return {ok:false,reason:'changed'};
+    if(!view.claim.writer||!Array.isArray(view.claim.immolates)
+      ||(view.claim.writer!==originalWriter&&game.users.get(view.claim.writer)?.active))return {ok:false,reason:'writerActive'};
+    if(view.sources.some(source=>source.remaining))return {ok:false,reason:'burns-remain'};
+    try{
+      await actor.unsetFlag(SCOPE,CLAIM);
+      return actor.getFlag(SCOPE,CLAIM)?{ok:false,reason:'uncertain'}:{ok:true};
+    }catch{return {ok:false,reason:'uncertain'};}
+  };
+  const next=consumptionQueue.then(run,run);consumptionQueue=next.catch(()=>{});return next;
+}
 
 /** Read on the GM, including effects a player cannot inspect on an enemy. */
 export async function prepareConflagrate({casterUuid,spellUuid,targets,burning=false}={}, {user}={}) {
@@ -77,7 +109,8 @@ export function conflagrateReviewState(card) {
       &&(f[RECEIPT]?.[0]?.stage!=='complete'||f[RECEIPT][0].targetUuid!==target?.uuid))
     ||(damage&&(damage.stage!=='complete'||damage.identity!==damageIdentity(card))));
   return {pending,reviewed,sources,target:target?.name??f.targets?.[0]?.name??'',damage:f.damageByTarget?.[0]?.damage??null,
-    expected:JSON.stringify({identity:damageIdentity(card),damage,review,claim:target?.getFlag(SCOPE,CLAIM),sources})};
+    expected:JSON.stringify({identity:damageIdentity(card),damage,review,claim:target?.getFlag(SCOPE,CLAIM),sources,
+      signatures:f.chosenSignatureDelivery,health:target?.system?.health})};
 }
 
 /** Close a manually reconciled cast. This never deals damage or ends a Sustain. */
@@ -100,15 +133,25 @@ export async function reviewConflagrateResolution({messageId,expected,acknowledg
       if(state.reviewed)return await clearClaim(card.getFlag(SCOPE,REVIEW));
       if(!state.pending||state.expected!==expected)return {ok:false,reason:'changed'};
       if(state.sources.some(source=>source.remaining))return {ok:false,reason:'burns-remain'};
+      const signatures=card.flags[SCOPE].chosenSignatureDelivery;
+      if(signatures&&(signatures.version!==1||signatures.cast!==card.flags[SCOPE].cast||!Array.isArray(signatures.entries)
+        ||JSON.stringify(signatures.entries.map(row=>row.bonus))!==JSON.stringify(card.flags[SCOPE].chosenSignatureBonuses)))return {ok:false,reason:'changed'};
+      if(signatures?.entries.some(row=>row.pending&&(!row.pending.writer
+        ||(row.pending.writer!==game.user.id&&game.users.get(row.pending.writer)?.active))))return {ok:false,reason:'changed'};
       const review={stage:'complete',by:user.id,at:Date.now(),targetUuid:targetOf(card.flags[SCOPE].targets?.[0])?.uuid??null,expected};
-      await card.setFlag(SCOPE,REVIEW,review);
-      if(!writer()||JSON.stringify(card.getFlag(SCOPE,REVIEW))!==JSON.stringify(review))return {ok:false,reason:'uncertain'};
+      const closed=signatures?{...signatures,entries:signatures.entries.map(row=>({...row,used:true,pending:null,
+        ...(!row.used||row.pending?{review:{by:user.id,at:review.at,previousPending:row.pending??null}}:{})}))}:null;
+      if(closed)await card.update({[`flags.${SCOPE}.${REVIEW}`]:review,[`flags.${SCOPE}.chosenSignatureDelivery`]:closed});
+      else await card.setFlag(SCOPE,REVIEW,review);
+      if(!writer()||JSON.stringify(card.getFlag(SCOPE,REVIEW))!==JSON.stringify(review)
+        ||(closed&&JSON.stringify(card.getFlag(SCOPE,'chosenSignatureDelivery'))!==JSON.stringify(closed)))return {ok:false,reason:'uncertain'};
       return await clearClaim(review);
     }catch{return {ok:false,reason:'uncertain'};}
   };
   // Join both queues before closing: a review cannot race a still-running cast.
   const priorDamage=damageQueues.get(messageId)??Promise.resolve();
-  const next=consumptionQueue.then(()=>priorDamage).then(run,run);
+  const locked=()=>card?.flags?.[SCOPE]?.chosenSignatureDelivery?withSignatureDeliveryLock(card,run):run();
+  const next=consumptionQueue.then(()=>priorDamage).then(locked,locked);
   consumptionQueue=next.catch(()=>{});damageQueues.set(messageId,next);
   try{return await next;}finally{if(damageQueues.get(messageId)===next)damageQueues.delete(messageId);}
 }
@@ -162,10 +205,11 @@ async function applyDamageHere({messageId}={}, {user}={}) {
       const {applyRecordedConflagrateDamage}=await import('../dice/chat.mjs');
       const execute=async({valid:allowed=valid}={})=>allowed()&&conflagrateDamageClaimValid(card)
         ? applyRecordedConflagrateDamage(card) : {ok:false};
-      const result=chosen ? await deliverChosenSignature({message:card,cast:f.cast,recipient,event:'initial:0',validate:valid,execute})
+      const mirrored=hasMirrorImage(target)&&await interceptMirrorImage(target,{valid:()=>valid()&&conflagrateDamageClaimValid(card)});
+      const result=mirrored ? {ok:true} : chosen ? await deliverChosenSignature({message:card,cast:f.cast,recipient,event:'initial:0',validate:valid,execute})
         : await execute();
       if(!result?.ok || !valid() || !conflagrateDamageClaimValid(card))return {ok:false,reason:'uncertain'};
-      const completed={...receipt,stage:'complete'};
+      const completed={...receipt,stage:'complete',...(mirrored?{mirrorImage:true}:{})};
       await card.setFlag(SCOPE,DAMAGE,completed);
       if(!valid() || JSON.stringify(card.getFlag(SCOPE,DAMAGE))!==JSON.stringify(completed))return {ok:false,reason:'uncertain'};
       return {ok:true};
@@ -227,7 +271,7 @@ export async function consumeConflagrate({messageId,index=0}={}, {user}={}) {
     const current=conflagrateOn(target,{burning:prepared.manualBurning===true});
     if(JSON.stringify(current.immolates)!==JSON.stringify(prepared.immolates)
       ||current.burning!==prepared.burning)return {ok:false,reason:'changed'};
-    const claim={messageId,index,targetUuid:target.uuid};
+    const claim={messageId,index,targetUuid:target.uuid,writer:game.user.id,immolates:structuredClone(current.immolates)};
     try {
       // Target serialization alone is insufficient across a client reload.
       await target.setFlag(SCOPE,CLAIM,claim);

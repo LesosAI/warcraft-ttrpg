@@ -69,6 +69,7 @@
 
 import { AZEROTH } from "../config.mjs";
 import { PARANOIA, paranoiaSource } from "../rules/paranoia.mjs";
+import { HEALING_AREA_WARD, healingAreaWardSource } from "../rules/healing-area-ward.mjs";
 import {
   AURA_FALLBACK_ICON, AURA_FLAG, AURA_ICONS, AURA_VERSION, auraCentreOf, auraChanges, auraGives, auraLaidHere, auraPayloadOf, auraPlan,
   diffAuras, excludesHolder, followUp, ownerAuras, payloadFromFlag, strongestPerGroup, totemStands
@@ -135,6 +136,10 @@ function plain(html) {
 export function auraSourcesOf(actor) {
   if (!actor) return [];
   const out = [];
+  for (const effect of actor.effects ?? []) {
+    const source = healingAreaWardSource(effect, actor.uuid);
+    if (source) out.push(source);
+  }
   const paranoia = paranoiaSource({ uuid: actor.uuid, type: actor.type, health: actor.system?.health?.value,
     abilities: actor.system?.creatureAbilities, img: actor.img || AURA_FALLBACK_ICON });
   if (paranoia) out.push(paranoia);
@@ -174,6 +179,7 @@ export function auraSourcesOf(actor) {
 /** Whether this creature holds an aura at all, before any gate is judged. */
 function holdsAura(actor) {
   if (!actor) return false;
+  if ([...(actor.effects ?? [])].some(e => healingAreaWardSource(e, actor.uuid))) return true;
   if ((actor.system?.signatureEffects?.auras ?? []).length) return true;
   for (const item of actor.items ?? []) {
     if (item.type === "feature" && item.system?.aura?.feet) return true;
@@ -496,7 +502,7 @@ function standingAreas(scene) {
     const f = region.flags?.["azeroth-rpg"] ?? {};
     if (!f.cast || !hasAreaTick(f.areaTick) || !(f.areaTick.remains ?? []).length) continue;
     const row = areaRecord(region);
-    if (row && staleIn(scene, [row], now).length) continue;
+    if (row && (row.transferPending === true || staleIn(scene, [row], now).length)) continue;
     out.push(region);
   }
   return out;
@@ -883,6 +889,7 @@ export function registerAuraHooks() {
   const gates = auraSpellGates();
   const effectMoves = (effect, changes = null) => {
     if (effect?.flags?.["azeroth-rpg"]?.[AURA_FLAG]) return changes?.disabled === false;
+    if (effect?.flags?.["azeroth-rpg"]?.[HEALING_AREA_WARD]) return true;
     let actor = effect?.parent ?? null;
     if (actor?.documentName === "Item") actor = actor.parent ?? null;
     if (actor?.documentName !== "Actor") return false;

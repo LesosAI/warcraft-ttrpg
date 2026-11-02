@@ -33,10 +33,11 @@ export function piccoloPerformance({ownModifiers={},skillRanks={},targets=[]}={}
 
 /** One saved recipient's actual Spirit Test. The runtime owns the next-Attack
  * consumption, end-of-next-turn expiry and per-recipient delivery receipt. */
-export function piccoloResistance(performance,{targetUuid,total}={}){
+export function piccoloResistance(performance,{targetUuid,total,success}={}){
   if(performance?.version!==1||performance.identifier!==PICCOLO_IDENTIFIER
     ||!Number.isInteger(performance.dc)||performance.dc<10||!Number.isFinite(total)
+    ||(success!==undefined&&typeof success!=='boolean')
     ||!performance.targets?.some(row=>row.uuid===targetUuid))return null;
-  const passed=total>=performance.dc;
+  const passed=success??total>=performance.dc;
   return {passed,attackBanes:passed?0:1,expires:'endOfNextTurn'};
 }

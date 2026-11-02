@@ -67,7 +67,7 @@
       {{#if row.castable}}<button type="button" class="azeroth-cast" data-action="castSpell">{{localize "AZEROTH.Sheet.Cast"}}</button>{{/if}}
       {{#if row.attackable}}<button type="button" data-action="rollAttack">{{localize "AZEROTH.Sheet.Attack"}}</button>{{/if}}
       {{#if (eq row.type "feature")}}{{#unless row.passive}}<button type="button" class="azeroth-use" data-action="useFeature"{{#unless row.available}} disabled{{/unless}}>{{localize "AZEROTH.Feature.Use"}}</button>{{/unless}}{{/if}}
-      {{#if row.usable}}<button type="button" class="azeroth-use" data-action="useGear">{{localize "AZEROTH.Feature.Use"}}</button>{{/if}}
+      {{#if row.usable}}<button type="button" class="azeroth-use" data-action="useGear"{{#if row.useRefusal}} disabled data-tooltip="{{localize row.useRefusal}}"{{/if}}>{{localize "AZEROTH.Feature.Use"}}</button>{{/if}}
       <button type="button" class="azeroth-star is-favorite" data-action="toggleFavorite" data-tooltip="{{localize "AZEROTH.Sheet.Unstar"}}" aria-label="{{localize "AZEROTH.Sheet.Unstar"}}" aria-pressed="true"><i class="fa-solid fa-star"></i></button>
       {{> systems/azeroth-rpg/templates/actor/partials/item-detail.hbs id=row.id detail=row.detail origin=row.origin description=row.description}}
     </li>

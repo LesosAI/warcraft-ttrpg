@@ -2,6 +2,7 @@ import { soulLinkState } from "./soul-link.mjs";
 import { soulLinkRecordedDamage, soulLinkRecipientDamage } from "../rules/soul-link-record.mjs";
 import { buffetStacks } from "../rules/flame-buffet.mjs";
 import { SOUL_LINK_CLAIM } from "./soul-link-casting.mjs";
+import {invulnerabilityPotionActive} from '../rules/invulnerability-potion.mjs';
 
 const SCOPE = "azeroth-rpg";
 const refuse = reason => ({ ok: false, reason });
@@ -29,7 +30,8 @@ export function prepareSoulLinkDamage(actor, row, { flatReduction = 0, negate = 
     if (state.caster !== actor || state.recipient === actor) return refuse("endpoint");
     if (typeof halve !== "boolean") return refuse("input");
     const rank = actor.talentRanks?.("Soul Link") ?? 0;
-    const result = soulLinkRecordedDamage(row, { rank, flatReduction, negate, ethereal, standingReduction, woundedRanks, halve });
+    const preventPhysical=invulnerabilityPotionActive(actor.effects);
+    const result = soulLinkRecordedDamage(row, { rank, flatReduction, negate, ethereal, standingReduction, woundedRanks, halve, preventPhysical });
     if (!result.ok) return result;
     const recipientDefenses = { immune: [...(state.recipient.system?.immune ?? [])],
       vulnerable: [...(state.recipient.system?.vulnerable ?? [])],
@@ -40,7 +42,7 @@ export function prepareSoulLinkDamage(actor, row, { flatReduction = 0, negate = 
     const snapshot = structuredClone({ casterUuid: actor.uuid, recipientUuid: state.recipient.uuid,
       effectId: effect.id, cast: effect.flags[SCOPE].cast, link: effect.flags[SCOPE].soulLink,
       start: effect._source?.start ?? effect.start, duration: effect._source?.duration ?? effect.duration,
-      rank, flatReduction, negate, ethereal, standingReduction, woundedRanks, halve, row, recipientDefenses,
+      rank, flatReduction, negate, ethereal, standingReduction, woundedRanks, halve, preventPhysical, row, recipientDefenses,
       casterHealth: health(actor), recipientHealth: health(state.recipient) });
     return { ok: true, linked: true, caster: actor, recipient: state.recipient,
       effect, snapshot, damage };

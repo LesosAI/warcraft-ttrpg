@@ -30,6 +30,7 @@
  */
 
 import { mitigatedDamage } from "../rules/reactions.mjs";
+import { areaTransferRefusal } from "../effects/pending-area-transfer.mjs";
 import { requestSignatureHitWithdrawal } from "../effects/signature-hit-withdrawal.mjs";
 import { resistKey, resistRecord, rowMatches } from "../rules/records.mjs";
 // What a failed Test landed, as the card records it (the B6 fix).
@@ -466,7 +467,7 @@ export async function recordResist({ message = null, result = null } = {}) {
  * client together - a player's and the GM's - cannot both find the card
  * unrecorded.
  */
-const AREA_WRITES = new Set();
+import {areaSaveWrites as AREA_WRITES} from '../effects/area-save-write-state.mjs';
 
 /** The creature an area's card is for, by name, for the words a refusal says. */
 export function areaTestName(message) {
@@ -520,7 +521,11 @@ export async function verifiedAreaTest({ messageId, resultId, user = null } = {}
   const flags = message?.flags?.["azeroth-rpg"] ?? {};
   if (!message || flags.kind !== "areaTest" || !flags.area?.check) return unlinked;
   if (flags.areaResult) return { ok: false, reason: "AZEROTH.AreaTest.Already", params: areaResultWords(flags.areaResult) };
+  let transferRefusal = areaTransferRefusal(flags.area);
+  if (transferRefusal) return { ok: false, reason: transferRefusal, params: { name: flags.area.name ?? "" } };
   const result = await messageArriving(resultId);
+  transferRefusal = areaTransferRefusal(flags.area);
+  if (transferRefusal) return { ok: false, reason: transferRefusal, params: { name: flags.area.name ?? "" } };
   const link = result?.flags?.["azeroth-rpg"]?.kind === "resilience" ? result.flags["azeroth-rpg"].resistOf ?? null : null;
   if (!link || link.messageId !== message.id) return unlinked;
   if (user && result.author?.id !== user.id) return { ok: false, reason: "AZEROTH.Card.NotYours" };
@@ -568,7 +573,24 @@ async function writeAreaTest({ messageId, resultId } = {}, user = null) {
   try {
     const verdict = await verifiedAreaTest({ messageId, resultId, user });
     if (!verdict.ok) throw new Error(game.i18n.format(verdict.reason, verdict.params ?? {}));
-    await message.update({ "flags.azeroth-rpg.areaResult": verdict.record });
+    const damageClaim=message.flags?.['azeroth-rpg']?.area?.signatureDamageCast
+      ? {state:'pending',writer:game.user.id,resultId,review:null} : null;
+    await message.update({ "flags.azeroth-rpg.areaResult": verdict.record,
+      ...(damageClaim?{'flags.azeroth-rpg.signatureAreaSaveDelivery':damageClaim}:{}) });
+    if (message.flags?.['azeroth-rpg']?.area?.signatureDamageCast) {
+      const { deliverRecordedAreaSignature } = await import('../effects/signature-area-save.mjs');
+      const delivered = await deliverRecordedAreaSignature({ message, result: game.messages.get(resultId), record: verdict.record, user });
+      if (!delivered.ok) throw new Error(game.i18n.localize('AZEROTH.AreaTest.TransferInterrupted'));
+      if(game.users.activeGM?.id!==game.user.id||JSON.stringify(message.flags['azeroth-rpg'].signatureAreaSaveDelivery)!==JSON.stringify(damageClaim))throw new Error(game.i18n.localize('AZEROTH.AreaTest.TransferInterrupted'));
+      const complete={...damageClaim,state:'complete'};
+      await message.setFlag('azeroth-rpg','signatureAreaSaveDelivery',complete);
+      if(JSON.stringify(message.flags['azeroth-rpg'].signatureAreaSaveDelivery)!==JSON.stringify(complete))throw new Error(game.i18n.localize('AZEROTH.AreaTest.TransferInterrupted'));
+      if (delivered.lines?.length) await ChatMessage.create({
+        speaker: message.speaker,
+        content: delivered.lines.map(line => `<p class="azeroth-drain">${line}</p>`).join(''),
+        flags: { 'azeroth-rpg': { kind: 'tick' } }
+      });
+    }
     return verdict.record;
   } finally {
     if (message) AREA_WRITES.delete(message.id);
@@ -590,7 +612,8 @@ export async function recordAreaTest({ message = null, result = null } = {}) {
   if (!message?.id || !result?.id) return null;
   const payload = { kind: "areaTest", messageId: message.id, resultId: result.id };
   try {
-    if (message.isOwner) return await writeAreaTest(payload, game.user);
+    if (message.isOwner && (!message.flags?.['azeroth-rpg']?.area?.signatureDamageCast
+      || game.users.activeGM?.id === game.user.id)) return await writeAreaTest(payload, game.user);
     const gm = game.users.activeGM;
     if (!gm) throw new Error(game.i18n.localize("AZEROTH.AreaTest.NeedsGM"));
     return await gm.query(ANNOTATE_QUERY, payload, { timeout: 15000 });

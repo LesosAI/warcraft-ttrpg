@@ -5,6 +5,7 @@ import { signatureRecipientKey } from "./chosen-signature-casting.mjs";
 import { sparedFor, halvesFor } from "../rules/resisted.mjs";
 import { signatureApplyRows } from "../rules/signature-apply.mjs";
 import { queueSignatureCard } from "./signature-card-queue.mjs";
+import { hasMirrorImage, interceptMirrorImage } from "./mirror-image-hit.mjs";
 
 // These two spells have their own payment/ending delivery coordinators.
 // They must join signature delivery there, never bypass those transactions.
@@ -44,6 +45,9 @@ async function applyQuery({ messageUuid, index, operation = "apply" } = {}, { us
   const message = resolve(messageUuid);
   const flags = message?.flags?.["azeroth-rpg"];
   const chain = flags?.kind === "spell" && flags.identifier === "chain-lightning";
+  const imageSpell = flags?.kind === "spell" && flags.mirrorImageDefense === true
+    && !["mana-burn", "conflagrate"].includes(flags.identifier);
+  const spellIdentifier = flags?.identifier;
   const signature = signatureSpell(flags);
   const target = flags?.targets?.[index];
   const actor = target?.sceneId && target?.tokenId
@@ -51,8 +55,8 @@ async function applyQuery({ messageUuid, index, operation = "apply" } = {}, { us
     : !target?.sceneId && !target?.tokenId && target?.actorId ? game.actors.get(target.actorId) : null;
   const permitted = () => operation === "reveal" ? Boolean(user.isGM || message?.author?.id === user.id)
     : actor?.testUserPermission(user, "OWNER") === true;
-  if (message?.documentName !== "ChatMessage" || (!chain && !signature && flags?.kind !== "attack") || flags.parry || flags.notAttack
-    || ((chain || signature) && (operation !== "apply" || flags.success !== true))
+  if (message?.documentName !== "ChatMessage" || (!chain && !signature && !imageSpell && flags?.kind !== "attack") || flags.parry || flags.notAttack
+    || ((chain || signature || imageSpell) && (operation !== "apply" || flags.success !== true))
     || !actor || !permitted()) return { ok: false, reason: "permission" };
   if (chain && flags.attackResolution?.targets?.slice(0, index).some(row => row.stage !== "applied")) {
     return { ok: false, reason: "arcOrder" };
@@ -65,7 +69,7 @@ async function applyQuery({ messageUuid, index, operation = "apply" } = {}, { us
   if (!effective) return {ok:false,reason:"signatureChanged"};
   const chosen = signature && !effective.consumed && flags.targets.findIndex(row => signatureRecipientKey(row) === recipient) === index
     && flags.chosenSignatureBonuses.some(bonus => bonus.recipient === recipient);
-  const spared = signature && sparedFor(flags, target);
+  const spared = (signature || imageSpell) && sparedFor(flags, target);
   const resistance = JSON.stringify({spared:sparedFor(flags,target), half:halvesFor(flags,target), passed:flags.passedByTarget?.[index]});
   const valid = () => permitted()
     && (!effective.consumed || JSON.stringify(signatureApplyRows(message.flags?.["azeroth-rpg"],index)) === JSON.stringify(effective))
@@ -75,20 +79,29 @@ async function applyQuery({ messageUuid, index, operation = "apply" } = {}, { us
     && (signature ? signatureSpell(message.flags?.["azeroth-rpg"])
       && JSON.stringify({cast:message.flags["azeroth-rpg"].cast, bonuses:message.flags["azeroth-rpg"].chosenSignatureBonuses}) === signaturePlan
       && sparedFor(message.flags["azeroth-rpg"], targetRow) === spared
-      : chain ? message.flags?.["azeroth-rpg"]?.kind === "spell"
-      && message.flags?.["azeroth-rpg"]?.identifier === "chain-lightning"
+      : chain || imageSpell ? message.flags?.["azeroth-rpg"]?.kind === "spell"
+      && message.flags?.["azeroth-rpg"]?.identifier === spellIdentifier
+      && (!imageSpell || message.flags?.["azeroth-rpg"]?.mirrorImageDefense === true)
       && message.flags?.["azeroth-rpg"]?.success === true : message.flags?.["azeroth-rpg"]?.kind === "attack")
     && JSON.stringify(message.flags?.["azeroth-rpg"]?.targets?.[index]) === JSON.stringify(targetRow)
     && JSON.stringify(message.flags?.["azeroth-rpg"]?.damageByTarget?.[index]) === JSON.stringify(damageRow)
     && JSON.stringify({spared:sparedFor(message.flags?.["azeroth-rpg"],targetRow),
       half:halvesFor(message.flags?.["azeroth-rpg"],targetRow), passed:message.flags?.["azeroth-rpg"]?.passedByTarget?.[index]}) === resistance
-    && damageRow?.withdrawn !== true && (chain || signature ? damageRow?.hit !== false : damageRow?.hit === true)
+    && damageRow?.withdrawn !== true && (chain || signature || imageSpell ? damageRow?.hit !== false : damageRow?.hit === true)
     && Number.isFinite(damageRow.damage) && damageRow.damage >= 0;
   return resolveAttackOperation({ message, index, targetUuid: actor.uuid, operation, validate: valid,
-    prepare: operation === "apply" && !spared ? ({ valid: stillValid }) => prepareAttackTransfer({ target: actor, message, index,
-      by: ChatMessage.getSpeakerActor(message.speaker) }, { valid: stillValid }) : null,
+    prepare: operation === "apply" && !spared ? ({ valid: stillValid }) => hasMirrorImage(actor)
+      ? {ok:true, mirrorImage:true}
+      : prepareAttackTransfer({ target: actor, message, index,
+        by: ChatMessage.getSpeakerActor(message.speaker) }, { valid: stillValid }) : null,
     execute: async ({ valid: stillValid, prepared }) => {
       if (operation === "reveal") return { ok: stillValid() };
+      if (!spared && await interceptMirrorImage(actor, {valid:stillValid})) {
+        return {ok:true, dealtDamage:false, mirrorImage:true};
+      }
+      // An image vanished while this hit was being claimed. No transfer was
+      // selected, so do not silently deliver an unprepared ordinary hit.
+      if (prepared?.mirrorImage) return {ok:false};
       const { applyRecordedAttackDamage } = await import("../dice/chat.mjs");
       if (!stillValid()) return { ok: false };
       const land = async ({valid = stillValid} = {}) => {

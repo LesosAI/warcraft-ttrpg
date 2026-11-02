@@ -1,5 +1,15 @@
 {
   "AZEROTH": {
+    "Everburn": {
+      "Touch": "Everburn contact",
+      "TouchConfirm": "Confirm that {target} touches this fire now. Apply its touch damage once? If movement already applied damage for this contact, cancel.",
+      "TouchUnresolved": "Select exactly one creature that touches this fire. If delivery was interrupted, review its damage before trying again.",
+      "Dismiss": "Dismiss Everburn",
+      "Unresolved": "Everburn dismissal could not be confirmed. Check the remaining fire areas before trying again."
+    },
+    "Bellow": {
+      "Unresolved": "Bellow could not complete. Check its use, action budget and interrupted-use record before trying again; no automatic retry or refund was made."
+    },
     "RocketJump": {
       "Pick": "Rocket Jump: choose an unoccupied destination within your movement allowance. Cancel spends nothing.",
       "Source": "Rocket Jump needs your token on the viewed scene and an active GM viewing that scene.",
@@ -43,8 +53,91 @@
       "Cancel": "Cancel",
       "Reviewed": "Weapon use reviewed. Reload state now reflects your decision."
     },
+    "HungerMastered": {
+      "Title": "The Hunger Mastered",
+      "ReviewTitle": "Review interrupted uses",
+      "ReviewNone": "No supported interrupted uses need review.",
+      "ReviewConfirm": "Mark reconciled",
+      "ReviewCancel": "Cancel",
+      "ReviewExplain": "Inspect the selected actor's Test or use, target effects, Power pools, relevant counters and result card. Reconcile these manually before continuing. This control closes the selected pending receipt only; it does not change effects, restore Power or a group Boon, change counters, publish a card or repeat the use.",
+      "ReviewAcknowledge": "I inspected and reconciled this Test or use, its resources and its result card.",
+      "ReviewDone": "Selected receipt marked reconciled. No Test, Power restoration or use was repeated.",
+      "ReviewChanged": "Review could not finish. Check for changed actor state, an active original writer, or a pending write before reviewing again.",
+      "Restored": "Every Power pool is restored to its maximum. Something unintended notices; the Farstriders' reaction is the GM's call.",
+      "Refused": "The Hunger Mastered needs an available arc use, a Power pool, and an active GM.",
+      "Pending": "The Hunger Mastered may already have restored Power and spent its use. Ask the GM to inspect the actor receipt before retrying; do not restore the use automatically."
+    },
+    "Zalazane": {
+      "Title": "Zalazane's Lesson",
+      "Target": "Target one creature with identified Mind Control, Compel, Dominate, Enslave Demon, or Thrall of the Banshee. Unmarked legacy effects need GM identification; ordinary Charmed is not automatically domination.",
+      "Confirm": "Spend your use for this story arc to permanently end this creature's recognized current domination? This grants no immunity to future domination.",
+      "Done": "Recognized current domination ended; one story-arc use spent. No future immunity was granted.",
+      "Pending": "Zalazane's Lesson was not confirmed. The use may already be spent. The GM must inspect the use receipt, counters and target effects before retrying."
+    },
+    "MindSootheHarm": {
+      "Title": "End for harm",
+      "Confirm": "Confirm that harm was done to this creature or something it cares about. End all currently active Mind Soothe spells on this creature? Other effects remain unchanged."
+    },
+    "DominationOrder": {
+      "DeliveryReview": "Interrupted domination delivery",
+      "DeliveryPending": "Domination delivery was not confirmed. The active GM must inspect the target and delivery record before retrying; do not repeat the cast automatically.",
+      "DeletionReview": "Deferred domination cleanup",
+      "Title": "Order-triggered save",
+      "MinuteDue": "Minute save due",
+      "ClockReview": "Reconcile minute clock",
+      "ClockExplain": "Resolve any past minute saves at the table, then enter how many seconds remain until the next save. Zero means a save is due now. This does not roll a Test or change the domination.",
+      "ClockSeconds": "Seconds until next save (0–60)",
+      "ClockAck": "I have reconciled all past minute saves.",
+      "ClockDone": "Enslave Demon's next minute save is scheduled. No Test was rolled.",
+      "MissingClock": "Enslave Demon on {name} has no verified minute deadline. The GM must reconcile the elapsed time and past saves; automatic minute saves are unavailable for this legacy effect.",
+      "Minute": "One minute of Enslave Demon has elapsed. Resolve this minute's Spirit Test. Cancelling leaves it due; multiple elapsed minutes are resolved separately.",
+      "Harmful": "Confirm a new Dominate order to harm this creature or one of its allies. It immediately repeats its Spirit Test with a Boon.",
+      "Destruction": "Confirm a new Enslave Demon order to destroy itself. It immediately repeats its Spirit Test.",
+      "MissingDC": "The original casting DC cannot be verified. The GM must adjudicate this save.",
+      "Pending": "This order's save is unresolved. Reconcile the recorded attempt, result and effects through Review interrupted uses in the Actors directory before making another Test."
+    },
+    "MilitiaDrill": {
+      "GroupName": "Name this drilled group",
+      "Title": "Militia Drill",
+      "Target": "Target the actor who will make the drilled group's single Test.",
+      "Confirm": "Confirm that you spent an hour drilling these untrained people. This actor will represent the group for its next single Test, receiving one Boon. Their extra round holding a line remains the GM's judgement.",
+      "GroupTest": "Militia Drill: this is the drilled group's single Test (choose only one group)",
+      "Ready": "The group's representative has one Militia Drill Boon available. Select its group-Test line when rolling for the group.",
+      "PublicationPending": "The group Test's completion could not be confirmed. Ask the GM to inspect its card and use Review interrupted uses in the Actors directory. Do not repeat the Test or restore its Boon automatically.",
+      "Refused": "Militia Drill could not be confirmed. Check the active GM, representative and any existing or interrupted group Test before retrying."
+    },
+    "KodoBond": {
+      "Title": "Kodo-Bond",
+      "Target": "Target one beast you control to register or release its Kodo-Bond turn timing.",
+      "Confirm": "Confirm that you have worked with this beast for a month. Its existing turn will follow yours; it gains no additional turn. Cancel if this has not been established at the table.",
+      "Release": "Stop scheduling this beast immediately after your turn? Its normal turn remains available.",
+      "Done": "Kodo-Bond timing updated. Already completed turns are preserved.",
+      "Pending": "Kodo-Bond could not be fully confirmed. Ask the GM to inspect the registered beasts and turn order; conflicting turn placements need adjudication."
+    },
+    "ElunesRegard": {
+      "Title": "Elune's Regard",
+      "Prompt": "Spend your use for this story arc to make this failed Test a success at SL 0? The priestesses will want to know why you were owed it.",
+      "Use": "Succeed at SL 0",
+      "Keep": "Keep failed Test",
+      "Result": "Failed Test becomes success at SL 0; one story-arc use spent.",
+      "Pending": "The use may have been spent, but the result replacement could not be confirmed. Ask the GM to reconcile the use and Test through Review interrupted uses in the Actors directory before retrying.",
+      "Changed": "Elune's Regard is no longer available. The original Test stands.",
+      "PublicationPending": "Elune's Regard's result card exists, but its use receipt could not be linked. Ask the GM to inspect the card and talent; do not repeat the Test or restore its use automatically."
+    },
+    "ElunesLight": {
+      "Title": "Elune's Light",
+      "Target": "Select your token on the scene to confirm or end Elune's Light.",
+      "Confirm": "Confirm that this token is under an open night sky. It emits visible Bright light for 10 feet, with no additional Dim light. Use this feature again when that circumstance ends.",
+      "End": "End this token's open-night-sky light? Other light settings remain unchanged."
+    },
     "MindControl": {
       "Saves": {
+        "Legacy": "This older control is not registered in its caster's Sustain list. Register it to use normal capacity and upkeep while keeping its saved DC, current turn and resistance history. No other Sustain will be replaced.",
+        "UpgradeAcknowledge": "Keep this control and register its Sustain slot.",
+        "Upgrade": "Register Sustain",
+        "Upgraded": "Mind Control now uses its caster's normal Sustain capacity and upkeep.",
+        "Capacity": "The caster has no free Sustain slot. Stop an existing Sustain before registering this control, or end this control.",
+        "UpgradeUnresolved": "Registration could not be confirmed. Check the caster's Sustain list and this control before reopening. An exact existing reservation can be reused without creating another slot.",
         "Title": "Mind Control saves",
         "None": "No canceled or interrupted save is available on an active control from this cast.",
         "Explain": "Resume only a canceled save. For an interrupted save, inspect its resistance card and manually reconcile the control effect before marking it reviewed. Review does not roll, remove control, or change turns or resources.",
@@ -61,11 +154,18 @@
       "OneTarget": "Choose exactly one available creature for Mind Control. Nothing was spent.",
       "Review": {
         "Title": "Review interrupted Mind Control",
-        "Explain": "Inspect the original cast, target effects and combat state. Manually reconcile the interrupted control before confirming. This closes the claim only; it does not create or remove effects, change turns, repeat the cast or refund costs.",
+        "ActivateTitle": "Apply missed Mind Control",
+        "Activate": "Apply control",
+        "ActivateExplain": "This cast has one failed initial resistance Test and no recorded activation attempt. Apply control only if its activation was missed and control should still begin now. This uses the recorded result without another Test or resource payment. Conflicting results or an existing activation claim require manual review instead.",
+        "ActivateAcknowledge": "I checked the cast and subsequent events. Control was not already applied manually and should begin now.",
+        "Activated": "Mind Control applied from the recorded failed Test. No resources were spent again.",
+        "Explain": "Inspect the original cast, target effects, the caster's Sustain list and combat state. Manually reconcile the interrupted control before confirming. This closes the claim only; it does not create or remove effects, release Sustain slots, change turns, repeat the cast or refund costs.",
+        "Reservations": "Sustain slots reserved for this cast:",
+        "ReservationHelp": "A slot may remain even if activation did not finish. Keep it only if the matching control remains active. Otherwise stop that Mind Control in the caster's Sustain list before marking this claim reviewed. Do not remove another creature's control.",
         "Effects": "Currently active control effects recorded from this cast:",
         "None": "None found. This does not prove that no effect was created earlier.",
         "Missing": "Unavailable actor",
-        "Acknowledge": "I have checked and manually reconciled this cast, its effects and combat state.",
+        "Acknowledge": "I have checked and manually reconciled this cast, its effects, its reserved Sustain slot and combat state.",
         "Confirm": "Mark reviewed",
         "Cancel": "Cancel",
         "Reviewed": "The claim is reviewed. Effects and resources were not changed.",
@@ -130,6 +230,7 @@
       "Legacy": "This older trap has no saved explosion inputs. Its damage needs GM adjudication.",
       "Resist": "{name}: Reflex DC {dc}",
       "Complete": "{name}: damage resolved.",
+      "Reviewed": "{name}: resolved manually by the GM. Damage will not be applied again.",
       "Review": "{name}: resolution is pending or uncertain. Ask the GM to review it; do not apply the damage again.",
       "Unavailable": "{name}: an active GM is required to resolve the explosion.",
       "Refused": "Explosive Trap could not be resolved. Check the trigger, roll and resolution record before trying again. An uncertain damage write must not be repeated."
@@ -175,9 +276,14 @@
       "CleanupFailed": "Soul Link cleanup could not be confirmed. The GM should check the linked effects before applying further damage."
     },
     "Compel": {
-      "RepeatUnresolved": "A Compel effect on {name} has no verified repeat-Test record. The GM must check the original cast's Spirit DC and resolve its end-turn Test manually.",
+      "RepeatUnresolved": "A Compel or Dominate effect on {name} has no verified repeat-Test record. The GM must check the original cast's Spirit DC and resolve its end-turn Test manually.",
       "BeforeFailed": "Compel requires exactly one demon target. The selected creature is unavailable or ineligible. Nothing was spent.",
-      "UseResistance": "Compel applies Charmed automatically when the demon fails its Spirit Resilience Test. Use the spell card's Resist control."
+      "UseResistance": "Compel applies Charmed automatically when the demon fails its Spirit Resilience Test. Use the spell card's Resist control.",
+      "DominationResistance": "This spell applies its own Charmed effect when the target fails its Spirit Resilience Test. Use the spell card's Resist control.",
+      "DominationTarget": "Select exactly one valid target. Compel and Enslave Demon require a demon; Dominate requires a creature with a mind under your active Mind Soothe.",
+      "MindSootheResistance": "Mind Soothe applies automatically after a failed Spirit Resilience Test. Use the spell card's Resist control.",
+      "MindSootheCleanup": "Damage was applied, but Mind Soothe cleanup could not be confirmed. Check the target's effects.",
+      "MindSoothePending": "Mind Soothe application was not confirmed. The active GM must inspect the target's effects and application receipt before retrying."
     },
     "BloodPactSpell": {
       "Review": "Review interrupted Blood Pact",
@@ -347,7 +453,10 @@
       "Prompt": "Your Attack Test missed ({total} against DC {dc}). Spend {cost} Rage to roll it again? You must keep the new result. This uses Second Strike for this round.",
       "RollAgain": "Spend Rage and reroll",
       "Keep": "Keep the miss",
-      "Record": "Replaced the missed Test ({total}); spent {cost} Rage."
+      "Record": "Replaced the missed Test ({total}); spent {cost} Rage.",
+      "RerollUnconfirmed": "Second Strike spent {cost} Rage, but its replacement roll could not be completed. The original miss is preserved and this round's use remains spent. Ask the GM to review the interrupted reroll.",
+      "PaymentUnconfirmed": "Second Strike's Rage payment could not be confirmed. Keep the original miss. Its use remains spent for this round; ask the GM to check the Rage pool before adjusting it.",
+      "ClaimUnconfirmed": "Second Strike's use could not be confirmed for this round. Keep the original miss. No Rage payment or reroll was attempted."
     },
     "Training": {
       "weapon": "You are not trained in this weapon",
@@ -1190,6 +1299,7 @@
         "NotLeaving": "{name} has no departure to answer.",
         "Grasped": "{name} is held fast and can make no Opportunity Attack while it is held.",
         "Unanswered": "No creature may take a Reaction against it ({source}).",
+        "Unparryable": "This attack cannot be Parried or Blocked.",
         "NoReady": "{name} readied no action to take.",
         "NotYours": "{name} is not yours to react with.",
         "Gone": "The creature that would react is gone.",
@@ -1529,6 +1639,16 @@
       "ResistFor": "{name}: {resilience} Resilience Test, DC {dc}",
       "ResistOutcome": "{name}: {outcome} ({total} vs DC {dc})",
       "ResistNeedsGM": "A GM must be online to record this Resilience Test on its card.",
+      "GadgetResistResolved": "This creature already resolved this gadget's Resilience Test. A GM must use the explicit override to reroll it.",
+      "GadgetResistPending": "Gadget delivery was not authorized or is still pending. It cannot be repeated until the GM reconciles the earlier attempt.",
+      "GadgetReview": "Review interrupted gadget delivery",
+      "GadgetReviewHelp": "Reconcile this target's conditions and other consequences manually before confirming. Review does not apply effects, roll, spend or refund uses. Ordinary Resist remains blocked; a separate GM override can then reroll. Review is refused while another originating client is connected or this card is in use.",
+      "GadgetReviewAck": "I have reconciled this attempt's consequences.",
+      "GadgetReviewFacts": "Saved Test: {total} against DC {dc}. Current effects: {effects}.",
+      "GadgetReviewed": "Gadget attempt reviewed. No effects or uses were changed.",
+      "GadgetReviewChanged": "Review refused: the attempt changed or its originating client may still be applying effects.",
+      "GadgetResistOverride": "GM override: reroll gadget resistance",
+      "GadgetResistOverrideHelp": "Reroll this target's gadget resistance and resolve its result again. This does not spend or restore gadget uses. Existing conditions are not automatically undone; reconcile any prior consequences before continuing.",
       "ResistUnlinked": "That Resilience Test was not made from this card's Resist.",
       "ResistFailedCast": "{name} did not go off, so there is nothing to resist: a failed Casting Test lands nothing.",
       "ResistNotAtCast": "{name} asks its Test later - of a creature entering the area, starting its turn there, crossing it or striking its caster - never at the cast, so this card has nothing to resist.",
@@ -2109,6 +2229,8 @@
       "NoneNamed": "Nobody was named as {spell} was cast: target the creatures to name before casting it."
     },
     "AreaTest": {
+      "TransferInterrupted": "Area resolution stopped because Spellsteal started transferring this area. Completed effects remain; the GM must review any unapplied effects. Do not repeat the Test.",
+      "Transferred": "This area was transferred or ended during Spellsteal. Its original card can no longer resolve a Test.",
       "Turn": "{name} starts its turn in {spell}: a {resilience} Resilience Test against DC {dc}.",
       "Enter": "{name} enters {spell}: a {resilience} Resilience Test against DC {dc}.",
       "Cross": "{name} tries to cross {spell}: a {resilience} Resilience Test against DC {dc}.",
@@ -2283,6 +2405,7 @@
       "Per": {
         "Short": "per Short Rest",
         "Long": "per Long Rest",
+        "Arc": "per story arc",
         "Encounter": "per encounter",
         "Round": "per round",
         "Turn": "per turn",
@@ -2397,6 +2520,7 @@
         "maxed": "Fully ranked"
       },
       "Locked": {
+        "ogreMage": "Two Heads requires the Ogre race and Mage class.",
         "maxed": "That talent is already at its highest rank.",
         "noPoints": "No talent points left to spend.",
         "tierLocked": "That tier is not open yet - spend more points in this branch.",
@@ -2445,6 +2569,7 @@
       "DamageWhen": {
         "always": "always",
         "damagedTarget": "against a target you have already damaged",
+        "lunarTarget": "against a target you dealt Arcane or Nature damage since the start of your previous turn",
         "engagedOne": "Engaged with exactly one enemy",
         "boundDemon": "while you control a Bound Demon",
         "riposte": "on a Riposte",
@@ -2637,7 +2762,7 @@
       "AuraBaneJudged": "Area: a Bane, if a metal weapon is held",
       "LaidBoon": "laid a Boon on this Test",
       "LaidBaneJudged": "laid a Bane, unless this attack is against the one who laid it",
-      "TalentBoon": "gives a Boon on this attack",
+      "TalentBoon": "gives a Boon on this Test",
       "Reckless": "gives a Boon on your attacks, and attacks against you gain one until your next turn",
       "NextAttackBoon": "promised a Boon on this attack",
       "TargetExposed": "left the target open: a Boon on this attack",
@@ -2645,6 +2770,7 @@
       "TalentBane": "lays a Bane on this Test",
       "Opening": "holds the target under your Opening: a Boon on this attack",
       "TargetDeterred": "on the target: a Bane on attacks against it",
+      "TargetMirrorImages": "Mirror Image: a Bane against this target",
       "LesserInvisibleTarget": "Lesser Invisibility: two Banes against this target",
       "LesserInvisibleMovement": "Lesser Invisibility: a Boon if this Test is to move unnoticed"
     },
@@ -2661,6 +2787,7 @@
       }
     },
     "Cast": {
+      "ArcaneMissilesTargets": "Choose a primary target and, optionally, one different creature within 15 feet of it. The second creature takes the fourth dart only at SL 3 or better.",
       "SelfTokenRequired": "Place and select this creature's token before using its self-targeted spell.",
       "NoHealth": "{name} costs {health} Health and that would leave you below 1.",
       "HealthCost": "Health",
@@ -2879,6 +3006,7 @@
       "NoPause": "A shape is left, never switched off: press Leave.",
       "NeedsTalent": "{name} needs the talent {talent}.",
       "LeftSwift": "{name} leaves the {form} with {talent}, at no action.",
+      "SwiftPaymentUnconfirmed": "Predator's Swiftness could not confirm its spent use. The form and Mana discount have not changed. Check the talent's uses before trying again.",
       "LeftSavage": "{name} leaves the {form} at no action: {talent}'s shift this round.",
       "TokenNotDressed": "The token for {name} on {scenes} could not be changed to match the shape. The shape on the sheet still applies.",
       "NotWritten": "{name}: {form} could not be written, and no shape was taken.",
@@ -3058,6 +3186,7 @@
         "noRacialTalent": "Take one racial talent.",
         "racialTalentNotOfRace": "{name} is not one of this people's talents.",
         "racialTalentTier": "{name} is above tier 1.",
+        "racialTalentEligibility": "{name} requires the Ogre race and Mage class.",
         "noClassTalent": "Spend the talent point.",
         "classTalentNotOfClass": "{name} is not on this class's trees.",
         "classTalentNotYourPeople": "{name} is on the {people}'s Legacy branch, which only the {people} keep.",
@@ -3539,6 +3668,8 @@
     },
     "Use": {
       "WardSchool": "Choose the school this elixir was brewed for.",
+      "SpellpowerSchool": "Choose the school that gains 2 Spellpower for one hour.",
+      "FatigueGained": "{n} Fatigue gained",
       "Busy": "Finish or cancel this character's current consumable use first.",
       "Changed": "The item changed while choosing. Nothing was spent; choose again from its current state.",
       "GrantedXp": "{name} gains {xp} experience toward one skill.",
@@ -3558,6 +3689,16 @@
       "NoFatigue": "No Fatigue track to relieve",
       "Ended": "{condition} ended",
       "NotEnded": "{condition} could not be ended",
+      "Receipt": {
+        "Pending": "This consumable use is unresolved. The active GM must review its payment and effects before another use.",
+        "Review": "Review consumable use",
+        "MarkReviewed": "Mark reviewed",
+        "Cancel": "Cancel",
+        "Help": "Check the spent action, remaining doses, Health, Mana, Fatigue and effects. Settle any partial result manually before closing this record. Review does not replay benefits or refund payment.",
+        "Acknowledge": "I have reconciled the payment and effects. Close this attempt without replaying or refunding it.",
+        "Reviewed": "Consumable use reviewed. No benefits or payment were replayed.",
+        "Failed": "Review refused: the actor changed or the original user is still resolving this use."
+      },
       "Antivenom": {
         "Choose": "Choose one poison to end.",
         "NeedsClassification": "The GM must confirm that this entire effect is one harmful poison before anything is spent.",
@@ -3793,6 +3934,38 @@
     },
     "Signature": {
       "ChosenTargetRequired": "Select a valid recipient for the signature bonus before casting. If the item or target changed, make the selection again.",
+      "RetaliationUnresolved": "Retaliation could not be applied. Confirm the attack's damage first; if the hit, sustained spell, or casting record changed, review the unresolved damage before continuing.",
+      "HealingReview": {
+        "Title": "Review interrupted signature healing",
+        "Help": "Check the recipients' Health and reconcile the interrupted healing manually before continuing. Missing cards do not prove that no healing occurred. Review closes the original bonus allowances as spent and prevents the uncertain healing from repeating. A pending periodic pulse advances its countdown once; later pulses may continue. This does not restore or remove Health.",
+        "Acknowledge": "I reconciled the recipients' Health and accept closing these attempts without replay.",
+        "Complete": "Close reviewed healing",
+        "Done": "Healing attempts reviewed without repeating healing.",
+        "Failed": "Review could not finish. Reopen it after checking changes to recipients, cards, effects, or the previous GM's connection."
+      },
+      "DamageReview": {
+        "SealingHelp": "Sealing Flame casting was interrupted for this recipient. Reconcile the original hit, casting costs, Health, Bleeding and injury stabilization manually, then record whether the recipient benefited. This does not replay or refund anything.",
+        "SealingResult": "Did this recipient benefit from Sealing Flame?",
+        "SealingChoose": "Choose the reconciled outcome",
+        "SealingUsed": "Yes — unavailable until Long Rest",
+        "SealingUnused": "No — release the reservation",
+        "Title": "Review interrupted signature damage",
+        "Help": "Reconcile the recipients' damage and any transferred shares before continuing. This closes all remaining signature bonuses for the listed castings, marks pending area hits reviewed, and advances each pending timed pulse once. A missing spell card is replaced by a recovery record with no signature bonus. For recovered areas, reconcile the current combat turn manually; automatic base damage resumes on later turns. This does not change Health or replay damage. Attack and transfer recovery remain separate.",
+        "RecoveryRecord": "The GM reconciled a spell whose original card was missing. This record preserves its remaining base damage; its signature bonuses are closed. Recovered areas resume automatic damage after the manually reconciled combat turn.",
+        "Acknowledge": "I reconciled these hits, any Sealing Flame condition removal and injury stabilization, and accept closing the casting without replay.",
+        "Complete": "Close reviewed damage",
+        "Done": "Signature damage reviewed without repeating damage.",
+        "Failed": "Review could not finish. Check the recipients, cards, and previous GM's connection before reopening it."
+      },
+      "HitReview": {
+        "Title": "Review signature attack",
+        "Help": "An attack was interrupted while recording its signature bonus. Check any surviving attack cards and settle their damage and action costs manually before continuing. A missing card does not prove that nothing happened. This review marks the listed allowances spent on their original turn; it does not roll, apply damage, or refund resources.",
+        "Card": "Surviving attack card",
+        "Acknowledge": "I have reconciled these attacks and accept closing their signature allowances as spent.",
+        "Complete": "Close as spent",
+        "Done": "Signature attack allowances reviewed. No attack or damage was repeated.",
+        "Failed": "Review could not finish. Check that the previous writer disconnected and that the actor and cards have not changed."
+      },
       "ParryReview": {
         "Title": "Review interrupted Conqueror Parry",
         "Complete": "Mark Parry bonus reviewed",
@@ -3801,6 +3974,16 @@
         "Acknowledge": "I reconciled this Parry and its costs and effects. Do not repeat the attempt.",
         "Done": "The Parry bonus claim was reviewed. No roll, resource or attack result was changed.",
         "Failed": "Review was not confirmed. State changed, the operation is running, or its previous GM writer is still connected."
+      },
+      "KillReview": {
+        "Title": "Review interrupted kill rewards",
+        "Complete": "Close reviewed allowances",
+        "Health": "Current Health: {health}; temporary Health: {temp}.",
+        "Missing": "Original attack card is missing",
+        "Help": "Check the original kill, Health restored and temporary Health granted. Reconcile uncertain changes manually first. Recorded actor allowances close as spent on their original turn; card-only claims do not create an allowance. This does not grant, refund or repeat either reward. Original attack cards remain non-replayable, including when a card or target has been deleted.",
+        "Acknowledge": "I have reviewed and reconciled these rewards. Do not repeat them.",
+        "Done": "The pending kill allowances were reviewed. Health and temporary Health were unchanged.",
+        "Failed": "Review was not confirmed. State changed, delivery is running, or a previous GM writer is still connected."
       },
       "Cannonball": {
         "Review": {
@@ -3882,8 +4065,17 @@
       "HitBonus": "This hit deals {n} additional {type} damage",
       "HitTarget": "Choose the target that receives this attack's signature damage bonus.",
       "BandHide": "One Boon when using Stealth to hide in dim light or darkness",
+      "BandHiddenTarget": "Band of Veiled Shadows: I was Hidden from this target when this Test began",
+      "BandExtraAttack": "Extra Attack — Band of Veiled Shadows",
+      "BandContinue": "Roll extra attack",
       "PiccoloCannotHear": "Cannot hear — cancel this use",
       "Helmet": {
+        "Review": "Review interrupted helmet strike",
+        "Applying": "The saved attempt was applying the knockdown.",
+        "RecordedTotal": "Recorded Body Test total: {total}",
+        "ProneNow": "The target is currently Prone.",
+        "NotProneNow": "The target is not currently Prone, or is no longer available.",
+        "ReviewHelp": "Check the Body Test, the target's Prone condition and the helmet's shared rest use. Reconcile them manually before marking this attempt reviewed. This control does not roll again, change conditions or refund the use.",
         "Use": "{name}: Body DC {dc} for {target} (once per Short Rest)",
         "Offered": "This hit's helmet use has been spent. Resolve its Body Test on the helmet card.",
         "Test": "{target} makes a Body Resilience Test against DC {dc}. On failure it becomes Prone. The helmet deals no additional damage.",
@@ -4097,6 +4289,9 @@
     },
     "Laid": {
       "BaneLine": "{target} takes {n} Bane attacking anyone but {name}",
+      "NextTestBaneLine": "{target} takes {n} Bane on their next Test.",
+      "BaneUnconfirmed": "{name}: delivery to {target} could not be confirmed. The GM must inspect that target before any retry; this does not refund the use or action.",
+      "CannotHearDelivery": "{name}: {target} is Deafened and cannot hear you. No new Bane was applied; this does not refund any spent use or action.",
       "NotFriendly": "{name} names a friendly creature, and {target} is hostile.",
       "OneTarget": "{name} names one creature: target exactly one.",
       "SomeTargets": "{name}: target at least one creature that can hear you.",
@@ -4104,6 +4299,7 @@
       "CannotHear": "{name}: {target} is Deafened and cannot hear you. Nothing was spent.",
       "TooFar": "{name}: {target} is more than {feet} feet away.",
       "BaneNoGM": "No GM is online to lay the Bane on a creature you do not own.",
+      "ReplacementUnconfirmed": "The previous Boon or Bane could not be removed. No replacement was created; ask the GM to review the existing effect.",
       "BaneEndNoGM": "No GM is online to end the Bane on a creature you do not own.",
       "BoonNoGM": "No GM is online to lay the Boon on a creature you do not own."
     },
@@ -4216,6 +4412,7 @@
       "Text": "Counts as hidden even while observed, until the end of the next turn."
     },
     "Snare": {
+      "EscapeUnconfirmed": "Snare removal could not be confirmed. No Entrapment damage was applied; check the condition and spent action before retrying.",
       "AutomaticEntry": "The first creature to enter the placed Snare is Entangled automatically.",
       "LegacyCard": "This older Snare card needs GM adjudication. Use the current Snare feature for a new trap.",
       "Triggered": "This Snare has triggered and cannot catch another creature.",
@@ -4470,6 +4667,34 @@
       "TwoTargets": "{name} names two creatures: target exactly two."
     },
     "Spellsteal": {
+      "RecoveryTitle": "Spellsteal recovery",
+      "RecoveryActiveGM": "Only the active GM can resolve interrupted Spellsteal attempts.",
+      "RecoveryWriterActive": "The GM who started this attempt is still connected. Resolve it on that GM's client, or disconnect that client before recovery on another GM.",
+      "RecoveryNone": "No recoverable Spellsteal attempts are pending.",
+      "RecoveryExplain": "Review an interrupted attempt. Confirm is available only when its exact completed transfer is still present. Ending removes this cast from both creatures once transfer delivery has begun; an attempt interrupted before delivery leaves the original spell intact. Already-ended replacement spells are not restored.",
+      "RecoveryAttempt": "Attempt",
+      "RecoveryPhase": "Delivery",
+      "RecoveryHolding": "Preparing the sustained spell",
+      "RecoveryMoving": "Moving the effect",
+      "RecoveryReleasing": "Ending the original caster's upkeep",
+      "RecoveryComplete": "Complete",
+      "RecoveryPending": "In progress or interrupted",
+      "RecoveryNeedsReview": "Needs review",
+      "RecoveryNotStarted": "Not started",
+      "RecoveryEffects": "Current effects",
+      "RecoveryRegions": "Surviving areas",
+      "RecoveryReplacement": "Capacity replacement",
+      "RecoveryActivation": "Activation",
+      "RecoveryAction": "Recovery action",
+      "RecoveryChoose": "Choose an outcome…",
+      "RecoveryConfirm": "Confirm the completed transfer",
+      "RecoveryEnd": "End this transferred cast on both creatures",
+      "RecoveryClose": "Close the attempt; keep the original spell",
+      "RecoveryAcknowledge": "I reviewed this attempt. This action neither refunds nor repeats payment, and does not restore replaced spells.",
+      "RecoveryResolve": "Resolve attempt",
+      "RecoveryCancel": "Cancel",
+      "RecoveryDone": "Spellsteal recovery recorded. No payment was repeated or refunded.",
+      "RecoveryChanged": "Recovery could not be confirmed. Reopen the review to inspect the current state before acting again.",
       "EndChoice": "End effect",
       "TransferChoice": "Sustain it yourself",
       "TransferDescription": "Move the effect onto yourself and pay its upkeep from your Mage Mana pool. If your Sustain capacity is full, your oldest sustained spell ends to make room.",
@@ -4699,7 +4924,8 @@
       "Everyone": "each creature in the radius"
     },
     "Dreamstate": {
-      "Rested": "{name} rests in the Dream too and restores {n} Health."
+      "Rested": "{name} rests in the Dream too and restores {n} Health.",
+      "AlreadyHealed": "Dreamwalk already restored this Druid's Health when used. Select the other characters resting with the Druid."
     },
     "SharedQuarry": {
       "Label": "Shared Quarry",
@@ -4810,6 +5036,7 @@
       "CardIgnores": "+{n} damage at SL {sl}, ignoring Armor Points."
     },
     "Blueprint": {
+      "CleanupUnconfirmed": "Blueprint expiry could not be confirmed. Inspect the remaining device and build record before completing the Long Rest.",
       "Built": "{talent}: {name} is built, and works until your next Long Rest.",
       "DeviceTag": "device",
       "GadgetTag": "gadget",

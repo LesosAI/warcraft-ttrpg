@@ -40,6 +40,9 @@ import { spellTiming } from "./durations.mjs";
 import { MIND_FLAY_FLAG } from "../rules/qiraji-mind-flay.mjs";
 import { mindFlayChannelLive } from "./qiraji-mind-flay-lifecycle.mjs";
 import { sustainedSpellLive } from "./sustained-spells.mjs";
+import { allyOf } from "../canvas/engaged.mjs";
+import { talentEffect } from "../rules/talent-effects.mjs";
+import { evaluateAmount } from "../rules/class-features.mjs";
 
 /** The flag a laid tick lives under, in the system's scope. */
 export const TICK_FLAG = "tick";
@@ -189,6 +192,7 @@ export async function layTickOn(actor, { tick, img = null, origin = null, timing
     })
     .map(e => e.id);
   if (stale.length) await actor.deleteEmbeddedDocuments("ActiveEffect", stale);
+  if (!actorInWorld(actor) || stale.some(id => actor.effects.get(id))) return null;
   const [made] = await actor.createEmbeddedDocuments("ActiveEffect", [{
     name: tick.name || game.i18n.localize("AZEROTH.Tick.Label"),
     img: img ?? POISON_ICON,
@@ -197,7 +201,7 @@ export async function layTickOn(actor, { tick, img = null, origin = null, timing
     ...(timing ?? {}),
     flags: { "azeroth-rpg": { [TICK_FLAG]: foundry.utils.deepClone(tick) } }
   }]);
-  return made ?? null;
+  return made && actorInWorld(actor) && actor.effects.get(made.id) === made ? made : null;
 }
 
 /**
@@ -211,7 +215,7 @@ export async function layTickOn(actor, { tick, img = null, origin = null, timing
  * @returns {Promise<{id: string, name: string, tick: object}|null>}
  */
 export async function endTick(target, { from = null, kind = "heal", effectId = null } = {}) {
-  if (!target) return null;
+  if (!target || !actorInWorld(target)) return null;
   const hand = typeof from === "string" ? from : (from?.uuid ?? null);
   const rows = tickEffectsOf(target, { all: true }).map(e => ({ id: e.id, tick: tickOn(e) }));
   const id = tickToEnd(rows, { from: hand, kind, id: effectId });
@@ -224,7 +228,8 @@ export async function endTick(target, { from = null, kind = "heal", effectId = n
   if (!effect) return null;
   const tick = foundry.utils.deepClone(tickOn(effect));
   const name = effect.name;
-  await effect.delete();
+  const deleted = await effect.delete();
+  if (deleted?.id !== id || !actorInWorld(target) || target.effects.has(id)) return null;
   return { id, name, tick };
 }
 
@@ -328,8 +333,8 @@ export function tickLaidBy(target, { from = null, kind = "heal" } = {}) {
  * Where this client may write the creature: end the tick, then give the heal.
  * Nothing is healed where nothing was ended.
  */
-async function endAndHealHere({ target, from, kind, heal }) {
-  const ended = await endTick(target, { from, kind });
+async function endAndHealHere({ target, from, kind, heal, effectId = null }) {
+  const ended = await endTick(target, { from, kind, effectId });
   if (!ended) return { ended: null, healed: 0 };
   const before = target.system?.health?.value ?? 0;
   const amount = Math.max(0, Math.trunc(Number(heal)) || 0);
@@ -343,14 +348,26 @@ async function endAndHealHere({ target, from, kind, heal }) {
  * caster), and the creature is the GM's to write. A refusal travels back as the
  * thrown error.
  */
-export async function endTickQueryHandler({ targetUuid = null, casterUuid = null, kind = "heal", heal = 0 } = {}, { user = null } = {}) {
+export async function endTickQueryHandler({ targetUuid = null, casterUuid = null, kind = "heal", heal = 0, effectId = null } = {}, { user = null } = {}) {
+  const writerId = game.user?.id;
+  if (!game.user?.isGM || game.users?.activeGM?.id !== writerId) throw new Error(game.i18n.localize("AZEROTH.Card.TargetGone"));
   const target = targetUuid ? await fromUuid(targetUuid) : null;
   if (!target || target.documentName !== "Actor") throw new Error(game.i18n.localize("AZEROTH.Card.TargetGone"));
   const caster = casterUuid ? await fromUuid(casterUuid) : null;
   if (user && (caster?.documentName !== "Actor" || !caster.testUserPermission(user, "OWNER"))) {
     throw new Error(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: caster?.name ?? "" }));
   }
-  return endAndHealHere({ target, from: caster ?? casterUuid, kind, heal });
+  const talent = caster?.takenTalents?.().find(t => talentEffect(t.className, t.identifier, t.race)?.onUse?.ends === "healTick");
+  const rule = talent && talentEffect(talent.className, talent.identifier, talent.race);
+  const expected = rule?.grants?.heal ? evaluateAmount(rule.grants.heal, {
+    tier: caster.system?.tier ?? 1, level: caster.system?.level ?? 1, rank: talent.taken, sl: 0
+  }) : null;
+  if (!talent || kind !== "heal" || typeof effectId !== "string" || !effectId || heal !== expected
+    || game.user.id !== writerId || game.users?.activeGM?.id !== writerId)
+    throw new Error(game.i18n.format("AZEROTH.Swiftmend.NoTick", { name: "Swiftmend", target: target.name }));
+  if (caster.uuid !== target.uuid && !allyOf(caster, target))
+    throw new Error(game.i18n.format("AZEROTH.Laid.NotFriendly", { name: "Swiftmend", target: target.name }));
+  return endAndHealHere({ target, from: caster ?? casterUuid, kind, heal, effectId });
 }
 
 /**
@@ -364,16 +381,16 @@ export async function endTickQueryHandler({ targetUuid = null, casterUuid = null
  * @param {{target: Actor, from: Actor, kind?: "heal"|"damage", heal?: number}} o
  * @returns {Promise<{ended: {id: string, name: string}|null, healed: number}>}
  */
-export async function endTickAndHeal({ target, from, kind = "heal", heal = 0 } = {}) {
+export async function endTickAndHeal({ target, from, kind = "heal", heal = 0, effectId = null } = {}) {
   if (!target || !from) return { ended: null, healed: 0 };
-  if (target.isOwner) return endAndHealHere({ target, from, kind, heal });
   const gm = game.users?.activeGM ?? null;
-  if (!gm) {
+  if (!target.isOwner && !gm) {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Tick.NoGM", { name: target.name }));
     return { ended: null, healed: 0 };
   }
   try {
-    const done = await gm.query(END_TICK_QUERY, { targetUuid: target.uuid, casterUuid: from.uuid, kind, heal }, { timeout: 15000 });
+    if (target.isOwner) return await endAndHealHere({ target, from, kind, heal, effectId });
+    const done = await gm.query(END_TICK_QUERY, { targetUuid: target.uuid, casterUuid: from.uuid, kind, heal, effectId }, { timeout: 15000 });
     return done && typeof done === "object" ? { ended: done.ended ?? null, healed: Number(done.healed) || 0 } : { ended: null, healed: 0 };
   } catch (err) {
     ui.notifications?.warn(err.message);

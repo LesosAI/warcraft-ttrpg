@@ -5,7 +5,9 @@ import {deliverTurnSignature,signatureHealingReceipt} from './signature-turn-use
 
 export const SIGNATURE_KILL_QUERY='azeroth-rpg.signatureWeaponKill';
 export const SIGNATURE_KILL_FLAG='signatureWeaponKill';
+export const SIGNATURE_KILL_REVIEW_FLAG='signatureWeaponKillReview';
 const busy=new Set();
+export const killRewardInFlight=messageId=>busy.has(messageId);
 const gmHere=()=>game.user?.isGM===true&&game.users?.activeGM?.id===game.user.id;
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 
@@ -65,6 +67,7 @@ export async function signatureKillQueryHandler(data={}, {user}={}){
   try{
     const attacker=await fromUuid(attackerUuid),target=await fromUuid(targetUuid);
     const message=game.messages?.get(messageId);
+    if(message?.getFlag('azeroth-rpg',SIGNATURE_KILL_REVIEW_FLAG))return {ok:false,reason:'reviewed'};
     const valid=()=>gmHere()&&attacker?.documentName==='Actor'&&target?.documentName==='Actor'
       &&fromUuidSync(attackerUuid)===attacker&&fromUuidSync(targetUuid)===target
       &&message&&game.messages?.get(messageId)===message
@@ -78,14 +81,18 @@ export async function signatureKillQueryHandler(data={}, {user}={}){
     const results=[];
     for(const reward of rewards){
       let receipts=structuredClone(message.getFlag('azeroth-rpg',SIGNATURE_KILL_FLAG)??{});
-      if(receipts[reward.identifier])continue;
+      if(Object.hasOwn(receipts,reward.identifier)){
+        if(!['complete','unavailable'].includes(receipts[reward.identifier]?.state))
+          return {ok:false,reason:'review',results};
+        continue;
+      }
       const stillValid=()=>valid()&&rewardsFor(attacker,target,message,data).some(row=>same(row,reward));
       if(!stillValid())return {ok:false,results};
       const claim={state:'pending',writer:game.user.id,targetUuid,before,after,reward};
       receipts[reward.identifier]=claim;
       await message.setFlag('azeroth-rpg',SIGNATURE_KILL_FLAG,receipts);
       const held=()=>stillValid()&&same(message.getFlag('azeroth-rpg',SIGNATURE_KILL_FLAG),receipts);
-      if(!held())return {ok:false,results};
+      if(!held())return {ok:false,reason:'review',results};
       const result=await deliverTurnSignature({actor:attacker,identifier:reward.identifier,
         event:`weapon-kill:${messageId}:${targetUuid}:${reward.identifier}`,validate:held,
         execute:async({valid:authorized})=>{
@@ -100,16 +107,65 @@ export async function signatureKillQueryHandler(data={}, {user}={}){
             ?{complete:true,committed:done.landed}:{complete:false};
         }});
       results.push({identifier:reward.identifier,...result});
-      if(!held())return {ok:false,results};
+      if(!held())return {ok:false,reason:'review',results};
       if(result.ok||result.reason==='unavailable'){
         receipts={...receipts,[reward.identifier]:{...claim,state:result.ok?'complete':'unavailable',result}};
         await message.setFlag('azeroth-rpg',SIGNATURE_KILL_FLAG,receipts);
-        if(!held())return {ok:false,results};
+        if(!held())return {ok:false,reason:'review',results};
       }
     }
     return {ok:results.every(row=>row.ok||row.reason==='unavailable'),results};
   }catch(error){
     console.warn('azeroth-rpg | Weapon kill signature delivery is uncertain; retained receipts',error);
-    return {ok:false,uncertain:true};
+    return {ok:false,reason:'review',uncertain:true};
   }finally{busy.delete(messageId);}
+}
+
+/** Snapshot pending card claims, including claims which never reached the
+ * actor allowance writer. Deleted targets and unequipped sources are valid
+ * recovery cases; the original attacker and card must still be identifiable. */
+export function killCardReviewState(actor){
+ if(!gmHere()||fromUuidSync(actor?.uuid)!==actor)return null;
+ const cards=[...(game.messages?.values?.()??[])].filter(message=>
+  ChatMessage.getSpeakerActor(message.speaker)===actor
+  &&!message.getFlag('azeroth-rpg',SIGNATURE_KILL_REVIEW_FLAG)).flatMap(message=>{
+   const receipts=message.getFlag('azeroth-rpg',SIGNATURE_KILL_FLAG);
+   if(!receipts||!['death-grips','spinal-reaper'].some(id=>receipts[id]?.state==='pending'))return [];
+   return [{messageId:message.id,receipts:structuredClone(receipts)}];
+  }).sort((a,b)=>a.messageId.localeCompare(b.messageId));
+ const state={cards,records:structuredClone(actor.getFlag('azeroth-rpg','signatureTurnUses')??{}),health:structuredClone(actor.system.health)};
+ return {...state,expected:JSON.stringify(state)};
+}
+
+/** Explicit GM closure only: never replays a benefit or manufactures a
+ * successful delivery receipt. The whole old card becomes non-replayable. */
+export async function reviewKillCards(actor,{expected,acknowledged=false}={}){
+ const state=killCardReviewState(actor);
+ if(!state||!acknowledged)return {ok:false,reason:'authority'};
+ if(!state.cards.length||state.expected!==expected)return {ok:false,reason:'changed'};
+ if(state.cards.some(card=>busy.has(card.messageId)))return {ok:false,reason:'busy'};
+ for(const card of state.cards)for(const id of ['death-grips','spinal-reaper']){
+  const receipt=card.receipts[id];if(receipt?.state!=='pending')continue;
+  if(receipt.writer!==game.user.id&&game.users.get(receipt.writer)?.active)return {ok:false,reason:'writerActive'};
+  if(state.records[id]?.pending?.event===`weapon-kill:${card.messageId}:${receipt.targetUuid}:${id}`)
+   return {ok:false,reason:'allowancePending'};
+ }
+ for(const card of state.cards)busy.add(card.messageId);
+ try{
+  let currentExpected=state.expected;
+  for(const card of state.cards){
+   if(killCardReviewState(actor)?.expected!==currentExpected)return {ok:false,reason:'changed'};
+   const message=game.messages.get(card.messageId);
+   const mark={by:game.user.id,at:Date.now(),receipts:structuredClone(card.receipts)};
+   await message.setFlag('azeroth-rpg',SIGNATURE_KILL_REVIEW_FLAG,mark);
+   if(!gmHere()||fromUuidSync(actor.uuid)!==actor||game.messages.get(card.messageId)!==message
+    ||!same(message.getFlag('azeroth-rpg',SIGNATURE_KILL_REVIEW_FLAG),mark)
+    ||!same(message.getFlag('azeroth-rpg',SIGNATURE_KILL_FLAG),card.receipts))return {ok:false,reason:'uncertain'};
+   state.cards=state.cards.filter(row=>row.messageId!==card.messageId);
+   currentExpected=JSON.stringify({cards:state.cards,records:state.records,health:state.health});
+   if(killCardReviewState(actor)?.expected!==currentExpected)return {ok:false,reason:'changed'};
+  }
+  return {ok:true};
+ }catch{return {ok:false,reason:'uncertain'};}
+ finally{for(const card of JSON.parse(expected).cards)busy.delete(card.messageId);}
 }

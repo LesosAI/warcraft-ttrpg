@@ -1627,9 +1627,8 @@ export function parryGainsFor(talents = [], { facts = null } = {}, rowOf = talen
  * Reflexes on the Parry, Deflection on the Block): `freeReactionsFor` answers the
  * first; this answers each, so a Warrior-Rogue holding two has both counts.
  *
- * **AND ONE A TURN, WITH A MELEE WEAPON IN EACH HAND** (04's Main Gauche as the
- * lead reworked it, 2026-10-03, on O-180: *"Main gauge can be reworked to allow 1
- * parry per turn without spending a reaction."*; D-779): `per: "turn"` counts the
+ * Main Gauche grants one free Parry per rank each turn (lead, 2026-11-01).
+ * `per: "turn"` counts the
  * free Parry on the fight's turn rather than its round (`class-answers.mjs
  * #turnMark`), and `needs: "dualMelee"` holds it to a melee weapon in each hand -
  * both handed to the door, which measures the hands.

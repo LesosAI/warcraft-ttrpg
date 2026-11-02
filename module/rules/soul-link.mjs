@@ -51,9 +51,7 @@ export function soulLinkDamage(input = {}, { rank = 0, shrink = 0, flatReduction
   const beforeWard = shrinkDamage(resolveDamage({ ...input, ward: 0, wardBySchool: {} }), shrink);
   const main = { ...beforeWard, damage: beforeWard.mainDamage ?? beforeWard.damage };
   const lanes = [main, ...(beforeWard.parts ?? [])];
-  // With only one nonzero type, whole-hit rounding has no allocation question.
-  // Mixed-type halving remains pending; negation already removes every type.
-  if (halve && !negate && lanes.filter(lane => lane.damage > 0).length > 1) return null;
+  // Approved 2026-11-01: halve each type separately, rounding down before splitting.
   let reductionLeft = flatReduction;
   let negated = 0;
   let etherealPrevented = 0, standingLeft = standingReduction, halvingPrevented = 0;

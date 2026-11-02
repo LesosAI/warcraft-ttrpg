@@ -4,18 +4,27 @@
   own above Favorites on a character's Core (D-665), where `always` keeps the
   heading and prints the line that says there are none.
 --}}
-{{#if (or effects.signatureParryReview (or effects.signatureUseReview (or (or effects.rows.length effects.dispersionEndingReview) (or effects.antivenomReview always))))}}
+{{#if (or (or effects.signatureHealingReview effects.signatureDamageReview) (or effects.signatureHitReview (or effects.consumableReview (or effects.signatureKillReview (or effects.signatureParryReview (or effects.signatureUseReview (or (or effects.rows.length effects.dispersionEndingReview) (or effects.antivenomReview always))))))))}}
 <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Effects.Effects"}}</h3>
 {{#if effects.dispersionEndingReview}}<button type="button" data-action="reviewDispersionAftermath">Review Dispersion aftermath</button>{{/if}}
 {{#if effects.antivenomReview}}<button type="button" data-action="reviewAntivenom">{{localize "AZEROTH.Use.Antivenom.Review"}}</button>{{/if}}
+{{#if effects.consumableReview}}<button type="button" data-action="reviewConsumable">{{localize "AZEROTH.Use.Receipt.Review"}}</button>{{/if}}
 {{#if effects.signatureUseReview}}<button type="button" data-action="reviewSignatureUses">{{localize "AZEROTH.Signature.Review.Title"}}</button>{{/if}}
 {{#if effects.signatureParryReview}}<button type="button" data-action="reviewSignatureParry">{{localize "AZEROTH.Signature.ParryReview.Title"}}</button>{{/if}}
+{{#if effects.signatureHitReview}}<button type="button" data-action="reviewSignatureHit">{{localize "AZEROTH.Signature.HitReview.Title"}}</button>{{/if}}
+{{#if effects.signatureHealingReview}}<button type="button" data-action="reviewSignatureHealing">{{localize "AZEROTH.Signature.HealingReview.Title"}}</button>{{/if}}
+{{#if effects.signatureDamageReview}}<button type="button" data-action="reviewSignatureDamage">{{localize "AZEROTH.Signature.DamageReview.Title"}}</button>{{/if}}
+{{#if effects.signatureKillReview}}<button type="button" data-action="reviewSignatureKills">{{localize "AZEROTH.Signature.KillReview.Title"}}</button>{{/if}}
 <ol class="azeroth-effect-list">
   {{#each effects.rows as |e|}}
   <li class="azeroth-effect{{#if e.disabled}} is-disabled{{/if}}" data-effect-id="{{e.id}}">
     {{#if e.img}}<img src="{{e.img}}" alt="">{{/if}}
     <span class="azeroth-effect-name" data-action="editEffect">{{e.name}}</span>
     {{#if e.mindControlSaves}}<button type="button" data-action="mindControlSaves">{{localize "AZEROTH.MindControl.Saves.Title"}}</button>{{/if}}
+    {{#if e.dominationOrder}}<button type="button" data-action="dominationOrder">{{localize "AZEROTH.DominationOrder.Title"}}</button>{{/if}}
+    {{#if e.mindSootheHarm}}<button type="button" data-action="mindSootheHarm">{{localize "AZEROTH.MindSootheHarm.Title"}}</button>{{/if}}
+    {{#if e.enslaveMinute}}<button type="button" data-action="enslaveMinute">{{localize "AZEROTH.DominationOrder.MinuteDue"}}</button>{{/if}}
+    {{#if e.enslaveClockReview}}<button type="button" data-action="enslaveClockReview">{{localize "AZEROTH.DominationOrder.ClockReview"}}</button>{{/if}}
     {{#if e.permanent}}<span class="azeroth-effect-flag">{{localize "AZEROTH.Card.Permanent"}}</span>{{/if}}
     {{#if e.iceBlock}}
     <button type="button" data-action="deleteEffect" data-tooltip="{{localize "AZEROTH.IceBlock.CannotEnd"}}"{{#unless e.canEndIceBlock}} disabled{{/unless}}>{{localize "AZEROTH.IceBlock.End"}}</button>

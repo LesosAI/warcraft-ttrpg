@@ -345,10 +345,13 @@ export function racialPicksFor(level = 1) {
  * @param {{tier?: number, ranks?: number, taken?: number}} talent
  * @param {{taken?: number}[]} held
  * @param {number} level  The character's level.
+ * @param {{race?: string, classes?: string[]}} context Owned race and all class names.
  * @returns {{ok: boolean, reason: string|null}}
  */
-export function canTakeRacial(talent, held = [], level = 1) {
+export function canTakeRacial(talent, held = [], level = 1, { race = "", classes = [] } = {}) {
   if ((talent?.taken ?? 0) >= (talent?.ranks ?? 1)) return { ok: false, reason: "maxed" };
+  if ((talent?.identifier === "two-heads" || talent?.name === "Two Heads")
+    && (race !== "Ogre" || !classes.includes("Mage"))) return { ok: false, reason: "ogreMage" };
   if ((talent?.tier ?? 1) > tierForLevel(level)) return { ok: false, reason: "raceTier" };
   const used = held.reduce((n, t) => n + (t?.taken ?? 0), 0);
   if (used >= racialPicksFor(level)) return { ok: false, reason: "racePicks" };

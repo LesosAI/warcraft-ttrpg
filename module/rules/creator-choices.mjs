@@ -1,6 +1,10 @@
 /** Draft-only choices. Reuse the sheet's tree law without owning an Actor. */
-import { buildTree } from "./talents.mjs";
+import { buildTree, canTakeRacial } from "./talents.mjs";
 import { keptBy } from "./legacy-branches.mjs";
+
+export function startingRacialState(talent, race, cls) {
+  return canTakeRacial(talent, [], 1, { race: race?.name, classes: cls ? [cls.name] : [] });
+}
 
 export function startingTalents(talents, cls, race) {
   return talents.filter(t => cls && t.className === cls.name && !t.race && keptBy(t, race?.name ?? null));
@@ -19,7 +23,7 @@ export function draftTree(talents, selected) {
 /** Only invalid choices are proposed for removal; the UI confirms this patch. */
 export function invalidatedChoices(state, { race, cls, talents, spells }) {
   const patch = {}, removed = [];
-  if (state.racialTalent && !race?.talents?.some(t => t.name === state.racialTalent && Number(t.tier ?? 1) <= 1)) {
+  if (state.racialTalent && !race?.talents?.some(t => t.name === state.racialTalent && startingRacialState(t, race, cls).ok)) {
     patch.racialTalent = null;
     removed.push(state.racialTalent);
   }

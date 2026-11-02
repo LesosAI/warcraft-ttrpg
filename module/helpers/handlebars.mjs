@@ -21,6 +21,7 @@ const TEMPLATES = [
   // a module draws to this list.
   "systems/azeroth-rpg/templates/chat/partials/piccolo-review.hbs",
   "systems/azeroth-rpg/templates/chat/partials/cannonball-review.hbs",
+  "systems/azeroth-rpg/templates/chat/partials/helmet-review.hbs",
   "systems/azeroth-rpg/templates/chat/partials/jangthraze-use.hbs",
   "systems/azeroth-rpg/templates/chat/partials/helmet-use.hbs",
   "systems/azeroth-rpg/templates/chat/partials/mind-control-review.hbs",

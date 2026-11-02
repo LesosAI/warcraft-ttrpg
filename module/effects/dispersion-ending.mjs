@@ -37,16 +37,21 @@ async function deliver(actor,effect) {
   const status=CONFIG.statusEffects.numbed;
   if(!status)return refuse('conditionMissing');
   const claim={version:1,cast:record.cast,writerId:game.user.id,state:'creating',timing:structuredClone(timing)};
+  const stillClaimed=()=>writer() && game.user.id===claim.writerId
+    && JSON.stringify(actor.getFlag(scope,DISPERSION_ENDINGS)?.[key])===JSON.stringify(claim);
   try {
-    await actor.setFlag(scope,DISPERSION_ENDINGS,{...receipts,[key]:claim});
-    if(!writer() || JSON.stringify(actor.getFlag(scope,DISPERSION_ENDINGS)?.[key])!==JSON.stringify(claim))return refuse('reviewRequired');
+    await actor.setFlag(scope,DISPERSION_ENDINGS,{...receipts,[key]:structuredClone(claim)});
+    if(!stillClaimed())return refuse('reviewRequired');
     const data={name:game.i18n.localize(status.name),img:status.img,description:status.description ?? '',
       statuses:['numbed'],system:structuredClone(status.system ?? {}),origin:record.spellUuid,transfer:false,
       ...timing,flags:{[scope]:{dispersionAftermath:{effectId:key,cast:record.cast,ownerUuid:actor.uuid}}}};
     const made=await actor.createEmbeddedDocuments('ActiveEffect',[data]);
-    if(!writer() || made.length!==1)return refuse('reviewRequired');
+    if(!stillClaimed() || made.length!==1 || !made[0]?.id)return refuse('reviewRequired');
+    const completed={...claim,state:'done',aftermathId:made[0].id};
     await actor.setFlag(scope,DISPERSION_ENDINGS,{...(actor.getFlag(scope,DISPERSION_ENDINGS) ?? {}),
-      [key]:{...claim,state:'done',aftermathId:made[0].id}});
+      [key]:structuredClone(completed)});
+    if(!writer() || game.user.id!==claim.writerId
+      || JSON.stringify(actor.getFlag(scope,DISPERSION_ENDINGS)?.[key])!==JSON.stringify(completed))return refuse('reviewRequired');
     return {ok:true,aftermathId:made[0].id};
   } catch{return refuse('reviewRequired');}
 }

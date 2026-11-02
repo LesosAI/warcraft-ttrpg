@@ -39,11 +39,11 @@
 
   <div class="azeroth-bag-inspect-controls">
     {{#if row.usable}}
-    <button type="button" class="azeroth-use" data-action="useGear">{{localize "AZEROTH.Feature.Use"}}{{#if row.quantity}} <span class="azeroth-bag-inspect-count">{{row.quantity}}</span>{{/if}}</button>
+    <button type="button" class="azeroth-use" data-action="useGear"{{#if row.useRefusal}} disabled data-tooltip="{{localize row.useRefusal}}"{{/if}}>{{localize "AZEROTH.Feature.Use"}}{{#if row.quantity}} <span class="azeroth-bag-inspect-count">{{row.quantity}}</span>{{/if}}</button>
     {{/if}}
     {{#if row.charges}}
-    <button type="button" class="azeroth-use" data-action="spendCharge"{{#unless row.charges.value}} disabled{{/unless}}>{{localize "AZEROTH.Container.Spend"}}</button>
-    <button type="button" class="azeroth-forge-quiet" data-action="fillCharges">{{localize "AZEROTH.Container.Fill"}}</button>
+    <button type="button" class="azeroth-use" data-action="spendCharge"{{#if row.useRefusal}} disabled data-tooltip="{{localize row.useRefusal}}"{{else}}{{#unless row.charges.value}} disabled{{/unless}}{{/if}}>{{localize "AZEROTH.Container.Spend"}}</button>
+    <button type="button" class="azeroth-forge-quiet" data-action="fillCharges"{{#if row.useRefusal}} disabled data-tooltip="{{localize row.useRefusal}}"{{/if}}>{{localize "AZEROTH.Container.Fill"}}</button>
     {{/if}}
     {{#if row.equippable}}
     {{!-- Copied from `carried-row.hbs`, so the two doors carry the same word,

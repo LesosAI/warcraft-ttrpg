@@ -5,6 +5,17 @@ export const DISPERSION_REASON='AZEROTH.Dispersion.Restricted';
 const scope='azeroth-rpg';
 const id=value=>typeof value==='string' && value.trim().length>0;
 
+/** Equipment benefits can live on the item or on its wearer. Consumed-item
+ * and spell carriers have their own lifetime; item provenance alone does not
+ * turn those into a currently carried equipment benefit. */
+export function dispersionSuppressesEquipmentEffect(effect, physicalItemUuids = new Set()) {
+  const parent = effect?.parent;
+  if (parent?.documentName === 'Item' && ['weapon','armor','gear'].includes(parent.type)) return true;
+  const flags = effect?.flags?.[scope] ?? {};
+  if (typeof flags.signature === 'string' && physicalItemUuids.has(flags.signature)) return true;
+  return physicalItemUuids.has(effect?.origin) && !flags.consumable && !flags.spell;
+}
+
 function validTiming({start,duration}={}) {
   if(!Number.isSafeInteger(start?.time) || start.time<0) return false;
   if(duration?.units==='minutes') return duration.value===1;

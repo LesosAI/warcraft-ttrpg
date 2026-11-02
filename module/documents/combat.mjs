@@ -11,6 +11,7 @@
 
 // Shadowform's mark, cleared at the end of the holder's own turn (D-774).
 import { clearLightUsed } from "../effects/shadowform.mjs";
+import { LUNAR_DAMAGE_FLAG, advanceLunarDamage } from "../rules/lunar-guidance.mjs";
 import { iceBlockFor } from "../rules/ice-block.mjs";
 import { restoreCombatEffectTracking } from "../effects/combat-effect-registry.mjs";
 import {
@@ -1758,6 +1759,13 @@ export class AzerothCombat extends Combat {
    * are core's and are not.
    */
   async startCombat() {
+    // A reused Combat document is a new fight; injury provenance must not
+    // classify an earlier encounter's injuries as belonging to this one.
+    const injuryEncounter = foundry.utils.randomID();
+    await this.setFlag('azeroth-rpg','injuryEncounter',injuryEncounter);
+    if (this.getFlag('azeroth-rpg','injuryEncounter') !== injuryEncounter) {
+      throw new Error('Combat start could not confirm its injury encounter identity.');
+    }
     await this._assignInitiative();
     for (const combatant of this.combatants) await this._fightStart(combatant);
     return super.startCombat();
@@ -1901,6 +1909,8 @@ export class AzerothCombat extends Combat {
   async _onStartTurn(combatant, context) {
     restoreCombatEffectTracking(combatant, {...context, combat: this});
     await super._onStartTurn(combatant, context);
+    const lunarDamage = combatant.getFlag("azeroth-rpg", LUNAR_DAMAGE_FLAG);
+    if (lunarDamage !== undefined) await combatant.setFlag("azeroth-rpg", LUNAR_DAMAGE_FLAG, advanceLunarDamage(lunarDamage));
     // **02's FOCUS REFILLS ONLY AFTER A STILL TURN** (*It refills at 2 at the start of
     // any turn in which you have neither moved nor been Engaged*; the Legacy branches'
     // door 9): the creature's last turn's record, read BEFORE the reset below, and
@@ -2318,11 +2328,23 @@ export class AzerothCombat extends Combat {
       if (!payload) continue;
       // The ONE door an area's damage and healing land through (D-757): the
       // tick, an entry and a failed Test all strike through it.
-      if(source.region?.flags?.['azeroth-rpg']?.signatureHealingCast&&payload.heal>0){
-        const {landSignatureAreaHealing}=await import('../effects/signature-healing-areas.mjs');
+      const healingSignatures=payload.heal>0?await import('../effects/signature-healing-areas.mjs'):null;
+      const damageSignatures=payload.damage?await import('../effects/signature-damage-areas.mjs'):null;
+      if(damageSignatures&&(source.signatureDamageCast||source.region?.flags?.['azeroth-rpg']?.signatureDamageCast||damageSignatures.signatureDamageCardFor(source))){
+        const snapshot=JSON.stringify({tick:source.tick,payload});
+        const result=await damageSignatures.landSignatureAreaDamage({combat:this,combatant,source,payload,validate:()=>
+          tickSources(scene,token,worldClock()).some(current=>current.region===source.region&&current.caster===caster
+            &&current.cast===source.cast&&current.casterToken===source.casterToken
+            &&JSON.stringify({tick:current.tick,payload:tickFor(current.tick,{kinds:kindsOfActor(actor),
+              relation:relationTo({caster,casterToken:current.casterToken,actor,token,fight:this})})})===snapshot)});
+        if(!result.ok){console.warn('azeroth-rpg | signature area damage unresolved',result.reason);continue;}
+        lines.push(...result.lines);
+      }else if(healingSignatures&&(source.region?.flags?.['azeroth-rpg']?.signatureHealingCast||healingSignatures.signatureHealingCardFor(source))){
+        const {landSignatureAreaHealing}=healingSignatures;
         const snapshot=JSON.stringify({tick:source.tick,payload});
         const result=await landSignatureAreaHealing({combat:this,combatant,source,payload,validate:()=>
           tickSources(scene,token,worldClock()).some(current=>current.region===source.region&&current.caster===caster
+            &&current.cast===source.cast&&current.casterToken===source.casterToken
             &&JSON.stringify({tick:current.tick,payload:tickFor(current.tick,{kinds:kindsOfActor(actor),
               relation:relationTo({caster,casterToken:current.casterToken,actor,token,fight:this})})})===snapshot)});
         if(!result.ok){console.warn('azeroth-rpg | signature area healing unresolved',result.reason);continue;}
@@ -2688,6 +2710,10 @@ export class AzerothCombat extends Combat {
       // area lays from the end of a turn inside it is armed now, on the area's
       // own flag - never a combatant write, which would move `previous`.
       const token = combatant.token ?? null;
+      const {deliverEndTurnDamage}=await import('../effects/end-turn-damage.mjs');
+      const endDamage=await deliverEndTurnDamage(this,combatant,{
+        round:context?.round??previous?.round??this.round,turn:context?.turn??previous?.turn??this.turn});
+      if(endDamage.some(result=>!result.ok))console.warn('azeroth-rpg | end-turn damage requires review',endDamage);
       if (token?.parent) await armAreas(token.parent, token, "turnEnd").catch(err => console.warn("azeroth-rpg | an area rider did not arm", err));
       // Poisoned (A1): a Body Resilience Test at the end of each of your turns
       // against the poison's DC; a success sheds a stack. The Test is a card
@@ -2777,7 +2803,7 @@ export class AzerothCombat extends Combat {
     // for 02's Focus (the Legacy branches' door 9).
     // `constructTurn` is what a tinker's constructs have spent of their shared turn
     // (the Legacy branches' door 6).
-    for (const key of ["budget", "round", "lastHitRound", "acted", "heldPosition", "marked", "damageTypes", "ready", "moveHalves", "damaged", "lastTurn", "constructTurn"]) {
+    for (const key of ["budget", "round", "lastHitRound", "acted", "heldPosition", "marked", "damageTypes", "ready", "moveHalves", "damaged", LUNAR_DAMAGE_FLAG, "lastTurn", "constructTurn"]) {
       if (combatant.getFlag("azeroth-rpg", key) !== undefined) await combatant.unsetFlag("azeroth-rpg", key);
     }
   }
@@ -2785,16 +2811,11 @@ export class AzerothCombat extends Combat {
   /**
    * @inheritDoc
    *
-   * The pools are emptied here as well as on exit, before core's confirm, so
-   * the GM and a test see them land at once; the second pass on exit finds
-   * nothing to move and writes nothing.
-   *
-   * **THIS IS THE FIGHT ENDING**, so a poison's minute ends with it (08 §12,
-   * D-719). The exit pass says the same thing from the other side, for a fight
-   * deleted from the sidebar rather than ended from the tracker.
+   * Core V14 confirms before deleting the combat. Encounter cleanup belongs
+   * to _onExit, which runs after that deletion (including sidebar deletion).
+   * Never spend resources or expire benefits merely by opening the prompt.
    */
   async endCombat() {
-    for (const combatant of this.combatants) await this._leaveFight(combatant, { ended: true });
     return super.endCombat();
   }
 
@@ -2857,7 +2878,7 @@ function selfTicksOf(actor) {
     const item = entry?.areaTick && entry?.tickSpell ? null : itemOf(entry?.spellId, entry?.uuid);
     const tick = entry?.areaTick ?? item?.system?.areaTick;
     if (!hasAreaTick(tick) || tick.centre !== "self") continue;
-    out.push({ tick, cast: entry.cast ?? null, spell: entry.tickSpell ?? tickSpellOf(item, entry.name) });
+    out.push({ tick, cast: entry.cast ?? null, signatureDamageCast:entry.signatureDamageCast??null, spell: entry.tickSpell ?? tickSpellOf(item, entry.name) });
   }
   for (const effect of actor.effects ?? []) {
     if (effect.active === false) continue;
@@ -2869,7 +2890,7 @@ function selfTicksOf(actor) {
     const tick = f.areaTick ?? item?.system?.areaTick;
     // A Sustain answers to its entry above; only a TIMED tick answers to its effect.
     if (!hasAreaTick(tick) || tick.centre !== "self" || !(Number(tick.lasts?.rounds) > 0)) continue;
-    out.push({ tick, cast: f.cast ?? null, spell: f.tickSpell ?? tickSpellOf(item, f.spellName) });
+    out.push({ tick, cast: f.cast ?? null, signatureDamageCast:f.signatureDamageCast??null, spell: f.tickSpell ?? tickSpellOf(item, f.spellName) });
   }
   return out;
 }
@@ -2898,7 +2919,7 @@ function tickSources(scene, victim, now) {
     // A Region whose Sustain has gone, whose caster is down, or whose span is
     // over strikes nobody even in the moment before the sweep takes it away -
     // the sweep's own judgement (`staleIn`), so the two cannot disagree.
-    if (row && staleIn(scene, [row], now).length) continue;
+    if (row && (row.transferPending === true || staleIn(scene, [row], now).length)) continue;
     let inside = false;
     try {
       inside = victim.testInsideRegion(region);
@@ -2917,7 +2938,7 @@ function tickSources(scene, victim, now) {
     // A carrier that is down holds no Sustain and stands at the heart of
     // nothing (the review, M1); its laid effect's minute is core's to end.
     const carrierDown = isDown(carrier);
-    for (const { tick, cast, spell } of selfTicksOf(carrier)) {
+    for (const { tick, cast, spell, signatureDamageCast } of selfTicksOf(carrier)) {
       if (carrierDown && !(Number(tick.lasts?.rounds) > 0)) continue;
       const key = cast ?? `${carrier.uuid}:${spell.name}`;
       if (seen.has(key)) continue;
@@ -2926,7 +2947,7 @@ function tickSources(scene, victim, now) {
       const feet = feetApart(other, victim);
       if (feet === null || feet > (Number(tick.feet) || 0) + widen) continue;
       seen.add(key);
-      out.push({ tick, caster: carrier, casterToken: other, spell, region: null });
+      out.push({ tick, cast, signatureDamageCast, caster: carrier, casterToken: other, spell, region: null });
     }
   }
   return out;

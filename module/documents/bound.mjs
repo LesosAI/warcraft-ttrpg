@@ -89,6 +89,8 @@ export async function writeThrallBond(actor, bond) {
 export async function releaseThrallBond(actor, { endCharmed = true } = {}) {
   const bond = actor?.getFlag?.("azeroth-rpg", FLAG) ?? null;
   if (!isThrallBond(bond) || !actor.isOwner) return null;
+  const expectedBond = JSON.stringify(bond);
+  const unchanged = () => actor.isOwner && JSON.stringify(actor.getFlag("azeroth-rpg", FLAG)) === expectedBond;
   const restore = bond.restore ?? {};
   let token = null;
   try {
@@ -96,13 +98,17 @@ export async function releaseThrallBond(actor, { endCharmed = true } = {}) {
   } catch {
     token = null;
   }
+  if (!unchanged() || (restore.tokenUuid && token?.documentName !== "Token")) return null;
   if (token?.documentName === "Token" && Number.isInteger(restore.disposition) && token.disposition !== restore.disposition) {
     await token.update({ disposition: restore.disposition });
   }
+  if (!unchanged() || (token && Number.isInteger(restore.disposition) && token.disposition !== restore.disposition)) return null;
   await actor.unsetFlag("azeroth-rpg", FLAG);
+  if (!actor.isOwner || actor.getFlag("azeroth-rpg", FLAG)) return null;
   if (endCharmed) {
     const ids = (actor.effects ?? []).filter(e => e.flags?.["azeroth-rpg"]?.[THRALL_FLAG]).map(e => e.id);
     if (ids.length) await actor.deleteEmbeddedDocuments("ActiveEffect", ids);
+    if (ids.some(id => actor.effects.some(e => e.id === id))) return null;
   }
   ui.notifications?.info(game.i18n.format("AZEROTH.Thrall.Released", { name: actor.name, owner: bond.ownerName ?? "" }));
   return actor;

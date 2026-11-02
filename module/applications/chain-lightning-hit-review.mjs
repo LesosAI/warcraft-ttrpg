@@ -39,7 +39,10 @@ export async function reviewChainLightningDamage(message) {
       { action: 'cancel', label: game.i18n.localize('AZEROTH.ChainLightning.Review.Cancel'), default: true, callback: () => -1 }],
     render: (_event, dialog) => {
       const form = dialog.element.querySelector('form');
-      const update = () => { form.querySelector('[data-action="review"]').disabled = form.elements.acknowledged?.checked !== true; };
+      const update = event => {
+        if (event?.target === form.elements.hit) form.elements.acknowledged.checked = false;
+        form.querySelector('[data-action="review"]').disabled = form.elements.acknowledged?.checked !== true;
+      };
       form.addEventListener('change', update); update();
     }
   });

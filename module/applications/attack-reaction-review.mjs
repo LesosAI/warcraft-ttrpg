@@ -35,7 +35,13 @@ export async function reviewAttackReactionFromCard(message) {
       { action: 'cancel', label: words('Cancel'), default: true, callback: () => -1 }],
     render: (_event, dialog) => {
       const form = dialog.element.querySelector('form');
-      const update = () => { form.querySelector('[data-action="review"]').disabled = !acknowledged(form); };
+      const update = event => {
+        if (event?.target === form.elements.hit) {
+          form.elements.acknowledged.checked = false;
+          if (form.elements.damageReconciled) form.elements.damageReconciled.checked = false;
+        }
+        form.querySelector('[data-action="review"]').disabled = !acknowledged(form);
+      };
       form.addEventListener('change', update); update();
     }
   });

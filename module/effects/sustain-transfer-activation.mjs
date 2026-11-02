@@ -3,6 +3,8 @@ import { releaseSustainTransferEffect, suspendSustainTransferEffect } from "../r
 import { iceBlockFor } from "../rules/ice-block.mjs";
 import { dispersionFor } from "../rules/dispersion.mjs";
 import { hasTransferCarrierPlan } from "../rules/sustain-record-carrier.mjs";
+import { sustainRegionStagePlans } from '../rules/sustain-region-stage-plans.mjs';
+import { writeSustainRegionActivation } from './sustain-region-activation-writer.mjs';
 
 const scope = "azeroth-rpg";
 const stable = value => Array.isArray(value) ? value.map(stable) : value && typeof value === "object"
@@ -27,11 +29,16 @@ export function createSustainTransferActivation({ readReceipt, writeReceipt, val
         if (uncertain.has(key)) return { ok: false, reason: "review" };
         let receipt = structuredClone(await readReceipt(key));
         const plan = receipt?.plan;
+        const regionPlan = plan?.inventory?.regions?.length || plan?.regionTransfers?.length
+          ? sustainRegionStagePlans(plan) : {ok:true,regions:[]};
+        const regionsOnly = regionPlan.ok && regionPlan.regions.length > 0 && plan?.relocation?.ok
+          && Array.isArray(plan.relocation.moves) && !plan.relocation.moves.length
+          && Array.isArray(plan.relocation.removals) && !plan.relocation.removals.length;
         if (receipt?.version !== 1 || receipt.key !== key || receipt.state !== "done" || receipt.attempted !== null
           || !same(receipt.completed, ["holdRecipient", "relocateCarriers", "releaseSource"])
           || !["casterUuid", "recipientUuid", "cast", "transactionId"].every(field => typeof plan?.[field] === "string"
             && plan[field].length && receipt[field] === plan[field]) || plan.casterUuid === plan.recipientUuid
-          || !hasTransferCarrierPlan(plan)) {
+          || !regionPlan.ok || (!hasTransferCarrierPlan(plan) && !regionsOnly)) {
           return { ok: false, reason: "incomplete" };
         }
         if (await validate(structuredClone(plan), structuredClone(receipt)) !== true) return { ok: false, reason: "changed" };
@@ -59,7 +66,8 @@ export function createSustainTransferActivation({ readReceipt, writeReceipt, val
           expected.set(destination.uuid, source);
           patches.push({ _id: data._id, ...release.patch });
         }
-        const check = async () => {
+        const regions = new Map(regionPlan.regions.map(row=>[row.destination.uuid,row.destination]));
+        const check = async (skipRegion = null) => {
           if (await validate(structuredClone(plan), structuredClone(receipt)) !== true || !exact(await readReceipt(key), receipt)
             || !game.user?.isGM || game.users?.activeGM?.id !== game.user.id) throw Error("Activation authority changed");
           for (const [index, actor] of actors.entries()) {
@@ -72,6 +80,14 @@ export function createSustainTransferActivation({ readReceipt, writeReceipt, val
               || !same(effect.toObject(), data)) throw Error("Activation carrier changed");
           }
           if (plan.relocation.removals.some(row => fromUuidSync(row.uuid))) throw Error("Original carrier remains");
+          for(const row of regionPlan.regions) if(fromUuidSync(row.original.uuid))throw Error('Original Region remains');
+          for(const [uuid,data] of regions) {
+            if(uuid===skipRegion)continue;
+            const region=fromUuidSync(uuid);
+            if(region?.documentName!=='Region'||region.parent?.uuid!==data.parentUuid
+              ||!same({...region.toObject(),uuid:region.uuid,parentUuid:region.parent.uuid},data))
+              throw Error('Activation Region changed');
+          }
         };
         const save = async next => {
           await writeReceipt(key, structuredClone(next));
@@ -80,7 +96,8 @@ export function createSustainTransferActivation({ readReceipt, writeReceipt, val
         };
         await check();
         claimed = true;
-        await save({ ...receipt, activation: { state: "pending", effectIds: patches.map(patch => patch._id) } });
+        await save({ ...receipt, activation: { state: "pending", effectIds: patches.map(patch => patch._id),
+          ...(regions.size ? {regionUuids:[...regions.keys()]} : {}) } });
         await check();
         const activeEntries = lists[1].map(entry => entry.cast === plan.cast ? released.entry : entry);
         // V14 EmbeddedCollectionField updates existing children by _id in the
@@ -92,6 +109,12 @@ export function createSustainTransferActivation({ readReceipt, writeReceipt, val
           data.disabled = patch.disabled; data.flags[scope].sustainTransfer = null;
         }
         await check();
+        for(const [uuid,data] of regions) {
+          const result=await writeSustainRegionActivation({region:data,receipt,entry:held[0],validate:async()=>{
+            await check(uuid);return true;
+          }});
+          regions.set(uuid,result.snapshot);await check();
+        }
         await save({ ...receipt, activation: { ...receipt.activation, state: "done" } });
         return { ok: true, key, transactionId: receipt.transactionId };
       } catch {

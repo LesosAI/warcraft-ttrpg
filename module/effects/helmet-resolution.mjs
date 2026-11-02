@@ -1,5 +1,7 @@
 import {helmetResistance,HELMET_IDENTIFIER} from '../rules/horned-helmet.mjs';
 import {refuseIceBlockTarget} from './ice-block-protection.mjs';
+import {drawCardPartial} from '../helpers/card-partials.mjs';
+const HELMET_REVIEW='systems/azeroth-rpg/templates/chat/partials/helmet-review.hbs';
 export const HELMET_RESOLVE_QUERY='azeroth-rpg.resolveHelmetStrike';
 export const HELMET_SAVE_QUERY='azeroth-rpg.performHelmetSave';
 const busy=new Set();
@@ -60,8 +62,9 @@ export async function resolveHelmetStrike({messageUuid}={}, {user}={}){
     if(!valid()||card?.author?.id!==user.id||card?.speaker?.actor!==target.id||flags?.kind!=='resilience'
       ||flags.resilience!=='body'||link?.messageId!==message.id||link.cast!==key||link.index!==0
       ||link.actorId!==target.id||link.sceneId!==(ref.sceneId??null)||link.tokenId!==(ref.tokenId??null)
-      ||link.identifier!==HELMET_IDENTIFIER||!Number.isFinite(roll?.total))return {ok:false,reason:'saveUncertain'};
-    const result=helmetResistance({dc:expected.dc,total:roll.total});if(!result)return {ok:false,reason:'resistance'};
+      ||link.identifier!==HELMET_IDENTIFIER||!Number.isFinite(roll?.total)
+      ||roll?.options?.dc!==expected.dc||typeof roll?.outcome?.success!=='boolean')return {ok:false,reason:'saveUncertain'};
+    const result=helmetResistance({dc:expected.dc,total:roll.total,success:roll.outcome.success});if(!result)return {ok:false,reason:'resistance'};
     await save({...expected,state:'applying',save:{uuid:card.uuid,total:roll.total,passed:result.passed}});
     let prevented=false;
     if(result.prone&&!target.statuses.has('prone')){
@@ -90,11 +93,38 @@ export async function requestHelmetSave(message){
   if(!result?.ok)ui.notifications?.warn(game.i18n.localize('AZEROTH.Signature.Helmet.Unresolved'));
   return result;
 }
+export function helmetReviewState(message){
+  const strike=strikeOf(message),target=targetOf(strike),caster=resolve(strike?.casterUuid);
+  const snapshot={strike,target:target?.uuid??null,statuses:[...(target?.statuses??[])],
+    effects:[...(target?.effects??[])].map(e=>e.toObject?.()??{id:e.id,flags:e.flags,disabled:e.disabled}),
+    caster:caster?.uuid??null};
+  return {...snapshot,pending:['saving','applying'].includes(strike?.state),expected:JSON.stringify(snapshot)};
+}
+export async function reviewHelmetResolution(message,{expected,acknowledged=false}={}){
+  if(!gmHere()||acknowledged!==true)return {ok:false,reason:'authority'};
+  if(busy.has(message?.uuid))return {ok:false,reason:'busy'};
+  const state=helmetReviewState(message);
+  if(resolve(message?.uuid)!==message||!state.pending||state.expected!==expected)return {ok:false,reason:'changed'};
+  const writer=state.strike.claim?.writer;
+  if(writer&&writer!==game.user.id&&game.users.get?.(writer)?.active)return {ok:false,reason:'writerActive'};
+  busy.add(message.uuid);
+  try{
+    const next={...state.strike,state:'reviewed',review:{by:game.user.id,at:Date.now()}};
+    await message.setFlag('azeroth-rpg','helmetStrike',next);
+    return {ok:Boolean(gmHere()&&resolve(message.uuid)===message&&same(strikeOf(message),next))};
+  }catch{return {ok:false,reason:'uncertain'};}
+  finally{busy.delete(message.uuid);}
+}
 export function showHelmetState(message,html){
   const strike=strikeOf(message);if(!strike)return;
   const button=html.querySelector('[data-action="helmetSave"]');if(button)button.disabled=strike.state!=='awaitingSave';
   const line=html.querySelector('[data-helmet-state]');
   if(line)line.textContent=game.i18n.localize(strike.state==='complete'
     ?strike.prevented?'AZEROTH.Signature.Helmet.Prevented':strike.save.passed?'AZEROTH.Signature.Helmet.Passed':'AZEROTH.Signature.Helmet.Failed'
+    :strike.state==='reviewed'?'AZEROTH.HungerMastered.ReviewDone'
     :strike.state==='awaitingSave'?'AZEROTH.Signature.Helmet.AwaitingSave':'AZEROTH.Signature.Helmet.Unresolved');
+  if(gmHere()&&['saving','applying'].includes(strike.state)){
+    const review=drawCardPartial(HELMET_REVIEW,{},message);
+    if(review)html.querySelector('.azeroth-card')?.append(review);
+  }
 }

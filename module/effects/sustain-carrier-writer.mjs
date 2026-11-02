@@ -3,6 +3,8 @@ import { sustainEntryTransferPending } from "../rules/sustain-entry-transfer.mjs
 import { iceBlockFor } from "../rules/ice-block.mjs";
 import { dispersionFor } from "../rules/dispersion.mjs";
 import { hasTransferCarrierPlan } from "../rules/sustain-record-carrier.mjs";
+import { sustainRegionStagePlans } from '../rules/sustain-region-stage-plans.mjs';
+import { writeSustainRegionRelocation } from './sustain-region-relocation-writer.mjs';
 
 const scope = "azeroth-rpg";
 const stable = value => Array.isArray(value) ? value.map(stable) : value && typeof value === "object"
@@ -12,7 +14,7 @@ const snapshot = effect => ({ ...effect.toObject(), uuid: effect.uuid, parentUui
 const suspended = (data, receipt) => {
   const result = suspendSustainTransferEffect({ effect: data, receipt });
   if (!result.ok) throw Error("Invalid transfer carrier");
-  return { ...structuredClone(data), disabled: true, flags: { ...structuredClone(data.flags),
+  return { ...structuredClone(data), ...(result.patch.origin ? { origin: result.patch.origin } : {}), disabled: true, flags: { ...structuredClone(data.flags),
     [scope]: { ...structuredClone(data.flags[scope]), sustainTransfer: result.patch[`flags.${scope}.sustainTransfer`] } } };
 };
 
@@ -21,12 +23,17 @@ const suspended = (data, receipt) => {
  * validate rechecks its durable receipt, request authority and whole-cast claim.
  * A rejected/uncertain write is never retried or rolled back here. */
 export async function writeSustainTransferCarriers({ plan, receipt, validate } = {}) {
+  const regionPlan = plan?.inventory?.regions?.length || plan?.regionTransfers?.length
+    ? sustainRegionStagePlans(plan) : {ok:true,regions:[]};
+  const regionsOnly = regionPlan.ok && regionPlan.regions.length > 0 && plan?.relocation?.ok
+    && Array.isArray(plan.relocation.moves) && !plan.relocation.moves.length
+    && Array.isArray(plan.relocation.removals) && !plan.relocation.removals.length;
   if (typeof validate !== "function" || receipt?.version !== 1 || receipt.state !== "claimed"
     || receipt.attempted !== "relocateCarriers" || !same(receipt.completed, ["holdRecipient"])
     || !["casterUuid", "recipientUuid", "cast", "transactionId"].every(key => typeof plan?.[key] === "string"
       && plan[key].length > 0 && receipt[key] === plan[key])
     || plan.casterUuid === plan.recipientUuid || !plan.relocation?.ok
-    || !hasTransferCarrierPlan(plan)) throw Error("Invalid transfer stage");
+    || !regionPlan.ok || (!hasTransferCarrierPlan(plan) && !regionsOnly)) throw Error("Invalid transfer stage");
   // Copy caller-owned inputs before the first asynchronous admission check.
   plan = structuredClone(plan); receipt = structuredClone(receipt);
   const actors = [plan.casterUuid, plan.recipientUuid].map(uuid => fromUuidSync(uuid));
@@ -36,7 +43,9 @@ export async function writeSustainTransferCarriers({ plan, receipt, validate } =
     if (expected.has(row.uuid) && !same(expected.get(row.uuid), data)) throw Error("Conflicting source snapshots");
     expected.set(row.uuid, data);
   }
-  const check = async () => {
+  const regionRows = regionPlan.regions; // Plain relocation rows, not a Foundry Region collection.
+  const regions = new Map(regionRows.flatMap(row=>[[row.original.uuid,row.held],[row.destination.uuid,null]]));
+  const check = async (skipRegions = []) => {
     if (await validate() !== true) throw Error("Transfer claim changed");
     if (!game.user?.isGM || game.users?.activeGM?.id !== game.user.id) throw Error("Transfer authority changed");
     for (const [index, actor] of actors.entries()) {
@@ -54,6 +63,12 @@ export async function writeSustainTransferCarriers({ plan, receipt, validate } =
       if (data === null ? effect != null : effect?.documentName !== "ActiveEffect" || !same(snapshot(effect), data)) {
         throw Error("Transfer carrier changed");
       }
+    }
+    for(const [uuid,data] of regions) {
+      if(skipRegions.includes(uuid))continue;
+      const region=fromUuidSync(uuid);
+      if(data===null ? region!=null : region?.documentName!=='Region'||!same(snapshot(region),data))
+        throw Error('Transfer Region changed');
     }
   };
   await check();
@@ -84,5 +99,14 @@ export async function writeSustainTransferCarriers({ plan, receipt, validate } =
     expected.set(removal.uuid, null);
     await check();
   }
-  return { relocated: [...destinations], removed: plan.relocation.removals.map(row => row.uuid) };
+  for(const row of regionPlan.regions) {
+    await check();
+    const moved=await writeSustainRegionRelocation({input:{...row.input,receipt},validate:async()=>{
+      await check([row.original.uuid,row.destination.uuid]);return true;
+    }});
+    if(!same(moved.snapshot,row.destination))throw Error('Unconfirmed Region relocation');
+    regions.set(row.original.uuid,null);regions.set(row.destination.uuid,row.destination);await check();
+    destinations.add(row.destination.uuid);
+  }
+  return { relocated: [...destinations], removed: [...plan.relocation.removals.map(row => row.uuid),...regionPlan.regions.map(row=>row.original.uuid)] };
 }

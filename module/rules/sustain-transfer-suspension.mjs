@@ -19,7 +19,8 @@ const matches = (effect, receipt) => receipt?.version === 1
   && [receipt.transactionId, receipt.cast, receipt.casterUuid, receipt.recipientUuid].every(identity)
   && receipt.casterUuid !== receipt.recipientUuid
   && effect?.flags?.[scope]?.sustained === true && effect.flags[scope].cast === receipt.cast
-  && [receipt.casterUuid, receipt.recipientUuid].includes(effect.origin);
+  && ([receipt.casterUuid, receipt.recipientUuid].includes(effect.origin)
+    || (!effect.origin && identity(effect.flags[scope].spell)));
 
 export function suspendSustainTransferEffect({ effect, receipt } = {}) {
   if (!matches(effect, receipt) || receipt.state !== "claimed") return { ok: false, reason: "claim" };
@@ -30,7 +31,11 @@ export function suspendSustainTransferEffect({ effect, receipt } = {}) {
   }
   const marker = existing ?? { version: 1, transactionId: receipt.transactionId, cast: receipt.cast,
     casterUuid: receipt.casterUuid, recipientUuid: receipt.recipientUuid, disabledBefore: effect.disabled === true };
-  return { ok: true, patch: { disabled: true, [`flags.${scope}.${SUSTAIN_TRANSFER_FLAG}`]: structuredClone(marker) } };
+  // The inventory already matched a legacy originless carrier to this cast's
+  // spell UUID. Give its pending marker an explicit caster so lifecycle readers
+  // recognize it as suspended instead of deleting it as an orphan.
+  return { ok: true, patch: { ...(!effect.origin ? { origin: receipt.casterUuid } : {}),
+    disabled: true, [`flags.${scope}.${SUSTAIN_TRANSFER_FLAG}`]: structuredClone(marker) } };
 }
 
 export function releaseSustainTransferEffect({ effect, receipt, entry } = {}) {

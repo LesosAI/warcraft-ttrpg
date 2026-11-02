@@ -44,10 +44,46 @@ export function registerMindControlHooks({hooks=globalThis.Hooks,game=globalThis
   hooks.on("createActiveEffect",effect=>changed(effect));
   hooks.on("updateActiveEffect",changed);
   hooks.on("deleteActiveEffect",effect=>changed(effect));
+  const hasBonds=actor=>Array.isArray(actor?.getFlag?.("azeroth-rpg","kodoBond")?.beasts)
+    && actor.getFlag("azeroth-rpg","kodoBond").beasts.length>0;
+  const relevant=combat=>combat.getFlag("azeroth-rpg",MIND_CONTROL_SCHEDULE)
+    || Array.from(combat.combatants ?? []).some(row=>hasBonds(row.actor)
+      || Array.from(row.actor?.effects ?? []).some(effect=>effect.flags?.["azeroth-rpg"]?.[MIND_CONTROL_FLAG]));
+  const talentChanged=item=>{
+    const actor=item?.parent;
+    // The saved relationship remains available if a talent is bought again.
+    // Rebuilding now removes its timing immediately when the talent is lost.
+    if(item?.type!=="talent" || !hasBonds(actor)) return;
+    return Promise.all(Array.from(game.combats ?? []).filter(combat=>
+      Array.from(combat.combatants ?? []).some(row=>row.actor===actor)).map(enqueue));
+  };
+  hooks.on("createItem",talentChanged);
+  hooks.on("updateItem",talentChanged);
+  hooks.on("deleteItem",talentChanged);
+  const participantChanged=row=>{
+    const combat=row?.parent;
+    if(combat && relevant(combat)) return enqueue(combat);
+  };
+  hooks.on("createCombatant",participantChanged);
+  hooks.on("updateCombatant",(row,delta={})=>{
+    const flags=delta.flags?.["azeroth-rpg"] ?? delta["flags.azeroth-rpg"] ?? {};
+    if (!["actorId","tokenId","sceneId","name","initiative","defeated",
+      "flags.azeroth-rpg.side"].some(key=>Object.hasOwn(delta,key))
+      && !Object.hasOwn(flags,"side") && !Object.hasOwn(flags,"-=side")) return;
+    return participantChanged(row);
+  });
+  hooks.on("deleteCombatant",participantChanged);
+  hooks.on("updateActor",(actor,delta={})=>{
+    const flags=delta.flags?.["azeroth-rpg"] ?? delta["flags.azeroth-rpg"] ?? {};
+    const bondChanged=["bond","-=bond"].some(key=>Object.hasOwn(flags,key)
+      || Object.hasOwn(delta,`flags.azeroth-rpg.${key}`));
+    if(!bondChanged && !Object.hasOwn(delta,"system.creatureType") && !Object.hasOwn(delta.system ?? {},"creatureType")) return;
+    return Promise.all(Array.from(game.combats ?? []).filter(combat=>(bondChanged||relevant(combat))
+      && Array.from(combat.combatants ?? []).some(row=>row.actor===actor
+        || (bondChanged && row.actor?.isToken && row.actorId===actor.id))).map(enqueue));
+  });
   const reconcile=()=>Promise.all(Array.from(game.combats ?? []).filter(combat=>
-    combat.getFlag("azeroth-rpg",MIND_CONTROL_SCHEDULE)
-    || Array.from(combat.combatants ?? []).some(row=>Array.from(row.actor?.effects ?? [])
-      .some(effect=>effect.flags?.["azeroth-rpg"]?.[MIND_CONTROL_FLAG]))).map(enqueue));
+    relevant(combat)).map(enqueue));
   hooks.on("ready",reconcile);
   let gmId=game.users?.activeGM?.id;
   hooks.on("updateUser",()=>{

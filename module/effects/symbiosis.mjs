@@ -14,6 +14,7 @@
 import { SYMBIOSIS_FLAG, bondPartners, sharedHeal } from "../rules/symbiosis.mjs";
 import { talentEffect } from "../rules/talent-effects.mjs";
 import { iceBlockFor } from "../rules/ice-block.mjs";
+import { dispersionRefusal } from '../rules/dispersion.mjs';
 
 /** The query a share for a creature this client does not own goes through. */
 export const SHARE_HEAL_QUERY = "azeroth-rpg.shareHeal";
@@ -125,7 +126,12 @@ export async function shareHealQueryHandler({ partnerUuid = null, healedUuid = n
  */
 export async function nameSymbiosisPartner(druid, partner) {
   if (!druid || !partner || iceBlockFor(druid) || iceBlockFor(partner)) return null;
-  await druid.setFlag("azeroth-rpg", SYMBIOSIS_FLAG, { partner: partner.uuid, name: partner.name });
+  if (dispersionRefusal(druid, 'target') || dispersionRefusal(partner, 'target')) return null;
+  const bond = { partner: partner.uuid, name: partner.name };
+  await druid.setFlag("azeroth-rpg", SYMBIOSIS_FLAG, { ...bond });
+  const saved = druid.getFlag("azeroth-rpg", SYMBIOSIS_FLAG);
+  if (saved?.partner !== bond.partner || saved?.name !== bond.name)
+    throw new Error("Symbiosis bond write is unconfirmed");
   ui.notifications?.info(game.i18n.format("AZEROTH.Symbiosis.Named", { name: druid.name, partner: partner.name }));
   return partner;
 }
@@ -140,6 +146,8 @@ export async function endSymbiosis(druid) {
   const flag = druid?.getFlag?.("azeroth-rpg", SYMBIOSIS_FLAG) ?? null;
   if (!flag) return false;
   await druid.unsetFlag("azeroth-rpg", SYMBIOSIS_FLAG);
+  if (druid.getFlag("azeroth-rpg", SYMBIOSIS_FLAG))
+    throw new Error("Symbiosis bond removal is unconfirmed");
   ui.notifications?.info(game.i18n.format("AZEROTH.Symbiosis.Ended", { name: druid.name, partner: flag.name ?? "" }));
   return true;
 }

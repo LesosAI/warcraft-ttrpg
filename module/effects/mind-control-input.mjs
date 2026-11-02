@@ -1,5 +1,6 @@
 import { mindControlRecord } from '../rules/mind-control.mjs';
 import { iceBlockFor } from '../rules/ice-block.mjs';
+import { dispersionFor } from '../rules/dispersion.mjs';
 
 /** Read-only admission for the eventual active-GM control writer. Accept real
  * registered documents, never client-provided result totals or target actors. */
@@ -25,7 +26,8 @@ export function readMindControlFailure({ message, result, user } = {}, {
     : !row.sceneId && !row.tokenId ? resolve(`Actor.${row.actorId}`) : null;
   const caster = resolve(cast.casterUuid);
   if (!target || !caster || speakerActor(message.speaker) !== caster || speakerActor(result.speaker) !== target
-    || !target.testUserPermission(user, 'OWNER') || iceBlockFor(target) || iceBlockFor(caster)) return null;
+    || !target.testUserPermission(user, 'OWNER') || iceBlockFor(target) || iceBlockFor(caster)
+    || dispersionFor(target) || dispersionFor(caster)) return null;
   const casterToken = message.speaker?.token
     ? { sceneId: message.speaker.scene, tokenId: message.speaker.token } : null;
   if (casterToken && (!casterToken.sceneId

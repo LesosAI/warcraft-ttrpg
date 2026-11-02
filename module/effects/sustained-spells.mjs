@@ -1,5 +1,6 @@
 /** Actor-carried Sustains follow their caster across scenes, on the active GM. */
 import { sustainTransferPending } from "../rules/sustain-transfer-suspension.mjs";
+import { mindControlRecord } from "../rules/mind-control.mjs";
 const SCOPE = "azeroth-rpg";
 const values = collection => [...(collection?.values?.() ?? collection ?? [])];
 const writer = () => game.user?.isGM === true && game.users?.activeGM?.id === game.user.id;
@@ -43,6 +44,25 @@ export function reconcileSustainedSpells() {
   return next;
 }
 
+/** A successful escape or dispel ends the corresponding domination Sustain.
+ * Transfer carriers are recovery evidence and must never trigger this cleanup. */
+export async function endDeletedDomination(effect) {
+  const flags = effect?.flags?.[SCOPE];
+  const control = flags?.identifier === 'mind-control' ? mindControlRecord(flags.mindControl) : null;
+  const cast = flags?.cast ?? control?.messageUuid;
+  const domination = ["compel", "dominate", "enslave-demon"].includes(flags?.identifier) && effect.statuses?.has("charmed");
+  const mindControl = control && control.casterUuid === effect.origin
+    && control.targetUuid === effect.parent?.uuid && control.messageUuid === cast;
+  if (!writer() || (!mindControl && flags?.sustained !== true) || !cast || !effect.origin
+    || (!domination && !mindControl) || sustainTransferPending(effect)) return false;
+  const { endSustain } = await import("../dice/workflows.mjs");
+  const caster = fromUuidSync(effect.origin);
+  if (!writer() || !caster || !(caster.getFlag(SCOPE, "sustaining") ?? []).some(row => row.cast === cast)) return false;
+  await endSustain({ actor: caster, cast });
+  if ((caster.getFlag(SCOPE, "sustaining") ?? []).some(row => row.cast === cast)) throw Error("Domination Sustain cleanup incomplete");
+  return true;
+}
+
 export function registerSustainedSpellHooks() {
   const sweep = () => {
     if (writer()) void reconcileSustainedSpells().catch(error => {
@@ -51,5 +71,11 @@ export function registerSustainedSpellHooks() {
     });
   };
   for (const hook of ["updateActor", "deleteActor", "deleteToken", "createActiveEffect", "updateUser"]) Hooks.on(hook, sweep);
+  Hooks.on("deleteActiveEffect", effect => {
+    void endDeletedDomination(effect).catch(error => {
+      console.warn("azeroth-rpg | Domination Sustain cleanup", error);
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Card.SustainCleanupFailed"));
+    });
+  });
   Hooks.once("ready", sweep);
 }

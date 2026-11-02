@@ -40,6 +40,9 @@
  */
 
 import { areaLapsed, firstEntry, hasAreaTick, joinFight, staleAreas } from "../rules/area-ticks.mjs";
+import {casterLifeEnded} from '../rules/end-turn-damage.mjs';
+import {AZEROTH} from '../config.mjs';
+import { sustainRegionTransferPending } from "../rules/sustain-region-suspension.mjs";
 // Difficult ground on a placed area (D-757): the law of what it lays and on whom,
 // the cost it charges, and the talents that lay it.
 import { DIFFICULT_BEHAVIOR, groundNow } from "../rules/area-ground.mjs";
@@ -112,6 +115,9 @@ export function areaRecord(region) {
     // fall ends the Sustain when a world actor cast through an unlinked token.
     source: f.source ?? null,
     sustained: f.sustained === true,
+    ...(f.identifier==='everburn'?{endsOnCasterDeath:true}:{}),
+    ...(f.identifier==='everburn'&&game.messages?.get(f.messageId)?.flags?.[SCOPE]?.everburnDismissed===true?{dismissed:true}:{}),
+    ...(sustainRegionTransferPending(region) ? { transferPending: true } : {}),
     lasts: f.lasts ?? null,
     placedAt: f.placedAt ?? null,
     // An area whose span is the world's clock alone, fight or no fight (04's
@@ -199,7 +205,13 @@ function sourceDown(row, scene) {
  * @returns {string[]}
  */
 export function staleIn(scene, rows, now = worldClock()) {
-  const judged = rows.map(row => ({ ...row, down: sourceDown(row, scene) }));
+  const judged = rows.filter(row => row.transferPending !== true).map(row => {
+    const caster=actorOf(row.caster),token=row.source?.tokenId?scene?.tokens?.get(row.source.tokenId):null;
+    const source=token&&caster&&token.actorId===caster.id&&(!row.source.sceneId||row.source.sceneId===scene.id)?token.actor:caster;
+    return {...row,down:sourceDown(row,scene),casterDead:row.endsOnCasterDeath===true&&(!source||casterLifeEnded({
+      type:source.type,health:source.system?.health?.value,steps:source.system?.deathSteps,
+      limit:source.system?.deathStepLimit??AZEROTH.DEATH_STEPS}))};
+  });
   return staleAreas(judged, heldCasts(rows.map(row => row.caster)), now);
 }
 
@@ -312,7 +324,7 @@ async function sweepAreasNow({ scenes = null, caster = null, ids = null } = {}) 
  * @returns {{caster: string, cast: string}|null}
  */
 export function takenOffSustain(region, options = {}) {
-  if (options?.[SWEEP_DELETE] === true) return null;
+  if (options?.[SWEEP_DELETE] === true || sustainRegionTransferPending(region)) return null;
   const row = areaRecord(region);
   if (!row || row.sustained !== true || !row.caster) return null;
   const scene = region?.parent ?? null;
@@ -371,7 +383,7 @@ async function clockAreasNow(combat) {
   const updates = [];
   for (const region of scene.regions) {
     const row = areaRecord(region);
-    if (!row || !(Number(row.lasts?.rounds) > 0) || row.placedAt?.combatId || row.worldClock === true) continue;
+    if (!row || row.transferPending === true || !(Number(row.lasts?.rounds) > 0) || row.placedAt?.combatId || row.worldClock === true) continue;
     if (areaLapsed(row, now)) continue;
     const placedAt = joinFight(row.placedAt, { combatId: combat.id, round: combat.round ?? 0, turn: combat.turn ?? 0, time: now.time });
     updates.push({ _id: region.id, [`flags.${SCOPE}.placedAt`]: placedAt });
@@ -451,6 +463,7 @@ export function casterTokenOn(scene, source, caster) {
  * @returns {{who: string, kinds: string[], caster: string|null}|null}
  */
 export function groundWanted(region, now = worldClock()) {
+  if (sustainRegionTransferPending(region)) return null;
   const f = region?.flags?.[SCOPE] ?? {};
   if (!f.cast) return null;
   const areaGround = f.areaGround ?? (f.areaTick?.difficult === true ? { difficult: true, lasts: { rounds: null }, from: "" } : null);
@@ -498,6 +511,9 @@ async function reconcileGroundNow({ scenes = null, caster = null } = {}) {
       const f = region.flags?.[SCOPE] ?? {};
       if (!f.cast) continue;
       if (caster && f.caster !== caster) continue;
+      // Retain suspended embedded behaviors as recovery evidence, rather than
+      // deleting/rebuilding them because the pending area wants no ground.
+      if (sustainRegionTransferPending(region)) continue;
       const want = groundWanted(region, now);
       const have = region.behaviors.filter(b => b.type === DIFFICULT_BEHAVIOR && b.getFlag?.(SCOPE, GROUND_FLAG) === true);
       if (want && have.length === 1 && sameGround(have[0], want)) continue;
@@ -554,6 +570,9 @@ async function sweepLeaversNow({ scenes = null } = {}) {
         const at = effect.flags?.[SCOPE]?.[LEAVES_FLAG] ?? null;
         if (!at?.regionId || (at.sceneId && at.sceneId !== scene.id)) continue;
         const region = scene.regions.get(at.regionId) ?? null;
+        // Transfer owns this snapshot until activation or explicit recovery.
+        // Temporary placement must not erase its riders during that interval.
+        if (sustainRegionTransferPending(region)) continue;
         let inside = false;
         try {
           inside = Boolean(region) && token.testInsideRegion(region);
@@ -571,6 +590,7 @@ async function sweepLeaversNow({ scenes = null } = {}) {
       }
     }
     for (const region of scene.regions) {
+      if (sustainRegionTransferPending(region)) continue;
       const armed = region.flags?.[SCOPE]?.[ARMED_FLAG] ?? null;
       if (!armed || typeof armed !== "object") continue;
       const keep = {};
@@ -613,7 +633,7 @@ export function armAreas(scene, token, when) {
     let armed = 0;
     for (const region of scene.regions) {
       const f = region.flags?.[SCOPE] ?? {};
-      if (!f.cast || !hasAreaTick(f.areaTick)) continue;
+      if (!f.cast || !hasAreaTick(f.areaTick) || sustainRegionTransferPending(region)) continue;
       if (!(f.areaTick.remains ?? []).some(r => r.when === when)) continue;
       let inside = false;
       try {
@@ -647,7 +667,7 @@ export function armAreas(scene, token, when) {
  */
 export function claimEntry(region, tokenId, turnKey) {
   return serial(async () => {
-    if (!isWriter() || !regionInWorld(region)) return false;
+    if (!isWriter() || !regionInWorld(region) || sustainRegionTransferPending(region)) return false;
     const next = firstEntry(region.flags?.[SCOPE]?.[ENTERED_FLAG] ?? {}, tokenId, turnKey);
     if (!next.first) return false;
     await region.update({ [`flags.${SCOPE}.${ENTERED_FLAG}.${tokenId}`]: turnKey });
@@ -683,7 +703,7 @@ export function growAreas(scene, caster, token = null) {
       const source = f.source ?? null;
       const theirs = f.caster === caster.uuid
         || Boolean(token && source?.tokenId === token.id && (!source.sceneId || source.sceneId === scene.id));
-      if (!f.cast || feet <= 0 || !theirs) continue;
+      if (!f.cast || feet <= 0 || !theirs || sustainRegionTransferPending(region)) continue;
       const shape = region.shapes?.[0] ?? null;
       if (shape?.type !== "circle") continue;
       const data = typeof shape.toObject === "function" ? shape.toObject() : { ...shape };
@@ -741,6 +761,7 @@ export function registerSustainedAreaHooks() {
     if (!isWriter()) return;
     if (changed?.flags?.[SCOPE]) quietly(sweepAreas({ caster: actor.uuid }));
     if (foundry.utils.getProperty(changed ?? {}, "system.health.value") === 0) quietly(sweepAreas());
+    if (foundry.utils.hasProperty(changed ?? {}, "system.deathSteps")) quietly(sweepAreas());
   });
   Hooks.on("createRegion", region => {
     if (!isWriter() || !region?.flags?.[SCOPE]?.cast) return;

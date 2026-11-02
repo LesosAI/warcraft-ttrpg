@@ -1,5 +1,7 @@
-<p>{{localize "AZEROTH.MindControl.Review.Explain"}}</p>
+<p>{{#if activation}}{{localize "AZEROTH.MindControl.Review.ActivateExplain"}}{{else}}{{localize "AZEROTH.MindControl.Review.Explain"}}{{/if}}</p>
 <p>{{caster}} → {{target}} · DC {{dc}}</p>
 <p>{{localize "AZEROTH.MindControl.Review.Effects"}}</p>
 <ul>{{#each effects}}<li>{{name}} ({{id}})</li>{{else}}<li>{{localize "AZEROTH.MindControl.Review.None"}}</li>{{/each}}</ul>
-<p><label><input type="checkbox" name="acknowledged"> {{localize "AZEROTH.MindControl.Review.Acknowledge"}}</label></p>
+{{#unless activation}}<p data-mind-control-reservations>{{localize "AZEROTH.MindControl.Review.Reservations"}} <strong>{{reservationCount}}</strong></p>
+<p>{{localize "AZEROTH.MindControl.Review.ReservationHelp"}}</p>{{/unless}}
+<p><label><input type="checkbox" name="acknowledged"> {{#if activation}}{{localize "AZEROTH.MindControl.Review.ActivateAcknowledge"}}{{else}}{{localize "AZEROTH.MindControl.Review.Acknowledge"}}{{/if}}</label></p>

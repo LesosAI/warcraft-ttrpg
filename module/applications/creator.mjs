@@ -38,8 +38,9 @@ import { arrange } from "../rules/slots.mjs";
 // A Legacy's talents come with its people (04 §1, D-781).
 import { keptBy, owedTalents } from "../rules/legacy-branches.mjs";
 import { sectionTail, matchesFilter, sortEntries, facetOptions } from "./browser-categories.mjs";
-import { startingTalents, startingSpell, draftTree, invalidatedChoices } from "../rules/creator-choices.mjs";
+import { startingTalents, startingSpell, startingRacialState, draftTree, invalidatedChoices } from "../rules/creator-choices.mjs";
 import { crestPath } from "../rules/crests.mjs";
+import { racialTalentIcon } from "../rules/icons.mjs";
 import { SKILL_TEXT } from "../rules/skill-text.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -517,10 +518,11 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     const tree = draftTree(mine.filter(t => t.branch === s.talentBranch), s.classTalent);
     tree.crest = crestPath(p.cls?.identifier);
     const racial = (p.race?.talents ?? []).map((t, i) => ({ ...t,
-      _id: t.name, img: p.race.img, racial: true, taken: s.racialTalent === t.name ? 1 : 0, ranks: 1,
-      state: s.racialTalent === t.name ? "maxed" : Number(t.tier ?? 1) <= 1 ? "available" : "locked",
+      _id: t.name, img: racialTalentIcon(p.race.name, t.name, p.race.img), racial: true, taken: s.racialTalent === t.name ? 1 : 0, ranks: 1,
+      state: s.racialTalent === t.name ? "maxed" : startingRacialState(t, p.race, p.cls).ok ? "available" : "locked",
+      lockedBecause: startingRacialState(t, p.race, p.cls).reason,
       label: t.name + ": " + (s.racialTalent === t.name ? "1/1" : "0/1") + ", " + game.i18n.localize("AZEROTH.Talent.Tier") + " " + (t.tier ?? 1), socketId: this.id + "-racial-" + i,
-      canChoose: Number(t.tier ?? 1) <= 1 && !s.racialTalent }));
+      canChoose: startingRacialState(t, p.race, p.cls).ok && !s.racialTalent }));
     for (const tier of tree.tiers) {
       tier.railId = this.id + "-tier-" + tier.tier;
       for (const t of tier.talents) {
@@ -537,7 +539,7 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
       key: selected.racial ? selected.name : selected.identifier,
       canChoose: selected.racial ? selected.canChoose : selected.canTake,
       html: await enrich(selected.effect ?? selected.description ?? ""),
-      reason: selected.racial ? (Number(selected.tier ?? 1) > 1 ? "raceTier" : "racePicks") : selected.lockedBecause } : null;
+      reason: selected.racial ? (selected.lockedBecause ?? "racePicks") : selected.lockedBecause } : null;
     return { racial, branches, tree, detail, className: p.cls?.name, raceName: p.race?.name,
       classChosen: Boolean(s.classTalent), racialChosen: Boolean(s.racialTalent),
       selectedClassName: mine.find(t => t.identifier === s.classTalent)?.name,
@@ -1045,7 +1047,7 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     const p = this.#proposal();
     if (racial) {
       const choice = p.race?.talents?.find(t => t.name === target.dataset.key && Number(t.tier ?? 1) <= 1);
-      if (!choice || this.#state.racialTalent) return;
+      if (!choice || this.#state.racialTalent || !startingRacialState(choice, p.race, p.cls).ok) return;
       this.#state.racialTalent = choice.name;
     } else {
       const mine = startingTalents(this.#data.talents, p.cls, p.race);

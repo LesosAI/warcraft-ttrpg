@@ -22,10 +22,14 @@ const COUNTS = { once: 1, twice: 2, "three times": 3, "four times": 4, "five tim
  * three spells, and no spell's uses are read from its prose.
  *
  * @param {string} text  Plain or HTML.
- * @returns {{max: number, per: "short"|"long"|"encounter"}|null}
+ * @param {{arc?: boolean}} options Enable the racial once-in-an-arc wording.
+ * @returns {{max: number, per: "short"|"long"|"encounter"|"arc"}|null}
  */
-export function usesFromText(text = "") {
+export function usesFromText(text = "", { arc = false } = {}) {
   const plain = String(text).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  // Campaign arcs have no clock/rest boundary. Opt in only for racial grants;
+  // generic signature parsing retains its existing manually adjudicated scope.
+  if (arc && /\bonce in an arc\b/i.test(plain)) return { max: 1, per: "arc" };
   const m = /\b(once|twice|three times|four times|five times|(\d+) times)\s+(?:per|a|each|between)\s+(encounter|combat|fight|short rests?|long rests?|day)\b/i.exec(plain);
   if (!m) return null;
   const max = m[2] ? Number(m[2]) : (COUNTS[m[1].toLowerCase()] ?? 1);
@@ -35,8 +39,8 @@ export function usesFromText(text = "") {
 }
 
 /** The uses a text stamps on a fresh document: full, or unlimited. */
-export function usesStamp(text = "") {
-  const u = usesFromText(text);
+export function usesStamp(text = "", options = {}) {
+  const u = usesFromText(text, options);
   return u ? { value: u.max, max: u.max, per: u.per } : { value: 0, max: 0, per: null };
 }
 
@@ -47,6 +51,7 @@ export function usesStamp(text = "") {
  */
 export function refreshes(per, event) {
   if (!per) return false;
+  if (per === "arc") return event === "arc";
   if (event === "long") return true;
   if (event === "short") return per === "short" || per === "encounter";
   if (event === "encounter") return per === "encounter";

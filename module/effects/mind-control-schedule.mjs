@@ -1,4 +1,4 @@
-import {mindControlCombatLinks} from "./mind-control-combat.mjs";
+import {companionTurnLinks} from "./kodo-bond.mjs";
 import {mindControlOrder} from "../rules/mind-control-turns.mjs";
 import {MIND_CONTROL_SCHEDULE} from "../rules/mind-control-schedule.mjs";
 const busy=new Set();
@@ -17,7 +17,7 @@ export async function refreshMindControlSchedule(combat,{game=globalThis.game,re
     const round=combat.round,turn=combat.turn;
     const standing=[...(combat.turnSlots ?? [])],currentKey=standing[turn]?.key ?? null;
     if (turn!==null && !currentKey) return {ok:false,reason:"unknownTurn"};
-    const read=()=>mindControlCombatLinks(combat,{resolve});
+    const read=()=>companionTurnLinks(combat,{resolve});
     const controls=read();
     if (controls.issues.length) return {ok:false,reason:"unresolvedControl",issues:controls.issues};
     const plan=mindControlOrder(combat._baseTurnSlots(),controls.links,{previous:standing,currentKey});
@@ -27,6 +27,7 @@ export async function refreshMindControlSchedule(combat,{game=globalThis.game,re
     const record={version:1,round,keys:slots.map(s=>s.key)};
     if (!authorized() || combat.round!==round || combat.turn!==turn
       || !same(combat.turnSlots,standing) || !same(read(),controls)) return {ok:false,reason:"changed"};
+    if (turn===nextTurn && same(combat.getFlag("azeroth-rpg",MIND_CONTROL_SCHEDULE),record)) return {ok:true};
     await combat.update({[`flags.azeroth-rpg.${MIND_CONTROL_SCHEDULE}`]:record,turn:nextTurn},{turnEvents:false});
     return authorized() && combat.round===round && combat.turn===nextTurn
       && same(combat.getFlag("azeroth-rpg",MIND_CONTROL_SCHEDULE),record)

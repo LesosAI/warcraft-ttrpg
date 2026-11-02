@@ -1,0 +1,13 @@
+<p><strong>{{actor}}</strong></p>
+<p>{{localize "AZEROTH.Signature.DamageReview.Help"}}</p>
+<ul>{{#each cards}}<li>{{this}}</li>{{/each}}</ul>
+{{#if sealingReservation}}
+<p>{{localize "AZEROTH.Signature.DamageReview.SealingHelp"}}</p>
+<label>{{localize "AZEROTH.Signature.DamageReview.SealingResult"}}
+<select name="sealingRescued">
+  <option value="">{{localize "AZEROTH.Signature.DamageReview.SealingChoose"}}</option>
+  <option value="yes">{{localize "AZEROTH.Signature.DamageReview.SealingUsed"}}</option>
+  <option value="no">{{localize "AZEROTH.Signature.DamageReview.SealingUnused"}}</option>
+</select></label>
+{{/if}}
+<label><input type="checkbox" name="acknowledged"> {{localize "AZEROTH.Signature.DamageReview.Acknowledge"}}</label>

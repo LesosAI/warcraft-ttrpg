@@ -15,6 +15,8 @@ const scope = "azeroth-rpg", ledgerFlag = "spellstealTransfers";
 const continuations = new WeakMap();
 let queue = Promise.resolve();
 const serial = run => { const result = queue.then(run, run); queue = result.catch(() => {}); return result; };
+/** GM recovery joins the same queue as paid uses; it never races a live use. */
+export const withSpellstealUseLock = run => serial(run);
 const identity = value => typeof value === "string" && value.trim().length > 0;
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const turn = () => ({ combat: game.combat?.id ?? null, round: game.combat?.round ?? null,
@@ -75,7 +77,7 @@ export async function spellstealUseHandler(payload = {}, { user = null } = {}) {
     const rows = () => caster.getFlag(scope, ledgerFlag) ?? [];
     if (!Array.isArray(rows())) return { ok: false, reason: "review" };
     const previous = rows().find(row => row.key === key);
-    if (previous) return { ok: false, reason: previous.request?.state === "done" ? "used" : "review" };
+    if (previous) return { ok: false, reason: ["done", "closed"].includes(previous.request?.state) ? "used" : "review" };
     let request = null;
     const valid = () => {
       try {
@@ -98,8 +100,7 @@ export async function spellstealUseHandler(payload = {}, { user = null } = {}) {
     if (!prepared.ok || !valid()) return { ok: false, reason: "unsupported" };
     const replacing = prepared.capacity.dropped.length > 0;
     if (replacing && (!sameSustainSnapshot(input.recipientSustains, [...prepared.capacity.dropped, ...prepared.capacity.retained])
-      || prepared.replacements?.length !== prepared.capacity.dropped.length
-      || prepared.replacements.some(row => row.regions.length))) return { ok: false, reason: "unsupported" };
+      || prepared.replacements?.length !== prepared.capacity.dropped.length)) return { ok: false, reason: "unsupported" };
     let plan = { ...prepared, casterUuid: caster.uuid, recipientUuid: mage.uuid, cast: input.cast,
       transactionId: foundry.utils.randomID() };
     request = { version: 1, id: foundry.utils.randomID(), state: "pending", userId: requester.id,

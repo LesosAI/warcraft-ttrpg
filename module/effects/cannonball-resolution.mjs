@@ -65,8 +65,9 @@ export async function resolveCannonball({messageUuid}={}, {user}={}){
   if(!valid()||card?.author?.id!==user.id||card?.speaker?.actor!==target.id||flags?.kind!=='resilience'
    ||flags.resilience!=='reflex'||link?.messageId!==message.id||link.cast!==key||link.index!==0
    ||link.actorId!==target.id||link.sceneId!==(expected.target.sceneId??null)||link.tokenId!==(expected.target.tokenId??null)
-   ||link.identifier!==CANNONBALL_IDENTIFIER||!Number.isFinite(roll?.total))return {ok:false,reason:'saveUncertain'};
-  const passed=roll.total>=expected.dc;
+   ||link.identifier!==CANNONBALL_IDENTIFIER||!Number.isFinite(roll?.total)
+   ||roll?.options?.dc!==expected.dc||typeof roll?.outcome?.success!=='boolean')return {ok:false,reason:'saveUncertain'};
+  const passed=roll.outcome.success;
   const row=cannonballDamage(expected,{passed,apByLocation:target.system.ap??{},immune:target.system.immune??[],
    vulnerable:target.system.vulnerable??[],dealtHalved:dealtHalvedBy(caster)});
   if(!row)return {ok:false,reason:'damage'};

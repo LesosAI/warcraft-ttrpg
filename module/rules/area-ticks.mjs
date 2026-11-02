@@ -1354,6 +1354,8 @@ export function staleAreas(regions = [], held = new Map(), now = {}) {
   const out = [];
   for (const r of regions ?? []) {
     if (!r?.id || !r.cast) continue;
+    if(r.dismissed===true){out.push(r.id);continue;}
+    if(r.endsOnCasterDeath===true&&r.casterDead===true){out.push(r.id);continue;}
     if (r.sustained === true && (r.down === true || !held?.get?.(r.caster ?? "")?.has(r.cast))) {
       out.push(r.id);
       continue;

@@ -231,7 +231,8 @@ AZEROTH.featureKinds = {
 AZEROTH.usesPer = {
   short:     "AZEROTH.Feature.Per.Short",
   long:      "AZEROTH.Feature.Per.Long",
-  encounter: "AZEROTH.Feature.Per.Encounter"
+  encounter: "AZEROTH.Feature.Per.Encounter",
+  arc:       "AZEROTH.Feature.Per.Arc"
 };
 AZEROTH.FAVORITES_MAX = 15;
 // The Momentum maneuvers open to anyone (05 SS11, 06 SS7): name, cost and the

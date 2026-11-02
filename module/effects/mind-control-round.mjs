@@ -1,11 +1,11 @@
-import {mindControlCombatLinks} from "./mind-control-combat.mjs";
+import {companionTurnLinks} from "./kodo-bond.mjs";
 import {mindControlOrder} from "../rules/mind-control-turns.mjs";
 import {MIND_CONTROL_SCHEDULE} from "../rules/mind-control-schedule.mjs";
 
 /** Prepare the same Combat update that advances the round, before core chooses
  * lifecycle participants. No separate write or action-budget reset happens here.
  */
-export function prepareMindControlRound(combat,changed,options={}, {read=mindControlCombatLinks}={}) {
+export function prepareMindControlRound(combat,changed,options={}, {read=companionTurnLinks}={}) {
   if(!Number.isSafeInteger(changed.round) || changed.round<1 || changed.round===combat.round)
     return {ok:true};
   const controls=read(combat);

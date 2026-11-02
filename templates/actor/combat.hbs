@@ -356,7 +356,7 @@
         {{#if s.uses}}<span class="azeroth-feature-chip azeroth-feature-uses">{{s.uses.value}}/{{s.uses.max}} {{localize s.uses.per}}</span>{{/if}}
       </span>
       {{#if s.pressable}}
-      <button type="button" class="azeroth-use" data-action="useSignature"{{#if s.refusal}} disabled{{/if}}>{{localize "AZEROTH.Feature.Use"}}</button>
+      <button type="button" class="azeroth-use" data-action="useSignature"{{#if s.refusal}} disabled{{/if}}{{#if s.refusalLabel}} data-tooltip="{{localize s.refusalLabel}}"{{/if}}>{{localize "AZEROTH.Feature.Use"}}</button>
       {{/if}}
       <div class="azeroth-item-detail azeroth-feature-effect" data-item-id="{{s.id}}" hidden>
         {{#if s.origin}}<p class="azeroth-item-origin">{{s.origin}}</p>{{/if}}

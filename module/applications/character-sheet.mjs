@@ -18,6 +18,7 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+import { dispersionRefusal } from "../rules/dispersion.mjs";
 import { actorTraining, trainingWarning } from "../rules/equipment-training.mjs";
 import { showsManeuvers } from "../rules/combat-sheet.mjs";
 import { attackWithDialog, bindKeyActivation, bindPlateKeys, bindPoolInputs, bindScoreInputs, blankItemMenu, browseItems, browseSpells, containersFor, grantsOf, maneuversContext, castItemSpell, castWithDialog, detailFields, effectAction, effectsContext, exposeWithDialog, itemContextMenu, putInContainer, resilienceWithDialog, rollAbility, rollWithDialog, signatureContext, skillContextMenu, skillTooltip, stepPool, useFeatureWithDialog, useGearWithDialog, useSignatureWithDialog, wearable } from "./actions.mjs";
@@ -248,10 +249,19 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       toggleEffect: AzerothCharacterSheet.#onEffectAction,
       editEffect: AzerothCharacterSheet.#onEffectAction,
       mindControlSaves: AzerothCharacterSheet.#onEffectAction,
+      dominationOrder: AzerothCharacterSheet.#onEffectAction,
+      enslaveMinute: AzerothCharacterSheet.#onEffectAction,
+      enslaveClockReview: AzerothCharacterSheet.#onEffectAction,
+      mindSootheHarm: AzerothCharacterSheet.#onEffectAction,
       reviewDispersionAftermath: AzerothCharacterSheet.#onEffectAction,
       reviewAntivenom: AzerothCharacterSheet.#onEffectAction,
+      reviewConsumable: AzerothCharacterSheet.#onEffectAction,
       reviewSignatureUses: AzerothCharacterSheet.#onEffectAction,
       reviewSignatureParry: AzerothCharacterSheet.#onEffectAction,
+      reviewSignatureHit: AzerothCharacterSheet.#onEffectAction,
+      reviewSignatureHealing: AzerothCharacterSheet.#onEffectAction,
+      reviewSignatureDamage: AzerothCharacterSheet.#onEffectAction,
+      reviewSignatureKills: AzerothCharacterSheet.#onEffectAction,
       deleteEffect: AzerothCharacterSheet.#onEffectAction,
       expandItem: AzerothCharacterSheet.#onExpandItem,
       useFeature: AzerothCharacterSheet.#onUseFeature,
@@ -1902,7 +1912,9 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     const picksTotal = racialPicksFor(level);
     const picksUsed = systems.reduce((n, s) => n + (s.taken ?? 0), 0);
     const talents = await Promise.all(held.map(async item => {
-      const state = canTakeRacial({ ...item.system, name: item.name }, systems, level);
+      const state = canTakeRacial({ ...item.system, name: item.name }, systems, level, {
+        race: race.name, classes: this.actor.classItems.map(item => item.name)
+      });
       // The tree's own tile (D-758): the same socket, states, badge and card.
       return this.#tile({
         _id: item.id,
@@ -2344,7 +2356,9 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // A racial talent spends a pick, never a point (02 SS2, D-620).
     if (item.system.race) {
       const held = this.actor.items.filter(i => i.type === "talent" && i.system.race === item.system.race).map(i => i.system);
-      const state = canTakeRacial({ ...item.system, name: item.name }, held, this.actor.system.level ?? 1);
+      const state = canTakeRacial({ ...item.system, name: item.name }, held, this.actor.system.level ?? 1, {
+        race: this.actor.raceItem?.name, classes: this.actor.classItems.map(item => item.name)
+      });
       if (!state.ok) {
         ui.notifications?.warn(game.i18n.localize(`AZEROTH.Talent.Locked.${state.reason}`));
         return;
@@ -2926,6 +2940,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       coating: item.getFlag("azeroth-rpg", "coating")?.name ?? null,
       charges: hasCharges(sys.charges) ? { ...sys.charges } : null,
       usable: hasUse(sys.use),
+      useRefusal: dispersionRefusal(this.actor, "gear"),
       quantity: sys.quantity ?? null,
       // A container and a mount are put on from this tab now (D-736), so the
       // row's own answer is `actions.mjs#wearable` rather than the narrower
@@ -3342,7 +3357,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     const items = this.actor.items
       .filter(i => i.type === "talent" && (i.system.taken ?? 0) > 0 && i.system.uses?.per)
       // A talent that grants a feature counts its uses on the feature (D-642).
-      .filter(i => !talentEffect(i.system.className, i.system.identifier)?.grants)
+      .filter(i => !talentEffect(i.system.className, i.system.identifier, i.system.race ?? null)?.grants)
       .sort((a, b) => a.name.localeCompare(b.name));
     return Promise.all(items.map(async item => ({
       id: item.id,
@@ -3537,6 +3552,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         castable: item.type === "spell",
         attackable: item.type === "weapon",
         usable: hasUse(item.system.use),
+        useRefusal: dispersionRefusal(this.actor, "gear"),
         equipped: item.system?.equipped === true,
         meta: item.type === "spell" ? `T${item.system.tier}` : (item.type === "weapon" ? (item.system.rating ?? null) : null),
         favorite: true,
@@ -3550,6 +3566,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
   /** Use a class feature: the dialog where it casts, straight where it does not. */
   /** Fill a thing that holds charges (08 SS11's waterskin, D-671). */
   static async #onFillCharges(event, target) {
+    const refusal = dispersionRefusal(this.actor, "gear");
+    if (refusal) return ui.notifications?.warn(game.i18n.localize(refusal));
     const item = this.actor.items.get(target.closest("[data-item-id]")?.dataset.itemId);
     const charges = item?.system?.charges;
     if (!hasCharges(charges)) return;
@@ -3559,6 +3577,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
 
   /** Spend one (09 SS5: a day with no water costs a point of Fatigue). */
   static async #onSpendCharge(event, target) {
+    const refusal = dispersionRefusal(this.actor, "gear");
+    if (refusal) return ui.notifications?.warn(game.i18n.localize(refusal));
     const item = this.actor.items.get(target.closest("[data-item-id]")?.dataset.itemId);
     const charges = item?.system?.charges;
     if (!hasCharges(charges)) return;
