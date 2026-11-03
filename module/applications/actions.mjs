@@ -49,6 +49,7 @@ import { SKILL_TEXT } from "../rules/skill-text.mjs";
 import { THINNED_RATING_DROP, thinnedRating } from "../rules/swarm.mjs";
 import { fieldsFor } from "./item-fields.mjs";
 import { shouldPrompt } from "../settings.mjs";
+import { guardPendingCustodyItem } from "../rules/item-custody-guard.mjs";
 import { OVERCHANNEL_MAX_POINTS, castingDC, grantingClass, isHealingSpell, manaPrice, maxOverchannel, overchannelPerPoint, spellManaCost, statedCastingDC, swiftCast, takeNextSpell } from "../rules/casting.mjs";
 // THE LEGACY BRANCHES' DOORS (B1): a spell a talent pays in another pool (door 8),
 // the ability scope (door 16), a throw a rider makes possible (door 15), and no
@@ -1682,6 +1683,10 @@ function packFlankOf(actor, targetToken) {
 export async function attackWithDialog(actor, weapon, event = null, { location = "body", dc = null, damage = true, offHand = null, budget = null, gainsMomentum = true, atDistance = null, riposte = false, mode = null, ratingDelta = 0, opportunity = false, landsOnHit = null, cardBoons = null, fromFeature = null, targets = null, prepareOnly = false, paidThrowAs = null, testOnly = false } = {}) {
   if (testOnly && (!prepareOnly || budget!=="none" || damage!==false)) return null;
   if (!weapon || weapon.type !== "weapon") return null;
+  if (!guardPendingCustodyItem(weapon).ok) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Item.CustodyPending"));
+    return null;
+  }
   // Ordinary Attack follows the equipped hand on every entry point (sheet,
   // hotbar and item). Reactions and already-paid feature strikes retain their
   // own attack economy; an explicit choice, including a follow-up, wins.

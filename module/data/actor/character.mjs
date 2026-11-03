@@ -8,6 +8,8 @@ import { AZEROTH } from "../../config.mjs";
 import { deathStepLimitFor } from "../../rules/sacrifice.mjs";
 import { dispersionFor } from "../../rules/dispersion.mjs";
 import { grantsFor, grantsOn } from "../../rules/grants.mjs";
+// A GM's own Damage Rating and Casting bonuses on what is equipped (2026-11-02).
+import { bonusTotals } from "../../rules/item-bonuses.mjs";
 import { signatureEffects } from "../../rules/signatures.mjs";
 import { corruptionEffects } from "../../rules/corruption-effects.mjs";
 import { wornWeaponEffects } from "../../rules/weapon-traits.mjs";
@@ -34,6 +36,7 @@ import { SHAPE_ABILITIES, meldsGear } from "../../rules/shapes.mjs";
 // Carrying is counted in bag slots (D-735, D-736); the pounds stay with 14's
 // creatures, in `rules/weight.mjs` and `NpcData`.
 import { baseCapacity, ledger } from "../../rules/slots.mjs";
+import { collectBurdenParticipants, derivePilgrimsBurdenLoadState } from "../../effects/pilgrims-burden.mjs";
 import { carryFactor } from "../../rules/talent-effects.mjs";
 import { blockSpeedParts, speedFrom, speedParts } from "../../rules/speed.mjs";
 import { capFor } from "../../rules/momentum.mjs";
@@ -309,6 +312,12 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
       equipped: i.system?.equipped === true, name: i.name, grants: grantsOn(i, bearer)
     })));
     this.grants = worn;
+    // The two bonuses a GM types on a thing that have no grant sentence: a Damage
+    // Rating for the attack lane below and a Casting Test line the cast door
+    // adds. Affixes on a melded thing still count, as the grants above do.
+    this.itemBonus = bonusTotals(usableGear.map(i => ({
+      equipped: i.system?.equipped === true, name: i.name, bonus: i.system?.bonus
+    })));
     for (const [key, ability] of Object.entries(this.abilities)) {
       // **THE DELTA IS AN EFFECT'S CHANGE TO `mod`, read against the score as
       // STORED** (D-769): `prepareBaseData` took the modifier off `stored`, and
@@ -513,7 +522,13 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     const typedLanes = () => Object.fromEntries(Object.keys(AZEROTH.damageTypes).map(k => [k, 0]));
     const heldTyped = typeof heldBonus.typed === "object" && heldBonus.typed ? heldBonus.typed : {};
     this.damageBonus = {
-      attack: { ...damageLanes(), ...(heldBonus.attack ?? {}) },
+      // **A GM's Damage Rating on what is equipped adds to EVERY attack** (2026-11-02),
+      // ADDED to what an effect already put on the lane and never assigned over it.
+      attack: (() => {
+        const lane = { ...damageLanes(), ...(heldBonus.attack ?? {}) };
+        lane.all = (Number(lane.all) || 0) + (this.itemBonus?.damageRating ?? 0);
+        return lane;
+      })(),
       spell: { ...damageLanes(), ...(heldBonus.spell ?? {}) },
       // **AN ATTACK IN A SHAPESHIFT FORM** (04's Berserk, D-771): a third map
       // only the attack door reads, and only while `inShapeshiftForm` holds -
@@ -563,9 +578,15 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // anything hidden inside it and a legacy world reads its overflow in
     // words rather than losing what is over.
     const bags = ledger([...(this.parent?.items ?? [])], base);
-    this.bagSlots = { base, capacity: bags.capacity, used: bags.used, over: bags.over, state: bags.state };
+    const burdenSnapshot = globalThis.game?.messages && game.time
+      ? collectBurdenParticipants({actor: this.parent, ledger: bags}) : null;
+    const burden = burdenSnapshot ? derivePilgrimsBurdenLoadState({actorUuid: this.parent.uuid,
+      ledger: bags, ...burdenSnapshot}) : null;
+    this.bagSlots = { base, capacity: bags.capacity, used: burden?.used ?? bags.used,
+      over: burden?.over ?? bags.over, state: burden?.state ?? bags.state,
+      physicalUsed: bags.used, shared: burden?.shared ?? 0 };
     // 05's two rungs, read in slots: the Speed part below is unchanged.
-    this.load = bags.state;
+    this.load = this.bagSlots.state;
 
     // Armor: the equipped suit's category sets every Armor Point, and a Cut
     // moves them (08 §8). Only leather adds Defense (D-452).

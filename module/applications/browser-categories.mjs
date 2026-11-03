@@ -29,6 +29,31 @@ export const NOT_BROWSABLE = Object.freeze({
   rules: "JournalEntry, not embeddable content — it is read in the Journals sidebar and is what @UUID links point at"
 });
 
+/**
+ * Actor and Item TYPES (`system.json#documentTypes`) that no browsable pack holds,
+ * and why (the lead, 2026-11-02: *the compendium browser is missing entries of
+ * various types from the system list*).
+ *
+ * **The pack census above is by pack; this one is by TYPE**, and a type can have a
+ * pack and still be only partly in it. `browser-coverage.test.mjs` fails on a
+ * documentType that is neither held by a browsable pack (its manifest `types`
+ * flag) nor named here, and fails on a name here that a browsable pack now holds,
+ * so the list MAY ONLY FALL: building the pack is what removes the line.
+ *
+ * `owed` is a type the lead wants browsable and nothing builds yet; the rest are
+ * not compendium content at all.
+ */
+export const UNBROWSED_TYPES = Object.freeze({
+  character: { owed: false, reason: "a player's own actor, made by the creator and never shipped in a pack" },
+  talentTree: { owed: true, reason: "three trees a class are structure the talent items point into; no pack holds a tree entry (CLAUDE.md §4)" },
+  profession: { owed: true, reason: "the type exists and nothing builds an entry for it" },
+  feature: {
+    owed: true,
+    partial: true,
+    reason: "only the Tinker's gadgets are stored (the gadgets pack); the 63 class features and the racial traits are stamped onto a character from rules/class-features.mjs and exist in no pack"
+  }
+});
+
 export const CATEGORIES = Object.freeze({
   talents: {
     pack: "azeroth-rpg.talents",

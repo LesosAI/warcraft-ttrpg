@@ -3121,8 +3121,93 @@ export class AzerothActor extends Actor {
     if (preparedTransfer) await preparedTransfer.note("originalPending");
     if (await dispersedNow()) return this;
     const healthBeforeWrite = (this.system?.health?.value ?? 0) + Math.max(0, Number(this.system?.health?.temp) || 0);
+    const healthBeforeHoly = this.system?.health?.value ?? 0;
     await this.adjustHealth(-amount, { temp: soaked.temp, damage: true, manaShield:shield });
     const healthAfterWrite = (this.system?.health?.value ?? 0) + Math.max(0, Number(this.system?.health?.temp) || 0);
+    const healthAfterHoly = this.system?.health?.value ?? 0;
+    let verdict = null;
+    const verdictTicket = messageId && game.messages?.get(messageId)?.flags?.["azeroth-rpg"]?.verdictTicket;
+    if (verdictTicket) {
+      const markVerdictPending = async () => {
+        const stored = this.flags?.["azeroth-rpg"]?.verdictDamagePending;
+        const entries = Array.isArray(stored) ? stored : stored ? [stored] : [];
+        await this.setFlag("azeroth-rpg", "verdictDamagePending", [
+          ...entries.filter(entry => entry?.messageId !== messageId),
+          { ticket: verdictTicket, messageId, healthBefore: healthBeforeHoly, healthAfter: healthAfterHoly }
+        ]);
+      };
+      try {
+        const { resolveVerdictDamage } = await import("../effects/thematic-holy.mjs");
+        const resolved = await resolveVerdictDamage({ messageId, target: this,
+          healthBefore: healthBeforeHoly, healthAfter: healthAfterHoly });
+        if (resolved?.ok) {
+          verdict = resolved;
+          if (verdict.stabilizeAtZero) await this.setFlag("azeroth-rpg", "stabilized", true);
+        } else if (["unanswered", "noGM"].includes(resolved?.reason) || !resolved) {
+          // The GM may have committed the receipt before its reply was lost.
+          // Hold only new injuries until that consequence can be reconciled.
+          verdict = { suppressNewCriticalInjury: true, pending: true };
+          await markVerdictPending();
+          ui.notifications?.warn(game.i18n.localize("AZEROTH.Holy.DamageUnconfirmed"));
+        } else {
+          console.warn("azeroth-rpg | Gentle Verdict damage refused", resolved.reason);
+          ui.notifications?.warn(game.i18n.localize("AZEROTH.Holy.DamageUnconfirmed"));
+        }
+      } catch (error) {
+        verdict ??= { suppressNewCriticalInjury: true, pending: true };
+        if (verdict.pending) {
+          try {
+            await markVerdictPending();
+          } catch (markerError) {
+            console.warn("azeroth-rpg | Gentle Verdict pending marker", markerError);
+          }
+        }
+        console.warn("azeroth-rpg | Gentle Verdict damage", error);
+        ui.notifications?.warn(game.i18n.localize("AZEROTH.Holy.DamageUnconfirmed"));
+      }
+    }
+    // Mindlink shares the shock of committed damage, including temporary
+    // Health loss. The GM resolves private membership and boundary crossings.
+    if (healthAfterWrite < healthBeforeWrite
+      && [...this.effects ?? []].some(effect => effect.flags?.["azeroth-rpg"]?.mindlinkChannel)) {
+      try {
+        const { requestMindlinkDamage } = await import("../effects/thematic-shadow.mjs");
+        const result = await requestMindlinkDamage({ actor: this, before: healthBeforeWrite,
+          after: healthAfterWrite, eventId: foundry.utils.randomID() });
+        if (result?.ok === false) throw new Error("Mindlink shock could not be confirmed");
+      } catch (error) {
+        console.warn("azeroth-rpg | Mindlink damage shock", error);
+        ui.notifications?.warn(game.i18n.localize("AZEROTH.ThematicShadow.ShockUnresolved"));
+      }
+    }
+    // Outside damage wakes a Dream Theatre participant, including damage
+    // absorbed by temporary Health. Run before any subsequent healing.
+    if (healthAfterWrite < healthBeforeWrite
+      && [...this.effects ?? []].some(effect => effect.flags?.["azeroth-rpg"]?.dreamTheatre)) {
+      try {
+        const { endDreamOnDamage } = await import("../effects/thematic-dream.mjs");
+        const ended = await endDreamOnDamage(this, healthBeforeWrite, healthAfterWrite);
+        if (ended?.ok === false) throw new Error(ended.reason ?? "Dream departure was refused");
+      } catch (error) {
+        console.warn("azeroth-rpg | Dream Theatre damage departure", error);
+        ui.notifications?.warn(game.i18n.localize("AZEROTH.Dream.DamageCleanup"));
+      }
+    }
+    // Mending is triggered by actual, nonlethal Health loss, never temporary
+    // Health alone. Resolve before another reaction can change that snapshot.
+    if (healthAfterHoly > 0 && healthAfterHoly < healthBeforeHoly
+      && [...this.effects ?? []].some(effect => effect.flags?.["azeroth-rpg"]?.holyMending)) {
+      try {
+        const { mendingAfterDamage } = await import("../effects/thematic-holy.mjs");
+        const result = await mendingAfterDamage({ targetUuid: this.uuid,
+          eventId: foundry.utils.randomID(), healthBefore: healthBeforeHoly,
+          healthAfter: healthAfterHoly, sourceMessageId: messageId });
+        if (result?.ok === false) throw new Error(result.reason ?? "Mending could not be resolved");
+      } catch (error) {
+        console.warn("azeroth-rpg | Prayer of Mending damage", error);
+        ui.notifications?.warn(game.i18n.localize("AZEROTH.Holy.DamageUnconfirmed"));
+      }
+    }
     if (mindSootheBefore.length) {
       try {
         await mindSootheHarm.endMindSootheOnDamage(this, mindSootheBefore,
@@ -3246,7 +3331,7 @@ export class AzerothActor extends Actor {
       }
     }
     if (!struck) return completeOutcome();
-    await this._struckBy({ before, amount, location, type, attack, max, shapeKind, by, spell, parts });
+    await this._struckBy({ before, amount, location, type, attack, max, shapeKind, by, spell, parts, verdict });
     // What the blow does beyond its target, once, whatever door it came through
     // (D-768): the card's Apply, an area's tick, a failed area Test. **GUARDED**:
     // it runs after the Health is written and is bookkeeping beyond the target,
@@ -3393,7 +3478,7 @@ export class AzerothActor extends Actor {
    * `applyDamage` so the blow's effects BEYOND the target run after it on every
    * path (D-768); the early returns it holds no longer skip them.
    */
-  async _struckBy({ before, amount, location, type, attack, max, shapeKind = null, by = null, spell = false, parts = null }) {
+  async _struckBy({ before, amount, location, type, attack, max, shapeKind = null, by = null, spell = false, parts = null, verdict = null }) {
     const after = this.system?.health?.value ?? 0;
     // Reaching 0 (06 SS8, D-629): Prone, and the Critical Injury the VICTIM
     // rolls; an ATTACK on a character already dying costs a Death Step (06 §9),
@@ -3409,19 +3494,19 @@ export class AzerothActor extends Actor {
         // Ward's `afterWardedBlow`), which runs after this.
         const ruin = spell && typeof by?.takenTalents === "function" ? ruinFor(by.takenTalents()) : null;
         try {
-          await game.system.azeroth.workflows.rollCriticalInjury({ actor: this, location, higher: ruin?.higher === true ? ruin.name : null });
+          if (!verdict?.suppressNewCriticalInjury) await game.system.azeroth.workflows.rollCriticalInjury({ actor: this, location, higher: ruin?.higher === true ? ruin.name : null });
         } catch (err) {
           console.error("azeroth-rpg | critical injury at 0", err);
         }
         try {
-          if (ruin?.mana > 0) await game.system.azeroth.workflows.ruinMana(by, ruin);
+          if (!verdict?.suppressNewCriticalInjury && ruin?.mana > 0) await game.system.azeroth.workflows.ruinMana(by, ruin);
         } catch (err) {
           console.error("azeroth-rpg | ruin", err);
         }
         // **THE AVATAR'S PRICE** (02 §7, D-769): *If you are reduced to 0 Health
         // while in this form, you take an additional Critical Injury and start
         // dying.* The shape it was in when the blow landed, since 0 ends it.
-        if (shapeKind === "avatar") {
+        if (shapeKind === "avatar" && !verdict?.suppressNewCriticalInjury) {
           for (let i = 0; i < AVATAR.extraCriticalInjuries; i++) {
             try {
               await game.system.azeroth.workflows.rollCriticalInjury({ actor: this, location });

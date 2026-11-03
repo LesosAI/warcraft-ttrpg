@@ -497,7 +497,7 @@ export async function placeSpellArea({ spell, actor = null } = {}) {
  * @param {Function|null} [options.createArea] Optional authoritative writer after a confirmed pick.
  * @returns {Promise<RegionDocument|null>}
  */
-export async function placeItemArea({ item = null, actor = null, areaText = null, name = null, color = null, token = null, guessToken = true, flags = null, widenFt = 0, lengthenFt = 0, accept = null, createArea = null } = {}) {
+export async function placeItemArea({ item = null, actor = null, areaText = null, name = null, color = null, token = null, guessToken = true, flags = null, widenFt = 0, lengthenFt = 0, accept = null, createArea = null, placementOverride = null } = {}) {
   const text = areaText ?? item?.system?.area ?? item?.system?.target ?? "";
   const label = name ?? item?.name ?? "";
   const area = lengthenArea(widenArea(areaFor(text), widenFt), lengthenFt);
@@ -513,6 +513,21 @@ export async function placeItemArea({ item = null, actor = null, areaText = null
   }
 
   const caster = token ?? (guessToken ? tokenFor(actor) : null);
+  // Spell Relay aims before its Casting Test. Reopening its successful card
+  // must use that recorded geometry, never a new click or a selected token.
+  // The token still identifies the real caster; only the origin changes.
+  if (placementOverride !== null) {
+    const {sceneId, origin, rotation, area: recordedArea} = placementOverride;
+    if (sceneId !== scene.id || !["cone", "line"].includes(area.shape)
+      || !origin || !Number.isFinite(origin.x) || !Number.isFinite(origin.y)
+      || !Number.isFinite(rotation) || rotation < 0 || rotation >= 360
+      || !recordedArea || recordedArea.shape !== area.shape
+      || recordedArea.distanceFt !== area.distanceFt
+      || recordedArea.widthFt !== area.widthFt || recordedArea.angle !== area.angle) return null;
+    return (createArea ?? placeArea)({item, areaText: text, name: label, color, scene,
+      origin: {x: origin.x, y: origin.y}, rotation, token: caster, attach: false,
+      flags, widenFt, lengthenFt});
+  }
   const centre = caster ? centreOf(caster) : null;
   const steps = placementSteps(area, { hasToken: Boolean(centre) });
   if (!steps) {

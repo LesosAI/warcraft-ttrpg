@@ -30,7 +30,7 @@ export const PACK_COUNTS = Object.freeze({
     count: 16,
     why: "04 §2's Gadgets table under the Tinker: eight original gadgets plus eight additions (2026-10-24)"
   },
-  spells: { count: 406, why: "07 holds 406 across seven schools and five tiers" },
+  spells: { count: 430, why: "07 holds 430 across seven schools and five tiers, including the 24 approved thematic additions" },
   careers: { count: 53, why: "03 holds 53 across four tiers" },
   races: { count: 11, why: "02 §5's eleven peoples" },
   classes: { count: 9, why: "02 §7's nine classes" },

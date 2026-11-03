@@ -588,7 +588,12 @@ function strikeOverride(record, features = {}) {
  * the anchors resolved, every sound gated on its own picture.
  */
 function cueSteps(record, facts, cues, trigger) {
-  const source = tokenOf(facts, record.source?.tokenId);
+  // Spell Relay keeps caster identity in `record.source`, while its native
+  // preflight freezes the reviewed origin in the cast card. Cues launch from
+  // that shared point without pretending it is a token.
+  const source = record.kind === "spell" && record.relayOrigin
+    ? { ...record.relayOrigin, visible: true }
+    : tokenOf(facts, record.source?.tokenId);
   // WHAT A `cast|effect` ROW AIMS AT. At cast it is the recorded target; on
   // the effect trigger - which fires only where the cast recorded nothing to
   // aim at - it is the token the laid effect landed on. The row writes one

@@ -86,6 +86,23 @@ const SCHOOL_POINTS = Object.freeze([
  * says what it adds while it is worn — the Backpack's own 8 was a fact the
  * sheet held all the numbers for and stated nowhere.
  */
+/**
+ * A GM's own bonuses on a physical thing (the lead, 2026-11-02): Spellpower in a
+ * school, a Damage Rating, an Attack Test bonus and a Casting Test bonus.
+ * `rules/item-bonuses.mjs` is the law. They are drawn on every editable sheet
+ * whatever the thing is and however empty they are, so a GM can always type one
+ * (an editable sheet keeps empty fields); `lock` makes them text for a player on
+ * a copy they own, and `zeroEmpty` keeps a read-only sheet from printing four
+ * zeros on every item in the book.
+ */
+const BONUSES = Object.freeze([
+  { path: "bonus.spellpower.points", label: "AZEROTH.Item.BonusSpellpower", type: "number", lock: "ownedByPlayer", hint: "AZEROTH.Item.BonusLocked", zeroEmpty: true },
+  { path: "bonus.spellpower.school", label: "AZEROTH.Item.BonusSpellpowerSchool", type: "select", choices: "schools", lock: "ownedByPlayer", hint: "AZEROTH.Item.BonusLocked" },
+  { path: "bonus.damageRating", label: "AZEROTH.Item.BonusDamageRating", type: "number", lock: "ownedByPlayer", hint: "AZEROTH.Item.BonusLocked", zeroEmpty: true },
+  { path: "bonus.attack", label: "AZEROTH.Item.BonusAttack", type: "number", lock: "ownedByPlayer", hint: "AZEROTH.Item.BonusLocked", zeroEmpty: true },
+  { path: "bonus.casting", label: "AZEROTH.Item.BonusCasting", type: "number", lock: "ownedByPlayer", hint: "AZEROTH.Item.BonusLocked", zeroEmpty: true }
+]);
+
 const BAG_SLOTS = Object.freeze({ path: "bagSlots", label: "AZEROTH.Item.BagSlots", type: "derived" });
 
 export const ITEM_FIELDS = Object.freeze({
@@ -274,6 +291,7 @@ export const ITEM_FIELDS = Object.freeze({
     { path: "launcher", label: "AZEROTH.Item.Launcher", type: "select", choices: "launcherKinds" },
     { path: "fits", label: "AZEROTH.Item.Fits", type: "tags", choices: "launcherKinds" },
     ...SCHOOL_POINTS,
+    ...BONUSES,
     ...ECONOMY,
     // A bundle's count (D-407); a weapon that is not shot carries none.
     { path: "quantity", label: "AZEROTH.Item.Quantity", type: "number" },
@@ -302,6 +320,7 @@ export const ITEM_FIELDS = Object.freeze({
     // suit read as though it had none. Derived, never stored (D-512).
     { path: "suitTraits", label: "AZEROTH.Item.SuitTraits", type: "derived" },
     ...SCHOOL_POINTS,
+    ...BONUSES,
     ...ECONOMY,
     BAG_SLOTS,
     { path: "equipped", label: "AZEROTH.Item.Equipped", type: "checkbox" }
@@ -332,6 +351,7 @@ export const ITEM_FIELDS = Object.freeze({
     { path: "charges", label: "AZEROTH.Item.Charges", type: "derived" },
     { path: "use", label: "AZEROTH.Item.Use", type: "derived" },
     ...SCHOOL_POINTS,
+    ...BONUSES,
     ...ECONOMY,
     { path: "quantity", label: "AZEROTH.Item.Quantity", type: "number" },
     BAG_SLOTS,
@@ -407,7 +427,7 @@ export function fieldsFor(type, system, { editable = false, labels = null, owned
       readOnly: fieldLocked(field.lock, { owned, isGM }),
       value: field.type === "derived" ? derivedValue(field.path, system, labels) : readPath(system, field.path)
     }))
-    .filter(field => editable || hasValue(field.value));
+    .filter(field => editable || (hasValue(field.value) && !(field.zeroEmpty && Number(field.value) === 0)));
 }
 
 /**

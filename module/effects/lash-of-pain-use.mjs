@@ -46,6 +46,7 @@ export async function lashOfPainQueryHandler({ actorUuid, index, source, request
     : Number.isFinite(game.time?.worldTime) ? game.time.worldTime : null; };
   const started = clock();
   let victim = null, selection, consumed = false, attempted = false;
+  let suretyTools = null, suretyQuote = null, abilityPayer = actor, payerPool = null, suretyCommitted = false;
   const validate = () => {
     if (!gmHere() || fromUuidSync(actor.uuid) !== actor || !actor.testUserPermission(user, "OWNER")
       || started === null || clock() !== started || walls() !== wallStamp || game.scenes.get(scene.id) !== scene
@@ -55,7 +56,11 @@ export async function lashOfPainQueryHandler({ actorUuid, index, source, request
       || a.cost?.pool !== "power" || a.cost.amount !== 2 || a.uses?.max > 0
       || JSON.stringify(lashOfPainProfile(actor.system?.attacks)) !== profileStamp) return false;
     if (!Number.isFinite(mana) || mana < 2 || (actor.system.power.name ?? "mana") !== "mana"
-      || actor.system.power.value !== mana - (consumed ? 2 : 0)) return false;
+      || actor.system.power.value !== mana - (consumed && abilityPayer === actor ? 2 : 0)) return false;
+    if (abilityPayer !== actor) {
+      const current = abilityPayer?.poolSnapshot?.().find(p => p.itemId === payerPool?.itemId && p.kind === payerPool?.kind && p.name === payerPool?.name);
+      if (!payerPool || !current || current.value !== payerPool.value - (consumed ? 2 : 0)) return false;
+    }
     if (!(actor.system?.health?.value > 0) || actor.statuses?.has("stunned") || actor.statuses?.has("silenced")
       || realmRefusalFor(actor, "ability") || projectionRefusal(actor, "ability")
       || sleepRefusal(actor, "ability") || despairRefusal(actor, "ability")) return false;
@@ -79,6 +84,19 @@ export async function lashOfPainQueryHandler({ actorUuid, index, source, request
     if (!picked) return refuse("cancelled");
     victim = selection.targets.find(r => r.token.id === picked.key)?.token;
     if (!victim || !validate() || !selection.valid()) return refuse("target");
+    if (actor.getFlag?.("azeroth-rpg", "bond")?.kind === "demon") {
+      const ability = actor.system.creatureAbilities[index];
+      suretyTools = await import("../effects/thematic-fel.mjs");
+      const quote = await suretyTools.claimFelSuretyForAbility({demon: actor, ability, index, attemptId: requestId});
+      if (quote?.ok) {
+        suretyQuote = quote;
+        abilityPayer = quote.payer === "warlock" ? fromUuidSync(quote.casterUuid) : actor;
+        payerPool = quote.payerPool;
+        if (quote.payer === "warlock" && (!abilityPayer?.testUserPermission(game.user, "OWNER")
+          || !abilityPayer.poolSnapshot?.().some(p => p.itemId === payerPool?.itemId && p.kind === payerPool?.kind
+            && p.name === payerPool?.name && p.value >= 2))) return refuse("suretyPayer");
+      } else if (quote?.reason !== "noSurety") return refuse("suretyClaim");
+    }
     const { targetSnapshots } = await import("../applications/roll-dialog.mjs");
     const snapshot = () => targetSnapshots([{ id: victim.id, name: victim.name, actor: victim.actor, scene }]);
     const declared = snapshot(), declaredStamp = JSON.stringify(declared);
@@ -107,7 +125,23 @@ export async function lashOfPainQueryHandler({ actorUuid, index, source, request
           },
           payMana: async () => {
             if (!ready()) return undefined;
-            await actor.update({ "system.power.value": mana - 2 }); consumed = true;
+            if (suretyQuote?.payer === "warlock") {
+              const current = abilityPayer.poolSnapshot?.().find(p => p.itemId === payerPool.itemId && p.kind === payerPool.kind && p.name === payerPool.name);
+              if (!current) return undefined;
+              await abilityPayer.updatePool({itemId: payerPool.itemId, kind: payerPool.kind,
+                value: Math.max(0, current.value - 2)});
+              const committed = await suretyTools.commitFelSuretyUse(suretyQuote);
+              suretyCommitted = committed?.ok === true;
+              if (!suretyCommitted) console.warn("azeroth-rpg | Fel Surety use acknowledgement needs GM reconciliation");
+            } else {
+              await actor.update({ "system.power.value": mana - 2 });
+              if (suretyQuote) {
+                const committed = await suretyTools.commitFelSuretyUse(suretyQuote);
+                suretyCommitted = committed?.ok === true;
+                if (!suretyCommitted) console.warn("azeroth-rpg | Fel Surety use acknowledgement needs GM reconciliation");
+              }
+            }
+            consumed = true;
             return ready() ? true : undefined;
           },
           roll: async claim => {
@@ -130,5 +164,11 @@ export async function lashOfPainQueryHandler({ actorUuid, index, source, request
     }
     return response;
   } catch { return refuse("writeUncertain"); }
-  finally { busy.delete(actor.uuid); }
+  finally {
+    if (suretyQuote && !suretyCommitted) {
+      try { await suretyTools.releaseFelSuretyClaim(suretyQuote); }
+      catch (error) { console.warn("azeroth-rpg | Fel Surety release needs GM reconciliation", error); }
+    }
+    busy.delete(actor.uuid);
+  }
 }

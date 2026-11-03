@@ -50,6 +50,7 @@ import { SORT_STEP, nextSort } from "../rules/bags.mjs";
 import { underOffer } from "../rules/loot-offer.mjs";
 // A Gadgets-compendium entry is a reference, never a sheet's (the lead, 2026-10-24).
 import { isGadgetEntry } from "../rules/gadgets.mjs";
+import { ITEM_CUSTODY_PENDING_FLAG, isItemCustodyPending } from "../rules/item-custody-guard.mjs";
 
 /** The item subtypes that are THINGS. A talent, a spell or a class is never judged. */
 const PHYSICAL = new Set(["weapon", "armor", "gear"]);
@@ -107,6 +108,20 @@ function baseOf(actor) {
 /** A refusal said in words, once. */
 function sayRefusal(reason, data = {}) {
   ui.notifications?.warn(game.i18n.format(reason, data ?? {}));
+}
+
+function custodyWriteAuthorized(operation, user) {
+  return operation?.azerothItemCustody === "bypass" && user?.isGM === true && user.id === game.users?.activeGM?.id;
+}
+
+function custodyMarkerRequested(update) {
+  const nested = update?.flags?.["azeroth-rpg"];
+  if (nested && Object.hasOwn(nested, ITEM_CUSTODY_PENDING_FLAG) && nested[ITEM_CUSTODY_PENDING_FLAG]) return true;
+  return Object.entries(update ?? {}).some(([key, value]) => key.endsWith(`flags.azeroth-rpg.${ITEM_CUSTODY_PENDING_FLAG}`) && value);
+}
+
+function refusePendingCustody() {
+  ui.notifications?.warn(game.i18n.localize("AZEROTH.Item.CustodyPending"));
 }
 
 export class AzerothItem extends Item {
@@ -218,6 +233,10 @@ export class AzerothItem extends Item {
   static async _preCreateOperation(documents, operation, user) {
     const allowed = await super._preCreateOperation(documents, operation, user);
     if (allowed === false) return false;
+    if (!custodyWriteAuthorized(operation, user) && documents.some(isItemCustodyPending)) {
+      refusePendingCustody();
+      return false;
+    }
 
     // D-739, at every door and on every parent. On a CREATE every schema field
     // is present, so the law's `hasOwnProperty` reads the whole system object
@@ -301,6 +320,11 @@ export class AzerothItem extends Item {
   static async _preUpdateOperation(documents, operation, user) {
     const allowed = await super._preUpdateOperation(documents, operation, user);
     if (allowed === false) return false;
+    if (!custodyWriteAuthorized(operation, user)
+        && (documents.some(isItemCustodyPending) || (operation.updates ?? []).some(custodyMarkerRequested))) {
+      refusePendingCustody();
+      return false;
+    }
 
     const actor = bagsActor(operation);
     if (!actor) return allowed;
@@ -348,6 +372,10 @@ export class AzerothItem extends Item {
   static async _preDeleteOperation(documents, operation, user) {
     const allowed = await super._preDeleteOperation(documents, operation, user);
     if (allowed === false) return false;
+    if (!custodyWriteAuthorized(operation, user) && documents.some(isItemCustodyPending)) {
+      refusePendingCustody();
+      return false;
+    }
 
     const actor = bagsActor(operation);
     if (!actor) return allowed;

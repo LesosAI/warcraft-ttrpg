@@ -636,7 +636,9 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // A blank sheet offers the creator (D-636): the player's door.
     context.canBuild = this.isEditable && AzerothCharacterCreator.canBuild(this.actor);
     // The tongues spoken and the purse, stored since 0.10.0 (D-636).
-    context.languages = (system.languages ?? []).map(key => game.i18n.localize(AZEROTH.languages[key] ?? key));
+    const {borrowedLanguages} = await import("../rules/thematic-utility.mjs");
+    context.languages = borrowedLanguages(system.languages ?? [], [...this.actor.effects], game.time.worldTime)
+      .map(key => game.i18n.localize(AZEROTH.languages[key] ?? key));
     context.purse = coins(system.coin ?? 0);
     context.levels = Array.from({ length: 20 }, (_, i) => ({ value: i + 1, selected: i + 1 === system.level }));
     // 05's temporary Health past the maximum, in words (D-777).

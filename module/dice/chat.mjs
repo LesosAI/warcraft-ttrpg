@@ -281,6 +281,20 @@ export function registerChatHooks() {
     showEarthShockReview(message, html);
     showDispersionReactions(message, html);
 
+    const thematicFlags = message.flags?.["azeroth-rpg"];
+    if (game.user?.isGM && Array.isArray(thematicFlags?.thematicResolutionPending)
+      && thematicFlags.thematicResolutionPending.length && !card.querySelector('[data-action="recoverThematicCast"]')) {
+      const block = document.createElement("div");
+      block.className = "azeroth-card-actions";
+      block.dataset.gmOnly = "";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.action = "recoverThematicCast";
+      button.textContent = game.i18n.localize("AZEROTH.ThematicCast.Recover");
+      block.append(button);
+      card.append(block);
+    }
+
     for (const button of html.querySelectorAll("[data-action]")) {
       button.addEventListener("click", event => onCardAction(event, message));
     }
@@ -615,6 +629,11 @@ export const CARD_ACTIONS = {
   applyCondition: (button, message) => applyConditionFromCard(button, message),
   // A lasting spell laid on its targets (2026-09-06).
   applySpellEffect: (button, message) => applySpellEffectFromCard(button, message),
+  recoverThematicCast: async (_button, message) => {
+    const result = await (await import("../effects/thematic-cast-recovery.mjs")).recoverThematicCastCard(message);
+    if (!result?.ok) ui.notifications?.warn(game.i18n.localize("AZEROTH.ThematicCast.RecoveryFailed"));
+    return result;
+  },
   openingCombo: (button, message) => openingComboFromCard(message),
   stabilize: (button, message) => stabilizeFromCard(button),
   // What a creature's ability called up (D-691): the GM presses it and moves
@@ -958,6 +977,10 @@ async function placeAreaFromCard(message) {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Area.FailedCast", { name: flags.spellName ?? abilityRow?.name ?? item?.name ?? flags.title }));
     return null;
   }
+  if (flags.spellRelayAttemptTicket && !flags.spellRelayPlacement) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Area.NoArea"));
+    return null;
+  }
   // **A SUSTAIN THAT HAS ENDED PLACES NOTHING** (D-756). The card outlives the
   // cast: dropped, out-paid, over the limit or ended by a Critical Injury, the
   // spell is gone and an area placed now would stand for nothing - and the
@@ -1015,6 +1038,9 @@ async function placeAreaFromCard(message) {
     widenFt: Number(flags.widen) || 0,
     // And a talent's longer cone (D-775): Cone of Cold's 5 feet a rank.
     lengthenFt: Number(flags.lengthen) || 0,
+    // Relay records the selected alternate origin and facing before the Test.
+    // The Region uses it verbatim and retains the card's real caster token.
+    placementOverride: flags.spellRelayPlacement ?? null,
     // Which cast placed it (D-724), and what it answers to (D-756): the Region
     // answers to the card and to the Sustain, and nothing is written back onto
     // the card.

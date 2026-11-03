@@ -27,6 +27,8 @@ import { cleanCapacity, cleanCharges } from "../../rules/containers.mjs";
 import { bagSlotsOf, cleanWell } from "../../rules/slots.mjs";
 import { augmentOf } from "../../rules/augments.mjs";
 import { cleanSlot } from "../../rules/worn.mjs";
+// A GM's own Spellpower, Damage Rating, Attack and Casting bonuses (2026-11-02).
+import { cleanBonus } from "../../rules/item-bonuses.mjs";
 // 08 §7's Type column (the Legacy branches' door 15).
 import { cleanWeaponType } from "../../rules/wield.mjs";
 import { cleanProvision } from "../../rules/provisions.mjs";
@@ -102,6 +104,35 @@ function chargesField() {
  * Null until the choice is made, and an item with no points ignores it.
  */
 const chosenSchool = () => ({ school: choiceField(AZEROTH.schools) });
+
+/**
+ * A GM's own bonuses on a physical thing (the lead, 2026-11-02): Spellpower in a
+ * school, a Damage Rating, an Attack Test bonus and a Casting Test bonus, all
+ * zero until the GM types one. `rules/item-bonuses.mjs` is the law and says what
+ * reads each; they count only while the thing is equipped. Stored beside the
+ * book's own numbers and never in place of them, so a pack re-parse destroys
+ * nothing the GM wrote.
+ *
+ * A FUNCTION, never a shared constant: a `DataField` takes its `name` and its
+ * `parent` from the schema it is placed in.
+ */
+const bonusField = () => ({
+  bonus: new fields.SchemaField({
+    spellpower: new fields.SchemaField({
+      points: new fields.NumberField({ required: false, integer: true, min: 0, max: 20, initial: 0 }),
+      school: choiceField(AZEROTH.schools)
+    }),
+    damageRating: new fields.NumberField({ required: false, integer: true, min: -20, max: 20, initial: 0 }),
+    attack: new fields.NumberField({ required: false, integer: true, min: 0, max: 20, initial: 0 }),
+    casting: new fields.NumberField({ required: false, integer: true, min: -20, max: 20, initial: 0 })
+  })
+});
+
+/** A stored `bonus` made valid, only where it is present (CLAUDE.md §15). */
+function cleanBonusField(source) {
+  if (!source || typeof source !== "object" || !source.bonus) return;
+  cleanBonus(source.bonus, school => Boolean(AZEROTH.schools[school]));
+}
 
 /**
  * The grant those points compose, on the DERIVED system (CLAUDE.md §4), and
@@ -204,6 +235,7 @@ export class WeaponData extends foundry.abstract.TypeDataModel {
       // weapon names none.
       weaponType: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
       ...chosenSchool(),
+      ...bonusField(),
       ...itemEconomyFields(AZEROTH),
       equipped: new fields.BooleanField({ initial: false }),
       ...forged(),
@@ -238,6 +270,7 @@ export class WeaponData extends foundry.abstract.TypeDataModel {
       // where the key is PRESENT, since this runs over partial updates too (D-671).
       if ("weaponType" in source) source.weaponType = cleanWeaponType(source.weaponType);
       cleanSchool(source);
+      cleanBonusField(source);
       cleanSignatureEffect(source);
       cleanWellField(source);
     }
@@ -297,6 +330,7 @@ export class ArmorData extends foundry.abstract.TypeDataModel {
       shield: new fields.BooleanField({ initial: false }),
       traits: traitsField(),
       ...chosenSchool(),
+      ...bonusField(),
       ...itemEconomyFields(AZEROTH),
       equipped: new fields.BooleanField({ initial: false }),
       // Body Armor Points over the category's: a named suit's margin (08 §20),
@@ -310,6 +344,7 @@ export class ArmorData extends foundry.abstract.TypeDataModel {
   /** A stored school or Signature outside its vocabulary is nulled, never refused (CLAUDE.md §15). */
   static migrateData(source) {
     cleanSchool(source);
+    cleanBonusField(source);
     cleanSignatureEffect(source);
     cleanWellField(source);
     return super.migrateData(source);
@@ -351,6 +386,7 @@ export class GearData extends foundry.abstract.TypeDataModel {
       // exists - and a Short Rest needs one of each to give back anything.
       provision: choiceField(AZEROTH.provisionKinds),
       ...chosenSchool(),
+      ...bonusField(),
       ...itemEconomyFields(AZEROTH),
       quantity: new fields.NumberField({ required: true, integer: true, initial: 1, min: 0 }),
       equipped: new fields.BooleanField({ initial: false }),
@@ -395,6 +431,7 @@ export class GearData extends foundry.abstract.TypeDataModel {
     if (source && "slot" in source) source.slot = cleanSlot(source.slot);
     if (source && "provision" in source) source.provision = cleanProvision(source.provision);
     cleanSchool(source);
+    cleanBonusField(source);
     cleanSignatureEffect(source);
     cleanWellField(source);
     return super.migrateData(source);

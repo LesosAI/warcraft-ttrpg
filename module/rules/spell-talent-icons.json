@@ -161,6 +161,13 @@
     ],
     "reason": "The icon is a circular white blast. Arcane Nova releases unshaped power outward in every direction, matching the radial burst."
   },
+  "spell:arcane-seal": {
+    "name": "Arcane Seal",
+    "source": "07-MAGIC",
+    "icon": "spell_arcane_arcane02",
+    "previousIcons": [],
+    "reason": "An arcane spell sigil suits a ward placed on a named physical boundary."
+  },
   "spell:archmage": {
     "name": "Archmage",
     "source": "07-MAGIC",
@@ -169,6 +176,13 @@
       "spell_arcane_arcanetactics"
     ],
     "reason": "A robed mage silhouette stands above a group. Archmage names a caster’s attained mastery, and the image clearly identifies a powerful mage."
+  },
+  "spell:ash-assay": {
+    "name": "Ash Assay",
+    "source": "07-MAGIC",
+    "icon": "spell_fire_incinerate",
+    "previousIcons": [],
+    "reason": "The fire and ash icon fits a Shaman's examination of burned residue."
   },
   "spell:ashfall": {
     "name": "Ashfall",
@@ -340,6 +354,13 @@
       "spell_druid_wildmushroom_bloom"
     ],
     "reason": "Green mushrooms and new growth spread over the image. Bloom calls growth up all at once, matching the sudden vegetation."
+  },
+  "spell:borrowed-voice": {
+    "name": "Borrowed Voice",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_twistedfaith",
+    "previousIcons": [],
+    "reason": "The shadow themed icon supports a temporary alteration of the speaker's voice."
   },
   "spell:carrion-swarm": {
     "name": "Carrion Swarm",
@@ -944,6 +965,13 @@
     ],
     "reason": "A purple claw grips a living target. Drain Soul pulls steadily on what keeps a creature alive, matching the grasping drain."
   },
+  "spell:dream-theatre": {
+    "name": "Dream Theatre",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_nethercloak",
+    "previousIcons": [],
+    "reason": "The dreamlike shadow icon suits an illusion staged in a sleeping target's dream."
+  },
   "spell:dreamsight": {
     "name": "Dreamsight",
     "source": "07-MAGIC",
@@ -1097,6 +1125,13 @@
     ],
     "reason": "A self-contained orange flame fits a Fire effect that needs no fuel and cannot be put out ordinarily."
   },
+  "spell:exacting-measure": {
+    "name": "Exacting Measure",
+    "source": "07-MAGIC",
+    "icon": "spell_arcane_arcane01",
+    "previousIcons": [],
+    "reason": "The arcane icon marks a spell that measures dimensions and counted contents precisely."
+  },
   "spell:exorcism": {
     "name": "Exorcism",
     "source": "07-MAGIC",
@@ -1204,6 +1239,13 @@
       "spell_shadow_curseofmannoroth"
     ],
     "reason": "The old art shows crossed weapons, not an agreement. Fel Covenant offers a bargain to an entire company; the replacement depicts a demonic pact."
+  },
+  "spell:fel-surety": {
+    "name": "Fel Surety",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_deathpact",
+    "previousIcons": [],
+    "reason": "The demonic pact icon fits a Warlock's temporary promise to pay a bound demon's Power cost."
   },
   "spell:fel-tether": {
     "name": "Fel Tether",
@@ -1511,6 +1553,13 @@
     ],
     "reason": "A violet curved opening arcs through the center. Gate holds a door open between places, matching the portal shape."
   },
+  "spell:gentle-verdict": {
+    "name": "Gentle Verdict",
+    "source": "07-MAGIC",
+    "icon": "spell_holy_devineaegis",
+    "previousIcons": [],
+    "reason": "The Holy protection icon fits a judgment that restrains rather than harms its target."
+  },
   "spell:ghost-wolf": {
     "name": "Ghost Wolf",
     "source": "07-MAGIC",
@@ -1546,6 +1595,13 @@
       "spell_frost_glacier"
     ],
     "reason": "A mass of blue ice surges forward. Glacier sends moving ice at the pace of natural ice, matching the advancing formation."
+  },
+  "spell:grand-lexicon": {
+    "name": "Grand Lexicon",
+    "source": "07-MAGIC",
+    "icon": "spell_arcane_arcanepotency_nightborne",
+    "previousIcons": [],
+    "reason": "The arcane knowledge icon suits temporary comprehension of a language supplied by another speaker."
   },
   "spell:grave-coil": {
     "name": "Grave Coil",
@@ -1663,6 +1719,13 @@
       "spell_shadow_deadofnight"
     ],
     "reason": "A dark hand reaching through green light evokes Health being passed from the caster to the target."
+  },
+  "spell:heat-mirage": {
+    "name": "Heat Mirage",
+    "source": "07-MAGIC",
+    "icon": "spell_fire_fireball",
+    "previousIcons": [],
+    "reason": "The fire icon communicates the heat shimmer used to distort distant sight."
   },
   "spell:hellbind": {
     "name": "Hellbind",
@@ -1870,6 +1933,13 @@
       "spell_frost_wizardmark"
     ],
     "reason": "The old art is an eye-like rune. Icespan creates a step of ice ahead of each foot; the replacement depicts a connected sheet of ice."
+  },
+  "spell:icevein-passage": {
+    "name": "Icevein Passage",
+    "source": "07-MAGIC",
+    "icon": "spell_frost_icefloes",
+    "previousIcons": [],
+    "reason": "The frost and ice icon fits a temporary route across a frozen water surface."
   },
   "spell:icewalk": {
     "name": "Icewalk",
@@ -2258,6 +2328,13 @@
     ],
     "reason": "The old art is a hand holding up a moon, which suggests an individual blessing. Mindlink lets six people share thoughts at once; the replacement depicts a concentrated psychic connection."
   },
+  "spell:mindstatic": {
+    "name": "Mindstatic",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_mindtwisting",
+    "previousIcons": [],
+    "reason": "The mind themed shadow icon fits a localized disturbance of nearby thought and speech."
+  },
   "spell:mirror-image": {
     "name": "Mirror Image",
     "source": "07-MAGIC",
@@ -2447,6 +2524,13 @@
     ],
     "reason": "The old art is a dark blue whirlpool with no cold impact. Numbing Frost makes cold seize a target’s movement; the replacement depicts a sharp frost impact."
   },
+  "spell:pact-escrow": {
+    "name": "Pact Escrow",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_rune",
+    "previousIcons": [],
+    "reason": "The rune icon suits a stored, conditional magical payment governed by a pact."
+  },
   "spell:pain-suppression": {
     "name": "Pain Suppression",
     "source": "07-MAGIC",
@@ -2455,6 +2539,27 @@
       "spell_holy_dispelmagic"
     ],
     "reason": "The old art is scattered purple sparks. Pain Suppression steps between a person and harm without healing them; the replacement visibly depicts an interposing shield."
+  },
+  "spell:phantom-footsteps": {
+    "name": "Phantom Footsteps",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_psychicscream",
+    "previousIcons": [],
+    "reason": "The shadow icon fits misleading phantom sounds that draw attention elsewhere."
+  },
+  "spell:phoenix-courier": {
+    "name": "Phoenix Courier",
+    "source": "07-MAGIC",
+    "icon": "spell_fire_burningspeed",
+    "previousIcons": [],
+    "reason": "The fire and speed icon suits a message borne quickly by a brief fiery projection."
+  },
+  "spell:pilgrims-burden": {
+    "name": "Pilgrims' Burden",
+    "source": "07-MAGIC",
+    "icon": "spell_holy_blessedresillience",
+    "previousIcons": [],
+    "reason": "The Holy aid icon fits the temporary redistribution of carried burden between willing travelers."
   },
   "spell:portal": {
     "name": "Portal",
@@ -2491,6 +2596,13 @@
       "spell_holy_prayerofhealing"
     ],
     "reason": "The old art shows a mounted paladin, not a group receiving prayer. Prayer of Healing divides mercy among everyone who needs it; the replacement depicts a circle of shared healing."
+  },
+  "spell:prayer-of-mending": {
+    "name": "Prayer of Mending",
+    "source": "07-MAGIC",
+    "icon": "spell_holy_prayerofhealing",
+    "previousIcons": [],
+    "reason": "The prayer and healing icon fits a blessing that answers later nonlethal harm."
   },
   "spell:prayer-of-the-road": {
     "name": "Prayer of the Road",
@@ -2699,6 +2811,13 @@
     ],
     "reason": "The old art is a monster screaming. Rewrite removes a memory from someone’s head; the replacement shows a hand reaching into a mind."
   },
+  "spell:rime-arrest": {
+    "name": "Rime Arrest",
+    "source": "07-MAGIC",
+    "icon": "spell_frost_freezingbreath",
+    "previousIcons": [],
+    "reason": "The frost icon fits a brief arrest of an existing water flow by forming ice."
+  },
   "spell:rimebind": {
     "name": "Rimebind",
     "source": "07-MAGIC",
@@ -2816,6 +2935,13 @@
     ],
     "reason": "The old art is a city portal, which implies a route outward. Sanctum folds a room inward and stops others from reaching it; the replacement depicts a protective barrier."
   },
+  "spell:scentweave": {
+    "name": "Scentweave",
+    "source": "07-MAGIC",
+    "icon": "spell_nature_faeriefire",
+    "previousIcons": [],
+    "reason": "The Nature icon fits the shaping of a sampled scent into a temporary trail."
+  },
   "spell:scorch": {
     "name": "Scorch",
     "source": "07-MAGIC",
@@ -2860,6 +2986,13 @@
       "spell_fire_fireballgreen"
     ],
     "reason": "An orange burning face depicts Fire damage that leaves the target struggling to attack."
+  },
+  "spell:seedwake": {
+    "name": "Seedwake",
+    "source": "07-MAGIC",
+    "icon": "spell_druid_germination_rejuvenation",
+    "previousIcons": [],
+    "reason": "The growth and renewal icon fits accelerated germination of viable seeds."
   },
   "spell:sending": {
     "name": "Sending",
@@ -3113,6 +3246,20 @@
     ],
     "reason": "Several pale ghostly skulls depict a corpse giving voice to the dead person’s memories."
   },
+  "spell:spell-relay": {
+    "name": "Spell Relay",
+    "source": "07-MAGIC",
+    "icon": "spell_arcane_arcane03",
+    "previousIcons": [],
+    "reason": "The arcane icon fits the transfer of a willing caster's already prepared spell."
+  },
+  "spell:spellwrights-mark": {
+    "name": "Spellwright's Mark",
+    "source": "07-MAGIC",
+    "icon": "spell_arcane_arcanetactics",
+    "previousIcons": [],
+    "reason": "The arcane craft icon suits a temporary written mark that stores a prepared spell."
+  },
   "spell:spirit-of-redemption": {
     "name": "Spirit of Redemption",
     "source": "07-MAGIC",
@@ -3229,6 +3376,13 @@
       "spell_nature_farsight"
     ],
     "reason": "A shield edged in blue lightning fits a wall that blocks ranged attacks and shocks passage."
+  },
+  "spell:summoners-writ": {
+    "name": "Summoner's Writ",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_demonicpact",
+    "previousIcons": [],
+    "reason": "The demonic pact icon fits a temporary grant of command permission over a bound demon."
   },
   "spell:sundering": {
     "name": "Sundering",
@@ -3373,6 +3527,13 @@
       "spell_nature_groundingtotem"
     ],
     "reason": "Blue lightning branches across a storm sky, fitting the moving field that shocks one creature each turn."
+  },
+  "spell:tidebreath": {
+    "name": "Tidebreath",
+    "source": "07-MAGIC",
+    "icon": "ability_shaman_watershield",
+    "previousIcons": [],
+    "reason": "The Shaman water icon fits speech carried between creatures underwater."
   },
   "spell:tidecall": {
     "name": "Tidecall",
@@ -3544,6 +3705,13 @@
       "spell_nature_healingwavegreater"
     ],
     "reason": "The old art shows a hand producing healing water. Water Walking lets a person move across the surface; the replacement depicts feet moving over water."
+  },
+  "spell:watershed": {
+    "name": "Watershed",
+    "source": "07-MAGIC",
+    "icon": "spell_nature_giftofthewaterspirit",
+    "previousIcons": [],
+    "reason": "The water and Nature icon fits a divination about the direction and condition of nearby water."
   },
   "spell:wellspring": {
     "name": "Wellspring",

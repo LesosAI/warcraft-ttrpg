@@ -123,6 +123,10 @@
  */
 
 import { EXPANDED_SPELL_ANIMATIONS } from "./spell-animation-expansion.mjs";
+import { THEMATIC_SPELL_ANIMATIONS } from "./thematic-spell-animations.mjs";
+import { utilitySpell } from "./thematic-utility.mjs";
+import { SUPPORTED_THEMATIC_OBJECT_CASTS } from "./thematic-objects.mjs";
+import { THEMATIC_FEL_SPELLS } from "./thematic-fel.mjs";
 import { creatureAnimations } from "./creature-animation-table.mjs";
 
 /* ------------------------------------------------------------------ */
@@ -1293,7 +1297,12 @@ export const NPC_SPELL_ANIMATIONS = Object.freeze({
   }
 });
 
-export const ALL_SPELL_ANIMATIONS = Object.freeze({ ...EXPANDED_SPELL_ANIMATIONS, ...SPELL_ANIMATIONS, ...TAUGHT_SPELL_ANIMATIONS, ...NPC_SPELL_ANIMATIONS });
+const READY_THEMATIC_ANIMATIONS = Object.fromEntries(Object.entries(THEMATIC_SPELL_ANIMATIONS)
+  .filter(([identifier]) => utilitySpell(identifier) || SUPPORTED_THEMATIC_OBJECT_CASTS.includes(identifier) || THEMATIC_FEL_SPELLS.includes(identifier)
+    // Custody spells have explicit committed-state runtimes. These audiovisual
+    // cues announce casting only; the animation never performs custody changes.
+    || ["pilgrims-burden", "prayer-of-mending", "gentle-verdict", "dream-theatre", "spell-relay", "mindstatic", "pact-escrow", "phoenix-courier"].includes(identifier)));
+export const ALL_SPELL_ANIMATIONS = Object.freeze({ ...EXPANDED_SPELL_ANIMATIONS, ...READY_THEMATIC_ANIMATIONS, ...SPELL_ANIMATIONS, ...TAUGHT_SPELL_ANIMATIONS, ...NPC_SPELL_ANIMATIONS });
 
 /* ------------------------------------------------------------------ */
 /*  Features (the Legacy branches' door 2)                             */

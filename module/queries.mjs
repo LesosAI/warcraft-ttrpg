@@ -201,9 +201,71 @@ import { BLOOD_PACT_SPELL_PREPARE, BLOOD_PACT_SPELL_RESOLVE, BLOOD_PACT_SPELL_RE
 import { SOUL_LINK_CONSENT, soulLinkConsentHandler } from "./effects/soul-link-consent.mjs";
 import { DAMAGE_TRANSFER_CHOICE, damageTransferChoiceHandler } from "./effects/damage-transfer-choice.mjs";
 import { SOUL_LINK_PREPARE, SOUL_LINK_RESOLVE, SOUL_LINK_REVIEW_QUERY, prepareSoulLinkCast, resolveSoulLinkCast, reviewSoulLinkCreation } from "./effects/soul-link-casting.mjs";
+import { UTILITY_QUERY, UTILITY_CONSENT, utilityQueryHandler, utilityConsentHandler, registerUtilityCardHooks } from "./effects/thematic-utility.mjs";
+import { THEMATIC_OBJECT_QUERY, THEMATIC_OBJECT_OPERATION_QUERY, THEMATIC_OBJECT_ACCESS_QUERY,
+  thematicObjectQueryHandler, thematicObjectOperationQueryHandler, thematicObjectAccessQueryHandler,
+  registerThematicObjectCardHooks } from "./effects/thematic-object-state.mjs";
+import { THEMATIC_FEL_QUERY, THEMATIC_FEL_CONSENT, thematicFelQueryHandler,
+  thematicFelConsentHandler, registerThematicFelCardHooks } from "./effects/thematic-fel.mjs";
+import { PILGRIMS_BURDEN_QUERY, PILGRIMS_BURDEN_CONSENT, pilgrimsBurdenQueryHandler,
+  pilgrimsBurdenConsentHandler, registerPilgrimsBurdenCardHooks, registerPilgrimsBurdenHooks,
+  registerPilgrimsBurdenLoadRefresh } from "./effects/pilgrims-burden.mjs";
+import { DREAM_QUERY, DREAM_CONSENT, dreamQueryHandler, dreamConsentHandler, registerDreamCardHooks } from "./effects/thematic-dream.mjs";
+import { HOLY_QUERY, HOLY_CONSENT, holyQueryHandler, holyConsentHandler, registerHolyCardHooks } from "./effects/thematic-holy.mjs";
+import { SPELL_RELAY_QUERY, thematicSpellRelayQueryHandler, registerSpellRelayCardHooks } from "./effects/spell-relay.mjs";
+import { SHADOW_QUERY, SHADOW_CONSENT, shadowQueryHandler, shadowConsentHandler,
+  registerShadowCardHooks } from "./effects/thematic-shadow.mjs";
+import { ITEM_CUSTODY_QUERY, ITEM_CUSTODY_CONSENT_QUERY, ITEM_CUSTODY_RECIPIENT_CONSENT,
+  ITEM_CUSTODY_CLAIM_QUERY, ITEM_CUSTODY_FINISH_QUERY, ITEM_CUSTODY_OPERATION_QUERY,
+  itemCustodyPrepareQueryHandler, itemCustodyConsentHandler, itemCustodyRecipientConsentHandler,
+  itemCustodyClaimQueryHandler, itemCustodyFinishQueryHandler, itemCustodyOperationQueryHandler,
+  registerItemCustodyHooks, registerItemCustodyCardHooks } from "./effects/item-custody-transactions.mjs";
 
 /** Register at init. */
 export function registerQueries() {
+  CONFIG.queries[SHADOW_QUERY] = shadowQueryHandler;
+  CONFIG.queries[SHADOW_CONSENT] = shadowConsentHandler;
+  registerShadowCardHooks();
+  CONFIG.queries[ITEM_CUSTODY_QUERY] = itemCustodyPrepareQueryHandler;
+  CONFIG.queries[ITEM_CUSTODY_CONSENT_QUERY] = itemCustodyConsentHandler;
+  CONFIG.queries[ITEM_CUSTODY_RECIPIENT_CONSENT] = itemCustodyRecipientConsentHandler;
+  CONFIG.queries[ITEM_CUSTODY_CLAIM_QUERY] = itemCustodyClaimQueryHandler;
+  CONFIG.queries[ITEM_CUSTODY_FINISH_QUERY] = itemCustodyFinishQueryHandler;
+  CONFIG.queries[ITEM_CUSTODY_OPERATION_QUERY] = itemCustodyOperationQueryHandler;
+  registerItemCustodyHooks();
+  registerItemCustodyCardHooks();
+  CONFIG.queries[UTILITY_QUERY] = utilityQueryHandler;
+  CONFIG.queries[UTILITY_CONSENT] = utilityConsentHandler;
+  registerUtilityCardHooks();
+  CONFIG.queries[THEMATIC_OBJECT_QUERY] = thematicObjectQueryHandler;
+  CONFIG.queries[THEMATIC_OBJECT_OPERATION_QUERY] = thematicObjectOperationQueryHandler;
+  CONFIG.queries[THEMATIC_OBJECT_ACCESS_QUERY] = thematicObjectAccessQueryHandler;
+  registerThematicObjectCardHooks();
+  CONFIG.queries[THEMATIC_FEL_QUERY] = thematicFelQueryHandler;
+  CONFIG.queries[THEMATIC_FEL_CONSENT] = thematicFelConsentHandler;
+  registerThematicFelCardHooks();
+  CONFIG.queries[PILGRIMS_BURDEN_QUERY] = pilgrimsBurdenQueryHandler;
+  CONFIG.queries[PILGRIMS_BURDEN_CONSENT] = pilgrimsBurdenConsentHandler;
+  registerPilgrimsBurdenCardHooks();
+  registerPilgrimsBurdenHooks();
+  registerPilgrimsBurdenLoadRefresh(ids => {
+    for (const uuid of ids ?? []) {
+      try {
+        const actor = fromUuidSync(uuid);
+        if (actor?.documentName !== "Actor" || actor.type !== "character") continue;
+        actor.prepareData();
+        if (actor.sheet?.rendered) actor.sheet.render(false);
+      } catch (error) { console.warn("azeroth-rpg | Pilgrims' Burden refresh", error); }
+    }
+  });
+  CONFIG.queries[DREAM_QUERY] = dreamQueryHandler;
+  CONFIG.queries[DREAM_CONSENT] = dreamConsentHandler;
+  registerDreamCardHooks();
+  CONFIG.queries[HOLY_QUERY] = holyQueryHandler;
+  CONFIG.queries[HOLY_CONSENT] = holyConsentHandler;
+  registerHolyCardHooks();
+  CONFIG.queries[SPELL_RELAY_QUERY] = thematicSpellRelayQueryHandler;
+  registerSpellRelayCardHooks();
   CONFIG.queries[EVERBURN_DISMISS_QUERY]=dismissEverburn;
   CONFIG.queries[SPELL_CROSSING_QUERY]=deliverSpellCrossing;
   CONFIG.queries[SEALING_FLAME_CAST_QUERY]=sealingFlameCast;

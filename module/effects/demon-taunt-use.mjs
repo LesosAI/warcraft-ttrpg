@@ -54,6 +54,7 @@ export async function demonTauntQueryHandler({ actorUuid, index, source, request
   const started = clock(), mana = actor.system?.power?.value;
   const kiss = name === "Soothing Kiss", torment = name === "Torment";
   let consumed = false, targets = [], selection;
+  let suretyTools = null, suretyQuote = null, abilityPayer = actor, payerPool = null, suretyCommitted = false;
   const validate = () => {
     if (!gmHere() || fromUuidSync(actor.uuid) !== actor || !actor.testUserPermission(user, "OWNER")
       || started == null || clock() !== started || walls() !== wallStamp || game.scenes.get(scene.id) !== scene) return false;
@@ -62,7 +63,11 @@ export async function demonTauntQueryHandler({ actorUuid, index, source, request
       || a.action !== spec.action) return false;
     if (kiss ? a.cost?.pool !== "power" || a.cost.amount !== 1 || a.dc !== 15 : a.cost?.amount > 0) return false;
     if (kiss && (!Number.isFinite(mana) || mana < 1 || (actor.system.power.name ?? "mana") !== "mana"
-      || actor.system.power.value !== mana - (consumed ? 1 : 0) || actor.statuses?.has("silenced"))) return false;
+      || actor.system.power.value !== mana - (consumed && abilityPayer === actor ? 1 : 0) || actor.statuses?.has("silenced"))) return false;
+    if (kiss && abilityPayer !== actor) {
+      const current = abilityPayer?.poolSnapshot?.().find(p => p.itemId === payerPool?.itemId && p.kind === payerPool?.kind && p.name === payerPool?.name);
+      if (!payerPool || !current || current.value !== payerPool.value - (consumed ? 1 : 0)) return false;
+    }
     if (!torment && (a.uses?.max !== 1 || a.uses.per !== "short" || a.uses.value !== (consumed ? 0 : 1))) return false;
     if (torment) {
       if (a.uses?.max > 0) return false;
@@ -100,6 +105,19 @@ export async function demonTauntQueryHandler({ actorUuid, index, source, request
       if (!token || !validate() || !selection.valid()) return refuse("target");
       targets = [token];
     }
+    if (kiss && actor.getFlag?.("azeroth-rpg", "bond")?.kind === "demon") {
+      suretyTools = await import("../effects/thematic-fel.mjs");
+      const ability = actor.system.creatureAbilities[index];
+      const quote = await suretyTools.claimFelSuretyForAbility({demon: actor, ability, index, attemptId: requestId});
+      if (quote?.ok) {
+        suretyQuote = quote;
+        abilityPayer = quote.payer === "warlock" ? fromUuidSync(quote.casterUuid) : actor;
+        payerPool = quote.payerPool;
+        if (quote.payer === "warlock" && (!abilityPayer?.testUserPermission(game.user, "OWNER")
+          || !abilityPayer.poolSnapshot?.().some(p => p.itemId === payerPool?.itemId && p.kind === payerPool?.kind
+            && p.name === payerPool?.name && p.value >= 1))) return refuse("suretyPayer");
+      } else if (quote?.reason !== "noSurety") return refuse("suretyClaim");
+    }
     const byUuid = new Map(targets.map(t => [t.actor.uuid, t]));
     if (byUuid.size !== targets.length) return refuse("duplicateActor");
     const result = await runDemonTaunt({ actor, name, requestId, targets: [...byUuid.keys()], validate,
@@ -110,7 +128,22 @@ export async function demonTauntQueryHandler({ actorUuid, index, source, request
         if (torment) await actor.setFlag("azeroth-rpg", DEMON_TORMENT_TURN, started);
         else {
           const rows = foundry.utils.deepClone(actor.system.creatureAbilities); rows[index].automation.uses.value = 0;
-          await actor.update({ "system.creatureAbilities": rows, ...(kiss ? { "system.power.value": mana - 1 } : {}) });
+          if (kiss && suretyQuote?.payer === "warlock") {
+            await actor.update({ "system.creatureAbilities": rows });
+            const current = abilityPayer.poolSnapshot?.().find(p => p.itemId === payerPool.itemId && p.kind === payerPool.kind && p.name === payerPool.name);
+            if (!current) return undefined;
+            await abilityPayer.updatePool({itemId: payerPool.itemId, kind: payerPool.kind, value: Math.max(0, current.value - 1)});
+            const committed = await suretyTools.commitFelSuretyUse(suretyQuote);
+            suretyCommitted = committed?.ok === true;
+            if (!suretyCommitted) console.warn("azeroth-rpg | Fel Surety use acknowledgement needs GM reconciliation");
+          } else {
+            await actor.update({ "system.creatureAbilities": rows, ...(kiss ? {"system.power.value": mana - 1} : {}) });
+            if (kiss && suretyQuote) {
+              const committed = await suretyTools.commitFelSuretyUse(suretyQuote);
+              suretyCommitted = committed?.ok === true;
+              if (!suretyCommitted) console.warn("azeroth-rpg | Fel Surety use acknowledgement needs GM reconciliation");
+            }
+          }
         }
         consumed = true;
         if (!validate()) return undefined;
@@ -156,5 +189,11 @@ export async function demonTauntQueryHandler({ actorUuid, index, source, request
     }
     return result;
   } catch { return refuse("writeUncertain"); }
-  finally { busy.delete(actor.uuid); }
+  finally {
+    if (suretyQuote && !suretyCommitted) {
+      try { await suretyTools.releaseFelSuretyClaim(suretyQuote); }
+      catch (error) { console.warn("azeroth-rpg | Fel Surety release needs GM reconciliation", error); }
+    }
+    busy.delete(actor.uuid);
+  }
 }

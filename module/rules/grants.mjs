@@ -33,6 +33,8 @@ import { AZEROTH } from "../config.mjs";
 // either module does while loading is building frozen tables that touch
 // neither. Anything added here that runs `gateHolds` at load time breaks that.
 import { gateHolds } from "./signatures.mjs";
+// A GM's own Spellpower and Attack bonuses on a thing, as grant sentences.
+import { bonusGrants } from "./item-bonuses.mjs";
 
 const ABILITY_NAMES = Object.freeze({
   strength: "str", dexterity: "dex", constitution: "con",
@@ -237,6 +239,7 @@ export function grantsOn(item, state = null) {
     ...(Array.isArray(flags.grants) ? flags.grants : []),
     flags.affix?.grants,
     ...(Array.isArray(item?.system?.grants) ? item.system.grants : []),
+    ...bonusGrants(item?.system?.bonus),
     ...signatureGrantsOn(item, state)
   ].filter(Boolean).map(String);
 }

@@ -80,6 +80,7 @@ import { beginBellowJournal } from "../effects/bellow-journal.mjs";
 import { requestBellowUse, bellowCommitValid, payBellowUse } from "../effects/bellow-use.mjs";
 import { UNANSWERED_FLAG, blockReduction, canReact, meleeInHand, parryHolds, shieldsHeld, standingMarkRefusal, unansweredBy } from "../rules/reactions.mjs";
 import { POISON_ROUNDS, coatingAction, coatingFired, consumableEnds, consumableImmunities, endsOnHit, flatten, goesOn, hasUse, poisonTick, runAfter, spendOne } from "../rules/consumables.mjs";
+import { guardPendingCustodyItem } from "../rules/item-custody-guard.mjs";
 import { wardingElixir, wardingElixirChange, supremePower, supremePowerChange, SUPREME_POWER_FLAG } from "../rules/consumable-schools.mjs";
 import { thistleTeaRefill, thistleTeaFatigue } from "../rules/thistle-tea.mjs";
 import { WISDOM_FLAG, isDistilledWisdom } from "../rules/distilled-wisdom.mjs";
@@ -320,6 +321,7 @@ import { worldActorOf } from "../documents/bound.mjs";
 // branches' door 2): records of what happened, as `source` and `strike` are.
 import { abilityKeyOf, cleanFromFeature, featureKeyOf, risenRecord, tokenRef } from "../rules/animation-records.mjs";
 import { PRESENTATION_ONLY_ABILITIES, CREATURE_PRESENTATION_AREAS } from "../rules/creature-animation-table.mjs";
+import { castingBonusOf } from "../rules/item-bonuses.mjs";
 
 /**
  * **THE FINISHER AS IT STANDS NOW** (02 §7 with 04's Death Mark, Rupture and
@@ -2907,6 +2909,22 @@ export async function castSpell({
     });
   }
   if (refuseAncientDespair(actor, "casting")) return null;
+  const {isThematicSpell} = await import("../rules/thematic-spell-catalogue.mjs");
+  const {utilitySpell} = await import("../rules/thematic-utility.mjs");
+  const objectTools = await import("../effects/thematic-object-state.mjs");
+  const thematicFel = ["summoners-writ", "fel-surety"].includes(spell?.system?.identifier);
+  const felTools = thematicFel ? await import("../effects/thematic-fel.mjs") : null;
+  const burdenTools = spell?.system?.identifier === "pilgrims-burden" ? await import("../effects/pilgrims-burden.mjs") : null;
+  const custodyTools = ["pact-escrow", "phoenix-courier"].includes(spell?.system?.identifier)
+    ? await import("../effects/item-custody-transactions.mjs") : null;
+  const shadowTools = ["phantom-footsteps", "mindstatic"].includes(spell?.system?.identifier)
+    ? await import("../effects/thematic-shadow.mjs") : null;
+  const thematicStateReady = ["prayer-of-mending", "gentle-verdict", "dream-theatre", "spell-relay"].includes(spell?.system?.identifier);
+  // Enable an authored entry only after its state adapter is connected.
+  if (isThematicSpell(spell) && !utilitySpell(spell?.system?.identifier) && !objectTools.supportsThematicObject(spell?.system?.identifier) && !thematicFel && !burdenTools && !custodyTools && !shadowTools && !thematicStateReady) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.Pending"));
+    return null;
+  }
   if (spell?.system?.duration?.kind === "sustained" && refuseSustainTransferStart(actor)) return null;
   const chainRefusal=chainLightningTargetRefusal(spell,targets,viaItem ? [] : actor.takenTalents?.() ?? []);
   if(chainRefusal){ui.notifications?.warn(game.i18n.format("AZEROTH.ChainLightning.TooMany",chainRefusal));return null;}
@@ -3320,6 +3338,64 @@ export async function castSpell({
     }
   }
 
+  // Reviewed utility choices live only on the GM's receipt. Cancellation is
+  // before budget/Mana payment; the cast card carries only its opaque ticket.
+  const utilityTools = await import("../effects/thematic-utility.mjs");
+  const utilityReview = await utilityTools.prepareThematicUtility({actor, spell, source, targets: list});
+  if (utilityReview && !utilityReview.ok) {
+    if (utilityReview.reason !== "cancelled") ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.BeforeFailed"));
+    return null;
+  }
+  const shadowReview = shadowTools ? await shadowTools.prepareShadowCastWithPoint({actor, spell, source, targets: list}) : null;
+  if (shadowReview && !shadowReview.ok) {
+    if (shadowReview.reason !== "cancelled") ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.BeforeFailed"));
+    return null;
+  }
+  const custodyReview = custodyTools ? await custodyTools.prepareItemCustodyCast({actor, spell, source}) : null;
+  if (custodyReview && !custodyReview.ok) {
+    if (custodyReview.reason !== "cancelled") ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.BeforeFailed"));
+    return null;
+  }
+  const objectReview = custodyTools ? null : await objectTools.prepareThematicObject({actor, spell, source, targets: list});
+  if (objectReview && !objectReview.ok) {
+    if (objectReview.reason !== "cancelled") ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.BeforeFailed"));
+    return null;
+  }
+  const felReview = felTools ? await felTools.prepareThematicFel({actor, spell, source, targets: list}) : null;
+  if (felReview && !felReview.ok) {
+    if (felReview.reason !== "cancelled") ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.BeforeFailed"));
+    return null;
+  }
+  const burdenReview = burdenTools ? await burdenTools.preparePilgrimsBurden({actor, spell, source}) : null;
+  if (burdenReview && !burdenReview.ok) {
+    if (burdenReview.reason !== "cancelled") ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.BeforeFailed"));
+    return null;
+  }
+  const holyTools = await import("../effects/thematic-holy.mjs");
+  const holyReview = await holyTools.prepareHolyCast({actor, spell, source, targets: list});
+  if (holyReview && !holyReview.ok) {
+    if (holyReview.reason !== "cancelled") ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.BeforeFailed"));
+    return null;
+  }
+  const dreamTools = await import("../effects/thematic-dream.mjs");
+  const dreamReview = await dreamTools.prepareDreamCast({actor, spell, source, targets: list});
+  if (dreamReview && !dreamReview.ok) {
+    if (dreamReview.reason !== "cancelled") ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.BeforeFailed"));
+    return null;
+  }
+  const spellRelayTools = await import("../effects/spell-relay.mjs");
+  const relayMode = sys.identifier === "spell-relay" ? "setup" : "attempt";
+  const relayTalentArea = spellAreaFor(actor.takenTalents?.() ?? [], {name: spell.name});
+  const relayArea = lengthenArea(widenArea(areaFor(sys.target ?? ""), relayTalentArea.widen), relayTalentArea.lengthen);
+  const relayReview = relayMode === "setup"
+    ? await spellRelayTools.prepareSpellRelay({actor, spell, source, targets: list})
+    : await spellRelayTools.prepareRelayAttempt({actor, spell, source, targets: list, area: relayArea,
+      viaItem: Boolean(viaItem)});
+  if (relayReview && !relayReview.ok) {
+    if (relayReview.reason !== "cancelled") ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.BeforeFailed"));
+    return null;
+  }
+
   // Single-recipient signature choices precede every action/resource payment.
   const {spellRetaliationFrom} = await import('../rules/spell-retaliation.mjs');
   const spellRetaliation = spellRetaliationFrom(spell);
@@ -3386,6 +3462,39 @@ export async function castSpell({
     return null;
   }
   if (sys.duration?.kind === "sustained" && refuseSustainTransferStart(actor)) return null;
+  // Gentle Verdict is reviewed before the final coordinator checks and budget.
+  // Its separate claim below consumes only after the budget and Mana are paid.
+  const verdictReview = await holyTools.prepareVerdictAttempt({actor, spell, targets: list, attemptId: cast,
+    viaItem: Boolean(viaItem)});
+  if (verdictReview && !verdictReview.ok) {
+    if (verdictReview.reason !== "cancelled") ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.BeforeFailed"));
+    return null;
+  }
+  if (utilityReview?.ticket && !(await utilityTools.claimThematicUtility(utilityReview.ticket, cast))?.ok) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.BeforeFailed"));
+    return null;
+  }
+  if (objectReview?.ticket && !(await objectTools.claimThematicObject(objectReview.ticket, cast))?.ok) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.BeforeFailed"));
+    return null;
+  }
+  if (felReview?.ticket && !(await felTools.claimThematicFel(felReview.ticket, cast))?.ok) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.BeforeFailed"));
+    return null;
+  }
+  if (burdenReview?.ticket && !(await burdenTools.claimPilgrimsBurden(burdenReview.ticket, cast))?.ok) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.BeforeFailed"));
+    return null;
+  }
+  if (custodyReview?.ticket && !(await custodyTools.requestItemCustodyClaim({ticket: custodyReview.ticket,
+    cast, casterUuid: actor.uuid, spellUuid: spell.uuid}))?.ok) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.BeforeFailed"));
+    return null;
+  }
+  if (shadowReview?.ticket && !(await shadowTools.claimShadowCast(shadowReview.ticket, cast))?.ok) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.BeforeFailed"));
+    return null;
+  }
   // **A GM-RUN CAST'S CLAIM IS ASKED LAST, BEFORE THE BUDGET AND NEVER AFTER IT**
   // (D-768; the lead: *"I don't want a half-action wasted bug"*): Chain
   // Lightning's request and Dispersion's Reaction were asked again after the
@@ -3399,6 +3508,16 @@ export async function castSpell({
   if (chainExecution) chainExecution.started = true;
   if (!(await spendSpellBudget(actor, spell, castAction, spendTurnBudget))) {
     if (chainExecution) chainExecution.started = false;
+    if (verdictReview?.ticket) await holyTools.releaseVerdictAttempt({ticket: verdictReview.ticket, attemptId: cast});
+    if (custodyReview?.ticket) {
+      try {
+        const released = await custodyTools.requestItemCustodyAbort(custodyReview.ticket, cast);
+        if (!released?.ok) ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+      } catch (error) {
+        console.warn("azeroth-rpg | Unpaid custody reservation", error);
+        ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+      }
+    }
     return null;
   }
 
@@ -3456,6 +3575,31 @@ export async function castSpell({
     const done = actor.getFlag("azeroth-rpg", DEVOURING_PLAGUE.flag) ?? [];
     if (!done.includes(plagueOn.uuid)) await actor.setFlag("azeroth-rpg", DEVOURING_PLAGUE.flag, [...done, plagueOn.uuid]);
   }
+  let relayPlacement = null;
+  const thematicResolutionPending = [];
+  // A paid attempt is a cast even if its durable claim write fails. Keep the
+  // card and its ticket for GM reconciliation; never return after payment or
+  // let a failed claim grant its effect.
+  const recordThematicClaim = async (name, operation) => {
+    try {
+      const result = await operation();
+      if (result?.ok) return result;
+    } catch (error) {
+      console.warn(`azeroth-rpg | ${name} claim`, error);
+    }
+    thematicResolutionPending.push(name);
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+    return false;
+  };
+  if (holyReview?.ticket) await recordThematicClaim("holy", () => holyTools.claimHolyCast(holyReview.ticket, cast));
+  if (dreamReview?.ticket) await recordThematicClaim("dream", () => dreamTools.claimDreamCast(dreamReview.ticket, cast));
+  if (relayReview?.ticket) {
+    const claimedRelay = await recordThematicClaim("relay", () => relayMode === "setup"
+      ? spellRelayTools.claimSpellRelaySetup(relayReview.ticket, cast)
+      : spellRelayTools.claimRelayAttempt(relayReview.ticket, cast));
+    if (claimedRelay?.placementOverride && relayMode === "attempt") relayPlacement = claimedRelay.placementOverride;
+  }
+  if (verdictReview?.ticket) await recordThematicClaim("verdict", () => holyTools.claimVerdictAttempt({ticket: verdictReview.ticket, attemptId: cast}));
 
   // 2b. 07 §8: casting a tier 5 Fel or Shadow spell accrues 1 point of
   // Corruption on its own track. Here, with the Mana, because CASTING is what
@@ -3500,6 +3644,11 @@ export async function castSpell({
   } else if (Number.isFinite(Number(modifier)) && Number(modifier)) {
     modifiers.push({label:"AZEROTH.Dialog.Circumstance",value:Number(modifier)});
   }
+  // **A GM's Casting Test bonus on what is equipped** (2026-11-02): a standing
+  // line on every Casting Test, named for what the sheet calls it, never a
+  // checkbox - it is the thing's number, not a judgement call (D2 §12).
+  const itemCasting = castingBonusOf(actor?.system?.itemBonus?.casting);
+  if (itemCasting) modifiers.push({ label: "AZEROTH.Cast.ItemBonus", value: itemCasting });
   // **THE DC THE ENTRY STATES, OR A TALENT RESTATES** (07: *Make a Casting Test
   // against DC 26*; 04's Sunfire and Cataclysm: *against DC 22 rather than 26*;
   // D-775), where no dialog handed one in. An item's casting reads the entry's own
@@ -4369,6 +4518,21 @@ export async function castSpell({
         // A compendium spell has no id on the actor, so carry the uuid too.
         spellUuid: spell.uuid,
         ...(cureReview?.ticket ? { cureTicket: cureReview.ticket } : {}),
+        ...(utilityReview?.ticket ? {utilityTicket: utilityReview.ticket, utilityCastTime: game.time.worldTime} : {}),
+        ...(objectReview?.ticket ? {thematicObjectTicket: objectReview.ticket, thematicObjectCastTime: game.time.worldTime} : {}),
+        ...(felReview?.ticket ? {felTicket: felReview.ticket} : {}),
+        ...(burdenReview?.ticket ? {pilgrimsBurdenTicket: burdenReview.ticket, pilgrimsBurdenCastTime: game.time.worldTime} : {}),
+        ...(custodyReview?.ticket ? {itemCustodyTicket: custodyReview.ticket, itemCustodyCastTime: game.time.worldTime} : {}),
+        ...(shadowReview?.ticket ? {shadowTicket: shadowReview.ticket} : {}),
+        ...(["mindlink", "sending", "mind-vision", "distant-mind"].includes(sys.identifier)
+          ? {mentalCastTime: game.time.worldTime} : {}),
+        ...(holyReview?.ticket ? {holyTicket: holyReview.ticket} : {}),
+        ...(dreamReview?.ticket ? {dreamTicket: dreamReview.ticket} : {}),
+        ...(relayReview?.ticket && relayMode === "setup" ? {spellRelayTicket: relayReview.ticket} : {}),
+        ...(relayReview?.ticket && relayMode === "attempt" ? {spellRelayAttemptTicket: relayReview.ticket} : {}),
+        ...(relayPlacement ? {spellRelayPlacement: relayPlacement} : {}),
+        ...(verdictReview?.ticket ? {verdictTicket: verdictReview.ticket} : {}),
+        ...(thematicResolutionPending.length ? {thematicResolutionPending} : {}),
         // WHAT WAS CAST, WHICH CAST, WHETHER IT WORKED AND WHO CAST IT (D-724).
         // `success` is this workflow's own verdict as it was decided above, so
         // a reader never re-derives it from the roll; `source` is the caster's
@@ -4539,6 +4703,100 @@ export async function castSpell({
     } catch (error) {
       ui.notifications?.warn(game.i18n.localize("AZEROTH.CurePoison.AfterFailed"));
       console.warn("azeroth-rpg | Cure Poison", error);
+    }
+  }
+  if (spellCard && utilityReview?.ticket) {
+    try {
+      const result = await utilityTools.finishThematicUtility(utilityReview.ticket, spellCard.id);
+      if (!result?.ok) ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+    } catch (error) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+      console.warn("azeroth-rpg | Thematic utility resolution", error);
+    }
+  }
+  if (spellCard && objectReview?.ticket) {
+    try {
+      const result = await objectTools.finishThematicObject(objectReview.ticket, spellCard.id);
+      if (!result?.ok) ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+    } catch (error) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+      console.warn("azeroth-rpg | Thematic object resolution", error);
+    }
+  }
+  if (spellCard && felReview?.ticket) {
+    try {
+      const result = await felTools.finishThematicFel(felReview.ticket, spellCard.id, cast);
+      if (!result?.ok) ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+    } catch (error) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+      console.warn("azeroth-rpg | Thematic Fel resolution", error);
+    }
+  }
+  if (spellCard && burdenReview?.ticket) {
+    try {
+      const result = await burdenTools.finishPilgrimsBurden(burdenReview.ticket, spellCard.id);
+      if (!result?.ok) ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+    } catch (error) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+      console.warn("azeroth-rpg | Pilgrims' Burden resolution", error);
+    }
+  }
+  if (spellCard && shadowReview?.ticket) {
+    try {
+      const result = await shadowTools.finishShadowCast(shadowReview.ticket, spellCard.id);
+      if (!result?.ok) ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+    } catch (error) {
+      console.warn("azeroth-rpg | Shadow spell resolution", error);
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+    }
+  }
+  if (spellCard?.flags?.["azeroth-rpg"]?.success === true
+      && ["mindlink", "sending", "mind-vision", "distant-mind"].includes(spellCard.flags["azeroth-rpg"].identifier)) {
+    try {
+      const {openMentalChannel} = await import("../effects/thematic-shadow.mjs");
+      const result = await openMentalChannel(spellCard.id);
+      if (!result?.ok) ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+    } catch (error) {
+      console.warn("azeroth-rpg | Mental channel opening", error);
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+    }
+  }
+  if (spellCard && custodyReview?.ticket) {
+    try {
+      const result = await custodyTools.requestItemCustodyFinish({ticket: custodyReview.ticket, messageId: spellCard.id});
+      if (!result?.ok) ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+    } catch (error) {
+      console.warn("azeroth-rpg | Item custody resolution", error);
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+    }
+  }
+  if (spellCard && holyReview?.ticket && !thematicResolutionPending.includes("holy")) {
+    try {
+      const result = await holyTools.finishHolyCast(holyReview.ticket, spellCard.id);
+      if (!result?.ok) ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+    } catch (error) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+      console.warn("azeroth-rpg | Thematic Holy resolution", error);
+    }
+  }
+  if (spellCard && dreamReview?.ticket && !thematicResolutionPending.includes("dream")) {
+    try {
+      const result = await dreamTools.finishDreamCast(dreamReview.ticket, spellCard.id);
+      if (!result?.ok) ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+    } catch (error) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+      console.warn("azeroth-rpg | Dream Theatre resolution", error);
+    }
+  }
+  if (spellCard && relayReview?.ticket && !thematicResolutionPending.includes("relay")) {
+    try {
+      const result = relayMode === "setup"
+        ? await spellRelayTools.finishSpellRelaySetup(relayReview.ticket, spellCard.id)
+        : await spellRelayTools.finishRelayAttempt(relayReview.ticket, spellCard.id);
+      if (!result?.ok) ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+    } catch (error) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.AfterFailed"));
+      console.warn("azeroth-rpg | Spell Relay resolution", error);
     }
   }
   if (spellCard && reactionBar && success) {
@@ -9784,9 +10042,28 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
   // was spent first and a short pool refused after, so a refused ability cost
   // the creature its Half-Action or its Boss Actions for nothing.
   let payFrom = null;
+  let abilityPayer = actor;
+  let suretyTools = null, suretyQuote = null;
+  if (list === "creatureAbilities" && a.cost?.pool === "power" && a.cost.amount > 0 && a.cost.amount <= 6
+    && actor.getFlag?.("azeroth-rpg", "bond")?.kind === "demon") {
+    suretyTools = await import("../effects/thematic-fel.mjs");
+    const quote = await suretyTools.claimFelSuretyForAbility({demon: actor, ability: row, list, index, attemptId: foundry.utils.randomID()});
+    if (quote?.ok) {
+      suretyQuote = quote;
+      abilityPayer = quote.payer === "warlock" ? fromUuidSync(quote.casterUuid) : actor;
+      payFrom = abilityPayer?.poolSnapshot?.().find(p => p.itemId === quote.payerPool?.itemId
+        && p.kind === quote.payerPool?.kind && p.name === quote.payerPool?.name) ?? null;
+      if (!abilityPayer?.testUserPermission(game.user, "OWNER") || !payFrom) {
+        await suretyTools.releaseFelSuretyClaim(quote);
+        ui.notifications?.warn("Fel Surety's payer could not be confirmed. Nothing was spent.");
+        return null;
+      }
+    }
+  }
   if (a.cost?.pool && (a.cost.amount ?? 0) > 0) {
-    payFrom = (actor.poolSnapshot?.() ?? []).find(p => p.kind === a.cost.pool) ?? null;
+    payFrom ??= (actor.poolSnapshot?.() ?? []).find(p => p.kind === a.cost.pool) ?? null;
     if (!payFrom || payFrom.value < a.cost.amount) {
+      if (suretyQuote) await suretyTools.releaseFelSuretyClaim(suretyQuote);
       const label = game.i18n.localize(AZEROTH.npcPoolKinds[a.cost.pool] ?? a.cost.pool);
       ui.notifications?.warn(game.i18n.format("AZEROTH.Feature.NoPool", { name: row.name, pool: label, amount: a.cost.amount }));
       return null;
@@ -9796,13 +10073,26 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
   // 1d. Spend: the Boss Action points, marked off before anything else is paid
   // as a shot is (D-641), or the turn's budget.
   if (isBossAction) await actor.update({ "system.bossPoints.value": bossSpend.left });
-  else if (!(await spendTurnBudget(actor, a.action ?? null))) return null;
+  else if (!(await spendTurnBudget(actor, a.action ?? null))) {
+    if (suretyQuote) await suretyTools.releaseFelSuretyClaim(suretyQuote);
+    return null;
+  }
 
   // 2. Pay, off the creature's pool of that kind.
   let spent = 0;
   if (payFrom) {
     spent = a.cost.amount;
-    await actor.updatePool({ itemId: null, kind: payFrom.kind, value: payFrom.value - spent });
+    const currentPool = abilityPayer.poolSnapshot?.().find(p => p.itemId === payFrom.itemId && p.kind === payFrom.kind && p.name === payFrom.name) ?? payFrom;
+    await abilityPayer.updatePool({ itemId: payFrom.itemId ?? null, kind: payFrom.kind, value: payFromNow(currentPool.value, spent).value });
+  }
+  if (suretyQuote) {
+    try {
+      const committed = await suretyTools.commitFelSuretyUse(suretyQuote);
+      if (!committed?.ok) ui.notifications?.warn("This ability was paid. Fel Surety needs GM reconciliation; do not use the ability again to retry payment.");
+    } catch (error) {
+      ui.notifications?.warn("This ability was paid. Fel Surety needs GM reconciliation; do not use the ability again to retry payment.");
+      console.warn("azeroth-rpg | Fel Surety payment acknowledgement", error);
+    }
   }
 
   // This ability is committed now. Refused selections and payments above
@@ -9958,7 +10248,8 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
   const summon = a.kind === "summon" && a.summon?.entry && (a.summon.count ?? 0) > 0
     ? { entry: a.summon.entry, count: a.summon.count, side: a.summon.side, from: a.summon.from }
     : null;
-  const costLabel = a.cost?.pool && spent ? game.i18n.localize(AZEROTH.npcPoolKinds[a.cost.pool] ?? a.cost.pool) : null;
+  const costLabel = suretyQuote?.payer === "warlock" ? `Mana (${abilityPayer.name})`
+    : a.cost?.pool && spent ? game.i18n.localize(AZEROTH.npcPoolKinds[a.cost.pool] ?? a.cost.pool) : null;
   const content = await renderTemplate(TEMPLATE.feature, {
     config: AZEROTH,
     title: row.name,
@@ -10080,6 +10371,10 @@ export async function useGear({ actor, item, targets = null } = {}) {
   if (refuseAncientDespair(actor, "gear")) return null;
   const use = item?.system?.use ?? null;
   if (!actor || !item || !hasUse(use)) return null;
+  if (!guardPendingCustodyItem(item).ok) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Item.CustodyPending"));
+    return null;
+  }
   const priorUse=actor.getFlag('azeroth-rpg','consumableUse');
   if(priorUse&&!['complete','reviewed','cancelled'].includes(priorUse.stage)) {
     ui.notifications?.warn(game.i18n.localize('AZEROTH.Use.Receipt.Pending'));return null;
@@ -10147,6 +10442,10 @@ export async function useGear({ actor, item, targets = null } = {}) {
   if (use.target === "item") {
     onto = await chooseCoatingTarget(actor, item, use);
     if (!onto) return null;
+    if (!guardPendingCustodyItem(onto).ok) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Item.CustodyPending"));
+      return null;
+    }
   }
 
   // 4. The turn's budget, in a fight. **A poison costs nothing to apply where

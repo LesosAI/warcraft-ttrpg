@@ -298,6 +298,12 @@ export function cardRecord(message) {
     };
   }
   if (flags.kind === "spell") {
+    const relayPlacement = flags.spellRelayPlacement;
+    const relayOrigin = relayPlacement?.sceneId === flags.source?.sceneId
+      && Number.isFinite(relayPlacement?.origin?.x) && Number.isFinite(relayPlacement?.origin?.y)
+      ? { sceneId: relayPlacement.sceneId, x: relayPlacement.origin.x, y: relayPlacement.origin.y,
+        ...(Number.isFinite(relayPlacement.rotation) ? { rotation: relayPlacement.rotation } : {}) }
+      : null;
     return {
       trigger: "cast",
       kind: "spell",
@@ -308,6 +314,9 @@ export function cardRecord(message) {
       success: flags.success === true,
       area: flags.area ?? null,
       source: flags.source ?? null,
+      // The caster remains `source` for identity. Relay's reviewed placement
+      // supplies the visual launch point for the same spell card.
+      relayOrigin,
       targets: Array.isArray(flags.targets) ? flags.targets : [],
       // Where the spell moved its caster and its party (Shadow Walk, Dark Passage).
       steps: cleanSteps(flags.steps)
@@ -777,6 +786,9 @@ export function effectRecord(effect) {
     kind: "spell",
     sceneId: viewed()?.id ?? null,
     ...castParts(card, flags),
+    // Each committed utility carrier announces only its own recipient. The
+    // whole original target list here would replay all six recipients six times.
+    ...(flags.utilitySpell ? {targets: []} : {}),
     effect: { id: effect.id, sceneId: viewed()?.id ?? null, tokenId, actorId: actor?.id ?? null }
   };
 }
