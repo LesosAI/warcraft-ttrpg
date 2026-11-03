@@ -1,4 +1,7 @@
 import { spellstealRecoveryRows, recoverSpellsteal } from "../effects/spellsteal-recovery.mjs";
+// The Actor directory's GM doors (D-799): drawn for a GM alone, and refused in
+// words at the press for anyone but the active GM.
+import { GM_DOOR_REFUSALS, gmDoorRefusal, showsGmDoor } from "../rules/gm-doors.mjs";
 const words = key => game.i18n.localize(`AZEROTH.Spellsteal.${key}`);
 const phaseWords = phase => words(({ holdRecipient: "RecoveryHolding", relocateCarriers: "RecoveryMoving",
   releaseSource: "RecoveryReleasing", done: "RecoveryComplete", claimed: "RecoveryPending", pending: "RecoveryPending"
@@ -6,8 +9,11 @@ const phaseWords = phase => words(({ holdRecipient: "RecoveryHolding", relocateC
 const stepWords = state => state ? phaseWords(state) : words("RecoveryNotStarted");
 
 export async function reviewSpellstealTransfers() {
-  if (!game.user?.isGM || game.users.activeGM?.id !== game.user.id) {
-    ui.notifications.warn(words("RecoveryActiveGM")); return null;
+  // Judged here as well as at the footer (D-799): a macro or a console call
+  // reaches this door without the button.
+  const refused = gmDoorRefusal(game.user, game.users?.activeGM?.id ?? null);
+  if (refused) {
+    ui.notifications.warn(game.i18n.format(GM_DOOR_REFUSALS[refused], { door: words("RecoveryTitle") })); return null;
   }
   const rows = spellstealRecoveryRows();
   if (!rows.length) { ui.notifications.info(words("RecoveryNone")); return null; }
@@ -47,16 +53,27 @@ export async function reviewSpellstealTransfers() {
   return result;
 }
 
+/**
+ * Put Spellsteal recovery in the Actor directory's footer, for a GM alone
+ * (D-799). Exported so a test can render the footer as a player and as a GM.
+ *
+ * @param {HTMLElement} element  the directory's rendered element
+ * @param {User} [user]  whose footer it is
+ * @returns {boolean}  whether a button was added
+ */
+export function addSpellstealReviewButton(element, user = game.user) {
+  if (!showsGmDoor(user)) return false;
+  const footer = element?.querySelector("footer.directory-footer");
+  if (!footer || footer.querySelector("[data-spellsteal-review]")) return false;
+  const button = document.createElement("button"); button.type = "button";
+  button.dataset.spellstealReview = ""; button.textContent = words("RecoveryTitle");
+  button.addEventListener("click", () => reviewSpellstealTransfers().catch(error => {
+    console.warn("azeroth-rpg | Spellsteal review", error); ui.notifications.warn(words("RecoveryChanged"));
+  }));
+  footer.append(button);
+  return true;
+}
+
 export function registerSpellstealReview() {
-  Hooks.on("renderActorDirectory", (_app, element) => {
-    if (!game.user?.isGM) return;
-    const footer = element?.querySelector("footer.directory-footer");
-    if (!footer || footer.querySelector("[data-spellsteal-review]")) return;
-    const button = document.createElement("button"); button.type = "button";
-    button.dataset.spellstealReview = ""; button.textContent = words("RecoveryTitle");
-    button.addEventListener("click", () => reviewSpellstealTransfers().catch(error => {
-      console.warn("azeroth-rpg | Spellsteal review", error); ui.notifications.warn(words("RecoveryChanged"));
-    }));
-    footer.append(button);
-  });
+  Hooks.on("renderActorDirectory", (_app, element) => addSpellstealReviewButton(element));
 }

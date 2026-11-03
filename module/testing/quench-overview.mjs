@@ -891,7 +891,7 @@ export function overviewBatch(context) {
     // lands on the document (D-603) - the source reads are in
     // `module/applications/portraits.test.mjs`.
 
-    it("the banner portrait follows the prototype token, and img stays the directory's", async function () {
+    it("the banner portrait follows the prototype token, and img follows it while img is core's placeholder (D-797)", async function () {
       this.timeout(60000);
       const actor = await makeCharacter({ name: "ZZ Portrait Token", classes: [["Warrior", 1]] });
       const sheet = await openSheet(actor);
@@ -903,16 +903,20 @@ export function overviewBatch(context) {
         // `src = src || source.img`, so it is never blank.
         assert.equal(portrait().getAttribute("src"), actor.prototypeToken.texture.src,
           "the banner does not draw the prototype token");
+        // The fixture is made with nothing but a name, so its portrait is
+        // core's hooded placeholder - the directory the lead read.
+        assert.equal(actor.img, CONST.DEFAULT_TOKEN, "the fixture already carries a portrait");
 
         // WHAT THE LEAD DID: the Prototype Token dialog writes this one field
         // through `actor.update`, which is what has to reach the banner.
         const token = "icons/svg/target.svg";
-        const before = actor.img;
         await actor.update({ "prototypeToken.texture.src": token });
         // Re-query on every turn: an AppV2 re-render detaches the node.
         await until(() => sheet.element.querySelector("img.azeroth-portrait")?.getAttribute("src") === token,
           "the banner to follow the prototype token");
-        assert.equal(actor.img, before, "setting the token changed the Actor directory's portrait");
+        // **AND THE DIRECTORY'S PORTRAIT FOLLOWS IT** (the lead, 2026-11-02,
+        // *option 1*): it was the placeholder, so nobody had chosen one.
+        assert.equal(actor.img, token, "the token art never reached the Actor directory's placeholder portrait");
       } finally {
         await sheet.close();
       }
@@ -923,8 +927,13 @@ export function overviewBatch(context) {
       const actor = await makeCharacter({ name: "ZZ Portrait Write", classes: [["Warrior", 1]] });
       // A token that differs from `img`, so the picker below is proved to have
       // walked the NESTED path rather than to have fallen back to the portrait.
+      // ONE write naming both (D-797): a write that names `img` keeps it, so
+      // the two stay apart - a token set alone would carry the placeholder
+      // portrait with it.
       const opened = "icons/svg/target.svg";
-      await actor.update({ "prototypeToken.texture.src": opened });
+      const chosen = "icons/svg/book.svg";
+      await actor.update({ img: chosen, "prototypeToken.texture.src": opened });
+      assert.equal(actor.img, chosen, "a write naming img did not keep it");
       const sheet = await openSheet(actor);
       let picker = null;
       try {
@@ -957,10 +966,118 @@ export function overviewBatch(context) {
         await until(() => actor.prototypeToken.texture.src === token,
           "the token image to land on the document");
         assert.equal(actor.prototypeToken.texture.src, token);
+        // A portrait somebody CHOSE is never overwritten by the token's art (D-797).
+        assert.equal(actor.img, chosen, "the token art overwrote a chosen directory portrait");
       } finally {
         if (picker?.rendered) await picker.close();
         await sheet.close();
       }
+    });
+
+    it("THE BANNER'S OWN CONTROL MOVES THE ACTOR DIRECTORY'S PORTRAIT, and a chosen one stays (D-797)", async function () {
+      this.timeout(90000);
+      // The lead's fault: every player character drew core's hooded placeholder
+      // in the Actor directory, because the banner edits the TOKEN art and
+      // nothing carried it to `img`. Pressed through the control a player
+      // presses - core's `editImage` action and the FilePicker it builds - and
+      // read back off the document AND off the directory's own entry.
+      const actor = await makeCharacter({ name: "ZZ Portrait Directory", classes: [["Warrior", 1]] });
+      assert.equal(actor.img, CONST.DEFAULT_TOKEN, "the fixture already carries a portrait");
+      const sheet = await openSheet(actor);
+      let picker = null;
+      const thumb = () => ui.actors.element?.querySelector(`[data-entry-id="${actor.id}"] img.thumbnail`)?.getAttribute("src") ?? null;
+      /** Click the banner's portrait, take the picker core built, and pick `path` with its own callback. */
+      const pick = async path => {
+        // **A RENDER BETWEEN THE CLICK AND THE PICK DETACHES THE IMG** core's
+        // callback writes to (`#onEditImage` keeps the element it was clicked on),
+        // and the form then submits the OLD path: the write before this one
+        // re-renders the sheet on its own schedule. So the portrait is re-queried
+        // for every click, and a click whose img a render took away is made again.
+        for (let attempt = 0; attempt < 5; attempt++) {
+          await settle();
+          const portrait = sheet.element.querySelector("img.azeroth-portrait");
+          portrait.click();
+          await until(() => foundry.applications.instances.get("file-picker")?.rendered === true,
+            "the FilePicker to open from the banner");
+          picker = foundry.applications.instances.get("file-picker");
+          assert.isFunction(picker.callback, "the picker was built with no callback");
+          if (!portrait.isConnected) {
+            await picker.close();
+            picker = null;
+            continue;
+          }
+          // Core's own callback (`DocumentSheetV2#onEditImage`): the src set and
+          // the form submitted, since the sheet submits on change. Synchronous,
+          // so nothing renders between the check above and the submit.
+          picker.callback(path, picker);
+          await picker.close();
+          picker = null;
+          return;
+        }
+        throw new Error("the sheet re-rendered under every click on the banner's portrait");
+      };
+      try {
+        const token = "icons/svg/target.svg";
+        await pick(token);
+        await until(() => actor.prototypeToken.texture.src === token, "the token art to land on the document");
+        await until(() => actor.img === token, "the directory portrait to follow the token art");
+        await ui.actors.render({ force: true });
+        await settle();
+        assert.equal(thumb(), token, "the Actor directory's entry still draws the placeholder");
+
+        // A second pick: the portrait WAS the token's previous art, so it follows again.
+        const again = "icons/svg/shield.svg";
+        await pick(again);
+        await until(() => actor.prototypeToken.texture.src === again, "the second token art to land");
+        await until(() => actor.img === again, "the directory portrait to follow the token's previous art");
+
+        // A portrait somebody chose stays where they put it, whatever the token does.
+        const chosen = "icons/svg/book.svg";
+        await actor.update({ img: chosen });
+        // Core's own rule runs the other way only where the token art is the
+        // default (14.367 `BaseActor#_preUpdate`), and this token is not.
+        await until(() => actor.img === chosen, "the chosen portrait");
+        assert.equal(actor.prototypeToken.texture.src, again, "choosing a portrait moved the token art");
+        const third = "icons/svg/sword.svg";
+        await pick(third);
+        await until(() => actor.prototypeToken.texture.src === third, "the third token art to land");
+        assert.equal(actor.img, chosen, "the token art overwrote a chosen directory portrait");
+      } finally {
+        if (picker?.rendered) await picker.close();
+        await sheet.close();
+      }
+    });
+
+    it("A CREATURE's token art leaves its img alone (D-797 is a character's)", async function () {
+      this.timeout(60000);
+      const actor = await Actor.create({ name: "ZZ Portrait Creature", type: "npc" });
+      try {
+        assert.equal(actor.img, CONST.DEFAULT_TOKEN, "the creature already carries a portrait");
+        await actor.update({ "prototypeToken.texture.src": "icons/svg/target.svg" });
+        await until(() => actor.prototypeToken.texture.src === "icons/svg/target.svg", "the creature's token art");
+        assert.equal(actor.img, CONST.DEFAULT_TOKEN, "a creature's img followed its token art");
+      } finally {
+        await actor.delete();
+      }
+    });
+
+    it("MIGRATION 0.12.69 gives an existing character's placeholder portrait its token art, and nothing else", async function () {
+      this.timeout(120000);
+      const { migrate, portraitUpdate } = await import("../migrations/0.12.69-token-portraits.mjs");
+      // Stored as a world made before D-797 holds them: written past the door
+      // in ONE update naming both fields, which the rule leaves alone.
+      const hooded = await makeCharacter({ name: "ZZ Portrait Migrate" });
+      await hooded.update({ img: CONST.DEFAULT_TOKEN, "prototypeToken.texture.src": "icons/svg/target.svg" });
+      const chosen = await makeCharacter({ name: "ZZ Portrait Kept" });
+      await chosen.update({ img: "icons/svg/book.svg", "prototypeToken.texture.src": "icons/svg/target.svg" });
+      assert.deepEqual(portraitUpdate(hooded), { img: "icons/svg/target.svg" });
+      assert.isNull(portraitUpdate(chosen));
+      await migrate(() => {});
+      await until(() => hooded.img === "icons/svg/target.svg", "the placeholder portrait taking the token art");
+      assert.equal(chosen.img, "icons/svg/book.svg", "the migration overwrote a chosen portrait");
+      // Idempotent: nothing left for a second pass on either.
+      assert.isNull(portraitUpdate(hooded));
+      assert.isNull(portraitUpdate(chosen));
     });
 
     it("the Overview centre draws system.art and sets it from the tab (D-603)", async function () {

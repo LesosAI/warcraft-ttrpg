@@ -2443,6 +2443,10 @@ export async function traitSchools() {
 export async function useAbilityWithDialog(actor, list, index, event = null) {
   const row = actor?.system?.[list]?.[index] ?? null;
   const a = row?.automation ?? null;
+  if (row && (a?.kind ?? "none") === "none") {
+    const { PRESENTATION_ONLY_ABILITIES } = await import("../rules/creature-animation-table.mjs");
+    if (PRESENTATION_ONLY_ABILITIES.includes(row.name)) return game.system.azeroth.workflows.useAbility({ actor, list, index, targets: [] });
+  }
   // **CUTTING GEAR** (the lead, 2026-10-22: *"Give constructs a trait or ability that
   // allows them to end one Entangled condition per turn no action required."*): read by
   // its NAME, whatever its automation says, and pressed through the one ability door.

@@ -260,6 +260,8 @@ import { CHALLENGE_FLAG, CHALLENGE_TURN_MARK, WATCH_FLAG, bearingTo, challengeRe
 import { readUpkeep } from "../rules/upkeep.mjs";
 import { SLOWED_FEET_FLAG, readSpeedDrop, speedDropAt } from "../rules/slowing.mjs";
 import { clockRounds, minuteSpan, roundsOrClock, untilEndOfNextTurnOrRound, untilNextTurnOrRound } from "../effects/durations.mjs";
+// 02 §5's Blood Fury for an orc with no Momentum pool (the lead, 2026-11-02; D-798).
+import { BLOOD_FURY_FLAG, ENCOUNTER_CLOCK_ROUNDS, furyEffectData, gainOutcome } from "../rules/blood-fury.mjs";
 // D-779: the lead's class answers of 2026-10-03 (O-166 to O-195).
 import {
   DEVOURING_PLAGUE, FLAMETONGUE, LIGHTWELL, aegisSchools, chosenWardRemains, curseRoom, lavaLashSpread, parryReaches,
@@ -317,6 +319,7 @@ import { worldActorOf } from "../documents/bound.mjs";
 // What a Use, an attack and a step record for the animation layer (the Legacy
 // branches' door 2): records of what happened, as `source` and `strike` are.
 import { abilityKeyOf, cleanFromFeature, featureKeyOf, risenRecord, tokenRef } from "../rules/animation-records.mjs";
+import { PRESENTATION_ONLY_ABILITIES, CREATURE_PRESENTATION_AREAS } from "../rules/creature-animation-table.mjs";
 
 /**
  * **THE FINISHER AS IT STANDS NOW** (02 §7 with 04's Death Mark, Rupture and
@@ -8221,15 +8224,32 @@ export async function useFeature({
   }
 
   // Blood Fury: Momentum gained on use (02 SS5, D-620), into the primary
-  // class's pool of that kind, never past its cap.
+  // class's pool of that kind, never past its cap - **OR, WHERE THE CHARACTER
+  // HOLDS NO MOMENTUM POOL AT ALL, THE FURY** (the lead, 2026-11-02; D-798):
+  // weapon attacks and spells add 1 to their Damage Rating until the encounter
+  // ends. `rules/blood-fury.mjs#gainOutcome` is the one judgement; a multiclass
+  // holding ANY Momentum pool takes the Momentum and no damage, exactly as
+  // before. The fury is one Active Effect, replaced rather than stacked by a
+  // second Use, lifted by `_leaveFight` with the fight's other encounter buffs,
+  // and spanned by the world's clock where no fight is running (D-778).
   let gained = null;
-  if (sys.gain?.pool && (sys.gain.amount ?? 0) > 0) {
-    const pool = (actor.poolSnapshot?.() ?? []).find(p => p.kind === sys.gain.pool) ?? null;
-    if (pool) {
-      const amount = Math.max(0, Math.min(sys.gain.amount, pool.max - pool.value));
-      if (amount > 0) await actor.updatePool({ itemId: pool.itemId, kind: pool.kind, value: pool.value + amount });
-      gained = game.i18n.format("AZEROTH.Card.Gained", { amount, pool: game.i18n.localize(AZEROTH.poolTypes[pool.name] ?? pool.name) });
-    }
+  const gainNow = gainOutcome({ gain: sys.gain, pools: actor.poolSnapshot?.() ?? [], identifier: sys.identifier ?? null });
+  if (gainNow.kind === "pool") {
+    const { pool, amount } = gainNow;
+    if (amount > 0) await actor.updatePool({ itemId: pool.itemId, kind: pool.kind, value: pool.value + amount });
+    gained = game.i18n.format("AZEROTH.Card.Gained", { amount, pool: game.i18n.localize(AZEROTH.poolTypes[pool.name] ?? pool.name) });
+  } else if (gainNow.kind === "fury") {
+    const stale = actor.effects.filter(e => e.getFlag("azeroth-rpg", BLOOD_FURY_FLAG)).map(e => e.id);
+    if (stale.length) await actor.deleteEmbeddedDocuments("ActiveEffect", stale);
+    const inFight = Boolean(actor.activeFight?.());
+    await actor.createEmbeddedDocuments("ActiveEffect", [furyEffectData({
+      name: item.name, img: item.img, origin: actor.uuid,
+      description: await enrich(sys.description ?? "", { relativeTo: item }),
+      changes: gainNow.changes,
+      timing: inFight ? null : clockRounds(ENCOUNTER_CLOCK_ROUNDS)
+    })]);
+    usedLines.push(game.i18n.format(inFight ? "AZEROTH.BloodFury.Fury" : "AZEROTH.BloodFury.FuryClock",
+      { name: item.name, n: gainNow.amount, rounds: ENCOUNTER_CLOCK_ROUNDS }));
   }
 
   // 2b. What the feature calls (D-643): one world actor per entry named, each
@@ -9293,6 +9313,21 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
   if (refuseAncientDespair(actor, "ability")) return null;
   const row = actor?.system?.[list]?.[index] ?? null;
   const a = row?.automation ?? null;
+  // An announcement presents a GM-adjudicated action without resolving it.
+  // No resource, action budget, movement, target condition or summon is written.
+  if (row && actor?.isOwner && (a?.kind ?? "none") === "none" && PRESENTATION_ONLY_ABILITIES.includes(row.name)) {
+    const source = (await import("../applications/roll-dialog.mjs")).sourceOf(actor);
+    const content = await renderTemplate(TEMPLATE.feature, {
+      config: AZEROTH, title: row.name, subtitle: actor.name,
+      effect: await enrich(row.description, { relativeTo: actor }),
+      note: game.i18n.localize("AZEROTH.Animation.AnnouncementNote"),
+      targets: [], speakerName: actor.name
+    });
+    return ChatMessage.create(ChatMessage.applyMode({ speaker: ChatMessage.getSpeaker({ actor }), content,
+      flags: { "azeroth-rpg": { kind: "ability", list, index, title: row.name,
+        source, targets: [], featureKey: abilityKeyOf(row.name), casting: false,
+        success: true, presentationOnly: true } } }));
+  }
   // **CUTTING GEAR** (the lead, 2026-10-22: *"Give constructs a trait or ability that
   // allows them to end one Entangled condition per turn no action required."*): by its
   // NAME, its own door (`effects/legacy-uses.mjs#useCuttingGear`) - no action, once a turn.
@@ -9887,7 +9922,7 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
         dc: resist.dc
       }))
     : [];
-  const area = areaFor(a.area ?? "");
+  const area = areaFor(a.area || CREATURE_PRESENTATION_AREAS[abilityKeyOf(row.name)] || "");
   const attack = a.kind === "attack";
   // A LIST, one block per condition (the feature card's shape since D-771,
   // where Hurricane lays Slowed and Typhoon Prone beside it). A casting ability

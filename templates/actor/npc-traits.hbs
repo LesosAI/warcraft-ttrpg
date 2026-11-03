@@ -2,7 +2,7 @@
 <section class="tab azeroth-panel {{tab.cssClass}}" data-tab="traits" data-group="primary">
   <ol class="azeroth-abilities">
     {{#each creatureAbilities}}
-    <li>{{#if this.usable}}<button type="button" class="azeroth-npc-use" data-action="useAbility" data-list="creatureAbilities" data-index="{{@index}}" title="{{localize this.kindLabel}}">{{localize "AZEROTH.Feature.Use"}}</button> {{/if}}<strong>{{this.name}}.</strong> {{{this.html}}}</li>
+    <li>{{#if this.usable}}<button type="button" class="azeroth-npc-use" data-action="useAbility" data-list="creatureAbilities" data-index="{{@index}}" title="{{#if this.announcement}}{{localize "AZEROTH.Animation.AnnouncementNote"}}{{else}}{{localize this.kindLabel}}{{/if}}">{{#if this.announcement}}{{localize "AZEROTH.Animation.Announce"}}{{else}}{{localize "AZEROTH.Feature.Use"}}{{/if}}</button> {{/if}}<strong>{{this.name}}.</strong> {{{this.html}}}</li>
     {{else}}
     <li class="azeroth-note">{{localize "AZEROTH.Sheet.NoAbilities"}}</li>
     {{/each}}
@@ -17,7 +17,7 @@
   </h3>
   <ol class="azeroth-abilities">
     {{#each bossActions}}
-    <li>{{#if this.usable}}<button type="button" class="azeroth-npc-use" data-action="useAbility" data-list="bossActions" data-index="{{@index}}" title="{{localize this.kindLabel}}">{{localize "AZEROTH.Feature.Use"}}</button> {{/if}}<strong>{{this.name}}.</strong> {{{this.html}}}{{#if this.cost}} (&times;{{this.cost}}){{/if}}</li>
+    <li>{{#if this.usable}}<button type="button" class="azeroth-npc-use" data-action="useAbility" data-list="bossActions" data-index="{{@index}}" title="{{#if this.announcement}}{{localize "AZEROTH.Animation.AnnouncementNote"}}{{else}}{{localize this.kindLabel}}{{/if}}">{{#if this.announcement}}{{localize "AZEROTH.Animation.Announce"}}{{else}}{{localize "AZEROTH.Feature.Use"}}{{/if}}</button> {{/if}}<strong>{{this.name}}.</strong> {{{this.html}}}{{#if this.cost}} (&times;{{this.cost}}){{/if}}</li>
     {{/each}}
   </ol>
   {{/if}}

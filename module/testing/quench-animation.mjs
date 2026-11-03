@@ -1646,6 +1646,48 @@ export function animationBatch(context) {
           await takeUp({ docs: [stomper, near, rager], combats: combat ? [combat] : [], actors: [tauren, troll] });
         }
       });
+
+      it("BLOOD FURY (D-798): from the sheet, a roar and a red flare at the orc on every Use; a Shaman's red haze stands on the fury and goes with the fight; a Warrior's Momentum plays the cue alone", async function () {
+        this.timeout(240000);
+        // The lead's ruling: an orc with no Momentum pool takes +1 on weapon attacks and
+        // spells instead. That is a state the encounter holds, so it is a LOOP on the
+        // fury's own effect; the Momentum is gone into a pool, so it is the cue alone.
+        const shaman = await makeCharacter({ name: "ZZ Anim Fury Shaman", race: "Orc", classes: [["Shaman", 5]] });
+        const warrior = await makeCharacter({ name: "ZZ Anim Fury Warrior", race: "Orc", classes: [["Warrior", 5]], abilities: { str: 16 } });
+        await until(() => featureNamed(shaman, "Blood Fury") && featureNamed(warrior, "Blood Fury"), "Blood Fury granted to both orcs");
+        const furyToken = await place(shaman, { x: 2000, y: 1200, side: "friendly" });
+        const rageToken = await place(warrior, { x: 2600, y: 1200, side: "friendly" });
+        const furied = () => shaman.effects.some(e => e.flags?.["azeroth-rpg"]?.bloodFury);
+        let combat = null;
+        try {
+          combat = await fightWith([shaman, warrior]);
+          // The Shaman: no Momentum pool, so the fury and its haze.
+          await giveTurn(combat, shaman);
+          const card = await useFromSheet(shaman, featureNamed(shaman, "Blood Fury"));
+          assert.equal(card.flags["azeroth-rpg"].featureKey, "blood-fury", "the card does not name Blood Fury");
+          await until(() => recorder.cuesFor("use", "blood-fury").length === 1, `Blood Fury's use cue (skips: ${recorder.skips.map(s => s.skip)})`);
+          const flare = recorder.cuesFor("use", "blood-fury")[0].steps.filter(s => s.kind === "effect");
+          assert.deepEqual(flare.map(s => s.asset), ["jb2a.cast_generic.fire.01.orange"]);
+          for (const s of flare) assert.equal(s.on, furyToken.id, "the flare drew off the Shaman");
+          await until(furied, "the fury's effect on the Shaman");
+          const haze = await until(() => wanted("blood-fury")[0], "the red haze standing on the fury");
+          assert.deepEqual(haze.anchors, [furyToken.id], "the haze stands off the Shaman");
+          // The Warrior: 2 Rage, the cue at him, and no second haze anywhere.
+          await giveTurn(combat, warrior);
+          await useFromSheet(warrior, featureNamed(warrior, "Blood Fury"));
+          await until(() => recorder.cuesFor("use", "blood-fury").length === 1, "the Warrior's Blood Fury cue");
+          assert.equal(recorder.cuesFor("use", "blood-fury")[0].steps.find(s => s.kind === "effect").on, rageToken.id, "the Warrior's flare drew off another token");
+          assert.isFalse(warrior.effects.some(e => e.flags?.["azeroth-rpg"]?.bloodFury), "a Warrior's Blood Fury laid the fury");
+          assert.deepEqual(wanted("blood-fury").map(l => l.anchors[0]), [furyToken.id], "a Warrior's Momentum stood a haze");
+          // *Until the encounter ends*: the fight's end lifts the fury, and the haze goes with it.
+          await combat.delete();
+          combat = null;
+          await until(() => !furied(), "the fury lifted at the fight's end");
+          await until(() => wanted("blood-fury").length === 0, "the haze gone with the fury");
+        } finally {
+          await takeUp({ docs: [furyToken, rageToken], combats: combat ? [combat] : [], actors: [shaman, warrior] });
+        }
+      });
     });
 
     /* ------------------------------------------------------------------ */

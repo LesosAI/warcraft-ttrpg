@@ -129,6 +129,8 @@ import { displacedBy } from "../rules/worn.mjs";
 // What a character's token looks like before anybody touches it (D-718's
 // neighbour; the lead, 2026-09-13).
 import { characterTokenPatch } from "../rules/tokens.mjs";
+// A character's directory portrait follows its token art until one is chosen (D-797).
+import { mirroredImg } from "../rules/token-art.mjs";
 import { grantsOn } from "../rules/grants.mjs";
 // A shape is one Active Effect, read here and written by `./shapes.mjs` alone
 // (D-769): the physical half, what melds, and what ends it.
@@ -1912,6 +1914,25 @@ export class AzerothActor extends Actor {
   async _preUpdate(changed, options, user) {
     const allowed = await super._preUpdate(changed, options, user);
     if (allowed === false) return false;
+    // **THE DIRECTORY PORTRAIT FOLLOWS THE TOKEN ART** (the lead, 2026-11-02,
+    // *option 1*; D-797): a character's `img` takes the new token art where it
+    // was blank, core's placeholder or the token's previous art, and never where
+    // the update names `img` itself. HERE, so every door that writes the token
+    // art - the banner's portrait, the Prototype Token dialog, a macro - moves
+    // it. After `super`, whose own rule runs the other way (an `img` with no
+    // token art); characters alone, and a synthetic actor has no prototype.
+    // `rules/token-art.mjs` is the law.
+    if (this.type === "character" && !this.isToken && changed) {
+      const img = mirroredImg({
+        changed,
+        img: this._source.img,
+        tokenSrc: this._source.prototypeToken?.texture?.src,
+        randomImg: this._source.prototypeToken?.randomImg === true,
+        placeholders: [CONST.DEFAULT_TOKEN, this.constructor.DEFAULT_ICON],
+        extensions: Object.keys(CONST.IMAGE_FILE_EXTENSIONS)
+      });
+      if (img) changed.img = img;
+    }
     // Core's own pattern (TokenDocument#_preUpdate stashes previousActorId):
     // options reach every client's _onUpdate, so the Health before the write
     // rides there and each client draws the change over the tokens it sees.

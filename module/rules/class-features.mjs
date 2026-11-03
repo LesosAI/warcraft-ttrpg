@@ -298,8 +298,9 @@ export const CLASS_FEATURES = Object.freeze({
  * holds each name against the pack. A trait is free and always on: a
  * passive where it changes nothing the sheet can do, an action where the
  * book spends one. Blood Fury's Momentum is `gain`, paid into the primary
- * class's pool on use; Regeneration and Underfoot stay text, as Bleeding's
- * tick does.
+ * class's pool on use - or, where the character holds no Momentum pool at
+ * all, the fury `rules/blood-fury.mjs` lays instead (the lead, D-798);
+ * Regeneration and Underfoot stay text, as Bleeding's tick does.
  */
 export const RACE_TRAITS = Object.freeze({
   // Adaptable names one skill at creation, always in-career (02 SS5): the

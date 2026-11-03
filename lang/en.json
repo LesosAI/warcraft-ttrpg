@@ -67,6 +67,14 @@
       "Refused": "The Hunger Mastered needs an available arc use, a Power pool, and an active GM.",
       "Pending": "The Hunger Mastered may already have restored Power and spent its use. Ask the GM to inspect the actor receipt before retrying; do not restore the use automatically."
     },
+    "GmDoors": {
+      "NotGM": "Only a GM can open {door}.",
+      "NotActiveGM": "Only the active GM can open {door}. Open it on that GM's client."
+    },
+    "BloodFury": {
+      "Fury": "{name}: no Momentum pool, so weapon attacks and spells add {n} to their Damage Rating until the encounter ends.",
+      "FuryClock": "{name}: no Momentum pool, so weapon attacks and spells add {n} to their Damage Rating for {rounds} rounds of the world's clock, since no fight is running."
+    },
     "Zalazane": {
       "Title": "Zalazane's Lesson",
       "Target": "Target one creature with identified Mind Control, Compel, Dominate, Enslave Demon, or Thrall of the Banshee. Unmarked legacy effects need GM identification; ordinary Charmed is not automatically domination.",
@@ -2320,6 +2328,8 @@
       "Cleared": "{count} measured areas cleared."
     },
     "Animation": {
+      "Announce": "Announce",
+      "AnnouncementNote": "Visual and sound announcement only. Resolve this ability at the table; no action, resource, movement or effect is applied.",
       "Tool": "Animations",
       "Setting": {
         "Enabled": {
@@ -4668,7 +4678,6 @@
     },
     "Spellsteal": {
       "RecoveryTitle": "Spellsteal recovery",
-      "RecoveryActiveGM": "Only the active GM can resolve interrupted Spellsteal attempts.",
       "RecoveryWriterActive": "The GM who started this attempt is still connected. Resolve it on that GM's client, or disconnect that client before recovery on another GM.",
       "RecoveryNone": "No recoverable Spellsteal attempts are pending.",
       "RecoveryExplain": "Review an interrupted attempt. Confirm is available only when its exact completed transfer is still present. Ending removes this cast from both creatures once transfer delivery has begun; an attempt interrupted before delivery leaves the original spell intact. Already-ended replacement spells are not restored.",

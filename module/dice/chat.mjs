@@ -7,6 +7,7 @@
  */
 
 import { placeItemArea } from "../canvas/place.mjs";
+import { abilityKeyOf } from "../rules/animation-records.mjs";
 import {endTurnDamageStamp} from '../rules/end-turn-damage.mjs';
 import { areaTransferRefusal } from "../effects/pending-area-transfer.mjs";
 import { gadgetResistanceRequest, gadgetResistancePresses } from '../effects/gadget-resistance.mjs';
@@ -933,8 +934,15 @@ async function placeAreaFromCard(message) {
   // item (D-616), whose area is in 07 §9's phrasing on the item itself.
   const item = actor?.items?.get(flags.spellId ?? flags.itemId)
     ?? (flags.spellUuid ? await fromUuid(flags.spellUuid) : null);
+  // Creature abilities live on the actor, not as embedded feature Items.
+  // Re-read the exact row the card used before opening the existing picker.
+  const abilityRow = flags.kind === "ability" && ["creatureAbilities", "bossActions"].includes(flags.list)
+    ? actor?.system?.[flags.list]?.[flags.index] : null;
+  const { CREATURE_PRESENTATION_AREAS } = await import("../rules/creature-animation-table.mjs");
+  const abilityAreaText = abilityRow && abilityKeyOf(abilityRow.name) === flags.featureKey
+    ? (abilityRow.automation?.area || CREATURE_PRESENTATION_AREAS[flags.featureKey] || null) : null;
 
-  if (!item) {
+  if (!item && !abilityAreaText) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.Area.SpellGone"));
     return;
   }
@@ -946,8 +954,8 @@ async function placeAreaFromCard(message) {
   // which the animation layer already refused to draw (D-724). Refused in
   // words, before the Sustain's own check, whatever the spell's span.
   // A casting Use's card says so too (04's Firestorm burns *On success*; D-775).
-  if ((flags.kind === "spell" || flags.kind === "feature") && flags.success === false) {
-    ui.notifications?.warn(game.i18n.format("AZEROTH.Area.FailedCast", { name: flags.spellName ?? item.name }));
+  if ((flags.kind === "spell" || flags.kind === "feature" || flags.kind === "ability") && flags.success === false) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Area.FailedCast", { name: flags.spellName ?? abilityRow?.name ?? item?.name ?? flags.title }));
     return null;
   }
   // **A SUSTAIN THAT HAS ENDED PLACES NOTHING** (D-756). The card outlives the
@@ -1000,6 +1008,7 @@ async function placeAreaFromCard(message) {
   }
   const region = await placeItemArea({
     item, actor, token, guessToken: false,
+    ...(abilityAreaText ? { areaText: abilityAreaText, name: abilityRow.name } : {}),
     ...(flags.kind === "feature" && flags.featureKey === "snare" ? { createArea: options => placeSnareFromCard(message, options) } : {}),
     ...(aimAccept ? { accept: aimAccept } : {}),
     // A talent's wider circle (D-756): Consecrated Ground's rank 2.
@@ -1086,7 +1095,7 @@ export function regionFlagsFromCard(message, actor, item) {
     // **WHICH FEATURE PLACED IT** (the Legacy branches' door 2): the key the feature's
     // card names, and only where its Use did not fail - so a Region that carries one
     // is itself the proof the Use landed, and a loop standing on it needs no card.
-    ...(flags.kind === "feature" && typeof flags.featureKey === "string" && flags.featureKey && flags.success !== false
+    ...((flags.kind === "feature" || flags.kind === "ability") && typeof flags.featureKey === "string" && flags.featureKey && flags.success !== false
       ? { featureKey: flags.featureKey } : {}),
     sustained: flags.sustained === true,
     // **AND 07's BARRIER'S WARD ON THE CREATURES CHOSEN** (D-779; the lead, 2026-10-03,

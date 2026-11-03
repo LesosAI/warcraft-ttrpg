@@ -21,6 +21,7 @@ import { isSearingAttack } from "../rules/searing-totem.mjs";
 import { reviewSearingUses } from "./searing-totem-review.mjs";
 import { reviewChainLightningCast } from "./chain-lightning-review.mjs";
 import { hasAutomation, isPressable } from "../rules/ability-automation.mjs";
+import { PRESENTATION_ONLY_ABILITIES } from "../rules/creature-animation-table.mjs";
 // A construct's Cutting Gear (the lead's ruling, 2026-10-22): pressed by its name.
 import { holdsCuttingGear } from "../rules/escapes.mjs";
 import { enrich, enrichRows } from "../helpers/enrich.mjs";
@@ -422,7 +423,8 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
     const usable = rows => rows.map(row => ({
       ...row,
       // Cutting Gear is read by its NAME (the lead's ruling) and has a Use of its own.
-      usable: this.isEditable && (isPressable(row.automation) || holdsCuttingGear([row])),
+      usable: this.isEditable && (isPressable(row.automation) || holdsCuttingGear([row]) || ((row.automation?.kind ?? "none") === "none" && PRESENTATION_ONLY_ABILITIES.includes(row.name))),
+      announcement: (row.automation?.kind ?? "none") === "none" && PRESENTATION_ONLY_ABILITIES.includes(row.name),
       kindLabel: hasAutomation(row.automation) ? AZEROTH.abilityKinds[row.automation.kind] : (holdsCuttingGear([row]) ? "AZEROTH.CuttingGear.Title" : null)
     }));
     context.creatureAbilities = usable(await enrichRows(system.creatureAbilities, { relativeTo: actor }));

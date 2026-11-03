@@ -23,6 +23,8 @@ import { attackWithDialog, npcAttackWithDialog } from "../applications/actions.m
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 import { prepareRoll } from "../applications/roll-dialog.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
+// 05's *Round - ~6 seconds*: Blood Fury's span out of a fight is six of them (D-798).
+import { ROUND_SECONDS } from "../rules/area-ticks.mjs";
 
 /** What a pool holds now, by name. */
 const poolOf = (actor, name) => actor.poolSnapshot().find(p => p.name === name)?.value ?? null;
@@ -371,6 +373,95 @@ export function damagePipelineBatch(context) {
       // where `_leaveFight` lifts the buff.
       await combat.delete();
       await until(() => actor.system.damageBonus.spell.holy === 0, "the encounter's buff lapsing with the fight");
+    });
+
+    /* ---- 02 §5: Blood Fury with no Momentum pool (D-798) ----------------- */
+
+    it("BLOOD FURY with no Momentum pool: an orc Shaman's Use adds 1 to weapon attacks and spells - a real swing and a real cast read it - out of a fight on the clock, in one until it ends; an orc Warrior gains 2 Rage and nothing else", async function () {
+      this.timeout(300000);
+      // The lead (2026-11-02): *for a character with no Momentum pool, Blood Fury
+      // instead grants +1 to physical damage and +1 to spell damage (Damage Rating
+      // bonus on both)*. It used to spend the Half-Action and the use and do nothing.
+      const shaman = await makeCharacter({ name: "ZZ Fury Shaman", race: "Orc", classes: [["Shaman", 5]], abilities: { str: 14, wis: 16 } });
+      const warrior = await makeCharacter({ name: "ZZ Fury Warrior", race: "Orc", classes: [["Warrior", 5]], abilities: { str: 16 } });
+      const fury = actor => actor.items.find(i => i.type === "feature" && i.name === "Blood Fury") ?? null;
+      const laid = actor => actor.effects.filter(e => e.getFlag("azeroth-rpg", "bloodFury"));
+      const lanes = actor => [actor.system.damageBonus?.attack?.all ?? 0, actor.system.damageBonus?.spell?.all ?? 0];
+      const lanesTalent = card => (card?.rolls?.[0]?.options?.provenance ?? []).filter(p => p.label === "AZEROTH.Card.TalentDamage").map(p => p.value);
+      await until(() => fury(shaman) && fury(warrior), "Blood Fury granted to both orcs");
+      assert.isFalse(shaman.poolSnapshot().some(p => p.kind === "momentum"), "the Shaman holds a Momentum pool, so this proves nothing");
+      assert.deepEqual(lanes(shaman), [0, 0], "the Shaman's lanes did not start at zero");
+
+      // ---- OUT OF A FIGHT: the world's clock, six rounds (13 §3; D-778) ----
+      const outside = await game.system.azeroth.workflows.useFeature({ actor: shaman, item: fury(shaman) });
+      assert.ok(outside, "Blood Fury posted no card");
+      made.push(outside);
+      await until(() => laid(shaman).length === 1, "the fury's one effect");
+      await until(() => lanes(shaman)[0] === 1 && lanes(shaman)[1] === 1, "weapon attacks and spells each adding 1");
+      const clocked = laid(shaman)[0];
+      assert.equal(clocked.getFlag("azeroth-rpg", "talentBuff"), "Blood Fury", "the fury does not carry the encounter buff's flag");
+      assert.equal(clocked.getFlag("azeroth-rpg", "until"), "encounter");
+      assert.equal(clocked._source.duration?.units, "seconds", "out of a fight the fury holds no span of the world's clock");
+      assert.equal(clocked._source.duration?.value, 6 * ROUND_SECONDS, "out of a fight the fury is not six rounds of the clock");
+      assert.include(renderedText(outside), game.i18n.format("AZEROTH.BloodFury.FuryClock", { name: "Blood Fury", n: 1, rounds: 6 }),
+        "the card does not say what the Use did, in words");
+      assert.equal(fury(shaman).system.uses.value, 0, "the once-an-encounter use was not struck");
+
+      // A REAL SWING: the Damage Rating the card prints carries the 1, and says why.
+      const sword = await arm(shaman, "Longsword");
+      let unpin = pinDie(15);
+      let swing;
+      try { swing = await attackWithDialog(shaman, sword); } finally { unpin(); }
+      assert.ok(swing, "the Shaman's swing posted no card");
+      made.push(swing);
+      assert.match(new DOMParser().parseFromString(swing.content, "text/html").querySelector(".azeroth-damage em")?.textContent ?? "",
+        new RegExp(`^${sword.system.rating + 1} \\+ `), "the weapon attack's Damage Rating did not take Blood Fury's 1");
+      assert.deepEqual(lanesTalent(swing), [1], "the swing's card does not say what the lane added");
+
+      // A REAL CAST: Lightning Bolt's card names the 1 on the spell lane.
+      for (const pool of shaman.poolSnapshot().filter(p => p.kind === "power" && p.max > 0)) {
+        await shaman.updatePool({ itemId: pool.itemId, kind: "power", value: pool.max });
+      }
+      await until(() => shaman.poolSnapshot().some(p => p.name === "mana" && p.value >= 2), "the Shaman's Mana");
+      const bolt = await fromPack("azeroth-rpg.spells", "Lightning Bolt");
+      unpin = pinDie(18);
+      let cast;
+      try { cast = await game.system.azeroth.workflows.castSpell({ actor: shaman, spell: bolt, dc: 5, targets: [] }); } finally { unpin(); }
+      assert.ok(cast, "the cast posted no card");
+      made.push(cast);
+      assert.deepEqual(lanesTalent(cast), [1], "the spell's card does not carry Blood Fury's 1 on the spell lane");
+
+      // ---- IN A FIGHT: the encounter, and a second Use REPLACES the first ----
+      await fury(shaman).update({ "system.uses.value": 1 });
+      const combat = await fightWith([shaman]);
+      await giveTurn(combat, shaman);
+      await game.system.azeroth.workflows.useFeature({ actor: shaman, item: fury(shaman) });
+      await until(() => laid(shaman).length === 1 && laid(shaman)[0].id !== clocked.id, "the fight's fury replacing the clock's");
+      const fought = laid(shaman)[0];
+      assert.isNotOk(fought._source.duration?.value, "in a fight the fury carries a span of its own; the encounter ends it");
+      assert.deepEqual(lanes(shaman), [1, 1], "a second Use stacked the fury");
+      // A GM hands the use back; the Use again: still ONE effect, still 1 a lane.
+      await fury(shaman).update({ "system.uses.value": 1 });
+      await game.system.azeroth.workflows.useFeature({ actor: shaman, item: fury(shaman) });
+      await until(() => laid(shaman).length === 1 && laid(shaman)[0].id !== fought.id, "a third Use replacing the second");
+      assert.deepEqual(lanes(shaman), [1, 1], "a repeated Use stacked the fury");
+      // *Until the encounter ends*: the fight's end lifts it with the other encounter buffs.
+      await combat.delete();
+      await until(() => laid(shaman).length === 0, "the fury lifted with the fight");
+      await until(() => lanes(shaman)[0] === 0 && lanes(shaman)[1] === 0, "the lanes back at zero");
+
+      // ---- A MOMENTUM POOL: exactly as before, and no damage ----
+      const rage = warrior.poolSnapshot().find(p => p.kind === "momentum");
+      assert.ok(rage, "a Warrior with no Rage pool");
+      await warrior.updatePool({ itemId: rage.itemId, kind: "momentum", value: 3 });
+      await until(() => warrior.poolSnapshot().find(p => p.kind === "momentum").value === 3, "the Warrior's 3 Rage");
+      const momentum = await game.system.azeroth.workflows.useFeature({ actor: warrior, item: fury(warrior) });
+      assert.ok(momentum, "the Warrior's Blood Fury posted no card");
+      made.push(momentum);
+      await until(() => warrior.poolSnapshot().find(p => p.kind === "momentum").value === 5, "2 Rage gained");
+      await settle();
+      assert.lengthOf(laid(warrior), 0, "a Warrior's Blood Fury laid the fury beside the Momentum");
+      assert.deepEqual(lanes(warrior), [0, 0], "a Warrior's Blood Fury added damage");
     });
 
     /* ---- 02 §7: Finisher ------------------------------------------------- */

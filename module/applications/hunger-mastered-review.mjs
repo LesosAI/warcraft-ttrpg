@@ -14,10 +14,19 @@ import { snakeTrapRecoveryViews, reviewSnakeTrapDelivery } from '../effects/snak
 import { manaBurnRecoveryViews, reviewManaBurn } from '../effects/mana-burn.mjs';
 import { orphanConflagrateViews, reviewOrphanConflagrate } from '../effects/conflagrate.mjs';
 import {rocketJumpRecoveryViews,reviewRocketJump} from '../effects/rocket-jump-use.mjs';
+// The Actor directory's GM doors (D-799): drawn for a GM alone, and refused in
+// words at the press for anyone but the active GM.
+import { GM_DOOR_REFUSALS, gmDoorRefusal, showsGmDoor } from '../rules/gm-doors.mjs';
 const words = key => game.i18n.localize(`AZEROTH.HungerMastered.${key}`);
 
 export async function reviewHungerMasteredUses() {
-  if (!game.user?.isGM || game.users.activeGM !== game.user) return null;
+  // Judged here as well as at the footer (D-799), and SAID: this door returned
+  // a silent null to a player and to a GM who was not the active one.
+  const refused = gmDoorRefusal(game.user, game.users?.activeGM?.id ?? null);
+  if (refused) {
+    ui.notifications.warn(game.i18n.format(GM_DOOR_REFUSALS[refused], { door: words('ReviewTitle') }));
+    return null;
+  }
   const actors = new Map(Array.from(game.actors ?? []).map(actor => [actor.uuid, actor]));
   for (const scene of game.scenes ?? []) for (const token of scene.tokens ?? [])
     if (token.actor) actors.set(token.actor.uuid, token.actor);
@@ -74,14 +83,25 @@ export async function reviewHungerMasteredUses() {
   return result;
 }
 
+/**
+ * Put Review interrupted uses in the Actor directory's footer, for a GM alone
+ * (D-799). Exported so a test can render the footer as a player and as a GM.
+ *
+ * @param {HTMLElement} element  the directory's rendered element
+ * @param {User} [user]  whose footer it is
+ * @returns {boolean}  whether a button was added
+ */
+export function addHungerReviewButton(element, user = game.user) {
+  if (!showsGmDoor(user)) return false;
+  const footer = element?.querySelector('footer.directory-footer');
+  if (!footer || footer.querySelector('[data-hunger-review]')) return false;
+  const button = document.createElement('button'); button.type = 'button';
+  button.dataset.hungerReview = ''; button.textContent = words('ReviewTitle');
+  button.addEventListener('click', () => reviewHungerMasteredUses().catch(() => ui.notifications.warn(words('ReviewChanged'))));
+  footer.append(button);
+  return true;
+}
+
 export function registerHungerMasteredReview() {
-  Hooks.on('renderActorDirectory', (_app, element) => {
-    if (!game.user?.isGM) return;
-    const footer = element?.querySelector('footer.directory-footer');
-    if (!footer || footer.querySelector('[data-hunger-review]')) return;
-    const button = document.createElement('button'); button.type = 'button';
-    button.dataset.hungerReview = ''; button.textContent = words('ReviewTitle');
-    button.addEventListener('click', () => reviewHungerMasteredUses().catch(() => ui.notifications.warn(words('ReviewChanged'))));
-    footer.append(button);
-  });
+  Hooks.on('renderActorDirectory', (_app, element) => addHungerReviewButton(element));
 }

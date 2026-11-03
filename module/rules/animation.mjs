@@ -734,7 +734,12 @@ function addSteps(steps, recipe, context) {
     case "effect": return at(tokenOf(facts, record.effect?.tokenId));
 
     case "targets": {
-      (record.targets ?? []).forEach((t, index) => {
+      const recipients = record.trigger === "effect" && record.effect?.tokenId
+        ? [record.effect] : [...(recipe.includeSource === true && source ? [{ tokenId: source.id }] : []), ...(record.targets ?? [])];
+      const seenRecipients = new Set();
+      recipients.forEach((t, index) => {
+        if (seenRecipients.has(t?.tokenId)) return;
+        seenRecipients.add(t?.tokenId);
         const token = tokenOf(facts, t?.tokenId);
         if (token) at(token, { index, delay: (num(recipe.delay) ?? 0) + index * (num(recipe.stagger) ?? 0) });
       });
@@ -925,8 +930,10 @@ function soundAnchor({ place, record, facts, source, firstTarget, follow = null 
     ? { at: { x: token.x, y: token.y }, on: token.id, ...(seen(token) ? {} : { unseen: true }) }
     : null);
   switch (place) {
-    case "target":
     case "targets":
+      if (record.trigger === "effect") return spot(tokenOf(facts, record.effect?.tokenId));
+      return spot(firstTarget) ?? spot(source);
+    case "target":
     case "beside-target":
     case "source>target":
     case "missiles":

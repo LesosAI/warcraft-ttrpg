@@ -1,6 +1,6 @@
 /**
  * WHAT A COMPLETED ACTION LOOKS LIKE, as data (D-727, D-728). Pure: no Foundry
- * imports, and this file imports nothing at all.
+ * imports. The expansion catalogues it imports are pure presentation data too.
  *
  * `rules/animation.mjs` is the law that reads this; `module/animation/` (Phase
  * 4) is the only thing that touches Sequencer. Here there is nothing but a
@@ -121,6 +121,9 @@
  *  - `volume`, `bucketed`                  sounds only
  *  - `mask`     true where an area effect is clipped to its Region
  */
+
+import { EXPANDED_SPELL_ANIMATIONS } from "./spell-animation-expansion.mjs";
+import { creatureAnimations } from "./creature-animation-table.mjs";
 
 /* ------------------------------------------------------------------ */
 /*  Where a step can go                                                */
@@ -252,7 +255,13 @@ export const FILTERS = Object.freeze({
    * A red curse into a troll's voodoo green (02 §5's Da Voodoo). It starts near `FEL_R`
    * and is kept apart from it, so a hex and a demon's work can be tuned apart.
    */
-  VOODOO_R: Object.freeze({ hue: 100, saturate: 0.3, brightness: 0.9 })
+  VOODOO_R: Object.freeze({ hue: 100, saturate: 0.3, brightness: 0.9 }),
+  /**
+   * Orange fire into the red haze 05 §11 names (*The Horde calls it the red haze*):
+   * 02 §5's Blood Fury. It starts near `SCORCH` and is kept apart from it, so an
+   * orc's rage and Flamestrike's column can be tuned apart.
+   */
+  BLOOD_RAGE: Object.freeze({ hue: -30, saturate: 0.45, brightness: 0.85 })
 });
 
 /* ------------------------------------------------------------------ */
@@ -1284,7 +1293,7 @@ export const NPC_SPELL_ANIMATIONS = Object.freeze({
   }
 });
 
-export const ALL_SPELL_ANIMATIONS = Object.freeze({ ...SPELL_ANIMATIONS, ...TAUGHT_SPELL_ANIMATIONS, ...NPC_SPELL_ANIMATIONS });
+export const ALL_SPELL_ANIMATIONS = Object.freeze({ ...EXPANDED_SPELL_ANIMATIONS, ...SPELL_ANIMATIONS, ...TAUGHT_SPELL_ANIMATIONS, ...NPC_SPELL_ANIMATIONS });
 
 /* ------------------------------------------------------------------ */
 /*  Features (the Legacy branches' door 2)                             */
@@ -1322,6 +1331,7 @@ export const ALL_SPELL_ANIMATIONS = Object.freeze({ ...SPELL_ANIMATIONS, ...TAUG
  * **Every number is a starting value** (D-727), read against the frames in B8.
  */
 export const FEATURE_ANIMATIONS = Object.freeze({
+  ...creatureAnimations({ fx, snd, cue, recipe: strikeRecipe, SCHOOL_CUES, STRIKE_ANIMATIONS, SOUNDS }),
   /* ---- 02 §7's Mage ---- */
   blink: {
     cues: [
@@ -1381,6 +1391,18 @@ export const FEATURE_ANIMATIONS = Object.freeze({
       snd("psfx.creature.dragons.roar.small", { volume: 0.6 })
     ])],
     loop: loop("effect", [fx("jb2a.flames.04.loop.orange", { place: "holder", scale: 1.3, below: true, opacity: 0.35 })], { state: "talentBuff" })
+  },
+  // The orc's trait (D-798): a roar and a red flare at the orc on every Use, whichever way
+  // it goes - and, where he holds no Momentum pool and the Use laid the fury instead, the
+  // red haze standing about him while weapon attacks and spells add their 1 (the fury's
+  // effect carries the encounter's `talentBuff`, which the fight's end or the world's
+  // clock takes off). A Use that paid Momentum lays nothing, so it plays the cue alone.
+  "blood-fury": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.fire.01.orange", { place: "source", scale: 1.5, filter: "BLOOD_RAGE" }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.7 })
+    ])],
+    loop: loop("effect", [fx("jb2a.flames.04.loop.orange", { place: "holder", scale: 1.6, below: true, opacity: 0.5, filter: "BLOOD_RAGE" })], { state: "talentBuff" })
   },
   // The orc's word to a friend: a brief blessing on the creature named. The Boon itself
   // waits for that creature's next Test and is spent by it.
@@ -3269,7 +3291,7 @@ export function comparisonAssetKeys() {
  * @param {object} [table]  injected, as `plan`'s and `loopsFor`'s are
  * @returns {string[]}  sorted, so two readers agree
  */
-export function loopIdentifiers(binding, table = SPELL_ANIMATIONS) {
+export function loopIdentifiers(binding, table = ALL_SPELL_ANIMATIONS) {
   return Object.entries(table)
     .filter(([, row]) => loopsOf(row).some(lp => lp.binding === binding))
     .map(([identifier]) => identifier)

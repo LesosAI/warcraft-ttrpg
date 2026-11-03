@@ -90,6 +90,8 @@ import * as v01265 from './0.12.65-pimgib-fallback-text.mjs';
 import * as v01266 from './0.12.66-blueprint-expiry-text.mjs';
 import * as v01267 from './0.12.67-mountain-lion-text.mjs';
 import * as v01268 from './0.12.68-reviewed-ability-icons.mjs';
+import * as v01269 from "./0.12.69-token-portraits.mjs";
+import * as v01270 from "./0.12.70-blood-fury-text.mjs";
 import { forgetPacks } from "./walk.mjs";
 
 // Ordered oldest to newest. Add new entries at the end.
@@ -229,7 +231,11 @@ const CHAIN = [
   { version: "0.12.65", module: v01265 },
   { version: "0.12.66", module: v01266 },
   { version: "0.12.67", module: v01267 },
-  { version: "0.12.68", module: v01268 }
+  { version: "0.12.68", module: v01268 },
+  // 0.12.69: a character's placeholder directory portrait takes its token art (D-797).
+  { version: "0.12.69", module: v01269 },
+  // 0.12.70: an owned Orc race item's Blood Fury reads the lead's ruling (D-798).
+  { version: "0.12.70", module: v01270 }
 ];
 
 /**

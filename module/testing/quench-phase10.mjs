@@ -5,7 +5,7 @@
  * and the window at the floor.
  */
 
-import { cleanup, forgeDrop, made, makeNpc, openSheet, settle, useAction } from "./fixtures.mjs";
+import { cleanup, forgeDrop, made, makeNpc, openSheet, settle, useAction, warnings } from "./fixtures.mjs";
 import { baseTrait } from "../rules/bestiary.mjs";
 import { checkText } from "./geometry.mjs";
 // A pool's count is an input on an editable sheet (2026-09-13).
@@ -477,6 +477,53 @@ export function generatorBatch(context) {
       }
     });
 
+    it("THE DIRECTORY'S GM DOORS: a player's footer draws no review or recovery button, a GM's draws each once, and a player's press is refused in words (D-799)", async function () {
+      this.timeout(60000);
+      const { addSpellstealReviewButton, reviewSpellstealTransfers } = await import("../applications/spellsteal-review.mjs");
+      const { addHungerReviewButton, reviewHungerMasteredUses } = await import("../applications/hunger-mastered-review.mjs");
+      // The family the lead named: Spellsteal recovery and Review interrupted uses.
+      const FAMILY = ["[data-spellsteal-review]", "[data-hunger-review]"];
+      const footer = () => ui.actors.element?.querySelector("footer.directory-footer") ?? null;
+      const drawn = sel => footer()?.querySelectorAll(sel).length ?? 0;
+      const redraw = async () => {
+        await ui.actors.render({ force: true });
+        await settle();
+      };
+
+      // THE GM: each one, once.
+      await redraw();
+      assert.ok(footer(), "the Actor directory drew no footer");
+      for (const sel of FAMILY) assert.equal(drawn(sel), 1, `${sel} is not drawn once in the GM's footer`);
+      assert.isFalse(addSpellstealReviewButton(ui.actors.element), "a second render stacked a Spellsteal recovery");
+      assert.isFalse(addHungerReviewButton(ui.actors.element), "a second render stacked a Review interrupted uses");
+
+      // A PLAYER: core's own `isGM`, stubbed for this client as the other
+      // batches do, the footer drawn again through the real render hook.
+      Object.defineProperty(game.user, "isGM", { value: false, configurable: true });
+      let said = [];
+      try {
+        await redraw();
+        assert.ok(footer(), "a player's directory drew no footer");
+        assert.equal(FAMILY.reduce((n, sel) => n + drawn(sel), 0), 0,
+          `a player's footer draws a GM door: ${footer().innerHTML}`);
+        // And the two doors behind them refuse a player in words, before anything else.
+        said = await warnings(async () => {
+          assert.isNull(await reviewSpellstealTransfers(), "Spellsteal recovery opened for a player");
+          assert.isNull(await reviewHungerMasteredUses(), "Review interrupted uses opened for a player");
+        });
+      } finally {
+        delete game.user.isGM;
+      }
+      assert.deepEqual(said, [
+        game.i18n.format("AZEROTH.GmDoors.NotGM", { door: game.i18n.localize("AZEROTH.Spellsteal.RecoveryTitle") }),
+        game.i18n.format("AZEROTH.GmDoors.NotGM", { door: game.i18n.localize("AZEROTH.HungerMastered.ReviewTitle") })
+      ], "a player's press was not refused in words");
+
+      // Back to the GM, and the doors come back with the next render.
+      await redraw();
+      for (const sel of FAMILY) assert.equal(drawn(sel), 1, `${sel} did not come back for the GM`);
+    });
+
     it("renders at the floor, blank and on Whitemane", async function () {
       this.timeout(90000);
       const blank = generatorOf(null);
@@ -512,8 +559,14 @@ export function generatorBatch(context) {
       input.value = "plagued gh";
       input.dispatchEvent(new Event("input", { bubbles: true }));
       assert.isFalse(list.hidden);
-      assert.deepEqual([...list.querySelectorAll("li[data-search]:not([hidden])")].map(li => li.dataset.search), ["plagued ghoul"]);
-      list.querySelector("li:not([hidden]) button[data-action=generatorStartFrom]")
+      // **SCOPED TO WHAT THE FILTER OWNS** (D-681's shape: a pin on world state
+      // fails as the world grows): the bestiary gained a *Naxxramas Plagued Ghoul*
+      // in 0.12.32, so the term shows every entry it matches - this one among
+      // them - and nothing it does not.
+      const shown = [...list.querySelectorAll("li[data-search]:not([hidden])")];
+      assert.include(shown.map(li => li.dataset.search), "plagued ghoul", "the entry typed for is not listed");
+      for (const li of shown) assert.include(li.dataset.search, "plagued gh", `${li.dataset.search} is listed for a term it does not hold`);
+      shown.find(li => li.dataset.search === "plagued ghoul").querySelector("button[data-action=generatorStartFrom]")
         .dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
       const t0 = Date.now();
       while (generator.state?.from !== "Plagued Ghoul") {
