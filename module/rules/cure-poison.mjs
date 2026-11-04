@@ -40,20 +40,22 @@ export function curePoisonSelection(target, choice, { archmage = [] } = {}) {
 /** Bleeding sources add (A1). Spend exactly two points across stable IDs,
  * preserving every unrelated status and every other property of each effect.
  */
-export function cureBleedingPlan(effects = []) {
+export function cureBleedingPlan(effects = [], amount = 2) {
   const rows = effects.filter(e => !e.disabled && e.active !== false && [...(e.statuses ?? [])].includes("bleeding"))
     .sort((a, b) => String(a.id).localeCompare(String(b.id)));
   if (rows.some(e => typeof e.id !== "string" || !e.id) || new Set(rows.map(e => e.id)).size !== rows.length) return null;
-  let remaining = 2;
+  // `Infinity` is Cure Blight's "to 0": every point comes off.
+  let remaining = amount, removed = 0;
   const updates = [];
   for (const effect of rows) {
     const value = effect.flags?.["azeroth-rpg"]?.value ?? 1;
     if (!Number.isSafeInteger(value) || value < 0) return null;
     if (!remaining || !value) continue;
-    const removed = Math.min(remaining, value), next = value - removed;
-    remaining -= removed;
+    const take = Math.min(remaining, value), next = value - take;
+    remaining -= take;
+    removed += take;
     updates.push({ _id: effect.id, "flags.azeroth-rpg.value": next,
       ...(next === 0 ? { statuses: [...effect.statuses].filter(s => s !== "bleeding") } : {}) });
   }
-  return { removed: 2 - remaining, updates };
+  return { removed, updates };
 }

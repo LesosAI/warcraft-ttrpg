@@ -123,6 +123,15 @@ function automationField() {
       when: choiceField(AZEROTH.passiveWhen),
       // A damage type: withheld where it has taken this since its last turn.
       unless: choiceField(AZEROTH.damageTypes)
+    }),
+    // A venom or disease laid on a failed Test (D12). Additive to the kind.
+    afflict: new fields.SchemaField({
+      kind: new fields.StringField({ required: false, nullable: true, blank: false, initial: null, choices: ["poison", "disease"] }),
+      key: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+      name: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+      dc: optionalNumberField({ min: 0 }),
+      resilience: choiceField(AZEROTH.resiliences),
+      value: optionalNumberField({ min: 1 })
     })
   });
 }

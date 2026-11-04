@@ -38,6 +38,7 @@ import { ANTI_MAGIC_SHIELD_QUERY, antiMagicShieldQueryHandler } from "./effects/
 import { PLANT_TOTEM_QUERY, plantTotemQueryHandler } from "./documents/totems.mjs";
 import { LAY_BANE_QUERY, LAY_BOON_QUERY, layBaneQueryHandler, layBoonQueryHandler } from "./effects/banes.mjs";
 import { NO_HEALING_QUERY, noHealingQueryHandler } from "./effects/no-healing.mjs";
+import { AFFLICT_QUERY, afflictQueryHandler } from "./effects/afflictions.mjs";
 import { BEACON_HEAL_QUERY, beaconHealQueryHandler } from "./effects/beacon.mjs";
 import { VENGEANCE_QUERY, vengeanceQueryHandler } from "./effects/after-blow.mjs";
 import { INFLICT_QUERY, inflictQueryHandler } from "./effects/inflict.mjs";
@@ -221,8 +222,14 @@ import { ITEM_CUSTODY_QUERY, ITEM_CUSTODY_CONSENT_QUERY, ITEM_CUSTODY_RECIPIENT_
   itemCustodyClaimQueryHandler, itemCustodyFinishQueryHandler, itemCustodyOperationQueryHandler,
   registerItemCustodyHooks, registerItemCustodyCardHooks } from "./effects/item-custody-transactions.mjs";
 
+import { registerPrivateSpellQueries } from "./effects/private-spell-records.mjs";
+
 /** Register at init. */
 export function registerQueries() {
+  registerPrivateSpellQueries();
+  void import("./applications/private-spell-keys.mjs")
+    .then(({ registerPrivateSpellKeyMenu }) => registerPrivateSpellKeyMenu())
+    .catch(error => console.warn("azeroth-rpg | private spell key menu unavailable", error));
   CONFIG.queries[SHADOW_QUERY] = shadowQueryHandler;
   CONFIG.queries[SHADOW_CONSENT] = shadowConsentHandler;
   registerShadowCardHooks();
@@ -481,6 +488,7 @@ export function registerQueries() {
   // a heal landing on a chosen creature this client does not own.
   CONFIG.queries[LAY_BOON_QUERY] = layBoonQueryHandler;
   CONFIG.queries[NO_HEALING_QUERY] = noHealingQueryHandler;
+  CONFIG.queries[AFFLICT_QUERY] = afflictQueryHandler;
   CONFIG.queries[BEACON_HEAL_QUERY] = beaconHealQueryHandler;
   // A Vengeance holder another user owns (the architect's review of D-772).
   CONFIG.queries[VENGEANCE_QUERY] = vengeanceQueryHandler;

@@ -68,7 +68,7 @@ export const PACK_COUNTS = Object.freeze({
     why: "08's armor categories, every row, §8's 12 shields (D-636), plus §20's 12 named suits and shields (D-632), plus 203 Classic finds off the vendored record (D-685)"
   },
   gear: {
-    count: 1501, classic: 1052,
+    count: 1510, classic: 1052,
     why: "08 §9 to §17's catalogue tables by header name, two Augments a class, and §20's Epic consumables and the Grimoire (D-632), plus §11's Leggings and Trinket (D-686) and its Mantle (D-689), plus 1,052 Classic finds off the vendored record (D-685, D-690, D-692)"
   },
   rules: { count: 18, why: "one JournalEntry per chapter in docs/book" },

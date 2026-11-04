@@ -4278,6 +4278,334 @@
   .azeroth.azeroth-item-tip .azeroth-item-tip-line.is-kind, .azeroth.azeroth-item-tip .azeroth-item-tip-line.is-place, .azeroth.azeroth-item-tip .azeroth-item-tip-line.is-slot {
     color: var(--azeroth-ink-light-soft);
   }
+  .azeroth.sheet.actor.character .azeroth-afflictions {
+    margin-top: 12px;
+    padding: 4px 8px 6px;
+    background-color: var(--azeroth-panel-dark);
+    border: 1px solid var(--azeroth-stone);
+    border-radius: 3px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--azeroth-ink-light);
+  }
+  .azeroth.sheet.actor.character .azeroth-afflictions-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 4px;
+    padding-bottom: 3px;
+    border-bottom: 1px solid var(--azeroth-slot-edge);
+  }
+  .azeroth.sheet.actor.character .azeroth-afflictions-head .azeroth-panel-heading {
+    flex: 1 1 auto;
+    margin: 0;
+    border: 0;
+    padding: 0;
+    color: var(--azeroth-gold-text);
+  }
+  .azeroth.sheet.actor.character .azeroth-afflictions-head button {
+    background: var(--azeroth-iron);
+    color: var(--azeroth-ink-light);
+    border: 1px solid var(--azeroth-stone);
+    transition: none;
+  }
+  .azeroth.sheet.actor.character .azeroth-afflictions-head button:hover:not(:disabled), .azeroth.sheet.actor.character .azeroth-afflictions-head button:focus-visible {
+    background: var(--azeroth-stone-dark);
+    color: var(--azeroth-ink-light);
+    border-color: var(--azeroth-alliance-gold);
+  }
+  .azeroth.sheet.actor.character .azeroth-afflictions-head button:focus-visible {
+    outline: 2px solid var(--azeroth-alliance-gold);
+    outline-offset: 1px;
+  }
+  .azeroth.sheet.actor.character .azeroth-afflictions-head button:disabled {
+    background: var(--azeroth-panel-dark);
+    color: var(--azeroth-ink-light-soft);
+    border-color: var(--azeroth-slot-edge);
+    cursor: default;
+  }
+  .azeroth.sheet.actor.character .azeroth-afflictions-head button {
+    flex: none;
+    width: auto;
+    height: auto;
+    margin: 0;
+    padding: 1px 8px;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .azeroth.sheet.actor.character .azeroth-afflictions-empty {
+    margin: 0;
+    padding: 4px 2px;
+    font-style: italic;
+    color: var(--azeroth-ink-light-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-group {
+    margin: 4px 0 6px;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 8px;
+    padding: 3px 4px;
+    border-bottom: 1px solid var(--azeroth-slot-edge);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--azeroth-ink-light);
+    list-style: none;
+    cursor: pointer;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-summary::-webkit-details-marker {
+    display: none;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-summary::marker {
+    content: "";
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-summary::before {
+    content: "▸";
+    display: inline-block;
+    width: 12px;
+    font-weight: 400;
+    color: var(--azeroth-ink-light-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-summary:focus-visible {
+    outline: 2px solid var(--azeroth-alliance-gold);
+    outline-offset: 1px;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-group[open] > .azeroth-aff-summary::before {
+    content: "▾";
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-count {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 6px;
+    border: 1px solid var(--azeroth-slot-edge);
+    border-radius: 9px;
+    background: var(--azeroth-iron);
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--azeroth-ink-light);
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-sum {
+    flex: 1 1 100%;
+    padding-left: 20px;
+    font-weight: 400;
+    color: var(--azeroth-ink-light-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-rows {
+    margin: 4px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-row {
+    margin: 2px 0;
+    background-color: var(--azeroth-stone-dark);
+    border-left: 3px solid var(--azeroth-slot-edge);
+    border-radius: 0 2px 2px 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-row.is-poison {
+    border-left-color: var(--azeroth-page-alarm);
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-row.is-disease {
+    border-left-color: var(--azeroth-page-accent);
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-row.is-open {
+    outline: 1px solid var(--azeroth-alliance-gold);
+    outline-offset: -1px;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-line {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 2px 6px;
+    min-height: 28px;
+    padding: 2px 6px;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-icon {
+    flex: none;
+    box-sizing: border-box;
+    width: 22px;
+    height: 22px;
+    padding: 3px;
+    background-color: var(--azeroth-slot);
+    background-image: none;
+    filter: none;
+    border: 1px solid var(--azeroth-slot-edge);
+    border-radius: 2px;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-toggle {
+    flex: 1 1 0;
+    min-width: 72px;
+    display: flex;
+    justify-content: flex-start;
+    align-items: baseline;
+    gap: 2px;
+    width: auto;
+    height: auto;
+    margin: 0;
+    padding: 0;
+    background: none;
+    border: 0;
+    box-shadow: none;
+    text-align: left;
+    font: inherit;
+    font-weight: 600;
+    color: var(--azeroth-ink-light);
+    cursor: pointer;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-toggle::before {
+    content: "▸";
+    flex: none;
+    width: 12px;
+    font-weight: 400;
+    color: var(--azeroth-ink-light-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-toggle[aria-expanded=true]::before {
+    content: "▾";
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-toggle:hover {
+    text-decoration: underline;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-toggle:focus-visible {
+    outline: 2px solid var(--azeroth-alliance-gold);
+    outline-offset: 1px;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-short {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 34%;
+    color: var(--azeroth-ink-light-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-short b {
+    font-weight: 600;
+    color: var(--azeroth-ink-light);
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-chip {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    height: 18px;
+    padding: 0 5px;
+    border: 1px solid var(--azeroth-slot-edge);
+    border-radius: 2px;
+    background: var(--azeroth-iron);
+    font-size: 13px;
+    color: var(--azeroth-ink-light);
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-slot {
+    flex: none;
+    display: flex;
+    justify-content: flex-end;
+    width: 80px;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-act,
+  .azeroth.sheet.actor.character .azeroth-aff-end {
+    background: var(--azeroth-iron);
+    color: var(--azeroth-ink-light);
+    border: 1px solid var(--azeroth-stone);
+    transition: none;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-act:hover:not(:disabled), .azeroth.sheet.actor.character .azeroth-aff-act:focus-visible,
+  .azeroth.sheet.actor.character .azeroth-aff-end:hover:not(:disabled),
+  .azeroth.sheet.actor.character .azeroth-aff-end:focus-visible {
+    background: var(--azeroth-stone-dark);
+    color: var(--azeroth-ink-light);
+    border-color: var(--azeroth-alliance-gold);
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-act:focus-visible,
+  .azeroth.sheet.actor.character .azeroth-aff-end:focus-visible {
+    outline: 2px solid var(--azeroth-alliance-gold);
+    outline-offset: 1px;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-act:disabled,
+  .azeroth.sheet.actor.character .azeroth-aff-end:disabled {
+    background: var(--azeroth-panel-dark);
+    color: var(--azeroth-ink-light-soft);
+    border-color: var(--azeroth-slot-edge);
+    cursor: default;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-act,
+  .azeroth.sheet.actor.character .azeroth-aff-end {
+    width: auto;
+    height: auto;
+    margin: 0;
+    padding: 1px 8px;
+    font-size: 13px;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-slot .azeroth-aff-act {
+    width: 100%;
+    padding: 1px 4px;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-end {
+    flex: none;
+    min-width: 22px;
+    padding: 0 5px;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-detail {
+    padding: 2px 8px 7px 34px;
+    border-top: 1px solid var(--azeroth-slot-edge);
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-detail[hidden] {
+    display: none;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-detail p {
+    margin: 2px 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 2px 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-label {
+    margin-right: 4px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--azeroth-ink-light-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-course {
+    display: flex;
+    margin: 3px 0 1px;
+    padding: 0;
+    list-style: none;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-course li {
+    padding: 0 7px;
+    border: 1px solid var(--azeroth-slot-edge);
+    background: var(--azeroth-slot);
+    font-size: 13px;
+    color: var(--azeroth-ink-light-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-course li + li {
+    border-left: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-course li.is-done {
+    text-decoration: line-through;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-course li.is-at {
+    font-weight: 700;
+    color: var(--azeroth-ink-light);
+    background: var(--azeroth-iron);
+    border: 1px solid var(--azeroth-alliance-gold);
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-acts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 6px;
+    margin-top: 4px;
+  }
+  .azeroth.sheet.actor.character .azeroth-aff-refusal {
+    flex: 1 1 100%;
+    font-size: 13px;
+    color: var(--azeroth-ink-light-soft);
+  }
   .azeroth.sheet.item button[data-action=castSpell] {
     background: var(--azeroth-iron);
     color: var(--azeroth-ink-light);

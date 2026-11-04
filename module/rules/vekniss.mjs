@@ -1,7 +1,14 @@
 /** Vekniss Itch/Catalyst adaptation. Pure transition decisions; the runtime
- * owns effects, permissions, clocks and the one damage-application door. */
+ * owns effects, permissions, clocks and the one damage-application door.
+ * Catalyst is carried until the poison is cured (D12): no count of pulses runs out. It
+ * pulses at the start of each of its carrier's turns in a fight and once an hour
+ * (`pulseSeconds`) outside one; Itch still matures after `seconds` outside a fight.
+ * The carrier is also an affliction (`rules/creature-poisons.mjs`) whose beat this
+ * module's own advancer lands. */
 export const VEKNISS_FLAG = "veknissCatalyst";
-export const VEKNISS = Object.freeze({ ticks: 3, damage: 3, school: "nature", chargeBonus: 4, dc: 20, seconds: 6 });
+export const VEKNISS = Object.freeze({ damage: 3, school: "nature", chargeBonus: 4, dc: 20, seconds: 6, pulseSeconds: 3600 });
+/** The interval to the next world event: Itch matures soon, Catalyst pulses by the hour. */
+export const veknissInterval = phase => phase === "itch" ? VEKNISS.seconds : VEKNISS.pulseSeconds;
 
 const nonempty = value => typeof value === "string" && value.trim().length > 0;
 const count = value => Number.isInteger(value) && value >= 0;
@@ -13,9 +20,7 @@ export function validVeknissState(state) {
     && nonempty(state.sourceUuid) && nonempty(state.targetUuid)
     && (state.mode === "world"
       ? state.combatUuid === null && state.last === null && Number.isFinite(state.nextAt)
-      : (state.mode === undefined || state.mode === "combat") && nonempty(state.combatUuid) && validClock(state.last))
-    && Number.isInteger(state.remaining)
-    && state.remaining > 0 && state.remaining <= VEKNISS.ticks);
+      : (state.mode === undefined || state.mode === "combat") && nonempty(state.combatUuid) && validClock(state.last)));
 }
 
 /** Exploration advances on world time, never wall-clock timers. */
@@ -23,10 +28,10 @@ export function seedVeknissWorld({ sourceUuid, targetUuid, time, existing = [] }
   if (!nonempty(sourceUuid) || !nonempty(targetUuid) || !Number.isFinite(time)) return { ok: false, reason: "invalid", state: null };
   if (existing.some(s => validVeknissState(s) && s.targetUuid === targetUuid)) return { ok: false, reason: "alreadyAffected", state: null };
   return { ok: true, reason: null, state: { phase: "itch", sourceUuid, targetUuid, mode: "world",
-    combatUuid: null, last: null, nextAt: time + VEKNISS.seconds, remaining: VEKNISS.ticks } };
+    combatUuid: null, last: null, nextAt: time + VEKNISS.seconds } };
 }
 
-/** Switch clocks without producing damage or refreshing the remaining dose.
+/** Switch clocks without producing damage.
  * A clock switch starts one new interval; the switch itself is not a tick.
  */
 export function veknissClock(state, { combatUuid = null, clock = null, time } = {}) {
@@ -39,11 +44,11 @@ export function veknissClock(state, { combatUuid = null, clock = null, time } = 
   }
   if (state.mode === "world") return state;
   if (!Number.isFinite(time)) return null;
-  return { ...state, mode: "world", combatUuid: null, last: null, nextAt: time + VEKNISS.seconds };
+  return { ...state, mode: "world", combatUuid: null, last: null, nextAt: time + veknissInterval(state.phase) };
 }
 
 /** One due event at a time. Persist next before applying damage, then call
- * again to catch up a world-time jump. There can be at most four events.
+ * again to catch up a world-time jump: one event for every interval that is due.
  */
 export function veknissWorld(state, { targetUuid, time, sourceExists = true, disabled = false } = {}) {
   const none = reason => ({ action: "none", reason, next: state, damage: null });
@@ -51,16 +56,17 @@ export function veknissWorld(state, { targetUuid, time, sourceExists = true, dis
   if (!sourceExists) return { action: "end", reason: "orphaned", next: null, damage: null };
   if (state.mode !== "world" || state.targetUuid !== targetUuid) return none("differentClockOrCarrier");
   if (!Number.isFinite(time)) return none("invalidClock");
-  if (disabled) return { ...none("disabled"), next: { ...state, nextAt: Math.max(state.nextAt, time + VEKNISS.seconds) } };
+  if (disabled) return { ...none("disabled"), next: { ...state, nextAt: Math.max(state.nextAt, time + veknissInterval(state.phase)) } };
   if (time < state.nextAt) return none("notDue");
-  const next = { ...state, nextAt: state.nextAt + VEKNISS.seconds };
-  if (state.phase === "itch") return { action: "mature", reason: null, next: { ...next, phase: "catalyst" }, damage: null };
-  const remaining = state.remaining - 1;
-  return { action: "tick", reason: null, next: remaining ? { ...next, remaining } : null,
-    damage: { rating: VEKNISS.damage, school: VEKNISS.school }, endsAfterDamage: remaining === 0 };
+  if (state.phase === "itch") {
+    return { action: "mature", reason: null,
+      next: { ...state, phase: "catalyst", nextAt: state.nextAt + VEKNISS.pulseSeconds }, damage: null };
+  }
+  return { action: "tick", reason: null, next: { ...state, nextAt: state.nextAt + VEKNISS.pulseSeconds },
+    damage: { rating: VEKNISS.damage, school: VEKNISS.school } };
 }
 
-/** One carrier holds one dose. Reapplication does not refresh or accelerate it. */
+/** One carrier holds one dose. Reapplication does not stack, refresh or accelerate it. */
 export function seedVekniss({ sourceUuid, targetUuid, combatUuid, clock, existing = [] } = {}) {
   if (!nonempty(sourceUuid) || !nonempty(targetUuid) || !nonempty(combatUuid) || !validClock(clock)) {
     return { ok: false, reason: "invalid", state: null };
@@ -69,7 +75,7 @@ export function seedVekniss({ sourceUuid, targetUuid, combatUuid, clock, existin
     return { ok: false, reason: "alreadyAffected", state: null };
   }
   return { ok: true, reason: null, state: { phase: "itch", sourceUuid, targetUuid, combatUuid,
-    last: { round: clock.round, turn: clock.turn }, remaining: VEKNISS.ticks } };
+    last: { round: clock.round, turn: clock.turn } } };
 }
 
 /** Call only for a carrier's turn start. Persist `next` before applying a
@@ -88,9 +94,8 @@ export function veknissTurn(state, { targetUuid, combatUuid, clock, sourceExists
   const next = { ...state, last: { round: clock.round, turn: clock.turn } };
   if (state.phase === "itch") return { action: "mature", reason: null,
     next: { ...next, phase: "catalyst" }, damage: null };
-  const remaining = state.remaining - 1;
-  return { action: "tick", reason: null, next: remaining ? { ...next, remaining } : null,
-    damage: { rating: VEKNISS.damage, school: VEKNISS.school }, endsAfterDamage: remaining === 0 };
+  return { action: "tick", reason: null, next,
+    damage: { rating: VEKNISS.damage, school: VEKNISS.school } };
 }
 
 /** The Stinger's charge bonus is specific to an active, mature Catalyst.

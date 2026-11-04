@@ -1,3 +1,4 @@
+import { createPrivateSpellMessage, privateSpellMessage, privateSpellMessages, withPrivateSpellMessage, loadAuthorizedPrivateSpellMessages } from "./private-spell-records.mjs";
 /** GM-owned Shadow receipts and private mental-channel delivery. */
 import { CHANNEL_RULES, MENTAL_CHANNELS, SHADOW_SPELLS, channelDelivery,
   channelMessage, channelSenses, mindstaticActive, mindstaticEffectData,
@@ -141,6 +142,7 @@ function validateCard(receipt, state, card) {
 }
 
 export async function shadowQueryHandler(data = {}, { user } = {}) {
+  await loadAuthorizedPrivateSpellMessages();
   if (!gmHere() || !user?.id) return no("authority");
   if (data.phase === "shock") {
     const actor = resolve(data.actorUuid);
@@ -153,7 +155,7 @@ export async function shadowQueryHandler(data = {}, { user } = {}) {
   if (["claim", "finish", "repeat", "openChannel", "deliver", "leaveChannel", "members", "bearings", "recoverChannel", "recoverCue"].includes(data.phase))
     return serialized(data.ticket ?? data.messageId, () => shadowOperation(data, user));
   if (data.phase === "playback") {
-    const receipt = game.messages.get(data.ticket), state = stateOf(receipt), target = resolve(state?.targetUuid);
+    const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt), target = resolve(state?.targetUuid);
     if (state?.identifier !== "phantom-footsteps" || !["complete", "cueing"].includes(state.status) || !target
       || !user.isGM && !target.testUserPermission(user, "OWNER")
       || !phantomActive(target.effects.get(state.effectId), target.uuid, game.time.worldTime)) return no("unavailable");
@@ -188,14 +190,14 @@ export async function shadowQueryHandler(data = {}, { user } = {}) {
     identifier: ctx.identifier, actorUuid: ctx.actor.uuid, spellUuid: ctx.spell.uuid, point: data.point,
     source: refOf(data.source), targets: (data.targets ?? []).map(refOf), choice: choice.value,
     targetUuid: ctx.target?.uuid ?? null, effectId: foundry.utils.randomID(), cueMessageId: foundry.utils.randomID() };
-  const receipt = await ChatMessage.create({ whisper: gmIds(), content: content(ctx.spell.name),
+  const receipt = await createPrivateSpellMessage({ whisper: gmIds(), content: content(ctx.spell.name),
     flags: { [NS]: { shadowReceipt: state } } });
   return { ok: true, ticket: receipt.id };
 }
 
 async function shadowOperation(data, user) {
   if (data.phase === "openChannel") return openChannel(data, user);
-  const receipt = game.messages.get(data.ticket), state = stateOf(receipt);
+  const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt);
   if (!state) return no("ticket");
   if (data.phase === "claim") {
     if (state.userId !== user.id || state.status !== "prepared" || state.claimCast
@@ -222,7 +224,7 @@ async function shadowOperation(data, user) {
 
 async function finish(receipt, state, data, user) {
   if (state.userId !== user.id && !user.isGM || !state.claimCast) return no("ticket");
-  const card = game.messages.get(data.messageId);
+  const card = privateSpellMessage(data.messageId);
   if (!validateCard(receipt, state, card)) return no("card");
   if (state.cardId && state.cardId !== card.id) return no("bound");
   if (state.status === "complete" || state.status === "failed") return { ok: true, complete: state.status === "complete" };
@@ -235,7 +237,7 @@ async function finish(receipt, state, data, user) {
   if (state.identifier === "mindstatic" && !sustainHeld(ctx.actor, state.claimCast, "mindstatic")) return no("sustain");
   if (state.identifier === "phantom-footsteps" && !state.record) {
     const answer = await utilityDialog({ title: ctx.spell.name, note: words("ResistReview"),
-      fields: [{ name: "failed", type: "checkbox", label: words("FailedSpirit") }] });
+      fields: [{ name: "failed", type: "checkbox", required: false, label: words("FailedSpirit") }] });
     if (!answer) return no("cancelled");
     if (!answer.failed) {
       await write(receipt, { ...state, cardId: card.id, status: "failed" });
@@ -267,11 +269,11 @@ async function finish(receipt, state, data, user) {
   if (effect?.origin !== state.spellUuid || mark?.ticket !== receipt.id || mark.cast !== state.claimCast) return no("effectMismatch");
   if (state.identifier === "phantom-footsteps") {
     const cueId = state.cueMessageId;
-    if (state.cueStatus === "writing" && !game.messages.get(cueId)) return no("cueUnresolved");
+    if (state.cueStatus === "writing" && !privateSpellMessage(cueId)) return no("cueUnresolved");
     if (state.cueStatus !== "complete") {
       await write(receipt, { ...state, record, cardId: card.id, status: "cueing",
         effectStatus: "complete", cueStatus: "writing" });
-      if (!game.messages.get(cueId)) {
+      if (!privateSpellMessage(cueId)) {
         await createPhantomCue(receipt, state, owner);
       }
     }
@@ -283,7 +285,7 @@ async function finish(receipt, state, data, user) {
 
 async function createPhantomCue(receipt, state, target) {
   const owners = [...game.users].filter(who => !who.isGM && target.testUserPermission(who, "OWNER"));
-  return ChatMessage.create({ _id: state.cueMessageId,
+  return createPrivateSpellMessage({ _id: state.cueMessageId,
     whisper: owners.length ? owners.map(who => who.id) : gmIds(),
     content: content(words("PrivateSound")), flags: { [NS]: { phantomCue: { ticket: receipt.id,
       targetUuid: target.uuid } } } }, { keepId: true });
@@ -294,7 +296,7 @@ async function recoverCue(receipt, state, user) {
   const target = resolve(state.targetUuid);
   if (!user.isGM || state.identifier !== "phantom-footsteps" || state.status !== "cueing"
     || !target || !phantomActive(target.effects?.get(state.effectId), target.uuid, game.time.worldTime)) return no("ticket");
-  if (!game.messages.get(state.cueMessageId)) {
+  if (!privateSpellMessage(state.cueMessageId)) {
     const reviewed = await utilityDialog({ title: words("ReviewCue"), note: words("CueMissing"),
       fields: [{ name: "absent", type: "checkbox", label: words("ConfirmCueAbsent") }] });
     if (!reviewed?.absent) return no("cueUnresolved");
@@ -381,9 +383,9 @@ function repeatPrivatePhantom(ticket) {
 export async function reviewPhantomTest(ticket) {
   if (!game.user?.isGM) return examinePhantom(ticket, { spentAction: true });
   const answer = await utilityDialog({ title: words("RepeatTest"), note: words("RepeatReview"), fields: [
-    { name: "contradiction", type: "checkbox", label: words("Contradiction") },
-    { name: "spentAction", type: "checkbox", label: words("ExamineAction") },
-    { name: "passed", type: "checkbox", label: words("PassedSpirit") }
+    { name: "contradiction", type: "checkbox", required: false, label: words("Contradiction") },
+    { name: "spentAction", type: "checkbox", required: false, label: words("ExamineAction") },
+    { name: "passed", type: "checkbox", required: false, label: words("PassedSpirit") }
   ] });
   if (!answer) return no("cancelled");
   return examinePhantom(ticket, answer);
@@ -414,7 +416,7 @@ async function repeat(receipt, state, data, user) {
 /** Read active GM receipts, plus a live caster effect. Movement changes the answer. */
 export function mindstaticAreas() {
   const areas = [];
-  for (const receipt of game.messages?.values?.() ?? []) {
+  for (const receipt of privateSpellMessages()) {
     const state = stateOf(receipt);
     if (state?.identifier !== "mindstatic" || state.status !== "complete") continue;
     const caster = resolve(state.actorUuid), effect = caster?.effects?.get(state.effectId);
@@ -436,7 +438,7 @@ export const openMentalChannel = (messageId, { answerUntil = null } = {}) =>
   request({ phase: "openChannel", messageId, answerUntil });
 
 async function openChannel(data, user) {
-  const card = game.messages.get(data.messageId), flags = card?.flags?.[NS];
+  const card = privateSpellMessage(data.messageId), flags = card?.flags?.[NS];
   if (!card || card.author?.id !== user.id && !user.isGM || flags?.kind !== "spell"
     || !MENTAL_CHANNELS.includes(flags.identifier) || flags.success !== true || !ref(flags.cast)) return no("card");
   const caster = resolve(flags.caster), spell = resolve(flags.spellUuid), law = CHANNEL_RULES[flags.identifier];
@@ -447,7 +449,7 @@ async function openChannel(data, user) {
     || targets.length + (flags.identifier === "mindlink" ? 0 : 1) > law.maxMembers
     || new Set(targets.map(target => target.uuid)).size !== targets.length
     || flags.identifier !== "mindlink" && targets.some(target => target.uuid === caster.uuid)) return no("targets");
-  const existing = [...game.messages.values()].find(message => stateOf(message)?.channelCardId === card.id);
+  const existing = [...privateSpellMessages().values()].find(message => stateOf(message)?.channelCardId === card.id);
   if (existing) {
     if (stateOf(existing).status !== "complete") return no("channelUnresolved");
     if (flags.mentalTicket !== existing.id) await card.update({ [`flags.${NS}.mentalTicket`]: existing.id });
@@ -495,7 +497,7 @@ async function openChannel(data, user) {
     effectId: foundry.utils.randomID(), status: "pending" })) : [];
   const state = { version: 1, status: rows.length ? "applying" : "complete", channelCardId: card.id,
     userId: user.id, spellUuid: spell.uuid, record: made.value, rows, deliveries: [], shocks: [] };
-  const receipt = await ChatMessage.create({ whisper: gmIds(), content: content(spell.name),
+  const receipt = await createPrivateSpellMessage({ whisper: gmIds(), content: content(spell.name),
     flags: { [NS]: { shadowReceipt: state } } });
   for (const row of rows) {
     const member = resolve(row.actorUuid);
@@ -522,7 +524,7 @@ export const recoverMindlinkChannel = ticket => request({ phase: "recoverChannel
 
 async function recoverChannel(receipt, state, user) {
   if (!user.isGM || state.status !== "applying" || state.record?.identifier !== "mindlink") return no("ticket");
-  const card = game.messages.get(state.channelCardId), spell = resolve(state.spellUuid);
+  const card = privateSpellMessage(state.channelCardId), spell = resolve(state.spellUuid);
   if (!card || !spell || state.record.expiresAt <= game.time.worldTime) return no("expired");
   for (const row of state.rows) {
     if (row.status === "complete") continue;
@@ -643,7 +645,7 @@ async function deliver(receipt, state, data, user) {
     toPoint ?? { sceneId: "unlocated", xFt: 0, yFt: 0 }, now);
     if (!boundary.allowed) return no(boundary.reason);
   }
-  if (prior?.status === "writing" && !game.messages.get(prior.messageId)) return no("deliveryUnresolved");
+  if (prior?.status === "writing" && !privateSpellMessage(prior.messageId)) return no("deliveryUnresolved");
   const entry = prior ?? { id: data.deliveryId, messageId: foundry.utils.randomID(), status: "writing",
     fromUuid: from.uuid, toUuid: to.uuid, reply: Boolean(data.reply) };
   if (!prior) await write(receipt, { ...state, deliveries: [...state.deliveries, entry] });
@@ -652,7 +654,7 @@ async function deliver(receipt, state, data, user) {
     ? record.memberUuids.map(resolve).filter(Boolean) : [to]) : [from, to];
   for (const actor of recipients) for (const owner of game.users)
     if (actor.testUserPermission(owner, "OWNER")) audience.add(owner.id);
-  if (!game.messages.get(entry.messageId)) await ChatMessage.create({ _id: entry.messageId,
+  if (!privateSpellMessage(entry.messageId)) await createPrivateSpellMessage({ _id: entry.messageId,
     whisper: [...audience], content: content(data.kind === "senses" ? `${words("UnverifiedReport")}: ${checked.value.text}` : checked.value.text),
     flags: { [NS]: { mentalDelivery: { ticket: receipt.id, id: entry.id, identifier: record.identifier } } }
   }, { keepId: true });
@@ -703,7 +705,7 @@ export async function mindlinkBearingsFor(ticket, actorUuid) {
 export function mindlinkShockCandidates(damagedActor, now = game.time?.worldTime ?? 0) {
   if (!gmHere() || !damagedActor || !Number.isSafeInteger(now)) return [];
   const areas = mindstaticAreas(), hits = [];
-  for (const receipt of game.messages?.values?.() ?? []) {
+  for (const receipt of privateSpellMessages()) {
     const state = stateOf(receipt), record = state?.record;
     if (state?.status !== "complete" || record?.identifier !== "mindlink") continue;
     const memberRow = state.rows?.find(row => row.actorUuid === damagedActor.uuid);
@@ -745,7 +747,7 @@ export async function mindlinkAfterDamage({ actor, before, after, eventId } = {}
   const applied = [];
   for (const hit of hits) {
     const result = await serialized(hit.ticket, async () => {
-      const receipt = game.messages.get(hit.ticket), state = stateOf(receipt);
+      const receipt = privateSpellMessage(hit.ticket), state = stateOf(receipt);
       if (state?.status !== "complete" || state.record?.cast !== hit.cast) return no("ticket");
       const id = `${eventId}:${hit.recipientUuid}`;
       const prior = (state.shocks ?? []).find(row => row.id === id);
@@ -788,9 +790,12 @@ export function registerShadowCardHooks() {
     heardCues.add(message.id);
     void playPhantom(cue.ticket).then(result => { if (result?.ok) repeatPrivatePhantom(cue.ticket); }).catch(() => {});
   };
-  Hooks.on("createChatMessage", receiveCue);
-  Hooks.once("ready", () => { for (const message of game.messages?.values?.() ?? []) receiveCue(message); });
-  Hooks.on("renderChatMessageHTML", (message, html) => {
+  Hooks.on("createChatMessage", withPrivateSpellMessage(receiveCue));
+  Hooks.once("ready", async () => {
+    await loadAuthorizedPrivateSpellMessages();
+    for (const message of privateSpellMessages()) receiveCue(message);
+  });
+  Hooks.on("renderChatMessageHTML", withPrivateSpellMessage((message, html) => {
     const flags = message.flags?.[NS];
     if (!flags) return;
     const mount = html.querySelector(".azeroth-card") ?? html.querySelector(".message-content") ?? html;
@@ -840,5 +845,5 @@ export function registerShadowCardHooks() {
         button(words("LeaveMindlink"), () => leaveOwnMindlink(flags.mentalTicket));
       }
     }
-  });
+  }));
 }

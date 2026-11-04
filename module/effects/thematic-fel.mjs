@@ -13,6 +13,8 @@ import {
 } from "../rules/thematic-fel.mjs";
 import { feetApart } from "../canvas/footprints.mjs";
 import { worldActorOf, bondOf, boundOf } from "../documents/bound.mjs";
+import { createPrivateSpellMessage, privateSpellMessage, privateSpellMessages,
+  withPrivateSpellMessage, loadAuthorizedPrivateSpellMessages } from "./private-spell-records.mjs";
 
 export const THEMATIC_FEL_QUERY = "azeroth-rpg.thematicFel";
 export const THEMATIC_FEL_CONSENT = "azeroth-rpg.thematicFelConsent";
@@ -95,7 +97,7 @@ function touchDistance(source, target) {
 }
 
 function allReceipts() {
-  return [...(game.messages ?? [])].flatMap(message => {
+  return privateSpellMessages().flatMap(message => {
     const state = stateOf(message);
     return state ? [{...state, receiptId: message.id}] : [];
   });
@@ -287,6 +289,7 @@ function contextFor(data, user, {checkConsent = true} = {}) {
 
 export async function thematicFelQueryHandler(data = {}, {user} = {}) {
   if (!gmHere() || !user?.id) return refuse("authority");
+  await loadAuthorizedPrivateSpellMessages();
   if (data.phase === "prepare") {
     const ctx = contextFor(data, user, {checkConsent: false});
     if (!ctx.ok) return ctx;
@@ -298,7 +301,7 @@ export async function thematicFelQueryHandler(data = {}, {user} = {}) {
     const fresh = contextFor({...data, consent}, user, {checkConsent: false});
     if (!fresh.ok || fresh.caster.uuid !== ctx.caster.uuid || fresh.demon.uuid !== ctx.demon.uuid
       || fresh.delegate?.uuid !== ctx.delegate?.uuid) return refuse("changed");
-    const receipt = await ChatMessage.create({
+    const receipt = await createPrivateSpellMessage({
       whisper: [...game.users].filter(person => person.isGM).map(person => person.id),
       content: textContent(`${fresh.spell.name}: ${fresh.demon.name}${fresh.delegate ? ` — ${fresh.delegate.name}` : ""}`),
       flags: {[NS]: {thematicFelReceipt: {
@@ -316,7 +319,7 @@ export async function thematicFelQueryHandler(data = {}, {user} = {}) {
     return {ok: true, ticket: receipt.id, source: refOf(data.source), targets: receipt.flags?.[NS]?.thematicFelReceipt?.targets ?? []};
   }
   if (data.phase === "claim") return serialized(data.ticket, async () => {
-    const receipt = game.messages.get(data.ticket), stored = stateOf(receipt), state = foundry.utils.deepClone(stored);
+    const receipt = privateSpellMessage(data.ticket), stored = stateOf(receipt), state = foundry.utils.deepClone(stored);
     if (!state || state.userId !== user.id || state.status !== "prepared" || Date.now() > state.wallExpires
       || typeof data.castId !== "string" || !data.castId) return refuse("ticket");
     if (state.claimCast) return state.claimCast === data.castId
@@ -333,9 +336,9 @@ export async function thematicFelQueryHandler(data = {}, {user} = {}) {
     return {ok: true};
   });
   if (data.phase === "finish") return serialized(data.ticket, async () => {
-    const receipt = game.messages.get(data.ticket), state = foundry.utils.deepClone(stateOf(receipt));
+    const receipt = privateSpellMessage(data.ticket), state = foundry.utils.deepClone(stateOf(receipt));
     if (!state || (state.userId !== user.id && !(user.isGM && user.id === game.users?.activeGM?.id))) return refuse("ticket");
-    const card = game.messages.get(data.messageId), flags = card?.flags?.[NS];
+    const card = privateSpellMessage(data.messageId), flags = card?.flags?.[NS];
     if (!card || card.author?.id !== state.userId || flags?.kind !== "spell" || flags.identifier !== (state.kind === "writ" ? "summoners-writ" : "fel-surety")
       || flags.caster !== state.casterUuid || flags.spellUuid !== state.spellUuid
       || flags.cast !== data.castId || flags.felTicket !== receipt.id || state.claimCast !== data.castId
@@ -397,7 +400,7 @@ export async function thematicFelQueryHandler(data = {}, {user} = {}) {
   if (data.phase === "issueCommand") return issueCommand(data, user);
   if (data.phase === "issueOrder") return serialized(data.ticket, () => issueOrdinaryOrder(data, user));
   if (data.phase === "revokeWrit") return serialized(data.ticket, async () => {
-    const receipt = game.messages.get(data.ticket), state = foundry.utils.deepClone(stateOf(receipt));
+    const receipt = privateSpellMessage(data.ticket), state = foundry.utils.deepClone(stateOf(receipt));
     if (!state || state.kind !== "writ" || state.status !== "active" || state.revokePending) return refuse("ticket");
     const caster = resolve(state.casterUuid);
     if (!caster?.testUserPermission(user, "OWNER")) return refuse("owner");
@@ -426,7 +429,7 @@ function tokenForActorInScene(actor, sceneId) {
 }
 
 async function authorizeCommand(data, user) {
-  const receipt = game.messages.get(data.ticket), state = stateOf(receipt);
+  const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt);
   if (!state || state.kind !== "writ" || state.status !== "active" || state.writ?.revokedAt != null || state.revokePending) return refuse("noWrit");
   const worldDemon = worldActorOf(resolve(state.writ.demonUuid));
   const requester = resolve(data.requesterActorUuid);
@@ -493,9 +496,9 @@ async function issueOrdinaryOrder(data, user) {
       || typeof data.commandId !== "string" || !data.commandId || data.commandId.length > 100) return refuse("order");
   let authorized = await authorizeCommand({...data, operation: "ordinary"}, user);
   if (!authorized.ok) return authorized;
-  const receipt = game.messages.get(data.ticket), state = stateOf(receipt);
+  const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt);
   const prior = (state.orders ?? []).find(row => row.id === data.commandId);
-  if (prior) return prior.messageId && game.messages.get(prior.messageId)
+  if (prior) return prior.messageId && privateSpellMessage(prior.messageId)
     ? {ok: true, messageId: prior.messageId, already: true} : refuse("orderUnresolved");
   const answer = await felDialog({name: "GM: Summoner's Writ order"}, [
     {name: "ordinary", type: "checkbox", label: "This is an ordinary command; it does not dismiss, transfer or change the bond"}
@@ -509,7 +512,7 @@ async function issueOrdinaryOrder(data, user) {
   const requester = resolve(data.requesterActorUuid), caster = resolve(latest.casterUuid);
   const whisper = [...game.users].filter(who => who.isGM || requester?.testUserPermission(who, "OWNER")
     || caster?.testUserPermission(who, "OWNER")).map(who => who.id);
-  const card = await ChatMessage.create({_id: messageId, whisper,
+  const card = await createPrivateSpellMessage({_id: messageId, whisper,
     content: textContent(`${requester.name} directs ${authorized.demon.name}: ${data.order.trim()} — GM resolves this with the demon's ordinary actions.`),
     flags: {[NS]: {writOrder: {ticket: receipt.id, commandId: data.commandId}}}}, {keepId: true});
   return card ? {ok: true, messageId: card.id} : refuse("orderUnresolved");
@@ -552,7 +555,7 @@ async function issueCommandFromCard(ticket) {
 
 /** Add Half-Action revocation and ordinary command controls to the Writ card. */
 export function registerThematicFelCardHooks() {
-  Hooks.on("renderChatMessageHTML", (message, html) => {
+  Hooks.on("renderChatMessageHTML", withPrivateSpellMessage((message, html) => {
     const flags = message.flags?.[NS];
     if (flags?.kind !== "spell" || flags.identifier !== "summoners-writ" || !flags.felTicket) return;
     const container = html.querySelector(".azeroth-card");
@@ -582,7 +585,7 @@ export function registerThematicFelCardHooks() {
       } finally { command.disabled = false; }
     });
     container.append(command);
-  });
+  }));
 }
 
 async function claimSurety(data, user) {
@@ -593,7 +596,7 @@ async function claimSurety(data, user) {
   const active = liveSuretyForDemon(demon.uuid);
   if (!active) return refuse("noSurety");
   return serialized(active.receiptId, async () => {
-    const receipt = game.messages.get(active.receiptId), state = foundry.utils.deepClone(stateOf(receipt));
+    const receipt = privateSpellMessage(active.receiptId), state = foundry.utils.deepClone(stateOf(receipt));
     if (!state || state.status !== "active" || state.surety.consumedAt != null) return refuse("consumed");
     if (state.claim) {
       if (state.claim.attemptId !== data.attemptId) return refuse("claimed");
@@ -626,7 +629,7 @@ async function claimSurety(data, user) {
 
 async function commitSurety(data, user) {
   return serialized(data.ticket, async () => {
-    const receipt = game.messages.get(data.ticket), state = foundry.utils.deepClone(stateOf(receipt));
+    const receipt = privateSpellMessage(data.ticket), state = foundry.utils.deepClone(stateOf(receipt));
     if (!state || state.kind !== "surety" || state.claim?.attemptId !== data.attemptId
       || state.claim?.claimId !== data.claimId) return refuse("claim");
     if (state.status === "consumed" && state.claim.status === "paid") return {ok: true, consumed: true, replay: true};
@@ -647,7 +650,7 @@ async function commitSurety(data, user) {
 
 async function releaseSurety(data, user) {
   return serialized(data.ticket, async () => {
-    const receipt = game.messages.get(data.ticket), state = foundry.utils.deepClone(stateOf(receipt));
+    const receipt = privateSpellMessage(data.ticket), state = foundry.utils.deepClone(stateOf(receipt));
     if (!state || state.kind !== "surety" || state.claim?.attemptId !== data.attemptId
       || state.claim?.claimId !== data.claimId || state.claim.status !== "reserved") return refuse("claim");
     const demon = resolve(state.demonUuid);

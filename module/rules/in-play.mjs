@@ -81,7 +81,11 @@ export const CONDITION_REFUSALS = Object.freeze({
 export function clearRefusal(row, { actorType = "character" } = {}) {
   if (row?.iceBlock && !row.canEndIceBlock) return "AZEROTH.IceBlock.CannotEnd";
   if (!row) return null;
-  if (row.kind === "condition") return CONDITION_REFUSALS[actorType]?.[row.id] ?? null;
+  if (row.kind === "condition") {
+    // A Diseased a carried disease owns ends with its disease (D12 R1): cure it, or end it on the panel.
+    if (row.id === "diseased" && row.carried === true) return "AZEROTH.Afflictions.Bare.DiseasedClear";
+    return CONDITION_REFUSALS[actorType]?.[row.id] ?? null;
+  }
   return SYNCED_REASONS[row.synced] ?? null;
 }
 
@@ -118,7 +122,8 @@ export function inPlay({ conditions = [], effects = [], actorType = "character" 
       value: c.valued && Number(c.value) > 0 ? Number(c.value) : null,
       duration: c.duration ?? null,
       permanent: false,
-      synced: null
+      synced: null,
+      carried: c.carried === true
     };
     rows.push(row);
   }

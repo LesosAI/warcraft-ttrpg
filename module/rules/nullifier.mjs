@@ -5,6 +5,7 @@
 import { dispelJudgement } from "./dispel.mjs";
 import { VEKNISS_FLAG, validVeknissState } from "./vekniss.mjs";
 import { BLOODPETAL_FLAG, validBloodpetal } from "./bloodpetal.mjs";
+import { classifyCarrier } from "./cures.mjs";
 
 export const NULLIFY_CATEGORIES = Object.freeze(["curse", "disease", "poison", "magic"]);
 
@@ -27,6 +28,10 @@ export function nullifyJudgement(effect, { classification = null, archmage = [] 
   const protection = dispelJudgement({ ...effect, statuses: [] }, { archmage });
   if (!protection.ok) return refuse(protection.reason);
   if (classification?.harmful === false) return refuse("beneficial");
+  // A carried poison or disease is what its FLAG says, whatever conditions it
+  // holds: a gear poison holding Slowed or Blinded was `needsReview` by status alone.
+  const carrier = classifyCarrier(effect);
+  if (carrier) return { ok: true, reason: null, category: carrier.category };
   if (classification?.harmful === true && NULLIFY_CATEGORIES.includes(classification.category)) {
     return { ok: true, reason: null, category: classification.category };
   }

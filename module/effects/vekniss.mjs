@@ -1,6 +1,9 @@
 /** GM-side V14 effect lifecycle for the Vekniss encounter pair. Activation,
  * resistance and charge validation belong to their workflows. */
-import { VEKNISS_FLAG, seedVekniss, seedVeknissWorld, validVeknissState, veknissTurn, veknissClock, veknissWorld } from "../rules/vekniss.mjs";
+import { VEKNISS, VEKNISS_FLAG, seedVekniss, seedVeknissWorld, validVeknissState, veknissTurn, veknissClock, veknissWorld } from "../rules/vekniss.mjs";
+import { creaturePoisonAff, creaturePoisonPatch } from "../rules/creature-poisons.mjs";
+import { downedTarget } from "../rules/poison-catchup.mjs";
+import { AFFLICTION_FLAG } from "../rules/afflictions.mjs";
 import { strikeFromArea } from "./area-strikes.mjs";
 import { postVeknissPulse } from "./vekniss-cues.mjs";
 
@@ -10,6 +13,10 @@ const gmHere = () => game.user?.isGM === true && (!game.users?.activeGM || game.
 const resolve = uuid => { try { return fromUuidSync(uuid); } catch { return null; } };
 const clockOf = combat => ({ round: combat.round, turn: combat.turn });
 const present = actor => actor?.documentName === "Actor" && resolve(actor.uuid) === actor;
+/** A guard against a runaway loop; an hourly catch-up has no cap of its own (D12 R4). */
+const CATCH_UP_GUARD = 48;
+/** The carrier's own picture of the dose once Catalyst holds Poisoned and Slowed. */
+const CATALYST_PATCH = creaturePoisonPatch({ value: 1, damage: 3, statuses: ["poisoned", "slowed"] });
 
 /** Called only after the activation door has paid and the victim failed its Test. */
 export async function layVeknissItch({ source, target, combat } = {}) {
@@ -28,7 +35,10 @@ export async function layVeknissItch({ source, target, combat } = {}) {
       name: "Vekniss Itch", img: "icons/svg/poison.svg", origin: source.uuid,
       description: "<p>A pending poison. It becomes Vekniss Catalyst at the start of this creature's next turn. It has no penalties until then.</p>",
       statuses: [], system: { changes: [] },
-      flags: { "azeroth-rpg": { [VEKNISS_FLAG]: seeded.state, harmful: true, poison: true } }
+      flags: { "azeroth-rpg": { [VEKNISS_FLAG]: seeded.state, harmful: true, poison: true,
+        [AFFLICTION_FLAG]: creaturePoisonAff({ name: "Vekniss Itch", key: "creature-vekniss", dc: VEKNISS.dc,
+          sourceUuid: source.uuid, sourceName: source.name, now: game.time?.worldTime ?? 0, inFight: Boolean(combat),
+          value: 0, damage: 0, statuses: [] }) } }
     }]);
     if (effect && (!present(source) || !present(target) || (combat && !combat.started) || (target.system?.conditionImmunities ?? []).includes("poisoned"))) {
       if (present(target) && target.effects.get(effect.id) === effect) await effect.delete();
@@ -47,7 +57,7 @@ function carriers() {
 }
 
 /** Exploration pulses are claimed before damage just like combat pulses.
- * Large time advances process at most the one maturation and three ticks.
+ * A large time advance lands the maturation and then every hourly pulse that is due.
  */
 export async function advanceVeknissWorld() {
   if (!gmHere() || !Number.isFinite(game.time?.worldTime)) return [];
@@ -57,7 +67,9 @@ export async function advanceVeknissWorld() {
     pending.add(actor.uuid);
     try {
       for (const effect of [...actor.effects].filter(e => stateOf(e)?.mode === "world")) {
-        for (let step = 0; step < 4 && actor.effects.get(effect.id) === effect; step++) {
+        for (let step = 0; step < CATCH_UP_GUARD && actor.effects.get(effect.id) === effect; step++) {
+          // A catch-up stops at a target with no Health left to lose (rules/poison-catchup.mjs).
+          if (downedTarget(actor)) break;
           const state = stateOf(effect), source = resolve(state?.sourceUuid);
           const fight = (game.combats?.contents ?? []).find(c => c.started && c.getCombatantsByActor(actor)?.length);
           if (fight) {
@@ -76,12 +88,13 @@ export async function advanceVeknissWorld() {
           if (plan.action === "mature") {
             await effect.update({ name: "Vekniss Catalyst", statuses: ["poisoned", "slowed"],
               "system.changes": [{ key: "system.speed", type: "multiply", value: 0.5, phase: "final" }],
-              [`flags.azeroth-rpg.${VEKNISS_FLAG}`]: plan.next });
+              [`flags.azeroth-rpg.${VEKNISS_FLAG}`]: plan.next, [`flags.azeroth-rpg.${AFFLICTION_FLAG}.name`]: "Vekniss Catalyst",
+              ...CATALYST_PATCH });
             lines.push(`${actor.name}: Vekniss Itch becomes Catalyst without damage.`);
             await postVeknissPulse({ actor, phase: "mature" });
             continue;
           }
-          await effect.update({ [`flags.azeroth-rpg.${VEKNISS_FLAG}`]: plan.next ?? { ...state, remaining: 0 } });
+          await effect.update({ [`flags.azeroth-rpg.${VEKNISS_FLAG}`]: plan.next });
           if (actor.effects.get(effect.id) !== effect || !present(actor)) break;
           try {
             if (present(source) && effect.disabled !== true && effect.active !== false
@@ -93,7 +106,7 @@ export async function advanceVeknissWorld() {
           } catch {
             ui.notifications?.warn("Vekniss Catalyst damage failed. This pulse was consumed; check the creature before resolving it manually.");
           } finally {
-            if ((plan.endsAfterDamage || !present(source) || ![...(effect.statuses ?? [])].includes("poisoned"))
+            if ((!present(source) || ![...(effect.statuses ?? [])].includes("poisoned"))
               && present(actor) && actor.effects.get(effect.id) === effect) await effect.delete();
           }
         }
@@ -134,8 +147,9 @@ export async function advanceVekniss(actor, combat) {
       if (plan.action === "mature") {
         await effect.update({ name: "Vekniss Catalyst", statuses: ["poisoned", "slowed"],
           "system.changes": [{ key: "system.speed", type: "multiply", value: 0.5, phase: "final" }],
-          [`flags.azeroth-rpg.${VEKNISS_FLAG}`]: plan.next,
-          description: "<p>Poisoned and Slowed. Takes 3 Nature damage at each of its next three turn starts. A Vekniss Stinger's charge deals 4 additional damage while this Catalyst remains.</p>" });
+          [`flags.azeroth-rpg.${VEKNISS_FLAG}`]: plan.next, [`flags.azeroth-rpg.${AFFLICTION_FLAG}.name`]: "Vekniss Catalyst",
+          ...CATALYST_PATCH,
+          description: "<p>Poisoned and Slowed. Takes 3 Nature damage at the start of each of its turns, and once an hour outside a fight, until the poison is cured. A Vekniss Stinger's charge deals 4 additional damage while this Catalyst remains.</p>" });
         if (!present(source) || ![...(effect.statuses ?? [])].includes("poisoned")) {
           if (actor.effects.get(effect.id) === effect) await effect.delete();
           continue;
@@ -148,9 +162,8 @@ export async function advanceVekniss(actor, combat) {
         }
         continue;
       }
-      // A terminal claim is deliberately invalid for another tick and can only
-      // be cleaned up if this client disappears before the final deletion.
-      await effect.update({ [`flags.azeroth-rpg.${VEKNISS_FLAG}`]: plan.next ?? { ...state, remaining: 0, last: clockOf(combat) } });
+      // Claim the turn before the damage, so a failed write is never replayed.
+      await effect.update({ [`flags.azeroth-rpg.${VEKNISS_FLAG}`]: plan.next });
       if (actor.effects.get(effect.id) !== effect || !present(actor)) continue;
       if (!present(source) || ![...(effect.statuses ?? [])].includes("poisoned")) { await effect.delete(); continue; }
       if (effect.disabled === true || effect.active === false) continue;
@@ -167,7 +180,7 @@ export async function advanceVekniss(actor, combat) {
       } finally {
         // Cleanup hooks skip this actor while its tick owns the lock. Recheck
         // after the damage await so those events cannot leave a stale Catalyst.
-        const ended = plan.endsAfterDamage || !present(source) || ![...(effect.statuses ?? [])].includes("poisoned");
+        const ended = !present(source) || ![...(effect.statuses ?? [])].includes("poisoned");
         if (ended && present(actor) && actor.effects.get(effect.id) === effect) await effect.delete();
         else if (!resolve(combat.uuid)?.started && present(actor) && actor.effects.get(effect.id) === effect) {
           const next = veknissClock(stateOf(effect), { time: game.time?.worldTime });

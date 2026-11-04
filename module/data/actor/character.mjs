@@ -4,6 +4,7 @@
  * location, encumbrance) are computed in prepareDerivedData() and never stored.
  */
 
+import { fatigueFloorOf } from "../../rules/afflictions.mjs";
 import { AZEROTH } from "../../config.mjs";
 import { deathStepLimitFor } from "../../rules/sacrifice.mjs";
 import { dispersionFor } from "../../rules/dispersion.mjs";
@@ -539,9 +540,12 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
         spell: { ...typedLanes(), ...(heldTyped.spell ?? {}) }
       }
     };
-    this.fatigueFloor = rungs.fatigueFloor;
+    // A disease carried until cured holds a Fatigue floor of its own (D12 section 3: Rot-fever,
+    // Marsh fever), read off the carrier effects and joined to the corruption rung's.
+    const affliction = fatigueFloorOf([...(this.parent?.effects ?? [])].map(e => e.flags?.["azeroth-rpg"]?.affliction).filter(a => a?.kind));
+    this.fatigueFloor = Math.max(rungs.fatigueFloor, affliction);
     // Fatigue that does not clear (10 §5): the stored number reads no lower.
-    if (typeof this.fatigue === "number" && this.fatigue < rungs.fatigueFloor) this.fatigue = rungs.fatigueFloor;
+    if (typeof this.fatigue === "number" && this.fatigue < this.fatigueFloor) this.fatigue = this.fatigueFloor;
 
     // Schools and the pairings they trip (02 §10).
     this.schools = schoolsFor(classItems);

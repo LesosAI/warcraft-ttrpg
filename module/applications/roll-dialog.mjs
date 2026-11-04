@@ -61,6 +61,7 @@ import { describeDamage } from "../rules/mitigation.mjs";
 import { chooseSource } from "../rules/records.mjs";
 // In the hand or thrown (D-731): the variant a spec rolls, and what a switch keeps.
 import { carriedLines, usableAttackModes, withAttackMode } from "../rules/attack-modes.mjs";
+import { AFFLICTION_FLAG, afflictionBanes, turnKeyOf } from "../rules/afflictions.mjs";
 // Every distance between tokens, between the nearest squares they occupy (D-732).
 import { feetApart } from "../canvas/footprints.mjs";
 // What a talent spends as part of an attack, in words (D-770).
@@ -283,6 +284,21 @@ export function distanceBetween(a, b) {
 export { enemyDistances } from "../canvas/engaged.mjs";
 
 /** The roller, as the pure rule wants it. */
+/**
+ * The Banes the roller's carried poisons and diseases lay on this Test (D12). Reads
+ * the carriers off the actor's effects; the once-a-turn mark is spent by the roll
+ * workflow after the die (`markFirstTestBane`), never here.
+ */
+function afflictionBanesFor(actor, { kind, skill = null, resilience = null }) {
+  const rows = [...(actor.effects ?? [])]
+    .map(e => ({ id: e.id, aff: e.flags?.["azeroth-rpg"]?.[AFFLICTION_FLAG] }))
+    .filter(r => r.aff?.kind);
+  if (!rows.length) return null;
+  const fight = actor.activeFight?.() ?? null;
+  const found = afflictionBanes(rows, { kind, skill, resilience, turnKey: turnKeyOf(fight), abilityOf: AZEROTH.skillAbility });
+  return found.banes > 0 ? found : null;
+}
+
 function snapshotOf(actor, { kind, skill, targets, resilience = null, heavy = false, rangeBand = null, engaged = false, range = null, cancelsBane = [], parry = false, against = null, facts = {} }) {
   const s = actor.system ?? {};
   // Poisoned stacks live on the effect (A1: "Poisoned X"); a bare status is one.
@@ -327,6 +343,8 @@ function snapshotOf(actor, { kind, skill, targets, resilience = null, heavy = fa
     standingBanes: kind === "skill" && skill ? (s.skillBanes?.[skill] ?? []) : [],
     standingTestBoons: s.testBoons?.[kind] ?? 0,
     standingTestBanes: s.testBanes?.[kind] ?? 0,
+    // D12: the Banes a carried poison or disease lays on this Test (named, automatic).
+    afflictionBanes: afflictionBanesFor(actor, { kind, skill, resilience }),
     // And what a thing being WORN grants on this kind of Test, by name (08 §20,
     // 2026-09-10). `system.grants` is `rules/grants.mjs#grantsFor`'s own output,
     // computed once on the model, so this is a read and never a second sum.
@@ -513,6 +531,9 @@ function auraLine(on, key) {
  * @param {object} spec  { kind, skill, dc, location, modifiers, targets }
  */
 export function prepareRoll(actor, given) {
+  // A variant that names its own roller (the Medicine Test's Healer select, D12) is
+  // prepared for THAT creature: its Fatigue, its conditions, its Banes.
+  actor = withAttackMode(given, given?.mode ?? null).actor ?? actor;
   // **ONE WAY OF STRIKING AT A TIME** (D-731). A weapon that may be struck in
   // the hand or thrown carries a variant per way; everything below reads the
   // chosen one, so the lines, the modifiers and the preview are one blow.
@@ -919,7 +940,7 @@ function formulaFor(choice, modifiers) {
 function attackModeOptions(spec, chosen) {
   const modes = spec?.modes;
   if (!modes || typeof modes !== "object") return null;
-  if (spec.castTestChoices) return Object.entries(spec.castTestChoices).map(([mode,label])=>({mode,label,selected:mode===chosen,refused:null}));
+  if (spec.castTestChoices) return Object.entries(spec.castTestChoices).map(([mode,label])=>({mode,label,selected:mode===chosen,refused:modes[mode]?.refused?.text ?? null}));
   const keys = Object.keys(modes).filter(key => Object.hasOwn(modes, key) && Object.hasOwn(AZEROTH.attackModes, key));
   if (keys.length < 2) return null;
   return keys.map(key => ({
@@ -964,6 +985,8 @@ async function dialogVariant(actor, spec) {
     // on click alone).
     attackModes: attackModeOptions(resolved, p.mode),
     castTestChoices: spec.castTestChoices ?? null,
+    // The select's own label where a caller names one (the Medicine Test's Healer, D12).
+    choiceLabel: spec.choiceLabel ?? null,
     title: spec.title,
     kind: spec.kind,
     dc: p.dc,

@@ -492,7 +492,8 @@ AZEROTH.consumableKinds = {
   dressing:  "AZEROTH.Consumable.Dressing",
   poison:    "AZEROTH.Consumable.Poison",
   coating:   "AZEROTH.Consumable.Coating",
-  explosive: "AZEROTH.Consumable.Explosive"
+  explosive: "AZEROTH.Consumable.Explosive",
+  remedy:    "AZEROTH.Consumable.Remedy"
 };
 
 /**

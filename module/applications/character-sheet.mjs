@@ -21,7 +21,7 @@ import { AZEROTH } from "../config.mjs";
 import { dispersionRefusal } from "../rules/dispersion.mjs";
 import { actorTraining, trainingWarning } from "../rules/equipment-training.mjs";
 import { showsManeuvers } from "../rules/combat-sheet.mjs";
-import { attackWithDialog, bindKeyActivation, bindPlateKeys, bindPoolInputs, bindScoreInputs, blankItemMenu, browseItems, browseSpells, containersFor, grantsOf, maneuversContext, castItemSpell, castWithDialog, detailFields, effectAction, effectsContext, exposeWithDialog, itemContextMenu, putInContainer, resilienceWithDialog, rollAbility, rollWithDialog, signatureContext, skillContextMenu, skillTooltip, stepPool, useFeatureWithDialog, useGearWithDialog, useSignatureWithDialog, wearable } from "./actions.mjs";
+import { attackWithDialog, bindKeyActivation, bindPlateKeys, bindPoolInputs, bindScoreInputs, blankItemMenu, browseItems, browseSpells, containersFor, grantsOf, maneuversContext, castItemSpell, castWithDialog, afflictionsContext, AFFLICTION_OPEN_GROUP, AFFLICTION_OPEN_ROWS, rememberAfflictionOpen, detailFields, effectAction, effectsContext, exposeWithDialog, itemContextMenu, putInContainer, resilienceWithDialog, rollAbility, rollWithDialog, signatureContext, skillContextMenu, skillTooltip, stepPool, useFeatureWithDialog, useGearWithDialog, useSignatureWithDialog, wearable } from "./actions.mjs";
 import { hasSignature } from "../rules/signatures.mjs";
 import { inPlay } from "../rules/in-play.mjs";
 import { RANK_MAX, ledgerTotal, rankCost, unspent } from "../rules/xp.mjs";
@@ -78,6 +78,10 @@ import { rarityClass } from "../helpers/rarity.mjs";
 import { fittingBundles, selectAmmunition, shotDamage } from "../rules/ammunition.mjs";
 import { calledShotCost } from "../rules/modifiers.mjs";
 import { AzerothCharacterCreator } from "./creator.mjs";
+import { isAntivenom } from "../rules/antivenom.mjs";
+import { endAffliction } from "../effects/afflictions.mjs";
+import { handLay } from "../effects/bare-afflictions.mjs";
+import { bareKind } from "../rules/bare-afflictions.mjs";
 import { inCareerSkills, skillFromKnown } from "../rules/creation.mjs";
 import { coins } from "../helpers/coins.mjs";
 // 05's temporary Health on the banner (D-777).
@@ -289,6 +293,14 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       // A rider paid before the blow (D-770; the lead: *"Either order"*).
       primeRider: AzerothCharacterSheet.#onPrimeRider,
       toggleFavorite: AzerothCharacterSheet.#onToggleFavorite,
+      // The Afflictions panel on the Corruption tab (D12, Phase 7).
+      toggleAffliction: AzerothCharacterSheet.#onToggleAffliction,
+      medicineTest: AzerothCharacterSheet.#onMedicineTest,
+      useAntivenom: AzerothCharacterSheet.#onUseAntivenom,
+      useRemedy: AzerothCharacterSheet.#onUseRemedy,
+      endAffliction: AzerothCharacterSheet.#onEndAffliction,
+      addAffliction: AzerothCharacterSheet.#onAddAffliction,
+      exposeAffliction: AzerothCharacterSheet.#onExposeAffliction,
       calledShot: AzerothCharacterSheet.#onCalledShot,
       openCreator: AzerothCharacterSheet.#onOpenCreator,
       // The Overview tab's centre image (D-700). `editImage` on the banner is
@@ -492,6 +504,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     context.spells = this.#spells();
     context.spells.fromItems = this.#itemSpells();
     context.effects = effectsContext(this.actor);
+    // Poisons and diseases carried until cured (D12): the Corruption tab's panel.
+    context.afflictions = afflictionsContext(this.actor);
     context.isGM = game.user.isGM;
     // The Party (2026-09-06): a chip on the banner where the GM marked it.
     context.party = this.actor.isParty === true;
@@ -695,6 +709,17 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         const key = `combatSections.${section.dataset.combatSection}`;
         if ((game.user.getFlag("azeroth-rpg", key) !== false) === section.open) return;
         void game.user.setFlag("azeroth-rpg", key, section.open);
+      });
+    }
+    // A group of the Afflictions panel remembers its open state per viewer, as
+    // the Combat tab's sections do. A `toggle` event, never a click action.
+    for (const group of this.element.querySelectorAll("details[data-affliction-group]")) {
+      if (group.dataset.collapseBound) continue;
+      group.dataset.collapseBound = "1";
+      group.addEventListener("toggle", () => {
+        const key = AFFLICTION_OPEN_GROUP(group.dataset.afflictionGroup);
+        if ((game.user.getFlag("azeroth-rpg", key) !== false) === group.open) return;
+        void rememberAfflictionOpen(key, group.open);
       });
     }
     // Core replaces the parts it rendered and leaves the rest standing, so a
@@ -1406,6 +1431,17 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
 
   /** @type {HTMLElement|null} */
   #litZone = null;
+
+  /**
+   * **A POISONED OR DISEASED DROPPED FROM THE CONDITIONS PACK IS NAMED** (D12 R1): a bare status
+   * has no clock and no cure, so the drop opens the Add picker instead of embedding it.
+   * @inheritDoc
+   */
+  async _onDropActiveEffect(event, effect) {
+    const kind = bareKind([...(effect.statuses ?? [])], effect.flags?.["azeroth-rpg"] ?? {});
+    if (kind && this.document.isOwner && this.isEditable) return (await handLay(this.document, kind)) ?? null;
+    return super._onDropActiveEffect(event, effect);
+  }
 
   /** @inheritDoc */
   async _onDrop(event) {
@@ -3822,6 +3858,69 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     await this.actor.updateEmbeddedDocuments("Item",
       [{ _id: item.id, "system.quantity": verdict.quantity }], { azerothBags: "bypass" });
     return made;
+  }
+
+  /* -------------------------------------------- */
+  /*  The Afflictions panel (D12, Phase 7)         */
+  /* -------------------------------------------- */
+
+  /**
+   * Open or close a row. The DOM is flipped in place (no render, so focus stays
+   * on the button) and the open rows are written as ONE array flag - an array
+   * replaces rather than merges, so a row that is gone drops out of it.
+   */
+  static async #onToggleAffliction(event, target) {
+    const row = target.closest("[data-affliction-row]");
+    const detail = row?.querySelector(".azeroth-aff-detail");
+    if (!row || !detail) return;
+    const open = target.getAttribute("aria-expanded") !== "true";
+    target.setAttribute("aria-expanded", String(open));
+    detail.hidden = !open;
+    row.classList.toggle("is-open", open);
+    const ids = [...this.element.querySelectorAll('[data-affliction-row] .azeroth-aff-toggle[aria-expanded="true"]')]
+      .map(b => b.closest("[data-affliction-row]").dataset.afflictionRow);
+    await rememberAfflictionOpen(AFFLICTION_OPEN_ROWS, ids);
+  }
+
+  static async #onMedicineTest(event, target) {
+    const id = target.dataset.afflictionId;
+    if (id) await game.system.azeroth.workflows.medicineTest({ patient: this.actor, afflictionId: id, event });
+  }
+
+  /** The first Antivenom the actor carries, through the same door every Use takes. */
+  static async #onUseAntivenom(event, target) {
+    const item = this.actor.items.find(i => isAntivenom(i.system?.use) && (i.system?.quantity ?? 1) > 0);
+    if (!item) return void ui.notifications?.warn(game.i18n.format("AZEROTH.Afflictions.Panel.NoItem", { name: game.i18n.localize("AZEROTH.Afflictions.Panel.AntivenomShort") }));
+    await useGearWithDialog(this.actor, item);
+  }
+
+  static async #onUseRemedy(event, target) {
+    const item = this.actor.items.get(target.dataset.itemId ?? "");
+    if (!item) return void ui.notifications?.warn(game.i18n.format("AZEROTH.Afflictions.Panel.NoItem", { name: game.i18n.localize("AZEROTH.Afflictions.Panel.RemedyShort") }));
+    await useGearWithDialog(this.actor, item);
+  }
+
+  /** The GM's alone: a player cannot lose a poison by tidying the sheet. */
+  static async #onEndAffliction(event, target) {
+    if (!game.user.isGM) return void ui.notifications?.warn(game.i18n.localize("AZEROTH.Afflictions.Panel.EndGMOnly"));
+    const id = target.dataset.afflictionId;
+    if (id) await endAffliction(this.actor, id, { by: this.actor });
+  }
+
+  /** Pick from the catalogue through the system's one chooser (diseases first, then poisons). */
+  async #pickAffliction(prompt) {
+    if (!game.user.isGM) return void ui.notifications?.warn(game.i18n.localize("AZEROTH.Afflictions.GMOnly"));
+    return game.system.azeroth.workflows.chooseAffliction({ actor: this.actor, prompt });
+  }
+
+  static async #onAddAffliction(event, target) {
+    const pick = await this.#pickAffliction("AZEROTH.Afflictions.Panel.AddPrompt");
+    if (pick) await game.system.azeroth.workflows.addAffliction({ actor: this.actor, ...pick });
+  }
+
+  static async #onExposeAffliction(event, target) {
+    const pick = await this.#pickAffliction("AZEROTH.Afflictions.Panel.ExposePrompt");
+    if (pick) await game.system.azeroth.workflows.exposeAffliction({ actor: this.actor, ...pick, event });
   }
 
   /** Star or unstar the row's item (D-612). */

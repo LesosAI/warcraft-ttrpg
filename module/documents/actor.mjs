@@ -20,6 +20,7 @@
  * stacking — belongs in `final` (D2 §5).
  */
 
+import { healingFactorOf } from "../rules/afflictions.mjs";
 import { addClassEntry, hostileExposures, poolsFor, removeClassEntry, secondaryLevel, setCharacterLevel } from "../rules/progression.mjs";
 import { hasCauseInsanity } from "../rules/cause-insanity.mjs";
 import { racialTalentIcon } from "../rules/icons.mjs";
@@ -1851,6 +1852,21 @@ export class AzerothActor extends Actor {
     const cleared = await this.clearSundered();
     if (this.getFlag("azeroth-rpg", "shortRests")) await this.unsetFlag("azeroth-rpg", "shortRests");
     await restCard({ actor: this, kind: "long", gains: r.gains, restored, cleared, diseased });
+    // 07's Haven and Sanctification: *any that take a Long Rest end it with every disease and
+    // poison gone* (Sanctification: and one Critical Injury healed). D12 Phase 6.
+    if (this.type === "character" && this.isOwner) {
+      // A throw here must not skip the hostile-school exposure that follows: warn and carry on.
+      try {
+        const { cureAtLongRest } = await import("../effects/cures.mjs");
+        const rested = await cureAtLongRest(this);
+        if (rested.lines.length) {
+          const { postAfflictionCard } = await import("../effects/afflictions.mjs");
+          await postAfflictionCard(this, { title: rested.by.join(", "), lines: rested.lines, accent: "azeroth-card-spell", kind: "cure" });
+        }
+      } catch (error) {
+        console.warn("azeroth-rpg | long rest cure", error);
+      }
+    }
 
     // 10 §7: a character holding two classes in hostile schools is exposed
     // once per Long Rest, at DC 15, on the track the pairing names. The
@@ -2573,6 +2589,16 @@ export class AzerothActor extends Actor {
       const received = halvedHealing(healed, true);
       ui.notifications?.info(game.i18n.format("AZEROTH.Card.HealingHalved", { name: this.name, from: healed, to: received }));
       healed = received;
+    }
+    // **AND A POISON CARRIED UNTIL CURED** (D12: Wound poison, *halve all healing the
+    // target receives*): the factor the carrier lays, whatever the source.
+    if (!keep && healed > 0) {
+      const factor = healingFactorOf([...(this.effects ?? [])].map(e => e.flags?.["azeroth-rpg"]?.affliction).filter(a => a?.kind));
+      if (factor < 1) {
+        const received = Math.floor(healed * factor);
+        ui.notifications?.info(game.i18n.format("AZEROTH.Card.HealingHalved", { name: this.name, from: healed, to: received }));
+        healed = received;
+      }
     }
     // **AND A BLOW THAT LEFT IT RECOVERING NONE** (04's Mortal Strike: *the
     // target recovers no Health from any source until the end of your next

@@ -19,6 +19,7 @@ import { CUTTING_GEAR } from "./escapes.mjs";
 import { standardDC } from "./modifiers.mjs";
 import { MANA_SHOCK } from "./mana-surge.mjs";
 import { parseGrant } from "./grants.mjs";
+import { DISEASES, diseaseByName } from "./afflictions.mjs";
 // 08 §7's Greater School enchantment and 08 §5's Pierce, in one place for the
 // creature's attack row and the character's weapon alike.
 import { weaponDamageSpec } from "./damage-spec.mjs";
@@ -69,7 +70,11 @@ export function emptyAutomation() {
     // Regeneration (D-691): Health at the start of each of its turns, gated by
     // `when` and withheld where it has taken `unless` damage since the end of
     // its last turn.
-    tick: { heal: null, when: null, unless: null }
+    tick: { heal: null, when: null, unless: null },
+    // D12: a venom or a disease the ability lays on a failed Test. ADDITIVE
+    // (Phase 4): the routing of the abilities handled by name is unchanged;
+    // `kind` is "poison" | "disease" or null.
+    afflict: { kind: null, key: null, name: null, dc: null, resilience: null, value: null }
   };
 }
 
@@ -115,6 +120,14 @@ export function cleanAutomation(raw) {
     when: oneOf(raw.tick?.when, Object.keys(AZEROTH.passiveWhen)),
     // A damage type, meaning "has taken this since the end of its last turn".
     unless: oneOf(raw.tick?.unless, Object.keys(AZEROTH.damageTypes))
+  };
+  out.afflict = {
+    kind: oneOf(raw.afflict?.kind, ["poison", "disease"]),
+    key: typeof raw.afflict?.key === "string" && raw.afflict.key ? raw.afflict.key : null,
+    name: typeof raw.afflict?.name === "string" && raw.afflict.name ? raw.afflict.name : null,
+    dc: num(raw.afflict?.dc),
+    resilience: oneOf(raw.afflict?.resilience, Object.keys(AZEROTH.resiliences)),
+    value: num(raw.afflict?.value)
   };
   out.action = oneOf(raw.action, Object.keys(AZEROTH.actions));
   out.cost = { pool: oneOf(raw.cost?.pool, Object.keys(AZEROTH.npcPoolKinds)), amount: num(raw.cost?.amount) };
@@ -460,7 +473,60 @@ export function delegatedAbilitySpell(prose = "") {
     ? { name: names[0], self: Boolean(match[2]) } : null;
 }
 
-export function seedAutomation(prose = "", { name = "" } = {}) {
+/** The abilities whose own module routes the Test and lays the carrier (`dice/workflows.mjs`'s by-name doors). */
+export const BESPOKE_AFFLICTORS = Object.freeze(new Set([
+  "Maggot Goo", "Venom Spit", "Dredge Poison", "Dredge Sickness", "Virulent Poison", "Vekniss Itch",
+  "Vekniss Catalyst", "Localized Toxin", "Deadly Poison", "Maggot Slime", "Plague Cloud", "Tetanus"
+]));
+
+/**
+ * D12: *is Poisoned N unless it passes a Resilience (Body) Test at DC X* and
+ * *is Diseased with / carries <Disease>* with the Test beside it. Returns the
+ * `afflict` descriptor or null. A disease is read through `diseaseByName`, so
+ * a name 09 does not hold reads as nothing.
+ */
+export function readAfflict(prose = "", { name = "" } = {}) {
+  // A bespoke module lays its own carrier (`effects/creature-diseases.mjs`,
+  // `dredge-poison.mjs`, ...). A descriptor here would make the generic door lay a SECOND
+  // carrier on the same failed Test, so these abilities read as nothing.
+  if (BESPOKE_AFFLICTORS.has(String(name).trim())) return null;
+  const text = plain(prose);
+  const test = () => {
+    const dcs = distinct([...text.matchAll(/\bDC\s*(\d+)\b/g)].map(m => Number(m[1])));
+    const res = distinct([
+      ...[...text.matchAll(/\b(Body|Reflex|Spirit)\s+(?:Resilience\s+)?Test\b/gi)].map(m => m[1].toLowerCase()),
+      ...[...text.matchAll(/\bResilience\s*\((Body|Reflex|Spirit)\)/gi)].map(m => m[1].toLowerCase())
+    ]);
+    return dcs.length === 1 && res.length === 1 ? { dc: dcs[0], resilience: res[0] } : null;
+  };
+  const pois = /\b(?:is|becomes)\s+Poisoned(?:\s+(\d+))?\s+unless\s+it\s+passes\b/i.exec(text);
+  if (pois) {
+    const t = test();
+    if (!t) return null;
+    const label = String(name).trim();
+    return {
+      kind: "poison", key: label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || null,
+      name: label || null, dc: t.dc, resilience: t.resilience, value: pois[1] ? Number(pois[1]) : 1
+    };
+  }
+  for (const d of Object.values(DISEASES)) {
+    const re = new RegExp(`\\b(?:Diseased with|carries|carry|contracts)\\s+(?:the\\s+)?${d.name.replace(/-/g, "[- ]")}\\b`, "i");
+    if (!re.test(text) || diseaseByName(d.name)?.key !== d.key) continue;
+    const t = test();
+    if (!t) return null;
+    return { kind: "disease", key: d.key, name: d.name, dc: t.dc, resilience: t.resilience, value: null };
+  }
+  return null;
+}
+
+export function seedAutomation(prose = "", opts = {}) {
+  const seed = seedAutomationBase(prose, opts);
+  const afflict = readAfflict(prose, opts);
+  if (afflict) seed.afflict = afflict;
+  return seed;
+}
+
+function seedAutomationBase(prose = "", { name = "" } = {}) {
   const text = plain(prose);
   const seed = {};
   // D-530 KEYS A STRUCTURAL RULE ON STRUCTURE, and this is the same reading:
@@ -811,6 +877,7 @@ export function mergeSeed(automation, seed) {
     };
   }
   if (!out.summon.entry && seed.summon) out.summon = { ...out.summon, ...seed.summon };
+  if (out.afflict.kind === null && seed.afflict) out.afflict = { ...out.afflict, ...seed.afflict };
   if (out.tick.heal === null && seed.tick) out.tick = { ...out.tick, ...seed.tick };
   if (out.action === null && seed.action) out.action = seed.action;
   if (out.cost.pool === null && out.cost.amount === null && seed.cost) {

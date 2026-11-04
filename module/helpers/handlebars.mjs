@@ -61,6 +61,9 @@ const TEMPLATES = [
   // 2026-09-20). A reading of `effectsContext` - the object the two partials
   // above it are drawn from - and never a second walk of `actor.effects`.
   "systems/azeroth-rpg/templates/actor/partials/in-play.hbs",
+  // The Afflictions panel on the Corruption tab (D12): two collapsible groups of one-line rows.
+  "systems/azeroth-rpg/templates/actor/partials/afflictions.hbs",
+  "systems/azeroth-rpg/templates/actor/partials/affliction-act.hbs",
   // The Gear tab as bag slots (D-738). FIVE partials, every one of them named
   // by `gear.hbs` or by another of the five - and a partial a template names
   // and this list does not hold is not a missing style, it THROWS at render

@@ -35,6 +35,7 @@ import { registerReflectionHooks } from "./effects/reflection.mjs";
 import { registerVeknissHooks } from "./effects/vekniss.mjs";
 import { registerBloodpetalHooks } from "./effects/bloodpetal.mjs";
 import { registerDredgePoisonHooks } from "./effects/dredge-poison.mjs";
+import { registerAfflictionHooks } from "./effects/affliction-clock.mjs";
 import { registerVirulentPoisonHooks } from "./effects/virulent-poison.mjs";
 import { registerFireguardBurnHooks } from "./effects/fireguard-burn.mjs";
 import { registerFleshRotHooks } from "./effects/flesh-rot.mjs";
@@ -191,6 +192,7 @@ Hooks.once("init", () => {
   registerVeknissHooks();
   registerBloodpetalHooks();
   registerDredgePoisonHooks();
+  registerAfflictionHooks();
   registerVirulentPoisonHooks();
   registerFireguardBurnHooks();
   registerFleshRotHooks();

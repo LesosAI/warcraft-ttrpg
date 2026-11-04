@@ -612,6 +612,14 @@ export function attacksPerRoundBatch(context) {
           assert.include([...select.options].map(o => o.value), tokenB.id, "the second foe was not offered");
           select.value = tokenB.id;
           select.dispatchEvent(new Event("change", { bubbles: true }));
+          // 0.12.32: the second roll's weapon is chosen on this dialog and Roll stays
+          // disabled until one is. The test answered the target and never the weapon,
+          // so the click did nothing and the test sat on the dialog until its timeout.
+          const weapon = form.elements.extraWeapon;
+          if (weapon) {
+            weapon.value = "current";
+            weapon.dispatchEvent(new Event("change", { bubbles: true }));
+          }
           dialog.element.querySelector('button[data-action="roll"]').click();
           await rolling;
         });

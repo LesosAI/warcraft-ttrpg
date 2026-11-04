@@ -16,7 +16,7 @@ function targetOf(shot){
 }
 function shotOf(message){
  const flags=message?.flags?.['azeroth-rpg'],shot=flags?.cannonball;
- return message?.author?.isGM&&flags.kind==='signature'&&flags.identifier===CANNONBALL_IDENTIFIER
+ return message?.author?.isGM&&flags?.kind==='signature'&&flags.identifier===CANNONBALL_IDENTIFIER
   &&shot?.version===1&&shot.identifier===CANNONBALL_IDENTIFIER
   &&Number.isInteger(shot.dc)&&shot.dc>=10&&Number.isInteger(shot.damage)&&shot.damage>=0?shot:null;
 }

@@ -1,7 +1,6 @@
-/** Harvest Golem's Classic disease, adapted to the tabletop's score scale. */
+/** Harvest Golem's disease, carried as Lockjaw until cured (D12; the ability keeps the name Tetanus). */
 export const TETANUS = Object.freeze({ name: "Tetanus", action: "action", feet: 5,
-  dc: 12, resilience: "body", reduction: 2, floor: 3, minutes: 20 });
-export const TETANUS_FLAG = "tetanus";
+  dc: 12, resilience: "body", reduction: 2, floor: 3 });
 export const TETANUS_REQUESTS = "tetanusRequests";
 const REQUEST_LIFETIME = 600000;
 
@@ -15,20 +14,6 @@ export function tetanusRequestClaim({ requestId, issuedAt, now, receipts = [] } 
   const current = receipts.filter(row => Number.isFinite(row?.expiresAt) && row.expiresAt > now);
   if (current.some(row => row.requestId === requestId)) return { ok: false, reason: "replayedRequest" };
   return { ok: true, receipts: [...current, { requestId, expiresAt: issuedAt + REQUEST_LIFETIME }] };
-}
-
-/** One carrier lets a disease cure remove the condition and penalty together. */
-export function tetanusEffect({ abilities, origin, timing } = {}) {
-  const con = abilities?.con?.value;
-  if (!Number.isFinite(con) || typeof origin !== "string" || !origin
-    || !timing?.duration || !timing?.start) return null;
-  return { name: TETANUS.name, img: "icons/svg/biohazard.svg", origin, disabled: false,
-    statuses: ["diseased"], system: { changes: [
-      { key: "system.abilities.con.value", type: "subtract", value: String(TETANUS.reduction), phase: "initial", priority: 20 },
-      // A pre-existing score below the normal floor must not be improved by disease.
-      { key: "system.abilities.con.value", type: "upgrade", value: String(Math.min(con, TETANUS.floor)), phase: "initial", priority: 30 }
-    ] }, duration: { ...timing.duration }, start: { ...timing.start },
-    flags: { "azeroth-rpg": { harmful: true, disease: true, [TETANUS_FLAG]: { version: 1 } } } };
 }
 
 /**

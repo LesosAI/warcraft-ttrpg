@@ -1,0 +1,90 @@
+{{!--
+  THE AFFLICTIONS PANEL (D12, Phase 7; the lead approved the mockup at
+  `docs/design/mockups/afflictions-panel.html`, boards 1-4 for the rows and 6-7
+  for the layout).
+
+  **IT IS A READING OF STATE.** Every row comes from `actions.mjs#afflictionsContext`
+  through `rules/affliction-view.mjs`; nothing here decides a rule. Poisons and
+  Diseases are two collapsible groups whose heading keeps its count and its
+  urgency summary when closed. A row is ONE line - name (a disclosure button),
+  short state, DC, one main cure button - that opens to the full row.
+
+  **A <summary> HOLDS TEXT ONLY.** A control nested in a summary is two
+  controls in one hit target; the row's disclosure is a <button aria-expanded>
+  in the row itself.
+
+  **EVERY FOCUSABLE CONTROL CARRIES AN ID** (CLAUDE.md section 15): core
+  restores focus across a part render only for an element with an id or a name.
+  `@root.rootId` because a bare name inside #each is the row, not the root.
+
+  **OPEN STATE IS PER VIEWER.** `open` here is the user flag the sheet read;
+  the `toggle` event on a <details> and `toggleAffliction` on a row write it.
+  A refusal is written in words beside its greyed control, never by the grey alone.
+--}}
+<div class="azeroth-afflictions" data-afflictions>
+  <div class="azeroth-afflictions-head">
+    <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Afflictions.Panel.Heading"}}</h3>
+    {{#if afflictions.canAdd}}
+    <button type="button" id="{{@root.rootId}}-aff-expose" data-action="exposeAffliction"
+            title="{{localize 'AZEROTH.Afflictions.Panel.ExposeHint'}}">{{localize "AZEROTH.Afflictions.Panel.Expose"}}</button>
+    <button type="button" id="{{@root.rootId}}-aff-add" data-action="addAffliction"
+            title="{{localize 'AZEROTH.Afflictions.Panel.AddHint'}}">{{localize "AZEROTH.Afflictions.Panel.Add"}}</button>
+    {{/if}}
+  </div>
+  {{#if afflictions.empty}}
+  <p class="azeroth-afflictions-empty">{{localize "AZEROTH.Afflictions.Panel.Empty"}}</p>
+  {{/if}}
+  {{#each afflictions.groups as |group|}}
+  <details class="azeroth-aff-group is-{{group.kind}}" data-affliction-group="{{group.kind}}" id="{{@root.rootId}}-aff-group-{{group.kind}}"{{#if group.open}} open{{/if}}>
+    <summary class="azeroth-aff-summary">{{group.label}} <span class="azeroth-aff-count">{{group.count}}</span> <span class="azeroth-aff-sum">{{group.summary}}</span></summary>
+    <ul class="azeroth-aff-rows">
+      {{#each group.rows as |row|}}
+      <li class="azeroth-aff-row is-{{row.kind}}{{#if row.open}} is-open{{/if}}" data-affliction-row="{{row.id}}">
+        <div class="azeroth-aff-line">
+          {{#if row.img}}<img class="azeroth-aff-icon" src="{{row.img}}" alt="">{{/if}}
+          <button type="button" class="azeroth-aff-toggle" id="{{@root.rootId}}-aff-{{row.id}}"
+                  data-action="toggleAffliction" data-affliction-id="{{row.id}}"
+                  aria-expanded="{{#if row.open}}true{{else}}false{{/if}}" aria-controls="{{@root.rootId}}-aff-{{row.id}}-detail">{{row.name}}</button>
+          <span class="azeroth-aff-short">{{#if row.shortStrong}}<b>{{row.shortStrong}}</b>{{/if}}{{#if row.shortRest}} &middot; {{row.shortRest}}{{/if}}</span>
+          <span class="azeroth-aff-chip">{{row.dcLabel}}</span>
+          <span class="azeroth-aff-slot">
+            {{#if row.primary}}
+            {{> "systems/azeroth-rpg/templates/actor/partials/affliction-act.hbs" act=row.primary cls="azeroth-aff-act" domId=(concat @root.rootId "-aff-" row.id "-main")}}
+            {{/if}}
+          </span>
+        </div>
+        <div class="azeroth-aff-detail" id="{{@root.rootId}}-aff-{{row.id}}-detail"{{#unless row.open}} hidden{{/unless}}>
+          <p class="azeroth-aff-top"><span class="azeroth-aff-chip is-kind">{{row.kindLabel}}</span>
+          {{!-- The GM's end control lives on the OPENED row only (the lead's review), so the one-line row keeps its width for the name. --}}
+          {{#if row.canEnd}}
+          <button type="button" class="azeroth-aff-end" id="{{@root.rootId}}-aff-{{row.id}}-end"
+                  data-action="endAffliction" data-affliction-id="{{row.id}}"
+                  title="{{localize 'AZEROTH.Afflictions.Panel.EndHint'}}" aria-label="{{row.endLabel}}">&times;</button>
+          {{/if}}</p>
+          {{#if row.course}}
+          <ol class="azeroth-aff-course" aria-label="{{localize 'AZEROTH.Afflictions.Panel.Course.Label'}}">
+            {{#each row.course as |step|}}
+            <li class="is-{{step.state}}"{{#if (eq step.state "at")}} aria-current="step"{{/if}}>{{step.label}}</li>
+            {{/each}}
+          </ol>
+          {{/if}}
+          <p class="azeroth-aff-text"><span class="azeroth-aff-label">{{localize "AZEROTH.Afflictions.Panel.LabelNow"}}</span> {{row.now}}</p>
+          {{#if row.then}}<p class="azeroth-aff-text"><span class="azeroth-aff-label">{{localize "AZEROTH.Afflictions.Panel.LabelThen"}}</span> {{row.then}}</p>{{/if}}
+          {{#if row.from}}<p class="azeroth-aff-text"><span class="azeroth-aff-label">{{localize "AZEROTH.Afflictions.Panel.LabelFrom"}}</span> {{row.from}}</p>{{/if}}
+          <p class="azeroth-aff-text"><span class="azeroth-aff-label">{{localize "AZEROTH.Afflictions.Panel.LabelEnds"}}</span> {{row.ends}}</p>
+          {{#if row.weekly}}<p class="azeroth-aff-text"><span class="azeroth-aff-label">{{localize "AZEROTH.Afflictions.Panel.LabelWeekly"}}</span> {{row.weekly}}</p>{{/if}}
+          <div class="azeroth-aff-acts">
+            {{#each row.actions as |act|}}
+            {{> "systems/azeroth-rpg/templates/actor/partials/affliction-act.hbs" act=act cls="azeroth-aff-act" domId=(concat @root.rootId "-aff-" row.id "-" act.action)}}
+            {{/each}}
+            {{#each row.refusals as |why|}}
+            <span class="azeroth-aff-refusal">{{why}}</span>
+            {{/each}}
+          </div>
+        </div>
+      </li>
+      {{/each}}
+    </ul>
+  </details>
+  {{/each}}
+</div>

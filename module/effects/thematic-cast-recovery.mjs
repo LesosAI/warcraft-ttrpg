@@ -1,3 +1,4 @@
+import { privateSpellMessage, loadAuthorizedPrivateSpellMessages } from "./private-spell-records.mjs";
 import { utilityDialog } from "../applications/thematic-utility-dialog.mjs";
 import { finishHolyCast } from "./thematic-holy.mjs";
 import { finishDreamCast } from "./thematic-dream.mjs";
@@ -24,7 +25,7 @@ function matchesOriginalCard(state, card, flags) {
 
 /** Reconcile a paid cast only from its GM-owned receipt and exact card binding. */
 export function recoverThematicCastCard(message) {
-  const card = message?.documentName === "ChatMessage" ? message : game.messages?.get(message?.id);
+  const card = message?.documentName === "ChatMessage" ? message : privateSpellMessage(message?.id);
   const key = card?.uuid ?? card?.id;
   if (!key) return Promise.resolve(refused("card"));
   const pending = recoveries.get(key);
@@ -46,8 +47,9 @@ export function recoverThematicCastCard(message) {
 }
 
 async function reconcileThematicCastCard(message) {
+  await loadAuthorizedPrivateSpellMessages();
   if (game.user?.isGM !== true || game.users?.activeGM?.id !== game.user.id) return refused("authority");
-  const card = message?.documentName === "ChatMessage" ? message : game.messages?.get(message?.id);
+  const card = message?.documentName === "ChatMessage" ? message : privateSpellMessage(message?.id);
   const flags = card?.flags?.[NS], cast = flags?.cast;
   const pending = Array.isArray(flags?.thematicResolutionPending) ? [...new Set(flags.thematicResolutionPending)] : [];
   if (!card || !cast) return refused("card");
@@ -64,7 +66,7 @@ async function reconcileThematicCastCard(message) {
         : kind === "relay" ? flags.spellRelayAttemptTicket ?? flags.spellRelayTicket
           : kind === "verdict" ? flags.verdictTicket : null;
     if (!ticket) { remaining.push(kind); continue; }
-    const receipt = game.messages?.get(ticket);
+    const receipt = privateSpellMessage(ticket);
     const key = kind === "dream" ? "dreamReceipt"
       : kind === "relay" ? (flags.spellRelayAttemptTicket ? "spellRelayAttempt" : "spellRelayReceipt")
         : "holyReceipt";

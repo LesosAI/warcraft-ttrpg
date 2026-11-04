@@ -153,6 +153,21 @@ async function pressForCard(control, speaker, face = 15, { kind = null, ms = 300
   const unpin = pinDie(face);
   try {
     el.click();
+    // **EXTRA ATTACK ASKS FOR THE SECOND ROLL'S WEAPON** (02 SS6, D-704): a character holding it is
+    // always shown the roll dialog, whatever the skip setting says, and Roll stays greyed until a
+    // weapon is picked. An attack pressed from the sheet answers it, as the player would.
+    if (kind === "attack") {
+      const dialog = await until(() => [...foundry.applications.instances.values()]
+        .find(a => String(a.id ?? "").startsWith("azeroth-roll-") && a.rendered) ?? null, "the attack's roll dialog", 8000).catch(() => null);
+      if (dialog) {
+        const second = dialog.element.querySelector('select[name="extraWeapon"]');
+        if (second) {
+          second.value = [...second.options].find(o => o.value)?.value ?? "";
+          second.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        dialog.element.querySelector('button[data-action="roll"]')?.click();
+      }
+    }
     const [card] = await posted;
     made.push(card);
     return card;
@@ -280,7 +295,9 @@ export function legacySpiritsBatch(context) {
 
     it("DOOR 10: from the Spirit Realm the sheet's Attack and a Use are refused in words, and nothing is spent", async function () {
       this.timeout(180000);
-      const dying = await makeCharacter({ name: "ZZ LS Spirit", classes: [["Warrior", 5]] });
+      // Level 4: a level 5 Warrior holds Extra Attack and is always shown the roll dialog first
+      // (D-704), which would stand between the press and the refusal this test reads.
+      const dying = await makeCharacter({ name: "ZZ LS Spirit", classes: [["Warrior", 4]] });
       const sword = await wield(dying, "Longsword");
       const foe = await makeNpc("Plagued Ghoul");
       await sceneWith([{ actor: dying, x: 1000, y: 1000 }, { actor: foe, x: 1100, y: 1000, side: "hostile" }]);

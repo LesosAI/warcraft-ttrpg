@@ -39,6 +39,7 @@ import { categoryTraits } from "../rules/armor.mjs";
 import { capacityParts } from "../rules/containers.mjs";
 import { bagSlotsOf, isMount, wellsOf } from "../rules/slots.mjs";
 import { useParts } from "../rules/consumables.mjs";
+import { DISEASES } from "../rules/afflictions.mjs";
 
 /** Fields every imported item carries, shown under the header. */
 export const PROVENANCE_FIELDS = Object.freeze([
@@ -469,8 +470,34 @@ const DERIVED_WORDS = Object.freeze({
   consumable: Object.freeze({}),
   action: Object.freeze({}),
   target: Object.freeze({}),
-  goesOn: Object.freeze({})
+  goesOn: Object.freeze({}),
+  afflictions: Object.freeze({ statuses: Object.freeze({}), beat: Object.freeze({}) })
 });
+
+/**
+ * A poison's Carried descriptor as one readable line (D12), the localised
+ * words handed in. Pure: `readCarried` made the descriptor, this prints it.
+ */
+export function carriedLine(carried, words = {}) {
+  if (!carried || typeof carried !== "object") return null;
+  const w = words.afflictions ?? {};
+  if (carried.carried === false) return w.notCarried ?? "";
+  const parts = [];
+  if (carried.value > 0) parts.push(fill(w.poisoned ?? "", { n: carried.value }));
+  for (const id of carried.statuses ?? []) {
+    if (id === "poisoned" && carried.value > 0) continue;
+    parts.push(w.statuses?.[id] ?? id);
+  }
+  if (carried.damage > 0) parts.push(fill(w.damage ?? "", { n: carried.damage }));
+  if (carried.fatigue > 0) parts.push(fill(w.fatigue ?? "", { n: carried.fatigue }));
+  if (carried.firstTestBane === "attack") parts.push(w.baneAttack ?? "");
+  if (carried.firstTestBane === "casting") parts.push(w.baneCasting ?? "");
+  if (carried.healingFactor === 0.5) parts.push(w.halveHealing ?? "");
+  const beats = (carried.beats ?? []).map(b => w.beat?.[b] ?? b);
+  const line = joinParts(parts);
+  if (!line) return null;
+  return beats.length ? `${line} (${beats.join(", ")})` : line;
+}
 
 /** Fill `{name}` placeholders. The sheet's i18n does this; the bag carries the template. */
 function fill(template, params) {
@@ -582,6 +609,8 @@ export function derivedValue(path, system, labels = null) {
       words.action?.[held.action] ?? held.action,
       words.goesOn?.[held.goesOn] ?? held.goesOn,
       words.target?.[held.target] ?? held.target,
+      held.cures ? fill(words.afflictions?.cures ?? "", { name: DISEASES[held.cures]?.name ?? held.cures }) : null,
+      held.carried ? fill(words.afflictions?.carried ?? "", { line: carriedLine(held.carried, words) ?? "" }) : null,
       held.note
     ]);
   }

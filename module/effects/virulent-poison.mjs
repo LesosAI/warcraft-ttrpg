@@ -1,6 +1,10 @@
 import { VIRULENT, VIRULENT_FLAG as FLAG, validVirulent, virulentDose, virulentClock,
   virulentPulse, virulentEffect, virulentWithdrawal } from "../rules/virulent-poison.mjs";
+import { creaturePoisonPatch } from "../rules/creature-poisons.mjs";
+import { downedTarget } from "../rules/poison-catchup.mjs";
 import { strikeFromArea } from "./area-strikes.mjs";
+/** A guard against a runaway loop; an hourly catch-up has no cap of its own (D12 R4). */
+const CATCH_UP_GUARD = 48;
 const queues = new Map();
 const gmHere = () => game.user?.isGM === true && game.users?.activeGM?.id === game.user.id;
 const resolve = uuid => { try { return fromUuidSync(uuid); } catch { return null; } };
@@ -34,16 +38,20 @@ export function layVirulentPoison({ source, target, hitId, valid } = {}) {
     const carriers = [...target.effects].filter(stateOf);
     if (carriers.length > 1) return { ok: false, reason: "conflictingCarriers" };
     let effect = carriers[0] ?? null;
-    if (effect && (!poisoned(effect) || effect.disabled || effect.active === false)) return { ok: false, reason: "inactiveCarrier" };
+    if (effect && (effect.disabled || effect.active === false)) return { ok: false, reason: "inactiveCarrier" };
     const dose = virulentDose({ sourceUuid: source.uuid, targetUuid: target.uuid, hitId,
-      existing: effect ? stateOf(effect) : null, currentValue: effect ? valueOf(effect) : 0, ...timing(fightOf(target)) });
+      existing: effect ? stateOf(effect) : null, currentValue: 0, ...timing(fightOf(target)) });
     if (!dose) return { ok: false, reason: "invalidDose" };
     if (dose.duplicate) return { ok: true, duplicate: true, effectId: effect.id };
     try {
       if (effect) {
-        await effect.update({ [path]: dose.state, "flags.azeroth-rpg.value": dose.value, origin: source.uuid });
+        // A new hit lays the dose's stacks again, shed or not.
+        await effect.update({ [path]: dose.state, "flags.azeroth-rpg.value": dose.value, origin: source.uuid,
+          statuses: ["poisoned"],
+          ...creaturePoisonPatch({ value: dose.value, damage: VIRULENT.damage * dose.value, statuses: ["poisoned"] }) });
       } else {
-        [effect] = await target.createEmbeddedDocuments("ActiveEffect", [virulentEffect(dose)]);
+        [effect] = await target.createEmbeddedDocuments("ActiveEffect", [virulentEffect(dose,
+          { now: game.time?.worldTime ?? 0, inFight: Boolean(fightOf(target)) })]);
       }
       if (!effect || !check() || !held(target, effect) || !poisoned(effect) || immune(target)
         || valueOf(effect) !== dose.value || !same(stateOf(effect), dose.state)) return { ok: false, reason: "writeUnconfirmed", effectId: effect?.id };
@@ -71,16 +79,18 @@ export function withdrawVirulentPoison({ target, hitId, valid } = {}) {
     if (!found.length) return { ok: true, absent: true };
     if (found.length !== 1) return { ok: false, reason: "conflictingCarriers" };
     const effect = found[0];
-    const plan = virulentWithdrawal(stateOf(effect), hitId, valueOf(effect));
+    const plan = virulentWithdrawal(stateOf(effect), hitId);
     if (!plan) return { ok: false, reason: "invalidCarrier" };
     try {
       if (!plan.state) {
         await effect.delete();
         return { ok: check() && !held(target, effect), removed: !held(target, effect) };
       }
-      await effect.update({ [path]: plan.state, "flags.azeroth-rpg.value": plan.value, origin: plan.state.sourceUuid });
+      // Withdrawing a contribution lowers the dose; the condition's value follows it.
+      await effect.update({ [path]: plan.state, "flags.azeroth-rpg.value": plan.value, origin: plan.state.sourceUuid,
+        ...creaturePoisonPatch({ value: plan.value, damage: VIRULENT.damage * plan.value }) });
       return { ok: check() && held(target, effect) && same(stateOf(effect), plan.state) && valueOf(effect) === plan.value,
-        value: plan.value, remaining: plan.state.remaining };
+        value: plan.value };
     } catch (error) {
       console.warn("azeroth-rpg | Virulent Poison withdrawal", error);
       return { ok: false, reason: "writeUncertain" };
@@ -89,8 +99,8 @@ export function withdrawVirulentPoison({ target, hitId, valid } = {}) {
 }
 
 /** Persist each tick claim before ordinary Nature mitigation. An uncertain
- * damage write is reported and never replayed. World catch-up is bounded at
- * three distinct ticks, preserving Ward mitigation on each one.
+ * damage write is reported and never replayed. World catch-up lands every hour due,
+ * each tick mitigated by Ward separately.
  */
 export function advanceVirulentPoison(actor, combat = null) {
   return virulentWrite(actor?.uuid, async () => {
@@ -98,10 +108,12 @@ export function advanceVirulentPoison(actor, combat = null) {
     if (!gmHere() || !present(actor)) return lines;
     if (combat && (!combat.started || combat.combatant?.actor !== actor || fightOf(actor) !== combat)) return lines;
     for (const effect of [...actor.effects].filter(stateOf)) {
-      for (let n = 0; n < (combat ? 1 : VIRULENT.ticks) && gmHere() && held(actor, effect); n++) {
+      for (let n = 0; n < (combat ? 1 : CATCH_UP_GUARD) && gmHere() && held(actor, effect); n++) {
+        // A catch-up stops at a target with no Health left to lose (rules/poison-catchup.mjs).
+        if (!combat && downedTarget(actor)) break;
         try {
           const state = stateOf(effect);
-          if (!validVirulent(state) || state.targetUuid !== actor.uuid || !poisoned(effect) || immune(actor)) {
+          if (!validVirulent(state) || state.targetUuid !== actor.uuid || immune(actor)) {
             await effect.delete(); break;
           }
           const governing = fightOf(actor);
@@ -109,12 +121,17 @@ export function advanceVirulentPoison(actor, combat = null) {
           if (!nextClock) break;
           if (nextClock !== state) { await effect.update({ [path]: nextClock }); break; }
           if ((!combat && governing) || (combat && governing !== combat)) break;
-          const plan = virulentPulse(state, { targetUuid: actor.uuid, value: valueOf(effect), poisoned: poisoned(effect),
+          const plan = virulentPulse(state, { targetUuid: actor.uuid,
             disabled: effect.disabled === true || effect.active === false, ...timing(combat) });
           if (plan.action === "end") { await effect.delete(); break; }
           if (plan.action === "none") break;
           const clockBefore = JSON.stringify(timing(governing));
-          await effect.update({ [path]: plan.next });
+          // The beat lays the dose's stacks again (D12 R1): whatever was shed, Poisoned returns at
+          // the dose's value, and the damage below is worked out from that value.
+          const relay = plan.action === "tick"
+            ? { statuses: ["poisoned"], "flags.azeroth-rpg.value": plan.value,
+              ...creaturePoisonPatch({ value: plan.value, damage: VIRULENT.damage * plan.value, statuses: ["poisoned"] }) } : {};
+          await effect.update({ [path]: plan.next, ...relay });
           if (!gmHere() || !held(actor, effect) || !same(stateOf(effect), plan.next)) {
             lines.push({ applied: false, reason: "claimUnconfirmed" }); break;
           }
@@ -123,16 +140,14 @@ export function advanceVirulentPoison(actor, combat = null) {
             globalThis.ui?.notifications?.warn("Virulent Poison's turn changed during its tick. Review that tick before resolving it manually.");
             break;
           }
-          if (plan.damage && poisoned(effect) && !immune(actor) && !effect.disabled && effect.active !== false
+          if (plan.damage && !immune(actor) && !effect.disabled && effect.active !== false
             && (actor.type !== "npc" || actor.system?.health?.value > 0)) {
             const source = resolve(state.sourceUuid);
-            // Shedding can happen while the claim write is awaited. Read its
-            // current value, not the stack count from before that write.
             lines.push(...await strikeFromArea({ actor, caster: present(source) ? source : null,
               spell: { name: VIRULENT.name, school: "nature", takesSpellpower: false, feature: true, isSpell: false },
-              damage: { rating: VIRULENT.damage * valueOf(effect), school: "nature" } }));
+              damage: plan.damage }));
           }
-          if (gmHere() && held(actor, effect) && (plan.endsAfterDamage || !poisoned(effect) || immune(actor))) {
+          if (gmHere() && held(actor, effect) && immune(actor)) {
             await effect.delete(); break;
           }
         } catch (error) {

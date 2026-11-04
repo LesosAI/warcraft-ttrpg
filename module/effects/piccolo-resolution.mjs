@@ -11,7 +11,7 @@ const gmHere=()=>game.user?.isGM&&game.users.activeGM?.id===game.user.id;
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 function performanceOf(message){
   const flags=message?.flags?.['azeroth-rpg'],performance=flags?.piccolo;
-  return message?.author?.isGM&&flags.kind==='signature'&&flags.identifier===PICCOLO_IDENTIFIER
+  return message?.author?.isGM&&flags?.kind==='signature'&&flags.identifier===PICCOLO_IDENTIFIER
     &&performance?.version===1&&performance.identifier===PICCOLO_IDENTIFIER
     &&Number.isInteger(performance.dc)&&performance.dc>=10&&Array.isArray(performance.targets)?performance:null;
 }

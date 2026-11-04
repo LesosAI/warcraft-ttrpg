@@ -94,6 +94,8 @@ import { HEALING_AREA_WARD, healingAreaWardStamp, isHealingWardArea } from "../r
 // Damage or healing laid on a creature at the start of each of its turns
 // (D-770): a spell's rides its Apply, a poison's its failed Test.
 import { hasTick, tickHasClock } from "../rules/ticks.mjs";
+import { AFFLICTION_FLAG, weeklyPrompted } from "../rules/afflictions.mjs";
+import { afflictDisease, afflictPoison } from "./afflictions-workflows.mjs";
 import { TICK_FLAG, poisonTakesHold } from "../effects/ticks.mjs";
 import { POOL_CHANGE_TYPE } from "../rules/pool-change.mjs";
 import { areaResultWords, areaTestName, recordAreaTest, recordResist, resisterOf, targetActorOf } from "./annotate.mjs";
@@ -1046,6 +1048,17 @@ async function placeAreaFromCard(message) {
     // the card.
     flags: regionFlagsFromCard(message, actor, item)
   });
+  // **A CURE LAID OVER GROUND** (07's Restoration, Scour and Deliverance; D12 Phase 6): at
+  // the moment the area is placed, every poison and disease on the creatures inside
+  // ends (Deliverance only on the willing, and it leaves the caster Fatigued).
+  if (region && flags.kind === "spell" && flags.success !== false && ["Restoration", "Scour", "Deliverance"].includes(item?.name)) {
+    try {
+      const { cureAreaOnPlace } = await import("../effects/cures.mjs");
+      await cureAreaOnPlace(region, actor, item.name);
+    } catch (error) {
+      console.warn("azeroth-rpg | area cure", error);
+    }
+  }
   // **04's TYPHOON** (*Your Hurricane class feature also pushes everything in its
   // area 10 feet per rank*; D-778; the lead, 2026-10-03, on O-158: *"Yes."* to *away
   // from the area's centre*): once the area stands, every creature in it is moved
@@ -1603,6 +1616,19 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
       poisonHeld = { effect, value: effect.getFlag("azeroth-rpg", "value") ?? 1,
         dc: cleanShedDc(effect.getFlag("azeroth-rpg", SHED_DC_FLAG))?.dc ?? dc };
     }
+    // **MARSH FEVER'S WEEKLY TEST** (D12): the prompt names the carrier it was posted for;
+    // the creature still carries that disease with the prompt outstanding, and an owner presses.
+    let relapseHeld = null;
+    if (purpose === "relapse") {
+      const effect = actor.effects.get(button.dataset.effectId ?? "") ?? null;
+      const held = effect?.flags?.["azeroth-rpg"]?.[AFFLICTION_FLAG] ?? null;
+      if (!actor.isOwner || cardPressUnrecordable(message) || !held?.kind || !weeklyPrompted(held)
+        || message.flags?.["azeroth-rpg"]?.actorUuid !== actor.uuid || message.flags?.["azeroth-rpg"]?.pressed?.relapse) {
+        ui.notifications?.warn(game.i18n.localize("AZEROTH.Afflictions.Relapse.Unavailable"));
+        continue;
+      }
+      relapseHeld = { effectId: effect.id };
+    }
     let escapeHeld = null;
     if (purpose === "escape") {
       const effect = actor.effects.get(button.dataset.effectId ?? "") ?? null;
@@ -1664,6 +1690,13 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
         && !(await claimSnakeTrapCatch(message, actor, result))) {
         ui.notifications?.warn(game.i18n.localize("AZEROTH.SnakeTrap.CatchRefused"));
         continue;
+      }
+      if (relapseHeld && typeof result?.rolls?.[0]?.outcome?.success === "boolean") {
+        const claimed = await claimCardPress(message, { kind: "once", press: "relapse" });
+        if (!claimed.ok) {
+          ui.notifications?.warn(game.i18n.localize("AZEROTH.Afflictions.Relapse.Unavailable"));
+          continue;
+        }
       }
       if (poisonHeld && typeof result?.rolls?.[0]?.outcome?.success === "boolean") {
         const claimed = await claimCardPress(message, { kind: "once", press: "poisoned" });
@@ -1834,6 +1867,8 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
       const laid = [];
       for (const f of failLands) {
         if (!AZEROTH.conditions?.[f?.condition]) continue;
+        // D12: where the ability names the carrier it lays, the carrier holds Poisoned / Diseased itself.
+        if (cardFlags.afflict && (f.condition === "poisoned" || f.condition === "diseased")) continue;
         if (cardFlags.featureKey === "ability:seduction" && f.condition === "charmed") {
           const { requestSeduction } = await import("../effects/seduction-use.mjs");
           const delivery = await requestSeduction({ message, result });
@@ -1854,6 +1889,13 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
         if (landing?.landed) laid.push(game.i18n.localize(AZEROTH.conditions[f.condition]));
       }
       if (laid.length) ui.notifications?.info(game.i18n.format("AZEROTH.Card.OnFailLanded", { name: actor.name, conditions: laid.join(", ") }));
+    }
+    // **A CREATURE'S POISON OR DISEASE** (D12): the ability named what it lays, and a failed
+    // Test lays the carrier (`automation.afflict`), at the ability's own DC.
+    const afflictRow = abilityCard && result && !passed ? message.flags?.["azeroth-rpg"]?.afflict ?? null : null;
+    if (afflictRow) {
+      if (afflictRow.kind === "disease") await afflictDisease({ victim: actor, key: afflictRow.key, by: maker });
+      else await afflictPoison({ victim: actor, name: afflictRow.name, key: afflictRow.key, dc: afflictRow.dc, resilience: afflictRow.resilience ?? "body", carried: afflictRow.value ?? 1, by: maker });
     }
     // **AN AREA'S TEST** (D-757): posted by `effects/area-strikes.mjs#postAreaTest`
     // at the start of a turn in the area or on entering it, and rolled HERE, the
@@ -1967,6 +2009,13 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
       // **A POISON'S CONDITIONS, WHERE THE CARD CARRIES THEM** (04's Snake Trap,
       // D-779): the Test resists the poison, so its failure lays what the poison
       // lays - a weapon's coating offers its conditions as buttons instead.
+      // **A POISON CARRIED UNTIL IT IS CURED** (D12): the failed Test lays the carrier, which
+      // holds the conditions itself - a coating laid before D12 has no `afflict` and takes the
+      // paths below as it did.
+      if (poison?.afflict) {
+        const a = poison.afflict;
+        await afflictPoison({ victim: actor, name: a.name, key: a.key, dc: a.dc, resilience: a.resilience ?? "body", carried: a.carried, by: maker });
+      }
       for (const id of poison?.statuses ?? []) {
         if (!AZEROTH.conditions?.[id]) continue;
         const effect = await applyCondition(actor, id, {});
@@ -1995,6 +2044,10 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
       if (snakeTrap && result) await finishSnakeTrapCatch(message, actor, result, 'interrupted');
       throw error;
     }
+    // Marsh fever's weekly Test (D12): a failure while recovering sends it back to carried.
+    if (purpose === "relapse" && relapseHeld && result) {
+      await game.system.azeroth.workflows.resolveRelapse({ actor, effectId: relapseHeld.effectId, success: passed });
+    }
     // Poisoned (A1): each success sheds one stack.
     if (button.dataset.purpose === "poisoned" && result?.rolls?.[0]?.outcome?.success) {
       const effect = poisonHeld?.effect;
@@ -2006,9 +2059,16 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
       }
       if (effect) {
         const value = (effect.getFlag("azeroth-rpg", "value") ?? 1) - 1;
+        // A CARRIED poison is never deleted by a shed (D12, R1): at 0 it drops the Poisoned
+        // and keeps its flag, and its next beat lays the value again.
+        const carrier = effect.getFlag("azeroth-rpg", "affliction");
+        if (carrier?.kind) {
+          await effect.update(value > 0 ? { "flags.azeroth-rpg.value": value }
+            : { statuses: [...(effect.statuses ?? [])].filter(id => id !== "poisoned"), "flags.azeroth-rpg.value": 0 });
+        }
         // End this dose alone. Toggling the status off removes every poison
         // carrier, including unrelated poisons and their ongoing damage.
-        if (value <= 0) await effect.delete();
+        else if (value <= 0) await effect.delete();
         else await effect.setFlag("azeroth-rpg", "value", value);
         ui.notifications?.info(game.i18n.format("AZEROTH.Combat.PoisonShed", { name: actor.name, stacks: conditionValues(actor).poisoned ?? 0 }));
       }

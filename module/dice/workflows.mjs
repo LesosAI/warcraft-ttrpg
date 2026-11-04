@@ -44,6 +44,7 @@ import { resolveRecordedDamage as resolveDamage } from "../rules/damage-record.m
 import { explosiveTrapSnapshot, explosiveTrapDamage } from "../rules/explosive-trap.mjs";
 import { blastRadius } from "../rules/blast-radius.mjs";
 import { featureReady } from "../effects/feature-ready.mjs";
+import { afflictPoison, markFirstTestBane } from "./afflictions-workflows.mjs";
 import { AzerothRoll } from "./azeroth-roll.mjs";
 import { routeSignatureHit, prepareSignatureHitTarget } from "../effects/signature-hit-routing.mjs";
 import { hitBonusDamageForTarget } from "../rules/signature-hit-target.mjs";
@@ -85,6 +86,7 @@ import { wardingElixir, wardingElixirChange, supremePower, supremePowerChange, S
 import { thistleTeaRefill, thistleTeaFatigue } from "../rules/thistle-tea.mjs";
 import { WISDOM_FLAG, isDistilledWisdom } from "../rules/distilled-wisdom.mjs";
 import { isAntivenom } from "../rules/antivenom.mjs";
+import { isRemedy } from "../rules/cures.mjs";
 import { INVULNERABILITY_POTION_FLAG, isInvulnerabilityPotion } from "../rules/invulnerability-potion.mjs";
 import { useAntivenom } from "../effects/antivenom-use.mjs";
 import { acquireConsumableUse } from "../effects/consumable-use-lock.mjs";
@@ -536,11 +538,17 @@ async function nameAegisSchools(actor, { heals = false, name = "" } = {}) {
 }
 
 /**
- * Whether any character in the world holds 04's Foresight and 02's Ward (D-779):
- * an attack card offers a Foresight Ward only where somebody could press it.
+ * Whether a character who could answer this attack holds 04's Foresight and 02's
+ * Ward (D-779): an attack card offers a Foresight Ward only where somebody could
+ * press it. **Inside a fight only a priest IN that fight counts** (2026-11-04):
+ * Foresight *spends a Reaction*, and a priest who is not a combatant has none, so a
+ * Foresight priest anywhere in the world held the damage of every hit in every
+ * fight behind a reveal nobody there could press. Out of a fight, any character.
  */
-function foresightHeld() {
-  return (game.actors?.contents ?? []).some(a => a.type === "character" && a.hasFeature?.("Ward") && foresightFor(a.takenTalents?.() ?? []));
+function foresightHeld(fight = null) {
+  const holds = a => a?.type === "character" && a.hasFeature?.("Ward") && foresightFor(a.takenTalents?.() ?? []);
+  if (fight?.combatants) return fight.combatants.some(c => holds(c.actor));
+  return (game.actors?.contents ?? []).some(holds);
 }
 
 /**
@@ -606,6 +614,8 @@ async function restoreMana(actor, pool, amount) {
 
 // Still reachable here: the Quench combat batch and the card read it from the workflows.
 export { calledShotCost };
+export { medicineTest, exposeAffliction, addAffliction, afflictionCatalogue, chooseAffliction, afflictPoison, afflictDisease,
+  resolveRelapse, markFirstTestBane } from "./afflictions-workflows.mjs";
 
 /**
  * The actor a target snapshot points at: its token on its scene, else the
@@ -1397,6 +1407,8 @@ export async function rollTest({
     roll.options.provenance.push({ label: "AZEROTH.Modifier.LaidBane", value: null, formula: baneSources.join(", ") });
   }
   // And a Boon somebody laid (04's Blessing, D-772): spent the same way.
+  // D12: a carried poison's Bane on the first Attack or Casting Test of the turn is spent by this one.
+  await markFirstTestBane(actor, kind);
   const boonSources = await spendLaidBoons(actor, kind);
   if (boonSources.length) {
     roll.options.provenance.push({ label: "AZEROTH.Modifier.LaidBoon", value: null, formula: boonSources.join(", ") });
@@ -1890,6 +1902,27 @@ export async function rollTest({
   const coatedBlades = kind === "attack" && !parry ? coatingTalentsFor(talentsHeld) : { noTest: false, by: [] };
   const poisons = [];
   for (const f of fired) {
+    // **A POISON CARRIED UNTIL IT IS CURED** (D12): no Test lays it on every creature struck;
+    // a Test offers the target's Resilience Test on the card and a failure lays it
+    // (`dice/chat.mjs#rollResists`). Coated Blades' rank 2 skips the Test as it does for a tick.
+    if (f.afflict) {
+      const a = f.afflict;
+      if (!a.resilience || coatedBlades.noTest) {
+        const words = [];
+        for (const t of list) {
+          const victim = targetActorOf(t);
+          if (!victim) continue;
+          const done = await afflictPoison({ victim, name: a.name, key: a.key, dc: a.dc, resilience: a.resilience ?? "body", carried: a.carried, by: actor });
+          words.push(game.i18n.format(done?.ok ? "AZEROTH.Afflictions.Card.Laid" : (done?.reason === "immune" ? "AZEROTH.Afflictions.Card.Immune" : "AZEROTH.Afflictions.Card.Already"), { name: t?.name ?? victim.name, affliction: a.name }));
+        }
+        if (words.length) f.text = [f.text, ...words].filter(Boolean).join(" ");
+      } else {
+        f.poison = { index: poisons.length, resilience: a.resilience, label: AZEROTH.resiliences[a.resilience], dc: a.dc ?? null };
+        poisons.push({ name: f.name, afflict: a });
+        for (const ti of list.keys()) recordHit(ti, { kind: "test", name: f.name });
+      }
+      continue;
+    }
     if (!f.tick || !f.resist?.resilience) continue;
     const laidPoison = layTick(f.tick, { source: actor?.uuid ?? null, name: f.name });
     if (!laidPoison) continue;
@@ -2305,7 +2338,7 @@ export async function rollTest({
     : [];
 
   const foresightOffered = Boolean(kind === "attack" && !parry && outcome.success && damageResult
-    && list.length && foresightHeld());
+    && list.length && foresightHeld(fight));
   const content = await renderTemplate(TEMPLATE.roll, {
     config: AZEROTH,
     kind,
@@ -3336,6 +3369,14 @@ export async function castSpell({
       if (cureReview?.reason !== "cancelled") ui.notifications?.warn(game.i18n.localize("AZEROTH.CurePoison.BeforeFailed"));
       return null;
     }
+  }
+
+  // The five single-target cures (D12 Phase 6) are judged and chosen before payment.
+  let doorCure = null;
+  if ((await import("../effects/cures.mjs")).DOOR_CURES.includes(spell.name)) {
+    const { prepareDoorCure } = await import("../effects/cures.mjs");
+    doorCure = await prepareDoorCure({ actor, spell, source, targets: list });
+    if (!doorCure?.ok) return null;
   }
 
   // Reviewed utility choices live only on the GM's receipt. Cancellation is
@@ -4694,6 +4735,15 @@ export async function castSpell({
   if (spellCard && dispersionTools && success) {
     const result = await dispersionTools.requestDispersionResolution(spellCard);
     if (!result?.ok) ui.notifications?.warn(game.i18n.localize("AZEROTH.Dispersion.Unresolved"));
+  }
+  // A cure lands only on a successful Casting Test (07 ง8).
+  if (doorCure?.ok && success) {
+    try {
+      const { finishDoorCure } = await import("../effects/cures.mjs");
+      await finishDoorCure(doorCure, { actor, spell, sl: outcome.sl });
+    } catch (error) {
+      console.warn("azeroth-rpg | cure", error);
+    }
   }
   if (spellCard && cureReview?.ticket) {
     try {
@@ -10229,6 +10279,12 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
     onFail: a.inflicts.onFail === true && Boolean(resist)
   }] : [];
   // The conditions a failed Resist on this card lands (`dice/chat.mjs#rollResists`).
+  // D12: an ability that names the poison or disease it lays lays the CARRIER on a failed Test,
+  // and the carrier holds the condition itself, so the plain Poisoned / Diseased is not laid beside it.
+  const afflictOnFail = resist && a.afflict?.kind && a.afflict.key
+    ? { kind: a.afflict.kind, key: a.afflict.key, name: a.afflict.name ?? row.name, dc: a.afflict.dc ?? resist.dc,
+      resilience: a.afflict.resilience ?? resist.key, value: a.afflict.value ?? 1 }
+    : null;
   const onFailInflicts = resist ? governed(inflicts).onFail.map(i => ({ condition: i.condition, value: i.value, until: i.until })) : [];
 
   // 5. Strike a use: the row is written whole, an array being what it is.
@@ -10298,6 +10354,7 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
       ...(damage && halfOnPass ? { halfOnPass: true, passedByTarget, damagePassed } : {}),
       ...(damage && noneOnPass ? { noneOnPass: true } : {}),
       ...(resist && onFailInflicts.length ? { onFailInflicts } : {}),
+      ...(afflictOnFail ? { afflict: afflictOnFail } : {}),
       // AN ABILITY THAT ATTACKS AND NAMES NO NUMBERS SWINGS THE BLOCK'S OWN
       // LINE (D-691). Ten entries carried `kind: "attack"` with an empty
       // `attack` descriptor, so the card's button rolled at Bonus 0 for 0
@@ -10380,6 +10437,8 @@ export async function useGear({ actor, item, targets = null } = {}) {
     ui.notifications?.warn(game.i18n.localize('AZEROTH.Use.Receipt.Pending'));return null;
   }
   if (isAntivenom(use)) return useAntivenom(actor, item);
+  // A gear REMEDY ends the one disease it names, on the user or a creature touched (D12 Phase 6).
+  if (isRemedy(use)) return (await import("../effects/cures.mjs")).useRemedy(actor, item, { targets: targets ?? [] });
   const source = JSON.stringify({name:item.name,use});
   const releaseUse = acquireConsumableUse(actor);
   if (!releaseUse) {
@@ -10530,6 +10589,13 @@ export async function useGear({ actor, item, targets = null } = {}) {
       // *2 damage a turn for 3 turns* (08 ยง12, O-114; D-770): what a failed
       // Test lays, carried to the card with the blow that lands.
       tick: poisonTick(use),
+      // D12: what the poison leaves CARRIED (08 section 13's Carried cell, `readCarried`'s
+      // descriptor) and the key the carrier is known by. A blade coated before this
+      // carries neither and behaves as it did.
+      ...(use.kind === "poison" && use.carried?.carried ? {
+        carried: foundry.utils.deepClone(use.carried),
+        key: item.name.toLowerCase().replace(/[^a-z]/g, "")
+      } : {}),
       at: Date.now()
     });
     lines.push(game.i18n.format("AZEROTH.Use.LaidOn", { name: item.name, item: onto.name }));

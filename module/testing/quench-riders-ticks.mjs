@@ -22,8 +22,8 @@
  * - Rejuvenation laid from its card, healing at each start of its target's
  *   turn and gone at its last; Moonfire's card laying its tick on the caster's
  *   span;
- * - Serpent's tears: the Test on the card, a failure laying 2 damage a turn for
- *   3 turns, and nothing after;
+ * - Serpent's tears: the Test on the card, a failure laying a CARRIED poison
+ *   (D12) dealing 2 at each turn start until cured;
  * - `endTick` removing a laid heal.
  *
  * Run alone with `QUENCH_BATCH=azeroth-rpg.riders-ticks`. Every document a test
@@ -36,6 +36,7 @@ import { attackWithDialog } from "../applications/actions.mjs";
 import { prepareRoll } from "../applications/roll-dialog.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 import { AZEROTH } from "../config.mjs";
+import { afflictionsOf } from "../effects/afflictions.mjs";
 
 /** Wait for a condition, or say what was being waited for. */
 async function until(fn, what, ms = 15000) {
@@ -210,6 +211,13 @@ export function ridersTicksBatch(context) {
         const line = box.closest("label").textContent.replace(/\s+/g, " ");
         assert.include(line, game.i18n.format("AZEROTH.Rider.Price", { n: 2, pool: game.i18n.localize("AZEROTH.Pool.Ferocity") }), "the line names no price");
         box.checked = true;
+        // A level 5 Druid holds Extra Attack (02 SS6, D-704): the dialog makes the player name the
+        // second roll's weapon and greys Roll until one is picked.
+        const second = dialog.element.querySelector('select[name="extraWeapon"]');
+        if (second) {
+          second.value = [...second.options].find(o => o.value)?.value ?? "";
+          second.dispatchEvent(new Event("change", { bubbles: true }));
+        }
         dialog.element.querySelector('button[data-action="roll"]').click();
         card = await pending;
       } finally {
@@ -468,7 +476,7 @@ export function ridersTicksBatch(context) {
       assert.equal(patient.system.health.value, start + 4, "Rejuvenation healed after it ended");
     });
 
-    it("SERPENT'S TEARS: the Test on the card, and a failure lays 2 damage at each of the next 3 turn starts, then nothing", async function () {
+    it("SERPENT'S TEARS: the Test on the card, and a failure lays a CARRIED poison that deals 2 at each turn start until cured (D12)", async function () {
       this.timeout(240000);
       const rogue = await makeCharacter({ name: "ZZ Tick Poisoner", classes: [["Rogue", 3]], weapons: ["Dagger"] });
       const dagger = rogue.items.find(i => i.name === "Dagger");
@@ -476,7 +484,7 @@ export function ridersTicksBatch(context) {
       const tears = await give(rogue, "Serpent's tears");
       await game.system.azeroth.workflows.useGear({ actor: rogue, item: tears });
       const coating = await until(() => rogue.items.get(dagger.id)?.getFlag("azeroth-rpg", "coating"), "the poison on the dagger");
-      assert.deepInclude(coating.tick, { kind: "damage", amount: "2", rounds: 3 }, "the coating carries no tick");
+      assert.equal(coating.carried?.damage, 2, "the coating carries no descriptor");
       const ghoul = await makeNpc("Plagued Ghoul");
       await sceneWith([{ actor: rogue, x: 1000, y: 1000 }, { actor: ghoul, x: 1100, y: 1000, side: "hostile" }]);
       target(ghoul);
@@ -490,7 +498,9 @@ export function ridersTicksBatch(context) {
       }
       assert.ok(card, "the poisoned blow posted no card");
       made.push(card);
-      assert.ok(card.flags["azeroth-rpg"].poisons?.length, "the card carries no tick poison");
+      const poison = card.flags["azeroth-rpg"].poisons?.[0];
+      assert.ok(poison?.afflict, "the card offers no carried poison");
+      assert.isNotOk(poison.tick, "a carried poison also stamped the old tick");
       const button = parsed(card).querySelector('[data-action="resistTest"][data-purpose="poison"]');
       assert.ok(button, "the card offers no Test for the poison");
       assert.equal(button.dataset.dc, "13");
@@ -500,17 +510,15 @@ export function ridersTicksBatch(context) {
       } finally {
         fail();
       }
-      const laid = await until(() => tickEffect(ghoul, "Serpent's tears"), "the poison's tick on the ghoul");
-      assert.deepInclude(laid.getFlag("azeroth-rpg", "tick"), { kind: "damage", type: null, amount: 2, rounds: 3, source: rogue.uuid });
+      const carried = () => afflictionsOf(ghoul);
+      await until(() => carried().length === 1, "the carrier on the ghoul");
       const start = ghoul.system.health.value;
       for (let turn = 1; turn <= 3; turn++) {
         await nextRound(combat);
         await until(() => ghoul.system.health.value === start - 2 * turn, `turn ${turn}'s 2 damage`);
       }
-      await until(() => !tickEffect(ghoul, "Serpent's tears"), "the poison gone after its third turn");
-      await nextRound(combat);
-      await settle();
-      assert.equal(ghoul.system.health.value, start - 6, "the poison dealt damage after its turns");
+      // Carried until cured: it is STILL there after three turns.
+      assert.lengthOf(carried(), 1, "a carried poison ended by itself");
     });
 
     it("ENDTICK removes one healing tick the caster laid, and finds nothing to end after", async function () {

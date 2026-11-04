@@ -192,7 +192,8 @@ export function situationalModifiers({
   talentBanes = null,
   opening = null,
   untrained = [],
-  resilience = null
+  resilience = null,
+  afflictionBanes = null
 } = {}) {
   const has = id => statuses.includes(id);
   const targetHas = id => targetStatuses.includes(id);
@@ -298,6 +299,9 @@ export function situationalModifiers({
   // is the roller's own state, so automatic and still editable (D-691).
   if (kind === "skill" && skill && standingBanes.length) auto("standingBane", { banes: standingBanes.length });
   if (standingTestBoons > 0) auto("standingBoon", { boons: standingTestBoons });
+  // D12: a poison or disease the roller CARRIES (Rot-fever's Bane on Strength Tests, Dulling
+  // oil's on the first Attack of the turn). The roller's own state, so automatic and named.
+  if (afflictionBanes?.banes > 0) auto("affliction", { banes: afflictionBanes.banes, name: (afflictionBanes.names ?? []).join(", ") });
   if (standingTestBanes > 0 && !(kind === "skill" && skill && standingBanes.length)) auto("standingBane", { banes: standingTestBanes });
   // 08 §20 (2026-09-10): a Boon on this KIND of Test from a thing being WORN -
   // a parry rating read as a Boon on the Parry, a Signature that says *a Boon

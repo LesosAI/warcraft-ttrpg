@@ -27,6 +27,7 @@
 
 // 08 §12's tick poisons (O-114, D-770): *N damage a turn for M turns*.
 import { readPoisonTick } from "./ticks.mjs";
+import { DISEASES, REMEDIES, diseaseByName, readCarried } from "./afflictions.mjs";
 
 /**
  * The shelves 08 gives a Use to. A tool, a device and a written thing are
@@ -47,7 +48,9 @@ export const USABLE_SHELVES = Object.freeze([
   // one could be used, so the experience a book gives had to be typed in by
   // hand (the lead, 2026-09-07). A book is read at the table rather than in a
   // turn, so it takes no action rung.
-  /· Manuals$/
+  /· Manuals$/,
+  // D12 §4: the nine remedies, each ending one disease.
+  /· Remedies$/
 ]);
 
 /** Whether a catalogue shelf carries things a button uses. */
@@ -59,7 +62,9 @@ export function usableShelf(section) {
 export const CONSUMABLE_KINDS = Object.freeze([
   "none", "restore", "elixir", "draught", "dressing", "poison", "coating", "explosive",
   // A book read rather than drunk: using it grants what its **Grants.** run says.
-  "grant"
+  "grant",
+  // 08 §12's Remedies: ends the one disease it names (D12 §4).
+  "remedy"
 ]);
 
 /** What a coating may be laid on, as 08 §13's *Goes on* column names it. */
@@ -85,6 +90,10 @@ export function emptyUse() {
     perRest: null,
     // 14's Manuals: the experience a book grants when it is read.
     xp: null,
+    // D12: the disease a remedy ends (a DISEASES key), and what a poison
+    // leaves carried on the target (`readCarried`'s descriptor).
+    cures: null,
+    carried: null,
     note: ""
   };
 }
@@ -95,6 +104,26 @@ const num = v => {
   return Number.isFinite(n) ? n : null;
 };
 const oneOf = (v, keys) => (typeof v === "string" && keys.includes(v) ? v : null);
+
+/**
+ * `readCarried`'s descriptor made valid, only the keys that are there at every
+ * depth (D-671). A non-object is no descriptor at all.
+ */
+export function cleanCarried(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const out = {};
+  const has = key => key in raw;
+  if (has("carried")) out.carried = raw.carried !== false;
+  if (has("damage")) out.damage = num(raw.damage) ?? 0;
+  if (has("fatigue")) out.fatigue = num(raw.fatigue) ?? 0;
+  if (has("statuses")) out.statuses = Array.isArray(raw.statuses) ? raw.statuses.filter(x => typeof x === "string" && x) : [];
+  if (has("value")) out.value = num(raw.value) ?? 0;
+  if (has("firstTestBane")) out.firstTestBane = oneOf(raw.firstTestBane, ["attack", "casting"]);
+  if (has("healingFactor")) out.healingFactor = Number.isFinite(Number(raw.healingFactor)) && raw.healingFactor !== null ? Number(raw.healingFactor) : null;
+  if (has("beats")) out.beats = Array.isArray(raw.beats) ? raw.beats.filter(b => b === "turn" || b === "hour") : [];
+  if (has("reason")) out.reason = typeof raw.reason === "string" && raw.reason ? raw.reason : null;
+  return out;
+}
 
 /**
  * A stored descriptor made valid: a value outside its vocabulary is nulled
@@ -150,6 +179,8 @@ export function cleanUse(raw, { conditions = [], schools = [], resiliences = [],
   }
   if (has("perRest")) out.perRest = oneOf(raw.perRest, ["short", "long"]);
   if (has("xp")) out.xp = num(raw.xp);
+  if (has("cures")) out.cures = typeof raw.cures === "string" && DISEASES[raw.cures] ? raw.cures : null;
+  if (has("carried")) out.carried = cleanCarried(raw.carried);
   if (has("note")) out.note = typeof raw.note === "string" ? raw.note : "";
   return out;
 }
@@ -302,7 +333,13 @@ export function endsOnRest(coating, kind = "short") {
  */
 export function coatingFired(coating, { success = false } = {}) {
   if (!coating || !success) return null;
-  if (!coating.statuses?.length && !coating.text) return null;
+  // **A POISON THAT TAKES HOLD IS CARRIED UNTIL IT IS CURED** (D12): a coating stamped with
+  // `carried` (and its `key`) hands the card an `afflict` descriptor instead of a tick or a
+  // condition button - the carrier lays the statuses itself. A coating laid before D12 has
+  // none and keeps the old behaviour.
+  const carried = coating.kind === "poison" && coating.carried && typeof coating.carried === "object" && coating.carried.carried === true
+    ? coating.carried : null;
+  if (!coating.statuses?.length && !coating.text && !carried) return null;
   const envenom = coating.kind === "poison" && (Number(coating.rating) || 0) > 0
     ? Math.max(0, Math.trunc(Number(coating.envenom)) || 0)
     : 0;
@@ -310,14 +347,18 @@ export function coatingFired(coating, { success = false } = {}) {
   // D-770): the target's Resilience Test is a button there, and a failure lays
   // the ticks. A blade coated before D-770 carries no stamp, so the tick is
   // read off the coating's own words.
-  const tick = coating.kind === "poison" && coating.resist?.resilience
+  const tick = !carried && coating.kind === "poison" && coating.resist?.resilience
     ? (coating.tick ?? readPoisonTick(coating.text ?? ""))
     : null;
   return {
     name: coating.name ?? "",
     text: coating.text ?? "",
-    condition: coating.statuses?.length ? { id: coating.statuses[0], value: null } : null,
+    condition: !carried && coating.statuses?.length ? { id: coating.statuses[0], value: null } : null,
     extraDamage: envenom,
+    ...(carried ? { afflict: {
+      key: coating.key ?? null, name: coating.name ?? "", carried,
+      dc: coating.resist?.dc ?? null, resilience: coating.resist?.resilience ?? null
+    } } : {}),
     ...(tick ? { tick, resist: { resilience: coating.resist.resilience, dc: coating.resist.dc ?? null } } : {})
   };
 }
@@ -558,6 +599,19 @@ export function seedUse({ name = "", section = "", description = "" } = {}, { co
     return use;
   }
 
+  // ---- 08 §12's Remedies: a Half-Action on yourself or a creature you touch.
+  if (/· Remedies$/.test(shelf)) {
+    const cures = diseaseByName(runAfter(text, "Cures") ?? "");
+    const named = REMEDIES[String(name).trim()];
+    const key = cures?.key ?? named ?? null;
+    if (!key) return use;
+    use.kind = "remedy";
+    use.action = "half";
+    use.target = "self";
+    use.cures = key;
+    return use;
+  }
+
   const effect = runAfter(text, "Effect");
   if (!effect) return use;
 
@@ -568,6 +622,8 @@ export function seedUse({ name = "", section = "", description = "" } = {}, { co
     use.target = "item";
     use.appliesTo = "weapon";
     use.duration = { value: 1, units: "minutes" };
+    const carriedCell = runAfter(text, "Carried");
+    if (carriedCell) use.carried = readCarried(carriedCell);
     // *+2 damage on each hit* (08 §12, D-719). It read *on the next hit* until
     // the poison stopped leaving with the blow, and the parse was keyed on
     // those words - so Blade venom's whole effect fell through to a `note` and
@@ -689,6 +745,9 @@ export function useParts(use) {
     action: use.action ?? null,
     // A coating names what it is laid on rather than a target (08 §13).
     goesOn: use.kind === "coating" ? (use.appliesTo ?? null) : null,
+    // D12: the disease a remedy ends, and what a poison leaves carried.
+    cures: use.kind === "remedy" ? (use.cures ?? null) : null,
+    carried: use.kind === "poison" ? (use.carried ?? null) : null,
     target: use.kind === "coating" ? null : (use.target ?? null),
     note: typeof use.note === "string" ? use.note : ""
   };

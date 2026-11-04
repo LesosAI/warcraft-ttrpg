@@ -62,6 +62,7 @@ export const CORE_FALLBACK = Object.freeze({
   Restoratives: "icons/svg/pill.svg",
   Elixirs: "icons/svg/pill.svg",
   "Utility draughts": "icons/svg/pill.svg",
+  Remedies: "icons/svg/pill.svg",
   "Bandages and dressings": "icons/svg/pill.svg",
   Explosives: "icons/svg/explosion.svg",
   Devices: "icons/svg/clockwork.svg",

@@ -3,6 +3,8 @@
 import { utilitySpell, utilityChoice, prepareUtilityRecord, utilityEffectData, borrowedLanguages, activeUtilityEffects, underwaterSpeechAllowed } from "../rules/thematic-utility.mjs";
 import { feetApart } from "../canvas/footprints.mjs";
 import { utilityDialog } from "../applications/thematic-utility-dialog.mjs";
+import { createPrivateSpellMessage, privateSpellMessage, withPrivateSpellMessage,
+  loadAuthorizedPrivateSpellMessages } from "./private-spell-records.mjs";
 
 export const UTILITY_QUERY = "azeroth-rpg.thematicUtility";
 export const UTILITY_CONSENT = "azeroth-rpg.thematicUtilityConsent";
@@ -155,8 +157,9 @@ function choiceFor(ctx, raw, approved = false) {
 
 export async function utilityQueryHandler(data = {}, {user} = {}) {
   if (!gmHere() || !user?.id) return refused("authority");
+  await loadAuthorizedPrivateSpellMessages();
   if (data.phase === "claim") return serialized(data.ticket, async () => {
-    const receipt = game.messages.get(data.ticket), state = stateOf(receipt);
+    const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt);
     if (!state || state.userId !== user.id || state.status !== "prepared" || state.claimCast
       || typeof data.cast !== "string" || !data.cast || Date.now() > state.wallExpires) return refused("ticket");
     const ctx = context(state, user);
@@ -196,15 +199,15 @@ export async function utilityQueryHandler(data = {}, {user} = {}) {
     choice: choice.value, consents, findings: review.findings ?? "",
     resultId: foundry.utils.randomID()
   };
-  const receipt = await ChatMessage.create({whisper: [...game.users].filter(u => u.isGM).map(u => u.id),
+  const receipt = await createPrivateSpellMessage({whisper: [...game.users].filter(u => u.isGM).map(u => u.id),
     content: textContent(`${ctx.spell.name}: ${choiceLabel(choice.value)}`), flags: {[NS]: {utilityReceipt: state}}});
   return {ok: true, ticket: receipt.id};
 }
 
 async function finish(data, user) {
-  const receipt = game.messages.get(data.ticket), state = stateOf(receipt);
+  const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt);
   if (!state || (state.userId !== user.id && !user.isGM)) return refused("ticket");
-  const card = game.messages.get(data.messageId), flags = card?.flags?.[NS];
+  const card = privateSpellMessage(data.messageId), flags = card?.flags?.[NS];
   if (!card || card.author?.id !== state.userId || flags?.kind !== "spell" || flags.utilityTicket !== receipt.id
     || flags.caster !== state.actorUuid || flags.spellUuid !== state.spellUuid || flags.identifier !== state.identifier
     || !same(refOf(flags.source), state.source) || !same((flags.targets ?? []).map(refOf), state.targets)
@@ -259,7 +262,7 @@ async function finish(data, user) {
       await write(receipt, state);
     }
   }
-  if (!game.messages.get(state.resultId)) await ChatMessage.create({_id: state.resultId,
+  if (!privateSpellMessage(state.resultId)) await createPrivateSpellMessage({_id: state.resultId,
     whisper: privateUsers(ctx.actor), speaker: ChatMessage.getSpeaker({actor: ctx.actor}),
     content: textContent(`${ctx.spell.name}: ${state.findings || words("Applied")}`),
     flags: {[NS]: {utilityResult: {ticket: receipt.id, cardId: card.id, identifier: state.identifier}}}
@@ -270,7 +273,7 @@ async function finish(data, user) {
 }
 
 async function interact(data, user) {
-  const receipt = game.messages.get(data.ticket), state = stateOf(receipt);
+  const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt);
   if (state?.status !== "complete" || !state.record) return refused("ticket");
   const now = game.time.worldTime;
   const actor = resolve(state.actorUuid);
@@ -288,7 +291,7 @@ async function interact(data, user) {
     if (!review?.eligible || state.record.expiresAt <= game.time.worldTime) return refused("cancelled");
     // The GM records the actual test/junction result. This door never infers
     // chemistry, map rivers, or a tracker's success from an illustration.
-    await ChatMessage.create({whisper: privateUsers(actor), content: textContent(`${review.subject}: ${review.findings}`),
+    await createPrivateSpellMessage({whisper: privateUsers(actor), content: textContent(`${review.subject}: ${review.findings}`),
       flags: {[NS]: {utilityFinding: {ticket: receipt.id, at: game.time.worldTime}}}});
     return {ok: true};
   }
@@ -312,14 +315,14 @@ async function interact(data, user) {
     listeners.push(listener);
   }
   const audience = [...new Set([speaker, ...listeners].flatMap(privateUsers))];
-  await ChatMessage.create({whisper: audience, speaker: ChatMessage.getSpeaker({actor: speaker}), content: textContent(data.text),
+  await createPrivateSpellMessage({whisper: audience, speaker: ChatMessage.getSpeaker({actor: speaker}), content: textContent(data.text),
     flags: {[NS]: {utilitySpeech: {ticket: receipt.id}}}});
   return {ok: true};
 }
 
 /** A retry uses the original successful card and never calls castSpell again. */
 export function registerUtilityCardHooks() {
-  Hooks.on("renderChatMessageHTML", (message, html) => {
+  Hooks.on("renderChatMessageHTML", withPrivateSpellMessage((message, html) => {
     const flags = message.flags?.[NS];
     if (!flags?.utilityTicket || !flags.success) return;
     const container = html.querySelector(".azeroth-card");
@@ -369,5 +372,5 @@ export function registerUtilityCardHooks() {
       } finally { interactButton.disabled = false; }
     });
     container.append(interactButton);
-  });
+  }));
 }

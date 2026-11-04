@@ -1,7 +1,9 @@
 /** Active-GM lifecycle for Dredge Worm's biological poison doses. */
 import { DREDGE_POISON_FLAG, DREDGE_POISONS, dredgePoisonClock, dredgePoisonEffect,
   dredgePoisonPulse, seedDredgePoison, validDredgePoison } from "../rules/dredge-poison.mjs";
+import { AFFLICTION_FLAG, carrierRefresh } from "../rules/afflictions.mjs";
 import { strikeFromArea } from "./area-strikes.mjs";
+import { downedTarget } from "../rules/poison-catchup.mjs";
 
 const pending = new Set();
 const gmHere = () => game.user?.isGM === true && game.users?.activeGM?.id === game.user.id;
@@ -17,6 +19,18 @@ const clockArgs = combat => combat ? { combatUuid: combat.uuid, clock: { round: 
   : { time: game.time?.worldTime };
 const warn = key => ui.notifications?.warn(game.i18n.localize(`AZEROTH.DredgePoison.${key}`));
 const statePath = `flags.azeroth-rpg.${DREDGE_POISON_FLAG}`;
+/** A guard against a runaway loop; an hour-by-hour catch-up has no cap of its own (D12 R4). */
+const CATCH_UP_GUARD = 48;
+
+/**
+ * Shedding Poisoned leaves the dose (D12 R1). At the dose's beat the carrier lays the
+ * Poisoned stack again, and only then; between beats a shed stays shed.
+ */
+async function relayPoisoned(actor, effect) {
+  const aff = effect.flags?.["azeroth-rpg"]?.[AFFLICTION_FLAG];
+  if (!aff || poisoned(effect) || !held(actor, effect)) return;
+  await effect.update(carrierRefresh(aff, { abilities: {}, type: actor.type }));
+}
 
 /** Called after payment and the failed resistance Test. The activation
  * validator pins source, range, authority and encounter across awaited work. */
@@ -29,7 +43,7 @@ export async function layDredgePoison({ source, target, kind, valid } = {}) {
     const state = seedDredgePoison({ kind, sourceUuid: source.uuid, targetUuid: target.uuid,
       ...clockArgs(fightOf(target)), existing: [...target.effects].map(stateOf).filter(Boolean) });
     if (!state) return { ok: false, reason: "alreadyAffectedOrInvalidClock" };
-    const data = dredgePoisonEffect(state);
+    const data = dredgePoisonEffect(state, { now: game.time?.worldTime ?? 0, inFight: Boolean(fightOf(target)) });
     const [effect] = await target.createEmbeddedDocuments("ActiveEffect", [data]);
     if (!effect) return { ok: false, reason: "notCreated" };
     if (!gmHere() || !valid()) return { ok: false, reason: "changedDuringWrite", effectId: effect.id };
@@ -57,10 +71,12 @@ async function advance(actor, combat = null) {
   const lines = [];
   try {
     for (const effect of [...actor.effects].filter(stateOf)) {
-      // No catch-up can exceed the largest authored dose, even on a huge jump.
-      for (let i = 0; i < (combat ? 1 : 3) && gmHere() && held(actor, effect); i++) {
+      // A dose is carried until cured: an hourly catch-up lands every hour that is due.
+      for (let i = 0; i < (combat ? 1 : CATCH_UP_GUARD) && gmHere() && held(actor, effect); i++) {
+        // A catch-up stops at a target with no Health left to lose (rules/poison-catchup.mjs).
+        if (!combat && downedTarget(actor)) break;
         const state = stateOf(effect);
-        if (!validDredgePoison(state) || state.targetUuid !== actor.uuid || !poisoned(effect) || immune(actor)) {
+        if (!validDredgePoison(state) || state.targetUuid !== actor.uuid || immune(actor)) {
           await effect.delete(); break;
         }
         const governing = fightOf(actor);
@@ -69,11 +85,13 @@ async function advance(actor, combat = null) {
           await effect.update({ [statePath]: nextClock }); break;
         }
         if ((!combat && governing) || (combat && governing !== combat)) break;
-        const plan = dredgePoisonPulse(state, { targetUuid: actor.uuid, poisoned: poisoned(effect),
+        const plan = dredgePoisonPulse(state, { targetUuid: actor.uuid,
           disabled: effect.disabled === true || effect.active === false, ...clockArgs(combat) });
         if (plan.action === "end") { await effect.delete(); break; }
         if (plan.next !== state) await effect.update({ [statePath]: plan.next });
         if (plan.action === "none") break;
+        // The beat lays a shed Poisoned stack again before the damage lands.
+        await relayPoisoned(actor, effect);
         // Claim before damage. A rejected/uncertain damage write is never retried.
         try {
           if (gmHere() && held(actor, effect) && poisoned(effect) && !immune(actor)
@@ -87,7 +105,7 @@ async function advance(actor, combat = null) {
         } catch { warn("DamageFailed"); }
         finally {
           if (gmHere() && held(actor, effect)) {
-            if (plan.endsAfterDamage || !poisoned(effect) || immune(actor)) await effect.delete();
+            if (immune(actor)) await effect.delete();
             else {
               const next = dredgePoisonClock(stateOf(effect), clockArgs(fightOf(actor)));
               if (next && next !== stateOf(effect)) await effect.update({ [statePath]: next });
@@ -117,7 +135,7 @@ export async function cleanDredgePoisonEffects() {
       for (const effect of [...actor.effects].filter(stateOf)) {
         if (!gmHere() || !held(actor, effect)) break;
         const state = stateOf(effect);
-        if (!validDredgePoison(state) || state.targetUuid !== actor.uuid || !poisoned(effect) || immune(actor)) {
+        if (!validDredgePoison(state) || state.targetUuid !== actor.uuid || immune(actor)) {
           await effect.delete(); continue;
         }
         const next = dredgePoisonClock(state, clockArgs(fightOf(actor)));

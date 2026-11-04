@@ -4,6 +4,7 @@
 import { curePoisonJudgement, cureBleedingPlan } from "../rules/cure-poison.mjs";
 import { archmageCasters, plainEffect } from "./dispel.mjs";
 import { endNullifiedEffect } from "./nullifier.mjs";
+import { endCarrier } from "./cures.mjs";
 
 const pending = new Set();
 
@@ -34,6 +35,9 @@ export async function resolveCurePoison({ caster, target, choice, classification
     if (!judgement.ok) return refuse(judgement.reason);
     // This shared writer rechecks identity, protection and the reviewed state
     // after a curse gate; it deletes the whole dose before retaliation.
+    // A poison or disease CARRIER ends through the affliction writer (D12 Phase 6); a curse keeps its gates.
+    const carried = await endCarrier(target, effect.id, { by: caster });
+    if (carried) return carried;
     return await endNullifiedEffect({ dispeller: caster, target, effectId: effect.id, classification, gateTest });
   } finally {
     pending.delete(target.uuid);

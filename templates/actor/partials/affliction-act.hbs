@@ -1,0 +1,14 @@
+{{!--
+  ONE CURE BUTTON of the Afflictions panel. The action is spelled out in a
+  branch for each of the three so every `data-action` is a literal in a
+  template (`actions.test.mjs` audits the sheet's actions map against them), and
+  a control that is not one of the three draws nothing rather than a dead
+  button. Hash: `act` (label, action, data, disabled), `cls`, `domId`.
+--}}
+{{#if (eq act.action "medicineTest")}}
+<button type="button" class="{{cls}}" id="{{domId}}" data-action="medicineTest" data-affliction-id="{{act.data.affliction}}"{{#if act.disabled}} disabled{{/if}}>{{act.label}}</button>
+{{else if (eq act.action "useAntivenom")}}
+<button type="button" class="{{cls}}" id="{{domId}}" data-action="useAntivenom" data-affliction-id="{{act.data.affliction}}"{{#if act.disabled}} disabled{{/if}}>{{act.label}}</button>
+{{else if (eq act.action "useRemedy")}}
+<button type="button" class="{{cls}}" id="{{domId}}" data-action="useRemedy" data-affliction-id="{{act.data.affliction}}" data-item-id="{{act.data.itemId}}"{{#if act.disabled}} disabled{{/if}}>{{act.label}}</button>
+{{/if}}

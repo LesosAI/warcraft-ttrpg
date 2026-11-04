@@ -51,6 +51,8 @@ import { heldAttackRows } from "../rules/held-attacks.mjs";
 // 05's temporary Health on the banner (D-777).
 import { temporaryHealthContext } from "../effects/temporary-health.mjs";
 import { npcReloadMenu } from "./reload.mjs";
+import { handLay } from "../effects/bare-afflictions.mjs";
+import { bareKind } from "../rules/bare-afflictions.mjs";
 
 const { HandlebarsApplicationMixin } = foundry.applications.api;
 const { ActorSheetV2 } = foundry.applications.sheets;
@@ -66,6 +68,17 @@ function standsAnywhere(actor) {
 }
 
 export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
+  /**
+   * **A POISONED OR DISEASED DROPPED FROM THE CONDITIONS PACK IS NAMED** (D12 R1): a bare status
+   * has no clock and no cure, so the drop opens the Add picker instead of embedding it.
+   * @inheritDoc
+   */
+  async _onDropActiveEffect(event, effect) {
+    const kind = bareKind([...(effect.statuses ?? [])], effect.flags?.["azeroth-rpg"] ?? {});
+    if (kind && this.document.isOwner && this.isEditable) return (await handLay(this.document, kind)) ?? null;
+    return super._onDropActiveEffect(event, effect);
+  }
+
   static #onReviewChainLightningCast() { return reviewChainLightningCast(this.actor); }
   static #onReviewSearingUses() { return reviewSearingUses(this.actor); }
 

@@ -1,7 +1,8 @@
-/** A Devourer's death burst is one event, not a reusable ability. */
+/** A Devourer's death burst is one event, not a reusable ability. Its poison is carried until
+ *  cured (D12) and repeats once an hour outside a fight (`seconds`). */
 export const MAGGOT_GOO_FLAG = "maggotGoo";
 export const MAGGOT_GOO = Object.freeze({ name: "Maggot Goo", feet: 10, dc: 16,
-  resilience: "body", immediate: 4, ticks: 2, damage: 2, seconds: 6 });
+  resilience: "body", immediate: 4, damage: 2, seconds: 3600 });
 const id = value => typeof value === "string" && value.trim().length > 0;
 
 export function maggotGooDeath({ before, after, hasAbility = false } = {}) {

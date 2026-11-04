@@ -80,7 +80,7 @@ export async function tetanusQueryHandler({ actorUuid, index, source, requestId,
     if (!candidates.length) return refuse("empty");
     const menu = { id: `${actor.id}-tetanus`, name: SPEC.name };
     const picked = await chooseOption(menu, candidates.map(other => ({ key: other.id, name: other.name,
-      description: `Body Resilience DC ${dc}, or Diseased with Constitution reduced by 2 for twenty minutes.` })), null, { prompt: "Choose a creature within 5 feet." });
+      description: `Body Resilience DC ${dc}, or carries Lockjaw: Constitution reduced by 2 until the disease is cured.` })), null, { prompt: "Choose a creature within 5 feet." });
     if (!picked) return refuse("cancelled");
     target = candidates.find(other => other.id === picked.key);
     if (!target) return refuse("target");
@@ -109,7 +109,7 @@ export async function tetanusQueryHandler({ actorUuid, index, source, requestId,
       if (!result.effect.ok) return refuse(result.effect.reason);
     }
     await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), whisper: [game.user.id],
-      content: `<p><strong>Tetanus</strong></p><p>${foundry.utils.escapeHTML(target.name)} ${result.resisted ? "resisted the disease." : result.effect?.immune ? "is immune to disease." : "is Diseased, with Constitution reduced by 2 for twenty minutes (minimum 3). Curing the disease ends the penalty."}</p>`,
+      content: `<p><strong>Tetanus</strong></p><p>${foundry.utils.escapeHTML(target.name)} ${result.resisted ? "resisted the disease." : result.effect?.immune ? "is immune to disease." : result.effect?.already ? "already carries Lockjaw; nothing changes." : "carries Lockjaw: Constitution reduced by 2 (minimum 3) until the disease is cured, and maximum Health falls with it."}</p>`,
       flags: { "azeroth-rpg": { kind: "ability",
         source: source ?? null,
         featureKey: "ability:tetanus",

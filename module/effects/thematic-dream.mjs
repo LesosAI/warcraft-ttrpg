@@ -1,3 +1,4 @@
+import { createPrivateSpellMessage, privateSpellMessage, withPrivateSpellMessage, loadAuthorizedPrivateSpellMessages } from "./private-spell-records.mjs";
 /** Dream Theatre's GM-owned cast receipt and voluntary private channel. */
 import { DREAM_THEATRE, activeDreamMembers, dreamContribution, dreamEffectActive,
   dreamEffectData, leaveDream, startDream } from "../rules/thematic-dream.mjs";
@@ -154,6 +155,7 @@ function participantUsers(state) {
 }
 
 export async function dreamQueryHandler(data = {}, { user } = {}) {
+  await loadAuthorizedPrivateSpellMessages();
   if (!gmHere() || !user?.id) return refused("authority");
   if (["claim", "finish", "contribute", "leave"].includes(data.phase)) return serialized(data.ticket, () => {
     if (data.phase === "claim") return claim(data, user);
@@ -185,13 +187,13 @@ export async function dreamQueryHandler(data = {}, { user } = {}) {
     actorUuid: ctx.actor.uuid, spellUuid: ctx.spell.uuid, source: refOf(data.source), targets: data.targets.map(refOf),
     rows: ctx.members.map(member => ({ actorUuid: member.uuid, effectId: foundry.utils.randomID(), status: "pending" })),
     consents, contributions: [] };
-  const receipt = await ChatMessage.create({ whisper: [...game.users].filter(who => who.isGM).map(who => who.id),
+  const receipt = await createPrivateSpellMessage({ whisper: [...game.users].filter(who => who.isGM).map(who => who.id),
     content: textContent(ctx.spell.name), flags: { [NS]: { dreamReceipt: state } } });
   return { ok: true, ticket: receipt.id };
 }
 
 async function claim(data, user) {
-  const receipt = game.messages.get(data.ticket), state = stateOf(receipt);
+  const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt);
   if (!state || state.userId !== user.id || state.status !== "prepared" || state.claimCast
     || !ref(data.cast) || Date.now() > state.wallExpires) return refused("ticket");
   const ctx = context(state, user);
@@ -211,9 +213,9 @@ async function claim(data, user) {
 }
 
 async function finish(data, user) {
-  const receipt = game.messages.get(data.ticket), state = stateOf(receipt);
+  const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt);
   if (!state || (state.userId !== user.id && !user.isGM) || !state.claimCast) return refused("ticket");
-  const card = game.messages.get(data.messageId), flags = card?.flags?.[NS];
+  const card = privateSpellMessage(data.messageId), flags = card?.flags?.[NS];
   if (!card || card.author?.id !== state.userId || flags?.dreamTicket !== receipt.id || flags.kind !== "spell"
     || flags.identifier !== DREAM_THEATRE.identifier || flags.caster !== state.actorUuid
     || flags.spellUuid !== state.spellUuid || flags.cast !== state.claimCast
@@ -261,7 +263,7 @@ async function finish(data, user) {
 }
 
 function members(data, user) {
-  const receipt = game.messages.get(data.ticket), state = stateOf(receipt), now = game.time.worldTime;
+  const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt), now = game.time.worldTime;
   if (!state || state.status !== "complete" || !activeDreamMembers(state.record, now).length) return refused("ticket");
   const options = state.rows.filter(row => row.status === "complete" && activeDreamMembers(state.record, now).includes(row.actorUuid))
     .map(row => resolve(row.actorUuid)).filter(member => member && (user.isGM || member.testUserPermission(user, "OWNER"))
@@ -271,7 +273,7 @@ function members(data, user) {
 }
 
 async function contribute(data, user) {
-  const receipt = game.messages.get(data.ticket), state = stateOf(receipt), now = game.time.worldTime;
+  const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt), now = game.time.worldTime;
   if (!state || state.status !== "complete" || !ref(data.contributionId)) return refused("ticket");
   const prior = state.contributions.find(row => row.id === data.contributionId);
   if (prior && (!resolve(prior.value.actorUuid)
@@ -285,7 +287,7 @@ async function contribute(data, user) {
   if (!chosen.ok) return chosen;
   const entry = prior ?? { id: data.contributionId, messageId: foundry.utils.randomID(), value: chosen.value, status: "writing" };
   if (!prior) await write(receipt, { ...state, contributions: [...state.contributions, entry] });
-  if (!game.messages.get(entry.messageId)) await ChatMessage.create({ _id: entry.messageId,
+  if (!privateSpellMessage(entry.messageId)) await createPrivateSpellMessage({ _id: entry.messageId,
     whisper: participantUsers(state), speaker: ChatMessage.getSpeaker({ actor: member }),
     content: textContent(`${member.name}: ${chosen.value.label} — ${chosen.value.text}`),
     flags: { [NS]: { dreamContribution: { ticket: receipt.id, contributionId: entry.id, uncertain: true } } }
@@ -297,7 +299,7 @@ async function contribute(data, user) {
 }
 
 async function leave(data, user) {
-  const receipt = game.messages.get(data.ticket), state = stateOf(receipt);
+  const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt);
   if (!state || state.status !== "complete" || !["woke", "left", "damage"].includes(data.reason)) return refused("ticket");
   const member = resolve(data.memberUuid), row = state.rows.find(row => row.actorUuid === member?.uuid);
   if (!member || !row || !user.isGM && !member.testUserPermission(user, "OWNER")) return refused("member");
@@ -321,7 +323,7 @@ async function leave(data, user) {
 }
 
 export function registerDreamCardHooks() {
-  Hooks.on("renderChatMessageHTML", (message, html) => {
+  Hooks.on("renderChatMessageHTML", withPrivateSpellMessage((message, html) => {
     const flags = message.flags?.[NS];
     if (!flags?.dreamTicket || flags.identifier !== DREAM_THEATRE.identifier || flags.success !== true) return;
     const mount = html.querySelector(".azeroth-card") ?? html.querySelector(".message-content") ?? html;
@@ -339,5 +341,5 @@ export function registerDreamCardHooks() {
     if (game.user.isGM || message.author?.id === game.user.id) addButton(words("Resolve"), () => finishDreamCast(flags.dreamTicket, message.id));
     addButton(words("Contribute"), () => contributeDream(flags.dreamTicket));
     addButton(words("Leave"), () => leaveDreamChannel(flags.dreamTicket));
-  });
+  }));
 }

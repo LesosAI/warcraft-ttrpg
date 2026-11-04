@@ -145,6 +145,11 @@ import { dealtHalvedBy } from "../rules/legacy-uses.mjs";
 import { holdsCuttingGear } from "../rules/escapes.mjs";
 // 07's Nature's Grasp's bar on Opportunity Attacks (the B9a pass).
 import { barredFromOpportunity } from "../rules/struck-tests.mjs";
+import { afflictionView } from "../rules/affliction-view.mjs";
+import { afflictionsOf } from "../effects/afflictions.mjs";
+import { handLay } from "../effects/bare-afflictions.mjs";
+import { BARE_STATUSES, carrierOwnsChip, clearCarrierChip, stepCarrierPoison } from "../rules/bare-afflictions.mjs";
+import { isAntivenom } from "../rules/antivenom.mjs";
 
 /**
  * WHAT THE THINGS THE TARGET IS WEARING ANSWER BACK (08 SS20, D-692).
@@ -1120,7 +1125,7 @@ export async function rollWithDialog(actor, spec, event = null) {
   const firstPrepared = typeof spec.rebuildSecond === "function" ? prepareRoll(actor, spec) : null;
   const preparedModes = firstPrepared && spec.modes ? Object.fromEntries(Object.keys(spec.modes)
     .map(mode => [mode, prepareRoll(actor, withAttackMode(spec, mode))])) : null;
-  const choice = spec.extraWeapons || shouldPrompt(event) ? await promptRoll(actor, spec) : defaultChoice(actor, spec);
+  const choice = spec.extraWeapons || spec.alwaysPrompt || shouldPrompt(event) ? await promptRoll(actor, spec) : defaultChoice(actor, spec);
   if (!choice) return null;
   if (spec.extraWeapons && (!extraAttackSelection(spec.extraWeapons, choice.extraWeapon)
     || !spec.validateExtra?.(choice.extraWeapon))) {
@@ -1143,9 +1148,9 @@ export async function rollWithDialog(actor, spec, event = null) {
   // roller left ticked arrives back as `extraRating` and `damageRows`.
   // `talentLineOffer` is the dialog's own input too (D-774): what the roller
   // ticked arrives back as `talentLines`, the identifiers alone.
-  const { skill, casting, occasions, fallbackDC, fallbackSource, heavyBane, damageLines, talentLineOffer, run, rebuildSecond, rolls, modes, riderModifiers, extraWeapons, validateExtra, ...roll } = withAttackMode(spec, choice.mode);
+  const { skill, casting, occasions, fallbackDC, fallbackSource, heavyBane, damageLines, talentLineOffer, alwaysPrompt, run, rebuildSecond, rolls, modes, riderModifiers, extraWeapons, validateExtra, ...roll } = withAttackMode(spec, choice.mode);
   void extraWeapons; void validateExtra;
-  void skill; void casting; void occasions; void fallbackDC; void fallbackSource; void heavyBane; void damageLines; void talentLineOffer; void modes;
+  void alwaysPrompt; void skill; void casting; void occasions; void fallbackDC; void fallbackSource; void heavyBane; void damageLines; void talentLineOffer; void modes;
   // The second roll's target is the dialog's answer and never the roll's input.
   const { secondTargets, extraWeapon, ...picked } = choice;
   let workflow = run ?? game.system.azeroth.workflows.rollTest;
@@ -2956,6 +2961,16 @@ function syncedBy(effect) {
 }
 
 /** What the effects partial reads. */
+/**
+ * The carrier that owns a Poisoned or Diseased chip, or null: a poison whose repeat lays the
+ * status (shed to 0 it still owns it) or a disease standing in `diseased`. A chip a carrier
+ * owns is TRACKED: clearing it never deletes the carrier (`rules/bare-afflictions.mjs`).
+ */
+export function carrierFor(actor, status) {
+  if (!BARE_STATUSES[status]) return null;
+  return afflictionsOf(actor).find(r => carrierOwnsChip(r.aff, status, { statusOn: r.effect.statuses?.has(status) === true })) ?? null;
+}
+
 export function effectsContext(actor) {
   const block = iceBlockFor(actor);
   const dispersion = dispersionFor(actor);
@@ -2968,6 +2983,8 @@ export function effectsContext(actor) {
       img: CONFIG.statusEffects?.[id]?.img ?? "icons/svg/aura.svg",
       active: statuses.has(id),
       valued: AZEROTH.valuedConditions.includes(id),
+      // A chip a carried poison or disease owns (clearing it never deletes the carrier).
+      carried: Boolean(carrierFor(actor, id)),
       value: effect ? (effect.getFlag("azeroth-rpg", "value") ?? 1) : 0,
       // For the Overview strip (2026-09-20). The Core grid draws no span: a
       // hand-toggled condition carries none (D-628) and this is null there.
@@ -3034,6 +3051,27 @@ export function effectsContext(actor) {
   const signatureHealingReview=game.user?.isGM&&game.users?.activeGM?.id===game.user.id&&healingSignatureReviewState(actor).pending;
   const signatureDamageReview=game.user?.isGM&&game.users?.activeGM?.id===game.user.id&&(damageSignatureCards(actor).length>0||orphanDamageCasts(actor).length>0||['reserved','uncertain'].includes(actor.getFlag?.('azeroth-rpg','sealingFlameRecipient')?.state));
   return { conditions, rows, thresholds, dispersionEndingReview, antivenomReview, consumableReview, signatureUseReview, signatureParryReview, signatureKillReview, signatureHitReview, signatureHealingReview, signatureDamageReview };
+}
+
+/** Step a carried poison's Poisoned stacks (never past four, 0 sheds them, the carrier stays). */
+async function stepCarrierChip(actor, carrier, delta, max = AZEROTH.POISONED_MAX) {
+  const held = carrier.effect.statuses?.has("poisoned") ? (Number(carrier.effect.getFlag("azeroth-rpg", "value")) || 1) : 0;
+  const step = stepCarrierPoison(carrier.aff, held, delta, max);
+  if (step.value === held) return null;
+  if (step.value === 0) return shedCarrierChip(actor, carrier, "poisoned");
+  // STACKS ONLY: the beat lays the carrier's own dose back (D12 R1), so the dose hook
+  // in effects/bare-afflictions.mjs leaves this write alone.
+  await carrier.effect.update(step.patch, { azerothStacks: true });
+  return carrier.effect;
+}
+
+/** Clear a carrier-owned chip: Poisoned sheds the stacks and the poison lays them again at its next beat. */
+async function shedCarrierChip(actor, carrier, status) {
+  const clear = clearCarrierChip(carrier.aff, status);
+  if (clear?.op !== "shed") return null;
+  await carrier.effect.update(clear.patch);
+  ui.notifications?.info(game.i18n.format("AZEROTH.Afflictions.Bare.Shed", { name: actor.name, poison: carrier.aff.name }));
+  return carrier.effect;
 }
 
 /**
@@ -3124,7 +3162,21 @@ export async function effectAction(actor, action, target) {
       const {reviewConsumableUse}=await import('./consumable-review.mjs');
       return reviewConsumableUse(actor);
     }
-    case "toggleCondition":
+    case "toggleCondition": {
+      // **A POISONED OR DISEASED IS TRACKED** (D12 R1): on opens the Add picker (a bare status
+      // would have no clock and no cure); off, on a chip a carrier owns, never deletes the carrier.
+      const bare = BARE_STATUSES[condition];
+      if (bare) {
+        const carrier = carrierFor(actor, condition);
+        if (!actor.statuses?.has(condition)) {
+          if (carrier && bare === "poison") return stepCarrierChip(actor, carrier, 1);
+          return handLay(actor, bare);
+        }
+        if (carrier) {
+          if (refuse({ kind: "condition", id: condition, carried: true })) return null;
+          return shedCarrierChip(actor, carrier, condition);
+        }
+      }
       // Fatigued is the condition that puts a point on the track (A1, D-624):
       // on adds one, and the track keeps the status lit; off is a Long
       // Rest's to do, one point a night, so the chip refuses.
@@ -3133,12 +3185,17 @@ export async function effectAction(actor, action, target) {
         return actor.update({ "system.fatigue": Math.min(AZEROTH.FATIGUE_MAX, (actor.system?.fatigue ?? 0) + 1) });
       }
       return actor.toggleStatusEffect(condition);
+    }
     case "stepCondition": {
       const delta = Math.trunc(Number(target.dataset.delta)) || 0;
       const current = actor.effects.find(e => e.statuses?.has(condition));
       const max = condition === "poisoned" ? AZEROTH.POISONED_MAX : 99;
+      // The stepper changes a carried poison's STACKS, never the carrier's existence.
+      const owner = condition === "poisoned" ? carrierFor(actor, condition) : null;
+      if (owner) return stepCarrierChip(actor, owner, delta, max);
       if (!current) {
         if (delta <= 0) return null;
+        if (condition === "poisoned") return handLay(actor, "poison");
         await actor.toggleStatusEffect(condition, { active: true });
         const made = actor.effects.find(e => e.statuses?.has(condition));
         return made?.setFlag("azeroth-rpg", "value", 1) ?? null;
@@ -3552,3 +3609,74 @@ export function itemContextMenu(sheet) {
     sheet.element, "li[data-item-id], .azeroth-slot-tile[data-item-id]", entries, { jQuery: false, fixed: true });
 }
 
+
+/* ------------------------------------------------------------------ */
+/* The Afflictions panel (D12, Phase 7)                                */
+/* ------------------------------------------------------------------ */
+
+/** The flag names the open state is remembered under, per viewer (the Combat tab's mechanism). */
+export const AFFLICTION_OPEN_GROUP = kind => `afflictionGroups.${kind}`;
+export const AFFLICTION_OPEN_ROWS = "afflictionRows";
+
+/**
+ * The viewer's last open-or-closed choice on the Afflictions panel, held from the click
+ * until its user-flag write lands. A redraw in that round trip (the panel's 1 s countdown)
+ * read the old flag and opened a group the viewer had just closed.
+ */
+const pendingOpen = new Map();
+const openRead = key => (pendingOpen.has(key) ? pendingOpen.get(key) : game.user.getFlag("azeroth-rpg", key));
+
+/** Remember a group's or the rows' open state for this viewer: held at once, then written. */
+export async function rememberAfflictionOpen(key, value) {
+  pendingOpen.set(key, value);
+  try { await game.user.setFlag("azeroth-rpg", key, value); }
+  finally { if (pendingOpen.get(key) === value) pendingOpen.delete(key); }
+}
+
+/** The panel's words: `AZEROTH.Afflictions.Panel` plus the three label maps the view needs. */
+function afflictionWords() {
+  const panel = foundry.utils.getProperty(game.i18n.translations, "AZEROTH.Afflictions.Panel") ?? {};
+  const words = foundry.utils.deepClone(panel);
+  // Two nested groups, read by prefix so each key has a reader the lang audit can see.
+  words.Span = Object.fromEntries(["Under", "Min", "Hour", "Day", "Days"].map(k => [k, game.i18n.localize(`AZEROTH.Afflictions.Panel.Span.${k}`)]));
+  words.MedicineRefuse = Object.fromEntries(["inFight", "onset", "triedToday", "recovering", "healerCarries"]
+    .map(k => [k, game.i18n.localize(`AZEROTH.Afflictions.Panel.MedicineRefuse.${k}`)]));
+  words.conditions = Object.fromEntries(Object.entries(AZEROTH.conditions).map(([k, v]) => [k, game.i18n.localize(v)]));
+  words.abilities = Object.fromEntries(Object.entries(AZEROTH.abilities).map(([k, v]) => [k, game.i18n.localize(v)]));
+  words.resiliences = Object.fromEntries(Object.entries(AZEROTH.resiliences).map(([k, v]) => [k, game.i18n.localize(v)]));
+  return words;
+}
+
+/**
+ * What the Afflictions panel draws (a reading, never stored): the carriers
+ * through `rules/affliction-view.mjs#afflictionView`, with the Antivenom and
+ * the remedies the actor carries counted so a control is drawn only when it can
+ * be used, and the viewer's remembered open state.
+ */
+export function afflictionsContext(actor) {
+  const carriers = afflictionsOf(actor).map(r => ({ id: r.id, aff: r.aff, img: r.effect?.img || null }));
+  let antivenom = 0;
+  const remedies = {};
+  for (const item of actor.items ?? []) {
+    const use = item.system?.use;
+    if (!use) continue;
+    const n = item.system?.quantity ?? 1;
+    if (isAntivenom(use)) antivenom += n;
+    else if (use.kind === "remedy" && use.cures) {
+      const have = remedies[use.cures];
+      remedies[use.cures] = have ? { ...have, count: have.count + n } : { name: item.name, count: n, itemId: item.id };
+    }
+  }
+  const groups = {};
+  for (const kind of ["poison", "disease"]) groups[kind] = openRead(AFFLICTION_OPEN_GROUP(kind)) !== false;
+  const rows = openRead(AFFLICTION_OPEN_ROWS);
+  return afflictionView(carriers, {
+    now: game.time?.worldTime ?? 0,
+    // The same question the Medicine Test asks, so a button and its door agree.
+    inFight: Boolean(actor.activeFight?.()),
+    isGM: game.user.isGM === true,
+    carried: { antivenom, remedies },
+    words: afflictionWords(),
+    open: { groups, rows: Array.isArray(rows) ? rows : [] }
+  });
+}

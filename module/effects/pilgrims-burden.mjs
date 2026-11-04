@@ -5,6 +5,8 @@ import { feetApart } from "../canvas/footprints.mjs";
 import { burdenLoadState, redistributePilgrimsBurden } from "../rules/pilgrims-burden.mjs";
 import { ledger as bagLedger } from "../rules/slots.mjs";
 import { utilityDialog } from "../applications/thematic-utility-dialog.mjs";
+import { createPrivateSpellMessage, privateSpellMessage, privateSpellMessages,
+  withPrivateSpellMessage, loadAuthorizedPrivateSpellMessages } from "./private-spell-records.mjs";
 
 export const PILGRIMS_BURDEN_QUERY = "azeroth-rpg.pilgrimsBurden";
 export const PILGRIMS_BURDEN_CONSENT = "azeroth-rpg.pilgrimsBurdenConsent";
@@ -30,7 +32,7 @@ const tokenRef = token => {
 };
 const tokenAt = ref => ref?.sceneId && ref?.tokenId ? game.scenes?.get(ref.sceneId)?.tokens?.get(ref.tokenId) ?? null : null;
 const canonicalTokenRef = ref => tokenRef(ref?.tokenUuid ? resolve(ref.tokenUuid) : tokenAt(ref));
-const messages = () => game.messages?.contents ?? [];
+const messages = () => privateSpellMessages();
 const privateWhisper = () => [...(game.users?.contents ?? [])].filter(user => user.isGM).map(user => user.id);
 const escape = value => foundry.utils.escapeHTML(String(value ?? ""));
 const write = (message, state) => message.update({[`flags.${NS}.${PILGRIMS_BURDEN_RECEIPT}`]: foundry.data.operators.ForcedReplacement.create(state)});
@@ -221,6 +223,7 @@ function duplicateReservation(participantUuids, now, exceptTicket = null) {
 /** Active-GM handler registered in CONFIG.queries. */
 export async function pilgrimsBurdenQueryHandler(data = {}, {user} = {}) {
   if (!gmHere() || !user?.id || !data || typeof data !== "object" || Array.isArray(data)) return refuse("authority");
+  await loadAuthorizedPrivateSpellMessages();
   if (data.phase === "prepare") return serialized("prepare", () => prepareOnGm(data, user));
   if (data.phase === "claim") return serialized(`ticket:${data.ticket}`, () => claimOnGm(data, user));
   if (data.phase === "finish") return serialized(`ticket:${data.ticket}`, () => finishOnGm(data, user));
@@ -267,7 +270,7 @@ async function prepareOnGm(data, user) {
     casterUuid: caster.uuid, spellUuid: spell.uuid, source: canonicalSource,
     pairs: checked.pairs, participantUuids: checked.participantUuids, consents,
     operationId: foundry.utils.randomID(24), castTimeElapsed: true};
-  const receipt = await ChatMessage.create({whisper: privateWhisper(), blind: true,
+  const receipt = await createPrivateSpellMessage({whisper: privateWhisper(), blind: true,
     content: `<p>${escape(spell.name)}: group consent and the cast minute were confirmed. No load, item, or resource has changed yet.</p>`,
     flags: {[NS]: {[PILGRIMS_BURDEN_RECEIPT]: state}}});
   if (!receipt) return refuse("receipt-uncertain");
@@ -278,7 +281,7 @@ async function prepareOnGm(data, user) {
 async function claimOnGm(data, user) {
   if (Object.keys(data).some(key => !["phase", "ticket", "cast"].includes(key))
       || !data.ticket || typeof data.cast !== "string" || !data.cast.trim() || data.cast.length > 240) return refuse("shape");
-  const receipt = game.messages.get(data.ticket), state = stateOf(receipt);
+  const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt);
   if (!state || state.status !== "prepared" || state.userId !== user.id || state.wallExpires <= Date.now()) return refuse("ticket");
   if (messages().some(message => stateOf(message)?.castId === data.cast)) return refuse("cast-replayed");
   const caster = resolve(state.casterUuid), spell = resolve(state.spellUuid), sourceToken = resolve(state.source.tokenUuid);
@@ -299,7 +302,7 @@ async function claimOnGm(data, user) {
 async function finishOnGm(data, user) {
   if (Object.keys(data).some(key => !["phase", "ticket", "messageId"].includes(key))
       || !data.ticket || !data.messageId) return refuse("shape");
-  const receipt = game.messages.get(data.ticket), state = stateOf(receipt), card = game.messages.get(data.messageId);
+  const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt), card = privateSpellMessage(data.messageId);
   const flags = card?.flags?.[NS];
   if (!state || !card || (user.id !== state.userId && !user.isGM) || card.author?.id !== state.userId
       || flags?.kind !== "spell" || flags.identifier !== IDENTIFIER || flags.caster !== state.casterUuid
@@ -335,19 +338,19 @@ async function finishOnGm(data, user) {
 async function endOnGm(data, user) {
   if (Object.keys(data).some(key => !["phase", "ticket"].includes(key)) || !data.ticket
       || !user?.isGM || user.id !== game.user.id) return refuse("permission-or-shape");
-  const receipt = game.messages.get(data.ticket), state = stateOf(receipt);
+  const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt);
   if (!state || state.status !== "complete" || !Array.isArray(state.links)) return refuse("not-active");
   const links = state.links.map(link => ({...link, rangeState: "ended"}));
   await write(receipt, {...state, status: "ended", endedAt: game.time.worldTime, endReason: "gm-dispel", links});
   if (stateOf(receipt)?.status !== "ended") return refuse("receipt-uncertain");
-  const card = game.messages.get(state.cardId);
+  const card = privateSpellMessage(state.cardId);
   await card?.update({[`flags.${NS}.${PILGRIMS_BURDEN_LINKS}`]: [], [`flags.${NS}.pilgrimsBurdenStatus`]: "ended"});
   const ids = [...new Set(links.flatMap(link => [link.sourceUuid, link.targetUuid]))];
   Hooks.callAll(PILGRIMS_BURDEN_REFRESH, ids);
   const actors = ids.map(resolve).filter(Boolean);
   const audience = [...(game.users?.contents ?? [])].filter(candidate => candidate.isGM
     || actors.some(actor => actor.testUserPermission?.(candidate, "OWNER"))).map(candidate => candidate.id);
-  if (audience.length) await ChatMessage.create({whisper: audience, blind: true,
+  if (audience.length) await createPrivateSpellMessage({whisper: audience, blind: true,
     content: "<p>Pilgrims’ Burden was ended by the GM. Each participant now has their ordinary counted load. No item or capacity changed.</p>"});
   return {ok: true, ended: true};
 }
@@ -432,7 +435,7 @@ export async function refreshPilgrimsBurdenRanges() {
       });
       if (!changed) continue;
       await write(receipt, {...state, links});
-      const card = game.messages.get(state.cardId);
+      const card = privateSpellMessage(state.cardId);
       const publicLinks = links.map(({cast, sourceUuid, targetUuid, sourceToken, targetToken, slots, createdAt, expiresAt, rangeState}) =>
         ({cast, sourceUuid, targetUuid, sourceToken, targetToken, slots, createdAt, expiresAt, rangeState}));
       await card?.update({[`flags.${NS}.${PILGRIMS_BURDEN_LINKS}`]: publicLinks,
@@ -447,7 +450,7 @@ export async function refreshPilgrimsBurdenRanges() {
         : `Pilgrims’ Burden has resumed for ${source?.name ?? "one partner"} and ${target?.name ?? "the other partner"}.`;
       const audience = [...(game.users?.contents ?? [])].filter(user => user.isGM
         || source?.testUserPermission?.(user, "OWNER") || target?.testUserPermission?.(user, "OWNER")).map(user => user.id);
-      if (audience.length) await ChatMessage.create({whisper: audience, blind: true, content: `<p>${escape(message)}</p>`});
+      if (audience.length) await createPrivateSpellMessage({whisper: audience, blind: true, content: `<p>${escape(message)}</p>`, flags: {[NS]: {pilgrimsBurdenNotice: true}}});
     }
     return {ok: true, updates};
   });
@@ -480,9 +483,15 @@ export function registerPilgrimsBurdenHooks() {
     });
   };
   const projectionChange = message => queueRefresh(collectProjectionUuids(message));
-  Hooks.on("createChatMessage", message => projectionChange(message));
-  Hooks.on("updateChatMessage", message => projectionChange(message));
-  Hooks.on("deleteChatMessage", message => projectionChange(message));
+  Hooks.once("ready", async () => {
+    if (gmHere()) await loadAuthorizedPrivateSpellMessages();
+    const ids = collectProjectionUuids();
+    queueRefresh(ids);
+    if (gmHere()) await refreshPilgrimsBurdenRanges();
+  });
+  Hooks.on("createChatMessage", withPrivateSpellMessage(message => projectionChange(message)));
+  Hooks.on("updateChatMessage", withPrivateSpellMessage(message => projectionChange(message)));
+  Hooks.on("deleteChatMessage", withPrivateSpellMessage(message => projectionChange(message)));
   const actorInventoryChange = document => {
     const actor = document?.documentName === "Actor" ? document : document?.parent;
     if (!actor?.uuid) return;
@@ -522,7 +531,7 @@ export function registerPilgrimsBurdenLoadRefresh(callback) {
 }
 
 export function registerPilgrimsBurdenCardHooks() {
-  Hooks.on("renderChatMessageHTML", (message, html) => {
+  Hooks.on("renderChatMessageHTML", withPrivateSpellMessage((message, html) => {
     const flags = message.flags?.[NS];
     if (!flags?.pilgrimsBurdenTicket) return;
     const container = html.querySelector(".azeroth-card");
@@ -547,5 +556,5 @@ export function registerPilgrimsBurdenCardHooks() {
       const result = await endPilgrimsBurden(flags.pilgrimsBurdenTicket);
       if (!result?.ok) ui.notifications.warn(`Could not end Pilgrims’ Burden: ${result.reason}`);
     });
-  });
+  }));
 }

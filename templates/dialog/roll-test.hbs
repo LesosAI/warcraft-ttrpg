@@ -16,15 +16,18 @@
         `data-attack-mode`, with NO data-action: an action fires on click
         alone. A refused way stays in the list, greyed, and says why. --}}
   <div class="azeroth-dialog-row azeroth-dialog-mode">
-    <label for="azeroth-dialog-mode">{{#if castTestChoices}}{{localize "AZEROTH.Blademaster.Choice"}}{{else}}{{localize "AZEROTH.Dialog.AttackMode.Label"}}{{/if}}</label>
+    <label for="azeroth-dialog-mode">{{#if choiceLabel}}{{localize choiceLabel}}{{else if castTestChoices}}{{localize "AZEROTH.Blademaster.Choice"}}{{else}}{{localize "AZEROTH.Dialog.AttackMode.Label"}}{{/if}}</label>
     <select id="azeroth-dialog-mode" name="attackMode" data-attack-mode>
       {{#each attackModes}}
       <option value="{{this.mode}}" {{#if this.selected}}selected{{/if}} {{#if this.refused}}disabled{{/if}}>{{localize this.label}}</option>
       {{/each}}
     </select>
-    {{#each attackModes}}{{#if this.refused}}
+    {{!-- A chooser whose option labels carry their own refusal (the Medicine
+          Test's healers, D12) prints no note per way: ten healers in a fight
+          drew ten identical lines. The greyed option says why. --}}
+    {{#unless castTestChoices}}{{#each attackModes}}{{#if this.refused}}
     <span class="azeroth-dialog-note azeroth-dialog-mode-refused">{{this.refused}}</span>
-    {{/if}}{{/each}}
+    {{/if}}{{/each}}{{/unless}}
   </div>
   {{/if}}
 

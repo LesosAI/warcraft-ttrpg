@@ -23,7 +23,11 @@ export async function utilityDialog({title, note = "", fields = [], timeout = 12
     } else if (!field.multiline) input.type = field.type ?? "text";
     if (field.type === "checkbox") input.checked = field.value === true;
     else input.value = field.value ?? "";
-    if (field.type === "number") { input.min = field.min ?? 0; input.max = field.max ?? 86400; }
+    if (field.type === "number") {
+      input.min = field.min ?? 0;
+      input.max = field.max ?? 86400;
+      input.step = field.step ?? "any";
+    }
     if (!field.options && field.type !== "checkbox") input.maxLength = field.maxLength ?? 1000;
     label.append(input);
     row.append(label);

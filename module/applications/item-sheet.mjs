@@ -161,7 +161,23 @@ export class AzerothItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       consumable: enumWords("consumableKinds"),
       action: enumWords("actions"),
       target: enumWords("useTargets"),
-      goesOn: enumWords("coatingTargets")
+      goesOn: enumWords("coatingTargets"),
+      afflictions: {
+        cures: game.i18n.localize("AZEROTH.Afflictions.Cures"),
+        carried: game.i18n.localize("AZEROTH.Afflictions.Carried"),
+        notCarried: game.i18n.localize("AZEROTH.Afflictions.NotCarried"),
+        damage: game.i18n.localize("AZEROTH.Afflictions.Damage"),
+        fatigue: game.i18n.localize("AZEROTH.Afflictions.Fatigue"),
+        poisoned: game.i18n.localize("AZEROTH.Afflictions.Poisoned"),
+        baneAttack: game.i18n.localize("AZEROTH.Afflictions.BaneAttack"),
+        baneCasting: game.i18n.localize("AZEROTH.Afflictions.BaneCasting"),
+        halveHealing: game.i18n.localize("AZEROTH.Afflictions.HalveHealing"),
+        beat: {
+          turn: game.i18n.localize("AZEROTH.Afflictions.Beat.turn"),
+          hour: game.i18n.localize("AZEROTH.Afflictions.Beat.hour")
+        },
+        statuses: enumWords("conditions")
+      }
     };
   }
 

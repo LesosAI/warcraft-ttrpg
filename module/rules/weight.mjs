@@ -82,6 +82,7 @@ const GEAR_KIND = Object.freeze({
   "Restoratives": "flask",
   "Elixirs": "flask",
   "Utility draughts": "flask",
+  "Remedies": "flask",
   "Poisons": "flask",
   "Bandages and dressings": "dressing",
   "Food and drink": "meal",

@@ -1,3 +1,4 @@
+import { createPrivateSpellMessage, privateSpellMessage, withPrivateSpellMessage, loadAuthorizedPrivateSpellMessages } from "./private-spell-records.mjs";
 /** GM-owned receipts for Prayer of Mending and Gentle Verdict. The ordinary
  * spell workflow owns payment/Test; this door owns finite post-cast state. */
 import { holySpell, startMending, mendingOnDamage, mendingJump, startVerdict,
@@ -214,6 +215,7 @@ function hasMending(actor, exceptTicket = null) {
 }
 
 export async function holyQueryHandler(data = {}, { user } = {}) {
+  await loadAuthorizedPrivateSpellMessages();
   if (!gmHere() || !user?.id) return refused("authority");
   if (["claim", "finish", "jump", "recover", "verdictPrepare", "verdictAttempt", "verdictRelease"].includes(data.phase)) {
     return serialized(data.ticket, () => {
@@ -228,16 +230,16 @@ export async function holyQueryHandler(data = {}, { user } = {}) {
   }
   if (data.phase === "damage") return damage(data, user);
   if (data.phase === "jumpCandidates") {
-    const receipt = game.messages.get(data.ticket);
+    const receipt = privateSpellMessage(data.ticket);
     return jumpCandidates({ ...stateOf(receipt), receiptId: receipt?.id }, user);
   }
   if (data.phase === "verdictDamage") {
-    const card = game.messages.get(data.messageId), ticket = card?.flags?.[NS]?.verdictTicket;
+    const card = privateSpellMessage(data.messageId), ticket = card?.flags?.[NS]?.verdictTicket;
     if (!ref(ticket)) return refused("card");
     return serialized(ticket, () => verdictDamage(data, user, card, ticket));
   }
   if (data.phase === "verdictRecover") {
-    const card = game.messages.get(data.messageId), ticket = card?.flags?.[NS]?.verdictTicket;
+    const card = privateSpellMessage(data.messageId), ticket = card?.flags?.[NS]?.verdictTicket;
     if (!ref(ticket)) return refused("card");
     return serialized(ticket, () => verdictRecover(data, user, card, ticket));
   }
@@ -263,13 +265,13 @@ export async function holyQueryHandler(data = {}, { user } = {}) {
     source: refOf(data.source), targets: data.targets.map(refOf), recipientUuid: ctx.recipient.uuid,
     consentUserId,
     effectId: foundry.utils.randomID(), resultId: foundry.utils.randomID() };
-  const receipt = await ChatMessage.create({ whisper: [...game.users].filter(who => who.isGM).map(who => who.id),
+  const receipt = await createPrivateSpellMessage({ whisper: [...game.users].filter(who => who.isGM).map(who => who.id),
     content: textContent(ctx.spell.name), flags: { [NS]: { holyReceipt: state } } });
   return { ok: true, ticket: receipt.id };
 }
 
 async function claim(data, user) {
-  const receipt = game.messages.get(data.ticket), state = stateOf(receipt);
+  const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt);
   if (!state || state.userId !== user.id || state.status !== "prepared" || state.claimCast
     || !ref(data.cast) || Date.now() > state.wallExpires) return refused("ticket");
   const ctx = context(state, user);
@@ -283,9 +285,9 @@ async function claim(data, user) {
 }
 
 async function finish(data, user) {
-  const receipt = game.messages.get(data.ticket), state = stateOf(receipt);
+  const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt);
   if (!state || (state.userId !== user.id && !user.isGM) || !state.claimCast) return refused("ticket");
-  const card = game.messages.get(data.messageId), flags = card?.flags?.[NS];
+  const card = privateSpellMessage(data.messageId), flags = card?.flags?.[NS];
   if (!card || card.author?.id !== state.userId || flags?.kind !== "spell" || flags.holyTicket !== receipt.id
     || flags.caster !== state.actorUuid || flags.spellUuid !== state.spellUuid || flags.identifier !== state.identifier
     || flags.cast !== state.claimCast || !same(refOf(flags.source), state.source)
@@ -322,7 +324,7 @@ async function finish(data, user) {
   const marker = state.identifier === "prayer-of-mending" ? landed?.flags?.[NS]?.holyMending : landed?.flags?.[NS]?.holyVerdict;
   if (!landed || landed.origin !== ctx.spell.uuid || marker?.ticket !== receipt.id || marker?.cast !== record.cast
     || landed.flags?.[NS]?.messageId !== card.id) return refused("effectMismatch");
-  if (!game.messages.get(state.resultId)) await ChatMessage.create({ _id: state.resultId,
+  if (!privateSpellMessage(state.resultId)) await createPrivateSpellMessage({ _id: state.resultId,
     whisper: privateUsers(ctx.actor), speaker: ChatMessage.getSpeaker({ actor: ctx.actor }),
     content: textContent(ctx.spell.name), flags: { [NS]: { holyResult: { ticket: receipt.id, cardId: card.id } } }
   }, { keepId: true });
@@ -337,7 +339,7 @@ async function damage(data, user) {
 }
 
 async function damageHere(data, user, target, held) {
-  const receipt = game.messages.get(held.ticket), state = stateOf(receipt);
+  const receipt = privateSpellMessage(held.ticket), state = stateOf(receipt);
   if (!state || state.status !== "complete" || state.identifier !== "prayer-of-mending"
     || state.record?.status !== "active" || state.record.holderUuid !== target.uuid
     || state.record.cast !== held.cast || !ref(data.eventId)
@@ -345,7 +347,7 @@ async function damageHere(data, user, target, held) {
     || !Number.isSafeInteger(data.healthBefore) || !Number.isSafeInteger(data.healthAfter)
     || target.system?.health?.value !== data.healthAfter
     || (!user.isGM && !ref(data.sourceMessageId))) return refused("event");
-  const source = ref(data.sourceMessageId) ? game.messages.get(data.sourceMessageId) : null;
+  const source = ref(data.sourceMessageId) ? privateSpellMessage(data.sourceMessageId) : null;
   if (data.sourceMessageId && !source) return refused("source");
   const review = await utilityDialog({ title: words("MendingDamage"),
     note: `${target.name}: ${data.healthBefore} → ${data.healthAfter}${source ? ` (${source.id})` : ""}`,
@@ -380,7 +382,7 @@ async function damageHere(data, user, target, held) {
 
 async function recover(data, user) {
   if (!user.isGM || user.id !== game.users.activeGM?.id || typeof data.healingLanded !== "boolean") return refused("authority");
-  const receipt = game.messages.get(data.ticket), state = stateOf(receipt), pending = state?.pendingDamage;
+  const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt), pending = state?.pendingDamage;
   if (!state || state.identifier !== "prayer-of-mending" || state.status !== "complete"
     || !pending || !["healing", "retrying"].includes(pending.status)) return refused("ticket");
   const target = resolve(pending.holderUuid), caster = resolve(state.actorUuid);
@@ -403,7 +405,7 @@ async function recover(data, user) {
 }
 
 async function jump(data, user) {
-  const receipt = game.messages.get(data.ticket), state = stateOf(receipt);
+  const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt);
   if (!state || state.status !== "complete" || state.identifier !== "prayer-of-mending"
     || state.record?.status !== "choosing" || state.pendingDamage?.status !== "delivered"
     || (state.userId !== user.id && !user.isGM)) return refused("ticket");
@@ -470,7 +472,7 @@ function verdictSource(state, data, user) {
 }
 
 async function verdictPrepare(data, user) {
-  const receipt = game.messages.get(data.ticket), state = stateOf(receipt);
+  const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt);
   if (!state || state.status !== "complete" || state.identifier !== "gentle-verdict"
     || state.userId !== user.id || state.record?.status !== "ready" || !ref(data.attemptId)
     || data.actorUuid !== state.actorUuid) return refused("ticket");
@@ -492,7 +494,7 @@ async function verdictPrepare(data, user) {
 }
 
 async function verdictRelease(data, user) {
-  const receipt = game.messages.get(data.ticket), state = stateOf(receipt);
+  const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt);
   if (!state || state.identifier !== "gentle-verdict" || state.userId !== user.id
     || state.record?.status !== "ready" || state.pendingAttempt?.attemptId !== data.attemptId) return refused("ticket");
   await write(receipt, { ...state, pendingAttempt: null });
@@ -500,7 +502,7 @@ async function verdictRelease(data, user) {
 }
 
 async function verdictAttempt(data, user) {
-  const receipt = game.messages.get(data.ticket), state = stateOf(receipt), pending = state?.pendingAttempt;
+  const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt), pending = state?.pendingAttempt;
   if (!state || state.status !== "complete" || state.identifier !== "gentle-verdict"
     || state.userId !== user.id || state.record?.status !== "ready"
     || !pending || pending.attemptId !== data.attemptId || Date.now() > pending.wallExpires) return refused("ticket");
@@ -518,7 +520,7 @@ async function verdictAttempt(data, user) {
 }
 
 async function verdictDamage(data, user, card, ticket) {
-  const receipt = game.messages.get(ticket), state = stateOf(receipt), flags = card?.flags?.[NS];
+  const receipt = privateSpellMessage(ticket), state = stateOf(receipt), flags = card?.flags?.[NS];
   const target = resolve(data.targetUuid), grant = state?.verdictGrant;
   if (!state || state.identifier !== "gentle-verdict" || state.record?.status !== "spent"
     || !grant || state.resolvedDamage || !target
@@ -570,7 +572,7 @@ async function verdictRecover(data, user, card, ticket) {
     await clearVerdictPending(target, card.id);
     return { ok: true, complete: true, outcome: prior.outcome };
   }
-  const receipt = game.messages.get(ticket), state = stateOf(receipt), grant = state?.verdictGrant;
+  const receipt = privateSpellMessage(ticket), state = stateOf(receipt), grant = state?.verdictGrant;
   const bound = state?.identifier === "gentle-verdict" && state.record?.status === "spent"
     && grant && card.author?.id === state.userId && flags.kind === "spell" && flags.success === true
     && flags.cast === grant.attemptId && flags.caster === state.actorUuid
@@ -601,7 +603,7 @@ async function verdictRecover(data, user, card, ticket) {
 
 /** A card can retry the same finish, but never spend the same Holy cast twice. */
 export function registerHolyCardHooks() {
-  Hooks.on("renderChatMessageHTML", (message, html) => {
+  Hooks.on("renderChatMessageHTML", withPrivateSpellMessage((message, html) => {
     const flags = message.flags?.[NS];
     const receipt = flags?.holyReceipt;
     const mount = html.querySelector(".azeroth-card") ?? html.querySelector(".message-content") ?? html;
@@ -637,7 +639,7 @@ export function registerHolyCardHooks() {
             fields: [{ name: "outcome", label: words("VerdictRecoveryOutcome"), options: [
               { value: "protected", label: words("VerdictProtected") },
               { value: "handled", label: words("VerdictInjuriesHandled") }
-            ] }, { name: "handled", type: "checkbox", label: words("VerdictHandledConfirm") }] });
+            ] }, { name: "handled", type: "checkbox", required: false, label: words("VerdictHandledConfirm") }] });
           if (!picked) return;
           recoverButton.disabled = true;
           try {
@@ -674,5 +676,5 @@ export function registerHolyCardHooks() {
       });
       mount.append(jumpButton);
     }
-  });
+  }));
 }

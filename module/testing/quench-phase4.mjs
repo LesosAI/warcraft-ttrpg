@@ -8,6 +8,36 @@
 import { cleanup, settle, untilHook, firstFromPack, makeCharacter, makeNpc, openSheet, useAction, PACK_FOR } from "./fixtures.mjs";
 import { AZEROTH } from "../config.mjs";
 
+/**
+ * D12 R1: a hand + on a Poisoned the creature does not hold opens the Add picker, filtered
+ * to poisons. Answer it with the first poison whose carried form lays Poisoned, so the
+ * chip and its stepper have a value to step.
+ */
+async function answerPoisonedPicker(actor) {
+  const { afflictionCatalogue } = await import("../dice/afflictions-workflows.mjs");
+  const entry = (await afflictionCatalogue()).find(e => e.kind === "poison" && (e.carried?.statuses ?? []).includes("poisoned"));
+  if (!entry) throw new Error("the affliction catalogue holds no poison that lays Poisoned");
+  let app = null;
+  for (let i = 0; i < 200 && !app?.rendered; i++) {
+    await new Promise(r => setTimeout(r, 25));
+    app = foundry.applications.instances.get(`azeroth-choose-${actor.id}`);
+  }
+  if (!app?.rendered) throw new Error("the + on Poisoned opened no picker");
+  const form = app.element;
+  const select = form.querySelector("select[name=choice]");
+  if (select) {
+    const option = [...select.options].find(o => o.textContent.trim().startsWith(entry.name));
+    if (!option) throw new Error(`the picker does not list ${entry.name}`);
+    select.value = option.value;
+  } else {
+    const box = [...form.querySelectorAll("input[name=choice]")].find(b => b.closest("label")?.textContent.trim().startsWith(entry.name));
+    if (!box) throw new Error(`the picker does not list ${entry.name}`);
+    box.checked = true;
+  }
+  form.querySelector('button[data-action="choose"]').click();
+  return entry;
+}
+
 const shift = () => new MouseEvent("click", { bubbles: true, cancelable: true, shiftKey: true });
 const click = el => el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
@@ -158,29 +188,34 @@ export function editingBatch(context) {
         await settle();
         const plus = sheet.element.querySelector('[data-action="stepCondition"][data-condition="poisoned"][data-delta="1"]');
         assert.ok(plus, "no Poisoned stepper");
-        wait = untilHook("createActiveEffect", 5000, e => e.parent?.id === actor.id);
+        wait = untilHook("createActiveEffect", 15000, e => e.parent?.id === actor.id);
         click(plus);
+        await answerPoisonedPicker(actor);
         await wait;
         assert.isTrue(actor.statuses.has("poisoned"), "Poisoned did not apply on the first step");
+        // The picked poison lays its own dose (a bestiary venom may hold Poisoned 2), so the
+        // next step is read against that, not against 1.
+        const laid = actor.effects.find(e => e.statuses?.has("poisoned"))?.getFlag("azeroth-rpg", "value") ?? 1;
         await settle();
         const again = sheet.element.querySelector('[data-action="stepCondition"][data-condition="poisoned"][data-delta="1"]');
         wait = untilHook("updateActiveEffect", 5000, e => e.parent?.id === actor.id);
         click(again);
         await wait;
         const effect = actor.effects.find(e => e.statuses?.has("poisoned"));
-        assert.equal(effect?.getFlag("azeroth-rpg", "value"), 2, "the second step did not write Poisoned 2");
+        assert.equal(effect?.getFlag("azeroth-rpg", "value"), laid + 1, `the second step did not write Poisoned ${laid + 1}`);
 
-        // Down to zero removes it.
+        // Down to zero sheds the stacks and KEEPS the poison (D12 R1): only a cure ends it.
         await settle();
-        for (let i = 0; i < 2; i++) {
+        for (let i = 0; i < laid + 1; i++) {
           const minus = sheet.element.querySelector('[data-action="stepCondition"][data-condition="poisoned"][data-delta="-1"]');
           assert.ok(minus && !minus.disabled, "no enabled minus on an active Poisoned");
-          const w = i === 1 ? untilHook("deleteActiveEffect", 5000, e => e.parent?.id === actor.id) : untilHook("updateActiveEffect", 5000, e => e.parent?.id === actor.id);
+          const w = untilHook("updateActiveEffect", 5000, e => e.parent?.id === actor.id);
           click(minus);
           await w;
           await settle();
         }
         assert.isFalse(actor.statuses.has("poisoned"), "stepping to 0 did not shed Poisoned");
+        assert.ok(actor.effects.find(e => e.flags?.["azeroth-rpg"]?.affliction?.kind === "poison"), "stepping to 0 ended the poison, and only a cure may");
       } finally {
         await sheet.close();
       }

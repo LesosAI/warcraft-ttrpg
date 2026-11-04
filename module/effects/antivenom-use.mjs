@@ -3,6 +3,7 @@ import {isAntivenom,antivenomJudgement} from '../rules/antivenom.mjs';
 import {spendOne} from '../rules/consumables.mjs';
 import {plainEffect,archmageCasters,dispelGatesOn} from './dispel.mjs';
 import {endNullifiedEffect} from './nullifier.mjs';
+import {endCarrier} from './cures.mjs';
 import {acquireConsumableUse} from './consumable-use-lock.mjs';
 import {refuseDispersion} from './dispersion-protection.mjs';
 import {refuseAncientDespair} from './ancient-despair-refusal.mjs';
@@ -123,7 +124,8 @@ export async function antivenomQueryHandler(data={}, {user=null}={}) {
     await actor.setFlag('azeroth-rpg',FLAG,{...receipt,stage:'dosePaid'});
     if(game.users.activeGM?.id!==game.user.id||!user.active||!actor.testUserPermission(user,'OWNER')
       ||actor.effects.get(data.effectId)!==effect||!eligible(actor,effect,classification)||effectState(effect)!==data.effectState||barred(actor))return refuse('changedAfterPayment',true);
-    const result=await endNullifiedEffect({dispeller:actor,target:actor,effectId:effect.id,classification});
+    // A carrier ends through the affliction writer (D12 Phase 6); anything else keeps its gates.
+    const result=await endCarrier(actor,effect.id,{by:actor})??await endNullifiedEffect({dispeller:actor,target:actor,effectId:effect.id,classification});
     if(!result.ok)return refuse(result.reason,true);
     await actor.setFlag('azeroth-rpg',FLAG,{...receipt,stage:'removed',result});
     const content=await foundry.applications.handlebars.renderTemplate('systems/azeroth-rpg/templates/chat/feature-card.hbs',{

@@ -13,6 +13,36 @@ import { checkText } from "./geometry.mjs";
 import { composite, contrast, parseColour, toHex } from "./colour.mjs";
 import { checkNoRawKeys } from "./expectations.mjs";
 import { AZEROTH } from "../config.mjs";
+
+/**
+ * D12 R1: a hand + on a Poisoned the creature does not hold opens the Add picker, filtered
+ * to poisons. Answer it with the first poison whose carried form lays Poisoned, so the
+ * chip and its stepper have a value to step.
+ */
+async function answerPoisonedPicker(actor) {
+  const { afflictionCatalogue } = await import("../dice/afflictions-workflows.mjs");
+  const entry = (await afflictionCatalogue()).find(e => e.kind === "poison" && (e.carried?.statuses ?? []).includes("poisoned"));
+  if (!entry) throw new Error("the affliction catalogue holds no poison that lays Poisoned");
+  let app = null;
+  for (let i = 0; i < 200 && !app?.rendered; i++) {
+    await new Promise(r => setTimeout(r, 25));
+    app = foundry.applications.instances.get(`azeroth-choose-${actor.id}`);
+  }
+  if (!app?.rendered) throw new Error("the + on Poisoned opened no picker");
+  const form = app.element;
+  const select = form.querySelector("select[name=choice]");
+  if (select) {
+    const option = [...select.options].find(o => o.textContent.trim().startsWith(entry.name));
+    if (!option) throw new Error(`the picker does not list ${entry.name}`);
+    select.value = option.value;
+  } else {
+    const box = [...form.querySelectorAll("input[name=choice]")].find(b => b.closest("label")?.textContent.trim().startsWith(entry.name));
+    if (!box) throw new Error(`the picker does not list ${entry.name}`);
+    box.checked = true;
+  }
+  form.querySelector('button[data-action="choose"]').click();
+  return entry;
+}
 import { coins } from "../helpers/coins.mjs";
 import { forgeDrop, fromPack, gearInspector, gearTab, gearTile, give, itemOf, tokenData } from "./fixtures.mjs";
 import { affixOf } from "../applications/affix-dialog.mjs";
@@ -132,7 +162,12 @@ export function feedbackBatch(context) {
       assert.ok(spell, "Cure Blight is not in the pack");
       const pool = actor.system.powers.find(p => p.name === "mana");
       if (pool) await actor.updatePool({ itemId: pool.itemId, kind: "power", value: pool.max });
-      const card = await cardOf("spell", actor, { spell });
+      // Cure Blight is a cure door (D12): it refuses, with nothing spent, a cast that
+      // names no creature or one with nothing to cure. Give it a patient who carries one.
+      const patient = await makeCharacter({ name: "ZZ Feedback Patient", classes: [["Warrior", 1]] });
+      const { afflictDisease } = await import("../dice/afflictions-workflows.mjs");
+      await afflictDisease({ victim: patient, key: "carrionPalsy" });
+      const card = await cardOf("spell", actor, { spell, face: 20, args: { targets: [{ actorId: patient.id, name: patient.name }] } });
       const el = card?.element ?? card;
       assert.ok(el?.querySelector, "no spell card rendered");
       assert.ok(el.querySelector(`.azeroth-card-effect ${RULES_LINK}`), "the spell's Effect did not enrich its link");
@@ -220,8 +255,9 @@ export function feedbackBatch(context) {
         assert.deepEqual(checkText(ul), []);
 
         const plus = sheet.element.querySelector('[data-action="stepCondition"][data-condition="poisoned"][data-delta="1"]');
-        const wait = untilHook("createActiveEffect", 5000, e => e.parent?.id === actor.id);
+        const wait = untilHook("createActiveEffect", 15000, e => e.parent?.id === actor.id);
         click(plus);
+        await answerPoisonedPicker(actor);
         await wait;
         await settle();
         const lit = sheet.element.querySelector('.azeroth-condition[data-condition="poisoned"]');

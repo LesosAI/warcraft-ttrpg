@@ -1,6 +1,11 @@
 import { TOXIC_FLAG, TOXIC_POISONS, toxicPoisonDose, toxicPoisonEffect,
-  validToxicPoison, toxicPoisonClock, toxicPoisonPulse, confirmToxicPoisonTick, toxicPoisonDamage } from "../rules/toxic-horror.mjs";
+  validToxicPoison, toxicPoisonClock, toxicPoisonPulse, confirmToxicPoisonTick, toxicPoisonDamage, toxicStacks } from "../rules/toxic-horror.mjs";
 import { dealtHalvedBy } from "../rules/legacy-uses.mjs";
+import { creaturePoisonPatch } from "../rules/creature-poisons.mjs";
+import { downedTarget } from "../rules/poison-catchup.mjs";
+
+/** A guard against a runaway loop; an hourly catch-up has no cap of its own (D12 R4). */
+const CATCH_UP_GUARD = 48;
 
 const queues = new Map();
 const stateOf = effect => effect.flags?.["azeroth-rpg"]?.[TOXIC_FLAG];
@@ -34,7 +39,7 @@ export async function layToxicPoison({ source, target, kind, exposureId, valid }
     const existing = matches[0], stamp = timing(target);
     const prior = existing ? structuredClone(stateOf(existing)) : null;
     const value = existing ? valueOf(existing) : 0;
-    if (existing && (existing.disabled || existing.isSuppressed || ![...(existing.statuses ?? [])].includes("poisoned")))
+    if (existing && (existing.disabled || existing.isSuppressed))
       return { ok: false, reason: "reconcile" };
     const dose = toxicPoisonDose({ kind, sourceUuid: source.uuid, targetUuid: target.uuid,
       exposureId, existing: prior, currentValue: value, ...stamp });
@@ -43,14 +48,15 @@ export async function layToxicPoison({ source, target, kind, exposureId, valid }
     const unchanged = () => same(stamp, timing(target)) && !immune(target) && (existing
       ? carriers().length === 1 && target.effects.get(existing.id) === existing
         && same(stateOf(existing), prior) && valueOf(existing) === value && !existing.disabled && !existing.isSuppressed
-        && [...(existing.statuses ?? [])].includes("poisoned")
       : carriers().length === 0);
     if (!await check() || !unchanged()) return { ok: false, reason: "changed" };
     try {
       let effect = existing;
       if (effect) await effect.update({ [`flags.azeroth-rpg.${TOXIC_FLAG}`]: dose.state,
-        "flags.azeroth-rpg.value": dose.value, origin: source.uuid });
-      else [effect] = await target.createEmbeddedDocuments("ActiveEffect", [{ ...toxicPoisonEffect(dose),
+        "flags.azeroth-rpg.value": dose.value, origin: source.uuid, statuses: ["poisoned"],
+        ...creaturePoisonPatch({ value: dose.value, damage: TOXIC_POISONS[kind].damage * dose.value, statuses: ["poisoned"] }) });
+      else [effect] = await target.createEmbeddedDocuments("ActiveEffect", [{ ...toxicPoisonEffect(dose,
+        { now: stamp.time ?? 0, inFight: stamp.combatUuid !== null }),
         transfer: false, start: { time: stamp.time },
         // The poison clock owns expiry; pending writes must survive core cleanup.
         duration: { value: null, units: "seconds", expiry: null } }]);
@@ -70,7 +76,7 @@ export async function layToxicPoison({ source, target, kind, exposureId, valid }
 }
 
 /** Combat callers must invoke this at the victim's turn start. World sweeps
- * catch up at most three separately mitigated ticks, never pooled damage. */
+ * catch up every hourly tick that is due, each separately mitigated, never pooled damage. */
 export async function advanceToxicPoison(actor, combat = null) {
   const previous = queues.get(actor?.uuid) ?? Promise.resolve();
   const pending = previous.catch(() => {}).then(async () => {
@@ -80,16 +86,19 @@ export async function advanceToxicPoison(actor, combat = null) {
     const effects = [...actor.effects].filter(stateOf);
     if (new Set(effects.map(e => stateOf(e).kind)).size !== effects.length) return lines;
     for (const effect of effects) {
-      for (let i = 0; i < (combat ? 1 : 3); i++) {
+      for (let i = 0; i < (combat ? 1 : CATCH_UP_GUARD); i++) {
+        // A catch-up stops at a target with no Health left to lose (rules/poison-catchup.mjs).
+        if (!combat && downedTarget(actor)) break;
         const held = () => gmHere() && present(actor) && actor.effects.get(effect.id) === effect;
         if (!held()) break;
         const prior = structuredClone(stateOf(effect)), stamp = timing(actor), value = valueOf(effect);
-        // Preserve invalid or uncertain state for reconciliation, including the
-        // final tick whose remaining count is already zero.
+        // The dose is the poison's state; the value shown is what is left of it after shedding.
+        const stacks = toxicStacks(prior);
+        // Preserve invalid or uncertain state for reconciliation.
         if (!validToxicPoison(prior) || prior.targetUuid !== actor.uuid || prior.pending) break;
         const unchanged = () => held() && same(stateOf(effect), prior) && valueOf(effect) === value && same(stamp, timing(actor));
         try {
-          if (immune(actor) || value === 0 || ![...(effect.statuses ?? [])].includes("poisoned") || prior.remaining === 0) {
+          if (immune(actor)) {
             if (unchanged()) await effect.delete();
             break;
           }
@@ -102,12 +111,16 @@ export async function advanceToxicPoison(actor, combat = null) {
           if ((combat?.uuid ?? null) !== stamp.combatUuid) break;
           const disabled = () => effect.disabled || effect.active === false || effect.isSuppressed
             || !(actor.system?.health?.value > 0);
-          const plan = toxicPoisonPulse(prior, { targetUuid: actor.uuid, value, poisoned: true, disabled: disabled(), ...stamp });
+          const plan = toxicPoisonPulse(prior, { targetUuid: actor.uuid, disabled: disabled(), ...stamp });
           if (!["tick", "advance"].includes(plan.action) || !unchanged()) break;
-          await effect.update({ [`flags.azeroth-rpg.${TOXIC_FLAG}`]: plan.next });
+          // The beat lays the dose's stacks again (D12 R1), in the same write as the claim.
+          const relay = plan.action === "tick"
+            ? { statuses: ["poisoned"], "flags.azeroth-rpg.value": stacks,
+              ...creaturePoisonPatch({ value: stacks, damage: TOXIC_POISONS[prior.kind].damage * stacks, statuses: ["poisoned"] }) } : {};
+          await effect.update({ [`flags.azeroth-rpg.${TOXIC_FLAG}`]: plan.next, ...relay });
           const claimed = () => held() && same(stateOf(effect), plan.next);
-          if (!claimed() || !same(stamp, timing(actor)) || valueOf(effect) !== value) break;
-          if (plan.action === "tick" && !disabled() && !immune(actor) && [...(effect.statuses ?? [])].includes("poisoned")) {
+          if (!claimed() || !same(stamp, timing(actor)) || valueOf(effect) !== (plan.action === "tick" ? stacks : value)) break;
+          if (plan.action === "tick" && !disabled() && !immune(actor)) {
             let source;
             try { source = fromUuidSync(prior.sourceUuid); } catch { source = null; }
             const by = present(source) ? source : null;
@@ -124,7 +137,6 @@ export async function advanceToxicPoison(actor, combat = null) {
           const completed = plan.action === "tick" ? confirmToxicPoisonTick(plan.next, plan.key) : plan.next;
           await effect.update({ [`flags.azeroth-rpg.${TOXIC_FLAG}`]: completed });
           if (!held() || !same(stateOf(effect), completed)) break;
-          if (completed.remaining === 0) { await effect.delete(); break; }
         } catch {
           // Never replay an uncertain damage write. Its saved pending key stays
           // on the carrier until the GM reconciles it.

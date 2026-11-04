@@ -10,7 +10,7 @@ const gmHere=()=>game.user?.isGM&&game.users.activeGM?.id===game.user.id;
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 function strikeOf(message){
   const flags=message?.flags?.['azeroth-rpg'],strike=flags?.helmetStrike;
-  return message?.author?.isGM&&flags.kind==='signature'&&flags.identifier===HELMET_IDENTIFIER
+  return message?.author?.isGM&&flags?.kind==='signature'&&flags.identifier===HELMET_IDENTIFIER
     &&strike?.version===1&&strike.identifier===HELMET_IDENTIFIER&&Number.isInteger(strike.dc)&&strike.dc>=10?strike:null;
 }
 function targetOf(strike){

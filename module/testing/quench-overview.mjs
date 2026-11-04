@@ -1334,8 +1334,11 @@ export function overviewBatch(context) {
         await coreOf(sheet);
         sheet.element.querySelector('section[data-tab="core"] [data-action="toggleCondition"][data-condition="prone"]').click();
         await until(() => actor.statuses.has("prone"), "Prone to apply");
-        await overviewOf(sheet);
+        // The sheet's render for the new effect lands ~150 ms after it: a tab changed while it is
+        // in flight is drawn over by it (the context was prepared on Core). Wait for the strip
+        // row, which every tab carries, THEN change tab.
         await until(() => stripRow(sheet, '[data-condition="prone"]'), "Prone on the strip");
+        await overviewOf(sheet);
         assert.equal(stripRows(sheet).length, 1, "the empty line stayed beside the row");
         assert.closeTo(socketTop(), before, 1, "the hands row moved when a condition arrived");
       } finally {

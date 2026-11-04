@@ -1,0 +1,18 @@
+{{!--
+  A card for a carried poison or disease (D12): a tick, a stage, a recovery, a
+  Medicine Test, a GM's Expose. `cardClass` picks the accent: the attack's red for
+  harm, the spell's blue for Medicine and cures. Every line is built and localised
+  by the caller; nothing here is a button.
+--}}
+<div class="azeroth azeroth-card {{cardClass}}" data-message-kind="afflictions">
+  {{> systems/azeroth-rpg/templates/chat/partials/card-header.hbs title=title subtitle=name}}
+
+  <div class="azeroth-card-body">
+    {{#if verdict}}
+    <p class="azeroth-card-verdict"><strong>{{verdict.outcome}}</strong>{{#if verdict.margin}} - {{verdict.margin}}{{/if}}{{#if verdict.total}} ({{verdict.total}} vs DC {{verdict.dc}}){{/if}}</p>
+    {{/if}}
+    {{#each lines}}
+    <p class="azeroth-card-text">{{this}}</p>
+    {{/each}}
+  </div>
+</div>

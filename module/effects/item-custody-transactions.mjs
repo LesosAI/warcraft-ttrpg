@@ -11,6 +11,8 @@ import { advanceItemCustody, createItemCustodyRecord } from "../rules/item-custo
 import { ITEM_CUSTODY_PENDING_FLAG, isItemCustodyPending } from "../rules/item-custody-guard.mjs";
 import { utilityDialog } from "../applications/thematic-utility-dialog.mjs";
 import { feetApart } from "../canvas/footprints.mjs";
+import { createPrivateSpellMessage, privateSpellMessage, privateSpellMessages,
+  withPrivateSpellMessage, loadAuthorizedPrivateSpellMessages } from "./private-spell-records.mjs";
 
 export const ITEM_CUSTODY_QUERY = "azeroth-rpg.itemCustody";
 export const ITEM_CUSTODY_CONSENT_QUERY = "azeroth-rpg.itemCustodyConsent";
@@ -25,7 +27,7 @@ const refuse = reason => ({ok: false, reason});
 const resolve = uuid => { try { return fromUuidSync(uuid); } catch { return null; } };
 const gmHere = () => game.user?.isGM === true && game.users?.activeGM?.id === game.user.id;
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-const messages = () => game.messages?.contents ?? [];
+const messages = () => privateSpellMessages();
 const stateOf = message => message?.flags?.[NS]?.[ITEM_CUSTODY_RECEIPT];
 const escape = value => foundry.utils.escapeHTML(String(value ?? ""));
 const privateWhisper = () => [...(game.users?.contents ?? [])].filter(user => user.isGM).map(user => user.id);
@@ -156,6 +158,7 @@ export async function itemCustodyRecipientConsentHandler(data = {}, {user} = {})
 }
 
 export async function itemCustodyPrepareQueryHandler(data = {}, {user} = {}) {
+  if (gmHere()) await loadAuthorizedPrivateSpellMessages();
   if (data?.choose === true) return chooseCustodyCast(data, user);
   const allowed = ["kind", "casterUuid", "casterTokenUuid", "spellUuid", "parcels", "mission"];
   if (!gmHere() || !user?.id || !data || Array.isArray(data) || Object.keys(data).some(key => !allowed.includes(key))
@@ -226,6 +229,7 @@ async function chooseCustodyCast(data, user) {
 }
 
 export async function itemCustodyClaimQueryHandler(data = {}, {user} = {}) {
+  if (gmHere()) await loadAuthorizedPrivateSpellMessages();
   if (!gmHere() || !user?.id || !data || Array.isArray(data)
       || Object.keys(data).some(key => !["ticket", "cast", "casterUuid", "spellUuid"].includes(key))
       || ![data.ticket, data.cast, data.casterUuid, data.spellUuid].every(value => typeof value === "string")) return refuse("authority-or-shape");
@@ -233,6 +237,7 @@ export async function itemCustodyClaimQueryHandler(data = {}, {user} = {}) {
 }
 
 export async function itemCustodyFinishQueryHandler(data = {}, {user} = {}) {
+  if (gmHere()) await loadAuthorizedPrivateSpellMessages();
   if (!gmHere() || !user?.id || !data || Array.isArray(data)
       || Object.keys(data).some(key => !["ticket", "messageId"].includes(key))
       || ![data.ticket, data.messageId].every(value => typeof value === "string")) return refuse("authority-or-shape");
@@ -240,11 +245,12 @@ export async function itemCustodyFinishQueryHandler(data = {}, {user} = {}) {
 }
 
 export async function itemCustodyOperationQueryHandler(data = {}, {user} = {}) {
+  if (gmHere()) await loadAuthorizedPrivateSpellMessages();
   if (!user?.id || !gmHere() || !data || Array.isArray(data)
       || Object.keys(data).some(key => !["ticket", "operation", "cast"].includes(key))
       || typeof data.ticket !== "string" || !["cancel", "recall", "abort-unpaid", "pact-cleanup"].includes(data.operation)
       || (data.cast !== undefined && typeof data.cast !== "string")) return refuse("authority-or-shape");
-  const state = stateOf(game.messages.get(data.ticket));
+  const state = stateOf(privateSpellMessage(data.ticket));
   if (!state) return refuse("ticket");
   if (data.operation === "abort-unpaid") return abortUnpaidItemCustody(data.ticket, {cast: data.cast}, user);
   if (data.operation === "pact-cleanup") {
@@ -330,7 +336,7 @@ async function writeReceipt(message, state) {
   await message.update({[`flags.${NS}.${ITEM_CUSTODY_RECEIPT}`]: foundry.data.operators.ForcedReplacement.create(state)});
   const saved = same(stateOf(message), state);
   if (saved && state.cardId) {
-    const card = game.messages.get(state.cardId);
+    const card = privateSpellMessage(state.cardId);
     if (card?.flags?.[NS]?.itemCustodyTicket === message.id) {
       await card.update({[`flags.${NS}.itemCustodyStatus`]: state.status});
     }
@@ -587,7 +593,7 @@ async function prepareItemCustodyInternal({kind, transactionId = foundry.utils.r
   const made = createItemCustodyRecord({transactionId, kind, createdAt: game.time.worldTime, expiresAt: expires,
     custodyActorUuid: custody.uuid, parcels: pureRows});
   if (!made.ok) return made;
-  const receipt = await ChatMessage.create({whisper: privateWhisper(), blind: true,
+  const receipt = await createPrivateSpellMessage({whisper: privateWhisper(), blind: true,
     content: `<p>GM-private physical item custody prepared.</p>`,
     flags: {[NS]: {[ITEM_CUSTODY_RECEIPT]: {version: 1, status: "prepared", transactionId, kind,
       custodyActorUuid: custody.uuid, record: made.record, parcels: rows, casterUuid: caster.uuid,
@@ -600,7 +606,7 @@ async function prepareItemCustodyInternal({kind, transactionId = foundry.utils.r
 export async function claimItemCustody(ticket, {cast, casterUuid, spellUuid} = {}, user = game.user) {
   if (!gmHere() || !user?.id) return refuse("authority");
   return serialized(ticket, async () => {
-    const message = game.messages.get(ticket), state = stateOf(message);
+    const message = privateSpellMessage(ticket), state = stateOf(message);
     const caster = worldActor(casterUuid), spell = resolve(spellUuid);
     if (!state || !["prepared", "claimed"].includes(state.status) || state.casterUuid !== casterUuid || state.spellUuid !== spellUuid
         || !caster || !spell || spell.parent?.uuid !== caster.uuid || !caster.testUserPermission(user, "OWNER")
@@ -626,7 +632,7 @@ export async function claimItemCustody(ticket, {cast, casterUuid, spellUuid} = {
 export async function abortUnpaidItemCustody(ticket, {cast} = {}, user = game.user) {
   if (!gmHere() || !user?.id) return refuse("authority");
   return serialized(ticket, async () => {
-    const receipt = game.messages.get(ticket), state = stateOf(receipt);
+    const receipt = privateSpellMessage(ticket), state = stateOf(receipt);
     if (!state || !["prepared", "claimed"].includes(state.status) || state.record?.status !== "holding"
         || (state.record?.held?.length ?? 0) !== 0 || state.cardId) return refuse("not-unpaid");
     if (state.status === "prepared" && state.requestedByUserId !== user.id) return refuse("not-authorized-to-abort");
@@ -648,7 +654,7 @@ export async function abortUnpaidItemCustody(ticket, {cast} = {}, user = game.us
 
 export async function finishItemCustody(ticket, messageId, user = game.user) {
   if (!gmHere() || !user?.id) return refuse("authority");
-  const receipt = game.messages.get(ticket), state = stateOf(receipt), card = game.messages.get(messageId);
+  const receipt = privateSpellMessage(ticket), state = stateOf(receipt), card = privateSpellMessage(messageId);
   const flags = card?.flags?.[NS];
   const identifier = state?.kind === "phoenix-courier" ? "phoenix-courier" : "pact-escrow";
   const retryableHold = state?.status === "needs-review" && state.cardId === card?.id && state.record?.status === "holding";
@@ -682,7 +688,7 @@ export async function finishItemCustody(ticket, messageId, user = game.user) {
 export async function holdItemCustody(ticket) {
   if (!gmHere()) return refuse("authority");
   return serialized(ticket, async () => {
-    const message = game.messages.get(ticket), initial = stateOf(message);
+    const message = privateSpellMessage(ticket), initial = stateOf(message);
     const retryableHold = initial?.status === "needs-review" && initial.cardId && initial.record?.status === "holding";
     if (!initial || (initial.status !== "paid" && !retryableHold)) return refuse("ticket");
     let state = initial;
@@ -708,7 +714,7 @@ function kindIsPact(state) { return state?.kind === "pact-escrow"; }
 export async function deliverItemCustody(ticket, {destinationByParcel = {}} = {}) {
   if (!gmHere()) return refuse("authority");
   return serialized(ticket, async () => {
-    const message = game.messages.get(ticket), initial = stateOf(message);
+    const message = privateSpellMessage(ticket), initial = stateOf(message);
     if (!initial || initial.kind !== "pact-escrow") return refuse("ticket-not-held");
     if (initial.record?.status === "delivered") return finishCommittedPactDelivery(ticket, message, initial);
     if (initial.status !== "held") return refuse("ticket-not-held");
@@ -761,7 +767,7 @@ export async function deliverItemCustody(ticket, {destinationByParcel = {}} = {}
 export async function reconcilePactDelivery(ticket) {
   if (!gmHere()) return refuse("authority");
   return serialized(ticket, async () => {
-    const message = game.messages.get(ticket), state = stateOf(message);
+    const message = privateSpellMessage(ticket), state = stateOf(message);
     return finishCommittedPactDelivery(ticket, message, state);
   });
 }
@@ -770,7 +776,7 @@ export async function reconcilePactDelivery(ticket) {
 export async function startPhoenixCourier(ticket) {
   if (!gmHere()) return refuse("authority");
   return serialized(ticket, async () => {
-    const message = game.messages.get(ticket), state = stateOf(message);
+    const message = privateSpellMessage(ticket), state = stateOf(message);
     if (!state || state.kind !== "phoenix-courier" || state.status !== "held" || !state.mission
         || game.time.worldTime >= state.record.expiresAt) return refuse("ticket-or-route");
     const held = itemAt(worldActor(state.custodyActorUuid), state.parcels[0].itemId);
@@ -797,7 +803,7 @@ export async function startPhoenixCourier(ticket) {
 export async function recordPhoenixCourierAttempt(ticket) {
   if (!gmHere()) return refuse("authority");
   return serialized(ticket, async () => {
-    const message = game.messages.get(ticket), state = stateOf(message);
+    const message = privateSpellMessage(ticket), state = stateOf(message);
     if (!state || state.kind !== "phoenix-courier" || state.status !== "in-transit"
         || game.time.worldTime >= state.record.expiresAt) return refuse("ticket-not-in-transit");
     const held = itemAt(worldActor(state.custodyActorUuid), state.parcels[0].itemId);
@@ -823,7 +829,7 @@ export async function recordPhoenixCourierAttempt(ticket) {
 export async function completePhoenixCourierDelivery(ticket) {
   if (!gmHere()) return refuse("authority");
   return serialized(ticket, async () => {
-    const message = game.messages.get(ticket), state = stateOf(message);
+    const message = privateSpellMessage(ticket), state = stateOf(message);
     if (!state || state.kind !== "phoenix-courier" || state.status !== "delivery-pending"
         || game.time.worldTime >= state.record.expiresAt) return refuse("ticket-not-delivery-pending");
     const parcel = state.parcels[0];
@@ -845,7 +851,7 @@ export async function completePhoenixCourierDelivery(ticket) {
 export async function recordPhoenixCourierCondition(ticket, {note} = {}) {
   if (!gmHere() || typeof note !== "string" || !note.trim() || note.length > 500) return refuse("authority-or-note");
   return serialized(ticket, async () => {
-    const message = game.messages.get(ticket), state = stateOf(message);
+    const message = privateSpellMessage(ticket), state = stateOf(message);
     if (!state || state.kind !== "phoenix-courier" || !["held", "in-transit", "delivery-pending", "returning"].includes(state.status))
       return refuse("ticket-status");
     const parcel = state.parcels[0], custody = worldActor(state.custodyActorUuid), item = itemAt(custody, parcel.itemId);
@@ -871,7 +877,7 @@ export async function recordPhoenixCourierCondition(ticket, {note} = {}) {
 export async function recordPhoenixCourierLoss(ticket, reason) {
   if (!gmHere() || typeof reason !== "string" || !reason.trim() || reason.length > 500) return refuse("authority-or-reason");
   return serialized(ticket, async () => {
-    const message = game.messages.get(ticket), state = stateOf(message);
+    const message = privateSpellMessage(ticket), state = stateOf(message);
     if (!state || state.kind !== "phoenix-courier" || !["held", "in-transit", "delivery-pending", "returning"].includes(state.status))
       return refuse("ticket-status");
     const parcel = state.parcels[0], custody = worldActor(state.custodyActorUuid), item = itemAt(custody, parcel.itemId);
@@ -889,7 +895,7 @@ export async function recordPhoenixCourierLoss(ticket, reason) {
 export async function returnItemCustody(ticket) {
   if (!gmHere()) return refuse("authority");
   return serialized(ticket, async () => {
-    const message = game.messages.get(ticket), initial = stateOf(message);
+    const message = privateSpellMessage(ticket), initial = stateOf(message);
     if (!initial || ["returned", "delivered", "cancelled", "lost", "failed", "expired"].includes(initial.status)) return refuse("ticket-ended");
     let state = initial;
     if (state.record.status !== "returning") {
@@ -956,15 +962,16 @@ export async function returnItemCustody(ticket) {
 
 export function itemCustodyReceipt(ticket) {
   if (!gmHere()) return null;
-  return stateOf(game.messages.get(ticket)) ?? null;
+  return stateOf(privateSpellMessage(ticket)) ?? null;
 }
 
 /** Expired Pact circles and undelivered Phoenix missions return their real Items. */
 export function registerItemCustodyHooks() {
   if (hooksRegistered) return;
   hooksRegistered = true;
-  Hooks.on("updateWorldTime", () => {
+  const reconcile = async () => {
     if (!gmHere()) return;
+    await loadAuthorizedPrivateSpellMessages();
     for (const message of messages()) {
       const state = stateOf(message);
       if (!state || state.record.expiresAt > game.time.worldTime || ["delivered", "returned", "cancelled", "failed", "expired", "lost"].includes(state.status)) continue;
@@ -974,15 +981,17 @@ export function registerItemCustodyHooks() {
       }
       void returnItemCustody(message.id);
     }
-  });
+  };
+  Hooks.on("ready", reconcile);
+  Hooks.on("updateWorldTime", reconcile);
 }
 
 /** Add owner cancel/recall and active-GM commit/dispatch controls to paid cards. */
 export function registerItemCustodyCardHooks() {
-  Hooks.on("renderChatMessageHTML", (message, html) => {
+  Hooks.on("renderChatMessageHTML", withPrivateSpellMessage((message, html) => {
     const flags = message.flags?.[NS], ticket = flags?.itemCustodyTicket;
     if (!ticket || flags.kind !== "spell" || !["pact-escrow", "phoenix-courier"].includes(flags.identifier)) return;
-    const state = game.user?.isGM ? stateOf(game.messages.get(ticket)) : null;
+    const state = game.user?.isGM ? stateOf(privateSpellMessage(ticket)) : null;
     if (game.user?.isGM && (!state || state.cardId !== message.id)) return;
     const container = html.querySelector(".azeroth-card");
     if (!container) return;
@@ -1052,5 +1061,5 @@ export function registerItemCustodyCardHooks() {
         || (flags.identifier === "phoenix-courier" && ["held", "in-transit", "delivery-pending"].includes(flags.itemCustodyStatus))) {
       add(flags.identifier === "pact-escrow" ? "Cancel Pact Escrow" : "Recall Phoenix Courier", flags.identifier === "pact-escrow" ? "cancel" : "recall");
     }
-  });
+  }));
 }

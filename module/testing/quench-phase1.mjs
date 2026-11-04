@@ -89,7 +89,11 @@ export function seamBatch(context) {
       const actor = await makeCharacter({ name: "ZZ Rest Diseased", classes: [["Priest", 5]], abilities: { con: 14 } });
       await actor.update({ "system.health.value": 1, "system.fatigue": 2 });
       await actor.updatePool({ itemId: actor.system.classes[0].itemId, kind: "power", value: 0 });
-      await actor.toggleStatusEffect("diseased", { active: true });
+      // A bare Diseased names no disease and is refused (D12, the lead: "Name one"):
+      // Carrion palsy has no onset, so it holds Diseased from the moment it is laid.
+      const { afflictDisease } = await import("../dice/afflictions-workflows.mjs");
+      await afflictDisease({ victim: actor, key: "carrionPalsy" });
+      assert.isTrue(actor.statuses.has("diseased"), "Carrion palsy laid no Diseased");
       await actor.longRest();
       const card = lastCard();
       assert.equal(actor.system.health.value, 1, "a Diseased Long Rest restored Health");
@@ -97,7 +101,6 @@ export function seamBatch(context) {
       assert.equal(actor.system.powers[0].value, actor.system.powers[0].max, "the Mana did not fill");
       assert.include(card.text, "Diseased");
       assert.notMatch(card.text, /Health\s*\+/, "a Diseased Long Rest claimed Health");
-      await actor.toggleStatusEffect("diseased", { active: false });
     });
 
     it("the third Short Rest of a day warns on the card and still rests, and a Long Rest starts the count over", async function () {
@@ -246,20 +249,23 @@ export function seamBatch(context) {
         await until(() => actor.system.powers.find(p => p.name === "energy").value === 5);
         const energy = actor.system.powers.find(p => p.name === "energy");
         assert.equal(energy.value, 5, "the Rogue's Energy refills 3 a turn (05 SS12)");
-        // Core's endCombat awaits a modal confirm, so it is not awaited here:
-        // the zeroing runs before super, the actor's update is the signal,
-        // and the prompt is answered afterwards - Yes deletes the combat.
-        const zeroed = untilHook("updateActor", 5000, a => a.id === actor.id);
+        // Core's endCombat awaits a modal confirm, so it is not awaited here. The
+        // zeroing is the fight's `_onExit` cleanup, which runs AFTER Yes deletes
+        // the combat: opening the prompt must spend nothing (combat.mjs#endCombat).
+        const rageHeld = actor.system.classes[0].momentum.value;
+        assert.isAbove(rageHeld, 0, "the test needs Rage held to see it die");
         const ending = combat.endCombat();
-        await zeroed;
-        assert.equal(actor.system.classes[0].momentum.value, 0, "Rage did not die with the fight");
-        assert.equal(actor.system.classes[1].momentum.value, 0, "Combo Points did not die with the fight");
-        assert.equal(actor.system.momenta[0].value, 0, "the derived Momentum disagrees");
         await until(() => openDialog(), 10000);
         const prompt = openDialog();
         assert.ok(prompt, "core's End Combat confirm did not open");
+        assert.equal(actor.system.classes[0].momentum.value, rageHeld, "opening the End Combat prompt spent Rage");
         prompt.element.querySelector('button[data-action="yes"]').click();
         await ending;
+        // `_onExit` runs on the active GM's client and nothing awaits it: poll for the write.
+        await until(() => actor.system.classes[0].momentum.value === 0 && actor.system.classes[1].momentum.value === 0, 10000);
+        assert.equal(actor.system.classes[0].momentum.value, 0, "Rage did not die with the fight");
+        assert.equal(actor.system.classes[1].momentum.value, 0, "Combo Points did not die with the fight");
+        assert.equal(actor.system.momenta[0].value, 0, "the derived Momentum disagrees");
         void combatant;
       } finally {
         if (game.combats.has(combat.id)) await combat.delete().catch(() => {});
@@ -310,7 +316,8 @@ export function seamBatch(context) {
         sheet.options.actions.createItem.call(sheet, new MouseEvent("click"), el);
         const [item] = await wait;
         assert.equal(item.type, "gear");
-        await settle();
+        // The sheet renders on its own schedule after the create: wait for exactly it.
+        await until(() => item.sheet?.rendered === true, 10000).catch(() => {});
         assert.ok(item.sheet?.rendered, "the new item's sheet did not open");
         await item.sheet.close();
       } finally {

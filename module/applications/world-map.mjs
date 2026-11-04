@@ -71,6 +71,18 @@ const BORDER_RATIO = 2 / 828;
 const borderFor = width => Math.max(1, Math.round(BORDER_RATIO * width));
 
 /**
+ * **A DECODED PLATE IS KEPT FOR THE SESSION, NOT FOR THE WINDOW** (2026-11-04). Each
+ * window used to decode both plates afresh: 3264 x 6528 is 85 MB of pixels a canvas, an
+ * 85 MB `ImageData` and two more arrays the size of the plate, per window, and the
+ * Quench world-map batch opens thirty windows in a minute. The garbage outlived the
+ * collector - the renderer's working set reached 5 GB and, with the machine's virtual
+ * memory already short, the browser was killed and the run hung. What is cached is only
+ * what the window reads (`owners`, `borders`, `bounds`, the image): the raw pixels and
+ * the scratch canvas are let go the moment the ground is shared out.
+ */
+const PLATE_CACHE = new Map();
+
+/**
  * Zoom limits and the step a click of the wheel takes.
  *
  * There is no fixed floor: the plate is drawn at the frame's width, so a
@@ -285,6 +297,10 @@ export class AzerothWorldMap extends HandlebarsApplicationMixin(ApplicationV2) {
    */
   async #plate(continent) {
     if (this.#plates.has(continent)) return this.#plates.get(continent);
+    if (PLATE_CACHE.has(continent)) {
+      this.#plates.set(continent, PLATE_CACHE.get(continent));
+      return PLATE_CACHE.get(continent);
+    }
     const meta = shapes.plates[continent];
     if (!meta) return null;
 
@@ -323,12 +339,16 @@ export class AzerothWorldMap extends HandlebarsApplicationMixin(ApplicationV2) {
     // One box a region, so lighting the one under the cursor repaints its own
     // corner rather than the whole million-pixel plate.
     const bounds = regionBounds(owners, seeds.length, width, height);
+    // The scratch canvas holds 85 MB of backing store until the collector gets to it.
+    scratch.width = 0;
+    scratch.height = 0;
 
     // `land` is NOT kept. `owners` already says it — a pixel is ground exactly
     // when its owner is not -1 — and at 3264px the mask is 21MB a plate, held
     // for the life of the window for nothing (D-684).
     const plate = { continent, meta, image, width, height, seeds, owners, borders, bounds, missing: false };
     this.#plates.set(continent, plate);
+    PLATE_CACHE.set(continent, plate);
     return plate;
   }
 

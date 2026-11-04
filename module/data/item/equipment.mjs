@@ -516,6 +516,19 @@ function useField() {
     perRest: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
     // 14's Manuals: the experience reading it grants (the lead, 2026-09-07).
     xp: new fields.NumberField({ required: false, nullable: true, integer: true, initial: null, min: 0 }),
+    // D12: the disease a remedy ends, and what a poison leaves carried.
+    cures: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+    carried: new fields.SchemaField({
+      carried: new fields.BooleanField({ required: false, initial: true }),
+      damage: new fields.NumberField({ required: false, integer: true, initial: 0, min: 0 }),
+      fatigue: new fields.NumberField({ required: false, integer: true, initial: 0, min: 0 }),
+      statuses: new fields.ArrayField(new fields.StringField({ blank: false }), { initial: [] }),
+      value: new fields.NumberField({ required: false, integer: true, initial: 0, min: 0 }),
+      firstTestBane: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+      healingFactor: new fields.NumberField({ required: false, nullable: true, initial: null, min: 0 }),
+      beats: new fields.ArrayField(new fields.StringField({ blank: false }), { initial: ["turn", "hour"] }),
+      reason: new fields.StringField({ required: false, nullable: true, blank: false, initial: null })
+    }, { required: false, nullable: true, initial: null }),
     note: new fields.StringField({ required: false, blank: true, initial: "" })
   });
 }

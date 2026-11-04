@@ -11,6 +11,8 @@ import { SUPPORTED_THEMATIC_OBJECT_CASTS, THEMATIC_OBJECT_SPELLS, arcaneSealAcce
 import { THEMATIC_SPELL_ANIMATIONS } from "../rules/thematic-spell-animations.mjs";
 import { SequencerPlayer } from "../animation/player.mjs";
 import { utilityDialog } from "../applications/thematic-utility-dialog.mjs";
+import { createPrivateSpellMessage, privateSpellMessage, privateSpellMessages,
+  withPrivateSpellMessage, loadAuthorizedPrivateSpellMessages } from "./private-spell-records.mjs";
 
 export const THEMATIC_OBJECT_QUERY = "azeroth-rpg.thematicObject";
 export const THEMATIC_OBJECT_OPERATION_QUERY = "azeroth-rpg.thematicObjectOperation";
@@ -32,16 +34,16 @@ const refOf = ref => ref ? {sceneId: ref.sceneId ?? null, tokenId: ref.tokenId ?
 const tokenAt = ref => ref?.sceneId && ref?.tokenId ? game.scenes?.get(ref.sceneId)?.tokens.get(ref.tokenId) ?? null : null;
 const privateWhisper = () => [...(game.users?.contents ?? [])].filter(user => user.isGM).map(user => user.id);
 const write = (message, state) => message.update({[`flags.${NS}.${RECEIPT}`]: foundry.data.operators.ForcedReplacement.create(state)});
-const messages = () => game.messages?.contents ?? [];
+const messages = () => privateSpellMessages();
 export const supportsThematicObject = identifier => SUPPORTED_CASTS.has(identifier);
 const privateAudience = (...actors) => [...(game.users?.contents ?? [])]
   .filter(user => user.isGM || actors.some(actor => actor?.testUserPermission?.(user, "OWNER")))
   .map(user => user.id);
 const privateNotice = async (actors, content, {privateCue = null} = {}) => {
   const whisper = privateAudience(...actors);
-  if (whisper.length) await ChatMessage.create({author: game.user.id, whisper, blind: true,
+  if (whisper.length) await createPrivateSpellMessage({whisper, blind: true,
     content: `<p>${foundry.utils.escapeHTML(content)}</p>`,
-    ...(privateCue ? {flags: {[NS]: {[PRIVATE_CUE]: privateCue}}} : {})});
+    flags: {[NS]: {thematicPrivateNotice: true, ...(privateCue ? {[PRIVATE_CUE]: privateCue} : {})}}});
 };
 
 /** Play a GM-marked private tone only on clients included in that whisper. */
@@ -175,7 +177,12 @@ async function ensureHeatMirageTile(receipt, state) {
 async function removeHeatMirageTile(record, ticket) {
   const scene = game.scenes?.get(record?.anchor?.sceneId);
   const ids = (scene?.tiles?.contents ?? []).filter(tile => tile.flags?.[NS]?.heatMirageTicket === ticket).map(tile => tile.id);
-  if (ids.length) await scene.deleteEmbeddedDocuments("Tile", ids);
+  if (!ids.length) return;
+  try {
+    await scene.deleteEmbeddedDocuments("Tile", ids);
+  } catch {
+    // The reconciler or a prior cleanup may already have removed this tile.
+  }
 }
 
 async function proposedDeclaration(identifier, raw) {
@@ -285,6 +292,7 @@ export async function endHeatMirageForCast(actorUuid, castId) {
 /** Reconcile private illusion records with the normal, paid Sustain ledger. */
 export async function reconcileHeatMirages() {
   if (!gmHere()) return;
+  await loadAuthorizedPrivateSpellMessages();
   for (const message of messages()) {
     const state = stateOf(message), record = state?.record;
     if (state?.status !== "complete" || record?.spellId !== "heat-mirage") continue;
@@ -307,6 +315,7 @@ export async function reconcileHeatMirages() {
 /** Active-GM handler registered by module/queries.mjs. */
 export async function thematicObjectQueryHandler(data = {}, {user} = {}) {
   if (!gmHere() || !user?.id || !data || typeof data !== "object" || Array.isArray(data)) return refuse("authority");
+  await loadAuthorizedPrivateSpellMessages();
   if (data.phase === "prepare") {
     const key = `prepare:${String(data.actorUuid)}:${String(data.objectId)}`;
     return serialized(key, () => prepareOnGm(data, user));
@@ -405,7 +414,7 @@ async function prepareOnGm(data, user) {
     identifier, actorUuid: actor.uuid, spellUuid: spell.uuid, source,
     targets: targetRefs, objectId: data.objectId, objectLabel: data.objectLabel, declaration,
     operationId: foundry.utils.randomID(), castTimeElapsed: review.castTimeElapsed === true};
-  const receipt = await ChatMessage.create({whisper: privateWhisper(), blind: true,
+  const receipt = await createPrivateSpellMessage({whisper: privateWhisper(), blind: true,
     content: `<p>${foundry.utils.escapeHTML(spell.name)}: GM-approved object-state cast prepared.</p>`,
     flags: {[NS]: {[RECEIPT]: state}}});
   return receipt && stateOf(receipt)?.ticket === ticket ? {ok: true, ticket: receipt.id} : refuse("receipt-uncertain");
@@ -414,7 +423,7 @@ async function prepareOnGm(data, user) {
 async function claimOnGm(data, user) {
   if (Object.keys(data).some(key => !["phase", "ticket", "cast"].includes(key))
       || !data.ticket || typeof data.cast !== "string" || !data.cast.trim() || data.cast.length > 240) return refuse("shape");
-  const receipt = game.messages.get(data.ticket), state = stateOf(receipt);
+  const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt);
   if (!state || state.status !== "prepared" || state.userId !== user.id || Date.now() > state.wallExpires) return refuse("ticket");
   if (messages().some(message => {
     const other = stateOf(message);
@@ -435,9 +444,9 @@ async function claimOnGm(data, user) {
 async function finishOnGm(data, user) {
   if (Object.keys(data).some(key => !["phase", "ticket", "messageId"].includes(key))
       || !data.ticket || !data.messageId) return refuse("shape");
-  const receipt = game.messages.get(data.ticket), state = stateOf(receipt);
+  const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt);
   if (!state || (state.userId !== user.id && !user.isGM)) return refuse("ticket");
-  const card = game.messages.get(data.messageId), flags = card?.flags?.[NS];
+  const card = privateSpellMessage(data.messageId), flags = card?.flags?.[NS];
   if (!card || card.author?.id !== state.userId || flags?.kind !== "spell"
       || flags.thematicObjectTicket !== receipt.id || flags.caster !== state.actorUuid
       || flags.spellUuid !== state.spellUuid || flags.identifier !== state.identifier
@@ -487,7 +496,7 @@ async function finishOnGm(data, user) {
 export async function applyThematicObjectOperation({ticket, operation, data = {}, operationId = foundry.utils.randomID()} = {}) {
   if (!gmHere() || !ticket || typeof operation !== "string") return refuse("authority");
   return serialized(ticket, async () => {
-    const receipt = game.messages.get(ticket), state = stateOf(receipt);
+    const receipt = privateSpellMessage(ticket), state = stateOf(receipt);
     if (!state || state.status !== "complete" || !state.record) return refuse("record");
     const updated = transitionThematicObject(state.record, {operationId, operation,
       at: game.time.worldTime, gmApproval: game.user.id, data});
@@ -502,7 +511,7 @@ export async function applyThematicObjectOperation({ticket, operation, data = {}
       if (kept.length !== held.length) await caster.setFlag(NS, "sustaining", kept);
       await removeHeatMirageTile(updated.record, receipt.id);
     }
-    const card = game.messages.get(state.cardId);
+    const card = privateSpellMessage(state.cardId);
     await card?.update({[`flags.${NS}.thematicObjectStateStatus`]: updated.record.status});
     if (operation === "verify" && updated.outcome) {
       const verifier = resolve(data.verifierUuid);
@@ -526,6 +535,7 @@ export async function thematicObjectOperationQueryHandler(data = {}, {user} = {}
       || Object.keys(data).some(key => !["ticket", "operation", "data", "operationId"].includes(key))
       || !data.ticket || typeof data.operation !== "string" || !data.operationId
       || !data.data || typeof data.data !== "object" || Array.isArray(data.data)) return refuse("authority-or-shape");
+  await loadAuthorizedPrivateSpellMessages();
   return applyThematicObjectOperation(data);
 }
 
@@ -534,7 +544,8 @@ export async function thematicObjectAccessQueryHandler(data = {}, {user} = {}) {
   if (!gmHere() || !user?.id || !data || typeof data !== "object" || Array.isArray(data)
       || Object.keys(data).some(key => !["ticket", "actorUuid"].includes(key))
       || !data.ticket || typeof data.actorUuid !== "string") return refuse("authority-or-shape");
-  const receipt = game.messages.get(data.ticket), record = stateOf(receipt)?.record;
+  await loadAuthorizedPrivateSpellMessages();
+  const receipt = privateSpellMessage(data.ticket), record = stateOf(receipt)?.record;
   const actor = resolve(data.actorUuid);
   if (record?.spellId !== "arcane-seal" || !actor || actor.documentName !== "Actor" || actor.isToken
       || game.actors?.get(actor.id) !== actor || !actor.testUserPermission(user, "OWNER")) return refuse("actor-or-record");
@@ -549,15 +560,17 @@ export async function thematicObjectAccessQueryHandler(data = {}, {user} = {}) {
 export function registerThematicObjectCardHooks() {
   if (!objectHooksRegistered) {
     objectHooksRegistered = true;
-    const reconcile = () => {
+    const reconcile = async () => {
+      if (gmHere()) await loadAuthorizedPrivateSpellMessages();
       void reconcileHeatMirages().catch(error => console.warn("azeroth-rpg | Heat Mirage Sustain reconciliation", error));
     };
     Hooks.on("ready", reconcile);
     Hooks.on("updateActor", reconcile);
     Hooks.on("deleteActor", reconcile);
     Hooks.on("updateChatMessage", reconcile);
-    Hooks.on("updateWorldTime", () => {
+    Hooks.on("updateWorldTime", async () => {
       if (!gmHere()) return;
+      await loadAuthorizedPrivateSpellMessages();
       for (const message of messages()) {
         const state = stateOf(message), record = state?.record;
         if (state?.status === "complete" && record?.spellId === "icevein-passage"
@@ -567,7 +580,7 @@ export function registerThematicObjectCardHooks() {
       }
     });
   }
-  Hooks.on("renderChatMessageHTML", (message, html) => {
+  Hooks.on("renderChatMessageHTML", withPrivateSpellMessage((message, html) => {
     playPrivateNoticeCue(message);
     const flags = message.flags?.[NS];
     if (!flags?.thematicObjectTicket) return;
@@ -591,7 +604,7 @@ export function registerThematicObjectCardHooks() {
       });
     }
     if (!game.user?.isGM || !gmHere() || !flags.thematicObjectStateTicket) return;
-    const record = stateOf(game.messages.get(flags.thematicObjectTicket))?.record;
+    const record = stateOf(privateSpellMessage(flags.thematicObjectTicket))?.record;
     const buttons = {
       "arcane-seal": ["break", "dispel", "expire", "replace"],
       "rime-arrest": ["break", "thaw", "expire"],
@@ -605,7 +618,7 @@ export function registerThematicObjectCardHooks() {
     for (const operation of buttons) addButton(`GM: ${operation}`, async () => {
       let data = {};
       if (operation === "verify") {
-        const record = stateOf(game.messages.get(flags.thematicObjectTicket))?.record;
+        const record = stateOf(privateSpellMessage(flags.thematicObjectTicket))?.record;
         const allowed = new Set(record?.verifierUuids ?? []);
         const options = [{value: "", label: "Choose verifier"}, ...(game.actors?.contents ?? [])
           .filter(actor => allowed.has(actor.uuid) && (game.user?.isGM || actor.testUserPermission?.(game.user, "OBSERVER")))
@@ -667,5 +680,5 @@ export function registerThematicObjectCardHooks() {
       const result = await requestThematicObjectAccess({ticket: flags.thematicObjectTicket, actorUuid: answer.actorUuid});
       if (!result?.ok) ui.notifications.warn(`Access check refused: ${result.reason}`);
     });
-  });
+  }));
 }

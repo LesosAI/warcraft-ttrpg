@@ -747,10 +747,15 @@ export function automationBatch(context) {
       if (ally.system.health.value < ally.system.health.max / 2) {
         assert.equal(pool(warrior, "rage").value, Math.min(10, rageBefore + 6), "Killing Blow paid no Rage");
       }
-      // The ally goes to 0 within 20 feet of the Paladin: +2 Zeal.
+      // The ally goes to 0 within 20 feet of the Paladin: +2 Zeal. A card's damage lands
+      // on a target ONCE (the attack-resolution record, 0.12.32), so the second blow is a
+      // second attack - Extra Attack's roll, which spends no budget.
       await ally.update({ "system.health.value": 1 });
       const zealBefore = pool(paladin, "zeal").value;
-      await CARD_ACTIONS.applyDamage(apply, card);
+      const second = await face(20, () => attack(warrior, { targets: [snap], budget: "none" }));
+      const el2 = document.createElement("div");
+      el2.innerHTML = second.content;
+      await CARD_ACTIONS.applyDamage(el2.querySelector('[data-action="applyDamage"][data-target-index="0"]'), second);
       assert.equal(ally.system.health.value, 0);
       await until(() => pool(paladin, "zeal").value === zealBefore + 2, 15000);
       await combat.delete();
@@ -889,7 +894,12 @@ export function automationBatch(context) {
       const injury = game.messages.contents.slice(before).find(m => m.flags?.["azeroth-rpg"]?.result && m.speaker?.actor === victim.id);
       assert.ok(injury, "no Critical Injury card for the victim");
       assert.equal(injury.getFlag("azeroth-rpg", "location") ?? "limb", "limb");
-      await CARD_ACTIONS.applyDamage(el.querySelector('[data-action="applyDamage"][data-target-index="0"]'), card);
+      // A card's damage lands on a target ONCE (the attack-resolution record, 0.12.32):
+      // the blow while dying is a second attack, Extra Attack's roll with no budget.
+      const second = await face(15, () => attack(attacker, { targets: [{ ...snapshotOf(victim), size: victim.system.size }], location: "limb", budget: "none" }));
+      const el2 = document.createElement("div");
+      el2.innerHTML = second.content;
+      await CARD_ACTIONS.applyDamage(el2.querySelector('[data-action="applyDamage"][data-target-index="0"]'), second);
       assert.equal(victim.system.deathSteps, 1, "a blow while dying took no Death Step");
       await combat.delete();
     });

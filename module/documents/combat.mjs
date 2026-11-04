@@ -109,6 +109,7 @@ import {
 // what a creature is and who it is to the caster.
 import { casterTurnTests, kindsOfActor, postAreaTest, relationTo, strikeFromArea } from "../effects/area-strikes.mjs";
 // Damage or healing laid on the creature itself, at the start of its turn (D-770).
+import { advanceAfflictionsInFight } from "../effects/affliction-clock.mjs";
 import { landTicks } from "../effects/ticks.mjs";
 import { advanceVekniss } from "../effects/vekniss.mjs";
 import { advanceBloodpetal } from "../effects/bloodpetal.mjs";
@@ -2134,6 +2135,8 @@ export class AzerothCombat extends Combat {
     // damage a turn - the same beat as the area's, after it, and before the
     // regeneration below for the same reason.
     for (const line of await this._effectTicks(combatant)) lines.push(line);
+    // A poison carried until it is cured lands its turn beat (D12), beside the other ticks laid on the creature.
+    if (combatant?.actor && !combatant.isDefeated) for (const line of await advanceAfflictionsInFight(combatant.actor)) lines.push(line);
     // Burning (10 §4, 2026-09-06): 1 damage at the start of each turn that
     // nothing mitigates - straight to Health, no armor, no Ward.
     for (const tick of actor.system?.corruptionEffects?.ticks ?? []) {
@@ -2350,6 +2353,13 @@ export class AzerothCombat extends Combat {
         if(!result.ok){console.warn('azeroth-rpg | signature area healing unresolved',result.reason);continue;}
         lines.push(...result.lines);
       }else for (const line of await strikeFromArea({ actor, caster, spell: source.spell ?? {}, damage: payload.damage, heal: payload.heal })) lines.push(line);
+      // **MOONWELL'S OTHER HALF** (07: *an ally that starts its turn in the area regains
+      // 4 Health, and one poison or one disease on it ends*; D12 Phase 6). The GM's
+      // client lands the tick and shows no chooser: the first by urgency ends.
+      if (payload.heal > 0 && source.spell?.name) {
+        const { cureOnTick } = await import("../effects/cures.mjs");
+        for (const line of await cureOnTick(actor, caster, source.spell.name)) lines.push(line);
+      }
       // **AND THE PULL BESIDE IT** (07's Void Rift: *takes 4 Shadow damage at the
       // start of each of its turns and is pulled 10 feet toward the center*; D-778,
       // the lead on O-158: *"Yes."*): toward the area's own centre, through the one

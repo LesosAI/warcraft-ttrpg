@@ -1,3 +1,4 @@
+import { createPrivateSpellMessage, privateSpellMessage, privateSpellMessages, withPrivateSpellMessage, loadAuthorizedPrivateSpellMessages } from "./private-spell-records.mjs";
 /** Spell Relay's GM-owned setup and one-use attempt receipts. */
 import {attemptSpellRelay, createSpellRelay, relaySpellRefusal} from "../rules/spell-relay.mjs";
 import {areaFor, lengthenArea, widenArea} from "../rules/areas.mjs";
@@ -51,7 +52,7 @@ async function request(payload) {
 }
 
 function relayReceipts(actor) {
-  return [...(game.messages?.contents ?? [])].filter(message => {
+  return [...(privateSpellMessages())].filter(message => {
     const state = stateOf(message);
     return state?.version === 1 && state.status === "active" && state.actorUuid === actor.uuid;
   }).sort((a, b) => (stateOf(b)?.armedAt ?? 0) - (stateOf(a)?.armedAt ?? 0));
@@ -90,6 +91,9 @@ export async function prepareRelayAttempt({actor, spell, source, targets = [], a
   const refusal = relaySpellRefusal(spell, {viaItem, summons, teleports});
   if (refusal) return null;
   if (!actor.testUserPermission(game.user, "OWNER")) return rejected("owner");
+  if (!effectsOf(actor).some(effect => effect.flags?.[NS]?.spellRelayCarrier)) return null;
+  try { await loadAuthorizedPrivateSpellMessages(); }
+  catch { return rejected("unavailable"); }
   const receipt = relayReceipts(actor)[0];
   if (!receipt) return null;
   const record = stateOf(receipt);
@@ -163,7 +167,7 @@ async function reviewAttempt(ctx, data) {
 }
 
 async function cardFor(state, messageId, user, {phase, flag}) {
-  const card = game.messages.get(messageId), flags = card?.flags?.[NS];
+  const card = privateSpellMessage(messageId), flags = card?.flags?.[NS];
   if (!card || (card.author?.id !== state.userId && !user.isGM) || flags?.kind !== "spell"
     || flags[flag] !== state.ticket || flags.caster !== state.actorUuid || flags.spellUuid !== state.spellUuid
     || flags.cast !== state.claimCast || !same(refOf(flags.source), state.source)
@@ -174,6 +178,7 @@ async function cardFor(state, messageId, user, {phase, flag}) {
 
 /** GM-only handler; every point, range, caster, card and spend is rechecked here. */
 export async function thematicSpellRelayQueryHandler(data = {}, {user} = {}) {
+  await loadAuthorizedPrivateSpellMessages();
   if (!gmHere() || !user?.id) return rejected("authority");
   if (data.phase === "setupPrepare") {
     const ctx = setupContext(data, user);
@@ -184,14 +189,14 @@ export async function thematicSpellRelayQueryHandler(data = {}, {user} = {}) {
       actorUuid: ctx.actor.uuid, spellUuid: ctx.spell.uuid, source: data.source, targets: data.targets,
       sceneId: data.sceneId, origin: data.origin, preparedAt: game.time.worldTime,
       wallExpires: Date.now() + 600000};
-    const receipt = await ChatMessage.create({whisper: privateUsers(ctx.actor), content: text(`${ctx.spell.name}: Spell Relay point reviewed`),
+    const receipt = await createPrivateSpellMessage({whisper: privateUsers(ctx.actor), content: text(`${ctx.spell.name}: Spell Relay point reviewed`),
       flags: {[NS]: {spellRelayReceipt: state}}});
     state.ticket = receipt.id;
     await write(receipt, "spellRelayReceipt", state);
     return {ok: true, ticket: receipt.id, origin: state.origin, sceneId: state.sceneId};
   }
   if (data.phase === "setupClaim") return serialized(data.ticket, async () => {
-    const receipt = game.messages.get(data.ticket), state = stateOf(receipt);
+    const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt);
     if (state?.kind === "setup" && state.status === "claimed" && state.userId === user.id && state.claimCast === data.cast) return {ok: true};
     if (!state || state.kind !== "setup" || state.status !== "prepared" || state.userId !== user.id
       || Date.now() > state.wallExpires || typeof data.cast !== "string" || !data.cast) return rejected("ticket");
@@ -201,7 +206,7 @@ export async function thematicSpellRelayQueryHandler(data = {}, {user} = {}) {
     return {ok: true};
   });
   if (data.phase === "setupFinish") return serialized(data.ticket, async () => {
-    const receipt = game.messages.get(data.ticket), state = stateOf(receipt);
+    const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt);
     if (!state || state.kind !== "setup" || !["claimed", "active", "failed"].includes(state.status)
       || (state.userId !== user.id && !user.isGM)) return rejected("ticket");
     const bound = await cardFor({...state, ticket: receipt.id}, data.messageId, user, {phase: "setup", flag: "spellRelayTicket"});
@@ -230,7 +235,7 @@ export async function thematicSpellRelayQueryHandler(data = {}, {user} = {}) {
     return {ok: true, active: true, effectId: effect.id, origin: activeState.origin, sceneId: activeState.sceneId};
   });
   if (data.phase === "attemptPrepare") {
-    const setupReceipt = game.messages.get(data.relayTicket), setup = stateOf(setupReceipt);
+    const setupReceipt = privateSpellMessage(data.relayTicket), setup = stateOf(setupReceipt);
     const ctx = setup && setup.status === "active" ? attemptContext(data, user, setup) : rejected("relay");
     if (ctx.reason) return ctx;
     const carrier = ctx.actor.effects.get(setup.effectId);
@@ -249,21 +254,21 @@ export async function thematicSpellRelayQueryHandler(data = {}, {user} = {}) {
       area: law.geometry.area, rotation: data.rotation, geometry: {sceneId: data.sceneId,
         origin: {...setup.origin}, rotation: data.rotation, area: {...law.geometry.area}, attach: false},
       preparedAt: game.time.worldTime, wallExpires: Date.now() + 600000};
-    const receipt = await ChatMessage.create({whisper: privateUsers(ctx.actor), content: text(`${ctx.spell.name}: Spell Relay placement reviewed`),
+    const receipt = await createPrivateSpellMessage({whisper: privateUsers(ctx.actor), content: text(`${ctx.spell.name}: Spell Relay placement reviewed`),
       flags: {[NS]: {spellRelayAttempt: state}}});
     state.ticket = receipt.id;
     await write(receipt, "spellRelayAttempt", state);
     return {ok: true, ticket: receipt.id, geometry: state.geometry, placementOverride: state.geometry};
   }
   if (data.phase === "attemptClaim") {
-    const initial = stateOf(game.messages.get(data.ticket), "spellRelayAttempt");
+    const initial = stateOf(privateSpellMessage(data.ticket), "spellRelayAttempt");
     if (!initial?.setupTicket) return rejected("ticket");
     return serialized(initial.setupTicket, async () => {
-    const receipt = game.messages.get(data.ticket), state = stateOf(receipt, "spellRelayAttempt");
+    const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt, "spellRelayAttempt");
     if (state?.status === "claimed" && state.claimCast === data.cast) return {ok: true, geometry: state.geometry, placementOverride: state.geometry};
     if (!state || state.kind !== "attempt" || state.status !== "prepared" || state.userId !== user.id
       || Date.now() > state.wallExpires || typeof data.cast !== "string" || !data.cast) return rejected("ticket");
-    const actor = resolve(state.actorUuid), setupReceipt = game.messages.get(state.setupTicket), setup = stateOf(setupReceipt);
+    const actor = resolve(state.actorUuid), setupReceipt = privateSpellMessage(state.setupTicket), setup = stateOf(setupReceipt);
     const spell = resolve(state.spellUuid), sourceToken = validSource(state.source, actor);
     const refusal = relaySpellRefusal(spell);
     const alreadySpentHere = setup?.status === "spent" && setup.spentBy === state.attemptId && setup.attemptTicket === receipt.id;
@@ -286,7 +291,7 @@ export async function thematicSpellRelayQueryHandler(data = {}, {user} = {}) {
     });
   }
   if (data.phase === "attemptFinish") return serialized(data.ticket, async () => {
-    const receipt = game.messages.get(data.ticket), state = stateOf(receipt, "spellRelayAttempt");
+    const receipt = privateSpellMessage(data.ticket), state = stateOf(receipt, "spellRelayAttempt");
     if (!state || state.kind !== "attempt" || !["claimed", "complete", "failed"].includes(state.status)
       || (state.userId !== user.id && !user.isGM)) return rejected("ticket");
     const bound = await cardFor({...state, ticket: receipt.id}, data.messageId, user, {phase: "attempt", flag: "spellRelayAttemptTicket"});
@@ -302,7 +307,7 @@ export async function thematicSpellRelayQueryHandler(data = {}, {user} = {}) {
 
 /** Add a card control for setup receipts; the cast workflow may also call finish directly. */
 export function registerSpellRelayCardHooks() {
-  Hooks.on("renderChatMessageHTML", (message, html) => {
+  Hooks.on("renderChatMessageHTML", withPrivateSpellMessage((message, html) => {
     const state = message.flags?.[NS];
     if (!state?.spellRelayTicket || state.success !== true || !game.user?.isGM) return;
     const container = html.querySelector(".azeroth-card");
@@ -319,5 +324,5 @@ export function registerSpellRelayCardHooks() {
       } finally { button.disabled = false; }
     });
     container.append(button);
-  });
+  }));
 }

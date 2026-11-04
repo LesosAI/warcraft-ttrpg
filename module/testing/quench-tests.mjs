@@ -64,6 +64,7 @@ import { restBatch } from "./quench-rests.mjs";
 // WoW's character pane: core's frame, the band and the hanging tabs (D-734).
 import { frameBatch } from "./quench-frame.mjs";
 import { bagsBatch } from "./quench-bags.mjs";
+import { afflictionsBatch } from "./quench-afflictions.mjs";
 // What stands on an ally: Aura of Resolve, Avenging Bulwark, Tree of Life and
 // Demonic Pact (D-755).
 import { aurasBatch } from "./quench-auras.mjs";
@@ -355,6 +356,9 @@ export function registerQuenchTests() {
     });
     quench.registerBatch("azeroth-rpg.frame", frameBatch, {
       displayName: "AZEROTH: The character sheet's frame and tabs"
+    });
+    quench.registerBatch("azeroth-rpg.afflictions", afflictionsBatch, {
+      displayName: "AZEROTH: Poisons and diseases carried until cured"
     });
     quench.registerBatch("azeroth-rpg.bags", bagsBatch, {
       displayName: "AZEROTH: Bag slots, and what will not fit"

@@ -47,6 +47,8 @@
     {{/if}}
   </div>
   {{/each}}
+  {{!-- Poisons and diseases carried until cured (D12): always drawn, so the tab does not jump. --}}
+  {{> "systems/azeroth-rpg/templates/actor/partials/afflictions.hbs"}}
   {{!-- There is no total, and there is deliberately nowhere to print one. --}}
   {{!-- No clarifier here (D-615): the rule that tracks never sum is the book's to state. --}}
 </section>
