@@ -33,7 +33,7 @@ import { laidBanesOn, laidBoonsOn } from "../rules/banes.mjs";
 // The Warrior's and the Paladin's lines (D-772): a Boon off the target's
 // Health (Hammer of Wrath), Reckless on the roller and its exposure on the
 // target, and the next attack's promise.
-import { EXPOSED_FLAG, calledShotFor, exposedBoonsOn, recklessFor } from "../rules/class-talents.mjs";
+import { EXPOSED_FLAG, calledShotFor, exposedBoonsOn, exposuresAgainst, recklessFor } from "../rules/class-talents.mjs";
 // The Ranger's and the Rogue's lines (D-773): Careful Shot's cancelled Banes, a
 // Boon off the target's Health or a measured fact (Hammer of Wrath, Master
 // Duellist), the Opening measured, and the Finisher the talents reshape.
@@ -230,7 +230,11 @@ export function exposuresOf(actor) {
     const raw = effect.flags?.["azeroth-rpg"]?.[EXPOSED_FLAG] ?? null;
     // A side, where only one side's attacks take it (14's Sell Them Out: *every creature
     // on his side takes Boon on attack Tests against it*; D-809).
-    if (raw && typeof raw === "object") out.push({ boons: Number(raw.boons) || 0, ranged: raw.ranged === true, source: String(raw.source ?? ""), ...(raw.side === "friendly" || raw.side === "hostile" ? { side: raw.side } : {}) });
+    // And a namer, where only ONE creature's attacks take it (14's Named Quarry: *Its attack
+    // Tests against that creature take Boon*; D-811).
+    if (raw && typeof raw === "object") out.push({ boons: Number(raw.boons) || 0, ranged: raw.ranged === true, source: String(raw.source ?? ""),
+      ...(raw.side === "friendly" || raw.side === "hostile" ? { side: raw.side } : {}),
+      ...(typeof raw.by === "string" && raw.by ? { by: raw.by } : {}) });
   }
   return out;
 }
@@ -466,7 +470,7 @@ function attackTalentLines(actor, target, range, facts = {}) {
     talentBoons: { boons: wrath.boons + carded, names: [...wrath.by, ...(carded ? (facts.cardBoons?.names ?? []) : [])] },
     reckless: reckless ? { boons: reckless.boons, names: [reckless.name] } : null,
     nextAttackBoons: { boons: promised.boons, names: promised.live.filter(e => (e.boons ?? 0) > 0).map(e => e.name).filter(Boolean) },
-    targetExposed: exposedBoonsOn((target?.exposed ?? []).filter(e => !e.side || e.side === attackerSide(actor)), { range }),
+    targetExposed: exposedBoonsOn(exposuresAgainst(target?.exposed ?? [], { side: attackerSide(actor), uuid: actor?.uuid ?? null }), { range }),
     talentCancels: cancels.ids.length ? { ids: cancels.ids, names: cancels.by } : null,
     packFlank: facts.packFlank?.names?.length ? { names: [...facts.packFlank.names] } : null,
     targetDeterred: deterBanes > 0 ? { banes: deterBanes, names: [...new Set(deterred.map(d => d.source).filter(Boolean))].sort() } : null,

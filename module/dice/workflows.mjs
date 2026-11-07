@@ -329,6 +329,8 @@ import { castingBonusOf } from "../rules/item-bonuses.mjs";
 import { bossRefusalWords, claimBossPoints } from "../effects/boss-points.mjs";
 import { afterBossPress, bossCardFlags, prepareBossPress, takeMarkedExtra, takeMissNext } from "../effects/boss-doors.mjs";
 import { bossPressJudgement, bossTurnKey, cleanBossPlan } from "../rules/boss-actions.mjs";
+// A creature's ability that carries a plan, and a summon that arrives later (D-811).
+import { hasCreaturePlan, summonDue } from "../rules/creature-plans.mjs";
 
 /**
  * **THE FINISHER AS IT STANDS NOW** (02 §7 with 04's Death Mark, Rupture and
@@ -2676,7 +2678,9 @@ async function layExposure(actor, reckless) {
   if (!actor?.isOwner || !reckless || !(reckless.exposed?.boons > 0)) return null;
   const span = untilNextTurn(actor);
   if (!span) return null;
-  const stale = actor.effects.filter(e => e.getFlag("azeroth-rpg", EXPOSED_FLAG)).map(e => e.id);
+  // Reckless's OWN exposure only (D-811): a Sell Them Out mark or a Named Quarry laid on this
+  // creature by somebody else is theirs, and a Reckless swing used to wipe it.
+  const stale = actor.effects.filter(e => e.getFlag("azeroth-rpg", EXPOSED_FLAG)?.source === reckless.name).map(e => e.id);
   if (stale.length) await actor.deleteEmbeddedDocuments("ActiveEffect", stale);
   await actor.createEmbeddedDocuments("ActiveEffect", [{
     name: game.i18n.format("AZEROTH.Reckless.EffectName", { name: reckless.name }),
@@ -10077,6 +10081,15 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
     const { requestReflectionField } = await import("../effects/reflection-use.mjs");
     return requestReflectionField(actor, index, lst);
   }
+  // **A CREATURE'S ABILITY WHOSE DESCRIPTOR CARRIES A PLAN TAKES THE SAME DOORS** (D-811;
+  // `rules/creature-plans.mjs`): judged and picked here - after the doors routed by name, before anything is spent, carried on
+  // the card and landed after it - and nothing of a Boss Action's points.
+  const creaturePlan = list === "creatureAbilities" && hasCreaturePlan(a);
+  if (creaturePlan) {
+    bossPre = await prepareBossPress({ actor, row, targets: lst });
+    if (!bossPre.ok) return null;
+    lst.splice(0, lst.length, ...bossPre.targets);
+  }
   const first = lst[0] ?? null;
   // **WHO USED IT, TAKEN NOW** (D-724; the Legacy branches' door 2): the creature's
   // token by the roll dialog's own rule, for the card's record.
@@ -10379,8 +10392,12 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
   // What arrives, and how many (D-691, decision 2): the GM presses the card's
   // button and chooses where they stand, because the tool does not know what
   // "out of the chamber walls" means.
+  // *Arrive at the start of the third round after it* (D-811): the round they arrive in, on
+  // the card, which its Place waits for (`rules/creature-plans.mjs#summonWaits`).
+  const arrival = a.kind === "summon" ? summonDue(a.summon?.from ?? null, actor.activeFight?.() ?? null) : null;
   const summon = a.kind === "summon" && a.summon?.entry && (a.summon.count ?? 0) > 0 && bossPlan.door !== "raise"
-    ? { entry: a.summon.entry, count: a.summon.count, side: a.summon.side, from: a.summon.from }
+    ? { entry: a.summon.entry, count: a.summon.count, side: a.summon.side, from: a.summon.from,
+      ...(arrival ? { due: arrival.due, dueFight: arrival.fight } : {}) }
     : null;
   const costLabel = suretyQuote?.payer === "warlock" ? `Mana (${abilityPayer.name})`
     : a.cost?.pool && spent ? game.i18n.localize(AZEROTH.npcPoolKinds[a.cost.pool] ?? a.cost.pool) : null;
@@ -10444,7 +10461,7 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
       bossAction: isBossAction,
       // **WHAT THE CARD CARRIES FOR A BOSS ACTION'S DOORS** (D-809): a forced move, a
       // drain, an escape, a grip, an attack's allowance, a zone.
-      ...(isBossAction ? bossCardFlags({ actor, row, targets: lst }) : {}),
+      ...(isBossAction || creaturePlan ? bossCardFlags({ actor, row, targets: lst }) : {}),
       // **WHO USED IT, WHICH ABILITY, AND HOW ITS TEST WENT** (D-724; the Legacy
       // branches' door 2): the creature's token, the key its row is filed under in
       // the feature table (`ability:<slug>`), and whether a Casting Test was made.
@@ -10460,7 +10477,7 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
   }
   // **WHAT A BOSS ACTION LANDS AT THE PRESS** (D-809): a relocation, a push, Power, a
   // miss to come, a Boon or a Bane, copies, the raised.
-  if (isBossAction) await afterBossPress({ actor, row, targets: lst, pre: bossPre?.pre ?? {}, message });
+  if (isBossAction || creaturePlan) await afterBossPress({ actor, row, targets: lst, pre: bossPre?.pre ?? {}, message });
   return message;
 }
 

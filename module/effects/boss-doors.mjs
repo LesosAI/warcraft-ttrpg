@@ -23,6 +23,10 @@
  * `refuseCannotAttack` at both attack doors, `advanceBossGrips` at the holder's turn,
  * `bossTurnSkip` and `bossRoundStart` at the tracker's turn and round.
  *
+ * **A creature's ability takes the same doors** where its descriptor carries a plan
+ * (`rules/creature-plans.mjs`, D-811): the three steps above, and nothing of a Boss Action's
+ * points.
+ *
  * **One write door.** A write on a creature this client does not own goes to the
  * active GM through `azeroth-rpg.bossDoor`, judged there against the user's own
  * creature; a write on one it owns is made here.
@@ -112,6 +116,30 @@ function fallen(token) {
   if (token.combatant?.isDefeated) return true;
   if (actor.statuses?.has?.(CONFIG.specialStatusEffects?.DEFEATED ?? "dead") || actor.statuses?.has?.("dead")) return true;
   return actor.type === "npc" && (actor.system?.health?.value ?? 1) <= 0;
+}
+
+/**
+ * Every creature this one has named its quarry, with the effects that say so (D-811): the
+ * world's actors and every token on every scene, since a quarry is the namer's whoever the
+ * board is showing. Sorted by uuid, so a list a person reads never wobbles.
+ *
+ * @param {Actor} namer
+ * @param {string} source  the ability's name
+ * @returns {Array<{actor: Actor, ids: string[]}>}
+ */
+function quarriesOf(namer, source) {
+  const seen = new Map();
+  const visit = actor => {
+    if (!actor || seen.has(actor.uuid)) return;
+    const ids = (actor.effects ?? []).filter(e => {
+      const raw = e.getFlag?.(SCOPE, EXPOSED_FLAG);
+      return raw?.by === namer.uuid && raw?.source === source;
+    }).map(e => e.id);
+    seen.set(actor.uuid, ids.length ? { actor, ids } : null);
+  };
+  for (const actor of game.actors ?? []) visit(actor);
+  for (const scene of game.scenes ?? []) for (const token of scene.tokens ?? []) if (!token.actorLink) visit(token.actor);
+  return [...seen.values()].filter(Boolean).sort((a, b) => a.actor.uuid.localeCompare(b.actor.uuid));
 }
 
 /** A grid-snapped top-left corner for a token whose centre should stand at `point`. */
@@ -272,7 +300,20 @@ export async function prepareBossPress({ actor, row, targets = [] } = {}) {
   if (!list.length && plan.gather) {
     const feet = plan.gather.feet === "reach" ? reachOfActor(actor) : plan.gather.feet;
     const found = creaturesInArea(actor, { who: plan.gather.who, origin: "self", feet }) ?? [];
-    list = targetSnapshots(found.filter(r => r.token !== own).map(r => r.token));
+    // *Each ally within 10 feet of it* takes the user too (D-755: the user counts as an ally
+    // unless the words say *other than you*; D-811); every other circle is about the user.
+    list = targetSnapshots(found.filter(r => plan.gather.who === "ally" || r.token !== own).map(r => r.token));
+  }
+
+  // **EXACTLY SO MANY, SO NEAR** (D-811; 14's Counterspell: *a Casting Test it can see within
+  // 30 feet*): the creatures targeted by hand, counted and measured before anything is spent.
+  if (plan.target) {
+    if (list.length !== plan.target.count) return refuse("AZEROTH.Boss.Targets", { name, count: plan.target.count, feet: plan.target.feet });
+    for (const t of list) {
+      const tok = snapshotToken(t);
+      const d = own && tok ? footprintFeet(own, tok) : null;
+      if (d === null || d > plan.target.feet) return refuse("AZEROTH.Boss.TargetTooFar", { name, feet: plan.target.feet, target: tok?.name ?? t?.name ?? "" });
+    }
   }
 
   const door = plan.door ?? null;
@@ -297,7 +338,7 @@ export async function prepareBossPress({ actor, row, targets = [] } = {}) {
     if (door === "gyth") pre.also = list.map(snapshotActor).filter(Boolean);
   }
 
-  if (door === "relocateTarget" || door === "away" || door === "enfeeble" || door === "marked") {
+  if (door === "relocateTarget" || door === "away" || door === "enfeeble" || door === "marked" || door === "quarry") {
     if (list.length !== 1) return refuse("AZEROTH.Boss.OneTarget", { name });
     const victim = snapshotActor(list[0]);
     const vt = snapshotToken(list[0]);
@@ -389,7 +430,9 @@ export async function prepareBossPress({ actor, row, targets = [] } = {}) {
 
   // The writes a failed Test lands are made on the creature's owner's client; a forced
   // push at the press and a drain at the press reach every target from here.
-  if ((plan.forced?.on === "press" || plan.poolLoss?.on === "press") && !writable(list.map(snapshotActor))) {
+  // A Boon or a Bane laid at the press is a write on every creature reached, too (D-811).
+  if ((plan.forced?.on === "press" || plan.poolLoss?.on === "press" || plan.boon || plan.bane?.on === "press")
+    && !writable(list.map(snapshotActor))) {
     return refuse("AZEROTH.Boss.NoGM", {});
   }
   return { ok: true, targets: list, pre };
@@ -520,11 +563,41 @@ export async function afterBossPress({ actor, row, targets = [], pre = {}, messa
   }
   // Power drained from the creature at the press (Feed).
   if (plan.poolLoss?.on === "press") {
+    let drained = 0;
     for (const t of targets) {
       const victim = snapshotActor(t);
       if (!victim) continue;
       const done = await bossWrite("pool", { actorUuid: victim.uuid, kind: plan.poolLoss.pool, delta: -plan.poolLoss.amount }, { by: actor, owned: victim.isOwner });
+      if (done) drained += done.from - done.to;
       words(done ? "AZEROTH.Boss.PoolLost" : "AZEROTH.Boss.NoPool", { target: victim.name, n: done ? done.from - done.to : plan.poolLoss.amount, pool: game.i18n.localize(plan.poolLoss.pool === "mana" ? "AZEROTH.Pool.Mana" : "AZEROTH.Sheet.Power") });
+    }
+    // *And the citizen gains 1 for each one drained* (14's Arcane Torrent; D-811): what was
+    // actually taken, never what was asked for, into the user's own pool of that kind.
+    if (plan.poolLoss.gain && drained > 0) {
+      const got = await bossWrite("pool", { actorUuid: actor.uuid, kind: plan.poolLoss.pool, delta: drained }, { by: actor, owned: actor.isOwner });
+      if (got) words("AZEROTH.Boss.PoolDrained", { n: got.to - got.from, pool: game.i18n.localize(plan.poolLoss.pool === "mana" ? "AZEROTH.Pool.Mana" : "AZEROTH.Sheet.Power") });
+    }
+  }
+  // A Boon on the next Test of a kind, on every creature the press reached (14's Battle Squawk;
+  // D-811): a count, spent by that Test (`effects/banes.mjs#spendLaidBoons`).
+  if (plan.boon) {
+    const kind = game.i18n.localize(AZEROTH.testKinds[plan.boon.kind] ?? plan.boon.kind);
+    for (const t of targets) {
+      const victim = snapshotActor(t);
+      if (!victim) continue;
+      const done = await layBoon({ victim, kind: plan.boon.kind, boons: 1, source: row.name, by: actor });
+      if (done) words("AZEROTH.Boss.BoonLaid", { target: victim.name, kind });
+    }
+  }
+  // A Bane on the next Test of a kind, at the press (14's Counterspell; D-811): 06's Pummel's
+  // door, spent by that Test, the door's own backstop its span.
+  if (plan.bane?.on === "press") {
+    const kind = game.i18n.localize(AZEROTH.testKinds[plan.bane.kind] ?? plan.bane.kind);
+    for (const t of targets) {
+      const victim = snapshotActor(t);
+      if (!victim) continue;
+      const done = await layBane({ victim, kind: plan.bane.kind, banes: 1, source: row.name, by: actor });
+      if (done) words("AZEROTH.Boss.CastingBaneLaid", { target: victim.name, kind });
     }
   }
 
@@ -599,7 +672,10 @@ export async function afterBossPress({ actor, row, targets = [], pre = {}, messa
       const victim = pre.victim;
       if (victim) {
         await bossWrite("createEffect", { actorUuid: victim.uuid, effect: bossEffect(row, actor, {
-          flags: { [EXPOSED_FLAG]: { boons: plan.boons ?? 1, ranged: true, source: row.name, side: sideOfActor(actor), extra: { damage: plan.extra ?? 0, spent: false, by: actor.uuid } } },
+          // `ranged: false`: *every creature on his side takes Boon on attack Tests against it* is
+          // every attack, and Reckless's `ranged: true` (rank 2's *only ranged attacks do*) took
+          // the Boon off every blow struck in reach (D-811's adjacent fault).
+          flags: { [EXPOSED_FLAG]: { boons: plan.boons ?? 1, ranged: false, source: row.name, side: sideOfActor(actor), extra: { damage: plan.extra ?? 0, spent: false, by: actor.uuid } } },
           span: untilEndOfRound(victim), description: game.i18n.format("AZEROTH.Boss.MarkedText", { boss: actor.name, n: plan.extra ?? 0 })
         }) }, { by: actor, owned: victim.isOwner });
         words("AZEROTH.Boss.Marked", { target: victim.name });
@@ -607,12 +683,43 @@ export async function afterBossPress({ actor, row, targets = [], pre = {}, messa
       break;
     }
     case "amaniFury": {
-      await layBoon({ victim: actor, kind: "attack", boons: 1, source: row.name, by: actor, lasting: true, span: untilEndOfRound(actor) });
+      // *Until the encounter ends* (14's Berserk; D-811): the two flags `AzerothCombat#_leaveFight`
+      // lifts at a fight's end, on the Boon and the exposure alike.
+      // Otherwise Amani Fury's *until the end of the round*.
+      const encounter = plan.lasts === "encounter";
+      if (encounter) await layBoon({ victim: actor, kind: "attack", boons: 1, source: row.name, by: actor, encounter: true });
+      else await layBoon({ victim: actor, kind: "attack", boons: 1, source: row.name, by: actor, lasting: true, span: untilEndOfRound(actor) });
+      // `ranged: false`: *every attack Test against him* is every attack (D-811's adjacent fault).
       await bossWrite("createEffect", { actorUuid: actor.uuid, effect: bossEffect(row, actor, {
-        flags: { [EXPOSED_FLAG]: { boons: 1, ranged: true, source: row.name } }, span: untilEndOfRound(actor),
-        description: game.i18n.localize("AZEROTH.Boss.AmaniText")
+        flags: { [EXPOSED_FLAG]: { boons: 1, ranged: false, source: row.name }, ...(encounter ? { talentBuff: row.name, until: "encounter" } : {}) },
+        // The encounter's lift is the flags alone, as `layBoon`'s own is: a core `combatEnd` span
+        // beside them would delete the effect twice at the fight's end.
+        span: encounter ? null : untilEndOfRound(actor),
+        description: game.i18n.localize(encounter ? "AZEROTH.Boss.FuryEncounterText" : "AZEROTH.Boss.AmaniText")
       }) }, { by: actor, owned: actor.isOwner });
-      words("AZEROTH.Boss.Amani", {});
+      words(encounter ? "AZEROTH.Boss.FuryEncounter" : "AZEROTH.Boss.Amani", {});
+      break;
+    }
+    case "quarry": {
+      // *Its attack Tests against that creature take Boon until the encounter ends or it names
+      // another* (14's Named Quarry; D-811): an exposure only the namer's own attacks read
+      // (`by`), for the encounter; a second name ends the first wherever it stands.
+      const victim = pre.victim;
+      if (!victim) break;
+      for (const held of quarriesOf(actor, row.name)) {
+        if (held.actor.uuid === victim.uuid) continue;
+        const done = await bossWrite("deleteEffects", { actorUuid: held.actor.uuid, effectIds: held.ids }, { by: actor, owned: held.actor.isOwner });
+        if (done) words("AZEROTH.Boss.QuarryEnded", { target: held.actor.name });
+      }
+      // Named again: the one quarry, laid afresh.
+      const again = quarriesOf(actor, row.name).find(h => h.actor.uuid === victim.uuid);
+      if (again) await bossWrite("deleteEffects", { actorUuid: victim.uuid, effectIds: again.ids }, { by: actor, owned: victim.isOwner });
+      await bossWrite("createEffect", { actorUuid: victim.uuid, effect: bossEffect(row, actor, {
+        // Lifted at the fight's end by `_leaveFight`'s flags, never by a second span.
+        flags: { [EXPOSED_FLAG]: { boons: 1, ranged: false, source: row.name, by: actor.uuid }, talentBuff: row.name, until: "encounter" },
+        description: game.i18n.format("AZEROTH.Boss.QuarryText", { boss: actor.name })
+      }) }, { by: actor, owned: victim.isOwner });
+      words("AZEROTH.Boss.Quarry", { target: victim.name });
       break;
     }
     case "classCall": {

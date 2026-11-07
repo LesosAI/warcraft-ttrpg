@@ -95,6 +95,7 @@ import * as v01270 from "./0.12.70-blood-fury-text.mjs";
 import * as v0130 from "./0.13.0-afflictions.mjs";
 import * as v0131 from "./0.13.1-bestiary-descriptors.mjs";
 import * as v0132 from "./0.13.2-boss-actions.mjs";
+import * as v0134 from "./0.13.4-creature-plans.mjs";
 import { forgetPacks } from "./walk.mjs";
 
 // Ordered oldest to newest. Add new entries at the end.
@@ -247,7 +248,10 @@ const CHAIN = [
   { version: "0.13.1", module: v0131 },
   // 0.13.2: 14 §1's Boss Actions on the Bosses a world holds - every row whose descriptor D-809
   // moved, only where it still holds an old pack copy, and the three bodies 14 now marks x2 (D-809).
-  { version: "0.13.2", module: v0132 }
+  { version: "0.13.2", module: v0132 },
+  // 0.13.4: six of D-807's shells take their Use - Battle Squawk, Named Quarry, Counterspell,
+  // Arcane Torrent, Calls the Watch and Berserk - only where a row still holds an old pack copy (D-811).
+  { version: "0.13.4", module: v0134 }
 ];
 
 /**

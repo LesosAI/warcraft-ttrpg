@@ -4343,8 +4343,10 @@
       },
       "From": {
         "NextRound": "They act from the next round",
-        "Now": "They act at once"
+        "Now": "They act at once",
+        "ThirdRound": "They arrive at the start of the third round after it"
       },
+      "NotYet": "{name} arrive at the start of round {round}. Place them then. Nothing was placed.",
       "Place": "Place {count} × {name}",
       "Folder": "Summoned",
       "NoPack": "The bestiary compendium is not available.",
@@ -4400,6 +4402,15 @@
       "Marked": "{target} is named: {boss}'s side takes Boon against it until the end of the round ({name}).",
       "AmaniText": "Every attack Test against this creature takes Boon until the end of the round.",
       "Amani": "{boss}'s attack Tests and every attack Test against {boss} take Boon until the end of the round ({name}).",
+      "FuryEncounterText": "Every attack Test against this creature takes Boon until the encounter ends.",
+      "FuryEncounter": "{boss}'s attack Tests and every attack Test against {boss} take Boon until the encounter ends ({name}).",
+      "QuarryText": "{boss}'s attack Tests against this creature take Boon until the encounter ends or it names another.",
+      "Quarry": "{target} is {boss}'s quarry: its attack Tests against {target} take Boon until the encounter ends or it names another ({name}).",
+      "QuarryEnded": "{target} is no longer {boss}'s quarry ({name}).",
+      "BoonLaid": "{target} gains a Boon on its next {kind} ({name}).",
+      "CastingBaneLaid": "{target} takes a Bane on its next {kind} ({name}).",
+      "Targets": "{name} acts on exactly {count} creature(s) within {feet} feet. Target them. Nothing was spent.",
+      "PoolDrained": "{boss} gains {n} {pool} for what it drained ({name}).",
       "ClassCalled": "{name}: the {cls} takes Bane on Casting Tests until the end of its next turn - {names}.",
       "Nobody": "nobody in the fight",
       "EnfeebleText": "Its Armor Points count as 0 until the end of the round.",

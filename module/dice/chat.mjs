@@ -93,6 +93,7 @@ import { feetApart, feetToPoint } from "../canvas/footprints.mjs";
 import { gadgetWeapon, gadgetByKey, gadgetTargetRefusal, SHRINK_FLAG } from "../rules/gadgets.mjs";
 import { bondOf, boundOf, worldActorOf } from "../documents/bound.mjs";
 import { placeSummon } from "../documents/summon.mjs";
+import { summonWaits } from "../rules/creature-plans.mjs";
 // 14 §1's Boss Actions (D-809): what a failed Test on a Boss Action's card lands.
 import { BOSS_GRIP_FLAG, bossFailLands } from "../effects/boss-doors.mjs";
 import { AZEROTH } from "../config.mjs";
@@ -3310,6 +3311,14 @@ async function placeSummonFromCard(message) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.Card.ActorGone"));
     return;
   }
+  // **NOT BEFORE THEY ARRIVE** (D-811; 14's Calls the Watch: *Two more Town Guards arrive at
+  // the start of the third round after it*): refused in words, nothing claimed, so the same
+  // card places them when the round comes.
+  const waits = summonWaits(summon, summoner.activeFight?.() ?? null);
+  if (waits !== null) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Summon.NotYet", { name: summon.entry, round: waits }));
+    return;
+  }
   // **ONE PLACEMENT A CARD** (D-809, the audit's F3): claimed on the card before anything
   // is placed, on the GM's client where this one may not write it.
   const claimed = await claimCardPress(message, { kind: "once", press: "summon" });
@@ -3323,7 +3332,7 @@ async function placeSummonFromCard(message) {
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor: summoner }),
     content: `<p class="azeroth-drain">${game.i18n.format(
-      summon.from === "now" ? "AZEROTH.Summon.ArrivedNow" : "AZEROTH.Summon.Arrived",
+      summon.from === "now" || summon.from === "thirdRound" ? "AZEROTH.Summon.ArrivedNow" : "AZEROTH.Summon.Arrived",
       { count: done.count, name: done.name, summoner: summoner.name }
     )}</p>`,
     flags: { "azeroth-rpg": { kind: "summon", entry: done.name, count: done.count,

@@ -138,7 +138,8 @@ export function creatureAnimations({ fx, snd, cue, SOUNDS }) {
   // posts `ability:devour-magic-result` when the drain or the Silence lands.
   quiet("Devour Magic", "Read off the bite that wounds, never pressed: its own door plays the devour-magic-result cue once the drain or the Silence lands.");
   // **ANNOUNCED, AND NOT AN ATTACK** (D-807): what these do is the table's, so each plays at the
-  // creature alone. The Troll Berserker's Berserk is its Half-Action shell; the rest announce.
+  // creature alone. The rest announce; the Troll Berserker's Berserk is a Half-Action that lays
+  // Amani Fury's Boons for the encounter since D-811, and its cue still plays at the berserker.
   add("Unholy Command", "jb2a.magic_signs.circle.02.necromancy.complete.dark_green", "psfx.incantations.masculine.001.reverb.help.002",
     { scale: 0.6 });
   add("Sell Them Out", "jb2a.markers.skull.dark_orange.01", "psfx.incantations.whispers.masc.001.forward.standard.005",

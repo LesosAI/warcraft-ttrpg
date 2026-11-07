@@ -284,6 +284,19 @@ export const EXPOSED_FLAG = "exposed";
  * @returns {{boons: number, names: string[], judged: {boons: number, names: string[]}}}
  *   `judged` where the blow's range is not known and only the table can say
  */
+/**
+ * **WHICH OF A TARGET'S EXPOSURES THIS ATTACKER'S BLOW READS**: one with no side and no namer is
+ * every attacker's; a `side` is that side's (14's Sell Them Out, D-809); a `by` is that one
+ * creature's (14's Named Quarry: *Its attack Tests against that creature take Boon*; D-811).
+ *
+ * @param {Array<{side?: string, by?: string}>} exposures
+ * @param {{side?: string|null, uuid?: string|null}} attacker
+ * @returns {Array<object>}
+ */
+export function exposuresAgainst(exposures = [], { side = null, uuid = null } = {}) {
+  return (exposures ?? []).filter(e => (!e?.side || e.side === side) && (!e?.by || e.by === uuid));
+}
+
 export function exposedBoonsOn(exposures = [], { range = null } = {}) {
   const out = { boons: 0, names: [], judged: { boons: 0, names: [] } };
   for (const e of exposures ?? []) {

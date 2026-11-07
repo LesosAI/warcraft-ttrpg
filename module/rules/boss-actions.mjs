@@ -54,7 +54,10 @@ export const BOSS_DOORS = Object.freeze([
   // Raise the Fallen, The Dead Attend, Raise Mograine: a body raised where a creature fell.
   "raise",
   // Gyth Takes the Air: Rend and his mount move, and the next attack against either misses.
-  "gyth"
+  "gyth",
+  // Named Quarry (a creature's ability, D-811): one creature named; the namer's own attack
+  // Tests against it take Boon for the encounter, and a second name ends the first.
+  "quarry"
 ]);
 
 /** When a part of a plan lands: at the press, or on a failed Resilience Test. */
@@ -95,7 +98,8 @@ export function cleanBossPlan(raw) {
   if (!isObj(raw)) return {};
   const out = {};
   if (isObj(raw.gather)) {
-    const who = oneOf(raw.gather.who, ["creature", "enemy"]);
+    // `ally` (D-811): the user's own side, the user among them (D-755's reading of an ally).
+    const who = oneOf(raw.gather.who, ["creature", "enemy", "ally"]);
     const feet = raw.gather.feet === "reach" ? "reach" : int(raw.gather.feet);
     if (who && (feet === "reach" || feet > 0)) out.gather = { who, feet };
   }
@@ -115,7 +119,9 @@ export function cleanBossPlan(raw) {
     const pool = oneOf(raw.poolLoss.pool, POOLS);
     const amount = int(raw.poolLoss.amount);
     const on = oneOf(raw.poolLoss.on, PLAN_ON);
-    if (pool && amount > 0 && on) out.poolLoss = { pool, amount, on };
+    // `gain` (D-811): the user gains what it drained, one for one, at the press (14's Arcane
+    // Torrent: *the citizen gains 1 for each one drained*).
+    if (pool && amount > 0 && on) out.poolLoss = { pool, amount, on, ...(raw.poolLoss.gain === true && on === "press" ? { gain: true } : {}) };
   }
   if (isObj(raw.poolGain)) {
     const pool = oneOf(raw.poolGain.pool, POOLS);
@@ -137,6 +143,19 @@ export function cleanBossPlan(raw) {
     const kind = oneOf(raw.bane.kind, ["attack", "casting", "skill", "resilience", "all"]);
     const on = oneOf(raw.bane.on, PLAN_ON);
     if (kind && on) out.bane = { kind, on, only: raw.bane.only === "self" ? "self" : null };
+  }
+  // A Boon laid at the press on every creature the press reaches, spent by its next Test of the
+  // kind (D-811; 14's Battle Squawk: *gains a Boon on its next Attack Test*).
+  if (isObj(raw.boon)) {
+    const kind = oneOf(raw.boon.kind, ["attack", "casting", "skill", "resilience", "all"]);
+    if (kind && raw.boon.on === "press") out.boon = { kind, on: "press" };
+  }
+  // How many creatures the press is aimed at, and how far (D-811; 14's Counterspell: *a
+  // Casting Test it can see within 30 feet*): exactly `count`, each within `feet`.
+  if (isObj(raw.target)) {
+    const count = int(raw.target.count);
+    const feet = int(raw.target.feet);
+    if (count > 0 && feet > 0) out.target = { count, feet };
   }
   if (isObj(raw.sideSwitch)) {
     const until = oneOf(raw.sideSwitch.until, ["endOfNextTurn", "encounter"]);
@@ -194,6 +213,9 @@ export function cleanBossPlan(raw) {
     if (int(raw.health) > 0) out.health = int(raw.health);
     if (int(raw.defense) > 0) out.defense = int(raw.defense);
     if (raw.all === true) out.all = true;
+    // How long a door's Boons stand, where it is not the round (D-811; 14's Berserk: *until the
+    // encounter ends*).
+    if (oneOf(raw.lasts, ZONE_LASTS)) out.lasts = raw.lasts;
     if (Array.isArray(raw.kinds)) {
       const kinds = raw.kinds.filter(k => typeof k === "string" && k);
       if (kinds.length) out.kinds = kinds;
@@ -514,7 +536,20 @@ export function bossPlanRows() {
  * @returns {object}  a new descriptor
  */
 export function applyBossPlan(automation, creature, action, empty) {
-  const row = bossPlanFor(creature, action);
+  return applyPlanRow(automation, bossPlanFor(creature, action), empty);
+}
+
+/**
+ * **LAY ONE TABLE ROW** - `BOSS_PLANS`' or a creature ability's
+ * (`rules/creature-plans.mjs`, D-811): the one reading of a row's overrides, so the two tables
+ * cannot mean different things by the same key. A null row comes back unchanged.
+ *
+ * @param {object} automation  the seeded descriptor, whole
+ * @param {object|null} row
+ * @param {object} empty  `emptyAutomation()`
+ * @returns {object}
+ */
+export function applyPlanRow(automation, row, empty) {
   if (!row) return automation;
   const out = structuredClone(automation);
   for (const key of row.clear ?? []) out[key] = structuredClone(empty[key]);
@@ -544,6 +579,6 @@ export function applyBossPlan(automation, creature, action, empty) {
 export function bossActionDoor(row) {
   const a = row?.automation ?? {};
   const plan = cleanBossPlan(a.plan);
-  const parts = Object.keys(plan).filter(k => !["feet", "missNext", "boons", "extra", "count", "health", "defense", "all", "kinds"].includes(k));
+  const parts = Object.keys(plan).filter(k => !["feet", "missNext", "boons", "extra", "count", "health", "defense", "all", "kinds", "lasts"].includes(k));
   return { door: plan.door ?? (a.kind === "spell" ? "spell" : "ability"), spends: true, parts };
 }

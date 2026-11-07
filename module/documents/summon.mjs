@@ -187,7 +187,9 @@ export async function placeSummon({ summoner, entry = null, count = 1, side = "s
   const payload = {
     summonerUuid: summoner.uuid, entry, count, side, actorUuid: actor?.uuid ?? null, at: at ? { x: at.x, y: at.y } : null,
     sceneId: typeof sceneId === "string" && sceneId ? sceneId : null,
-    from: from === "nextRound" || from === "now" ? from : null
+    // `thirdRound` (D-811) is placed when the card lets it be, at the round they arrive in, and
+    // acts at once: no `arrives` mark, which only `nextRound` writes.
+    from: from === "nextRound" || from === "now" || from === "thirdRound" ? from : null
   };
   try {
     if (game.user.isGM) return await summonQueryHandler(payload, { user: game.user });

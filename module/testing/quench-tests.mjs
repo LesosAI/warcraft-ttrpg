@@ -167,6 +167,7 @@ import { legacyDarkRangerBatch } from "./quench-legacy-dark-ranger.mjs";
 // Migration 0.13.1 (D-807): the bestiary audit's descriptors on the creatures a world holds,
 // through core's compendium record, the NPC model and an unlinked token's own delta.
 import { bestiaryDescriptorsBatch } from "./quench-bestiary-descriptors.mjs";
+import { creaturePlansBatch } from "./quench-creature-plans.mjs";
 // 14 §1's Boss Actions, for every Boss (D-809): the economy, and every Boss Action pressed.
 import { bossActionsBatch1, bossActionsBatch2, bossActionsBatch3, bossActionsBatch4, bossEconomyBatch } from "./quench-boss-actions.mjs";
 import { forcedShapesBatch } from "./quench-forced-shapes.mjs";
@@ -490,6 +491,9 @@ export function registerQuenchTests() {
     }
     quench.registerBatch("azeroth-rpg.forced-shapes", forcedShapesBatch, {
       displayName: "AZEROTH: Hex and Polymorph lay 14 SS15's Frog and Rabbit (D-808)"
+    });
+    quench.registerBatch("azeroth-rpg.creature-plans", creaturePlansBatch, {
+      displayName: "AZEROTH: Six shells take their Use, and migration 0.13.4 (D-811)"
     });
   });
 }

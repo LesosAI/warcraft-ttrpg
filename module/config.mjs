@@ -799,7 +799,10 @@ AZEROTH.summonSides = {
 };
 AZEROTH.summonFrom = {
   nextRound: "AZEROTH.Summon.From.NextRound",
-  now: "AZEROTH.Summon.From.Now"
+  now: "AZEROTH.Summon.From.Now",
+  // *Arrive at the start of the third round after it* (14's Calls the Watch, D-811): the
+  // card's Place waits for that round (`rules/creature-plans.mjs#summonWaits`).
+  thirdRound: "AZEROTH.Summon.From.ThirdRound"
 };
 // How long 05's temporary Health lasts (D-777): `rules/temporary-health.mjs
 // #TEMP_SPANS`, in the words the banner's tooltip prints.
