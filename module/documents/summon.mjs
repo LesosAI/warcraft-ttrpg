@@ -10,18 +10,20 @@
  * **The card carries a button and the GM presses it.** The tool does not know
  * what *out of the chamber walls* means, so the tokens land in a ring around
  * the summoner and the GM drags them where they belong. The Boss Action's
- * points were spent when the action was used, not here: pressing Place twice
- * is the GM's own mistake to make, and refusing it would strand a summon
- * whose first placement went somewhere wrong.
+ * points were spent when the action was used, not here, and **the card is
+ * claimed once** (D-809, the lead's approval of the audit's F3): a second
+ * press placed the bodies again, so a Boss's two Worgen became four for one
+ * Boss Action. A placement that went somewhere wrong is dragged, not re-made.
  *
  * **The write goes through `CONFIG.queries`**, as D-643's binding does: a
  * player cannot create a world actor, and `game.socket` is not the answer.
  *
  * **They arrive on the summoner's side**, which is what 14 means by *acts on
- * his side*. WHEN they act is the table's: 14 says *from the next round* and
- * the chat line says so, but nothing here moves the tracker's turn - D2 SS12
- * forbids automating the table's call, and the same discipline holds the
- * timing of a Boss Action itself.
+ * his side*, and **they act from the next round** (D-809, the lead's approval
+ * of the audit's F9): placed into a started fight, each combatant carries the
+ * round it arrives in (`ARRIVES_FLAG`), and the tracker passes its turn until
+ * then, in words (`effects/boss-doors.mjs#bossTurnSkip`). WHEN a Boss Action
+ * is taken stays the table's (D-691).
  */
 
 import { actorFolder, bondOf, worldActorOf } from "./bound.mjs";
@@ -108,7 +110,7 @@ function summonerToken(summoner, sceneId = null) {
  * Action's call, exactly as before: imported once into the Summoned folder and rung
  * round the summoner.
  */
-export async function summonQueryHandler({ summonerUuid, entry = null, count = 1, side = "summoner", actorUuid = null, at = null, sceneId = null } = {}, { user = null } = {}) {
+export async function summonQueryHandler({ summonerUuid, entry = null, count = 1, side = "summoner", actorUuid = null, at = null, sceneId = null, from = null } = {}, { user = null } = {}) {
   const summoner = await fromUuid(summonerUuid);
   if (!summoner || summoner.documentName !== "Actor") throw new Error(game.i18n.localize("AZEROTH.Summon.NoSummoner"));
   if (user && !summoner.testUserPermission(user, "OWNER")) throw new Error(game.i18n.localize("AZEROTH.Bound.NotOwner"));
@@ -164,8 +166,10 @@ export async function summonQueryHandler({ summonerUuid, entry = null, count = 1
   // Into the fight beside the summoner, where there is one.
   const fight = game.combats?.find(c => c.combatants.some(cb => cb.tokenId === token.id)) ?? null;
   if (fight) {
+    // *From the next round* (D-809): the round each one arrives in, on its combatant.
+    const arrives = from === "nextRound" && fight.started ? { flags: { "azeroth-rpg": { arrives: fight.round + 1 } } } : {};
     await fight.createEmbeddedDocuments("Combatant", placed.map(t => ({
-      tokenId: t.id, sceneId: scene.id, actorId: actor.id
+      tokenId: t.id, sceneId: scene.id, actorId: actor.id, ...arrives
     })));
   }
   return { count: placed.length, name: actor.name, inFight: Boolean(fight), tokenIds: placed.map(t => t.id), sceneId: scene.id };
@@ -179,10 +183,11 @@ export async function summonQueryHandler({ summonerUuid, entry = null, count = 1
  * (`summonQueryHandler`). `sceneId` is the scene the summoner's token stood on where
  * the call was made (the B2 review): the GM's client finds the token there first.
  */
-export async function placeSummon({ summoner, entry = null, count = 1, side = "summoner", actor = null, at = null, sceneId = null }) {
+export async function placeSummon({ summoner, entry = null, count = 1, side = "summoner", actor = null, at = null, sceneId = null, from = null }) {
   const payload = {
     summonerUuid: summoner.uuid, entry, count, side, actorUuid: actor?.uuid ?? null, at: at ? { x: at.x, y: at.y } : null,
-    sceneId: typeof sceneId === "string" && sceneId ? sceneId : null
+    sceneId: typeof sceneId === "string" && sceneId ? sceneId : null,
+    from: from === "nextRound" || from === "now" ? from : null
   };
   try {
     if (game.user.isGM) return await summonQueryHandler(payload, { user: game.user });

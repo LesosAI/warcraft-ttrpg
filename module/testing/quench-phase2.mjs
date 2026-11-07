@@ -101,9 +101,24 @@ export function rollDialogBatch(context) {
         assert.match(preview, /^1d20/, "paying did not cancel the Bane");
         assert.include(preview, "- 2", "paying removed the -2, which it never does (D-239)");
 
+        // **A LEVEL 5 WARRIOR'S ATTACK IS TWO ROLLS, AND THE SECOND ROLL'S WEAPON IS
+        // CHOSEN ON THIS DIALOG** (02 §6's Extra Attack, D-704; 0.12.32's required
+        // pick, `rules/second-attack-choice.mjs#extraAttackSelection`: *no implicit
+        // first option*). Roll stays disabled until one is chosen, so this test's
+        // click did nothing from 0.12.32 on and the card never came. Answer it as
+        // the player would; the second roll spends no Momentum.
+        const extra = form.elements.extraWeapon;
+        if (extra) {
+          extra.value = "current";
+          extra.dispatchEvent(new Event("change", { bubbles: true }));
+          await settle();
+        }
         const wait = untilHook("createChatMessage", 8000, m => m.speaker?.actor === actor.id);
         dialog.element.querySelector('button[data-action="roll"]').click();
         const [message] = await wait;
+        // The second roll's card, waited for so it cannot land inside the next
+        // test's message count; it is not what this test asserts.
+        await untilHook("createChatMessage", 8000, m => m.speaker?.actor === actor.id && m.id !== message.id).catch(() => null);
         const roll = message.rolls[0];
         assert.equal(roll.location, "head");
         assert.match(roll.formula, /^1d20/, "the roll did not net the Bane to 0");

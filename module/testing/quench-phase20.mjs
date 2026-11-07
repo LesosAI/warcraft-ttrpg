@@ -16,6 +16,8 @@ import { npcAttackWithDialog } from "../applications/actions.mjs";
 import { prepareRoll } from "../applications/roll-dialog.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 import { SUMMONED_FLAG } from "../documents/summon.mjs";
+// The points' one writer (D-809): full again, and the turn's record cleared, between two presses.
+import { refreshBossPoints } from "../effects/boss-points.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { AZEROTH } from "../config.mjs";
 
@@ -329,10 +331,22 @@ export function bestiaryAutomationBatch(context) {
         assert.equal(world.length, 1, "the summon imported its block more than once");
         assert.equal(world[0].name, summon.entry);
         made.push(...world);
-        // And a second press reuses it rather than importing again.
+        // A second press of the SAME card places nothing, in words (D-809, the audit's F3: one
+        // Boss Action, one set of bodies)...
         const twice = scene.tokens.size;
-        await CARD_ACTIONS.placeSummon(button, card);
-        await until(() => scene.tokens.size === twice + summon.count, "the second placement", 20000);
+        const { said } = await saidDuring(() => CARD_ACTIONS.placeSummon(button, card));
+        await new Promise(r => setTimeout(r, 500));
+        assert.equal(scene.tokens.size, twice, "a second press of one card placed the bodies again");
+        assert.isTrue(said.length > 0, "the second press was refused in silence");
+        // ...and a second Boss Action's card reuses the imported block rather than importing again.
+        await refreshBossPoints(boss);
+        await until(() => boss.system.bossPoints.value === boss.system.bossPoints.max, "the points refreshed");
+        const again = await game.system.azeroth.workflows.useAbility({ actor: boss, list: "bossActions", index, targets: [] });
+        made.push(again);
+        const html2 = document.createElement("div");
+        html2.innerHTML = again.content;
+        await CARD_ACTIONS.placeSummon(html2.querySelector('[data-action="placeSummon"]'), again);
+        await until(() => scene.tokens.size === twice + summon.count, "the second card's placement", 20000);
         assert.equal(game.actors.filter(a => a.getFlag("azeroth-rpg", SUMMONED_FLAG)).length, 1,
           "the second placement imported the block again");
       } finally {

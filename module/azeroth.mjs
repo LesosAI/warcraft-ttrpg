@@ -36,6 +36,8 @@ import { registerVeknissHooks } from "./effects/vekniss.mjs";
 import { registerBloodpetalHooks } from "./effects/bloodpetal.mjs";
 import { registerDredgePoisonHooks } from "./effects/dredge-poison.mjs";
 import { registerAfflictionHooks } from "./effects/affliction-clock.mjs";
+// 14 §1's Boss Actions (D-809): a side switched back, copies gone with the fight.
+import { registerBossDoorHooks } from "./effects/boss-doors.mjs";
 import { registerVirulentPoisonHooks } from "./effects/virulent-poison.mjs";
 import { registerFireguardBurnHooks } from "./effects/fireguard-burn.mjs";
 import { registerFleshRotHooks } from "./effects/flesh-rot.mjs";
@@ -193,6 +195,7 @@ Hooks.once("init", () => {
   registerBloodpetalHooks();
   registerDredgePoisonHooks();
   registerAfflictionHooks();
+  registerBossDoorHooks();
   registerVirulentPoisonHooks();
   registerFireguardBurnHooks();
   registerFleshRotHooks();

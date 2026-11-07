@@ -8,6 +8,11 @@
 
 import { placeItemArea } from "../canvas/place.mjs";
 import { abilityKeyOf } from "../rules/animation-records.mjs";
+// A creature ability's area, IMPORTED rather than awaited inside `placeAreaFromCard`:
+// that door must reach its pick with no await on an embedded item, or a press made
+// straight after the call lands before the board listens and the pick waits for ever
+// (the D-808 run: Blizzard's and Flamestrike's Place area timed out in Quench).
+import { CREATURE_PRESENTATION_AREAS } from "../rules/creature-animation-table.mjs";
 import {endTurnDamageStamp} from '../rules/end-turn-damage.mjs';
 import { areaTransferRefusal } from "../effects/pending-area-transfer.mjs";
 import { gadgetResistanceRequest, gadgetResistancePresses } from '../effects/gadget-resistance.mjs';
@@ -50,6 +55,9 @@ import { requestFleshRotApply } from "../effects/flesh-rot-apply.mjs";
 import { refuseProjectionTarget } from "../effects/image-projection-protection.mjs";
 import { attackWithDialog, npcAttackWithDialog, reactWithDialog, resilienceWithDialog, takeOpportunity, useFeatureWithDialog } from "../applications/actions.mjs";
 import { takeReadied } from "../applications/combat-actions.mjs";
+// 07's Hex and 02's Polymorph: the form a failed Test lays (D-808).
+import { forcedShapeFromTest, forcedShapeUnwritable } from "../documents/shapes.mjs";
+import { SHAPE_KINDS, forcedKindForCard } from "../rules/shapes.mjs";
 import { openLootOffer } from "../applications/loot-offer.mjs";
 import { layBane } from "../effects/banes.mjs";
 import { conditionValues } from "../effects/conditions.mjs";
@@ -85,6 +93,8 @@ import { feetApart, feetToPoint } from "../canvas/footprints.mjs";
 import { gadgetWeapon, gadgetByKey, gadgetTargetRefusal, SHRINK_FLAG } from "../rules/gadgets.mjs";
 import { bondOf, boundOf, worldActorOf } from "../documents/bound.mjs";
 import { placeSummon } from "../documents/summon.mjs";
+// 14 §1's Boss Actions (D-809): what a failed Test on a Boss Action's card lands.
+import { BOSS_GRIP_FLAG, bossFailLands } from "../effects/boss-doors.mjs";
 import { AZEROTH } from "../config.mjs";
 import { sunderedChanges } from "../rules/maneuvers.mjs";
 import { applyCondition, clockRounds, minuteSpan, roundsOrClock, spellTiming, untilEndOfNextTurn, untilEndOfNextTurnOrRound, untilNextTurn } from "../effects/durations.mjs";
@@ -172,6 +182,24 @@ function refuseWithdrawn(message, index, key) {
   if (!rowWithdrawn(flags, index)) return false;
   ui.notifications?.warn(game.i18n.format(key, { name: flags.targets?.[Number(index)]?.name ?? "" }));
   return true;
+}
+
+/**
+ * **AN APPLY ON A ROW TURNED INTO A MISS** (the B1 review; door 13): nothing lands,
+ * and the mark THIS card left on the defender - where it still stands and this
+ * client may clear it - is spent as the Apply would have spent it, so it never
+ * waits on a blow it can no longer answer. The one rule for the legacy Apply and
+ * the tracked one (`applyDamageToTargets`).
+ *
+ * @param {ChatMessage} message  the attack's card
+ * @param {number} index         the withdrawn row
+ */
+async function spendWithdrawnMark(message, index) {
+  const target = message?.flags?.["azeroth-rpg"]?.targets?.[index] ?? null;
+  const actor = target ? targetActorOf(target) : null;
+  const held = actor?.getFlag?.("azeroth-rpg", "mitigate") ?? null;
+  if (held?.messageId === message.id && markAnswers(held, message.id) && actor.isOwner) await actor.unsetFlag("azeroth-rpg", "mitigate");
+  ui.notifications?.warn(game.i18n.format("AZEROTH.Miss.ApplyWithdrawn", { name: target?.name ?? actor?.name ?? "" }));
 }
 
 export function registerChatHooks() {
@@ -959,7 +987,6 @@ async function placeAreaFromCard(message) {
   // Re-read the exact row the card used before opening the existing picker.
   const abilityRow = flags.kind === "ability" && ["creatureAbilities", "bossActions"].includes(flags.list)
     ? actor?.system?.[flags.list]?.[flags.index] : null;
-  const { CREATURE_PRESENTATION_AREAS } = await import("../rules/creature-animation-table.mjs");
   const abilityAreaText = abilityRow && abilityKeyOf(abilityRow.name) === flags.featureKey
     ? (abilityRow.automation?.area || CREATURE_PRESENTATION_AREAS[flags.featureKey] || null) : null;
 
@@ -1169,7 +1196,9 @@ export function regionFlagsFromCard(message, actor, item) {
     // it strikes anybody: the sweep takes it off when the span is over. A
     // feature's card names its own where it has one (04's Firestorm: *burns until
     // the end of your next turn*; D-775), since a feature carries no Duration.
-    lasts: { rounds: Number(flags.lasts?.rounds) > 0 ? Math.trunc(Number(flags.lasts.rounds)) : roundsIn(sys.duration ?? {}) },
+    lasts: { rounds: Number(flags.lasts?.rounds) > 0 ? Math.trunc(Number(flags.lasts.rounds)) : roundsIn(sys.duration ?? {}),
+      // A Boss Action's zone (D-809): *for the rest of the encounter*, *until the end of the round*.
+      ...(flags.lasts?.encounter === true ? { encounter: true } : {}), ...(flags.lasts?.endOfRound === true ? { endOfRound: true } : {}) },
     // **WHAT THE AREA DOES THAT ITS TICK DOES NOT** (D-778): the forced move it
     // makes on a creature entering it or starting a turn there (Tempest's push,
     // Void Rift's pull; `effects/area-strikes.mjs`, `AzerothCombat#_areaTicks`), the
@@ -1543,6 +1572,18 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
       ui.notifications?.warn(game.i18n.format("AZEROTH.Miss.TestWithdrawn", { name: actor.name }));
       continue;
     }
+    // **07's HEX AND 02's POLYMORPH** (D-808): the form a failure lays, read off the
+    // card - a spell card's Resist, or a feature card's own - and written on a GM's
+    // client, because the bestiary is the GM's pack. With no GM to write it the Test
+    // is refused in words BEFORE it is rolled: a roll would record a failure that
+    // laid nothing.
+    const forcedKind = purpose === "spell" || (!purpose && message.flags?.["azeroth-rpg"]?.kind === "feature")
+      ? forcedKindForCard(message.flags?.["azeroth-rpg"])
+      : null;
+    if (forcedKind && forcedShapeUnwritable()) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.ForcedShape.NoGM", { name: actor.name, by: SHAPE_KINDS[forcedKind].by }));
+      continue;
+    }
     // **NOT THIS CREATURE'S TEST** (the B9a pass; 07 prints Holy Wrath's and Earth Shock's
     // **Test** now): Holy Wrath's living target, Earth Shock's target holding no Sustained
     // spell, Enslave Demon's and Compel's non-demon - judged off the creature as it stands,
@@ -1897,6 +1938,20 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
       if (afflictRow.kind === "disease") await afflictDisease({ victim: actor, key: afflictRow.key, by: maker });
       else await afflictPoison({ victim: actor, name: afflictRow.name, key: afflictRow.key, dc: afflictRow.dc, resilience: afflictRow.resilience ?? "body", carried: afflictRow.value ?? 1, by: maker });
     }
+    // **WHAT A BOSS ACTION'S FAILED TEST LANDS** (D-809): its forced move through the
+    // spell card's own record and door (Knock Aside's throw, Drag Under's pull), and
+    // the rest of its plan - Mana lost, Armor Points, a Bane, a side, a mark - through
+    // `effects/boss-doors.mjs#bossFailLands`, here, on the client that rolled the Test.
+    if (abilityCard && result && !passed) {
+      const forcedA = cleanForced(message.flags?.["azeroth-rpg"]?.forced ?? null);
+      if (forcedA?.on === "fail") {
+        const token = resisterToken(actor, source);
+        const from = forcedFromOf(message, forcedA, token?.parent ?? null);
+        const r = await forceMove({ token, from, feet: forcedA.feet, toward: forcedA.toward, by: casterOf(message), name: actor.name });
+        ui.notifications?.info(forcedWords(r, { toward: forcedA.toward, source: message.flags["azeroth-rpg"].title ?? "" }));
+      }
+      if (message.flags?.["azeroth-rpg"]?.bossOnFail) await bossFailLands({ actor, message });
+    }
     // **AN AREA'S TEST** (D-757): posted by `effects/area-strikes.mjs#postAreaTest`
     // at the start of a turn in the area or on entering it, and rolled HERE, the
     // spell card's own door - never a second one. What it lands is the area's,
@@ -1955,6 +2010,10 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
         ui.notifications?.info(forcedWords(r, { toward: forced.toward, source: flags.spellName ?? "" }));
       }
     }
+    // **THE FORM A FAILED TEST LAYS** (07's Hex: *becomes a frog*; 02's Polymorph:
+    // *becomes a rabbit*; D-808), on this creature, through the one writer - before the
+    // Test is recorded, as every other failure's landing is. A pass lays nothing.
+    if (forcedKind && result && !passed) await forcedShapeFromTest({ target: actor, kind: forcedKind, message, result });
     // **THE TEST, RECORDED ON ITS CARD ONCE WHAT IT LANDS HAS LANDED** (D-726; the B6
     // fix): a spell's card and a feature's, whose record says what the failure laid
     // (`dice/annotate.mjs#verifiedResist` reads it off the creature) - and is what the
@@ -2207,7 +2266,10 @@ async function attackFromCard(button, message) {
     return;
   }
   const flags0 = message.flags?.["azeroth-rpg"] ?? {};
-  if (flags0.kind !== "feature") return attackFromCardNow(button, message, actor, flags0);
+  // A creature's ability card counts its Attack too where it records an allowance
+  // (D-809, the audit's F4: Cleave the Line, Cut and Turn and Maul could be pressed for ever).
+  const counted = flags0.kind === "feature" || (flags0.kind === "ability" && (Number(flags0.attacks?.allowed) || 0) > 0);
+  if (!counted) return attackFromCardNow(button, message, actor, flags0);
   // **A FEATURE CARD'S ATTACKS ARE COUNTED** (the architect's review of D-773).
   // The Use paid the feature's action, so a press costs nothing more
   // (`data-budget="none"`) - and past the allowance the card records
@@ -2219,7 +2281,7 @@ async function attackFromCard(button, message) {
   const allowed = flags0.attacks?.allowed ?? null;
   const refused = cardAttackRefusal({ made: Number(message.getFlag("azeroth-rpg", "attacksMade")) || 0, allowed });
   if (refused) {
-    ui.notifications?.warn(game.i18n.format(refused, { name: actor.items.get(flags0.itemId)?.name ?? "", n: Math.max(1, Math.trunc(Number(allowed)) || 1) }));
+    ui.notifications?.warn(game.i18n.format(refused, { name: actor.items.get(flags0.itemId)?.name ?? flags0.title ?? "", n: Math.max(1, Math.trunc(Number(allowed)) || 1) }));
     return null;
   }
   // **THE COUNT IS THE CARD'S, AND A CARD IS ITS AUTHOR'S AND THE GM'S TO WRITE**
@@ -2262,12 +2324,26 @@ async function attackFromCardNow(button, message, actor, flags0) {
     // action was used (D-691), so this blow is charged nothing here. The
     // once-per-round Attack limit it used to be an exception to no longer
     // exists (D-711).
-    return npcAttackWithDialog(actor, null, null, {
+    // **A BOSS ACTION'S ATTACK** (D-809): Maul's *the attack Test takes Boon* against a
+    // creature already wounded (the target's Health below its maximum, read as the
+    // attack is made) and its *Bleeding 2* landing with the hit.
+    const bossAttack = flags0.bossAttack ?? null;
+    const aimed = [...(game.user?.targets ?? [])][0]?.actor ?? null;
+    const gateHolds = !bossAttack?.boonGate || (bossAttack.boonGate === "wounded" && aimed
+      && (aimed.system?.health?.value ?? 0) < (aimed.system?.health?.max ?? 0));
+    const boons = bossAttack && gateHolds ? (bossAttack.boons ?? 0) : 0;
+    const card = await npcAttackWithDialog(actor, null, null, {
       attack: flags0.attack,
       title: flags0.title ?? flags0.attack.name ?? null,
       bossAction: flags0.bossAction === true,
-      fromFeature
+      fromFeature,
+      ...(boons > 0 ? { cardBoons: { boons, names: [bossAttack.name ?? flags0.title ?? ""] } } : {}),
+      ...((bossAttack?.landsOnHit ?? []).length ? { landsOnHit: bossAttack.landsOnHit.map(l => ({ ...l, source: bossAttack.name ?? "" })) } : {})
     });
+    // Cut and Turn: *moves up to his Speed without provoking and attacks at the end of
+    // the move* - the Disengage the Use laid ends with the attack.
+    if (card && flags0.bossDisengage && actor.statuses?.has("disengaging")) await actor.toggleStatusEffect("disengaging", { active: false });
+    return card;
   }
   // **A GADGET'S ATTACK IS MADE WITH THE GADGET** (04's Net-o-Matic Projector; the
   // Legacy branches' door 7): no weapon in hand is swung, the Use paid the action,
@@ -2670,6 +2746,18 @@ async function applyDamageToTargets(button, message, recordedAttack = false, tra
   if (snareOwnsCondition(flags, "entangled")) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.ExplosiveTrap.Refused")); return;
   }
+  // **A ROW TURNED INTO A MISS APPLIES NOTHING, ON A TRACKED CARD TOO** (the reactions
+  // batch, 2026-11-06): a Parry that held writes the row `withdrawn` and leaves a mark
+  // bound to this card, and the tracked Apply refuses a withdrawn row as *changed* -
+  // so the mark was never spent, the press said *the attack operation was not
+  // confirmed*, and the mark stood for good against a card that can never be applied,
+  // where 04's Survival Instincts and a Signature's halving read it as standing. The
+  // row's `withdrawn` is final (`annotate.mjs` never clears it), so this is judged
+  // here, before any claim on the card, through the legacy path's own rule.
+  if (button.dataset.self === undefined && !recordedAttack && rowWithdrawn(flags, button.dataset.targetIndex)) {
+    await spendWithdrawnMark(message, Number(button.dataset.targetIndex));
+    return;
+  }
   if (flags.attackResolution && button.dataset.self === undefined && !recordedAttack) {
     return requestAttackApply(message, Number(button.dataset.targetIndex));
   }
@@ -2778,9 +2866,7 @@ async function applyDamageToTargets(button, message, recordedAttack = false, tra
     // this card left, where it still stands and this client may clear it, is spent here
     // as the Apply would have spent it, so it never waits on the next blow.
     if (row?.withdrawn === true) {
-      const held = actor.getFlag?.("azeroth-rpg", "mitigate") ?? null;
-      if (held?.messageId === message.id && markAnswers(held, message.id) && actor.isOwner) await actor.unsetFlag("azeroth-rpg", "mitigate");
-      ui.notifications?.warn(game.i18n.format("AZEROTH.Miss.ApplyWithdrawn", { name: target.name ?? actor.name }));
+      await spendWithdrawnMark(message, Number(index));
       return;
     }
     // What the Ward took and the second amounts are the half's own where it landed.
@@ -3224,8 +3310,15 @@ async function placeSummonFromCard(message) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.Card.ActorGone"));
     return;
   }
+  // **ONE PLACEMENT A CARD** (D-809, the audit's F3): claimed on the card before anything
+  // is placed, on the GM's client where this one may not write it.
+  const claimed = await claimCardPress(message, { kind: "once", press: "summon" });
+  if (!claimed.ok) {
+    ui.notifications?.warn(game.i18n.localize(claimed.reason === "AZEROTH.TalentLine.Pressed" ? "AZEROTH.Summon.AlreadyPlaced" : (claimed.reason ?? "AZEROTH.Card.PressNoGM")));
+    return;
+  }
   // On the scene the card was spoken on (the B2 review): the GM's viewed scene may be another.
-  const done = await placeSummon({ summoner, entry: summon.entry, count: summon.count ?? 1, side: summon.side ?? "summoner", sceneId: message.speaker?.scene ?? null });
+  const done = await placeSummon({ summoner, entry: summon.entry, count: summon.count ?? 1, side: summon.side ?? "summoner", sceneId: message.speaker?.scene ?? null, from: summon.from ?? null });
   if (!done) return;
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor: summoner }),
@@ -3344,6 +3437,9 @@ async function applyConditionFromCard(button, message) {
       if (next.length !== (Array.isArray(held) ? held.length : 0)) marks[`flags.azeroth-rpg.${LAID_BY_FLAG}`] = next;
     }
     if (escape?.condition === id) marks[`flags.azeroth-rpg.${ESCAPE_FLAG}`] = escape;
+    // 14's Grab (D-809): the grip that strikes at the holder's turns rides the Entangled.
+    const grip = message.flags?.["azeroth-rpg"]?.bossGrip ?? null;
+    if (grip && id === "entangled" && button.dataset.self === undefined) marks[`flags.azeroth-rpg.${BOSS_GRIP_FLAG}`] = grip;
     if (Object.keys(marks).length) await standing.update(marks);
   }
 }
@@ -3376,6 +3472,13 @@ async function applySpellEffectFromCard(button, message) {
   }
   if (flags.identifier === "soul-link") {
     ui.notifications?.info(game.i18n.localize("AZEROTH.SoulLink.UseCasting"));
+    return;
+  }
+  // **HEX LANDS WITH ITS FAILED TEST** (D-808): the frog is laid by the creature's own
+  // Resist (`rollResists`), never by an Apply - a card posted before the form existed
+  // offers one, and its press says so and lays nothing.
+  if (forcedKindForCard({ kind: "spell", identifier: flags.identifier ?? null })) {
+    ui.notifications?.info(game.i18n.localize("AZEROTH.ForcedShape.ApplyRefused"));
     return;
   }
   // A chat card survives its cast. It must not recreate a sustained effect

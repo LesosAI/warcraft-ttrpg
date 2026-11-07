@@ -113,6 +113,13 @@ export class AzerothRoll extends Roll {
     // options so the card read back off its message says the same.
     const forced = forcedSlOf(this.options);
     if (forced !== null) return forcedOutcome({ sl: forced, total: this.total, natural: this.natural });
+    // 14's Shadow Step, Step Aside and Gyth Takes the Air (D-809): *the next attack
+    // against him this round misses*, whatever the die - carried on the options so the
+    // card read back off its message says the same.
+    if (this.options?.forcedMiss) {
+      const base = resolveTest({ natural: this.natural, modifier: this.total - this.natural, dc: this.dc ?? 10, criticalOn: this.options.criticalOn ?? 20 });
+      return { ...base, success: false, sl: Math.min(base.sl ?? 0, -1), critical: false, forcedMiss: true };
+    }
     return resolveTest({
       natural: this.natural,
       modifier: this.total - this.natural,

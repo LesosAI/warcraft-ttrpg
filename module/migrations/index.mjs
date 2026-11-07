@@ -93,6 +93,8 @@ import * as v01268 from './0.12.68-reviewed-ability-icons.mjs';
 import * as v01269 from "./0.12.69-token-portraits.mjs";
 import * as v01270 from "./0.12.70-blood-fury-text.mjs";
 import * as v0130 from "./0.13.0-afflictions.mjs";
+import * as v0131 from "./0.13.1-bestiary-descriptors.mjs";
+import * as v0132 from "./0.13.2-boss-actions.mjs";
 import { forgetPacks } from "./walk.mjs";
 
 // Ordered oldest to newest. Add new entries at the end.
@@ -239,7 +241,13 @@ const CHAIN = [
   { version: "0.12.70", module: v01270 },
   // 0.13.0: poisons and diseases are carried until cured; the old timed effects and
   // counted ticks become carriers (D-800 to D-805).
-  { version: "0.13.0", module: v0130 }
+  { version: "0.13.0", module: v0130 },
+  // 0.13.1: the bestiary audit's 43 descriptors on the creatures a world holds, each row only
+  // where it still holds the old pack copy; a GM's own descriptor is kept and logged (D-807).
+  { version: "0.13.1", module: v0131 },
+  // 0.13.2: 14 §1's Boss Actions on the Bosses a world holds - every row whose descriptor D-809
+  // moved, only where it still holds an old pack copy, and the three bodies 14 now marks x2 (D-809).
+  { version: "0.13.2", module: v0132 }
 ];
 
 /**

@@ -17,6 +17,8 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+// The one door for a Skill Test's numbers (05 §1, §8; D-810).
+import { signedModifier, skillModOf, skillRowsFor } from "../rules/skills.mjs";
 import { isSearingAttack } from "../rules/searing-totem.mjs";
 import { reviewSearingUses } from "./searing-totem-review.mjs";
 import { reviewChainLightningCast } from "./chain-lightning-review.mjs";
@@ -366,6 +368,10 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
         ? `${ability.value} ${(ability.sources ?? []).map(src => `${src.points < 0 ? "−" : "+"} ${Math.abs(src.points)} · ${src.name}`).join(" ")}`
         : null,
       mod: ability.mod,
+      // Both numbers on the chip's hover (05 §1, D-810), as on the character.
+      modTip: ability.value === null ? null : game.i18n.format("AZEROTH.Sheet.ModifiersTip", {
+        ability: signedModifier(ability.mod), skill: signedModifier(ability.skillMod)
+      }),
       absent: ability.value === null,
       editable: this.isEditable && ability.value !== null,
       resilience,
@@ -385,8 +391,9 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
       };
     });
 
-    // Skills at their Ranks (14 SS1): a Test is attribute + Proficiency + the
-    // Rank shown. The block lists only the skills the creature has.
+    // Skills at their Ranks (14 SS1): a Test is the attribute's skill modifier
+    // + Proficiency + the Rank shown (D-810). The block lists only the skills
+    // the creature has.
     context.skills = Object.entries(system.skills ?? {})
       .filter(([key]) => AZEROTH.skills[key])
       .map(([key, v]) => ({ key, label: AZEROTH.skills[key], rank: typeof v === "number" ? v : (v?.rank ?? 0) }));
@@ -699,23 +706,30 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
     return rollAbility(this.actor, target.dataset.ability, event);
   }
 
-  /** 14 SS1: attribute + Proficiency + the Rank shown; an unlisted skill is not offered. */
+  /**
+   * 14 SS1: the attribute's skill modifier + Proficiency + the Rank shown
+   * (D-810); an unlisted skill is not offered. **A score the creature does not
+   * have gives no Test** (fault F5): a Mindless creature's Arcana rolled at +0
+   * off an Intelligence it has no slot for, and it is refused in words now.
+   */
   static async #onRollSkill(event, target) {
     const key = target.dataset.skill;
     const system = this.actor.system;
     const ability = AZEROTH.skillAbility[key];
     if (!ability || !system.abilities?.[ability]) return null;
-    const raw = system.skills?.[key];
-    const rank = typeof raw === "number" ? raw : (raw?.rank ?? 0);
+    if (skillModOf(this.actor, ability) === null) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Sheet.NoScoreForSkill", {
+        name: this.actor.name,
+        ability: game.i18n.localize(AZEROTH.abilities[ability]),
+        skill: game.i18n.localize(AZEROTH.skills[key])
+      }));
+      return null;
+    }
     return rollWithDialog(this.actor, {
       kind: "skill",
       skill: key,
       title: game.i18n.localize(AZEROTH.skills[key]),
-      modifiers: [
-        { label: AZEROTH.abilities[ability], value: system.abilities[ability].mod ?? 0 },
-        { label: "AZEROTH.Sheet.Proficiency", value: system.proficiency ?? 0 },
-        { label: "AZEROTH.Sheet.Rank", value: rank }
-      ]
+      modifiers: skillRowsFor(this.actor, key)
     }, event);
   }
 

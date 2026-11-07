@@ -147,6 +147,10 @@ import { SPIRIT_REALM, realmTurnOffers } from "../rules/spirit-realm.mjs";
 import { dyingNow, realmRefusalFor, realmStateFor, realmTurnText } from "../effects/spirit-realm.mjs";
 import { postPrompt } from "../effects/prompts.mjs";
 import { CUTTING_GEAR, holdsCuttingGear } from "../rules/escapes.mjs";
+// 14 §1's Boss Actions (D-809): the points' one writer, a grip that strikes at the
+// holder's turn, and a turn that passes while a creature is away or not yet arrived.
+import { refreshBossPoints } from "../effects/boss-points.mjs";
+import { advanceBossGrips, bossRoundStart, bossTurnSkip } from "../effects/boss-doors.mjs";
 
 /** An area's forced move at a turn's start (07's Void Rift; D-778), off the Region's own record. */
 function turnForced(region) {
@@ -1883,6 +1887,29 @@ export class AzerothCombat extends Combat {
     await this._leaveFight(combatant, { ended: !game.combats.has(this.id) });
   }
 
+  /** A Boss's points full again, the turn's record cleared (14 §1, D-809). */
+  async _refreshBossPoints(actor) {
+    return refreshBossPoints(actor);
+  }
+
+  /** What a Boss's grips strike at the start of its turn (14's Grab, D-809). */
+  async _bossGrips(actor) {
+    return advanceBossGrips(actor, this);
+  }
+
+  /** A creature Sent to a Room back at the round after next (D-809). */
+  async _bossRoundStart() {
+    return bossRoundStart(this).catch(err => {
+      console.warn("azeroth-rpg | a Boss Action's round start", err);
+      return null;
+    });
+  }
+
+  /** A turn that passes, in words, or null (a body arriving next round, a creature away; D-809). */
+  _bossTurnSkip(combatant) {
+    return bossTurnSkip(combatant, this);
+  }
+
   /** @inheritDoc */
   async _onStartRound(context) {
     await super._onStartRound(context);
@@ -1897,19 +1924,27 @@ export class AzerothCombat extends Combat {
       await combatant.resetBudget();
       if (combatant.getFlag("azeroth-rpg", "round") !== undefined) await combatant.unsetFlag("azeroth-rpg", "round");
       // 14 §1: *they refresh at the top of the round and unspent ones are
-      // lost.* Full again, whatever is left (D-691).
-      const actor = combatant.actor;
-      const points = actor?.system?.bossPoints ?? null;
-      if (actor?.type === "npc" && (points?.max ?? 0) > 0 && points.value !== points.max) {
-        await actor.update({ "system.bossPoints.value": points.max });
-      }
+      // lost.* Full again, whatever is left (D-691), and the turn's record of
+      // the last press cleared - through the points' one writer (D-809).
+      await this._refreshBossPoints?.(combatant.actor);
     }
+    // A creature Sent to a Room comes back at the start of the round after next (D-809).
+    await this._bossRoundStart?.();
   }
 
   /** @inheritDoc */
   async _onStartTurn(combatant, context) {
     restoreCombatEffectTracking(combatant, {...context, combat: this});
     await super._onStartTurn(combatant, context);
+    // **A TURN THAT PASSES** (14 §1, D-809): a body a Boss Action called *acts on his
+    // side from the next round*, and a creature Sent to a Room is out of the fight
+    // until the round after next. Said in words, and the tracker moves on.
+    const skip = this._bossTurnSkip?.(combatant) ?? null;
+    if (skip) {
+      await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor: combatant.actor }), content: `<p class="azeroth-drain">${skip}</p>`, flags: { "azeroth-rpg": { kind: "tick" } } });
+      await this.nextTurn();
+      return;
+    }
     const lunarDamage = combatant.getFlag("azeroth-rpg", LUNAR_DAMAGE_FLAG);
     if (lunarDamage !== undefined) await combatant.setFlag("azeroth-rpg", LUNAR_DAMAGE_FLAG, advanceLunarDamage(lunarDamage));
     // **02's FOCUS REFILLS ONLY AFTER A STILL TURN** (*It refills at 2 at the start of
@@ -2417,6 +2452,9 @@ export class AzerothCombat extends Combat {
     lines.push(...await advanceWildRegeneration(actor, this));
     lines.push(...await advanceSentinelMending(actor, this));
     lines.push(...await advanceMindFlay(actor, this));
+    // 14's Grab (D-809): *takes 5 damage at the start of each of Stitches's turns* -
+    // the HOLDER's turn, so it is this creature's grips on the others that strike.
+    lines.push(...((await this._bossGrips?.(actor)) ?? []));
     return lines;
   }
 
@@ -2805,6 +2843,9 @@ export class AzerothCombat extends Combat {
     // and the one after. A combatant walking out of a fight that carries on
     // keeps theirs - the minute is still running in there.
     if (ended) await this._coatingsEndWithFight(actor);
+    // **A BOSS'S POINTS ARE FULL AGAIN WHEN ITS FIGHT ENDS** (the lead's ruling on Q18,
+    // D-809): out of a fight it spends as in one, and starts the next one full.
+    if (ended) await this._refreshBossPoints?.(actor);
     if (!game.combats.has(this.id) || !this.combatants.has(combatant.id)) return;
     // `ready` is the trigger and the action a Ready named (06 SS6, D-694);
     // `moveHalves` is what the turn's movement has paid for.

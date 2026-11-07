@@ -41,7 +41,8 @@
       <div>
         <dt>{{localize "AZEROTH.Sheet.Speed"}}</dt>
         <dd>{{combat.shape.speed}} ft{{#if combat.shape.flying}} <span class="azeroth-of">/ {{combat.shape.flying}} {{localize "AZEROTH.Sheet.Flying"}}</span>{{/if}}</dd>
-        <dd class="azeroth-shape-from">{{combat.shape.from}}</dd>
+        {{!-- Under Hex or Polymorph the Speed is the spell's and the rest the creature's own (D-808). --}}
+        <dd class="azeroth-shape-from">{{#if combat.shape.speedFrom}}{{combat.shape.speedFrom}}{{else}}{{combat.shape.from}}{{/if}}</dd>
       </div>
       {{/if}}
       <div>
@@ -225,7 +226,7 @@
     {{#if combat.shape}}
     {{!-- Any of the three shapes (D-769), named in words; its x is Leave. --}}
     <span class="azeroth-state-chip">{{combat.shape.line}}
-      <button type="button" class="azeroth-chip-x" data-action="leaveShape" aria-label="{{localize "AZEROTH.Shape.Leave"}}">&times;</button></span>
+      {{#unless combat.shape.leaveRefused}}<button type="button" class="azeroth-chip-x" data-action="leaveShape" aria-label="{{localize "AZEROTH.Shape.Leave"}}">&times;</button>{{/unless}}</span>
     {{/if}}
     {{!-- A rider whose spend buys a move, paid BEFORE the blow (04's Feral
           Charge; D-770, the lead: "Either order"): drawn in a fight alone.

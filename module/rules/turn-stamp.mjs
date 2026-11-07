@@ -83,7 +83,10 @@ export const FLAG_SCOPE = "azeroth-rpg";
 export const BOOKKEEPING_FLAGS = Object.freeze([
   "budget", "moveHalves", "acted", "round", "lastHitRound", "damageTypes",
   "damaged", "marked", "ready", "heldPosition", "criticalsIgnored", "lastTurn",
-  "constructTurn", "lunarDamage", "crushridgeExtraAttacks", "infernalImmolationTicks"
+  "constructTurn", "lunarDamage", "crushridgeExtraAttacks", "infernalImmolationTicks",
+  // The round a body a Boss Action called arrives in (D-809): written on the
+  // combatant's creation, never reorders a fight.
+  "arrives"
 ]);
 
 /**

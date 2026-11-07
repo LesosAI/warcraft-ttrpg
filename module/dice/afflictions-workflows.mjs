@@ -10,13 +10,13 @@
  * `run`, the way `corruptionExposure` does.
  */
 
-import { AZEROTH } from "../config.mjs";
 import { AzerothRoll } from "./azeroth-roll.mjs";
 import {
   DISEASES, DAY, afflictionBanes, diseaseCatalogue, makeDisease, makePoison, medicineNextAt,
   medicineOutcome, medicineRefusal, weeklyClearedPatch, weeklyOutcome, bareVenom
 } from "../rules/afflictions.mjs";
 import { resultName } from "../rules/resolution.mjs";
+import { skillRowsFor } from "../rules/skills.mjs";
 import {
   afflict, afflictionsOf, postAfflictionCard, updateAffliction
 } from "../effects/afflictions.mjs";
@@ -66,17 +66,9 @@ function tellLaid(victim, aff, done) {
 /* Skill and Resilience rows                                           */
 /* ------------------------------------------------------------------ */
 
-function skillModifiers(actor, key) {
-  const system = actor.system;
-  const ability = AZEROTH.skillAbility[key];
-  const raw = system.skills?.[key];
-  const rank = typeof raw === "number" ? raw : (raw?.rank ?? 0);
-  return [
-    { label: AZEROTH.abilities[ability], value: system.abilities?.[ability]?.mod ?? 0 },
-    { label: "AZEROTH.Sheet.Proficiency", value: system.proficiency ?? 0 },
-    { label: "AZEROTH.Sheet.Rank", value: rank }
-  ];
-}
+// A Skill Test's rows come through `rules/skills.mjs#skillRowsFor` (D-810). The
+// copy that stood here read the Rank off `system.skills`, which only a creature
+// has, so every CHARACTER healer rolled Medicine at Rank 0 (fault F1).
 
 function verdictOf(roll, dc) {
   const won = roll.outcome.success === true;
@@ -140,7 +132,7 @@ export async function medicineTest({ patient, afflictionId, event = null } = {})
     choices[h.uuid] = why ? `${h.name} - ${t(`AZEROTH.Afflictions.Medicine.Refuse.${why}`, { name: h.name, disease: row.aff.name })}` : h.name;
     modes[h.uuid] = why
       ? { refused: { text: t(`AZEROTH.Afflictions.Medicine.Refuse.${why}`, { name: h.name, disease: row.aff.name }) } }
-      : { actor: h, healer: h.uuid, skill: "medicine", modifiers: skillModifiers(h, "medicine") };
+      : { actor: h, healer: h.uuid, skill: "medicine", modifiers: skillRowsFor(h, "medicine") };
     if (!why && !first) first = h.uuid;
   }
   if (!first) {

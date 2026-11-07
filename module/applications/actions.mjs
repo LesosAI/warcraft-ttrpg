@@ -73,7 +73,7 @@ import { cardPressUnrecordable } from "../effects/card-presses.mjs";
 import { VEINS_FLAG, igniteBurning, overchannelReliefFor, spellDcFor, spellDiscountFor, veinsStates } from "../rules/class-talents.mjs";
 import { flaggedEffects } from "../effects/talent-states.mjs";
 // A shape's gear melds and Metamorphosis adds to a blow (02 §7, D-769).
-import { meldsGear, shapeDamageBonus } from "../rules/shapes.mjs";
+import { isForcedKind, meldsGear, shapeDamageBonus } from "../rules/shapes.mjs";
 import { scoreHeldBy, storedFromShown } from "../rules/abilities.mjs";
 import { attackAbility, attackModes, canFire, fittingBundles, pierceOf, selectAmmunition, shotDamage } from "../rules/ammunition.mjs";
 // In the hand or thrown (D-731): the ways a blow may be struck, one variant each.
@@ -624,6 +624,9 @@ export async function reactWithDialog(actor, reaction, { attackTotal = null, mes
     ui.notifications?.warn(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: actor.name }));
     return null;
   }
+  // **NO PARRY AND NO BLOCK UNDER HEX OR POLYMORPH** (D-808), refused before the
+  // claim on the striker's card or the Reaction is touched.
+  if (actor.refuseForcedShape?.("reaction")) return null;
   const refuseAttackState = () => {
     const card = messageId ? game.messages?.get(messageId) : null;
     const refusal = parryCommit !== null ? (reaction === "parry" && parryCommitValid(parryCommit, actor, messageId, targetIndex) ? null : "commit")
@@ -635,13 +638,6 @@ export async function reactWithDialog(actor, reaction, { attackTotal = null, mes
     return true;
   };
   if (refuseAttackState()) return null;
-  const trackedCard = messageId ? game.messages?.get(messageId) : null;
-  if (reaction === "block" && blockCommit === null && trackedCard?.getFlag("azeroth-rpg", "attackResolution"))
-    return requestAttackBlock(actor, trackedCard, targetIndex);
-  if (reaction === "parry" && parryCommit === null && trackedCard?.getFlag("azeroth-rpg", "attackResolution"))
-    return requestAttackParry(actor, trackedCard, targetIndex);
-  if(reaction==='parry'&&parryCommit===null&&hasParrySignature(actor))
-    return requestStandaloneParry(actor,attackTotal,{message:trackedCard,index:trackedCard?targetIndex:null});
   // The blow's striker (the Legacy branches' door 14: no Reaction against one Wind
   // Walk or Bladestorm holds unanswerable), and whether the blow took this creature's
   // own Reaction (door 13: the answer may be that one).
@@ -675,6 +671,29 @@ export async function reactWithDialog(actor, reaction, { attackTotal = null, mes
     ui.notifications?.warn(game.i18n.localize("AZEROTH.Card.PressNoGM"));
     return null;
   }
+  // **EVERY REFUSAL ABOVE IS SAID IN WORDS BEFORE A CARD IS CLAIMED** (the reactions
+  // batch, 2026-11-06): the tracked doors of 0.12.32 (`requestAttackBlock`,
+  // `requestAttackParry`) and a parry Signature's standalone door used to be handed
+  // the press before `canReact` was asked, so a creature already answered, out of
+  // Reactions, carrying no shield, holding no Momentum or of a class that builds none
+  // was told only *A Reaction cannot answer this attack in its current state* - the
+  // GM's handler refuses the same facts as `unavailable` and has no words to give.
+  // The range verdict is read here and NOT spent: its once-a-round mark is taken
+  // below, on the client the claim comes back to, or it would be taken twice.
+  if (reaction === "parry") {
+    const early = parryRangeContext(actor, { messageId, targetIndex });
+    if (!early.ok) {
+      ui.notifications?.warn(game.i18n.format(early.reason, { name: actor.name, talent: early.ranged?.name ?? "", feet: early.ranged?.feet ?? 0 }));
+      return null;
+    }
+  }
+  const trackedCard = messageId ? game.messages?.get(messageId) : null;
+  if (reaction === "block" && blockCommit === null && trackedCard?.getFlag("azeroth-rpg", "attackResolution"))
+    return requestAttackBlock(actor, trackedCard, targetIndex);
+  if (reaction === "parry" && parryCommit === null && trackedCard?.getFlag("azeroth-rpg", "attackResolution"))
+    return requestAttackParry(actor, trackedCard, targetIndex);
+  if(reaction==='parry'&&parryCommit===null&&hasParrySignature(actor))
+    return requestStandaloneParry(actor,attackTotal,{message:trackedCard,index:trackedCard?targetIndex:null});
   // **A PARRY ANSWERS A MELEE BLOW** (the lead, 2026-10-03, on O-180: *"Parry is
   // limited to melee unless a feature allows ranged parry."*; D-779): judged again
   // at the press off the card's own record of how the blow was struck, the striker's
@@ -1025,6 +1044,9 @@ export async function takeOpportunity(actor, { tokenId = null, sceneId = null, d
     ui.notifications?.warn(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: actor.name }));
     return null;
   }
+  // **AN OPPORTUNITY ATTACK IS A REACTION A FROG CANNOT TAKE** (D-808), refused
+  // before the Reaction or the target is touched.
+  if (actor.refuseForcedShape?.("reaction")) return null;
   // Aim at whoever is leaving, before anything is spent: a target that cannot
   // be set is worth saying so about while the Reaction is still in hand.
   const scene = (sceneId && game.scenes.get(sceneId)) || canvas?.scene || null;
@@ -1279,6 +1301,8 @@ function secondRollOverrides(actor, args, secondTargets) {
  * `castSpell` pays first and rolls.
  */
 export async function castWithDialog(actor, spell, event = null, { targets = null, run = null } = {}) {
+  // 07's Hex: *it cannot attack, cast or speak* (D-808) - before the dialog opens.
+  if (actor?.refuseForcedShape?.("cast")) return null;
   const sys = spell.system;
   const classes = (actor.classItems ?? []).map(c => ({
     itemId: c.id, schools: c.system?.schools ?? [], castingAbility: c.system?.castingAbility ?? null
@@ -1478,6 +1502,7 @@ export function roundMarksLeftOf(actor, row) {
 export async function castItemSpell(actor, item, index, event = null) {
   const entry = item?.system?.spells?.[index] ?? null;
   if (!entry) return null;
+  if (actor?.refuseForcedShape?.("cast")) return null;
   if ((entry.uses?.max ?? 0) > 0 && (entry.uses?.value ?? 0) <= 0) {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Cast.NoUses", { name: entry.name, item: item.name }));
     return null;
@@ -1528,6 +1553,8 @@ export async function castItemSpell(actor, item, index, event = null) {
  * blow it answers. A feature that makes no Casting Test takes them as given.
  */
 export async function useFeatureWithDialog(actor, item, event = null, { targets = null, foresight = null, answers = null } = {}) {
+  // A creature under Hex or Polymorph uses no feature (D-808): before any dialog.
+  if (actor?.refuseForcedShape?.("feature")) return null;
   const sys = item.system;
   const run = game.system.azeroth.workflows.useFeature;
   // **WHAT A TALENT ADDS TO A FEATURE'S DAMAGE** (04, D-768): the lines the
@@ -1688,6 +1715,9 @@ function packFlankOf(actor, targetToken) {
 export async function attackWithDialog(actor, weapon, event = null, { location = "body", dc = null, damage = true, offHand = null, budget = null, gainsMomentum = true, atDistance = null, riposte = false, mode = null, ratingDelta = 0, opportunity = false, landsOnHit = null, cardBoons = null, fromFeature = null, targets = null, prepareOnly = false, paidThrowAs = null, testOnly = false } = {}) {
   if (testOnly && (!prepareOnly || budget!=="none" || damage!==false)) return null;
   if (!weapon || weapon.type !== "weapon") return null;
+  // 07's Hex: *it cannot attack* (D-808) - every attack this door makes, an
+  // Opportunity Attack and a Riposte included, before anything is worked out.
+  if (actor?.refuseForcedShape?.("attack")) return null;
   if (!guardPendingCustodyItem(weapon).ok) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.Item.CustodyPending"));
     return null;
@@ -2195,9 +2225,11 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
  * moves: the card had simply never been able to reach a creature, because
  * `attackFromCard` looked for an Item and every creature held none (2026-09-10).
  */
-export async function npcAttackWithDialog(actor, index, event = null, { title = null, targets = null, attack: override = null, bossAction = false, budget = null, dc = null, damage = true, gainsMomentum = true, mode = null, fromFeature = null, run = null, singleAttack = false, damageSchool = null, prepareOnly = false } = {}) {
+export async function npcAttackWithDialog(actor, index, event = null, { title = null, targets = null, attack: override = null, bossAction = false, budget = null, dc = null, damage = true, gainsMomentum = true, mode = null, fromFeature = null, run = null, singleAttack = false, damageSchool = null, prepareOnly = false, cardBoons = null, landsOnHit = null } = {}) {
   const attack = override ?? actor?.system?.attacks?.[index];
   if (!attack) return null;
+  // A hexed creature's own block attacks no more than a character does (D-808).
+  if (actor?.refuseForcedShape?.("attack")) return null;
   if (damageSchool !== null && (typeof damageSchool !== "string" || !Object.hasOwn(AZEROTH.schools, damageSchool))) return null;
   const sys = actor.system;
   const bonus = sys.damageBonus ?? 0;
@@ -2338,7 +2370,7 @@ export async function npcAttackWithDialog(actor, index, event = null, { title = 
         }
         return npcAttackWithDialog(actor, index, null, { title, targets: next.originalTargets, attack: override,
           bossAction, budget: "none", dc, damage, gainsMomentum, mode: way, fromFeature, run,
-          singleAttack: true, damageSchool, prepareOnly: true });
+          singleAttack: true, damageSchool, prepareOnly: true, cardBoons, landsOnHit });
       } } : {}),
     // A declared NPC action can revalidate after the dialog, immediately
     // before the ordinary workflow pays and rolls. Ordinary attacks omit it.
@@ -2381,6 +2413,11 @@ export async function npcAttackWithDialog(actor, index, event = null, { title = 
     ...(dc !== null ? { dc } : {}),
     traits: await traitDefinitions(attack.traits ?? [], actor),
     ...(bossAction ? { bossAction: true } : {}),
+    // **A BOSS ACTION'S BOON AND LANDING** (D-809): Unholy Command's *its attack Test
+    // takes Boon*, Maul's Boon and *Bleeding 2* on a hit - the character door's own
+    // `cardBoons` and `landsOnHit`, read by the dialog and `workflows.rollTest`.
+    ...((Number(cardBoons?.boons) || 0) > 0 ? { cardBoons: { boons: Math.trunc(Number(cardBoons.boons)), names: [...(cardBoons.names ?? [])] } } : {}),
+    ...(Array.isArray(landsOnHit) && landsOnHit.length ? { landsOnHit } : {}),
     // A creature's Opportunity Attack passes `budget: "none"`: the Reaction
     // was spent at the card's door (06 §6, D-694).
     ...(budget ? { budget } : {}),
@@ -2451,6 +2488,8 @@ export async function traitSchools() {
  * spell it names through the dialog; the rest post the feature card.
  */
 export async function useAbilityWithDialog(actor, list, index, event = null) {
+  // A creature under Hex or Polymorph uses none of its abilities (D-808).
+  if (actor?.refuseForcedShape?.("ability")) return null;
   const row = actor?.system?.[list]?.[index] ?? null;
   const a = row?.automation ?? null;
   if (row && (a?.kind ?? "none") === "none") {
@@ -2465,6 +2504,31 @@ export async function useAbilityWithDialog(actor, list, index, event = null) {
   // draws no button for one, and this is the same refusal at the door.
   if (!row || !isPressable(a)) return null;
   if (a.kind === "spell") {
+    // **A BOSS ACTION THAT CASTS SPENDS ITS POINTS, NOT THE TURN** (D-809, the audit's
+    // F8): judged here before the dialog opens, claimed through the points' one writer
+    // as the cast is made, and cast with no action of the creature's own turn.
+    if (list === "bossActions") {
+      const { bossPressJudgement, bossTurnKey } = await import("../rules/boss-actions.mjs");
+      const { bossRefusalWords, claimBossPoints } = await import("../effects/boss-points.mjs");
+      const judged = bossPressJudgement({ points: actor.system?.bossPoints ?? {}, cost: row.cost ?? 1,
+        turnKey: bossTurnKey(actor.activeFight?.() ?? null), lastTurnKey: actor.getFlag?.("azeroth-rpg", "bossPress")?.turnKey ?? null });
+      if (!judged.ok) {
+        ui.notifications?.warn(bossRefusalWords(actor, row, judged));
+        return null;
+      }
+      const pack = game.packs.get("azeroth-rpg.spells");
+      const entry = pack ? (await pack.getIndex()).find(e => e.name === (a.spell || row.name)) ?? null : null;
+      const spell = entry ? await pack.getDocument(entry._id) : null;
+      if (!spell) {
+        ui.notifications?.warn(game.i18n.format("AZEROTH.Cast.SpellMissing", { name: a.spell || row.name }));
+        return null;
+      }
+      return castWithDialog(actor, spell, event, { run: async args => {
+        const claimed = await claimBossPoints(actor, row);
+        if (!claimed.ok) return null;
+        return game.system.azeroth.workflows.castSpell({ ...args, actor, spell, bossAction: true });
+      } });
+    }
     const delegation = delegatedAbilitySpell(row.description ?? "");
     return castNamedSpell(actor, a.spell || row.name, event, { self: delegation?.self === true && delegation.name === a.spell });
   }
@@ -2473,6 +2537,8 @@ export async function useAbilityWithDialog(actor, list, index, event = null) {
 
 /** Cast a spell 07 names, by name, from the pack (D-647): a creature's Spells line. */
 export async function castNamedSpell(actor, name, event = null, { self = false } = {}) {
+  // A creature's Spells line casts nothing under Hex or Polymorph (D-808).
+  if (actor?.refuseForcedShape?.("cast")) return null;
   const pack = game.packs.get("azeroth-rpg.spells");
   const entry = pack ? (await pack.getIndex()).find(e => e.name === name) ?? null : null;
   const spell = entry ? await pack.getDocument(entry._id) : null;
@@ -2513,6 +2579,7 @@ export async function castNamedSpell(actor, name, event = null, { self = false }
  * @param {{by?: string, target?: {tokenId?: string}|null, event?: Event|null}} [o]
  */
 export async function castFreeSpell(actor, name, { by = "", target = null, event = null } = {}) {
+  if (actor?.refuseForcedShape?.("cast")) return null;
   let spell = actor.items.find(i => i.type === "spell" && i.name === name) ?? null;
   if (!spell) {
     const pack = game.packs.get("azeroth-rpg.spells");
@@ -2588,6 +2655,14 @@ export function exposeWithDialog(actor, track, event = null) {
 
 /**
  * Roll a bare ability Test - no skill, no Rank.
+ *
+ * **IT ADDS THE ABILITY MODIFIER, NOT THE SKILL MODIFIER** (05 §1; the lead's
+ * answer to D-810's Q1): a Test that names an ability and no skill is not a
+ * Skill Test. It rides the pipeline's `skill` kind because it is no Attack,
+ * Casting or Resilience Test, and it carries `ability` so a Bane laid on
+ * *Charisma Tests* or *Strength Tests* (10, 09, D12's diseases) reaches it as it
+ * reaches a Skill Test that reads the same ability (fault F4).
+ * `skill-modifier.test.mjs` names this door as the one exception to its census.
  * @param {Actor} actor
  * @param {string} key  One of AZEROTH.abilities' keys.
  * @param {Event|null} [event]
@@ -2599,6 +2674,7 @@ export function rollAbility(actor, key, event = null) {
   if (!ability || ability.value === null) return null;
   return rollWithDialog(actor, {
     kind: "skill",
+    ability: key,
     title: game.i18n.localize(AZEROTH.abilities[key]),
     modifiers: [{ label: AZEROTH.abilities[key], value: ability.mod }]
   }, event);
@@ -2768,6 +2844,8 @@ export async function useGearWithDialog(actor, item) {
  * `useSignature` refuses with, so neither path can drift from the other.
  */
 export async function useSignatureWithDialog(actor, item, event = null) {
+  // A creature under Hex or Polymorph presses no Signature (D-808).
+  if (actor?.refuseForcedShape?.("signature")) return null;
   const signature = signatureEffectOf(item);
   if (signature?.kind === "spell") {
     if (game.system.azeroth.workflows.refuseSignaturePress({ actor, item })) return null;
@@ -2957,6 +3035,9 @@ function syncedBy(effect) {
   for (const flag of Object.keys(SYNCED_REASONS)) {
     if (effect.getFlag("azeroth-rpg", flag)) return flag;
   }
+  // A shape somebody else laid (D-808): only a GM takes it off by hand, so for
+  // anybody else the strip says so rather than drawing a clear that refuses.
+  if (!game.user?.isGM && isForcedKind(effect.getFlag("azeroth-rpg", "shape")?.kind)) return "forcedShape";
   return null;
 }
 

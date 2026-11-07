@@ -135,8 +135,10 @@ import { mirroredImg } from "../rules/token-art.mjs";
 import { grantsOn } from "../rules/grants.mjs";
 // A shape is one Active Effect, read here and written by `./shapes.mjs` alone
 // (D-769): the physical half, what melds, and what ends it.
-import { AVATAR, SHAPE_FLAG, meldsGear, naturalWeapon, physicalHalf, readShape } from "../rules/shapes.mjs";
-import { endShapeAt } from "./shapes.mjs";
+import { AVATAR, SHAPE_FLAG, isForcedKind, meldsGear, naturalWeapon, physicalHalf, readShape } from "../rules/shapes.mjs";
+import { endShapeAt, endShapeOnDamage, refuseForcedShape } from "./shapes.mjs";
+// 14's Hex the Loudest (D-809): a creature that cannot attack.
+import { refuseCannotAttack } from "../effects/boss-doors.mjs";
 // What a feature lays on every ally in reach, stamped whole (D-755), and the
 // Boons an ally's aura has laid on this creature, named for a card.
 import { auraBoonsOn, auraStamp, halvedHealing } from "../rules/auras.mjs";
@@ -641,8 +643,9 @@ export class AzerothActor extends Actor {
       // **THE FORMS' NAMES, OR NOTHING** (D-769). The old flag object reached
       // a gate as `[object Object]`, so a form named in a gate never held; any
       // shape counts as *in any form they take* (Stormrage Raiment), the
-      // Avatar's and Metamorphosis's included - the plan's reading.
-      form: this.shape ? this.shape.forms.map(f => f.name) : null,
+      // Avatar's and Metamorphosis's included - the plan's reading. **A form somebody
+      // else laid is none of them** (D-808): a hexed Druid is in no form of their own.
+      form: this.shape && !this.shape.forced ? this.shape.forms.map(f => f.name) : null,
       health: { value: s.health?.value ?? 0, max: s.health?.max ?? 0 },
       // The three tracks and their scores, or nothing. A creature's keyword is
       // not a score, so it is not one of these.
@@ -689,7 +692,11 @@ export class AzerothActor extends Actor {
     if (!effect) return null;
     const shape = readShape(effect.getFlag("azeroth-rpg", SHAPE_FLAG));
     if (!shape) return null;
-    return { id: effect.id, ...shape, physical: physicalHalf(shape.forms) };
+    // **A FORCED SHAPE HAS NO PHYSICAL HALF** (D-808): under Hex or Polymorph the
+    // creature keeps its own scores, Defense, Armor Points, size and gear, so every
+    // reader of `physical` - `CharacterData` above all - finds nothing to take.
+    const forced = isForcedKind(shape.kind);
+    return { id: effect.id, ...shape, forced, physical: forced ? null : physicalHalf(shape.forms) };
   }
 
   /**
@@ -699,6 +706,24 @@ export class AzerothActor extends Actor {
    */
   get inShapeshiftForm() {
     return this.shape?.kind === "shapeshift";
+  }
+
+  /**
+   * **WHETHER A SHAPE SOMEBODY ELSE LAID SHUTS THIS DOOR, SAID IN WORDS** (07's Hex,
+   * 02's Polymorph; D-808): the one question every door that attacks, casts, uses
+   * or reacts asks before anything is spent, through `documents/shapes.mjs
+   * #refuseForcedShape`. True where the door is shut and the user was told why.
+   * A method on the actor, so a door asks it as `actor?.refuseForcedShape?.(door)`.
+   *
+   * @param {string} door  a `rules/shapes.mjs#FORCED_REFUSALS` key
+   * @returns {boolean}
+   */
+  refuseForcedShape(door) {
+    return refuseForcedShape(this, door)
+      // **AND 14's HEX THE LOUDEST** (D-809): *Silenced and cannot attack until the end of
+      // its next turn* - asked after the shape, at the same question, so every attack door
+      // that refuses a hexed creature refuses this one too, in its own words.
+      || ((door === "attack" || door === "reaction") && refuseCannotAttack(this));
   }
 
   /**
@@ -2080,6 +2105,19 @@ export class AzerothActor extends Actor {
       catch (error) {
         console.warn("azeroth-rpg | Mind Control damage release", error);
         ui.notifications?.warn("Damage was applied, but Mind Control could not be removed. Check the target's effects.");
+      }
+    }
+    // **ANY DAMAGE ENDS HEX AND POLYMORPH** (07: *Any damage ends the Hex*; 02: *until
+    // it takes damage*; D-808): what this write took of Health and temporary Health,
+    // after every door of the blow had it (`rules/shapes.mjs#endsOnDamage`, the tool's
+    // reading). HERE, the one writer `applyDamage` and Scorched's straight damage both
+    // reach, and before the early return below, which a blow temporary Health took
+    // whole would otherwise leave by.
+    if (damageApplied > 0 && this.shape?.forced) {
+      try {
+        await endShapeOnDamage(this, damageApplied);
+      } catch (error) {
+        console.warn("azeroth-rpg | a forced shape did not end on damage", error);
       }
     }
     if (!("system.health.value" in update)) return written;

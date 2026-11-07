@@ -71,6 +71,42 @@ export function untilEndOfNextTurnOrRound(actor) {
   return untilEndOfNextTurn(actor) ?? clockRounds(1);
 }
 
+/**
+ * **UNTIL THE END OF THE ROUND** (14's Arcane Breath, Enfeeble, Sell Them Out, Amani Fury;
+ * D-809): core's `roundEnd` expiry in the creature's started fight (14.367
+ * `Combat#onEndRound` refreshes the registry with `roundEnd`; the shape `useGear` has
+ * written since D-772 for a Boon that lasts the round), and one round of the world's
+ * clock out of one (D-778's reading).
+ *
+ * @param {Actor} actor  the creature it lands on
+ */
+export function untilEndOfRound(actor, combat = actor?.activeFight?.() ?? game.combat) {
+  if (!combat?.started) return clockRounds(1);
+  const combatant = combat.getCombatantsByActor(actor)?.[0] ?? null;
+  if (!combatant) return clockRounds(1);
+  return {
+    duration: { value: 0, units: "rounds", expiry: "roundEnd" },
+    start: { combat: combat.id, combatant: combatant.id, round: combat.round, turn: combat.turn, time: game.time.worldTime }
+  };
+}
+
+/**
+ * **FOR THE REST OF THE ENCOUNTER** (14's Take the Mind; D-809): core's `combatEnd`
+ * expiry in the creature's started fight, or null out of one - an encounter that has
+ * not begun has no end the clock can name, and the condition is the table's to lift.
+ *
+ * @param {Actor} actor
+ */
+export function untilEncounterEnd(actor, combat = actor?.activeFight?.() ?? game.combat) {
+  if (!combat?.started) return null;
+  const combatant = combat.getCombatantsByActor(actor)?.[0] ?? null;
+  if (!combatant) return null;
+  return {
+    duration: { value: 0, units: "rounds", expiry: "combatEnd" },
+    start: { combat: combat.id, combatant: combatant.id, round: combat.round, turn: combat.turn, time: game.time.worldTime }
+  };
+}
+
 /** *For N rounds*: the fight's rounds, or N rounds of the world's clock out of one (D-778). */
 export function roundsOrClock(actor, rounds = 1) {
   return spellTiming(actor, { value: Math.max(1, Math.trunc(Number(rounds)) || 1), units: "rounds", expiry: "turnEnd" }) ?? clockRounds(rounds);
@@ -109,7 +145,9 @@ export async function applyCondition(actor, id, { value = null, until = null } =
   if (value !== null) update["flags.azeroth-rpg.value"] = value;
   // A ready-made `{duration, start}` (a spell's minute, 2026-09-06) rides as it is.
   const timing = until && typeof until === "object" ? until
-    : until === "endOfNextTurn" ? untilEndOfNextTurn(actor) : until === "nextTurn" ? untilNextTurn(actor) : null;
+    : until === "endOfNextTurn" ? untilEndOfNextTurn(actor) : until === "nextTurn" ? untilNextTurn(actor)
+      // 14's *until the end of the round* and *for the rest of the encounter* (D-809).
+      : until === "endOfRound" ? untilEndOfRound(actor) : until === "encounter" ? untilEncounterEnd(actor) : null;
   if (timing) Object.assign(update, timing);
   if (Object.keys(update).length) await effect.update(update);
   return effect;

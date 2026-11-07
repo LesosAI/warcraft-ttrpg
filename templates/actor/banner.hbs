@@ -55,7 +55,9 @@
     <div class="azeroth-shape-line">
       {{#if shape.portrait}}<img class="azeroth-shape-portrait" src="{{shape.portrait}}" alt="">{{/if}}
       <span class="azeroth-shape-name">{{shape.line}}</span>
-      {{#if editable}}<button type="button" class="azeroth-shape-leave" data-action="leaveShape">{{localize "AZEROTH.Shape.Leave"}}</button>{{/if}}
+      {{!-- A shape somebody else laid (D-808) is not left by its wearer: what ends
+            it stands in words where Leave would, the whole refusal on its tooltip. --}}
+      {{#if shape.leaveRefused}}<span class="azeroth-shape-held" data-tooltip="{{shape.leaveRefused}}">{{shape.leaveNote}}</span>{{else if editable}}<button type="button" class="azeroth-shape-leave" data-action="leaveShape">{{localize "AZEROTH.Shape.Leave"}}</button>{{/if}}
     </div>
     {{/if}}
   </div>

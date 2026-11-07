@@ -30,9 +30,30 @@ export function resilienceBonus({ score = 10, proficiency = 2, trained = false }
   return abilityModifier(score) + (trained ? proficiency : 0);
 }
 
-/** Skill Test = ability modifier + Proficiency Bonus + Skill Rank (02 §8). */
+/**
+ * **THE SKILL MODIFIER** (05 §1; the lead's ruling, D-810): *"+1 to the
+ * relevant skills per 10 in the attribute. For each point below 10 it should
+ * give a minus 1 to the skill. For example an 8 in int would give -2 to
+ * arcana."* +1 for each full 10 in a score of 10 or more (10-19 +1, 20-29 +2,
+ * 30 +3, and on past 30 uncapped), and the score less 10 below that (9 -1,
+ * 8 -2, 3 -7). A Skill Test adds it IN PLACE OF the ability modifier; every
+ * other use of a score - Attack, Casting and Resilience Tests, Defense,
+ * Initiative, Health, bag slots, Mana, the Spell DC, a bare ability Test - keeps
+ * `abilityModifier`. Null for no score (a creature's em-dash).
+ *
+ * @param {number|string|null|undefined} score
+ * @returns {number|null}
+ */
+export function skillModifier(score) {
+  if (score === null || score === undefined || score === "") return null;
+  const s = Math.trunc(Number(score));
+  if (!Number.isFinite(s)) return null;
+  return s >= 10 ? Math.floor(s / 10) : s - 10;
+}
+
+/** Skill Test = skill modifier + Proficiency Bonus + Skill Rank (05 §8, D-810). */
 export function skillTotal({ score = 10, proficiency = 2, rank = 0 } = {}) {
-  return abilityModifier(score) + proficiency + rank;
+  return (skillModifier(score) ?? 0) + proficiency + rank;
 }
 
 /** Spell DC = 10 + casting ability modifier + Proficiency Bonus (05). */

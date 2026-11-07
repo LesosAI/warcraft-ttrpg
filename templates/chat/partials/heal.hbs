@@ -17,6 +17,16 @@
   <button type="button" data-action="applyHealing" data-self="1" data-heal="{{heal.amount}}">
     {{localize "AZEROTH.Card.ApplyToSelf" name=speakerName}} <strong>{{heal.amount}}</strong>
   </button>
+  {{#if heal.alt}}
+  {{!-- A Boss Action's alternative amount (14's Stone Mends Stone: *If she is standing
+  on unbroken cavern floor she recovers 18 instead*; D-809), the table's to choose - on a
+  row of its own, so each button takes the card's width and its number stays whole. --}}
+</div>
+<div class="azeroth-card-actions">
+  <button type="button" data-action="applyHealing" data-self="1" data-heal="{{heal.alt}}">
+    {{localize "AZEROTH.Card.ApplyToSelfAlt" name=speakerName}} <strong>{{heal.alt}}</strong>
+  </button>
+  {{/if}}
   {{else}}
   {{#each targets}}
   {{#if ../heal.perTarget}}

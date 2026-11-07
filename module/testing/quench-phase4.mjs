@@ -95,7 +95,7 @@ export function editingBatch(context) {
         assert.equal(actor.getFlag("azeroth-rpg", "skillRanks")?.stealth, 4, "the rank input did not write");
         await settle();
         const row = sheet.element.querySelector('.azeroth-skill input[name="flags.azeroth-rpg.skillRanks.stealth"]')?.closest(".azeroth-skill");
-        assert.include(row?.querySelector(".azeroth-skill-total")?.textContent ?? "", String(actor.system.abilities.dex.mod + actor.system.proficiency + 4).replace(/^(\d)/, "+$1"), "the total does not read the new Rank");
+        assert.include(row?.querySelector(".azeroth-skill-total")?.textContent ?? "", String(actor.system.abilities.dex.skillMod + actor.system.proficiency + 4).replace(/^(\d)/, "+$1"), "the total does not read the new Rank");
       } finally {
         await sheet.close();
       }

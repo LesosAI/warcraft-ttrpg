@@ -1290,6 +1290,19 @@ export function riderPayload(row, { judged = false } = {}) {
  *   the world's time, and every STARTED fight's round and turn, by id
  */
 export function areaLapsed({ lasts = null, placedAt = null } = {}, { time = 0, fights = {}, turns = {} } = {}) {
+  // **A BOSS ACTION'S ZONE** (14, D-809): *for the rest of the encounter* lapses when the
+  // fight it was laid in is over; *until the end of the round* when that fight's round
+  // has moved on (one round of the world's clock out of a fight, D-778's reading).
+  if (lasts?.encounter === true || lasts?.endOfRound === true) {
+    if (placedAt?.combatId) {
+      const round = fights?.[placedAt.combatId];
+      if (round === undefined || round === null) return true;
+      return lasts.endOfRound === true && Number(round) > (Number(placedAt.round) || 0);
+    }
+    if (lasts.encounter === true) return false;
+    if (placedAt?.time === null || placedAt?.time === undefined) return false;
+    return (Number(time) || 0) - Number(placedAt.time) >= ROUND_SECONDS;
+  }
   const rounds = Number(lasts?.rounds);
   if (!(rounds > 0)) return false;
   if (placedAt?.combatId) {

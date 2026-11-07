@@ -805,20 +805,18 @@ export function reactionBatch(context) {
     it("Pummel lays two Banes that reach the caster's next Casting Test, and are gone after it", async function () {
       this.timeout(180000);
       const warrior = await makeCharacter({ name: "ZZ Pummeller", classes: [["Warrior", 5]] });
+      // **A SPELL OF THE MAGE'S OWN SCHOOL THAT NEEDS NO TARGET, BY NAME** (2026-11-06).
+      // This took the FIRST tier 1 spell in the pack's index, whatever it was, and the
+      // index's order is the LevelDB key's: it handed a Mage *Enslave Demon*, which
+      // 0.12.33's domination door (`workflows.castSpell`, `AZEROTH.Compel.DominationTarget`)
+      // refuses without a demon targeted - a deliberate rule, so the cast returned null
+      // and the Bane under test was never spent. Arcane Intellect casts with no target,
+      // as `quench-animation.mjs` casts it.
       const caster = await makeCharacter({
-        name: "ZZ Pummelled", classes: [["Mage", 5]], abilities: { int: 16 }
+        name: "ZZ Pummelled", classes: [["Mage", 5]], abilities: { int: 16 }, spells: ["Arcane Intellect"]
       });
-      const spell = await until(() => caster.items.find(i => i.type === "spell") ?? null,
-        "a spell on the caster", 1000).catch(() => null)
-        ?? await (async () => {
-          const pack = game.packs.get("azeroth-rpg.spells");
-          const index = await pack.getIndex({ fields: ["system.tier"] });
-          const entry = index.find(e => e.system?.tier === 1);
-          const doc = await pack.getDocument(entry._id);
-          const [made0] = await caster.createEmbeddedDocuments("Item", [doc.toObject()]);
-          return made0;
-        })();
-      assert.ok(spell, "the caster holds no spell");
+      const spell = caster.items.find(i => i.type === "spell" && i.name === "Arcane Intellect") ?? null;
+      assert.ok(spell, "the caster holds no Arcane Intellect");
 
       const pummel = await until(() => warrior.items.find(i => i.type === "feature" && i.name === "Pummel") ?? null,
         "the Warrior's Pummel feature");

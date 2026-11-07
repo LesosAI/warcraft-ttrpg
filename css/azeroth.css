@@ -3011,6 +3011,13 @@
     color: var(--azeroth-ink-light);
     border: 1px solid var(--azeroth-stone-light);
   }
+  .azeroth.sheet.actor.character .azeroth-shape-held {
+    flex: 1 1 0;
+    min-width: 0;
+    font-size: 12px;
+    line-height: 1.2;
+    color: var(--azeroth-ink-light);
+  }
   .azeroth.sheet.actor.character .azeroth-chip.azeroth-chip-form {
     top: -5px;
     bottom: auto;
@@ -7043,6 +7050,10 @@
   }
   .azeroth.azeroth-creator .azeroth-creator-tile {
     background: var(--azeroth-panel-dark);
+    border-color: var(--azeroth-stone);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-figure {
+    background: var(--azeroth-slot);
     border-color: var(--azeroth-stone);
   }
   .azeroth.azeroth-creator .azeroth-picker-list, .azeroth.azeroth-creator .azeroth-forge-preview, .azeroth.azeroth-creator .azeroth-forge-phrases {

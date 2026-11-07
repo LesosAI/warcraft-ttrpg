@@ -239,7 +239,10 @@ export const CLASS_FEATURES = Object.freeze({
     "Counterspell": action({ action: "reaction", cost: cost("mana", 4) }),
     "Overchannel Mastery": passive(),
     "Shape the Weave": passive(),
-    "Polymorph": action({ action: "action", cost: cost("mana", 8), casting: true, resist: "spirit" }),
+    // A failure on the card's own Resist lays the Rabbit (D-808, `dice/chat.mjs
+    // #rollResists`); *Some targets are immune* names none, so the note leaves that
+    // to the GM in words (O-236).
+    "Polymorph": action({ action: "action", cost: cost("mana", 8), casting: true, resist: "spirit", note: "AZEROTH.Feature.Note.Polymorph" }),
     "Time Warp": action({ action: "action", cost: cost("mana", 12), casting: true, uses: once("long") }),
     "Arcane Mastery": action({ action: "half", cost: cost("mana", 20) })
   },

@@ -985,7 +985,7 @@ export function spellEffectBatch(context) {
       }
     });
 
-    it("Hex: a row press records the failure and lands nothing, since the entry names no condition (D-726)", async function () {
+    it("Hex: a row press records the failure and lands no condition, since the entry names none (D-726) - only the Frog's form (D-808)", async function () {
       this.timeout(90000);
       const shaman = await makeCharacter({ name: "ZZ Hex Shaman", classes: [["Shaman", 3]], spells: ["Hex"] });
       const spell = shaman.items.find(i => i.name === "Hex");
@@ -1005,7 +1005,15 @@ export function spellEffectBatch(context) {
       assert.equal(record.index, 0);
       await settle();
       assert.deepEqual([...npc.statuses].sort(), statuses, "a failed Hex Test landed a condition the entry never names");
-      assert.equal(npc.effects.size, effects, "a failed Hex Test laid an effect");
+      // **AND THE FROG** (D-808; the lead, 2026-11-06: a creature that fails becomes 14
+      // SS15's Frog): the one effect a failed Hex lays is the form, and it is no
+      // condition. This test asserted no effect at all before the form existed.
+      await until(() => npc.shape?.kind === "hexed", "the Frog laid on a failed Hex Test");
+      assert.equal(npc.effects.size, effects + 1, "a failed Hex Test laid more than the form");
+      assert.isEmpty([...(npc.effects.find(e => e.getFlag("azeroth-rpg", "shape"))?.statuses ?? [])], "the form carries a condition");
+      // Hex is Sustained: drop it, which takes the frog with it, so no later test inherits either.
+      await game.system.azeroth.workflows.endSustain({ actor: shaman, spellId: spell.id });
+      await until(() => !npc.shape, "the frog ending with the Sustain");
     });
 
     it("REFUSES A RESIST RECORD FROM SOMEBODY WHO DID NOT MAKE THE TEST, and takes nothing from the payload but two ids (D-726)", async function () {

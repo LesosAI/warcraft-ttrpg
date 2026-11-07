@@ -106,8 +106,162 @@ export const SHAPE_KINDS = Object.freeze({
     endsAt: Object.freeze(["short", "long", "zeroHealth"]),
     entry: "Gnomish Battle Rig",
     boundDamage: "tier"
+  }),
+  // **A SHAPE LAID ON A CREATURE BY SOMEBODY ELSE** (D-808; the lead, 2026-11-06):
+  // 07's Hex - *A creature that fails a Spirit Resilience Test against your Spell DC
+  // becomes a frog: it cannot attack, cast or speak, its Speed is 10 feet, and it
+  // keeps its own Health and Defense. Any damage ends the Hex* - and 02's Polymorph,
+  // *becomes a rabbit until it takes damage*. `forced`: the shape is the form's SIZE,
+  // ART AND NAME and the spell's limits, nothing else - no score overridden, nothing
+  // melded, the creature's own Health, Defense and Armor Points kept (the lead:
+  // "visual-plus-limits only"; Armor Points are MY READING of *keeps its own*), and
+  // the Speed held to `FORCED_SPEED`. `entry` is 14 §15's block, `by` the spell or
+  // feature that lays it, `identifier` its card's key (`forcedKindForCard`),
+  // `sustained` whether it lives exactly as long as the caster's Sustain (07: Hex is
+  // Sustained), and `endsOnDamage` *Any damage ends the Hex*. **Polymorph takes Hex's
+  // limits** (the lead: *"Polymorph gets the same limits"*): 02 states none, so that
+  // half is THE TOOL'S READING (D2 §7), and it ends on damage alone, as 02 says.
+  hexed: Object.freeze({
+    feature: null, choice: null, forced: true,
+    by: "Hex", identifier: "hex", source: "spell",
+    ferocity: false, barsMana: false, melds: false, requires: null,
+    endsAt: Object.freeze([]), endsOnDamage: true, sustained: true,
+    entry: "Frog"
+  }),
+  polymorphed: Object.freeze({
+    feature: null, choice: null, forced: true,
+    by: "Polymorph", identifier: "polymorph", source: "feature",
+    ferocity: false, barsMana: false, melds: false, requires: null,
+    endsAt: Object.freeze([]), endsOnDamage: true, sustained: false,
+    entry: "Rabbit"
   })
 });
+
+/**
+ * **07's HEX: *its Speed is 10 feet*** (D-808). Held to the chapter's sentence by
+ * `shapes.test.mjs`; Polymorph takes it too (the tool's reading).
+ */
+export const FORCED_SPEED = 10;
+
+/** Whether a kind of shape is laid on a creature by somebody else (07's Hex, 02's Polymorph). */
+export function isForcedKind(kind) {
+  return SHAPE_KINDS[kind]?.forced === true;
+}
+
+/** The 14 blocks a forced shape takes the form of: §15's Frog and Rabbit. */
+export const FORCED_FORMS = Object.freeze(Object.values(SHAPE_KINDS).filter(k => k.forced).map(k => k.entry));
+
+/**
+ * **THE FORCED KIND A CARD LAYS ON A FAILED TEST** (D-808): a spell card by the
+ * spell's identifier (07's Hex, whoever casts it - a character, a creature's
+ * Spells line, an item), a feature card by the feature's key (02's Polymorph).
+ * Null for every other card - and for a card whose Casting Test FAILED, which lays
+ * nothing (07 §8: *a failed Casting Test costs the Mana and nothing else*).
+ *
+ * @param {object} flags  a card's `flags["azeroth-rpg"]`
+ * @returns {string|null}
+ */
+export function forcedKindForCard(flags = {}) {
+  const f = flags ?? {};
+  if (f.success === false) return null;
+  for (const [kind, k] of Object.entries(SHAPE_KINDS)) {
+    if (!k.forced) continue;
+    if (k.source === "spell" && f.kind === "spell" && f.identifier === k.identifier) return kind;
+    if (k.source === "feature" && f.kind === "feature" && f.featureKey === k.identifier) return kind;
+  }
+  return null;
+}
+
+/**
+ * **WHAT A FORCED SHAPE SHUTS, IN WORDS** (07's Hex: *it cannot attack, cast or
+ * speak*; the lead, 2026-11-06, naming the doors: the attack, the cast, a feature's
+ * Use, a creature's ability, a Signature, the Reactions and a Readied action). Each
+ * is refused before anything is spent (D-768's order). A Move is open at the form's
+ * pace. *Speak* has no mechanism in the system and stays the table's call - the
+ * effect's text and the card say so. `leave`: the creature cannot step out of a
+ * shape somebody else laid; the Sustain's end, damage or a GM does it.
+ */
+export const FORCED_REFUSALS = Object.freeze({
+  attack: "AZEROTH.ForcedShape.Refuse.Attack",
+  cast: "AZEROTH.ForcedShape.Refuse.Cast",
+  feature: "AZEROTH.ForcedShape.Refuse.Feature",
+  ability: "AZEROTH.ForcedShape.Refuse.Ability",
+  signature: "AZEROTH.ForcedShape.Refuse.Signature",
+  reaction: "AZEROTH.ForcedShape.Refuse.Reaction",
+  ready: "AZEROTH.ForcedShape.Refuse.Ready",
+  leave: "AZEROTH.ForcedShape.Refuse.Leave"
+});
+
+/**
+ * Why a door is shut by the shape worn, as a localization key, or null. A GM may
+ * take a forced shape off by hand (the lead: *"a Hex is ended by ending the
+ * Sustain, not by hand-deleting, unless a GM"*), so `leave` is open to one.
+ *
+ * @param {{kind?: string}|null} shape  `AzerothActor#shape`
+ * @param {string} door  a `FORCED_REFUSALS` key
+ * @param {{gm?: boolean}} [o]
+ * @returns {string|null}
+ */
+export function forcedShapeRefusal(shape, door, { gm = false } = {}) {
+  if (!shape || !isForcedKind(shape.kind)) return null;
+  if (door === "leave" && gm === true) return null;
+  return FORCED_REFUSALS[door] ?? null;
+}
+
+/**
+ * **WHETHER A BLOW ENDS THE SHAPE** (07's Hex: *Any damage ends the Hex*; 02's
+ * Polymorph: *until it takes damage*): a kind that ends on damage, and a blow that
+ * TOOK something once every door before the write had it (D-777's order) - Health,
+ * or the temporary Health 05 has damage take first. A Parry that negates, a blow
+ * moved onto somebody else, a Ward or a reduction that leaves 0 is no damage
+ * taken; Health LOST (A1's Bleeding) is not damage at all. THE TOOL'S READING
+ * (D-808), the plainer of the two the lead was offered.
+ *
+ * @param {{kind?: string}|null} shape
+ * @param {number} taken  Health and temporary Health the blow removed
+ * @returns {boolean}
+ */
+export function endsOnDamage(shape, taken) {
+  return Boolean(shape && SHAPE_KINDS[shape.kind]?.endsOnDamage === true && (Number(taken) || 0) > 0);
+}
+
+/**
+ * **A SECOND SHAPE** (D-808): a forced shape replaces whatever is worn - a frog over
+ * a Druid's bear, a rabbit over a frog - and what it replaced ends with it; a shape
+ * a creature takes for itself never replaces one laid on it (every door that takes
+ * one refuses first; this is the writer's own guard). MY READING: the simplest rule
+ * that keeps ONE shape a creature.
+ *
+ * @param {string|null} heldKind
+ * @param {string} nextKind
+ * @returns {boolean}
+ */
+export function shapeMayReplace(heldKind, nextKind) {
+  if (!SHAPE_KINDS[nextKind]) return false;
+  if (isForcedKind(nextKind)) return true;
+  return !isForcedKind(heldKind);
+}
+
+/**
+ * **THE FORM'S PACE, AS THE EFFECT'S OWN CHANGES** (07's Hex: *its Speed is 10
+ * feet*; D-808), in the `final` phase because the Speed is derived (D-668). An
+ * OVERRIDE AT PRIORITY 1, so it is the base every other change on the Speed lands
+ * on - Slowed's halving, a drop with its own `upgrade 0` floor, Entangled's 0 - and
+ * undoes none of them. A creature with a flying pace keeps none (`flies`): `0`,
+ * which `rules/movement.mjs#paceFor` reads as no flying pace, so a flying move goes
+ * at the 10 (MY READING: a frog does not fly).
+ *
+ * @param {string} kind
+ * @param {{flies?: boolean}} [o]
+ * @returns {Array<{key: string, type: string, value: string, phase: string, priority: number}>}
+ */
+export function forcedShapeChanges(kind, { flies = false } = {}) {
+  if (!isForcedKind(kind)) return [];
+  return [
+    { key: "system.speed", type: "override", value: String(FORCED_SPEED), phase: "final", priority: 1 },
+    ...(flies ? [{ key: "system.flyingSpeed", type: "override", value: "0", phase: "final", priority: 1 }] : [])
+  ];
+}
 
 /**
  * **THE ONE 14 BLOCK A SHAPE WITH NO MENU TAKES** (the Gnomish Battle Rig's
@@ -202,6 +356,9 @@ export const AVATAR = Object.freeze({ extraCriticalInjuries: 1 });
  */
 export function shapeKindOf({ name = "", choice = null } = {}) {
   for (const [kind, k] of Object.entries(SHAPE_KINDS)) {
+    // A forced shape is laid by somebody else's failed Test (D-808): no feature
+    // of the creature's own takes one, Polymorph's Use included.
+    if (k.forced) continue;
     if (k.feature === name && k.choice === choice) return kind;
   }
   return null;
@@ -485,8 +642,13 @@ export function shapeDamageBonus(shape) {
   return shape?.kind === "metamorphosis" ? METAMORPHOSIS.damageRating : 0;
 }
 
-/** 02's Beast forms, with the lead's specific Mountain Lion exception (2026-11-01). */
+/**
+ * 02's Beast forms, with the lead's specific Mountain Lion exception (2026-11-01).
+ * **NOT 14 §15's FROG AND RABBIT** (D-808): 14 §8 makes a form *any Beast here*, in
+ * §8, and those two are the forms Hex and Polymorph lay (MY READING of *here*).
+ */
 export function isShapeshiftForm(entry = {}) {
+  if (FORCED_FORMS.includes(entry.name)) return false;
   return entry.creatureType === "beast"
     && (["chaff", "standard"].includes(entry.weightClass)
       || (entry.name === "Mountain Lion" && entry.weightClass === "soldier"));

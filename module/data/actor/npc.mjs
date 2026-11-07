@@ -18,7 +18,7 @@
 
 import { AZEROTH } from "../../config.mjs";
 import { dispersionFor } from "../../rules/dispersion.mjs";
-import { abilityModifier } from "../../rules/abilities.mjs";
+import { abilityModifier, skillModifier } from "../../rules/abilities.mjs";
 import { trackStates } from "../../rules/corruption.mjs";
 import { carryCapacity, flyingPace, loadState } from "../../rules/size.mjs";
 import { carriedTotal } from "../../rules/weight.mjs";
@@ -85,6 +85,11 @@ function automationField() {
     }),
     spell: new fields.StringField({ required: true, blank: true, initial: "" }),
     note: new fields.StringField({ required: true, blank: true, initial: "" }),
+    // **WHAT A BOSS ACTION DOES BEYOND THE DESCRIPTOR** (D-809): a door, a forced move, a
+    // drain, a zone - `rules/boss-actions.mjs#cleanBossPlan`'s keys, cleaned by
+    // `cleanAutomation` in `migrateData` before this reads it. Optional: a row that carries
+    // none carries no key, so every other row's stored shape is untouched.
+    plan: new fields.ObjectField({ required: false }),
     // Why an entry is still prose (D-691): recorded, so the census can print
     // the remainder by name instead of it vanishing.
     reason: new fields.StringField({
@@ -380,8 +385,8 @@ export class NpcData extends foundry.abstract.TypeDataModel {
 
     // A creature's Proficiency Bonus is 1 + its tier (14 §1), already baked
     // into every printed attack Bonus. It is exposed for Skill Tests: a Test
-    // is attribute + this + the Rank shown, and an unlisted skill is attribute
-    // plus this alone.
+    // is the attribute's skill modifier + this + the Rank shown, and an
+    // unlisted skill is the skill modifier plus this alone (14 §1, D-810).
     this.proficiency = 1 + this.tier;
 
     // Set by tier, not by the creature (D-530).
@@ -614,6 +619,7 @@ export class NpcData extends foundry.abstract.TypeDataModel {
       // `—` stays `—`: nothing worn gives a Mindless thing an Intelligence.
       if (ability.value === null || ability.value === undefined) {
         ability.total = null;
+        ability.skillMod = null;
         continue;
       }
       ability.total = ability.value + points;
@@ -624,6 +630,9 @@ export class NpcData extends foundry.abstract.TypeDataModel {
       // and left its modifier exactly where it was, which is D-668's fault
       // read on the other actor type.
       ability.mod = abilityModifier(ability.total);
+      // A Skill Test reads the skill modifier off the same total (05 §1,
+      // D-810); every other reader keeps `mod`.
+      ability.skillMod = skillModifier(ability.total);
     }
 
     // Spellpower by school (08 §6's suffix, §9's Augments).

@@ -26,6 +26,7 @@ import { afflict, afflictQueryHandler, afflictionsOf } from "../effects/afflicti
 import { advanceAfflictionsWorld } from "../effects/affliction-clock.mjs";
 import { postPrompt } from "../effects/prompts.mjs";
 import { attackWithDialog } from "../applications/actions.mjs";
+import { AZEROTH } from "../config.mjs";
 
 /** Poll for exactly the thing the next line asserts. */
 async function until(fn, what, ms = 15000) {
@@ -321,6 +322,38 @@ export function afflictionsBatch(context) {
       assert.equal(refused?.refused, "triedToday");
       assert.lengthOf(said, 1);
       void clockIdle; void PACK_FOR; void advanceAfflictionsWorld;
+    });
+
+    it("a CHARACTER healer's Medicine Test carries their Rank and their skill modifier (D-810's F1)", async function () {
+      // The door read the Rank off `system.skills`, which only a creature has, so
+      // every character healer rolled at Rank 0 whatever they had bought.
+      this.timeout(180000);
+      const patient = await makeCharacter({ name: "ZZ Afflict Patient Rank", classes: [["Warrior", 2]] });
+      const healer = await makeCharacter({ name: "ZZ Afflict Healer Rank", classes: [["Priest", 2]] });
+      await healer.setFlag("azeroth-rpg", "skillRanks", { medicine: 4 });
+      assert.isTrue((await afflict(patient, { aff: makeDisease("lockjaw", { source: null, now: game.time.worldTime }) })).ok);
+      const row = rowOf(patient, "lockjaw");
+      const unpin = pinDie(10);
+      let card;
+      try {
+        const pending = workflows().medicineTest({ patient, afflictionId: row.id });
+        const dialog = await until(() => [...foundry.applications.instances.values()]
+          .find(a => a.rendered && String(a.id).startsWith("azeroth-roll-") && a.element?.querySelector("select[data-attack-mode]")),
+          "the Medicine dialog");
+        const select = dialog.element.querySelector("select[data-attack-mode]");
+        select.value = healer.uuid;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        await settle();
+        dialog.element.querySelector('button[data-action="roll"]').click();
+        card = await pending;
+      } finally { unpin(); }
+      assert.ok(card, "no Medicine card");
+      const provenance = card.rolls[0].provenance ?? card.rolls[0].options?.provenance ?? [];
+      const rank = provenance.find(r => /Sheet\.Rank|^Rank$/.test(String(r.label)));
+      assert.equal(rank?.value, 4, "the healer's Medicine Rank did not reach the roll");
+      const ability = AZEROTH.skillAbility.medicine;
+      const mod = provenance.find(r => /\.Skill$|skill modifier/.test(String(r.label)));
+      assert.equal(mod?.value, healer.system.abilities[ability].skillMod, "the first row is not the skill modifier");
     });
 
     it("the Corruption tab's Afflictions panel: groups, rows and the sheet's own controls (D12, Phase 7)", async function () {

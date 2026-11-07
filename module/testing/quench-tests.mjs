@@ -164,6 +164,12 @@ import { legacySpiritWalkerBatch } from "./quench-legacy-spirit-walker.mjs";
 import { legacyBlademasterBatch } from "./quench-legacy-blademaster.mjs";
 import { legacyMountainKingBatch } from "./quench-legacy-mountain-king.mjs";
 import { legacyDarkRangerBatch } from "./quench-legacy-dark-ranger.mjs";
+// Migration 0.13.1 (D-807): the bestiary audit's descriptors on the creatures a world holds,
+// through core's compendium record, the NPC model and an unlinked token's own delta.
+import { bestiaryDescriptorsBatch } from "./quench-bestiary-descriptors.mjs";
+// 14 §1's Boss Actions, for every Boss (D-809): the economy, and every Boss Action pressed.
+import { bossActionsBatch1, bossActionsBatch2, bossActionsBatch3, bossActionsBatch4, bossEconomyBatch } from "./quench-boss-actions.mjs";
+import { forcedShapesBatch } from "./quench-forced-shapes.mjs";
 // The counts live in ONE place and both readers take them from there
 // (CLAUDE.md §9); a second copy here went stale twice in a day.
 import { PACK_COUNTS } from "./pack-counts.mjs";
@@ -470,6 +476,20 @@ export function registerQuenchTests() {
     });
     quench.registerBatch("azeroth-rpg.legacy-dark-ranger", legacyDarkRangerBatch, {
       displayName: "AZEROTH: The Dark Ranger's twelve (B6a)"
+    });
+    quench.registerBatch("azeroth-rpg.bestiary-descriptors", bestiaryDescriptorsBatch, {
+      displayName: "AZEROTH: Migration 0.13.1 - the bestiary audit's descriptors on a world's creatures"
+    });
+    quench.registerBatch("azeroth-rpg.boss-economy", bossEconomyBatch, {
+      displayName: "AZEROTH: 14 SS1's Boss Action economy (D-809)"
+    });
+    for (const [n, batch] of [[1, bossActionsBatch1], [2, bossActionsBatch2], [3, bossActionsBatch3], [4, bossActionsBatch4]]) {
+      quench.registerBatch(`azeroth-rpg.boss-actions-${n}`, batch, {
+        displayName: `AZEROTH: Every Boss Action pressed, part ${n} of 4 (D-809)`
+      });
+    }
+    quench.registerBatch("azeroth-rpg.forced-shapes", forcedShapesBatch, {
+      displayName: "AZEROTH: Hex and Polymorph lay 14 SS15's Frog and Rabbit (D-808)"
     });
   });
 }
@@ -1914,10 +1934,18 @@ function sheetBatch(context) {
       assert.equal(first, "Athletics", "Athletics opens the list (02 section 8)");
     });
 
-    it("shows a skill total of modifier plus Proficiency plus Rank", function () {
-      // Athletics reads Strength: +3 from a 16, +2 Proficiency, Rank 0.
+    it("shows a skill total of the SKILL modifier plus Proficiency plus Rank (D-810)", function () {
+      // Athletics reads Strength: a 16 gives +1 to a skill (its ability modifier
+      // is +3), +2 Proficiency, Rank 0.
       const athletics = root.querySelector(".azeroth-skill .azeroth-skill-total");
-      assert.equal(athletics.textContent.trim(), "+5");
+      assert.equal(athletics.textContent.trim(), "+3");
+      // And the ability's hover names the number the row adds.
+      const tip = root.querySelector(".azeroth-skill .azeroth-skill-ability")?.dataset.tooltip ?? "";
+      assert.include(tip, "+1", "the Athletics row names Strength's skill modifier");
+      // The plate's chip keeps the ability modifier and names both on its hover.
+      const chip = root.querySelector('[data-ability="str"]').closest(".azeroth-attribute").querySelector(".azeroth-chip-mod");
+      assert.equal(chip.textContent.trim(), "+3");
+      assert.include(chip.dataset.tooltip ?? "", "+1");
     });
 
     it("has no progress bar anywhere (D-508)", function () {

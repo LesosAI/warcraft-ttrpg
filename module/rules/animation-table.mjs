@@ -932,8 +932,10 @@ export const SPELL_ANIMATIONS = Object.freeze({
       snd("psfx.1st-level-spells.entangle.vines.v1.001.intro")
     ])]
   },
-  // No frog: the token is never touched, and the appearance would have to wait
-  // for a failed resistance in any case (the `sustain-resisted` candidate).
+  // The frog is the token itself (D-808): a failed Spirit Test dresses it in
+  // 14 §15's Frog, and this smoke, which plays on that failure alone, is what it
+  // appears in. The `sustain-resisted` candidate below would lay a second, lasting
+  // look over the frog, and stays the lead's pick.
   hex: {
     cues: [cue("resist", [
       fx("jb2a.smoke.puff.centered.grey", { place: "resisted", scale: 1.3, filter: "HEX" }),
@@ -2615,32 +2617,62 @@ export const FEATURE_ANIMATIONS = Object.freeze({
       snd("psfx.creature.dragons.roar.small", { volume: 0.35 })
     ])]
   },
+  // **THE CLOSING MARK OF A MULTI-STRIKE USE** (the bestiary audit, D-807). Each strike's own
+  // attack card plays its weapon's form and its hit or miss, so the completion card adds only a
+  // faint mark at the creature beside its quiet thump - never an impact, never on a target.
   "ability:qiraji-cleave": {
-    cues: [cue("use", [snd(SOUNDS.blunt, { volume: 0.15 })])]
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.outpulse.circle.02.normal", { place: "source", scale: 0.55, opacity: 0.35, filter: "DESATURATE" }),
+      snd(SOUNDS.blunt, { volume: 0.15 })
+    ])]
   },
   "ability:reaver-cleave": {
-    cues: [cue("use", [snd(SOUNDS.blunt, { volume: 0.15 })])]
+    cues: [cue("use", [
+      fx("jb2a.smoke.puff.side.grey", { place: "source", scale: 0.5, opacity: 0.45 }),
+      snd(SOUNDS.blunt, { volume: 0.15 })
+    ])]
   },
   "ability:guard-cleave": {
-    cues: [cue("use", [snd(SOUNDS.blunt, { volume: 0.15 })])]
+    cues: [cue("use", [
+      fx("jb2a.melee_generic.whirlwind.01.orange", { place: "source", scale: 0.55, opacity: 0.35, filter: "DESATURATE" }),
+      snd(SOUNDS.blunt, { volume: 0.15 })
+    ])]
   },
   "ability:ghoul-cleave": {
-    cues: [cue("use", [snd(SOUNDS.blunt, { volume: 0.15 })])]
+    cues: [cue("use", [
+      fx("jb2a.smoke.puff.centered.grey", { place: "source", scale: 0.45, opacity: 0.45, filter: "DARK" }),
+      snd(SOUNDS.blunt, { volume: 0.15 })
+    ])]
   },
   "ability:mighty-blow": {
-    cues: [cue("use", [snd(SOUNDS.blunt, { volume: 0.15 })])]
+    cues: [cue("use", [
+      fx("jb2a.impact.ground_crack.01.orange", { place: "source", scale: 0.45, opacity: 0.5, below: true, filter: "EARTH" }),
+      snd(SOUNDS.blunt, { volume: 0.15 })
+    ])]
   },
   "ability:royal-trample": {
-    cues: [cue("use", [snd(SOUNDS.blunt, { volume: 0.15 })])]
+    cues: [cue("use", [
+      fx("jb2a.impact.ground_crack.02.orange", { place: "source", scale: 0.6, opacity: 0.5, below: true, filter: "EARTH" }),
+      snd(SOUNDS.blunt, { volume: 0.15 })
+    ])]
   },
   "ability:vicious-rend": {
-    cues: [cue("use", [snd(SOUNDS.blunt, { volume: 0.15 })])]
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.inpulse.circle.03.normal", { place: "source", scale: 0.45, opacity: 0.35, filter: "DESATURATE" }),
+      snd(SOUNDS.blunt, { volume: 0.15 })
+    ])]
   },
   "ability:rending-claws": {
-    cues: [cue("use", [snd(SOUNDS.blunt, { volume: 0.15 })])]
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.inpulse.circle.04.normal", { place: "source", scale: 0.4, opacity: 0.35, filter: "DARK" }),
+      snd(SOUNDS.blunt, { volume: 0.15 })
+    ])]
   },
   "ability:flesh-rot": {
-    cues: [cue("use", [snd(SOUNDS.blunt, { volume: 0.15 })])]
+    cues: [cue("use", [
+      fx("jb2a.particles.outward.greenyellow.02.02", { place: "source", scale: 0.35, opacity: 0.45, filter: "DARK" }),
+      snd(SOUNDS.blunt, { volume: 0.15 })
+    ])]
   },
   "ability:flesh-rot-wound": {
     cues: [cue("use", [
@@ -2776,12 +2808,29 @@ export const FEATURE_ANIMATIONS = Object.freeze({
       snd(SOUNDS.blunt, { volume: 0.4 })
     ])]
   },
-  "ability:torment": { cues: [cue("use", SCHOOL_CUES.shadow)] },
-  "ability:soothing-kiss": { cues: [cue("use", SCHOOL_CUES.shadow)] },
-  "ability:lash-of-pain": { cues: [cue("use", SCHOOL_CUES.shadow)] },
-  "ability:consume-shadows": { cues: [cue("use", SCHOOL_CUES.shadow)] },
-  "ability:blood-pact": { cues: [cue("use", [...SCHOOL_CUES.fel,
-    snd("psfx.1st-level-spells.dissonant-whispers.v1.001", { volume: 0.5 })])] },
+  // **THE WARLOCK'S DEMONS IN THEIR OWN VOICES** (the bestiary audit, D-807): the voidwalker's
+  // taunts a violet pulse, the succubus a heart and a strand, the imp's pact a fel burst. Each had
+  // borrowed the Shadow or Fel school's one restrained cast cue.
+  "ability:torment": { cues: [cue("use", [
+    fx("jb2a.extras.tmfx.inpulse.circle.02.normal", { place: "source", scale: 0.7, opacity: 0.8, filter: "PSYCHIC" }),
+    snd("psfx.incantations.masculine.002.demonic.harm.004", { volume: 0.45 })
+  ])] },
+  "ability:soothing-kiss": { cues: [cue("use", [
+    fx("jb2a.markers.heart.pink.02", { place: "source", scale: 0.6 }),
+    snd("psfx.incantations.feminine.001.demonic.help.008", { volume: 0.5 })
+  ])] },
+  "ability:lash-of-pain": { cues: [cue("use", [
+    fx("jb2a.energy_strands.02.marker.bluepurple", { place: "source", scale: 0.6, filter: "SHADOW_B" }),
+    snd("psfx.incantations.feminine.001.demonic.harm.007", { volume: 0.5 })
+  ])] },
+  "ability:consume-shadows": { cues: [cue("use", [
+    fx("jb2a.template_circle.aura.03.inward.001.complete.combined.blue", { place: "source", scale: 0.6, filter: "SHADOW_B" }),
+    snd("psfx.incantations.masculine.002.demonic.help.005", { volume: 0.4 })
+  ])] },
+  "ability:blood-pact": { cues: [cue("use", [
+    fx("jb2a.template_circle.out_pulse.01.burst.bluewhite", { place: "source", sizeFt: 20, opacity: 0.7, filter: "FEL_B" }),
+    snd("psfx.incantations.masculine.001.demonic.help.002", { volume: 0.5 })
+  ])] },
   "ability:fire-shield": { cues: [cue("use", [
     fx("jb2a.cast_generic.fire.01.orange", { place: "target", scale: 0.7 }),
     snd(SOUNDS.fire, { volume: 0.5 })
@@ -2791,8 +2840,8 @@ export const FEATURE_ANIMATIONS = Object.freeze({
     snd(SOUNDS.fire, { volume: 0.4 })
   ])] },
   "ability:suffering": { cues: [cue("use", [
-    fx("jb2a.cast_generic.02.blue", { place: "source", sizeFt: 20, filter: "SHADOW_B", opacity: 0.65 }),
-    snd("psfx.1st-level-spells.dissonant-whispers.v1.001", { volume: 0.7 })
+    fx("jb2a.extras.tmfx.outpulse.circle.01.normal", { place: "source", sizeFt: 20, opacity: 0.65, filter: "PSYCHIC" }),
+    snd("psfx.incantations.masculine.002.demonic.harm.004", { volume: 0.6 })
   ])] },
   "ability:avalanchions-trample": {
     cues: [cue("use", [

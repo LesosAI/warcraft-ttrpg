@@ -1015,27 +1015,33 @@
     "Ability": {
       "Str": {
         "Label": "Strength",
-        "Abbr": "STR"
+        "Abbr": "STR",
+        "Skill": "Strength skill modifier"
       },
       "Dex": {
         "Label": "Dexterity",
-        "Abbr": "DEX"
+        "Abbr": "DEX",
+        "Skill": "Dexterity skill modifier"
       },
       "Con": {
         "Label": "Constitution",
-        "Abbr": "CON"
+        "Abbr": "CON",
+        "Skill": "Constitution skill modifier"
       },
       "Int": {
         "Label": "Intelligence",
-        "Abbr": "INT"
+        "Abbr": "INT",
+        "Skill": "Intelligence skill modifier"
       },
       "Wis": {
         "Label": "Wisdom",
-        "Abbr": "WIS"
+        "Abbr": "WIS",
+        "Skill": "Wisdom skill modifier"
       },
       "Cha": {
         "Label": "Charisma",
-        "Abbr": "CHA"
+        "Abbr": "CHA",
+        "Skill": "Charisma skill modifier"
       }
     },
     "Trait": {
@@ -1890,7 +1896,8 @@
       "NextTurn": "until its next turn",
       "Encounter": "for the encounter",
       "CasterTurnStart": "until the start of the caster's next turn",
-      "Minute": "for one minute"
+      "Minute": "for one minute",
+      "EndOfRound": "until the end of the round"
     },
     "Swarm": {
       "Attack": "Swarm",
@@ -1983,6 +1990,7 @@
       }
     },
     "Card": {
+      "ApplyToSelfAlt": "Apply the higher amount",
       "EffectNotSustained": "{name} is no longer sustained, so its effect cannot be applied.",
       "SustainCleanupFailed": "A sustained spell's effects could not be removed. The GM should check the affected actors before continuing.",
       "FearCleanupFailed": "Damage was applied, but Fear could not be removed. Check the target's Fear effects before continuing.",
@@ -2211,6 +2219,9 @@
       "Rank": "Rank",
       "InCareer": "In-career: this Rank costs the cheap rate",
       "Proficiency": "Proficiency",
+      "SkillModifierTip": "{ability}: skill modifier {skill}",
+      "ModifiersTip": "Ability modifier {ability} · skill modifier {skill}",
+      "NoScoreForSkill": "{name} has no {ability} score and makes no {skill} Test.",
       "Languages": "Languages",
       "Motive": "On the road because",
       "Purse": "Purse",
@@ -2382,7 +2393,8 @@
       "ClearNamed": "Clear {name}",
       "FromTalent": "A talent grants it. Untake the talent to be rid of it.",
       "FromBond": "The bond grants it. It stands while the bond does.",
-      "FromAura": "An aura grants it. It lifts when you leave the aura, or the aura ends. A GM may switch it off."
+      "FromAura": "An aura grants it. It lifts when you leave the aura, or the aura ends. A GM may switch it off.",
+      "ForcedShape": "Laid on this creature by a spell or a feature: it ends as that says, or a GM takes it off."
     },
     "Aura": {
       "EffectName": "{source} ({owner})",
@@ -2803,6 +2815,7 @@
         "Pummel": "Two Banes on the target's next Casting Test.",
         "WildBond": "The touch restores Health equal to your tier to your companion.",
         "LifeTap": "Spend any Health; gain twice that much Mana.",
+        "Polymorph": "Some targets are immune to Polymorph, and which ones is the GM's call. A creature that fails becomes a Rabbit until it takes damage: its Speed is 10 feet and it cannot attack, cast, use a feature or take a Reaction (Hex's limits, the tool's reading); whether it can speak is the table's call.",
         "Charge": "Your first Overbear or Sunder this encounter costs no Rage and grants 1.",
         "Finisher": "Spend every Combo Point on an attack's roll dialog; each one adds 1 damage.",
         "Sprint": "Your first Move of a fight costs no Half-Action."
@@ -3365,12 +3378,17 @@
         "Shapeshift": "Shapeshift form",
         "Avatar": "Avatar of the Wild",
         "Metamorphosis": "Metamorphosis",
-        "Battlerig": "Gnomish Battle Rig"
+        "Battlerig": "Gnomish Battle Rig",
+        "Hexed": "Hex",
+        "Polymorphed": "Polymorph"
       },
       "EffectName": {
         "shapeshift": "{name} form",
         "avatar": "{name} form (Avatar of the Wild)",
-        "metamorphosis": "{name} form (Metamorphosis)"
+        "metamorphosis": "{name} form (Metamorphosis)",
+        "battlerig": "{name}",
+        "hexed": "{name} (Hex)",
+        "polymorphed": "{name} (Polymorph)"
       },
       "EffectText": "{name}: Strength, Dexterity, Constitution, Defense, Armor Points, Speed, size and attacks are the block's. Health and carrying stay the character's own. What is worn melds into the shape, and its Signatures and affixes still count. Leave it from the character sheet.",
       "InForm": "In {form}",
@@ -3402,6 +3420,35 @@
       "NotWritten": "{name}: {form} could not be written, and no shape was taken.",
       "SpellsInFerocity": "In {form}: Mana cannot be spent, so each spell's cost below is its price in Ferocity, 1 for every 2 Mana, rounded up. A Sustain already held is still paid in Mana.",
       "FreeShift": "{talent}: this shift cost no action."
+    },
+    "ForcedShape": {
+      "Refuse": {
+        "Attack": "{name} is a {form} and cannot attack.",
+        "Cast": "{name} is a {form} and cannot cast.",
+        "Feature": "{name} is a {form} and cannot use a class feature or a talent's Use.",
+        "Ability": "{name} is a {form} and cannot use an ability.",
+        "Signature": "{name} is a {form} and cannot use a Signature.",
+        "Reaction": "{name} is a {form} and cannot take a Reaction.",
+        "Ready": "{name} is a {form} and cannot ready an action.",
+        "Leave": "{name} cannot leave the {form} by choice. {ends} A GM may take it off by hand."
+      },
+      "Ends": {
+        "Hexed": "Any damage ends it, and so does the end of the caster's Sustain.",
+        "Polymorphed": "Any damage ends it."
+      },
+      "Text": "Under {by} this creature takes the form's size and look and keeps its own Health, Defense and Armor Points. Its Speed is {speed} feet, and it cannot attack, cast, use a feature, an ability or a Signature, or take a Reaction. Whether it can speak is the table's call. {ends}",
+      "Card": "{name} fails the Test and becomes a {form}. Its Speed is {speed} feet, and it cannot attack, cast, use a feature, an ability or a Signature, or take a Reaction; whether it can speak is the table's call. {ends}",
+      "InForm": "{form}: cannot attack, cast, use a feature or react",
+      "OwnNumbers": "Its own: {by} leaves them",
+      "SpeedFrom": "{by} sets it at {speed} feet",
+      "Holds": "{name} is a {form}, laid by somebody else: a shape of its own cannot replace it.",
+      "EndedByDamage": "{name} took damage, and the {form} ends.",
+      "SustainEnded": "{name} no longer sustains {spell}: the form it laid has ended.",
+      "SustainGone": "{name}: {spell} is no longer sustained, so no form is laid.",
+      "NoGM": "{name}: the form {by} lays is written by a GM, and no GM is online. The Test is not rolled.",
+      "Refused": "The form was not laid: the card, the creature or the Test does not answer it.",
+      "ApplyRefused": "Hex lands with the target's failed Spirit Test: press its Resist, not Apply.",
+      "SustainNotEnded": "The form has ended, and its caster's Sustain could not be ended with it: press Stop on the caster's Spells tab."
     },
     "Picker": {
       "Add": "Add",
@@ -4289,6 +4336,7 @@
       "Phasing": "Moves through what is in the way"
     },
     "Summon": {
+      "AlreadyPlaced": "This card has already placed what it called. Drag the tokens rather than placing them again.",
       "Side": {
         "Summoner": "On the summoner's side",
         "Opposing": "Against the summoner"
@@ -4319,8 +4367,60 @@
       "Points": "Boss Action points",
       "Left": "{n} left this round",
       "Held": "{value} of {max} left this round",
-      "NoPoints": "{name} lists no Boss Actions, so there are no points to spend.",
-      "Short": "{name} costs {cost} Boss Action points and only {held} are left this round."
+      "NoPoints": "{boss} holds no Boss Action points, so {name} cannot be taken.",
+      "Short": "{name} costs {cost} Boss Action points and {boss} has only {held} left this round.",
+      "TurnTaken": "{boss} has already taken a Boss Action after this turn. A Boss spends one after each turn, and a ×2 action is the only time it spends two.",
+      "NoGM": "A Boss Action that writes on a creature you do not own needs a GM online. Nothing was spent.",
+      "NeedsToken": "{name} needs {boss}'s token on the board. Nothing was spent.",
+      "PickSpace": "{name}: click the space to move to, within {feet} feet. Right-click or Escape to cancel; nothing is spent until you pick.",
+      "TooFar": "{name} reaches no further than {feet} feet.",
+      "OneTarget": "{name} acts on one creature. Target exactly one. Nothing was spent.",
+      "TargetTooFar": "{target} is beyond {name}'s {feet} feet. Nothing was spent.",
+      "PickPlace": "{name}: click where {target} is put down. Right-click or Escape to cancel; nothing is spent until you pick.",
+      "NoAlly": "{name} needs a creature on the Boss's side within {feet} feet that can attack. Nothing was spent.",
+      "NoClasses": "{name} found no classes to name. Nothing was spent.",
+      "NoCorpse": "{name} finds no fallen creature to raise. Nothing was spent.",
+      "PoolGained": "{boss} gains {n} {pool} ({name}).",
+      "PoolLost": "{target} loses {n} {pool} ({name}).",
+      "NoPool": "{target} holds no {pool} for {name} to take.",
+      "Moved": "{target} is moved ({name}).",
+      "NotMoved": "{target} could not be moved ({name}). Move the token by hand.",
+      "MissNextText": "The next attack against this creature this round misses.",
+      "MissNext": "The next attack against {target} this round misses ({name}).",
+      "MissNextRow": "Misses: the next attack against it this round",
+      "AwayText": "Sent away from the fight. It returns at the start of the round after next.",
+      "Away": "{target} is sent away and returns at the start of round {round} ({name}).",
+      "AwayTurn": "{name} is away from the fight and takes no turn.",
+      "Returns": "{name} returns to the fight.",
+      "Arriving": "{name} arrives on the next round and takes no turn this round.",
+      "Rode": "{target} rides {feet} feet along the line ({name}).",
+      "Disengaged": "{boss} moves without provoking ({name}): drag the token, then press Attack.",
+      "AllyAttacks": "{target} takes its Attack now, and its attack Test takes Boon ({name}).",
+      "MarkedText": "Every creature on {boss}'s side takes Boon on attack Tests against this creature, and the first of those attacks to hit deals {n} extra damage.",
+      "Marked": "{target} is named: {boss}'s side takes Boon against it until the end of the round ({name}).",
+      "AmaniText": "Every attack Test against this creature takes Boon until the end of the round.",
+      "Amani": "{boss}'s attack Tests and every attack Test against {boss} take Boon until the end of the round ({name}).",
+      "ClassCalled": "{name}: the {cls} takes Bane on Casting Tests until the end of its next turn - {names}.",
+      "Nobody": "nobody in the fight",
+      "EnfeebleText": "Its Armor Points count as 0 until the end of the round.",
+      "Enfeebled": "{target}'s Armor Points count as 0 until the end of the round ({name}).",
+      "Copies": "{n} copies of {boss} step out ({name}).",
+      "NoCopies": "{name} placed no copies. Place them by hand.",
+      "CopyName": "{name} (copy)",
+      "Raised": "{n} {entry} raised where they fell ({name}).",
+      "Sundered": "{target}'s armour at the struck location loses {n} Armor Point until it is repaired ({name}).",
+      "BaneLaid": "{target} takes Bane on attack Tests against {boss} until the end of its next turn ({name}).",
+      "SideRefused": "{target} is not a {kinds}, so {name} does not turn it.",
+      "SideText": "Fights on {boss}'s side.",
+      "SideSwitched": "{target} fights on {boss}'s side ({name}).",
+      "SideNoFight": "{target} is in no fight, so {name} has no side to turn it to.",
+      "CannotAttackText": "This creature cannot attack until the end of its next turn.",
+      "CannotAttack": "{target} cannot attack until the end of its next turn ({name}).",
+      "CannotAttackRefused": "{name} cannot attack: {source}.",
+      "ReminderText": "Must move toward {boss} and attack it on its next turn if it is able.",
+      "Reminder": "{target} must move toward {boss} and attack it on its next turn if it is able ({name}).",
+      "Drained": "{boss} recovers {n} Health ({name}).",
+      "GripStrikes": "{boss}'s grip holds {target} ({name}): {n} damage."
     },
     "Signature": {
       "ChosenTargetRequired": "Select a valid recipient for the signature bonus before casting. If the item or target changed, make the selection again.",

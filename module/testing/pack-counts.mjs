@@ -39,8 +39,8 @@ export const PACK_COUNTS = Object.freeze({
     why: "08 §5: form 16 + cut 4 + effect 11 + enchantment 28 = 59, matching 06 §3's roster, plus 15 Mount traits that belong to 08 §15 alone (D-399)"
   },
   bestiary: {
-    count: 342,
-    why: "14 holds 342 across five weight classes, including seven Totems, Spirit Wolf, six Tinker constructs, 145 selected Classic examples and twenty additional Classic actors through Felguard Elite; offline verification is complete for these additions, with live acceptance pending"
+    count: 344,
+    why: "14 holds 344 across five weight classes, including seven Totems, Spirit Wolf, six Tinker constructs, 145 selected Classic examples, twenty additional Classic actors through Felguard Elite, and §15's Frog and Rabbit, the forms Hex and Polymorph lay (D-808); offline verification is complete for these additions, with live acceptance pending"
   },
   legacies: { count: 7, why: "15 §2's seven, one per Legacy on 04 §1's roster, lore and no ranks (D-781)" },
   affixes: {

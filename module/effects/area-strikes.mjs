@@ -620,6 +620,15 @@ export async function areaTestOutcome({ actor, message, result } = {}) {
     if (await landCondition(actor, id, until, area, caster, { messageId: message.id })) landed.push(id);
     if (areaTransferRefusal(area)) return interrupted();
   }
+  // **THE POISON A ZONE'S TEST NAMES** (14's Vent the Section, D-809; D12): the carrier,
+  // laid on a failure at the area's DC, which holds Poisoned itself - never the bare
+  // condition beside it.
+  if (!success && area.check?.afflict?.key) {
+    const { afflictPoison } = await import("../dice/afflictions-workflows.mjs");
+    await afflictPoison({ victim: actor, name: area.check.afflict.name ?? spellName, key: area.check.afflict.key, dc: area.dc ?? null,
+      resilience: area.check.resilience ?? "body", carried: 1, by: caster });
+    landed.push("poisoned");
+  }
   describeLanded();
   if (outcome.bane) {
     // A Bane on this kind of Test UNTIL the end of its next turn - lasting,

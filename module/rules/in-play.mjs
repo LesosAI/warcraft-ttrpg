@@ -54,7 +54,11 @@ export const SYNCED_REASONS = Object.freeze({
   talentEffect: "AZEROTH.InPlay.FromTalent",
   bond: "AZEROTH.InPlay.FromBond",
   // `rules/auras.mjs#AURA_FLAG` (D-755).
-  aura: "AZEROTH.InPlay.FromAura"
+  aura: "AZEROTH.InPlay.FromAura",
+  // A shape somebody else laid (07's Hex, 02's Polymorph; D-808): its wearer does not
+  // take it off - damage or the caster's Sustain ends it, or a GM does. No effect wears
+  // a flag of this name; `actions.mjs#syncedBy` names it for a player's reader.
+  forcedShape: "AZEROTH.InPlay.ForcedShape"
 });
 
 /** A condition that cannot be cleared by hand, and why. Keyed by actor type. */

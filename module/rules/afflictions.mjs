@@ -635,14 +635,17 @@ export const turnKeyOf = fight => (fight ? `${fight.id}:${fight.round}` : null);
  * (`turnKey` null). Returns `{banes, names, marks}`: `marks` are the carrier ids
  * whose once-a-turn mark a roll of this kind spends.
  */
-export function afflictionBanes(rows = [], { kind, skill = null, resilience = null, turnKey = null, abilityOf = {} } = {}) {
+export function afflictionBanes(rows = [], { kind, skill = null, resilience = null, ability = null, turnKey = null, abilityOf = {} } = {}) {
   let banes = 0;
   const names = [], marks = [];
+  // The ability this Test reads: its skill's, or a bare ability Test's own
+  // (05 §1, D-810's F4), so *a Bane on Strength Tests* reaches both.
+  const reads = skill ? (abilityOf[skill] ?? null) : ability;
   for (const { id, aff } of rows) {
     if (!aff) continue;
     if (penaltiesApply(aff)) {
       for (const b of aff.repeat?.banes ?? []) {
-        const hit = (kind === "skill" && skill && abilityOf[skill] && b.test === abilityOf[skill])
+        const hit = (kind === "skill" && reads && b.test === reads)
           || (kind === "resilience" && resilience && b.test === `resilience:${resilience}`);
         if (hit) { banes += 1; names.push(aff.name); }
       }

@@ -1,6 +1,7 @@
 {{!--
   The twenty-three of 02 SS8 in book order, grouped by attribute.
-  Total = attribute modifier + Proficiency + Rank.
+  Total = skill modifier + Proficiency + Rank (05 SS1, D-810); the ability's
+  hover names the skill modifier the row adds.
 
   Hidden — not removed — when a wide tab takes this column. The grid drops a
   track with it, because a hidden element is not a grid item (D11 SS1).
@@ -23,7 +24,7 @@
       <button type="button" class="azeroth-skill-name" data-action="rollSkill" data-skill="{{this.key}}"{{#if this.tooltip}} data-tooltip="{{this.tooltip}}" data-tooltip-direction="RIGHT"{{/if}}>
         {{localize this.label}}{{#if this.inCareer}} <span class="azeroth-in-career" data-tooltip="{{localize 'AZEROTH.Sheet.InCareer'}}">&#9670;</span>{{/if}}
       </button>
-      <span class="azeroth-skill-ability" data-tooltip="{{localize this.abilityLabel}}">{{localize this.abilityAbbr}}</span>
+      <span class="azeroth-skill-ability" data-tooltip="{{this.abilityTip}}">{{localize this.abilityAbbr}}</span>
       <span class="azeroth-skill-total">{{azerothSigned this.total}}</span>
     </li>
     {{/each}}

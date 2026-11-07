@@ -25,6 +25,10 @@ import { DISEASES, diseaseByName } from "./afflictions.mjs";
 import { weaponDamageSpec } from "./damage-spec.mjs";
 // What an ability's Test governs, in 14's words (the B8a2 pass).
 import { abilityGoverns, abilityHalvesOnPass, abilityNoneOnPass } from "./resisted.mjs";
+// The repository's one sentence splitter (CLAUDE.md §4, D-722).
+import { sentences } from "./spell-effects.mjs";
+// 14 §1's Boss Actions (D-809): the plan a row carries beyond the descriptor.
+import { cleanBossPlan, hasPlan } from "./boss-actions.mjs";
 
 export const ABILITY_KINDS = Object.freeze(["none", "attack", "test", "spell", "heal", "utility", "passive", "summon"]);
 
@@ -152,6 +156,11 @@ export function cleanAutomation(raw) {
   };
   out.spell = typeof raw.spell === "string" ? raw.spell : "";
   out.note = typeof raw.note === "string" ? raw.note : "";
+  // **WHAT A BOSS ACTION DOES BEYOND THE DESCRIPTOR** (D-809): `rules/boss-actions.mjs
+  // #cleanBossPlan`, carried only where it holds something, so the 600-odd rows that
+  // carry none keep their stored shape byte for byte.
+  const plan = cleanBossPlan(raw.plan);
+  if (Object.keys(plan).length) out.plan = plan;
   return out;
 }
 
@@ -192,7 +201,14 @@ const COUNTS = Object.freeze({ a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, f
  * `system.flies`, read off the Speed row and printed as the tier's flying
  * pace; sixteen blocks carry it and its prose is deliberately atmospheric.
  */
-const ON_THE_BLOCK = new Set(["Winged"]);
+const ON_THE_BLOCK = new Set([
+  "Winged",
+  // **DEFENSELESS IS THE TOTEM'S DEFENSE 0, AP 0 AND HEALTH 1** (D-707: *six Defenseless
+  // paragraphs whose rule is the Health and Defense already on the block*). Recorded as
+  // `narrative` until the bestiary audit, which said the words state no mechanic; they state
+  // three, and the block carries all three.
+  "Defenseless"
+]);
 
 /**
  * **ABILITIES ANOTHER DOOR READS BY THEIR OWN NAME**, which the seed must not
@@ -336,7 +352,6 @@ const OWN_DOOR = Object.freeze({
   "Consume Shadows": Object.freeze({ kind: "utility", action: null, uses: { max: 1, value: 1, per: "short" } }),
   "Fire Shield": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "short" } }),
   "Blood Pact": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "short" } }),
-  "Blood Pact": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "short" } }),
   "Soothing Kiss": Object.freeze({ kind: "utility", action: "half", dc: 15,
     cost: { pool: "power", amount: 1 }, uses: { max: 1, value: 1, per: "short" } }),
   "Suffering": Object.freeze({ kind: "utility", action: "action", uses: { max: 1, value: 1, per: "short" } }),
@@ -376,8 +391,53 @@ const OWN_DOOR = Object.freeze({
   "Vekniss Itch": Object.freeze({ kind: "utility", action: "half", uses: { max: 1, value: 1, per: "short" } }),
   "Stinger Charge": Object.freeze({ kind: "utility", action: "half" }),
   "Reflection Field": Object.freeze({ kind: "utility", action: "half", uses: { max: 1, value: 1, per: "short" } }),
+  // **DOORS THAT READ WHAT THE SEED HAPPENED TO WRITE** (the bestiary audit, D-807). Each is
+  // routed by its NAME and validates a descriptor the prose seeded by accident, so any change
+  // to the seed could have broken it in silence: `workflows.useAbility` hands Mortal Strike to
+  // `effects/sentinel-strike-use.mjs` only at `utility`/`action` (`rules/mortal-strike.mjs`),
+  // the incoming attack's card offers Phase Shift at `utility`/`reaction` with no price
+  // (`effects/phase-shift-use.mjs`), and `effects/voidwalker-sacrifice-use.mjs` reads Sacrifice
+  // at `utility`/`half`. Pinned here with exactly what each door checks.
+  "Mortal Strike": Object.freeze({ kind: "utility", action: "action" }),
+  "Phase Shift": Object.freeze({ kind: "utility", action: "reaction" }),
+  "Sacrifice": Object.freeze({ kind: "utility", action: "half" }),
+  // Read off the blow, never pressed: `canvas/fel-shod.mjs` lays the burning ground after a hit
+  // with the Fel-shod trait, and `effects/devour-magic-wound.mjs` drains or silences off a bite
+  // that wounds. The seed had recorded Fel-shod as `narrative` - a mechanic nothing carries -
+  // and had made Devour Magic a Use button laying Silenced by hand beside its own door.
+  "Fel-shod": Object.freeze({ kind: "passive" }),
+  "Devour Magic": Object.freeze({ kind: "passive" }),
   [CUTTING_GEAR.name]: Object.freeze({ kind: "utility" }),
   "Ejector Seat": Object.freeze({ kind: "none", reason: "tableCall" })
+});
+
+/**
+ * The descriptor an own door stamps for `name`, or null (D-807). The census
+ * (`ability-doors.test.mjs`) and the audit's generator ask this rather than read
+ * the table, so a row counts as DEDICATED only where its door is named here.
+ */
+export function ownDoorFor(name) {
+  const key = String(name ?? "").trim();
+  return Object.hasOwn(OWN_DOOR, key) ? OWN_DOOR[key] : null;
+}
+
+/** Every name an own door reads, sorted. */
+export const OWN_DOOR_NAMES = Object.freeze(Object.keys(OWN_DOOR).sort());
+
+/**
+ * The own doors read by something other than their name written out, and where (D-807).
+ * The census holds every other own-door name to a module that writes it as a string. Extra
+ * Attack IS written out - by 02's class feature of that name, which is the character's and
+ * not this door - so it is named here, where its reader is.
+ */
+export const OWN_DOOR_READ_BY = Object.freeze({
+  // `AzerothActor#hasExtraAttack` reads /extra attack|multiattack/ off the row's name.
+  "Extra Attack": "module/documents/actor.mjs",
+  "Multiattack (Double Attack)": "module/documents/actor.mjs",
+  // Raise Alarm's door asks the GM which intruder the scanner detects before it pays.
+  "Intruder Scanner": "module/effects/mobile-alert-detection.mjs",
+  // The Sentinel pack's mending power, advanced at each turn by `documents/combat.mjs`.
+  "Sentinel Mending": "module/effects/sentinel-mending.mjs"
 });
 
 /**
@@ -448,7 +508,15 @@ const AURA_HEAL = /\bwithin\s+\d+\s*(?:feet|ft)\s+(?:of\s+[\w'’]+\s+)?(?:recov
 const GRANTS_TO_OTHERS = /\b(?:every|each|a|an|any|one)\s+(?:other\s+)?[\w'’ -]{0,25}?creature\b[^.]{0,90}?\btakes?\b|\bevery\s+[a-z'’-]+\s+within\b|\bevery creature under\b/i;
 
 /** A clause the tool cannot judge: light, sight, a charge, standing somewhere. */
-const TABLE_CALL = /\b(?:in daylight|by daylight|under an open night sky|it can see|he can see|she can see|they can see|inside the [a-z ]+|standing on|in the open|from dusk|at night|in darkness|(?:on|in) a turn in which)\b/i;
+const TABLE_CALL = /\b(?:in daylight|by daylight|under an open night sky|it can see|he can see|she can see|they can see|inside the [a-z ]+|standing on|in the open|from dusk|at night|in darkness|in dim light|(?:on|in) a turn in which)\b/i;
+
+/**
+ * An aura that ENDS a condition on somebody else (D-807): *A Crusade creature that can see
+ * Whitemane ends **Frightened** at the start of its turn*, *A creature of the Cult of the
+ * Damned within 30 feet of Gandling ends **Frightened***. `AURA` keys on a measure and a verb
+ * of taking, and these name a faction and an ending.
+ */
+const AURA_ENDS = /\b(?:[Aa]n?|[Ee]very|[Ee]ach|[Aa]ny)\s+[\w'’ -]{0,40}?creature\b[^.]{0,60}?\bends?\s+(?:one\s+|any\s+)?[A-Z][a-z]+\b/;
 
 /**
  * A refusal the tool must not read flat: *by anything of its own size or
@@ -456,6 +524,69 @@ const TABLE_CALL = /\b(?:in daylight|by daylight|under an open night sky|it can 
  * an unqualified refusal as a bare *cannot be X*, and only that is read.
  */
 const QUALIFIED = /\bby anything\b|\bunless\b|^\s*while\b/i;
+
+/**
+ * A condition the words END rather than lay (D-807): *every Crusade creature within 30 feet
+ * ends **Frightened***. 14 names a condition by A1's own word, so the verb in front of it is
+ * what tells an ending from an infliction.
+ */
+const CONDITION_WORDS = Object.keys(AZEROTH.conditions).map(id => (id === "bleeding" ? "Bleeding|Bleed" : id)).join("|");
+const ENDED_CONDITION = new RegExp(`\\bends?\\s+(?:one\\s+|any\\s+)?(?:${CONDITION_WORDS})\\b`, "gi");
+
+/**
+ * A condition the words NEGATE or name as somebody's STATE (D-807): the Lordamere Otter *is
+ * never **Slowed** by water or current*, the Orgrimmar Peon hauls *without being **Slowed***,
+ * and the Carrion Bird's attacks take Boon *against a creature that is **Prone***. Each had
+ * seeded a button laying the condition the sentence denies or merely looks for.
+ */
+const UNLAID_CONDITION = new RegExp(`\\b(?:never|not)\\s+(?:be\\s+|being\\s+)?(?:${CONDITION_WORDS})\\b`
+  + `|\\bwithout\\s+being\\s+(?:${CONDITION_WORDS})\\b`
+  + `|\\b(?:that|who|which)\\s+(?:is|are)\\s+(?:already\\s+)?(?:${CONDITION_WORDS})\\b`, "gi");
+
+/** A `once per` that limits who RECEIVES the ability, never how often it is used (D-807). */
+const RECIPIENT_LIMIT = /\b(?:a|an|each|every|any)\s+(?:other\s+)?(?:creature|target|ally)\s+may\s+(?:take|receive|benefit\s+from)\s+(?:this|it)\b/i;
+
+/**
+ * An attack Test a Boon or Bane lands on, written with the Boon AFTER the Tests (D-807):
+ * *its attack Tests take Boon*, *every attack Test against him takes Boon*. D-707's
+ * `BOON_TESTS` strips the form with the Boon in front; this is its mirror. And an attack Test
+ * ALREADY ROLLED: the Sellsword's Veteran *may repeat one failed attack Test or Resilience
+ * Test*, which is a reroll and not a blow.
+ */
+const LATE_BOON_TESTS = /\battack Tests?\b(?:\s+(?:made\s+)?against\s+[\w'’]+)?\s+takes?\s+(?:a\s+)?(?:Boon|Bane)\b|\bfailed attack Tests?\b/gi;
+
+/**
+ * The phrases that say THIS block swings, whoever else the sentence is about. *Ursal attacks
+ * a creature he has already wounded and the attack Test takes Boon* is his own blow with a
+ * Boon on it; *attacks the nearest creature* is still the TARGET's (the Satyr's Whispers).
+ */
+const STRONG_ATTACK = /\b(makes? an attack|attacks (?:every|each)\b|attacks (?:a|an|one) (?:creature|target|enemy)\b|attacks at the end\b|at (?:his|her|its|the same) Bonus)\b/i;
+
+/** The phrases that name an attack without saying whose it is: this block's only in its own sentence. */
+const WEAK_ATTACK = /\b(attack Test|to hit)\b/i;
+
+/**
+ * Whether the words say this block makes an attack (D-691's `attack` kind, D-807's reading).
+ * Read a sentence at a time: *One creature on Rivendare's side within 30 feet takes its Attack
+ * immediately, and its attack Test takes Boon* is ANOTHER creature's blow, *Until the end of
+ * the round Zul'jin's attack Tests take Boon* is a Boon, and *the first of those attacks to
+ * hit* is the Syndicate's - and each had put an Attack button rolling the block's own first
+ * line on its card. *Ukorz attacks every creature in reach at his Bonus* is still his.
+ */
+function attacksOwnLine(text) {
+  return sentences(text).some(sentence => {
+    const own = sentence.replace(BOON_TESTS, " ").replace(LATE_BOON_TESTS, " ");
+    if (STRONG_ATTACK.test(own)) return true;
+    return WEAK_ATTACK.test(own) && !GRANTS_TO_OTHERS.test(sentence);
+  });
+}
+
+/**
+ * A sentence whose subject NAMES the block beside the others it grants to (D-807): *The
+ * captain and every creature under its command take +2 to Initiative*. Its own share is its
+ * own, which `GRANTS_TO_OTHERS` alone would have thrown away with the rest.
+ */
+const SELF_AND = /^\s*the\s+[\w'’-]+(?:\s+[\w'’-]+)?\s+and\s+(?:every|each|all)\b/i;
 
 /**
  * A descriptor read off the prose, seeded only where the words are
@@ -572,8 +703,22 @@ function seedAutomationBase(prose = "", { name = "" } = {}) {
     ...[...forced.matchAll(/\bResilience\s*\((Body|Reflex|Spirit)\)/gi)].map(m => m[1].toLowerCase())
   ]);
   if (resists.length === 1) seed.resist = resists[0];
+  // **A CONDITION THE WORDS END OR REFUSE IS NOT ONE THIS BLOCK LAYS** (the bestiary audit,
+  // D-807). *Every Crusade creature within 30 feet ends **Frightened*** put an Inflict
+  // Frightened button on the Scarlet Knight, the chaplain, Whitemane and Gandling - D-691's
+  // Netherborn fault through another verb - and a QUALIFIED refusal (*cannot be knocked
+  // **Prone** against its will by anything of its own size or smaller*) is still a refusal:
+  // `readPassive` rightly declines to read it, so the check against `refuses` below never
+  // saw it, and the Bluffwatcher and Thermaplugg each held a button that knocked somebody
+  // Prone. **The count is still the whole text's**: Cho'gall refuses three conditions and
+  // *casts on the round he is **Stunned***, and a reading that set the refused three aside
+  // first found Stunned alone and laid it.
   const conditions = injuryConditions(text).conditions;
-  if (conditions.length === 1) seed.inflicts = { condition: conditions[0].id, value: conditions[0].value ?? null, until: null };
+  const unlaid = text.replace(REFUSE_RE, " ").replace(ENDED_CONDITION, " ").replace(UNLAID_CONDITION, " ");
+  const laid = new Set(injuryConditions(unlaid).conditions.map(c => c.id));
+  if (conditions.length === 1 && laid.has(conditions[0].id)) {
+    seed.inflicts = { condition: conditions[0].id, value: conditions[0].value ?? null, until: null };
+  }
   // Read only an explicit TARGET sentence here. A loose "its next turn"
   // elsewhere in the ability could refer to the creature using it.
   if (seed.inflicts) {
@@ -592,16 +737,31 @@ function seedAutomationBase(prose = "", { name = "" } = {}) {
   if (seed.inflicts && seed.resist && abilityGoverns(text, seed.inflicts.condition)) seed.inflicts.onFail = true;
   const action = /\bas an?\s+(Reaction|Half-Action|Full Action|action)\b/i.exec(text);
   if (action) seed.action = { reaction: "reaction", "half-action": "half", "full action": "full", action: "action" }[action[1].toLowerCase()] ?? null;
-  const once = /\bonce per\s+(Short Rest|Long Rest|encounter|fight)\b/i.exec(text);
+  // *A creature may take this once per Short Rest* is the RECIPIENT's limit, never the user's:
+  // read flat, the Priest of the Light could lay Hands On once a Short Rest in all (the
+  // bestiary audit, D-807).
+  const once = [...text.matchAll(/\bonce per\s+(Short Rest|Long Rest|encounter|fight)\b/gi)]
+    .find(m => !RECIPIENT_LIMIT.test(sentenceAround(text, m.index ?? 0)));
   if (once) seed.uses = { max: 1, value: 1, per: { "short rest": "short", "long rest": "long", encounter: "encounter", fight: "encounter" }[once[1].toLowerCase()] };
+  // **A PRICE THE CREATURE PAYS IN WORDS** (D-807): *the magus spends 4 Mana*. A creature's
+  // Power pool IS its Mana (D-692), so Mana and Power both cost `power`; a pool somebody else
+  // LOSES (*every creature within 10 feet loses 1 Power*) is never this block's price. One
+  // price or none, as everything here.
+  const prices = distinct([...text.matchAll(/\bspends?\s+(\d+)\s+(Mana|Power|Momentum)\b/gi)]
+    .map(m => `${m[2].toLowerCase() === "momentum" ? "momentum" : "power"}/${m[1]}`));
+  if (prices.length === 1) {
+    const [pool, amount] = prices[0].split("/");
+    seed.cost = { pool, amount: Number(amount) };
+  }
   // WHAT IT GIVES TO SOMEBODY ELSE IS NOT ITS OWN (D-691). An aura's numbers
   // land on other creatures, so reading them onto this block would heal the
   // witch-doctor for the Health its fetish gives every troll around it.
   const aura = AURA.test(text);
 
   // 14 writes *recovers* as often as *heals* or *regains*, and every one of
-  // those was invisible (D-691).
-  const heals = distinct([...text.matchAll(/\b(?:heals?|regains?|recovers?)\s+(\d+)\s+Health\b/gi)].map(m => Number(m[1])));
+  // those was invisible (D-691). And *restore 4 Health to a creature in reach*,
+  // which was invisible until the bestiary audit (D-807).
+  const heals = distinct([...text.matchAll(/\b(?:heals?|regains?|recovers?|restores?)\s+(\d+)\s+Health\b/gi)].map(m => Number(m[1])));
   const area = /\b(\d+)\s*(?:ft|feet)\s+(radius|cone|line)\b/i.exec(text);
   if (area) seed.area = `${area[1]} ft ${area[2].toLowerCase()}`;
 
@@ -619,7 +779,8 @@ function seedAutomationBase(prose = "", { name = "" } = {}) {
   if (heals.length === 1 && !seed.tick && !auraHeal && !gatedTick) seed.heal = heals[0];
 
   // ---- a summon: a count, a block named in bold, a side (D-691) -----------
-  if (/\bacts? on (?:his|her|its|their) side\b/i.test(text)) {
+  // *It acts on the Scourge side* names the side by its faction (the Cult Necromancer).
+  if (/\b[Aa]cts? on (?:[Hh]is|[Hh]er|[Ii]ts|[Tt]heir|the [A-Z][\w'’-]*) side\b/.test(text)) {
     const named = summonNamed(prose);
     if (named) {
       seed.summon = { ...named, side: "summoner", from: /\bfrom the next round\b/i.test(text) ? "nextRound" : "now" };
@@ -646,7 +807,7 @@ function seedAutomationBase(prose = "", { name = "" } = {}) {
   // *Each ally within 10 feet of it gains a Boon on its next Attack Test* is a
   // squawk that gives, and read off the full text it was an attack the chicken
   // made (D-781's constructs).
-  const attacks = /\b(makes? an attack|attack Test|to hit|attacks (?:every|each)\b|attacks at the end\b|at (?:his|her|its|the same) Bonus)\b/i.test(forced);
+  const attacks = attacksOwnLine(text);
   // `passive` is the kind of an entry with NOTHING TO PRESS. What stands lives
   // on `automation.passive` whatever the kind, so an entry that both senses
   // and inflicts keeps its button and its senses both (D-691).
@@ -654,13 +815,17 @@ function seedAutomationBase(prose = "", { name = "" } = {}) {
     : attacks ? "attack"
       : (seed.resist || seed.dc !== undefined || seed.damage) ? "test"
         : seed.heal !== undefined ? "heal"
-          : (seed.action || seed.uses || seed.inflicts || seed.area) ? "utility"
+          : (seed.action || seed.uses || seed.cost || seed.inflicts || seed.area) ? "utility"
             : (seed.passive || seed.tick) ? "passive"
               : "none";
 
   // ---- and where it read nothing, why (D-691) -----------------------------
-  if (seed.kind === "none" && !seed.reason) {
-    if (aura) seed.reason = "aura";
+  // **A SHELL SAYS WHY TOO** (D-807): a Use that spends its action, its uses or its price
+  // and lays nothing - *As a Half-Action, one creature under the captain's command takes a
+  // Half-Action of its own* - records why its effect is still prose, as a `none` records why
+  // there is no Use at all. The Use is still worth its button: it spends what 14 prices.
+  if ((seed.kind === "none" || isShell(seed)) && !seed.reason) {
+    if (aura || AURA_ENDS.test(text)) seed.reason = "aura";
     else if (gatedTick || TABLE_CALL.test(text)) seed.reason = "tableCall";
     else if (/\bfor each\b|\bto a maximum of\b/i.test(text)) seed.reason = "scaled";
     else if (/\buses the [A-Za-z' ]+ block in place of\b|\bSwap\b/i.test(text)) seed.reason = "replacesBlock";
@@ -772,7 +937,12 @@ function readPassive(text) {
   // A GRANT IN A SENTENCE ABOUT OTHER CREATURES IS NOT THIS BLOCK'S (D-691):
   // *Every creature that holds it takes Bane on Casting Tests* would otherwise
   // have laid Nefarian's own Class Call on Nefarian.
-  const mine = m => !GRANTS_TO_OTHERS.test(sentenceAround(text, m.index ?? 0));
+  // *The captain and every creature under its command take +2* names the block itself among the
+  // subjects, and that much is its own (D-807).
+  const mine = m => {
+    const sentence = sentenceAround(text, m.index ?? 0);
+    return !GRANTS_TO_OTHERS.test(sentence) || SELF_AND.test(sentence);
+  };
   for (const m of text.matchAll(BONUS_RE)) {
     if (!mine(m)) continue;
     const what = m[2].toLowerCase() === "attack tests" ? "Attack" : m[2];
@@ -864,9 +1034,9 @@ function gateFor(text, near) {
 export function mergeSeed(automation, seed) {
   const out = cleanAutomation(automation);
   if (out.kind === "none" && seed.kind) out.kind = seed.kind;
-  // The reason travels with `none` and is dropped the moment there is a kind.
+  // The reason travels with `none` and with a SHELL (D-807), and is dropped the moment the
+  // row lays something - judged at the end, once every field below has been merged.
   if (!out.reason && seed.reason) out.reason = seed.reason;
-  if (out.kind !== "none") out.reason = "";
   if (!out.passive.grants.length && !out.passive.refuses.length && !out.passive.senses.length && seed.passive) {
     out.passive = {
       grants: seed.passive.grants ?? [],
@@ -897,7 +1067,37 @@ export function mergeSeed(automation, seed) {
   }
   if (!out.area && seed.area) out.area = seed.area;
   if (out.kind === "spell" && !out.spell && seed.kind === "spell" && seed.spell) out.spell = seed.spell;
+  if (out.kind !== "none" && !isShell(out)) out.reason = "";
   return out;
+}
+
+/**
+ * Whether a descriptor DOES something when pressed, or stands (D-807): a heal, damage, a
+ * Resilience, a condition, an attack (D-691: one with no numbers swings the block's own
+ * line), an area, a spell, a summon, a tick, a venom, a Casting Test, or anything standing.
+ * An action, uses and a price are what a Use SPENDS; a DC with no Resilience prints nothing.
+ */
+export function hasEffect(automation) {
+  const a = automation ?? {};
+  const p = a.passive ?? {};
+  return Boolean(
+    (a.heal ?? 0) > 0 || (a.damage?.amount ?? 0) > 0 || a.resist || a.inflicts?.condition
+    || a.kind === "attack" || (a.attack?.bonus ?? null) !== null || (a.attack?.damage ?? null) !== null
+    || (a.attack?.traits ?? []).length || a.area || a.spell || a.summon?.entry
+    || (a.tick?.heal ?? 0) > 0 || a.afflict?.kind || a.casting === true
+    || (p.grants ?? []).length || (p.refuses ?? []).length || (p.senses ?? []).length || p.when || p.near?.name
+    // A Boss Action's plan (D-809): a door, a forced move, a drain, a zone.
+    || hasPlan(a.plan)
+  );
+}
+
+/**
+ * A SHELL (D-807): a Use that spends what 14 prices - its action, its uses, its Mana, a Boss
+ * Action's points - and lays nothing. It carries a `reason` saying why its effect is still
+ * prose, as a `none` carries one saying why there is no Use at all.
+ */
+export function isShell(automation) {
+  return isPressable(automation) && !hasEffect(automation);
 }
 
 /* -------------------------------------------- */

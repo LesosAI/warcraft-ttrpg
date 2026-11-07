@@ -220,7 +220,11 @@ AZEROTH.shapeKinds = {
   avatar:        "AZEROTH.Shape.Kind.Avatar",
   metamorphosis: "AZEROTH.Shape.Kind.Metamorphosis",
   // 04's Gnomish Battle Rig (the Legacy branches' B2), worn off its 14 block.
-  battlerig:     "AZEROTH.Shape.Kind.Battlerig"
+  battlerig:     "AZEROTH.Shape.Kind.Battlerig",
+  // Laid on a creature by somebody else's spell or feature (D-808): 07's Hex and
+  // 02's Polymorph, worn off 14 §15's Frog and Rabbit.
+  hexed:         "AZEROTH.Shape.Kind.Hexed",
+  polymorphed:   "AZEROTH.Shape.Kind.Polymorphed"
 };
 // A class feature is a thing you do or a thing you are (02 §7, D-612).
 AZEROTH.featureKinds = {
@@ -815,7 +819,10 @@ AZEROTH.untilKinds = {
   // *For one minute* (04's The Vault Opens, Banshee's Wail, Thrall of the Banshee;
   // the Legacy branches' door 26): ten of the fight's rounds, or the world's minute
   // (`effects/durations.mjs#minuteSpan`).
-  minute: "AZEROTH.Until.Minute"
+  minute: "AZEROTH.Until.Minute",
+  // *Until the end of the round* (14's Arcane Breath, Enfeeble, Amani Fury; D-809): core's
+  // `roundEnd` expiry (`effects/durations.mjs#untilEndOfRound`).
+  endOfRound: "AZEROTH.Until.EndOfRound"
 };
 // A creature's two pools, by kind: the block names no type (D-637).
 AZEROTH.npcPoolKinds = { momentum: "AZEROTH.Momentum.Label", power: "AZEROTH.Sheet.Power" };
@@ -906,7 +913,7 @@ AZEROTH.enchantmentGrades = {
 };
 
 // The twenty-three skills, in book order, grouped by the ability each reads
-// (02 SS8). Skill Test = ability modifier + Proficiency Bonus + Skill Rank.
+// (02 SS8). Skill Test = skill modifier + Proficiency Bonus + Skill Rank (05 SS1, D-810).
 AZEROTH.skills = {
   athletics:     "AZEROTH.Skill.Athletics",
   acrobatics:    "AZEROTH.Skill.Acrobatics",

@@ -68,7 +68,7 @@ function cleanMarks(marks) {
  * two keywords `applyCondition` reads, or none.
  */
 function cleanUntil(until) {
-  if (until === "endOfNextTurn" || until === "nextTurn") return until;
+  if (until === "endOfNextTurn" || until === "nextTurn" || until === "endOfRound" || until === "encounter") return until;
   if (until && typeof until === "object" && until.duration && until.start) {
     return { duration: { ...until.duration }, start: { ...until.start } };
   }

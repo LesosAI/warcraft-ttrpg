@@ -34,7 +34,9 @@
       <span class="azeroth-attribute-label">{{localize this.label}}</span>
     </div>
     {{#unless this.absent}}
-    <span class="azeroth-chip azeroth-chip-mod">{{azerothSigned this.mod}}</span>
+    {{!-- Both numbers on hover (05 SS1, D-810): the chip is the ability
+          modifier; a Skill Test adds the skill modifier. --}}
+    <span class="azeroth-chip azeroth-chip-mod"{{#if this.modTip}} data-tooltip="{{this.modTip}}"{{/if}}>{{azerothSigned this.mod}}</span>
     {{/unless}}
     {{#if this.bonus}}
     {{!-- A mark that the gear is in the number (08 §6); the formula is on the score's hover. --}}

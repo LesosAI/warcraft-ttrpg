@@ -187,6 +187,10 @@ import { VEKNISS_QUERY, veknissQueryHandler } from "./effects/vekniss-use.mjs";
 import { BLOODPETAL_QUERY, bloodpetalQueryHandler } from "./effects/bloodpetal-use.mjs";
 import { STINGER_QUERY, stingerQueryHandler } from "./effects/vekniss-charge-use.mjs";
 import { FORCED_QUERY, forcedMoveQueryHandler } from "./effects/forced-movement.mjs";
+// 14 §1's Boss Actions (D-809): the points' one writer, and the doors a plan names.
+import { BOSS_POINTS_QUERY, bossPointsQueryHandler } from "./effects/boss-points.mjs";
+import { BOSS_DOOR_QUERY, bossDoorQueryHandler } from "./effects/boss-doors.mjs";
+import { FORCED_SHAPE_QUERY, forcedShapeQueryHandler } from "./documents/shapes.mjs";
 import { STEP_QUERY, stepQueryHandler } from "./effects/steps.mjs";
 import { LEGACY_USE_QUERY, legacyUseQueryHandler } from "./effects/legacy-uses.mjs";
 import { DEATH_HOLD_QUERY, deathHoldQueryHandler } from "./effects/death-holds.mjs";
@@ -536,6 +540,12 @@ export function registerQueries() {
   // token pushed or pulled where this client may not write it.
   CONFIG.queries[DISPEL_QUERY] = dispelQueryHandler;
   CONFIG.queries[FORCED_QUERY] = forcedMoveQueryHandler;
+  CONFIG.queries[BOSS_POINTS_QUERY] = bossPointsQueryHandler;
+  CONFIG.queries[BOSS_DOOR_QUERY] = bossDoorQueryHandler;
+  // 07's Hex and 02's Polymorph (D-808): the form a player's failed Test lays on their
+  // own creature, read off the GM's bestiary pack and written here - the asker, the
+  // card and the failed Test judged again.
+  CONFIG.queries[FORCED_SHAPE_QUERY] = forcedShapeQueryHandler;
   // The Legacy branches' bodies (B2, door 3): a token stepped to a chosen space -
   // 02's Blink and Shadowstep, 04's Fade Step, 07's Shadow Walk and Dark Passage -
   // where this client may not write it, the space judged again here.

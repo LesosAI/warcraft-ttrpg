@@ -208,12 +208,29 @@ export function speedDroppedOf(actor) {
  * @param {Actor} actor
  * @returns {Array<{boons: number, ranged: boolean, source: string}>}
  */
+/**
+ * The side an attacker fights on (D-809): its combatant's in its own fight, else its
+ * token's disposition - what a side-bound exposure is read against.
+ *
+ * @param {Actor} actor
+ * @returns {"friendly"|"hostile"}
+ */
+function attackerSide(actor) {
+  const fight = actor?.activeFight?.() ?? null;
+  const combatant = fight?.getCombatantsByActor?.(actor)?.[0] ?? null;
+  if (combatant?.side) return combatant.side;
+  const token = actor?.isToken ? actor.token : actor?.getActiveTokens?.(false, true)?.[0] ?? null;
+  return (token?.disposition ?? actor?.prototypeToken?.disposition) === CONST.TOKEN_DISPOSITIONS.FRIENDLY ? "friendly" : "hostile";
+}
+
 export function exposuresOf(actor) {
   const out = [];
   for (const effect of actor?.effects ?? []) {
     if (effect.active === false) continue;
     const raw = effect.flags?.["azeroth-rpg"]?.[EXPOSED_FLAG] ?? null;
-    if (raw && typeof raw === "object") out.push({ boons: Number(raw.boons) || 0, ranged: raw.ranged === true, source: String(raw.source ?? "") });
+    // A side, where only one side's attacks take it (14's Sell Them Out: *every creature
+    // on his side takes Boon on attack Tests against it*; D-809).
+    if (raw && typeof raw === "object") out.push({ boons: Number(raw.boons) || 0, ranged: raw.ranged === true, source: String(raw.source ?? ""), ...(raw.side === "friendly" || raw.side === "hostile" ? { side: raw.side } : {}) });
   }
   return out;
 }
@@ -289,17 +306,17 @@ export { enemyDistances } from "../canvas/engaged.mjs";
  * the carriers off the actor's effects; the once-a-turn mark is spent by the roll
  * workflow after the die (`markFirstTestBane`), never here.
  */
-function afflictionBanesFor(actor, { kind, skill = null, resilience = null }) {
+function afflictionBanesFor(actor, { kind, skill = null, resilience = null, ability = null }) {
   const rows = [...(actor.effects ?? [])]
     .map(e => ({ id: e.id, aff: e.flags?.["azeroth-rpg"]?.[AFFLICTION_FLAG] }))
     .filter(r => r.aff?.kind);
   if (!rows.length) return null;
   const fight = actor.activeFight?.() ?? null;
-  const found = afflictionBanes(rows, { kind, skill, resilience, turnKey: turnKeyOf(fight), abilityOf: AZEROTH.skillAbility });
+  const found = afflictionBanes(rows, { kind, skill, resilience, ability, turnKey: turnKeyOf(fight), abilityOf: AZEROTH.skillAbility });
   return found.banes > 0 ? found : null;
 }
 
-function snapshotOf(actor, { kind, skill, targets, resilience = null, heavy = false, rangeBand = null, engaged = false, range = null, cancelsBane = [], parry = false, against = null, facts = {} }) {
+function snapshotOf(actor, { kind, skill, targets, resilience = null, ability = null, heavy = false, rangeBand = null, engaged = false, range = null, cancelsBane = [], parry = false, against = null, facts = {} }) {
   const s = actor.system ?? {};
   // Poisoned stacks live on the effect (A1: "Poisoned X"); a bare status is one.
   const poisoned = actor.effects?.find?.(e => e.statuses?.has("poisoned"));
@@ -344,7 +361,7 @@ function snapshotOf(actor, { kind, skill, targets, resilience = null, heavy = fa
     standingTestBoons: s.testBoons?.[kind] ?? 0,
     standingTestBanes: s.testBanes?.[kind] ?? 0,
     // D12: the Banes a carried poison or disease lays on this Test (named, automatic).
-    afflictionBanes: afflictionBanesFor(actor, { kind, skill, resilience }),
+    afflictionBanes: afflictionBanesFor(actor, { kind, skill, resilience, ability }),
     // And what a thing being WORN grants on this kind of Test, by name (08 §20,
     // 2026-09-10). `system.grants` is `rules/grants.mjs#grantsFor`'s own output,
     // computed once on the model, so this is a read and never a second sum.
@@ -388,7 +405,9 @@ function snapshotOf(actor, { kind, skill, targets, resilience = null, heavy = fa
     // Legacy branches' door 20) is the door's `resilience`, as the aura Boon's is.
     auraBanes: auraLine(auraBanesOn(s.auraBaneRows ?? [], kind, resilience), "banes"),
     // The rungs that bear on this Test (10 §4, §5): the table's call, so judgement lines.
-    corruption: corruptionLines(s.corruptionEffects, { kind, skill, skillAbility: skill ? (AZEROTH.skillAbility[skill] ?? null) : null }),
+    // A bare ability Test reads its own ability, so 10's Bane on *Charisma
+    // Tests* reaches a bare Charisma Test too (D-810's F4).
+    corruption: corruptionLines(s.corruptionEffects, { kind, skill, skillAbility: skill ? (AZEROTH.skillAbility[skill] ?? null) : ability }),
     // A Heavy weapon below Strength 13 (08 §5): the roller's own state, automatic.
     heavy,
     // What a Signature takes back off this roll (08 §20, D-692). It rides on
@@ -447,7 +466,7 @@ function attackTalentLines(actor, target, range, facts = {}) {
     talentBoons: { boons: wrath.boons + carded, names: [...wrath.by, ...(carded ? (facts.cardBoons?.names ?? []) : [])] },
     reckless: reckless ? { boons: reckless.boons, names: [reckless.name] } : null,
     nextAttackBoons: { boons: promised.boons, names: promised.live.filter(e => (e.boons ?? 0) > 0).map(e => e.name).filter(Boolean) },
-    targetExposed: exposedBoonsOn(target?.exposed ?? [], { range }),
+    targetExposed: exposedBoonsOn((target?.exposed ?? []).filter(e => !e.side || e.side === attackerSide(actor)), { range }),
     talentCancels: cancels.ids.length ? { ids: cancels.ids, names: cancels.by } : null,
     packFlank: facts.packFlank?.names?.length ? { names: [...facts.packFlank.names] } : null,
     targetDeterred: deterBanes > 0 ? { banes: deterBanes, names: [...new Set(deterred.map(d => d.source).filter(Boolean))].sort() } : null,
@@ -545,6 +564,8 @@ export function prepareRoll(actor, given) {
   const source = sourceOf(actor, spec.source ?? null);
   const situational = situationalModifiers({ ...snapshotOf(actor, {
     kind: test.kind, skill: spec.skill ?? null, targets, resilience: spec.resilience ?? null,
+    // A bare ability Test names its ability and no skill (05 §1, D-810's F4).
+    ability: test.kind === "skill" && !spec.skill ? (spec.ability ?? null) : null,
     heavy: test.heavyBane === true,
     // 06's reach and range (D-669): measured at the door and passed through.
     range: test.rangeKind ?? null, rangeBand: test.rangeBand ?? null, engaged: test.engaged === true,

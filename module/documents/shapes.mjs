@@ -23,7 +23,27 @@
  * no movement and is a plain update.
  */
 
-import { RESTORE_FLAG, SHAPE_FLAG, SHAPE_KINDS, SWIFT_LEAVE, appearanceFor, centredResize, keepsFerocity, physicalHalf, readShape, shapeChanges, shapeEnds, snapshotOf } from "../rules/shapes.mjs";
+import {
+  FORCED_SPEED, RESTORE_FLAG, SHAPE_FLAG, SHAPE_KINDS, SWIFT_LEAVE, appearanceFor, centredResize, endsOnDamage, forcedKindForCard,
+  forcedShapeChanges, forcedShapeRefusal, isForcedKind, keepsFerocity, physicalHalf, readShape, shapeChanges, shapeEnds,
+  shapeEntryOf, shapeMayReplace, snapshotOf
+} from "../rules/shapes.mjs";
+// A forced shape is written on a GM's client, judged before anything is spent (D-808).
+import { gmAbsentFor } from "../rules/gm-writes.mjs";
+
+/**
+ * **THE QUERY A FORCED SHAPE IS LAID THROUGH** (D-808): the bestiary pack is the
+ * GM's (`system.json`: `PLAYER: NONE`), so a player who fails a Test against Hex or
+ * Polymorph on their own creature has the form read and written on the active GM's
+ * client. Never `game.socket` (D-643).
+ */
+export const FORCED_SHAPE_QUERY = "azeroth-rpg.forcedShape";
+
+/** What each forced kind's end is, in words: Hex's Sustain and damage, Polymorph's damage. */
+export const FORCED_ENDS = Object.freeze({
+  hexed: "AZEROTH.ForcedShape.Ends.Hexed",
+  polymorphed: "AZEROTH.ForcedShape.Ends.Polymorphed"
+});
 
 /** The operation option the writer puts on its own effect writes, so the hooks below leave them alone. */
 export const SHAPE_OPTION = "azerothShape";
@@ -34,6 +54,91 @@ const SHAPE_FALLBACK_ICON = "icons/svg/pawprint.svg";
 /** Whether an Active Effect is a shape. */
 export function isShapeEffect(effect) {
   return Boolean(effect?.getFlag?.("azeroth-rpg", SHAPE_FLAG));
+}
+
+/** Whether an Active Effect is a shape somebody else laid (07's Hex, 02's Polymorph; D-808). */
+export function isForcedShapeEffect(effect) {
+  return isForcedKind(effect?.getFlag?.("azeroth-rpg", SHAPE_FLAG)?.kind);
+}
+
+/**
+ * **WHY A DOOR IS SHUT BY THE SHAPE WORN, IN WORDS** (D-808): the one reading every
+ * door asks - the attack, the cast, a Use, an ability, a Signature, a Reaction, a
+ * Readied action and the Leave - through `rules/shapes.mjs#forcedShapeRefusal`.
+ * Null where the door is open.
+ *
+ * @param {Actor|null} actor
+ * @param {string} door  a `FORCED_REFUSALS` key
+ * @returns {string|null}
+ */
+export function forcedRefusalFor(actor, door) {
+  const shape = actor?.shape ?? null;
+  const key = forcedShapeRefusal(shape, door, { gm: game.user?.isGM === true });
+  if (!key) return null;
+  return game.i18n.format(key, {
+    name: actor?.name ?? "", form: shapeLabel(shape),
+    ends: game.i18n.localize(FORCED_ENDS[shape.kind] ?? "")
+  });
+}
+
+/**
+ * The refusal said and answered: true where the door is shut and the user was told
+ * why, before anything was spent.
+ *
+ * @param {Actor|null} actor
+ * @param {string} door
+ * @returns {boolean}
+ */
+export function refuseForcedShape(actor, door) {
+  const why = forcedRefusalFor(actor, door);
+  if (why) ui.notifications?.warn(why);
+  return Boolean(why);
+}
+
+/**
+ * **A FORCED SHAPE'S LIFETIME, ON ITS EFFECT** (D-808), in the keys every laid spell
+ * effect already carries (D-657, D-724): the spell, the card's cast key and the card,
+ * whether it is Sustained - `effects/sustained-spells.mjs` deletes a `sustained`
+ * effect whose caster (the effect's `origin`) no longer holds the cast or has fallen,
+ * which is what makes a dropped Hex, a fallen shaman and a Sustain over the limit end
+ * the frog with no code path of their own. EVERY KEY, EVERY TIME: a forced shape is
+ * rewritten in place over the one before, and a key left out would survive it.
+ *
+ * @param {string} kind
+ * @param {{spellUuid?: string|null, spellName?: string|null, cast?: string|null, sustained?: boolean, messageId?: string|null}|null} laid
+ */
+function forcedLifetime(kind, laid = null) {
+  const k = SHAPE_KINDS[kind];
+  const cast = typeof laid?.cast === "string" && laid.cast ? laid.cast : null;
+  return {
+    spell: laid?.spellUuid ?? null,
+    spellName: laid?.spellName || k.by,
+    identifier: k.identifier,
+    cast,
+    sustained: k.sustained === true && laid?.sustained === true && Boolean(cast),
+    messageId: laid?.messageId ?? null
+  };
+}
+
+/**
+ * Whether a creature flies of its OWN (D-808's reading 5): a creature's block says so
+ * (`system.flies`), a character's GM-stored pace does. Never the pace a shape or an
+ * effect gives it now - a rabbit's grounding rewritten into a frog would otherwise read
+ * the 0 it set and give the frog its wings back.
+ *
+ * @param {Actor} actor
+ * @returns {boolean}
+ */
+function fliesOfItsOwn(actor) {
+  if (actor?.type === "npc") return actor.system?.flies === true;
+  return (Number(actor?._source?.system?.flyingSpeed) || 0) > 0;
+}
+
+/** A forced shape's text: what the creature keeps, what it cannot do, and what ends it. */
+function forcedText(kind, label) {
+  return game.i18n.format("AZEROTH.ForcedShape.Text", {
+    form: label, by: SHAPE_KINDS[kind].by, speed: FORCED_SPEED, ends: game.i18n.localize(FORCED_ENDS[kind] ?? "")
+  });
 }
 
 /**
@@ -68,26 +173,36 @@ export function shapeLabel(shape) {
  * form's token art, drawn on the token always (`showIcon`), the three scores
  * overridden in the `initial` phase, and the flag every reader reads.
  *
+ * **A FORCED SHAPE** (D-808) carries no score override and nothing the block's half
+ * gives: the form's Speed alone (`rules/shapes.mjs#forcedShapeChanges`), its name and
+ * art, the text of what it shuts, and its lifetime (`forcedLifetime`). Its `origin` is
+ * whoever laid it.
+ *
  * @param {Actor} actor
- * @param {{kind: string, forms: object[], ward?: object|null}} shape
+ * @param {{kind: string, forms: object[], ward?: object|null, laid?: object|null}} shape
  */
-export function shapeEffectData(actor, { kind, forms, ward = null }) {
+export function shapeEffectData(actor, { kind, forms, ward = null, laid = null }) {
   const physical = physicalHalf(forms);
   const label = shapeLabel({ kind, forms });
+  const forced = isForcedKind(kind);
   return {
     name: label,
     img: forms[0]?.token || SHAPE_FALLBACK_ICON,
-    origin: actor.uuid,
+    origin: forced ? (laid?.caster || actor.uuid) : actor.uuid,
     // **WITHOUT THIS CORE NEVER DRAWS IT** (14.367 `Token#_drawEffects`): an
     // effect is drawn at ALWAYS, or at CONDITIONAL only while temporary, and a
     // shape has no duration. The icon on the token is the effect kept.
     showIcon: CONST.ACTIVE_EFFECT_SHOW_ICON.ALWAYS,
     disabled: false,
-    description: `<p>${foundry.utils.escapeHTML(game.i18n.format("AZEROTH.Shape.EffectText", { name: label }))}</p>`,
-    system: { changes: shapeChanges(physical) },
+    description: `<p>${foundry.utils.escapeHTML(forced ? forcedText(kind, label) : game.i18n.format("AZEROTH.Shape.EffectText", { name: label }))}</p>`,
+    system: {
+      changes: forced
+        ? forcedShapeChanges(kind, { flies: fliesOfItsOwn(actor) })
+        : shapeChanges(physical)
+    },
     // EVERY KEY, EVERY TIME: an update merges a flag object key by key, so a
     // `ward` left out would survive from the shape before.
-    flags: { "azeroth-rpg": { [SHAPE_FLAG]: { kind, forms, ward: ward ?? null } } }
+    flags: { "azeroth-rpg": { [SHAPE_FLAG]: { kind, forms, ward: ward ?? null }, ...(forced ? forcedLifetime(kind, laid) : {}) } }
   };
 }
 
@@ -169,16 +284,33 @@ async function followShape(actor, { zero = false } = {}) {
  * @param {object[]|null} [o.forms]          snapshots already taken - by the door's
  *   step 1b, before anything was paid (`useFeature`), or by the migration
  * @param {{school: string, value: number}|null} [o.ward]  Metamorphosis's Ward
+ * @param {object|null} [o.laid]  a FORCED shape's caster and lifetime (D-808):
+ *   `{caster, spellUuid, spellName, cast, sustained, messageId}`
  * @returns {Promise<ActiveEffect|null>}
  */
-export async function takeShape(actor, { kind, entries = [], forms = null, ward = null } = {}) {
-  if (!actor || actor.type !== "character" || !SHAPE_KINDS[kind]) return null;
+export async function takeShape(actor, { kind, entries = [], forms = null, ward = null, laid = null } = {}) {
+  if (!actor || !SHAPE_KINDS[kind]) return null;
+  // A creature of any kind may be hexed (D-808); only a character takes a shape of
+  // its own.
+  if (actor.type !== "character" && !isForcedKind(kind)) return null;
   const snapshots = forms ?? await formsFrom(entries);
   if (!snapshots.length) return null;
   const before = actor.shape;
-  const data = shapeEffectData(actor, { kind, forms: snapshots, ward });
+  // **THE SECOND-SHAPE RULE** (D-808, `rules/shapes.mjs#shapeMayReplace`): a forced
+  // shape replaces whatever stands; a shape of the creature's own never replaces one
+  // laid on it.
+  if (before && !shapeMayReplace(before.kind, kind)) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.ForcedShape.Holds", { name: actor.name, form: shapeLabel(before) }));
+    return null;
+  }
+  const data = shapeEffectData(actor, { kind, forms: snapshots, ward, laid });
   const expectedShape = JSON.stringify(data.flags["azeroth-rpg"][SHAPE_FLAG]);
   const held = shapeEffectsOf(actor);
+  // What a forced shape rewritten in place was living on: a Hex replaced by a rabbit,
+  // or by a second Hex, ends the Sustain that held the first (`endLaidSustain`).
+  const replaced = held.length && isForcedShapeEffect(held[0])
+    ? { caster: held[0].origin ?? null, cast: held[0].getFlag("azeroth-rpg", "cast") ?? null, sustained: held[0].getFlag("azeroth-rpg", "sustained") === true }
+    : null;
   let effect = null;
   try {
     if (held.length) {
@@ -204,7 +336,32 @@ export async function takeShape(actor, { kind, entries = [], forms = null, ward 
   const zero = Boolean(effect)
     && !keepsFerocity({ from: before?.kind ?? null, to: kind, savageShift: actor.talentRanks?.("Savage Shift") ?? 0 });
   await followShape(actor, { zero });
+  if (effect && replaced?.sustained && replaced.cast && replaced.cast !== (effect.getFlag("azeroth-rpg", "cast") ?? null)) {
+    await endLaidSustain(replaced).catch(err => console.warn("azeroth-rpg | the replaced shape's Sustain did not end", err));
+  }
   return effect ?? null;
+}
+
+/**
+ * **THE SUSTAIN A FORCED SHAPE LIVED ON, ENDED WITH IT** (D-808): a Hex the frog it
+ * laid has gone from - damage, a GM's hand, a Dispel, a second shape - is over, and
+ * the shaman stops paying for it. Through `workflows.endSustain`, the Stop's own door,
+ * by the CAST (two Sustains of one spell are two casts, D-760), and only while the
+ * caster still holds it: the sweep's own deletions find nothing held and end nothing.
+ *
+ * @param {{caster?: string|null, cast?: string|null}} o
+ * @returns {Promise<object|null>}  the Sustain entry ended
+ */
+export async function endLaidSustain({ caster = null, cast = null } = {}) {
+  if (!caster || !cast) return null;
+  let actor = null;
+  try {
+    actor = fromUuidSync(caster);
+  } catch {
+    actor = null;
+  }
+  if (!actor || !(actor.getFlag?.("azeroth-rpg", "sustaining") ?? []).some(s => s?.cast === cast)) return null;
+  return game.system.azeroth.workflows.endSustain({ actor, cast, notice: "AZEROTH.ForcedShape.SustainEnded" });
 }
 
 /**
@@ -288,6 +445,185 @@ export async function endShapeAt(actor, event) {
   await leaveShape(actor);
   ui.notifications?.info(game.i18n.format("AZEROTH.Shape.Ended", { name: actor.name, form: label }));
   return shape;
+}
+
+/**
+ * **ANY DAMAGE ENDS IT** (07's Hex; 02's Polymorph: *until it takes damage*; D-808):
+ * asked by the one damage writer, `AzerothActor#adjustHealth`, with what the blow took
+ * of Health and temporary Health once every door before the write had it
+ * (`rules/shapes.mjs#endsOnDamage`). Here, on the client that wrote the Health, which
+ * owns the creature and its tokens. The Sustain a Hex lived on ends on the active GM's
+ * client (`registerShapeHooks`), because the shaman is seldom this client's.
+ *
+ * @param {Actor} actor
+ * @param {number} taken
+ * @returns {Promise<object|null>}  the shape that ended, or null
+ */
+export async function endShapeOnDamage(actor, taken) {
+  const shape = actor?.shape ?? null;
+  if (!endsOnDamage(shape, taken)) return null;
+  const label = shapeLabel(shape);
+  await leaveShape(actor);
+  ui.notifications?.info(game.i18n.format("AZEROTH.ForcedShape.EndedByDamage", { name: actor.name, form: label }));
+  return shape;
+}
+
+/**
+ * The bestiary pack's entry for a forced kind's form (14 §15's Frog or Rabbit), by
+ * name, as a uuid - or null where the pack holds none.
+ *
+ * @param {string} kind
+ * @returns {Promise<string|null>}
+ */
+async function forcedFormUuid(kind) {
+  const name = shapeEntryOf(kind);
+  const pack = game.packs?.get("azeroth-rpg.bestiary") ?? null;
+  if (!name || !pack) return null;
+  const index = await pack.getIndex();
+  const row = [...index].find(e => e.name === name) ?? null;
+  return row ? (row.uuid ?? `Compendium.azeroth-rpg.bestiary.Actor.${row._id}`) : null;
+}
+
+/**
+ * **WHETHER THIS CLIENT CAN HAVE A FORCED SHAPE WRITTEN** (D-808), judged BEFORE the
+ * Test is rolled (D-768's order, `rules/gm-writes.mjs#gmAbsentFor`): a GM writes it
+ * here, anybody else through the active GM, and with no GM online nobody can - so the
+ * Resist is refused in words with nothing rolled, where a roll would record a failure
+ * that laid nothing.
+ *
+ * @returns {boolean}
+ */
+export function forcedShapeUnwritable() {
+  return gmAbsentFor({ owned: [false], isGM: game.user?.isGM === true, gmActive: Boolean(game.users?.activeGM) });
+}
+
+/**
+ * **LAY A FORCED SHAPE** (D-808): the form's block read off the bestiary pack, its
+ * snapshot taken, and the shape written through the one writer with the lifetime the
+ * CARD recorded - its caster, cast key and whether the cast is Sustained. On a GM's
+ * client: the pack is the GM's.
+ *
+ * - A Sustained cast the caster no longer holds lays nothing: the Hex was dropped
+ *   between the cast and the Test (`AZEROTH.ForcedShape.SustainGone`).
+ * - The card says what happened in words: a line in chat, from the creature.
+ *
+ * @param {{target: Actor, kind: string, card?: ChatMessage|null}} o
+ * @returns {Promise<{laid: boolean, reason: string|null}>}
+ */
+export async function layForcedShape({ target = null, kind = null, card = null } = {}) {
+  if (!target || !isForcedKind(kind)) return { laid: false, reason: "refused" };
+  const k = SHAPE_KINDS[kind];
+  const f = card?.flags?.["azeroth-rpg"] ?? {};
+  // WHO HOLDS THE CAST (D-724's record): the card's caster, else its speaker - a
+  // feature card records no caster.
+  const caster = f.caster ?? (card ? (ChatMessage.getSpeakerActor(card.speaker)?.uuid ?? null) : null);
+  const laid = {
+    caster,
+    spellUuid: f.kind === "spell" ? (f.spellUuid ?? null) : null,
+    spellName: f.spellName ?? k.by,
+    cast: f.cast ?? null,
+    sustained: k.sustained === true && f.sustained === true,
+    messageId: card?.id ?? null
+  };
+  if (laid.sustained) {
+    let caster = null;
+    try {
+      caster = laid.caster ? fromUuidSync(laid.caster) : null;
+    } catch {
+      caster = null;
+    }
+    if (!caster || !(caster.getFlag?.("azeroth-rpg", "sustaining") ?? []).some(s => s?.cast === laid.cast)) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.ForcedShape.SustainGone", { name: target.name, spell: k.by }));
+      return { laid: false, reason: "sustainGone" };
+    }
+  }
+  const uuid = await forcedFormUuid(kind);
+  const forms = uuid ? await formsFrom([uuid]) : [];
+  if (!forms.length) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Shape.NoBlock", { name: k.by, form: shapeEntryOf(kind) ?? "" }));
+    return { laid: false, reason: "noBlock" };
+  }
+  const effect = await takeShape(target, { kind, forms, laid });
+  if (!effect) return { laid: false, reason: "notWritten" };
+  const label = shapeLabel({ kind, forms });
+  try {
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: target }),
+      content: `<p class="azeroth-drain">${foundry.utils.escapeHTML(game.i18n.format("AZEROTH.ForcedShape.Card", {
+        name: target.name, form: label, by: k.by, speed: FORCED_SPEED, ends: game.i18n.localize(FORCED_ENDS[kind] ?? "")
+      }))}</p>`,
+      flags: { "azeroth-rpg": { kind: "forcedShape", forcedShape: { kind, form: forms[0]?.name ?? "", by: k.by, messageId: card?.id ?? null } } }
+    });
+  } catch (err) {
+    // The card failing leaves the shape laid, said in the console (CLAUDE.md §16).
+    console.warn("azeroth-rpg | the forced shape's card", err);
+  }
+  return { laid: true, reason: null };
+}
+
+/**
+ * **A FAILED TEST LAYS THE FORM, THROUGH THE ONE DOOR** (D-808): called by the card's
+ * own Resist (`dice/chat.mjs#rollResists`) for a creature that failed its Test against
+ * Hex or Polymorph. A GM writes it here; anybody else asks the active GM, who judges
+ * the asker, the card and the Test again before writing.
+ *
+ * @param {{target: Actor, kind: string, message: ChatMessage, result: ChatMessage}} o
+ * @returns {Promise<{laid: boolean, reason: string|null}>}
+ */
+export async function forcedShapeFromTest({ target, kind, message, result } = {}) {
+  if (game.user?.isGM) return layForcedShape({ target, kind, card: message });
+  const gm = game.users?.activeGM ?? null;
+  if (!gm) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.ForcedShape.NoGM", { name: target?.name ?? "", by: SHAPE_KINDS[kind]?.by ?? "" }));
+    return { laid: false, reason: "noGM" };
+  }
+  try {
+    const done = await gm.query(FORCED_SHAPE_QUERY, {
+      targetUuid: target.uuid, kind, messageId: message?.id ?? null, resultId: result?.id ?? null
+    }, { timeout: 15000 });
+    return done && typeof done === "object" ? { laid: done.laid === true, reason: done.reason ?? null } : { laid: false, reason: "error" };
+  } catch (err) {
+    ui.notifications?.warn(err.message);
+    return { laid: false, reason: "error" };
+  }
+}
+
+/** A chat message by id, waited for a moment: the asker's own Test may still be on its way here. */
+async function messageSoon(id) {
+  for (let i = 0; i < 20 && id; i++) {
+    const found = game.messages?.get(id) ?? null;
+    if (found) return found;
+    await new Promise(r => setTimeout(r, 50));
+  }
+  return null;
+}
+
+/**
+ * **THE GM'S SIDE OF `FORCED_SHAPE_QUERY`** (D-808), every fact judged again here:
+ * the creature is the asker's, the card lays this kind, and the Test the asker made
+ * is a FAILED Resilience Test answering that card, made by the asker.
+ *
+ * @param {{targetUuid?: string, kind?: string, messageId?: string, resultId?: string}} data
+ * @param {{user?: User|null}} [o]
+ * @returns {Promise<{laid: boolean, reason: string|null}>}
+ */
+export async function forcedShapeQueryHandler({ targetUuid = null, kind = null, messageId = null, resultId = null } = {}, { user = null } = {}) {
+  const target = targetUuid ? await fromUuid(targetUuid) : null;
+  if (!target || target.documentName !== "Actor") throw new Error(game.i18n.localize("AZEROTH.Card.TargetGone"));
+  if (user && !target.testUserPermission(user, "OWNER")) {
+    throw new Error(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: target.name }));
+  }
+  const card = messageId ? game.messages?.get(messageId) ?? null : null;
+  if (!card || !isForcedKind(kind) || forcedKindForCard(card.flags?.["azeroth-rpg"]) !== kind) {
+    throw new Error(game.i18n.localize("AZEROTH.ForcedShape.Refused"));
+  }
+  const result = await messageSoon(resultId);
+  const f = result?.flags?.["azeroth-rpg"] ?? {};
+  const failed = result?.rolls?.[0]?.outcome?.success === false;
+  if (!result || f.resistOf?.messageId !== card.id || !failed || (user && result.author?.id !== user.id)) {
+    throw new Error(game.i18n.localize("AZEROTH.ForcedShape.Refused"));
+  }
+  return layForcedShape({ target, kind, card });
 }
 
 /**
@@ -397,7 +733,10 @@ export async function repairShapeTokens(scene = globalThis.canvas?.scene ?? null
   const actors = new Map();
   for (const token of scene.tokens) {
     const actor = token.actor;
-    if (actor?.type !== "character") continue;
+    if (!actor) continue;
+    // A creature of any kind may wear a forced shape (D-808): one is reconciled
+    // where it wears a shape or its token still keeps an original.
+    if (actor.type !== "character" && !actor.shape && !token.getFlag?.("azeroth-rpg", RESTORE_FLAG)) continue;
     // A synthetic actor is its own; a world actor is reconciled once, on every scene.
     actors.set(actor.isToken ? `token:${token.id}` : actor.uuid, actor);
   }
@@ -426,7 +765,9 @@ export async function repairShapeTokens(scene = globalThis.canvas?.scene ?? null
  */
 function onPreCreateToken(token) {
   const actor = token?.actor ?? null;
-  if (!actor || actor.type !== "character") return;
+  // Any creature, since a forced shape is laid on one of any kind (D-808): a token
+  // with neither a shape to wear nor an original to go back to is left below.
+  if (!actor) return;
   const source = token._source ?? {};
   const kept = source.flags?.["azeroth-rpg"]?.[RESTORE_FLAG] ?? null;
   const shape = actor.shape;
@@ -490,6 +831,22 @@ export function registerShapeHooks() {
     if (!actor) return;
     settleAfterLeaving(actor, readShape(effect.getFlag("azeroth-rpg", SHAPE_FLAG)))
       .catch(err => console.error("azeroth-rpg | shape left", err));
+  });
+  // **A HEX THAT ENDS ENDS ITS SUSTAIN** (D-808): the frog gone by ANY door - damage,
+  // a GM's hand, a Dispel, the writer's own leave - and the shaman stops paying for
+  // it. On the active GM's client alone, whoever deleted it, because the caster is
+  // seldom the deleter's to write; `endLaidSustain` ends nothing the caster no longer
+  // holds, which is every deletion the Sustain's own sweep made.
+  Hooks.on("deleteActiveEffect", effect => {
+    if (game.users?.activeGM?.isSelf !== true || !isForcedShapeEffect(effect)) return;
+    if (effect.getFlag("azeroth-rpg", "sustained") !== true) return;
+    // A failure is said in words and warned of, never logged as a console error
+    // (CLAUDE.md §16): the frog is gone either way, and the Stop still ends the Sustain.
+    endLaidSustain({ caster: effect.origin ?? null, cast: effect.getFlag("azeroth-rpg", "cast") ?? null })
+      .catch(err => {
+        console.warn("azeroth-rpg | the Sustain of a forced shape did not end", err);
+        ui.notifications?.warn(game.i18n.localize("AZEROTH.ForcedShape.SustainNotEnded"));
+      });
   });
   const redress = (effect, options, userId) => {
     if (userId !== game.user.id || options?.[SHAPE_OPTION]) return;

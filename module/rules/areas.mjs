@@ -44,8 +44,12 @@ const ORIGINS = Object.freeze({ SELF: "self", POINT: "point", TARGET: "target" }
 
 export { ORIGINS };
 
-/** `20 ft`, `100 ft` — the only distance form 07 uses. */
-const DISTANCE = /(\d+)\s*ft\b/i;
+/**
+ * `20 ft`, `100 ft` — the only distance form 07 uses — and a half foot, `7.5 ft`:
+ * 14's *A 15-foot area* is a circle fifteen feet across (the lead's ruling on Q2,
+ * D-809), so its radius is a half foot.
+ */
+const DISTANCE = /(\d+(?:\.5)?)\s*ft\b/i;
 
 /**
  * **ONE SPACE ON THE GROUND** (07's Frozen Rune: *Target A point on the ground*, and

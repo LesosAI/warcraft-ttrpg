@@ -25,6 +25,8 @@ import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { attackWithDialog } from "../applications/actions.mjs";
 import { migrate as migrateShapes } from "../migrations/0.12.20-shapes.mjs";
 import { RESTORE_FLAG } from "../rules/shapes.mjs";
+import { skillModifier } from "../rules/abilities.mjs";
+import { skillRankOf, skillTotalFor } from "../rules/skills.mjs";
 
 /** Wait for a condition, or say what was being waited for. */
 async function until(fn, what, ms = 15000) {
@@ -209,6 +211,12 @@ export function shapesBatch(context) {
       const s = druid.system;
       assert.equal(s.abilities.str.value, bear.system.abilities.str.value);
       assert.equal(s.abilities.str.mod, 2, "the form's Strength did not move the modifier");
+      // The lead's Q7 (D-810): Athletics in a form reads the BEAST's Strength
+      // skill modifier, and the Druid's own score keeps its own beside it.
+      assert.equal(s.abilities.str.skillMod, skillModifier(s.abilities.str.total), "the form's Strength did not move the skill modifier");
+      assert.equal(s.abilities.str.own.skillMod, skillModifier(s.abilities.str.own.total), "the Druid's own Strength carries no skill modifier");
+      assert.equal(skillTotalFor(druid, "athletics"), skillModifier(s.abilities.str.total) + s.proficiency + skillRankOf(druid, "athletics"),
+        "Athletics in the form does not read the bear's Strength");
       assert.equal(s.abilities.con.value, bear.system.abilities.con.value);
       assert.equal(s.abilities.str.own.value, own.str, "the character's own Strength is lost");
       assert.equal(s.defense, bear.system.defense);

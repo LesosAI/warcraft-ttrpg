@@ -23,6 +23,8 @@ import { actorTraining, trainingWarning } from "../rules/equipment-training.mjs"
 import { showsManeuvers } from "../rules/combat-sheet.mjs";
 import { attackWithDialog, bindKeyActivation, bindPlateKeys, bindPoolInputs, bindScoreInputs, blankItemMenu, browseItems, browseSpells, containersFor, grantsOf, maneuversContext, castItemSpell, castWithDialog, afflictionsContext, AFFLICTION_OPEN_GROUP, AFFLICTION_OPEN_ROWS, rememberAfflictionOpen, detailFields, effectAction, effectsContext, exposeWithDialog, itemContextMenu, putInContainer, resilienceWithDialog, rollAbility, rollWithDialog, signatureContext, skillContextMenu, skillTooltip, stepPool, useFeatureWithDialog, useGearWithDialog, useSignatureWithDialog, wearable } from "./actions.mjs";
 import { hasSignature } from "../rules/signatures.mjs";
+// The one door for a Skill Test's numbers (05 §1, §8; D-810).
+import { signedModifier, skillModOf, skillRowsFor, skillTotalFor } from "../rules/skills.mjs";
 import { inPlay } from "../rules/in-play.mjs";
 import { RANK_MAX, ledgerTotal, rankCost, unspent } from "../rules/xp.mjs";
 import { enrich } from "../helpers/enrich.mjs";
@@ -38,9 +40,9 @@ import { clearHidden, clearMark, clearReady, disengage, guard, hide, leaveShapeC
 import { chargeLines } from "../rules/riders.mjs";
 import { chargeControl } from "../helpers/rider-words.mjs";
 // A shape on the sheet (02 §7, D-769): its name, what melds, the attack's ability.
-import { SHAPE_ABILITIES, meldsGear, shapeKindOf, shapeRefusal } from "../rules/shapes.mjs";
+import { FORCED_SPEED, SHAPE_ABILITIES, SHAPE_KINDS, meldsGear, shapeKindOf, shapeRefusal } from "../rules/shapes.mjs";
 import { featurePrice, rungsChip } from "../rules/class-features.mjs";
-import { shapeLabel } from "../documents/shapes.mjs";
+import { FORCED_ENDS, forcedRefusalFor, shapeLabel } from "../documents/shapes.mjs";
 import { attackAbility } from "../rules/ammunition.mjs";
 // Whether the character is out of sight, for the Combat tab's chip (D-717).
 import { isHidden } from "../effects/stealth.mjs";
@@ -450,12 +452,18 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       // *form*, the character's own score on its tooltip, and NOT editable - the
       // plate's input writes the stored score back, and what it would write is
       // the block's.
-      const formed = Boolean(context.shape) && SHAPE_ABILITIES.includes(key);
+      // A shape somebody else laid takes no score (D-808): nothing is marked.
+      const formed = Boolean(context.shape) && !context.shape.forced && SHAPE_ABILITIES.includes(key);
       return {
       key,
       label: AZEROTH.abilities[key],
       value: ability.value,
       mod: ability.mod,
+      // Both numbers the score gives, on the chip's hover (05 §1, D-810): the
+      // chip is the ability modifier, and a Skill Test adds the skill modifier.
+      modTip: game.i18n.format("AZEROTH.Sheet.ModifiersTip", {
+        ability: signedModifier(ability.mod), skill: signedModifier(ability.skillMod)
+      }),
       // What is worn adds to the score (08 §6, 2026-09-06): the total on a
       // chip when it differs from the stored score.
       bonus: ability.bonus ?? 0,
@@ -2504,7 +2512,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
 
   /**
    * The twenty-three skills in book order, grouped by the ability each reads
-   * (D11 §1). **Total = attribute modifier + Proficiency + Rank** (02 §8).
+   * (D11 §1). **Total = skill modifier + Proficiency + Rank** (05 §8, D-810),
+   * read through the one door every Skill Test takes (`rules/skills.mjs`).
    */
   #skills() {
     const system = this.actor.system;
@@ -2527,6 +2536,12 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         abilityLabel: AZEROTH.abilities[ability],
         // Three letters in the row, the full name on hover: the row is 250px.
         abilityAbbr: AZEROTH.abilities[ability].replace(/\.Label$/, ".Abbr"),
+        // The hover names the number the row adds (05 §1, D-810): a Str 16
+        // gives Athletics +1, not the +3 its plate shows.
+        abilityTip: game.i18n.format("AZEROTH.Sheet.SkillModifierTip", {
+          ability: game.i18n.localize(AZEROTH.abilities[ability]),
+          skill: signedModifier(skillModOf(this.actor, ability) ?? 0)
+        }),
         rank,
         // The in-career marker reads the career item's own list — that list is
         // the only reason a Rank is cheap, and showing it is how a player sees
@@ -2535,7 +2550,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         // 02 SS8: the next Rank's cost, and whether the purse covers it.
         nextCost: rank < RANK_MAX ? rankCost(rank + 1, inCareer.has(key)) : null,
         canBuy: rank < RANK_MAX && purse >= rankCost(rank + 1, inCareer.has(key)),
-        total: (system.abilities?.[ability]?.mod ?? 0) + (system.proficiency ?? 0) + rank
+        total: skillTotalFor(this.actor, key)
       };
     });
   }
@@ -2634,6 +2649,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
   #shapeContext() {
     const shape = this.actor.shape;
     if (!shape) return null;
+    if (shape.forced) return this.#forcedShapeContext(shape);
     const system = this.actor.system;
     const label = shapeLabel(shape);
     const names = game.i18n.getListFormatter({ type: "conjunction" }).format(shape.forms.map(f => f.name));
@@ -2685,6 +2701,41 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       ward: shape.ward?.school
         ? game.i18n.format("AZEROTH.Shape.WardLine", { ward: shape.ward.value, school: game.i18n.localize(AZEROTH.schools[shape.ward.school] ?? shape.ward.school) })
         : null
+    };
+  }
+
+  /**
+   * **A SHAPE SOMEBODY ELSE LAID** (07's Hex, 02's Polymorph; D-808): the same object
+   * the banner, the Combat tab and the Overview read, holding none of the block's
+   * half. Defense and Armor Points are named the creature's own, the Speed the
+   * spell's, the weapons stay in the list (every attack door refuses them in words),
+   * and where the reader may not take the shape off, the reason stands where the
+   * Leave would - a refused clear is never a dead button (D-686).
+   */
+  #forcedShapeContext(shape) {
+    const label = shapeLabel(shape);
+    const first = shape.forms[0] ?? {};
+    const by = SHAPE_KINDS[shape.kind]?.by ?? "";
+    return {
+      kind: shape.kind,
+      kindLabel: AZEROTH.shapeKinds[shape.kind] ?? null,
+      forced: true,
+      label,
+      line: game.i18n.format("AZEROTH.ForcedShape.InForm", { form: label }),
+      names: first.name ?? "",
+      portrait: first.portrait || first.token || null,
+      uuid: first.uuid ?? null,
+      from: game.i18n.format("AZEROTH.ForcedShape.OwnNumbers", { by }),
+      speedFrom: game.i18n.format("AZEROTH.ForcedShape.SpeedFrom", { by, speed: FORCED_SPEED }),
+      speed: this.actor.system.speed ?? null,
+      flying: null,
+      melds: false,
+      attacksHeading: null,
+      attacks: [],
+      melded: null,
+      ward: null,
+      leaveRefused: forcedRefusalFor(this.actor, "leave"),
+      leaveNote: game.i18n.localize(FORCED_ENDS[shape.kind] ?? "")
     };
   }
 
@@ -3975,11 +4026,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       kind: "skill",
       skill: key,
       title: game.i18n.localize(skill.label),
-      modifiers: [
-        { label: AZEROTH.abilities[skill.ability], value: this.actor.system.abilities[skill.ability].mod },
-        { label: "AZEROTH.Sheet.Proficiency", value: this.actor.system.proficiency },
-        { label: "AZEROTH.Sheet.Rank", value: skill.rank }
-      ]
+      modifiers: skillRowsFor(this.actor, key)
     }, event);
   }
 

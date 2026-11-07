@@ -67,7 +67,7 @@ import { CONSECRATED, CONSECRATED_FLAG, SNARE, cardAttackAllowance, consecratedT
 // Shapeshift, the Avatar of the Wild and Metamorphosis (02 §7, D-769): the law,
 // and the one writer of a shape.
 // The free shift's own law and its once-a-round mark (04's Savage Shift, D-771).
-import { FREE_SHIFT_MARK, METAMORPHOSIS, formPicksRefusal, freeShift, isShapeshiftForm, shapeKindOf, shapeRefusal } from "../rules/shapes.mjs";
+import { FORCED_FORMS, FREE_SHIFT_MARK, METAMORPHOSIS, forcedKindForCard, formPicksRefusal, freeShift, isShapeshiftForm, shapeKindOf, shapeRefusal } from "../rules/shapes.mjs";
 import { formsFrom, takeShape } from "../documents/shapes.mjs";
 import { secondaryLevel, tierForLevel } from "../rules/progression.mjs";
 import { skillFromKnown, skillUuid } from "../rules/creation.mjs";
@@ -324,6 +324,11 @@ import { worldActorOf } from "../documents/bound.mjs";
 import { abilityKeyOf, cleanFromFeature, featureKeyOf, risenRecord, tokenRef } from "../rules/animation-records.mjs";
 import { PRESENTATION_ONLY_ABILITIES, CREATURE_PRESENTATION_AREAS } from "../rules/creature-animation-table.mjs";
 import { castingBonusOf } from "../rules/item-bonuses.mjs";
+// 14 §1's Boss Actions, for every Boss (D-809): the points' one writer, the doors a
+// plan names, and the reads an attack makes of what a Boss Action laid.
+import { bossRefusalWords, claimBossPoints } from "../effects/boss-points.mjs";
+import { afterBossPress, bossCardFlags, prepareBossPress, takeMarkedExtra, takeMissNext } from "../effects/boss-doors.mjs";
+import { bossPressJudgement, bossTurnKey, cleanBossPlan } from "../rules/boss-actions.mjs";
 
 /**
  * **THE FINISHER AS IT STANDS NOW** (02 §7 with 04's Death Mark, Rupture and
@@ -964,6 +969,9 @@ export async function rollTest({
   if (kind === "attack" && !parry && refuseDispersion(actor, "attack")) return null;
   if (parry && weaponId && refuseDispersion(actor, "gear")) return null;
   if (refuseAncientDespair(actor, kind)) return null;
+  // **07's HEX: *it cannot attack*** (D-808): no attack and no Parry under Hex or
+  // Polymorph, whichever door rolled it - before the budget, the Momentum or a shot.
+  if (kind === "attack" && actor?.refuseForcedShape?.(parry ? "reaction" : "attack")) return null;
   if (kind === "attack" && refuseDisarmedAttack(actor, { weaponId, strike })) return null;
   if (npcShieldSlamShieldId !== null && (actor?.type !== "npc" || kind !== "attack" || parry
     || typeof npcShieldSlamShieldId !== "string"
@@ -1395,6 +1403,16 @@ export async function rollTest({
   await roll.evaluate();
   roll = await offerSecondStrike(actor, roll, { kind, parry });
   await actor.offerElunesRegard?.(roll);
+  // **14's SHADOW STEP, STEP ASIDE AND GYTH TAKES THE AIR** (D-809): *the next attack
+  // against him this round misses* - the first target's mark, taken by this attack and
+  // read by the roll's own outcome, so the card says Miss in words.
+  if (kind === "attack" && !parry) {
+    const missNext = await takeMissNext(actor, first);
+    if (missNext) {
+      roll.options.forcedMiss = missNext;
+      roll.options.provenance.push({ label: missNext.name, value: null, formula: game.i18n.localize("AZEROTH.Boss.MissNextRow") });
+    }
+  }
   const outcome = roll.outcome;
   // 06 §6 (D-693): a Bane somebody laid on this creature is spent by the Test
   // it was laid for - *on the NEXT Casting Test it makes* is a count, not a
@@ -2057,7 +2075,12 @@ export async function rollTest({
   // a Static Charge to add your tier to that damage*; D-774): where it lands.
   const charged = chargeLine && damage && outcome.success && await spendCharge(actor) ? chargeLine.amount : 0;
   if (charged) roll.options.provenance.push({ label: chargeLine.name, value: charged });
+  // **14's SELL THEM OUT** (D-809): *the first of those attacks to hit deals 4 extra
+  // damage* - taken off the target's mark by the hit, for the marking Boss's side alone.
+  const markedHit = kind === "attack" && !parry && damage && outcome.success ? await takeMarkedExtra(actor, first) : null;
+  if (markedHit) roll.options.provenance.push({ label: markedHit.name, value: markedHit.damage });
   const talentRating = Math.max(0, Math.trunc(Number(extraRating)) || 0) + finisher + (damage ? promisedDamage : 0) + charged
+    + (markedHit?.damage ?? 0)
     // Axe and Hammer's damage on the off hand (door 26).
     + (damage ? offHandBuild.damage : 0)
     + (damage ? crushridgeRating : 0)
@@ -2915,6 +2938,9 @@ export async function castSpell({
   // 2, D-772): `{by}` names what paid for it, for the card's source line. It
   // takes none of the next spell's discounts, since it paid no Mana.
   free = null,
+  // **A BOSS ACTION THAT CASTS** (D-809, the audit's F8): its points paid it at the press
+  // (`applications/actions.mjs#useAbilityWithDialog`), so the cast spends no action.
+  bossAction = false,
   // **WHAT A TALENT'S COUNTER OR CHARGE BUYS ON THIS CAST** (D-774): the
   // identifiers the roller ticked - Inner Focus's free Mana, Lava Burst's Ward
   // ignored, Static Charge's tier - judged again here before anything is spent.
@@ -2924,6 +2950,8 @@ export async function castSpell({
   dispersionExecution = null
 } = {}) {
   if (dispersionExecution && !validDispersionExecution(dispersionExecution, actor, spell)) return null;
+  // 07's Hex: *it cannot attack, cast or speak* (D-808), before anything is spent.
+  if (actor?.refuseForcedShape?.("cast")) return null;
   if (refuseDispersion(actor, "cast")) return null;
   if (refuseDispersedTargets(targets)) return null;
   if (spell?.system?.identifier === "chain-lightning") {
@@ -3239,7 +3267,7 @@ export async function castSpell({
   const swiftUsed = swiftMine ? ((r => (r.number === swiftFight.round ? r.once ?? [] : []))(swiftMine.getFlag("azeroth-rpg", "round") ?? {})) : [];
   const swiftMark = swiftRow?.perRound && swiftMine ? nextRoundMark(swiftRow.identifier, swiftRow.perRound, swiftUsed) : null;
   const swiftLeft = swiftRow?.perRound ? (swiftMine ? roundMarksLeft(swiftRow.identifier, swiftRow.perRound, swiftUsed) : swiftRow.perRound) : (swiftCounter?.system?.uses?.value ?? 0);
-  let castAction = free ? null : sys.action;
+  let castAction = free || bossAction ? null : sys.action;
   if (swift && !viaItem && !free) {
     const judged = swiftCast({ row: swiftRow, spellAction: sys.action ?? null, healing: isHealingSpell(sys), usesLeft: swiftLeft });
     if (!judged.ok) {
@@ -4162,7 +4190,10 @@ export async function castSpell({
   // at the cast was never 07's rule for an area on the ground. **And wherever a
   // tick is laid** (D-770): Moonfire carries a Damage, so it lays no effect of
   // its own words, and the effect is what carries its 2 at the next turn.
-  const applies = !["compel", "soul-link"].includes(sys.identifier) && (sys.applies?.active || laidTick || floor) && success && !areaCarriesSpell(sys) ? {
+  // **AND NEVER WHERE A FAILED TEST LAYS A FORM** (D-808): 07's Hex is the frog its
+  // Resist lays (`dice/chat.mjs#rollResists`), and an Apply would lay a second Hex.
+  const applies = !["compel", "soul-link"].includes(sys.identifier) && !forcedKindForCard({ kind: "spell", identifier: sys.identifier ?? null })
+    && (sys.applies?.active || laidTick || floor) && success && !areaCarriesSpell(sys) ? {
     self: selfCast,
     targets: list.map((t, index) => ({ index, name: t.name }))
   } : null;
@@ -5921,6 +5952,8 @@ export async function useFeature({
   if (spellstealCommit !== null && !spellstealUseValid(actor, item, spellstealCommit)) return null;
   if (!(await featureReady(actor, item))) return null;
   if (refuseAncientDespair(actor, "feature")) return null;
+  // A creature under Hex or Polymorph uses no feature (D-808), before anything is paid.
+  if (actor?.refuseForcedShape?.("feature")) return null;
   const sys = item.system;
   // A copy, never the caller's own array: an area Use replaces it with the creatures it
   // gathers (the B6 fix; the lead: *"Measure the area"*), and Cloudburst adds to it.
@@ -9619,22 +9652,38 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
     return manageSentinelPack(actor);
   }
   if (refuseAncientDespair(actor, "ability")) return null;
+  // A creature under Hex or Polymorph uses none of its abilities (D-808).
+  if (actor?.refuseForcedShape?.("ability")) return null;
   const row = actor?.system?.[list]?.[index] ?? null;
   const a = row?.automation ?? null;
   // An announcement presents a GM-adjudicated action without resolving it.
   // No resource, action budget, movement, target condition or summon is written.
   if (row && actor?.isOwner && (a?.kind ?? "none") === "none" && PRESENTATION_ONLY_ABILITIES.includes(row.name)) {
+    // 06 §10 (door 10): a spirit announces nothing either (the audit's F10).
+    const spiritAnnounce = realmRefusalFor(actor, "ability");
+    if (spiritAnnounce) {
+      ui.notifications?.warn(spiritAnnounce);
+      return null;
+    }
+    // **AN ANNOUNCED BOSS ACTION SPENDS ITS POINTS** (D-809; D-807's open item): claimed
+    // once, through the points' one writer, before the card is posted.
+    let announced = null;
+    if (list === "bossActions") {
+      announced = await claimBossPoints(actor, row);
+      if (!announced.ok) return null;
+    }
     const source = (await import("../applications/roll-dialog.mjs")).sourceOf(actor);
     const content = await renderTemplate(TEMPLATE.feature, {
       config: AZEROTH, title: row.name, subtitle: actor.name,
       effect: await enrich(row.description, { relativeTo: actor }),
       note: game.i18n.localize("AZEROTH.Animation.AnnouncementNote"),
+      bossPoints: announced ? { cost: announced.cost, left: announced.left, max: actor.system?.bossPoints?.max ?? null } : null,
       targets: [], speakerName: actor.name
     });
     return ChatMessage.create(ChatMessage.applyMode({ speaker: ChatMessage.getSpeaker({ actor }), content,
       flags: { "azeroth-rpg": { kind: "ability", list, index, title: row.name,
         source, targets: [], featureKey: abilityKeyOf(row.name), casting: false,
-        success: true, presentationOnly: true } } }));
+        success: true, presentationOnly: true, ...(announced ? { bossAction: true } : {}) } } }));
   }
   // **CUTTING GEAR** (the lead, 2026-10-22: *"Give constructs a trait or ability that
   // allows them to end one Entangled condition per turn no action required."*): by its
@@ -9648,6 +9697,21 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
     return null;
   }
   const lst = targets ?? [];
+  // **EVERYTHING A BOSS ACTION JUDGES AND PICKS BEFORE IT SPENDS** (D-809; D-768's
+  // order): the circle it gathers where nobody is targeted, a space, a facing, an ally,
+  // a class or a corpse - a pick dismissed or refused spends nothing.
+  let bossPre = null;
+  if (list === "bossActions") {
+    const judged = bossPressJudgement({ points: actor.system?.bossPoints ?? {}, cost: row.cost ?? 1,
+      turnKey: bossTurnKey(actor.activeFight?.() ?? null), lastTurnKey: actor.getFlag?.("azeroth-rpg", "bossPress")?.turnKey ?? null });
+    if (!judged.ok) {
+      ui.notifications?.warn(bossRefusalWords(actor, row, judged));
+      return null;
+    }
+    bossPre = await prepareBossPress({ actor, row, targets: lst });
+    if (!bossPre.ok) return null;
+    lst.splice(0, lst.length, ...bossPre.targets);
+  }
   if (list === "creatureAbilities" && row.name === "Pack Rekindling") {
     const { configureCoreHoundPack } = await import("../effects/core-hound-pack-configure.mjs");
     return configureCoreHoundPack(actor);
@@ -10077,12 +10141,9 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
   const isBossAction = list === "bossActions";
   let bossSpend = null;
   if (isBossAction) {
-    bossSpend = spendBossPoints(actor.system?.bossPoints ?? {}, row.cost ?? 1);
+    bossSpend = bossPressJudgement({ points: actor.system?.bossPoints ?? {}, cost: row.cost ?? 1 });
     if (!bossSpend.ok) {
-      ui.notifications?.warn(game.i18n.format(
-        bossSpend.reason === "none" ? "AZEROTH.Boss.NoPoints" : "AZEROTH.Boss.Short",
-        { name: row.name, cost: bossSpend.cost, held: bossSpend.held }
-      ));
+      ui.notifications?.warn(bossRefusalWords(actor, row, bossSpend));
       return null;
     }
   }
@@ -10122,8 +10183,17 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
 
   // 1d. Spend: the Boss Action points, marked off before anything else is paid
   // as a shot is (D-641), or the turn's budget.
-  if (isBossAction) await actor.update({ "system.bossPoints.value": bossSpend.left });
-  else if (!(await spendTurnBudget(actor, a.action ?? null))) {
+  // **THE POINTS' ONE WRITER** (D-809): judged again and written once where it is
+  // written, a double press and a second client included; refused in words with
+  // nothing spent.
+  if (isBossAction) {
+    const claimed = await claimBossPoints(actor, row);
+    if (!claimed.ok) {
+      if (suretyQuote) await suretyTools.releaseFelSuretyClaim(suretyQuote);
+      return null;
+    }
+    bossSpend = claimed;
+  } else if (!(await spendTurnBudget(actor, a.action ?? null))) {
     if (suretyQuote) await suretyTools.releaseFelSuretyClaim(suretyQuote);
     return null;
   }
@@ -10196,7 +10266,15 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
 
   // 4. The numbers.
   const testDC = abilityDC(a, actor.system);
-  const heal = success && (a.heal ?? 0) > 0 ? { amount: a.heal, explanation: String(a.heal) } : null;
+  // A Boss Action's plan (D-809): read once for the heal, the summon and the card.
+  const bossPlan = cleanBossPlan(a.plan);
+  const heal = success && (a.heal ?? 0) > 0 ? {
+    amount: a.heal, explanation: String(a.heal),
+    // *Immol'thar ... recovers 5 Health*: the Boss's own (the audit's F5), never the target's.
+    ...(bossPlan.selfHeal ? { self: true } : {}),
+    // Stone Mends Stone's *18 instead*, the table's to choose.
+    ...(bossPlan.healAlt ? { alt: bossPlan.healAlt } : {})
+  } : null;
   // **A FAILED CASTING TEST FORCES NO RESIST** (D-775's rule for a casting Use, carried to
   // a creature's casting ability by the B8a2 pass): the ability did not go off.
   const resist = a.resist && success ? { key: a.resist, label: AZEROTH.resiliences[a.resist], dc: testDC } : null;
@@ -10301,7 +10379,7 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
   // What arrives, and how many (D-691, decision 2): the GM presses the card's
   // button and chooses where they stand, because the tool does not know what
   // "out of the chamber walls" means.
-  const summon = a.kind === "summon" && a.summon?.entry && (a.summon.count ?? 0) > 0
+  const summon = a.kind === "summon" && a.summon?.entry && (a.summon.count ?? 0) > 0 && bossPlan.door !== "raise"
     ? { entry: a.summon.entry, count: a.summon.count, side: a.summon.side, from: a.summon.from }
     : null;
   const costLabel = suretyQuote?.payer === "warlock" ? `Mana (${abilityPayer.name})`
@@ -10364,6 +10442,9 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
       // What the Place button calls up (D-691, decision 2).
       summon: summon ? { ...summon, bossAction: isBossAction } : null,
       bossAction: isBossAction,
+      // **WHAT THE CARD CARRIES FOR A BOSS ACTION'S DOORS** (D-809): a forced move, a
+      // drain, an escape, a grip, an attack's allowance, a zone.
+      ...(isBossAction ? bossCardFlags({ actor, row, targets: lst }) : {}),
       // **WHO USED IT, WHICH ABILITY, AND HOW ITS TEST WENT** (D-724; the Legacy
       // branches' door 2): the creature's token, the key its row is filed under in
       // the feature table (`ability:<slug>`), and whether a Casting Test was made.
@@ -10377,6 +10458,9 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
     const aftermath = await completeSpellLockWindow({ actor, castId: spellLock.castId, message });
     if (!aftermath?.ok) ui.notifications?.warn("The ability resolved, but Spell Lock's resistance or Silence could not be confirmed. Check the reaction records; do not repeat the ability.");
   }
+  // **WHAT A BOSS ACTION LANDS AT THE PRESS** (D-809): a relocation, a push, Power, a
+  // miss to come, a Boon or a Bane, copies, the raised.
+  if (isBossAction) await afterBossPress({ actor, row, targets: lst, pre: bossPre?.pre ?? {}, message });
   return message;
 }
 
@@ -10890,6 +10974,8 @@ export async function useSignature({ actor, item, targets = null, approved = nul
   // only there wrote a pending claim and said nothing to the player who pressed.
   if (refuseDispersion(actor, "gear")) return null;
   if (refuseAncientDespair(actor, "signature")) return null;
+  // A creature under Hex or Polymorph presses no Signature (D-808).
+  if (actor?.refuseForcedShape?.("signature")) return null;
   if(approvedRestSignature(item?.system?.identifier)&&approved?.authority!==SIGNATURE_USE_AUTHORITY)
     return requestApprovedSignatureUse(actor,item,targets??[]);
   if(approved?.authority!==SIGNATURE_USE_AUTHORITY)approved=null;
@@ -11356,7 +11442,10 @@ export async function featureMenu(actor, item) {
     // 14's entries and the GM's own beasts (D-650), gated by the talent, the
     // Handling DC and the character's tier; held ones tagged, never greyed.
     const options = [...(await bestiaryEntries()), ...worldCreatures(["beast", "dragonkin", ...(graveBond ? ["undead"] : [])], { owner: actor })]
-      .filter(e => (e.creatureType === "beast" || e.creatureType === "dragonkin" || (graveBond && e.creatureType === "undead")) && e.name !== "Avatar")
+      // 14 SS13 gives a Companion *any entry in Beasts*: never SS15's Frog and Rabbit,
+      // the forms Hex and Polymorph lay (D-808, MY READING).
+      .filter(e => (e.creatureType === "beast" || e.creatureType === "dragonkin" || (graveBond && e.creatureType === "undead")) && e.name !== "Avatar"
+        && !FORCED_FORMS.includes(e.name))
       .sort((a, b) => (order.indexOf(a.weightClass) - order.indexOf(b.weightClass)) || ((a.tier ?? 1) - (b.tier ?? 1)) || a.name.localeCompare(b.name))
       .map(e => {
         const option = creatureOption(e);

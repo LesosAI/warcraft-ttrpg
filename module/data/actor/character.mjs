@@ -14,7 +14,7 @@ import { bonusTotals } from "../../rules/item-bonuses.mjs";
 import { signatureEffects } from "../../rules/signatures.mjs";
 import { corruptionEffects } from "../../rules/corruption-effects.mjs";
 import { wornWeaponEffects } from "../../rules/weapon-traits.mjs";
-import { abilityModifier } from "../../rules/abilities.mjs";
+import { abilityModifier, skillModifier } from "../../rules/abilities.mjs";
 import { initiativeFor } from "../../rules/initiative.mjs";
 import { derivedThresholds, trackStates } from "../../rules/corruption.mjs";
 import { wardFor } from "../../rules/ward.mjs";
@@ -33,7 +33,7 @@ import { suitEffects } from "../../rules/armor.mjs";
 import { DEFAULT_SIZE, flyingPace } from "../../rules/size.mjs";
 // A shape's physical half (02 §7, D-769): what the block gives the character,
 // and whether worn gear melds into it.
-import { SHAPE_ABILITIES, meldsGear } from "../../rules/shapes.mjs";
+import { FORCED_SPEED, SHAPE_ABILITIES, meldsGear } from "../../rules/shapes.mjs";
 // Carrying is counted in bag slots (D-735, D-736); the pounds stay with 14's
 // creatures, in `rules/weight.mjs` and `NpcData`.
 import { baseCapacity, ledger } from "../../rules/slots.mjs";
@@ -330,10 +330,20 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
       ability.sources = worn.abilitySources[key] ?? [];
       ability.total = ability.value + ability.bonus;
       ability.mod = abilityModifier(ability.total) + delta;
+      // **THE SKILL MODIFIER** (05 §1; the lead's ruling, D-810): what a Skill
+      // Test adds in place of the ability modifier. It reads the score's TOTAL
+      // and nothing else - an effect on the score and a worn grant reach it, an
+      // effect's delta on `mod` does not (Q4) - and in a shape the total is the
+      // beast's, so Athletics in a form reads the beast's Strength (Q7).
+      ability.skillMod = skillModifier(ability.total);
       // **THE CHARACTER'S OWN SCORE, WHERE A SHAPE HAS TAKEN IT** (D-769): what
       // the sheet's tooltip names, and what the Health and a rest read.
       ability.own = physical && SHAPE_ABILITIES.includes(key)
-        ? { value: stored, total: stored + ability.bonus, mod: abilityModifier(stored + ability.bonus) + delta }
+        ? {
+          value: stored, total: stored + ability.bonus,
+          mod: abilityModifier(stored + ability.bonus) + delta,
+          skillMod: skillModifier(stored + ability.bonus)
+        }
         : null;
     }
     // Final-phase ADD changes need a numeric base even for an untrained school.
@@ -667,6 +677,11 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // for the lead, so the movement door still stops an Entangled Paladin.
     this.speedUnreducible = steadfast.speedFloor === true;
     this.speedFloor = this.speedUnreducible ? speedFrom(this.speedParts.filter(p => (Number(p?.value) || 0) >= 0)) : null;
+    // **A FORCED SHAPE SETS THE SPEED** (07's Hex: *its Speed is 10 feet*; D-808): the
+    // form's pace is the base, never a reduction, so what *cannot be reduced* holds is
+    // that pace - a hexed Unyielding Paladin moves 10 feet, and Slowed takes nothing
+    // off it (MY READING, beside the open question on Entangled above).
+    if (shape?.forced && Number.isFinite(this.speedFloor)) this.speedFloor = Math.min(this.speedFloor, FORCED_SPEED);
     if (this.speedUnreducible) this.speed = Math.max(this.speed, this.speedFloor);
     // **A FLIER'S FLYING PACE IS THE TIER'S** (14 §1, D-530) while the shape
     // flies, at the character's own tier, and a shape that does not fly flies

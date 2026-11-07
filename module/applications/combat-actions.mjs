@@ -14,6 +14,8 @@ import { allyOf, anchoredBy } from "../canvas/engaged.mjs";
 import { reactionStateOf, rollWithDialog, unansweredOf } from "./actions.mjs";
 // Hiding (D-717): the law, and the one place the status is written.
 import { STEALTH_SKILL, markStealth, stealthAllowed } from "../rules/stealth.mjs";
+// A Skill Test's rows come through one door (05 §1, D-810).
+import { skillRowsFor } from "../rules/skills.mjs";
 import { conceal, isHidden, reveal } from "../effects/stealth.mjs";
 // A shape is left through its one writer (D-769).
 import { leaveShape, shapeLabel, swiftLeaveCounter } from "../documents/shapes.mjs";
@@ -138,21 +140,6 @@ export async function disengage(actor) {
 }
 
 /**
- * The Rank this actor holds in a skill, whichever kind of actor it is.
- *
- * A character's Ranks live on a flag (`azeroth-rpg.skillRanks`) and a
- * creature's on `system.skills`, which is a `TypedObjectField` whose value may
- * be a bare number or a row - the NPC sheet's own roll reads both (D-637).
- */
-function skillRank(actor, key) {
-  if (actor?.type === "npc") {
-    const raw = actor.system?.skills?.[key];
-    return typeof raw === "number" ? raw : (raw?.rank ?? 0);
-  }
-  return Number(actor?.getFlag?.("azeroth-rpg", "skillRanks")?.[key]) || 0;
-}
-
-/**
  * **A STEALTH TEST, OPPOSED** (05 §5's Opposed DC; D-717's Hide): the spec the
  * roll dialog takes - Hide's own, and 04's Preparation's (*make a Stealth Test,
  * opposed by Perception*; D-773), so the two cannot read the Test differently.
@@ -160,18 +147,14 @@ function skillRank(actor, key) {
  * @param {Actor} actor
  */
 export function stealthTestSpec(actor) {
-  const system = actor?.system ?? {};
-  const ability = AZEROTH.skillAbility[STEALTH_SKILL];
   return {
     kind: "skill",
     skill: STEALTH_SKILL,
     dc: AZEROTH.OPPOSED_DC,
     title: game.i18n.localize(AZEROTH.skills[STEALTH_SKILL]),
-    modifiers: [
-      { label: AZEROTH.abilities[ability], value: system.abilities?.[ability]?.mod ?? 0 },
-      { label: "AZEROTH.Sheet.Proficiency", value: system.proficiency ?? 0 },
-      { label: "AZEROTH.Sheet.Rank", value: skillRank(actor, STEALTH_SKILL) }
-    ]
+    // The one door (05 §1, D-810): the skill modifier, the Proficiency Bonus and
+    // the Rank, read off either kind of actor (`rules/skills.mjs#skillRankOf`).
+    modifiers: skillRowsFor(actor, STEALTH_SKILL)
   };
 }
 
@@ -252,6 +235,8 @@ export async function clearHidden(actor) {
 export async function ready(actor) {
   // Refused before the dialog opens, so nothing is asked for nothing.
   if (realmBars(actor)) return null;
+  // A creature under Hex or Polymorph readies nothing it could take (D-808).
+  if (actor?.refuseForcedShape?.("ready")) return null;
   const asked = await askForReady();
   if (!asked) return null;
   return readyWith(actor, asked);
@@ -263,6 +248,7 @@ export async function ready(actor) {
  */
 export async function readyWith(actor, { trigger = "", action = "" } = {}) {
   if (realmBars(actor)) return null;
+  if (actor?.refuseForcedShape?.("ready")) return null;
   const combat = fightOf(actor);
   const combatant = combatantOf(actor);
   if (!combat || !combatant) {
@@ -363,6 +349,8 @@ export async function takeReadied(actor, { messageId = null } = {}) {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: actor.name }));
     return null;
   }
+  // A creature under Hex or Polymorph takes no Reaction (D-808), before it is spent.
+  if (actor.refuseForcedShape?.("reaction")) return null;
   // **AGAINST WHOM** (door 14, the B1 review: no creature may take a Reaction against one
   // Wind Walk or Bladestorm holds): the trigger is the table's to name, so the readied
   // action answers the creature the user has targeted, and is refused against one the
@@ -505,6 +493,14 @@ export async function primeRider(actor, identifier) {
 export async function leaveShapeControl(actor) {
   const shape = actor?.shape ?? null;
   if (!shape) return null;
+  // **A SHAPE SOMEBODY ELSE LAID IS NOT LEFT BY ITS WEARER** (D-808; the lead: *"a
+  // Hex is ended by ending the Sustain, not by hand-deleting, unless a GM"*): refused
+  // in words, and a GM's Leave takes it off at no cost - the table's override.
+  if (shape.forced) {
+    if (actor.refuseForcedShape?.("leave")) return null;
+    await leaveShape(actor);
+    return null;
+  }
   const swift = swiftLeaveCounter(actor);
   // **SAVAGE SHIFT'S ROUND REACHES THE LEAVE** (D-779; the lead, 2026-10-03, on
   // O-167: *"Yes"*): the one allowance a free shift takes, judged by the shift's

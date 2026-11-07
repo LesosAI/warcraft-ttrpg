@@ -286,7 +286,20 @@ export function configuredRollsBatch(context) {
       assert.include(message.content, 'data-target-index="0"', "no per-target Apply button");
       const expected = byTarget[0].damage;
       assert.isAbove(expected, 0);
-      await CARD_ACTIONS.applyDamage({ dataset: { targetIndex: "0", damage: String(expected) } }, message);
+      // **OUT OF A FIGHT, A FORESIGHT PRIEST ANYWHERE IN THE WORLD HIDES A HIT'S
+      // DAMAGE BEHIND THE CARD'S REVEAL** (D-779; `workflows.mjs#foresightHeld`,
+      // narrowed to a fight's own combatants in 0.13.0 and left world-wide out of
+      // one): Apply refuses such a card as `unrevealed` until Reveal is pressed.
+      // The test world keeps a character named `Test` holding Ward and Foresight,
+      // so this out-of-fight blow is hidden there and not on a fresh world. Reveal
+      // through the card's own door where the card says so; the Apply is what
+      // this test is about.
+      if (message.getFlag("azeroth-rpg", "attackResolution")?.damageRevealed === false) {
+        const shown = await CARD_ACTIONS.revealAttackDamage({ dataset: { targetIndex: "0" } }, message);
+        assert.isTrue(shown?.ok === true, `the card's Reveal was refused: ${shown?.reason ?? "no answer"}`);
+      }
+      const applied = await CARD_ACTIONS.applyDamage({ dataset: { targetIndex: "0", damage: String(expected) } }, message);
+      assert.notStrictEqual(applied?.ok, false, `the Apply was refused: ${applied?.reason ?? ""}`);
       assert.equal(victim.system.health.value, Math.max(0, health - expected), "the target's Health did not drop by the mitigated damage");
     });
 
@@ -323,7 +336,7 @@ export function configuredRollsBatch(context) {
     });
 
     // ---- the NPC's skill ---------------------------------------------------------------
-    it("an NPC's skill Test is attribute + Proficiency + Rank (14 SS1)", async function () {
+    it("an NPC's skill Test is the attribute's skill modifier + Proficiency + Rank (14 SS1, D-810)", async function () {
       this.timeout(30000);
       const npc = await makeNpc("Plagued Ghoul");
       await npc.update({ "system.skills": { athletics: 2 } });
@@ -339,7 +352,10 @@ export function configuredRollsBatch(context) {
         const [message] = await wait;
         const roll = message.rolls[0];
         const sum = roll.provenance.filter(r => typeof r.value === "number").reduce((a, r) => a + r.value, 0);
-        assert.equal(sum, npc.system.abilities.str.mod + npc.system.proficiency + 2, "the modifier is not Str + Proficiency + Rank");
+        // The Ghoul's Strength 14 gives +2 to an attack and +1 to a skill.
+        assert.equal(npc.system.abilities.str.skillMod, 1, "Strength 14's skill modifier is not +1");
+        assert.equal(sum, npc.system.abilities.str.skillMod + npc.system.proficiency + 2, "the modifier is not Str's skill modifier + Proficiency + Rank");
+        assert.match(roll.provenance.map(r => r.label).join(" "), /skill modifier|Str\.Skill/, "no row names the skill modifier");
         assert.equal(roll.natural + sum, roll.total);
       } finally {
         await sheet.close();
