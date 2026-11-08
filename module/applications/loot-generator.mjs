@@ -37,7 +37,7 @@ import { pickLootPlayers } from "./loot-offer.mjs";
 import { rarityClass } from "../helpers/rarity.mjs";
 import {
   RARITIES, SCENARIOS, TIERS,
-  bossesIn, itemDataFor, poolsFrom, purseFor, reviewRows, rollLoot, rollRow, tableFor, tierForPartyLevel, zoneTiers
+  bossesIn, catalogueItemData, catalogueRow, gadgetBlueprintOf, itemDataFor, poolsFrom, purseFor, reviewRows, rollLoot, rollRow, tableFor, tierForPartyLevel, zoneTiers
 } from "../rules/loot.mjs";
 
 const TEMPLATE = "systems/azeroth-rpg/templates/dialog/loot-generator.hbs";
@@ -86,6 +86,7 @@ export class AzerothLootGenerator extends HandlebarsApplicationMixin(Application
       lootLockRow: AzerothLootGenerator.#onLockRow,
       lootRemoveRow: AzerothLootGenerator.#onRemoveRow,
       lootAddRow: AzerothLootGenerator.#onAddRow,
+      lootAddCatalogue: AzerothLootGenerator.#onAddCatalogue,
       lootBrowseRow: AzerothLootGenerator.#onBrowseRow,
       lootResuggest: AzerothLootGenerator.#onResuggest,
       lootPresent: AzerothLootGenerator.#onPresent,
@@ -386,15 +387,17 @@ export class AzerothLootGenerator extends HandlebarsApplicationMixin(Application
         index,
         name: row.name,
         rarityClass: rarityClass(row.rarity),
-        rarities: RARITIES.map(r => ({ value: r, label: game.i18n.localize(AZEROTH.rarities[r]), selected: r === row.rarity })),
+        rarities: [...new Set([...RARITIES, row.rarity])].map(r => ({ value: r, label: game.i18n.localize(AZEROTH.rarities[r]), selected: r === row.rarity })),
         kinds: Object.entries({ combat: "AZEROTH.Loot.Kind.Combat", noncombat: "AZEROTH.Loot.Kind.Noncombat" })
           .map(([value, label]) => ({ value, label: game.i18n.localize(label), selected: value === row.kind })),
-        detail: this.#detailOf(row),
+        detail: row.blueprint ? game.i18n.localize("AZEROTH.Loot.BlueprintNotice") : this.#detailOf(row),
         grants: this.#grantsOf(row),
         quantity: row.quantity && row.quantity > 1 ? game.i18n.format("AZEROTH.Loot.Quantity", { n: row.quantity }) : null,
         price: row.price === null || row.price === undefined ? game.i18n.localize("AZEROTH.Forge.NotSold") : coins(row.price),
         img: row.base.img,
         named: Boolean(row.fixedUuid),
+        catalogue: Boolean(row.catalogue),
+        blueprint: Boolean(row.blueprint),
         accepted: row.accepted,
         locked: row.locked,
         notes: (row.notes ?? []).map(noted)
@@ -547,7 +550,7 @@ export class AzerothLootGenerator extends HandlebarsApplicationMixin(Application
   #redrawRow(index, changed) {
     const s = this.#state;
     const row = s.rows[index];
-    if (!row) return;
+    if (!row || row.catalogue) return;
     const rarity = changed.name.startsWith("row-rarity") ? changed.value : row.rarity;
     const kind = changed.name.startsWith("row-kind") ? changed.value : row.kind;
     const taken = new Set(s.rows.filter((_, i) => i !== index).map(r => r.base?.uuid).filter(Boolean));
@@ -642,7 +645,18 @@ export class AzerothLootGenerator extends HandlebarsApplicationMixin(Application
       }
       if (row.fixedUuid) {
         // A named thing out of the pack, as it stands (08 §20).
-        const data = doc.toObject();
+        const data = row.catalogue ? catalogueItemData(row, doc.toObject(), {
+          blueprint: {
+            notice: game.i18n.localize("AZEROTH.Loot.BlueprintNotice"),
+            requirements: game.i18n.localize("AZEROTH.Loot.BlueprintRequirements"),
+            reference: game.i18n.localize("AZEROTH.Loot.BlueprintReference"),
+            provenance: game.i18n.format("AZEROTH.Loot.BlueprintProvenance", { name: doc.name })
+          }
+        }) : doc.toObject();
+        if (!data) {
+          refused.push({ code: "catalogueChanged", params: { name: row.name ?? doc.name } });
+          continue;
+        }
         delete data._id;
         data.folder = folder?.id ?? null;
         foundry.utils.setProperty(data, "flags.azeroth-rpg.loot", { ...stamp, rarity: row.rarity });
@@ -795,7 +809,7 @@ export class AzerothLootGenerator extends HandlebarsApplicationMixin(Application
     const s = this.#state;
     const index = Number(target.closest("li[data-index]")?.dataset.index);
     const row = s.rows[index];
-    if (!row) return;
+    if (!row || row.catalogue) return;
     const taken = new Set(s.rows.filter((_, i) => i !== index).map(r => r.base?.uuid).filter(Boolean));
     const made = rollRow({
       tier: s.tier, table: s.table, pools: this.#data.pools, random: this.#random,
@@ -809,7 +823,7 @@ export class AzerothLootGenerator extends HandlebarsApplicationMixin(Application
     this.#readForm();
     const index = Number(target.closest("li[data-index]")?.dataset.index);
     const row = this.#state.rows[index];
-    if (row) row.locked = !row.locked;
+    if (row && !row.catalogue) row.locked = !row.locked;
     return this.render();
   }
 
@@ -833,28 +847,49 @@ export class AzerothLootGenerator extends HandlebarsApplicationMixin(Application
     return this.render();
   }
 
+  /** The catalogue door does not roll or replace any existing find. */
+  static async #onAddCatalogue() {
+    this.#readForm();
+    return game.system.azeroth.browser.browse({
+      category: "gear",
+      pick: { title: game.i18n.localize("AZEROTH.Loot.CatalogueTitle"), onPick: doc => this.takeCatalogueItem(doc) }
+    });
+  }
+
   /** Browse opens the compendium browser in pick mode; the row picked becomes this find (D-645). */
   static async #onBrowseRow(event, target) {
     this.#readForm();
     const index = Number(target.closest("li[data-index]")?.dataset.index);
     const row = this.#state.rows[index];
     if (!row) return;
-    const category = { weapon: "weapons", armor: "armor", gear: "gear" }[row.base.type] ?? "gear";
-    const title = game.i18n.format("AZEROTH.Loot.PickItem", { rarity: game.i18n.localize(AZEROTH.rarities[row.rarity]) });
-    return game.system.azeroth.browser.browse({ category, pick: { title, onPick: doc => this.takeItem(index, doc) } });
+    const category = row.blueprint ? "gadgets" : { weapon: "weapons", armor: "armor", gear: "gear" }[row.base.type] ?? "gear";
+    const title = game.i18n.localize("AZEROTH.Loot.CatalogueTitle");
+    return game.system.azeroth.browser.browse({ category, pick: { title, onPick: doc => this.takeItem(index, doc, { expectedRow: row }) } });
   }
 
   /**
-   * A document offered to a row. A Legendary is never loot (08 §20: one in
-   * the world), an affix is not a thing, and anything but a weapon, a suit
-   * or gear is refused with its reason. A Common pick is re-affixed at the
-   * row's rarity; a pack Rare or Epic becomes the row as it stands.
+   * Replacing a row is an explicit catalogue pick, with its intrinsic rules.
+   * Random rarity ceilings do not constrain the GM's deliberate selection.
    */
-  async takeItem(index, doc) {
+  async takeItem(index, doc, { expectedRow = this.#state?.rows[index] } = {}) {
+    if (!expectedRow) return false;
+    return this.takeCatalogueItem(doc, { index, expectedRow });
+  }
+
+  /** Add or replace one exact physical item; never grant a learned gadget. */
+  async takeCatalogueItem(doc, { index = null, expectedRow = null } = {}) {
+    await this.#load();
+    this.#state ??= this.#initialState();
     const s = this.#state;
-    const row = s.rows[index];
-    if (!row) return false;
-    if (doc?.documentName !== "Item" || !["weapon", "armor", "gear"].includes(doc.type)) {
+    if (index !== null && expectedRow) {
+      index = s.rows.indexOf(expectedRow);
+      if (index < 0) {
+        ui.notifications?.warn(game.i18n.localize("AZEROTH.Loot.CatalogueRowGone"));
+        return false;
+      }
+    }
+    const data = doc?.documentName === "Item" ? { ...doc.toObject(), uuid: doc.uuid } : null;
+    if (!data || (!["weapon", "armor", "gear"].includes(doc.type) && !gadgetBlueprintOf(data))) {
       ui.notifications?.warn(game.i18n.format("AZEROTH.Loot.NotItem", { name: doc?.name ?? "" }));
       return false;
     }
@@ -862,29 +897,11 @@ export class AzerothLootGenerator extends HandlebarsApplicationMixin(Application
       ui.notifications?.warn(game.i18n.format("AZEROTH.Loot.NotAffix", { name: doc.name }));
       return false;
     }
-    const rarity = doc.system?.rarity ?? "common";
-    if (rarity === "legendary") {
-      ui.notifications?.warn(game.i18n.format("AZEROTH.Loot.NotLegendary", { name: doc.name }));
-      return false;
-    }
-    const base = { uuid: doc.uuid, name: doc.name, img: doc.img, type: doc.type, system: doc.system.toObject() };
-    if (rarity !== "common") {
-      s.rows[index] = { ...row, rarity, base, fixedUuid: doc.uuid, prefix: null, suffix: null, greater: [], quantity: null, name: doc.name, price: base.system.cost ?? null, spent: base.system.budget ?? null, notes: [], locked: true };
-      await this.render();
-      return true;
-    }
-    // A Common pick keeps the row's rarity where the affixes still go on it.
-    const taken = new Set(s.rows.filter((_, i) => i !== index).map(r => r.base?.uuid).filter(Boolean));
-    const pools = { ...this.#data.pools, bases: { ...this.#data.pools.bases }, affixable: { ...this.#data.pools.affixable } };
-    pools.bases[row.kind] = [base];
-    pools.affixable[row.kind] = [base];
-    // The hand-picked base is the ONLY draw, so both named shelves are
-    // blanked - the book's and D-702's Classic finds alike, or a find could
-    // still be drawn over the GM's own pick.
-    pools.fixed = { rare: { combat: [], noncombat: [] }, epic: { combat: [], noncombat: [] } };
-    pools.found = { rare: { combat: [], noncombat: [] }, epic: { combat: [], noncombat: [] } };
-    const made = rollRow({ tier: s.tier, table: s.table, pools, random: this.#random, rarity: row.rarity, kind: row.kind, taken });
-    if (made) s.rows[index] = { ...made, accepted: row.accepted, locked: true };
+    const made = catalogueRow(data, { blueprintName: game.i18n.format("AZEROTH.Loot.BlueprintName", { name: doc.name }) });
+    if (!made) return false;
+    if (index === null) s.rows.push(made);
+    else if (s.rows[index]) s.rows[index] = { ...made, accepted: s.rows[index].accepted };
+    else return false;
     await this.render();
     return true;
   }

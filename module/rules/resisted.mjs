@@ -510,7 +510,7 @@ export function abilityGoverns(text, condition) {
  * a creature's ability): a spell's, a feature's and an ability's - the ones whose Apply reads
  * a half or a spare off the record, and whose failure lands what the Test governs.
  */
-export const RESIST_RECORD_KINDS = Object.freeze(["spell", "feature", "ability"]);
+export const RESIST_RECORD_KINDS = Object.freeze(["spell", "feature", "ability", "gear"]);
 
 /**
  * Whether a card of this kind records its Resist (`RESIST_RECORD_KINDS`).

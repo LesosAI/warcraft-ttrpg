@@ -168,6 +168,7 @@ import { legacyDarkRangerBatch } from "./quench-legacy-dark-ranger.mjs";
 // through core's compendium record, the NPC model and an unlinked token's own delta.
 import { bestiaryDescriptorsBatch } from "./quench-bestiary-descriptors.mjs";
 import { creaturePlansBatch } from "./quench-creature-plans.mjs";
+import { slRidersBatch } from "./quench-sl-riders.mjs";
 // 14 §1's Boss Actions, for every Boss (D-809): the economy, and every Boss Action pressed.
 import { bossActionsBatch1, bossActionsBatch2, bossActionsBatch3, bossActionsBatch4, bossEconomyBatch } from "./quench-boss-actions.mjs";
 import { forcedShapesBatch } from "./quench-forced-shapes.mjs";
@@ -494,6 +495,9 @@ export function registerQuenchTests() {
     });
     quench.registerBatch("azeroth-rpg.creature-plans", creaturePlansBatch, {
       displayName: "AZEROTH: Six shells take their Use, and migration 0.13.4 (D-811)"
+    });
+    quench.registerBatch("azeroth-rpg.sl-riders", slRidersBatch, {
+      displayName: "AZEROTH: Every Success-Level-gated spell rider and weapon trait lands (D-812)"
     });
   });
 }
@@ -1419,7 +1423,7 @@ function packBatch(context) {
         // A folder a class and one a branch: 9 + 34 since the seven Legacy branches
         // (D-781), read off the one place the counts live (D-690).
         { pack: "talents", folders: PACK_COUNTS.classes.count + PACK_COUNTS.talents.branches, top: "Mage", nested: null },
-        { pack: "bestiary", folders: 13, top: null, nested: null },
+        { pack: "bestiary", folders: 14, top: null, nested: null },
         // §20's named weapons join §7's eight categories (D-632), and the
         // Classic finds add `Classic loot` with a folder per zone (D-685):
         // 8 + Unique + Classic loot + 26 zones = 36.
@@ -1530,11 +1534,11 @@ function packBatch(context) {
       assert.equal(target.parent.pack, "azeroth-rpg.rules");
     });
 
-    it("holds 406 spells across seven schools and five tiers", async function () {
+    it("holds 430 spells across seven schools and five tiers", async function () {
       const pack = game.packs.get("azeroth-rpg.spells");
       assert.ok(pack, "the spells pack did not load");
       const index = await pack.getIndex();
-      assert.equal(index.size, 406);
+      assert.equal(index.size, PACK_COUNTS.spells.count);
     });
 
     it("holds 53 careers across four tiers", async function () {

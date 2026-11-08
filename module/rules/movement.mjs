@@ -242,6 +242,9 @@ export function measuredStep(segment, { gridless = false } = {}) {
  * @returns {number} feet, never negative
  */
 export function stepFeet(waypoint, step) {
+  // The GM-authorized Parachute path has a separate per-round allowance.
+  // Its normal voluntary movement classification is deliberately unchanged.
+  if (["parachuteGlide","rocketBoots"].includes(waypoint?.action)) return 0;
   const { distance, squares } = step !== null && typeof step === "object" ? step : { distance: step, squares: null };
   const d = Math.max(0, Number(distance) || 0);
   const raw = waypoint?.cost;
@@ -284,8 +287,16 @@ export function stepFeet(waypoint, step) {
  */
 export function sectionFeet(section, steps = null) {
   const waypoints = Array.isArray(section?.waypoints) ? section.waypoints : null;
+  if (waypoints?.length && waypoints.every(w => ["parachuteGlide","rocketBoots"].includes(w.action))) return 0;
   if (waypoints && Array.isArray(steps) && steps.length === waypoints.length) {
     return waypoints.reduce((feet, waypoint, i) => feet + stepFeet(waypoint, steps[i]), 0);
+  }
+  // Core's persisted per-waypoint costs also distinguish the glide if a fresh
+  // path measurement is unavailable. An origin waypoint may still say walk.
+  const glides = waypoints?.filter(w => ["parachuteGlide","rocketBoots"].includes(w.action)) ?? [];
+  if (glides.length && glides.every(w => Number.isFinite(w.cost) && w.cost >= 0)
+    && Number.isFinite(section?.cost) && section.cost >= 0) {
+    return Math.max(0, section.cost - glides.reduce((sum, w) => sum + w.cost, 0));
   }
   const distance = Math.max(0, Number(section?.distance) || 0);
   const raw = section?.cost;

@@ -33,6 +33,7 @@ import { keepsHidden } from "../rules/class-talents.mjs";
 import { dancing } from "./talent-states.mjs";
 import { endNpcSneak } from "./npc-sneak.mjs";
 import { refuseIceBlockTarget } from "./ice-block-protection.mjs";
+import { endEquipmentInvisibility } from "./equipment-travel.mjs";
 
 /** The flag that says this invisibility is a Hide and nothing else. */
 export const HIDDEN_FLAG = "hidden";
@@ -89,16 +90,36 @@ export async function conceal(actor) {
  * @param {{force?: boolean, acting?: boolean, kind?: "attack"|"cast"|null}} [options]  `force` clears a GM's own invisibility too.
  * @returns {Promise<boolean>} whether anything was cleared
  */
-export async function reveal(actor, { force = false, acting = false, kind = null } = {}) {
-  if (!actor) return false;
+export async function reveal(actor, { force = false, acting = false, kind = null, valid = () => true,
+  preserveIndependentInvisibility = false } = {}) {
+  if (!actor || !valid()) return false;
+  const equipmentEnded = acting ? await endEquipmentInvisibility(actor, {event:kind}) : false;
+  if (!valid()) return equipmentEnded;
   const sneakEnded = await endNpcSneak(actor, { event: acting ? kind : "reveal" });
+  if (!valid()) return equipmentEnded || sneakEnded;
   const concealmentEnded = acting && (kind === "attack" || kind === "cast") ? await endConcealments(actor, kind) : false;
-  const ended = sneakEnded || concealmentEnded;
+  const ended = sneakEnded || concealmentEnded || equipmentEnded;
+  if (!valid()) return ended;
   if (acting && !force && (keepsHidden(actor.takenTalents?.() ?? []) || dancing(actor))) return ended;
   const ours = actor.getFlag?.("azeroth-rpg", HIDDEN_FLAG) === true;
   if (!ours && !force) return ended;
-  if (isHidden(actor)) await actor.toggleStatusEffect(HIDDEN_STATUS, { active: false });
-  if (ours) await actor.unsetFlag("azeroth-rpg", HIDDEN_FLAG);
+  if (isHidden(actor)) {
+    if (preserveIndependentInvisibility && ours && !force) {
+      // The core Hide is a plain, source-free status carrier. Do not use
+      // toggleStatusEffect here: V14 would also delete a spell's single-status
+      // carrier. Custom/source-bearing invisibility is independent of Hide.
+      const ids=[...(actor.effects??[])].filter(effect=>!effect.origin
+        &&effect.statuses?.size===1&&effect.statuses.has(HIDDEN_STATUS)
+        &&!Object.keys(effect.flags?.['azeroth-rpg']??{}).length
+        &&!(effect.system?.changes??[]).length).map(effect=>effect.id);
+      if(ids.length&&valid()){
+        await actor.deleteEmbeddedDocuments('ActiveEffect',ids);
+        if(ids.some(id=>actor.effects.get(id)))return false;
+      }
+      else if(valid())ui.notifications?.warn(game.i18n.localize('AZEROTH.AlarmBot.AmbiguousHide'));
+    }else await actor.toggleStatusEffect(HIDDEN_STATUS, { active: false });
+  }
+  if (ours && valid()) await actor.unsetFlag("azeroth-rpg", HIDDEN_FLAG);
   return true;
 }
 

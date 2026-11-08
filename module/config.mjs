@@ -493,6 +493,7 @@ AZEROTH.consumableKinds = {
   restore:   "AZEROTH.Consumable.Restore",
   elixir:    "AZEROTH.Consumable.Elixir",
   draught:   "AZEROTH.Consumable.Draught",
+  special:   "AZEROTH.Consumable.Special",
   dressing:  "AZEROTH.Consumable.Dressing",
   poison:    "AZEROTH.Consumable.Poison",
   coating:   "AZEROTH.Consumable.Coating",
@@ -520,6 +521,7 @@ AZEROTH.provisionKinds = {
 /** Who or what a Use is aimed at. */
 AZEROTH.useTargets = {
   self: "AZEROTH.Consumable.TargetSelf",
+  creature: "AZEROTH.Consumable.TargetCreature",
   item: "AZEROTH.Consumable.TargetItem",
   area: "AZEROTH.Consumable.TargetArea"
 };

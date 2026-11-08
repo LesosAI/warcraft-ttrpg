@@ -88,6 +88,7 @@ import {
 } from "../rules/movement.mjs";
 // Whether a creature swims by nature, and how fast (the final review of D-757).
 import { movementFactsOf } from "../canvas/behaviors.mjs";
+import { equipmentMovementPlan } from "../rules/equipment-travel.mjs";
 import { movementLimited } from "../settings.mjs";
 // Hiding ends when the fight does (D-717).
 import { reveal } from "../effects/stealth.mjs";
@@ -376,6 +377,8 @@ export class AzerothCombatant extends Combatant {
     // turn-boundary rule the lead did not ask to change.
     const flags = { budget: freshTurn(this._turnFacts()) };
     if (this.getFlag("azeroth-rpg", "moveHalves")) flags.moveHalves = foundry.data.operators.ForcedDeletion.create();
+    // Clear on every budget reset, including a GM rewind to the same round/turn.
+    if (this.getFlag("azeroth-rpg", "swimMovement")) flags.swimMovement = foundry.data.operators.ForcedDeletion.create();
     return this.update({ flags: { "azeroth-rpg": flags } });
   }
 
@@ -656,8 +659,11 @@ export class AzerothCombatant extends Combatant {
     if (!this._pacedByNature()) return null;
     const speed = this._pace(movement);
     const steps = movementSteps(this.token, movement);
-    const total = meteredFeet(movement, steps);
+    let movementPlan = this._equipmentMovementPlan(movement, steps);
+    let total = movementPlan.feet;
     const charged = await oneAtATime(this, async () => {
+      movementPlan = this._equipmentMovementPlan(movement, steps);
+      total = movementPlan.feet;
       const paid = this.getFlag("azeroth-rpg", "moveHalves") ?? 0;
       if (!(speed > 0)) {
         if (total > 0) ui.notifications?.warn(game.i18n.format("AZEROTH.Combat.MovedPast", { name: actor.name, feet: Math.round(total), speed: 0 }));
@@ -676,6 +682,7 @@ export class AzerothCombatant extends Combatant {
       // record (door 6) - nothing is awaited between the two reads.
       const before = this.budget;
       const charge = chargeMoves(this.budget, { paid, needed, onTurn: this.isCurrentTurn });
+      const movementLedger={round:this.parent.round,turn:this.parent.turn,...movementPlan.ledger};
       if (charge.refusal) ui.notifications?.warn(game.i18n.format(charge.refusal.reason, charge.refusal.params ?? {}));
       // A fight ended under the move has no budget left to write to.
       if (charge.paid !== paid && this.parent?.combatants?.has(this.id) && game.combats?.has(this.parent.id)) {
@@ -684,7 +691,10 @@ export class AzerothCombatant extends Combatant {
         await this._spendShared(before, charge.budget, { force: true });
         // The walk's Half-Actions off the construct's own budget, the view the clamp (B8b).
         if (this._sharedTurn()) charge.budget = ownAfterShared(this._ownBudget(), before, charge.budget);
-        await this.update({ flags: { "azeroth-rpg": { budget: charge.budget, moveHalves: charge.paid } } });
+        await this.update({ flags: { "azeroth-rpg": { budget: charge.budget, moveHalves: charge.paid,
+          swimMovement:movementLedger } } });
+      } else if (movementPlan.ledger && this.parent?.combatants?.has(this.id) && game.combats?.has(this.parent.id)) {
+        await this.setFlag('azeroth-rpg','swimMovement',movementLedger);
       }
       if (total > speed * Math.max(charge.paid, 1) && charge.paid < needed) {
         ui.notifications?.warn(game.i18n.format("AZEROTH.Combat.MovedPast", { name: actor.name, feet: Math.round(total), speed }));
@@ -698,7 +708,7 @@ export class AzerothCombatant extends Combatant {
     // actor write awaited inside it held every later spend behind it.
     // `layFleetFooted` keeps two walks landing together from laying two.
     if (this.isCurrentTurn && actor?.type === "character" && actor.isOwner) {
-      const fleet = fleetFootedFor(actor.takenTalents?.() ?? [], { feet: total });
+      const fleet = fleetFootedFor(actor.takenTalents?.() ?? [], { feet: meteredFeet(movement, steps) });
       if (fleet) await layFleetFooted(actor, { defense: fleet.defense, name: fleet.name, span: untilNextTurn(actor) });
     }
     return charged;
@@ -773,13 +783,22 @@ export class AzerothCombatant extends Combatant {
     const budget = this.budget;
     return {
       // The feet of movement SPENT, at core's cost (D-757), never the distance.
-      distance: meteredFeet(movement, steps),
+      distance: this._equipmentMovementFeet(movement, steps),
       pace: this._pace(movement),
       unpaced: !this._pacedByNature(),
       paid: this.getFlag("azeroth-rpg", "moveHalves") ?? 0,
       halfActionsLeft: budget.halfActions ?? 0,
       freeMove: budget.freeMove ?? 0
     };
+  }
+
+  _equipmentMovementFeet(movement,steps){
+    return this._equipmentMovementPlan(movement,steps).feet;
+  }
+  _equipmentMovementPlan(movement,steps){
+    const saved=this.getFlag('azeroth-rpg','swimMovement');
+    const ledger=saved?.round===this.parent?.round&&saved?.turn===this.parent?.turn?saved:null;
+    return equipmentMovementPlan(movement,steps,{pace:this._pace(movement),groundSpeed:this.actor?.system?.speed??0,effects:this.actor?.effects??[],now:game.time?.worldTime??0,ledger});
   }
 
   /** Whether the fight is standing on this combatant's turn right now. */

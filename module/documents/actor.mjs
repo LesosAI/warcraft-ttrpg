@@ -93,6 +93,7 @@ import {
 import { healTempFor } from "../rules/class-talents.mjs";
 import { wouldDrop } from "../rules/blow-doors.mjs";
 import { damageAboveHealthFloor } from "../rules/sealing-flame.mjs";
+import {utilityEffectView} from "../rules/utility-draughts.mjs";
 // What another creature does to a blow, asked as it lands (D-777): a blow moved,
 // a blow divided, a creature held at 1, and 07's Aegis floor.
 import { aegisFloor, askToHold, divideBlow, landShares, redirectBlow } from "../effects/blow-doors.mjs";
@@ -116,6 +117,7 @@ import { restoreSpellUses } from "../effects/spell-limits.mjs";
 import { restoreApprovedSignatureUses } from "../effects/approved-signature-use.mjs";
 // What a Short Rest eats and drinks (05 SS16, 08 SS12; D-733).
 import { FOOD_KINDS, isProvision, restPicks } from "../rules/provisions.mjs";
+import {prostheticEffectView} from "../rules/prosthetics.mjs";
 import { spendOne } from "../rules/consumables.mjs";
 
 import { AZEROTH } from "../config.mjs";
@@ -499,7 +501,8 @@ export class AzerothActor extends Actor {
       .filter(item => ["weapon", "armor", "gear"].includes(item.type)).map(item => item.uuid)) : null;
     for (const effect of super.allApplicableEffects()) {
       if (dispersed && dispersionSuppressesEquipmentEffect(effect, physicalItemUuids)) continue;
-      yield effect;
+      const utility=utilityEffectView(effect,game.time?.worldTime??0);
+      if(utility)yield prostheticEffectView(this,utility);
     }
   }
 
@@ -1660,7 +1663,13 @@ export class AzerothActor extends Actor {
    *
    * @param {{food?: Item|string|null, drink?: Item|string|null}} [picks]
    */
-  async shortRest({ food = null, drink = null } = {}) {
+  async shortRest({ food = null, drink = null, feast = null } = {}) {
+    const {withSpecialEquipmentRest}=await import("../effects/special-equipment.mjs");
+    return withSpecialEquipmentRest(this,async()=>{
+    const {prepareSpecialRest,finishSpecialRest,rechargeSpecialEquipment}=await import("../effects/special-equipment.mjs");
+    const {prepareSharedFeast,finishSharedFeast,pendingSharedFeast,restGeneration}=await import("../effects/shared-feast.mjs");
+    if(pendingSharedFeast(this)){ui.notifications?.warn(game.i18n.localize("AZEROTH.SharedFeast.Pending"));return null;}
+    let sharedMeal=null;
     // 1. Resolve each pick: an Item, or an id off this actor.
     // ON THIS ACTOR, whichever way it was named: an Item object is looked up
     // by its id in this actor's own collection, so another character's bread
@@ -1671,6 +1680,7 @@ export class AzerothActor extends Actor {
     };
     const eaten = pick(food);
     const drunk = pick(drink);
+    let specialRest={ok:true};
     let ate = null;
     let drank = null;
     // A CREATURE IS EXEMPT and the code says so where it rests: 14 gives no
@@ -1692,7 +1702,7 @@ export class AzerothActor extends Actor {
         ui.notifications?.warn(game.i18n.format("AZEROTH.Rest.NotDrink", { name: drink?.name ?? String(drink) }));
         return null;
       }
-      if (!eaten && !drunk) {
+      if (!eaten && !drunk && !feast) {
         ui.notifications?.warn(game.i18n.format("AZEROTH.Rest.NeedsProvision", { name: this.name }));
         return null;
       }
@@ -1706,9 +1716,12 @@ export class AzerothActor extends Actor {
       }
       // 3. What was taken, READ BEFORE THE DELETE: an item spent to nothing is
       // gone by the time the card is written.
-      ate = eaten?.name ?? null;
+      if(feast){if(eaten)return null;sharedMeal=await prepareSharedFeast(this,feast);if(!sharedMeal.ok)return null;}
+      specialRest=await prepareSpecialRest(this,eaten,drunk);
+      if(!specialRest.ok)return null;
+      ate = sharedMeal?.name??eaten?.name ?? null;
       drank = drunk?.name ?? null;
-      picks = restPicks({ foodKind: eaten?.system?.provision ?? null, hasDrink: Boolean(drunk) });
+      picks = restPicks({ foodKind: sharedMeal?"hotMeal":eaten?.system?.provision ?? null, hasDrink: Boolean(drunk) });
       // 4. One item, one rest, whatever the row says it keeps for. `spendOne`
       // is `useGear`'s own mark-off rule (D-733).
       for (const item of [eaten, drunk]) {
@@ -1776,14 +1789,19 @@ export class AzerothActor extends Actor {
     // 04's Devouring Plague (D-779): *once per target* runs with its uses, a rest's.
     if (this.getFlag("azeroth-rpg", DEVOURING_PLAGUE.flag)) await this.unsetFlag("azeroth-rpg", DEVOURING_PLAGUE.flag);
     const restored = await this.resetUses("short");
+    await finishSpecialRest(this,specialRest);
+    await rechargeSpecialEquipment(this,"short");
     const cleared = await this.clearSundered();
     let count = null;
     if (this.type === "character") {
       count = (this.getFlag("azeroth-rpg", "shortRests") ?? 0) + 1;
       await this.setFlag("azeroth-rpg", "shortRests", count);
     }
+    await this.setFlag("azeroth-rpg","restGeneration",restGeneration(this)+1);
+    await finishSharedFeast(this,sharedMeal);
     await restCard({ actor: this, kind: "short", gains: r.gains, restored, cleared, count, ate, drank });
     return this;
+    });
   }
 
   /**
@@ -1792,6 +1810,11 @@ export class AzerothActor extends Actor {
    * (A1) takes the Health and the Fatigue away and the card says so.
    */
   async longRest() {
+    const {withSpecialEquipmentRest}=await import("../effects/special-equipment.mjs");
+    return withSpecialEquipmentRest(this,async()=>{
+    const {pendingSharedFeast,restGeneration}=await import("../effects/shared-feast.mjs");
+    if(pendingSharedFeast(this)){ui.notifications?.warn(game.i18n.localize("AZEROTH.SharedFeast.Pending"));return null;}
+    const {rechargeSpecialEquipment}=await import("../effects/special-equipment.mjs");
     // **AN AVATAR OR A METAMORPHOSIS ENDS WITH THE REST** (02 §7, D-769).
     await endShapeAt(this, "long");
     // **THE LONG WATCH ENDS WITH IT** (04: *Until your next Long Rest you know its
@@ -1869,6 +1892,7 @@ export class AzerothActor extends Actor {
       if (built?.gadget) await this.syncClassFeatures();
     }
     const restored = await this.resetUses("long");
+    await rechargeSpecialEquipment(this,"long");
     // Sealing Flame limits the recipient, not the caster. An unresolved
     // reservation requires review; only a consumed benefit resets at rest.
     if (this.getFlag('azeroth-rpg','sealingFlameRecipient')?.state === 'used') {
@@ -1876,6 +1900,7 @@ export class AzerothActor extends Actor {
     }
     const cleared = await this.clearSundered();
     if (this.getFlag("azeroth-rpg", "shortRests")) await this.unsetFlag("azeroth-rpg", "shortRests");
+    await this.setFlag("azeroth-rpg","restGeneration",restGeneration(this)+1);
     await restCard({ actor: this, kind: "long", gains: r.gains, restored, cleared, diseased });
     // 07's Haven and Sanctification: *any that take a Long Rest end it with every disease and
     // poison gone* (Sanctification: and one Critical Injury healed). D12 Phase 6.
@@ -1922,6 +1947,7 @@ export class AzerothActor extends Actor {
     const bench = this.takenTalents?.().some(t => t.className === "Rogue" && t.identifier === "the-bench" && t.taken > 0);
     if (gadgeteer && bench) await game.system.azeroth.workflows.useFeature({ actor: this, item: gadgeteer, gadgetRest: true });
     return this;
+    });
   }
 
   /** 05 §14, 06 §9: stand at 1 Health for one Tether, no Test. */
@@ -2946,12 +2972,21 @@ export class AzerothActor extends Actor {
    *   `damage`: what the damage door records of each type, and what a priest's
    *   Ward took off each.
    */
-  async applyDamage(damage, { struck = false, attack = true, location = "body", type = null, messageId = null, by = null, riposte = false, wardTook = 0, spell = false, ignite = false, moved = false, shared = false, parts = null, drain = null, transfer = null, outcome = null, healthFloor = null } = {}) {
+  async applyDamage(damage, { struck = false, attack = true, location = "body", type = null, messageId = null, by = null, riposte = false, wardTook = 0, spell = false, ignite = false, moved = false, shared = false, parts = null, drain = null, transfer = null, outcome = null, healthFloor = null, falling = false } = {}) {
     // Optional local receipt; retain the historical Actor return value. This
     // reports this actor's committed Health/temp loss, never guesses shares.
     const report = outcome && typeof outcome === "object" ? outcome : null;
     if (report) Object.assign(report, { targetUuid:this.uuid, complete:false, amount:0, dealtDamage:false, transferred:false, transfers:[] });
     const completeOutcome = () => { if (report) report.complete = true; return this; };
+    if (falling === true) {
+      const {equipmentFallProtected}=await import('../rules/equipment-travel.mjs');
+      const protectedFall=equipmentFallProtected(this.effects,game.time?.worldTime??0);
+      // This is a committed, explicitly declared landing, including zero damage;
+      // readers/previews never remove the fall carrier. Timed draughts remain.
+      const {landParachute}=await import('../effects/parachute.mjs');
+      if(!await landParachute(this))return this;
+      if(protectedFall)return completeOutcome();
+    }
     if (refuseIceBlockTarget(this) || refuseDispersion(this, "damage")) {
       if (transfer) await consumeAttackTransfer(transfer, { target: this, messageId }).note("protected");
       return completeOutcome();
@@ -2990,10 +3025,10 @@ export class AzerothActor extends Actor {
     // physical damage. Filter typed components before scalar actor reductions.
     // Soul Link supplies its already-resolved retained share below instead.
     if (!linkedTransfer) preventPotionPhysical();
-    const before = this.system?.health?.value ?? 0;
+    let before = this.system?.health?.value ?? 0;
     // What the blow found, Health and temporary Health both, for 04's Life Drain (*You
     // recover Health equal to the damage it takes*; door 25), read once it is written.
-    const tookFrom = before + Math.max(0, Math.trunc(Number(this.system?.health?.temp)) || 0);
+    let tookFrom = before + Math.max(0, Math.trunc(Number(this.system?.health?.temp)) || 0);
     const max = this.system?.health?.max ?? 0;
     // The shape as the blow found it (D-769): reaching 0 ends an Avatar on the
     // write itself, so `_struckBy` is told what stood before it.
@@ -3158,6 +3193,14 @@ export class AzerothActor extends Actor {
         console.error("azeroth-rpg | blow divided", err);
       }
       if (division) amount = division.keep;
+    }
+    // Only the original claimed attack offers the belt. Transferred shares and
+    // ongoing/environmental damage cannot create a fresh hit trigger.
+    if(struck&&attack&&!moved&&!shared&&!linkedTransfer&&messageId){
+      const {offerHarmPrevention}=await import('../effects/harm-prevention.mjs');
+      if(!await offerHarmPrevention(this,messageId))return this;
+      before=this.system?.health?.value??0;
+      tookFrom=before+Math.max(0,Math.trunc(Number(this.system?.health?.temp))||0);
     }
     // **05's TEMPORARY HEALTH FIRST** (D-777; the lead: *"raise HP past max as temp
     // hp"*): *Damage comes off temporary Health first, and only what is left over

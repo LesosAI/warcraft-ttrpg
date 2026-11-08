@@ -40,6 +40,8 @@ export function racialTalentIcon(raceName, talentName, fallback) {
  * used before D-676 and they are always present, because core ships them.
  */
 export const CORE_FALLBACK = Object.freeze({
+  "Special designs": "icons/svg/item-bag.svg",
+  "Special provisions and utility consumables": "icons/svg/pill.svg",
   "One-handed weapon": "icons/svg/sword.svg",
   "Two-handed weapon": "icons/svg/sword.svg",
   "Light weapon": "icons/svg/sword.svg",

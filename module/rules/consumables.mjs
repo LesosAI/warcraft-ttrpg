@@ -64,7 +64,9 @@ export const CONSUMABLE_KINDS = Object.freeze([
   // A book read rather than drunk: using it grants what its **Grants.** run says.
   "grant",
   // 08 §12's Remedies: ends the one disease it names (D12 §4).
-  "remedy"
+  "remedy",
+  // Approved special designs/provisions use their own authoritative workflow, not a draught.
+  "special"
 ]);
 
 /** What a coating may be laid on, as 08 §13's *Goes on* column names it. */
@@ -140,7 +142,7 @@ export function cleanUse(raw, { conditions = [], schools = [], resiliences = [],
   const has = key => key in raw;
   if (has("kind")) out.kind = oneOf(raw.kind, CONSUMABLE_KINDS) ?? "none";
   if (has("action")) out.action = oneOf(raw.action, actions);
-  if (has("target")) out.target = oneOf(raw.target, ["self", "item", "area"]) ?? "self";
+  if (has("target")) out.target = oneOf(raw.target, ["self", "creature", "item", "area"]) ?? "self";
   if (has("appliesTo")) out.appliesTo = oneOf(raw.appliesTo, GOES_ON);
   if (has("heal")) {
     out.heal = {
@@ -383,6 +385,23 @@ export function hasUse(use) {
   return Boolean(use) && use.kind !== "none";
 }
 
+/** Exact chapter identity repairs the old no-Use stamp in derived data only. */
+export function compatibleGearUse(system) {
+  const old=system?.use;
+  if(["spiced-tea","orcish-grog","dwarven-stout","frostwolf-marrow-broth"].includes(system?.identifier)&&system.source?.document==="08-EQUIPMENT"
+    &&system.source.section==="12 · Consumables · Food and drink"&&(!old?.kind||old.kind==="none"))
+    return {...emptyUse(),kind:"special",action:"half",target:"self",note:system.identifier};
+  if(system?.identifier==="healers-kit-10-uses"&&system.source?.document==="08-EQUIPMENT"
+    &&system.source.section==="11 · Adventuring gear · Trade kits"&&(!old?.kind||old.kind==="none"))
+    return {...emptyUse(),kind:"special",action:"half",target:"creature",note:"Healer's kit"};
+  if(system?.identifier==="sappers-satchel"&&system.source?.document==="08-EQUIPMENT"
+    &&system.source.section==="13 · Ordnance and devices · Explosives"&&old?.kind==="explosive"&&old.action==="half")return {...old,action:"full"};
+  if(old?.kind && old.kind!=="none")return old;
+  if(!["repair-kit-mechanical","rocket-boots","target-dummy","spring-loaded-grapple"].includes(system?.identifier)||system?.source?.document!=="08-EQUIPMENT"
+    ||system.source.section!=="13 · Ordnance and devices · Devices")return old;
+  return {...emptyUse(),kind:"special",action:null,target:"self",note:({"rocket-boots":"Rocket boots","target-dummy":"Target dummy","spring-loaded-grapple":"Spring-loaded grapple"})[system.identifier]??"Repair kit, mechanical"};
+}
+
 /**
  * MARKING ONE OFF (D-733). The one rule for spending a single item, shared by
  * the **Use** button and by the food and drink a Short Rest eats.
@@ -558,6 +577,14 @@ export function goesOn(appliesTo, item) {
 export function seedUse({ name = "", section = "", description = "" } = {}, { conditions = [], schools = [] } = {}) {
   const use = emptyUse();
   const shelf = String(section);
+  if(shelf==="12 · Consumables · Food and drink"&&["Spiced tea","Orcish grog","Dwarven stout","Frostwolf marrow-broth"].includes(name))
+    return {...use,kind:"special",action:"half",target:"self",note:name};
+  if(shelf==="11 · Adventuring gear · Trade kits"&&name==="Healer's kit (10 uses)")
+    return {...use,kind:"special",action:"half",target:"creature",note:"Healer's kit"};
+  // 08 §13: exactly this device is a spent repair, with no printed action time.
+  if (/· Devices$/.test(shelf) && ["Repair kit, mechanical","Rocket boots","Target dummy","Spring-loaded grapple"].includes(name)) {
+    return {...use, kind:"special", action:null, target:"self", note:name};
+  }
   // A shelf decides whether a thing has a Use at all.
   if (!usableShelf(shelf)) return use;
   const text = flatten(description);
@@ -645,7 +672,7 @@ export function seedUse({ name = "", section = "", description = "" } = {}, { co
   // ---- 08 §13's explosives: thrown, and the radius is what it covers.
   if (/· Explosives$/.test(shelf)) {
     use.kind = "explosive";
-    use.action = "half";
+    use.action = name === "Sapper's satchel" ? "full" : "half";
     use.target = "area";
     const damage = /(\d+) damage in (\d+) feet/.exec(effect);
     if (damage) {

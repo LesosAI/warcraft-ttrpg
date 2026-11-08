@@ -27,7 +27,7 @@ export async function consumableReceiptHandler(data={}, {user}={}){
    if(!item||!hasUse(item.system.use)||item.parent!==actor
      ||JSON.stringify({name:item.name,use:item.system.use})!==data.source||item.system.quantity!==data.quantity)
     return {ok:false,reason:'changed'};
-   next={version:1,key:data.key,stage:'claimed',requester:user.id,writer:game.user.id,itemId:item.id,itemName:item.name,
+   next={version:1,key:data.key,stage:'claimed',requester:user.id,writer:game.user.id,itemId:item.id,itemName:item.name,itemIdentifier:item.system.identifier??null,
     quantity:item.system.quantity??null,source:data.source,before:structuredClone(snapshot(actor)),stopped:false,
     messageUuid:null,reviewedBy:null};
   }else{

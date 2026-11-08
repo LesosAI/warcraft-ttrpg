@@ -15,6 +15,7 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+import { specialEquipmentOf } from "./special-equipment.mjs";
 import {
   attributeGradeOf, attributeGrantAllowed, attributePointsIn, canGoOn, grantAtRarity,
   isAttributeAffix, nameFor, priceFor, RARITY_BAND
@@ -136,6 +137,9 @@ export function plan({ base, rarity = "common", prefixes = [], suffix = null, gr
   const reasons = [];
   const notes = [];
   if (!base) return { ok: false, reasons: ["no base item"], notes, spent: 0, band: null, price: null, name: null };
+  if (specialEquipmentOf(base)?.slot
+    && (prefixes.some(Boolean) || suffix))
+    reasons.push("special designs carry their own effect and no affixes (08 §11)");
   if (!AZEROTH.rarities[rarity]) reasons.push(`no such rarity: ${rarity}`);
 
   const legendary = rarity === "legendary";

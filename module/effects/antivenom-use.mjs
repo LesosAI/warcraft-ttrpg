@@ -122,6 +122,7 @@ export async function antivenomQueryHandler(data={}, {user=null}={}) {
     if(spend?.delete)await item.delete();
     else if(spend)await item.update({'system.quantity':spend.quantity});
     await actor.setFlag('azeroth-rpg',FLAG,{...receipt,stage:'dosePaid'});
+    await (await import('./equipment-travel.mjs')).endEquipmentInvisibility(actor,{event:'consumable'});
     if(game.users.activeGM?.id!==game.user.id||!user.active||!actor.testUserPermission(user,'OWNER')
       ||actor.effects.get(data.effectId)!==effect||!eligible(actor,effect,classification)||effectState(effect)!==data.effectState||barred(actor))return refuse('changedAfterPayment',true);
     // A carrier ends through the affliction writer (D12 Phase 6); anything else keeps its gates.

@@ -590,12 +590,14 @@ export function readyEntry({ trigger = "", action = "", round = null, turn = nul
  * @param {boolean} [state.noOpportunity]  the reactor is held from Opportunity Attacks
  *   (07's Nature's Grasp: *... and unable to make Opportunity Attacks while it is held*;
  *   the B9a pass) - `rules/struck-tests.mjs#barredFromOpportunity`
+ * @param {boolean} [state.snagged]  a Snag holds the reactor from Opportunity Attacks
+ *   until its next turn (08 §5; D-812) - `rules/hit-marks.mjs#snaggedFromOpportunity`
  * @returns {{ok: boolean, reason: string|null, with: string|null}}
  */
 export function canReact(key, {
   reactionsLeft = 1, inFight = true, alreadyReacted = false, meleeWeapons = [], shields = [],
   attacks = [], leftReach = true, readied = null, classNames = [], pools = [], free = {},
-  unanswered = false, cannotParryOrBlock = false, lostToBlow = false, spiritRealm = false, noOpportunity = false, disoriented = false, asleep = false, phaseShifted = false, seduced = false, reactionBarred = false, iceBlocked = false, dispersed = false
+  unanswered = false, cannotParryOrBlock = false, lostToBlow = false, spiritRealm = false, noOpportunity = false, snagged = false, disoriented = false, asleep = false, phaseShifted = false, seduced = false, reactionBarred = false, iceBlocked = false, dispersed = false
 } = {}) {
   const row = REACTIONS[key] ?? null;
   if (!row) return { ok: false, reason: "AZEROTH.Reaction.Refuse.NoSuch", with: null };
@@ -617,6 +619,8 @@ export function canReact(key, {
   if (spiritRealm === true) return { ok: false, reason: "AZEROTH.Spirit.Refuse.Reaction", with: null };
   // *Unable to make Opportunity Attacks while it is held* (07's Nature's Grasp; the B9a pass).
   if (key === "opportunityAttack" && noOpportunity === true) return { ok: false, reason: "AZEROTH.Reaction.Refuse.Grasped", with: null };
+  // *The target cannot make Opportunity Attacks until their next turn* (08 §5's Snag; D-812).
+  if (key === "opportunityAttack" && snagged === true) return { ok: false, reason: "AZEROTH.Reaction.Refuse.Snagged", with: null };
   if (alreadyReacted) return { ok: false, reason: "AZEROTH.Reaction.Refuse.Already", with: null };
   // Out of a started fight there is no turn and no budget; 06 §6's one a round
   // is a rule about rounds, so it holds nobody outside one. A Reaction that

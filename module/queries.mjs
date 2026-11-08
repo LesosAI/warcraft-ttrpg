@@ -47,6 +47,7 @@ import { CLAIM_LOOT_QUERY, claimLootQueryHandler } from "./documents/loot-offer.
 import { END_TICK_QUERY, LAY_POISON_QUERY, endTickQueryHandler, layPoisonQueryHandler } from "./effects/ticks.mjs";
 import { LOSE_REACTION_QUERY, loseReactionQueryHandler } from "./effects/reaction-loss.mjs";
 import { SPEED_DROP_QUERY, speedDropQueryHandler } from "./effects/speed-drop.mjs";
+import { HIT_MARK_QUERY, hitMarkQueryHandler } from "./effects/hit-marks.mjs";
 import { SHARE_HEAL_QUERY, shareHealQueryHandler } from "./effects/symbiosis.mjs";
 import { WARD_QUERY, wardQueryHandler } from "./effects/wards.mjs";
 import { GIFT_QUERY, giftQueryHandler } from "./effects/gifts.mjs";
@@ -227,9 +228,11 @@ import { ITEM_CUSTODY_QUERY, ITEM_CUSTODY_CONSENT_QUERY, ITEM_CUSTODY_RECIPIENT_
   registerItemCustodyHooks, registerItemCustodyCardHooks } from "./effects/item-custody-transactions.mjs";
 
 import { registerPrivateSpellQueries } from "./effects/private-spell-records.mjs";
+import {registerSpecialEquipment} from "./effects/special-equipment.mjs";
 
 /** Register at init. */
 export function registerQueries() {
+  registerSpecialEquipment();
   registerPrivateSpellQueries();
   void import("./applications/private-spell-keys.mjs")
     .then(({ registerPrivateSpellKeyMenu }) => registerPrivateSpellKeyMenu())
@@ -502,6 +505,8 @@ export function registerQueries() {
   // poison landing with no Test (Coated Blades at rank 2).
   CONFIG.queries[LOSE_REACTION_QUERY] = loseReactionQueryHandler;
   CONFIG.queries[SPEED_DROP_QUERY] = speedDropQueryHandler;
+  // What a hit leaves beside a condition (D-812): Fel Bolt's Ward drop, Snag, Rattle.
+  CONFIG.queries[HIT_MARK_QUERY] = hitMarkQueryHandler;
   CONFIG.queries[LAY_POISON_QUERY] = layPoisonQueryHandler;
   // The Priest's and the Shaman's (D-774): 02's Ward laid on a creature the priest
   // does not own and Absorption's Mana back to a priest the striker's client does

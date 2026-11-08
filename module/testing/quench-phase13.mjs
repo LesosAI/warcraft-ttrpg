@@ -417,7 +417,7 @@ export function lootBatch(context) {
       assert.equal(folded.items[0].getFlag("azeroth-rpg", "classic")?.boss, "Kel'Thuzad");
     });
 
-    it("Browse opens the browser in pick mode; the row's own door takes a Common weapon and refuses a Legendary", async function () {
+    it("Browse opens the browser in pick mode; the row's own door takes any exact physical item and still refuses an affix", async function () {
       this.timeout(60000);
       const generator = generatorOf();
       await generator.render({ force: true });
@@ -430,22 +430,26 @@ export function lootBatch(context) {
       await settle();
       const browser = foundry.applications.instances.get("azeroth-compendium-browser");
       assert.ok(browser, "Browse did not open the compendium browser");
-      const wanted = game.i18n.format("AZEROTH.Loot.PickItem", {
-        rarity: game.i18n.localize(AZEROTH.rarities[generator.state.rows[0].rarity])
-      });
+      // Replacing a row is an explicit catalogue pick (D-813's loot phase), so the
+      // title no longer names the row's random rarity.
+      const wanted = game.i18n.localize("AZEROTH.Loot.CatalogueTitle");
       assert.equal(browser.title, wanted, "the browser did not open in pick mode for this row");
       await browser.close();
 
       // The refusals are at OUR door: the browser's filters cannot say *not
-      // that* (D-645), so the receiver is what a test drives.
+      // that* (D-645), so the receiver is what a test drives. An explicit pick
+      // is the GM's placement and ignores the random odds, so a Legendary is
+      // taken intact (08 SS20); an affix is still not a thing.
       const docs = await game.packs.get("azeroth-rpg.weapons").getDocuments();
       const legendary = docs.find(d => d.system.rarity === "legendary");
       const common = docs.find(d => d.name === "Longsword");
-      const before = generator.state.rows[0].base.uuid;
-      assert.isFalse(await generator.takeItem(0, legendary), "a Legendary was taken as loot");
-      assert.equal(generator.state.rows[0].base.uuid, before, "the row moved on a refusal");
       const affix = (await game.packs.get("azeroth-rpg.affixes").getDocuments())[0];
+      const before = generator.state.rows[0].base.uuid;
       assert.isFalse(await generator.takeItem(0, affix), "an affix was taken as a thing");
+      assert.equal(generator.state.rows[0].base.uuid, before, "the row moved on a refusal");
+      assert.isTrue(await generator.takeItem(0, legendary), "an explicit Legendary pick was refused");
+      assert.equal(generator.state.rows[0].base.uuid, legendary.uuid);
+      assert.equal(generator.state.rows[0].rarity, "legendary", "the pick lost its own rarity");
       assert.isTrue(await generator.takeItem(0, common), "a Common weapon was refused");
       assert.equal(generator.state.rows[0].base.uuid, common.uuid);
       assert.isTrue(generator.state.rows[0].locked, "a picked row is not kept");

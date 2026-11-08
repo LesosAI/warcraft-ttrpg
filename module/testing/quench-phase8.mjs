@@ -544,7 +544,12 @@ export function forgeBatch(context) {
       assert.isTrue(options.every(o => o.uuid), "a beast does not link its block in 14");
       const open = options.filter(o => o.available !== false);
       assert.isAbove(open.length, 1, "no beast with a Handling DC to bind");
-      assert.isTrue(options.filter(o => o.available === false).every(o => o.tag === game.i18n.localize("AZEROTH.Bound.NoHandling")), "a greyed beast is not greyed for its Handling DC");
+      // A beast waits for its Handling DC or for the level (D-650's tier gate): the
+      // bestiary now holds beasts above a level 5 Ranger's tier, so both tags are right.
+      assert.isTrue(options.filter(o => o.available === false).every(o =>
+        o.tag === game.i18n.localize("AZEROTH.Bound.NoHandling")
+        || o.tag === game.i18n.format("AZEROTH.Bound.TierAbove", { tier: o.tier ?? 1 })),
+      "a greyed beast is greyed for neither its Handling DC nor its tier");
       const [first, second] = open;
       const card = await pick(actor, companion, first.name);
       assert.ok(card, "no card for the bond");

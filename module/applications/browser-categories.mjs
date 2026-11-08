@@ -115,8 +115,9 @@ export const CATEGORIES = Object.freeze({
   weapons: {
     pack: "azeroth-rpg.weapons",
     label: "AZEROTH.Browser.Weapons",
-    fields: ["system.rating", "system.range", "system.traits", "system.rarity", "system.cost", "system.source.section"],
+    fields: ["system.rating", "system.range", "system.traits", "system.rarity", "system.cost", "system.source.section", "system.weaponType"],
     filters: () => ({
+      weaponType: { label: "AZEROTH.Item.WeaponType", path: "system.weaponType", choices: AZEROTH.weaponTypes },
       shelf: { label: "AZEROTH.Browser.Shelf", path: "system.source.section", kind: "tail" },
       traits: { label: "AZEROTH.Item.Traits", path: "system.traits", kind: "includes" },
       rarity: { label: "AZEROTH.Browser.Rarity", path: "system.rarity", choices: AZEROTH.rarities },

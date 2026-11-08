@@ -788,6 +788,10 @@ export async function enterAreas(document, movement, operation = {}) {
   let entered = 0;
   for (const region of scene.regions) {
     const f = region.flags?.[SCOPE] ?? {};
+    if(f.equipmentMine){
+      if(await triggerEquipmentMine({region,document,path,enterType:ENTER}))entered++;
+      continue;
+    }
     if(f.endTurnDamage?.touch===true){
       const {deliverGroundTouchDamage}=await import('./end-turn-damage.mjs');
       const result=await deliverGroundTouchDamage({region,document,movement,path,enterType:ENTER});
@@ -984,3 +988,4 @@ export function registerAreaStrikeHooks() {
     sweepLeavers({ scenes: [region.parent] }).catch(() => 0);
   });
 }
+import {triggerEquipmentMine} from "./equipment-mine.mjs";

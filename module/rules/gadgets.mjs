@@ -360,7 +360,8 @@ export const SHRINK_FLAG = "gadgetShrink";
 /** Repeated rays do not stack: use the strongest active reduction. */
 export function shrinkAmount(effects = []) {
   return effects.reduce((best, effect) => {
-    if (effect?.active === false || effect?.disabled === true) return best;
+    if (effect?.active === false || effect?.disabled === true || effect?.isSuppressed === true
+      || effect?.duration?.expired === true || effect?.isExpired === true) return best;
     const n = Number(effect?.flags?.["azeroth-rpg"]?.[SHRINK_FLAG]?.amount);
     return Number.isFinite(n) ? Math.max(best, Math.min(4, Math.max(0, Math.trunc(n)))) : best;
   }, 0);

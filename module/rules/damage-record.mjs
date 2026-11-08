@@ -3,7 +3,7 @@ import { shrinkDamage } from "./gadgets.mjs";
 
 // Only the resolver's inputs belong in a persisted card. Never retain actor,
 // token or effect documents passed by an adapter alongside those inputs.
-const INPUTS = ["rating", "sl", "kind", "school", "location", "apByLocation",
+const INPUTS = ["sourceDamageBonus", "rating", "sl", "kind", "school", "location", "apByLocation",
   "penetration", "ward", "immune", "vulnerable", "slAddsToDamage", "multiplier",
   "schoolArmor", "extras", "wardBySchool", "schoolArmorBySchool", "dealtHalved",
   "passedHalf", "bypass", "fireTakenBonus"];

@@ -18,8 +18,9 @@
  * - An Effect trait fires on a Success Level threshold (08 §5): Minor at SL
  *   1, Standard at SL 2, Severe on the Critical Injury. A fired trait that
  *   names a condition offers it on the card; Nick's extra damage joins the
- *   damage; Maim moves the Critical Injury to the Limb table; the rest are
- *   the table's and print as fired.
+ *   damage; Maim moves the Critical Injury to the Limb table; Rattle, Snag,
+ *   Shove and Daze land on every creature the card records (`traitLandings`,
+ *   D-812); Hook's choice is the table's and prints as fired.
  * - Keen (Craft) widens the Critical Injury: 19 at Lesser, 18 at Greater.
  */
 
@@ -47,11 +48,17 @@ export const FORM = Object.freeze({
 /** Effect traits: fire on SL 1 (Minor), SL 2 (Standard), or the Critical Injury (Severe). */
 export const EFFECT = Object.freeze({
   nick: Object.freeze({ sl: 1, extraDamage: 1 }),
-  rattle: Object.freeze({ sl: 1, note: true }),
-  snag: Object.freeze({ sl: 1, note: true }),
-  shove: Object.freeze({ sl: 1, note: true }),
+  // **WHAT FOUR EFFECT TRAITS LAND ON A HIT** (D-812; the lead: *"complete them"*):
+  // each on every creature the card records, as a rider's condition lands (D-770),
+  // through the door that already writes it - Rattle's point off a Momentum pool and
+  // Snag's mark through `effects/hit-marks.mjs`, Shove through
+  // `effects/forced-movement.mjs#forceMove`, Daze through
+  // `effects/reaction-loss.mjs#loseReaction` (Paralytic's *loses its next Reaction*).
+  rattle: Object.freeze({ sl: 1, momentumLoss: 1 }),
+  snag: Object.freeze({ sl: 1, noOpportunity: true }),
+  shove: Object.freeze({ sl: 1, push: 5 }),
   bleed: Object.freeze({ sl: 2, condition: { id: "bleeding", value: 1 } }),
-  daze: Object.freeze({ sl: 2, note: true }),
+  daze: Object.freeze({ sl: 2, loseReaction: true }),
   hook: Object.freeze({ sl: 2, condition: { id: "prone" }, note: true }),
   entangle: Object.freeze({ sl: 2, condition: { id: "entangled" } }),
   maim: Object.freeze({ critical: true, location: "limb" }),
@@ -120,6 +127,29 @@ export function weaponTraitEffects(names = [], { strength = 10 } = {}) {
 export function firedTraits(effects, { sl = 0, success = false, critical = false } = {}) {
   if (!success) return [];
   return (effects?.effects ?? []).filter(e => (e.critical ? critical : sl >= (e.sl ?? Infinity)));
+}
+
+/** What a fired trait row lands on a creature struck, in the order the door lands them. */
+export const TRAIT_LANDING_KINDS = Object.freeze(["momentum", "noOpportunity", "push", "reaction"]);
+
+/**
+ * **WHAT ONE FIRED TRAIT LANDS ON EACH CREATURE STRUCK** (D-812): Rattle's
+ * `momentum` (the points lost), Snag's `noOpportunity`, Shove's `push` (the feet,
+ * straight away from the striker) and Daze's `reaction`. Empty for any other row -
+ * a Signature's `onHit` row rides the same `fired` list and is never read here
+ * (its `key` is `signature`).
+ *
+ * @param {{key?: string, momentumLoss?: number, noOpportunity?: boolean, push?: number, loseReaction?: boolean}|null} row
+ * @returns {Array<{kind: string, amount?: number, feet?: number}>}
+ */
+export function traitLandings(row) {
+  if (!row || !Object.hasOwn(EFFECT, row.key ?? "")) return [];
+  const out = [];
+  if ((Number(row.momentumLoss) || 0) > 0) out.push({ kind: "momentum", amount: Math.trunc(Number(row.momentumLoss)) });
+  if (row.noOpportunity === true) out.push({ kind: "noOpportunity" });
+  if ((Number(row.push) || 0) > 0) out.push({ kind: "push", feet: Math.trunc(Number(row.push)) });
+  if (row.loseReaction === true) out.push({ kind: "reaction" });
+  return out;
 }
 
 /** What the worn weapons do to the body (08 §5): Encumbering's Speed and Stealth. */

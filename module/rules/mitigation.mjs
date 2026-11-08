@@ -184,7 +184,9 @@ export function resolveDamage({
   // Vulnerable and a halving stand: the words name armor and Ward and nothing else.
   bypass = false,
   // Target-side Flame Buffet: after source scaling, before mitigation.
-  fireTakenBonus = 0
+  fireTakenBonus = 0,
+  // Flat source damage after scaling, before ordinary halving/mitigation.
+  sourceDamageBonus = 0
 } = {}) {
   const own = kind === "magical" ? school : "physical";
   const typed = typedExtras(extras, own);
@@ -194,9 +196,11 @@ export function resolveDamage({
   const main = resolveOne({
     rating: (Number(rating) || 0) + typed.merged, sl, kind, school, location,
     apByLocation: past ? {} : apByLocation, penetration, ward: past ? 0 : ward,
-    immune, vulnerable, slAddsToDamage, multiplier, schoolArmor: past ? 0 : schoolArmor, halved: halvings, fireTakenBonus
+    immune, vulnerable, slAddsToDamage, multiplier, schoolArmor: past ? 0 : schoolArmor, halved: halvings, fireTakenBonus,
+    sourceDamageBonus
   });
-  const flagged = past ? { ...main, bypass: true } : main;
+  const sourced = sourceDamageBonus > 0 ? { ...main, sourceDamageBonus } : main;
+  const flagged = past ? { ...sourced, bypass: true } : sourced;
   const marked = halvings ? { ...flagged, ...(halved ? { dealtHalved: true } : {}), ...(passedHalf === true ? { passedHalf: true } : {}) } : flagged;
   if (!typed.extras.length) return marked;
   const meets = past
@@ -292,11 +296,13 @@ function resolveOne({
   multiplier = 1,
   schoolArmor = 0,
   halved = false,
-  fireTakenBonus = 0
+  fireTakenBonus = 0,
+  sourceDamageBonus = 0
 } = {}) {
   // A multiplier under 1 would mean the opposite of itself, and 08 §20 doubles
   // and nothing else; anything smaller is no multiplier at all.
   const times = Number.isFinite(multiplier) && multiplier > 1 ? multiplier : 1;
+  const sourceBonus = Math.max(0, Number(sourceDamageBonus) || 0);
   // The type is the school for magical damage and "physical" otherwise. Both
   // sit in the same keyword space (06 §4).
   const type = kind === "magical" ? school : "physical";
@@ -332,7 +338,7 @@ function resolveOne({
   // Vulnerable switches mitigation off: "Armor and Ward do not apply."
   // Its 2 is the target's own, added after a halving of the blow's worth (door 25).
   if (isVulnerable) {
-    const worth = worthOf(times * (rating + (slAddsToDamage ? sl : 0) + headBonus), halved);
+    const worth = worthOf(times * (rating + (slAddsToDamage ? sl : 0) + headBonus) + sourceBonus, halved);
     const bonus = fireBonusFor(type, worth, fireTakenBonus);
     const damage = Math.max(0, worth + bonus + vulnBonus);
     return { damage, effectiveSL: sl, hit: true, immune: false, vulnerable: true, mitigation: 0, ...lane,
@@ -345,14 +351,14 @@ function resolveOne({
     // `applyWard`'s and `spellDamage`'s own arithmetic, with the worth halved between.
     const w = Math.max(0, ward);
     const effectiveSL = Math.max(0, sl - w);
-    const worth = worthOf(times * (rating + (slAddsToDamage ? effectiveSL : 0)), halved);
+    const worth = worthOf(times * (rating + (slAddsToDamage ? effectiveSL : 0)) + sourceBonus, halved);
     const bonus = fireBonusFor(type, worth, fireTakenBonus);
     const damage = Math.max(0, worth + bonus - w);
     // **WHAT THE WARD TOOK OFF THIS BLOW** (D-774): the damage with no Ward less
     // the damage with it, so a door after the die can say whether the Ward
     // prevented anything - 04's Atonement (*When your Ward class feature prevents
     // damage*) and Absorption read it at the one damage door.
-    const bareWorth = worthOf(times * (rating + (slAddsToDamage ? Math.max(0, sl) : 0)), halved);
+    const bareWorth = worthOf(times * (rating + (slAddsToDamage ? Math.max(0, sl) : 0)) + sourceBonus, halved);
     const bare = { damage: Math.max(0, bareWorth + fireBonusFor(type, bareWorth, fireTakenBonus)) };
     const wardTook = Math.max(0, bare.damage - damage);
     // An aura's Armor Points come off what the Ward left, and the Success Level
@@ -372,7 +378,7 @@ function resolveOne({
     };
   }
 
-  const before = worthOf(times * (rating + sl + headBonus), halved);
+  const before = worthOf(times * (rating + sl + headBonus) + sourceBonus, halved);
   const ap = armorAt(apByLocation, location) ?? 0;
   const effectiveAP = Math.max(0, ap - Math.max(0, penetration));
   return {
@@ -430,6 +436,7 @@ export function explainDamage(result = {}, { rating = 0, sl = 0, slAddsToDamage 
   // A spell's Success Level gates riders and never adds (D-330), so it is not
   // a part of the sum on that lane.
   if (slAddsToDamage) parts.push({ n: Math.trunc(Number(sl)) || 0, sign: "+" });
+  if (result.sourceDamageBonus > 0) parts.push({ n: result.sourceDamageBonus, sign: "+" });
   if (result.fireTakenBonus > 0) parts.push({ n: result.fireTakenBonus, sign: "+" });
   if (result.vulnerable) {
     return withExtras({ parts, immune: false, vulnerable: true, note: { kind: "vulnerable", n: VULNERABLE_DAMAGE_BONUS } });

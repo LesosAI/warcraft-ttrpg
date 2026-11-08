@@ -100,6 +100,11 @@ export async function landTicks(actor, {combat = null, combatant = null} = {}) {
       // A channel needs its living caster and recorded tokens at the instant
       // damage lands. Hook cleanup can still be waiting on another write.
       const carrier = actor.effects.get(id);
+      if(tick.equipmentExplosive){
+        const {landExplosiveTick}=await import("./equipment-explosives.mjs");
+        await landExplosiveTick({actor,carrier,tick,combat});
+        continue;
+      }
       if (!sustainedSpellLive(carrier)) continue;
       const channel = carrier?.flags?.["azeroth-rpg"]?.[MIND_FLAY_FLAG];
       // Dedicated channels persist their pulse claim before damage; the
@@ -183,9 +188,9 @@ export async function landTicks(actor, {combat = null, combatant = null} = {}) {
  * @param {{tick: object, img?: string|null, origin?: string|null, timing?: object}} o
  * @returns {Promise<ActiveEffect|null>}
  */
-export async function layTickOn(actor, { tick, img = null, origin = null, timing = {} } = {}) {
+export async function layTickOn(actor, { tick, img = null, origin = null, timing = {}, replace = true } = {}) {
   if (!actor || !hasTick(tick) || !actorInWorld(actor)) return null;
-  const stale = tickEffectsOf(actor, { all: true })
+  const stale = (replace ? tickEffectsOf(actor, { all: true }) : [])
     .filter(e => {
       const held = tickOn(e);
       return held.name === tick.name && (held.source ?? null) === (tick.source ?? null);

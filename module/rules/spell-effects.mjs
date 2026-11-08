@@ -172,6 +172,10 @@ export function seedApplies(effectText, duration = {}, target = "") {
     for (const sentence of sentences(text)) {
       if (/\byou(?:r)?\b/i.test(sentence) && !/(?:the|each|every|one|any) (?:target|creature)/i.test(sentence)) continue;
       if (/fail(?:s|ed)? (?:a|an|the)? ?(?:Body|Reflex|Spirit)? ?Resilience Test/i.test(sentence)) continue;
+      // **A CONDITION ONLY A SUCCESS LEVEL LANDS IS NEVER THE APPLY'S** (07's Frostbite:
+      // *At SL 3 or better it is **Entangled** for the first round*; D-812): its Apply
+      // laid Entangled at any SL, on a pass as on a failure. `spell-sl-riders.mjs` reads it.
+      if (/\b[Aa]t SL \d+ or better\b/.test(sentence)) continue;
       // **A CONDITION THE TARGET CANNOT BE IS ONE IT REFUSES, NEVER ONE IT IS
       // GIVEN** (A1: *Cannot be X prevents the condition*; CLAUDE.md §15's
       // pitfall for a creature's rule; found reading the lay door for D-770).

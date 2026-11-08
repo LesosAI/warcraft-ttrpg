@@ -162,6 +162,8 @@ export function situationalModifiers({
   targetStatuses = [],
   lesserInvisible = false,
   targetLesserInvisible = false,
+  invisible = false,
+  targetInvisible = false,
   targetMirrorImages = false,
   range = null,
   rangeBand = null,
@@ -237,9 +239,11 @@ export function situationalModifiers({
 
   // Lesser Invisibility uses 07's defensive penalty, not an attacker's
   // generic unseen Boon. Moving unnoticed is narrower than every skill Test.
-  if (targetLesserInvisible === true && (kind === "attack" || kind === "casting"))
+  if ((targetLesserInvisible === true || targetInvisible === true) && (kind === "attack" || kind === "casting"))
     auto("lesserInvisibleTarget", { banes: 2 });
-  if (lesserInvisible === true && kind === "skill")
+  if (invisible === true && kind === "skill" && skill === "stealth")
+    auto("invisibleStealth", { boons: 1 });
+  if (lesserInvisible === true && kind === "skill" && !(invisible === true && skill === "stealth"))
     judge("lesserInvisibleMovement", { boons: 1 });
 
   // ---- automatic: the roller's own state ----------------------------------

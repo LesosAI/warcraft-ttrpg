@@ -20,6 +20,8 @@
 import { AZEROTH } from "../config.mjs";
 import { mirrorImageBanes } from "../rules/mirror-image.mjs";
 import { untrainedForRoll } from "../rules/equipment-training.mjs";
+import { equipmentModifiers, pendingEquipmentTest } from "../rules/special-equipment.mjs";
+import {drinkTestBenefits} from "../rules/provision-benefits.mjs";
 import { signatureSkillChoices, signatureHiddenChoices } from "../rules/signature-skill-choices.mjs";
 import { militiaDrillChoice, militiaDrillSelection, MILITIA_DRILL_FLAG } from "../rules/militia-drill.mjs";
 import { symbiosisSkillPartners } from "../effects/symbiosis-skills.mjs";
@@ -46,6 +48,8 @@ import { ARCHMAGE, VEINS_FLAG, archmageBoons, castingBoonsFor, speedReducedFact,
 import { boundOf } from "../documents/bound.mjs";
 import { isHiddenFor } from "../effects/stealth.mjs";
 import { lesserInvisibilityActive } from "../rules/lesser-invisibility.mjs";
+import { invisibilityActive } from "../rules/equipment-travel.mjs";
+import { dispersionFor } from "../rules/dispersion.mjs";
 import { featureReminders } from "../rules/class-features.mjs";
 // The Damage lines kept, one function for this dialog and the feature door (D-768).
 import { damageChosen } from "../rules/talent-effects.mjs";
@@ -103,6 +107,7 @@ export function targetSnapshots(targets = game.user?.targets ?? []) {
       actorId: actor.id,
       name: token.name ?? actor.name,
       defense: s.defense ?? null,
+      invisible: invisibilityActive(actor.effects, game.time?.worldTime),
       lesserInvisible: lesserInvisibilityActive(actor.effects, actor.uuid, game.time?.worldTime)
         && isHiddenFor(actor, { tokenId: token.id, sceneId: token.scene?.id ?? token.document?.parent?.id ?? null }),
       // **AND ROCKBITER'S RISE AGAINST THE FIRST ATTACK EACH ROUND** (04, D-774):
@@ -340,6 +345,8 @@ function snapshotOf(actor, { kind, skill, targets, resilience = null, ability = 
     armorBanes: s.armorBanes ?? [],
     targetStatuses: targets[0]?.statuses ?? [],
     targetLesserInvisible: targets[0]?.lesserInvisible === true,
+    targetInvisible: targets[0]?.invisible === true,
+    invisible: invisibilityActive(actor.effects, game.time?.worldTime),
     targetMirrorImages: (targets[0]?.mirrorImageBanes??0)>0,
     lesserInvisible: facts.lesserInvisible === true,
     // 06: what the distance costs, where the tokens let it be measured (D-669).
@@ -596,6 +603,15 @@ export function prepareRoll(actor, given) {
       cardBoons: spec.cardBoons?.boons > 0 ? spec.cardBoons : null
     }
   }), untrained: untrainedForRoll(actor, test) });
+  const equipment = equipmentModifiers({
+    actor,rangeKind:test.rangeKind??spec.rangeKind??null,
+    items: dispersionFor(actor) ? [] : actor.items ?? [], effects: actor.effects ?? [], kind: test.kind,
+    skill: spec.skill ?? null,
+    ability: test.ability ?? AZEROTH.skillAbility?.[spec.skill] ?? AZEROTH.resilienceAbility?.[spec.resilience] ?? null,
+    resilience: spec.resilience ?? null, now: game.time?.worldTime
+  });
+  situational.automatic.push(...equipment.automatic);
+  situational.judgement.push(...equipment.judgement);
   for (const partner of symbiosisSkillPartners(actor, { kind: test.kind, skill: spec.skill, source })) {
     situational.automatic.push({
       id: `symbiosis-${partner.uuid}`, label: "AZEROTH.Symbiosis.SkillBoon",
@@ -640,6 +656,11 @@ export function prepareRoll(actor, given) {
   }
   return {
     targets,
+    provisionTestIds: drinkTestBenefits(actor.effects??[],{kind:test.kind,resilience:spec.resilience??null}).map(e=>e.id??e._id),
+    equipmentTestIds: pendingEquipmentTest(actor.effects ?? [], {
+      kind: test.kind, ability: test.ability ?? AZEROTH.skillAbility?.[spec.skill] ?? null,
+      now: game.time?.worldTime
+    }),
     source,
     extraWeapons: spec.extraWeapons ?? null,
     // The way this blow is struck, where the weapon offers a choice (D-731).
@@ -769,6 +790,9 @@ export function defaultChoice(actor, spec) {
   // the table's judgements off, exactly as the automatic Boons are taken.
   const damage = damageChosen(p.damageLines);
   return {
+    equipmentPrepared: true,
+    equipmentTestIds: p.equipmentTestIds,
+    provisionTestIds: p.provisionTestIds,
     ...damage,
     damageChoices: p.damageLines.filter(line => line.checked).map(line => line.id),
     // A skipped dialog spends no Combo Points: how many a blow is worth is the
@@ -859,6 +883,9 @@ function readForm(form, p) {
   // A talent's counter or charge (D-774): ticked, and only where the line is live.
   const talentLines = (p.talentLines ?? []).filter(l => l.available && f[`tline-${l.identifier}`]?.checked).map(l => l.identifier);
   return {
+    equipmentPrepared: true,
+    equipmentTestIds: p.equipmentTestIds,
+    provisionTestIds: p.provisionTestIds,
     ...damage,
     damageChoices: p.damageLines.filter(line => f[`line-${line.id}`]?.checked).map(line => line.id),
     finisherSpent,

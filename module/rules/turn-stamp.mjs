@@ -54,6 +54,8 @@ export const FLAG_SCOPE = "azeroth-rpg";
  * lands wherever damage does.
  *
  *  - `budget`, `moveHalves`: the turn's Half-Actions, Reaction and the Moves paid (D-712, D-761).
+ *  - `swimMovement`: D-813's per-Move swimming-credit history, written with the
+ *    movement budget and cleared by resetBudget; it cannot reorder combatants.
  *  - `acted`: the first turn of the fight is over (02 §7's Sprint).
  *  - `round`, `lastHitRound`: the round's record - struck, was struck, Fast, a Stealth made (D-627).
  *  - `damageTypes`: the damage taken since the end of its last turn (14's Regeneration, D-691).
@@ -81,7 +83,7 @@ export const FLAG_SCOPE = "azeroth-rpg";
  * is named by a literal or through a constant.
  */
 export const BOOKKEEPING_FLAGS = Object.freeze([
-  "budget", "moveHalves", "acted", "round", "lastHitRound", "damageTypes",
+  "budget", "moveHalves", "swimMovement", "acted", "round", "lastHitRound", "damageTypes",
   "damaged", "marked", "ready", "heldPosition", "criticalsIgnored", "lastTurn",
   "constructTurn", "lunarDamage", "crushridgeExtraAttacks", "infernalImmolationTicks",
   // The round a body a Boss Action called arrives in (D-809): written on the

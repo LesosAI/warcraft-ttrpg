@@ -69,6 +69,7 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+import { gadgetByKey, GADGET_UUID_PREFIX, isGadgetEntry } from "./gadgets.mjs";
 import { canGoOn, priceFor } from "./affixes.mjs";
 import { ZONES } from "./classic-tables.mjs";
 import { affixCost, bandFor, build, plan } from "./forge.mjs";
@@ -778,6 +779,84 @@ export function reviewRows(rows = []) {
     for (const note of row.notes ?? []) notes.push(note);
   }
   return { ok: reasons.length === 0, reasons, notes };
+}
+
+/** Only the sixteen source references can become blueprint loot; learned features cannot. */
+export function gadgetBlueprintOf(document) {
+  const uuid = String(document?.uuid ?? "");
+  if (document?.type !== "feature" || !uuid.startsWith(GADGET_UUID_PREFIX)
+    || !/^[A-Za-z0-9]{16}$/.test(uuid.slice(GADGET_UUID_PREFIX.length))
+    || !isGadgetEntry(document) || document.system?.source?.document !== "04-TALENTS"
+    || document.system?.source?.section !== "Gadgets") return null;
+  const gadget = gadgetByKey(document.system?.identifier);
+  return gadget?.name === document.name ? gadget : null;
+}
+
+/** An explicit GM pick is an exact physical item, or an inert gadget blueprint. */
+export function catalogueRow(document, { blueprintName = null } = {}) {
+  const blueprint = gadgetBlueprintOf(document);
+  if (!document?.uuid || (!["weapon", "armor", "gear"].includes(document.type) && !blueprint)
+    || document.flags?.["azeroth-rpg"]?.affix) return null;
+  const system = document.system ?? {};
+  const rarity = blueprint ? "common" : system.rarity ?? "common";
+  const base = {
+    uuid: document.uuid, name: document.name, img: document.img,
+    type: document.type, system: structuredClone(system)
+  };
+  return {
+    base, rarity, kind: kindOf(base) ?? "noncombat", fixedUuid: document.uuid,
+    catalogue: true, blueprint: Boolean(blueprint), catalogueSource: catalogueSource(document), prefix: null, suffix: null, greater: [], quantity: null,
+    name: blueprint ? (blueprintName ?? `${document.name} blueprint`) : document.name,
+    price: blueprint ? null : system.cost ?? null, spent: blueprint ? null : system.budget ?? null,
+    notes: [], accepted: true, locked: true
+  };
+}
+
+/** Only the source item's visible rules and presentation, not document timestamps. */
+function catalogueSource(document) {
+  return structuredClone({ name: document.name, type: document.type, img: document.img ?? null,
+    system: document.system ?? {}, flags: document.flags ?? {}, effects: document.effects ?? [] });
+}
+
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])]));
+  return value;
+}
+
+/** Copy a resolved source document without Forge normalization or class grants. */
+export function catalogueItemData(row, document, { blueprint = {} } = {}) {
+  if (!row?.catalogue || row.fixedUuid !== row.base?.uuid
+    || !catalogueRow({ ...document, uuid: row.fixedUuid })
+    || JSON.stringify(canonical(row.catalogueSource)) !== JSON.stringify(canonical(catalogueSource(document)))) return null;
+  const gadget = gadgetBlueprintOf({ ...document, uuid: row.fixedUuid });
+  if (Boolean(row.blueprint) !== Boolean(gadget)) return null;
+  if (gadget) {
+    const notice = blueprint.notice ?? "Reference blueprint only. Learning, building and use follow the linked gadget's existing class/talent rules; this blueprint grants no ability or prerequisite exemption.";
+    const requirements = blueprint.requirements ?? "Normal source path: Gnome, Rogue, Tinker Legacy, Gadgeteer. Other existing explicit talent permissions retain their own rules.";
+    const reference = blueprint.reference ?? "Gadget reference rules; this blueprint does not activate them.";
+    const provenance = blueprint.provenance ?? `Blueprint reference: ${document.name} (04-TALENTS, Gadgets)`;
+    return {
+      name: row.name, type: "gear", img: document.img, effects: [],
+      system: {
+        identifier: `blueprint-${gadget.key}`,
+        description: `<p>${notice}</p><p>${requirements}</p><p>@UUID[${row.fixedUuid}]{${document.name}}</p><p><strong>${reference}</strong></p>${document.system.description ?? ""}`,
+        source: { document: "04-TALENTS", section: "Gadget blueprints" },
+        traits: [], slot: null, provision: null, rarity: "common", budget: 0,
+        cost: null, weight: null, provenance, quantity: 1, equipped: false, container: null,
+        use: { kind: "none" }, charges: { value: null, max: null, unit: null }
+      },
+      flags: { "azeroth-rpg": { lootBlueprint: {
+        version: 1, sourceUuid: row.fixedUuid, sourceName: document.name, gadgetKey: gadget.key,
+        source: structuredClone(document.system.source), sourceClass: document.system.className ?? null,
+        requirementsReference: { document: "04-TALENTS", className: "Rogue", people: "Gnome", legacy: "Tinker", talent: "Gadgeteer" }
+      } } }
+    };
+  }
+  const data = structuredClone(document);
+  delete data._id;
+  delete data._key;
+  return data;
 }
 
 /**

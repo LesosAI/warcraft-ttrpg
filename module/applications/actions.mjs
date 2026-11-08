@@ -145,6 +145,7 @@ import { dealtHalvedBy } from "../rules/legacy-uses.mjs";
 import { holdsCuttingGear } from "../rules/escapes.mjs";
 // 07's Nature's Grasp's bar on Opportunity Attacks (the B9a pass).
 import { barredFromOpportunity } from "../rules/struck-tests.mjs";
+import { snaggedFromOpportunity } from "../rules/hit-marks.mjs";
 import { afflictionView } from "../rules/affliction-view.mjs";
 import { afflictionsOf } from "../effects/afflictions.mjs";
 import { handLay } from "../effects/bare-afflictions.mjs";
@@ -357,7 +358,7 @@ export function reactionStateOf(actor, { messageId = null, against = null, targe
     // The attack reveals a hidden striker before defenders answer. Ghostly
     // Strike reads that attack's saved concealment, never the later live status.
     cannotParryOrBlock: Boolean(against && unanswerableWith(against.takenTalents?.() ?? [],
-      { hidden: card?.getFlag?.('azeroth-rpg', 'hiddenAtRoll') === true })),
+      { hidden: card?.getFlag?.('azeroth-rpg', 'hiddenAtRoll') === true }))||smokeObscuresAttack(actor,card,targetIndex),
     lostToBlow,
     // **A SPIRIT ANSWERS NO BLOW** (06 §10: *You cannot touch the living world, and
     // nothing in the fight can touch you*; the Legacy branches' door 10): a character
@@ -373,7 +374,10 @@ export function reactionStateOf(actor, { messageId = null, against = null, targe
     // **HELD FROM OPPORTUNITY ATTACKS** (07's Nature's Grasp: *... or be **Entangled** and
     // unable to make Opportunity Attacks while it is held*; the B9a pass): while the
     // Entangled its striker's Test laid holds (`rules/struck-tests.mjs`).
-    noOpportunity: barredFromOpportunity(actor?.effects?.contents ?? [])
+    noOpportunity: barredFromOpportunity(actor?.effects?.contents ?? []),
+    // **SNAGGED** (08 §5's Snag: *cannot make Opportunity Attacks until their next
+    // turn*; D-812): the mark a hit laid (`rules/hit-marks.mjs`).
+    snagged: snaggedFromOpportunity(actor?.effects?.contents ?? [])
   };
 }
 
@@ -1187,7 +1191,8 @@ export async function rollWithDialog(actor, spec, event = null) {
   const modifiers = picked.modifier
     ? [...(baseModifiers ?? []), { label: "AZEROTH.Dialog.Circumstance", value: picked.modifier }]
     : baseModifiers;
-  const args = { actor, ...roll, ...picked, ...(modifiers !== roll.modifiers ? { modifiers } : {}), provenanceExtra };
+  const args = { actor, ...roll, ...picked, ...(modifiers !== roll.modifiers ? { modifiers } : {}), provenanceExtra,
+    skill: skill ?? null, ability: roll.ability ?? AZEROTH.skillAbility?.[skill] ?? null };
   // Validate the chosen weapon and its range/ammunition before spending the
   // first attack. Rebuild again after it lands to use the resulting live state.
   if (spec.extraWeapons && !await rebuildSecond({ args, secondTargets, extraWeapon, firstCard: null })) return null;
@@ -1390,6 +1395,7 @@ export async function castWithDialog(actor, spell, event = null, { targets = nul
   });
   const castingSpec = {
     kind: "casting",
+    ability,
     title: spell.name,
     spell,
     ...(targets !== null ? { targets } : {}),
@@ -3761,3 +3767,4 @@ export function afflictionsContext(actor) {
     open: { groups, rows: Array.isArray(rows) ? rows : [] }
   });
 }
+import {smokeObscuresAttack} from "../canvas/equipment-smoke.mjs";

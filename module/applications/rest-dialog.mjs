@@ -102,18 +102,21 @@ export async function promptRest(actor) {
   }
 
   const carried = provisionOptions(actor.items ?? []);
+  const {sharedFeastOptions}=await import("../effects/shared-feast.mjs");
+  const sharedMeals=await sharedFeastOptions(actor);
+  const foodOptions=[...optionsFor(carried.food),...sharedMeals];
   const numbers = restNumbers(actor);
-  const empty = !carried.food.length && !carried.drink.length;
+  const empty = !carried.food.length && !sharedMeals.length && !carried.drink.length;
   const content = await renderTemplate(TEMPLATE, {
     name: actor.name,
-    food: optionsFor(carried.food),
+    food: foodOptions,
     // A DRINK IS NOT PRESELECTED FOR A CHARACTER WITH NO MANA while there is
     // food to rest on: the default would spend an ale on a Warrior for nothing.
     // With no food carried it is the only way to rest at all, so it is offered.
     drink: optionsFor(carried.drink, numbers.hasMana || !carried.food.length),
     // The numbers each pick returns, in the row's own note.
     eatReturns: game.i18n.format("AZEROTH.Rest.EatReturns", { n: numbers.health }),
-    hotMealReturns: carried.food.some(r => tierAgain(r.kind))
+    hotMealReturns: sharedMeals.length||carried.food.some(r => tierAgain(r.kind))
       ? game.i18n.format("AZEROTH.Rest.HotMealReturns", { n: numbers.hotMeal })
       : null,
     drinkReturns: numbers.hasMana
@@ -163,10 +166,11 @@ export async function promptRest(actor) {
       // ALWAYS an object: a callback that returns null falls through to the
       // button's own action (`DialogV2#_onClickButton`, 14.367), and the caller
       // would then be handed the string "rest".
-      callback: (clicked, target) => ({
-        food: target.form.elements.food?.value || null,
-        drink: target.form.elements.drink?.value || null
-      })
+      callback: (clicked, target) => {
+        const food=target.form.elements.food?.value||null;
+        if(food?.startsWith("feast:")){const value=food.slice(6),split=value.lastIndexOf(":");return {food:null,drink:target.form.elements.drink?.value||null,feast:{payerUuid:value.slice(0,split),sessionId:value.slice(split+1)}};}
+        return {food,drink:target.form.elements.drink?.value||null};
+      }
     }]
   });
 }

@@ -123,15 +123,16 @@
         <select name="row-rarity-{{this.index}}" data-loot="row" aria-label="{{localize "AZEROTH.Item.Rarity"}}" {{#if this.named}}disabled{{/if}}>
           {{#each this.rarities}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
         </select>
-        <select name="row-kind-{{this.index}}" data-loot="row" aria-label="{{localize "AZEROTH.Loot.Kind.Label"}}">
+        <select name="row-kind-{{this.index}}" data-loot="row" aria-label="{{localize "AZEROTH.Loot.Kind.Label"}}" {{#if this.catalogue}}disabled{{/if}}>
           {{#each this.kinds}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
         </select>
         <span class="azeroth-forge-cost">{{this.price}}</span>
-        <button type="button" class="azeroth-forge-quiet" data-action="lootRerollRow">{{localize "AZEROTH.Loot.Reroll"}}</button>
-        <button type="button" class="azeroth-forge-quiet" data-action="lootLockRow" aria-pressed="{{this.locked}}">{{#if this.locked}}{{localize "AZEROTH.Loot.Unlock"}}{{else}}{{localize "AZEROTH.Loot.Lock"}}{{/if}}</button>
+        <button type="button" class="azeroth-forge-quiet" data-action="lootRerollRow" {{#if this.catalogue}}disabled{{/if}}>{{localize "AZEROTH.Loot.Reroll"}}</button>
+        <button type="button" class="azeroth-forge-quiet" data-action="lootLockRow" aria-pressed="{{this.locked}}" {{#if this.catalogue}}disabled{{/if}}>{{#if this.locked}}{{localize "AZEROTH.Loot.Unlock"}}{{else}}{{localize "AZEROTH.Loot.Lock"}}{{/if}}</button>
         <button type="button" class="azeroth-forge-quiet" data-action="lootBrowseRow">{{localize "AZEROTH.Creator.Browse"}}</button>
         <button type="button" class="azeroth-delete" data-action="lootRemoveRow" data-tooltip="{{localize "AZEROTH.Loot.Remove"}}" aria-label="{{localize "AZEROTH.Loot.Remove"}}">&times;</button>
         {{#if this.detail}}<span class="azeroth-loot-detail">{{this.detail}}</span>{{/if}}
+        {{#if this.catalogue}}<span class="azeroth-loot-detail">{{#if this.blueprint}}{{localize "AZEROTH.Loot.BlueprintExact"}}{{else}}{{localize "AZEROTH.Loot.CatalogueExact"}}{{/if}}</span>{{/if}}
         {{#if this.grants.length}}<span class="azeroth-loot-grants">{{#each this.grants}}{{this}}{{#unless @last}} · {{/unless}}{{/each}}</span>{{/if}}
         {{#each this.notes}}<span class="azeroth-loot-detail">{{this}}</span>{{/each}}
       </li>
@@ -144,6 +145,7 @@
         {{#each addRarities}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}
       </select>
       <button type="button" class="azeroth-forge-quiet" data-action="lootAddRow">{{localize "AZEROTH.Loot.AddRow"}}</button>
+      <button type="button" class="azeroth-forge-quiet" data-action="lootAddCatalogue">{{localize "AZEROTH.Loot.AddCatalogue"}}</button>
     </div>
   </div>
 

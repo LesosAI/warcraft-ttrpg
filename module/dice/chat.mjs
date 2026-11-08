@@ -7,6 +7,7 @@
  */
 
 import { placeItemArea } from "../canvas/place.mjs";
+const EXPLOSIVE_DAMAGE_CAPABILITY=Symbol("equipment explosive damage");
 import { abilityKeyOf } from "../rules/animation-records.mjs";
 // A creature ability's area, IMPORTED rather than awaited inside `placeAreaFromCard`:
 // that door must reach its pick with no await on an embedded item, or a press made
@@ -86,6 +87,8 @@ import { feetBetweenTokens } from "../canvas/engaged.mjs";
 import { loseReaction, reactionLossText } from "../effects/reaction-loss.mjs";
 import { SNARE, SNARE_FLAG, cardAttackRefusal, snareEscapeRefusal, snareHolds } from "../rules/class-features.mjs";
 import { inflictCondition } from "../effects/inflict.mjs";
+import { cleanFailRider, destroysCreature, riderSl, slRiderHolds } from "../rules/spell-sl-riders.mjs";
+import { reactionBarEffect } from "../rules/reaction-bar.mjs";
 import { layFear } from "../effects/fear.mjs";
 import { tickEffectsOf } from "../effects/ticks.mjs";
 import { feetApart, feetToPoint } from "../canvas/footprints.mjs";
@@ -972,6 +975,7 @@ async function criticalInjuryFromCard(message) {
  */
 async function placeAreaFromCard(message) {
   const flags = message.flags?.["azeroth-rpg"] ?? {};
+  if(["goblin-land-mine","thermite-stick","smoke-bomb","blasting-charge","sappers-satchel"].includes(flags.equipmentExplosive?.key)||flags.equipmentExplosivePending)return null;
   if(flags.identifier==='everburn'&&flags.everburnDismissed===true)return null;
   if (flags.kind === "feature" && flags.featureKey === "snare"
     && (flags.snarePlacement != null || flags.snareTrigger != null)) {
@@ -1995,6 +1999,36 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
           name: actor.name, conditions: flags.onFail.statuses.map(id => game.i18n.localize(AZEROTH.conditions[id] ?? id)).join(", ")
         }));
       }
+      // **WHAT THE FAILURE LANDS AT THE CAST'S SUCCESS LEVEL** (07; D-812; the lead:
+      // *"complete them"*): the record the cast wrote (`rules/spell-sl-riders.mjs`),
+      // judged again here at the SL this creature's own Ward left (07 SS8: *A Ward comes
+      // off the Success Level as well as off the damage*), on the client that rolled
+      // its Test, which owns it. Frostbite's Entangled for the first round (MY READING:
+      // until the end of the creature's next turn, beside the Slowed already laid for
+      // the rest) and Shadow Wave's Blinded through the landing door; Slow's *no Reaction
+      // for the duration* as the reaction bar `canReact` and the budget already read,
+      // on the spell's own span; Turn Undead's *destroyed outright* as its Health lost
+      // to 0 through the one door for Health lost (MY READING).
+      const slRider = cleanFailRider(flags.slRider ?? null);
+      const riderAt = riderSl(Number.isInteger(link?.index) ? (flags.damageByTarget?.[link.index] ?? null) : null, flags.sl);
+      if (slRider && slRiderHolds(slRider, { sl: riderAt, success: flags.success === true })) {
+        const spellName = flags.spellName ?? "";
+        if (slRider.kind === "failCondition") {
+          const effect = await applyCondition(actor, slRider.status, { until: untilEndOfNextTurnOrRound(actor) });
+          if (effect) ui.notifications?.info(game.i18n.format("AZEROTH.SlRider.FailLanded", { name: actor.name, spell: spellName, condition: game.i18n.localize(AZEROTH.conditions[slRider.status] ?? slRider.status) }));
+        } else if (slRider.kind === "failNoReaction") {
+          const prior = (actor.effects ?? []).filter(e => e.flags?.["azeroth-rpg"]?.reactionBar?.cardUuid === message.uuid).map(e => e.id);
+          if (prior.length) await actor.deleteEmbeddedDocuments("ActiveEffect", prior);
+          const [made] = await actor.createEmbeddedDocuments("ActiveEffect", [reactionBarEffect({
+            actorUuid: actor.uuid, cardUuid: message.uuid, timing: timing ?? {},
+            name: game.i18n.format("AZEROTH.SlRider.NoReactionName", { spell: spellName })
+          })]);
+          if (made) ui.notifications?.info(game.i18n.format("AZEROTH.SlRider.NoReactionLanded", { name: actor.name, spell: spellName }));
+        } else if (slRider.kind === "failDestroy" && destroysCreature(slRider, { kinds: kindsOfActor(actor), tier: actor.system?.tier ?? null })) {
+          await actor.loseHealth?.(Math.max(0, Math.trunc(Number(actor.system?.health?.value)) || 0));
+          ui.notifications?.info(game.i18n.format("AZEROTH.SlRider.Destroyed", { name: actor.name, spell: spellName }));
+        }
+      }
       // **EARTH SHOCK'S *OR LOSE IT*** (the B9a pass): the Sustained spell the creature
       // holds ends - the one it holds, or the one named where it holds more than one.
       if (flags.testGate?.loses === "sustain") await loseHeldSustain(actor, flags.spellName ?? "");
@@ -2020,6 +2054,8 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
     // (`dice/annotate.mjs#verifiedResist` reads it off the creature) - and is what the
     // card's Apply reads to land the half on a creature that passed.
     if (link && result) await recordResist({ message, result });
+    if(link&&result&&message.flags?.["azeroth-rpg"]?.equipmentExplosive)
+      await (await import("../effects/equipment-explosives.mjs")).requestExplosiveApply(message,link.index);
     if (gadgetDelivery && result) await gadgetResistanceRequest({
       action: 'complete', messageId: message.id, resultId: result.id
     });
@@ -2189,7 +2225,8 @@ async function resistersOf(button, message) {
   // governed condition read the record exactly as a feature's do.
   const recorded = (button.dataset.purpose === "spell" && flags.kind === "spell")
     || (!button.dataset.purpose && (flags.kind === "feature" || flags.kind === "ability"));
-  const linkOf = (ids, index = null) => (recorded
+  const explosiveRecorded=!button.dataset.purpose&&flags.kind==="gear"&&flags.equipmentExplosive;
+  const linkOf = (ids, index = null) => (recorded||explosiveRecorded
     ? resistLink({ ...ids, index, messageId: message.id, spellUuid: flags.spellUuid ?? null, identifier: flags.identifier ?? null, cast: flags.cast ?? null })
     : null);
   const tokenSource = (sceneId, tokenId) => (tokenId ? { sceneId: sceneId ?? null, tokenId } : null);
@@ -2744,6 +2781,14 @@ function excluded(attacker) {
  */
 async function applyDamageToTargets(button, message, recordedAttack = false, transfer = null) {
   const flags = message.flags?.["azeroth-rpg"] ?? {};
+  const recordedExplosive=flags.equipmentExplosive&&transfer===EXPLOSIVE_DAMAGE_CAPABILITY;
+  if(recordedExplosive)transfer=null;
+  if(flags.equipmentExplosivePending&&!flags.equipmentExplosive){
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Explosives.Pending"));return {ok:false,pending:true};
+  }
+  if(flags.equipmentExplosive&&!recordedExplosive){
+    return (await import("../effects/equipment-explosives.mjs")).requestExplosiveApply(message,Number(button.dataset.targetIndex));
+  }
   if (snareOwnsCondition(flags, "entangled")) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.ExplosiveTrap.Refused")); return;
   }
@@ -2939,6 +2984,9 @@ async function applyDamageToTargets(button, message, recordedAttack = false, tra
 }
 
 /** Internal GM query path: the durable claim must already be held. */
+export async function applyRecordedExplosiveDamage(message,index){
+  return applyDamageToTargets({dataset:{targetIndex:String(index)}},message,false,EXPLOSIVE_DAMAGE_CAPABILITY);
+}
 export async function applyRecordedAttackDamage(message, index, transfer = null) {
   const flags = message?.flags?.["azeroth-rpg"];
   if (!game.user?.isGM || game.users?.activeGM?.id !== game.user.id

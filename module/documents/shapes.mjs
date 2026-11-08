@@ -304,6 +304,9 @@ export async function takeShape(actor, { kind, entries = [], forms = null, ward 
     return null;
   }
   const data = shapeEffectData(actor, { kind, forms: snapshots, ward, laid });
+  data.flags["azeroth-rpg"].equipmentShapeEntry = !before && kind === "shapeshift"
+    && [...(actor.items??[])].some(i=>i.system?.equipped&&i.system.identifier==="wolfshead-helm")
+    ? {id:foundry.utils.randomID(32),at:game.time.worldTime} : null;
   const expectedShape = JSON.stringify(data.flags["azeroth-rpg"][SHAPE_FLAG]);
   const held = shapeEffectsOf(actor);
   // What a forced shape rewritten in place was living on: a Hex replaced by a rabbit,
@@ -336,6 +339,10 @@ export async function takeShape(actor, { kind, entries = [], forms = null, ward 
   const zero = Boolean(effect)
     && !keepsFerocity({ from: before?.kind ?? null, to: kind, savageShift: actor.talentRanks?.("Savage Shift") ?? 0 });
   await followShape(actor, { zero });
+  if(effect?.getFlag("azeroth-rpg","equipmentShapeEntry")) {
+    const {wolfsheadAfterShape}=await import("../effects/special-equipment.mjs");
+    await wolfsheadAfterShape(actor,{before,kind,effect});
+  }
   if (effect && replaced?.sustained && replaced.cast && replaced.cast !== (effect.getFlag("azeroth-rpg", "cast") ?? null)) {
     await endLaidSustain(replaced).catch(err => console.warn("azeroth-rpg | the replaced shape's Sustain did not end", err));
   }

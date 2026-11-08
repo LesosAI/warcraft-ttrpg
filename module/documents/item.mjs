@@ -1,3 +1,4 @@
+import {prostheticWieldAllowed} from "../rules/prosthetics.mjs";
 /**
  * AzerothItem. Thin: the schemas and their `prepareDerivedData` do the work.
  *
@@ -206,6 +207,11 @@ export class AzerothItem extends Item {
   async _preUpdate(changes, options, user) {
     const allowed = await super._preUpdate(changes, options, user);
     if (allowed === false) return false;
+    const equipping=changes?.system?.equipped===true||changes?.["system.equipped"]===true;
+    if(equipping&&this.actor&&!prostheticWieldAllowed(this.actor,{type:this.type,flags:this.flags,
+      system:{...this.system,...changes.system}})){
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Prosthetic.HandRefused"));return false;
+    }
     if (PHYSICAL.has(this.type) && changes?.system && typeof changes.system === "object") {
       // **THE WHOLE STORED SYSTEM, not the two fields.** The law exempts a
       // nocked bundle, and it can only see one by reading `fits` and `rating`.

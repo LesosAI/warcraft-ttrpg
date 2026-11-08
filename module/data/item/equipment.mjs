@@ -21,7 +21,8 @@ import {
 } from "../common/fields.mjs";
 import { armorPoints, defenseFrom, speedModifier } from "../../rules/armor.mjs";
 import { pointsAwaitingSchool, schoolGrants } from "../../rules/grants.mjs";
-import { CONSUMABLE_KINDS, GOES_ON, cleanUse } from "../../rules/consumables.mjs";
+import { CONSUMABLE_KINDS, GOES_ON, cleanUse, compatibleGearUse } from "../../rules/consumables.mjs";
+import {healerKitCharges} from "../../rules/healer-kit.mjs";
 import { SIGNATURE_KINDS_AUTOMATED, cleanSignature } from "../../rules/signatures.mjs";
 import { cleanCapacity, cleanCharges } from "../../rules/containers.mjs";
 import { bagSlotsOf, cleanWell } from "../../rules/slots.mjs";
@@ -32,6 +33,7 @@ import { cleanBonus } from "../../rules/item-bonuses.mjs";
 // 08 §7's Type column (the Legacy branches' door 15).
 import { cleanWeaponType } from "../../rules/wield.mjs";
 import { cleanProvision } from "../../rules/provisions.mjs";
+import {prostheticWieldAllowed} from "../../rules/prosthetics.mjs";
 // 02 §7's Consecrated and 04's Sanctified Weapon (D-772): the trait a
 // Consecrated weapon carries, derived while the flag stands.
 import { CONSECRATED_FLAG, consecratedTrait } from "../../rules/class-features.mjs";
@@ -293,6 +295,7 @@ export class WeaponData extends foundry.abstract.TypeDataModel {
     super.prepareDerivedData();
     applyCoating(this, this.parent?.flags?.["azeroth-rpg"]?.coating ?? null);
     applyConsecrated(this);
+    if(this.parent?.parent && !prostheticWieldAllowed(this.parent.parent,{type:"weapon",system:this,flags:this.parent.flags}))this.equipped=false;
     applySchoolPoints(this, this.parent?.flags);
     stampBagSlots(this);
   }
@@ -362,6 +365,7 @@ export class ArmorData extends foundry.abstract.TypeDataModel {
     this.armorPoints = armorPoints(this.category, this.cuts);
     if (this.apBonus) this.armorPoints = { ...this.armorPoints, body: (this.armorPoints.body ?? 0) + this.apBonus };
     this.defense = defenseFrom(this.category, { shield: this.shield });
+    if(this.shield && this.parent?.parent && !prostheticWieldAllowed(this.parent.parent,{type:"armor",system:this}))this.equipped=false;
     this.speed = speedModifier(this.category, this.cuts);
     stampBagSlots(this);
   }
@@ -416,6 +420,8 @@ export class GearData extends foundry.abstract.TypeDataModel {
   prepareDerivedData() {
     super.prepareDerivedData();
     this.augment = augmentOf({ name: this.parent?.name, system: this, flags: this.parent?.flags });
+    this.use = compatibleGearUse(this);
+    this.charges = healerKitCharges(this);
     applySchoolPoints(this, this.parent?.flags);
     stampBagSlots(this);
   }
@@ -482,7 +488,7 @@ function useField() {
   return new fields.SchemaField({
     kind: new fields.StringField({ required: true, blank: false, initial: "none", choices: CONSUMABLE_KINDS }),
     action: choiceField(AZEROTH.actions),
-    target: new fields.StringField({ required: true, blank: false, initial: "self", choices: ["self", "item", "area"] }),
+    target: new fields.StringField({ required: true, blank: false, initial: "self", choices: ["self", "creature", "item", "area"] }),
     appliesTo: new fields.StringField({ required: false, nullable: true, blank: false, initial: null, choices: GOES_ON }),
     heal: new fields.SchemaField({
       health: optionalNumberField({ min: 0 }),

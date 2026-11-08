@@ -24,6 +24,12 @@
  *   test       a Test the hit offered on the card (Intimidation, a poison's,
  *              Keening Arrows'): withdrawn - the card's press refuses it in words
  *              once the row says the hit was withdrawn (`annotate.mjs`)
+ *   mark       a mark laid by `effects/hit-marks.mjs` (Snag's, Fel Bolt's Ward
+ *              drop; D-812): deleted, by its id
+ *   momentum   Momentum the blow took (Rattle; D-812): given back into the pool it
+ *              came off, never past that pool's maximum
+ *   push       a creature the blow pushed (Shove; D-812): put back where it stood,
+ *              through the forced-movement door's `putBack`
  *
  * And a rider the ATTACKER paid only because the blow landed (`pays: "hit"`,
  * Bloodthirst's *When one of your attacks hits, spend 6 Rage*) is refunded into
@@ -42,10 +48,10 @@
 import { parryUndoes } from "./class-answers.mjs";
 
 /** The kinds of landing a card records, by what a hit lays. */
-export const HIT_RECORD_KINDS = Object.freeze(["condition", "reaction", "speedDrop", "noHealing", "bane", "test"]);
+export const HIT_RECORD_KINDS = Object.freeze(["condition", "reaction", "speedDrop", "noHealing", "bane", "test", "mark", "momentum", "push"]);
 
 /** The landings that are an Active Effect on the creature struck, withdrawn by deleting it. */
-const EFFECT_KINDS = Object.freeze(["speedDrop", "noHealing", "bane"]);
+const EFFECT_KINDS = Object.freeze(["speedDrop", "noHealing", "bane", "mark"]);
 
 /**
  * **ONE ROW OF THE CARD'S LANDING RECORD, CLEANED**. A row D-779 wrote carries no
@@ -70,6 +76,18 @@ export function hitRecordRow(raw) {
   }
   if (kind === "reaction") return { index, kind, lost: raw.lost === true };
   if (kind === "test") return { index, kind, name: String(raw.name ?? "") };
+  // Rattle's point (D-812): the pool it came off and how many.
+  if (kind === "momentum") {
+    const amount = Math.max(0, Math.trunc(Number(raw.amount)) || 0);
+    return { index, kind, landed: raw.landed === true && amount > 0, itemId: typeof raw.itemId === "string" && raw.itemId ? raw.itemId : null, amount };
+  }
+  // Shove's push (D-812): where the token stood before it, in the scene's pixels.
+  if (kind === "push") {
+    const x = Number(raw.from?.x);
+    const y = Number(raw.from?.y);
+    const from = Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+    return { index, kind, landed: raw.landed === true && Boolean(from), from };
+  }
   const effectId = typeof raw.effectId === "string" && raw.effectId ? raw.effectId : null;
   return { index, kind, landed: raw.landed === true && Boolean(effectId), effectId, source: String(raw.source ?? "") };
 }
@@ -85,7 +103,8 @@ export function hitRecordRow(raw) {
  * @param {{index?: number|null, answeredWithLost?: boolean}} [o]  the target's row on
  *   the card; whether the Reaction that answered was the one the blow took
  * @returns {{conditions: Array<{id: string, remove: boolean, value: number|null}>, effects: string[],
- *   reaction: boolean, tests: boolean, strips: Array<{id: string, uuid: string}>}}
+ *   reaction: boolean, tests: boolean, strips: Array<{id: string, uuid: string}>,
+ *   momentum: Array<{itemId: string|null, amount: number}>, pushBack: {x: number, y: number}|null}}
  */
 export function missUndoes(record = [], { index = null, answeredWithLost = false } = {}) {
   const rows = (record ?? []).map(hitRecordRow).filter(r => r && r.index === index);
@@ -107,7 +126,11 @@ export function missUndoes(record = [], { index = null, answeredWithLost = false
     effects,
     reaction: !answeredWithLost && rows.some(r => r.kind === "reaction" && r.lost === true),
     tests: rows.some(r => r.kind === "test"),
-    strips
+    strips,
+    // What Rattle took, by pool, given back (D-812).
+    momentum: rows.filter(r => r.kind === "momentum" && r.landed).map(r => ({ itemId: r.itemId, amount: r.amount })),
+    // Where Shove's push began: the token goes back to the FIRST position recorded (D-812).
+    pushBack: rows.find(r => r.kind === "push" && r.landed)?.from ?? null
   };
 }
 

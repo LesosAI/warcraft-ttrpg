@@ -269,6 +269,7 @@ export async function useRemedy(actor, item, { targets = [] } = {}) {
     const spend = spendOne(held);
     if (spend?.delete) await item.delete();
     else if (spend) await item.update({ "system.quantity": spend.quantity });
+    await (await import('./equipment-travel.mjs')).endEquipmentInvisibility(actor,{event:'consumable'});
     const done = await cureRemedy(actor, verdict.target, verdict.effectId, { item });
     return done.message ?? null;
   } finally {
