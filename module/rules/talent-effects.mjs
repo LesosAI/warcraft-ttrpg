@@ -249,6 +249,8 @@
 // patch of the same shape now (Totem Mastery on Totem), and one constructor
 // in the file both readers already import beats two that must agree.
 import { CLASS_FEATURES, action, bindRank, cost, evaluateAmount, mod, once } from "./class-features.mjs";
+// 02 §5's Tail Sweep: a price from any pool (the lead, 2026-11-09).
+import { ANY_POOL } from "./pools.mjs";
 // What stands on somebody else (D-755): the descriptor, and the stamp that
 // evaluates it at a rank.
 import { aura, auraStamp } from "./auras.mjs";
@@ -300,6 +302,14 @@ const rider = (pool, amount, { once = null, form = false, weapon = null, move = 
 });
 
 /**
+ * **A SPELL A CHROMATIC CHAMPION'S BRANCH TEACHES** (02 §7: *A spell a branch teaches is
+ * cast with Constitution, and you pay Rage where 07-MAGIC asks for Mana*): a `spell` row
+ * that learns its names, priced in Rage and cast with Constitution - the shape
+ * `class-talents.mjs#spellPoolFor` reads (04's Shadowcraft's, door 8).
+ */
+const branchSpell = (names, extra = {}) => ({ names, learn: true, pool: "rage", ability: "con", ...extra });
+
+/**
  * A RACE talent's mechanics (D-675). Racial talents are embedded as real
  * talent items but carry `className: ""` and `race: "Goblin"`, so
  * `TALENT_EFFECTS` — keyed by class — can never match one, and Pack
@@ -310,6 +320,59 @@ const rider = (pool, amount, { once = null, form = false, weapon = null, move = 
  * effect is prose stays prose.
  */
 export const RACE_TALENT_EFFECTS = Object.freeze({
+  // **THE CHROMATIC OUTCAST'S EIGHT** (02 §5; stage 3A of the Chromatic Champion plan). The
+  // guise people's own talents are never embedded (`rules/guise.mjs`); these are.
+  "chromatic-outcast": {
+    // *You know by smell which flight a dragon or dragonkin belongs to, and you know a dragon
+    // wearing a mortal shape when you stand within 30 feet of it. It knows you as well.*
+    "scent-of-the-flight": none("what a smell tells the Outcast, and that the dragon knows it back, is what the GM says: the table's (D2 §12)"),
+    // *Handling a coin, a gem or a piece of worked metal tells you what it is worth and where
+    // it was made, and in any room you can tell which thing in it is worth the most.*
+    "hoard-sense": none("a price and a maker the GM names, and the most valuable thing in a room the GM points to: the table's (D2 §12)"),
+    // *You speak Draconic, the tongue of every flight and its dragonkin, and you read anything
+    // they have written. A dragonkin will hear you out before it fights you.*
+    // The lead, 2026-11-08: *"Add Draconic"* - 02 SS4 lists it now and `AZEROTH.languages`
+    // carries it. A `language` row ADDS the tongue to what the character speaks, derived and
+    // never stored (`talentLanguages`, read by `CharacterData` and the creator); the
+    // dragonkin hearing the Outcast out stays the GM's call (D2 SS12).
+    "draconic": { language: "draconic", reason: "*A dragonkin will hear you out before it fights you* is the GM's call (D2 SS12): no door decides whether a creature fights" },
+    // *You take no damage from a fall and land on your feet.* INLINE: the falling door
+    // (`AzerothActor#applyDamage`'s `falling`) reads the talent by name and lands nothing;
+    // the sideways drift while falling is the table's.
+    "wings-beneath": { automated: "inline", fall: { noDamage: true } },
+    // *Spend a Half-Action and 4 Momentum or Power. Every enemy within 5 feet makes a Reflex Resilience Test against 8 plus your Constitution modifier plus
+    // your Proficiency Bonus. On a failure it is knocked Prone.* The lead, 2026-11-09:
+    // *"Pay 4 from your Momentum or your Power pool (Rage, Energy, Mana...). The DC is 8 +
+    // Constitution modifier + proficiency, so it works the same for every class."* War
+    // Stomp's shape: the circle measured by the Use, the price from the pool the payer picks
+    // (`rules/pools.mjs#ANY_POOL`, asked before anything is paid), the Test at `con8`
+    // (`class-features.mjs#con8DC`, never the Spell DC), the Prone landing on a failure.
+    "tail-sweep": {
+      grants: grant({
+        action: "half", cost: cost(ANY_POOL, 4), area: "A 5 ft radius centered on you", who: "enemy",
+        resist: "reflex", resistDc: "con8",
+        inflicts: [{ condition: "prone", value: null, until: null, onFail: true }]
+      })
+    },
+    // *Once between Long Rests, ask one question about a place, a ruin or a creature that the
+    // four flights would remember. What returns is true and comes as one sentence.* A counter;
+    // the answer is the GM's.
+    "blood-memory": {
+      grants: grant({ action: null, uses: uses(1, "long") }),
+      reason: "the one true sentence that returns is the GM's to give (D2 §12); the Use counts the Long Rest's question"
+    },
+    // *A thing you have kept through a Long Rest is yours by the old law. You always know its
+    // direction and rough distance out to 100 miles, and you have a Boon on Tests to track
+    // whoever took it from you.*
+    "hoarder's-claim": none("which thing was kept through a Long Rest, where it is and whether a Test tracks its taker are the table's; the roll dialog prints the talent's words on a Test as a note"),
+    // *Once in an arc, address a true dragon as kin. It hears you out and grants one favor
+    // that costs it nothing it values. Afterward it remembers you, and so does Nefarian.* A
+    // counter; the favor is the GM's.
+    "wyrm's-regard": {
+      grants: grant({ action: null, uses: uses(1, "arc") }),
+      reason: "the favor a true dragon grants, and what Nefarian remembers, are the GM's (D2 §12); the Use counts the arc's address"
+    }
+  },
   human: {
     'militia-drill': { grants: grant({ action: null }), onUse: { militiaDrill: true } }
   },
@@ -2702,6 +2765,325 @@ export const TALENT_EFFECTS = Object.freeze({
     // the rank add to the tick as well?*): the rank rides Moonfire's hit and the
     // number its tick lands each turn, stamped at the cast (`tickBonusFor`).
     "improved-moonfire": { spell: { names: ["Moonfire"], damage: 1 }, tick: { spells: ["Moonfire"], add: "rank" }, undispellable: { spells: ["Moonfire"], minRank: 2 } }
+  },
+  // **THE CHROMATIC CHAMPION'S FORTY-EIGHT** (04's Life-Binder, Spell-Weaver, Timewalker and
+  // Earth-Warder). Every *You know* talent of all four branches is a `spell` row through
+  // `branchSpell`: learned while taken, paid in Rage and cast with Constitution
+  // (`class-talents.mjs#spellPoolFor`), a rank's spell named in its `atRank` clause beside
+  // the row's own (so `atRankOf` and `spellNamesAtRank` agree), a utility spell's free cast
+  // once a Short Rest in `free` (`rules/free-casts.mjs`), and the Black branch's Void in
+  // `void` (`castVoidFor`). Nothing here teaches a spell above tier 3
+  // (`chromatic-champion-talents.test.mjs` holds the pack to it). Stage 3A builds the
+  // Life-Binder's and the Earth-Warder's mechanics; the Spell-Weaver's and the Timewalker's
+  // are stage 3B's, and their rows here carry only the spells they teach.
+  "chromatic-champion": {
+    // ---- Life-Binder ----
+    // *You know Scorch and Blazing Speed. At rank 2 you also know Fire Ward. Once per Short
+    // Rest you may cast Blazing Speed without paying Rage, and the same for Fire Ward.*
+    "kindled-blood": {
+      spell: branchSpell(["Scorch", "Blazing Speed"], {
+        free: { names: ["Blazing Speed", "Fire Ward"], per: "shortRest" },
+        atRank: [{ rank: 2, names: ["Scorch", "Blazing Speed", "Fire Ward"] }]
+      })
+    },
+    // *When you cast a branch spell that deals Fire damage, you may split it. Work out the
+    // damage it deals after Armor Points and Ward. Its target takes half of that, rounded
+    // down, and one creature within the spell's range, you included, regains Health equal
+    // to the other half plus your Constitution modifier.* A line on the cast's own dialog,
+    // the creature chosen before anything is paid (`castSpell`, `rules/chromatic-talents.mjs
+    // #lifebinderSplit`).
+    "lifebinders-flame": { lifebinder: { split: true } },
+    // *Your weapon attacks may deal Fire damage instead of their own type. When one of them
+    // reaches SL 2, the target is Scorched. At rank 2 this happens at SL 1, and at rank 3 on
+    // any hit.* The swap is a line on the attack's dialog (`convert {to, attack}`); the
+    // Scorched lands with the blow (`hitLays`, read at its rank).
+    "ember-strikes": {
+      castLine: { convert: { to: "fire", attack: true } },
+      hitLays: { sl: 2, condition: "scorched", value: null, atRank: [{ rank: 2, sl: 1 }, { rank: 3, sl: 0 }] }
+    },
+    // *A creature you heal with Lifebinder's Flame regains 1 more Health per rank.*
+    "rekindle": { lifebinder: { add: "rank" } },
+    // *You know Kindle and Immolation. Once per Short Rest you may cast Kindle without paying
+    // Rage. Your Immolation deals no damage. Instead, each ally that starts its turn within 5
+    // feet of you regains Health equal to the spell's damage.* The caster's own copy of the
+    // tick, rewritten at the cast (`hearthfireTick`).
+    "hearthfire": {
+      spell: branchSpell(["Kindle", "Immolation"], { free: { names: ["Kindle"], per: "shortRest" } }),
+      hearthfire: { spell: "Immolation" }
+    },
+    // *When you heal a creature with Lifebinder's Flame, it loses 1 Undeath Corruption. At
+    // rank 2 its Bleeding also ends.*
+    "cleansing-fire": { lifebinder: { cleanse: { undeath: 1, bleedingAt: 2 } } },
+    // *You know Emberlash and Purging Flame. At rank 2 you also know Cinderburst.*
+    "dragonfire": {
+      spell: branchSpell(["Emberlash", "Purging Flame"], { atRank: [{ rank: 2, names: ["Emberlash", "Purging Flame", "Cinderburst"] }] })
+    },
+    // *As a Reaction when an ally within 30 feet drops below half Health, spend 3 Rage. It
+    // regains Health equal to your tier plus your rank.* A Use the blow offers on a card
+    // row shown to the holder's owner (`effects/chromatic-talents.mjs#offerLifeblood`, D-779),
+    // judged at the press: a friendly creature within 30 feet, below half Health.
+    "lifeblood": {
+      grants: grant({ action: "reaction", cost: cost("rage", 3), heal: "tier+rank" }),
+      onUse: { aim: { feet: 30, friendly: true }, belowHalf: true },
+      lifeblood: { feet: 30, below: 0.5 }
+    },
+    // *When you heal a creature with a branch spell or talent, gain 1 Rage.* Read at the one
+    // healing door, for a heal the door is told is a branch heal.
+    "kindling-heart": { kindling: { gain: { pool: "rage", amount: 1 } } },
+    // *You know Smolder and Firebreak. Each tick of your Smolder may be split as Lifebinder's
+    // Flame splits a spell.* The split chosen at the cast rides the tick it stamps.
+    "smoldering-life": {
+      spell: branchSpell(["Smolder", "Firebreak"]),
+      lifebinder: { ticks: ["Smolder"] }
+    },
+    // *Lifebinder's Flame may divide its heal between two creatures within range. At rank 2
+    // it may divide it between three.*
+    "pyre-of-renewal": { lifebinder: { divide: 2, atRank: [{ rank: 2, divide: 3 }] } },
+    // *In it your Breath deals Fire damage, and every heal you give with Lifebinder's Flame
+    // also heals you for your tier.*
+    "red-drake": {
+      grants: grant({ action: "half" }),
+      modifies: mod("Breath", { inForm: { form: "Red Drake", school: "fire" } }),
+      lifebinder: { self: "tier", form: "Red Drake" }
+    },
+    // ---- Spell-Weaver (stage 3B) ----
+    // *You know Frostbite and Arcane Explosion. At rank 2 you also know Blizzard.*
+    "arcane-blood": {
+      spell: branchSpell(["Frostbite", "Arcane Explosion"], { atRank: [{ rank: 2, names: ["Frostbite", "Arcane Explosion", "Blizzard"] }] })
+    },
+    // *As a Half-Action, spend any amount of Rage. One ally within 30 feet regains that much
+    // Mana, to no more than its maximum. At rank 2 it regains 1 more.* A Use at the ally
+    // targeted, the amount picked through the one chooser before anything is paid, the Mana
+    // landed through `effects/gifts.mjs#giveMana`'s Rage branch (`fontOfMagicFor`).
+    "font-of-magic": {
+      grants: grant({ action: "half" }),
+      onUse: { font: true, aim: { feet: 30, friendly: true } },
+      font: { feet: 30, add: 0, atRank: [{ rank: 2, add: 1 }] }
+    },
+    // *Once a round, when a creature within 30 feet of you casts a spell, gain 1 Rage. At
+    // rank 2, gain 2.* Read at `castSpell` once the cast is paid for, on the active GM's
+    // client, the round's once on the holder's round record (`manaHungerFor`).
+    "mana-hunger": { manaHunger: { feet: 30, gain: 1, atRank: [{ rank: 2, gain: 2 }] } },
+    // *You know Detect Magic, Dampen Magic and Arcane Intellect. Once per Short Rest you may
+    // cast each of them without paying Rage.*
+    "weavers-sight": {
+      spell: branchSpell(["Detect Magic", "Dampen Magic", "Arcane Intellect"], {
+        free: { names: ["Detect Magic", "Dampen Magic", "Arcane Intellect"], per: "shortRest" }
+      })
+    },
+    // *As a Full Action, end one Sustained spell that a creature within 30 feet is
+    // sustaining. Gain Rage equal to twice your rank.* A Use at the creature targeted, the
+    // Sustain picked through the one chooser, ended through `workflows.endSustain` - on the
+    // GM's client through `CONFIG.queries` where this one does not own the creature.
+    "spellbreak": {
+      grants: grant({ action: "full" }),
+      onUse: { spellbreak: { feet: 30 } }
+    },
+    // *Your attacks against a Slowed or Entangled creature deal 1 more damage per rank.*
+    "frozen-grip": { damage: damage(["all"], "attack", { when: { targetHas: ["slowed", "entangled"] } }) },
+    // *You know Nullify and Rimeshard. At rank 2 you also know Chilblain.*
+    "deep-weave": {
+      spell: branchSpell(["Nullify", "Rimeshard"], { atRank: [{ rank: 2, names: ["Nullify", "Rimeshard", "Chilblain"] }] })
+    },
+    // *As a Reaction when an enemy within 60 feet that you can see casts a spell, spend Rage
+    // equal to that spell's tier plus 2. The caster makes a Spirit Resilience Test against
+    // your Spell DC. On a failure the spell fails and its Mana is spent. At rank 2 the Test
+    // takes a Bane.* Asked IN the cast, after its payment and before its Casting Test lands
+    // (D-777's door for what another creature does to an event in flight), of whoever
+    // answers for the holder of whom the caster is an enemy (the lead, 2026-11-08: *"Enemies
+    // only"*, the one reading Paradox uses); seeing the caster is the table's, and the
+    // question says so (`effects/chromatic-reactions.mjs#askDisruptWeave`).
+    "disrupt-weave": {
+      disruptWeave:{ feet: 60, resilience: "spirit", banes: 0, atRank: [{ rank: 2, banes: 1 }] }
+    },
+    // *Font of Magic gives 1 more Mana per rank.*
+    "overflow": { font: { add: "rank" } },
+    // *You know Unweave and Manafount.*
+    "unraveller": { spell: branchSpell(["Unweave", "Manafount"]) },
+    // *When Spellbreak or Unweave ends a spell effect, gain Rage equal to your tier. At rank 2
+    // one ally within 30 feet also regains 2 Mana.*
+    "spellthief": { spellthief: { gain: "tier", allyMana: 0, feet: 30, atRank: [{ rank: 2, allyMana: 2 }] } },
+    // *In it your Breath deals Frost damage, and each ally within 30 feet regains 1 Mana
+    // at the start of each of your turns.* The Mana on the active GM's client as the drake's
+    // turn starts (`AzerothCombat#_onStartTurn`, `blueDrakeTurnFor`).
+    "blue-drake": {
+      grants: grant({ action: "half" }),
+      modifies: mod("Breath", { inForm: { form: "Blue Drake", school: "frost" } }),
+      turnStart: { form: "Blue Drake", allyMana: 1, feet: 30 }
+    },
+    // ---- Timewalker (stage 3B) ----
+    // *You know Slow and Displacement. At rank 2 you also know Ley Snare. Once per Short Rest
+    // you may cast Displacement without paying Rage.*
+    "sands-of-time": {
+      spell: branchSpell(["Slow", "Displacement"], {
+        free: { names: ["Displacement"], per: "shortRest" },
+        atRank: [{ rank: 2, names: ["Slow", "Displacement", "Ley Snare"] }]
+      })
+    },
+    // *Your Initiative rises by 1 per rank. At rank 2 you cannot be surprised.* A flat
+    // passive on the derived Initiative, `final` because the number is derived; rank 2 is
+    // the table's, since nothing in the system declares a creature surprised.
+    "glimpse-ahead": {
+      passive: passive([add("system.initiative", "rank")]),
+      reason: "rank 2's *you cannot be surprised*: surprise is the table's call (D2 §12), and no door in the system declares a creature surprised"
+    },
+    // *When one of your attacks hits a Slowed creature, gain 1 Rage. At rank 2, gain 2.*
+    "temporal-drag": { momentum: { pool: "rage", amount: "rank", when: { targetHas: ["slowed"] } } },
+    // *Once per encounter, as a Half-Action, spend 5 Rage. One ally within 30 feet gains a
+    // Half-Action on its next turn. At rank 2 it costs 3 Rage.* (the lead: *"Change Hasten to
+    // once per encounter"*). The Half-Action waits on the creature as an effect and is given
+    // as its next turn starts (`AzerothCombat#_onStartTurn`, the door 02's Bloodlust shares).
+    "hasten": {
+      grants: grant({ action: "half", cost: cost("rage", 5), uses: uses(1, "encounter"), atRank: [{ rank: 2, cost: cost("rage", 3) }] }),
+      onUse: { hasten: true },
+      hasten: { feet: 30 }
+    },
+    // *Once per Short Rest, when you fail a Test, roll it again and take the new result.*
+    // Offered on the roller's own client after the die and before anything follows from it
+    // (the seam 02's Elune's Regard takes), its use struck on the counter.
+    "time-lapse": { grants: counter(1, "short"), timeLapse: true },
+    // *A creature you have Slowed takes a Bane on Attack Tests against you. At rank 2 the Bane
+    // applies to its Attack Tests against anyone. At rank 3 it also has no Reaction.* Read off
+    // who laid the attacker's Slowed (the condition's own `laidBy`): an automatic line on the
+    // attack's dialog, and at rank 3 the one Reaction gate (`rules/reaction-bar.mjs`).
+    "weight-of-ages": { weightOfAges: { against: "you", atRank: [{ rank: 2, against: "anyone" }, { rank: 3, noReaction: true }] } },
+    // *You know Translocate. At rank 2 you also know Ley Rift. Once per Short Rest you may
+    // cast Translocate without paying Rage.*
+    "fold-space": {
+      spell: branchSpell(["Translocate"], {
+        free: { names: ["Translocate"], per: "shortRest" },
+        atRank: [{ rank: 2, names: ["Translocate", "Ley Rift"] }]
+      })
+    },
+    // *Once per Short Rest, as a Reaction when an ally within 30 feet takes damage, spend 2
+    // Rage. It regains half the Health that blow took, rounded up. At rank 2 it regains all
+    // of it.* Offered on a card row from the one damage door to the holder's owner (D-779),
+    // the blow's Health read off that offer's own record (`effects/chromatic-talents.mjs
+    // #offerRewind`), and judged again at the press through the granted feature's own door.
+    "rewind": {
+      grants: grant({ action: "reaction", cost: cost("rage", 2), uses: uses(1, "short") }),
+      onUse: { rewind: true },
+      rewind: { feet: 30, whole: false, atRank: [{ rank: 2, whole: true }] }
+    },
+    // *Hasten may target you. At rank 2 the creature you Hasten also gains 10 feet of Speed
+    // until the end of its next turn.* Read with Hasten (`hastenFor`); the Speed a laid
+    // `final` change spanned to the creature's next turn's end, or a round of the world's
+    // clock out of a fight (D-778).
+    "borrowed-moment": { hasten: { self: true, speed: 0, atRank: [{ rank: 2, speed: 10 }] } },
+    // *You know Arcane Anchor. A creature that starts its turn inside your Arcane Anchor must
+    // pass a Spirit Resilience Test against your Spell DC or be Entangled while it stays
+    // there.* The Champion's own copy of the spell's tick, a check added at the cast
+    // (`anchorTick`): the area's start-of-turn Test (`AzerothCombat#_areaTicks`), its
+    // Entangled ended by leaving the area - or by A1's own way out, an action and a Reflex
+    // Resilience Test at *the DC the source names*, which the lead ruled is the *"Champion's
+    // Spell DC"* (2026-11-08; the 3B review, M2): D-778's escape on the condition's effect.
+    "anchor-of-ages": {
+      spell: branchSpell(["Arcane Anchor"]),
+      anchor: { spell: "Arcane Anchor", resilience: "spirit", condition: "entangled", escape: { on: "action", resilience: "reflex", dc: "spellDc" } }
+    },
+    // *As a Reaction when an enemy within 60 feet makes an Attack Test or a Casting Test, it
+    // rolls twice and takes the lower. You may do this a number of times per Short Rest equal
+    // to your rank.* Asked IN the enemy's Test, before its result is shown, of whoever answers
+    // for the holder (`effects/chromatic-reactions.mjs#askParadox`); the counter's uses are
+    // the rank's.
+    "paradox": { grants: counter("rank", "short"), paradox: { feet: 60 } },
+    // *In it your Breath deals Arcane damage and leaves each creature that fails its Test
+    // Slowed until the end of its next turn. The turn you take the form, you gain a
+    // Half-Action.*
+    "bronze-drake": {
+      grants: grant({ action: "half" }),
+      modifies: mod("Breath", {
+        inForm: { form: "Bronze Drake", school: "arcane", inflicts: [{ condition: "slowed", value: null, until: "endOfNextTurn", onFail: true }] }
+      }),
+      drakeHalf: { form: "Bronze Drake" }
+    },
+    // ---- Earth-Warder ----
+    // *You know Lightning Bolt and Lightning Shield. At rank 2 you also know Stone Grip.*
+    "stormblood": {
+      spell: branchSpell(["Lightning Bolt", "Lightning Shield"], { atRank: [{ rank: 2, names: ["Lightning Bolt", "Lightning Shield", "Stone Grip"] }] })
+    },
+    // *Once per Long Rest, take the guise of one particular humanoid you have studied for an
+    // hour, its face and voice included. Arcana and Investigation Tests to see through it take
+    // a Bane. At rank 2 you may do this twice per Long Rest.* A Use at the humanoid targeted,
+    // its appearance swapped onto the Champion and restored when the effect goes
+    // (`effects/chromatic-talents.mjs#takeCourtGuise`); the Bane an automatic line on a Test
+    // of those skills at a creature wearing one (`roll-dialog.mjs#prepareRoll`).
+    "court-guise": {
+      grants: grant({ action: null, uses: uses("rank", "long") }),
+      onUse: { courtGuise: true },
+      courtGuise: { boons: 0 }
+    },
+    // *While you wear a Court Guise, your Deception and Persuasion Tests gain a Boon. At rank 2
+    // a creature that sees through your Court Guise does not learn your true form; it knows
+    // only that something about you is unusual.* (the lead, 2026-11-08: *"reword the talent on
+    // number 5 to only work with the court guise"*). An automatic line while a Court Guise
+    // effect is worn, never the mortal guise (`silverTongueFor`); rank 2 is what the GM says,
+    // and stays the table's.
+    "silver-tongue": {
+      silverTongue: { skills: ["deception", "persuasion"], boons: 1 },
+      reason: "rank 2's *does not learn your true form* is what the GM tells a creature that sees through the Court Guise: the table's (D2 §12)"
+    },
+    // *When an attack or a branch spell of yours deals damage, spend up to your tier in Void
+    // Corruption. The blow deals 1 more damage per rank for each Void Corruption spent.* A
+    // line on the attack's dialog (a rider paid in the Void track, `cap` the tier, paid on
+    // the hit) and on a branch spell's (`castSpell`), what a spend lands read by
+    // `voidSpendFor`.
+    "void-surge": {
+      rider: { ...rider("void", "all", { pays: "hit" }), cap: "tier" },
+      voidSpend: { surge: "rank", cap: "tier" }
+    },
+    // *As a Half-Action, spend 3 Rage. Your next attack this turn cannot be met with a Parry
+    // or a Block. At rank 2 it also gains a Boon.* The next attack's promise
+    // (`rules/next-attack.mjs`'s `unanswerable`), read by the attack's card and the press.
+    "false-opening": {
+      grants: grant({ action: "half", cost: cost("rage", 3) }),
+      onUse: {
+        nextAttack: { unanswerable: true, lasts: "turn" },
+        atRank: [{ rank: 2, nextAttack: { unanswerable: true, boons: 1, lasts: "turn" } }]
+      }
+    },
+    // *When you hit a creature with a weapon attack, your next branch spell to damage that
+    // creature before the end of your next turn deals 1 more damage per rank.*
+    "charged-steel": { chargedSteel: { amount: "rank" } },
+    // *You know Thunderlash and Earthmeld. At rank 2 you also know Earthen Spike. Once per
+    // Short Rest you may cast Earthmeld without paying Rage. Each time you cast one of these
+    // tier 2 spells, you gain 1 Void Corruption.*
+    "earth-warders-craft": {
+      spell: branchSpell(["Thunderlash", "Earthmeld"], {
+        free: { names: ["Earthmeld"], per: "shortRest" },
+        void: 1,
+        atRank: [{ rank: 2, names: ["Thunderlash", "Earthmeld", "Earthen Spike"] }]
+      })
+    },
+    // *As a Half-Action, gain 4 Void Corruption. A humanoid within 30 feet that fails a Spirit
+    // Resilience Test against your Spell DC is Charmed until the end of your next turn.* No
+    // Rage (the lead: *"Rework this to not cost rage"*), the Void gained whatever the Test
+    // comes to (*"yes"*); the Charmed lands on a failure, held to the Champion's next turn.
+    "whisper-of-madness": {
+      grants: grant({
+        action: "half", resist: "spirit",
+        inflicts: [{ condition: "charmed", value: null, until: "casterTurnEnd", onFail: true }]
+      }),
+      onUse: { aim: { feet: 30, kinds: ["humanoid"] }, voidGain: 4 }
+    },
+    // *Each Void Corruption you spend gives you 1 temporary Health per rank.*
+    "obsidian-skin": { voidSpend: { tempHealth: "rank" } },
+    // *You know Shattering Bolt. Each time you cast it, you gain 2 Void Corruption.*
+    "deathwings-malice": { spell: branchSpell(["Shattering Bolt"], { void: 2 }) },
+    // *When you spend 3 or more Void Corruption on one blow, the target is knocked Prone. At
+    // rank 2, if the blow reached SL 2, it is also Stunned.*
+    "earthshatter": { voidSpend: { prone: 3, stun: { rank: 2, sl: 2 } } },
+    // *In it your Breath deals Nature damage, Void Surge adds 1 more damage per Void spent,
+    // and when you land from flight each creature within 10 feet must pass a Reflex
+    // Resilience Test against your Spell DC or be knocked Prone.*
+    "black-drake": {
+      grants: grant({ action: "half" }),
+      modifies: mod("Breath", { inForm: { form: "Black Drake", school: "nature" } }),
+      voidSpend: { add: 1, form: "Black Drake" },
+      // The landing: a token in the form whose elevation comes down to the ground, read on
+      // the active GM's client (`effects/chromatic-talents.mjs#blackDrakeLanding`).
+      landing: { form: "Black Drake", feet: 10, resilience: "reflex", condition: "prone" }
+    }
   }
 });
 
@@ -3087,6 +3469,11 @@ export const CENSUS_DETECTORS = Object.freeze({
       // Health* through - from the Spirit Realm (The Crossing's `spiritRealm.heals`)
       // and under Ethereal Form (`rules/spirit-realm.mjs#castFilterRefusal`).
       || Boolean(e.onUse?.lift) || e.spiritRealm?.heals === "others" || Boolean(e.onUse?.ethereal)
+      // And the Chromatic Champion's (stage 3A): Lifebinder's Flame's split and what the
+      // Life-Binder adds to it (`chromatic-talents.mjs#lifebinderFor`), and Hearthfire's ring.
+      || Boolean(e.lifebinder || e.hearthfire)
+      // And the Timewalker's (stage 3B): Rewind's Health back off the blow's record.
+      || Boolean(e.rewind)
   },
   // *Your Fortitude rises by 2 per rank*, *your Defense rises by 1 per rank*.
   risesBy: {
@@ -3126,7 +3513,8 @@ export const CENSUS_DETECTORS = Object.freeze({
   // spell (`tempHealth`), or a Use's own (Last Stand's `onUse.tempHealth`).
   temporaryHealth: {
     re: /\btemporary Health\b/i,
-    covers: e => Boolean(e.tempHealth || e.onUse?.tempHealth)
+    // And Obsidian Skin's, on a spend of Void (stage 3A, `chromatic-talents.mjs#voidSpendFor`).
+    covers: e => Boolean(e.tempHealth || e.onUse?.tempHealth) || e.voidSpend?.tempHealth !== undefined
   },
   // *at the start of each of your turns*, *at the start of the target's turns*,
   // *anything starting its turn there*: a tick (the plan's Phase 2b).
@@ -3809,6 +4197,24 @@ export function auraSpellGates() {
   for (const rows of Object.values(TALENT_EFFECTS)) for (const entry of Object.values(rows)) read(entry);
   for (const rows of Object.values(CLASS_FEATURES)) for (const descriptor of Object.values(rows)) read(descriptor);
   return out;
+}
+
+/**
+ * **THE TONGUES A RACIAL TALENT ADDS** (02 SS5's Chromatic Outcast's Draconic; the lead,
+ * 2026-11-08: *"Add Draconic"*): every `language` row a taken talent carries, sorted, each
+ * once. Derived - added to `system.languages` at data preparation and to the creator's
+ * numbers, never written over the stored list a GM may edit.
+ *
+ * @param {Array} talents
+ * @param {Function} [rowOf]
+ * @returns {string[]}
+ */
+export function talentLanguages(talents = [], rowOf = talentEffect) {
+  const out = new Set();
+  for (const { entry } of takenRows(talents, rowOf)) {
+    if (typeof entry.language === "string" && entry.language) out.add(entry.language);
+  }
+  return [...out].sort();
 }
 
 /**

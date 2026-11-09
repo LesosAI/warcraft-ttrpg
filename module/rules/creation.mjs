@@ -20,9 +20,11 @@ import { ABILITIES, abilityModifier, isNaturalScore, skillTotal, spellDC } from 
 import { fortitudeAt, healthMax, poolsFor, proficiencyBonus, tierForLevel } from "./progression.mjs";
 import { suitEffects } from "./armor.mjs";
 import { speedFrom, speedParts } from "./speed.mjs";
+// 02's Scales, the Champion's level 1 feature (the stage 2 review, should-fix 4).
+import { CHAMPION_CLASS, scalesWaive } from "./chromatic-features.mjs";
 import { tokenSize } from "./size.mjs";
 import { MAX_CONTAINERS, arrange, baseCapacity, isMount, ledger, wellsOf } from "./slots.mjs";
-import { carryFactor, classKey } from "./talent-effects.mjs";
+import { carryFactor, classKey, talentLanguages } from "./talent-effects.mjs";
 import { characterToken } from "./tokens.mjs";
 import { RANK_MAX, rankCost, rankCostBetween } from "./xp.mjs";
 import { spellsKnown } from "./casting.mjs";
@@ -32,11 +34,22 @@ import { trainingProfile, trainingWarning } from "./equipment-training.mjs";
 // A Legacy's talent is its people's alone (04 §1, D-781).
 import { keptBy } from "./legacy-branches.mjs";
 import { startingRacialState } from "./creator-choices.mjs";
+// The Mortal guise (the Chromatic Champion plan).
+import { guiseFacts, guiseRequired, guiseSnapshot, isGuiseRace, peopleOf, raceOpensClass } from "./guise.mjs";
 
-/** The ten steps, in 01 §1's order. Nothing in a step depends on a step below it. */
+/**
+ * The ten steps, in 01 §1's order. Nothing in a step depends on a step below it.
+ *
+ * **`guise` is the race step for a guise class** (the Chromatic Champion plan: *the
+ * race step becomes a Mortal guise step*): a proposal walks one or the other, never
+ * both (`stepsFor`), so every strip is still ten or eleven long.
+ */
 export const STEPS = Object.freeze([
-  "race", "class", "abilities", "career", "skills", "talents", "spells", "languages", "equipment", "numbers", "name"
+  "race", "guise", "class", "abilities", "career", "skills", "talents", "spells", "languages", "equipment", "numbers", "name"
 ]);
+
+/** The step a guise class picks its people's looks on, in place of the race step. */
+export const GUISE_STEP = "guise";
 
 /** The step a caster's spells are chosen on (07 §5); a class that casts nothing skips it (2026-09-06). */
 export const SPELLS_STEP = "spells";
@@ -79,31 +92,66 @@ export function primaryAbilities(cls) {
  * it printed a bare *Intelligence* under *Casting ability* and read as though the
  * Rogue cast.
  *
- * @param {{castingAbility?: string|null, power?: {caster?: string}}|null} cls
- * @returns {{ability: string, grade: "full"|"half"|"dcOnly"}|null}
+ * **The Chromatic Champion's row is a fourth grade**, *Constitution, for the spells
+ * your branches teach*: it holds no Mana and no school, as the Rogue does, but its
+ * branches teach spells it casts for Rage (02 §7), so *for Spell DC only* would be
+ * false on its card. The class item carries no field that tells the two apart, so
+ * `BRANCH_CASTERS` names it by identifier, and a Vitest holds the list to every
+ * class whose 02 row reads that way.
+ *
+ * @param {{identifier?: string, castingAbility?: string|null, power?: {caster?: string}}|null} cls
+ * @returns {{ability: string, grade: "full"|"half"|"dcOnly"|"taught"}|null}
  */
 export function castingLine(cls) {
   const ability = typeof cls?.castingAbility === "string" && cls.castingAbility ? cls.castingAbility : null;
   if (!ability) return null;
   const caster = cls?.power?.caster ?? "none";
-  return { ability, grade: caster === "full" ? "full" : caster === "half" ? "half" : "dcOnly" };
+  if (caster === "full") return { ability, grade: "full" };
+  if (caster === "half") return { ability, grade: "half" };
+  return { ability, grade: BRANCH_CASTERS.includes(String(cls?.identifier ?? "")) ? "taught" : "dcOnly" };
 }
+
+/** The classes whose 02 Casting row reads *for the spells your branches teach*, by identifier. */
+export const BRANCH_CASTERS = Object.freeze(["chromatic-champion"]);
 
 /** Whether a class shows the spells step at all: it holds a Power pool that casts. */
 export function castsSpells(cls) {
   return Boolean(cls) && (cls.power?.caster ?? "none") !== "none";
 }
 
-/** The steps a proposal walks: every step, less the spells step for a class that casts nothing. */
+/**
+ * The steps a proposal walks: every step, less the spells step for a class that casts
+ * nothing, and the race step OR the Mortal guise step - the guise for the Chromatic
+ * Champion or the Chromatic Outcast (`rules/guise.mjs#guiseRequired`), the race for
+ * everybody else.
+ */
 export function stepsFor(p = {}) {
-  return STEPS.filter(key => key !== SPELLS_STEP || castsSpells(p.cls));
+  const guise = guiseRequired({ race: p.race ?? null, cls: p.cls ?? null });
+  return STEPS.filter(key => (key !== SPELLS_STEP || castsSpells(p.cls))
+    && (key !== GUISE_STEP || guise) && (key !== "race" || !guise));
+}
+
+/**
+ * The step to show when the one the player stands on has left the strip. The race and
+ * the Mortal guise steps hold one place between them, so picking the Chromatic Outcast
+ * on the race step lands on the guise step and leaving the guise lands on the race
+ * step; any other step off the strip (the spells step of a class that casts nothing)
+ * falls back to the talents step, as it always has.
+ * @param {string} step     the step held in the state
+ * @param {string[]} steps  `stepsFor`'s strip
+ */
+export function stepOnStrip(step, steps) {
+  if (steps.includes(step)) return step;
+  if (step === "race" && steps.includes(GUISE_STEP)) return GUISE_STEP;
+  if (step === GUISE_STEP && steps.includes("race")) return "race";
+  return "talents";
 }
 
 /** The three methods of 01 §3 (D-478). The table picks one; any player may. */
 export const METHODS = Object.freeze(["array", "pointBuy", "roll"]);
 
-/** The nine classes in 02 §7's order, which is how the class step lays its tiles (D-638); a Vitest reads it off the chapter. */
-export const CLASS_ORDER = Object.freeze(["warrior", "paladin", "ranger", "rogue", "priest", "shaman", "mage", "warlock", "druid"]);
+/** The ten classes in 02 §7's order, which is how the class step lays its tiles (D-638); a Vitest reads it off the chapter. */
+export const CLASS_ORDER = Object.freeze(["warrior", "paladin", "ranger", "rogue", "priest", "shaman", "mage", "warlock", "druid", "chromatic-champion"]);
 
 /** "Take these six numbers and assign each to an ability." */
 export const ARRAY = Object.freeze([16, 14, 13, 12, 10, 8]);
@@ -125,6 +173,9 @@ export const ROLL_KEEP = 3;
 export const STARTING_XP = 100;
 export const STARTING_LEVEL = 1;
 export const STARTING_CAREER_TIER = 1;
+
+/** The portrait a character takes when nobody chose one: core's own. */
+export const DEFAULT_PORTRAIT = "icons/svg/mystery-man.svg";
 
 /** 01 §6 (D-480): ten silver, in copper (D-422). */
 export const PURSE = 1000;
@@ -211,9 +262,16 @@ export function languagesFor(race, side = null) {
   return out;
 }
 
-/** Whether a race may take a class (02 §3's matrix, carried on the race item). */
+/**
+ * Whether a race may take a class (02 §3's matrix, carried on the race item). A guise
+ * class (the Chromatic Champion) is open to its guise race alone, whatever a race item's
+ * list says; the guise race (the Chromatic Outcast) opens the classes on its own list,
+ * which the lead widened on 2026-11-09 to the Warrior, Rogue, Mage and Warlock as well
+ * (`rules/guise.mjs#guiseRaceOpens` is the same reading for the creator's settle).
+ * `rules/guise.mjs#raceOpensClass` is the reading, shared with the multiclass door.
+ */
 export function classOpenTo(race, cls) {
-  return Boolean(race?.classes?.includes(cls?.name));
+  return raceOpensClass(race, cls);
 }
 
 /**
@@ -394,7 +452,8 @@ export function kitItems(p = {}) {
 export function bagSlotsFor(p = {}) {
   return baseCapacity({
     strMod: abilityModifier(Number(p.abilities?.str) || 10),
-    size: p.race?.size ?? "medium",
+    // A guise's size (the Chromatic Champion plan), else the race's.
+    size: p.guise ? guiseFacts({ race: p.race ?? null, guise: p.guise }).size : (p.race?.size ?? "medium"),
     factor: carryFactor(p.racialTalent?.name
       ? [{ identifier: classKey(p.racialTalent.name), race: p.race?.name ?? "", taken: 1 }]
       : [])
@@ -493,7 +552,13 @@ export function numbersFor(p = {}) {
     defense: 10 + mods.dex + effects.defense,
     initiative: 10 + mods.dex,
     ap,
-    speed: speedFrom(speedParts({ raceSpeed: p.race?.speed ?? null, armorSpeed: effects.speed, encumbering: effects.encumbering })),
+    // A guise's Speed (the Chromatic Champion plan), else the race's.
+    // And 02's Scales on a Champion in Mail or Plate (the stage 2 review, should-fix 4): the
+    // suit's Encumbering costs it no Speed, as `CharacterData` reads it once the actor stands.
+    speed: speedFrom(speedParts({
+      raceSpeed: p.guise ? guiseFacts({ race: p.race ?? null, guise: p.guise }).speed : (p.race?.speed ?? null), armorSpeed: effects.speed, encumbering: effects.encumbering,
+      scales: scalesWaive({ held: cls?.name === CHAMPION_CLASS, category: suit?.category ?? null })
+    })),
     // BAG SLOTS, not pounds (D-735): 16 plus the Strength modifier, times the
     // size rung, times Pack Hobgoblin. `bagSlotsFor` is the one place it is
     // worked out, so the number the window shows is the number `validate`
@@ -505,7 +570,15 @@ export function numbersFor(p = {}) {
     spellsKnown: spellsRequired(cls, scores),
     attack: { melee: mods.str + proficiency, ranged: mods.dex + proficiency },
     skills,
-    languages: languagesFor(p.race, p.side),
+    // A guise's tongue (the Chromatic Champion plan: *looks, size, Speed and language
+    // only*), else the race's.
+    // And the tongue a racial pick adds (02 SS5's Draconic; the lead, 2026-11-08: *"Add
+    // Draconic"*), which a guise never takes away: the guise gives looks, size, Speed and its
+    // own tongue, and the Outcast is still a dragon.
+    languages: [...new Set([
+      ...languagesFor(peopleOf({ race: p.race ?? null, guise: p.guise ?? null }), p.side),
+      ...talentLanguages(p.racialTalent?.name ? [{ identifier: classKey(p.racialTalent.name), race: p.race?.name ?? "", taken: 1 }] : [])
+    ])],
     spent: purseSpend(p.equipment ?? [], p.race),
     coin: PURSE - purseSpend(p.equipment ?? [], p.race)
   };
@@ -547,6 +620,13 @@ export function validate(p = {}) {
   if (!p.race) refuse("noRace", "race");
   if (!p.cls) refuse("noClass", "class");
   if (p.race && p.cls && !classOpenTo(p.race, p.cls)) refuse("classNotOpen", "class", { race: p.race.name, cls: p.cls.name });
+  // 1 for a guise class - the Mortal guise (the Chromatic Champion plan). The race is
+  // the Outcast and the guise one of the other peoples; a guise without the need is
+  // dropped by the window, never written.
+  if (guiseRequired({ race: p.race ?? null, cls: p.cls ?? null })) {
+    if (!p.guise) refuse("noGuise", "guise");
+    else if (isGuiseRace(p.guise)) refuse("guiseNotAPeople", "guise", { name: p.guise.name ?? "" });
+  }
 
   // 3 — abilities, by method.
   const scores = ABILITIES.map(k => p.abilities?.[k]);
@@ -620,8 +700,10 @@ export function validate(p = {}) {
     }
   }
 
-  // 7 — languages: the three peoples of neither side say which raised them.
-  if (p.race && sideFor(p.race) === null && !p.side) refuse("sideUnchosen", "languages");
+  // 7 — languages: the three peoples of neither side say which raised them. A guise's
+  // people answers for a Chromatic Outcast, since its tongue is the guise's.
+  const people = peopleOf({ race: p.race ?? null, guise: p.guise ?? null });
+  if (people && sideFor(people) === null && !p.side) refuse("sideUnchosen", "languages");
 
   // 8 — the purse, and the class's Access.
   const spend = purseSpend(p.equipment ?? [], p.race);
@@ -666,7 +748,9 @@ export function plan(p = {}) {
   const ranks = Object.fromEntries(Object.entries(p.ranks ?? {}).filter(([, r]) => (Number(r) || 0) > 0).map(([k, r]) => [k, Number(r)]));
   const ledger = rankLedger(ranks, inCareer);
   const spent = ledger.reduce((s, row) => s + row.amount, 0);
-  const size = p.race?.size ?? "medium";
+  // The guise's size where one is held (the Chromatic Champion plan): the token
+  // stands at the people the character looks like.
+  const size = p.guise ? guiseFacts({ race: p.race ?? null, guise: p.guise }).size : (p.race?.size ?? "medium");
 
   const embeds = [];
   if (p.race?.uuid) embeds.push({ uuid: p.race.uuid, kind: "race" });
@@ -689,14 +773,18 @@ export function plan(p = {}) {
     create: {
       name: String(p.name ?? "").trim(),
       type: "character",
-      img: p.img || "icons/svg/mystery-man.svg",
+      // A guise's portrait is the default where none was chosen (the plan: *the default
+      // portrait is read from it*).
+      img: (p.img && p.img !== DEFAULT_PORTRAIT ? p.img : null) || p.guise?.img || DEFAULT_PORTRAIT,
       system: {
         abilities: Object.fromEntries(ABILITIES.map(k => [k, { value: numbers.scores[k] }])),
         health: { value: numbers.health, max: numbers.health },
         xp: { earned: STARTING_XP, spent },
         languages: numbers.languages,
         coin: Math.max(0, numbers.coin),
-        motive: String(p.motive ?? "").trim()
+        motive: String(p.motive ?? "").trim(),
+        // The guise snapshot (`rules/guise.mjs#guiseSnapshot`), or null.
+        guise: guiseRequired({ race: p.race ?? null, cls: p.cls ?? null }) ? guiseSnapshot(p.guise ?? null) : null
       },
       // The PC token (the lead, 2026-09-13): friendly, named, linked, with a
       // Health bar. Spread from `rules/tokens.mjs` rather than listed again,

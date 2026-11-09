@@ -27,6 +27,27 @@ import { emptyAutomation, hasAutomation, isShell } from "./ability-automation.mj
 const CASTING_TESTS = "casting";
 
 export const CREATURE_PLANS = Object.freeze({
+  "Blackrock Outrunner": {
+    "Trapper Net": { plan: { target: { count: 1, feet: 20 } } },
+    "Berserk": { plan: { door: "amaniFury", lasts: "encounter" } }
+  },
+  "Dragonmaw Bonewarder": {
+    "Raise Bone Guardian": { kind: "summon", summon: { entry: "Risen Skeleton", count: 1, side: "summoner", from: "now" } }
+  },
+  "Kolkar Wrangler": {
+    "Trapper Net": { plan: { target: { count: 1, feet: 20 } } }
+  },
+  "Twilight Aquamancer": {
+    "Call Aqua Guardian": { kind: "summon", summon: { entry: "Lesser Water Elemental", count: 1, side: "summoner", from: "now" } }
+  },
+  "Vile Sprite": {
+    "Sprite Poison": { plan: { target: { count: 1, feet: 5 } } }
+  },
+  // The net's save/duration/uses come from the prose; validate its single
+  // recorded target and range before spending its action or encounter use.
+  "Defias Trapper": {
+    "Trapper Net": { plan: { target: { count: 1, feet: 20 } } }
+  },
   // *Each ally within 10 feet of it gains a Boon on its next Attack Test.* An ally is the
   // chicken's own side and the chicken among them (D-755: the user counts as an ally unless
   // the words say *other than you*).
@@ -92,6 +113,16 @@ export function applyCreaturePlan(automation, creature, ability) {
 /** Whether a creature ability's descriptor carries a plan its doors read. */
 export function hasCreaturePlan(automation) {
   return Object.keys(cleanBossPlan(automation?.plan)).length > 0;
+}
+
+/** An explicitly aimed area keeps the range printed on its creature ability.
+ * Other prose distances (an aura, a victim's move) are not placement ranges. */
+export function creatureAreaRange(row) {
+  if (!row?.automation?.area) return null;
+  const text = String(row.description ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
+  const match = /\bat a point within (\d+)\s*(?:feet|ft)\b/i.exec(text);
+  const feet = match ? Number(match[1]) : 0;
+  return feet > 0 ? feet : null;
 }
 
 /* -------------------------------------------- */

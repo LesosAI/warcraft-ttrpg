@@ -57,7 +57,7 @@
  * the granting talent's row, every refusal asked before anything is paid.
  */
 
-import { talentEffect } from "./talent-effects.mjs";
+import { spellNamesAtRank, talentEffect } from "./talent-effects.mjs";
 import { evaluateAmount } from "./class-features.mjs";
 // A Use's area that strikes at the start of a turn takes D-756's whole shape
 // (04's Firestorm, D-775).
@@ -159,7 +159,11 @@ export function calledShotFor(talents = [], rowOf = talentEffect) {
 export function hitConditionsFor(talents = [], { sl = 0, hit = false, opportunity = false } = {}, rowOf = talentEffect) {
   if (!hit) return [];
   const out = [];
-  for (const { talent, row, rank } of rowsOfKind(talents, "hitLays", rowOf)) {
+  for (const { talent, row: base, rank } of rowsOfKind(talents, "hitLays", rowOf)) {
+    // **A ROW AT ITS RANK** (04's Ember Strikes: *When one of them reaches SL 2, the target
+    // is Scorched. At rank 2 this happens at SL 1, and at rank 3 on any hit*; stage 3A of
+    // the Chromatic Champion plan): a rank's clause lays its own `sl` over the row's.
+    const row = atRankOf(base, rank);
     if (!row.condition) continue;
     // **A COMPANION'S ROW IS THE COMPANION'S** (found reading this for door 22):
     // 04's Ferocious Bite (*When your companion's attack reaches SL 2*) is read off
@@ -835,7 +839,10 @@ export function onUseNextAttack(onUse, talent, { rank = 1, tier = 1, scope = {} 
     boons: amount(n.boons ?? 0, where),
     penetration: amount(n.penetration ?? 0, where),
     damage: amount(n.damage ?? 0, where),
-    lasts: n.lasts
+    lasts: n.lasts,
+    // 04's False Opening: *Your next attack this turn cannot be met with a Parry or a
+    // Block* (stage 3A), named only where the Use promises it.
+    ...(n.unanswerable === true ? { unanswerable: true } : {})
   };
 }
 
@@ -1890,6 +1897,32 @@ export const WARD_BASE = Object.freeze({ feature: "Ward", targets: 1, amount: 1,
 export const WARD_FLAG = "priestWard";
 
 /**
+ * **WHAT A DRAKE CAPSTONE DOES TO 02's BREATH WHILE ITS FORM IS HELD** (04's four
+ * capstones: *In it your Breath deals Fire damage*; the Bronze Drake's *leaves each
+ * creature that fails its Test Slowed until the end of its next turn*; stage 2B). The
+ * capstone's `mod("Breath", {inForm})` patch, read through `patchRowsOf` (D-773 to
+ * D-775: the patch carries the mechanism) for the form the Champion holds now, by its
+ * block's name. Null out of a drake form, or in one no taken capstone patches.
+ *
+ * @param {Array} talents  the taken talents
+ * @param {{form?: string|null}} o  the held drake form's block name
+ * @returns {{school: string|null, inflicts: Array<object>, by: string}|null}
+ */
+export function drakeBreathFor(talents = [], { form = null } = {}, rowOf = talentEffect) {
+  if (!form) return null;
+  for (const { talent, patch } of patchRowsOf(talents, "Breath", rowOf)) {
+    const inForm = patch?.inForm ?? null;
+    if (!inForm || inForm.form !== form) continue;
+    return {
+      school: typeof inForm.school === "string" && inForm.school ? inForm.school : null,
+      inflicts: (Array.isArray(inForm.inflicts) ? inForm.inflicts : []).filter(i => i?.condition).map(i => ({ ...i })),
+      by: String(talent?.name ?? "")
+    };
+  }
+  return null;
+}
+
+/**
  * **WHAT THE WARD THIS PRIEST LAYS CARRIES** (02: *As a Reaction, spend 2 Mana to
  * grant a target Ward 1 of one school until your next turn*; with the five
  * talents that patch it, D-774): how many it names, every school or one, the
@@ -2177,6 +2210,16 @@ export function talentLinesFor(talents = [], { roll = "spell", school = null, da
       out.push({
         id: `talent-line-${talent.identifier}`, identifier: talent.identifier, name: talent.name, kind: "convert",
         amount: at(row.add ?? 0, { rank }), to: row.convert.to, left: 1, available: true, reason: null
+      });
+    }
+    // **A WEAPON BLOW OF ANOTHER TYPE** (04's Ember Strikes: *Your weapon attacks may deal
+    // Fire damage instead of their own type*; stage 3A): a line on an attack that deals
+    // damage, always available, the player's to tick - `rollTest` makes the blow a magical
+    // one of that school, as a creature's patched school is (`npcAttackWithDialog`).
+    if (row.convert?.to && row.convert.attack === true && roll === "attack" && damages) {
+      out.push({
+        id: `talent-line-${talent.identifier}`, identifier: talent.identifier, name: talent.name, kind: "convertAttack",
+        amount: 0, to: row.convert.to, left: 1, available: true, reason: null
       });
     }
   }
@@ -2551,6 +2594,15 @@ export function featureAims({ name = "", lays = null, attack = false, onUse = nu
   // the revive was refused *target the one creature* and the travel and the form went
   // alone whatever was targeted. Ethereal Form without the talent still covers its user.
   if (o.revive || o.transporter || o.ethereal) return true;
+  // 04's Court Guise names the humanoid whose face it takes (stage 3A of the Chromatic
+  // Champion plan): from the sheet it was handed nobody and refused *one target*.
+  if (o.courtGuise) return true;
+  // And the Spell-Weaver's and the Timewalker's (stage 3B): Spellbreak names the creature
+  // whose Sustain it ends, Hasten the ally it hands a Half-Action, Rewind the creature its
+  // offer names (Font of Magic's ally rides `aim`, above).
+  if (o.spellbreak || o.hasten || o.rewind) return true;
+  // 02's Bloodlust names its up to six targets (the lead, 2026-11-08: *"Fix it now"*).
+  if (o.bloodlust) return true;
   // 02's Blink (Slow Time's friend) and Counterspell (Spellsteal's caster), D-775;
   // and 02's Dispel, whose one target (and Rapture's second) the Use ends effects
   // on (D-778).
@@ -4731,7 +4783,10 @@ export function movingProvokesFor(talents = [], rowOf = talentEffect) {
 export function spellPoolFor(talents = [], { name = "", school = null } = {}, rowOf = talentEffect) {
   for (const { talent, row } of rowsOfKind(talents, "spell", rowOf)) {
     if (typeof row.pool !== "string" || !row.pool) continue;
-    const named = (row.names ?? []).includes(name) || (school && (row.schools ?? []).includes(school));
+    // **AT THE RANK TAKEN** (stage 3A: 04's Kindled Blood, *At rank 2 you also know Fire
+    // Ward*): a spell a rank's clause teaches is paid in the row's pool too, or it would be
+    // priced in a Mana the Champion does not hold.
+    const named = spellNamesAtRank(row, Number(talent.taken) || 1).includes(name) || (school && (row.schools ?? []).includes(school));
     if (!named) continue;
     return { pool: row.pool, ability: typeof row.ability === "string" && row.ability ? row.ability : null, name: talent.name };
   }

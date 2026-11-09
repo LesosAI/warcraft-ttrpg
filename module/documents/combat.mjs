@@ -32,7 +32,7 @@ import { sustainEntryTransferPending } from "../rules/sustain-entry-transfer.mjs
 import { buffetStacks } from "../rules/flame-buffet.mjs";
 import { liftSpellEffects } from "../dice/workflows.mjs";
 import { AZEROTH } from "../config.mjs";
-import { reactionBarred, REACTION_BAR_REASON } from "../rules/reaction-bar.mjs";
+import { reactionBarReason, reactionBarred, REACTION_BAR_REASON } from "../rules/reaction-bar.mjs";
 import { elementalTurnSlots, matchingTurnSlot } from "../rules/elemental-turns.mjs";
 import { MIND_CONTROL_SCHEDULE, mindControlScheduledSlots } from "../rules/mind-control-schedule.mjs";
 import { prepareMindControlRound } from "../effects/mind-control-round.mjs";
@@ -835,8 +835,9 @@ export class AzerothCombatant extends Combatant {
         return { ok: false, reason, params: {}, budget: before };
       }
       if (cost === "reaction" && reactionBarred(this.actor)) {
-        ui.notifications?.warn(game.i18n.localize(REACTION_BAR_REASON));
-        return { ok: false, reason: REACTION_BAR_REASON, params: {}, budget: before };
+        const reason = reactionBarReason(this.actor) ?? REACTION_BAR_REASON;
+        ui.notifications?.warn(game.i18n.format(reason, { name: this.actor?.name ?? "" }));
+        return { ok: false, reason, params: { name: this.actor?.name ?? "" }, budget: before };
       }
       const projection = projectionRefusal(this.actor, "action");
       if (projection) {
@@ -2213,6 +2214,17 @@ export class AzerothCombat extends Combat {
     // regeneration because it is the same beat of the turn; the difference is
     // that a character's comes off the things they are wearing.
     for (const line of await this._signatureTicks(actor)) lines.push(line);
+    // **THE CHAMPION'S TURN-START DOORS** (04; stage 3B): the Half-Action a Hasten gave this
+    // creature for this turn, given now that the budget is reset (`takeHastened`), and the
+    // Blue Drake's Mana to each ally within 30 feet as the drake's own turn starts. Guarded:
+    // neither stops the turn.
+    try {
+      const { blueDrakeTurn, takeHastened } = await import("../effects/chromatic-flights.mjs");
+      for (const line of await takeHastened(combatant)) lines.push(line);
+      for (const line of await blueDrakeTurn(combatant)) lines.push(line);
+    } catch (err) {
+      console.warn("azeroth-rpg | a Champion's turn start", err);
+    }
     // **AND WHAT A TALENT GIVES BACK** (04's Blood Craze: *While you hold more
     // than 7 Rage, recover 1 Health per rank at the start of each of your
     // turns*; D-772), at the same beat.
@@ -2253,8 +2265,18 @@ export class AzerothCombat extends Combat {
       }
       // What the upkeep came to, in words (D-778): the Mana and the Health paid -
       // Felstep's is Health alone, Felfire Aura's both.
-      const paidCount = r.kept.length - r.free.length - r.suspended.length;
-      if (paidCount > 0) {
+      // Only the Sustains paid in Mana or Health (the 1B review, item 3): one a talent's
+      // pool paid is said on its own line below and is not in this count.
+      const paidCount = r.paidCount ?? 0;
+      // A pool a talent named (the Champion's Rage, Shadowcraft's Focus) is said by
+      // its own name; the Mana line below counts Mana alone (the Chromatic Champion
+      // plan, finding 2).
+      for (const [poolName, amount] of Object.entries(r.paidIn ?? {}).sort(([a], [b]) => a.localeCompare(b))) {
+        lines.push(game.i18n.format("AZEROTH.Combat.SustainPaidPool", {
+          name: actor.name, amount, pool: game.i18n.localize(AZEROTH.poolTypes[poolName] ?? poolName)
+        }));
+      }
+      if (paidCount > 0 && (r.paid.mana > 0 || r.paid.health > 0)) {
         const paidKey = r.paid.health > 0
           ? (r.paid.mana > 0 ? "AZEROTH.Combat.SustainPaidBoth" : "AZEROTH.Combat.SustainPaidHealth")
           : "AZEROTH.Combat.SustainPaidMana";
@@ -3002,7 +3024,22 @@ function tickSources(scene, victim, now) {
     out.push({ tick: f.areaTick, caster, casterToken: casterTokenOn(scene, f.source ?? null, caster), spell: f.spell ?? { name: region.name }, region });
   }
   for (const other of scene.tokens ?? []) {
-    if (other.id === victim.id) continue;
+    // **THE HOLDER STANDS IN ITS OWN RING WHERE THE TICK SAYS SO** (04's Hearthfire: *each
+    // ally that starts its turn within 5 feet of you* - and the Champion counts as an ally,
+    // D-755; stage 3A): the caster's own token takes a self-centred tick marked
+    // `includesHolder`, and no other.
+    if (other.id === victim.id) {
+      const self = other.actor ?? null;
+      if (!self || isDown(self)) continue;
+      for (const { tick, cast, spell, signatureDamageCast } of selfTicksOf(self)) {
+        if (tick.includesHolder !== true) continue;
+        const key = cast ?? `${self.uuid}:${spell.name}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ tick, cast, signatureDamageCast, caster: self, casterToken: other, spell, region: null });
+      }
+      continue;
+    }
     const carrier = other.actor ?? null;
     if (!carrier) continue;
     // A carrier that is down holds no Sustain and stands at the heart of

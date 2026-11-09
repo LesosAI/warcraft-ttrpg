@@ -29,7 +29,7 @@ import { addArmorPoints, wornArmorPoints, wornGrants, wornWard } from "../../rul
 import { creaturePools } from "../../rules/bestiary.mjs";
 import { choiceField, descriptionField, optionalNumberField, sourceField } from "../common/fields.mjs";
 import { migrateNpcSource } from "../../migrations/0.10.0-creators.mjs";
-import { wardMapOf, wardSchoolsNamed } from "../../rules/ward.mjs";
+import { wardCap, wardMapOf, wardSchoolsNamed } from "../../rules/ward.mjs";
 import { isThinned } from "../../rules/swarm.mjs";
 // What an ally's aura lays on this creature (D-755).
 import { auraBaneRows, auraBoonRows, auraHalvesHealing, auraStandsFree, emptySchoolArmor } from "../../rules/auras.mjs";
@@ -770,6 +770,17 @@ export class NpcData extends foundry.abstract.TypeDataModel {
     // A creature carries a corruption keyword rather than tracks of its own,
     // but the GM may run one that has them.
     this.corruptionState = this.corruption ? trackStates({}) : null;
+  }
+
+  /**
+   * **WHAT LANDS AFTER CORE'S `final` ACTIVE EFFECT PHASE** (D-768's seam, which
+   * `AzerothActor#prepareData` calls for either model): a creature's Ward against any
+   * one school is at most 10 (the Chromatic Champion plan; the lead: *"increase the
+   * ward max to 10 system wide"*), held once a laid Ward, an aura's floor and every
+   * other `final` change have landed.
+   */
+  afterFinalPhase() {
+    wardCap(this.ward);
   }
 
   /** Whether this creature can be called-shot to a location (06 §2). */

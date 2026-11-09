@@ -20,9 +20,11 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+// Sunder's own changes (05 §11): the amount off every location's Armor Points.
+import { sunderedChanges } from "./maneuvers.mjs";
 
 /** The marks the door lays as an Active Effect. */
-export const HIT_MARK_KINDS = Object.freeze(["wardDrop", "noOpportunity"]);
+export const HIT_MARK_KINDS = Object.freeze(["wardDrop", "noOpportunity", "apDrop"]);
 
 /** The flag every laid mark rides: `{kind, source, school?, amount?}`. */
 export const HIT_MARK_FLAG = "hitMark";
@@ -46,6 +48,22 @@ export function wardDropChanges(school, amount) {
 }
 
 /**
+ * **AN ARMOR POINT DROP'S CHANGES** (07's Shattering Bolt: *the target loses 1 Armor Point
+ * at every location*; stage 3A): Sunder's own `add -n` on every location's derived Armor
+ * Points (`maneuvers.mjs#sunderedChanges`), in the `final` phase, with an `upgrade 0` floor
+ * beside each so no location reads below nothing.
+ *
+ * @param {number} amount
+ * @returns {Array<{key: string, type: string, value: string|number, phase: string}>}
+ */
+export function apDropChanges(amount) {
+  const n = Math.max(0, Math.trunc(Number(amount)) || 0);
+  if (!(n > 0)) return [];
+  const drops = sunderedChanges(n);
+  return [...drops, ...drops.map(c => ({ key: c.key, type: "upgrade", value: "0", phase: "final" }))];
+}
+
+/**
  * **ONE MARK, CLEANED**, or null where it says nothing the door can lay.
  *
  * @param {unknown} raw  `{kind, source, school?, amount?}`
@@ -55,6 +73,11 @@ export function cleanHitMark(raw) {
   if (!raw || typeof raw !== "object" || !HIT_MARK_KINDS.includes(raw.kind)) return null;
   const source = String(raw.source ?? "");
   if (raw.kind === "noOpportunity") return { kind: raw.kind, source };
+  // **ARMOR POINTS LOST AT EVERY LOCATION** (07's Shattering Bolt; stage 3A).
+  if (raw.kind === "apDrop") {
+    const n = Math.trunc(Number(raw.amount));
+    return n > 0 ? { kind: raw.kind, source, amount: n } : null;
+  }
   const changes = wardDropChanges(raw.school, raw.amount);
   if (!changes.length) return null;
   return { kind: raw.kind, source, school: String(raw.school), amount: Math.trunc(Number(raw.amount)) };
@@ -69,8 +92,11 @@ export function cleanHitMark(raw) {
  */
 export function hitMarkCarries(mark) {
   if (!mark) return { changes: [], flags: {} };
-  const changes = mark.kind === "wardDrop" ? wardDropChanges(mark.school, mark.amount) : [];
-  return { changes, flags: { [HIT_MARK_FLAG]: { ...mark } } };
+  const changes = mark.kind === "wardDrop" ? wardDropChanges(mark.school, mark.amount)
+    : mark.kind === "apDrop" ? apDropChanges(mark.amount) : [];
+  // An Armor Point drop *until it finishes a Short Rest* carries Sunder's own flag, so the
+  // rest door that ends a Sunder ends it (`AzerothActor#clearSundered`; stage 3A).
+  return { changes, flags: { [HIT_MARK_FLAG]: { ...mark }, ...(mark.kind === "apDrop" ? { sundered: true } : {}) } };
 }
 
 /**

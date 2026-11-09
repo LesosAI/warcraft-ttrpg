@@ -18,7 +18,8 @@
  * **Resolve LENIENTLY, and never guess between two named pools:**
  *
  * 1. a Power pool actually named `mana`, if there is one;
- * 2. otherwise the **only** Power pool, whatever it is called;
+ * 2. otherwise the **only** Power pool, whatever it is called, where it belongs
+ *    to no class - a creature's (a character's Energy or Focus is never Mana);
  * 3. otherwise nothing.
  *
  * Step 2 is what reaches a creature. Step 3 is what keeps a Warrior's Rage
@@ -61,6 +62,56 @@ export const MANA = "mana";
 export const ANY_MOMENTUM = "momentum";
 
 /**
+ * **A COST PAID FROM ANY POOL THE CHARACTER HOLDS** (02 §5's Tail Sweep; the lead,
+ * 2026-11-09, verbatim: *"Pay 4 from your Momentum or your Power pool (Rage, Energy,
+ * Mana...). The DC is 8 + Constitution modifier + proficiency, so it works the same for
+ * every class."*). The pool is chosen at the door, before anything is paid, through
+ * `anyPoolChoice`; `poolNamed` never guesses it. `AZEROTH.costPoolTypes` carries its word.
+ */
+export const ANY_POOL = "any";
+
+/**
+ * The pools that can pay `amount` of an `ANY_POOL` cost: every Momentum and Power pool
+ * holding at least that much, Momentum first, then by name and class, so a list a
+ * person reads never wobbles.
+ *
+ * @param {PoolSnapshot[]} [pools]
+ * @param {number} [amount]
+ * @returns {PoolSnapshot[]}
+ */
+export function anyPoolPayers(pools = [], amount = 0) {
+  const due = Math.max(0, Math.trunc(Number(amount)) || 0);
+  const order = { momentum: 0, power: 1 };
+  return (Array.isArray(pools) ? pools : [])
+    .filter(p => p && (p.kind === "momentum" || p.kind === "power") && (Number(p.value) || 0) >= due)
+    .sort((a, b) => (order[a.kind] - order[b.kind])
+      || String(a.name ?? "").localeCompare(String(b.name ?? ""))
+      || String(a.itemId ?? "").localeCompare(String(b.itemId ?? "")));
+}
+
+/** The key a chooser row names a pool by: its class and its kind, which a character holds once each. */
+export function anyPoolKey(pool) {
+  return `${pool?.itemId ?? ""}:${pool?.kind ?? ""}`;
+}
+
+/**
+ * **WHICH POOL AN `ANY_POOL` COST COMES OUT OF**: none can pay it, and the door refuses in
+ * words naming the price; exactly one can, and it pays without asking; more than one
+ * can, and the door asks which through the one chooser before anything is paid (D-768's
+ * order). Pure: the door does the asking.
+ *
+ * @param {PoolSnapshot[]} [pools]
+ * @param {number} [amount]
+ * @returns {{pool: PoolSnapshot|null, ask: PoolSnapshot[]|null, refusal: "NoPool"|null}}
+ */
+export function anyPoolChoice(pools = [], amount = 0) {
+  const payers = anyPoolPayers(pools, amount);
+  if (!payers.length) return { pool: null, ask: null, refusal: "NoPool" };
+  if (payers.length === 1) return { pool: payers[0], ask: null, refusal: null };
+  return { pool: null, ask: payers, refusal: null };
+}
+
+/**
  * Which half of 05 §11 a pool name belongs to, off `config.mjs`'s own two maps.
  * `null` for a word that is neither, so a caller can fail closed on it.
  *
@@ -91,8 +142,9 @@ export function poolKind(name) {
  *
  * **IT IS DELIBERATELY STRICTER THAN `manaPool`, and the difference is the
  * difference between a gain and a cost.** `manaPool` answers *where does this
- * Mana go*, and the lead's ruling lets it land in the only Power pool whatever
- * it is called — a Hunter's Focus takes a Mana potion. This answers *what may
+ * Mana go*, and the lead's ruling lets it land in a creature's only Power pool
+ * whatever its GM called it (never a character's Energy or Focus, which 05 §11
+ * says is not Mana). This answers *what may
  * this be paid out of*, and a pool that names a different thing may not pay it:
  * a Paladin holds one Momentum pool and it is Zeal, so a cost of 4 Rage is
  * refused rather than quietly drunk out of it. A pool that names NOTHING names
@@ -133,5 +185,11 @@ export function manaPool(pools = []) {
   const powers = (Array.isArray(pools) ? pools : []).filter(p => p?.kind === "power");
   const named = powers.find(p => p.name === MANA);
   if (named) return named;
-  return powers.length === 1 ? powers[0] : null;
+  // **STEP 2 IS THE CREATURE'S, AND ONLY THE CREATURE'S** (the Chromatic Champion
+  // plan, finding 1). The lead's ruling of 2026-09-10 is about a creature: *a
+  // creature's Power pool IS what it casts from*. A creature's pool belongs to no
+  // class (`itemId` null); a character's always does, and 05 §11 says a Rogue and a
+  // Ranger hold no Mana - so Hymn of Hope, a Mana draught and a Mana tick refilled a
+  // Rogue's Energy and a Ranger's Focus while this read every lone Power pool.
+  return powers.length === 1 && !powers[0].itemId ? powers[0] : null;
 }

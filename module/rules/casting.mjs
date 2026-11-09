@@ -374,11 +374,17 @@ export function swiftCast({ row = null, spellAction = null, healing = false, use
  * #spellPoolFor`'s answer - takes 07's number as it stands, in that pool. It is
  * asked first: the talent names the price, and no Druid holds one.
  *
+ * **AND A FREE CAST** (the Chromatic Champion plan: *"the utility spells can be cast
+ * without rage once per short rest"*): `free` - a talent's free cast ticked on the
+ * dialog and still unspent (`rules/free-casts.mjs`) - prices it at nothing, in the pool
+ * it would have been paid from.
+ *
  * @param {number} mana  the price in Mana, every discount already taken off
- * @param {{inShapeshiftForm?: boolean, pool?: string|null}} [o]
+ * @param {{inShapeshiftForm?: boolean, pool?: string|null, free?: boolean}} [o]
  * @returns {{pool: string, amount: number}}
  */
-export function manaPrice(mana = 0, { inShapeshiftForm = false, pool = null } = {}) {
+export function manaPrice(mana = 0, { inShapeshiftForm = false, pool = null, free = false } = {}) {
+  if (free === true) return { pool: typeof pool === "string" && pool ? pool : "mana", amount: 0 };
   const m = Math.max(0, Number(mana) || 0);
   if (typeof pool === "string" && pool && pool !== "mana" && m > 0) return { pool, amount: m };
   if (inShapeshiftForm && m > 0) return { pool: "ferocity", amount: ferocityFor(m) };

@@ -25,6 +25,7 @@
   <div class="azeroth-creator-pane">
     <h3 class="azeroth-forge-heading">{{stepLabel}}</h3>
     {{#if (eq step "race")}}{{> systems/azeroth-rpg/templates/creator/race.hbs}}{{/if}}
+    {{#if (eq step "guise")}}{{> systems/azeroth-rpg/templates/creator/guise.hbs}}{{/if}}
     {{#if (eq step "class")}}{{> systems/azeroth-rpg/templates/creator/class.hbs}}{{/if}}
     {{#if (eq step "abilities")}}{{> systems/azeroth-rpg/templates/creator/abilities.hbs}}{{/if}}
     {{#if (eq step "career")}}{{> systems/azeroth-rpg/templates/creator/career.hbs}}{{/if}}

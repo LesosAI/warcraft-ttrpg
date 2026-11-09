@@ -88,10 +88,53 @@ export function wardSchoolsNamed(changes = []) {
 }
 
 /**
- * The schools that hold a Ward, from a `{school: n}` map.
+ * **A CREATURE'S WARD AGAINST ANY ONE SCHOOL IS AT MOST 10** (the lead, 2026-11-08,
+ * on the Chromatic Champion plan: *"keep ward sources and increase the ward max to
+ * 10 system wide. gear counts towards this max"*). Every source counts - what is
+ * worn, a race, a feature, a talent, a laid effect, an aura - and 08 §10's 3 from
+ * gear still stands inside it.
+ */
+export const WARD_MAX = 10;
+
+/**
+ * One school's Ward held to `WARD_MAX`. A number that is not a number is 0.
+ *
+ * @param {number} n
+ * @returns {number}
+ */
+export function wardCapped(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return 0;
+  return Math.min(WARD_MAX, v);
+}
+
+/**
+ * **THE ONE CLAMP** (the Chromatic Champion plan, *A system-wide change: Ward has a
+ * hard maximum of 10*). Every school of a `{school: n}` map held to `WARD_MAX`, IN
+ * PLACE, and the map handed back. It runs in both actor models' `afterFinalPhase`
+ * - after core's `final` Active Effect phase, which lands AFTER `prepareDerivedData`
+ * (CLAUDE.md §6), so a clamp there would miss a laid Ward, an aura and every other
+ * `final` change - and again inside `wardBySchool`, the point of use the mitigation
+ * doors read, so a snapshot recorded before the cap still meets it.
+ *
+ * @param {Record<string, number>} ward
+ * @returns {Record<string, number>}
+ */
+export function wardCap(ward) {
+  if (!ward || typeof ward !== "object") return ward;
+  for (const [k, v] of Object.entries(ward)) {
+    if (typeof v === "number" && v > WARD_MAX) ward[k] = WARD_MAX;
+  }
+  return ward;
+}
+
+/**
+ * The schools that hold a Ward, from a `{school: n}` map, each held to `WARD_MAX`.
  * @returns {Record<string, number>}
  */
 export function wardBySchool(ward) {
   if (!ward || typeof ward !== "object") return {};
-  return Object.fromEntries(Object.entries(ward).filter(([k, v]) => AZEROTH.schools[k] && Number(v) > 0));
+  return Object.fromEntries(Object.entries(ward)
+    .filter(([k, v]) => AZEROTH.schools[k] && Number(v) > 0)
+    .map(([k, v]) => [k, wardCapped(v)]));
 }

@@ -217,24 +217,41 @@ export function negateRefusal({ named = false, own = false, hit = false, withdra
  * @returns {Array<{actorUuid: string, itemId: string|null, kind: string, pool: string, amount: number}>}
  */
 export function missRefunds(paid = []) {
-  return byPool(paid);
+  return byPool(paid, MISS_REFUND_KINDS);
 }
+
+/**
+ * **WHAT A WITHDRAWN HIT GIVES BACK OR TAKES OFF THE STRIKER, BY KIND** (the 3A review,
+ * M4; the lead: *"Yes, take it back"*): a pool's price (`momentum`, `power`), Void
+ * Corruption spent on the hit (`corruption`, 04's Void Surge - given back onto the track),
+ * and the temporary Health the spend granted (`tempHealth`, 04's Obsidian Skin - taken back
+ * off the striker).
+ */
+export const MISS_REFUND_KINDS = Object.freeze(["momentum", "power", "corruption", "tempHealth"]);
 
 /**
  * One row a creature's pool, the amounts summed, nothing where nothing moved -
  * the shape a refund and a take-back share. Sorted by creature, pool and item, so
  * the writes and the card's words never wobble.
  */
-function byPool(rows = []) {
+function byPool(rows = [], kinds = ["momentum", "power"]) {
   const out = new Map();
   for (const p of rows ?? []) {
     const amount = Math.max(0, Math.trunc(Number(p?.amount)) || 0);
     if (!amount || typeof p?.actorUuid !== "string" || !p.actorUuid || typeof p.pool !== "string" || !p.pool) continue;
-    const kind = p.kind === "momentum" || p.kind === "power" ? p.kind : null;
+    const kind = kinds.includes(p.kind) ? p.kind : null;
     if (!kind) continue;
     const key = `${p.actorUuid}|${p.itemId ?? ""}|${kind}|${p.pool}`;
     const held = out.get(key) ?? { actorUuid: p.actorUuid, itemId: p.itemId ?? null, kind, pool: p.pool, amount: 0 };
     held.amount += amount;
+    // **A TEMPORARY HEALTH ROW NAMES THE GRANT IT TAKES BACK** (the 3B review, should-fix
+    // 7): the grant's source and the record it replaced, so the take-back acts only while
+    // that grant still stands (`rules/temporary-health.mjs#grantTakenBack`). Named only
+    // where the row names them, so every other row keeps its exact shape.
+    if (kind === "tempHealth" && typeof p.source === "string" && held.source === undefined) {
+      held.source = p.source;
+      held.prior = p.prior && typeof p.prior === "object" ? { ...p.prior } : null;
+    }
     out.set(key, held);
   }
   return [...out.values()].sort((a, b) => a.actorUuid.localeCompare(b.actorUuid) || a.pool.localeCompare(b.pool) || String(a.itemId).localeCompare(String(b.itemId)));

@@ -1991,6 +1991,9 @@
     gap: 16px;
     align-items: start;
   }
+  .azeroth.sheet.actor .azeroth-combat-configure {
+    margin-bottom: 8px;
+  }
   .azeroth.sheet.actor .azeroth-figure {
     display: grid;
     grid-template-columns: 1fr;

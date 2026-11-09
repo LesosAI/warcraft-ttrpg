@@ -49,6 +49,7 @@ import { BASE_SLOTS, REFUSALS, admit, judge, judgeDelete } from "../rules/slots.
 import { SORT_STEP, nextSort } from "../rules/bags.mjs";
 // A find still on offer is taken from the loot window, never dragged (D-721).
 import { underOffer } from "../rules/loot-offer.mjs";
+import { multiclassRefusal } from "../rules/multiclass.mjs";
 // A Gadgets-compendium entry is a reference, never a sheet's (the lead, 2026-10-24).
 import { isGadgetEntry } from "../rules/gadgets.mjs";
 import { ITEM_CUSTODY_PENDING_FLAG, isItemCustodyPending } from "../rules/item-custody-guard.mjs";
@@ -143,6 +144,21 @@ export class AzerothItem extends Item {
       const held = actor.system?.classes ?? [];
       if (held.length >= 2 && !held.some(c => c?.itemId === this.id)) {
         ui.notifications?.warn(game.i18n.localize("AZEROTH.Sheet.ThirdClassRefused"));
+        return false;
+      }
+      // **A CREATION-ONLY CLASS NEVER MULTICLASSES, EITHER WAY** (the Chromatic
+      // Champion plan; the lead: *"Creation only; no 2nd class."*). Asked of the class
+      // items actually held, the one judgement `rules/multiclass.mjs` makes.
+      const heldItems = actor.items.filter(i => i.type === "class" && i.id !== this.id)
+        .map(i => ({ identifier: i.system?.identifier ?? "", name: i.name }));
+      // **THE SECOND CLASS MUST BE ON THE RACE'S ROW** (02 §10; the lead, 2026-11-09:
+      // *"The second class must be on your race's row in 02 §3, refused in words
+      // otherwise."*), read off the race item the character holds.
+      const raceItem = actor.items.find(i => i.type === "race") ?? null;
+      const race = raceItem ? { identifier: raceItem.system?.identifier ?? "", name: raceItem.name, classes: raceItem.system?.classes ?? [] } : null;
+      const barred = multiclassRefusal(heldItems, { identifier: data.system?.identifier ?? this.system?.identifier ?? "", name: data.name ?? this.name }, { race });
+      if (barred) {
+        ui.notifications?.warn(game.i18n.format(barred.reason, { name: barred.name, race: barred.race ?? "" }));
         return false;
       }
     }

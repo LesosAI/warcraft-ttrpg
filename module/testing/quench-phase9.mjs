@@ -8,6 +8,7 @@
 import { cleanup, made, makeCharacter, openSheet, fromPack, pinDie, settle, useAction, PACK_FOR } from "./fixtures.mjs";
 import { checkText } from "./geometry.mjs";
 import { STEPS } from "../rules/creation.mjs";
+import { PACK_COUNTS } from "./pack-counts.mjs";
 
 const click = el => el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 /** Poll for a render the click did not await. */
@@ -470,7 +471,8 @@ export function creatorBatch(context) {
     it("the packs carry every class's kit and every career's side", async function () {
       this.timeout(30000);
       const classes = await game.packs.get(PACK_FOR.class).getDocuments();
-      assert.lengthOf(classes, 9);
+      // The count is pack-counts.mjs's, the one place it lives (ten since the Chromatic Champion).
+      assert.lengthOf(classes, PACK_COUNTS.classes.count);
       for (const c of classes) {
         assert.isAtLeast(c.system.kit.length, 8, `${c.name} has no kit`);
         assert.equal(c.system.kit.filter(r => r.road).length, 5, `${c.name} lacks the road kit`);

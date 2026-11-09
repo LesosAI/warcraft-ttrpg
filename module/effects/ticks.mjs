@@ -148,7 +148,8 @@ export async function landTicks(actor, {combat = null, combatant = null} = {}) {
         if (still) await still.update({ [`flags.azeroth-rpg.${TICK_FLAG}.doubled`]: landing.left });
       }
       if (tick.kind === "damage" && tick.type) {
-        for (const line of await strikeFromArea({ actor, caster: hand, spell, damage: { rating: amount, school: tick.type } })) lines.push(line);
+        // A Smolder split at its cast (04's Smoldering Life; stage 3A) carries the split.
+        for (const line of await strikeFromArea({ actor, caster: hand, spell, damage: { rating: amount, school: tick.type }, split: tick.split ?? null })) lines.push(line);
       } else if (tick.kind === "damage") {
         // 08 §12's *N damage a turn*, which names no type: the printed number
         // lands, and no Armor Point or Ward reduces it (D-770, a reading for

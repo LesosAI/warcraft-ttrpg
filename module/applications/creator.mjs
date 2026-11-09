@@ -30,11 +30,13 @@ import { featuresFor } from "../rules/class-features.mjs";
 import { RANK_MAX, rankCost } from "../rules/xp.mjs";
 import {
   ARRAY, CLASS_ORDER, METHODS, POINT_BUY, PURSE, ROLL_DICE, ROLL_KEEP, STARTING_XP, STEPS,
-  accessNote, castingLine, inCareerSkills, kitRows, numbersFor, plan, pointBuyCost, pointBuyTotal, talentArmorFor,
+  accessNote, castingLine, classOpenTo, inCareerSkills, kitRows, numbersFor, plan, pointBuyCost, pointBuyTotal, talentArmorFor,
   primaryAbilities, rankSpend,
-  rollFloorMet, sideFor, skillUuid, spellsRequired, stepsFor, castsSpells, validate
+  rollFloorMet, sideFor, skillUuid, spellsRequired, stepOnStrip, stepsFor, castsSpells, validate
 } from "../rules/creation.mjs";
 import { arrange } from "../rules/slots.mjs";
+// The Mortal guise (the Chromatic Champion plan).
+import { guiseChoices, guiseRequired, guiseSnapshot, settleGuise } from "../rules/guise.mjs";
 // A Legacy's talents come with its people (04 §1, D-781).
 import { keptBy, owedTalents } from "../rules/legacy-branches.mjs";
 import { sectionTail, matchesFilter, sortEntries, facetOptions } from "./browser-categories.mjs";
@@ -87,7 +89,9 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
       creatorPortrait: AzerothCharacterCreator.#onPortrait,
       // A row's name opens what the entry says (2026-09-06); the shelves sort on one toggle.
       creatorExpand: AzerothCharacterCreator.#onExpand,
-      creatorSort: AzerothCharacterCreator.#onSort
+      creatorSort: AzerothCharacterCreator.#onSort,
+      // The Mortal guise's way back to the race step (the Chromatic Champion plan).
+      creatorLeaveGuise: AzerothCharacterCreator.#onLeaveGuise
     }
   };
 
@@ -131,6 +135,7 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     await this.#load();
     this.#state ??= this.#initialState();
     this.#state = { ...this.#state, ...foundry.utils.deepClone(partial) };
+    this.#settleGuise(null);
     if (this.rendered) await this.render();
     return this.state;
   }
@@ -199,6 +204,8 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     return {
       step: "race",
       race: null, cls: null,
+      // The Mortal guise's people, by uuid (the Chromatic Champion plan).
+      guise: null,
       method: "array",
       abilities: Object.fromEntries(ABILITIES.map(k => [k, null])),
       rolled: null,
@@ -224,6 +231,22 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
   }
 
   #raceDoc(s = this.#state) { return this.#data.races.find(r => r.uuid === s.race) ?? null; }
+  #guiseDoc(s = this.#state) { return s.guise ? this.#data.races.find(r => r.uuid === s.guise) ?? null : null; }
+
+  /**
+   * **A GUISE CLASS SETS THE RACE** (the Chromatic Champion plan): picking the Chromatic
+   * Champion makes the race the Chromatic Outcast, a people already picked becoming the
+   * guise. Picking the Outcast keeps a class it opens and picks none for the player (the
+   * lead, 2026-11-09: *"Allow the Chromatic Outcast Race to be Warrior, Mage, Rogue, or
+   * Warlock classes as well."*). `rules/guise.mjs#settleGuise` is the judgement.
+   * @param {"race"|"cls"|null} changed  the field the player just set
+   */
+  #settleGuise(changed) {
+    const s = this.#state;
+    if (!s || !this.#data) return;
+    Object.assign(s, settleGuise({ race: s.race, cls: s.cls, guise: s.guise },
+      { races: this.#data.races, classes: this.#data.classes, changed }));
+  }
   #classDoc(s = this.#state) { return this.#data.classes.find(c => c.uuid === s.cls) ?? null; }
   #careerDoc(s = this.#state) { return this.#data.careers.find(c => c.uuid === s.career) ?? null; }
   #catalogueItem(uuid) { return this.#data.catalogue.find(i => i.uuid === uuid) ?? null; }
@@ -236,6 +259,8 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     const classTalent = s.classTalent ? this.#data.talents.find(t => t.identifier === s.classTalent && t.className === cls?.name && !t.race) ?? null : null;
     return {
       race, cls, career,
+      // The guise's snapshot, as `system.guise` will hold it (the Chromatic Champion plan).
+      guise: guiseSnapshot(this.#guiseDoc(s)),
       method: s.method,
       abilities: { ...s.abilities },
       rolled: s.rolled ? [...s.rolled] : null,
@@ -275,11 +300,14 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
 
     // A class that casts nothing walks nine steps; the spells step is not on its strip (2026-09-06).
     const steps = stepsFor(p);
-    if (!steps.includes(s.step)) s.step = "talents";
+    // The race and Mortal guise steps share one place on the strip (the Chromatic Champion
+    // plan), so an Outcast picked on the race step lands on the guise step.
+    s.step = stepOnStrip(s.step, steps);
     const index = steps.indexOf(s.step);
     const pane = {};
     switch (s.step) {
       case "race": pane.races = await this.#racePane(s); break;
+      case "guise": Object.assign(pane, this.#guisePane(s, p)); break;
       case "class": pane.classes = await this.#classPane(s, p); break;
       case "abilities": Object.assign(pane, this.#abilitiesPane(s, numbers)); break;
       case "career": Object.assign(pane, await this.#careerPane(s, p)); break;
@@ -310,7 +338,8 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
       canNext: index < steps.length - 1,
       pane,
       review: s.step === "numbers" ? [
-        { step: "race", label: game.i18n.localize("AZEROTH.Creator.Step.race"), value: p.race?.name },
+        { step: guiseRequired(p) ? "guise" : "race", label: game.i18n.localize("AZEROTH.Creator.Step.race"), value: p.race?.name },
+        ...(guiseRequired(p) ? [{ step: "guise", label: game.i18n.localize("AZEROTH.Creator.Step.guise"), value: p.guise?.name }] : []),
         { step: "class", label: game.i18n.localize("AZEROTH.Creator.Step.class"), value: p.cls?.name },
         { step: "career", label: game.i18n.localize("AZEROTH.Creator.Step.career"), value: p.career?.name },
         { step: "talents", label: game.i18n.localize("AZEROTH.Creator.Step.talents"), value: [p.racialTalent?.name, p.classTalent?.name].filter(Boolean).join(", ") },
@@ -352,12 +381,32 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     })));
   }
 
+  /**
+   * The Mortal guise (the Chromatic Champion plan): the other peoples as tiles, each
+   * with the three things a guise gives - size, Speed and tongue - and the race the
+   * character truly is named above them.
+   */
+  #guisePane(s, p) {
+    return {
+      trueRace: p.race?.name ?? "",
+      guises: guiseChoices(this.#data.races).map(r => ({
+        uuid: r.uuid, name: r.name, img: r.img,
+        selected: r.uuid === s.guise,
+        size: game.i18n.localize(AZEROTH.sizes[r.size] ?? r.size ?? ""),
+        speed: r.speed ?? null,
+        languages: (r.languages ?? []).map(l => game.i18n.localize(AZEROTH.languages[l] ?? l)).join(", ")
+      }))
+    };
+  }
+
   async #classPane(s, p) {
     // The tiles in 02 §7's order, the Warrior first; a class the chapter does not order goes last.
     const place = c => { const i = CLASS_ORDER.indexOf(c.identifier); return i < 0 ? CLASS_ORDER.length : i; };
     const ordered = [...this.#data.classes].sort((a, b) => place(a) - place(b));
     return Promise.all(ordered.map(async c => {
-      const open = p.race ? p.race.classes.includes(c.name) : true;
+      // `validate`'s own reading (`classOpenTo`): the Champion is the Outcast's alone, and
+      // the Outcast opens the classes on its list (the lead, 2026-11-09).
+      const open = p.race ? classOpenTo(p.race, c) : true;
       const pools = [c.momentum?.name, c.power?.name].filter(Boolean).map(n => game.i18n.localize(AZEROTH.poolTypes[n] ?? n));
       return {
         uuid: c.uuid, name: c.name, img: c.img,
@@ -757,6 +806,7 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
       el.addEventListener("change", async () => {
         const before = this.state;
         this.#readForm();
+        if (el.name === "race" || el.name === "cls") this.#settleGuise(el.name);
         if (el.name === "race" || el.name === "cls") {
           const changes = invalidatedChoices(this.#state, { race: this.#raceDoc(), cls: this.#classDoc(), talents: this.#data.talents, spells: this.#data.spells });
           if (changes.removed.length) {
@@ -835,6 +885,7 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
 
     const race = value("race"); if (race !== undefined) s.race = race || null;
     const cls = value("cls"); if (cls !== undefined) s.cls = cls || null;
+    const guise = value("guise"); if (guise !== undefined) s.guise = guise || null;
     const method = value("method");
     if (method !== undefined && METHODS.includes(method) && method !== s.method) {
       s.method = method;
@@ -877,6 +928,7 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     await this.#load();
     this.#state ??= this.#initialState();
     if (state) this.#state = { ...this.#state, ...foundry.utils.deepClone(state) };
+    this.#settleGuise(null);
     const proposal = this.#proposal();
     const v = validate(proposal);
     if (!v.ok) {
@@ -894,6 +946,11 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
       // The maker owns what Finish makes, and the GM may hand it to a player (2026-09-06).
       const ownership = this.#ownership();
       if (created) actor = await Actor.create({ ...p.create, ...(Object.keys(ownership).length ? { ownership } : {}) });
+      // A guise reaches the Build door's actor BEFORE the embed (the Chromatic Champion
+      // plan): `arrange` below reads the bag slots, and they read the guise's size.
+      // Written EVERY time, null included (the 1B review, item 8): a character rebuilt
+      // as anything but an Outcast keeps no stale guise from an earlier build.
+      else await actor.update({ "system.guise": p.create.system.guise ?? null });
 
       // ONE embed, so the grant chain runs once (actor.mjs, _talentGrant).
       const docs = [];
@@ -1083,16 +1140,33 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     return this.goTo(target.dataset.step);
   }
 
+  /**
+   * Leave the Mortal guise for the race step (the Chromatic Champion plan): the race,
+   * the guise and a guise class all go, so the player picks a people afresh.
+   */
+  static async #onLeaveGuise() {
+    this.#readForm();
+    const s = this.#state;
+    const cls = this.#classDoc(s);
+    Object.assign(s, { race: null, guise: null, step: "race", ...(cls && guiseRequired({ cls }) ? { cls: null } : {}) });
+    return this.render();
+  }
+
   static async #onBack() {
     this.#readForm();
     const steps = stepsFor(this.#proposal());
-    return this.goTo(steps[Math.max(0, steps.indexOf(this.#state.step) - 1)]);
+    const here = stepOnStrip(this.#state.step, steps);
+    return this.goTo(steps[Math.max(0, steps.indexOf(here) - 1)]);
   }
 
   static async #onNext() {
     this.#readForm();
     const steps = stepsFor(this.#proposal());
-    return this.goTo(steps[Math.min(steps.length - 1, steps.indexOf(this.#state.step) + 1)]);
+    // A step that has just left the strip (the Outcast picked on the race step) shows
+    // the step that took its place before moving on, so the Mortal guise is never skipped.
+    const here = stepOnStrip(this.#state.step, steps);
+    if (here !== this.#state.step) return this.goTo(here);
+    return this.goTo(steps[Math.min(steps.length - 1, steps.indexOf(here) + 1)]);
   }
 
   /** A row's name opens what the entry says, and closes it again (2026-09-06). */

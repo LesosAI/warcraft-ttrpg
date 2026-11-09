@@ -20,6 +20,7 @@ import { SUMMONED_FLAG } from "../documents/summon.mjs";
 import { refreshBossPoints } from "../effects/boss-points.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { AZEROTH } from "../config.mjs";
+import { bestiaryTier12Batch } from "./quench-bestiary-tier12.mjs";
 
 const until = async (fn, what, ms = 8000) => {
   const t0 = Date.now();
@@ -48,6 +49,7 @@ async function saidDuring(fn) {
 const rowIndex = (actor, list, name) => (actor.system[list] ?? []).findIndex(r => r.name === name);
 
 export function bestiaryAutomationBatch(context) {
+  bestiaryTier12Batch(context);
   const { describe, it, assert, before, after } = context;
 
   describe("The bestiary, automated (D-691)", function () {

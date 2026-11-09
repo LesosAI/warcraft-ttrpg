@@ -104,10 +104,28 @@ export function sustainLimit({ features = [], extra = 0 } = {}) {
  * @param {{itemId: string, kind: string, name: string, value: number, max: number}[]} pools
  * @param {{costOf?: (entry: object) => number|{mana?: number, health?: number}, health?: number|null}} [o]
  * @returns {{updates: object[], kept: object[], ended: object[], free: object[], paid: {mana: number, health: number},
- *   health: number|null}}  `health` the caster's Health after the upkeep, or null where none was paid
+ *   paidIn: Record<string, number>, health: number|null}}  `health` the caster's Health after the upkeep, or null
+ *   where none was paid; `paidIn` what was paid in a pool a talent named (`entry.pool`), by pool name
  */
 export function upkeep(entries = [], pools = [], { costOf = () => 1, health = null } = {}) {
-  const remaining = new Map(pools.filter(p => p.kind === "power").map(p => [p.itemId, p.value ?? 0]));
+  // **THE POOL THE CAST WAS PAID FROM PAYS ITS UPKEEP** (the Chromatic Champion
+  // plan, finding 2). A spell a talent pays in another pool (04's Shadowcraft's
+  // Focus; the Champion's Rage) records that pool's name on its entry as `pool`,
+  // and is upkept there - the class's Power pool would be Energy for a Champion. An
+  // entry with no `pool` is paid from its class's Power pool, as before.
+  const keyOf = p => `${p.itemId ?? ""}|${p.kind}|${p.name ?? ""}`;
+  const remaining = new Map(pools.filter(p => p.kind === "power" || p.kind === "momentum").map(p => [keyOf(p), p.value ?? 0]));
+  const payerOf = entry => {
+    const named = typeof entry?.pool === "string" && entry.pool && entry.pool !== "mana" ? entry.pool : null;
+    if (named) {
+      const of = pools.filter(p => p.name === named);
+      const pick = of.find(p => p.itemId === entry.itemId) ?? of[0] ?? null;
+      return pick ? keyOf(pick) : null;
+    }
+    const power = pools.find(p => p.kind === "power" && p.itemId === entry?.itemId) ?? null;
+    return power ? keyOf(power) : null;
+  };
+  const other = {};
   const start = health === null || health === undefined || !Number.isFinite(Number(health)) ? null : Math.trunc(Number(health));
   let healthLeft = start;
   const kept = [];
@@ -115,6 +133,9 @@ export function upkeep(entries = [], pools = [], { costOf = () => 1, health = nu
   const free = [];
   const suspended = [];
   const paid = { mana: 0, health: 0 };
+  // How many kept Sustains paid in MANA or in HEALTH (the 1B review, item 3): the card's
+  // *{count} sustained* line counts these alone, never one a talent's pool paid.
+  let paidCount = 0;
   for (const entry of entries) {
     if (sustainEntryTransferPending(entry)) { kept.push(entry); suspended.push(entry); continue; }
     const raw = costOf(entry);
@@ -122,20 +143,25 @@ export function upkeep(entries = [], pools = [], { costOf = () => 1, health = nu
     const mana = Math.max(0, Math.trunc(Number(cost.mana)) || 0);
     const hp = Math.max(0, Math.trunc(Number(cost.health)) || 0);
     if (mana === 0 && hp === 0) { kept.push(entry); free.push(entry); continue; }
-    const have = remaining.get(entry.itemId);
+    const payer = payerOf(entry);
+    const have = payer === null ? undefined : remaining.get(payer);
     if (mana > 0 && (have === undefined || have < mana)) { ended.push(entry); continue; }
     if (hp > 0 && (healthLeft === null || healthLeft - hp < 1)) { ended.push(entry); continue; }
-    if (mana > 0) remaining.set(entry.itemId, have - mana);
+    if (mana > 0) remaining.set(payer, have - mana);
     if (hp > 0) healthLeft -= hp;
-    paid.mana += mana;
+    // A pool a talent named is not Mana, and the card says which it was.
+    const named = typeof entry?.pool === "string" && entry.pool && entry.pool !== "mana" ? entry.pool : null;
+    if (named && mana > 0) other[named] = (other[named] ?? 0) + mana;
+    else paid.mana += mana;
     paid.health += hp;
+    if ((!named && mana > 0) || hp > 0) paidCount += 1;
     kept.push(entry);
   }
   const updates = [];
   for (const p of pools) {
-    if (p.kind !== "power") continue;
-    const value = remaining.get(p.itemId);
-    if (value !== undefined && value !== p.value) updates.push({ itemId: p.itemId, kind: "power", value });
+    if (p.kind !== "power" && p.kind !== "momentum") continue;
+    const value = remaining.get(keyOf(p));
+    if (value !== undefined && value !== p.value) updates.push({ itemId: p.itemId, kind: p.kind, value });
   }
-  return { updates, kept, ended, free, suspended, paid, health: start !== null && healthLeft !== start ? healthLeft : null };
+  return { updates, kept, ended, free, suspended, paid, paidCount, paidIn: other, health: start !== null && healthLeft !== start ? healthLeft : null };
 }

@@ -38,9 +38,10 @@ import { reviewChainLightningCast } from "./chain-lightning-review.mjs";
 import { clearHidden, clearMark, clearReady, disengage, guard, hide, leaveShapeControl, markQuarry, primeRider, ready } from "./combat-actions.mjs";
 // A rider paid before the blow, the Combat tab's control (D-770).
 import { chargeLines } from "../rules/riders.mjs";
+import { raceLine } from "../rules/guise.mjs";
 import { chargeControl } from "../helpers/rider-words.mjs";
 // A shape on the sheet (02 §7, D-769): its name, what melds, the attack's ability.
-import { FORCED_SPEED, SHAPE_ABILITIES, SHAPE_KINDS, meldsGear, shapeKindOf, shapeRefusal } from "../rules/shapes.mjs";
+import { FORCED_SPEED, SHAPE_ABILITIES, SHAPE_KINDS, isOverlayKind, meldsGear, shapeKindOf, shapeRefusal } from "../rules/shapes.mjs";
 import { featurePrice, rungsChip } from "../rules/class-features.mjs";
 import { FORCED_ENDS, forcedRefusalFor, shapeLabel } from "../documents/shapes.mjs";
 import { attackAbility } from "../rules/ammunition.mjs";
@@ -88,6 +89,8 @@ import { inCareerSkills, skillFromKnown } from "../rules/creation.mjs";
 import { coins } from "../helpers/coins.mjs";
 // 05's temporary Health on the banner (D-777).
 import { temporaryHealthContext } from "../effects/temporary-health.mjs";
+// The pool a talent pays a spell from (the Chromatic Champion's branch spells, in Rage).
+import { spellPoolFor } from "../rules/class-talents.mjs";
 
 const { HandlebarsApplicationMixin } = foundry.applications.api;
 const { ActorSheetV2 } = foundry.applications.sheets;
@@ -453,7 +456,10 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       // plate's input writes the stored score back, and what it would write is
       // the block's.
       // A shape somebody else laid takes no score (D-808): nothing is marked.
-      const formed = Boolean(context.shape) && !context.shape.forced && SHAPE_ABILITIES.includes(key);
+      // A drake form overrides no score (the lead: *"Allow the player stats to remain"*),
+      // so its overlay kind marks no plate and locks none.
+      const formed = Boolean(context.shape) && !context.shape.forced
+        && !isOverlayKind(this.actor.shape?.kind) && SHAPE_ABILITIES.includes(key);
       return {
       key,
       label: AZEROTH.abilities[key],
@@ -644,8 +650,11 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // it functions at (02 §10). A class that is linked but never named on the
     // sheet looked to the lead like a class that had not been added.
     const classItems = this.actor.classItems ?? [];
+    // A guise (the Chromatic Champion plan): *"Chromatic Outcast, in the guise of a
+    // Dwarf"*, the race the character IS and the people it looks like.
+    const line = raceLine({ race: this.actor.raceItem, guise: system.guise });
     context.identity = {
-      race: this.actor.raceItem?.name ?? null,
+      race: line.race && line.guise ? game.i18n.format("AZEROTH.Guise.Line", line) : line.race,
       classes: classItems.map((item, index) => ({
         id: item.id,
         name: item.name,
@@ -2165,6 +2174,11 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // (the lead: *"Upkeep unchanged"*).
     const inForm = this.actor.inShapeshiftForm === true;
     const manaWord = game.i18n.localize("AZEROTH.Card.Mana");
+    // **A SPELL A TALENT PAYS FROM ANOTHER POOL SAYS WHICH** (the Chromatic Champion's
+    // branch spells, paid in Rage): the column's word is the pool `castSpell` takes it
+    // from, through the same `spellPoolFor`, and that pool's bar joins the header.
+    const taken = this.actor.takenTalents?.() ?? [];
+    const paidIn = new Set();
     for (const item of held) {
       const tier = item.system.tier ?? 1;
       if (!byTier.has(tier)) byTier.set(tier, []);
@@ -2172,6 +2186,10 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       if (school && !order.includes(school)) order.push(school);
       const mana = item.system.mana ?? null;
       const price = inForm && mana > 0 ? manaPrice(mana, { inShapeshiftForm: true }) : null;
+      const paid = spellPoolFor(taken, { name: item.name, school });
+      const payWith = paid?.pool && paid.pool !== "mana" ? paid.pool : null;
+      if (payWith) paidIn.add(payWith);
+      const payWord = payWith ? game.i18n.localize(AZEROTH.momentumTypes[payWith] ?? AZEROTH.powerTypes[payWith] ?? payWith) : manaWord;
       byTier.get(tier).push({
         id: item.id,
         name: item.name,
@@ -2180,7 +2198,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         school,
         schoolLabel: AZEROTH.schools[school] ?? null,
         mana: price ? price.amount : mana,
-        manaTip: price ? game.i18n.format("AZEROTH.Shape.FerocityForMana", { mana }) : manaWord,
+        manaTip: price ? game.i18n.format("AZEROTH.Shape.FerocityForMana", { mana }) : payWord,
         ferocity: Boolean(price),
         actionLabel: AZEROTH.actions[item.system.action] ?? null,
         sustaining: sustaining.has(item.id),
@@ -2226,7 +2244,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       // the stepper (the lead, 2026-09-13) reached Core and not this tab, and
       // the two bars printed the same pool two ways. The partial was never the
       // half that drifted.
-      pools: this.#pools().filter(pool => pool.held && pool.kind === "power")
+      pools: this.#pools().filter(pool => pool.held && (pool.kind === "power" || paidIn.has(pool.name)))
     };
   }
 

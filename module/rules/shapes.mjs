@@ -134,8 +134,49 @@ export const SHAPE_KINDS = Object.freeze({
     ferocity: false, barsMana: false, melds: false, requires: null,
     endsAt: Object.freeze([]), endsOnDamage: true, sustained: false,
     entry: "Rabbit"
+  }),
+  // **THE CHROMATIC CHAMPION'S DRAKE FORM** (the Chromatic Champion plan, *Drake forms*;
+  // the lead: *"have the drake capstone bestiary entry be tier 3 in scaling. Allow the
+  // player stats to remain and any signatures from items they have. They should also be
+  // able to use class and talent abilities while in the form"*; *"lasts until ended as
+  // a half action"*; *"the drake form doesn't end at 0 health but normal death process
+  // applies"*), **AS 02 WRITES IT** (*Drake form*; the 1B review's MUST-FIX - the book
+  // wins over the plan): *What you wear and carry melds into the form, and the
+  // Signatures on it still work* - `melds`, so every `meldsGear` reader follows (the
+  // suit, the shield, the off hand, Block, `wieldFacts`); *You fight with the block's
+  // attacks in place of your weapons ... and your own Strength modifier and Proficiency
+  // Bonus* - `readyWeapons` answers the block's rows alone, and no score is overridden,
+  // so the attack door's own Strength and Proficiency are the character's; *Your
+  // Defense, and your Armor Points at each location, are the block's or the ones you had
+  // before you took the form, whichever is higher* - `overlay`: the block stands BESIDE
+  // the character, `CharacterData` works out the character's own numbers (the melded
+  // suit included) and `afterFinalPhase` takes the better of each (`overlayDefense`,
+  // `overlayArmorPoints`). Health, attributes and the ground pace are the character's;
+  // the size, the flying pace (the block's own tier's, D-530) and the look are the
+  // block's. `endsAt` is empty: no rest and no 0 Health ends it, only the Champion's
+  // Half-Action (`leaveShape`) or a GM deleting the effect; and nobody else's shape
+  // replaces it (`shapeMayReplace`; the lead: *"Only when champion ends it."*).
+  // `entries` maps the capstone feature's name to its 14 block; the four come from
+  // 14 §10 and 04's four capstones.
+  drake: Object.freeze({
+    feature: null, choice: null, features: Object.freeze(["Red Drake", "Blue Drake", "Bronze Drake", "Black Drake"]),
+    ferocity: false, barsMana: false, melds: true, requires: null, overlay: true, keeps: true,
+    endsAt: Object.freeze([]),
+    entries: Object.freeze({ "Red Drake": "Red Drake", "Blue Drake": "Blue Drake", "Bronze Drake": "Bronze Drake", "Black Drake": "Black Drake" })
   })
 });
+
+/**
+ * Whether a kind of shape stands BESIDE the character (the drake form): no score
+ * overridden, Defense and Armor Points the better of the block's and the character's
+ * own. What is worn still melds (`meldsGear`). `SHAPE_KINDS[kind].overlay`.
+ *
+ * @param {string|null} kind
+ * @returns {boolean}
+ */
+export function isOverlayKind(kind) {
+  return SHAPE_KINDS[kind]?.overlay === true;
+}
 
 /**
  * **07's HEX: *its Speed is 10 feet*** (D-808). Held to the chapter's sentence by
@@ -232,14 +273,30 @@ export function endsOnDamage(shape, taken) {
  * one refuses first; this is the writer's own guard). MY READING: the simplest rule
  * that keeps ONE shape a creature.
  *
+ * **EXCEPT A SHAPE THAT ONLY ITS HOLDER ENDS** (`keeps`, the drake form; the lead:
+ * *"Only when champion ends it."*, and the lead's ruling of 2026-11-08, *"I approve
+ * those 4"*): 07's Hex and 02's Polymorph do not replace it, and
+ * `documents/shapes.mjs#layForcedShape` says so in words on a card.
+ *
  * @param {string|null} heldKind
  * @param {string} nextKind
  * @returns {boolean}
  */
 export function shapeMayReplace(heldKind, nextKind) {
   if (!SHAPE_KINDS[nextKind]) return false;
-  if (isForcedKind(nextKind)) return true;
+  if (isForcedKind(nextKind)) return !keepsAgainstForced(heldKind);
   return !isForcedKind(heldKind);
+}
+
+/**
+ * Whether a shape refuses to be replaced by one somebody else lays (the drake form;
+ * the lead: *"Only when champion ends it."*). `SHAPE_KINDS[kind].keeps`.
+ *
+ * @param {string|null} kind
+ * @returns {boolean}
+ */
+export function keepsAgainstForced(kind) {
+  return SHAPE_KINDS[kind]?.keeps === true;
 }
 
 /**
@@ -270,7 +327,11 @@ export function forcedShapeChanges(kind, { flies = false } = {}) {
  * @param {string|null} kind
  * @returns {string|null}
  */
-export function shapeEntryOf(kind) {
+export function shapeEntryOf(kind, { feature = null } = {}) {
+  // A kind whose feature names its block (the drake form: one block for each of the
+  // four capstones), by the feature that takes it.
+  const byFeature = SHAPE_KINDS[kind]?.entries?.[feature] ?? null;
+  if (typeof byFeature === "string" && byFeature) return byFeature;
   const entry = SHAPE_KINDS[kind]?.entry ?? null;
   return typeof entry === "string" && entry ? entry : null;
 }
@@ -360,6 +421,8 @@ export function shapeKindOf({ name = "", choice = null } = {}) {
     // of the creature's own takes one, Polymorph's Use included.
     if (k.forced) continue;
     if (k.feature === name && k.choice === choice) return kind;
+    // A kind several features take, by name alone (the drake form's four capstones).
+    if (Array.isArray(k.features) && k.features.includes(name) && !choice) return kind;
   }
   return null;
 }
@@ -477,6 +540,9 @@ export function snapshotOf(source = {}, { uuid = null } = {}) {
     flies: s.flies === true,
     movementSenses,
     size: isSize(s.size) ? String(s.size).toLowerCase() : DEFAULT_SIZE,
+    // The block's own tier: a drake form flies at ITS tier's pace (the plan's *"tier 3
+    // in scaling"*, D-530), never the character's.
+    tier: num(s.tier),
     attacks: attacks.filter(a => a?.name).map(a => ({
       name: String(a.name),
       bonus: num(a.bonus),
@@ -524,8 +590,56 @@ export function physicalHalf(forms = []) {
     movementSenses: [...new Set(list.flatMap(f => f.movementSenses ?? []))]
       .filter(sense => sense !== "aquaticOnly" || list.every(f => (f.movementSenses ?? []).includes(sense))),
     size,
+    tier: pick(f => f.tier),
     attacks: list.flatMap((f, formIndex) => (f.attacks ?? []).map(a => ({ ...a, traits: [...(a.traits ?? [])], form: String(f.name ?? ""), formIndex })))
   };
+}
+
+/**
+ * **THE PHYSICAL HALF A KIND TAKES**: `physicalHalf`'s, with every score left to the
+ * character where the kind stands beside it (the drake form, `isOverlayKind`: *"Allow
+ * the player stats to remain"*). `shapeChanges` then overrides nothing, and
+ * `CharacterData` reads the character's own scores.
+ *
+ * @param {string|null} kind
+ * @param {object[]} forms  snapshots
+ * @returns {ReturnType<typeof physicalHalf>}
+ */
+export function shapePhysical(kind, forms = []) {
+  const physical = physicalHalf(forms);
+  if (!physical || !isOverlayKind(kind)) return physical;
+  return { ...physical, abilities: Object.fromEntries(SHAPE_ABILITIES.map(k => [k, null])) };
+}
+
+/**
+ * **THE BETTER OF TWO DEFENSES** (the drake form; the lead: *its Defense and Armor
+ * Points apply only where better*): the block's where it is the higher, else the
+ * character's own. A block that prints none leaves the character's.
+ *
+ * @param {number|null} block
+ * @param {number} own
+ * @returns {number}
+ */
+export function overlayDefense(block, own) {
+  const o = Number(own) || 0;
+  return Number.isFinite(block) ? Math.max(block, o) : o;
+}
+
+/**
+ * **THE BETTER OF TWO ARMOR POINTS, PER LOCATION** (the drake form): each of Body,
+ * Head and Limb the higher of the block's and the character's own. A location the
+ * block prints `—` for is the character's.
+ *
+ * @param {Record<string, number|null>} block
+ * @param {Record<string, number|null>} own
+ * @returns {Record<string, number|null>}
+ */
+export function overlayArmorPoints(block = {}, own = {}) {
+  return Object.fromEntries(LOCATIONS.map(l => {
+    const b = Number.isFinite(block?.[l]) ? block[l] : null;
+    const o = Number.isFinite(own?.[l]) ? own[l] : null;
+    return [l, b === null ? o : (o === null ? b : Math.max(b, o))];
+  }));
 }
 
 /**

@@ -257,7 +257,9 @@ export class SpellData extends foundry.abstract.TypeDataModel {
         lasts: new fields.SchemaField({
           rounds: optionalNumberField({ min: 1 })
         }),
-        from: new fields.StringField({ required: true, blank: true, initial: "", choices: ["", "landing"] }),
+        // "target": the ground at a single target, which the cast places on the creature
+        // (stage 3B of the Chromatic Champion plan; `rules/area-ground.mjs#targetGroundOf`).
+        from: new fields.StringField({ required: true, blank: true, initial: "", choices: ["", "landing", "target"] }),
         ignores: new fields.BooleanField({ initial: false }),
         reason: new fields.StringField({ required: true, blank: true, initial: "" })
       }),

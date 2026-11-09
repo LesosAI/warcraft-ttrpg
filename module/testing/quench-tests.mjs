@@ -169,6 +169,10 @@ import { legacyDarkRangerBatch } from "./quench-legacy-dark-ranger.mjs";
 import { bestiaryDescriptorsBatch } from "./quench-bestiary-descriptors.mjs";
 import { creaturePlansBatch } from "./quench-creature-plans.mjs";
 import { slRidersBatch } from "./quench-sl-riders.mjs";
+// The Chromatic Champion's engine (the plan's stage 1B).
+import { chromaticEngineBatch } from "./quench-chromatic-engine.mjs";
+import { chromaticFeaturesBatch } from "./quench-chromatic-features.mjs";
+import { chromaticChampionTalentsBatch } from "./quench-chromatic-champion-talents.mjs";
 // 14 §1's Boss Actions, for every Boss (D-809): the economy, and every Boss Action pressed.
 import { bossActionsBatch1, bossActionsBatch2, bossActionsBatch3, bossActionsBatch4, bossEconomyBatch } from "./quench-boss-actions.mjs";
 import { forcedShapesBatch } from "./quench-forced-shapes.mjs";
@@ -498,6 +502,15 @@ export function registerQuenchTests() {
     });
     quench.registerBatch("azeroth-rpg.sl-riders", slRidersBatch, {
       displayName: "AZEROTH: Every Success-Level-gated spell rider and weapon trait lands (D-812)"
+    });
+    quench.registerBatch("azeroth-rpg.chromatic-engine", chromaticEngineBatch, {
+      displayName: "AZEROTH: The Chromatic Champion's engine - Ward 10, the guise, Energy maneuvers, free casts, the drake (stage 1B)"
+    });
+    quench.registerBatch("azeroth-rpg.chromatic-features", chromaticFeaturesBatch, {
+      displayName: "AZEROTH: The Chromatic Champion's class features and drake capstones, through the sheet (stage 2B)"
+    });
+    quench.registerBatch("azeroth-rpg.chromatic-champion-talents", chromaticChampionTalentsBatch, {
+      displayName: "AZEROTH: The Chromatic Champion's Life-Binder, Earth-Warder and Outcast talents, through their doors (stage 3A)"
     });
   });
 }
@@ -1405,11 +1418,12 @@ function packBatch(context) {
       assert.equal(index.size, PACK_COUNTS.conditions.count, PACK_COUNTS.conditions.why);
     });
 
-    it("holds the talents 04 prints: nine classes, three branches, twelve each, and the seven Legacy branches", async function () {
+    it("holds the talents 04 prints: three branches a class and four for the Chromatic Champion, twelve each, and the seven Legacy branches", async function () {
       const pack = game.packs.get("azeroth-rpg.talents");
       assert.ok(pack, "the talents pack did not load");
       const index = await pack.getIndex();
-      // The ONE place the count lives (D-690): 408 since the Legacy branches (D-781).
+      // The ONE place the count lives (D-690): 408 since the Legacy branches (D-781),
+      // 456 since the Chromatic Champion's four (D-815).
       assert.equal(index.size, PACK_COUNTS.talents.count, PACK_COUNTS.talents.why);
     });
 
@@ -1594,11 +1608,12 @@ function packBatch(context) {
       assert.isString(doc.system.branch);
     });
 
-    it("holds the eleven peoples and the nine classes", async function () {
+    it("holds 02's twelve races and ten classes", async function () {
       const races = game.packs.get("azeroth-rpg.races");
       const classes = game.packs.get("azeroth-rpg.classes");
-      assert.equal((await races.getIndex()).size, 11);
-      assert.equal((await classes.getIndex()).size, 9);
+      // The ONE place the counts live (D-690).
+      assert.equal((await races.getIndex()).size, PACK_COUNTS.races.count, PACK_COUNTS.races.why);
+      assert.equal((await classes.getIndex()).size, PACK_COUNTS.classes.count, PACK_COUNTS.classes.why);
     });
 
     it("gives a real Warrior from the pack its Rage cap", async function () {
@@ -4094,7 +4109,8 @@ function migrationBatch(context) {
       // rebuilt pack is asserted first, in words.
       const index = await game.packs.get(TALENTS_PACK).getIndex({ fields: ["sort", "system.className", "system.identifier"] });
       const rowOf = rowsFromIndex(index);
-      // The ONE place the count lives (D-690): 408 since the Legacy branches (D-781).
+      // The ONE place the count lives (D-690): 408 since the Legacy branches (D-781),
+      // 456 since the Chromatic Champion's four (D-815).
       assert.equal(rowOf.size, PACK_COUNTS.talents.count, "the talents pack carries no row order: it was not rebuilt from packs-src");
 
       const actor = await makeCharacter({ name: "ZZ Row Order", classes: [["Warrior", 1]] });

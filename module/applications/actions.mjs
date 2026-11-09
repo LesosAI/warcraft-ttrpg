@@ -1,4 +1,5 @@
 import {reloadMenuEntries} from "./reload.mjs";
+import { npcArmamentFor } from "../rules/npc-armament.mjs";
 import {healingSignatureReviewState} from '../effects/signature-healing-review.mjs';
 import {damageSignatureCards} from '../effects/signature-damage-review.mjs';
 import {orphanDamageCasts} from '../effects/signature-damage-orphans.mjs';
@@ -113,6 +114,9 @@ import { blademasterReaches, flametongueStrike, parryReaches, turnMark } from ".
 import { isHiddenFor } from "../effects/stealth.mjs";
 // What a talent adds to a blow's damage, per rank (04, D-711 phase 2).
 import { FORM_LANE, castAsFor, damageChosen, damageLinesFor, damageRowsFor, featureDamageLane, onUseOf, talentEffect } from "../rules/talent-effects.mjs";
+// A class feature's own `onUse` (stage 2B: the Chromatic Champion's Wing Buffet and Dread
+// Presence aim at the creatures targeted), read as a granting talent's row is.
+import { classFeatureOnUse } from "../rules/class-features.mjs";
 import { LUNAR_DAMAGE_FLAG, lunarDamageQualifies } from "../rules/lunar-guidance.mjs";
 // The one reading of a lane (D-768). Aliased: `attackWithDialog` keeps a local
 // `laneBonus` number, and an import of the same name would be shadowed by it.
@@ -344,6 +348,9 @@ export function reactionStateOf(actor, { messageId = null, against = null, targe
     // never sees the button and a creature whose block prints a Momentum row
     // does — `parryPoolFor` is the law and this only hands it the snapshot.
     pools: actor?.poolSnapshot?.() ?? [],
+    // Draconic Discipline's pool for every maneuver and the Parry (the Chromatic
+    // Champion plan), read off the feature held; null pays Momentum.
+    maneuverPool: actor?.maneuverPool ?? null,
     // **A PARRY OR A BLOCK THAT COSTS NO REACTION THIS ROUND** (04's Bladeturn
     // and Deflection, D-772): a spent Reaction does not refuse it. **And the first
     // Opportunity Attack of a round** (04's Hold the Hall at rank 2; door 22).
@@ -358,7 +365,9 @@ export function reactionStateOf(actor, { messageId = null, against = null, targe
     // The attack reveals a hidden striker before defenders answer. Ghostly
     // Strike reads that attack's saved concealment, never the later live status.
     cannotParryOrBlock: Boolean(against && unanswerableWith(against.takenTalents?.() ?? [],
-      { hidden: card?.getFlag?.('azeroth-rpg', 'hiddenAtRoll') === true }))||smokeObscuresAttack(actor,card,targetIndex),
+      { hidden: card?.getFlag?.('azeroth-rpg', 'hiddenAtRoll') === true }))||smokeObscuresAttack(actor,card,targetIndex)
+      // 04's False Opening (stage 3A): the attack the card records took the promise.
+      || card?.getFlag?.("azeroth-rpg", "unanswerable") === true,
     lostToBlow,
     // **A SPIRIT ANSWERS NO BLOW** (06 §10: *You cannot touch the living world, and
     // nothing in the fight can touch you*; the Legacy branches' door 10): a character
@@ -764,7 +773,7 @@ export async function reactWithDialog(actor, reaction, { attackTotal = null, mes
  * @returns {Promise<{name: string, cost: number}|null>} what was spent, for the card's line
  */
 async function payParry(actor) {
-  const purse = parryPoolFor(actor.poolSnapshot?.() ?? []);
+  const purse = parryPoolFor(actor.poolSnapshot?.() ?? [], { maneuverPool: actor.maneuverPool ?? null });
   if (!purse || (purse.value ?? 0) < PARRY_COST) return null;
   await actor.updatePool({ itemId: purse.itemId, kind: purse.kind, value: purse.value - PARRY_COST });
   // A creature's block names no pool type at all (D-637), so the generic word
@@ -1433,6 +1442,9 @@ export async function castWithDialog(actor, spell, event = null, { targets = nul
       // to nothing else, so it is a number on this dialog rather than an
       // effect on a score - and the box was defaulting to 0 with every
       // caster's focus sitting in their pack.
+      // **AN AUGMENT HELD COUNTS IN A DRAKE FORM** (the lead's ruling of 2026-11-08, *"I approve
+      // those 4"*: what is worn melds and its Signatures still work, and the Broodstone bears on
+      // the branch spells), so no shape is asked here.
       augment: castingAugment(actor.items.filter(i => i.type === "gear"), actor.classNames ?? []),
       // What the next spell was promised, by name (D-771), and Nature's
       // Swiftness's line where the talent reaches this spell. A talent's own
@@ -1586,7 +1598,7 @@ export async function useFeatureWithDialog(actor, item, event = null, { targets 
     // A gadget's Use is the gadget's (the Legacy branches' door 7), never the
     // Gadgeteer row's that granted it - the Use door reads it the same way.
     const gadget = item.getFlag?.("azeroth-rpg", "feature")?.gadget ? gadgetByKey(item.getFlag("azeroth-rpg", "feature").gadget) : null;
-    const use = gadget ? (gadget.onUse ?? {}) : onUseOf(row);
+    const use = gadget ? (gadget.onUse ?? {}) : (granting ? onUseOf(row) : classFeatureOnUse(sys.className ?? "", item.name));
     // **WHOM THE USE IS AIMED AT, THROUGH THE ONE READING** (D-774): 02's Ward,
     // Silence, Guardian Spirit and Reincarnation's friend - and every D-772 and
     // D-773 Use that reads its targets, which were refused from this button.
@@ -2234,6 +2246,25 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
 export async function npcAttackWithDialog(actor, index, event = null, { title = null, targets = null, attack: override = null, bossAction = false, budget = null, dc = null, damage = true, gainsMomentum = true, mode = null, fromFeature = null, run = null, singleAttack = false, damageSchool = null, prepareOnly = false, cardBoons = null, landsOnHit = null } = {}) {
   const attack = override ?? actor?.system?.attacks?.[index];
   if (!attack) return null;
+  // An explicitly equipped book weapon uses the same ammunition, reload,
+  // range, grip and trait path as its carried row. A missing weapon cannot
+  // fall back to the printed row and fire without ammunition or reload work.
+  const armament = !override && !bossAction && !run && damageSchool === null ? npcArmamentFor(actor, attack) : null;
+  if (armament) {
+    if (!armament.weapon) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Dialog.NpcArmamentUnavailable", { name: attack.name }));
+      return null;
+    }
+    if (armament.primary) {
+      const prepared = await attackWithDialog(actor, armament.weapon, event, {
+        dc, damage, budget, gainsMomentum, mode, fromFeature, targets, cardBoons, landsOnHit, prepareOnly: true
+      });
+      if (!prepared) return null;
+      prepared.title = title ?? attack.name;
+      if (singleAttack) { delete prepared.rolls; delete prepared.extraWeapons; delete prepared.rebuildSecond; }
+      return prepareOnly ? prepared : rollWithDialog(actor, prepared, event);
+    }
+  }
   // A hexed creature's own block attacks no more than a character does (D-808).
   if (actor?.refuseForcedShape?.("attack")) return null;
   if (damageSchool !== null && (typeof damageSchool !== "string" || !Object.hasOwn(AZEROTH.schools, damageSchool))) return null;

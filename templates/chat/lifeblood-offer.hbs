@@ -1,0 +1,14 @@
+{{!-- 04's Lifeblood, offered (stage 3A of the Chromatic Champion plan): *As a Reaction
+      when an ally within 30 feet drops below half Health, spend 3 Rage*. Posted from the
+      one damage door (`effects/chromatic-talents.mjs#offerLifeblood`) on whichever client
+      applied the blow, so the button carries the holder: `data-reaction-owner` shows it to
+      whoever owns the holder and nobody else (D-779), and the granted feature's own door
+      judges the Reaction, the Rage, the reach and the half Health again at the press. --}}
+<div class="azeroth azeroth-card azeroth-card-feature" data-message-kind="lifebloodOffer">
+  <div class="azeroth-card-body">
+    <p class="azeroth-card-line azeroth-fired"><span>{{name}}</span><em>{{text}}</em></p>
+    <div class="azeroth-card-actions" data-reaction-owner="{{holderUuid}}">
+      <button type="button" data-action="lifeblood" data-holder-uuid="{{holderUuid}}" data-feature-id="{{featureId}}" data-target-uuid="{{targetUuid}}">{{label}}</button>
+    </div>
+  </div>
+</div>

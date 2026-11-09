@@ -105,6 +105,45 @@ export function grantTemporary(held = {}, grant = {}) {
 }
 
 /**
+ * **WHAT A GRANT ADDED, KEPT FOR TAKING IT BACK** (04's Obsidian Skin on a hit a Parry or
+ * Afterimage withdraws; the 3B review, should-fix 7): the grant's own record, what it
+ * added over what was held before it (05's no-stack law replaces a smaller amount, so a 5
+ * over a held 2 added 3), and the record it replaced. Null where the grant changed nothing.
+ *
+ * @param {{temp?: number, record?: object|null}} before  what the creature held
+ * @param {{applies?: boolean, temp?: number, record?: object|null}} judged  `grantTemporary`'s answer
+ * @returns {{amount: number, source: string, prior: object|null}|null}
+ */
+export function grantTaken(before = {}, judged = {}) {
+  if (judged?.applies !== true) return null;
+  const was = wholeTemp(before?.temp);
+  const amount = wholeTemp(judged.temp) - was;
+  if (!(amount > 0)) return null;
+  return { amount, source: cleanTempRecord(judged.record)?.source ?? "", prior: was > 0 ? cleanTempRecord(before?.record ?? null) : null };
+}
+
+/**
+ * **A GRANT TAKEN BACK, AND ONLY WHILE IT STILL STANDS** (05: *It does not stack*; the 3B
+ * review, should-fix 7). Where the standing record is still the grant's own source, what
+ * the grant added comes off what is held now - never below nothing - and where some is
+ * left, the record it replaced is put back. Where another grant has replaced it since, the
+ * pool is left alone: that temporary Health is the other source's. Answers the write, or
+ * null where nothing moves.
+ *
+ * @param {{temp?: number, record?: object|null}} held  what the creature holds now
+ * @param {{amount?: number, source?: string, prior?: object|null}} taken  `grantTaken`'s
+ * @returns {{temp: number, record: object|null}|null}
+ */
+export function grantTakenBack(held = {}, taken = {}) {
+  const amount = wholeTemp(taken?.amount);
+  const record = cleanTempRecord(held?.record ?? null);
+  const temp = wholeTemp(held?.temp);
+  if (!(amount > 0) || !temp || !record || record.source !== String(taken?.source ?? "")) return null;
+  const left = Math.max(0, temp - amount);
+  return { temp: left, record: left > 0 ? cleanTempRecord(taken?.prior ?? null) : null };
+}
+
+/**
  * **DAMAGE COMES OFF TEMPORARY HEALTH FIRST** (05): what is left of it, what is
  * left of the damage for the creature's own Health, and what it took.
  *

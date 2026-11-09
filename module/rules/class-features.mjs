@@ -79,6 +79,9 @@ import { manaPrice } from "./casting.mjs";
 import { evaluateExpression } from "./expressions.mjs";
 // 05 §3's Standard Test at a tier (the B8a pass: 02's War Stomp's Resist DC).
 import { standardDC } from "./modifiers.mjs";
+// The Chromatic Champion's numbers (02 §7; stage 2B): one home for each, read by these
+// rows and by the doors alike.
+import { BREATH, CHROMATIC_BREATH, DRACONIC_LEAP, DREAD_PRESENCE, GREAT_BREATH, WING_BUFFET } from "./chromatic-features.mjs";
 
 // The descriptor vocabulary, shared with `rules/talent-effects.mjs` (D-642).
 export const passive = (extra = {}) => ({ kind: "passive", action: null, cost: null, casting: false, uses: null, heal: null, damage: null, resist: null, ...extra });
@@ -224,7 +227,11 @@ export const CLASS_FEATURES = Object.freeze({
     // automated. The STANDING limit stays the tier's (D-709), so a level 11
     // shaman places three of the four and a level 16 all four.
     "Totem Mastery": passive({ modifies: mod("Totem", { picks: 4, area: "A 60 ft radius centered on you" }) }),
-    "Bloodlust": action({ action: "full", cost: cost("mana", 8), area: "Each ally within 30 ft" }),
+    // *Up to 6 targets within 30 feet gain an extra Half-Action on their next turn* (02 SS7;
+    // the lead, 2026-11-08: *"Fix it now"*): nothing gave the Half-Action. `onUse.bloodlust`
+    // is judged before the Mana (`rules/extra-halves.mjs#bloodlustRefusal`) and lays the
+    // effect Hasten's Half-Action rides, given at each target's next turn.
+    "Bloodlust": action({ action: "full", cost: cost("mana", 8), area: "Each ally within 30 ft", onUse: { bloodlust: { feet: 30, max: 6 } } }),
     "Elemental Bond": action({ action: "action", cost: cost("mana", 12), choice: "elementals" }),
     // *Everyone in this area must make a Reflex Resilience Test against your Spell DC. On
     // failure, they are knocked **Prone*** (02 §7; the lead: *"Land automatically"*, the
@@ -292,8 +299,98 @@ export const CLASS_FEATURES = Object.freeze({
     }),
     "Hibernate": passive({ uses: once("long") }),
     "Avatar of the Wild": action({ action: "full", cost: cost("mana", 15), choice: "avatar" })
+  },
+  // **THE CHROMATIC CHAMPION** (02 §7, *Features by level*; stage 2B of the plan). Every
+  // number is `rules/chromatic-features.mjs`'s, held to the pack's own text by
+  // `chromatic-features.test.mjs`. A feature's `onUse` is read by `useFeature` and by
+  // the sheet's `featureAims` exactly as a talent's grant's is (`classFeatureOnUse`).
+  "chromatic-champion": {
+    // *While you wear Mail or Plate, its Encumbering trait costs you no Speed and
+    // imposes no Bane on your Stealth Tests*: read by `CharacterData` off the feature
+    // held (`chromatic-features.mjs#scalesWaive`), never a Use.
+    "Scales": passive({ note: "AZEROTH.Feature.Note.Scales" }),
+    // *Your race is the Chromatic Outcast ... you never take a second class*: the guise
+    // and the creation-only refusal are stage 1B's (`rules/guise.mjs`,
+    // `rules/multiclass.mjs`), so the feature itself does nothing a sheet can press.
+    "Chromatic Blood": passive({ note: "AZEROTH.Feature.Note.ChromaticBlood" }),
+    // *You pay for maneuvers in Energy rather than Momentum, at the same price*: the
+    // pool every universal maneuver, the called shot and a Parry are paid from
+    // (`rules/maneuver-pool.mjs`), stamped as `maneuverPool` on the feature item.
+    "Draconic Discipline": passive({ maneuverPool: "energy" }),
+    // A cone from the Champion's token, aimed before anything is paid, gathering every
+    // creature in it (`who`); the school asked where the branches tie and the area
+    // where Great Breath gives two (`onUse.breath`).
+    "Breath": action({
+      action: "half", cost: cost("energy", BREATH.energy), resist: BREATH.resist, who: "creature", area: BREATH.area,
+      damage: { amount: BREATH.damage, type: null, half: true }, onUse: { breath: "branch" }
+    }),
+    // *Once per Short Rest, as a Half-Action, gain Ward 1 against Fire, Frost and Nature
+    // for 10 minutes, added to any Ward you already hold*: a laid `final` add on the
+    // Champion (`onUse.hardenScales`).
+    "Hardened Scales": action({ action: "half", uses: once("short"), onUse: { hardenScales: true } }),
+    // *Each creature of your choice within 5 feet of you is pushed 10 feet away, and one
+    // that fails a Body Resilience Test against your Spell DC is also knocked Prone*.
+    "Wing Buffet": action({
+      action: "half", cost: cost("energy", WING_BUFFET.energy), resist: WING_BUFFET.resist,
+      inflicts: [{ condition: WING_BUFFET.condition, value: null, until: null, onFail: true }],
+      onUse: { push: { feet: WING_BUFFET.push, from: "user" }, within: WING_BUFFET.within }
+    }),
+    // *Spend 3 Energy and a Half-Action, or your Reaction on another creature's turn, to
+    // leap up to 20 feet ... ends Entangled on you, and your next attack before the end
+    // of your next turn gains a Boon*: `rungs` gives the Reaction, `offTurn` keeps it to
+    // another creature's turn, `step` is the leap through the one step door (a space you
+    // can see, picked before anything is paid, then a displacement: no Move, no
+    // Opportunity Attack, no Difficult ground - `effects/steps.mjs`), `frees` the
+    // Entangled, `nextAttack` the Boon.
+    "Draconic Leap": action({
+      action: "half", rungs: ["reaction"], cost: cost("energy", DRACONIC_LEAP.energy),
+      onUse: {
+        step: { feet: DRACONIC_LEAP.feet, sight: "see" }, offTurn: "reaction", frees: [...DRACONIC_LEAP.frees],
+        nextAttack: { boons: DRACONIC_LEAP.boons, lasts: "nextTurn" }
+      }
+    }),
+    // *Once per encounter, as a Half-Action, each creature of your choice within 10 feet
+    // of you makes a Spirit Resilience Test against your Spell DC. On a failure it is
+    // Frightened of you until the end of its next turn*.
+    "Dread Presence": action({
+      action: "half", uses: once("encounter"), resist: DREAD_PRESENCE.resist,
+      inflicts: [{ condition: DREAD_PRESENCE.condition, value: null, until: "endOfNextTurn", onFail: true }],
+      onUse: { aims: true, within: DREAD_PRESENCE.within }
+    }),
+    // *Your Breath may fill a cone 30 feet long or a line 60 feet long, chosen as you
+    // breathe*: the cone laid on Breath's stamp (its chip), and the line offered beside
+    // it by `chromatic-features.mjs#breathAreas`.
+    "Great Breath": passive({ modifies: mod("Breath", { area: GREAT_BREATH.areas[0] }) }),
+    // *Ward 1 against your Breath's school, chosen after each Long Rest where a tie
+    // leaves it open*: derived on the character (`flightSchool`), and the Use names the
+    // school where the branches tie - once a Long Rest, as Blessed Plate's is.
+    "Scales of the Flight": action({ action: null, uses: once("long"), choice: "flightSchools" }),
+    // *Once per Long Rest, as a Half-Action and for no Energy, breathe in a cone 60 feet
+    // long, in a school you choose from the seven in 07-MAGIC ... twice your Breath's
+    // damage*.
+    "Chromatic Breath": action({
+      action: "half", uses: once("long"), resist: CHROMATIC_BREATH.resist, who: "creature", area: CHROMATIC_BREATH.area,
+      damage: { amount: CHROMATIC_BREATH.damage, type: null, half: true }, onUse: { breath: "any" }
+    })
   }
 });
+
+/**
+ * **WHAT A CLASS FEATURE'S USE DOES BEYOND ITS STAMP** (stage 2B): the row's own
+ * `onUse`, in `talent-effects.mjs`' vocabulary, read off this table by the feature's
+ * class and name - never stamped, so no schema holds it twice. `useFeature` and the
+ * sheet's `featureAims` read it where no talent granted the feature, as they read a
+ * granting talent's row. Null for every feature that carries none.
+ *
+ * @param {string} className  the feature item's `className`, as 02 names the class
+ * @param {string} name       the feature's name
+ * @returns {object|null}
+ */
+export function classFeatureOnUse(className = "", name = "") {
+  const key = String(className ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  const o = CLASS_FEATURES[key]?.[name]?.onUse ?? null;
+  return o && typeof o === "object" ? o : null;
+}
 
 /**
  * The eleven racial traits (02 SS5), reviewed one by one as the class
@@ -319,7 +416,11 @@ export const RACE_TRAITS = Object.freeze({
   forsaken: { name: "Will of the Forsaken", ...action({ action: null, uses: once("long") }) },
   "blood-elf": { name: "Arcane Torrent", ...action({ action: "half", uses: once("encounter"), area: "A 10 ft radius centered on you" }) },
   goblin: { name: "Best Deal Anywhere", ...passive() },
-  ogre: { name: "Great Frame", ...passive() }
+  ogre: { name: "Great Frame", ...passive() },
+  // *You have Ward equal to your tier against Fire, Frost, Arcane and Nature* (02 §5's
+  // twelfth people): derived on the character (`chromatic-features.mjs#flightbloodWard`),
+  // never a Use. Found beside stage 2B's Hardened Scales, which adds to it.
+  "chromatic-outcast": { name: "Flightblood", ...passive() }
 });
 
 /** The traits that could bear on a roll (D-613), by race identifier. */
@@ -358,6 +459,7 @@ export function raceTraitFor(raceSystem) {
  * without is a note. Reviewed against the same sixty-three.
  *
  *   kinds   "attack" | "casting" | "skill" | "resilience", or "any"
+ *   skills  the skill keys a `skill` reminder bears on, where it names any (02's Scales)
  *   text    an i18n key
  *   boons / banes   the line's count when ticked, or none
  */
@@ -405,6 +507,11 @@ export const FEATURE_REMINDERS = Object.freeze({
   druid: {
     "Shapeshift": { kinds: ["casting"], text: "AZEROTH.Feature.Reminder.Shapeshift" },
     "Extra Attack": { kinds: ["attack"], text: "AZEROTH.Feature.Reminder.ExtraAttackForm" }
+  },
+  // Scales bears on a Stealth Test (a skill), and the waiver itself is automatic: a note,
+  // drawn on a Stealth Test alone (`skills`; the stage 2 review, should-fix 7).
+  "chromatic-champion": {
+    "Scales": { kinds: ["skill"], skills: ["stealth"], text: "AZEROTH.Feature.Reminder.Scales" }
   }
 });
 
@@ -426,13 +533,15 @@ export function featureReminder(classIdentifier, name) {
  * @param {string} kind
  * @returns {{lines: object[], notes: object[]}}
  */
-export function featureReminders(features = [], talents = [], kind = "skill") {
+export function featureReminders(features = [], talents = [], kind = "skill", { skill = null } = {}) {
   const lines = [];
   const notes = [];
   for (const f of features) {
     const r = f.reminder;
     if (!r?.text || !Array.isArray(r.kinds)) continue;
     if (!r.kinds.includes("any") && !r.kinds.includes(kind)) continue;
+    // A reminder that names its skills is drawn on a Test of one of them alone (02's Scales).
+    if (kind === "skill" && Array.isArray(r.skills) && r.skills.length && !r.skills.includes(skill)) continue;
     const entry = { id: `feature-${slug(f.name)}`, name: f.name, label: r.text, boons: r.boons ?? 0, banes: r.banes ?? 0, checked: false };
     if (entry.boons || entry.banes) lines.push(entry);
     else notes.push(entry);
@@ -569,18 +678,37 @@ export function evaluateAmount(expr, { tier = 1, level = 1, sl = 0, rank = 1, we
  * Reflex Resilience Test at a Standard DC for your tier — 12, 16, 20 or 24*; the B8a
  * pass): `rules/modifiers.mjs#standardDC`, the roll dialog's own fallback, at the tier the
  * door hands in - a DC kind no door read before, so the racial talent had no row.
+ *
+ * **`con8` IS 8 + THE CONSTITUTION MODIFIER + PROFICIENCY** (02 §5's Tail Sweep; the
+ * lead, 2026-11-09: *"Pay 4 from your Momentum or your Power pool (Rage, Energy,
+ * Mana...). The DC is 8 + Constitution modifier + proficiency, so it works the same for
+ * every class."*). It is not the Spell DC, so a Warrior, who holds none, has a DC too.
+ * `con8DC` is the arithmetic.
  */
-export const RESIST_DCS = Object.freeze(["spellDc", "str", "standard"]);
+export const RESIST_DCS = Object.freeze(["spellDc", "str", "standard", "con8"]);
+
+/**
+ * **8 + THE CONSTITUTION MODIFIER + PROFICIENCY** (02 §5's Tail Sweep; the lead,
+ * 2026-11-09). A modifier may be negative and is passed as it is.
+ *
+ * @param {{conMod?: number, proficiency?: number}} o
+ * @returns {number}
+ */
+export function con8DC({ conMod = 0, proficiency = 0 } = {}) {
+  return 8 + (Math.trunc(Number(conMod)) || 0) + (Math.trunc(Number(proficiency)) || 0);
+}
 
 /**
  * The DC a feature's card offers its Resist at.
  *
- * @param {{kind?: "spellDc"|"str"|"standard"|null, spellDC?: number|null, strMod?: number, proficiency?: number, tier?: number}} o
+ * @param {{kind?: "spellDc"|"str"|"standard"|"con8"|null, spellDC?: number|null, strMod?: number, conMod?: number,
+ *   proficiency?: number, tier?: number}} o
  * @returns {number|null}
  */
-export function resistDcFor({ kind = null, spellDC = null, strMod = 0, proficiency = 0, tier = 1 } = {}) {
+export function resistDcFor({ kind = null, spellDC = null, strMod = 0, conMod = 0, proficiency = 0, tier = 1 } = {}) {
   if (kind === "str") return 10 + (Math.trunc(Number(strMod)) || 0) + (Math.trunc(Number(proficiency)) || 0);
   if (kind === "standard") return standardDC(tier);
+  if (kind === "con8") return con8DC({ conMod, proficiency });
   const spell = Math.trunc(Number(spellDC));
   return spellDC !== null && spellDC !== undefined && Number.isFinite(spell) ? spell : null;
 }
@@ -874,13 +1002,17 @@ export function rungsChip(action, rungs = [], { label = r => r, or = (first, sec
  * Ethereal Form's rungs read as payable and the chooser asked, where the Use is the
  * Reaction. `onTurn` is the creature's own turn in its fight.
  *
- * @param {{action?: string|null, rungs?: string[], inFight?: boolean, onTurn?: boolean, payable?: (rung: string) => boolean}} o
+ * **A RUNG OPEN ONLY OFF ITS OWN TURN** (02's Draconic Leap: *a Half-Action, or your
+ * Reaction on another creature's turn*; stage 2B): `offTurnOnly` names it, and on the
+ * creature's own turn that rung is closed.
+ *
+ * @param {{action?: string|null, rungs?: string[], inFight?: boolean, onTurn?: boolean, payable?: (rung: string) => boolean, offTurnOnly?: string|null}} o
  * @returns {{rung: string|null, ask: string[]|null}}
  */
-export function rungChoice({ action = null, rungs = [], inFight = false, onTurn = true, payable = () => true } = {}) {
+export function rungChoice({ action = null, rungs = [], inFight = false, onTurn = true, payable = () => true, offTurnOnly = null } = {}) {
   const all = Array.isArray(rungs) && rungs.length > 1 ? rungs : [];
   if (!all.length || !inFight) return { rung: action ?? null, ask: null };
-  const open = all.filter(r => (onTurn !== false || r === "reaction") && payable(r) === true);
+  const open = all.filter(r => (onTurn !== false || r === "reaction") && !(onTurn !== false && r === offTurnOnly) && payable(r) === true);
   if (!open.length) return { rung: action ?? null, ask: null };
   if (open.length === 1) return { rung: open[0], ask: null };
   return { rung: null, ask: open };

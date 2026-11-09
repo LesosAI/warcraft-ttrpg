@@ -86,8 +86,10 @@ AZEROTH.careerTiers = {
   4: "AZEROTH.Career.Tier4"
 };
 
-// 02 SS4's nine languages (D-636). A people speaks its own and Common or
-// Orcish by the side that raised it; 02 SS9 sells the rest at 20 XP.
+// 02 SS4's ten languages (D-636; Draconic added by the lead, 2026-11-08: *"Add
+// Draconic"*). A people speaks its own and Common or Orcish by the side that raised
+// it; 02 SS9 sells the rest at 20 XP. No people's own tongue is Draconic: the
+// Chromatic Outcast's Draconic racial talent adds it (`talentLanguages`).
 AZEROTH.languages = {
   common:      "AZEROTH.Language.Common",
   orcish:      "AZEROTH.Language.Orcish",
@@ -97,7 +99,8 @@ AZEROTH.languages = {
   gutterspeak: "AZEROTH.Language.Gutterspeak",
   thalassian:  "AZEROTH.Language.Thalassian",
   goblin:      "AZEROTH.Language.Goblin",
-  lowCommon:   "AZEROTH.Language.LowCommon"
+  lowCommon:   "AZEROTH.Language.LowCommon",
+  draconic:    "AZEROTH.Language.Draconic"
 };
 // Who a career is open to (03 SS5), and which side raised a people (02 SS1):
 // four to the Alliance, four to the Horde, and three to neither, whose side
@@ -127,6 +130,20 @@ AZEROTH.schools = {
   holy:   "AZEROTH.School.Holy"
 };
 
+// The menus a feature's Use asks from (D-618, D-619, D-635): the `choices` of
+// `FeatureData.choice` (`data/item/progression.mjs`). A row in `rules/` that stamps a
+// key this list lacks makes the feature item INVALID, and core refuses it at creation
+// and hides it at load (CLAUDE.md §15) - the Champion's Scales of the Flight stamped
+// "flightSchools" before it was here, and every level-17 grant batch failed with it.
+// `rules/feature-choices.test.mjs` holds every stamped key to this list. Keys, not
+// labels: no menu name is drawn from here.
+AZEROTH.featureChoices = Object.freeze([
+  "totems", "elementals", "forms", "demons", "greaterDemons", "beasts", "avatar", "warCry", "schools", "poisons", "skills",
+  "constructs", "gadgets", "overclock", "blueprint",
+  // The Champion's Scales of the Flight (02 §7): the schools tied for the leading branch.
+  "flightSchools"
+]);
+
 // Damage types are the seven schools plus Physical (06 SS4). Immune and
 // Vulnerable both read this list.
 AZEROTH.damageTypes = { ...AZEROTH.schools, physical: "AZEROTH.DamageType.Physical" };
@@ -148,7 +165,18 @@ AZEROTH.resilienceAbility = { body: "con", reflex: "dex", spirit: "wis" };
 //
 // Keyed by the class's `identifier`, never by its name, so it survives a
 // rename. `rules/creation.mjs#primaryAbilities` is the reader.
-AZEROTH.primaryAbility = { warrior: "str", rogue: "dex", ranger: "dex" };
+AZEROTH.primaryAbility = { warrior: "str", rogue: "dex", ranger: "dex", "chromatic-champion": "con" };
+
+// **A CLASS TAKEN AT CREATION AND NEVER MULTICLASSED, EITHER WAY** (the lead, on the
+// Chromatic Champion plan: *"Creation only; no 2nd class."*). Keyed by identifier;
+// `rules/multiclass.mjs#multiclassRefusal` is the one reader.
+AZEROTH.creationOnlyClasses = ["chromatic-champion"];
+
+// **A CLASS WHOSE PEOPLE IS FIXED AND WEARS ANOTHER'S GUISE** (the Chromatic Champion
+// plan, *The Chromatic Outcast is a real race item, and the guise is a pick beside
+// it*): the class's identifier to the race it always is. The guise is one of the
+// other peoples and gives size, Speed and tongue; `rules/guise.mjs` is the reader.
+AZEROTH.guiseRaceFor = { "chromatic-champion": "chromatic-outcast" };
 
 // Six size rungs, smallest first (D-545). Medium is the default. Size does
 // exactly three things -- carrying, moving through a space, resisting being
@@ -191,7 +219,9 @@ AZEROTH.poolTypes = { ...AZEROTH.momentumTypes, ...AZEROTH.powerTypes };
 // War Stomp spends *4 Momentum*, the Momentum pool a tauren's class holds, whichever it
 // is (`rules/pools.mjs#ANY_MOMENTUM`). Kept apart from `poolTypes`, which names a pool
 // a character can hold and a select can offer.
-AZEROTH.costPoolTypes = { momentum: "AZEROTH.Momentum.Label", ...AZEROTH.poolTypes };
+// `any` is a price paid from whichever Momentum or Power pool the payer picks (02 §5's
+// Tail Sweep; the lead, 2026-11-09; `rules/pools.mjs#ANY_POOL`).
+AZEROTH.costPoolTypes = { momentum: "AZEROTH.Momentum.Label", any: "AZEROTH.Pool.Any", ...AZEROTH.poolTypes };
 // What feeds Speed (05 §10, D-621), for the banner's tooltip.
 AZEROTH.speedParts = {
   race:    "AZEROTH.Speed.Race",
@@ -211,7 +241,9 @@ AZEROTH.speedParts = {
   // so the tooltip printed the bare key `grant`.
   grant: "AZEROTH.Speed.Grant",
   // 04's Warden's Mail at rank 2: the Encumbering trait's Speed given back (door 23).
-  waived: "AZEROTH.Speed.Waived"
+  waived: "AZEROTH.Speed.Waived",
+  // 02's Chromatic Champion's Scales: the suit's Encumbering Speed given back (stage 2B).
+  scales: "AZEROTH.Speed.Scales"
 };
 // The three kinds of shape a character may wear (02 §7, D-769): the law is
 // `rules/shapes.mjs#SHAPE_KINDS`, and `shapes.test.mjs` holds the two in step.
@@ -224,7 +256,10 @@ AZEROTH.shapeKinds = {
   // Laid on a creature by somebody else's spell or feature (D-808): 07's Hex and
   // 02's Polymorph, worn off 14 §15's Frog and Rabbit.
   hexed:         "AZEROTH.Shape.Kind.Hexed",
-  polymorphed:   "AZEROTH.Shape.Kind.Polymorphed"
+  polymorphed:   "AZEROTH.Shape.Kind.Polymorphed",
+  // The Chromatic Champion's four capstones (the Chromatic Champion plan), worn
+  // beside the character off 14 §10's tier 3 drake blocks.
+  drake:         "AZEROTH.Shape.Kind.Drake"
 };
 // A class feature is a thing you do or a thing you are (02 §7, D-612).
 AZEROTH.featureKinds = {
@@ -821,6 +856,9 @@ AZEROTH.untilKinds = {
   // *Until the start of YOUR next turn* - the caster's (02's Hurricane, D-771):
   // the area vocabulary's own word (`rules/area-ticks.mjs#AREA_UNTIL`).
   casterTurnStart: "AZEROTH.Until.CasterTurnStart",
+  // *Until the end of YOUR next turn* - the user's (04's Whisper of Madness; stage 3A of the
+  // Chromatic Champion plan): held to the world's clock out of a fight (D-778).
+  casterTurnEnd: "AZEROTH.Until.CasterTurnEnd",
   // *For one minute* (04's The Vault Opens, Banshee's Wail, Thrall of the Banshee;
   // the Legacy branches' door 26): ten of the fight's rounds, or the world's minute
   // (`effects/durations.mjs#minuteSpan`).

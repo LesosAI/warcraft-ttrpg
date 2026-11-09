@@ -212,7 +212,7 @@
     <legend>{{localize "AZEROTH.TalentLine.Legend"}}</legend>
     {{#each talentLines}}
     <label class="checkbox azeroth-dialog-line azeroth-dialog-rider{{#unless this.available}} is-refused{{/unless}}">
-      <input type="checkbox" name="tline-{{this.identifier}}"{{#unless this.available}} disabled{{/unless}}>
+      <input type="checkbox" name="tline-{{this.identifier}}"{{#if this.checked}} checked{{/if}}{{#unless this.available}} disabled{{/unless}}>
       <span><strong>{{this.name}}</strong> {{this.does}}</span>
       <span class="azeroth-dialog-cost">{{this.left}}</span>
     </label>

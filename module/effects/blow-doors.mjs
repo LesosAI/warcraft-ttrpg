@@ -144,11 +144,14 @@ async function ask(holder, payload) {
  * The yes or no, on the answering client: a dialog that closes itself as no
  * before the asker stops waiting. Exported for the Death-Step hold (door 11).
  *
+ * A question whose yes is followed by queued writes may close sooner (`ms`; the 3B review,
+ * should-fix 11: 04's Disrupt Weave and Paradox, `rules/chromatic-talents.mjs#answerWindow`).
+ *
  * @param {Actor} holder
- * @param {{title: string, text: string}} o
+ * @param {{title: string, text: string, ms?: number}} o
  * @returns {Promise<boolean>}
  */
-export async function confirmHere(holder, { title, text }) {
+export async function confirmHere(holder, { title, text, ms = ANSWER_MS }) {
   const { DialogV2 } = foundry.applications.api;
   let dialog = null;
   const answer = DialogV2.confirm({
@@ -160,7 +163,7 @@ export async function confirmHere(holder, { title, text }) {
     render: (event, d) => { dialog = d; }
   });
   let timer = null;
-  const late = new Promise(resolve => { timer = setTimeout(() => resolve("late"), ANSWER_MS); });
+  const late = new Promise(resolve => { timer = setTimeout(() => resolve("late"), Math.min(ANSWER_MS, Number(ms) || ANSWER_MS)); });
   const result = await Promise.race([answer, late]);
   clearTimeout(timer);
   if (result === "late") {

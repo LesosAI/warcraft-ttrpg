@@ -38,6 +38,7 @@ import { landedOnFail, recordsResist } from "../rules/resisted.mjs";
 // A hit turned into a miss (the Legacy branches' door 13): the rider it paid for, back -
 // and the Momentum it built, off (the lead, 2026-10-21: *"Yes, take it back"*).
 import { everyRowWithdrawn, missRefunds, missWithdrawals, refundedValue, withdrawnValue } from "../rules/miss.mjs";
+import { TEMP_FLAG, grantTakenBack } from "../rules/temporary-health.mjs";
 
 export const ANNOTATE_QUERY = "azeroth-rpg.annotateCard";
 
@@ -128,7 +129,8 @@ async function releaseOnce(record) {
 }
 
 /** One rider's price back into the attacker's pool, never past its maximum. */
-async function refundOne({ actorUuid, itemId, kind, pool, amount }) {
+async function refundOne(row) {
+  const { actorUuid, itemId, kind, pool, amount } = row ?? {};
   let attacker = null;
   try {
     attacker = fromUuidSync(actorUuid);
@@ -136,6 +138,29 @@ async function refundOne({ actorUuid, itemId, kind, pool, amount }) {
     attacker = null;
   }
   if (attacker?.documentName !== "Actor" || !attacker.isOwner) return;
+  // **VOID SPENT ON THE HIT COMES BACK ONTO THE TRACK, AND ITS TEMPORARY HEALTH COMES OFF**
+  // (04's Void Surge and Obsidian Skin; the 3A review, M4): the track through the rider
+  // pools' own write (`AzerothActor#writeRiderPools`), never past its top; the temporary
+  // Health by the amount the spend granted, never below nothing.
+  if (kind === "corruption") {
+    const track = (attacker.riderPools?.() ?? []).find(p => p.kind === "corruption" && p.name === pool) ?? null;
+    if (!track) return;
+    const value = refundedValue(track, amount);
+    if (value !== track.value) await attacker.writeRiderPools([{ itemId: null, kind: "corruption", value }]);
+    return;
+  }
+  // **AND ONLY WHILE THAT GRANT STILL STANDS** (05's no-stack law; the 3B review, should-fix
+  // 7): what the grant ADDED comes off, the record it replaced put back, and where another
+  // grant has replaced it since, the pool is that grant's and is left alone. A row from a
+  // card posted before the grant named its source takes nothing back.
+  if (kind === "tempHealth") {
+    const write = grantTakenBack(
+      { temp: attacker.system?.health?.temp ?? 0, record: attacker.getFlag?.("azeroth-rpg", TEMP_FLAG) ?? null },
+      { amount, source: row.source ?? null, prior: row.prior ?? null }
+    );
+    if (write) await attacker.update({ "system.health.temp": write.temp, [`flags.azeroth-rpg.${TEMP_FLAG}`]: write.record });
+    return;
+  }
   const now = (attacker.poolSnapshot?.() ?? []).find(p => p.kind === kind && p.name === pool && (p.itemId ?? null) === (itemId ?? null)) ?? null;
   if (!now) return;
   const value = refundedValue(now, amount);

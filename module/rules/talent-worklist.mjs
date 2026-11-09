@@ -20,6 +20,19 @@
  */
 
 export const TALENT_WORKLIST = Object.freeze({
+  // THE CHROMATIC CHAMPION (D-815): 04's 48 branch talents reached the pack in the
+  // parser stage (2A) before any of them had a row in `talent-effects.mjs`, so the
+  // census finds these lines on wording alone (twelve, and four `namesFeature`
+  // lines on the drake capstones once the rows stage's Breath row named the feature). They are NOT gaps a phase
+  // judged and parked: they are the whole class waiting for its rows, which the
+  // rows stage (2B, the plan's Phase 5) writes and then strikes every line here,
+  // taking the ceiling to 0. Parked so the gap is visible rather than red.
+  "chromatic-champion": Object.freeze({
+    // Stage 3A built the Life-Binder and the Earth-Warder and wrote every branch's spell
+    // rows, striking ten. Stage 3B struck the last five: the Black Drake's landing, the
+    // Blue Drake's turn-start Mana, the Bronze Drake's Half-Action, Glimpse Ahead's
+    // Initiative and Rewind's heal. None left.
+  }),
   // D-771 (the talent plan's Phase 3): two lines left, each a QUESTION for the
   // lead, its reason on the row's own `gap`. D-777 built Living Seed's
   // temporary Health (the lead: *"raise HP past max as temp hp"*), and D-778
@@ -79,6 +92,16 @@ export const TALENT_WORKLIST = Object.freeze({
 
 /** How many `(talent, detector)` lines each class holds today. May only fall (D-768). */
 export const WORKLIST_CEILING = Object.freeze({
+  // 0 to 16 (D-815, the parser stage): the Chromatic Champion's talents arrived in
+  // the pack with no rows. Raised for this class ALONE; the rows stage (2B) takes it
+  // back to 0. The census test's key check fails until `TALENT_EFFECTS` carries a
+  // `chromatic-champion` key, which is that stage's first row.
+  // 16 to 15 (stage 2B): the four capstones' rows - their `namesFeature` and Blue
+  // Drake's `startOfTurn` struck, each capstone's unbuilt clause a `gap`.
+  // 15 to 5 (stage 3A): the Life-Binder's and the Earth-Warder's doors, the Red Drake's
+  // heal, and Sands of Time's spell row. 5 to 0 (stage 3B): the Spell-Weaver's and the
+  // Timewalker's doors and the Black Drake's landing.
+  "chromatic-champion": 0,
   // 23 to 22 (D-769): Chimera's patch takes two forms. 22 to 14 (D-770):
   // Mangle, Rip and Feral Charge ride the attack dialog as riders. 14 to 2
   // (D-771): every Druid talent built but Living Seed and Typhoon's push. 2 to

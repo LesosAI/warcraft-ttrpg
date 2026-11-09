@@ -4,6 +4,24 @@
   "AZEROTH.Falling.Amount": "Damage",
   "AZEROTH.Falling.Apply": "Apply",
   "AZEROTH": {
+    "Multiclass": {
+      "NotSecond": "{name} is taken at creation only and is never a second class.",
+      "HoldsCreationOnly": "A {name} takes no second class.",
+      "NotOnRow": "{name} is not on the {race} row of the race and class table, so it cannot be this character's second class.",
+      "NotForRace": "{name} is open only to its own race, and this character is a {race}."
+    },
+    "FreeCast": {
+      "Spent": "{name}: the free cast is spent until the next Short Rest.",
+      "Row": "cast free ({n} {pool} waived)",
+      "VoidOccasion": "Cast {name} ({talent})"
+    },
+    "Guise": {
+      "Line": "{race}, in the guise of a {guise}",
+      "Label": "Guise",
+      "StepHint": "You are a {race}. Choose the people whose form you wear: it gives your size, your Speed and your tongue, and nothing else.",
+      "Speed": "{n} ft",
+      "Leave": "Back to races"
+    },
     "SharedFeast": {
       "RetireOrphan": "Retire orphaned shared-meal claim",
       "Manage": "Manage shared Feast rest", "SharedTag": "Shared hot meal", "Confirm": "Confirm shared Short Rest",
@@ -770,6 +788,8 @@
       "WardDrop": "{spell}: {name}'s Ward against {school} drops by {n} until the end of the caster's next turn.",
       "WardDropNot": "{spell}: {name}'s Ward against {school} could not be dropped.",
       "WardDropNoFight": "{spell}: {name}'s Ward against {school} drops by {n} until the end of the caster's next turn. There is no fight to time it in; apply and end it at the table.",
+      "ApDrop": "{spell}: {name} loses {n} Armor Point at every location until it finishes a Short Rest.",
+      "ApDropNot": "{spell}: the Armor Point loss on {name} could not be laid.",
       "FailCard": {
         "failCondition": "{spell}: a creature that fails its Test at SL {n} or better, after its own Ward, is also {condition} until the end of its next turn.",
         "failNoReaction": "{spell}: a creature that fails its Test at SL {n} or better also has no Reaction for the duration.",
@@ -788,6 +808,10 @@
       "Snag": {
         "Name": "{source}: no Opportunity Attacks",
         "Text": "Cannot make Opportunity Attacks until its next turn."
+      },
+      "ApDrop": {
+        "Name": "{source}: Armor Points -{n}",
+        "Text": "Loses {n} Armor Point at every location until it finishes a Short Rest."
       },
       "Unreadable": "That mark names nothing this system can lay."
     },
@@ -1477,7 +1501,8 @@
       "Gutterspeak": "Gutterspeak",
       "Thalassian": "Thalassian",
       "Goblin": "Goblin",
-      "LowCommon": "Low Common"
+      "LowCommon": "Low Common",
+      "Draconic": "Draconic"
     },
     "Side": {
       "Anyone": "Anyone",
@@ -1497,7 +1522,8 @@
       "Ferocity": "Ferocity",
       "Mana": "Mana",
       "Focus": "Focus",
-      "Energy": "Energy"
+      "Energy": "Energy",
+      "Any": "Momentum or Power"
     },
     "Caster": {
       "None": "Not a caster",
@@ -2157,6 +2183,7 @@
       "NextTurn": "until its next turn",
       "Encounter": "for the encounter",
       "CasterTurnStart": "until the start of the caster's next turn",
+      "CasterTurnEnd": "until the end of the caster's next turn",
       "Minute": "for one minute",
       "EndOfRound": "until the end of the round"
     },
@@ -3055,7 +3082,8 @@
       "Encumbered": "What you carry",
       "Block": "Stat block",
       "Grant": "What you wear",
-      "Waived": "Encumbering waived (talent)"
+      "Waived": "Encumbering waived (talent)",
+      "Scales": "Encumbering waived (Scales)"
     },
     "Feature": {
       "Kind": {
@@ -3079,7 +3107,9 @@
         "Polymorph": "Some targets are immune to Polymorph, and which ones is the GM's call. A creature that fails becomes a Rabbit until it takes damage: its Speed is 10 feet and it cannot attack, cast, use a feature or take a Reaction (Hex's limits, the tool's reading); whether it can speak is the table's call.",
         "Charge": "Your first Overbear or Sunder this encounter costs no Rage and grants 1.",
         "Finisher": "Spend every Combo Point on an attack's roll dialog; each one adds 1 damage.",
-        "Sprint": "Your first Move of a fight costs no Half-Action."
+        "Sprint": "Your first Move of a fight costs no Half-Action.",
+        "Scales": "In Mail or Plate, the suit's Encumbering costs you no Speed and puts no Bane on Stealth.",
+        "ChromaticBlood": "Your race is the Chromatic Outcast, wearing a guise. You took this class at creation and take no second class."
       },
       "Buff": {
         "encounter": "{name}: +{n} damage until the encounter ends.",
@@ -3110,9 +3140,13 @@
       },
       "NoPool": "Not enough {pool} for {name}: it costs {amount}.",
       "NoPoolMany": "Not enough {pool} for {count} × {name}: that costs {amount}.",
+      "NoAnyPool": "{name} costs {amount} from your Momentum or your Power pool, and none of your pools holds {amount}. Nothing was spent.",
+      "PayFrom": "Pay {amount} for {name} from which pool?",
+      "PayFromOption": "{pool} ({value} of {max})",
       "Restored": "{name} restored {amount} Mana.",
       "SpendAll": "all",
       "Reminder": {
+        "Scales": "Scales: in Mail or Plate, your suit's Encumbering puts no Bane on a Stealth Test.",
         "Charge": "Your first Overbear or Sunder this encounter costs no Rage and grants 1; you may move your Speed in a straight line first.",
         "ExtraAttack": "Two attacks each time you Attack.",
         "ExtraAttackForm": "Two attacks each time you Attack, while in a Shapeshift form.",
@@ -3227,6 +3261,7 @@
       "Damage": "Damage {n} {type}",
       "TalentDamage": "Damage modifiers",
       "NpcBackstab": "when flanking the target or unseen by it",
+      "NpcArmamentUnavailable": "{name}: its linked weapon is missing, ambiguous or unequipped. Equip that weapon before attacking.",
       "Finisher": "Finisher: spend {n} Combo Points for +{n} damage",
       "DamageWhen": {
         "always": "always",
@@ -3632,6 +3667,7 @@
       "SustainPaidMana": "{name} pays {mana} Mana in upkeep on {count} sustained.",
       "SustainPaidHealth": "{name} pays {health} Health in upkeep on {count} sustained.",
       "SustainPaidBoth": "{name} pays {mana} Mana and {health} Health in upkeep on {count} sustained.",
+      "SustainPaidPool": "{name} pays {amount} {pool} in upkeep on a spell a talent pays for in {pool}.",
       "PoisonedPromptDc": "{name} is Poisoned {stacks}: a Body Resilience Test against DC {dc} ({source}) sheds a stack."
     },
     "Shape": {
@@ -3642,7 +3678,8 @@
         "Metamorphosis": "Metamorphosis",
         "Battlerig": "Gnomish Battle Rig",
         "Hexed": "Hex",
-        "Polymorphed": "Polymorph"
+        "Polymorphed": "Polymorph",
+        "Drake": "Drake form"
       },
       "EffectName": {
         "shapeshift": "{name} form",
@@ -3650,8 +3687,10 @@
         "metamorphosis": "{name} form (Metamorphosis)",
         "battlerig": "{name}",
         "hexed": "{name} (Hex)",
-        "polymorphed": "{name} (Polymorph)"
+        "polymorphed": "{name} (Polymorph)",
+        "drake": "{name} form"
       },
+      "EffectTextOverlay": "{name}: you are Large and fly at the drake's flying pace. What you wear and carry melds into the form, and the Signatures on it still work. You fight with the drake's bite, claws and tail in place of your weapons, at your own Strength modifier and Proficiency Bonus. Your Defense and your Armor Points at each location are the drake's or your own, whichever is higher. Your Health, attributes, ground Speed, Tests, Spell DC, features, talents and branch spells stay yours. Only you end it, as a Half-Action, from the character sheet.",
       "EffectText": "{name}: Strength, Dexterity, Constitution, Defense, Armor Points, Speed, size and attacks are the block's. Health and carrying stay the character's own. What is worn melds into the shape, and its Signatures and affixes still count. Leave it from the character sheet.",
       "InForm": "In {form}",
       "Leave": "Leave",
@@ -3683,6 +3722,185 @@
       "SpellsInFerocity": "In {form}: Mana cannot be spent, so each spell's cost below is its price in Ferocity, 1 for every 2 Mana, rounded up. A Sustain already held is still paid in Mana.",
       "FreeShift": "{talent}: this shift cost no action."
     },
+    "Lifebinder": {
+      "Prompt": "{name}: choose who {talent} heals (up to {count}).",
+      "NoGMBefore": "Lifebinder's Flame heals a creature another player owns, and no GM is online to write it. Nothing was spent.",
+      "Row": "split: half to each target, the rest heals",
+      "Line": "{talent}: each target takes half the damage. Heals: {heals}.",
+      "Healed": "{talent}: {name} regains {n} Health.",
+      "Cleansed": "{name} loses {what}.",
+      "Drake": "{talent}: {name} regains {n} Health for the heal they gave.",
+      "Gone": "Lifebinder's Flame: {name} is no longer in the world.",
+      "NoGM": "Lifebinder's Flame: no GM is online to heal {name}.",
+      "Failed": "Lifebinder's Flame: the heal on {name} could not be written.",
+      "Unresolved": "Lifebinder's Flame's heal could not be confirmed. Check the card before healing again.",
+      "NeedsTarget": "{name}: {talent} splits the damage the spell deals to its target. Target the creature the spell strikes first. Nothing was spent."
+    },
+    "Lifeblood": {
+      "Offer": "{name} is below half Health. {holder} may spend a Reaction and 3 Rage on {talent}.",
+      "Press": "{talent} on {name}",
+      "NotBelow": "{name}: {target} is not below half Health.",
+      "Stale": "{name}: the blow this offer answers is past. A Reaction answers the moment it names, so nothing was spent."
+    },
+    "VoidSpend": {
+      "Spent": "{name} spends {n} Void Corruption: +{damage} damage.",
+      "Temp": "{name} gains {n} temporary Health.",
+      "TempWasted": "{name} already holds as much temporary Health as {n}, so none is added.",
+      "Gain": "{talent}",
+      "Gained": "{talent}: {name} gains {n} Void Corruption.",
+      "GainedNone": "{talent}: {name} gains no Void Corruption (the track is full or something stops it).",
+      "NoneHeld": "{name}: you hold no Void Corruption to spend."
+    },
+    "ChargedSteel": {
+      "Laid": "{talent}: {name}'s next branch spell against this creature before the end of their next turn deals {n} more damage.",
+      "Row": "Charged Steel: +1 damage per rank against this creature"
+    },
+    "CourtGuise": {
+      "NotHumanoid": "{name}: {target} is not a humanoid.",
+      "Effect": "Court Guise: {name}",
+      "Text": "You look and sound like {name}. Arcana and Investigation Tests to see through it take a Bane. Delete this effect to end the guise.",
+      "Taken": "{name} takes the face and voice of {as}.",
+      "Line": "Court Guise: a Bane to see through it",
+      "InShape": "{name}: you cannot take a guise while you hold {form}. Leave the form first. Nothing was spent."
+    },
+    "SilverTongue": {
+      "Line": "Silver Tongue: a Boon while you wear a Court Guise"
+    },
+    "FontOfMagic": {
+      "NoMana": "{name}: {target} holds no Mana to regain. Target an ally within 30 feet who casts.",
+      "Full": "{name}: {target}'s Mana is already full. Nothing was spent.",
+      "NoRage": "{name}: you hold no Rage to spend.",
+      "Option": "Spend {n} Rage",
+      "OptionMana": "The ally regains {n} Mana.",
+      "Prompt": "{name}: how much Rage do you spend for {target}?",
+      "Line": "{talent}: {name} regains {n} Mana for {rage} Rage."
+    },
+    "ManaHunger": {
+      "Gained": "{talent}: {name} gains {n} Rage as {caster} casts."
+    },
+    "Spellbreak": {
+      "NoSustain": "{name}: {target} is sustaining no spell.",
+      "NoGM": "{name}: no GM is online to end a spell on a creature you do not own. Nothing was spent.",
+      "Prompt": "{name}: which spell that {target} sustains do you end?",
+      "Line": "{talent}: {name}'s {spell} ends.",
+      "NotEnded": "{talent}: {name}'s {spell} could not be ended.",
+      "Rage": "{talent}: {name} gains {n} Rage.",
+      "Ended": "{name} stops sustaining {spell}: it was broken.",
+      "NotHeld": "{name} does not hold Spellbreak."
+    },
+    "Spellthief": {
+      "Rage": "{talent}: {name} gains {n} Rage.",
+      "Prompt": "{name}: which ally within reach regains {n} Mana?",
+      "NoAlly": "{name}: no ally within {feet} feet who holds Mana was chosen, so none regains Mana.",
+      "Mana": "{talent}: {name} regains {n} Mana."
+    },
+    "Unweave": {
+      "Ended": "{spell}: every spell effect on {name} ends ({effects}).",
+      "Nothing": "{spell}: no spell effect on {name} could be ended."
+    },
+    "DisruptWeave": {
+      "Label": "Disrupt Weave",
+      "Ask": "{name}, an enemy within 60 feet of {holder}, casts {spell} (tier {tier}). Use {talent}: spend a Reaction and {n} Rage? {name} then makes a Spirit Resilience Test against {holder}'s Spell DC, and on a failure the spell fails and its Mana is spent. Answer only if {holder} can see {name}.",
+      "Passed": "{talent} ({holder}): {name}'s Spirit Test {total} against DC {dc} holds. {spell} goes on.",
+      "Failed": "{talent} ({holder}): {name}'s Spirit Test {total} against DC {dc} fails. {spell} fails and its Mana is spent.",
+      "Refuse": {
+        "unknown": "{name} no longer holds {talent}.",
+        "noDc": "{name} has no Spell DC for {talent}.",
+        "noReaction": "{name} has no Reaction left for {talent}.",
+        "short": "{name} no longer holds {n} Rage for {talent}."
+      }
+    },
+    "Paradox": {
+      "Label": "Paradox",
+      "Ask": "{name}, an enemy within 60 feet of {holder}, is making a Test ({test}). Use {talent} ({n} left): spend a Reaction, and {name} rolls the Test twice and takes the lower? Answer only if {holder} can see {name}.",
+      "Row": "{holder}: rolled twice ({first} and {second}), the lower ({kept}) kept",
+      "Refuse": {
+        "unknown": "{name} no longer holds {talent}.",
+        "noUses": "{name} has no use of {talent} left before a Short Rest.",
+        "noReaction": "{name} has no Reaction left for {talent}."
+      }
+    },
+    "TimeLapse": {
+      "Ask": "{name} fails the Test ({total} against DC {dc}). Use {talent} to roll it again and take the new result?",
+      "Row": "rolled again: {first}, then {second}, and the new result taken"
+    },
+    "Hasten": {
+      "NotSelf": "{name} reaches an ally, never you, until Borrowed Moment lets it target you.",
+      "NoFight": "{name}: {target} has no next turn outside a fight you share. Nothing was spent.",
+      "Line": "{talent}: {name} gains a Half-Action on its next turn.",
+      "NotLaid": "{talent}: the Half-Action on {name} could not be laid.",
+      "SpeedLine": "{name} gains {n} feet of Speed until the end of its next turn.",
+      "Text": "{name} gains a Half-Action as its next turn starts.",
+      "SpeedName": "{talent}: Speed",
+      "Given": "{name} gains {n} Half-Action from {source}."
+    },
+    "WeightOfAges": {
+      "Line": "Weight of Ages: a Bane on an Attack Test by a creature the holder Slowed",
+      "NoReaction": "{name} has no Reaction: it is Slowed under Weight of Ages."
+    },
+    "Rewind": {
+      "Offer": "{name} lost {n} Health to a blow. {holder} may spend a Reaction and 2 Rage on {talent}: {name} regains {heal} Health.",
+      "Press": "{talent} on {name}",
+      "NoOffer": "{name} is used from the offer a blow posts, for the creature that blow struck.",
+      "NotThat": "{name}: target the creature the offer names.",
+      "TooFar": "{name}: {target} is more than {feet} feet away.",
+      "Stale": "{name}: the blow this offer answers is past. A Reaction answers the moment it names, so nothing was spent.",
+      "Line": "{talent}: {name} regains {n} Health."
+    },
+    "Bloodlust": {
+      "NoTargets": "{name}: target the creatures, up to {max}, that gain a Half-Action. Nothing was spent.",
+      "TooMany": "{name} reaches no more than {max} targets. Nothing was spent.",
+      "TooFar": "{name}: {target} is more than {feet} feet away. Nothing was spent.",
+      "NoFight": "{name}: {target} has no next turn outside a fight you share. Nothing was spent.",
+      "NotHeld": "{name} does not hold {talent}.",
+      "Line": "{talent}: {name} gains an extra Half-Action on its next turn.",
+      "NotLaid": "{talent}: the extra Half-Action on {name} could not be laid."
+    },
+    "BlueDrake": {
+      "Mana": "{talent}: {name} regains {n} Mana."
+    },
+    "BronzeDrake": {
+      "Half": "{talent}: {name} gains a Half-Action this turn.",
+      "NoTurn": "{talent}: {name} is not on its own turn in a fight, so there is no Half-Action to gain."
+    },
+    "BlackDrake": {
+      "Landing": "{talent}: {name} lands. Each creature within {feet} feet makes a Reflex Resilience Test.",
+      "Passed": "{name}: {resilience} {total} against DC {dc}, passed.",
+      "Failed": "{name}: {resilience} {total} against DC {dc}, failed."
+    },
+    "TargetGround": {
+      "Title": "{spell}: Difficult ground at {name}",
+      "Placed": "{spell}: the ground at {name} is Difficult ground until the end of your next turn.",
+      "NotPlaced": "{spell}: the ground at {name} could not be placed.",
+      "Pinned": "{name} cannot stand up: {spell}'s spike still stands in its space, and it knocked {name} Prone.",
+      "NoToken": "{spell}: {name} has no token on a scene, so place its Difficult ground by hand."
+    },
+    "WingsBeneath": {
+      "NoFall": "Wings Beneath: {name} takes no damage from the fall and lands on their feet."
+    },
+    "EmberStrikes": {
+      "Row": "deals {school} damage instead of its own type"
+    },
+    "Chromatic": {
+      "Kindled": "{talent}: {name} gains {n} Rage.",
+      "NeedsTargets": "{name} reaches the creatures you choose within {feet} feet: target them first.",
+      "NotSelf": "{name} reaches other creatures, never you: untarget yourself.",
+      "OutOfReach": "{name}: {target} is more than {feet} feet away.",
+      "BreathTiePrompt": "Your branches tie. Which school does {name} breathe?",
+      "BreathAnyPrompt": "Which of the seven schools does {name} breathe?",
+      "BreathAreaPrompt": "Does {name} fill the cone or the line?",
+      "BreathLine": "{feature} ({school}, {area}) reaches: {names}.",
+      "BreathNone": "{feature} ({school}, {area}) reaches no creature.",
+      "BreathUnaimed": "{feature} breathes {school} in {area}. No token of yours is on this scene, so place the area and target the creatures in it.",
+      "BreathDrake": "{talent}: {feature} takes the form's school.",
+      "Freed": "{name} leaps clear: {conditions} ends.",
+      "HardenedScalesText": "Ward {n} against Fire, Frost and Nature for {minutes} minutes, added to any Ward already held against each.",
+      "HardenedScalesLine": "{name} gains Ward {n} against Fire, Frost and Nature for {minutes} minutes.",
+      "HardenedScalesNotLaid": "{name}'s Hardened Scales could not be laid.",
+      "FlightTieNote": "Your branches tie: name the school your Scales of the Flight wards until your next Long Rest.",
+      "FlightLeadNote": "{name} already wards against {school}, the school of your leading branch: there is nothing to name.",
+      "FlightNamed": "{name}'s Scales of the Flight wards against {school} until the next Long Rest."
+    },
     "ForcedShape": {
       "Refuse": {
         "Attack": "{name} is a {form} and cannot attack.",
@@ -3704,6 +3922,7 @@
       "OwnNumbers": "Its own: {by} leaves them",
       "SpeedFrom": "{by} sets it at {speed} feet",
       "Holds": "{name} is a {form}, laid by somebody else: a shape of its own cannot replace it.",
+      "Kept": "{name} fails the Test, but keeps its {form}: {by} does not replace a drake form, which only its Champion ends.",
       "EndedByDamage": "{name} took damage, and the {form} ends.",
       "SustainEnded": "{name} no longer sustains {spell}: the form it laid has ended.",
       "SustainGone": "{name}: {spell} is no longer sustained, so no form is laid.",
@@ -3764,6 +3983,7 @@
       "Elsewhere": "{n} to settle on other steps",
       "Step": {
         "race": "Race",
+        "guise": "Mortal guise",
         "class": "Class",
         "abilities": "Abilities",
         "career": "Career",
@@ -3782,7 +4002,8 @@
       "CastingGrade": {
         "full": "{ability}, full caster",
         "half": "{ability}, half caster",
-        "dcOnly": "{ability}, for Spell DC only"
+        "dcOnly": "{ability}, for Spell DC only",
+        "taught": "{ability}, for the spells your branches teach"
       },
       "NoSpellsForClass": "This class casts nothing.",
       "NoSpellsChosen": "No spell chosen yet.",
@@ -3867,6 +4088,8 @@
         "noRace": "Choose a race.",
         "noClass": "Choose a class.",
         "classNotOpen": "{race} cannot take the {cls}.",
+        "noGuise": "Choose the people whose guise you wear.",
+        "guiseNotAPeople": "{name} cannot be a guise. Choose one of the other peoples.",
         "noMethod": "Pick a method.",
         "abilityUnassigned": "Every ability needs a score.",
         "scoreUnnatural": "{score} is outside 3 to 20.",
@@ -5079,11 +5302,13 @@
     "NextAttack": {
       "BoonRow": "{n} Boon on this attack",
       "NoFight": "{talent} promises {name}'s next attack in a fight, and there is none.",
+      "NeedsFight": "{name} promises your next attack in a fight, and you are in none. Nothing was spent.",
       "PierceRow": "ignores {n} Armor Points",
       "Laid": {
         "turn": "{name}'s next attack this turn takes {talent}.",
         "round": "{name}'s next attack this round takes {talent}.",
-        "encounter": "{name}'s next attack this encounter takes {talent}."
+        "encounter": "{name}'s next attack this encounter takes {talent}.",
+        "nextTurn": "{name}'s next attack before the end of their next turn takes {talent}."
       }
     },
     "NoHealing": {
@@ -5255,7 +5480,11 @@
         "pierce": "ignores {n} Ward",
         "charge": "+{n} damage",
         "swift": "at a Half-Action",
-        "double": "doubles its damage on the cast's tick and the one a turn after"
+        "double": "doubles its damage on the cast's tick and the one a turn after",
+        "freeCast": "cast without {pool}, once per Short Rest",
+        "lifebinder": "split the damage: half to the target, the rest heals up to {n} creatures you choose",
+        "voidSurge": "spend {n} Void Corruption for more damage",
+        "convertAttack": "deal Fire damage instead of the weapon's own type"
       },
       "Charges": "{n} held",
       "Left": "{n} left",

@@ -999,6 +999,15 @@
     ],
     "reason": "A yellow crack splits the ground. Earth Shock sends a jolt through the earth into a target, matching the ground fracture."
   },
+  "spell:earthen-spike": {
+    "name": "Earthen Spike",
+    "source": "07-MAGIC",
+    "icon": "ability_earthen_pillar",
+    "previousIcons": [
+      "ability_earthen_pillar"
+    ],
+    "reason": "A pillar of stone thrust up: damage, Prone, and Difficult ground where it stands."
+  },
   "spell:earthfast": {
     "name": "Earthfast",
     "source": "07-MAGIC",
@@ -1016,6 +1025,15 @@
       "spell_nature_callstorm"
     ],
     "reason": "A green magical shield fits the one spell that the earth refuses on the caster’s behalf."
+  },
+  "spell:earthmeld": {
+    "name": "Earthmeld",
+    "source": "07-MAGIC",
+    "icon": "spell_nature_skinofearth",
+    "previousIcons": [
+      "spell_nature_skinofearth"
+    ],
+    "reason": "Stone over skin: stepping into stone and staying in it."
   },
   "spell:earthskin": {
     "name": "Earthskin",
@@ -3084,6 +3102,15 @@
     ],
     "reason": "A hooded figure in purple shadow fits concealment and a protective Shadow veil."
   },
+  "spell:shattering-bolt": {
+    "name": "Shattering Bolt",
+    "source": "07-MAGIC",
+    "icon": "spell_lightning_lightningbolt01",
+    "previousIcons": [
+      "spell_lightning_lightningbolt01"
+    ],
+    "reason": "A heavy lightning bolt, for the branch's heaviest single-target strike."
+  },
   "spell:signal-fire": {
     "name": "Signal Fire",
     "source": "07-MAGIC",
@@ -3350,6 +3377,15 @@
     ],
     "reason": "An icy blue face enclosed in frost evokes a living target preserved outside time."
   },
+  "spell:stone-grip": {
+    "name": "Stone Grip",
+    "source": "07-MAGIC",
+    "icon": "spell_nature_earthbind",
+    "previousIcons": [
+      "spell_nature_earthbind"
+    ],
+    "reason": "Earthbind's art: stone closing on a creature's feet, Entangled on a failed Reflex Test."
+  },
   "spell:stone-spike": {
     "name": "Stone Spike",
     "source": "07-MAGIC",
@@ -3527,6 +3563,15 @@
       "spell_nature_groundingtotem"
     ],
     "reason": "Blue lightning branches across a storm sky, fitting the moving field that shocks one creature each turn."
+  },
+  "spell:thunderlash": {
+    "name": "Thunderlash",
+    "source": "07-MAGIC",
+    "icon": "ability_thunderking_lightningwhip",
+    "previousIcons": [
+      "ability_thunderking_lightningwhip"
+    ],
+    "reason": "A lightning whip, for heavy single-target lightning."
   },
   "spell:tidebreath": {
     "name": "Tidebreath",
@@ -3948,6 +3993,15 @@
     ],
     "reason": "Replace: The proposed art is a shouting warrior; it does not show an enemy being held in place. The purple web visibly binds, matching enemies who cannot Disengage."
   },
+  "talent:anchor-of-ages": {
+    "name": "Anchor of Ages",
+    "source": "04-TALENTS",
+    "icon": "spell_nature_timestop",
+    "previousIcons": [
+      "spell_nature_timestop"
+    ],
+    "reason": "Time stopped: a creature held in place inside your Arcane Anchor."
+  },
   "talent:anticipation": {
     "name": "Anticipation",
     "source": "04-TALENTS",
@@ -3966,6 +4020,15 @@
       "achievement_character_undead_male"
     ],
     "reason": "A sickly green face evokes the poisons and plagues the apothecary understands."
+  },
+  "talent:arcane-blood": {
+    "name": "Arcane Blood",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_monsterscales_19",
+    "previousIcons": [
+      "spell_arcane_arcane01"
+    ],
+    "reason": "An ice-rimed blue dragon scale: the blue flight's blood, for the talent that teaches Frostbite, Arcane Explosion and Blizzard."
   },
   "talent:arcane-concentration": {
     "name": "Arcane Concentration",
@@ -4213,6 +4276,15 @@
     ],
     "reason": "Retain: the black arrow is the talent’s named attack and matches its no-ammunition Shadow shot."
   },
+  "talent:black-drake": {
+    "name": "Black Drake",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_head_dragon_black",
+    "previousIcons": [
+      "inv_misc_head_dragon_black"
+    ],
+    "reason": "A black dragon's head: the capstone that takes the Black Drake's form."
+  },
   "talent:blackrock-legacy": {
     "name": "Blackrock Legacy",
     "source": "02-CHARACTER-OPTIONS",
@@ -4305,6 +4377,16 @@
     ],
     "reason": "Retain: the bloodied warrior image matches the Rage threshold and the Health recovered from it."
   },
+  "talent:blood-memory": {
+    "name": "Blood Memory",
+    "source": "02-CHARACTER-OPTIONS",
+    "race": "Chromatic Outcast",
+    "icon": "inv_jewelcrafting_dragonseye02",
+    "previousIcons": [
+      "spell_holy_mindvision"
+    ],
+    "reason": "A dragon's eye in every colour: one true answer remembered by the four flights."
+  },
   "talent:blood-pact": {
     "name": "Blood Pact",
     "source": "04-TALENTS",
@@ -4341,6 +4423,15 @@
     ],
     "reason": "Retain: the bloodthirst spell art matches the attack-triggered resource effect."
   },
+  "talent:blue-drake": {
+    "name": "Blue Drake",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_head_dragon_blue",
+    "previousIcons": [
+      "inv_misc_head_dragon_blue"
+    ],
+    "reason": "A blue dragon's head: the capstone that takes the Blue Drake's form."
+  },
   "talent:bonded": {
     "name": "Bonded",
     "source": "04-TALENTS",
@@ -4360,6 +4451,15 @@
     ],
     "reason": "The bone-and-feather doll fits omens and folk wards."
   },
+  "talent:borrowed-moment": {
+    "name": "Borrowed Moment",
+    "source": "04-TALENTS",
+    "icon": "spell_holy_borrowedtime",
+    "previousIcons": [
+      "spell_holy_borrowedtime"
+    ],
+    "reason": "Borrowed Time names the talent: Hasten on yourself, and Speed for the Hastened."
+  },
   "talent:bracing": {
     "name": "Bracing",
     "source": "04-TALENTS",
@@ -4368,6 +4468,15 @@
       "ability_warrior_bloodfrenzy"
     ],
     "reason": "Replace: Blood Frenzy shows an aggressive red attack. The shielded defensive stance depicts holding position while Armor rises."
+  },
+  "talent:bronze-drake": {
+    "name": "Bronze Drake",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_head_dragon_bronze",
+    "previousIcons": [
+      "inv_misc_head_dragon_bronze"
+    ],
+    "reason": "A bronze dragon's head: the capstone that takes the Bronze Drake's form."
   },
   "talent:burial-ground": {
     "name": "Burial Ground",
@@ -4498,6 +4607,15 @@
     ],
     "reason": "Align with the named Chaos Bolt spell: Green fel energy flies from a warlock’s hand. Chaos Bolt throws fel power at a marked target; the icon shows both fel color and a directed projectile."
   },
+  "talent:charged-steel": {
+    "name": "Charged Steel",
+    "source": "04-TALENTS",
+    "icon": "spell_shaman_staticshock",
+    "previousIcons": [
+      "spell_shaman_staticshock"
+    ],
+    "reason": "A static-charged blade for a weapon hit that powers the next branch spell."
+  },
   "talent:chastise": {
     "name": "Chastise",
     "source": "04-TALENTS",
@@ -4561,6 +4679,15 @@
       "ability_titankeeper_cleanse"
     ],
     "reason": "Align with the named Cleanse spell: Pale blue curls sweep across the icon. Cleanse names a harmful effect and asks it to leave, which the clearing swirl conveys."
+  },
+  "talent:cleansing-fire": {
+    "name": "Cleansing Fire",
+    "source": "04-TALENTS",
+    "icon": "spell_holy_purify",
+    "previousIcons": [
+      "spell_holy_purify"
+    ],
+    "reason": "A purifying image for the heal that strips Undeath Corruption and ends Bleeding."
   },
   "talent:clearcasting": {
     "name": "Clearcasting",
@@ -4698,6 +4825,15 @@
     ],
     "reason": "Replace: The proposed dark footstep art does not depict a retaliatory attack. The crossing blades depict the Riposte whose damage this talent raises."
   },
+  "talent:court-guise": {
+    "name": "Court Guise",
+    "source": "04-TALENTS",
+    "icon": "inv_mask_04",
+    "previousIcons": [
+      "ability_rogue_disguise"
+    ],
+    "reason": "A human face worn as a mask: the guise of one particular humanoid, face and voice, as the black flight walked the courts."
+  },
   "talent:critical-strike": {
     "name": "Critical Strike",
     "source": "04-TALENTS",
@@ -4780,6 +4916,15 @@
     ],
     "reason": "Retain: the marked-target combat symbol fits a named mark whose target is tracked until it dies."
   },
+  "talent:deathwings-malice": {
+    "name": "Deathwing's Malice",
+    "source": "04-TALENTS",
+    "icon": "achievment_boss_madnessofdeathwing",
+    "previousIcons": [
+      "ability_deathwing_cataclysm"
+    ],
+    "reason": "Deathwing's molten face, for the talent that teaches Shattering Bolt and charges Void Corruption for it."
+  },
   "talent:deep-cut": {
     "name": "Deep Cut",
     "source": "04-TALENTS",
@@ -4807,6 +4952,15 @@
       "achievement_character_dwarf_male"
     ],
     "reason": "Carved stone marks the worked underground passages the dwarf can navigate."
+  },
+  "talent:deep-weave": {
+    "name": "Deep Weave",
+    "source": "04-TALENTS",
+    "icon": "spell_arcane_focusedpower",
+    "previousIcons": [
+      "spell_arcane_focusedpower"
+    ],
+    "reason": "Focused arcane power for the tier 2 spells the branch teaches."
   },
   "talent:deflection": {
     "name": "Deflection",
@@ -4943,6 +5097,15 @@
     ],
     "reason": "Align with the named Dispersion spell: Purple pieces pull away from a central point. Dispersion stops the priest from being a body for a time, matching the visibly scattered form."
   },
+  "talent:disrupt-weave": {
+    "name": "Disrupt Weave",
+    "source": "04-TALENTS",
+    "icon": "spell_frost_iceshock",
+    "previousIcons": [
+      "spell_frost_iceshock"
+    ],
+    "reason": "WoW's counterspell art: a Reaction that makes an enemy's cast fail."
+  },
   "talent:divine-aegis": {
     "name": "Divine Aegis",
     "source": "04-TALENTS",
@@ -4978,6 +5141,25 @@
       "ability_shaman_astralshift"
     ],
     "reason": "Replace: The proposed dark hood silhouette has no wind or storm motif. Blue lightning branches across a storm sky, fitting repeated Stormlash hits."
+  },
+  "talent:draconic": {
+    "name": "Draconic",
+    "source": "02-CHARACTER-OPTIONS",
+    "race": "Chromatic Outcast",
+    "icon": "inv_misc_book_12",
+    "previousIcons": [
+      "inv_misc_book_09"
+    ],
+    "reason": "A gilded book of an old script: the Draconic tongue, spoken and read."
+  },
+  "talent:dragonfire": {
+    "name": "Dragonfire",
+    "source": "04-TALENTS",
+    "icon": "ability_monk_breathoffire",
+    "previousIcons": [
+      "ability_monk_breathoffire"
+    ],
+    "reason": "A gout of breathed fire: the tier 3 talent that teaches Emberlash, Purging Flame and Cinderburst."
   },
   "talent:drain-soul": {
     "name": "Drain Soul",
@@ -5034,6 +5216,15 @@
     ],
     "reason": "Align with the named Earth Shock spell: A yellow crack splits the ground. Earth Shock sends a jolt through the earth into a target, matching the ground fracture."
   },
+  "talent:earth-warders-craft": {
+    "name": "Earth-Warder's Craft",
+    "source": "04-TALENTS",
+    "icon": "ability_druid_earthandsky",
+    "previousIcons": [
+      "spell_nature_earthquake"
+    ],
+    "reason": "Lightning over stone: earth and sky together, for the talent that teaches Thunderlash, Earthmeld and Earthen Spike."
+  },
   "talent:earthen-shield": {
     "name": "Earthen Shield",
     "source": "04-TALENTS",
@@ -5061,6 +5252,15 @@
       "achievement_character_tauren_male"
     ],
     "reason": "Fresh water from nature fits finding food and water for the party."
+  },
+  "talent:earthshatter": {
+    "name": "Earthshatter",
+    "source": "04-TALENTS",
+    "icon": "spell_shaman_earthquake",
+    "previousIcons": [
+      "spell_shaman_earthquake"
+    ],
+    "reason": "A shattering quake that knocks the target Prone, and Stuns it at SL 2."
   },
   "talent:eclipse": {
     "name": "Eclipse",
@@ -5145,6 +5345,15 @@
       "ability_rogue_controlisking"
     ],
     "reason": "Retain: the control is king image depicts an agile evasive movement after an attack misses."
+  },
+  "talent:ember-strikes": {
+    "name": "Ember Strikes",
+    "source": "04-TALENTS",
+    "icon": "spell_fire_flametounge",
+    "previousIcons": [
+      "spell_fire_flametounge"
+    ],
+    "reason": "A flame-tongued weapon: weapon attacks that deal Fire and leave the target Scorched."
   },
   "talent:emberstorm": {
     "name": "Emberstorm",
@@ -5282,6 +5491,15 @@
       "ability_rogue_envelopingshadows"
     ],
     "reason": "Retain: the enveloping shadow image depicts disappearing and stepping to a visible space."
+  },
+  "talent:false-opening": {
+    "name": "False Opening",
+    "source": "04-TALENTS",
+    "icon": "spell_shadow_fumble",
+    "previousIcons": [
+      "ability_rogue_feint"
+    ],
+    "reason": "A guard knocked loose from the hand: the next attack cannot be met with a Parry or a Block."
   },
   "talent:fan-of-knives": {
     "name": "Fan of Knives",
@@ -5455,6 +5673,15 @@
     ],
     "reason": "Replace: The proposed crossed-sword challenge icon depicts a duel, not rapid extra attacks. Several streaking blades depict the extra attacks earned on high success."
   },
+  "talent:fold-space": {
+    "name": "Fold Space",
+    "source": "04-TALENTS",
+    "icon": "ability_racial_spatialrift",
+    "previousIcons": [
+      "spell_arcane_blink"
+    ],
+    "reason": "A rift torn through space, for the talent that teaches Translocate and Ley Rift."
+  },
   "talent:follow-through": {
     "name": "Follow Through",
     "source": "04-TALENTS",
@@ -5463,6 +5690,15 @@
       "ability_warrior_cleave"
     ],
     "reason": "Retain: the cleaving weapon image matches an attack that follows a takedown."
+  },
+  "talent:font-of-magic": {
+    "name": "Font of Magic",
+    "source": "04-TALENTS",
+    "icon": "spell_magic_managain",
+    "previousIcons": [
+      "spell_magic_managain"
+    ],
+    "reason": "A Mana gain image: Rage turned into an ally's Mana."
   },
   "talent:force-of-nature": {
     "name": "Force of Nature",
@@ -5547,6 +5783,15 @@
     ],
     "reason": "Retain: the frozen core image depicts Frost immunity and empowered Frost damage."
   },
+  "talent:frozen-grip": {
+    "name": "Frozen Grip",
+    "source": "04-TALENTS",
+    "icon": "spell_frost_chainsofice",
+    "previousIcons": [
+      "spell_frost_chainsofice"
+    ],
+    "reason": "Chains of ice for extra damage against a Slowed or Entangled creature."
+  },
   "talent:gadgeteer": {
     "name": "Gadgeteer",
     "source": "04-TALENTS",
@@ -5582,6 +5827,15 @@
       "spell_nature_web"
     ],
     "reason": "Replace: Web depicts entanglement. The green healing image matches the extra Health restored by healing spells and features."
+  },
+  "talent:glimpse-ahead": {
+    "name": "Glimpse Ahead",
+    "source": "04-TALENTS",
+    "icon": "ability_hunter_posthaste",
+    "previousIcons": [
+      "ability_hunter_posthaste"
+    ],
+    "reason": "A quickening image for higher Initiative and never being surprised."
   },
   "talent:gnomish-battle-rig": {
     "name": "Gnomish Battle Rig",
@@ -5684,6 +5938,15 @@
     ],
     "reason": "Retain: the beast-master image depicts an armored companion, matching its added Armor Point."
   },
+  "talent:hasten": {
+    "name": "Hasten",
+    "source": "04-TALENTS",
+    "icon": "ability_mage_timewarp",
+    "previousIcons": [
+      "ability_mage_timewarp"
+    ],
+    "reason": "Time Warp's art: Hasten gives an ally an extra Half-Action."
+  },
   "talent:haunt": {
     "name": "Haunt",
     "source": "04-TALENTS",
@@ -5720,6 +5983,15 @@
     ],
     "reason": "Retain: the druid astral form depicts the wild form this talent makes faster to enter."
   },
+  "talent:hearthfire": {
+    "name": "Hearthfire",
+    "source": "04-TALENTS",
+    "icon": "inv_holiday_hearthstonemidsummerfirefestival",
+    "previousIcons": [
+      "spell_fire_immolation"
+    ],
+    "reason": "A hearthstone burning with a fire rune: the hearth's fire, as Hearthfire turns Immolation into healing for allies beside you."
+  },
   "talent:heavy-hand": {
     "name": "Heavy Hand",
     "source": "04-TALENTS",
@@ -5728,6 +6000,26 @@
       "ability_warrior_commandingshout"
     ],
     "reason": "Replace: Commanding Shout depicts a roar. The close warrior punch depicts a heavy called shot to the Head."
+  },
+  "talent:hoard-sense": {
+    "name": "Hoard-Sense",
+    "source": "02-CHARACTER-OPTIONS",
+    "race": "Chromatic Outcast",
+    "icon": "inv_misc_coin_02",
+    "previousIcons": [
+      "inv_misc_coin_02"
+    ],
+    "reason": "A coin, for knowing what a thing is worth and where it was made."
+  },
+  "talent:hoarders-claim": {
+    "name": "Hoarder's Claim",
+    "source": "02-CHARACTER-OPTIONS",
+    "race": "Chromatic Outcast",
+    "icon": "inv_misc_gem_diamond_01",
+    "previousIcons": [
+      "inv_misc_gem_diamond_01"
+    ],
+    "reason": "A kept gem: you always know where a thing you hoarded is."
   },
   "talent:hold-the-hall": {
     "name": "Hold the Hall",
@@ -6032,6 +6324,24 @@
     ],
     "reason": "Replace: Crimson Vial depicts a potion. The red whirling blade image depicts a follow-up attack after a Riposte kill."
   },
+  "talent:kindled-blood": {
+    "name": "Kindled Blood",
+    "source": "04-TALENTS",
+    "icon": "spell_fire_moltenblood",
+    "previousIcons": [
+      "spell_fire_flameshock"
+    ],
+    "reason": "Veins of fire: blood kindled, for the talent that teaches Scorch, Blazing Speed and Fire Ward."
+  },
+  "talent:kindling-heart": {
+    "name": "Kindling Heart",
+    "source": "04-TALENTS",
+    "icon": "inv_jewelcrafting_livingruby_01",
+    "previousIcons": [
+      "spell_fire_soulburn"
+    ],
+    "reason": "A living ruby, the red flight's heart, for the Rage gained when a branch spell or talent heals."
+  },
   "talent:kindred-spirits": {
     "name": "Kindred Spirits",
     "source": "04-TALENTS",
@@ -6135,6 +6445,24 @@
       "spell_shadow_lifedrain"
     ],
     "reason": "Retain: the dark red siphon art depicts Health being transferred, matching the spell’s name and effect."
+  },
+  "talent:lifebinders-flame": {
+    "name": "Lifebinder's Flame",
+    "source": "04-TALENTS",
+    "icon": "spell_fire_sealoffire",
+    "previousIcons": [
+      "spell_fire_sealoffire"
+    ],
+    "reason": "The sealed flame stands for one fire bound to two ends: the split that burns the target and heals another."
+  },
+  "talent:lifeblood": {
+    "name": "Lifeblood",
+    "source": "04-TALENTS",
+    "icon": "spell_holy_healingaura",
+    "previousIcons": [
+      "spell_holy_sealofsacrifice"
+    ],
+    "reason": "A hand in a warm healing glow reaching an ally, for the Reaction that spends Rage to heal one dropping below half Health."
   },
   "talent:lights-grace": {
     "name": "Light's Grace",
@@ -6273,6 +6601,15 @@
       "spell_shadow_carrionswarm"
     ],
     "reason": "Replace: The proposed bat-like carrion face suggests a creature rather than strengthened curses. A purple hand clutching a victim represents the longer or more painful curse."
+  },
+  "talent:mana-hunger": {
+    "name": "Mana Hunger",
+    "source": "04-TALENTS",
+    "icon": "spell_frost_manaburn",
+    "previousIcons": [
+      "spell_arcane_manatap"
+    ],
+    "reason": "Hands drawing a blue spark of magic out of the air, as Mana Hunger gains Rage from casting nearby."
   },
   "talent:mana-shield": {
     "name": "Mana Shield",
@@ -6533,6 +6870,15 @@
     ],
     "reason": "A binding seal fits an oath made aloud and accepted by witnesses."
   },
+  "talent:obsidian-skin": {
+    "name": "Obsidian Skin",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_monsterscales_07",
+    "previousIcons": [
+      "ability_shaman_stonebulwark"
+    ],
+    "reason": "A black dragon scale, for the temporary Health each Void Corruption spent gives."
+  },
   "talent:old-stone-memory": {
     "name": "Old Stone Memory",
     "source": "02-CHARACTER-OPTIONS",
@@ -6570,6 +6916,15 @@
       "achievement_character_gnome_male"
     ],
     "reason": "A metal machine fitting suggests a gadget driven beyond its safe limits."
+  },
+  "talent:overflow": {
+    "name": "Overflow",
+    "source": "04-TALENTS",
+    "icon": "spell_mage_arcaneorb",
+    "previousIcons": [
+      "spell_frost_manarecharge"
+    ],
+    "reason": "An orb brimming with arcane power, for the extra Mana Font of Magic gives."
   },
   "talent:overkill": {
     "name": "Overkill",
@@ -6625,6 +6980,15 @@
       "spell_shadow_coneofsilence"
     ],
     "reason": "Replace: The proposed purple silence mask suggests muting a caster, not spreading a Curse to further targets. A cluster of diseased spectral faces depicts the curse reaching many victims."
+  },
+  "talent:paradox": {
+    "name": "Paradox",
+    "source": "04-TALENTS",
+    "icon": "ability_bossmagistrix_timewarp1",
+    "previousIcons": [
+      "ability_bossmagistrix_timewarp1"
+    ],
+    "reason": "A warped clock for the Reaction that makes an enemy roll twice and take the lower."
   },
   "talent:paralytic": {
     "name": "Paralytic",
@@ -6744,6 +7108,15 @@
     ],
     "reason": "Align with the named Psychic Scream spell: A blue figure is ringed by a violent spiral. Psychic Scream drives terror outward from the priest, matching the person caught inside the scream’s wave."
   },
+  "talent:pyre-of-renewal": {
+    "name": "Pyre of Renewal",
+    "source": "04-TALENTS",
+    "icon": "artifactability_firemage_phoenixbolt",
+    "previousIcons": [
+      "spell_holy_circleofrenewal"
+    ],
+    "reason": "A phoenix of flame, renewal out of the pyre, for one Lifebinder's Flame heal divided between two or three creatures."
+  },
   "talent:pyroblast": {
     "name": "Pyroblast",
     "source": "04-TALENTS",
@@ -6835,6 +7208,15 @@
     ],
     "reason": "Retain: the divine intervention art matches Zeal gained when Health falls below half."
   },
+  "talent:red-drake": {
+    "name": "Red Drake",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_head_dragon_red",
+    "previousIcons": [
+      "inv_misc_head_dragon_red"
+    ],
+    "reason": "A red dragon's head: the capstone that takes the Red Drake's form."
+  },
   "talent:redoubt": {
     "name": "Redoubt",
     "source": "04-TALENTS",
@@ -6871,6 +7253,15 @@
       "spell_nature_rejuvenation"
     ],
     "reason": "Align with the named Rejuvenation spell: Violet branches grow across the image. Rejuvenation sets growth into a person and lets it run, matching the growing form."
+  },
+  "talent:rekindle": {
+    "name": "Rekindle",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_phoenixegg",
+    "previousIcons": [
+      "spell_holy_renew"
+    ],
+    "reason": "A phoenix egg veined with fire: life rekindled, for the extra Health a Lifebinder's Flame heal gives per rank."
   },
   "talent:remembered-life": {
     "name": "Remembered Life",
@@ -6926,6 +7317,15 @@
       "ability_warrior_riposte"
     ],
     "reason": "Retain: the Riposte icon depicts a countering weapon strike, matching the cheaper Riposte feature."
+  },
+  "talent:rewind": {
+    "name": "Rewind",
+    "source": "04-TALENTS",
+    "icon": "ability_rewindtime",
+    "previousIcons": [
+      "ability_rewindtime"
+    ],
+    "reason": "Rewind Time's art: a blow's Health given back."
   },
   "talent:righteous-fury": {
     "name": "Righteous Fury",
@@ -7075,6 +7475,15 @@
     ],
     "reason": "Replace: The proposed cartoon dizzy symbol does not show a weapon blessed with Holy damage. A gold radiant weapon strike depicts the Consecrated weapon converting damage to Holy."
   },
+  "talent:sands-of-time": {
+    "name": "Sands of Time",
+    "source": "04-TALENTS",
+    "icon": "spell_quicksand",
+    "previousIcons": [
+      "spell_quicksand"
+    ],
+    "reason": "Running sand, for the talent that teaches Slow, Displacement and Ley Snare."
+  },
   "talent:savage-shift": {
     "name": "Savage Shift",
     "source": "04-TALENTS",
@@ -7083,6 +7492,16 @@
       "ability_druid_catform"
     ],
     "reason": "Retain: the cat form image directly depicts Shapeshift forms changing without delay."
+  },
+  "talent:scent-of-the-flight": {
+    "name": "Scent of the Flight",
+    "source": "02-CHARACTER-OPTIONS",
+    "race": "Chromatic Outcast",
+    "icon": "ability_hunter_improvedtracking",
+    "previousIcons": [
+      "ability_hunter_improvedtracking"
+    ],
+    "reason": "A tracking image: knowing a dragon's flight by smell."
   },
   "talent:schematic-mind": {
     "name": "Schematic Mind",
@@ -7374,6 +7793,15 @@
     ],
     "reason": "Replace: Disembowel depicts a bloody strike. The stealth silhouette depicts moving quietly without movement penalties."
   },
+  "talent:silver-tongue": {
+    "name": "Silver Tongue",
+    "source": "04-TALENTS",
+    "icon": "achievement_boss_onyxia",
+    "previousIcons": [
+      "spell_shadow_mindsteal"
+    ],
+    "reason": "Onyxia, who held a human court in a guise, for the Boon on Deception and Persuasion while a Court Guise is worn."
+  },
   "talent:silvermoons-debts": {
     "name": "Silvermoon's Debts",
     "source": "02-CHARACTER-OPTIONS",
@@ -7420,6 +7848,15 @@
       "ability_iyyokuk_bomb_red"
     ],
     "reason": "Retain: the red bomb image depicts the explosive device that fills an area with smoke."
+  },
+  "talent:smoldering-life": {
+    "name": "Smoldering Life",
+    "source": "04-TALENTS",
+    "icon": "spell_fire_lavaspawn",
+    "previousIcons": [
+      "spell_fire_lavaspawn"
+    ],
+    "reason": "Smoldering embers, for Smolder's ticks that split into heals."
   },
   "talent:snake-trap": {
     "name": "Snake Trap",
@@ -7476,6 +7913,15 @@
     ],
     "reason": "Retain: the violet soul-transfer effect is the named Soul Swap and matches moving ongoing effects between targets."
   },
+  "talent:spellbreak": {
+    "name": "Spellbreak",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_manabreak",
+    "previousIcons": [
+      "ability_demonhunter_manabreak"
+    ],
+    "reason": "A broken Mana sigil: Spellbreak ends a Sustained spell."
+  },
   "talent:spellsteal": {
     "name": "Spellsteal",
     "source": "04-TALENTS",
@@ -7484,6 +7930,15 @@
       "spell_arcane_arcanetorrent_nightborne"
     ],
     "reason": "Retain: the purple arcane swipe matches the counterspell effect that ends an enemy spell."
+  },
+  "talent:spellthief": {
+    "name": "Spellthief",
+    "source": "04-TALENTS",
+    "icon": "spell_shadow_siphonmana",
+    "previousIcons": [
+      "spell_shadow_siphonmana"
+    ],
+    "reason": "Siphoned Mana, for Rage and Mana taken when a spell effect is ended."
   },
   "talent:spirit-link-totem": {
     "name": "Spirit Link Totem",
@@ -7586,6 +8041,15 @@
     ],
     "reason": "Replace: Chaotic Imprint Fire shows a single demonic fire imprint. The inspected Storm, Earth and Fire icon shows lightning striking scorched earth, a closer visual for the three summoned elemental forces."
   },
+  "talent:stormblood": {
+    "name": "Stormblood",
+    "source": "04-TALENTS",
+    "icon": "spell_nature_lightning",
+    "previousIcons": [
+      "spell_nature_lightning"
+    ],
+    "reason": "Lightning, for the talent that teaches Lightning Bolt, Lightning Shield and Stone Grip."
+  },
   "talent:stormlash": {
     "name": "Stormlash",
     "source": "04-TALENTS",
@@ -7686,6 +8150,16 @@
     ],
     "reason": "Retain: the linked druidic forms directly represent the named bond that shares healing between two creatures."
   },
+  "talent:tail-sweep": {
+    "name": "Tail Sweep",
+    "source": "02-CHARACTER-OPTIONS",
+    "race": "Chromatic Outcast",
+    "icon": "inv_misc_dragoncostume_tail",
+    "previousIcons": [
+      "inv_misc_dragoncostume_tail"
+    ],
+    "reason": "A dragon's tail, swept to knock nearby enemies Prone."
+  },
   "talent:taunt": {
     "name": "Taunt",
     "source": "04-TALENTS",
@@ -7703,6 +8177,15 @@
       "ability_warrior_savageblow"
     ],
     "reason": "Retain: the savage axe blow matches an attack result that earns additional Rage."
+  },
+  "talent:temporal-drag": {
+    "name": "Temporal Drag",
+    "source": "04-TALENTS",
+    "icon": "spell_nature_slow",
+    "previousIcons": [
+      "spell_nature_slow"
+    ],
+    "reason": "Slow's own art, for Rage gained by hitting a Slowed creature."
   },
   "talent:ten-thousand-years": {
     "name": "Ten Thousand Years",
@@ -7901,6 +8384,15 @@
       "ability_racial_packhobgoblin"
     ],
     "reason": "The coin marks a goblin pricing work and hearing an inflated cost."
+  },
+  "talent:time-lapse": {
+    "name": "Time Lapse",
+    "source": "04-TALENTS",
+    "icon": "spell_mage_altertime_active",
+    "previousIcons": [
+      "spell_mage_altertime_active"
+    ],
+    "reason": "Alter Time's art for rolling a failed Test again."
   },
   "talent:tinkers-eye": {
     "name": "Tinker's Eye",
@@ -8106,6 +8598,15 @@
     ],
     "reason": "Replace: Shattering Throw depicts a thrown weapon. The planted defensive stance depicts staying still to build Rage."
   },
+  "talent:unraveller": {
+    "name": "Unraveller",
+    "source": "04-TALENTS",
+    "icon": "spell_arcane_massdispel",
+    "previousIcons": [
+      "spell_arcane_massdispel"
+    ],
+    "reason": "A mass dispel for the talent that teaches Unweave."
+  },
   "talent:unstable-affliction": {
     "name": "Unstable Affliction",
     "source": "04-TALENTS",
@@ -8159,6 +8660,15 @@
       "spell_shadow_cripple"
     ],
     "reason": "Replace: Cripple depicts a slowing effect. Shadowfury depicts the large area burst and silence of Void Eruption."
+  },
+  "talent:void-surge": {
+    "name": "Void Surge",
+    "source": "04-TALENTS",
+    "icon": "ability_priest_voidentropy",
+    "previousIcons": [
+      "ability_priest_voidentropy"
+    ],
+    "reason": "Void energy spent on a blow for extra damage."
   },
   "talent:voodoo-mending": {
     "name": "Voodoo Mending",
@@ -8225,6 +8735,24 @@
     ],
     "reason": "Retain: the rogue ambush blade matches attacking from hidden and denying a Reaction."
   },
+  "talent:weavers-sight": {
+    "name": "Weaver's Sight",
+    "source": "04-TALENTS",
+    "icon": "spell_arcane_mindmastery",
+    "previousIcons": [
+      "spell_arcane_mindmastery"
+    ],
+    "reason": "An arcane mind image for the utility spells that sense and shape magic."
+  },
+  "talent:weight-of-ages": {
+    "name": "Weight of Ages",
+    "source": "04-TALENTS",
+    "icon": "spell_nature_slowingtotem",
+    "previousIcons": [
+      "spell_nature_slowingtotem"
+    ],
+    "reason": "A slowing image for the Bane and lost Reaction on a creature you have Slowed."
+  },
   "talent:what-sylvanas-kept": {
     "name": "What Sylvanas Kept",
     "source": "02-CHARACTER-OPTIONS",
@@ -8243,6 +8771,15 @@
       "ability_whirlwind"
     ],
     "reason": "Retain: the spinning warrior attack is the named multi-target Whirlwind."
+  },
+  "talent:whisper-of-madness": {
+    "name": "Whisper of Madness",
+    "source": "04-TALENTS",
+    "icon": "spell_shadow_charm",
+    "previousIcons": [
+      "spell_shadow_charm"
+    ],
+    "reason": "A charm: a humanoid Charmed by a whisper that costs 4 Void Corruption."
   },
   "talent:wide-aura": {
     "name": "Wide Aura",
@@ -8288,6 +8825,16 @@
       "ability_hunter_cobrastrikes"
     ],
     "reason": "Replace: The proposed cobra head suggests poison, while this attack cuts the target’s Speed. Several barbed arrows depict the wounding shot that slows the target."
+  },
+  "talent:wings-beneath": {
+    "name": "Wings Beneath",
+    "source": "02-CHARACTER-OPTIONS",
+    "race": "Chromatic Outcast",
+    "icon": "spell_magic_featherfall",
+    "previousIcons": [
+      "spell_magic_featherfall"
+    ],
+    "reason": "Feather Fall's art: no damage from a fall."
   },
   "talent:witch-doctor": {
     "name": "Witch Doctor",
@@ -8353,6 +8900,16 @@
       "spell_holy_greaterblessingofkings"
     ],
     "reason": "Replace: The proposed gold fist suggests a single punch, while the talent damages and blinds all nearby enemies. A radial flash of gold Holy light depicts the area blast and blinding glare."
+  },
+  "talent:wyrms-regard": {
+    "name": "Wyrm's Regard",
+    "source": "02-CHARACTER-OPTIONS",
+    "race": "Chromatic Outcast",
+    "icon": "achievement_reputation_wyrmresttemple",
+    "previousIcons": [
+      "ability_warrior_dragonroar"
+    ],
+    "reason": "Wyrmrest Temple, where the flights meet: a true dragon who hears you out as kin."
   },
   "talent:zalazanes-lesson": {
     "name": "Zalazane's Lesson",

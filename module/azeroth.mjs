@@ -114,6 +114,7 @@ import { registerMindSootheReceipts } from './effects/mind-soothe.mjs';
 import { registerDominationDeletion } from './effects/domination-deletion.mjs';
 import { registerElunesRegardHooks } from "./effects/elunes-regard.mjs";
 import { registerMilitiaDrillHooks } from "./effects/militia-drill.mjs";
+import { registerChromaticTalentHooks } from "./effects/chromatic-talents.mjs";
 import { AzerothCharacterSheet } from "./applications/character-sheet.mjs";
 import { AzerothNpcSheet } from "./applications/npc-sheet.mjs";
 import { AzerothItemSheet } from "./applications/item-sheet.mjs";
@@ -358,6 +359,8 @@ Hooks.once("init", () => {
   registerDominationDeletion();
   registerElunesRegardHooks();
   registerMilitiaDrillHooks();
+  // 04's Court Guise (stage 3A): a guise ended by any delete of its effect is put back.
+  registerChromaticTalentHooks();
   registerProjectionProtectionHooks();
   registerIceBlockProtectionHooks();
   registerDispersionProtectionHooks();

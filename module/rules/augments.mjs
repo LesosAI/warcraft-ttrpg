@@ -2,7 +2,9 @@
  * Augments — the class equipment a caster casts through (07 §3, 08 §9).
  * Pure, no Foundry imports (CLAUDE.md §3).
  *
- * 07 §3 is the authority and 08 §9 prices it. Six categories, one to a class,
+ * 07 §3 is the authority and 08 §9 prices it. Seven categories, one to a class
+ * (the Chromatic Champion's Broodstone the seventh: it bears on the Casting Test
+ * of the spells its branches teach, since the class casts nothing else),
  * and the form inside a category is a choice of weight and concealment rather
  * than of power: *any form inside a category carries the same bonus*.
  *
@@ -33,7 +35,8 @@ export const AUGMENTS = Object.freeze({
   grimoire: Object.freeze({ className: "Warlock", forms: "Bound pacts, ledgers, skull-set wands" }),
   libram: Object.freeze({ className: "Paladin", forms: "Librams, blessed seals, hand-copied psalters" }),
   idol: Object.freeze({ className: "Druid", forms: "Carved idols, antler fetishes, moonwell stones" }),
-  totem: Object.freeze({ className: "Shaman", forms: "Planted totems, carved poles, ancestor stakes" })
+  totem: Object.freeze({ className: "Shaman", forms: "Planted totems, carved poles, ancestor stakes" }),
+  broodstone: Object.freeze({ className: "Chromatic Champion", forms: "A cut stone, a ring-set garnet, a vial sealed in lead" })
 });
 
 /** The one that is planted rather than held, and how far it reaches (07 §3). */
@@ -117,7 +120,7 @@ export function augmentOf(item) {
   return { category, className: entry.className, forms: entry.forms, bonus, planted: category === PLANTED };
 }
 
-/** Whether a thing is one of the six at all. */
+/** Whether a thing is one of the seven at all. */
 export function isAugment(item) {
   return augmentOf(item) !== null;
 }

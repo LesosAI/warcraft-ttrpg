@@ -60,7 +60,9 @@ export class RaceData extends foundry.abstract.TypeDataModel {
         new fields.StringField({ choices: () => Object.keys(AZEROTH.languages) }),
         { initial: [] }
       ),
-      // 02 §3's matrix. Warrior is the only class open to all eleven.
+      // 02 §3's matrix. Warrior is the only class open to all twelve; the Chromatic
+      // Outcast opens the Warrior, Rogue, Mage, Warlock and Chromatic Champion (the
+      // lead, 2026-11-09).
       classes: new fields.ArrayField(new fields.StringField(), { initial: [] })
     };
   }
@@ -116,7 +118,9 @@ export class ClassData extends foundry.abstract.TypeDataModel {
       shields: new fields.BooleanField({ initial: false }),
       weapons: new fields.StringField({ required: false, blank: true, initial: "" }),
 
-      // Three named branches. The sheet never invents one (D11 §4).
+      // Three named branches. The sheet never invents one (D11 §4). FOUR for the
+      // Chromatic Champion, one a dragonflight, and no Legacy beside them, so a frame
+      // still shows four at most (the Chromatic Champion plan, *Trees*).
       //
       // {name, description}, as the pack source and TalentTreeData carry
       // them. Typed as strings until 0.6.0, so `StringField#_cast` turned every
@@ -125,7 +129,7 @@ export class ClassData extends foundry.abstract.TypeDataModel {
       branches: new fields.ArrayField(new fields.SchemaField({
         name: new fields.StringField({ required: true, blank: false }),
         description: descriptionField()
-      }), { initial: [], max: 3 }),
+      }), { initial: [], max: 4 }),
 
       // Features arrive at levels 1, 5, 9, 11, 14, 17 and 20, two at level 1.
       features: new fields.ArrayField(new fields.SchemaField({
@@ -396,6 +400,12 @@ export class FeatureData extends foundry.abstract.TypeDataModel {
       // the field takes the initial and is stamped on the next preparation -
       // no migration.
       freeMove: new fields.NumberField({ required: true, integer: true, initial: 0, min: 0, max: 2 }),
+      // **THE POOL EVERY UNIVERSAL MANEUVER IS PAID FROM** (the Chromatic Champion plan's
+      // Draconic Discipline: *you pay every universal maneuver in Energy instead of
+      // Momentum, at the same price*), or null for Momentum. A free string with no
+      // `choices` (CLAUDE.md §15), restamped by the sync at world load (D-621) - no
+      // migration. `rules/maneuver-pool.mjs` is the reader.
+      maneuverPool: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
       // The card's Attack button, where the feature makes an attack (D-616).
       attack: new fields.BooleanField({ initial: false }),
       // HOW MANY ATTACKS that button makes (the architect's review of D-773):
@@ -415,10 +425,11 @@ export class FeatureData extends foundry.abstract.TypeDataModel {
       // table, "gadgets" Gadgeteer's, "overclock" and "blueprint" the gnome's two
       // racial talents (02 §5). Values ADDED to the list refuse nothing a world
       // stores, and the sync restamps every held feature at world load (D-621): no
-      // migration, the precedent of `picks` and `aura`.
+      // migration, the precedent of `picks` and `aura`. The list is
+      // `AZEROTH.featureChoices`, and `rules/feature-choices.test.mjs` fails a key a row
+      // in `rules/` stamps and the list lacks (the Champion's "flightSchools" was one).
       choice: new fields.StringField({ required: false, nullable: true, blank: false, initial: null,
-        choices: ["totems", "elementals", "forms", "demons", "greaterDemons", "beasts", "avatar", "warCry", "schools", "poisons", "skills",
-          "constructs", "gadgets", "overclock", "blueprint"] }),
+        choices: () => [...AZEROTH.featureChoices] }),
       // How many the menu takes in ONE use (02 §7's Totem Mastery, D-710):
       // one Half-Action places up to four totems, each paying its own Mana.
       // One everywhere else, and the sync stamps it off the feature table -
@@ -515,7 +526,12 @@ export class FeatureData extends foundry.abstract.TypeDataModel {
         kinds: new fields.ArrayField(new fields.StringField({ choices: ["attack", "casting", "skill", "resilience", "any"] }), { initial: [] }),
         text: new fields.StringField({ required: false, blank: true, initial: "" }),
         boons: new fields.NumberField({ required: true, integer: true, initial: 0, min: 0 }),
-        banes: new fields.NumberField({ required: true, integer: true, initial: 0, min: 0 })
+        banes: new fields.NumberField({ required: true, integer: true, initial: 0, min: 0 }),
+        // **THE SKILLS A SKILL REMINDER BEARS ON** (02's Scales bears on Stealth alone; the
+        // stage 2 review, should-fix 7): free strings, empty for every reminder before it.
+        // A new field with an initial, restamped by the sync at world load (D-621): no
+        // migration, as `aura` and `onFail` beside it.
+        skills: new fields.ArrayField(new fields.StringField({ required: true, blank: false }), { initial: [] })
       }),
       // What stands on every ALLY in reach (02 §7's Aura of Resolve, D-755):
       // `rules/auras.mjs#auraStamp`'s shape, key for key and initial for
@@ -570,7 +586,7 @@ export class FeatureData extends foundry.abstract.TypeDataModel {
 
 /* -------------------------------------------- */
 
-/** A talent tree: a class and its three branches. Talents reference into it. */
+/** A talent tree: a class and its three branches (four for the Chromatic Champion). Talents reference into it. */
 export class TalentTreeData extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     return {
@@ -579,7 +595,7 @@ export class TalentTreeData extends foundry.abstract.TypeDataModel {
       branches: new fields.ArrayField(new fields.SchemaField({
         name: new fields.StringField({ required: true, blank: false }),
         description: descriptionField()
-      }), { initial: [], max: 3 })
+      }), { initial: [], max: 4 })
     };
   }
 }

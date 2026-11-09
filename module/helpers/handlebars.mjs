@@ -92,6 +92,8 @@ const TEMPLATES = [
   "systems/azeroth-rpg/templates/chat/prompt-card.hbs",
   // The character creator's ten panes (D-636), one partial a step.
   "systems/azeroth-rpg/templates/creator/race.hbs",
+  // The Mortal guise, the race step for a guise class (the Chromatic Champion plan).
+  "systems/azeroth-rpg/templates/creator/guise.hbs",
   "systems/azeroth-rpg/templates/creator/class.hbs",
   "systems/azeroth-rpg/templates/creator/abilities.hbs",
   "systems/azeroth-rpg/templates/creator/career.hbs",

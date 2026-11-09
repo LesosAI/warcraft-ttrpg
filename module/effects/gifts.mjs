@@ -12,6 +12,14 @@
  *   target within 10 feet restores the same amount*): Earthliving's heal through
  *   the one healing door, the shaman its giver.
  *
+ * - **Font of Magic's Mana** (04's Spell-Weaver: *spend any amount of Rage. One ally within
+ *   30 feet regains that much Mana, to no more than its maximum*; stage 3B): the Rage
+ *   branch of the one Mana gift. The Rage is the giver's choice, so it cannot be worked
+ *   out again off the talents: the giver's own `fontOfMagic` flag records what was spent
+ *   and for whom, written after the payment, and the GM's handler reads THAT - never the
+ *   request - and clears it, so one Font lands once. **And Spellthief's 2 Mana** at rank 2,
+ *   worked out again off the giver's talents.
+ *
  * Here where this client may write the creature, and on the active GM's client
  * through `CONFIG.queries` where it may not (never `game.socket`, D-643). The
  * handler asks that the asker own the GIVER and that the giver hold the talent,
@@ -22,6 +30,13 @@
 import { earthlivingFor, guidanceFor, onUsePriestShaman, reincarnationFor } from "../rules/class-talents.mjs";
 import { talentEffect } from "../rules/talent-effects.mjs";
 import { manaPool } from "../rules/pools.mjs";
+import { fontMana, fontOfMagicFor, spellthiefFor } from "../rules/chromatic-talents.mjs";
+
+/** The giver's flag one Font's spend waits under until its Mana lands (stage 3B). */
+export const FONT_FLAG = "fontOfMagic";
+
+/** The giver's flag one Spellthief's Mana waits under until it lands (stage 3B). */
+export const THIEF_FLAG = "spellthiefGift";
 
 /** The query a gift to a creature this client does not own goes through. */
 export const GIFT_QUERY = "azeroth-rpg.talentGift";
@@ -58,6 +73,22 @@ async function manaHere(recipient, amount) {
   return value - pool.value;
 }
 
+/**
+ * **ONE FONT, WORKED OUT** (04's Font of Magic and Overflow): what the ally's pool takes for
+ * the Rage spent, off the giver's talents as they stand.
+ */
+function fontAmount(giver, recipient, spent) {
+  const plan = fontOfMagicFor(giver?.takenTalents?.() ?? [], talentEffect);
+  const pool = manaPool(recipient?.poolSnapshot?.() ?? []);
+  if (!plan || !pool) return 0;
+  return fontMana({ spent, add: plan.add, value: pool.value, max: pool.max });
+}
+
+/** What the giver's Spellthief gives an ally at rank 2, off the giver's own talents, or 0. */
+function thiefAmount(giver) {
+  return spellthiefFor(giver?.takenTalents?.() ?? [], { tier: giver?.system?.tier ?? 1 }, talentEffect)?.allyMana ?? 0;
+}
+
 /** A Dying creature stood up at 1 Health here. Answers whether it rose. */
 async function riseHere(recipient) {
   if ((recipient.system?.health?.value ?? 1) > 0) return false;
@@ -87,8 +118,24 @@ async function viaGM(payload) {
  * @param {{giver: Actor, recipient: Actor, amount: number}} o
  * @returns {Promise<number>}  the Mana that landed
  */
-export async function giveMana({ giver, recipient, amount }) {
+export async function giveMana({ giver, recipient, amount, pool = null }) {
   if (!giver || !recipient || !(amount > 0)) return 0;
+  // **THE RAGE BRANCH** (04's Font of Magic; stage 3B): the spend recorded on the giver
+  // first, so the GM's handler reads the giver's record and never the request.
+  if (pool === "rage") {
+    const spent = Math.max(0, Math.trunc(Number(amount)) || 0);
+    if (recipient.isOwner) return manaHere(recipient, fontAmount(giver, recipient, spent));
+    await giver.setFlag("azeroth-rpg", FONT_FLAG, { recipient: recipient.uuid, spent });
+    const done = await viaGM({ act: "font", giverUuid: giver.uuid, recipientUuid: recipient.uuid });
+    return Number(done?.gained) || 0;
+  }
+  // **SPELLTHIEF'S MANA** (stage 3B), worked out again off the giver's talents.
+  if (pool === "spellthief") {
+    if (recipient.isOwner) return manaHere(recipient, thiefAmount(giver));
+    await giver.setFlag("azeroth-rpg", THIEF_FLAG, { recipient: recipient.uuid });
+    const done = await viaGM({ act: "spellthief", giverUuid: giver.uuid, recipientUuid: recipient.uuid });
+    return Number(done?.gained) || 0;
+  }
   if (recipient.isOwner) return manaHere(recipient, Math.trunc(amount));
   const done = await viaGM({ act: "mana", giverUuid: giver.uuid, recipientUuid: recipient.uuid });
   return Number(done?.gained) || 0;
@@ -142,6 +189,19 @@ export async function giftQueryHandler({ act = "mana", giverUuid = null, recipie
     if (!(n > 0)) return { healed: false };
     await recipient.applyHealing(n, { from: giver });
     return { healed: true };
+  }
+  if (act === "font") {
+    // The giver's record of the spend, read here and cleared, so one Font lands once.
+    const record = giver.getFlag("azeroth-rpg", FONT_FLAG) ?? null;
+    if (!record || record.recipient !== recipient.uuid) return { gained: 0 };
+    await giver.unsetFlag("azeroth-rpg", FONT_FLAG);
+    return { gained: await manaHere(recipient, fontAmount(giver, recipient, Math.max(0, Math.trunc(Number(record.spent)) || 0))) };
+  }
+  if (act === "spellthief") {
+    const record = giver.getFlag("azeroth-rpg", THIEF_FLAG) ?? null;
+    if (!record || record.recipient !== recipient.uuid) return { gained: 0 };
+    await giver.unsetFlag("azeroth-rpg", THIEF_FLAG);
+    return { gained: await manaHere(recipient, thiefAmount(giver)) };
   }
   return { gained: await manaHere(recipient, hymnAmount(giver)) };
 }

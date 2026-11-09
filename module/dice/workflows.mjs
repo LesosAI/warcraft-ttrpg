@@ -33,7 +33,7 @@ import { offerSecondStrike } from "../effects/second-strike.mjs";
 import { applyInjuryOnce } from "../effects/injury-application.mjs";
 import { spellLimitRefusal, spendSpellBudget } from "../effects/spell-limits.mjs";
 import { validDispersionExecution } from "../effects/dispersion-reaction-cast.mjs";
-import { earthShockBars, reactionBarred, REACTION_BAR_REASON } from "../rules/reaction-bar.mjs";
+import { earthShockBars, reactionBarReason, reactionBarred, REACTION_BAR_REASON } from "../rules/reaction-bar.mjs";
 import { applyEarthShockBar } from "../effects/reaction-bar.mjs";
 import { crushridgeMeleeBonus } from "../rules/crushridge.mjs";
 import { taintedBloodAttackRating } from "../rules/tainted-blood.mjs";
@@ -66,7 +66,7 @@ import { resultName, succeeded } from "../rules/resolution.mjs";
 import { areaFor, lengthenArea, widenArea } from "../rules/areas.mjs";
 // An area that strikes at the start of a turn (D-756): the cast deals none of
 // it, and the tick adds what the caster STANDS on, as the cast does.
-import { areaCarriesSpell, castDealsDamage, castHeals, hasAreaTick, roundsIn, tickParts } from "../rules/area-ticks.mjs";
+import { areaCarriesSpell, castDealsDamage, castHeals, emptyAreaTick, hasAreaTick, roundsIn, tickParts } from "../rules/area-ticks.mjs";
 import { standingFeatureBonus, standingSpellBonus } from "../rules/spell-bonus.mjs";
 import { calledShotCost, situationalModifiers } from "../rules/modifiers.mjs";
 import { endLesserInvisibility } from "../effects/lesser-invisibility.mjs";
@@ -78,6 +78,21 @@ import { injuryConditions } from "../rules/injuries.mjs";
 import { injuryFightOf, injuryProvenance } from "../effects/injury-provenance.mjs";
 import { enrich } from "../helpers/enrich.mjs";
 import { CONSECRATED, CONSECRATED_FLAG, SNARE, cardAttackAllowance, consecratedTrait, evaluateAmount, featurePayment, formsKnown, mainHandOf, payingPool, paysOnSuccess, resistDcFor, rungChoice, weaponRatingOf } from "../rules/class-features.mjs";
+// The Chromatic Champion's class features (02 §7; stage 2B): a class feature's own
+// `onUse`, and the law its doors read.
+import { classFeatureOnUse } from "../rules/class-features.mjs";
+import {
+  FLIGHT_SCHOOL_FLAG, HARDENED_SCALES, HARDENED_SCALES_FLAG, branchPointsFor, breathAreas, breathSchools, flightSchool,
+  hardenedScalesChanges, outOfReach
+} from "../rules/chromatic-features.mjs";
+import { drakeBreathFor, healthBelow } from "../rules/class-talents.mjs";
+// The Chromatic Champion's branch talents (stage 3A): the law, and the one write.
+import {
+  branchSpellOf, courtGuiseRecord, fontMana, fontOfMagicFor, hastenFor, lifebinderFor, lifebinderSplit, voidSpendFor, voidSpendOutcome, voidSpendWrites, hearthfireTick, anchorTick
+} from "../rules/chromatic-talents.mjs";
+// 02's Bloodlust and 04's Hasten: one Half-Action for the next turn (the lead, 2026-11-08: *"Fix it now"*).
+import { BLOODLUST, bloodlustRefusal } from "../rules/extra-halves.mjs";
+import { BREATH_CUE_MS } from "../rules/chromatic-features.mjs";
 // Shapeshift, the Avatar of the Wild and Metamorphosis (02 §7, D-769): the law,
 // and the one writer of a shape.
 // The free shift's own law and its once-a-round mark (04's Savage Shift, D-771).
@@ -188,7 +203,7 @@ import { commandDemonRangeRefusal } from "../effects/command-demon-range.mjs";
 import { giveMana, raiseAlly } from "../effects/gifts.mjs";
 import { markLightUsed } from "../effects/shadowform.mjs";
 // Spirit Walk's *ignoring Difficult ground* (D-774): the terrain door's own flag (D-757).
-import { IGNORES_GROUND_FLAG } from "../rules/area-ground.mjs";
+import { IGNORES_GROUND_FLAG, targetGroundOf } from "../rules/area-ground.mjs";
 // THE DAMAGE DOOR'S RULINGS (D-777): 05's temporary Health - what a spell, a
 // draught, a Signature and a Use grant - 07's Aegis floor and the Critical Injury
 // it refuses, Spirit Link Totem's named totem, and a blow's second amount of its
@@ -233,7 +248,9 @@ import {publishHelmetHit} from '../effects/helmet-hit-use.mjs';
 // on one and both handlers below said *no Mana pool* to a creature holding one.
 // And `poolNamed` is the same reading for a COST — `poolFor` below matched a
 // pool by name alone, so a Signature that costs a pool refused on all 164.
-import { ANY_MOMENTUM, manaPool, poolNamed } from "../rules/pools.mjs";
+import { ANY_MOMENTUM, ANY_POOL, anyPoolChoice, anyPoolKey, manaPool, poolNamed } from "../rules/pools.mjs";
+// A free cast once per rest, and the Void a branch spell builds (the Chromatic Champion plan).
+import { FREE_CAST_FLAG, castVoidFor, spentAfter } from "../rules/free-casts.mjs";
 import { MIRROR_IMAGE_COUNT } from "../rules/mirror-image.mjs";
 // Attacking and casting end a Hide (D-717).
 import { isHiddenFor, reveal } from "../effects/stealth.mjs";
@@ -260,7 +277,7 @@ import { resistKey, resistLink } from "../rules/records.mjs";
 // the talents on it, forced movement, the Test 07 gives a held or Stunned creature,
 // a Sustain's upkeep by its entry, a Speed drop off a spell's hit and Permafrost's
 // feet, and a span out of a fight on the world's clock.
-import { DISPEL, DISPEL_REFUSALS, dispelTargetRefusal, gatePassed } from "../rules/dispel.mjs";
+import { DISPEL, DISPEL_REFUSALS, dispelTargetRefusal, gatePassed, spellCasterOf } from "../rules/dispel.mjs";
 import { dispelGatesOn, dispelOptionsOn, endEffects, unstableStrikes } from "../effects/dispel.mjs";
 import {
   escapeTalentsFor, pushFor, raptureFor, slowingFor, spellPushFor, undispellableFor
@@ -291,7 +308,7 @@ import {
 } from "../rules/class-talents.mjs";
 import { OVERCHANNEL_MAX_POINTS, overchannelPrice, takeForFeature } from "../rules/casting.mjs";
 import { ROUNDS_PER_MINUTE } from "../rules/area-ticks.mjs";
-import { pickPoint, pickFacing } from "../canvas/place.mjs";
+import { areaOriginFor, pickPoint, pickFacing } from "../canvas/place.mjs";
 import { placeArea, regionDataFor, schoolColor } from "../canvas/regions.mjs";
 import { feetToPoint } from "../canvas/footprints.mjs";
 // THE LEGACY BRANCHES' BODIES (B2): a step to a chosen point (door 3), a called
@@ -601,7 +618,13 @@ function roundUsedOf(actor) {
  * @param {Array<object>} rows  `reactionRows`'
  * @param {{actor?: Actor|null, list?: Array, strike?: object|null}} o
  */
-function parryOffered(rows = [], { actor = null, list = [], strike = null } = {}) {
+function parryOffered(rows = [], { actor = null, list = [], strike = null, unanswerable = false } = {}) {
+  // **AN ATTACK PROMISED NO ANSWER** (04's False Opening: *Your next attack this turn cannot
+  // be met with a Parry or a Block*; stage 3A): neither row is offered; the press refuses it
+  // too (`actions.mjs#reactionStateOf` reads the card's own `unanswerable`).
+  if (unanswerable === true) {
+    return (rows ?? []).map(row => ({ ...row, parry: null, block: null })).filter(row => row?.negate || row?.phaseShift);
+  }
   const rangeKind = strike?.rangeKind ?? null;
   if (!rangeKind || rangeKind === "melee") return rows ?? [];
   const from = actor?.getActiveTokens?.(true)?.[0] ?? null;
@@ -1117,7 +1140,8 @@ export async function rollTest({
   let plan = null;
   if (riderPicks.length) {
     const lines = riderLinesNow;
-    const projected = (actor?.poolSnapshot?.() ?? []).map(p => ({ ...p }));
+    // Every pool a rider may pay from, Void Corruption among them (04's Void Surge; stage 3A).
+    const projected = (actor?.riderPools?.() ?? actor?.poolSnapshot?.() ?? []).map(p => ({ ...p }));
     if (momentumPool) {
       const p = projected.find(x => x.kind === "momentum" && x.itemId === momentumPool.itemId);
       if (p) p.value -= momentumSpent;
@@ -1135,7 +1159,13 @@ export async function rollTest({
     // (the architect's review of D-774): its condition, Bane, lost Reaction,
     // Speed drop or no-healing mark lands through the GM's client, and with none
     // online it was paid for and then laid nothing. Refused here, nothing spent.
-    const writes = riderPicks.map(id => lines.find(l => l.identifier === id)).filter(Boolean)
+    // **AND A SPEND OF VOID THAT REACHES EARTHSHATTER'S PRONE** (the 3A review, M1): Void
+    // Surge's row names no `onHit`, so its Prone and Stunned were never asked for a GM.
+    const surgeWrites = riderPicks.includes("void-surge") && voidSpendWrites(
+      voidSpendFor(actor?.takenTalents?.() ?? [], { tier: actor?.system?.tier ?? 1, form: actor?.shape?.kind === "drake" ? (actor.shape.forms?.[0]?.name ?? null) : null }, talentEffect),
+      (actor?.riderPools?.() ?? []).find(p => p.kind === "corruption" && p.name === "void")?.value ?? 0
+    );
+    const writes = surgeWrites || riderPicks.map(id => lines.find(l => l.identifier === id)).filter(Boolean)
       .some(line => riderWritesOnTarget(line, { tier: actor?.system?.tier ?? 1 }));
     if (writes && gmAbsentForActors(list.map(t => targetActorOf(t)))) {
       ui.notifications?.warn(game.i18n.localize("AZEROTH.Rider.Inflict.NoGM"));
@@ -1168,6 +1198,13 @@ export async function rollTest({
     return null;
   }
   const chargeLine = linesNow.taken.find(l => l.kind === "charge") ?? null;
+  // **04's EMBER STRIKES** (*Your weapon attacks may deal Fire damage instead of their own
+  // type*; stage 3A): the line ticked, the blow a magical one of that school, as a creature's
+  // patched school is (`npcAttackWithDialog`) - its Ward and Immune read on that school.
+  const convertAttack = linesNow.taken.find(l => l.kind === "convertAttack") ?? null;
+  if (convertAttack && damage && AZEROTH.schools?.[convertAttack.to]) {
+    damage = { ...damage, kind: "magical", school: convertAttack.to };
+  }
   const finisherNow = kind === "attack" && (finisherSpent > 0 || finisherFree) ? finisherStateOf(actor, first) : null;
   if (finisherFree && !finisherNow?.free) {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Finisher.MarkGone", { talent: finisherFree }));
@@ -1181,7 +1218,11 @@ export async function rollTest({
   // they were paid for and laid nothing. Refused here with the riders' own, nothing spent.
   if (kind === "attack" && !parry && list.length) {
     const boundOwner = boundOwnerOf(actor);
+    // **AND WHAT A TALENT LAYS WITH THE HIT** (the 3A review, should-fix 4): 04's Ember
+    // Strikes' Scorched and Deep Cut's Bleeding (`hitConditionsFor`, read at the highest SL a
+    // hit could reach, so a blow that could lay one is asked).
     const lays = (Array.isArray(landsOnHit) && landsOnHit.some(l => AZEROTH.conditions?.[l?.condition]))
+      || hitConditionsFor(actor?.takenTalents?.() ?? [], { sl: 6, hit: true }).length > 0
       || (finisherMode === "shackle" && Boolean(finisherNow?.shackle))
       || (Boolean(boundOwner) && boundAttacksFor(boundOwner.takenTalents?.() ?? [], { kind: bondOf(actor)?.kind ?? null, name: actor.name ?? "" })
         .some(row => (row.lays ?? []).some(l => AZEROTH.conditions?.[l?.condition])));
@@ -1293,8 +1334,11 @@ export async function rollTest({
     const payer = momentumPayerNow?.actor ?? actor;
     // A creature's snapshot holds its Power and its Momentum both at itemId null and
     // name null (D-637), so the kind is what tells them apart.
-    const momentumNow = (payer.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.itemId === momentumPool.itemId && p.name === momentumPool.name) ?? momentumPool;
-    await payer.updatePool({ itemId: momentumPool.itemId, kind: "momentum", value: Math.max(0, (Number(momentumNow.value) || 0) - momentumSpent) });
+    // Draconic Discipline's Energy is a Power pool (the Chromatic Champion plan): the
+    // payer's own `kind`, Momentum where the row names none.
+    const payKind = momentumPool.kind ?? "momentum";
+    const momentumNow = (payer.poolSnapshot?.() ?? []).find(p => p.kind === payKind && p.itemId === momentumPool.itemId && p.name === momentumPool.name) ?? momentumPool;
+    await payer.updatePool({ itemId: momentumPool.itemId, kind: payKind, value: Math.max(0, (Number(momentumNow.value) || 0) - momentumSpent) });
     if (momentumPayerNow?.shared) provenanceExtra = [...provenanceExtra, { label: "AZEROTH.SharedQuarry.Label", value: null, formula: game.i18n.format("AZEROTH.SharedQuarry.Paid", { n: momentumSpent, owner: payer.name }) }];
   }
   // **FINISHER** (02 §7): *spend ALL your Combo Points and add that many to the
@@ -1346,8 +1390,8 @@ export async function rollTest({
   // is paid now, as D-770 pays it.
   const paidNow = keptPaid.filter(p => p.line?.pays !== "hit");
   const paidOnHit = keptPaid.filter(p => p.line?.pays === "hit");
-  const settled = settleRiders({ paid: paidNow }, { pools: actor?.poolSnapshot?.() ?? [] });
-  if (settled.writes.length) await actor.updatePool(settled.writes);
+  const settled = settleRiders({ paid: paidNow }, { pools: actor?.riderPools?.() ?? actor?.poolSnapshot?.() ?? [] });
+  if (settled.writes.length) await (actor.writeRiderPools ? actor.writeRiderPools(settled.writes) : actor.updatePool(settled.writes));
   // **WHAT A PAID RIDER DOES TO THE ROLL ITSELF** (D-773): Trueshot's SL, the hit
   // made without a roll (*counts as SL 2, or SL 3 at rank 2*), and Piercing
   // Shot's Pierce on the blow - a charge paid before the blow from the Combat
@@ -1573,21 +1617,47 @@ export async function rollTest({
   // **A RIDER PAID ONLY WHEN THE BLOW LANDS** (Bloodthirst, D-772): settled now,
   // off the pools as they stand after the die, and on a miss nothing is spent.
   const settledOnHit = outcome.success && paidOnHit.length
-    ? settleRiders({ paid: paidOnHit }, { pools: actor?.poolSnapshot?.() ?? [] })
+    ? settleRiders({ paid: paidOnHit }, { pools: actor?.riderPools?.() ?? actor?.poolSnapshot?.() ?? [] })
     : { paid: [], writes: [] };
-  if (settledOnHit.writes.length) await actor.updatePool(settledOnHit.writes);
+  if (settledOnHit.writes.length) await (actor.writeRiderPools ? actor.writeRiderPools(settledOnHit.writes) : actor.updatePool(settledOnHit.writes));
+  // **WHAT A SPEND OF VOID LANDS** (04's Void Surge, Obsidian Skin, Earthshatter and the
+  // Black Drake; stage 3A): the Void the hit actually spent, read off the settle - its damage
+  // on the blow's own Rating (`riderDamageRows`, below), the temporary Health on the
+  // Champion and Earthshatter's Prone and Stunned on every creature struck.
+  const voidSpent = settledOnHit.paid.filter(p => p.pool === "void").reduce((n, p) => n + (Math.trunc(Number(p.spent)) || 0), 0);
+  const voidPlan = voidSpent > 0 ? voidSpendFor(talentsHeld, { tier: actor?.system?.tier ?? 1, form: actor?.shape?.kind === "drake" ? (actor.shape.forms?.[0]?.name ?? null) : null }, talentEffect) : null;
+  const voidDone = voidPlan ? voidSpendOutcome(voidPlan, { spent: voidSpent, sl: outcome.sl, hit: outcome.success }) : null;
+  // **AND WHAT A WITHDRAWN HIT TAKES BACK OF IT** (the 3A review, M4; the lead: *"Yes, take
+  // it back"*): each Prone and Stunned it laid recorded by target through `recordLanding`, so
+  // a Parry or Afterimage takes them off; the temporary Health it granted, recorded for the
+  // card's settle below.
+  // What the grant ADDED and the record it replaced (the 3B review, should-fix 7), so the
+  // take-back acts only while that grant still stands (`rules/temporary-health.mjs#grantTakenBack`).
+  let voidTempTaken = null;
+  if (voidDone) {
+    const { landVoidSpend } = await import("../effects/chromatic-talents.mjs");
+    const voidLanded = await landVoidSpend({ actor, outcome: voidDone, targets: list, source: voidPlan.names.join(", "), recordLanding });
+    voidTempTaken = voidLanded.tempTaken ?? null;
+    fired.push({ key: "talent", name: voidPlan.by, text: [game.i18n.format("AZEROTH.VoidSpend.Spent", { name: actor.name, n: voidSpent, damage: voidDone.damage }), ...voidLanded.lines].join(" "), extraDamage: voidDone.damage });
+    if (voidDone.damage > 0) riderDamageRows.push({ name: voidPlan.by, amount: voidDone.damage, type: null });
+  }
   // **WHAT THE HIT WAS PAID, FOR A MISS TO GIVE BACK** (the Legacy branches' door 13:
   // Bloodthirst's *When one of your attacks hits, spend 6 Rage*): the riders paid on
   // the hit, by pool, refunded once if a Parry or Afterimage withdraws it
   // (`dice/annotate.mjs`) - once EVERY row of the card is withdrawn, since a blow that
   // landed on two is still a hit on the one nobody answered (the B1 fix run: the same
   // settle as the Momentum the hit built, `rules/miss.mjs#everyRowWithdrawn`).
-  const poolsAfterHit = actor?.poolSnapshot?.() ?? [];
+  // Every pool a rider may pay from, the Void track among them (the 3A review, M4): the track
+  // is no `poolSnapshot` pool, so its spend was dropped from the refund.
+  const poolsAfterHit = actor?.riderPools?.() ?? actor?.poolSnapshot?.() ?? [];
   const refundOnMiss = outcome.success && list.length > 0
-    ? settledOnHit.paid.filter(p => (Number(p.spent) || 0) > 0).map(p => {
-      const pool = poolsAfterHit.find(x => x.name === p.pool) ?? null;
-      return { actorUuid: actor.uuid, itemId: pool?.itemId ?? null, kind: pool?.kind ?? null, pool: p.pool, amount: p.spent };
-    }).filter(r => r.kind)
+    ? [
+      ...settledOnHit.paid.filter(p => (Number(p.spent) || 0) > 0).map(p => {
+        const pool = poolsAfterHit.find(x => x.name === p.pool) ?? null;
+        return { actorUuid: actor.uuid, itemId: pool?.itemId ?? null, kind: pool?.kind ?? null, pool: p.pool, amount: p.spent };
+      }).filter(r => r.kind),
+      ...(voidTempTaken?.amount > 0 ? [{ actorUuid: actor.uuid, itemId: null, kind: "tempHealth", pool: "temp", amount: voidTempTaken.amount, source: voidTempTaken.source, prior: voidTempTaken.prior }] : [])
+    ]
     : [];
   const riderRows = [
     ...settled.paid.map(p => ({ ...p, primed: false })),
@@ -1736,6 +1806,14 @@ export async function rollTest({
         text: landed ? landed.map(landedText).join(" ") : game.i18n.format("AZEROTH.Talent.Card.LaysOnHit", { condition: game.i18n.localize(AZEROTH.conditions[hit.id] ?? hit.id), value: hit.value ?? "" }),
         condition: landed ? null : { id: hit.id, value: hit.value }
       });
+    }
+    // **04's CHARGED STEEL** (*When you hit a creature with a weapon attack, your next branch
+    // spell to damage that creature before the end of your next turn deals 1 more damage per
+    // rank*; stage 3A): the promise laid on the striker for each creature this hit struck.
+    if (outcome.success && list.length && actor?.type === "character") {
+      const { markChargedSteel } = await import("../effects/chromatic-talents.mjs");
+      const steel = await markChargedSteel(actor, list);
+      if (steel) fired.push({ key: "talent", name: steel.name, text: steel.text });
     }
   }
   // **WHAT FOUR EFFECT TRAITS LAND ON A HIT** (08 SS5; D-812; the lead: *"complete
@@ -2220,6 +2298,8 @@ export async function rollTest({
     }
     // The next attack's promised damage, by the talent that promised it (D-772).
     for (const e of promised?.live ?? []) if ((e.damage ?? 0) > 0) roll.options.provenance.push({ label: e.name, value: e.damage });
+    // 04's Ember Strikes' Fire, said by name (stage 3A).
+    if (convertAttack) roll.options.provenance.push({ label: convertAttack.name, value: null, formula: game.i18n.format("AZEROTH.EmberStrikes.Row", { school: game.i18n.localize(AZEROTH.schools[convertAttack.to] ?? convertAttack.to) }) });
   }
   // **04's DRAWN ACROSS ON THE STRIKER** (*the damage it deals is halved, rounded down*;
   // the Legacy branches' door 25): the blow's worth halved before Armor Points and Ward,
@@ -2622,7 +2702,7 @@ export async function rollTest({
     // or thrown blow keeps a defender's Parry only where 04's Anticipation reaches it
     // (`parryOffered`), and a row left with neither button goes.
     reactions: (kind === "attack" && !parry
-      ? outcome.success && damageResult ? parryOffered(reactions, { actor, list, strike })
+      ? outcome.success && damageResult ? parryOffered(reactions, { actor, list, strike, unanswerable: promised?.unanswerable === true })
         : (reactions ?? []).filter(row => row.phaseShift).map(row => ({ ...row, block: null, parry: null, negate: null }))
       : []),
     // **A WARD PRESSED FROM THIS CARD** (04's Foresight; the lead, 2026-10-03, on
@@ -2679,6 +2759,8 @@ export async function rollTest({
     // Maim draws the Critical Injury on the Limb table whatever the blow struck (08 §5).
     flags: { "azeroth-rpg": { kind, location: criticalLocation ?? location, struck: location, damage: damageResult, targets: list, damageByTarget, momentumSpent, offHand,
       hiddenAtRoll,
+      // 04's False Opening (stage 3A): this attack took the promise no Parry or Block answers.
+      ...(promised?.unanswerable === true ? { unanswerable: true } : {}),
       ...(unreliableMarker?{unreliableWeapon:unreliableMarker}:{}),
       signatureRetaliations: (kind==='attack'&&outcome.success&&(strike?.rangeKind??'melee')==='melee'?struckBack:[])
         .filter(row=>row.signatureRetaliation&&Number.isInteger(row.index)).map(row=>({...row.signatureRetaliation,index:row.index})),
@@ -2980,7 +3062,7 @@ function damageTypeWords(result = {}) {
  */
 export function turnBudgetRefusal(actor, action) {
   if (iceBlockFor(actor)) return { reason: "AZEROTH.IceBlock.Protected", params: {} };
-  if (action === "reaction" && reactionBarred(actor)) return { reason: REACTION_BAR_REASON, params: {} };
+  if (action === "reaction" && reactionBarred(actor)) return { reason: reactionBarReason(actor) ?? REACTION_BAR_REASON, params: { name: actor?.name ?? "" } };
   const projection = projectionRefusal(actor, "action");
   if (projection) return { reason: projection, params: {} };
   const sleeping = sleepRefusal(actor, "action");
@@ -3011,7 +3093,7 @@ export function turnBudgetRefusal(actor, action) {
 
 export async function spendTurnBudget(actor, action) {
   if (action === "reaction" && reactionBarred(actor)) {
-    ui.notifications?.warn(game.i18n.localize(REACTION_BAR_REASON));
+    ui.notifications?.warn(game.i18n.format(reactionBarReason(actor) ?? REACTION_BAR_REASON, { name: actor?.name ?? "" }));
     return false;
   }
   if (refuseAncientDespair(actor, "action")) return false;
@@ -3292,6 +3374,11 @@ export async function castSpell({
     return null;
   }
   const freeLine = linesNow.taken.find(l => l.kind === "free") ?? null;
+  // **A FREE CAST, ONCE PER REST** (the Chromatic Champion plan: *"the utility spells
+  // can be cast without rage once per short rest"*): the ticked line, judged again by
+  // `talentLinesTaken` against the talent item's flag as it stands now, and marked
+  // spent once the cast is paid for (`rules/free-casts.mjs`).
+  const freeCastLine = linesNow.taken.find(l => l.kind === "freeCast") ?? null;
   const pierceLine = linesNow.taken.find(l => l.kind === "pierce") ?? null;
   const chargeLine = linesNow.taken.find(l => l.kind === "charge") ?? null;
   // **FEL FIRE** (04: *you may have it deal Fel damage instead*; D-775): the line
@@ -3312,9 +3399,12 @@ export async function castSpell({
       return null;
     }
   }
+  const splitLine = linesNow.taken.find(l => l.kind === "lifebinder") ?? null;
+  const surgeLine = linesNow.taken.find(l => l.kind === "voidSurge") ?? null;
+  let splitPicked = null;
   // **INNER FOCUS** (04: *a spell or feature requiring a Casting Test costs no
   // Mana*; D-774): nothing to pay, and its use struck once the cast is paid for.
-  const manaBase = freeLine ? 0 : manaDue;
+  const manaBase = freeLine || freeCastLine ? 0 : manaDue;
   // The item naming this spell, read again further down for what it adds to the
   // Health the spell restores (D-698's heal half).
   const empowered = actor.system?.signatureEffects?.empowers?.[spell.name] ?? null;
@@ -3345,7 +3435,7 @@ export async function castSpell({
   const ferocity = inForm ? ((actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === "ferocity") ?? null) : null;
   // The pool a talent pays in (door 8): the actor's own pool of that name.
   const payPool = talentPool ? ((actor.poolSnapshot?.() ?? []).find(p => p.name === talentPool.pool) ?? null) : null;
-  const price = manaPrice(mana, { inShapeshiftForm: inForm, pool: talentPool?.pool ?? null });
+  const price = manaPrice(mana, { inShapeshiftForm: inForm, pool: talentPool?.pool ?? null, free: Boolean(freeCastLine) });
   // 04's Garrote (D-773): *cannot cast while that Bleeding lasts* - the
   // Bleeding's own effect carries the mark, so it ends with the Bleeding.
   const noCasting = noCastingFrom((actor.effects ?? []).filter(e => e.active !== false).map(e => e.flags?.["azeroth-rpg"] ?? {}));
@@ -3379,6 +3469,40 @@ export async function castSpell({
   if (refused?.reason === "NoHealth") {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Cast.NoHealth", { name: spell.name, health: spellHealth }));
     return null;
+  }
+  // **04's LIFEBINDER'S FLAME, CHOSEN BEFORE ANYTHING IS PAID, AFTER THE POOL'S REFUSALS** (the
+  // 3A review, should-fix 1: a Champion short of Rage was asked to pick and then refused) (*one creature within the
+  // spell's range, you included, regains Health*; Pyre of Renewal's two or three; stage 3A):
+  // the line ticked, the creatures to heal picked now through the one chooser - every
+  // creature on the board within the spell's reach of the caster, the caster first - and a
+  // dismissed chooser casts nothing. A creature this client does not own needs a GM to heal,
+  // judged here with the rest. With no token on the board the caster is the one choice.
+  if (splitLine) {
+    // *Work out the damage it deals after Armor Points and Ward. Its target takes half*: a
+    // split needs the creature the spell strikes, so a cast with none targeted is refused
+    // in words before the chooser (the 3A review, M3).
+    if (!list.some(t => targetActorOf(t))) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Lifebinder.NeedsTarget", { name: spell.name, talent: splitLine.name }));
+      return null;
+    }
+    const plan = lifebinderFor(talentsNow, { form: actor.shape?.kind === "drake" ? (actor.shape.forms?.[0]?.name ?? null) : null }, talentEffect);
+    const reachFt = /^touch$/i.test(String(sys.range ?? "").trim()) ? 5 : (Number(/(\d+)\s*ft/i.exec(String(sys.range ?? ""))?.[1]) || 0);
+    const near = reachFt > 0 ? creaturesWithin(actor, reachFt, { who: "creature" }) : [];
+    const options = [{ key: actor.uuid, name: actor.name, description: "", actor }];
+    for (const r of near) if (r.actor && r.actor.uuid !== actor.uuid && !options.some(o => o.key === r.actor.uuid)) options.push({ key: r.actor.uuid, name: r.token?.name ?? r.actor.name, description: "", actor: r.actor });
+    const picks = options.length === 1 ? [options[0]] : await (async () => {
+      const max = Math.max(1, plan?.divide ?? 1);
+      const answer = await chooseOption(spell, options.map(({ actor: _a, ...o }) => o), null, { max, prompt: game.i18n.format("AZEROTH.Lifebinder.Prompt", { name: spell.name, talent: splitLine.name, count: max }) });
+      const keys = (Array.isArray(answer) ? answer : (answer ? [answer] : [])).map(o => o.key);
+      return options.filter(o => keys.includes(o.key));
+    })();
+    if (!picks.length) return null;
+    const { lifebinderNeedsGM } = await import("../effects/chromatic-talents.mjs");
+    if (lifebinderNeedsGM(picks.map(p => p.actor))) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Lifebinder.NoGMBefore"));
+      return null;
+    }
+    splitPicked = { plan, picks: picks.map(p => ({ uuid: p.actor.uuid, name: p.name })) };
   }
   // **A HEALING SPELL AT A HALF-ACTION** (04's Nature's Swiftness, D-771), asked
   // with the refusals: the spell has to be a healing spell that costs an action
@@ -3452,6 +3576,42 @@ export async function castSpell({
   if (speedRead && list.length && gmAbsentForActors(list.map(t => targetActorOf(t)))) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.SpeedDrop.NoGM"));
     return null;
+  }
+  // **AND EVERY OTHER WRITE THE HIT LAYS ON THE CREATURE STRUCK** (the 3A review, M1 and
+  // should-fix 3): 07's SL riders - Searing Pain's Bane, Fel Bolt's Ward drop, Shattering
+  // Bolt's Armor Points - land through the GM's client where this one does not own the
+  // creature, and so does a spend of Void that reaches Earthshatter's Prone, and 07's
+  // Unweave's ending. With no GM online each was paid for and laid nothing; refused here,
+  // before the budget, nothing spent.
+  const slWrites = ["hitBane", "hitWardDrop", "hitApDrop"].includes(readSlRider(sys.effect)?.kind);
+  const surgeWrites = Boolean(surgeLine) && !viaItem && voidSpendWrites(
+    voidSpendFor(talentsNow, { tier: actor.system?.tier ?? 1, form: actor.shape?.kind === "drake" ? (actor.shape.forms?.[0]?.name ?? null) : null }, talentEffect),
+    actor.system?.corruption?.void ?? 0
+  );
+  const unweaving = sys.identifier === "unweave";
+  if ((slWrites || surgeWrites || unweaving) && list.length && gmAbsentForActors(list.map(t => targetActorOf(t)))) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Rider.Inflict.NoGM"));
+    return null;
+  }
+  // **04's SPELLTHIEF'S ALLY, PICKED BEFORE ANYTHING IS PAID** (the 3B review, should-fix 5;
+  // D-768's order): an Unweave that may end a spell effect - a target carrying one - asks
+  // which ally regains Spellthief's Mana now, before the budget and the Mana, never in the
+  // middle of the cast. A dismissed chooser casts nothing; a picked ally this client does
+  // not own needs a GM, judged here with the rest.
+  let unweaveThief = { ally: null };
+  if (unweaving && !viaItem && list.length) {
+    const { plainEffect } = await import("../effects/dispel.mjs");
+    const ends = list.some(t => (targetActorOf(t)?.effects ?? []).some(e => { const p = plainEffect(e); return !p.disabled && spellCasterOf(p); }));
+    if (ends) {
+      const { pickSpellthiefAlly } = await import("../effects/chromatic-flights.mjs");
+      const picked = await pickSpellthiefAlly(actor);
+      if (!picked) return null;
+      if (picked.ally && gmAbsentForActors([picked.ally.actor])) {
+        ui.notifications?.warn(game.i18n.localize("AZEROTH.Gift.NoGM"));
+        return null;
+      }
+      unweaveThief = picked;
+    }
   }
 
   // **04's DIVINE AEGIS** (*When your healing restores a target to full Health, it
@@ -3753,6 +3913,10 @@ export async function castSpell({
     const payNow = poolsNow.find(p => p.itemId === payPool.itemId && p.kind === payPool.kind && p.name === payPool.name) ?? payPool;
     await actor.updatePool({ itemId: payPool.itemId, kind: payPool.kind, value: payFromNow(payNow.value, price.amount).value }, extra);
   } else if (Object.keys(extra).length) await actor.update(extra);
+  // The free cast's use, marked on its talent item STRAIGHT AFTER THE PAYMENT (the
+  // Chromatic Champion plan; the 1B review, item 5 - D-761's shape): judged before the
+  // budget, so no other write may stand between the price waived and the use spent.
+  const freeCast = Boolean(freeCastLine) && manaDue > 0 && await markFreeCast(actor, freeCastLine);
   // Nature's Swiftness's use, struck once the cast is paid for (D-771).
   const castSwift = (Boolean(swiftCounter) || Boolean(swiftRow?.perRound)) && !free && beforeDreadAction !== sys.action;
   if (castSwift && swiftCounter) await swiftCounter.update({ "system.uses.value": Math.max(0, (swiftCounter.system?.uses?.value ?? 1) - 1) });
@@ -3805,6 +3969,19 @@ export async function castSpell({
   // spell was cast either way. Unresisted: 10 §3 puts this among the
   // occasions *agreed to rather than suffered*, so there is no Test.
   await accrueCastingCorruption(actor, spell);
+  // **AND THE VOID A BRANCH SPELL BUILDS** (the Chromatic Champion plan's Black branch:
+  // *"have the black spells at tier 2 and tier 3 give void corruption"*): the talent
+  // row's `void`, after the payment and whatever the Test, through the same
+  // unresisted door. An item's casting is not the talent's.
+  if (!viaItem) await accrueCastVoid(actor, spell, talentsNow);
+  // **04's MANA HUNGER** (*Once a round, when a creature within 30 feet of you casts a spell,
+  // gain 1 Rage*; stage 3B): a cast made is a cast whatever its Test comes to, so the holders
+  // near the caster are fed here, once it is paid for - a creature's Spells line comes through
+  // this door too (`applications/actions.mjs#castNamedSpell`). The active GM judges. **NOT
+  // AWAITED** (the 3B review, should-fix 4): nothing in the cast depends on the Rage, and the
+  // door asks nobody where no holder stands near.
+  import("../effects/chromatic-flights.mjs").then(m => m.feedManaHunger({ caster: actor, source }))
+    .catch(err => console.warn("azeroth-rpg | Mana Hunger", err));
 
   // 2c. **A CAST THAT COUNTS AS MOVING** (04's Shadowcraft: *Shadow Walk counts as
   // moving for your Focus*; the lead: *"Yes"*; the Legacy branches' door 9): the
@@ -3898,6 +4075,8 @@ export async function castSpell({
   }
   if (castSwift) roll.options.provenance.push({ label: swiftRow.name, value: null, formula: game.i18n.localize("AZEROTH.Cast.Swift.Row") });
   if (focused) roll.options.provenance.push({ label: freeLine.name, value: null, formula: game.i18n.format("AZEROTH.TalentLine.FreeRow", { n: manaDue }) });
+  if (freeCast) roll.options.provenance.push({ label: freeCastLine.name, value: null, formula: game.i18n.format("AZEROTH.FreeCast.Row", {
+    n: manaDue, pool: game.i18n.localize(AZEROTH.poolTypes[freeCastLine.pool ?? "mana"] ?? freeCastLine.pool ?? "mana") }) });
   await roll.evaluate();
   // **SOUL FIRE** (04: *Your next spell this turn counts its Casting Test as
   // reaching SL 3*; D-775): the Test counts as a success at SL 3 - or at the SL
@@ -3918,6 +4097,18 @@ export async function castSpell({
     const rolled = roll.outcome;
     roll.options.forcedSl = rolled?.success ? Math.max(0, rolled.sl ?? 0) : 0;
     roll.options.provenance.push({ label: take.miracle.name || "AZEROTH.Miracle.Label", value: null, formula: game.i18n.localize("AZEROTH.Miracle.Row") });
+  }
+  // **04's DISRUPT WEAVE, ASKED IN THE CAST** (*spend Rage equal to that spell's tier plus 2.
+  // The caster makes a Spirit Resilience Test against your Spell DC. On a failure the spell
+  // fails and its Mana is spent*; stage 3B): after the payment and the die, before anything
+  // follows from either, of each holder near enough (`effects/chromatic-reactions.mjs`). A
+  // spell cast through an Attack Test (04's Blademaster's) is no Casting Test.
+  if (!attackCalculation) {
+    try {
+      await (await import("../effects/chromatic-reactions.mjs")).askDisruptWeave({ caster: actor, spell, roll });
+    } catch (err) {
+      console.warn("azeroth-rpg | Disrupt Weave", err);
+    }
   }
   await actor.offerElunesRegard?.(roll);
   const outcome = roll.outcome;
@@ -4144,22 +4335,72 @@ export async function castSpell({
   // spell deals it, off the flag as it stands now.
   const charged = hit && chargeLine && await spendCharge(actor) ? chargeLine.amount : 0;
   if (charged) roll.options.provenance.push({ label: chargeLine.name, value: charged });
-  const damageByTarget = list.map((t,index) => (hit ? mitigate(t, charged ? (ratingFor(t).rating ?? 0) + extras + charged : null,{signatureIndex:index}) : null));
+  // **04's VOID SURGE ON A BRANCH SPELL** (*When an attack or a branch spell of yours deals
+  // damage, spend up to your tier in Void Corruption. The blow deals 1 more damage per rank
+  // for each Void Corruption spent*; stage 3A): the line ticked, spent where the spell deals
+  // its damage - the most the track holds up to the cap, off the track as it stands now -
+  // and the Black Drake's further 1 a Void in its form (`voidSpendFor`).
+  const champForm = actor.shape?.kind === "drake" ? (actor.shape.forms?.[0]?.name ?? null) : null;
+  const surgePlan = hit && surgeLine && !viaItem ? voidSpendFor(talentsNow, { tier: actor.system?.tier ?? 1, form: champForm }, talentEffect) : null;
+  const voidHeld = Math.max(0, Math.trunc(Number(actor.system?.corruption?.void)) || 0);
+  const surgeSpent = surgePlan ? Math.min(voidHeld, surgePlan.cap) : 0;
+  const surgeDone = surgeSpent > 0 ? voidSpendOutcome(surgePlan, { spent: surgeSpent, sl, hit: true }) : null;
+  if (surgeDone) {
+    await actor.update({ "system.corruption.void": Math.max(0, voidHeld - surgeSpent) });
+    roll.options.provenance.push({ label: surgePlan.by, value: surgeDone.damage });
+  }
+  const surgeAdd = surgeDone?.damage ?? 0;
+  // **04's CHARGED STEEL** (*your next branch spell to damage that creature before the end of
+  // your next turn deals 1 more damage per rank*; stage 3A): each creature's own promise,
+  // taken off the caster's flag by this branch spell.
+  const steel = hit && !viaItem && branchSpellOf(talentsNow, spell.name, talentEffect)
+    ? await (await import("../effects/chromatic-talents.mjs")).takeChargedSteel(actor, list.map(t => targetActorOf(t)?.uuid).filter(Boolean))
+    : { by: {}, names: [] };
+  for (const n of steel.names) roll.options.provenance.push({ label: n, value: null, formula: game.i18n.localize("AZEROTH.ChargedSteel.Row") });
+  const boostOf = t => charged + surgeAdd + (steel.by[targetActorOf(t)?.uuid] ?? 0);
+  const forcedFor = t => (boostOf(t) ? (ratingFor(t).rating ?? 0) + extras + boostOf(t) : null);
+  const damageByTarget = list.map((t,index) => (hit ? mitigate(t, forcedFor(t),{signatureIndex:index}) : null));
+  // **04's LIFEBINDER'S FLAME, SPLIT** (*Work out the damage it deals after Armor Points and
+  // Ward. Its target takes half of that, rounded down, and one creature ... regains Health
+  // equal to the other half plus your Constitution modifier*; stage 3A): each row's damage
+  // after its Armor Points and Ward halved, rounded down, on the card's own Apply, and the
+  // heal recorded for the creatures picked - landed once the card stands (`landLifebinder`).
+  // A row's second amounts ride its halved number (MY READING, for the lead).
+  let lifebinderRecord = null;
+  const splitLines = [];
+  if (splitPicked && hit) {
+    const split = lifebinderSplit({
+      dealt: damageByTarget.map(r => r?.damage ?? 0), conMod: actor.system?.abilities?.con?.mod ?? 0,
+      heals: splitPicked.picks.length, plan: splitPicked.plan, tier: actor.system?.tier ?? 1
+    });
+    for (const [i, r] of damageByTarget.entries()) if (r) damageByTarget[i] = { ...r, damage: split.takes[i] ?? r.damage, parts: null, split: true };
+    lifebinderRecord = {
+      by: actor.uuid, name: splitLine.name, cleanse: splitPicked.plan?.cleanse ?? null, self: split.self,
+      selfBy: splitPicked.plan?.selfBy ?? null,
+      heals: splitPicked.picks.map((p, i) => ({ ...p, amount: split.shares[i] ?? 0 })), landed: []
+    };
+    roll.options.provenance.push({ label: splitLine.name, value: null, formula: game.i18n.localize("AZEROTH.Lifebinder.Row") });
+    splitLines.push(game.i18n.format("AZEROTH.Lifebinder.Line", {
+      talent: splitLine.name, heals: lifebinderRecord.heals.map(h => `${h.name} ${h.amount}`).join(", ")
+    }));
+  }
   // Current Mana is read when Apply is pressed. Store each possible shortage
   // through the SAME mitigation path, so Ward and halving meet the whole hit.
   const manaBurn = hit && sys.identifier === "mana-burn"
     ? list.map((t,index) => Array.from({ length: 4 }, (_, shortage) =>
       mitigate(t, (ratingFor(t).rating ?? 0) + extras + charged + shortage,{signatureIndex:index})))
     : null;
-  const damageResult = hit ? (damageByTarget[0] ?? mitigate(null, charged ? (rating ?? 0) + charged : null)) : null;
+  const damageResult = hit ? (damageByTarget[0] ?? mitigate(null, (charged + surgeAdd) ? (rating ?? 0) + charged + surgeAdd : null)) : null;
+  // What the card's one button adds where no target is recorded (Static Charge, Void Surge).
+  const looseBoost = charged + surgeAdd;
   // **WHAT A CREATURE THAT PASSES ITS TEST TAKES** (07's *and half of that, rounded down,
   // on a success*, stamped as `damage.half` off the entry's own sentence; the lead:
   // *"Build it everywhere"*): each row's half, halved before the same creature's Ward, and
   // the one button's, ready for the card's Apply to land on a creature whose Resist on
   // this card is recorded as passed (`rules/resisted.mjs#halvesFor`).
   const halfOnPass = hit && sys.damage?.half === true && Boolean(sys.test?.resilience);
-  const passedByTarget = halfOnPass ? list.map((t,index) => mitigate(t, charged ? (ratingFor(t).rating ?? 0) + extras + charged : null, { passed: true, signatureIndex:index })) : [];
-  const damagePassed = halfOnPass ? mitigate(null, charged ? (rating ?? 0) + charged : null, { passed: true }).damage : null;
+  const passedByTarget = halfOnPass ? list.map((t,index) => mitigate(t, forcedFor(t), { passed: true, signatureIndex:index })) : [];
+  const damagePassed = halfOnPass ? mitigate(null, looseBoost ? (rating ?? 0) + looseBoost : null, { passed: true }).damage : null;
   // **AND WHAT IT TAKES WHERE ITS FAILURE IS WHAT DEALS THE DAMAGE** (07's Rimebind: *On a
   // failure it takes 2 Frost damage*, stamped as `damage.onFail` off the entry's own
   // sentence; the B8a pass): nothing - the card's Apply lands none of it on a creature
@@ -4182,7 +4423,14 @@ export async function castSpell({
   // place, carrying Permafrost's feet on its own effect. Out of a fight there is no
   // turn to end it on and it is the table's, said in words (Wing Clip's rule, D-773).
   const speedLines = [];
-  const conditionLines = [];
+  const conditionLines = [...splitLines];
+  // What a Void Surge spend on this cast lands beside its damage (04's Obsidian Skin and
+  // Earthshatter; stage 3A), on every creature the card records.
+  if (surgeDone) {
+    const { landVoidSpend } = await import("../effects/chromatic-talents.mjs");
+    conditionLines.push(game.i18n.format("AZEROTH.VoidSpend.Spent", { name: actor.name, n: surgeSpent, damage: surgeDone.damage }),
+      ...(await landVoidSpend({ actor, outcome: surgeDone, targets: list, source: surgePlan.names.join(", ") })).lines);
+  }
   // **A WARD COMES OFF THE SUCCESS LEVEL AS WELL AS OFF THE DAMAGE** (07 SS8; D-812):
   // each creature's rider reads the SL its own Ward left (`rules/spell-sl-riders.mjs
   // #riderSl`), so a target with Ward 3 shrugs off a rider an SL 3 cast carried.
@@ -4270,6 +4518,68 @@ export async function castSpell({
       conditionLines.push(game.i18n.format(laid.landed ? "AZEROTH.SlRider.WardDrop" : "AZEROTH.SlRider.WardDropNot", { name, spell: spell.name, n: slRead.amount, school: schoolName }));
     }
   }
+  // **07's SHATTERING BOLT AT SL 2** (*At SL 2 or better the target loses 1 Armor Point at
+  // every location until it finishes a Short Rest*; stage 3A): a mark the hit-mark door lays
+  // on each creature at the SL its own Ward left, carrying Sunder's own `sundered` flag, so
+  // the Short Rest door that ends a Sunder ends it (`AzerothActor#clearSundered`).
+  if (hit && slRead?.kind === "hitApDrop") {
+    for (const [ti, t] of list.entries()) {
+      const victim = targetActorOf(t);
+      const name = t?.name ?? victim?.name ?? "";
+      if (!slRiderHolds(slRead, { sl: riderSl(damageByTarget[ti], sl), success })) {
+        if (slRiderHolds(slRead, { sl, success })) conditionLines.push(game.i18n.format("AZEROTH.SlRider.Warded", { name, spell: spell.name }));
+        continue;
+      }
+      const laid = await layHitMark({ victim, mark: { kind: "apDrop", source: spell.name, amount: slRead.amount }, by: actor, span: null, name });
+      conditionLines.push(game.i18n.format(laid.landed ? "AZEROTH.SlRider.ApDrop" : "AZEROTH.SlRider.ApDropNot", { name, spell: spell.name, n: slRead.amount }));
+    }
+  }
+  // **07's UNWEAVE** (*Every spell effect on the target ends, whoever cast it*; the Chromatic
+  // Champion plan's Phase 4, door 4): on a cast that went off, each creature the card records
+  // has every spell effect on it ended - a laid spell or a spell's tick, by
+  // `rules/dispel.mjs#spellCasterOf` - that 02's Dispel's own judgement lets end
+  // (`dispelJudgement`: never a condition, a marked effect or an Archmage's), through
+  // Dispel's one write (`effects/dispel.mjs#endEffects`, on the GM's client where this one
+  // does not own the creature). **And 04's Spellthief** on the Champion who ended something.
+  // The second half - *may not benefit from a spell of the school you name* - is the
+  // entry's own words, carried by no condition, and stays the table's.
+  if (success && sys.identifier === "unweave" && list.length) {
+    const { endEffects, plainEffect } = await import("../effects/dispel.mjs");
+    let endedAny = false;
+    for (const t of list) {
+      const victim = targetActorOf(t);
+      if (!victim) continue;
+      const ids = (victim.effects ?? []).map(plainEffect).filter(e => !e.disabled && spellCasterOf(e)).map(e => e.id);
+      const done = ids.length ? await endEffects({ dispeller: actor, target: victim, ids, name: t?.name ?? victim.name, unweave: true }) : { ended: [] };
+      if (done.ended?.length) endedAny = true;
+      conditionLines.push(game.i18n.format(done.ended?.length ? "AZEROTH.Unweave.Ended" : "AZEROTH.Unweave.Nothing", {
+        name: t?.name ?? victim.name, spell: spell.name, effects: (done.ended ?? []).map(e => e.name).join(", ")
+      }));
+    }
+    if (endedAny && !viaItem) {
+      const { stealAfterEnding } = await import("../effects/chromatic-flights.mjs");
+      conditionLines.push(...(await stealAfterEnding({ actor, ally: unweaveThief.ally })));
+    }
+  }
+  // **THE GROUND AT A SINGLE TARGET** (07's Lightning Strike, Earthen Spike and Shattering
+  // Bolt; stage 3B): on a cast that went off, a Region on each creature the card records -
+  // its footprint, widened by the feet 07 names - carrying the ground and its span, so the
+  // one reconciler lays its Difficult ground and the one sweep takes it off
+  // (`effects/target-ground.mjs`). Read off 07's own words (`targetGroundOf`), so a spell
+  // embedded before its descriptor named the target places its ground too.
+  const targetGround = success ? targetGroundOf(sys.effect ?? "", { target: sys.target ?? "" }) : null;
+  if (targetGround && list.length) {
+    // Guarded (the 3B review, should-fix 12): the cast is paid for by now, and a Region the
+    // server refuses - no REGION_CREATE, a scene gone - must not lose the card. The card
+    // says the ground was not placed.
+    try {
+      const { placeTargetGround } = await import("../effects/target-ground.mjs");
+      conditionLines.push(...(await placeTargetGround({ actor, spell, cast, targets: list, ground: targetGround, areaGround: sys.areaGround ?? null, source })));
+    } catch (err) {
+      console.warn("azeroth-rpg | the ground at a single target", err);
+      for (const t of list) conditionLines.push(game.i18n.format("AZEROTH.TargetGround.NotPlaced", { name: t?.name ?? "", spell: spell.name }));
+    }
+  }
   // **WHAT THE CAST CARRIES FOR THE DOORS AFTER IT** (D-778): a forced move 07's
   // words state (Blast Wave's and Gust of Wind's push and Ley Rift's pull on a failed
   // Test; Tempest's push on entering, Void Rift's pull at a turn's start), its feet at
@@ -4326,7 +4636,14 @@ export async function castSpell({
     ...(healingSignaturePreparation.bonuses.length && extendedTick.kind === "heal" ? {signatureHealingCast:cast} : {}),
     ...(plagued && extendedTick.kind === "damage" ? { doubled: plague?.landings ?? 2 } : {}),
     ...(aegisNamed && extendedTick.kind === "heal" ? { aegis: aegisNamed } : {}),
-    ...(take.miracle && extendedTick.kind === "heal" ? { unreduced: true } : {})
+    ...(take.miracle && extendedTick.kind === "heal" ? { unreduced: true } : {}),
+    // **04's SMOLDERING LIFE** (*Each tick of your Smolder may be split as Lifebinder's Flame
+    // splits a spell*; stage 3A): the creatures picked at the cast and what the split adds,
+    // carried on the tick each turn lands (`effects/chromatic-talents.mjs#landSplitTick`).
+    ...(splitPicked && extendedTick.kind === "damage" && (splitPicked.plan?.ticks ?? []).includes(spell.name) ? { split: {
+      by: actor.uuid, name: splitLine.name, heals: splitPicked.picks.map(p => p.uuid), conMod: actor.system?.abilities?.con?.mod ?? 0,
+      add: splitPicked.plan.add, self: splitPicked.plan.self, tier: actor.system?.tier ?? 1, cleanse: splitPicked.plan.cleanse ?? null
+    } } : {})
   } : null;
   if (stampedTick?.doubled) roll.options.provenance.push({ label: plague?.name ?? doubleLine?.name ?? "", value: null, formula: game.i18n.format("AZEROTH.DevouringPlague.Row", { n: stampedTick.doubled }) });
   if (stampedTick) for (const b of tickBonus.by) roll.options.provenance.push({ label: b.name, value: null, formula: game.i18n.format("AZEROTH.Tick.BonusRow", { n: b.amount }) });
@@ -4499,7 +4816,18 @@ export async function castSpell({
   const area = lengthenArea(widenArea(areaFor(sys.target ?? ""), spellArea.widen), spellArea.lengthen);
   // The area's tick, said on the card in words (D-756), and carried on it for
   // the Region to take.
-  const areaTick = hasAreaTick(sys.areaTick) ? foundry.utils.deepClone(sys.areaTick) : null;
+  // **04's HEARTHFIRE** (*Your Immolation deals no damage. Instead, each ally that starts its
+  // turn within 5 feet of you regains Health equal to the spell's damage*; stage 3A): the
+  // caster's own copy of the tick, rewritten here - the Sustain's entry and the card both
+  // carry it - and an item's casting is the item's, not the talent's.
+  const heldTick = hasAreaTick(sys.areaTick)
+    ? (viaItem ? foundry.utils.deepClone(sys.areaTick) : hearthfireTick(foundry.utils.deepClone(sys.areaTick), talentsNow, spell.name, talentEffect))
+    : null;
+  // **04's ANCHOR OF AGES** (*A creature that starts its turn inside your Arcane Anchor must
+  // pass a Spirit Resilience Test against your Spell DC or be Entangled while it stays
+  // there*; stage 3B): the caster's own copy of the tick, a check added, whether or not the
+  // spell held one of its own (`anchorTick`); an item's casting is the item's.
+  const areaTick = viaItem ? heldTick : anchorTick(heldTick, talentsNow, spell.name, talentEffect, emptyAreaTick(), { dc: actor.system?.spellDC ?? null, caster: actor.uuid, cast });
   const tickLine = areaTick ? areaTickLine(areaTick, { widen: spellArea.widen }) : null;
   // **THE CREATURES NAMED AT THE CAST** (07's Ring of Fire: *Name any number of creatures
   // as you cast: the ring lets them through and does not burn them*; Blackout's and The
@@ -4518,7 +4846,11 @@ export async function castSpell({
   // S6): the Region's `spell` block, the Sustain entry and the laid effect all
   // take it, because a spell cast by name from the pack or through an item is
   // on no actor for the tick to read it back from.
-  const tickSpell = { name: spell.name, school: school ?? null, tier: sys.tier ?? null, takesSpellpower: sys.takesSpellpower === true };
+  const tickSpell = {
+    name: spell.name, school: school ?? null, tier: sys.tier ?? null, takesSpellpower: sys.takesSpellpower === true,
+    // A Hearthfire ring heals as a branch spell (04's Kindling Heart; stage 3A).
+    ...(areaTick?.hearthfire ? { branch: true } : {})
+  };
 
   // 6. Healing (D-625): the entry's own number, never raised by SL or tier
   // (07 SS9); a drain is a share of what the spell dealt, to the caster.
@@ -4615,10 +4947,16 @@ export async function castSpell({
   // stands until a hand removes it rather than vanishing on a Sustain that
   // was never recorded.
   let sustained = false;
-  if (success && sys.duration?.kind === "sustained" && pool) {
+  // **A SPELL A TALENT PAYS IN ANOTHER POOL IS HELD IN THAT POOL** (the Chromatic
+  // Champion plan, finding 2): a Champion holds no Mana, so its Rage-paid Immolation
+  // was never recorded and never upkept. The entry names the pool (`pool`) and
+  // `turn-effects.mjs#upkeep` charges it there.
+  const holdPool = talentPool && payPool ? payPool : pool;
+  if (success && sys.duration?.kind === "sustained" && holdPool) {
     const sustaining = foundry.utils.deepClone(actor.getFlag("azeroth-rpg", "sustaining") ?? []);
     sustaining.push({
-      spellId: spell.id, uuid: spell.uuid, name: spell.name, itemId: pool.itemId,
+      spellId: spell.id, uuid: spell.uuid, name: spell.name, itemId: holdPool.itemId,
+      ...(holdPool === payPool && talentPool?.pool && talentPool.pool !== "mana" ? { pool: talentPool.pool } : {}),
       // WHICH CAST IS HELD, WHAT IT WAS AIMED AT AND WHO HOLDS IT (D-724): the
       // same `cast` the card carries, and the targets as ids alone - an entry
       // is a record of the moment, and the snapshot's Defense and Ward are the
@@ -4864,6 +5202,8 @@ export async function castSpell({
         }} : {}),
         targets: list,
         damageByTarget,
+        // 04's Lifebinder's Flame (stage 3A): the heal the split owes, landed once the card stands.
+        ...(lifebinderRecord ? { lifebinder: lifebinderRecord } : {}),
         // A return arc is another hit even when it names the same actor.
         // Seed only new cards; old cards provide no proof of prior delivery.
         ...(hit && (sys.identifier === "chain-lightning" || ((chosenSignaturePreparation.bonuses.length
@@ -4940,6 +5280,18 @@ export async function castSpell({
       }
     }
   });
+  // **THE SPLIT'S HEAL, ONCE THE CARD STANDS** (04's Lifebinder's Flame; stage 3A): every
+  // creature picked, through the one healing door, the card's own record the GM reads.
+  if (spellCard && lifebinderRecord) {
+    try {
+      const { landLifebinder } = await import("../effects/chromatic-talents.mjs");
+      const healed = await landLifebinder(spellCard);
+      if (healed.length) await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: healed.map(l => `<p class="azeroth-drain">${foundry.utils.escapeHTML(l)}</p>`).join(""), flags: { "azeroth-rpg": { kind: "lifebinder", messageId: spellCard.id } } });
+    } catch (err) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Lifebinder.Unresolved"));
+      console.warn("azeroth-rpg | Lifebinder's Flame", err);
+    }
+  }
   if (spellCard && spellCrossing && success && stepPicked?.made?.length) {
     const { requestSpellCrossing } = await import('../effects/spell-crossing-delivery.mjs');
     const result = await requestSpellCrossing(spellCard);
@@ -6231,9 +6583,14 @@ export async function useFeature({
   }
   // The granting talent's row: a damage buff the Use switches on (D-711), and
   // what the Use does beyond its descriptor (D-771's `onUse`).
+  // **A CLASS FEATURE'S OWN `onUse`** (stage 2B): read off `CLASS_FEATURES` where no
+  // talent granted the feature and it is no gadget - the Champion's Breath, Wing Buffet,
+  // Draconic Leap, Dread Presence and Hardened Scales - as a talent's grant's is read off
+  // its row. Only the `onUse`, so nothing else a talent row carries is read off it.
+  const classUse = !gadget && !grantingTalent ? classFeatureOnUse(item.system?.className ?? "", item.name) : null;
   const talentRow = gadget ? { onUse: gadget.onUse ?? {} } : grantingTalent
     ? talentEffect(grantingTalent.system?.className, grantingTalent.system?.identifier, grantingTalent.system?.race ?? null)
-    : null;
+    : (classUse ? { onUse: classUse } : null);
   const onUse = onUseOf(talentRow);
   const isBellow = grantingTalent?.system?.identifier === 'bellow' && String(grantingTalent.system.race).toLowerCase() === 'ogre';
   if (isBellow && bellowCommit === null) return requestBellowUse(actor, item, list);
@@ -7222,7 +7579,10 @@ export async function useFeature({
       return null;
     }
     const kinds = Array.isArray(onUse.aim.kinds) ? onUse.aim.kinds : [];
-    const struckType = targetActorOf(aimed[0])?.system?.creatureType ?? aimed[0]?.creatureType ?? null;
+    // A character is one of 02 §5's peoples, every one a humanoid (04's Whisper of Madness:
+    // *A humanoid within 30 feet*; stage 3A): its sheet carries no creature type to read.
+    const struckType = targetActorOf(aimed[0])?.system?.creatureType ?? aimed[0]?.creatureType
+      ?? (targetActorOf(aimed[0])?.type === "character" ? "humanoid" : null);
     if (kinds.length && !kinds.includes(struckType)) {
       ui.notifications?.warn(game.i18n.format("AZEROTH.Gadget.WrongKind", { name: item.name, target: aimed[0].name ?? "", kind: kinds.map(k => game.i18n.localize(AZEROTH.creatureTypes?.[k] ?? k)).join(", ") }));
       return null;
@@ -7343,6 +7703,22 @@ export async function useFeature({
   // farther refused in words and the pick kept open, and a pick dismissed costs nothing.
   // With nothing to aim from on this board the point is the table's, as before: the card
   // keeps its Place area and its buttons reach the selected tokens.
+  // **THE CHROMATIC CHAMPION'S USES, JUDGED AND PICKED BEFORE ANYTHING IS PAID** (02 §7;
+  // stage 2B; D-768's order): Wing Buffet's and Dread Presence's reach, Breath's school,
+  // area and facing (the cone aimed and the creatures in it gathered now), and Draconic
+  // Leap's landing space. A dismissed chooser or pick costs nothing.
+  // **A PROMISE TO THE NEXT ATTACK NEEDS A FIGHT TO HOLD IT** (the 3A review, should-fix 2):
+  // `rules/next-attack.mjs` lays a promise only against a fight's turn, so a Use that does
+  // nothing BUT promise (04's False Opening, Precise Strike) charged its price out of a fight
+  // and laid nothing. Refused in words before anything is paid.
+  if (grantingTalent && onUse && Object.keys(onUse).every(k => k === "nextAttack" || k === "atRank")
+    && onUseNextAttack(onUse, { identifier: grantingTalent.system?.identifier, name: grantingTalent.name }, { rank, tier: actor.system?.tier ?? 1, scope: abilityScope(actor.system) })
+    && !actor.fightTurnNow?.()?.combat) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.NextAttack.NeedsFight", { name: item.name }));
+    return null;
+  }
+  const champ = await judgeChampionUse({ actor, item, sys, onUse, list, ownToken, rank, grantingTalent, answers });
+  if (!champ) return null;
   const gatherPlan = gatherOf({ who: sys.who ?? null, area: sys.area ?? "" });
   // The flash is aimed before payment. A temporary Region uses core's own token
   // containment geometry without creating a document or leaving an abandoned area.
@@ -7709,7 +8085,8 @@ export async function useFeature({
   // block the pack does not hold refuses the Use in words.
   if (!shapeTake && !sys.choice) {
     const kindHere = shapeKindOf({ name: item.name, choice: null });
-    const entryName = shapeEntryOf(kindHere);
+    // A drake form's block is named by its capstone feature (the Chromatic Champion plan).
+    const entryName = shapeEntryOf(kindHere, { feature: item.name });
     if (entryName) {
       const found = (await bestiaryEntries()).find(e => e.name === entryName) ?? null;
       const forms = found ? await formsFrom([found.uuid]) : [];
@@ -7846,7 +8223,32 @@ export async function useFeature({
   // so an Avatar of the Wild taken from a bear's shape costs 8 (the plan's
   // reading, flagged for the lead). `payingPool` says which pool pays.
   const inForm = actor.inShapeshiftForm === true;
-  const pool = poolFor(actor, payingPool(sys.cost?.pool ?? null, { inShapeshiftForm: inForm }), item.getFlag("azeroth-rpg", "feature")?.classId ?? null);
+  // **A PRICE FROM ANY POOL** (02 §5's Tail Sweep; the lead, 2026-11-09: *"Pay 4 from your
+  // Momentum or your Power pool (Rage, Energy, Mana...)."*): the pools that hold the price,
+  // read now; none is refused in words naming the price, one pays without asking, and two
+  // are a pick through the one chooser - all before the budget and before anything is
+  // paid (D-768's order). `rules/pools.mjs#anyPoolChoice` is the judgement.
+  let anyPoolPaid = null;
+  if (sys.cost?.pool === ANY_POOL && !sys.cost?.all) {
+    const due = Math.max(0, (Number(sys.cost.amount) || 0) - (Number(actor.system?.signatureEffects?.empowers?.[item.name]?.cost) || 0));
+    const choice = anyPoolChoice(actor.poolSnapshot?.() ?? [], due);
+    if (choice.refusal) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Feature.NoAnyPool", { name: item.name, amount: due }));
+      return undoBinds();
+    }
+    anyPoolPaid = choice.pool;
+    if (!anyPoolPaid) {
+      const label = p => game.i18n.localize(p.name ? (AZEROTH.poolTypes[p.name] ?? p.name)
+        : (p.kind === "power" ? "AZEROTH.Item.PowerPool" : "AZEROTH.Momentum.Label"));
+      const pick = await chooseOption(item, choice.ask.map(p => ({
+        key: anyPoolKey(p), description: "",
+        name: game.i18n.format("AZEROTH.Feature.PayFromOption", { pool: label(p), value: p.value ?? 0, max: p.max ?? 0 })
+      })), null, { prompt: game.i18n.format("AZEROTH.Feature.PayFrom", { name: item.name, amount: due }) });
+      anyPoolPaid = pick ? choice.ask.find(p => anyPoolKey(p) === pick.key) ?? null : null;
+      if (!anyPoolPaid) return undoBinds();
+    }
+  }
+  const pool = anyPoolPaid ?? poolFor(actor, payingPool(sys.cost?.pool ?? null, { inShapeshiftForm: inForm }), item.getFlag("azeroth-rpg", "feature")?.classId ?? null);
   // **DIVINE FAVOR** (04: *Your first healing feature after each Long Rest costs
   // no Mana. At rank 2 the first two cost none*; D-772): a healing feature's Mana
   // is waived while the counter the talent grants holds a use - the counter's
@@ -7899,7 +8301,9 @@ export async function useFeature({
   const rungPlan = rungChoice({
     action: sys.action ?? null, rungs: sys.rungs ?? [], inFight: Boolean(actor.activeFight?.()),
     onTurn: rungMine ? rungMine.isCurrentTurn === true : true,
-    payable: r => !turnBudgetRefusal(actor, r)
+    payable: r => !turnBudgetRefusal(actor, r),
+    // 02's Draconic Leap: *your Reaction on ANOTHER creature's turn* (stage 2B).
+    offTurnOnly: onUse?.offTurn ?? null
   });
   let rungNow = rungPlan.rung;
   if (rungPlan.ask) {
@@ -8041,6 +8445,18 @@ export async function useFeature({
     if (bellowJournal) await bellowJournal.cancelBeforePayment();
     return undoBinds();
   }
+  // **A REWIND'S OFFER, CLAIMED BEFORE ANYTHING IS SPENT** (D-773's and D-774's rule for a
+  // card's press; stage 3B): every refusal has been asked, so the offer is marked pressed
+  // now - here where this client may write it, on the GM's client where it may not - and a
+  // press another client claimed first is refused in words with nothing spent.
+  if (champ?.rewind) {
+    const { claimCardPress } = await import("../effects/card-presses.mjs");
+    const claimed = await claimCardPress(champ.rewind.message, { kind: "once", press: "rewind" });
+    if (!claimed.ok) {
+      ui.notifications?.warn(game.i18n.localize(claimed.reason ?? "AZEROTH.TalentLine.Pressed"));
+      return undoBinds();
+    }
+  }
   if (ps.walk && mine) {
     if (!(await mine.spendMoveAction()).ok) return undoBinds();
   } else if (negating?.answeredWithLost) {
@@ -8139,6 +8555,13 @@ export async function useFeature({
     if (shapeTake.kind === "metamorphosis") {
       await accrueCorruption(actor, { ...METAMORPHOSIS.corruption, occasion: game.i18n.format("AZEROTH.Occasion.Metamorphosis", { name: item.name }) });
     }
+    // **04's BRONZE DRAKE** (*The turn you take the form, you gain a Half-Action*; stage 3B):
+    // once the form is written, through the combatant's own queued door, and said on the card.
+    if (shapeTake.kind === "drake") {
+      const { bronzeDrakeHalf } = await import("../effects/chromatic-flights.mjs");
+      const halfLine = await bronzeDrakeHalf({ actor, form: actor.shape?.forms?.[0]?.name ?? null });
+      if (halfLine) answerLines.push(halfLine);
+    }
   }
   // Evocation: half the total back, rounded down (02 \u00a77).
   let restored = null;
@@ -8197,6 +8620,10 @@ export async function useFeature({
   if (gadgetCost.cost > 0) {
     usedLines.push(game.i18n.format("AZEROTH.Gadget.HealthPaid", { name: item.name, n: gadgetCost.cost }));
   }
+  // **WHAT THE CHAMPION'S USES DO, NOW THAT THEY ARE PAID FOR** (02 §7; stage 2B): Hardened
+  // Scales' Ward laid, Draconic Leap's Entangled ended, the leap and its Boon, and the
+  // school Scales of the Flight names. A class feature's own - never a talent's grant.
+  if (classUse || sys.choice === "flightSchools") usedLines.push(...(await landChampionUse({ actor, item, sys, onUse, chosen })));
   // Survival Instincts: *reduce the damage of one attack against you by half,
   // rounded down* - the one-attack mark a Block and a Parry ride, spent by the
   // next attack that lands (`AzerothActor#applyDamage`) - *and gain 1 Ferocity
@@ -8364,7 +8791,25 @@ export async function useFeature({
   // modifier to its damage*; the Legacy branches' B6): read at the rank, and nothing laid
   // or said where it promises nothing - a Dexterity of +0 adds none.
   const promise = grantingTalent ? onUseNextAttack(onUse, { identifier: grantingTalent.system?.identifier, name: grantingTalent.name }, { rank, tier: actor.system.tier ?? 1, scope: abilityScope(actor.system) }) : null;
-  if (promise && (promise.boons > 0 || promise.penetration > 0 || promise.damage > 0)) {
+  // **04's WHISPER OF MADNESS** (*As a Half-Action, gain 4 Void Corruption*; the lead: *"It
+  // has the same effect but give 4 Void Corruption"* and *"yes"* to the Void landing even
+  // when resisted; stage 3A): after the Half-Action, whatever the Test comes to, through the
+  // one unresisted Corruption door.
+  if (onUse?.voidGain > 0 && actor.type === "character") {
+    const gained = await accrueCorruption(actor, { track: "void", points: Math.trunc(Number(onUse.voidGain)),
+      occasion: game.i18n.format("AZEROTH.VoidSpend.Gain", { talent: grantingTalent?.name ?? item.name }) });
+    usedLines.push(game.i18n.format(gained ? "AZEROTH.VoidSpend.Gained" : "AZEROTH.VoidSpend.GainedNone", { name: actor.name, n: onUse.voidGain, talent: grantingTalent?.name ?? item.name }));
+  }
+  // **04's COURT GUISE** (stage 3A): the studied humanoid's face taken, once the use is struck.
+  if (champ?.courtGuise) {
+    const { takeCourtGuise } = await import("../effects/chromatic-talents.mjs");
+    usedLines.push(await takeCourtGuise({ actor, studied: champ.courtGuise.studied, studiedToken: champ.courtGuise.token, item }));
+  }
+  // **THE SPELL-WEAVER'S AND THE TIMEWALKER'S USES, NOW THAT THEY ARE PAID FOR** (stage 3B):
+  // Font of Magic's Rage paid and its Mana given, Spellbreak's Sustain ended and its Rage,
+  // Hasten's Half-Action laid, Rewind's heal. Each was judged before the payment.
+  usedLines.push(...(await landChampionTalent({ actor, item, champ, rank })));
+  if (promise && (promise.boons > 0 || promise.penetration > 0 || promise.damage > 0 || promise.unanswerable === true)) {
     const grant = promise;
     const laid = grant ? await layNextAttack(actor, [grant], { quiet: true }) : [];
     usedLines.push(laid.length
@@ -9117,6 +9562,25 @@ export async function useFeature({
     }
   }
 
+  // 3c+. **A BREATH'S CONE GATHERS ITS OWN TARGETS** (02's Breath: *Every creature in a
+  // cone*; stage 2B): the creatures inside the cone aimed before anything was paid,
+  // never the breather, are the card's targets, each against its own Ward.
+  if (champ.facing && success) {
+    areaMeasured = true;
+    const { targetSnapshots } = await import("../applications/roll-dialog.mjs");
+    list.splice(0, list.length, ...targetSnapshots(champ.facing.tokens));
+    const words = { feature: item.name, area: champ.facing.area, school: game.i18n.localize(AZEROTH.schools[champ.breath?.school] ?? champ.breath?.school ?? "") };
+    usedLines.push(list.length
+      ? game.i18n.format("AZEROTH.Chromatic.BreathLine", { ...words, names: list.map(t => t.name ?? "").join(", ") })
+      : game.i18n.format("AZEROTH.Chromatic.BreathNone", words));
+  }
+  if (champ.breath && !champ.facing) {
+    usedLines.push(game.i18n.format("AZEROTH.Chromatic.BreathUnaimed", {
+      feature: item.name, area: champ.breath.area, school: game.i18n.localize(AZEROTH.schools[champ.breath.school] ?? champ.breath.school)
+    }));
+  }
+  if (champ.breath?.drake) usedLines.push(game.i18n.format("AZEROTH.Chromatic.BreathDrake", { talent: champ.breath.drake, feature: item.name }));
+
   // 4. The numbers, on success, at the rank taken (D-642) - and the Rating of
   // the weapon in the main hand, for 04's Wrath of the Light (*Holy damage at
   // your Damage Rating*; D-772), Unarmed's 1 with none.
@@ -9184,7 +9648,10 @@ export async function useFeature({
   // 19: Bad Mojo, Shackle, Shadow Trap, The Vault Opens, Warden's Cage): the stamped
   // escape with its DC resolved now - the Spell DC, or the Strength one - written on
   // the card for `dice/chat.mjs#applyConditionFromCard` to lay with the condition.
-  const inflictEscapes = success ? Object.fromEntries((sys.inflicts ?? []).map(i => {
+  // The stamp's conditions, and what a drake capstone's Breath adds while its form is held
+  // (04's Bronze Drake's Slowed; stage 2B).
+  const useInflicts = [...(sys.inflicts ?? []), ...(champ.breath?.inflicts ?? [])];
+  const inflictEscapes = success ? Object.fromEntries(useInflicts.map(i => {
     const record = featureEscapeRecord(i?.escape ?? null, {
       condition: i?.condition ?? null, spellDc: actor.system.spellDC ?? actor.system.spells?.dc ?? null,
       strDc: resistDcFor({ kind: "str", strMod: actor.system.abilities?.str?.mod ?? 0, proficiency: actor.system.proficiency ?? 0 }),
@@ -9197,7 +9664,7 @@ export async function useFeature({
   // A condition offered from an SL (04's Pyroblast at rank 2; D-775) is offered
   // only where the Test reached it.
   const inflicts = success
-    ? (sys.inflicts ?? []).filter(i => AZEROTH.conditions?.[i?.condition] && !(Number(i?.sl) > 0 && sl < Number(i.sl))).map(i => ({
+    ? useInflicts.filter(i => AZEROTH.conditions?.[i?.condition] && !(Number(i?.sl) > 0 && sl < Number(i.sl))).map(i => ({
         condition: i.condition,
         label: game.i18n.localize(AZEROTH.conditions[i.condition]),
         value: i.value ?? null,
@@ -9228,6 +9695,8 @@ export async function useFeature({
       const victim = targetActorOf(t);
       for (const i of landedAtOnce) {
         const until = i.until === "casterTurnStart" ? untilNextTurnOrRound(actor)
+          // 04's Whisper of Madness: *until the end of your next turn* - the user's (stage 3A).
+          : i.until === "casterTurnEnd" ? untilEndOfNextTurnOrRound(actor)
           : i.until === "minute" ? (victim ? minuteSpan(victim) : null)
             : i.until === "endOfNextTurn" ? (victim ? untilEndOfNextTurnOrRound(victim) : null)
               : (i.until || null);
@@ -9252,7 +9721,8 @@ export async function useFeature({
   let explosiveTrap = null;
   if (success && sys.damage?.amount) {
     const base = evaluateAmount(sys.damage.amount, scope) ?? 0;
-    const school = sys.damage.type ?? null;
+    // A Breath's school, chosen at 1b (stage 2B), else the stamp's own type.
+    const school = champ.breath?.school ?? sys.damage.type ?? null;
     // **THE LANE AND THE LINES** (D-768). This door built neither: Elemental
     // Fury never reached Forked Lightning, Seal of Command's Holy never reached
     // a feature, and 10's *+1 Damage Rating on all damage you deal* skipped every
@@ -9346,6 +9816,8 @@ export async function useFeature({
         dc: resistDcFor({
           kind: sys.resistDc ?? null, spellDC: actor.system.spellDC ?? actor.system.spells?.dc ?? null,
           strMod: actor.system.abilities?.str?.mod ?? 0, proficiency: actor.system.proficiency ?? 0,
+          // 02 §5's Tail Sweep's 8 + Constitution modifier + Proficiency (`con8`; the lead, 2026-11-09).
+          conMod: actor.system.abilities?.con?.mod ?? 0,
           // 05 §3's Standard DC at the user's own tier (02 §5's War Stomp; the B8a pass).
           tier: actor.system.tier ?? 1
         }),
@@ -9383,7 +9855,7 @@ export async function useFeature({
   // **A FAILED CASTING TEST PLACES NOTHING** (the lead, 2026-09-26, for a spell;
   // D-775 for a casting Use: 04's Firestorm burns *On success*), and the card
   // then offers no area.
-  const area = success ? widenArea(areaFor(sys.area ?? ""), barrageLimits?.widen ?? 0) : null;
+  const area = success ? widenArea(areaFor(champ.breath?.area ?? sys.area ?? ""), barrageLimits?.widen ?? 0) : null;
   // 04's Firestorm (D-775): what the Region placed from this card strikes at the
   // start of a turn, its span, and which Use placed it.
   const useAreaTick = success && area && mw.areaTick ? mw.areaTick : null;
@@ -9479,7 +9951,8 @@ export async function useFeature({
   const paidFrom = payingPool(sys.cost?.pool ?? null, { inShapeshiftForm: inForm });
   // A price in 05 §11's kind word names the pool that paid it (02 §5's War Stomp: the
   // tauren's Rage, Quarry or Ferocity; the B8a pass).
-  const paidPool = paidFrom === ANY_MOMENTUM ? (pool?.name ?? ANY_MOMENTUM) : paidFrom;
+  // A price from any pool names the pool picked (02 §5's Tail Sweep; the lead, 2026-11-09).
+  const paidPool = paidFrom === ANY_MOMENTUM || paidFrom === ANY_POOL ? (pool?.name ?? paidFrom) : paidFrom;
   const costLabel = paidPool ? game.i18n.localize(AZEROTH.costPoolTypes[paidPool] ?? paidPool) : null;
   const content = await renderTemplate(TEMPLATE.feature, {
     config: AZEROTH,
@@ -9509,7 +9982,7 @@ export async function useFeature({
     escape,
     // **AN AREA THE USE PLACED ITSELF IS NOT OFFERED AGAIN** (the B6 fix): a circle on
     // the ground the Use aimed and measured is set down below, once the card stands.
-    area: gatherAt || gadgetCone ? null : area,
+    area: gatherAt || gadgetCone || champ.facing ? null : area,
     attack,
     // How many attacks the button makes (the architect's review of D-773).
     attackAllowance,
@@ -9629,7 +10102,10 @@ export async function useFeature({
       // damage door records; the half a passed Test leaves on each row and on the one
       // button (`dice/chat.mjs#applyDamageToTargets`); the conditions a failed Resist
       // lands at once (`rollResists`); and the circle the Use measured, and where.
-      ...(damage && sys.damage?.type ? { damageType: sys.damage.type } : {}),
+      ...(damage && (champ.breath?.school ?? sys.damage?.type) ? { damageType: champ.breath?.school ?? sys.damage.type } : {}),
+      // What a Breath breathed (stage 2B): its school and its area, for the cue
+      // (`rules/animation-table.mjs`' Breath rows) and the card's reader.
+      ...(champ.breath ? { breath: { school: champ.breath.school, area: champ.breath.area, drake: champ.breath.drake ?? null } } : {}),
       ...(damage && damagePassed !== null ? { halfOnPass: true, passedByTarget, damagePassed } : {}),
       // And nothing on a pass, where the failure deals it (the B8a pass).
       ...(damage && noneOnPass && resist ? { noneOnPass: true } : {}),
@@ -9713,6 +10189,22 @@ export async function useFeature({
     } catch (err) {
       ui.notifications?.warn(game.i18n.format("AZEROTH.Gather.PlaceFailed", { feature: item.name }));
       console.warn("azeroth-rpg | gadget cone could not be drawn", err);
+    }
+  }
+  // **A BREATH'S CONE, SET DOWN WHERE IT WAS AIMED** (stage 2B), as the gadget cone is:
+  // the card's own record on it, the board's drawing never undoing the Use.
+  if (posted && champ.facing && success && canvas?.scene) {
+    try {
+      const { regionFlagsFromCard } = await import("./chat.mjs");
+      // **SHOWN WHILE ITS CUE PLAYS, THEN TAKEN AWAY** (the lead, 2026-11-08: *"Remove after
+      // the cue"*): `afterCue` asks the active GM's area queue to delete it, marked as the
+      // sweep's own so the deletion is never read as a hand delete (D-760).
+      await placeArea({ item, areaText: champ.facing.area, name: item.name, scene: canvas.scene,
+        origin: champ.facing.origin, rotation: champ.facing.rotation, token: ownToken,
+        attach: false, flags: { ...regionFlagsFromCard(posted, actor, item), afterCue: BREATH_CUE_MS } });
+    } catch (err) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Gather.PlaceFailed", { feature: item.name }));
+      console.warn("azeroth-rpg | a Breath's cone could not be drawn", err);
     }
   }
   if (hammerFalls) await hammerAfterUse(actor, item, list);
@@ -11727,6 +12219,17 @@ export async function featureMenu(actor, item) {
         description: `<p>${game.i18n.format("AZEROTH.Feature.WarCry.BattleText", { amount: Math.floor(level / 3) })}</p>` }
     ], note: null };
   }
+  if (sys.choice === "flightSchools") {
+    // 02's Scales of the Flight (stage 2B): the schools the branches tie on, named once a
+    // Long Rest; where one branch leads there is nothing to name, said in words, and the
+    // empty menu refuses the Use before its use is struck.
+    const flight = flightSchool({ points: branchPointsFor(actor.takenTalents?.() ?? []), chosen: actor.getFlag("azeroth-rpg", FLIGHT_SCHOOL_FLAG) ?? null });
+    const options = flight.open.map(key => ({ key, name: game.i18n.localize(AZEROTH.schools[key] ?? key), description: "",
+      tag: key === flight.school ? game.i18n.localize("AZEROTH.Feature.Known") : null }));
+    const note = flight.open.length ? game.i18n.localize("AZEROTH.Chromatic.FlightTieNote")
+      : game.i18n.format("AZEROTH.Chromatic.FlightLeadNote", { name: item.name, school: game.i18n.localize(AZEROTH.schools[flight.school] ?? flight.school ?? "") });
+    return { options, note };
+  }
   if (sys.choice === "schools") {
     // A school of your choice (Shield of the Righteous, Ward, Divine Hymn).
     const options = Object.entries(AZEROTH.schools).map(([key, label]) => ({ key, name: game.i18n.localize(label), description: "" }));
@@ -12345,6 +12848,444 @@ export async function criticalTable(location) {
  * A no-op for every spell but a tier 5 Fel or Shadow one, and for a creature:
  * 10's tracks are a character's. Returns the card where a point landed.
  */
+/**
+ * The Void Corruption a talent's `spell` row builds on a cast (the Chromatic Champion
+ * plan's Black branch; `rules/free-casts.mjs#castVoidFor`), unresisted, through
+ * `accrueCorruption`. A no-op where no taken talent's row names the spell with a
+ * `void`, and for a creature.
+ */
+async function accrueCastVoid(actor, spell, talents = []) {
+  if (!actor || actor.type !== "character") return null;
+  const owed = castVoidFor(talents, { spell: spell?.name ?? "" });
+  if (!(owed.amount > 0)) return null;
+  return accrueCorruption(actor, { track: "void", points: owed.amount,
+    occasion: game.i18n.format("AZEROTH.FreeCast.VoidOccasion", { name: spell.name, talent: owed.talent ?? "" }) });
+}
+
+/**
+ * **THE CHROMATIC CHAMPION'S USES, JUDGED AND PICKED BEFORE ANYTHING IS PAID** (02 §7's
+ * *Features by level*; stage 2B; D-768's order). Answers null where the Use is refused
+ * or a chooser or pick was dismissed - nothing has been spent - else what the Use took:
+ *
+ * - `within` (Wing Buffet *each creature of your choice within 5 feet*, Dread Presence's
+ *   10): a creature targeted, never the user, every one measured inside the reach where
+ *   both stand on the board; a push of a creature this client does not own asks a GM;
+ * - `breath`: the school (the branch with the most points, the drake capstone's while
+ *   its form is held, or any of the seven for Chromatic Breath - asked where several),
+ *   the area (Great Breath's cone or line, asked), and the cone aimed from the user's
+ *   token through `pickFacing` with the creatures inside it gathered - with no token on
+ *   the viewed board the card keeps its Place area and the creatures targeted;
+ *
+ * Draconic Leap's space is the step door's (`onUse.step`, picked with every other step
+ * before anything is paid, `effects/steps.mjs`).
+ */
+async function judgeChampionUse({ actor, item, sys, onUse, list, ownToken, rank = 1, grantingTalent = null, answers = null }) {
+  const out = { breath: null, facing: null };
+  if (!onUse) return out;
+  const talentsNow = actor.takenTalents?.() ?? [];
+  const aimedRows = () => list.map(t => ({ t, actor: targetActorOf(t), token: tokenOfTarget(t) })).filter(r => r.actor);
+  // **04's FONT OF MAGIC** (*spend any amount of Rage. One ally within 30 feet regains that much
+  // Mana*; stage 3B): the one ally the aim door already judged, holding Mana with room in it,
+  // the amount picked now through the one chooser - every amount the Rage held can pay - and a
+  // creature this client does not own needs a GM. A dismissed chooser pays nothing.
+  // **THE BUDGET BEFORE ANY CHOOSER** (the 3B review, should-fix 6; the stage 2 review's
+  // should-fix 3 on two new doors): a Champion with no Half-Action (Font) or no Full Action
+  // (Spellbreak) is refused before picking an amount or a Sustain - asked without spending.
+  if (onUse.font || onUse.spellbreak || onUse.bloodlust) {
+    const short = turnBudgetRefusal(actor, sys.action ?? null);
+    if (short) {
+      ui.notifications?.warn(game.i18n.format(short.reason, short.params ?? {}));
+      return null;
+    }
+  }
+  if (onUse.font) {
+    const plan = fontOfMagicFor(talentsNow, talentEffect);
+    const aimed = aimedRows()[0] ?? null;
+    const pool = aimed ? manaPool(aimed.actor.poolSnapshot?.() ?? []) : null;
+    if (!plan || !aimed || !pool) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.FontOfMagic.NoMana", { name: item.name, target: aimed?.t?.name ?? aimed?.actor?.name ?? "" }));
+      return null;
+    }
+    if (pool.value >= pool.max) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.FontOfMagic.Full", { name: item.name, target: aimed.t?.name ?? aimed.actor.name }));
+      return null;
+    }
+    const rage = poolNamed(actor.poolSnapshot?.() ?? [], "rage");
+    const held = Math.max(0, Math.trunc(Number(rage?.value)) || 0);
+    if (!(held > 0)) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.FontOfMagic.NoRage", { name: item.name }));
+      return null;
+    }
+    if (gmAbsentForActors([aimed.actor])) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Gift.NoGM"));
+      return null;
+    }
+    const options = Array.from({ length: held }, (_, i) => i + 1).map(n => ({
+      key: String(n), name: game.i18n.format("AZEROTH.FontOfMagic.Option", { n }),
+      description: game.i18n.format("AZEROTH.FontOfMagic.OptionMana", { n: fontMana({ spent: n, add: plan.add, value: pool.value, max: pool.max }) })
+    }));
+    const pick = await chooseOption(item, options, null, { prompt: game.i18n.format("AZEROTH.FontOfMagic.Prompt", { name: item.name, target: aimed.t?.name ?? aimed.actor.name }) });
+    if (!pick) return null;
+    out.font = { recipient: aimed.actor, name: aimed.t?.name ?? aimed.actor.name, spent: Math.trunc(Number(pick.key)) || 0, plan };
+  }
+  // **04's SPELLBREAK** (*end one Sustained spell that a creature within 30 feet is
+  // sustaining*; stage 3B): one creature targeted - never the user, who is not *within 30
+  // feet* of itself (MY READING) - within the feet, holding a Sustain; the Sustain picked
+  // now through the one chooser where it holds two; a creature this client does not own
+  // needs a GM.
+  if (onUse.spellbreak) {
+    const aimed = aimedRows();
+    const feet = Math.max(0, Number(onUse.spellbreak.feet) || 30);
+    if (aimed.length !== 1 || aimed[0].actor.uuid === actor.uuid) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Laid.OneTarget", { name: item.name }));
+      return null;
+    }
+    const apart = feetBetweenTokens(ownToken, aimed[0].token);
+    if (apart !== null && apart > feet) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Laid.TooFar", { name: item.name, target: aimed[0].t?.name ?? "", feet }));
+      return null;
+    }
+    const held = (aimed[0].actor.getFlag("azeroth-rpg", "sustaining") ?? []).filter(e => e?.cast);
+    if (!held.length) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Spellbreak.NoSustain", { name: item.name, target: aimed[0].t?.name ?? aimed[0].actor.name }));
+      return null;
+    }
+    if (gmAbsentForActors([aimed[0].actor])) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Spellbreak.NoGM"));
+      return null;
+    }
+    let entry = held.length === 1 ? held[0] : null;
+    if (!entry) {
+      const pick = await chooseOption(item, held.map(e => ({ key: e.cast, name: e.name ?? "", description: "" })), null,
+        { prompt: game.i18n.format("AZEROTH.Spellbreak.Prompt", { name: item.name, target: aimed[0].t?.name ?? aimed[0].actor.name }) });
+      if (!pick) return null;
+      entry = held.find(e => e.cast === pick.key) ?? null;
+    }
+    if (!entry) return null;
+    // Spellthief's ally, picked now with the Sustain (the 3B review, should-fix 5): never
+    // after the Full Action is paid. A dismissed chooser makes no Use.
+    const { pickSpellthiefAlly } = await import("../effects/chromatic-flights.mjs");
+    const thief = await pickSpellthiefAlly(actor);
+    if (!thief) return null;
+    if (thief.ally && gmAbsentForActors([thief.ally.actor])) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Gift.NoGM"));
+      return null;
+    }
+    out.spellbreak = { target: aimed[0].actor, name: aimed[0].t?.name ?? aimed[0].actor.name, cast: entry.cast, spell: entry.name ?? "", ally: thief.ally };
+  }
+  // **02's BLOODLUST** (*As a Full Action spend 8 Mana. Up to 6 targets within 30 feet gain
+  // an extra Half-Action on their next turn*; the lead, 2026-11-08: *"Fix it now"*): the
+  // creatures targeted, judged before anything is paid (`rules/extra-halves.mjs
+  // #bloodlustRefusal`) - one to six, each within 30 feet where both stand on the board,
+  // each in the shaman's started fight - and a creature this client does not own needs a
+  // GM. The Half-Action is laid through Hasten's own write and given at the creature's next
+  // turn (`effects/chromatic-flights.mjs#takeHastened`).
+  if (onUse.bloodlust) {
+    const plan = { feet: Number(onUse.bloodlust.feet) || BLOODLUST.feet, max: Number(onUse.bloodlust.max) || BLOODLUST.max };
+    const fight = actor.activeFight?.() ?? null;
+    const rows = aimedRows().filter((r, i, all) => all.findIndex(x => x.actor.uuid === r.actor.uuid) === i);
+    const refused = bloodlustRefusal({
+      targets: rows.map(r => ({
+        uuid: r.actor.uuid, name: r.t?.name ?? r.actor.name,
+        feet: r.actor.uuid === actor.uuid ? 0 : feetBetweenTokens(ownToken, r.token),
+        inFight: Boolean(fight?.getCombatantsByActor?.(r.actor)?.length)
+      })),
+      inFight: Boolean(fight), max: plan.max, feet: plan.feet
+    });
+    if (refused) {
+      ui.notifications?.warn(game.i18n.format(refused.key, { name: item.name, target: refused.name ?? "", feet: plan.feet, max: plan.max }));
+      return null;
+    }
+    if (gmAbsentForActors(rows.map(r => r.actor))) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Rider.Inflict.NoGM"));
+      return null;
+    }
+    out.bloodlust = { combatId: fight.id, targets: rows.map(r => ({ actor: r.actor, name: r.t?.name ?? r.actor.name })) };
+  }
+  // **04's HASTEN, WITH BORROWED MOMENT** (*Once per encounter, as a Half-Action ... One ally
+  // within 30 feet gains a Half-Action on its next turn*; *Hasten may target you*; stage 3B):
+  // one creature targeted, an ally within the feet - the user only with Borrowed Moment -
+  // standing in the user's started fight, since *its next turn* is a turn of the fight; a
+  // creature this client does not own needs a GM.
+  if (onUse.hasten) {
+    const plan = hastenFor(talentsNow, talentEffect);
+    const aimed = aimedRows();
+    const fight = actor.activeFight?.() ?? null;
+    if (!plan || aimed.length !== 1) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Laid.OneTarget", { name: item.name }));
+      return null;
+    }
+    const target = aimed[0].actor;
+    if (target.uuid === actor.uuid && !plan.self) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Hasten.NotSelf", { name: item.name }));
+      return null;
+    }
+    if (target.uuid !== actor.uuid && !allyOf(actor, target)) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Laid.NotFriendly", { name: item.name, target: aimed[0].t?.name ?? target.name }));
+      return null;
+    }
+    const apart = target.uuid === actor.uuid ? 0 : feetBetweenTokens(ownToken, aimed[0].token);
+    if (apart !== null && apart > plan.feet) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Laid.TooFar", { name: item.name, target: aimed[0].t?.name ?? "", feet: plan.feet }));
+      return null;
+    }
+    if (!fight || !fight.getCombatantsByActor(target)?.length) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Hasten.NoFight", { name: item.name, target: aimed[0].t?.name ?? target.name }));
+      return null;
+    }
+    if (gmAbsentForActors([target])) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Rider.Inflict.NoGM"));
+      return null;
+    }
+    out.hasten = { target, name: aimed[0].t?.name ?? target.name, combatId: fight.id };
+  }
+  // **04's REWIND** (*as a Reaction when an ally within 30 feet takes damage ... It regains
+  // half the Health that blow took*; stage 3B): pressed from the offer the blow posted, which
+  // carries the Health it took; judged off that offer (`chromatic-flights.mjs#rewindJudgement`)
+  // and claimed on it before the budget. A creature this client does not own needs a GM.
+  if (onUse.rewind) {
+    const aimed = aimedRows();
+    const { rewindJudgement } = await import("../effects/chromatic-flights.mjs");
+    const judged = rewindJudgement({ holder: actor, messageId: answers?.messageId ?? null, target: aimed[0]?.actor ?? null, targetToken: aimed[0]?.token ?? null, ownToken });
+    if (!judged.ok || aimed.length !== 1) {
+      ui.notifications?.warn(game.i18n.format(judged.reason ?? "AZEROTH.Rewind.NoOffer", { name: item.name, target: aimed[0]?.t?.name ?? "", feet: judged.row?.feet ?? 30 }));
+      return null;
+    }
+    if (gmAbsentForActors([aimed[0].actor]) || cardPressUnrecordable(judged.message)) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Card.PressNoGM"));
+      return null;
+    }
+    out.rewind = { target: aimed[0].actor, name: aimed[0].t?.name ?? aimed[0].actor.name, message: judged.message, heal: judged.heal };
+  }
+  const onBoard = Boolean(ownToken?.document?.parent) && ownToken.document.parent.id === canvas?.scene?.id;
+  const within = Math.max(0, Number(onUse.within) || 0);
+  if (within > 0) {
+    const aimed = list.map(t => ({ t, actor: targetActorOf(t), token: tokenOfTarget(t) })).filter(r => r.actor);
+    if (!aimed.length) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Chromatic.NeedsTargets", { name: item.name, feet: within }));
+      return null;
+    }
+    if (aimed.some(r => r.actor.uuid === actor.uuid)) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Chromatic.NotSelf", { name: item.name }));
+      return null;
+    }
+    const far = outOfReach(aimed.map(r => ({
+      name: r.t?.name ?? r.actor.name, feet: onBoard && r.token ? feetBetweenTokens(ownToken, r.token) : null
+    })), within);
+    if (far) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Chromatic.OutOfReach", { name: item.name, target: far.name, feet: within }));
+      return null;
+    }
+    if (onUse.push && gmAbsentForActors(aimed.map(r => r.actor))) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Forced.NoGM"));
+      return null;
+    }
+  }
+  // **04's COURT GUISE** (*take the guise of one particular humanoid you have studied*;
+  // stage 3A): one creature targeted, a humanoid, judged before the use is struck.
+  if (onUse.courtGuise) {
+    // **NEVER UNDER A SHAPE** (the 3A review, should-fix 5): a shape stands over a guise -
+    // a guise taken first lives in the shape's own record of what to go back to - so a
+    // guise is refused while one stands, in words, before the use is struck.
+    if (actor.shape) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.CourtGuise.InShape", { name: item.name, form: (actor.shape.forms ?? []).map(f => f.name).join(", ") }));
+      return null;
+    }
+    const aimed = list.map(t => ({ t, actor: targetActorOf(t) })).filter(r => r.actor);
+    if (aimed.length !== 1 || aimed[0].actor.uuid === actor.uuid) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Laid.OneTarget", { name: item.name }));
+      return null;
+    }
+    const studied = aimed[0].actor;
+    const judged = courtGuiseRecord({ name: studied.name, img: studied.img, type: studied.type, creatureType: studied.system?.creatureType ?? null }, { name: actor.name, img: actor.img });
+    if (judged.refusal) {
+      ui.notifications?.warn(game.i18n.format(judged.refusal, { name: item.name, target: aimed[0].t?.name ?? studied.name }));
+      return null;
+    }
+    out.courtGuise = { studied, token: tokenOfTarget(aimed[0].t)?.document ?? null };
+  }
+  // **04's LIFEBLOOD** (*when an ally within 30 feet drops below half Health*; stage 3A):
+  // the creature the offer named stands below half its Health still, or nothing is paid.
+  if (onUse.belowHalf) {
+    const offer = answers?.messageId ? (game.messages?.get(answers.messageId) ?? null) : null;
+    if (offer?.flags?.["azeroth-rpg"]?.kind === "lifebloodOffer") {
+      const { offerStillStands } = await import("../effects/chromatic-flights.mjs");
+      if (!offerStillStands(offer.flags["azeroth-rpg"].at ?? null)) {
+        ui.notifications?.warn(game.i18n.format("AZEROTH.Lifeblood.Stale", { name: item.name }));
+        return null;
+      }
+    }
+    const aimed = list.map(t => targetActorOf(t)).filter(Boolean);
+    const low = aimed.length === 1 && healthBelow(aimed[0].system?.health ?? null, 0.5);
+    if (!low) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Lifeblood.NotBelow", { name: item.name, target: aimed[0]?.name ?? "" }));
+      return null;
+    }
+  }
+  if (onUse.breath) {
+    // **A SHORT POOL IS REFUSED BEFORE ANY PICK** (the stage 2 review, should-fix 3): a
+    // Champion with too little Energy is told so before the cone is aimed, through the
+    // payment's own arithmetic; the payment judges it again at its turn.
+    const prePool = poolFor(actor, payingPool(sys.cost?.pool ?? null, { inShapeshiftForm: actor.inShapeshiftForm === true }), item.getFlag("azeroth-rpg", "feature")?.classId ?? null);
+    const prePay = featurePayment({ cost: sys.cost, pool: prePool, discount: actor.system?.signatureEffects?.empowers?.[item.name]?.cost ?? 0 });
+    if (prePay.refusal) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Feature.NoPool", {
+        name: item.name, pool: game.i18n.localize(AZEROTH.costPoolTypes[sys.cost?.pool] ?? sys.cost?.pool ?? ""), amount: sys.cost?.amount ?? 0
+      }));
+      return null;
+    }
+    const talents = actor.takenTalents?.() ?? [];
+    // **THE CAPSTONE'S RIDER IS ON 02's BREATH ALONE** (the stage 2 review, must-fix 1): 04
+    // puts *your Breath* in the drake form's sentence, so Chromatic Breath (`breath: "any"`)
+    // takes neither its school nor its Slowed.
+    const drake = onUse.breath === "branch" && actor.shape?.kind === "drake" ? drakeBreathFor(talents, { form: actor.shape.forms?.[0]?.name ?? null }) : null;
+    const schools = onUse.breath === "any"
+      ? Object.keys(AZEROTH.schools ?? {})
+      : breathSchools({ points: branchPointsFor(talents), drakeSchool: drake?.school ?? null });
+    let school = schools.length === 1 ? schools[0] : null;
+    if (!school) {
+      const pick = await chooseOption(item, schools.map(key => ({ key, name: game.i18n.localize(AZEROTH.schools[key] ?? key), description: "" })), null,
+        { prompt: game.i18n.format(onUse.breath === "any" ? "AZEROTH.Chromatic.BreathAnyPrompt" : "AZEROTH.Chromatic.BreathTiePrompt", { name: item.name }) });
+      if (!pick) return null;
+      school = pick.key;
+    }
+    const areas = onUse.breath === "branch" ? breathAreas(sys.area ?? "") : [String(sys.area ?? "")];
+    let area = areas[0];
+    if (areas.length > 1) {
+      const pick = await chooseOption(item, areas.map(key => ({ key, name: key, description: "" })), null,
+        { prompt: game.i18n.format("AZEROTH.Chromatic.BreathAreaPrompt", { name: item.name }) });
+      if (!pick) return null;
+      area = pick.key;
+    }
+    out.breath = { school, area, drake: drake?.by ?? null, inflicts: drake?.inflicts ?? [] };
+    const shape = areaFor(area);
+    // **THE CONE STARTS WHERE A SPELL'S CONE STARTS** (the lead, 2026-11-08: *"Same as spell
+    // cones"*): the one origin reading the spell card's Place area takes (`areaOriginFor`).
+    const origin = shape && onBoard ? areaOriginFor(shape, ownToken) : null;
+    if (shape && onBoard && origin) {
+      const rotation = await pickFacing({ origin, area: shape, scene: canvas.scene, label: item.name });
+      if (rotation === null) return null;
+      const data = regionDataFor({ item, areaText: area, scene: canvas.scene, token: ownToken, origin, rotation, attach: false });
+      const region = new CONFIG.Region.documentClass(data, { parent: canvas.scene });
+      // Never the breather: not the token pressed, and not a second token of the same
+      // actor (the stage 2 review, should-fix 6).
+      const inside = (creaturesInArea(actor, { who: sys.who ?? "creature", origin: "self", feet: shape.distanceFt }) ?? [])
+        .filter(r => r.token !== ownToken && r.actor?.uuid !== actor.uuid && r.token.document.testInsideRegion(region));
+      out.facing = { origin, rotation, area, tokens: inside.map(r => r.token) };
+    }
+  }
+  return out;
+}
+
+/**
+ * **WHAT THE CHAMPION'S USES DO ONCE PAID FOR** (02 §7; stage 2B), as card lines:
+ *
+ * - Hardened Scales: a laid `final` add of 1 on each of Fire, Frost and Nature's Ward,
+ *   spanned by ten minutes - a fight's hundred rounds or the world's ten minutes
+ *   (`effects/durations.mjs#minuteSpan`) - a second use replacing the first;
+ * - Draconic Leap: Entangled ended on the user (the condition's own effect deleted, as
+ *   a passed escape deletes it) BEFORE the leap, which the step door makes further on -
+ *   a displacement, so no Move is spent, no Difficult ground costs and no Opportunity
+ *   Attack is offered - and the Boon on the next attack before the end of the user's
+ *   next turn (`rules/next-attack.mjs`'s `nextTurn`);
+ * - Scales of the Flight: the school the tie leaves open, named on the actor until the
+ *   next Long Rest.
+ */
+async function landChampionUse({ actor, item, sys, onUse, chosen }) {
+  const lines = [];
+  if (onUse?.hardenScales) {
+    const laid = await layState(actor, {
+      flag: HARDENED_SCALES_FLAG, data: { source: item.name }, img: item.img, name: item.name,
+      span: minuteSpan(actor, HARDENED_SCALES.minutes), changes: hardenedScalesChanges(), sameAs: raw => raw?.source === item.name,
+      description: `<p>${foundry.utils.escapeHTML(game.i18n.format("AZEROTH.Chromatic.HardenedScalesText", { n: HARDENED_SCALES.ward, minutes: HARDENED_SCALES.minutes }))}</p>`
+    });
+    lines.push(game.i18n.format(laid ? "AZEROTH.Chromatic.HardenedScalesLine" : "AZEROTH.Chromatic.HardenedScalesNotLaid",
+      { name: actor.name, n: HARDENED_SCALES.ward, minutes: HARDENED_SCALES.minutes }));
+  }
+  const frees = Array.isArray(onUse?.frees) ? onUse.frees : [];
+  if (frees.length) {
+    const held = actor.effects.filter(e => e.active !== false && frees.some(id => e.statuses?.has?.(id))).map(e => e.id);
+    if (held.length) {
+      await actor.deleteEmbeddedDocuments("ActiveEffect", held);
+      lines.push(game.i18n.format("AZEROTH.Chromatic.Freed", { name: actor.name, conditions: frees.map(id => game.i18n.localize(AZEROTH.conditions[id] ?? id)).join(", ") }));
+    }
+  }
+  if (onUse?.nextAttack) {
+    const grant = { source: item.system?.identifier || item.name, name: item.name, boons: Math.max(0, Math.trunc(Number(onUse.nextAttack.boons)) || 0), lasts: onUse.nextAttack.lasts };
+    const laid = grant.boons > 0 ? await layNextAttack(actor, [grant], { quiet: true }) : [];
+    lines.push(laid.length
+      ? game.i18n.format(`AZEROTH.NextAttack.Laid.${grant.lasts}`, { name: actor.name, talent: item.name })
+      : game.i18n.format("AZEROTH.NextAttack.NoFight", { name: actor.name, talent: item.name }));
+  }
+  if (sys.choice === "flightSchools" && chosen?.key && AZEROTH.schools?.[chosen.key]) {
+    await actor.setFlag("azeroth-rpg", FLIGHT_SCHOOL_FLAG, chosen.key);
+    lines.push(game.i18n.format("AZEROTH.Chromatic.FlightNamed", { name: actor.name, school: game.i18n.localize(AZEROTH.schools[chosen.key]) }));
+  }
+  return lines;
+}
+
+/**
+ * **WHAT THE SPELL-WEAVER'S AND THE TIMEWALKER'S USES DO ONCE PAID FOR** (04; stage 3B), as
+ * card lines, each judged in `judgeChampionUse` before anything was paid:
+ *
+ * - Font of Magic: the Rage chosen, off the pool as it stands now, then the Mana through the
+ *   one gift's Rage branch (`effects/gifts.mjs#giveMana`);
+ * - Spellbreak: the Sustain ended through the Stop's own door, then its Rage and Spellthief;
+ * - Hasten: the Half-Action laid for the creature's next turn, and Borrowed Moment's Speed;
+ * - Rewind: the heal, off the offer's own record.
+ */
+async function landChampionTalent({ actor, item, champ, rank = 1 }) {
+  const lines = [];
+  if (!champ) return lines;
+  if (champ.font) {
+    const rage = poolNamed(actor.poolSnapshot?.() ?? [], "rage");
+    const spent = Math.min(champ.font.spent, Math.max(0, Math.trunc(Number(rage?.value)) || 0));
+    if (rage && spent > 0) await actor.updatePool({ itemId: rage.itemId, kind: rage.kind, value: rage.value - spent });
+    const landed = spent > 0 ? await giveMana({ giver: actor, recipient: champ.font.recipient, amount: spent, pool: "rage" }) : 0;
+    lines.push(game.i18n.format("AZEROTH.FontOfMagic.Line", { name: champ.font.name, n: landed, rage: spent, talent: champ.font.plan.names.join(", ") }));
+  }
+  if (champ.spellbreak) {
+    const { breakSustain, spellbreakRage, stealAfterEnding } = await import("../effects/chromatic-flights.mjs");
+    const ended = await breakSustain({ breaker: actor, target: champ.spellbreak.target, cast: champ.spellbreak.cast });
+    lines.push(game.i18n.format(ended.ended ? "AZEROTH.Spellbreak.Line" : "AZEROTH.Spellbreak.NotEnded", { name: champ.spellbreak.name, spell: ended.name || champ.spellbreak.spell, talent: item.name }));
+    if (ended.ended) {
+      lines.push(...(await spellbreakRage({ actor, rank, name: item.name })));
+      lines.push(...(await stealAfterEnding({ actor, ally: champ.spellbreak.ally ?? null })));
+    }
+  }
+  if (champ.bloodlust) {
+    const { layBloodlust } = await import("../effects/chromatic-flights.mjs");
+    for (const t of champ.bloodlust.targets) {
+      const laid = await layBloodlust({ shaman: actor, target: t.actor, source: item.name, combatId: champ.bloodlust.combatId });
+      lines.push(game.i18n.format(laid ? "AZEROTH.Bloodlust.Line" : "AZEROTH.Bloodlust.NotLaid", { name: t.name, talent: item.name }));
+    }
+  }
+  if (champ.hasten) {
+    const { layHasten } = await import("../effects/chromatic-flights.mjs");
+    const laid = await layHasten({ holder: actor, target: champ.hasten.target, combatId: champ.hasten.combatId });
+    lines.push(game.i18n.format(laid.laid ? "AZEROTH.Hasten.Line" : "AZEROTH.Hasten.NotLaid", { name: champ.hasten.name, talent: item.name }));
+    if (laid.laid && laid.speed > 0) lines.push(game.i18n.format("AZEROTH.Hasten.SpeedLine", { name: champ.hasten.name, n: laid.speed }));
+  }
+  if (champ.rewind) {
+    const { landRewind } = await import("../effects/chromatic-flights.mjs");
+    const healed = await landRewind({ holder: actor, target: champ.rewind.target, messageId: champ.rewind.message.id });
+    lines.push(game.i18n.format("AZEROTH.Rewind.Line", { name: champ.rewind.name, n: healed, talent: item.name }));
+  }
+  return lines;
+}
+
+/**
+ * Mark a free cast spent on its talent item (the Chromatic Champion plan;
+ * `rules/free-casts.mjs`). Answers whether the mark was written.
+ */
+async function markFreeCast(actor, line) {
+  const talent = line?.talentId ? actor.items.get(line.talentId) : null;
+  if (!talent) return false;
+  const spent = spentAfter(talent.getFlag("azeroth-rpg", FREE_CAST_FLAG) ?? [], line.spell);
+  await talent.setFlag("azeroth-rpg", FREE_CAST_FLAG, spent);
+  return true;
+}
+
 async function accrueCastingCorruption(actor, spell) {
   if (!actor || actor.type !== "character") return null;
   const owed = castingCorruption(spell?.system ?? {});
@@ -12665,7 +13606,8 @@ export async function useManeuver({ actor, key, targets = null } = {}) {
   if (priced.cost > 0) {
     value -= priced.cost;
     value = refundOnSpend({ ...pool, value }, priced.cost, payingActor.talentRanks?.("Hammer of Justice") ?? 0);
-    await payingActor.updatePool({ itemId: pool.itemId, kind: "momentum", value });
+    // The pool's own kind: Draconic Discipline pays in Energy (the Chromatic Champion plan).
+    await payingActor.updatePool({ itemId: pool.itemId, kind: pool.kind ?? "momentum", value });
   }
   let charged = false;
   if (priced.gain > 0) {

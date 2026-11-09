@@ -23,24 +23,27 @@
 export const PACK_COUNTS = Object.freeze({
   conditions: { count: 15, why: "A1 holds fifteen (D-307, D-472, D-519, D-695)" },
   talents: {
-    count: 408, branches: 34, legacy: 84,
-    why: "9 classes x 3 branches x 12 (04 §2), plus the seven Legacy branches x 12 that 04 §1's roster gives four of them (D-781)"
+    count: 456, branches: 38, legacy: 84,
+    why: "9 classes x 3 branches x 12 and the Chromatic Champion's 4 x 12 (04 §2, 02 §6), plus the seven Legacy branches x 12 that 04 §1's roster gives four of them (D-781)"
   },
   gadgets: {
     count: 16,
     why: "04 §2's Gadgets table under the Tinker: eight original gadgets plus eight additions (2026-10-24)"
   },
-  spells: { count: 430, why: "07 holds 430 across seven schools and five tiers, including the 24 approved thematic additions" },
+  spells: {
+    count: 435,
+    why: "07 holds 435 across seven schools and five tiers, including the 24 approved thematic additions and the Chromatic Champion's five Earth-Warder spells (Stone Grip, Thunderlash, Earthmeld, Earthen Spike, Shattering Bolt)"
+  },
   careers: { count: 53, why: "03 holds 53 across four tiers" },
-  races: { count: 11, why: "02 §5's eleven peoples" },
-  classes: { count: 9, why: "02 §7's nine classes" },
+  races: { count: 12, why: "02 §5's twelve races: eleven peoples and the Chromatic Outcast" },
+  classes: { count: 10, why: "02 §7's ten classes" },
   traits: {
     count: 74,
     why: "08 §5: form 16 + cut 4 + effect 11 + enchantment 28 = 59, matching 06 §3's roster, plus 15 Mount traits that belong to 08 §15 alone (D-399)"
   },
   bestiary: {
-    count: 344,
-    why: "14 holds 344 across five weight classes, including seven Totems, Spirit Wolf, six Tinker constructs, 145 selected Classic examples, twenty additional Classic actors through Felguard Elite, and §15's Frog and Rabbit, the forms Hex and Polymorph lay (D-808); offline verification is complete for these additions, with live acceptance pending"
+    count: 374,
+    why: "14 holds 374 across five weight classes: the prior 348 plus 26 researched tier 1/2 faction NPCs (BESTIARY-TIER12-EXPANSION.md); verification status is recorded in the production tracker"
   },
   legacies: { count: 7, why: "15 §2's seven, one per Legacy on 04 §1's roster, lore and no ranks (D-781)" },
   affixes: {
@@ -68,8 +71,8 @@ export const PACK_COUNTS = Object.freeze({
     why: "08's armor categories, every row, §8's 12 shields (D-636), plus §20's 12 named suits and shields (D-632), plus 203 Classic finds off the vendored record (D-685)"
   },
   gear: {
-    count: 1528, classic: 1052,
-    why: "08 §9 to §17's catalogue tables by header name, two Augments a class, and §20's Epic consumables and the Grimoire (D-632), plus §11's Leggings and Trinket (D-686), Mantle (D-689), eighteen approved special designs and provisions (D-813), and 1,052 Classic finds off the vendored record (D-685, D-690, D-692)"
+    count: 1530, classic: 1052,
+    why: "08 §9 to §17's catalogue tables by header name, two Augments a class (seven classes, the Broodstone the seventh), and §20's Epic consumables and the Grimoire (D-632), plus §11's Leggings and Trinket (D-686), Mantle (D-689), eighteen approved special designs and provisions (D-813), and 1,052 Classic finds off the vendored record (D-685, D-690, D-692)"
   },
   rules: { count: 18, why: "one JournalEntry per chapter in docs/book" },
   criticals: { count: 3, why: "06 §8: Body, Head and Limb, d20 over seven bands each" }

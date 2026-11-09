@@ -13,9 +13,14 @@
  *    lays a `difficultFor` Region behavior on each one's placed area
  *    (`canvas/behaviors.mjs`).
  * 2. **Something that is not the placed area is** - Water Walking's *Rough
- *    water*, Lightning Strike's *space it occupied* (a single target: no area is
- *    placed), The Great Wild's *buildings ... within a day*. Each carries its
+ *    water*, The Great Wild's *buildings ... within a day*. Each carries its
  *    `reason` and is the table's.
+ * 2a. **The ground AT A SINGLE TARGET is** (the Chromatic Champion plan, stage 3B) -
+ *    Lightning Strike's *The space it occupied*, Earthen Spike's *the space* its spike
+ *    stands in, Shattering Bolt's *the ground within 10 feet of it*. `from: "target"`:
+ *    the cast places a Region of its own on the creature's footprint, widened by the
+ *    feet the sentence names (`targetGroundOf`), and the same reconciler lays the
+ *    behavior on it.
  * 3. **The TARGET ignores it** - Firewalk, Cold Snap, Icewalk, Ghost Wolf,
  *    Windwalk, Windrush and Blessing of Freedom. `ignores` rides the laid
  *    effect as a flag (`dice/chat.mjs#applySpellEffectFromCard`) and the one
@@ -36,6 +41,7 @@
  *              as a timed area is (`area-ticks.mjs#areaLapsed`)
  *   from       "landing" where the ground is made when something lands *at the
  *              start of your next turn* (Meteor's crater, Cinderfall's ash);
+ *              "target" where it is the ground at a single target (2a above);
  *              "" from the moment the area is placed
  *   ignores    the spell's target ignores Difficult ground
  *   reason     every Difficult-ground sentence the machinery cannot carry,
@@ -111,6 +117,72 @@ const NEXT_TURN = /\buntil the end of your next turn\b/i;
 const LANDS = /\blands at the start of your next turn\b/i;
 
 /**
+ * **THE GROUND AT A SINGLE TARGET** (2a above): *The space it occupied becomes*, *the space
+ * is*, and *the ground within N feet of it becomes* **Difficult ground**. The first two are
+ * the creature's own footprint; the third that footprint widened by N feet.
+ */
+const TARGET_SPACE = /\bthe space(?: it occupied)? (?:is|becomes) \*\*Difficult ground\*\*/i;
+const TARGET_NEAR = /\bthe ground within (\d+) feet of it becomes \*\*Difficult ground\*\*/i;
+
+/**
+ * **WHERE A SINGLE-TARGET SPELL MAKES THE GROUND DIFFICULT** (2a above), off 07's own
+ * sentences: the feet the target's footprint is widened by (0 for its own space), and the
+ * rounds the ground lasts (*until the end of your next turn* anywhere in the entry is one).
+ * Null for a spell that places an area, or says nothing of the kind. The cast reads THIS -
+ * the chapter's words - so a spell embedded before the descriptor carried `from: "target"`
+ * places its ground all the same.
+ *
+ * @param {string} effectText
+ * @param {{target?: string}} [fields]
+ * @returns {{feet: number, rounds: number|null}|null}
+ */
+export function targetGroundOf(effectText, fields = {}) {
+  if (areaFor(String(fields?.target ?? ""))) return null;
+  const list = sentences(flatText(effectText));
+  for (const s of list) {
+    if (!namesDifficultGround(s)) continue;
+    const near = TARGET_NEAR.exec(s);
+    if (near || TARGET_SPACE.test(s)) {
+      return { feet: near ? Math.max(0, Math.trunc(Number(near[1])) || 0) : 0, rounds: list.some(x => NEXT_TURN.test(x)) ? 1 : null };
+    }
+  }
+  return null;
+}
+
+/**
+ * **WHETHER A SPELL'S GROUND PINS WHAT IT KNOCKED PRONE** (07's Earthen Spike: *While it
+ * stands, the space is Difficult ground and a creature it knocked Prone cannot stand up*;
+ * the 3B review, should-fix 15), off 07's own words, so the Region placed at the target can
+ * carry it.
+ *
+ * @param {string} effectText
+ * @returns {boolean}
+ */
+export function pinsProne(effectText) {
+  return /\bit knocked (?:\*\*)?Prone(?:\*\*)? cannot stand up\b/i.test(flatText(effectText));
+}
+
+/**
+ * **THE SPIKE A PRONE CREATURE CANNOT STAND UP UNDER** (07's Earthen Spike): the first
+ * standing Region that pins - one whose spell's words say so (`pinsProne`), still on the
+ * scene, holding the creature's token, placed by a caster among those who laid the creature's
+ * Prone (*a creature IT knocked Prone*: the condition's own `laidBy`). Null where nothing
+ * holds it down, and the creature may Stand. Sorted by the Region's id, so the refusal names
+ * one spell whatever the order.
+ *
+ * @param {{laidBy?: string[], regions?: Array<{id: string, pins?: boolean, caster?: string|null, inside?: boolean, spell?: string}>}} o
+ * @returns {{id: string, spell: string}|null}
+ */
+export function pinnedProne({ laidBy = [], regions = [] } = {}) {
+  const layers = new Set((laidBy ?? []).filter(u => typeof u === "string" && u));
+  if (!layers.size) return null;
+  const hit = [...(regions ?? [])]
+    .filter(r => r && r.pins === true && r.inside === true && typeof r.caster === "string" && layers.has(r.caster))
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)))[0] ?? null;
+  return hit ? { id: String(hit.id), spell: String(hit.spell ?? "") } : null;
+}
+
+/**
  * WHY A DIFFICULT-GROUND SENTENCE IS NOT CARRIED, in the chapter's own terms.
  * Each is one count under the test's ceiling.
  */
@@ -138,7 +210,9 @@ export const NON_SPELL_GROUND = Object.freeze({
   "Killing Ground": { reason: "a class feature's area, which records no cast for the reconciler to read" },
   "Earthquake": { reason: "a class feature's area, which records no cast for the reconciler to read" },
   // 04's Blademaster (D-781): *Move up to your Speed, ignoring Difficult ground*.
-  "Wind Walk": { automated: "the Legacy branches' `onUse.freeMove {ignoresGround}` (door 25): one Move that costs no Half-Action, paid through `movement.mjs#paidDifficulty` at a foot a foot; its talent row is phase B6's (`LEGACY_ROWS_PENDING`)" }
+  "Wind Walk": { automated: "the Legacy branches' `onUse.freeMove {ignoresGround}` (door 25): one Move that costs no Half-Action, paid through `movement.mjs#paidDifficulty` at a foot a foot; its talent row is phase B6's (`LEGACY_ROWS_PENDING`)" },
+  // 02's Chromatic Champion (stage 2B): *The leap ignores Difficult ground*.
+  "Draconic Leap": { automated: "the leap is the step door's displacement (`onUse.step`, `effects/steps.mjs#stepTo`), which meters no foot, so Difficult ground costs it nothing and it spends no Move" }
 });
 
 /**
@@ -154,6 +228,7 @@ export function readAreaGround(effectText, fields = {}) {
   const list = sentences(text);
   const placed = Boolean(areaFor(String(fields?.target ?? "")));
   const reasons = [];
+  const atTarget = placed ? null : targetGroundOf(effectText, fields);
   for (const s of list) {
     if (!namesDifficultGround(s)) continue;
     if (IGNORES.test(s)) {
@@ -166,6 +241,13 @@ export function readAreaGround(effectText, fields = {}) {
     if (placed && AREA_IS.some(re => re.test(s))) {
       ground.difficult = true;
       if (NEXT_TURN.test(s)) ground.lasts = { rounds: 1 };
+      continue;
+    }
+    // The ground at a single target (2a): the cast places it on the creature (stage 3B).
+    if (atTarget && (TARGET_SPACE.test(s) || TARGET_NEAR.test(s))) {
+      ground.difficult = true;
+      ground.from = "target";
+      if (atTarget.rounds) ground.lasts = { rounds: atTarget.rounds };
       continue;
     }
     reasons.push(placed ? GROUND_REASONS.notArea : GROUND_REASONS.noArea);
@@ -274,7 +356,7 @@ export function cleanAreaGround(ground) {
       ground.lasts.rounds = typeof n === "number" && Number.isInteger(n) && n > 0 ? n : null;
     }
   }
-  if ("from" in ground && !["", "landing"].includes(ground.from)) ground.from = "";
+  if ("from" in ground && !["", "landing", "target"].includes(ground.from)) ground.from = "";
   if ("ignores" in ground && typeof ground.ignores !== "boolean") ground.ignores = ground.ignores === true;
   if ("reason" in ground && typeof ground.reason !== "string") ground.reason = "";
   return ground;

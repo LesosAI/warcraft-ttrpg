@@ -14,6 +14,9 @@ import { abilityKeyOf } from "../rules/animation-records.mjs";
 // straight after the call lands before the board listens and the pick waits for ever
 // (the D-808 run: Blizzard's and Flamestrike's Place area timed out in Quench).
 import { CREATURE_PRESENTATION_AREAS } from "../rules/creature-animation-table.mjs";
+// A Breath's Region state (02's Chromatic Champion; stage 2B).
+import { breathState } from "../rules/animation-table.mjs";
+import { areaFor } from "../rules/areas.mjs";
 import {endTurnDamageStamp} from '../rules/end-turn-damage.mjs';
 import { areaTransferRefusal } from "../effects/pending-area-transfer.mjs";
 import { gadgetResistanceRequest, gadgetResistancePresses } from '../effects/gadget-resistance.mjs';
@@ -58,7 +61,7 @@ import { attackWithDialog, npcAttackWithDialog, reactWithDialog, resilienceWithD
 import { takeReadied } from "../applications/combat-actions.mjs";
 // 07's Hex and 02's Polymorph: the form a failed Test lays (D-808).
 import { forcedShapeFromTest, forcedShapeUnwritable } from "../documents/shapes.mjs";
-import { SHAPE_KINDS, forcedKindForCard } from "../rules/shapes.mjs";
+import { SHAPE_KINDS, forcedKindForCard, meldsGear } from "../rules/shapes.mjs";
 import { openLootOffer } from "../applications/loot-offer.mjs";
 import { layBane } from "../effects/banes.mjs";
 import { conditionValues } from "../effects/conditions.mjs";
@@ -96,7 +99,7 @@ import { feetApart, feetToPoint } from "../canvas/footprints.mjs";
 import { gadgetWeapon, gadgetByKey, gadgetTargetRefusal, SHRINK_FLAG } from "../rules/gadgets.mjs";
 import { bondOf, boundOf, worldActorOf } from "../documents/bound.mjs";
 import { placeSummon } from "../documents/summon.mjs";
-import { summonWaits } from "../rules/creature-plans.mjs";
+import { summonWaits, creatureAreaRange } from "../rules/creature-plans.mjs";
 // 14 §1's Boss Actions (D-809): what a failed Test on a Boss Action's card lands.
 import { BOSS_GRIP_FLAG, bossFailLands } from "../effects/boss-doors.mjs";
 import { AZEROTH } from "../config.mjs";
@@ -699,6 +702,10 @@ export const CARD_ACTIONS = {
   // incoming card by a priest holding 04's Foresight, and a charge taken from 04's
   // Lightwell for a Half-Action.
   foresightWard: (button, message) => foresightWardFromCard(button, message),
+  // 04's Lifeblood (stage 3A): the holder's Reaction, pressed from the offer a blow posted.
+  lifeblood: async button => (await import("../effects/chromatic-talents.mjs")).lifebloodFromCard(button),
+  // 04's Rewind (stage 3B): the holder's Reaction, pressed from the offer a blow posted.
+  rewind: async button => (await import("../effects/chromatic-flights.mjs")).rewindFromCard(button),
   lightwellCharge: (button, message) => lightwellChargeFromCard(button, message),
   // **THE LEGACY BRANCHES'** (B1): 04's Afterimage pressed from the incoming card by
   // the creature struck - *The attack misses* (door 13).
@@ -1049,6 +1056,19 @@ async function placeAreaFromCard(message) {
   // the point is held to the feet from the construct the Use named, and refused in
   // words past them - and a construct no longer standing on this board aims nothing.
   let aimAccept = null;
+  const abilityRange = abilityAreaText ? creatureAreaRange(abilityRow) : null;
+  if (abilityRange !== null) {
+    if (!token) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Construct.AimGone", { name: actor?.name ?? "", feature: abilityRow.name }));
+      return null;
+    }
+    aimAccept = point => {
+      const apart = feetToPoint(token, point);
+      if (apart !== null && apart <= abilityRange) return true;
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Construct.AimTooFar", { name: actor.name, feet: abilityRange }));
+      return false;
+    };
+  }
   if (flags.kind === "feature" && flags.aimFrom?.tokenUuid) {
     const from = fromUuidSync(flags.aimFrom.tokenUuid);
     if (!from || from.parent?.id !== canvas?.scene?.id) {
@@ -1169,6 +1189,9 @@ export function regionFlagsFromCard(message, actor, item) {
     ...((flags.kind === "feature" || flags.kind === "ability") && typeof flags.featureKey === "string" && flags.featureKey && flags.success !== false
       ? { featureKey: flags.featureKey } : {}),
     sustained: flags.sustained === true,
+    // **WHAT A BREATH BREATHED** (02's Chromatic Champion; stage 2B): the state its cone's
+    // `region` cue is chosen by (`rules/animation-table.mjs#breathState`).
+    ...(flags.success !== false && flags.breath?.school ? { breathState: breathStateOf(flags.breath) } : {}),
     // **AND 07's BARRIER'S WARD ON THE CREATURES CHOSEN** (D-779; the lead, 2026-10-03,
     // on O-182: *"Yes"*): a rider for the creatures the cast named, laid by the aura
     // door while each stays inside (`rules/class-answers.mjs#chosenWardRemains`).
@@ -1418,6 +1441,21 @@ async function loseHeldSustain(actor, spellName) {
 
 /** The escape prompts a press is in flight on, on this client (D-778). */
 const ESCAPE_PRESSES = new Set();
+
+/**
+ * **A CONDITION HELD UNTIL THE END OF THE CREATURE'S OWN NEXT TURN** (stage 2B): the
+ * feature cards whose `endOfNextTurn` is the creature's own turn, held to the world's
+ * clock out of a fight (D-778) - 02's Dread Presence (*Frightened of you until the end
+ * of its next turn*) and Breath under 04's Bronze Drake (*Slowed until the end of its
+ * next turn*), by their feature keys (`rules/animation-records.mjs#featureKeyOf`).
+ */
+const CREATURE_TURN_SPANS = Object.freeze(["dread-presence", "breath"]);
+
+/** A Breath card's state for its Region: the school and the area's shape (stage 2B). */
+function breathStateOf(breath) {
+  const shape = areaFor(String(breath?.area ?? ""))?.shape === "line" ? "line" : "cone";
+  return breathState(String(breath?.school ?? ""), shape);
+}
 
 /**
  * **WHAT A TEST TO BREAK FREE OR TO END A STUN LANDS** (D-778; the lead: *"Yes."*):
@@ -1922,8 +1960,13 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
           else if (!delivery?.immune) ui.notifications?.warn("Seduction's charm could not be confirmed. Check the effect and card records before retrying.");
           continue;
         }
-        const caster = f.until === "casterTurnStart" ? casterOf(message) : null;
-        const until = f.until === "casterTurnStart" ? (caster ? (untilNextTurn(caster) ?? null) : null)
+        const caster = f.until === "casterTurnStart" || f.until === "casterTurnEnd" ? casterOf(message) : null;
+        // The Champion's Dread Presence and Bronze Drake Breath: the creature's own next turn (stage 2B).
+        const until = f.until === "endOfNextTurn" && CREATURE_TURN_SPANS.includes(cardFlags.featureKey) ? untilEndOfNextTurnOrRound(actor)
+          : f.until === "casterTurnStart" ? (caster ? (untilNextTurn(caster) ?? null) : null)
+          // 04's Whisper of Madness: *until the end of your next turn*, the user's, held to the
+          // world's clock out of a fight (D-778; stage 3A).
+          : f.until === "casterTurnEnd" ? (caster ? untilEndOfNextTurnOrRound(caster) : null)
           : (f.until === "minute" ? minuteSpan(actor)
             : f.until === "endOfNextTurn" && (gadgetByKey(cardFlags.featureKey) || cardFlags.featureKey === "ability:seduction" || cardFlags.featureKey === "ability:frost-shock") ? untilEndOfNextTurnOrRound(actor) : (f.until || null));
         const escape = cleanEscape(cardFlags.inflictEscapes?.[f.condition] ?? null);
@@ -2405,7 +2448,9 @@ async function attackFromCardNow(button, message, actor, flags0) {
   }
   // **WHAT IS IN HAND IS `readyWeapons`** (D-769): a shifted character swings
   // its block's first row, and a melded sword is never the fallback.
-  const weapons = actor.shape ? [] : actor.items.filter(i => i.type === "weapon");
+  // A drake form melds too (02, *Drake form*), so its block's rows are the weapons and
+  // no sword is the fallback.
+  const weapons = actor.shape && meldsGear(actor.shape.kind) ? [] : actor.items.filter(i => i.type === "weapon");
   const ready = actor.readyWeapons?.() ?? weapons.filter(w => w.system?.equipped);
   const weapon = ready[0]
     ?? (actor.type === "npc" ? null : weapons[0] ?? null);
@@ -3446,9 +3491,11 @@ async function applyConditionFromCard(button, message) {
   // *Until the start of YOUR next turn* (02's Hurricane, D-771) is the
   // CASTER's turn: the span is keyed on the card's caster's combatant, which
   // `untilNextTurn` builds where it is handed that actor.
-  const caster = button.dataset.until === "casterTurnStart" ? casterOf(message) : null;
+  const caster = button.dataset.until === "casterTurnStart" || button.dataset.until === "casterTurnEnd" ? casterOf(message) : null;
   const until = button.dataset.until === "casterTurnStart"
     ? (caster ? (untilNextTurn(caster) ?? null) : null)
+    // 04's Whisper of Madness (stage 3A): the user's next turn's end, or a round of the clock.
+    : button.dataset.until === "casterTurnEnd" ? (caster ? untilEndOfNextTurnOrRound(caster) : null)
     : (button.dataset.until || null);
   // A Signature that answers the blow leaves its condition on the SPEAKER
   // (Stygian Buckler's Slowed, 08 SS20; D-692) - never on the creature that
@@ -3478,7 +3525,9 @@ async function applyConditionFromCard(button, message) {
     // *For one minute* (door 26): the fight's ten rounds, or the world's minute,
     // keyed on the creature the condition lands on.
     const span = until === "minute" ? minuteSpan(actor)
-      : until === "endOfNextTurn" && (gadgetByKey(message.flags?.["azeroth-rpg"]?.featureKey) || message.flags?.["azeroth-rpg"]?.featureKey === "ability:seduction" || message.flags?.["azeroth-rpg"]?.featureKey === "ability:frost-shock") ? untilEndOfNextTurnOrRound(actor) : until;
+      : until === "endOfNextTurn" && (gadgetByKey(message.flags?.["azeroth-rpg"]?.featureKey) || message.flags?.["azeroth-rpg"]?.featureKey === "ability:seduction" || message.flags?.["azeroth-rpg"]?.featureKey === "ability:frost-shock") ? untilEndOfNextTurnOrRound(actor)
+        // The Champion's Dread Presence and Bronze Drake Breath: the creature's own next turn (stage 2B).
+        : until === "endOfNextTurn" && CREATURE_TURN_SPANS.includes(message.flags?.["azeroth-rpg"]?.featureKey) ? untilEndOfNextTurnOrRound(actor) : until;
     if (value !== null || span) await applyCondition(actor, id, { value, until: span });
     else if (!actor.statuses?.has(id)) await actor.toggleStatusEffect(id, { active: true });
     if (slowing?.feet > 0 && actor.isOwner) {

@@ -246,7 +246,7 @@ function serial(task) {
 
 /** How many passes are queued or running. */
 export function areasOwed() {
-  return OWED;
+  return OWED + CUES.size;
 }
 
 /**
@@ -254,10 +254,38 @@ export function areasOwed() {
  * before this, and every pass those passes queued in turn - a Region deleted
  * queues the leavers' sweep - has run. A batch deleting its scene waits here
  * first (`testing/fixtures.mjs#drainAreaWork`), so no pass it started reaches
- * the server after the scene has gone.
+ * the server after the scene has gone. A Breath's cone still waiting on its cue is
+ * waited out with them.
  */
 export async function areasIdle() {
-  while (OWED > 0) await QUEUE;
+  while (OWED > 0 || CUES.size > 0) await Promise.all([QUEUE, ...CUES]);
+}
+
+/** The cones waiting for their cue to finish before the queue takes them away. */
+const CUES = new Set();
+
+/**
+ * **A REGION SHOWN WHILE ITS CUE PLAYS, THEN DELETED** (02's Breath; the lead, 2026-11-08:
+ * *"Remove after the cue"*): the Region its card placed with `afterCue` (milliseconds), taken
+ * away once the wait is over - through the ONE queue, so core never sees a second delete of
+ * a Region a sweep already took, and with `SWEEP_DELETE` on the operation, so the deletion
+ * is never read as an area taken off by hand (D-760). On the active GM's client only, as
+ * every write here is; a Region gone in the meantime is left alone.
+ *
+ * @param {RegionDocument} region
+ * @returns {Promise<number>}
+ */
+export function removeAfterCue(region) {
+  const ms = Math.max(0, Math.trunc(Number(region?.flags?.[SCOPE]?.afterCue)) || 0);
+  const scene = region?.parent ?? null;
+  const id = region?.id ?? null;
+  if (!scene || !id || !(ms > 0)) return Promise.resolve(0);
+  // The ONE delete: the sweep's own, queued, asking the world first (`sweepAreasNow`'s `cued`).
+  const done = new Promise(resolve => setTimeout(resolve, ms))
+    .then(() => sweepAreas({ scenes: [scene], ids: [id], cued: true }));
+  CUES.add(done);
+  done.finally(() => CUES.delete(done));
+  return done;
 }
 
 /**
@@ -273,7 +301,7 @@ export function sweepAreas(o = {}) {
 }
 
 /** The sweep itself; only ever run from the queue. */
-async function sweepAreasNow({ scenes = null, caster = null, ids = null } = {}) {
+async function sweepAreasNow({ scenes = null, caster = null, ids = null, cued = false } = {}) {
   if (!isWriter()) return 0;
   const now = worldClock();
   let gone = 0;
@@ -283,15 +311,22 @@ async function sweepAreasNow({ scenes = null, caster = null, ids = null } = {}) 
     // to would be an error on the console (`canvas/in-world.mjs`).
     if (!scene?.regions || !sceneInWorld(scene)) continue;
     const rows = [];
+    // **A REGION WHOSE CUE HAS PLAYED** (02's Breath; the lead: *"Remove after the cue"*):
+    // named by `removeAfterCue` once its wait is over, it goes whatever its record says.
+    const cuedIds = [];
     for (const region of scene.regions) {
+      if (cued && ids?.includes(region.id) && Number(region.flags?.[SCOPE]?.afterCue) > 0) {
+        cuedIds.push(region.id);
+        continue;
+      }
       const row = areaRecord(region);
       if (!row) continue;
       if (caster && row.caster !== caster) continue;
       if (ids && !ids.includes(row.id)) continue;
       rows.push(row);
     }
-    if (!rows.length) continue;
-    const stale = staleIn(scene, rows, now).filter(id => regionInWorld(scene.regions.get(id)));
+    if (!rows.length && !cuedIds.length) continue;
+    const stale = [...cuedIds, ...(rows.length ? staleIn(scene, rows, now) : [])].filter(id => regionInWorld(scene.regions.get(id)));
     if (!stale.length || !sceneInWorld(scene)) continue;
     // Marked as the sweep's own (D-760): an area that goes because its Sustain
     // did is not an area taken off by hand, and ends nothing more.
@@ -764,7 +799,10 @@ export function registerSustainedAreaHooks() {
     if (foundry.utils.hasProperty(changed ?? {}, "system.deathSteps")) quietly(sweepAreas());
   });
   Hooks.on("createRegion", region => {
-    if (!isWriter() || !region?.flags?.[SCOPE]?.cast) return;
+    if (!isWriter()) return;
+    // A Breath's cone (02's Breath): taken away once its cue has played.
+    if (Number(region?.flags?.[SCOPE]?.afterCue) > 0) quietly(removeAfterCue(region));
+    if (!region?.flags?.[SCOPE]?.cast) return;
     quietly(sweepAreas({ scenes: [region.parent], ids: [region.id] }));
     // A placed area whose spell, or whose caster's talent, makes it
     // Difficult ground takes its behavior on the GM's client (D-757).
@@ -800,5 +838,12 @@ export function registerSustainedAreaHooks() {
     if (!isWriter()) return;
     quietly(sweepAreas());
     quietly(reconcileGround());
+    // **A BREATH'S CONE LEFT BEHIND BY A RELOAD** (the 3A review, should-fix 14): its cue's
+    // timer lived in the client that reloaded, so a cued Region still standing at `ready` is
+    // a leftover - taken now, through the one queue, as the cue's own delete would have.
+    for (const scene of game.scenes ?? []) {
+      const ids = (scene.regions ?? []).filter(r => Number(r?.flags?.[SCOPE]?.afterCue) > 0).map(r => r.id);
+      if (ids.length) quietly(sweepAreas({ scenes: [scene], ids, cued: true }));
+    }
   });
 }

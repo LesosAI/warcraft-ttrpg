@@ -32,6 +32,9 @@ import { strikeCard } from "./after-blow.mjs";
 // dispeller's own feature.
 import { featureOnUse } from "./legacy-uses.mjs";
 import { onUseSpirits } from "../rules/legacy-uses.mjs";
+// 07's Unweave, cast by a Champion who knows it through a talent (stage 3B).
+import { branchSpellOf } from "../rules/chromatic-talents.mjs";
+import { talentEffect } from "../rules/talent-effects.mjs";
 
 /** The query an end on a creature this client does not own goes through. */
 export const DISPEL_QUERY = "azeroth-rpg.dispel";
@@ -117,14 +120,18 @@ export function dispelGatesOn(target, ids = []) {
   return dispelGated(effects, gates);
 }
 
-/** End them here; the caller has established that this client may. Judged again. */
-async function endHere({ target, ids }) {
+/**
+ * End them here; the caller has established that this client may. Judged again. **07's
+ * Unweave** (*Every spell effect on the target ends*; stage 3B) ends a SPELL's effect alone -
+ * a laid spell or a spell's tick (`spellCasterOf`) - under the same judgement.
+ */
+async function endHere({ target, ids, unweave = false }) {
   const want = new Set(cleanEffectIds(ids));
   if (iceBlockFor(target)) return { name: target.name, ended: [], kept: [...want].sort() };
   const effects = (target.effects ?? []).filter(e => want.has(e.id)).map(plainEffect);
   const archmage = archmageCasters(effects);
   const ended = effects
-    .filter(e => !e.disabled && dispelJudgement(e, { archmage }).ok)
+    .filter(e => !e.disabled && (!unweave || spellCasterOf(e)) && dispelJudgement(e, { archmage }).ok)
     .map(e => ({ id: e.id, name: e.name, owner: ongoingOwner(e) }));
   const gone = ended.map(e => e.id).filter(id => target.effects.has(id));
   if (gone.length) await target.deleteEmbeddedDocuments("ActiveEffect", gone);
@@ -153,7 +160,7 @@ function areaDispelHeld(dispeller, featureId) {
  * to the caller as the refusal. A dispeller holds 02's Dispel, or the feature the
  * request names is an area's dispel (04's Disenchant; door 25).
  */
-export async function dispelQueryHandler({ targetUuid = null, dispellerUuid = null, ids = [], featureId = null } = {}, { user = null } = {}) {
+export async function dispelQueryHandler({ targetUuid = null, dispellerUuid = null, ids = [], featureId = null, unweave = false } = {}, { user = null } = {}) {
   const target = targetUuid ? await fromUuid(targetUuid) : null;
   if (target?.documentName !== "Actor") throw new Error(game.i18n.localize("AZEROTH.Card.TargetGone"));
   if (user) {
@@ -161,9 +168,15 @@ export async function dispelQueryHandler({ targetUuid = null, dispellerUuid = nu
     if (dispeller?.documentName !== "Actor" || !dispeller.testUserPermission(user, "OWNER")) {
       throw new Error(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: dispeller?.name ?? "" }));
     }
-    if (!dispeller.hasFeature?.("Dispel") && !areaDispelHeld(dispeller, featureId)) throw new Error(game.i18n.format("AZEROTH.Dispel.NoFeature", { name: dispeller.name }));
+    // 07's Unweave is a spell its caster knows: a spell item of that name, or one a taken talent
+    // teaches (04's Unraveller; stage 3B).
+    const weaves = unweave === true && (dispeller.items?.some?.(i => i.type === "spell" && i.system?.identifier === "unweave")
+      || Boolean(branchSpellOf(dispeller.takenTalents?.() ?? [], "Unweave", talentEffect)));
+    if (!weaves) {
+      if (!dispeller.hasFeature?.("Dispel") && !areaDispelHeld(dispeller, featureId)) throw new Error(game.i18n.format("AZEROTH.Dispel.NoFeature", { name: dispeller.name }));
+    }
   }
-  return endHere({ target, ids });
+  return endHere({ target, ids, unweave: unweave === true });
 }
 
 /**
@@ -174,13 +187,13 @@ export async function dispelQueryHandler({ targetUuid = null, dispellerUuid = nu
  *   GM's handler judges the request by
  * @returns {Promise<{name: string, ended: Array<{id: string, name: string, owner: string|null}>, kept: string[], error?: boolean}>}
  */
-export async function endEffects({ dispeller, target, ids = [], name = "", featureId = null } = {}) {
+export async function endEffects({ dispeller, target, ids = [], name = "", featureId = null, unweave = false } = {}) {
   if (!target) return { name, ended: [], kept: [...ids], error: true };
   try {
-    if (target.isOwner) return await endHere({ target, ids });
+    if (target.isOwner) return await endHere({ target, ids, unweave });
     const gm = game.users?.activeGM ?? null;
     if (!gm) throw new Error(game.i18n.localize("AZEROTH.Dispel.NoGM"));
-    const done = await gm.query(DISPEL_QUERY, { targetUuid: target.uuid, dispellerUuid: dispeller?.uuid ?? null, ids: cleanEffectIds(ids), featureId: featureId ?? null }, { timeout: 15000 });
+    const done = await gm.query(DISPEL_QUERY, { targetUuid: target.uuid, dispellerUuid: dispeller?.uuid ?? null, ids: cleanEffectIds(ids), featureId: featureId ?? null, unweave: unweave === true }, { timeout: 15000 });
     return done && typeof done === "object"
       ? { name: done.name ?? target.name, ended: Array.isArray(done.ended) ? done.ended : [], kept: Array.isArray(done.kept) ? done.kept : [] }
       : { name: target.name, ended: [], kept: [...ids], error: true };

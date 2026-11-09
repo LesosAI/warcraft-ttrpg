@@ -1,0 +1,15 @@
+{{!-- 04's Rewind, offered (stage 3B of the Chromatic Champion plan): *Once per Short Rest,
+      as a Reaction when a creature within 30 feet takes damage, spend 2 Rage*. Posted from
+      the one damage door (`effects/chromatic-flights.mjs#offerRewind`) on whichever client
+      applied the blow, carrying the Health the blow took on the card's own flag:
+      `data-reaction-owner` shows the button to whoever owns the holder and nobody else
+      (D-779), and the granted feature's own door judges the Reaction, the Rage, the use,
+      the reach and the offer again at the press. --}}
+<div class="azeroth azeroth-card azeroth-card-feature" data-message-kind="rewindOffer">
+  <div class="azeroth-card-body">
+    <p class="azeroth-card-line azeroth-fired"><span>{{name}}</span><em>{{text}}</em></p>
+    <div class="azeroth-card-actions" data-reaction-owner="{{holderUuid}}">
+      <button type="button" data-action="rewind" data-holder-uuid="{{holderUuid}}" data-feature-id="{{featureId}}" data-target-uuid="{{targetUuid}}">{{label}}</button>
+    </div>
+  </div>
+</div>

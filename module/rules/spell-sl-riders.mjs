@@ -31,7 +31,7 @@ import { AZEROTH } from "../config.mjs";
 import { flatText, sentences } from "./spell-effects.mjs";
 
 /** The kinds of rider this module reads. */
-export const SL_RIDER_KINDS = Object.freeze(["hitBane", "hitWardDrop", "failCondition", "failNoReaction", "failDestroy"]);
+export const SL_RIDER_KINDS = Object.freeze(["hitBane", "hitWardDrop", "hitApDrop", "failCondition", "failNoReaction", "failDestroy"]);
 
 /** The kinds a failed Resist lands, which the card carries to the Test. */
 export const SL_FAIL_KINDS = Object.freeze(["failCondition", "failNoReaction", "failDestroy"]);
@@ -94,6 +94,10 @@ const TEST_WORDS = Object.freeze({ attack: "attack", casting: "casting" });
  *   hit (`at` null); at `lastingAt` it is a span rather than a count.
  * - `hitWardDrop` `{at, school, amount, until: "casterTurnEnd"}` - *At SL 3 or better
  *   its Ward against Fel drops by 1 until the end of your next turn.*
+ * - `hitApDrop` `{at, amount, until: "shortRest"}` - 07's Shattering Bolt: *At SL 2 or
+ *   better the target loses 1 Armor Point at every location until it finishes a Short
+ *   Rest* (stage 3A of the Chromatic Champion plan): laid as Sunder's own mark is, which
+ *   the Short Rest door ends (`AzerothActor#clearSundered`).
  * - `failCondition` `{at, status, span}` - *At SL 3 or better a creature that fails
  *   is Blinded until the end of its next turn* (`span` `targetNextTurnEnd`), and
  *   *At SL 3 or better it is Entangled for the first round and Slowed for the rest*
@@ -116,6 +120,8 @@ export function readSlRider(effectText) {
   if (m && schoolOf(m[2])) {
     return { kind: "hitWardDrop", at: Number(m[1]), school: schoolOf(m[2]), amount: Number(m[3]), until: "casterTurnEnd" };
   }
+  m = /\bAt SL (\d+) or better the target loses (\d+) Armor Points? at every location until it finishes a Short Rest\./.exec(text);
+  if (m) return { kind: "hitApDrop", at: Number(m[1]), amount: Number(m[2]), until: "shortRest" };
   m = /\bAt SL (\d+) or better it is (\w+) for the first round and (\w+) for the rest\./.exec(text);
   if (m && conditionOf(m[2]) && conditionOf(m[3])) {
     return { kind: "failCondition", at: Number(m[1]), status: conditionOf(m[2]), span: "firstRound", then: conditionOf(m[3]) };

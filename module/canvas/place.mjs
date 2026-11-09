@@ -530,6 +530,8 @@ export async function placeItemArea({ item = null, actor = null, areaText = null
   }
   const centre = caster ? centreOf(caster) : null;
   const steps = placementSteps(area, { hasToken: Boolean(centre) });
+  // **WHERE A CONE ON THE CASTER STARTS** is `areaOriginFor`'s answer, the one reading this
+  // and 02's Breath share (the lead, 2026-11-08: *"Same as spell cones"*).
   if (!steps) {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Area.NoArea", { name: label }));
     return null;
@@ -540,7 +542,7 @@ export async function placeItemArea({ item = null, actor = null, areaText = null
   // asking the caster where they are standing.
   let origin;
   if (steps.origin === STEP_ORIGINS.TOKEN) {
-    origin = { x: centre.x, y: centre.y };
+    origin = areaOriginFor(area, caster);
   } else {
     // `accept` holds the point to a caller's own rule and keeps the pick open on a
     // refusal (`pickPoint`'s own option): 04's Cluster Rockets aims within 60 feet
@@ -570,6 +572,24 @@ export async function placeItemArea({ item = null, actor = null, areaText = null
     item, areaText: text, name: label, color, scene, origin, rotation,
     token: caster, attach: steps.attach, flags, widenFt, lengthenFt
   });
+}
+
+/**
+ * **WHERE AN AREA MEASURED FROM ITS CASTER STARTS** (07 §9: an area is measured from the
+ * caster unless the entry says otherwise): the caster's token centre where the area is one
+ * placed on the caster (`rules/placement.mjs#placementSteps`), else null - a click picks it.
+ * The ONE origin a spell's cone and 02's Breath take (the lead, 2026-11-08, on Breath's
+ * cone: *"Same as spell cones"*), so the two can never start in different places.
+ *
+ * @param {object|null} area  `rules/areas.mjs#areaFor`'s shape
+ * @param {Token|TokenDocument|null} token  the caster's
+ * @returns {{x: number, y: number}|null}
+ */
+export function areaOriginFor(area, token) {
+  const centre = token ? centreOf(token) : null;
+  const steps = placementSteps(area, { hasToken: Boolean(centre) });
+  if (!steps || steps.origin !== STEP_ORIGINS.TOKEN || !centre) return null;
+  return { x: centre.x, y: centre.y };
 }
 
 /**

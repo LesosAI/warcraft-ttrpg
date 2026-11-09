@@ -41,6 +41,7 @@
 import { BASE_REACH } from "./distance.mjs";
 import { attackModes } from "./ammunition.mjs";
 import { succeeded } from "./resolution.mjs";
+import { maneuverPurse } from "./maneuver-pool.mjs";
 
 /** 06 §6's rows, in the chapter's own order. */
 export const REACTION_KEYS = Object.freeze([
@@ -316,12 +317,19 @@ export function blockedDamage(damage, { bonus = 0 } = {}) {
  * that can; with neither able to pay the first is returned so `canReact` can
  * refuse in its own words rather than with a null.
  *
+ * **A FEATURE MAY SEND IT ELSEWHERE** (the Chromatic Champion plan's Draconic
+ * Discipline): `maneuverPool`, the pool a held feature names
+ * (`rules/maneuver-pool.mjs#maneuverPoolOf`), pays every universal maneuver and the
+ * Parry at the printed price.
+ *
  * @param {Array<{kind: string, name: string|null, value: number, max: number}>} pools
  *   `AzerothActor#poolSnapshot`'s rows. A creature's carry `name: null`,
  *   because 14's block prints a number and no pool type (D-637).
+ * @param {{maneuverPool?: string|null}} [o]
  */
-export function parryPoolFor(pools = []) {
+export function parryPoolFor(pools = [], { maneuverPool = null } = {}) {
   const list = pools ?? [];
+  if (maneuverPool) return maneuverPurse(list, maneuverPool);
   const momenta = list.filter(p => p?.kind === "momentum" && (p.max ?? 0) > 0);
   if (!momenta.length) return null;
   const purse = pool => (pool.name === PARRY_COMBO_POOL
@@ -596,7 +604,7 @@ export function readyEntry({ trigger = "", action = "", round = null, turn = nul
  */
 export function canReact(key, {
   reactionsLeft = 1, inFight = true, alreadyReacted = false, meleeWeapons = [], shields = [],
-  attacks = [], leftReach = true, readied = null, classNames = [], pools = [], free = {},
+  attacks = [], leftReach = true, readied = null, classNames = [], pools = [], maneuverPool = null, free = {},
   unanswered = false, cannotParryOrBlock = false, lostToBlow = false, spiritRealm = false, noOpportunity = false, snagged = false, disoriented = false, asleep = false, phaseShifted = false, seduced = false, reactionBarred = false, iceBlocked = false, dispersed = false
 } = {}) {
   const row = REACTIONS[key] ?? null;
@@ -632,7 +640,7 @@ export function canReact(key, {
   // weapon would not help; and the point is asked out of a fight as readily as
   // in one, since it is a price rather than a turn's budget.
   if (row.needs === "momentumPool") {
-    const purse = parryPoolFor(pools);
+    const purse = parryPoolFor(pools, { maneuverPool });
     if (!purse) return { ok: false, reason: "AZEROTH.Reaction.Refuse.NoMomentumClass", with: null };
     if ((purse.value ?? 0) < (row.cost ?? 0)) return { ok: false, reason: "AZEROTH.Reaction.Refuse.NoMomentum", with: null };
   }

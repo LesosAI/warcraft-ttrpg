@@ -17,7 +17,12 @@ import { wornWeaponEffects } from "../../rules/weapon-traits.mjs";
 import { abilityModifier, skillModifier } from "../../rules/abilities.mjs";
 import { initiativeFor } from "../../rules/initiative.mjs";
 import { derivedThresholds, trackStates } from "../../rules/corruption.mjs";
-import { wardFor } from "../../rules/ward.mjs";
+import { wardCap, wardFor } from "../../rules/ward.mjs";
+import { guiseFacts } from "../../rules/guise.mjs";
+// The Chromatic Champion's standing features and the Outcast's trait (02 §5, §7; stage 2B).
+import {
+  FLIGHT_SCHOOL_FLAG, FLIGHTBLOOD, SCALES, SCALES_OF_THE_FLIGHT, branchPointsFor, encumberingBanes, flightSchool, flightbloodWard, scalesWaive
+} from "../../rules/chromatic-features.mjs";
 import {
   characterLevel,
   clampPool,
@@ -33,12 +38,12 @@ import { suitEffects } from "../../rules/armor.mjs";
 import { DEFAULT_SIZE, flyingPace } from "../../rules/size.mjs";
 // A shape's physical half (02 §7, D-769): what the block gives the character,
 // and whether worn gear melds into it.
-import { FORCED_SPEED, SHAPE_ABILITIES, meldsGear } from "../../rules/shapes.mjs";
+import { FORCED_SPEED, SHAPE_ABILITIES, isOverlayKind, meldsGear, overlayArmorPoints, overlayDefense } from "../../rules/shapes.mjs";
 // Carrying is counted in bag slots (D-735, D-736); the pounds stay with 14's
 // creatures, in `rules/weight.mjs` and `NpcData`.
 import { baseCapacity, ledger } from "../../rules/slots.mjs";
 import { collectBurdenParticipants, derivePilgrimsBurdenLoadState } from "../../effects/pilgrims-burden.mjs";
-import { carryFactor } from "../../rules/talent-effects.mjs";
+import { carryFactor, talentLanguages } from "../../rules/talent-effects.mjs";
 import { blockSpeedParts, speedFrom, speedParts } from "../../rules/speed.mjs";
 import { capFor } from "../../rules/momentum.mjs";
 import { emptyByTestKind, laidBaneRows, laidBaneTotals, laidBoonRows } from "../../rules/banes.mjs";
@@ -201,6 +206,23 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
       // at home (D-636).
       motive: new fields.StringField({ required: false, blank: true, initial: "" }),
 
+      // **THE GUISE** (the Chromatic Champion plan): the people a Chromatic Outcast
+      // looks like, picked at creation beside the race it IS. It gives size, Speed and
+      // tongue and nothing else; its trait and its talents are never embedded. A
+      // SNAPSHOT of the race it was taken from, because data preparation cannot await
+      // a pack read (D-769's reason for a shape's block on its effect);
+      // `rules/guise.mjs#guiseSnapshot` is its one writer. Null for everybody else,
+      // so no migration: a new nullable field reads null on every stored character.
+      guise: new fields.SchemaField({
+        uuid: new fields.StringField({ required: true, blank: true, initial: "" }),
+        identifier: new fields.StringField({ required: true, blank: true, initial: "" }),
+        name: new fields.StringField({ required: true, blank: true, initial: "" }),
+        img: new fields.StringField({ required: true, blank: true, initial: "" }),
+        size: new fields.StringField({ required: true, initial: "medium", choices: () => Object.keys(AZEROTH.sizes) }),
+        speed: new fields.NumberField({ required: false, nullable: true, integer: true, initial: null, min: 0 }),
+        languages: new fields.ArrayField(new fields.StringField({ choices: () => Object.keys(AZEROTH.languages) }), { initial: [] })
+      }, { required: false, nullable: true, initial: null }),
+
       // A FLYING PACE, where something gives the character one (14 §1's
       // second pace, D-530; D-718). **Stored rather than derived**, and that
       // is the whole point: nothing in 02 or 04 grants a character flight, so
@@ -296,7 +318,17 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // scores arrive as the effect's `initial` overrides; everything else is
     // read off the snapshot below. Null out of a shape, and nothing moves.
     const shape = this.parent?.shape ?? null;
-    const physical = shape?.physical ?? null;
+    // **A DRAKE FORM STANDS BESIDE THE CHARACTER** (02, *Drake form*): no score taken,
+    // its own ground pace kept, what is worn melded (`melded` below), and Defense and
+    // Armor Points the better of the block's and the character's own - which
+    // `afterFinalPhase` takes, once every effect on the character's own has landed.
+    // `overlay` holds the block apart from `physical`, so the readers that REPLACE with
+    // the block - the pace, the Armor Points, the Defense - do not reach it.
+    const overlay = shape && isOverlayKind(shape.kind) ? (shape.physical ?? null) : null;
+    // Kept for `afterFinalPhase` (the 1B review, item d): the block's Defense and Armor
+    // Points, never stored.
+    this.overlayBlock = overlay ? { defense: Number.isFinite(overlay.defense) ? overlay.defense : null, ap: { ...(overlay.ap ?? {}) } } : null;
+    const physical = overlay ? null : (shape?.physical ?? null);
     const melded = Boolean(shape && meldsGear(shape.kind));
     // Dispersion preserves inventory and equipped flags, but suspends gear benefits.
     // Unlike shapeshifting, it does not retain affixes or signatures.
@@ -407,6 +439,11 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     const talentRows = taken.map(t => ({
       id: t.id, identifier: t.system?.identifier, className: t.system?.className, race: t.system?.race ?? null, name: t.name, taken: t.system?.taken
     }));
+    // **A TONGUE A TALENT ADDS** (02 SS5's Chromatic Outcast's Draconic; the lead, 2026-11-08:
+    // *"Add Draconic"*): ADDED to the prepared list, never written over the stored one - the
+    // creator, a guise and a GM's edit own that.
+    const tongues = talentLanguages(talentRows);
+    if (tongues.length) this.languages = [...new Set([...(this.languages ?? []), ...tongues])];
     for (const pool of pools.momenta) pool.max = capFor(pool, ranksOf);
     if (pools.momentum && !pools.momenta.includes(pools.momentum)) pools.momentum.max = capFor(pools.momentum, ranksOf);
     // A pool the character does not hold keeps its stored value untouched and
@@ -573,8 +610,14 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // and being moved read it. **CARRYING DOES NOT** (the lead, 2026-10-03:
     // *"Druid's own carry"*): the bag slots below read the race's size and the
     // character's OWN Strength, so a shift neither empties nor grows the bags.
-    const ownSize = race?.system?.size ?? DEFAULT_SIZE;
-    const size = physical?.size ?? ownSize;
+    // **A GUISE GIVES SIZE AND SPEED** (the Chromatic Champion plan): a Chromatic
+    // Outcast carries, moves and stands at its guise people's size and pace, never its
+    // own race item's. `rules/guise.mjs#guiseFacts` is the one reading; with no guise
+    // it reads the race exactly as before.
+    const people = guiseFacts({ race: race?.system ?? null, guise: this.guise ?? null });
+    const ownSize = people.from === "guise" ? people.size : (race?.system?.size ?? DEFAULT_SIZE);
+    const ownSpeed = people.from === "guise" ? people.speed : (race?.system?.speed ?? null);
+    const size = physical?.size ?? overlay?.size ?? ownSize;
     this.size = size;
     // **PACK HOBGOBLIN IS READ INLINE, HERE.** It was a `multiply` change in
     // the `final` phase, which lands after this whole method - so it doubled
@@ -616,11 +659,22 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     const category = suit?.system?.category ?? "none";
     const cuts = suit?.system?.cuts ?? [];
     const effects = suitEffects(category, cuts, { shield: Boolean(shield) });
-    this.ap = physical ? { body: physical.ap.body, head: physical.ap.head, limb: physical.ap.limb } : effects.armorPoints;
+    // **THE ONES YOU HAD BEFORE YOU TOOK THE FORM** (02, *Drake form*; the 1B review,
+    // item c): a drake form melds the suit and the shield - `effects` above is the
+    // melded reading, which Speed, Encumbering and the Stealth Bane keep - but its
+    // Defense and Armor Points are the better of the block's and the character's OWN,
+    // and the character's own are worn ones. So the own reading is built off what is
+    // equipped, melded or not, and `afterFinalPhase` compares it with the block.
+    const ownSuit = overlay ? usableGear.find(i => i.type === "armor" && i.system?.equipped && !i.system?.shield) ?? null : suit;
+    const ownShield = overlay ? usableGear.find(i => i.type === "armor" && i.system?.equipped && i.system?.shield) ?? null : shield;
+    const ownEffects = overlay
+      ? suitEffects(ownSuit?.system?.category ?? "none", ownSuit?.system?.cuts ?? [], { shield: Boolean(ownShield) })
+      : effects;
+    this.ap = physical ? { body: physical.ap.body, head: physical.ap.head, limb: physical.ap.limb } : { ...ownEffects.armorPoints };
     // A named suit prints one Armor Point number and Body is the one that
     // matters (D-632): its margin over the category, a Reinforced prefix and
     // a shield's own points all ride on `apBonus`.
-    const apBonus = (suit?.system?.apBonus ?? 0) + (shield?.system?.apBonus ?? 0);
+    const apBonus = (ownSuit?.system?.apBonus ?? 0) + (ownShield?.system?.apBonus ?? 0);
     if (apBonus) this.ap = { ...this.ap, body: (this.ap.body ?? 0) + apBonus };
     // **ARMOR POINTS SCALED BY THE BEARER** (Stormrage Raiment, 08 §20; D-696):
     // *a Druid wearing it adds Armor Points equal to their tier in any form
@@ -637,7 +691,15 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // Stealth. A melded weapon is in nobody's hand (D-769).
     const wornWeapons = wornWeaponEffects((melded ? [] : usableGear)
       .filter(i => i.type === "weapon" && i.system?.equipped === true).map(i => i.system?.traits ?? []));
-    this.armorBanes = [...effects.banes, ...wornWeapons.banes.filter(b => !effects.banes.includes(b))];
+    // **THE SUIT'S OWN ENCUMBERING BANE** (08 §5's Encumbering: *Speed drops 5 feet, and
+    // Stealth Tests take a Bane*), which no reader carried: a Mail or Plate suit cost its
+    // Speed and put no Bane on Stealth at all, found beside 02's Scales (stage 2B), which
+    // waives exactly this. Muffled buys it back (08 §6), and a melded suit carries none.
+    const featureNames = new Set((this.parent?.items ?? []).filter(i => i.type === "feature").map(i => i.name));
+    const scales = scalesWaive({ held: featureNames.has(SCALES.feature), category });
+    this.scalesWaive = scales;
+    const suitBanes = encumberingBanes({ encumbering: effects.encumbering === true, grants: grantsOn(suit, bearer), waived: scales });
+    this.armorBanes = [...new Set([...effects.banes, ...suitBanes, ...wornWeapons.banes])];
 
     // Speed (05 §10, D-621): the race's own, the suit's cost or gift, and
     // Muffled at Greater grade buying Encumbering's cost back. The parts are
@@ -649,16 +711,18 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // the first part - `block`, 14 §1's pace, which is what it is - with what is
     // carried; the melded suit costs and gives nothing.
     this.speedParts = physical
-      ? blockSpeedParts({ blockSpeed: physical.speed ?? race?.system?.speed ?? undefined, load: this.load })
+      ? blockSpeedParts({ blockSpeed: physical.speed ?? ownSpeed ?? undefined, load: this.load })
       : speedParts({
-        raceSpeed: race?.system?.speed ?? null,
+        raceSpeed: ownSpeed,
         armorSpeed: effects.speed,
         encumbering: effects.encumbering === true,
         grants: grantsOn(suit, bearer),
         load: this.load,
         // 04's Warden's Mail at rank 2 (door 23): the Encumbering trait's Speed back.
         waivesEncumbering: armorAccessFor(talentRows).waivesEncumbering,
-        weaponSpeed: wornWeapons.speed ?? 0
+        weaponSpeed: wornWeapons.speed ?? 0,
+        // 02's Scales: the Mail or Plate suit's Encumbering costs no Speed (stage 2B).
+        scales
       });
     // Undeath's Speed cost, the track's "in total" (10 §6).
     if (rungs.speed) this.speedParts.push({ key: "corruption", value: rungs.speed });
@@ -688,9 +752,12 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // nowhere (D-769). In memory only: `flyingSpeed` is the GM's stored field,
     // no input on the sheet writes it, and leaving the shape reads it again.
     if (physical) this.flyingSpeed = physical.flies ? flyingPace(this.tier) : null;
+    // A drake flies at its BLOCK's tier (the plan: *"tier 3 in scaling"*, so 240 feet),
+    // and a drake block that flies not leaves the character's own field alone.
+    if (overlay?.flies) this.flyingSpeed = flyingPace(overlay.tier ?? 3);
     // Derived anew each preparation, so leaving a form removes its swimming
     // restrictions and breathing traits immediately.
-    this.senses = [...(physical?.movementSenses ?? [])];
+    this.senses = [...((physical ?? overlay)?.movementSenses ?? [])];
     // Dying is Health at 0 (06 SS8): derived, never stored.
     this.dying = (this.health?.value ?? 0) <= 0;
     this.deathStepLimit = deathStepLimitFor(talents);
@@ -743,9 +810,13 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     //
     // **A SHAPE'S DEFENSE IS THE BLOCK'S** (D-769), which already holds the
     // beast's own Dexterity; what is worn still grants.
+    // **A DRAKE FORM'S DEFENSE IS THE BETTER OF TWO** (02, *Drake form*), compared in
+    // `afterFinalPhase`: here it is the character's OWN, the melded suit's leather
+    // included (`ownEffects`), and what is worn adds to the own side alone - never to
+    // the block's printed number (the 1B review, item c).
     this.defense = physical && Number.isFinite(physical.defense)
       ? physical.defense + worn.scalars.defense
-      : 10 + this.abilities.dex.mod + effects.defense + worn.scalars.defense;
+      : 10 + this.abilities.dex.mod + ownEffects.defense + worn.scalars.defense;
 
     // Initiative is never rolled (D-256): it is a static number the side order
     // is compared on. `initiativeFor` rather than `10 +` written a second time,
@@ -778,6 +849,23 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     })));
     // A rung's Ward joins the worn (10 §6's Shadow; §9's Fel and Shadow).
     for (const [school, n] of Object.entries(rungs.ward)) this.ward[school] = (this.ward[school] ?? 0) + n;
+    // **THE CHROMATIC OUTCAST'S FLIGHTBLOOD** (02 §5: *Ward equal to your tier against
+    // Fire, Frost, Arcane and Nature*), off the race item's identifier - the guise never
+    // gives a trait - and **SCALES OF THE FLIGHT** (02 §7: *Ward 1 against your Breath's
+    // school ... added to any Ward you already hold*): the leading branch's school, or
+    // the one named since the last Long Rest where a tie leaves it open. Both ADD, and
+    // the cap runs in `afterFinalPhase` (stage 2B).
+    if (race?.system?.identifier === FLIGHTBLOOD.race) {
+      for (const [school, n] of Object.entries(flightbloodWard(this.tier ?? 1))) this.ward[school] = (this.ward[school] ?? 0) + n;
+    }
+    if (featureNames.has(SCALES_OF_THE_FLIGHT.feature)) {
+      const points = branchPointsFor((this.parent?.items ?? []).filter(i => i.type === "talent").map(i => ({
+        className: i.system?.className, branch: i.system?.branch, taken: i.system?.taken, race: i.system?.race ?? null
+      })));
+      const flight = flightSchool({ points, chosen: this.parent?.getFlag?.("azeroth-rpg", FLIGHT_SCHOOL_FLAG) ?? null });
+      this.flightSchool = flight;
+      if (flight.school) this.ward[flight.school] = (this.ward[flight.school] ?? 0) + SCALES_OF_THE_FLIGHT.ward;
+    }
     // Metamorphosis's *Ward 3 (Fel or Shadow)* (02 §7, D-769), the school
     // chosen when the form was taken.
     if (shape?.ward?.school && shape.ward.value > 0) {
@@ -815,6 +903,17 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // *Your Speed cannot be reduced*: Slowed, an injury's drop and an area's -10
     // are `final`-phase changes, so the floor is held again here.
     if (this.speedUnreducible && Number.isFinite(this.speedFloor)) this.speed = Math.max(this.speed ?? 0, this.speedFloor);
+    // **A DRAKE FORM'S DEFENSE AND ARMOR POINTS: THE BLOCK'S OR YOURS, WHICHEVER IS
+    // HIGHER** (02, *Drake form*; the 1B review, item d), taken HERE, once every `final`
+    // change has landed on the character's own numbers - so a buff or a penalty on your
+    // own side counts in the comparison and never stacks on the block's: *the ones you
+    // had before* is your own number with every change on it, a penalty included (the
+    // lead's ruling of 2026-11-08, *"I approve those 4"*). Before Warded Plate's share
+    // below and before the Ward's cap.
+    if (this.overlayBlock) {
+      this.ap = overlayArmorPoints(this.overlayBlock.ap, this.ap);
+      this.defense = overlayDefense(this.overlayBlock.defense, this.defense);
+    }
     // Warded Plate's *a third of your Armor Points, rounded down* (half at rank
     // 2), off the Body Armor Points every effect has moved by now.
     const named = this.parent?.getFlag?.("azeroth-rpg", PLATE_FLAG) ?? null;
@@ -822,6 +921,10 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
       const share = plateWards(this.plateTalents, { named, bodyAP: this.ap?.body ?? 0, part: "armor" });
       for (const [school, n] of Object.entries(share.ward)) this.ward[school] = (this.ward[school] ?? 0) + n;
     }
+    // **WARD IS AT MOST 10 AGAINST ANY SCHOOL** (the Chromatic Champion plan; the lead:
+    // *"increase the ward max to 10 system wide. gear counts towards this max"*): LAST,
+    // once every source - Warded Plate above and every `final` change - has landed.
+    wardCap(this.ward);
   }
 
   /**

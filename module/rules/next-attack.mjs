@@ -42,8 +42,12 @@
 /** The actor flag the promises stand under. */
 export const NEXT_ATTACK_FLAG = "nextAttack";
 
-/** How long a promise may wait for its attack. */
-export const NEXT_ATTACK_LASTS = Object.freeze(["turn", "round", "encounter"]);
+/**
+ * How long a promise may wait for its attack. `nextTurn` is *before the end of your
+ * next turn* (02's Draconic Leap, stage 2B): through the holder's next turn, read off
+ * the turn order the promise was laid in (`at.turn`, `at.own`).
+ */
+export const NEXT_ATTACK_LASTS = Object.freeze(["turn", "round", "encounter", "nextTurn"]);
 
 /** A whole number at or above nothing. */
 const count = v => Math.max(0, Math.trunc(Number(v)) || 0);
@@ -67,10 +71,48 @@ export function nextAttackEntry(grant = {}, now = null) {
     boons: count(grant.boons),
     penetration: count(grant.penetration),
     damage: count(grant.damage),
+    // 04's False Opening (stage 3A): *Your next attack this turn cannot be met with a
+    // Parry or a Block* - named only where a promise carries it.
+    ...(grant.unanswerable === true ? { unanswerable: true } : {}),
     lasts: grant.lasts,
-    at: { combat: String(now.combat), round: Math.trunc(Number(now.round)) || 0, combatant: String(now.combatant ?? "") }
+    at: {
+      combat: String(now.combat), round: Math.trunc(Number(now.round)) || 0, combatant: String(now.combatant ?? ""),
+      // Where the turn stood and where the holder's own turn sits, for `nextTurn` alone:
+      // indices in the fight's turn order, or null where the fight did not say.
+      ...(grant.lasts === "nextTurn" ? { turn: turnIndex(now.turn), own: turnIndex(now.own) } : {})
+    }
   };
-  return entry.boons || entry.penetration || entry.damage ? entry : null;
+  return entry.boons || entry.penetration || entry.damage || entry.unanswerable ? entry : null;
+}
+
+/** A turn index, or null. */
+function turnIndex(v) {
+  const n = Math.trunc(Number(v));
+  return v === null || v === undefined || !Number.isFinite(n) || n < 0 ? null : n;
+}
+
+/**
+ * **BEFORE THE END OF YOUR NEXT TURN** (02's Draconic Leap): the holder's next turn is
+ * this round's where it is still to come when the promise is laid (a Reaction taken
+ * before the holder has acted), else the next round's. The promise stands until that
+ * turn is over. With no turn order recorded, through the end of the next round (MY
+ * READING: the longest the words could mean).
+ *
+ * @param {{round: number, turn?: number|null, own?: number|null}} at
+ * @param {{round: number, turn?: number|null}} now
+ * @returns {boolean}
+ */
+export function nextTurnStands(at, now) {
+  const round = Math.trunc(Number(now?.round)) || 0;
+  const laidRound = Math.trunc(Number(at?.round)) || 0;
+  const own = turnIndex(at?.own);
+  const laidTurn = turnIndex(at?.turn);
+  if (own === null || laidTurn === null) return round <= laidRound + 1;
+  const endRound = laidTurn < own ? laidRound : laidRound + 1;
+  if (round < endRound) return true;
+  if (round > endRound) return false;
+  const turn = turnIndex(now?.turn);
+  return turn === null ? true : turn <= own;
 }
 
 /**
@@ -102,6 +144,7 @@ export function nextAttackStands(entry, now = null) {
   const at = entry?.at ?? null;
   if (!at || !now?.combat || now.combat !== at.combat) return false;
   if (entry.lasts === "encounter") return true;
+  if (entry.lasts === "nextTurn") return nextTurnStands(at, now);
   if (now.round !== at.round) return false;
   if (entry.lasts === "round") return true;
   if (entry.lasts === "turn") return now.combatant === at.combatant;
@@ -122,7 +165,7 @@ export function pendingNextAttack(entries = [], { now = null } = {}) {
   const live = [];
   const lapsed = [];
   for (const e of Array.isArray(entries) ? entries : []) {
-    if (!e || typeof e !== "object" || !(count(e.boons) || count(e.penetration) || count(e.damage))) {
+    if (!e || typeof e !== "object" || !(count(e.boons) || count(e.penetration) || count(e.damage) || e.unanswerable === true)) {
       lapsed.push(e);
       continue;
     }
@@ -130,7 +173,7 @@ export function pendingNextAttack(entries = [], { now = null } = {}) {
     else lapsed.push(e);
   }
   const sum = key => live.reduce((n, e) => n + count(e[key]), 0);
-  return { boons: sum("boons"), penetration: sum("penetration"), damage: sum("damage"), live, lapsed };
+  return { boons: sum("boons"), penetration: sum("penetration"), damage: sum("damage"), unanswerable: live.some(e => e.unanswerable === true), live, lapsed };
 }
 
 /**

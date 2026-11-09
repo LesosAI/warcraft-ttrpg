@@ -545,6 +545,8 @@ export function regionRecord(region) {
       identifier: featureKey,
       source: tokenRef(flags.source) ?? sourceOfUuid(flags[TRAP_FLAG]?.setter ?? null),
       region: { id: region.id, sceneId: region?.parent?.id ?? null, shape: shapeOf(region) },
+      // A Breath's school and shape (stage 2B): the state its `region` cue answers.
+      ...(typeof flags.breathState === "string" && flags.breathState ? { states: [flags.breathState] } : {}),
       ...(privacy ? { privacy } : {})
     });
     // A trap is set BEFORE its Use's card is posted: the director holds its cue for the

@@ -1,0 +1,22 @@
+{{!-- The Mortal guise (the Chromatic Champion plan): the race step for a guise class.
+      The race the character IS is named first; the tiles are the peoples it may look
+      like, each with the three things a guise gives. --}}
+<p class="azeroth-dialog-note">{{localize "AZEROTH.Guise.StepHint" race=pane.trueRace}}</p>
+<div class="azeroth-creator-tiles" role="radiogroup" aria-label="{{localize "AZEROTH.Creator.Step.guise"}}">
+  {{#each pane.guises as |g|}}
+  <label class="azeroth-creator-tile{{#if g.selected}} is-selected{{/if}}">
+    <input type="radio" name="guise" value="{{g.uuid}}" data-creator="guise" {{#if g.selected}}checked{{/if}}>
+    <span class="azeroth-creator-tile-name">{{g.name}}</span>
+    <span class="azeroth-creator-tile-meta">{{g.size}}{{#if g.speed}} · {{localize "AZEROTH.Guise.Speed" n=g.speed}}{{/if}}</span>
+  </label>
+  {{/each}}
+</div>
+{{#each pane.guises as |g|}}
+{{#if g.selected}}
+<dl class="azeroth-creator-detail">
+  <dt>{{localize "AZEROTH.Guise.Label"}}</dt><dd>{{localize "AZEROTH.Guise.Line" race=@root.pane.trueRace guise=g.name}}</dd>
+  <dt>{{localize "AZEROTH.Item.Languages"}}</dt><dd>{{g.languages}}</dd>
+</dl>
+{{/if}}
+{{/each}}
+<p><button type="button" data-action="creatorLeaveGuise">{{localize "AZEROTH.Guise.Leave"}}</button></p>

@@ -30,9 +30,12 @@ export const GREATER_MUFFLED = /Muffled \(Greater\)/i;
  *   `class-talents.mjs#armorAccessFor`)
  * @param {number} [input.weaponSpeed]      what an Encumbering weapon worn costs (08 §5), so the
  *   waiver gives that back too
+ * @param {boolean} [input.scales]          02's Chromatic Champion's Scales: *While you wear Mail
+ *   or Plate, its **Encumbering** trait costs you no Speed* - the SUIT's trait alone, never
+ *   a weapon's (`rules/chromatic-features.mjs#scalesWaive` says whether it holds)
  * @returns {{key: string, value: number}[]}
  */
-export function speedParts({ raceSpeed = null, armorSpeed = 0, encumbering = false, grants = [], load = "unencumbered", waivesEncumbering = false, weaponSpeed = 0 } = {}) {
+export function speedParts({ raceSpeed = null, armorSpeed = 0, encumbering = false, grants = [], load = "unencumbered", waivesEncumbering = false, weaponSpeed = 0, scales = false } = {}) {
   const parts = [{ key: "race", value: Number.isFinite(raceSpeed) ? raceSpeed : BASE_SPEED }];
   if (armorSpeed) parts.push({ key: "armor", value: armorSpeed });
   const muffled = encumbering && grants.some(g => GREATER_MUFFLED.test(String(g)));
@@ -43,8 +46,12 @@ export function speedParts({ raceSpeed = null, armorSpeed = 0, encumbering = fal
   // suit's Encumbering given back once - never a second time beside Muffled - and,
   // MY READING for the lead, an Encumbering weapon's too, since the sentence names the
   // trait and not the suit.
+  // **SCALES GIVES THE SUIT'S BACK** (stage 2B), once - never beside Muffled, and
+  // never again under Warden's Mail below.
+  const suitBack = encumbering && !muffled;
+  if (scales === true && suitBack) parts.push({ key: "scales", value: ENCUMBERING_SPEED_PENALTY });
   if (waivesEncumbering === true) {
-    const back = (encumbering && !muffled ? ENCUMBERING_SPEED_PENALTY : 0) + Math.max(0, -(Number(weaponSpeed) || 0));
+    const back = (suitBack && scales !== true ? ENCUMBERING_SPEED_PENALTY : 0) + Math.max(0, -(Number(weaponSpeed) || 0));
     if (back > 0) parts.push({ key: "waived", value: back });
   }
   // What you are carrying (05 §10, D-675). A PART rather than a condition:

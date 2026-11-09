@@ -303,7 +303,9 @@ export const FEATURE_LADDER = Object.freeze([1, 5, 9, 11, 14, 17, 20]);
 export const EXTRA_FEATURE_LEVELS = Object.freeze({
   paladin: Object.freeze([15]),
   warlock: Object.freeze([15]),
-  rogue: Object.freeze([4])
+  rogue: Object.freeze([4]),
+  // Breath (02 §7; 02 §6: *the Chromatic Champion one more at level 3*).
+  "chromatic-champion": Object.freeze([3])
 });
 
 /** The levels one class grants a feature at: the ladder plus its own extras. */

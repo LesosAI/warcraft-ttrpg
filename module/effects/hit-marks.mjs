@@ -19,7 +19,7 @@ import { cleanHitMark, hitMarkCarries, HIT_MARK_FLAG, momentumLoss } from "../ru
 export const HIT_MARK_QUERY = "azeroth-rpg.hitMark";
 
 /** The icon a mark wears in the effects list. */
-const ICON = { wardDrop: "icons/svg/downgrade.svg", noOpportunity: "icons/svg/net.svg" };
+const ICON = { wardDrop: "icons/svg/downgrade.svg", noOpportunity: "icons/svg/net.svg", apDrop: "icons/svg/hazard.svg" };
 
 /** The effect's create data. */
 function markData(mark, { originUuid = null, span = null } = {}) {
@@ -27,6 +27,9 @@ function markData(mark, { originUuid = null, span = null } = {}) {
   const words = mark.kind === "wardDrop"
     ? { name: game.i18n.format("AZEROTH.HitMark.WardDrop.Name", { source: mark.source, n: mark.amount, school: game.i18n.localize(AZEROTH.schools[mark.school] ?? mark.school) }),
         text: game.i18n.format("AZEROTH.HitMark.WardDrop.Text", { n: mark.amount, school: game.i18n.localize(AZEROTH.schools[mark.school] ?? mark.school) }) }
+    : mark.kind === "apDrop"
+    ? { name: game.i18n.format("AZEROTH.HitMark.ApDrop.Name", { source: mark.source, n: mark.amount }),
+        text: game.i18n.format("AZEROTH.HitMark.ApDrop.Text", { n: mark.amount }) }
     : { name: game.i18n.format("AZEROTH.HitMark.Snag.Name", { source: mark.source }), text: game.i18n.localize("AZEROTH.HitMark.Snag.Text") };
   return {
     name: words.name,

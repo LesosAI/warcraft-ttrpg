@@ -34,6 +34,8 @@
 import { BLINK, blinkFor, onUseLegacy } from "../rules/class-talents.mjs";
 import { spellCrossingFrom } from "../rules/spell-crossing.mjs";
 import { onUseOf, talentEffect } from "../rules/talent-effects.mjs";
+// A class feature's own `onUse` (02's Draconic Leap; stage 2B).
+import { classFeatureOnUse } from "../rules/class-features.mjs";
 import { abilityScope } from "../rules/expressions.mjs";
 import { laidByOne } from "../rules/forced-movement.mjs";
 import { countsAsAlly } from "../rules/distance.mjs";
@@ -259,7 +261,11 @@ export function stepAllowance(by, item) {
   if (item.name === "Shadowstep" && item.system?.className === "Rogue") return { feet: FEATURE_STEPS.Shadowstep.feet, friend: null, party: null, pull: null };
   const flag = item.getFlag?.("azeroth-rpg", "feature") ?? item.flags?.["azeroth-rpg"]?.feature ?? {};
   const talent = flag.talentId ? (by.items?.get?.(flag.talentId) ?? null) : null;
-  if (!talent) return null;
+  // A class feature's own step (02's Draconic Leap; stage 2B), off its row's `onUse`.
+  if (!talent) {
+    const own = stepOf(classFeatureOnUse(item.system?.className ?? "", item.name), 1);
+    return own ? { feet: own.feet, friend: null, party: null, pull: null } : null;
+  }
   const rank = talent.system?.taken ?? flag.rank ?? 1;
   const onUse = onUseOf(talentEffect(talent.system?.className, talent.system?.identifier, talent.system?.race ?? null));
   const own = stepOf(onUse, rank);

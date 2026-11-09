@@ -323,6 +323,55 @@ function cue(trigger, steps, { state = null } = {}) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  The Chromatic Champion's breath (stage 2B)                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * **WHAT A BREATH LOOKS LIKE, BY SCHOOL AND SHAPE** (02's Breath, Great Breath and
+ * Chromatic Breath): the free libraries' breath silhouettes, recoloured where none comes
+ * in the school's colour. Every asset is a full leaf key held against
+ * `tools/animation/assets.json` (D-723).
+ */
+export const BREATH_LOOKS = Object.freeze({
+  cone: Object.freeze({
+    fire: { asset: "jb2a.breath_weapons.fire.cone.orange.01", sound: SOUNDS.fire },
+    frost: { asset: "jb2a.breath_weapons.cold.cone.blue", sound: SOUNDS.cold },
+    arcane: { asset: "jb2a.breath_weapons.cold.cone.blue", sound: SOUNDS.strands, filter: "PURPLE_B" },
+    nature: { asset: "jb2a.breath_weapons.poison.cone.green", sound: SOUNDS.lightning },
+    holy: { asset: "jb2a.breath_weapons.cold.cone.blue", sound: SOUNDS.bless1, filter: "GOLD_B" },
+    shadow: { asset: "jb2a.breath_weapons.cold.cone.blue", sound: SOUNDS.necrotic, filter: "SHADOW_B" },
+    fel: { asset: "jb2a.breath_weapons.fire.cone.orange.01", sound: SOUNDS.fire, filter: "FEL_O" }
+  }),
+  line: Object.freeze({
+    fire: { asset: "jb2a.breath_weapons.fire.line.orange", sound: SOUNDS.fire },
+    frost: { asset: "jb2a.breath_weapons.fire.line.orange", sound: SOUNDS.cold, filter: "ICE_O" },
+    arcane: { asset: "jb2a.breath_weapons.lightning.line.blue", sound: SOUNDS.strands, filter: "PURPLE_B" },
+    nature: { asset: "jb2a.breath_weapons.lightning.line.blue", sound: SOUNDS.lightning }
+  })
+});
+
+/** The state a Breath's Region carries: `breath-<school>-<shape>`. */
+export function breathState(school, shape) {
+  return `breath-${school}-${shape}`;
+}
+
+/** One `region` cue for each school and shape, keyed to the Region's state. */
+function breathCues(schools, shapes) {
+  const out = [];
+  for (const shape of shapes) {
+    for (const school of schools) {
+      const look = BREATH_LOOKS[shape]?.[school];
+      if (!look) continue;
+      out.push(cue("region", [
+        fx(look.asset, { place: shape === "line" ? "region-line" : "region-cone", travel: "stretch", ...(look.filter ? { filter: look.filter } : {}) }),
+        snd(look.sound, { volume: 0.55 })
+      ], { state: breathState(school, shape) }));
+    }
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Cast cues several rows share                                       */
 /* ------------------------------------------------------------------ */
 
@@ -673,7 +722,10 @@ export const SPELL_ANIMATIONS = Object.freeze({
     ])]
   },
   "fire-ward": {
-    cues: [cue("cast|effect", [fx("jb2a.impact.fire.01.orange", { place: "target", scale: 0.5 })])],
+    cues: [cue("cast|effect", [
+      fx("jb2a.impact.fire.01.orange", { place: "target", scale: 0.5 }),
+      snd("psfx.casting.fire.001", { volume: 0.4 })
+    ])],
     loop: loop("effect", [
       fx("jb2a.shield_themed.below.fire.01.orange", { place: "holder", scale: 1.5, below: true }),
       fx("jb2a.shield_themed.above.fire.01.orange", { place: "holder", scale: 1.5 })
@@ -967,6 +1019,15 @@ export const SPELL_ANIMATIONS = Object.freeze({
       snd(SOUNDS.boon)
     ])]
   },
+  // The Chromatic Champion's Earth-Warder spell (D-815): Earth Shock's ground jolt at
+  // the feet, the stone closing. A STARTING VALUE the parser stage set so 07's tier 1
+  // census holds; the Entangled hold is the condition's, never this cue's.
+  "stone-grip": {
+    cues: [cue("cast", [
+      fx("jb2a.impact.ground_crack.01.orange", { place: "target", below: true, filter: "EARTH" }),
+      snd("psfx.casting.earth.001")
+    ])]
+  },
 
   /* ================= Shadow ================= */
   "shadow-bolt": {
@@ -1121,7 +1182,10 @@ export const SPELL_ANIMATIONS = Object.freeze({
     loop: loop("sustain-channel", [fx("jb2a.energy_strands.range.standard.purple.04", { place: "channel-back", travel: "stretch", filter: "FEL_P" })])
   },
   "fel-armor": {
-    cues: [cue("cast", [fx("jb2a.impact.fire.01.orange", { place: "source", scale: 0.6, filter: "FEL_O" })])],
+    cues: [cue("cast", [
+      fx("jb2a.impact.fire.01.orange", { place: "source", scale: 0.6, filter: "FEL_O" }),
+      snd(SOUNDS.fire, { volume: 0.4 })
+    ])],
     // Borderline (an hour).
     loop: loop("effect", [
       fx("jb2a.shield_themed.below.fire.01.orange", { place: "holder", scale: 1.5, below: true, filter: "FEL_O" }),
@@ -1246,7 +1310,7 @@ export const SPELL_ANIMATIONS = Object.freeze({
 });
 
 /* ------------------------------------------------------------------ */
-/*  Spells above tier 1 that a Legacy branch teaches                   */
+/*  Spells above tier 1 that a Legacy or Champion branch teaches       */
 /* ------------------------------------------------------------------ */
 
 /**
@@ -1260,6 +1324,12 @@ export const SPELL_ANIMATIONS = Object.freeze({
  * held to 04's own words instead: `animation-table.test.mjs` reads every spell 04's
  * branch tables teach and fails one above tier 1 with no row here, and a row here
  * that no branch teaches.
+ *
+ * **AND THE CHROMATIC CHAMPION'S OWN** (the Chromatic Champion plan, Phase 6): the four
+ * tier 2 and 3 spells 07 restricts to the Champion and 04's Earth-Warder teaches -
+ * Thunderlash, Earthmeld, Earthen Spike and Shattering Bolt. Every other spell the four
+ * flight branches teach is a spell another class casts too, and its row is already the
+ * tier 1 table's or the expansion's; Stone Grip, the fifth of its own, is tier 1.
  */
 export const TAUGHT_SPELL_ANIMATIONS = Object.freeze({
   // Shadow Ward's skin, on each ally the Ward reaches.
@@ -1282,6 +1352,48 @@ export const TAUGHT_SPELL_ANIMATIONS = Object.freeze({
         snd("psfx.2nd-level-spells.misty-step.v1.outro.generic", { volume: 0.8 })
       ])
     ]
+  },
+
+  /* ---- 04's Earth-Warder (the Chromatic Champion plan, Phase 6) ---- */
+  // Lightning drawn down the arm and thrown from the weapon hand: a crackle at the
+  // Champion, then Lightning Bolt's own bolt and strike on the target.
+  thunderlash: {
+    cues: [cue("cast", [
+      fx("jb2a.static_electricity.01.blue", { place: "source", scale: 0.8 }),
+      fx("jb2a.chain_lightning.primary.blue", { place: "source>target", travel: "stretch", delay: 150 }),
+      snd("psfx.3rd-level-spells.call-lightning.v1.primary", { delay: 150 }),
+      fx("jb2a.static_electricity.01.blue", { place: "target", scale: 1.2, delay: 450 }),
+      snd(SOUNDS.lightning, { delay: 450 })
+    ])]
+  },
+  // The stone taking the Champion in: earth gathered and a puff of grit at the Champion.
+  // Nothing stands while they wait inside it: the Apply's effect is the state, and a
+  // picture would show where the hidden caster is.
+  earthmeld: {
+    cues: [cue("cast", [
+      fx("jb2a.cast_generic.earth.01.browngreen", { place: "source", scale: 1.2 }),
+      fx("jb2a.smoke.puff.centered.grey", { place: "source", scale: 0.9, filter: "EARTH", delay: 300 }),
+      snd("psfx.casting.earth.001")
+    ])]
+  },
+  // A spur of rock driven up under the target: Stone Spike's ground crack. The Prone is the
+  // failed Body Test's, and the Difficult ground the table's (07 places no Region for it).
+  "earthen-spike": {
+    cues: [cue("cast", [
+      fx("jb2a.impact.ground_crack.orange.02", { place: "target", scale: 1.1, below: true, filter: "EARTH" }),
+      snd(SOUNDS.blunt),
+      snd("psfx.casting.earth.001", { delay: 120, volume: 0.7 })
+    ])]
+  },
+  // The bolt that lands like a falling hammer: a strike from above and the ground cracked
+  // round the target. The 10 ft of Difficult ground is the table's; nothing stands for it.
+  "shattering-bolt": {
+    cues: [cue("cast", [
+      fx("jb2a.lightning_strike.blue", { place: "target", scale: 1.3 }),
+      snd(SOUNDS.lightning),
+      fx("jb2a.impact.ground_crack.orange.02", { place: "target", scale: 1.8, below: true, filter: "EARTH", delay: 200 }),
+      snd(SOUNDS.blunt, { delay: 200, volume: 0.9 })
+    ])]
   }
 });
 
@@ -1369,6 +1481,168 @@ export const FEATURE_ANIMATIONS = Object.freeze({
         snd("psfx.2nd-level-spells.misty-step.v1.outro.generic", { volume: 0.6 })
       ])
     ]
+  },
+
+  /* ---- 02 §7's Chromatic Champion (stage 2B) ---- */
+  // A Breath's cone is set down where it was aimed, and the Region's own geometry draws it:
+  // one `region` cue a school and a shape, chosen by the state the Region carries
+  // (`breathStates`: `breath-<school>-<cone|line>`, copied off the card by
+  // `dice/chat.mjs#regionFlagsFromCard`). The `use` cue is the drake's draw of breath at
+  // the Champion, whatever the school.
+  breath: {
+    cues: [
+      cue("use", [
+        fx("jb2a.smoke.puff.side.02.white", { place: "source", scale: 0.45, opacity: 0.6 }),
+        snd("psfx.creature.dragons.attacks.breath.small.fire", { volume: 0.5 })
+      ]),
+      ...breathCues(["fire", "frost", "arcane", "nature"], ["cone", "line"])
+    ]
+  },
+  "chromatic-breath": {
+    cues: [
+      cue("use", [
+        fx("jb2a.cast_generic.fire.01.orange", { place: "source", scale: 1.1, filter: "DESATURATE" }),
+        snd("psfx.creature.dragons.roar.small", { volume: 0.6 })
+      ]),
+      ...breathCues(["fire", "frost", "arcane", "nature", "holy", "shadow", "fel"], ["cone"])
+    ]
+  },
+  // The wings beat once: a ring of dust thrown out at the Champion's feet. Who is pushed
+  // and who falls Prone is the forced-movement door's and each creature's Test's.
+  "wing-buffet": {
+    cues: [cue("use", [
+      fx("jb2a.smoke.puff.ring.01.white", { place: "source", scale: 2.0, below: true, filter: "EARTH" }),
+      snd(SOUNDS.gust, { volume: 0.8 })
+    ])]
+  },
+  // The leap is a step (`effects/steps.mjs`): dust where it left, the ground struck where it
+  // lands, off the step the card records.
+  "draconic-leap": {
+    cues: [
+      cue("use", [
+        fx("jb2a.smoke.puff.ring.01.white", { place: "step-from", scale: 1.2, below: true, filter: "EARTH" }),
+        snd(SOUNDS.swingHeavy, { volume: 0.6 })
+      ]),
+      cue("arrive", [
+        fx("jb2a.impact.ground_crack.orange.02", { place: "step-to", scale: 1.4, below: true, filter: "EARTH" }),
+        snd(SOUNDS.blunt, { volume: 0.8 })
+      ])
+    ]
+  },
+  /* ---- the Chromatic Champion's other Uses (the plan's Phase 6) ---- */
+  // A dragon's roar and a pulse of dread thrown out across the 10 feet it reaches from either
+  // side of the Champion's square (the nearest-square measure, D-732). Nothing is drawn on a
+  // creature: who is Frightened is its own Spirit Test's.
+  "dread-presence": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.02.blue", { place: "source", scale: 1.2, filter: "SHADOW_B" }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.8 }),
+      fx("jb2a.extras.tmfx.outpulse.circle.01.normal", { place: "source", sizeFt: 25, delay: 150 })
+    ])]
+  },
+  // The scales hardening: a shell of stone-dulled scale at the Champion as the Use is made.
+  // The Ward lasts 10 minutes and is a number on the sheet; nothing stands for it.
+  "hardened-scales": {
+    cues: [cue("use", [
+      fx("jb2a.shield_themed.above.molten_earth.01.orange", { place: "source", scale: 1.2, filter: "EARTH", hold: 900, fadeOut: 400 }),
+      snd("psfx.1st-level-spells.shield-spell.intro.v1.003", { volume: 0.7 })
+    ])]
+  },
+  // The Chromatic Outcast's tail: a sweep of the whole square about the Champion and dust
+  // thrown off the ground. Who falls Prone is each creature's Reflex Test's.
+  "tail-sweep": {
+    cues: [cue("use", [
+      fx("jb2a.template_circle.whirl.intro.blue", { place: "source", scale: 1.5, filter: "DESATURATE" }),
+      snd(SOUNDS.swingHeavy),
+      fx("jb2a.smoke.puff.ring.01.white", { place: "source", scale: 1.6, below: true, filter: "EARTH", delay: 200 }),
+      snd(SOUNDS.blunt, { delay: 250, volume: 0.7 })
+    ])]
+  },
+  // The four drake forms: a roar and a flare of the flight's colour as the form is taken.
+  // The token's drake art is the form; no second picture follows it, and leaving the form
+  // plays nothing, as no other shape does.
+  "red-drake": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.fire.01.orange", { place: "source", scale: 1.6 }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.8 })
+    ])]
+  },
+  "blue-drake": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.water.02.blue", { place: "source", scale: 1.6 }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.8 })
+    ])]
+  },
+  "bronze-drake": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.02.blue", { place: "source", scale: 1.6, filter: "GOLD_B" }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.8 })
+    ])]
+  },
+  "black-drake": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.earth.01.browngreen", { place: "source", scale: 1.6, filter: "DARK" }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.8 })
+    ])]
+  },
+  // 04's Lifeblood: a small flare at the Champion and a warm heal on the ally, in the red
+  // flight's fire (the yellow heal warmed by Flamestrike's own recolour).
+  lifeblood: {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.fire.01.orange", { place: "source", scale: 0.6 }),
+      fx("jb2a.healing_generic.400px.yellow", { place: "target", scale: 0.9, filter: "SCORCH", delay: 200 }),
+      snd(SOUNDS.boon, { delay: 200 })
+    ])]
+  },
+  // 04's Font of Magic: Rage handed over as Mana, strands from the Champion to the ally and
+  // Manafount's arcane flare where they land.
+  "font-of-magic": {
+    cues: [cue("use", [
+      fx("jb2a.energy_strands.range.standard.purple.01", { place: "source>target", travel: "stretch" }),
+      snd(SOUNDS.strands),
+      fx("jb2a.cast_generic.02.blue", { place: "target", scale: 0.9, filter: "PURPLE_B", waitFor: "travel", overlap: -250 })
+    ])]
+  },
+  // 04's Spellbreak: Unweave's arcane burst on the creature whose Sustain ends.
+  spellbreak: {
+    cues: [cue("use", [
+      fx("jb2a.explosion.02.blue", { place: "target", scale: 0.8, filter: "PURPLE_B" }),
+      snd(SOUNDS.generic)
+    ])]
+  },
+  // 04's Hasten: a golden quickening on the ally. The Half-Action waits on it as an effect
+  // and is given as its next turn starts; nothing stands for the wait.
+  hasten: {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.02.blue", { place: "source", scale: 0.7, filter: "GOLD_B" }),
+      fx("jb2a.on_token_buff.001.001.bluepurple", { place: "target", scale: 1.1, filter: "GOLD_B", delay: 200 }),
+      snd(SOUNDS.bless2, { delay: 200 })
+    ])]
+  },
+  // 04's Rewind: the blow drawn back - an inward pulse on the ally and a golden heal.
+  rewind: {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "target", scale: 0.9 }),
+      fx("jb2a.healing_generic.400px.yellow", { place: "target", scale: 0.9, delay: 250 }),
+      snd(SOUNDS.boon, { delay: 250 })
+    ])]
+  },
+  // 04's Whisper of Madness: the Old Gods' whisper gathered at the Champion, in the Shadow
+  // school's restrained register. Nothing is drawn on the humanoid: the Charmed is its
+  // failed Spirit Test's, and the Void lands either way.
+  "whisper-of-madness": {
+    cues: [cue("use", [
+      fx("jb2a.energy_strands.complete.blue.01", { place: "source", scale: 0.9, filter: "SHADOW_B" }),
+      snd("psfx.1st-level-spells.dissonant-whispers.v1.001", { volume: 0.7 })
+    ])]
+  },
+  // 04's Void Surge: a crackle of the Void on the blow that spent it, a beat after the
+  // weapon's own impact lands (Bash's shape).
+  "void-surge": {
+    cues: [cue("hit", [
+      fx("jb2a.impact.004.blue", { place: "target", scale: 0.8, filter: "SHADOW_B", delay: 420 }),
+      snd(SOUNDS.necrotic, { delay: 420, volume: 0.7 })
+    ])]
   },
 
   /* ---- 02 §7's Druid ---- */

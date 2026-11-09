@@ -48,7 +48,7 @@ export async function parryPayQueryHandler({ key } = {}, { user } = {}) {
   if (entry.payment === "paid") return { ok: true, paid: entry.paid };
   if (entry.payment === "unavailable") return { ok: true, paid: null };
   if (entry.payment !== "none") return { ok: false };
-  const purse = parryPoolFor(entry.actor.poolSnapshot?.() ?? []);
+  const purse = parryPoolFor(entry.actor.poolSnapshot?.() ?? [], { maneuverPool: entry.actor.maneuverPool ?? null });
   if (!purse || purse.value < PARRY_COST) { entry.payment = "unavailable"; return { ok: true, paid: null }; }
   const { itemId, kind } = purse;
   const expectedValue = purse.value - PARRY_COST;

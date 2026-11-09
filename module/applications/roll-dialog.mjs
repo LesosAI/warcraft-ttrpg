@@ -52,7 +52,11 @@ import { invisibilityActive } from "../rules/equipment-travel.mjs";
 import { dispersionFor } from "../rules/dispersion.mjs";
 import { featureReminders } from "../rules/class-features.mjs";
 // The Damage lines kept, one function for this dialog and the feature door (D-768).
-import { damageChosen } from "../rules/talent-effects.mjs";
+import { damageChosen, talentEffect } from "../rules/talent-effects.mjs";
+// The Chromatic Champion's guise lines (stage 3A).
+import { courtGuiseBanes, silverTongueFor, weightOfAgesBanes } from "../rules/chromatic-talents.mjs";
+import { wearsCourtGuise } from "../effects/chromatic-talents.mjs";
+import { targetActorOf } from "../dice/annotate.mjs";
 import { extraAttackSelection, secondAttackChoice } from "../rules/second-attack-choice.mjs";
 import { wardBySchool } from "../rules/ward.mjs";
 // What an ally's aura lays on the roller and on the target (D-755): a Boon on a
@@ -640,9 +644,28 @@ export function prepareRoll(actor, given) {
   const reminders = featureReminders(
     (actor.items ?? []).filter(i => i.type === "feature").map(i => ({ name: i.name, reminder: i.system?.reminder ?? null })),
     (actor.items ?? []).filter(i => i.type === "talent").map(i => ({ name: i.name, taken: i.system?.taken ?? 0, effect: i.system?.effect ?? "" })),
-    test.kind ?? "skill"
+    test.kind ?? "skill",
+    { skill: spec.skill ?? null }
   );
   situational.judgement.push(...reminders.lines);
+  // **04's SILVER TONGUE AND COURT GUISE** (stage 3A of the Chromatic Champion plan): a Boon
+  // on the Champion's own Deception or Persuasion while a Court Guise is worn (the lead,
+  // 2026-11-08: *"only work with the court guise"* - never the mortal guise), and a Bane on
+  // an Arcana or Investigation Test at a creature wearing a Court Guise - automatic lines, named.
+  if (test.kind === "skill" && spec.skill) {
+    const tongue = silverTongueFor(actor.takenTalents?.() ?? [], { skill: spec.skill, courtGuise: wearsCourtGuise(actor) }, talentEffect);
+    if (tongue) situational.automatic.push({ id: "silver-tongue", label: "AZEROTH.SilverTongue.Line", name: tongue.name, boons: tongue.boons, banes: 0, modifier: 0, checked: true });
+    const guisedTarget = (targets ?? []).some(t => wearsCourtGuise(targetActorOf(t)));
+    const guiseBanes = courtGuiseBanes({ skill: spec.skill, targetGuised: guisedTarget });
+    if (guiseBanes) situational.automatic.push({ id: "court-guise", label: "AZEROTH.CourtGuise.Line", name: "", boons: 0, banes: guiseBanes, modifier: 0, checked: true });
+  }
+  // **04's WEIGHT OF AGES** (*A creature you have Slowed takes a Bane on Attack Tests against
+  // you. At rank 2 the Bane applies to its Attack Tests against anyone*; stage 3B): read off
+  // who laid the attacker's Slowed, an automatic line, named.
+  if (test.kind === "attack" && typeof actor.weightOfAgesLayers === "function") {
+    const weight = weightOfAgesBanes(actor.weightOfAgesLayers(), { targetUuids: (targets ?? []).map(t => targetActorOf(t)?.uuid).filter(Boolean) });
+    if (weight.banes) situational.automatic.push({ id: "weight-of-ages", label: "AZEROTH.WeightOfAges.Line", name: weight.names.join(", "), boons: 0, banes: weight.banes, modifier: 0, checked: true });
+  }
   situational.judgement.push(...militiaDrillChoice(actor.getFlag?.('azeroth-rpg', MILITIA_DRILL_FLAG), test.kind));
   situational.judgement.push(...signatureSkillChoices({kind:test.kind,skill:spec.skill,
     signatures:actor.system?.signatureEffects?.scalingHitDamage??[]}));
@@ -816,8 +839,9 @@ export function defaultChoice(actor, spec) {
     augment: p.casting?.augment?.value ?? 0,
     // Nor a use of Nature's Swiftness (D-771): spending a use is the player's call.
     swift: false,
-    // Nor a talent's counter or charge (D-774), for the same reason.
-    talentLines: [],
+    // Nor a talent's counter or charge (D-774), for the same reason - save a free
+    // cast once per rest (the Chromatic Champion plan), whose line opens TICKED.
+    talentLines: (p.talentLines ?? []).filter(l => l.available && l.checked === true).map(l => l.identifier),
     occasion: spec.occasions?.[0]?.key ?? null,
     targets: p.targets,
     // Who is acting, as `prepareRoll` found it (D-724).
@@ -1078,9 +1102,13 @@ async function dialogVariant(actor, spec) {
     talentLines: (p.talentLines ?? []).map(l => ({
       identifier: l.identifier,
       name: l.name,
-      does: game.i18n.format(`AZEROTH.TalentLine.Does.${l.kind}`, { n: l.amount }),
+      does: game.i18n.format(`AZEROTH.TalentLine.Does.${l.kind}`, {
+        n: l.amount, pool: game.i18n.localize(AZEROTH.poolTypes[l.pool ?? "mana"] ?? l.pool ?? "mana")
+      }),
       left: game.i18n.format(l.kind === "charge" ? "AZEROTH.TalentLine.Charges" : "AZEROTH.TalentLine.Left", { n: l.left }),
       available: l.available,
+      // A free cast once per rest opens ticked (the Chromatic Champion plan).
+      checked: l.available && l.checked === true,
       reason: l.reason ? game.i18n.format(l.reason, { name: l.name }) : null
     })),
     // **THE SECOND ROLL'S TARGET** (02 §6, D-704; the lead's L3). Drawn only

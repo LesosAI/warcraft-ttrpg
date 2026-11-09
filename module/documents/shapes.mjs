@@ -25,8 +25,8 @@
 
 import {
   FORCED_SPEED, RESTORE_FLAG, SHAPE_FLAG, SHAPE_KINDS, SWIFT_LEAVE, appearanceFor, centredResize, endsOnDamage, forcedKindForCard,
-  forcedShapeChanges, forcedShapeRefusal, isForcedKind, keepsFerocity, physicalHalf, readShape, shapeChanges, shapeEnds,
-  shapeEntryOf, shapeMayReplace, snapshotOf
+  forcedShapeChanges, forcedShapeRefusal, isForcedKind, isOverlayKind, keepsFerocity, readShape, shapeChanges, shapeEnds,
+  shapeEntryOf, shapeMayReplace, shapePhysical, snapshotOf
 } from "../rules/shapes.mjs";
 // A forced shape is written on a GM's client, judged before anything is spent (D-808).
 import { gmAbsentFor } from "../rules/gm-writes.mjs";
@@ -182,7 +182,8 @@ export function shapeLabel(shape) {
  * @param {{kind: string, forms: object[], ward?: object|null, laid?: object|null}} shape
  */
 export function shapeEffectData(actor, { kind, forms, ward = null, laid = null }) {
-  const physical = physicalHalf(forms);
+  // A drake form overrides no score (`rules/shapes.mjs#shapePhysical`).
+  const physical = shapePhysical(kind, forms);
   const label = shapeLabel({ kind, forms });
   const forced = isForcedKind(kind);
   return {
@@ -194,7 +195,7 @@ export function shapeEffectData(actor, { kind, forms, ward = null, laid = null }
     // shape has no duration. The icon on the token is the effect kept.
     showIcon: CONST.ACTIVE_EFFECT_SHOW_ICON.ALWAYS,
     disabled: false,
-    description: `<p>${foundry.utils.escapeHTML(forced ? forcedText(kind, label) : game.i18n.format("AZEROTH.Shape.EffectText", { name: label }))}</p>`,
+    description: `<p>${foundry.utils.escapeHTML(forced ? forcedText(kind, label) : game.i18n.format(isOverlayKind(kind) ? "AZEROTH.Shape.EffectTextOverlay" : "AZEROTH.Shape.EffectText", { name: label }))}</p>`,
     system: {
       changes: forced
         ? forcedShapeChanges(kind, { flies: fliesOfItsOwn(actor) })
@@ -543,6 +544,25 @@ export async function layForcedShape({ target = null, kind = null, card = null }
       ui.notifications?.warn(game.i18n.format("AZEROTH.ForcedShape.SustainGone", { name: target.name, spell: k.by }));
       return { laid: false, reason: "sustainGone" };
     }
+  }
+  // **A DRAKE FORM IS NOT REPLACED** (the lead: *"Only when champion ends it."*; the
+  // lead's ruling of 2026-11-08, *"I approve those 4"*; `rules/shapes.mjs
+  // #shapeMayReplace`): the Hex or the Polymorph lays nothing, and a card says so in
+  // words beside the Test that failed - never the notification alone.
+  const held = target.shape ?? null;
+  if (held && !shapeMayReplace(held.kind, kind)) {
+    const text = game.i18n.format("AZEROTH.ForcedShape.Kept", { name: target.name, form: shapeLabel(held), by: k.by });
+    try {
+      await ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor: target }),
+        content: `<p class="azeroth-drain">${foundry.utils.escapeHTML(text)}</p>`,
+        flags: { "azeroth-rpg": { kind: "forcedShape", forcedShape: { kind, kept: held.kind, by: k.by, messageId: card?.id ?? null } } }
+      });
+    } catch (err) {
+      console.warn("azeroth-rpg | the kept shape's card", err);
+      ui.notifications?.warn(text);
+    }
+    return { laid: false, reason: "kept" };
   }
   const uuid = await forcedFormUuid(kind);
   const forms = uuid ? await formsFrom([uuid]) : [];

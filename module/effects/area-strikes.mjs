@@ -168,7 +168,7 @@ export function spellBlowOf(spell = {}) {
  *   takesSpellpower?: boolean}, damage?: {rating: number, school: string|null}|null, heal?: number|null}} o
  * @returns {Promise<string[]>} the lines for the card
  */
-export async function strikeFromArea({ actor, caster = null, spell = {}, damage = null, heal = null, signatureExtras = [], damageOutcome = null, healingOutcome = null } = {}) {
+export async function strikeFromArea({ actor, caster = null, spell = {}, damage = null, heal = null, signatureExtras = [], damageOutcome = null, healingOutcome = null, split = null } = {}) {
   const lines = [];
   // Preserve the historical lines return value. Signature delivery needs the
   // actual committed loss, including prevention at the Actor damage door.
@@ -198,6 +198,18 @@ export async function strikeFromArea({ actor, caster = null, spell = {}, damage 
       // the one damage door, D-774): a tick a priest's Ward answers is a blow too.
       // And whether a SPELL struck it, and whether it is Ignite's own tick (D-775):
       // Shadowburn and Ruin read the first, Ignite the second.
+      // **04's SMOLDERING LIFE** (*Each tick of your Smolder may be split as Lifebinder's
+      // Flame splits a spell*; stage 3A): the tick's damage after its Ward halved, rounded
+      // down, and the heal its cast recorded landed on the creatures picked
+      // (`effects/chromatic-talents.mjs#landSplitTick`).
+      if (split && result.damage > 0) {
+        const { landSplitTick } = await import("./chromatic-talents.mjs");
+        const splitDone = await landSplitTick({ dealt: result.damage, split });
+        // The worked-out number is this door's own fresh object: what lands is the half.
+        result.damage = splitDone.takes;
+        result.parts = null;
+        lines.push(...splitDone.lines);
+      }
       if (result.damage > 0 && actorInWorld(actor)) {
         await actor.applyDamage(result.damage, {
           struck: true, attack: false, location: "body", type: school, by: caster, wardTook: result.wardTook ?? 0,
@@ -225,7 +237,8 @@ export async function strikeFromArea({ actor, caster = null, spell = {}, damage 
       const more = feature ? 0 : Math.max(0, Math.trunc(Number(caster?.system?.signatureEffects?.empowers?.[spellName]?.heal) || 0));
       const before = health.value ?? 0;
       // A tick's Divine Aegis schools and Miracle's unreduced heal ride to the door (D-779).
-      await actor.applyHealing(heal + more, { from: caster ?? null, spell: !feature, feature, aegis: spell?.aegis ?? null, unreduced: spell?.unreduced === true, outcome:healingOutcome });
+      // A Hearthfire ring heals as a Champion's branch spell (04's Kindling Heart; stage 3A).
+      await actor.applyHealing(heal + more, { from: caster ?? null, spell: !feature, feature, aegis: spell?.aegis ?? null, unreduced: spell?.unreduced === true, outcome:healingOutcome, branch: spell?.branch === true });
       const healed = (actor.system?.health?.value ?? before) - before;
       if (healed > 0) lines.push(game.i18n.format("AZEROTH.Combat.AreaTickHeal", { name: actor.name, amount: healed, spell: spellName }));
     } else if(healingOutcome&&actorInWorld(actor))healingOutcome.complete=true;
@@ -616,8 +629,14 @@ export async function areaTestOutcome({ actor, message, result } = {}) {
   // The owner's continuation handles only the remaining non-damage riders.
   if (outcome.damage && !area.signatureDamageCast) lines.push(...await strikeFromArea({ actor, caster, spell: area.spell ?? {}, damage: outcome.damage }));
   if (areaTransferRefusal(area)) return interrupted();
+  // **THE ESCAPE A CHECK'S FAILURE CARRIES** (04's Anchor of Ages; the 3B review, M2): a
+  // check row may name its own way out (`fail.escape`, stamped at the cast with the caster's
+  // Spell DC), which a failure's condition takes before the area's - the area's is 07's
+  // and names the spell's own Test.
+  const checkEscape = success ? null : cleanEscape(area.check?.fail?.escape ?? null);
+  const landingArea = checkEscape ? { ...area, escape: checkEscape } : area;
   for (const { id, until } of outcome.statuses) {
-    if (await landCondition(actor, id, until, area, caster, { messageId: message.id })) landed.push(id);
+    if (await landCondition(actor, id, until, landingArea, caster, { messageId: message.id })) landed.push(id);
     if (areaTransferRefusal(area)) return interrupted();
   }
   // **THE POISON A ZONE'S TEST NAMES** (14's Vent the Section, D-809; D12): the carrier,

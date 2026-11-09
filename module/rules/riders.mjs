@@ -535,7 +535,12 @@ export function ridersFor(talents = [], { pools = [], form = false, weapon = nul
     const freeBy = !all ? (frees.get(talent.identifier) ?? null) : null;
     const cost = all ? null : (freeBy ? 0 : discountedCost(rider.cost.amount, rider.cost.pool, discounts));
     const value = Math.max(0, Math.trunc(Number(pool?.value) || 0));
-    const spend = all ? value : cost;
+    // **SPEND UP TO A NUMBER** (04's Void Surge: *spend up to your tier in Void
+    // Corruption*; stage 3A of the Chromatic Champion plan): a rider of `"all"` with a
+    // `cap` takes what the pool holds, never more than the cap at the rank and tier.
+    const cap = all && rider.cap !== undefined && rider.cap !== null
+      ? Math.max(0, Math.trunc(evaluateExpression(rider.cap, { rank, tier }) ?? 0)) : null;
+    const spend = all ? (cap !== null ? Math.min(value, cap) : value) : cost;
     const params = { name: talent.name, pool: rider.cost.pool, cost: cost ?? value, value };
     const isPrimed = (primed ?? []).includes(talent.identifier);
     let reason = null;
@@ -554,6 +559,8 @@ export function ridersFor(talents = [], { pools = [], form = false, weapon = nul
       all,
       cost,
       spend,
+      // The most a rider of `"all"` may take (Void Surge's tier), named only where carried.
+      ...(cap !== null ? { cap } : {}),
       once: rider.once ?? null,
       move: rider.move ?? null,
       // When it is paid, and what the blow is struck with (D-772).
@@ -684,7 +691,7 @@ export function riderPlan(lines = [], chosen = [], { pools = [] } = {}) {
     const pool = poolOf(line.pool);
     if (!pool) return { ok: false, reason: { key: RIDER_REFUSALS.noPool, params: { name: line.name, pool: line.pool, cost: line.cost ?? 0, value: 0 } } };
     const now = have(line.pool);
-    const spent = line.all ? now : line.cost;
+    const spent = line.all ? (Number.isFinite(line.cap) ? Math.min(now, line.cap) : now) : line.cost;
     if (line.all && now < 1) return { ok: false, reason: { key: RIDER_REFUSALS.empty, params: { name: line.name, pool: line.pool, cost: 0, value: now } } };
     if (!line.all && now < spent) return { ok: false, reason: { key: RIDER_REFUSALS.short, params: { name: line.name, pool: line.pool, cost: spent, value: now } } };
     left.set(line.pool, now - spent);
@@ -738,7 +745,7 @@ export function settleRiders(plan, { pools = [] } = {}) {
     }
     const now = have(p.pool);
     const price = Math.max(0, Math.trunc(Number(p.spent)) || 0);
-    const spent = p.line?.all ? now : Math.min(now, price);
+    const spent = p.line?.all ? (Number.isFinite(p.line?.cap) ? Math.min(now, p.line.cap) : now) : Math.min(now, price);
     left.set(p.pool, now - spent);
     settled.set(p, { ...p, spent });
   }

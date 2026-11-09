@@ -105,6 +105,9 @@ import { SEDUCTION_WALK_QUERY, seductionWalkQueryHandler } from "./effects/seduc
 import { DEVOUR_MAGIC_QUERY, devourMagicQueryHandler } from "./effects/devour-magic-use.mjs";
 import { QIRAJI_MIND_FLAY_QUERY, qirajiMindFlayQueryHandler } from "./effects/qiraji-mind-flay-use.mjs";
 import { DESTROYER_DRAIN_QUERY, destroyerDrainQueryHandler } from "./effects/obsidian-drain-use.mjs";
+import { CHROMATIC_TALENT_QUERY, chromaticTalentQueryHandler } from "./effects/chromatic-talents.mjs";
+import { CHROMATIC_FLIGHT_QUERY, chromaticFlightQueryHandler } from "./effects/chromatic-flights.mjs";
+import { CHROMATIC_ASK_QUERY, chromaticAskHandler } from "./effects/chromatic-reactions.mjs";
 import { DESTROYER_PURGE_QUERY, destroyerPurgeQueryHandler } from "./effects/obsidian-purge-use.mjs";
 import { DREADLORD_SLEEP_QUERY, dreadlordSleepQueryHandler } from "./effects/dreadlord-sleep-use.mjs";
 import { FLAMEWAKER_QUERY, flamewakerQueryHandler } from "./effects/flamewaker-use.mjs";
@@ -362,6 +365,12 @@ export function registerQueries() {
   CONFIG.queries[DEVOUR_MAGIC_QUERY] = devourMagicQueryHandler;
   CONFIG.queries[QIRAJI_MIND_FLAY_QUERY] = qirajiMindFlayQueryHandler;
   CONFIG.queries[DESTROYER_DRAIN_QUERY] = destroyerDrainQueryHandler;
+  // The Chromatic Champion's Lifebinder's Flame on a creature the caster does not own (stage 3A).
+  CONFIG.queries[CHROMATIC_TALENT_QUERY] = chromaticTalentQueryHandler;
+  // The Spell-Weaver's and the Timewalker's writes on a creature the asker does not own,
+  // and the Reactions asked IN another creature's Test (stage 3B).
+  CONFIG.queries[CHROMATIC_FLIGHT_QUERY] = chromaticFlightQueryHandler;
+  CONFIG.queries[CHROMATIC_ASK_QUERY] = chromaticAskHandler;
   CONFIG.queries[DESTROYER_PURGE_QUERY] = destroyerPurgeQueryHandler;
   CONFIG.queries[DREADLORD_SLEEP_QUERY] = dreadlordSleepQueryHandler;
   CONFIG.queries[FLAMEWAKER_QUERY] = flamewakerQueryHandler;

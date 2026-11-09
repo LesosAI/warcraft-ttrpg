@@ -30,7 +30,7 @@ import { hasPredatoryEnrage } from "../rules/predatory-enrage.mjs";
 import { evaluateAmount, featurePatchesFor, featureRungs, featureTickStamp, featuresFor, raceTraitFor, refreshes, usesMaxFor } from "../rules/class-features.mjs";
 // Whom an area Use reaches (the B6 fix; the lead: *"Measure the area"*).
 import { cleanWho } from "../rules/area-gather.mjs";
-import { grantsFor, healBonusFor, healingPatchesFor, passivesFor, patchFeature, patchesFor, spellGrantsFor, talentEffectDiff, wardPierceFor } from "../rules/talent-effects.mjs";
+import { grantsFor, healBonusFor, healingPatchesFor, passivesFor, patchFeature, patchesFor, spellGrantsFor, talentEffect, talentEffectDiff, wardPierceFor } from "../rules/talent-effects.mjs";
 // 02's healing features that name one target, which Divine Providence's chip reaches (D-778).
 import { HEALS_ONE_TARGET } from "../rules/class-talents.mjs";
 // What the next spell was promised (04's Nature's Grace, Predator's Swiftness;
@@ -43,13 +43,17 @@ import { endSymbiosis, shareHealing } from "../effects/symbiosis.mjs";
 import { NEXT_ATTACK_FLAG, pendingNextAttack } from "../rules/next-attack.mjs";
 import { BEACON_FLAG, DEATH_MARK_FLAG, PLATE_FLAG, openingFor, restBonusFor, turnStartRestoreFor, woundedBeastTaken } from "../rules/class-talents.mjs";
 // What a counter or a charge buys on a roll's own dialog (D-774).
-import { CHARGE_FLAG, talentLinesFor } from "../rules/class-talents.mjs";
+import { CHARGE_FLAG, spellPoolFor, talentLinesFor } from "../rules/class-talents.mjs";
+import { FREE_CAST_FLAG, freeCastLines, freeCastRefills } from "../rules/free-casts.mjs";
 import { untilEndOfNextTurnOrRound, untilNextTurnOrRound } from "../effects/durations.mjs";
 import { askStabilizer } from "../effects/gadget-reactions.mjs";
 // D-779: the lead's class answers - Shared Quarry's payer, Undying Rage's hold,
 // Divine Aegis's Ward and Miracle's heal at the one healing door.
 import { companionSpendsFor, undyingRageFor } from "../rules/class-talents.mjs";
 import { DEVOURING_PLAGUE, DIVINE_AEGIS, UNDYING_RAGE, aegisChanges, momentumPayer, restoredToFull, undyingRageHold } from "../rules/class-answers.mjs";
+import { maneuverPoolOf, maneuverPurse } from "../rules/maneuver-pool.mjs";
+// The school 02's Scales of the Flight names where a tie leaves it open (stage 2B).
+import { FLIGHT_SCHOOL_FLAG } from "../rules/chromatic-features.mjs";
 // The Mage's and the Warlock's (D-775): Cauterize's catch at the damage door,
 // Ruin's two dice on a spell's Critical Injury, and the Long Rest's release of a
 // demon Command Demon bound and its lifting of Demonic Sacrifice's lock.
@@ -61,6 +65,9 @@ import { shareBeacon } from "../effects/beacon.mjs";
 // What a talent spends as part of an attack (D-770): the law the dialog's lines
 // and the roll's payment both read through `riderLines`.
 import { riderDiscountsOf, ridersFor } from "../rules/riders.mjs";
+// The Chromatic Champion's branch talents (stage 3A): Void Corruption as a pool a rider
+// pays from, and its write.
+import { branchSpellOf, fallHarmless, lifebinderFor, riderWritesSplit, splitOffered, voidPool, voidSpendFor, weightOfAgesBars, weightOfAgesFor } from "../rules/chromatic-talents.mjs";
 import { boundOf, releaseAll, releaseAtLongRest, syncBoundFor } from "./bound.mjs";
 // The Legacy branches' B2: the tinker's constructs and gadgets, the gnome's two talents.
 import { constructsFor, isWrecked } from "../rules/constructs.mjs";
@@ -137,7 +144,7 @@ import { mirroredImg } from "../rules/token-art.mjs";
 import { grantsOn } from "../rules/grants.mjs";
 // A shape is one Active Effect, read here and written by `./shapes.mjs` alone
 // (D-769): the physical half, what melds, and what ends it.
-import { AVATAR, SHAPE_FLAG, isForcedKind, meldsGear, naturalWeapon, physicalHalf, readShape } from "../rules/shapes.mjs";
+import { AVATAR, SHAPE_FLAG, isForcedKind, meldsGear, naturalWeapon, readShape, shapePhysical } from "../rules/shapes.mjs";
 import { endShapeAt, endShapeOnDamage, refuseForcedShape } from "./shapes.mjs";
 // 14's Hex the Loudest (D-809): a creature that cannot attack.
 import { refuseCannotAttack } from "../effects/boss-doors.mjs";
@@ -343,6 +350,9 @@ function featureStamp(cls, f, { tier = 1, level = 1 } = {}) {
     extraAttackIn: f.extraAttackIn ?? null,
     // 02 §7's Sprint (D-712): the Moves this turn that cost no Half-Action.
     freeMove: Math.max(0, Math.trunc(Number(f.freeMove ?? 0)) || 0),
+    // Draconic Discipline's pool for every universal maneuver (the Chromatic Champion
+    // plan), or null for Momentum.
+    maneuverPool: typeof f.maneuverPool === "string" && f.maneuverPool ? f.maneuverPool : null,
     attack: f.attack === true,
     // HOW MANY presses the card's Attack allows (the architect's review of D-773): `each`,
     // an amount in `rank` (04's Rapid Fire, `4*rank`), or null for one. **NEVER STAMPED
@@ -395,7 +405,10 @@ function featureStamp(cls, f, { tier = 1, level = 1 } = {}) {
       kinds: f.reminder?.kinds ?? [],
       text: f.reminder?.text ?? "",
       boons: f.reminder?.boons ?? 0,
-      banes: f.reminder?.banes ?? 0
+      banes: f.reminder?.banes ?? 0,
+      // The skills a skill reminder bears on, where it names any (02's Scales: Stealth; the
+      // stage 2 review, should-fix 7). A new key restamped by the sync (D-621).
+      skills: f.reminder?.skills ?? []
     },
     // What stands on every ally in reach (02 §7's Aura of Resolve, D-755),
     // widened by a talent's patch (Wide Aura) before it gets here. **THE WHOLE
@@ -490,7 +503,56 @@ export class AzerothActor extends Actor {
   }
 
   /** Offer result replacement before a Test's outcome-dependent effects run. */
-  async offerElunesRegard(roll) { return offerElunesRegard(this, roll); }
+  /**
+   * **WHO LAID THIS CREATURE'S SLOWED, WITH THEIR WEIGHT OF AGES** (04's Timewalker; stage
+   * 3B): each holder of the talent among the uuids on the Slowed effect's own `laidBy`, with
+   * the row at the holder's rank. Read by the attack's dialog (the Bane) and the Reaction
+   * gate (rank 3), never stored.
+   *
+   * @returns {Array<{uuid: string, row: object}>}
+   */
+  weightOfAgesLayers() {
+    const slowed = (this.effects ?? []).filter(e => e.active !== false && e.disabled !== true && e.statuses?.has?.("slowed"));
+    const uuids = [...new Set(slowed.flatMap(e => e.flags?.["azeroth-rpg"]?.laidBy ?? []).filter(u => typeof u === "string" && u))].sort();
+    const out = [];
+    for (const uuid of uuids) {
+      let holder = null;
+      try {
+        holder = fromUuidSync(uuid);
+      } catch {
+        holder = null;
+      }
+      if (holder?.documentName !== "Actor" || typeof holder.takenTalents !== "function") continue;
+      const row = weightOfAgesFor(holder.takenTalents(), talentEffect);
+      if (row) out.push({ uuid, row });
+    }
+    return out;
+  }
+
+  /** Whether a holder of Weight of Ages at rank 3 laid this creature's Slowed: *it also has no Reaction*. */
+  get weightOfAgesBar() {
+    return weightOfAgesBars(this.weightOfAgesLayers());
+  }
+
+  /**
+   * **THE AFTER-THE-DIE SEAM** (02's Elune's Regard; and 04's Paradox and Time Lapse, stage
+   * 3B): every Test door calls this once its die is evaluated and before anything follows
+   * from it. In order: a nearby holder's Paradox on an enemy's Attack or Casting Test
+   * (`effects/chromatic-reactions.mjs#askParadox`), the roller's own Time Lapse on a failure,
+   * then Elune's Regard. A Test a Disrupt Weave has failed is the spell's failure, not the
+   * die's, and nothing here reaches it.
+   */
+  async offerElunesRegard(roll) {
+    if (roll?.options?.disrupted) return;
+    const { askParadox, offerTimeLapse } = await import("../effects/chromatic-reactions.mjs");
+    try {
+      await askParadox({ roller: this, roll });
+      await offerTimeLapse(this, roll);
+    } catch (err) {
+      console.warn("azeroth-rpg | Paradox or Time Lapse", err);
+    }
+    return offerElunesRegard(this, roll);
+  }
 
   /** V14 applies transferred Item effects through this iterator in both phases.
    * Dispersion keeps equipment intact but suspends its transferred effects;
@@ -699,7 +761,8 @@ export class AzerothActor extends Actor {
     // creature keeps its own scores, Defense, Armor Points, size and gear, so every
     // reader of `physical` - `CharacterData` above all - finds nothing to take.
     const forced = isForcedKind(shape.kind);
-    return { id: effect.id, ...shape, forced, physical: forced ? null : physicalHalf(shape.forms) };
+    // A drake form keeps the character's own scores (`rules/shapes.mjs#shapePhysical`).
+    return { id: effect.id, ...shape, forced, physical: forced ? null : shapePhysical(shape.kind, shape.forms) };
   }
 
   /**
@@ -731,7 +794,8 @@ export class AzerothActor extends Actor {
 
   /**
    * **THE WEAPONS THIS ACTOR FIGHTS WITH** (D-769): THE ONE ACCESSOR. In a shape
-   * whose gear melds - all three do (the lead: *"Melds; Signatures count"*) -
+   * whose gear melds - every kind a character takes for itself does, the drake form
+   * included (the lead: *"Melds; Signatures count"*; 02, *Drake form*) -
    * they are the block's attack rows, each shaped as a weapon by
    * `rules/shapes.mjs#naturalWeapon`; otherwise the weapons held. The Combat
    * tab, the card's Attack button, the off hand, Parry and the Opportunity
@@ -744,6 +808,8 @@ export class AzerothActor extends Actor {
     if (shape && meldsGear(shape.kind)) {
       return (shape.physical?.attacks ?? []).map((row, index) => naturalWeapon(row, { index, form: row.form }));
     }
+    // A drake form melds too (02, *Drake form*: *You fight with the block's attacks in
+    // place of your weapons*), so it takes the branch above; nothing in hand is added.
     return this.items.filter(i => i.type === "weapon" && i.system?.equipped === true);
   }
 
@@ -1582,6 +1648,17 @@ export class AzerothActor extends Actor {
       updates.push({ _id: item.id, "system.signatureEffect.use.uses.value": uses.max });
       names.push(item.name);
     }
+    // **A FREE CAST COMES BACK WITH ITS REST** (the Chromatic Champion plan: *"once per
+    // short rest"*): the spent names on each talent item, emptied where the row's rest
+    // is this one (`rules/free-casts.mjs#freeCastRefills`).
+    const freeTalents = this.items.filter(i => i.type === "talent").map(i => ({
+      id: i.id, identifier: i.system?.identifier, className: i.system?.className, race: i.system?.race ?? null,
+      taken: i.system?.taken ?? 0, spent: i.getFlag?.("azeroth-rpg", FREE_CAST_FLAG) ?? []
+    }));
+    for (const id of freeCastRefills(freeTalents, event, refreshes)) {
+      updates.push({ _id: id, [`flags.azeroth-rpg.${FREE_CAST_FLAG}`]: [] });
+      names.push(this.items.get(id)?.name ?? "");
+    }
     // **AN OVERCLOCK ENDS WITH THE ENCOUNTER, OR AT A REST** (02's gnome; the B2 review):
     // the mark Overclock leaves on a gadget's feature (`rules/gadgets.mjs#OVERCLOCK_FLAG`)
     // comes off unused - it is the next Use's, and *once per encounter* is its clock.
@@ -1864,6 +1941,9 @@ export class AzerothActor extends Actor {
     // a Long Rest*) - each named afresh by the Use the rest gives back.
     if (this.getFlag("azeroth-rpg", PLATE_FLAG)) await this.unsetFlag("azeroth-rpg", PLATE_FLAG);
     if (this.getFlag("azeroth-rpg", BEACON_FLAG)) await this.unsetFlag("azeroth-rpg", BEACON_FLAG);
+    // 02's Scales of the Flight (stage 2B): *chosen after each Long Rest where a tie leaves
+    // it open* - named afresh by the Use the rest gives back.
+    if (this.getFlag("azeroth-rpg", FLIGHT_SCHOOL_FLAG)) await this.unsetFlag("azeroth-rpg", FLIGHT_SCHOOL_FLAG);
     // 04's Death Mark (D-773): *Until your next Short or Long Rest*.
     if (this.getFlag("azeroth-rpg", DEATH_MARK_FLAG)) await this.unsetFlag("azeroth-rpg", DEATH_MARK_FLAG);
     // **THE WARLOCK'S** (D-775): a demon Command Demon bound is bound *until your
@@ -2353,7 +2433,26 @@ export class AzerothActor extends Actor {
     return constructsFor(owner.takenTalents?.() ?? [], { tier: owner.system?.tier ?? 1 }).finisher ? owner : this;
   }
 
+  /**
+   * **THE POOL THIS CHARACTER PAYS EVERY UNIVERSAL MANEUVER FROM** (the Chromatic
+   * Champion plan's Draconic Discipline), read off the features it HOLDS - never its
+   * class's name - or null for Momentum. `rules/maneuver-pool.mjs` is the law.
+   * @returns {string|null}
+   */
+  get maneuverPool() {
+    if (this.type !== "character") return null;
+    return maneuverPoolOf((this.items ?? []).filter(i => i.type === "feature")
+      .map(i => ({ name: i.name, maneuverPool: i.system?.maneuverPool ?? null })));
+  }
+
   momentumPayer({ amount = 0 } = {}) {
+    // Draconic Discipline: a feature that names a maneuver pool pays every maneuver
+    // from it, the called shot's Momentum included (the Chromatic Champion plan).
+    const named = this.maneuverPool;
+    if (named) {
+      const purse = maneuverPurse(this.poolSnapshot?.() ?? [], named);
+      return purse ? { actor: this, pool: purse, shared: false } : null;
+    }
     const own = this.system?.momenta?.[0] ?? (this.poolSnapshot?.() ?? []).find(p => p.kind === "momentum") ?? null;
     let owner = null;
     let quarry = null;
@@ -2387,11 +2486,66 @@ export class AzerothActor extends Actor {
     }
     // D-779: the spell's name (04's Devouring Plague on Shadow Word: Pain), and a
     // healing feature's own action (Nature's Swiftness on a healing class feature).
-    return talentLinesFor(talents, {
+    const lines = talentLinesFor(talents, {
       roll, school, damages, mana, casting, left, ticks, spell, healing, action,
       charges: Math.max(0, Math.trunc(Number(this.getFlag("azeroth-rpg", CHARGE_FLAG))) || 0),
       tier: this.system?.tier ?? 1
     });
+    // **THE CHAMPION'S BRANCH SPELL LINES** (04's Lifebinder's Flame and Void Surge; stage
+    // 3A): unticked, the player's to tick, judged again by `castSpell` - the split on a
+    // branch spell dealing Fire (on the cast, or as Smolder's tick through Smoldering Life),
+    // and a spend of Void on a branch spell that deals damage.
+    if (roll === "spell" && spell) {
+      const branch = Boolean(branchSpellOf(talents, spell, talentEffect));
+      const form = this.shape?.kind === "drake" ? (this.shape.forms?.[0]?.name ?? null) : null;
+      const split = lifebinderFor(talents, { form }, talentEffect);
+      if (splitOffered(split, { branch, school, damages, ticks, spell })) {
+        lines.push({ id: "talent-line-lifebinders-flame", identifier: "lifebinders-flame", name: split.by, kind: "lifebinder", amount: split.divide, left: 1, available: true, reason: null });
+      }
+      // On a spell whose damage is its tick (Smolder) the spend is never made - it is paid on
+      // the cast's own hit - so the line is not offered there (the 3A review, should-fix 9).
+      const surge = branch && damages ? voidSpendFor(talents, { tier: this.system?.tier ?? 1, form }, talentEffect) : null;
+      if (surge) {
+        const held = Math.max(0, Math.trunc(Number(this.system?.corruption?.void)) || 0);
+        lines.push({
+          id: "talent-line-void-surge", identifier: "void-surge", name: surge.by, kind: "voidSurge",
+          amount: Math.min(held, surge.cap), left: held > 0 ? 1 : 0, available: held > 0, reason: held > 0 ? null : "AZEROTH.VoidSpend.NoneHeld"
+        });
+      }
+    }
+    // **A FREE CAST, ONCE PER REST** (the Chromatic Champion plan): a TICKED line on
+    // the spell's own dialog, its use counted per spell on the talent item
+    // (`rules/free-casts.mjs`). Only where the spell has a price to waive.
+    if (roll !== "spell" || !spell || !((Number(mana) || 0) > 0)) return lines;
+    const spent = Object.fromEntries(this.items.filter(i => i.type === "talent")
+      .map(i => [i.id, i.getFlag?.("azeroth-rpg", FREE_CAST_FLAG) ?? []]));
+    const pool = spellPoolFor(talents, { name: spell, school })?.pool ?? null;
+    return [...lines, ...freeCastLines(talents, { spell, spent, pool })];
+  }
+
+  /**
+   * **THE POOLS A RIDER MAY PAY FROM** (D-770, and 04's Void Surge: *spend up to your tier
+   * in Void Corruption*; stage 3A): every class pool, and a character's Void track shaped as
+   * one (`rules/chromatic-talents.mjs#voidPool`). The ONE list the attack's dialog, the
+   * roll's judgement and its settle read, so the three cannot disagree.
+   *
+   * @returns {Array<object>}
+   */
+  riderPools() {
+    const pools = this.poolSnapshot();
+    return this.type === "character" ? [...pools, voidPool(this.system)] : pools;
+  }
+
+  /**
+   * Write what a rider settled (D-770): the class pools through `updatePool` and a spend of
+   * Void Corruption on the track, in the one update.
+   *
+   * @param {Array<{itemId: string|null, kind: string, value: number}>} writes
+   */
+  async writeRiderPools(writes = []) {
+    const { pools, extra } = riderWritesSplit(writes);
+    if (!pools.length && !Object.keys(extra).length) return this;
+    return this.updatePool(pools, extra);
   }
 
   /**
@@ -2425,7 +2579,7 @@ export class AzerothActor extends Actor {
     const usedThisRound = thisRound ? [...(round.riders ?? [])] : [];
     const primed = thisRound && combatant.isCurrentTurn ? [...(round.primed ?? [])] : [];
     return ridersFor(this.takenTalents(), {
-      pools: this.poolSnapshot(),
+      pools: this.riderPools(),
       form: this.inShapeshiftForm === true,
       weapon,
       // A blow struck WITH a shield needs one in hand (Shield Slam, D-772).
@@ -2523,7 +2677,12 @@ export class AzerothActor extends Actor {
   fightTurnNow() {
     const fight = this.activeFight?.() ?? null;
     if (!fight?.combatant) return null;
-    return { combat: fight.id, round: fight.round, combatant: fight.combatant.id };
+    // `turn` and `own` (the turn order's index of the turn now and of this actor's own):
+    // what a promise held *before the end of your next turn* is read against (02's
+    // Draconic Leap; `rules/next-attack.mjs#nextTurnStands`).
+    const mine = fight.getCombatantsByActor?.(this)?.[0] ?? null;
+    const own = mine ? (fight.turns ?? []).findIndex(c => c?.id === mine.id) : -1;
+    return { combat: fight.id, round: fight.round, combatant: fight.combatant.id, turn: fight.turn ?? null, own: own >= 0 ? own : null };
   }
 
   /**
@@ -2591,7 +2750,7 @@ export class AzerothActor extends Actor {
    *   temporary Health (07's Grave Coil and Exsanguinate; D-777)
    * @param {string} [o.overflowSource]  the spell that keeps it, for the record
    */
-  async applyHealing(amount, { from = null, spell = false, feature = false, shared = false, featureName = null, overflow = false, overflowSource = "", aegis = null, unreduced = false, outcome = null } = {}) {
+  async applyHealing(amount, { from = null, spell = false, feature = false, shared = false, featureName = null, overflow = false, overflowSource = "", aegis = null, unreduced = false, outcome = null, branch = false } = {}) {
     // Optional receipt for once-per-turn healing signatures. The Actor remains
     // the return value; incomplete downstream writes are never proof of delivery.
     if (outcome) Object.assign(outcome, { complete: false, restored: 0 });
@@ -2685,6 +2844,17 @@ export class AzerothActor extends Actor {
     // hook knows it was a heal (`effects/undying-rage.mjs`).
     const restoredNow = Math.max(0, (this.system?.health?.value ?? before) - before);
     if (outcome) outcome.restored = restoredNow;
+    // **04's KINDLING HEART** (*When you heal a creature with a branch spell or talent, gain
+    // 1 Rage*; stage 3A): a heal that restored something, given by a Champion's branch - the
+    // door says so (`branch`), or the feature named is one a Champion talent granted.
+    if (restoredNow > 0 && from && (branch === true || (feature && featureName))) {
+      try {
+        const { branchFeatureHeal, kindleHealer } = await import("../effects/chromatic-talents.mjs");
+        if (branch === true || branchFeatureHeal(from, featureName)) await kindleHealer(from);
+      } catch (err) {
+        console.warn("azeroth-rpg | Kindling Heart", err);
+      }
+    }
     if (restoredNow > 0) {
       const held = (this.effects ?? []).filter(e => e.flags?.["azeroth-rpg"]?.[UNDYING_RAGE.flag]).map(e => e.id);
       if (held.length && this.isOwner) {
@@ -2814,6 +2984,19 @@ export class AzerothActor extends Actor {
       const spirit = realmRefusalFor(this, "stand");
       if (spirit) {
         ui.notifications?.warn(spirit);
+        return false;
+      }
+    }
+    // **07's EARTHEN SPIKE PINS WHAT IT KNOCKED PRONE** (*While it stands ... a creature it
+    // knocked Prone cannot stand up*; the 3B review, should-fix 15): asked of the spike's own
+    // Region before anything is spent, for every creature - a GM's HUD clear included, since
+    // the spell names no exception - and refused in words. A door that frees for nothing
+    // (`free`) is no Stand and passes; deleting the effect outright stays the GM's.
+    if (!wants && statusId === "prone" && !options.free && this.statuses?.has?.("prone")) {
+      const { pinnedHere } = await import("../effects/target-ground.mjs");
+      const pin = pinnedHere(this);
+      if (pin) {
+        ui.notifications?.warn(game.i18n.format("AZEROTH.TargetGround.Pinned", { name: this.name, spell: pin.spell }));
         return false;
       }
     }
@@ -2989,6 +3172,12 @@ export class AzerothActor extends Actor {
     }
     if (refuseIceBlockTarget(this) || refuseDispersion(this, "damage")) {
       if (transfer) await consumeAttackTransfer(transfer, { target: this, messageId }).note("protected");
+      return completeOutcome();
+    }
+    // **02 §5's WINGS BENEATH** (the Chromatic Outcast: *You take no damage from a fall and
+    // land on your feet*; stage 3A): nothing of a fall lands, said in words.
+    if (falling === true && fallHarmless(this.takenTalents?.() ?? [], talentEffect)) {
+      ui.notifications?.info(game.i18n.format("AZEROTH.WingsBeneath.NoFall", { name: this.name }));
       return completeOutcome();
     }
     if (projectionPhaseFor(this)) {
@@ -3391,6 +3580,26 @@ export class AzerothActor extends Actor {
         ui.notifications?.warn(game.i18n.format("AZEROTH.Drain.Failed", { source: drain.name ?? "", target: this.name }));
         console.warn("azeroth-rpg | life drain", err);
       }
+    }
+    // **04's LIFEBLOOD** (*As a Reaction when an ally within 30 feet drops below half
+    // Health*; stage 3A): the blow that took this creature below half its maximum offers it
+    // on a card row to every holder near enough, judged again at the press. Guarded: an
+    // offer never undoes the blow.
+    try {
+      const { offerLifeblood } = await import("../effects/chromatic-talents.mjs");
+      await offerLifeblood({ target: this, before, after: this.system?.health?.value ?? 0, max: this.system?.health?.max ?? max });
+    } catch (err) {
+      console.warn("azeroth-rpg | Lifeblood's offer", err);
+    }
+    // **04's REWIND** (*as a Reaction when an ally within 30 feet takes damage ... It regains
+    // half the Health that blow took*; stage 3B): the blow that took Health off this creature
+    // offers it on a card row to every holder near enough, the Health it took on the offer's
+    // own record. Guarded: an offer never undoes the blow.
+    try {
+      const { offerRewind } = await import("../effects/chromatic-flights.mjs");
+      await offerRewind({ target: this, before, after: this.system?.health?.value ?? 0 });
+    } catch (err) {
+      console.warn("azeroth-rpg | Rewind's offer", err);
     }
     // The others' shares of a divided blow, once this creature's is written.
     if (division) {

@@ -248,5 +248,22 @@ export function creatureAnimations({ fx, snd, cue, SOUNDS }) {
   breath("Storm Breath", "jb2a.breath_weapons.lightning.line.blue", SOUNDS.lightning, "region-line");
   add("Named Quarry", "jb2a.cast_generic.02.blue", SOUNDS.boon,
     { scale: 0.45, opacity: 0.5 });
+  // A moving mesh announces the throw; it does not wrap a target before its save.
+  add("Trapper Net", "jb2a.web.02", SOUNDS.swingLight,
+    { place: "source>target", travel: "move", scale: 0.3 });
+  rows["ability:trapper-net"].standIn = "The installed web mesh stands in for a thrown rope net.";
+  quiet("Gift of Ragnaros", "Standing Damage Rating bonus; the rifle shot and melee impact carry its presentation.");
+  add("Sprite Poison", "jb2a.particles.outward.greenyellow.01.01", SOUNDS.necrotic,
+    { scale: 0.35, opacity: 0.65 });
+  add("Raise Bone Guardian", "jb2a.cast_generic.02.blue", SOUNDS.necrotic,
+    { opacity: 0.55 });
+  add("Call Aqua Guardian", "jb2a.water_splash.circle.01.blue", "psfx.casting.water.001",
+    { scale: 0.5 });
+  add("Thrown Bomb", "jb2a.extras.tmfx.inpulse.circle.01.normal", SOUNDS.swingLight,
+    { opacity: 0.35 });
+  rows["ability:thrown-bomb"].cues.push(cue("region", [
+    fx("jb2a.cast_generic.fire.01.orange", { place: "region", scale: 0.6 }),
+    snd(SOUNDS.fire, { volume: 0.5 })
+  ]));
   return Object.freeze(rows);
 }
