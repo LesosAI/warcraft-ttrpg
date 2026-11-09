@@ -27,6 +27,13 @@ import { emptyAutomation, hasAutomation, isShell } from "./ability-automation.mj
 const CASTING_TESTS = "casting";
 
 export const CREATURE_PLANS = Object.freeze({
+  // *Every enemy within 30 feet is pulled 20 feet toward the drake unless it passes a Resilience
+  // (Spirit) Test at DC 17* (14 §10, the drakes' differences, D-846): the seed reads the Test, the
+  // action and the Short Rest, and the plan gathers the enemies and lands the pull on a failure,
+  // as Aku'mai's The Water Rises does.
+  "Blue Drake": {
+    "Arcane Vacuum": { plan: { gather: { who: "enemy", feet: 30 }, forced: { on: "fail", feet: 20, toward: "toward" } } }
+  },
   "Blackrock Outrunner": {
     "Trapper Net": { plan: { target: { count: 1, feet: 20 } } },
     "Berserk": { plan: { door: "amaniFury", lasts: "encounter" } }

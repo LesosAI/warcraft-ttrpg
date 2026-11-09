@@ -178,7 +178,9 @@ export function creaturePlansBatch(context) {
       this.timeout(30000);
       const pack = game.packs.get(BESTIARY_PACK);
       for (const [creature, ability] of [["Gnomish Battle Chicken", "Battle Squawk"], ["Farstrider", "Named Quarry"], ["Kirin Tor Magus", "Counterspell"],
-        ["Silvermoon Citizen", "Arcane Torrent"], ["Town Guard", "Calls the Watch"], ["Troll Berserker", "Berserk"]]) {
+        ["Silvermoon Citizen", "Arcane Torrent"], ["Town Guard", "Calls the Watch"], ["Troll Berserker", "Berserk"],
+        // D-846: the Blue Drake's pull rides the same doors.
+        ["Blue Drake", "Arcane Vacuum"]]) {
         const entry = (await pack.getIndex()).find(e => e.name === creature);
         const doc = await pack.getDocument(entry._id);
         const a = cleanAutomation(doc.system.creatureAbilities.find(r => r.name === ability).automation);
@@ -280,6 +282,55 @@ export function creaturePlansBatch(context) {
       await press(citizen, "Arcane Torrent");
       await until(() => powerOf(neighbour) === 1, "the neighbour drained of 1 Power");
       await until(() => powerOf(citizen) === 1, "the citizen gains the 1 it drained");
+    });
+
+    // D-846: *every enemy within 30 feet is pulled 20 feet toward the drake unless it passes a
+    // Resilience (Spirit) Test at DC 17*. The circle gathers the enemy in range and no ally, the
+    // failed Resist lands the pull through the forced-movement door, and the Short Rest's use is
+    // struck. A pull was never asserted live before (the Boss batch checks only a push).
+    it("Arcane Vacuum gathers the enemies within 30 feet, and a failed Spirit Test pulls one 20 feet toward the Blue Drake", async function () {
+      this.timeout(90000);
+      const drake = await worldCopy("Blue Drake");
+      const kin = await worldCopy("Kobold", " Vacuum Ally");
+      const hunter = await worldCopy("Felhunter", " Vacuum Far");
+      // The drake is Large, two squares from (500, 1900); the mage stands 30 feet from its
+      // nearest square, the kobold beside it, the felhunter 40 feet off.
+      const [drakeTok, mageTok, kinTok, hunterTok] = await place([
+        { actor: drake, x: 500, y: 1900, side: "HOSTILE" },
+        { actor: mage, x: 1200, y: 1900, side: "FRIENDLY" },
+        { actor: kin, x: 500, y: 2100, side: "HOSTILE" },
+        { actor: hunter, x: 1400, y: 2200, side: "FRIENDLY" }
+      ]);
+      const card = await press(drake, "Arcane Vacuum");
+      assert.ok(card, "no card");
+      const named = (card.flags[SCOPE].targets ?? []).map(t => t.tokenId);
+      assert.include(named, mageTok.id, "the mage 25 feet off was not gathered");
+      assert.notInclude(named, kinTok.id, "the drake's own side was gathered");
+      assert.notInclude(named, hunterTok.id, "a creature past 30 feet was gathered");
+      const before = { x: mageTok.x, y: mageTok.y };
+      const button = buttonsOf(card, '[data-action="resistTest"][data-target-index]')
+        .find(b => (card.flags[SCOPE].targets ?? [])[Number(b.dataset.targetIndex)]?.tokenId === mageTok.id);
+      assert.ok(button, "the card offers the mage no Resist");
+      // The Resist opens the roll dialog unless it is skipped, and a dialog nobody answers is a
+      // test that never ends.
+      const prior = game.settings.get(SCOPE, ROLL_DIALOG_SETTING);
+      await game.settings.set(SCOPE, ROLL_DIALOG_SETTING, "skip");
+      const unpin = pinDie(1);
+      try {
+        await CARD_ACTIONS.resistTest(button, game.messages.get(card.id));
+      } finally {
+        unpin();
+        await game.settings.set(SCOPE, ROLL_DIALOG_SETTING, prior);
+      }
+      // A token's document position is interpolated while it travels (CLAUDE.md §15): wait for
+      // it to come to rest, then read how far it went - four squares, never more.
+      const at = () => scene.tokens.get(mageTok.id);
+      await until(() => at().x < before.x, "the mage pulled toward the drake");
+      await until(async () => { const was = `${at().x},${at().y}`; await sleep(300); return was === `${at().x},${at().y}`; }, "the pull at rest", 15000);
+      const moved = Math.hypot(at().x - before.x, at().y - before.y);
+      assert.isAtLeast(moved, 300, `the mage moved ${moved}px, less than 15 feet`);
+      assert.isAtMost(moved, 400 * Math.SQRT2, `the mage moved ${moved}px, more than 20 feet`);
+      await until(() => drake.system.creatureAbilities.find(r => r.name === "Arcane Vacuum").automation.uses.value === 0, "the Short Rest's use struck");
     });
 
     it("Berserk takes Boon on its attacks and exposes it for the encounter, and both lift when the fight ends", async function () {
