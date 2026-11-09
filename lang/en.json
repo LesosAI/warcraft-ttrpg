@@ -3734,7 +3734,11 @@
       "NoGM": "Lifebinder's Flame: no GM is online to heal {name}.",
       "Failed": "Lifebinder's Flame: the heal on {name} could not be written.",
       "Unresolved": "Lifebinder's Flame's heal could not be confirmed. Check the card before healing again.",
-      "NeedsTarget": "{name}: {talent} splits the damage the spell deals to its target. Target the creature the spell strikes first. Nothing was spent."
+      "NeedsTarget": "{name}: {talent} splits the damage the spell deals to its target. Target the creature the spell strikes first. Nothing was spent.",
+      "BreathPrompt": "{name} deals Fire damage. Split it with {talent}?",
+      "BreathSplit": "Split it with {talent}",
+      "BreathSplitText": "Each creature in the area takes half of what it would take. The other halves plus your Constitution modifier heal a creature you pick within {feet} feet.",
+      "BreathWhole": "Do not split it"
     },
     "Lifeblood": {
       "Offer": "{name} is below half Health. {holder} may spend a Reaction and 3 Rage on {talent}.",
@@ -3996,6 +4000,8 @@
         "name": "Name"
       },
       "NotOpen": "Not open to this people",
+      "Available": "Available",
+      "AvailableClasses": "Classes available to {race}",
       "FightsWith": "Fighting ability",
       "FightsWithTip": "The ability this class fights with",
       "CastsWithTip": "The ability this class casts with",

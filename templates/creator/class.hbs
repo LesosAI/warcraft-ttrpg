@@ -1,9 +1,12 @@
 {{!-- Step 2 (01 §2): nine classes across the window in 02 §7's order (D-638), those 02 §3 closes to the race in soft ink; the chosen one's five things. --}}
+{{#if pane.raceName}}<h4 class="azeroth-creator-access-heading">{{localize "AZEROTH.Creator.AvailableClasses" race=pane.raceName}}</h4>{{/if}}
 <div class="azeroth-creator-tiles azeroth-creator-tiles-wide" role="radiogroup" aria-label="{{localize "AZEROTH.Creator.Step.class"}}">
   {{#each pane.classes as |c|}}
-  <label class="azeroth-creator-tile{{#if c.selected}} is-selected{{/if}}{{#unless c.open}} is-unavailable{{/unless}}">
+  <label class="azeroth-creator-tile{{#if c.selected}} is-selected{{/if}}{{#if c.open}} is-available{{else}} is-unavailable{{/if}}">
     <input type="radio" name="cls" value="{{c.uuid}}" data-creator="cls" {{#if c.selected}}checked{{/if}}>
+    <img class="azeroth-creator-choice-art is-emblem" src="{{c.img}}" alt="">
     <span class="azeroth-creator-tile-name">{{c.name}}</span>
+    {{#if c.open}}<span class="azeroth-creator-availability"><i class="fa-solid fa-check" aria-hidden="true"></i> {{localize "AZEROTH.Creator.Available"}}</span>{{/if}}
     <span class="azeroth-creator-tile-meta">{{#if c.open}}{{c.frame}}{{#if c.pools}} · {{c.pools}}{{/if}}{{else}}{{localize "AZEROTH.Creator.NotOpen"}}{{/if}}</span>
   </label>
   {{/each}}

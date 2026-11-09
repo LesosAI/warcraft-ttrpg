@@ -2792,7 +2792,12 @@ export const TALENT_EFFECTS = Object.freeze({
     // to the other half plus your Constitution modifier.* A line on the cast's own dialog,
     // the creature chosen before anything is paid (`castSpell`, `rules/chromatic-talents.mjs
     // #lifebinderSplit`).
-    "lifebinders-flame": { lifebinder: { split: true } },
+    // *... or your Breath or Chromatic Breath deals Fire damage ... A Breath splits the damage of
+    // every creature it strikes, adds the other halves together, and heals a creature within 30
+    // feet* (the lead, 2026-11-09; D-845): the two class features, asked
+    // through the one chooser once the school is Fire and the cone is aimed
+    // (`workflows.mjs#breathSplitPick`), and the 30 feet (MY READING, for the lead).
+    "lifebinders-flame": { lifebinder: { split: true, breath: { features: ["Breath", "Chromatic Breath"], feet: 30 } } },
     // *Your weapon attacks may deal Fire damage instead of their own type. When one of them
     // reaches SL 2, the target is Scorched. At rank 2 this happens at SL 1, and at rank 3 on
     // any hit.* The swap is a line on the attack's dialog (`convert {to, attack}`); the

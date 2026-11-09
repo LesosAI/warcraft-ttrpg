@@ -49,6 +49,10 @@ const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 const TEMPLATE = "systems/azeroth-rpg/templates/creator/creator.hbs";
 const DEFAULT_IMG = "icons/svg/mystery-man.svg";
+// The Goblin item icon depicts coins; the creator needs the people themselves.
+const raceImage = race => race.identifier === "goblin"
+  ? "systems/azeroth-rpg/assets/art/bestiary/portraits/steamwheedle-trader.png"
+  : race.img;
 const PACKS = {
   races: "azeroth-rpg.races", classes: "azeroth-rpg.classes", careers: "azeroth-rpg.careers",
   talents: "azeroth-rpg.talents", spells: "azeroth-rpg.spells",
@@ -308,7 +312,10 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     switch (s.step) {
       case "race": pane.races = await this.#racePane(s); break;
       case "guise": Object.assign(pane, this.#guisePane(s, p)); break;
-      case "class": pane.classes = await this.#classPane(s, p); break;
+      case "class":
+        pane.classes = await this.#classPane(s, p);
+        pane.raceName = p.race?.name;
+        break;
       case "abilities": Object.assign(pane, this.#abilitiesPane(s, numbers)); break;
       case "career": Object.assign(pane, await this.#careerPane(s, p)); break;
       case "skills": Object.assign(pane, this.#skillsPane(s, p, numbers)); break;
@@ -371,13 +378,16 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
 
   async #racePane(s) {
     return Promise.all(this.#data.races.map(async r => ({
-      uuid: r.uuid, name: r.name, img: r.img,
+      uuid: r.uuid, name: r.name, img: raceImage(r),
       selected: r.uuid === s.race,
       size: game.i18n.localize(AZEROTH.sizes[r.size] ?? r.size),
       trait: r.trait?.name ?? "",
       traitHtml: await enrich(r.trait?.description ?? ""),
       languages: (r.languages ?? []).map(l => game.i18n.localize(AZEROTH.languages[l] ?? l)).join(", "),
-      classes: (r.classes ?? []).join(", ")
+      classes: (r.classes ?? []).join(", "),
+      availableClasses: this.#data.classes.filter(c => classOpenTo(r, c)).map(c => ({
+        name: c.name, img: crestPath(c.identifier) ?? c.img
+      }))
     })));
   }
 
@@ -390,7 +400,7 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     return {
       trueRace: p.race?.name ?? "",
       guises: guiseChoices(this.#data.races).map(r => ({
-        uuid: r.uuid, name: r.name, img: r.img,
+        uuid: r.uuid, name: r.name, img: raceImage(r),
         selected: r.uuid === s.guise,
         size: game.i18n.localize(AZEROTH.sizes[r.size] ?? r.size ?? ""),
         speed: r.speed ?? null,
@@ -409,7 +419,7 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
       const open = p.race ? classOpenTo(p.race, c) : true;
       const pools = [c.momentum?.name, c.power?.name].filter(Boolean).map(n => game.i18n.localize(AZEROTH.poolTypes[n] ?? n));
       return {
-        uuid: c.uuid, name: c.name, img: c.img,
+        uuid: c.uuid, name: c.name, img: crestPath(c.identifier) ?? c.img,
         selected: c.uuid === s.cls,
         open,
         frame: game.i18n.localize(AZEROTH.frames[c.frame] ?? c.frame),

@@ -7,6 +7,8 @@
  *
  * - Lifebinder's Flame: a branch Fire spell split on the dialog's line, the creature picked in
  *   the chooser, the target's row halved, the heal landed; Kindling Heart's Rage beside it;
+ *   and a Fire Breath and a Fire Chromatic Breath split through the chooser, a Frost one asked
+ *   nothing (D-845);
  * - Hearthfire: the Champion's Immolation heals an ally and the Champion at their turns and
  *   strikes no enemy;
  * - Lifeblood: a blow below half Health posts the holder's offer, and its press heals;
@@ -47,6 +49,19 @@ import { prepareRoll } from "../applications/roll-dialog.mjs";
 import { CARD_ACTIONS, regionFlagsFromCard } from "../dice/chat.mjs";
 import { placeArea } from "../canvas/regions.mjs";
 import { ESCAPE_FLAG } from "../rules/escapes.mjs";
+import { pickState } from "../canvas/place.mjs";
+
+/** Press the board where a pick is waiting, at a point in canvas pixels (a Breath's aim). */
+function pressBoard(point) {
+  const client = canvas.clientCoordinatesFromCanvas(point);
+  canvas.app.view.dispatchEvent(new PointerEvent("pointerdown", {
+    clientX: client.x, clientY: client.y, button: 0, buttons: 1,
+    pointerId: 1, pointerType: "mouse", isPrimary: true, bubbles: true, cancelable: true
+  }));
+}
+
+/** Whether the one chooser is open for this item now. */
+const chooserOpen = item => Boolean(foundry.applications.instances.get(`azeroth-choose-${item.id}`)?.rendered);
 
 const CHAMPION = "Chromatic Champion";
 const OUTCAST = "Chromatic Outcast";
@@ -313,6 +328,124 @@ export function chromaticChampionTalentsBatch(context) {
       assert.include([0, 1], extra, "the heal is not the other half plus Constitution");
       await until(() => ally.system.health.value === Math.min(ally.system.health.max, 1 + record.heals[0].amount), "the ally healed");
       await until(() => poolOf(champion, "rage").value === 1, "Kindling Heart's Rage");
+    });
+
+    // **D-845** (the lead, 2026-11-09: *"I want to make sure the lifebinder healing talents can
+    // trigger off the Breath attack if it's fire damage"*, and *"chromatic breath is included if
+    // fire damage is picked with those talents"*): Breath opens no roll dialog, so the split is
+    // the one chooser's, asked once the school is Fire and the cone aimed.
+    it("LIFEBINDER'S FLAME ON A FIRE BREATH: the cone pressed from the sheet is split, the ally picked regains the other half plus Con and Rekindle, Kindling Heart gives Rage", async function () {
+      this.timeout(240000);
+      const champion = await championWith("ZZ CT Breath Flame", { level: 5, ranks: { "Lifebinder's Flame": 1, "Rekindle": 1, "Kindling Heart": 1 } });
+      const ally = await makeCharacter({ name: "ZZ CT Fireheal Ally", classes: [["Warrior", 5]] });
+      const foe = await makeNpc("Defias Footpad");
+      // The foe in the cone east of the Champion, the ally behind it: within 30 feet, out of the cone.
+      await sceneWith([{ actor: champion, x: 1000, y: 1000 }, { actor: foe, x: 1100, y: 1000, side: "hostile" }, { actor: ally, x: 900, y: 1000 }]);
+      await ally.update({ "system.health.value": 1 });
+      // Kindling Heart's 1 is read off an empty pool (a Breath is paid in Energy).
+      const rage = poolOf(champion, "rage");
+      await champion.updatePool({ itemId: rage.itemId, kind: rage.kind, value: 0 });
+      await until(() => poolOf(champion, "rage").value === 0, "the Rage emptied");
+      const breath = await until(() => featureNamed(champion, "Breath"), "Breath granted");
+      const foeBefore = foe.system.health.value;
+      const pending = pressUse(champion, "Breath");
+      await until(() => pickState()?.mode === "facing", "Breath's aim");
+      pressBoard({ x: 1600, y: 1050 });
+      await pickIn(breath, [game.i18n.format("AZEROTH.Lifebinder.BreathSplit", { talent: "Lifebinder's Flame" })]);
+      await pickIn(breath, [ally.name]);
+      const card = await pending;
+      assert.ok(card, "Breath posted no card");
+      const f = card.flags["azeroth-rpg"];
+      assert.equal(f.damageType, "fire", "Life-Binder leads, and the Breath is not Fire");
+      const index = (f.targets ?? []).findIndex(t => t.actorId === foe.id);
+      assert.isAtLeast(index, 0, "the foe in the cone was not gathered");
+      assert.notInclude((f.targets ?? []).map(t => t.actorId), ally.id, "the ally behind was breathed on");
+      const row = f.damageByTarget[index];
+      assert.equal(row.split, true, "the foe's row was not split");
+      assert.equal(f.passedByTarget?.[index]?.split, true, "the row a passed Reflex Test lands was not split");
+      const record = f.lifebinder;
+      assert.ok(record, "the card records no split");
+      assert.equal(record.heals.length, 1);
+      assert.equal(record.heals[0].uuid, ally.uuid, "the ally picked is not the one healed");
+      // The other half is the half taken or one more; Rekindle 1 on top of Constitution.
+      const extra = record.heals[0].amount - (champion.system.abilities.con.mod ?? 0) - 1 - row.damage;
+      assert.include([0, 1], extra, "the heal is not the other half plus Constitution plus Rekindle");
+      await until(() => ally.system.health.value === Math.min(ally.system.health.max, 1 + record.heals[0].amount), "the ally healed");
+      await until(() => poolOf(champion, "rage").value === 1, "Kindling Heart's Rage on the Breath's heal");
+      // The card's own Apply lands the half on the foe (no Reflex Test recorded: the failed row).
+      const button = parsed(game.messages.get(card.id)).querySelector(`[data-action="applyDamage"][data-target-index="${index}"]`);
+      assert.ok(button, "the card draws no Apply for the foe");
+      await CARD_ACTIONS.applyDamage(button, game.messages.get(card.id));
+      await until(() => foe.system.health.value === Math.max(0, foeBefore - row.damage), `the foe to take its half, ${row.damage}`);
+    });
+
+    it("LIFEBINDER'S FLAME ON A FIRE CHROMATIC BREATH: Fire picked, the cone split and pooled into the heal; a Frost Chromatic Breath asks nothing", async function () {
+      this.timeout(300000);
+      const champion = await championWith("ZZ CT Chromatic Flame", { level: 20, ranks: { "Lifebinder's Flame": 1, "Rekindle": 2 } });
+      const ally = await makeCharacter({ name: "ZZ CT Chromatic Ally", classes: [["Warrior", 5]] });
+      const foe = await makeNpc("Defias Footpad");
+      await sceneWith([{ actor: champion, x: 1000, y: 1000 }, { actor: foe, x: 1300, y: 1000, side: "hostile" }, { actor: ally, x: 900, y: 1000 }]);
+      await ally.update({ "system.health.value": 1 });
+      const feature = await until(() => featureNamed(champion, "Chromatic Breath"), "Chromatic Breath granted");
+      const pending = pressUse(champion, "Chromatic Breath");
+      await pickIn(feature, [game.i18n.localize("AZEROTH.School.Fire")]);
+      await until(() => pickState()?.mode === "facing", "the cone's aim");
+      pressBoard({ x: 1800, y: 1050 });
+      await pickIn(feature, [game.i18n.format("AZEROTH.Lifebinder.BreathSplit", { talent: "Lifebinder's Flame" })]);
+      await pickIn(feature, [ally.name]);
+      const card = await pending;
+      assert.ok(card, "Chromatic Breath posted no card");
+      const f = card.flags["azeroth-rpg"];
+      assert.equal(f.damageType, "fire");
+      const index = (f.targets ?? []).findIndex(t => t.actorId === foe.id);
+      assert.isAtLeast(index, 0, "the foe in the cone was not gathered");
+      const row = f.damageByTarget[index];
+      assert.equal(row.split, true, "the foe's row was not split");
+      const record = f.lifebinder;
+      assert.equal(record?.heals?.[0]?.uuid, ally.uuid, "the ally picked is not the one healed");
+      const extra = record.heals[0].amount - (champion.system.abilities.con.mod ?? 0) - 2 - row.damage;
+      assert.include([0, 1], extra, "the heal is not the other half plus Constitution plus Rekindle 2");
+      await until(() => ally.system.health.value === Math.min(ally.system.health.max, 1 + record.heals[0].amount), "the ally healed");
+
+      // A second Chromatic Champion breathes Frost: no split is asked and nothing is recorded.
+      const frosty = await championWith("ZZ CT Chromatic Frost", { level: 20, ranks: { "Lifebinder's Flame": 1 } });
+      const foe2 = await makeNpc("Defias Footpad");
+      await sceneWith([{ actor: frosty, x: 1000, y: 1000 }, { actor: foe2, x: 1300, y: 1000, side: "hostile" }]);
+      const feature2 = await until(() => featureNamed(frosty, "Chromatic Breath"), "the second Chromatic Breath granted");
+      const pending2 = pressUse(frosty, "Chromatic Breath");
+      await pickIn(feature2, [game.i18n.localize("AZEROTH.School.Frost")]);
+      await until(() => pickState()?.mode === "facing", "the second cone's aim");
+      pressBoard({ x: 1800, y: 1050 });
+      let asked = false;
+      const watch = setInterval(() => { if (chooserOpen(feature2)) asked = true; }, 25);
+      let card2 = null;
+      try { card2 = await pending2; } finally { clearInterval(watch); }
+      assert.ok(card2, "a Frost Chromatic Breath posted no card");
+      assert.isFalse(asked, "a Frost Chromatic Breath asked for a split");
+      assert.equal(card2.flags["azeroth-rpg"].damageType, "frost");
+      assert.notOk(card2.flags["azeroth-rpg"].lifebinder, "a Frost Chromatic Breath recorded a split");
+      assert.notOk((card2.flags["azeroth-rpg"].damageByTarget ?? []).some(r => r?.split), "a Frost Chromatic Breath halved a row");
+    });
+
+    it("LIFEBINDER'S FLAME: a Frost-leading Champion's Breath asks for no split and halves nothing", async function () {
+      this.timeout(180000);
+      const champion = await championWith("ZZ CT Breath Frost", { level: 5, ranks: { "Lifebinder's Flame": 1, "Arcane Blood": 2 } });
+      const foe = await makeNpc("Defias Footpad");
+      await sceneWith([{ actor: champion, x: 1000, y: 1000 }, { actor: foe, x: 1100, y: 1000, side: "hostile" }]);
+      const breath = await until(() => featureNamed(champion, "Breath"), "Breath granted");
+      const pending = pressUse(champion, "Breath");
+      await until(() => pickState()?.mode === "facing", "Breath's aim");
+      let asked = false;
+      const watch = setInterval(() => { if (chooserOpen(breath)) asked = true; }, 25);
+      pressBoard({ x: 1600, y: 1050 });
+      let card = null;
+      try { card = await pending; } finally { clearInterval(watch); }
+      assert.ok(card, "Breath posted no card");
+      assert.isFalse(asked, "a Frost Breath asked a chooser");
+      const f = card.flags["azeroth-rpg"];
+      assert.equal(f.damageType, "frost", "Spell-Weaver leads, and the Breath is not Frost");
+      assert.notOk(f.lifebinder, "a Frost Breath recorded a split");
+      assert.notOk((f.damageByTarget ?? []).some(r => r?.split), "a Frost Breath halved a row");
     });
 
     it("HEARTHFIRE: the Champion's Immolation heals the ally and the Champion at their turns, and strikes no enemy", async function () {

@@ -6,6 +6,7 @@
   {{#each pane.guises as |g|}}
   <label class="azeroth-creator-tile{{#if g.selected}} is-selected{{/if}}">
     <input type="radio" name="guise" value="{{g.uuid}}" data-creator="guise" {{#if g.selected}}checked{{/if}}>
+    <img class="azeroth-creator-choice-art" src="{{g.img}}" alt="">
     <span class="azeroth-creator-tile-name">{{g.name}}</span>
     <span class="azeroth-creator-tile-meta">{{g.size}}{{#if g.speed}} · {{localize "AZEROTH.Guise.Speed" n=g.speed}}{{/if}}</span>
   </label>

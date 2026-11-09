@@ -88,7 +88,7 @@ import {
 import { drakeBreathFor, healthBelow } from "../rules/class-talents.mjs";
 // The Chromatic Champion's branch talents (stage 3A): the law, and the one write.
 import {
-  branchSpellOf, courtGuiseRecord, fontMana, fontOfMagicFor, hastenFor, lifebinderFor, lifebinderSplit, voidSpendFor, voidSpendOutcome, voidSpendWrites, hearthfireTick, anchorTick
+  branchSpellOf, courtGuiseRecord, fontMana, fontOfMagicFor, hastenFor, lifebinderFor, lifebinderSplit, splitOffered, splitRows, voidSpendFor, voidSpendOutcome, voidSpendWrites, hearthfireTick, anchorTick
 } from "../rules/chromatic-talents.mjs";
 // 02's Bloodlust and 04's Hasten: one Half-Action for the next turn (the lead, 2026-11-08: *"Fix it now"*).
 import { BLOODLUST, bloodlustRefusal } from "../rules/extra-halves.mjs";
@@ -4399,8 +4399,12 @@ export async function castSpell({
   // the one button's, ready for the card's Apply to land on a creature whose Resist on
   // this card is recorded as passed (`rules/resisted.mjs#halvesFor`).
   const halfOnPass = hit && sys.damage?.half === true && Boolean(sys.test?.resilience);
-  const passedByTarget = halfOnPass ? list.map((t,index) => mitigate(t, forcedFor(t), { passed: true, signatureIndex:index })) : [];
-  const damagePassed = halfOnPass ? mitigate(null, looseBoost ? (rating ?? 0) + looseBoost : null, { passed: true }).damage : null;
+  // A split cast's passed rows are halved too (D-845, the Breath's reading; no branch Fire spell
+  // carries a half on a pass today, so this guards the next one that does).
+  const passedRaw = halfOnPass ? list.map((t,index) => mitigate(t, forcedFor(t), { passed: true, signatureIndex:index })) : [];
+  const passedByTarget = lifebinderRecord ? splitRows(passedRaw) : passedRaw;
+  const passedLoose = halfOnPass ? mitigate(null, looseBoost ? (rating ?? 0) + looseBoost : null, { passed: true }).damage : null;
+  const damagePassed = lifebinderRecord && passedLoose !== null ? Math.floor(Math.max(0, Number(passedLoose) || 0) / 2) : passedLoose;
   // **AND WHAT IT TAKES WHERE ITS FAILURE IS WHAT DEALS THE DAMAGE** (07's Rimebind: *On a
   // failure it takes 2 Frost damage*, stamped as `damage.onFail` off the entry's own
   // sentence; the B8a pass): nothing - the card's Apply lands none of it on a creature
@@ -9719,6 +9723,9 @@ export async function useFeature({
   // Why a feature's damage was what it was, for a card with no roll to carry it.
   const damageProvenance = [];
   let explosiveTrap = null;
+  // 04's Lifebinder's Flame on a Fire Breath (D-845): the heal the split owes, recorded on the
+  // card and landed once it stands (`landLifebinder`), as the spell door records its own.
+  let lifebinderRecord = null;
   if (success && sys.damage?.amount) {
     const base = evaluateAmount(sys.damage.amount, scope) ?? 0;
     // A Breath's school, chosen at 1b (stage 2B), else the stamp's own type.
@@ -9787,6 +9794,33 @@ export async function useFeature({
     // damage*; the B8a pass): the card's Apply lands nothing on a creature whose Resist on
     // this card passed (`rules/resisted.mjs#sparedFor`) - only where the Use offers its Test.
     noneOnPass = sys.damage.onFail === true && sys.damage.half !== true && Boolean(sys.resist) && !successShort;
+    // **04's LIFEBINDER'S FLAME, SPLITTING A FIRE BREATH** (*Work out the damage it deals after
+    // Armor Points and Ward ... A Breath splits the damage of every creature it strikes, adds
+    // the other halves together, and heals a creature within 30 feet*; D-845): the split chosen
+    // before anything was paid, worked out by the spell door's own law over every creature in
+    // the cone - each row halved after its Ward, the other halves pooled with the Constitution
+    // modifier, Rekindle, Pyre of Renewal and the Red Drake read off the plan - and the row a
+    // passed Reflex Test lands halved the same way (MY READING, for the lead).
+    if (champ.breathSplit && damageByTarget.some(Boolean)) {
+      const split = lifebinderSplit({
+        dealt: damageByTarget.map(r => r?.damage ?? 0), conMod: actor.system?.abilities?.con?.mod ?? 0,
+        heals: champ.breathSplit.picks.length, plan: champ.breathSplit.plan, tier: actor.system?.tier ?? 1
+      });
+      damageByTarget = splitRows(damageByTarget, split.takes);
+      if (passedByTarget.length) passedByTarget = splitRows(passedByTarget);
+      if (damagePassed !== null) damagePassed = Math.floor(Math.max(0, Number(damagePassed) || 0) / 2);
+      lifebinderRecord = {
+        by: actor.uuid, name: champ.breathSplit.plan.by, cleanse: champ.breathSplit.plan.cleanse ?? null, self: split.self,
+        selfBy: champ.breathSplit.plan.selfBy ?? null,
+        heals: champ.breathSplit.picks.map((p, i) => ({ ...p, amount: split.shares[i] ?? 0 })), landed: []
+      };
+      const splitRow = { label: champ.breathSplit.plan.by, value: null, formula: game.i18n.localize("AZEROTH.Lifebinder.Row") };
+      damageProvenance.push(splitRow);
+      if (roll) roll.options.provenance.push(splitRow);
+      usedLines.push(game.i18n.format("AZEROTH.Lifebinder.Line", {
+        talent: champ.breathSplit.plan.by, heals: lifebinderRecord.heals.map(h => `${h.name} ${h.amount}`).join(", ")
+      }));
+    }
     const result = damageByTarget[0] ?? mitigate(null);
     // The Rating the mitigation took from, so `6 − 1` reads off the number the
     // lane and the lines made rather than the bare base (D-768).
@@ -10056,6 +10090,8 @@ export async function useFeature({
     // The Casting Tests a Dispel's gates made (04's Everlasting Affliction, D-778) ride beside the Use's own.
     rolls: [...(roll ? [roll] : []), ...extraRolls],
     flags: { "azeroth-rpg": { kind: "feature", itemId: item.id, targets: list, damageByTarget, heal: healsBound ? null : healAmount, sl, area,
+      // 04's Lifebinder's Flame on a Fire Breath (D-845): the heal the split owes, landed once the card stands.
+      ...(lifebinderRecord ? { lifebinder: lifebinderRecord } : {}),
       ...(bellowResults.length ? { bellowDelivery: { version: 1, sourceUuid: actor.uuid, journalKey: bellowJournal?.key, recipients: bellowResults } } : {}),
       ...(grantingTalent?.system?.identifier === "mind-control" && resist && success ? {
         mindControlCast: { version: 1, casterUuid: actor.uuid, featureUuid: item.uuid, dc: resist.dc }
@@ -10159,6 +10195,19 @@ export async function useFeature({
       ...(holdMade ? { hold: holdMade } : {}) } }
   });
   if (bellowJournal) await bellowJournal.published(posted);
+  // **THE BREATH'S SPLIT HEAL, ONCE THE CARD STANDS** (04's Lifebinder's Flame; D-845): the spell
+  // door's own landing - every creature picked through the one healing door as a branch heal
+  // (Kindling Heart reads it), Cleansing Fire, the Red Drake's tier - off the card's record.
+  if (posted && lifebinderRecord) {
+    try {
+      const { landLifebinder } = await import("../effects/chromatic-talents.mjs");
+      const healed = await landLifebinder(posted);
+      if (healed.length) await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: healed.map(l => `<p class="azeroth-drain">${foundry.utils.escapeHTML(l)}</p>`).join(""), flags: { "azeroth-rpg": { kind: "lifebinder", messageId: posted.id } } });
+    } catch (err) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Lifebinder.Unresolved"));
+      console.warn("azeroth-rpg | Lifebinder's Flame on a Breath", err);
+    }
+  }
   // **THE CIRCLE THE USE AIMED, SET DOWN WHERE IT WAS MEASURED** (the B6 fix; the lead:
   // *"Measure the area"*): a Use on the ground that gathered its targets at the point it
   // picked places its Region there once its card stands - with the card's own record on
@@ -12891,7 +12940,9 @@ async function judgeChampionUse({ actor, item, sys, onUse, list, ownToken, rank 
   // **THE BUDGET BEFORE ANY CHOOSER** (the 3B review, should-fix 6; the stage 2 review's
   // should-fix 3 on two new doors): a Champion with no Half-Action (Font) or no Full Action
   // (Spellbreak) is refused before picking an amount or a Sustain - asked without spending.
-  if (onUse.font || onUse.spellbreak || onUse.bloodlust) {
+  // And a Breath (D-845): its school, its area, its cone and now Lifebinder's Flame's split
+  // are four asks, none of which a Champion with no Half-Action should be put through.
+  if (onUse.font || onUse.spellbreak || onUse.bloodlust || onUse.breath) {
     const short = turnBudgetRefusal(actor, sys.action ?? null);
     if (short) {
       ui.notifications?.warn(game.i18n.format(short.reason, short.params ?? {}));
@@ -13173,8 +13224,57 @@ async function judgeChampionUse({ actor, item, sys, onUse, list, ownToken, rank 
         .filter(r => r.token !== ownToken && r.actor?.uuid !== actor.uuid && r.token.document.testInsideRegion(region));
       out.facing = { origin, rotation, area, tokens: inside.map(r => r.token) };
     }
+    // **04's LIFEBINDER'S FLAME ON A FIRE BREATH** (D-845), asked once the school is known and
+    // the cone aimed - a dismissed ask breathes nothing and costs nothing.
+    const split = await breathSplitPick({ actor, item, school, struck: out.facing ? out.facing.tokens.map(t => t.actor).filter(Boolean) : list.map(t => targetActorOf(t)).filter(Boolean) });
+    if (split === null) return null;
+    out.breathSplit = split.split;
   }
   return out;
+}
+
+/**
+ * **04's LIFEBINDER'S FLAME ON A FIRE BREATH, CHOSEN BEFORE ANYTHING IS PAID** (*or your
+ * Breath or Chromatic Breath deals Fire damage, you may split it ... A Breath splits the damage
+ * of every creature it strikes, adds the other halves together, and heals a creature within 30
+ * feet*; the lead, 2026-11-09: *"make sure the lifebinder healing talents can trigger off the
+ * Breath attack if it's fire damage"* and *"chromatic breath is included if fire damage is
+ * picked with those talents"*; D-845). A Breath opens no roll dialog, so the split is the one
+ * chooser's, as the Breath's school is: offered where `splitOffered` says so and the Breath
+ * strikes somebody; then the creatures it heals, picked as the spell door picks them - the
+ * Champion first, every creature within the Flame's feet, as many as Pyre of Renewal divides
+ * between - and a creature this client does not own needs a GM, judged here with the rest.
+ *
+ * @returns {Promise<{split: {plan: object, picks: Array<{uuid: string, name: string}>}|null}|null>}
+ *   null where an ask was dismissed; `split: null` where nothing is split
+ */
+async function breathSplitPick({ actor, item, school, struck = [] }) {
+  const talents = actor.takenTalents?.() ?? [];
+  const form = actor.shape?.kind === "drake" ? (actor.shape.forms?.[0]?.name ?? null) : null;
+  const plan = lifebinderFor(talents, { form }, talentEffect);
+  if (!splitOffered(plan, { feature: item.name, school, damages: Boolean(item.system?.damage?.amount) }) || !struck.length) return { split: null };
+  const ask = await chooseOption(item, [
+    { key: "split", name: game.i18n.format("AZEROTH.Lifebinder.BreathSplit", { talent: plan.by }), description: game.i18n.format("AZEROTH.Lifebinder.BreathSplitText", { feet: plan.breath.feet }) },
+    { key: "whole", name: game.i18n.localize("AZEROTH.Lifebinder.BreathWhole"), description: "" }
+  ], null, { prompt: game.i18n.format("AZEROTH.Lifebinder.BreathPrompt", { name: item.name, talent: plan.by }) });
+  if (!ask) return null;
+  if (ask.key !== "split") return { split: null };
+  const near = creaturesWithin(actor, plan.breath.feet, { who: "creature" });
+  const options = [{ key: actor.uuid, name: actor.name, description: "", actor }];
+  for (const r of near) if (r.actor && r.actor.uuid !== actor.uuid && !options.some(o => o.key === r.actor.uuid)) options.push({ key: r.actor.uuid, name: r.token?.name ?? r.actor.name, description: "", actor: r.actor });
+  const picks = options.length === 1 ? [options[0]] : await (async () => {
+    const max = Math.max(1, plan.divide ?? 1);
+    const answer = await chooseOption(item, options.map(({ actor: _a, ...o }) => o), null, { max, prompt: game.i18n.format("AZEROTH.Lifebinder.Prompt", { name: item.name, talent: plan.by, count: max }) });
+    const keys = (Array.isArray(answer) ? answer : (answer ? [answer] : [])).map(o => o.key);
+    return options.filter(o => keys.includes(o.key));
+  })();
+  if (!picks.length) return null;
+  const { lifebinderNeedsGM } = await import("../effects/chromatic-talents.mjs");
+  if (lifebinderNeedsGM(picks.map(p => p.actor))) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Lifebinder.NoGMBefore"));
+    return null;
+  }
+  return { split: { plan, picks: picks.map(p => ({ uuid: p.actor.uuid, name: p.name })) } };
 }
 
 /**

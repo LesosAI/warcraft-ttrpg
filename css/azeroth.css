@@ -7409,6 +7409,72 @@
     border-color: var(--azeroth-gold-text);
     box-shadow: inset 0 0 0 2px var(--azeroth-creator-well);
   }
+  .azeroth.azeroth-creator .azeroth-creator-choice-art {
+    width: 64px;
+    height: 64px;
+    object-fit: cover;
+    object-position: top;
+    align-self: center;
+    border: 1px solid var(--azeroth-creator-brass);
+    border-radius: 3px;
+    background: var(--azeroth-creator-well);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-choice-art.is-emblem {
+    object-fit: contain;
+    padding: 4px;
+    width: 80px;
+    height: 80px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-tile:focus-within {
+    outline: 2px solid var(--azeroth-gold-text);
+    outline-offset: 2px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-tile.is-available {
+    border-color: var(--azeroth-creator-brass);
+    border-top: 3px solid var(--azeroth-gold-text);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-tile.is-selected {
+    border-color: var(--azeroth-gold-text);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-availability {
+    color: var(--azeroth-gold-text);
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-access {
+    margin: 14px 0;
+    padding: 12px;
+    border: 1px solid var(--azeroth-creator-brass);
+    border-top: 3px solid var(--azeroth-gold-text);
+    background: var(--azeroth-creator-well);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-access h4 {
+    margin: 0 0 10px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-access-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-access-list li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    margin: 0;
+    border: 1px solid var(--azeroth-creator-brass);
+    background: var(--azeroth-creator-charcoal);
+    font-size: 14px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-access-list img {
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
+    border: 0;
+  }
   @container (max-width: 1000px) {
     .azeroth.azeroth-creator .azeroth-creator-choice-layout {
       grid-template-columns: minmax(0, 1fr);

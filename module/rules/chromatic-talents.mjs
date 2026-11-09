@@ -13,6 +13,9 @@
  *                laid tick (`effects/ticks.mjs`) and the Quench batch share:
  *                  split    Lifebinder's Flame itself: a branch spell dealing Fire may
  *                           be split
+ *                  breath   `{features, feet}` on the same row: the class features whose
+ *                           Fire it splits too (Breath, Chromatic Breath) and the feet its
+ *                           heal reaches from one (D-845), read by `useFeature`'s judgement
  *                  add      Rekindle's *1 more Health per rank*, per creature healed
  *                  divide   Pyre of Renewal's *between two creatures*, three at rank 2
  *                  cleanse  Cleansing Fire's *loses 1 Undeath Corruption*, Bleeding at
@@ -150,7 +153,12 @@ export function lifebinderFor(talents = [], { form = null } = {}, rowOf) {
   const rows = rowsOfKind(talents, "lifebinder", rowOf);
   const split = rows.find(r => r.row.split === true);
   if (!split) return null;
-  const out = { by: split.talent.name, add: 0, divide: 1, cleanse: null, self: null, selfBy: null, ticks: [], names: [split.talent.name] };
+  // *or your Breath or Chromatic Breath deals Fire damage* (the lead, 2026-11-09; D-845): the
+  // features whose Fire the Flame splits, and the feet its heal reaches from a Breath.
+  const breath = split.row.breath && Array.isArray(split.row.breath.features) && split.row.breath.features.length
+    ? { features: [...split.row.breath.features], feet: count(split.row.breath.feet) || 30 }
+    : null;
+  const out = { by: split.talent.name, add: 0, divide: 1, cleanse: null, self: null, selfBy: null, ticks: [], breath, names: [split.talent.name] };
   for (const { talent, row, rank } of rows) {
     if (row === split.row) continue;
     const at = atRank(row, rank);
@@ -214,12 +222,43 @@ export function lifebinderSplit({ dealt = [], conMod = 0, heals = 1, plan = null
  * **WHETHER A CAST MAY BE SPLIT**: Lifebinder's Flame held, the spell a branch spell, and
  * Fire the damage it deals - on the cast or as its tick (Smolder through Smoldering Life).
  *
+ * **OR A BREATH** (04: *or your Breath or Chromatic Breath deals Fire damage*; the lead,
+ * 2026-11-09: *"make sure the lifebinder healing talents can trigger off the Breath attack if
+ * it's fire damage"*, and *"chromatic breath is included if fire damage is picked with those
+ * talents"*; D-845): `feature` names the class feature used, and the split is offered where the
+ * Flame's row names it and the school breathed is Fire. A Breath is no spell, so `branch` is not
+ * asked of it.
+ *
  * @param {object|null} plan  `lifebinderFor`'s
- * @param {{branch?: boolean, school?: string|null, damages?: boolean, ticks?: boolean, spell?: string}} o
+ * @param {{branch?: boolean, school?: string|null, damages?: boolean, ticks?: boolean, spell?: string, feature?: string}} o
  */
-export function splitOffered(plan, { branch = false, school = null, damages = false, ticks = false, spell = "" } = {}) {
-  if (!plan || branch !== true || school !== "fire") return false;
+export function splitOffered(plan, { branch = false, school = null, damages = false, ticks = false, spell = "", feature = "" } = {}) {
+  if (!plan || school !== "fire") return false;
+  if (feature) return damages === true && (plan.breath?.features ?? []).includes(feature);
+  if (branch !== true) return false;
   return damages === true || (ticks === true && plan.ticks.includes(spell));
+}
+
+/**
+ * **THE ROWS A SPLIT LEAVES ON THE CARD** (04's *Its target takes half of that, rounded
+ * down*): each creature's row at the half it takes - `takes` where `lifebinderSplit` worked
+ * them out, else each row's own damage halved, rounded down - its second amounts folded into
+ * the halved number and marked `split`. The one reading the spell door and the Breath door
+ * share, for the row a failed Test lands and the row a passed one lands alike.
+ *
+ * A Breath's Reflex Test is made after the card stands, so a creature that passes takes half of
+ * the half its passed row holds (MY READING, for the lead; D-845).
+ *
+ * @param {Array<object|null>} rows  `resolveDamage`'s rows, by target
+ * @param {number[]|null} [takes]
+ * @returns {Array<object|null>}
+ */
+export function splitRows(rows = [], takes = null) {
+  return (rows ?? []).map((r, i) => {
+    if (!r) return r;
+    const take = Array.isArray(takes) && Number.isFinite(Number(takes[i])) ? count(takes[i]) : Math.floor(count(r.damage) / 2);
+    return { ...r, damage: take, parts: null, split: true };
+  });
 }
 
 /**
