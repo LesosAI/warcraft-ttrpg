@@ -965,6 +965,32 @@ function patchRowsOf(talents = [], feature, rowOf = talentEffect) {
 }
 
 /**
+ * **HOW MUCH FURTHER A TALENT MAKES A CLASS FEATURE REACH** (04's Empowered Mending: *Your
+ * **Mass Mend** class feature reaches 10 feet further per rank*; the Priest gap Stage 4 found,
+ * the lead's *"class gap - yes fix"*). The `widen` on the talent's `mod(...)` patch, at the
+ * rank taken, summed over every patch on the feature: the feet the range door adds to the
+ * distance the feature's own words state (`rules/range.mjs#widenReach`'s `add`). The patch
+ * already widened the stamp's `area` words (`talent-effects.mjs#applyPatch`); the range door
+ * reads 02's text, so it needs the feet too. Null where no taken talent widens the feature.
+ *
+ * @param {Array} talents
+ * @param {string} feature  the class feature's name
+ * @returns {{add: number, by: string[]}|null}
+ */
+export function reachWidenFor(talents = [], feature, rowOf = talentEffect) {
+  let add = 0;
+  const by = [];
+  for (const { talent, patch, rank } of patchRowsOf(talents, feature, rowOf)) {
+    if (patch?.widen === undefined || patch.widen === null) continue;
+    const feet = at(String(patch.widen), { rank });
+    if (!(feet > 0)) continue;
+    add += feet;
+    by.push(talent.name);
+  }
+  return add > 0 ? { add, by } : null;
+}
+
+/**
  * **STEADY AIM** (04: *Spending a Half-Action on **Steady** returns 1 Focus per
  * rank*): the pool and the amount a Half-Action spent on Steady returns, or null.
  * **MY READING** (D-773): 05's Steady is a judgement line on the roll dialog and
@@ -2603,6 +2629,12 @@ export function featureAims({ name = "", lays = null, attack = false, onUse = nu
   if (o.spellbreak || o.hasten || o.rewind) return true;
   // 02's Bloodlust names its up to six targets (the lead, 2026-11-08: *"Fix it now"*).
   if (o.bloodlust) return true;
+  // The Chronomancer's (stage 2b): Slipstream's and Master of Hours' creature, Suspend's,
+  // and the Chronoweaver's allies - Gift of Moments, Quickstep, Second Chance, Echo of Power,
+  // Suspended Moment and Recovered Hours name theirs, Temporal Loop and Unfading the creature
+  // their offer names.
+  if (o.slipstream || o.suspend || o.masterOfHours || o.gift || o.quickstep || o.secondChance || o.echoOfPower
+    || o.suspendedMoment || o.recover || o.temporalLoop || o.unfading) return true;
   // 02's Blink (Slow Time's friend) and Counterspell (Spellsteal's caster), D-775;
   // and 02's Dispel, whose one target (and Rapture's second) the Use ends effects
   // on (D-778).
@@ -4581,7 +4613,8 @@ export function blademasterFor(talents = [], rowOf = talentEffect) {
  *                 `stoodFor`, `AzerothCombat#_onEndTurn`, beside Bracing
  *   hitTest       gained `via: "self"` with `condition`, `rounds`, `sl`, `once`,
  *                 `weapon` (Keening Arrows) - `selfHitTestsFor`, `rollTest`
- *   armorAccess   `{categories, waivesEncumbering, atRank}` (Warden's Mail) -
+ *   armorAccess   `{categories, waivesEncumbering, shields, atRank}` (Warden's Mail;
+ *                 `shields` the Chronomancer's Bronzed Steel, D-855) -
  *                 `armorAccessFor`, `creation.mjs#accessNote` and the Speed's parts
  *   provokes      `{moving: true}` (Hold the Hall) - `movingProvokesFor`,
  *                 `AzerothCombatant#opportunities`
@@ -4740,20 +4773,28 @@ export function selfHitTestsFor(talents = [], { sl = 0, hit = false, rangeKind =
  * Legacy branches' door 23): the categories added to the class's own Access, and
  * whether Encumbering's 5 feet are given back.
  *
+ * **AND SHIELDS** (D-855; the Chronomancer's Bronzed Steel: *You may wear studded
+ * and mail armor and carry a shield*, the lead's *"Up to mail, plus shields"*): a
+ * row's `shields: true` hands the class 08 §8's shields, which before this read
+ * off the class item alone (`equipment-training.mjs#trainingProfile`), so no
+ * talent could grant one.
+ *
  * @param {Array} talents
- * @returns {{categories: string[], waivesEncumbering: boolean, by: string[]}}
+ * @returns {{categories: string[], waivesEncumbering: boolean, shields: boolean, by: string[]}}
  */
 export function armorAccessFor(talents = [], rowOf = talentEffect) {
   const categories = new Set();
   let waivesEncumbering = false;
+  let shields = false;
   const by = [];
   for (const { talent, row: raw, rank } of rowsOfKind(talents, "armorAccess", rowOf)) {
     const row = atRankOf(raw, rank);
     for (const c of row.categories ?? []) if (typeof c === "string" && c) categories.add(c);
     if (row.waivesEncumbering === true) waivesEncumbering = true;
+    if (row.shields === true) shields = true;
     by.push(talent.name);
   }
-  return { categories: [...categories].sort(), waivesEncumbering, by };
+  return { categories: [...categories].sort(), waivesEncumbering, shields, by };
 }
 
 /**

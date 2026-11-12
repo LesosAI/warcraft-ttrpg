@@ -117,7 +117,9 @@ export async function landTicks(actor, {combat = null, combatant = null} = {}) {
       // And whether a SPELL laid it (its card stamped `castUuid`) and whether it is
       // 04's Ignite (D-775): Shadowburn, Burning Soul and Ignite read them.
       const spell = {
-        name: tick.name || actor.effects.get(id)?.name || "", school: tick.type ?? null, takesSpellpower: tick.spellpower === true, feature: tick.via === "feature",
+        name: tick.name || actor.effects.get(id)?.name || "",
+        // A Physical tick's spell school, for its Spellpower (the 2a review, L1); else the tick's type.
+        school: tick.type === "physical" ? (tick.spellSchool ?? tick.type) : (tick.type ?? null), takesSpellpower: tick.spellpower === true, feature: tick.via === "feature",
         isSpell: Boolean(tick.castUuid) && tick.via !== "feature", ignite: tick.ignite === true,
         // D-779: the schools 04's Divine Aegis was named for at the cast, and 04's
         // Miracle's heal nothing reduces, both read at the one healing door.

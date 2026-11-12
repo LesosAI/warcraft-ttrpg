@@ -193,9 +193,11 @@ export function areaSustainBatch(context) {
       await paladin.setParty(true);
       await fillMana(paladin);
       const bandit = await makeNpc("Bandit");
-      // A 20 ft radius at (1500, 1000) holds the bandit's square.
+      // A 20 ft radius at (1500, 1000) holds the bandit's square. The paladin stands 25 feet
+      // from that point, inside Consecration's 30 ft Range and outside its radius: Place area
+      // refuses a point past the Range (O-288, D-893), and (300, 300) was 60 feet off.
       const tokens = await place(scene, [
-        { actor: paladin, x: 300, y: 300 },
+        { actor: paladin, x: 1000, y: 1000 },
         { actor: bandit, x: 1500, y: 1000, disposition: "HOSTILE" }
       ]);
       let combat = null;
@@ -266,7 +268,8 @@ export function areaSustainBatch(context) {
       this.timeout(180000);
       const paladin = await makeCharacter({ name: "ZZ Stopping Paladin", classes: [["Paladin", 5]], spells: ["Consecration"] });
       await fillMana(paladin);
-      const tokens = await place(scene, [{ actor: paladin, x: 300, y: 300 }]);
+      // Inside Consecration's 30 ft Range of the point placed below (O-288, D-893).
+      const tokens = await place(scene, [{ actor: paladin, x: 1000, y: 1000 }]);
       try {
         const spell = paladin.items.find(i => i.type === "spell" && i.name === "Consecration");
         const card = await cast(paladin, spell);

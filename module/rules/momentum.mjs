@@ -8,6 +8,9 @@
 
 // The ONE hold at 1 Health (D-777): Unkillable's floor reads it.
 import { heldAt } from "./blow-doors.mjs";
+// Sand empties ONLY at a rest or when its Hourglass leaves the slot (D-848):
+// every lifecycle step below asks `sandSurvives` rather than restating it.
+import { SAND, sandAfter, sandCap, sandSurvives } from "./sand.mjs";
 
 /**
  * What every pool holds as a fight starts (02 SS7): Momentum at 0 - Zeal at
@@ -28,6 +31,9 @@ export function fightStart(pools = [], { zealStart = 0, keepsZeal = false } = {}
   const updates = [];
   for (const p of pools) {
     if (p.kind === "momentum") {
+      // Sand does not start a fight at 0 (the lead: *"It should only drain on a
+      // short or long rest"*, D-848).
+      if (p.name === SAND && sandSurvives("fightStart")) continue;
       if (p.name === "zeal" && keepsZeal && !(Number(zealStart) > 0)) continue;
       const value = p.name === "zeal" ? Math.max(0, Math.min(p.max ?? 0, zealStart)) : 0;
       if (value !== (p.value ?? 0)) updates.push({ itemId: p.itemId, kind: "momentum", value });
@@ -41,8 +47,18 @@ export function fightStart(pools = [], { zealStart = 0, keepsZeal = false } = {}
 /**
  * Momentum decay. A Critical Injury costs all of it, and so does the Guard
  * action (05 SS11). The Warrior's end-of-round drain is the class's own.
+ *
+ * **EXCEPT SAND** (D-848; the orchestrator's literal reading of the lead's
+ * *"It should only drain on a short or long rest"*, open as O-259): `pool`
+ * names the pool, and Sand keeps its value through a Critical Injury and a
+ * Guard. A caller that passes no pool is the old reading, unchanged.
  */
-export function momentumAfter(value, { criticalInjury = false, guarded = false } = {}) {
+export function momentumAfter(value, { criticalInjury = false, guarded = false, pool = null } = {}) {
+  if (pool === SAND) {
+    const event = criticalInjury ? "criticalInjury" : (guarded ? "guard" : null);
+    // What the pool holds after the event, by Sand's one list (`sandAfter`; the 2a review, item 4).
+    if (!event || sandSurvives(event)) return sandAfter(value, event);
+  }
   if (criticalInjury || guarded) return 0;
   return Math.max(0, value);
 }
@@ -174,9 +190,13 @@ export function idleDecay(pool, { round = 1, lastHitRound = null } = {}) {
   return round - lastHitRound >= 2 ? 0 : value;
 }
 
-/** Guard (05 SS11) costs all of it; Unbroken keeps the Rage, once an encounter (02 SS7). */
+/**
+ * Guard (05 SS11) costs all of it; Unbroken keeps the Rage, once an encounter
+ * (02 SS7). Sand survives a Guard (D-848, O-259).
+ */
 export function lossOnGuard(pool, { unbroken = false } = {}) {
   if (unbroken && pool?.name === "rage") return pool.value ?? 0;
+  if (pool?.name === SAND && sandSurvives("guard")) return pool.value ?? 0;
   return 0;
 }
 
@@ -225,6 +245,8 @@ export function leaveFightPools(pools = [], { keepsZeal = false } = {}) {
   return (pools ?? [])
     .filter(p => p?.kind === "momentum" && (p.value ?? 0) > 0)
     .filter(p => !(keepsZeal && p.name === "zeal"))
+    // Sand is not emptied by a fight's end (D-848).
+    .filter(p => !(p.name === SAND && sandSurvives("fightEnd")))
     .map(p => ({ itemId: p.itemId, kind: "momentum", value: momentumAfter(0) }));
 }
 
@@ -294,8 +316,13 @@ export function unkillableFloor({ before = 0, amount = 0, rage = 0, holds = fals
 /**
  * A pool's cap with the talents that lift it (04): Zealotry caps Zeal at 15,
  * Hunter's Mark adds 2 Quarry a rank. `ranks` is a name-to-ranks lookup.
+ *
+ * **Sand's cap is the Hourglass's** (08 §9, D-848): `hourglass` is the one in the
+ * Ranged slot (`sand.mjs#equippedHourglass`), and with none the cap is 0 - the
+ * class item's printed 5 is the Common glass's and is never read on its own.
  */
-export function capFor(pool, ranks = () => 0) {
+export function capFor(pool, ranks = () => 0, { hourglass = null } = {}) {
+  if (pool?.name === SAND) return sandCap(hourglass);
   const max = pool?.max ?? 0;
   if (pool?.name === "zeal" && ranks("Zealotry") > 0) return 15;
   if (pool?.name === "quarry") return max + 2 * Math.max(0, ranks("Hunter's Mark"));

@@ -345,6 +345,19 @@ function cleanBane(raw) {
   return raw.judged === true ? { ...out, judged: true } : out;
 }
 
+/**
+ * **A TAUNT'S BANE** (07 §12's Bastion of Hours: *each enemy within 10 feet of you takes a Bane on
+ * attacks against anyone but you*; the 2a fix stage), or null: the Banes and the creature spared,
+ * laid as the Taunt Bane's own flag beside the aura's (`effects/banes.mjs`' `except`).
+ */
+function cleanTaunt(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const banes = atLeast(raw.banes, 1);
+  const actorId = typeof raw.except?.actorId === "string" && raw.except.actorId ? raw.except.actorId : null;
+  const tokenId = typeof raw.except?.tokenId === "string" && raw.except.tokenId ? raw.except.tokenId : null;
+  return banes && (actorId || tokenId) ? { banes, except: { actorId, tokenId } } : null;
+}
+
 /** Ward ADDED against some schools (Hallowed Ground's *gains Ward 2*), resolved, or null. */
 function cleanWardAdd(raw) {
   if (!raw || typeof raw !== "object") return null;
@@ -417,6 +430,16 @@ export function auraPayloadOf(row = {}) {
   // stays at, laid as 07's Aegis floor's own flag (`healthFloorFlag`) and never a change.
   const healthFloor = atLeast(src.healthFloor, 1);
   if (healthFloor) out.healthFloor = healthFloor;
+  // **07 §12's TEMPORAL SANCTUARY** (*it cannot gain a condition, and the conditions and effects
+  // already on it do nothing and do not count down*; the 2a fix stage): the conditions refused,
+  // laid as the `immuneTo` flag `toggleStatusEffect` reads, and the HOLD, which
+  // `effects/sand-auras.mjs#syncSanctuaryHold` keeps. Flags, never changes.
+  const immune = cleanConditions(src.immune?.conditions);
+  if (immune.length) out.immune = { conditions: immune };
+  if (src.hold === true) out.hold = true;
+  // **BASTION OF HOURS' TAUNT** (the same stage): the Bane on attacks against anyone but the holder.
+  const taunt = cleanTaunt(src.taunt);
+  if (taunt) out.taunt = taunt;
   return out;
 }
 
@@ -558,6 +581,7 @@ export function auraChanges(row = {}, { type = null, apLocations = null } = {}) 
 export function auraGives(row = {}, candidate = {}) {
   const p = auraPayloadOf(row);
   return Boolean(p.boon) || Boolean(p.bane) || Boolean(p.healing) || Boolean(p.standFree) || Boolean(p.healthFloor)
+    || Boolean(p.immune) || Boolean(p.hold) || Boolean(p.taunt)
     || auraChanges(row, candidate).length > 0;
 }
 
@@ -729,7 +753,7 @@ export function auraMagnitude(row = {}) {
   return (p.damageReduction ?? 0) + (p.boon?.boons ?? 0) + (p.schoolArmor?.amount ?? 0)
     + (p.floor?.ap ?? 0) + (p.floor?.ward ?? 0) + (p.spellDamage ?? 0) + (p.armor ?? 0)
     + (p.bane?.banes ?? 0) + (p.ward?.amount ?? 0) + Math.abs(p.speed ?? 0) + (p.healing ? 1 : 0) + (p.standFree ? 1 : 0)
-    + (p.healthFloor ? 1 : 0);
+    + (p.healthFloor ? 1 : 0) + (p.immune ? 1 : 0) + (p.hold ? 1 : 0) + (p.taunt?.banes ?? 0);
 }
 
 /**

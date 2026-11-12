@@ -24,7 +24,9 @@ const THEMES = Object.freeze({
   arcane: {cast: "jb2a.cast_generic.02.blue", impact: "jb2a.explosion.02.blue", shield: "jb2a.shield.01.intro.blue", filter: "PURPLE_B", sound: "psfx.impacts.magicaleffects.generic.002.001"},
   nature: {cast: "jb2a.cast_generic.earth.01.browngreen", impact: "jb2a.impact.ground_crack.orange.02", shield: "jb2a.markers.shield.green.01", sound: "psfx.casting.water.001"},
   fel: {cast: "jb2a.cast_generic.fire.01.orange", impact: "jb2a.impact.fire.01.orange", shield: "jb2a.shield.01.intro.blue", filter: "FEL_O", sound: "psfx.impacts.magicaleffects.necrotic"},
-  shadow: {cast: "jb2a.cast_generic.02.blue", impact: "jb2a.energy_strands.complete.blue.01", shield: "jb2a.shield.01.intro.blue", filter: "SHADOW_B", sound: "psfx.1st-level-spells.dissonant-whispers.v1.001"}
+  shadow: {cast: "jb2a.cast_generic.02.blue", impact: "jb2a.energy_strands.complete.blue.01", shield: "jb2a.shield.01.intro.blue", filter: "SHADOW_B", sound: "psfx.1st-level-spells.dissonant-whispers.v1.001"},
+  // The Chronomancer's sand (07 §12, D-864): Arcane spells in sand-gold (`FILTERS.SAND`).
+  sand: {cast: "jb2a.cast_generic.02.blue", impact: "jb2a.impact.ground_crack.orange.02", shield: "jb2a.shield.01.intro.blue", filter: "SAND", sound: "psfx.cantrips.gust.v1"}
 });
 
 /** Shape choices are independent of school: lightning, roots and healing do
@@ -204,6 +206,8 @@ export const EXPANDED_SPELL_ANIMATIONS = Object.freeze({
   "lightbrand": spell("holy", "impact", "target", "cast|effect", 1),
   "lights-reach": spell("holy", "lightheal", "target", "cast|effect", 1),
   "litany": group("holy", "spirit"),
+  // O-225 (the lead: *"Just the animation should fire in the targetted area."*): at the Region its
+  // card places, sized to its 20 ft radius. Its effect stays the table's (D2 §12).
   "mass-dispel": spell("holy", "burst", "region", "region", 1),
   "pain-suppression": spell("holy", "shield", "target", "cast|effect", 1),
   "power-word-fortitude": group("holy", "cast"),
@@ -223,6 +227,32 @@ export const EXPANDED_SPELL_ANIMATIONS = Object.freeze({
   "the-last-word": spell("holy", "impact", "target", "cast", 1),
   "verdict": spell("holy", "impact", "target", "cast", 1),
   "vigil": group("holy", "detect"),
+  // the Chronomancer's sand spells, tiers 2 to 5 (07 §12, D-864): every one its own cue,
+  // a loop where the game holds the state (a held area, a held shell, a laid effect).
+  "sandstorm": spell("sand", "snow", "region", "region", 1, "sustain-region"),
+  "withering-sands": spell("sand", "ash", "region", "region", 1, "sustain-region"),
+  "dilation": spell("sand", "shield", "target", "cast|effect", 1.2),
+  "reversion": spell("sand", "lightheal", "target", "cast|effect", 1.2),
+  "time-trap": spell("sand", "burst", "region", "region", 1),
+  "accelerate": spell("sand", "wind", "target", "cast|effect", 1.1, "sustain-target"),
+  "drag-of-ages": spell("sand", "ash", "region", "region", 1),
+  "sandwall": spell("sand", "snow", "region-line", "region", 1, "sustain-region"),
+  "hourstrike": spell("sand", "cast", "source", "cast", 1.1),
+  "hour-of-dust": projectile("sand", "jb2a.magic_missile.purple", {filter: "SAND", scale: 1.2}),
+  "shifting-hours": spell("sand", "wind", "region", "region", 1, "sustain-region"),
+  "sand-prison": spell("sand", "snow", "target", "resist", 1.2, "sustain-target"),
+  "sands-run-back": group("sand", "lightheal"),
+  "dune-collapse": spell("sand", "impact", "region", "region", 1),
+  "never-was": spell("sand", "cast", "target", "cast", 1.2),
+  "temporal-sanctuary": spell("sand", "burst", "source", "cast", "area", "sustain-self"),
+  "scouring-veil": spell("sand", "shield", "source", "cast", 1.3),
+  "epoch": projectile("sand", "jb2a.magic_missile.purple", {filter: "SAND", scale: 1.5}),
+  "hour-of-haste": group("sand", "wind"),
+  "timeslip": group("sand", "cast"),
+  "deserts-weight": spell("sand", "ash", "region", "region", 1),
+  "pristine-timeline": group("sand", "shield"),
+  "bastion-of-hours": spell("sand", "shield", "source", "cast", 1.4, "sustain-self"),
+  "divert-timeway": group("sand", "burst"),
   // arcane
   "aegis": group("arcane", "shield", true),
   "aftersight": spell("arcane", "detect", "source", "cast", "area"),
@@ -368,7 +398,11 @@ export const EXPANDED_SPELL_ANIMATIONS = Object.freeze({
   "ember-skin": spell("fire", "shield", "source", "cast", 1),
   "emberflight": spell("fire", "step", "source", "cast", 1),
   "emberlash": projectile("fire", "jb2a.scorching_ray.01.orange", {sound: "psfx.2nd-level-spells.scorching-ray.v1"}),
-  "everburn": spell("fire", "flame", "source", "cast", 1.1), // No object/remote destination is recorded: cast cue only.
+  // O-225 (the lead, 2026-11-11: *"Just the animation should fire in the targetted area."*): the
+  // fire burns where the card's Place area put its 10 ft of ground, never at the caster. An object
+  // the card places no area on records no point, and nothing plays (`not-this-trigger` at the cast).
+  // A cue, not a loop: Everburn is not Sustained, and a spell row has no loop on a Region alone.
+  "everburn": spell("fire", "flame", "region", "region", 1),
   "fire-shield": spell("fire", "shield", "target", "cast|effect", 1),
   "firebrand": spell("fire", "flame", "target", "cast|effect", 1),
   "firebreak": spell("fire", "burst", "region-line", "region", 1),

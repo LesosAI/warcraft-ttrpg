@@ -48,6 +48,17 @@ import { END_TICK_QUERY, LAY_POISON_QUERY, endTickQueryHandler, layPoisonQueryHa
 import { LOSE_REACTION_QUERY, loseReactionQueryHandler } from "./effects/reaction-loss.mjs";
 import { SPEED_DROP_QUERY, speedDropQueryHandler } from "./effects/speed-drop.mjs";
 import { HIT_MARK_QUERY, hitMarkQueryHandler } from "./effects/hit-marks.mjs";
+// 07 §9's Decay (D-865): laid on a creature the caster does not own.
+import { DECAY_QUERY, decayQueryHandler } from "./effects/decay.mjs";
+// 02 §7's Sand from a failed Resist (D-848), on a caster this client does not own.
+import { SAND_GAIN_QUERY, sandGainQueryHandler } from "./effects/sand.mjs";
+// The Chronomancer's writes on a creature another user owns, and Another Timeline's ask (stage 2b).
+import { CHRONO_QUERY, chronoQueryHandler } from "./effects/chronomancer.mjs";
+// 04's Interposed Moment's swap where the ally's token is another user's (the Guardian of Time, stage 2c).
+import { GUARDIAN_QUERY, guardianQueryHandler } from "./effects/guardian.mjs";
+// 07 §12's Never Was and Moment's Warning landing on a creature this client does not own (O-264).
+import { SAND_ANSWER_QUERY, sandAnswerQueryHandler } from "./effects/sand-answers.mjs";
+import { TIMELINE_QUERY, timelineQueryHandler } from "./effects/chrono-timeline.mjs";
 import { SHARE_HEAL_QUERY, shareHealQueryHandler } from "./effects/symbiosis.mjs";
 import { WARD_QUERY, wardQueryHandler } from "./effects/wards.mjs";
 import { GIFT_QUERY, giftQueryHandler } from "./effects/gifts.mjs";
@@ -516,6 +527,12 @@ export function registerQueries() {
   CONFIG.queries[SPEED_DROP_QUERY] = speedDropQueryHandler;
   // What a hit leaves beside a condition (D-812): Fel Bolt's Ward drop, Snag, Rattle.
   CONFIG.queries[HIT_MARK_QUERY] = hitMarkQueryHandler;
+  CONFIG.queries[DECAY_QUERY] = decayQueryHandler;
+  CONFIG.queries[SAND_GAIN_QUERY] = sandGainQueryHandler;
+  CONFIG.queries[CHRONO_QUERY] = chronoQueryHandler;
+  CONFIG.queries[GUARDIAN_QUERY] = guardianQueryHandler;
+  CONFIG.queries[SAND_ANSWER_QUERY] = sandAnswerQueryHandler;
+  CONFIG.queries[TIMELINE_QUERY] = timelineQueryHandler;
   CONFIG.queries[LAY_POISON_QUERY] = layPoisonQueryHandler;
   // The Priest's and the Shaman's (D-774): 02's Ward laid on a creature the priest
   // does not own and Absorption's Mana back to a priest the striker's client does

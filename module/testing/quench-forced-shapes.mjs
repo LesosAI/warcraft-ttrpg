@@ -207,8 +207,10 @@ export function forcedShapesBatch(context) {
       // A Large creature, so the frog's Tiny footprint moves the token; two UNLINKED
       // tokens off one world actor, each its own creature.
       bear = await makeNpc("Black Bear");
+      // The shaman 10 feet from the first bear and 30 from the second: both inside Hex's 30 ft
+      // Range (O-288, D-893), where the second stood 40 feet off.
       const placed = await sceneWith([
-        { actor: shaman, x: 600, y: 600 },
+        { actor: shaman, x: 800, y: 600 },
         { actor: bear, x: 1000, y: 600, side: "hostile", link: false },
         { actor: bear, x: 1400, y: 600, side: "hostile", link: false }
       ]);

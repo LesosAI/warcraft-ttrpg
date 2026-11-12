@@ -49,7 +49,7 @@
     {{!-- Copied from `carried-row.hbs`, so the two doors carry the same word,
           the same tooltip and the same pressed state (D-674, D-686). --}}
     <button type="button" class="azeroth-equip{{#if row.equipped}} is-equipped{{/if}}" data-action="toggleEquipped"
-            data-tooltip="{{#if row.augment}}{{localize "AZEROTH.Augment.Tooltip" className=row.augment.className bonus=row.augment.bonus}}{{else}}{{localize "AZEROTH.Sheet.Equip"}}{{/if}}" aria-pressed="{{row.equipped}}">
+            data-tooltip="{{#if row.augment}}{{#if row.augment.holds}}{{localize "AZEROTH.Augment.HourglassTooltip" className=row.augment.className}}{{else}}{{localize "AZEROTH.Augment.Tooltip" className=row.augment.className bonus=row.augment.bonus}}{{/if}}{{else}}{{localize "AZEROTH.Sheet.Equip"}}{{/if}}" aria-pressed="{{row.equipped}}">
       {{#if row.equipped}}{{localize "AZEROTH.Sheet.Equipped"}}{{else}}{{localize "AZEROTH.Sheet.Equip"}}{{/if}}
     </button>
     {{/if}}

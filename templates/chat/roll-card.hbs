@@ -308,6 +308,18 @@
     </div>
     {{/each}}
     {{/if}}
+    {{#if sandAnswers.length}}
+    {{!-- 07 SS12's Never Was and Moment's Warning (O-264): a Chronomancer who knows one casts
+          it from this card against the row it names, as a Reaction. Shown only to a client
+          owning such a caster (`data-sand-answer`, `dice/chat.mjs`); judged again at the press. --}}
+    {{#each sandAnswers as |a|}}
+    <div class="azeroth-card-actions" data-sand-answer="1">
+      {{#each a.spells as |s|}}
+      <button type="button" data-action="reactSpell" data-target-index="{{a.index}}" data-spell-identifier="{{s.identifier}}">{{localize "AZEROTH.SandAnswer.Button" spell=s.name name=a.name}}</button>
+      {{/each}}
+    </div>
+    {{/each}}
+    {{/if}}
     {{#if evades.length}}
     {{!-- 04's Elusive (D-773): an attack that missed or dealt nothing lets the
           defender step away as though Disengaged, for its Energy. Shown to the

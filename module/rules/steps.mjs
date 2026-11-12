@@ -303,8 +303,26 @@ export function readSpellStep(effectText) {
   const shadow = /\bin darkness or in shadow\b/i.test(text);
   let m = /^You move up to (\d+) feet to a space you can see\b/.exec(text) ?? /(?:^|\. )You move up to (\d+) feet to a space you can see\b/.exec(text);
   if (m && !/\bany place you have stood before\b/.test(text)) return { who: "self", feet: Number(m[1]), sight: "see", shadow };
+  // **07's FARSTEP** (stage 2b, for 04's Weaver's Lore: *When you cast Farstep you may bring one
+  // willing creature within 5 feet of you*): *You move up to 300 feet to any place you have
+  // stood before and can picture clearly, or up to 60 feet to a space you can see* - the larger
+  // reach, to a space the mover has seen (`seen`); whether the caster has stood there is the
+  // table's and the pick's hint says so. A space that will not hold the caster is refused
+  // rather than costing 4 damage (the step door's own rule for an occupied space; reading).
+  m = /^You move up to (\d+) feet to any place you have stood before and can picture clearly, or up to (\d+) feet to a space you can see\b/.exec(text);
+  if (m) return { who: "self", feet: Number(m[1]), sight: "seen", shadow, farstep: true };
   m = /\bYou and each target move up to (\d+) feet to spaces you can see\b/.exec(text);
   if (m) return { who: "selfAndTargets", feet: Number(m[1]), sight: "see", shadow };
+  // **07 §12's ECHO STEP** (D-864; the lead: *"an unocupied space within 5xIntelligence
+  // Modifier"*): *You teleport to an unoccupied space you can see within a number of feet
+  // equal to 5 times your Intelligence modifier* - the feet worked out at the cast
+  // (`perInt`), the move the step door's displacement, which provokes nothing.
+  m = /\bYou teleport to an unoccupied space you can see within a number of feet equal to (\d+) times your Intelligence modifier\b/.exec(text);
+  if (m) return { who: "self", feet: null, perInt: Number(m[1]), sight: "see", shadow };
+  // **07 §12's TIMESLIP**: *Each target teleports up to 60 feet to a space you can see* -
+  // each targeted creature its own space, picked before the payment.
+  m = /\bEach target teleports up to (\d+) feet to a space you can see\b/.exec(text);
+  if (m) return { who: "targets", feet: Number(m[1]), sight: "see", shadow };
   return null;
 }
 
@@ -314,6 +332,5 @@ export function readSpellStep(effectText) {
  * new one.
  */
 export const STEP_UNREAD = Object.freeze({
-  Translocate: "the TARGET is moved and an unwilling one may resist with a Spirit Resilience Test first, which is a Resist the card would have to answer before the move; the move stays the table's",
-  Farstep: "a place the mage has stood before and can picture is no point on the board, and arriving in a space that will not hold the mage puts them in the nearest that will for 4 damage, where this door refuses an occupied space; the move stays the table's"
+  Translocate: "the TARGET is moved and an unwilling one may resist with a Spirit Resilience Test first, which is a Resist the card would have to answer before the move; the move stays the table's"
 });

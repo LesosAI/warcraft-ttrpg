@@ -608,8 +608,8 @@ export function areasBatch(context) {
         // And nothing on a Skill Test: the swarm's Bane is on Attack Tests.
         assert.isUndefined(prepareRoll(victim, { kind: "skill", skill: "athletics", targets: [] }).situational.automatic.find(l => l.id === "auraBane"));
         // Out of the swarm, twenty feet on its own turn: the Bane goes, and the
-        // arming with it. The fight stays: *a minute* is the fight's, and a
-        // timed area ends with the fight it was placed in (D-756).
+        // arming with it. The fight stays: *a minute* is the fight's while it
+        // lasts, and the world's clock's after it (D-756, O-298).
         assert.isTrue(await token.move({ x: 1500, y: 1100 }), "the walk out of the swarm was refused");
         await until(() => token.x === 1500 && !token.testInsideRegion(region), "the ally out of the swarm", 10000);
         await until(() => (victim.system.auraBaneRows ?? []).length === 0, "the swarm's Bane lifted when the ally left");

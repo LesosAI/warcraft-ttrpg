@@ -1,6 +1,8 @@
 /** GM configuration from an NPC's Pack Rekindling Use button. */
 import { CORE_HOUND_PACK_FLAG, seedCoreHoundPack } from "../rules/core-hound-pack.mjs";
 import { coreHoundPackAdapter } from "./core-hound-pack-foundry.mjs";
+// The scenes a fight stands on (O-294): core makes a fight unlinked, so `combat.scene` is null at the table.
+import { fightOnScene } from "../rules/fight-scenes.mjs";
 
 const busy = new Set();
 const gmHere = () => game.user?.isGM === true && game.users?.activeGM?.id === game.user.id;
@@ -10,7 +12,7 @@ export async function configureCoreHoundPack(actor, { choose } = {}) {
   if (!gmHere()) return refuse("gm");
   const combat = game.combat, scene = canvas.scene;
   const tokens = (canvas.tokens?.controlled ?? []).map(token => token.document);
-  if (!combat?.started || combat.scene !== scene || tokens.length < 2
+  if (!combat?.started || !fightOnScene(combat, scene, game.scenes) || tokens.length < 2
     || !tokens.some(token => token.actor === actor)) {
     ui.notifications?.warn("Start combat, then select this hound and at least one packmate before using Pack Rekindling.");
     return refuse("selection");
@@ -22,7 +24,7 @@ export async function configureCoreHoundPack(actor, { choose } = {}) {
   const packIds = () => combat.flags?.["azeroth-rpg"]?.[CORE_HOUND_PACK_FLAG] ?? {};
   const previous = JSON.stringify(packIds());
   const validate = () => {
-    if (!gmHere() || game.combat !== combat || !combat.started || combat.scene !== scene
+    if (!gmHere() || game.combat !== combat || !combat.started || !fightOnScene(combat, scene, game.scenes)
       || canvas.scene !== scene || combat.round !== round || combat.turn !== turn
       || JSON.stringify(packIds()) !== previous) return false;
     const actors = new Set();

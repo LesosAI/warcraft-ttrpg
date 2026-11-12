@@ -125,6 +125,14 @@ export async function disengage(actor) {
     ui.notifications?.warn(game.i18n.format(anchored.key, { name: actor.name, ...anchored.params }));
     return null;
   }
+  // **04's HEAVY HOURS AT RANK 2** (*A creature carrying your Decay ... cannot Disengage*;
+  // stage 2b): refused in words before the Half-Action is spent, read off the Decay's own `by`.
+  const { disengageBarred } = await import("../effects/chronomancer.mjs");
+  const heavy = disengageBarred(actor);
+  if (heavy) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Chrono.HeavyHoursDisengage", { name: actor.name, holder: heavy.name, talent: heavy.talent }));
+    return null;
+  }
   const combatant = combatantOf(actor);
   if (combatant) {
     const spent = await combatant.spendMoveAction();

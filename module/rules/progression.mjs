@@ -132,6 +132,24 @@ export function addClassEntry(classes = [], entry) {
   return [...classes.map(c => ({ ...c })), { ...entry }];
 }
 
+/**
+ * **WHETHER AN ACTOR'S UPDATE RE-SYNCS ITS FEATURES** (D-612; O-272, D-905). A level
+ * or a class array change moves the features with it, and so does an Intelligence
+ * score written to the actor, because a use counted by the Intelligence modifier
+ * (02's Recall, *half your Intelligence modifier*; 04's Shared Hours) is stamped by
+ * the sync. `changed` is the expanded diff `_onUpdate` receives. An Intelligence
+ * moved by an effect or by gear is not a write to the actor, and is restamped at
+ * the next sync (a level, a class, a talent, world load).
+ *
+ * @param {object} changed
+ * @returns {boolean}
+ */
+export function resyncsFeatures(changed = {}) {
+  const sys = changed?.system;
+  if (!sys || typeof sys !== "object") return false;
+  return sys.classes !== undefined || sys.abilities?.int !== undefined;
+}
+
 /** `system.classes[]` without the entry for an item; the survivor is primary. */
 export function removeClassEntry(classes = [], itemId) {
   return classes.filter(c => c?.itemId !== itemId).map(c => ({ ...c }));

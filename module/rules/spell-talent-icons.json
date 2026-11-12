@@ -17,6 +17,15 @@
     ],
     "reason": "The image is a closed golden book with a white hand laid across its cover. Absolution removes a burden through a formal act of the Light, and the hand-and-book seal fits that rite."
   },
+  "spell:accelerate": {
+    "name": "Accelerate",
+    "source": "07-MAGIC",
+    "icon": "ability_mage_timewarp",
+    "previousIcons": [
+      "ability_mage_timewarp"
+    ],
+    "reason": "Time running faster around a figure, its sand run quicker than it was poured."
+  },
   "spell:aegis": {
     "name": "Aegis",
     "source": "07-MAGIC",
@@ -255,6 +264,15 @@
       "spell_holy_auramastery"
     ],
     "reason": "A blue magical shield fits an area that grants Ward without physically blocking movement or sight."
+  },
+  "spell:bastion-of-hours": {
+    "name": "Bastion of Hours",
+    "source": "07-MAGIC",
+    "icon": "ability_shaman_stonebulwark",
+    "previousIcons": [
+      "ability_shaman_stonebulwark"
+    ],
+    "reason": "A bulwark of stone, the turning wall of sand that takes the edge off every blow."
   },
   "spell:beacon-of-light": {
     "name": "Beacon of Light",
@@ -848,6 +866,15 @@
     ],
     "reason": "A violet-green spiral descends into a central opening. Descent brings a force down from the Nether into the world, matching the downward pull."
   },
+  "spell:deserts-weight": {
+    "name": "Desert's Weight",
+    "source": "07-MAGIC",
+    "icon": "trade_archaeology_sand castle",
+    "previousIcons": [
+      "trade_archaeology_sand castle"
+    ],
+    "reason": "Desert stone and sand, the weight of the whole waste brought down on one place."
+  },
   "spell:detect-magic": {
     "name": "Detect Magic",
     "source": "07-MAGIC",
@@ -865,6 +892,15 @@
       "spell_holy_devotionaura"
     ],
     "reason": "A bright shield is centered in a blue ring. Devotion Aura protects people standing near the paladin, matching the shielded aura."
+  },
+  "spell:dilation": {
+    "name": "Dilation",
+    "source": "07-MAGIC",
+    "icon": "ability_bossmagistrix_timewarp1",
+    "previousIcons": [
+      "ability_bossmagistrix_timewarp1"
+    ],
+    "reason": "Time warped and stretched, a blow drawn out across two heartbeats."
   },
   "spell:disintegration": {
     "name": "Disintegration",
@@ -901,6 +937,15 @@
       "spell_shadow_lastingafflictions"
     ],
     "reason": "A green mind-like silhouette looks outward. Distant Mind extends perception beyond the horizon, matching the projected view."
+  },
+  "spell:divert-timeway": {
+    "name": "Divert Timeway",
+    "source": "07-MAGIC",
+    "icon": "inv_relics_hourglass_02",
+    "previousIcons": [
+      "inv_relics_hourglass_02"
+    ],
+    "reason": "The great hourglass, a minute of the world unpicked and woven back."
   },
   "spell:divine-shield": {
     "name": "Divine Shield",
@@ -947,6 +992,15 @@
     ],
     "reason": "A green Fel flame depicts the burning ground that damages creatures and restores demons."
   },
+  "spell:drag-of-ages": {
+    "name": "Drag of Ages",
+    "source": "07-MAGIC",
+    "icon": "inv_misc_dust_02",
+    "previousIcons": [
+      "inv_misc_dust_02"
+    ],
+    "reason": "Settled dust of years, the age laid on a crowd at once."
+  },
   "spell:drain-life": {
     "name": "Drain Life",
     "source": "07-MAGIC",
@@ -989,6 +1043,15 @@
       "spell_nature_bloodlust"
     ],
     "reason": "The old art is a yellow mask, not a route. Dreamway travels through the Emerald Dream beneath the world; the replacement shows an opening into another place."
+  },
+  "spell:dune-collapse": {
+    "name": "Dune Collapse",
+    "source": "07-MAGIC",
+    "icon": "achievement_dungeon_thesandqueen",
+    "previousIcons": [
+      "achievement_dungeon_thesandqueen"
+    ],
+    "reason": "The desert's weight falling in, the slip face of a dune giving way."
   },
   "spell:earth-shock": {
     "name": "Earth Shock",
@@ -1043,6 +1106,15 @@
       "spell_nature_corrosivebreath"
     ],
     "reason": "A rocky figure in green Nature light fits hardened skin, temporary Health, and slower movement."
+  },
+  "spell:echo-step": {
+    "name": "Echo Step",
+    "source": "07-MAGIC",
+    "icon": "spell_arcane_blink",
+    "previousIcons": [
+      "spell_arcane_blink"
+    ],
+    "reason": "The arcane step out of one place and into the next, the caster's echo of where they will stand."
   },
   "spell:elemental-convergence": {
     "name": "Elemental Convergence",
@@ -1133,6 +1205,15 @@
       "spell_shadow_lifedrain02"
     ],
     "reason": "A purple-black void opens inside green darkness, fitting a Shadow strike that unravels a target and leaves nothing behind."
+  },
+  "spell:epoch": {
+    "name": "Epoch",
+    "source": "07-MAGIC",
+    "icon": "inv_misc_head_dragon_bronze",
+    "previousIcons": [
+      "inv_misc_head_dragon_bronze"
+    ],
+    "reason": "A bronze dragon's head, the age a creature lives through between two heartbeats."
   },
   "spell:everburn": {
     "name": "Everburn",
@@ -1639,6 +1720,15 @@
     ],
     "reason": "A corpse-like face is covered in decay. Graveblight tells the ground nothing should grow again, matching the undead blight."
   },
+  "spell:grit-lash": {
+    "name": "Grit Lash",
+    "source": "07-MAGIC",
+    "icon": "spell_sandbolt",
+    "previousIcons": [
+      "spell_sandbolt"
+    ],
+    "reason": "A bolt of whirling sand, the grit cord cracked out and hauled back."
+  },
   "spell:grove": {
     "name": "Grove",
     "source": "07-MAGIC",
@@ -1852,6 +1942,33 @@
       "spell_shadow_mindshear"
     ],
     "reason": "A shadowed face stares from the icon. Horrify shows a creature what it fears, and the threatening face supports that effect."
+  },
+  "spell:hour-of-dust": {
+    "name": "Hour of Dust",
+    "source": "07-MAGIC",
+    "icon": "inv_misc_dust_infinite",
+    "previousIcons": [
+      "inv_misc_dust_infinite"
+    ],
+    "reason": "Dust beyond counting, a long life's wear given all at once."
+  },
+  "spell:hour-of-haste": {
+    "name": "Hour of Haste",
+    "source": "07-MAGIC",
+    "icon": "ability_mage_timewarp",
+    "previousIcons": [
+      "ability_mage_timewarp"
+    ],
+    "reason": "Time hurried for a whole company, an hour emptied into allies at once."
+  },
+  "spell:hourstrike": {
+    "name": "Hourstrike",
+    "source": "07-MAGIC",
+    "icon": "inv_relics_hourglass",
+    "previousIcons": [
+      "inv_relics_hourglass"
+    ],
+    "reason": "The hourglass itself, the weight of an hour set behind the next swing."
   },
   "spell:howl-of-terror": {
     "name": "Howl of Terror",
@@ -2274,6 +2391,15 @@
     ],
     "reason": "The old art is a purple clenched fist. Mass Dispel removes effects from everyone in an area; the replacement depicts a cleansing sweep."
   },
+  "spell:mending-sands": {
+    "name": "Mending Sands",
+    "source": "07-MAGIC",
+    "icon": "ability_rewindtime",
+    "previousIcons": [
+      "ability_rewindtime"
+    ],
+    "reason": "A wound wound back: the art is time running backward, which is how the sand mends."
+  },
   "spell:meteor": {
     "name": "Meteor",
     "source": "07-MAGIC",
@@ -2361,6 +2487,15 @@
       "spell_arcane_portalshattrath"
     ],
     "reason": "The old art is a green city portal, which suggests teleportation. Mirror Image creates three copies of the caster; the replacement visibly shows paired mirrored figures."
+  },
+  "spell:moments-warning": {
+    "name": "Moment's Warning",
+    "source": "07-MAGIC",
+    "icon": "spell_mage_temporalshield",
+    "previousIcons": [
+      "spell_mage_temporalshield"
+    ],
+    "reason": "A shield of turned time, the heartbeat of warning lent to a creature about to be struck."
   },
   "spell:moonfall": {
     "name": "Moonfall",
@@ -2496,6 +2631,15 @@
       "spell_shadow_demonicempathy"
     ],
     "reason": "The old proposal was an ice storm. Netherstorm releases fel energy across a field and leaves burning ground; the replacement shows green fel fire raining across an area."
+  },
+  "spell:never-was": {
+    "name": "Never Was",
+    "source": "07-MAGIC",
+    "icon": "inv_cape_timewalker_b_01",
+    "previousIcons": [
+      "inv_cape_timewalker_b_01"
+    ],
+    "reason": "A timewalker's mantle, the blow lifted out of the moment it landed in."
   },
   "spell:nightburn": {
     "name": "Nightburn",
@@ -2658,6 +2802,15 @@
     ],
     "reason": "The old art is an orange portal swirl, not defense. Prismatic Shield sorts incoming effects by school; the replacement visibly shows a shield."
   },
+  "spell:pristine-timeline": {
+    "name": "Pristine Timeline",
+    "source": "07-MAGIC",
+    "icon": "spell_mage_temporalshield",
+    "previousIcons": [
+      "spell_mage_temporalshield"
+    ],
+    "reason": "A shield of time held still, the version of events in which nothing has caught them."
+  },
   "spell:psychic-scream": {
     "name": "Psychic Scream",
     "source": "07-MAGIC",
@@ -2702,6 +2855,15 @@
       "spell_fire_felpyroblast"
     ],
     "reason": "The old art is green fel flame, but Pyroclasm opens the ground and ejects Blackrock fire. The replacement shows a large erupting fireball."
+  },
+  "spell:quickening": {
+    "name": "Quickening",
+    "source": "07-MAGIC",
+    "icon": "ability_hunter_posthaste",
+    "previousIcons": [
+      "ability_hunter_posthaste"
+    ],
+    "reason": "A runner's burst of speed, the sand poured back faster to quicken a creature."
   },
   "spell:rain-of-chaos": {
     "name": "Rain of Chaos",
@@ -2810,6 +2972,15 @@
       "spell_holy_divineprovidence"
     ],
     "reason": "The old art is a city portal. Revelation shows a company what is actually before them; the replacement sends a focused ray of insight."
+  },
+  "spell:reversion": {
+    "name": "Reversion",
+    "source": "07-MAGIC",
+    "icon": "spell_holy_borrowedtime",
+    "previousIcons": [
+      "spell_holy_borrowedtime"
+    ],
+    "reason": "An hourglass of borrowed time, the wound run back a little now and the rest a heartbeat later."
   },
   "spell:revival": {
     "name": "Revival",
@@ -2953,6 +3124,78 @@
     ],
     "reason": "The old art is a city portal, which implies a route outward. Sanctum folds a room inward and stops others from reaching it; the replacement depicts a protective barrier."
   },
+  "spell:sand-blast": {
+    "name": "Sand Blast",
+    "source": "07-MAGIC",
+    "icon": "spell_sandexplosion",
+    "previousIcons": [
+      "spell_sandexplosion"
+    ],
+    "reason": "A burst of flung sand: the spell is a fistful of sand thrown hard enough to scour mail."
+  },
+  "spell:sand-breath": {
+    "name": "Sand Breath",
+    "source": "07-MAGIC",
+    "icon": "spell_sandstorm",
+    "previousIcons": [
+      "spell_sandstorm"
+    ],
+    "reason": "Blown grit in a churning sweep, the cone of sand the caster breathes out."
+  },
+  "spell:sand-prison": {
+    "name": "Sand Prison",
+    "source": "07-MAGIC",
+    "icon": "inv_qiraj_skinsandworm",
+    "previousIcons": [
+      "inv_qiraj_skinsandworm"
+    ],
+    "reason": "A shell of sand-hardened hide, the mould that sets round the creature caught."
+  },
+  "spell:sands-run-back": {
+    "name": "Sands Run Back",
+    "source": "07-MAGIC",
+    "icon": "inv_eng_unstabletemporaltimeshifter",
+    "previousIcons": [
+      "inv_eng_unstabletemporaltimeshifter"
+    ],
+    "reason": "A device that turns time back, the glass turned over for everybody at once."
+  },
+  "spell:sandskin": {
+    "name": "Sandskin",
+    "source": "07-MAGIC",
+    "icon": "spell_nature_skinofearth",
+    "previousIcons": [
+      "spell_nature_skinofearth"
+    ],
+    "reason": "A hardened earthen skin, the sand packed tight over a creature to take a blade."
+  },
+  "spell:sandstorm": {
+    "name": "Sandstorm",
+    "source": "07-MAGIC",
+    "icon": "spell_sandstorm",
+    "previousIcons": [
+      "spell_sandstorm"
+    ],
+    "reason": "A Tanaris storm in miniature: the sandstorm itself."
+  },
+  "spell:sandtrap": {
+    "name": "Sandtrap",
+    "source": "07-MAGIC",
+    "icon": "spell_quicksand",
+    "previousIcons": [
+      "spell_quicksand"
+    ],
+    "reason": "Loosened sinking sand, the soft dune face the spell lays across the ground."
+  },
+  "spell:sandwall": {
+    "name": "Sandwall",
+    "source": "07-MAGIC",
+    "icon": "spell_sandelemental",
+    "previousIcons": [
+      "spell_sandelemental"
+    ],
+    "reason": "A towering column of living sand, the curtain spun up out of nothing and kept turning."
+  },
   "spell:scentweave": {
     "name": "Scentweave",
     "source": "07-MAGIC",
@@ -2986,6 +3229,15 @@
       "spell_fire_firearmor"
     ],
     "reason": "The old art is a brown shield. Scour burns everything across an area like a surgeon cauterizing a field; the replacement shows active flame."
+  },
+  "spell:scouring-veil": {
+    "name": "Scouring Veil",
+    "source": "07-MAGIC",
+    "icon": "inv_enchant_dustarcane",
+    "previousIcons": [
+      "inv_enchant_dustarcane"
+    ],
+    "reason": "A cloud of glittering arcane dust, the grit worn close that flays whatever reaches in."
   },
   "spell:sealing-flame": {
     "name": "Sealing Flame",
@@ -3110,6 +3362,15 @@
       "spell_lightning_lightningbolt01"
     ],
     "reason": "A heavy lightning bolt, for the branch's heaviest single-target strike."
+  },
+  "spell:shifting-hours": {
+    "name": "Shifting Hours",
+    "source": "07-MAGIC",
+    "icon": "ability_bossmagistrix_timewarp2",
+    "previousIcons": [
+      "ability_bossmagistrix_timewarp2"
+    ],
+    "reason": "Uneven warped time across a field, slow for some and quick for others."
   },
   "spell:signal-fire": {
     "name": "Signal Fire",
@@ -3413,6 +3674,15 @@
     ],
     "reason": "A shield edged in blue lightning fits a wall that blocks ranged attacks and shocks passage."
   },
+  "spell:stutter": {
+    "name": "Stutter",
+    "source": "07-MAGIC",
+    "icon": "spell_nature_slow",
+    "previousIcons": [
+      "spell_nature_slow"
+    ],
+    "reason": "The slowed figure: one moment taken out and the next made to wait for it."
+  },
   "spell:summoners-writ": {
     "name": "Summoner's Writ",
     "source": "07-MAGIC",
@@ -3446,6 +3716,15 @@
       "spell_nature_forceofnature"
     ],
     "reason": "Grey streaks sweep across green air, fitting a moving cyclone that damages and pushes creatures."
+  },
+  "spell:temporal-sanctuary": {
+    "name": "Temporal Sanctuary",
+    "source": "07-MAGIC",
+    "icon": "inv_shield_timewalker_b_01",
+    "previousIcons": [
+      "inv_shield_timewalker_b_01"
+    ],
+    "reason": "A timewalker's shield, the circle where the sand stops falling."
   },
   "spell:the-black-harvest": {
     "name": "The Black Harvest",
@@ -3588,6 +3867,24 @@
       "spell_nature_guardianward"
     ],
     "reason": "The old art is a carved orange face. Tidecall asks a water spirit to stay; the replacement visibly shows water pouring from a summoned source."
+  },
+  "spell:time-trap": {
+    "name": "Time Trap",
+    "source": "07-MAGIC",
+    "icon": "spell_nature_timestop",
+    "previousIcons": [
+      "spell_nature_timestop"
+    ],
+    "reason": "A clock stopped dead, the glyph that freezes the first enemy to step in it."
+  },
+  "spell:timeslip": {
+    "name": "Timeslip",
+    "source": "07-MAGIC",
+    "icon": "spell_arcane_blink",
+    "previousIcons": [
+      "spell_arcane_blink"
+    ],
+    "reason": "The arcane step taken by a party together, out of one moment and into the next."
   },
   "spell:tranquility": {
     "name": "Tranquility",
@@ -3857,6 +4154,15 @@
     ],
     "reason": "A blue crystalline shield depicts Ward against Fire and Frost around the caster."
   },
+  "spell:withering-sands": {
+    "name": "Withering Sands",
+    "source": "07-MAGIC",
+    "icon": "inv_withered",
+    "previousIcons": [
+      "inv_withered"
+    ],
+    "reason": "Something withered and aged, the wear each grain takes from whoever stands in the circle."
+  },
   "spell:wrath": {
     "name": "Wrath",
     "source": "07-MAGIC",
@@ -4083,6 +4389,15 @@
       "spell_holy_ardentdefender"
     ],
     "reason": "Retain: the golden armored defender art aligns with the named defensive class feature and its reduced Zeal cost."
+  },
+  "talent:arrested-moment": {
+    "name": "Arrested Moment",
+    "source": "04-TALENTS",
+    "icon": "inv_enchant_duststrange",
+    "previousIcons": [
+      "inv_enchant_duststrange"
+    ],
+    "reason": "A moment stopped, the Slowed creature Stunned as well."
   },
   "talent:ascendance": {
     "name": "Ascendance",
@@ -4451,6 +4766,15 @@
     ],
     "reason": "The bone-and-feather doll fits omens and folk wards."
   },
+  "talent:borrowed-hour": {
+    "name": "Borrowed Hour",
+    "source": "04-TALENTS",
+    "icon": "inv_relics_hourglass",
+    "previousIcons": [
+      "inv_relics_hourglass"
+    ],
+    "reason": "The hourglass, one Health kept when a blow would end it."
+  },
   "talent:borrowed-moment": {
     "name": "Borrowed Moment",
     "source": "04-TALENTS",
@@ -4459,6 +4783,15 @@
       "spell_holy_borrowedtime"
     ],
     "reason": "Borrowed Time names the talent: Hasten on yourself, and Speed for the Hastened."
+  },
+  "talent:borrowed-time": {
+    "name": "Borrowed Time",
+    "source": "04-TALENTS",
+    "icon": "achievement_guild_timeoff",
+    "previousIcons": [
+      "achievement_guild_timeoff"
+    ],
+    "reason": "Borrowed time, half a blow put off to the next turn."
   },
   "talent:bracing": {
     "name": "Bracing",
@@ -4477,6 +4810,15 @@
       "inv_misc_head_dragon_bronze"
     ],
     "reason": "A bronze dragon's head: the capstone that takes the Bronze Drake's form."
+  },
+  "talent:bronzed-steel": {
+    "name": "Bronzed Steel",
+    "source": "04-TALENTS",
+    "icon": "inv_ingot_bronze",
+    "previousIcons": [
+      "inv_ingot_bronze"
+    ],
+    "reason": "A bronze ingot, mail and a shield taken up."
   },
   "talent:burial-ground": {
     "name": "Burial Ground",
@@ -4742,6 +5084,15 @@
       "ability_hunter_criticalshot"
     ],
     "reason": "Replace: Critical Shot depicts an aimed attack. The skull and raised dead image fits speaking with the recently dead and resisting fear."
+  },
+  "talent:collapse-of-hours": {
+    "name": "Collapse of Hours",
+    "source": "04-TALENTS",
+    "icon": "achievement_dungeon_thesandqueen",
+    "previousIcons": [
+      "achievement_dungeon_thesandqueen"
+    ],
+    "reason": "The collapse of the dunes, every Slowed or decayed creature struck at once."
   },
   "talent:combat-reflexes": {
     "name": "Combat Reflexes",
@@ -5106,6 +5457,15 @@
     ],
     "reason": "WoW's counterspell art: a Reaction that makes an enemy's cast fail."
   },
+  "talent:distortion-field": {
+    "name": "Distortion Field",
+    "source": "04-TALENTS",
+    "icon": "spell_nature_earthbind",
+    "previousIcons": [
+      "spell_nature_earthbind"
+    ],
+    "reason": "Ground that binds the feet, the Difficult ground about the caster."
+  },
   "talent:divine-aegis": {
     "name": "Divine Aegis",
     "source": "04-TALENTS",
@@ -5151,6 +5511,15 @@
       "inv_misc_book_09"
     ],
     "reason": "A gilded book of an old script: the Draconic tongue, spoken and read."
+  },
+  "talent:dragging-sands": {
+    "name": "Dragging Sands",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_dust_04",
+    "previousIcons": [
+      "inv_misc_dust_04"
+    ],
+    "reason": "Dragging sand, Sand gained from a Slowed or Entangled creature."
   },
   "talent:dragonfire": {
     "name": "Dragonfire",
@@ -5261,6 +5630,33 @@
       "spell_shaman_earthquake"
     ],
     "reason": "A shattering quake that knocks the target Prone, and Stuns it at SL 2."
+  },
+  "talent:echo-of-power": {
+    "name": "Echo of Power",
+    "source": "04-TALENTS",
+    "icon": "inv_enchant_dustarcane",
+    "previousIcons": [
+      "inv_enchant_dustarcane"
+    ],
+    "reason": "Glittering arcane dust, spent power restored to an ally."
+  },
+  "talent:echo-of-the-blade": {
+    "name": "Echo of the Blade",
+    "source": "04-TALENTS",
+    "icon": "ability_shaman_echooftheelements",
+    "previousIcons": [
+      "ability_shaman_echooftheelements"
+    ],
+    "reason": "An echo, a shield-bearer's attack that strikes again."
+  },
+  "talent:echoing-sands": {
+    "name": "Echoing Sands",
+    "source": "04-TALENTS",
+    "icon": "ability_shaman_echooftheelements",
+    "previousIcons": [
+      "ability_shaman_echooftheelements"
+    ],
+    "reason": "An echo of force, the damage that lands again at the next turn."
   },
   "talent:eclipse": {
     "name": "Eclipse",
@@ -5417,6 +5813,15 @@
       "ability_rogue_creepingvenom"
     ],
     "reason": "Retain: the green venom image directly matches the poison’s increased damage."
+  },
+  "talent:erosion": {
+    "name": "Erosion",
+    "source": "04-TALENTS",
+    "icon": "ability_priest_touchofdecay",
+    "previousIcons": [
+      "ability_priest_touchofdecay"
+    ],
+    "reason": "A touch of decay, the Decay a spell lays made deeper."
   },
   "talent:escape-artist": {
     "name": "Escape Artist",
@@ -5819,6 +6224,15 @@
     ],
     "reason": "Retain: the death knight strike depicts attacking from concealment with a blow that cannot be parried."
   },
+  "talent:gift-of-moments": {
+    "name": "Gift of Moments",
+    "source": "04-TALENTS",
+    "icon": "inv_bijou_bronze",
+    "previousIcons": [
+      "inv_bijou_bronze"
+    ],
+    "reason": "Borrowed time given away, a Boon handed to an ally."
+  },
   "talent:gift-of-nature": {
     "name": "Gift of Nature",
     "source": "04-TALENTS",
@@ -5854,6 +6268,24 @@
       "ability_hunter_eagleeye"
     ],
     "reason": "Replace: Eagle Eye depicts distant sight. The skull and raised dead image identifies the mindless undead companion this talent can bind."
+  },
+  "talent:grinding-block": {
+    "name": "Grinding Block",
+    "source": "04-TALENTS",
+    "icon": "ability_warrior_shieldbash",
+    "previousIcons": [
+      "ability_warrior_shieldbash"
+    ],
+    "reason": "A shield driven into the attacker, which may leave it Slowed."
+  },
+  "talent:grit-of-ages": {
+    "name": "Grit of Ages",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_dust",
+    "previousIcons": [
+      "inv_misc_dust"
+    ],
+    "reason": "Grit and dust, the Sand spent on a cast for damage or a better Success Level."
   },
   "talent:groms-example": {
     "name": "Grom's Example",
@@ -5901,6 +6333,15 @@
       "achievement_character_dwarf_male"
     ],
     "reason": "A rifle depicts faster practiced reloading."
+  },
+  "talent:halt-the-sands": {
+    "name": "Halt the Sands",
+    "source": "04-TALENTS",
+    "icon": "inv_relics_hourglass_02",
+    "previousIcons": [
+      "inv_relics_hourglass_02"
+    ],
+    "reason": "The great hourglass halted, Halt cast for Sand."
   },
   "talent:hammer-and-anvil": {
     "name": "Hammer and Anvil",
@@ -6000,6 +6441,15 @@
       "ability_warrior_commandingshout"
     ],
     "reason": "Replace: Commanding Shout depicts a roar. The close warrior punch depicts a heavy called shot to the Head."
+  },
+  "talent:heavy-hours": {
+    "name": "Heavy Hours",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_dust_03",
+    "previousIcons": [
+      "inv_misc_dust_03"
+    ],
+    "reason": "A slowing weight, the Bane a decayed creature takes against the caster's spells."
   },
   "talent:hoard-sense": {
     "name": "Hoard-Sense",
@@ -6220,6 +6670,15 @@
       "spell_nature_insectswarm"
     ],
     "reason": "Align with the named Insect Swarm spell: A group of green insects fills the frame. Insect Swarm summons many small creatures, matching the visible swarm."
+  },
+  "talent:interposed-moment": {
+    "name": "Interposed Moment",
+    "source": "04-TALENTS",
+    "icon": "ability_warrior_shieldwall",
+    "previousIcons": [
+      "ability_warrior_shieldwall"
+    ],
+    "reason": "A wall of shields, the caster stepping into a blow meant for an ally."
   },
   "talent:intervention": {
     "name": "Intervention",
@@ -7135,6 +7594,15 @@
     ],
     "reason": "Replace: Defensive Stance depicts a shield. The drawn bow represents drawing and swapping a weapon without spending an action."
   },
+  "talent:quickstep": {
+    "name": "Quickstep",
+    "source": "04-TALENTS",
+    "icon": "spell_nature_mentalquickness",
+    "previousIcons": [
+      "spell_nature_mentalquickness"
+    ],
+    "reason": "A quick step, an ally moved at once."
+  },
   "talent:rampage": {
     "name": "Rampage",
     "source": "04-TALENTS",
@@ -7207,6 +7675,15 @@
       "spell_holy_divineintervention"
     ],
     "reason": "Retain: the divine intervention art matches Zeal gained when Health falls below half."
+  },
+  "talent:recovered-hours": {
+    "name": "Recovered Hours",
+    "source": "04-TALENTS",
+    "icon": "inv_cape_timewalker_b_01",
+    "previousIcons": [
+      "inv_cape_timewalker_b_01"
+    ],
+    "reason": "A timewalker's mantle, spent uses recovered for allies."
   },
   "talent:red-drake": {
     "name": "Red Drake",
@@ -7540,6 +8017,15 @@
     ],
     "reason": "Replace: Bursting Shot depicts an explosive projectile. The beast-taming image depicts keeping a second companion."
   },
+  "talent:second-chance": {
+    "name": "Second Chance",
+    "source": "04-TALENTS",
+    "icon": "ability_rogue_quickrecovery",
+    "previousIcons": [
+      "ability_rogue_quickrecovery"
+    ],
+    "reason": "Time warped back for a second try, a Reaction given to an ally."
+  },
   "talent:second-strike": {
     "name": "Second Strike",
     "source": "04-TALENTS",
@@ -7702,6 +8188,15 @@
       "spell_shaman_spiritlink"
     ],
     "reason": "Retain: the Spirit Link image directly depicts sharing damage between an ally and the caster."
+  },
+  "talent:shared-hours": {
+    "name": "Shared Hours",
+    "source": "04-TALENTS",
+    "icon": "inv_eng_unstabletemporaltimeshifter",
+    "previousIcons": [
+      "inv_eng_unstabletemporaltimeshifter"
+    ],
+    "reason": "Time shared out, Sand gained whenever an ally is helped."
   },
   "talent:shared-quarry": {
     "name": "Shared Quarry",
@@ -7995,6 +8490,15 @@
     ],
     "reason": "Starlight depicts rapid travel guided beneath the stars."
   },
+  "talent:stasis-lore": {
+    "name": "Stasis Lore",
+    "source": "04-TALENTS",
+    "icon": "inv_enchant_dustvision",
+    "previousIcons": [
+      "inv_enchant_dustvision"
+    ],
+    "reason": "Time stopped, the Stasis the talent teaches."
+  },
   "talent:static-charge": {
     "name": "Static Charge",
     "source": "04-TALENTS",
@@ -8040,6 +8544,15 @@
       "ability_demonhunter_chaoticimprint_fire"
     ],
     "reason": "Replace: Chaotic Imprint Fire shows a single demonic fire imprint. The inspected Storm, Earth and Fire icon shows lightning striking scorched earth, a closer visual for the three summoned elemental forces."
+  },
+  "talent:storm-of-ages": {
+    "name": "Storm of Ages",
+    "source": "04-TALENTS",
+    "icon": "spell_sandstorm",
+    "previousIcons": [
+      "spell_sandstorm"
+    ],
+    "reason": "A widening sandstorm, Sandstorm's radius grown."
   },
   "talent:stormblood": {
     "name": "Stormblood",
@@ -8132,6 +8645,24 @@
     ],
     "reason": "Retain: the cat attack image depicts being in Shapeshift form and reacting to an incoming hit."
   },
+  "talent:suspended-moment": {
+    "name": "Suspended Moment",
+    "source": "04-TALENTS",
+    "icon": "ability_bossmagistrix_timewarp2",
+    "previousIcons": [
+      "ability_bossmagistrix_timewarp2"
+    ],
+    "reason": "A moment suspended, conditions that do nothing for a turn."
+  },
+  "talent:swift-current": {
+    "name": "Swift Current",
+    "source": "04-TALENTS",
+    "icon": "inv_tailoring_815_synchronousthread",
+    "previousIcons": [
+      "inv_tailoring_815_synchronousthread"
+    ],
+    "reason": "Time hurried further, Slipstream's reach widened."
+  },
   "talent:swiftmend": {
     "name": "Swiftmend",
     "source": "04-TALENTS",
@@ -8186,6 +8717,15 @@
       "spell_nature_slow"
     ],
     "reason": "Slow's own art, for Rage gained by hitting a Slowed creature."
+  },
+  "talent:temporal-loop": {
+    "name": "Temporal Loop",
+    "source": "04-TALENTS",
+    "icon": "inv_eng_clockworkegg",
+    "previousIcons": [
+      "inv_eng_clockworkegg"
+    ],
+    "reason": "Time looped back, a creature returned to where its move began."
   },
   "talent:ten-thousand-years": {
     "name": "Ten Thousand Years",
@@ -8253,6 +8793,15 @@
       "achievement_character_undead_male"
     ],
     "reason": "A ghostly dead figure fits locating a plague victim and learning their fate."
+  },
+  "talent:the-glass-turns-back": {
+    "name": "The Glass Turns Back",
+    "source": "04-TALENTS",
+    "icon": "inv_shield_timewalker_b_01",
+    "previousIcons": [
+      "inv_shield_timewalker_b_01"
+    ],
+    "reason": "The timewalker's shield, the whole party's uses and pools turned back."
   },
   "talent:the-hunger-mastered": {
     "name": "The Hunger Mastered",
@@ -8394,6 +8943,24 @@
     ],
     "reason": "Alter Time's art for rolling a failed Test again."
   },
+  "talent:time-lock": {
+    "name": "Time-Lock",
+    "source": "04-TALENTS",
+    "icon": "inv_eng_bombslow",
+    "previousIcons": [
+      "inv_eng_bombslow"
+    ],
+    "reason": "A slowed figure, a creature held to attacking the caster alone."
+  },
+  "talent:timeless-sentinel": {
+    "name": "Timeless Sentinel",
+    "source": "04-TALENTS",
+    "icon": "ability_mount_drake_bronze",
+    "previousIcons": [
+      "ability_mount_drake_bronze"
+    ],
+    "reason": "A bronze dragon's watch, every attack on an ally drawn to the caster."
+  },
   "talent:tinkers-eye": {
     "name": "Tinker's Eye",
     "source": "02-CHARACTER-OPTIONS",
@@ -8496,6 +9063,24 @@
     ],
     "reason": "Retain: the focused bow image fits an attack that hits without a roll."
   },
+  "talent:turned-aside": {
+    "name": "Turned Aside",
+    "source": "04-TALENTS",
+    "icon": "inv_shield_06",
+    "previousIcons": [
+      "inv_shield_06"
+    ],
+    "reason": "A shield, Sand gained from a Block and a missed attack."
+  },
+  "talent:twinned-hours": {
+    "name": "Twinned Hours",
+    "source": "04-TALENTS",
+    "icon": "inv_relics_hourglass",
+    "previousIcons": [
+      "inv_relics_hourglass"
+    ],
+    "reason": "A second hourglass, Slipstream used twice."
+  },
   "talent:twisted-faith": {
     "name": "Twisted Faith",
     "source": "04-TALENTS",
@@ -8580,6 +9165,15 @@
     ],
     "reason": "Replace: The proposed earthbind totem shows ground control, not return from death. A luminous guardian spirit evokes both the revived bearer and the Dying ally they bring back."
   },
+  "talent:unfading": {
+    "name": "Unfading",
+    "source": "04-TALENTS",
+    "icon": "spell_mage_temporalshield",
+    "previousIcons": [
+      "spell_mage_temporalshield"
+    ],
+    "reason": "A shield of time, a condition ended and held off."
+  },
   "talent:unfettered": {
     "name": "Unfettered",
     "source": "04-TALENTS",
@@ -8588,6 +9182,15 @@
       "ability_rogue_nightblade"
     ],
     "reason": "Replace: Nightblade depicts a weapon. The rogue sprint image depicts ending and resisting movement restrictions."
+  },
+  "talent:unmade-wound": {
+    "name": "Unmade Wound",
+    "source": "04-TALENTS",
+    "icon": "spell_necro_deathlyecho",
+    "previousIcons": [
+      "spell_necro_deathlyecho"
+    ],
+    "reason": "Time rewound, the damage put off that never arrives."
   },
   "talent:unmoved": {
     "name": "Unmoved",
@@ -8735,6 +9338,24 @@
     ],
     "reason": "Retain: the rogue ambush blade matches attacking from hidden and denying a Reaction."
   },
+  "talent:weathered-by-ages": {
+    "name": "Weathered by Ages",
+    "source": "04-TALENTS",
+    "icon": "spell_nature_skinofearth",
+    "previousIcons": [
+      "spell_nature_skinofearth"
+    ],
+    "reason": "A weathered earthen skin, Fortitude raised."
+  },
+  "talent:weavers-lore": {
+    "name": "Weaver's Lore",
+    "source": "04-TALENTS",
+    "icon": "spell_arcane_blink",
+    "previousIcons": [
+      "spell_arcane_blink"
+    ],
+    "reason": "The arcane step, Farstep and Aftersight learned."
+  },
   "talent:weavers-sight": {
     "name": "Weaver's Sight",
     "source": "04-TALENTS",
@@ -8854,6 +9475,15 @@
       "achievement_character_bloodelf_male"
     ],
     "reason": "A surge of blue magical energy depicts recovering Power at depletion."
+  },
+  "talent:withering-hours": {
+    "name": "Withering Hours",
+    "source": "04-TALENTS",
+    "icon": "inv_withered",
+    "previousIcons": [
+      "inv_withered"
+    ],
+    "reason": "Withering, Withering Sands made harsher and its healing halved."
   },
   "talent:wolfs-pace": {
     "name": "Wolf's Pace",

@@ -17,6 +17,8 @@ import { restoreCombatEffectTracking } from "../effects/combat-effect-registry.m
 import {
   freshTurn,
   gainHalfActions,
+  giveReaction,
+  givenKept,
   grantAtOnce,
   initiativeFor,
   loseTurn,
@@ -27,6 +29,8 @@ import {
   withoutReaction
 } from "../rules/initiative.mjs";
 import { drainAtRoundEnd, fightStart, idleDecay, leaveFightPools } from "../rules/momentum.mjs";
+// 04's Second Chance: the last moment a given Reaction may be spent (stage 2b).
+import { givenReactionUntil } from "../rules/chronomancer.mjs";
 import { bleedTick, scorchTick, sustainLimit, upkeep } from "../rules/turn-effects.mjs";
 import { sustainEntryTransferPending } from "../rules/sustain-entry-transfer.mjs";
 import { buffetStacks } from "../rules/flame-buffet.mjs";
@@ -103,7 +107,7 @@ import { checksFor, hasAreaTick, holdsPoint, shapeCentre, tickFor } from "../rul
 import { spellAreaFor } from "../rules/talent-effects.mjs";
 import { feetApart } from "../canvas/footprints.mjs";
 import {
-  actorOf, areaRecord, armAreas, casterTokenOn, growAreas, isDown, staleIn, sweepFightAreas, worldClock
+  actorOf, areaRecord, armAreas, casterTokenOn, growAreas, isDown, scenesOfFight, staleIn, sweepFightAreas, worldClock
 } from "../canvas/sustained-areas.mjs";
 // What an area does to a creature (D-756, D-757): the one door its damage and
 // healing land through, the Resist card its Tests post, and the one reading of
@@ -151,6 +155,7 @@ import { CUTTING_GEAR, holdsCuttingGear } from "../rules/escapes.mjs";
 // 14 §1's Boss Actions (D-809): the points' one writer, a grip that strikes at the
 // holder's turn, and a turn that passes while a creature is away or not yet arrived.
 import { refreshBossPoints } from "../effects/boss-points.mjs";
+import { secondsLeftAfterFight } from "../rules/fight-spans.mjs";
 import { advanceBossGrips, bossRoundStart, bossTurnSkip } from "../effects/boss-doors.mjs";
 
 /** An area's forced move at a turn's start (07's Void Rift; D-778), off the Region's own record. */
@@ -376,10 +381,19 @@ export class AzerothCombatant extends Combatant {
     // that spend and wiped it - three batches spend exactly then - which is a
     // turn-boundary rule the lead did not ask to change.
     const flags = { budget: freshTurn(this._turnFacts()) };
+    // **A REACTION GIVEN OUTLIVES THE RESET** (04's Second Chance: *which it may use until the
+    // end of its next turn*; stage 2b): the ones still standing at the turn now starting.
+    const kept = this._givenKept?.() ?? [];
+    if (kept.length) flags.budget.given = kept;
     if (this.getFlag("azeroth-rpg", "moveHalves")) flags.moveHalves = foundry.data.operators.ForcedDeletion.create();
     // Clear on every budget reset, including a GM rewind to the same round/turn.
     if (this.getFlag("azeroth-rpg", "swimMovement")) flags.swimMovement = foundry.data.operators.ForcedDeletion.create();
     return this.update({ flags: { "azeroth-rpg": flags } });
+  }
+
+  /** The Reactions given that still stand at the turn now starting (04's Second Chance; stage 2b). */
+  _givenKept() {
+    return givenKept(this.getFlag("azeroth-rpg", "budget") ?? null, this.combat ? { round: this.combat.round, turn: this.combat.turn } : null);
   }
 
   /** What `freshTurn` reads off the creature: 02 §6's feature and 02 §7's free Move. */
@@ -864,6 +878,8 @@ export class AzerothCombatant extends Combatant {
         ui.notifications?.warn(game.i18n.localize(seduction));
         return { ok: false, reason: seduction, params: {}, budget: before };
       }
+      // The fight's moment, for a Reaction given that may have lapsed (04's Second Chance; stage 2b).
+      options = { now: this.combat ? { round: this.combat.round, turn: this.combat.turn } : null, ...options };
       const result = spend(before, cost, { ...options, attackSlowed: attackSlowedFor(this.actor, options), onTurn: options.onTurn ?? this.isCurrentTurn });
       if (!result.ok) {
         // A construct the SHARED turn refuses says so (door 6).
@@ -1000,10 +1016,13 @@ export class AzerothCombatant extends Combatant {
    * one away. Queued with every other budget write and read when its turn comes
    * (D-761): the combatant's eighth budget door.
    *
+   * `uncapped` is Master of Hours' own stack and gifts, which no cap of six binds (D-877).
+   *
    * @param {number} [n]
+   * @param {{uncapped?: boolean}} [o]
    */
-  async grantHalfActions(n = 1) {
-    return oneAtATime(this, async () => this.setFlag("azeroth-rpg", "budget", gainHalfActions(this.budget, n)));
+  async grantHalfActions(n = 1, { uncapped = false } = {}) {
+    return oneAtATime(this, async () => this.setFlag("azeroth-rpg", "budget", gainHalfActions(this.budget, n, uncapped ? { cap: null } : {})));
   }
 
   /**
@@ -1020,6 +1039,29 @@ export class AzerothCombatant extends Combatant {
    */
   async grantAtOnce(n = 1) {
     return oneAtATime(this, async () => this.setFlag("azeroth-rpg", "budget", grantAtOnce(this._ownBudget(), n)));
+  }
+
+  /**
+   * **A REACTION GIVEN, HELD UNTIL THE END OF THE CREATURE'S NEXT TURN** (04's Second Chance:
+   * *An ally within 30 feet gains an extra Reaction, which it may use until the end of its
+   * next turn*; the plan's door 9). The last moment it may be spent is worked out off the
+   * fight as it stands when the write's turn comes (`chronomancer.mjs#givenReactionUntil`),
+   * written on the budget (`rules/initiative.mjs#giveReaction`), kept through the turn's
+   * reset and spent before the creature's own Reaction. Queued with every other budget write
+   * (D-761): the combatant's twelfth budget door. `restoreAction` stays the GM's undo.
+   *
+   * @returns {Promise<{given: boolean, until: object|null}>}
+   */
+  async giveReaction() {
+    return oneAtATime(this, async () => {
+      const fight = this.combat ?? null;
+      if (!fight?.started) return { given: false, until: null };
+      const allyTurn = fight.turns.findIndex(c => c.id === this.id);
+      if (allyTurn < 0) return { given: false, until: null };
+      const until = givenReactionUntil({ round: fight.round, turn: fight.turn ?? 0, allyTurn });
+      await this.setFlag("azeroth-rpg", "budget", giveReaction(this.budget, until));
+      return { given: true, until };
+    });
   }
 
   /**
@@ -1418,6 +1460,13 @@ export function onMoveToken(document, movement, operation, user) {
     ? Promise.resolve(null) : combatant.spendMovement(movement);
   return paid
     .then(() => (!rocketJump && creatureMoved(movement, operation) ? offerOpportunities(combatant, movement) : []))
+    // **04's TEMPORAL LOOP** (*As a Reaction when a creature you can see within 60 feet ends a
+    // move*; stage 2b): an offer to each holder near the mover's new space, once the move ends.
+    .then(async () => {
+      if (rocketJump || !creatureMoved(movement, operation)) return;
+      const { offerTemporalLoop } = await import("../effects/chronomancer.mjs");
+      await offerTemporalLoop(combatant, movement);
+    })
     .catch(err => console.error("azeroth-rpg | opportunity attack", err));
 }
 
@@ -1882,14 +1931,21 @@ export class AzerothCombat extends Combat {
     // A late joiner enters as the others began (02 SS7).
     if (this.started) await this._fightStart(combatant);
     if (this.started) await this._infernalArrivals([combatant]);
-    // A character's bound creatures on the scene join beside it (D2 §7, D-643).
+    // A character's bound creatures on the scene join beside it (D2 §7, D-643) - on every
+    // scene the fight stands on (O-294): core makes a fight unlinked, so `this.scene` is null
+    // at the table and the bound creatures never joined (`rules/fight-scenes.mjs`).
     const owner = combatant.actor;
-    if (owner?.type === "character" && this.scene) {
+    if (owner?.type === "character") {
       const bound = new Set(boundOf(owner).map(a => a.id));
-      const tokens = this.scene.tokens.filter(t => bound.has(t.actorId) && !this.combatants.some(c => c.tokenId === t.id));
-      if (tokens.length) {
-        await this.createEmbeddedDocuments("Combatant", tokens.map(t => ({ tokenId: t.id, sceneId: this.scene.id, actorId: t.actorId })));
+      const joining = [];
+      for (const scene of scenesOfFight(this)) {
+        for (const t of scene.tokens) {
+          if (bound.has(t.actorId) && !this.combatants.some(c => c.tokenId === t.id && (c.sceneId ?? scene.id) === scene.id)) {
+            joining.push({ tokenId: t.id, sceneId: scene.id, actorId: t.actorId });
+          }
+        }
       }
+      if (joining.length) await this.createEmbeddedDocuments("Combatant", joining);
     }
   }
 
@@ -2184,6 +2240,14 @@ export class AzerothCombat extends Combat {
     // Rain of Fire's Fire, Healing Rain's Health. Beside Scorched because it is
     // the same beat, and BEFORE the regeneration below, so a Fire tick withholds
     // this turn's mending as 14 says it does.
+    // **07 §12's DILATION, THE HALF PUT OFF** (D-866; the 2a review, M2): landed FIRST, before any
+    // of this turn's ticks, so a tick taken under Dilation now - put off in its turn - waits for
+    // the next turn rather than landing in this same pass. **04's Unmade Wound is asked first**
+    // (O-274, D-880): the turn's Half-Actions are fresh here, so the Guardian may erase what
+    // Borrowed Time put off before it lands (`turnStart`).
+    if (!combatant?.isDefeated && !(actor.type === "npc" && (actor.system?.health?.value ?? 0) <= 0)) {
+      for (const line of (await this._landDeferred?.(actor, { turnStart: true })) ?? []) lines.push(line);
+    }
     for (const line of await this._areaTicks(combatant)) lines.push(line);
     // **AND WHAT IS LAID ON THE CREATURE ITSELF** (D-770; the lead: *"Build
     // the tick now"*): Rejuvenation's Health, Immolate's Fire, a poison's
@@ -2214,6 +2278,15 @@ export class AzerothCombat extends Combat {
     // regeneration because it is the same beat of the turn; the difference is
     // that a character's comes off the things they are wearing.
     for (const line of await this._signatureTicks(actor)) lines.push(line);
+    // **THE CHRONOMANCER'S TURN-START DOORS** (02 §7, 04; stage 2b): Master of Hours' stacking
+    // Half-Actions, and what Recurrence and Echoing Sands land again at the caster's turn
+    // start (`effects/chronomancer.mjs#chronoTurnStart`). Guarded: none stops the turn.
+    try {
+      const { chronoTurnStart } = await import("../effects/chronomancer.mjs");
+      for (const line of await chronoTurnStart(combatant)) lines.push(line);
+    } catch (err) {
+      console.warn("azeroth-rpg | a Chronomancer's turn start", err);
+    }
     // **THE CHAMPION'S TURN-START DOORS** (04; stage 3B): the Half-Action a Hasten gave this
     // creature for this turn, given now that the budget is reset (`takeHastened`), and the
     // Blue Drake's Mana to each ally within 30 feet as the drake's own turn starts. Guarded:
@@ -2483,6 +2556,7 @@ export class AzerothCombat extends Combat {
     if (!actor) return [];
     if (combatant.isDefeated || (actor.type === "npc" && (actor.system?.health?.value ?? 0) <= 0)) return [];
     const lines = await landTicks(actor, {combat:this,combatant});
+    // 07 §12's Dilation's half lands before this turn's ticks (`_onStartTurn`, the 2a review, M2).
     lines.push(...await advanceVekniss(actor, this));
     lines.push(...await advanceBloodpetal(actor, this));
     lines.push(...await advanceDredgePoison(actor, this));
@@ -2497,6 +2571,22 @@ export class AzerothCombat extends Combat {
     // the HOLDER's turn, so it is this creature's grips on the others that strike.
     lines.push(...((await this._bossGrips?.(actor)) ?? []));
     return lines;
+  }
+
+  /**
+   * **07 §12's DILATION, WHAT WAS PUT OFF, LANDED** (D-866): each pending row through
+   * `AzerothActor#_landPutOff` - not reduced again, never put off a second time, through
+   * `takeStraightDamage` (the 2a review, M1) - at the start of the creature's turn, before
+   * that turn's ticks (`_onStartTurn`), and at the fight's end (`_leaveFight`). Answers the lines.
+   * `turnStart` asks 04's Unmade Wound first (O-274, D-880); the fight's end asks nothing.
+   *
+   * @param {Actor} actor
+   * @param {{turnStart?: boolean}} [o]
+   * @returns {Promise<string[]>}
+   */
+  async _landDeferred(actor, { turnStart = false } = {}) {
+    const { landDeferred } = await import("../effects/deferred-damage.mjs");
+    return landDeferred(actor, { turnStart });
   }
 
   /**
@@ -2867,6 +2957,10 @@ export class AzerothCombat extends Combat {
     // **AND TEMPORARY HEALTH BOUGHT FOR THE FIGHT** (04's Last Stand and Living
     // Seed: *until the encounter ends*; D-777): what is left of it goes.
     await actor?.endTemporaryHealth?.({ kind: "encounterEnd", combatId: this.id });
+    // **07 §12's DILATION, A HALF STILL PUT OFF** (D-866; the 2a review, M2): the turn it waited
+    // for will never come, so it lands now - D-866's own reading of a blow out of a fight - and
+    // the list is cleared by the landing.
+    if (actor) for (const line of (await this._landDeferred?.(actor)) ?? []) ui.notifications?.info(line);
     // The buffs bought for the fight lapse and the creatures called for it go (D-643).
     if (actor?.type === "character") await endBoundEncounter(actor).catch(err => console.error("azeroth-rpg | bound encounter", err));
     // The fight's states go with the fight (05, D-694): a Disengage bought a
@@ -2884,6 +2978,11 @@ export class AzerothCombat extends Combat {
     // and the one after. A combatant walking out of a fight that carries on
     // keeps theirs - the minute is still running in there.
     if (ended) await this._coatingsEndWithFight(actor);
+    // **AND A SPAN OF TURNS THE FIGHT WAS COUNTING GOES ON THE WORLD'S CLOCK** (the sweep's
+    // stage 2, D-891; narrowed by O-289, D-893): a span in rounds is core's, reframed through
+    // `CONFIG.time.roundTime`; *until the end of your next turn* has no length core can reframe
+    // and would end at the clock's next tick, so it is one round of the clock.
+    if (ended) await this._spansToClock(actor);
     // **A BOSS'S POINTS ARE FULL AGAIN WHEN ITS FIGHT ENDS** (the lead's ruling on Q18,
     // D-809): out of a fight it spends as in one, and starts the next one full.
     if (ended) await this._refreshBossPoints?.(actor);
@@ -2898,6 +2997,35 @@ export class AzerothCombat extends Combat {
     for (const key of ["budget", "round", "lastHitRound", "acted", "heldPosition", "marked", "damageTypes", "ready", "moveHalves", "damaged", LUNAR_DAMAGE_FLAG, "lastTurn", "constructTurn"]) {
       if (combatant.getFlag("azeroth-rpg", key) !== undefined) await combatant.unsetFlag("azeroth-rpg", key);
     }
+  }
+
+  /**
+   * **WHAT IS LEFT OF A FIGHT'S SPANS OF TURNS, ON THE WORLD'S CLOCK** (the sweep's stage 2,
+   * D-891; O-289, D-893): each effect on this actor that THIS fight was counting in turns - its
+   * `start.combat`, read off the stored source because the live field resolves to a document and
+   * the fight is gone - rewritten as the seconds `rules/fight-spans.mjs#secondsLeftAfterFight`
+   * leaves it, started now, keyed on no fight. A span in rounds is left as it is: core reframes
+   * it through `CONFIG.time.roundTime`. Run on the active GM's client as the fight ends
+   * (`_onExit`), before any clock tick.
+   *
+   * @param {Actor} actor
+   */
+  async _spansToClock(actor) {
+    const now = Math.trunc(Number(game.time?.worldTime) || 0);
+    const updates = [];
+    for (const effect of actor?.effects ?? []) {
+      const start = effect._source?.start ?? null;
+      if (!start || start.combat !== this.id) continue;
+      const seconds = secondsLeftAfterFight(effect._source.duration);
+      if (seconds === null) continue;
+      updates.push({
+        _id: effect.id,
+        "duration.value": seconds, "duration.units": "seconds", "duration.expiry": null,
+        "start.combat": null, "start.combatant": null, "start.round": null, "start.turn": null, "start.time": now
+      });
+    }
+    if (updates.length) await actor.updateEmbeddedDocuments("ActiveEffect", updates).catch(err => console.warn("azeroth-rpg | a fight's spans to the clock", err));
+    return updates.length;
   }
 
   /**

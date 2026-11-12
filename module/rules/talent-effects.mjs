@@ -3089,6 +3089,234 @@ export const TALENT_EFFECTS = Object.freeze({
       // the active GM's client (`effects/chromatic-talents.mjs#blackDrakeLanding`).
       landing: { form: "Black Drake", feet: 10, resilience: "reflex", condition: "prone" }
     }
+  },
+  // THE CHRONOMANCER (D-847; stage 2b, D-870 to D-877). 04's Shifting Sands and
+  // Chronoweaver, every talent a row and every row a door with a caller - the lead: *"We
+  // need automation and animations fully complete for everything"*. The law is
+  // `rules/chronomancer.mjs`; the Use doors are `workflows.mjs#judgeChronoUse` and
+  // `#landChronoUse`, the writes `effects/chronomancer.mjs`; Guardian of Time's twelve (stage
+  // 2c) read `rules/guardian.mjs` and `rules/echoes.mjs` and write through
+  // `effects/guardian.mjs`. A spell a talent teaches is the Chronomancer's to cast whatever its
+  // Restricted line says (D-852): the sync embeds by name and the cast takes the class's
+  // own Casting Test and Spell DC (`casting.mjs#grantingClass`).
+  chronomancer: {
+    // ---- Shifting Sands ----
+    // *As you make a Casting Test, before you roll, you may spend Sand, up to twice your
+    // rank, on one of two things: 1 more damage for each Sand, or 1 more SL for each 2 Sand.
+    // Choose one; the Sand cannot be split between them.* Lines on the cast's own dialog,
+    // unticked and priced (`chronomancer.mjs#gritLines`), one taken (`gritPicked`), paid
+    // with the cast (`castSpell`).
+    "grit-of-ages": { grit: { damage: 1, sl: 2, cap: 2 } },
+    // *A creature carrying your Decay takes a Bane on Reflex Resilience Tests against your
+    // spells. At rank 2 it cannot Disengage.* A Bane on the Resist off the caster's talents
+    // and the Decay's own `by` (`dice/chat.mjs#rollResists`), and the Disengage refused at
+    // the one Disengage door (`effects/chronomancer.mjs#disengageBarred`).
+    "heavy-hours": { heavyHours: { banes: 1, atRank: [{ rank: 2, noDisengage: true }] } },
+    // *When a spell of yours damages a Slowed or Entangled creature, gain 1 Sand, once a cast.*
+    "dragging-sands": { dragging: { gain: 1, conditions: ["slowed", "entangled"] } },
+    // *When a spell of yours damages a creature, you may spend 2 Sand. At the start of your
+    // next turn that creature takes half the damage it took, rounded down, again. At rank 2
+    // it takes all of it again.* A line on the cast's dialog (`echoingSandsLine`), the Sand
+    // paid where the spell hits; the first creature its card's Apply damages takes it again
+    // at the caster's next turn start, after Armor Points and never reduced a second time
+    // (D-858's reading; `effects/chronomancer.mjs#landAgain`).
+    "echoing-sands": { echoing: { sand: 2, whole: false, atRank: [{ rank: 2, whole: true }] } },
+    // *Once per Short Rest, when a creature you have Slowed fails a Resilience Test against a
+    // spell of yours, it is also Stunned until the end of its next turn. At rank 2, twice per
+    // Short Rest.* The counter's uses, struck where the failed Resist lays the Stun.
+    "arrested-moment": {
+      grants: grant({ action: null, uses: uses("rank", "short") }),
+      arrested: { condition: "stunned" }
+    },
+    // *When a spell of yours lays Decay on a creature, that Decay is 1 higher. At rank 2 your
+    // Decay adds to any Decay the creature already carries, to no more than your tier.*
+    "erosion": { decay: { more: 1, adds: true, capTier: true, atRank: 2 } },
+    // *Your Sandstorm's radius is 5 feet larger. At rank 2, as you cast it you may spend Sand,
+    // and each Sand adds 5 feet more.* The widened area through `spellAreaFor`, and rank 2's
+    // Sand lines on the dialog (`stormLines`).
+    "storm-of-ages": {
+      spell: { names: ["Sandstorm"], widen: 5 },
+      storm: { spell: "Sandstorm", perSand: 5, spend: false, atRank: [{ rank: 2, spend: true }] }
+    },
+    // *Your Withering Sands deals 1 more damage per rank. At rank 2 or higher, a creature
+    // inside its area regains only half the Health any healing gives it, rounded down.*
+    "withering-hours": {
+      spell: { names: ["Withering Sands"], damage: 1 },
+      withering: { spell: "Withering Sands", halves: false, atRank: [{ rank: 2, halves: true }] }
+    },
+    // *As a Reaction when a creature you can see within 60 feet ends a move, spend 2 Sand. It
+    // makes a Spirit Resilience Test against your Spell DC. On a failure it returns to the
+    // space it started that move from.* Offered on a card when an enemy's move ends
+    // (`effects/chronomancer.mjs#offerTemporalLoop`), pressed through the granted feature.
+    "temporal-loop": {
+      grants: grant({ action: "reaction", cost: cost("sand", 2), resist: "spirit" }),
+      onUse: { temporalLoop: true },
+      loop: { feet: 60, sand: 2 }
+    },
+    // *You know Stasis, and your Stasis needs no Arcane Anchor: any targets within its range
+    // may be held. You may cast it for 5 Sand in place of its Mana.*
+    "stasis-lore": { spell: { names: ["Stasis"], learn: true, noPrerequisite: ["Stasis"], sandCast: { cost: 5, names: ["Stasis"], succeeds: [] } } },
+    // *Once per encounter, as a Half-Action, spend all your Sand, at least 3. Each creature
+    // within 60 feet that you have Slowed or that carries your Decay takes Physical damage
+    // equal to your tier plus the Sand spent. At rank 2, twice your tier plus the Sand spent.*
+    "collapse-of-hours": {
+      grants: grant({ action: "half", uses: uses(1, "encounter") }),
+      onUse: { collapse: { feet: 60, least: 3, twice: false, atRank: [{ rank: 2, twice: true }] } }
+    },
+    // *You know Halt. You may cast it for 5 Sand in place of its Mana, and when you do, its
+    // Casting Test succeeds.*
+    "halt-the-sands": { spell: { names: ["Halt"], learn: true, sandCast: { cost: 5, names: ["Halt"], succeeds: ["Halt"] } } },
+    // ---- Chronoweaver ----
+    // *As a Half-Action, spend 2 Sand. One ally within 30 feet gains a Boon on its next Test
+    // before the end of its next turn. At rank 2 it also gains 10 feet of Speed until the end
+    // of its next turn.*
+    "gift-of-moments": {
+      grants: grant({ action: "half", cost: cost("sand", 2) }),
+      onUse: { gift: { feet: 30, boons: 1, speed: 0, atRank: [{ rank: 2, speed: 10 }] } }
+    },
+    // *As a Half-Action, spend 1 Sand. One willing ally within 30 feet moves up to 10 feet per
+    // rank at once, without provoking Opportunity Attacks.* The ally's space picked before
+    // the Sand is paid, then the step door's displacement (`effects/steps.mjs`).
+    "quickstep": {
+      grants: grant({ action: "half", cost: cost("sand", 1) }),
+      onUse: { quickstep: { feet: 30, per: 10 } }
+    },
+    // *When a spell or talent of yours gives an ally Health, a Boon, a Half-Action or a
+    // Reaction, gain 1 Sand. At rank 2, gain 2. You may gain Sand this way a number of times
+    // per Long Rest equal to your Intelligence modifier.*
+    "shared-hours": {
+      grants: counter("int", "long"),
+      shared: { gain: 1, atRank: [{ rank: 2, gain: 2 }] }
+    },
+    // *As a Half-Action, spend 3 Sand. An ally within 30 feet gains an extra Reaction, which it
+    // may use until the end of its next turn. At rank 2 it costs 2 Sand.* The combatant's own
+    // queued door (`AzerothCombatant#giveReaction`).
+    "second-chance": {
+      grants: grant({ action: "half", cost: cost("sand", 3), atRank: [{ rank: 2, cost: cost("sand", 2) }] }),
+      onUse: { secondChance: { feet: 30 } }
+    },
+    // *As a Reaction when an ally within 90 feet gains a condition, spend 2 Sand. The condition
+    // ends, and the ally cannot gain it again until the end of its next turn. You may do this a
+    // number of times per encounter equal to your rank.*
+    "unfading": {
+      grants: grant({ action: "reaction", cost: cost("sand", 2), uses: uses("rank", "encounter") }),
+      onUse: { unfading: true },
+      unfading: { feet: 90, sand: 2 }
+    },
+    // *Your Slipstream reaches 60 feet. At rank 2 it costs 2 Mana.*
+    "swift-current": {
+      modifies: mod("Slipstream", { atRank: [{ rank: 2, cost: { delta: -2 } }] }),
+      slipstream: { feet: 60, atRank: [{ rank: 2, mana: 2 }] }
+    },
+    // *As a Half-Action, spend 3 Sand. One ally within 30 feet regains up to 2 per rank of one
+    // Momentum or Power pool it holds, other than Sand, to no more than its maximum.*
+    "echo-of-power": {
+      grants: grant({ action: "half", cost: cost("sand", 3) }),
+      onUse: { echoOfPower: { feet: 30, per: 2 } }
+    },
+    // *As a Half-Action, spend 2 Sand. Until the start of your next turn, the conditions on a
+    // number of allies within 30 feet equal to your rank are suspended: they do nothing and do
+    // not count down.*
+    "suspended-moment": {
+      grants: grant({ action: "half", cost: cost("sand", 2) }),
+      onUse: { suspendedMoment: { feet: 30 } }
+    },
+    // *You may use Slipstream twice per encounter. At rank 2 it may target you.*
+    "twinned-hours": {
+      modifies: mod("Slipstream", { uses: { max: 2, per: "encounter" } }),
+      slipstream: { uses: 2, atRank: [{ rank: 2, self: true }] }
+    },
+    // *You know Farstep and Aftersight. When you cast Farstep you may bring one willing
+    // creature within 5 feet of you.*
+    "weavers-lore": {
+      spell: { names: ["Farstep", "Aftersight"], learn: true },
+      companion: { spell: "Farstep", feet: 5, count: 1 }
+    },
+    // *Once per Short Rest, as a Half-Action, spend 4 Sand. A number of allies within 30 feet
+    // equal to your rank each regain one spent use of a feature, talent or spell they may use
+    // once per encounter or once per Short Rest.*
+    "recovered-hours": {
+      grants: grant({ action: "half", cost: cost("sand", 4), uses: uses(1, "short") }),
+      onUse: { recover: { feet: 30, pers: ["encounter", "short"], self: false } }
+    },
+    // *Once per Long Rest, as an action, spend all your Sand, at least 3. Each ally within 60
+    // feet, you included, regains one spent use of a feature, talent or spell other than this
+    // one that it may use once per encounter, once per Short Rest or once per Long Rest, and
+    // regains up to 3 of one Momentum or Power pool it holds.*
+    "the-glass-turns-back": {
+      grants: grant({ action: "action", uses: uses(1, "long") }),
+      onUse: { glassTurnsBack: { feet: 60, least: 3, pers: ["encounter", "short", "long"], pool: 3 } }
+    },
+    // ---- Guardian of Time (stage 2c; the law is `rules/guardian.mjs`, the writes
+    // `effects/guardian.mjs`) ----
+    // *You may wear studded and mail armor and carry a shield.* (D-855): the Access Bane,
+    // the creator's notes and the owned-item warnings read it (`armorAccessFor`).
+    "bronzed-steel": { armorAccess: { categories: ["studded", "mail"], shields: true } },
+    // *As a Half-Action, spend 2 Sand. A creature within 30 feet that can see you takes a
+    // Bane, per rank, attacking anyone but you until the end of your next turn.* Taunt's
+    // laid Bane, the one door (`effects/banes.mjs#layBane` through `useFeature`).
+    "time-lock": {
+      grants: grant({ action: "half", cost: cost("sand", 2) }),
+      onUse: { laysBane: { kind: "attack", banes: "rank", except: "user", until: "userTurnEnd", feet: 30 } }
+    },
+    // *When you Block an attack, gain 1 Sand. At rank 2 you also gain 1 when an attack
+    // against you misses. At rank 3 a Block gives 2.* The Block's own door
+    // (`actions.mjs#blockNow`) and the miss read off the attack's card on the active GM's
+    // client (`effects/guardian.mjs#turnedAsideOnMiss`).
+    "turned-aside": { turnedAside: { block: 1, miss: 0, atRank: [{ rank: 2, miss: 1 }, { rank: 3, block: 2 }] } },
+    // *While you wield a shield, when your Attack Test's d20 shows 18, 19 or 20, make one
+    // more attack roll, an echo ... When that echo's d20 shows 16 or higher, it echoes again,
+    // and when the second echo's d20 shows 14 or higher, it echoes a third time. A third echo
+    // does not echo.* (`rules/echoes.mjs`, rolled by `actions.mjs#rollWithDialog`).
+    "echo-of-the-blade": { echo: { floors: [18, 16, 14], shield: true } },
+    // *As a Reaction when a blow reduces your Health, spend 1 Sand. Take half its damage now,
+    // rounded up. At the start of your next turn, take the other half minus your rank.*
+    // Asked IN the blow (`AzerothActor#applyDamage`, through `azeroth-rpg.blowAsk`), the half
+    // put off on the creature's list and landed at its turn's start (D-866's carrier).
+    "borrowed-time": {
+      grants: grant({ action: "reaction", cost: cost("sand", 1) }),
+      onUse: { askedInBlow: true },
+      borrowed: { sand: 1, less: "rank" }
+    },
+    // *When you Block, the attacker makes a Spirit Resilience Test against your Spell DC. On
+    // a failure it is Slowed until the end of its next turn. At rank 2 your Block takes 1 more
+    // damage off.* The Test rides the Block's own card; the 1 more is the Block's bonus.
+    "grinding-block": {
+      grind: { resilience: "spirit", condition: "slowed", until: "endOfNextTurn" },
+      block: { add: "rank-1" }
+    },
+    // *As a Reaction when a creature you can see attacks an ally within 10 feet of you, spend
+    // 2 Sand. You and that ally swap places without provoking Opportunity Attacks, and the
+    // attack targets you instead. At rank 2, within 20 feet.* A move asked in the blow, as
+    // Guardian's is (`effects/blow-doors.mjs#redirectBlow`), the swap a displacement.
+    "interposed-moment": {
+      grants: grant({ action: "reaction", cost: cost("sand", 2) }),
+      moves: { kind: "interposed", feet: 10, cost: { pool: "sand", amount: 2 }, atRank: [{ rank: 2, feet: 20 }] }
+    },
+    // *As a Half-Action, spend 2 Sand. Half the damage Borrowed Time has put off, rounded
+    // down, never arrives. At rank 2, none of it arrives.*
+    "unmade-wound": {
+      grants: grant({ action: "half", cost: cost("sand", 2) }),
+      onUse: { unmade: { whole: false, atRank: [{ rank: 2, whole: true }] } }
+    },
+    // *Your Fortitude rises by 2 per rank.* Fortitude is Health (05), as Toughness's.
+    "weathered-by-ages": { passive: passive([add("system.health.max", "2*rank")]) },
+    // *Once per Long Rest, when a blow would drop you to 0 Health, you stay at 1 Health. The
+    // rest of that blow arrives at the start of your next turn.* Among the holds at 1
+    // (`AzerothActor#_holdAtOne`), the rest on the put-off list.
+    "borrowed-hour": { grants: counter(1, "long"), borrowedHour: { stay: 1 } },
+    // *The ground within 10 feet of you is Difficult ground for your enemies. At rank 2,
+    // within 15 feet.* A Region attached to the token, carrying the `difficultFor` behavior
+    // for the holder's enemies, laid by the active GM (`canvas/distortion-field.mjs`).
+    "distortion-field": { field: { feet: 10, who: "enemy", atRank: [{ rank: 2, feet: 15 }] } },
+    // *As an action, spend 5 Sand. Until the end of your next turn, every attack against an
+    // ally within 30 feet of you targets you instead, and you may use Borrowed Time on each
+    // blow without spending Sand or your Reaction.* An effect on the Guardian, read as an
+    // automatic move in the blow and as a free Borrowed Time.
+    "timeless-sentinel": {
+      grants: grant({ action: "action", cost: cost("sand", 5) }),
+      onUse: { timelessSentinel: { feet: 30 } }
+    }
   }
 });
 
@@ -3479,6 +3707,9 @@ export const CENSUS_DETECTORS = Object.freeze({
       || Boolean(e.lifebinder || e.hearthfire)
       // And the Timewalker's (stage 3B): Rewind's Health back off the blow's record.
       || Boolean(e.rewind)
+      // And the Chronomancer's (stage 2b): Withering Hours' halving of what a heal gives inside
+      // the area (`chronomancer.mjs#witheredHeal`, read at `AzerothActor#applyHealing`).
+      || Boolean(e.withering)
   },
   // *Your Fortitude rises by 2 per rank*, *your Defense rises by 1 per rank*.
   risesBy: {
@@ -3536,6 +3767,12 @@ export const CENSUS_DETECTORS = Object.freeze({
       // And D-778's: a Sustain's upkeep, which the turn's start charges (Arcane
       // Concentration; Netherwind's patch on Shape the Weave).
       || Boolean(e.upkeep) || modifiesOf(e).some(m => m.upkeepLess)
+      // And the Chronomancer's (stage 2b): Echoing Sands' landing at the caster's turn start
+      // (`effects/chronomancer.mjs#landAgain`).
+      || Boolean(e.echoing)
+      // And the Guardian of Time's (stage 2c): the half Borrowed Time puts off and the rest
+      // of a blow Borrowed Hour holds, landed at the turn's start (`deferred-damage.mjs`).
+      || Boolean(e.borrowed || e.borrowedHour)
   },
   // **THREE THE PLAN'S LIST DID NOT NAME** (D-768), each a family of talents
   // with no row and no carrier, found reading the worklist against 04: a
@@ -3566,6 +3803,12 @@ export const CENSUS_DETECTORS = Object.freeze({
       // And B1's own, which no cover named: a condition the Use lays on its user
       // (Ancestral Spirit's *You gain **Fatigued***, door 26).
       || Boolean(e.onUse?.self?.condition)
+      // And the Chronomancer's (stage 2b): Arrested Moment's Stun on a failed Resist
+      // (`effects/chronomancer.mjs#afterResist`).
+      || Boolean(e.arrested?.condition)
+      // And the Guardian of Time's (stage 2c): Grinding Block's Slowed on the attacker's
+      // failed Test (`effects/guardian.mjs#grindAfterResist`).
+      || Boolean(e.grind?.condition)
   },
   // A row whose trigger IS a Success Level (D-771): Nature's Grace's next
   // spell and Primal Fury's further Ferocity. And D-772's: Deep Cut's
@@ -3945,6 +4188,36 @@ export function spellNotesFor(talents = [], { name = "", school = null } = {}) {
  * @param {{name: string, school: string|null}} spell
  * @returns {Array<{name: string, rank: number, amount: number}>}
  */
+/**
+ * **WHAT THE TALENTS TAKEN DO TO A DECAY THE CASTER LAYS** (07 §9's *unless a talent
+ * says the two add together*; D-865): a row's `decay {more, adds, capTier, atRank}` -
+ * `more` an amount at the rank added to the X laid (04's Erosion: *that Decay is 1
+ * higher*), `adds` the two applications added rather than the higher kept (*at rank 2
+ * your Decay adds to any Decay the creature already has*), `capTier` the sum held to the
+ * caster's tier (*to no more than your tier*), `atRank` the rank `adds` waits on. The
+ * cast door reads this and `effects/decay.mjs#layDecay` writes it; the rows are the
+ * Chronomancer talents' (Phase 5).
+ *
+ * @returns {{more: number, adds: boolean, cap: number|null, by: string[]}}
+ */
+export function decayScaleFor(talents = [], { tier = 1 } = {}, rowOf = talentEffect) {
+  const out = { more: 0, adds: false, cap: null, by: [] };
+  for (const { talent, entry } of takenRows(talents, rowOf)) {
+    const d = entry.decay;
+    if (!d) continue;
+    const rank = Math.max(1, Math.trunc(Number(talent.taken) || 0));
+    const more = Math.max(0, Math.trunc(Number(typeof d.more === "function" ? d.more(rank) : d.more)) || 0);
+    out.more += more;
+    const reaches = !d.atRank || rank >= Number(d.atRank);
+    if (d.adds && reaches) {
+      out.adds = true;
+      if (d.capTier) out.cap = Math.max(0, Math.trunc(Number(tier)) || 0);
+    }
+    out.by.push(talent.name);
+  }
+  return out;
+}
+
 export function spellDamageFor(talents = [], { name = "", school = null } = {}) {
   return takenRows(talents)
     .filter(({ entry }) => Number(entry.spell?.damage) > 0)

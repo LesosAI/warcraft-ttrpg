@@ -1,10 +1,11 @@
-import { SPELL_USES_FLAG, spellLimit, spellUsesRemaining, spendSpellUse, resetSpellUses } from "../rules/spell-limits.mjs";
+import { SPELL_USES_FLAG, spellKey, spellLimit, spellUsesRemaining, spendSpellUse, resetSpellUses, restoreSpellUse } from "../rules/spell-limits.mjs";
 
 export const SPELL_LIMIT_QUERY = "azeroth-rpg.spellRestUse";
 const queues = new Map();
 const limitFor = (actor, spell) => spellLimit({ type: actor?.type, spell, talents: actor?.takenTalents?.() ?? [] });
 const words = key => game.i18n.localize(`AZEROTH.SpellLimit.${key}`);
 
+/** The refusal of a cast 07 §4 shuts, or null (D-882: the one home). */
 export function spellLimitRefusal(actor, spell) {
   const limit = limitFor(actor, spell);
   return limit && spellUsesRemaining(limit, actor.getFlag?.("azeroth-rpg", SPELL_USES_FLAG)) < 1
@@ -52,6 +53,35 @@ export async function spendSpellBudget(actor, spell, action, spend = game.system
   const result = await request({ actorUuid: actor.uuid, spellUuid: spell.uuid, action });
   if (result.reason) ui.notifications?.warn(result.reason);
   return result.ok;
+}
+
+/**
+ * **ONE SPENT USE OF A SPELL GIVEN BACK** (04's Recovered Hours and The Glass Turns Back; D-882):
+ * the spell named on this creature, by its record's key, one use returned. Written on the
+ * client that may write the creature (the Chronomancer's own door judges that); answers
+ * whether a use came back.
+ *
+ * @param {Actor} actor
+ * @param {string} name  the spell's name, as the chooser listed it
+ * @returns {Promise<boolean>}
+ */
+export async function giveBackSpellUse(actor, name) {
+  const key = spellKeyOn(actor, name);
+  const next = restoreSpellUse(actor?.getFlag?.("azeroth-rpg", SPELL_USES_FLAG) ?? {}, key);
+  if (!next) return false;
+  await actor.setFlag("azeroth-rpg", SPELL_USES_FLAG, next);
+  return true;
+}
+
+/** The record's key for a spell this creature holds by name, else the name's own slug. */
+export function spellKeyOn(actor, name) {
+  const held = (actor?.items ?? []).find?.(i => i.type === "spell" && i.name === name) ?? null;
+  return held ? spellKey(held) : spellKey({ name });
+}
+
+/** The name a record's key is shown by: the spell this creature holds with that key, else the key. */
+export function spellNameOn(actor, key) {
+  return (actor?.items ?? []).find?.(i => i.type === "spell" && spellKey(i) === key)?.name ?? key;
 }
 
 export async function restoreSpellUses(actor, event) {

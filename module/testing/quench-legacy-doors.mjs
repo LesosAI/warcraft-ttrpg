@@ -503,6 +503,14 @@ export function legacyDoorsBatch(context) {
       const warrior = await characterOf("ZZ LD No Mana", ["Warrior", 5], { spells: ["Arcane Missiles"] });
       const spell = await until(() => warrior.items.find(i => i.type === "spell" && i.name === "Arcane Missiles"), "the spell on the sheet");
       const before = warrior.system.health?.value ?? 0;
+      // **ONE BOARD, A TARGET NAMED** (the Chronomancer live fix found this stale): since 0.12.33
+      // Arcane Missiles refuses a cast that names no creature (*Choose a primary target*) before it
+      // asks for a pool, so a Warrior pressing it at nobody heard the target's words, never NoPool's.
+      // The Warrior aims at a creature here, so the refusal left is the one this test is about.
+      const adept = await makeNpc("Adept of the Schools");
+      const aimed = await characterOf("ZZ LD Missiled", ["Warrior", 5]);
+      await sceneWith([{ actor: warrior, x: 700, y: 1000 }, { actor: adept, x: 1000, y: 1000, side: "hostile" }, { actor: aimed, x: 1300, y: 1000 }]);
+      canvas.tokens.setTargets([tokenOf(aimed).id]);
       const sheet = await openSheet(warrior);
       let said = [];
       try {
@@ -513,14 +521,12 @@ export function legacyDoorsBatch(context) {
         said = await pressAndHear(cast);
       } finally {
         await sheet.close();
+        canvas.tokens.setTargets([]);
       }
       const words = game.i18n.format("AZEROTH.Cast.NoPool", { name: "Arcane Missiles", pool: game.i18n.localize(AZEROTH.poolTypes.mana), n: 2 });
       assert.include(said, words, `the refusal is not NoPool's words: ${JSON.stringify(said)}`);
       assert.equal(warrior.system.health?.value ?? 0, before, "the refused cast cost Health");
       // A creature's Power pool IS its Mana (the lead, 2026-09-10), whatever its block calls it.
-      const adept = await makeNpc("Adept of the Schools");
-      const aimed = await characterOf("ZZ LD Missiled", ["Warrior", 5]);
-      await sceneWith([{ actor: adept, x: 1000, y: 1000, side: "hostile" }, { actor: aimed, x: 1300, y: 1000 }]);
       const power = adept.system.power?.value ?? 0;
       assert.isAtLeast(power, 2, "the Adept holds no Power to pay with");
       canvas.tokens.setTargets([tokenOf(aimed).id]);
@@ -1172,7 +1178,8 @@ export function legacyDoorsBatch(context) {
         await settle();
         canvas.tokens.setTargets([tokenOf(far).id]);
         const said = await pressAndHear(useControl(sheet, use));
-        assert.include(said.join(" "), game.i18n.format("AZEROTH.Laid.TooFar", { name: use.name, target: tokenOf(far).document.name, feet: 60 }), "a friend past 60 feet was not refused in words");
+        // The range door's words since O-288 (D-893): it judges the reach first, before the Use's own.
+        assert.include(said.join(" "), game.i18n.format("AZEROTH.Range.Refused", { name: use.name, target: tokenOf(far).document.name, distance: "70", feet: 60 }), "a friend past 60 feet was not refused in words");
         assert.equal(poolOf(orc, "rage").value, 6, "the refused Use paid its Rage");
         canvas.tokens.setTargets([tokenOf(near).id]);
         await pressForCard(useControl(sheet, use), orc, 15, { kind: "feature" });

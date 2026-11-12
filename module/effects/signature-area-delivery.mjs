@@ -3,6 +3,8 @@ import {deliverChosenSignature} from './signature-delivery.mjs';
 import {signatureDamageOutcome} from '../rules/signature-delivery.mjs';
 import {strikeFromArea} from './area-strikes.mjs';
 import {signatureRecipientKey} from '../rules/signature-scaling.mjs';
+// The scenes a fight stands on (O-294): core makes a fight unlinked, so `combat.scene` is null at the table.
+import {fightOnScene} from '../rules/fight-scenes.mjs';
 const scope='azeroth-rpg',receiptFlag='signatureAreaDelivery';
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const resolve=uuid=>{try{return fromUuidSync(uuid);}catch{return null;}};
@@ -32,7 +34,7 @@ export function deliverSignatureAreaDamage({message,caster,actor,token,spell,dam
   const receipts=structuredClone(message.getFlag(scope,receiptFlag)??{});
   if(flags.signatureDamageRecovery){
    if(flags.signatureDamageRecovery.state!=='complete'||!valid())return {ok:false,reason:'review'};
-   if((flags.signatureDamageRecovery.skippedTurns??[]).some(stamp=>{const combat=game.combats?.get(stamp.id);return combat?.started&&combat.active===true&&combat.scene?.id===token?.parent?.id&&combat.round===stamp.round&&combat.turn===stamp.turn;}))return {ok:true,already:true,lines:[]};
+   if((flags.signatureDamageRecovery.skippedTurns??[]).some(stamp=>{const combat=game.combats?.get(stamp.id);return combat?.started&&combat.active===true&&fightOnScene(combat,token?.parent??null,game.scenes)&&combat.round===stamp.round&&combat.turn===stamp.turn;}))return {ok:true,already:true,lines:[]};
   }
   if(['complete','reviewed'].includes(receipts[key]?.state))return {ok:true,already:true,lines:[]};
   if(receipts[key]||Object.values(receipts).some(row=>row?.state==='pending'&&row.targetUuid===actor.uuid))return {ok:false,reason:'review'};

@@ -1,8 +1,10 @@
 /** Active-GM adapter for an explicitly configured pack on a Combat flag.
- * Uses V14 Combat.scene and TokenDocument.actor; linked tokens are refused
+ * Uses the scenes the fight stands on (O-294: `rules/fight-scenes.mjs`, since core
+ * makes a fight unlinked) and TokenDocument.actor; linked tokens are refused
  * because writing one shared actor's Health cannot revive an individual. */
 import { CORE_HOUND_PACK_FLAG, validCoreHoundPack } from "../rules/core-hound-pack.mjs";
 import { advanceCoreHoundPack } from "./core-hound-pack.mjs";
+import { fightScenes } from "../rules/fight-scenes.mjs";
 
 const namespace = "azeroth-rpg";
 const resolve = uuid => { try { return fromUuidSync(uuid); } catch { return null; } };
@@ -23,8 +25,9 @@ export function coreHoundPackAdapter(combat, packId, { roundEnd = false, endedRo
       || combat.round !== liveRound || combat.turn !== turn) return null;
     const state = combat.flags?.[namespace]?.[CORE_HOUND_PACK_FLAG]?.[packId];
     if (!validCoreHoundPack(state) || state.combatUuid !== combat.uuid) return null;
-    const scene = combat.scene;
-    if (!scene || scene.uuid !== state.sceneUuid || resolve(scene.uuid) !== scene) return null;
+    // The pack's own scene, where the fight stands on it (O-294).
+    const scene = fightScenes(combat, game.scenes).find(s => s?.uuid === state.sceneUuid) ?? null;
+    if (!scene || resolve(scene.uuid) !== scene) return null;
     const actors = new Set(), members = [];
     for (const tokenUuid of state.tokenUuids) {
       const token = resolve(tokenUuid), actor = token?.actor;

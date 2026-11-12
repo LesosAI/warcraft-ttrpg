@@ -24,6 +24,7 @@
 import { areasIdle, areasOwed } from "../canvas/sustained-areas.mjs";
 import { aurasBusy, aurasIdle } from "../effects/auras.mjs";
 import { arrivalsIdle, arrivalsPending } from "../canvas/arrival.mjs";
+import { reconcileSustainedSpells } from "../effects/sustained-spells.mjs";
 
 /** Every document a batch made, deleted together in `after`. */
 export const made = [];
@@ -63,6 +64,12 @@ export async function cleanup() {
     await doc._talentGrant?.catch?.(() => {});
     if (!stillThere(doc)) continue;
     await doc.delete().catch(() => {});
+    // **A HELD SPELL'S CARRIERS GO WITH ITS CASTER** (D-892): deleting a caster runs the active
+    // GM's sustained-spell sweep (`effects/sustained-spells.mjs`), which deletes what the cast
+    // laid on other creatures - a Sand Prison's Entangled - and a creature deleted next while that
+    // write is in flight is refused by the server (*The Actor ... does not exist in actors*).
+    // Wait for the sweep before the next delete, as a GM's hand would.
+    if (doc.documentName === "Actor") await reconcileSustainedSpells().catch(() => {});
   }
 }
 

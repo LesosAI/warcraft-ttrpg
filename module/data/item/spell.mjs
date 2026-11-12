@@ -62,6 +62,14 @@ export class SpellData extends foundry.abstract.TypeDataModel {
         // (D-330) — SL gates riders and nothing else.
         rating: optionalNumberField({ min: 0 }),
         school: choiceField(AZEROTH.schools),
+        // **THE DAMAGE TYPE WHERE IT IS NOT THE SCHOOL'S** (D-853): `physical` on a
+        // Chronomancer's sand spell, `**Damage** 6 Physical` (07 §9; the lead:
+        // *"sand school spells hsould deal physical damage, reduced by armor points
+        // not ward"*), stamped by the parser. Null everywhere else, where the
+        // damage is typed by `school` above - so no world copy needs a migration:
+        // a stored school spell holds no `type` and reads null, as its pack copy
+        // does. The doors that type a spell's damage read it in Phase 4.
+        type: choiceField(AZEROTH.damageTypes),
         // **HALF ON A PASSED TEST** (the lead: *"Build it everywhere"*): 07's *and
         // half of that, rounded down, on a success*, read off the entry's own
         // sentence by the parser (`rules/resisted.mjs#halvesOnPass`). The card's
@@ -151,9 +159,10 @@ export class SpellData extends foundry.abstract.TypeDataModel {
       // each key; `AzerothCombat#_areaTicks` is what reads it at a turn.
       areaTick: new fields.SchemaField({
         who: new fields.StringField({ required: true, blank: true, initial: "", choices: ["", ...AREA_TICK_WHO] }),
+        // **THE DAMAGE'S TYPE**: a school, or a sand spell's `physical` (07 §9, D-864).
         damage: new fields.SchemaField({
           rating: optionalNumberField({ min: 0 }),
-          school: choiceField(AZEROTH.schools)
+          school: choiceField(AZEROTH.damageTypes)
         }),
         heal: optionalNumberField({ min: 0 }),
         against: new fields.ArrayField(new fields.SchemaField({
@@ -163,7 +172,7 @@ export class SpellData extends foundry.abstract.TypeDataModel {
           // 2026-09-26). A row stored before the key loads as "".
           who: new fields.StringField({ required: true, blank: true, initial: "", choices: ["", ...AREA_TICK_WHO] }),
           rating: optionalNumberField({ min: 0 }),
-          school: choiceField(AZEROTH.schools),
+          school: choiceField(AZEROTH.damageTypes),
           heal: optionalNumberField({ min: 0 }),
           instead: new fields.BooleanField({ initial: false })
         }), { initial: [] }),
@@ -182,7 +191,7 @@ export class SpellData extends foundry.abstract.TypeDataModel {
         // leaf present on every spell, in `emptyAreaTick`'s order.
         enter: new fields.SchemaField({
           rating: optionalNumberField({ min: 0 }),
-          school: choiceField(AZEROTH.schools),
+          school: choiceField(AZEROTH.damageTypes),
           once: new fields.BooleanField({ initial: false }),
           rounds: optionalNumberField({ min: 1 }),
           sl: optionalNumberField()
@@ -195,7 +204,7 @@ export class SpellData extends foundry.abstract.TypeDataModel {
           exempt: new fields.StringField({ required: true, blank: true, initial: "", choices: ["", "caster"] }),
           fail: new fields.SchemaField({
             rating: optionalNumberField({ min: 0 }),
-            school: choiceField(AZEROTH.schools),
+            school: choiceField(AZEROTH.damageTypes),
             statuses: new fields.ArrayField(new fields.StringField({ required: true, blank: false }), { initial: [] }),
             bane: new fields.StringField({ required: true, blank: true, initial: "" }),
             until: new fields.StringField({ required: true, blank: true, initial: "", choices: [...AREA_UNTIL] }),
@@ -207,14 +216,16 @@ export class SpellData extends foundry.abstract.TypeDataModel {
             }), { initial: [] }),
             // *On a failure it does not cross* (07's Ring of Fire and Stormwall; the B9a
             // pass): put back on its own side of the edge.
-            stop: new fields.BooleanField({ initial: false })
+            stop: new fields.BooleanField({ initial: false }),
+            // 07 §12's Withering Sands: the Decay a failure lays (D-865).
+            decay: optionalNumberField({ min: 0 })
           }),
           success: new fields.SchemaField({
             statuses: new fields.ArrayField(new fields.StringField({ required: true, blank: false }), { initial: [] }),
             until: new fields.StringField({ required: true, blank: true, initial: "", choices: [...AREA_UNTIL] }),
             // Ring of Fire's *on a success it crosses and takes 5 Fire damage* (the B9a pass).
             rating: optionalNumberField({ min: 0 }),
-            school: choiceField(AZEROTH.schools)
+            school: choiceField(AZEROTH.damageTypes)
           }),
           // **THE B9a PASS'S TWO** (the lead: *"Build the triggers"*): Frozen Rune's *The
           // first creature to enter the space* - once an area, ever - and the creatures
@@ -222,7 +233,11 @@ export class SpellData extends foundry.abstract.TypeDataModel {
           // keeps them, or a spell embedded off the pack drops them and the door that
           // reads them reads nothing.
           first: new fields.BooleanField({ initial: false }),
-          spares: new fields.StringField({ required: true, blank: true, initial: "", choices: ["", "named"] })
+          spares: new fields.StringField({ required: true, blank: true, initial: "", choices: ["", "named"] }),
+          // 07 §12's two (D-864): Time Trap's *first enemy* and Shifting Hours' *A creature
+          // you choose*, the creatures named at the cast alone.
+          who: new fields.StringField({ required: true, blank: true, initial: "", choices: ["", "enemy"] }),
+          picks: new fields.StringField({ required: true, blank: true, initial: "", choices: ["", "named"] })
         }), { initial: [] }),
         remains: new fields.ArrayField(new fields.SchemaField({
           when: new fields.StringField({ required: true, blank: false, initial: "inside", choices: [...AREA_REMAINS_WHEN] }),
@@ -260,6 +275,9 @@ export class SpellData extends foundry.abstract.TypeDataModel {
         // "target": the ground at a single target, which the cast places on the creature
         // (stage 3B of the Chromatic Champion plan; `rules/area-ground.mjs#targetGroundOf`).
         from: new fields.StringField({ required: true, blank: true, initial: "", choices: ["", "landing", "target"] }),
+        // 07 §12's Sandtrap: *for each creature you choose as you cast* - the creatures
+        // named at the cast alone (D-864).
+        who: new fields.StringField({ required: true, blank: true, initial: "", choices: ["", "named"] }),
         ignores: new fields.BooleanField({ initial: false }),
         reason: new fields.StringField({ required: true, blank: true, initial: "" })
       }),
@@ -271,7 +289,7 @@ export class SpellData extends foundry.abstract.TypeDataModel {
       // `AzerothCombat#_turnTicks` lands it. `rules/ticks.mjs` documents each key.
       tick: new fields.SchemaField({
         kind: new fields.StringField({ required: true, blank: true, initial: "", choices: ["", ...TICK_KINDS] }),
-        type: choiceField(AZEROTH.schools),
+        type: choiceField(AZEROTH.damageTypes),
         amount: new fields.StringField({ required: true, blank: true, initial: "" }),
         rounds: optionalNumberField({ min: 1 }),
         until: new fields.StringField({ required: true, blank: true, initial: "", choices: [...TICK_UNTIL] }),
@@ -292,7 +310,7 @@ export class SpellData extends foundry.abstract.TypeDataModel {
       splash: new fields.SchemaField({
         feet: optionalNumberField({ min: 0 }),
         rating: optionalNumberField({ min: 0 }),
-        school: choiceField(AZEROTH.schools),
+        school: choiceField(AZEROTH.damageTypes),
         resilience: choiceField(AZEROTH.resiliences),
         reason: new fields.StringField({ required: true, blank: true, initial: "" })
       })

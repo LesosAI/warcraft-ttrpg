@@ -43,6 +43,8 @@
  *              start of your next turn* (Meteor's crater, Cinderfall's ash);
  *              "target" where it is the ground at a single target (2a above);
  *              "" from the moment the area is placed
+ *   who        "" every creature, or "named": Sandtrap's *for each creature you choose
+ *              as you cast* (07 §12, D-864) - the creatures the cast named alone
  *   ignores    the spell's target ignores Difficult ground
  *   reason     every Difficult-ground sentence the machinery cannot carry,
  *              "; "-joined, counted under a CEILING in `area-ground.test.mjs`
@@ -80,6 +82,7 @@ export function emptyAreaGround() {
     difficult: false,
     lasts: { rounds: null },
     from: "",
+    who: "",
     ignores: false,
     reason: ""
   };
@@ -107,8 +110,13 @@ const AREA_IS = [
   /\bmakes the area \*\*Difficult ground\*\*/i,
   /\bthe area is \*\*Difficult ground\*\*/i,
   /:\s*it is \*\*Difficult ground\*\*/i,
-  /\bThe ground (?:stays broken[^.]*?and )?is \*\*Difficult ground\*\*/i
+  /\bThe ground (?:stays broken[^.]*?and )?is \*\*Difficult ground\*\*/i,
+  // 07 §12's Sandwall: *its space is **Difficult ground*** - the wall's own placed line.
+  /\bits space is \*\*Difficult ground\*\*/i
 ];
+
+/** Sandtrap's *for each creature you choose as you cast* (07 §12): the named alone. */
+const CHOSEN = /\bfor each creature you choose as you cast\b/i;
 
 /** 07's *until the end of your next turn*: the ground outlasts the cast by one round. */
 const NEXT_TURN = /\buntil the end of your next turn\b/i;
@@ -212,7 +220,10 @@ export const NON_SPELL_GROUND = Object.freeze({
   // 04's Blademaster (D-781): *Move up to your Speed, ignoring Difficult ground*.
   "Wind Walk": { automated: "the Legacy branches' `onUse.freeMove {ignoresGround}` (door 25): one Move that costs no Half-Action, paid through `movement.mjs#paidDifficulty` at a foot a foot; its talent row is phase B6's (`LEGACY_ROWS_PENDING`)" },
   // 02's Chromatic Champion (stage 2B): *The leap ignores Difficult ground*.
-  "Draconic Leap": { automated: "the leap is the step door's displacement (`onUse.step`, `effects/steps.mjs#stepTo`), which meters no foot, so Difficult ground costs it nothing and it spends no Move" }
+  "Draconic Leap": { automated: "the leap is the step door's displacement (`onUse.step`, `effects/steps.mjs#stepTo`), which meters no foot, so Difficult ground costs it nothing and it spends no Move" },
+  // 04's Guardian of Time (the Chronomancer's stage 2c): *The ground within 10 feet of you is
+  // Difficult ground for your enemies. At rank 2, within 15 feet.*
+  "Distortion Field": { automated: "the talent's `field` row: a Region attached to the holder's token carrying the `difficultFor` behavior for the holder's enemies, 10 or 15 feet past its own squares, laid and kept by the active GM (`canvas/distortion-field.mjs#reconcileFields`)" }
 });
 
 /**
@@ -241,6 +252,7 @@ export function readAreaGround(effectText, fields = {}) {
     if (placed && AREA_IS.some(re => re.test(s))) {
       ground.difficult = true;
       if (NEXT_TURN.test(s)) ground.lasts = { rounds: 1 };
+      if (CHOSEN.test(s)) ground.who = "named";
       continue;
     }
     // The ground at a single target (2a): the cast places it on the creature (stage 3B).
@@ -284,6 +296,8 @@ export function groundNow(row = {}, talentGround = undefined, now = {}) {
     const placedAt = row?.placedAt ?? null;
     const lapsed = Number(own.lasts?.rounds) > 0 && areaLapsed({ lasts: own.lasts, placedAt }, now);
     const early = own.from === "landing" && !groundLanded(placedAt, now);
+    // Sandtrap's ground slows the creatures named at the cast alone (07 §12, D-864).
+    if (!lapsed && !early && own.who === "named") return { who: "named", kinds: [], named: [...(row?.named ?? [])].filter(u => typeof u === "string" && u).sort() };
     if (!lapsed && !early) return { who: "creature", kinds: [] };
   }
   const talent = talentGround === undefined ? (row?.ground ?? null) : talentGround;
@@ -328,7 +342,9 @@ export function groundLanded(placedAt = null, { time = 0, fights = {}, turns = {
  * @param {{relation?: string, kinds?: Set<string>|string[]}} mover
  * @returns {boolean}
  */
-export function difficultApplies(spec = {}, { relation = "other", kinds = [] } = {}) {
+export function difficultApplies(spec = {}, { relation = "other", kinds = [], uuid = null } = {}) {
+  // Sandtrap's *each creature you choose as you cast* (07 §12): the named alone.
+  if (spec?.who === "named") return Boolean(uuid) && (spec?.named ?? []).includes(uuid);
   const who = spec?.who === "enemy" ? "enemy" : "creature";
   if (who === "enemy" && relation !== "enemy") return false;
   const want = [...new Set(spec?.kinds ?? [])];
@@ -357,6 +373,7 @@ export function cleanAreaGround(ground) {
     }
   }
   if ("from" in ground && !["", "landing", "target"].includes(ground.from)) ground.from = "";
+  if ("who" in ground && !["", "named"].includes(ground.who)) ground.who = "";
   if ("ignores" in ground && typeof ground.ignores !== "boolean") ground.ignores = ground.ignores === true;
   if ("reason" in ground && typeof ground.reason !== "string") ground.reason = "";
   return ground;

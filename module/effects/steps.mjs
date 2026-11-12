@@ -31,6 +31,8 @@
  * makes to reach it.
  */
 
+// The Chronomancer's steps (stage 2b): Quickstep's feet, Recall's mark, Farstep's companion.
+import { RECALL_FLAG, farstepCompanion, quickstepFeet, recallStands } from "../rules/chronomancer.mjs";
 import { BLINK, blinkFor, onUseLegacy } from "../rules/class-talents.mjs";
 import { spellCrossingFrom } from "../rules/spell-crossing.mjs";
 import { onUseOf, talentEffect } from "../rules/talent-effects.mjs";
@@ -251,7 +253,10 @@ export function stepAllowance(by, item) {
   if (item.type === "spell") {
     const step = readSpellStep(item.system?.effect ?? "") ?? spellCrossingFrom(item);
     if (!step) return null;
-    return { feet: step.feet, friend: null, party: step.who === "selfAndTargets" ? partyRadius(item.system?.target ?? "") : null, pull: null };
+    // 04's Weaver's Lore on Farstep (*you may bring one willing creature within 5 feet of
+    // you*; stage 2b): its companion is a party step of the talent's feet.
+    const companion = farstepCompanion(by.takenTalents?.() ?? [], { spell: item.name }, talentEffect);
+    return { feet: step.feet, friend: null, party: step.who === "selfAndTargets" ? partyRadius(item.system?.target ?? "") : (companion?.feet ?? null), pull: null };
   }
   if (item.type !== "feature") return null;
   if (item.name === BLINK.feature) {
@@ -261,6 +266,12 @@ export function stepAllowance(by, item) {
   if (item.name === "Shadowstep" && item.system?.className === "Rogue") return { feet: FEATURE_STEPS.Shadowstep.feet, friend: null, party: null, pull: null };
   const flag = item.getFlag?.("azeroth-rpg", "feature") ?? item.flags?.["azeroth-rpg"]?.feature ?? {};
   const talent = flag.talentId ? (by.items?.get?.(flag.talentId) ?? null) : null;
+  // 02's Recall (*you may return to that space*; stage 2b): the user's own token back to the
+  // mark it laid, on the mark's scene, whatever the distance - the mark is the reach.
+  if (!talent && item.name === "Recall" && item.system?.className === "Chronomancer") {
+    const mark = by.getFlag?.("azeroth-rpg", RECALL_FLAG) ?? null;
+    return recallStands(mark, game.time?.worldTime ?? 0) ? { feet: 1e6, friend: null, party: null, pull: null } : null;
+  }
   // A class feature's own step (02's Draconic Leap; stage 2B), off its row's `onUse`.
   if (!talent) {
     const own = stepOf(classFeatureOnUse(item.system?.className ?? "", item.name), 1);
@@ -268,6 +279,9 @@ export function stepAllowance(by, item) {
   }
   const rank = talent.system?.taken ?? flag.rank ?? 1;
   const onUse = onUseOf(talentEffect(talent.system?.className, talent.system?.identifier, talent.system?.race ?? null));
+  // 04's Quickstep (*One willing ally within 30 feet moves up to 10 feet per rank*; stage 2b):
+  // the ally within the reach, moving the rank's feet - a `friend` step.
+  if (onUse?.quickstep) return { feet: quickstepFeet(rank, onUse.quickstep.per), friend: onUse.quickstep.feet ?? 30, party: null, pull: null };
   const own = stepOf(onUse, rank);
   if (own) return { feet: own.feet, friend: null, party: null, pull: null };
   const legacy = onUseLegacy(onUse, { rank, tier: by.system?.tier ?? 1, scope: abilityScope(by.system) });

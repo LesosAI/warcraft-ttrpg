@@ -112,7 +112,11 @@ export function cleanShedDc(raw) {
 }
 
 /** Conditions supported by the repeat-Test door, including Fear for the NPC expansion. */
-export const ESCAPE_CONDITIONS = Object.freeze(["entangled", "stunned", "frightened"]);
+// **AND SLOWED** (07 §12's Drag of Ages, *a success ends the Slowed*, and Desert's Weight;
+// the lead: *"We need automation and animations fully complete for everything"*): the
+// door ends whatever condition the flag rides, so a Slowed's repeat Test is built for every
+// entry that writes one (D-864).
+export const ESCAPE_CONDITIONS = Object.freeze(["entangled", "stunned", "frightened", "slowed"]);
 
 /** When the Test is offered: on the creature's own action, or at the end of its turns. */
 export const ESCAPE_ON = Object.freeze(["action", "turnEnd"]);
@@ -124,7 +128,7 @@ export const ESCAPE_FLAG = "escape";
 export const ESCAPE_STUN_SPANS = Object.freeze(["casterTurnEnd"]);
 
 /** Conditions with written repeat Tests whose automation is still outstanding. */
-export const ESCAPE_UNBUILT = Object.freeze(["slowed", "silenced"]);
+export const ESCAPE_UNBUILT = Object.freeze(["silenced"]);
 
 /**
  * **EVERY TEST 07 REPEATS THAT ENDS NO CONDITION**, by name, with its reason: the
@@ -140,9 +144,17 @@ export const ESCAPE_UNREAD = Object.freeze({
   Icelock: "frozen where it stands - no move and no Reaction - is the entry's own words, carried by no condition",
   Mindfetter: "no nearer and no Attack Test or spell at the caster is the entry's own words, carried by no condition",
   Puppet: "the caster moving and acting with the creature is the table's, carried by no condition",
-  Stasis: "no action, move, speech or damage is the entry's own words, carried by no condition",
   Unweave: "no benefit from the named school's spells is the entry's own words, carried by no condition"
 });
+
+/**
+ * **EVERY TEST 07 REPEATS THAT A HOLD'S OWN DOOR BUILDS**, by name: the reader takes nothing off
+ * the words (they name no condition), and the door that lays the hold writes the escape itself.
+ * 07 §12's Stasis is held through Suspend's door (O-306, D-898; `rules/chronomancer.mjs
+ * #holdOutOfTime`), whose carrier is a **Stunned** riding 07's repeat Test. The census in
+ * `escapes.test.mjs` holds each to the hold's own escape.
+ */
+export const ESCAPE_BY_HOLD = Object.freeze(["Stasis"]);
 
 const RESILIENCES = Object.freeze(["body", "reflex", "spirit"]);
 
@@ -194,7 +206,17 @@ export function readEscapeAny(effectText, fields = {}) {
     }
     if (!named) continue;
     const test = /\b(Body|Reflex|Spirit) Resilience Test\b/.exec(s);
-    return { condition: conditionOf(named[1]), on: "turnEnd", resilience: test ? test[1].toLowerCase() : own, banes: repeat[1] ? 1 : 0 };
+    // **07 §12's SAND PRISON**: *... is **Entangled** and **Blinded** ... It may repeat the
+    // Test at the end of each of its turns, and leaves the spell when it succeeds* - a pass
+    // ends every condition that failure named (`also`), not the first alone.
+    // And the creature LEAVES THE SPELL (`leaves`; O-292, the lead: *"292 - end when target
+    // escapes"*): once no creature is held by the cast, its Sustain ends
+    // (`leavesSustain`; O-303 widened it to any freeing, `rules/held-sustains.mjs`).
+    const leaves = /\bleaves the spell when it succeeds\b/.test(list[i]);
+    const also = leaves
+      ? [...s.matchAll(/\*\*(\w+)\*\*/g)].map(x => conditionOf(x[1])).filter(id => id && id !== conditionOf(named[1]) && !/^decay$/.test(id))
+      : [];
+    return { condition: conditionOf(named[1]), on: "turnEnd", resilience: test ? test[1].toLowerCase() : own, banes: repeat[1] ? 1 : 0, ...(also.length ? { also } : {}), ...(leaves ? { leaves: true } : {}) };
   }
   return null;
 }
@@ -225,6 +247,8 @@ export function escapeRecord(read, { dc = null, talents = {}, caster = null, sou
   if (!read) return null;
   return cleanEscape({
     condition: read.condition, on: read.on, resilience: read.resilience,
+    ...(Array.isArray(read.also) && read.also.length ? { also: read.also } : {}),
+    ...(read.leaves === true ? { leaves: true } : {}),
     dc, banes: (Math.trunc(Number(read.banes)) || 0) + (Math.trunc(Number(talents?.banes)) || 0),
     failStun: talents?.failStun ?? null, talents: [...(talents?.by ?? [])], by: caster, source, cast
   });
@@ -300,6 +324,11 @@ export function cleanEscape(raw) {
     condition: raw.condition,
     on: raw.on,
     resilience: raw.resilience,
+    // The other conditions a pass ends with it (07 §12's Sand Prison), only where named.
+    ...(Array.isArray(raw.also) && raw.also.some(id => typeof id === "string" && /^[a-z]+$/.test(id))
+      ? { also: raw.also.filter(id => typeof id === "string" && /^[a-z]+$/.test(id)) } : {}),
+    // A pass leaves the spell (07 §12's Sand Prison; O-292), only where named.
+    ...(raw.leaves === true ? { leaves: true } : {}),
     dc: Number.isFinite(dc) && dc > 0 ? dc : null,
     banes: Math.max(0, Math.min(3, Math.trunc(Number(raw.banes)) || 0)),
     failStun: ESCAPE_STUN_SPANS.includes(raw.failStun) ? raw.failStun : null,
@@ -364,4 +393,24 @@ export function escapeRefusal({ held = false, on = "turnEnd", budgetShort = fals
   if (on === "action" && budgetShort) return "AZEROTH.Escape.NoAction";
   if (recordable !== true) return "AZEROTH.Card.PressNoGM";
   return null;
+}
+
+/**
+ * **A SUSTAIN WITH NOBODY LEFT IN IT ENDS** (O-292; the lead, 2026-11-10: *"292 - end when target
+ * escapes"*). 07 §12's Sand Prison: *It may repeat the Test at the end of each of its turns, and
+ * leaves the spell when it succeeds. While sustaining this spell you pay 3 Mana at the start of
+ * each of your turns.* A creature that passed left the spell, and the caster went on holding it
+ * and paying 3 Mana a turn for nothing. True where the escape that passed is one whose creature
+ * LEAVES the spell (`leaves`, read off those words at the cast), it names the cast and its caster,
+ * and no other creature is still held by that cast (`othersHeld`, counted on the board by
+ * `effects/sustained-spells.mjs#heldByCast`). A spell holding several creatures runs until the
+ * last of them is out. Closed by default: a caller that counts nobody (`othersHeld` not a whole
+ * number) ends nothing.
+ *
+ * @param {{escape?: object|null, othersHeld?: number|null}} o
+ * @returns {boolean}
+ */
+export function leavesSustain({ escape = null, othersHeld = null } = {}) {
+  if (escape?.leaves !== true || !escape.cast || !escape.by) return false;
+  return Number.isInteger(othersHeld) && othersHeld === 0;
 }

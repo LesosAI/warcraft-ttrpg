@@ -1,4 +1,6 @@
 import {restorativeTotemContext,RESTORATIVE_TOTEM_FLAG} from "./restorative-totems.mjs";
+// The scenes a fight stands on (O-294): core makes a fight unlinked, so `combat.scene` is null at the table.
+import {fightOnScene,fightScenes} from "../rules/fight-scenes.mjs";
 
 export const RESTORATIVE_TOTEM_OFFER = "restorativeTotemOffer";
 const TEMPLATE = "systems/azeroth-rpg/templates/chat/restorative-totem.hbs";
@@ -20,9 +22,10 @@ export async function renderRestorativeTotemCard(offer, receipt = null) {
 /** Prompt creation is harmless and deduplicated by durable chat identity.
  * Resource mutation has its separate, authoritative once-per-turn receipt. */
 export async function postRestorativeTotemOffers(combat) {
-  if (!gmHere() || !combat?.started || !combat.scene || !combat.combatant?.token) return;
+  if (!gmHere() || !combat?.started || !combat.combatant?.token) return;
   const stamp={combatId:combat.id,round:combat.round,turn:combat.turn};
-  for (const token of combat.scene.tokens.values()) {
+  const tokens=fightScenes(combat,game.scenes).flatMap(scene=>[...scene.tokens.values()]);
+  for (const token of tokens) {
     const payload={...stamp,sourceUuid:token.uuid};
     const context=restorativeTotemContext(payload,game.user);
     if (!context.ok || pending.has(context.key)) continue;
@@ -60,7 +63,7 @@ export async function refreshRestorativeTotemCards(combat,key) {
 export function registerRestorativeTotemHooks() {
   const review=sceneId=>{
     if (!gmHere()) return;
-    for (const combat of game.combats) if (combat.started && (!sceneId || combat.scene?.id===sceneId)) {
+    for (const combat of game.combats) if (combat.started && (!sceneId || fightOnScene(combat,sceneId,game.scenes))) {
       void postRestorativeTotemOffers(combat).catch(error=>console.warn("azeroth-rpg | restorative totems",error));
     }
   };

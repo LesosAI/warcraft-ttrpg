@@ -320,6 +320,10 @@
       "Unavailable": "This Dream Theatre action is unavailable. Check membership, consent, the active GM and the remaining duration.",
       "DamageCleanup": "Damage was applied, but Dream Theatre could not confirm this participant’s departure. Ask the GM to end their participation."
     },
+    "HeatMirage": {
+      "PickAnchor": "Choose the centre of Heat Mirage's image: a 5 ft radius, 10 feet across.",
+      "AnchorConfirmed": "I confirm this fixed anchor is within the caster's range and the image stays within its 5 ft radius"
+    },
     "ThematicShadow": {
       "PhantomReview": "Choose a simple sound and confirm that its point is visible to the target.",
       "StaticReview": "Confirm a stationary point within 30 feet of the caster. Its radius is 15 feet.",
@@ -1520,10 +1524,222 @@
       "Quarry": "Quarry",
       "ComboPoints": "Combo Points",
       "Ferocity": "Ferocity",
+      "Sand": "Sand",
       "Mana": "Mana",
       "Focus": "Focus",
       "Energy": "Energy",
       "Any": "Momentum or Power"
+    },
+    "Sand": {
+      "NoHourglass": "No Hourglass in your Ranged slot, so you hold no Sand (08 §9).",
+      "Label": "Sand",
+      "GainedRow": "{n} Sand gained"
+    },
+    "SandCast": {
+      "NoHourglass": "No Hourglass in your Ranged slot, so you hold no Sand to pay with.",
+      "NotEnough": "Not enough Sand to pay with.",
+      "Refused": "{name}: paying with Sand needs {n} Sand, and you hold less. Nothing was spent.",
+      "Paid": "paid with {n} Sand instead of its Mana",
+      "Succeeds": "bought with Sand: the Casting Test succeeds"
+    },
+    "Grit": {
+      "OneOnly": "{name}: Grit of Ages takes one choice and one amount. Tick one line only. Nothing was spent.",
+      "Short": "{name}: the lines you ticked cost {n} Sand, and you hold less. Nothing was spent.",
+      "DamageRow": "{n} more damage, {sand} Sand spent",
+      "DamageFailed": "{sand} Sand spent before the roll. The Casting Test failed, so no damage lands",
+      "SlRaised": "{n} more SL, {sand} Sand spent: SL {from} becomes SL {to}",
+      "SlFailed": "{sand} Sand spent before the roll. The Casting Test failed, so it gains no SL and stays at SL {sl}. A Test succeeds on its total against the DC, never on its SL"
+    },
+    "Storm": {
+      "OneOnly": "{name}: Storm of Ages takes one amount of Sand. Tick one line only. Nothing was spent."
+    },
+    "Chrono": {
+      "TimelessMindRow": "Timeless Mind",
+      "AskedInTest": "{name} is offered as a Reaction when a creature within 30 feet makes a Test. You do not use it from the sheet.",
+      "Given": {
+        "one": "{name}: target the one creature it gives a Half-Action. Nothing was spent.",
+        "self": "{name} cannot target you. Nothing was spent.",
+        "ally": "{name} gives the Half-Action to an ally, and {target} is not one. Nothing was spent.",
+        "fight": "{name}: {target} gains the Half-Action on its next turn, so it must be in your started fight. Nothing was spent.",
+        "far": "{name} reaches {feet} feet, and {target} is farther. Nothing was spent."
+      },
+      "NoGM": "This needs a GM online to write a creature you do not own. Nothing was spent.",
+      "NoToken": "{name} needs your token on the board. Nothing was spent.",
+      "NoGlass": "{name} needs an Hourglass in your Ranged slot to gain Sand. You have none there, so it gained no Sand.",
+      "RecallScene": "{name}: your mark is on another scene. Nothing was spent.",
+      "NeedsFight": "{name} needs a started fight: it waits on a turn. Nothing was spent.",
+      "ShortSand": "{name}: the gift costs {n} Sand, and you hold less. Nothing was spent.",
+      "NoPool": "{name}: {target} holds no Momentum or Power pool other than Sand with room in it. Nothing was spent.",
+      "TooMany": "{name} takes up to {n} creatures. Target that many or fewer. Nothing was spent.",
+      "AllSand": "{name} spends all your Sand, at least {n}, and you hold less. Nothing was spent.",
+      "Per": {
+        "encounter": "once per encounter",
+        "short": "once per Short Rest",
+        "long": "once per Long Rest"
+      },
+      "UsePrompt": "{name}: which spent use does {target} regain?",
+      "PoolPrompt": "{name}: which pool does {target} regain?",
+      "OfferOnly": "{name} is pressed from the card its trigger posts. Nothing was spent.",
+      "Unfading": {
+        "unknown": "{name}: you do not hold Unfading.",
+        "ally": "{name} answers for an ally, and {target} is not one. Nothing was spent.",
+        "far": "{name} reaches 90 feet, and {target} is farther. Nothing was spent.",
+        "uses": "{name} has no use left this encounter. Nothing was spent.",
+        "sand": "{name} costs 2 Sand, and you hold less. Nothing was spent.",
+        "reaction": "{name} needs your Reaction, and you have none left. Nothing was spent.",
+        "gone": "{name}: {target} no longer has that condition. Nothing was spent."
+      },
+      "HalfLaid": "{name} gains a Half-Action on its next turn ({source}).",
+      "HalfNotLaid": "{name} gains no Half-Action: it could not be written ({source}).",
+      "RecallMarked": "{name} marks this space, and a ring on the board shows it. For {minutes} minutes, press Recall's Use again as a Reaction to return and regain the damage taken since.",
+      "RecallMarkerName": "Recall: {name}'s mark",
+      "RecallMoveByHand": "{name}'s token was not moved: put it on the marked space.",
+      "RecallReturned": "{name} returns to the mark: {taken} damage taken since the mark, {n} Health regained.",
+      "SuspendLaid": "{name} is held out of time until the end of its next turn: Stunned and immune to damage.",
+      "SuspendNotLaid": "{name} could not be held out of time: the write failed.",
+      "SuspendResist": "{name} makes a Spirit Resilience Test against your Spell DC. On a failure it is held out of time.",
+      "SuspendText": "{name} is held out of time: Stunned and immune to damage, and its conditions and effects do not count down.",
+      "SuspendImmune": "{name} is held out of time and takes no damage.",
+      "StasisText": "{name} is held out of time by {source}: Stunned, cannot be moved and immune to damage, and nothing already affecting it advances. It repeats the Spirit Test at the end of each of its turns and leaves the spell when it succeeds.",
+      "StasisLaid": "{name} is held out of time by {source} while the spell is sustained: Stunned, cannot be moved and immune to damage.",
+      "RecurrenceArmed": "{name}: the damage and healing of the next spell of tier {tier} or lower you cast this turn land again at the start of your next turn. A failed Casting Test spends it and lands nothing.",
+      "RecurrenceTaken": "Recurrence: what each creature takes or regains from this card's Apply lands again at the start of your next turn, with no Mana and no Casting Test",
+      "RecurrenceSpent": "Recurrence is spent: the Casting Test failed, so nothing lands again",
+      "MasterText": "Master of Hours: Half-Actions at the start of your next three turns, 1, then 2, then 3. While it lasts, 2 Sand gives a creature within 30 feet a Half-Action on its next turn.",
+      "MasterLaid": "{name} gains 1, 2 and 3 Half-Actions at the start of the next three turns.",
+      "MasterTurn": "Master of Hours: {name} gains {n} Half-Action(s), {total} in all this turn.",
+      "GiftLaid": "{name} gains a Half-Action on its next turn ({source}, {n} Sand).",
+      "BoonLaid": "{name} gains a Boon on its next Test before the end of its next turn ({source}).",
+      "BoonNotLaid": "{name} gains no Boon: it could not be written ({source}).",
+      "SpeedName": "{source}: Speed",
+      "SpeedLine": "{name} gains {n} feet of Speed until the end of its next turn.",
+      "ReactionGiven": "{name} gains an extra Reaction, which it may use until the end of its next turn ({source}).",
+      "ReactionNotGiven": "{name} gains no Reaction: it could not be written ({source}).",
+      "PoolRegained": "{name} regains {n} {pool} ({source}).",
+      "ConditionsSuspended": "{name}: {n} condition(s) suspended until the start of your next turn.",
+      "SuspendedMomentText": "{name}'s conditions are suspended: they do nothing and do not count down.",
+      "SandSpent": "{name} spends {n} Sand.",
+      "UseRegained": "{name} regains a use of {use}.",
+      "UseNotRegained": "{name} regains no use of {use}: it could not be written.",
+      "NoSpentUse": "{name} has no spent use to regain.",
+      "CollapseLine": "{name} spends {n} Sand: {damage} Physical damage to each creature you Slowed or that carries your Decay.",
+      "CollapseStruck": "{name} takes {n} Physical damage after Armor Points.",
+      "CollapseNotStruck": "{name} is not struck: the GM's client did not write the damage.",
+      "Unfaded": "{name}: {condition} ends, and {name} cannot gain it again until the end of its next turn.",
+      "NotUnfaded": "{name}: {condition} could not be ended.",
+      "UnfadingText": "{name} cannot gain {condition} again until the end of its next turn.",
+      "LoopResist": "{name} makes a Spirit Resilience Test against your Spell DC. On a failure it returns to where its move began.",
+      "LoopReturned": "{name} returns to the space it started its move from.",
+      "LoopNotReturned": "{name} could not be returned: the token could not be moved.",
+      "LoopOffer": "{holder}: {name} ended a move. {talent} may return it to where it started.",
+      "LoopPress": "{talent}: spend 2 Sand and your Reaction",
+      "UnfadingOffer": "{holder}: {name} gained {condition}. {talent} may end it.",
+      "UnfadingPress": "{talent}: spend 2 Sand and your Reaction",
+      "SharedHours": "{name} gains {n} Sand ({talent}).",
+      "AgainRecorded": "{name}: {n} lands again at the start of the caster's next turn ({source}).",
+      "AgainHealed": "{name} regains {n} Health again ({source}).",
+      "AgainDamaged": "{name} takes {n} damage again ({source}).",
+      "Arrested": "{name} is also Stunned until the end of its next turn ({talent}).",
+      "NotHeld": "That creature does not hold the feature or talent this needs.",
+      "HeavyHoursDisengage": "{name} carries {holder}'s Decay and cannot Disengage ({talent}).",
+      "EchoPaid": "{n} Sand spent: what it deals lands again at the start of your next turn",
+      "NoPrerequisite": "needs no {spell}: any target within its range may be held",
+      "NoCompanion": "Nobody",
+      "CompanionPrompt": "{name}: bring one willing creature within {feet} feet ({talent})?",
+      "TimelineRow": "{holder}'s Another Timeline: {first}, rolled again, {second} kept",
+      "TimelineLine": "{holder} uses Another Timeline: {name} rolls the Test again. {first} becomes {second}.",
+      "TimelineAsk": "{holder}: {name} just made a {test} and rolled {total}. Spend your Reaction and {n} Mana to make it roll again and take the second result? Seeing it is the table's call.",
+      "Timeline": {
+        "unknown": "{name} no longer holds Another Timeline.",
+        "kind": "{name}: Another Timeline answers an Attack, Casting or Resilience Test.",
+        "forced": "{name}: that Test's result is fixed.",
+        "self": "{name}: Another Timeline answers another creature's Test.",
+        "far": "{name}: the creature is more than 30 feet away.",
+        "mana": "{name}: Another Timeline costs 2 Mana, and you hold less.",
+        "reaction": "{name}: you have no Reaction left."
+      }
+    },
+    "Decay": {
+      "Label": "Decay",
+      "Name": "Decay {n}",
+      "Text": "Armor Points at every location are {n} lower, never below 0 (07 §9).",
+      "Laid": "{spell}: {name} carries Decay {n}.",
+      "NotLaid": "{spell}: no Decay could be laid on {name}."
+    },
+    "Deferred": {
+      "Put": "{source}: {name} takes {now} now, and {later} at the start of its next turn.",
+      "Landed": "{source}: {name} takes the {n} damage put off.",
+      "Kept": "{name}: {n} rows of damage put off could not land, so they stay on the list for the next landing."
+    },
+    "Echo": {
+      "Subtitle": "{talent}: echo {n}",
+      "Rolled": "{talent}: {name}'s d20 showed {face}, so echo {n} is rolled as part of the same Attack.",
+      "Same": "The same creature ({name})",
+      "Prompt": "{talent}: roll the echo against the same creature or another within your reach."
+    },
+    "Guardian": {
+      "AskBorrow": "{talent}: a blow would take {n} from {name}. Take {now} now and {later} at the start of your next turn? It costs {cost} Sand and your Reaction.",
+      "AskBorrowFree": "{talent}: a blow would take {n} from {name}. Take {now} now and {later} at the start of your next turn? Timeless Sentinel makes it cost no Sand and no Reaction.",
+      "BorrowRefuse": {
+        "unknown": "{name} does not hold {talent}.",
+        "deferred": "{talent}: damage already put off is never put off a second time.",
+        "nothing": "{talent}: the blow is too small to put any of it off.",
+        "fight": "{talent}: {name} is in no started fight, so there is no next turn to put the damage off to.",
+        "noHourglass": "{talent}: {name} carries no Hourglass in the Ranged slot, so holds no Sand.",
+        "sand": "{talent}: {name} does not hold the Sand.",
+        "reaction": "{talent}: {name} has no Reaction left."
+      },
+      "Borrowed": "{talent}: {name} takes {now} now; {later} arrives at the start of their next turn ({spared} taken off by the rank).",
+      "BorrowedFree": "{talent}, free under Timeless Sentinel: {name} takes {now} now; {later} arrives at the start of their next turn ({spared} taken off by the rank).",
+      "BorrowedHour": "{talent}: {name} stays at 1 Health. The other {n} damage arrives at the start of their next turn.",
+      "TurnedAside": "{talent}: {name} gains {n} Sand for the Block.",
+      "TurnedAsideFull": "{talent}: {name}'s Hourglass is full, so the Block gives no Sand.",
+      "TurnedAsideNoGlass": "{talent}: {name} carries no Hourglass in the Ranged slot, so the Block gives no Sand.",
+      "TurnedAsideMiss": "{talent}: the attack against {name} misses, and {name} gains {n} Sand.",
+      "GrindLine": "{talent}: {name} makes a {resilience} Resilience Test against DC {dc}. On a failure it is Slowed until the end of its next turn.",
+      "GrindNoAttacker": "{talent}: the attacker could not be found, so no Test is offered.",
+      "GrindNoDc": "{talent}: {name} has no Spell DC, so no Test is offered.",
+      "GrindPassed": "{talent}: {name} passes the Test and is not Slowed.",
+      "GrindLanded": "{talent}: {name} fails the Test and is {condition} until the end of its next turn.",
+      "GrindNotLanded": "{talent}: {name} failed the Test, but {condition} could not be laid.",
+      "SwapNoBoard": "Interposed Moment: {name} and {target} do not both stand on this scene, so no swap is made. The attack still targets {name}.",
+      "SwapFailed": "Interposed Moment: {name} and {target} could not swap places. The attack still targets {name}.",
+      "Swapped": "{talent}: {name} and {target} swap places, and the attack targets {name}.",
+      "AskedInBlow": "{name} is asked as a blow reduces your Health. It is not pressed from the sheet.",
+      "NothingPutOff": "{name}: {talent} has put off no damage, so nothing can be erased. Nothing was spent.",
+      "NothingToErase": "{name}: half of the {n} damage put off, rounded down, is nothing. Nothing was spent.",
+      "Unmade": "{talent}: {n} of the damage put off on {name} never arrives; {left} still does.",
+      "AskUnmade": "{talent}: {held} damage Borrowed Time put off on {name} arrives now, at the start of the turn. Spend {cost} Sand and a Half-Action so that {n} of it never arrives?",
+      "UnmadeRefuse": {
+        "unknown": "{name} does not hold {talent}. Nothing was spent.",
+        "nothing": "{talent}: nothing Borrowed Time put off on {name} would be erased. Nothing was spent.",
+        "noHourglass": "{talent}: {name} carries no Hourglass in the Ranged slot, so holds no Sand. Nothing was spent.",
+        "sand": "{talent}: {name} does not hold the Sand. Nothing was spent.",
+        "half": "{talent}: {name} has no Half-Action left. Nothing was spent."
+      },
+      "SentinelText": "Until the end of {name}'s next turn, every attack against an ally within {feet} feet targets {name} instead, and Borrowed Time costs {name} no Sand and no Reaction.",
+      "SentinelLaid": "Timeless Sentinel: every attack against an ally within {feet} feet of {name} targets {name} instead until the end of its next turn.",
+      "FieldName": "{talent} ({name}, {feet} ft)"
+    },
+    "Divert": {
+      "First": "Divert Timeway: your first casting costs only its Mana.",
+      "Price": "Divert Timeway: a casting after your first also gives you {fatigue} Fatigue that no rest removes and spends {tether} Spirit's Tether.",
+      "NoTether": "Divert Timeway: a casting after your first spends {tether} Spirit's Tether, and you hold none. Nothing was spent.",
+      "Paid": "{name} takes {fatigue} Fatigue that no rest removes and spends {tether} Spirit's Tether.",
+      "GmDecides": "What the minute undone changes is the GM's to decide; the targets keep no memory of it, and the caster does."
+    },
+    "SandAnswer": {
+      "Button": "{spell} on the blow against {name}",
+      "NoCaster": "Select the token of the caster who casts it, or set your character: none of yours knows that spell, or more than one does.",
+      "NeedsCard": "{name} is cast from the attack's own card, against the creature the attack struck. Nothing was spent.",
+      "NotAnAttack": "{name} answers an attack, and that card holds none. Nothing was spent.",
+      "NoNumbers": "{name} cannot be judged: the attack's card records no total or no Defense. Nothing was spent.",
+      "NotKnown": "That caster knows no spell that answers an attack.",
+      "StillHits": "{spell}: the attack on {name} still hits, at the same Success Level.",
+      "Missed": "{spell}: the attack on {name} misses. It deals no damage and lays nothing.",
+      "Lowered": "{spell}: the attack on {name} still hits, at a lower Success Level. It deals {n} less damage.",
+      "NotLanded": "{spell} went off, and the card could not record its answer to the blow on {name}.",
+      "Answered": "{name}'s Defense rose: {n} less damage, {to} to take"
     },
     "Caster": {
       "None": "Not a caster",
@@ -2278,6 +2494,7 @@
       }
     },
     "Card": {
+      "HealRecent": "the damage each target has taken since the start of your last turn, to no more than {n}",
       "ApplyToSelfAlt": "Apply the higher amount",
       "EffectNotSustained": "{name} is no longer sustained, so its effect cannot be applied.",
       "SustainCleanupFailed": "A sustained spell's effects could not be removed. The GM should check the affected actors before continuing.",
@@ -2362,6 +2579,10 @@
       "ResistLanded": "{conditions} landed",
       "PassedHalf": "{name} passed the Test and takes half the damage: {n}.",
       "PassedNone": "{name} passed the Test and takes none of the damage.",
+      "AppliedTo": "Applied to {name}: {n}",
+      "ApplyingTo": "Applying to {name}: {n}",
+      "AlreadyApplied": "{name} has already taken this card's damage. It is not applied twice.",
+      "ApplyBusy": "This card's damage to {name} is being written now. Wait for it to land; if it never does, a GM reviews the card.",
       "DamageOnFail": "dealt only on a failed Test",
       "Bypass": "bypasses Armor Points and Ward",
       "InflictResolved": "{name}'s Test is recorded on this card: {condition} is the Test's to lay, not a button's.",
@@ -2708,7 +2929,10 @@
       "Armor": "Your Armor Points rise by {ap} while another friendly creature stands within {feet} feet of you.",
       "ReachTotem": "Within {feet} ft of {owner}'s {totem} totem.",
       "BoonResilienceAll": "Resilience Tests",
-      "HealthFloor": "No source may reduce you below {n} Health while {owner} sustains it. It does not stop a Critical Injury or anything a Critical Injury does."
+      "HealthFloor": "No source may reduce you below {n} Health while {owner} sustains it. It does not stop a Critical Injury or anything a Critical Injury does.",
+      "Immune": "It cannot gain a condition.",
+      "Hold": "The conditions and effects already on it do nothing and do not count down. They resume when it leaves the area or the spell ends.",
+      "Taunt": "It takes a Bane on attacks against anyone but {owner}."
     },
     "NpcTab": {
       "statistics": "Statistics",
@@ -2766,7 +2990,8 @@
       "Price": "Price",
       "Shelf": "Shelf",
       "Slot": "Slot",
-      "Provision": "Food or drink"
+      "Provision": "Food or drink",
+      "ClassBadge": "Class: {className}"
     },
     "Item": {
       "CustodyPending": "This item is committed to a Pact Escrow exchange and is temporarily unavailable.",
@@ -2904,6 +3129,7 @@
       "AimSamePoint": "{name}: that is where it starts. Click somewhere else to give it a direction.",
       "NoArea": "{name} has no area to place.",
       "NoScene": "There is no scene to place an area on.",
+      "AimedElsewhere": "{name} was aimed on another scene. View that scene to place its area.",
       "SpellGone": "That spell is no longer available to place.",
       "NotSustained": "{name} is no longer sustained, so there is no area to place.",
       "FailedCast": "{name} did not go off, so there is no area to place: a failed Casting Test places nothing.",
@@ -2912,6 +3138,7 @@
       "SustainTakenOff": "{spell}'s area was taken off the board, so {name} no longer sustains it.",
       "NamedLabel": "Named",
       "NamedAtCast": "Named as {spell} was cast, and spared its Test: {names}.",
+      "ChosenAtCast": "Chosen as {spell} was cast: {names}.",
       "NoneNamed": "Nobody was named as {spell} was cast: target the creatures to name before casting it."
     },
     "AreaTest": {
@@ -2939,7 +3166,8 @@
       "Until": {
         "leaves": "until it leaves",
         "casterTurnStart": "until the start of {caster}'s next turn",
-        "endOfNextTurn": "until the end of its next turn"
+        "endOfNextTurn": "until the end of its next turn",
+        "endOfTurn": "until the end of that turn"
       },
       "Pushed": "pushed {feet} ft away",
       "Pulled": "pulled {feet} ft toward the centre"
@@ -2949,7 +3177,8 @@
       "DifficultiesHint": "What a foot costs here for each way of moving. Where Difficult ground overlaps, the higher cost applies; costs never multiply.",
       "Who": {
         "creature": "Every creature",
-        "enemy": "An enemy of the caster"
+        "enemy": "An enemy of the caster",
+        "named": "The creatures named at the cast"
       },
       "Kind": {
         "undead": "Undead",
@@ -3109,7 +3338,8 @@
         "Finisher": "Spend every Combo Point on an attack's roll dialog; each one adds 1 damage.",
         "Sprint": "Your first Move of a fight costs no Half-Action.",
         "Scales": "In Mail or Plate, the suit's Encumbering costs you no Speed and puts no Bane on Stealth.",
-        "ChromaticBlood": "Your race is the Chromatic Outcast, wearing a guise. You took this class at creation and take no second class."
+        "ChromaticBlood": "Your race is the Chromatic Outcast, wearing a guise. You took this class at creation and take no second class.",
+        "TimelessMind": "Your Proficiency Bonus counts twice on a Spirit Resilience Test."
       },
       "Buff": {
         "encounter": "{name}: +{n} damage until the encounter ends.",
@@ -3147,6 +3377,7 @@
       "SpendAll": "all",
       "Reminder": {
         "Scales": "Scales: in Mail or Plate, your suit's Encumbering puts no Bane on a Stealth Test.",
+        "TimelessMind": "Timeless Mind: your Proficiency Bonus counts twice on this Spirit Test, as its own row.",
         "Charge": "Your first Overbear or Sunder this encounter costs no Rage and grants 1; you may move your Speed in a straight line first.",
         "ExtraAttack": "Two attacks each time you Attack.",
         "ExtraAttackForm": "Two attacks each time you Attack, while in a Shapeshift form.",
@@ -3247,7 +3478,10 @@
         "Defense": "the target's Defense",
         "Standard": "a Standard Test at your tier",
         "Spell": "10 + 2 per tier of the spell",
-        "Occasion": "the occasion's DC"
+        "Occasion": "the occasion's DC",
+        "Each": "one roll, read against each target's own number; type over any one",
+        "EachDefense": "its Defense, {dc}",
+        "EachWilling": "willing, 10 + 2 per tier: {dc}"
       },
       "Target": "Target",
       "Automatic": "Effects",
@@ -3525,6 +3759,14 @@
       "FreeBy": "Cast for no Mana and no action: {name}",
       "FreeRow": "Cast for no Mana and no action",
       "ManaBackRow": "{n} Mana back",
+      "EachTarget": {
+        "HitDefense": "Hit, SL {sl}: {total} against its Defense {dc}",
+        "HitWilling": "Hit, SL {sl}: {total} against {dc}, willing",
+        "MissDefense": "Miss: {total} against its Defense {dc}. Nothing lands on it.",
+        "MissWilling": "Miss: {total} against {dc}, willing. Nothing lands on it.",
+        "HitTyped": "Hit, SL {sl}: {total} against DC {dc}, typed in place of {default}",
+        "MissTyped": "Miss: {total} against DC {dc}, typed in place of {default}. Nothing lands on it."
+      },
       "Garroted": "{name} cannot be cast: {by} bars casting while that Bleeding lasts.",
       "LongerRow": "lasts {n} further minute(s)",
       "NextSpellHalf": "{name}'s next spell that costs an action costs a Half-Action ({talent}).",
@@ -4690,9 +4932,12 @@
       "NoRoom": "There is no room in {container} for {name}."
     },
     "Augment": {
-      "Tooltip": "{className} Augment, +{bonus} to a Casting Test (07 §3). Held in the off hand.",
+      "Tooltip": "{className} Augment, +{bonus} to a Casting Test (07 §3). Carried in the Ranged slot.",
+      "HourglassTooltip": "{className} Augment. It holds your Sand and adds nothing to a Casting Test (07 §3). Carried in the Ranged slot.",
+      "HourglassNote": "{name} holds your Sand and adds nothing to a Casting Test (07 §3).",
       "NotYours": "{name} is {className} equipment: only that class casts through one (08 §9).",
       "HeldNote": "Casting through {name}.",
+      "HourglassNote": "{name} holds your Sand. It adds nothing to a Casting Test.",
       "PlantedNote": "{name} is planted: it counts while you stand within {n} feet of it (07 §3).",
       "CreatureNote": "Casting through {name}. 08 §9 gives an Augment to the {className} alone, and a creature holds no class for that lock to bite on, so nothing here refuses it."
     },
@@ -5307,6 +5552,7 @@
     },
     "NextAttack": {
       "BoonRow": "{n} Boon on this attack",
+      "SpellLaid": "{talent}: {name}'s next weapon attack this turn deals {n} more damage on a hit and lays Decay {decay}.",
       "NoFight": "{talent} promises {name}'s next attack in a fight, and there is none.",
       "NeedsFight": "{name} promises your next attack in a fight, and you are in none. Nothing was spent.",
       "PierceRow": "ignores {n} Armor Points",
@@ -5490,7 +5736,14 @@
         "freeCast": "cast without {pool}, once per Short Rest",
         "lifebinder": "split the damage: half to the target, the rest heals up to {n} creatures you choose",
         "voidSurge": "spend {n} Void Corruption for more damage",
-        "convertAttack": "deal Fire damage instead of the weapon's own type"
+        "gritDamage": "{n} more damage, for {price} Sand, spent before the roll",
+        "gritSl": "{n} more SL on a success, for {price} Sand, spent before the roll",
+        "echoing": "spend {price} Sand: half the damage it deals lands again at the start of your next turn",
+        "echoingWhole": "spend {price} Sand: the damage it deals lands again at the start of your next turn",
+        "storm": "{feet} feet more radius, for {price} Sand",
+        "convertAttack": "deal Fire damage instead of the weapon's own type",
+        "sandCast": "cast for {price} Sand in place of its Mana",
+        "sandCastSucceeds": "cast for {price} Sand in place of its Mana, and its Casting Test succeeds"
       },
       "Charges": "{n} held",
       "Left": "{n} left",
@@ -5743,6 +5996,15 @@
       "Line": "{name} gains {n} temporary Health.",
       "LineKept": "{name} keeps {held} temporary Health; {n} does not stack."
     },
+    "Range": {
+      "Refused": "{target} is {distance} feet away. {name} reaches {feet} feet. Nothing was spent.",
+      "RefusedTouch": "{target} is {distance} feet away. {name} reaches only a creature you touch, within {feet} feet. Nothing was spent.",
+      "RefusedMelee": "{target} is {distance} feet away. {name} takes a creature you are engaged with in melee, within your reach of {feet} feet. Nothing was spent.",
+      "PointRefused": "That point is {distance} feet away. {name} reaches {feet} feet: choose a point inside it.",
+      "TooMany": "{name} names up to {max}, and {count} are targeted. Nothing was spent.",
+      "NotWilling": "{target} is not willing: {name} takes only a willing creature or an ally. Nothing was spent.",
+      "NotSelf": "{name} takes a creature other than you. Nothing was spent."
+    },
     "RallyingCry": {
       "NoneMeasured": "No ally measured within {feet} feet: the table names who heard it."
     },
@@ -5758,6 +6020,7 @@
       "AskGuardian": "{talent}: {name} is hit for {n} damage within your reach. Take the hit in full? It costs {cost} {pool} and your Reaction.",
       "AskRighteous": "{talent}: {name} is struck within your reach. Make yourself its target and take {n} damage, your Ward 1 against its school counted? It costs {cost} {pool} and your Reaction.",
       "AskBurden": "{talent}: {name} is struck within your reach. Take {n} of that damage onto yourself, the rest staying with them? It costs {cost} {pool} and your Reaction.",
+      "AskInterposed": "{talent}: {name} is attacked within your reach. Swap places with them and take the attack's {n} damage yourself? It costs {cost} {pool} and your Reaction.",
       "SheetUse": "{name} is asked as a blow lands on a friendly target within {feet} feet. It is not pressed from the sheet.",
       "AskHold": "{talent}: {name} would drop to 0 Health. Hold them at 1 instead? {n} uses left.",
       "AskHoldHeal": "{talent}: {name} would drop to 0 Health. Hold them at 1 and restore {heal} Health? {n} uses left.",
@@ -5805,6 +6068,14 @@
       "Ended": "Ended on {target}: {effects}.",
       "EndedNone": "Nothing on {target} was ended.",
       "RaptureLine": "{talent}: the second creature spends a use, {n} left.",
+      "SustainRow": "{spell}: the Sustain {caster} holds, on {held}",
+      "SustainEnded": "{spell}, the Sustain {caster} held, ended on every creature it held ({held})",
+      "SustainNobody": "no creature",
+      "SustainNotice": "Dispel ended {name}'s {spell}.",
+      "PickArea": "{name}: click a point inside a held area within {feet} feet, or press Escape.",
+      "NoArea": "{name}: no held area at that point is one Dispel may end.",
+      "PromptArea": "Choose the held areas at that point to end.",
+      "TheArea": "the area",
       "Refuse": {
         "Transfer": "an unfinished Spellsteal transfer requiring GM review",
         "Condition": "a condition ({conditions}), which Dispel does not end",
@@ -5840,6 +6111,7 @@
       "Refuse": {
         "AtPoint": "{name} stands on the point it would be moved from, and is not moved ({source}).",
         "Immovable": "{name} cannot be pushed ({source}).",
+        "Held": "{name} is held out of time and cannot be moved ({source}).",
         "Walled": "{name} has a wall in the way and is not moved ({source}).",
         "Unchecked": "{name}'s scene is not on the board here, so the walls cannot be checked and nothing is moved ({source}).",
         "Gone": "{name}'s token is not on a scene, so nothing is moved ({source}).",
@@ -5867,7 +6139,9 @@
       "Freed": "{name} breaks free: {condition} from {source} ends.",
       "Held": "{name} stays {condition} ({source}).",
       "Stunned": "{talents}: {name} fails a second Test and is Stunned until the end of {caster}'s next turn.",
-      "NotStunned": "{talents}: {name} fails a second Test, and the Stun could not be laid."
+      "NotStunned": "{talents}: {name} fails a second Test, and the Stun could not be laid.",
+      "SustainLeft": "{name} was the last creature {source} held, so {caster}'s Sustain ends and pays no more upkeep.",
+      "SustainLeftNotice": "{spell} holds no creature now, so {name}'s Sustain ends."
     },
     "Unstable": {
       "Subtitle": "{name} ended the warlock's affliction early",
@@ -6187,6 +6461,7 @@
       "Pick": "{name}: click a space you can see within {feet} feet. Right-click or Escape to cancel.",
       "PickSeen": "{name}: click a space within {feet} feet. Right-click or Escape to cancel.",
       "PickShadow": "{name}: click a space you can see within {feet} feet. Both ends must be in darkness or in shadow, which is the table's call. Right-click or Escape to cancel.",
+      "NoFeet": "{spell} moves you {n} feet for each point of your Intelligence modifier, and your modifier gives it none. Nothing was spent.",
       "Refuse": {
         "Far": "{name}: that space is more than {feet} feet away.",
         "Gone": "{name} could not be moved.",
@@ -6258,6 +6533,7 @@
       "Pick": "{name}: click a point within {feet} feet. Every creature within {radius} feet of it loses an effect.",
       "PickTooFar": "{name}: the point must be within {feet} feet.",
       "Prompt": "Choose up to {n} effect on {target} to end.",
+      "PromptArea": "Choose up to {n} held area at the point to end.",
       "Nothing": "{name}: nothing within {radius} feet of that point has an effect this may end.",
       "Failed": "{name}: the Casting Test failed, and nothing ends.",
       "Subtitle": "Struck by {name}",

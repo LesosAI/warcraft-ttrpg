@@ -36,9 +36,13 @@ export function resilienceModifier({ abilityMod = 0, proficiency = 0, trained = 
  * The provenance rows for a Resilience Test, in the order the card shows them.
  * @returns {Array<{label: string, value: number}>}
  */
-export function resilienceRows({ resilience, abilityMod = 0, proficiency = 0, trained = false } = {}) {
+export function resilienceRows({ resilience, abilityMod = 0, proficiency = 0, trained = false, doubled = false } = {}) {
   const ability = resilienceAbility(resilience);
   const rows = [{ label: AZEROTH.abilities[ability] ?? "AZEROTH.Sheet.Resilience", value: abilityMod }];
   if (trained) rows.push({ label: "AZEROTH.Sheet.Proficiency", value: proficiency });
+  // **02's TIMELESS MIND** (*Your Proficiency Bonus is doubled on Spirit Resilience Tests*;
+  // stage 2b): the Proficiency counted a second time, as its own row, where it is counted at
+  // all (`rules/chronomancer.mjs#timelessMindDoubles` decides `doubled`).
+  if (trained && doubled) rows.push({ label: "AZEROTH.Chrono.TimelessMindRow", value: proficiency });
   return rows;
 }

@@ -2,10 +2,10 @@
   "id": "azeroth-rpg",
   "title": "Azeroth RPG",
   "description": "Private homebrew d20 system — D&D 5e chassis with WFRP 4e-style complexity, set in the Warcraft III / classic WoW era. Not for distribution.",
-  "version": "0.14.2",
+  "version": "0.15.0",
   "url": "https://github.com/LesosAI/warcraft-ttrpg",
   "manifest": "https://github.com/LesosAI/warcraft-ttrpg/releases/latest/download/system.json",
-  "download": "https://github.com/LesosAI/warcraft-ttrpg/releases/download/v0.14.2/system.zip",
+  "download": "https://github.com/LesosAI/warcraft-ttrpg/releases/download/v0.15.0/system.zip",
   "authors": [
     {
       "name": "Brad McCorkle"

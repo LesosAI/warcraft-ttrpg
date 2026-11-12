@@ -2,11 +2,18 @@
  * Augments — the class equipment a caster casts through (07 §3, 08 §9).
  * Pure, no Foundry imports (CLAUDE.md §3).
  *
- * 07 §3 is the authority and 08 §9 prices it. Seven categories, one to a class
+ * 07 §3 is the authority and 08 §9 prices it. Eight categories, one to a class
  * (the Chromatic Champion's Broodstone the seventh: it bears on the Casting Test
- * of the spells its branches teach, since the class casts nothing else),
+ * of the spells its branches teach, since the class casts nothing else; the
+ * Chronomancer's Hourglass the eighth, which adds 0 and holds Sand, D-849),
  * and the form inside a category is a choice of weight and concealment rather
  * than of power: *any form inside a category carries the same bonus*.
+ *
+ * **It is carried in the Ranged slot for every class** (D-850; the lead: *"An
+ * augment should use the ranged weapon slot for all classes"*). It and a ranged
+ * weapon displace each other, and a two-handed main hand no longer bars it
+ * (`rules/worn.mjs`). The Shaman's totem sits there while carried and is still
+ * planted to cast.
  *
  * **It adds to the Casting Test and to nothing else.** 07 §3: *a spell's
  * damage is its Damage Rating, which no Casting Test changes, and a spell
@@ -36,8 +43,33 @@ export const AUGMENTS = Object.freeze({
   libram: Object.freeze({ className: "Paladin", forms: "Librams, blessed seals, hand-copied psalters" }),
   idol: Object.freeze({ className: "Druid", forms: "Carved idols, antler fetishes, moonwell stones" }),
   totem: Object.freeze({ className: "Shaman", forms: "Planted totems, carved poles, ancestor stakes" }),
-  broodstone: Object.freeze({ className: "Chromatic Champion", forms: "A cut stone, a ring-set garnet, a vial sealed in lead" })
+  broodstone: Object.freeze({ className: "Chromatic Champion", forms: "A cut stone, a ring-set garnet, a vial sealed in lead" }),
+  // The Chronomancer's (D-849): the one Augment that adds NOTHING to a Casting
+  // Test and holds a pool instead. The lead: *"the augment does not add a casting
+  // bonus for the hourglass"*, *"no hourglass no sand"*. `bonus: 0` is fixed by the
+  // category, so the pack carries ONE item rather than a `(+1)` and a `(+2)`.
+  hourglass: Object.freeze({
+    className: "Chronomancer",
+    forms: "A brass-caged glass, a sand-glass on a chain, a glass set in a staff-head",
+    bonus: 0,
+    holds: "sand"
+  })
 });
+
+/**
+ * Whether a category carries a fixed bonus (the Hourglass's 0) rather than a
+ * grade read off the item's name. An Hourglass names no `(+N)`, and before
+ * D-849 `augmentOf` refused any §9 row without one.
+ */
+export function fixedBonus(category) {
+  const entry = AUGMENTS[category];
+  return entry && Number.isFinite(entry.bonus) ? entry.bonus : null;
+}
+
+/** The pool a category holds (`"sand"` for the Hourglass), or null. */
+export function poolHeld(category) {
+  return AUGMENTS[category]?.holds ?? null;
+}
 
 /** The one that is planted rather than held, and how far it reaches (07 §3). */
 export const PLANTED = "totem";
@@ -71,8 +103,12 @@ function flaggedAugment(item) {
     ?? null;
   if (!flag) return null;
   const category = String(flag.category ?? "").trim().toLowerCase();
-  const bonus = Number(flag.bonus);
-  if (!AUGMENTS[category] || !Number.isFinite(bonus)) return null;
+  if (!AUGMENTS[category]) return null;
+  // A fixed-bonus category (the Hourglass) is that bonus whatever the flag says.
+  const fixed = fixedBonus(category);
+  const bonus = fixed ?? Number(flag.bonus);
+  if (flag.bonus === undefined && fixed === null) return null;
+  if (!Number.isFinite(bonus)) return null;
   return { category, bonus };
 }
 
@@ -91,9 +127,20 @@ function flaggedAugment(item) {
  * @param {object} item  `{name, flags, system: {source: {section}}}` or the system alone
  * @returns {{category, className, forms, bonus, planted}|null}
  */
-export function augmentOf(item) {
+export function augmentOf(item, depth = 0) {
   if (!item) return null;
   const sys = item.system ?? item;
+  // **A FORGED OR ROLLED AUGMENT IS ITS BASE'S** (D-863, found beside the
+  // Hourglass): the Forge and the loot generator name a thing `<prefix> <base>`
+  // (`affixes.mjs#nameFor`) and stamp neither the base's flag nor its name, so
+  // *Keen Focus (+1)* or an Uncommon *Swift Hourglass* read their first word as a
+  // category and stopped being Augments at all. Both carry the whole base on
+  // `flags.azeroth-rpg.generated.base`, which answers first.
+  const generated = item?.flags?.["azeroth-rpg"]?.generated?.base ?? null;
+  if (generated && depth < 1) {
+    const fromBase = augmentOf(generated, depth + 1);
+    if (fromBase) return fromBase;
+  }
   const flagged = flaggedAugment(item);
   if (flagged) {
     const entry = AUGMENTS[flagged.category];
@@ -102,7 +149,8 @@ export function augmentOf(item) {
       className: entry.className,
       forms: entry.forms,
       bonus: flagged.bonus,
-      planted: flagged.category === PLANTED
+      planted: flagged.category === PLANTED,
+      holds: poolHeld(flagged.category)
     };
   }
   const section = String(sys?.source?.section ?? "");
@@ -113,14 +161,19 @@ export function augmentOf(item) {
   if (!entry) return null;
   // `Focus (+2)` and the identifier `focus-2` say the same thing; the name is
   // what a reader sees, so it is read first.
+  // An Hourglass's bonus is its category's (0, D-849) and its name carries none.
+  const fixed = fixedBonus(category);
   const marked = /\(\s*\+\s*(\d+)\s*\)/.exec(name);
   const identified = /-(\d+)$/.exec(String(sys?.identifier ?? ""));
-  const bonus = marked ? Number(marked[1]) : (identified ? Number(identified[1]) : null);
+  const bonus = fixed ?? (marked ? Number(marked[1]) : (identified ? Number(identified[1]) : null));
   if (bonus === null) return null;
-  return { category, className: entry.className, forms: entry.forms, bonus, planted: category === PLANTED };
+  return {
+    category, className: entry.className, forms: entry.forms, bonus,
+    planted: category === PLANTED, holds: poolHeld(category)
+  };
 }
 
-/** Whether a thing is one of the seven at all. */
+/** Whether a thing is one of the eight at all. */
 export function isAugment(item) {
   return augmentOf(item) !== null;
 }
@@ -200,6 +253,8 @@ export function castingAugment(items = [], classNames = []) {
     category: held.category,
     planted: held.planted,
     // 08 §9's own condition, for the table to judge (D2 §12).
-    note: held.planted ? PLANTED_RANGE : null
+    note: held.planted ? PLANTED_RANGE : null,
+    // The Hourglass holds Sand and adds 0 (D-849); the dialog says so in words.
+    ...(held.holds ? { holds: held.holds } : {})
   };
 }

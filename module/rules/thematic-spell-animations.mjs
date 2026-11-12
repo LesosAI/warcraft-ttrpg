@@ -23,7 +23,20 @@ const recipe = (visual, sound, options = {}) => Object.freeze({
  * Footsteps therefore has no public sound step.
  */
 export const THEMATIC_SPELL_ANIMATIONS = Object.freeze({
-  "heat-mirage": recipe("jb2a.cast_generic.fire.side01.orange", "psfx.casting.fire-side.001", {place: "source", requires: ["gm-authored illusion anchor", "viewer knowledge"]}),
+  // **HEAT MIRAGE AND MINDSTATIC PLAY IN THEIR AREA** (O-314; the lead, 2026-11-11: *"yes if
+  // there is an animation for the effected area"*). Each places a Region from its card at the
+  // point its cast recorded, and is cued there and nowhere else: silent at the cast, like every
+  // area 07 places (Flamestrike). Heat Mirage's refraction is a heat shimmer, played ONCE as the
+  // image is made; it stands no loop, because a shimmer standing on the image would mark the
+  // illusion for every viewer (asked of the lead, O-315). Mindstatic's boundary stands a loop
+  // while its Region does and the Sustain is held.
+  "heat-mirage": Object.freeze({
+    cues: Object.freeze([cue("region", [
+      fx("jb2a.template_circle.aura.04.outward.001.complete.combined.refraction", "region", {area: 1}),
+      snd("psfx.casting.fire-side.001")
+    ])]),
+    requires: Object.freeze(["gm-authored illusion anchor", "viewer knowledge", "the card's Place area at the anchor the cast recorded"])
+  }),
   "phoenix-courier": recipe("jb2a.fireflies.many.01.green", "psfx.cantrips.gust.v1", {visualOptions: {filter: "FIRE_B"}, standIn: "Amber-filtered motes are only an ember-bird departure/arrival stand-in; no courier, parcel, route or cross-scene flight is represented.", requires: ["parcel custody", "delivery mission", "GM completion/failure"]}),
   "icevein-passage": recipe("jb2a.ice_spikes.radial.burst.white", "psfx.impacts.magicaleffects.cold", {requires: ["GM-approved ice route", "terrain geometry", "expiry"]}),
   "arcane-seal": recipe("jb2a.detect_magic.circle.blue", "psfx.impacts.magicaleffects.generic.002.001", {requires: ["registered object", "authorized creature list", "override/dispel controls"]}),
@@ -40,7 +53,16 @@ export const THEMATIC_SPELL_ANIMATIONS = Object.freeze({
       audience: "affected player only; GM for NPC", status: "played by the private whisper route; never use the shared planner"}),
     standIn: "The violet flicker follows only a failed Resist and is intended for the affected player; the shared planner cannot enforce that privacy yet. The phantom sound is not in the public recipe."
   }),
-  "mindstatic": recipe("jb2a.template_circle.out_pulse.01.burst.bluewhite", "psfx.impacts.magicaleffects.psychic", {place: "source", requires: ["placed area", "mental-channel endpoints", "suspend/resume state"]}),
+  "mindstatic": Object.freeze({
+    cues: Object.freeze([cue("region", [
+      fx("jb2a.template_circle.out_pulse.01.burst.bluewhite", "region", {area: 1}),
+      snd("psfx.impacts.magicaleffects.psychic")
+    ])]),
+    loop: Object.freeze({binding: "sustain-region", layers: Object.freeze([
+      fx("jb2a.template_circle.aura.01.loop.large.bluepurple", "region", {area: 1, mask: true, opacity: 0.35})
+    ])}),
+    requires: Object.freeze(["the card's Place area at the point the cast recorded", "mental-channel endpoints", "suspend/resume state"])
+  }),
   "summoners-writ": recipe("jb2a.cast_generic.fire.01.orange", "psfx.casting.generic.001", {requires: ["GM-approved delegate permission", "range and bond checks on every command", "revocation state"]}),
   "prayer-of-mending": recipe("jb2a.particle_burst.01.circle.bluepurple", "psfx.conditions.boon.002.01", {trigger: "effect", place: "target", visualOptions: {filter: "GOLD_B", scale: 0.4}, requires: ["gold mote when applied to the recorded recipient", "hostile damage event identity", "atomic charge spend and heal", "committed recipient transfer; healing bell and traveling spark wait for that record"]}),
 

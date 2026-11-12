@@ -21,9 +21,25 @@
  *                Constitution modifier. Mana and Focus: full. Fatigue: minus
  *                one. Resolve refreshes but is derived, so nothing is stored.
  *                Spirit's Tether: NEVER on a rest (D2 §2.2).
+ *
+ * **SAND EMPTIES WHEN EITHER REST FINISHES** (D-848; the lead: *"It should only
+ * drain on a short or long rest"*). It is a Momentum pool and the one that
+ * outlives a fight, so both rests write it to 0 whatever was eaten, and the card
+ * says how much went (`{kind: "sandEmptied", amount}`).
  */
 
 import { AZEROTH } from "../config.mjs";
+import { SAND, emptySandUpdates } from "./sand.mjs";
+
+/** Sand's updates and its card line, off a snapshot (D-848). */
+function sandAtRest(pools) {
+  const updates = emptySandUpdates(pools);
+  // The Sand pool alone (the stage 1 review): another Momentum pool on the same class item
+  // is never counted as Sand emptied.
+  const held = (pools ?? []).filter(p => p?.kind === "momentum" && p.name === SAND && updates.some(u => u.itemId === p.itemId))
+    .reduce((n, p) => n + Math.max(0, Number(p.value) || 0), 0);
+  return { updates, gains: held > 0 ? [{ kind: "sandEmptied", amount: held }] : [] };
+}
 
 /** @typedef {{itemId: string, kind: "power"|"momentum", name: string, value: number, max: number}} PoolSnapshot */
 
@@ -110,14 +126,16 @@ export function shortRest({
     if (p.name === "focus") return p.max;
     return null;
   });
+  const sand = sandAtRest(pools);
   return {
     health: after,
     fatigue,
-    pools: updates,
+    pools: [...updates, ...sand.updates],
     gains: [
       ...(fedTo > before ? [{ kind: "health", amount: fedTo - before }] : []),
       ...(after > fedTo ? [{ kind: "tierAgain", amount: after - fedTo }] : []),
       ...gains,
+      ...sand.gains,
       ...(eats ? [] : [{ kind: "noFood" }]),
       ...(!drinks && holdsMana ? [{ kind: "noDrink" }] : [])
     ]
@@ -135,13 +153,15 @@ export function longRest({ health, conMod = 0, tier = 1, fatigue = 0, pools = []
   const after = diseased ? before : Math.min(health.max, before + gain);
   const rested = diseased ? fatigue : Math.max(0, fatigue - 1);
   const { updates, gains } = poolRecovery(pools, p => (p.name === "mana" || p.name === "focus" ? p.max : null));
+  const sand = sandAtRest(pools);
   return {
     health: after,
     fatigue: rested,
-    pools: updates,
+    pools: [...updates, ...sand.updates],
     gains: [
       ...(after > before ? [{ kind: "health", amount: after - before }] : []),
       ...gains,
+      ...sand.gains,
       ...(rested < fatigue ? [{ kind: "fatigue", amount: rested - fatigue }] : []),
       ...(diseased ? [{ kind: "diseased" }] : [])
     ]

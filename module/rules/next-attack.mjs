@@ -74,6 +74,13 @@ export function nextAttackEntry(grant = {}, now = null) {
     // 04's False Opening (stage 3A): *Your next attack this turn cannot be met with a
     // Parry or a Block* - named only where a promise carries it.
     ...(grant.unanswerable === true ? { unanswerable: true } : {}),
+    // 07 §12's Hourstrike (D-865): *lays Decay 1 on the creature it hits* - named only
+    // where a promise carries it, laid on the hit through `effects/decay.mjs#layDecay`.
+    ...(count(grant.decay) > 0 ? { decay: count(grant.decay) } : {}),
+    // **THE DAMAGE'S OWN TYPE** (Hourstrike's *2 more Physical damage*; the 2a review, L3):
+    // named only where a promise carries one. The attack adds it to its Rating where the
+    // blow is of that type and as a second amount of that type where it is not (D-777).
+    ...(typeof grant.type === "string" && grant.type && count(grant.damage) > 0 ? { type: grant.type } : {}),
     lasts: grant.lasts,
     at: {
       combat: String(now.combat), round: Math.trunc(Number(now.round)) || 0, combatant: String(now.combatant ?? ""),
@@ -82,7 +89,7 @@ export function nextAttackEntry(grant = {}, now = null) {
       ...(grant.lasts === "nextTurn" ? { turn: turnIndex(now.turn), own: turnIndex(now.own) } : {})
     }
   };
-  return entry.boons || entry.penetration || entry.damage || entry.unanswerable ? entry : null;
+  return entry.boons || entry.penetration || entry.damage || entry.unanswerable || entry.decay ? entry : null;
 }
 
 /** A turn index, or null. */
@@ -173,7 +180,11 @@ export function pendingNextAttack(entries = [], { now = null } = {}) {
     else lapsed.push(e);
   }
   const sum = key => live.reduce((n, e) => n + count(e[key]), 0);
-  return { boons: sum("boons"), penetration: sum("penetration"), damage: sum("damage"), unanswerable: live.some(e => e.unanswerable === true), live, lapsed };
+  // A promise that names its damage's type (Hourstrike) is `typed`, never the plain sum: the
+  // attack lays it by the blow's own type (the 2a review, L3).
+  const typed = live.filter(e => typeof e.type === "string" && e.type && count(e.damage) > 0).map(e => ({ type: e.type, amount: count(e.damage), name: e.name }));
+  const damage = live.reduce((n, e) => n + (typeof e.type === "string" && e.type ? 0 : count(e.damage)), 0);
+  return { boons: sum("boons"), penetration: sum("penetration"), damage, typed, unanswerable: live.some(e => e.unanswerable === true), live, lapsed };
 }
 
 /**

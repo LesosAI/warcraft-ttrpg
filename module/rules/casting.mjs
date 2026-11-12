@@ -20,11 +20,147 @@ import { ROUND_SECONDS } from "./area-ticks.mjs";
 import { ferocityFor } from "./shapes.mjs";
 // A creature's Power pool IS its Mana (the lead, 2026-09-10).
 import { manaPool } from "./pools.mjs";
+// 05 §1 and §2: one roll read against each target's own number (O-301).
+import { SL_CAP, computeSL, resolveTest } from "./resolution.mjs";
 
 /** 07 §2: two numbers cover every spell. */
 export function castingDC({ tier = 1, targetDefense = null } = {}) {
   if (targetDefense !== null && targetDefense !== undefined) return targetDefense;
   return 10 + 2 * Math.max(1, Math.trunc(tier) || 1);
+}
+
+/**
+ * **07 §2's TWO NUMBERS, CHOSEN FOR A CAST** (the Chronomancer sweep's stage 3, D-892): *Aimed at
+ * one creature - That creature's Defense; Aimed at an area, at an ally, or at nothing - 10 + 2 per
+ * tier of the spell.* The dialog and the cast door took the first target's Defense for any spell
+ * with a creature targeted, so Shifting Hours (*A 20 ft radius*) rolled against a Raptor's
+ * Defense 12 rather than 16, and Sands Run Back at an ally against the ally's Defense.
+ *
+ * **07 §2's *ally* IS A WILLING TARGET** (O-296; the lead, 2026-11-10: *"296 - ally means willing
+ * target"*): the one predicate `rules/target-line.mjs#willingFrom`, read at the door through
+ * `canvas/range.mjs#willingOf` (D-893) - the caster; D-755's ally (the sides in a fight the two
+ * share, the Party outside one); a NEUTRAL creature, in a fight or out of one (the lead,
+ * 2026-11-11: *"300 - neutral can be willing"*, D-900, so a NEUTRAL target gives 10 + 2 a tier
+ * and never its Defense); and outside a shared fight a token on the caster's own side of the
+ * board. Nothing asks the target's player. The door that answers it is
+ * `canvas/engaged.mjs#spellAimsAtTier`, which hands the verdict here.
+ *
+ * @param {{tier?: number, area?: boolean, ally?: boolean, targetDefense?: number|null}} o
+ *   `area` - the spell's Target line names an area (`rules/areas.mjs#areaFor`); `ally` - the
+ *   creature it is aimed at is willing (`canvas/range.mjs#willingOf`, the caster included)
+ */
+export function spellCastingDC({ tier = 1, area = false, ally = false, targetDefense = null } = {}) {
+  if (area === true || ally === true) return castingDC({ tier });
+  return castingDC({ tier, targetDefense });
+}
+
+/**
+ * **EVERY TARGET IS JUDGED ON ITS OWN NUMBER** (O-301; the lead, 2026-11-10: *"o301 - each target
+ * needs to be rolled against it's defense or make it's own resilence test if relevant."*). A spell
+ * that names several creatures and is not an area takes ONE Casting Test - one roll, one total,
+ * the Mana paid once (07 §2's steps name one Test a cast) - and that total is compared with each
+ * target's own 07 §2 number: an unwilling creature's Defense, a willing one's 10 + 2 a tier. It
+ * replaces the first target's Defense standing for the whole cast (D-892's second reading).
+ *
+ * True where the cast is aimed at two or more creatures, is not an area, and no DC was handed in or
+ * stated by the entry (a stated DC is the entry's, for every target).
+ *
+ * @param {{area?: boolean, given?: number|null, stated?: number|null, count?: number}} o
+ */
+export function judgesEachTarget({ area = false, given = null, stated = null, count = 0 } = {}) {
+  return area !== true && (given === null || given === undefined) && (stated === null || stated === undefined)
+    && (Math.trunc(Number(count)) || 0) >= 2;
+}
+
+/**
+ * Each target's 07 §2 number, in the order handed in: `{dc, willing}`.
+ *
+ * @param {{tier?: number, targets?: Array<{willing?: boolean, defense?: number|null}>}} o
+ * @returns {Array<{dc: number, willing: boolean}>}
+ */
+export function eachTargetDCs({ tier = 1, targets = [] } = {}) {
+  return (targets ?? []).map(t => {
+    const willing = t?.willing === true;
+    const defense = Number.isFinite(Number(t?.defense)) && t?.defense !== null ? Number(t.defense) : null;
+    return { dc: spellCastingDC({ tier, ally: willing, targetDefense: defense }), willing };
+  });
+}
+
+/**
+ * **A DC TYPED IN ONE TARGET'S FIELD** (O-307; the lead, 2026-11-11: *"307 - one field per
+ * target"*): the number a field holds, or null where it holds nothing usable - empty, blank, not a
+ * number, below 0 - so a field cleared returns to its default. A whole number (a fraction is
+ * truncated, as the single DC field's `step="1"` reads it).
+ *
+ * @param {unknown} raw  the field's value
+ * @returns {number|null}
+ */
+export function typedDcValue(raw) {
+  if (raw === null || raw === undefined) return null;
+  const text = String(raw).trim();
+  if (!text) return null;
+  const n = Number(text);
+  return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : null;
+}
+
+/**
+ * **EACH TARGET'S NUMBER, WITH WHAT WAS TYPED OVER IT** (O-307): the rows `eachTargetDCs` gave
+ * (each carrying its own `key`), every one keeping its 07 §2 number as `default`, and the one a GM
+ * or player typed in that target's own field as `dc` where it differs (`typed: true`). A number
+ * typed for one key reaches that target alone: a key no row carries, and a field cleared, change
+ * nothing.
+ *
+ * @param {Array<{dc: number, key?: string}>} rows
+ * @param {Record<string, unknown>|null} [typed]  the fields' values by target key
+ * @returns {Array<{dc: number, default: number, typed: boolean}>}
+ */
+export function typedTargetDCs(rows = [], typed = null) {
+  const by = typed && typeof typed === "object" ? typed : {};
+  return (rows ?? []).map(r => {
+    const raw = typeof r?.key === "string" && Object.hasOwn(by, r.key) ? by[r.key] : null;
+    const n = typedDcValue(raw);
+    return n === null || n === r.dc ? { ...r, default: r.dc, typed: false } : { ...r, dc: n, default: r.dc, typed: true };
+  });
+}
+
+/**
+ * **THE ONE ROLL, READ AGAINST EACH TARGET'S NUMBER**: per target `{dc, total, success, sl,
+ * critical}`. A natural 20 succeeds against every number and a natural 1 fails against every one
+ * (05 §1); success is the margin (CLAUDE.md §7). A Test the rules call a success outright (Halt
+ * bought with Sand, Soul Fire, Miracle: `forcedSl`) succeeds against every target at that SL, and
+ * a Test that failed outright (`failed`, a forced failure) fails against every one.
+ *
+ * @param {{natural?: number|null, total?: number, dcs?: number[], criticalOn?: number, forcedSl?: number|null, failed?: boolean}} o
+ */
+export function judgeEachTarget({ natural = null, total = 0, dcs = [], criticalOn = 20, forcedSl = null, failed = false } = {}) {
+  return (dcs ?? []).map(dc => {
+    if (failed === true) return { dc, total, success: false, sl: computeSL(total, dc), critical: false };
+    if (forcedSl !== null && forcedSl !== undefined && Number.isFinite(Number(forcedSl))) {
+      return { dc, total, success: true, sl: Math.max(0, Math.trunc(Number(forcedSl)) || 0), critical: false, forced: true };
+    }
+    const nat = Math.trunc(Number(natural));
+    const r = resolveTest({ natural: nat, modifier: total - nat, dc, criticalOn });
+    return { dc, total: r.total, success: r.success, sl: r.sl, critical: r.critical === true };
+  });
+}
+
+/**
+ * **A TARGET'S OWN SUCCESS LEVEL** - what its riders read: the cast's SL (worked out against the
+ * lowest number, with Overchannel, Grit of Ages and Ascendance already on it) less however many
+ * Success Levels this target's higher number takes off the same total. Null for a target the
+ * Test missed. A forced success is the cast's SL for every target.
+ *
+ * @param {number} castSl
+ * @param {{dc: number, success: boolean, critical?: boolean, forced?: boolean}} row  `judgeEachTarget`'s
+ * @param {{total: number, lowest: number}} o
+ * @returns {number|null}
+ */
+export function targetSl(castSl, row, { total = 0, lowest = 0 } = {}) {
+  if (!row?.success) return null;
+  const sl = Math.trunc(Number(castSl)) || 0;
+  if (row.forced === true) return sl;
+  const less = computeSL(total, lowest) - computeSL(total, row.dc);
+  return Math.max(row.critical === true ? 1 : 0, Math.min(SL_CAP, sl - Math.max(0, less)));
 }
 
 /** 07 §8: Health per Overchannel point, by the spell's tier. */

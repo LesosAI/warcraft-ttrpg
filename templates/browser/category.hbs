@@ -93,6 +93,10 @@
     <li class="azeroth-browser-entry" data-uuid="{{this.uuid}}" data-action="openEntry">
       {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=this.img rarityClass=this.rarityClass}}
       <span class="azeroth-browser-name{{#if this.rarityClass}} {{this.rarityClass}}{{/if}}">{{this.name}}</span>
+      {{!-- The class emblems (D-862), after the name. The image is never the only
+            carrier: each names its class in a tooltip and an accessible label, and
+            a class with no crest is never drawn (`classBadges` drops it). --}}
+      {{#if this.badges.length}}<span class="azeroth-browser-badges">{{#each this.badges}}<img class="azeroth-browser-badge" src="{{this.src}}" alt="{{this.label}}" data-tooltip="{{this.label}}">{{/each}}</span>{{/if}}
       {{#if this.meta}}<span class="azeroth-browser-meta"{{#if this.metaTitle}} data-tooltip="{{this.metaTitle}}"{{/if}}>{{this.meta}}</span>{{/if}}
     </li>
     {{/each}}

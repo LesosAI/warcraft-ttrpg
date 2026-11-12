@@ -4,6 +4,8 @@ import {feetApart} from "../canvas/footprints.mjs";
 import {projectionRefusal} from "../rules/image-projection.mjs";
 import {realmRefusalFor,realmStateFor} from "./spirit-realm.mjs";
 import {iceBlockFor} from "../rules/ice-block.mjs";
+// The scenes a fight stands on (O-294): core makes a fight unlinked, so `combat.scene` is null at the table.
+import {fightOnScene} from "../rules/fight-scenes.mjs";
 
 export const RESTORATIVE_TOTEM_QUERY = "azeroth-rpg.restorativeTotem";
 export const RESTORATIVE_TOTEM_FLAG = "restorativeTotemUses";
@@ -24,7 +26,7 @@ export function restorativeTotemContext({combatId,round,turn,sourceUuid} = {}, u
   const refuse = reason => ({ok:false,reason});
   if (!combat?.started || combat.round !== round || combat.turn !== turn || !token?.actor) return refuse("turn");
   if (source?.documentName !== "Token" || source.parent?.tokens?.get(source.id) !== source || !source.actor) return refuse("source");
-  if (source.parent !== token.parent || combat.scene?.id !== source.parent.id) return refuse("scene");
+  if (source.parent !== token.parent || !fightOnScene(combat, source.parent, game.scenes)) return refuse("scene");
   const bond = bondOf(source.actor), owner = bond?.ownerUuid ? fromUuidSync(bond.ownerUuid) : null;
   const restoration = restorativeTotem(bond,owner?.takenTalents?.() ?? []);
   if (!owner || !restoration || !physical(source.actor)) return refuse("source");

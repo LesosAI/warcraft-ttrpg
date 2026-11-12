@@ -267,7 +267,9 @@ export function legacyShadowHunterBatch(context) {
           useControl(sheet, blood)()?.click();
           await sleep(1500);
         });
-        assert.include(said, game.i18n.format("AZEROTH.Laid.NotFriendly", { name: "Troll's Blood", target: tokenOf(ghoul).name }), `no refusal in words: ${JSON.stringify(said)}`);
+        // The range door's words since O-293 (D-893): *A friendly target within 30 feet* is
+        // judged willing there first, before the Use's own friendly check.
+        assert.include(said, game.i18n.format("AZEROTH.Range.NotWilling", { name: "Troll's Blood", target: tokenOf(ghoul).name }), `no refusal in words: ${JSON.stringify(said)}`);
         assert.equal(game.messages.size, before, "a refused Troll's Blood posted a card");
         assert.equal(poolOf(troll, "mana").value, full, "a refused Troll's Blood spent Mana");
         canvas.tokens.setTargets([tokenOf(ally).id]);

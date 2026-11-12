@@ -553,7 +553,9 @@ export function transportRefusal(choice, { inFight = false, token = true, pad = 
  * @returns {boolean}
  */
 export function usesAskedLater(onUse) {
-  return Boolean(onUse?.transporter && typeof onUse.transporter === "object");
+  // And 02's Recall (the Chronomancer's stage 2b): a use buys the MARK, and the return a mark
+  // standing allows spends none, so the judgement asks for the use once it knows which.
+  return Boolean(onUse?.transporter && typeof onUse.transporter === "object") || onUse?.recall === true;
 }
 
 /**

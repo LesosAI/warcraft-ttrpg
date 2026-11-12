@@ -58,7 +58,8 @@ function carriers() {
 export async function postBloodpetalPulse(actor, combat = null) {
   let ref = null;
   if (combat?.combatant?.actor?.uuid === actor.uuid) {
-    const sceneId = combat.scene?.id ?? combat.sceneId;
+    // The scene the combatant's token stands on (O-294): core makes a fight unlinked.
+    const sceneId = combat.combatant.token?.parent?.id ?? combat.combatant.sceneId ?? combat.scene?.id ?? combat.sceneId;
     const token = game.scenes?.get(sceneId)?.tokens.get(combat.combatant.tokenId);
     if (token?.actor?.uuid === actor.uuid) ref = { sceneId, tokenId: token.id };
   } else if (!combat) {

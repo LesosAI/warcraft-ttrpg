@@ -17,6 +17,8 @@
  * map and `data-action` rather than ad-hoc listeners.
  */
 
+// 02's Timeless Mind on the sheet's Resilience numbers (stage 2b).
+import { CHRONO_FEATURES, timelessMindDoubles } from "../rules/chronomancer.mjs";
 import { AZEROTH } from "../config.mjs";
 import { dispersionRefusal } from "../rules/dispersion.mjs";
 import { actorTraining, trainingWarning } from "../rules/equipment-training.mjs";
@@ -42,7 +44,7 @@ import { raceLine } from "../rules/guise.mjs";
 import { chargeControl } from "../helpers/rider-words.mjs";
 // A shape on the sheet (02 §7, D-769): its name, what melds, the attack's ability.
 import { FORCED_SPEED, SHAPE_ABILITIES, SHAPE_KINDS, isOverlayKind, meldsGear, shapeKindOf, shapeRefusal } from "../rules/shapes.mjs";
-import { featurePrice, rungsChip } from "../rules/class-features.mjs";
+import { classFeatureOnUse, featurePrice, rungsChip } from "../rules/class-features.mjs";
 import { FORCED_ENDS, forcedRefusalFor, shapeLabel } from "../documents/shapes.mjs";
 import { attackAbility } from "../rules/ammunition.mjs";
 // Whether the character is out of sight, for the Combat tab's chip (D-717).
@@ -61,6 +63,7 @@ import { usesAskedLater } from "../rules/legacy-uses.mjs";
 import { hasUse } from "../rules/consumables.mjs";
 import { containerOf, hasCharges, isContainer, isWorn } from "../rules/containers.mjs";
 import { canCarry, heldAugment } from "../rules/augments.mjs";
+import { SAND } from "../rules/sand.mjs";
 import { FIGURE_HANDS, FIGURE_LEFT, FIGURE_RIGHT, copyLabels, displacedBy, figureSlots, fitsSlot, handFor } from "../rules/worn.mjs";
 import { BASE_SLOTS, MAX_CONTAINERS, REFUSALS, areTwins, arrange, isMount, judgeMerge, judgePlace, judgeSplit, judgeSwap, ledger, placeOf, slotLine, slotsIn, stackKey, unitsOf, wearNew, wellsOf } from "../rules/slots.mjs";
 // The Gear tab as bag slots (D-738): the panels, the order and the tooltip.
@@ -2599,7 +2602,12 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         max: pool.max,
         // One segment per point the class allows: a Warrior's bar has ten and
         // a Rogue's has five.
-        segments: Array.from({ length: pool.max }, (_, i) => ({ filled: i < stored.value }))
+        segments: Array.from({ length: pool.max }, (_, i) => ({ filled: i < stored.value })),
+        // **SAND IS HELD IN THE HOURGLASS** (D-848): the partial draws the glass
+        // beside the count, and with none in the Ranged slot it says so in words,
+        // since a bar of no segments alone would read as a broken pool.
+        sand: pool.name === SAND,
+        noHourglass: pool.name === SAND && !(pool.max > 0)
       };
     };
     // ONE ENTRY PER POWER POOL THE CHARACTER HOLDS (02 §10). A double-caster
@@ -2793,7 +2801,10 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     if (!entry) return null;
     const [resilience] = entry;
     const trained = (this.#trainedResiliences()).includes(resilience);
-    return (system.abilities?.[abilityKey]?.mod ?? 0) + (trained ? system.proficiency ?? 0 : 0);
+    // 02's Timeless Mind doubles the Proficiency on a Spirit Test (stage 2b): the sheet's
+    // number is the Test's (`rules/resilience.mjs#resilienceRows`).
+    const doubled = timelessMindDoubles({ resilience, trained, holds: this.actor.hasFeature?.(CHRONO_FEATURES.timelessMind.feature) === true });
+    return (system.abilities?.[abilityKey]?.mod ?? 0) + (trained ? (system.proficiency ?? 0) * (doubled ? 2 : 1) : 0);
   }
 
   #trainedResiliences() {
@@ -3193,11 +3204,14 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       // The Off hand is barred while the main hand is held in both (D-689):
       // no action, no drop, and the reason in words beside the grey.
       const barred = slot === "offHand" && figure.twoHanded === true;
-      // The Off hand shows the shield or the Augment where no off-hand
-      // weapon is held (07 §3, D-674), so it says which it is showing.
+      // The Off hand shows the shield where no off-hand weapon is held, and the
+      // Ranged tile the Augment where no launcher is (D-850), so each says
+      // which it is showing.
       const note = slot === "offHand" && figure.offHandKind && figure.offHandKind !== "weapon"
         ? game.i18n.localize(AZEROTH.heldSlots[figure.offHandKind])
-        : null;
+        : (slot === "ranged" && figure.rangedKind === "augment"
+          ? game.i18n.localize(AZEROTH.heldSlots.augment)
+          : null);
       const barredNote = barred
         ? game.i18n.format("AZEROTH.Overview.TwoHanded", { name: figure.mainHand?.name ?? "" })
         : null;
@@ -3224,8 +3238,9 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         rarityClass: item ? rarityClass(item.system?.rarity) : null,
         barred,
         // What the socket used to print - the slot's label, the thing's name,
-        // *Empty*, and which of a shield or an Augment the off hand is
-        // showing - is all inside these two now.
+        // *Empty*, which of a weapon or a shield the off hand is showing and
+        // which of a launcher or an Augment the Ranged tile is (D-850) - is all
+        // inside these two now.
         ariaLabel,
         // The Gear tab's own card, with the SLOT where the Gear tab says where
         // the thing is kept. An EMPTY socket takes a plain string through
@@ -3357,7 +3372,9 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
           label: AZEROTH.locations[key],
           value: Math.max(0, system.ap?.[key] ?? 0)
         })),
-        augment: augment ? { name: augment.name, bonus: augment.bonus, className: augment.className } : null,
+        // An Hourglass holds Sand and adds nothing to a Casting Test (07 §3, D-849): the line
+        // says so, rather than *+0* (the 2a review's should-fix, stage 2b).
+        augment: augment ? { name: augment.name, bonus: augment.bonus, className: augment.className, holds: Boolean(augment.holds) } : null,
         // WHAT THE SIGNATURES ON WHAT IS WORN ARE DOING (08 §20, S3; D-692):
         // one row per equipped Signature, beside Ward, Spellpower and the
         // Boons, saying whether its gate holds and carrying a button where
@@ -3568,7 +3585,9 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // D-771): greyed out of one, with the door's own words.
     const grantId = item.getFlag("azeroth-rpg", "feature")?.talentId ?? null;
     const granting = grantId ? this.actor.items.get(grantId) ?? null : null;
-    const use = granting ? onUseOf(talentEffect(granting.system?.className, granting.system?.identifier, granting.system?.race ?? null)) : null;
+    // A class feature's own `onUse` where no talent granted it (02's Recall: a use buys the mark,
+    // and the return with a mark standing needs none - `usesAskedLater`; stage 2b).
+    const use = granting ? onUseOf(talentEffect(granting.system?.className, granting.system?.identifier, granting.system?.race ?? null)) : classFeatureOnUse(item.system?.className ?? "", item.name);
     const formless = use?.requires === "shapeshift" && this.actor.inShapeshiftForm !== true;
     const refusal = barred
       ? game.i18n.format("AZEROTH.Shape.NeedsTalent", { name: item.name, talent: barred.talent })

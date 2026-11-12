@@ -22,16 +22,31 @@
  * @returns {number}
  */
 export function hastenedHalves(records = []) {
+  const { capped, uncapped } = hastenedSplit(records);
+  return capped + uncapped;
+}
+
+/**
+ * **THE SAME COUNT, SPLIT BY WHETHER THE CAP BINDS IT** (D-877; the lead, on Turn the Glass
+ * with Master of Hours: *"the eight half actions a turn is fine because of the resource
+ * spend."*): a record marked `uncapped` - Master of Hours' 2-Sand gift - is given past the
+ * cap of six, every other record meets it. `takeHastened` grants the capped first, so the
+ * cap never cuts a gift.
+ *
+ * @param {Array<{by?: string|null, source?: string, halves?: number, uncapped?: boolean}|null>} records
+ * @returns {{capped: number, uncapped: number}}
+ */
+export function hastenedSplit(records = []) {
   const seen = new Set();
-  let n = 0;
+  const out = { capped: 0, uncapped: 0 };
   for (const r of records ?? []) {
     if (!r || typeof r !== "object") continue;
     const key = `${r.by ?? ""}|${r.source ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    n += Math.max(1, Math.trunc(Number(r.halves)) || 1);
+    out[r.uncapped === true ? "uncapped" : "capped"] += Math.max(1, Math.trunc(Number(r.halves)) || 1);
   }
-  return n;
+  return out;
 }
 
 /** 02's Bloodlust, as its row reads it: the reach and how many it gives a Half-Action. */

@@ -29,10 +29,11 @@ export function spellRetaliationSources({holderUuid,sustaining=[],effects=[]}={}
       ||typeof state.messageUuid!=='string'||!state.messageUuid.trim()
       ||state.transferPending===true)return;
     const descriptor=spellRetaliationFrom(state.spell);
+    // A Self spell's laid effect on its own caster (07 §12's Scouring Veil) carries it too.
     if(!descriptor || (source==='sustain' ? descriptor.recipient!=='caster'||state.casterUuid!==holderUuid
-      :descriptor.recipient!=='target'))return;
+      :!(descriptor.recipient==='target'||(descriptor.recipient==='caster'&&state.casterUuid===holderUuid))))return;
     rows.push({source,cast:state.cast,casterUuid:state.casterUuid,holderUuid,
-      messageUuid:state.messageUuid,damage:descriptor.damage});
+      messageUuid:state.messageUuid,damage:descriptor.damage,...(descriptor.decay?{decay:descriptor.decay}:{})});
   };
   for(const entry of sustaining) add(entry,'sustain');
   for(const effect of effects){

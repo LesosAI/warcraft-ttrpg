@@ -46,6 +46,8 @@ import { collectBurdenParticipants, derivePilgrimsBurdenLoadState } from "../../
 import { carryFactor, talentLanguages } from "../../rules/talent-effects.mjs";
 import { blockSpeedParts, speedFrom, speedParts } from "../../rules/speed.mjs";
 import { capFor } from "../../rules/momentum.mjs";
+import { hourglassOnTile } from "../../rules/sand.mjs";
+import { figureSlots } from "../../rules/worn.mjs";
 import { emptyByTestKind, laidBaneRows, laidBaneTotals, laidBoonRows } from "../../rules/banes.mjs";
 import { laidBaneFlags, laidBoonFlags } from "../../effects/banes.mjs";
 // The Warrior's and the Paladin's kinds read on the model (D-772): Unyielding,
@@ -444,8 +446,14 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // creator, a guise and a GM's edit own that.
     const tongues = talentLanguages(talentRows);
     if (tongues.length) this.languages = [...new Set([...(this.languages ?? []), ...tongues])];
-    for (const pool of pools.momenta) pool.max = capFor(pool, ranksOf);
-    if (pools.momentum && !pools.momenta.includes(pools.momentum)) pools.momentum.max = capFor(pools.momentum, ranksOf);
+    // Sand's cap is the Hourglass in the Ranged slot's (08 §9, D-848): 0 without
+    // one, so the clamp below shows no Sand while the stored value waits for the
+    // door that empties it (`AzerothItem#_onUpdate`, `rules/sand.mjs#hourglassLeaves`).
+    // The glass the Ranged TILE shows (the 2a review's should-fix): one reading for the sheet
+    // and the cap (`rules/sand.mjs#hourglassOnTile`).
+    const hourglass = hourglassOnTile(figureSlots([...(this.parent?.items ?? [])]));
+    for (const pool of pools.momenta) pool.max = capFor(pool, ranksOf, { hourglass });
+    if (pools.momentum && !pools.momenta.includes(pools.momentum)) pools.momentum.max = capFor(pools.momentum, ranksOf, { hourglass });
     // A pool the character does not hold keeps its stored value untouched and
     // reports a null cap. Zeroing it here would discard data every time a GM
     // detached a class item, and the null `max` is already what tells the sheet
@@ -590,7 +598,10 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // A disease carried until cured holds a Fatigue floor of its own (D12 section 3: Rot-fever,
     // Marsh fever), read off the carrier effects and joined to the corruption rung's.
     const affliction = fatigueFloorOf([...(this.parent?.effects ?? [])].map(e => e.flags?.["azeroth-rpg"]?.affliction).filter(a => a?.kind));
-    this.fatigueFloor = Math.max(rungs.fatigueFloor, affliction);
+    // **07 §12's DIVERT TIMEWAY** (*2 Fatigue that no rest removes and nothing treats*;
+    // D-868): what a life of castings past the first has laid, on top of every other floor.
+    const permanent = Math.max(0, Math.trunc(Number(this.parent?.flags?.["azeroth-rpg"]?.permanentFatigue)) || 0);
+    this.fatigueFloor = Math.max(rungs.fatigueFloor, affliction) + permanent;
     // Fatigue that does not clear (10 §5): the stored number reads no lower.
     if (typeof this.fatigue === "number" && this.fatigue < this.fatigueFloor) this.fatigue = this.fatigueFloor;
 

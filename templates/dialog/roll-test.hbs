@@ -60,13 +60,14 @@
       <input type="number" name="overchannel" value="0" min="0" max="{{casting.maxPoints}}" step="1"{{#unless casting.maxPoints}} disabled{{/unless}}>
     </label>
     <span class="azeroth-dialog-note">{{localize "AZEROTH.Cast.OverchannelNote" per=casting.perPoint max=casting.maxPoints}}</span>
-    {{!-- The Augment in hand (07 SS3, D-674): the box carries what it is
-          worth and the note names it. A totem is PLANTED, so the thirty feet
-          is the table's call and the note says so (D2 SS12). --}}
+    {{!-- The Augment in the Ranged slot (07 SS3, D-674, D-850): the box carries
+          what it is worth and the note names it. A totem is PLANTED, so the
+          thirty feet is the table's call and the note says so (D2 SS12). An
+          Hourglass adds 0 and holds Sand, and the note says that (D-849). --}}
     {{#unless casting.noAugment}}
     <label>{{localize "AZEROTH.Cast.Augment"}} <input type="number" name="augment" value="{{#if casting.augment}}{{casting.augment.value}}{{else}}0{{/if}}" step="1"></label>
     {{#if casting.augment}}
-    <span class="azeroth-dialog-note">{{#if casting.augment.planted}}{{localize "AZEROTH.Augment.PlantedNote" name=casting.augment.name n=casting.augment.note}}{{else}}{{localize "AZEROTH.Augment.HeldNote" name=casting.augment.name}}{{/if}}</span>
+    <span class="azeroth-dialog-note">{{#if casting.augment.planted}}{{localize "AZEROTH.Augment.PlantedNote" name=casting.augment.name n=casting.augment.note}}{{else if casting.augment.holds}}{{localize "AZEROTH.Augment.HourglassNote" name=casting.augment.name}}{{else}}{{localize "AZEROTH.Augment.HeldNote" name=casting.augment.name}}{{/if}}</span>
     {{/if}}
     {{else}}
     <span class="azeroth-dialog-note">{{localize "AZEROTH.Blademaster.NoAugment"}}</span>
@@ -111,11 +112,31 @@
   </p>
   {{/if}}
 
+  {{#if eachTarget}}
+  {{!-- O-301, O-307: several creatures, no area, no DC of the entry's own - one roll, read against
+        each target's own number, and ONE FIELD PER TARGET to type over it (the lead: "307 - one
+        field per target"). Each field is labelled with the target's name, its default is the
+        target's own number and the reason is beside it in words; a field cleared is its default. --}}
+  <div class="azeroth-dialog-row azeroth-dialog-dc-each">
+    <span class="azeroth-dialog-label">{{localize "AZEROTH.Dialog.DC.Label"}}</span>
+    <span class="azeroth-dialog-note">{{localize dcSource}}</span>
+  </div>
+  <ul class="azeroth-dialog-each">
+    {{#each eachTarget}}
+    <li class="azeroth-dialog-each-row azeroth-dialog-dc">
+      <label for="{{this.id}}">{{this.name}}</label>
+      <input type="number" id="{{this.id}}" name="{{this.input}}" value="{{this.dc}}" placeholder="{{this.dc}}" min="0" step="1" data-target-key="{{this.key}}"{{#if @first}} autofocus{{/if}}>
+      <span class="azeroth-dialog-note">{{this.reason}}</span>
+    </li>
+    {{/each}}
+  </ul>
+  {{else}}
   <div class="azeroth-dialog-row azeroth-dialog-dc">
     <label for="azeroth-dialog-dc">{{localize "AZEROTH.Dialog.DC.Label"}}</label>
     <input type="number" id="azeroth-dialog-dc" name="dc" value="{{dc}}" min="0" step="1" autofocus>
     <span class="azeroth-dialog-note">{{localize dcSource}}</span>
   </div>
+  {{/if}}
 
   {{#if warnings.length}}
   <ul class="azeroth-dialog-warnings">

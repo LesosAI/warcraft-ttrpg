@@ -61,8 +61,9 @@ export function capacityOf(slot) {
  *
  * Five of them draw a tile - `body` is 08 §8's suit, the two hands and the
  * Ranged and Ammunition tiles are 06 §2's and 08 §7's. `shield` and `augment`
- * draw NONE: both are held in the off hand (07 §3, D-674), and they exist
- * here only so the Off hand tile can name what it is showing.
+ * draw NONE: the shield is held in the off hand and the Augment is carried in
+ * the Ranged slot (D-850, amending D-674), and they exist here only so the Off
+ * hand and Ranged tiles can name what each is showing.
  *
  * `AZEROTH.heldSlots` labels them.
  */
@@ -264,16 +265,19 @@ const flatten = item => ({ id: item?.id, name: item?.name, ...(item?.system ?? {
  *   a main hand, and an embedded collection's order is not stable across a
  *   re-sync, so a `find` over it would swap two tiles between renders
  *   (CLAUDE.md §15).
- * - **The Off hand falls back**: the off-hand weapon, else the shield, else
- *   the Augment (07 §3 holds it in the off hand, D-674). `offHandKind` says
- *   which, so the tile can name what it is showing.
+ * - **The Off hand falls back**: the off-hand weapon, else the shield.
+ *   `offHandKind` says which, so the tile can name what it is showing.
+ * - **The Ranged tile holds a launcher or an Augment** (D-850; the lead: *"An
+ *   augment should use the ranged weapon slot for all classes"*), the launcher
+ *   first where a world from before D-850 equips both. `rangedKind` says which.
  * - **The Ammunition tile is the bundle the launcher would actually fire**,
  *   through `selectAmmunition`, over every bundle the character carries
  *   rather than only the equipped ones - which is the pool `attackWithDialog`
  *   and the Combat rows already read. A tile that named a different bundle
  *   from the one the shot spends would be a lie.
  * - **`twoHanded` bars the off hand.** A main hand held in both hands leaves
- *   nothing for a shield, an Augment or a second blade (D-689).
+ *   nothing for a shield or a second blade (D-689). It no longer bars an
+ *   Augment, which is in the Ranged slot (D-850).
  *
  * @param {Iterable<{type: string, name?: string, system?: object}>} items
  * @returns {object} the shape D-689 froze
@@ -293,28 +297,33 @@ export function figureSlots(items = []) {
 
   filled.body = held.find(i => i.type === "armor" && !i.system?.shield) ?? null;
   const shield = held.find(i => i.type === "armor" && i.system?.shield === true) ?? null;
-  const augment = held.find(i => Boolean(i.system?.augment)) ?? null;
+  // Ordered by id, so two (a world from before D-850) never swap between preparations (CLAUDE.md §15).
+  const augment = held.filter(i => Boolean(i.system?.augment)).sort((a, b) => String(a.id ?? "").localeCompare(String(b.id ?? "")))[0] ?? null;
 
   const weapons = held.filter(i => i.type === "weapon").sort(byName);
   filled.mainHand = weapons.find(i => i.system?.offHand !== true && !i.system?.launcher) ?? null;
-  filled.ranged = weapons.find(i => Boolean(i.system?.launcher)) ?? null;
+  const launcher = weapons.find(i => Boolean(i.system?.launcher)) ?? null;
+  // The Ranged slot holds a launcher or an Augment (D-850).
+  filled.ranged = launcher ?? augment ?? null;
+  filled.rangedKind = launcher ? "weapon" : (augment ? "augment" : null);
 
   const offWeapon = weapons.find(i => i.system?.offHand === true && !i.system?.launcher) ?? null;
-  filled.offHand = offWeapon ?? shield ?? augment ?? null;
-  filled.offHandKind = offWeapon ? "weapon" : (shield ? "shield" : (augment ? "augment" : null));
+  filled.offHand = offWeapon ?? shield ?? null;
+  filled.offHandKind = offWeapon ? "weapon" : (shield ? "shield" : null);
 
-  // The bundle nocked on the launcher, over every bundle carried (D-641).
+  // The bundle nocked on the launcher, over every bundle carried (D-641). An
+  // Augment in the Ranged slot fires nothing, so it nocks nothing.
   let ammo = null;
-  if (filled.ranged) {
+  if (launcher) {
     const bundles = all.filter(i => i.type === "weapon").map(flatten);
-    const chosen = selectAmmunition(filled.ranged.system ?? {}, fittingBundles(filled.ranged.system ?? {}, bundles));
+    const chosen = selectAmmunition(launcher.system ?? {}, fittingBundles(launcher.system ?? {}, bundles));
     ammo = chosen ? all.find(i => i.id === chosen.id) ?? null : null;
   }
   filled.ammo = ammo;
 
   filled.twoHanded = isTwoHanded(filled.mainHand) && !hasTitansPresence(all);
 
-  const drawn = new Set([filled.mainHand, offWeapon, filled.ranged, filled.ammo].filter(Boolean));
+  const drawn = new Set([filled.mainHand, offWeapon, launcher, filled.ammo].filter(Boolean));
   filled.alsoReady = weapons.filter(w => !drawn.has(w));
   return filled;
 }
@@ -339,8 +348,8 @@ export function figureSlots(items = []) {
  *   `offHand: false` and the Ammunition tile finds it through
  *   `selectAmmunition`.
  * - **The off hand, when the main hand is already full** and the thing holding
- *   it is one-handed, and nothing — weapon, shield or Augment — is in the off
- *   hand yet, and this weapon is not itself two-handed.
+ *   it is one-handed, and nothing — weapon or shield — is in the off hand yet,
+ *   and this weapon is not itself two-handed.
  * - **The main hand otherwise.** A two-handed weapon never goes in the off
  *   hand, and with a barred off hand there is nowhere else for anything.
  *
@@ -367,8 +376,8 @@ export function handFor(item, items = []) {
   // A main hand held in both hands bars the off hand both ways (D-689).
   if (figure.twoHanded) return "mainHand";
   if (!figure.mainHand) return "mainHand";
-  // `offHand` falls back through weapon, shield and Augment, so one test
-  // covers all three things 07 §3 and 08 §8 put in that hand.
+  // `offHand` falls back through weapon and shield, so one test covers both
+  // things 06 §2 and 08 §8 put in that hand (the Augment left it, D-850).
   if (figure.offHand) return "mainHand";
   return "offHand";
 }
@@ -423,13 +432,13 @@ export function fitsSlot(item, slot) {
   if (isWornSlot(slot)) return item.type === "gear" && sys.slot === slot;
   if (slot === "body") return item.type === "armor" && sys.shield !== true;
   if (slot === "mainHand") return item.type === "weapon" && !sys.launcher;
-  // 07 §3 holds the Augment in the off hand, and 08 §8's shield is held there.
+  // 08 §8's shield is held in the off hand; the Augment is not (D-850).
   if (slot === "offHand") {
     return (item.type === "weapon" && !sys.launcher)
-      || (item.type === "armor" && sys.shield === true)
-      || Boolean(sys.augment);
+      || (item.type === "armor" && sys.shield === true);
   }
-  if (slot === "ranged") return item.type === "weapon" && Boolean(sys.launcher);
+  // The Ranged slot takes a launcher or an Augment (D-850).
+  if (slot === "ranged") return (item.type === "weapon" && Boolean(sys.launcher)) || Boolean(sys.augment);
   if (slot === "ammo") return item.type === "weapon" && isShot(sys);
   return false;
 }
@@ -448,11 +457,21 @@ export function cleanSlot(slot) {
   return isWornSlot(slot) ? slot : null;
 }
 
-/** Whether this is a thing the off hand holds: a shield, an Augment, an off-hand weapon. */
+/**
+ * Whether this is a thing the off hand holds: a shield or an off-hand weapon.
+ * An Augment is not one since D-850: it is carried in the Ranged slot.
+ */
 function isOffHandThing(item) {
   const sys = item?.system ?? {};
   if (item?.type === "weapon") return sys.offHand === true && !sys.launcher;
   if (item?.type === "armor") return sys.shield === true;
+  return false;
+}
+
+/** Whether this fills the Ranged slot: a launcher or an Augment (D-850). */
+export function isRangedThing(item) {
+  const sys = item?.system ?? {};
+  if (item?.type === "weapon") return Boolean(sys.launcher);
   return Boolean(sys.augment);
 }
 
@@ -468,13 +487,16 @@ function isTwoHandedMain(item) {
  *   suit for every Armor Point, so a second suit displaces the first. A
  *   shield displaces no suit and is displaced by none.
  * - **One Augment.** 07 §3 speaks of a caster holding one throughout.
+ * - **One thing in the Ranged slot** (D-850): an Augment and a launcher put each
+ *   other away, both ways. A bundle of shot is nocked, not held, and is no
+ *   launcher, so it displaces nothing here.
  * - **A worn slot displaces only when it is FULL** (08 §11, D-689). Most hold
  *   one; a finger and a trinket hold two, so a third ring puts one away - the
  *   one at `index` where the caller gives one (a drop or a pick on Finger 2),
  *   else the first in the sorted order.
  * - **The hands.** A main-hand weapon held in both hands leaves nothing for
- *   an off-hand weapon, a shield or a held Augment, and each of those three
- *   puts the two-hander away in turn. **Symmetric**, because a greyed tile
+ *   an off-hand weapon or a shield, and each of those puts the two-hander away
+ *   in turn. An Augment is no longer one of them (D-850). **Symmetric**, because a greyed tile
  *   whose item still granted Armor Points would be a lie. A one-handed weapon
  *   still displaces nothing: 06 §2 owns the hands and `alsoReady` lists the
  *   rest.
@@ -499,6 +521,10 @@ export function displacedBy(item, items, { index, titansPresence = hasTitansPres
   }
   if (item.system?.augment) {
     for (const other of equipped) if (other.system?.augment) victims.add(other);
+  }
+  // The Ranged slot holds one thing: an Augment or a launcher (D-850).
+  if (isRangedThing(item)) {
+    for (const other of equipped) if (isRangedThing(other)) victims.add(other);
   }
 
   // One thing in each worn slot, and two on a finger or a chain (08 §11).

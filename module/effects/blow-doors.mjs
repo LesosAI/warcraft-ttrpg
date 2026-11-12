@@ -19,6 +19,10 @@
  * - `registerBlowDoorHooks` - 07's Aegis of the Light: a creature its floor held
  *   restores the caster's tier when the floor goes, where the caster holds 04's
  *   talent of the name.
+ * - **The Chronomancer's Guardian of Time** (stage 2c): Interposed Moment a move that
+ *   swaps the two first, Timeless Sentinel a move asked of nobody and paid with
+ *   nothing, and `askToBorrow` - Borrowed Time, the creature struck asked about its
+ *   own blow (`rules/guardian.mjs`).
  *
  * **WHO IS ASKED**: an active player who owns the holder, else the active GM,
  * through `CONFIG.queries` (`BLOW_ASK_QUERY`; never `game.socket`, D-643) - or a
@@ -53,6 +57,12 @@ import { wardsOn } from "./wards.mjs";
 import { bondOf } from "../documents/bound.mjs";
 // No Reaction against a creature Wind Walk or Bladestorm holds (the Legacy branches' door 14).
 import { unansweredBy } from "../rules/reactions.mjs";
+// 04's Guardian of Time (the Chronomancer's stage 2c): Interposed Moment and Timeless Sentinel
+// as moves, and Borrowed Time asked in the blow.
+import { BORROWED_TIME, borrowedRefusal, borrowedSplit, borrowedTimeOf, interposedFor, sentinelMove, sentinelOf } from "../rules/guardian.mjs";
+import { talentEffect } from "../rules/talent-effects.mjs";
+// The hardened answer window (the 3B review, should-fix 11), for Borrowed Time's ask.
+import { answerInTime, answerWindow } from "../rules/chromatic-talents.mjs";
 
 /** Whether no creature may take a Reaction against this one now (door 14). */
 function unanswered(actor) {
@@ -185,6 +195,14 @@ export async function confirmHere(holder, { title, text, ms = ANSWER_MS }) {
 function movesOf(holder) {
   const out = [];
   const talents = holder.takenTalents?.() ?? [];
+  // **04's TIMELESS SENTINEL FIRST** (stage 2c: *every attack against an ally within 30 feet of
+  // you targets you instead*): automatic and free, so a Guardian holding it is never asked
+  // to pay for Interposed Moment on a blow the Sentinel takes anyway.
+  const sentinel = sentinelMove(sentinelOf([...(holder.effects ?? [])]));
+  if (sentinel) out.push(sentinel);
+  // 04's Interposed Moment (stage 2c): a swap and the attack, for 2 Sand and the Reaction.
+  const interposed = interposedFor(talents, talentEffect);
+  if (interposed) out.push(interposed);
   const guardian = guardianFor(talents);
   if (guardian) out.push(guardian);
   // 04's Shared Burden (the Legacy branches' B6): a share of the blow, half or all.
@@ -290,9 +308,12 @@ async function moveHere({ holder, target, kind, amount, moved, type, attack, spe
   // **A SHARE IS THE HOLDER'S OWN ROW'S** (04's Shared Burden; the Legacy branches' B6):
   // worked out again here off the holder's rank, never taken off the request.
   if (kind === "burden") moved = movedAmount({ kind, amount, share: row.share ?? "half" });
-  const yes = await confirmHere(holder, {
+  // **04's TIMELESS SENTINEL ASKS NOBODY** (stage 2c: *every attack ... targets you instead*):
+  // the move is the effect's, so no question is put; every other move is a choice.
+  const askKey = { righteous: "AZEROTH.BlowDoor.AskRighteous", burden: "AZEROTH.BlowDoor.AskBurden", interposed: "AZEROTH.BlowDoor.AskInterposed" }[kind] ?? "AZEROTH.BlowDoor.AskGuardian";
+  const yes = row.auto === true ? true : await confirmHere(holder, {
     title: row.name,
-    text: game.i18n.format(kind === "righteous" ? "AZEROTH.BlowDoor.AskRighteous" : (kind === "burden" ? "AZEROTH.BlowDoor.AskBurden" : "AZEROTH.BlowDoor.AskGuardian"), {
+    text: game.i18n.format(askKey, {
       holder: holder.name, name: target.name, n: moved, cost: row.cost?.amount ?? 0,
       pool: game.i18n.localize(AZEROTH.poolTypes[row.cost?.pool] ?? row.cost?.pool ?? ""), talent: row.name
     })
@@ -305,10 +326,22 @@ async function moveHere({ holder, target, kind, amount, moved, type, attack, spe
     ui.notifications?.warn(game.i18n.format(`AZEROTH.BlowDoor.Refuse.${again.reason}`, { name: holder.name, talent: row.name }));
     return { moved: false, reason: again.reason };
   }
-  if (!(await game.system.azeroth.workflows.spendTurnBudget(holder, "reaction"))) return { moved: false, reason: "noReaction" };
-  const pool = (holder.poolSnapshot?.() ?? []).find(p => p.name === row.cost?.pool) ?? null;
-  const price = Math.max(0, Math.trunc(Number(row.cost?.amount)) || 0);
-  if (pool && price > 0) await holder.updatePool({ itemId: pool.itemId, kind: pool.kind, value: Math.max(0, pool.value - price) });
+  // The Sentinel's move takes no Reaction and no price (stage 2c).
+  if (row.free !== true) {
+    if (!(await game.system.azeroth.workflows.spendTurnBudget(holder, "reaction"))) return { moved: false, reason: "noReaction" };
+    const pool = (holder.poolSnapshot?.() ?? []).find(p => p.name === row.cost?.pool) ?? null;
+    const price = Math.max(0, Math.trunc(Number(row.cost?.amount)) || 0);
+    if (pool && price > 0) await holder.updatePool({ itemId: pool.itemId, kind: pool.kind, value: Math.max(0, pool.value - price) });
+  }
+  // **04's INTERPOSED MOMENT: *You and that ally swap places without provoking Opportunity
+  // Attacks*** (stage 2c): two displacements, here or on the GM's client, recorded on a card
+  // for the swap's animation (`effects/guardian.mjs#swapPlaces`) - paid for, then made,
+  // before the attack lands on the Guardian. A swap that cannot be made is said in words
+  // and the attack still targets the Guardian.
+  if (row.swap === true) {
+    const { swapPlaces } = await import("./guardian.mjs");
+    await swapPlaces({ holder, target, source: row.name });
+  }
   // The holder takes it through its own door: its standing reduction, its
   // temporary Health and its own holds - and never a second move or a division.
   // Its second amounts go with it, but not what the struck creature's Ward took
@@ -556,6 +589,85 @@ async function holdHere({ holder, target, identifier, before, amount, attack, di
   return { held: true, heal: row.heal };
 }
 
+/* -------------------------------------------- */
+/*  04's Borrowed Time (stage 2c)                */
+/* -------------------------------------------- */
+
+/**
+ * Borrowed Time on a creature now, and why it may not be asked, off the world as this client
+ * holds it: the talent at its rank (or Timeless Sentinel's free use), the fight, the Sand and
+ * the Reaction (`rules/guardian.mjs#borrowedRefusal`).
+ */
+function borrowJudgement(holder, amount) {
+  const sentinel = sentinelOf([...(holder?.effects ?? [])]);
+  const held = holder?.type === "character" ? borrowedTimeOf(holder.takenTalents?.() ?? [], { sentinel: Boolean(sentinel) }, talentEffect) : null;
+  const fight = holder?.activeFight?.() ?? null;
+  const inFight = Boolean(fight?.started && fight.getCombatantsByActor?.(holder)?.length);
+  const why = borrowedRefusal({ held, amount, inFight, sand: poolValue(holder, "sand"), reaction: held?.free ? true : reactionLeft(holder) });
+  return { held, why };
+}
+
+/**
+ * **04's BORROWED TIME, ASKED IN THE BLOW** (stage 2c: *As a Reaction when a blow reduces your
+ * Health, spend 1 Sand. Take half its damage now, rounded up. At the start of your next turn,
+ * take the other half minus your rank.*; Timeless Sentinel: *you may use Borrowed Time on each
+ * blow without spending Sand or your Reaction*). Called by `AzerothActor#applyDamage` once
+ * the blow's own mitigation, the move, the division, Dilation's split, the harm prevention,
+ * temporary Health, Mana Shield and the floor have had their say (D-880: a blow they take
+ * whole reduces no Health and is not asked), and before the hold at 1. The creature is asked through whoever
+ * answers for it (`ask`, `BLOW_ASK_QUERY`), judged before it is asked and again after; a yes
+ * answers the split and the row the damage door writes on the put-off list just before the
+ * Health (D-866's carrier, landed at the turn's start by `effects/deferred-damage.mjs`).
+ *
+ * @param {{target: Actor, amount: number, type?: string|null, by?: Actor|null}} o
+ * @returns {Promise<{borrowed: boolean, now?: number, later?: number, spared?: number, name?: string, free?: boolean, row?: object|null, reason?: string}>}
+ */
+export async function askToBorrow({ target, amount = 0, type = null, by = null } = {}) {
+  if (!target) return { borrowed: false, reason: "unknown" };
+  const first = borrowJudgement(target, amount);
+  if (first.why) return { borrowed: false, reason: first.why };
+  const answer = await ask(target, { act: "borrow", holderUuid: target.uuid, targetUuid: target.uuid, amount });
+  if (!answer?.borrowed) return { borrowed: false, reason: answer?.reason ?? "declined" };
+  const split = borrowedSplit(amount, { rank: first.held.rank });
+  return {
+    borrowed: true, now: split.now, later: split.later, spared: split.spared, name: first.held.name, free: answer.free === true,
+    row: split.later > 0 ? { amount: split.later, type, by: by?.uuid ?? null, source: BORROWED_TIME } : null
+  };
+}
+
+/**
+ * Borrowed Time on the holder's own client: judged, asked, judged again, then the Reaction and
+ * the Sand - **paid only while the asker still waits** (the stage 3 fix, the hardened pattern
+ * Another Timeline keeps): the dialog closes inside `answerWindow(ASK_MS)` and a yes judged
+ * past `answerInTime` pays nothing, so a late yes never spends Sand on a blow the asker has
+ * already landed whole.
+ */
+async function borrowHere({ holder, amount }) {
+  const started = Date.now();
+  const first = borrowJudgement(holder, amount);
+  if (first.why) return { borrowed: false, reason: first.why };
+  const split = borrowedSplit(amount, { rank: first.held.rank });
+  const yes = await confirmHere(holder, {
+    title: first.held.name, ms: answerWindow(ASK_MS),
+    text: game.i18n.format(first.held.free ? "AZEROTH.Guardian.AskBorrowFree" : "AZEROTH.Guardian.AskBorrow", {
+      name: holder.name, n: amount, now: split.now, later: split.later, talent: first.held.name, cost: first.held.sand
+    })
+  });
+  if (!yes) return { borrowed: false, reason: "declined" };
+  const again = borrowJudgement(holder, amount);
+  if (again.why) {
+    ui.notifications?.warn(game.i18n.format(`AZEROTH.Guardian.BorrowRefuse.${again.why}`, { name: holder.name, talent: first.held.name }));
+    return { borrowed: false, reason: again.why };
+  }
+  if (!answerInTime(started, Date.now(), ASK_MS)) return { borrowed: false, reason: "late" };
+  if (!again.held.free) {
+    if (!(await game.system.azeroth.workflows.spendTurnBudget(holder, "reaction"))) return { borrowed: false, reason: "reaction" };
+    const pool = (holder.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === "sand") ?? null;
+    if (pool) await holder.updatePool({ itemId: pool.itemId, kind: pool.kind, value: Math.max(0, pool.value - again.held.sand) });
+  }
+  return { borrowed: true, free: again.held.free === true };
+}
+
 /**
  * The handler a holder is asked through (`BLOW_ASK_QUERY`), on the client that
  * answers for the holder. The asker must own the creature STRUCK - it was their
@@ -584,6 +696,11 @@ export async function blowAskHandler(payload = {}, { user = null } = {}) {
       holder, target, identifier: payload.identifier, before: whole(payload.before), amount: whole(payload.amount),
       attack: payload.attack === true, distance: typeof payload.distance === "number" ? payload.distance : null
     });
+  }
+  // 04's Borrowed Time (stage 2c): the creature struck is its own holder.
+  if (payload.act === "borrow") {
+    if (holder.uuid !== target.uuid) throw new Error(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: holder.name }));
+    return borrowHere({ holder, amount: whole(payload.amount) });
   }
   throw new Error(`blowAsk: no such act ${JSON.stringify(payload.act ?? null)}`);
 }

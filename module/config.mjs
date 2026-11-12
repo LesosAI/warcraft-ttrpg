@@ -165,12 +165,13 @@ AZEROTH.resilienceAbility = { body: "con", reflex: "dex", spirit: "wis" };
 //
 // Keyed by the class's `identifier`, never by its name, so it survives a
 // rename. `rules/creation.mjs#primaryAbilities` is the reader.
-AZEROTH.primaryAbility = { warrior: "str", rogue: "dex", ranger: "dex", "chromatic-champion": "con" };
+AZEROTH.primaryAbility = { warrior: "str", rogue: "dex", ranger: "dex", "chromatic-champion": "con", chronomancer: "int" };
 
 // **A CLASS TAKEN AT CREATION AND NEVER MULTICLASSED, EITHER WAY** (the lead, on the
 // Chromatic Champion plan: *"Creation only; no 2nd class."*). Keyed by identifier;
 // `rules/multiclass.mjs#multiclassRefusal` is the one reader.
-AZEROTH.creationOnlyClasses = ["chromatic-champion"];
+// The Chronomancer too (the lead: *"Restrict multiclassing for this."*, D-860).
+AZEROTH.creationOnlyClasses = ["chromatic-champion", "chronomancer"];
 
 // **A CLASS WHOSE PEOPLE IS FIXED AND WEARS ANOTHER'S GUISE** (the Chromatic Champion
 // plan, *The Chromatic Outcast is a real race item, and the guise is a pick beside
@@ -205,7 +206,10 @@ AZEROTH.momentumTypes = {
   zeal:        "AZEROTH.Pool.Zeal",
   quarry:      "AZEROTH.Pool.Quarry",
   comboPoints: "AZEROTH.Pool.ComboPoints",
-  ferocity:    "AZEROTH.Pool.Ferocity"
+  ferocity:    "AZEROTH.Pool.Ferocity",
+  // The Chronomancer's (D-848): held in the Hourglass, capped by its rarity, and
+  // gone the moment it leaves the Ranged slot (`rules/sand.mjs`).
+  sand:        "AZEROTH.Pool.Sand"
 };
 AZEROTH.powerTypes = {
   mana:   "AZEROTH.Pool.Mana",
@@ -384,11 +388,12 @@ AZEROTH.wornSlots = {
 
 /**
  * The tiles on the Overview figure that are not one of §11's slots (D-689):
- * 08 §8's suit, 06 §2's two hands, 08 §7's launcher and its bundle, and the
- * shield and the Augment, which are HELD in the off hand (07 §3, D-674).
+ * 08 §8's suit, 06 §2's two hands, 08 §7's launcher and its bundle, the
+ * shield HELD in the off hand, and the Augment carried in the Ranged slot
+ * (D-850, amending D-674).
  *
  * `shield` and `augment` draw no tile of their own - they exist so the Off
- * hand tile can name what it is showing. They key the same vocabulary as
+ * hand and Ranged tiles can name what each is showing. They key the same vocabulary as
  * `wornSlots` so the figure's roster in `rules/worn.mjs` can carry both, and
  * nothing here is stored on an item: every tile is answered from what is
  * equipped.

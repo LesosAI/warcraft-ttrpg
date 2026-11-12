@@ -31,11 +31,11 @@
   {{/if}}
   {{#if row.equippable}}
   {{!-- Equip and Equipped, whatever the thing is (the lead, 2026-09-07): an
-        Augment is held in the off hand and 07 SS3 is what says so, but the
+        Augment is carried in the Ranged slot (D-850), but the
         row is a row and a second word for the same button read as a second
         kind of button. The tooltip carries what an Augment is worth. --}}
   <button type="button" class="azeroth-equip{{#if row.equipped}} is-equipped{{/if}}" data-action="toggleEquipped"
-          data-tooltip="{{#if row.augment}}{{localize "AZEROTH.Augment.Tooltip" className=row.augment.className bonus=row.augment.bonus}}{{else}}{{localize "AZEROTH.Sheet.Equip"}}{{/if}}" aria-pressed="{{row.equipped}}">
+          data-tooltip="{{#if row.augment}}{{#if row.augment.holds}}{{localize "AZEROTH.Augment.HourglassTooltip" className=row.augment.className}}{{else}}{{localize "AZEROTH.Augment.Tooltip" className=row.augment.className bonus=row.augment.bonus}}{{/if}}{{else}}{{localize "AZEROTH.Sheet.Equip"}}{{/if}}" aria-pressed="{{row.equipped}}">
     {{#if row.equipped}}{{localize "AZEROTH.Sheet.Equipped"}}{{else}}{{localize "AZEROTH.Sheet.Equip"}}{{/if}}
   </button>
   {{else}}<span></span>{{/if}}

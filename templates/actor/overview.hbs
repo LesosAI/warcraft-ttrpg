@@ -252,9 +252,14 @@
       {{!-- 07 SS3: the Augment reaches the Casting Test and nothing else, so
             the line says what it does rather than printing a bare number. --}}
       <h4 class="azeroth-overview-heading">{{localize "AZEROTH.Overview.Casting"}}</h4>
+      {{#if overview.inForce.augment.holds}}
+      {{!-- An Hourglass holds Sand and adds nothing to a Casting Test (07 SS3, D-849). --}}
+      <p class="azeroth-force-line">{{localize "AZEROTH.Augment.HourglassNote" name=overview.inForce.augment.name}}</p>
+      {{else}}
       <p class="azeroth-force-line">{{localize "AZEROTH.Augment.HeldNote" name=overview.inForce.augment.name}}</p>
       <p class="azeroth-force-line"><span class="azeroth-force-value">+{{overview.inForce.augment.bonus}}</span>
         <span class="azeroth-force-from">{{localize "AZEROTH.Overview.CastingTest"}}</span></p>
+      {{/if}}
       {{/if}}
 
       {{!-- A heading and the number, never the word twice: the heading IS the

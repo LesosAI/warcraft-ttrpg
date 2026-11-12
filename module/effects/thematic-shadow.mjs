@@ -122,13 +122,21 @@ export async function prepareShadowCastWithPoint({ actor, spell, source = null, 
   if (spell.system.identifier === "phantom-footsteps"
     && (!targetToken || targetToken.parent?.id !== scene.id)) return no("scene");
   const { pickPoint } = await import("../canvas/place.mjs");
+  // Mindstatic's point is held to 07's Range before the payment (stage 11, D-906), by the one point
+  // rule the card's Place area holds it to (`canvas/range.mjs#spellPointAccept`).
+  const { spellPointAccept } = await import("../canvas/range.mjs");
+  const inRange = spell.system.identifier === "mindstatic" ? spellPointAccept(sourceToken, spell) : null;
   const chosen = await pickPoint({ sceneId: scene.id, hint: words("PickPoint"),
-    accept: point => Number.isFinite(point?.x) && Number.isFinite(point?.y) });
+    accept: point => Number.isFinite(point?.x) && Number.isFinite(point?.y) && (!inRange || inRange(point)) });
   if (!chosen || canvas?.scene?.id !== scene.id) return no("cancelled");
   const point = { sceneId: scene.id, xFt: chosen.x * grid.distance / grid.size,
     yFt: chosen.y * grid.distance / grid.size };
-  return prepareShadowCast({ actor, spell, source, targets, point,
+  const prepared = await prepareShadowCast({ actor, spell, source, targets, point,
     casterPoint: tokenPoint(sourceToken), targetPoint: tokenPoint(targetToken) });
+  // **MINDSTATIC'S POINT, FOR ITS CARD** (O-314): the card's Place area lays the Region at the
+  // point picked here, in canvas pixels, so the boundary and its Region are one circle.
+  return prepared?.ok && spell.system.identifier === "mindstatic"
+    ? { ...prepared, areaAt: { sceneId: scene.id, x: chosen.x, y: chosen.y } } : prepared;
 }
 export const claimShadowCast = (ticket, cast) => request({ phase: "claim", ticket, cast });
 export const finishShadowCast = (ticket, messageId) => request({ phase: "finish", ticket, messageId });

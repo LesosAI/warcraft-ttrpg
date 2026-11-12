@@ -12,10 +12,17 @@
  * the card - which named the ambush.
  */
 
+import { areaFor } from "../rules/areas.mjs";
+// O-301: each target of a multi-target spell on its own 07 §2 number.
+import { eachTargetDCs, judgesEachTarget, typedTargetDCs } from "../rules/casting.mjs";
 import { countsAsAlly, countsAsEnemy, isEngaged, threatReach } from "../rules/distance.mjs";
 import { feetBetweenFootprints, feetToPoint, footprintOf } from "./footprints.mjs";
 // Whom an area Use gathers (the B6 fix; the lead: *"Measure the area"*).
 import { gathers, insideCircle } from "../rules/area-gather.mjs";
+// THE ONE PREDICATE FOR WILLING (D-893; the lead: *"296 - ally means willing target"*), read
+// by 07 §2's DC (`spellAimsAtTier`, O-296). `range.mjs` imports this module too; the cycle is
+// safe because neither reads the other at load, only inside a call.
+import { willingOf } from "./range.mjs";
 
 /**
  * The reach an actor threatens with (06 §5): five feet, or ten with a **Reach**
@@ -398,4 +405,66 @@ export function allyOf(owner, other) {
     allyStandingOf({ token: mine, actor: owner, combatant: combatantIn(fight, owner, mine), fight }),
     allyStandingOf({ token: theirs, actor: other, combatant: combatantIn(fight, other, theirs), fight })
   );
+}
+
+/**
+ * **WHETHER A SPELL'S CASTING TEST IS 07 §2's TIER NUMBER** (D-892): *Aimed at one creature -
+ * That creature's Defense; Aimed at an area, at an ally, or at nothing - 10 + 2 per tier of the
+ * spell.* True for a spell whose Target line names an area, or whose first target is WILLING
+ * (O-296; the lead: *"296 - ally means willing target"*): `range.mjs#willingOf`, the one
+ * predicate the range door reads for *willing* (D-893) - the caster, D-755's ally (the sides in a
+ * fight the two share, the Party outside one), a NEUTRAL creature in a fight or out of one (the
+ * lead: *"300 - neutral can be willing"*, D-900, so a NEUTRAL target gives 10 + 2 a tier, never
+ * its Defense), and outside a shared fight a token on the caster's own side of the board. False
+ * for anything that is not a spell, and for a spell aimed
+ * at a creature that is not willing. The number itself is `rules/casting.mjs#spellCastingDC`'s.
+ * Asked by the roll dialog and by `castSpell`'s fallback.
+ *
+ * @param {Actor} actor
+ * @param {Item|null} spell
+ * @param {{tokenId?: string|null, sceneId?: string|null, actorId?: string|null}|null} target  a `targetSnapshots` row
+ * @returns {boolean}
+ */
+export function spellAimsAtTier(actor, spell, target) {
+  if (spell?.type !== "spell") return false;
+  if (areaFor(spell.system?.target ?? "")) return true;
+  if (!target) return false;
+  const doc = target.tokenId ? (globalThis.game?.scenes?.get?.(target.sceneId ?? "")?.tokens?.get?.(target.tokenId) ?? null) : null;
+  const other = doc?.actor ?? (target.actorId ? globalThis.game?.actors?.get?.(target.actorId) ?? null : null);
+  if (!other) return false;
+  if (other === actor || (other.uuid && other.uuid === actor?.uuid)) return true;
+  return willingOf(actor, other, { otherToken: doc });
+}
+
+/**
+ * **EACH TARGET'S 07 §2 NUMBER, OR NULL WHERE ONE NUMBER SERVES** (O-301; the lead: *"o301 - each
+ * target needs to be rolled against it's defense or make it's own resilence test if relevant."*):
+ * for a spell aimed at two or more creatures that is not an area and names no DC of its own, each
+ * target's `{dc, willing, name, key}` in the order handed in - its Defense where it is unwilling,
+ * 10 + 2 a tier where it is willing (`spellAimsAtTier`, the one willing reading) - read by the roll
+ * dialog and by `castSpell` alike (`rules/casting.mjs#judgesEachTarget`, `#eachTargetDCs`).
+ *
+ * @param {Actor} actor
+ * @param {Item|null} spell
+ * @param {object[]} targets  `targetSnapshots` rows
+ * **AND WHAT WAS TYPED IN EACH TARGET'S FIELD** (O-307; the lead: *"307 - one field per
+ * target"*): `typed` is the dialog's fields by target key, laid over each row's own number by
+ * `rules/casting.mjs#typedTargetDCs` - a field cleared keeps the default, one target's number
+ * reaches no other.
+ *
+ * @param {{given?: number|null, stated?: number|null, typed?: Record<string, unknown>|null}} [o]  a DC
+ *   handed in, the entry's own, and the per-target fields
+ * @returns {Array<{dc: number, default: number, typed: boolean, willing: boolean, name: string, key: string}>|null}
+ */
+export function eachTargetFor(actor, spell, targets = [], { given = null, stated = null, typed = null } = {}) {
+  if (spell?.type !== "spell") return null;
+  const list = (targets ?? []).filter(Boolean);
+  if (!judgesEachTarget({ area: Boolean(areaFor(spell.system?.target ?? "")), given, stated, count: list.length })) return null;
+  const rows = eachTargetDCs({ tier: spell.system?.tier ?? 1, targets: list.map(t => ({ willing: spellAimsAtTier(actor, spell, t), defense: t?.defense ?? null })) });
+  return typedTargetDCs(rows.map((r, i) => ({ ...r, name: list[i]?.name ?? "", key: targetKey(list[i]) })), typed);
+}
+
+/** One target snapshot's identity: its scene, token and actor, as the card records it. */
+export function targetKey(t) {
+  return `${t?.sceneId ?? ""}.${t?.tokenId ?? ""}.${t?.actorId ?? ""}`;
 }

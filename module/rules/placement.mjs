@@ -66,6 +66,30 @@ export function placementSteps(area, { hasToken = false } = {}) {
 }
 
 /**
+ * **AN AREA WHOSE POINT THE CAST ALREADY RECORDED** (O-314; the lead, 2026-11-11: *"yes if there
+ * is an animation for the effected area"*). Mindstatic and Heat Mirage pick their point BEFORE the
+ * payment, through their own GM-reviewed doors, and the card carries it as `areaAt` {sceneId, x, y}
+ * in canvas pixels. The card's Place area lays the Region THERE rather than asking a second click,
+ * so the Region Dispel reaches (D-901) is the area the boundary and the image stand in.
+ *
+ * Only a circle placed at a point takes it: a shape on the caster, a cone and a line answer `pick`
+ * and are placed as they always were. A point recorded on another scene is refused, never moved.
+ *
+ * @param {object|null} area      `areaFor`'s shape
+ * @param {object|null} atPoint   the card's `areaAt`
+ * @param {string|null} sceneId   the scene the area would go on
+ * @param {{hasToken?: boolean}} [options]
+ * @returns {{use: "recorded", origin: {x: number, y: number}} | {use: "pick"} | {use: "elsewhere"}}
+ */
+export function recordedOrigin(area, atPoint, sceneId, { hasToken = false } = {}) {
+  const point = finitePoint(atPoint);
+  const steps = placementSteps(area, { hasToken });
+  if (!point || !steps || area.shape !== "circle" || steps.origin !== STEP_ORIGINS.CLICK) return { use: "pick" };
+  if (typeof atPoint.sceneId !== "string" || !atPoint.sceneId || atPoint.sceneId !== sceneId) return { use: "elsewhere" };
+  return { use: "recorded", origin: point };
+}
+
+/**
  * The facing from one point to another, in degrees, in [0, 360).
  *
  * **Canvas y runs DOWN**, so 90 is towards the bottom of the screen. That is

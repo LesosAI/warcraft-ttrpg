@@ -39,7 +39,7 @@ const { CategoryBrowser } = foundry.applications.api;
 // render with "CATEGORIES is not defined" — which no unit test can see, because
 // this file cannot be imported outside Foundry at all.
 import {
-  CATEGORIES, NOT_BROWSABLE, summary,
+  CATEGORIES, NOT_BROWSABLE, summary, classBadges,
   boundFrom, emptyFilterState, entryMatches, facetOptions, isActive, sortEntries, sortKeysFor
 } from "./browser-categories.mjs";
 export { CATEGORIES, NOT_BROWSABLE };
@@ -183,6 +183,8 @@ export class AzerothCompendiumBrowser extends CategoryBrowser {
         flags: entry.flags ?? {},
         rarityClass: rarityClass(entry.system?.rarity),
         meta: summary(key, entry).join(" \u00b7 "),
+        // The class emblems after the name (D-862), each with its class in words.
+        badges: classBadges(key, entry).map(b => ({ ...b, label: game.i18n.format("AZEROTH.Browser.ClassBadge", { className: b.className }) })),
         // A career's Grantor is a sentence: the meta clips it and the row's
         // tooltip carries it whole (2026-09-06).
         metaTitle: key === "careers" && entry.system?.grantor ? String(entry.system.grantor) : null

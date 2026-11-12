@@ -43,6 +43,8 @@
 
 import { AZEROTH } from "../config.mjs";
 import { ancientDreadAction } from "./ancient-dread.mjs";
+// 02 §7's Master of Hours: *Only Master of Hours raises a creature above 6 Half-Actions in a turn* (stage 2b; O-273, D-900).
+import { HALF_ACTION_CAP } from "./chronomancer.mjs";
 
 /** Two sides. Neutral acts with the side it is not hostile to; the GM decides. */
 export const SIDES = Object.freeze(["friendly", "hostile"]);
@@ -255,7 +257,7 @@ export function loseTurn(budget) {
  *                                       but for the at-once allowance, and the
  *                                       off hand by its own name.
  */
-export function spend(budget, cost, { isAttack = false, isOffHand = false, isMove = false, onTurn = true, attackSlowed = false } = {}) {
+export function spend(budget, cost, { isAttack = false, isOffHand = false, isMove = false, onTurn = true, attackSlowed = false, now = null } = {}) {
   cost = ancientDreadAction(cost, { affected: attackSlowed,
     attack: isAttack && !(isOffHand && budget.attacked === true) });
   const base = { half: 1, action: 2, full: 2, reaction: 0 }[cost];
@@ -310,6 +312,12 @@ export function spend(budget, cost, { isAttack = false, isOffHand = false, isMov
     return { ok: false, reason: BUDGET_REFUSALS.notYourTurn, params: {}, budget };
   }
 
+  // **A REACTION GIVEN IS SPENT FIRST** (04's Second Chance: *gains an extra Reaction, which
+  // it may use until the end of its next turn*; the plan's door 9): one that still stands
+  // NOW, before the creature's own.
+  if (cost === "reaction" && givenReactionsLeft(budget, now) > 0) {
+    return { ok: true, reason: null, params: null, budget: { ...budget, given: spendGiven(budget.given, now) } };
+  }
   if (cost === "reaction") {
     if (budget.reactions < 1) return { ok: false, reason: BUDGET_REFUSALS.noReaction, params: {}, budget };
   } else if (budget.halfActions < owed) {
@@ -382,12 +390,81 @@ export function grantAtOnce(budget, n = 1) {
  *
  * @param {object} budget
  * @param {number} [n]
+ * @param {{cap?: number|null}} [o]  `cap: null` for a gain no cap binds
  * @returns {object}  the budget with the Half-Actions added
  */
-export function gainHalfActions(budget, n = 1) {
+export function gainHalfActions(budget, n = 1, { cap = HALF_ACTION_CAP } = {}) {
   const b = budget && typeof budget === "object" ? budget : freshTurn();
   const add = Math.max(0, Math.trunc(Number(n)) || 0);
-  return { ...b, halfActions: Math.max(0, Math.trunc(Number(b.halfActions)) || 0) + add };
+  const held = Math.max(0, Math.trunc(Number(b.halfActions)) || 0);
+  // **NO LIMIT FOR MASTER OF HOURS' OWN** (the lead, on Turn the Glass with Master of Hours:
+  // *"the eight half actions a turn is fine because of the resource spend."*; D-877): the
+  // stack's 1, 2 and 3 and its 2-Sand gifts pass `cap: null` and are never cut.
+  if (cap === null || cap === undefined || cap === Infinity) return { ...b, halfActions: held + add };
+  // **EVERY OTHER GAIN NEVER PAST SIX** (D-870's reading of 02 §7's *No creature holds more
+  // than 6 Half-Actions in a turn*, kept for Slipstream, Hour of Haste, Bloodlust and the
+  // rest; D-877, O-273). A turn already past it keeps what it holds.
+  return { ...b, halfActions: Math.max(held, Math.min(cap, held + add)) };
+}
+
+/**
+ * **A REACTION GIVEN TO A CREATURE** (04's Second Chance: *An ally within 30 feet gains an
+ * extra Reaction, which it may use until the end of its next turn*; the plan's door 9): one
+ * entry on the budget naming the last moment it may be spent - the round and the turn index
+ * of the creature's next turn (`chronomancer.mjs#givenReactionUntil`). It is kept through the
+ * turn's reset (`givenKept`) and spent before the creature's own (`spend`).
+ *
+ * @param {object} budget
+ * @param {{round: number, turn: number}} until
+ */
+export function giveReaction(budget, until) {
+  const b = budget && typeof budget === "object" ? budget : freshTurn();
+  const u = cleanUntil(until);
+  if (!u) return b;
+  return { ...b, given: [...givenList(b.given), u] };
+}
+
+/** A `{round, turn}` moment, or null. */
+function cleanUntil(until) {
+  const round = Math.trunc(Number(until?.round));
+  const turn = Math.trunc(Number(until?.turn));
+  return Number.isFinite(round) && Number.isFinite(turn) && round >= 0 && turn >= 0 ? { round, turn } : null;
+}
+
+/** The given list, each entry well-formed. */
+function givenList(given) {
+  return (Array.isArray(given) ? given : []).map(cleanUntil).filter(Boolean);
+}
+
+/** Whether a moment still stands at `now` (`{round, turn}`); with no `now` every one does. */
+function givenStands(entry, now) {
+  const n = cleanUntil(now);
+  if (!n) return true;
+  return entry.round > n.round || (entry.round === n.round && entry.turn >= n.turn);
+}
+
+/** How many given Reactions stand now. */
+export function givenReactionsLeft(budget, now = null) {
+  return givenList(budget?.given).filter(e => givenStands(e, now)).length;
+}
+
+/** The list with the soonest-ending one that stands spent, and the lapsed dropped. */
+function spendGiven(given, now) {
+  const list = givenList(given).filter(e => givenStands(e, now))
+    .sort((a, b) => a.round - b.round || a.turn - b.turn);
+  return list.slice(1);
+}
+
+/**
+ * **WHAT A TURN'S RESET KEEPS OF THE GIVEN REACTIONS**: the ones that still stand at the turn
+ * now starting. A turn whose own end is the last moment keeps it for this turn.
+ *
+ * @param {object|null} budget  the budget before the reset
+ * @param {{round: number, turn: number}|null} now
+ * @returns {Array<{round: number, turn: number}>}
+ */
+export function givenKept(budget, now = null) {
+  return givenList(budget?.given).filter(e => givenStands(e, now));
 }
 
 /**

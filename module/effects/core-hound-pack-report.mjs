@@ -1,4 +1,7 @@
 /** Durable outcome card for actual revival attempts, not every Health hook. */
+// The scenes a fight stands on (O-294): core makes a fight unlinked, so `combat.scene` is null at the table.
+import { fightOnScene } from "../rules/fight-scenes.mjs";
+
 export async function reportCoreHoundPack(combat, packId, result) {
   const restored = result?.restored ?? [], uncertain = result?.uncertain ?? [], deferred = result?.deferred ?? [];
   if (!restored.length && !uncertain.length && !deferred.length) return null;
@@ -15,9 +18,9 @@ export async function reportCoreHoundPack(combat, packId, result) {
   const targets = restored.flatMap(uuid => {
     try {
       const token = fromUuidSync(uuid);
-      if (token?.documentName !== "Token" || token.parent !== combat.scene
-        || combat.scene?.tokens?.get(token.id) !== token || !(token.actor?.system?.health?.value > 0)) return [];
-      return [{ sceneId: combat.scene.id, tokenId: token.id, actorUuid: token.actor.uuid, name: token.name }];
+      if (token?.documentName !== "Token" || !fightOnScene(combat, token.parent, game.scenes)
+        || token.parent?.tokens?.get(token.id) !== token || !(token.actor?.system?.health?.value > 0)) return [];
+      return [{ sceneId: token.parent.id, tokenId: token.id, actorUuid: token.actor.uuid, name: token.name }];
     } catch { return []; }
   });
   const source = targets[0] ?? null;

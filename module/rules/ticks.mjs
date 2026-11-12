@@ -62,6 +62,10 @@ import { flatText, sentences } from "./spell-effects.mjs";
 import { isStartOfTurnSentence, isUpkeep, roundsIn } from "./area-ticks.mjs";
 import { areaFor } from "./areas.mjs";
 import { evaluateExpression } from "./expressions.mjs";
+// A damage word as 07 writes it: a school, or a sand spell's Physical (07 §9, D-864).
+import { damageTypeKey, isDamageTypeKey } from "./spell-damage-type.mjs";
+// 07 §12's Dilation is the deferral door's sentence, landed at the one damage door (D-866).
+import { isDeferralSentence } from "./deferred-damage.mjs";
 
 /** What a tick does. */
 export const TICK_KINDS = Object.freeze(["damage", "heal"]);
@@ -85,8 +89,7 @@ export function hasTick(tick) {
   return Boolean(tick && typeof tick === "object" && TICK_KINDS.includes(tick.kind) && TICK_WHEN.includes(tick.when));
 }
 
-const SCHOOL = new Map(Object.keys(AZEROTH.schools).map(k => [k.charAt(0).toUpperCase() + k.slice(1), k]));
-const schoolOf = word => SCHOOL.get(String(word ?? "")) ?? null;
+const schoolOf = word => (/^[A-Z]/.test(String(word ?? "")) ? damageTypeKey(word) : null);
 
 /**
  * **A SENTENCE ABOUT THE START OF A TURN** (the census's reading): *at the
@@ -105,7 +108,7 @@ export const PER_TURN_RE = /\bat the start of (?:each of )?(?:its|their|your|the
  */
 export function isPerTurnSentence(sentence, { area = false } = {}) {
   const s = String(sentence ?? "");
-  return PER_TURN_RE.test(s) && !isUpkeep(s) && !(area && isStartOfTurnSentence(s));
+  return PER_TURN_RE.test(s) && !isUpkeep(s) && !(area && isStartOfTurnSentence(s)) && !isDeferralSentence(s);
 }
 
 /** Whether a spell's Target places an area or is Self: the area census's own scope (D-756). */
@@ -202,6 +205,16 @@ const SHAPES = [
     const m = /^The target regains (?<first>\d+) Health, then (?<n>\d+) Health at the start of each of its turns(?<span> for the duration)?\.?$/.exec(s);
     if (!m) return null;
     return { tick: { kind: "heal", amount: m.groups.n, rounds: spanRounds(m.groups.span, fields?.duration), hit: true }, beside: [] };
+  },
+  // **REVERSION** (07 §12, D-864; the lead: *"small amount of health now and more health
+  // plus intelligence modifier at the start of their turn next round"*): *The target
+  // regains 2 Health, and 3 Health plus your Intelligence modifier at the start of its
+  // next turn.* The 2 is the cast's own (`hit`); the tick's amount names `int`, which
+  // `layTick` works out off the caster's modifier at the cast.
+  s => {
+    const m = /^The target regains (?<first>\d+) Health, and (?<n>\d+) Health plus your Intelligence modifier at the start of its next turn\.?$/.exec(s);
+    if (!m) return null;
+    return { tick: { kind: "heal", amount: `${m.groups.n} + int`, rounds: 1, hit: true }, beside: [] };
   },
   // Light Unending: *For the duration each target has Ward 3 ..., cannot be
   // Frightened or Charmed, and regains 3 Health at the start of each of its
@@ -319,10 +332,12 @@ export function readPoisonTick(text) {
  *   rank?: number, tier?: number, sl?: number|null, add?: number, via?: "feature"|null}} [o]
  * @returns {object|null}  the `flags.azeroth-rpg.tick` an effect carries
  */
-export function layTick(stored, { source = null, castUuid = null, cast = null, name = "", rank = 1, tier = 1, sl = null, add = 0, via = null } = {}) {
+export function layTick(stored, { source = null, castUuid = null, cast = null, name = "", rank = 1, tier = 1, sl = null, add = 0, via = null, abilities = {}, spellSchool = null } = {}) {
   if (!hasTick(stored)) return null;
   if (stored.sl !== null && stored.sl !== undefined && !(Number(sl) >= Number(stored.sl))) return null;
-  const base = Math.trunc(evaluateExpression(stored.amount, { rank, tier }) ?? 0);
+  // The caster's ability modifiers (`expressions.mjs#abilityScope`) for an amount that
+  // names one - Reversion's `3 + int` (07 §12) - stamped as a number at the cast.
+  const base = Math.trunc(evaluateExpression(stored.amount, { ...abilities, rank, tier }) ?? 0);
   if (!(base > 0)) return null;
   const amount = base + Math.max(0, Math.trunc(Number(add)) || 0);
   const rounds = stored.rounds === null || stored.rounds === undefined ? null : Math.max(1, Math.trunc(Number(stored.rounds)) || 1);
@@ -335,7 +350,10 @@ export function layTick(stored, { source = null, castUuid = null, cast = null, n
     when: "startOfTurn",
     spellpower: stored.spellpower === true,
     source, castUuid, cast, name: String(name ?? ""),
-    ...(via === "feature" ? { via } : {})
+    ...(via === "feature" ? { via } : {}),
+    // **A PHYSICAL TICK REMEMBERS ITS SPELL'S SCHOOL** (07 §9; the 2a review, L1): the damage
+    // is Physical while Spellpower and a talent's spell damage read the spell's Arcane school.
+    ...(stored.kind === "damage" && stored.type === "physical" && typeof spellSchool === "string" && spellSchool ? { spellSchool } : {})
   };
 }
 
@@ -479,7 +497,7 @@ export function cleanTick(raw) {
   if (!raw || typeof raw !== "object") return raw;
   const has = key => key in raw;
   if (has("kind")) raw.kind = oneOf(raw.kind, ["", ...TICK_KINDS]) ?? "";
-  if (has("type")) raw.type = typeof raw.type === "string" && AZEROTH.schools[raw.type] ? raw.type : null;
+  if (has("type")) raw.type = isDamageTypeKey(raw.type) ? raw.type : null;
   if (has("amount")) raw.amount = raw.amount === null || raw.amount === undefined ? "" : String(raw.amount);
   if (has("rounds")) {
     const n = Math.trunc(Number(raw.rounds));

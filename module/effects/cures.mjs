@@ -290,14 +290,16 @@ export async function cureAreaOnPlace(region, caster, name) {
   const spec = CURE_SPELLS[name];
   if (!region || !caster || spec?.area !== "cast") return null;
   const { relationTo } = await import("./area-strikes.mjs");
+  const { willingOf } = await import("../canvas/range.mjs");
   const scene = region.parent;
   const casterToken = caster.getActiveTokens?.()[0]?.document ?? null;
   const inside = [...(scene?.tokens ?? [])].filter(tok => tok.actor && tok.testInsideRegion(region)).map(tok => {
     const relation = relationTo({ caster, casterToken, actor: tok.actor, token: tok });
-    // WILLING (Deliverance): an ally of the caster per `countsAsAlly`, or - outside a fight, where
-    // only a party member counts as an ally - a creature whose token is FRIENDLY and no enemy.
-    const friendly = relation !== "enemy" && tok.disposition === CONST.TOKEN_DISPOSITIONS.FRIENDLY;
-    return { uuid: tok.actor.uuid, actor: tok.actor, ally: relation === "ally" || relation === "self" || friendly, caster: tok.actor.uuid === caster.uuid, defeated: tok.actor.system?.health?.value <= 0 && tok.actor.type === "npc" };
+    // WILLING (Deliverance, *every willing creature*): the ONE predicate (`canvas/range.mjs#willingOf`,
+    // D-893) - the caster, an ally of the caster, a NEUTRAL creature (the lead: *"300 - neutral can
+    // be willing"*, D-900), and outside a shared fight a token on the caster's side of the board.
+    const willing = willingOf(caster, tok.actor, { ownerToken: casterToken, otherToken: tok });
+    return { uuid: tok.actor.uuid, actor: tok.actor, ally: relation === "ally" || relation === "self" || willing, caster: tok.actor.uuid === caster.uuid, defeated: tok.actor.system?.health?.value <= 0 && tok.actor.type === "npc" };
   });
   const reached = areaReach(inside, spec);
   const lines = [];

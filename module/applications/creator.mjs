@@ -30,7 +30,7 @@ import { featuresFor } from "../rules/class-features.mjs";
 import { RANK_MAX, rankCost } from "../rules/xp.mjs";
 import {
   ARRAY, CLASS_ORDER, METHODS, POINT_BUY, PURSE, ROLL_DICE, ROLL_KEEP, STARTING_XP, STEPS,
-  accessNote, castingLine, classOpenTo, inCareerSkills, kitRows, numbersFor, plan, pointBuyCost, pointBuyTotal, talentArmorFor,
+  accessNote, castingLine, classOpenTo, inCareerSkills, kitRows, numbersFor, plan, pointBuyCost, pointBuyTotal, talentArmorFor, talentShieldsFor,
   primaryAbilities, rankSpend,
   rollFloorMet, sideFor, skillUuid, spellsRequired, stepOnStrip, stepsFor, castsSpells, validate
 } from "../rules/creation.mjs";
@@ -695,9 +695,11 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     const rows = [];
     // What the class talent picked adds to the Access (04's Warden's Mail; door 23).
     const talentArmor = talentArmorFor(p);
+    // And a shield it hands the class (the Chronomancer's Bronzed Steel, D-855).
+    const talentShields = talentShieldsFor(p);
     for (const [index, row] of p.equipment.entries()) {
       const price = row.cost === null ? 0 : priced(row);
-      const note = accessNote(row, p.cls, { extra: talentArmor });
+      const note = accessNote(row, p.cls, { extra: talentArmor, shields: talentShields });
       rows.push({
         index, uuid: row.uuid, name: row.name, img: row.img,
         type: game.i18n.localize(`TYPES.Item.${row.type}`),
@@ -721,7 +723,7 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     const sort = s.itemSort === "cost" ? "cost" : "name";
     const byShelf = new Map();
     for (const i of this.#data.catalogue) {
-      const access = accessNote(i, p.cls, { extra: talentArmor });
+      const access = accessNote(i, p.cls, { extra: talentArmor, shields: talentShields });
       const augment = augmentOf(i);
       const wrongAugment = augment && p.cls && !canCarry(augment.category, [p.cls.name]);
       if ((access || wrongAugment) && !s.showUntrainedGear) continue;

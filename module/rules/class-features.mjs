@@ -82,6 +82,8 @@ import { standardDC } from "./modifiers.mjs";
 // The Chromatic Champion's numbers (02 §7; stage 2B): one home for each, read by these
 // rows and by the doors alike.
 import { BREATH, CHROMATIC_BREATH, DRACONIC_LEAP, DREAD_PRESENCE, GREAT_BREATH, WING_BUFFET } from "./chromatic-features.mjs";
+// The Chronomancer's numbers (02 §7; stage 2b).
+import { CHRONO_FEATURES, RECALL_USES } from "./chronomancer.mjs";
 
 // The descriptor vocabulary, shared with `rules/talent-effects.mjs` (D-642).
 export const passive = (extra = {}) => ({ kind: "passive", action: null, cost: null, casting: false, uses: null, heal: null, damage: null, resist: null, ...extra });
@@ -372,6 +374,38 @@ export const CLASS_FEATURES = Object.freeze({
       action: "half", uses: once("long"), resist: CHROMATIC_BREATH.resist, who: "creature", area: CHROMATIC_BREATH.area,
       damage: { amount: CHROMATIC_BREATH.damage, type: null, half: true }, onUse: { breath: "any" }
     })
+  },
+  // **THE CHRONOMANCER** (02 §7, *Features by level*; stage 2b). Every number is
+  // `rules/chronomancer.mjs#CHRONO_FEATURES`', held to the pack's text by
+  // `chronomancer-features.test.mjs`; each `onUse` is read by `workflows.mjs#judgeChronoUse`.
+  chronomancer: {
+    // *Your Proficiency Bonus is doubled on Spirit Resilience Tests*: a second Proficiency row
+    // where the Resilience Test's rows are built (`workflows.mjs#resilienceModifiers`).
+    "Timeless Mind": passive({ note: "AZEROTH.Feature.Note.TimelessMind" }),
+    // *As a Reaction, spend 2 Mana. A creature you can see within 30 feet that has just made an
+    // Attack Test, a Casting Test or a Resilience Test rolls it again and takes the second
+    // result*: asked IN the Test, at the after-the-die seam (`effects/chrono-timeline.mjs`).
+    "Another Timeline": action({ action: "reaction", cost: cost("mana", CHRONO_FEATURES.anotherTimeline.mana), onUse: { askedInTest: true } }),
+    // *Once per encounter, as a Half-Action, spend 4 Mana. One ally other than you within 30
+    // feet gains a Half-Action on its next turn*: Hasten's and Bloodlust's one write.
+    "Slipstream": action({ action: "half", cost: cost("mana", CHRONO_FEATURES.slipstream.mana), uses: once("encounter"), onUse: { slipstream: true } }),
+    // *As an action, spend 6 Mana and mark the space you stand in. For 10 minutes, as a
+    // Reaction, you may return ...*: a Use with a mark standing is the return.
+    "Recall": action({ action: "action", cost: cost("mana", CHRONO_FEATURES.recall.mana), uses: { max: RECALL_USES, per: "short" }, onUse: { recall: true } }),
+    // *As a Half-Action, spend 6 Mana. Gain Sand equal to your tier*: the Use's own gain, into
+    // the Sand pool the Hourglass caps (*"no hourglass no sand"*).
+    "Turn the Glass": action({ action: "half", cost: cost("mana", CHRONO_FEATURES.turnTheGlass.mana), onUse: { gain: { pool: "sand", amount: "tier" } } }),
+    // *As an action, spend 8 Mana. One creature within 30 feet is held out of time until the
+    // end of its next turn: a willing creature, or one that fails a Spirit Resilience Test
+    // against your Spell DC*.
+    "Suspend": action({ action: "action", cost: cost("mana", CHRONO_FEATURES.suspend.mana), resist: "spirit", onUse: { suspend: true } }),
+    // *As a Half-Action, spend 12 Mana. The damage and healing of the next spell of tier 3 or
+    // lower you cast this turn land again ...*.
+    "Recurrence": action({ action: "half", cost: cost("mana", CHRONO_FEATURES.recurrence.mana), onUse: { recurrence: true } }),
+    // *As a Half-Action, spend 20 Mana. For your next three turns you gain Half-Actions that
+    // stack ... While it lasts, you may spend 2 Sand to give a creature within 30 feet a
+    // Half-Action on its next turn*: a Use while it runs is the gift.
+    "Master of Hours": action({ action: "half", cost: cost("mana", CHRONO_FEATURES.masterOfHours.mana), onUse: { masterOfHours: true } })
   }
 });
 
@@ -512,6 +546,11 @@ export const FEATURE_REMINDERS = Object.freeze({
   // drawn on a Stealth Test alone (`skills`; the stage 2 review, should-fix 7).
   "chromatic-champion": {
     "Scales": { kinds: ["skill"], skills: ["stealth"], text: "AZEROTH.Feature.Reminder.Scales" }
+  },
+  // Timeless Mind's doubled Proficiency is a row of the Test itself (automatic), so the
+  // reminder is a note that says why the Spirit Test carries two Proficiency rows.
+  chronomancer: {
+    "Timeless Mind": { kinds: ["resilience"], text: "AZEROTH.Feature.Reminder.TimelessMind" }
   }
 });
 
@@ -941,9 +980,10 @@ export function featureTickStamp(tick, rank = 1) {
  * @param {{rank?: number, tier?: number, level?: number}} [scope]
  * @returns {number}
  */
-export function usesMaxFor(uses, { rank = 1, tier = 1, level = 1 } = {}) {
+export function usesMaxFor(uses, { rank = 1, tier = 1, level = 1, int = 0 } = {}) {
   const max = uses?.max;
-  if (typeof max === "string") return evaluateAmount(max, { rank, tier, level }) ?? 0;
+  // `int` for a count the Intelligence modifier sets (02's Recall, 04's Shared Hours; stage 2b).
+  if (typeof max === "string") return Math.max(0, evaluateAmount(max, { rank, tier, level, int }) ?? 0);
   return max ?? 0;
 }
 

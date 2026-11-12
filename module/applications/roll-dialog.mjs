@@ -17,6 +17,9 @@
  * would have opened on.
  */
 
+import { eachTargetFor, spellAimsAtTier } from "../canvas/engaged.mjs";
+// O-307: a DC field's text read the one way, per target and on the single field.
+import { typedDcValue } from "../rules/casting.mjs";
 import { AZEROTH } from "../config.mjs";
 import { mirrorImageBanes } from "../rules/mirror-image.mjs";
 import { untrainedForRoll } from "../rules/equipment-training.mjs";
@@ -312,6 +315,7 @@ export function distanceBetween(a, b) {
  * attack door and the live batches have always imported it from this module.
  */
 export { enemyDistances } from "../canvas/engaged.mjs";
+
 
 /** The roller, as the pure rule wants it. */
 /**
@@ -629,9 +633,17 @@ export function prepareRoll(actor, given) {
     situational.warnings = situational.warnings.map(w => (w === TALENT_CANCELLED ? game.i18n.format(TALENT_CANCELLED, { names: by.join(", ") }) : w));
   }
   const target = targets[0] ?? null;
-  const usesDefense = (spec.kind === "attack" || spec.kind === "casting") && target?.defense != null;
+  // 07 §2: a spell aimed at an area, at an ally or at nothing rolls against 10 + 2 a tier, never
+  // the Defense of a creature that happens to be targeted (D-892; `spellAimsAtTier`).
+  const usesDefense = (spec.kind === "attack" || (spec.kind === "casting" && !spellAimsAtTier(actor, spec.spell, target))) && target?.defense != null;
+  // **EACH TARGET ON ITS OWN NUMBER** (O-301; the lead: *"o301 - each target needs to be rolled
+  // against it's defense or make it's own resilence test if relevant."*): a spell at two or more
+  // creatures, not an area, with no DC of its own, lists every target's number and hands the cast
+  // no single DC, so `castSpell` reads the one total against each (`canvas/engaged.mjs#eachTargetFor`).
+  const eachTarget = test.kind === "casting" ? eachTargetFor(actor, spec.spell, targets, { given: spec.dc ?? null }) : null;
   let dc, dcSource;
-  if (spec.dc != null) { dc = spec.dc; dcSource = "given"; }
+  if (eachTarget) { dc = null; dcSource = "each"; }
+  else if (spec.dc != null) { dc = spec.dc; dcSource = "given"; }
   else if (usesDefense) { dc = target.defense; dcSource = "defense"; }
   else if (spec.fallbackDC != null) { dc = spec.fallbackDC; dcSource = spec.fallbackSource ?? "given"; }
   else { dc = standardDC(actor.system?.tier ?? 1); dcSource = "standard"; }
@@ -692,6 +704,8 @@ export function prepareRoll(actor, given) {
     reminders: reminders.notes,
     dc,
     dcSource,
+    // Every target's number where each is judged on its own (O-301), else null.
+    eachTarget,
     momentum,
     casting: spec.casting ?? null,
     location: spec.kind === "attack" ? (spec.location ?? "body") : null,
@@ -872,6 +886,38 @@ export function refreshedSecondAttackChoice(actor, spec, previous, choice) {
     provenanceExtra: circumstanceRow(refreshed.lines, refreshed.extraBoons, refreshed.extraBanes) };
 }
 
+/** The name of one target's DC field (O-307): its index in the dialog's own list. */
+const eachDcName = index => `dcTarget-${index}`;
+
+/**
+ * **WHAT EACH TARGET'S FIELD HOLDS** (O-307), by target key: only the fields that hold a usable
+ * number (`rules/casting.mjs#typedDcValue`), so a field cleared is no override at all.
+ *
+ * @param {HTMLFormControlsCollection} f
+ * @param {Array<{key: string}>} rows  `prepareRoll`'s `eachTarget`
+ * @returns {Record<string, number>}
+ */
+function eachTypedDcs(f, rows) {
+  const out = {};
+  for (const [i, r] of rows.entries()) {
+    const n = typedDcValue(f[eachDcName(i)]?.value);
+    if (n !== null && typeof r?.key === "string") out[r.key] = n;
+  }
+  return out;
+}
+
+/** Every target field's text as it stands, by target key (O-307) - what a switch or a render puts back. */
+function eachFieldTexts(form) {
+  return new Map([...form.querySelectorAll("input[data-target-key]")].map(el => [el.dataset.targetKey, el.value]));
+}
+
+/** Put each target field's text back by target key (O-307): typed numbers survive a render or a switch. */
+function restoreFieldTexts(form, texts) {
+  for (const el of form.querySelectorAll("input[data-target-key]")) {
+    if (texts?.has?.(el.dataset.targetKey)) el.value = texts.get(el.dataset.targetKey);
+  }
+}
+
 /** Read the form into a choice. Shared by the live preview and the Roll button. */
 function readForm(form, p) {
   const f = form.elements;
@@ -883,7 +929,12 @@ function readForm(form, p) {
   const location = p.location ? (f.location?.value || p.location) : null;
   const canPay = Boolean(p.momentum && p.momentum.value >= AZEROTH.CALLED_SHOT_MOMENTUM);
   const paid = canPay && location !== null && location !== "body" && Boolean(f.momentum?.checked);
-  const dcRaw = Number(f.dc?.value);
+  // A DC field cleared returns to the prepared number (O-307's rule, on the single field too:
+  // `Number("")` is 0, which read an emptied field as DC 0).
+  const dcRaw = typedDcValue(f.dc?.value) ?? NaN;
+  // Each target's own field (O-307), by target key: what is typed there, read against its own
+  // number by `castSpell` (`rules/casting.mjs#typedTargetDCs`); a cleared field is its default.
+  const dcByTarget = p.eachTarget ? eachTypedDcs(f, p.eachTarget) : null;
   // Casting: Overchannel points, clamped to what the Health can pay; a manual Augment.
   const maxPoints = p.casting?.maxPoints ?? 0;
   const overchannel = Math.min(maxPoints, Math.max(0, Math.trunc(Number(f.overchannel?.value)) || 0));
@@ -919,6 +970,7 @@ function readForm(form, p) {
     talentLines,
     conflagrateBurning: p.casting?.conflagrate === true && f.conflagrateBurning?.checked === true,
     dc: Number.isFinite(dcRaw) ? dcRaw : p.dc,
+    ...(dcByTarget ? { dcByTarget } : {}),
     boons,
     banes,
     modifier,
@@ -1067,6 +1119,14 @@ async function dialogVariant(actor, spec) {
     kind: spec.kind,
     dc: p.dc,
     dcSource: `AZEROTH.Dialog.DC.${p.dcSource[0].toUpperCase()}${p.dcSource.slice(1)}`,
+    // **ONE DC FIELD PER TARGET** (O-307; the lead, 2026-11-11: *"307 - one field per target"*):
+    // each target named, its own 07 §2 number in the field and the reason beside it in words, the
+    // field's `id` and `name` its index (core restores focus across a render only for those).
+    eachTarget: p.eachTarget ? p.eachTarget.map((r, index) => ({
+      index, key: r.key, name: r.name, dc: r.default ?? r.dc,
+      id: `azeroth-dialog-dc-${index}`, input: eachDcName(index),
+      reason: game.i18n.format(r.willing ? "AZEROTH.Dialog.DC.EachWilling" : "AZEROTH.Dialog.DC.EachDefense", { name: r.name, dc: r.default ?? r.dc })
+    })) : null,
     targetName: p.targets[0]?.name ?? null,
     automatic: p.situational.automatic,
     judgement: p.situational.judgement,
@@ -1102,8 +1162,9 @@ async function dialogVariant(actor, spec) {
     talentLines: (p.talentLines ?? []).map(l => ({
       identifier: l.identifier,
       name: l.name,
-      does: game.i18n.format(`AZEROTH.TalentLine.Does.${l.kind}`, {
-        n: l.amount, pool: game.i18n.localize(AZEROTH.poolTypes[l.pool ?? "mana"] ?? l.pool ?? "mana")
+      // A line may name its own words (04's Grit of Ages: damage or SL, and the Sand it costs).
+      does: game.i18n.format(l.doesKey ?? `AZEROTH.TalentLine.Does.${l.kind}`, {
+        n: l.amount, price: l.price ?? l.amount, feet: l.feet ?? 0, pool: game.i18n.localize(AZEROTH.poolTypes[l.pool ?? "mana"] ?? l.pool ?? "mana")
       }),
       left: game.i18n.format(l.kind === "charge" ? "AZEROTH.TalentLine.Charges" : "AZEROTH.TalentLine.Left", { n: l.left }),
       available: l.available,
@@ -1168,6 +1229,8 @@ function switchAttackMode(form, variants, state, key) {
   const allFrom = [...from.p.situational.automatic, ...from.p.situational.judgement];
   const kept = {
     dc: f.dc?.value ?? null,
+    // Each target's field as typed (O-307), by target key.
+    targetDcs: eachFieldTexts(form),
     extraBoons: f.extraBoons?.value ?? null,
     extraBanes: f.extraBanes?.value ?? null,
     location: f.location?.value ?? null,
@@ -1192,6 +1255,7 @@ function switchAttackMode(form, variants, state, key) {
   state.key = key;
   const g = form.elements;
   if (g.dc && kept.dc !== null) g.dc.value = kept.dc;
+  restoreFieldTexts(form, kept.targetDcs);
   if (g.extraBoons && kept.extraBoons !== null) g.extraBoons.value = kept.extraBoons;
   if (g.extraBanes && kept.extraBanes !== null) g.extraBanes.value = kept.extraBanes;
   if (g.location && kept.location !== null && [...g.location.options].some(o => o.value === kept.location)) g.location.value = kept.location;
@@ -1238,7 +1302,9 @@ export async function promptRoll(actor, spec) {
   } else {
     variants.set(null, await dialogVariant(actor, spec));
   }
-  const state = { key: ways.length > 1 ? withAttackMode(spec, spec.mode ?? null).mode : null };
+  // `typedDcs`: each target's DC field as typed, by target key (O-307) - kept HERE, in the closure,
+  // because a render draws `content` again and ApplicationV2 freezes `options` (D-731).
+  const state = { key: ways.length > 1 ? withAttackMode(spec, spec.mode ?? null).mode : null, typedDcs: new Map() };
   // The way `content` below draws, and so the way every render of the dialog draws.
   const opened = state.key;
   const current = () => variants.get(state.key);
@@ -1279,7 +1345,15 @@ export async function promptRoll(actor, spec) {
         const momentumBox = form.elements.momentum;
         if (momentumBox) momentumBox.disabled = !shown.canPay || !choice.location || choice.location === "body";
       };
+      // A target's DC field typed (O-307): kept by target key, so a render puts it back and no
+      // other target's field ever reads it.
+      const keepTyped = event => {
+        const el = event.target;
+        if (el?.matches?.("input[data-target-key]")) state.typedDcs.set(el.dataset.targetKey, el.value);
+      };
+      form.addEventListener("input", keepTyped);
       form.addEventListener("change", changed => {
+        keepTyped(changed);
         const control = changed.target;
         // An occasion carries its DC (10 SS3); choosing one writes it, and a
         // null DC leaves whatever is typed.
@@ -1307,6 +1381,8 @@ export async function promptRoll(actor, spec) {
         state.key = opened;
         switchAttackMode(form, variants, state, chosen);
       }
+      // And each target's DC as typed before the render (O-307).
+      restoreFieldTexts(form, state.typedDcs);
       update();
     }
   });

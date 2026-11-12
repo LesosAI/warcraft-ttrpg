@@ -21,7 +21,16 @@
  */
 
 import { healingFactorOf } from "../rules/afflictions.mjs";
-import { addClassEntry, hostileExposures, poolsFor, removeClassEntry, secondaryLevel, setCharacterLevel } from "../rules/progression.mjs";
+// 07 §12's ledger of damage taken (D-867).
+import { LEDGER_FLAG, appendLedger, ledgerStamp } from "../rules/recent-damage.mjs";
+// 07 §12's Dilation (D-866): half a blow put off to the start of the next turn.
+import { DEFERRED_FLAG, appendDeferred, deferralOf, splitDeferred } from "../rules/deferred-damage.mjs";
+// 04's Stasis Lore and Halt the Sands: a spell bought with Sand (D-869).
+// The Chronomancer's dialog lines, its hold and its readers (stage 2b).
+import { echoingSandsLine, gritLines, recallCounts, RECALL_FLAG, stormLines } from "../rules/chronomancer.mjs";
+import { sharedHours, suspendedNow, witheringHalves } from "../effects/chronomancer.mjs";
+import { sandCastLines } from "../rules/sand-casts.mjs";
+import { addClassEntry, hostileExposures, poolsFor, removeClassEntry, resyncsFeatures, secondaryLevel, setCharacterLevel } from "../rules/progression.mjs";
 import { hasCauseInsanity } from "../rules/cause-insanity.mjs";
 import { racialTalentIcon } from "../rules/icons.mjs";
 import { hasReaverEnrage } from "../rules/reaver-enrage.mjs";
@@ -103,7 +112,7 @@ import { damageAboveHealthFloor } from "../rules/sealing-flame.mjs";
 import {utilityEffectView} from "../rules/utility-draughts.mjs";
 // What another creature does to a blow, asked as it lands (D-777): a blow moved,
 // a blow divided, a creature held at 1, and 07's Aegis floor.
-import { aegisFloor, askToHold, divideBlow, landShares, redirectBlow } from "../effects/blow-doors.mjs";
+import { aegisFloor, askToBorrow, askToHold, divideBlow, landShares, redirectBlow } from "../effects/blow-doors.mjs";
 // THE LEGACY BRANCHES' B3 (doors 10, 11 and 25): a Death Step held back or spared, the
 // third one recorded, 06 §10's offer at the second, Ethereal Form's halving at the one
 // damage door, and Life Drain's Health back off what the blow took.
@@ -135,6 +144,7 @@ import { offerElunesRegard } from "../effects/elunes-regard.mjs";
 import { dispersionFor, dispersionSuppressesEquipmentEffect } from "../rules/dispersion.mjs";
 import { healingReceived } from "../rules/corruption-effects.mjs";
 import { heldAugment } from "../rules/augments.mjs";
+import { emptySandUpdates } from "../rules/sand.mjs";
 import { displacedBy } from "../rules/worn.mjs";
 // What a character's token looks like before anybody touches it (D-718's
 // neighbour; the lead, 2026-09-13).
@@ -314,13 +324,13 @@ function withHealingPatches(descriptor, taken) {
  * mechanics the sheet and the workflow read off the item alone. `uses.value`
  * and `known` are the two fields play changes, and the sync keeps them.
  */
-function featureStamp(cls, f, { tier = 1, level = 1 } = {}) {
+function featureStamp(cls, f, { tier = 1, level = 1, int = 0 } = {}) {
   // A talent's grant scales its uses by the rank taken (D-642), and a counter
   // *equal to your tier* by the tier (D-768): the scope used to be the rank
   // alone, so Survival Instincts and Lava Burst read tier 1 at every level. A
   // patched class feature's `"rank"` arrives already bound (`bindRank`).
   const rank = f.rank ?? 1;
-  const usesMax = usesMaxFor(f.uses, { rank, tier, level });
+  const usesMax = usesMaxFor(f.uses, { rank, tier, level, int });
   return {
     identifier: f.name.slugify(),
     description: f.description,
@@ -550,6 +560,15 @@ export class AzerothActor extends Actor {
       await offerTimeLapse(this, roll);
     } catch (err) {
       console.warn("azeroth-rpg | Paradox or Time Lapse", err);
+    }
+    // **02's ANOTHER TIMELINE** (*A creature you can see within 30 feet that has just made an
+    // Attack Test, a Casting Test or a Resilience Test rolls it again and takes the second
+    // result*; stage 2b), asked of each holder near enough at the same seam.
+    try {
+      const { askAnotherTimeline } = await import("../effects/chrono-timeline.mjs");
+      await askAnotherTimeline({ roller: this, roll });
+    } catch (err) {
+      console.warn("azeroth-rpg | Another Timeline", err);
     }
     return offerElunesRegard(this, roll);
   }
@@ -1137,6 +1156,25 @@ export class AzerothActor extends Actor {
   }
 
   /**
+   * Empty every Sand pool (D-848): the door `AzerothItem` calls when an Hourglass
+   * leaves the Ranged slot, so re-equipping it gives nothing back. Written
+   * through `updatePool`, which skips a write that moves nothing.
+   */
+  // **ONE AT A TIME** (the 2a review's should-fix, stage 2b): two unequips in quick order - a
+  // displacement and a bag move - each read the pool and wrote; queued on the actor, each reads
+  // the pool as the last one left it. A throw is said and never stops the next.
+  async emptySand() {
+    if (this.type !== "character") return this;
+    const run = async () => {
+      const updates = emptySandUpdates(this.poolSnapshot());
+      return updates.length ? this.updatePool(updates) : this;
+    };
+    const next = (this._sandEmptying ?? Promise.resolve()).then(run, run);
+    this._sandEmptying = next.catch(err => console.warn("azeroth-rpg | emptying Sand", err));
+    return next;
+  }
+
+  /**
    * Write one or more pool values. THE ONLY PLACE `system.classes[]` IS
    * WRITTEN FOR A POOL: the sheet, the workflows and the combat all come
    * through here, so none of them can reach for the legacy `system.power`
@@ -1309,7 +1347,7 @@ export class AzerothActor extends Actor {
     // the counter follows it.
     const tier = this.system?.tier ?? 1;
     for (const [key, { cls, f, talentId = null, rank = null, gadget = null }] of wanted) {
-      const stamp = featureStamp(cls, f, { tier, level });
+      const stamp = featureStamp(cls, f, { tier, level, int: Math.trunc(Number(this.system?.abilities?.int?.mod)) || 0 });
       const item = held.get(key);
       // A gadget's feature names its gadget (door 7): `useFeature` reads its Use off
       // 04's Gadgets table by that key, never off the talent that granted it.
@@ -1699,6 +1737,97 @@ export class AzerothActor extends Actor {
     return ids.length;
   }
 
+  /**
+   * **THE LEDGER ROW A BLOW ADDS** (07 §12's Mending Sands and Sands Run Back: *the damage it
+   * has taken since the start of your last turn*; D-867): the update keys `adjustHealth`
+   * writes beside the Health, in the same write.
+   *
+   * @param {number} amount  what the write took of Health and temporary Health
+   * @returns {object}
+   */
+  _damageLedger(amount) {
+    const fight = this.activeFight?.() ?? null;
+    const out = { [`flags.azeroth-rpg.${LEDGER_FLAG}`]: appendLedger(this.getFlag("azeroth-rpg", LEDGER_FLAG) ?? [], amount,
+      ledgerStamp({ combatId: fight?.started ? fight.id : null, round: fight?.round, turn: fight?.turn, time: game.time?.worldTime ?? 0 })) };
+    // **02's RECALL COUNTS WHAT IS TAKEN SINCE ITS MARK** (*regain Health equal to the damage you
+    // have taken since you marked it*; stage 2b): the ledger keeps two minutes, the mark ten,
+    // so the mark keeps its own running total, in the same write as the Health.
+    const mark = this.getFlag("azeroth-rpg", RECALL_FLAG) ?? null;
+    if (mark) out[`flags.azeroth-rpg.${RECALL_FLAG}`] = recallCounts(mark, amount, game.time?.worldTime ?? 0);
+    return out;
+  }
+
+  /**
+   * **THE HALF DILATION PUT OFF, LANDED** (D-866; the 2a review, M1): not reduced again and
+   * never put off a second time, but damage all the same - so through `takeStraightDamage`,
+   * where 05's temporary Health takes it first, Mana Shield pays for it and 07's Aegis floor
+   * and the one hold at 1 keep the creature at 1, as for any damage no Armor or Ward meets.
+   *
+   * @param {number} amount
+   */
+  async _landPutOff(amount) {
+    const n = Math.max(0, Math.trunc(Number(amount)) || 0);
+    if (!n) return this;
+    return this.takeStraightDamage(n);
+  }
+
+  /**
+   * **07 §12's DILATION, AT THE ONE DAMAGE DOOR** (D-866): *it takes half, rounded up, and
+   * the other half at the start of its next turn*. In a started fight the half put off waits
+   * on the creature's list, landed by `effects/deferred-damage.mjs#landDeferred` at its
+   * turn's start through `_landPutOff`, which never puts it off a second time; out of a
+   * fight it lands with the blow. **Answers the split and writes nothing** (the 2a review,
+   * M2): the half put off is written by `_writeDeferred` just before the Health is, so a
+   * blow refused after this point - a harm prevented, a dispersal, Ice Block - leaves no
+   * row behind it.
+   *
+   * @param {number} amount
+   * @param {{type?: string|null, by?: Actor|null}} o
+   * @returns {{now: number, row: object|null}}
+   */
+  _deferBlow(amount, { type = null, by = null } = {}) {
+    const deferral = deferralOf(this.effects ?? []);
+    const fight = deferral ? (this.activeFight?.() ?? null) : null;
+    if (!deferral || !fight?.started) return { now: amount, row: null };
+    const split = splitDeferred(amount, deferral);
+    if (split.later < 1) return { now: amount, row: null };
+    return { now: split.now, row: { amount: split.later, type, by: by?.uuid ?? null, source: deferral.source ?? "" } };
+  }
+
+  /** The half put off, written on the creature's list (D-866), and said in words. */
+  async _writeDeferred(row, now = 0) {
+    if (!row || !(row.amount > 0)) return;
+    await this.setFlag("azeroth-rpg", DEFERRED_FLAG, appendDeferred(this.getFlag("azeroth-rpg", DEFERRED_FLAG) ?? [], row));
+    ui.notifications?.info(game.i18n.format("AZEROTH.Deferred.Put", { name: this.name, now, later: row.amount, source: row.source ?? "" }));
+  }
+
+  /**
+   * Delete a Decay that lasts until a Short Rest (07's Hour of Dust: *Decay 2, which
+   * lasts until it finishes a Short Rest rather than 1 minute*; D-865). A minute's
+   * Decay ends by its own span. Both rests finish one. Resolves to how many went.
+   */
+
+  /** 02's Suspend held on this creature now (`effects/chronomancer.mjs#suspendedNow`; stage 2b). */
+  _suspended() {
+    return suspendedNow(this);
+  }
+
+  /** 04's Withering Hours on a heal this creature takes (`witheringHalves`; stage 2b). */
+  _withered(amount) {
+    return witheringHalves(this, amount);
+  }
+
+  /** 04's Shared Hours for the giver of a heal this creature took (`sharedHours`; stage 2b). */
+  _sharedHoursFrom(giver) {
+    return sharedHours(giver, this, "health");
+  }
+
+  async clearRestDecay() {
+    const ids = this.effects.filter(e => e.getFlag("azeroth-rpg", "decay")?.until === "shortRest").map(e => e.id);
+    if (ids.length) await this.deleteEmbeddedDocuments("ActiveEffect", ids);
+    return ids.length;
+  }
+
   /** The starred item ids, in the order they were starred (D-612). */
   get favorites() {
     const ids = this.getFlag("azeroth-rpg", "favorites") ?? [];
@@ -1869,6 +1998,7 @@ export class AzerothActor extends Actor {
     await finishSpecialRest(this,specialRest);
     await rechargeSpecialEquipment(this,"short");
     const cleared = await this.clearSundered();
+    await this.clearRestDecay();
     let count = null;
     if (this.type === "character") {
       count = (this.getFlag("azeroth-rpg", "shortRests") ?? 0) + 1;
@@ -1979,6 +2109,7 @@ export class AzerothActor extends Actor {
       await this.unsetFlag('azeroth-rpg','sealingFlameRecipient');
     }
     const cleared = await this.clearSundered();
+    await this.clearRestDecay();
     if (this.getFlag("azeroth-rpg", "shortRests")) await this.unsetFlag("azeroth-rpg", "shortRests");
     await this.setFlag("azeroth-rpg","restGeneration",restGeneration(this)+1);
     await restCard({ actor: this, kind: "long", gains: r.gains, restored, cleared, diseased });
@@ -2095,8 +2226,10 @@ export class AzerothActor extends Actor {
       this.syncBound().catch(err => console.error("azeroth-rpg | bound sync", err));
     }
     // A level or a class array change moves the features with it (D-612):
-    // the updating client alone, once, after the write has landed.
-    if (userId === game.user.id && changed.system?.classes !== undefined && this.type === "character") {
+    // the updating client alone, once, after the write has landed. An
+    // Intelligence written to the actor does too (O-272): Recall's and Shared
+    // Hours' uses are counted by its modifier (`rules/progression.mjs#resyncsFeatures`).
+    if (userId === game.user.id && resyncsFeatures(changed) && this.type === "character") {
       this.syncClassFeatures();
     }
     // The Fatigue track moved: its statuses follow (D-624), on the writing client.
@@ -2195,6 +2328,10 @@ export class AzerothActor extends Actor {
     if (!Object.keys(update).length && !manaShield) return this;
     const damageApplied = damage === true
       ? Math.max(0, (health.value ?? 0) - value) + (temp === null ? 0 : Math.max(0, wholeTemp(health.temp) - wholeTemp(temp))) : 0;
+    // **THE LEDGER OF WHAT WAS TAKEN** (07 §12's Mending Sands and Sands Run Back: *the
+    // damage it has taken since the start of your last turn*; D-867), one row a blow, in
+    // the same write as the Health (`rules/recent-damage.mjs`).
+    if (damageApplied > 0) Object.assign(update, this._damageLedger?.(damageApplied) ?? {});
     const controlHarm = damageApplied > 0 && this.effects?.some(effect => effect.flags?.["azeroth-rpg"]?.mindControl)
       ? mindControlHarm : null;
     const controlSnapshot = controlHarm?.mindControlHarmSnapshot(this) ?? [];
@@ -2504,6 +2641,14 @@ export class AzerothActor extends Actor {
       }
       // On a spell whose damage is its tick (Smolder) the spend is never made - it is paid on
       // the cast's own hit - so the line is not offered there (the 3A review, should-fix 9).
+      // **04's GRIT OF AGES, ECHOING SANDS AND STORM OF AGES** (stage 2b): unticked lines priced
+      // in Sand, greyed with their reason where the Sand will not cover them; `castSpell`
+      // judges every tick again.
+      const sandHeld = (this.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === "sand")?.value ?? null;
+      lines.push(...gritLines(talents, { sand: sandHeld, damages }, talentEffect));
+      const echo = this.activeFight?.()?.started ? echoingSandsLine(talents, { sand: sandHeld, damages }, talentEffect) : null;
+      if (echo) lines.push(echo);
+      lines.push(...stormLines(talents, { spell, sand: sandHeld }, talentEffect));
       const surge = branch && damages ? voidSpendFor(talents, { tier: this.system?.tier ?? 1, form }, talentEffect) : null;
       if (surge) {
         const held = Math.max(0, Math.trunc(Number(this.system?.corruption?.void)) || 0);
@@ -2520,6 +2665,10 @@ export class AzerothActor extends Actor {
     const spent = Object.fromEntries(this.items.filter(i => i.type === "talent")
       .map(i => [i.id, i.getFlag?.("azeroth-rpg", FREE_CAST_FLAG) ?? []]));
     const pool = spellPoolFor(talents, { name: spell, school })?.pool ?? null;
+    // **04's STASIS LORE AND HALT THE SANDS** (D-869): the Sand line, unticked, beside the
+    // free cast (`rules/sand-casts.mjs`); its rows are the Chronomancer talents'.
+    const sandNow = (this.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === "sand")?.value ?? null;
+    lines.push(...sandCastLines(talents, { spell, sand: sandNow }, talentEffect));
     return [...lines, ...freeCastLines(talents, { spell, spent, pool })];
   }
 
@@ -2813,6 +2962,15 @@ export class AzerothActor extends Actor {
       ui.notifications?.info(game.i18n.format("AZEROTH.Card.HealingHalved", { name: this.name, from: healed, to: received }));
       healed = received;
     }
+    // **AND WITHERING HOURS' AREA** (04: *At rank 2 or higher, a creature inside its area regains
+    // only half the Health any healing gives it, rounded down*; stage 2b).
+    if (!keep && healed > 0) {
+      const withered = this._withered?.(healed) ?? { amount: healed, by: null };
+      if (withered.by) {
+        ui.notifications?.info(game.i18n.format("AZEROTH.Card.HealingHalved", { name: this.name, from: healed, to: withered.amount }));
+        healed = withered.amount;
+      }
+    }
     // **AND A POISON CARRIED UNTIL CURED** (D12: Wound poison, *halve all healing the
     // target receives*): the factor the carrier lays, whatever the source.
     if (!keep && healed > 0) {
@@ -2844,6 +3002,15 @@ export class AzerothActor extends Actor {
     // hook knows it was a heal (`effects/undying-rage.mjs`).
     const restoredNow = Math.max(0, (this.system?.health?.value ?? before) - before);
     if (outcome) outcome.restored = restoredNow;
+    // **04's SHARED HOURS** (*When a spell or talent of yours gives an ally Health ... gain 1
+    // Sand*; stage 2b): a heal a spell gave, or a feature a talent granted, that restored any.
+    if (restoredNow > 0 && from?.type === "character" && (spell || (feature && featureName && from.items?.some?.(i => i.type === "feature" && i.name === featureName && i.getFlag?.("azeroth-rpg", "feature")?.talentId)))) {
+      try {
+        for (const line of (await this._sharedHoursFrom?.(from)) ?? []) ui.notifications?.info(line);
+      } catch (err) {
+        console.warn("azeroth-rpg | Shared Hours", err);
+      }
+    }
     // **04's KINDLING HEART** (*When you heal a creature with a branch spell or talent, gain
     // 1 Rage*; stage 3A): a heal that restored something, given by a Champion's branch - the
     // door says so (`branch`), or the feature named is one a Champion talent granted.
@@ -3174,6 +3341,13 @@ export class AzerothActor extends Actor {
       if (transfer) await consumeAttackTransfer(transfer, { target: this, messageId }).note("protected");
       return completeOutcome();
     }
+    // **02's SUSPEND** (*While held it is Stunned and immune to damage*; stage 2b): nothing of
+    // any blow lands, said in words.
+    if (this._suspended?.()) {
+      if (transfer) await consumeAttackTransfer(transfer, { target: this, messageId }).note("protected");
+      ui.notifications?.info(game.i18n.format("AZEROTH.Chrono.SuspendImmune", { name: this.name }));
+      return completeOutcome();
+    }
     // **02 §5's WINGS BENEATH** (the Chromatic Outcast: *You take no damage from a fall and
     // land on your feet*; stage 3A): nothing of a fall lands, said in words.
     if (falling === true && fallHarmless(this.takenTalents?.() ?? [], talentEffect)) {
@@ -3383,6 +3557,13 @@ export class AzerothActor extends Actor {
       }
       if (division) amount = division.keep;
     }
+    // **07 §12's DILATION** (D-866): *it takes half, rounded up, and the other half at the
+    // start of its next turn* - in a started fight the half put off waits on the creature's
+    // list, landed by `effects/deferred-damage.mjs#landDeferred` at its turn's start with
+    // `deferred: true`, which never puts it off a second time. Out of a fight it lands now.
+    // The split is worked out here and WRITTEN just before the Health (the 2a review, M2).
+    const deferredPlan = amount > 0 ? (this._deferBlow?.(amount, { type, by }) ?? null) : null;
+    if (deferredPlan) amount = deferredPlan.now;
     // Only the original claimed attack offers the belt. Transferred shares and
     // ongoing/environmental damage cannot create a fresh hit trigger.
     if(struck&&attack&&!moved&&!shared&&!linkedTransfer&&messageId){
@@ -3400,9 +3581,32 @@ export class AzerothActor extends Actor {
     const {manaShieldFor}=await import('../effects/mana-shield-payment.mjs');
     const shield=manaShieldFor(this,amount);
     if(shield)amount=shield.damage;
+    // The Health floor a standing effect sets (`rules/sealing-flame.mjs#damageAboveHealthFloor`).
+    amount = damageAboveHealthFloor(this.system?.health?.value, amount, healthFloor);
+    // **04's BORROWED TIME, ASKED ONCE WHAT REACHES THE HEALTH IS KNOWN** (the Chronomancer's
+    // Guardian of Time, stage 2c: *As a Reaction when a blow reduces your Health, spend 1 Sand.
+    // Take half its damage now, rounded up. At the start of your next turn, take the other half
+    // minus your rank.*), and Timeless Sentinel's free use of it: after the blow's own
+    // mitigation, the move, the division, Dilation's split, the harm prevention, **temporary
+    // Health, Mana Shield and the floor** (D-880: a blow they take whole reduces no Health, so
+    // it is not asked and costs no Sand and no Reaction, and what it halves is what would reach
+    // the Health), and before the hold at 1 - a halved blow may drop nobody. The half put off is
+    // written on the put-off list just before the Health, beside Dilation's, and lands at the
+    // turn's start through `_landPutOff` (D-866's carrier); a moved blow (the Sentinel's,
+    // Interposed Moment's) is a blow on this creature too. Guarded: an ask that fails leaves
+    // the blow whole, said as a warning.
+    let borrowed = null;
+    if (struck && amount > 1) {
+      try {
+        borrowed = await askToBorrow({ target: this, amount, type, by });
+      } catch (err) {
+        console.warn("azeroth-rpg | borrowed time", err);
+        borrowed = null;
+      }
+      if (borrowed?.borrowed) amount = borrowed.now;
+    }
     // **THE ONE HOLD AT 1** (D-777): 07's Aegis floor, then the creature's own
     // Unkillable and Cauterize, then another creature's talent, asked in the blow.
-    amount = damageAboveHealthFloor(this.system?.health?.value, amount, healthFloor);
     const hold = await this._holdAtOne({ before, amount, attack, struck });
     if (await dispersedNow()) return this;
     amount = hold.amount;
@@ -3418,6 +3622,20 @@ export class AzerothActor extends Actor {
     if (await dispersedNow()) return this;
     const healthBeforeWrite = (this.system?.health?.value ?? 0) + Math.max(0, Number(this.system?.health?.temp) || 0);
     const healthBeforeHoly = this.system?.health?.value ?? 0;
+    // Dilation's half put off, written now that nothing above can refuse the blow (M2).
+    if (deferredPlan?.row) await this._writeDeferred(deferredPlan.row, deferredPlan.now);
+    // Borrowed Time's half, written the same way (stage 2c), and its card once it is.
+    if (borrowed?.row) await this._writeDeferred(borrowed.row, borrowed.now);
+    if (borrowed?.borrowed) {
+      const { borrowedCard } = await import("../effects/guardian.mjs");
+      await borrowedCard(this, borrowed).catch(err => console.warn("azeroth-rpg | borrowed time card", err));
+    }
+    // Borrowed Hour's use and the rest of its blow, written the same way (the stage 3 fix): a
+    // blow refused after the hold - a late dispersal - strands no row and spends no use.
+    if (hold?.borrowedHour) {
+      const { commitBorrowedHour } = await import("../effects/guardian.mjs");
+      await commitBorrowedHour(this, hold.borrowedHour).catch(err => console.warn("azeroth-rpg | borrowed hour", err));
+    }
     await this.adjustHealth(-amount, { temp: soaked.temp, damage: true, manaShield:shield });
     const healthAfterWrite = (this.system?.health?.value ?? 0) + Math.max(0, Number(this.system?.health?.temp) || 0);
     const healthAfterHoly = this.system?.health?.value ?? 0;
@@ -3750,6 +3968,20 @@ export class AzerothActor extends Actor {
     // through `loseHealth` and `takeStraightDamage`, where only 07's floor holds.
     const cauterized = this.type === "character" ? await this._cauterize({ before, amount }) : null;
     if (cauterized) return { amount: cauterized.amount, held: { kind: "cauterize", name: cauterized.row.name }, cauterized };
+    // **04's BORROWED HOUR** (the Chronomancer's Guardian of Time, stage 2c: *Once per Long
+    // Rest, when a blow would drop you to 0 Health, you stay at 1 Health. The rest of that blow
+    // arrives at the start of your next turn.*): the creature's own, automatic, after
+    // Cauterize and before another's is asked (`blow-doors.mjs#HOLD_ORDER`) - its use struck,
+    // the rest on the put-off list (`effects/guardian.mjs#borrowedHourHold`).
+    if (this.type === "character") {
+      try {
+        const { borrowedHourHold } = await import("../effects/guardian.mjs");
+        const hour = await borrowedHourHold(this, { before, amount });
+        if (hour) return hour;
+      } catch (err) {
+        console.warn("azeroth-rpg | borrowed hour", err);
+      }
+    }
     try {
       const asked = await askToHold({ target: this, before, amount, attack: struck && attack });
       if (asked.held) {

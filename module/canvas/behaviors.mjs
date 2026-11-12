@@ -167,7 +167,9 @@ export class AzerothTerrainData extends foundry.data.TerrainData {
 export function groundReaches(system, token) {
   const actor = token?.actor ?? null;
   if (!actor) return false;
-  const spec = { who: system?.who ?? "creature", kinds: [...(system?.kinds ?? [])] };
+  const spec = { who: system?.who ?? "creature", kinds: [...(system?.kinds ?? [])], named: [...(system?.named ?? [])] };
+  // Sandtrap's *each creature you choose as you cast* (07 §12, D-864): the named alone.
+  if (spec.who === "named") return difficultApplies(spec, { uuid: actor.uuid });
   let relation = "other";
   if (spec.who === "enemy") {
     const caster = actorOf(system?.caster ?? null);
@@ -217,8 +219,10 @@ export class DifficultForBehaviorType extends ModifyMovementCostRegionBehaviorTy
       ...schema,
       who: new fields.StringField({
         required: true, blank: false, initial: "creature",
-        choices: { creature: "AZEROTH.DifficultFor.Who.creature", enemy: "AZEROTH.DifficultFor.Who.enemy" }
+        choices: { creature: "AZEROTH.DifficultFor.Who.creature", enemy: "AZEROTH.DifficultFor.Who.enemy", named: "AZEROTH.DifficultFor.Who.named" }
       }),
+      // The creatures the cast named (07 §12's Sandtrap), by actor uuid, where `who` is `named`.
+      named: new fields.ArrayField(new fields.StringField({ required: true, blank: false })),
       kinds: new fields.SetField(new fields.StringField({
         required: true, blank: false,
         choices: Object.fromEntries(CREATURE_KINDS.map(kind => [kind, `AZEROTH.DifficultFor.Kind.${kind}`]))

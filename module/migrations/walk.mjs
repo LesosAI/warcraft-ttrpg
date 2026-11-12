@@ -59,14 +59,34 @@ export async function packSystems(packId) {
   return table;
 }
 
+/**
+ * **AN IDENTIFIER THAT MOVED TO ANOTHER DOCUMENT** (the Chronomancer's stage 2b, finding 9 of
+ * the 2a review): a world's copy of 08 §11's 80c Hourglass tool still carries `identifier:
+ * hourglass` and the tool's section, while the pack's `hourglass` is now 08 §9's Augment (the
+ * tool was renamed Sand-clock, D-849). A copy is found by the identifier its section had then,
+ * and its old name - *Hourglass* - never reaches the Augment either.
+ */
+export const RETIRED_IDENTIFIERS = Object.freeze({
+  hourglass: Object.freeze({ section: "11 · Adventuring gear · Adventuring tools", identifier: "sand-clock", name: "Sand-clock" })
+});
+
+/** The identifier and name a stored document's copy is found by, past a retired identifier. */
+function copyKeys(raw, name) {
+  const retired = RETIRED_IDENTIFIERS[raw?.identifier];
+  if (retired && raw?.source?.section === retired.section) return { identifier: retired.identifier, name: retired.name };
+  return { identifier: raw?.identifier, name };
+}
+
 /** The pack copy of a document: by identifier first, then by name. */
 export function packCopy(table, raw, name) {
-  return table?.byIdentifier.get(raw?.identifier) ?? table?.byName.get(name) ?? null;
+  const k = copyKeys(raw, name);
+  return table?.byIdentifier.get(k.identifier) ?? table?.byName.get(k.name) ?? null;
 }
 
 /** The pack copy's own grant sentences, found the same way. */
 export function packGrants(table, raw, name) {
-  return table?.grantsByIdentifier?.get(raw?.identifier) ?? table?.grantsByName?.get(name) ?? null;
+  const k = copyKeys(raw, name);
+  return table?.grantsByIdentifier?.get(k.identifier) ?? table?.grantsByName?.get(k.name) ?? null;
 }
 
 /** A document's stored system, before preparation. */

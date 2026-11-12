@@ -31,6 +31,8 @@ import {
 } from "../rules/area-ticks.mjs";
 import { creatureSnapshot, kindsOf } from "../rules/creature-kinds.mjs";
 import { resolveDamage } from "../rules/mitigation.mjs";
+// A sand spell's Physical damage meets Armor Points at the Body, never a Ward (07 §9, D-864).
+import { PHYSICAL, spellDamageLane } from "../rules/spell-damage-type.mjs";
 import { buffetStacks } from "../rules/flame-buffet.mjs";
 import { wardBySchool } from "../rules/ward.mjs";
 import { schoolArmorBySchool } from "../rules/auras.mjs";
@@ -50,6 +52,8 @@ import { arrived } from "../canvas/arrival.mjs";
 import { actorInWorld, regionInWorld, sceneInWorld, tokenInWorld } from "../canvas/in-world.mjs";
 import { applyCondition } from "./durations.mjs";
 import { layBane } from "./banes.mjs";
+// 07 §9's Decay a failed area Test lays (Withering Sands; D-865), through the one writer.
+import { decayLine, layDecay } from "./decay.mjs";
 // THE CROSS-CLASS RULINGS (D-778): Tempest's push on entering, the escape a Test's
 // Entangled carries (Rimebind, Thornguard), Permafrost's feet on a Slowed it lays.
 import { forcedCheck } from "../rules/area-ticks.mjs";
@@ -71,6 +75,8 @@ import { landedText } from "../helpers/rider-words.mjs";
 import { addSlowedFeet } from "./speed-drop.mjs";
 // Drawn Across on a blow's source (the Legacy branches' door 25): the damage it deals, halved.
 import { dealtHalvedBy } from "../rules/legacy-uses.mjs";
+// The scenes a fight stands on (O-294): core makes a fight unlinked, so `combat.scene` is null at the table.
+import { fightOnScene } from "../rules/fight-scenes.mjs";
 
 const SCOPE = "azeroth-rpg";
 
@@ -113,7 +119,13 @@ export function relationTo({ caster = null, casterToken = null, actor, token = n
  */
 export function areaDamageOn({ actor, caster = null, spell = {}, damage, signatureExtras = [] } = {}) {
   const spellName = spell?.name ?? "";
-  const school = damage?.school ?? null;
+  // **A SAND SPELL'S TICK, ENTRY OR FAILED TEST IS PHYSICAL** (07 §9, D-864): the
+  // descriptor's damage word is `physical`, which meets the creature's Body Armor
+  // Points and no Ward (`damageType`); what the caster stands on reads the spell's own
+  // school, which is `school` below for a Physical blow.
+  const damageType = damage?.school ?? null;
+  const physical = damageType === PHYSICAL;
+  const school = physical ? (spell?.school ?? null) : damageType;
   const talentRows = caster?.takenTalents ? spellDamageFor(caster.takenTalents(), { name: spellName, school: spell?.school ?? null }) : [];
   const bonus = caster
     ? standingSpellBonus(caster.system, { name: spellName, damageSchool: school, takesSpellpower: spell?.takesSpellpower === true }, talentRows).total
@@ -127,7 +139,12 @@ export function areaDamageOn({ actor, caster = null, spell = {}, damage, signatu
   // treat Immune (Fire) as Ward 3 instead*; D-775), on a SPELL's area or tick alone
   // - Ignite's and a feature's are no spell - as the cast reads it.
   const asWard = spellBlowOf(spell) && caster?.takenTalents ? immuneAsWardFor(caster.takenTalents(), { school }).ward : 0;
-  const read = immuneReadAsWard({ immune: s.immune ?? [], ward: Math.max(0, (wardBySchool(s.ward)[school] ?? 0) - pierce), school, asWard });
+  const read = physical ? { immune: s.immune ?? [], ward: 0 }
+    : immuneReadAsWard({ immune: s.immune ?? [], ward: Math.max(0, (wardBySchool(s.ward)[school] ?? 0) - pierce), school, asWard });
+  const lane = spellDamageLane({
+    type: damageType, spellSchool: spell?.school ?? null,
+    apByLocation: { body: s.ap?.body ?? 0, head: s.ap?.head ?? 0, limb: s.ap?.limb ?? 0 }
+  });
   // **WHAT THE CASTER ADDS TO EVERY SPELL AS ITS OWN TYPE** (04's Arcane Power;
   // D-777, the lead: *"Different damage types in one attack are possible"*): a
   // SPELL's tick carries it as the cast does, a second amount met by its own Ward;
@@ -135,9 +152,11 @@ export function areaDamageOn({ actor, caster = null, spell = {}, damage, signatu
   const typed = caster && spellBlowOf(spell) ? typedLaneExtras(caster.system, "spell") : [];
   return resolveDamage({
     rating: (Number(damage?.rating) || 0) + bonus, sl: 0, kind: "magical", school,
+    // 07 §9's Physical lane over the magical one for a sand spell (D-864).
+    ...(physical ? { kind: lane.kind, school: lane.school, location: lane.location, apByLocation: lane.apByLocation } : {}),
     fireTakenBonus: buffetStacks([...(actor?.effects ?? [])], game.time?.worldTime),
     ward: read.ward,
-    schoolArmor: schoolArmorBySchool(s.schoolArmor)[school] ?? 0,
+    schoolArmor: physical ? 0 : (schoolArmorBySchool(s.schoolArmor)[school] ?? 0),
     immune: read.immune, vulnerable: s.vulnerable ?? [],
     slAddsToDamage: false,
     extras: [...typed, ...signatureExtras], wardBySchool: wardBySchool(s.ward), schoolArmorBySchool: schoolArmorBySchool(s.schoolArmor),
@@ -183,7 +202,7 @@ export async function strikeFromArea({ actor, caster = null, spell = {}, damage 
   if (damage) {
     const school = damage.school ?? null;
     const result = areaDamageOn({ actor, caster, spell, damage, signatureExtras });
-    const type = game.i18n.localize(AZEROTH.schools[school] ?? school ?? "");
+    const type = game.i18n.localize(AZEROTH.damageTypes[school] ?? school ?? "");
     if (result.immune) {
       if (damageOutcome) damageOutcome.complete = true;
       lines.push(game.i18n.format("AZEROTH.Combat.AreaTickImmune", { name: actor.name, type, spell: spellName }));
@@ -270,7 +289,7 @@ export function retaliationRows(holder, attacker) {
     out.push({name:source.name,melee:true,
       text:game.i18n.format(result.immune?'AZEROTH.Card.AreaRetaliateImmune':'AZEROTH.Card.AreaRetaliate',{
         spell:source.name,name:holder.name,attacker:attacker.name,amount:result.damage,
-        type:game.i18n.localize(AZEROTH.schools[source.damage.school])}),
+        type:game.i18n.localize(AZEROTH.damageTypes[source.damage.school])}),
       signatureRetaliation:{cast:source.cast,casterUuid:source.casterUuid,holderUuid:holder.uuid,
         spellUuid:source.spellUuid,messageUuid:source.messageUuid,spellRetaliation:true},
       damage:{amount:result.immune?null:result.damage,type:source.damage.school},condition:{}});
@@ -289,7 +308,7 @@ export function retaliationRows(holder, attacker) {
       name: spell.name ?? "",
       text: game.i18n.format(result.immune ? "AZEROTH.Card.AreaRetaliateImmune" : "AZEROTH.Card.AreaRetaliate", {
         spell: spell.name ?? "", name: holder.name, attacker: attacker.name,
-        amount: result.damage, type: game.i18n.localize(AZEROTH.schools[school] ?? school ?? "")
+        amount: result.damage, type: game.i18n.localize(AZEROTH.damageTypes[school] ?? school ?? "")
       }),
       melee: true,
       ...(entry.signatureDamageCast===entry.cast&&entry.cast ? {signatureRetaliation:{cast:entry.cast,casterUuid:holder.uuid,spellUuid:entry.uuid??null}} : {}),
@@ -316,7 +335,7 @@ export function retaliationRows(holder, attacker) {
       name: row.name,
       text: game.i18n.format(result.immune ? "AZEROTH.Card.AreaRetaliateImmune" : "AZEROTH.Card.AreaRetaliate", {
         spell: row.name, name: holder.name, attacker: attacker.name,
-        amount: result.damage, type: game.i18n.localize(AZEROTH.schools[row.type] ?? row.type ?? "")
+        amount: result.damage, type: game.i18n.localize(AZEROTH.damageTypes[row.type] ?? row.type ?? "")
       }),
       melee: row.melee === true,
       damage: { amount: result.immune ? null : result.damage, type: row.type },
@@ -358,7 +377,7 @@ function outcomeWords(outcome, casterName) {
   const parts = [];
   if (outcome.damage) {
     parts.push(game.i18n.format("AZEROTH.AreaTest.Damage", {
-      rating: outcome.damage.rating, school: game.i18n.localize(AZEROTH.schools[outcome.damage.school] ?? outcome.damage.school ?? "")
+      rating: outcome.damage.rating, school: game.i18n.localize(AZEROTH.damageTypes[outcome.damage.school] ?? outcome.damage.school ?? "")
     }));
   }
   const bySpan = new Map();
@@ -568,7 +587,8 @@ async function landCondition(actor, id, until, area, caster, { messageId = null 
   if (!AZEROTH.conditions?.[id]) return null;
   const had = actor.statuses?.has?.(id) === true;
   const fight = actor.activeFight?.() ?? null;
-  const timing = until === "endOfNextTurn" ? "endOfNextTurn" : until === "casterTurnStart" ? casterTurnStart(caster, fight) : null;
+  const timing = until === "endOfNextTurn" ? "endOfNextTurn" : until === "endOfTurn" ? "endOfTurn"
+    : until === "casterTurnStart" ? casterTurnStart(caster, fight) : null;
   const effect = await applyCondition(actor, id, { until: timing });
   if (effect && until === "leaves" && !had) {
     await effect.setFlag(SCOPE, LEAVES_FLAG, { sceneId: area.sceneId ?? null, regionId: area.regionId ?? null });
@@ -649,6 +669,15 @@ export async function areaTestOutcome({ actor, message, result } = {}) {
     landed.push("poisoned");
   }
   describeLanded();
+  // **07 §12's WITHERING SANDS** (*If it also fails ... it gains Decay 1*; D-865): the
+  // failure's Decay, laid by the caster's hand through the one writer. No GM-absent refusal is
+  // needed (the 2a review, L2): this lands on the client that rolled the creature's own Test
+  // (`dice/chat.mjs`' Resist door, `data-resist-owner`), which owns the creature it writes.
+  if (Number(outcome.decay) > 0) {
+    const laid = await layDecay({ victim: actor, value: outcome.decay, by: caster, source: spellName });
+    lines.push(decayLine(laid, { spell: spellName }));
+  }
+  if (areaTransferRefusal(area)) return interrupted();
   if (outcome.bane) {
     // A Bane on this kind of Test UNTIL the end of its next turn - lasting,
     // never spent by the next roll (`rules/banes.mjs`' `lasting`).
@@ -748,7 +777,7 @@ export async function casterTurnTests(scene, caster, token = null) {
 function fightOn(scene, actor) {
   const own = actor?.activeFight?.() ?? null;
   if (own?.started) return own;
-  return (game.combats ?? []).find(c => c.started && c.scene?.id === scene?.id) ?? null;
+  return (game.combats ?? []).find(c => c.started && fightOnScene(c, scene, game.scenes)) ?? null;
 }
 
 /**
@@ -928,6 +957,10 @@ export async function enterAreas(document, movement, operation = {}) {
       // claimed once in the one area queue, ever, as a standing trap is.
       if (check.first === true && !(await claimEntry(region, "first", "entered"))) continue;
       if (tokenInWorld(document) && regionInWorld(region)) await postAreaTest({ actor, token: document, region, check, trigger: "enter", caster });
+      // **AND AN AREA ITS FIRST ENTRY SPENDS GOES** (07 §12's Time Trap: *The glyph then fades*;
+      // the sweep's stage 2, D-891): its Test is posted, so the Region is deleted - the card
+      // carries everything the Test needs.
+      if (check.first === true && check.spends === true && regionInWorld(region)) await region.delete().catch(err => console.warn("azeroth-rpg | a spent glyph", err));
     }
     // **TEMPEST'S PUSH** (*one that fails a Reflex Resilience Test against your Spell
     // DC when it first enters is pushed 10 feet toward the edge*; D-778): its Test,

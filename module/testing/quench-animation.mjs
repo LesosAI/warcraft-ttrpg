@@ -643,7 +643,9 @@ export function animationBatch(context) {
 
         recorder.reset();
         const placing = CARD_ACTIONS.placeArea({ dataset: {} }, card);
-        pressBoard({ x: 2000, y: 1200 });
+        // Inside Flamestrike's 60 feet of the caster at (500, 500): Place area refuses a point past
+        // the Range and the pick waits on (O-288, D-893), so (2000, 1200), 75 feet off, never placed.
+        pressBoard({ x: 1200, y: 900 });
         const region = await placing;
         assert.ok(region, "Place area placed nothing");
         try {
@@ -657,8 +659,8 @@ export function animationBatch(context) {
           // AT THE AREA'S OWN CENTRE, never on the caster, and sized from the
           // Region: a 20 ft radius on a 100px/5ft grid is 400px, so the column
           // at 0.7 of the diameter is 560px across.
-          assert.closeTo(steps[0].at.x, 2000, 1, "the column was not drawn where the area was placed");
-          assert.closeTo(steps[0].at.y, 1200, 1);
+          assert.closeTo(steps[0].at.x, 1200, 1, "the column was not drawn where the area was placed");
+          assert.closeTo(steps[0].at.y, 900, 1);
           assert.closeTo(steps[0].size, 560, 1, "the column was not sized from the area's own radius");
           assert.closeTo(steps[1].size, 800, 1, "the scorched ground is not the area's whole diameter");
           assert.isTrue(steps[1].below, "the scorched ground was drawn over the tokens");
@@ -689,11 +691,59 @@ export function animationBatch(context) {
         assert.lengthOf(placed, 0, "a self-centred area waited for a Region");
       });
 
+      /**
+       * **07's 15 FEET BETWEEN CREATURES** (the Chronomancer live fix, which found both tests
+       * stale against 0.12.32's enforcement): Chain Lightning arcs *to a creature within 15 feet*
+       * and the active GM chooses the path from the ONE target the caster names
+       * (`effects/chain-lightning-path.mjs`: two or more targets are refused before payment),
+       * and Arcane Missiles' second creature must be *within 15 feet of the first*. The ghouls
+       * stand 20 feet apart for every other test here, so these two move Alpha and Gamma into a
+       * column 15 feet apart - Gamma, Alpha, Beta from the top - and put them back after.
+       */
+      /** Move Alpha to `to` and answer the function that puts it back where it was. */
+      async function nearerAlpha(to) {
+        const was = { x: token.alpha.x, y: token.alpha.y };
+        const put = async ({ x, y }) => {
+          await token.alpha.move({ x, y, action: "displace" });
+          await until(() => token.alpha.x === x && token.alpha.y === y, `Alpha at ${x},${y}`, 20000);
+        };
+        await put(to);
+        await settle();
+        return () => put(was);
+      }
+
+      // Put Alpha back after the test that moved it, however that test ended.
+      let alphaBack = null;
+      context.afterEach?.(async function () {
+        const back = alphaBack;
+        alphaBack = null;
+        if (typeof back === "function") await back();
+      });
+
+      async function inColumn(fn) {
+        const at = doc => ({ x: doc.x, y: doc.y });
+        const was = { alpha: at(token.alpha), gamma: at(token.gamma) };
+        const put = async (doc, { x, y }) => {
+          await doc.move({ x, y, action: "displace" });
+          await until(() => doc.x === x && doc.y === y, `${doc.name} at ${x},${y}`, 20000);
+        };
+        try {
+          await put(token.alpha, { x: 1500, y: 600 });
+          await put(token.gamma, { x: 1500, y: 300 });
+          await settle();
+          return await fn();
+        } finally {
+          await put(token.alpha, was.alpha);
+          await put(token.gamma, was.gamma);
+        }
+      }
+
       it("Chain Lightning arcs in the order the card recorded, never three bolts from the caster", async function () {
         this.timeout(120000);
-        // Beta, Alpha, Gamma - deliberately not the order they stand in, so a
-        // reader that took the nearest creature would be visible.
-        const card = await cast("Chain Lightning", 18, [token.beta, token.alpha, token.gamma]);
+        // Beta named alone: the GM's path runs Beta, then Alpha 15 feet from it, then Gamma 15
+        // feet from Alpha - not the order a reader taking the caster's nearest creature would
+        // draw, since Gamma is the nearest of the three to nobody but Alpha.
+        const card = await inColumn(() => cast("Chain Lightning", 18, [token.beta]));
         assert.deepEqual((card.flags["azeroth-rpg"].targets ?? []).map(t => t.tokenId),
           [token.beta.id, token.alpha.id, token.gamma.id], "the card did not record the order they were aimed at");
 
@@ -716,7 +766,7 @@ export function animationBatch(context) {
 
       it("Arcane Missiles records exactly three darts to the first target, and one launch sound", async function () {
         this.timeout(120000);
-        const card = await cast("Arcane Missiles", 18, [token.alpha, token.beta]);
+        const card = await inColumn(() => cast("Arcane Missiles", 18, [token.alpha, token.beta]));
         assert.isTrue(card.flags["azeroth-rpg"].success);
         await until(() => recorder.cues.length === 1, `one cue for Arcane Missiles (skips: ${recorder.skips.map(s => s.skip)})`);
         const steps = recorder.lastSteps();
@@ -732,6 +782,10 @@ export function animationBatch(context) {
 
       it("Hex cues nothing at cast, `resisted` on a passed Test, and a step on the creature that failed one", async function () {
         this.timeout(180000);
+        // Hex reaches 30 feet and Alpha stands 50 off (O-288, D-893): Alpha steps in to 25 feet for
+        // this test, and back after it (`nearerAlpha`).
+        const back = await nearerAlpha({ x: 1000, y: 500 });
+        alphaBack = back;
         const card = await cast("Hex", 18, [token.alpha]);
         assert.isTrue(card.flags["azeroth-rpg"].success, "the Casting Test failed; a resist cue needs a successful cast");
         await until(() => recorder.skips.length >= 1, "the law's answer at cast");
@@ -1280,7 +1334,20 @@ export function animationBatch(context) {
             assert.isFalse(box.disabled, `the ${id} line was greyed`);
             box.checked = true;
           }
-          dialog.element.querySelector('button[data-action="roll"]').click();
+          // **EXTRA ATTACK'S SECOND WEAPON IS CHOSEN ON THE DIALOG** (0.14.0; the Chronomancer
+          // live fix found this stale): a hero with Extra Attack draws `extraWeapon` with no
+          // default and the Roll button disabled until one is picked, so a press here did
+          // nothing and the card never came. The first legal weapon, as a player would pick.
+          const select = dialog.element.querySelector('select[name="extraWeapon"]');
+          if (select && !select.value) {
+            const first = [...select.options].find(o => o.value && !o.disabled);
+            assert.ok(first, "the dialog offers no second weapon to choose");
+            select.value = first.value;
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+          const roll = dialog.element.querySelector('button[data-action="roll"]');
+          await until(() => !roll.disabled, "the Roll button enabled", 5000);
+          roll.click();
           const [card] = await posted;
           made.push(card);
           return card;
@@ -1821,7 +1888,8 @@ export function animationBatch(context) {
         await withRealPlayer(async () => {
           const spare = await makeNpc("Plagued Ghoul");
           await spare.update({ name: "ZZ Anim Spare" });
-          const doc = await place(spare, { x: 2200, y: 500 });
+          // Inside Immolate's 60 feet of the caster at (500, 500) (O-288, D-893): it stood 85 off.
+          const doc = await place(spare, { x: 1100, y: 500 });
           const { spell, loop } = await sustainedLoop("Immolate", [doc]);
           await drawn(loop.key, loop.layers.length);
           await doc.delete();

@@ -33,6 +33,9 @@ export const TALENT_WORKLIST = Object.freeze({
     // Blue Drake's turn-start Mana, the Bronze Drake's Half-Action, Glimpse Ahead's
     // Initiative and Rewind's heal. None left.
   }),
+  // THE CHRONOMANCER (D-847): no lines while the pack holds none of its talents; see
+  // its ceiling below.
+  chronomancer: Object.freeze({}),
   // D-771 (the talent plan's Phase 3): two lines left, each a QUESTION for the
   // lead, its reason on the row's own `gap`. D-777 built Living Seed's
   // temporary Health (the lead: *"raise HP past max as temp hp"*), and D-778
@@ -102,6 +105,13 @@ export const WORKLIST_CEILING = Object.freeze({
   // heal, and Sands of Time's spell row. 5 to 0 (stage 3B): the Spell-Weaver's and the
   // Timewalker's doors and the Black Drake's landing.
   "chromatic-champion": 0,
+  // THE CHRONOMANCER (D-847): 0 while the pack holds none of its 36 talents. The
+  // first `packs:parse` after 04's three branches puts them in the pack with three
+  // rows (`talent-effects.mjs`, the spells they teach), and the census then finds
+  // the rest on wording alone: the rows stage (the plan's Phase 5) writes them, or
+  // parks the lines here with this ceiling raised for this class alone, as the
+  // Chromatic Champion's parser stage did.
+  chronomancer: 0,
   // 23 to 22 (D-769): Chimera's patch takes two forms. 22 to 14 (D-770):
   // Mangle, Rip and Feral Charge ride the attack dialog as riders. 14 to 2
   // (D-771): every Druid talent built but Living Seed and Typhoon's push. 2 to

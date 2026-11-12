@@ -378,7 +378,9 @@ function resolveOne({
     };
   }
 
-  const before = worthOf(times * (rating + sl + headBonus) + sourceBonus, halved);
+  // A spell's Physical damage (07 §9, D-864) keeps D-330's rule: the SL gates riders and
+  // never adds - `slAddsToDamage: false`, which every weapon blow leaves at its default.
+  const before = worthOf(times * (rating + (slAddsToDamage ? sl : 0) + headBonus) + sourceBonus, halved);
   const ap = armorAt(apByLocation, location) ?? 0;
   const effectiveAP = Math.max(0, ap - Math.max(0, penetration));
   return {

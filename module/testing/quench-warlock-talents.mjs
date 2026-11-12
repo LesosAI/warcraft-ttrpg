@@ -481,9 +481,19 @@ export function warlockTalentsBatch(context) {
       const warlock = await warlockWith("ZZ WlT Backdraft", { ranks: { "Shadow Bolt": 1, Backdraft: 1 } });
       const ghoul = await makeNpc("Plagued Ghoul");
       const combat = await fightWith([warlock, ghoul]);
+      // **07 §2's DC IS THE RULE, NOT THE FAULT** (D-892, O-296; the lead: *"296 - ally means
+      // willing target"*): a spell aimed at a willing creature rolls against 10 + 2 a tier, not
+      // its Defense. Two combatants with no token are both HOSTILE (`AzerothCombatant#side`
+      // defaults a tokenless one so), so the ghoul stood on the warlock's side, counted as willing
+      // (`canvas/range.mjs#willingOf`) and the bolt rolled against 12 rather than the row's
+      // Defense 10: SL 2 where this test wants 3. The warlock fights on the friendly side, set
+      // before the turn is given because a side moves the order.
+      await combat.getCombatantsByActor(warlock)[0].setSide("friendly");
+      await until(() => combat.getCombatantsByActor(warlock)[0]?.side === "friendly", "the warlock on the friendly side");
       const mine = await giveTurn(combat, warlock);
       await fill(warlock, "mana");
       const first = await cast(warlock, "Shadow Bolt", { targets: [rowOf(ghoul)], face: 20 });
+      assert.equal(first.rolls[0].options.dc, 10, "07 §2: aimed at an enemy, the Shadow Bolt rolls against its Defense");
       assert.isAtLeast(first.flags["azeroth-rpg"].sl, 3);
       await until(() => (warlock.getFlag("azeroth-rpg", "nextSpell") ?? []).some(e => e.cast === "half"), "the Half-Action promised");
       await mine.resetBudget();

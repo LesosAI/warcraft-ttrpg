@@ -169,6 +169,28 @@ import { legacyDarkRangerBatch } from "./quench-legacy-dark-ranger.mjs";
 import { bestiaryDescriptorsBatch } from "./quench-bestiary-descriptors.mjs";
 import { creaturePlansBatch } from "./quench-creature-plans.mjs";
 import { slRidersBatch } from "./quench-sl-riders.mjs";
+// The Chronomancer's sand spells, Decay and Physical damage (07 §12; D-864 to D-869).
+import { sandSpellsBatch } from "./quench-sand-spells.mjs";
+import { chronomancerFeaturesBatch } from "./quench-chronomancer-features.mjs";
+import { chronomancerTalentsBatch } from "./quench-chronomancer-talents.mjs";
+import { chronomancerGuardianBatch } from "./quench-chronomancer-guardian.mjs";
+import { chronomancerPlaytestBatch } from "./quench-chronomancer-playtest.mjs";
+import { chronomancerSweepTier1Batch, chronomancerSweepTier2Batch } from "./quench-chronomancer-sweep-t12.mjs";
+import { chronomancerSweepTier3Batch, chronomancerSweepTier45Batch } from "./quench-chronomancer-sweep-t35.mjs";
+// The sweep's stage 4: the eight features and thirty-six talents through the real controls.
+import { chronomancerSweepFeaturesBatch, chronomancerSweepTalentsBatch, chronomancerSweepGuardianBatch } from "./quench-chronomancer-sweep-ft.mjs";
+import { rangeRoundTimeBatch } from "./quench-range-roundtime.mjs";
+// 07 §2's ally is a willing target (O-296) and a fight core made stands on its combatants' scenes (O-294).
+import { willingFightScenesBatch } from "./quench-willing-fight-scenes.mjs";
+// Stage R3: O-303's held Sustain, O-301's per-target judgement, Pummel's melee, O-298's timed areas.
+import { chronomancerR3HeldBatch, chronomancerR3Batch } from "./quench-chronomancer-r3.mjs";
+// Stage 5: Stasis held through Suspend's door (O-306), Empowered Mending's reach (the Priest gap).
+import { stage5Batch } from "./quench-stage5.mjs";
+// Stage 6: one DC field per target (O-307), and Dispel ends a Sustained spell as the cast (O-308).
+import { stage6Batch } from "./quench-stage6.mjs";
+// Stage 8: Dispel ends a held area Sustain aimed at its caster, a creature in it, or the area itself (O-312).
+import { stage8Batch } from "./quench-stage8.mjs";
+import { stage9Batch } from "./quench-stage9.mjs";
 // The Chromatic Champion's engine (the plan's stage 1B).
 import { chromaticEngineBatch } from "./quench-chromatic-engine.mjs";
 import { chromaticFeaturesBatch } from "./quench-chromatic-features.mjs";
@@ -502,6 +524,66 @@ export function registerQuenchTests() {
     });
     quench.registerBatch("azeroth-rpg.sl-riders", slRidersBatch, {
       displayName: "AZEROTH: Every Success-Level-gated spell rider and weapon trait lands (D-812)"
+    });
+    quench.registerBatch("azeroth-rpg.sand-spells", sandSpellsBatch, {
+      displayName: "AZEROTH: The Chronomancer's sand spells, Decay and Physical damage (D-864 to D-869)"
+    });
+    quench.registerBatch("azeroth-rpg.chronomancer-features", chronomancerFeaturesBatch, {
+      displayName: "AZEROTH: The Chronomancer's eight features and 07 §4's rest gates, through the sheet (stage 2b)"
+    });
+    quench.registerBatch("azeroth-rpg.chronomancer-talents", chronomancerTalentsBatch, {
+      displayName: "AZEROTH: The Chronomancer's Shifting Sands and Chronoweaver, through their doors (stage 2b)"
+    });
+    quench.registerBatch("azeroth-rpg.chronomancer-guardian", chronomancerGuardianBatch, {
+      displayName: "AZEROTH: The Chronomancer's Guardian of Time, through the blow, the Block, the echo and the sheet (stage 2c)"
+    });
+    quench.registerBatch("azeroth-rpg.chronomancer-sweep-t12", chronomancerSweepTier1Batch, {
+      displayName: "AZEROTH: The Chronomancer sweep, the tier 1 sand spells through the real controls (stage 2)"
+    });
+    quench.registerBatch("azeroth-rpg.chronomancer-sweep-t12-tier2", chronomancerSweepTier2Batch, {
+      displayName: "AZEROTH: The Chronomancer sweep, the tier 2 sand spells through the real controls (stage 2)"
+    });
+    quench.registerBatch("azeroth-rpg.chronomancer-sweep-t35", chronomancerSweepTier3Batch, {
+      displayName: "AZEROTH: The Chronomancer sweep, the tier 3 sand spells through the real controls (stage 3)"
+    });
+    quench.registerBatch("azeroth-rpg.chronomancer-sweep-t35-tier45", chronomancerSweepTier45Batch, {
+      displayName: "AZEROTH: The Chronomancer sweep, the tier 4 sand spells and Divert Timeway through the real controls (stage 3)"
+    });
+    quench.registerBatch("azeroth-rpg.chronomancer-sweep-features", chronomancerSweepFeaturesBatch, {
+      displayName: "AZEROTH: The Chronomancer sweep, the eight features through the real controls (stage 4)"
+    });
+    quench.registerBatch("azeroth-rpg.chronomancer-sweep-talents", chronomancerSweepTalentsBatch, {
+      displayName: "AZEROTH: The Chronomancer sweep, Shifting Sands and Chronoweaver through the real controls (stage 4)"
+    });
+    quench.registerBatch("azeroth-rpg.chronomancer-sweep-guardian", chronomancerSweepGuardianBatch, {
+      displayName: "AZEROTH: The Chronomancer sweep, Guardian of Time and Sand through the real controls (stage 4)"
+    });
+    quench.registerBatch("azeroth-rpg.range-roundtime", rangeRoundTimeBatch, {
+      displayName: "AZEROTH: Range, whom a cast names, and the six-second round, through the real controls (D-893)"
+    });
+    quench.registerBatch("azeroth-rpg.willing-fight-scenes", willingFightScenesBatch, {
+      displayName: "AZEROTH: 07 §2's ally is a willing target, and a fight core made stands on its combatants' scenes (O-296, O-294)"
+    });
+    quench.registerBatch("azeroth-rpg.chronomancer-r3-held", chronomancerR3HeldBatch, {
+      displayName: "AZEROTH: A held Sustain ends however its last creature is freed, through the real controls (O-303)"
+    });
+    quench.registerBatch("azeroth-rpg.chronomancer-r3", chronomancerR3Batch, {
+      displayName: "AZEROTH: Each target judged on its own, Pummel in melee, timed areas past the fight, the range door's words (O-301, O-298, Stage R3)"
+    });
+    quench.registerBatch("azeroth-rpg.stage5", stage5Batch, {
+      displayName: "AZEROTH: Stasis held through Suspend's door, and Mass Mend widened by Empowered Mending, through the real controls (O-306, D-898)"
+    });
+    quench.registerBatch("azeroth-rpg.stage6", stage6Batch, {
+      displayName: "AZEROTH: One DC field per target, and Dispel ends a Sustained spell as the cast, through the real controls (O-307, O-308)"
+    });
+    quench.registerBatch("azeroth-rpg.stage8", stage8Batch, {
+      displayName: "AZEROTH: Dispel ends a held area Sustain aimed at its caster, a creature in it, or the area itself, through the real controls (O-312)"
+    });
+    quench.registerBatch("azeroth-rpg.stage9", stage9Batch, {
+      displayName: "AZEROTH: Mindstatic and Heat Mirage place their area (O-314); Mass Dispel, Cleanse and Everburn play where they were aimed (O-225)"
+    });
+    quench.registerBatch("azeroth-rpg.chronomancer-playtest", chronomancerPlaytestBatch, {
+      displayName: "AZEROTH: The lead's Chronomancer play-test, through the real controls (D-887 to D-890)"
     });
     quench.registerBatch("azeroth-rpg.chromatic-engine", chromaticEngineBatch, {
       displayName: "AZEROTH: The Chromatic Champion's engine - Ward 10, the guise, Energy maneuvers, free casts, the drake (stage 1B)"

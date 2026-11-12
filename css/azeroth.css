@@ -797,6 +797,16 @@
   .azeroth.sheet.actor .azeroth-pool.is-mana .azeroth-segment.is-filled {
     background: var(--azeroth-page-accent);
   }
+  .azeroth.sheet.actor .azeroth-pool-glass {
+    margin-right: 4px;
+    color: var(--azeroth-page-ink);
+  }
+  .azeroth.sheet.actor .azeroth-pool-note {
+    margin: 2px 0 0;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--azeroth-page-ink-soft);
+  }
   .azeroth.sheet.actor .azeroth-load {
     margin: 0 0 8px;
   }
@@ -2470,6 +2480,15 @@
   .azeroth.azeroth-browser .azeroth-browser-entry:nth-child(odd) {
     background: rgba(0, 0, 0, 0.04);
   }
+  .azeroth.azeroth-browser .azeroth-browser-entry .azeroth-browser-badges {
+    display: inline-flex;
+    gap: 3px;
+    flex: none;
+  }
+  .azeroth.azeroth-browser .azeroth-browser-entry img.azeroth-browser-badge {
+    width: 20px;
+    height: 20px;
+  }
   .azeroth.azeroth-browser .azeroth-browser-tools {
     display: flex;
     align-items: center;
@@ -2938,8 +2957,10 @@
     outline-offset: 1px;
   }
   .azeroth.sheet.actor.character .azeroth-segment {
-    background: var(--azeroth-slot);
     border-color: var(--azeroth-slot-edge);
+  }
+  .azeroth.sheet.actor.character .azeroth-segment:not(.is-filled) {
+    background: var(--azeroth-slot);
   }
   .azeroth.sheet.actor.character .azeroth-condition {
     background: var(--azeroth-slot);
@@ -5612,6 +5633,35 @@
   .azeroth-roll-dialog .azeroth-dialog-dc input {
     font-size: 15px;
     font-weight: 700;
+  }
+  .azeroth-roll-dialog .azeroth-dialog-dc-each .azeroth-dialog-label {
+    font-weight: 700;
+  }
+  .azeroth-roll-dialog .azeroth-dialog-each {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 4px;
+  }
+  .azeroth-roll-dialog .azeroth-dialog-each-row {
+    display: grid;
+    grid-template-columns: 128px 64px minmax(0, 1fr);
+    align-items: center;
+    column-gap: 8px;
+  }
+  .azeroth-roll-dialog .azeroth-dialog-each-row label {
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.35;
+    color: var(--azeroth-ink);
+    overflow-wrap: anywhere;
+  }
+  .azeroth-roll-dialog .azeroth-dialog-each-row input[type=number] {
+    width: 64px;
+  }
+  .azeroth-roll-dialog .azeroth-dialog-each-row .azeroth-dialog-note {
+    line-height: 1.35;
   }
   .azeroth-roll-dialog .azeroth-dialog-note {
     font-size: 13px;

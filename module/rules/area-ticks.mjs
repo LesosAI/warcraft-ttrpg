@@ -112,6 +112,10 @@ import { isUpkeepSentence } from "./upkeep.mjs";
 import { readForced } from "./forced-movement.mjs";
 // The Test 07 gives a held creature at the end of its turns (D-778).
 import { readEscape } from "./escapes.mjs";
+// A damage word as 07 writes it: a school, or a sand spell's Physical (07 §9, D-864).
+import { damageTypeKey, isDamageTypeKey } from "./spell-damage-type.mjs";
+// A spell whose damage is a retaliation (07 §12's Scouring Veil) deals none at the cast.
+import { spellRetaliationFrom } from "./spell-retaliation.mjs";
 
 /** The kinds a clause may name (D-753): `creature-kinds.mjs#kindsOf` answers them. */
 export const AREA_TICK_KINDS = CREATURE_KINDS;
@@ -133,7 +137,7 @@ export const AREA_CHECK_ON = Object.freeze(["turn", "enter", "both", "cross", "c
  * *until it leaves*, *until the start of your next turn* (the CASTER's),
  * *until the end of its next turn*, or "" - the condition's own **Ends** (A1).
  */
-export const AREA_UNTIL = Object.freeze(["", "leaves", "casterTurnStart", "endOfNextTurn"]);
+export const AREA_UNTIL = Object.freeze(["", "leaves", "casterTurnStart", "endOfNextTurn", "endOfTurn"]);
 
 /** When a creature starts carrying what an area lays while it remains (D-757). */
 export const AREA_REMAINS_WHEN = Object.freeze(["inside", "turn", "turnEnd"]);
@@ -213,9 +217,12 @@ export function hasAreaTick(tick) {
   return Boolean(tick && typeof tick === "object" && AREA_TICK_WHO.includes(tick.who));
 }
 
-const SCHOOL = new Map(Object.keys(AZEROTH.schools).map(k => [k.charAt(0).toUpperCase() + k.slice(1), k]));
 const RESILIENCE = new Map(Object.keys(AZEROTH.resiliences).map(k => [k.charAt(0).toUpperCase() + k.slice(1), k]));
-const schoolOf = word => SCHOOL.get(String(word ?? "")) ?? null;
+// **A SAND SPELL'S *Physical*** (07 §9, D-864) is read where a school always was: the
+// descriptor's `school` is the damage's TYPE, and `effects/area-strikes.mjs#areaDamageOn`
+// sends `physical` down the Armor Points lane.
+const schoolOf = word => (/^[A-Z]/.test(String(word ?? "")) ? damageTypeKey(word) : null);
+const damageKey = v => (isDamageTypeKey(v) ? v : null);
 
 /** Every `**Condition**` named in a run of text, as ids, in order and once. */
 function conditionsIn(text) {
@@ -265,6 +272,13 @@ export function isUpkeep(sentence) {
  * it by name rather than letting the damage go back to the cast unseen.
  */
 const BASE = [
+  // A sand spell's (07 §12, D-864): *A creature that starts its turn in the area takes 5
+  // Physical damage* (Withering Sands), *... takes 4 Physical damage and makes a Reflex
+  // Resilience Test* (Sandstorm) - the damage every creature takes, its Test a check row.
+  s => {
+    const m = /^A creature that starts its turn in the area takes (\d+) ([A-Z][a-z]+) damage\b/.exec(s);
+    return m && schoolOf(m[2]) ? { who: "creature", damage: { rating: Number(m[1]), school: schoolOf(m[2]) } } : null;
+  },
   // *A creature takes 2 Fire damage when it starts its turn inside the area*,
   // *An enemy takes 2 Holy damage when it starts its turn inside the area*.
   s => {
@@ -390,7 +404,39 @@ function readEnter(list, base) {
  */
 const CROSS_TRIGGER = /\b[Aa] creature (?:crossing the ring\b|that tries to cross\b)/;
 /** Frozen Rune's *The first creature to enter the space*: one entry, ever (the B9a pass). */
-const FIRST_ENTRY = /^The first creature to enter the space\b/;
+const FIRST_ENTRY = /^The first (?:creature|enemy) to enter (?:the space|it)\b/;
+
+/**
+ * **AN AREA ITS FIRST ENTRY SPENDS** (07 §12's Time Trap: *The first enemy to enter it makes a
+ * Spirit Resilience Test ... The glyph then fades*; the sweep's stage 2, D-891). Frozen Rune's
+ * first entry is claimed once and the sustained rune stands on; Time Trap's glyph goes. Read off
+ * the entry's own words at the cast and carried on the card's tick, so the Region it places is
+ * deleted once that first Test is posted (`effects/area-strikes.mjs#enterAreas`).
+ */
+const THEN_FADES = /\bThe (?:glyph|rune|trap|circle|ring|mark) then fades\b/i;
+
+/** Whether an entry's area is spent by its first entry. */
+export function spentByFirstEntry(effectText) {
+  return THEN_FADES.test(String(effectText ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " "));
+}
+
+/**
+ * The tick with each first-entry check marked `spends`, where the entry says the area then
+ * fades; the tick it was handed otherwise. Never writes the object it is handed.
+ *
+ * @param {object|null} tick
+ * @param {string} effectText
+ */
+export function markSpentFirst(tick, effectText) {
+  if (!tick || !Array.isArray(tick.checks) || !tick.checks.some(c => c?.first === true) || !spentByFirstEntry(effectText)) return tick;
+  return { ...tick, checks: tick.checks.map(c => (c?.first === true ? { ...c, spends: true } : c)) };
+}
+/** Time Trap's *The first enemy to enter it*: the row reaches an enemy of the caster alone. */
+const FIRST_ENEMY = /^The first enemy to enter\b/;
+/** Shifting Hours' *A creature you choose that starts its turn*: the creatures named at the cast alone. */
+const YOU_CHOOSE = /^A creature you choose that (?:starts|begins) its turn\b/;
+/** Withering Sands' *If it also fails a Spirit Resilience Test against your Spell DC, it gains Decay 1*. */
+const ALSO_FAILS = /^If it also fails an? (Body|Reflex|Spirit) Resilience Test against your Spell DC, it gains \*\*Decay (\d+)\*\*/;
 
 /** When a sentence's Test is made: on entering, at the start of a turn, both, or on crossing the edge; null where it is no such clause. */
 function checkTrigger(s) {
@@ -398,7 +444,7 @@ function checkTrigger(s) {
   if (FIRST_ENTRY.test(s)) return "enter";
   if (/^(?:While you hold both, )?[Aa] creature that enters the area or (?:starts|begins) its turn (?:inside it|there|in it|inside|in the area)\b/.test(s)) return "both";
   if (/^A creature that enters the area\b(?! or)/.test(s)) return "enter";
-  if (/\b(?:[Aa] creature|one) that (?:is not native to fire and )?(?:starts|begins) its turn (?:in the area|inside|in it|there|at the center)\b/.test(s)) return "turn";
+  if (/\b(?:[Aa] creature|one) (?:you choose )?that (?:is not native to fire and )?(?:starts|begins) its turn (?:in the area|inside|in it|there|at the center)\b/.test(s)) return "turn";
   return null;
 }
 
@@ -410,6 +456,10 @@ function untilIn(text) {
   if (/\buntil it leaves\b/i.test(text)) return "leaves";
   if (/\buntil the start of your next turn\b/i.test(text)) return "casterTurnStart";
   if (/\buntil the end of its next turn\b/i.test(text)) return "endOfNextTurn";
+  // Sandstorm's *until the end of that turn* (07 §12): the turn it started in the area.
+  if (/\buntil the end of that turn\b/i.test(text)) return "endOfTurn";
+  // Shifting Hours' *while it stays in the area* is *until it leaves*.
+  if (/\bwhile it stays in the area\b/i.test(text)) return "leaves";
   return "";
 }
 
@@ -442,6 +492,9 @@ function outcomeInSentence(rest) {
       success: { statuses: conditionsIn(deep[3]), until }
     };
   }
+  // Time Trap's *, and on a failure it is **Stunned*** (07 §12).
+  const andFail = /^,? and on a failure it is (.+?)\.?$/i.exec(rest);
+  if (andFail && conditionsIn(andFail[1]).length) return { fail: { statuses: conditionsIn(andFail[1]), until: untilIn(andFail[1]) } };
   const or = /\bor (?:be |is )?(.+)$/i.exec(rest);
   if (!or) return null;
   // Everything up to the next clause of the same sentence (*, and the area is
@@ -469,6 +522,15 @@ function outcomeAround(list) {
       fail.school = schoolOf(damage[2]);
       // Up to the next clause: *, and it may repeat the Test ...* is the escape, not the failure.
       fail.statuses = conditionsIn((damage[3] ?? "").split(/, and /)[0]);
+      found = true;
+      continue;
+    }
+    // Sandstorm's and Shifting Hours' *On a failure it is **Blinded** until the end of
+    // that turn* / *... **Slowed** while it stays in the area* (07 §12).
+    const plainFail = /^On a failure it is (.+)$/.exec(s);
+    if (plainFail && !fail.statuses.length && conditionsIn(plainFail[1]).length) {
+      fail.statuses = conditionsIn(plainFail[1]);
+      fail.until = untilIn(plainFail[1]);
       found = true;
       continue;
     }
@@ -505,6 +567,19 @@ function readChecks(list, fields = {}, body = "") {
   const holds = /\bWhile you hold both\b/.test(body) ? /\bsustaining \*\*([^*]+)\*\*/.exec(body) : null;
   for (let i = 0; i < list.length; i++) {
     const s = list[i];
+    // **WITHERING SANDS' FOLLOWING TEST** (07 §12; D-865): *If it also fails a Spirit
+    // Resilience Test against your Spell DC, it gains Decay 1* - a row made at the start of
+    // the turn the sentence before it struck, whose failure lays Decay through its one writer.
+    const also = ALSO_FAILS.exec(s);
+    if (also && i > 0 && checkTrigger(list[i - 1]) === "turn") {
+      const row = emptyCheck();
+      row.on = "turn";
+      row.resilience = RESILIENCE.get(also[1]) ?? null;
+      row.exempt = exempt;
+      row.fail.decay = Number(also[2]);
+      if (row.resilience) out.push(row);
+      continue;
+    }
     const on = checkTrigger(s);
     if (!on) continue;
     const test = CHECK_TEST.exec(s);
@@ -520,6 +595,9 @@ function readChecks(list, fields = {}, body = "") {
     // Named only where the row has one (the B9a pass), so every other row keeps its shape.
     if (FIRST_ENTRY.test(s)) row.first = true;
     if (spares) row.spares = spares;
+    // Time Trap reaches an enemy alone; Shifting Hours the creatures named at the cast alone.
+    if (FIRST_ENEMY.test(s)) row.who = "enemy";
+    if (YOU_CHOOSE.test(s)) row.picks = "named";
     const inSentence = outcomeInSentence(s.slice(test.index + test[0].length));
     if (inSentence) {
       Object.assign(row.fail, inSentence.fail ?? {});
@@ -536,6 +614,7 @@ function readChecks(list, fields = {}, body = "") {
       Object.assign(row.fail, around);
     }
     const lands = row.fail.rating !== null || row.fail.statuses.length || row.fail.bane || row.fail.lose || row.fail.kinds.length || row.success.statuses.length
+      || Number(row.fail.decay) > 0
       || row.fail.stop === true || Number(row.success.rating) > 0;
     if (lands) out.push(row);
   }
@@ -550,7 +629,7 @@ function readChecks(list, fields = {}, body = "") {
 function riderSubject(s) {
   const enemy = /^An? (undead or demon )?enemy\b/.exec(s);
   if (enemy) return { who: "enemy", kinds: enemy[1] ? ["undead", "demon"] : [] };
-  if (/^An ally\b/.test(s)) return { who: "ally", kinds: [] };
+  if (/^(?:An|Each) ally\b/.test(s)) return { who: "ally", kinds: [] };
   return { who: "creature", kinds: [] };
 }
 
@@ -591,6 +670,9 @@ function readRemains(list, against = []) {
     if (boon) { row.boonAgainst = conditionsIn(boon[1]).sort(); any = true; }
     const speed = /\b(?:its Speed drops|has its Speed drop) by (\d+) feet until it leaves\b/.exec(s);
     if (speed) { row.speed = -Number(speed[1]); any = true; }
+    // Shifting Hours' *Each ally in the area has 10 feet more Speed* (07 §12): while inside.
+    const more = /^Each ally in the area has (\d+) feet more Speed\b/.exec(s);
+    if (more) { row.speed = Number(more[1]); any = true; }
     if (/\bhealing it receives while inside is halved\b/.test(s)) {
       row.healing = "half";
       row.exceptKinds = insteadKinds;
@@ -780,6 +862,10 @@ export function castDealsDamage(sys = {}) {
   // and the card applied it once at the cast. Moonfire's 4 is the cast's own
   // and its 2 a second number (`hit`), so it keeps its Apply.
   if (creatureTickIs(sys?.tick, "damage")) return false;
+  // **AND NOT WHERE THE DAMAGE IS A RETALIATION** (07 §12's Scouring Veil: *Each creature
+  // that hits you with a melee attack takes 3 Physical damage*; D-864): the Damage field is
+  // what strikes the attacker, through the retaliation door, never the caster at the cast.
+  if (spellRetaliationFrom({ type: "spell", system: sys })) return false;
   const tick = sys?.areaTick;
   if (!hasAreaTick(tick)) return true;
   const ticks = (tick.damage?.rating ?? null) !== null || (tick.against ?? []).some(r => (r?.rating ?? null) !== null);
@@ -1008,6 +1094,10 @@ export function checksFor(tick, trigger, { relation = "other", atCentre = false,
   return (tick.checks ?? []).filter(c => {
     if (!(c.on === trigger || (c.on === "both" && (trigger === "turn" || trigger === "enter")))) return false;
     if (c.spares === "named" && named === true) return false;
+    // Shifting Hours' *A creature you choose* (07 §12): only a creature named at the cast.
+    if (c.picks === "named" && named !== true) return false;
+    // Time Trap's *The first enemy to enter it*: an enemy of the caster alone.
+    if (c.who === "enemy" && relation !== "enemy") return false;
     if (c.exempt === "caster" && relation === "self") return false;
     if (tick.excludesCaster === true && relation === "self") return false;
     if (c.where === "centre" && !atCentre) return false;
@@ -1114,7 +1204,10 @@ export function checkOutcome(check, { success = false, kinds = [] } = {}) {
     // The forced move a failure makes (Tempest's push on entering; D-778).
     forced: feet > 0 ? { feet, toward: fail.forced.toward === "toward" ? "toward" : "away" } : null,
     // *It does not cross* (the B9a pass): put back where it stood before the edge.
-    stop: fail.stop === true
+    stop: fail.stop === true,
+    // Withering Sands' Decay (07 §12, D-865), laid by `effects/decay.mjs#layDecay` - on an
+    // outcome only where its row names one.
+    ...(Number(fail.decay) > 0 ? { decay: Math.trunc(Number(fail.decay)) } : {})
   };
 }
 
@@ -1270,9 +1363,11 @@ export function riderPayload(row, { judged = false } = {}) {
 
 /**
  * **WHETHER A TIMED AREA'S SPAN IS OVER.** An area placed in a fight counts
- * that fight's rounds and ends with it - a minute has no clock outside the
- * fight it was spent in (the coating's rule, D-719). One placed outside any
- * fight counts world time at 05's six seconds a round. No span, no lapse.
+ * that fight's rounds while the fight lasts, and once it is over runs on by the
+ * world's clock from the moment it went down (O-298, the lead: *"timed areas,
+ * yes"*; it used to end with its fight). One placed outside any fight counts
+ * world time at 05's six seconds a round. No span, no lapse. A Boss Action's
+ * zone *for the rest of the encounter* still ends with its fight.
  *
  * **TEN ROUNDS FROM THE MOMENT IT WENT DOWN, NOT FROM THE ROUND** (the review,
  * N3). 05's minute is ten rounds, so the area stands until the same point in
@@ -1307,7 +1402,15 @@ export function areaLapsed({ lasts = null, placedAt = null } = {}, { time = 0, f
   if (!(rounds > 0)) return false;
   if (placedAt?.combatId) {
     const round = fights?.[placedAt.combatId];
-    if (round === undefined || round === null) return true;
+    // **A FIGHT'S AREA OUTLIVES THE FIGHT ON THE WORLD'S CLOCK** (O-298; the lead, 2026-11-10:
+    // *"timed areas, yes"*): with the fight gone the span runs on from the world time it went down,
+    // six seconds a round (05; D-893's `roundTime`), exactly as a spell's effect does - and the
+    // clock already moved six seconds for every round the fight ran, so no round is counted twice.
+    // A record that kept no world time ends with its fight, as before.
+    if (round === undefined || round === null) {
+      if (placedAt.time === null || placedAt.time === undefined || !Number.isFinite(Number(placedAt.time))) return true;
+      return (Number(time) || 0) - Number(placedAt.time) >= rounds * ROUND_SECONDS;
+    }
     const elapsed = Number(round) - (Number(placedAt.round) || 0);
     const at = placedAt.turn;
     const turn = turns?.[placedAt.combatId];
@@ -1402,7 +1505,7 @@ function cleanCheckRow(r) {
     exempt: r?.exempt === "caster" ? "caster" : "",
     fail: {
       rating: nullableNumber(fail.rating ?? null),
-      school: fail.school && AZEROTH.schools[fail.school] ? fail.school : null,
+      school: damageKey(fail.school),
       statuses: conditionList(fail.statuses),
       bane: testKind(fail.bane),
       until: AREA_UNTIL.includes(fail.until) ? fail.until : "",
@@ -1411,19 +1514,24 @@ function cleanCheckRow(r) {
         kinds: kindList(k.kinds), not: k.not === true, statuses: conditionList(k.statuses)
       })) : [],
       // *It does not cross* (the B9a pass), named only where a row names it.
-      ...(fail.stop === true ? { stop: true } : {})
+      ...(fail.stop === true ? { stop: true } : {}),
+      // Withering Sands' Decay (D-865), named only where a row names it.
+      ...(Number(fail.decay) > 0 ? { decay: Math.trunc(Number(fail.decay)) } : {})
     },
     success: {
       statuses: conditionList(success.statuses),
       until: AREA_UNTIL.includes(success.until) ? success.until : "",
       // Ring of Fire's *on a success it crosses and takes 5 Fire damage* (the B9a pass).
-      ...(successRating > 0 ? { rating: successRating, school: success.school && AZEROTH.schools[success.school] ? success.school : null } : {})
+      ...(successRating > 0 ? { rating: successRating, school: damageKey(success.school) } : {})
     },
     // **THE B9a PASS'S TWO** (the lead: *"Build the triggers"*), named only where a row
     // names one, so every row stored before them keeps its exact shape: Frozen Rune's
     // first entry, and the creatures named at the cast that a row spares.
     ...(r?.first === true ? { first: true } : {}),
-    ...(r?.spares === "named" ? { spares: "named" } : {})
+    ...(r?.spares === "named" ? { spares: "named" } : {}),
+    // The sand spells' two (07 §12), named only where a row names one.
+    ...(r?.who === "enemy" ? { who: "enemy" } : {}),
+    ...(r?.picks === "named" ? { picks: "named" } : {})
   };
 }
 
@@ -1465,7 +1573,7 @@ export function cleanAreaTick(tick) {
     if (!tick.damage || typeof tick.damage !== "object" || Array.isArray(tick.damage)) tick.damage = { rating: null, school: null };
     else {
       if ("rating" in tick.damage) tick.damage.rating = nullableNumber(tick.damage.rating);
-      if ("school" in tick.damage && tick.damage.school !== null && !AZEROTH.schools[tick.damage.school]) tick.damage.school = null;
+      if ("school" in tick.damage && tick.damage.school !== null && !isDamageTypeKey(tick.damage.school)) tick.damage.school = null;
     }
   }
   if ("heal" in tick) tick.heal = nullableNumber(tick.heal);
@@ -1476,7 +1584,7 @@ export function cleanAreaTick(tick) {
       // A row stored before a clause could name its own subject names none.
       who: AREA_TICK_WHO.includes(r.who) ? r.who : "",
       rating: nullableNumber(r.rating ?? null),
-      school: r.school && AZEROTH.schools[r.school] ? r.school : null,
+      school: damageKey(r.school),
       heal: nullableNumber(r.heal ?? null),
       instead: r.instead === true
     })) : [];
@@ -1501,7 +1609,7 @@ export function cleanAreaTick(tick) {
     else {
       const e = tick.enter;
       if ("rating" in e) e.rating = nullableNumber(e.rating);
-      if ("school" in e && e.school !== null && !AZEROTH.schools[e.school]) e.school = null;
+      if ("school" in e && e.school !== null && !isDamageTypeKey(e.school)) e.school = null;
       if ("once" in e && typeof e.once !== "boolean") e.once = e.once === true;
       if ("rounds" in e) e.rounds = typeof e.rounds === "number" && Number.isInteger(e.rounds) && e.rounds > 0 ? e.rounds : null;
       if ("sl" in e) e.sl = typeof e.sl === "number" && Number.isInteger(e.sl) ? e.sl : null;

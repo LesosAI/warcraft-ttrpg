@@ -50,7 +50,7 @@
 import { areaFor, lengthenArea, widenArea } from "../rules/areas.mjs";
 import {
   AIM_PREVIEW_HOOK, PICK_MODES, PICK_OUTCOMES, PICK_STATE_HOOK, STEP_ORIGINS, aimPreviewData, facingDegrees,
-  finitePoint, outline, pickTracker, placementSteps
+  finitePoint, outline, pickTracker, placementSteps, recordedOrigin
 } from "../rules/placement.mjs";
 import { pixelsPerFoot, placeArea, schoolColor } from "./regions.mjs";
 
@@ -495,12 +495,15 @@ export async function placeSpellArea({ spell, actor = null } = {}) {
  * @param {number} [options.lengthenFt]  Feet a talent adds to a cone's or a
  *   line's length (D-775: Cone of Cold), through `rules/areas.mjs#lengthenArea`.
  * @param {Function|null} [options.createArea] Optional authoritative writer after a confirmed pick.
+ * @param {object|null} [options.atPoint] A point the cast already recorded, `{sceneId, x, y}` in
+ *   canvas pixels (O-314: Mindstatic and Heat Mirage); `rules/placement.mjs#recordedOrigin` decides.
  * @returns {Promise<RegionDocument|null>}
  */
-export async function placeItemArea({ item = null, actor = null, areaText = null, name = null, color = null, token = null, guessToken = true, flags = null, widenFt = 0, lengthenFt = 0, accept = null, createArea = null, placementOverride = null } = {}) {
+export async function placeItemArea({ item = null, actor = null, areaText = null, name = null, color = null, token = null, guessToken = true, flags = null, widenFt = 0, lengthenFt = 0, accept = null, createArea = null, placementOverride = null, areaShape = null, atPoint = null } = {}) {
   const text = areaText ?? item?.system?.area ?? item?.system?.target ?? "";
   const label = name ?? item?.name ?? "";
-  const area = lengthenArea(widenArea(areaFor(text), widenFt), lengthenFt);
+  // `areaShape`: an area the cast worked out and the card carries (Time Trap's glyph), whole.
+  const area = areaShape ?? lengthenArea(widenArea(areaFor(text), widenFt), lengthenFt);
   if (!area) {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Area.NoArea", { name: label }));
     return null;
@@ -537,12 +540,25 @@ export async function placeItemArea({ item = null, actor = null, areaText = null
     return null;
   }
 
+  // **THE POINT THE CAST RECORDED** (O-314): laid there, with no second click; a point
+  // recorded on another scene is refused in words, never moved to this one.
+  const recorded = atPoint ? recordedOrigin(area, atPoint, scene.id, { hasToken: Boolean(centre) }) : { use: "pick" };
+  if (recorded.use === "elsewhere") {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Area.AimedElsewhere", { name: label }));
+    return null;
+  }
   // 07 §9 measures from the caster unless the entry says otherwise, so an
   // area on the caster takes no click for where it is — asking would be
   // asking the caster where they are standing.
   let origin;
   if (steps.origin === STEP_ORIGINS.TOKEN) {
     origin = areaOriginFor(area, caster);
+  } else if (recorded.use === "recorded") {
+    // **THE RECORDED POINT MEETS THE SAME RULE A CLICK DOES** (stage 11, D-906): the caller's
+    // `accept` (the Range from the caster, `canvas/range.mjs#pointAccept`) refuses it in its own
+    // words, and nothing is laid. The cast was paid before the card; Place area spends nothing.
+    if (typeof accept === "function" && !accept(recorded.origin)) return null;
+    origin = recorded.origin;
   } else {
     // `accept` holds the point to a caller's own rule and keeps the pick open on a
     // refusal (`pickPoint`'s own option): 04's Cluster Rockets aims within 60 feet
@@ -570,7 +586,7 @@ export async function placeItemArea({ item = null, actor = null, areaText = null
 
   return (createArea ?? placeArea)({
     item, areaText: text, name: label, color, scene, origin, rotation,
-    token: caster, attach: steps.attach, flags, widenFt, lengthenFt
+    token: caster, attach: steps.attach, flags, widenFt, lengthenFt, ...(areaShape ? { areaShape } : {})
   });
 }
 

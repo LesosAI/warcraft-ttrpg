@@ -42,7 +42,7 @@ import { extraPart } from "./mitigation.mjs";
  * own Unkillable and Cauterize (automatic, as built since D-768 and D-775), then
  * another creature's talent, asked in turn.
  */
-export const HOLD_ORDER = Object.freeze(["aegis", "unkillable", "cauterize", "intervention", "spiritShell", "guardianSpirit"]);
+export const HOLD_ORDER = Object.freeze(["aegis", "unkillable", "cauterize", "borrowedHour", "intervention", "spiritShell", "guardianSpirit"]);
 
 /** The holds a holder is ASKED for: another creature's talent and its use. */
 export const ASKED_HOLDS = Object.freeze(["intervention", "spiritShell", "guardianSpirit"]);
@@ -54,7 +54,7 @@ export const ASKED_HOLDS = Object.freeze(["intervention", "spiritShell", "guardi
  * down, is dealt to you instead, or all of it at rank 2* - a SHARE moved, the rest
  * staying where it was aimed (`movedAmount`'s `share`, `keptAmount`).
  */
-export const MOVE_KINDS = Object.freeze(["guardian", "righteous", "burden"]);
+export const MOVE_KINDS = Object.freeze(["guardian", "righteous", "burden", "interposed", "sentinel"]);
 
 /** What a burden move takes: half the blow, rounded down, or all of it. */
 export const MOVE_SHARES = Object.freeze(["half", "all"]);
@@ -150,13 +150,18 @@ export function moveJudgement(row = {}, {
   // A burden's half of 1 is nothing to take (the Legacy branches' B6: Shared Burden).
   if (row.kind === "burden" && !(movedAmount({ kind: "burden", amount, share: row.share }) > 0)) return { ok: false, reason: "nothing" };
   if (self === true) return { ok: false, reason: "self" };
-  if (row.kind === "guardian" && attack !== true) return { ok: false, reason: "notAttack" };
+  // 04's Interposed Moment (*when a creature you can see attacks an ally*) and Timeless
+  // Sentinel (*every attack against an ally*) are an attack's, as Guardian's is (stage 2c).
+  if (["guardian", "interposed", "sentinel"].includes(row.kind) && attack !== true) return { ok: false, reason: "notAttack" };
   // Shield of the Righteous's *a spell or attack*, and Shared Burden's *an attack or spell*.
   if ((row.kind === "righteous" || row.kind === "burden") && !(attack === true || spell === true)) return { ok: false, reason: "notAttack" };
   if (fromCard !== true) return { ok: false, reason: "notAttack" };
   if (holderUp !== true) return { ok: false, reason: "down" };
   if (friendly !== true) return { ok: false, reason: "notFriendly" };
   if (typeof distance !== "number" || distance > (Number(row.feet) || 0)) return { ok: false, reason: "tooFar" };
+  // **TIMELESS SENTINEL TAKES NOTHING** (04: *every attack against an ally within 30 feet of
+  // you targets you instead*; stage 2c): no Sand and no Reaction for each blow it draws.
+  if (row.free === true) return { ok: true, reason: null };
   const price = whole(row.cost?.amount);
   if (price > 0 && !(whole(poolValue) >= price)) return { ok: false, reason: "short" };
   if (reactionLeft !== true) return { ok: false, reason: "noReaction" };

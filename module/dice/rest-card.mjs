@@ -41,6 +41,8 @@ export async function restCard({
     // What a talent added to the Mana line above (04's Light's Reserve, D-772),
     // said beside it so the number reads as what it is.
     else if (g.kind === "talentMana") flags.push(game.i18n.format("AZEROTH.Rest.TalentMana", { name: g.name ?? "", n: g.amount ?? 0 }));
+    // Sand empties when a rest finishes (D-848), and the card says how much went.
+    else if (g.kind === "sandEmptied") lines.push({ label: game.i18n.localize("AZEROTH.Pool.Sand"), value: `\u2212${Math.abs(g.amount)}` });
   }
   if (kind === "long" && actor.type === "character" && actor.system?.resolve != null) {
     lines.push({ label: game.i18n.localize("AZEROTH.Rest.Resolve"), value: String(actor.system.resolve) });

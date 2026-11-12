@@ -26,6 +26,8 @@ import { FORCED_REFUSALS, forcedPlan, forcedStep } from "../rules/forced-movemen
 import { refusesPushFor } from "../rules/class-talents.mjs";
 import { shapeCentre } from "../rules/area-ticks.mjs";
 import { dispersionRefusal } from "../rules/dispersion.mjs";
+// 07 §12's Stasis: *cannot act, move, speak or be moved* (O-306).
+import { unmovableBy } from "../rules/chronomancer.mjs";
 
 /** The query a move of a token this client does not own goes through. */
 export const FORCED_QUERY = "azeroth-rpg.forcedMove";
@@ -84,6 +86,8 @@ async function moveHere({ token, from, feet, toward }) {
   const actor = token.actor ?? null;
   const name = token.name ?? actor?.name ?? "";
   if (dispersionRefusal(actor, "forcedMove")) return result(name, 0, false, "dispersion");
+  // **HELD BY STASIS** (07 §12: *it cannot act, move, speak or be moved*; O-306): no push, no pull.
+  if (unmovableBy([...(actor?.effects ?? [])])) return result(name, 0, false, "held");
   if (toward !== "toward" && actor && typeof actor.takenTalents === "function" && refusesPushFor(actor.takenTalents())) {
     return result(name, 0, false, "immovable");
   }
@@ -156,6 +160,7 @@ export async function forceMove({ token = null, from = null, feet = 0, toward = 
 export async function putBack({ token = null, to = null, name = "" } = {}) {
   if (!token?.parent) return result(name, 0, false, "gone");
   if (dispersionRefusal(token.actor, "forcedMove")) return result(token.name ?? name, 0, false, "dispersion");
+  if (unmovableBy([...(token.actor?.effects ?? [])])) return result(token.name ?? name, 0, false, "held");
   const at = to && Number.isFinite(Number(to.x)) && Number.isFinite(Number(to.y)) ? { x: Math.round(Number(to.x)), y: Math.round(Number(to.y)) } : null;
   if (!at) return result(token.name ?? name, 0, false, "unmeasured");
   if (!token.isOwner) return result(token.name ?? name, 0, false, "notYours");

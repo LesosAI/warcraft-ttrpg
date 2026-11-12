@@ -817,14 +817,23 @@ async function blockNow(actor, shield, messageId, targetIndex = null, { freeBy =
     lines.push(`<p class="azeroth-card-line azeroth-fired"><span>${foundry.utils.escapeHTML(retort.name)}</span><em>${game.i18n.format("AZEROTH.HolyShield.Line", { target: foundry.utils.escapeHTML(retort.target.name ?? ""), n: retort.result.damage })}</em></p>`);
     lines.push(`<div class="azeroth-card-actions"><button type="button" data-action="applyDamage" data-target-index="0" data-damage="${retort.result.damage}">${game.i18n.format("AZEROTH.Card.ApplyTo", { name: foundry.utils.escapeHTML(retort.target.name ?? "") })} <strong>${retort.result.damage}</strong></button></div>`);
   }
+  // **THE GUARDIAN OF TIME ON A BLOCK** (04, stage 2c): Turned Aside's Sand, gained here on
+  // the blocker's own client, and Grinding Block's Spirit Test, a row on this card for the
+  // attacker's owner (`effects/guardian.mjs#guardianOnBlock`).
+  const { guardianOnBlock } = await import("../effects/guardian.mjs");
+  const guard = await guardianOnBlock({ actor, messageId });
+  for (const line of guard.lines) lines.push(`<p class="azeroth-card-line azeroth-fired">${line}</p>`);
+  if (guard.resistHTML) lines.push(guard.resistHTML);
+  const card = Boolean(retort || guard.resistHTML);
   return ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
-    // A plain line as it always was; a card where Holy Shield gives it a button.
-    content: retort ? `<div class="azeroth azeroth-card azeroth-card-attack"><div class="azeroth-card-body">${lines.join("")}</div></div>` : lines.join(""),
+    // A plain line as it always was; a card where Holy Shield or Grinding Block gives it a button.
+    content: card ? `<div class="azeroth azeroth-card azeroth-card-attack"><div class="azeroth-card-body">${lines.join("")}</div></div>` : lines.join(""),
     flags: { "azeroth-rpg": {
       kind: "reaction", reaction: "block", amount: off,
       // The blow back is no attack (the retaliation's ruling, S1).
-      ...(retort ? { targets: [retort.target], damageByTarget: [retort.result], damageType: retort.type, location: "body", notAttack: true } : {})
+      ...(retort ? { targets: [retort.target], damageByTarget: [retort.result], damageType: retort.type, location: "body", notAttack: true } : {}),
+      ...(guard.grind ? { grind: guard.grind } : {})
     } }
   });
 }
@@ -1225,6 +1234,10 @@ export async function rollWithDialog(actor, spec, event = null) {
     return ordinaryWorkflow;
   };
   workflow = wrapWorkflow(workflow);
+  // **04's ECHO OF THE BLADE** (the Guardian of Time, stage 2c): every Attack Test this door
+  // makes - the first roll, Extra Attack's second - may roll echoes after it, as part of the
+  // same Attack, each on its own card (`echoingWorkflow`, `echoChain`).
+  workflow = echoingWorkflow(actor, workflow);
   const card = await workflow(args);
   // **ONE ATTACK, TWO CARDS** (02 §6, D-704). The two rolls may be at different
   // creatures and a card's Parry, Block, Apply damage and Critical Injury
@@ -1252,7 +1265,8 @@ export async function rollWithDialog(actor, spec, event = null) {
       source: args.source, modifiers: nextModifiers,
       provenanceExtra: [...(nextRoll.provenanceExtra ?? []), ...(refreshed.provenanceExtra ?? [])] };
     const confirmed=await confirmBandExtraAttack(actor,second);
-    if(confirmed)await wrapWorkflow(nextRun ?? game.system.azeroth.workflows.rollTest)(confirmed);
+    // The second roll is an Attack Test too, and may echo (stage 2c).
+    if(confirmed)await echoingWorkflow(actor, wrapWorkflow(nextRun ?? game.system.azeroth.workflows.rollTest))(confirmed);
     return card;
   }
   // The second card records the same blow: `strike` and `source` ride `args`
@@ -1260,6 +1274,102 @@ export async function rollWithDialog(actor, spec, event = null) {
   const confirmed=await confirmBandExtraAttack(actor,{ ...args, ...secondRollOverrides(actor, args, secondTargets) });
   if(confirmed)await workflow(confirmed);
   return card;
+}
+
+/**
+ * **A WORKFLOW WHOSE ATTACK TESTS ECHO** (04's Echo of the Blade, stage 2c): the workflow,
+ * and after each card it posts for an Attack Test that is no echo itself, the echo chain
+ * (`echoChain`), its echoes rolled through the workflow handed in so none echoes twice.
+ *
+ * @param {Actor} actor
+ * @param {Function} workflow
+ * @returns {Function}
+ */
+export function echoingWorkflow(actor, workflow) {
+  return async a => {
+    const card = await workflow(a);
+    if (card && !(Number(a?.echo) > 0)) await echoChain(actor, a, card, workflow);
+    return card;
+  };
+}
+
+/**
+ * **04's ECHO OF THE BLADE, ROLLED** (the Guardian of Time, stage 2c; the lead: *"if an echo
+ * of the blade attack rolls a 16-17 it triggers again. and the same for that attack if the
+ * roll is 14-15. then the echo stops."*): while the roller holds the talent and carries a
+ * shield, a roll whose d20 falls in its depth's band (`rules/echoes.mjs#echoBand`: 18-20,
+ * then 16-20, then 14-20) rolls one more - an echo - as part of the same Attack: Extra
+ * Attack's second roll's overrides (`secondRollOverrides`: `budget: "none"`, nothing paid
+ * twice), its depth on the card (`rollTest`'s `echo`), and each on its own card. *Against the
+ * same creature or another within reach*: the one chooser where another enemy stands within
+ * the roller's reach, the same creature where none does or the choice is dismissed. A Parry
+ * is no attack and never echoes. A third echo does not echo.
+ *
+ * @param {Actor} actor
+ * @param {object} args  the roll that may echo, as the workflow was handed it
+ * @param {ChatMessage} card  that roll's card
+ * @param {Function} workflow  the workflow that rolled it
+ * @returns {Promise<number>}  how many echoes were rolled
+ */
+export async function echoChain(actor, args, card, workflow) {
+  // An attack that deals damage: an Attack Test with none (a test-only roll) is no attack the
+  // echo repeats (MY READING), and a Parry is no attack at all.
+  if (!actor || args?.kind !== "attack" || args?.parry === true || !args?.damage || !card) return 0;
+  const { echoHeld, rollEchoes } = await import("../rules/echoes.mjs");
+  const { equippedShield } = await import("../rules/carried-gear.mjs");
+  let depth = Math.max(0, Math.trunc(Number(args.echo)) || 0);
+  let last = card;
+  let lastArgs = args;
+  let rolled = 0;
+  const baseSubtitle = String(args.subtitle ?? "").split(" · ").filter(s => s && s !== game.i18n.localize("AZEROTH.Attack.SecondRoll")).join(" · ");
+  for (;;) {
+    const held = echoHeld({ talents: actor.takenTalents?.() ?? [], shield: Boolean(equippedShield([...(actor.items ?? [])])) }, talentEffect);
+    if (!held) return rolled;
+    const natural = last?.rolls?.[0]?.natural ?? null;
+    if (!rollEchoes({ kind: "attack", parry: false, depth, natural }, held.floors)) return rolled;
+    depth += 1;
+    const targets = await echoTargets(actor, lastArgs, held);
+    const overrides = secondRollOverrides(actor, lastArgs, targets);
+    const next = {
+      ...lastArgs, ...overrides, echo: depth,
+      subtitle: [baseSubtitle, game.i18n.format("AZEROTH.Echo.Subtitle", { talent: held.name, n: depth })].filter(Boolean).join(" · ")
+    };
+    ui.notifications?.info(game.i18n.format("AZEROTH.Echo.Rolled", { name: actor.name, talent: held.name, n: depth, face: natural }));
+    last = await workflow(next);
+    if (!last) return rolled;
+    rolled += 1;
+    lastArgs = next;
+  }
+}
+
+/**
+ * Whom an echo is rolled at (*against the same creature or another within reach*): null for
+ * the roll's own targets, or the one snapshot picked where another enemy stands within the
+ * roller's reach - asked through the one chooser (D-673), dismissed meaning the same creature.
+ */
+async function echoTargets(actor, args, held) {
+  const same = (args.targets ?? []).map(t => t?.tokenId).filter(Boolean);
+  let within = [];
+  try {
+    const { creaturesWithin } = await import("../canvas/engaged.mjs");
+    within = creaturesWithin(actor, reachOfActor(actor), { who: "enemy" })
+      .filter(r => r.token?.id && r.actor && !same.includes(r.token.id))
+      .filter((r, i, all) => all.findIndex(x => x.token.id === r.token.id) === i);
+  } catch {
+    within = [];
+  }
+  if (!within.length) return null;
+  const sameName = (args.targets ?? []).map(t => t?.name).filter(Boolean).join(", ");
+  const rows = [
+    ...(same.length ? [{ key: "same", name: game.i18n.format("AZEROTH.Echo.Same", { name: sameName }), description: "" }] : []),
+    ...within.map(r => ({ key: r.token.id, name: r.token.name ?? r.actor.name, description: `${r.feet ?? ""} ft` }))
+  ];
+  const weapon = args.weaponId ? actor.items?.get?.(args.weaponId) ?? null : null;
+  const pick = await game.system.azeroth.workflows.chooseOption(weapon ?? actor.items?.find?.(i => i.type === "talent" && i.system?.identifier === held.identifier) ?? null, rows, null,
+    { prompt: game.i18n.format("AZEROTH.Echo.Prompt", { talent: held.name }) });
+  if (!pick || pick.key === "same") return null;
+  const token = within.find(r => r.token.id === pick.key)?.token ?? null;
+  return token ? targetSnapshots([token]) : null;
 }
 
 /**
@@ -2561,6 +2671,10 @@ export async function useAbilityWithDialog(actor, list, index, event = null) {
         return null;
       }
       return castWithDialog(actor, spell, event, { run: async args => {
+        // 07 §9's Range before the points are claimed (O-288, D-893): `castSpell` asks it
+        // again, but by then the Boss Action would already be paid.
+        const { refuseOutOfRange, spellRangeRefusal } = await import("../canvas/range.mjs");
+        if (refuseOutOfRange(spellRangeRefusal({ actor, spell, targets: args?.targets ?? [], source: args?.source ?? null }))) return null;
         const claimed = await claimBossPoints(actor, row);
         if (!claimed.ok) return null;
         return game.system.azeroth.workflows.castSpell({ ...args, actor, spell, bossAction: true });
@@ -3637,7 +3751,8 @@ export async function putInContainer(actor, item) {
  * Five families, and each of them arrived separately:
  *
  * - a **weapon** and a **suit**, which is where the rule started;
- * - an **Augment**, which 07 §3 holds in the off hand (D-674);
+ * - an **Augment**, carried in the Ranged slot for every class (D-850,
+ *   amending D-674's off hand);
  * - a thing with one of **08 §11's worn slots** (D-686) — until that, a ring
  *   could be equipped only from the item sheet's own checkbox;
  * - a **container**, which adds its wells while it is worn and comes off

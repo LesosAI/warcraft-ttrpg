@@ -111,6 +111,12 @@ export function areaFor(target) {
     };
   }
 
+  // "A wall up to 30 ft long" (07 §12's Sandwall, D-864): a line the caster places,
+  // five feet thick as 07 writes it, starting where they choose.
+  if (/\bwall\b/i.test(text)) {
+    return { shape: "line", distanceFt, widthFt: LINE_WIDTH_FT, origin: ORIGINS.POINT, wall: true };
+  }
+
   // "A 20 ft radius", "... on the ground", "... centered on you",
   // "... centered on one creature", and the `within N ft` forms, which are the
   // same circle written as a rule about who it catches.
@@ -119,6 +125,36 @@ export function areaFor(target) {
   }
 
   return null;
+}
+
+/**
+ * **AN AREA WHOSE SIZE IS THE CASTER'S INTELLIGENCE** (07 §12's Time Trap, D-864; the
+ * lead: *"5ft x intelligence modifier"*, the radius the orchestrator's reading): *You lay
+ * a glyph with a radius of 5 feet times your Intelligence modifier.* The glyph is a circle
+ * about the point placed, its radius worked out at the cast; a modifier under 1 gives the
+ * glyph its one space. `isIntScaled` answers whether an entry's area is sized so - the card's
+ * Place area then lays the glyph the cast worked out (`flags.area`), never the Target line's
+ * one space (the sweep's stage 2, D-891).
+ *
+ * @param {string} effectText
+ */
+export function isIntScaled(effectText) {
+  return /\bwith a radius of (\d+) feet times your Intelligence modifier\b/.test(String(effectText ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " "));
+}
+
+/**
+ * The glyph itself: the area to place, or the area it was handed (see above).
+ *
+ * @param {object|null} area  `areaFor(target)`
+ * @param {string} effectText
+ * @param {number} intMod  the caster's Intelligence modifier
+ */
+export function intScaledArea(area, effectText, intMod = 0) {
+  const m = /\bwith a radius of (\d+) feet times your Intelligence modifier\b/.exec(String(effectText ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " "));
+  if (!m || !area) return area;
+  const n = Math.max(0, Math.trunc(Number(intMod)) || 0);
+  if (n < 1) return area;
+  return { shape: "circle", distanceFt: Number(m[1]) * n, origin: ORIGINS.POINT };
 }
 
 /**

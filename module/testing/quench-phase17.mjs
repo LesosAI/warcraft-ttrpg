@@ -1,10 +1,10 @@
 /**
  * Augments — the class equipment a caster casts through (07 §3, 08 §9;
- * D-674). Held in the off hand, one at a time, class-locked, and worth its
- * grade on the Casting Test and on nothing else.
+ * D-674). Carried in the Ranged slot (D-850), one at a time, class-locked, and
+ * worth its grade on the Casting Test and on nothing else.
  */
 
-import { cleanup, firstFromPack, gearTab, inspect, makeCharacter, openSheet, pinDie, settle, PACK_FOR } from "./fixtures.mjs";
+import { cleanup, firstFromPack, gearTab, give, inspect, makeCharacter, openSheet, pinDie, settle, PACK_FOR } from "./fixtures.mjs";
 import { castWithDialog } from "../applications/actions.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { checkText } from "./geometry.mjs";
@@ -231,6 +231,36 @@ export function augmentBatch(context) {
       } finally {
         dialog?.close();
         await cast.catch(() => null);
+      }
+    });
+
+    // D-850 (the lead: "An augment should use the ranged weapon slot for all
+    // classes"): pressed through the Gear tab's own Equip, the door a player uses.
+    it("is carried in the Ranged slot: beside a two-handed staff, and a bow puts it away (D-850)", async function () {
+      this.timeout(60000);
+      const actor = await makeCharacter({ name: "ZZ Aug Ranged", classes: [["Mage", 3]] });
+      const staff = await give(actor, "Quarterstaff", PACK_FOR.weapon);
+      const focus = await giveAugment(actor, "Focus (+1)");
+      const bow = await give(actor, "Shortbow", PACK_FOR.weapon);
+      const sheet = await openSheet(actor);
+      const press = async item => {
+        await sheet.render({ force: true });
+        await settle();
+        (await rowFor(sheet, item.id)).querySelector('[data-action="toggleEquipped"]').click();
+      };
+      try {
+        sheet.changeTab("gear", "primary");
+        await press(staff);
+        await until(() => staff.system.equipped === true, "the staff in hand");
+        await press(focus);
+        await until(() => focus.system.equipped === true, "the focus in the Ranged slot");
+        assert.isTrue(staff.system.equipped, "a two-handed staff was put away for an Augment");
+        await press(bow);
+        await until(() => bow.system.equipped === true, "the bow in the Ranged slot");
+        await until(() => focus.system.equipped === false, "the focus put away for the bow");
+        assert.isTrue(staff.system.equipped, "the bow put the staff away");
+      } finally {
+        await sheet.close();
       }
     });
   });

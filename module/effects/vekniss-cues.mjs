@@ -2,7 +2,8 @@
 export async function postVeknissPulse({ actor, combat, phase } = {}) {
   if (!["mature", "tick"].includes(phase) || !game.user?.isGM) return false;
   const combatant = combat?.combatant;
-  let sceneId = combat?.scene?.id ?? combat?.sceneId;
+  // The scene the combatant's token stands on (O-294): core makes a fight unlinked.
+  let sceneId = combatant?.token?.parent?.id ?? combatant?.sceneId ?? combat?.scene?.id ?? combat?.sceneId;
   let token = sceneId && combatant?.tokenId ? game.scenes?.get(sceneId)?.tokens?.get(combatant.tokenId) : null;
   if (combat && (!token || combatant?.actor?.uuid !== actor?.uuid)) return false;
   if (!combat) {

@@ -375,6 +375,14 @@ export function stateEntriesOf(flags, { only = null } = {}) {
       if (feature) add(key, feature);
       continue;
     }
+    // **07 §9's DECAY** (the lead: *"the decay animation should be like sand or rust/dust
+    // appearance"*; stage 2b): its `source` is the SPELL that laid it, so it is named for
+    // Decay itself, and its state is two steps by X - a light Decay and a heavy one.
+    if (key === "decay") {
+      const x = Math.trunc(Number(value.value)) || 0;
+      if (x > 0) add(x >= 2 ? "decayHeavy" : "decay", "Decay", value.by ?? null);
+      continue;
+    }
     if (text(value.cast)) continue;
     const source = text(value.source);
     if (source && !uuidLike(source)) add(key, source, value.by ?? value.caster ?? value.setter ?? value.ownerUuid ?? null);
@@ -551,6 +559,9 @@ export function hitKeysOf(flags = {}) {
   add(flags?.fromFeature?.key);
   for (const key of Array.isArray(flags?.patchedBy) ? flags.patchedBy : []) add(key);
   for (const key of Array.isArray(flags?.ridden) ? flags.ridden : []) add(key);
+  // 04's Echo of the Blade (the Chronomancer's stage 2c): an echo's roll, at its depth
+  // (`dice/workflows.mjs#attackRecords`), plays the talent's flash on its hit.
+  if (Number(flags?.echo?.depth) > 0) add(flags.echo.key);
   return out;
 }
 

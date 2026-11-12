@@ -11,6 +11,18 @@
 import { AZEROTH } from "../config.mjs";
 import { coins, copperFrom } from "../helpers/coins.mjs";
 import { GADGETS_PACK, GADGET_ENTRY_FLAG } from "../rules/gadgets.mjs";
+import { augmentOf } from "../rules/augments.mjs";
+import { crestPath } from "../rules/crests.mjs";
+
+/**
+ * The three places a Signature descriptor names a gate (D-692, D-722): the
+ * trunk's `gates`, the button's `useGates`, and each gated sentence's own.
+ * Indexed on every category whose documents carry a Signature, so a class gate
+ * can draw that class's emblem (`classBadges`).
+ */
+const SIGNATURE_GATES = [
+  "system.signatureEffect.gates", "system.signatureEffect.useGates", "system.signatureEffect.gated"
+];
 
 /** Where a gadget's entry carries 04's Use cell (`rules/gadgets.mjs#GADGET_ENTRY_FLAG`). */
 const GADGET_USE = `flags.azeroth-rpg.${GADGET_ENTRY_FLAG}.use`;
@@ -90,7 +102,7 @@ export const CATEGORIES = Object.freeze({
   careers: {
     pack: "azeroth-rpg.careers",
     label: "AZEROTH.Browser.Careers",
-    fields: ["system.tier", "system.grantor", "system.inCareer"],
+    fields: ["system.tier", "system.grantor", "system.inCareer", ...SIGNATURE_GATES],
     filters: () => ({
       tier: { label: "AZEROTH.Browser.Tier", path: "system.tier", choices: AZEROTH.careerTiers },
       inCareer: { label: "AZEROTH.Browser.InCareerSkill", path: "system.inCareer", choices: AZEROTH.skills, kind: "includes" }
@@ -115,7 +127,7 @@ export const CATEGORIES = Object.freeze({
   weapons: {
     pack: "azeroth-rpg.weapons",
     label: "AZEROTH.Browser.Weapons",
-    fields: ["system.rating", "system.range", "system.traits", "system.rarity", "system.cost", "system.source.section", "system.weaponType"],
+    fields: ["system.rating", "system.range", "system.traits", "system.rarity", "system.cost", "system.source.section", "system.weaponType", ...SIGNATURE_GATES],
     filters: () => ({
       weaponType: { label: "AZEROTH.Item.WeaponType", path: "system.weaponType", choices: AZEROTH.weaponTypes },
       shelf: { label: "AZEROTH.Browser.Shelf", path: "system.source.section", kind: "tail" },
@@ -132,7 +144,7 @@ export const CATEGORIES = Object.freeze({
     // its traits nor shown carrying any (the lead, 2026-09-07). An unindexed
     // field silently reads as absent rather than erroring, which is why the
     // gap was invisible.
-    fields: ["system.category", "system.cuts", "system.traits", "system.rarity", "system.cost"],
+    fields: ["system.category", "system.cuts", "system.traits", "system.rarity", "system.cost", ...SIGNATURE_GATES],
     filters: () => ({
       category: { label: "AZEROTH.Browser.Category", path: "system.category", choices: AZEROTH.armorCategories },
       cut: { label: "AZEROTH.Item.Cuts", path: "system.cuts", kind: "includes", choices: AZEROTH.armorCuts },
@@ -161,7 +173,11 @@ export const CATEGORIES = Object.freeze({
       "system.slot",
       // 08 §12's food and drink (D-733), stored for the same reason: a Short
       // Rest needs one of each and *what can I eat* is a shopping question.
-      "system.provision"
+      "system.provision",
+      // A Classic relic says which Augment it is on this flag (D-685), and the
+      // class emblem reads it through `augmentOf` (D-849).
+      "flags.azeroth-rpg.augment",
+      ...SIGNATURE_GATES
     ],
     filters: () => ({
       shelf: { label: "AZEROTH.Browser.Shelf", path: "system.source.section", kind: "tail" },
@@ -414,6 +430,80 @@ export function entryMatches(entry, defs, states, query = null, clean = s => s) 
     if (!matchesFilter(entry, def, states?.get(id))) return false;
   }
   return true;
+}
+
+/** `Chromatic Champion` -> `chromatic-champion`, the class pack's identifier. */
+function classIdentifier(name) {
+  return String(name ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+/** Every class a Signature descriptor's gates name: the trunk, the button and each sentence. */
+function signatureClasses(effect) {
+  if (!effect || typeof effect !== "object") return [];
+  const gates = [
+    ...(Array.isArray(effect.gates) ? effect.gates : []),
+    ...(Array.isArray(effect.useGates) ? effect.useGates : []),
+    ...(Array.isArray(effect.gated) ? effect.gated.flatMap(g => (Array.isArray(g?.gates) ? g.gates : [])) : [])
+  ];
+  return gates.filter(g => g?.kind === "class" && g.value).map(g => String(g.value));
+}
+
+/**
+ * **THE CLASS EMBLEMS A BROWSER ROW DRAWS** (D-862; the lead: *"include the class
+ * emblem in the character creator and the gear/item/spell entry within the
+ * compendium browser"*, for every class, the orchestrator's reading). Pure: an
+ * index entry in, a list of `{className, identifier, src}` out, sorted by name so
+ * the row never wobbles (CLAUDE.md §15).
+ *
+ * - **spells**: one per class on the CLASSES line (`system.classes`), so an open
+ *   Arcane spell shows the Mage, the Druid and the Chronomancer;
+ * - **talents** and **legacies**: `system.className`;
+ * - **gear**: an Augment's category's class, through `augments.mjs#augmentOf`
+ *   off the indexed `system.source.section`, the name and a Classic relic's flag
+ *   (never a second copy of the reader: `system.augment` is derived and absent
+ *   from the index);
+ * - **weapons, armor, gear and careers**: every class a Signature's gate names.
+ *
+ * **A class with no crest draws nothing** (`crests.mjs#crestPath` answers null),
+ * never a broken image: an `<img>` that 404s is a console error.
+ *
+ * @param {string} category  a key of `CATEGORIES`
+ * @param {{name?: string, system?: object, flags?: object}} entry
+ * @returns {{className: string, identifier: string, src: string}[]}
+ */
+export function classBadges(category, entry) {
+  const s = entry?.system ?? {};
+  const names = [];
+  switch (category) {
+    case "spells":
+      if (Array.isArray(s.classes)) names.push(...s.classes);
+      break;
+    case "talents":
+    case "legacies":
+      if (s.className) names.push(s.className);
+      break;
+    case "gear": {
+      const augment = augmentOf({ name: entry?.name, system: s, flags: entry?.flags });
+      if (augment) names.push(augment.className);
+      names.push(...signatureClasses(s.signatureEffect));
+      break;
+    }
+    case "weapons":
+    case "armor":
+    case "careers":
+      names.push(...signatureClasses(s.signatureEffect));
+      break;
+    default:
+      break;
+  }
+  const seen = new Map();
+  for (const name of names) {
+    const className = String(name ?? "").trim();
+    const identifier = classIdentifier(className);
+    const src = crestPath(identifier);
+    if (src && !seen.has(identifier)) seen.set(identifier, { className, identifier, src });
+  }
+  return [...seen.values()].sort((a, b) => a.className.localeCompare(b.className));
 }
 
 /**

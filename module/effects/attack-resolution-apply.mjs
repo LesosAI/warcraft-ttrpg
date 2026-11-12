@@ -6,6 +6,7 @@ import { sparedFor, halvesFor } from "../rules/resisted.mjs";
 import { signatureApplyRows } from "../rules/signature-apply.mjs";
 import { queueSignatureCard } from "./signature-card-queue.mjs";
 import { hasMirrorImage, interceptMirrorImage } from "./mirror-image-hit.mjs";
+import { applyRefusalKey, rowStage } from "../rules/applied-rows.mjs";
 
 // These two spells have their own payment/ending delivery coordinators.
 // They must join signature delivery there, never bypass those transactions.
@@ -121,7 +122,11 @@ export async function requestAttackApply(message, index, operation = "apply") {
     const flags = message.flags?.["azeroth-rpg"];
     const chain = flags?.kind === "spell" && flags.identifier === "chain-lightning";
     const key = chain ? ({ arcOrder: "ArcOrder", resolved: "Applied" }[result?.reason] ?? "ResolutionRefused") : null;
-    ui.notifications?.warn(game.i18n.localize(key ? `AZEROTH.ChainLightning.${key}` : "AZEROTH.Foresight.ResolutionRefused"));
+    if (key) return ui.notifications?.warn(game.i18n.localize(`AZEROTH.ChainLightning.${key}`));
+    // **A PRESS ON A ROW ALREADY APPLIED SAYS SO** (D-888; the lead's play-test): it was
+    // answered *not confirmed*, which reads as the damage never landing.
+    const said = applyRefusalKey(result, rowStage(message.flags?.["azeroth-rpg"], index));
+    ui.notifications?.warn(game.i18n.format(said, { name: flags?.targets?.[index]?.name ?? "" }));
   };
   try {
     const data = { messageUuid: message.uuid, index, operation };

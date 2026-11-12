@@ -11,15 +11,19 @@ import { AZEROTH } from "../config.mjs";
 const ARMOR_ORDER = Object.keys(AZEROTH.armorCategories);
 const sysOf = item => item?.system ?? item ?? {};
 
-export function trainingProfile({ classes = [], talents = [], extraArmor = [] } = {}) {
+export function trainingProfile({ classes = [], talents = [], extraArmor = [], extraShields = false, rowOf = undefined } = {}) {
   const rows = classes.map(sysOf);
   const talentRows = talents.map(t => ({ name: t.name, ...sysOf(t) }));
-  const access = [...rows.flatMap(c => c.armor ?? []), ...extraArmor, ...armorAccessFor(talentRows).categories];
+  // `rowOf` is `armorAccessFor`'s own seam (its default is the talent table).
+  const byTalent = armorAccessFor(talentRows, rowOf);
+  const access = [...rows.flatMap(c => c.armor ?? []), ...extraArmor, ...byTalent.categories];
   const ceiling = Math.max(0, ...access.map(c => ARMOR_ORDER.indexOf(c)));
   return {
     known: rows.length > 0,
     armor: ARMOR_ORDER.slice(0, ceiling + 1),
-    shields: rows.some(c => c.shields === true),
+    // A shield by class, or by a talent taken (D-855: Bronzed Steel's *carry a
+    // shield*), or by the creator's talent pick (`extraShields`).
+    shields: rows.some(c => c.shields === true) || extraShields === true || byTalent.shields,
     weapons: [...new Set(rows.flatMap(c => String(c.weapons ?? "").toLowerCase().split(",").map(s => s.trim()).filter(Boolean)))]
   };
 }
@@ -67,7 +71,10 @@ export function weaponTraining(item, access = []) {
   const grip = gripOf(doc);
   const shortBlade = dagger || (sword && (form === "shortsword" || /\bLight\b/i.test((sys.traits ?? []).join(" "))));
   const oneHanded = ["light", "one-handed", "hand-and-a-half"].includes(grip);
-  return access.some(a => (a === "daggers" && dagger) || (a === "blades" && (dagger || sword || type === "glaive"))
+  // **"swords"** is 02's Chronomancer row (*Daggers, swords, staves, wands*): every sword, short
+  // or long, and no dagger, which is its own word on the same row (the live fix: the word was in
+  // no branch, so every sword a Chronomancer drew carried the untrained Bane).
+  return access.some(a => (a === "daggers" && dagger) || (a === "swords" && sword) || (a === "blades" && (dagger || sword || type === "glaive"))
     || (a === "short blades" && shortBlade) || (a === "staves" && staff) || (a === "maces" && mace)
     || (a === "hammers" && hammer) || (a === "axes" && axe) || (a === "polearms" && polearm)
     || (a === "wands" && wand) || (a === "claws" && claw) || (a === "thrown" && thrown)

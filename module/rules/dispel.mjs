@@ -37,6 +37,27 @@
  * selected too, since it is an effect*), a draught's or a Signature's effect - may
  * be selected. A disabled effect is not listed at all: it stands on nobody.
  *
+ * ## A Sustained spell is dispelled as the cast (O-308)
+ *
+ * The lead, 2026-11-11: *"308 - sustained spells are ended by dispel, so Sand Prison would be
+ * stopped."* 07 §7's table: a Sustained spell is *Ended by **Dispel***. An effect that belongs to
+ * a Sustained cast - the sustained carrier's mark (`sustained`, `cast`) with its caster as the
+ * origin, a condition laid by a failed Resist or the card's Apply as much as a buff - is listed
+ * and ended AS THE CAST (`sustain` on the verdict), where the caster still holds that cast
+ * (`held`, read off the caster's Sustain list by the door): the door ends the Sustain through the
+ * one end door, which takes every effect the cast laid on every creature, its area and its
+ * upkeep. D-778's *not conditions* still holds for a bare condition no held cast laid, and a
+ * caster under 07's Archmage (*no creature may end a Sustained spell of yours by any means*) is
+ * refused as before. A door that hands no `held` (Devour Magic, the Nullifier, the Obsidian
+ * Destroyer) judges exactly as it did.
+ *
+ * ## An area Sustain with nothing laid on a creature (O-312)
+ *
+ * The lead, 2026-11-11: *"312 - yes it can"*. A held Sustain is reached through its CASTER, a
+ * creature standing in its AREA, or the area itself (`castsReached`), listed as a row of its own
+ * (`heldCastKey`) and ended through the same one end door, once. 04's Disenchant and 07's Unweave
+ * reach it the same way (the lead: *"unweave - yes"*, *"disenchant - yes"*).
+ *
  * ## The warlock's two talents
  *
  * *Your ongoing effects* is `class-talents.mjs#swappableEffects`' reading (D-775):
@@ -88,6 +109,21 @@ function statusesOf(effect) {
 }
 
 /**
+ * **THE SUSTAINED CAST AN EFFECT BELONGS TO** (O-308): `{cast, by}` where the effect wears the
+ * sustained carrier's mark (`sustained`, `cast`) and names its caster as the origin - else null.
+ * Whether the caster still holds the cast is the door's to read.
+ *
+ * @param {{origin?: string|null, flags?: object}|null} effect
+ * @returns {{cast: string, by: string}|null}
+ */
+export function sustainOf(effect) {
+  const f = flagsOf(effect);
+  if (f.sustained !== true || typeof f.cast !== "string" || !f.cast) return null;
+  const by = typeof effect?.origin === "string" && effect.origin ? effect.origin : null;
+  return by ? { cast: f.cast, by } : null;
+}
+
+/**
  * **WHOSE ONGOING EFFECT THIS IS** (04's *your ongoing effects*, D-775's reading in
  * `swappableEffects`): the uuid of the hand that laid a tick, the origin of a laid
  * spell, the origin of a Bane a Curse laid - or null.
@@ -123,14 +159,28 @@ export function spellCasterOf(effect) {
  *
  * @param {{id?: string, name?: string, statuses?: Iterable<string>, origin?: string|null, flags?: object, disabled?: boolean}} effect
  *   plain: an Active Effect's id, name, statuses, origin, flags and whether it is switched off
- * @param {{archmage?: Iterable<string>}} [o]  the uuids of casters a laid Archmage stands on
- * @returns {{ok: boolean, reason: string|null, by: string|null, conditions: string[]}}
+ * **AN EFFECT OF A HELD SUSTAINED CAST** (O-308) is judged as the cast: where `held` names its
+ * cast, a condition on it does not grey it, and the verdict carries `sustain {cast, by}` - the
+ * door ends the Sustain, never the effect alone. Archmage and a talent's mark still refuse it.
+ *
+ * @param {{archmage?: Iterable<string>, held?: Iterable<string>}} [o]  the uuids of casters a laid
+ *   Archmage stands on; the casts their casters still hold
+ * @returns {{ok: boolean, reason: string|null, by: string|null, conditions: string[], sustain?: {cast: string, by: string}}}
  */
-export function dispelJudgement(effect, { archmage = [] } = {}) {
+export function dispelJudgement(effect, { archmage = [], held = [] } = {}) {
   const f = flagsOf(effect);
   const statuses = statusesOf(effect);
   const refuse = (reason, extra = {}) => ({ ok: false, reason, by: null, conditions: [], ...extra });
   if (sustainTransferPending(effect)) return refuse("transfer");
+  const sustain = sustainOf(effect);
+  const heldCasts = held instanceof Set ? held : new Set(held ?? []);
+  const archmageOn = archmage instanceof Set ? archmage : new Set(archmage ?? []);
+  if (sustain && heldCasts.has(sustain.cast)) {
+    if (archmageOn.has(sustain.by)) return refuse("archmage");
+    const mark = f[UNDISPELLABLE_FLAG];
+    if (mark && typeof mark === "object") return refuse("marked", { by: typeof mark.by === "string" ? mark.by : null });
+    return { ok: true, reason: null, by: null, conditions: [], sustain };
+  }
   const conditions = statuses.filter(s => AZEROTH.conditions?.[s]);
   if (conditions.length) return refuse("condition", { conditions: [...conditions].sort() });
   if (statuses.length && !Object.keys(f).length) return refuse("status");
@@ -144,10 +194,101 @@ export function dispelJudgement(effect, { archmage = [] } = {}) {
   if (ward && typeof ward === "object" && ward.undispellable === true) {
     return refuse("marked", { by: typeof ward.undispellableBy === "string" && ward.undispellableBy ? ward.undispellableBy : null });
   }
-  const held = archmage instanceof Set ? archmage : new Set(archmage ?? []);
   const caster = spellCasterOf(effect);
-  if (caster && held.has(caster)) return refuse("archmage");
+  if (caster && archmageOn.has(caster)) return refuse("archmage");
   return { ok: true, reason: null, by: null, conditions: [] };
+}
+
+/**
+ * **A HELD SUSTAIN REACHED WITH NOTHING OF IT ON THE CREATURE** (O-312; the lead, 2026-11-11:
+ * *"312 - yes it can"*). D-899 lists a Sustained cast where an effect it laid stands on the
+ * creature aimed at. An area Sustain whose start-of-turn Test lays an unmarked condition
+ * (Sandstorm, Shifting Hours, The Deep, Thornguard) leaves nothing of the cast on anybody, so
+ * the lead's ruling reaches it three ways, each ending the same cast once through the one end
+ * door:
+ *
+ * - **aimed at the CASTER** - every Sustain the creature aimed at holds (`by`, its uuid);
+ * - **aimed at a CREATURE standing in the area** - every held AREA whose Region contains it
+ *   (`inside`, asked of the token document by the door);
+ * - **aimed at the AREA itself** - every held area whose Region contains the point picked
+ *   (`inside`, with no `by`).
+ *
+ * `held` is every Sustain the door could reach, keyed by cast: `{spell, caster, by, area,
+ * marked?, transfer?}`. An entry that is not an area is reached only through its caster.
+ *
+ * @param {Record<string, {by?: string, area?: boolean}>} held
+ * @param {{by?: string|null, inside?: Iterable<string>}} [aim]
+ * @returns {string[]}  the casts reached, sorted
+ */
+export function castsReached(held = {}, { by = null, inside = [] } = {}) {
+  const within = new Set(inside ?? []);
+  return Object.keys(held ?? {}).filter(cast => {
+    const row = held[cast];
+    if (!row || typeof row !== "object") return false;
+    if (by && row.by === by) return true;
+    return row.area === true && within.has(cast);
+  }).sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * **WHETHER A REACHED HELD CAST MAY BE ENDED** (O-312), by the same refusals D-899's held cast
+ * keeps: an unfinished Spellsteal transfer, a caster under 07's Archmage (*no creature may end a
+ * Sustained spell of yours by any means*), and a talent's mark (`undispellable`, read off the
+ * cast's card). No Test: 02's Dispel names none for a Sustained spell, and D-899 ends a held
+ * creature's Sustain with none, so one rule covers both (MY READING, for the lead: O-313).
+ *
+ * @param {{by?: string, marked?: {by?: string}|null, transfer?: boolean}} row
+ * @param {{archmage?: Iterable<string>}} [o]
+ * @returns {{ok: boolean, reason: string|null, by: string|null}}
+ */
+export function judgeHeldCast(row, { archmage = [] } = {}) {
+  const archmageOn = archmage instanceof Set ? archmage : new Set(archmage ?? []);
+  if (row?.transfer === true) return { ok: false, reason: "transfer", by: null };
+  if (row?.by && archmageOn.has(row.by)) return { ok: false, reason: "archmage", by: null };
+  const mark = row?.marked;
+  if (mark && typeof mark === "object") return { ok: false, reason: "marked", by: typeof mark.by === "string" ? mark.by : null };
+  return { ok: true, reason: null, by: null };
+}
+
+/** The chooser's key for a reached held cast: no effect id, so it can never be deleted as one. */
+export const HELD_CAST_KEY = "sustain-";
+
+/** A reached cast's chooser key. */
+export function heldCastKey(cast) {
+  return `${HELD_CAST_KEY}${cast}`;
+}
+
+/**
+ * **WHAT A HELD-CAST QUERY MAY CARRY** (O-312): the casts, as strings of the shape a cast id
+ * takes, once each, sorted - a chooser key is read back to its cast.
+ *
+ * @param {unknown} casts
+ * @returns {string[]}
+ */
+export function cleanCastIds(casts) {
+  if (!Array.isArray(casts)) return [];
+  const out = new Set();
+  for (const c of casts) {
+    if (typeof c !== "string") continue;
+    const cast = c.startsWith(HELD_CAST_KEY) ? c.slice(HELD_CAST_KEY.length) : c;
+    if (/^[A-Za-z0-9]{1,64}$/.test(cast)) out.add(cast);
+  }
+  return [...out].sort();
+}
+
+/**
+ * **A POINT A DISPEL WAS AIMED AT** (O-312, the area itself): `{sceneId, x, y}` with finite
+ * canvas pixels and an id of the scene's shape, or null.
+ *
+ * @param {unknown} at
+ * @returns {{sceneId: string, x: number, y: number}|null}
+ */
+export function cleanAimPoint(at) {
+  if (!at || typeof at !== "object") return null;
+  const x = Number(at.x);
+  const y = Number(at.y);
+  const sceneId = typeof at.sceneId === "string" && /^[A-Za-z0-9]{1,64}$/.test(at.sceneId) ? at.sceneId : null;
+  return sceneId && Number.isFinite(x) && Number.isFinite(y) ? { sceneId, x, y } : null;
 }
 
 /**
@@ -156,16 +297,57 @@ export function dispelJudgement(effect, { archmage = [] } = {}) {
  * of one creature list it the same way (CLAUDE.md §15: an embedded collection's
  * order is not stable). A switched-off effect is not listed.
  *
+ * **A HELD SUSTAINED CAST IS ONE ROW** (O-308): every effect of one cast the caster still holds
+ * (`sustains`, keyed by cast) folds into a single row named for the spell, carrying `sustain
+ * {cast, by, spell, caster, held}` - who casts it and the creatures it stands on - and keyed by
+ * the lowest id among them; it is greyed where any of them is refused (Archmage, a mark).
+ *
+ * **AND EVERY HELD SUSTAIN REACHED WITH NOTHING OF IT ON THE CREATURE** (O-312): `reached`,
+ * keyed by cast as `castsReached` answers it, each a row of its own keyed `sustain-<cast>`
+ * (`heldCastKey`) and judged by `judgeHeldCast`; a cast already folded from an effect on the
+ * creature is listed once, as that row.
+ *
  * @param {Array<object>} effects  plain, as `dispelJudgement` takes them
- * @param {{archmage?: Iterable<string>}} [o]
- * @returns {Array<{id: string, name: string, available: boolean, reason: string|null, by: string|null, conditions: string[]}>}
+ * @param {{archmage?: Iterable<string>, sustains?: Record<string, {spell?: string, caster?: string, held?: string[]}>, reached?: Record<string, {spell?: string, caster?: string, held?: string[], by?: string, area?: boolean, marked?: object|null, transfer?: boolean}>}} [o]
+ * @returns {Array<{id: string, name: string, available: boolean, reason: string|null, by: string|null, conditions: string[], sustain?: object}>}
  */
-export function dispelOptions(effects = [], { archmage = [] } = {}) {
+export function dispelOptions(effects = [], { archmage = [], sustains = {}, reached = {} } = {}) {
   const out = [];
+  const held = new Set(Object.keys(sustains ?? {}));
+  const casts = new Map();
   for (const e of effects ?? []) {
     if (!e?.id || e.disabled === true) continue;
-    const judged = dispelJudgement(e, { archmage });
+    const judged = dispelJudgement(e, { archmage, held });
+    const sustain = sustainOf(e);
+    if (sustain && held.has(sustain.cast)) {
+      casts.set(sustain.cast, [...(casts.get(sustain.cast) ?? []), { e, judged, sustain }]);
+      continue;
+    }
     out.push({ id: String(e.id), name: String(e.name ?? ""), available: judged.ok, reason: judged.reason, by: judged.by, conditions: judged.conditions });
+  }
+  for (const [cast, members] of casts) {
+    const sorted = [...members].sort((a, b) => String(a.e.id).localeCompare(String(b.e.id)));
+    const first = sorted[0];
+    const refused = sorted.find(m => !m.judged.ok) ?? null;
+    const info = sustains?.[cast] ?? {};
+    const spell = String(info.spell || first.e.name || "");
+    out.push({
+      id: String(first.e.id), name: spell, available: !refused, reason: refused?.judged.reason ?? null, by: refused?.judged.by ?? null, conditions: [],
+      sustain: { cast, by: first.sustain.by, spell, caster: String(info.caster ?? ""), held: [...(info.held ?? [])].map(String).sort((a, b) => a.localeCompare(b)) }
+    });
+  }
+  for (const cast of Object.keys(reached ?? {}).sort((a, b) => a.localeCompare(b))) {
+    const info = reached[cast];
+    if (!info || typeof info !== "object" || casts.has(cast)) continue;
+    const judged = judgeHeldCast(info, { archmage });
+    const spell = String(info.spell ?? "");
+    out.push({
+      id: heldCastKey(cast), name: spell, available: judged.ok, reason: judged.reason, by: judged.by, conditions: [],
+      sustain: {
+        cast, by: String(info.by ?? ""), spell, caster: String(info.caster ?? ""), area: info.area === true, reached: true,
+        held: [...(info.held ?? [])].map(String).sort((a, b) => a.localeCompare(b))
+      }
+    });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 }
@@ -189,7 +371,7 @@ export function dispelTargetRefusal({ named = 0, further = 0 } = {}) {
  * rank 2: *Dispel and similar effects end one of them only on a Casting Test that
  * meets or exceeds SL 2*): each effect whose ongoing owner holds the talent at
  * that rank. One Test an effect (MY READING, for the lead: *one of them* is each
- * one ended).
+ * one ended). Never a Sustained cast's effect (O-308; 07 §7).
  *
  * @param {Array<object>} effects  plain, the ones the user selected
  * @param {Record<string, {sl: number, name: string}|null>} gates  the gate each owner's talents set, by uuid
@@ -198,6 +380,9 @@ export function dispelTargetRefusal({ named = 0, further = 0 } = {}) {
 export function dispelGated(effects = [], gates = {}) {
   const out = [];
   for (const e of effects ?? []) {
+    // A Sustained cast's effect is not an ongoing effect (07 §7: *Talents that speak of your
+    // ongoing effects mean what an Instant spell left behind*), so no gate holds it (O-308).
+    if (sustainOf(e)) continue;
     const owner = ongoingOwner(e);
     const gate = owner ? gates?.[owner] ?? null : null;
     if (!gate || !(Number(gate.sl) > 0)) continue;

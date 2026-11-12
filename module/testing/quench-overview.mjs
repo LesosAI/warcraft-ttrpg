@@ -193,9 +193,9 @@ export function overviewBatch(context) {
         for (const slot of ["body", "mainHand", "offHand", "ranged", "ammo"]) {
           assert.ok(tileFor(panel, slot), `no tile for ${slot}`);
         }
-        // A shield and an Augment are HELD IN THE OFF HAND (07 §3, D-674) and
-        // draw no tile of their own since D-689; the Off hand names which it
-        // is showing instead.
+        // A shield (held in the off hand) and an Augment (carried in the Ranged
+        // slot, D-850) draw no tile of their own since D-689; the Off hand and
+        // the Ranged tile name which they are showing instead.
         for (const gone of ["shield", "augment"]) {
           assert.isNull(tileFor(panel, gone), `${gone} still draws a tile of its own`);
         }

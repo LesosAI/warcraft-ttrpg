@@ -96,6 +96,7 @@ import * as v0130 from "./0.13.0-afflictions.mjs";
 import * as v0131 from "./0.13.1-bestiary-descriptors.mjs";
 import * as v0132 from "./0.13.2-boss-actions.mjs";
 import * as v0134 from "./0.13.4-creature-plans.mjs";
+import * as v0143 from "./0.14.3-augment-ranged.mjs";
 import { forgetPacks } from "./walk.mjs";
 
 // Ordered oldest to newest. Add new entries at the end.
@@ -251,7 +252,10 @@ const CHAIN = [
   { version: "0.13.2", module: v0132 },
   // 0.13.4: six of D-807's shells take their Use - Battle Squawk, Named Quarry, Counterspell,
   // Arcane Torrent, Calls the Watch and Berserk - only where a row still holds an old pack copy (D-811).
-  { version: "0.13.4", module: v0134 }
+  { version: "0.13.4", module: v0134 },
+  // 0.14.3: an Augment is carried in the Ranged slot for every class; an actor holding an
+  // equipped launcher beside an equipped Augment keeps the Augment and bags the launcher (D-850).
+  { version: "0.14.3", module: v0143 }
 ];
 
 /**

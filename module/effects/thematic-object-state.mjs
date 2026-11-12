@@ -174,7 +174,21 @@ async function ensureHeatMirageTile(receipt, state) {
   } catch { return refuse("illusion-tile-create-failed"); }
 }
 
-async function removeHeatMirageTile(record, ticket) {
+/**
+ * **ONE TILE REMOVAL AT A TIME** (found by Stage 9's live test, O-314): ending a Heat Mirage
+ * writes its receipt, the write's `updateChatMessage` runs `reconcileHeatMirages`, and that
+ * reconcile and the operation that ended it each found the tile and each deleted it - the second
+ * refused by core (*Tile ... does not exist!*), a page error. Queued, the later one reads the
+ * scene after the first has written and finds nothing to delete.
+ */
+let tileRemovals = Promise.resolve();
+function removeHeatMirageTile(record, ticket) {
+  const run = tileRemovals.catch(() => {}).then(() => removeHeatMirageTileNow(record, ticket));
+  tileRemovals = run;
+  return run;
+}
+
+async function removeHeatMirageTileNow(record, ticket) {
   const scene = game.scenes?.get(record?.anchor?.sceneId);
   const ids = (scene?.tiles?.contents ?? []).filter(tile => tile.flags?.[NS]?.heatMirageTicket === ticket).map(tile => tile.id);
   if (!ids.length) return;
@@ -228,7 +242,12 @@ export async function prepareThematicObject({actor, spell, source, targets = []}
     const sceneId = refOf(source)?.sceneId ?? globalThis.canvas?.scene?.id;
     if (!sceneId || globalThis.canvas?.scene?.id !== sceneId) return refuse("source-scene");
     const {pickPoint} = await import("../canvas/place.mjs");
-    const point = await pickPoint({hint: "Choose the fixed centre of Heat Mirage's 10-foot cube", sceneId});
+    // **HELD TO 07's RANGE BEFORE THE PAYMENT** (stage 11, D-906): the one point rule
+    // (`canvas/range.mjs#spellPointAccept`), the same the card's Place area holds the anchor to.
+    const {spellPointAccept} = await import("../canvas/range.mjs");
+    const accept = spellPointAccept(tokenAt(refOf(source)), spell);
+    // 07's *A 5 ft radius* since O-314 (the cube 07 printed before has no shape on the board).
+    const point = await pickPoint({hint: game.i18n.localize("AZEROTH.HeatMirage.PickAnchor"), sceneId, ...(accept ? {accept} : {})});
     if (!point || globalThis.canvas?.scene?.id !== sceneId) return refuse("cancelled");
     choice.x = point.x;
     choice.y = point.y;
@@ -237,10 +256,14 @@ export async function prepareThematicObject({actor, spell, source, targets = []}
   if (!declaration) return refuse("invalid-declaration");
   const objectId = stableObjectKey(identifier === "seedwake" ? declaration.plotLabel : choice.objectLabel, refOf(source)?.sceneId);
   if (!objectId) return refuse("invalid-object-label");
-  return request({phase: "prepare", actorUuid: actor.uuid, spellUuid: spell.uuid,
+  const prepared = await request({phase: "prepare", actorUuid: actor.uuid, spellUuid: spell.uuid,
     source: refOf(source), targets: targets.map(refOf), objectId,
     objectLabel: identifier === "seedwake" ? declaration.plotLabel : choice.objectLabel,
     declaration});
+  // **HEAT MIRAGE'S ANCHOR, FOR ITS CARD** (O-314): the card's Place area lays the Region at the
+  // anchor picked here, so the image's tile and its Region share one centre.
+  return prepared?.ok && identifier === "heat-mirage"
+    ? {...prepared, areaAt: {sceneId: declaration.sceneId, x: declaration.x, y: declaration.y}} : prepared;
 }
 
 export async function claimThematicObject(ticket, cast) {
@@ -374,7 +397,7 @@ async function prepareOnGm(data, user) {
       {name: "seasonVerified", type: "checkbox", label: "I confirm this is the next natural season end"}
     ] : []),
     ...(identifier === "heat-mirage" ? [
-      {name: "anchorConfirmed", type: "checkbox", label: "I confirm this fixed anchor is within the caster’s range and image stays within one 10-foot cube"}
+      {name: "anchorConfirmed", type: "checkbox", label: game.i18n.localize("AZEROTH.HeatMirage.AnchorConfirmed")}
     ] : []),
     ...(identifier === "icevein-passage" ? [
       {name: "iceCourseConfirmed", type: "checkbox", label: "I confirm the course follows connected nonmagical ice and avoids occupied spaces, rock, construction and enchanted ice"}

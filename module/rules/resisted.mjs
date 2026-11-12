@@ -331,11 +331,21 @@ function waitsForLater(clause) {
  */
 export function testTiming(text) {
   const out = { atCast: [], later: [] };
+  let previousLater = false;
   for (const sentence of sentences(flatText(text))) {
+    let laterHere = false;
     for (const clause of sentence.split(CLAUSE_SPLIT_RE)) {
-      if (!TEST_NAMED_RE.test(clause)) continue;
-      (waitsForLater(clause) ? out.later : out.atCast).push(clause.trim());
+      // **A TEST THAT FOLLOWS A LATER MOMENT'S SENTENCE** (07 §12's Withering Sands: *A
+      // creature that starts its turn in the area takes 5 Physical damage. If it also fails
+      // a Spirit Resilience Test ...*): *If it also fails* is that moment's own Test.
+      const follows = previousLater && /^\s*If it also fails\b/.test(clause);
+      // A sentence that names the later moment with no Test of its own still sets it.
+      if (!TEST_NAMED_RE.test(clause)) { if (LATER_TEST_RE.test(clause)) laterHere = true; continue; }
+      const later = follows || waitsForLater(clause);
+      if (later) laterHere = true;
+      (later ? out.later : out.atCast).push(clause.trim());
     }
+    previousLater = laterHere;
   }
   return out;
 }

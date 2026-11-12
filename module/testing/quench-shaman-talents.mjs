@@ -527,7 +527,9 @@ export function shamanTalentsBatch(context) {
       // Out of a fight a friend is a fellow member of the Party (D-755), never a
       // token's disposition (B8b); the far one too, so only the 20 feet keep it out.
       for (const a of [shaman, first, near, far]) await a.setParty(true);
-      await sceneWith([{ actor: shaman, x: 2600, y: 1000 }, { actor: first, x: 1000, y: 1000 }, { actor: near, x: 1200, y: 1000 }, { actor: far, x: 2000, y: 1000 }]);
+      // The shaman 25 feet from the first ally: inside Healing Wave's 30 ft Range (O-288, D-893;
+      // it stood 80 feet off) and outside Cloudburst's 20 feet of the target.
+      await sceneWith([{ actor: shaman, x: 500, y: 1000 }, { actor: first, x: 1000, y: 1000 }, { actor: near, x: 1200, y: 1000 }, { actor: far, x: 2000, y: 1000 }]);
       assert.ok(await use(shaman, "Cloudburst"), "Cloudburst was refused");
       await until(() => shaman.getFlag("azeroth-rpg", "cloudburst"), "the promise laid");
       await fill(shaman, "mana");

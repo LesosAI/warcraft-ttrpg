@@ -130,8 +130,10 @@ export function snaggedFromOpportunity(effects = []) {
 export function momentumLoss(pools = [], amount = 1) {
   const n = Math.max(0, Math.trunc(Number(amount)) || 0);
   if (!(n > 0)) return null;
+  // **SAND IS NEVER TAKEN BY A HIT** (the lead: *"It should only drain on a short or long
+  // rest"*; O-259): 08 §5's *loses 1 Momentum* reaches every other pool.
   const held = (pools ?? [])
-    .filter(p => p?.kind === "momentum" && (Math.trunc(Number(p.value)) || 0) > 0)
+    .filter(p => p?.kind === "momentum" && p?.name !== "sand" && (Math.trunc(Number(p.value)) || 0) > 0)
     .sort((a, b) => (Number(b.value) - Number(a.value))
       || String(a.name ?? "").localeCompare(String(b.name ?? ""))
       || String(a.itemId ?? "").localeCompare(String(b.itemId ?? "")));

@@ -150,8 +150,13 @@ export function stepOnStrip(step, steps) {
 /** The three methods of 01 §3 (D-478). The table picks one; any player may. */
 export const METHODS = Object.freeze(["array", "pointBuy", "roll"]);
 
-/** The ten classes in 02 §7's order, which is how the class step lays its tiles (D-638); a Vitest reads it off the chapter. */
-export const CLASS_ORDER = Object.freeze(["warrior", "paladin", "ranger", "rogue", "priest", "shaman", "mage", "warlock", "druid", "chromatic-champion"]);
+/**
+ * The eleven classes in 02 §7's order, which is how the class step lays its tiles
+ * (D-638); a Vitest reads it off the chapter. The Chronomancer last, after the
+ * Chromatic Champion (D-847; the orchestrator's placement, the drafts' second
+ * option - the Vitest says so if the book lays it elsewhere).
+ */
+export const CLASS_ORDER = Object.freeze(["warrior", "paladin", "ranger", "rogue", "priest", "shaman", "mage", "warlock", "druid", "chromatic-champion", "chronomancer"]);
 
 /** "Take these six numbers and assign each to an ability." */
 export const ARRAY = Object.freeze([16, 14, 13, 12, 10, 8]);
@@ -486,13 +491,29 @@ export function kitOverBy(p = {}) {
  * armor*; the Legacy branches' door 23): `extra`, the categories
  * `class-talents.mjs#armorAccessFor` reads off the talents taken (`talentArmorFor`).
  *
+ * **AND A SHIELD A TALENT ADDS** (D-855; the Chronomancer's Bronzed Steel):
+ * `shields`, off `talentShieldsFor`.
+ *
  * @param {object} item
  * @param {object|null} cls
- * @param {{extra?: string[]}} [o]
+ * @param {{extra?: string[], shields?: boolean}} [o]
  */
-export function accessNote(item, cls, { extra = [] } = {}) {
-  const warning = trainingWarning(item, trainingProfile({ classes: cls ? [cls] : [], extraArmor: extra }));
+export function accessNote(item, cls, { extra = [], shields = false } = {}) {
+  const warning = trainingWarning(item, trainingProfile({ classes: cls ? [cls] : [], extraArmor: extra, extraShields: shields }));
   return warning ? `${warning}Access` : null;
+}
+
+/**
+ * **WHETHER THE CREATOR'S TALENT PICK HANDS THE CLASS A SHIELD** (D-855): the class
+ * talent chosen at step 9, at rank 1, through `armorAccessFor`'s `shields`.
+ *
+ * @param {{classTalent?: object|null}} p
+ * @returns {boolean}
+ */
+export function talentShieldsFor(p = {}) {
+  const t = p?.classTalent ?? null;
+  if (!t?.identifier) return false;
+  return armorAccessFor([{ identifier: t.identifier, className: t.className, race: t.race ?? null, name: t.name ?? "", taken: 1 }]).shields === true;
 }
 
 /**
@@ -709,8 +730,9 @@ export function validate(p = {}) {
   const spend = purseSpend(p.equipment ?? [], p.race);
   if (spend > PURSE) refuse("purseOverspent", "equipment", { copper: spend });
   const talentArmor = talentArmorFor(p);
+  const talentShields = talentShieldsFor(p);
   for (const row of p.equipment ?? []) {
-    const code = accessNote(row, p.cls, { extra: talentArmor });
+    const code = accessNote(row, p.cls, { extra: talentArmor, shields: talentShields });
     if (code) note(code === "weaponAccess" ? "untrainedWeapon" : code, "equipment", { name: row.name });
     if (row.type === "gear" && row.cost === null) note("augmentIssued", "equipment", { name: row.name });
   }

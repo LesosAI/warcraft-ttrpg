@@ -39,6 +39,7 @@
  * smoke test fails on, so each is caught and said once in the console.
  */
 
+import { fightScenes } from "../rules/fight-scenes.mjs";
 import { areaLapsed, firstEntry, hasAreaTick, joinFight, staleAreas } from "../rules/area-ticks.mjs";
 import {casterLifeEnded} from '../rules/end-turn-damage.mjs';
 import {AZEROTH} from '../config.mjs';
@@ -88,7 +89,8 @@ export function isWriter() {
 /**
  * The world's clock, as `staleAreas` reads it: the time, and every STARTED
  * fight's round and turn by id - a fight that has not begun counts no rounds,
- * and one that has gone is absent, which is what ends an area placed in it.
+ * and one that has gone is absent, which hands an area placed in it to the
+ * world's clock (O-298) and ends a zone *for the rest of the encounter*.
  * The turn is what lets a timed area stand to the same point in the order ten
  * rounds on (`rules/area-ticks.mjs#areaLapsed`, the review's N3).
  */
@@ -412,20 +414,35 @@ export function endTakenOffSustain(region, options = {}) {
  */
 async function clockAreasNow(combat) {
   if (!isWriter() || !combat?.started) return 0;
-  const scene = combat.scene ?? null;
-  if (!scene?.regions || !sceneInWorld(scene)) return 0;
-  const now = worldClock();
-  const updates = [];
-  for (const region of scene.regions) {
-    const row = areaRecord(region);
-    if (!row || row.transferPending === true || !(Number(row.lasts?.rounds) > 0) || row.placedAt?.combatId || row.worldClock === true) continue;
-    if (areaLapsed(row, now)) continue;
-    const placedAt = joinFight(row.placedAt, { combatId: combat.id, round: combat.round ?? 0, turn: combat.turn ?? 0, time: now.time });
-    updates.push({ _id: region.id, [`flags.${SCOPE}.placedAt`]: placedAt });
+  let count = 0;
+  for (const scene of scenesOfFight(combat)) {
+    if (!scene?.regions || !sceneInWorld(scene)) continue;
+    const now = worldClock();
+    const updates = [];
+    for (const region of scene.regions) {
+      const row = areaRecord(region);
+      if (!row || row.transferPending === true || !(Number(row.lasts?.rounds) > 0) || row.placedAt?.combatId || row.worldClock === true) continue;
+      if (areaLapsed(row, now)) continue;
+      const placedAt = joinFight(row.placedAt, { combatId: combat.id, round: combat.round ?? 0, turn: combat.turn ?? 0, time: now.time });
+      updates.push({ _id: region.id, [`flags.${SCOPE}.placedAt`]: placedAt });
+    }
+    const clocked = updates.filter(u => regionInWorld(scene.regions.get(u._id)));
+    if (clocked.length && sceneInWorld(scene)) await scene.updateEmbeddedDocuments("Region", clocked);
+    count += clocked.length;
   }
-  const clocked = updates.filter(u => regionInWorld(scene.regions.get(u._id)));
-  if (clocked.length && sceneInWorld(scene)) await scene.updateEmbeddedDocuments("Region", clocked);
-  return clocked.length;
+  return count;
+}
+
+/**
+ * **THE SCENES A FIGHT'S AREAS ARE JUDGED ON** (D-892): its own where a GM linked it, and the
+ * scene of every combatant's token - core makes a fight unlinked, so `combat.scene` alone is
+ * null at the table and no timed area ever ran out (`rules/fight-scenes.mjs`).
+ *
+ * @param {Combat} combat
+ * @returns {Scene[]}
+ */
+export function scenesOfFight(combat) {
+  return fightScenes(combat, game.scenes);
 }
 
 /**
@@ -437,10 +454,11 @@ async function clockAreasNow(combat) {
  */
 export function sweepFightAreas(combat) {
   return serial(async () => {
-    if (!isWriter() || !combat?.scene) return 0;
+    const scenes = scenesOfFight(combat);
+    if (!isWriter() || !scenes.length) return 0;
     await clockAreasNow(combat);
-    const gone = await sweepAreasNow({ scenes: [combat.scene] });
-    await reconcileGroundNow({ scenes: [combat.scene] });
+    const gone = await sweepAreasNow({ scenes });
+    await reconcileGroundNow({ scenes });
     return gone;
   });
 }
@@ -505,16 +523,19 @@ export function groundWanted(region, now = worldClock()) {
   if (!areaGround && !hasAreaTick(f.areaTick)) return null;
   const caster = actorOf(f.caster);
   const talent = caster ? spellAreaFor(caster.takenTalents?.() ?? [], { name: f.spell?.name ?? "" }).ground : undefined;
-  const spec = groundNow({ areaGround, ground: f.ground ?? null, placedAt: f.placedAt ?? null }, talent, now);
-  return spec ? { who: spec.who, kinds: spec.kinds, caster: f.caster ?? null } : null;
+  const spec = groundNow({ areaGround, ground: f.ground ?? null, placedAt: f.placedAt ?? null, named: f.named ?? [] }, talent, now);
+  return spec ? { who: spec.who, kinds: spec.kinds, caster: f.caster ?? null, named: spec.named ?? [] } : null;
 }
 
 /** Whether a laid behavior already says what is wanted. */
 function sameGround(behavior, want) {
   const s = behavior?.system ?? {};
   const kinds = [...(s.kinds ?? [])].sort();
+  const named = [...(s.named ?? [])].sort();
+  const wantNamed = [...(want.named ?? [])].sort();
   return s.who === want.who && (s.caster ?? null) === (want.caster ?? null)
-    && kinds.length === want.kinds.length && kinds.every((k, i) => k === want.kinds[i]);
+    && kinds.length === want.kinds.length && kinds.every((k, i) => k === want.kinds[i])
+    && named.length === wantNamed.length && named.every((u, i) => u === wantNamed[i]);
 }
 
 /**
@@ -565,7 +586,7 @@ async function reconcileGroundNow({ scenes = null, caster = null } = {}) {
         await region.createEmbeddedDocuments("RegionBehavior", [{
           type: DIFFICULT_BEHAVIOR,
           name: game.i18n.localize("AZEROTH.DifficultFor.Name"),
-          system: { difficulties: { walk: DIFFICULT_COST, swim: DIFFICULT_COST }, who: want.who, kinds: want.kinds, caster: want.caster },
+          system: { difficulties: { walk: DIFFICULT_COST, swim: DIFFICULT_COST }, who: want.who, kinds: want.kinds, caster: want.caster, named: want.named ?? [] },
           flags: { [SCOPE]: { [GROUND_FLAG]: true } }
         }]);
       }
@@ -775,7 +796,8 @@ function quietly(promise) {
  * - **`deleteRegion`** (D-760): an area taken off by hand ends the one Sustain
  *   it recorded (`endTakenOffSustain`); the sweep's own deletions are marked
  *   and end nothing.
- * - **`deleteCombat`**: a fight's minute goes with it.
+ * - **`deleteCombat`**: a fight's encounter-long zone goes with it; a timed area
+ *   placed in it runs on by the world's clock from the time it went down (O-298).
  * - **`deleteActor`** (S2): a caster deleted holds nothing, and neither does
  *   a token actor of it that is left with no base; every area is judged.
  * - **`deleteToken`** (S2): an unlinked caster's synthetic actor dies with its

@@ -97,7 +97,8 @@ export class ClassData extends foundry.abstract.TypeDataModel {
         caster: choiceField(AZEROTH.casterGrades, { initial: "none", nullable: false })
       }),
 
-      // A class trains two of the three Resiliences (05 §1).
+      // A class trains two of the three Resiliences (05 §1) - the Chronomancer
+      // ONE, Spirit (D-851) - so the field takes one or two and sets no minimum.
       resiliences: new fields.ArrayField(
         new fields.StringField({ choices: () => Object.keys(AZEROTH.resiliences) }),
         { initial: [], max: 2 }

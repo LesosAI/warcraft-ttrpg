@@ -49,6 +49,7 @@ import { BASE_SLOTS, REFUSALS, admit, judge, judgeDelete } from "../rules/slots.
 import { SORT_STEP, nextSort } from "../rules/bags.mjs";
 // A find still on offer is taken from the loot window, never dragged (D-721).
 import { underOffer } from "../rules/loot-offer.mjs";
+import { isHourglass } from "../rules/sand.mjs";
 import { multiclassRefusal } from "../rules/multiclass.mjs";
 // A Gadgets-compendium entry is a reference, never a sheet's (the lead, 2026-10-24).
 import { isGadgetEntry } from "../rules/gadgets.mjs";
@@ -420,6 +421,30 @@ export class AzerothItem extends Item {
   /** @inheritDoc */
   prepareDerivedData() {
     super.prepareDerivedData();
+  }
+
+  /**
+   * @inheritDoc
+   *
+   * **AN HOURGLASS TAKEN OUT OF THE RANGED SLOT TAKES THE SAND WITH IT** (D-848;
+   * the lead: *"no hourglass no sand"*). Every unequip reaches this hook - the
+   * sheet's Equip, a displacement, a move into a bag (`wornXorKept`) - because
+   * each is an update to this document, so the one door is here and not at each
+   * caller. `changed` is core's diff, so `equipped: false` in it is a change from
+   * true. Run on the writing client alone, which owns the actor.
+   */
+  _onUpdate(changed, options, userId) {
+    super._onUpdate(changed, options, userId);
+    if (userId !== game.user?.id) return;
+    const equipped = changed?.system?.equipped;
+    if (equipped === false && isHourglass(this)) this.actor?.emptySand?.();
+  }
+
+  /** @inheritDoc - an equipped Hourglass deleted leaves the slot too (D-848). */
+  _onDelete(options, userId) {
+    super._onDelete(options, userId);
+    if (userId !== game.user?.id) return;
+    if (this.system?.equipped === true && isHourglass(this)) this.actor?.emptySand?.();
   }
 
   /** Whether this item is carried in a way that contributes to derived data. */

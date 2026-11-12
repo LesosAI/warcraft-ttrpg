@@ -1,6 +1,8 @@
 import {queueSignatureCard} from './signature-card-queue.mjs';
 import {damageSignatureReviewState,reviewDamageSignature} from './signature-damage-review.mjs';
 import {areaSaveWrites} from './area-save-write-state.mjs';
+// The scenes a fight stands on (O-294): core makes a fight unlinked, so `combat.scene` is null at the table.
+import {fightOnScene,fightScenes} from '../rules/fight-scenes.mjs';
 const scope='azeroth-rpg';
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const resolve=uuid=>{try{return fromUuidSync(uuid);}catch{return null;}};
@@ -97,8 +99,8 @@ export function recoverOrphanDamageCast(actor,{key,expected,acknowledged=false}=
     chosenSignatureDelivery:{version:1,cast:group.cast,entries:[]},
     signatureDamageRecovery:{state:'pending',bonusesClosed:true,by:writer,
      skippedTurns:group.regions.length||group.selfSources.length?[...(game.combats?.values?.()??[])].filter(combat=>combat.started&&combat.active===true
-      &&(group.regions.some(row=>resolve(row.uuid)?.parent?.id===combat.scene?.id)
-       ||group.selfSources.length&&[...(combat.scene?.tokens?.values?.()??[])].some(token=>token.actor?.uuid===actor.uuid))).map(combat=>({id:combat.id,round:combat.round,turn:combat.turn})):[],
+      &&(group.regions.some(row=>fightOnScene(combat,resolve(row.uuid)?.parent??null,game.scenes))
+       ||group.selfSources.length&&fightScenes(combat,game.scenes).some(scene=>[...(scene.tokens?.values?.()??[])].some(token=>token.actor?.uuid===actor.uuid)))).map(combat=>({id:combat.id,round:combat.round,turn:combat.turn})):[],
      originalMessageUuids:[...new Set([...receipts.map(row=>row.messageUuid),...group.saves.map(row=>`ChatMessage.${row.flags.area.signatureMessageId}`),...group.regions.map(row=>row.data.flags[scope].messageId?`ChatMessage.${row.data.flags[scope].messageId}`:null)].filter(Boolean))]}
    }}});
    if(!card||!unchanged())return {ok:false,reason:'uncertain'};

@@ -94,6 +94,12 @@ import { actorInWorld, sceneInWorld } from "../canvas/in-world.mjs";
 // branches' door 12: 04's Big Bad Voodoo).
 import { FLOOR_FLAG } from "../rules/blow-doors.mjs";
 import { healthFloorFlag } from "../rules/auras.mjs";
+// 07 §12's Temporal Sanctuary and Bastion of Hours (O-265, the 2a fix stage): the sources a laid
+// effect holds up, the `immuneTo` flag Temporal Sanctuary lays and the Taunt Bane Bastion lays.
+import { sandAuraSources } from "./sand-auras.mjs";
+import { SAND_AURA_FLAG } from "../rules/sand-auras.mjs";
+import { IMMUNE_FLAG } from "../rules/legacy-uses.mjs";
+import { LAID_BANE_FLAG } from "../rules/banes.mjs";
 
 /** The pass in flight, and whether anything asked for another while it ran. */
 let RUNNING = null;
@@ -173,6 +179,9 @@ export function auraSourcesOf(actor) {
       img: item?.img || AURA_FALLBACK_ICON, text: plain(talent.effect), aura
     });
   }
+  // **A SUSTAINED SAND SPELL'S AURA** (07 §12: Temporal Sanctuary, Bastion of Hours; O-265): the
+  // caster's own laid effect, stamped by the card's Apply, held up while it stands.
+  for (const source of sandAuraSources(actor)) out.push(source);
   return out;
 }
 
@@ -181,6 +190,7 @@ function holdsAura(actor) {
   if (!actor) return false;
   if ([...(actor.effects ?? [])].some(e => healingAreaWardSource(e, actor.uuid))) return true;
   if ((actor.system?.signatureEffects?.auras ?? []).length) return true;
+  if (sandAuraSources(actor).length) return true;
   for (const item of actor.items ?? []) {
     if (item.type === "feature" && item.system?.aura?.feet) return true;
     if (item.type === "talent" && (item.system?.taken ?? 0) > 0 && talentAuraOf(item.system)) return true;
@@ -318,6 +328,10 @@ function auraDescription(row, shown = {}) {
   if (p.damageReduction) lines.push(game.i18n.format("AZEROTH.Signature.Aura.Text", { n: p.damageReduction }));
   // A floor under Health (04's Big Bad Voodoo; door 12).
   if (p.healthFloor) lines.push(game.i18n.format("AZEROTH.Aura.HealthFloor", { n: p.healthFloor, owner }));
+  // 07 §12's Temporal Sanctuary and Bastion of Hours (O-265).
+  if (p.immune) lines.push(game.i18n.localize("AZEROTH.Aura.Immune"));
+  if (p.hold) lines.push(game.i18n.localize("AZEROTH.Aura.Hold"));
+  if (p.taunt) lines.push(game.i18n.format("AZEROTH.Aura.Taunt", { n: p.taunt.banes, owner }));
   return lines.map(line => `<p>${line}</p>`).join("");
 }
 
@@ -337,6 +351,15 @@ function auraData(row, shown = {}) {
   // Injury does*), and a Critical Injury's own drop to 0 is written straight and never
   // meets it.
   const floor = healthFloorFlag(row, { by: row.origin ?? null, name: row.name ?? "" });
+  // **THE TWO SAND AURAS' FLAGS, BESIDE THE AURA'S** (07 §12; O-265): Temporal Sanctuary's
+  // conditions refused, read by `toggleStatusEffect` exactly as Pristine Timeline's are, and
+  // Bastion of Hours' Taunt Bane in `effects/banes.mjs`' own shape - lasting, never spent, sparing
+  // the holder - so the roll dialog's reader takes it with no door of its own.
+  const p = auraPayloadOf(row);
+  const sandFlags = {
+    ...(p.immune ? { [IMMUNE_FLAG]: { conditions: [...p.immune.conditions] } } : {}),
+    ...(p.taunt ? { [LAID_BANE_FLAG]: { kind: "attack", banes: p.taunt.banes, source: row.name ?? "", except: { ...p.taunt.except }, lasting: true } } : {})
+  };
   return {
     name: game.i18n.format("AZEROTH.Aura.EffectName", { source: row.name, owner }),
     img: shown.img || AURA_FALLBACK_ICON,
@@ -356,7 +379,7 @@ function auraData(row, shown = {}) {
       // reach the text states, and the scene whose pass laid it, which is the
       // one pass that may lift it from a creature that has since left.
       feet: row.feet ?? null, scene: row.scene ?? null
-    }, ...(floor ? { [FLOOR_FLAG]: floor } : {}) } }
+    }, ...(floor ? { [FLOOR_FLAG]: floor } : {}), ...sandFlags } }
   };
 }
 
@@ -890,6 +913,8 @@ export function registerAuraHooks() {
   const effectMoves = (effect, changes = null) => {
     if (effect?.flags?.["azeroth-rpg"]?.[AURA_FLAG]) return changes?.disabled === false;
     if (effect?.flags?.["azeroth-rpg"]?.[HEALING_AREA_WARD]) return true;
+    // A sand aura's carrier laid, lifted or switched (O-265).
+    if (effect?.flags?.["azeroth-rpg"]?.[SAND_AURA_FLAG]) return true;
     let actor = effect?.parent ?? null;
     if (actor?.documentName === "Item") actor = actor.parent ?? null;
     if (actor?.documentName !== "Actor") return false;

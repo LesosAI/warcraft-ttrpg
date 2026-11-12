@@ -140,17 +140,47 @@ export function readSlRider(effectText) {
 /**
  * **THE SUCCESS LEVEL A RIDER READS ON ONE CREATURE** (07 §8: *A Ward comes off the
  * Success Level as well as off the damage*): the mitigation's `effectiveSL` for that
- * creature where the cast dealt it damage, else the cast's own. A spell that deals
- * no damage meets no Ward (07's Frostbite: *The spell deals no damage, so no Ward
- * applies to it*).
+ * creature where the cast dealt it damage, else the cast's own less `ward`.
+ *
+ * **A SPELL WITH NO DAMAGE FIELD STILL MEETS THE WARD ON ITS SUCCESS LEVEL** (O-262,
+ * D-905; the lead: *"fix 262 as you read"*): 07 §9, *A spell with no **Damage** field
+ * deals none, and Ward has only the Success Level to subtract from*, and 05 §15,
+ * *Subtract Ward from the SL of a magical effect that deals no damage, to a minimum of
+ * SL 0*. The caller hands the creature's Ward in the spell's school through
+ * `noDamageWard`, which is 0 where the entry says *The spell deals no damage, so no
+ * Ward applies to it* (Frostbite and five more) or the spell is Physical (07 §9).
+ * Before D-905 a spell with no Damage field met no Ward at all.
  *
  * @param {{effectiveSL?: number}|null} damageRow  the creature's row of the card's damage
  * @param {number} sl  the cast's Success Level
+ * @param {number} [ward]  the creature's Ward against a spell that deals no damage
  * @returns {number}
  */
-export function riderSl(damageRow, sl) {
+export function riderSl(damageRow, sl, ward = 0) {
   const at = Number(damageRow?.effectiveSL);
-  return Number.isFinite(at) ? Math.trunc(at) : (Math.trunc(Number(sl)) || 0);
+  if (Number.isFinite(at)) return Math.trunc(at);
+  const own = Math.trunc(Number(sl)) || 0;
+  const w = Math.max(0, Math.trunc(Number(ward)) || 0);
+  return w > 0 ? Math.max(0, own - w) : own;
+}
+
+/** 07's own exception: *The spell deals no damage, so no Ward applies to it*. */
+export const NO_WARD_RE = /\bThe spell deals no damage, so no Ward applies to it\b/;
+
+/**
+ * **THE WARD A SPELL WITH NO DAMAGE FIELD MEETS ON ONE CREATURE'S SUCCESS LEVEL**
+ * (07 §9, 05 §15; O-262, D-905): the creature's Ward in the spell's school, from the
+ * target snapshot the card records, or 0 where the spell deals damage (its damage
+ * row carries the SL), is Physical, or says no Ward applies to it.
+ *
+ * @param {{dealsDamage: boolean, physical?: boolean, effect?: string, school?: string|null}} spell
+ * @param {{wardBySchool?: Record<string, number>}|null} target  the card's target snapshot
+ * @returns {number}
+ */
+export function noDamageWard({ dealsDamage = false, physical = false, effect = "", school = null } = {}, target = null) {
+  if (dealsDamage || physical || !school) return 0;
+  if (NO_WARD_RE.test(plain(effect))) return 0;
+  return Math.max(0, Math.trunc(Number(target?.wardBySchool?.[school])) || 0);
 }
 
 /**

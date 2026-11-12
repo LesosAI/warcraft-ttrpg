@@ -6,6 +6,10 @@
 <div class="azeroth-pool{{#if this.name}} is-{{this.name}}{{/if}}">
   {{#if this.held}}
   <div class="azeroth-pool-head">
+    {{!-- Sand is held in the Hourglass (D-848; the lead: "tied to the counter
+          like other power and momentum resources"): the glass is drawn beside
+          the label, and the words below say when there is none. --}}
+    {{#if this.sand}}<i class="fa-solid fa-hourglass-half azeroth-pool-glass" aria-hidden="true"></i>{{/if}}
     <span class="azeroth-pool-label">{{localize this.label}}</span>
     {{!--
       The count, and a stepper either side of it (the lead, 2026-09-13): the
@@ -39,6 +43,7 @@
   <div class="azeroth-pool-track">
     {{#each this.segments}}<span class="azeroth-segment{{#if this.filled}} is-filled{{/if}}"></span>{{/each}}
   </div>
+  {{#if this.noHourglass}}<p class="azeroth-pool-note">{{localize "AZEROTH.Sand.NoHourglass"}}</p>{{/if}}
   {{else}}
   {{!-- A pool nobody has draws an em-dash, not an empty bar (D-509). --}}
   <div class="azeroth-pool-head is-absent">

@@ -17,6 +17,8 @@ import { registerChatHooks } from "./dice/chat.mjs";
 import { registerPassiveHooks } from "./effects/passives.mjs";
 import { registerAuraHooks } from "./effects/auras.mjs";
 import { registerSustainedAreaHooks } from "./canvas/sustained-areas.mjs";
+// 07 §12's Sandwall: the sight-blocking Wall along its line (O-267, the 2a fix stage).
+import { registerSandWallHooks } from "./canvas/sand-walls.mjs";
 import { registerSustainedSpellHooks } from "./effects/sustained-spells.mjs";
 import { registerSpellstealReview } from "./applications/spellsteal-review.mjs";
 import { registerHungerMasteredReview } from "./applications/hunger-mastered-review.mjs";
@@ -101,6 +103,15 @@ import { animations, registerAnimationHooks } from "./animation/director.mjs";
 import { registerAnimationControl } from "./animation/control.mjs";
 import { registerAnimationWindowHooks } from "./applications/animations.mjs";
 import * as workflows from "./dice/workflows.mjs";
+import { registerChronoHooks } from "./effects/chronomancer.mjs";
+// 04's Guardian of Time (stage 2c): Turned Aside's Sand on a miss, and Distortion Field's ground.
+import { registerGuardianHooks } from "./effects/guardian.mjs";
+import { registerFieldHooks } from "./canvas/distortion-field.mjs";
+// 02's Recall marked on the board (D-889; the lead's play-test).
+import { registerRecallMarkerHooks } from "./canvas/recall-marker.mjs";
+// 07 §9's Decay re-laid where a creature's locations move, and Temporal Sanctuary's held effects (stage 2a fix).
+import { registerDecayHooks } from "./effects/decay.mjs";
+import { registerSandAuraHooks } from "./effects/sand-auras.mjs";
 // The hotbar (the lead, 2026-09-13): the system had no macro code at all.
 import * as macros from "./macros.mjs";
 import { registerHotbarDrop } from "./macros.mjs";
@@ -146,6 +157,7 @@ import { registerSettings } from "./settings.mjs";
 import { AzerothCombatTracker } from "./applications/combat-tracker.mjs";
 import { registerPauseVideo } from "./applications/pause-video.mjs";
 import { registerQuenchTests } from "./testing/quench-tests.mjs";
+import { ROUND_SECONDS } from "./rules/area-ticks.mjs";
 
 // No-op unless the Quench module is active — safe in production worlds.
 registerQuenchTests();
@@ -191,6 +203,20 @@ Hooks.once("init", () => {
   // registry, as core does for a token deleted on its own: left in it, the
   // next expiry deletes them in a batch the server refuses.
   registerDurationHooks();
+  // **A ROUND IS SIX SECONDS OF THE WORLD'S CLOCK** (05: *Round - ~6 seconds*; O-289, D-893;
+  // the lead, 2026-11-10: *"6 second round is fine."*). Core then advances the clock six
+  // seconds at every round of every fight (`Combat#getTimeDelta`, 14.367), and reframes a
+  // span counted in rounds as seconds once its fight is over
+  // (`ActiveEffect#_prepareCombatBasedDuration`). `turnTime` stays 0: a turn has no length
+  // of its own, so the clock moves once a round and never twice.
+  CONFIG.time.roundTime = ROUND_SECONDS;
+  // The Chronomancer's offers and its suspensions' ends (stage 2b).
+  registerChronoHooks();
+  registerGuardianHooks();
+  registerFieldHooks();
+  registerRecallMarkerHooks();
+  registerDecayHooks();
+  registerSandAuraHooks();
   registerReflectionHooks();
   registerVeknissHooks();
   registerBloodpetalHooks();
@@ -349,6 +375,7 @@ Hooks.once("init", () => {
   // is the one that deletes.
   registerInWorldHooks();
   registerSustainedAreaHooks();
+  registerSandWallHooks();
   registerSustainedSpellHooks();
   registerSpellstealReview();
   registerHungerMasteredReview();
@@ -455,7 +482,23 @@ Hooks.once("setup", async () => {
   await preloadTemplates();
 });
 
+/**
+ * **THE DAMAGE PATH'S TWO DYNAMIC IMPORTS, LOADED AT `ready`** (O-285; the lead:
+ * *"285, yes"*). `AzerothActor#applyDamage` imports the harm prevention and
+ * Seduction's harm when a blow lands, so the first Apply of a session paid for
+ * loading them. Started here and never awaited: nothing waits on it, and a failure
+ * is a warning, since the damage path imports the same module again when it needs it.
+ */
+export const WARMED_DAMAGE_MODULES = Object.freeze(["./effects/harm-prevention.mjs", "./effects/seduction-harm.mjs"]);
+
+function warmDamagePath() {
+  for (const path of WARMED_DAMAGE_MODULES) {
+    import(path).catch(err => console.warn(`azeroth-rpg | ${path} did not load early`, err));
+  }
+}
+
 Hooks.once("ready", async () => {
+  warmDamagePath();
   // **`game.ready` IS TRUE BEFORE THIS WORK IS DONE**: core calls the ready
   // hooks without awaiting them, so the migration chain and the feature sync
   // below run on after the world reports ready. `readyWorkDone` says when they

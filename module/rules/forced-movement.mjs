@@ -66,6 +66,7 @@ export const FORCED_ON = Object.freeze(["fail", "enter", "turn", "casterTurn"]);
 export const FORCED_REFUSALS = Object.freeze({
   atPoint: "AZEROTH.Forced.Refuse.AtPoint",
   immovable: "AZEROTH.Forced.Refuse.Immovable",
+  held: "AZEROTH.Forced.Refuse.Held",
   walled: "AZEROTH.Forced.Refuse.Walled",
   unchecked: "AZEROTH.Forced.Refuse.Unchecked",
   gone: "AZEROTH.Forced.Refuse.Gone",
@@ -198,6 +199,10 @@ export function readForced(effectText, fields = {}) {
     const sl = /\bAt SL (\d) or better the push is (\d+) feet\b/.exec(text);
     return { on: "fail", feet: Number(m[1]), toward: "away", from: "caster", sl: sl ? { at: Number(sl[1]), feet: Number(sl[2]) } : null, resilience };
   }
+  // 07 §12's Grit Lash (D-864): *If it fails a Body Resilience Test against your Spell DC,
+  // it is pulled 10 feet toward you.*
+  m = /\bIf it fails an? (Body|Reflex|Spirit) Resilience Test against your Spell DC, it is pulled (\d+) feet toward you\b/.exec(text);
+  if (m) return { on: "fail", feet: Number(m[2]), toward: "toward", from: "caster", sl: null, resilience: m[1].toLowerCase() };
   // Ley Rift: *On a failure it takes N X damage and is pulled N feet toward the center*.
   m = /\bOn a failure it takes \d+ \w+ damage and is pulled (\d+) feet toward the cent(?:er|re)\b/.exec(text);
   if (m) return { on: "fail", feet: Number(m[1]), toward: "toward", from: "area", sl: null, resilience };

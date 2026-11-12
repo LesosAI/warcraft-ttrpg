@@ -32,6 +32,22 @@ export function untilEndOfNextTurn(actor, combat = actor.activeFight?.() ?? game
   };
 }
 
+/**
+ * `duration` and `start` for "until the end of THAT turn" (07 §12's Sandstorm, laid at the
+ * start of the creature's own turn): it ends as the turn it was laid in ends, or null out
+ * of a started fight. **Verified against 14.367's source** (`client/documents/active-effect.mjs`
+ * `_prepareCombatBasedDuration`, `isExpiryEvent`; `client/helpers/active-effect-registry.mjs`
+ * `refresh`): a `turns` span of 0 started on the current turn prepares `remaining` as
+ * `0 - 0 = 0`, so the duration is reached at once; `isExpiryEvent` answers false for every
+ * event but `turnEnd` (and for `updateWorldTime` while the actor is in combat), and true for
+ * `turnEnd` only where `combat.previous.combatantId` is `start.combatant` - the creature's own
+ * turn ending. So it ends as the turn it was laid in ends, and not before (the 2a review, L6).
+ */
+export function untilEndOfTurn(actor, combat = actor.activeFight?.() ?? game.combat) {
+  const d = untilEndOfNextTurn(actor, combat);
+  return d ? { ...d, duration: { ...d.duration, value: 0 } } : null;
+}
+
 /** `duration` and `start` for "until your next turn" - it ends as the victim's turn starts. */
 export function untilNextTurn(actor, combat = actor.activeFight?.() ?? game.combat) {
   const d = untilEndOfNextTurn(actor, combat);
@@ -146,6 +162,7 @@ export async function applyCondition(actor, id, { value = null, until = null } =
   // A ready-made `{duration, start}` (a spell's minute, 2026-09-06) rides as it is.
   const timing = until && typeof until === "object" ? until
     : until === "endOfNextTurn" ? untilEndOfNextTurn(actor) : until === "nextTurn" ? untilNextTurn(actor)
+      : until === "endOfTurn" ? untilEndOfTurn(actor)
       // 14's *until the end of the round* and *for the rest of the encounter* (D-809).
       : until === "endOfRound" ? untilEndOfRound(actor) : until === "encounter" ? untilEncounterEnd(actor) : null;
   if (timing) Object.assign(update, timing);
@@ -173,6 +190,24 @@ export function spellTiming(actor, spec) {
     };
   }
   return { duration: { value: spec.value, units: spec.units }, start: { time: game.time.worldTime } };
+}
+
+/**
+ * **A SPELL'S SPAN ON A CREATURE, WHOEVER'S TURN IT IS KEYED ON** (the sweep's stage 2,
+ * D-891): `spellTiming` keys a span on the creature it lands on, and 07's *until the end of
+ * your next turn* is the CASTER's (`rules/spell-effects.mjs#effectDuration`'s `of: "caster"`):
+ * that span is keyed on the caster's combatant, as a tick's `casterTurnEnd` is, and out of the
+ * caster's fight it is one round of the world's clock. A span of 0 turns is *until the end of
+ * your turn*.
+ *
+ * @param {Actor} actor   the creature it lands on
+ * @param {object|null} spec  `effectDuration`'s
+ * @param {Actor|null} caster
+ */
+export function spanOn(actor, spec, caster = null) {
+  if (spec?.of !== "caster") return spellTiming(actor, spec);
+  const keyed = caster ? (Number(spec.value) === 0 ? untilEndOfTurn(caster) : untilEndOfNextTurn(caster)) : null;
+  return keyed ?? clockRounds(1);
 }
 
 /**

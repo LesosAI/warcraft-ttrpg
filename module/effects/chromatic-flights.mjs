@@ -29,7 +29,7 @@ import {
   HASTENED_FLAG, MANA_HUNGER_MARK, blueDrakeTurnFor, drakeHalfFor, hastenFor, landingFor,
   landingCatches, manaHungerFor, offerMoment, offerStands, rewindFor, rewindHeal, spellbreakGain, spellthiefFor
 } from "../rules/chromatic-talents.mjs";
-import { BLOODLUST, hastenedHalves } from "../rules/extra-halves.mjs";
+import { BLOODLUST, hastenedHalves, hastenedSplit } from "../rules/extra-halves.mjs";
 import { classFeatureOnUse } from "../rules/class-features.mjs";
 import { manaPool, poolNamed } from "../rules/pools.mjs";
 import { feetApart, footprintOf, feetBetweenFootprints } from "../canvas/footprints.mjs";
@@ -396,8 +396,12 @@ export async function takeHastened(combatant) {
   if (!actor) return [];
   const held = actor.effects.filter(e => e.active !== false && e.getFlag("azeroth-rpg", HASTENED_FLAG));
   if (!held.length) return [];
-  const halves = hastenedHalves(held.map(e => e.getFlag("azeroth-rpg", HASTENED_FLAG)));
-  await combatant.grantHalfActions(halves);
+  const records = held.map(e => e.getFlag("azeroth-rpg", HASTENED_FLAG));
+  const halves = hastenedHalves(records);
+  // The capped first, then Master of Hours' gifts past the cap (D-877).
+  const split = hastenedSplit(records);
+  if (split.capped > 0) await combatant.grantHalfActions(split.capped);
+  if (split.uncapped > 0) await combatant.grantHalfActions(split.uncapped, { uncapped: true });
   await actor.deleteEmbeddedDocuments("ActiveEffect", held.map(e => e.id));
   return [game.i18n.format("AZEROTH.Hasten.Given", { name: actor.name, n: halves, source: held.map(e => e.getFlag("azeroth-rpg", HASTENED_FLAG)?.source ?? e.name).join(", ") })];
 }
@@ -778,7 +782,11 @@ export async function chromaticFlightQueryHandler(payload = {}, { user = null } 
     if (!owns(shaman)) throw new Error(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: shaman.name }));
     // The shaman holds the feature whose Use this is, the target stands within its feet,
     // and both are in the fight the request names - judged here, off the documents.
-    const held = shaman.items.find(i => i.type === "feature" && i.name === String(payload.source ?? "") && classFeatureOnUse(i.system?.className ?? "", i.name)?.bloodlust) ?? null;
+    // Or the spell whose words give it (07 §12's Hour of Haste: *Each target gains a Half-Action
+    // on its next turn*; D-864), known by the caster.
+    const held = shaman.items.find(i => i.type === "feature" && i.name === String(payload.source ?? "") && classFeatureOnUse(i.system?.className ?? "", i.name)?.bloodlust)
+      ?? shaman.items.find(i => i.type === "spell" && i.name === String(payload.source ?? "") && /\bEach target gains a Half-Action on its next turn\b/.test(String(i.system?.effect ?? "").replace(/<[^>]*>/g, " ")))
+      ?? null;
     if (!held) throw new Error(game.i18n.format("AZEROTH.Bloodlust.NotHeld", { name: shaman.name, talent: String(payload.source ?? BLOODLUST.feature) }));
     const fight = payload.combatId ? (game.combats?.get(payload.combatId) ?? null) : null;
     if (!fight?.started || !fight.getCombatantsByActor(target)?.length || !fight.getCombatantsByActor(shaman)?.length) {

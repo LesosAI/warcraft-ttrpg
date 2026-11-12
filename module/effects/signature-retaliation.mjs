@@ -21,11 +21,19 @@ export async function deliverSignatureRetaliation({message,index,cast,permission
    ||flags.retaliation||(flags.strike?.rangeKind??'melee')!=='melee')return {ok:false,reason:'hit'};
   const snapshot=JSON.stringify({source,rows,resolution});
   const token=message.speaker?.scene&&message.speaker?.token?game.scenes.get(message.speaker.scene)?.tokens.get(message.speaker.token):null;
-  return deliverSignatureAreaDamage({message:original,caster,actor,token,spell:source.spell,damage:source.damage,
+  const delivered=await deliverSignatureAreaDamage({message:original,caster,actor,token,spell:source.spell,damage:source.damage,
    event:`retaliation:${message.uuid}:${index}:${cast}`,
    validate:()=>permission()===true&&resolve(message.uuid)===message&&resolve(holder.uuid)===holder
     &&resolve(original.uuid)===original&&!rowWithdrawn(message.flags[scope],index)
     &&JSON.stringify({source:read(),rows:message.flags[scope].signatureRetaliations?.filter(r=>r.index===index&&r.cast===cast),resolution:message.flags[scope].attackResolution?.targets?.[index]})===snapshot});
+  // 07 §12's Scouring Veil: *and gains Decay 1* on the creature that struck (D-865). No GM-absent
+  // refusal is needed (the 2a review, L2): this whole delivery runs on the active GM's client
+  // alone (the guard above), and `requestSignatureRetaliation` refuses with no GM online.
+  if(delivered?.ok!==false&&Number(source.decay)>0){
+   const {layDecay}=await import('./decay.mjs');
+   await layDecay({victim:actor,value:source.decay,by:caster,source:source.name??''});
+  }
+  return delivered;
  }
  const entry=()=>caster?.getFlag(scope,'sustaining')?.find(e=>e.cast===cast&&e.signatureDamageCast===cast&&e.uuid===row.spellUuid&&!sustainEntryTransferPending(e,caster.uuid));
  const held=entry(),resolution=flags.attackResolution?.targets?.[index];

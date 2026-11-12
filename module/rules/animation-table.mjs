@@ -219,6 +219,34 @@ export const FILTERS = Object.freeze({
   STAR_Y: Object.freeze({ hue: 200, saturate: -0.2, brightness: 1.1 }),
   /** Blue into arcane purple. */
   PURPLE_B: Object.freeze({ hue: 45 }),
+  /**
+   * **SAND** (07 §12, D-864): the Chronomancer's sand-coloured arcane treatment - a TINT,
+   * since the assets it dresses (a sleet curtain, a pale pulse, a misty step) are near
+   * white and a hue rotation moves nothing on white (Rain of Fire's lesson above). The
+   * colour is a starting value for the lead's review off the rendered shots.
+   */
+  SAND: Object.freeze({ tint: "#d8b56d", brightness: 1 }),
+  /**
+   * **SAND_GRAIN** and **RUST** are 07 §9's Decay (the lead: *"the decay animation should be
+   * like sand or rust/dust appearance"*; D-885), tuned off the board, not in the head.
+   *
+   * The motes they dress are JB2A's green-yellow particles, and the first build's `SAND` tint
+   * on JB2A's BLUE shards multiplied blue by tan into a dark teal no eye found: 0.1% of the
+   * token's area changed on the board at Decay 1, 0.5% at Decay 2. A wash MULTIPLIES, so it
+   * can only darken a colour toward itself; the sand comes from `sepia`, which maps any colour
+   * to a warm tan by its brightness, and the grey wash before it sets how bright the tan is.
+   * Rust is the wash alone: white cores take the rust exactly, the green fringes go olive-brown.
+   *
+   * **ONE MATRIX OPERATION EACH, never two.** Sequencer builds `ColorMatrix` by calling each
+   * key's PIXI method with `multiply`, and PIXI 7's `ColorMatrixFilter#_loadMatrix` passes its
+   * operand as the product's OUTPUT (`_multiply(newMatrix, this.uniforms.m, matrix)` with
+   * `newMatrix === matrix`), so a second operation reads cells the first row of the product
+   * has already overwritten. Probed: `{sepia, saturate, brightness}` drew lavender-pink and
+   * `{hue, saturate, brightness}` pink where both were meant as rust. The sprite wash runs
+   * before the matrix and is not a matrix operation, so `tint` plus one key is exact.
+   */
+  SAND_GRAIN: Object.freeze({ tint: "#e6e6e6", sepia: true }),
+  RUST: Object.freeze({ tint: "#c06030" }),
   /** Green into arcane purple, for Drain Life's gathered strands. */
   PURPLE_G: Object.freeze({ hue: 150 }),
   /** The two psychic pulses, which are a wash rather than a hue move. */
@@ -913,6 +941,78 @@ export const SPELL_ANIMATIONS = Object.freeze({
     ])]
   },
 
+  /* ================= Arcane: the Chronomancer's sand (07 §12, D-864) ================= */
+  "sand-blast": {
+    cues: [cue("cast", [
+      fx("jb2a.magic_missile.purple", { place: "source>target", travel: "stretch", filter: "SAND" }),
+      snd(SOUNDS.generic),
+      fx("jb2a.impact.ground_crack.orange.02", { place: "target", scale: 0.8, filter: "SAND", waitFor: "travel", overlap: -150 })
+    ])]
+  },
+  "sand-breath": {
+    cues: [cue("region", [
+      fx("jb2a.cone_of_cold.blue", { place: "region-cone", travel: "stretch", filter: "SAND" }),
+      snd(SOUNDS.gust)
+    ])]
+  },
+  "mending-sands": {
+    cues: [cue("cast|effect", [
+      fx("jb2a.healing_generic.200px.yellow", { place: "target", scale: 1.2, filter: "SAND", opacity: 0.8 }),
+      snd(SOUNDS.boon)
+    ])]
+  },
+  sandtrap: {
+    cues: [cue("region", [
+      fx("jb2a.impact.ground_crack.orange.02", { place: "region", area: 0.5, below: true, filter: "SAND" }),
+      snd(SOUNDS.gust)
+    ])],
+    loop: loop("sustain-region", [fx("jb2a.sleet_storm.01.blue", { place: "region", area: 1, mask: true, below: true, filter: "SAND", opacity: 0.4 })])
+  },
+  "moments-warning": {
+    cues: [cue("cast", [
+      fx("jb2a.shimmer.01.blue", { place: "target", scale: 1.2, filter: "SAND" }),
+      snd(SOUNDS.boon)
+    ])]
+  },
+  quickening: {
+    cues: [cue("cast|effect", [
+      fx("jb2a.swirling_feathers.outburst.01.textured", { place: "target", below: true, opacity: 0.8, filter: "SAND" }),
+      snd(SOUNDS.gust)
+    ])]
+  },
+  "grit-lash": {
+    cues: [cue("cast", [
+      fx("jb2a.magic_missile.purple", { place: "source>target", travel: "stretch", filter: "SAND" }),
+      snd(SOUNDS.gust),
+      fx("jb2a.impact.ground_crack.orange.02", { place: "target", scale: 0.6, filter: "SAND", waitFor: "travel", overlap: -150 })
+    ])]
+  },
+  sandskin: {
+    cues: [cue("cast|effect", [
+      fx("jb2a.shield.01.intro.blue", { place: "target", scale: 1.3, filter: "SAND" }),
+      snd("psfx.1st-level-spells.shield-spell.intro.v1.003")
+    ])],
+    loop: loop("effect", [fx("jb2a.shield.01.loop.blue", { place: "holder", scale: 1.3, filter: "SAND", opacity: 0.45 })])
+  },
+  stutter: {
+    cues: [cue("cast", [
+      fx("jb2a.shimmer.01.blue", { place: "target", scale: 1.1, filter: "SAND", opacity: 0.8 }),
+      snd(SOUNDS.generic)
+    ])]
+  },
+  "echo-step": {
+    cues: [
+      cue("cast", [
+        fx("jb2a.misty_step.01.blue", { place: "step-from", scale: 1.1, filter: "SAND" }),
+        snd("psfx.2nd-level-spells.misty-step.v1.intro.generic", { volume: 0.7 })
+      ]),
+      cue("arrive", [
+        fx("jb2a.misty_step.02.blue", { place: "step-to", scale: 1.1, filter: "SAND" }),
+        snd("psfx.2nd-level-spells.misty-step.v1.outro.generic", { volume: 0.7 })
+      ])
+    ]
+  },
+
   /* ================= Nature ================= */
   "lightning-bolt": {
     cues: [cue("cast", [
@@ -1301,6 +1401,8 @@ export const SPELL_ANIMATIONS = Object.freeze({
       snd(SOUNDS.gust)
     ])]
   },
+  // O-225 (the lead, 2026-11-11: *"Just the animation should fire in the targetted area."*): on
+  // the one creature the card recorded, never the caster; with none recorded, `no-anchor`.
   cleanse: {
     cues: [cue("cast", [
       fx("jb2a.particle_burst.01.circle.bluepurple", { place: "target", filter: "GOLD_B" }),
@@ -1618,6 +1720,233 @@ export const FEATURE_ANIMATIONS = Object.freeze({
       fx("jb2a.on_token_buff.001.001.bluepurple", { place: "target", scale: 1.1, filter: "GOLD_B", delay: 200 }),
       snd(SOUNDS.bless2, { delay: 200 })
     ])]
+  },
+  /* ---- the Chronomancer (02 §7, 04; stage 2b), in the sand-gold treatment (`FILTERS.SAND`) ---- */
+  // 02's Another Timeline: the moment wound back on the creature that rolls again - an inward
+  // pulse in sand at the Chronomancer and a shimmer on the creature.
+  "another-timeline": {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "source", scale: 0.8, filter: "SAND" }),
+      fx("jb2a.shimmer.01.blue", { place: "target", scale: 1.1, filter: "SAND", delay: 200 }),
+      snd(SOUNDS.generic, { delay: 200 })
+    ])]
+  },
+  // 02's Slipstream: a quickening run of sand from the Chronomancer to the ally. The
+  // Half-Action waits on the ally until its turn; nothing stands for the wait.
+  slipstream: {
+    cues: [cue("use", [
+      fx("jb2a.energy_strands.range.standard.purple.01", { place: "source>target", travel: "stretch", filter: "SAND" }),
+      fx("jb2a.on_token_buff.001.001.orangeyellow", { place: "target", scale: 1.0, filter: "SAND", waitFor: "travel", overlap: -200 }),
+      snd(SOUNDS.bless2)
+    ])]
+  },
+  // 02's Recall: a sand glyph on the space marked, and on a return the step's own departure
+  // and arrival off the moves the card recorded.
+  recall: {
+    cues: [
+      cue("use", [
+        fx("jb2a.magic_signs.circle.02.divination.complete.blue", { place: "source", scale: 0.8, below: true, filter: "SAND" }),
+        snd(SOUNDS.generic)
+      ]),
+      cue("arrive", [
+        fx("jb2a.misty_step.01.blue", { place: "step-from", scale: 1.1, filter: "SAND" }),
+        fx("jb2a.misty_step.02.blue", { place: "step-to", scale: 1.1, filter: "SAND", delay: 250 }),
+        snd("psfx.2nd-level-spells.misty-step.v1.outro.generic", { volume: 0.7 })
+      ])
+    ]
+  },
+  // 02's Turn the Glass: sand drawn back into the Chronomancer.
+  "turn-the-glass": {
+    cues: [cue("use", [
+      fx("jb2a.particles.inward.greenyellow.01.01", { place: "source", scale: 1.0, filter: "SAND" }),
+      snd(SOUNDS.gust, { volume: 0.7 })
+    ])]
+  },
+  // 02's Suspend: a shell of still sand on the creature held, and a loop that stands while the
+  // hold's effect stands (`suspended`); the effect's end ends it with no path of its own.
+  suspend: {
+    cues: [cue("use", [
+      fx("jb2a.shield.01.intro.blue", { place: "target", scale: 1.3, filter: "SAND" }),
+      snd("psfx.1st-level-spells.shield-spell.intro.v1.003", { volume: 0.7 })
+    ])],
+    loops: [
+      loop("effect", [fx("jb2a.energy_field.01.blue", { place: "holder", scale: 1.2, filter: "SAND", opacity: 0.55 })], { state: "suspended" })
+    ]
+  },
+  // 02's Recurrence: an outward pulse as the next spell is bound to come round again.
+  recurrence: {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.outpulse.circle.01.normal", { place: "source", scale: 0.9, filter: "SAND" }),
+      snd(SOUNDS.generic)
+    ])]
+  },
+  // 02's Master of Hours: a sand rune at the Chronomancer, and a turning border that stands
+  // for the three turns the effect lasts (`masterOfHours`).
+  "master-of-hours": {
+    cues: [cue("use", [
+      fx("jb2a.magic_signs.circle.02.divination.intro.blue", { place: "source", scale: 1.0, below: true, filter: "SAND" }),
+      snd(SOUNDS.bless1)
+    ])],
+    loops: [
+      loop("effect", [fx("jb2a.token_border.circle.spinning.blue.004", { place: "holder", scale: 1.1, filter: "SAND", opacity: 0.7 })], { state: "masterOfHours" })
+    ]
+  },
+  // 04's Gift of Moments: a golden boon on the ally.
+  "gift-of-moments": {
+    cues: [cue("use", [
+      fx("jb2a.bless.200px.intro.yellow", { place: "target", scale: 0.8, filter: "SAND" }),
+      snd(SOUNDS.boon)
+    ])]
+  },
+  // 04's Quickstep: the ally's step, off the move the card recorded.
+  quickstep: {
+    cues: [
+      cue("use", [fx("jb2a.swirling_feathers.outburst.01.textured", { place: "step-from", scale: 0.8, filter: "SAND", below: true }), snd(SOUNDS.gust)]),
+      cue("arrive", [fx("jb2a.misty_step.02.blue", { place: "step-to", scale: 1.0, filter: "SAND" })])
+    ]
+  },
+  // 04's Second Chance: a turn of sand round the ally as its extra Reaction is given.
+  "second-chance": {
+    cues: [cue("use", [
+      fx("jb2a.token_border.circle.spinning.blue.002", { place: "target", scale: 1.0, filter: "SAND", hold: 900, fadeOut: 400 }),
+      snd(SOUNDS.bless2)
+    ])]
+  },
+  // 04's Unfading: the condition swept off the ally.
+  unfading: {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.outpulse.circle.01.normal", { place: "target", scale: 0.8, filter: "SAND" }),
+      fx("jb2a.healing_generic.200px.yellow", { place: "target", scale: 0.8, filter: "SAND", delay: 200 }),
+      snd(SOUNDS.boon, { delay: 200 })
+    ])]
+  },
+  // 04's Echo of Power: power run back into the ally.
+  "echo-of-power": {
+    cues: [cue("use", [
+      fx("jb2a.energy_strands.range.standard.purple.02", { place: "source>target", travel: "stretch", filter: "SAND" }),
+      fx("jb2a.cast_generic.02.blue", { place: "target", scale: 0.8, filter: "SAND", waitFor: "travel", overlap: -200 }),
+      snd(SOUNDS.strands)
+    ])]
+  },
+  // 04's Suspended Moment: a still bubble on each ally whose conditions wait.
+  "suspended-moment": {
+    cues: [cue("use", [
+      fx("jb2a.markers.bubble.complete.blue", { place: "targets", scale: 0.9, filter: "SAND" }),
+      snd(SOUNDS.generic)
+    ])]
+  },
+  // 04's Recovered Hours and The Glass Turns Back: spent hours drawn back to the allies.
+  "recovered-hours": {
+    cues: [cue("use", [
+      fx("jb2a.particles.inward.greenyellow.01.02", { place: "targets", scale: 0.8, filter: "SAND" }),
+      snd(SOUNDS.bless1)
+    ])]
+  },
+  "the-glass-turns-back": {
+    cues: [cue("use", [
+      fx("jb2a.magic_signs.circle.02.divination.complete.blue", { place: "source", scale: 1.6, below: true, filter: "SAND" }),
+      fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "source", scale: 2.0, filter: "SAND", delay: 300 }),
+      snd(SOUNDS.bless1)
+    ])]
+  },
+  // 04's Collapse of Hours: the sand let go at once round the Chronomancer.
+  "collapse-of-hours": {
+    cues: [cue("use", [
+      fx("jb2a.impact.ground_crack.02.orange", { place: "source", scale: 1.8, below: true, filter: "SAND" }),
+      fx("jb2a.extras.tmfx.outpulse.circle.01.normal", { place: "source", sizeFt: 60, filter: "SAND", delay: 150 }),
+      snd(SOUNDS.explode, { volume: 0.7 })
+    ])]
+  },
+  // 04's Temporal Loop: the creature drawn back along its own move.
+  "temporal-loop": {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "target", scale: 0.9, filter: "SAND" }),
+      snd(SOUNDS.gust, { volume: 0.7 })
+    ])]
+  },
+  /* ---- the Guardian of Time (04; stage 2c), in sand-gold ---- */
+  // 04's Time-Lock: a shimmer of sand on the creature as its Bane is laid, and a turning band
+  // about it that stands while the laid Bane does (`laidBane`, `effects/banes.mjs`).
+  "time-lock": {
+    cues: [cue("use", [
+      fx("jb2a.shimmer.01.blue", { place: "target", scale: 1.1, filter: "SAND" }),
+      snd(SOUNDS.generic)
+    ])],
+    loops: [
+      loop("effect", [fx("jb2a.token_border.circle.spinning.blue.002", { place: "holder", scale: 1.0, filter: "SAND", opacity: 0.5 })], { state: "laidBane" })
+    ]
+  },
+  // 04's Echo of the Blade: a flash of sand on the creature an echo strikes, a beat after the
+  // weapon's own impact (`hitKeysOf` reads the echo's depth off its card).
+  "echo-of-the-blade": {
+    cues: [cue("hit", [
+      fx("jb2a.shimmer.01.blue", { place: "target", scale: 1.0, filter: "SAND", delay: 250 }),
+      snd(SOUNDS.generic, { delay: 250, volume: 0.6 })
+    ])]
+  },
+  // 04's Borrowed Time: sand drawn into the Guardian as half the blow is put off.
+  "borrowed-time": {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "target", scale: 0.9, filter: "SAND" }),
+      snd(SOUNDS.gust, { volume: 0.6 })
+    ])]
+  },
+  // 04's Borrowed Hour: a shell of sand as the Guardian is held at 1 Health.
+  "borrowed-hour": {
+    cues: [cue("use", [
+      fx("jb2a.shield.01.intro.blue", { place: "target", scale: 1.2, filter: "SAND" }),
+      snd("psfx.1st-level-spells.shield-spell.intro.v1.003", { volume: 0.7 })
+    ])]
+  },
+  // 04's Interposed Moment: a step of sand out of each place and into the other, off the moves
+  // the swap recorded on its card.
+  "interposed-moment": {
+    cues: [
+      cue("use", [fx("jb2a.misty_step.01.blue", { place: "step-from", scale: 1.0, filter: "SAND" }), snd(SOUNDS.gust, { volume: 0.7 })]),
+      cue("arrive", [fx("jb2a.misty_step.02.blue", { place: "step-to", scale: 1.0, filter: "SAND" })])
+    ]
+  },
+  // 04's Unmade Wound: the put-off damage drawn out of the Guardian as sand.
+  "unmade-wound": {
+    cues: [cue("use", [
+      fx("jb2a.particles.inward.greenyellow.01.01", { place: "source", scale: 0.9, filter: "SAND" }),
+      snd(SOUNDS.generic)
+    ])]
+  },
+  // 04's Timeless Sentinel: a sand rune at the Guardian as the Use is made, and a shell of sand
+  // about it that stands while the Sentinel's effect does (`timelessSentinel`).
+  "timeless-sentinel": {
+    cues: [cue("use", [
+      fx("jb2a.magic_signs.circle.02.divination.intro.blue", { place: "source", scale: 1.2, below: true, filter: "SAND" }),
+      snd(SOUNDS.bless1)
+    ])],
+    loops: [
+      loop("effect", [fx("jb2a.shield.01.loop.blue", { place: "holder", scale: 1.4, filter: "SAND", opacity: 0.45 })], { state: "timelessSentinel" })
+    ]
+  },
+  // 04's Distortion Field: a haze of slowed sand on the ground about the Guardian, standing
+  // while the field's Region does (`canvas/distortion-field.mjs`; the `region` binding).
+  "distortion-field": {
+    loops: [
+      loop("region", [fx("jb2a.sleet_storm.01.blue", { place: "region", area: 1, mask: true, below: true, filter: "SAND", opacity: 0.3 })])
+    ]
+  },
+  // 07 §9's DECAY (the lead: *"the decay animation should be like sand or rust/dust
+  // appearance"*; D-885): motes settling onto the creature while its Decay stands - a few
+  // grains of sand drawn in at Decay 1, and at Decay 2 or more a ring of rust and dust whirling
+  // round it as well (`decay` and `decayHeavy`, `rules/animation-records.mjs#stateEntriesOf`).
+  // The effect's end ends it. Both reach past the token (1.6 and 1.7 of its width) and leave
+  // its face clear: on a 2x crop of the board the sand changed 8 to 9% of the token's area
+  // and the rust 35 to 37%, most of it outside the token's disc (the probe's numbers; the
+  // first build's blue shards under a tan wash changed 0.1% and 0.5% and read as nothing).
+  decay: {
+    loops: [
+      loop("effect", [fx("jb2a.particles.inward.greenyellow.01.01", { place: "holder", scale: 1.6, filter: "SAND_GRAIN" })], { state: "decay" }),
+      loop("effect", [
+        fx("jb2a.particles.swirl.greenyellow.01.01", { place: "holder", scale: 1.7, filter: "RUST", opacity: 0.9 }),
+        fx("jb2a.particles.inward.greenyellow.01.01", { place: "holder", scale: 1.6, filter: "RUST" })
+      ], { state: "decayHeavy" })
+    ]
   },
   // 04's Rewind: the blow drawn back - an inward pulse on the ally and a golden heal.
   rewind: {

@@ -142,6 +142,14 @@ export function seedApplies(effectText, duration = {}, target = "") {
   else if ((m = /(\d+) more Defense/.exec(text))) add("system.defense", m[1]);
   if ((m = /Speed (?:rises|increases) by (\d+)/.exec(text))) add("system.speed", m[1]);
   if ((m = /Speed (?:is )?(?:reduced|falls|drops) by (\d+)/.exec(text))) add("system.speed", -Number(m[1]));
+  // **THE SAND SPELLS' NUMBERS** (07 §12, D-864): Quickening's *and its Initiative by 2*,
+  // Accelerate's *The target's Speed doubles*, Sandskin's *Body Armor Points rise by 1*,
+  // Bastion of Hours' *Your Armor Points rise by 2 at every location* - each a `final`
+  // change on the derived number (CLAUDE.md §15).
+  if ((m = /\bInitiative (?:rises |increases )?by (\d+)/.exec(text))) add("system.initiative", m[1]);
+  if (/\bSpeed doubles\b/.test(text)) changes.push({ key: "system.speed", type: "multiply", value: "2" });
+  if ((m = /\bBody Armor Points rise by (\d+)/.exec(text))) add("system.ap.body", m[1]);
+  if ((m = /\bArmor Points rise by (\d+) at every location\b/.exec(text))) for (const loc of ["body", "head", "limb"]) add(`system.ap.${loc}`, m[1]);
   // *Damage the target takes is reduced by 3 for the duration* (07's Pain
   // Suppression and Barkskin; found beside 04's Pain Suppression, D-774): the
   // every-source reduction D-696 made `system.damageReduction`, which the one
@@ -195,7 +203,9 @@ const SCHOOL_WORD = "(?:\\*\\*)?(?:Fire|Frost|Arcane|Nature|Shadow|Fel|Holy)(?:\
 const WARD_LIST = new RegExp(`Ward (\\d+) against (${SCHOOL_WORD}(?:(?:, (?:and |or )?| and | or )${SCHOOL_WORD})*)`, "g");
 
 /** *cannot be **Frightened** or **Charmed***, *cannot be knocked **Prone***: the clause and the conditions it refuses. */
-const CANNOT_BE = /\bcannot be (?:knocked )?(?:\*\*[A-Za-z]+(?: \d+)?\*\*(?:,? (?:or |and )?)?)+/gi;
+// 07 §12's Pristine Timeline: *cannot be **Slowed**, **Entangled**, **Stunned** or knocked
+// **Prone*** - the *knocked* may stand before any name in the list, not the first alone.
+const CANNOT_BE = /\bcannot be (?:(?:knocked )?\*\*[A-Za-z]+(?: \d+)?\*\*(?:,? (?:or |and )?)?)+/gi;
 
 /** *may ignore one **Bleeding** effect*: a condition the target is spared, never one it is given (D-774). */
 const MAY_IGNORE = /\bmay ignore (?:one |a |any )?(?:\*\*[A-Za-z]+(?: \d+)?\*\*)/gi;
@@ -255,6 +265,15 @@ export function seedCost(effect = "") {
  */
 export function effectDuration(duration = {}, { inFight = false } = {}) {
   const text = String(duration?.text ?? "");
+  // **A SPAN KEYED ON THE CASTER'S TURN** (the sweep's stage 2, D-891): 07's *Instant, until
+  // the end of your next turn* (Dilation, Spell Relay, Scouring Veil, Nether Ward, Gentle
+  // Verdict) and *Instant, until the end of your turn* (Hourstrike) name no number, so they
+  // read as no span and what their Apply laid never ended - Dilation put half of every blow
+  // off for the rest of the fight. *Your* is the caster's: `of: "caster"` tells the door to key
+  // it on the caster's combatant (`effects/durations.mjs#spanOn`), and out of a fight it is
+  // one round of the world's clock (D-778's reading).
+  if (/\buntil the end of your next turn\b/i.test(text)) return { value: 1, units: "turns", expiry: "turnEnd", of: "caster" };
+  if (/\buntil the end of your turn\b/i.test(text)) return { value: 0, units: "turns", expiry: "turnEnd", of: "caster" };
   const m = /(\d+)\s*(minute|hour|round|turn|day)s?/i.exec(text);
   if (!m) return null;
   const n = Number(m[1]);

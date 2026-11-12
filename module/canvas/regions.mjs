@@ -92,11 +92,12 @@ export function shapeFor(area, origin, scale, rotation = 0) {
  *   `rules/areas.mjs#lengthenArea`.
  * @returns {object|null}  Region data, or null where the spell has no area.
  */
-export function regionDataFor({ spell = null, item = null, areaText = null, name = null, color = null, scene, origin, token = null, rotation = 0, title = null, attach = null, flags = null, widenFt = 0, lengthenFt = 0 }) {
+export function regionDataFor({ spell = null, item = null, areaText = null, name = null, color = null, scene, origin, token = null, rotation = 0, title = null, attach = null, flags = null, widenFt = 0, lengthenFt = 0, areaShape = null }) {
   // A spell's Target line, a feature's area (D-616), or a bare measurement
-  // from the Measure control - one grammar, `areaFor`, for all three.
+  // from the Measure control - one grammar, `areaFor`, for all three. An area the CAST
+  // worked out (Time Trap's glyph, `rules/areas.mjs#intScaledArea`) is handed over whole.
   const source = spell ?? item;
-  const area = lengthenArea(widenArea(areaFor(areaText ?? source?.system?.target ?? ""), widenFt), lengthenFt);
+  const area = areaShape ?? lengthenArea(widenArea(areaFor(areaText ?? source?.system?.target ?? ""), widenFt), lengthenFt);
   if (!area) return null;
   const label = name ?? source?.name ?? "";
 

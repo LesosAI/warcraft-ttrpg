@@ -16,7 +16,7 @@ import { abilityKeyOf } from "../rules/animation-records.mjs";
 import { CREATURE_PRESENTATION_AREAS } from "../rules/creature-animation-table.mjs";
 // A Breath's Region state (02's Chromatic Champion; stage 2B).
 import { breathState } from "../rules/animation-table.mjs";
-import { areaFor } from "../rules/areas.mjs";
+import { areaFor, isIntScaled } from "../rules/areas.mjs";
 import {endTurnDamageStamp} from '../rules/end-turn-damage.mjs';
 import { areaTransferRefusal } from "../effects/pending-area-transfer.mjs";
 import { gadgetResistanceRequest, gadgetResistancePresses } from '../effects/gadget-resistance.mjs';
@@ -41,6 +41,7 @@ import { requestFireShieldHit } from "../effects/fire-shield-hit-query.mjs";
 import { requestTaintedBloodHit } from "../effects/tainted-blood-hit-query.mjs";
 import { requestAttackApply } from "../effects/attack-resolution-apply.mjs";
 import { signatureApplyRows } from "../rules/signature-apply.mjs";
+import { applyButtonState, rowStage } from "../rules/applied-rows.mjs";
 import { showForesightTiming } from "../applications/foresight-card.mjs";
 import { reviewChainLightningDamage, showChainLightningHitReview } from "../applications/chain-lightning-hit-review.mjs";
 import { reviewAttackReactionFromCard, showAttackReactionReview } from "../applications/attack-reaction-review.mjs";
@@ -85,12 +86,30 @@ import { showSnarePlacementState, reviewSnarePlacementCard } from "../applicatio
 import { showExplosiveTrapState, resistExplosiveTrapCard } from "../applications/explosive-trap-card.mjs";
 import { gmAbsentFor, pressClaim } from "../rules/gm-writes.mjs";
 import { feetBetweenTokens } from "../canvas/engaged.mjs";
+// Read without an await at Place area: an await before the pick arms lets a press land on no pick.
+import { judgesPoint, rangeInText, readRange } from "../rules/range.mjs";
+import { pointAccept } from "../canvas/range.mjs";
 // What the Ranger's and the Rogue's talents land from a card (D-773): a Reaction
 // taken, a Snare's escape, and the creature a Test's failure entangles.
 import { loseReaction, reactionLossText } from "../effects/reaction-loss.mjs";
 import { SNARE, SNARE_FLAG, cardAttackRefusal, snareEscapeRefusal, snareHolds } from "../rules/class-features.mjs";
 import { inflictCondition } from "../effects/inflict.mjs";
 import { cleanFailRider, destroysCreature, riderSl, slRiderHolds } from "../rules/spell-sl-riders.mjs";
+// 07 §9's Decay on a failed Resist (D-865), and 02 §7's Sand for the caster (D-848).
+import { decayLine, layDecay } from "../effects/decay.mjs";
+import { gainSandFromResist } from "../effects/sand.mjs";
+// The Chronomancer's card doors (stage 2b): Heavy Hours' Bane, a failed Resist's landings,
+// and what a spell's Apply records to land again.
+import { afterSpellApply, chronoAfterResist, heavyHoursOn, layStasis } from "../effects/chronomancer.mjs";
+// 04's Grinding Block (the Chronomancer's Guardian of Time, stage 2c): the attacker's Test on a Block's card.
+import { grindAfterResist } from "../effects/guardian.mjs";
+// What a sand spell's words lay beside its numbers (07 §12, D-864, D-866).
+import { blocksSight, failNoReaction, failSpan, readDeferral, targetRefuses } from "../rules/sand-spells.mjs";
+import { resistLandsUntil, sustainedMark } from "../rules/spell-landings.mjs";
+// O-303: a held cast's carriers say they hold the creature; the card says the Sustain ends.
+import { HOLDS_FLAG, freedEndsSustain, holdMarkOf } from "../rules/held-sustains.mjs";
+import { DEFERRAL_FLAG } from "../rules/deferred-damage.mjs";
+import { IMMUNE_FLAG } from "../rules/legacy-uses.mjs";
 import { reactionBarEffect } from "../rules/reaction-bar.mjs";
 import { layFear } from "../effects/fear.mjs";
 import { tickEffectsOf } from "../effects/ticks.mjs";
@@ -104,10 +123,14 @@ import { summonWaits, creatureAreaRange } from "../rules/creature-plans.mjs";
 import { BOSS_GRIP_FLAG, bossFailLands } from "../effects/boss-doors.mjs";
 import { AZEROTH } from "../config.mjs";
 import { sunderedChanges } from "../rules/maneuvers.mjs";
-import { applyCondition, clockRounds, minuteSpan, roundsOrClock, spellTiming, untilEndOfNextTurn, untilEndOfNextTurnOrRound, untilNextTurn } from "../effects/durations.mjs";
+import { applyCondition, clockRounds, minuteSpan, roundsOrClock, spanOn, spellTiming, untilEndOfNextTurn, untilEndOfNextTurnOrRound, untilNextTurn } from "../effects/durations.mjs";
 // A heal over time's Ward, asked as it is laid (04's Nature's Ward, D-771).
 import { tickWardChanges, tickWardFor } from "../rules/talent-effects.mjs";
 import { HEALING_AREA_WARD, healingAreaWardStamp, isHealingWardArea } from "../rules/healing-area-ward.mjs";
+// 07 §12's Temporal Sanctuary and Bastion of Hours (O-265): the aura a sustained cast holds up.
+import { SAND_AURA_FLAG, cleanSandAura } from "../rules/sand-auras.mjs";
+// 07 §12's Never Was and Moment's Warning on the incoming card (O-264): the card's audience.
+import { answersFor } from "../effects/sand-answers.mjs";
 // Damage or healing laid on a creature at the start of each of its turns
 // (D-770): a spell's rides its Apply, a poison's its failed Test.
 import { hasTick, tickHasClock } from "../rules/ticks.mjs";
@@ -137,6 +160,8 @@ import { STRUCK_TEST_FLAG, cleanStruckTest, struckRefusal } from "../rules/struc
 import { cleanForced } from "../rules/forced-movement.mjs";
 import { forceFromRegion, forceMove, forcedWords, regionCentreOf } from "../effects/forced-movement.mjs";
 import { ESCAPE_FLAG, SHED_DC_FLAG, cleanShedDc, cleanEscape, escapeRefusal, escapeAction, escapeOfEffect, escapeEffectMatches } from "../rules/escapes.mjs";
+// O-292: the last creature out of a held spell ends its Sustain (the GM's door), said on the card.
+import { heldByCast } from "../effects/sustained-spells.mjs";
 import { addSlowedFeet } from "../effects/speed-drop.mjs";
 // THE B6 FIX (the lead: *"Build it everywhere"*, *"Land automatically"*): the half a
 // passed Test leaves, what a card's Test governs, and Permafrost's feet on a Slowed a
@@ -244,6 +269,15 @@ export function registerChatHooks() {
     for (const el of html.querySelectorAll("[data-foresight]")) {
       if (!foreseeing) el.remove();
     }
+    // **07 §12's NEVER WAS AND MOMENT'S WARNING** (O-264): each button is a Chronomancer's who
+    // knows the spell, so it is shown to a client owning such a caster, and a row left with no
+    // button goes.
+    if (html.querySelector("[data-sand-answer]")) {
+      for (const button of html.querySelectorAll("[data-sand-answer] [data-spell-identifier]")) {
+        if (!answersFor(button.dataset.spellIdentifier)) button.remove();
+      }
+      for (const el of html.querySelectorAll("[data-sand-answer]")) if (!el.querySelector("[data-action]")) el.remove();
+    }
 
     // **AN OFFER OF LOOT IS THE INVITED PLAYERS' AND THE GM'S** (D-721). The
     // offered card is posted by the GM, so the ownership rule below would take
@@ -280,7 +314,8 @@ export function registerChatHooks() {
         // by its own rule: judging it twice would take it back off the very
         // players it was kept for.
         if (el.dataset.reactionOwner === undefined && el.dataset.offerUsers === undefined
-          && el.dataset.resistOwner === undefined && el.dataset.foresight === undefined && el.dataset.openTo === undefined) el.remove();
+          && el.dataset.resistOwner === undefined && el.dataset.foresight === undefined && el.dataset.openTo === undefined
+          && el.dataset.sandAnswer === undefined) el.remove();
       }
     }
     // A Resist block left with nothing to press takes its note with it.
@@ -294,6 +329,9 @@ export function registerChatHooks() {
     // as doing nothing (the lead's item 8). Drawn from the message's own flag,
     // so every client sees it and a re-render keeps it.
     showMitigation(message, html);
+    // **AND WHAT ITS APPLY HAS ALREADY DONE** (D-888; the lead's play-test): an applied row's
+    // button greyed and naming the creature that took it, from the card's own record.
+    showApplied(message, html);
     showCannonballState(message, html);
     showPiccoloState(message, html);
     showJangthrazeUse(message, html);
@@ -339,6 +377,29 @@ export function registerChatHooks() {
 }
 
 /**
+ * **SAY ON THE CARD WHAT ITS APPLY HAS DONE** (D-888; the lead's play-test, 2026-11-10:
+ * *"damage button did not apply damage if the token was moved via failing the body
+ * test"*). The lead's card had landed its 3 - the record and the creature's ledger both
+ * say so - and nothing on the card did: the button stayed live, the press took seconds,
+ * and a second press was told *not confirmed*. A tracked row (`flags.attackResolution`)
+ * that is `applied` greys its button and names who took it, in words; one being written
+ * says so and keeps its control for the GM's review. Drawn from the card's own flag, so
+ * every client sees it and a re-render keeps it.
+ */
+function showApplied(message, html) {
+  const flags = message.flags?.["azeroth-rpg"] ?? {};
+  for (const button of html.querySelectorAll('button[data-action="applyDamage"][data-target-index]:not([data-rider]):not([data-self])')) {
+    const index = Number(button.dataset.targetIndex);
+    const state = applyButtonState(rowStage(flags, index));
+    if (!state) continue;
+    const name = flags.targets?.[index]?.name ?? "";
+    const n = button.querySelector("strong")?.textContent ?? button.dataset.damage ?? "";
+    button.textContent = game.i18n.format(state.key, { name, n });
+    if (state.disabled) button.disabled = true;
+  }
+}
+
+/**
  * Patch the Apply buttons of a card a Parry or a Block answered, and say so in
  * words above them.
  *
@@ -380,7 +441,9 @@ function showMitigation(message, html) {
       : row.reaction === "parry" ? "AZEROTH.Card.Parried" : row.reaction === "ward" ? "AZEROTH.Card.Warded"
       : row.reaction === "phaseShift" ? "AZEROTH.PhaseShift.Answered"
       : row.reaction === "dispersion" ? "AZEROTH.Dispersion.Answered"
-      : row.reaction === "negate" ? "AZEROTH.Card.Negated" : "AZEROTH.Card.Blocked", {
+      : row.reaction === "negate" ? "AZEROTH.Card.Negated"
+      // 07 §12's Moment's Warning, the SL the raised Defense took off (O-264).
+      : row.reaction === "warning" ? "AZEROTH.SandAnswer.Answered" : "AZEROTH.Card.Blocked", {
       name: flags.targets?.[index]?.name ?? "", n: row.mitigated ?? 0, to: row.to,
       ward: row.foresightPrevented ?? 0, other: Math.max(0, (row.damage ?? 0) - row.to)
     }))
@@ -710,6 +773,9 @@ export const CARD_ACTIONS = {
   // **THE LEGACY BRANCHES'** (B1): 04's Afterimage pressed from the incoming card by
   // the creature struck - *The attack misses* (door 13).
   reactNegate: (button, message) => negateFromCard(button, message),
+  // **07 §12's NEVER WAS AND MOMENT'S WARNING** (O-264): a Chronomancer's Reaction spell cast
+  // from the incoming card against the row it names, through the cast's own door.
+  reactSpell: (button, message) => spellAnswerFromCard(button, message),
   phaseShift: (button, message) => requestPhaseShift(message, Number(button.dataset.targetIndex)),
   dispersionReaction: (button, message) => dispersionReactionFromCard(message, Number(button.dataset.targetIndex)),
   // **AND B3'S**: 06 §10's offer, taken on its prompt by the Dying character's owner
@@ -783,6 +849,39 @@ async function negateFromCard(button, message) {
     return null;
   }
   return useFeatureWithDialog(defender, feature, null, { answers: { messageId: message.id, index } });
+}
+
+/**
+ * **A REACTION SPELL CAST AGAINST THE ATTACK ON THIS ROW** (07 §12's Never Was: *Cast when an
+ * attack hits a creature you can see*; Moment's Warning: *Cast when a creature you can see is
+ * attacked*; O-264): the caster this client presses for (`effects/sand-answers.mjs
+ * #answeringCaster`) casts the spell through the roll dialog and `castSpell`, handed the card's
+ * row as `answers` - `castSpell` judges the row again before anything is paid, and lands what the
+ * spell does on a success. The row's creature is the spell's target.
+ */
+async function spellAnswerFromCard(button, message) {
+  const flags = message.flags?.["azeroth-rpg"] ?? {};
+  const index = Number(button.dataset.targetIndex);
+  const row = Number.isInteger(index) ? (flags.targets?.[index] ?? null) : null;
+  if (!row || !targetActorOf(row)) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Card.TargetGone"));
+    return null;
+  }
+  const identifier = button.dataset.spellIdentifier ?? "";
+  const { answerSpellsOf, answeringCaster } = await import("../effects/sand-answers.mjs");
+  const caster = answeringCaster(identifier);
+  if (!caster) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.SandAnswer.NoCaster"));
+    return null;
+  }
+  const spell = answerSpellsOf(caster).find(s => (s.item.system?.identifier || s.item.name.slugify()) === identifier)?.item ?? null;
+  if (!spell) return null;
+  const answers = { messageId: message.id, index };
+  const { castWithDialog } = await import("../applications/actions.mjs");
+  return castWithDialog(caster, spell, null, {
+    targets: [row],
+    run: opts => game.system.azeroth.workflows.castSpell({ ...opts, answers })
+  });
 }
 
 /**
@@ -1069,6 +1168,21 @@ async function placeAreaFromCard(message) {
       return false;
     };
   }
+  // **A SPELL'S AREA IS PLACED INSIDE ITS RANGE** (07 §9: *Distances are in feet and measured
+  // from the caster*; O-288, D-893): a radius, line or cube set at a point is held to the
+  // Range from the caster's own token, and a point past it is refused in words while the
+  // pick waits on. An area about the caster, a cone and a token-less caster are not judged.
+  // A feature's area is held to the distance its own words place it at (02's Hurricane and
+  // Earthquake: *a 20-foot area within 60 feet*; `rules/range.mjs#rangeInText`'s `point`).
+  if (!aimAccept && (flags.kind === "spell" || flags.kind === "feature") && token && item?.system) {
+    const placed = flags.kind === "feature" ? rangeInText(item.system.description ?? "") : null;
+    const reach = flags.kind === "feature"
+      ? (placed?.kind === "point" ? { kind: "feet", feet: placed.distance } : { kind: "none", feet: null })
+      : readRange(item.system.range);
+    // The one point rule (`canvas/range.mjs#pointAccept`), which a point the cast recorded before
+    // its payment is held to as well (`placeItemArea`'s recorded branch; stage 11, D-906).
+    if (flags.kind === "feature" || judgesPoint(item.system.target)) aimAccept = pointAccept(token, reach, item.name);
+  }
   if (flags.kind === "feature" && flags.aimFrom?.tokenUuid) {
     const from = fromUuidSync(flags.aimFrom.tokenUuid);
     if (!from || from.parent?.id !== canvas?.scene?.id) {
@@ -1092,9 +1206,16 @@ async function placeAreaFromCard(message) {
     widenFt: Number(flags.widen) || 0,
     // And a talent's longer cone (D-775): Cone of Cold's 5 feet a rank.
     lengthenFt: Number(flags.lengthen) || 0,
+    // **TIME TRAP'S GLYPH** (07 §12: *a radius of 5 feet times your Intelligence modifier*; the
+    // sweep's stage 2, D-891): the area the cast worked out and the card prints, never the Target
+    // line's one space, which is what the door laid before.
+    ...(flags.kind === "spell" && flags.area && isIntScaled(item?.system?.effect ?? "") ? { areaShape: flags.area } : {}),
     // Relay records the selected alternate origin and facing before the Test.
     // The Region uses it verbatim and retains the card's real caster token.
     placementOverride: flags.spellRelayPlacement ?? null,
+    // **MINDSTATIC'S AND HEAT MIRAGE'S POINT** (O-314): picked before the payment and recorded on
+    // the card, so the Region goes where the boundary and the image stand, with no second click.
+    ...(flags.kind === "spell" && flags.areaAt ? { atPoint: flags.areaAt } : {}),
     // Which cast placed it (D-724), and what it answers to (D-756): the Region
     // answers to the card and to the Sustain, and nothing is written back onto
     // the card.
@@ -1204,6 +1325,9 @@ export function regionFlagsFromCard(message, actor, item) {
     // talent's - neither where the Casting Test failed.
     areaGround: flags.success === false ? null : (flags.areaGround ?? null),
     ground: flags.success === false ? null : (flags.ground ?? null),
+    // **07 §12's SANDWALL** (*It blocks sight*; O-267): the Wall the active GM raises along the
+    // placed line and takes down with it (`canvas/sand-walls.mjs`). Named only where it blocks.
+    ...(flags.success !== false && blocksSight(flags.effectHTML ?? "") ? { blocksSight: true } : {}),
     widen: Number(flags.widen) || 0,
     // What the area's Tests are made against and what Rain of Chaos's *At SL
     // 3 or better* reads (D-757): the caster's Spell DC and the cast's SL.
@@ -1373,6 +1497,11 @@ async function resistTestFromCard(button, message, {gadgetOverride=false} = {}) 
     ui.notifications?.warn(game.i18n.format("AZEROTH.Card.ResistFailedCast", { name: flags0.title ?? "" }));
     return null;
   }
+  // 04's Grinding Block (stage 2c): the Block card's Test is made once.
+  if (button.dataset.purpose === "grind" && flags0.pressed?.grind) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.TalentLine.Pressed"));
+    return null;
+  }
   const area = button.dataset.purpose === "area";
   const gadget = !button.dataset.purpose && resistedGadget(flags0);
   if (gadget && GADGET_RESIST_PRESSES.has(message.id)) return null;
@@ -1479,8 +1608,31 @@ async function escapeOutcome({ actor, effect, escape, passed }) {
   const condition = game.i18n.localize(AZEROTH.conditions[escape.condition] ?? escape.condition);
   const lines = [];
   if (passed) {
+    // 07 §12's Sand Prison: *leaves the spell when it succeeds* - its other conditions too,
+    // taken off FIRST, so the condition the escape rides goes last: the active GM's freed-creature
+    // door (O-292, O-303, `effects/sustained-spells.mjs#endFreedSustains`) ends a Sustain that holds
+    // nobody once this creature carries none of the cast's conditions. **ONLY THE CAST'S OWN**
+    // (stage 11, D-906): a `toggleStatusEffect` off deleted every Blinded the creature carried, a
+    // Flash Powder's among them; the conditions the cast laid carry its `cast`, and only those go,
+    // in one delete.
+    const holdMark = holdMarkOf(effect);
+    const holdCast = holdMark?.cast ?? escape.cast ?? null;
+    const also = new Set(escape.also ?? []);
+    const castOwn = holdCast && also.size
+      ? actor.effects.filter(e => e.id !== effect.id && e.flags?.["azeroth-rpg"]?.cast === holdCast && [...(e.statuses ?? [])].some(id => also.has(id))).map(e => e.id)
+      : [];
+    if (castOwn.length) await actor.deleteEmbeddedDocuments("ActiveEffect", castOwn);
+    // Counted before the delete, on the board as it stands (the creature leaving excluded). Any
+    // held cast, not Sand Prison's words alone (O-303: *"end it however the creature is freed"*).
+    const holdCaster = actorAt(holdMark?.by ?? escape.by);
+    const lastOut = Boolean(holdMark) && freedEndsSustain({
+      casterHolds: (holdCaster?.getFlag?.("azeroth-rpg", "sustaining") ?? []).some(row => row?.cast === holdCast),
+      othersHeld: heldByCast(holdCast, { except: actor.uuid })
+    });
     if (actor.effects.has(effect.id)) await actor.deleteEmbeddedDocuments("ActiveEffect", [effect.id]);
     lines.push(game.i18n.format("AZEROTH.Escape.Freed", { name: actor.name, condition, source: escape.source }));
+    // O-292 (the lead: *"292 - end when target escapes"*): the card says the Sustain ends.
+    if (lastOut) lines.push(game.i18n.format("AZEROTH.Escape.SustainLeft", { name: actor.name, source: escape.source, caster: actorAt(escape.by)?.name ?? "" }));
   } else {
     lines.push(game.i18n.format("AZEROTH.Escape.Held", { name: actor.name, condition, source: escape.source }));
     if (escape.failStun === "casterTurnEnd") {
@@ -1740,6 +1892,12 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
     let talentBanes = escapeHeld?.escape?.banes > 0
       ? { banes: escapeHeld.escape.banes, names: escapeHeld.escape.talents.length ? escapeHeld.escape.talents : [escapeHeld.escape.source] }
       : null;
+    // **04's HEAVY HOURS** (*A creature carrying your Decay takes a Bane on Reflex Resilience
+    // Tests against your spells*; stage 2b): the caster's talents and the Decay's own `by`.
+    if (purpose === "spell" && !talentBanes) {
+      const heavy = heavyHoursOn({ resister: actor, caster: casterOf(message), resilience });
+      if (heavy) talentBanes = heavy;
+    }
     if (purpose === "poison" && maker && typeof maker.takenTalents === "function") {
       const vile = poisonTestBanesFor(maker.takenTalents());
       const suffering = vile.banes > 0 && tickEffectsOf(actor).some(e => isPoisonTickBy(e.flags?.["azeroth-rpg"]?.tick ?? null, maker.uuid));
@@ -1838,6 +1996,11 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
     }
     if (purpose === "reach" && result && !(await game.system.azeroth.workflows.spendTurnBudget(actor, "half"))) continue;
     const passed = result?.rolls?.[0]?.outcome?.success === true;
+    // **WHO HAD SLOWED IT WHEN IT FAILED** (04's Arrested Moment: *when a creature you have
+    // Slowed fails a Resilience Test*; the live fix): read BEFORE this Test's failure lays
+    // anything, so a Slowed this very failure lays (Stutter's, Sand Breath's) is not one the
+    // creature already had - the Stun is the second spell's, as *also* says.
+    const slowedBefore = actor.effects.filter(e => e.active !== false && e.statuses?.has?.("slowed")).flatMap(e => e.flags?.["azeroth-rpg"]?.[LAID_BY_FLAG] ?? []);
     // The Snare's escape, landed (D-773): a pass ends the Entangled, and 04's
     // Entrapment deals its 5 as the creature pulls clear - untyped, as 08 §12's
     // *N damage* is (D-770), and no attack.
@@ -2012,7 +2175,7 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
     // with the spell's own span on the fight's clock (D-628).
     if (button.dataset.purpose === "spell" && result && !result.rolls?.[0]?.outcome?.success) {
       const flags = message.flags?.["azeroth-rpg"] ?? {};
-      const timing = spellTiming(actor, flags.duration ?? null);
+      const timing = spanOn(actor, flags.duration ?? null, casterOf(message));
       if (flags.identifier === "mind-soothe") {
         const { requestMindSoothe } = await import("../effects/mind-soothe.mjs");
         await requestMindSoothe(actor, message, result);
@@ -2033,9 +2196,43 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
           dominationConfirmed = (await requestDomination(actor, message, result))?.ok === true;
           continue;
         }
-        const effect = await applyCondition(actor, id, { until: timing });
+        // A failure's own span where the entry names one (07 §12's Sand Breath and Stutter:
+        // *until the end of its next turn*), else the spell's - and where the spell names none
+        // and holds nothing up, A1's own end (07 §12's Epoch: *it is also Stunned*; D-892).
+        const lands = resistLandsUntil({ id, named: failSpan(flags.effectHTML ?? ""), timed: Boolean(timing), sustained: flags.sustained === true });
+        const failUntil = lands === "endOfNextTurn" ? untilEndOfNextTurnOrRound(actor) : timing;
+        const had = actor.statuses?.has?.(id) === true;
+        const effect = await applyCondition(actor, id, { until: failUntil });
+        // **A HELD SPELL'S CONDITION ENDS WITH ITS SUSTAIN** (07 §7; 07 §12's Sand Prison;
+        // D-892): the mark every sustained carrier wears, which the active GM's sweep
+        // (`effects/sustained-spells.mjs`) reads, on a condition this Test laid.
+        // **AND WHETHER IT HOLDS THE CREATURE** (O-303): a cast aimed at creatures, never an area,
+        // so the Sustain ends once nobody carries it (`rules/held-sustains.mjs`).
+        const holdMark = effect ? sustainedMark({ sustained: flags.sustained === true, cast: flags.cast ?? null, casterUuid: casterOf(message)?.uuid ?? null, had, area: Boolean(flags.area) }) : null;
+        if (holdMark) await effect.update({ origin: holdMark.origin, "flags.azeroth-rpg.sustained": holdMark.flags.sustained, "flags.azeroth-rpg.cast": holdMark.flags.cast,
+          ...(holdMark.flags.holds === true ? { "flags.azeroth-rpg.holds": true } : {}) });
+        // **WHO LAID IT** (the Legacy branches' door 17, which the condition button and
+        // `effects/inflict.mjs` already stamp; the Chronomancer live fix): the caster, on the
+        // condition's own effect. A spell's failed Resist laid its condition naming nobody, so
+        // 04's Arrested Moment (*a creature you have Slowed*) never saw the caster's Slowed.
+        if (effect && maker?.uuid) {
+          const held = effect.flags?.["azeroth-rpg"]?.[LAID_BY_FLAG] ?? [];
+          const next = laidByWith(held, maker.uuid);
+          if (next.length !== laidByWith(held, null).length) await effect.setFlag("azeroth-rpg", LAID_BY_FLAG, next);
+        }
         if (effect && escape?.condition === id) await effect.setFlag("azeroth-rpg", ESCAPE_FLAG, escape);
         if (effect && id === "slowed" && Number(flags.slowing?.feet) > 0) await addSlowedFeet(effect, flags.slowing);
+      }
+      // **07 §12's STUTTER** (*... and has no Reaction until the end of its next turn*): the
+      // reaction bar `canReact` and the budget read, on the failure's own span.
+      if (failNoReaction(flags.effectHTML ?? "")) {
+        const prior = (actor.effects ?? []).filter(e => e.flags?.["azeroth-rpg"]?.reactionBar?.cardUuid === message.uuid).map(e => e.id);
+        if (prior.length) await actor.deleteEmbeddedDocuments("ActiveEffect", prior);
+        await actor.createEmbeddedDocuments("ActiveEffect", [reactionBarEffect({
+          actorUuid: actor.uuid, cardUuid: message.uuid, timing: untilEndOfNextTurnOrRound(actor) ?? {},
+          name: game.i18n.format("AZEROTH.SlRider.NoReactionName", { spell: flags.spellName ?? "" })
+        })]);
+        ui.notifications?.info(game.i18n.format("AZEROTH.SlRider.NoReactionLanded", { name: actor.name, spell: flags.spellName ?? "" }));
       }
       if (flags.onFail?.statuses?.length && dominationConfirmed) {
         ui.notifications?.info(game.i18n.format("AZEROTH.Card.OnFailLanded", {
@@ -2053,7 +2250,13 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
       // on the spell's own span; Turn Undead's *destroyed outright* as its Health lost
       // to 0 through the one door for Health lost (MY READING).
       const slRider = cleanFailRider(flags.slRider ?? null);
-      const riderAt = riderSl(Number.isInteger(link?.index) ? (flags.damageByTarget?.[link.index] ?? null) : null, flags.sl);
+      // This creature's own SL where each target was judged on its own number (O-301), else the cast's.
+      const ownSl = Number.isInteger(link?.index) && Number.isFinite(Number(flags.slByTarget?.[link.index])) && flags.slByTarget?.[link.index] !== null
+        ? Number(flags.slByTarget[link.index]) : flags.sl;
+      // A spell with no Damage field meets this creature's Ward on its SL (07 SS9, 05 SS15;
+      // O-262, D-905): the Ward the cast recorded for it (`slRiderWard`), 0 on an older card.
+      const riderAt = riderSl(Number.isInteger(link?.index) ? (flags.damageByTarget?.[link.index] ?? null) : null, ownSl,
+        Number.isInteger(link?.index) ? (flags.slRiderWard?.[link.index] ?? 0) : 0);
       if (slRider && slRiderHolds(slRider, { sl: riderAt, success: flags.success === true })) {
         const spellName = flags.spellName ?? "";
         if (slRider.kind === "failCondition") {
@@ -2072,6 +2275,15 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
           ui.notifications?.info(game.i18n.format("AZEROTH.SlRider.Destroyed", { name: actor.name, spell: spellName }));
         }
       }
+      // **07 §9's DECAY ON A FAILED RESIST** (D-865): Sand Prison's *gains Decay 1*, Drag
+      // of Ages' half the caster's Intelligence modifier - the number the cast recorded,
+      // laid through the one writer by the caster's hand.
+      const decayFail = flags.decayFail ?? null;
+      if (decayFail && Number(decayFail.value) > 0) {
+        const laid = await layDecay({ victim: actor, value: decayFail.value, by: casterOf(message), source: flags.spellName ?? "",
+          until: decayFail.until === "shortRest" ? "shortRest" : "", adds: decayFail.adds === true, cap: decayFail.cap ?? null, scaled: true });
+        ui.notifications?.info(decayLine(laid, { spell: flags.spellName ?? "" }));
+      }
       // **EARTH SHOCK'S *OR LOSE IT*** (the B9a pass): the Sustained spell the creature
       // holds ends - the one it holds, or the one named where it holds more than one.
       if (flags.testGate?.loses === "sustain") await loseHeldSustain(actor, flags.spellName ?? "");
@@ -2087,6 +2299,17 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
         const r = await forceMove({ token, from, feet: forced.feet, toward: forced.toward, by: casterOf(message), name: actor.name });
         ui.notifications?.info(forcedWords(r, { toward: forced.toward, source: flags.spellName ?? "" }));
       }
+      // **07 §12's STASIS** (*On a failure it cannot act, move, speak or be moved, it takes no damage
+      // from any source, and nothing already affecting it advances while this runs. It may repeat the
+      // Test at the end of each of its turns, and leaves the spell when it succeeds*; O-306, the lead:
+      // *"306 - I agree"*): the creature that failed is held through Suspend's own door
+      // (`effects/chronomancer.mjs#layStasis`, `rules/chronomancer.mjs#holdOutOfTime`), naming the
+      // cast so O-303's door ends the Sustain once nobody is held. A failure lays it; a pass nothing.
+      if (flags.identifier === "stasis") {
+        const caster = casterOf(message);
+        const held = caster ? await layStasis({ by: caster, target: actor, source: flags.spellName || "Stasis", cast: flags.cast ?? null, dc: dc ?? flags.spellDC ?? null }) : false;
+        if (held) ui.notifications?.info(game.i18n.format("AZEROTH.Chrono.StasisLaid", { name: actor.name, source: flags.spellName || "Stasis" }));
+      }
     }
     // **THE FORM A FAILED TEST LAYS** (07's Hex: *becomes a frog*; 02's Polymorph:
     // *becomes a rabbit*; D-808), on this creature, through the one writer - before the
@@ -2097,6 +2320,28 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
     // (`dice/annotate.mjs#verifiedResist` reads it off the creature) - and is what the
     // card's Apply reads to land the half on a creature that passed.
     if (link && result) await recordResist({ message, result });
+    // **SAND FOR THE CASTER** (02 §7: *Gain 1 when a creature fails a Resilience Test against
+    // a spell or feature of yours, once a cast*; D-848): through the one door, once a cast.
+    if (link && result && !passed) await gainSandFromResist(casterOf(message), { message, resister: actor });
+    // **THE CHRONOMANCER'S FAILED RESISTS** (stage 2b): Suspend's hold, Temporal Loop's return
+    // and Arrested Moment's Stun (`effects/chronomancer.mjs#chronoAfterResist`). Guarded: none
+    // undoes the Test.
+    if (result && !passed) {
+      try {
+        for (const line of await chronoAfterResist({ message, actor, passed, purpose, caster: casterOf(message), slowedBy: slowedBefore })) ui.notifications?.info(line);
+      } catch (err) {
+        console.warn("azeroth-rpg | a Chronomancer's Resist", err);
+      }
+    }
+    // **04's GRINDING BLOCK** (stage 2c): the attacker's Spirit Test on the Block's card, its one
+    // press claimed either way and a failure landing Slowed (`effects/guardian.mjs#grindAfterResist`).
+    if (result && purpose === "grind") {
+      try {
+        for (const line of await grindAfterResist({ message, actor, passed })) ui.notifications?.info(line);
+      } catch (err) {
+        console.warn("azeroth-rpg | Grinding Block's Test", err);
+      }
+    }
     if(link&&result&&message.flags?.["azeroth-rpg"]?.equipmentExplosive)
       await (await import("../effects/equipment-explosives.mjs")).requestExplosiveApply(message,link.index);
     if (gadgetDelivery && result) await gadgetResistanceRequest({
@@ -2983,6 +3228,15 @@ async function applyDamageToTargets(button, message, recordedAttack = false, tra
     // hit. A withdrawn Parry returned above; the GM checks it again on receipt.
     // Contact detonation belongs to the successful hit, before retaliatory
     // damage could remove the bomb that landed it.
+    // **WHAT LANDS AGAIN** (02's Recurrence, 04's Echoing Sands; stage 2b): what this row took,
+    // recorded on the caster for its next turn start. Guarded.
+    if (flags.chronoAgain && damageOutcome.amount > 0) {
+      try {
+        await afterSpellApply({ message, target: actor, amount: damageOutcome.amount, kind: "damage" });
+      } catch (err) {
+        console.warn("azeroth-rpg | a spell landing again", err);
+      }
+    }
     await requestWalkingBombHit(message, Number(index));
     await requestLightningShieldHit(message, Number(index));
     await requestFireShieldHit(message, Number(index));
@@ -3114,7 +3368,17 @@ async function applyHealingToTargets(button, message) {
       return;
     }
     if (!canHeal(actor)) return;
-    return actor.applyHealing(amount, { from, spell, feature, featureName, ...riders });
+    const healOutcome = {};
+    const healed = await actor.applyHealing(amount, { from, spell, feature, featureName, ...riders, outcome: healOutcome });
+    // 02's Recurrence: *The damage and healing of the next spell ... land again* (stage 2b).
+    if (flags.chronoAgain && healOutcome.restored > 0) {
+      try {
+        await afterSpellApply({ message, target: actor, amount: healOutcome.restored, kind: "heal" });
+      } catch (err) {
+        console.warn("azeroth-rpg | a heal landing again", err);
+      }
+    }
+    return healed;
   }
   const controlled = canvas.tokens?.controlled ?? [];
   if (controlled.length) {
@@ -3685,11 +3949,13 @@ async function applySpellEffectFromCard(button, message) {
       return (e.system?.changes ?? []).some(c => c.type === POOL_CHANGE_TYPE && poolKeys.includes(c.key));
     }).map(e => e.id);
     if (stale.length) await actor.deleteEmbeddedDocuments("ActiveEffect", stale);
-    const timing = (holder ? untilEndOfNextTurn(holder) : null) ?? spellTiming(actor, flags.duration ?? null) ?? {};
+    const timing = (holder ? untilEndOfNextTurn(holder) : null) ?? spanOn(actor, flags.duration ?? null, casterOf(message)) ?? {};
     // A condition the body refuses stays off (10 §4, §6).
     const statuses = (applies.statuses ?? []).filter(id => AZEROTH.conditions?.[id] && !(actor.system?.conditionImmunities ?? []).includes(id));
     const {spellRetaliationCarrier} = await import('../rules/spell-retaliation-sources.mjs');
+    // A Self spell's carrier on its own caster (07 §12's Scouring Veil; D-864).
     const retaliationCarrier = flags.spellRetaliation?.descriptor?.recipient === 'target'
+      || (flags.spellRetaliation?.descriptor?.recipient === 'caster' && flags.sustained !== true && flags.spellRetaliation?.casterUuid === actor.uuid)
       ? spellRetaliationCarrier(flags,message.uuid,actor.uuid) : null;
     const [laid] = await actor.createEmbeddedDocuments("ActiveEffect", [{
       name: flags.spellName ?? message.flavor ?? "Spell",
@@ -3709,6 +3975,9 @@ async function applySpellEffectFromCard(button, message) {
         // and the card, so the effect answers to the cast that made it.
         identifier: flags.identifier ?? null, cast: flags.cast ?? null, messageId: message.id,
         ...(flags.sustained === true ? { sustained: true } : {}),
+        // A held cast's conditions laid by the Apply hold the creature too (O-303): its Sustain
+        // ends once nobody carries one (`rules/held-sustains.mjs`); never an area's.
+        ...(flags.sustained === true && !flags.area && statuses.length ? { [HOLDS_FLAG]: true } : {}),
         ...selfTick,
         ...(areaWard ? { [HEALING_AREA_WARD]: areaWard } : {}),
         ...endTurnDamageStamp(flags,'self'),
@@ -3718,6 +3987,14 @@ async function applySpellEffectFromCard(button, message) {
         // Freedom ...; D-757): the terrain door reads it for every source of
         // Difficult ground while the effect stands (`canvas/behaviors.mjs`).
         ...(flags.areaGround?.ignores === true ? { [IGNORES_GROUND_FLAG]: true } : {}),
+        // **07 §12's DILATION** (D-866): the deferral the one damage door reads while this stands.
+        ...(readDeferral(flags.effectHTML ?? "") ? { [DEFERRAL_FLAG]: { ...readDeferral(flags.effectHTML), by: casterOf(message)?.uuid ?? null, source: flags.spellName ?? "" } } : {}),
+        // **07 §12's PRISTINE TIMELINE** (*Each target cannot be Slowed, Entangled, Stunned
+        // or knocked Prone*): the conditions `toggleStatusEffect` refuses while this stands.
+        ...(targetRefuses(flags.effectHTML ?? "") ? { [IMMUNE_FLAG]: targetRefuses(flags.effectHTML) } : {}),
+        // **07 §12's TEMPORAL SANCTUARY AND BASTION OF HOURS** (O-265): the aura the cast holds
+        // up, on the caster's own effect, which the aura door reads as a source while it stands.
+        ...(cleanSandAura(flags.sandAura) && actor.uuid === casterOf(message)?.uuid ? { [SAND_AURA_FLAG]: cleanSandAura(flags.sandAura) } : {}),
         // 07's floor (D-777), whose caster the talent's heal reads when it goes.
         ...(floorHere ? { [FLOOR_FLAG]: { stay: Math.max(1, Math.trunc(Number(floorHere.stay)) || 1), by: casterOf(message)?.uuid ?? null, name: flags.spellName ?? "", held: false, noCritical: floorHere.noCritical === true } } : {}),
         // **NO DISPEL ENDS IT** (04's Improved Moonfire at rank 2: *it cannot be ended
