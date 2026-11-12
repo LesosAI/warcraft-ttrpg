@@ -53,6 +53,8 @@ import { isHourglass } from "../rules/sand.mjs";
 import { multiclassRefusal } from "../rules/multiclass.mjs";
 // A Gadgets-compendium entry is a reference, never a sheet's (the lead, 2026-10-24).
 import { isGadgetEntry } from "../rules/gadgets.mjs";
+// A Services-compendium entry is bought and never carried (the lead: *"Add services to the compendium"*).
+import { serviceRefusal } from "../rules/services.mjs";
 import { ITEM_CUSTODY_PENDING_FLAG, isItemCustodyPending } from "../rules/item-custody-guard.mjs";
 
 /** The item subtypes that are THINGS. A talent, a spell or a class is never judged. */
@@ -192,6 +194,15 @@ export class AzerothItem extends Item {
     // offered find's does (`rules/gadgets.mjs#isGadgetEntry`).
     if (actor?.documentName === "Actor" && isGadgetEntry(data)) {
       ui.notifications?.warn(game.i18n.format("AZEROTH.Gadget.EntryRefused", { name: data.name ?? "" }));
+      return false;
+    }
+    // **A SERVICES-COMPENDIUM ENTRY IS NEVER A SHEET'S.** 08 §15's and §16's rows are paid
+    // for and never carried: a night's lodging or a day's guide in a bag would take a bag
+    // slot and be sold on. Refused on every actor, in words, whatever the door; a world
+    // item with no actor is allowed (`rules/services.mjs#serviceRefusal`).
+    const serviceRefused = serviceRefusal({ parent: actor, data });
+    if (serviceRefused) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Service.EntryRefused", { name: data.name ?? "" }));
       return false;
     }
     return allowed;

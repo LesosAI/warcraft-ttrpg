@@ -74,6 +74,10 @@ export const PACK_COUNTS = Object.freeze({
     count: 1531, classic: 1052,
     why: "08 §9 to §17's catalogue tables by header name, two Augments a class (seven classes, the Broodstone the seventh) and the Chronomancer's one ungraded Hourglass (D-847), and §20's Epic consumables and the Grimoire (D-632), plus §11's Leggings and Trinket (D-686), Mantle (D-689), eighteen approved special designs and provisions (D-813), and 1,052 Classic finds off the vendored record (D-685, D-690, D-692)"
   },
+  services: {
+    count: 41,
+    why: "08 §15's Hired transport (10) and §16's Lodging (7), Upkeep (5), Hire (9) and Services (10), one gear document a row; never carried, so the gear pack skips them"
+  },
   rules: { count: 18, why: "one JournalEntry per chapter in docs/book" },
   criticals: { count: 3, why: "06 §8: Body, Head and Limb, d20 over seven bands each" }
 });

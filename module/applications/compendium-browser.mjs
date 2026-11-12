@@ -268,7 +268,7 @@ export class AzerothCompendiumBrowser extends CategoryBrowser {
    */
   #sortContext(key) {
     const chosen = this.#sort.get(key) ?? { key: "name", dir: "asc" };
-    const type = { weapons: "weapon", armor: "armor", gear: "gear", spells: "spell", talents: "talent", careers: "career" }[key];
+    const type = { weapons: "weapon", armor: "armor", gear: "gear", services: "gear", spells: "spell", talents: "talent", careers: "career" }[key];
     const spec = type ? (ITEM_FIELDS[type] ?? []) : [];
     const label = k => {
       if (k === "name") return game.i18n.localize("AZEROTH.Item.Name");

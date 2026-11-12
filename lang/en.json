@@ -2953,6 +2953,7 @@
       "Weapons": "Weapons",
       "Armor": "Armor",
       "Gear": "Gear",
+      "Services": "Services",
       "Traits": "Traits",
       "Conditions": "Conditions",
       "Legacies": "Legacies",
@@ -6362,8 +6363,11 @@
       "WreckedTag": "wrecked",
       "SharedNotYours": "{name}: the shared turn is recorded on your tinker's combatant, which you cannot write, so nothing is spent."
     },
+    "Service": {
+      "EntryRefused": "{name} is a service. Pay for it from the purse; you cannot add it to a sheet."
+    },
     "Gadget": {
-      "EntryRefused": "Choose {name} through Gadgeteer, or build it with Mekkatorque's Blueprint. You cannot add it directly from the compendium.",
+      "EntryRefused":"Choose {name} through Gadgeteer, or build it with Mekkatorque's Blueprint. You cannot add it directly from the compendium.",
       "InFight": "{name}: you cannot choose or replace gadgets during a fight.",
       "Known": "Gadgets known: {names}.",
       "MenuNote": "Choose up to {n} gadgets: 2 + your tier, plus one for each rank of Engineering Upgrade. You can use each gadget once between Short Rests. During a Long Rest, use The Bench to replace one known gadget. You can fill empty slots outside a fight.",

@@ -91,7 +91,15 @@ export const CORE_FALLBACK = Object.freeze({
   "Camp and the road": "icons/svg/item-bag.svg",
   "Storage and carry": "icons/svg/item-bag.svg",
   "Instruments and games": "icons/svg/item-bag.svg",
-  "Ritual and cultural goods": "icons/svg/item-bag.svg"
+  "Ritual and cultural goods": "icons/svg/item-bag.svg",
+
+  // 08 §15's and §16's service tables, the services pack (the lead: *"Add services to
+  // the compendium"*). The icon map names none of them, so each shelf wears a core icon.
+  "Hired transport": "icons/svg/stone-path.svg",
+  Lodging: "icons/svg/house.svg",
+  Upkeep: "icons/svg/village.svg",
+  Hire: "icons/svg/mystery-man.svg",
+  Services: "icons/svg/coins.svg"
 });
 
 /**

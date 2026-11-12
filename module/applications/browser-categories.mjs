@@ -11,6 +11,7 @@
 import { AZEROTH } from "../config.mjs";
 import { coins, copperFrom } from "../helpers/coins.mjs";
 import { GADGETS_PACK, GADGET_ENTRY_FLAG } from "../rules/gadgets.mjs";
+import { SERVICES_PACK } from "../rules/services.mjs";
 import { augmentOf } from "../rules/augments.mjs";
 import { crestPath } from "../rules/crests.mjs";
 
@@ -190,6 +191,19 @@ export const CATEGORIES = Object.freeze({
       cost: { label: "AZEROTH.Browser.Price", path: "system.cost", kind: "range", coin: true }
     })
   },
+  // 08 §15's Hired transport and §16's Lodging, Upkeep, Hire and Services (the lead:
+  // *"Add services to the compendium"*). Bought and never carried, so they are a pack of
+  // their own and the gear category's bag and slot facets do not apply.
+  services: {
+    pack: SERVICES_PACK,
+    label: "AZEROTH.Browser.Services",
+    fields: ["system.cost", "system.source.section"],
+    filters: () => ({
+      shelf: { label: "AZEROTH.Browser.Shelf", path: "system.source.section", kind: "tail" },
+      // 08 §2's coin, not copper: the bound is typed as `2s` and parsed (D-672).
+      cost: { label: "AZEROTH.Browser.Price", path: "system.cost", kind: "range", coin: true }
+    })
+  },
   traits: {
     pack: "azeroth-rpg.traits",
     label: "AZEROTH.Browser.Traits",
@@ -327,6 +341,8 @@ export function summary(key, entry) {
     case "weapons": parts.push(s.rating != null ? `R${s.rating}` : null, s.range != null ? `${s.range} ft` : null, traitRun(s.traits), enumLabel(AZEROTH.rarities, s.rarity), coins(s.cost)); break;
     case "armor": parts.push(enumLabel(AZEROTH.armorCategories, s.category), ...(s.cuts ?? []).map(k => enumLabel(AZEROTH.armorCuts, k)), traitRun(s.traits), enumLabel(AZEROTH.rarities, s.rarity), coins(s.cost)); break;
     case "gear": parts.push(sectionTail(s.source?.section), traitRun(s.traits), enumLabel(AZEROTH.rarities, s.rarity), coins(s.cost)); break;
+    // A service's shelf and its coin; a price the table states in words has no coin.
+    case "services": parts.push(sectionTail(s.source?.section), coins(s.cost)); break;
     case "traits": parts.push(enumLabel(AZEROTH.traitKinds, s.kind), enumLabel(AZEROTH.schools, s.school)); break;
     case "affixes": parts.push(f.affix?.kind, f.affix?.family, f.affix?.cost != null ? `${f.affix.cost} pts` : null); break;
     case "legacies": parts.push(s.race, s.className); break;
@@ -399,7 +415,12 @@ export function matchesFilter(entry, def, state) {
   if (def.kind === "range") {
     // A price is stored in copper and typed in 08 §2's coin (D-672), so the
     // bounds are parsed rather than read as numbers.
-    const n = Number(readPath(entry, def.path));
+    // A missing value is no number at all: `Number(null)` is 0, so a price the
+    // chapter states in words (*A tenth of its price*) read as free and passed
+    // every upper bound. `sortEntries` already treats it as missing.
+    const raw = readPath(entry, def.path);
+    if (raw === null || raw === undefined || raw === "") return false;
+    const n = Number(raw);
     if (!Number.isFinite(n)) return false;
     if (state.min !== null && n < state.min) return false;
     if (state.max !== null && n > state.max) return false;
@@ -538,6 +559,7 @@ export const SORT_KEYS = Object.freeze({
   weapons: ["name", "system.rating", "system.cost", "system.weight"],
   armor: ["name", "system.cost", "system.weight"],
   gear: ["name", "system.cost", "system.weight"],
+  services: ["name", "system.cost"],
   spells: ["name", "system.tier", "system.mana"],
   talents: ["name", "system.tier"],
   careers: ["name", "system.tier"],

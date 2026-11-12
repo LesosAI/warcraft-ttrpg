@@ -74,6 +74,7 @@ import { underOffer } from "../rules/loot-offer.mjs";
 // And a Gadgets-compendium entry is never a sheet's (the lead, 2026-10-24): the
 // same question, asked the same way, before any drop zone writes.
 import { isGadgetEntry } from "../rules/gadgets.mjs";
+import { isServiceEntry } from "../rules/services.mjs";
 // The derived bag-slot line, composed once and drawn on the tooltip, the
 // inspector and the item sheet alike (D-677: the words arrive in a bag).
 import { derivedValue } from "./item-fields.mjs";
@@ -833,6 +834,9 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // feature dropped on the figure is *not worn* and on a slot *does not fit* before the
     // create says why again.
     if (isGadgetEntry(item) && this.actor.uuid !== item.parent?.uuid) return super._onDropItem(event, item);
+    // A Services-compendium entry the same way: a bag well or a slot must not answer for a
+    // night's lodging before the create refuses it in its own words (`rules/services.mjs`).
+    if (isServiceEntry(item) && this.actor.uuid !== item.parent?.uuid) return super._onDropItem(event, item);
     const zone = dropZoneOf(event);
     if (zone === null || !this.actor.isOwner) return super._onDropItem(event, item);
     if (zone.kind === "slot") return this.#dropOnSlot(event, item, zone.slot, zone.index);
