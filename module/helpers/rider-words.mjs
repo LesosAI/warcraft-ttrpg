@@ -114,6 +114,8 @@ export function landedText(row) {
       ? game.i18n.format("AZEROTH.Rider.Card.Landed", { name: row.name, condition, value: row.value })
       : game.i18n.format("AZEROTH.Rider.Card.LandedBare", { name: row.name, condition });
   }
+  // 05's *Being moved* refused a Prone (D-913), said as the push's refusal is.
+  if (row.reason === "outsized") return game.i18n.format("AZEROTH.Rider.Card.Outsized", { name: row.name, condition });
   return row.reason === "immune"
     ? game.i18n.format("AZEROTH.Rider.Card.Immune", { name: row.name, condition })
     : game.i18n.format("AZEROTH.Rider.Card.NotLanded", { name: row.name, condition });

@@ -40,6 +40,7 @@ import { LAY_BANE_QUERY, LAY_BOON_QUERY, layBaneQueryHandler, layBoonQueryHandle
 import { NO_HEALING_QUERY, noHealingQueryHandler } from "./effects/no-healing.mjs";
 import { AFFLICT_QUERY, afflictQueryHandler } from "./effects/afflictions.mjs";
 import { BEACON_HEAL_QUERY, beaconHealQueryHandler } from "./effects/beacon.mjs";
+import { LEGENDARY_QUERY, legendaryQueryHandler } from "./effects/legendary-doors.mjs";
 import { VENGEANCE_QUERY, vengeanceQueryHandler } from "./effects/after-blow.mjs";
 import { INFLICT_QUERY, inflictQueryHandler } from "./effects/inflict.mjs";
 import { ANNOTATE_QUERY, annotateQueryHandler } from "./dice/annotate.mjs";
@@ -565,6 +566,8 @@ export function registerQueries() {
   // and a share of a blow Spirit Link Totem divides, on the GM's client.
   CONFIG.queries[TEMP_HEALTH_QUERY] = temporaryHealthQueryHandler;
   CONFIG.queries[BLOW_ASK_QUERY] = blowAskHandler;
+  // 08 §20's Legendary doors on another creature (D-912).
+  CONFIG.queries[LEGENDARY_QUERY] = legendaryQueryHandler;
   CONFIG.queries[BLOW_SHARE_QUERY] = blowShareQueryHandler;
   // The cross-class rulings (D-778): 02's Dispel ending the effects selected on a
   // creature this client does not own, every id judged again here; and a creature's

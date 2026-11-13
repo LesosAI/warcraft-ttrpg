@@ -88,7 +88,12 @@ export const BOOKKEEPING_FLAGS = Object.freeze([
   "constructTurn", "lunarDamage", "crushridgeExtraAttacks", "infernalImmolationTicks",
   // The round a body a Boss Action called arrives in (D-809): written on the
   // combatant's creation, never reorders a fight.
-  "arrives"
+  "arrives",
+  // The on-hit Signature rows a fight has already fired once an encounter
+  // (the Hammer of the Lightbringer's Verdict, D-910).
+  "signatureEncounter",
+  // The Health a creature had as its turn began (the Scepter's Staghelm's Regret, D-912).
+  "turnStartHealth"
 ]);
 
 /**

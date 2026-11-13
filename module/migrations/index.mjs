@@ -97,6 +97,7 @@ import * as v0131 from "./0.13.1-bestiary-descriptors.mjs";
 import * as v0132 from "./0.13.2-boss-actions.mjs";
 import * as v0134 from "./0.13.4-creature-plans.mjs";
 import * as v0143 from "./0.14.3-augment-ranged.mjs";
+import * as v0152 from "./0.15.2-legendary-runs.mjs";
 import { forgetPacks } from "./walk.mjs";
 
 // Ordered oldest to newest. Add new entries at the end.
@@ -255,7 +256,11 @@ const CHAIN = [
   { version: "0.13.4", module: v0134 },
   // 0.14.3: an Augment is carried in the Ranged slot for every class; an actor holding an
   // equipped launcher beside an equipped Augment keeps the Augment and bags the launcher (D-850).
-  { version: "0.14.3", module: v0143 }
+  { version: "0.14.3", module: v0143 },
+  // 0.15.2: the seven Legendaries printed before D-909 take 08 §20's named runs - the prose
+  // and the descriptor together - only where a held copy still carries the pack's old one
+  // sentence (D-910).
+  { version: "0.15.2", module: v0152 }
 ];
 
 /**

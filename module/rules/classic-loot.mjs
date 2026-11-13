@@ -81,8 +81,12 @@ export const NUMBER_CAP = Object.freeze({ rare: 1, epic: 2 });
 export const SUIT_AP_CAP = Object.freeze({ rare: 1, epic: 1 });
 
 /**
- * A shield's, counted on top of the 1 every §8 shield already carries, so the
- * ceiling is §20's Skullflame Shield at +2 and nothing goes past it.
+ * A shield's, counted on top of the 1 every §8 shield already carries, so a
+ * CLASSIC FIND's ceiling is §20's Skullflame Shield at +2 and no find goes past
+ * it. **A Legendary is not a find** (D-909, D-910): §20 prints the Scale of the
+ * Earth-Warder at +3 by hand, `parseUnique` stamps its printed number, and
+ * nothing here reaches it - the record holds no Legendary shield to convert,
+ * and a rarity this table does not name is capped at 0.
  */
 export const SHIELD_AP_CAP = Object.freeze({ rare: 1, epic: 1 });
 

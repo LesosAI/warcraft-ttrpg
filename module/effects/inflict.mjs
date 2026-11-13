@@ -30,6 +30,9 @@ import { SLOWED_FEET_FLAG } from "../rules/slowing.mjs";
 import { addSlowedFeet } from "./speed-drop.mjs";
 // Who laid a condition, on its own effect (the Legacy branches' door 17).
 import { LAID_BY_FLAG, laidByWith } from "../rules/talent-gates.mjs";
+// 08 §20 (D-911): a condition refused from one source, and a mark the damage door ends.
+import { ENDS_ON_DAMAGE_FLAG, refusedFromSource } from "../rules/signatures.mjs";
+import { beingMovedBy } from "./forced-movement.mjs";
 
 export const INFLICT_QUERY = "azeroth-rpg.inflictCondition";
 
@@ -42,7 +45,9 @@ export const INFLICT_QUERY = "azeroth-rpg.inflictCondition";
  * `rules/escapes.mjs#cleanEscape`) and the feet 04's Permafrost adds to a Slowed
  * (`slowedFeet`, `{feet, source}`).
  */
-const MARKS = Object.freeze([NO_CASTING_FLAG, PARALYTIC_FLAG, SNARE_FLAG]);
+// And 08 §20's Emerald Slumber's *until it takes damage* (D-911): `endsOnDamage`, which
+// `AzerothActor#applyDamage` ends on the next blow that lands.
+const MARKS = Object.freeze([NO_CASTING_FLAG, PARALYTIC_FLAG, SNARE_FLAG, ENDS_ON_DAMAGE_FLAG]);
 
 /** The marks a request carries, cleaned: each a `{source}` object, or dropped. */
 function cleanMarks(marks) {
@@ -108,6 +113,20 @@ function landing(name, id, value, landed, reason = null, { had = null, prior = n
  */
 async function inflictHere({ victim, id, value, until = null, marks = {}, byUuid = null }) {
   if ((victim.system?.conditionImmunities ?? []).includes(id)) return landing(victim.name, id, value, false, "immune");
+  // **A CONDITION REFUSED FROM ONE KIND OF SOURCE** (08 §20's Quel'Serrar, Dragonslayer's
+  // Nerve: *A dragonkin cannot make you Frightened*; D-911): judged against the creature
+  // that lays it, where the door knows one - a hand-toggled condition names nobody.
+  if (refusedFromSource(victim.system?.signatureEffects?.refusesFrom ?? [], id, layerTypeOf(byUuid)) !== null) {
+    return landing(victim.name, id, value, false, "immune");
+  }
+  // **05's BEING MOVED, ITS PRONE HALF** (*cannot be ... knocked Prone against your will by
+  // anything more than one size smaller than you*; the lead, D-913: *"Enforce it, include
+  // Prone, exempt willing allies"*): judged against the creature that lays it, where the
+  // door knows one - the push's own reading (`effects/forced-movement.mjs#beingMovedBy`).
+  if (id === "prone" && byUuid) {
+    const by = actorAt(byUuid);
+    if (by && beingMovedBy(victim, by)) return landing(victim.name, id, value, false, "outsized");
+  }
   const had = victim.statuses?.has?.(id) === true;
   const prior = had ? (victim.effects?.find?.(e => e.statuses?.has?.(id))?.getFlag?.("azeroth-rpg", "value") ?? null) : null;
   const effect = await applyCondition(victim, id, { value: valueOf(value), until: cleanUntil(until) });
@@ -144,6 +163,28 @@ async function inflictHere({ victim, id, value, until = null, marks = {}, byUuid
   // Permafrost's feet on a Slowed (D-778): changes of their own on the same effect.
   if (effect && id === "slowed" && slowedFeet) await addSlowedFeet(effect, slowedFeet);
   return landing(victim.name, id, value, Boolean(effect), effect ? null : "refused", { had, prior, laidByAdded });
+}
+
+/** The actor a uuid names, quietly, or null. */
+function actorAt(uuid) {
+  if (typeof uuid !== "string" || !uuid) return null;
+  try {
+    const doc = fromUuidSync(uuid);
+    return doc?.documentName === "Actor" ? doc : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The type of the creature a uuid names, for a refusal scoped to its source (D-911). */
+function layerTypeOf(uuid) {
+  if (typeof uuid !== "string" || !uuid) return null;
+  try {
+    const doc = fromUuidSync(uuid);
+    return doc?.documentName === "Actor" ? (doc.system?.creatureType ?? null) : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

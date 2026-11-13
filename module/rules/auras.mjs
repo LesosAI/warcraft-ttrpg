@@ -120,7 +120,27 @@ export const AURA_ICONS = Object.freeze({
 
 /** An aura with nothing set, as `emptySignature()` carries it. */
 export function emptyAura() {
-  return { feet: null, targets: null, damageReduction: null };
+  // `spellDamage` and `floor` joined the item's aura with the Legendary
+  // expansion (D-909, D-910): Atiesh's *adds 1 to the Damage Rating of every
+  // spell they cast* and the Hammer of the Lightbringer's *Ward 2 against
+  // Shadow, unless it already has more* - the payloads a class feature's aura
+  // already lays, carried on an item. `floor.schools` empty is every school.
+  //
+  // **AND FIVE MORE FOR THE LEGENDARY READERS (D-911)**, each a payload or a
+  // filter a class feature's aura already lays or a talent's already reads:
+  // Warchief's Hammer's Boon on Spirit Resilience Tests (`boon`), Rivendare's
+  // Dread's Bane on its enemies' (`bane`), The Black Hand Raised's attack Damage
+  // Rating (`attackDamage`), Hand of Ragnaros's damage at an enemy's turn start
+  // (`tick`, the laid tick `effects/ticks.mjs` already lands), and WHO among
+  // those in reach it touches (`who`: a faction, or only the living).
+  return {
+    feet: null, targets: null, damageReduction: null, spellDamage: null, floor: { ward: null, schools: [] },
+    boon: { kind: null, resilience: null, boons: null },
+    bane: { kind: null, resilience: null, banes: null },
+    attackDamage: null,
+    tick: { damage: null, type: null },
+    who: { faction: null, living: false }
+  };
 }
 
 /** Freeze a descriptor all the way down, so a patch that forgets to copy throws. */
@@ -271,6 +291,29 @@ export function cleanAura(raw) {
     out.targets = typeof src.targets === "string" && AZEROTH.auraTargets.includes(src.targets) ? src.targets : null;
   }
   if ("damageReduction" in src) out.damageReduction = atLeast(src.damageReduction, 1);
+  if ("spellDamage" in src) out.spellDamage = atLeast(src.spellDamage, 1);
+  // Present-key one level down too (D-692): a dotted write of the floor's Ward
+  // keeps its schools.
+  if ("floor" in src) {
+    const floor = src.floor && typeof src.floor === "object" ? src.floor : {};
+    out.floor = {};
+    if ("ward" in floor) out.floor.ward = atLeast(floor.ward, 1);
+    if ("schools" in floor) out.floor.schools = cleanSchools(floor.schools);
+  }
+  // The Legendary readers' five (D-911), present-key one level down too.
+  const sub = (key, cleaners) => {
+    if (!(key in src)) return;
+    const raw = src[key] && typeof src[key] === "object" ? src[key] : {};
+    out[key] = {};
+    for (const [k, clean] of Object.entries(cleaners)) if (k in raw) out[key][k] = clean(raw[k]);
+  };
+  const testKind = k => (typeof k === "string" && (k === "all" || k in AZEROTH.testKinds) ? k : null);
+  const resilienceOf = r => (typeof r === "string" && r in AZEROTH.resiliences ? r : null);
+  sub("boon", { kind: testKind, resilience: resilienceOf, boons: n => atLeast(n, 1) });
+  sub("bane", { kind: testKind, resilience: resilienceOf, banes: n => atLeast(n, 1) });
+  if ("attackDamage" in src) out.attackDamage = atLeast(src.attackDamage, 1);
+  sub("tick", { damage: n => atLeast(n, 1), type: t => (typeof t === "string" && t in AZEROTH.damageTypes ? t : null) });
+  sub("who", { faction: f => (typeof f === "string" && f.trim() ? f.trim() : null), living: l => l === true });
   return out;
 }
 
@@ -379,7 +422,12 @@ function cleanFloor(raw) {
   if (!raw || typeof raw !== "object") return null;
   const ap = atLeast(raw.ap, 1) ?? 0;
   const ward = atLeast(raw.ward, 1) ?? 0;
-  return ap || ward ? { ap, ward } : null;
+  // **ONE SCHOOL'S WARD** (the Hammer of the Lightbringer, D-910): *Ward 2
+  // against Shadow*. Carried only where named, so every floor before it keeps
+  // its exact shape and still raises every school.
+  const schools = ward ? cleanSchools(raw.schools) : [];
+  if (!ap && !ward) return null;
+  return schools.length ? { ap, ward, schools } : { ap, ward };
 }
 
 /**
@@ -440,7 +488,45 @@ export function auraPayloadOf(row = {}) {
   // **BASTION OF HOURS' TAUNT** (the same stage): the Bane on attacks against anyone but the holder.
   const taunt = cleanTaunt(src.taunt);
   if (taunt) out.taunt = taunt;
+  // **THE BLACK HAND RAISED** (D-911: *every ally within 15 feet adds 1 to the
+  // Damage Rating of its attacks*): a number on the attack lane, a change.
+  const attackDamage = atLeast(src.attackDamage, 1);
+  if (attackDamage) out.attackDamage = attackDamage;
+  // **HAND OF RAGNAROS** (D-911: *Each enemy that starts its turn within 5 feet of
+  // you takes 2 Fire damage, and Ward applies*): the laid tick's own shape on the
+  // effect (`auraTickFlag`), landed at that creature's turn start by
+  // `effects/ticks.mjs#landTicks`, and gone the moment it steps out of reach.
+  const tick = cleanAuraTick(src.tick);
+  if (tick) out.tick = tick;
   return out;
+}
+
+/** An aura's start-of-turn damage, resolved, or null (D-911). */
+function cleanAuraTick(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const damage = atLeast(raw.damage, 1);
+  const type = typeof raw.type === "string" && raw.type in AZEROTH.damageTypes ? raw.type : null;
+  return damage && type ? { damage, type } : null;
+}
+
+/**
+ * **THE LAID TICK AN AURA'S `tick` WRITES** (Hand of Ragnaros, D-911): the shape
+ * `rules/ticks.mjs#hasTick` reads, no count (the aura's own diff ends it when the
+ * creature leaves the reach), the holder its hand, so the damage is typed and
+ * Ward applies through `strikeFromArea` exactly as a spell's tick. Null where the
+ * row lays none.
+ *
+ * @param {object} row  a planned row or a payload
+ * @param {{by?: string|null, name?: string}} [o]  the holder's uuid and the source's name
+ */
+export function auraTickFlag(row = {}, { by = null, name = "" } = {}) {
+  const tick = auraPayloadOf(row).tick ?? null;
+  if (!tick) return null;
+  return {
+    kind: "damage", type: tick.type, amount: String(tick.damage), rounds: null, until: "", when: "startOfTurn",
+    hit: false, sl: null, spellpower: false, reason: "", via: "item",
+    source: typeof by === "string" && by ? by : null, name: String(name ?? "")
+  };
 }
 
 /**
@@ -509,6 +595,11 @@ export function auraReaches(aura, candidate = {}) {
   }
   if (!self && aura.targets === "party" && candidate.party !== true) return false;
   if (!self && aura.targets === "allies" && candidate.ally !== true) return false;
+  // **WHO AMONG THOSE IN REACH** (D-911): Warchief's Hammer's *every ally ... who
+  // belongs to the Horde* (the holder too: *you and every ally*), Rivendare's
+  // Dread's *each LIVING enemy*. A fact the pass did not measure never holds.
+  if (aura.who?.faction && !(candidate.factions ?? []).map(f => String(f).toLowerCase()).includes(String(aura.who.faction).toLowerCase())) return false;
+  if (aura.who?.living === true && candidate.living !== true) return false;
   const feet = candidate.feet;
   if (typeof feet !== "number" || !Number.isFinite(feet)) return false;
   return feet <= aura.feet;
@@ -548,8 +639,15 @@ export function auraChanges(row = {}, { type = null, apLocations = null } = {}) 
       if ((apLocations ?? []).includes(location)) change(`system.ap.${location}`, "upgrade", p.floor.ap);
     }
   }
-  if (p.floor?.ward) for (const school of Object.keys(AZEROTH.schools)) change(`system.ward.${school}`, "upgrade", p.floor.ward);
+  if (p.floor?.ward) {
+    const schools = p.floor.schools?.length ? p.floor.schools : Object.keys(AZEROTH.schools);
+    for (const school of schools) change(`system.ward.${school}`, "upgrade", p.floor.ward);
+  }
   if (p.spellDamage && type === "character") change("system.damageBonus.spell.all", "add", p.spellDamage);
+  // The attack lane (The Black Hand Raised, D-911): a character's `attack.all`, a
+  // creature's one scalar `damageBonus` its attacks read (`NpcData`, D-643).
+  if (p.attackDamage && type === "character") change("system.damageBonus.attack.all", "add", p.attackDamage);
+  else if (p.attackDamage && type === "npc") change("system.damageBonus", "add", p.attackDamage);
   // 04's Sacred Duty (D-772): an `add` on each location the creature HAS, as
   // the floor's own rule - a creature with no head grows none.
   if (p.armor) {
@@ -581,7 +679,7 @@ export function auraChanges(row = {}, { type = null, apLocations = null } = {}) 
 export function auraGives(row = {}, candidate = {}) {
   const p = auraPayloadOf(row);
   return Boolean(p.boon) || Boolean(p.bane) || Boolean(p.healing) || Boolean(p.standFree) || Boolean(p.healthFloor)
-    || Boolean(p.immune) || Boolean(p.hold) || Boolean(p.taunt)
+    || Boolean(p.immune) || Boolean(p.hold) || Boolean(p.taunt) || Boolean(p.tick)
     || auraChanges(row, candidate).length > 0;
 }
 
@@ -753,7 +851,8 @@ export function auraMagnitude(row = {}) {
   return (p.damageReduction ?? 0) + (p.boon?.boons ?? 0) + (p.schoolArmor?.amount ?? 0)
     + (p.floor?.ap ?? 0) + (p.floor?.ward ?? 0) + (p.spellDamage ?? 0) + (p.armor ?? 0)
     + (p.bane?.banes ?? 0) + (p.ward?.amount ?? 0) + Math.abs(p.speed ?? 0) + (p.healing ? 1 : 0) + (p.standFree ? 1 : 0)
-    + (p.healthFloor ? 1 : 0) + (p.immune ? 1 : 0) + (p.hold ? 1 : 0) + (p.taunt?.banes ?? 0);
+    + (p.healthFloor ? 1 : 0) + (p.immune ? 1 : 0) + (p.hold ? 1 : 0) + (p.taunt?.banes ?? 0)
+    + (p.attackDamage ?? 0) + (p.tick?.damage ?? 0);
 }
 
 /**
@@ -859,6 +958,9 @@ export function ownerAuras(sources = [], facts = {}) {
       excludeOwner: a.excludeOwner === true,
       // Reaches its holder alone, while another ally is near (D-772).
       holderOnly: a.holderOnly === true,
+      // Who among those in reach (D-911): a faction, or only the living. Carried
+      // only where it names one, so every source before it keeps its shape.
+      ...(a.who && (a.who.faction || a.who.living === true) ? { who: { faction: a.who.faction ?? null, living: a.who.living === true } } : {}),
       // What `effects/auras.mjs` reads to know a follow-up pass may be owed.
       readsOwnArmor: ownArmor,
       ...auraPayloadOf({ ...a, schoolArmor })

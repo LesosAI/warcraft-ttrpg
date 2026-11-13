@@ -127,7 +127,9 @@ export function areaDamageOn({ actor, caster = null, spell = {}, damage, signatu
   const physical = damageType === PHYSICAL;
   const school = physical ? (spell?.school ?? null) : damageType;
   const talentRows = caster?.takenTalents ? spellDamageFor(caster.takenTalents(), { name: spellName, school: spell?.school ?? null }) : [];
-  const bonus = caster
+  // An ITEM's tick (08 §20's Hand of Ragnaros, D-911) is no spell: nothing the
+  // holder's spells add reaches it.
+  const bonus = caster && spell?.item !== true
     ? standingSpellBonus(caster.system, { name: spellName, damageSchool: school, takesSpellpower: spell?.takesSpellpower === true }, talentRows).total
     : 0;
   const s = actor?.system ?? {};

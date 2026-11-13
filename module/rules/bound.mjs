@@ -419,11 +419,15 @@ export function withResistedBond(raw, uuid) {
  *   `signatureEffects().bound`
  * @returns {Array<{talent: string, label: string, name: string, encounter: boolean, changes: object[]}>}
  */
-export function boundSignatureEffects(sources = []) {
+export function boundSignatureEffects(sources = [], { creatureType = null } = {}) {
   const out = [];
+  const type = typeof creatureType === "string" ? creatureType.toLowerCase().split(/\s|\(/)[0] : null;
   for (const source of sources) {
     const damage = Math.trunc(Number(source?.damage) || 0);
     if (!source?.key || damage <= 0) continue;
+    // **ONE KIND OF BOUND CREATURE** (08 §20's Master of the Shadow Council: *A demon
+    // bound to a Warlock holding it*; D-911): a row naming a type reaches that type alone.
+    if (source.creatureType && source.creatureType !== type) continue;
     out.push({
       talent: `signature:${source.key}`,
       label: "AZEROTH.Bound.Effect.Signature",

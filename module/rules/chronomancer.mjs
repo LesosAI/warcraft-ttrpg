@@ -358,10 +358,45 @@ export const AGAIN_FLAG = "landsAgain";
  * second time - D-858's reading for Echoing Sands, and the same reading for Recurrence),
  * the creature, the spell and the source.
  */
-export function againRow({ kind = "damage", amount = 0, target = "", type = null, spell = "", source = "", combatId = null } = {}) {
+export function againRow({ kind = "damage", amount = 0, target = "", type = null, spell = "", source = "", combatId = null, test = null, passed = null } = {}) {
+  // What the spell deals over time lands again as ONE EXTRA LANDING on the tick itself
+  // (the lead, D-913: *"One extra landing of the tick"*; `rules/ticks.mjs#tickLandings`),
+  // never as a row here: a `tick` kind is no row (D-914).
   const a = count(amount);
   if (!a || !target || !["damage", "heal"].includes(kind)) return null;
-  return { kind, amount: a, target: String(target), type: typeof type === "string" ? type : null, spell: String(spell ?? ""), source: String(source ?? ""), combatId: combatId || null };
+  const row = { kind, amount: a, target: String(target), type: typeof type === "string" ? type : null, spell: String(spell ?? ""), source: String(source ?? ""), combatId: combatId || null };
+  // **THE TEST MADE AGAIN** (*A creature makes the spell's Resilience Test again when
+  // it lands again*; D-911): the card's Resilience, its DC and what a pass leaves -
+  // `passed` the half where it halves - carried only where the card had a Test, so a
+  // row with none keeps its exact shape.
+  const t = againTest(test);
+  if (kind === "damage" && t) {
+    row.test = t;
+    row.passed = t.onPass === "half" ? count(passed ?? Math.floor(a / 2)) : (t.onPass === "none" ? 0 : a);
+  }
+  return row;
+}
+
+/** A recorded Test, cleaned: a Resilience, a DC, and what a pass leaves; or null. */
+export function againTest(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const resilience = ["body", "reflex", "spirit"].includes(raw.resilience) ? raw.resilience : null;
+  const dc = Math.trunc(Number(raw.dc));
+  if (!resilience || !(dc > 0)) return null;
+  return { resilience, dc, onPass: ["half", "none", "full"].includes(raw.onPass) ? raw.onPass : "full" };
+}
+
+/**
+ * **WHAT A ROW MADE AGAIN LANDS** (D-911): the whole on a failed Test, what a pass
+ * leaves on a passed one - and a row with no Test lands whole, as before.
+ *
+ * @param {object} row  an `againRow`
+ * @param {boolean|null} passed  the Test made again, or null where none was
+ * @returns {number}
+ */
+export function againAmount(row, passed = null) {
+  if (!row?.test || passed !== true) return count(row?.amount);
+  return count(row.passed);
 }
 
 /** The list with one more row; a row that is nothing leaves it. */

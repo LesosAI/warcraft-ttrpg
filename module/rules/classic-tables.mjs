@@ -1110,7 +1110,9 @@ export const REASON_TEXT = Object.freeze({
   targetRelative: "What it did depends on what it was used against.",
   tableCall: "What it did is the table's to judge.",
   narrative: "",
-  unwritten: ""
+  unwritten: "",
+  // 08 §20's own (The Wyrm's Roar, D-914), never a find's.
+  attackBane: ""
 });
 
 /**

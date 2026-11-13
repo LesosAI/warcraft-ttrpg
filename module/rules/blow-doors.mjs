@@ -35,14 +35,16 @@
  * answered (CLARIFY in the rulings) and nothing here builds it.
  */
 
-import { extraPart } from "./mitigation.mjs";
+import { extraPart, resolveDamage } from "./mitigation.mjs";
 
 /**
  * The order the holds are tried in: 07's Aegis floor (free), the creature's
  * own Unkillable and Cauterize (automatic, as built since D-768 and D-775), then
  * another creature's talent, asked in turn.
  */
-export const HOLD_ORDER = Object.freeze(["aegis", "unkillable", "cauterize", "borrowedHour", "intervention", "spiritShell", "guardianSpirit"]);
+// **08 §20's UNDYING** (D-911) is the creature's own too, a Signature press that fires
+// itself (`signature`), after Borrowed Hour and before another's is asked.
+export const HOLD_ORDER = Object.freeze(["aegis", "unkillable", "cauterize", "borrowedHour", "signature", "intervention", "spiritShell", "guardianSpirit"]);
 
 /** The holds a holder is ASKED for: another creature's talent and its use. */
 export const ASKED_HOLDS = Object.freeze(["intervention", "spiritShell", "guardianSpirit"]);
@@ -54,7 +56,10 @@ export const ASKED_HOLDS = Object.freeze(["intervention", "spiritShell", "guardi
  * down, is dealt to you instead, or all of it at rank 2* - a SHARE moved, the rest
  * staying where it was aimed (`movedAmount`'s `share`, `keptAmount`).
  */
-export const MOVE_KINDS = Object.freeze(["guardian", "righteous", "burden", "interposed", "sentinel"]);
+// `gauntlet` is 08 §20's The Raised Gauntlet (D-912): *as a Reaction when an attack hits an
+// ally within 15 feet of you, the attack hits you instead, and your Armor Points apply* - a
+// Signature's press, its use the press's own.
+export const MOVE_KINDS = Object.freeze(["guardian", "righteous", "burden", "interposed", "sentinel", "gauntlet"]);
 
 /** What a burden move takes: half the blow, rounded down, or all of it. */
 export const MOVE_SHARES = Object.freeze(["half", "all"]);
@@ -152,11 +157,13 @@ export function moveJudgement(row = {}, {
   if (self === true) return { ok: false, reason: "self" };
   // 04's Interposed Moment (*when a creature you can see attacks an ally*) and Timeless
   // Sentinel (*every attack against an ally*) are an attack's, as Guardian's is (stage 2c).
-  if (["guardian", "interposed", "sentinel"].includes(row.kind) && attack !== true) return { ok: false, reason: "notAttack" };
+  if (["guardian", "interposed", "sentinel", "gauntlet"].includes(row.kind) && attack !== true) return { ok: false, reason: "notAttack" };
   // Shield of the Righteous's *a spell or attack*, and Shared Burden's *an attack or spell*.
   if ((row.kind === "righteous" || row.kind === "burden") && !(attack === true || spell === true)) return { ok: false, reason: "notAttack" };
   if (fromCard !== true) return { ok: false, reason: "notAttack" };
   if (holderUp !== true) return { ok: false, reason: "down" };
+  // A press counted by a rest (The Raised Gauntlet, D-912) needs a use left.
+  if (row.kind === "gauntlet" && row.counted !== false && !(whole(row.usesLeft) > 0)) return { ok: false, reason: "noUses" };
   if (friendly !== true) return { ok: false, reason: "notFriendly" };
   if (typeof distance !== "number" || distance > (Number(row.feet) || 0)) return { ok: false, reason: "tooFar" };
   // **TIMELESS SENTINEL TAKES NOTHING** (04: *every attack against an ally within 30 feet of
@@ -166,6 +173,49 @@ export function moveJudgement(row = {}, {
   if (price > 0 && !(whole(poolValue) >= price)) return { ok: false, reason: "short" };
   if (reactionLeft !== true) return { ok: false, reason: "noReaction" };
   return { ok: true, reason: null };
+}
+
+/**
+ * **THE RAISED GAUNTLET'S BLOW, RE-RESOLVED AGAINST THE BEARER** (08 §20: *the attack hits
+ * you instead, and your Armor Points apply*; the lead, D-913: *"Re-resolve against the
+ * bearer only"*). The attack card records the blow before any target met it
+ * (`blowSpec`: its Rating, SL, kind and school, location, Pierce and the rest
+ * `resolveDamage` takes), and this meets it with the BEARER's Armor Points and Ward
+ * alone - the ally's drop out. Null where the card recorded none, which the door
+ * refuses in words rather than reducing a blow twice.
+ *
+ * @param {object|null} spec  the card's `blowSpec`
+ * @param {{apByLocation?: object, wardBySchool?: object, schoolArmorBySchool?: object, fireTakenBonus?: number,
+ *   immune?: string[], vulnerable?: string[]}} bearer
+ * @returns {object|null}  `resolveDamage`'s answer
+ */
+export function regrossFor(spec, bearer = {}) {
+  if (!spec || !Number.isFinite(Number(spec.rating))) return null;
+  const location = spec.location ?? "body";
+  const ap = bearer.apByLocation ?? {};
+  const armor = bearer.schoolArmor ?? bearer.schoolArmorBySchool ?? {};
+  const pierce = Math.max(0, Math.trunc(Number(spec.penetration)) || 0);
+  return resolveDamage({
+    ...(spec.sourceDamageBonus ? { sourceDamageBonus: spec.sourceDamageBonus } : {}),
+    fireTakenBonus: bearer.fireTakenBonus ?? 0,
+    rating: Number(spec.rating),
+    sl: Number(spec.sl) || 0,
+    kind: spec.kind ?? "physical",
+    school: spec.school ?? null,
+    location,
+    apByLocation: ap,
+    penetration: spec.slIgnoresArmor === true ? Math.max(pierce, Math.trunc(Number(ap[location])) || 0) : pierce,
+    ward: spec.school ? (bearer.wardBySchool?.[spec.school] ?? 0) : 0,
+    schoolArmor: spec.school ? (bearer.schoolArmor?.[spec.school] ?? armor[spec.school] ?? 0) : 0,
+    immune: bearer.immune ?? [],
+    vulnerable: bearer.vulnerable ?? [],
+    multiplier: spec.multiplier ?? 1,
+    extras: Array.isArray(spec.extras) ? spec.extras : [],
+    wardBySchool: bearer.wardBySchool ?? {},
+    schoolArmorBySchool: armor,
+    dealtHalved: spec.dealtHalved ?? null,
+    immuneHalf: Array.isArray(spec.immuneHalf) ? spec.immuneHalf : []
+  }, { shrink: Math.max(0, Math.trunc(Number(spec.shrink)) || 0) });
 }
 
 /**

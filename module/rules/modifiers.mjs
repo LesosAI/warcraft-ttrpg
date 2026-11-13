@@ -165,6 +165,8 @@ export function situationalModifiers({
   invisible = false,
   targetInvisible = false,
   targetMirrorImages = false,
+  // 08 §20's Scarlet Reckoning (D-912): the Banes the target's Signature lays on this attacker.
+  attackerBane = 0,
   range = null,
   rangeBand = null,
   outOfReachNote = null,
@@ -235,6 +237,7 @@ export function situationalModifiers({
   const judge = (id, cost) => push(judgement, id, cost, false);
   const isTest = kind === "skill" || kind === "attack" || kind === "casting";
   if(targetMirrorImages===true && (kind==='attack'||kind==='casting'))auto('targetMirrorImages',{banes:1});
+  if (kind === "attack" && Math.trunc(Number(attackerBane)) > 0) auto("attackerBane", { banes: Math.trunc(Number(attackerBane)) });
   if (untrained.length) auto("untrained", { banes: 1, name: untrained.join(", ") });
 
   // Lesser Invisibility uses 07's defensive penalty, not an attacker's

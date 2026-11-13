@@ -70,6 +70,21 @@ export function readRange(text) {
 }
 
 /**
+ * **A TOUCH RANGE CAST FURTHER** (08 §20's Hand of the Church: *A Priest wearing it casts
+ * healing spells with a Range of Touch at a range of 30 feet*; D-912): a read Range of
+ * Touch becomes `feet` where the caller says the spell qualifies; every other Range, and
+ * a widening no further than Touch, is returned as it was.
+ *
+ * @param {{kind: string, feet: number|null, text: string}|null} reach  `readRange`'s
+ * @param {number} feet
+ */
+export function touchAt(reach, feet = 0) {
+  const n = Number(feet) || 0;
+  if (reach?.kind !== "touch" || !(n > TOUCH_FEET)) return reach;
+  return { kind: "feet", feet: n, text: reach.text };
+}
+
+/**
  * **WHETHER A SPELL'S TARGET LINE NAMES CREATURES THE CAST IS JUDGED AT**: the
  * targets themselves, not an area. An area is judged at its placed point
  * (`judgesPoint`); an area about the caster, and the caster, at nothing.

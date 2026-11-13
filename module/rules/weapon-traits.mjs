@@ -85,6 +85,21 @@ export const BOUND = Object.freeze({
   sundering: Object.freeze({ critical: true, sunder: 2 })
 });
 
+/**
+ * **THE TRAITS WHOSE PRICE NO READER CHARGES YET** (08 §5, 10 §3; D-909's
+ * rulings, D-910). Fel-touched, Plaguebound and Felwrought charge Corruption
+ * only on a failed Resilience Test *at DC 12 plus twice your tier* - Spirit,
+ * Body and Spirit - on a natural 1, a kill, a month, a week or a Long Rest.
+ *
+ * **ALL THREE ARE READ NOW** (D-911): `rules/trait-corruption.mjs` is the law and
+ * its doors are the attack's natural 1 (`workflows.rollTest`), the damage door's
+ * kill (`AzerothActor#_legendaryAfterBlow`), the world's clock
+ * (`effects/trait-clock.mjs`) and the Long Rest (`AzerothActor#longRest`). A
+ * worklist the census in `weapon-traits.test.mjs` holds to the pack, under a
+ * ceiling that may only fall - and it is empty.
+ */
+export const TRAIT_READERS_OWED = Object.freeze({});
+
 /** `Impale (X)` → `impale`, `Keen (Greater)` → `keen` with the grade, `Pierce 2` → `pierce`. */
 export function traitKey(name) {
   const raw = String(name ?? "").trim();

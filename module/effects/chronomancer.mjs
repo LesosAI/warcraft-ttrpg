@@ -23,7 +23,7 @@ import { AZEROTH } from "../config.mjs";
 import { talentEffect } from "../rules/talent-effects.mjs";
 import {
   AGAIN_FLAG, CHRONO_FEATURES, MASTER_FLAG, RECALL_FLAG, RECURRENCE_FLAG, SUSPENDED_MOMENT_FLAG, SUSPEND_FLAG,
-  againRow, allSandRefusal, appendAgain, arrestedMomentFires, collapseDamage, collapseStrikes, disengageBarredBy,
+  againAmount, againRow, allSandRefusal, appendAgain, arrestedMomentFires, collapseDamage, collapseStrikes, disengageBarredBy,
   echoAmount, givenHalfRefusal, heavyHoursBanes, heldDuration, holdOutOfTime, masterOfHoursTurn, poolRegain, quickstepFeet, recallHeal, recallMark, recallStands,
   recurrenceTakes, restorablePools, restorableUses, sharedHoursGain, slipstreamFor, suspendableConditions,
   suspendedBy, temporalLoopRefusal, unfadingRefusal, witheredHeal, atRankRow, chronoRows
@@ -684,6 +684,11 @@ export async function judgeChronoUse({ actor, item, sys, onUse, list, rank = 1, 
   // to cast in and a next turn to land on, so a started fight (MY READING, said in words).
   if (onUse.recurrence) {
     if (!combatantOf(actor)) return refuse("AZEROTH.Chrono.NeedsFight", { name });
+    // **ONE ARMING AT A TIME** (D-913, the lead's adopted recommendation): Echo of the
+    // Infinite's press arms the same next spell (`RECURRENCE_FLAG`), so a second arming is
+    // refused here, before anything is paid, rather than writing over the first.
+    const armed = actor.getFlag("azeroth-rpg", RECURRENCE_FLAG) ?? null;
+    if (armed) return refuse("AZEROTH.Chrono.AlreadyArmed", { name, source: armed.source ?? "" });
     out.recurrence = true;
   }
   // **02's MASTER OF HOURS** (*While it lasts, you may spend 2 Sand to give a creature within
@@ -1081,7 +1086,7 @@ export async function sharedHours(giver, target, gives) {
  *
  * @param {{message: ChatMessage, target: Actor, amount: number, kind: "damage"|"heal"}} o
  */
-export async function afterSpellApply({ message, target, amount = 0, kind = "damage" }) {
+export async function afterSpellApply({ message, target, amount = 0, kind = "damage", full = null, passed = null }) {
   const flags = message?.flags?.["azeroth-rpg"] ?? {};
   const again = flags.chronoAgain ?? null;
   if (!again || !target) return [];
@@ -1089,7 +1094,14 @@ export async function afterSpellApply({ message, target, amount = 0, kind = "dam
   if (caster?.documentName !== "Actor") return [];
   const lines = [];
   const rows = [];
-  if (again.recurrence) rows.push(againRow({ kind, amount, target: target.uuid, type: flags.damageType ?? null, spell: flags.spellName ?? "", source: again.recurrence, combatId: again.combatId }));
+  // **THE TEST MADE AGAIN, AND WHAT LANDS OVER TIME** (02's Recurrence and 08 §20's Echo
+  // of the Infinite; the lead: *"Yes, Yes, Yes"*; D-911): a card with a Test records the
+  // row's WHOLE amount and what a pass leaves (`full`, `passed`), so the turn start's
+  // Test - not this one's - decides it. A tick is not recorded here: its extra landing rides
+  // the tick the Apply lays (D-913).
+  if (again.recurrence && kind === "damage" && again.test) {
+    rows.push(againRow({ kind, amount: full ?? amount, passed, test: again.test, target: target.uuid, type: flags.damageType ?? null, spell: flags.spellName ?? "", source: again.recurrence, combatId: again.combatId }));
+  } else if (again.recurrence) rows.push(againRow({ kind, amount, target: target.uuid, type: flags.damageType ?? null, spell: flags.spellName ?? "", source: again.recurrence, combatId: again.combatId }));
   if (again.echo && kind === "damage" && !again.echoDone) {
     rows.push(againRow({ kind: "damage", amount: echoAmount(amount, { whole: again.whole === true }), target: target.uuid, type: flags.damageType ?? null, spell: flags.spellName ?? "", source: again.echo, combatId: again.combatId }));
     if (message.isOwner) await message.update({ "flags.azeroth-rpg.chronoAgain.echoDone": true });
@@ -1141,13 +1153,40 @@ export async function chronoTurnStart(combatant) {
         await target.applyHealing(r.amount, { from: actor, spell: true });
         lines.push(game.i18n.format("AZEROTH.Chrono.AgainHealed", { name: target.name, n: r.amount, source: r.source }));
       } else {
-        await target.applyDamage(r.amount, { struck: true, attack: false, location: "body", type: r.type, by: actor, spell: true });
-        lines.push(game.i18n.format("AZEROTH.Chrono.AgainDamaged", { name: target.name, n: r.amount, source: r.source }));
+        // *A creature makes the spell's Resilience Test again when it lands again* (D-911).
+        const passed = r.test ? await againResist(target, r) : null;
+        const n = againAmount(r, passed);
+        if (n > 0) await target.applyDamage(n, { struck: true, attack: false, location: "body", type: r.type, by: actor, spell: true });
+        lines.push(game.i18n.format(passed === true && n === 0 ? "AZEROTH.Chrono.AgainResisted" : "AZEROTH.Chrono.AgainDamaged", { name: target.name, n, source: r.source }));
       }
     }
     if (lines.length) await lineCard(actor, lines.at(-1), { key: "recurrence", targets: [] });
   }
   return lines;
+}
+
+/**
+ * **THE SPELL'S RESILIENCE TEST, MADE AGAIN** (02's Recurrence and 08 §20's Echo of the
+ * Infinite: *A creature makes the spell's Resilience Test again when it lands again*; the
+ * lead: *"Yes, Yes, Yes"*; D-911): the creature's own Test at the card's DC, rolled on the
+ * client landing the row (the active GM's, at the caster's turn start) through the roll
+ * pipeline's skip path - every automatic line the creature's own state raises, nothing the
+ * table judges (`defaultChoice`, as the Long Rest's exposure Test) - and posted as a
+ * Resilience card of its own. True on a pass.
+ *
+ * @param {Actor} target
+ * @param {object} row  an `againRow` carrying `test`
+ * @returns {Promise<boolean>}
+ */
+async function againResist(target, row) {
+  const { defaultChoice } = await import("../applications/roll-dialog.mjs");
+  const choice = defaultChoice(target, { kind: "resilience", resilience: row.test.resilience, dc: row.test.dc, targets: [] });
+  const message = await game.system.azeroth.workflows.rollTest({
+    actor: target, kind: "resilience", resilience: row.test.resilience, dc: row.test.dc,
+    boons: choice.boons, banes: choice.banes, provenanceExtra: choice.provenanceExtra,
+    title: game.i18n.format("AZEROTH.Chrono.AgainTest", { spell: row.spell, source: row.source })
+  });
+  return message?.rolls?.[0]?.outcome?.success === true;
 }
 
 /* -------------------------------------------- */

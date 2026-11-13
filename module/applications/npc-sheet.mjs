@@ -342,6 +342,9 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
 
     context.config = AZEROTH;
     context.system = system;
+    // The factions it belongs to (D-912): the GM sets more; everybody reads the list.
+    context.factionEdit = game.user.isGM && this.isEditable;
+    context.factionList = (this.actor.signatureState?.factions ?? []).join(", ");
     // npc-banner.hbs binds {{actor.name}} and {{actor.img}} - see the character sheet.
     context.actor = this.actor;
     context.canReviewChainCast = game.user.isGM && this.actor.getFlag("azeroth-rpg", "chainLightningCast")?.stage === "pending";

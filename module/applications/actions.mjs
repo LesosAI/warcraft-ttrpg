@@ -17,6 +17,8 @@ import { enslaveMinuteDue } from '../rules/enslave-clock.mjs';
  */
 
 import { AZEROTH } from "../config.mjs";
+// What a Block lands on the attacker (08 §20's Neltharion's Heat; D-911).
+import { inflictCondition } from "../effects/inflict.mjs";
 import { confirmBandExtraAttack } from './signature-band-confirmation.mjs';
 import { reactionBarred } from "../rules/reaction-bar.mjs";
 import { attackReactionRefusal } from "../rules/attack-reaction-state.mjs";
@@ -138,7 +140,7 @@ import { describeDamage, resolveDamage } from "../rules/mitigation.mjs";
 import { baseTrait } from "../rules/bestiary.mjs";
 import { grantsOn } from "../rules/grants.mjs";
 import { SYNCED_REASONS, clearRefusal } from "../rules/in-play.mjs";
-import { blowFacts, gateHolds, hasSignature, isPressable as signaturePressable, mergeWeaponEffects, pressGates, pressRefusal, signatureEffectOf, signatureEffects } from "../rules/signatures.mjs";
+import { blowFacts, gateHolds, hasSignature, isPressable as signaturePressable, mergeWeaponEffects, pressEntryRefusal, pressGates, pressRefusal, pressesOf, PRESS_REASONS, pressTrigger, signatureEffectOf, signatureEffects, signatureWorn, splitGates } from "../rules/signatures.mjs";
 import {approvedRestSignature,charmUseView,SIGNATURE_USES_FLAG} from '../rules/approved-signature-uses.mjs';
 import { AzerothCompendiumBrowser } from "./compendium-browser.mjs";
 // THE LEGACY BRANCHES' B3: where a creature stands (06 §10's Spirit Realm, door 10) and
@@ -551,11 +553,18 @@ export function reactionRows(targets = [], { attacker = null, hidden = false } =
     // feature a talent grants with `onUse.mitigate: "negate"` and a use left, pressed
     // from this row through the feature's own door, which judges it all again.
     const negate = cannotParryOrBlock ? null : negateFeatureOf(actor);
+    // And 08 §20's Step Aside (*as a Reaction when an attack hits you ... the attack misses
+    // you*; D-912): a worn Signature's press, through the press's own door
+    // (`AzerothActor#signatureNegate`).
+    const answer = negate ?? (cannotParryOrBlock ? null : (actor.signatureNegate?.() ?? null));
+    // And the Signature presses that answer an attack on their bearer (D-913: Uther's Stand,
+    // The Wyrm's Roar), each its own button through the press's own door.
+    const answersSig = actor.signatureCardPresses?.() ?? [];
     const phaseShift = actor.type === "npc" && actor.system?.health?.value > 0
       && actor.system?.creatureAbilities?.some(row => row.name === "Phase Shift")
       && !state.phaseShifted && !state.asleep && !state.disoriented && !state.spiritRealm
       && !actor.statuses?.has("stunned") && (!state.inFight || state.reactionsLeft > 0 || state.lostToBlow);
-    if (!block.ok && !parry.ok && !negate && !phaseShift) continue;
+    if (!block.ok && !parry.ok && !answer && !phaseShift && !answersSig.length) continue;
     out.push({
       index,
       name: snapshot.name ?? actor.name,
@@ -563,7 +572,7 @@ export function reactionRows(targets = [], { attacker = null, hidden = false } =
       block: block.ok ? block.with : null,
       blockOff: blockOffFor(actor),
       parry: parry.ok ? parry.with : null,
-      negate, phaseShift
+      negate: answer, phaseShift, answersSig
     });
   }
   return out;
@@ -823,6 +832,11 @@ async function blockNow(actor, shield, messageId, targetIndex = null, { freeBy =
   const { guardianOnBlock } = await import("../effects/guardian.mjs");
   const guard = await guardianOnBlock({ actor, messageId });
   for (const line of guard.lines) lines.push(`<p class="azeroth-card-line azeroth-fired">${line}</p>`);
+  // **WHAT A WORN THING DOES ON A BLOCK** (08 §20's Scale of the Earth-Warder; D-911):
+  // Molten Seam's Rage on the blocker, and Neltharion's Heat's Scorched on whoever
+  // swung a MELEE blow - the card's own `strike.rangeKind` (D-779), and a blow whose
+  // way was never recorded is left to the table and said so.
+  for (const line of await signatureOnBlock(actor, messageId)) lines.push(`<p class="azeroth-card-line azeroth-fired">${line}</p>`);
   if (guard.resistHTML) lines.push(guard.resistHTML);
   const card = Boolean(retort || guard.resistHTML);
   return ChatMessage.create({
@@ -836,6 +850,49 @@ async function blockNow(actor, shield, messageId, targetIndex = null, { freeBy =
       ...(guard.grind ? { grind: guard.grind } : {})
     } }
   });
+}
+
+/**
+ * **WHAT THE BLOCKER'S SIGNATURES DO ON A BLOCK** (08 §20, D-911), the lines the
+ * Block's card prints. The rows are `signatureEffects().onBlock`, gated already;
+ * the pool through `updatePool` on the blocker's own client, the condition through
+ * the Inflict door (`effects/inflict.mjs`), on the GM's client where the attacker
+ * is not this client's.
+ *
+ * @param {Actor} actor  the blocker
+ * @param {string|null} messageId  the attack's card
+ * @returns {Promise<string[]>}
+ */
+async function signatureOnBlock(actor, messageId) {
+  const rows = actor?.system?.signatureEffects?.onBlock ?? [];
+  if (!rows.length) return [];
+  const lines = [];
+  const message = messageId ? game.messages?.get(messageId) ?? null : null;
+  const attacker = message ? ChatMessage.getSpeakerActor(message.speaker) : null;
+  const rangeKind = message?.flags?.["azeroth-rpg"]?.strike?.rangeKind ?? null;
+  for (const row of rows) {
+    if (row.pool) {
+      const pool = (actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === row.pool.pool) ?? null;
+      if (pool) {
+        const value = Math.min(pool.max ?? 0, (pool.value ?? 0) + row.pool.amount);
+        if (value > pool.value) await actor.updatePool([{ itemId: pool.itemId, kind: "momentum", value }]);
+        lines.push(game.i18n.format("AZEROTH.Signature.BlockPool", { source: row.label || row.name, name: actor.name, n: value - (pool.value ?? 0), pool: game.i18n.localize(AZEROTH.poolTypes[row.pool.pool] ?? row.pool.pool) }));
+      }
+    }
+    if (row.condition) {
+      if (!attacker) continue;
+      if (row.melee && rangeKind !== "melee") {
+        lines.push(game.i18n.format(rangeKind ? "AZEROTH.Signature.BlockNotMelee" : "AZEROTH.Signature.BlockUnrecorded", { source: row.label || row.name }));
+        continue;
+      }
+      const landed = await inflictCondition({ victim: attacker, id: row.condition.id, value: row.condition.value ?? null, by: actor, name: attacker.name, until: row.condition.until ?? null });
+      lines.push(game.i18n.format(landed?.landed ? "AZEROTH.Signature.BlockLanded" : "AZEROTH.Signature.BlockNotLanded", {
+        source: row.label || row.name, name: landed?.name || attacker.name,
+        condition: game.i18n.localize(AZEROTH.conditions[row.condition.id] ?? row.condition.id)
+      }));
+    }
+  }
+  return lines;
 }
 
 /**
@@ -1872,20 +1929,28 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
   let damageSpec = null;
   // What Flametongue made of the blow, for the card (D-779).
   let flametongueLine = null;
+  // Starfire Arrow's shot with no ammunition (D-912), or null.
+  let phantom = null;
   // Wounded Beast (04, D-648): a weapon attack's Rating rises by the rank.
   const wounded = actor.talentRanks?.("Wounded Beast") ?? 0;
   if (sys.isLauncher) {
     const bundles = fittingBundles(sys, actor.items.filter(i => i.type === "weapon").map(i => ({ id: i.id, name: i.name, ...i.system })));
     const chosen = selectAmmunition(sys, bundles);
     const state = canFire(sys, chosen);
-    if (!state.ok && !testOnly) {
+    // **A SHOT WITH NO AMMUNITION** (08 §20's Starfire Arrow, D-912): where nothing fitting
+    // is nocked or the bundle is empty, the launcher that carries it shoots anyway, at the
+    // row's Rating and in its school. A bundle that fits is still what it fires (MY READING).
+    phantom = state.ok ? null : (actor.phantomShotFor?.(weapon) ?? null);
+    if (phantom) {
+      damageSpec = { rating: phantom.rating + wounded, kind: "magical", school: phantom.type, penetration: 0 };
+    } else if (!state.ok && !testOnly) {
       ui.notifications?.warn(game.i18n.format(state.reason === "empty" ? "AZEROTH.Attack.EmptyBundle" : "AZEROTH.Attack.NoAmmunition", {
         weapon: weapon.name, launcher: game.i18n.localize(AZEROTH.launcherKinds[sys.launcher])
       }));
       return null;
     }
-    ammunition = chosen ? { itemId: chosen.id, name: chosen.name } : null;
-    damageSpec = chosen ? shotDamage(sys, chosen) : null;
+    ammunition = chosen && !phantom ? { itemId: chosen.id, name: chosen.name } : null;
+    if (!phantom) damageSpec = chosen ? shotDamage(sys, chosen) : null;
     // **WOUNDED BEAST ON A SHOT TOO** (04: *Your weapon attacks add 1 to their
     // Damage Rating per rank*; D-772): a bow is a weapon, and the shot's Rating
     // was the one weapon attack the rank never reached.
@@ -1950,6 +2015,8 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
     const converted = weaponDamageSpec({ rating: damageSpec.rating, traits: traitNames }, await traitSchools());
     const gadgetSchool = weapon.gadget && sys.damageType && AZEROTH.damageTypes[sys.damageType] && sys.damageType !== "physical" ? sys.damageType : null;
     damageSpec = { ...damageSpec, kind: gadgetSchool ? "magical" : converted.kind, school: gadgetSchool ?? converted.school, penetration: converted.penetration };
+    // Starfire Arrow's shot keeps its own school (D-912).
+    if (phantom) damageSpec = { ...damageSpec, kind: "magical", school: phantom.type };
     // **04's FLAMETONGUE, HELD** (*While you Sustain it, your weapon attacks deal Fire
     // damage rather than Physical. At rank 2 they add 1 damage as well*; the lead,
     // 2026-10-03, on O-188: *"1 mana"*; D-779): while the shaman's Sustain stands, a
@@ -2130,11 +2197,20 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
     // all. `moved` is the movement halves the turn has spent (D-659), the same
     // number `hasNotMoved` reads the other way round.
     blow: blowFacts({ offHand, moved: turnState.moved }),
+    // **A BLOW FROM HIDING** (08 §20's Hexed Fang, D-911: *while hidden from that
+    // creature*): the fact the `hidden` gate reads, the same reading Ghostly Strike's
+    // card takes below (`effects/stealth.mjs#isHiddenFor`).
+    hidden: isHiddenFor(actor, sourceOf(actor)) === true,
     ...(struck
       ? { target: { creatureType: struck.creatureType ?? null, acted: struck.acted, conditions: struck.conditions ?? {} } }
       : {})
   }, { weaponId: weapon.id });
   const weaponEffects = mergeWeaponEffects(traitEffects, signature);
+  // **WHAT A PRESS PUT ON THIS WEAPON** (08 §20's Blood of Mannoroth: *an orc wielding
+  // it adds 2 to its Damage Rating until the end of the encounter*; D-911): the
+  // press's effect names the item, and only this weapon's blows read it.
+  const pressedOn = actor.pressedWeaponBonus?.(weapon.id) ?? { damage: 0, sources: [] };
+  if (pressedOn.damage) weaponEffects.damageRating = (weaponEffects.damageRating ?? 0) + pressedOn.damage;
   // A Damage Rating SET replaces (Quel'Serrar's *is 8*), a grant adds
   // (Verigan's *adds 2*), and the multiplier travels to the mitigation, which
   // is the only place *doubled before Ward is subtracted* can mean anything.
@@ -2153,6 +2229,9 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
       add: weaponEffects.damageRating ?? 0,
       standing: laneBonus + shapeBonus
     });
+    // 08 §20's The Sorcerer-Thane's Pact (D-911): this weapon's own blow passes an
+    // Immune of these types at half, at the mitigation (`resolveDamage`'s `immuneHalf`).
+    if ((signature.pastImmune ?? []).length) damageSpec = { ...damageSpec, pastImmune: [...signature.pastImmune] };
     if (rating !== damageSpec.rating || weaponEffects.damageMultiplier) {
       damageSpec = { ...damageSpec, rating, ...(weaponEffects.damageMultiplier ? { multiplier: weaponEffects.damageMultiplier } : {}) };
       // WHY the number was what it was (CLAUDE.md §7): a set says what it set
@@ -2994,9 +3073,12 @@ export async function useGearWithDialog(actor, item) {
  * under it.** `refuseSignaturePress` is the same judgement and the same words
  * `useSignature` refuses with, so neither path can drift from the other.
  */
-export async function useSignatureWithDialog(actor, item, event = null) {
+export async function useSignatureWithDialog(actor, item, event = null, press = null) {
   // A creature under Hex or Polymorph presses no Signature (D-808).
   if (actor?.refuseForcedShape?.("signature")) return null;
+  // **ONE OF A LEGENDARY'S OTHER BUTTONS** (D-910): the press's key rides the
+  // control (`data-press`) and the door judges and pays it as its own.
+  if (press) return game.system.azeroth.workflows.useSignature({ actor, item, targets: targetSnapshots(), press });
   const signature = signatureEffectOf(item);
   if (signature?.kind === "spell") {
     if (game.system.azeroth.workflows.refuseSignaturePress({ actor, item })) return null;
@@ -3059,7 +3141,12 @@ export function signatureContext(item, actor = null) {
   const press = pressGates(signature);
   const pressHolds = state ? gateHolds(press, state) : true;
   const gearRefusal = dispersionRefusal(actor, "gear");
-  const refusal = gearRefusal ?? shared?.refusal ?? (state ? pressRefusal(signature, { holds: pressHolds, spells }) : null);
+  // **WORN, AND BY SOMEBODY** (D-913, F6 and the live run): a Legendary presses only while
+  // it is worn, and a pack sheet has no bearer at all, so neither draws a live Use - said
+  // in words (`unequipped`), never a grey alone.
+  const worn = Boolean(actor) && signatureWorn(item);
+  const unworn = signaturePressable(signature) && !worn ? "unequipped" : null;
+  const refusal = gearRefusal ?? shared?.refusal ?? unworn ?? (state ? pressRefusal(signature, { holds: pressHolds, spells, worn }) : null);
   const use = signature.use ?? {};
   const clause = g => ({
     kind: g.kind,
@@ -3097,9 +3184,45 @@ export function signatureContext(item, actor = null) {
     // words, never by a grey (D5).
     gatedParts: (signature.gated ?? []).map(branch => {
       const clauses = (branch.gates ?? []).map(clause).filter(g => g.label);
-      const stands = state ? gateHolds(branch.gates ?? [], state) : true;
-      return { gates: clauses, holds: Boolean(state) && stands, fails: Boolean(state) && !stands };
-    }).filter(part => part.gates.length),
+      // **A TARGET'S CONDITION IS NOT THE BEARER'S** (the live run, D-913): *Only against one
+      // kind of creature: demon* is judged at the blow, so the bearer's verdict reads only
+      // the bearer's own clauses, and a target clause says it is one (`targetOnly`).
+      const split = splitGates(branch.gates ?? []);
+      const stands = state ? gateHolds(split.bearer, state) : true;
+      return {
+        gates: clauses, holds: Boolean(state) && stands && split.bearer.length > 0, fails: Boolean(state) && !stands,
+        targetOnly: split.target.length > 0 && (!state || stands),
+        // A Legendary's run names itself (D-910), and a run still prose says
+        // why IN WORDS - *it waits on a reader* - rather than sitting inert.
+        label: branch.label ?? "",
+        reason: branch.reason ? AZEROTH.signatureReasons[branch.reason] ?? null : null
+      };
+    }).filter(part => part.gates.length || part.reason),
+    // The run the trunk reads (D-910), empty on an Epic or a Rare.
+    label: signature.label ?? "",
+    // **A LEGENDARY'S OTHER BUTTONS** (D-910), each a row of its own with the
+    // trunk's chips and its own refusal in words, judged by the one function the
+    // door refuses on (`pressEntryRefusal`).
+    presses: pressesOf(signature).map(({ key, press }) => {
+      const stands = state ? gateHolds(press.gates ?? [], state) : true;
+      // A press that answers an attack on its bearer is pressed from that attack's card
+      // (D-913): the sheet's button says so rather than refusing on the click.
+      const answersCard = ["hitOnYou", "attackOnYou"].includes(pressTrigger(press));
+      const why = gearRefusal ?? (press.trigger ? "automatic" : null) ?? (worn ? null : "unequipped") ?? (state ? pressEntryRefusal(press, { holds: stands, worn }) : null) ?? (answersCard ? "fromCard" : null);
+      return {
+        key, label: press.label,
+        gates: (press.gates ?? []).map(clause).filter(g => g.label),
+        refusal: why,
+        refusalLabel: gearRefusal ?? (why ? AZEROTH.signatureRefusals[why] ?? null : null),
+        actionLabel: press.action ? AZEROTH.actions[press.action] ?? null : null,
+        cost: press.cost?.pool && press.cost?.amount
+          ? { amount: press.cost.amount, label: AZEROTH.poolTypes[press.cost.pool] ?? press.cost.pool }
+          : null,
+        uses: press.uses?.per ? { value: press.uses.value ?? 0, max: press.uses.max ?? 0, per: AZEROTH.usesPer[press.uses.per] ?? press.uses.per } : null,
+        // What the press leaves to the table, in words (D-914: The Wyrm's Roar's Bane).
+        reason: PRESS_REASONS[press.label] ? AZEROTH.signatureReasons[PRESS_REASONS[press.label]] ?? null : null
+      };
+    }),
     // The clauses that qualify the BUTTON ALONE, printed beside it. **Only
     // where the press has a gate OF ITS OWN**: `pressGates` falls back to the
     // trunk's list, which every surface has already printed above, and a

@@ -240,9 +240,17 @@
                 without the line a Signature half of which is a Shaman's reads
                 here as ungated. --}}
           {{#each s.gatedParts as |part|}}
-          <span class="azeroth-force-signature-note">{{localize "AZEROTH.Signature.PartOnly"}} {{#each part.gates as |g|}}{{#unless @first}} · {{/unless}}{{#if g.value}}{{localize "AZEROTH.Signature.GateValue" kind=(localize g.label) value=g.value}}{{else}}{{localize g.label}}{{/if}}{{/each}}</span>
+          <span class="azeroth-force-signature-note">{{#if part.label}}{{localize "AZEROTH.Signature.RunLead" label=part.label}}{{else}}{{localize "AZEROTH.Signature.PartOnly"}}{{/if}} {{#each part.gates as |g|}}{{#unless @first}} · {{/unless}}{{#if g.value}}{{localize "AZEROTH.Signature.GateValue" kind=(localize g.label) value=g.value}}{{else}}{{localize g.label}}{{/if}}{{/each}}{{#if part.gates.length}}.{{/if}}{{#if part.targetOnly}} {{localize "AZEROTH.Signature.PartTarget"}}{{/if}}{{#if part.reason}} {{localize part.reason}}{{/if}}</span>
           {{/each}}
           {{#if s.refusalLabel}}<span class="azeroth-force-signature-note">{{localize s.refusalLabel}}</span>{{/if}}
+          {{!-- A Legendary's other buttons (D-910), a line each. --}}
+          {{#each s.presses as |p|}}
+          {{!-- The press's own gate, as the Combat tab prints it (the live run, D-913). --}}
+          <span class="azeroth-force-signature-note">{{localize "AZEROTH.Signature.RunLead" label=p.label}}
+            <button type="button" class="azeroth-use" data-action="useSignature" data-press="{{p.key}}"{{#if p.refusal}} disabled{{/if}}{{#if p.refusalLabel}} data-tooltip="{{localize p.refusalLabel}}"{{/if}}>{{localize "AZEROTH.Feature.Use"}}</button>
+            {{#each p.gates as |g|}}{{#unless @first}} · {{/unless}}{{#if g.value}}{{localize "AZEROTH.Signature.GateValue" kind=(localize g.label) value=g.value}}{{else}}{{localize g.label}}{{/if}}{{/each}}{{#if p.gates.length}}.{{/if}}
+            {{#if p.refusalLabel}}{{localize p.refusalLabel}}.{{/if}}</span>
+          {{/each}}
         </li>
         {{/each}}
       </ul>

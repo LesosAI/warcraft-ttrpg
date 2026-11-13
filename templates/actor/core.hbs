@@ -6,6 +6,9 @@
     <dd>{{#each languages}}<span class="azeroth-state-chip">{{this}}</span>{{else}}{{azerothDash null}}{{/each}}</dd>
     <dt>{{localize "AZEROTH.Sheet.Motive"}}</dt>
     <dd>{{#if editable}}<input type="text" name="system.motive" value="{{system.motive}}" aria-label="{{localize "AZEROTH.Sheet.Motive"}}">{{else}}{{system.motive}}{{/if}}</dd>
+    {{!-- The factions the character belongs to (D-912): its people's, and what the GM set. --}}
+    <dt>{{localize "AZEROTH.Sheet.Factions"}}</dt>
+    <dd>{{#if factionEdit}}<input type="text" name="system.factions" value="{{system.factions}}" aria-label="{{localize "AZEROTH.Sheet.Factions"}}" placeholder="{{factionList}}">{{else}}{{#if factionList}}{{factionList}}{{else}}{{azerothDash null}}{{/if}}{{/if}}</dd>
   </dl>
 
   {{!-- One partial for every pool, shared with the Spells header (D-614). --}}

@@ -855,6 +855,21 @@ export function roundStruck(round, number) {
 }
 
 /**
+ * **THE ROUND'S FIRST ATTACK THAT HURT** (08 §20's The Destroyer's Temper,
+ * D-911): `roundStruck`'s twin, on its own key, so a blow that was no attack never
+ * spends it. `first` is whether this is the round's first.
+ *
+ * @param {object|null} round  the combatant's round record
+ * @param {number} number      the fight's round
+ * @returns {{round: object, changed: boolean, first: boolean}}
+ */
+export function roundHurt(round, number) {
+  const same = round?.number === number;
+  if (same && round.hurtByAttack === true) return { round, changed: false, first: false };
+  return { round: { ...(same ? round : {}), number, hurtByAttack: true }, changed: true, first: true };
+}
+
+/**
  * **WHETHER THE COMBAT TAB MAY PAY A RIDER BEFORE THE BLOW** (the lead,
  * 2026-10-03: *"Either order"*). Only a rider whose spend buys a move - the
  * thing that has to happen before the blow - and only in a fight, on the

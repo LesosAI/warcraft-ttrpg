@@ -47,7 +47,7 @@ import {
 } from "../rules/class-talents.mjs";
 // 04's Shared Burden: a SHARE of the blow moved, the rest kept, the share met by the
 // holder's own Armor Points and Ward (the Legacy branches' B6).
-import { burdenMet, keptAmount } from "../rules/blow-doors.mjs";
+import { burdenMet, keptAmount, regrossFor } from "../rules/blow-doors.mjs";
 import { buffetStacks } from "../rules/flame-buffet.mjs";
 import { wardBySchool } from "../rules/ward.mjs";
 import { schoolArmorBySchool } from "../rules/auras.mjs";
@@ -208,6 +208,8 @@ function movesOf(holder) {
   // 04's Shared Burden (the Legacy branches' B6): a share of the blow, half or all.
   const burden = burdenFor(talents);
   if (burden) out.push(burden);
+  // 08 §20's The Raised Gauntlet (D-912): what the holder WEARS, read by its own reader.
+  for (const row of holder.signatureMoves?.() ?? []) out.push(row);
   const feature = (holder.items ?? []).find(i => i.type === "feature" && i.name === RIGHTEOUS.feature) ?? null;
   if (feature) {
     out.push({
@@ -257,7 +259,7 @@ export function redirectCandidates({ target, amount = 0, type = null, attack = f
 /** Selection is one freshly eligible candidate key, or null for no transfer.
  * Undefined preserves the existing sequential path until the unified chooser is wired.
  * Discovery never asks, pays, or writes; a stale selection never substitutes another holder. */
-export async function redirectBlow({ target, amount = 0, type = null, attack = false, spell = false, messageId = null, by = null, location = "body", parts = null, selection = undefined } = {}) {
+export async function redirectBlow({ target, amount = 0, type = null, attack = false, spell = false, messageId = null, by = null, location = "body", parts = null, breath = null, selection = undefined } = {}) {
   if (selection === null) return { moved: false };
   const blow = { target, amount, type, attack, spell, messageId, by };
   const candidates = redirectCandidates(blow).filter(c => selection === undefined || c.key === selection);
@@ -269,7 +271,7 @@ export async function redirectBlow({ target, amount = 0, type = null, attack = f
     const { holder, row, feet, moved } = fresh;
     const answer = await ask(holder, {
       act: "move", kind: row.kind, holderUuid: holder.uuid, targetUuid: target.uuid, amount, moved, type,
-      attack: attack === true, spell: spell === true, messageId, byUuid: by?.uuid ?? null, location, feet, parts,
+      attack: attack === true, spell: spell === true, messageId, byUuid: by?.uuid ?? null, location, feet, parts, breath,
       awaitDelivery: selection !== undefined
     });
     if (answer?.moved) {
@@ -293,7 +295,7 @@ export async function redirectBlow({ target, amount = 0, type = null, attack = f
  * `remote` where another client asked through `BLOW_ASK_QUERY` and is waiting on
  * the answer (`blowAskHandler`).
  */
-async function moveHere({ holder, target, kind, amount, moved, type, attack, spell, messageId, by, location, feet, parts, remote = false }) {
+async function moveHere({ holder, target, kind, amount, moved, type, attack, spell, messageId, by, location, feet, parts, breath = null, remote = false }) {
   const row = movesOf(holder).find(r => r.kind === kind) ?? null;
   if (!row) return { moved: false, reason: "unknown" };
   // Judged again on the holder's client (door 14): the striker may have taken Wind
@@ -308,9 +310,27 @@ async function moveHere({ holder, target, kind, amount, moved, type, attack, spe
   // **A SHARE IS THE HOLDER'S OWN ROW'S** (04's Shared Burden; the Legacy branches' B6):
   // worked out again here off the holder's rank, never taken off the request.
   if (kind === "burden") moved = movedAmount({ kind, amount, share: row.share ?? "half" });
+  // **THE RAISED GAUNTLET RE-RESOLVES THE ATTACK AGAINST ITS BEARER** (the lead, D-913:
+  // *"Re-resolve against the bearer only"*): the card's own record of the blow before any
+  // target met it, met by the bearer's Armor Points and Ward alone. A card that recorded
+  // none is refused in words before anything is asked or paid - never a blow reduced twice.
+  let gross = null;
+  if (kind === "gauntlet") {
+    const spec = game.messages?.get?.(messageId)?.flags?.["azeroth-rpg"]?.blowSpec ?? null;
+    gross = regrossFor(spec, {
+      apByLocation: holder.system?.ap ?? {}, wardBySchool: wardBySchool(holder.system?.ward), schoolArmorBySchool: schoolArmorBySchool(holder.system?.schoolArmor),
+      fireTakenBonus: buffetStacks([...(holder.effects ?? [])], game.time?.worldTime),
+      immune: holder.system?.immune ?? [], vulnerable: holder.system?.vulnerable ?? []
+    });
+    if (!gross) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.BlowDoor.Refuse.noGross", { name: holder.name, talent: row.name }));
+      return { moved: false, reason: "noGross" };
+    }
+    moved = Math.max(0, Math.trunc(Number(gross.damage)) || 0);
+  }
   // **04's TIMELESS SENTINEL ASKS NOBODY** (stage 2c: *every attack ... targets you instead*):
   // the move is the effect's, so no question is put; every other move is a choice.
-  const askKey = { righteous: "AZEROTH.BlowDoor.AskRighteous", burden: "AZEROTH.BlowDoor.AskBurden", interposed: "AZEROTH.BlowDoor.AskInterposed" }[kind] ?? "AZEROTH.BlowDoor.AskGuardian";
+  const askKey = { righteous: "AZEROTH.BlowDoor.AskRighteous", burden: "AZEROTH.BlowDoor.AskBurden", interposed: "AZEROTH.BlowDoor.AskInterposed", gauntlet: "AZEROTH.BlowDoor.AskGauntlet" }[kind] ?? "AZEROTH.BlowDoor.AskGuardian";
   const yes = row.auto === true ? true : await confirmHere(holder, {
     title: row.name,
     text: game.i18n.format(askKey, {
@@ -332,6 +352,13 @@ async function moveHere({ holder, target, kind, amount, moved, type, attack, spe
     const pool = (holder.poolSnapshot?.() ?? []).find(p => p.name === row.cost?.pool) ?? null;
     const price = Math.max(0, Math.trunc(Number(row.cost?.amount)) || 0);
     if (pool && price > 0) await holder.updatePool({ itemId: pool.itemId, kind: pool.kind, value: Math.max(0, pool.value - price) });
+  }
+  // **THE RAISED GAUNTLET'S USE, STRUCK** (D-912): the press's own count at its own dotted
+  // path (08 §20: *counts its uses apart from the item's other Signatures*), after the
+  // Reaction and before the blow lands.
+  if (kind === "gauntlet" && row.itemId && row.press && row.counted !== false) {
+    const worn = holder.items?.get?.(row.itemId) ?? null;
+    if (worn) await worn.update({ [`system.signatureEffect.presses.${row.press}.uses.value`]: Math.max(0, (Math.trunc(Number(row.usesLeft)) || 0) - 1) });
   }
   // **04's INTERPOSED MOMENT: *You and that ally swap places without provoking Opportunity
   // Attacks*** (stage 2c): two displacements, here or on the GM's client, recorded on a card
@@ -361,8 +388,11 @@ async function moveHere({ holder, target, kind, amount, moved, type, attack, spe
   }) : null;
   const damageOutcome = {};
   const landing = met
-    ? holder.applyDamage(met.damage, { struck: true, attack, spell, location, type, messageId, by, moved: true, wardTook: met.wardTook, parts: met.parts, outcome: damageOutcome })
-    : holder.applyDamage(moved, { struck: true, attack, spell, location, type, messageId, by, moved: true, parts: movedParts(parts), outcome: damageOutcome });
+    ? holder.applyDamage(met.damage, { struck: true, attack, spell, location, type, messageId, by, moved: true, wardTook: met.wardTook, parts: met.parts, outcome: damageOutcome, breath })
+    // The Raised Gauntlet's blow as the bearer's own Armor Points and Ward met it (D-913).
+    : gross ? holder.applyDamage(moved, { struck: true, attack, spell, location, type, messageId, by, moved: true, wardTook: gross.wardTook ?? 0, parts: gross.parts ?? null, outcome: damageOutcome, breath })
+    // A breath moved stays a breath (D-914): Foror's Lesson halves it on the holder.
+    : holder.applyDamage(moved, { struck: true, attack, spell, location, type, messageId, by, moved: true, parts: movedParts(parts), outcome: damageOutcome, breath });
   // **ANSWERED ONCE IT IS PAID, WHERE ANOTHER CLIENT ASKED** (the review of D-777):
   // the asker stops waiting at ASK_MS and then lands the blow where it was aimed,
   // and the holder's own door can outlast that - a hold it asks in turn is a
@@ -668,6 +698,13 @@ async function borrowHere({ holder, amount }) {
   return { borrowed: true, free: again.held.free === true };
 }
 
+/** A breath record as a query carries it (D-914): its three names as strings, or null. */
+function breathRecord(b) {
+  if (!b || typeof b !== "object") return null;
+  const s = v => (typeof v === "string" ? v : null);
+  return { title: s(b.title), featureKey: s(b.featureKey), spellName: s(b.spellName) };
+}
+
 /**
  * The handler a holder is asked through (`BLOW_ASK_QUERY`), on the client that
  * answers for the holder. The asker must own the creature STRUCK - it was their
@@ -686,6 +723,8 @@ export async function blowAskHandler(payload = {}, { user = null } = {}) {
       attack: payload.attack === true, spell: payload.spell === true, messageId: payload.messageId ?? null,
       by: actorAt(payload.byUuid), location: payload.location ?? "body",
       feet: typeof payload.feet === "number" ? payload.feet : null, parts: Array.isArray(payload.parts) ? payload.parts : null,
+      // The card's breath record (D-914): three names, nothing else trusted.
+      breath: breathRecord(payload.breath),
       // Asked by ANOTHER client, which stops waiting at ASK_MS (`moveHere`).
        remote: Boolean(user?.id) && user.id !== game.user?.id
          && !(payload.awaitDelivery === true && user?.isGM && user.id === game.users?.activeGM?.id)

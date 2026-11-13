@@ -610,7 +610,9 @@ function standingSignatureFields() {
     // descriptor comes from (CLAUDE.md SS9).
     spellCost: new fields.SchemaField({
       school: choiceField(AZEROTH.schools),
-      amount: optionalNumberField({ min: 1 })
+      amount: optionalNumberField({ min: 1 }),
+      // The floor the discount stops at (Atiesh, *to a minimum of 1*; D-910).
+      minimum: optionalNumberField({ min: 1 })
     }),
     // Vestments of Transcendence: what the bearer's own healing adds.
     healingBonus: optionalNumberField({ min: 1 }),
@@ -619,6 +621,8 @@ function standingSignatureFields() {
       track: choiceField(AZEROTH.corruptionTracks),
       amount: optionalNumberField({ min: 1 })
     }),
+    // The Black Empire's Price: what HOLDING it charges, a Test first (D-910).
+    corruptionGain: corruptionGainField(),
     // Dragonstalker Armor: the dialog line the bearer does not take. A BANE
     // CANCELLED IS NOT A BOON, which is why this is not a grant.
     cancelsBane: choiceField(AZEROTH.cancellableBanes),
@@ -638,7 +642,36 @@ function standingSignatureFields() {
     aura: new fields.SchemaField({
       feet: optionalNumberField({ min: 1 }),
       targets: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
-      damageReduction: optionalNumberField({ min: 1 })
+      damageReduction: optionalNumberField({ min: 1 }),
+      // Atiesh's spell Damage Rating and the Lightbringer's Shadow Ward floor
+      // (D-910): the payloads a class feature's aura already lays.
+      spellDamage: optionalNumberField({ min: 1 }),
+      floor: new fields.SchemaField({
+        ward: optionalNumberField({ min: 1 }),
+        schools: new fields.ArrayField(new fields.StringField({ blank: false }), { initial: [] })
+      }),
+      // The Legendary readers' five (D-911): a Boon, a Bane, the attack lane, a
+      // turn-start tick, and who among those in reach. Vocabularies are left to
+      // `cleanAura`, never a `choices` here (CLAUDE.md SS15).
+      boon: new fields.SchemaField({
+        kind: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+        resilience: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+        boons: optionalNumberField({ min: 1 })
+      }),
+      bane: new fields.SchemaField({
+        kind: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+        resilience: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+        banes: optionalNumberField({ min: 1 })
+      }),
+      attackDamage: optionalNumberField({ min: 1 }),
+      tick: new fields.SchemaField({
+        damage: optionalNumberField({ min: 1 }),
+        type: new fields.StringField({ required: false, nullable: true, blank: false, initial: null })
+      }),
+      who: new fields.SchemaField({
+        faction: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+        living: new fields.BooleanField({ initial: false })
+      })
     }),
     // ONE NAMED SPELL OR CLASS FEATURE, IMPROVED (D-698). The NAME is free
     // text: 02, 04 and 07 have no roster in `config.mjs`, so the vocabulary is
@@ -651,7 +684,79 @@ function standingSignatureFields() {
       cost: optionalNumberField({ min: 1 })
     }),
     // What every creature the bearer has bound gains (D-698, D-643's bond).
-    bound: new fields.SchemaField({ damage: optionalNumberField({ min: 1 }) }),
+    // `creatureType`: *a DEMON bound to a Warlock* (D-911); null is every one.
+    bound: new fields.SchemaField({
+      damage: optionalNumberField({ min: 1 }),
+      creatureType: choiceField(AZEROTH.creatureTypes)
+    }),
+    // THE LEGENDARY READERS (D-911), in `emptySignature()`'s own order: each a
+    // key one run of 08 SS20 writes and one door reads.
+    wardFloor: new fields.SchemaField({
+      ward: optionalNumberField({ min: 1 }),
+      schools: new fields.ArrayField(new fields.StringField({ blank: false }), { initial: [] })
+    }),
+    noFallDamage: new fields.BooleanField({ initial: false }),
+    ignoresReload: new fields.BooleanField({ initial: false }),
+    pastImmune: choiceField(AZEROTH.damageTypes),
+    sandOnFail: optionalNumberField({ min: 1 }),
+    poolOnHurt: new fields.SchemaField({
+      pool: choiceField(AZEROTH.poolTypes),
+      amount: optionalNumberField({ min: 1 })
+    }),
+    onBlock: new fields.SchemaField({
+      pool: new fields.SchemaField({
+        pool: choiceField(AZEROTH.poolTypes),
+        amount: optionalNumberField({ min: 1 })
+      }),
+      condition: new fields.SchemaField({
+        id: choiceField(AZEROTH.conditions),
+        value: optionalNumberField({ min: 1 }),
+        until: choiceField(AZEROTH.untilKinds)
+      }),
+      melee: new fields.BooleanField({ initial: false })
+    }),
+    tickHealBonus: optionalNumberField({ min: 1 }),
+    refusesFrom: new fields.ArrayField(new fields.SchemaField({
+      id: choiceField(AZEROTH.conditions),
+      creatureType: choiceField(AZEROTH.creatureTypes)
+    }), { initial: [] }),
+    bossCannotIgnore: new fields.BooleanField({ initial: false }),
+    adaptiveWard: optionalNumberField({ min: 1 }),
+    killTemp: new fields.SchemaField({
+      perTier: optionalNumberField({ min: 1 }),
+      weightClasses: new fields.ArrayField(new fields.StringField({ blank: false }), { initial: [] })
+    }),
+    // PHASE B2 (D-912), in `emptySignature()`'s own order.
+    breathHalf: new fields.BooleanField({ initial: false }),
+    attackerBane: new fields.SchemaField({
+      faction: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+      banes: optionalNumberField({ min: 1 })
+    }),
+    phantomShot: new fields.SchemaField({
+      rating: optionalNumberField({ min: 0 }),
+      type: choiceField(AZEROTH.damageTypes)
+    }),
+    resistBane: new fields.SchemaField({
+      school: choiceField(AZEROTH.schools),
+      name: new fields.StringField({ required: true, blank: true, initial: "" }),
+      creatureType: choiceField(AZEROTH.creatureTypes),
+      banes: optionalNumberField({ min: 1 }),
+      per: new fields.StringField({ required: false, nullable: true, blank: false, initial: null })
+    }),
+    freeSpell: new fields.StringField({ required: true, blank: true, initial: "" }),
+    touchHealingFeet: optionalNumberField({ min: 1 }),
+    ordination: new fields.BooleanField({ initial: false }),
+    spellDamageTest: new fields.SchemaField({
+      school: choiceField(AZEROTH.schools),
+      resilience: choiceField(AZEROTH.resiliences),
+      onFail: new fields.SchemaField({
+        id: choiceField(AZEROTH.conditions),
+        value: optionalNumberField({ min: 1 }),
+        until: choiceField(AZEROTH.untilKinds)
+      })
+    }),
+    sizeStep: optionalNumberField({ min: 1 }),
+    secondReaction: new fields.ArrayField(new fields.StringField({ blank: false }), { initial: [] }),
     onHit: new fields.SchemaField({
       // Null is *on a hit*; 2 is 08 SS5's Standard threshold.
       sl: optionalNumberField({ min: 0 }),
@@ -686,7 +791,9 @@ function standingSignatureFields() {
       // `arc` rather than `arc.targets` to know whether there is one.
       arc: new fields.SchemaField({
         targets: optionalNumberField({ min: 1 }),
-        feet: optionalNumberField({ min: 0 })
+        feet: optionalNumberField({ min: 0 }),
+        // Magma Shot's *every other creature* (D-912).
+        all: new fields.BooleanField({ required: false, initial: undefined })
       }, { required: false, nullable: true, initial: null }),
       // How often the row may fire (D-696): Dal'Rend's *each round*, Sulfuron's
       // *each turn*. Null is every hit. The vocabulary is `abilityUsesPer` and
@@ -700,7 +807,10 @@ function standingSignatureFields() {
       }),
       // Sulfuron Hammer: the divisor the condition's value is taken at, so 2 is
       // *half the damage dealt* (D-696). Its exact mirror.
-      conditionFromDamage: optionalNumberField({ min: 1 })
+      conditionFromDamage: optionalNumberField({ min: 1 }),
+      // Ash of the Risen's no healing, and the Signature DC a condition carries (D-911).
+      noHealing: new fields.BooleanField({ initial: false }),
+      signatureDC: new fields.BooleanField({ initial: false })
     }),
     // Gorehowl: a blow that FINISHES a creature, which is not one that lands.
     onKill: new fields.SchemaField({
@@ -774,6 +884,8 @@ function branchField() {
   return new fields.SchemaField({
     gates: gateListField(),
     reason: reasonField(),
+    // The run the branch reads (D-910).
+    label: new fields.StringField({ required: true, blank: true, initial: "" }),
     grants: standing.grants,
     refuses: standing.refuses,
     criticalOn: standing.criticalOn,
@@ -788,17 +900,153 @@ function branchField() {
     spellCost: standing.spellCost,
     healingBonus: standing.healingBonus,
     corruptionReduction: standing.corruptionReduction,
+    corruptionGain: standing.corruptionGain,
     cancelsBane: standing.cancelsBane,
     blockBonus: standing.blockBonus,
     armorPointsPerTier: standing.armorPointsPerTier,
     aura: standing.aura,
     empowers: standing.empowers,
     bound: standing.bound,
+    wardFloor: standing.wardFloor,
+    noFallDamage: standing.noFallDamage,
+    ignoresReload: standing.ignoresReload,
+    pastImmune: standing.pastImmune,
+    sandOnFail: standing.sandOnFail,
+    poolOnHurt: standing.poolOnHurt,
+    onBlock: standing.onBlock,
+    tickHealBonus: standing.tickHealBonus,
+    refusesFrom: standing.refusesFrom,
+    bossCannotIgnore: standing.bossCannotIgnore,
+    adaptiveWard: standing.adaptiveWard,
+    killTemp: standing.killTemp,
+    breathHalf: standing.breathHalf,
+    attackerBane: standing.attackerBane,
+    phantomShot: standing.phantomShot,
+    resistBane: standing.resistBane,
+    freeSpell: standing.freeSpell,
+    touchHealingFeet: standing.touchHealingFeet,
+    ordination: standing.ordination,
+    spellDamageTest: standing.spellDamageTest,
+    sizeStep: standing.sizeStep,
+    secondReaction: standing.secondReaction,
     onHit: standing.onHit,
     onKill: standing.onKill,
     whenStruck: standing.whenStruck,
     tick: standing.tick
   });
+}
+
+/**
+ * A Corruption charge, a Resilience Test first (D-910): the track, the points
+ * a failure gives, the Test and its DC, and when it is offered. Every field
+ * nullable and guarded by `cleanSignature` first, as every vocabulary here is.
+ */
+function corruptionGainField() {
+  return new fields.SchemaField({
+    track: choiceField(AZEROTH.corruptionTracks),
+    amount: optionalNumberField({ min: 1 }),
+    resilience: choiceField(AZEROTH.resiliences),
+    dc: optionalNumberField({ min: 1 }),
+    at: new fields.StringField({ required: false, nullable: true, blank: false, initial: null })
+  });
+}
+
+/**
+ * What a press does, in `use`'s own shape (D-692) - the trunk's one button and
+ * every entry of a Legendary's `presses` map (D-910) - so the two cannot drift.
+ * A FUNCTION, because a field instance cannot sit in two schemas.
+ */
+function pressUseFields() {
+  return {
+    action: choiceField(AZEROTH.actions),
+    // What the press costs, in `class-features.mjs#cost`'s shape exactly.
+    cost: new fields.SchemaField({
+      pool: choiceField(AZEROTH.poolTypes),
+      amount: optionalNumberField({ min: 1 })
+    }),
+    uses: new fields.SchemaField({
+      max: optionalNumberField({ min: 0 }),
+      value: optionalNumberField({ min: 0 }),
+      per: choiceField(AZEROTH.abilityUsesPer)
+    }),
+    heal: new fields.SchemaField({
+      health: optionalNumberField({ min: 0 }),
+      mana: optionalNumberField({ min: 0 }),
+      fatigue: optionalNumberField({ min: 0 })
+    }),
+    changes: new fields.ArrayField(new fields.SchemaField({
+      key: new fields.StringField({ required: true, blank: false }),
+      type: new fields.StringField({ required: true, blank: false, initial: "add" }),
+      value: new fields.StringField({ required: true, blank: true, initial: "" }),
+      // A stored base moves in `initial`, a derived number in `final` (CLAUDE.md SS6).
+      phase: new fields.StringField({ required: true, blank: false, initial: "final", choices: ["initial", "final"] })
+    }), { initial: [] }),
+    statuses: new fields.ArrayField(new fields.StringField({ blank: false }), { initial: [] }),
+    ends: new fields.ArrayField(new fields.StringField({ blank: false }), { initial: [] }),
+    // `SIGNATURE_DURATION_UNITS` is the vocabulary and `cleanSignature`
+    // enforces it, exactly as `useField()` leaves its own units to
+    // `cleanUse`: a `choices` here would refuse the document at load
+    // instead, and a refused document is invisible to a migration.
+    // **`encounter` is a unit and carries no number** (D-692).
+    duration: new fields.SchemaField({
+      value: optionalNumberField({ min: 0 }),
+      units: new fields.StringField({ required: false, nullable: true, blank: false, initial: null })
+    }),
+    damage: new fields.SchemaField({ amount: optionalNumberField({ min: 0 }), type: choiceField(AZEROTH.damageTypes) }),
+    // What it takes OFF one incoming blow (Battlegear of Wrath's halving),
+    // never both halves at once.
+    mitigates: new fields.SchemaField({
+      halve: new fields.BooleanField({ initial: false }),
+      amount: optionalNumberField({ min: 1 })
+    }),
+    resist: new fields.SchemaField({
+      resilience: choiceField(AZEROTH.resiliences),
+      dc: optionalNumberField({ min: 0 })
+    }, { required: false, nullable: true, initial: null }),
+    area: new fields.StringField({ required: true, blank: true, initial: "" }),
+    note: new fields.StringField({ required: true, blank: true, initial: "" }),
+    // What a failed Resist lands on the creature that failed it (D-910).
+    onFail: new fields.ArrayField(new fields.SchemaField({
+      id: choiceField(AZEROTH.conditions),
+      value: optionalNumberField({ min: 1 }),
+      until: choiceField(AZEROTH.untilKinds),
+      // Emerald Slumber's *until it takes damage* (D-911).
+      endsOnDamage: new fields.BooleanField({ required: false, initial: undefined })
+    }), { initial: [] }),
+    // The Corruption the press offers, a Test first (D-910).
+    corruptionGain: corruptionGainField(),
+    // The Legendary presses (D-911), each read by `workflows.useSignature`.
+    noDamage: new fields.BooleanField({ initial: false }),
+    fill: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+    attacks: new fields.SchemaField({
+      count: optionalNumberField({ min: 1 }),
+      same: new fields.BooleanField({ initial: false })
+    }),
+    trigger: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+    echo: new fields.BooleanField({ initial: false }),
+    weaponDamage: optionalNumberField({ min: 1 }),
+    // Phase B2 presses (D-912), each read by `workflows.useSignature`.
+    feature: new fields.StringField({ required: true, blank: true, initial: "" }),
+    castHeal: optionalNumberField({ min: 1 }),
+    gather: new fields.SchemaField({
+      feet: optionalNumberField({ min: 1 }),
+      condition: choiceField(AZEROTH.conditions),
+      sustaining: new fields.BooleanField({ initial: false })
+    }),
+    drain: choiceField(AZEROTH.conditions),
+    onFailEnds: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+    tether: new fields.SchemaField({
+      creatureType: choiceField(AZEROTH.creatureTypes),
+      feet: optionalNumberField({ min: 1 }),
+      loss: optionalNumberField({ min: 1 }),
+      mana: optionalNumberField({ min: 1 })
+    }),
+    rewind: new fields.BooleanField({ initial: false }),
+    move: new fields.SchemaField({ feet: optionalNumberField({ min: 1 }) }),
+    negates: new fields.BooleanField({ initial: false }),
+    arcWiden: optionalNumberField({ min: 1 }),
+    breathSchool: new fields.BooleanField({ initial: false })
+  };
 }
 
 /**
@@ -824,6 +1072,8 @@ export function signatureField() {
   return new fields.SchemaField({
     kind: new fields.StringField({ required: true, blank: false, initial: "none", choices: SIGNATURE_KINDS_AUTOMATED }),
     reason: reasonField(),
+    // The run the trunk reads (D-910): empty on an Epic or a Rare.
+    label: new fields.StringField({ required: true, blank: true, initial: "" }),
     gates: gateListField(),
     // WHAT QUALIFIES THE BUTTON ALONE (D-722). A Signature carries one button
     // and the sentence that presses may be gated while the sentences beside it
@@ -845,65 +1095,41 @@ export function signatureField() {
     spellCost: standing.spellCost,
     healingBonus: standing.healingBonus,
     corruptionReduction: standing.corruptionReduction,
+    corruptionGain: standing.corruptionGain,
     cancelsBane: standing.cancelsBane,
     blockBonus: standing.blockBonus,
     armorPointsPerTier: standing.armorPointsPerTier,
     aura: standing.aura,
     empowers: standing.empowers,
     bound: standing.bound,
+    wardFloor: standing.wardFloor,
+    noFallDamage: standing.noFallDamage,
+    ignoresReload: standing.ignoresReload,
+    pastImmune: standing.pastImmune,
+    sandOnFail: standing.sandOnFail,
+    poolOnHurt: standing.poolOnHurt,
+    onBlock: standing.onBlock,
+    tickHealBonus: standing.tickHealBonus,
+    refusesFrom: standing.refusesFrom,
+    bossCannotIgnore: standing.bossCannotIgnore,
+    adaptiveWard: standing.adaptiveWard,
+    killTemp: standing.killTemp,
+    breathHalf: standing.breathHalf,
+    attackerBane: standing.attackerBane,
+    phantomShot: standing.phantomShot,
+    resistBane: standing.resistBane,
+    freeSpell: standing.freeSpell,
+    touchHealingFeet: standing.touchHealingFeet,
+    ordination: standing.ordination,
+    spellDamageTest: standing.spellDamageTest,
+    sizeStep: standing.sizeStep,
+    secondReaction: standing.secondReaction,
     onHit: standing.onHit,
     onKill: standing.onKill,
     whenStruck: standing.whenStruck,
-    // What pressing it does, in `useField()`'s vocabulary above.
-    use: new fields.SchemaField({
-      action: choiceField(AZEROTH.actions),
-      // What the press costs, in `class-features.mjs#cost`'s shape exactly.
-      cost: new fields.SchemaField({
-        pool: choiceField(AZEROTH.poolTypes),
-        amount: optionalNumberField({ min: 1 })
-      }),
-      uses: new fields.SchemaField({
-        max: optionalNumberField({ min: 0 }),
-        value: optionalNumberField({ min: 0 }),
-        per: choiceField(AZEROTH.abilityUsesPer)
-      }),
-      heal: new fields.SchemaField({
-        health: optionalNumberField({ min: 0 }),
-        mana: optionalNumberField({ min: 0 }),
-        fatigue: optionalNumberField({ min: 0 })
-      }),
-      changes: new fields.ArrayField(new fields.SchemaField({
-        key: new fields.StringField({ required: true, blank: false }),
-        type: new fields.StringField({ required: true, blank: false, initial: "add" }),
-        value: new fields.StringField({ required: true, blank: true, initial: "" }),
-        // A stored base moves in `initial`, a derived number in `final` (CLAUDE.md SS6).
-        phase: new fields.StringField({ required: true, blank: false, initial: "final", choices: ["initial", "final"] })
-      }), { initial: [] }),
-      statuses: new fields.ArrayField(new fields.StringField({ blank: false }), { initial: [] }),
-      ends: new fields.ArrayField(new fields.StringField({ blank: false }), { initial: [] }),
-      // `SIGNATURE_DURATION_UNITS` is the vocabulary and `cleanSignature`
-      // enforces it, exactly as `useField()` leaves its own units to
-      // `cleanUse`: a `choices` here would refuse the document at load
-      // instead, and a refused document is invisible to a migration.
-      // **`encounter` is a unit and carries no number** (D-692).
-      duration: new fields.SchemaField({
-        value: optionalNumberField({ min: 0 }),
-        units: new fields.StringField({ required: false, nullable: true, blank: false, initial: null })
-      }),
-      damage: new fields.SchemaField({ amount: optionalNumberField({ min: 0 }), type: choiceField(AZEROTH.damageTypes) }),
-      // What it takes OFF one incoming blow (Battlegear of Wrath's halving),
-      // never both halves at once.
-      mitigates: new fields.SchemaField({
-        halve: new fields.BooleanField({ initial: false }),
-        amount: optionalNumberField({ min: 1 })
-      }),
-      resist: new fields.SchemaField({
-        resilience: choiceField(AZEROTH.resiliences),
-        dc: optionalNumberField({ min: 0 })
-      }, { required: false, nullable: true, initial: null }),
-      area: new fields.StringField({ required: true, blank: true, initial: "" }),
-      note: new fields.StringField({ required: true, blank: true, initial: "" })
-    }),
+    // What pressing it does, in `useField()`'s vocabulary above - the same
+    // fields every entry of `presses` carries (D-910).
+    use: new fields.SchemaField(pressUseFields()),
     // More bodies on the field (D-691's own shape, verbatim).
     summon: new fields.SchemaField({
       entry: new fields.StringField({ required: true, blank: true, initial: "" }),
@@ -915,7 +1141,17 @@ export function signatureField() {
     // THE SENTENCES WITH A GATE OF THEIR OWN (D-722). An EMPTY list is exactly
     // what the descriptor meant before this key, so every stored document, hand
     // row and Classic template keeps its value and nothing inverts.
-    gated: new fields.ArrayField(branchField(), { initial: [] })
+    gated: new fields.ArrayField(branchField(), { initial: [] }),
+    // A LEGENDARY'S OTHER BUTTONS (D-910): a map keyed by the run's slug, so a
+    // refill is the dotted path `presses.<key>.uses.value` and never an array
+    // index (D-671). Each entry is its run's label, its own gate and `use`'s
+    // whole shape. A key that is not a slug is dropped by `validateKey`, which
+    // `cleanSignature` has already done before it gets here.
+    presses: new fields.TypedObjectField(new fields.SchemaField({
+      label: new fields.StringField({ required: true, blank: true, initial: "" }),
+      gates: gateListField(),
+      ...pressUseFields()
+    }), { initial: {}, validateKey: key => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key) })
   });
 }
 

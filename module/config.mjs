@@ -652,7 +652,10 @@ AZEROTH.signatureKindsShort = {
  * with no entry to justify it would be the speculative kind.
  */
 AZEROTH.cancellableBanes = {
-  longRange: "AZEROTH.Modifier.LongRange"
+  longRange: "AZEROTH.Modifier.LongRange",
+  // Thori'dal's *A Ranger drawing it takes no Bane for shooting while Engaged*
+  // (D-909): 06's Engaged Bane on a ranged attack, the dialog's own line.
+  engagedRanged: "AZEROTH.Modifier.EngagedRanged"
 };
 
 /**
@@ -696,7 +699,14 @@ AZEROTH.signatureGates = {
   // all. It is a gate rather than a second grammar because the OR the sentence
   // writes is exactly the OR a clause's value already is: the list is an AND
   // and the value inside one clause is an "any of".
-  blow: "AZEROTH.Signature.Gate.Blow"
+  blow: "AZEROTH.Signature.Gate.Blow",
+  // *While you are at or above half Health* (The Black Hand Raised, D-911): the
+  // mirror of `belowHalfHealth`, off the same one reading of half a pool.
+  atOrAboveHalfHealth: "AZEROTH.Signature.Gate.AtOrAboveHalfHealth",
+  // *While hidden from that creature* (Hexed Fang, D-911): a fact about the blow
+  // being made, read where the attack is built (`effects/stealth.mjs#isHiddenFor`),
+  // and failing closed everywhere else.
+  hidden: "AZEROTH.Signature.Gate.Hidden"
 };
 
 // What a `blow` gate may name (D-696). Two, because 08 SS20 writes two: the
@@ -734,6 +744,14 @@ AZEROTH.signatureBlows = {
 // feet of it* (`rules/distance.mjs#countsAsEnemy`), never the holder.
 AZEROTH.auraTargets = ["party", "allies", "enemies"];
 
+// WHEN A SIGNATURE'S CORRUPTION IS OFFERED (D-909, D-910): `press` is the run's
+// own button (Blood of Mannoroth, Raise the Fallen, The Skull's Reserve) and
+// `longRest` the end of every Long Rest the item is held through (The Black
+// Empire's Price). Every one is a Resilience Test first and a point on a
+// failure (`rules/signatures.mjs#cleanCorruptionGain`). A vocabulary, not a
+// label map, as `auraTargets` above is.
+AZEROTH.corruptionGainAt = ["press", "longRest"];
+
 // WHERE AN AURA IS MEASURED FROM (D-755). The holder, or every token of every
 // demon bound to them - Demonic Pact's *within 20 feet of it* - so a warlock
 // with no token of their own still gives it. `boundTotem` (door 20) is a totem
@@ -759,7 +777,11 @@ AZEROTH.signatureReasons = {
   targetRelative: "AZEROTH.Signature.Reason.TargetRelative",
   scaled:         "AZEROTH.Signature.Reason.Scaled",
   narrative:      "AZEROTH.Signature.Reason.Narrative",
-  unwritten:      "AZEROTH.Signature.Reason.Unwritten"
+  unwritten:      "AZEROTH.Signature.Reason.Unwritten",
+  // A press whose last clause lands on a roll already made (The Wyrm's Roar, D-914).
+  attackBane:     "AZEROTH.Signature.Reason.AttackBane"
+  // The `needs-reader:<family>` reasons D-910 parked 08 §20's runs on are gone (D-913):
+  // D-911 and D-912 built every one, and nothing read them any more.
 };
 
 // WHY A PRESSABLE SIGNATURE IS UNAVAILABLE RIGHT NOW (08 SS20, D-692).
@@ -772,7 +794,11 @@ AZEROTH.signatureRefusals = {
   spent:   "AZEROTH.Signature.Refusal.Spent",
   pending: "AZEROTH.Signature.Refusal.Pending",
   unequipped: "AZEROTH.Signature.Refusal.Unequipped",
-  noSpell: "AZEROTH.Signature.Refusal.NoSpell"
+  noSpell: "AZEROTH.Signature.Refusal.NoSpell",
+  // A press that fires itself (Undying, D-911): there is nothing to press.
+  automatic: "AZEROTH.Signature.Refusal.Automatic",
+  // A press that answers an attack on its bearer (D-913): pressed from that attack's card.
+  fromCard: "AZEROTH.Signature.Refusal.FromCard"
 };
 
 // The five trait kinds (D-416). 08 SS5 defines every trait and 06 SS3 carries a

@@ -31,7 +31,7 @@
  */
 
 import { AZEROTH } from "../config.mjs";
-import { hasTick, tickCountdown, tickHasClock, tickLanding, tickLineParts, tickToEnd, ticksDue } from "../rules/ticks.mjs";
+import { hasTick, tickCountdown, tickHasClock, tickLanding, tickLandings, tickLineParts, tickToEnd, ticksDue } from "../rules/ticks.mjs";
 // 04's Drawn Across on the hand that laid an untyped tick (the B3 review).
 import { dealtHalvedBy, halvedAmount } from "../rules/legacy-uses.mjs";
 import { strikeFromArea } from "./area-strikes.mjs";
@@ -121,6 +121,8 @@ export async function landTicks(actor, {combat = null, combatant = null} = {}) {
         // A Physical tick's spell school, for its Spellpower (the 2a review, L1); else the tick's type.
         school: tick.type === "physical" ? (tick.spellSchool ?? tick.type) : (tick.type ?? null), takesSpellpower: tick.spellpower === true, feature: tick.via === "feature",
         isSpell: Boolean(tick.castUuid) && tick.via !== "feature", ignite: tick.ignite === true,
+        // An item's own tick (08 §20's Hand of Ragnaros; D-911) takes no spell's bonus.
+        item: tick.via === "item",
         // D-779: the schools 04's Divine Aegis was named for at the cast, and 04's
         // Miracle's heal nothing reduces, both read at the one healing door.
         aegis: tick.aegis ?? null, unreduced: tick.unreduced === true
@@ -149,6 +151,16 @@ export async function landTicks(actor, {combat = null, combatant = null} = {}) {
         const still = actor.effects.get(id);
         if (still) await still.update({ [`flags.azeroth-rpg.${TICK_FLAG}.doubled`]: landing.left });
       }
+      // **ONE EXTRA LANDING** (02's Recurrence, 08 §20's Echo; the lead, D-913: *"One extra
+      // landing of the tick"*): the same landing once more, its count of rounds untouched.
+      const landings = tickLandings(tick);
+      if (landings.times > 1) {
+        const still = actor.effects.get(id);
+        if (still) await still.update({ [`flags.azeroth-rpg.${TICK_FLAG}.extra`]: landings.extraLeft });
+        lines.push(game.i18n.format("AZEROTH.Chrono.AgainTick", { name: actor.name, spell: spell.name, source: tick.extraSource ?? "" }));
+      }
+      for (let landed = 0; landed < landings.times; landed++) {
+      if (landed > 0 && (!actorInWorld(actor) || (actor.type === "npc" && (actor.system?.health?.value ?? 0) <= 0))) break;
       if (tick.kind === "damage" && tick.type) {
         // A Smolder split at its cast (04's Smoldering Life; stage 3A) carries the split.
         for (const line of await strikeFromArea({ actor, caster: hand, spell, damage: { rating: amount, school: tick.type }, split: tick.split ?? null })) lines.push(line);
@@ -162,7 +174,13 @@ export async function landTicks(actor, {combat = null, combatant = null} = {}) {
         if (dealt > 0) await actor.applyDamage(dealt, { struck: true, attack: false, location: "body", type: null, by: hand });
         lines.push(game.i18n.format("AZEROTH.Tick.Untyped", { name: actor.name, amount: dealt, source: spell.name }));
       } else {
-        for (const line of await strikeFromArea({ actor, caster: hand, spell, heal: amount })) lines.push(line);
+        // **08 §20's THE DREAM'S BOUNTY** (the Idol of the Dreamer: *A spell cast by a
+        // Druid carrying it that restores Health at the start of a creature's turn
+        // restores 1 more Health each time*; D-911): a SPELL's heal tick, off the
+        // caster's aggregate as it stands now, so the Idol set down gives nothing more.
+        const bounty = spell.isSpell ? Math.max(0, Math.trunc(Number(hand?.system?.signatureEffects?.tickHealBonus)) || 0) : 0;
+        for (const line of await strikeFromArea({ actor, caster: hand, spell, heal: amount + bounty })) lines.push(line);
+      }
       }
       // THE COUNTDOWN: one a turn start, and the effect goes at its last.
       const next = tickCountdown(tick);

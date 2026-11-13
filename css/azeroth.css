@@ -298,6 +298,8 @@
   .azeroth.azeroth-card .azeroth-card-open button {
     flex: 1 1 0;
     min-width: 0;
+    height: auto;
+    min-height: var(--input-height);
     padding: 3px 6px;
     border: 1px solid var(--azeroth-iron);
     background: var(--azeroth-iron);
@@ -4923,6 +4925,10 @@
   .azeroth.sheet.item .azeroth-item__prose prose-mirror {
     display: block;
     min-height: 120px;
+  }
+  .azeroth.sheet.item .azeroth-item__prose prose-mirror.inactive .editor-content {
+    position: static;
+    overflow: visible;
   }
   .azeroth.sheet.item .azeroth-item__prose :is(p, ul, ol) {
     margin: 0 0 0.5rem;

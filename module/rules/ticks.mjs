@@ -442,6 +442,21 @@ export function tickLanding(laid) {
 }
 
 /**
+ * **HOW MANY TIMES A LAID TICK LANDS AT THIS TURN START** (02's Recurrence and 08 §20's
+ * Echo of the Infinite: *damage or healing the spell deals over time lands again as
+ * well*; the lead, D-913: *"One extra landing of the tick"*): once, and once more while
+ * the tick carries an `extra` landing - which this one spends. The spell's own count of
+ * rounds is untouched: the extra is a landing, not a round.
+ *
+ * @param {object} laid  a laid tick
+ * @returns {{times: number, extraLeft: number}}
+ */
+export function tickLandings(laid) {
+  const extra = Math.max(0, Math.trunc(Number(laid?.extra)) || 0);
+  return extra > 0 ? { times: 2, extraLeft: extra - 1 } : { times: 1, extraLeft: 0 };
+}
+
+/**
  * The ticks due at a turn start, in the order they land: DAMAGE BEFORE HEALING
  * (the area's rule, D-756's review S5: a dying creature is not stood up and
  * knocked down again), then by id, so two runs land them the same way.

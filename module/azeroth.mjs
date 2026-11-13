@@ -38,6 +38,8 @@ import { registerVeknissHooks } from "./effects/vekniss.mjs";
 import { registerBloodpetalHooks } from "./effects/bloodpetal.mjs";
 import { registerDredgePoisonHooks } from "./effects/dredge-poison.mjs";
 import { registerAfflictionHooks } from "./effects/affliction-clock.mjs";
+// 08 §5's Plaguebound on the world's clock (D-911).
+import { registerTraitClockHooks } from "./effects/trait-clock.mjs";
 // 14 §1's Boss Actions (D-809): a side switched back, copies gone with the fight.
 import { registerBossDoorHooks } from "./effects/boss-doors.mjs";
 import { registerVirulentPoisonHooks } from "./effects/virulent-poison.mjs";
@@ -222,6 +224,7 @@ Hooks.once("init", () => {
   registerBloodpetalHooks();
   registerDredgePoisonHooks();
   registerAfflictionHooks();
+  registerTraitClockHooks();
   registerBossDoorHooks();
   registerVirulentPoisonHooks();
   registerFireguardBurnHooks();

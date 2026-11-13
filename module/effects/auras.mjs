@@ -93,7 +93,13 @@ import { actorInWorld, sceneInWorld } from "../canvas/in-world.mjs";
 // A floor under Health an aura lays, in 07's Aegis floor's own flag (the Legacy
 // branches' door 12: 04's Big Bad Voodoo).
 import { FLOOR_FLAG } from "../rules/blow-doors.mjs";
-import { healthFloorFlag } from "../rules/auras.mjs";
+import { auraTickFlag, healthFloorFlag } from "../rules/auras.mjs";
+// Hand of Ragnaros's turn-start damage rides the laid tick's own flag (D-911), and
+// Rivendare's Dread reads *living* as Chain Lightning does.
+import { TICK_FLAG } from "./ticks.mjs";
+import { chainLightningLiving } from "../rules/chain-lightning.mjs";
+// A Legendary's aura reads ITS run's words, not every run the item prints (D-910).
+import { runProse } from "../rules/signatures.mjs";
 // 07 §12's Temporal Sanctuary and Bastion of Hours (O-265, the 2a fix stage): the sources a laid
 // effect holds up, the `immuneTo` flag Temporal Sanctuary lays and the Taunt Bane Bastion lays.
 import { sandAuraSources } from "./sand-auras.mjs";
@@ -153,14 +159,25 @@ export function auraSourcesOf(actor) {
     if (row.targets === "party" && actor.isParty !== true) continue;
     const item = actor.items?.get?.(row.key) ?? null;
     const key = `${actor.uuid}:${row.key}`;
-    const text = plain(item?.system?.signature);
+    const text = plain(runProse(item?.system?.signature ?? "", row.label ?? ""));
     out.push({
       key, group: key, name: row.name, origin: actor.uuid,
       img: item?.img || AURA_FALLBACK_ICON, text,
       // *Every OTHER member of your party* (08 §20's Bulwark of Tyr's Hand):
       // the one aura the book writes that leaves its bearer out, read off the
       // Signature's own words (the lead, 2026-09-26).
-      aura: { feet: row.feet, targets: row.targets, centre: "self", damageReduction: row.damageReduction, excludeOwner: excludesHolder(text) }
+      // Atiesh's spell Damage Rating and the Hammer of the Lightbringer's Shadow
+      // Ward floor ride the same row (D-910): the payloads a class feature's
+      // aura already lays, read by the same `auraPayloadOf`.
+      // **AND THE LEGENDARY READERS' FIVE** (D-911): Warchief's Hammer's Boon,
+      // Rivendare's Dread's Bane, The Black Hand Raised's attack Damage Rating,
+      // Hand of Ragnaros's turn-start damage, and who among those in reach.
+      aura: {
+        feet: row.feet, targets: row.targets, centre: "self", damageReduction: row.damageReduction,
+        spellDamage: row.spellDamage ?? null, floor: row.floor ?? null, excludeOwner: excludesHolder(text),
+        boon: row.boon ?? null, bane: row.bane ?? null, attackDamage: row.attackDamage ?? null,
+        tick: row.tick ?? null, who: row.who ?? null
+      }
     });
   }
   for (const item of actor.items ?? []) {
@@ -332,6 +349,9 @@ function auraDescription(row, shown = {}) {
   if (p.immune) lines.push(game.i18n.localize("AZEROTH.Aura.Immune"));
   if (p.hold) lines.push(game.i18n.localize("AZEROTH.Aura.Hold"));
   if (p.taunt) lines.push(game.i18n.format("AZEROTH.Aura.Taunt", { n: p.taunt.banes, owner }));
+  // The Legendary readers (D-911).
+  if (p.attackDamage) lines.push(game.i18n.format("AZEROTH.Aura.AttackDamage", { n: p.attackDamage }));
+  if (p.tick) lines.push(game.i18n.format("AZEROTH.Aura.Tick", { n: p.tick.damage, type: game.i18n.localize(AZEROTH.damageTypes[p.tick.type] ?? p.tick.type), owner }));
   return lines.map(line => `<p>${line}</p>`).join("");
 }
 
@@ -351,6 +371,10 @@ function auraData(row, shown = {}) {
   // Injury does*), and a Critical Injury's own drop to 0 is written straight and never
   // meets it.
   const floor = healthFloorFlag(row, { by: row.origin ?? null, name: row.name ?? "" });
+  // **HAND OF RAGNAROS** (D-911): the laid tick's own flag beside the aura's, so
+  // `effects/ticks.mjs#landTicks` lands the Fire at this creature's turn start
+  // with Ward, and the aura's diff lifts it the moment the creature steps away.
+  const tick = auraTickFlag(row, { by: row.origin ?? null, name: row.name ?? "" });
   // **THE TWO SAND AURAS' FLAGS, BESIDE THE AURA'S** (07 §12; O-265): Temporal Sanctuary's
   // conditions refused, read by `toggleStatusEffect` exactly as Pristine Timeline's are, and
   // Bastion of Hours' Taunt Bane in `effects/banes.mjs`' own shape - lasting, never spent, sparing
@@ -379,7 +403,7 @@ function auraData(row, shown = {}) {
       // reach the text states, and the scene whose pass laid it, which is the
       // one pass that may lift it from a creature that has since left.
       feet: row.feet ?? null, scene: row.scene ?? null
-    }, ...(floor ? { [FLOOR_FLAG]: floor } : {}), ...sandFlags } }
+    }, ...(floor ? { [FLOOR_FLAG]: floor } : {}), ...(tick ? { [TICK_FLAG]: tick } : {}), ...sandFlags } }
   };
 }
 
@@ -714,7 +738,17 @@ async function syncAurasNow(scene) {
         enemy: countsAsEnemy(holderStanding, theirs, { gm: true }),
         feet: nearestFeet(centres, token, footprints, { sameLevel: source.group === PARANOIA.group }),
         type: actor.type,
-        apLocations: apLocationsOf(actor)
+        apLocations: apLocationsOf(actor),
+        // Who among those in reach (D-911): the people's faction (02 §1), and
+        // whether it lives - 07's Chain Lightning's own reading, never a second.
+        ...(source.who ? {
+          factions: actor.signatureState?.factions ?? [],
+          living: chainLightningLiving({
+            creatureType: actor.system?.creatureType ?? null,
+            race: actor.raceItem?.system?.identifier ?? actor.raceItem?.name ?? actor.system?.race ?? null,
+            statuses: [...(actor.statuses ?? [])]
+          })
+        } : {})
       }));
       // **AN AURA ON ITS HOLDER ALONE** (04's Sacred Duty, D-772): it stands on
       // the holder while ANOTHER ally is within its feet - measured off the same

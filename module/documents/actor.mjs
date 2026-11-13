@@ -78,6 +78,34 @@ import { riderDiscountsOf, ridersFor } from "../rules/riders.mjs";
 // pays from, and its write.
 import { branchSpellOf, fallHarmless, lifebinderFor, riderWritesSplit, splitOffered, voidPool, voidSpendFor, weightOfAgesBars, weightOfAgesFor } from "../rules/chromatic-talents.mjs";
 import { boundOf, releaseAll, releaseAtLongRest, syncBoundFor } from "./bound.mjs";
+// A people's faction, for a `faction` gate (02 §1; D-911).
+import { factionsFor } from "../rules/factions.mjs";
+// 08 §20's Legendary readers at the damage door, and 08 §5's trait Corruption (D-911).
+import { ADAPTIVE_WARD_FLAG, ENDS_ON_DAMAGE_FLAG, SIGNATURE_SHIELD_FLAG, adaptiveWardFor, attackerBanesFrom, breathSource, breathTaken, gateHolds, hitThisTurn, pressTrigger, resistBanesForCast, killTemporaryHealth, pressEntryRefusal, pressedWeaponBonus, pressesOf } from "../rules/signatures.mjs";
+import { traitExposures } from "../rules/trait-corruption.mjs";
+import { chainLightningLiving } from "../rules/chain-lightning.mjs";
+
+/**
+ * What 08 §5's Corruption traits on a CHARACTER's equipped weapons charge on this
+ * occasion (D-911): the pure law is `rules/trait-corruption.mjs#traitExposures`,
+ * this only reads the sheet. A creature's attack rows carry their own traits and
+ * are read by the bond's Long Rest, never here.
+ */
+function traitExposuresOn(actor, occasion) {
+  if (actor?.type !== "character") return [];
+  // What is WIELDED (`readyWeapons`, D-769): a blade melded into a shape is in nobody's hand.
+  const weapons = (actor.readyWeapons?.() ?? []).map(i => ({ name: i.name, traits: i.system?.traits ?? [] }));
+  return traitExposures(weapons, occasion, { tier: actor.system?.tier ?? 1, living: livingActor(actor) });
+}
+
+/** Whether a creature lives, 07's Chain Lightning's own reading (D-911). */
+function livingActor(actor) {
+  return chainLightningLiving({
+    creatureType: actor?.system?.creatureType ?? null,
+    race: actor?.raceItem?.system?.identifier ?? actor?.raceItem?.name ?? actor?.system?.race ?? null,
+    statuses: [...(actor?.statuses ?? [])]
+  });
+}
 // The Legacy branches' B2: the tinker's constructs and gadgets, the gnome's two talents.
 import { constructsFor, isWrecked } from "../rules/constructs.mjs";
 import { BLUEPRINT_FLAG, GADGETS_SPENT_FLAG, OVERCLOCK_ENDS, OVERCLOCK_FLAG, cleanBlueprint, gadgetByKey, gadgetFeature, gadgetSpentSwap, gadgetsKnownFor, knownGadgets } from "../rules/gadgets.mjs";
@@ -91,7 +119,7 @@ import { usesAfterRestamp, usesStamp } from "../rules/uses.mjs";
 // A Legacy branch embeds only with its people (04 §1; D-781, door 1).
 import { legacyResync, owedTalents } from "../rules/legacy-branches.mjs";
 import { fatigueState } from "../rules/fatigue.mjs";
-import { gainWhenStruck, unkillableFloor } from "../rules/momentum.mjs";
+import { gainOnHurt, gainWhenStruck, unkillableFloor } from "../rules/momentum.mjs";
 // What a blow does beyond its target, run from the one damage door (D-768).
 import { afterBlow, strikeAround } from "../effects/after-blow.mjs";
 import * as mindControlHarm from "../effects/mind-control-harm.mjs";
@@ -723,6 +751,16 @@ export class AzerothActor extends Actor {
       classes: this.classNames,
       // A character wears its people as an item; a creature states it (14 §1).
       race: this.raceItem?.name ?? (typeof s.race === "string" ? s.race : null),
+      // **THE FACTION, OFF THE PEOPLE** (02 §1; D-911): a `faction` gate had no
+      // snapshot to read and failed closed on everybody (Warchief's Hammer).
+      // And since D-912 the organisations a creature's 14 entry names and what a GM set
+      // (`rules/factions.mjs#factionsFor`, the one reader).
+      factions: factionsFor({
+        people: this.raceItem?.name ?? (typeof s.race === "string" ? s.race : null),
+        name: this.type === "npc" ? (this._source?.name ?? this.name ?? "") : "",
+        section: this.type === "npc" ? (s.source?.section ?? "") : "",
+        set: typeof s.factions === "string" ? s.factions : ""
+      }),
       schools: s.schools ?? null,
       // **THE FORMS' NAMES, OR NOTHING** (D-769). The old flag object reached
       // a gate as `[object Object]`, so a form named in a gate never held; any
@@ -1653,6 +1691,13 @@ export class AzerothActor extends Actor {
    * @returns {Promise<string[]>}
    */
   async resetUses(event) {
+    // **WHAT A LEGENDARY ARMED FOR ITS NEXT USE ENDS AT A REST** (D-913, F12 and the
+    // review's LOW): Brood Breath's school (`breathSchool`) and Thunderaan's Fury's
+    // widened arc (`arcWiden`, `effects/legendary-doors.mjs`' flags) are struck at a Short
+    // Rest and a Long Rest alike.
+    if ((event === "short" || event === "long") && this.isOwner) {
+      for (const key of ["breathSchool", "arcWiden"]) if (this.getFlag("azeroth-rpg", key)) await this.unsetFlag("azeroth-rpg", key);
+    }
     await restoreApprovedSignatureUses(this, event);
     await restoreSpellUses(this, event);
     const due = this.items.filter(i => i.system?.uses?.per && refreshes(i.system.uses.per, event)
@@ -1685,6 +1730,21 @@ export class AzerothActor extends Actor {
       if ((uses.value ?? 0) >= (uses.max ?? 0)) continue;
       updates.push({ _id: item.id, "system.signatureEffect.use.uses.value": uses.max });
       names.push(item.name);
+    }
+    // **AND A LEGENDARY'S OTHER BUTTONS** (08 §20: *counts its uses apart from
+    // the item's other Signatures*; D-910). Each at its own dotted path under
+    // `presses`, which `cleanSignature` cleans present-key at every depth, so the
+    // rest of the entry survives the write (D-671).
+    for (const item of this.items) {
+      const presses = item.system?.signatureEffect?.presses ?? null;
+      if (!presses || typeof presses !== "object") continue;
+      for (const [key, entry] of Object.entries(presses)) {
+        const uses = entry?.uses ?? null;
+        if (!uses?.per || !refreshes(uses.per, event)) continue;
+        if ((uses.value ?? 0) >= (uses.max ?? 0)) continue;
+        updates.push({ _id: item.id, [`system.signatureEffect.presses.${key}.uses.value`]: uses.max });
+        names.push(game.i18n.format("AZEROTH.Signature.RunName", { name: item.name, label: entry.label ?? key }));
+      }
     }
     // **A FREE CAST COMES BACK WITH ITS REST** (the Chromatic Champion plan: *"once per
     // short rest"*): the spent names on each talent item, emptied where the row's rest
@@ -2150,6 +2210,37 @@ export class AzerothActor extends Actor {
         actor: this, track, dc, occasion: "hostileSchools",
         boons: choice.boons, banes: choice.banes,
         provenanceExtra: [...choice.provenanceExtra, ...auraBoonProvenance(this, resilience, choice)]
+      });
+    }
+    // **WHAT HOLDING A THING CHARGES AT A LONG REST** (08 §20, 10 §3; D-909,
+    // D-910): Xal'atath's The Black Empire's Price, *at the end of each Long
+    // Rest, make a Spirit Resilience Test at DC 20. On a failure, gain 1 Void
+    // Corruption.* The aggregate `signatureEffects` already judged the gate and
+    // what is held; the Test counts the roller's automatic lines as the hostile
+    // pairing's does, and the point lands on a failure alone.
+    for (const row of this.system?.signatureEffects?.exposures ?? []) {
+      const choice = defaultChoice(this, { kind: "resilience", resilience: row.resilience, dc: row.dc, targets: [] });
+      await game.system.azeroth.workflows.corruptionExposure({
+        actor: this, track: row.track, dc: row.dc, resilience: row.resilience, points: row.amount, occasion: "signature",
+        boons: choice.boons, banes: choice.banes,
+        provenanceExtra: [...choice.provenanceExtra, ...auraBoonProvenance(this, row.resilience, choice)]
+      });
+    }
+    // **08 §5's FELWROUGHT** (*For each Long Rest it is kept, its rider makes a Spirit
+    // Resilience Test at DC 12 plus twice their tier. On a failure, the rider gains 1 Fel
+    // Corruption*; the lead: *"DC is 12+2xtier"*; D-911): every creature bound to this
+    // character whose block carries the trait, and every mount the character keeps
+    // that names it, through the one exposure door (`rules/trait-corruption.mjs`).
+    const kept = [
+      ...boundOf(this).map(b => ({ name: b.name, traits: (b.system?.attacks ?? []).flatMap(a => a?.traits ?? []) })),
+      ...[...(this.items ?? [])].filter(i => Array.isArray(i.system?.traits)).map(i => ({ name: i.name, traits: i.system.traits }))
+    ];
+    for (const row of traitExposures(kept, "longRest", { tier: this.system?.tier ?? 1, living: livingActor(this) })) {
+      const choice = defaultChoice(this, { kind: "resilience", resilience: row.resilience, dc: row.dc, targets: [] });
+      await game.system.azeroth.workflows.corruptionExposure({
+        actor: this, track: row.track, dc: row.dc, resilience: row.resilience, points: row.amount, occasion: "gear",
+        boons: choice.boons, banes: choice.banes,
+        provenanceExtra: [...choice.provenanceExtra, ...auraBoonProvenance(this, row.resilience, choice)]
       });
     }
     // Gadgeteer's replacement is offered within this Long Rest, never banked
@@ -3002,6 +3093,16 @@ export class AzerothActor extends Actor {
     // hook knows it was a heal (`effects/undying-rage.mjs`).
     const restoredNow = Math.max(0, (this.system?.health?.value ?? before) - before);
     if (outcome) outcome.restored = restoredNow;
+    // **08 §20's SECOND ORDINATION** (*When a spell of a Priest wearing it restores Health
+    // to a creature at 0 Health, it also ends one Critical Injury that creature took this
+    // encounter*; D-912): a spell's heal off 0 that restored any. Guarded: the Health stands.
+    if (spell && from && before === 0 && restoredNow > 0 && (from.system?.signatureEffects?.ordination ?? []).length) {
+      try {
+        await this._secondOrdination?.(from);
+      } catch (err) {
+        console.warn("azeroth-rpg | Second Ordination", err);
+      }
+    }
     // **04's SHARED HOURS** (*When a spell or talent of yours gives an ally Health ... gain 1
     // Sand*; stage 2b): a heal a spell gave, or a feature a talent granted, that restored any.
     if (restoredNow > 0 && from?.type === "character" && (spell || (feature && featureName && from.items?.some?.(i => i.type === "feature" && i.name === featureName && i.getFlag?.("azeroth-rpg", "feature")?.talentId)))) {
@@ -3322,7 +3423,7 @@ export class AzerothActor extends Actor {
    *   `damage`: what the damage door records of each type, and what a priest's
    *   Ward took off each.
    */
-  async applyDamage(damage, { struck = false, attack = true, location = "body", type = null, messageId = null, by = null, riposte = false, wardTook = 0, spell = false, ignite = false, moved = false, shared = false, parts = null, drain = null, transfer = null, outcome = null, healthFloor = null, falling = false } = {}) {
+  async applyDamage(damage, { struck = false, attack = true, location = "body", type = null, messageId = null, by = null, riposte = false, wardTook = 0, spell = false, ignite = false, moved = false, shared = false, parts = null, drain = null, transfer = null, outcome = null, healthFloor = null, falling = false, breath = false } = {}) {
     // Optional local receipt; retain the historical Actor return value. This
     // reports this actor's committed Health/temp loss, never guesses shares.
     const report = outcome && typeof outcome === "object" ? outcome : null;
@@ -3352,6 +3453,22 @@ export class AzerothActor extends Actor {
     // land on your feet*; stage 3A): nothing of a fall lands, said in words.
     if (falling === true && fallHarmless(this.takenTalents?.() ?? [], talentEffect)) {
       ui.notifications?.info(game.i18n.format("AZEROTH.WingsBeneath.NoFall", { name: this.name }));
+      return completeOutcome();
+    }
+    // **08 §20's WINDSEEKER** (Thunderfury: *a fall deals you no damage*; D-911): the
+    // same door, off what is wielded.
+    const fallSafe = falling === true ? (this.system?.signatureEffects?.noFallDamage ?? [])[0] ?? null : null;
+    if (fallSafe) {
+      ui.notifications?.info(game.i18n.format("AZEROTH.Signature.NoFall", { name: this.name, source: fallSafe }));
+      return completeOutcome();
+    }
+    // **08 §20's UTHER'S STAND** (the Hammer of the Lightbringer: *takes no damage from
+    // that attack or from any other source until the start of their next turn*; D-911):
+    // the press's own effect, while it stands, takes every blow whole.
+    const stand = this._signatureShield?.() ?? null;
+    if (stand) {
+      if (transfer) await consumeAttackTransfer(transfer, { target: this, messageId }).note("protected");
+      ui.notifications?.info(game.i18n.format("AZEROTH.Signature.NoDamage", { name: this.name, source: stand.source }));
       return completeOutcome();
     }
     if (projectionPhaseFor(this)) {
@@ -3452,7 +3569,7 @@ export class AzerothActor extends Actor {
         if (preparedTransfer) {
           const selected = preparedTransfer.candidate?.kind === "redirect" ? preparedTransfer.candidate.plan.key : null;
           if (selected !== null) await preparedTransfer.note("redirectPending");
-          redirected = await redirectBlow({ target: this, amount, type, attack, spell, messageId, by, location, parts, selection: selected });
+          redirected = await redirectBlow({ target: this, amount, type, attack, spell, messageId, by, location, parts, breath, selection: selected });
           if (selected !== null) {
             if (!redirected.moved) {
               await preparedTransfer.note(redirected.reason === "declined" ? "redirectDeclined" : "redirectChanged");
@@ -3462,7 +3579,7 @@ export class AzerothActor extends Actor {
             }
             await preparedTransfer.note("redirectApplied");
           }
-        } else redirected = await redirectBlow({ target: this, amount, type, attack, spell, messageId, by, location, parts });
+        } else redirected = await redirectBlow({ target: this, amount, type, attack, spell, messageId, by, location, parts, breath });
       } catch (err) {
         if (preparedTransfer) throw err;
         console.error("azeroth-rpg | blow moved", err);
@@ -3481,6 +3598,13 @@ export class AzerothActor extends Actor {
         amount = Math.trunc(Number(redirected.kept));
       }
     }
+    // **08 §20's FOROR'S LESSON** (Quel'Serrar: *A breath weapon deals you half its damage,
+    // rounded down*; the lead, on O-319: *"Abilities and spells named Breath"*; D-912): the
+    // card's record (`breath`: its title, feature key and spell name) is judged by the
+    // reader of the creature the breath REACHES - after the move step, beside Ethereal
+    // Form's halving (D-914, the final review), so a blow moved onto a holder carries
+    // `breath` and halves there, and a blow kept here halves here.
+    if (breath && !linkedTransfer && amount > 0) amount = this._breathHalved?.(amount, breath) ?? amount;
     // **04's ETHEREAL FORM** (*Until your next turn physical damage you take is halved,
     // rounded down*; the Legacy branches' door 10): the physical share of what reaches
     // this creature - after its own Parry or Block and after a blow moved onto it lands
@@ -3707,6 +3831,17 @@ export class AzerothActor extends Actor {
         ui.notifications?.warn(game.i18n.localize("AZEROTH.Dream.DamageCleanup"));
       }
     }
+    // **WHAT 08 §20's LEGENDARIES DO ONCE A BLOW HAS LANDED** (D-911): Emerald
+    // Slumber's Stun ends on damage, Adaptive Scales lays its Ward, and a kill pays
+    // The Tusk Taken and Fel-touched's Greater Test. Guarded: a door beyond this
+    // blow never cancels it.
+    if (healthAfterWrite < healthBeforeWrite) {
+      try {
+        await this._legendaryAfterBlow?.({ before: healthBeforeHoly, after: healthAfterHoly, type, parts, by });
+      } catch (error) {
+        console.warn("azeroth-rpg | a Legendary after the blow", error);
+      }
+    }
     // Mending is triggered by actual, nonlethal Health loss, never temporary
     // Health alone. Resolve before another reaction can change that snapshot.
     if (healthAfterHoly > 0 && healthAfterHoly < healthBeforeHoly
@@ -3894,6 +4029,315 @@ export class AzerothActor extends Actor {
   }
 
   /**
+   * **THE BANES THIS CREATURE TAKES ATTACKING A TARGET** (08 §20's Scarlet Reckoning,
+   * D-912): the target's `attackerBane` rows whose faction this creature belongs to, read
+   * through `rules/factions.mjs#factionsFor` (`signatureState.factions`).
+   * @param {Array<{name: string, faction: string, banes: number}>} rows  the target's
+   * @returns {number}
+   */
+  attackerBanesAgainst(rows = []) {
+    return attackerBanesFrom(rows, this.signatureState?.factions ?? []).banes;
+  }
+
+  /**
+   * **THE BANES A CAST'S RESIST TAKES OFF THIS CASTER'S ITEMS** (The Blade Hungers, The
+   * Fifth Pylon; D-912): the rows `resistBanesForCast` matches, a row once each round
+   * spending the round's own mark in a fight (`markRoundOnce`, the one queue) - and
+   * counting at every cast out of one, where there is no round to count (MY READING).
+   * @param {{school?: string|null, name?: string}} spell
+   * @returns {Promise<Array<{name: string, banes: number, creatureType: string|null}>>}
+   */
+  async _resistBanesAtCast({ school = null, name = "" } = {}) {
+    const rows = resistBanesForCast(this.system?.signatureEffects?.resistBane ?? [], { school, name });
+    if (!rows.length) return [];
+    const fight = this.activeFight?.() ?? null;
+    const mine = fight?.getCombatantsByActor?.(this)?.[0] ?? null;
+    const out = [];
+    for (const r of rows) {
+      if (r.per === "round" && mine) {
+        const marked = await mine.markRoundOnce(`signature-resist:${r.name}`);
+        if (!marked?.added) continue;
+      }
+      out.push({ name: r.name, banes: r.banes, creatureType: r.creatureType ?? null });
+    }
+    return out;
+  }
+
+  /**
+   * **ONE CRITICAL INJURY OF THIS ENCOUNTER, ENDED** (Second Ordination, D-912): the one
+   * taken latest in the fight this creature is in (`effects/injury-provenance.mjs`, the
+   * one reading of *this encounter* - an injury of unknown provenance is never guessed
+   * into it), said in words; nothing where there is none, or this client may not write.
+   * The latest is MY READING of *one*, for the lead.
+   * @param {Actor} healer
+   */
+  async _secondOrdination(healer) {
+    const { injuryFightOf, injuriesFromFight } = await import("../effects/injury-provenance.mjs");
+    const source = injuryFightOf(this);
+    const order = e => { const f = e.flags?.["azeroth-rpg"]?.injuryFight ?? {}; return [Number(f.round) || 0, Number(f.turn) || 0]; };
+    const found = injuriesFromFight(this.effects, source)
+      .sort((a, b) => order(b)[0] - order(a)[0] || order(b)[1] - order(a)[1] || String(b.id).localeCompare(String(a.id)));
+    const ended = found[0] ?? null;
+    const by = (healer.system?.signatureEffects?.ordination ?? [])[0] ?? "";
+    if (!ended) return;
+    if (!this.isOwner) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Signature.OrdinationNotYours", { name: this.name, source: by, injury: ended.name }));
+      return;
+    }
+    await this.deleteEmbeddedDocuments("ActiveEffect", [ended.id]);
+    ui.notifications?.info(game.i18n.format("AZEROTH.Signature.OrdinationEnds", { name: this.name, source: by, injury: ended.name }));
+  }
+
+  /**
+   * A breath weapon's damage, as Foror's Lesson leaves it (D-912): half, rounded down,
+   * where something worn says so and the card is a breath's - said in words - and the
+   * whole otherwise.
+   * @param {number} amount
+   * @param {true|{title?: string|null, featureKey?: string|null, spellName?: string|null}} card
+   * @returns {number}
+   */
+  _breathHalved(amount, card = true) {
+    const rows = this.system?.signatureEffects?.breathHalf ?? [];
+    const isBreath = card === true || breathSource(card ?? {});
+    const taken = breathTaken(amount, { halves: rows.length > 0 && isBreath });
+    if (rows.length && taken !== amount) {
+      ui.notifications?.info(game.i18n.format("AZEROTH.Signature.BreathHalved", { name: this.name, source: rows[0], from: amount, to: taken }));
+    }
+    return taken;
+  }
+
+  /**
+   * **THE SHOT A LAUNCHER MAKES WITH NO AMMUNITION** (08 §20's Starfire Arrow, Thori'dal:
+   * *You need no ammunition to shoot it. A shot made without ammunition has Damage Rating
+   * 5 and deals Arcane damage*; D-912): the held row, where THIS weapon is the one that
+   * carries it and is equipped - its gate already judged by the aggregate - else null.
+   * @param {Item} weapon
+   * @returns {{name: string, rating: number, type: string}|null}
+   */
+  phantomShotFor(weapon) {
+    const held = this.system?.signatureEffects?.phantomShot ?? null;
+    if (!held || !weapon?.system?.equipped) return null;
+    const own = weapon.system?.signatureEffect ?? null;
+    const carries = [own, ...(own?.gated ?? [])].some(p => p?.phantomShot?.type);
+    return carries ? held : null;
+  }
+
+  /**
+   * **WHAT 08 §20's LEGENDARIES DO ONCE A BLOW HAS LANDED** (D-911), from
+   * `applyDamage` on the client that wrote this creature's Health:
+   *
+   * - **Emerald Slumber** (*Stunned until it takes damage or until the end of its
+   *   next turn*): every condition laid with `endsOnDamage` ends.
+   * - **Adaptive Scales** (*The first time each round you take damage of one of
+   *   the seven schools, you have Ward 2 against that school until the end of your
+   *   next turn, unless you already have more*): an `upgrade` on that school's
+   *   Ward, spanned on this creature, once a round (`rules/signatures.mjs
+   *   #adaptiveWardFor`).
+   * - **The Tusk Taken** (*When you reduce a Boss or an Elite to 0 Health, you
+   *   gain temporary Health equal to twice your tier*): on the KILLER, through
+   *   05's own grant (`killTemporaryHealth`).
+   * - **Fel-touched (Greater)** (08 §5: *Also make that Test each time an attack
+   *   or effect of yours reduces a creature to 0 Health*): the killer's Spirit
+   *   Test at DC 12 plus twice their tier, through the exposure door
+   *   (`rules/trait-corruption.mjs`).
+   *
+   * A killer this client cannot write is said in words and left: the victim's
+   * owner writes the blow, which is the GM's client for every Boss and Elite.
+   */
+  async _legendaryAfterBlow({ before = 0, after = 0, type = null, parts = null, by = null } = {}) {
+    const ending = [...(this.effects ?? [])].filter(e => e.flags?.["azeroth-rpg"]?.[ENDS_ON_DAMAGE_FLAG]);
+    if (ending.length && this.isOwner) {
+      await this.deleteEmbeddedDocuments("ActiveEffect", ending.map(e => e.id));
+      ui.notifications?.info(game.i18n.format("AZEROTH.Signature.EndedOnDamage", { name: this.name, condition: ending.map(e => e.name).join(", ") }));
+    }
+    const sig = this.system?.signatureEffects ?? null;
+    if (sig?.adaptiveWard && this.isOwner) {
+      const fight = this.activeFight?.() ?? null;
+      const mark = fight?.started ? `${fight.id}:${fight.round}` : `t:${game.time?.worldTime ?? 0}`;
+      const types = [type, ...(parts ?? []).filter(p => (Number(p?.damage) || 0) > 0).map(p => p.type)];
+      const laid = adaptiveWardFor({ ward: sig.adaptiveWard, types, spent: this.getFlag("azeroth-rpg", ADAPTIVE_WARD_FLAG) === mark });
+      if (laid) {
+        const stale = this.effects.filter(e => e.flags?.["azeroth-rpg"]?.adaptiveWard).map(e => e.id);
+        if (stale.length) await this.deleteEmbeddedDocuments("ActiveEffect", stale);
+        const school = game.i18n.localize(AZEROTH.schools[laid.school] ?? laid.school);
+        await this.createEmbeddedDocuments("ActiveEffect", [{
+          name: game.i18n.format("AZEROTH.Signature.AdaptiveName", { school }),
+          img: "icons/svg/shield.svg", origin: this.uuid,
+          showIcon: CONST.ACTIVE_EFFECT_SHOW_ICON.ALWAYS,
+          ...(untilEndOfNextTurnOrRound(this) ?? {}),
+          system: { changes: [{ key: `system.ward.${laid.school}`, type: "upgrade", value: String(laid.ward), phase: "final" }] },
+          flags: { "azeroth-rpg": { adaptiveWard: { school: laid.school } } }
+        }]);
+        await this.setFlag("azeroth-rpg", ADAPTIVE_WARD_FLAG, mark);
+        ui.notifications?.info(game.i18n.format("AZEROTH.Signature.AdaptiveLaid", { name: this.name, n: laid.ward, school }));
+      }
+    }
+    if (!(before > 0 && after === 0) || !by || by.documentName !== "Actor") return;
+    const killer = by;
+    const temp = killTemporaryHealth(killer.system?.signatureEffects?.killTemp ?? [], { tier: killer.system?.tier ?? 1, weightClass: this.system?.weightClass ?? null });
+    if (temp) {
+      if (killer.isOwner) await killer.grantTemporaryHealth(temp.amount, { source: temp.name });
+      else ui.notifications?.warn(game.i18n.format("AZEROTH.Signature.KillerNotYours", { name: killer.name, source: temp.name }));
+    }
+    // A killer this client does not own is asked of the GM, whose client re-reads the
+    // killer's own weapons (D-913, the review's LOW) - never skipped in silence.
+    if (!killer.isOwner) {
+      if (traitExposuresOn(killer, "kill").length) {
+        const { askTraitExposure } = await import("../effects/legendary-doors.mjs");
+        await askTraitExposure(killer, "kill", this);
+      }
+      return;
+    }
+    for (const row of traitExposuresOn(killer, "kill")) {
+      await game.system.azeroth.workflows.corruptionExposure({
+        actor: killer, track: row.track, dc: row.dc, resilience: row.resilience, points: row.amount, occasion: "gear"
+      });
+    }
+  }
+
+  /** What 08 §5's Corruption traits on what this creature wields charge on an occasion (D-911, D-913). */
+  traitExposuresFor(occasion) {
+    return traitExposuresOn(this, occasion);
+  }
+
+  /**
+   * **WHAT A PRESS PUT ON ONE WEAPON** (08 §20's Blood of Mannoroth: *an orc wielding it
+   * adds 2 to its Damage Rating*; D-911): `rules/signatures.mjs#pressedWeaponBonus` over
+   * this actor's effects. The attack door asks it for the weapon it swings.
+   *
+   * @param {string} weaponId
+   * @returns {{damage: number, sources: string[]}}
+   */
+  pressedWeaponBonus(weaponId) {
+    return pressedWeaponBonus([...(this.effects ?? [])], weaponId);
+  }
+
+  /**
+   * **UTHER'S STAND, WHILE IT STANDS** (08 §20, D-911): the press's own effect, active,
+   * as `{source}` - or null. A method, so the damage door names no flag of its own.
+   *
+   * @returns {{source: string}|null}
+   */
+  _signatureShield() {
+    const effect = [...(this.effects ?? [])].find(e => e.active !== false && e.flags?.["azeroth-rpg"]?.[SIGNATURE_SHIELD_FLAG]) ?? null;
+    return effect ? { source: effect.flags["azeroth-rpg"][SIGNATURE_SHIELD_FLAG].source ?? effect.name ?? "" } : null;
+  }
+
+  /**
+   * **THE MOVES WHAT THIS CREATURE WEARS MAKES** (08 §20's The Raised Gauntlet, D-912):
+   * every equipped press that moves a blow onto its bearer (`move.feet`, the trigger
+   * `blowMoved`) whose gate holds, as a row `effects/blow-doors.mjs#movesOf` reads -
+   * judged with every other move by `rules/blow-doors.mjs#moveJudgement`.
+   * @returns {Array<object>}
+   */
+  signatureMoves() {
+    const state = this.signatureState ?? {};
+    const out = [];
+    for (const item of this.items ?? []) {
+      if (item.system?.equipped !== true) continue;
+      for (const { key, press } of pressesOf(item.system?.signatureEffect)) {
+        if (press.trigger !== "blowMoved" || !(Number(press.move?.feet) > 0)) continue;
+        if (!gateHolds(press.gates ?? [], state)) continue;
+        out.push({
+          kind: "gauntlet", name: press.label || item.name, feet: Number(press.move.feet),
+          usesLeft: press.uses?.value ?? 0, counted: Boolean(press.uses?.per), itemId: item.id, press: key
+        });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * **THE SIGNATURE PRESS THAT TURNS THIS CREATURE'S HIT INTO A MISS** (08 §20's Step
+   * Aside, D-912): an equipped item's press that `negates`, its gate holding and a use
+   * left - the first by item name. `press` is the key `workflows.useSignature` takes;
+   * `applications/actions.mjs#reactionRows` draws the card's row from it.
+   * @returns {{id: string, name: string, press: string}|null}
+   */
+  signatureNegate() {
+    const state = this.signatureState ?? {};
+    const found = [];
+    for (const item of this.items ?? []) {
+      if (item.system?.equipped !== true) continue;
+      for (const { key, press } of pressesOf(item.system?.signatureEffect)) {
+        if (press.negates !== true) continue;
+        if (pressEntryRefusal(press, { holds: gateHolds(press.gates ?? [], state) })) continue;
+        found.push({ id: item.id, name: press.label || item.name, press: key, item: item.name });
+      }
+    }
+    found.sort((a, b) => a.item.localeCompare(b.item) || a.id.localeCompare(b.id));
+    return found[0] ? { id: found[0].id, name: found[0].name, press: found[0].press } : null;
+  }
+
+  /**
+   * **THE SIGNATURE PRESSES AN ATTACK CARD OFFERS THIS CREATURE** (D-913): Uther's Stand
+   * and The Wyrm's Roar - an equipped item's press whose run answers an attack on its
+   * bearer (`rules/signatures.mjs#pressTrigger`), its gate holding and a use left; Step
+   * Aside rides the negate button (`signatureNegate`). Sorted by item name.
+   * @returns {Array<{id: string, name: string, press: string, trigger: string}>}
+   */
+  signatureCardPresses() {
+    const state = this.signatureState ?? {};
+    const found = [];
+    for (const item of this.items ?? []) {
+      if (item.system?.equipped !== true) continue;
+      for (const { key, press } of pressesOf(item.system?.signatureEffect)) {
+        const trigger = pressTrigger(press);
+        if (press.negates === true || (trigger !== "hitOnYou" && trigger !== "attackOnYou")) continue;
+        if (pressEntryRefusal(press, { holds: gateHolds(press.gates ?? [], state) })) continue;
+        found.push({ id: item.id, name: press.label || item.name, press: key, trigger, item: item.name });
+      }
+    }
+    found.sort((a, b) => a.item.localeCompare(b.item) || a.press.localeCompare(b.press));
+    return found.map(({ item, ...row }) => row);
+  }
+
+  /**
+   * **THIS CREATURE'S HIT WITH A WEAPON, RECORDED** (08 §20's Wind of the Doomhammer: *when
+   * an Attack Test with it hits*; D-913): written by the attack door where an equipped
+   * press answers its own bearer's hit, so nothing is written for anybody else.
+   * @param {{itemId: string, messageId: string, index?: number}} o
+   */
+  async recordSignatureHit({ itemId = null, messageId = null, index = 0 } = {}) {
+    if (!itemId || !this.isOwner) return;
+    const item = this.items.get(itemId) ?? null;
+    if (!pressesOf(item?.system?.signatureEffect).some(({ press }) => pressTrigger(press) === "ownHit")) return;
+    const fight = this.activeFight?.() ?? null;
+    await this.setFlag("azeroth-rpg", "signatureHit", {
+      itemId, messageId, index, combatId: fight?.id ?? null, round: fight?.round ?? null, turn: fight?.turn ?? null, at: game.time?.worldTime ?? null
+    });
+  }
+
+  /** The hit Wind of the Doomhammer answers with this item, or null (D-913). */
+  signatureHitFor(item) {
+    const record = this.getFlag("azeroth-rpg", "signatureHit") ?? null;
+    const fight = this.activeFight?.() ?? null;
+    return hitThisTurn(record, { itemId: item?.id, combatId: fight?.id ?? null, round: fight?.round ?? null, turn: fight?.turn ?? null, now: game.time?.worldTime ?? null }) ? record : null;
+  }
+
+  /**
+   * **A SIGNATURE THAT HOLDS ITS BEARER AT 1** (Undying, D-911): the first equipped
+   * item whose press fires itself on a drop to 0, its gate holding and a use left -
+   * judged through the one press judgement but for the trigger itself. Null where
+   * none would hold, or this client cannot strike its use.
+   *
+   * @returns {{item: Item, key: string, press: object}|null}
+   */
+  _signatureHold({ before = 0, amount = 0 } = {}) {
+    if (!this.isOwner || !(before > 0) || amount < before) return null;
+    const state = this.signatureState ?? {};
+    for (const item of this.items ?? []) {
+      if (item.system?.equipped !== true) continue;
+      for (const { key, press } of pressesOf(item.system?.signatureEffect)) {
+        if (press.trigger !== "dropToZero") continue;
+        if (pressEntryRefusal({ ...press, trigger: null }, { holds: gateHolds(press.gates ?? [], state) })) continue;
+        return { item, key, press };
+      }
+    }
+    return null;
+  }
+
+  /**
    * **THE ONE HOLD AT 1** (D-777; the lead on O-156: *"Yes."*), in `rules/blow-doors
    * .mjs#HOLD_ORDER`: a blow that would take this creature from above 0 to 0 is held
    * by the first of -
@@ -3981,6 +4425,28 @@ export class AzerothActor extends Actor {
       } catch (err) {
         console.warn("azeroth-rpg | borrowed hour", err);
       }
+    }
+    // **08 §20's UNDYING** (the Phylactery of Kel'Thuzad: *Once per Long Rest, when
+    // damage would reduce you to 0 Health, you are reduced to 1 instead. Then make a
+    // Body Resilience Test at DC 20. On a failure, gain 1 Undeath Corruption.*; D-911):
+    // the creature's own, automatic - a press that fires itself (`use.trigger`) - after
+    // Borrowed Hour and before another's is asked (`blow-doors.mjs#HOLD_ORDER`).
+    const undying = this._signatureHold?.({ before, amount }) ?? null;
+    if (undying) {
+      await undying.item.update({ [`system.signatureEffect.presses.${undying.key}.uses.value`]: Math.max(0, (undying.press.uses?.value ?? 0) - 1) });
+      ui.notifications?.info(game.i18n.format("AZEROTH.Signature.Held", { name: this.name, source: undying.press.label }));
+      const gain = undying.press.corruptionGain ?? null;
+      if (gain?.track && gain?.amount && gain?.resilience && gain?.dc) {
+        // The hold stands whatever the Test does; a Test that could not be made is SAID,
+        // never skipped in silence (D-913, the review's LOW): the table makes it by hand.
+        try {
+          await game.system.azeroth.workflows.corruptionExposure({ actor: this, track: gain.track, dc: gain.dc, resilience: gain.resilience, points: gain.amount, occasion: "signature" });
+        } catch (err) {
+          ui.notifications?.error(game.i18n.format("AZEROTH.Signature.CorruptionTestLost", { name: this.name, source: undying.press.label, dc: gain.dc }));
+          console.warn("azeroth-rpg | Undying's Corruption Test was not made", err);
+        }
+      }
+      return { amount: Math.max(0, before - 1), held: { kind: "signature", name: undying.press.label } };
     }
     try {
       const asked = await askToHold({ target: this, before, amount, attack: struck && attack });
@@ -4096,6 +4562,18 @@ export class AzerothActor extends Actor {
     }
     if (!combatant || amount <= 0) return this;
     const gains = gainWhenStruck({ pools: this.poolSnapshot(), damage: amount, enrageRanks: this.talentRanks?.("Enrage") ?? 0 });
+    // **08 §20's THE DESTROYER'S TEMPER** (Blackhand's Harness: *A Warrior wearing it
+    // gains 1 more Rage the first time each round an attack reduces their Health*;
+    // D-911): the round's first such blow, marked through the combatant's queued door,
+    // its pool raised beside 05 §11's own gain (`rules/momentum.mjs#gainOnHurt`).
+    const hurtRows = attack ? (this.system?.signatureEffects?.poolOnHurt ?? []) : [];
+    if (hurtRows.length && await combatant.markHurtByAttack()) {
+      for (const g of gainOnHurt({ pools: this.poolSnapshot(), gains, rows: hurtRows })) {
+        const at = gains.findIndex(x => x.itemId === g.itemId && x.kind === g.kind && x.name === g.name);
+        if (at >= 0) gains[at] = g;
+        else gains.push(g);
+      }
+    }
     // Reckoning (04): reduced below half Health, gain 5 Zeal a rank.
     const reckoning = this.talentRanks?.("Reckoning") ?? 0;
     if (reckoning > 0 && before >= max / 2 && after < max / 2) {

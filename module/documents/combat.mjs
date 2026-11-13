@@ -10,12 +10,13 @@
  */
 
 // Shadowform's mark, cleared at the end of the holder's own turn (D-774).
+import { SECOND_REACTION_MARK } from "../rules/signatures.mjs";
 import { clearLightUsed } from "../effects/shadowform.mjs";
 import { LUNAR_DAMAGE_FLAG, advanceLunarDamage } from "../rules/lunar-guidance.mjs";
 import { iceBlockFor } from "../rules/ice-block.mjs";
 import { restoreCombatEffectTracking } from "../effects/combat-effect-registry.mjs";
 import {
-  freshTurn,
+  freshTurn, roundStartBudget,
   gainHalfActions,
   giveReaction,
   givenKept,
@@ -127,7 +128,7 @@ import { advanceWildRegeneration } from "../effects/wild-regeneration.mjs";
 import { advanceSentinelMending } from "../effects/sentinel-mending.mjs";
 import { advanceMindFlay } from "../effects/qiraji-mind-flay-clock.mjs";
 // The round's record of the riders spent and paid before the blow (D-770).
-import { roundOnce, roundRelease, roundRiders, roundStruck } from "../rules/riders.mjs";
+import { roundHurt, roundOnce, roundRelease, roundRiders, roundStruck } from "../rules/riders.mjs";
 // Whether a creature and an area are still in the world after the turn's awaits.
 import { regionInWorld, tokenInWorld } from "../canvas/in-world.mjs";
 import { halvedHealing } from "../rules/auras.mjs";
@@ -368,7 +369,7 @@ export class AzerothCombatant extends Combatant {
     return shared ? sharedView(own, shared.left) : own;
   }
 
-  async resetBudget() {
+  async resetBudget({ ownTurn = false, roundStart = false } = {}) {
     // The turn's movement starts over with its budget (2026-09-06) - in the
     // SAME write (D-761): between the two it used to take, the limit read the
     // old turn's Half-Actions left beside no Moves paid and refused a move the
@@ -381,10 +382,22 @@ export class AzerothCombatant extends Combatant {
     // that spend and wiped it - three batches spend exactly then - which is a
     // turn-boundary rule the lead did not ask to change.
     const flags = { budget: freshTurn(this._turnFacts()) };
+    // **A ROUND'S START REFRESHES NO REACTION** (05: *The Reaction refreshes at the start of
+    // your turn*; the lead, D-915): the round's reset carries the Reaction as it stands
+    // (`rules/initiative.mjs#roundStartBudget`) - the first round excepted - and only the
+    // creature's own turn (`ownTurn`) or a full reset makes it fresh.
+    if (roundStart && !ownTurn) flags.budget = roundStartBudget(flags.budget, this.getFlag("azeroth-rpg", "budget") ?? null, { firstRound: (this.combat?.round ?? 0) <= 1 });
     // **A REACTION GIVEN OUTLIVES THE RESET** (04's Second Chance: *which it may use until the
     // end of its next turn*; stage 2b): the ones still standing at the turn now starting.
     const kept = this._givenKept?.() ?? [];
     if (kept.length) flags.budget.given = kept;
+    // **THE SECOND REACTION COMES BACK AT THIS CREATURE'S OWN TURN** (08 §20's Ten Thousand
+    // Years of Practice; the lead, D-913: *"The Mage's own turn"*). The write MERGES into the
+    // stored budget, so a key `freshTurn` does not name survives it: the mark stood for good
+    // and the Signet gave its second Reaction once a fight (the second live pass). Cleared
+    // at the turn's own reset alone, never at a round's (`_onStartRound`), where the merge
+    // keeps it.
+    if (ownTurn && this.getFlag("azeroth-rpg", "budget")?.[SECOND_REACTION_MARK] === true) flags.budget[SECOND_REACTION_MARK] = false;
     if (this.getFlag("azeroth-rpg", "moveHalves")) flags.moveHalves = foundry.data.operators.ForcedDeletion.create();
     // Clear on every budget reset, including a GM rewind to the same round/turn.
     if (this.getFlag("azeroth-rpg", "swimMovement")) flags.swimMovement = foundry.data.operators.ForcedDeletion.create();
@@ -1211,6 +1224,53 @@ export class AzerothCombatant extends Combatant {
   }
 
   /**
+   * **THE SECOND REACTION, SPENT** (08 §20's Ten Thousand Years of Practice; the lead,
+   * D-913: *"The Mage's own turn"*): written on the turn's budget, which the turn's own
+   * reset makes fresh at the start of this combatant's turn - so it refreshes with the
+   * first Reaction and never on a round's turn. Queued with every other budget write
+   * (D-761). Answers whether this call spent it.
+   *
+   * @returns {Promise<{added: boolean}>}
+   */
+  async markSecondReaction() {
+    return oneAtATime(this, async () => {
+      const budget = this.budget ?? null;
+      if (!budget || budget[SECOND_REACTION_MARK] === true) return { added: false };
+      await this.update({ flags: { "azeroth-rpg": { budget: { ...budget, [SECOND_REACTION_MARK]: true } } } });
+      return { added: true };
+    });
+  }
+
+  /**
+   * **THE HEALTH THIS CREATURE BEGAN ITS TURN WITH** (08 §20's Staghelm's Regret, D-912),
+   * through the one queue; a bookkeeping flag (`turn-stamp.mjs#BOOKKEEPING_FLAGS`).
+   *
+   * @param {number} value
+   */
+  async markTurnStartHealth(value) {
+    return oneAtATime(this, async () => {
+      const v = Math.max(0, Math.trunc(Number(value)) || 0);
+      if (this.getFlag("azeroth-rpg", "turnStartHealth") !== v) await this.setFlag("azeroth-rpg", "turnStartHealth", v);
+      return v;
+    });
+  }
+
+  /**
+   * **THE ROUND'S FIRST ATTACK THAT REDUCED THIS CREATURE'S HEALTH** (08 §20's The
+   * Destroyer's Temper, D-911): true the first time a round, and the mark kept on
+   * the round's own record (`rules/riders.mjs#roundHurt`), through the one queue.
+   *
+   * @returns {Promise<boolean>}
+   */
+  async markHurtByAttack() {
+    return oneAtATime(this, async () => {
+      const next = roundHurt(this.getFlag("azeroth-rpg", "round") ?? null, this.combat?.round ?? 0);
+      if (next.changed) await this.setFlag("azeroth-rpg", "round", next.round);
+      return next.first;
+    });
+  }
+
+  /**
    * Put a Half-Action or the Reaction back (D-718). **The GM's alone**: it is
    * an undo for a spend the table decided did not happen, and a player holding
    * their own combatant must not be able to refund their turn.
@@ -1997,7 +2057,8 @@ export class AzerothCombat extends Combat {
     // fresh, the off hand's one blow being per ROUND (06 SS2).
     await this._assignInitiative();
     for (const combatant of this.combatants) {
-      await combatant.resetBudget();
+      // The Reaction is carried, not refreshed: it comes back at the creature's own turn (D-915).
+      await combatant.resetBudget({ roundStart: true });
       if (combatant.getFlag("azeroth-rpg", "round") !== undefined) await combatant.unsetFlag("azeroth-rpg", "round");
       // 14 §1: *they refresh at the top of the round and unspent ones are
       // lost.* Full again, whatever is left (D-691), and the turn's record of
@@ -2035,8 +2096,9 @@ export class AzerothCombat extends Combat {
       engaged: combatant.getFlag("azeroth-rpg", "lastTurn")?.engaged === true || engagedInFight(combatant)
     }) : true;
     // Reactions refresh at the start of your turn (06 SS6), and so does Energy
-    // (05 SS12: "refills 3 a turn"); Focus as above ("refills 2 a turn").
-    await combatant.resetBudget();
+    // (05 SS12: "refills 3 a turn"); Focus as above ("refills 2 a turn"). The combatant's
+    // OWN turn: what refreshes only then (Ten Thousand Years' second Reaction) is cleared.
+    await combatant.resetBudget({ ownTurn: true });
     // **A TINKER'S CONSTRUCTS START THEIR SHARED TURN WITH THE TINKER'S OWN** (04's The
     // Bench, *each turn*; the B2 review), not with the round.
     if (combatant.getFlag("azeroth-rpg", "constructTurn") !== undefined) await combatant.resetConstructTurn();
@@ -2278,6 +2340,16 @@ export class AzerothCombat extends Combat {
     // regeneration because it is the same beat of the turn; the difference is
     // that a character's comes off the things they are wearing.
     for (const line of await this._signatureTicks(actor)) lines.push(line);
+    // **08 §20's PYLON TETHER AND STAGHELM'S REGRET** (D-912): the Warlock's tether at
+    // the Warlock's own turn start, and the Health this creature begins its turn with.
+    // Guarded: neither stops the turn.
+    try {
+      const { landTethers, recordTurnStartHealth } = await import("../effects/legendary-doors.mjs");
+      for (const line of await landTethers(combatant)) lines.push(line);
+      await recordTurnStartHealth(combatant);
+    } catch (err) {
+      console.warn("azeroth-rpg | a Legendary at the turn start", err);
+    }
     // **THE CHRONOMANCER'S TURN-START DOORS** (02 §7, 04; stage 2b): Master of Hours' stacking
     // Half-Actions, and what Recurrence and Echoing Sands land again at the caster's turn
     // start (`effects/chronomancer.mjs#chronoTurnStart`). Guarded: none stops the turn.
@@ -2994,7 +3066,9 @@ export class AzerothCombat extends Combat {
     // for 02's Focus (the Legacy branches' door 9).
     // `constructTurn` is what a tinker's constructs have spent of their shared turn
     // (the Legacy branches' door 6).
-    for (const key of ["budget", "round", "lastHitRound", "acted", "heldPosition", "marked", "damageTypes", "ready", "moveHalves", "damaged", LUNAR_DAMAGE_FLAG, "lastTurn", "constructTurn"]) {
+    // `signatureEncounter` is the on-hit Signature rows fired once this fight
+    // (D-910).
+    for (const key of ["budget", "round", "lastHitRound", "acted", "heldPosition", "marked", "damageTypes", "ready", "moveHalves", "damaged", LUNAR_DAMAGE_FLAG, "lastTurn", "constructTurn", "signatureEncounter", "turnStartHealth"]) {
       if (combatant.getFlag("azeroth-rpg", key) !== undefined) await combatant.unsetFlag("azeroth-rpg", key);
     }
   }

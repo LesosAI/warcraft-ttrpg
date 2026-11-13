@@ -222,6 +222,27 @@ export function freshTurn({ extraAttack = false, freeMove = 0, halfActions = nul
 }
 
 /**
+ * **THE REACTION REFRESHES AT THE START OF YOUR OWN TURN** (05: *The Reaction refreshes
+ * at the start of your turn*; the lead, D-915: *"Yes"*). A round's start makes the rest
+ * of the budget fresh - the off hand's one blow is per ROUND (06 §2) - but carries the
+ * Reaction as it stands: one spent since the creature's last turn stays spent until its
+ * own turn starts, so no creature holds a second, refreshed Reaction before then. The
+ * FIRST round, and a creature with no budget yet (one joining the fight), take the fresh
+ * turn whole: a creature that has not acted holds its Reaction for the turns before its
+ * own, as it always did.
+ *
+ * @param {object} fresh   `freshTurn`'s budget
+ * @param {object|null} stored  the budget the combatant holds now
+ * @param {{firstRound?: boolean}} [o]
+ * @returns {object}
+ */
+export function roundStartBudget(fresh, stored, { firstRound = false } = {}) {
+  if (firstRound === true || !stored || typeof stored !== "object" || !Number.isFinite(Number(stored.reactions))) return fresh;
+  const held = Math.max(0, Math.trunc(Number(stored.reactions)) || 0);
+  return { ...fresh, reactions: Math.min(fresh.reactions, held) };
+}
+
+/**
  * **A TURN LOST** (07's Void Rift: *or loses its turn describing what it can
  * see*; D-757): the turn's Half-Actions and its free Move are gone, and nothing
  * else is - the Reaction is not the turn's, and a blow already struck stays

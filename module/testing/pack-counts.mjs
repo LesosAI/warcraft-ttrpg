@@ -63,16 +63,16 @@ export const PACK_COUNTS = Object.freeze({
   // Scale* through - its whole conversion is a converting `Use:` at 4, which
   // 08 §4's own 3 could not buy, so it reached no floor and was refused.
   weapons: {
-    count: 662, classic: 517,
-    why: "08 §7's weapon tables, every row (D-406 launchers included), plus §20's 15 named weapons and shot (D-632), plus 517 Classic finds off the vendored record (D-685)"
+    count: 672, classic: 517,
+    why: "08 §7's weapon tables, every row (D-406 launchers included), plus §20's 25 named weapons and shot (D-632; ten Legendaries added by D-909), plus 517 Classic finds off the vendored record (D-685)"
   },
   armor: {
-    count: 280, classic: 203,
-    why: "08's armor categories, every row, §8's 12 shields (D-636), plus §20's 12 named suits and shields (D-632), plus 203 Classic finds off the vendored record (D-685)"
+    count: 285, classic: 203,
+    why: "08's armor categories, every row, §8's 12 shields (D-636), plus §20's 17 named suits and shields (D-632; five Legendaries added by D-909), plus 203 Classic finds off the vendored record (D-685)"
   },
   gear: {
-    count: 1531, classic: 1052,
-    why: "08 §9 to §17's catalogue tables by header name, two Augments a class (seven classes, the Broodstone the seventh) and the Chronomancer's one ungraded Hourglass (D-847), and §20's Epic consumables and the Grimoire (D-632), plus §11's Leggings and Trinket (D-686), Mantle (D-689), eighteen approved special designs and provisions (D-813), and 1,052 Classic finds off the vendored record (D-685, D-690, D-692)"
+    count: 1539, classic: 1052,
+    why: "08 §9 to §17's catalogue tables by header name, two Augments a class (seven classes, the Broodstone the seventh) and the Chronomancer's one ungraded Hourglass (D-847), and §20's Epic consumables and the Grimoire (D-632) and its eight Legendary worn things and Augments (D-909), plus §11's Leggings and Trinket (D-686), Mantle (D-689), eighteen approved special designs and provisions (D-813), and 1,052 Classic finds off the vendored record (D-685, D-690, D-692)"
   },
   services: {
     count: 41,

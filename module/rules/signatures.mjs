@@ -197,6 +197,14 @@ export function emptySignature() {
     // WHY THIS IS STILL PROSE. One of `AZEROTH.signatureReasons`, or "" for a
     // Signature nobody has read. Only meaningful at `kind: "none"`.
     reason: "",
+    // **THE RUN THIS PART READS** (D-909, D-910). 08 §20 prints a Legendary's
+    // Signatures as runs, each with its own name - **Scarlet Reckoning.**,
+    // **The Crystal's Light.** - and the prose keeps every run as a paragraph
+    // opening on its name in bold. The trunk and each `gated` branch name the
+    // run they read, so a card prints that run's words and the census holds a
+    // part's numbers against its own run. Empty on an Epic or a Rare, whose one
+    // run is the whole prose.
+    label: "",
     // 08 §20's gate, as a LIST that must hold all the way through: a class, a
     // race, a faction, a school, the creature struck, the bearer below half
     // Health, a Corruption score, the form they are in, a turn they have not
@@ -252,7 +260,9 @@ export function emptySignature() {
     // mirror — one school's spells and never the bearer, because 07's Mana is
     // the spell's own number and a flat grant has nowhere to land. `castSpell`
     // takes this and the named one off together, floored at nothing.
-    spellCost: { school: null, amount: null },
+    // `minimum` is the floor the discount stops at (Atiesh, *to a minimum of
+    // 1*; D-910), null for none.
+    spellCost: { school: null, amount: null, minimum: null },
     // Vestments of Transcendence: *restores 2 additional Health with every
     // spell that restores any.* What the bearer GIVES, where `use.heal` is
     // what the item itself restores.
@@ -260,6 +270,13 @@ export function emptySignature() {
     // Nemesis Raiment: *takes 1 less Fel Corruption, to a minimum of 0.* A
     // track of `AZEROTH.corruptionTracks` and the amount taken off it.
     corruptionReduction: { track: null, amount: null },
+    // **WHAT HOLDING IT CHARGES** (D-909, D-910): The Black Empire's Price, *at
+    // the end of each Long Rest, make a Spirit Resilience Test at DC 20. On a
+    // failure, gain 1 Void Corruption.* `corruptionReduction`'s mirror, and a
+    // TEST FIRST: the point lands on a failure alone. `at` says when it is
+    // offered (`AZEROTH.corruptionGainAt`); a press carries its own on
+    // `use.corruptionGain`, offered when it is pressed.
+    corruptionGain: emptyCorruptionGain(),
     // Dragonstalker Armor: *takes no Bane on Attack Tests against dragonkin,
     // whatever the range.* A BANE REMOVED IS NOT A BOON — 08 §6's grammar has
     // *A Boon on Attack Tests* and nothing that cancels one, and a Boon
@@ -310,7 +327,95 @@ export function emptySignature() {
     // *increases your pet's damage*, and D-643's bond is what a pet is here:
     // `rules/bound.mjs#boundSignatureEffects` turns this into the same v14
     // change a talent lays, and `syncBoundFor` diffs it beside them.
-    bound: { damage: null },
+    // `creatureType` (D-911): *A DEMON bound to a Warlock holding it* (the Skull
+    // of Gul'dan's Master of the Shadow Council) - null is every bound creature.
+    bound: { damage: null, creatureType: null },
+    // **THE LEGENDARY READERS (D-911)**, each a key one run writes and one door
+    // reads. Every one is named for what it does, never for the item.
+    //
+    // A WARD FLOOR ON THE BEARER (Firelord's Grip, *You have Ward 3 against
+    // Fire, unless you already have more*): the higher of the two, read in each
+    // model's `afterFinalPhase` once every `final` change has landed, so no
+    // token and no aura pass is needed. `schools` empty is every school.
+    wardFloor: { ward: null, schools: [] },
+    // *A fall deals you no damage* (Thunderfury's Windseeker): the damage door's
+    // `falling` blow lands nothing, as 02 §5's Wings Beneath does.
+    noFallDamage: false,
+    // *A dwarf firing it ignores its Reload* (The Emperor's Thunder): the weapon's
+    // own Reload, read at `effects/reload-state.mjs`. Weapon-scoped.
+    ignoresReload: false,
+    // *Fire damage you deal with it ignores Immune (Fire): a creature immune to
+    // Fire takes half of it instead* (The Sorcerer-Thane's Pact): the damage type
+    // whose Immune the blow passes at half. Weapon-scoped.
+    pastImmune: null,
+    // *Gains 1 Sand the first time each round a creature fails a Resilience Test
+    // against one of their spells* (Sand of the Bronze): read where the failed
+    // Resist's Sand is (`effects/sand.mjs`).
+    sandOnFail: null,
+    // *Gains 1 more Rage the first time each round an attack reduces their
+    // Health* (The Destroyer's Temper): the pool and the amount, at the struck door.
+    poolOnHurt: { pool: null, amount: null },
+    // WHAT A BLOCK DOES BEYOND THE FOUR (Molten Seam's *gains 2 Rage each time
+    // they Block*, Neltharion's Heat's *a creature whose melee attack you Block
+    // gains Scorched 2*): read at 06 §6's own Block door.
+    onBlock: { pool: { pool: null, amount: null }, condition: { id: null, value: null, until: null }, melee: false },
+    // *A spell cast by a Druid carrying it that restores Health at the start of a
+    // creature's turn restores 1 more Health each time* (The Dream's Bounty): read
+    // at the laid tick's heal, off the caster.
+    tickHealBonus: null,
+    // A refusal SCOPED TO ITS SOURCE (Dragonslayer's Nerve, *A dragonkin cannot
+    // make you Frightened*): `{id, creatureType}` rows, read where a condition is
+    // laid and the layer is known.
+    refusesFrom: [],
+    // *A Boss cannot ignore a Critical Injury a Rogue wearing it inflicts with an
+    // attack made while hidden from that Boss* (Kingslayer): 14 §1's first two
+    // ignored injuries, refused off the card's own `hiddenAtRoll`.
+    bossCannotIgnore: false,
+    // *The first time each round you take damage of one of the seven schools,
+    // you have Ward N against that school until the end of your next turn,
+    // unless you already have more* (Adaptive Scales): the N.
+    adaptiveWard: null,
+    // *When you reduce a Boss or an Elite to 0 Health, you gain temporary Health
+    // equal to twice your tier* (The Tusk Taken): the multiple of the tier, and
+    // the weight classes a kill counts on.
+    killTemp: { perTier: null, weightClasses: [] },
+    // **PHASE B2 (D-912)**, each again one run's mechanic and one door's read.
+    //
+    // *A breath weapon deals you half its damage, rounded down* (Foror's Lesson):
+    // the damage door halves a blow whose source is a breath (`breathSource`).
+    breathHalf: false,
+    // *A member of the Scarlet Crusade takes a Bane on every Attack Test it makes
+    // against you* (Scarlet Reckoning): the attacker's faction and the Banes, read
+    // off the TARGET's items at the attack door (`rules/factions.mjs`).
+    attackerBane: { faction: null, banes: null },
+    // *You need no ammunition to shoot it. A shot made without ammunition has
+    // Damage Rating 5 and deals Arcane damage* (Starfire Arrow). Weapon-scoped.
+    phantomShot: { rating: null, type: null },
+    // *Each creature makes that Test with a Bane* (The Blade Hungers: a Shadow
+    // spell, once a round; The Fifth Pylon: a demon, against Banish): the Banes a
+    // spell card's Resist takes, by school or by the spell's name, and the kind of
+    // creature that takes them.
+    resistBane: { school: null, name: "", creatureType: null, banes: null, per: null },
+    // *Pays no Mana to cast Banish* (The Fifth Pylon): the spell named, free.
+    freeSpell: "",
+    // *Casts healing spells with a Range of Touch at a range of 30 feet* (Hand of
+    // the Church): the feet a Touch healing spell reaches.
+    touchHealingFeet: null,
+    // *When a spell of a Priest wearing it restores Health to a creature at 0
+    // Health, it also ends one Critical Injury that creature took this encounter*
+    // (Second Ordination): read at `applyHealing`, off the giver.
+    ordination: false,
+    // *The first time each round a Frost spell of yours deals damage, one creature
+    // it damaged makes a Body Resilience Test against your Signature DC. On a
+    // failure it is Numbed until the end of its next turn* (Breath of the
+    // Necropolis): the school, the Test and what a failure lays.
+    spellDamageTest: { school: null, resilience: null, onFail: { id: null, value: null, until: null } },
+    // *Counts as one size larger for what it carries and for resisting being
+    // moved* (The King's Frame): rungs of 05's ladder, for those two alone.
+    sizeStep: null,
+    // *Has a second Reaction each turn, and spends it only on Blink or
+    // Counterspell* (Ten Thousand Years of Practice): the features it may pay for.
+    secondReaction: [],
     // What a blow that lands does beyond its damage, in `weapon-traits.mjs`'
     // Effect-trait shape: `sl` null is *on a hit*, `sl: 2` is 08 §5's Standard
     // threshold. `arc` is Thunderfury's jump — null where it does not arc.
@@ -370,7 +475,16 @@ export function emptySignature() {
       // to make a condition — and the number is the DIVISOR, so 2 is half.
       // `condition.id` says which condition; `rollTest` fills the value once
       // the mitigation has run, because *the damage dealt* is what arrived.
-      conditionFromDamage: null
+      conditionFromDamage: null,
+      // *An undead creature it hits cannot regain Health until the end of ITS
+      // next turn* (Ash of the Risen, D-911): 04's Mortal Strike mark
+      // (`effects/no-healing.mjs`), spanned on the creature struck.
+      noHealing: false,
+      // *... and makes its Test to break free (or to shed it) against your
+      // Signature DC* (Unholy Grasp, Soulflayer's Venom; D-911): the condition
+      // carries the bearer's Signature DC on its own effect, as 07's escape and
+      // A1's Poisoned shed DC already ride (`rules/escapes.mjs`).
+      signatureDC: false
     },
     // Gorehowl: *when an attack with it reduces a creature to 0 Health, every
     // enemy within 30 feet that saw it takes a Bane on their next Attack
@@ -403,7 +517,78 @@ export function emptySignature() {
       mitigates: { halve: false, amount: null },
       resist: null,
       area: "",
-      note: ""
+      note: "",
+      // **WHAT A FAILED RESIST LANDS ON THE CREATURE THAT FAILED IT** (D-910).
+      // `statuses` above lands on the BEARER, which is what a draught means;
+      // Hellscream's *every enemy within 30 feet ... On a failure it is
+      // Frightened of you* lands on whoever rolled the Test and failed, through
+      // the feature card's own door (`dice/chat.mjs`' `onFailInflicts`).
+      onFail: [],
+      // **THE CORRUPTION THE PRESS OFFERS** (D-909, D-910): Blood of Mannoroth,
+      // Raise the Fallen, The Skull's Reserve. A Resilience Test first, a point
+      // on a failure, through `workflows.corruptionExposure`.
+      corruptionGain: emptyCorruptionGain(),
+      // **THE LEGENDARY PRESSES (D-911)**, each read by `workflows.useSignature`:
+      //
+      // *takes no damage from that attack or from any other source until the
+      // start of their next turn* (Uther's Stand): an effect `applyDamage` reads.
+      noDamage: false,
+      // *Gain Sand up to its cap* (Stolen Hour): the pool filled.
+      fill: null,
+      // *makes two more Attack Tests against the same creature as part of the
+      // same Attack* (Wind of the Doomhammer), *one Attack Test with it against
+      // each creature of your choice* (Starfall Volley): Attack Tests through the
+      // attack door with nothing more spent - `same` is the creature targeted, a
+      // count each; otherwise one each creature targeted.
+      attacks: { count: null, same: false },
+      // A press that FIRES ITSELF (Undying: *when damage would reduce you to 0
+      // Health, you are reduced to 1 instead*): the door that strikes its use.
+      // No surface draws it live.
+      trigger: null,
+      // *When you cast a spell, you may choose it: its damage and healing land
+      // again* (Echo of the Infinite): arms the next cast as 02's Recurrence does.
+      echo: false,
+      // *An orc wielding it adds 2 to its Damage Rating* (Blood of Mannoroth): a
+      // bonus on THIS weapon's blows alone, never the bearer's attack lane.
+      weaponDamage: null,
+      // **PHASE B2 PRESSES (D-912)**, each read by `workflows.useSignature`:
+      //
+      // *plants one totem ... paying the totem's Mana and no Half-Action for it*
+      // (Call of the Elements): the class feature used, through `useFeature`.
+      feature: "",
+      // *casts a healing spell on up to 12 creatures ... with one Casting Test and
+      // no Mana* (The Archbishop's Prayer): the most creatures it reaches.
+      castHeal: null,
+      // *every other ... creature within N feet of you* (Drain the Chamber, The
+      // Sunwell's Torrent): the creatures the press gathers itself, ally or enemy,
+      // by a condition they carry or a Sustain they hold.
+      gather: { feet: null, condition: null, sustaining: false },
+      // *loses Health equal to its Bleeding value, and you regain the total*
+      // (Drain the Chamber): the condition whose value is drained.
+      drain: null,
+      // *On a failure one spell it is sustaining ends, of its choice* (The
+      // Sunwell's Torrent): what a failed Resist ends beside its conditions.
+      onFailEnds: null,
+      // *tethers one demon ... At the start of each of the Warlock's turns until
+      // the end of the encounter, or until the demon is more than 60 feet from the
+      // Warlock, the demon loses 2 Health and the Warlock regains 2 Mana* (Pylon
+      // Tether).
+      tether: { creatureType: null, feet: null, loss: null, mana: null },
+      // *that ally returns to the Health it had at the start of its last turn*
+      // (Staghelm's Regret): the creature targeted, at 0.
+      rewind: false,
+      // *the attack hits you instead, and your Armor Points apply* (The Raised
+      // Gauntlet): asked IN the blow by D-777's move door, so it fires itself.
+      move: { feet: null },
+      // *the attack misses you* (Step Aside): pressed from the attack's own card,
+      // through 04's Afterimage's door.
+      negates: false,
+      // *it arcs to four other creatures ... instead of one* (Thunderaan's Fury):
+      // the next arc's count.
+      arcWiden: null,
+      // *chooses their Breath's school from the seven* (Brood Breath): the next
+      // Breath's school, chosen at the press.
+      breathSchool: false
     },
     // More bodies on the field (D-691's own shape, verbatim).
     summon: { entry: "", count: null, side: "summoner", from: "nextRound" },
@@ -428,8 +613,142 @@ export function emptySignature() {
     // An unreadable sentence drops ALONE (the lead, the same day): it becomes a
     // branch carrying its gates and its `reason` and no families, where before
     // one unqualifiable *against …* clause withheld the whole Signature.
-    gated: []
+    gated: [],
+    // **THE OTHER BUTTONS** (D-909, D-910). A Legendary may print more than one
+    // run that is pressed - Gorehowl's Hellscream and Blood of Mannoroth - and
+    // the trunk's `use` is ONE button. A MAP keyed by the run's slug, never a
+    // list: `resetUses` and `useSignature` write
+    // `system.signatureEffect.presses.<key>.uses.value` by dotted path, and an
+    // array index there is D-671's trap. Each entry is `emptyPress()`: the
+    // run's label, its own gate, and `use`'s whole shape. Empty on everything
+    // that is not a Legendary.
+    presses: {}
   };
+}
+
+/**
+ * WHEN A PRESS FIRES ITSELF (D-911): `dropToZero` is Undying's *when damage
+ * would reduce you to 0 Health*, read by `AzerothActor#_holdAtOne`.
+ */
+export const SIGNATURE_TRIGGERS = Object.freeze(["dropToZero", "blowMoved"]);
+
+/** A corruption charge with nothing set (D-910). */
+export function emptyCorruptionGain() {
+  return { track: null, amount: null, resilience: null, dc: null, at: null };
+}
+
+/**
+ * ONE MORE BUTTON ON A LEGENDARY (D-910): the run's label, the gate on that
+ * button alone, then the trunk `use`'s own keys in their own order, so every
+ * door that reads a `use` reads a press with no second branch.
+ */
+export function emptyPress() {
+  return { label: "", gates: [], ...emptySignature().use };
+}
+
+/**
+ * A run's name as the key of `presses` (D-910): lower case, apostrophes gone,
+ * every other run of non-letters a hyphen - `tools/parse-book`'s own slug, so a
+ * dotted path never meets a space, a full stop or a quote.
+ *
+ * @param {string} label
+ * @returns {string}
+ */
+export function pressKey(label) {
+  return String(label ?? "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * **THE SIGNATURE DC** (08 §20, D-909; the lead's ruling, D-910): *your Spell
+ * DC or 12 plus twice your tier, whichever is higher*. A character with no
+ * Spell DC takes the floor. The tier is the bearer's, 1 to 4, and a tier that
+ * is not a number is tier 1.
+ *
+ * @param {{spellDC?: number|null, tier?: number|null}} bearer
+ * @returns {number}
+ */
+export function signatureDC({ spellDC = null, tier = 1 } = {}) {
+  const t = Math.max(1, Math.trunc(Number(tier)) || 1);
+  const floor = 12 + 2 * t;
+  const own = Number(spellDC);
+  return spellDC !== null && spellDC !== undefined && Number.isFinite(own) ? Math.max(Math.trunc(own), floor) : floor;
+}
+
+/**
+ * **THE ONE SIGNATURE DC OF A BEARER** (D-914, the final review: three derivations in
+ * `workflows.mjs` had drifted - a creature's Resist with no Spell DC asked for none). A
+ * character's is `signatureDC` (08 §20, D-910: its Spell DC or 12 plus twice its tier,
+ * whichever is higher); a creature's is its block's Spell DC (14 §1's `**Spells** (DC n)`,
+ * `system.spells.dc`), else 12 plus twice its tier.
+ *
+ * @param {{type?: string, system?: object}|null} actor
+ * @returns {number}
+ */
+export function signatureDcOf(actor) {
+  const sys = actor?.system ?? {};
+  const spell = sys.spellDC ?? sys.spells?.dc ?? null;
+  const tier = sys.tier ?? 1;
+  return actor?.type === "character" ? signatureDC({ spellDC: spell, tier }) : (spell ?? signatureDC({ tier }));
+}
+
+/**
+ * THE LABELLED RUNS OF A SIGNATURE'S PROSE (D-909, D-910). A Legendary's prose
+ * is one paragraph a run, each opening on its name in bold and a full stop -
+ * `<p><strong>Scarlet Reckoning.</strong> A member of …</p>` - which is what
+ * `tools/parse-book/equipment.mjs#parseUnique` writes. **Two runs or more, every
+ * paragraph labelled**, or the whole prose is one unlabelled run: an Epic's
+ * sentence, a Classic find's and a GM's own are never split, so nothing they
+ * said reads differently.
+ *
+ * @param {string} html
+ * @returns {Array<{label: string, html: string}>}
+ */
+export function signatureRuns(html) {
+  const text = String(html ?? "");
+  const whole = [{ label: "", html: text }];
+  const paragraphs = text.match(/<p\b[^>]*>[\s\S]*?<\/p>/gi) ?? [];
+  if (paragraphs.length < 2) return whole;
+  const runs = [];
+  for (const p of paragraphs) {
+    const m = /^<p\b[^>]*>\s*<strong>([^<]+?)\.\s*<\/strong>\s*([\s\S]*?)\s*<\/p>$/i.exec(p.trim());
+    if (!m) return whole;
+    runs.push({ label: m[1].trim(), html: `<p>${m[2]}</p>` });
+  }
+  return runs;
+}
+
+/**
+ * One run's words, as plain text, by its label (D-910): what a card prints for
+ * a fired row and what the census holds a part's numbers against. An empty or
+ * unknown label is the whole prose.
+ *
+ * @param {string} html
+ * @param {string} [label]
+ * @returns {string}  the run's HTML
+ */
+export function runProse(html, label = "") {
+  if (!label) return String(html ?? "");
+  const run = signatureRuns(html).find(r => r.label.toLowerCase() === String(label).toLowerCase());
+  return run ? run.html : String(html ?? "");
+}
+
+/**
+ * THE OTHER BUTTONS, in the order the row wrote them (D-910), each with its
+ * key, made whole. A map's own order is its insertion order, and the hand row
+ * and the parser write them in the order the chapter prints them.
+ *
+ * @param {object|null} signature
+ * @returns {Array<{key: string, press: object}>}
+ */
+export function pressesOf(signature) {
+  const held = signature?.presses;
+  if (!held || typeof held !== "object") return [];
+  return Object.entries(held).map(([key, raw]) => ({ key, press: merge(emptyPress(), raw ?? {}) }));
 }
 
 /**
@@ -445,8 +764,14 @@ export function emptySignature() {
  */
 export const BRANCH_FAMILIES = Object.freeze([
   "grants", "refuses", "criticalOn", "damageMultiplier", "damageRatingSet",
-  "spellDamage", "chosenSpellDamage", "chosenSpellHealing", "firstParryTest", "weaponKillReward", "scalingHitDamage", "spellCost", "healingBonus", "corruptionReduction", "cancelsBane",
+  "spellDamage", "chosenSpellDamage", "chosenSpellHealing", "firstParryTest", "weaponKillReward", "scalingHitDamage", "spellCost", "healingBonus", "corruptionReduction", "corruptionGain", "cancelsBane",
   "blockBonus", "armorPointsPerTier", "aura", "empowers", "bound",
+  // The Legendary readers (D-911), in `emptySignature()`'s own order.
+  "wardFloor", "noFallDamage", "ignoresReload", "pastImmune", "sandOnFail", "poolOnHurt", "onBlock",
+  "tickHealBonus", "refusesFrom", "bossCannotIgnore", "adaptiveWard", "killTemp",
+  // Phase B2 (D-912).
+  "breathHalf", "attackerBane", "phantomShot", "resistBane", "freeSpell", "touchHealingFeet", "ordination",
+  "spellDamageTest", "sizeStep", "secondReaction",
   "onHit", "onKill", "whenStruck", "tick"
 ]);
 
@@ -457,7 +782,8 @@ export const BRANCH_FAMILIES = Object.freeze([
  */
 export function emptyBranch() {
   const whole = emptySignature();
-  const out = { gates: [], reason: "" };
+  // The run's name rides after the reason, as it does on the trunk (D-910).
+  const out = { gates: [], reason: "", label: "" };
   for (const key of BRANCH_FAMILIES) out[key] = whole[key];
   return out;
 }
@@ -560,6 +886,8 @@ export function cleanSignature(raw) {
   return nested(raw, {
     kind: v => oneOf(v, SIGNATURE_KINDS_AUTOMATED) ?? "none",
     reason: cleanReason,
+    // The run the trunk reads (D-910): free text, the chapter's own name.
+    label: text,
     gates: cleanGates,
     // The gate on the BUTTON alone, in the trunk's own vocabulary (D-722).
     useGates: cleanGates,
@@ -576,7 +904,49 @@ export function cleanSignature(raw) {
     // recursion never walks into a branch: a dotted write into an array index
     // is not a shape anything in this system makes, and treating one as a
     // partial would be D-671's trap with an index in it.
-    gated: cleanBranches
+    gated: cleanBranches,
+    // THE OTHER BUTTONS (D-910). A MAP, so the dotted refill
+    // `presses.<key>.uses.value` arrives as `{presses: {<key>: {uses: {value}}}}`
+    // and is cleaned PRESENT-KEY at every depth, exactly as the trunk's `use`.
+    presses: cleanPresses
+  });
+}
+
+/**
+ * The other buttons made valid, key by key and present-key all the way down
+ * (D-910, CLAUDE.md §15). A key that is not a slug is dropped - it could never
+ * be written by dotted path - and so is a value that is not an object.
+ */
+function cleanPresses(raw) {
+  const out = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [key, value] of Object.entries(raw)) {
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key) || !value || typeof value !== "object") continue;
+    out[key] = cleanPress(value);
+  }
+  return out;
+}
+
+/** One press made valid: its label, its gate, then `use`'s own cleaner. */
+function cleanPress(raw) {
+  const head = nested(raw, { label: text, gates: cleanGates });
+  const { label, gates, ...rest } = raw;
+  return { ...head, ...cleanSignatureUse(rest) };
+}
+
+/**
+ * A corruption charge made valid, present-key (D-910). A track 10 does not
+ * build, a Resilience 05 does not name or an `at` outside the vocabulary is
+ * nulled, and the amount and the DC floor at 1: a charge of nothing is none,
+ * and a Test against DC 0 is no Test.
+ */
+function cleanCorruptionGain(raw) {
+  return nested(raw, {
+    track: t => oneOf(t, Object.keys(AZEROTH.corruptionTracks)),
+    amount: a => atLeast(a, 1),
+    resilience: r => oneOf(r, Object.keys(AZEROTH.resiliences)),
+    dc: d => atLeast(d, 1),
+    at: a => oneOf(a, AZEROTH.corruptionGainAt)
   });
 }
 
@@ -629,13 +999,16 @@ function standingCleaners() {
     // school alone (D-671, D-692).
     spellCost: v => nested(v, {
       school: s => oneOf(s, Object.keys(AZEROTH.schools)),
-      amount: a => atLeast(a, 1)
+      amount: a => atLeast(a, 1),
+      minimum: m => atLeast(m, 1)
     }),
     healingBonus: v => atLeast(v, 1),
     corruptionReduction: v => nested(v, {
       track: t => oneOf(t, Object.keys(AZEROTH.corruptionTracks)),
       amount: a => atLeast(a, 1)
     }),
+    // What holding it charges, a Test first (D-910).
+    corruptionGain: cleanCorruptionGain,
     cancelsBane: v => oneOf(v, Object.keys(AZEROTH.cancellableBanes)),
     // Drillborer Disk's *a further 2* on a Block (06 §6's Reaction).
     blockBonus: v => atLeast(v, 1),
@@ -653,7 +1026,60 @@ function standingCleaners() {
       heal: n => atLeast(n, 1),
       cost: n => atLeast(n, 1)
     }),
-    bound: v => nested(v, { damage: n => atLeast(n, 1) }),
+    bound: v => nested(v, {
+      damage: n => atLeast(n, 1),
+      creatureType: t => oneOf(typeof t === "string" ? t.toLowerCase() : t, Object.keys(AZEROTH.creatureTypes))
+    }),
+    // The Legendary readers (D-911), present-key at every depth.
+    wardFloor: v => nested(v, {
+      ward: n => atLeast(n, 1),
+      schools: s => [...new Set((Array.isArray(s) ? s : []).filter(x => typeof x === "string" && x in AZEROTH.schools))]
+    }),
+    noFallDamage: v => v === true,
+    ignoresReload: v => v === true,
+    pastImmune: t => oneOf(t, Object.keys(AZEROTH.damageTypes)),
+    sandOnFail: n => atLeast(n, 1),
+    poolOnHurt: v => nested(v, { pool: p => oneOf(p, Object.keys(AZEROTH.poolTypes)), amount: a => atLeast(a, 1) }),
+    onBlock: v => nested(v, {
+      pool: p => nested(p, { pool: q => oneOf(q, Object.keys(AZEROTH.poolTypes)), amount: a => atLeast(a, 1) }),
+      condition: cleanInflicted,
+      melee: m => m === true
+    }),
+    tickHealBonus: n => atLeast(n, 1),
+    // A row naming no condition A1 holds, or no creature type, refuses nothing.
+    refusesFrom: v => (Array.isArray(v) ? v : [])
+      .map(r => ({
+        id: oneOf(r?.id, Object.keys(AZEROTH.conditions)),
+        creatureType: oneOf(typeof r?.creatureType === "string" ? r.creatureType.toLowerCase() : null, Object.keys(AZEROTH.creatureTypes))
+      }))
+      .filter(r => r.id && r.creatureType),
+    bossCannotIgnore: v => v === true,
+    adaptiveWard: n => atLeast(n, 1),
+    killTemp: v => nested(v, {
+      perTier: n => atLeast(n, 1),
+      weightClasses: w => [...new Set((Array.isArray(w) ? w : []).filter(x => typeof x === "string" && x in AZEROTH.weightClasses))]
+    }),
+    // Phase B2 (D-912), present-key at every depth.
+    breathHalf: v => v === true,
+    attackerBane: v => nested(v, { faction: f => (typeof f === "string" && f.trim() ? f.trim() : null), banes: n => atLeast(n, 1) }),
+    phantomShot: v => nested(v, { rating: n => atLeast(n, 0), type: t => oneOf(t, Object.keys(AZEROTH.damageTypes)) }),
+    resistBane: v => nested(v, {
+      school: t => oneOf(t, Object.keys(AZEROTH.schools)),
+      name: text,
+      creatureType: t => oneOf(typeof t === "string" ? t.toLowerCase() : t, Object.keys(AZEROTH.creatureTypes)),
+      banes: n => atLeast(n, 1),
+      per: p => oneOf(p, Object.keys(AZEROTH.abilityUsesPer))
+    }),
+    freeSpell: text,
+    touchHealingFeet: n => atLeast(n, 1),
+    ordination: v => v === true,
+    spellDamageTest: v => nested(v, {
+      school: t => oneOf(t, Object.keys(AZEROTH.schools)),
+      resilience: r => oneOf(r, Object.keys(AZEROTH.resiliences)),
+      onFail: cleanInflicted
+    }),
+    sizeStep: n => atLeast(n, 1),
+    secondReaction: v => strings(v),
     onHit: v => nested(v, {
       sl: num,
       damage: d => nested(d, { amount: num, type: t => oneOf(t, damageTypes()) }),
@@ -672,7 +1098,8 @@ function standingCleaners() {
       push: p => atLeast(p, 1),
       // Null where it does not arc, so a consumer reads `arc` and not
       // `arc.targets` to know whether there is one.
-      arc: a => (a && typeof a === "object" ? nested(a, { targets: num, feet: num }) : null),
+      // `all` (Magma Shot, D-912): *every other creature within 5 feet of the target*.
+      arc: a => (a && typeof a === "object" ? nested(a, { targets: num, feet: num, all: x => x === true }) : null),
       // How often the row may fire (D-696); null is every hit.
       per: p => oneOf(p, Object.keys(AZEROTH.abilityUsesPer)),
       // Damage read off the target's own condition (Perdition's Blade).
@@ -683,7 +1110,9 @@ function standingCleaners() {
       // The divisor the condition's value is taken at (Sulfuron Hammer). A
       // divisor of 0 is not one, and of 1 would be *all* of the damage - which
       // is a legal rule and simply not one 08 §20 writes today.
-      conditionFromDamage: v2 => atLeast(v2, 1)
+      conditionFromDamage: v2 => atLeast(v2, 1),
+      noHealing: v2 => v2 === true,
+      signatureDC: v2 => v2 === true
     }),
     onKill: v => nested(v, { feet: f => atLeast(f, 0), bane: b => atLeast(b, 1), condition: cleanInflicted }),
     whenStruck: v => nested(v, {
@@ -738,7 +1167,7 @@ function cleanBranches(raw) {
 export function cleanBranch(raw) {
   if (!raw || typeof raw !== "object") return emptyBranch();
   const standing = standingCleaners();
-  const cleaners = { gates: cleanGates, reason: cleanReason };
+  const cleaners = { gates: cleanGates, reason: cleanReason, label: text };
   for (const key of BRANCH_FAMILIES) cleaners[key] = standing[key];
   return nested(raw, cleaners);
 }
@@ -822,7 +1251,7 @@ function cleanGate(raw) {
 }
 
 /** The gates that are a condition of the world and name nothing beside it. */
-const VALUELESS_GATES = Object.freeze(["belowHalfHealth", "hasNotMoved", "targetHasNotActed"]);
+const VALUELESS_GATES = Object.freeze(["belowHalfHealth", "atOrAboveHalfHealth", "hasNotMoved", "targetHasNotActed", "hidden"]);
 
 /**
  * A gate's value, as the list of things it names. 08 §20 writes *against
@@ -898,7 +1327,38 @@ function cleanSignatureUse(raw) {
       return nested(v, { resilience: r => oneOf(r, Object.keys(AZEROTH.resiliences)), dc: num });
     },
     area: text,
-    note: text
+    note: text,
+    // What a failed Resist lands on whoever failed it (D-910), in the shape a
+    // condition inflicted takes everywhere; an entry naming none is dropped.
+    // An entry may carry `endsOnDamage` (Emerald Slumber: *Stunned until it
+    // takes damage or until the end of its next turn*; D-911), only where named.
+    onFail: v => (Array.isArray(v) ? v : []).map(f => {
+      const c = cleanInflicted(f);
+      return f?.endsOnDamage === true ? { ...c, endsOnDamage: true } : c;
+    }).filter(c => c.id),
+    corruptionGain: cleanCorruptionGain,
+    // The Legendary presses (D-911).
+    noDamage: n => n === true,
+    fill: f => oneOf(f, ["sand"]),
+    attacks: a => nested(a, { count: n => atLeast(n, 1), same: s => s === true }),
+    trigger: t => oneOf(t, SIGNATURE_TRIGGERS),
+    echo: e => e === true,
+    weaponDamage: n => atLeast(n, 1),
+    // Phase B2 (D-912).
+    feature: text,
+    castHeal: n => atLeast(n, 1),
+    gather: g => nested(g, { feet: n => atLeast(n, 1), condition: c => oneOf(c, Object.keys(AZEROTH.conditions)), sustaining: x => x === true }),
+    drain: c => oneOf(c, Object.keys(AZEROTH.conditions)),
+    onFailEnds: e => oneOf(e, ["sustain"]),
+    tether: t => nested(t, {
+      creatureType: c => oneOf(typeof c === "string" ? c.toLowerCase() : c, Object.keys(AZEROTH.creatureTypes)),
+      feet: n => atLeast(n, 1), loss: n => atLeast(n, 1), mana: n => atLeast(n, 1)
+    }),
+    rewind: x => x === true,
+    move: m => nested(m, { feet: n => atLeast(n, 1) }),
+    negates: x => x === true,
+    arcWiden: n => atLeast(n, 1),
+    breathSchool: x => x === true
   });
   // `halve` wins where a caller writes each, and it can only be judged once
   // both are in hand.
@@ -970,8 +1430,11 @@ export function pressGates(signature) {
  * @param {number} [o.spells]   how many entries `system.spells[]` carries
  * @returns {"gate"|"spent"|"noSpell"|null}
  */
-export function pressRefusal(signature, { holds = true, spells = 0 } = {}) {
+export function pressRefusal(signature, { holds = true, spells = 0, worn = true } = {}) {
   if (!isPressable(signature)) return null;
+  // **A LEGENDARY WORKS WHILE IT IS WORN** (08 §20; D-913): `signatureWorn` is the
+  // caller's reading of the item, and a press of an item not worn is refused in words.
+  if (worn === false) return "unequipped";
   if (!holds) return "gate";
   // **A `spell` KIND NAMES NO SPELL** (the descriptor's own comment): which one
   // it casts is `system.spells[]`, and Benediction and Netherwind Regalia are
@@ -983,8 +1446,204 @@ export function pressRefusal(signature, { holds = true, spells = 0 } = {}) {
   return null;
 }
 
+/**
+ * WHY ONE OF A LEGENDARY'S OTHER BUTTONS CANNOT BE PRESSED, or null (D-910).
+ * `pressRefusal`'s own two judgements over one `presses` entry: its gate, then
+ * its own uses - *counts its uses apart from the item's other Signatures* is
+ * 08 §20's sentence, and the entry's own counter is what makes it true.
+ *
+ * @param {object|null} press  one entry of `presses`, made whole
+ * @param {{holds?: boolean}} [o]  `gateHolds` over the entry's OWN gate
+ * @returns {"gate"|"spent"|null}
+ */
+export function pressEntryRefusal(press, { holds = true, worn = true } = {}) {
+  if (!press) return null;
+  // **A PRESS THAT FIRES ITSELF IS NEVER PRESSED** (Undying, D-911): its door is
+  // the blow that would drop the bearer, and a live button over it would spend
+  // the use on nothing (D-681). Said in words on every surface.
+  if (press.trigger) return "automatic";
+  if (worn === false) return "unequipped";
+  if (!holds) return "gate";
+  const uses = press.uses ?? null;
+  if (uses?.per && (uses.value ?? 0) <= 0) return "spent";
+  return null;
+}
+
 /** The refusals `pressRefusal` returns, for `config.mjs` to name and a test to hold. */
-export const SIGNATURE_REFUSALS = Object.freeze(["gate", "spent", "noSpell"]);
+export const SIGNATURE_REFUSALS = Object.freeze(["gate", "spent", "noSpell", "automatic", "unequipped", "fromCard"]);
+
+/**
+ * **WHETHER AN ITEM'S PRESS MAY BE MADE AS IT IS CARRIED** (08 §20's callout: *a
+ * Signature works only while its item is wielded, worn or held*; D-913, and D-914 for
+ * every rarity - the callout is general, so a Rare's or an Epic's press is the
+ * Legendary's rule too). An item in a pack or a bag presses nothing; a pack sheet has no
+ * bearer and is never worn.
+ *
+ * @param {{system?: {equipped?: boolean}}|null} item
+ * @returns {boolean}
+ */
+export function signatureWorn(item) {
+  if (!item) return false;
+  // A career is held, never carried (03 §5's Signature capability): it has no `equipped`
+  // to read, and the rule above read it as set down, so no career press was ever made
+  // (the D-914 live pass: the Field Surgeon's card stopped posting).
+  if (item.type === "career") return true;
+  return item.system?.equipped === true;
+}
+
+/**
+ * **WHAT A LEGENDARY PRESS ANSWERS** (D-913; the lead's adopted recommendation: *press
+ * only with their trigger recorded where a card or a hit exists*). Each run's own
+ * sentence names its moment:
+ *
+ * - `hitOnYou` - *as a Reaction when an attack hits you* (Step Aside, which `negates`;
+ *   Uther's Stand): pressed from the attack card's row naming the bearer, a hit not
+ *   withdrawn;
+ * - `attackOnYou` - *as a Reaction when a creature ... makes an Attack Test against you*
+ *   (The Wyrm's Roar): pressed from the attack card's row naming the bearer;
+ * - `ownHit` - *when an Attack Test with it hits* (Wind of the Doomhammer): the bearer's
+ *   own hit with this weapon, this turn, recorded at the attack door.
+ *
+ * Keyed by the run's label, because 08 §20 prints each once; a Classic find carries none.
+ */
+export const PRESS_TRIGGERS = Object.freeze({
+  "Step Aside": "hitOnYou",
+  "Uther's Stand": "hitOnYou",
+  "The Wyrm's Roar": "attackOnYou",
+  "Wind of the Doomhammer": "ownHit"
+});
+
+/**
+ * **WHETHER A SIGNATURE'S `area` IS AN AREA A REGION CAN OCCUPY** (D-916, a live finding:
+ * The Wyrm's Roar's card drew *Place area: 30 ft circle* over *A creature within 30 ft*,
+ * a button over nothing - D-681's shape). The `area` field carries two kinds of phrase:
+ *
+ * - **an AREA** - a shape (*a 15 ft radius*, a cone, a line) or every creature in reach
+ *   (*Each enemy within 30 ft*, *Every other Bleeding creature within 30 ft*): the card
+ *   offers Place area, as it always did;
+ * - **a TARGET** - one creature in reach (*A creature within 30 ft*, *An ally within 30
+ *   ft*, *One demon within 30 ft*): a range for who may be named, which no Region holds,
+ *   so the card offers no Place area.
+ *
+ * Answers the phrase where it is an area, else null. A phrase that is neither is kept as
+ * an area (the card's old behaviour), and the census in `signature-d916.test.mjs` fails
+ * on one, so a new kind of phrase is read before it ships.
+ *
+ * @param {string|null} text
+ * @returns {string|null}
+ */
+export function signatureAreaOf(text) {
+  const t = String(text ?? "").replace(/\s+/g, " ").trim();
+  if (!t) return null;
+  if (SIGNATURE_AREA_SHAPE.test(t)) return t;
+  if (SIGNATURE_TARGET_PHRASE.test(t)) return null;
+  return t;
+}
+
+/** A shape, or every creature in reach: an area a Region occupies (D-916). */
+export const SIGNATURE_AREA_SHAPE = /\b(?:radius|cone|line|cube|circle|sphere|square)\b|^(?:every|each|all)\b/i;
+
+/** One creature in reach: a target's range, never an area (D-916). */
+export const SIGNATURE_TARGET_PHRASE = /^(?:a|an|one)\s+(?:[A-Za-z'-]+\s+){0,3}?(?:creature|ally|enemy|demon|corpse|undead|beast|target)\b.*\bwithin\s+\d+\s*(?:ft|feet)\b/i;
+
+/**
+ * **WHAT A PRESS LEAVES TO THE TABLE**, said on the item sheet (D-914, the final review;
+ * no new mechanic): The Wyrm's Roar is pressed from the attack's card once the Attack
+ * Test is rolled, so *that Attack Test takes the Bane Frightened gives* is the table's to
+ * apply. Keyed by the run's label to an `AZEROTH.signatureReasons` key.
+ */
+export const PRESS_REASONS = Object.freeze({
+  "The Wyrm's Roar": "attackBane"
+});
+
+/**
+ * The moment a press answers, or null where it is pressed at will (D-913).
+ * @param {{label?: string, negates?: boolean}|null} press
+ * @returns {"hitOnYou"|"attackOnYou"|"ownHit"|null}
+ */
+export function pressTrigger(press) {
+  if (press?.negates === true) return "hitOnYou";
+  return PRESS_TRIGGERS[String(press?.label ?? "")] ?? null;
+}
+
+/**
+ * **WHETHER A PRESS'S MOMENT IS ON RECORD** (D-913): the i18n key of the refusal, or null.
+ * The facts are the caller's reading of the card it was pressed from, or of the bearer's
+ * recorded hit.
+ *
+ * @param {string|null} trigger  `pressTrigger`'s
+ * @param {{named?: boolean, attackCard?: boolean, own?: boolean, hit?: boolean, withdrawn?: boolean,
+ *   unanswered?: boolean, hitRecord?: boolean}} facts
+ * @returns {string|null}
+ */
+export function pressAnswerRefusal(trigger, { named = false, attackCard = false, own = false, hit = false, withdrawn = false, unanswered = false, hitRecord = false } = {}) {
+  if (!trigger) return null;
+  if (trigger === "ownHit") return hitRecord ? null : "AZEROTH.Signature.NoHitThisTurn";
+  if (!named) return "AZEROTH.Signature.FromCard";
+  if (!attackCard) return "AZEROTH.Signature.NotAttackCard";
+  if (!own) return "AZEROTH.Signature.NotYourRow";
+  if (trigger === "hitOnYou" && (!hit || withdrawn)) return "AZEROTH.Signature.NotHit";
+  if (unanswered) return "AZEROTH.Signature.Unanswered";
+  return null;
+}
+
+/**
+ * **WHETHER A GM MAY TRUST A BOOKKEEPING ASK FROM A CLIENT THAT DOES NOT OWN THE BEARER**
+ * (D-914, the final review; `effects/legendary-doors.mjs#justifiedAct`'s rule: nothing off
+ * the request is trusted that the GM's client cannot re-derive). Where the asker owns the
+ * bearer the ask is its own and stands. Otherwise:
+ *
+ * - `traitExposure` (Fel-touched (Greater) on a kill): the creature killed is at 0 Health
+ *   and this bearer's kill Test has not been asked over it before (`marked`);
+ * - `roundMark` (Breath of the Necropolis): the card it answers is a spell card the bearer
+ *   spoke, of a school one of the bearer's rows names, and the mark is that row's own.
+ *
+ * @param {string} act
+ * @param {{askerOwnsBearer?: boolean, victimHealth?: number|null, marked?: boolean, cardByBearer?: boolean,
+ *   cardSchool?: string|null, rows?: Array<{name: string, school: string}>, key?: string}} facts
+ * @returns {boolean}
+ */
+export function legendaryAskTrusted(act, { askerOwnsBearer = false, victimHealth = null, marked = false, cardByBearer = false, cardSchool = null, rows = [], key = "" } = {}) {
+  if (askerOwnsBearer === true) return true;
+  if (act === "traitExposure") return Number.isFinite(Number(victimHealth)) && victimHealth !== null && Number(victimHealth) <= 0 && marked !== true;
+  if (act === "roundMark") {
+    if (cardByBearer !== true || !cardSchool) return false;
+    return (rows ?? []).some(r => r?.school === cardSchool && key === `signature-spell-test:${r.name}`);
+  }
+  return false;
+}
+
+/**
+ * Whether a recorded hit is the one Wind of the Doomhammer answers (D-913): with this
+ * weapon, in this fight's current round and turn - or, out of a fight, at this moment of
+ * the world's clock.
+ *
+ * @param {{itemId?: string, combatId?: string|null, round?: number|null, turn?: number|null, at?: number|null}|null} record
+ * @param {{itemId: string, combatId?: string|null, round?: number|null, turn?: number|null, now?: number|null}} here
+ */
+export function hitThisTurn(record, { itemId, combatId = null, round = null, turn = null, now = null } = {}) {
+  if (!record || record.itemId !== itemId) return false;
+  if (record.combatId || combatId) return record.combatId === combatId && record.round === round && record.turn === turn;
+  return record.at === now;
+}
+
+/**
+ * **GATE KINDS THAT NAME THE TARGET OR THE BLOW, NOT THE BEARER** (D-913, the live
+ * run): *Only against one kind of creature: demon* says nothing about who may hold
+ * the item, so a surface never prints *That sentence does not apply to you* over it.
+ */
+export const TARGET_GATE_KINDS = Object.freeze(["creatureType", "targetHasNotActed", "blow", "hidden"]);
+
+/**
+ * A gate split by whom it judges (D-913): the bearer's clauses, and the target's.
+ * @param {Array<{kind: string}>} gates
+ * @returns {{bearer: object[], target: object[]}}
+ */
+export function splitGates(gates = []) {
+  const bearer = [], target = [];
+  for (const g of gates ?? []) (TARGET_GATE_KINDS.includes(g?.kind) ? target : bearer).push(g);
+  return { bearer, target };
+}
 
 /**
  * WHAT IS TRUE OF THE BLOW BEING MADE, as a `blow` gate reads it (Dal'Rend's
@@ -1106,6 +1765,16 @@ function oneGateHolds(clause, state) {
   // ONE implementation of below-half, shared with the creature passives, so
   // the two cannot disagree about what half a Health pool is.
   if (kind === "belowHalfHealth") return whenHolds("belowHalfHealth", { health: state.health ?? null });
+  // *At or above half Health* (The Black Hand Raised, D-911): the same one
+  // reading of half a pool, the other side of it - and no snapshot fails closed.
+  if (kind === "atOrAboveHalfHealth") {
+    const h = state.health ?? null;
+    if (!h || !Number.isFinite(Number(h.max)) || Number(h.max) <= 0) return false;
+    return !whenHolds("belowHalfHealth", { health: h });
+  }
+  // *While hidden from that creature* (Hexed Fang, D-911): only the attack door
+  // knows, and hands `hidden: true`; everything else fails closed.
+  if (kind === "hidden") return state.hidden === true;
 
   // *While you have not moved this turn* — the feet the turn has spent, which
   // `AzerothCombatant#spendMovement` already records (D-659). No number is no
@@ -1174,7 +1843,8 @@ function oneGateHolds(clause, state) {
 function firesOnHit(onHit) {
   if (!onHit) return false;
   return Boolean(onHit.damage?.amount || onHit.condition?.id || onHit.bane || onHit.sunder
-    || onHit.momentum || onHit.heal || onHit.mana || onHit.push || onHit.arc?.targets
+    || onHit.momentum || onHit.heal || onHit.mana || onHit.push || onHit.arc?.targets || onHit.arc?.all === true
+    || onHit.noHealing === true
     || (onHit.conditions ?? []).some(c => c?.id));
 }
 
@@ -1337,6 +2007,9 @@ export function signatureEffects(items = [], state = {}, { weaponId = null } = {
     // 2026-09-14). `castSpell` reads it by the spell's own school beside
     // `empowers[name].cost`, and both come off the Mana together.
     spellCost: {},
+    // The floor a school's discount stops at, by school (Atiesh; D-910), read
+    // by `casting.mjs#spellManaCost`.
+    spellCostFloor: {},
     healingBonus: 0, corruptionReduction: {}, cancelsBane: [],
     // What a Block takes off ON TOP of 06 §6's four (Drillborer Disk, D-693).
     blockBonus: 0,
@@ -1355,6 +2028,40 @@ export function signatureEffects(items = [], state = {}, { weaponId = null } = {
     // What every creature the bearer has bound gains (D-698), each with the
     // item that gave it, because `syncBoundFor` diffs the effects by source.
     bound: [],
+    // WHAT HOLDING IT CHARGES AT A LONG REST (D-910): one Test each, in the
+    // order the items and their runs are written. `AzerothActor#longRest`
+    // offers each through `workflows.corruptionExposure`.
+    exposures: [],
+    // THE LEGENDARY READERS (D-911), each read by one door:
+    // the Ward floor by school, the highest any part names (`afterFinalPhase`);
+    wardFloor: {},
+    // the parts that make a fall harmless, by item name (`applyDamage`);
+    noFallDamage: [],
+    // whether this weapon's Reload is ignored (`effects/reload-state.mjs`);
+    ignoresReload: false,
+    // the damage types whose Immune this weapon's blow passes at half;
+    pastImmune: [],
+    // Sand the first failed Resist each round gives (`effects/sand.mjs`);
+    sandOnFail: 0,
+    // a pool gained the first time each round an attack hurts the bearer;
+    poolOnHurt: [],
+    // what a Block does beyond its four (`applications/actions.mjs#blockNow`);
+    onBlock: [],
+    // Health a laid heal tick of the bearer's spell restores more;
+    tickHealBonus: 0,
+    // conditions refused from a creature of one type (`effects/inflict.mjs`);
+    refusesFrom: [],
+    // whether a Boss may ignore the bearer's hidden Critical Injury;
+    bossCannotIgnore: [],
+    // the Ward a damaging school gives (`AzerothActor#applyDamage`);
+    adaptiveWard: 0,
+    // temporary Health a kill gives, by the tier's multiple and the weight classes;
+    killTemp: [],
+    // Phase B2 (D-912): what halves a breath, the attacker's Banes off the target,
+    // a shot of nothing, a Resist's Banes, a free spell, Touch healing's reach,
+    // Second Ordination, a spell's damage Test, a size step and the second Reaction.
+    breathHalf: [], attackerBane: [], phantomShot: null, resistBane: [], freeSpell: [],
+    touchHealingFeet: 0, ordination: [], spellDamageTest: [], sizeStep: 0, secondReaction: [],
     onHit: [], onKill: [], whenStruck: [], tick: { health: 0, mana: 0 }
   };
   for (const item of items) {
@@ -1369,19 +2076,21 @@ export function signatureEffects(items = [], state = {}, { weaponId = null } = {
     if (!signature) continue;
     const name = item?.name ?? "";
     // The item's own sentence, for a card that would otherwise print one
-    // generic line for all 288 of them.
-    const text = plainText(signatureProse(item));
-    const ctx = { item, name, text, state };
+    // generic line for all 288 of them - and on a Legendary THE RUN'S OWN
+    // (D-910), so Wrath of Ragnaros's card prints Wrath of Ragnaros and not
+    // all four of Sulfuras's runs.
+    const prose = signatureProse(item);
+    const ctx = part => ({ item, name, text: plainText(runProse(prose, part?.label ?? "")), state });
 
     // THE TRUNK, under the trunk's own gate.
-    if (gateHolds(signature.gates, state)) applyPart(out, signature, ctx);
+    if (gateHolds(signature.gates, state)) applyPart(out, signature, ctx(signature));
     // AND EVERY GATED SENTENCE, under ITS OWN (D-722). The lead, 2026-09-14:
     // a gate covers *only its own sentence*. The aggregate's shape does not
     // move an inch — twenty-odd readers downstream see the same object they
     // always did — because a branch is folded into it by the same function the
     // trunk goes through.
     for (const branch of signature.gated ?? []) {
-      if (gateHolds(branch?.gates ?? [], state)) applyPart(out, branch, ctx);
+      if (gateHolds(branch?.gates ?? [], state)) applyPart(out, branch, ctx(branch));
     }
   }
   return out;
@@ -1456,11 +2165,22 @@ function applyPart(out, part, { item, name, text, state }) {
   if (part.spellCost?.school && part.spellCost?.amount) {
     const school = part.spellCost.school;
     out.spellCost[school] = (out.spellCost[school] ?? 0) + part.spellCost.amount;
+    // The HIGHEST floor any discount on the school names (D-910).
+    if (part.spellCost.minimum) out.spellCostFloor[school] = Math.max(out.spellCostFloor[school] ?? 0, part.spellCost.minimum);
   }
   out.healingBonus += part.healingBonus ?? 0;
   if (part.corruptionReduction.track && part.corruptionReduction.amount) {
     const track = part.corruptionReduction.track;
     out.corruptionReduction[track] = (out.corruptionReduction[track] ?? 0) + part.corruptionReduction.amount;
+  }
+  // A Long Rest's price (The Black Empire's Price, D-910): only a whole charge
+  // is one, and a press's own charge is never here - it is offered when pressed.
+  const gain = part.corruptionGain ?? null;
+  if (gain?.at === "longRest" && gain.track && gain.amount && gain.resilience && gain.dc) {
+    out.exposures.push({
+      key: item?.id ?? item?.uuid ?? name, name, label: part.label ?? "",
+      track: gain.track, amount: gain.amount, resilience: gain.resilience, dc: gain.dc
+    });
   }
   if (part.cancelsBane && !out.cancelsBane.includes(part.cancelsBane)) {
     out.cancelsBane.push(part.cancelsBane);
@@ -1471,7 +2191,9 @@ function applyPart(out, part, { item, name, text, state }) {
     // The KEY is the item, so a second preparation finds the same effect and
     // the diff leaves it alone; the name is what the effect is called on the
     // ally's own sheet.
-    out.auras.push({ key: item?.id ?? item?.uuid ?? name, name, ...part.aura });
+    // `label` is the run that lays it (D-910), so the writer reads THAT run's
+    // words for *other than you* and not every run the item prints.
+    out.auras.push({ key: item?.id ?? item?.uuid ?? name, name, label: part.label ?? "", ...part.aura });
   }
   // One named ability improved (D-698). Summed by name, so a second item
   // naming the same spell adds to the first.
@@ -1485,8 +2207,11 @@ function applyPart(out, part, { item, name, text, state }) {
     out.empowers[empowered.name] = held;
   }
   if (part.bound?.damage) {
-    out.bound.push({ key: item?.id ?? item?.uuid ?? name, name, damage: part.bound.damage });
+    // *A DEMON bound to a Warlock* (D-911): the type the bond reads, or null for every one.
+    out.bound.push({ key: item?.id ?? item?.uuid ?? name, name, damage: part.bound.damage, ...(part.bound.creatureType ? { creatureType: part.bound.creatureType } : {}) });
   }
+  // The Legendary readers (D-911).
+  applyLegendary(out, part, { item, name });
   // The target answers the parts of the row only it can (Perdition's Blade).
   const hit = resolveOnHit(part.onHit, state.target ?? null);
   if (firesOnHit(hit)) {
@@ -1515,6 +2240,341 @@ function applyPart(out, part, { item, name, text, state }) {
   out.tick.health += part.tick.health ?? 0;
   out.tick.mana += part.tick.mana ?? 0;
   return out;
+}
+
+/**
+ * **THE LEGENDARY READERS' PART OF THE AGGREGATE** (D-911). Every one is a key
+ * a run of 08 §20 writes and ONE door reads, and each sums, takes the best or
+ * lists exactly as the family beside it in `applyPart` does:
+ *
+ * - a Ward FLOOR takes the higher per school (*unless you already have more*
+ *   is a floor, never a sum);
+ * - a pool gain, a Block's answer, a kill's temporary Health and a refusal by
+ *   source are LISTS, each with the item's name, because the door says whose;
+ * - Sand, Ward and a heal tick's extra SUM, as bonuses do everywhere here.
+ *
+ * Pure, and folded through the same gate the trunk and every branch go through.
+ */
+function applyLegendary(out, part, { item, name }) {
+  const ward = part.wardFloor?.ward ?? null;
+  if (ward) {
+    const schools = part.wardFloor.schools?.length ? part.wardFloor.schools : Object.keys(AZEROTH.schools);
+    for (const school of schools) out.wardFloor[school] = Math.max(out.wardFloor[school] ?? 0, ward);
+  }
+  if (part.noFallDamage === true && !out.noFallDamage.includes(name)) out.noFallDamage.push(name);
+  if (part.ignoresReload === true) out.ignoresReload = true;
+  if (part.pastImmune && !out.pastImmune.includes(part.pastImmune)) out.pastImmune.push(part.pastImmune);
+  out.sandOnFail += part.sandOnFail ?? 0;
+  if (part.poolOnHurt?.pool && part.poolOnHurt?.amount) out.poolOnHurt.push({ name, pool: part.poolOnHurt.pool, amount: part.poolOnHurt.amount });
+  const block = part.onBlock ?? null;
+  if ((block?.pool?.pool && block?.pool?.amount) || block?.condition?.id) {
+    out.onBlock.push({
+      name, label: part.label ?? "",
+      ...(block.pool?.pool && block.pool?.amount ? { pool: { pool: block.pool.pool, amount: block.pool.amount } } : {}),
+      ...(block.condition?.id ? { condition: { id: block.condition.id, value: block.condition.value ?? null, until: block.condition.until ?? null } } : {}),
+      melee: block.melee === true
+    });
+  }
+  out.tickHealBonus += part.tickHealBonus ?? 0;
+  for (const r of part.refusesFrom ?? []) {
+    if (r?.id && r?.creatureType) out.refusesFrom.push({ id: r.id, creatureType: r.creatureType, name });
+  }
+  if (part.bossCannotIgnore === true) out.bossCannotIgnore.push(name);
+  out.adaptiveWard = Math.max(out.adaptiveWard, part.adaptiveWard ?? 0);
+  if (part.killTemp?.perTier) {
+    out.killTemp.push({ name, perTier: part.killTemp.perTier, weightClasses: [...(part.killTemp.weightClasses ?? [])] });
+  }
+  // Phase B2 (D-912).
+  if (part.breathHalf === true && !out.breathHalf.includes(name)) out.breathHalf.push(name);
+  if (part.attackerBane?.faction && part.attackerBane?.banes) out.attackerBane.push({ name, faction: part.attackerBane.faction, banes: part.attackerBane.banes });
+  if (part.phantomShot?.rating !== null && part.phantomShot?.rating !== undefined && part.phantomShot?.type) {
+    if (!out.phantomShot || part.phantomShot.rating > out.phantomShot.rating) out.phantomShot = { name, rating: part.phantomShot.rating, type: part.phantomShot.type };
+  }
+  const rb = part.resistBane ?? null;
+  if (rb?.banes && (rb.school || rb.name)) {
+    out.resistBane.push({ name, label: part.label ?? "", school: rb.school ?? null, spell: rb.name || null, creatureType: rb.creatureType ?? null, banes: rb.banes, per: rb.per ?? null });
+  }
+  if (part.freeSpell && !out.freeSpell.includes(part.freeSpell)) out.freeSpell.push(part.freeSpell);
+  out.touchHealingFeet = Math.max(out.touchHealingFeet, part.touchHealingFeet ?? 0);
+  if (part.ordination === true && !out.ordination.includes(name)) out.ordination.push(name);
+  const sdt = part.spellDamageTest ?? null;
+  if (sdt?.school && sdt?.resilience && sdt?.onFail?.id) {
+    out.spellDamageTest.push({ name, label: part.label ?? "", school: sdt.school, resilience: sdt.resilience, onFail: { id: sdt.onFail.id, value: sdt.onFail.value ?? null, until: sdt.onFail.until ?? null } });
+  }
+  out.sizeStep += part.sizeStep ?? 0;
+  for (const n of part.secondReaction ?? []) if (!out.secondReaction.includes(n)) out.secondReaction.push(n);
+}
+
+/** The turn budget's key Ten Thousand Years of Practice's second Reaction spends (D-912), reset at the Mage's own turn start (D-913). */
+export const SECOND_REACTION_MARK = "secondReaction";
+
+/**
+ * **WHETHER A USE MAY TAKE THE SECOND REACTION** (Ten Thousand Years of Practice, D-912:
+ * *spends it only on Blink or Counterspell*): the use's name among the Signature's, case
+ * and spacing forgiven.
+ *
+ * @param {string[]} names  `signatureEffects().secondReaction`
+ * @param {string} used     the feature's name
+ */
+export function secondReactionHolds(names = [], used = "") {
+  const flat = v => String(v ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+  return Boolean(used) && (names ?? []).map(flat).includes(flat(used));
+}
+
+/**
+ * **WHETHER A BLOW'S SOURCE IS A BREATH WEAPON** (Foror's Lesson; the lead, on O-319:
+ * *"Abilities and spells named Breath"*; D-912): a creature ability, a Boss Action or
+ * a spell whose name holds *Breath*, and 02's Chromatic Champion's Breath feature -
+ * read off the card's own record (its title, its feature key, its spell's name).
+ *
+ * @param {{title?: string|null, featureKey?: string|null, spellName?: string|null}} card
+ * @returns {boolean}
+ */
+export function breathSource({ title = null, featureKey = null, spellName = null } = {}) {
+  return [title, featureKey, spellName].some(v => typeof v === "string" && /breath/i.test(v));
+}
+
+/**
+ * **HALF OF A BREATH, ROUNDED DOWN** (Foror's Lesson, D-912), or the whole where the
+ * bearer holds nothing that halves it.
+ */
+export function breathTaken(amount, { halves = false } = {}) {
+  const n = Math.max(0, Math.trunc(Number(amount)) || 0);
+  return halves ? Math.floor(n / 2) : n;
+}
+
+/**
+ * **THE BANES AN ATTACKER TAKES OFF WHAT ITS TARGET WEARS** (Scarlet Reckoning,
+ * D-912: *A member of the Scarlet Crusade takes a Bane on every Attack Test it makes
+ * against you*): the target's rows whose faction the attacker belongs to, summed.
+ *
+ * @param {Array<{name: string, faction: string, banes: number}>} rows  the TARGET's
+ * @param {string[]} attackerFactions
+ * @returns {{banes: number, names: string[]}}
+ */
+export function attackerBanesFrom(rows = [], attackerFactions = []) {
+  const held = (attackerFactions ?? []).map(f => String(f).toLowerCase());
+  const hit = (rows ?? []).filter(r => r?.faction && held.includes(String(r.faction).toLowerCase()));
+  return { banes: hit.reduce((n, r) => n + (Math.trunc(Number(r.banes)) || 0), 0), names: [...new Set(hit.map(r => r.name))] };
+}
+
+/**
+ * **THE BANES A SPELL'S RESIST TAKES OFF ITS CASTER'S ITEMS** (The Blade Hungers, The
+ * Fifth Pylon; D-912): the rows a cast of this school or this name matches, at the
+ * cast; the creature-type half is judged at the Resist, off the resister.
+ *
+ * @param {Array<object>} rows  the caster's `resistBane`
+ * @param {{school?: string|null, name?: string}} spell
+ * @returns {Array<{name: string, banes: number, creatureType: string|null, per: string|null}>}
+ */
+export function resistBanesForCast(rows = [], { school = null, name = "" } = {}) {
+  const n = String(name ?? "").toLowerCase();
+  return (rows ?? []).filter(r => (r.spell ? String(r.spell).toLowerCase() === n : true) && (r.school ? r.school === school : true))
+    .map(r => ({ name: r.label || r.name, banes: r.banes, creatureType: r.creatureType ?? null, per: r.per ?? null }));
+}
+
+/**
+ * The Banes one resister takes off a card's recorded rows (D-912): a row naming a
+ * creature type reaches that type alone.
+ *
+ * @param {Array<{name: string, banes: number, creatureType?: string|null}>} rows
+ * @param {string|null} creatureType  the resister's, lower case
+ * @returns {{banes: number, names: string[]}|null}
+ */
+export function resistBanesOn(rows = [], creatureType = null) {
+  const type = typeof creatureType === "string" ? creatureType.toLowerCase().split(/\s|\(/)[0] : null;
+  const hit = (rows ?? []).filter(r => !r?.creatureType || r.creatureType === type);
+  const banes = hit.reduce((n, r) => n + (Math.trunc(Number(r.banes)) || 0), 0);
+  return banes > 0 ? { banes, names: hit.map(r => r.name) } : null;
+}
+
+/**
+ * **05's LADDER, STEPPED** (The King's Frame, D-912: *counts as one size larger for
+ * what it carries and for resisting being moved*): the size `step` rungs up, never
+ * past Enormous. The caller decides what the stepped size is read for.
+ *
+ * @param {string} size
+ * @param {number} step
+ * @param {string[]} sizes  05's six rungs, smallest first
+ * @returns {string}
+ */
+export function steppedSize(size, step = 0, sizes = ["tiny", "small", "medium", "large", "huge", "enormous"]) {
+  const at = sizes.indexOf(String(size ?? "").toLowerCase());
+  const n = Math.max(0, Math.trunc(Number(step)) || 0);
+  if (at < 0 || !n) return size;
+  return sizes[Math.min(sizes.length - 1, at + n)];
+}
+
+/**
+ * **WHICH OTHER CREATURES AN ARC REACHES** (Thunderfury; the lead, on O-319: *"Automate
+ * the arc and the Fury"*; Magma Shot; D-912). Pure: the caller measured each creature's
+ * distance from the creature struck. `all` takes every one in reach (Magma Shot's *every
+ * other creature*); otherwise the `targets` nearest, enemies of the striker before the
+ * rest (MY READING, D-912), ties by id - never the creature struck, never the striker.
+ *
+ * @param {Array<{id: string, feet: number|null, enemy?: boolean, self?: boolean, struck?: boolean}>} creatures
+ * @param {{targets?: number|null, feet?: number|null, all?: boolean}} arc
+ * @returns {string[]}  the ids reached
+ */
+export function arcPicks(creatures = [], { targets = 1, feet = 0, all = false } = {}) {
+  const reach = Number(feet) || 0;
+  // Never the creature struck and never the striker (D-913: an arc never reaches the one
+  // who made it, Magma Shot's *every other creature* included).
+  const near = (creatures ?? []).filter(c => c?.id && !c.struck && !c.self && typeof c.feet === "number" && c.feet <= reach + 0.01);
+  if (all === true) return near.map(c => c.id);
+  const count = Math.max(0, Math.trunc(Number(targets)) || 0);
+  return near
+    .sort((a, b) => (a.enemy === b.enemy ? 0 : a.enemy ? -1 : 1) || a.feet - b.feet || String(a.id).localeCompare(String(b.id)))
+    .slice(0, count).map(c => c.id);
+}
+
+/** The effect flag Uther's Stand lays: no damage while it stands (D-911). */
+export const SIGNATURE_SHIELD_FLAG = "signatureShield";
+
+/**
+ * The mark a condition laid by Emerald Slumber carries: the damage door ends it
+ * (D-911, *until it takes damage*). `effects/inflict.mjs` keeps it as a mark.
+ */
+export const ENDS_ON_DAMAGE_FLAG = "endsOnDamage";
+
+/** The actor flag Adaptive Scales keeps its once-a-round in (D-911). */
+export const ADAPTIVE_WARD_FLAG = "adaptiveWardRound";
+
+/** The effect flag Blood of Mannoroth lays: Damage Rating on ONE weapon's blows (D-911). */
+export const SIGNATURE_WEAPON_FLAG = "signatureWeapon";
+
+/**
+ * **WHAT A PRESSED WEAPON BONUS ADDS TO THIS BLOW** (Blood of Mannoroth, D-911):
+ * the sum the bearer's ACTIVE effects flagged for this weapon carry, with the
+ * names that gave it. Pure: the caller hands the effects' flags.
+ *
+ * @param {Array<{active?: boolean, flags?: object}>} effects
+ * @param {string|null} weaponId
+ * @returns {{damage: number, sources: string[]}}
+ */
+export function pressedWeaponBonus(effects = [], weaponId = null) {
+  let damage = 0;
+  const sources = [];
+  if (!weaponId) return { damage, sources };
+  for (const e of effects ?? []) {
+    if (e?.active === false || e?.disabled === true) continue;
+    const f = e?.flags?.["azeroth-rpg"]?.[SIGNATURE_WEAPON_FLAG] ?? null;
+    if (!f || f.itemId !== weaponId) continue;
+    const n = Math.max(0, Math.trunc(Number(f.damage)) || 0);
+    if (!n) continue;
+    damage += n;
+    if (f.source) sources.push(String(f.source));
+  }
+  return { damage, sources };
+}
+
+/**
+ * **THE SIGNATURE DC THE CONDITIONS A BLOW LANDS CARRY** (Unholy Grasp's *makes
+ * its Test to break free against your Signature DC*, Soulflayer's Venom's *makes
+ * its Test to shed it against your Signature DC*; D-911): off the fired rows that
+ * say so, the attack card's `inflictEscapes` - 07's escape on the condition's own
+ * effect (`rules/escapes.mjs`), A1's *An action and a Reflex Resilience Test ...
+ * or at the DC the source names* for Entangled - and its `inflictShedDc` for
+ * Poisoned (A1: *against the DC of the poison*). Pure.
+ *
+ * @param {Array<object>} fired  the card's fired rows
+ * @param {{dc?: number|null, by?: string|null}} o  the bearer's Signature DC and uuid
+ * @returns {{escapes: Record<string, object>, shed: Record<string, {dc: number, source: string}>}}
+ */
+export function signatureConditionMarks(fired = [], { dc = null, by = null } = {}) {
+  const out = { escapes: {}, shed: {} };
+  const n = Math.trunc(Number(dc));
+  if (!(n > 0)) return out;
+  for (const f of fired ?? []) {
+    const id = f?.signatureDC === true ? f.condition?.id ?? null : null;
+    if (!id) continue;
+    if (id === "poisoned") out.shed.poisoned = { dc: n, source: String(f.name ?? "") };
+    else if (SIGNATURE_ESCAPES[id]) {
+      out.escapes[id] = { condition: id, ...SIGNATURE_ESCAPES[id], dc: n, banes: 0, talents: [], by: by ?? null, source: String(f.name ?? ""), cast: null };
+    }
+  }
+  return out;
+}
+
+/** A1's own Test to end each condition a Signature's DC may ride (D-911). */
+export const SIGNATURE_ESCAPES = Object.freeze({
+  // *An action and a Reflex Resilience Test at DC 12, or at the DC the source names.*
+  entangled: Object.freeze({ on: "action", resilience: "reflex" })
+});
+
+/**
+ * **THE CREATURES A PRESS'S ATTACK TESTS ARE AIMED AT** (D-911): `same` is the
+ * first creature targeted, `count` times (Wind of the Doomhammer); otherwise
+ * each creature targeted, `count` times each (Starfall Volley). Nothing where
+ * the press makes none.
+ *
+ * @param {{count?: number|null, same?: boolean}|null} attacks
+ * @param {Array<object>} targets  the press's target snapshots
+ * @returns {Array<object>}
+ */
+export function pressAttackTargets(attacks, targets = []) {
+  const n = Math.max(0, Math.trunc(Number(attacks?.count)) || 0);
+  if (!n || !(targets ?? []).length) return [];
+  const aimed = attacks.same === true ? [targets[0]] : targets;
+  return aimed.flatMap(t => Array.from({ length: n }, () => t));
+}
+
+/**
+ * **WHETHER A CONDITION IS REFUSED FROM THIS SOURCE** (Dragonslayer's Nerve,
+ * D-911: *A dragonkin cannot make you Frightened*). Pure: the bearer's aggregate
+ * rows and the creature laying it. A layer with no type refuses nothing - the
+ * door that cannot name who laid it lands it as before.
+ *
+ * @param {Array<{id: string, creatureType: string, name?: string}>} rows
+ * @param {string} id               the condition being laid
+ * @param {string|null} creatureType  the layer's type, lower case
+ * @returns {string|null}  the name of the item that refuses it, or null
+ */
+export function refusedFromSource(rows = [], id, creatureType) {
+  const type = typeof creatureType === "string" ? creatureType.toLowerCase().split(/\s|\(/)[0] : null;
+  if (!id || !type) return null;
+  const row = (rows ?? []).find(r => r?.id === id && r?.creatureType === type);
+  return row ? (row.name ?? "") : null;
+}
+
+/**
+ * **THE TEMPORARY HEALTH A KILL GIVES** (The Tusk Taken, D-911: *When you
+ * reduce a Boss or an Elite to 0 Health, you gain temporary Health equal to
+ * twice your tier*). Pure: the killer's rows, its tier, the creature killed.
+ * The largest row that counts wins - 05 says temporary Health does not stack.
+ *
+ * @param {Array<{name: string, perTier: number, weightClasses: string[]}>} rows
+ * @param {{tier?: number, weightClass?: string|null}} o
+ * @returns {{amount: number, name: string}|null}
+ */
+export function killTemporaryHealth(rows = [], { tier = 1, weightClass = null } = {}) {
+  const t = Math.max(1, Math.trunc(Number(tier)) || 1);
+  let best = null;
+  for (const row of rows ?? []) {
+    const classes = row?.weightClasses ?? [];
+    if (classes.length && !classes.includes(String(weightClass ?? ""))) continue;
+    const amount = Math.max(0, Math.trunc(Number(row?.perTier)) || 0) * t;
+    if (amount > 0 && (!best || amount > best.amount)) best = { amount, name: row.name ?? "" };
+  }
+  return best;
+}
+
+/**
+ * **THE WARD A DAMAGING SCHOOL GIVES** (Adaptive Scales, D-911: *The first time
+ * each round you take damage of one of the seven schools in 07-MAGIC, you have
+ * Ward 2 against that school until the end of your next turn, unless you already
+ * have more*). Pure: the amount, the blow's types, and whether the round's mark
+ * is already spent. Answers the school the FIRST of the blow's types names, or
+ * null - Physical is no school.
+ *
+ * @param {{ward?: number, types?: string[], spent?: boolean}} o
+ * @returns {{school: string, ward: number}|null}
+ */
+export function adaptiveWardFor({ ward = 0, types = [], spent = false } = {}) {
+  const n = Math.max(0, Math.trunc(Number(ward)) || 0);
+  if (!n || spent) return null;
+  const school = (types ?? []).find(t => typeof t === "string" && t in AZEROTH.schools) ?? null;
+  return school ? { school, ward: n } : null;
 }
 
 /**
@@ -1595,7 +2655,7 @@ export function mergeWeaponEffects(effects, signature) {
  * tests `{{#if f.condition}}` and a `{id: null}` object is truthy, which would
  * draw an Inflict button naming nothing.
  */
-function firedSignatureRow(row) {
+export function firedSignatureRow(row) {
   const out = { key: row.key ?? "signature", name: row.name ?? "", text: row.text ?? "", sl: row.sl ?? 0 };
   if (row.condition?.id) out.condition = { ...row.condition };
   // *The target gains Scorched equal to half the damage dealt* (Sulfuron
@@ -1629,8 +2689,25 @@ function firedSignatureRow(row) {
   // Feet the target is pushed (Earthshaker). The move is the table's; what
   // this does is put the row on the card at all.
   if (row.push) out.push = row.push;
+  // Ash of the Risen's *cannot regain Health until the end of its next turn*,
+  // and Unholy Grasp's and Soulflayer's Venom's *against your Signature DC*
+  // (D-911): `rollTest` lays the mark and the attack card carries the DC.
+  if (row.noHealing === true) out.noHealing = true;
+  if (row.signatureDC === true && row.condition?.id) out.signatureDC = true;
+  // **THE ARC LANDS NOW** (Thunderfury, Magma Shot; the lead, on O-319: *"Automate the arc
+  // and the Fury"*; D-912): its damage and its condition are the creatures it arcs TO, so
+  // the row carries them for `effects/legendary-doors.mjs#landArcs` and lays nothing on
+  // the creature struck - its Inflict button would have put the arc's Slowed there.
+  const arcs = Boolean(row.arc?.targets) || row.arc?.all === true;
+  if (arcs) {
+    out.arc = { targets: row.arc.targets ?? null, feet: row.arc.feet ?? 0, all: row.arc.all === true };
+    out.arcDamage = row.damage?.amount ? { amount: row.damage.amount, type: row.damage.type ?? null } : null;
+    out.arcCondition = row.condition?.id ? { ...row.condition } : null;
+    delete out.condition;
+    delete out.conditionFromDamage;
+  }
   // The arc's damage belongs to the creature it arcs TO (Thunderfury).
-  if (!row.arc?.targets && row.damage?.amount) {
+  if (!arcs && row.damage?.amount) {
     out.extraDamage = row.damage.amount;
     // **ITS OWN TYPE, WHERE IT NAMES ONE** (D-777; the lead: *"Different damage
     // types in one attack are possible"*): *1 Nature damage* on a steel blow is a
@@ -1683,6 +2760,25 @@ export const none = (reason, extra = {}) => built("none", { reason, ...extra });
 export const gate = (kind, value = "") => ({ kind, value });
 /** A limit, stamped full. `rules/uses.mjs` is the grammar the prose is read with. */
 export const once = per => ({ max: 1, value: 1, per });
+/**
+ * One labelled run of a Legendary that is not the trunk (D-910): a `gated`
+ * branch carrying the run's name. An ungated run is a branch with an empty
+ * gate, which holds for everybody.
+ */
+export const run = (label, extra = {}) => merge(emptyBranch(), { ...extra, label });
+/**
+ * One labelled run that is a BUTTON of its own (D-910): an entry of
+ * `presses`, keyed by `pressKey(label)` where the row writes it.
+ */
+export const press = (label, extra = {}) => merge(emptyPress(), { ...extra, label });
+/** A row's `presses` map, keyed by each press's own label (D-910). */
+export const pressMap = (...entries) => Object.fromEntries(entries.map(p => [pressKey(p.label), p]));
+/**
+ * A run the next phase builds a reader for (D-910): the family it waits on,
+ * as the reason `AZEROTH.signatureReasons` names.
+ */
+/** A Corruption charge, a Test first (D-910): *a Spirit Resilience Test at DC 20 ... gain 1 Fel Corruption*. */
+export const corruption = (track, amount, resilience, dc, at = null) => ({ track, amount, resilience, dc, at });
 /**
  * What a press costs the bearer. **`class-features.mjs#cost` itself**, not a
  * copy of it: Battlegear of Wrath's *spend 4 Rage as a Reaction* is a class
@@ -1776,6 +2872,12 @@ export function seedSignature({ name = "", text = "", section = "" } = {}, { cla
   // readers as a mechanic.
   if (/^Signature to be written\b/i.test(flat)) return none("unwritten");
 
+  // ---- step 0: A LEGENDARY'S LABELLED RUNS ARE UNITS (D-909, D-910). Each run
+  // is read whole, as the single Signature it would be on an Epic, and never
+  // split across another run's sentences.
+  const runs = signatureRuns(html);
+  if (runs.length >= 2) return seedRuns(runs, classes);
+
   // ---- step 1 and 2: the sentences, with the inert ones folded back in.
   const parts = signatureParts(html, classes);
 
@@ -1848,6 +2950,49 @@ export function seedSignature({ name = "", text = "", section = "" } = {}, { cla
   if (lifted) out.kind = lifted;
   else if (out.kind === "none") out.kind = branchKind(out.gated);
   if (out.kind === "spell") out.use = emptySignature().use;
+  return out;
+}
+
+/**
+ * A LEGENDARY'S RUNS, each read whole (D-910) - the seeder's half of the
+ * labelled prose `signatureRuns` reads. It is the door for a GM's own
+ * Legendary at the Forge and for a world item no pack holds; the book's thirty
+ * are `BOOK_SIGNATURES`' hand rows and never come through here.
+ *
+ * - **The trunk is the first run that fires**, or the first run where none
+ *   does, carrying its label. A trunk that fires nothing would make the whole
+ *   item read as prose while a later run worked.
+ * - **A later run that presses is a `presses` entry**, keyed by its slug, with
+ *   its own gate; one that casts is not read (an item casts through
+ *   `system.spells[]`, which one press already owns).
+ * - **Every other later run is a branch** under its own gate and label, and a
+ *   run that itself reads as several gated sentences hands each up as a branch
+ *   of its own, labelled with the run.
+ *
+ * @param {Array<{label: string, html: string}>} runs
+ * @param {string[]} classes
+ */
+function seedRuns(runs, classes) {
+  const read = runs.map(r => ({ label: r.label, d: seedSignature({ text: r.html }, { classes }) }));
+  const first = read.findIndex(r => hasSignature(r.d) && r.d.kind !== "spell");
+  const trunkAt = first >= 0 ? first : 0;
+  const out = merge(emptySignature(), read[trunkAt].d);
+  out.label = read[trunkAt].label;
+  out.gated = out.gated.map(b => ({ ...b, label: read[trunkAt].label }));
+  read.forEach(({ label, d }, i) => {
+    if (i === trunkAt) return;
+    if (d.kind === "use") {
+      const gates = (d.useGates ?? []).length ? d.useGates : d.gates;
+      out.presses[pressKey(label)] = merge(emptyPress(), { ...d.use, label, gates });
+      return;
+    }
+    if (d.kind === "spell") return;
+    const branch = merge(emptyBranch(), { label, gates: d.gates, reason: d.kind === "none" ? d.reason : "" });
+    for (const key of BRANCH_FAMILIES) branch[key] = d[key];
+    if (!branchIsEmpty(branch)) out.gated.push(branch);
+    for (const sub of d.gated ?? []) out.gated.push({ ...sub, label });
+  });
+  if (out.kind === "none" && !out.reason) out.kind = branchKind(out.gated);
   return out;
 }
 
@@ -2561,7 +3706,9 @@ export const SIGNATURE_PHRASE_GROUPS = Object.freeze([
  */
 export function signatureSummary(signature) {
   const d = signature ?? emptySignature();
-  const lines = partLines(d);
+  const lines = [];
+  if (d.label) lines.push({ code: "Run", params: { label: d.label } });
+  lines.push(...partLines(d));
 
   // WHAT PRESSING IT COSTS AND DOES. Only the trunk has a button (D-722), so
   // this half is never asked of a branch.
@@ -2583,7 +3730,23 @@ export function signatureSummary(signature) {
   // `system.speed` in `lang/en.json`.
   for (const change of u.changes ?? []) say("UseChange", { path: change.key, value: change.value });
   if (u.resist?.resilience) say("UseResist", { key: u.resist.resilience, dc: u.resist.dc ?? 0 });
+  pressLines(u, say);
   if (d.summon?.entry) say("Summon", { entry: d.summon.entry, n: d.summon.count ?? 1 });
+
+  // THE OTHER BUTTONS (D-910): each under its run's name, in the trunk's own
+  // press vocabulary.
+  for (const { press } of pressesOf(d)) {
+    say("Press", { label: press.label });
+    if (press.cost?.pool && press.cost?.amount) say("UseCost", { n: press.cost.amount, pool: press.cost.pool });
+    if (press.uses?.per) say("UseUses", { n: press.uses.max ?? 0, per: press.uses.per });
+    if (press.heal?.health) say("UseHealth", { n: press.heal.health });
+    if (press.heal?.mana) say("UseMana", { n: press.heal.mana });
+    if (press.damage?.amount) say("UseDamage", { n: press.damage.amount, type: press.damage.type ?? "" });
+    if (press.area) say("UseArea", { area: press.area });
+    for (const change of press.changes ?? []) say("UseChange", { path: change.key, value: change.value });
+    if (press.resist?.resilience) say("UseResist", { key: press.resist.resilience, dc: press.resist.dc ?? 0 });
+    pressLines(press, say);
+  }
 
   // AND EVERY GATED SENTENCE, UNDER ITS OWN GATE (D-722). A `GatedBy` line
   // opens each one, so a preview that lists a Damage Rating bonus says which
@@ -2591,10 +3754,45 @@ export function signatureSummary(signature) {
   // clauses travel as they are stored and the caller localises them — this
   // module is pure and `AZEROTH.signatureGates` is a table of lang keys.
   for (const branch of d.gated ?? []) {
+    // A Legendary's run names itself first (D-910), so a preview of four runs
+    // reads as four things and not as one list.
+    if (branch.label) say("Run", { label: branch.label });
     say("GatedBy", { gates: branch.gates ?? [] });
     lines.push(...partLines(branch));
   }
   return lines;
+}
+
+/**
+ * The two press families D-910 added, for the trunk's `use` and for each
+ * entry of `presses` alike. `say` is the caller's, spelled out so
+ * `signatures.test.mjs` reads the codes out of this source.
+ */
+function pressLines(u, say) {
+  for (const f of u?.onFail ?? []) if (f?.id) say("UseOnFail", { key: f.id });
+  const gain = u?.corruptionGain ?? null;
+  if (gain?.track && gain?.amount) {
+    say("CorruptionGain", { n: gain.amount, track: gain.track, key: gain.resilience ?? "", dc: gain.dc ?? 0 });
+  }
+  // The Legendary presses (D-911).
+  if (u?.noDamage) say("UseNoDamage", {});
+  if (u?.fill) say("UseFill", { pool: u.fill });
+  if (u?.attacks?.count) say("UseAttacks", { n: u.attacks.count });
+  if (u?.trigger) say("UseTrigger", {});
+  if (u?.echo) say("UseEcho", {});
+  if (u?.weaponDamage) say("UseWeaponDamage", { n: u.weaponDamage });
+  // Phase B2 (D-912).
+  if (u?.feature) say("UseFeature", { name: u.feature });
+  if (u?.castHeal) say("UseCastHeal", { n: u.castHeal });
+  if (u?.gather?.feet) say("UseGather", { feet: u.gather.feet });
+  if (u?.drain) say("UseDrain", { key: u.drain });
+  if (u?.onFailEnds) say("UseOnFailEnds", {});
+  if (u?.tether?.feet) say("UseTether", { feet: u.tether.feet });
+  if (u?.rewind) say("UseRewind", {});
+  if (u?.move?.feet) say("UseMove", { feet: u.move.feet });
+  if (u?.negates) say("UseNegates", {});
+  if (u?.arcWiden) say("UseArcWiden", { n: u.arcWiden });
+  if (u?.breathSchool) say("UseBreathSchool", {});
 }
 
 /**
@@ -2633,16 +3831,55 @@ function partLines(d) {
   if (d.corruptionReduction?.track && d.corruptionReduction?.amount) {
     say("CorruptionReduction", { n: d.corruptionReduction.amount, track: d.corruptionReduction.track });
   }
+  if (d.corruptionGain?.track && d.corruptionGain?.amount) {
+    say("CorruptionGain", { n: d.corruptionGain.amount, track: d.corruptionGain.track, key: d.corruptionGain.resilience ?? "", dc: d.corruptionGain.dc ?? 0 });
+  }
   if (d.cancelsBane) say("CancelsBane", { key: d.cancelsBane });
   if (d.blockBonus) say("BlockBonus", { n: d.blockBonus });
   if (d.armorPointsPerTier) say("ArmorPointsPerTier", { n: d.armorPointsPerTier });
-  if (auraStands(d.aura)) say("Aura", { n: d.aura.damageReduction, feet: d.aura.feet, key: d.aura.targets });
+  // An aura says what it gives, one line a payload (D-910's two and D-911's four); the
+  // reduction line names the reach itself, every other names it once on its own.
+  if (auraStands(d.aura)) {
+    if (d.aura.damageReduction) say("Aura", { n: d.aura.damageReduction, feet: d.aura.feet, key: d.aura.targets });
+    else say("AuraReach", { feet: d.aura.feet, key: d.aura.targets });
+    if (d.aura.spellDamage) say("AuraSpellDamage", { n: d.aura.spellDamage });
+    if (d.aura.floor?.ward) say("AuraFloor", { n: d.aura.floor.ward });
+    if (d.aura.boon?.boons) say("AuraBoon", { n: d.aura.boon.boons, key: d.aura.boon.resilience ?? "" });
+    if (d.aura.bane?.banes) say("AuraBane", { n: d.aura.bane.banes, key: d.aura.bane.resilience ?? "" });
+    if (d.aura.attackDamage) say("AuraAttack", { n: d.aura.attackDamage });
+    if (d.aura.tick?.damage) say("AuraTick", { n: d.aura.tick.damage, type: d.aura.tick.type ?? "" });
+  }
   if (d.empowers?.name) {
     if (d.empowers.damageRating) say("EmpowerDamage", { n: d.empowers.damageRating, name: d.empowers.name });
     if (d.empowers.heal) say("EmpowerHeal", { n: d.empowers.heal, name: d.empowers.name });
     if (d.empowers.cost) say("EmpowerCost", { n: d.empowers.cost, name: d.empowers.name });
   }
   if (d.bound?.damage) say("BoundDamage", { n: d.bound.damage });
+  // The Legendary readers (D-911).
+  if (d.wardFloor?.ward) say("WardFloor", { n: d.wardFloor.ward, schools: (d.wardFloor.schools ?? []).join(", ") });
+  if (d.noFallDamage) say("NoFallDamage", {});
+  if (d.ignoresReload) say("IgnoresReload", {});
+  if (d.pastImmune) say("PastImmune", { type: d.pastImmune });
+  if (d.sandOnFail) say("SandOnFail", { n: d.sandOnFail });
+  if (d.poolOnHurt?.pool && d.poolOnHurt?.amount) say("PoolOnHurt", { n: d.poolOnHurt.amount, pool: d.poolOnHurt.pool });
+  if (d.onBlock?.pool?.pool && d.onBlock?.pool?.amount) say("OnBlockPool", { n: d.onBlock.pool.amount, pool: d.onBlock.pool.pool });
+  if (d.onBlock?.condition?.id) say("OnBlockCondition", { key: d.onBlock.condition.id });
+  if (d.tickHealBonus) say("TickHealBonus", { n: d.tickHealBonus });
+  for (const r of d.refusesFrom ?? []) if (r?.id) say("RefusesFrom", { key: r.id, creature: r.creatureType ?? "" });
+  if (d.bossCannotIgnore) say("BossCannotIgnore", {});
+  if (d.adaptiveWard) say("AdaptiveWard", { n: d.adaptiveWard });
+  if (d.killTemp?.perTier) say("KillTemp", { n: d.killTemp.perTier });
+  // Phase B2 (D-912).
+  if (d.breathHalf) say("BreathHalf", {});
+  if (d.attackerBane?.faction && d.attackerBane?.banes) say("AttackerBane", { n: d.attackerBane.banes, faction: d.attackerBane.faction });
+  if (d.phantomShot?.type) say("PhantomShot", { n: d.phantomShot.rating ?? 0, type: d.phantomShot.type });
+  if (d.resistBane?.banes) say("ResistBane", { n: d.resistBane.banes, spell: d.resistBane.name || d.resistBane.school || "" });
+  if (d.freeSpell) say("FreeSpell", { spell: d.freeSpell });
+  if (d.touchHealingFeet) say("TouchHealing", { feet: d.touchHealingFeet });
+  if (d.ordination) say("Ordination", {});
+  if (d.spellDamageTest?.school && d.spellDamageTest?.onFail?.id) say("SpellDamageTest", { school: d.spellDamageTest.school, key: d.spellDamageTest.onFail.id });
+  if (d.sizeStep) say("SizeStep", { n: d.sizeStep });
+  if ((d.secondReaction ?? []).length) say("SecondReaction", { names: d.secondReaction.join(", ") });
 
   if (d.onHit?.damage?.amount) say("OnHitDamage", { n: d.onHit.damage.amount, type: d.onHit.damage.type ?? "" });
   if (d.onHit?.damageFromCondition?.id) {
@@ -2664,6 +3901,8 @@ function partLines(d) {
   if (d.onHit?.push) say("OnHitPush", { feet: d.onHit.push });
   if (d.onHit?.arc?.targets) say("OnHitArc", { n: d.onHit.arc.targets, feet: d.onHit.arc.feet ?? 0 });
   if (d.onHit?.per) say("OnHitPer", { per: d.onHit.per });
+  if (d.onHit?.noHealing) say("OnHitNoHealing", {});
+  if (d.onHit?.signatureDC) say("OnHitSignatureDC", {});
 
   if (d.onKill?.bane) say("OnKillBane", { n: d.onKill.bane, feet: d.onKill.feet ?? 0 });
   if (d.onKill?.condition?.id) say("OnKillCondition", { key: d.onKill.condition.id });
@@ -2732,6 +3971,15 @@ function partLines(d) {
  */
 export const BOOK_SIGNATURES = Object.freeze({
   /* ---- Legendary weapons ---- */
+  //
+  // **A LEGENDARY PRINTS EACH SIGNATURE AS ITS OWN RUN** (D-909), and each row
+  // names every run the chapter prints (D-910): the TRUNK is a run that fires -
+  // the one button where a run presses - carrying its `label`, every other run
+  // is a `run()` branch under its own gate, and a second button is a `press()`
+  // in `presses`. A run whose mechanic waits on a reader the next phase builds
+  // is `parked()` with the family it waits on, under a ceiling of its own in
+  // `signature-tables.test.mjs` that may only fall. `tools/parse-book` throws
+  // on a run this row names no part for, and on a part naming no run.
 
   // *Against undead, its damage is doubled before Ward is subtracted, and a
   // creature reduced to 0 Health by it leaves nothing to raise.* The
@@ -2739,14 +3987,61 @@ export const BOOK_SIGNATURES = Object.freeze({
   // multiplier at all — 08 §6's grammar only adds, and `onHit.damage` would
   // add a flat amount after. The second clause is what the corpse does
   // afterwards and stays on the item's own sentence.
-  ashbringer: standing({ gates: [gate("creatureType", "undead")], damageMultiplier: 2 }),
+  //
+  // *The Crystal's Light: On a hit against an undead creature, you regain 2
+  // Health* - `onHit.heal`, paid to the bearer at the attack door.
+  //
+  // *Ash of the Risen: An undead creature it hits cannot regain Health until the
+  // end of its next turn* - 04's Mortal Strike mark (`onHit.noHealing`, D-911),
+  // spanned on the creature struck. *Scarlet Reckoning* is a Bane the ATTACKER
+  // takes off this item at the attack door (`attackerBane`, D-912), a member of
+  // the Scarlet Crusade read through `rules/factions.mjs` (the lead, on O-319:
+  // *"Bestiary entries naming it"*, and a GM-set faction).
+  ashbringer: standing({
+    label: "Signature",
+    gates: [gate("creatureType", "undead")], damageMultiplier: 2,
+    gated: [
+      run("Scarlet Reckoning", { attackerBane: { faction: "Scarlet Crusade", banes: 1 } }),
+      run("Ash of the Risen", { gates: [gate("creatureType", "undead")], onHit: { noHealing: true } }),
+      run("The Crystal's Light", { gates: [gate("creatureType", "undead")], onHit: { heal: 2 } })
+    ]
+  }),
 
   // *A Shaman wielding it may spend a Half-Action to call the elements: every
   // creature within 15 feet takes 4 Nature damage, and Ward applies.* Ward is
   // the damage pipeline's and needs no saying.
+  //
+  // D-911: *Wind of the Doomhammer* is a press of its own - two more Attack
+  // Tests through the attack door at the creature targeted, nothing more spent
+  // (`use.attacks`); *when an Attack Test with it hits* is the table's moment
+  // to press it. *Warchief's Hammer* is the item aura's Boon on Spirit
+  // Resilience Tests, reaching the Horde alone (`aura.who.faction`, 02 §1's
+  // peoples through `rules/factions.mjs`). Call of the Elements (a totem
+  // planted as part of an Attack for no Half-Action) waits: 02's Totem is a
+  // class feature's Use with its own chooser, budget and Mana, and no door
+  // takes it from an item.
   "the-doomhammer": use({
+    label: "Signature",
     gates: [gate("class", "Shaman")],
-    use: { action: "half", damage: { amount: 4, type: "nature" }, area: "Each creature within 15 ft" }
+    use: { action: "half", damage: { amount: 4, type: "nature" }, area: "Each creature within 15 ft" },
+    gated: [
+      run("Warchief's Hammer", {
+        gates: [gate("faction", "Horde")],
+        aura: { feet: 30, targets: "allies", boon: { kind: "resilience", resilience: "spirit", boons: 1 }, who: { faction: "Horde" } }
+      }),
+    ],
+    presses: pressMap(
+      press("Wind of the Doomhammer", {
+        gates: [gate("class", "Shaman")],
+        uses: once("short"), attacks: { count: 2, same: true }
+      }),
+      // *Call of the Elements* (D-912): 02's Totem through `useFeature`, its Mana
+      // paid and no Half-Action (`use.feature`), once an encounter.
+      press("Call of the Elements", {
+        gates: [gate("class", "Shaman")],
+        uses: once("encounter"), feature: "Totem"
+      })
+    )
   }),
 
   // *When an attack with it reduces a creature to 0 Health, every enemy within
@@ -2754,24 +4049,76 @@ export const BOOK_SIGNATURES = Object.freeze({
   // kind: `onHit` fires off a blow that LANDS and this fires off one that
   // FINISHES. *That saw it* is the table's — the descriptor says 30 feet and
   // the sentence beside it says who was watching.
-  gorehowl: onKill({ onKill: { feet: 30, bane: 1 } }),
+  //
+  // **TWO BUTTONS, so `presses`** (D-910). Hellscream's Test is the Signature
+  // DC (`signatureDC`, at the door) and its Frightened lands on whoever FAILS,
+  // through `use.onFail`. Blood of Mannoroth's +2 is THIS AXE's (*adds 2 to its
+  // Damage Rating*; D-911, the architect's review of D-910): `use.weaponDamage`
+  // on an effect naming the item, which the attack door adds to this weapon's
+  // blows alone, until the encounter ends - and its Corruption is a Spirit Test
+  // at DC 20 first.
+  gorehowl: onKill({
+    label: "Signature",
+    onKill: { feet: 30, bane: 1 },
+    gated: [run("Mannoroth's End", { gates: [gate("creatureType", "demon")], criticalOn: 18 })],
+    presses: pressMap(
+      press("Hellscream", {
+        action: "half", uses: once("short"), area: "Each enemy within 30 ft",
+        resist: { resilience: "spirit", dc: null },
+        onFail: [{ id: "frightened", value: null, until: "endOfNextTurn" }]
+      }),
+      press("Blood of Mannoroth", {
+        gates: [gate("race", "Orc")],
+        action: "half", uses: once("long"),
+        weaponDamage: 2,
+        duration: { value: null, units: "encounter" },
+        corruptionGain: corruption("fel", 1, "spirit", 20, "press")
+      })
+    )
+  }),
 
   // *On a hit, the attack arcs to one other creature within 15 feet for 3
   // Nature damage, and that creature is Slowed until the end of its next
   // turn.* The whole sentence, and `arc` was written for this item.
+  //
+  // Windseeker's +10 Speed is an 08 §6 grant, and *a fall deals you no damage*
+  // is the damage door's `falling` blow landing nothing (`noFallDamage`, D-911),
+  // as 02 §5's Wings Beneath already does. Thunderaan's Fury (the next arc
+  // widened to four) waits: the arc itself is resolved by the table - the card
+  // prints the sentence and `arc` lays no damage on anybody (D-692) - so a
+  // press that widens it would be a button over nothing (D-681).
   "thunderfury-blessed-blade-of-the-windseeker": onHit({
+    label: "Signature",
     onHit: {
       damage: { amount: 3, type: "nature" },
       condition: { id: "slowed", until: "endOfNextTurn" },
       arc: { targets: 1, feet: 15 }
-    }
+    },
+    gated: [run("Windseeker", { grants: ["+10 Speed"], noFallDamage: true })],
+    // *Thunderaan's Fury* (D-912; the lead, on O-319: *"Automate the arc and the
+    // Fury"*): the arc lands now (`effects/legendary-doors.mjs#landArcs`), and the
+    // press widens the NEXT one to four (`use.arcWiden`).
+    presses: pressMap(press("Thunderaan's Fury", { uses: once("short"), arcWiden: 4 }))
   }),
 
   // *As a Full Action, every creature within 20 feet takes 8 Fire damage. The
   // bearer is not exempt.* The area says every creature, so the exemption
   // clause is the entry telling a reader that it meant it.
+  //
+  // Wrath of Ragnaros is an on-hit push and a Prone at SL 2. Hand of Ragnaros
+  // is the item aura on the bearer's ENEMIES within 5 feet carrying a laid
+  // Fire tick (`aura.tick`, D-911), landed at each one's own turn start with
+  // Ward by `effects/ticks.mjs`. Firelord's Grip is a Ward FLOOR on the bearer
+  // (`wardFloor`, D-911) - *unless you already have more* - taken in
+  // `afterFinalPhase`, where an 08 §6 grant would ADD.
   "sulfuras-hand-of-ragnaros": use({
-    use: { action: "full", damage: { amount: 8, type: "fire" }, area: "Each creature within 20 ft" }
+    label: "Signature",
+    use: { action: "full", damage: { amount: 8, type: "fire" }, area: "Each creature within 20 ft" },
+    gated: [
+      run("Hand of Ragnaros", { aura: { feet: 5, targets: "enemies", tick: { damage: 2, type: "fire" } } }),
+      run("Wrath of Ragnaros", { onHit: { sl: 2, push: 15, condition: { id: "prone" } } }),
+      run("Firelord's Grip", { wardFloor: { ward: 3, schools: ["fire"] } })
+    ]
   }),
 
   // *Against dragonkin its Damage Rating is 8, and a dragonkin it strikes
@@ -2780,8 +4127,206 @@ export const BOOK_SIGNATURES = Object.freeze({
   // would be this table doing arithmetic against the entry's own Rating 5 and
   // going stale the day that moves. The breath weapon is a refusal scoped to
   // the creature struck rather than to the bearer, which nothing carries, so
-  // that clause stays on the item's own sentence.
-  quelserrar: standing({ gates: [gate("creatureType", "dragonkin")], damageRatingSet: 8 }),
+  // that clause stays on the item's own sentence. Dragonslayer's Nerve is a
+  // refusal scoped to its source (`refusesFrom`, D-911), judged where the
+  // condition is laid and the layer is known. Foror's Lesson (a breath as a
+  // SOURCE) waits: nothing a creature's ability, a feature or a card records
+  // says that its damage is a breath weapon, so the damage door cannot tell.
+  quelserrar: standing({
+    label: "Signature",
+    gates: [gate("creatureType", "dragonkin")], damageRatingSet: 8,
+    gated: [
+      // *Foror's Lesson* (D-912; the lead, on O-319: *"Abilities and spells named
+      // Breath"*): the damage door halves a blow whose card names a Breath.
+      run("Foror's Lesson", { breathHalf: true }),
+      run("Dragonslayer's Nerve", { refusesFrom: [{ id: "frightened", creatureType: "dragonkin" }] })
+    ]
+  }),
+
+  // *While a Mage, Priest, Warlock or Druid wields it, every ally within 30
+  // feet adds 1 to the Damage Rating of every spell they cast. The wielder
+  // counts as an ally.* The item's aura carries `spellDamage` now (D-910),
+  // the payload Demonic Pact's aura already lays. Guardian's Economy is a
+  // school discount with a floor (`spellCost.minimum`); The Way to Karazhan
+  // is a door to a place.
+  "atiesh-greatstaff-of-the-guardian": standing({
+    label: "Aura of the Guardian",
+    gates: [gate("class", "Mage, Priest, Warlock, Druid")],
+    aura: { feet: 30, targets: "allies", spellDamage: 1 },
+    gated: [
+      run("Guardian's Economy", { gates: [gate("class", "Mage")], spellCost: { school: "arcane", amount: 2, minimum: 1 } }),
+      run("The Way to Karazhan", { reason: "narrative" })
+    ]
+  }),
+
+  // *Raise the Fallen: Once per Long Rest, as a Full Action, ... two Risen
+  // Skeletons rise beside it and fight on your side until the end of the
+  // encounter. Then make a Body Resilience Test at DC 20. On a failure, gain
+  // 1 Undeath Corruption.* D-691's summon, placed from the card, and the
+  // charge offered at the press. Unholy Grasp is an on-hit Entangled at SL 2
+  // whose Test to break free is against the Signature DC (`onHit.signatureDC`,
+  // D-911): the attack card carries 07's escape (`rules/escapes.mjs`) and the
+  // Inflict door writes it on the condition. Rivendare's Dread is the item aura
+  // on LIVING enemies (`aura.who.living`, 07's Chain Lightning's reading) laying
+  // a Bane on their Spirit Resilience Tests (D-911).
+  "dreadwake-runeblade-of-rivendare": use({
+    label: "Raise the Fallen",
+    use: { action: "full", uses: once("long"), corruptionGain: corruption("undeath", 1, "body", 20, "press") },
+    summon: { entry: "Risen Skeleton", count: 2, side: "summoner", from: "now" },
+    gated: [
+      run("Unholy Grasp", { onHit: { sl: 2, condition: { id: "entangled" }, signatureDC: true } }),
+      run("Rivendare's Dread", {
+        aura: { feet: 15, targets: "enemies", bane: { kind: "resilience", resilience: "spirit", banes: 1 }, who: { living: true } }
+      })
+    ]
+  }),
+
+  // *The Lightbringer's Verdict: Once per encounter, on a hit at SL 3, the
+  // target is Stunned.* An on-hit row once an encounter (`onHit.per`), and the
+  // Stun ends where A1 ends one the source does not span: *At the end of your
+  // next turn* (`until: "endOfNextTurn"`; the architect's review of D-910, which
+  // found it laid with no end). The Lightbringer's Ward is the item aura's Ward
+  // FLOOR in one school (D-910). *Uther's Stand* is a press of its own, a
+  // Reaction once per Long Rest laying an effect the damage door reads as no
+  // damage at all until the start of the Paladin's next turn (`use.noDamage`).
+  "hammer-of-the-lightbringer": onHit({
+    label: "The Lightbringer's Verdict",
+    onHit: { sl: 3, condition: { id: "stunned", until: "endOfNextTurn" }, per: "encounter" },
+    presses: pressMap(
+      press("Uther's Stand", {
+        gates: [gate("class", "Paladin")],
+        action: "reaction", uses: once("long"), noDamage: true
+      })
+    ),
+    gated: [
+      run("The Lightbringer's Ward", {
+        gates: [gate("class", "Paladin")],
+        aura: { feet: 30, targets: "allies", floor: { ward: 2, schools: ["shadow"] } }
+      })
+    ]
+  }),
+
+  // *The Prophet's Command: Once per Short Rest, as a Half-Action, a creature
+  // you hit this turn makes a Spirit Resilience Test against your Signature
+  // DC. On a failure it is Charmed by you until the end of its next turn.*
+  // Soulflayer's Venom is an on-hit Poisoned 2 at SL 2 shed against the
+  // Signature DC (`onHit.signatureDC`: A1's Poisoned shed DC on the effect,
+  // D-911). Hexed Fang is an on-hit Silenced behind a `hidden` gate, the fact
+  // the attack door reads off `effects/stealth.mjs#isHiddenFor` (D-911).
+  "serpent-fang-of-the-prophet": use({
+    label: "The Prophet's Command",
+    use: {
+      action: "half", uses: once("short"), resist: { resilience: "spirit", dc: null },
+      onFail: [{ id: "charmed", value: null, until: "endOfNextTurn" }]
+    },
+    gated: [
+      run("Soulflayer's Venom", { onHit: { sl: 2, condition: { id: "poisoned", value: 2 }, signatureDC: true } }),
+      run("Hexed Fang", {
+        gates: [gate("class", "Rogue"), gate("hidden")],
+        onHit: { condition: { id: "silenced", until: "endOfNextTurn" } }
+      })
+    ]
+  }),
+
+  // *Farstrider's Poise: A Ranger drawing it takes no Bane for shooting while
+  // Engaged.* 06's Engaged Bane on a ranged attack, cancelled on the dialog
+  // (`AZEROTH.cancellableBanes.engagedRanged`). Starfall Volley is a press of
+  // its own (D-911): an action, then one Attack Test through the attack door at
+  // each creature targeted (`use.attacks`, `same: false`), the 15-foot circle
+  // the table's. Starfire Arrow (a shot with no bundle) waits: 06's launcher
+  // fires the bundle nocked (D-641) and a shot made of nothing has no row there.
+  "thoridal-the-stars-fury": standing({
+    label: "Farstrider's Poise",
+    gates: [gate("class", "Ranger")], cancelsBane: "engagedRanged",
+    // *Starfire Arrow* (D-912): a shot of nothing at the launcher's own door.
+    gated: [run("Starfire Arrow", { phantomShot: { rating: 5, type: "arcane" } })],
+    presses: pressMap(
+      press("Starfall Volley", {
+        action: "action", uses: once("short"), area: "Each creature of your choice in a 15 ft radius",
+        attacks: { count: 1, same: false }
+      })
+    )
+  }),
+
+  // Dark Iron Hands is the Reload this weapon's own state reads
+  // (`ignoresReload`, D-911); The Sorcerer-Thane's Pact passes the creature's
+  // Immune (Fire) at half (`pastImmune`, D-911) at the mitigation. Magma Shot
+  // (every creature within 5 feet of the target) waits: `arc` is a count the
+  // table resolves, and the splash is no row any door lands.
+  // *Magma Shot* (D-912): an arc to EVERY other creature within 5 feet of the
+  // creature struck (`arc.all`), landed by the arc's own door.
+  "the-emperors-thunder": onHit({
+    label: "Magma Shot",
+    onHit: { sl: 2, damage: { amount: 3, type: "fire" }, arc: { targets: null, feet: 5, all: true } },
+    gated: [
+      run("Dark Iron Hands", { gates: [gate("race", "Dwarf")], ignoresReload: true }),
+      run("The Sorcerer-Thane's Pact", { pastImmune: "fire" })
+    ]
+  }),
+
+  // *Blood of the Gurubashi: On a hit, the target is Bleeding 2.* Loa's Edge is
+  // an 08 §6 grant on this weapon's own blow, gated on a troll. Drain the
+  // Chamber (Health taken off a condition's value across an area) waits.
+  "bloodglaive-of-the-hakkari": onHit({
+    label: "Blood of the Gurubashi",
+    onHit: { condition: { id: "bleeding", value: 2 } },
+    gated: [run("Loa's Edge", { gates: [gate("race", "Troll")], grants: ["+2 Damage Rating"] })],
+    // *Drain the Chamber* (D-912): the press gathers every other Bleeding
+    // creature within 30 feet itself, ally or enemy (`use.gather`), drains each
+    // and heals the bearer the total (`use.drain`).
+    presses: pressMap(press("Drain the Chamber", {
+      action: "half", uses: once("short"), area: "Every other Bleeding creature within 30 ft",
+      gather: { feet: 30, condition: "bleeding" }, drain: "bleeding"
+    }))
+  }),
+
+  // *Whispers of the Black Empire: A Priest holding it adds 2 to the Damage
+  // Rating of every Shadow spell they cast* - `spellDamage`, which
+  // `spell-bonus.mjs#standingSpellBonus` adds to the cast and to every tick.
+  // *The Black Empire's Price: At the end of each Long Rest, make a Spirit
+  // Resilience Test at DC 20. On a failure, gain 1 Void Corruption* - a charge
+  // offered at a Long Rest (`exposures`, read by `AzerothActor#longRest`).
+  // The Blade Hungers (a Bane laid on a creature's Test from the CASTER's
+  // item) waits.
+  "xalatath-blade-of-the-black-empire": standing({
+    label: "Whispers of the Black Empire",
+    gates: [gate("class", "Priest")], spellDamage: { school: "shadow", amount: 2 },
+    gated: [
+      // *The Blade Hungers* (D-912): the Shadow spell's card carries the Bane, once a round.
+      run("The Blade Hungers", { gates: [gate("class", "Priest")], resistBane: { school: "shadow", banes: 1, per: "round" } }),
+      run("The Black Empire's Price", { corruptionGain: corruption("void", 1, "spirit", 20, "longRest") })
+    ]
+  }),
+
+  // Sand of the Bronze is 1 Sand more off the first failed Resist each round
+  // against the Chronomancer's spell (`sandOnFail`, D-911), at the door 02's
+  // Sand paragraph already gains it at (`effects/sand.mjs`). The Scarab Gong
+  // opens a gate in the world. Staghelm's Regret (an ally put back at the
+  // Health it had at the start of its last turn) waits: no door records a
+  // creature's Health at the start of its turn.
+  "the-scepter-of-the-shifting-sands": standing({
+    label: "Sand of the Bronze",
+    gates: [gate("class", "Chronomancer")], sandOnFail: 1,
+    gated: [run("The Scarab Gong", { reason: "narrative" })],
+    // *Staghelm's Regret* (D-912): the Health each creature had at the start of its
+    // last turn, kept on its combatant, given back to the ally targeted at 0.
+    presses: pressMap(press("Staghelm's Regret", {
+      action: "reaction", uses: once("long"), area: "An ally within 30 ft", rewind: true
+    }))
+  }),
+
+  // *The Skull's Reserve: Once per Long Rest, as a Half-Action, a Warlock
+  // holding it regains 12 Mana, then makes a Spirit Resilience Test at DC 20.
+  // On a failure, the Warlock gains 1 Fel Corruption.* Master of the Shadow
+  // Council is D-698's bound damage, reaching a bound DEMON alone
+  // (`bound.creatureType`; D-911, the architect's review of D-910): a Warlock's
+  // talents call creatures that are not demons too, and the sentence names one.
+  "the-skull-of-guldan": use({
+    label: "The Skull's Reserve",
+    gates: [gate("class", "Warlock")],
+    use: { action: "half", uses: once("long"), heal: { mana: 12 }, corruptionGain: corruption("fel", 1, "spirit", 20, "press") },
+    gated: [run("Master of the Shadow Council", { gates: [gate("class", "Warlock")], bound: { damage: 2, creatureType: "demon" } })]
+  }),
 
   /* ---- Epic weapons ---- */
 
@@ -2873,8 +4418,217 @@ export const BOOK_SIGNATURES = Object.freeze({
   // §6). The 2 became 5 and *allies* became *your party* on the lead's own
   // call; a Legendary carries no budget, so neither costs anything.
   "the-bulwark-of-tyrs-hand": standing({
+    label: "Signature",
     gates: [gate("belowHalfHealth")],
-    aura: { feet: 15, targets: "party", damageReduction: 5 }
+    aura: { feet: 15, targets: "party", damageReduction: 5 },
+    // *The Raised Gauntlet* (D-912): D-777's move door asks the bearer IN the
+    // blow, so the press fires itself (`trigger: "blowMoved"`) and strikes its
+    // own use; the blow lands on the bearer's own Armor Points.
+    presses: pressMap(press("The Raised Gauntlet", {
+      action: "reaction", uses: once("short"), move: { feet: 15 }, trigger: "blowMoved"
+    }))
+  }),
+
+  // The Destroyer's Temper is 1 Rage more off the first attack each round that
+  // reduces the Warrior's Health (`poolOnHurt`, D-911), at the struck door
+  // where 05 §11's Rage is gained. The Black Hand Raised is the item aura's
+  // attack Damage Rating (`aura.attackDamage`) behind an *at or above half
+  // Health* gate (`atOrAboveHalfHealth`, D-911), the holder an ally as it says.
+  "blackhands-harness": standing({
+    label: "The Destroyer's Temper",
+    gates: [gate("class", "Warrior")], poolOnHurt: { pool: "rage", amount: 1 },
+    gated: [
+      run("The Black Hand Raised", {
+        gates: [gate("atOrAboveHalfHealth")],
+        aura: { feet: 15, targets: "allies", attackDamage: 1 }
+      })
+    ]
+  }),
+
+  // *Vat-Born: While you are below half Health, you regain 2 Health at the
+  // start of each of your turns* - the turn's tick, judged when the turn
+  // starts. Adaptive Scales is a Ward laid off the school of a blow taken
+  // (`adaptiveWard`, D-911), at the damage door, the first time each round.
+  // Brood Breath (a press that sets the next Breath's school) waits: the
+  // Champion's Breath takes its school from the drake form held, and no door
+  // lets a Signature hand it another.
+  "mail-of-the-fifth-brood": tick({
+    label: "Vat-Born",
+    gates: [gate("belowHalfHealth")], tick: { health: 2 },
+    gated: [run("Adaptive Scales", { adaptiveWard: 2 })],
+    // *Brood Breath* (D-912): the press chooses the school the next Breath takes.
+    presses: pressMap(press("Brood Breath", {
+      gates: [gate("class", "Chromatic Champion")], uses: once("short"), breathSchool: true
+    }))
+  }),
+
+  // *The Leash Cut: You cannot be Charmed.* Kingslayer is 14 §1's two ignored
+  // injuries refused (`bossCannotIgnore`, D-911) off the attack card's own
+  // `hiddenAtRoll`, so the *while hidden* is the card's record of the moment.
+  "garonas-leathers": standing({
+    label: "The Leash Cut",
+    refuses: ["charmed"],
+    gated: [run("Kingslayer", { gates: [gate("class", "Rogue")], bossCannotIgnore: true })]
+  }),
+
+  // Every run waits: The Archbishop's Prayer is one cast on many creatures,
+  // Second Ordination a Critical Injury ended by a heal, Hand of the Church a
+  // spell's Range overridden.
+  // *The Archbishop's Prayer* (D-912): one healing spell the Priest knows, on up to
+  // 12 creatures targeted, through `castSpell` with no Mana (`use.castHeal`).
+  // *Second Ordination* ends one Critical Injury taken this encounter at the healing
+  // door; *Hand of the Church* reaches a Touch healing spell to 30 feet at the range door.
+  "vestments-of-alonsus-faol": use({
+    label: "The Archbishop's Prayer",
+    gates: [gate("class", "Priest")],
+    use: { uses: once("short"), castHeal: 12 },
+    gated: [
+      run("Second Ordination", { gates: [gate("class", "Priest")], ordination: true }),
+      run("Hand of the Church", { gates: [gate("class", "Priest")], touchHealingFeet: 30 })
+    ]
+  }),
+
+  // Both runs fire off a Block (`onBlock`, D-911), read at 06 §6's own Block
+  // door: Molten Seam's Rage on the blocker, Neltharion's Heat's Scorched on the
+  // attacker of a MELEE blow (the attack card's `strike.rangeKind`, D-779).
+  "scale-of-the-earth-warder": standing({
+    label: "Molten Seam",
+    gates: [gate("class", "Warrior, Chromatic Champion")],
+    onBlock: { pool: { pool: "rage", amount: 2 } },
+    gated: [run("Neltharion's Heat", { onBlock: { condition: { id: "scorched", value: 2 }, melee: true } })]
+  }),
+
+  /* ---- Legendary worn things and Augments ---- */
+
+  // *Courtier's Tongue: You have a Boon on Deception and Persuasion Tests* -
+  // two 08 §6 grants. The Wyrm's Roar is a press of its own (D-911): a
+  // Reaction once per Short Rest, a Spirit Resilience Test against the
+  // Signature DC for the creature targeted, Frightened on a failure through
+  // the card's own `onFail`. *That Attack Test takes the Bane Frightened gives*
+  // is THE TABLE'S: the attack has already rolled when its card posts, and
+  // nothing rolls it again (D-911's reading). Borrowed Face is a disguise.
+  "lady-prestors-mantle": standing({
+    label: "Courtier's Tongue",
+    grants: ["A Boon on Deception Tests", "A Boon on Persuasion Tests"],
+    gated: [run("Borrowed Face", { reason: "narrative" })],
+    presses: pressMap(
+      press("The Wyrm's Roar", {
+        action: "reaction", uses: once("short"), area: "A creature within 30 ft",
+        resist: { resilience: "spirit", dc: null },
+        onFail: [{ id: "frightened", value: null, until: "endOfNextTurn" }]
+      })
+    )
+  }),
+
+  // The Tusk Taken is temporary Health off a kill (`killTemp`, D-911), read
+  // where the damage door writes a Boss's or an Elite's 0, through 05's own
+  // grant. The King's Frame (one size larger for carrying and for resisting a
+  // push) waits: the bag slots read the race's size and the forced move reads
+  // nobody's, so a size step has two doors to reach and neither takes one.
+  // The Court Kneels is how a court behaves, which the table plays.
+  "the-gordok-tusk-crown": standing({
+    label: "The Tusk Taken",
+    killTemp: { perTier: 2, weightClasses: ["boss", "elite"] },
+    gated: [
+      // *The King's Frame* (D-912; the lead, on O-319: *"Bag slots and forced movement"*).
+      run("The King's Frame", { gates: [gate("race", "Ogre")], sizeStep: 1 }),
+      run("The Court Kneels", { reason: "tableCall" })
+    ]
+  }),
+
+  // Both runs wait: a second Reaction restricted by name, and a hit turned
+  // into a miss after the roll.
+  // *Ten Thousand Years of Practice* (D-912): a second Reaction a round, spent only
+  // on Blink or Counterspell, at the one budget door (`spendTurnBudget`). *Step
+  // Aside* is pressed from the attack's own card, through 04's Afterimage's door.
+  "signet-of-the-shendralar": standing({
+    label: "Ten Thousand Years of Practice",
+    gates: [gate("class", "Mage")], secondReaction: ["Blink", "Counterspell"],
+    presses: pressMap(press("Step Aside", { action: "reaction", uses: once("short"), negates: true }))
+  }),
+
+  // *The Font Remembers: A blood elf wearing it regains 2 Mana at the start of
+  // each of their turns.* The Sunwell's Torrent (a Sustain ended on a failed
+  // Test) waits.
+  "shard-of-the-sunwell": tick({
+    label: "The Font Remembers",
+    gates: [gate("race", "Blood Elf")], tick: { mana: 2 },
+    // *The Sunwell's Torrent* (D-912): every other creature within 10 feet holding a
+    // Sustain, gathered by the press, ally or enemy; a failed Test ends one Sustain
+    // the creature chooses (`use.onFailEnds`).
+    presses: pressMap(press("The Sunwell's Torrent", {
+      action: "half", uses: once("short"), area: "Every other creature within 10 ft sustaining a spell",
+      gather: { feet: 10, sustaining: true }, resist: { resilience: "spirit", dc: null }, onFailEnds: "sustain"
+    }))
+  }),
+
+  // *The Master's Voice: You cannot be Silenced.* Undying is D-777's one hold
+  // at 1 (`use.trigger: "dropToZero"`, D-911), a press that fires itself in
+  // `AzerothActor#_holdAtOne`, strikes its own Long Rest use and offers its
+  // Body DC 20 Undeath charge through the exposure door. Breath of the
+  // Necropolis (a creature a Frost spell damaged makes a Test) waits: the spell
+  // card's damage is applied by its Apply, and no door there offers a Test
+  // that the caster's item names.
+  "the-phylactery-of-kelthuzad": standing({
+    label: "The Master's Voice",
+    refuses: ["silenced"],
+    // *Breath of the Necropolis* (D-912): the spell card's Apply posts the Test.
+    gated: [run("Breath of the Necropolis", {
+      spellDamageTest: { school: "frost", resilience: "body", onFail: { id: "numbed", until: "endOfNextTurn" } }
+    })],
+    presses: pressMap(
+      press("Undying", {
+        uses: once("long"), trigger: "dropToZero",
+        corruptionGain: corruption("undeath", 1, "body", 20, "press")
+      })
+    )
+  }),
+
+  // Both runs wait: a tick laid on a demon that pays the Warlock, and a free
+  // Banish whose Test a demon makes with a Bane.
+  // *Pylon Tether* (D-912): the tether rides the Warlock, landed at each of the
+  // Warlock's turn starts by the combat's own hook. *The Fifth Pylon*: Banish for no
+  // Mana (`freeSpell`) and a demon's Resist against it with a Bane (`resistBane`).
+  "codex-of-the-five-pylons": use({
+    label: "Pylon Tether",
+    gates: [gate("class", "Warlock")],
+    use: {
+      action: "half", uses: once("short"), area: "One demon within 30 ft",
+      tether: { creatureType: "demon", feet: 60, loss: 2, mana: 2 }
+    },
+    gated: [run("The Fifth Pylon", {
+      gates: [gate("class", "Warlock")], freeSpell: "Banish",
+      resistBane: { name: "Banish", creatureType: "demon", banes: 1 }
+    })]
+  }),
+
+  // Emerald Slumber is a press (D-911): a Spirit Resilience Test against the
+  // Signature DC for the creature named, Stunned on a failure *until it takes
+  // damage or until the end of its next turn* - the effect carries
+  // `endsOnDamage`, which the damage door ends. The Dream's Bounty raises a
+  // laid heal tick of the Druid's spell by 1 each landing (`tickHealBonus`).
+  "idol-of-the-dreamer": use({
+    label: "Emerald Slumber",
+    gates: [gate("class", "Druid")],
+    use: {
+      action: "half", uses: once("short"), area: "One creature within 60 ft",
+      resist: { resilience: "spirit", dc: null },
+      onFail: [{ id: "stunned", value: null, until: "endOfNextTurn", endsOnDamage: true }]
+    },
+    gated: [run("The Dream's Bounty", { gates: [gate("class", "Druid")], tickHealBonus: 1 })]
+  }),
+
+  // Stolen Hour fills the Sand to the Hourglass's cap (`use.fill`, D-911).
+  // Echo of the Infinite arms the next cast as 02's Recurrence does
+  // (`use.echo`), and the cast lands again at the caster's next turn: its card
+  // posted again, so each creature makes the spell's Resilience Test again, and
+  // a tick the spell laid is laid again (D-911; the lead: *"Yes, Yes, Yes"*).
+  "the-hourglass-of-the-infinite": use({
+    label: "Stolen Hour",
+    use: { action: "half", uses: once("long"), fill: "sand" },
+    presses: pressMap(
+      press("Echo of the Infinite", { uses: once("short"), echo: true })
+    )
   }),
 
   /* ---- Epic armor ---- */

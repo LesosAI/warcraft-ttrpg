@@ -90,12 +90,14 @@ export function sunderedChanges(amount = 1) {
  * a Bane if you are smaller") and 05 SS10's limit on being moved.
  * @returns {{boons: number, banes: number, immovable: boolean}}
  */
-export function sizeNote(userSize = "medium", targetSize = "medium") {
+export function sizeNote(userSize = "medium", targetSize = "medium", { targetResist = null } = {}) {
   const u = rung(userSize);
   const t = rung(targetSize);
   return {
     boons: u > t ? 1 : 0,
     banes: u < t ? 1 : 0,
-    immovable: resistsForcedMovement(targetSize, userSize)
+    // 05's *Being moved* reads the size the target RESISTS at: 08 §20's King's Frame
+    // counts an ogre one size larger for it (D-912), and the maneuver says so (D-914).
+    immovable: resistsForcedMovement(targetResist ?? targetSize, userSize)
   };
 }

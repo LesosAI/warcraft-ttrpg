@@ -5,6 +5,9 @@
   <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Sheet.Lore"}}</h3>
   <div class="azeroth-lore">{{{notes.lore}}}</div>
   {{/if}}
+  {{!-- The factions the creature belongs to (D-912): what its entry names, and what the GM set. --}}
+  <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Sheet.Factions"}}</h3>
+  <p>{{#if factionEdit}}<input type="text" name="system.factions" value="{{system.factions}}" aria-label="{{localize "AZEROTH.Sheet.Factions"}}" placeholder="{{factionList}}">{{else}}{{#if factionList}}{{factionList}}{{else}}{{azerothDash null}}{{/if}}{{/if}}</p>
   <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Sheet.Behavior"}}</h3>
   <div class="azeroth-behavior">{{{notes.behavior}}}</div>
   {{#if notes.tactics}}

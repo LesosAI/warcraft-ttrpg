@@ -19,7 +19,8 @@
 
 import { feetApart, feetToPoint } from "./footprints.mjs";
 import { allyOf, combatantIn, reachOfActor } from "./engaged.mjs";
-import { answerReach, check, feetWords, judgesPoint, judgesTargets, rangeInText, readRange, widenReach } from "../rules/range.mjs";
+import { answerReach, check, feetWords, judgesPoint, judgesTargets, rangeInText, readRange, touchAt, widenReach } from "../rules/range.mjs";
+import { isHealingSpell } from "../rules/casting.mjs";
 import { judgeNamed, readTargetLine, willingFrom } from "../rules/target-line.mjs";
 
 /** The scene a snapshot names, else the viewed one. */
@@ -161,7 +162,8 @@ export function judgeRange({ actor, name, targets = [], reach = null, line = nul
 export function spellRangeRefusal({ actor, spell, targets = [], source = null } = {}) {
   const sys = spell?.system ?? {};
   if (!judgesTargets(sys.target)) return null;
-  const reach = readRange(sys.range);
+  // A healing spell's Touch, cast at 30 feet under the Hand of the Church (D-912).
+  const reach = touchAt(readRange(sys.range), isHealingSpell(sys) ? (actor?.system?.signatureEffects?.touchHealingFeet ?? 0) : 0);
   return judgeRange({ actor, name: spell?.name ?? "", targets, reach, line: sys.target ?? null, source });
 }
 

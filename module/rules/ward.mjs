@@ -129,6 +129,28 @@ export function wardCap(ward) {
 }
 
 /**
+ * **A WARD FLOOR, IN PLACE** (08 §20's Firelord's Grip: *You have Ward 3 against
+ * Fire, unless you already have more*; D-911): each school of the map raised to the
+ * floor where it stands below it, and never lowered. It runs in both actor models'
+ * `afterFinalPhase`, before `wardCap`, so every `final` change is already counted
+ * in *what you already have*.
+ *
+ * @param {Record<string, number>} ward
+ * @param {Record<string, number>|null} floor  `signatureEffects().wardFloor`
+ * @returns {Record<string, number>}
+ */
+export function wardFloorOn(ward, floor) {
+  if (!ward || typeof ward !== "object" || !floor || typeof floor !== "object") return ward;
+  for (const [school, n] of Object.entries(floor)) {
+    const f = Math.max(0, Math.trunc(Number(n)) || 0);
+    if (!f || !AZEROTH.schools[school]) continue;
+    const held = Number(ward[school]);
+    if (!Number.isFinite(held) || held < f) ward[school] = f;
+  }
+  return ward;
+}
+
+/**
  * The schools that hold a Ward, from a `{school: n}` map, each held to `WARD_MAX`.
  * @returns {Record<string, number>}
  */

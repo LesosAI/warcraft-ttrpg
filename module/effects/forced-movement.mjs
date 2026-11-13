@@ -22,7 +22,8 @@
  *   the GM's client already (an area's pull at a turn's start, a Test on entering).
  */
 
-import { FORCED_REFUSALS, forcedPlan, forcedStep } from "../rules/forced-movement.mjs";
+import { FORCED_REFUSALS, beingMovedRefusal, forcedPlan, forcedStep } from "../rules/forced-movement.mjs";
+import { allyOf } from "../canvas/engaged.mjs";
 import { refusesPushFor } from "../rules/class-talents.mjs";
 import { shapeCentre } from "../rules/area-ticks.mjs";
 import { dispersionRefusal } from "../rules/dispersion.mjs";
@@ -81,11 +82,45 @@ function blocked(token, to) {
   }
 }
 
+/**
+ * The size a creature resists being moved at (05's *Being moved*): what the King's
+ * Frame steps up on a character (`system.resistSize`, D-912), else its size.
+ */
+export function resistingSize(actor) {
+  return actor?.system?.resistSize ?? actor?.system?.size ?? null;
+}
+
+/**
+ * **05's BEING MOVED, AT A DOOR THAT KNOWS WHO MOVES IT** (D-913; the lead: *"Enforce it,
+ * include Prone, exempt willing allies"*): the push, the pull and the knocked Prone
+ * (`effects/inflict.mjs`) ask this one reading. A creature is WILLING where it is the
+ * mover's ally (`canvas/engaged.mjs#allyOf`: the fight's sides, else the Party) - MY
+ * READING, for the lead, until a feature or spell names the ally's choice itself.
+ *
+ * @param {Actor|null} victim
+ * @param {Actor|null} by
+ * @returns {"outsized"|null}
+ */
+export function beingMovedBy(victim, by) {
+  if (!victim || !by) return null;
+  const self = victim.uuid === by.uuid;
+  return beingMovedRefusal({
+    targetSize: resistingSize(victim), sourceSize: by.system?.size ?? null,
+    self, willing: !self && allyOf(by, victim)
+  });
+}
+
 /** Move it here; the caller has established that this client may write the token. */
-async function moveHere({ token, from, feet, toward }) {
+async function moveHere({ token, from, feet, toward, by = null }) {
   const actor = token.actor ?? null;
   const name = token.name ?? actor?.name ?? "";
   if (dispersionRefusal(actor, "forcedMove")) return result(name, 0, false, "dispersion");
+  // **05's BEING MOVED** (*You cannot be pushed, pulled or knocked Prone against your will
+  // by anything more than one size smaller than you*; D-912, read at this door for the
+  // King's Frame - the lead, on O-319: *"Bag slots and forced movement"*): the size of
+  // the creature that caused it against the size the moved one resists at. A move with
+  // no creature behind it is not judged.
+  if (beingMovedBy(actor, by)) return result(name, 0, false, "outsized");
   // **HELD BY STASIS** (07 §12: *it cannot act, move, speak or be moved*; O-306): no push, no pull.
   if (unmovableBy([...(actor?.effects ?? [])])) return result(name, 0, false, "held");
   if (toward !== "toward" && actor && typeof actor.takenTalents === "function" && refusesPushFor(actor.takenTalents())) {
@@ -118,7 +153,8 @@ export async function forcedMoveQueryHandler({ tokenUuid = null, from = null, fe
   }
   const point = from && Number.isFinite(Number(from.x)) && Number.isFinite(Number(from.y)) ? { x: Number(from.x), y: Number(from.y) } : null;
   if (!point) return result(token.name, 0, false, "unmeasured");
-  return moveHere({ token, from: point, feet: Math.max(0, Math.trunc(Number(feet)) || 0), toward: toward === "toward" ? "toward" : "away" });
+  const mover = byUuid ? await fromUuid(byUuid) : null;
+  return moveHere({ token, from: point, feet: Math.max(0, Math.trunc(Number(feet)) || 0), toward: toward === "toward" ? "toward" : "away", by: mover?.documentName === "Actor" ? mover : null });
 }
 
 /**
@@ -133,7 +169,7 @@ export async function forceMove({ token = null, from = null, feet = 0, toward = 
   if (dispersionRefusal(token.actor, "forcedMove")) return result(token.name ?? name, 0, false, "dispersion");
   if (!from) return result(token.name, 0, false, "unmeasured");
   try {
-    if (token.isOwner) return await moveHere({ token, from, feet, toward });
+    if (token.isOwner) return await moveHere({ token, from, feet, toward, by });
     const gm = game.users?.activeGM ?? null;
     if (!gm) return result(token.name, 0, false, "noGM");
     const done = await gm.query(FORCED_QUERY, { tokenUuid: token.uuid, from: { x: from.x, y: from.y }, feet, toward, byUuid: by?.uuid ?? null }, { timeout: 15000 });

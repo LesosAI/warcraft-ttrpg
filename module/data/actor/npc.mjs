@@ -29,7 +29,7 @@ import { addArmorPoints, wornArmorPoints, wornGrants, wornWard } from "../../rul
 import { creaturePools } from "../../rules/bestiary.mjs";
 import { choiceField, descriptionField, optionalNumberField, sourceField } from "../common/fields.mjs";
 import { migrateNpcSource } from "../../migrations/0.10.0-creators.mjs";
-import { wardCap, wardMapOf, wardSchoolsNamed } from "../../rules/ward.mjs";
+import { wardCap, wardFloorOn, wardMapOf, wardSchoolsNamed } from "../../rules/ward.mjs";
 import { isThinned } from "../../rules/swarm.mjs";
 // What an ally's aura lays on this creature (D-755).
 import { auraBaneRows, auraBoonRows, auraHalvesHealing, auraStandsFree, emptySchoolArmor } from "../../rules/auras.mjs";
@@ -199,6 +199,9 @@ export class NpcData extends foundry.abstract.TypeDataModel {
       // On every Boss and on nothing else (D-528). `—` for a Boss holding no
       // fixed ground; 14 §12's index is this binding read the other way.
       dungeon: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+      // The factions a GM has set on the creature, comma-separated (D-912; the lead, on
+      // O-319), beside what its 14 entry names: `rules/factions.mjs#factionsFor`.
+      factions: new fields.StringField({ required: false, blank: true, initial: "" }),
 
       // --- the defense table: seven rows, fixed order, none omitted ---
       health: new fields.SchemaField({
@@ -780,6 +783,8 @@ export class NpcData extends foundry.abstract.TypeDataModel {
    * other `final` change have landed.
    */
   afterFinalPhase() {
+    // A Ward floor a worn Signature sets (08 §20's Firelord's Grip; D-911), then the cap.
+    wardFloorOn(this.ward, this.signatureEffects?.wardFloor);
     wardCap(this.ward);
   }
 

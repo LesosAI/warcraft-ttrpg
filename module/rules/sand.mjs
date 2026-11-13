@@ -43,11 +43,13 @@ export const HOURGLASS = "hourglass";
 
 /**
  * 08 §9's cap by rarity: Common 5, then +1 a step up to Epic 8 (the lead), and
- * a Legendary 8 (reading). A rarity this table lacks is read as Common: an
+ * a Legendary 10 (D-909). A rarity this table lacks is read as Common: an
  * Hourglass with no rarity stamped is the 4s shop glass.
  */
 export const SAND_CAP_BY_RARITY = Object.freeze({
-  common: 5, uncommon: 6, rare: 7, epic: 8, legendary: 8
+  // A Legendary one holds 10 (08 §9, D-909; the lead: *"10 is the cap for
+  // legendary quality hourglass"*), where it read 8 as an Epic did.
+  common: 5, uncommon: 6, rare: 7, epic: 8, legendary: 10
 });
 
 /** The cap with no Hourglass in the slot: none. */
@@ -149,6 +151,23 @@ export function gainSand(value, amount, cap) {
   const v = Math.max(0, Math.trunc(Number(value)) || 0);
   const a = Math.max(0, Math.trunc(Number(amount)) || 0);
   return Math.min(c, v + a);
+}
+
+/**
+ * **SAND OF THE BRONZE** (08 §20, D-911: *A Chronomancer holding it gains 1 Sand
+ * the first time each round a creature fails a Resilience Test against one of
+ * their spells*): what the Scepter adds to a failed Resist's Sand, and the round
+ * mark to keep. Nothing where the bearer holds none, where no round can be
+ * named, or where the mark already names this round.
+ *
+ * @param {{amount?: number, mark?: string|null, held?: string|null}} o
+ * @returns {{amount: number, mark: string}|null}
+ */
+export function sandBronzeGain({ amount = 0, mark = null, held = null } = {}) {
+  const n = Math.max(0, Math.trunc(Number(amount)) || 0);
+  if (!n || typeof mark !== "string" || !mark) return null;
+  if (held === mark) return null;
+  return { amount: n, mark };
 }
 
 /**

@@ -35,9 +35,12 @@ function landing(name, landed, reason = null, effectId = null) {
 }
 
 /** Lay it here; the caller has already established that this client may. */
-async function layHere({ victim, striker, source }) {
+async function layHere({ victim, striker, source, span: whose = "striker" }) {
   if (refuseIceBlockTarget(victim)) return landing(victim.name, false, "iceBlock");
-  const span = striker ? untilEndOfNextTurn(striker) : null;
+  // **WHOSE NEXT TURN** (D-911): Mortal Strike's *until the end of YOUR next turn* is
+  // the striker's; 08 §20's Ash of the Risen's *until the end of ITS next turn* is the
+  // creature struck's own.
+  const span = whose === "victim" ? untilEndOfNextTurn(victim) : (striker ? untilEndOfNextTurn(striker) : null);
   if (!span) return landing(victim.name, false, "noFight");
   const stale = (victim.effects ?? []).filter(e => {
     const held = e.flags?.["azeroth-rpg"]?.[NO_HEALING_FLAG] ?? null;
@@ -58,14 +61,14 @@ async function layHere({ victim, striker, source }) {
 }
 
 /** The GM-side handler. Throws with the reason. */
-export async function noHealingQueryHandler({ victimUuid, strikerUuid = null, source = "" } = {}, { user = null } = {}) {
+export async function noHealingQueryHandler({ victimUuid, strikerUuid = null, source = "", span = "striker" } = {}, { user = null } = {}) {
   const victim = victimUuid ? await fromUuid(victimUuid) : null;
   if (!victim || victim.documentName !== "Actor") throw new Error(game.i18n.localize("AZEROTH.Card.TargetGone"));
   const striker = strikerUuid ? await fromUuid(strikerUuid) : null;
   if (user && (striker?.documentName !== "Actor" || !striker.testUserPermission(user, "OWNER"))) {
     throw new Error(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: striker?.name ?? "" }));
   }
-  return layHere({ victim, striker, source: String(source ?? "") });
+  return layHere({ victim, striker, source: String(source ?? ""), span: span === "victim" ? "victim" : "striker" });
 }
 
 /**
@@ -74,13 +77,13 @@ export async function noHealingQueryHandler({ victimUuid, strikerUuid = null, so
  * @param {{victim: Actor|null, striker: Actor, source: string, name?: string}} o
  * @returns {Promise<{name: string, landed: boolean, reason: string|null}>}
  */
-export async function layNoHealing({ victim, striker, source = "", name = "" } = {}) {
+export async function layNoHealing({ victim, striker, source = "", name = "", span = "striker" } = {}) {
   if (!victim) return landing(name, false, "gone");
   try {
-    if (victim.isOwner) return await layHere({ victim, striker, source });
+    if (victim.isOwner) return await layHere({ victim, striker, source, span });
     const gm = game.users.activeGM;
     if (!gm) throw new Error(game.i18n.localize("AZEROTH.Rider.Inflict.NoGM"));
-    const done = await gm.query(NO_HEALING_QUERY, { victimUuid: victim.uuid, strikerUuid: striker?.uuid ?? null, source }, { timeout: 15000 });
+    const done = await gm.query(NO_HEALING_QUERY, { victimUuid: victim.uuid, strikerUuid: striker?.uuid ?? null, source, span }, { timeout: 15000 });
     return done && typeof done === "object" ? landing(done.name ?? victim.name, done.landed === true, done.reason ?? null, done.effectId ?? null) : landing(victim.name, false, "error");
   } catch (err) {
     ui.notifications?.warn(err.message);

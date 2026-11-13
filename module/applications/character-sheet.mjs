@@ -438,6 +438,9 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
 
     context.config = AZEROTH;
     context.system = system;
+    // The factions the character belongs to (D-912): the GM sets more; everybody reads the list.
+    context.factionEdit = game.user.isGM && this.isEditable;
+    context.factionList = (this.actor.signatureState?.factions ?? []).join(", ");
     context.canConfigureCombatSheet = game.user.isGM;
     context.showManeuvers = showsManeuvers(system, this.actor.getFlag("azeroth-rpg", "showManeuvers"));
     context.combatSections = Object.fromEntries(["maneuvers", "features", "talents", "signatures"].map(key =>
@@ -3406,7 +3409,9 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
           // the Combat panel and the item sheet are where a refusal is said in
           // full. Without it a Signature whose Damage Rating is a Shaman's and
           // whose retaliation is everybody's reads here as ungated.
-          gatedParts: row.gatedParts
+          gatedParts: row.gatedParts,
+          // A Legendary's other buttons (D-910), each with its own refusal.
+          presses: row.presses
         })),
         load
       }
@@ -3751,7 +3756,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
   static async #onUseSignature(event, target) {
     const item = this.actor.items.get(target.closest("[data-item-id]")?.dataset.itemId);
     if (!item) return;
-    return useSignatureWithDialog(this.actor, item, event);
+    // A Legendary's other button names its run's key (D-910).
+    return useSignatureWithDialog(this.actor, item, event, target.dataset.press || null);
   }
 
   /** The fight's controls (D-627, D-694). */

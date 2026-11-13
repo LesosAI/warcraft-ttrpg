@@ -106,10 +106,12 @@
           screenshot, D-611). One paragraph a branch, its verdict at the end. --}}
     {{#each signature.gatedParts as |part|}}
     <p class="azeroth-item__signature-note">
-      {{localize "AZEROTH.Signature.PartOnly"}}
-      {{#each part.gates as |g|}}{{#unless @first}} · {{/unless}}{{#if g.value}}{{localize "AZEROTH.Signature.GateValue" kind=(localize g.label) value=g.value}}{{else}}{{localize g.label}}{{/if}}{{/each}}
+      {{#if part.label}}{{localize "AZEROTH.Signature.RunLead" label=part.label}}{{else}}{{localize "AZEROTH.Signature.PartOnly"}}{{/if}}
+      {{#each part.gates as |g|}}{{#unless @first}} · {{/unless}}{{#if g.value}}{{localize "AZEROTH.Signature.GateValue" kind=(localize g.label) value=g.value}}{{else}}{{localize g.label}}{{/if}}{{/each}}{{#if part.gates.length}}.{{/if}}
       {{#if part.holds}}{{localize "AZEROTH.Signature.PartHolds"}}{{/if}}
       {{#if part.fails}}{{localize "AZEROTH.Signature.PartFails"}}{{/if}}
+      {{#if part.targetOnly}}{{localize "AZEROTH.Signature.PartTarget"}}{{/if}}
+      {{#if part.reason}}{{localize part.reason}}{{/if}}
     </p>
     {{/each}}
     {{!-- AND THE BUTTON'S OWN GATE, beside the button (D-722): a press that
@@ -125,8 +127,22 @@
     <p class="azeroth-item__signature-note">{{localize signature.refusalLabel}}</p>
     {{/if}}
     {{#if signature.reason}}
-    <p class="azeroth-item__signature-note">{{localize signature.reason}}</p>
+    <p class="azeroth-item__signature-note">{{#if signature.label}}{{localize "AZEROTH.Signature.RunLead" label=signature.label}} {{/if}}{{localize signature.reason}}</p>
     {{/if}}
+    {{!-- A LEGENDARY'S OTHER BUTTONS (D-910): each run that presses, with its
+          own chips, its own Use and its own refusal in words. --}}
+    {{#each signature.presses as |p|}}
+    <div class="azeroth-item__signature-state">
+      <span class="azeroth-feature-chip">{{p.label}}</span>
+      {{#if p.actionLabel}}<span class="azeroth-feature-chip">{{localize p.actionLabel}}</span>{{/if}}
+      {{#if p.cost}}<span class="azeroth-feature-chip">{{p.cost.amount}} {{localize p.cost.label}}</span>{{/if}}
+      {{#if p.uses}}<span class="azeroth-feature-chip azeroth-feature-uses">{{p.uses.value}}/{{p.uses.max}} {{localize p.uses.per}}</span>{{/if}}
+      <button type="button" class="azeroth-use" data-action="useSignature" data-press="{{p.key}}"{{#if p.refusal}} disabled{{/if}}>{{localize "AZEROTH.Feature.Use"}}</button>
+    </div>
+    {{#if p.gates.length}}<p class="azeroth-item__signature-note">{{#each p.gates as |g|}}{{#unless @first}} · {{/unless}}{{#if g.value}}{{localize "AZEROTH.Signature.GateValue" kind=(localize g.label) value=g.value}}{{else}}{{localize g.label}}{{/if}}{{/each}}.</p>{{/if}}
+    {{#if p.refusalLabel}}<p class="azeroth-item__signature-note">{{localize p.refusalLabel}}</p>{{/if}}
+    {{#if p.reason}}<p class="azeroth-item__signature-note">{{localize p.reason}}</p>{{/if}}
+    {{/each}}
   </section>
   {{/if}}
 </div>

@@ -45,6 +45,8 @@ import { bestiaryAutomationBatch } from "./quench-phase20.mjs";
 import { overviewBatch } from "./quench-overview.mjs";
 import { classicBatch } from "./quench-classic.mjs";
 import { signatureBatch } from "./quench-signatures.mjs";
+// 08 §20's Legendary readers (D-911).
+import { signatureLegendaryBatch } from "./quench-signature-legendary.mjs";
 import { reactionBatch } from "./quench-reactions.mjs";
 import { creatureGearBatch } from "./quench-npc-gear.mjs";
 import { creatureSwingBatch } from "./quench-npc-swing.mjs";
@@ -357,6 +359,9 @@ export function registerQuenchTests() {
     });
     quench.registerBatch("azeroth-rpg.signatures", signatureBatch, {
       displayName: "AZEROTH: What a Signature does"
+    });
+    quench.registerBatch("azeroth-rpg.signature-legendary", signatureLegendaryBatch, {
+      displayName: "AZEROTH: 08 §20's Legendary readers (D-911)"
     });
     quench.registerBatch("azeroth-rpg.reactions", reactionBatch, {
       displayName: "AZEROTH: Parry, Block and the Bane Pummel lays"

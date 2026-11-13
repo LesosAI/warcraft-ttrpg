@@ -504,7 +504,12 @@ export function sheetMatrixBatch(context) {
       const owner = await makeCharacter({ name: "ZZ Matrix Item Owner", classes: [["Mage", 5]] });
       for (const type of Object.keys(game.system.documentTypes.Item)) {
         for (const owned of [false, true]) {
-          const item = await itemOf(type, { owned: owned ? owner : null });
+          // A SECOND CLASS MUST BE ON THE RACE'S ROW (0.14.0's `NotOnRow`, a
+          // committed rule): the owner takes the pack's first race (a Troll) a
+          // row earlier, and the pack's first class (Paladin) is not on the
+          // Troll's row, so the embed was refused and `item` came back
+          // undefined. Name a class every row holds.
+          const item = await itemOf(type, { owned: owned ? owner : null, name: owned && type === "class" ? "Warrior" : null });
           const sheet = await openSheet(item);
           try {
             const label = `item ${type} (${owned ? "owned" : "unowned"})`;

@@ -170,6 +170,35 @@ export function gainWhenStruck({ pools = [], damage = 0, enrageRanks = 0 } = {})
 }
 
 /**
+ * **WHAT A SIGNATURE ADDS TO THE STRUCK GAIN** (08 §20's The Destroyer's Temper:
+ * *gains 1 more Rage the first time each round an attack reduces their Health*;
+ * D-911): each row's pool raised by its amount ON TOP of what `gainWhenStruck`
+ * already gave, capped at the pool's maximum. The once-a-round is the caller's.
+ *
+ * @param {{pools?: Array<object>, gains?: Array<object>, rows?: Array<{pool: string, amount: number}>}} o
+ * @returns {Array<{itemId: string, kind: string, name: string, value: number, gained: number}>}
+ */
+export function gainOnHurt({ pools = [], gains = [], rows = [] } = {}) {
+  const out = [];
+  for (const row of rows ?? []) {
+    const n = Math.max(0, Math.trunc(Number(row?.amount)) || 0);
+    if (!n || !row?.pool) continue;
+    const pool = (pools ?? []).find(p => p.kind === "momentum" && p.name === row.pool) ?? null;
+    if (!pool) continue;
+    const held = out.find(g => g.itemId === pool.itemId && g.name === pool.name)
+      ?? (gains ?? []).find(g => g.itemId === pool.itemId && g.name === pool.name) ?? null;
+    const from = held ? held.value : (pool.value ?? 0);
+    const value = Math.min(pool.max ?? 0, from + n);
+    if (value <= from) continue;
+    const next = { itemId: pool.itemId, kind: "momentum", name: pool.name, value, gained: value - (pool.value ?? 0) };
+    const at = out.findIndex(g => g.itemId === pool.itemId && g.name === pool.name);
+    if (at >= 0) out[at] = next;
+    else out.push(next);
+  }
+  return out;
+}
+
+/**
  * Rage at a round's end (02 SS7): drains 2 in a round the Warrior neither
  * struck nor was struck; not below half Health with Frenzy or Deathwish (04).
  * Any other pool is left as it stands.

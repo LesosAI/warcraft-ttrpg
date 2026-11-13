@@ -308,10 +308,21 @@ export function overchannelledSL(sl, points = 0) {
  */
 export function spellManaCost({ mana = 0, name = "", school = null } = {}, signatureEffects = {}, { viaItem = false, next = 0, less = 0 } = {}) {
   if (viaItem) return 0;
+  // **A SPELL A SIGNATURE CASTS FOR NOTHING** (08 §20's The Fifth Pylon: *pays no Mana to
+  // cast **Banish**, and pays its upkeep as the spell says*; D-912): the cast's Mana, by
+  // name. The upkeep is the Sustain's own door (`rules/upkeep.mjs`) and is untouched.
+  const flatName = v => String(v ?? "").trim().toLowerCase();
+  if (name && (signatureEffects?.freeSpell ?? []).some(s => flatName(s) === flatName(name))) return 0;
   const n = v => Number(v) || 0;
   const named = name ? n(signatureEffects?.empowers?.[name]?.cost) : 0;
   const bySchool = school ? n(signatureEffects?.spellCost?.[school]) : 0;
-  return Math.max(0, n(mana) - named - bySchool - Math.max(0, n(next)) - Math.max(0, n(less)));
+  const paid = Math.max(0, n(mana) - named - bySchool - Math.max(0, n(next)) - Math.max(0, n(less)));
+  // **A SCHOOL DISCOUNT'S OWN FLOOR** (Atiesh's Guardian's Economy, *to a
+  // minimum of 1*; D-910): where a Signature discounting this school names one,
+  // the Mana goes no lower than it - and never above the entry's own Mana, so a
+  // spell that costs nothing is not made to cost 1.
+  const floor = bySchool > 0 && school ? Math.max(0, n(signatureEffects?.spellCostFloor?.[school])) : 0;
+  return Math.max(paid, Math.min(floor, Math.max(0, n(mana))));
 }
 
 /** The actor flag the next spell's discounts stand under (D-771). */

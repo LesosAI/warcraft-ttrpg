@@ -357,13 +357,14 @@ export class AzerothItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
    * a Signature in the compendium has no bearer, and the gate, the pool and the
    * turn's budget are all the bearer's.
    */
-  static async #onUseSignature(event) {
+  static async #onUseSignature(event, target) {
     const actor = this.document.actor;
     if (!actor) {
       ui.notifications?.warn(game.i18n.format("AZEROTH.Signature.NoBearer", { name: this.document.name }));
       return null;
     }
-    return useSignatureWithDialog(actor, this.document, event);
+    // A Legendary's other button names its run's key (D-910).
+    return useSignatureWithDialog(actor, this.document, event, target?.dataset?.press || null);
   }
 
   static async #onStepSpellUses(event, target) {

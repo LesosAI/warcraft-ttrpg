@@ -684,7 +684,9 @@ export async function syncBoundFor(owner, { encounter } = {}) {
     // talents, keyed by the ITEM rather than by a talent identifier.
     const desired = [
       ...boundEffects(bond.kind, snapshot, talents, creature, active),
-      ...boundSignatureEffects(owner.system?.signatureEffects?.bound ?? [])
+      // A row naming a creature type reaches a bound creature of that type alone (the
+      // Skull of Gul'dan's *A DEMON bound to a Warlock*; D-911).
+      ...boundSignatureEffects(owner.system?.signatureEffects?.bound ?? [], { creatureType: bound.system?.creatureType ?? null })
     ];
     const held = bound.effects.filter(e => e.getFlag("azeroth-rpg", FLAG)?.talent);
     const oldMax = bound.system.health?.max ?? 0;

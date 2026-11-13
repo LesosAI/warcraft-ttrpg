@@ -141,6 +141,8 @@ export function targetSnapshots(targets = game.user?.targets ?? []) {
       conditions: conditionValues(actor),
       // For Overbear's size note (D-626).
       size: s.size ?? null,
+      // The size it resists being moved at: 08 §20's King's Frame steps it (D-912, D-914).
+      resistSize: s.resistSize ?? s.size ?? null,
       // A swarm has no Critical Injury table (13 §4, D-646).
       swarm: s.isSwarm === true,
       // What a Signature gated on the creature STRUCK needs (08 §20, D-692):
@@ -161,6 +163,9 @@ export function targetSnapshots(targets = game.user?.targets ?? []) {
       // against you take a Bane per rank until the start of your next turn*; D-773).
       deterred: deterrencesOf(actor),
       mirrorImageBanes: s.health?.value>0 ? mirrorImageBanes(actor.getFlag("azeroth-rpg","sustaining")) : 0,
+      // What this target wears that a member of a faction attacks at a Bane (08 §20's
+      // Scarlet Reckoning, D-912).
+      attackerBane: s.signatureEffects?.attackerBane ?? [],
       // **WHETHER ITS SPEED IS OTHERWISE REDUCED** (04's Shatter, D-775): a laid
       // effect lowering `system.speed` - a blow's drop, an area's (MY READING).
       speedDropped: speedDroppedOf(actor),
@@ -356,6 +361,8 @@ function snapshotOf(actor, { kind, skill, targets, resilience = null, ability = 
     targetInvisible: targets[0]?.invisible === true,
     invisible: invisibilityActive(actor.effects, game.time?.worldTime),
     targetMirrorImages: (targets[0]?.mirrorImageBanes??0)>0,
+    // Scarlet Reckoning (D-912): the roller's factions against what the target wears.
+    attackerBane: actor.attackerBanesAgainst?.(targets[0]?.attackerBane ?? []) ?? 0,
     lesserInvisible: facts.lesserInvisible === true,
     // 06: what the distance costs, where the tokens let it be measured (D-669).
     range,

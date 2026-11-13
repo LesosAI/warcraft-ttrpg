@@ -11,13 +11,13 @@ import { dispersionFor } from "../../rules/dispersion.mjs";
 import { grantsFor, grantsOn } from "../../rules/grants.mjs";
 // A GM's own Damage Rating and Casting bonuses on what is equipped (2026-11-02).
 import { bonusTotals } from "../../rules/item-bonuses.mjs";
-import { signatureEffects } from "../../rules/signatures.mjs";
+import { signatureEffects, steppedSize } from "../../rules/signatures.mjs";
 import { corruptionEffects } from "../../rules/corruption-effects.mjs";
 import { wornWeaponEffects } from "../../rules/weapon-traits.mjs";
 import { abilityModifier, skillModifier } from "../../rules/abilities.mjs";
 import { initiativeFor } from "../../rules/initiative.mjs";
 import { derivedThresholds, trackStates } from "../../rules/corruption.mjs";
-import { wardCap, wardFor } from "../../rules/ward.mjs";
+import { wardCap, wardFloorOn, wardFor } from "../../rules/ward.mjs";
 import { guiseFacts } from "../../rules/guise.mjs";
 // The Chromatic Champion's standing features and the Outcast's trait (02 §5, §7; stage 2B).
 import {
@@ -207,6 +207,9 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
       // 01 §8's one sentence: why this character is on the road instead of
       // at home (D-636).
       motive: new fields.StringField({ required: false, blank: true, initial: "" }),
+      // The factions a GM has set on the character, comma-separated (D-912; the lead, on
+      // O-319), beside its people's: `rules/factions.mjs#factionsFor` reads both.
+      factions: new fields.StringField({ required: false, blank: true, initial: "" }),
 
       // **THE GUISE** (the Chromatic Champion plan): the people a Chromatic Outcast
       // looks like, picked at creation beside the race it IS. It gives size, Speed and
@@ -630,6 +633,15 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     const ownSpeed = people.from === "guise" ? people.speed : (race?.system?.speed ?? null);
     const size = physical?.size ?? overlay?.size ?? ownSize;
     this.size = size;
+    // **08 §20's KING'S FRAME** (*counts as one size larger for what it carries and for
+    // resisting being moved*; the lead, on O-319: *"Bag slots and forced movement"*;
+    // D-912): the rungs a worn Signature steps the size up, read for those two things
+    // alone - the bag slots below and `effects/forced-movement.mjs` - never the token,
+    // a space or Speed. Great Frame (02) touches neither, so nothing counts twice: an
+    // ogre is Large (x2) for its race and Huge (x4) with the crown.
+    const sizeStep = signature?.sizeStep ?? 0;
+    const carrySize = steppedSize(ownSize, sizeStep);
+    this.resistSize = steppedSize(size, sizeStep);
     // **PACK HOBGOBLIN IS READ INLINE, HERE.** It was a `multiply` change in
     // the `final` phase, which lands after this whole method - so it doubled
     // the number the sheet printed and moved neither the load state, nor the
@@ -640,7 +652,7 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
       identifier: i.system?.identifier, className: i.system?.className,
       race: i.system?.race, taken: i.system?.taken
     }));
-    const base = baseCapacity({ strMod: this.abilities.str.own?.mod ?? this.abilities.str.mod, size: ownSize, factor: carryFactor(talents) });
+    const base = baseCapacity({ strMod: this.abilities.str.own?.mod ?? this.abilities.str.mod, size: carrySize, factor: carryFactor(talents) });
     // The whole derivation, once. NOTHING IS STORED: where a thing sits is
     // worked out every preparation, so a container taken off can never leave
     // anything hidden inside it and a legacy world reads its overflow in
@@ -932,6 +944,10 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
       const share = plateWards(this.plateTalents, { named, bodyAP: this.ap?.body ?? 0, part: "armor" });
       for (const [school, n] of Object.entries(share.ward)) this.ward[school] = (this.ward[school] ?? 0) + n;
     }
+    // **A WARD FLOOR A SIGNATURE SETS** (08 §20's Sulfuras, Firelord's Grip: *You have Ward
+    // 3 against Fire, unless you already have more*; D-911): the higher of the two, once
+    // every `final` change has landed - so it is a floor and never a sum - and before the cap.
+    wardFloorOn(this.ward, this.signatureEffects?.wardFloor);
     // **WARD IS AT MOST 10 AGAINST ANY SCHOOL** (the Chromatic Champion plan; the lead:
     // *"increase the ward max to 10 system wide. gear counts towards this max"*): LAST,
     // once every source - Warded Plate above and every `final` change - has landed.

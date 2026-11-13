@@ -53,6 +53,8 @@
  *   (`rules/area-ticks.mjs#casterTurnCheck`, posted by the turn's own door).
  */
 
+import { resistsForcedMovement } from "./size.mjs";
+
 /** Which way a forced move goes. */
 export const FORCED_TOWARD = Object.freeze(["away", "toward"]);
 
@@ -71,8 +73,27 @@ export const FORCED_REFUSALS = Object.freeze({
   unchecked: "AZEROTH.Forced.Refuse.Unchecked",
   gone: "AZEROTH.Forced.Refuse.Gone",
   unmeasured: "AZEROTH.Forced.Refuse.Unmeasured",
-  noGM: "AZEROTH.Forced.Refuse.NoGM"
+  noGM: "AZEROTH.Forced.Refuse.NoGM",
+  // 05's *Being moved* (D-912): the creature is more than one size larger than what moves it.
+  outsized: "AZEROTH.Forced.Refuse.Outsized"
 });
+
+/**
+ * **05's BEING MOVED** (*You cannot be pushed, pulled or knocked **Prone** against your
+ * will by anything more than one size smaller than you*; the lead, D-913: *"Enforce it,
+ * include Prone, exempt willing allies"*). The size the moved creature resists at (the
+ * King's Frame steps it, D-912) against the size of the creature that moves it, and
+ * nothing refused where the creature is willing - an ally of the one moving it, judged
+ * by the caller through the one ally reading (`rules/distance.mjs#countsAsAlly`), or a
+ * door that says the creature chose it. A move nobody causes is not judged.
+ *
+ * @param {{targetSize?: string|null, sourceSize?: string|null, willing?: boolean, self?: boolean}} o
+ * @returns {"outsized"|null}
+ */
+export function beingMovedRefusal({ targetSize = null, sourceSize = null, willing = false, self = false } = {}) {
+  if (self === true || willing === true || !targetSize || !sourceSize) return null;
+  return resistsForcedMovement(targetSize, sourceSize) ? "outsized" : null;
+}
 
 /**
  * **THE CANDIDATE MOVES, LONGEST FIRST**, in scene pixels.

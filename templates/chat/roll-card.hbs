@@ -176,8 +176,8 @@
             (D-693); it lands on the creature struck, like the condition. --}}
       <div class="azeroth-card-actions">
         {{#each ../targets}}
-        <button type="button" data-action="layBane" data-kind="attack" data-banes="{{../f.bane}}" data-source="{{../f.name}}" data-target-index="{{this.index}}">
-          {{localize "AZEROTH.Reaction.LaidBanes" source=../f.name n=../f.bane kind=(localize "AZEROTH.TestKind.Attack")}}
+        <button type="button" data-action="layBane" data-kind="attack" data-banes="{{f.bane}}" data-source="{{f.name}}" data-target-index="{{this.index}}">
+          {{localize "AZEROTH.Reaction.LaidBanes" source=f.name n=f.bane kind=(localize "AZEROTH.TestKind.Attack")}}
         </button>
         {{else}}
         <button type="button" data-action="layBane" data-kind="attack" data-banes="{{f.bane}}" data-source="{{f.name}}">
@@ -277,10 +277,17 @@
         {{!-- 04's Afterimage (the Legacy branches' door 13): the feature a talent grants
               to turn this hit into a miss, through the feature's own door. --}}
         {{#if r.negate}}
-        <button type="button" data-action="reactNegate" data-target-index="{{r.index}}" data-feature-id="{{r.negate.id}}">
+        <button type="button" data-action="reactNegate" data-target-index="{{r.index}}" data-feature-id="{{r.negate.id}}"{{#if r.negate.press}} data-press="{{r.negate.press}}"{{/if}}>
           {{localize "AZEROTH.Miss.NegateButton" name=r.negate.name}}
         </button>
         {{/if}}
+        {{!-- 08 §20's presses that answer an attack on their bearer (D-913): Uther's Stand,
+              The Wyrm's Roar - the press's own door, with this row as its record. --}}
+        {{#each r.answersSig as |s|}}
+        <button type="button" data-action="reactSignature" data-target-index="{{r.index}}" data-item-id="{{s.id}}" data-press="{{s.press}}">
+          {{localize "AZEROTH.Signature.AnswerButton" name=s.name}}
+        </button>
+        {{/each}}
         {{#if r.phaseShift}}
         <button type="button" data-action="phaseShift" data-target-index="{{r.index}}">
           {{localize "AZEROTH.PhaseShift.Button"}}
