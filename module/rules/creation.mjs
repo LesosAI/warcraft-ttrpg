@@ -34,6 +34,7 @@ import { trainingProfile, trainingWarning } from "./equipment-training.mjs";
 // A Legacy's talent is its people's alone (04 §1, D-781).
 import { keptBy } from "./legacy-branches.mjs";
 import { startingRacialState } from "./creator-choices.mjs";
+import { classLearnsSpell } from "./spell-access.mjs";
 // The Mortal guise (the Chromatic Champion plan).
 import { guiseFacts, guiseRequired, guiseSnapshot, isGuiseRace, peopleOf, raceOpensClass } from "./guise.mjs";
 
@@ -156,7 +157,8 @@ export const METHODS = Object.freeze(["array", "pointBuy", "roll"]);
  * Chromatic Champion (D-847; the orchestrator's placement, the drafts' second
  * option - the Vitest says so if the book lays it elsewhere).
  */
-export const CLASS_ORDER = Object.freeze(["warrior", "paladin", "ranger", "rogue", "priest", "shaman", "mage", "warlock", "druid", "chromatic-champion", "chronomancer"]);
+// The Death Knight twelfth, after the Chronomancer (D-942), where 02 §7 writes it up.
+export const CLASS_ORDER = Object.freeze(["warrior", "paladin", "ranger", "rogue", "priest", "shaman", "mage", "warlock", "druid", "chromatic-champion", "chronomancer", "death-knight"]);
 
 /** "Take these six numbers and assign each to an ability." */
 export const ARRAY = Object.freeze([16, 14, 13, 12, 10, 8]);
@@ -715,9 +717,13 @@ export function validate(p = {}) {
   if (chosen.length !== required) refuse("spellCount", "spells", { required, chosen: chosen.length });
   for (const spell of chosen) {
     if ((spell.tier ?? 1) > 1) { refuse("spellTier", "spells", { name: spell.name }); break; }
-    if (p.cls && !p.cls.schools?.includes(spell.school)) { refuse("spellSchool", "spells", { name: spell.name }); break; }
-    if (p.cls && Array.isArray(spell.classes) && spell.classes.length && !spell.classes.includes(p.cls.name)) {
-      refuse("spellRestricted", "spells", { name: spell.name }); break;
+    // The one predicate (`spell-access.mjs`, D-930): a holder of the school, or a
+    // casting class the Restricted line names. The two words keep their old meaning: a
+    // school neither held nor named, and a line that leaves the class out.
+    if (p.cls && !classLearnsSpell(p.cls, spell)) {
+      const named = Array.isArray(spell.classes) ? spell.classes : [];
+      const holds = Boolean(p.cls.schools?.includes(spell.school));
+      refuse(!holds && !named.includes(p.cls.name) ? "spellSchool" : "spellRestricted", "spells", { name: spell.name }); break;
     }
   }
 

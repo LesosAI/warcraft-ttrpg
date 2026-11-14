@@ -227,7 +227,8 @@ export async function specialEquipmentQueryHandler(data={}, {user}={}){
       if(JSON.stringify(reread)!==JSON.stringify(exchange))throw new Error("Rune resources changed after payment");
       await actor.updatePool(exchange.pool,{"system.health.value":exchange.health});
     }
-    else if(entry.heal)await target.applyHealing(entry.heal,{from:actor});
+    // A consumable's heal (D-946): the undead judgement never refuses one.
+    else if(entry.heal)await target.applyHealing(entry.heal,{from:actor,consumable:true});
     else if(bleed){
       // Preserve every other status, stat change, injury and flag on a mixed carrier.
       const statuses=[...bleed.statuses].filter(s=>s!=="bleeding");

@@ -41,3 +41,15 @@ export function maneuverPurse(pools = [], maneuverPool = null) {
   const named = (pools ?? []).filter(p => p?.name === maneuverPool);
   return named.find(p => p.kind === "power") ?? named[0] ?? null;
 }
+
+/**
+ * The price a held feature sets on every maneuver, or null where none does: the lowest a
+ * feature stamps (`FeatureData.maneuverPrice`), read off the features HELD, never the class.
+ *
+ * @param {Array<{maneuverPrice?: number|null}>} features
+ * @returns {number|null}
+ */
+export function maneuverPriceOf(features = []) {
+  const prices = (features ?? []).map(f => f?.maneuverPrice).filter(p => Number.isInteger(p) && p >= 0);
+  return prices.length ? Math.min(...prices) : null;
+}

@@ -323,7 +323,9 @@ export const EXTRA_FEATURE_LEVELS = Object.freeze({
   warlock: Object.freeze([15]),
   rogue: Object.freeze([4]),
   // Breath (02 §7; 02 §6: *the Chromatic Champion one more at level 3*).
-  "chromatic-champion": Object.freeze([3])
+  "chromatic-champion": Object.freeze([3]),
+  // Death Grip at 3 and Deathcharger at 15 (the drafts' roster, D-942).
+  "death-knight": Object.freeze([3, 15])
 });
 
 /** The levels one class grants a feature at: the ladder plus its own extras. */

@@ -117,8 +117,16 @@ AZEROTH.RACE_SIDE = {
   "blood-elf": null, "goblin": null, "ogre": null
 };
 
-// The seven schools (D-296). School sets the spell list a class may learn from,
-// the Ward it meets, and the Immune and Vulnerable keywords that answer it.
+// The seven DAMAGE schools (D-296). A school's damage meets its Ward, its
+// Spellpower, its school armor and the Immune and Vulnerable keywords that
+// answer it, and every map keyed by school - `system.ward`, `system.spellpower`,
+// the damage lanes, the "any school" choosers - is keyed by THIS list.
+//
+// **THE SPELL SCHOOLS ARE `spellSchools`, BELOW** (D-941, the Death Knight plan:
+// *"Death is a school for access. Its spells deal Shadow damage"*). The census of
+// every reader (F:\tmp\death-knight\f1-report.md) found 90-odd of them meaning a
+// damage school and a dozen meaning an access school, so this name keeps the
+// meaning most readers need and the access readers moved.
 // There is no second taxonomy: the traditions of D-005 are retired.
 AZEROTH.schools = {
   fire:   "AZEROTH.School.Fire",
@@ -128,6 +136,17 @@ AZEROTH.schools = {
   shadow: "AZEROTH.School.Shadow",
   fel:    "AZEROTH.School.Fel",
   holy:   "AZEROTH.School.Holy"
+};
+
+// The eight SPELL schools (07 §1; D-941): the seven above and **Death**, a school
+// for access alone. A spell's own `school`, a class's `schools`, the browser's and
+// the creator's school facet and every access reader take this list; a Death
+// spell's damage is Shadow (`system.damage.school`), so no Ward, Spellpower lane
+// or damage type is keyed `death`. `rules/schools.mjs` is the one reading of
+// which damage school a spell school's damage and bonuses fall under.
+AZEROTH.spellSchools = {
+  ...AZEROTH.schools,
+  death:  "AZEROTH.School.Death"
 };
 
 // The menus a feature's Use asks from (D-618, D-619, D-635): the `choices` of
@@ -144,8 +163,8 @@ AZEROTH.featureChoices = Object.freeze([
   "flightSchools"
 ]);
 
-// Damage types are the seven schools plus Physical (06 SS4). Immune and
-// Vulnerable both read this list.
+// Damage types are the seven DAMAGE schools plus Physical (06 SS4), never Death
+// (D-941). Immune and Vulnerable both read this list.
 AZEROTH.damageTypes = { ...AZEROTH.schools, physical: "AZEROTH.DamageType.Physical" };
 
 // The three Resiliences and the ability each reads (05 SS1). A class trains two,
@@ -165,13 +184,17 @@ AZEROTH.resilienceAbility = { body: "con", reflex: "dex", spirit: "wis" };
 //
 // Keyed by the class's `identifier`, never by its name, so it survives a
 // rename. `rules/creation.mjs#primaryAbilities` is the reader.
-AZEROTH.primaryAbility = { warrior: "str", rogue: "dex", ranger: "dex", "chromatic-champion": "con", chronomancer: "int" };
+// The Death Knight casts with Charisma (the lead: **Charisma**, Casting Test and Spell
+// DC; D-942), and Charisma sets its Runic Power cap and gain (`rules/runes.mjs`).
+AZEROTH.primaryAbility = { warrior: "str", rogue: "dex", ranger: "dex", "chromatic-champion": "con", chronomancer: "int", "death-knight": "cha" };
 
 // **A CLASS TAKEN AT CREATION AND NEVER MULTICLASSED, EITHER WAY** (the lead, on the
 // Chromatic Champion plan: *"Creation only; no 2nd class."*). Keyed by identifier;
 // `rules/multiclass.mjs#multiclassRefusal` is the one reader.
 // The Chronomancer too (the lead: *"Restrict multiclassing for this."*, D-860).
-AZEROTH.creationOnlyClasses = ["chromatic-champion", "chronomancer"];
+// The Death Knight too (the plan's Phase 0 item 6, accepted as drafted: *creation only,
+// and no second class in either direction*; D-942): its Power lives in its weapons.
+AZEROTH.creationOnlyClasses = ["chromatic-champion", "chronomancer", "death-knight"];
 
 // **A CLASS WHOSE PEOPLE IS FIXED AND WEARS ANOTHER'S GUISE** (the Chromatic Champion
 // plan, *The Chromatic Outcast is a real race item, and the guise is a pick beside
@@ -209,12 +232,24 @@ AZEROTH.momentumTypes = {
   ferocity:    "AZEROTH.Pool.Ferocity",
   // The Chronomancer's (D-848): held in the Hourglass, capped by its rarity, and
   // gone the moment it leaves the Ranged slot (`rules/sand.mjs`).
-  sand:        "AZEROTH.Pool.Sand"
+  sand:        "AZEROTH.Pool.Sand",
+  // The Death Knight's (D-943): gained ONLY by spending a rune unless a feature or
+  // talent names another way, capped at 10 plus Charisma and never below 10, kept
+  // between fights and emptied only when a Long Rest finishes (`rules/runes.mjs`).
+  runicPower:  "AZEROTH.Pool.RunicPower"
 };
 AZEROTH.powerTypes = {
   mana:   "AZEROTH.Pool.Mana",
   focus:  "AZEROTH.Pool.Focus",
-  energy: "AZEROTH.Pool.Energy"
+  energy: "AZEROTH.Pool.Energy",
+  // The Death Knight's Power pool is the runes inscribed on the weapons it WIELDS
+  // (D-943): derived off the weapons, never stored on the class (`rules/runes.mjs`).
+  runes:  "AZEROTH.Pool.Runes"
+};
+// The two kinds of rune (the lead: *"inscribe runes of either Blood or Frost"*).
+AZEROTH.runeKinds = {
+  blood: "AZEROTH.Runes.Blood",
+  frost: "AZEROTH.Runes.Frost"
 };
 // Every pool a feature may spend from (D-612): the five Momentum names and
 // the three Power names, one map so a select can offer them together.
@@ -226,6 +261,9 @@ AZEROTH.poolTypes = { ...AZEROTH.momentumTypes, ...AZEROTH.powerTypes };
 // `any` is a price paid from whichever Momentum or Power pool the payer picks (02 §5's
 // Tail Sweep; the lead, 2026-11-09; `rules/pools.mjs#ANY_POOL`).
 AZEROTH.costPoolTypes = { momentum: "AZEROTH.Momentum.Label", any: "AZEROTH.Pool.Any", ...AZEROTH.poolTypes };
+// The pool 07 prints a SPELL's cost in (D-944): Mana, or Runic Power on a spell only a Death
+// Knight can learn. `SpellData.costPool`'s choices and the spell sheet's select.
+AZEROTH.spellCostPools = { mana: "AZEROTH.Card.Mana", runicPower: "AZEROTH.Pool.RunicPower" };
 // What feeds Speed (05 §10, D-621), for the banner's tooltip.
 AZEROTH.speedParts = {
   race:    "AZEROTH.Speed.Race",
@@ -458,6 +496,13 @@ AZEROTH.actions = {
   action:   "AZEROTH.Action.Action",
   full:     "AZEROTH.Action.Full",
   reaction: "AZEROTH.Action.Reaction"
+};
+// **A SPELL'S ACTION** (O-351; run close-F2): the ladder, and 07's timed word for its fourteen
+// roleplay spells (*1 minute*). A spell's `action` alone may hold it; a feature, an ability and an
+// item's Use keep the ladder (`AZEROTH.actions`).
+AZEROTH.spellActions = {
+  ...AZEROTH.actions,
+  minute: "AZEROTH.Action.Minute"
 };
 AZEROTH.HALF_ACTIONS_PER_TURN = 2;
 AZEROTH.REACTIONS_PER_TURN = 1;
@@ -916,7 +961,9 @@ AZEROTH.boundKinds = {
   construct: "AZEROTH.Bound.Kind.Construct",
   // 04's Thrall of the Banshee (the lead, 2026-10-22): one token's creature, bound while
   // its Charmed stands, by the Use's door alone - the banner's Bind to never offers it.
-  thrall: "AZEROTH.Bound.Kind.Thrall"
+  thrall: "AZEROTH.Bound.Kind.Thrall",
+  // 07 §17's raise spells and 02's Army of the Dead: a corpse risen for its spell's span.
+  raised: "AZEROTH.Bound.Kind.Raised"
 };
 
 // The ways a weapon is used to attack (06 §1, 08 §5's Thrown; D-731), in the
@@ -1061,7 +1108,10 @@ AZEROTH.BOSS_ACTIONS = { 1: 2, 2: 2, 3: 3, 4: 3 };
 // rule rather than a number on the class: Mana scales with level from 02 SS6's
 // table, while Focus and Energy are flat (05 SS11). Momentum is the other way
 // round -- 02 SS7 prints its cap, so the class carries it (D-507).
-AZEROTH.POWER_FLAT = { focus: 6, energy: 10 };
+// `runes` is 0 here and REPLACED in `CharacterData#prepareDerivedData` by the runes
+// inscribed on the weapons the Death Knight wields (D-943): the pool exists for the
+// class, and its size is the weapons', never a constant.
+AZEROTH.POWER_FLAT = { focus: 6, energy: 10, runes: 0 };
 // Mana by level band, full caster then half caster (02 SS6). The casting
 // ability modifier is added on top.
 AZEROTH.MANA_BY_BAND = [

@@ -38,15 +38,25 @@ export class SpellData extends foundry.abstract.TypeDataModel {
       effect: descriptionField(),
       source: sourceField(),
 
-      // A spell belongs to one of the seven schools (D-296). School sets the
-      // list a class may learn from and the Ward that meets it.
-      school: choiceField(AZEROTH.schools, { nullable: false, initial: "arcane" }),
+      // A spell belongs to one of the eight SPELL schools (D-296, D-941). School
+      // sets the list a class may learn from; the Ward that meets it is its
+      // DAMAGE school (`damage.school` below), which for a Death spell is Shadow.
+      school: choiceField(AZEROTH.spellSchools, { nullable: false, initial: "arcane" }),
       // Five tiers. Tier 5 is FOUND, never granted by level (D-297).
       tier: new fields.NumberField({ required: true, integer: true, initial: 1, min: 1, max: 5 }),
 
       // --- 07 §9's field run, in order ---
       mana: optionalNumberField({ min: 0 }),
-      action: choiceField(AZEROTH.actions, { initial: "action" }),
+      // **THE POOL THE ENTRY PRINTS ITS COST IN** (D-944; the lead on the Death Knight's
+      // spells: *"they don't use mana"*): 07 prints **Runic Power** where an entry only
+      // the Death Knight casts would print **Mana**, and the parser reads the number
+      // into `mana` above with the pool named here. `mana` on every other spell, and
+      // the parser emits the key only where it is not, so no stored spell changes and
+      // a world copy reads the initial as its pack copy does (no migration). What a
+      // caster PAYS is `rules/casting.mjs#manaPrice`'s, whatever is printed.
+      costPool: new fields.StringField({ required: false, blank: false, initial: "mana", choices: () => ["mana", "runicPower"] }),
+      // 07's word for a timed cast too (O-351): `AZEROTH.spellActions` widens the ladder with `minute`.
+      action: choiceField(AZEROTH.spellActions, { initial: "action" }),
       range: new fields.StringField({ required: false, blank: true, initial: "" }),
       target: new fields.StringField({ required: false, blank: true, initial: "" }),
       duration: new fields.SchemaField({
@@ -325,6 +335,9 @@ export class SpellData extends foundry.abstract.TypeDataModel {
    * key the update did not name.
    */
   static migrateData(source) {
+    // The printed cost's pool (D-944): a word the choices lack is Mana, and only
+    // where the key is PRESENT, since this runs over partial updates too (D-671).
+    if (source && typeof source === "object" && "costPool" in source && !["mana", "runicPower"].includes(source.costPool)) source.costPool = "mana";
     if (source?.rider && source.rider.mode !== undefined && source.rider.mode !== null && !["replace", "add"].includes(source.rider.mode)) source.rider.mode = null;
     if (source && typeof source === "object" && "areaTick" in source) {
       if (source.areaTick && typeof source.areaTick === "object" && !Array.isArray(source.areaTick)) cleanAreaTick(source.areaTick);

@@ -34,6 +34,9 @@
  */
 
 import { augmentOf } from "./augments.mjs";
+// Sand's emptying is the Sand case of ONE pool-keyed rule (the Death Knight plan's
+// Phase 3, D-943): Runic Power reads the same door.
+import { EMPTIED_BY, keptAfter, keptSurvives, survivedBy } from "./kept-pools.mjs";
 
 /** The pool's key in `AZEROTH.momentumTypes`. */
 export const SAND = "sand";
@@ -106,20 +109,19 @@ export function hourglassOnTile(figure) {
  * The events that EMPTY the pool, and the ones that do not. Keyed by the word
  * a door passes; anything not listed leaves the Sand as it stands.
  */
-export const SAND_EMPTIED_BY = Object.freeze(["shortRest", "longRest", "hourglassOut"]);
+export const SAND_EMPTIED_BY = EMPTIED_BY[SAND];
 
 /** The events 05 §11 and 02 §7 apply to other Momentum and that Sand survives. */
-export const SAND_SURVIVES = Object.freeze(["fightStart", "fightEnd", "roundEnd", "guard", "criticalInjury"]);
+export const SAND_SURVIVES = Object.freeze(survivedBy(SAND));
 
-/** Whether Sand survives this event untouched. */
+/** Whether Sand survives this event untouched (`kept-pools.mjs#keptSurvives`). */
 export function sandSurvives(event) {
-  return !SAND_EMPTIED_BY.includes(event);
+  return keptSurvives(SAND, event);
 }
 
-/** What the pool holds after an event. */
+/** What the pool holds after an event (`kept-pools.mjs#keptAfter`). */
 export function sandAfter(value, event) {
-  const v = Math.max(0, Math.trunc(Number(value)) || 0);
-  return sandSurvives(event) ? v : 0;
+  return keptAfter(SAND, value, event);
 }
 
 /**

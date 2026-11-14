@@ -1,0 +1,38 @@
+{{!--
+  The Death Knight's rune panel on the Combat tab (D-919; D11 §4; the plan's door 1), beside
+  Talents in play: the Runic Power bar first, reading n / cap, then one group for each
+  wielded weapon - its icon ringed in its rarity, its name, its rarity, grip and slot count
+  in words, and one socket a rune slot - then Inscribe and Spend a rune. Each refusal is said
+  in words beside the greyed control. The context is `rules/rune-panel.mjs#runePanelContext`.
+--}}
+<div class="azeroth-rune-panel">
+  {{#if panel.runicPower}}
+  <div class="azeroth-rune-power">
+    <span class="azeroth-rune-power-label">{{localize "AZEROTH.Pool.RunicPower"}}</span>
+    <span class="azeroth-rune-power-count">{{panel.runicPower.value}} / {{panel.runicPower.max}}</span>
+    <span class="azeroth-rune-power-bar" aria-hidden="true"><span class="azeroth-rune-power-fill" style="width: {{panel.runicPower.percent}}%"></span></span>
+  </div>
+  {{/if}}
+  {{#each panel.groups as |g|}}
+  <div class="azeroth-rune-weapon" data-item-id="{{g.itemId}}">
+    <div class="azeroth-rune-weapon-head">
+      {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=g.img rarityClass=g.rarityClass}}
+      <div class="azeroth-rune-weapon-words">
+        <span class="azeroth-rune-weapon-name {{g.rarityClass}}">{{g.name}}</span>
+        <span class="azeroth-rune-weapon-meta">{{g.meta}}</span>
+      </div>
+    </div>
+    <ul class="azeroth-rune-sockets" aria-label="{{g.name}}">
+      {{#each g.sockets as |socket|}}{{> systems/azeroth-rpg/templates/actor/partials/rune-socket.hbs socket=socket}}{{/each}}
+    </ul>
+  </div>
+  {{else}}
+  <p class="azeroth-rune-none">{{localize "AZEROTH.Runes.Panel.Refuse.noWeapon"}}</p>
+  {{/each}}
+  <div class="azeroth-rune-controls">
+    <button type="button" class="azeroth-rune-control" data-action="inscribeRunes"{{#unless panel.inscribe.available}} disabled{{/unless}}>{{localize "AZEROTH.Runes.Panel.Inscribe"}}</button>
+    {{#if panel.inscribe.refusal}}<span class="azeroth-rune-why">{{panel.inscribe.refusal}}</span>{{/if}}
+    <button type="button" class="azeroth-rune-control" data-action="spendRune"{{#unless panel.spend.available}} disabled{{/unless}}>{{localize "AZEROTH.Runes.Panel.Spend"}}</button>
+    {{#if panel.spend.refusal}}<span class="azeroth-rune-why">{{panel.spend.refusal}}</span>{{/if}}
+  </div>
+</div>

@@ -98,6 +98,8 @@ import * as v0132 from "./0.13.2-boss-actions.mjs";
 import * as v0134 from "./0.13.4-creature-plans.mjs";
 import * as v0143 from "./0.14.3-augment-ranged.mjs";
 import * as v0152 from "./0.15.2-legendary-runs.mjs";
+import * as v0153 from "./0.15.3-death-knight.mjs";
+import * as v01531 from "./0.15.3.1-close-repairs.mjs";
 import { forgetPacks } from "./walk.mjs";
 
 // Ordered oldest to newest. Add new entries at the end.
@@ -260,7 +262,15 @@ const CHAIN = [
   // 0.15.2: the seven Legendaries printed before D-909 take 08 §20's named runs - the prose
   // and the descriptor together - only where a held copy still carries the pack's old one
   // sentence (D-910).
-  { version: "0.15.2", module: v0152 }
+  { version: "0.15.2", module: v0152 },
+  // 0.15.3: the Death Knight release - a class refusing shields trains none (D-948), the
+  // spells moved out of Shadow read Death, O-373's three wall and area descriptors, and a
+  // held Legendary's 08 §20 rune slots, each against its pack copy (D-996).
+  { version: "0.15.3", module: v0153 },
+  // 0.15.3.1: a point step inside the unreleased 0.15.3, so a world the working tree already took
+  // to 0.15.3 runs it too - 07's timed *1 minute* Action on a held spell (O-351), and every rules
+  // chapter the world already imported brought up to the book (F6's question 5; run close-F2).
+  { version: "0.15.3.1", module: v01531 }
 ];
 
 /**

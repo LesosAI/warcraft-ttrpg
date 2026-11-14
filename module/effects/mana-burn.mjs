@@ -148,7 +148,9 @@ async function applyHere({ messageId, index } = {}, { user = null } = {}) {
       if (!protection) await target.applyDamage(row.damage, {
         struck: true, attack: true, location: "body", type: "arcane", messageId,
         by: caster, spell: true, wardTook: row.wardTook ?? 0,
-        parts: Array.isArray(row.parts) ? row.parts : null, outcome
+        parts: Array.isArray(row.parts) ? row.parts : null, outcome,
+        // The resolver's inputs (`rules/damage-record.mjs`), so 04's Icebound Fortitude halves this blow before Armor Points and Ward (the F4b review, S6).
+        mitigation: row.mitigationSource ?? null
       });
       return { ok: current(), damageOutcome: outcome };
     };

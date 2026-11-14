@@ -46,6 +46,10 @@ import { collectBurdenParticipants, derivePilgrimsBurdenLoadState } from "../../
 import { carryFactor, talentLanguages } from "../../rules/talent-effects.mjs";
 import { blockSpeedParts, speedFrom, speedParts } from "../../rules/speed.mjs";
 import { capFor } from "../../rules/momentum.mjs";
+// The Death Knight (D-943, D-946): its runes are the weapons', it is undead, and it eats nothing.
+import { RUNES, runePool, wieldedRunes } from "../../rules/runes.mjs";
+import { UNDEAD_CLASS_IMMUNE, UNDEAD_CLASS_VULNERABLE, needsNoDrink, needsNoFood, undeadByClass } from "../../rules/undead.mjs";
+import { trainingProfile, weaponTraining } from "../../rules/equipment-training.mjs";
 import { hourglassOnTile } from "../../rules/sand.mjs";
 import { figureSlots } from "../../rules/worn.mjs";
 import { emptyByTestKind, laidBaneRows, laidBaneTotals, laidBoonRows } from "../../rules/banes.mjs";
@@ -59,6 +63,8 @@ import { armorAccessFor } from "../../rules/class-talents.mjs";
 import { damageImmunitiesFor } from "../../rules/class-talents.mjs";
 import { healingBlockedBy } from "../../rules/no-healing.mjs";
 import { sentinelHalvesHealing } from "../../rules/sentinel-mortal-strike.mjs";
+// 02's Blood Plague halves the healing its carrier receives (the Death Knight plan's door 7).
+import { plagueHalvesHealing } from "../../rules/death-knight.mjs";
 // What an ally's aura lays on this character (D-755).
 import { auraBaneRows, auraBoonRows, auraHalvesHealing, auraStandsFree, emptySchoolArmor } from "../../rules/auras.mjs";
 // A condition a creature cannot be for a span (04's Unfettered; the Legacy branches' door 25).
@@ -307,6 +313,11 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     super.prepareDerivedData();
 
     const classItems = this.#classItems();
+    // **THE CLASSES HELD, BY IDENTIFIER** (D-946): `creature-kinds.mjs#kindsOf` reads a
+    // Death Knight as undead off them through `creatureSnapshot`, and the rest door reads
+    // whether the character needs food. Derived, never stored.
+    this.classKeys = classItems.map(c => c.identifier).filter(id => typeof id === "string" && id);
+    const undeadClass = undeadByClass(this.classKeys);
 
     // The bearer, for every Signature gate judged on this sheet (08 §20,
     // D-692). Read ONCE, from the actor's own getter, so the standing grants
@@ -436,6 +447,19 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // Mana scales with level (02 §6), so the level is part of the lookup.
     const pools = poolsFor(classItems, this.level);
     for (const pool of pools.powers) pool.max += wisdomBonus(this.parent?.effects, pool);
+    // **THE DEATH KNIGHT'S POWER IS THE RUNES ON THE WEAPONS IT WIELDS** (02 §7; D-943), as
+    // Sand's cap is the Hourglass's: read through `readyWeapons`, the one accessor for what
+    // is in hand (D-769), each weapon's slots off its rarity and grip and 0 on one the class
+    // is not trained with (`equipment-training.mjs#weaponTraining`). `system.runes` is the
+    // panel's reading - every wielded weapon's runes and the pool they make - and the Power
+    // pool named `runes` takes its `max` and `value` from it, never from a stored number.
+    const runeAccess = trainingProfile({ classes: classItems }).weapons;
+    const runeRows = classItems.some(c => c.power?.name === RUNES)
+      ? wieldedRunes(this.parent?.readyWeapons?.() ?? [], w => weaponTraining(w, runeAccess))
+      : [];
+    const heldRunes = runePool(runeRows);
+    this.runes = { weapons: runeRows, ...heldRunes };
+    for (const pool of pools.powers) if (pool.name === RUNES) pool.max = heldRunes.max;
     // A talent that lifts a cap (04, D-627): Zealotry, Hunter's Mark. Items
     // are prepared before the actor's derived data, so the ranks are here.
     const taken = (this.parent?.items ?? []).filter(i => i.type === "talent" && (i.system?.taken ?? 0) > 0);
@@ -455,8 +479,10 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // The glass the Ranged TILE shows (the 2a review's should-fix): one reading for the sheet
     // and the cap (`rules/sand.mjs#hourglassOnTile`).
     const hourglass = hourglassOnTile(figureSlots([...(this.parent?.items ?? [])]));
-    for (const pool of pools.momenta) pool.max = capFor(pool, ranksOf, { hourglass });
-    if (pools.momentum && !pools.momenta.includes(pools.momentum)) pools.momentum.max = capFor(pools.momentum, ranksOf, { hourglass });
+    // Runic Power's cap is 10 plus the Charisma modifier, never below 10 (D-943).
+    const chaMod = this.abilities?.cha?.mod ?? 0;
+    for (const pool of pools.momenta) pool.max = capFor(pool, ranksOf, { hourglass, chaMod });
+    if (pools.momentum && !pools.momenta.includes(pools.momentum)) pools.momentum.max = capFor(pools.momentum, ranksOf, { hourglass, chaMod });
     // A pool the character does not hold keeps its stored value untouched and
     // reports a null cap. Zeroing it here would discard data every time a GM
     // detached a class item, and the null `max` is already what tells the sheet
@@ -485,7 +511,8 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
       return {
         ...pool,
         itemId: pool.itemId,
-        value: clampPool(stored, pool) ?? stored
+        // The runes' value is the unspent runes in hand, never a stored number (D-943).
+        value: pool.name === RUNES ? heldRunes.value : (clampPool(stored, pool) ?? stored)
       };
     });
     const primary = this.powers[0] ?? null;
@@ -527,6 +554,8 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     this.corruptionEffects = rungs;
     this.healingReduction = rungs.healingReduction;
     this.vulnerable = [...rungs.vulnerable];
+    // **A DEATH KNIGHT IS VULNERABLE (HOLY)** (02 §7's Risen Knight, 10 §9's Risen; D-946).
+    if (undeadClass) for (const type of UNDEAD_CLASS_VULNERABLE) if (!this.vulnerable.includes(type)) this.vulnerable.push(type);
     // What the Signatures on what is WORN add up to (08 §20, D-692). Read
     // here, applied below beside the numbers each of them belongs to.
     const signature = signatureEffects(usableGear, bearer);
@@ -555,7 +584,11 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
       ...rungs.immune,
       ...signature.conditionImmunities,
       ...steadfast.immune,
-      ...spanImmune
+      ...spanImmune,
+      // **AND A DEATH KNIGHT REFUSES POISON AND DISEASE** (02 §7's Risen Knight; D-946): the
+      // door `toggleStatusEffect` and the affliction door (`effects/afflictions.mjs#afflict`,
+      // `rules/afflictions.mjs#afflictRefusal`) both read this list.
+      ...(undeadClass ? UNDEAD_CLASS_IMMUNE : [])
     ])];
     this.damageRatingBonus = rungs.damageBonus;
     // **WHAT ADDS TO THE DAMAGE, BY LANE AND BY TYPE** (04, D-711 phase 2).
@@ -620,6 +653,12 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // both, because 05 still gives it its Strength score in pounds ten times
     // over and `NpcData` reads exactly that.
     const race = this.parent?.items?.find(i => i.type === "race") ?? null;
+    // **WHO RECOVERS ON A SHORT REST WITHOUT FOOD OR DRINK** (the lead: *"They do recover
+    // health but do not have to eat or drink."*; D-946): a Death Knight, a Forsaken, The
+    // Risen. Read by the rest dialog, which then asks for nothing, and by the rest door.
+    this.needsNoFood = needsNoFood({ classes: this.classKeys, race: race?.system?.identifier ?? race?.name ?? null, endings: rungs.endings, rungs: rungs.rungs });
+    // And who needs no DRINK either (O-331): Undeath's rung at 5 lifts the food alone.
+    this.needsNoDrink = needsNoDrink({ classes: this.classKeys, race: race?.system?.identifier ?? race?.name ?? null, endings: rungs.endings });
     // A shape's size is the block's (D-769): the token, moving through a space
     // and being moved read it. **CARRYING DOES NOT** (the lead, 2026-10-03:
     // *"Druid's own carry"*): the bag slots below read the race's size and the
@@ -811,7 +850,8 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // stand, which the Prone toggle reads.
     this.auraBaneRows = auraBaneRows(this.parent?.effects ?? []);
     this.healingHalved = auraHalvesHealing(this.parent?.effects ?? [])
-      || sentinelHalvesHealing(this.parent?.effects ?? []);
+      || sentinelHalvesHealing(this.parent?.effects ?? [])
+      || plagueHalvesHealing(this.parent?.effects ?? []);
     // **AND A BLOW THAT LEFT IT RECOVERING NONE** (04's Mortal Strike; D-772):
     // the mark's flag on an effect, read by every healing door.
     const blocked = healingBlockedBy(this.parent?.effects ?? []);

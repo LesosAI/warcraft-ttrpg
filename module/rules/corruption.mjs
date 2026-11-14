@@ -116,8 +116,13 @@ function clamp(value) {
 /** The tier at which Fel and Shadow start to charge (07 §8). */
 export const CASTING_CORRUPTION_TIER = 5;
 
-/** The schools that charge at all. Nothing below tier 5, and no other school ever. */
-export const CASTING_CORRUPTION_SCHOOLS = Object.freeze(["fel", "shadow"]);
+/**
+ * The schools that charge at all. Nothing below tier 5, and no other school ever.
+ * **Death** joined them (07 §8: *Casting a tier 5 Death spell accrues 1 Undeath, and a
+ * Death Knight accrues none*; D-945): its point is always Undeath, and who refuses it
+ * is the door's (`undead.mjs#accruesTrack`).
+ */
+export const CASTING_CORRUPTION_SCHOOLS = Object.freeze(["fel", "shadow", "death"]);
 
 /**
  * What casting this spell puts on the caster (07 §8).
@@ -145,6 +150,7 @@ export function castingCorruption(spell = {}) {
   if (tier < CASTING_CORRUPTION_TIER || !CASTING_CORRUPTION_SCHOOLS.includes(school)) return null;
 
   const named = String(spell?.corruption ?? "").toLowerCase();
-  const track = school === "fel" ? "fel" : (TRACKS.includes(named) ? named : null);
+  // A Death spell's point is Undeath, printed or not (D-945).
+  const track = school === "fel" ? "fel" : school === "death" ? "undeath" : (TRACKS.includes(named) ? named : null);
   return track ? { track, points: 1 } : null;
 }

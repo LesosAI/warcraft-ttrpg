@@ -260,10 +260,14 @@ export const ITEM_FIELDS = Object.freeze({
   // 07 §9's field order exactly. `check-spells.ps1` enforces it on the page
   // because the importer reads it in order; this keeps the sheet in step.
   spell: Object.freeze([
-    { path: "school", label: "AZEROTH.Item.School", type: "select", choices: "schools" },
+    // A spell's school is a SPELL school (D-941): a Death spell drew a blank select.
+    { path: "school", label: "AZEROTH.Item.School", type: "select", choices: "spellSchools" },
     { path: "tier", label: "AZEROTH.Item.Tier", type: "number" },
     { path: "mana", label: "AZEROTH.Item.Mana", type: "number" },
-    { path: "action", label: "AZEROTH.Item.Action", type: "text" },
+    // The pool 07 prints the cost in (D-944): Runic Power on a spell only a Death Knight learns.
+    { path: "costPool", label: "AZEROTH.Item.CostPool", type: "select", choices: "spellCostPools" },
+    // A rung of the ladder, or 07's timed *1 minute* (O-351).
+    { path: "action", label: "AZEROTH.Item.Action", type: "select", choices: "spellActions" },
     { path: "range", label: "AZEROTH.Item.Range", type: "text" },
     { path: "target", label: "AZEROTH.Item.Target", type: "text" },
     { path: "duration.text", label: "AZEROTH.Item.Duration", type: "text" },
@@ -291,6 +295,9 @@ export const ITEM_FIELDS = Object.freeze({
     // What it shoots with, and what a shot is cut to (08 §7's Fits column, D-641).
     { path: "launcher", label: "AZEROTH.Item.Launcher", type: "select", choices: "launcherKinds" },
     { path: "fits", label: "AZEROTH.Item.Fits", type: "tags", choices: "launcherKinds" },
+    // A Legendary's own rune slots by grip (08 §20's table, D-919): a Death Knight's count.
+    { path: "runeSlots.two", label: "AZEROTH.Item.RuneSlotsTwo", type: "number" },
+    { path: "runeSlots.one", label: "AZEROTH.Item.RuneSlotsOne", type: "number" },
     ...SCHOOL_POINTS,
     ...BONUSES,
     ...ECONOMY,

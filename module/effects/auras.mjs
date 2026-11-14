@@ -106,6 +106,10 @@ import { sandAuraSources } from "./sand-auras.mjs";
 import { SAND_AURA_FLAG } from "../rules/sand-auras.mjs";
 import { IMMUNE_FLAG } from "../rules/legacy-uses.mjs";
 import { LAID_BANE_FLAG } from "../rules/banes.mjs";
+// The Death Knight's two laid presences (02 §7's Unholy Presence and March of the Damned; doors
+// 10 and 12), the Difficult-ground flag March lays on its allies, and the undead reading.
+import { presenceAuraSources } from "../rules/death-knight.mjs";
+import { IGNORES_GROUND_FLAG } from "../rules/area-ground.mjs";
 
 /** The pass in flight, and whether anything asked for another while it ran. */
 let RUNNING = null;
@@ -199,7 +203,17 @@ export function auraSourcesOf(actor) {
   // **A SUSTAINED SAND SPELL'S AURA** (07 §12: Temporal Sanctuary, Bastion of Hours; O-265): the
   // caster's own laid effect, stamped by the card's Apply, held up while it stands.
   for (const source of sandAuraSources(actor)) out.push(source);
+  // **THE DEATH KNIGHT'S PRESENCES** (02 §7's Unholy Presence and March of the Damned; doors 10
+  // and 12): the knight's own laid effect, held up while it stands, one source a radius.
+  for (const source of presenceAuraSources(plainEffects(actor), { uuid: actor.uuid, name: actor.name })) {
+    out.push({ ...source, img: (actor.effects ?? []).find?.(e => e.flags?.["azeroth-rpg"]?.deathKnightPresence)?.img || AURA_FALLBACK_ICON });
+  }
   return out;
+}
+
+/** An actor's effects as the pure readers take them. */
+function plainEffects(actor) {
+  return [...(actor?.effects ?? [])].map(e => ({ id: e.id, active: e.active, disabled: e.disabled, flags: e.flags, description: e.description ?? "" }));
 }
 
 /** Whether this creature holds an aura at all, before any gate is judged. */
@@ -208,6 +222,7 @@ function holdsAura(actor) {
   if ([...(actor.effects ?? [])].some(e => healingAreaWardSource(e, actor.uuid))) return true;
   if ((actor.system?.signatureEffects?.auras ?? []).length) return true;
   if (sandAuraSources(actor).length) return true;
+  if (presenceAuraSources(plainEffects(actor), { uuid: actor.uuid }).length) return true;
   for (const item of actor.items ?? []) {
     if (item.type === "feature" && item.system?.aura?.feet) return true;
     if (item.type === "talent" && (item.system?.taken ?? 0) > 0 && talentAuraOf(item.system)) return true;
@@ -351,7 +366,12 @@ function auraDescription(row, shown = {}) {
   if (p.taunt) lines.push(game.i18n.format("AZEROTH.Aura.Taunt", { n: p.taunt.banes, owner }));
   // The Legendary readers (D-911).
   if (p.attackDamage) lines.push(game.i18n.format("AZEROTH.Aura.AttackDamage", { n: p.attackDamage }));
-  if (p.tick) lines.push(game.i18n.format("AZEROTH.Aura.Tick", { n: p.tick.damage, type: game.i18n.localize(AZEROTH.damageTypes[p.tick.type] ?? p.tick.type), owner }));
+  if (p.tick?.damage) lines.push(game.i18n.format("AZEROTH.Aura.Tick", { n: p.tick.damage, type: game.i18n.localize(AZEROTH.damageTypes[p.tick.type] ?? p.tick.type), owner }));
+  // The Death Knight's presences (doors 10 and 12).
+  if (p.tick?.heal) lines.push(game.i18n.format("AZEROTH.Aura.TickHeal", { n: p.tick.heal, owner }));
+  if (p.ignoresGround) lines.push(game.i18n.localize("AZEROTH.Aura.IgnoresGround"));
+  if (p.unmovable) lines.push(game.i18n.localize("AZEROTH.Aura.Unmovable"));
+  if (p.meleeTyped) lines.push(game.i18n.format("AZEROTH.Aura.MeleeTyped", { n: p.meleeTyped.amount, type: game.i18n.localize(AZEROTH.damageTypes[p.meleeTyped.type] ?? p.meleeTyped.type) }));
   return lines.map(line => `<p>${line}</p>`).join("");
 }
 
@@ -382,7 +402,10 @@ function auraData(row, shown = {}) {
   const p = auraPayloadOf(row);
   const sandFlags = {
     ...(p.immune ? { [IMMUNE_FLAG]: { conditions: [...p.immune.conditions] } } : {}),
-    ...(p.taunt ? { [LAID_BANE_FLAG]: { kind: "attack", banes: p.taunt.banes, source: row.name ?? "", except: { ...p.taunt.except }, lasting: true } } : {})
+    ...(p.taunt ? { [LAID_BANE_FLAG]: { kind: "attack", banes: p.taunt.banes, source: row.name ?? "", except: { ...p.taunt.except }, lasting: true } } : {}),
+    // March of the Damned's *ignore Difficult ground* (door 12): the flag a laid effect already
+    // carries for it (`canvas/behaviors.mjs#movementFactsOf`), lifted with the aura.
+    ...(p.ignoresGround ? { [IGNORES_GROUND_FLAG]: true } : {})
   };
   return {
     name: game.i18n.format("AZEROTH.Aura.EffectName", { source: row.name, owner }),
@@ -747,7 +770,9 @@ async function syncAurasNow(scene) {
             creatureType: actor.system?.creatureType ?? null,
             race: actor.raceItem?.system?.identifier ?? actor.raceItem?.name ?? actor.system?.race ?? null,
             statuses: [...(actor.statuses ?? [])]
-          })
+          }),
+          // *Each undead ally* (doors 10 and 12): `kindsOf`'s reading, the Death Knight among it.
+          undead: kindsOfActor(actor).has("undead")
         } : {})
       }));
       // **AN AURA ON ITS HOLDER ALONE** (04's Sacred Duty, D-772): it stands on
@@ -949,6 +974,8 @@ export function registerAuraHooks() {
     if (effect?.flags?.["azeroth-rpg"]?.[HEALING_AREA_WARD]) return true;
     // A sand aura's carrier laid, lifted or switched (O-265).
     if (effect?.flags?.["azeroth-rpg"]?.[SAND_AURA_FLAG]) return true;
+    // The Death Knight's presence or march laid, lifted or switched (doors 10 and 12).
+    if (effect?.flags?.["azeroth-rpg"]?.deathKnightPresence) return true;
     let actor = effect?.parent ?? null;
     if (actor?.documentName === "Item") actor = actor.parent ?? null;
     if (actor?.documentName !== "Actor") return false;

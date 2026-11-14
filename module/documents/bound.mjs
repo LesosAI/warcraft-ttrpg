@@ -195,7 +195,7 @@ function ownershipFor(owner) {
  * built by `rules/bound.mjs#totemBlock`). One actor stands for a multiple
  * summon, its tokens unlinked so each carries its own Health.
  */
-export async function createBoundActor({ owner, feature = null, entry = null, block = null, kind, until = null, uncounted = false, school = null, count = 1, sourceName = null, halfActions = null }) {
+export async function createBoundActor({ owner, feature = null, entry = null, block = null, kind, until = null, uncounted = false, school = null, count = 1, sourceName = null, halfActions = null, raise = null, raiseId = null }) {
   const data = entry
     ? entry.toObject()
     : { name: block.name, type: "npc", img: block.img ?? "icons/svg/mystery-man.svg", system: block.system };
@@ -221,7 +221,11 @@ export async function createBoundActor({ owner, feature = null, entry = null, bl
           // The Half-Actions each takes a turn of its own, where fewer than 05's two
           // (04's Pocket Factory, door 6: *each takes one Half-Action a turn of its
           // own*); `AzerothCombatant#_turnFacts` reads it.
-          ...(Number.isInteger(halfActions) && halfActions >= 0 && halfActions < 2 ? { halfActions } : {})
+          ...(Number.isInteger(halfActions) && halfActions >= 0 && halfActions < 2 ? { halfActions } : {}),
+          // **A RAISED DEAD NAMES ITS RAISE AND ITS CARRIER** (07 §17; the Death Knight plan):
+          // which raise made it, so a recast collapses that raise alone, and the carrier on the
+          // knight whose span is its clock (`rules/raise.mjs#RAISE_FLAG`).
+          ...(kind === "raised" && typeof raise === "string" && raise ? { raise, raiseId: typeof raiseId === "string" && raiseId ? raiseId : null } : {})
         }
       }
     }
@@ -588,7 +592,9 @@ export async function release(owner, uuid) {
   const bound = worldActorOf(await fromUuid(uuid));
   if (!bound) return null;
   const bond = bondOf(bound);
-  if (bond?.until === "encounter") {
+  // A raised dead COLLAPSES (07 §17): released by its clock, a recast or a Long Rest, it goes
+  // with its tokens exactly as a creature called for the encounter does.
+  if (bond?.until === "encounter" || bond?.kind === "raised") {
     try {
       await askGM(UNBIND_QUERY, unbindQueryHandler, { uuid: bound.uuid });
     } catch (err) {
@@ -624,6 +630,36 @@ export async function release(owner, uuid) {
  * clients never sync one character at once.
  */
 export function registerBoundHooks() {
+  // **A RAISE'S CLOCK** (07 §17: *The dead it raises collapse when its duration ends*): the
+  // carrier on the knight ending - its span out, a recast, a Long Rest, a hand - collapses
+  // the dead it carries, and the last of them gone takes the carrier with it. The active GM
+  // alone, which may delete every token (`effects/death-knight-necromancy.mjs`).
+  Hooks.on("deleteActiveEffect", effect => {
+    if (!game.users?.activeGM?.isSelf) return;
+    const raised = effect?.flags?.["azeroth-rpg"]?.raised ?? null;
+    if (!raised?.raiseId) return;
+    import("../effects/death-knight-necromancy.mjs")
+      .then(m => m.collapseRaise(raised.raiseId))
+      .catch(err => console.warn("azeroth-rpg | a raise's collapse", err));
+  });
+  // **A SCENE DELETED STRANDS NO RAISE** (the F3 review): core deletes the scene's tokens and
+  // leaves the raised world actor and its carrier; a raise with no dead left on any scene
+  // collapses (`effects/death-knight-necromancy.mjs#collapseStranded`).
+  Hooks.on("deleteScene", scene => {
+    if (!game.users?.activeGM?.isSelf) return;
+    import("../effects/death-knight-necromancy.mjs")
+      .then(m => m.collapseStranded(scene))
+      .catch(err => console.warn("azeroth-rpg | a raise's scene", err));
+  });
+  Hooks.on("deleteActor", actor => {
+    if (!game.users?.activeGM?.isSelf) return;
+    const raisedBond = actor?.getFlag?.("azeroth-rpg", FLAG) ?? null;
+    if (raisedBond?.kind === "raised" && raisedBond.raiseId) {
+      import("../effects/death-knight-necromancy.mjs")
+        .then(m => m.dropEmptyCarrier(raisedBond))
+        .catch(err => console.warn("azeroth-rpg | a raise's carrier", err));
+    }
+  });
   Hooks.on("deleteActor", actor => {
     if (!game.users?.activeGM?.isSelf) return;
     const bond = actor?.getFlag?.("azeroth-rpg", FLAG) ?? null;
@@ -719,9 +755,15 @@ export async function syncBoundFor(owner, { encounter } = {}) {
 /** A fight's end (D2 §7): the buffs bought for it lapse and the creatures called for it go. */
 export async function endBoundEncounter(owner) {
   if (owner?.type !== "character") return;
+  // **AN OWNER ALREADY GONE WRITES NOTHING** (run F4b; the page error runs F3 and F4a recorded):
+  // core calls `_onExit` for every combatant as a fight is deleted, and an owner deleted first (a
+  // teardown, a GM's cleanup) was written to here - *Actor id ... does not exist*.
+  const here = () => (owner.isToken ? Boolean(owner.token?.parent?.tokens?.has?.(owner.token.id)) : game.actors?.has?.(owner.id) === true);
+  if (!here()) return;
   for (const bound of boundOf(owner)) {
     if (bondOf(bound)?.until === "encounter") await release(owner, bound.uuid);
   }
+  if (!here()) return;
   await syncBoundFor(owner, { encounter: null });
 }
 

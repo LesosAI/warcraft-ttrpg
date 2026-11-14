@@ -29,6 +29,10 @@ import { shapeCentre } from "../rules/area-ticks.mjs";
 import { dispersionRefusal } from "../rules/dispersion.mjs";
 // 07 §12's Stasis: *cannot act, move, speak or be moved* (O-306).
 import { unmovableBy } from "../rules/chronomancer.mjs";
+// 02 §7's March of the Damned: *cannot be moved against your will* (door 12).
+import { auraHoldsUnmoved } from "../rules/auras.mjs";
+// The record a named pull writes on its own displacement, for the animation layer (D-1015).
+import { FORCED_MOVE_OPTION, cleanForcedMoveCue, forcedMoveCue } from "../rules/animation-records.mjs";
 
 /** The query a move of a token this client does not own goes through. */
 export const FORCED_QUERY = "azeroth-rpg.forcedMove";
@@ -97,21 +101,32 @@ export function resistingSize(actor) {
  * mover's ally (`canvas/engaged.mjs#allyOf`: the fight's sides, else the Party) - MY
  * READING, for the lead, until a feature or spell names the ally's choice itself.
  *
+ * **A MOVE WITH NOBODY BEHIND IT ASKS THE CREATURE'S OWN REFUSAL TOO** (the F2 review's
+ * should-fix 8, D-957): an area's push, a pull no creature is named for - 14's *cannot be moved
+ * against its will* and March of the Damned's (door 12) hold against it as they hold against
+ * a creature's; only the size rule needs a mover to compare against.
+ *
  * @param {Actor|null} victim
  * @param {Actor|null} by
- * @returns {"outsized"|null}
+ * @returns {"refuses"|"outsized"|null}
  */
-export function beingMovedBy(victim, by) {
-  if (!victim || !by) return null;
+export function beingMovedBy(victim, by, { ignoreSize = null } = {}) {
+  if (!victim) return null;
+  // The creature's own refusal (14's *cannot be moved against its will*), and March of the
+  // Damned's while it stands on it (`rules/auras.mjs#auraHoldsUnmoved`).
+  const refuses = [...(victim.system?.refuses ?? []), ...(auraHoldsUnmoved([...(victim.effects ?? [])]) ? ["forcedMovement"] : [])];
+  if (!by) return refuses.includes("forcedMovement") ? "refuses" : null;
   const self = victim.uuid === by.uuid;
   return beingMovedRefusal({
     targetSize: resistingSize(victim), sourceSize: by.system?.size ?? null,
-    self, willing: !self && allyOf(by, victim)
+    self, willing: !self && allyOf(by, victim),
+    // Death Grip's waiver of the size rule for anything but a Boss (02 §7).
+    refuses, ignoreSize, boss: victim.system?.weightClass === "boss"
   });
 }
 
 /** Move it here; the caller has established that this client may write the token. */
-async function moveHere({ token, from, feet, toward, by = null }) {
+async function moveHere({ token, from, feet, toward, by = null, ignoreSize = null, cue = null }) {
   const actor = token.actor ?? null;
   const name = token.name ?? actor?.name ?? "";
   if (dispersionRefusal(actor, "forcedMove")) return result(name, 0, false, "dispersion");
@@ -120,7 +135,8 @@ async function moveHere({ token, from, feet, toward, by = null }) {
   // King's Frame - the lead, on O-319: *"Bag slots and forced movement"*): the size of
   // the creature that caused it against the size the moved one resists at. A move with
   // no creature behind it is not judged.
-  if (beingMovedBy(actor, by)) return result(name, 0, false, "outsized");
+  const refusedMove = beingMovedBy(actor, by, { ignoreSize });
+  if (refusedMove) return result(name, 0, false, refusedMove);
   // **HELD BY STASIS** (07 §12: *it cannot act, move, speak or be moved*; O-306): no push, no pull.
   if (unmovableBy([...(actor?.effects ?? [])])) return result(name, 0, false, "held");
   if (toward !== "toward" && actor && typeof actor.takenTalents === "function" && refusesPushFor(actor.takenTalents())) {
@@ -134,7 +150,17 @@ async function moveHere({ token, from, feet, toward, by = null }) {
   const { step, reason } = forcedStep(plan, { askable: wallsAskable(token), blocked: s => blocked(token, positionOf(token, s, grid)) });
   if (!step) return result(name, 0, false, reason);
   const to = positionOf(token, step, grid);
-  const done = await token.move({ x: to.x, y: to.y, action: "displace" });
+  // **THE MOVE, RECORDED ON ITS OWN OPERATION** (D-1015, O-383; every push and pull since O-397):
+  // the move as the animation layer reads it - the token's centre before and after, a pull or a
+  // push - rides the displacement's operation, which every client's `updateToken` hook is handed,
+  // under the feature's key where the caller named one (`cue`) and the generic forced move's
+  // otherwise. It decides nothing about the move.
+  const record = forcedMoveCue({
+    key: cue?.key ?? null, by: cue?.by ?? null, privacy: cue?.privacy ?? null, toward,
+    step: { sceneId: token.parent?.id ?? null, tokenId: token.id, from: { x: token.x, y: token.y }, to, width: token.width, height: token.height,
+      sizeX: token.parent?.grid?.sizeX ?? grid.size, sizeY: token.parent?.grid?.sizeY ?? grid.size }
+  });
+  const done = await token.move({ x: to.x, y: to.y, action: "displace" }, record ? { [FORCED_MOVE_OPTION]: record } : {});
   return done === false ? result(name, 0, false, "walled") : result(name, step.feet, true, null);
 }
 
@@ -142,7 +168,7 @@ async function moveHere({ token, from, feet, toward, by = null }) {
  * The GM-side handler (`FORCED_QUERY`). Throws with the reason, which travels back
  * to the caller.
  */
-export async function forcedMoveQueryHandler({ tokenUuid = null, from = null, feet = 0, toward = "away", byUuid = null } = {}, { user = null } = {}) {
+export async function forcedMoveQueryHandler({ tokenUuid = null, from = null, feet = 0, toward = "away", byUuid = null, ignoreSize = null, cue = null } = {}, { user = null } = {}) {
   const token = tokenUuid ? await fromUuid(tokenUuid) : null;
   if (token?.documentName !== "Token") throw new Error(game.i18n.localize(FORCED_REFUSALS.gone));
   if (user) {
@@ -154,25 +180,41 @@ export async function forcedMoveQueryHandler({ tokenUuid = null, from = null, fe
   const point = from && Number.isFinite(Number(from.x)) && Number.isFinite(Number(from.y)) ? { x: Number(from.x), y: Number(from.y) } : null;
   if (!point) return result(token.name, 0, false, "unmeasured");
   const mover = byUuid ? await fromUuid(byUuid) : null;
-  return moveHere({ token, from: point, feet: Math.max(0, Math.trunc(Number(feet)) || 0), toward: toward === "toward" ? "toward" : "away", by: mover?.documentName === "Actor" ? mover : null });
+  return moveHere({ token, from: point, feet: Math.max(0, Math.trunc(Number(feet)) || 0), toward: toward === "toward" ? "toward" : "away", by: mover?.documentName === "Actor" ? mover : null,
+    ignoreSize: ignoreSize === "nonBoss" ? "nonBoss" : null, cue: cueOf(cue) });
+}
+
+/**
+ * The animation record a caller names for its pull, cleaned to the three things the GM's handler
+ * may carry (D-1015): the feature's key, the token of the creature that caused it and the Use's
+ * privacy pair. Null for anything else.
+ */
+function cueOf(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const probe = cleanForcedMoveCue({ key: raw.key, by: raw.by, privacy: raw.privacy,
+    step: { tokenId: "probe", kind: "pull", from: { x: 0, y: 0 }, to: { x: 0, y: 0 } } });
+  return probe ? { key: probe.key, by: probe.by, privacy: probe.privacy ?? null } : null;
 }
 
 /**
  * **PUSH OR PULL ONE CREATURE'S TOKEN**, and say what came of it.
  *
+ * `cue` (D-1015) names the feature whose pull this is - `{key, by: {sceneId, tokenId}, privacy}` -
+ * and the move then writes the record the animation layer plays the pull from.
+ *
  * @param {{token: TokenDocument|null, from: {x: number, y: number}|null, feet: number, toward?: "away"|"toward",
- *   by?: Actor|null, name?: string}} o  `from` in the scene's pixels: the caster's centre or the area's
+ *   by?: Actor|null, name?: string, cue?: object|null}} o  `from` in the scene's pixels: the caster's centre or the area's
  * @returns {Promise<{name: string, feet: number, moved: boolean, reason: string|null}>}
  */
-export async function forceMove({ token = null, from = null, feet = 0, toward = "away", by = null, name = "" } = {}) {
+export async function forceMove({ token = null, from = null, feet = 0, toward = "away", by = null, name = "", ignoreSize = null, cue = null } = {}) {
   if (!token?.parent) return result(name, 0, false, "gone");
   if (dispersionRefusal(token.actor, "forcedMove")) return result(token.name ?? name, 0, false, "dispersion");
   if (!from) return result(token.name, 0, false, "unmeasured");
   try {
-    if (token.isOwner) return await moveHere({ token, from, feet, toward, by });
+    if (token.isOwner) return await moveHere({ token, from, feet, toward, by, ignoreSize, cue: cueOf(cue) });
     const gm = game.users?.activeGM ?? null;
     if (!gm) return result(token.name, 0, false, "noGM");
-    const done = await gm.query(FORCED_QUERY, { tokenUuid: token.uuid, from: { x: from.x, y: from.y }, feet, toward, byUuid: by?.uuid ?? null }, { timeout: 15000 });
+    const done = await gm.query(FORCED_QUERY, { tokenUuid: token.uuid, from: { x: from.x, y: from.y }, feet, toward, byUuid: by?.uuid ?? null, ignoreSize, cue: cueOf(cue) }, { timeout: 15000 });
     return done && typeof done === "object" ? result(done.name ?? token.name, done.feet, done.moved === true, done.reason ?? null) : result(token.name, 0, false, "noGM");
   } catch (err) {
     ui.notifications?.warn(err.message);

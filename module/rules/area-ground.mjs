@@ -223,6 +223,12 @@ export const NON_SPELL_GROUND = Object.freeze({
   "Draconic Leap": { automated: "the leap is the step door's displacement (`onUse.step`, `effects/steps.mjs#stepTo`), which meters no foot, so Difficult ground costs it nothing and it spends no Move" },
   // 04's Guardian of Time (the Chronomancer's stage 2c): *The ground within 10 feet of you is
   // Difficult ground for your enemies. At rank 2, within 15 feet.*
+  // 02's Death Knight (run F2): Desecration's ground is a placed area carrying `areaGround` for
+  // the knight's enemies, sparing a creature immune to Shadow, which the GM's `reconcileGround`
+  // lays (`effects/death-knight.mjs#placeDesecration`, D-938).
+  "Desecration": { automated: "a placed area carrying `areaGround` (`who: enemy`, `spares: shadow`), laid by `effects/death-knight.mjs#placeDesecration` and given its `difficultFor` behavior by the GM's `reconcileGround` (D-938)" },
+  // *You and each ally within 30 feet of you ignore Difficult ground for 1 minute*: door 12, run F3's.
+  "March of the Damned": { reason: "02's level 20 feature, whose aura is the Death Knight plan's door 12 (run F3); until then the table's" },
   "Distortion Field": { automated: "the talent's `field` row: a Region attached to the holder's token carrying the `difficultFor` behavior for the holder's enemies, 10 or 15 feet past its own squares, laid and kept by the active GM (`canvas/distortion-field.mjs#reconcileFields`)" }
 });
 
@@ -298,6 +304,9 @@ export function groundNow(row = {}, talentGround = undefined, now = {}) {
     const early = own.from === "landing" && !groundLanded(placedAt, now);
     // Sandtrap's ground slows the creatures named at the cast alone (07 §12, D-864).
     if (!lapsed && !early && own.who === "named") return { who: "named", kinds: [], named: [...(row?.named ?? [])].filter(u => typeof u === "string" && u).sort() };
+    // A feature's ground for the caster's ENEMIES alone, sparing a creature immune to a
+    // school (02's Desecration, D-938) - named only where the ground carries them.
+    if (!lapsed && !early && own.who === "enemy") return { who: "enemy", kinds: [], ...(own.spares ? { spares: String(own.spares) } : {}) };
     if (!lapsed && !early) return { who: "creature", kinds: [] };
   }
   const talent = talentGround === undefined ? (row?.ground ?? null) : talentGround;
@@ -342,7 +351,9 @@ export function groundLanded(placedAt = null, { time = 0, fights = {}, turns = {
  * @param {{relation?: string, kinds?: Set<string>|string[]}} mover
  * @returns {boolean}
  */
-export function difficultApplies(spec = {}, { relation = "other", kinds = [], uuid = null } = {}) {
+export function difficultApplies(spec = {}, { relation = "other", kinds = [], uuid = null, immune = [] } = {}) {
+  // A creature immune to the school the ground spares walks it freely (02's Desecration).
+  if (spec?.spares && (immune ?? []).includes(spec.spares)) return false;
   // Sandtrap's *each creature you choose as you cast* (07 §12): the named alone.
   if (spec?.who === "named") return Boolean(uuid) && (spec?.named ?? []).includes(uuid);
   const who = spec?.who === "enemy" ? "enemy" : "creature";

@@ -19,7 +19,7 @@ import { targetSnapshots } from "../applications/roll-dialog.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { SECOND_REACTION_MARK, SIGNATURE_SHIELD_FLAG, SIGNATURE_WEAPON_FLAG, pressedWeaponBonus } from "../rules/signatures.mjs";
 import { PARRY_COST } from "../rules/reactions.mjs";
-import { regrossFor } from "../rules/blow-doors.mjs";
+import { regrossRecorded } from "../rules/blow-records.mjs";
 import { AGAIN_FLAG, RECURRENCE_FLAG, againAmount } from "../rules/chronomancer.mjs";
 import { AURA_FLAG } from "../rules/auras.mjs";
 import { tickLanding } from "../rules/ticks.mjs";
@@ -484,7 +484,7 @@ export function signatureLegendaryBatch(context) {
         const flags = card.flags["azeroth-rpg"];
         assert.ok(flags.blowSpec, "the card recorded no blow before any target met it");
         const allyMet = flags.damageByTarget[0].damage;
-        const expected = regrossFor(flags.blowSpec, { apByLocation: tyr.system.ap ?? {}, immune: tyr.system.immune ?? [], vulnerable: tyr.system.vulnerable ?? [] })?.damage;
+        const expected = regrossRecorded(flags.blowSpec, { apByLocation: tyr.system.ap ?? {}, immune: tyr.system.immune ?? [], vulnerable: tyr.system.vulnerable ?? [] })?.damage;
         assert.isAbove(expected, Math.max(0, allyMet - tyrAp), "the re-resolved blow is no larger than one met by both suits");
         const tyr1 = tyr.system.health.value;
         const ally1 = ally.system.health.value;

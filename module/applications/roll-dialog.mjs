@@ -656,7 +656,10 @@ export function prepareRoll(actor, given) {
   else { dc = standardDC(actor.system?.tier ?? 1); dcSource = "standard"; }
   // The pool a called shot pays from: the roller's own, or - a companion whose owner
   // holds 04's Shared Quarry - the owner's Quarry (D-779; `AzerothActor#momentumPayer`).
-  const momentum = actor.momentumPayer?.({ amount: AZEROTH.CALLED_SHOT_MOMENTUM })?.pool ?? actor.system?.momenta?.[0] ?? null;
+  const calledPayer = actor.momentumPayer?.({ amount: AZEROTH.CALLED_SHOT_MOMENTUM }) ?? null;
+  const momentum = calledPayer?.pool ?? actor.system?.momenta?.[0] ?? null;
+  // The called shot's price: 06 §7's 2, or what Runic Discipline sets (02 §7, run F2).
+  const calledShotCost = calledPayer?.price ?? AZEROTH.CALLED_SHOT_MOMENTUM;
   // D-613: the passives that could bear on this roll. One with a Boon or
   // Bane of its own joins the Situational lines, unchecked; the rest are
   // notes. Taken talents that speak of a Boon or Bane are notes as well.
@@ -698,6 +701,7 @@ export function prepareRoll(actor, given) {
   }
   return {
     targets,
+    calledShotCost,
     provisionTestIds: drinkTestBenefits(actor.effects??[],{kind:test.kind,resilience:spec.resilience??null}).map(e=>e.id??e._id),
     equipmentTestIds: pendingEquipmentTest(actor.effects ?? [], {
       kind: test.kind, ability: test.ability ?? AZEROTH.skillAbility?.[spec.skill] ?? null,
@@ -934,7 +938,7 @@ function readForm(form, p) {
   const extraBanes = Math.max(0, Math.trunc(Number(f.extraBanes?.value)) || 0);
   const { boons, banes, modifier } = countModifiers(lines, { extraBoons, extraBanes });
   const location = p.location ? (f.location?.value || p.location) : null;
-  const canPay = Boolean(p.momentum && p.momentum.value >= AZEROTH.CALLED_SHOT_MOMENTUM);
+  const canPay = Boolean(p.momentum && p.momentum.value >= (p.calledShotCost ?? AZEROTH.CALLED_SHOT_MOMENTUM));
   const paid = canPay && location !== null && location !== "body" && Boolean(f.momentum?.checked);
   // A DC field cleared returns to the prepared number (O-307's rule, on the single field too:
   // `Number("")` is 0, which read an emptied field as DC 0).
@@ -983,7 +987,7 @@ function readForm(form, p) {
     modifier,
     location,
     headModifier: p.headModifier ?? null,
-    momentumSpent: paid ? AZEROTH.CALLED_SHOT_MOMENTUM : 0,
+    momentumSpent: paid ? (p.calledShotCost ?? AZEROTH.CALLED_SHOT_MOMENTUM) : 0,
     overchannel,
     augment,
     swift,
@@ -1101,7 +1105,7 @@ async function dialogVariant(actor, spec) {
   const p = prepareRoll(actor, spec);
   const resolved = withAttackMode(spec, p.mode);
   const modifiers = (resolved.modifiers ?? []).map(m => ({ label: m.label, value: m.value }));
-  const canPay = Boolean(p.momentum && p.momentum.value >= AZEROTH.CALLED_SHOT_MOMENTUM);
+  const canPay = Boolean(p.momentum && p.momentum.value >= (p.calledShotCost ?? AZEROTH.CALLED_SHOT_MOMENTUM));
   const initial = {
     ...countModifiers(p.situational.automatic),
     location: p.location,
@@ -1193,7 +1197,7 @@ async function dialogVariant(actor, spec) {
     casting: p.casting,
     occasions: spec.occasions ?? null,
     momentum: p.momentum
-      ? { name: p.momentum.name, value: p.momentum.value, max: p.momentum.max, canPay, cost: AZEROTH.CALLED_SHOT_MOMENTUM }
+      ? { name: p.momentum.name, value: p.momentum.value, max: p.momentum.max, canPay, cost: p.calledShotCost ?? AZEROTH.CALLED_SHOT_MOMENTUM }
       : null,
     modifiers,
     preview: formulaFor(initial, modifiers)

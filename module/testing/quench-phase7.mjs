@@ -206,7 +206,9 @@ export function automationBatch(context) {
       const coil = warlock.items.find(i => i.name === "Death Coil");
       assert.equal(coil.system.heal.fromDamage, "half");
       await warlock.update({ "system.health.value": 1 });
-      const npc = await makeNpc("Plagued Ghoul");
+      // A LIVING target: 07 §17's Death Coil heals an undead one instead and drains nothing
+      // (D-960), so the ghoul this row used to strike now takes the heal.
+      const npc = await makeNpc("Kobold");
       const card2 = await cardOf("spell", warlock, { spell: coil, face: 20, args: { targets: [snapshotOf(npc)] } });
       const self = card2.element.querySelector('[data-action="applyHealing"][data-self]');
       assert.ok(self, "no Apply to self on Death Coil's card");

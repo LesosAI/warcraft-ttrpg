@@ -121,6 +121,9 @@ export async function landTicks(actor, {combat = null, combatant = null} = {}) {
         // A Physical tick's spell school, for its Spellpower (the 2a review, L1); else the tick's type.
         school: tick.type === "physical" ? (tick.spellSchool ?? tick.type) : (tick.type ?? null), takesSpellpower: tick.spellpower === true, feature: tick.via === "feature",
         isSpell: Boolean(tick.castUuid) && tick.via !== "feature", ignite: tick.ignite === true,
+        // A heal tick's spell school (O-333): a Death Knight is healed by another creature's
+        // Death spell alone, so the school rides to the one healing door.
+        castSchool: tick.castSchool ?? null,
         // An item's own tick (08 §20's Hand of Ragnaros; D-911) takes no spell's bonus.
         item: tick.via === "item",
         // D-779: the schools 04's Divine Aegis was named for at the cast, and 04's
@@ -163,7 +166,26 @@ export async function landTicks(actor, {combat = null, combatant = null} = {}) {
       if (landed > 0 && (!actorInWorld(actor) || (actor.type === "npc" && (actor.system?.health?.value ?? 0) <= 0))) break;
       if (tick.kind === "damage" && tick.type) {
         // A Smolder split at its cast (04's Smoldering Life; stage 3A) carries the split.
+        const plagueBefore = tick.plague === "bloodPlague" ? (actor.system?.health?.value ?? 0) + (Number(actor.system?.health?.temp) || 0) : null;
         for (const line of await strikeFromArea({ actor, caster: hand, spell, damage: { rating: amount, school: tick.type }, split: tick.split ?? null })) lines.push(line);
+        // **BLOOD PLAGUE SPREADS** (D-962; the lead: *"Have blood plague trigger a body resilience
+        // test against caster DC to targets within 5ft. On a failure they contract blood plague
+        // as well."*): each time it deals its damage, the knight's door posts the Tests.
+        if (plagueBefore !== null && plagueBefore > (actor.system?.health?.value ?? 0) + (Number(actor.system?.health?.temp) || 0)) {
+          // **04's SANGUINE PLAGUE** (*When your Blood Plague damages a creature, you immediately
+          // regain Health equal to the damage it dealt*; run F4a): in the same moment, the knight's
+          // own talent through the one healing door. Guarded: the tick stands.
+          const dealtNow = plagueBefore - ((actor.system?.health?.value ?? 0) + (Number(actor.system?.health?.temp) || 0));
+          try {
+            const { sanguinePlagueAfter } = await import("./death-knight-talents.mjs");
+            const said = await sanguinePlagueAfter(hand, dealtNow);
+            if (said) lines.push(said);
+          } catch (err) {
+            console.warn("azeroth-rpg | Sanguine Plague", err);
+          }
+          const { spreadBloodPlague } = await import("./death-knight.mjs");
+          lines.push(...await spreadBloodPlague({ carrier: actor, knight: hand }));
+        }
       } else if (tick.kind === "damage") {
         // 08 §12's *N damage a turn*, which names no type: the printed number
         // lands, and no Armor Point or Ward reduces it (D-770, a reading for
@@ -364,7 +386,7 @@ async function endAndHealHere({ target, from, kind, heal, effectId = null }) {
   if (!ended) return { ended: null, healed: 0 };
   const before = target.system?.health?.value ?? 0;
   const amount = Math.max(0, Math.trunc(Number(heal)) || 0);
-  if (amount > 0) await target.applyHealing(amount, { from: typeof from === "string" ? null : from, feature: true });
+  if (amount > 0) await target.applyHealing(amount, { from: typeof from === "string" ? null : from, givenBy: typeof from === "string" || !from ? "other" : null, feature: true });
   const healed = Math.max(0, (target.system?.health?.value ?? before) - before);
   return { ended: { id: ended.id, name: ended.name }, healed };
 }

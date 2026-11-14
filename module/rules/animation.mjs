@@ -87,7 +87,7 @@
 import {
   ALL_SPELL_ANIMATIONS, FEATURE_ANIMATIONS, FILTERS, LIBRARY_BY_ROOT, STRIKE_ANIMATIONS, libraryOf, loopsOf
 } from "./animation-table.mjs";
-import { cleanSteps, risenTokens } from "./animation-records.mjs";
+import { cleanCorpse, cleanSteps, risenTokens } from "./animation-records.mjs";
 
 /** The prefix every key this system writes into Sequencer's manager carries. */
 export const LOOP_PREFIX = "azeroth-rpg:loop";
@@ -668,6 +668,14 @@ function areaDiameter(record, facts, trigger) {
 function push(steps, recipe, context) {
   const before = steps.length;
   addSteps(steps, recipe, context);
+  // **A PLACEMENT'S FALLBACK** (D-1014): where the record carries nothing the placement can
+  // resolve - a Corpse Burst card written before the corpse was recorded - the recipe's
+  // `fallback` placement is tried instead, once. An anchor that resolved and is unseen added a
+  // step (`unseen`), so it never falls back: a hidden corpse is not a reason to draw elsewhere.
+  if (steps.length === before && typeof recipe.fallback === "string" && recipe.fallback !== recipe.place) {
+    const { fallback, ...rest } = recipe;
+    addSteps(steps, { ...rest, place: fallback }, context);
+  }
   return steps.length - before;
 }
 
@@ -877,6 +885,28 @@ function addSteps(steps, recipe, context) {
     // The striker whose blow a hold turned aside (04's Afterimage).
     case "striker": return at(tokenOf(facts, record.hold?.striker?.tokenId));
 
+    // **WHERE THE CORPSE LAY** (07 §17's Corpse Burst; D-1014, O-383): the point the card
+    // recorded at the cast, never the token's position now and never `on` it - a body may be
+    // moved or deleted after it burst. A recipe's `scale` is a multiple of the corpse's own
+    // recorded width, worked out here into `size`; a corpse token this client holds and cannot
+    // see drops the step as any other unseen anchor does. Nothing recorded adds nothing, which
+    // is what lets a recipe's `fallback` take over (`push`).
+    case "corpse": {
+      const body = cleanCorpse(record.corpse);
+      if (!body || (body.sceneId && facts.sceneId && body.sceneId !== facts.sceneId)) return;
+      const token = tokenOf(facts, body.tokenId);
+      const scale = num(recipe.scale);
+      steps.push({
+        ...step(recipe, {
+          at: { x: body.x, y: body.y },
+          size: scale !== null ? scale * body.width : sizeOf(recipe, { diameter, pxPerFt })
+        }),
+        ...mark,
+        ...(token && !seen(token) ? { unseen: true } : {})
+      });
+      return;
+    }
+
     // Exactly three darts to the FIRST target, staggered. The conditional
     // fourth needs a secondary target nothing records.
     case "missiles": {
@@ -985,6 +1015,16 @@ function soundAnchor({ place, record, facts, source, firstTarget, follow = null 
     }
     case "striker":
       return spot(tokenOf(facts, record.hold?.striker?.tokenId)) ?? spot(source);
+    // Where the corpse lay; with nothing recorded, where the picture's own fallback drew.
+    case "corpse": {
+      const body = cleanCorpse(record.corpse);
+      if (body && !(body.sceneId && facts.sceneId && body.sceneId !== facts.sceneId)) {
+        const token = tokenOf(facts, body.tokenId);
+        return { at: { x: body.x, y: body.y }, ...(token && !seen(token) ? { unseen: true } : {}) };
+      }
+      const fallback = typeof follow?.fallback === "string" && follow.fallback !== "corpse" ? follow.fallback : "target";
+      return soundAnchor({ place: fallback, record, facts, source, firstTarget, follow });
+    }
     default:
       return spot(source) ?? spot(firstTarget);
   }

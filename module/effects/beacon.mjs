@@ -91,7 +91,7 @@ export async function shareBeacon({ healed, from, restored }) {
   const due = beaconShareOf({ healed, from, restored });
   if (!due) return 0;
   if (due.chosen.isOwner) {
-    await due.chosen.applyHealing(due.share, { shared: true });
+    await due.chosen.applyHealing(due.share, { shared: true, givenBy: from });
     return due.share;
   }
   const gm = game.users?.activeGM ?? null;
@@ -124,7 +124,7 @@ export async function beaconHealQueryHandler({ healerUuid = null, healedUuid = n
   }
   const due = beaconShareOf({ healed, from, restored: Math.max(0, Math.trunc(Number(amount)) || 0), measuredElsewhere: true });
   if (!due) throw new Error(game.i18n.format("AZEROTH.Beacon.NoBond", { name: from.name }));
-  await due.chosen.applyHealing(due.share, { shared: true });
+  await due.chosen.applyHealing(due.share, { shared: true, givenBy: from });
   return { name: due.chosen.name, amount: due.share };
 }
 

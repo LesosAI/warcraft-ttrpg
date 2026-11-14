@@ -5,7 +5,7 @@
 import { SHED_DC_FLAG } from "./escapes.mjs";
 import { AFFLICTION_FLAG } from "./afflictions.mjs";
 import { creaturePoisonAff } from "./creature-poisons.mjs";
-import { resolveDamage } from "./mitigation.mjs";
+import { resolveRecordedDamage } from "./damage-record.mjs";
 import { wardBySchool } from "./ward.mjs";
 import { schoolArmorBySchool } from "./auras.mjs";
 export const TOXIC_FLAG = "toxicHorrorPoison";
@@ -14,8 +14,9 @@ export const TOXIC_POISONS = Object.freeze({
   deadly: Object.freeze({name:"Deadly Poison",action:"action",feet:10,dc:17,stacks:1,damage:3,seconds:3600,uses:1,per:"encounter"})
 });
 /** Biological poison takes Nature defenses, never caster spell bonuses. */
+/* The resolver's inputs (`rules/damage-record.mjs`), so 04's Icebound Fortitude halves this blow before Armor Points and Ward (the F4b review, S6). */
 export function toxicPoisonDamage(target = {}, rating = 0, { dealtHalved = false } = {}) {
-  return resolveDamage({ rating, sl: 0, kind: "magical", school: "nature",
+  return resolveRecordedDamage({ rating, sl: 0, kind: "magical", school: "nature",
     ward: wardBySchool(target.ward).nature ?? 0,
     schoolArmor: schoolArmorBySchool(target.schoolArmor).nature ?? 0,
     immune: target.immune ?? [], vulnerable: target.vulnerable ?? [],

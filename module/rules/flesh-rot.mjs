@@ -1,5 +1,5 @@
 import { FLESH_ROT } from "./naxxramas-ghoul.mjs";
-import { resolveDamage } from "./mitigation.mjs";
+import { resolveRecordedDamage } from "./damage-record.mjs";
 
 export const FLESH_ROT_FLAG = "fleshRot";
 const id = value => typeof value === "string" && value.trim().length > 0;
@@ -39,8 +39,9 @@ export function fleshRotPulse(state, { targetUuid, time, combatUuid = null, cloc
 }
 
 /** Physical wound damage reads Body AP, not school Ward or spell bonuses. */
+/* The resolver's inputs (`rules/damage-record.mjs`), so 04's Icebound Fortitude halves this blow before Armor Points and Ward (the F4b review, S6). */
 export function fleshRotDamage(target = {}, { dealtHalved = false } = {}) {
-  return resolveDamage({ rating: FLESH_ROT.periodicDamage, sl: 0, kind: "physical",
+  return resolveRecordedDamage({ rating: FLESH_ROT.periodicDamage, sl: 0, kind: "physical",
     location: "body", apByLocation: target.apByLocation ?? {}, immune: target.immune ?? [],
     vulnerable: target.vulnerable ?? [], slAddsToDamage: false, dealtHalved });
 }

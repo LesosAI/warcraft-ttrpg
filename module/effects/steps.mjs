@@ -405,6 +405,14 @@ export async function stepTo({ token, to, feet = 0, by = null, except = [], move
   const doc = docOf(token);
   const name = doc?.name ?? "";
   if (!doc?.parent || !to) return { moved: false, name, reason: "gone", step: null };
+  // **A PULL IS A MOVE AGAINST THE CREATURE'S WILL** (04's None Escape; the F2 review's
+  // should-fix 8, D-957): the creature's own *cannot be moved against its will* and March of
+  // the Damned's are asked here as at every forced move (`forced-movement.mjs#beingMovedBy`).
+  if (move?.kind === "pull") {
+    const { beingMovedBy } = await import("./forced-movement.mjs");
+    const refused = beingMovedBy(doc.actor ?? null, by);
+    if (refused) return { moved: false, name, reason: refused, step: null };
+  }
   // **WHERE IT STOOD AND WHERE IT LANDS, TAKEN BEFORE IT MOVES** (door 2): by the time
   // the Use's card arrives the token is at the destination, so the departure can only
   // be recorded - the caller puts this on the card, and the animation layer plays a

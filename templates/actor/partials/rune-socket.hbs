@@ -1,0 +1,11 @@
+{{!--
+  One rune socket (D-919; D11 §4). Four states, and colour is never the only carrier
+  (D-622): a Blood rune is a drop with a downward arrow, a Frost rune a six-armed
+  snowflake, a spent rune its own glyph in stone ink STRUCK THROUGH (never dimmed, D-608),
+  an empty slot a small dashed ring. Every socket says its state in words through core's
+  tooltip and an `aria-label`. The glyphs are drawn here, so no art file is needed.
+--}}
+<li class="azeroth-rune-socket is-{{socket.state}}{{#if socket.kind}} is-{{socket.kind}}{{/if}}" data-rune-state="{{socket.state}}"{{#if socket.kind}} data-rune-kind="{{socket.kind}}"{{/if}} data-tooltip="{{socket.label}}" aria-label="{{socket.label}}" role="img">
+  {{#if (eq socket.kind "blood")}}<svg class="azeroth-rune-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2 C9 7 6 10.5 6 14.5 a6 6 0 0 0 12 0 C18 10.5 15 7 12 2 Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 9 V19 M9 13 L12 16 L15 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  {{else if (eq socket.kind "frost")}}<svg class="azeroth-rune-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2 V22 M3.3 7 L20.7 17 M3.3 17 L20.7 7 M12 2 L9.5 4.5 M12 2 L14.5 4.5 M12 22 L9.5 19.5 M12 22 L14.5 19.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>{{/if}}
+</li>

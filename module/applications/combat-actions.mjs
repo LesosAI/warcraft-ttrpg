@@ -8,9 +8,9 @@
 
 import { AZEROTH } from "../config.mjs";
 import { lossOnGuard } from "../rules/momentum.mjs";
-import { canReact, disengageRefusal, readyEntry } from "../rules/reactions.mjs";
+import { canReact, readyEntry } from "../rules/reactions.mjs";
 // Who holds a mover with Anchor (04, D-772).
-import { allyOf, anchoredBy } from "../canvas/engaged.mjs";
+import { allyOf } from "../canvas/engaged.mjs";
 import { reactionStateOf, rollWithDialog, unansweredOf } from "./actions.mjs";
 // Hiding (D-717): the law, and the one place the status is written.
 import { STEALTH_SKILL, markStealth, stealthAllowed } from "../rules/stealth.mjs";
@@ -117,22 +117,12 @@ export async function guard(actor) {
  */
 export async function disengage(actor) {
   if (realmBars(actor)) return null;
-  // **NOT WHILE AN ANCHOR HOLDS YOU** (04's Anchor: *Enemies Engaged with you
-  // cannot Disengage*; D-772), refused in words before the Half-Action is spent
-  // (D-768's order). Measured on the viewed scene; nothing placed is nobody holding.
-  const anchored = disengageRefusal(anchoredBy(actor));
-  if (anchored) {
-    ui.notifications?.warn(game.i18n.format(anchored.key, { name: actor.name, ...anchored.params }));
-    return null;
-  }
-  // **04's HEAVY HOURS AT RANK 2** (*A creature carrying your Decay ... cannot Disengage*;
-  // stage 2b): refused in words before the Half-Action is spent, read off the Decay's own `by`.
-  const { disengageBarred } = await import("../effects/chronomancer.mjs");
-  const heavy = disengageBarred(actor);
-  if (heavy) {
-    ui.notifications?.warn(game.i18n.format("AZEROTH.Chrono.HeavyHoursDisengage", { name: actor.name, holder: heavy.name, talent: heavy.talent }));
-    return null;
-  }
+  // **WHAT BARS A DISENGAGE, ASKED AT THE ONE DOOR EVERY DISENGAGE ASKS** (the F4b review, S5):
+  // an Anchor the creature is Engaged with (04's Anchor, D-772), Heavy Hours' Decay at rank 2,
+  // Relentless Advance over a Slowed creature within reach, and Chains of Ice's own Slowed -
+  // refused in words before the Half-Action is spent (D-768's order).
+  const { refuseDisengage } = await import("../effects/disengage-bars.mjs");
+  if (await refuseDisengage(actor)) return null;
   const combatant = combatantOf(actor);
   if (combatant) {
     const spent = await combatant.spendMoveAction();

@@ -285,6 +285,13 @@ const BASE = [
     const m = /^(A creature|An enemy) takes (\d+) ([A-Z][a-z]+) damage when it starts its turn (?:inside the area|in the area|in the line)\b/.exec(s);
     return m ? { who: m[1] === "An enemy" ? "enemy" : "creature", damage: { rating: Number(m[2]), school: schoolOf(m[3]) } } : null;
   },
+  // 07 §17's Death and Decay (run F2): *An enemy takes Shadow damage equal to your casting
+  // modifier when it starts its turn inside the area* - the number is the caster's, stamped at
+  // the cast (`ratingFrom`, `castSpell`), so the pack stores the school and no rating.
+  s => {
+    const m = /^(A creature|An enemy) takes ([A-Z][a-z]+) damage equal to your casting modifier when it starts its turn (?:inside the area|in the area)\b/.exec(s);
+    return m && schoolOf(m[2]) ? { who: m[1] === "An enemy" ? "enemy" : "creature", damage: { rating: null, school: schoolOf(m[2]), ratingFrom: "castingMod" } } : null;
+  },
   // *Every creature in the area takes 4 Frost damage at the start of each of its turns*.
   s => {
     const m = /^Every creature in the area takes (\d+) ([A-Z][a-z]+) damage at the start of each of its turns\b/.exec(s);
@@ -353,6 +360,12 @@ const KIND = [
   s => {
     const m = /^An undead or demon enemy that starts its turn in the area takes (\d+) ([A-Z][a-z]+) damage\b/.exec(s);
     return m ? { kinds: ["undead", "demon"], who: "enemy", rating: Number(m[1]), school: schoolOf(m[2]), heal: null, instead: false } : null;
+  },
+  // 07 §17's Gravewell (run F2): *An undead ally regains 3 Health when it starts its turn inside
+  // the area* - an ALLY of the caster that is undead, and no living ally (D-946's rule).
+  s => {
+    const m = /^An undead ally regains (\d+) Health when it starts its turn (?:inside the area|in the area)\b/.exec(s);
+    return m ? { kinds: ["undead"], who: "ally", rating: null, school: null, heal: Number(m[1]), instead: false } : null;
   },
   s => {
     const m = /^(?:A demon standing in it|Any demon inside it) regains (\d+) Health at the start of each of its turns\b/.exec(s);
@@ -661,6 +674,11 @@ function readRemains(list, against = []) {
     // pass), which names no turn and holds from the moment it is inside.
     if (/\bhas a Bane on (?:its )?Attack Tests while it remains\b/.test(s) || /^A creature inside the area has a Bane on Attack Tests\b/.test(s)) { row.bane = "attack"; any = true; }
     if (/^Every Test a creature makes while it stands in the area has a Bane\b/.test(s)) { row.bane = "all"; any = true; }
+    // **07 §14's PALL OF DESPAIR** (*An enemy inside the area takes a Bane on Spirit Resilience
+    // Tests*; run F4b): a Bane on ONE Resilience, written as the Resilience's own name, which the
+    // aura payload reads as `{kind: "resilience", resilience}` (`riderPayload`).
+    const onResilience = /^An? (?:enemy|creature) inside the area takes a Bane on (Body|Reflex|Spirit) Resilience Tests\b/.exec(s);
+    if (onResilience) { row.bane = onResilience[1].toLowerCase(); any = true; }
     const ward = /\bgains Ward (\d+) against ([A-Z][a-z]+)(?: and Ward \1 against ([A-Z][a-z]+))? until it leaves\b/.exec(s);
     if (ward) {
       row.ward = { schools: [schoolOf(ward[2]), schoolOf(ward[3])].filter(Boolean), amount: Number(ward[1]) };
@@ -792,7 +810,7 @@ export function readAreaTick(effectText, fields = {}) {
         found = true;
         baseSentence = s;
         tick.who = base.who;
-        if (base.damage) tick.damage = { rating: base.damage.rating, school: base.damage.school };
+        if (base.damage) tick.damage = { rating: base.damage.rating, school: base.damage.school, ...(base.damage.ratingFrom ? { ratingFrom: base.damage.ratingFrom } : {}) };
         if (base.heal !== undefined) tick.heal = base.heal;
         if (base.centre) tick.centre = base.centre;
         if (base.feet !== undefined) tick.feet = base.feet;
@@ -1088,10 +1106,13 @@ export function firstEntry(memory, tokenId, turnKey) {
  * @param {{relation?: string, atCentre?: boolean, holds?: Set<string>|string[], named?: boolean}} o
  * @returns {object[]}  the check rows
  */
-export function checksFor(tick, trigger, { relation = "other", atCentre = false, holds = [], named = false } = {}) {
+export function checksFor(tick, trigger, { relation = "other", atCentre = false, holds = [], named = false, immune = [] } = {}) {
   if (!hasAreaTick(tick)) return [];
   const held = holds instanceof Set ? holds : new Set(holds ?? []);
   return (tick.checks ?? []).filter(c => {
+    // **A CREATURE IMMUNE TO THE AREA'S SCHOOL IGNORES IT** (02's Desecration, D-938: *A
+    // creature immune to Shadow damage ignores Desecration*): `spareImmune` names the school.
+    if (c.spareImmune && (immune ?? []).includes(c.spareImmune)) return false;
     if (!(c.on === trigger || (c.on === "both" && (trigger === "turn" || trigger === "enter")))) return false;
     if (c.spares === "named" && named === true) return false;
     // Shifting Hours' *A creature you choose* (07 §12): only a creature named at the cast.
@@ -1207,7 +1228,13 @@ export function checkOutcome(check, { success = false, kinds = [] } = {}) {
     stop: fail.stop === true,
     // Withering Sands' Decay (07 §12, D-865), laid by `effects/decay.mjs#layDecay` - on an
     // outcome only where its row names one.
-    ...(Number(fail.decay) > 0 ? { decay: Math.trunc(Number(fail.decay)) } : {})
+    ...(Number(fail.decay) > 0 ? { decay: Math.trunc(Number(fail.decay)) } : {}),
+    // 02's Desecration (D-938): a failure's Ward against a school reduced until the start of
+    // the creature's next turn - on an outcome only where its row names one.
+    // 02's Plague spreading (D-962): a failure contracts the knight's Blood Plague.
+    ...(fail.plague === "bloodPlague" || fail.plague === "frostFever" ? { plague: fail.plague } : {}),
+    ...(fail.wardDrop?.school && Number(fail.wardDrop.amount) > 0
+      ? { wardDrop: { school: String(fail.wardDrop.school), amount: Math.trunc(Number(fail.wardDrop.amount)) } } : {})
   };
 }
 
@@ -1348,7 +1375,9 @@ export function ridersFor(tick, { relation = "other", kinds = [], armed = [], me
  */
 export function riderPayload(row, { judged = false } = {}) {
   const out = {};
-  if (row?.bane) out.bane = judged ? { kind: row.bane, banes: 1, judged: true } : { kind: row.bane, banes: 1 };
+  // A Resilience's own name is a Bane on that Resilience alone (07 §14's Pall of Despair; run F4b).
+  const one = REMAINS_RESILIENCES.includes(row?.bane) ? { kind: "resilience", resilience: row.bane, banes: 1 } : null;
+  if (row?.bane) out.bane = one ? (judged ? { ...one, judged: true } : one) : (judged ? { kind: row.bane, banes: 1, judged: true } : { kind: row.bane, banes: 1 });
   if (row?.ward?.amount) out.ward = { schools: [...(row.ward.schools ?? [])], amount: row.ward.amount };
   // **A BOON ON A KIND OF TEST** (04's Burial Ground: *every friendly target inside it
   // gains a Boon on Resilience Tests*; the Legacy branches' door 25): every Resilience
@@ -1492,6 +1521,12 @@ const conditionList = list => (Array.isArray(list) ? [...new Set(list.filter(id 
 const kindList = list => (Array.isArray(list) ? list.filter(k => AREA_TICK_KINDS.includes(k)) : []);
 const testKind = v => (v === "all" || (typeof v === "string" && v in AZEROTH.testKinds) ? v : "");
 
+/** The Resilience names a remains row's Bane may carry alone (07 §14's Pall of Despair; run F4b). */
+export const REMAINS_RESILIENCES = Object.freeze(["body", "reflex", "spirit"]);
+
+/** A remains row's Bane: a kind of Test, `all`, or one Resilience by name. */
+const remainsBane = v => (REMAINS_RESILIENCES.includes(v) ? v : testKind(v));
+
 /** One stored check row, whole: an array is written whole, so a row is cleaned as one. */
 function cleanCheckRow(r) {
   const fail = r?.fail && typeof r.fail === "object" ? r.fail : {};
@@ -1516,7 +1551,13 @@ function cleanCheckRow(r) {
       // *It does not cross* (the B9a pass), named only where a row names it.
       ...(fail.stop === true ? { stop: true } : {}),
       // Withering Sands' Decay (D-865), named only where a row names it.
-      ...(Number(fail.decay) > 0 ? { decay: Math.trunc(Number(fail.decay)) } : {})
+      ...(Number(fail.decay) > 0 ? { decay: Math.trunc(Number(fail.decay)) } : {}),
+      // **02 §7's DESECRATION AND THE BLOOD PLAGUE'S SPREAD** (D-938, D-962; the F2 review's
+      // note): the Ward a failure takes and the disease it lays, named only where a row names one
+      // - the same shapes `checkOutcome` reads, so a cleaned row keeps what it does.
+      ...(fail.plague === "bloodPlague" || fail.plague === "frostFever" ? { plague: fail.plague } : {}),
+      ...(fail.wardDrop?.school && Number(fail.wardDrop.amount) > 0
+        ? { wardDrop: { school: String(fail.wardDrop.school), amount: Math.trunc(Number(fail.wardDrop.amount)) } } : {})
     },
     success: {
       statuses: conditionList(success.statuses),
@@ -1531,7 +1572,9 @@ function cleanCheckRow(r) {
     ...(r?.spares === "named" ? { spares: "named" } : {}),
     // The sand spells' two (07 §12), named only where a row names one.
     ...(r?.who === "enemy" ? { who: "enemy" } : {}),
-    ...(r?.picks === "named" ? { picks: "named" } : {})
+    ...(r?.picks === "named" ? { picks: "named" } : {}),
+    // Desecration's *A creature immune to Shadow damage ignores Desecration* (D-938).
+    ...(typeof r?.spareImmune === "string" && AZEROTH.damageTypes?.[r.spareImmune] ? { spareImmune: r.spareImmune } : {})
   };
 }
 
@@ -1544,7 +1587,7 @@ function cleanRemainsRow(r) {
     kinds: kindList(r?.kinds),
     exceptKinds: kindList(r?.exceptKinds),
     gear: r?.gear === "metal" ? "metal" : "",
-    bane: testKind(r?.bane),
+    bane: remainsBane(r?.bane),
     ward: {
       schools: Array.isArray(ward.schools) ? ward.schools.filter(s => AZEROTH.schools[s]) : [],
       amount: nullableNumber(ward.amount ?? null)

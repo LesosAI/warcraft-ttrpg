@@ -73,8 +73,9 @@ export async function resolveCannonball({messageUuid}={}, {user}={}){
   if(!row)return {ok:false,reason:'damage'};
   await save({...expected,state:'applying',save:{uuid:card.uuid,total:roll.total,passed},damageResult:row});
   const outcome={};
+  // The resolver's inputs (`rules/damage-record.mjs`), so 04's Icebound Fortitude halves this blow before Armor Points and Ward (the F4b review, S6).
   if(row.damage>0)await target.applyDamage(row.damage,{by:caster,struck:true,attack:false,spell:false,
-   type:'physical',location:'body',messageId:message.id,outcome});
+   type:'physical',location:'body',messageId:message.id,outcome,mitigation:row.mitigationSource??null});
   else outcome.complete=true;
   if(!valid()||outcome.complete!==true)return {ok:false,reason:'damageUncertain'};
   await save({...expected,state:'complete',outcome});

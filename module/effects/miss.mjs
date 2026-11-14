@@ -26,6 +26,7 @@
 
 import { AZEROTH } from "../config.mjs";
 import { missUndoes } from "../rules/miss.mjs";
+import { conditionEffectOf } from "../rules/condition-carriers.mjs";
 import { putBack } from "./forced-movement.mjs";
 import { LAID_BY_FLAG, laidByWith, laidByWithout } from "../rules/talent-gates.mjs";
 
@@ -43,7 +44,8 @@ export async function withdrawHit(defender, { messageId = null, index = null, an
   const undo = missUndoes(record, { index, answeredWithLost });
   out.tests = undo.tests;
   for (const u of undo.conditions) {
-    const effect = defender.effects?.find?.(e => e.statuses?.has?.(u.id)) ?? null;
+    // The condition's own effect, never a carrier holding its status (D-997).
+    const effect = conditionEffectOf(defender.effects ?? [], u.id);
     if (!effect) continue;
     if (u.remove) await defender.toggleStatusEffect(u.id, { active: false });
     else await effect.setFlag("azeroth-rpg", "value", u.value);
@@ -53,7 +55,7 @@ export async function withdrawHit(defender, { messageId = null, index = null, an
   // a creature that already had it keeps the effect, and the layer this hit added to
   // its `laidBy` goes - Cursed Prey and None Escape no longer read it as the striker's.
   for (const s of undo.strips ?? []) {
-    const effect = defender.effects?.find?.(e => e.statuses?.has?.(s.id)) ?? null;
+    const effect = conditionEffectOf(defender.effects ?? [], s.id);
     if (!effect) continue;
     const held = effect.flags?.["azeroth-rpg"]?.[LAID_BY_FLAG] ?? [];
     const next = laidByWithout(held, s.uuid);

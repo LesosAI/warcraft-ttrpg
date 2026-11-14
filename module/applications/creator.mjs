@@ -618,8 +618,8 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     const term = String(s.spellSearch ?? "").trim().toLocaleLowerCase();
     const matching = eligible.filter(sp => [sp.name, sp.effect, sp.description].join(" ").replace(/<[^>]*>/g, " ").toLocaleLowerCase().includes(term));
     const filtered = matching.filter(sp => Object.entries(definitions).every(([key, def]) => matchesFilter(sp, def, states.get(key))));
-    const row = sp => ({ ...sp, schoolLabel: game.i18n.localize(AZEROTH.schools[sp.school] ?? sp.school),
-      actionLabel: AZEROTH.actions[sp.action] ? game.i18n.localize(AZEROTH.actions[sp.action]) : sp.action,
+    const row = sp => ({ ...sp, schoolLabel: game.i18n.localize(AZEROTH.spellSchools[sp.school] ?? sp.school),
+      actionLabel: AZEROTH.spellActions[sp.action] ? game.i18n.localize(AZEROTH.spellActions[sp.action]) : sp.action,
       selected: s.spells.includes(sp.uuid), inspected: s.inspectedSpell === sp.uuid,
       canAdd: startingSpell(sp, p.cls) && !s.spells.includes(sp.uuid) && s.spells.length < required,
       index: s.spells.indexOf(sp.uuid), durationText: sp.duration?.text ?? "" });
@@ -633,8 +633,8 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     return { className: p.cls?.name, spells: { required, chosen, count: chosen.length, caster: castsSpells(p.cls),
       options, detail, search: s.spellSearch, school: s.spellSchool, action: s.spellAction, mana: s.spellMana, sort: s.spellSort,
       full: chosen.length >= required, total: eligible.length,
-      schools: facetOptions(matching, definitions, states, "school").map(r => ({ ...r, selected: r.value === s.spellSchool, label: game.i18n.localize(AZEROTH.schools[r.value] ?? r.value) })),
-      actions: facetOptions(matching, definitions, states, "action").map(r => ({ ...r, selected: r.value === s.spellAction, label: game.i18n.localize(AZEROTH.actions[r.value] ?? r.value) }))
+      schools: facetOptions(matching, definitions, states, "school").map(r => ({ ...r, selected: r.value === s.spellSchool, label: game.i18n.localize(AZEROTH.spellSchools[r.value] ?? r.value) })),
+      actions: facetOptions(matching, definitions, states, "action").map(r => ({ ...r, selected: r.value === s.spellAction, label: game.i18n.localize(AZEROTH.spellActions[r.value] ?? r.value) }))
     } };
   }
 

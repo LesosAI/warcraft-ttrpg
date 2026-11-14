@@ -35,15 +35,20 @@
     {{else}}
     <span class="azeroth-pool-count">{{this.value}} / {{this.max}}</span>
     {{/if}}
+    {{!-- The runes are spent and inscribed on the Combat tab's rune panel (F6's question 6): a
+          Spend here could only refuse (D-953), so the bar draws no control of its own. --}}
+    {{#unless this.runes}}
     <span class="azeroth-spend-row">
       <input type="number" class="azeroth-spend" value="1" min="1" max="{{this.max}}" aria-label="{{localize "AZEROTH.Sheet.SpendAmount"}}">
       <button type="button" data-action="spendPool" data-item-id="{{this.itemId}}" data-kind="{{this.kind}}">{{localize "AZEROTH.Sheet.Spend"}}</button>
     </span>
+    {{/unless}}
   </div>
   <div class="azeroth-pool-track">
     {{#each this.segments}}<span class="azeroth-segment{{#if this.filled}} is-filled{{/if}}"></span>{{/each}}
   </div>
   {{#if this.noHourglass}}<p class="azeroth-pool-note">{{localize "AZEROTH.Sand.NoHourglass"}}</p>{{/if}}
+  {{#if this.runes}}<p class="azeroth-pool-note azeroth-runes-here">{{localize "AZEROTH.Runes.PoolHere"}}</p>{{/if}}
   {{else}}
   {{!-- A pool nobody has draws an em-dash, not an empty bar (D-509). --}}
   <div class="azeroth-pool-head is-absent">

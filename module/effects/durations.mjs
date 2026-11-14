@@ -20,6 +20,71 @@
 
 // 05's *Round - ~6 seconds*, which the area law reads off the chapter (D-756).
 import { ROUND_SECONDS } from "../rules/area-ticks.mjs";
+import { conditionEffectOf } from "../rules/condition-carriers.mjs";
+// The one law for which of two spans stands longer (D-1005, O-384).
+import { keepLongerSpan } from "../rules/death-knight-spells.mjs";
+
+/** Seconds in a span counted on the world's clock, by core's units. */
+const CLOCK_UNIT_SECONDS = Object.freeze({ seconds: 1, minutes: 60, hours: 3600, days: 86400 });
+
+/**
+ * **WHAT A SPAN HAS LEFT, READ ONE WAY FOR EVERY DOOR** (the close review's findings 1 and 2):
+ * the shape `rules/death-knight-spells.mjs#keepLongerSpan` reads, off a standing effect (what core
+ * prepared on it: `secondsRemaining`, `remaining`, and no duration at all is a span that never
+ * ends) or off a `{duration, start}` about to be laid (the clock's seconds, or the rounds or turns
+ * it counts and where a turn sits in its fight). *For the rest of the encounter* (`combatEnd`)
+ * reads as endless on both sides, because core prepares it as 0 rounds.
+ *
+ * @param {object|null} span  an ActiveEffect, or a `{duration, start}`
+ * @returns {{temporary: boolean, secondsRemaining: number|null, remaining: number|null, units: string|null, turn: object|null}|null}
+ */
+export function spanReadOf(span) {
+  if (!span) return null;
+  const live = Boolean(span._source);
+  const src = live ? span._source : span;
+  const d = src.duration ?? {};
+  const units = d.units ?? null;
+  if (d.expiry === "combatEnd") return { temporary: true, secondsRemaining: Infinity, remaining: Infinity, units, turn: null };
+  if (live) {
+    return { temporary: span.isTemporary !== false, secondsRemaining: span.duration?.secondsRemaining ?? null,
+      remaining: span.duration?.remaining ?? null, units, turn: turnPlaceOf(src) };
+  }
+  const has = d.value !== null && d.value !== undefined && Number.isFinite(Number(d.value));
+  const per = CLOCK_UNIT_SECONDS[units] ?? null;
+  return { temporary: Boolean(d.expiry) || has, secondsRemaining: has && per ? Number(d.value) * per : null,
+    remaining: has ? Number(d.value) : null, units, turn: turnPlaceOf(src) };
+}
+
+/**
+ * Whether the condition already standing keeps its own span against `timing` (the close
+ * review's findings 1 and 2): it stands, it applies, and `keepLongerSpan` answers `"prior"` -
+ * a standing copy with no duration (a GM's hand-laid one) never ends, so it is never shortened.
+ *
+ * @param {object|null} standing  the condition's effect as it stood before this laying
+ * @param {{duration: object, start?: object}|null} timing
+ */
+export function keepsStandingSpan(standing, timing) {
+  if (!standing || !timing || standing.active === false) return false;
+  return keepLongerSpan(spanReadOf(standing), spanReadOf(timing), { roundSeconds: ROUND_SECONDS }) === "prior";
+}
+
+/**
+ * **WHERE A TURN-COUNTED SPAN SITS IN ITS FIGHT** (O-384; run close-F2): the fight's turn now, the
+ * keyed creature's place in its turns and how many turns a round holds, for
+ * `rules/death-knight-spells.mjs#spanSeconds`; null for a span not counted in turns or a fight
+ * that is gone or not started. Read off the span's own `start`, never the viewed fight.
+ *
+ * @param {{duration?: object, start?: object}|null} span  an effect's `_source` or a span to lay
+ * @returns {{current: number, keyed: number, turns: number}|null}
+ */
+export function turnPlaceOf(span) {
+  if (span?.duration?.units !== "turns") return null;
+  const combat = globalThis.game?.combats?.get?.(span.start?.combat ?? null) ?? null;
+  if (!combat?.started || !combat.turns?.length) return null;
+  const keyed = combat.turns.findIndex(c => c.id === span.start?.combatant);
+  if (keyed < 0) return null;
+  return { current: Math.max(0, Math.trunc(Number(combat.turn)) || 0), keyed, turns: combat.turns.length };
+}
 
 /** `duration` and `start` for "until the end of your next turn", or null out of a started fight. */
 export function untilEndOfNextTurn(actor, combat = actor.activeFight?.() ?? game.combat) {
@@ -154,18 +219,29 @@ function fightRounds(actor, rounds) {
  * hand.
  */
 export async function applyCondition(actor, id, { value = null, until = null } = {}) {
-  if (!actor.statuses?.has(id)) await actor.toggleStatusEffect(id, { active: true });
-  const effect = actor.effects.find(e => e.statuses?.has(id)) ?? null;
+  // **NEVER A CARRIER** (D-997): a tick or affliction carrier holding the status (Frost Fever's
+  // Slowed) is not the condition, and a span written onto it ends the disease. The condition's
+  // own effect is laid beside it (`ownEffect`), through the actor's one toggle door so every
+  // refusal still holds, and the span lands on that.
+  const standing = conditionEffectOf(actor.effects, id);
+  if (!standing) await actor.toggleStatusEffect(id, { active: true, ownEffect: true });
+  const effect = conditionEffectOf(actor.effects, id);
   if (!effect) return null;
   const update = {};
   if (value !== null) update["flags.azeroth-rpg.value"] = value;
   // A ready-made `{duration, start}` (a spell's minute, 2026-09-06) rides as it is.
   const timing = until && typeof until === "object" ? until
     : until === "endOfNextTurn" ? untilEndOfNextTurn(actor) : until === "nextTurn" ? untilNextTurn(actor)
+      // D-778's turn-keyed span that ends out of a fight too: one round of the world's clock there
+      // (the close review's finding 2 - Frozen Edge's Slowed laid before the fight never ended).
+      : until === "endOfNextTurnOrRound" ? untilEndOfNextTurnOrRound(actor) : until === "nextTurnOrRound" ? untilNextTurnOrRound(actor)
       : until === "endOfTurn" ? untilEndOfTurn(actor)
       // 14's *until the end of the round* and *for the rest of the encounter* (D-809).
       : until === "endOfRound" ? untilEndOfRound(actor) : until === "encounter" ? untilEncounterEnd(actor) : null;
-  if (timing) Object.assign(update, timing);
+  // **THE LONGER SPAN STANDS, FOR EVERY CALLER** (the close review's findings 1 and 2): a copy of
+  // the condition that already stood keeps its own span where it runs longer than this one - a
+  // spell's minute is never cut to a turn by a later hit, and a hand-laid one is never made to end.
+  if (timing && !keepsStandingSpan(standing, timing)) Object.assign(update, timing);
   if (Object.keys(update).length) await effect.update(update);
   return effect;
 }

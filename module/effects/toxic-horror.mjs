@@ -127,7 +127,9 @@ export async function advanceToxicPoison(actor, combat = null) {
             const result = toxicPoisonDamage(actor.system, plan.damage.rating, { dealtHalved: dealtHalvedBy(by) });
             if (result.damage > 0) await actor.applyDamage(result.damage, {
               struck: true, attack: false, spell: false, location: "body", type: "nature", by,
-              wardTook: result.wardTook ?? 0, parts: result.parts ?? null
+              wardTook: result.wardTook ?? 0, parts: result.parts ?? null,
+              // The resolver's inputs (`rules/damage-record.mjs`), so 04's Icebound Fortitude halves this blow before Armor Points and Ward (the F4b review, S6).
+              mitigation: result.mitigationSource ?? null
             });
             lines.push(game.i18n.format(result.immune ? "AZEROTH.Combat.AreaTickImmune" : "AZEROTH.Combat.AreaTick",
               { name: actor.name, amount: result.damage, type: game.i18n.localize("AZEROTH.School.Nature"),

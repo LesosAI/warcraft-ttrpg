@@ -44,6 +44,8 @@ import { raceLine } from "../rules/guise.mjs";
 import { chargeControl } from "../helpers/rider-words.mjs";
 // A shape on the sheet (02 §7, D-769): its name, what melds, the attack's ability.
 import { FORCED_SPEED, SHAPE_ABILITIES, SHAPE_KINDS, isOverlayKind, meldsGear, shapeKindOf, shapeRefusal } from "../rules/shapes.mjs";
+// What a Use needs in hand, greyed in words (run F4a).
+import { wieldRefusal } from "../rules/wield.mjs";
 import { classFeatureOnUse, featurePrice, rungsChip } from "../rules/class-features.mjs";
 import { FORCED_ENDS, forcedRefusalFor, shapeLabel } from "../documents/shapes.mjs";
 import { attackAbility } from "../rules/ammunition.mjs";
@@ -56,7 +58,7 @@ import { branchRank } from "../rules/legacy-branches.mjs";
 import { crestPath } from "../rules/crests.mjs";
 import { exitsFrom, isEligible } from "../rules/careers.mjs";
 import { tierForLevel, featuresUnlocked, secondaryLevel, secondaryTier } from "../rules/progression.mjs";
-import { manaPrice, showsSpells, spellsKnown } from "../rules/casting.mjs";
+import { manaPrice, showsSpells, spellsKnown, spellPayment } from "../rules/casting.mjs";
 import { onUseOf, talentEffect } from "../rules/talent-effects.mjs";
 // A Use whose first choice is free is pressed with its use spent (the B3 review).
 import { usesAskedLater } from "../rules/legacy-uses.mjs";
@@ -64,7 +66,7 @@ import { hasUse } from "../rules/consumables.mjs";
 import { containerOf, hasCharges, isContainer, isWorn } from "../rules/containers.mjs";
 import { canCarry, heldAugment } from "../rules/augments.mjs";
 import { SAND } from "../rules/sand.mjs";
-import { FIGURE_HANDS, FIGURE_LEFT, FIGURE_RIGHT, copyLabels, displacedBy, figureSlots, fitsSlot, handFor } from "../rules/worn.mjs";
+import { FIGURE_HANDS, FIGURE_LEFT, FIGURE_RIGHT, copyLabels, displacedBy, figureSlots, fitsSlot, handFor, twoHandedNote } from "../rules/worn.mjs";
 import { BASE_SLOTS, MAX_CONTAINERS, REFUSALS, areTwins, arrange, isMount, judgeMerge, judgePlace, judgeSplit, judgeSwap, ledger, placeOf, slotLine, slotsIn, stackKey, unitsOf, wearNew, wellsOf } from "../rules/slots.mjs";
 // The Gear tab as bag slots (D-738): the panels, the order and the tooltip.
 import { BLURB_KINDS, TILE_KINDS, TILE_PLACES, badgeOf, buildPanels, gridStep, kindOf, nextSort, primaryAction, slotOrder, tidyBags, tipModel } from "../rules/bags.mjs";
@@ -95,6 +97,12 @@ import { coins } from "../helpers/coins.mjs";
 import { temporaryHealthContext } from "../effects/temporary-health.mjs";
 // The pool a talent pays a spell from (the Chromatic Champion's branch spells, in Rage).
 import { spellPoolFor } from "../rules/class-talents.mjs";
+// The Death Knight's rune panel (D-919; D11 §4; run F2): the context is pure, the doors
+// are `effects/death-knight.mjs`'s.
+import { handSockets, runePanelContext } from "../rules/rune-panel.mjs";
+import { RUNES, RUNIC_POWER, poolLabelKey, spendRefusal as runeSpendRefusal } from "../rules/runes.mjs";
+import { inscriptionRefusalFor, spendRuneBare, useInscription } from "../effects/death-knight.mjs";
+import { spectralMove } from "../effects/mount-works.mjs";
 
 const { HandlebarsApplicationMixin } = foundry.applications.api;
 const { ActorSheetV2 } = foundry.applications.sheets;
@@ -210,6 +218,9 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       reviewChainLightningCast: AzerothCharacterSheet.#onReviewChainLightningCast,
       configureCombatSheet: AzerothCharacterSheet.#onConfigureCombatSheet,
       rollSkill: AzerothCharacterSheet.#onRollSkill,
+      // The rune panel's two controls (D-919; run F2).
+      inscribeRunes: AzerothCharacterSheet.#onInscribeRunes,
+      spendRune: AzerothCharacterSheet.#onSpendRune,
       rollAbility: AzerothCharacterSheet.#onRollAbility,
       shortRest: AzerothCharacterSheet.#onShortRest,
       longRest: AzerothCharacterSheet.#onLongRest,
@@ -443,7 +454,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     context.factionList = (this.actor.signatureState?.factions ?? []).join(", ");
     context.canConfigureCombatSheet = game.user.isGM;
     context.showManeuvers = showsManeuvers(system, this.actor.getFlag("azeroth-rpg", "showManeuvers"));
-    context.combatSections = Object.fromEntries(["maneuvers", "features", "talents", "signatures"].map(key =>
+    context.combatSections = Object.fromEntries(["maneuvers", "features", "talents", "runes", "signatures"].map(key =>
       [key, game.user.getFlag("azeroth-rpg", `combatSections.${key}`) !== false]));
     context.tabs = this._prepareTabs("primary");
 
@@ -555,6 +566,9 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // The Core tab's class features and the starred rows beneath Fatigue (D-612).
     context.features = await this.#features();
     context.usableTalents = await this.#usableTalents();
+    // The rune panel (D-919): a Death Knight's alone, built before the Overview, whose
+    // hand tiles draw the same sockets.
+    context.runePanel = this.#runePanel();
     context.favorites = await this.#favorites();
     // Every row's inline detail opens on what the entry says (2026-09-06).
     await this.#describeRows([
@@ -601,6 +615,13 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // conditions grid and effect list are drawn from (2026-09-20), so the two
     // tabs cannot disagree about what is standing.
     context.overview = await this.#overview(context.load, context.signatures, context.effects, context.shape);
+    // The paper doll's compact row under each hand that holds runes (D11 §4).
+    if (context.runePanel) {
+      for (const tile of context.overview?.hands ?? []) {
+        const hand = tile.slot === "mainHand" ? "main" : tile.slot === "offHand" ? "off" : null;
+        tile.runes = hand ? handSockets(context.runePanel, hand) : null;
+      }
+    }
     // Where a thing is kept is NOT a control on the row (the lead,
     // 2026-09-07): it is a drag onto the container, or *Put in* off the
     // row's right click. `containersFor` is the one place that says which
@@ -1164,6 +1185,10 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       return null;
     }
     if ((item.system?.equipped === true) === with_) return null;
+    // **08 §5's SPECTRAL** (02 §7's Deathcharger; door 9): dismissing a spectral steed into the
+    // runeweapon or calling it beside the rider is a Half-Action in a started fight, spent
+    // before it moves (`effects/mount-works.mjs#spectralMove`); a refused budget moves nothing.
+    if (!(await spectralMove(this.actor, item))) return null;
     const updates = [{ _id: item.id, "system.equipped": with_ }];
     // **BRINGING ONE ALONG LEAVES THE OTHER BEHIND** (08 §15's one at a time;
     // the lead, 2026-09-20). In ONE batch, so the door judges a result holding
@@ -2166,6 +2191,54 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
    * school a spell carries that the classes do not - and by tier within it.
    */
   /**
+   * **THE RUNE PANEL** (D-919; D11 §4; the plan's door 1): one group a wielded weapon, a
+   * socket a rune slot, the Runic Power bar, Inscribe and *Spend a rune*. Null for a
+   * character who is no Death Knight. The context is `rules/rune-panel.mjs`'s, pure; the
+   * words are composed here.
+   */
+  #runePanel() {
+    const system = this.actor.system;
+    if (!(system.classKeys ?? []).includes("death-knight")) return null;
+    const rows = system.runes?.weapons ?? [];
+    const figure = figureSlots(this.actor.items);
+    const weapons = Object.fromEntries(rows.map(r => {
+      const item = this.actor.items.get(r.itemId);
+      const hand = figure.mainHand?.id === r.itemId ? "main" : figure.offHand?.id === r.itemId ? "off" : null;
+      return [r.itemId, { img: item?.img ?? null, rarity: item?.system?.rarity ?? "common", rarityClass: rarityClass(item?.system?.rarity), hand }];
+    }));
+    const pool = (this.actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === RUNIC_POWER) ?? null;
+    const L = k => game.i18n.localize(k);
+    const inscribe = inscriptionRefusalFor(this.actor);
+    const spend = rows.length ? runeSpendRefusal(rows, { kind: "any", count: 1 }) : "noWeapon";
+    return runePanelContext({
+      rows, weapons, runicPower: pool ? { value: pool.value, max: pool.max } : null,
+      inscribeRefusal: inscribe ?? (rows.length ? null : "noWeapon"), spendRefusal: spend, editable: this.isEditable,
+      words: {
+        blood: L("AZEROTH.Runes.Blood"), frost: L("AZEROTH.Runes.Frost"),
+        spentBlood: L("AZEROTH.Runes.SpentBlood"), spentFrost: L("AZEROTH.Runes.SpentFrost"), empty: L("AZEROTH.Runes.EmptySlot"),
+        meta: ({ rarity, grip, slots }) => game.i18n.format("AZEROTH.Runes.Meta", {
+          rarity: L(AZEROTH.rarities[rarity] ?? rarity), grip: L(`AZEROTH.Runes.Grip.${grip}`), n: slots
+        }),
+        refusals: {
+          fight: L("AZEROTH.Runes.Panel.Refuse.fight"), window: L("AZEROTH.Runes.Panel.Refuse.window"),
+          noWeapon: L("AZEROTH.Runes.Panel.Refuse.noWeapon"), short: L("AZEROTH.Runes.Panel.Refuse.short")
+        }
+      }
+    });
+  }
+
+  /** Inscribed Runeweapon's Use from the panel (02 §7): the feature's own door. */
+  static async #onInscribeRunes() {
+    const feature = this.actor.items.find(i => i.type === "feature" && i.name === "Inscribed Runeweapon");
+    return useInscription(this.actor, feature ?? { id: "inscribe", name: game.i18n.localize("AZEROTH.Runes.Panel.Inscribe") });
+  }
+
+  /** *As a Half-Action, you may also spend any type of rune to gain its Runic Power* (02 §7). */
+  static async #onSpendRune() {
+    return spendRuneBare(this.actor, { kind: "any" });
+  }
+
+  /**
    * The Spells tab (D-614): the Mana bar as Core draws it, the spells the
    * classes grant at their tiers (07 §5) against the spells held, and the
    * known spells BY TIER, the school a chip on the row. Within a tier the
@@ -2196,7 +2269,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       if (school && !order.includes(school)) order.push(school);
       const mana = item.system.mana ?? null;
       const price = inForm && mana > 0 ? manaPrice(mana, { inShapeshiftForm: true }) : null;
-      const paid = spellPoolFor(taken, { name: item.name, school });
+      // And a class that pays in its Momentum (D-944): the Death Knight's Runic Power.
+      const paid = spellPayment(spellPoolFor(taken, { name: item.name, school }), this.actor.classItems ?? []);
       const payWith = paid?.pool && paid.pool !== "mana" ? paid.pool : null;
       if (payWith) paidIn.add(payWith);
       const payWord = payWith ? game.i18n.localize(AZEROTH.momentumTypes[payWith] ?? AZEROTH.powerTypes[payWith] ?? payWith) : manaWord;
@@ -2206,11 +2280,14 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         img: item.img,
         tier,
         school,
-        schoolLabel: AZEROTH.schools[school] ?? null,
+        schoolLabel: AZEROTH.spellSchools[school] ?? null,
         mana: price ? price.amount : mana,
+        // The pool's word beside the number where the list pays in more than Mana (F6's question 6;
+        // run close-F2): the browser row's own *2 Runic Power* (`browser-categories.mjs`).
+        cost: mana === null || mana === undefined ? null : `${price ? price.amount : mana} ${price ? game.i18n.localize(AZEROTH.momentumTypes.ferocity) : payWord}`,
         manaTip: price ? game.i18n.format("AZEROTH.Shape.FerocityForMana", { mana }) : payWord,
         ferocity: Boolean(price),
-        actionLabel: AZEROTH.actions[item.system.action] ?? null,
+        actionLabel: AZEROTH.spellActions[item.system.action] ?? null,
         sustaining: sustaining.has(item.id),
         detail: detailFields(item)
       });
@@ -2248,6 +2325,9 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       short: known.length > 0 && held.length < minimum,
       // The words that say the column is Ferocity, in a Shapeshift form alone.
       ferocityNote: inForm ? game.i18n.format("AZEROTH.Shape.SpellsInFerocity", { form: shapeLabel(this.actor.shape) }) : null,
+      // **EVERY ROW SAYS ITS POOL WHERE ANY ROW PAYS IN ANOTHER** (F6's question 6; run close-F2): a
+      // Death Knight's Runic Power, a branch spell's Rage. The number alone reads as Mana.
+      costWords: paidIn.size > 0,
       // The Power pools, through **Core's own rows** rather than a second
       // build of them. D-614 said *one partial, so the two cannot drift* and
       // then wrote the row twice: the header's copy carried no `editable`, so
@@ -2593,6 +2673,11 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     const build = (pool, stored, kind = null) => {
       if (!pool) return { held: false, label: null, value: null, max: null, segments: [], editable: false };
       const label = AZEROTH.momentumTypes[pool.name] ?? AZEROTH.powerTypes[pool.name] ?? pool.name;
+      // **THE RUNES ARE READ HERE AND SPENT ON THE COMBAT TAB** (F6's question 6; run close-F2;
+      // AGENT READING): the pool is derived off the weapons (D-919) and a hand write to it is refused
+      // in words (D-953), so a number box, steppers and Spend here could only refuse. The bar draws
+      // the count and a line naming the rune panel, whose sockets are the controls.
+      const runes = pool.name === RUNES;
       return {
         held: true,
         itemId: pool.itemId,
@@ -2604,7 +2689,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         // a partial resolves against the ROW, never the root (D-609), so
         // everything `pool.hbs` reads is spread onto the row here.
         title: label,
-        editable: this.isEditable,
+        editable: this.isEditable && !runes,
+        runes,
         value: stored.value,
         max: pool.max,
         // One segment per point the class allows: a Warrior's bar has ten and
@@ -3219,8 +3305,11 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         : (slot === "ranged" && figure.rangedKind === "augment"
           ? game.i18n.localize(AZEROTH.heldSlots.augment)
           : null);
+      // A Versatile weapon held in both hands by its rune count says so (D-943).
+      const runeNote = barred ? twoHandedNote(figure.mainHand) : null;
       const barredNote = barred
-        ? game.i18n.format("AZEROTH.Overview.TwoHanded", { name: figure.mainHand?.name ?? "" })
+        ? [game.i18n.format("AZEROTH.Overview.TwoHanded", { name: figure.mainHand?.name ?? "" }),
+          ...(runeNote ? [game.i18n.format(runeNote, { name: figure.mainHand?.name ?? "" })] : [])].join(" ")
         : null;
       // **THE SOCKET CARRIES NO WORDS** (the lead, 2026-09-20, against WoW's
       // own character pane): the icon in its rarity ring is the whole tile, so
@@ -3585,7 +3674,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // chip says what the Use takes, through the law the door pays with.
     const price = featurePrice(s.cost, { inShapeshiftForm: this.actor.inShapeshiftForm === true });
     // 05 §11's kind word reads as itself (02 §5's War Stomp: *4 Momentum*; the B8a pass).
-    const poolLabel = price ? game.i18n.localize(AZEROTH.costPoolTypes[price.pool] ?? price.pool) : null;
+    // One rune is *Rune* (`rules/runes.mjs#poolLabelKey`; the F2 review's note).
+    const poolLabel = price ? game.i18n.localize(poolLabelKey(price.pool, price.all ? 2 : price.amount, AZEROTH.costPoolTypes)) : null;
     // A shape the character cannot take at all (the lead: *"No Avatar without
     // it"*): the row greyed and the reason in words, through the rule the
     // door refuses with (`useFeature`'s 1a).
@@ -3598,9 +3688,14 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // and the return with a mark standing needs none - `usesAskedLater`; stage 2b).
     const use = granting ? onUseOf(talentEffect(granting.system?.className, granting.system?.identifier, granting.system?.race ?? null)) : classFeatureOnUse(item.system?.className ?? "", item.name);
     const formless = use?.requires === "shapeshift" && this.actor.inShapeshiftForm !== true;
+    // **A USE THAT NEEDS SOMETHING IN HAND** (04's Bladestorm, and the Death Knight's Dancing
+    // Runeweapon: *while you wield a two-handed weapon, or a Versatile weapon in both hands*;
+    // run F4a): greyed with the door's own words (`rules/wield.mjs#wieldRefusal`).
+    const wieldNeeds = Array.isArray(use?.wields) && use.wields.length ? wieldRefusal(use.wields, this.actor.gateFacts?.()?.wield ?? null) : null;
     const refusal = barred
       ? game.i18n.format("AZEROTH.Shape.NeedsTalent", { name: item.name, talent: barred.talent })
-      : (formless ? game.i18n.format("AZEROTH.Feature.NeedsForm", { name: item.name }) : null);
+      : (formless ? game.i18n.format("AZEROTH.Feature.NeedsForm", { name: item.name })
+        : (wieldNeeds ? game.i18n.format(wieldNeeds, { name: item.name }) : null));
     return {
       id: item.id,
       name: item.name,

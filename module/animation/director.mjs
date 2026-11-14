@@ -41,7 +41,8 @@ import { animationAvailability, isSettled, loopsOn, setSettled } from "./availab
 import { SequencerPlayer, warn } from "./player.mjs";
 import {
   cardPrivacyKey, cardRecord, cardRecords, effectRecord, effectRecords, effectUpdateRecords, factsFor, featureCardSeen,
-  liveFeatureCasts, markPrivacySeeded, notePrivacy, privateCasts, regionRecord, resistCueRecord, stateSnapshot
+  liveFeatureCasts, markPrivacySeeded, notePrivacy, privateCasts, regionRecord, resistCueRecord, runeSpendRecords, stateSnapshot,
+  forcedMoveRecords
 } from "./records.mjs";
 import {
   animationHidden, animationStops, setAnimationHidden, setAnimationStops
@@ -166,19 +167,43 @@ function holdForCard(record, arrivedAt) {
   const list = awaitingCard.get(record.privacy) ?? [];
   list.push({ record, arrivedAt });
   awaitingCard.set(record.privacy, list);
-  setTimeout(() => releaseAwaiting(record.privacy), STATE_CUE_WAIT_MS + 25);
+  setTimeout(() => releaseAwaiting(record.privacy), waitOf(record) + 25);
 }
 
-/** Play one held cue if its verdict is in. Answers whether it was settled. */
+/** How long a held record waits for its card: its own (a rune flare's, O-395), else a state's. */
+function waitOf(record) {
+  return Number.isFinite(record?.cardWaitMs) && record.cardWaitMs > 0 ? record.cardWaitMs : STATE_CUE_WAIT_MS;
+}
+
+/**
+ * Play one held cue if its verdict is in. Answers whether it was settled. A record may name how
+ * recent a card must be to speak for it: a rune flare takes only a card that arrives after it
+ * (`cardFreshMs: 0`, D-1013), a state the standing ten seconds. A rune flare also waits its own
+ * time (`waitOf`, O-395), fails closed where no card came (the close review's finding 5) and lets a
+ * blind card's own author see their own flare (O-394): `heldVerdict`.
+ */
 function settleStateCue(record, arrivedAt) {
-  const verdict = stateCueVerdict({
-    card: featureCardSeen(record.privacy), arrivedAt, now: Date.now(), freshMs: CARD_FRESH_MS, waitMs: STATE_CUE_WAIT_MS
-  });
+  const verdict = heldVerdict(record, arrivedAt);
   if (!verdict.ready) return false;
-  const { awaitCard, ...rest } = record;
-  void awaitCard;
+  const rest = withoutHold(record);
   playCueFor({ ...rest, contentVisible: rest.contentVisible !== false && !verdict.private });
   return true;
+}
+
+/** The verdict on one held record, off the last card this client saw for its pair. */
+function heldVerdict(record, arrivedAt) {
+  return stateCueVerdict({
+    card: featureCardSeen(record.privacy), arrivedAt, now: Date.now(), waitMs: waitOf(record),
+    freshMs: Number.isFinite(record.cardFreshMs) ? record.cardFreshMs : CARD_FRESH_MS,
+    failClosed: record.cardFailClosed === true, ownBlind: record.cardOwnBlind === true
+  });
+}
+
+/** A held record without the keys the hold read, as the law plans it. */
+function withoutHold(record) {
+  const { awaitCard, cardFreshMs, cardWaitMs, cardFailClosed, cardOwnBlind, ...rest } = record;
+  void awaitCard, void cardFreshMs, void cardWaitMs, void cardFailClosed, void cardOwnBlind;
+  return rest;
 }
 
 /** Every held cue of one pair whose verdict is in: a card arrived, or a wait ran out. */
@@ -569,6 +594,14 @@ export function registerAnimationHooks() {
   // and a condition's landing marks arriving after it was toggled on - read off the
   // update's own diff, which is what keeps a re-render from cueing either again.
   Hooks.on("updateActiveEffect", guarded("effect-update", (effect, changed) => playCuesFor(effectUpdateRecords(effect, changed))));
+  // **A RUNE SPENT** (02 §7, run F5): the one rune door writes what it spent on the update's own
+  // operation (`documents/runes.mjs#spendRunesOn`), which reaches every client's hook, so each
+  // plays the flare for itself. Any other actor update carries no such key and implies nothing.
+  Hooks.on("updateActor", guarded("rune-spend", (actor, changed, options) => playCuesFor(runeSpendRecords(options))));
+  // **A FORCED MOVE** (02's Death Grip, D-1015; every push and pull, O-397): the one forced-movement
+  // door writes the move on the token's own displacement, which reaches every client's hook, so each
+  // plays the `arrive` cue for itself. Any other token update implies nothing.
+  Hooks.on("updateToken", guarded("forced-move", (token, changed, options) => playCuesFor(forcedMoveRecords(options))));
 
   // LOOPS. Everything that could move what the world holds.
   for (const hook of [
@@ -639,7 +672,7 @@ export const animations = {
   plan,
   loopsFor,
   tables,
-  records: { cardRecord, cardRecords, regionRecord, effectRecord, effectRecords, effectUpdateRecords, resistCueRecord, factsFor, stateSnapshot },
+  records: { cardRecord, cardRecords, regionRecord, effectRecord, effectRecords, effectUpdateRecords, resistCueRecord, runeSpendRecords, forcedMoveRecords, factsFor, stateSnapshot },
   director: { reconcile: (options = { force: true }) => reconcileNow(options), setPlayer, resetPlayer, activeLoops, wantedLoops, prune: pruneAnimationKeys },
   // The player that draws nothing, so a batch, a macro or a Playwright script
   // can swap it in without knowing a module path (`quench-tests.mjs` already

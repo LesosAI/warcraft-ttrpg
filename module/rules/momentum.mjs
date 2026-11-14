@@ -10,7 +10,13 @@
 import { heldAt } from "./blow-doors.mjs";
 // Sand empties ONLY at a rest or when its Hourglass leaves the slot (D-848):
 // every lifecycle step below asks `sandSurvives` rather than restating it.
-import { SAND, sandAfter, sandCap, sandSurvives } from "./sand.mjs";
+import { SAND, sandCap } from "./sand.mjs";
+// **AND RUNIC POWER, BY THE SAME RULE** (D-943): the kept pools are ONE pool-keyed list
+// (`kept-pools.mjs`), Sand emptied by a rest or its Hourglass leaving, Runic Power by a
+// Long Rest alone. Every lifecycle step below asks it.
+import { isKeptPool, keptAfter, keptSurvives } from "./kept-pools.mjs";
+// Runic Power's cap, and the rule that 05 §11's universal gains never reach it (D-943).
+import { RUNIC_POWER, gainsByUniversalTriggers, runicPowerCap } from "./runes.mjs";
 
 /**
  * What every pool holds as a fight starts (02 SS7): Momentum at 0 - Zeal at
@@ -33,7 +39,8 @@ export function fightStart(pools = [], { zealStart = 0, keepsZeal = false } = {}
     if (p.kind === "momentum") {
       // Sand does not start a fight at 0 (the lead: *"It should only drain on a
       // short or long rest"*, D-848).
-      if (p.name === SAND && sandSurvives("fightStart")) continue;
+      // Nor Runic Power (the lead: *Runic Power keeps out of fights*, D-943).
+      if (keptSurvives(p.name, "fightStart")) continue;
       if (p.name === "zeal" && keepsZeal && !(Number(zealStart) > 0)) continue;
       const value = p.name === "zeal" ? Math.max(0, Math.min(p.max ?? 0, zealStart)) : 0;
       if (value !== (p.value ?? 0)) updates.push({ itemId: p.itemId, kind: "momentum", value });
@@ -54,10 +61,11 @@ export function fightStart(pools = [], { zealStart = 0, keepsZeal = false } = {}
  * Guard. A caller that passes no pool is the old reading, unchanged.
  */
 export function momentumAfter(value, { criticalInjury = false, guarded = false, pool = null } = {}) {
-  if (pool === SAND) {
+  // A KEPT pool - Sand, and Runic Power (the lead: a Critical Injury and Guard leave it
+  // alone, *"yes"*; D-943) - holds through both, by the one list (`kept-pools.mjs`).
+  if (isKeptPool(pool)) {
     const event = criticalInjury ? "criticalInjury" : (guarded ? "guard" : null);
-    // What the pool holds after the event, by Sand's one list (`sandAfter`; the 2a review, item 4).
-    if (!event || sandSurvives(event)) return sandAfter(value, event);
+    if (!event || keptSurvives(pool, event)) return keptAfter(pool, value, event);
   }
   if (criticalInjury || guarded) return 0;
   return Math.max(0, value);
@@ -113,7 +121,11 @@ export function gainOnHit({ pools = [], sl = 0, offHand = false, againstMark = f
     if (p.kind !== "momentum") continue;
     if (p.name === "quarry" && !againstMark) continue;
     if (p.name === "ferocity" && !inForm) continue;
-    const total = gain + further(p.name);
+    // **RUNIC POWER IS GAINED ONLY BY SPENDING A RUNE** (the lead: *"Runic Power is only
+    // gained by consuming runes"*; D-943): 05 §11's +1 for a hit and +1 more at SL 2 never
+    // reach it, nor Fast's `extra` nor a Signature's `always`. A row that NAMES it
+    // (`poolExtra.runicPower`, *"talents or features can exempt from this rule"*) still does.
+    const total = (gainsByUniversalTriggers(p.name) ? gain : 0) + further(p.name);
     if (total <= 0) continue;
     const value = Math.min(p.max ?? 0, (p.value ?? 0) + total);
     if (value > (p.value ?? 0)) out.push({ itemId: p.itemId, kind: "momentum", name: p.name, value, gained: value - (p.value ?? 0) });
@@ -157,13 +169,25 @@ export function furtherGains(args = {}, pool = null, amount = 0) {
   return valueWith(withRow) > valueWith(without);
 }
 
-/** Rage when a blow reaches Health (02 SS7): +1, and +1 more per rank of Enrage (04). */
-export function gainWhenStruck({ pools = [], damage = 0, enrageRanks = 0 } = {}) {
+/**
+ * Rage when a blow reaches Health (02 SS7): +1, and +1 more per rank of Enrage (04).
+ *
+ * **AND RUNIC POWER WHILE AN UNHOLY PRESENCE STANDS** (02 §7: *While your presence lasts, once a
+ * round, when a blow damages you, gain 1 Runic Power*; the Death Knight plan's door 10): the
+ * exemption the lead allowed (*"talents or features can exempt from this rule as an additonal way
+ * to gain runic power"*), `presence` its amount - the caller has judged the presence and taken the
+ * round's mark (`rules/death-knight.mjs#FEEDS_ON_BLOWS_MARK`), and writes it through the named
+ * door (`runicGain: "feedsOnBlows"`).
+ */
+export function gainWhenStruck({ pools = [], damage = 0, enrageRanks = 0, presence = 0 } = {}) {
   if (!(damage > 0)) return [];
   const out = [];
+  const fed = Math.max(0, Math.trunc(Number(presence)) || 0);
   for (const p of pools) {
-    if (p.kind !== "momentum" || p.name !== "rage") continue;
-    const value = Math.min(p.max ?? 0, (p.value ?? 0) + 1 + Math.max(0, Math.trunc(enrageRanks) || 0));
+    if (p.kind !== "momentum") continue;
+    const add = p.name === "rage" ? 1 + Math.max(0, Math.trunc(enrageRanks) || 0) : (p.name === "runicPower" ? fed : 0);
+    if (!add) continue;
+    const value = Math.min(p.max ?? 0, (p.value ?? 0) + add);
     if (value > (p.value ?? 0)) out.push({ itemId: p.itemId, kind: "momentum", name: p.name, value, gained: value - (p.value ?? 0) });
   }
   return out;
@@ -225,7 +249,8 @@ export function idleDecay(pool, { round = 1, lastHitRound = null } = {}) {
  */
 export function lossOnGuard(pool, { unbroken = false } = {}) {
   if (unbroken && pool?.name === "rage") return pool.value ?? 0;
-  if (pool?.name === SAND && sandSurvives("guard")) return pool.value ?? 0;
+  // A kept pool survives a Guard (Sand, D-848; Runic Power, D-943).
+  if (keptSurvives(pool?.name, "guard")) return pool.value ?? 0;
   return 0;
 }
 
@@ -274,8 +299,8 @@ export function leaveFightPools(pools = [], { keepsZeal = false } = {}) {
   return (pools ?? [])
     .filter(p => p?.kind === "momentum" && (p.value ?? 0) > 0)
     .filter(p => !(keepsZeal && p.name === "zeal"))
-    // Sand is not emptied by a fight's end (D-848).
-    .filter(p => !(p.name === SAND && sandSurvives("fightEnd")))
+    // Sand and Runic Power are not emptied by a fight's end (D-848, D-943).
+    .filter(p => !keptSurvives(p.name, "fightEnd"))
     .map(p => ({ itemId: p.itemId, kind: "momentum", value: momentumAfter(0) }));
 }
 
@@ -350,8 +375,11 @@ export function unkillableFloor({ before = 0, amount = 0, rage = 0, holds = fals
  * Ranged slot (`sand.mjs#equippedHourglass`), and with none the cap is 0 - the
  * class item's printed 5 is the Common glass's and is never read on its own.
  */
-export function capFor(pool, ranks = () => 0, { hourglass = null } = {}) {
+export function capFor(pool, ranks = () => 0, { hourglass = null, chaMod = 0 } = {}) {
   if (pool?.name === SAND) return sandCap(hourglass);
+  // **RUNIC POWER'S CAP IS 10 PLUS CHARISMA, NEVER BELOW 10** (the lead; D-943): `chaMod`
+  // the character's Charisma modifier. The class item's printed 10 is the floor.
+  if (pool?.name === RUNIC_POWER) return runicPowerCap(chaMod);
   const max = pool?.max ?? 0;
   if (pool?.name === "zeal" && ranks("Zealotry") > 0) return 15;
   if (pool?.name === "quarry") return max + 2 * Math.max(0, ranks("Hunter's Mark"));

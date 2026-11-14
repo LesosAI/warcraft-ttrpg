@@ -48,6 +48,7 @@ import { CUTTING_GEAR, cuttingGearRefusal, holdsCuttingGear } from "../rules/esc
 import { turnMark } from "../rules/class-answers.mjs";
 import { minuteSpan } from "./durations.mjs";
 import { refuseIceBlockTarget } from "./ice-block-protection.mjs";
+import { conditionEffectOf } from "../rules/condition-carriers.mjs";
 
 /** The query a write on a creature this client does not own goes through. */
 export const LEGACY_USE_QUERY = "azeroth-rpg.legacyUse";
@@ -634,8 +635,9 @@ export async function bindThrall({ target, owner, source, span = null, token = n
   if (refused) return { effect: null, refused };
   const doc = token?.documentName === "Token" ? token
     : (target.isToken ? target.token : (target.getActiveTokens?.(false, true)?.[0] ?? target.getDependentTokens?.({ linked: true })?.[0] ?? null));
-  if (!target.statuses?.has?.("charmed")) await target.toggleStatusEffect("charmed", { active: true });
-  const effect = target.effects.find(e => e.statuses?.has?.("charmed")) ?? null;
+  // The thrall's own Charmed, never a carrier holding it (D-997): the span and the bond ride it.
+  if (!conditionEffectOf(target.effects, "charmed")) await target.toggleStatusEffect("charmed", { active: true, ownEffect: true });
+  const effect = conditionEffectOf(target.effects, "charmed");
   if (!effect) return { effect: null, refused: null };
   await effect.update({
     ...(span ?? {}),

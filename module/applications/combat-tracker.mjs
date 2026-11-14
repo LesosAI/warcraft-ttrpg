@@ -45,6 +45,28 @@ export class AzerothCombatTracker extends CombatTracker {
 
   /* -------------------------------------------- */
 
+  /**
+   * **ANOTHER FIGHT'S UPDATE SCROLLS NOTHING** (run F4b; the page error runs F3 and F4a recorded).
+   * Core 14.367's `CombatTracker#_onRender` reads `"turn" in data` where `data` is the render data
+   * of the VIEWED fight, found in `renderData` - and an `updateCombat` render for another fight
+   * (two batches' fights at once, or a GM's second encounter) carries none, so `data` is undefined
+   * and the `in` throws as a page error. Such a render has no active row of the viewed fight to
+   * scroll into view, so its context is renamed for core's scroll check alone; everything else
+   * renders as core renders it.
+   *
+   * **REMOVE THIS OVERRIDE** when core's `client/applications/sidebar/tabs/combat-tracker.mjs`
+   * (14.367, lines 186-188) stops reading `"turn" in data` on a `data` that `renderData.find` may
+   * leave undefined - it is a workaround for that one line and nothing else.
+   * @inheritDoc
+   */
+  async _onRender(context, options) {
+    const other = Array.isArray(options?.renderData) && options.renderContext === "updateCombat"
+      && !options.renderData.some(d => d?._id === this.viewed?.id);
+    return super._onRender(context, other ? { ...options, renderContext: "updateCombatOther" } : options);
+  }
+
+  /* -------------------------------------------- */
+
   /** A row identifies a turn slot as well as its shared combatant. Core already
    * determines the active row by index, including adjacent turns of one actor. */
   async _prepareTurnContext(combat, combatant, index) {

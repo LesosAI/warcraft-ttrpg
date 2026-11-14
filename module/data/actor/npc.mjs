@@ -44,6 +44,8 @@ import { laidBaneFlags, laidBoonFlags } from "../../effects/banes.mjs";
 // A heal Mortal Strike's blow blocks (04, D-772): the character's own reading.
 import { healingBlockedBy } from "../../rules/no-healing.mjs";
 import { sentinelHalvesHealing } from "../../rules/sentinel-mortal-strike.mjs";
+// 02's Blood Plague halves the healing its carrier receives (the Death Knight plan's door 7).
+import { plagueHalvesHealing } from "../../rules/death-knight.mjs";
 import { sentinelEnrageBonus } from "../../rules/sentinel-enrage.mjs";
 import { nearbyCreatures } from "../../effects/passives.mjs";
 // 05's temporary Health, its stored value cleaned where present (D-777).
@@ -569,7 +571,8 @@ export class NpcData extends foundry.abstract.TypeDataModel {
     // three lines: the Banes the dialog reads, halved healing, a free stand.
     this.auraBaneRows = auraBaneRows(this.parent?.effects ?? []);
     this.healingHalved = auraHalvesHealing(this.parent?.effects ?? [])
-      || sentinelHalvesHealing(this.parent?.effects ?? []);
+      || sentinelHalvesHealing(this.parent?.effects ?? [])
+      || plagueHalvesHealing(this.parent?.effects ?? []);
     // **A BLOW THAT LEFT IT RECOVERING NONE** (04's Mortal Strike, D-772): a
     // troll's Regeneration as much as anybody's heal, read by every door.
     const blocked = healingBlockedBy(this.parent?.effects ?? []);

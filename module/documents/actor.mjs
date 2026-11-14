@@ -44,7 +44,7 @@ import { grantsFor, healBonusFor, healingPatchesFor, passivesFor, patchFeature, 
 import { HEALS_ONE_TARGET } from "../rules/class-talents.mjs";
 // What the next spell was promised (04's Nature's Grace, Predator's Swiftness;
 // D-771), and a heal shared between two partners (04's Symbiosis).
-import { NEXT_SPELL_FLAG, pendingNextSpell } from "../rules/casting.mjs";
+import { NEXT_SPELL_FLAG, pendingNextSpell, spellPayment } from "../rules/casting.mjs";
 import { endSymbiosis, shareHealing } from "../effects/symbiosis.mjs";
 // The Warrior's and the Paladin's kinds (D-772): what the next attack was
 // promised, Wounded Beast's price, Light's Reserve, a heal Mortal Strike blocks,
@@ -56,6 +56,7 @@ import { CHARGE_FLAG, spellPoolFor, talentLinesFor } from "../rules/class-talent
 import { FREE_CAST_FLAG, freeCastLines, freeCastRefills } from "../rules/free-casts.mjs";
 import { untilEndOfNextTurnOrRound, untilNextTurnOrRound } from "../effects/durations.mjs";
 import { askStabilizer } from "../effects/gadget-reactions.mjs";
+import { carrierChangesApplied, conditionEffectOf, conditionStatusesHeld, toggleOffTargets } from "../rules/condition-carriers.mjs";
 // D-779: the lead's class answers - Shared Quarry's payer, Undying Rage's hold,
 // Divine Aegis's Ward and Miracle's heal at the one healing door.
 import { companionSpendsFor, undyingRageFor } from "../rules/class-talents.mjs";
@@ -74,6 +75,7 @@ import { shareBeacon } from "../effects/beacon.mjs";
 // What a talent spends as part of an attack (D-770): the law the dialog's lines
 // and the roll's payment both read through `riderLines`.
 import { riderDiscountsOf, ridersFor } from "../rules/riders.mjs";
+import { FEEDS_ON_BLOWS_MARK, PRESENCE_ENDS_AT_ZERO, UNHOLY_PRESENCE, featureRiders, featureSpellGrants, holdsPresence, maneuverPriceOf, presenceOf } from "../rules/death-knight.mjs";
 // The Chromatic Champion's branch talents (stage 3A): Void Corruption as a pool a rider
 // pays from, and its write.
 import { branchSpellOf, fallHarmless, lifebinderFor, riderWritesSplit, splitOffered, voidPool, voidSpendFor, weightOfAgesBars, weightOfAgesFor } from "../rules/chromatic-talents.mjs";
@@ -136,6 +138,7 @@ import {
 } from "../rules/temporary-health.mjs";
 import { healTempFor } from "../rules/class-talents.mjs";
 import { wouldDrop } from "../rules/blow-doors.mjs";
+import { recordOf, resolveRecord } from "../rules/blow-records.mjs";
 import { damageAboveHealthFloor } from "../rules/sealing-flame.mjs";
 import {utilityEffectView} from "../rules/utility-draughts.mjs";
 // What another creature does to a blow, asked as it lands (D-777): a blow moved,
@@ -173,6 +176,12 @@ import { dispersionFor, dispersionSuppressesEquipmentEffect } from "../rules/dis
 import { healingReceived } from "../rules/corruption-effects.mjs";
 import { heldAugment } from "../rules/augments.mjs";
 import { emptySandUpdates } from "../rules/sand.mjs";
+// The Death Knight (D-943, D-946): the one healing judgement, and the runes' Long Rest refill.
+import { HEALING_REFUSAL_WORDS, healGiver, healingRefusal, undeadByClass } from "../rules/undead.mjs";
+import { creatureSnapshot, kindsOf } from "../rules/creature-kinds.mjs";
+import { refillRunesAtLongRest } from "./runes.mjs";
+import { RUNES, RUNIC_POWER, runicGainRefusal } from "../rules/runes.mjs";
+import { poolWrite } from "./pool-writes.mjs";
 import { displacedBy } from "../rules/worn.mjs";
 // What a character's token looks like before anybody touches it (D-718's
 // neighbour; the lead, 2026-09-13).
@@ -391,6 +400,8 @@ function featureStamp(cls, f, { tier = 1, level = 1, int = 0 } = {}) {
     // Draconic Discipline's pool for every universal maneuver (the Chromatic Champion
     // plan), or null for Momentum.
     maneuverPool: typeof f.maneuverPool === "string" && f.maneuverPool ? f.maneuverPool : null,
+    // Runic Discipline's price for every maneuver (02 §7, run F2), or null.
+    maneuverPrice: Number.isInteger(f.maneuverPrice) && f.maneuverPrice >= 0 ? f.maneuverPrice : null,
     attack: f.attack === true,
     // HOW MANY presses the card's Attack allows (the architect's review of D-773): `each`,
     // an amount in `rank` (04's Rapid Fire, `4*rank`), or null for one. **NEVER STAMPED
@@ -510,6 +521,24 @@ function auraBoonProvenance(actor, resilience, choice) {
   return names.length ? [{ label: "AZEROTH.Modifier.AuraBoon", value: null, formula: names.join(", ") }] : [];
 }
 
+/**
+ * A carrier as the application pass reads it (D-997): the carrier itself, unless a condition's
+ * own effect holds one of its statuses, in which case a facade whose `system.changes` leaves out
+ * the condition's change (`rules/condition-carriers.mjs#carrierChangesApplied`). The facade
+ * stays inside the iterator, as `utilityEffectView`'s does; it is never persisted.
+ */
+function carrierEffectView(effect, held) {
+  if (!effect || !held?.size || !effect.system?.changes?.length) return effect;
+  const own = carrierChangesApplied(effect, held, id => CONFIG.statusEffects?.[id]?.system?.changes ?? []);
+  if (own === effect.system.changes) return effect;
+  const system = new Proxy(effect.system, { get(target, key) { return key === "changes" ? own : Reflect.get(target, key, target); } });
+  return new Proxy(effect, { get(target, key) {
+    if (key === "system") return system;
+    const value = Reflect.get(target, key, target);
+    return typeof value === "function" ? value.bind(target) : value;
+  } });
+}
+
 export class AzerothActor extends Actor {
   /**
    * A character's token is a PC's token (the lead, 2026-09-13).
@@ -608,10 +637,14 @@ export class AzerothActor extends Actor {
     const dispersed = Boolean(dispersionFor(this));
     const physicalItemUuids = dispersed ? new Set([...this.items]
       .filter(item => ["weapon", "armor", "gear"].includes(item.type)).map(item => item.uuid)) : null;
+    // **A CONDITION'S CHANGE APPLIES ONCE** (D-997): where a condition's own effect stands beside
+    // a carrier holding the same status (a Slowed laid on a creature with Frost Fever), the
+    // carrier's copy of the condition's change sits out this pass, or Speed would halve twice.
+    const held = conditionStatusesHeld(this.effects ?? []);
     for (const effect of super.allApplicableEffects()) {
       if (dispersed && dispersionSuppressesEquipmentEffect(effect, physicalItemUuids)) continue;
       const utility=utilityEffectView(effect,game.time?.worldTime??0);
-      if(utility)yield prostheticEffectView(this,utility);
+      if(utility)yield carrierEffectView(prostheticEffectView(this,utility), held);
     }
   }
 
@@ -1220,10 +1253,46 @@ export class AzerothActor extends Actor {
    * is exactly what the rest handlers used to do, and why a Short Rest never
    * restored the pool the sheet draws.
    *
+   * **ONE AT A TIME FOR EACH ACTOR** (the F2 review's should-fix 4, D-761's lesson): the
+   * write runs on this client after every pool write queued before it for this actor has
+   * landed (`documents/pool-writes.mjs`), and reads the classes then, so a cast beside a
+   * rune spend, a feature's price beside a Long Rest, never loses one of the two.
+   *
    * @param {{itemId: string, kind: "power"|"momentum", value: number}[]|object} changes
    * @param {object} [extra]  Other fields to write in the same update.
+   * @param {{runicGain?: string|null}} [options]  core's update options, and - read here and
+   *   never sent - the door a RISE of Runic Power comes through (`rules/runes.mjs
+   *   #RUNIC_GAIN_SOURCES`)
    */
   async updatePool(changes, extra = {}, options = {}) {
+    return poolWrite(this, () => this.writePoolsNow(changes, extra, options));
+  }
+
+  /**
+   * **02 §7's UNHOLY PRESENCE ENDS AT 0 HEALTH** (door 10: *until you end it, you drop to 0 Health
+   * or you finish a Long Rest*), **AND MARCH OF THE DAMNED** (the lead on O-355, run F4b, D-987:
+   * *"Yes."*): every laid state `PRESENCE_ENDS_AT_ZERO` names, called by the struck blow's 0 Health
+   * branch. Said and never thrown, so nothing the blow does next is skipped.
+   */
+  async _endPresenceAtZero() {
+    const standing = PRESENCE_ENDS_AT_ZERO.filter(kind => presenceOf(this.effects, kind));
+    if (!standing.length) return;
+    try {
+      const { endPresence } = await import("../effects/death-knight-necromancy.mjs");
+      for (const kind of standing) await endPresence(this, kind);
+    } catch (err) {
+      console.warn("azeroth-rpg | a presence at 0", err);
+    }
+  }
+
+  /**
+   * **THE WRITE ITSELF, UNQUEUED**: for a task already running in this actor's pool queue
+   * (`documents/runes.mjs`), which must never await `updatePool` - it would wait behind
+   * itself. Everything else calls `updatePool`.
+   */
+  async writePoolsNow(changes, extra = {}, options = {}) {
+    const { runicGain = null, ...updateOptions } = options ?? {};
+    options = updateOptions;
     const list = Array.isArray(changes) ? changes : [changes];
     if (!list.length && !Object.keys(extra).length) return this;
     if (this.type === "npc") {
@@ -1250,7 +1319,25 @@ export class AzerothActor extends Actor {
       const entry = classes.find(c => c.itemId === itemId);
       const pool = snapshot.find(p => p.itemId === itemId && p.kind === kind);
       if (!entry || !pool) continue;
+      // **THE RUNES ARE NEVER WRITTEN HERE** (D-943; the F1 review): the pool is DERIVED off
+      // the weapons wielded, and a rune changes only through `documents/runes.mjs`, which
+      // gives each rune spent its Runic Power. A write that names it is refused in words and
+      // the rest of the batch stands.
+      if (pool.kind === "power" && pool.name === RUNES) {
+        if (Math.trunc(value) !== (pool.value ?? 0)) ui.notifications?.warn(game.i18n.format("AZEROTH.Runes.Refuse.direct", { name: this.name }));
+        continue;
+      }
       const next = Math.max(0, Math.min(pool.max, Math.trunc(value)));
+      // **RUNIC POWER RISES THROUGH A NAMED DOOR ALONE** (`rules/runes.mjs#runicGainRefusal`):
+      // a rise this write does not name a source for is refused in words, and the rest of
+      // the batch stands.
+      if (pool.kind === "momentum" && pool.name === RUNIC_POWER) {
+        const refusedGain = runicGainRefusal({ before: entry[kind]?.value ?? 0, after: next, source: runicGain, gm: game.user?.isGM === true });
+        if (refusedGain) {
+          ui.notifications?.warn(game.i18n.format(`AZEROTH.Runes.Refuse.gain.${refusedGain}`, { name: this.name }));
+          continue;
+        }
+      }
       if (next !== (entry[kind]?.value ?? 0)) moved = true;
       entry[kind] = { ...entry[kind], value: next };
     }
@@ -1428,7 +1515,12 @@ export class AzerothActor extends Actor {
     // "You know Fireball" (D-642): the spell embedded while the talent is
     // taken, flagged with the talent, and withdrawn with it. A spell the
     // character already holds by any other road is left alone.
+    // **AND A CLASS FEATURE'S** (02 §7's Unholy Lore: *You know Death Coil. It does not count
+    // against your spells known*; O-343): the same embed, flagged with the feature, withdrawn
+    // with it (`rules/death-knight.mjs#featureSpellGrants`).
     const known = spellGrantsFor(taken);
+    known.push(...featureSpellGrants(this.items.filter(i => i.type === "feature").map(i => ({ id: i.id, name: i.name, className: i.system?.className ?? "" })))
+      .map(g => ({ talent: { id: g.featureId }, name: g.spell })));
     const fromTalents = this.items.filter(i => i.type === "spell" && i.getFlag("azeroth-rpg", "spellFrom"));
     const staleSpells = fromTalents
       .filter(s => !known.some(k => k.talent.id === s.getFlag("azeroth-rpg", "spellFrom") && k.name === s.name))
@@ -1607,9 +1699,11 @@ export class AzerothActor extends Actor {
     if (state.fatigued !== has("fatigued")) await this.toggleStatusEffect("fatigued", { active: state.fatigued });
     const own = this.effects.find(e => e.statuses?.has("slowed") && e.getFlag("azeroth-rpg", "fromFatigue"));
     const slowed = state.slowed && !(this.system?.conditionImmunities ?? []).includes("slowed");
-    if (slowed && !own && !has("slowed")) {
-      await this.toggleStatusEffect("slowed", { active: true });
-      const made = this.effects.find(e => e.statuses?.has("slowed"));
+    // A carrier's Slowed (Frost Fever) is not the condition (D-997): the Fatigue lays its own
+    // beside it, so the Slowed outlasts the disease while the track still says so.
+    if (slowed && !own && !conditionEffectOf(this.effects, "slowed")) {
+      await this.toggleStatusEffect("slowed", { active: true, ownEffect: true });
+      const made = conditionEffectOf(this.effects, "slowed");
       if (made) await made.setFlag("azeroth-rpg", "fromFatigue", true);
     } else if (!slowed && own) {
       await own.delete();
@@ -1627,7 +1721,7 @@ export class AzerothActor extends Actor {
    * Charge has a use left.
    */
   maneuverContext() {
-    const features = this.items.filter(i => i.type === "feature").map(i => ({ name: i.name }));
+    const features = this.items.filter(i => i.type === "feature").map(i => ({ name: i.name, maneuverPrice: i.system?.maneuverPrice ?? null }));
     const talents = this.items.filter(i => i.type === "talent" && (i.system?.taken ?? 0) > 0)
       .map(i => ({ name: i.name, taken: i.system.taken }));
     const grants = this.items.filter(i => i.system?.equipped === true).flatMap(i => grantsOn(i));
@@ -1968,7 +2062,10 @@ export class AzerothActor extends Actor {
         ui.notifications?.warn(game.i18n.format("AZEROTH.Rest.NotDrink", { name: drink?.name ?? String(drink) }));
         return null;
       }
-      if (!eaten && !drunk && !feast) {
+      // **A CHARACTER WHO DOES NOT EAT OR DRINK RESTS WITHOUT EITHER** (the lead: *"They do
+      // recover health but do not have to eat or drink."*; D-946): no refusal, and the
+      // rest recovers as though fed (`rules/rest.mjs#shortRest`'s `needsNoFood`).
+      if (!eaten && !drunk && !feast && this.system?.needsNoFood !== true) {
         ui.notifications?.warn(game.i18n.format("AZEROTH.Rest.NeedsProvision", { name: this.name }));
         return null;
       }
@@ -2018,7 +2115,10 @@ export class AzerothActor extends Actor {
       health: s.health, conMod: s.abilities?.con?.own?.mod ?? s.abilities?.con?.mod ?? 0, tier: s.tier ?? 1, fatigue: s.fatigue ?? 0,
       pools: this.type === "character" ? this.poolSnapshot() : [],
       ...picks,
-      manaExtra: reserve.mana > 0 ? { itemId: reserveClass?.id ?? null, amount: reserve.mana } : null
+      manaExtra: reserve.mana > 0 ? { itemId: reserveClass?.id ?? null, amount: reserve.mana } : null,
+      // The Death Knight, the Forsaken and the Risen (D-946).
+      needsNoFood: this.type === "character" && this.system?.needsNoFood === true,
+      needsNoDrink: this.type === "character" && this.system?.needsNoDrink === true
     });
     if (reserve.mana > 0 && picks.drinks === true) r.gains.push({ kind: "talentMana", name: reserve.by.join(", "), amount: reserve.mana });
     const restBefore = this.system?.health?.value ?? 0;
@@ -2140,6 +2240,14 @@ export class AzerothActor extends Actor {
     // next Long Rest*, and one Demonic Sacrifice dismissed *cannot be summoned
     // again until your next Long Rest*.
     if (this.type === "character") await releaseAtLongRest(this);
+    // **02 §7's UNHOLY PRESENCE ENDS WITH THE REST, AND A DRACOLICH COLLAPSES** (doors 10 and the
+    // raises: *until you end it, you drop to 0 Health or you finish a Long Rest*; 07 §17's *It
+    // collapses when you finish a Long Rest*): the presence's effect, and every raise carrier the
+    // rest ends (its bond's release above deletes the creature; the carrier goes with it).
+    if (this.type === "character") {
+      const { endAtLongRest } = await import("../effects/death-knight-necromancy.mjs");
+      await endAtLongRest(this);
+    }
     if (this.getFlag("azeroth-rpg", SACRIFICED_FLAG)) await this.unsetFlag("azeroth-rpg", SACRIFICED_FLAG);
     // **WHAT MEKKATORQUE'S BLUEPRINT BUILT WORKS FOR A DAY** (02's gnome; the Legacy
     // branches' door 7; next Long Rest approved by the lead, 2026-11-01): the device carried
@@ -2172,6 +2280,13 @@ export class AzerothActor extends Actor {
     await this.clearRestDecay();
     if (this.getFlag("azeroth-rpg", "shortRests")) await this.unsetFlag("azeroth-rpg", "shortRests");
     await this.setFlag("azeroth-rpg","restGeneration",restGeneration(this)+1);
+    // **THE RUNES REFILL WITH THE SAME REST THAT EMPTIES THE RUNIC POWER** (02 §7; D-943):
+    // every spent rune on every weapon owned, through the one writer (`documents/runes.mjs`).
+    if (this.type === "character") {
+      const refilled = await refillRunesAtLongRest(this, { restGeneration: restGeneration(this) });
+      if (refilled > 0) r.gains.push({ kind: "runesRefilled", amount: refilled });
+      if ((this.system?.classKeys ?? []).includes("death-knight")) r.gains.push({ kind: "inscribeOpen" });
+    }
     await restCard({ actor: this, kind: "long", gains: r.gains, restored, cleared, diseased });
     // 07's Haven and Sanctification: *any that take a Long Rest end it with every disease and
     // poison gone* (Sanctification: and one Critical Injury healed). D12 Phase 6.
@@ -2674,12 +2789,18 @@ export class AzerothActor extends Actor {
   }
 
   momentumPayer({ amount = 0 } = {}) {
+    // **02's RUNIC DISCIPLINE** (*Each maneuver costs you 1 Runic Power, whatever its listed
+    // price*; the Death Knight plan's door 6): the price a held feature sets, which every
+    // maneuver's door reads off the payer as `price` - the called shot's included.
+    const set = this.type === "character" ? maneuverPriceOf((this.items ?? []).filter(i => i.type === "feature").map(i => ({ maneuverPrice: i.system?.maneuverPrice ?? null }))) : null;
+    const price = set === null ? amount : Math.min(Math.max(0, Math.trunc(Number(amount)) || 0), set);
+    const priced = pick => (pick ? { ...pick, price } : null);
     // Draconic Discipline: a feature that names a maneuver pool pays every maneuver
     // from it, the called shot's Momentum included (the Chromatic Champion plan).
     const named = this.maneuverPool;
     if (named) {
       const purse = maneuverPurse(this.poolSnapshot?.() ?? [], named);
-      return purse ? { actor: this, pool: purse, shared: false } : null;
+      return purse ? priced({ actor: this, pool: purse, shared: false }) : null;
     }
     const own = this.system?.momenta?.[0] ?? (this.poolSnapshot?.() ?? []).find(p => p.kind === "momentum") ?? null;
     let owner = null;
@@ -2700,8 +2821,8 @@ export class AzerothActor extends Actor {
         quarry = (owner.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === "quarry") ?? null;
       }
     }
-    const pick = momentumPayer({ own, owner: quarry, shares: Boolean(quarry), amount });
-    return pick ? { actor: pick.payer === "own" ? this : owner, pool: pick.pool, shared: pick.payer === "owner" } : null;
+    const pick = momentumPayer({ own, owner: quarry, shares: Boolean(quarry), amount: price });
+    return pick ? priced({ actor: pick.payer === "own" ? this : owner, pool: pick.pool, shared: pick.payer === "owner" }) : null;
   }
 
   talentLineOffer({ roll = "spell", school = null, damages = false, mana = 0, casting = false, ticks = false, spell = "", healing = false, action = null } = {}) {
@@ -2755,7 +2876,7 @@ export class AzerothActor extends Actor {
     if (roll !== "spell" || !spell || !((Number(mana) || 0) > 0)) return lines;
     const spent = Object.fromEntries(this.items.filter(i => i.type === "talent")
       .map(i => [i.id, i.getFlag?.("azeroth-rpg", FREE_CAST_FLAG) ?? []]));
-    const pool = spellPoolFor(talents, { name: spell, school })?.pool ?? null;
+    const pool = spellPayment(spellPoolFor(talents, { name: spell, school }), this.classItems ?? [])?.pool ?? null;
     // **04's STASIS LORE AND HALT THE SANDS** (D-869): the Sand line, unticked, beside the
     // free cast (`rules/sand-casts.mjs`); its rows are the Chronomancer talents'.
     const sandNow = (this.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === "sand")?.value ?? null;
@@ -2818,7 +2939,25 @@ export class AzerothActor extends Actor {
     const thisRound = Boolean(combatant) && round.number === fight.round;
     const usedThisRound = thisRound ? [...(round.riders ?? [])] : [];
     const primed = thisRound && combatant.isCurrentTurn ? [...(round.primed ?? [])] : [];
-    return ridersFor(this.takenTalents(), {
+    // **THE CLASS FEATURES THAT RIDE AN ATTACK** (02's Death Strike and Plague; the Death
+    // Knight plan's doors 4 and 7): the held features' rows through the SAME reading, their
+    // lines beside the talents', sorted as every line is.
+    const held = featureRiders(this.items.filter(i => i.type === "feature").map(i => i.name), k => game.i18n.localize(k));
+    const sharedRiderOptions = {
+      pools: this.riderPools(),
+      form: this.inShapeshiftForm === true,
+      weapon,
+      shield: this.shieldInHand === true,
+      opening,
+      usedThisRound,
+      primed,
+      activeDiscounts: riderDiscountsOf(this.effects.filter(e => e.active !== false).map(e => e.flags?.["azeroth-rpg"] ?? {})),
+      tier: this.system?.tier ?? 1,
+      facts: target ? this.gateFacts(target) : null,
+      abilities: abilityScope(this.system)
+    };
+    const featureLines = held.talents.length ? ridersFor(held.talents, { ...sharedRiderOptions, rowOf: held.rowOf }) : [];
+    return [...ridersFor(this.takenTalents(), {
       pools: this.riderPools(),
       form: this.inShapeshiftForm === true,
       weapon,
@@ -2836,7 +2975,7 @@ export class AzerothActor extends Actor {
       facts: target ? this.gateFacts(target) : null,
       // And the striker's ability modifiers for an amount that names one (door 16).
       abilities: abilityScope(this.system)
-    });
+    }), ...featureLines].sort((a, b) => a.name.localeCompare(b.name) || a.identifier.localeCompare(b.identifier));
   }
 
   /**
@@ -2967,6 +3106,43 @@ export class AzerothActor extends Actor {
     return this.items.find(i => i.type === "feature" && i.getFlag("azeroth-rpg", "feature")?.talentId === talentId) ?? null;
   }
 
+  /**
+   * **WHY THIS HEAL DOES NOTHING TO THIS CREATURE**, or null (D-946): the facts
+   * `rules/undead.mjs#healingRefusal` reads, off the target and the giver. Undead is
+   * `creature-kinds.mjs#kindsOf`'s reading, so a Forsaken, The Risen, an Undead block
+   * and a Death Knight are one word.
+   *
+   * @param {{from?: Actor|null, spell?: boolean, school?: string|null, consumable?: boolean}} o
+   * @returns {string|null}
+   */
+  _undeadHealingRefusal({ from = null, givenBy = null, shared = false, spell = false, school = null, consumable = false } = {}) {
+    // Who gives it (`rules/undead.mjs#healGiver`): the door's `from`, a `givenBy` named
+    // for this judgement alone, or another creature this door cannot name - a share, a
+    // cure with no caster, an area whose caster is gone - which is closed by default.
+    const named = healGiver({ from, givenBy, shared });
+    if (named.foreign) {
+      return healingRefusal({
+        targetUndead: kindsOf(creatureSnapshot({ type: this.type, system: this.system, race: this.type === "character" ? (this.raceItem?.name ?? null) : null })).has("undead"),
+        targetDeathKnight: this.type === "character" && undeadByClass(this.system?.classKeys ?? []),
+        sourceDeathKnight: false, self: false, giver: true,
+        consumable: consumable === true, spell: spell === true, school
+      });
+    }
+    if (!named.giver) return null;
+    from = named.giver;
+    const self = from === this || (from?.uuid && from.uuid === this.uuid);
+    const snapshot = actor => creatureSnapshot({
+      type: actor?.type ?? null, system: actor?.system ?? null,
+      race: actor?.type === "character" ? (actor?.raceItem?.name ?? null) : null
+    });
+    return healingRefusal({
+      targetUndead: kindsOf(snapshot(this)).has("undead"),
+      targetDeathKnight: this.type === "character" && undeadByClass(this.system?.classKeys ?? []),
+      sourceDeathKnight: from?.type === "character" && undeadByClass(from?.system?.classKeys ?? []),
+      self: Boolean(self), giver: true, consumable: consumable === true, spell: spell === true, school
+    });
+  }
+
   /** Healing, never above the maximum; from 0 it stands you up with the Death Steps cleared (D-629). */
   /** Wipe every coating off what this actor carries (08 SS13, D-670). */
   async clearCoatings() {
@@ -2989,12 +3165,29 @@ export class AzerothActor extends Actor {
    * @param {boolean} [o.overflow]     what would land above the maximum is kept as
    *   temporary Health (07's Grave Coil and Exsanguinate; D-777)
    * @param {string} [o.overflowSource]  the spell that keeps it, for the record
+   * @param {string|null} [o.school]  the SPELL's own school where a spell gives it
+   *   (D-946): a Death Knight is healed by another creature's Death spell alone
+   * @param {boolean} [o.consumable]  a consumable gives it (*"normal consumables act as
+   *   they would for any other player"*), whoever drinks or applies it
+   * @param {Actor|"other"|null} [o.givenBy]  who the heal comes from, for the undead
+   *   judgement ALONE (`rules/undead.mjs#healGiver`), where the door withholds `from`:
+   *   a Beacon share names its Paladin, a share or a cure with no caster says `"other"`
    */
-  async applyHealing(amount, { from = null, spell = false, feature = false, shared = false, featureName = null, overflow = false, overflowSource = "", aegis = null, unreduced = false, outcome = null, branch = false } = {}) {
+  async applyHealing(amount, { from = null, spell = false, feature = false, shared = false, featureName = null, overflow = false, overflowSource = "", aegis = null, unreduced = false, outcome = null, branch = false, school = null, consumable = false, givenBy = null } = {}) {
     // Optional receipt for once-per-turn healing signatures. The Actor remains
     // the return value; incomplete downstream writes are never proof of delivery.
     if (outcome) Object.assign(outcome, { complete: false, restored: 0 });
     if (refuseIceBlockTarget(this)) {
+      if (outcome) outcome.complete = true;
+      return this;
+    }
+    // **THE UNDEAD HEALING JUDGEMENT** (D-946; `rules/undead.mjs#healingRefusal`), asked
+    // before anything lands: a Death Knight's healing reaches the undead alone, and a
+    // Death Knight is healed by nothing another creature does but a Death spell. Said in
+    // words, and nothing lands.
+    const refused = Math.trunc(amount) > 0 ? this._undeadHealingRefusal({ from, givenBy, shared, spell, school, consumable }) : null;
+    if (refused) {
+      ui.notifications?.info(game.i18n.format(HEALING_REFUSAL_WORDS[refused], { name: this.name, from: from?.name ?? (givenBy && typeof givenBy === "object" ? givenBy.name : "") ?? "" }));
       if (outcome) outcome.complete = true;
       return this;
     }
@@ -3036,6 +3229,14 @@ export class AzerothActor extends Actor {
     if (from && healed > 0 && (spell || feature) && typeof from.takenTalents === "function") {
       const conditioned = [...(this.statuses ?? [])].some(id => Boolean(AZEROTH.conditions?.[id]));
       healed += healBonusFor(from.takenTalents(), { via: spell ? "spell" : "feature", conditioned }).amount;
+    }
+    // **04's VAMPIRIC BLOOD** (*Each time you regain Health, you regain 1 additional Health per
+    // rank, for 1 minute*; run F4a): read off THIS creature's own standing state, whoever gives the
+    // heal, before 10's reduction as the other raises are - the undead judgement above has said
+    // whether the heal lands at all (`effects/death-knight-talents.mjs#dkHealBonus`).
+    if (healed > 0 && this.type === "character") {
+      const { dkHealBonus } = await import("../effects/death-knight-talents.mjs");
+      healed += dkHealBonus(this, healed);
     }
     // Healing from ANOTHER creature is reduced by the Fel and Undeath rungs
     // (10 §4, §6; 2026-09-06): the card says what reached the character.
@@ -3279,6 +3480,27 @@ export class AzerothActor extends Actor {
       return false;
     }
     if (wants && statusId === "prone" && !this.statuses?.has("prone") && await askStabilizer(this)) return false;
+    // **A CARRIER IS NOT THE CONDITION** (D-997). Core finds "the effect" for a status with no
+    // static id as every single-status effect holding it (14.367 `Actor#toggleStatusEffect`),
+    // so a tick or affliction carrier holding the status (Frost Fever's Slowed) counted as the
+    // condition both ways: ON made nothing beside it, and OFF deleted the carrier and ended the
+    // disease. OFF deletes the condition's own effects and leaves every carrier standing, said in
+    // words where a carrier still holds the status; ON with `ownEffect` lays the condition's own
+    // effect beside a carrier (`effects/durations.mjs#applyCondition`).
+    const { remove, carriers } = toggleOffTargets(this.effects ?? [], statusId);
+    if (!wants && carriers.length) {
+      if (remove.length) await this.deleteEmbeddedDocuments("ActiveEffect", remove.map(e => e.id));
+      ui.notifications?.info(game.i18n.format("AZEROTH.Condition.CarrierHolds", {
+        name: this.name, condition: game.i18n.localize(AZEROTH.conditions?.[statusId] ?? statusId),
+        carrier: carriers.map(e => e.name).filter(Boolean).join(", ")
+      }));
+      return false;
+    }
+    if (wants && options.ownEffect === true && carriers.length && !conditionEffectOf(this.effects ?? [], statusId)) {
+      const ActiveEffect = getDocumentClass("ActiveEffect");
+      const effect = await ActiveEffect.fromStatusEffect(statusId, { parent: this });
+      return ActiveEffect.create(effect.toObject(), { parent: this });
+    }
     return super.toggleStatusEffect(statusId, options);
   }
 
@@ -3423,7 +3645,7 @@ export class AzerothActor extends Actor {
    *   `damage`: what the damage door records of each type, and what a priest's
    *   Ward took off each.
    */
-  async applyDamage(damage, { struck = false, attack = true, location = "body", type = null, messageId = null, by = null, riposte = false, wardTook = 0, spell = false, ignite = false, moved = false, shared = false, parts = null, drain = null, transfer = null, outcome = null, healthFloor = null, falling = false, breath = false } = {}) {
+  async applyDamage(damage, { struck = false, attack = true, location = "body", type = null, messageId = null, by = null, riposte = false, wardTook = 0, spell = false, ignite = false, moved = false, shared = false, parts = null, drain = null, transfer = null, outcome = null, healthFloor = null, falling = false, breath = false, mitigation = null } = {}) {
     // Optional local receipt; retain the historical Actor return value. This
     // reports this actor's committed Health/temp loss, never guesses shares.
     const report = outcome && typeof outcome === "object" ? outcome : null;
@@ -3569,7 +3791,7 @@ export class AzerothActor extends Actor {
         if (preparedTransfer) {
           const selected = preparedTransfer.candidate?.kind === "redirect" ? preparedTransfer.candidate.plan.key : null;
           if (selected !== null) await preparedTransfer.note("redirectPending");
-          redirected = await redirectBlow({ target: this, amount, type, attack, spell, messageId, by, location, parts, breath, selection: selected });
+          redirected = await redirectBlow({ target: this, amount, type, attack, spell, messageId, by, location, parts, breath, selection: selected, mitigation });
           if (selected !== null) {
             if (!redirected.moved) {
               await preparedTransfer.note(redirected.reason === "declined" ? "redirectDeclined" : "redirectChanged");
@@ -3579,7 +3801,7 @@ export class AzerothActor extends Actor {
             }
             await preparedTransfer.note("redirectApplied");
           }
-        } else redirected = await redirectBlow({ target: this, amount, type, attack, spell, messageId, by, location, parts, breath });
+        } else redirected = await redirectBlow({ target: this, amount, type, attack, spell, messageId, by, location, parts, breath, mitigation });
       } catch (err) {
         if (preparedTransfer) throw err;
         console.error("azeroth-rpg | blow moved", err);
@@ -3596,6 +3818,29 @@ export class AzerothActor extends Actor {
         if (report) { report.transferred = true; report.transfers.push(redirected.damageOutcome ?? {complete:false}); }
         if (!(Number(redirected.kept) > 0)) return completeOutcome();
         amount = Math.trunc(Number(redirected.kept));
+      }
+    }
+    // **04's ICEBOUND FORTITUDE, IN THE BLOW** (*That blow, and each blow until the end of your
+    // next turn, deals half its damage to you, rounded down, before Armor Points and Ward apply*;
+    // the lead: *"before AP or ward"*; run F4a): where the state stands the blow is halved, and
+    // where it does not the knight is asked first (`effects/death-knight-talents.mjs
+    // #iceboundInBlow`) - after the mark and the move, so a Parry that negates the blow or a blow
+    // taken onto somebody else asks nothing. Where the card recorded the resolver's inputs
+    // (`mitigation`), the halving lands BEFORE Armor Points and Ward. Guarded: the blow stands.
+    if (this.type === "character" && struck && !linkedTransfer && amount > 0) {
+      try {
+        const { iceboundInBlow } = await import("../effects/death-knight-talents.mjs");
+        const iced = await iceboundInBlow(this, { amount, mitigation, parts, wardTook });
+        amount = iced.amount;
+        // What reaches the doors below is the HALVED blow, its second amounts and Ward credit
+        // with it (the F4a review, S1): Ethereal Form, Atonement and a Legendary's after-blow
+        // read `parts` and `wardTook`, never the blow as it was before the halving.
+        if (iced.cut > 0) {
+          parts = iced.parts ?? parts;
+          wardTook = iced.wardTook ?? wardTook;
+        }
+      } catch (err) {
+        console.warn("azeroth-rpg | Icebound Fortitude", err);
       }
     }
     // **08 §20's FOROR'S LESSON** (Quel'Serrar: *A breath weapon deals you half its damage,
@@ -3668,6 +3913,7 @@ export class AzerothActor extends Actor {
     // the others' land once its own Health is written. Judged before anything is
     // written: a share another user's creature takes needs a GM.
     let division = null;
+    let divisionRecord = null;
     if (struck && !transferUsed && amount > 0) {
       try {
         if (preparedTransfer) {
@@ -3679,7 +3925,15 @@ export class AzerothActor extends Actor {
         if (preparedTransfer) throw err;
         console.error("azeroth-rpg | blow divided", err);
       }
-      if (division) amount = division.keep;
+      // **THE DIVISION'S RECORD** (O-362; run close-F2): the blow's resolver record, handed to the
+      // others' shares only where it still resolves to exactly the amount divided - a Block, a
+      // standing reduction or this creature's own halving changed the blow, and then each share
+      // is halved as it arrives.
+      if (division) {
+        const carried = mitigation ? recordOf(mitigation) : null;
+        divisionRecord = carried && resolveRecord(carried).damage === amount ? carried : null;
+        amount = division.keep;
+      }
     }
     // **07 §12's DILATION** (D-866): *it takes half, rounded up, and the other half at the
     // start of its next turn* - in a started fight the half put off waits on the creature's
@@ -3957,10 +4211,10 @@ export class AzerothActor extends Actor {
     // The others' shares of a divided blow, once this creature's is written.
     if (division) {
       try {
-        if (preparedTransfer) await landShares({ target: this, plan: division, type, by, strict: true, outcomes: report?.transfers,
+        if (preparedTransfer) await landShares({ target: this, plan: division, type, by, strict: true, outcomes: report?.transfers, record: divisionRecord,
           beforeShare: actor => preparedTransfer.note(`sharePending:${actor.uuid}`),
           afterShare: actor => preparedTransfer.note(`shareApplied:${actor.uuid}`) });
-        else await landShares({ target: this, plan: division, type, by, outcomes: report?.transfers });
+        else await landShares({ target: this, plan: division, type, by, outcomes: report?.transfers, record: divisionRecord });
       } catch (err) {
         if (preparedTransfer) throw err;
         console.error("azeroth-rpg | blow divided", err);
@@ -3994,7 +4248,7 @@ export class AzerothActor extends Actor {
     // to your tier*): from the priest, once the hold is written. Guarded.
     if (hold.held?.heal > 0) {
       try {
-        await this.applyHealing(hold.held.heal, { from: hold.held.holder ?? null, feature: true });
+        await this.applyHealing(hold.held.heal, { from: hold.held.holder ?? null, givenBy: hold.held.holder ? null : "other", feature: true });
       } catch (err) {
         console.error("azeroth-rpg | guardian spirit", err);
       }
@@ -4500,6 +4754,9 @@ export class AzerothActor extends Actor {
     if (this.type === "character" && amount > 0) {
       if (before > 0 && after === 0) {
         if (!this.statuses?.has("prone")) await this.toggleStatusEffect("prone", { active: true });
+        // **02 §7's UNHOLY PRESENCE ENDS AT 0 HEALTH** (*until you end it, you drop to 0 Health or
+        // you finish a Long Rest*; door 10), guarded so a throw never skips what the blow does next.
+        await this._endPresenceAtZero?.();
         // **RUIN** (04: *When one of your spells inflicts a Critical Injury, roll
         // twice on the table and take the higher result. At rank 2 you also gain 2
         // Mana*; D-775): a SPELL's blow that took this creature to 0 inflicts it.
@@ -4561,7 +4818,12 @@ export class AzerothActor extends Actor {
       }
     }
     if (!combatant || amount <= 0) return this;
-    const gains = gainWhenStruck({ pools: this.poolSnapshot(), damage: amount, enrageRanks: this.talentRanks?.("Enrage") ?? 0 });
+    // **02 §7's UNHOLY PRESENCE, FEEDS ON BLOWS** (door 10): *once a round, when a blow damages
+    // you, gain 1 Runic Power* - the presence asked, then the round's mark taken through the
+    // combatant's queued door, so two blows in a round give one.
+    const fed = this.type === "character" && holdsPresence(this.effects) && combatant.isOwner
+      && (await combatant.markRoundOnce(FEEDS_ON_BLOWS_MARK))?.added === true ? UNHOLY_PRESENCE.strike : 0;
+    const gains = gainWhenStruck({ pools: this.poolSnapshot(), damage: amount, enrageRanks: this.talentRanks?.("Enrage") ?? 0, presence: fed });
     // **08 §20's THE DESTROYER'S TEMPER** (Blackhand's Harness: *A Warrior wearing it
     // gains 1 more Rage the first time each round an attack reduces their Health*;
     // D-911): the round's first such blow, marked through the combatant's queued door,
@@ -4580,7 +4842,8 @@ export class AzerothActor extends Actor {
       const zeal = this.poolSnapshot().find(p => p.kind === "momentum" && p.name === "zeal");
       if (zeal) gains.push({ itemId: zeal.itemId, kind: "momentum", name: "zeal", value: Math.min(zeal.max, zeal.value + 5 * reckoning) });
     }
-    if (gains.length) await this.updatePool(gains.map(g => ({ itemId: g.itemId, kind: g.kind, value: g.value })));
+    // Feeds on Blows is a named door for a Runic Power rise (`rules/runes.mjs#RUNIC_GAIN_SOURCES`).
+    if (gains.length) await this.updatePool(gains.map(g => ({ itemId: g.itemId, kind: g.kind, value: g.value })), {}, fed ? { runicGain: "feedsOnBlows" } : {});
     return this;
   }
 }

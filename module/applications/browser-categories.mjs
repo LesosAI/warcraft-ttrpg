@@ -14,6 +14,7 @@ import { GADGETS_PACK, GADGET_ENTRY_FLAG } from "../rules/gadgets.mjs";
 import { SERVICES_PACK } from "../rules/services.mjs";
 import { augmentOf } from "../rules/augments.mjs";
 import { crestPath } from "../rules/crests.mjs";
+import { spellCostLabel } from "../rules/casting.mjs";
 
 /**
  * The three places a Signature descriptor names a gate (D-692, D-722): the
@@ -93,9 +94,9 @@ export const CATEGORIES = Object.freeze({
   spells: {
     pack: "azeroth-rpg.spells",
     label: "AZEROTH.Browser.Spells",
-    fields: ["system.school", "system.tier", "system.mana", "system.classes"],
+    fields: ["system.school", "system.tier", "system.mana", "system.costPool", "system.classes"],
     filters: () => ({
-      school: { label: "AZEROTH.Browser.School", path: "system.school", choices: AZEROTH.schools },
+      school: { label: "AZEROTH.Browser.School", path: "system.school", choices: AZEROTH.spellSchools },
       tier: { label: "AZEROTH.Browser.Tier", path: "system.tier" },
       classes: { label: "AZEROTH.Browser.ClassAccess", path: "system.classes", kind: "includes" }
     })
@@ -328,9 +329,11 @@ export function summary(key, entry) {
     // 04's Use cell: *Half-Action*, *One minute*, or the Reaction and what it waits on.
     // Prose, so cut to a row's width as a career's Grantor is.
     case "gadgets": parts.push(clip(f[GADGET_ENTRY_FLAG]?.use)); break;
-    case "spells": parts.push(enumLabel(AZEROTH.schools, s.school), tier(s.tier), s.mana != null ? `${s.mana} ${loc("AZEROTH.Card.Mana")}` : null); break;
+    // A spell 07 prints in Runic Power says so (`casting.mjs#spellCostLabel`, D-944).
+    case "spells": parts.push(enumLabel(AZEROTH.spellSchools, s.school), tier(s.tier), s.mana != null ? `${s.mana} ${loc(spellCostLabel({ costPool: s.costPool }))}` : null); break;
     case "careers": parts.push(enumLabel(AZEROTH.careerTiers, s.tier), clip(s.grantor)); break;
-    case "classes": parts.push(enumLabel(AZEROTH.frames, s.frame), ...(s.schools ?? []).map(k => enumLabel(AZEROTH.schools, k))); break;
+    // A class holds SPELL schools (D-941): the Death Knight's Death is not a damage school.
+    case "classes": parts.push(enumLabel(AZEROTH.frames, s.frame), ...(s.schools ?? []).map(k => enumLabel(AZEROTH.spellSchools, k))); break;
     case "races": parts.push(enumLabel(AZEROTH.sizes, s.size)); break;
     // A price is printed in the coin a shop would name (08 §2, D-672): a
     // longsword is `2s 40c`, and `240c` is not a price anybody quotes.

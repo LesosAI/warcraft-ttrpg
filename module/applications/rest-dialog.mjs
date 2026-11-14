@@ -141,7 +141,9 @@ export async function promptRest(actor) {
       const button = dialog.element.querySelector('button[data-action="rest"]');
       const line = form?.querySelector("[data-rest-reason]");
       const update = () => {
-        const picked = Boolean(form?.elements.food?.value) || Boolean(form?.elements.drink?.value);
+        // Undeath's rung at 5 needs no food (the F1 review's note): the rest may be taken with
+        // nothing chosen, and a drink is still what returns Mana.
+        const picked = Boolean(form?.elements.food?.value) || Boolean(form?.elements.drink?.value) || actor.system?.needsNoFood === true;
         if (button) button.disabled = !picked;
         // A REFUSAL IS SAID IN WORDS, never by the grey alone: nothing carried
         // is a different problem from nothing chosen.
@@ -184,6 +186,10 @@ export async function promptRest(actor) {
  */
 export async function shortRestWithDialog(actor) {
   if (!actor) return null;
+  // **A CHARACTER WHO DOES NOT EAT OR DRINK IS ASKED FOR NEITHER** (the lead: *"They do
+  // recover health but do not have to eat or drink."*; D-946): the Death Knight, the
+  // Forsaken and the Risen rest at once, and the card says why nothing was eaten.
+  if (actor.system?.needsNoFood === true && actor.system?.needsNoDrink === true) return actor.shortRest({});
   const picks = await promptRest(actor);
   if (!picks) return null;
   return actor.shortRest(picks);

@@ -116,7 +116,7 @@ export function cleanShedDc(raw) {
 // the lead: *"We need automation and animations fully complete for everything"*): the
 // door ends whatever condition the flag rides, so a Slowed's repeat Test is built for every
 // entry that writes one (D-864).
-export const ESCAPE_CONDITIONS = Object.freeze(["entangled", "stunned", "frightened", "slowed"]);
+export const ESCAPE_CONDITIONS = Object.freeze(["entangled", "stunned", "frightened", "slowed", "silenced"]);
 
 /** When the Test is offered: on the creature's own action, or at the end of its turns. */
 export const ESCAPE_ON = Object.freeze(["action", "turnEnd"]);
@@ -127,8 +127,11 @@ export const ESCAPE_FLAG = "escape";
 /** The spans a failed escape's Stun may take (04's Deep Freeze). */
 export const ESCAPE_STUN_SPANS = Object.freeze(["casterTurnEnd"]);
 
-/** Conditions with written repeat Tests whose automation is still outstanding. */
-export const ESCAPE_UNBUILT = Object.freeze(["silenced"]);
+/**
+ * Conditions with written repeat Tests whose automation is still outstanding. **Silenced is built
+ * since run F4b** (07 §14's Strangulate and §13's Nullify, on the one door; O-218's last).
+ */
+export const ESCAPE_UNBUILT = Object.freeze([]);
 
 /**
  * **EVERY TEST 07 REPEATS THAT ENDS NO CONDITION**, by name, with its reason: the
@@ -188,6 +191,11 @@ export function readEscapeAny(effectText, fields = {}) {
   // *is **Stunned** until it passes the Test again at the end of one of its turns*
   m = /\*\*(\w+)\*\* until it passes the Test again at the end of one of its turns\b/.exec(text);
   if (m) return { condition: conditionOf(m[1]), on: "turnEnd", resilience: own, banes: 0 };
+  // *Every creature in the cone is **Entangled**. It can end the Entangled with an action and a
+  // Reflex Resilience Test against your Spell DC* (07 §11's Frostwyrm Breath; the lead, D-962:
+  // *"Entangle ends with a test against casters spell DC"*; run F4b).
+  m = /\bis \*\*(\w+)\*\*\. It can end the \1 with an action and a (Body|Reflex|Spirit) Resilience Test\b/.exec(text);
+  if (m) return { condition: conditionOf(m[1]), on: "action", resilience: m[2].toLowerCase(), banes: 0 };
   // *is **Entangled**, and it may repeat the Test at the end of each of its turns*,
   // *is **Slowed** for the duration and may repeat the Test ...* - the condition the
   // same sentence names, and the Resilience that sentence's own Test names; or, for

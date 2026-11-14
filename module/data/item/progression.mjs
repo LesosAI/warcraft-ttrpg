@@ -106,8 +106,9 @@ export class ClassData extends foundry.abstract.TypeDataModel {
 
       // Schools this class may learn from (07 §1). A caster never adds one by
       // study; multiclassing adds the second class's schools to the first's.
+      // The eight SPELL schools (D-941): the Death Knight holds Death.
       schools: new fields.ArrayField(
-        new fields.StringField({ choices: () => Object.keys(AZEROTH.schools) }),
+        new fields.StringField({ choices: () => Object.keys(AZEROTH.spellSchools) }),
         { initial: [] }
       ),
       castingAbility: choiceField(AZEROTH.abilities),
@@ -407,6 +408,10 @@ export class FeatureData extends foundry.abstract.TypeDataModel {
       // `choices` (CLAUDE.md §15), restamped by the sync at world load (D-621) - no
       // migration. `rules/maneuver-pool.mjs` is the reader.
       maneuverPool: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+      // **THE PRICE EVERY MANEUVER TAKES** (02 §7's Runic Discipline: *Each maneuver costs you 1
+      // Runic Power, whatever its listed price*), or null for the listed price. Restamped by the
+      // sync at world load (D-621), so no migration; `rules/death-knight.mjs#maneuverPriceOf` reads it.
+      maneuverPrice: new fields.NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
       // The card's Attack button, where the feature makes an attack (D-616).
       attack: new fields.BooleanField({ initial: false }),
       // HOW MANY ATTACKS that button makes (the architect's review of D-773):
@@ -488,7 +493,11 @@ export class FeatureData extends foundry.abstract.TypeDataModel {
       tick: new fields.SchemaField({
         kind: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
         amount: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
-        rounds: new fields.NumberField({ required: true, integer: true, initial: 0, min: 0 })
+        rounds: new fields.NumberField({ required: true, integer: true, initial: 0, min: 0 }),
+        // A damage tick's TYPE (D-947; the Death Knight plan's finding 4: 02's Plague lays a
+        // Frost and a Shadow disease): a school or `physical`, null on a heal. Free, as the
+        // rest; `ticks.mjs#featureTick` drops a word that is no damage type.
+        type: new fields.StringField({ required: false, nullable: true, blank: false, initial: null })
       }),
       // The conditions the card offers on each target (02's Hurricane, 04's
       // Typhoon; D-771): an A1 key, its value, and how long - an

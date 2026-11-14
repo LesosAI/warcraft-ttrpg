@@ -87,6 +87,10 @@
     --azeroth-alliance-blue-dark: #6fb2f0;
     --azeroth-horde-red-dark: #e8604f;
     --azeroth-void-dark: #a678e0;
+    --azeroth-rune-blood: #e8604f;
+    --azeroth-rune-frost: #6fb2f0;
+    --azeroth-rune-spent: #8e877b;
+    --azeroth-rune-strike: #f2ece0;
   }
   .azeroth, .azeroth-card {
     --content-link-text-color: var(--azeroth-ink);
@@ -1612,6 +1616,12 @@
     margin: 0 0 8px;
     padding: 0;
     list-style: none;
+  }
+  .azeroth.sheet.actor .azeroth-spell-list.has-cost-words .azeroth-spell {
+    grid-template-columns: 20px minmax(0, 1fr) 76px 104px 80px 64px auto auto auto auto;
+  }
+  .azeroth.sheet.actor .azeroth-spell-list.has-cost-words .azeroth-spell .azeroth-spell-mana {
+    white-space: nowrap;
   }
   .azeroth.sheet.actor .azeroth-spell {
     display: grid;
@@ -5603,6 +5613,183 @@
     font-size: 0.8125rem;
     font-style: italic;
     color: var(--azeroth-page-ink-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-panel {
+    --azeroth-rarity-uncommon: var(--azeroth-rarity-uncommon-dark);
+    --azeroth-rarity-rare: var(--azeroth-rarity-rare-dark);
+    --azeroth-rarity-epic: var(--azeroth-rarity-epic-dark);
+    --azeroth-rarity-legendary: var(--azeroth-rarity-legendary-dark);
+    display: grid;
+    gap: 8px;
+    padding: 8px;
+    background-color: var(--azeroth-panel-dark);
+    color: var(--azeroth-page-ink);
+    border: 1px solid var(--azeroth-page-edge);
+    border-radius: 3px;
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-power {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 4px 8px;
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-power-label {
+    font-weight: 600;
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-power-count {
+    font-variant-numeric: tabular-nums;
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-power-bar {
+    grid-column: 1/-1;
+    display: block;
+    height: 8px;
+    background-color: var(--azeroth-slot);
+    border: 1px solid var(--azeroth-slot-edge);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-power-fill {
+    display: block;
+    height: 100%;
+    background-color: var(--azeroth-rune-frost);
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-weapon {
+    display: grid;
+    gap: 6px;
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-weapon-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-weapon-words {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-weapon-name {
+    font-weight: 600;
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-weapon-meta {
+    color: var(--azeroth-page-ink-soft);
+    font-size: var(--font-size-12, 12px);
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-sockets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-socket {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    margin: 0;
+    padding: 0;
+    background-color: var(--azeroth-slot);
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 1px var(--azeroth-slot-edge);
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-glyph {
+    width: 20px;
+    height: 20px;
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-socket.is-blood {
+    color: var(--azeroth-rune-blood);
+    box-shadow: inset 0 0 0 2px var(--azeroth-rune-blood);
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-socket.is-frost {
+    color: var(--azeroth-rune-frost);
+    box-shadow: inset 0 0 0 2px var(--azeroth-rune-frost);
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-socket.is-spent {
+    color: var(--azeroth-rune-spent);
+    box-shadow: inset 0 0 0 1px var(--azeroth-slot-edge);
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-socket.is-spent::after {
+    content: "";
+    position: absolute;
+    left: 6px;
+    right: 6px;
+    top: 50%;
+    height: 2px;
+    margin-top: -1px;
+    background-color: var(--azeroth-rune-strike);
+    border-radius: 1px;
+    transform: rotate(-35deg);
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-socket.is-empty::before {
+    content: "";
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1px dashed var(--azeroth-slot-edge);
+  }
+  .azeroth.sheet.actor.character .azeroth-doll-hand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-sockets.is-compact {
+    gap: 2px;
+    justify-content: center;
+    max-width: 44px;
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-sockets.is-compact .azeroth-rune-socket {
+    width: 13px;
+    height: 13px;
+    border-radius: 3px;
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-sockets.is-compact .azeroth-rune-glyph {
+    width: 9px;
+    height: 9px;
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-sockets.is-compact .azeroth-rune-socket.is-blood,
+  .azeroth.sheet.actor.character .azeroth-rune-sockets.is-compact .azeroth-rune-socket.is-frost {
+    box-shadow: inset 0 0 0 1px currentColor;
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-sockets.is-compact .azeroth-rune-socket.is-spent {
+    box-shadow: inset 0 0 0 1px var(--azeroth-slot-edge);
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-sockets.is-compact .azeroth-rune-socket.is-spent::after {
+    left: 1px;
+    right: 1px;
+    height: 1px;
+    margin-top: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-sockets.is-compact .azeroth-rune-socket.is-empty::before {
+    width: 4px;
+    height: 4px;
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-control {
+    width: auto;
+    padding: 4px 10px;
+    background-color: var(--azeroth-page-chip);
+    color: var(--azeroth-page-ink);
+    border: 1px solid var(--azeroth-page-edge);
+    border-radius: 3px;
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-control:disabled {
+    color: var(--azeroth-page-ink-soft);
+    border-style: dashed;
+    cursor: not-allowed;
+  }
+  .azeroth.sheet.actor.character .azeroth-rune-why,
+  .azeroth.sheet.actor.character .azeroth-rune-none {
+    color: var(--azeroth-page-ink-soft);
+    font-size: var(--font-size-12, 12px);
   }
   .azeroth-roll-dialog .window-content {
     background: var(--azeroth-parchment);

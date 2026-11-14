@@ -165,7 +165,9 @@ async function cureHere(actor, cure = {}, { by = null } = {}) {
   }
   const heal = Math.max(0, Math.trunc(Number(cure.heal) || 0));
   if (heal > 0) {
-    await actor.applyHealing(heal, { spell: true });
+    // The cure's caster gives it (the F1 review): named for the undead judgement alone, or
+    // another creature where the caster is gone, so a cure never heals a Death Knight.
+    await actor.applyHealing(heal, { spell: true, givenBy: by ?? "other", school: cure.school ?? null });
     out.healed = heal;
   }
   return { ok: true, ...out };

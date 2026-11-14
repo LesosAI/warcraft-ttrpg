@@ -10,6 +10,7 @@ import { strikeFromArea } from "./area-strikes.mjs";
 import { BLAZING_ABILITIES } from "../rules/blazing-invader.mjs";
 import { runBlazingAbility } from "./blazing-invader-state.mjs";
 import { independentSlowEffect, FELGUARD_SLOW_FLAG } from "../rules/frost-shot.mjs";
+import { isConditionCarrier } from "../rules/condition-carriers.mjs";
 
 export const BLAZING_QUERY = "azeroth-rpg.blazingInvader";
 const busy = new Set();
@@ -137,7 +138,7 @@ export async function blazingInvaderQueryHandler({ actorUuid, index, source, req
         const landed = await inflictCondition({ victim: token.actor, by: actor, id: "slowed", name: token.name,
           until: untilEndOfNextTurnOrRound(token.actor) });
         if (landed?.reason === "immune") return { ok: true, immune: true };
-        const effect = [...(token.actor.effects ?? [])].find(e => !e.disabled && !e.isSuppressed && e.statuses?.has("slowed"));
+        const effect = [...(token.actor.effects ?? [])].find(e => !e.disabled && !e.isSuppressed && e.statuses?.has("slowed") && !isConditionCarrier(e, "slowed"));
         return landed?.landed === true && effect?.id ? { ok: true, effectId: effect.id } : null;
       } });
     if (result.ok) {

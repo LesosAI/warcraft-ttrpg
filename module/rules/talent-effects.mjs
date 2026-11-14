@@ -3317,6 +3317,211 @@ export const TALENT_EFFECTS = Object.freeze({
       grants: grant({ action: "action", cost: cost("sand", 5) }),
       onUse: { timelessSentinel: { feet: 30 } }
     }
+  },
+  // **THE DEATH KNIGHT** (D-942; the plan's Phase 5, run F4a): Blood's and Frost's
+  // twenty-four, each written against 04's words and read by ONE door. The law for every kind
+  // only these rows carry is `rules/death-knight-talents.mjs`; `death-knight-talents.test.mjs`
+  // holds every number to 04 at every rank. Every rune a row spends goes through the one rune
+  // door (`documents/runes.mjs#spendRunesOn`), so it gives its Runic Power (the lead: *"make
+  // sure that runes being consumed for any reason like talents, etc provide runic power"*).
+  "death-knight": {
+    // ---- Blood ----
+    // *When Death Strike restores your Health, you gain temporary Health equal to twice your
+    // rank until the end of the encounter.* Read where Death Strike's heal lands (`rollTest`),
+    // through 05's grant (`AzerothActor#grantTemporaryHealth`).
+    "blood-shield": { tempHealth: { on: "deathStrike", amount: "2*rank", span: "encounter" } },
+    // *While you wield a two-handed weapon, or a Versatile weapon in both hands, when your melee
+    // attack hits a creature that has half its Health or less, you regain 1 Health per rank.*
+    // On the hit (`rollTest`), the knight's own feature heal through the one healing door.
+    // *While you wield a one-handed weapon in each hand, when your Off-Hand Attack hits a
+    // creature, you regain 1 Health per rank, or 2 Health per rank if it has half its Health or
+    // less.* The grip alternate (D-1017), on the Off-Hand Attack's own hit.
+    "grim-harvest": { dk: { harvest: {
+      heal: "rank", atMost: 0.5, when: ["melee", { wields: ["bothHands"] }],
+      alt: { offHand: true, heal: "rank", low: "2*rank", atMost: 0.5, when: { wields: ["oneInEach"] } }
+    } } },
+    // *When your Death Coil damages a creature, you gain temporary Health equal to the damage it
+    // dealt until the end of the encounter.* At the spell card's Apply, off what the blow took.
+    "crimson-coil": { spell: { names: ["Death Coil"] }, tempHealth: { on: "coilDealt", amount: "dealt", span: "encounter" } },
+    // *As a Half-Action, spend 1 Blood rune. You regain Health equal to your tier plus 2 per rank.*
+    "rune-tap": {
+      grants: grant({ action: "half", cost: cost("runes", 1) }),
+      onUse: { runes: { kind: "blood" }, dk: { regain: "tier+2*rank" } }
+    },
+    // *As a Half-Action, spend 1 Blood rune. Choose one creature within 30 feet. Each time that
+    // creature's attack damages you, you regain Health equal to twice your rank after the blow,
+    // for 1 minute.* The mark on the creature (`aim`), the heal at the card's Apply.
+    "mark-of-blood": {
+      grants: grant({ action: "half", cost: cost("runes", 1) }),
+      onUse: { runes: { kind: "blood" }, aim: { feet: 30 }, dk: { markOfBlood: { heal: "2*rank", minutes: 1 } } }
+    },
+    // *While you wield a two-handed weapon, or a Versatile weapon in both hands, once a round,
+    // when a creature within your reach damages you with a melee attack, it takes Shadow damage
+    // equal to your rank.* At the card's Apply, on the GM's client, the round's mark spent.
+    // *While you wield a one-handed weapon in each hand, once a round, when a creature within your
+    // reach damages you with a melee attack, you may make your Off-Hand Attack for the round
+    // against it as a Reaction, and on a hit it deals additional Shadow damage equal to your
+    // rank plus 1.* The grip alternate (D-1017), raised by O-398's A (the lead: *"Yes and yes"*):
+    // an offer card from the same Apply, the press judged whole, the Reaction and the round's
+    // Off-Hand Attack spent by the attack door.
+    "vengeful-blood": { dk: { vengeful: {
+      amount: "rank", type: "shadow", once: "round", when: { wields: ["bothHands"] },
+      alt: { riposte: true, amount: "rank + 1", type: "shadow", once: "round", when: { wields: ["oneInEach"] } }
+    } } },
+    // *As a Half-Action, spend 2 Runic Power. Choose one creature within 30 feet that can see
+    // you. It takes a Bane on attacks against anyone but you until the end of your next turn.*
+    // Taunt's Bane mark, Time Lock's own shape (`effects/banes.mjs#layBane`).
+    "dark-command": {
+      grants: grant({ action: "half", cost: cost("runicPower", 2) }),
+      onUse: { laysBane: { kind: "attack", banes: 1, except: "user", until: "userTurnEnd", feet: 30 } }
+    },
+    // *Once per encounter, as a Half-Action, spend 1 Blood rune. Each time you regain Health, you
+    // regain 1 additional Health per rank, for 1 minute.* A state on the knight, read at
+    // `AzerothActor#applyHealing`.
+    "vampiric-blood": {
+      grants: grant({ action: "half", cost: cost("runes", 1), uses: uses(1, "encounter") }),
+      onUse: { runes: { kind: "blood" }, dk: { vampiric: { add: "rank", minutes: 1 } } }
+    },
+    // *Once a round, when you spend a Blood rune, each enemy within 10 feet of you takes Shadow
+    // damage equal to your rank. You regain 1 Health for each creature damaged this way.* At the
+    // rune door, once the spend is written.
+    "sanguine-tide": { dk: { tide: { amount: "rank", type: "shadow", feet: 10, regain: 1, once: "round" } } },
+    // *Once per Short Rest, as a Half-Action, refill a number of your spent Blood runes equal to
+    // your rank.* Through the rune door's refill (`documents/runes.mjs#refillRunesOn`).
+    "blood-tap": {
+      grants: grant({ action: "half", uses: uses(1, "short") }),
+      onUse: { dk: { refill: { kind: "blood", count: "rank" } } }
+    },
+    // *When your Blood Plague damages a creature, you immediately regain Health equal to the
+    // damage it dealt.* The Plague's patch, read where the tick lands (`effects/ticks.mjs`).
+    "sanguine-plague": { modifies: mod("Plague", { plagueHeals: "dealt" }) },
+    // *Once per encounter, while you wield a two-handed weapon, or a Versatile weapon in both
+    // hands, as a Half-Action, spend 3 Blood runes. Your Dancing Runeweapon ... fights beside you
+    // for three rounds. When you make an Attack, the Dancing Runeweapon makes one more attack
+    // roll against the same creature as part of the same Attack. You regain Health equal to half
+    // the damage the Dancing Runeweapon deals, rounded down.* A state on the knight; the roll
+    // rides Extra Attack's `budget: "none"` door, as the Chronomancer's echo does.
+    // D-1017 opens the Use to *a one-handed weapon in each hand* as well (`eitherGrip`), where
+    // the roll rides the Off-Hand Attack and heals *the damage the Dancing Runeweapon deals*.
+    "dancing-runeweapon": {
+      grants: grant({ action: "half", cost: cost("runes", 3), uses: uses(1, "encounter") }),
+      onUse: { runes: { kind: "blood" }, wields: ["eitherGrip"], dk: { dancing: { rounds: 3, heal: 0.5, alt: { offHand: true, heal: 1 } } } }
+    },
+    // ---- Frost ----
+    // *While you wield a one-handed weapon in each hand, your Off-Hand Attack takes no -2. While
+    // you wield a one-handed weapon in each hand, your melee hits against a Slowed creature deal
+    // 1 additional Frost damage per rank.* The -2 is Second Strike's door (an Off-Hand Attack is
+    // made with a one-handed weapon in each hand, so its gate always holds); the Frost is its
+    // own amount on the hit (D-777's extras).
+    // *While you wield a two-handed weapon, or a Versatile weapon in both hands, your first melee
+    // hit each turn makes the creature Slowed until the end of its next turn, and your melee hits
+    // against a Slowed creature deal 1 additional Frost damage per rank.* The grip alternate
+    // (D-1017): the same Frost behind its own gate, and the Slowed through the one condition door
+    // on the turn's first melee hit (`turnMark`).
+    "frozen-edge": {
+      offHand: { noPenalty: true },
+      dk: { frozenEdge: {
+        amount: "rank", type: "frost", when: ["melee", { targetHas: ["slowed"], wields: ["oneInEach"] }],
+        alt: {
+          amount: "rank", type: "frost", when: ["melee", { targetHas: ["slowed"], wields: ["bothHands"] }],
+          slows: { condition: "slowed", until: "endOfNextTurn", once: "turn", when: ["melee", { wields: ["bothHands"] }] }
+        }
+      } }
+    },
+    // *A creature you pull with Death Grip is Slowed until the end of its next turn. At rank 2,
+    // Death Grip's range is 60 feet.* The Slowed rides the patch (`patchRowsOf`); the 60 feet is
+    // read by identifier (`rules/death-knight.mjs#deathGripFeet`), so the patch carries no reach.
+    "icy-grip": { modifies: mod("Death Grip", { slows: { condition: "slowed", until: "endOfNextTurn" } }) },
+    // *A creature your Death Coil damages is Slowed until the end of its next turn.*
+    "chill-of-the-grave": { spell: { names: ["Death Coil"] }, dk: { coilSlows: { condition: "slowed", until: "endOfNextTurn" } } },
+    // *Your Frost Fever deals 1 additional Frost damage per rank.* The Plague's patch, read as the
+    // Fever is laid (`effects/death-knight.mjs#plagueHere`).
+    "black-ice": { modifies: mod("Plague", { feverAdds: "rank" }) },
+    // *A Slowed creature within your reach cannot Disengage. At rank 2, when your Opportunity
+    // Attack hits, the creature's Speed is 0 until the end of its turn. At rank 2, while you
+    // wield a one-handed weapon in each hand, your Opportunity Attack includes your Off-Hand
+    // Attack.* The bar at the one Disengage door, the Speed 0 through Hold the Hall's `hitLays`
+    // (`speedZero`: no condition and no escape Test; the lead, run F4b, D-988: *"Speed 0"*), and
+    // the off hand at the Opportunity Attack's door.
+    // *At rank 2, while you wield a two-handed weapon, or a Versatile weapon in both hands, your
+    // Opportunity Attacks reach 5 feet further and deal additional Frost damage equal to your
+    // tier.* The grip alternate (D-1017): the reach where an Opportunity Attack is offered and
+    // where it is struck, and the Frost on its hit.
+    "relentless-advance": {
+      dk: { relentless: {
+        noDisengage: true, offHand: false, when: { wields: ["oneInEach"] }, atRank: [{ rank: 2, offHand: true }],
+        alt: { when: { wields: ["bothHands"] }, atRank: [{ rank: 2, reach: 5, damage: "tier", type: "frost" }] }
+      } },
+      hitLays: { condition: null, when: "opportunity", atRank: [{ rank: 2, speedZero: true, until: "endOfTurn" }] }
+    },
+    // *While you wield a one-handed weapon in each hand, each Frost rune you spend gives 1
+    // additional Runic Power per rank. At rank 2, while you wield a one-handed weapon in each
+    // hand, your attack against a Slowed creature inflicts a Critical Injury on a natural 19 or
+    // 20.* The rune door's `frostBonus` (the lead: *"this should increase the power gained by
+    // consuming a frost rune"*), and Keen's `criticalOn` through the shared `critical` row.
+    // *While you wield a two-handed weapon, or a Versatile weapon in both hands, once a round,
+    // your melee hit at SL 2 or more gives you 1 Runic Power per rank. At rank 2, while you wield a
+    // two-handed weapon, or a Versatile weapon in both hands, your melee hit on a Slowed creature at
+    // SL 2 or more inflicts a Critical Injury.* The grip alternate (D-1017), raised by O-398's C
+    // (the lead: *"Yes and yes"*): the Runic Power needs no Slowed creature and rides the pool door
+    // naming `killingMachine`; the Critical Injury keeps the Slowed gate under its own sentence
+    // (MY READING of C) and rides the card's own button.
+    "killing-machine": {
+      dk: { killingMachine: {
+        frostBonus: "rank", when: { wields: ["oneInEach"] },
+        alt: { gain: "rank", sl: 2, once: "round", when: ["melee", { wields: ["bothHands"] }],
+          atRank: [{ rank: 2, critical: { when: ["melee", { targetHas: ["slowed"], wields: ["bothHands"] }] } }] }
+      } },
+      // No `on` below rank 2: `Number(null)` is 0, which `criticalRangeFor` would read as a range.
+      critical: { when: { targetHas: ["slowed"], wields: ["oneInEach"] }, atRank: [{ rank: 2, on: 19 }] }
+    },
+    // *Once a round, when you spend a Frost rune, the next Frost spell you cast before the end of
+    // your turn costs 2 less Runic Power.* Laid by the rune door, taken by the next Frost cast.
+    "runic-frost": { nextSpell: { amount: 2, on: "frostRune", schools: ["frost"], turn: true, once: "round" } },
+    // *An enemy that starts its turn in your Desecration is Slowed until the end of its turn. At
+    // rank 2, Desecration's radius is 15 feet.* The Slowed rides the patch; the radius is read by
+    // identifier (`rules/death-knight.mjs#desecrationFeet`).
+    "frozen-desecration": { modifies: mod("Desecration", { slows: { condition: "slowed", until: "endOfTurn" } }) },
+    // *Once per encounter, as a Half-Action, spend 1 Frost rune. Every enemy within 10 feet of you
+    // makes a Body Resilience Test against your Spell DC. On a failure it is Entangled. It repeats
+    // the Test at the end of each of its turns, and the Entangled ends only when it succeeds. At
+    // rank 2 the radius is 15 feet, and at rank 3 it is 20 feet.* The Vault Opens' shape; the
+    // escape is the turn end's Body Test and nothing else (the lead, D-939).
+    "hungering-cold": {
+      grants: grant({
+        action: "half", cost: cost("runes", 1), uses: uses(1, "encounter"),
+        area: "A 10 ft radius centered on you", who: "enemy", resist: "body",
+        inflicts: [{ condition: "entangled", until: null, escape: { on: "turnEnd", resilience: "body", dc: "spellDc" }, onFail: true }],
+        atRank: [{ rank: 2, area: "A 15 ft radius centered on you" }, { rank: 3, area: "A 20 ft radius centered on you" }]
+      }),
+      onUse: { runes: { kind: "frost" } }
+    },
+    // *Once per Short Rest, as a Half-Action, end every Frost Fever you laid on creatures within
+    // 15 feet of you. Refill 1 spent Frost rune for each Frost Fever you end. You refill no more
+    // runes than the rune slots of the weapons you wield. At rank 2, the radius is 30 feet.*
+    // Judged whole before anything is paid (`death-knight-talents.mjs#empowerPlan`).
+    "empower-runeweapon": {
+      grants: grant({ action: "half", uses: uses(1, "short") }),
+      onUse: { dk: { empower: { feet: 15, atRank: [{ rank: 2, feet: 30 }] } } }
+    },
+    // *Once per encounter, as a Reaction when a blow damages you, spend 1 Frost rune. That blow,
+    // and each blow until the end of your next turn, deals half its damage to you, rounded down,
+    // before Armor Points and Ward apply.* Asked IN the blow (`AzerothActor#applyDamage`, through
+    // `azeroth-rpg.blowAsk`), as Borrowed Time is.
+    "icebound-fortitude": {
+      grants: grant({ action: "reaction", cost: cost("runes", 1), uses: uses(1, "encounter") }),
+      onUse: { runes: { kind: "frost" }, askedInBlow: true, dk: { icebound: true } }
+    },
+    // *Once per encounter, as a Half-Action, spend 3 Frost runes. A winter surrounds you to 15
+    // feet for three rounds. An enemy that starts its turn inside the winter takes Frost damage
+    // equal to your tier and is Slowed until the end of its turn. An enemy that is already Slowed
+    // when it starts its turn inside the winter makes a Body Resilience Test against your Spell
+    // DC instead. On a failure it is Entangled until the end of its turn.* A state on the knight,
+    // read at every turn's start (`effects/death-knight-talents.mjs#dkTurnStart`).
+    "remorseless-winter": {
+      grants: grant({ action: "half", cost: cost("runes", 3), uses: uses(1, "encounter") }),
+      onUse: { runes: { kind: "frost" }, dk: { winter: { feet: 15, rounds: 3 } } }
+    }
   }
 });
 
@@ -3710,6 +3915,13 @@ export const CENSUS_DETECTORS = Object.freeze({
       // And the Chronomancer's (stage 2b): Withering Hours' halving of what a heal gives inside
       // the area (`chronomancer.mjs#witheredHeal`, read at `AzerothActor#applyHealing`).
       || Boolean(e.withering)
+      // And the Death Knight's (run F4a; `rules/death-knight-talents.mjs`): Blood Shield's grant on
+      // Death Strike's restore, Grim Harvest's and Rune Tap's Health, Mark of Blood's heal after
+      // the blow, Vampiric Blood's raise, Sanguine Tide's Health for each creature, Dancing
+      // Runeweapon's half, and Sanguine Plague's patch.
+      || e.tempHealth?.on === "deathStrike" || Boolean(e.dk?.harvest || e.dk?.tide)
+      || Boolean(e.onUse?.dk?.regain || e.onUse?.dk?.markOfBlood || e.onUse?.dk?.vampiric || e.onUse?.dk?.dancing)
+      || modifiesOf(e).some(m => m.plagueHeals)
   },
   // *Your Fortitude rises by 2 per rank*, *your Defense rises by 1 per rank*.
   risesBy: {
@@ -3809,6 +4021,12 @@ export const CENSUS_DETECTORS = Object.freeze({
       // And the Guardian of Time's (stage 2c): Grinding Block's Slowed on the attacker's
       // failed Test (`effects/guardian.mjs#grindAfterResist`).
       || Boolean(e.grind?.condition)
+      // A condition a rank's clause lays on a hit (Relentless Advance's Entangled at rank 2).
+      || (e.hitLays?.atRank ?? []).some(c => c?.condition)
+      // And the Death Knight's (run F4a): Chill of the Grave's Slowed on a Death Coil's damage, a
+      // feature's patch that slows (Icy Grip on Death Grip, Frozen Desecration), and Remorseless
+      // Winter's Slowed and Entangled at a turn's start.
+      || Boolean(e.dk?.coilSlows || e.onUse?.dk?.winter) || modifiesOf(e).some(m => m.slows?.condition)
   },
   // A row whose trigger IS a Success Level (D-771): Nature's Grace's next
   // spell and Primal Fury's further Ferocity. And D-772's: Deep Cut's
@@ -3827,6 +4045,8 @@ export const CENSUS_DETECTORS = Object.freeze({
       // And the Legacy branches' (B1): damage a hit adds at an SL (Critical Strike,
       // door 26), and a Test the user's own hit forces at one (Keening Arrows).
       || Number(e.damage?.sl) > 0 || Number(e.hitTest?.sl) > 0
+      // And D-1019's: Killing Machine's two-handed half, a hit at SL 2 on its row's `alt`.
+      || Number(e.dk?.killingMachine?.alt?.sl) > 0
   },
   // A widened Critical Injury range (Executioner, D-772), and a spell's (Shatter, D-775).
   criticalRange: {
@@ -4556,7 +4776,8 @@ export function tickBonusFor(talents = [], { name = "" } = {}) {
 }
 
 /** What a `nextSpell` row is laid on (D-771). */
-export const NEXT_SPELL_ON = Object.freeze(["casting", "swiftLeave"]);
+// And 04's Runic Frost's Frost rune spent, laid by the rune door (run F4a).
+export const NEXT_SPELL_ON = Object.freeze(["casting", "swiftLeave", "frostRune"]);
 
 /**
  * **THE NEXT SPELL'S DISCOUNTS A TRIGGER LAYS** (04's Nature's Grace and
@@ -4581,7 +4802,9 @@ export function nextSpellGrants(talents = [], { on = "", sl = null } = {}) {
     const cast = n.cast === "half" ? "half" : null;
     const amount = cast && n.amount === undefined ? 0 : atRankAmount(n.amount, rankOfTaken(talent));
     if (amount <= 0 && !cast) continue;
-    out.push({ source: talent.identifier, name: talent.name, amount, turn: n.turn === true, ...(cast ? { cast, talentId: talent.id ?? null } : {}), ...(n.features === true ? { features: true } : {}) });
+    out.push({ source: talent.identifier, name: talent.name, amount, turn: n.turn === true, ...(cast ? { cast, talentId: talent.id ?? null } : {}), ...(n.features === true ? { features: true } : {}),
+      // A next spell of one school alone (04's Runic Frost: *the next Frost spell*; run F4a).
+      ...(Array.isArray(n.schools) && n.schools.length ? { schools: [...n.schools] } : {}) });
   }
   return out.sort((a, b) => a.source.localeCompare(b.source));
 }

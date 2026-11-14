@@ -3,7 +3,7 @@ import { KNOCK_AWAY as GIANT_KNOCK_AWAY, SENTINEL_KNOCK_AWAY } from "../rules/mo
 import { activeSentinelPowers } from "./anubisath-pack.mjs";
 import { sleepRefusal } from "../rules/dreadlord-sleep.mjs";
 import { despairRefusal } from "../rules/ancient-despair.mjs";
-import { resolveDamage } from "../rules/mitigation.mjs";
+import { resolveRecordedDamage } from "../rules/damage-record.mjs";
 import { dealtHalvedBy } from "../rules/legacy-uses.mjs";
 import { feetApart } from "../canvas/footprints.mjs";
 import { realmRefusalFor } from "./spirit-realm.mjs";
@@ -101,14 +101,16 @@ export async function knockAwayQueryHandler({ actorUuid, index, source, targets 
     reason = validate(); if (reason) return refuse(reason);
     const { targetSnapshots } = await import("../applications/roll-dialog.mjs");
     const snapshot = targetSnapshots([{ id: token.id, actor: victim, name: token.name, scene }])[0];
-    const damage = resolveDamage({ rating: KNOCK_AWAY.damage + (sentinel ? (actor.system.damageBonus ?? 0) : 0), sl: 0, kind: "physical", school: "physical",
+    const damage = resolveRecordedDamage({ rating: KNOCK_AWAY.damage + (sentinel ? (actor.system.damageBonus ?? 0) : 0), sl: 0, kind: "physical", school: "physical",
       location: "body", apByLocation: snapshot.apByLocation, immune: snapshot.immune, vulnerable: snapshot.vulnerable,
       slAddsToDamage: false, dealtHalved: dealtHalvedBy(actor), passedHalf: resisted });
     result.damage = damage.damage; result.immune = damage.immune;
     if (!damage.immune) {
       result.damageAttempted = true;
       await victim.applyDamage(damage.damage, { struck: true, attack: true, location: "body", type: "physical",
-        by: actor, spell: false, messageId: card?.id ?? null, parts: damage.parts ?? null });
+        by: actor, spell: false, messageId: card?.id ?? null, parts: damage.parts ?? null,
+        // the card's resolver inputs (`rules/damage-record.mjs`), so 04's Icebound Fortitude halves this blow before Armor Points and Ward (the F4b review, S6).
+        mitigation: damage.mitigationSource ?? null });
       result.damageApplied = true;
     }
     reason = validate(); if (reason) return refuse(reason);

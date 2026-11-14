@@ -35,7 +35,7 @@
  * answered (CLARIFY in the rulings) and nothing here builds it.
  */
 
-import { extraPart, resolveDamage } from "./mitigation.mjs";
+import { extraPart } from "./mitigation.mjs";
 
 /**
  * The order the holds are tried in: 07's Aegis floor (free), the creature's
@@ -184,18 +184,28 @@ export function moveJudgement(row = {}, {
  * alone - the ally's drop out. Null where the card recorded none, which the door
  * refuses in words rather than reducing a blow twice.
  *
+ * These are the resolver's inputs; the resolution is `blow-records.mjs#regrossRecorded`, which the
+ * door calls and which takes the striker's Shrink Ray once (run close-F2). The bare resolve that
+ * stood here (`regrossFor`) had no runtime caller and left the shrink out, so a test that computed
+ * its expected number through it compared against the wrong one (the close review's finding 9).
+ * This module imports the resolver alone, because the talent tables read `heldAt` here and
+ * `gadgets.mjs` reads the talent tables.
+ *
  * @param {object|null} spec  the card's `blowSpec`
  * @param {{apByLocation?: object, wardBySchool?: object, schoolArmorBySchool?: object, fireTakenBonus?: number,
  *   immune?: string[], vulnerable?: string[]}} bearer
- * @returns {object|null}  `resolveDamage`'s answer
+ *
+ * @param {object|null} spec
+ * @param {object} bearer
+ * @returns {object|null}
  */
-export function regrossFor(spec, bearer = {}) {
+export function regrossInput(spec, bearer = {}) {
   if (!spec || !Number.isFinite(Number(spec.rating))) return null;
   const location = spec.location ?? "body";
   const ap = bearer.apByLocation ?? {};
   const armor = bearer.schoolArmor ?? bearer.schoolArmorBySchool ?? {};
   const pierce = Math.max(0, Math.trunc(Number(spec.penetration)) || 0);
-  return resolveDamage({
+  return {
     ...(spec.sourceDamageBonus ? { sourceDamageBonus: spec.sourceDamageBonus } : {}),
     fireTakenBonus: bearer.fireTakenBonus ?? 0,
     rating: Number(spec.rating),
@@ -215,7 +225,7 @@ export function regrossFor(spec, bearer = {}) {
     schoolArmorBySchool: armor,
     dealtHalved: spec.dealtHalved ?? null,
     immuneHalf: Array.isArray(spec.immuneHalf) ? spec.immuneHalf : []
-  }, { shrink: Math.max(0, Math.trunc(Number(spec.shrink)) || 0) });
+  };
 }
 
 /**

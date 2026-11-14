@@ -439,7 +439,8 @@ export function tableBatch(context) {
         const detail = sheet.element.querySelector(`.azeroth-item-detail[data-item-id="${spell.id}"]`);
         assert.ok(detail, "no detail under the spell row");
         assert.include(detail.querySelector(".azeroth-item-effect")?.textContent ?? "", "Casting Tests gain a Boon", "the row's detail does not say what Rimeblood does");
-        assert.include(detail.querySelector(".azeroth-item-lore")?.textContent ?? "", "cold goes inward");
+        // The lore as D-907 reworded it (0.15.1): *Drawn inward, the cold rims the mage's eyelashes*.
+        assert.include(detail.querySelector(".azeroth-item-lore")?.textContent ?? "", "Drawn inward, the cold");
       } finally {
         await sheet.close();
       }

@@ -35,11 +35,15 @@ import { defaultAttackMode, rangeBand, reachAndRange, reachOf, thrownRange } fro
  *
  * @param {{launcher?: string|null, range?: number|null, traits?: string[]}} weapon
  * @param {string|null} mode
- * @param {{distance?: number|null, engaged?: boolean}} [o]  `engaged`: an enemy stands inside the attacker's reach
+ * @param {{distance?: number|null, engaged?: boolean, reachBonus?: number}} [o]  `engaged`: an enemy stands inside the attacker's reach;
+ *   `reachBonus`: feet a blow in the hand reaches further for THIS attack alone (04's Relentless Advance
+ *   in two hands, D-1017: *your Opportunity Attacks reach 5 feet further*)
  */
-export function attackVariant(weapon, mode, { distance = null, engaged = false } = {}) {
+export function attackVariant(weapon, mode, { distance = null, engaged = false, reachBonus = 0 } = {}) {
   const used = attackModeOf(weapon, mode);
-  const spec = reachAndRange(weapon, used);
+  const own = reachAndRange(weapon, used);
+  const extra = Math.max(0, Math.trunc(Number(reachBonus)) || 0);
+  const spec = own.kind === "melee" && extra > 0 ? { ...own, reach: (Number(own.reach) || 0) + extra } : own;
   const band = rangeBand(distance, spec);
   const rangeKind = spec.kind === "melee" ? "melee" : "ranged";
   return {
@@ -68,14 +72,15 @@ export function attackVariant(weapon, mode, { distance = null, engaged = false }
  * @param {{distance?: number|null, engaged?: boolean, mode?: string|null}} [o]
  * @returns {{modes: string[], mode: string|null, variants: Record<string, object>, lacks: string|null}}
  */
-export function attackPlan(weapon, { distance = null, engaged = false, mode = null } = {}) {
+export function attackPlan(weapon, { distance = null, engaged = false, mode = null, reachBonus = 0 } = {}) {
   const all = attackModes(weapon);
   if (mode && !all.includes(mode)) return { modes: [], mode: null, variants: {}, lacks: String(mode) };
   const offered = mode ? [mode] : all;
-  const variants = Object.fromEntries(offered.map(m => [m, attackVariant(weapon, m, { distance, engaged })]));
+  const variants = Object.fromEntries(offered.map(m => [m, attackVariant(weapon, m, { distance, engaged, reachBonus })]));
   const usable = offered.filter(m => !variants[m].refused);
   const traits = weapon?.traits ?? [];
-  const preferred = defaultAttackMode(offered, { distance, reach: reachOf(traits), throwRange: thrownRange(traits) });
+  const extra = Math.max(0, Math.trunc(Number(reachBonus)) || 0);
+  const preferred = defaultAttackMode(offered, { distance, reach: reachOf(traits) + extra, throwRange: thrownRange(traits) });
   return {
     modes: offered,
     mode: usable.includes(preferred) ? preferred : (usable[0] ?? null),

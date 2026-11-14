@@ -524,7 +524,7 @@ export function groundWanted(region, now = worldClock()) {
   const caster = actorOf(f.caster);
   const talent = caster ? spellAreaFor(caster.takenTalents?.() ?? [], { name: f.spell?.name ?? "" }).ground : undefined;
   const spec = groundNow({ areaGround, ground: f.ground ?? null, placedAt: f.placedAt ?? null, named: f.named ?? [] }, talent, now);
-  return spec ? { who: spec.who, kinds: spec.kinds, caster: f.caster ?? null, named: spec.named ?? [] } : null;
+  return spec ? { who: spec.who, kinds: spec.kinds, caster: f.caster ?? null, named: spec.named ?? [], spares: spec.spares ?? null } : null;
 }
 
 /** Whether a laid behavior already says what is wanted. */
@@ -533,7 +533,7 @@ function sameGround(behavior, want) {
   const kinds = [...(s.kinds ?? [])].sort();
   const named = [...(s.named ?? [])].sort();
   const wantNamed = [...(want.named ?? [])].sort();
-  return s.who === want.who && (s.caster ?? null) === (want.caster ?? null)
+  return s.who === want.who && (s.caster ?? null) === (want.caster ?? null) && (s.spares ?? null) === (want.spares ?? null)
     && kinds.length === want.kinds.length && kinds.every((k, i) => k === want.kinds[i])
     && named.length === wantNamed.length && named.every((u, i) => u === wantNamed[i]);
 }
@@ -586,7 +586,7 @@ async function reconcileGroundNow({ scenes = null, caster = null } = {}) {
         await region.createEmbeddedDocuments("RegionBehavior", [{
           type: DIFFICULT_BEHAVIOR,
           name: game.i18n.localize("AZEROTH.DifficultFor.Name"),
-          system: { difficulties: { walk: DIFFICULT_COST, swim: DIFFICULT_COST }, who: want.who, kinds: want.kinds, caster: want.caster, named: want.named ?? [] },
+          system: { difficulties: { walk: DIFFICULT_COST, swim: DIFFICULT_COST }, who: want.who, kinds: want.kinds, caster: want.caster, named: want.named ?? [], spares: want.spares ?? null },
           flags: { [SCOPE]: { [GROUND_FLAG]: true } }
         }]);
       }

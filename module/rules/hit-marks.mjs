@@ -22,6 +22,8 @@
 import { AZEROTH } from "../config.mjs";
 // Sunder's own changes (05 §11): the amount off every location's Armor Points.
 import { sunderedChanges } from "./maneuvers.mjs";
+// The pools a fight does not empty (Sand, Runic Power): a hit takes neither (D-943).
+import { isKeptPool } from "./kept-pools.mjs";
 
 /** The marks the door lays as an Active Effect. */
 export const HIT_MARK_KINDS = Object.freeze(["wardDrop", "noOpportunity", "apDrop"]);
@@ -130,10 +132,11 @@ export function snaggedFromOpportunity(effects = []) {
 export function momentumLoss(pools = [], amount = 1) {
   const n = Math.max(0, Math.trunc(Number(amount)) || 0);
   if (!(n > 0)) return null;
-  // **SAND IS NEVER TAKEN BY A HIT** (the lead: *"It should only drain on a short or long
-  // rest"*; O-259): 08 §5's *loses 1 Momentum* reaches every other pool.
+  // **A KEPT POOL IS NEVER TAKEN BY A HIT** (the lead on Sand: *"It should only drain on a
+  // short or long rest"*, O-259; on Runic Power: **"Only on a Long Rest"**, D-943): 08 §5's
+  // *loses 1 Momentum* reaches every pool `kept-pools.mjs` does not keep.
   const held = (pools ?? [])
-    .filter(p => p?.kind === "momentum" && p?.name !== "sand" && (Math.trunc(Number(p.value)) || 0) > 0)
+    .filter(p => p?.kind === "momentum" && !isKeptPool(p?.name) && (Math.trunc(Number(p.value)) || 0) > 0)
     .sort((a, b) => (Number(b.value) - Number(a.value))
       || String(a.name ?? "").localeCompare(String(b.name ?? ""))
       || String(a.itemId ?? "").localeCompare(String(b.itemId ?? "")));

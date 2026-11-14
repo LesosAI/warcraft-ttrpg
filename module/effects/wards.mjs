@@ -436,7 +436,7 @@ export async function afterWardedBlow({ target, type = null, wardTook = 0, stand
     // has just written the creature's Health and may write it again.
     if ((Number(ward.atone) || 0) > 0 && target.isOwner) {
       const before = target.system?.health?.value ?? 0;
-      await target.applyHealing(Math.trunc(Number(ward.atone)), { from: priest ?? null });
+      await target.applyHealing(Math.trunc(Number(ward.atone)), { from: priest ?? null, givenBy: priest ? null : "other" });
       const healed = Math.max(0, (target.system?.health?.value ?? before) - before);
       said.push(game.i18n.format("AZEROTH.Ward.Atoned", { name: target.name, n: healed, priest: ward.priestName ?? priest?.name ?? "" }));
     }

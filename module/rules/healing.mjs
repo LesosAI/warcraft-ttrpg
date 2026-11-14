@@ -12,11 +12,28 @@
  *
  * "temporary Health" is "gains", never "regains", and does not match: the
  * actor carries no such field. An "instead" clause for undead ("Cast on an
- * undead creature it heals instead: ...") is a second spell and is not read.
+ * undead creature it heals instead: ...") is a second spell and is not read
+ * here: `undeadHealFromText` reads it at the cast (the Death Knight plan's door 3).
  *
  * @param {string} text  Plain, Markdown or HTML.
  * @returns {{amount: number|null, perTurn: number|null, fromDamage: "half"|"all"|null}|null}
  */
+/**
+ * **07's DEATH COIL ON AN UNDEAD CREATURE** (the Death Knight plan's Phase 4 door 3: *Cast
+ * on an undead creature it heals instead: the target regains 4 Health and takes no
+ * damage*): the Health the clause restores, or null where the entry carries none. Read at
+ * the cast off the entry's own prose - never stamped, so no spell's stored `heal` changes
+ * shape - and `castSpell` spares each undead target the damage and heals it this much.
+ *
+ * @param {string} text  Plain, Markdown or HTML.
+ * @returns {number|null}
+ */
+export function undeadHealFromText(text = "") {
+  const plain = String(text).replace(/<[^>]+>/g, " ").replace(/\*\*/g, "").replace(/\s+/g, " ");
+  const m = /Cast on an undead creature it heals instead: the target regains (\d+) Health/i.exec(plain);
+  return m ? Number(m[1]) : null;
+}
+
 export function healFromText(text = "") {
   const plain = String(text).replace(/<[^>]+>/g, " ").replace(/\*\*/g, "").replace(/\s+/g, " ");
   const main = plain.split(/Cast on an undead/i)[0];

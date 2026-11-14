@@ -187,7 +187,10 @@ export async function placeArea(options) {
 export function schoolColor(school) {
   const palette = {
     fire: "#c1440e", frost: "#4a90d9", arcane: "#7e57c2",
-    holy: "#e0c060", shadow: "#4a2d5c", nature: "#4c9a2a", fel: "#6dbf2e"
+    holy: "#e0c060", shadow: "#4a2d5c", nature: "#4c9a2a", fel: "#6dbf2e",
+    // The Death school (D-941): a grave-moss green darker than Fel's, so the two
+    // areas never read as one on the board.
+    death: "#3f5a3a"
   };
   return palette[school] ?? "#8b1a1a";
 }

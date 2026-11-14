@@ -23,7 +23,7 @@ import { AZEROTH } from "../config.mjs";
 import { talentEffect } from "../rules/talent-effects.mjs";
 import {
   AGAIN_FLAG, CHRONO_FEATURES, MASTER_FLAG, RECALL_FLAG, RECURRENCE_FLAG, SUSPENDED_MOMENT_FLAG, SUSPEND_FLAG,
-  againAmount, againRow, allSandRefusal, appendAgain, arrestedMomentFires, collapseDamage, collapseStrikes, disengageBarredBy,
+  againAmount, againRecord, againRow, allSandRefusal, appendAgain, arrestedMomentFires, collapseDamage, collapseStrikes, disengageBarredBy,
   echoAmount, givenHalfRefusal, heavyHoursBanes, heldDuration, holdOutOfTime, masterOfHoursTurn, poolRegain, quickstepFeet, recallHeal, recallMark, recallStands,
   recurrenceTakes, restorablePools, restorableUses, sharedHoursGain, slipstreamFor, suspendableConditions,
   suspendedBy, temporalLoopRefusal, unfadingRefusal, witheredHeal, atRankRow, chronoRows
@@ -497,14 +497,15 @@ function struckByCollapse(target, casterUuid) {
  * where the Chronomancer's own damage is (`dealtHalvedBy`), through the damage door as no attack.
  */
 async function collapseHere({ by, target, rating }) {
-  const { resolveDamage } = await import("../rules/mitigation.mjs");
+  const { resolveRecordedDamage } = await import("../rules/damage-record.mjs");
   const { dealtHalvedBy } = await import("../rules/legacy-uses.mjs");
   const ap = target.system?.ap ?? {};
-  const r = resolveDamage({ rating, sl: 0, kind: "physical", school: "physical", location: "body",
+  const r = resolveRecordedDamage({ rating, sl: 0, kind: "physical", school: "physical", location: "body",
     apByLocation: { body: ap.body ?? 0, head: ap.head ?? 0, limb: ap.limb ?? 0 }, ward: 0,
     immune: target.system?.immune ?? [], vulnerable: target.system?.vulnerable ?? [], slAddsToDamage: false,
     dealtHalved: dealtHalvedBy(by) });
-  await target.applyDamage(r.damage, { struck: true, attack: false, location: "body", type: "physical", by });
+  // the card's resolver inputs (`rules/damage-record.mjs`), so 04's Icebound Fortitude halves this blow before Armor Points and Ward (the F4b review, S6).
+  await target.applyDamage(r.damage, { struck: true, attack: false, location: "body", type: "physical", by, mitigation: r.mitigationSource ?? null });
   return { ok: true, damage: r.damage };
 }
 
@@ -1086,7 +1087,7 @@ export async function sharedHours(giver, target, gives) {
  *
  * @param {{message: ChatMessage, target: Actor, amount: number, kind: "damage"|"heal"}} o
  */
-export async function afterSpellApply({ message, target, amount = 0, kind = "damage", full = null, passed = null }) {
+export async function afterSpellApply({ message, target, amount = 0, kind = "damage", full = null, passed = null, records = null }) {
   const flags = message?.flags?.["azeroth-rpg"] ?? {};
   const again = flags.chronoAgain ?? null;
   if (!again || !target) return [];
@@ -1094,16 +1095,23 @@ export async function afterSpellApply({ message, target, amount = 0, kind = "dam
   if (caster?.documentName !== "Actor") return [];
   const lines = [];
   const rows = [];
+  // **THE ROW'S RECORDS** (O-362; run close-F2): each landing again carries the resolver's inputs
+  // the row was met with - landing again, with no Ward credit, as this door always landed it - so
+  // 04's Icebound Fortitude on the creature halves it before the Armor Points and Ward that met it.
+  const { withSteps } = await import("../rules/blow-records.mjs");
+  const again_ = (record, ...steps) => withSteps(record ?? null, { moved: true }, ...steps);
   // **THE TEST MADE AGAIN, AND WHAT LANDS OVER TIME** (02's Recurrence and 08 §20's Echo
   // of the Infinite; the lead: *"Yes, Yes, Yes"*; D-911): a card with a Test records the
   // row's WHOLE amount and what a pass leaves (`full`, `passed`), so the turn start's
   // Test - not this one's - decides it. A tick is not recorded here: its extra landing rides
   // the tick the Apply lays (D-913).
   if (again.recurrence && kind === "damage" && again.test) {
-    rows.push(againRow({ kind, amount: full ?? amount, passed, test: again.test, target: target.uuid, type: flags.damageType ?? null, spell: flags.spellName ?? "", source: again.recurrence, combatId: again.combatId }));
-  } else if (again.recurrence) rows.push(againRow({ kind, amount, target: target.uuid, type: flags.damageType ?? null, spell: flags.spellName ?? "", source: again.recurrence, combatId: again.combatId }));
+    rows.push(againRow({ kind, amount: full ?? amount, passed, test: again.test, target: target.uuid, type: flags.damageType ?? null, spell: flags.spellName ?? "", source: again.recurrence, combatId: again.combatId,
+      record: again_(records?.full), passedRecord: again_(records?.passed) }));
+  } else if (again.recurrence) rows.push(againRow({ kind, amount, target: target.uuid, type: flags.damageType ?? null, spell: flags.spellName ?? "", source: again.recurrence, combatId: again.combatId, record: again_(records?.landed) }));
   if (again.echo && kind === "damage" && !again.echoDone) {
-    rows.push(againRow({ kind: "damage", amount: echoAmount(amount, { whole: again.whole === true }), target: target.uuid, type: flags.damageType ?? null, spell: flags.spellName ?? "", source: again.echo, combatId: again.combatId }));
+    rows.push(againRow({ kind: "damage", amount: echoAmount(amount, { whole: again.whole === true }), target: target.uuid, type: flags.damageType ?? null, spell: flags.spellName ?? "", source: again.echo, combatId: again.combatId,
+      record: again.whole === true ? again_(records?.landed) : again_(records?.landed, { half: true }) }));
     if (message.isOwner) await message.update({ "flags.azeroth-rpg.chronoAgain.echoDone": true });
   }
   const kept = rows.filter(Boolean);
@@ -1156,7 +1164,7 @@ export async function chronoTurnStart(combatant) {
         // *A creature makes the spell's Resilience Test again when it lands again* (D-911).
         const passed = r.test ? await againResist(target, r) : null;
         const n = againAmount(r, passed);
-        if (n > 0) await target.applyDamage(n, { struck: true, attack: false, location: "body", type: r.type, by: actor, spell: true });
+        if (n > 0) await target.applyDamage(n, { struck: true, attack: false, location: "body", type: r.type, by: actor, spell: true, mitigation: againRecord(r, passed) });
         lines.push(game.i18n.format(passed === true && n === 0 ? "AZEROTH.Chrono.AgainResisted" : "AZEROTH.Chrono.AgainDamaged", { name: target.name, n, source: r.source }));
       }
     }

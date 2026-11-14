@@ -358,7 +358,8 @@ export async function makeCharacter({
   // A class brings its thirty-six talents with it, after the link update
   // lands. Wait for them here so no test sees the sheet re-render under it.
   if (classes.length) {
-    const want = 36 * classes.length;
+    // Twelve a branch: three branches, two for the Death Knight (D-927).
+    const want = classes.reduce((n, [c]) => n + (c === "Death Knight" ? 24 : 36), 0);
     // Class talents only: a race's eight land on the same chain (D-620) and
     // would otherwise satisfy the count before the class's had arrived.
     for (let i = 0; i < 200 && actor.items.filter(t => t.type === "talent" && !t.system?.race).length < want; i++) {

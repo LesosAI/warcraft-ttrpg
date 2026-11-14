@@ -10,7 +10,8 @@
  * | **undead**  | a creature whose TYPE is Undead (14 §1: the type *is what
  * |             | spells and features read*); a character of the **Forsaken**
  * |             | people (02 §5); a character who has become **The Risen**
- * |             | (10 §9: the Undeath track at 20) |
+ * |             | (10 §9: the Undeath track at 20); a character who holds the
+ * |             | **Death Knight** class (02 §7's Risen Knight, D-946) |
  * | **fel**     | a creature whose identity line carries a **Corruption** entry
  * |             | of Fel (14 §1: it *names the track the creature exposes*); a
  * |             | character who has become **The Fel-touched** (10 §9) |
@@ -31,6 +32,8 @@
  */
 
 import { rungsInForce } from "./corruption-effects.mjs";
+// The classes whose holder is undead (02 §7's Death Knight, D-946).
+import { undeadByClass } from "./undead.mjs";
 
 /** The three words a rule may say, and nothing else (D-753). */
 export const CREATURE_KINDS = Object.freeze(["undead", "fel", "demon"]);
@@ -52,13 +55,14 @@ function peopleKey(name) {
  *   KEYWORD (`system.corruption`, a track name, never a score).
  * - A **character** carries its people as a race ITEM - the caller hands its
  *   name in as `race`, since a pure rule cannot walk the items - and three
- *   track SCORES under `system.corruption`.
+ *   track SCORES under `system.corruption`, and its class identifiers DERIVED
+ *   as `system.classKeys` (D-946), or handed in as `classes`.
  *
- * @param {{type?: string, system?: object, race?: string|null}} actor
+ * @param {{type?: string, system?: object, race?: string|null, classes?: string[]|null}} actor
  * @returns {{type: string|null, creatureType: string|null, race: string|null,
- *   keyword: string|null, tracks: Record<string, number>|null}}
+ *   keyword: string|null, tracks: Record<string, number>|null, classes: string[]}}
  */
-export function creatureSnapshot({ type = null, system = null, race = null } = {}) {
+export function creatureSnapshot({ type = null, system = null, race = null, classes = null } = {}) {
   const s = system && typeof system === "object" ? system : {};
   const npc = type === "npc";
   const corruption = s.corruption ?? null;
@@ -71,7 +75,9 @@ export function creatureSnapshot({ type = null, system = null, race = null } = {
     keyword: npc && typeof corruption === "string" ? corruption : null,
     tracks: !npc && corruption && typeof corruption === "object"
       ? Object.fromEntries(Object.entries(corruption).map(([k, v]) => [k, Math.trunc(Number(v) || 0)]))
-      : null
+      : null,
+    // A character's classes (D-946): what it was handed, else what its data derived.
+    classes: !npc ? [...(Array.isArray(classes) ? classes : (Array.isArray(s.classKeys) ? s.classKeys : []))] : []
   };
 }
 
@@ -91,7 +97,8 @@ export function kindsOf(snapshot = {}) {
   if (!snapshot || typeof snapshot !== "object") return out;
   const type = String(snapshot.creatureType ?? "").toLowerCase();
   const people = peopleKey(snapshot.race);
-  if (type === "undead" || UNDEAD_PEOPLES.includes(people) || endedAs(snapshot.tracks, "undeath", "The Risen")) out.add("undead");
+  if (type === "undead" || UNDEAD_PEOPLES.includes(people) || endedAs(snapshot.tracks, "undeath", "The Risen")
+    || undeadByClass(snapshot.classes)) out.add("undead");
   if (String(snapshot.keyword ?? "").toLowerCase() === "fel" || endedAs(snapshot.tracks, "fel", "The Fel-touched")) out.add("fel");
   if (type === "demon") out.add("demon");
   return out;

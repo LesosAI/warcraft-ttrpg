@@ -14,12 +14,16 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+// The class that pays its spells in Momentum (D-944), kept beside the runes it holds.
+import { CLASS_SPELL_POOL } from "./runes.mjs";
 // 05's *Round - ~6 seconds*: a turn's span out of a fight is one of them (D-778).
 import { ROUND_SECONDS } from "./area-ticks.mjs";
 // 07's *The Druid in a form*: 1 Ferocity for every 2 Mana, rounded up (D-769).
 import { ferocityFor } from "./shapes.mjs";
 // A creature's Power pool IS its Mana (the lead, 2026-09-10).
 import { manaPool } from "./pools.mjs";
+// The one predicate for a class a Restricted line names (D-930).
+import { classLearnsSpell } from "./spell-access.mjs";
 // 05 §1 and §2: one roll read against each target's own number (O-301).
 import { SL_CAP, computeSL, resolveTest } from "./resolution.mjs";
 
@@ -267,9 +271,14 @@ export function statedCastingDC(effect = "") {
  * @param {Array<{itemId: string, schools?: string[], castingAbility?: string|null}>} classes
  * @param {string} school
  */
-export function grantingClass(classes = [], school = null) {
+export function grantingClass(classes = [], school = null, named = null) {
   const bySchool = classes.find(c => Array.isArray(c.schools) && c.schools.includes(school));
-  return bySchool ?? classes.find(c => c.castingAbility) ?? null;
+  if (bySchool) return bySchool;
+  // **A RESTRICTED LINE THAT NAMES THE CLASS** (D-930): the Death Knight casts the Frost
+  // and Shadow spells that name it as its own - the one predicate the creator asks.
+  const byLine = Array.isArray(named) && named.length
+    ? classes.find(c => c.name && classLearnsSpell(c, { school, classes: named })) : null;
+  return byLine ?? classes.find(c => c.castingAbility) ?? null;
 }
 
 /** Spell DC = 10 + casting ability modifier + Proficiency (05), for ONE class. */
@@ -409,10 +418,16 @@ function promisesAnything(e) {
  * @returns {{taken: object[], kept: object[], amount: number, cast: object|null, forcedSl: number, damage: number,
  *   miracle: object|null}}
  */
-export function takeNextSpell(live = [], { action = null, healing = false } = {}) {
+export function takeNextSpell(live = [], { action = null, healing = false, school = null } = {}) {
   const taken = [];
   const kept = [];
   for (const e of live ?? []) {
+    // **A PROMISE TO ONE SCHOOL** (04's Runic Frost: *the next Frost spell you cast*; run F4a): an
+    // entry naming its schools is taken only by a spell of one of them, and kept otherwise.
+    if (Array.isArray(e?.schools) && e.schools.length && !e.schools.includes(school)) {
+      kept.push(e);
+      continue;
+    }
     if (e?.miracle === true) {
       if (healing === true) taken.push(e);
       else kept.push(e);
@@ -536,6 +551,53 @@ export function manaPrice(mana = 0, { inShapeshiftForm = false, pool = null, fre
   if (typeof pool === "string" && pool && pool !== "mana" && m > 0) return { pool, amount: m };
   if (inShapeshiftForm && m > 0) return { pool: "ferocity", amount: ferocityFor(m) };
   return { pool: "mana", amount: m };
+}
+
+/**
+ * **A CLASS THAT PAYS EVERY SPELL IN ITS MOMENTUM** (D-944; the Chromatic Champion's
+ * D-819 door, *"a spell costing its Mana in Rage"*, taken by a class rather than a
+ * talent): the Death Knight holds no Mana - its Power is its runes - and pays 07's
+ * Mana in Runic Power, 1 for 1, a Sustain's upkeep included (the lead: *Runic Power
+ * pays for spells at 1 per Mana*; *"they don't use mana"*). Keyed by the class's
+ * POWER name, since the runes are what leave the Mana with nowhere to come from.
+ */
+export { CLASS_SPELL_POOL };
+
+/**
+ * The pool a cast pays in: a talent's (`class-talents.mjs#spellPoolFor`, asked first,
+ * because a talent names its price), else the class's (`CLASS_SPELL_POOL`), else null
+ * for Mana. The ONE reading the cast, its dialog, the Spells tab and the free-cast
+ * line take, so the four never price one spell two ways.
+ *
+ * @param {{pool: string, ability?: string|null, name?: string}|null} talentPool
+ * @param {Iterable<{name?: string, system?: {power?: {name?: string}}, power?: {name?: string}}>} classes
+ *   the caster's class items, or their systems
+ * @returns {{pool: string, ability: string|null, name: string}|null}
+ */
+export function spellPayment(talentPool = null, classes = []) {
+  if (talentPool) return talentPool;
+  for (const c of classes ?? []) {
+    const power = c?.system?.power?.name ?? c?.power?.name ?? null;
+    const pool = power ? CLASS_SPELL_POOL[power] : null;
+    if (pool) return { pool, ability: null, name: String(c?.name ?? "") };
+  }
+  return null;
+}
+
+/**
+ * **THE WORD A SPELL'S COST IS PRINTED IN** (07 §9; D-944; the F1 review's note): the pool
+ * the caster pays it from where that is not Mana (`spellPayment`'s pool - a Champion's Rage,
+ * a Death Knight's Runic Power), else the pool 07 prints the cost in (`system.costPool`:
+ * `**Runic Power** 2` on a spell only a Death Knight can learn), else Mana. The browser row,
+ * the spell sheet and the spell card read it, so a Runic Power spell never says *Mana*.
+ *
+ * @param {{costPool?: string|null, paidIn?: string|null}} o
+ * @returns {string}  a lang key
+ */
+export function spellCostLabel({ costPool = "mana", paidIn = null } = {}) {
+  const pool = paidIn && paidIn !== "mana" ? paidIn : (costPool && costPool !== "mana" ? costPool : null);
+  if (!pool) return "AZEROTH.Card.Mana";
+  return AZEROTH.momentumTypes?.[pool] ?? AZEROTH.powerTypes?.[pool] ?? "AZEROTH.Card.Mana";
 }
 
 /**
@@ -678,4 +740,20 @@ export function showsSpells({ classes = [], spellItems = 0, itemSpells = 0 } = {
  */
 export function showsCreatureSpells({ names = [], dc = null, spellItems = 0 } = {}) {
   return (Array.isArray(names) && names.length > 0) || dc !== null && dc !== undefined || spellItems > 0;
+}
+
+/**
+ * **A CAST THAT TAKES 1 MINUTE, IN A FIGHT** (O-351; run close-F2; AGENT READING, for the lead): 07
+ * prints *1 minute* as the Action of fourteen roleplay spells (Read the Dead, Grave Labor, Raise
+ * Dracolich and their kin), and a minute is ten of 05's six-second rounds, longer than any turn's
+ * two Half-Actions. In a started fight the caster has fought in, the cast is refused in words
+ * before anything is paid; out of a fight it spends no turn's budget, as no cast out of a fight
+ * does. The lang key, or null.
+ *
+ * @param {{action?: string|null, inFight?: boolean}} o
+ * @returns {string|null}
+ */
+export const TIMED_SPELL_ACTIONS = Object.freeze(["minute"]);
+export function timedCastRefusal({ action = null, inFight = false } = {}) {
+  return TIMED_SPELL_ACTIONS.includes(action) && inFight === true ? "AZEROTH.Action.TimedInFight" : null;
 }

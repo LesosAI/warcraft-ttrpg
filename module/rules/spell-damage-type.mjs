@@ -25,6 +25,9 @@
  * an ally's school armor, Immune and Vulnerable read the damage TYPE.
  */
 
+// What a spell of an access-only school (Death, D-941) adds its bonuses under.
+import { bonusSchool } from "./schools.mjs";
+
 /** The one damage type a spell may deal that is not one of 07's seven schools. */
 export const PHYSICAL = "physical";
 
@@ -93,6 +96,8 @@ export function spellDamageLane({ type = null, spellSchool = null, apByLocation 
   return {
     kind: "magical", school: type, location: "body", apByLocation: {},
     ward: Math.max(0, Math.trunc(Number(ward)) || 0), schoolArmor: Math.max(0, Math.trunc(Number(schoolArmor)) || 0),
-    penetration: 0, slAddsToDamage: false, bonusSchool: spellSchool ?? type ?? null, physical: false
+    // **A DEATH SPELL'S BONUSES ARE SHADOW'S** (D-941): `schools.mjs#bonusSchool` keeps a
+    // damage school's own and gives an access-only school the damage it deals.
+    penetration: 0, slAddsToDamage: false, bonusSchool: bonusSchool({ school: spellSchool, damageSchool: type }) ?? spellSchool ?? type ?? null, physical: false
   };
 }

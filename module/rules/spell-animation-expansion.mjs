@@ -13,6 +13,9 @@
  * handles the sustained area loops included here.
  */
 
+// The Death Knight's spells above tier 1 (the Death Knight plan's Phase 6, run F5).
+import { DK_EXPANDED_SPELL_ANIMATIONS } from "./death-knight-animations.mjs";
+
 const fx = (asset, options = {}) => Object.freeze({kind: "effect", asset, ...options});
 const snd = (asset, options = {}) => Object.freeze({kind: "sound", asset, volume: 0.6, ...options});
 const cue = (trigger, steps) => Object.freeze({trigger, steps: Object.freeze(steps)});
@@ -25,6 +28,11 @@ const THEMES = Object.freeze({
   nature: {cast: "jb2a.cast_generic.earth.01.browngreen", impact: "jb2a.impact.ground_crack.orange.02", shield: "jb2a.markers.shield.green.01", sound: "psfx.casting.water.001"},
   fel: {cast: "jb2a.cast_generic.fire.01.orange", impact: "jb2a.impact.fire.01.orange", shield: "jb2a.shield.01.intro.blue", filter: "FEL_O", sound: "psfx.impacts.magicaleffects.necrotic"},
   shadow: {cast: "jb2a.cast_generic.02.blue", impact: "jb2a.energy_strands.complete.blue.01", shield: "jb2a.shield.01.intro.blue", filter: "SHADOW_B", sound: "psfx.1st-level-spells.dissonant-whispers.v1.001"},
+  // The Death school (07 §17, D-941): a school for access whose damage is Shadow, so it
+  // wears Shadow's cast and shield darkened, and the skull smoke the raise cues already
+  // play (`animation-table.mjs`). Every asset here is already held against assets.json by
+  // another row; the Phase 6 rows replace this with the lead's pick.
+  death: {cast: "jb2a.cast_generic.02.blue", impact: "jb2a.toll_the_dead.green.skull_smoke", shield: "jb2a.shield.01.intro.blue", filter: "DARK", sound: "psfx.impacts.magicaleffects.necrotic"},
   // The Chronomancer's sand (07 §12, D-864): Arcane spells in sand-gold (`FILTERS.SAND`).
   sand: {cast: "jb2a.cast_generic.02.blue", impact: "jb2a.impact.ground_crack.orange.02", shield: "jb2a.shield.01.intro.blue", filter: "SAND", sound: "psfx.cantrips.gust.v1"}
 });
@@ -436,7 +444,6 @@ export const EXPANDED_SPELL_ANIMATIONS = Object.freeze({
   // shadow
   "bargain": spell("shadow", "detect", "source", "cast", 1.1), // No object/remote destination is recorded: cast cue only.
   "blackout": spell("shadow", "darkness", "region", "region", 1, "sustain-region"),
-  "contagion": spell("shadow", "darkness", "region", "region", 1),
   "curse-of-the-elements": spell("shadow", "mental", "resisted", "resist", 1),
   "descent": group("shadow", "step", true),
   "dispersion": spell("shadow", "step", "source", "cast", 1),
@@ -445,15 +452,12 @@ export const EXPANDED_SPELL_ANIMATIONS = Object.freeze({
   "entropy": spell("shadow", "impact", "target", "cast", 1),
   "exsanguinate": spell("shadow", "impact", "target", "cast", 1),
   "faceless": spell("shadow", "mental", "resisted", "resist", 1),
-  "grave-coil": spell("shadow", "impact", "target", "cast", 1),
-  "graveblight": spell("shadow", "darkness", "region", "region", 1, "sustain-region"),
   "horrify": spell("shadow", "mental", "resisted", "resist", 1),
   "mind-sear": spell("shadow", "burst", "region", "region", 1),
   "mind-soothe": spell("shadow", "mental", "resisted", "resist", 1),
   "mindfetter": spell("shadow", "mental", "resisted", "resist", 1),
   "mindlink": group("shadow", "cast"),
   "necrosis": spell("shadow", "impact", "target", "cast", 1),
-  "necrotic-shell": spell("shadow", "shield", "source", "cast", 1),
   "nightburn": projectile("shadow", "jb2a.eldritch_blast.purple", {filter: "DARK", scale: 1.3}),
   "nightfall": spell("shadow", "darkness", "region", "region", 1),
   "nightreach": spell("shadow", "detect", "source", "cast", 1.1), // No object/remote destination is recorded: cast cue only.
@@ -474,4 +478,7 @@ export const EXPANDED_SPELL_ANIMATIONS = Object.freeze({
   "void-rift": spell("shadow", "vortex", "region", "region", 1, "sustain-region"),
   "void-tide": spell("shadow", "burst", "region", "region", 1),
   "wasting": spell("shadow", "impact", "target", "cast", 1),
+  // death (07 §17): every Death Knight spell above tier 1, Grave Coil, Graveblight, Necrotic
+  // Shell and Contagion among them since they moved from the Warlock (run F5).
+  ...DK_EXPANDED_SPELL_ANIMATIONS,
 });

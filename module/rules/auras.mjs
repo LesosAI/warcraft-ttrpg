@@ -498,15 +498,70 @@ export function auraPayloadOf(row = {}) {
   // `effects/ticks.mjs#landTicks`, and gone the moment it steps out of reach.
   const tick = cleanAuraTick(src.tick);
   if (tick) out.tick = tick;
+  // **02 §7's MARCH OF THE DAMNED** (the Death Knight plan's door 12), three flags and no change:
+  // *ignore Difficult ground* (`ignoresGround`, the flag `canvas/behaviors.mjs#movementFactsOf`
+  // already reads off a laid effect), *cannot be moved against your will* (`unmovable`, read by
+  // `effects/forced-movement.mjs#beingMovedBy`), and *deals Shadow damage equal to half your
+  // Charisma modifier ... on each melee hit* (`meleeTyped`, the blow's own second amount, D-777).
+  if (src.ignoresGround === true) out.ignoresGround = true;
+  if (src.unmovable === true) out.unmovable = true;
+  const melee = cleanMeleeTyped(src.meleeTyped);
+  if (melee) out.meleeTyped = melee;
   return out;
 }
 
-/** An aura's start-of-turn damage, resolved, or null (D-911). */
+/** An aura's start-of-turn damage, resolved, or null (D-911) - or its HEALING (02 §7's Unholy
+ * Presence: *regains 1 Health at the start of its turn*; door 10), which names no type. */
 function cleanAuraTick(raw) {
   if (!raw || typeof raw !== "object") return null;
+  const heal = atLeast(raw.heal, 1);
+  if (heal) return { heal };
   const damage = atLeast(raw.damage, 1);
   const type = typeof raw.type === "string" && raw.type in AZEROTH.damageTypes ? raw.type : null;
   return damage && type ? { damage, type } : null;
+}
+
+/** A second amount of a named type on every melee hit (March of the Damned), or null. */
+function cleanMeleeTyped(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const amount = atLeast(raw.amount, 1);
+  const type = typeof raw.type === "string" && raw.type in AZEROTH.damageTypes ? raw.type : null;
+  return amount && type ? { type, amount } : null;
+}
+
+/**
+ * **WHAT THE STANDING EFFECTS ADD TO A MELEE HIT, AS ITS OWN TYPE** (02 §7's March of the
+ * Damned: *deals Shadow damage equal to half your Charisma modifier, rounded down, on each
+ * melee hit*; door 12): every active laid aura carrying `meleeTyped`, one amount a type,
+ * summed - the blow's own second amount (`resolveDamage`'s `extras`, D-777), on a creature
+ * and a character alike, because `system.damageBonus.typed` is a character's alone and names
+ * no melee lane. Nothing for a strike that is not melee.
+ *
+ * @param {Iterable<{active?: boolean, disabled?: boolean, flags?: object}>} effects
+ * @param {{melee?: boolean}} o
+ * @returns {Array<{type: string, amount: number}>}
+ */
+export function meleeTypedExtras(effects = [], { melee = false } = {}) {
+  if (melee !== true) return [];
+  const by = new Map();
+  for (const e of effects ?? []) {
+    if (e?.active === false || e?.disabled === true) continue;
+    const raw = e?.flags?.["azeroth-rpg"]?.[AURA_FLAG] ?? null;
+    const row = raw ? payloadFromFlag(raw).meleeTyped ?? null : null;
+    if (!row) continue;
+    by.set(row.type, (by.get(row.type) ?? 0) + row.amount);
+  }
+  return [...by.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([type, amount]) => ({ type, amount }));
+}
+
+/** Whether a laid aura holds this creature against being moved against its will (March of the Damned). */
+export function auraHoldsUnmoved(effects = []) {
+  for (const e of effects ?? []) {
+    if (e?.active === false || e?.disabled === true) continue;
+    const raw = e?.flags?.["azeroth-rpg"]?.[AURA_FLAG] ?? null;
+    if (raw && payloadFromFlag(raw).unmovable === true) return true;
+  }
+  return false;
 }
 
 /**
@@ -522,6 +577,15 @@ function cleanAuraTick(raw) {
 export function auraTickFlag(row = {}, { by = null, name = "" } = {}) {
   const tick = auraPayloadOf(row).tick ?? null;
   if (!tick) return null;
+  // **A HEALING TICK** (02 §7's Unholy Presence, door 10): the holder's FEATURE heals, so the
+  // one healing door judges it as the knight's own feature (the undead judgement, D-946).
+  if (tick.heal) {
+    return {
+      kind: "heal", type: null, amount: String(tick.heal), rounds: null, until: "", when: "startOfTurn",
+      hit: false, sl: null, spellpower: false, reason: "", via: "feature",
+      source: typeof by === "string" && by ? by : null, name: String(name ?? "")
+    };
+  }
   return {
     kind: "damage", type: tick.type, amount: String(tick.damage), rounds: null, until: "", when: "startOfTurn",
     hit: false, sl: null, spellpower: false, reason: "", via: "item",
@@ -600,6 +664,10 @@ export function auraReaches(aura, candidate = {}) {
   // Dread's *each LIVING enemy*. A fact the pass did not measure never holds.
   if (aura.who?.faction && !(candidate.factions ?? []).map(f => String(f).toLowerCase()).includes(String(aura.who.faction).toLowerCase())) return false;
   if (aura.who?.living === true && candidate.living !== true) return false;
+  // **ONLY THE UNDEAD** (02 §7's Unholy Presence and March of the Damned: *each undead ally*;
+  // doors 10 and 12): `creature-kinds.mjs#kindsOf`'s reading, measured by the pass, so an
+  // enemy undead is reached by nothing (it is no ally) and a living ally by nothing either.
+  if (aura.who?.undead === true && candidate.undead !== true) return false;
   const feet = candidate.feet;
   if (typeof feet !== "number" || !Number.isFinite(feet)) return false;
   return feet <= aura.feet;
@@ -680,6 +748,7 @@ export function auraGives(row = {}, candidate = {}) {
   const p = auraPayloadOf(row);
   return Boolean(p.boon) || Boolean(p.bane) || Boolean(p.healing) || Boolean(p.standFree) || Boolean(p.healthFloor)
     || Boolean(p.immune) || Boolean(p.hold) || Boolean(p.taunt) || Boolean(p.tick)
+    || Boolean(p.ignoresGround) || Boolean(p.unmovable) || Boolean(p.meleeTyped)
     || auraChanges(row, candidate).length > 0;
 }
 
@@ -852,7 +921,8 @@ export function auraMagnitude(row = {}) {
     + (p.floor?.ap ?? 0) + (p.floor?.ward ?? 0) + (p.spellDamage ?? 0) + (p.armor ?? 0)
     + (p.bane?.banes ?? 0) + (p.ward?.amount ?? 0) + Math.abs(p.speed ?? 0) + (p.healing ? 1 : 0) + (p.standFree ? 1 : 0)
     + (p.healthFloor ? 1 : 0) + (p.immune ? 1 : 0) + (p.hold ? 1 : 0) + (p.taunt?.banes ?? 0)
-    + (p.attackDamage ?? 0) + (p.tick?.damage ?? 0);
+    + (p.attackDamage ?? 0) + (p.tick?.damage ?? 0) + (p.tick?.heal ?? 0)
+    + (p.ignoresGround ? 1 : 0) + (p.unmovable ? 1 : 0) + (p.meleeTyped?.amount ?? 0);
 }
 
 /**
@@ -960,7 +1030,8 @@ export function ownerAuras(sources = [], facts = {}) {
       holderOnly: a.holderOnly === true,
       // Who among those in reach (D-911): a faction, or only the living. Carried
       // only where it names one, so every source before it keeps its shape.
-      ...(a.who && (a.who.faction || a.who.living === true) ? { who: { faction: a.who.faction ?? null, living: a.who.living === true } } : {}),
+      ...(a.who && (a.who.faction || a.who.living === true || a.who.undead === true)
+        ? { who: { faction: a.who.faction ?? null, living: a.who.living === true, ...(a.who.undead === true ? { undead: true } : {}) } } : {}),
       // What `effects/auras.mjs` reads to know a follow-up pass may be owed.
       readsOwnArmor: ownArmor,
       ...auraPayloadOf({ ...a, schoolArmor })

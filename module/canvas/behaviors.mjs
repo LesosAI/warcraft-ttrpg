@@ -167,7 +167,7 @@ export class AzerothTerrainData extends foundry.data.TerrainData {
 export function groundReaches(system, token) {
   const actor = token?.actor ?? null;
   if (!actor) return false;
-  const spec = { who: system?.who ?? "creature", kinds: [...(system?.kinds ?? [])], named: [...(system?.named ?? [])] };
+  const spec = { who: system?.who ?? "creature", kinds: [...(system?.kinds ?? [])], named: [...(system?.named ?? [])], spares: system?.spares ?? null };
   // Sandtrap's *each creature you choose as you cast* (07 §12, D-864): the named alone.
   if (spec.who === "named") return difficultApplies(spec, { uuid: actor.uuid });
   let relation = "other";
@@ -178,7 +178,7 @@ export function groundReaches(system, token) {
     const casterToken = casterTokenOn(token.parent, region?.flags?.["azeroth-rpg"]?.source ?? null, caster);
     relation = relationTo({ caster, casterToken, actor, token });
   }
-  return difficultApplies(spec, { relation, kinds: kindsOfActor(actor) });
+  return difficultApplies(spec, { relation, kinds: kindsOfActor(actor), immune: [...(actor.system?.immune ?? [])] });
 }
 
 const { ModifyMovementCostRegionBehaviorType } = foundry.data.regionBehaviors;
@@ -200,7 +200,8 @@ export class DifficultForBehaviorType extends ModifyMovementCostRegionBehaviorTy
    * (`Localization.localizeSchema`, 14.367): `AZEROTH.DifficultFor.FIELDS.kinds.label`,
    * `AZEROTH.DifficultFor.FIELDS.kinds.hint`, `AZEROTH.DifficultFor.FIELDS.who.label`,
    * `AZEROTH.DifficultFor.FIELDS.who.hint`, `AZEROTH.DifficultFor.FIELDS.caster.label`,
-   * `AZEROTH.DifficultFor.FIELDS.caster.hint`.
+   * `AZEROTH.DifficultFor.FIELDS.caster.hint`, `AZEROTH.DifficultFor.FIELDS.spares.label`,
+   * `AZEROTH.DifficultFor.FIELDS.spares.hint`.
    */
   static LOCALIZATION_PREFIXES = [...ModifyMovementCostRegionBehaviorType.LOCALIZATION_PREFIXES, "AZEROTH.DifficultFor"];
 
@@ -227,7 +228,9 @@ export class DifficultForBehaviorType extends ModifyMovementCostRegionBehaviorTy
         required: true, blank: false,
         choices: Object.fromEntries(CREATURE_KINDS.map(kind => [kind, `AZEROTH.DifficultFor.Kind.${kind}`]))
       })),
-      caster: new fields.StringField({ required: false, nullable: true, blank: false, initial: null })
+      caster: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+      // A school whose immune creatures walk the ground freely (02's Desecration, D-938), or null.
+      spares: new fields.StringField({ required: false, nullable: true, blank: false, initial: null })
     };
   }
 

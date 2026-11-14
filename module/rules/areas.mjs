@@ -107,7 +107,9 @@ export function areaFor(target) {
       shape: "line",
       distanceFt,
       widthFt: LINE_WIDTH_FT,
-      origin: /\bon the ground\b/i.test(text) ? ORIGINS.POINT : ORIGINS.SELF
+      // 07 §17's Bone Threshold: *A doorway, or a line up to 10 ft long* - laid across where the
+      // caster chooses, as a line on the ground is (run F2).
+      origin: /\bon the ground\b|\bdoorway\b/i.test(text) ? ORIGINS.POINT : ORIGINS.SELF
     };
   }
 

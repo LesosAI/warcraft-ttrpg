@@ -51,12 +51,22 @@ import { refuseMobileAlertAttack } from "../effects/mobile-alert-restrictions.mj
 import { refuseDisarmedAttack } from "../effects/npc-disarm.mjs";
 import { stonemaulGrip } from "../rules/stonemaul-grip.mjs";
 import { shieldSlamShield } from "../rules/npc-shield-slam.mjs";
-import { effectDuration, riderRating } from "../rules/spell-effects.mjs";
+import { castingModPlus, effectDuration, riderRating } from "../rules/spell-effects.mjs";
 import { abilityModifier } from "../rules/abilities.mjs";
 import { applyExposure, castingCorruption, thresholdsCrossed } from "../rules/corruption.mjs";
 import { explainDamage } from "../rules/mitigation.mjs";
 // A sand spell's Physical damage meets Armor Points at the Body, never a Ward (07 §9, D-864).
 import { PHYSICAL, spellDamageLane, spellDamageType } from "../rules/spell-damage-type.mjs";
+// Spell schools against damage schools (D-941).
+import { bonusSchool } from "../rules/schools.mjs";
+import { RUNES, poolLabelKey, runicPowerCap, spendRefusal, sustainUpkeepFree } from "../rules/runes.mjs";
+// Death Grip's reach (02 §7, 04's Icy Grip) and the raise rows (07 §17), each read once.
+import { DEATH_GRIP, deathGripFeet } from "../rules/death-knight.mjs";
+import { raiseCapRefusal, raiseOf } from "../rules/raise.mjs";
+import { meleeTypedExtras } from "../rules/auras.mjs";
+import { settleRuneRiders, spendRunesOn } from "../documents/runes.mjs";
+// Who accrues no Undeath (10 §3, D-946).
+import { accruesTrack } from "../rules/undead.mjs";
 // 07 §9's Decay (D-865): read off the entry at the cast, laid through the one writer.
 import { decayAmount, decayReaches, hourstrikeLands, readSpellDecay } from "../rules/decay.mjs";
 import { decayLine, layDecay } from "../effects/decay.mjs";
@@ -96,7 +106,7 @@ import { calledShotCost, situationalModifiers } from "../rules/modifiers.mjs";
 import { endLesserInvisibility } from "../effects/lesser-invisibility.mjs";
 import { requestSpellLockWindow, completeSpellLockWindow } from "../effects/spell-lock-query.mjs";
 import { completeSpellLockGates } from "../effects/spell-lock-gates.mjs";
-import { NEXT_SPELL_FLAG, castRefusal, castingDC, castingManaPool, spellCastingDC, judgeEachTarget, targetSl, grantingClass, isHealingSpell, manaPrice, overchannelCost, overchannelledSL, payFromNow, spellDCFor, spellManaCost, statedCastingDC, swiftCast, takeNextSpell } from "../rules/casting.mjs";
+import { NEXT_SPELL_FLAG, castRefusal, castingDC, castingManaPool, spellCastingDC, judgeEachTarget, targetSl, grantingClass, isHealingSpell, manaPrice, overchannelCost, overchannelledSL, payFromNow, spellDCFor, spellManaCost, statedCastingDC, swiftCast, takeNextSpell, timedCastRefusal } from "../rules/casting.mjs";
 import { resilienceAbility, resilienceRows } from "../rules/resilience.mjs";
 import { injuryConditions } from "../rules/injuries.mjs";
 import { injuryFightOf, injuryProvenance } from "../effects/injury-provenance.mjs";
@@ -172,7 +182,7 @@ import { endTickAndHeal, tickEffectsOf, tickLaidBy, tickWords } from "../effects
 // a Boon laid on somebody else, and Beacon's chosen creature.
 import {
   EXPOSED_FLAG, PLATE_FLAG, boonSpan, calledShotFor, criticalRollCount, extraStrikesFor, freeHealingFor, hitConditionsFor,
-  lowerRoll, manaBackFor, nextRoundMark, offHandPenaltyFor, onUseLays, onUseNextAttack, recklessFor, waives
+  lowerRoll, manaBackFor, nextRoundMark, offHandPenaltyFor, onUseLays, onUseNextAttack, recklessFor, talentLaysOnHit, waives
 } from "../rules/class-talents.mjs";
 // The Ranger's and the Rogue's kinds (D-773): what each reads at the attack, the
 // cast and the Use.
@@ -291,6 +301,7 @@ import { gatherOf, landsAtOnce } from "../rules/area-gather.mjs";
 import { castTestGate, castTestOf, castTestRefusal, governed, passedHalf } from "../rules/resisted.mjs";
 // What a creature is, for a cast Test only a kind makes (Holy Wrath's undead; the B9a pass).
 import { creatureSnapshot, kindsOf } from "../rules/creature-kinds.mjs";
+import { undeadHealFromText } from "../rules/healing.mjs";
 // 07's Nature's Grasp: the Test the next blow on the caster asks (the B9a pass).
 import { cleanStruckTest, readStruckTest } from "../rules/struck-tests.mjs";
 // What a spell deals around its target, a Test at a time (07's Stormfury; the B8a pass).
@@ -336,7 +347,7 @@ import {
 import {
   chosenWardFor, divineAegisFor, foresightFor, lavaLashFor, plagueFor, rangedParryFor, snakeTrapFor
 } from "../rules/class-talents.mjs";
-import { OVERCHANNEL_MAX_POINTS, overchannelPrice, takeForFeature } from "../rules/casting.mjs";
+import { OVERCHANNEL_MAX_POINTS, overchannelPrice, takeForFeature, spellPayment, spellCostLabel } from "../rules/casting.mjs";
 import { ROUNDS_PER_MINUTE } from "../rules/area-ticks.mjs";
 import { areaOriginFor, pickPoint, pickFacing } from "../canvas/place.mjs";
 import { placeArea, regionDataFor, schoolColor } from "../canvas/regions.mjs";
@@ -386,7 +397,7 @@ import { SUMMONED_FLAG } from "../documents/summon.mjs";
 import { worldActorOf } from "../documents/bound.mjs";
 // What a Use, an attack and a step record for the animation layer (the Legacy
 // branches' door 2): records of what happened, as `source` and `strike` are.
-import { abilityKeyOf, cleanFromFeature, featureKeyOf, risenRecord, tokenRef } from "../rules/animation-records.mjs";
+import { abilityKeyOf, attackPrivacyKey, cleanFromFeature, corpseRecord, featureKeyOf, featurePrivacyKey, risenRecord, tokenRef } from "../rules/animation-records.mjs";
 import { PRESENTATION_ONLY_ABILITIES, CREATURE_PRESENTATION_AREAS } from "../rules/creature-animation-table.mjs";
 import { castingBonusOf } from "../rules/item-bonuses.mjs";
 // 14 §1's Boss Actions, for every Boss (D-809): the points' one writer, the doors a
@@ -1048,6 +1059,16 @@ export async function rollTest({
   // depth in the chain - 0 the Attack Test, 1 to 3 an echo - written on the card's strike
   // record and as the `echo` key the animation layer files its flash under. One Attack,
   // more rolls (D-704's shape): the door hands each echo `budget: "none"`.
+  // **04's DANCING RUNEWEAPON'S ROLL** (run F4a): `dancing`, `{name, heal}` where this roll is the
+  // Dancing Runeweapon's - one more roll of the same Attack, `budget: "none"` - written on the card
+  // so its Apply gives back half the damage it deals (`effects/death-knight-talents.mjs
+  // #dancingAfterApply`).
+  dancing = null,
+  // **04's VENGEFUL BLOOD'S RIPOSTE** (D-1017): `{name}` where this Off-Hand Attack is made as the
+  // Reaction its offer card names - spent below as the Reaction AND the round's Off-Hand Attack
+  // (`budget: "reaction"` with `offHand`, which `rules/initiative.mjs#spend` takes off-turn), its
+  // Shadow added on the hit off the knight's own row (`effects/death-knight-talents.mjs#dkOnHit`).
+  vengeful = null,
   echo = 0
 } = {}) {
   if (!militiaDrillSelection(actor.getFlag?.('azeroth-rpg', MILITIA_DRILL_FLAG), chosen, kind).ok) {
@@ -1263,7 +1284,9 @@ export async function rollTest({
     // Strikes' Scorched and Deep Cut's Bleeding (`hitConditionsFor`, read at the highest SL a
     // hit could reach, so a blow that could lay one is asked).
     const lays = (Array.isArray(landsOnHit) && landsOnHit.some(l => AZEROTH.conditions?.[l?.condition]))
-      || hitConditionsFor(actor?.takenTalents?.() ?? [], { sl: 6, hit: true }).length > 0
+      // And an Opportunity Attack's own rows (Hold the Hall's Prone, Relentless Advance's Speed 0;
+      // the F4b review, M2), which `hitConditionsFor` reads only where the opportunity is passed.
+      || talentLaysOnHit(actor?.takenTalents?.() ?? [], { opportunity: opportunity === true })
       || (finisherMode === "shackle" && Boolean(finisherNow?.shackle))
       || (Boolean(boundOwner) && boundAttacksFor(boundOwner.takenTalents?.() ?? [], { kind: bondOf(actor)?.kind ?? null, name: actor.name ?? "" })
         .some(row => (row.lays ?? []).some(l => AZEROTH.conditions?.[l?.condition])));
@@ -1439,8 +1462,12 @@ export async function rollTest({
   // is paid now, as D-770 pays it.
   const paidNow = keptPaid.filter(p => p.line?.pays !== "hit");
   const paidOnHit = keptPaid.filter(p => p.line?.pays === "hit");
-  const settled = settleRiders({ paid: paidNow }, { pools: actor?.riderPools?.() ?? actor?.poolSnapshot?.() ?? [] });
+  // **A RIDER PRICED IN RUNES IS SPENT THROUGH THE ONE RUNE DOOR** (02's Death Strike; the
+  // Death Knight plan's door 2), each rune with its Runic Power - never a pool write.
+  const settled = settleRiders({ paid: paidNow.filter(p => p.pool !== RUNES) }, { pools: actor?.riderPools?.() ?? actor?.poolSnapshot?.() ?? [] });
   if (settled.writes.length) await (actor.writeRiderPools ? actor.writeRiderPools(settled.writes) : actor.updatePool(settled.writes));
+  // The runes' flare waits for this attack's card and hides where it is private (O-394).
+  if (paidNow.some(p => p.pool === RUNES)) settled.paid.push(...await settleRuneRiders(actor, paidNow.filter(p => p.pool === RUNES), { privacy: attackPrivacyKey(actor.id) }));
   // **WHAT A PAID RIDER DOES TO THE ROLL ITSELF** (D-773): Trueshot's SL, the hit
   // made without a roll (*counts as SL 2, or SL 3 at rank 2*), and Piercing
   // Shot's Pierce on the blow - a charge paid before the blow from the Combat
@@ -1467,7 +1494,8 @@ export async function rollTest({
   }
   // 04's Heavy Hand (D-772): the Head's −2 is not suffered; the Bane is untouched.
   const shot = calledShotCost(location, {
-    paid: momentumSpent >= AZEROTH.CALLED_SHOT_MOMENTUM,
+    // Paid at Runic Discipline's price where a held feature sets one (02 §7, run F2).
+    paid: momentumSpent > 0 && momentumSpent >= (momentumPayerNow?.price ?? AZEROTH.CALLED_SHOT_MOMENTUM),
     headModifier: kind === "attack" ? calledShotFor(talentsHeld).headModifier : null
   });
   const allModifiers = [...modifiers];
@@ -1619,6 +1647,9 @@ export async function rollTest({
   // Ferocious Bite's, Rupture's - with whether the creature had it before, recorded
   // on the card for `applications/actions.mjs#parryNow` (`class-answers.mjs#parryUndoes`).
   const landedOnHit = [];
+  // Relentless Advance's Speed 0 on a creature another client owns, asked once the card is
+  // posted (the F4b review, S3): `{index, victim, source, name}`.
+  const speedZeroAfterCard = [];
   const recordLanding = (index, landing) => {
     // And the layer this landing ADDED to the condition's `laidBy` (the B1 review), so a
     // withdrawn hit takes it back off a condition the creature already had.
@@ -1669,9 +1700,12 @@ export async function rollTest({
   // **A RIDER PAID ONLY WHEN THE BLOW LANDS** (Bloodthirst, D-772): settled now,
   // off the pools as they stand after the die, and on a miss nothing is spent.
   const settledOnHit = outcome.success && paidOnHit.length
-    ? settleRiders({ paid: paidOnHit }, { pools: actor?.riderPools?.() ?? actor?.poolSnapshot?.() ?? [] })
+    ? settleRiders({ paid: paidOnHit.filter(p => p.pool !== RUNES) }, { pools: actor?.riderPools?.() ?? actor?.poolSnapshot?.() ?? [] })
     : { paid: [], writes: [] };
   if (settledOnHit.writes.length) await (actor.writeRiderPools ? actor.writeRiderPools(settledOnHit.writes) : actor.updatePool(settledOnHit.writes));
+  // And a rune price paid on the hit (02's Plague: *When your attack hits, you may spend any type
+  // of rune*), through the one rune door.
+  if (outcome.success && paidOnHit.some(p => p.pool === RUNES)) settledOnHit.paid.push(...await settleRuneRiders(actor, paidOnHit.filter(p => p.pool === RUNES), { privacy: attackPrivacyKey(actor.id) }));
   // **WHAT A SPEND OF VOID LANDS** (04's Void Surge, Obsidian Skin, Earthshatter and the
   // Black Drake; stage 3A): the Void the hit actually spent, read off the settle - its damage
   // on the blow's own Rating (`riderDamageRows`, below), the temporary Health on the
@@ -1705,6 +1739,11 @@ export async function rollTest({
   const refundOnMiss = outcome.success && list.length > 0
     ? [
       ...settledOnHit.paid.filter(p => (Number(p.spent) || 0) > 0).map(p => {
+        // **A RUNE PRICE COMES BACK THROUGH THE RUNE DOOR** (02's Plague; the F2 review's
+        // must-fix 2, O-346): the runes it took, slot by slot, and the Runic Power they gave
+        // taken back off - the runes are no pool a write may raise.
+        // The rest generation it was spent in, so a card older than a rest gives nothing back.
+        if (p.pool === RUNES) return { actorUuid: actor.uuid, itemId: null, kind: "runes", pool: RUNES, amount: p.spent, spent: p.runes ?? [], gained: p.runicPower ?? 0, restGeneration: actor.getFlag?.("azeroth-rpg", "restGeneration") ?? 0 };
         const pool = poolsAfterHit.find(x => x.name === p.pool) ?? null;
         return { actorUuid: actor.uuid, itemId: pool?.itemId ?? null, kind: pool?.kind ?? null, pool: p.pool, amount: p.spent };
       }).filter(r => r.kind),
@@ -1777,6 +1816,39 @@ export async function rollTest({
       await actor.applyHealing(done.heal, { from: actor });
       healed = Math.max(0, (actor.system?.health?.value ?? before) - before);
     }
+    // **02's DEATH STRIKE** (door 4: *you regain Health equal to the damage you took since the
+    // start of your last turn, up to 4 plus twice your tier*): the damage ledger read off the
+    // striker's own last turn start (`rules/recent-damage.mjs`, D-867's reading), the striker's
+    // own feature through the one healing door - and only where the rune was actually spent.
+    if (outcome.success && (done.recentHeal ?? 0) > 0 && (Number(p.spent) || 0) > 0) {
+      const fightDs = actor.activeFight?.() ?? null;
+      const myTurn = fightDs?.started ? fightDs.turns.findIndex(c => c.actor?.uuid === actor.uuid || c.actorId === actor.id) : -1;
+      const sinceDs = fightDs?.started && myTurn >= 0 ? lastTurnStart({ combatId: fightDs.id, round: fightDs.round, turn: fightDs.turn, casterTurn: myTurn }) : null;
+      const amountDs = recentHealFor(actor.getFlag?.("azeroth-rpg", LEDGER_FLAG) ?? [], sinceDs, { cap: done.recentHeal, time: game.time?.worldTime ?? 0 });
+      const beforeDs = actor.system?.health?.value ?? 0;
+      if (amountDs > 0) await actor.applyHealing(amountDs, { from: actor, feature: true, featureName: p.name });
+      healed = (healed ?? 0) + Math.max(0, (actor.system?.health?.value ?? beforeDs) - beforeDs);
+      fired.push({ key: "rider", name: p.name, text: game.i18n.format("AZEROTH.DeathKnight.DeathStrike.Healed", { name: actor.name, n: Math.max(0, (actor.system?.health?.value ?? beforeDs) - beforeDs), cap: done.recentHeal }) });
+      // **04's BLOOD SHIELD** (*When Death Strike restores your Health, you gain temporary Health
+      // equal to twice your rank until the end of the encounter*; run F4a): only where it
+      // restored something (`effects/death-knight-talents.mjs#bloodShieldAfter`).
+      const { bloodShieldAfter } = await import("../effects/death-knight-talents.mjs");
+      for (const text of await bloodShieldAfter(actor, Math.max(0, (actor.system?.health?.value ?? beforeDs) - beforeDs))) fired.push({ key: "talent", name: p.name, text });
+    }
+    // **02's PLAGUE** (door 7): the disease laid on every creature the hit struck, through the
+    // knight's one Plague door, the GM's client where this one may not write it.
+    if (outcome.success && done.plague && list.length && (Number(p.spent) || 0) > 0) {
+      const { layPlagueOn } = await import("../effects/death-knight.mjs");
+      const words = [];
+      for (const [ti, t] of list.entries()) {
+        const laid = await layPlagueOn({ victim: targetActorOf(t), kind: done.plague, by: actor });
+        words.push(laid.text);
+        // **A WITHDRAWN HIT TAKES THE DISEASE BACK OFF** (O-346): the carrier recorded as a
+        // landing, which a Parry or an Afterimage deletes (`effects/miss.mjs#withdrawHit`).
+        if (laid.effectId) recordHit(ti, { kind: "mark", landed: true, effectId: laid.effectId, source: p.name });
+      }
+      if (words.length) fired.push({ key: "rider", name: p.name, text: words.join(" ") });
+    }
     // **A TARGET THAT RECOVERS NONE** (04's Mortal Strike, D-772): the mark on
     // every target the card records, through the GM's client where needed.
     let noHealing = null;
@@ -1845,13 +1917,55 @@ export async function rollTest({
   // with the blow, as a rider's condition lands (the lead, 2026-10-03: *"Lands
   // automatically"*), and a button where the card records no target.
   if (kind === "attack" && !parry) {
+    // **04's FROZEN EDGE AND GRIM HARVEST** (run F4a): Frozen Edge's Frost on a melee hit against
+    // a Slowed creature, its own amount (a fired row's `extraType`, D-777), and Grim Harvest's
+    // Health on a melee hit against a creature at half its Health or less - each gated on what is
+    // in hand (`effects/death-knight-talents.mjs#dkOnHit`). And the grip alternates (D-1017): the
+    // Off-Hand Attack's heal, the turn's first Slowed, an Opportunity Attack's Frost, Killing
+    // Machine's Runic Power and Critical Injury, the riposte's Shadow - each recorded here so a
+    // withdrawn hit takes it back.
+    if (outcome.success) {
+      const { dkOnHit } = await import("../effects/death-knight-talents.mjs");
+      fired.push(...await dkOnHit({ actor, hit: true, melee: (strike?.rangeKind ?? null) === "melee", first, secondRoll: secondRoll === true,
+        offHand: offHand === true, opportunity: opportunity === true, sl: outcome.sl, riposte: Boolean(vengeful), list, recordLanding, recordBuilt, onceMarked: onceMarkedOnHit }));
+    }
     // And on an Opportunity Attack alone where the row says so (04's Hold the Hall:
     // *On a hit it is knocked Prone*; the Legacy branches' door 22).
     for (const hit of hitConditionsFor(talentsHeld, { sl: outcome.sl, hit: outcome.success, opportunity: opportunity === true })) {
       let landed = null;
       if (list.length) {
         landed = [];
-        for (const [ti, t] of list.entries()) landed.push(recordLanding(ti, await inflictCondition({ victim: targetActorOf(t), id: hit.id, value: hit.value, by: actor, name: t?.name ?? "" })));
+        // A row's own span where it names one (04's Relentless Advance: *Entangled until the end of
+        // its turn*; run F4a), else the condition's own.
+        // **A SPEED OF 0, NO CONDITION** (04's Relentless Advance at rank 2; the lead, D-988:
+        // *"Speed 0"*): laid through its own door, with no escape Test, and said in words.
+        // **A CREATURE THIS CLIENT DOES NOT OWN WAITS FOR THE CARD** (the F4b review, S3): the GM's
+        // handler judges the Speed 0 off the posted Opportunity Attack card - the knight's, a hit
+        // on the row naming the creature, once a row - so it is asked once the card is posted,
+        // below, and the card says it is asked.
+        if (hit.speedZero === true) {
+          const { laySpeedZero } = await import("../effects/death-knight-talents.mjs");
+          for (const [ti, t] of list.entries()) {
+            const victim = targetActorOf(t);
+            if (victim && !victim.isOwner) {
+              speedZeroAfterCard.push({ index: ti, victim, source: hit.name, name: t?.name ?? "" });
+              landed.push(game.i18n.format("AZEROTH.DeathKnight.Talent.SpeedZeroAsked", { name: t?.name ?? victim.name, talent: hit.name }));
+              continue;
+            }
+            const done = await laySpeedZero({ victim, by: actor, source: hit.name, name: t?.name ?? "" });
+            // **A PARRY THAT HOLDS TAKES IT BACK** (the F4c review, S1): the effect it made joins the
+            // card's landing record, as Rattle's Speed drop does.
+            if (done.landed && done.effectId) recordHit(ti, { kind: "speedDrop", landed: true, effectId: done.effectId, source: hit.name });
+            landed.push(done.text);
+          }
+          fired.push({ key: "talent", name: hit.name, text: landed.join(" "), condition: null });
+          continue;
+        }
+        for (const [ti, t] of list.entries()) landed.push(recordLanding(ti, await inflictCondition({ victim: targetActorOf(t), id: hit.id, value: hit.value, by: actor, name: t?.name ?? "", until: hit.until ?? null })));
+      }
+      if (hit.speedZero === true) {
+        fired.push({ key: "talent", name: hit.name, text: game.i18n.format("AZEROTH.DeathKnight.Talent.SpeedZeroCard", { talent: hit.name }), condition: null });
+        continue;
       }
       fired.push({
         key: "talent", name: hit.name,
@@ -2281,6 +2395,10 @@ export async function rollTest({
     ...fired.filter(f => !ownExtra(f) && (f.extraDamage ?? 0) > 0).map(f => ({ type: f.extraType, amount: f.extraDamage })),
     // What a standing effect adds to every attack AS ITS OWN TYPE (the typed lane).
     ...(kind === "attack" && !parry ? typedLaneExtras(actor?.system, "attack") : []),
+    // **02 §7's MARCH OF THE DAMNED** (door 12: *each undead ally ... deals Shadow damage equal to
+    // half your Charisma modifier, rounded down, on each melee hit*): the laid aura's own amount on
+    // a MELEE blow, a creature's as much as a character's (`rules/auras.mjs#meleeTypedExtras`).
+    ...(kind === "attack" && !parry ? meleeTypedExtras([...(actor?.effects ?? [])], { melee: (strike?.rangeKind ?? null) === "melee" }) : []),
     // A promise's damage of ANOTHER type rides as its own amount (Hourstrike's Physical on a
     // Fire blade; the 2a review, L3); one of the blow's own type rides the Rating below.
     ...(kind === "attack" && !parry && damage ? (promised?.typed ?? []).filter(x => x.type !== blowType).map(x => ({ type: x.type, amount: x.amount })) : [])
@@ -2830,7 +2948,9 @@ export async function rollTest({
     // Athletics Test does not break a rib.
     // A swarm has no Critical Injury table (13 §4, D-646): none on it, none
     // rolled by it.
-    criticalInjury: kind === "attack" && !parry && outcome.critical && actor?.system?.isSwarm !== true && !list.some(t => t?.swarm),
+    // And a hit a talent says inflicts one whatever the die (04's Killing Machine at rank 2 in two
+    // hands, D-1017: *every such hit inflicts a Critical Injury*): a fired row's `criticalInjury`.
+    criticalInjury: kind === "attack" && !parry && (outcome.critical || (outcome.success && fired.some(f => f?.criticalInjury === true))) && actor?.system?.isSwarm !== true && !list.some(t => t?.swarm),
     momentumGained: momentumGained.map(g => ({ label: game.i18n.localize(AZEROTH.momentumTypes[g.name] ?? g.name), gained: g.gained })),
     opening,
     provenance: roll.provenance
@@ -2868,7 +2988,7 @@ export async function rollTest({
       // The arcs the Apply lands (D-913).
       ...(arcRows.length ? { arcs: arcRows } : {}),
       // **THE BLOW BEFORE ANY TARGET MET IT** (D-913): what 08 §20's Raised Gauntlet
-      // re-resolves against its bearer (`rules/blow-doors.mjs#regrossFor`).
+      // re-resolves against its bearer (`rules/blow-records.mjs#regrossRecorded`).
       ...(hit && kind === "attack" && !parry ? { blowSpec: {
         rating: attackRating, sl: outcome.sl, kind: damage.kind ?? "physical", school: damage.school ?? null, location: location ?? "body",
         penetration: (damage.penetration ?? 0) + promisedPierce + talentPierce, slIgnoresArmor, multiplier: damage.multiplier ?? 1,
@@ -2897,6 +3017,9 @@ export async function rollTest({
       // 06 §7's Riposte (Killing Spree, at the damage door), Intimidation's
       // Banes, Blade Flurry's half, and the defenders Elusive lets step away.
       ...(riposte === true ? { riposte: true } : {}),
+      // An Opportunity Attack says so on its card (the F4b review, S3): the GM's handler reads it
+      // before it lays Relentless Advance's Speed 0 on a creature another client owns.
+      ...(kind === "attack" && opportunity === true && !parry ? { opportunity: true } : {}),
       // What the blow landed with no button pressed, by target (D-779): a Parry that
       // holds takes it back off (`applications/actions.mjs#parryNow`) - and, since the
       // Legacy branches' door 13, everything else the hit laid, and what it was paid.
@@ -2917,6 +3040,7 @@ export async function rollTest({
       // tells a reader this Attack Test was not an attack.
       source: source ?? null,
       ...(kind === "attack" && strike ? { strike } : {}),
+      ...(kind === "attack" && dancing && typeof dancing === "object" ? { dancingRuneweapon: { name: String(dancing.name ?? ""), heal: Number(dancing.heal) || 0.5 } } : {}),
       // **WHAT ELSE DREW THE BLOW, AND WHAT IT CARRIED** (the Legacy branches' door
       // 2): the feature card it was made from, the bound attack patches that shaped
       // it (04's Serpent Ward on the Searing totem), and the riders ridden with it -
@@ -2949,6 +3073,16 @@ export async function rollTest({
     ? await routeSignatureHit({actor,roll,weaponId,idolSource:signatureTarget.idolSource,bandSource:signatureTarget.bandSource,bladeSource:signatureTarget.bladeSource,targets:list,targetIndex:signatureTarget.index,publish:publishAttackCard})
     : await publishAttackCard();
   if(unreliableMarker)await recordUnreliableDamage(publishedAttack);
+  // **RELENTLESS ADVANCE'S SPEED 0, ASKED WITH THE CARD** (the F4b review, S3): the GM's handler
+  // reads the posted Opportunity Attack card for each row it lands on. A refusal is said in words.
+  if (publishedAttack && speedZeroAfterCard.length) {
+    const { laySpeedZero } = await import("../effects/death-knight-talents.mjs");
+    for (const row of speedZeroAfterCard) {
+      const done = await laySpeedZero({ victim: row.victim, by: actor, source: row.source, name: row.name, messageUuid: publishedAttack.uuid, index: row.index });
+      if (done.landed) ui.notifications?.info(done.text);
+      else ui.notifications?.warn(done.text);
+    }
+  }
   if (kind === "attack" && !parry && outcome.success && strike?.rangeKind === "melee")
     await offerChiliReaction({actor, message: publishedAttack});
   // **08 §5's FEL-TOUCHED ON A NATURAL 1** (*On a natural 1, make a Spirit Resilience
@@ -3208,11 +3342,17 @@ function damageTypeWords(result = {}) {
  * must open a dialog before it pays (02's Snare escape: the action is spent once
  * the Test is confirmed, so a dismissed dialog costs nothing) asks this first.
  *
+ * **AND THE ATTACK IT PRICES** (the close review's finding 8): `spendOptions` carries `isAttack` and
+ * `isOffHand` into the same `spend`, so 04's Vengeful Blood riposte - the round's Off-Hand Attack
+ * paid for with the Reaction - is judged here, through every bar `spendAction` asks, and never
+ * through a second call of `spend` of its own.
+ *
  * @param {Actor} actor
  * @param {"half"|"action"|"full"|"reaction"|null} action
+ * @param {{isAttack?: boolean, isOffHand?: boolean}} [spendOptions]
  * @returns {{reason: string, params: object}|null}
  */
-export function turnBudgetRefusal(actor, action) {
+export function turnBudgetRefusal(actor, action, spendOptions = {}) {
   if (iceBlockFor(actor)) return { reason: "AZEROTH.IceBlock.Protected", params: {} };
   if (action === "reaction" && reactionBarred(actor)) return { reason: reactionBarReason(actor) ?? REACTION_BAR_REASON, params: { name: actor?.name ?? "" } };
   const projection = projectionRefusal(actor, "action");
@@ -3233,7 +3373,7 @@ export function turnBudgetRefusal(actor, action) {
   if (!fight) return null;
   const combatant = fight.getCombatantsByActor(actor)?.[0] ?? null;
   if (!combatant) return null;
-  const judged = judgeSpend(combatant.budget, cost, { onTurn: combatant.isCurrentTurn });
+  const judged = judgeSpend(combatant.budget, cost, { isAttack: spendOptions?.isAttack === true, isOffHand: spendOptions?.isOffHand === true, onTurn: combatant.isCurrentTurn });
   if (judged.ok) return null;
   // **A CONSTRUCT THE SHARED TURN REFUSES SAYS SO** (the B2 review): the escape, the
   // Snare's, Lightwell's and the blow doors' pre-checks gave it the generic *no
@@ -3373,6 +3513,18 @@ export async function castSpell({
       extraRating, damageRows, viaItem, source, swift, talentLines
     });
   }
+  // **A CAST THAT TAKES 1 MINUTE** (O-351; run close-F2; AGENT READING): longer than a turn, so in a
+  // started fight the caster is in it is refused in words here, before anything is paid
+  // (`rules/casting.mjs#timedCastRefusal`). Out of a fight it charges no budget, as every cast there.
+  {
+    const fight = actor?.activeFight?.() ?? null;
+    const inFight = Boolean(fight?.started && fight.getCombatantsByActor?.(actor)?.length);
+    const timed = timedCastRefusal({ action: spell?.system?.action ?? null, inFight });
+    if (timed) {
+      ui.notifications?.warn(game.i18n.format(timed, { spell: spell?.name ?? "" }));
+      return null;
+    }
+  }
   if (refuseAncientDespair(actor, "casting")) return null;
   const {isThematicSpell} = await import("../rules/thematic-spell-catalogue.mjs");
   const {utilitySpell} = await import("../rules/thematic-utility.mjs");
@@ -3432,19 +3584,35 @@ export async function castSpell({
   }
   const school = sys.school;
   const classes = (actor?.classItems ?? []).map(c => ({
-    itemId: c.id, schools: c.system?.schools ?? [], castingAbility: c.system?.castingAbility ?? null
+    itemId: c.id, name: c.name, schools: c.system?.schools ?? [], castingAbility: c.system?.castingAbility ?? null
   }));
-  const grant = grantingClass(classes, school);
+  const grant = grantingClass(classes, school, sys.classes ?? null);
   // **A SPELL A TALENT PAYS IN ANOTHER POOL, AND CASTS WITH ANOTHER ABILITY** (04's
   // Shadowcraft: *Cast them with Wisdom, paying Focus where 07-MAGIC asks for
   // Mana*; the Legacy branches' door 8): the talent's pool and ability, where it
   // names this spell. An item's casting and a free cast pay nothing either way.
-  const talentPool = viaItem || free ? null : spellPoolFor(actor?.takenTalents?.() ?? [], { name: spell.name, school });
+  // **AND A CLASS THAT PAYS IN ITS MOMENTUM** (D-944): the Death Knight's Runic Power, 1 for 1.
+  const talentPool = viaItem || free ? null : spellPayment(spellPoolFor(actor?.takenTalents?.() ?? [], { name: spell.name, school }), actor?.classItems ?? []);
   const ability = talentPool?.ability ?? grant?.castingAbility ?? null;
   const abilityMod = ability ? (actor.system.abilities?.[ability]?.mod ?? 0) : 0;
   const proficiency = actor.system.proficiency ?? 0;
   let list = [...(targets ?? [])];
   let first = list[0] ?? null;
+  // **07's DEATH KNIGHT SPELLS, JUDGED BEFORE ANYTHING IS PAID** (run F4b; D-768's order): Death's
+  // Embrace's half-Health target, Pestilence's carrier - whose card rows become the enemies around
+  // it, before any door below reads the targets - Death Pact's undead you control, and a GM where a
+  // write lands on a creature this client does not own (`effects/death-knight-spells.mjs`).
+  let dkSpellPlan = null;
+  {
+    const { judgeDkSpell } = await import("../effects/death-knight-spells.mjs");
+    const judgedDk = await judgeDkSpell({ actor, spell, list, source });
+    if (!judgedDk) return null;
+    dkSpellPlan = judgedDk.plan;
+    if (judgedDk.list !== list) {
+      list = judgedDk.list;
+      first = list[0] ?? null;
+    }
+  }
 
   const missileTools=sys.identifier==='arcane-missiles'?await import('../effects/arcane-missiles-targets.mjs'):null;
   if(missileTools&&!missileTools.validArcaneMissilesTargets(list)){
@@ -3544,7 +3712,7 @@ export async function castSpell({
   // **WHAT THIS CAST TAKES OF IT** (D-775): a discount and Soul Fire's promise
   // whatever the spell, Backdraft's Half-Action only where it costs an action -
   // and never where Nature's Swiftness or Fire Blast's line already lowers it.
-  const take = takeNextSpell(pending.live, { action: swift ? null : (sys.action ?? null), healing: isHealingSpell(sys) });
+  const take = takeNextSpell(pending.live, { action: swift ? null : (sys.action ?? null), healing: isHealingSpell(sys), school: sys.school ?? null });
   // The talents this cast reads, once.
   const talentsNow = actor.takenTalents();
   // **WHAT A TALENT TAKES OFF THE MANA** (04's Emberstorm: *Your Fire and Fel
@@ -3553,8 +3721,12 @@ export async function castSpell({
   // casting and a free cast pay none and take none.
   // The pool the cast is paid in, so a discount named in one pool (04's Shadowcraft's
   // Focus; the Legacy branches' B6) reaches no other.
-  const discount = viaItem || free ? { amount: 0, by: [] } : spellDiscountFor(talentsNow, { school, mana: sys.mana ?? 0, states: veinsStates(flaggedEffects(actor, VEINS_FLAG).map(r => r.flag)), pool: talentPool?.pool ?? null });
-  const manaDue = spellManaCost({ mana: sys.mana ?? 0, name: spell.name, school }, actor.system?.signatureEffects, { viaItem: Boolean(viaItem) || Boolean(free), next: take.amount, less: discount.amount });
+  // **A DEATH SPELL'S DISCOUNTS ARE SHADOW'S** (the F1 review's note, O-335): a talent, a
+  // discount or a Signature that names a school reads `schools.mjs#bonusSchool`, so a
+  // Warlock's Shadow discounts still reach Drain Life; for the seven it is the spell's own.
+  const discountSchool = bonusSchool({ school, damageSchool: sys.damage?.school ?? null });
+  const discount = viaItem || free ? { amount: 0, by: [] } : spellDiscountFor(talentsNow, { school: discountSchool, mana: sys.mana ?? 0, states: veinsStates(flaggedEffects(actor, VEINS_FLAG).map(r => r.flag)), pool: talentPool?.pool ?? null });
+  const manaDue = spellManaCost({ mana: sys.mana ?? 0, name: spell.name, school: discountSchool }, actor.system?.signatureEffects, { viaItem: Boolean(viaItem) || Boolean(free), next: take.amount, less: discount.amount });
   // **WHAT A COUNTER OR A CHARGE BUYS, JUDGED AGAIN** (D-774): a ticked line no
   // longer offered - its counter or charge spent since the dialog opened -
   // refuses the cast in words with nothing spent. An item's casting and a free
@@ -3662,6 +3834,14 @@ export async function castSpell({
   // 04's Garrote (D-773): *cannot cast while that Bleeding lasts* - the
   // Bleeding's own effect carries the mark, so it ends with the Bleeding.
   const noCasting = noCastingFrom((actor.effects ?? []).filter(e => e.active !== false).map(e => e.flags?.["azeroth-rpg"] ?? {}));
+  // **07 §17's RAISE DRACOLICH, BELOW A RUNIC POWER CAP OF 15** (the plan's *Charisma 20 for Raise
+  // Dracolich*): a knight whose cap can never hold the price is refused in those words, before the
+  // pool's own refusal says only that there is not enough in it.
+  const capRow = raiseOf(sys.identifier);
+  if (capRow && raiseCapRefusal(capRow, { cap: runicPowerCap(actor.system?.abilities?.cha?.mod ?? 0) })) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Raise.Refuse.cap", { name: actor.name, spell: spell.name, n: capRow.capAtLeast }));
+    return null;
+  }
   const refused = castRefusal({ mana, pool, inForm, ferocity, health, overchannelHealth: oc.health, spellHealth, noCasting, payWith: talentPool?.pool ?? null, payPool });
   // **A PRICE WITH NOTHING TO PAY IT** (door 8): a learned spell on a class that
   // holds no Mana was cast free; it is refused in words now, nothing spent.
@@ -3737,7 +3917,7 @@ export async function castSpell({
   // uses the round's record, marked once the cast is paid for.
   // And 04's Fire Blast (*Once a round, a Fire spell of yours costs a Half-Action
   // rather than an action*; D-775): the same line, by the spell's school.
-  const swiftRow = swift && !viaItem ? castAsFor(talentsNow, { action: sys.action ?? null, healing: isHealingSpell(sys), name: spell.name, school }) : null;
+  const swiftRow = swift && !viaItem ? castAsFor(talentsNow, { action: sys.action ?? null, healing: isHealingSpell(sys), name: spell.name, school: discountSchool }) : null;
   const swiftCounter = swiftRow && !swiftRow.perRound ? (actor.grantedFeature?.(swiftRow.talentId) ?? null) : null;
   const swiftFight = swiftRow?.perRound ? (actor.activeFight?.() ?? null) : null;
   const swiftMine = swiftFight ? (swiftFight.getCombatantsByActor(actor)?.[0] ?? null) : null;
@@ -4110,6 +4290,21 @@ export async function castSpell({
   if(!healingSignaturePreparation.ok){
     if(healingSignaturePreparation.reason!=="cancelled")ui.notifications?.warn(game.i18n.localize("AZEROTH.Signature.ChosenTargetRequired"));
     return null;
+  }
+  // **07 §17's RAISES AND THE CORPSES' MARKS, JUDGED BEFORE ANYTHING IS PAID** (the Death Knight
+  // plan's *Raising the dead*; D-768): the corpses chosen, the knight's token, a GM to place the
+  // dead and Raise Dracolich's cap - each refused in words with nothing spent - and made once the
+  // Casting Test succeeds, below.
+  let raisePlan = null;
+  let corpsePlan = null;
+  if (raiseOf(sys.identifier)) {
+    const { judgeRaise } = await import("../effects/death-knight-necromancy.mjs");
+    raisePlan = await judgeRaise(actor, spell, { key: sys.identifier, source });
+    if (!raisePlan) return null;
+  } else {
+    const { judgeCorpseMark } = await import("../effects/death-knight-necromancy.mjs");
+    corpsePlan = await judgeCorpseMark(actor, spell, { source });
+    if (corpsePlan === false) return null;
   }
 
   // 1b. The turn's budget, in a fight (2026-09-06): the spell's Action line, or
@@ -4622,12 +4817,21 @@ export async function castSpell({
   // on the cast's hit where it deals one, else on its tick (MY READING, for the
   // lead: *its damage* is the tick of a spell whose damage is its tick).
   const promisedDamage = (convertLine?.amount ?? 0) + take.damage;
-  const hitAdd = castDealsDamage(sys) ? promisedDamage : 0;
+  // **07's GLACIAL ADVANCE** (*takes 5 Frost damage plus half your casting modifier, rounded
+  // down*; D-974): what the entry's own words add to the Rating, at the ability the cast uses,
+  // once a creature as the Rating is (`rules/spell-effects.mjs#castingModPlus`). An item's cast
+  // has no casting modifier of its own.
+  const castModAdd = viaItem ? 0 : castingModPlus(sys.effect ?? "", { ability, mod: abilityMod });
+  const hitAdd = castDealsDamage(sys) ? promisedDamage + castModAdd : 0;
   const tickAdd = castDealsDamage(sys) ? 0 : promisedDamage;
   // A talent that raises this spell's Damage Rating (2026-09-07): the
   // Warlock's *Shadow Bolt* reads *Each rank adds 1 to its Damage Rating*, and
   // the words reached the card as a note while the number reached nothing.
-  const talentDamage = spellDamageFor(actor.takenTalents(), { name: spell.name, school });
+  // **A DEATH SPELL'S BONUSES ARE SHADOW'S** (D-941): `rules/schools.mjs#bonusSchool` is the
+  // school a talent's spell damage, its Ward pierce and the lane read - the spell's own for
+  // the seven, the damage it deals for an access-only school.
+  const bonusKey = bonusSchool({ school, damageSchool });
+  const talentDamage = spellDamageFor(actor.takenTalents(), { name: spell.name, school: bonusKey });
   // **WHAT THE CASTER STANDS ON, IN ONE FUNCTION** (D-756): Spellpower (tier 3
   // up, 07 §9), a Corruption rung's Damage Rating (10 §4, §9), the talent rows
   // above, a Signature scoped to a school's spells (08 §20, D-692) or to this
@@ -4669,7 +4873,7 @@ export async function castSpell({
   // the Fire spell cast at a Half-Action through its line.
   const lavaPierce = pierceLine && success ? pierceLine.amount : 0;
   const blastPierce = castSwift ? Math.max(0, Math.trunc(Number(swiftRow?.pierce)) || 0) : 0;
-  const wardPierce = Math.max(0, Math.trunc(Number(actor.spellWardPierce?.(school)) || 0)) + lavaPierce + blastPierce;
+  const wardPierce = Math.max(0, Math.trunc(Number(actor.spellWardPierce?.(bonusKey)) || 0)) + lavaPierce + blastPierce;
   if (lavaPierce > 0 && await strikeTalentUse(actor, pierceLine.identifier)) {
     roll.options.provenance.push({ label: pierceLine.name, value: null, formula: game.i18n.format("AZEROTH.Cast.WardPierceRow", { n: lavaPierce }) });
   }
@@ -4757,6 +4961,17 @@ export async function castSpell({
   const boostOf = t => charged + surgeAdd + gritOut.damage + (steel.by[targetActorOf(t)?.uuid] ?? 0);
   const forcedFor = t => (boostOf(t) ? (ratingFor(t).rating ?? 0) + extras + boostOf(t) : null);
   const damageByTarget = list.map((t,index) => (hit ? mitigate(t, forcedFor(t),{signatureIndex:index}) : null));
+  // **07's DEATH COIL ON AN UNDEAD CREATURE** (the Death Knight plan's door 3: *Cast on an
+  // undead creature it heals instead: the target regains 4 Health and takes no damage*): each
+  // undead target (`creature-kinds.mjs#kindsOf` - a Death Knight, a Forsaken, a raised
+  // creature) takes no damage, and its heal is set below; no damage means no drain.
+  const undeadHeal = success ? undeadHealFromText(sys.effect) : null;
+  const sparedUndead = list.map(t => {
+    const who = targetActorOf(t);
+    return Boolean(undeadHeal) && Boolean(who) && kindsOf(creatureSnapshot({ type: who.type, system: who.system, race: who.raceItem?.name ?? null })).has("undead");
+  });
+  for (const [i, spared] of sparedUndead.entries()) if (spared) damageByTarget[i] = null;
+  const allSparedUndead = list.length > 0 && sparedUndead.every(Boolean);
   // **A SPELL WITH NO DAMAGE FIELD MEETS THE WARD ON ITS SUCCESS LEVEL** (07 SS9, 05 SS15;
   // O-262, D-905): each creature's Ward in the spell's school, off the target snapshot, for
   // the riders read below and recorded for the card's Resist (`slRiderWard`).
@@ -4791,7 +5006,7 @@ export async function castSpell({
     ? list.map((t,index) => Array.from({ length: 4 }, (_, shortage) =>
       mitigate(t, (ratingFor(t).rating ?? 0) + extras + charged + shortage,{signatureIndex:index})))
     : null;
-  const damageResult = hit ? (damageByTarget[0] ?? mitigate(null, (charged + surgeAdd + gritOut.damage) ? (rating ?? 0) + charged + surgeAdd + gritOut.damage : null)) : null;
+  const damageResult = hit && !allSparedUndead ? (damageByTarget[0] ?? mitigate(null, (charged + surgeAdd + gritOut.damage) ? (rating ?? 0) + charged + surgeAdd + gritOut.damage : null)) : null;
   // What the card's one button adds where no target is recorded (Static Charge, Void Surge).
   const looseBoost = charged + surgeAdd + gritOut.damage;
   // **WHAT A CREATURE THAT PASSES ITS TEST TAKES** (07's *and half of that, rounded down,
@@ -5156,7 +5371,7 @@ export async function castSpell({
   // Barrier, Earthskin, Necrotic Shell, Soulshield; 04's Power Word: Shield and
   // Ice Barrier, *Each rank adds 2*; D-777): read off the entry, raised by the
   // talent, carried on the card and granted with the effect its Apply lays.
-  const temporary = success ? castTemporary(spell, talentsNow, actor) : null;
+  const temporary = success ? castTemporary(spell, talentsNow, actor, { castingMod: abilityMod }) : null;
   if (temporary) for (const b of temporary.by) roll.options.provenance.push({ label: b.name, value: null, formula: game.i18n.format("AZEROTH.Temporary.AddRow", { n: b.amount }) });
   // **07's FLOOR** (Aegis of the Light; D-777): laid by the Apply on each target,
   // held at the one damage door until the end of the caster's next turn.
@@ -5329,6 +5544,9 @@ export async function castSpell({
   const heldTick = hasAreaTick(sys.areaTick)
     ? (viaItem ? foundry.utils.deepClone(sys.areaTick) : hearthfireTick(foundry.utils.deepClone(sys.areaTick), talentsNow, spell.name, talentEffect))
     : null;
+  // **A TICK WORTH THE CASTER'S MODIFIER** (07 §17's Death and Decay: *Shadow damage equal to
+  // your casting modifier*; run F2): the number stamped now, off the ability the cast uses.
+  if (heldTick?.damage?.ratingFrom === "castingMod") heldTick.damage = { ...heldTick.damage, rating: Math.max(0, abilityMod) || null };
   // **04's ANCHOR OF AGES** (*A creature that starts its turn inside your Arcane Anchor must
   // pass a Spirit Resilience Test against your Spell DC or be Entangled while it stays
   // there*; stage 3B): the caster's own copy of the tick, a check added, whether or not the
@@ -5442,6 +5660,14 @@ export async function castSpell({
       healByTarget[i] = recentHealFor(targetActorOf(t)?.getFlag?.("azeroth-rpg", LEDGER_FLAG) ?? [], since, { cap: recentHeal.cap, time: game.time?.worldTime ?? 0 });
     }
   }
+  // **AND THE UNDEAD DEATH COIL HEALS INSTEAD** (door 3): each spared target restores the
+  // clause's number, given by the caster as a Death spell, so the one healing judgement lets it
+  // land on a Death Knight and its raised dead.
+  if (undeadHeal && sparedUndead.some(Boolean)) {
+    if (!heal || heal.self) heal = { amount: undeadHeal, perTarget: true, explanation: game.i18n.format("AZEROTH.Card.HealUndeadInstead", { n: undeadHeal }) };
+    else heal.perTarget = true;
+    for (const [i, spared] of sparedUndead.entries()) healByTarget[i] = spared ? undeadHeal : (healByTarget[i] ?? null);
+  }
 
   // **WHAT THE TALENTS LAY BESIDE THE SPELL'S OWN** (D-774): Pain Suppression's
   // rank on the laid effect's damage reduction, and Void Eruption's Silenced on a
@@ -5490,6 +5716,10 @@ export async function castSpell({
     sustaining.push({
       spellId: spell.id, uuid: spell.uuid, name: spell.name, itemId: holdPool.itemId,
       ...(holdPool === payPool && talentPool?.pool && talentPool.pool !== "mana" ? { pool: talentPool.pool } : {}),
+      // **CAST WITH RUNIC POWER, IT OWES NO UPKEEP** (D-949; the lead: *"should not have a
+      // sustain cost if the caster uses Runic Power to cast them"*): decided here, at the
+      // cast, off the pool it was paid in, and read by `turn-effects.mjs#upkeep`.
+      ...(holdPool === payPool && sustainUpkeepFree(talentPool?.pool ?? null) ? { upkeepFree: true } : {}),
       // WHICH CAST IS HELD, WHAT IT WAS AIMED AT AND WHO HOLDS IT (D-724): the
       // same `cast` the card carries, and the targets as ids alone - an entry
       // is a record of the moment, and the snapshot's Defense and Ward are the
@@ -5552,6 +5782,46 @@ export async function castSpell({
     condition: failRider.status ? game.i18n.localize(AZEROTH.conditions[failRider.status] ?? failRider.status) : "",
     creature: failRider.creature ?? "", tier: failRider.tier ?? ""
   }));
+  // **THE DEAD RISE, OR THE CORPSE IS MARKED** (07 §17), once the Casting Test has succeeded: a
+  // failed cast spends its Runic Power and raises nothing (07 §8).
+  const raiseLines = [];
+  // **WHAT ROSE, FOR THE CARD** (run F5): the tokens the raise door placed, which the card records
+  // as `risen` and the animation layer plays its `rise` cue on (`animation/records.mjs#cardRecords`).
+  const raisedMade = [];
+  if (success && raisePlan) {
+    const { raiseDead, refundRefusedRaise } = await import("../effects/death-knight-necromancy.mjs");
+    // **A RAISE THE GM'S CLIENT REFUSES GIVES ITS PRICE BACK** (the final review's finding 2,
+    // D-997): the pool this cast was paid from, by the payment's own branches above.
+    const raisePaidPool = price.pool === "ferocity" ? ferocity : price.pool === "mana" && !sandCastLine ? pool
+      : payPool && price.pool === payPool.name ? payPool : null;
+    const raisePaid = price.pool === "mana" ? mana : price.amount;
+    const raiseRefunds = [];
+    raiseLines.push(...await raiseDead(actor, raisePlan, { onRisen: placed => {
+      const risen = risenRecord(placed);
+      if (risen) raisedMade.push(risen);
+    }, onRefused: async () => {
+      raiseRefunds.push(...await refundRefusedRaise(actor, { pool: raisePaidPool, amount: raisePaid, spell: spell.name }));
+    } }));
+    raiseLines.push(...raiseRefunds);
+  } else if (success && corpsePlan) {
+    const { markCorpse } = await import("../effects/death-knight-necromancy.mjs");
+    raiseLines.push(...await markCorpse(actor, corpsePlan));
+  }
+  // **WHERE THE CORPSE LAY, FOR THE CARD** (D-1014, O-383): the corpse the marking spell chose, its
+  // centre as the board holds it now, before anything can move it - the record a `corpse`
+  // placement draws the burst at. Nothing where the cast chose none or its token is gone.
+  const corpseDoc = corpsePlan ? game.scenes?.get(corpsePlan.sceneId)?.tokens?.get(corpsePlan.corpse) ?? null : null;
+  const corpseGrid = corpseDoc?.parent?.grid ?? null;
+  const corpseMade = corpseDoc ? corpseRecord({
+    sceneId: corpseDoc.parent.id, tokenId: corpseDoc.id, from: { x: corpseDoc.x, y: corpseDoc.y }, width: corpseDoc.width, height: corpseDoc.height,
+    sizeX: corpseGrid?.sizeX ?? corpseGrid?.size ?? 100, sizeY: corpseGrid?.sizeY ?? corpseGrid?.size ?? 100
+  }) : null;
+  // **AND WHAT A DEATH KNIGHT SPELL DOES THAT NO DESCRIPTOR CARRIES** (run F4b), once the Casting
+  // Test has succeeded: Frostwyrm Breath's Entangled, Death Pact, Horn of Winter, Plaguesight.
+  if (success && dkSpellPlan) {
+    const { dkSpellAfterCast } = await import("../effects/death-knight-spells.mjs");
+    raiseLines.push(...await dkSpellAfterCast({ actor, spell, plan: dkSpellPlan, list, spellDC, cast, source }));
+  }
   const content = await renderTemplate(TEMPLATE.spell, {
     dismissEverburn:success&&sys.identifier==='everburn',
     chainLightning: sys.identifier === "chain-lightning",
@@ -5559,8 +5829,10 @@ export async function castSpell({
     bloodPactSpell: Boolean(bloodPactTools),
     config: AZEROTH,
     title: spell.name,
-    subtitle: game.i18n.localize(AZEROTH.schools[school] ?? ""),
+    subtitle: game.i18n.localize(AZEROTH.spellSchools[school] ?? ""),
     mana,
+    // The word the cost is printed in (`casting.mjs#spellCostLabel`, D-944).
+    manaLabel: spellCostLabel({ costPool: sys.costPool ?? "mana", paidIn: talentPool?.pool ?? null }),
     action: sys.action,
     range: sys.range,
     target: sys.target,
@@ -5627,7 +5899,7 @@ export async function castSpell({
     // Speed drop or the Slowed a hit laid, the forced move a failed Test or the
     // area makes, the escape a held or Stunned creature is given, and a laid
     // effect no Dispel may end.
-    crossLines: crossCardLines({ speedLines, conditionLines, forced, escape, undispellable, stepLines, splashLines, namedLines, struckLines }),
+    crossLines: crossCardLines({ speedLines, conditionLines, forced, escape, undispellable, stepLines, splashLines, namedLines, struckLines, raiseLines }),
     targets: list.map((t, index) => ({ ...t, index, damage: damageByTarget[index]?.damage ?? null, healAmount: healByTarget[index] ?? null })),
     // **WHAT THE CARD OFFERS AFTER THE DIE** (D-774): Overload's second firing and
     // Ancestral Knowledge's Mana back, each a button that strikes a use.
@@ -5680,6 +5952,8 @@ export async function castSpell({
         // token and has nothing to do with the render context's `source`, which
         // is the *From item* line.
         identifier: sys.identifier ?? null,
+        // What a Death Knight spell's Apply reads (07 §17's Pestilence: the carrier's diseases; run F4b).
+        ...(dkSpellPlan?.card ? { deathKnightSpell: dkSpellPlan.card } : {}),
         // What lands again at the caster's next turn start (02's Recurrence, 04's Echoing Sands).
         // **AND THE TEST IT IS MADE AGAIN WITH** (02's Recurrence and 08 §20's Echo of the
         // Infinite: *A creature makes the spell's Resilience Test again when it lands again*;
@@ -5709,6 +5983,11 @@ export async function castSpell({
         // Passage; the Legacy branches' door 2): each move's centre before and after,
         // made by `castStepLines` on the pick it answered.
         ...(stepPicked?.made?.length ? { steps: stepPicked.made } : {}),
+        // **WHAT A RAISE SPELL STOOD UP** (07 §17, run F5), read by the animation layer alone.
+        ...(raisedMade.length ? { risen: raisedMade } : {}),
+        // **WHERE THE CORPSE A MARKING SPELL CHOSE LAY** (07 §17's Corpse Burst; D-1014), read by the
+        // animation layer alone: the burst is drawn there.
+        ...(corpseMade ? { corpse: corpseMade } : {}),
         ...(spellCrossing && stepPicked?.made?.length ? { spellCrossing: {
           descriptor: spellCrossing, sceneId: stepPicked.doc.parent.id, tokenId: stepPicked.doc.id,
           spell: {type:'spell',system:{target:sys.target,duration:sys.duration,effect:sys.effect}},
@@ -5832,6 +6111,9 @@ export async function castSpell({
         // Hours' 10 feet, a record of the cast the Apply stamps on the caster's effect.
         ...(success && sandAuraOf(sys) ? { sandAura: sandAuraOf(sys) } : {}),
         duration,
+        // The SPELL's own school (D-946): a Death Knight is healed by another creature's
+        // Death spell alone, and the card's Apply hands this to the one healing door.
+        castSchool: sys.school ?? null,
         spellName: spell.name,
         spellImg: spell.img,
         effectHTML: await enrich(sys.effect, { relativeTo: spell })
@@ -6033,11 +6315,13 @@ export async function castSpell({
  * @param {Actor} actor
  * @returns {{amount: number, by: Array<{name: string, amount: number}>}|null}
  */
-function castTemporary(spell, talents = [], actor = null) {
+function castTemporary(spell, talents = [], actor = null, { castingMod = 0 } = {}) {
   const sys = spell?.system ?? {};
   const read = readTemporaryHealth(sys.effect ?? "");
   if (!read?.amount || read.span !== "effect" || sys.applies?.active !== true) return null;
-  const base = Math.max(0, Math.trunc(Number(evaluateAmount(read.amount, { level: actor?.system?.level ?? 1, tier: actor?.system?.tier ?? 1 }))) || 0);
+  // 07 §17's Unholy Armor: *2 plus your casting modifier*, the cast's own modifier (run F4b).
+  const plus = read.castingMod === true ? Math.trunc(Number(castingMod)) || 0 : 0;
+  const base = Math.max(0, (Math.trunc(Number(evaluateAmount(read.amount, { level: actor?.system?.level ?? 1, tier: actor?.system?.tier ?? 1 }))) || 0) + plus);
   const more = spellTempFor(talents, { name: spell?.name ?? "" });
   const amount = base + more.add;
   return amount > 0 ? { amount, by: more.by } : null;
@@ -6121,9 +6405,11 @@ async function castStepLines({ actor, spell, step = null, picked = null, success
  * @param {{speedLines?: string[], forced?: object|null, escape?: object|null, undispellable?: {by: string}|null}} o
  * @returns {Array<{label: string, text: string}>}
  */
-function crossCardLines({ speedLines = [], conditionLines = [], forced = null, escape = null, undispellable = null, stepLines = [], splashLines = [], namedLines = [], struckLines = [] } = {}) {
+function crossCardLines({ speedLines = [], conditionLines = [], forced = null, escape = null, undispellable = null, stepLines = [], splashLines = [], namedLines = [], struckLines = [], raiseLines = [] } = {}) {
   const out = [];
   const label = key => game.i18n.localize(key);
+  // The dead a raise stood up, or the corpse a spell marked (07 §17; the Death Knight plan).
+  for (const text of raiseLines) out.push({ label: label("AZEROTH.Raise.Label"), text });
   // Where the spell moved its caster and its targets (the Legacy branches' door 3).
   for (const text of stepLines) out.push({ label: label("AZEROTH.Step.Label"), text });
   // The creatures named at the cast, whom the area lets be (the B9a pass).
@@ -7135,9 +7421,15 @@ export async function useFeature({
   // `widen` on the talent's own patch (`rules/class-talents.mjs#reachWidenFor`), added to the
   // distance 02's words state - the patch widened the stamp's area words, which no door judged by.
   const classFeature = item?.type === "feature" && !item.getFlag?.("azeroth-rpg", "feature")?.talentId;
+  // **04's ICY GRIP AT RANK 2** (*Death Grip's range is 60 feet*; the F2 review's note: the law
+  // `rules/death-knight.mjs#deathGripFeet` had no caller): Death Grip's reach is widened by what
+  // that law adds over 02's 30 feet, read by identifier as the law reads it.
+  const gripWiden = classFeature && item.name === DEATH_GRIP.feature
+    ? (n => (n > 0 ? { add: n, by: ["Icy Grip"] } : null))(deathGripFeet(actor.takenTalents?.() ?? []) - DEATH_GRIP.feet)
+    : null;
   const reachWiden = classFeature && item.name === CHRONO_FEATURES.slipstream.feature
     ? slipstreamFor(actor.takenTalents?.() ?? [], talentEffect)
-    : (classFeature ? reachWidenFor(actor.takenTalents?.() ?? [], item.name) : null);
+    : (gripWiden ?? (classFeature ? reachWidenFor(actor.takenTalents?.() ?? [], item.name) : null));
   if (refuseOutOfRange(useRangeRefusal({ actor, name: item?.name ?? "", text: useTextOf(item, actor), targets: list,
     cardTargets: cardTargetsOf(answers ?? foresight), answering: Boolean(answers || foresight) || item?.system?.action === "reaction", source,
     widen: reachWiden }))) return null;
@@ -7245,6 +7537,26 @@ export async function useFeature({
   if (onUse?.restoreAllPower) {
     const { useHungerMastered } = await import('../effects/hunger-mastered.mjs');
     return useHungerMastered(actor, item);
+  }
+  // **02's INSCRIBED RUNEWEAPON** (the Death Knight plan's door 1): its own door, which asks
+  // the window, the grips and the ratios through the one chooser and spends nothing.
+  if (onUse?.inscribe === true) {
+    const { useInscription } = await import("../effects/death-knight.mjs");
+    return useInscription(actor, item);
+  }
+  // **A MOUNT MADE OVER A LONG REST** (02's Deathcharger, Charger's Blessing and Ritual of the
+  // Steed; the Death Knight plan's door 9): its own door, which asks the window, the mount and
+  // the kind through the one chooser and spends nothing.
+  if (onUse?.mountWork) {
+    const { useMountWork } = await import("../effects/mount-works.mjs");
+    return useMountWork(actor, item, onUse.mountWork);
+  }
+  // **02's UNHOLY PRESENCE: *until you end it*** (door 10): a Use while the presence stands ends
+  // it for nothing - asked here, before the price is judged, so a knight short of 8 Runic Power
+  // can still end what it holds.
+  if (onUse?.unholyPresence) {
+    const { endStandingPresence } = await import("../effects/death-knight-necromancy.mjs");
+    if (await endStandingPresence(actor)) return null;
   }
   if (onUse?.rocketJump === true) {
     const { requestRocketJump } = await import("../effects/rocket-jump-use.mjs");
@@ -8989,10 +9301,64 @@ export async function useFeature({
       { name: item.name, pool: game.i18n.localize(AZEROTH.costPoolTypes[sys.cost.pool] ?? sys.cost.pool), amount: sys.cost.amount }));
     return undoBinds();
   }
+  // **UNHOLY PRESENCE ENDS FOR NOTHING** (02 §7: *until you end it*; the final review's finding
+  // 3, D-997): a Use while the presence stands ends it BEFORE any price is judged, so a knight
+  // below the 8 Runic Power a new presence costs can still end the one standing. The plan's
+  // judgement below asks the same and finds nothing standing.
+  if (onUse?.unholyPresence) {
+    const { endStandingPresence } = await import("../effects/death-knight-necromancy.mjs");
+    if (await endStandingPresence(actor)) return undoBinds();
+  }
+  // **A PRICE IN RUNES IS JUDGED BY KIND** (D-943; the Death Knight plan's door 2): the runes
+  // pool counts every unspent rune, so a Blood or a Frost price asks the one law
+  // (`runes.mjs#spendRefusal`) before the budget, and is paid below through the one rune door.
+  const runeKind = sys.cost?.pool === RUNES ? (onUse?.runes?.kind ?? "any") : null;
+  if (runeKind && !payment.refusal) {
+    const short = spendRefusal(actor.system?.runes?.weapons ?? [], { kind: runeKind, count: Math.max(1, payment.spent) });
+    if (short) {
+      ui.notifications?.warn(game.i18n.format(`AZEROTH.Runes.Refuse.${short}`, { name: actor.name, n: Math.max(1, payment.spent) }));
+      return undoBinds();
+    }
+  }
   if (payment.refusal === "Short") {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Feature.NoPool",
       { name: item.name, pool: game.i18n.localize(AZEROTH.poolTypes[pool.name] ?? pool.name), amount: payment.spent }));
     return undoBinds();
+  }
+  // **02's DESECRATION NEEDS SOMEWHERE TO STAND** (the F2 review's should-fix 5): the knight's
+  // token on a scene, asked before the budget and the payment (D-768's order).
+  if (onUse?.desecration === true) {
+    const { desecrationSite } = await import("../effects/death-knight.mjs");
+    if (!desecrationSite(actor, useSource)) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.DeathKnight.Desecration.NoToken", { name: actor.name }));
+      return undoBinds();
+    }
+  }
+  // **SPIRIT WALK IS A DISENGAGE, AND WHAT BARS ONE BARS IT** (the F4b review, S5): an Anchor,
+  // Heavy Hours, Relentless Advance and Chains of Ice, asked at the one door every Disengage asks,
+  // before the budget and the payment.
+  if (ps.walk) {
+    const { refuseDisengage } = await import("../effects/disengage-bars.mjs");
+    if (await refuseDisengage(actor)) return undoBinds();
+  }
+  // **THE DEATH KNIGHT'S RAISES AND PRESENCES, JUDGED BEFORE ANYTHING IS PAID** (doors 10 to
+  // 12): Army of the Dead's corpses and the GM who places them, the one presence a knight
+  // holds, March of the Damned's token (`effects/death-knight-necromancy.mjs#judgeUse`).
+  let dkPlan = null;
+  let raiseRefused = false;
+  if (onUse?.unholyPresence || onUse?.armyOfTheDead || onUse?.marchOfTheDamned) {
+    const { judgeDeathKnightUse } = await import("../effects/death-knight-necromancy.mjs");
+    dkPlan = await judgeDeathKnightUse(actor, item, { onUse, source: useSource });
+    if (!dkPlan) return undoBinds();
+  }
+  // **A DEATH KNIGHT TALENT'S USE, JUDGED BEFORE ANYTHING IS PAID** (04's Blood and Frost; run
+  // F4a): Mark of Blood's creature, Blood Tap's spent rune, Empower Runeweapon's Fevers judged
+  // whole, Icebound Fortitude refused off the sheet (`effects/death-knight-talents.mjs#judgeDkUse`).
+  let dkTalentPlan = null;
+  if (onUse?.dk) {
+    const { judgeDkUse } = await import("../effects/death-knight-talents.mjs");
+    dkTalentPlan = await judgeDkUse({ actor, item, onUse, rank, list: list.map(x => ({ actor: targetActorOf(x), tokenId: x?.tokenId ?? null, name: x?.name ?? "" })) });
+    if (!dkTalentPlan) return undoBinds();
   }
 
   // 1e. **THE RUNG A USE OF TWO IS TAKEN AT** (04's Ethereal Form: *At rank 2 you may use
@@ -9163,6 +9529,8 @@ export async function useFeature({
       return undoBinds();
     }
   }
+  // What the rune door spent, where the budget was paid inside it (the F2 review's must-fix 1).
+  let runesPaid = null;
   if (ps.walk && mine) {
     if (!(await mine.spendMoveAction()).ok) return undoBinds();
   } else if (negating?.answeredWithLost) {
@@ -9174,6 +9542,15 @@ export async function useFeature({
     // *paying the totem's Mana and no Half-Action for it*): no budget is asked.
   } else if (actionNow === "reaction" && await secondReactionSpend(actor, item.name)) {
     // Ten Thousand Years of Practice's second Reaction paid it (D-912).
+  } else if (runeKind && !paysOnSuccess(sys) && payment.spent > 0) {
+    // **A RUNE PRICE AND ITS HALF-ACTION, JUDGED AND PAID IN THE RUNE DOOR** (the F2 review's
+    // must-fix 1, D-768's order): the runes judged again on the queued fresh read, then the
+    // budget, then the write - so a double press refuses the second in words before its
+    // Half-Action is spent, and a budget that refuses spends no rune.
+    // The Use's privacy pair rides the rune flare's record (D-1013): its card decides who sees it.
+    runesPaid = await spendRunesOn(actor, { kind: runeKind, count: payment.spent, before: () => spendTurnBudget(actor, shiftFree ? null : actionNow),
+      privacy: featurePrivacyKey(actor.id, useKey) });
+    if (!runesPaid.ok) return undoBinds();
   } else if (!(await spendTurnBudget(actor, shiftFree ? null : actionNow))) return undoBinds();
   if (foresightCommit !== null && !foresightCommitValid(actor, foresight, foresightCommit)) return null;
   if (spellstealCommit !== null && !spellstealUseValid(actor, item, spellstealCommit)) return null;
@@ -9208,7 +9585,14 @@ export async function useFeature({
     const poolNow = (actor.poolSnapshot?.() ?? []).find(p => p.itemId === pool.itemId && p.kind === pool.kind && p.name === pool.name) ?? pool;
     if (foresightCommit !== null && (poolNow.value < spent || !foresightCommitValid(actor, foresight, foresightCommit))) return null;
     if (spellstealCommit !== null && (poolNow.value < spent || !spellstealUseValid(actor, item, spellstealCommit))) return null;
-    if (spent > 0) await actor.updatePool({ itemId: pool.itemId, kind: pool.kind, value: payFromNow(poolNow.value, spent).value });
+    // A rune price is spent through the ONE rune door, which gives each rune its Runic Power
+    // (the lead: *"runes being consumed for any reason ... provide runic power"*), never a pool write -
+    // above, with its Half-Action, where the budget was this Use's to spend; here otherwise, and
+    // a door that refuses stops the Use in its own words (the F2 review's must-fix 1).
+    if (spent > 0 && runeKind) {
+      if (!runesPaid) runesPaid = await spendRunesOn(actor, { kind: runeKind, count: spent, privacy: featurePrivacyKey(actor.id, useKey) });
+      if (!runesPaid.ok) return null;
+    } else if (spent > 0) await actor.updatePool({ itemId: pool.itemId, kind: pool.kind, value: payFromNow(poolNow.value, spent).value });
     if (spellstealCommit !== null && (!spellstealUseValid(actor, item, spellstealCommit)
       || (actor.poolSnapshot?.() ?? []).find(p => p.itemId === pool.itemId && p.kind === pool.kind)?.value !== poolNow.value - spent)) return null;
     if (foresightCommit !== null && (!foresightCommitValid(actor, foresight, foresightCommit)
@@ -9249,6 +9633,33 @@ export async function useFeature({
   // 2a. The creature a dismissal named goes, now that the use is paid for
   // (Demonic Sacrifice; D-643, D-768).
   if (dismissPick) await release(actor, dismissPick.uuid);
+  // **02's DESECRATION** (D-938), now that it is paid for: the ground laid where the knight
+  // stands, the area pipeline's to strike and to sweep once it stands.
+  if (onUse?.desecration === true) {
+    const { placeDesecration } = await import("../effects/death-knight.mjs");
+    answerLines.push(await placeDesecration(actor, { item, source: useSource }));
+  }
+  // **02's UNHOLY PRESENCE, ARMY OF THE DEAD AND MARCH OF THE DAMNED** (doors 10 to 12), now
+  // that each is paid for: the presence laid, the dead raised, the march laid - each through
+  // its one door, judged again where the world could have moved.
+  if (dkPlan) {
+    const { landDeathKnightUse, refundRefusedRaise } = await import("../effects/death-knight-necromancy.mjs");
+    // Army of the Dead's risen dead ride the card as every summon's do (`noteRisen`, run F5).
+    // A raise the GM's client refuses gives back what this Use paid and keeps its use (the final
+    // review's finding 2, D-997): the price off the pool it was paid from, and step 5 strikes no use.
+    const raiseRefunds = [];
+    answerLines.push(...await landDeathKnightUse(actor, item, dkPlan, { onRisen: noteRisen, onRefused: async () => {
+      raiseRefused = true;
+      raiseRefunds.push(...await refundRefusedRaise(actor, { pool: runeKind ? null : pool, amount: runeKind ? 0 : spent, spell: item.name, useKept: Boolean(sys.uses?.per) }));
+    } }));
+    answerLines.push(...raiseRefunds);
+  }
+  // **AND A DEATH KNIGHT TALENT'S** (run F4a), now that it is paid for: the Health, the state
+  // laid on the knight, the runes refilled, the Fevers ended.
+  if (dkTalentPlan) {
+    const { landDkUse } = await import("../effects/death-knight-talents.mjs");
+    answerLines.push(...await landDkUse({ actor, item, plan: dkTalentPlan }));
+  }
   // 2b. **THE SHAPE, NOW THAT IT IS PAID FOR** (D-769): the one writer, which
   // replaces a shape already worn in one go and dresses every token. A form
   // taken for the first time is learned beside it (D-619), and Metamorphosis
@@ -10613,6 +11024,10 @@ export async function useFeature({
   // start of a turn, its span, and which Use placed it.
   const useAreaTick = success && area && mw.areaTick ? mw.areaTick : null;
   const useCast = useAreaTick ? foundry.utils.randomID() : null;
+  // **02's DEATH GRIP** (door 5): the pull a failed Body Test makes, worked out off the two
+  // footprints now, carried on the card for its Resist door, with the size rule's waiver.
+  const gripForced = onUse?.deathGrip === true && list.length
+    ? await (await import("../effects/death-knight.mjs")).deathGripForced(actor, list[0], useSource) : null;
   // Said in words on the card, as a spell's area says it (D-756).
   const useAreaLine = useAreaTick ? areaTickLine(useAreaTick) : null;
   if (useAreaLine?.text) usedLines.push(useAreaLine.text);
@@ -10693,7 +11108,7 @@ export async function useFeature({
 
   // 5. Strike a use.
   let uses = bellowPaidUses;
-  if (sys.uses?.per && !bellowPaidUses && !chrono.noUse) {
+  if (sys.uses?.per && !bellowPaidUses && !raiseRefused && !chrono.noUse) {
     await item.update({ "system.uses.value": Math.max(0, sys.uses.value - 1) });
     uses = { value: item.system.uses.value, max: sys.uses.max };
   }
@@ -10706,7 +11121,8 @@ export async function useFeature({
   // tauren's Rage, Quarry or Ferocity; the B8a pass).
   // A price from any pool names the pool picked (02 §5's Tail Sweep; the lead, 2026-11-09).
   const paidPool = paidFrom === ANY_MOMENTUM || paidFrom === ANY_POOL ? (pool?.name ?? paidFrom) : paidFrom;
-  const costLabel = paidPool ? game.i18n.localize(AZEROTH.costPoolTypes[paidPool] ?? paidPool) : null;
+  // One rune is *Rune* (`rules/runes.mjs#poolLabelKey`; the F2 review's note).
+  const costLabel = paidPool ? game.i18n.localize(poolLabelKey(paidPool, sys.cost?.all ? 2 : spent + successPaid, AZEROTH.costPoolTypes)) : null;
   const content = await renderTemplate(TEMPLATE.feature, {
     config: AZEROTH,
     title: item.name,
@@ -10872,6 +11288,7 @@ export async function useFeature({
       ...(curse && success && !successShort ? { curse: { minutes: curse.minutes } } : {}),
       // 04's Firestorm (D-775): what `dice/chat.mjs#regionFlagsFromCard` copies onto
       // the Region - which Use placed it, who holds it, the tick and its span.
+      ...(gripForced ? { forced: gripForced, forcedIgnoresSize: "nonBoss" } : {}),
       ...(useAreaTick ? {
         cast: useCast, caster: actor.uuid, source: null, identifier: grantingTalent?.system?.identifier ?? null,
         sustained: false, areaTick: useAreaTick, lasts: { rounds: useAreaTick.lasts?.rounds ?? null },
@@ -12235,7 +12652,8 @@ export async function useGear({ actor, item, targets = null } = {}) {
       } else lines.push(game.i18n.localize('AZEROTH.Use.NoFatigue'));
     }
     if (use.heal?.health) {
-      await actor.applyHealing(use.heal.health, { from: actor });
+      // A consumable heals a Death Knight as anyone (D-946): *"normal consumables act as they would for any other player."*
+    await actor.applyHealing(use.heal.health, { from: actor, consumable: true });
       lines.push(game.i18n.format("AZEROTH.Use.Health", { n: use.heal.health }));
     }
     if (use.heal?.mana) {
@@ -12663,7 +13081,8 @@ export async function useSignature({ actor, item, targets = null, approved = nul
   // 4. The numbers.
   const lines = [];
   if (use.heal?.health) {
-    await actor.applyHealing(use.heal.health, { from: actor });
+    // A consumable heals a Death Knight as anyone (D-946): *"normal consumables act as they would for any other player."*
+    await actor.applyHealing(use.heal.health, { from: actor, consumable: true });
     lines.push(game.i18n.format("AZEROTH.Use.Health", { n: use.heal.health }));
   }
   if (use.heal?.mana) {
@@ -14017,6 +14436,9 @@ export async function corruptionExposure({
   // track does, while every other Signature's price is a Spirit Test whatever
   // the track. A track this system does not build is still no Test at all.
   if (!AZEROTH.corruptionResilience[track]) return null;
+  // **A FORSAKEN AND A DEATH KNIGHT ACCRUE NO UNDEATH** (10 §3; D-946): no Test is made,
+  // and the reason is said in words.
+  if (refusesTrack(actor, track)) return null;
   const resilience = named && AZEROTH.resiliences[named] ? named : AZEROTH.corruptionResilience[track];
 
   const roll = AzerothRoll.build({
@@ -14596,6 +15018,21 @@ async function markFreeCast(actor, line) {
   return true;
 }
 
+/**
+ * **WHETHER A CHARACTER IS REFUSED A POINT ON THIS TRACK**, said in words where it is
+ * (`rules/undead.mjs#accruesTrack`, D-946): the Forsaken and a Death Knight accrue no
+ * Undeath, 10 §3's rule that nothing built until the Death Knight plan.
+ */
+function refusesTrack(actor, track) {
+  if (actor?.type !== "character") return false;
+  const race = actor.raceItem?.system?.identifier ?? actor.raceItem?.name ?? null;
+  if (accruesTrack({ track, classes: actor.system?.classKeys ?? [], race })) return false;
+  ui.notifications?.info(game.i18n.format("AZEROTH.Undead.AccruesNone", {
+    name: actor.name, track: game.i18n.localize(AZEROTH.corruptionTracks[track] ?? track)
+  }));
+  return true;
+}
+
 async function accrueCastingCorruption(actor, spell) {
   if (!actor || actor.type !== "character") return null;
   const owed = castingCorruption(spell?.system ?? {});
@@ -14615,6 +15052,9 @@ async function accrueCastingCorruption(actor, spell) {
  */
 export async function accrueCorruption(actor, { track, points = 1, occasion = "" } = {}) {
   if (!actor || actor.type !== "character" || !AZEROTH.corruptionTracks[track]) return null;
+  // **NOR AN UNRESISTED POINT** (10 §3; the lead: *"Death Knight specific spells do not
+  // acrue undeath as they are immune"*; D-946): a tier 5 Death spell's Undeath included.
+  if (refusesTrack(actor, track)) return null;
   const from = actor.system.corruption?.[track] ?? 0;
   // `applyExposure` with `failed: true` is the unresisted case: the point
   // lands, and the clamp at the top of the track is the same one. A

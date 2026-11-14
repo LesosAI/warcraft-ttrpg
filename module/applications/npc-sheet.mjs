@@ -268,9 +268,9 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
       img: doc.img,
       tier: doc.system.tier ?? 1,
       school: doc.system.school ?? null,
-      schoolLabel: AZEROTH.schools[doc.system.school] ?? null,
+      schoolLabel: AZEROTH.spellSchools[doc.system.school] ?? null,
       mana: doc.system.mana ?? null,
-      actionLabel: AZEROTH.actions[doc.system.action] ?? null,
+      actionLabel: AZEROTH.spellActions[doc.system.action] ?? null,
       detail: detailFields(doc),
       description: await detailProse(doc),
       known: true,
@@ -310,7 +310,7 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
     // By tier ascending; a name with no tier at all sorts last. Within a tier
     // the block's rows first (D3 §7), then `AZEROTH.schools`' own key order —
     // a creature has no `system.schools` of its own to order by — then name.
-    const order = Object.keys(AZEROTH.schools);
+    const order = Object.keys(AZEROTH.spellSchools);
     const rank = key => { const i = order.indexOf(key); return i < 0 ? 99 : i; };
     const byTier = new Map();
     for (const row of rows) {

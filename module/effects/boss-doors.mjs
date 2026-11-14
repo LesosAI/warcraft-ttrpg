@@ -203,7 +203,7 @@ async function writeHere(op, data, by) {
     case "heal": {
       if (!actor) return 0;
       const before = actor.system?.health?.value ?? 0;
-      await actor.applyHealing(Math.max(0, Math.trunc(Number(data.amount) || 0)), { from: by ?? null });
+      await actor.applyHealing(Math.max(0, Math.trunc(Number(data.amount) || 0)), { from: by ?? null, givenBy: by ? null : "other" });
       return (actor.system?.health?.value ?? 0) - before;
     }
     case "move": {
@@ -319,6 +319,12 @@ export async function prepareBossPress({ actor, row, targets = [] } = {}) {
   const door = plan.door ?? null;
   const needToken = ["relocateSelf", "selfLine", "gyth", "copies", "allyAttack", "raise", "disengage"].includes(door);
   if (needToken && !own) return refuse("AZEROTH.Boss.NeedsToken", { name, boss: actor.name });
+  // **A BOSS'S DISENGAGE IS A DISENGAGE** (the F4b review, S5): what bars one bars it - an Anchor,
+  // Heavy Hours, Relentless Advance, Chains of Ice - asked at the one door, before the Boss point.
+  if (door === "disengage") {
+    const { refuseDisengage } = await import("./disengage-bars.mjs");
+    if (await refuseDisengage(actor)) return { ok: false };
+  }
 
   if (door === "relocateSelf" || door === "gyth") {
     const feet = door === "gyth" ? (actor.system?.flyingSpeed ?? actor.system?.speed ?? 0) : plan.feet;

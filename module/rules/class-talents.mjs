@@ -164,7 +164,10 @@ export function hitConditionsFor(talents = [], { sl = 0, hit = false, opportunit
     // is Scorched. At rank 2 this happens at SL 1, and at rank 3 on any hit*; stage 3A of
     // the Chromatic Champion plan): a rank's clause lays its own `sl` over the row's.
     const row = atRankOf(base, rank);
-    if (!row.condition) continue;
+    // **A SPEED OF 0 IS NO CONDITION** (04's Relentless Advance at rank 2; the lead, run F4b, D-988:
+    // *"Speed 0"*): a row naming `speedZero` lays the creature's Speed at 0 for its span, with no
+    // condition and no escape Test (`effects/death-knight-talents.mjs#laySpeedZero`).
+    if (!row.condition && row.speedZero !== true) continue;
     // **A COMPANION'S ROW IS THE COMPANION'S** (found reading this for door 22):
     // 04's Ferocious Bite (*When your companion's attack reaches SL 2*) is read off
     // the owner's talents by `companionHitConditionsFor` alone, and this laid its
@@ -174,14 +177,37 @@ export function hitConditionsFor(talents = [], { sl = 0, hit = false, opportunit
     // knocked Prone*; the Legacy branches' door 22): `when: "opportunity"`.
     if (row.when === "opportunity" && opportunity !== true) continue;
     if ((Math.trunc(Number(sl)) || 0) < (Number(row.sl) || 0)) continue;
+    // A span the row names (04's Relentless Advance: *until the end of its turn*; run F4a),
+    // named only where a row names one so every other row keeps its shape.
+    const span = typeof row.until === "string" && row.until ? { until: row.until } : {};
+    if (!row.condition) {
+      out.push({ identifier: talent.identifier, name: talent.name, id: null, value: null, speedZero: true, ...span });
+      continue;
+    }
     if (row.value === null || row.value === undefined) {
-      out.push({ identifier: talent.identifier, name: talent.name, id: row.condition, value: null });
+      out.push({ identifier: talent.identifier, name: talent.name, id: row.condition, value: null, ...span });
       continue;
     }
     const n = amount(row.value, { rank });
-    if (n > 0) out.push({ identifier: talent.identifier, name: talent.name, id: row.condition, value: n });
+    if (n > 0) out.push({ identifier: talent.identifier, name: talent.name, id: row.condition, value: n, ...span });
   }
   return out;
+}
+
+/**
+ * **WHETHER A HIT OF THIS BLOW COULD LAY ANYTHING BY A TALENT** - read at the highest SL a hit
+ * could reach, and on an Opportunity Attack with the rows that ride one alone (04's Hold the
+ * Hall's Prone, Relentless Advance's Speed 0 at rank 2: `when: "opportunity"`). The attack door
+ * asks it with its other refusals, so a blow that could write on a creature this client does not
+ * own is refused before anything is spent where no GM is online (the F4b review, M2: the
+ * Opportunity Attack's own rows were never seen, because the opportunity was not passed).
+ *
+ * @param {Array} talents
+ * @param {{opportunity?: boolean}} o
+ * @returns {boolean}
+ */
+export function talentLaysOnHit(talents = [], { opportunity = false } = {}, rowOf = talentEffect) {
+  return hitConditionsFor(talents, { sl: 6, hit: true, opportunity: opportunity === true }, rowOf).length > 0;
 }
 
 /**
@@ -953,7 +979,7 @@ const at = (expr, scope) => amount(expr, scope);
  * @param {Array} talents
  * @param {string} feature  the class feature's name
  */
-function patchRowsOf(talents = [], feature, rowOf = talentEffect) {
+export function patchRowsOf(talents = [], feature, rowOf = talentEffect) {
   const out = [];
   for (const t of talents ?? []) {
     if (!(Math.trunc(Number(t?.taken) || 0) > 0)) continue;
@@ -2629,6 +2655,8 @@ export function featureAims({ name = "", lays = null, attack = false, onUse = nu
   if (o.spellbreak || o.hasten || o.rewind) return true;
   // 02's Bloodlust names its up to six targets (the lead, 2026-11-08: *"Fix it now"*).
   if (o.bloodlust) return true;
+  // 02's Death Grip names the one creature it pulls (the Death Knight plan's door 5).
+  if (o.deathGrip) return true;
   // The Chronomancer's (stage 2b): Slipstream's and Master of Hours' creature, Suspend's,
   // and the Chronoweaver's allies - Gift of Moments, Quickstep, Second Chance, Echo of Power,
   // Suspended Moment and Recovered Hours name theirs, Temporal Loop and Unfading the creature

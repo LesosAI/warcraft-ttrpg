@@ -78,7 +78,10 @@ async function resolveExplosiveTrapNow({ messageId, actorUuid, resultId } = {}, 
     // Even a fully absorbed feature hit carries Ward credit to the damage door.
     const delivered = await actor.applyDamage(damage.damage, { struck: true, attack: false, spell: false,
       location: "body", type: "fire", messageId, by: ChatMessage.getSpeakerActor(message.speaker),
-      wardTook: damage.wardTook ?? 0, parts: damage.parts ?? null });
+      wardTook: damage.wardTook ?? 0, parts: damage.parts ?? null,
+      // The claim's resolver inputs (`rules/explosive-trap.mjs` records them), so 04's Icebound
+      // Fortitude halves this blow before Armor Points and Ward (the F4b review, S6).
+      mitigation: damage.mitigationSource ?? null });
     if (delivered !== actor) return { ok: false, reason: "delivery", claimed: true };
     if (!holds()) return { ok: false, reason: "changed", claimed: true };
     const completed = plan.claims.map(row => row === plan.claim ? { ...row, phase: "complete" } : row);

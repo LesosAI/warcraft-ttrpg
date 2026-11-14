@@ -113,7 +113,9 @@ export async function fireguardCastQueryHandler({ actorUuid, index, key, source,
     if (!valid()) return refuse("changed");
     if (!damage.immune && damage.damage > 0) {
       await selection.actor.applyDamage(damage.damage, { struck: true, attack: true, location: "body", type: "fire",
-        by: actor, spell: false, messageId: receipt.id, wardTook: damage.wardTook ?? 0, parts: damage.parts ?? null });
+        by: actor, spell: false, messageId: receipt.id, wardTook: damage.wardTook ?? 0, parts: damage.parts ?? null,
+        // the card's resolver inputs (`rules/damage-record.mjs`), so 04's Icebound Fortitude halves this blow before Armor Points and Ward (the F4b review, S6); `areaDamageOn` records them.
+        mitigation: damage.mitigationSource ?? null });
       await save({ damageApplied: true });
     }
     if (!valid()) return refuse("changed");

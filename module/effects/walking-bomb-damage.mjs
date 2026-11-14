@@ -20,7 +20,7 @@ export async function deliverWalkingBombDamage({ bomb, targetToken, valid, messa
   if (!result || !valid()) return { ok: false };
   if (!result.immune && result.damage > 0) {
     await victim.applyDamage(result.damage, { struck: true, attack: false, spell: false,
-      location: "body", type: "physical", by: bomb, messageId });
+      location: "body", type: "physical", by: bomb, messageId, mitigation: result.mitigationSource ?? null });
     if (!valid() || targetToken.actor !== victim) return { ok: false };
   }
   return { ok: true, result: { testId: test?.uuid ?? test?.id ?? null, resisted,

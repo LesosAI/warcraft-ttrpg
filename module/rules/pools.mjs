@@ -83,7 +83,10 @@ export function anyPoolPayers(pools = [], amount = 0) {
   const due = Math.max(0, Math.trunc(Number(amount)) || 0);
   const order = { momentum: 0, power: 1 };
   return (Array.isArray(pools) ? pools : [])
-    .filter(p => p && (p.kind === "momentum" || p.kind === "power") && (Number(p.value) || 0) >= due)
+    // **NEVER THE RUNES** (D-943): a Death Knight's runes are a derived Power pool that only
+    // `documents/runes.mjs` spends, with the Runic Power each rune gives; a price from any
+    // pool is paid from the others.
+    .filter(p => p && (p.kind === "momentum" || p.kind === "power") && p.name !== "runes" && (Number(p.value) || 0) >= due)
     .sort((a, b) => (order[a.kind] - order[b.kind])
       || String(a.name ?? "").localeCompare(String(b.name ?? ""))
       || String(a.itemId ?? "").localeCompare(String(b.itemId ?? "")));

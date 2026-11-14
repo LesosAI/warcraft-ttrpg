@@ -140,6 +140,51 @@ export async function importRulesJournals() {
 }
 
 /**
+ * **EVERY CHAPTER THE WORLD ALREADY HOLDS, BROUGHT UP TO THE BOOK** (F6's question 5; run close-F2).
+ * The import above skips a held chapter by design; this is the repair pass CLAUDE.md §15 asks of a
+ * rule enforced on create, run by migration 0.15.3.1. `rules/rules-journal-repair.mjs` is the
+ * judgement: a held page is never written or removed (the lead, on the close review's finding 3:
+ * *"Keep the GM's copy"*); where it differs from the book, the book's page is made beside it named
+ * `<page> (book)`; a page the pack has and the world lacks is made with the pack's id, so a link
+ * that names it resolves. Ownership is never written, the entry's or a page's. Idempotent: a second
+ * pass writes nothing. Each chapter touched is logged, and so are the pages the book no longer has.
+ * A write that fails throws, so migration 0.15.3.1 does not stamp its version (finding 4).
+ *
+ * @param {Function} [log]
+ * @returns {Promise<{chapters: number, pages: number, stale: boolean}>}
+ */
+export async function repairRulesJournals(log = console.log) {
+  const { planChapterRepair, planIsEmpty, rulesPackCarriesRepair } = await import("../rules/rules-journal-repair.mjs");
+  const pack = game.packs.get(RULES_PACK);
+  if (!pack) return { chapters: 0, pages: 0, stale: false };
+  const documents = await pack.getDocuments();
+  const chapters = documents.map(d => ({ name: d.name, pages: [...d.pages].map(p => ({ name: p.name })) }));
+  if (!rulesPackCarriesRepair(chapters)) {
+    console.warn(`azeroth-rpg | ${RULES_PACK} predates the Death Knight's book (no 02 \u00a77 "The twelve classes"), so no held chapter was brought up to it. `
+      + "Run `npm run packs:parse` and `npm run packs:build`, restart the server, set `migrationVersion` back below 0.15.3.1 and reload.");
+    return { chapters: 0, pages: 0, stale: true };
+  }
+  const inherit = CONST.DOCUMENT_OWNERSHIP_LEVELS.INHERIT;
+  // **A HELD PAGE IS NEVER WRITTEN** (the lead: *"Keep the GM's copy"*): the book's page goes
+  // beside one that differs, named with this word, and a GM merges by hand.
+  const suffix = game.i18n.localize("AZEROTH.Journals.BookCopy");
+  let touchedChapters = 0;
+  let touchedPages = 0;
+  for (const doc of documents) {
+    const held = worldChapter(doc.id);
+    if (!held) continue;
+    const plan = planChapterRepair({ chapter: doc.name, held: [...held.pages].map(p => p.toObject()), pack: [...doc.pages].map(p => p.toObject()), suffix, inherit });
+    if (plan.kept.length) log(`azeroth-rpg | ${held.name}: ${plan.kept.length} page(s) the book no longer has were kept, since a GM may have written on them`);
+    if (planIsEmpty(plan)) continue;
+    await held.createEmbeddedDocuments("JournalEntryPage", plan.create, { keepId: true });
+    touchedChapters += 1;
+    touchedPages += plan.create.length;
+    log(`azeroth-rpg | ${held.name}: ${plan.create.length - plan.copies} page(s) of the book made, ${plan.copies} book copy(ies) made beside a page that differs`);
+  }
+  return { chapters: touchedChapters, pages: touchedPages, stale: false };
+}
+
+/**
  * Import, and say what happened.
  *
  * A chapter CLOSED is said separately and as a warning, because it means

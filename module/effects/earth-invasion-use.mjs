@@ -8,8 +8,9 @@ import { realmRefusalFor } from "./spirit-realm.mjs";
 import { reviewNearbyEnemies } from "./area-enemies.mjs";
 import { inflictCondition } from "./inflict.mjs";
 import { untilEndOfNextTurnOrRound } from "./durations.mjs";
-import { resolveDamage } from "../rules/mitigation.mjs";
+import { resolveRecordedDamage } from "../rules/damage-record.mjs";
 import { dealtHalvedBy } from "../rules/legacy-uses.mjs";
+import { isConditionCarrier } from "../rules/condition-carriers.mjs";
 
 export const EARTH_INVASION_QUERY = "azeroth-rpg.earthInvasion";
 const ANIMATION_KEYS = Object.freeze({
@@ -121,11 +122,13 @@ export async function earthInvasionQueryHandler({ actorUuid, index, source, requ
       damage: async (uuid, outcome, claim) => {
         const token = byUuid.get(uuid); if (!token || !claim.valid() || !(token.actor.system?.health?.value > 0)) return null;
         const snapshot = targetSnapshots([{ id: token.id, actor: token.actor, name: token.name, scene }])[0];
-        const dealt = resolveDamage({ rating: outcome.damage, sl: 0, kind: "physical", school: "physical", location: "body",
+        const dealt = resolveRecordedDamage({ rating: outcome.damage, sl: 0, kind: "physical", school: "physical", location: "body",
           apByLocation: snapshot.apByLocation, immune: snapshot.immune, vulnerable: snapshot.vulnerable,
           slAddsToDamage: false, dealtHalved: dealtHalvedBy(actor) });
         if (!dealt.immune) await token.actor.applyDamage(dealt.damage, { struck: true, attack: true, location: "body",
-          type: "physical", by: actor, spell: false, messageId: claim.messageUuid?.split(".").at(-1), parts: dealt.parts ?? null });
+          type: "physical", by: actor, spell: false, messageId: claim.messageUuid?.split(".").at(-1), parts: dealt.parts ?? null,
+          // the card's resolver inputs (`rules/damage-record.mjs`), so 04's Icebound Fortitude halves this blow before Armor Points and Ward (the F4b review, S6).
+          mitigation: dealt.mitigationSource ?? null });
         damaged.add(uuid);
         return { ok: true, lines: [dealt.immune ? "Immune to Physical damage." : `${dealt.damage} Physical damage applied.`] };
       },
@@ -135,7 +138,7 @@ export async function earthInvasionQueryHandler({ actorUuid, index, source, requ
         const landed = await inflictCondition({ victim: token.actor, by: actor, id: "stunned", name: token.name,
           until: untilEndOfNextTurnOrRound(token.actor) });
         if (landed?.reason === "immune") return { ok: true, immune: true };
-        const effect = [...(token.actor.effects ?? [])].find(e => !e.disabled && !e.isSuppressed && e.statuses?.has("stunned"));
+        const effect = [...(token.actor.effects ?? [])].find(e => !e.disabled && !e.isSuppressed && e.statuses?.has("stunned") && !isConditionCarrier(e, "stunned"));
         return landed?.landed === true && effect?.id ? { ok: true, effectId: effect.id } : null;
       } });
     if (result.ok) {

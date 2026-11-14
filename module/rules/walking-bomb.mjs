@@ -1,4 +1,4 @@
-import { resolveDamage } from "./mitigation.mjs";
+import { resolveRecordedDamage } from "./damage-record.mjs";
 
 /** Classic Walking Bomb's outgoing-melee proc, adapted to tabletop attack
  * outcomes. The runtime must persist a detonation claim before any explosion
@@ -8,10 +8,12 @@ const identifier = value => typeof value === "string" && value.trim().length > 0
 export const WALKING_BOMB_BLAST = Object.freeze({ name: "Walking Bomb Explosion",
   radius: 10, rating: 3, dc: 15, resilience: "reflex", type: "physical" });
 
-/** D1's tier-1 small-area budget; success halves before Body armor. */
+/** D1's tier-1 small-area budget; success halves before Body armor. The resolver's inputs
+ * travel with the result (`rules/damage-record.mjs`), so 04's Icebound Fortitude halves the blast
+ * before Armor Points (the F4b review, S6). */
 export function walkingBombDamage({ target = {}, resisted, dealtHalved = false } = {}) {
   if (typeof resisted !== "boolean") return null;
-  return resolveDamage({ rating: WALKING_BOMB_BLAST.rating, sl: 0, kind: "physical",
+  return resolveRecordedDamage({ rating: WALKING_BOMB_BLAST.rating, sl: 0, kind: "physical",
     location: "body", apByLocation: target.apByLocation ?? {},
     immune: target.immune ?? [], vulnerable: target.vulnerable ?? [],
     passedHalf: resisted, dealtHalved, slAddsToDamage: false });

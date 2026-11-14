@@ -93,7 +93,9 @@ export function advanceFleshRot(actor, combat = null) {
       const source = resolve(state.sourceUuid), by = present(source) ? source : null;
       const result = fleshRotDamage(actor.system, { dealtHalved: dealtHalvedBy(by) });
       if (result.damage > 0) await actor.applyDamage(result.damage, {
-        struck: true, attack: false, spell: false, location: "body", type: "physical", by
+        struck: true, attack: false, spell: false, location: "body", type: "physical", by,
+        // The resolver's inputs (`rules/damage-record.mjs`), so 04's Icebound Fortitude halves this blow before Armor Points and Ward (the F4b review, S6).
+        mitigation: result.mitigationSource ?? null
       });
       if (!claimed()) { warn(); return lines; }
       const completed = { ...plan.next, pending: null };

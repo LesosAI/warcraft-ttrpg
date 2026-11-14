@@ -27,10 +27,14 @@ import { talentEffect } from "./talent-effects.mjs";
  * thrall's door alone (`effects/legacy-uses.mjs#bindThrall`), never from the banner's
  * Bind to.
  */
-export const BOUND_KINDS = Object.freeze(["companion", "demon", "elemental", "totem", "summon", "construct", "thrall"]);
+export const BOUND_KINDS = Object.freeze(["companion", "demon", "elemental", "totem", "summon", "construct", "thrall", "raised"]);
 
-/** The kinds the banner's Bind to offers a GM: every kind but a thrall's, which its Use binds. */
-export const BINDABLE_KINDS = Object.freeze(BOUND_KINDS.filter(k => k !== "thrall"));
+/**
+ * The kinds the banner's Bind to offers a GM: every kind but a thrall's, which its Use binds,
+ * and a raised dead's (07 §17's raise spells and 02's Army of the Dead; the Death Knight
+ * plan's *Raising the dead*), which its spell raises from a corpse.
+ */
+export const BINDABLE_KINDS = Object.freeze(BOUND_KINDS.filter(k => k !== "thrall" && k !== "raised"));
 
 /** A feature's menu, to the kind it binds. */
 export const KIND_OF_CHOICE = Object.freeze({
@@ -44,7 +48,17 @@ export const KIND_OF_CHOICE = Object.freeze({
  * ends. A construct is HELD (*You hold one at a time*): one wrecked at 0 Health
  * stays held until The Bench rebuilds it.
  */
-export const UNTIL = Object.freeze({ companion: null, demon: null, elemental: "encounter", totem: "encounter", summon: "encounter", construct: null, thrall: "charmed" });
+export const UNTIL = Object.freeze({ companion: null, demon: null, elemental: "encounter", totem: "encounter", summon: "encounter", construct: null, thrall: "charmed", raised: "raised" });
+
+/**
+ * **A RAISED DEAD STANDS FOR ITS SPELL'S SPAN** (07 §17: *Each raises one kind, for the duration
+ * its entry gives*; *The dead it raises collapse when its duration ends*): `raised` is held
+ * by the carrier the raise lays on the knight (`rules/raise.mjs#RAISE_FLAG`), whose own span
+ * is the clock - 1 minute, 1 hour, three rounds - and `longRest` where the span is *until
+ * your next Long Rest*. Either way the collapse DELETES the creature and its tokens, the
+ * called creature's path (`documents/bound.mjs#release`).
+ */
+export const RAISED_UNTIL = Object.freeze(["raised", "longRest"]);
 
 /** Metamorphosis, Avatar and Shapeshift are the character's own body, never a creature. */
 const SHAPES = new Set(["Metamorphosis", "Avatar of the Wild", "Shapeshift"]);
@@ -84,6 +98,10 @@ export function capacity(kind, { level = 1, talents = [] } = {}, rowOf = talentE
     // B2; its row is B6's).
     case "totem": return tierForLevel(level) + moreTotemsFor(talents, rowOf);
     case "summon": return Infinity;
+    // **ONE OF EACH KIND, NOT ONE AT ALL** (07 §17: *Casting a raise spell again collapses the
+    // creatures that spell raised before*): the recast's collapse is the limit, judged by spell
+    // in the raise door (`rules/raise.mjs`), so the kind itself counts against nothing.
+    case "raised": return Infinity;
     // **THE TINKER'S** (door 6): The Bench's one, and Assembly Line's second, off the
     // `constructs` rows - never by name or identifier, so a talent the pack does not
     // hold yet is read the day its row lands.
@@ -154,7 +172,15 @@ export function summonRefusal({ names = [], known = [], room = Infinity, held = 
  * or below, which `rules/constructs.mjs#constructEligible` answers; the tier gate
  * below holds it too.
  */
-export function eligible(kind, entry = {}, { talents = [], tier = null, graveBond = false } = {}) {
+export function eligible(kind, entry = {}, { talents = [], tier = null, graveBond = false, raises = null } = {}) {
+  // **A RAISED DEAD IS THE ENTRY ITS SPELL NAMES** (07 §17's table; the Death Knight plan): the
+  // spell's own creature and nothing else - the Crypt Fiend, which is not Mindless, through
+  // its spell rather than through Grave Bond's Mindless gate - and no tier gate, since a tier
+  // 1 knight's Raise Abomination raises a tier 2 Elite by the book's own table.
+  if (kind === "raised") {
+    if (!raises || String(entry.name ?? "") !== String(raises)) return { ok: false, reason: "NotRaised" };
+    return { ok: true, reason: null };
+  }
   // The construct's own law (the B2 review: this comment named it and nothing called
   // it): one of 04's table, at the tinker's tier or below.
   if (kind === "construct") {

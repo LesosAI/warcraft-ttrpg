@@ -10,8 +10,8 @@
     {{/if}}
     {{#if source}}<p class="azeroth-card-source">{{source}}</p>{{/if}}
     <dl class="azeroth-spell-fields">
-      {{#if mana}}<dt>{{localize "AZEROTH.Card.Mana"}}</dt><dd>{{mana}}</dd>{{/if}}
-      {{#if action}}<dt>{{localize "AZEROTH.Card.Action"}}</dt><dd>{{localize (lookup config.actions action)}}</dd>{{/if}}
+      {{#if mana}}<dt>{{localize manaLabel}}</dt><dd>{{mana}}</dd>{{/if}}
+      {{#if action}}<dt>{{localize "AZEROTH.Card.Action"}}</dt><dd>{{localize (lookup config.spellActions action)}}</dd>{{/if}}
       {{#if range}}<dt>{{localize "AZEROTH.Card.Range"}}</dt><dd>{{range}}</dd>{{/if}}
       {{#if target}}<dt>{{localize "AZEROTH.Card.Target"}}</dt><dd>{{target}}</dd>{{/if}}
       {{#if duration}}<dt>{{localize "AZEROTH.Card.Duration"}}</dt><dd>{{duration}}</dd>{{/if}}

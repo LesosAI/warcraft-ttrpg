@@ -161,10 +161,19 @@ async function refundOne(row) {
     if (write) await attacker.update({ "system.health.temp": write.temp, [`flags.azeroth-rpg.${TEMP_FLAG}`]: write.record });
     return;
   }
+  // **A RUNE PRICE, THROUGH THE RUNE DOOR** (02's Plague; the F2 review's must-fix 2, O-346):
+  // the runes marked unspent again and the Runic Power they gave taken back off, never a
+  // pool write - `updatePool` refuses a write that names the runes.
+  if (kind === "runes") {
+    const { refundRunesOn } = await import("../documents/runes.mjs");
+    await refundRunesOn(attacker, { spent: row.spent ?? [], gained: row.gained ?? 0, restGeneration: row.restGeneration ?? null });
+    return;
+  }
   const now = (attacker.poolSnapshot?.() ?? []).find(p => p.kind === kind && p.name === pool && (p.itemId ?? null) === (itemId ?? null)) ?? null;
   if (!now) return;
   const value = refundedValue(now, amount);
-  if (value !== now.value) await attacker.updatePool({ itemId: now.itemId, kind: now.kind, value });
+  // A price given back is a named door for a Runic Power rise (`rules/runes.mjs#RUNIC_GAIN_SOURCES`).
+  if (value !== now.value) await attacker.updatePool({ itemId: now.itemId, kind: now.kind, value }, {}, { runicGain: "refund" });
 }
 
 /**

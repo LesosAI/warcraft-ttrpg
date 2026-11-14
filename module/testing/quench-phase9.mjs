@@ -474,7 +474,9 @@ export function creatorBatch(context) {
       // The count is pack-counts.mjs's, the one place it lives (ten since the Chromatic Champion).
       assert.lengthOf(classes, PACK_COUNTS.classes.count);
       for (const c of classes) {
-        assert.isAtLeast(c.system.kit.length, 8, `${c.name} has no kit`);
+        // The road kit's five and at least two of the class's own: the Death Knight's is two
+        // (01 §6: *Studded leather · greatsword*, D-937), every older class's three or more.
+        assert.isAtLeast(c.system.kit.length, 7, `${c.name} has no kit`);
         assert.equal(c.system.kit.filter(r => r.road).length, 5, `${c.name} lacks the road kit`);
       }
       const careers = await game.packs.get(PACK_FOR.career).getIndex({ fields: ["system.tier", "system.side"] });

@@ -6,7 +6,11 @@ import { shrinkDamage } from "./gadgets.mjs";
 const INPUTS = ["sourceDamageBonus", "rating", "sl", "kind", "school", "location", "apByLocation",
   "penetration", "ward", "immune", "vulnerable", "slAddsToDamage", "multiplier",
   "schoolArmor", "extras", "wardBySchool", "schoolArmorBySchool", "dealtHalved",
-  "passedHalf", "bypass", "fireTakenBonus"];
+  "passedHalf", "bypass", "fireTakenBonus", "takenHalved",
+  // 08 §20's The Sorcerer-Thane's Pact (D-911): an Immune passed at half. Missing from this
+  // list until run close-F2, so every attack card resolved through here dropped it and an
+  // immune creature took nothing of the Pact's Fire.
+  "immuneHalf"];
 
 /** Preserve pre-Ward inputs alongside the ordinary result. Soul Link cannot
  * reconstruct them from final damage: magical-weapon Ward also reduces SL.

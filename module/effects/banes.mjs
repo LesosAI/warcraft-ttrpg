@@ -343,7 +343,7 @@ function boonData({ kind, boons, source, originUuid, lasting = false, span = nul
     name: game.i18n.format(label, {
       source: source || game.i18n.localize("AZEROTH.Reaction.Heading"),
       n: boons,
-      kind: kind === "all" ? "" : game.i18n.localize(AZEROTH.testKinds[kind] ?? kind)
+      kind: kind === "all" ? "" : game.i18n.localize(AZEROTH.testKinds[kind] ?? (kind === "attackOrResilience" ? "AZEROTH.TestKind.AttackOrResilience" : kind))
     }),
     img: BOON_ICON,
     origin: originUuid ?? null,

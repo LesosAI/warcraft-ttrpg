@@ -351,7 +351,7 @@ export class AzerothNpcGenerator extends HandlebarsApplicationMixin(ApplicationV
         names: s.spells.names.map((name, index) => ({ index, name })),
         options: this.#data.spells.filter(sp => !s.spells.names.includes(sp.name)).map(sp => ({
           name: sp.name, search: sp.name.toLowerCase(),
-          line: game.i18n.format("AZEROTH.Picker.Spell", { school: game.i18n.localize(AZEROTH.schools[sp.school] ?? sp.school ?? ""), tier: sp.tier })
+          line: game.i18n.format("AZEROTH.Picker.Spell", { school: game.i18n.localize(AZEROTH.spellSchools[sp.school] ?? sp.school ?? ""), tier: sp.tier })
         }))
       },
       abilities: s.creatureAbilities.map((a, index) => ({ index, name: a.name, description: a.description, prefix: "ability", list: "creatureAbilities", auto: this.#automationContext(a.automation) })),

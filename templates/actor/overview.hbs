@@ -93,7 +93,16 @@
       <h4 class="azeroth-overview-heading azeroth-doll-heading">{{localize "AZEROTH.Overview.Hands"}}</h4>
       <div class="azeroth-doll-hands">
         {{#each overview.hands as |tile|}}
+        {{#if tile.runes}}
+        {{!-- A Death Knight's hand: the tile and, under it, the compact row of its
+              weapon's rune sockets (D11 SS4). --}}
+        <div class="azeroth-doll-hand">
+          {{> systems/azeroth-rpg/templates/actor/partials/slot-tile.hbs tile=tile}}
+          {{> systems/azeroth-rpg/templates/actor/partials/rune-row.hbs sockets=tile.runes label=tile.ariaLabel}}
+        </div>
+        {{else}}
         {{> systems/azeroth-rpg/templates/actor/partials/slot-tile.hbs tile=tile}}
+        {{/if}}
         {{/each}}
       </div>
 

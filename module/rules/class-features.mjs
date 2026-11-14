@@ -84,6 +84,8 @@ import { standardDC } from "./modifiers.mjs";
 import { BREATH, CHROMATIC_BREATH, DRACONIC_LEAP, DREAD_PRESENCE, GREAT_BREATH, WING_BUFFET } from "./chromatic-features.mjs";
 // The Chronomancer's numbers (02 §7; stage 2b).
 import { CHRONO_FEATURES, RECALL_USES } from "./chronomancer.mjs";
+// The Death Knight's numbers (02 §7; run F2).
+import { DESECRATION, MARCH_OF_THE_DAMNED, RUNIC_DISCIPLINE, UNHOLY_PRESENCE } from "./death-knight.mjs";
 
 // The descriptor vocabulary, shared with `rules/talent-effects.mjs` (D-642).
 export const passive = (extra = {}) => ({ kind: "passive", action: null, cost: null, casting: false, uses: null, heal: null, damage: null, resist: null, ...extra });
@@ -144,7 +146,9 @@ export const CLASS_FEATURES = Object.freeze({
     // *an attack against any number of enemies within 10 feet of you*: one press
     // per creature (the architect's review of D-773).
     "Divine Storm": action({ action: "action", cost: cost("zeal", 10), attack: true, attacks: "each", area: "A 10 ft radius centered on you" }),
-    "Charger's Blessing": passive(),
+    // *Over a Long Rest, lay the Light on a mount you own*: the one mount door (the Death Knight
+    // plan's door 9, `effects/mount-works.mjs`), which asks the mount and spends nothing.
+    "Charger's Blessing": action({ action: null, onUse: { mountWork: true } }),
     "Avenging Wrath": action({ action: "half", cost: cost("mana", 12) }),
     "Beacon of Hope": passive()
   },
@@ -264,7 +268,8 @@ export const CLASS_FEATURES = Object.freeze({
     "Curse": action({ action: "action", cost: onSuccess(cost("mana", 4)), casting: true, resist: "spirit" }),
     "Greater Demon": passive(),
     "Soul Harvest": passive(),
-    "Ritual of the Steed": passive(),
+    // *Over a Long Rest, work a mount you own into a Felsteed*: the one mount door (door 9).
+    "Ritual of the Steed": action({ action: null, onUse: { mountWork: true } }),
     "Metamorphosis": action({ action: "full", cost: cost("mana", 12), choice: "greaterDemons" }),
     "Ritual of Summoning": action({ action: "full", cost: cost("mana", 20), casting: true, dc: 26, choice: "greaterDemons" })
   },
@@ -406,6 +411,54 @@ export const CLASS_FEATURES = Object.freeze({
     // stack ... While it lasts, you may spend 2 Sand to give a creature within 30 feet a
     // Half-Action on its next turn*: a Use while it runs is the gift.
     "Master of Hours": action({ action: "half", cost: cost("mana", CHRONO_FEATURES.masterOfHours.mana), onUse: { masterOfHours: true } })
+  },
+  // **THE DEATH KNIGHT** (02 §7; the plan's Phase 4 doors 1 to 8, run F2). A rune price is
+  // `cost("runes", n)`, judged by kind and spent through the one rune door
+  // (`documents/runes.mjs#spendRunesOn`, which gives each rune its Runic Power); a row's
+  // `onUse.runes.kind` names a Blood or a Frost price. Death Strike and Plague ride the attack's
+  // own dialog (`rules/death-knight.mjs#FEATURE_RIDERS`, D-770's door), so their rows here are
+  // passives. Unholy Presence, the Deathcharger, Army of the Dead and March of the Damned are
+  // doors 9 to 13, run F3's: their rows say what 02 prints and carry no Use until their doors.
+  "death-knight": {
+    // *When you finish a Long Rest, inscribe a Blood rune or a Frost rune in each rune slot of the
+    // weapons you wield, in any ratio*: the Use asks the window, the grips and the ratios
+    // (`effects/death-knight.mjs#useInscription`) and spends nothing.
+    "Inscribed Runeweapon": action({ action: null, onUse: { inscribe: true }, note: "AZEROTH.Feature.Note.InscribedRuneweapon" }),
+    // The undead package (`rules/undead.mjs`, D-946): every line of it is derived.
+    "Risen Knight": passive(),
+    // *You know Death Coil. It does not count against your spells known.*
+    "Unholy Lore": passive({ note: "AZEROTH.Feature.Note.UnholyLore" }),
+    // *As part of an Attack, spend any type of rune*: a line on the attack's dialog.
+    "Death Strike": passive({ note: "AZEROTH.Feature.Note.DeathStrike" }),
+    // *As a Half-Action, spend any type of rune. Choose one creature you can see within 30 feet.
+    // The target makes a Body Resilience Test against your Spell DC. On a failure you pull it
+    // into an unoccupied space within your reach.* The pull rides the card (`deathGripForced`).
+    "Death Grip": action({ action: "half", cost: cost("runes", 1), resist: "body", onUse: { deathGrip: true, runes: { kind: "any" } } }),
+    "Extra Attack": passive({ extraAttack: true }),
+    // *Each maneuver costs you 1 Runic Power, whatever its listed price*
+    // (`rules/death-knight.mjs#maneuverPriceOf`, read by `maneuverCost` and `momentumPayer`).
+    "Runic Discipline": passive({ maneuverPrice: RUNIC_DISCIPLINE.price, note: "AZEROTH.Feature.Note.RunicDiscipline" }),
+    // *When your attack hits, you may spend any type of rune*: two lines on the attack's dialog.
+    "Plague": passive({ note: "AZEROTH.Feature.Note.Plague" }),
+    // *As a Half-Action, spend 3 Runic Power. The ground within 10 feet of you is desecrated for
+    // 10 minutes* (D-938): the ground placed once it is paid for (`placeDesecration`).
+    "Desecration": action({ action: "half", cost: cost("runicPower", DESECRATION.cost), onUse: { desecration: true } }),
+    // *As a Half-Action, spend 8 Runic Power. You take up your presence until you end it, you drop
+    // to 0 Health or you finish a Long Rest. It is not a Sustain.* A laid effect on the knight
+    // (`effects/death-knight-necromancy.mjs`, door 10): its aura - +10 feet Speed, an undead
+    // ally's Health at its turn - through the aura door's own source (`presenceAuraSources`), its
+    // Frightened refused, and Feeds on Blows at the damage door. A Use while it stands ends it.
+    "Unholy Presence": action({ action: "half", cost: cost("runicPower", UNHOLY_PRESENCE.cost), onUse: { unholyPresence: true }, auraReason: "the knight's own laid presence holds the aura up (`rules/death-knight.mjs#presenceAuraSources`, read by `effects/auras.mjs#auraSourcesOf`), so the feature item stamps none" }),
+    // *Over a Long Rest, choose a mount you own and make it undead or spectral*: the one mount
+    // door (door 9), which asks the mount and the kind through the one chooser and spends nothing.
+    "Deathcharger": action({ action: null, onUse: { mountWork: true } }),
+    // *Once per Long Rest, as an action, spend 6 Runic Power. Up to six corpses within 60 feet of
+    // you rise as Risen Skeletons* (door 11): the raise door's called set (`rules/raise.mjs
+    // #RAISES["army-of-the-dead"]`), the corpses chosen before anything is paid.
+    "Army of the Dead": action({ action: "action", cost: cost("runicPower", 6), uses: once("long"), onUse: { armyOfTheDead: true } }),
+    // *As an action, spend 5 Runic Power* (door 12): a laid effect on the knight for 1 minute, its
+    // two radii through the aura door (`presenceAuraSources`).
+    "March of the Damned": action({ action: "action", cost: cost("runicPower", MARCH_OF_THE_DAMNED.cost), onUse: { marchOfTheDamned: true }, auraReason: "the knight's own laid march holds its two radii up (`rules/death-knight.mjs#presenceAuraSources`, read by `effects/auras.mjs#auraSourcesOf`), so the feature item stamps none" })
   }
 });
 
@@ -961,10 +1014,12 @@ export function bindRank(expr, rank = 1) {
  * @returns {{kind: string|null, amount: string|null, rounds: number}}
  */
 export function featureTickStamp(tick, rank = 1) {
-  if (!tick?.kind) return { kind: null, amount: null, rounds: 0 };
+  if (!tick?.kind) return { kind: null, amount: null, rounds: 0, type: null };
   const amount = tick.amount === null || tick.amount === undefined || tick.amount === "" ? null : String(bindRank(tick.amount, rank));
   const rounds = typeof tick.rounds === "string" ? evaluateAmount(bindRank(tick.rounds, rank), { rank }) : tick.rounds;
-  return { kind: String(tick.kind), amount, rounds: Math.max(0, Math.trunc(Number(rounds)) || 0) };
+  // A damage tick's type (D-947, the Death Knight plan's finding 4), stamped where the row names one.
+  const type = typeof tick.type === "string" && tick.type ? tick.type : null;
+  return { kind: String(tick.kind), amount, rounds: Math.max(0, Math.trunc(Number(rounds)) || 0), type };
 }
 
 /**

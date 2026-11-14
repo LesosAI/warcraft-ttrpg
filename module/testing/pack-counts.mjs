@@ -23,27 +23,27 @@
 export const PACK_COUNTS = Object.freeze({
   conditions: { count: 15, why: "A1 holds fifteen (D-307, D-472, D-519, D-695)" },
   talents: {
-    count: 492, branches: 41, legacy: 84,
-    why: "10 classes x 3 branches x 12 (the Chronomancer the tenth, D-847) and the Chromatic Champion's 4 x 12 (04 §2, 02 §6), plus the seven Legacy branches x 12 that 04 §1's roster gives four of them (D-781)"
+    count: 516, branches: 43, legacy: 84,
+    why: "10 classes x 3 branches x 12 (the Chronomancer the tenth, D-847), the Chromatic Champion's 4 x 12 (04 §2, 02 §6) and the Death Knight's 2 x 12 (D-927), plus the seven Legacy branches x 12 that 04 §1's roster gives four of them (D-781)"
   },
   gadgets: {
     count: 16,
     why: "04 §2's Gadgets table under the Tinker: eight original gadgets plus eight additions (2026-10-24)"
   },
   spells: {
-    count: 469,
-    why: "07 holds 469 across seven schools and five tiers, including the 24 approved thematic additions the Chromatic Champion's five Earth-Warder spells (Stone Grip, Thunderlash, Earthmeld, Earthen Spike, Shattering Bolt), and the Chronomancer's 34 sand spells (D-847)"
+    count: 516,
+    why: "07 holds 516 across eight schools and five tiers, including the 24 approved thematic additions, the Chromatic Champion's five Earth-Warder spells (Stone Grip, Thunderlash, Earthmeld, Earthen Spike, Shattering Bolt), the Chronomancer's 34 sand spells (D-847), and the Death Knight's 47 (35 new Death spells, Raise Dracolich among them, and twelve Restricted to it in Frost and Shadow; D-918, D-922, D-932)"
   },
   careers: { count: 53, why: "03 holds 53 across four tiers" },
   races: { count: 12, why: "02 §5's twelve races: eleven peoples and the Chromatic Outcast" },
-  classes: { count: 11, why: "02 §7's eleven classes (the Chronomancer the eleventh, D-847)" },
+  classes: { count: 12, why: "02 §7's twelve classes (the Chronomancer the eleventh, D-847; the Death Knight the twelfth, D-917)" },
   traits: {
-    count: 74,
-    why: "08 §5: form 16 + cut 4 + effect 11 + enchantment 28 = 59, matching 06 §3's roster, plus 15 Mount traits that belong to 08 §15 alone (D-399)"
+    count: 75,
+    why: "08 §5: form 16 + cut 4 + effect 11 + enchantment 28 = 59, matching 06 §3's roster, plus 16 Mount traits that belong to 08 §15 alone (D-399), Spectral the sixteenth (the Death Knight's Deathcharger, D-924)"
   },
   bestiary: {
-    count: 374,
-    why: "14 holds 374 across five weight classes: the prior 348 plus 26 researched tier 1/2 faction NPCs (BESTIARY-TIER12-EXPANSION.md); verification status is recorded in the production tracker"
+    count: 375,
+    why: "14 holds 375 across five weight classes: the prior 348 plus 26 researched tier 1/2 faction NPCs (BESTIARY-TIER12-EXPANSION.md) and the Dracolich (D-932); verification status is recorded in the production tracker"
   },
   legacies: { count: 7, why: "15 §2's seven, one per Legacy on 04 §1's roster, lore and no ranks (D-781)" },
   affixes: {

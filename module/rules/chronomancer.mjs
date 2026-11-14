@@ -16,6 +16,9 @@
 // 07 §12's Stasis: its repeat Test rides the Stunned as 07's escape (O-306, `holdOutOfTime`).
 import { cleanEscape } from "./escapes.mjs";
 
+/** A blow's record in the shape `blow-records.mjs#withSteps` writes, or null (read again by the door). */
+const recordOf = x => (x && typeof x === "object" && !Array.isArray(x) && x.input && typeof x.input === "object" && !Array.isArray(x.input) ? x : null);
+
 /* -------------------------------------------- */
 /*  02 §7's features                             */
 /* -------------------------------------------- */
@@ -358,7 +361,7 @@ export const AGAIN_FLAG = "landsAgain";
  * second time - D-858's reading for Echoing Sands, and the same reading for Recurrence),
  * the creature, the spell and the source.
  */
-export function againRow({ kind = "damage", amount = 0, target = "", type = null, spell = "", source = "", combatId = null, test = null, passed = null } = {}) {
+export function againRow({ kind = "damage", amount = 0, target = "", type = null, spell = "", source = "", combatId = null, test = null, passed = null, record = null, passedRecord = null } = {}) {
   // What the spell deals over time lands again as ONE EXTRA LANDING on the tick itself
   // (the lead, D-913: *"One extra landing of the tick"*; `rules/ticks.mjs#tickLandings`),
   // never as a row here: a `tick` kind is no row (D-914).
@@ -374,7 +377,27 @@ export function againRow({ kind = "damage", amount = 0, target = "", type = null
     row.test = t;
     row.passed = t.onPass === "half" ? count(passed ?? Math.floor(a / 2)) : (t.onPass === "none" ? 0 : a);
   }
+  // **THE BLOW'S RECORD** (O-362; run close-F2): the resolver's inputs the row was met with, so
+  // 04's Icebound Fortitude halves what lands again before the Armor Points and Ward that met it
+  // (`againRecord`). Carried only where the card recorded one, so a row with none keeps its shape.
+  const whole = kind === "damage" ? recordOf(record) : null;
+  if (whole) row.mitigation = whole;
+  const half = kind === "damage" && row.test?.onPass === "half" ? recordOf(passedRecord) : null;
+  if (half) row.mitigationPassed = half;
   return row;
+}
+
+/**
+ * **THE RECORD OF WHAT A ROW LANDS** (O-362): the whole's record, or the passed half's where the
+ * Test made again passed and a pass halves; null where the row carries none.
+ *
+ * @param {object} row  an `againRow`
+ * @param {boolean|null} passed
+ * @returns {object|null}
+ */
+export function againRecord(row, passed = null) {
+  if (row?.test && passed === true && row.test.onPass === "half") return row.mitigationPassed ?? null;
+  return row?.mitigation ?? null;
 }
 
 /** A recorded Test, cleaned: a Resilience, a DC, and what a pass leaves; or null. */
@@ -732,8 +755,15 @@ export function givenReactionUntil({ round = 1, turn = 0, allyTurn = 0 } = {}) {
  */
 export function restorablePools(pools = [], { exceptSand = true } = {}) {
   return (pools ?? []).filter(p => p && ["momentum", "power"].includes(p.kind) && (!exceptSand || p.name !== "sand")
-    && count(p.max) > count(p.value));
+    && !NEVER_RESTORED.includes(p.name) && count(p.max) > count(p.value));
 }
+
+/**
+ * **THE POOLS NO REGAIN REACHES** (the Death Knight plan's run F2): Runic Power is gained
+ * only by spending a rune (the lead: *"Runic Power is only gained by consuming runes"*), and
+ * the runes are a DERIVED pool that changes through `documents/runes.mjs` alone (D-943).
+ */
+export const NEVER_RESTORED = Object.freeze(["runicPower", "runes"]);
 
 /** What a pool regains: up to `amount`, never past its maximum. */
 export function poolRegain(pool, amount = 0) {

@@ -246,6 +246,11 @@ export function readTemporaryHealth(text = "") {
     if (m) return { amount: m[1], span: spanOf(sentence), overflow: false, reason: null };
     m = /\btemporary Health equal to (twice |three times )?your (level|tier)\b/i.exec(sentence);
     if (m) return { amount: `${TIMES[(m[1] ?? "").trim()] ?? ""}${m[2].toLowerCase()}`, span: spanOf(sentence), overflow: false, reason: null };
+    // **07 §17's UNHOLY ARMOR** (*temporary Health equal to 2 plus your casting modifier*; the lead:
+    // *"scale off charisma modifier"*; run F4b): the number, and `castingMod` - the caster's casting
+    // ability modifier is the cast's own (`castSpell`'s `abilityMod`), so the amount names none.
+    m = /\btemporary Health equal to (\d+) plus your casting modifier\b/i.exec(sentence);
+    if (m) return { amount: m[1], span: spanOf(sentence), overflow: false, reason: null, castingMod: true };
   }
   return { amount: null, span: null, overflow: false, reason: "unread" };
 }

@@ -1,6 +1,6 @@
 /** One GM-owned payment and one resolution per reviewed enemy. */
 import { MOLTEN_SMASH } from "../rules/molten-giant.mjs";
-import { resolveDamage } from "../rules/mitigation.mjs";
+import { resolveRecordedDamage } from "../rules/damage-record.mjs";
 import { dealtHalvedBy } from "../rules/legacy-uses.mjs";
 import { reviewNearbyEnemies } from "./area-enemies.mjs";
 import { realmRefusalFor } from "./spirit-realm.mjs";
@@ -88,7 +88,7 @@ export async function moltenSmashQueryHandler({ actorUuid, index, source } = {},
       reason = validate();
       if (reason) return refuse(reason);
       const snapshot = targetSnapshots([{ id: target.token.id, actor: victim, name: target.token.name, scene }])[0];
-      const damage = resolveDamage({ rating: MOLTEN_SMASH.damage, sl: 0, kind: "physical", school: "physical",
+      const damage = resolveRecordedDamage({ rating: MOLTEN_SMASH.damage, sl: 0, kind: "physical", school: "physical",
         location: "body", apByLocation: snapshot.apByLocation, immune: snapshot.immune, vulnerable: snapshot.vulnerable,
         slAddsToDamage: false, dealtHalved: dealtHalvedBy(actor), passedHalf: resisted });
       result.damage = damage.damage;
@@ -96,7 +96,9 @@ export async function moltenSmashQueryHandler({ actorUuid, index, source } = {},
       if (!damage.immune) {
         result.damageAttempted = true;
         await victim.applyDamage(damage.damage, { struck: true, attack: true, location: "body", type: "physical",
-          by: actor, spell: false, messageId: card?.id ?? null, parts: damage.parts ?? null });
+          by: actor, spell: false, messageId: card?.id ?? null, parts: damage.parts ?? null,
+          // the card's resolver inputs (`rules/damage-record.mjs`), so 04's Icebound Fortitude halves this blow before Armor Points and Ward (the F4b review, S6).
+          mitigation: damage.mitigationSource ?? null });
         result.damageApplied = true;
       }
       reason = validate();

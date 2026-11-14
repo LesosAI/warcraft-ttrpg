@@ -177,7 +177,10 @@ export const RIDER_REFUSALS = Object.freeze({
   gone: "AZEROTH.Rider.Refused.Gone",
   // Paid before the blow from the Combat tab: drawn checked and greyed, and the
   // next attack takes it without a second payment.
-  primed: "AZEROTH.Rider.Refused.Primed"
+  primed: "AZEROTH.Rider.Refused.Primed",
+  // Two lines of one choice ticked together (02's Plague: *your Frost Fever OR your Blood
+  // Plague*; the Death Knight plan's door 7).
+  exclusive: "AZEROTH.Rider.Refused.Exclusive"
 });
 
 /** Why the Combat tab's control cannot pay a rider before the blow, as `lang/en.json` keys. */
@@ -343,6 +346,12 @@ export function riderOutcome(rider, { hit = false, spent = 0, rank = 1, tier = 1
   if (on.heal !== null && on.heal !== undefined) out.heal = hit ? Math.max(0, Math.trunc(evaluateExpression(on.heal, scope) ?? 0)) : 0;
   // Mortal Strike: the target recovers no Health until the striker's turn ends.
   if (on.noHealing) out.noHealing = hit ? on.noHealing : null;
+  // **02's DEATH STRIKE** (the Death Knight plan's door 4): on a hit, Health equal to the
+  // damage taken since the start of the striker's last turn, to no more than this cap - the
+  // ledger is read by the door (`rules/recent-damage.mjs`), the cap here.
+  if (on.recentHeal) out.recentHeal = hit ? Math.max(0, Math.trunc(evaluateExpression(on.recentHeal, scope) ?? 0)) : 0;
+  // **02's PLAGUE** (door 7): the disease a hit lays on the creature struck.
+  if (on.plague) out.plague = hit ? on.plague : null;
   // **THE RANGER'S AND THE ROGUE'S** (D-773), each named only where carried.
   // Piercing Shot's Pierce rides the blow, landed or not (a miss pierces nothing).
   if (on.pierce !== null && on.pierce !== undefined) out.pierce = Math.max(0, Math.trunc(evaluateExpression(on.pierce, scope) ?? 0));
@@ -477,7 +486,7 @@ export function riderWritesOnTarget(line, { tier = 1 } = {}) {
   if (!line) return false;
   const done = outcomeOfLine(line, { hit: true, spent: Math.max(1, Math.trunc(Number(line.cost)) || 1), tier, sl: 6 });
   return riderConditions(done).length > 0 || done.loseReaction === true || (Number(done.speedDrop) || 0) > 0
-    || Boolean(done.noHealing) || Boolean(done.bane);
+    || Boolean(done.noHealing) || Boolean(done.bane) || Boolean(done.plague);
 }
 
 /**
@@ -568,6 +577,8 @@ export function ridersFor(talents = [], { pools = [], form = false, weapon = nul
       strike: rider.strike ?? null,
       // What the blow needs (D-772, D-773), so the roll can judge it again.
       needs: rider.needs ?? null,
+      // The choice it is one of, where it is (02's Plague, D-770's door; run F2).
+      ...(rider.exclusive ? { exclusive: String(rider.exclusive) } : {}),
       onHit: onHitAt(rider, rank),
       // What it would do on a hit that reached every SL a clause asks for, so
       // the line can say *at SL 2, Stunned* rather than nothing.
@@ -685,6 +696,13 @@ export function riderPlan(lines = [], chosen = [], { pools = [] } = {}) {
   const poolOf = name => (pools ?? []).find(p => p?.name === name) ?? null;
   const have = name => (left.has(name) ? left.get(name) : Math.max(0, Math.trunc(Number(poolOf(name)?.value) || 0)));
   const picked = (lines ?? []).filter(l => ids.includes(l.identifier));
+  // **ONE OF A CHOICE** (02's Plague: *your Frost Fever or your Blood Plague*): two lines of
+  // one `exclusive` group ticked together refuse the roll in words, nothing spent.
+  const groups = new Map();
+  for (const l of picked) if (l.exclusive) groups.set(l.exclusive, [...(groups.get(l.exclusive) ?? []), l.name]);
+  for (const names of groups.values()) {
+    if (names.length > 1) return { ok: false, reason: { key: RIDER_REFUSALS.exclusive, params: { name: names.join(", "), pool: "", cost: 0, value: 0 } } };
+  }
   const paid = [];
   for (const line of [...picked.filter(l => !l.all), ...picked.filter(l => l.all)]) {
     if (!line.available) return { ok: false, reason: line.reason };

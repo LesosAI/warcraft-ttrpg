@@ -58,6 +58,171 @@ export const PARALYTIC_FLAG = "paralytic";
 const THRALL_FLAG = "thrall";
 
 /**
+ * **THE DEATH KNIGHT'S LAID STATES** (the Death Knight plan's Phase 6, run F5), named here rather
+ * than imported for the same reason, and held to their constants by `death-knight-animations
+ * .test.mjs`:
+ *
+ * - `deathKnightPresence` (`rules/death-knight.mjs#PRESENCE_FLAG`) carries a `kind` and no name,
+ *   so the kind names the feature: Unholy Presence's presence, March of the Damned's march;
+ * - Dancing Runeweapon's, Icebound Fortitude's and Remorseless Winter's states
+ *   (`rules/death-knight-talents.mjs#DK_FLAGS`) carry the talent's `name`;
+ * - a Fever's carrier is a TICK (`effects/ticks.mjs#TICK_FLAG`) whose `plague` says which, and
+ *   whose `source` is the knight's uuid: it is named for 02's Plague, under the flag word of the
+ *   Fever, so a row's loop can stand a different picture for each.
+ */
+const DK_PRESENCE_FLAG = "deathKnightPresence";
+export const DK_PRESENCE_NAMES = Object.freeze({ presence: "Unholy Presence", march: "March of the Damned" });
+export const DK_NAMED_STATE_FLAGS = Object.freeze(["dancingRuneweapon", "iceboundFortitude", "remorselessWinter"]);
+const TICK_FLAG = "tick";
+export const PLAGUE_FEATURE = "Plague";
+export const PLAGUE_STATES = Object.freeze(["frostFever", "bloodPlague"]);
+
+/**
+ * **THE RUNE FLARE'S RECORD** (02 §7: *every rune spent, for any reason*; run F5). The one rune
+ * door (`documents/runes.mjs#spendRunesOn`) writes this under `RUNE_SPEND_OPTION` on the SAME
+ * update that spends the runes - an operation's own keys reach every client's hook - so each
+ * client reads the event and plays it for itself (D-729). The key a kind's row is filed under is
+ * `rune:<kind>`, kept apart from the features as a creature's `ability:` is.
+ */
+export const RUNE_PREFIX = "rune:";
+export const RUNE_KINDS = Object.freeze(["blood", "frost"]);
+export const RUNE_KEYS = Object.freeze(RUNE_KINDS.map(kind => `${RUNE_PREFIX}${kind}`));
+export const RUNE_SPEND_OPTION = "azerothRuneSpend";
+
+/**
+ * What one spend records: the knight's token as the spender's client saw it when the runes were
+ * spent (D-724), and the kinds spent, each once, sorted. Null where no rune of a known kind was
+ * spent or no token was recorded - nothing to read, so nothing plays.
+ *
+ * @param {{source?: {sceneId?: string, tokenId?: string}|null, spent?: Array<{kind?: string}>}} o
+ * @returns {{sceneId: string|null, tokenId: string, kinds: string[]}|null}
+ */
+export function runeSpendCue({ source = null, spent = [], privacy = null } = {}) {
+  return cleanRuneSpend({ sceneId: source?.sceneId ?? null, tokenId: source?.tokenId ?? null, kinds: (spent ?? []).map(r => r?.kind), privacy });
+}
+
+/**
+ * A rune spend's record as an operation carried it, cleaned, or null.
+ *
+ * **AND THE USE'S PRIVACY PAIR, WHERE A USE PAID THEM** (D-1013, O-382; the lead: *"Fix all these
+ * with your reading"*): `useFeature` hands the rune door the (user, feature) pair its card will be
+ * noted under (`featurePrivacyKey`), and the flare's record carries it, so every client holds the
+ * flare for that card and plays it only where the card may be read - the rule a state laid before
+ * its Use's card already follows (`stateCueVerdict`). A spend no Use paid for (the bare Half-Action,
+ * a rider, Icebound Fortitude inside a blow) carries none and flares for everyone, as before.
+ *
+ * @param {unknown} raw
+ * @returns {{sceneId: string|null, tokenId: string, kinds: string[], privacy?: string}|null}
+ */
+export function cleanRuneSpend(raw) {
+  const tokenId = idOf(raw?.tokenId);
+  const kinds = [...new Set((Array.isArray(raw?.kinds) ? raw.kinds : []).filter(k => RUNE_KINDS.includes(k)))].sort();
+  if (!tokenId || !kinds.length) return null;
+  const privacy = cleanPrivacyKey(raw?.privacy);
+  return { sceneId: idOf(raw?.sceneId), tokenId, kinds, ...(privacy ? { privacy } : {}) };
+}
+
+/**
+ * A (user, feature) privacy pair as a record carried it, rebuilt through `featurePrivacyKey`, or
+ * null: `feature:<actor id>:<feature key>`, nothing else.
+ *
+ * @param {unknown} raw
+ * @returns {string|null}
+ */
+export function cleanPrivacyKey(raw) {
+  const match = typeof raw === "string" ? /^feature:([A-Za-z0-9]+):(.+)$/.exec(raw) : null;
+  return match ? featurePrivacyKey(match[1], match[2]) : null;
+}
+
+/**
+ * **WHERE A SPELL'S CORPSE LAY** (07 §17's Corpse Burst: *the corpse bursts*; D-1014, O-383): the
+ * corpse a marking spell chose, as the card records it - its token, its CENTRE in canvas pixels at
+ * the cast and its pixel width - so the burst is drawn where the body lay (D-724: what happened is
+ * written where it happened, never read off the board later). `from` is the token's TOP-LEFT;
+ * `width` and `height` its squares; `sizeX` and `sizeY` the grid's pixels a square. Null where any
+ * of it cannot be read.
+ *
+ * @param {{sceneId?: string|null, tokenId?: string|null, from?: {x: number, y: number}|null,
+ *   width?: number, height?: number, sizeX?: number, sizeY?: number}} o
+ * @returns {{sceneId: string|null, tokenId: string, x: number, y: number, width: number}|null}
+ */
+export function corpseRecord({ sceneId = null, tokenId = null, from = null, width = 1, height = 1, sizeX = 100, sizeY = 100 } = {}) {
+  const token = idOf(tokenId);
+  const a = pointOf(from);
+  if (!token || !a) return null;
+  const w = (finite(width) && width > 0 ? width : 1) * (finite(sizeX) && sizeX > 0 ? sizeX : 100);
+  const h = (finite(height) && height > 0 ? height : 1) * (finite(sizeY) && sizeY > 0 ? sizeY : 100);
+  return { sceneId: idOf(sceneId), tokenId: token, x: a.x + w / 2, y: a.y + h / 2, width: w };
+}
+
+/**
+ * A card's recorded corpse, cleaned, or null.
+ *
+ * @param {unknown} raw
+ * @returns {{sceneId: string|null, tokenId: string, x: number, y: number, width: number}|null}
+ */
+export function cleanCorpse(raw) {
+  const token = idOf(raw?.tokenId);
+  const at = pointOf(raw);
+  const width = finite(raw?.width);
+  if (!token || !at || width === null || width <= 0) return null;
+  return { sceneId: idOf(raw?.sceneId), tokenId: token, x: at.x, y: at.y, width };
+}
+
+/**
+ * **A PULL A USE'S FAILED TEST MADE, AS ITS OPERATION CARRIES IT** (02's Death Grip: *On a failure
+ * you pull it into an unoccupied space within your reach*; D-1015, O-383). The one forced-movement
+ * door (`effects/forced-movement.mjs#forceMove`) writes this under `FORCED_MOVE_OPTION` on the
+ * token's own displacement where its caller names the feature - an operation's own keys reach every
+ * client's hook, as the rune flare's do - and each client plays the feature's `arrive` cue along the
+ * recorded path (`step`, `step-to`). The pull happens on the creature's failed Resilience Test,
+ * after the Use's card, so it cannot ride the card the way a step a Use makes does.
+ */
+export const FORCED_MOVE_OPTION = "azerothForcedMove";
+
+/**
+ * **THE KEY EVERY OTHER FORCED MOVE IS FILED UNDER** (O-397; the lead: *"Yes"* - pushes and area
+ * pulls animate the same way as Death Grip's pull): a push or a pull whose caller names no feature
+ * (07's Blast Wave and Typhoon, an area's pull, a spell's failed-Test pull, a Boss's Knock Aside,
+ * Mighty Blow) is recorded by the same door under this key, and its row draws the move along its
+ * recorded path. Kept apart from the features by its colon, as `rune:` and `ability:` are.
+ */
+export const FORCED_MOVE_KEY = "move:forced";
+
+/** The two kinds of forced move a record keeps: toward the cause, and away from it. */
+export const FORCED_KINDS = Object.freeze(["pull", "push"]);
+
+/**
+ * The record one forced move writes, or null: the key (the feature's where its caller names one,
+ * else `FORCED_MOVE_KEY`), the token of the creature that caused it where the caller names it, the
+ * Use's privacy pair, and the move itself as a `pull` or a `push` step - a CENTRE before and after
+ * (`stepRecord`). **Every forced move is recorded** (O-397): the door is one, and so is the record.
+ *
+ * @param {{key?: string|null, by?: {sceneId?: string, tokenId?: string}|null, privacy?: string|null,
+ *   toward?: "away"|"toward", step?: object|null}} o  `step` a `stepRecord` argument
+ * @returns {{key: string, by: {sceneId: string|null, tokenId: string}|null, privacy?: string,
+ *   step: object}|null}
+ */
+export function forcedMoveCue({ key = null, by = null, privacy = null, toward = "away", step = null } = {}) {
+  const kind = toward === "toward" ? "pull" : "push";
+  return cleanForcedMoveCue({ key: key ?? FORCED_MOVE_KEY, by, privacy, step: step ? stepRecord({ ...step, kind }) : null });
+}
+
+/**
+ * A forced move's record as an operation carried it, cleaned, or null.
+ *
+ * @param {unknown} raw
+ */
+export function cleanForcedMoveCue(raw) {
+  const key = raw?.key === FORCED_MOVE_KEY || slugOf(raw?.key) === raw?.key ? text(raw?.key) : null;
+  const step = cleanSteps([raw?.step])[0] ?? null;
+  if (!key || !step || !FORCED_KINDS.includes(step.kind)) return null;
+  const byToken = idOf(raw?.by?.tokenId);
+  const privacy = cleanPrivacyKey(raw?.privacy);
+  return { key, by: byToken ? { sceneId: idOf(raw?.by?.sceneId), tokenId: byToken } : null, ...(privacy ? { privacy } : {}), step };
+}
+
+/**
  * Every trigger a feature row's cue may answer (the Legacy branches' door 2):
  *
  * - `use`     the Use's card - on a SUCCESSFUL Casting Test where the feature makes
@@ -89,8 +254,11 @@ export const FEATURE_BINDINGS = Object.freeze(["effect", "mark", "region", "sust
 /** What a creature ability's key opens with. */
 export const ABILITY_PREFIX = "ability:";
 
-/** The kinds a step's mover may be (`rules/steps.mjs#STEP_KINDS`), as a record keeps them. */
-export const MOVE_KINDS = Object.freeze(["self", "friend", "party", "pull"]);
+/**
+ * The kinds a step's mover may be (`rules/steps.mjs#STEP_KINDS`), as a record keeps them, and
+ * `push`, which no Use's step makes: only the forced-movement door records one (O-397).
+ */
+export const MOVE_KINDS = Object.freeze(["self", "friend", "party", "pull", "push"]);
 
 /**
  * The flags a condition's effect takes AFTER it is toggled on (`effects/inflict.mjs`
@@ -384,6 +552,21 @@ export function stateEntriesOf(flags, { only = null } = {}) {
       continue;
     }
     if (text(value.cast)) continue;
+    // The Death Knight's states (run F5): see `DK_PRESENCE_NAMES` above.
+    if (key === DK_PRESENCE_FLAG) {
+      const name = DK_PRESENCE_NAMES[value.kind] ?? null;
+      if (name) add(key, name);
+      continue;
+    }
+    if (DK_NAMED_STATE_FLAGS.includes(key)) {
+      const name = text(value.name);
+      if (name) add(key, name);
+      continue;
+    }
+    if (key === TICK_FLAG && PLAGUE_STATES.includes(value.plague)) {
+      add(value.plague, PLAGUE_FEATURE, value.source ?? null);
+      continue;
+    }
     const source = text(value.source);
     if (source && !uuidLike(source)) add(key, source, value.by ?? value.caster ?? value.setter ?? value.ownerUuid ?? null);
   }
@@ -447,6 +630,31 @@ export function featurePrivacyKey(actorId, key) {
 }
 
 /**
+ * **THE KEY AN ATTACK CARD'S PRIVACY IS NOTED UNDER** (O-394; the lead: *"Yes"* - a private attack
+ * hides its riders' rune flares): the attacker's actor and this word, through `featurePrivacyKey`,
+ * so an attack card speaks for the runes its riders spent exactly as a Use's card speaks for its
+ * Use's. The `@` keeps it from any feature's key, which is a slug.
+ */
+export const ATTACK_PRIVACY_KEY = "@attack";
+
+/** The (user, attack) pair an attack card and its riders' rune spends both name, or null. */
+export function attackPrivacyKey(actorId) {
+  return featurePrivacyKey(actorId, ATTACK_PRIVACY_KEY);
+}
+
+/**
+ * **HOW LONG A RUNE FLARE WAITS FOR ITS CARD** (O-395; the lead: *"Yes"* - wait longer). The spend
+ * lands before its card, and a Use or an attack whose card is slow (a Dice So Nice roll, a slow
+ * client) used to outlast the state cue's 1.5 seconds. The figure is read off the card latency the
+ * two-client run measured (D-1013's spec, extended): three real Death Grip Uses on localhost put
+ * their cards 4801, 2 and 3134 ms behind their spends on the player's client, so the wait is twice
+ * the worst of them. A card that arrives releases the flare at once, so the wait costs nothing on a
+ * Use whose card comes; a card later than this decides nothing and the flare is hidden
+ * (`stateCueVerdict`'s `failClosed`, the close review's finding 5).
+ */
+export const FLARE_CARD_WAIT_MS = 10000;
+
+/**
  * **WHETHER A STATE'S ARRIVAL CUE MAY BE DECIDED YET** (the B4 review): a Use lays its
  * states and THEN posts its card (`workflows.useFeature`), so a state can arrive on a
  * client before the card that says whether it was private. A state that arrives with
@@ -454,15 +662,27 @@ export function featurePrivacyKey(actorId, key) {
  * decides it, and a wait that ends with no card decides by the last card this client
  * saw of that pair - public where it saw none, the spell rule's fail-open (D-729).
  *
- * @param {{card?: {at: number, private: boolean}|null, arrivedAt?: number, now?: number,
- *   freshMs?: number, waitMs?: number}} o  `card` the last card this client saw for the pair
+ * **A RECORD THAT FAILS CLOSED** (the close review's finding 5; O-395): a rune flare carrying a
+ * privacy pair (`failClosed`) is HIDDEN where its wait ends with no fresh card. An earlier card of
+ * the pair is an earlier Use's, and no card at all says nothing: the flare shows that runes were
+ * spent, which a private Use was meant to keep.
+ *
+ * **A BLIND CARD'S OWN AUTHOR** (O-394; the lead: *"Yes"*): core keeps a blind card's content from
+ * its non-GM author (`ChatMessage#isContentVisible`), so the author's own flare read as private.
+ * Where the record asks for it (`ownBlind`) and the card was this client's own blind card
+ * (`card.ownBlind`), the flare is the author's to see, on their own client alone.
+ *
+ * @param {{card?: {at: number, private: boolean, ownBlind?: boolean}|null, arrivedAt?: number, now?: number,
+ *   freshMs?: number, waitMs?: number, failClosed?: boolean, ownBlind?: boolean}} o  `card` the last
+ *   card this client saw for the pair
  * @returns {{ready: boolean, private: boolean}}
  */
-export function stateCueVerdict({ card = null, arrivedAt = 0, now = 0, freshMs = 10000, waitMs = 1500 } = {}) {
+export function stateCueVerdict({ card = null, arrivedAt = 0, now = 0, freshMs = 10000, waitMs = 1500, failClosed = false, ownBlind = false } = {}) {
   const at = finite(card?.at);
   const fresh = at !== null && at >= arrivedAt - freshMs;
-  if (fresh) return { ready: true, private: card.private === true };
+  if (fresh) return { ready: true, private: card.private === true && !(ownBlind === true && card.ownBlind === true) };
   if (now - arrivedAt < waitMs) return { ready: false, private: false };
+  if (failClosed === true) return { ready: true, private: true };
   return { ready: true, private: card?.private === true };
 }
 

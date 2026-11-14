@@ -46,6 +46,12 @@ import { INFLICT_QUERY, inflictQueryHandler } from "./effects/inflict.mjs";
 import { ANNOTATE_QUERY, annotateQueryHandler } from "./dice/annotate.mjs";
 import { CLAIM_LOOT_QUERY, claimLootQueryHandler } from "./documents/loot-offer.mjs";
 import { END_TICK_QUERY, LAY_POISON_QUERY, endTickQueryHandler, layPoisonQueryHandler } from "./effects/ticks.mjs";
+import { LAY_PLAGUE_QUERY, layPlagueQueryHandler } from "./effects/death-knight.mjs";
+// The Death Knight's raises and the corpses' marks (07 §17; the Death Knight plan, run F3).
+import { CORPSE_QUERY, RAISE_QUERY, corpseQueryHandler, raiseQueryHandler } from "./effects/death-knight-necromancy.mjs";
+// The Death Knight's talents' writes on creatures the knight's client does not own (04; run F4a).
+import { DK_TALENT_QUERY, dkTalentQueryHandler } from "./effects/death-knight-talents.mjs";
+import { DK_SPELL_QUERY, dkSpellQueryHandler } from "./effects/death-knight-spells.mjs";
 import { LOSE_REACTION_QUERY, loseReactionQueryHandler } from "./effects/reaction-loss.mjs";
 import { SPEED_DROP_QUERY, speedDropQueryHandler } from "./effects/speed-drop.mjs";
 import { HIT_MARK_QUERY, hitMarkQueryHandler } from "./effects/hit-marks.mjs";
@@ -535,6 +541,14 @@ export function registerQueries() {
   CONFIG.queries[SAND_ANSWER_QUERY] = sandAnswerQueryHandler;
   CONFIG.queries[TIMELINE_QUERY] = timelineQueryHandler;
   CONFIG.queries[LAY_POISON_QUERY] = layPoisonQueryHandler;
+  // 02's Plague laid on a creature the Death Knight's client does not own (run F2).
+  CONFIG.queries[LAY_PLAGUE_QUERY] = layPlagueQueryHandler;
+  CONFIG.queries[RAISE_QUERY] = raiseQueryHandler;
+  CONFIG.queries[CORPSE_QUERY] = corpseQueryHandler;
+  // 04's Blood and Frost (run F4a): Sanguine Tide, Mark of Blood, Vengeful Blood, Crimson Coil,
+  // Chill of the Grave, Dancing Runeweapon's heal and Empower Runeweapon's Fevers.
+  CONFIG.queries[DK_TALENT_QUERY] = dkTalentQueryHandler;
+  CONFIG.queries[DK_SPELL_QUERY] = dkSpellQueryHandler;
   // The Priest's and the Shaman's (D-774): 02's Ward laid on a creature the priest
   // does not own and Absorption's Mana back to a priest the striker's client does
   // not own; Hymn of Hope's Mana and Undying Spirit's friend stood up at 1 Health.

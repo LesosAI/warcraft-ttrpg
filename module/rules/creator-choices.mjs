@@ -1,6 +1,7 @@
 /** Draft-only choices. Reuse the sheet's tree law without owning an Actor. */
 import { buildTree, canTakeRacial } from "./talents.mjs";
 import { keptBy } from "./legacy-branches.mjs";
+import { classLearnsSpell } from "./spell-access.mjs";
 
 export function startingRacialState(talent, race, cls) {
   return canTakeRacial(talent, [], 1, { race: race?.name, classes: cls ? [cls.name] : [] });
@@ -11,8 +12,9 @@ export function startingTalents(talents, cls, race) {
 }
 
 export function startingSpell(spell, cls) {
-  return Boolean(cls && Number(spell?.tier) === 1 && cls.schools?.includes(spell.school)
-    && (!spell.classes?.length || spell.classes.includes(cls.name)));
+  // The one predicate (`spell-access.mjs`): a Restricted line naming the class counts
+  // as its own school does, so a Death Knight starts with Fear or a tier 1 Frost pick.
+  return Boolean(cls && Number(spell?.tier) === 1 && classLearnsSpell(cls, spell));
 }
 
 export function draftTree(talents, selected) {

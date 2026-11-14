@@ -293,7 +293,13 @@ export function spend(budget, cost, { isAttack = false, isOffHand = false, isMov
   // turn that is not being taken. The card's own button is drawn only in the
   // attacker's turn now as well; this is the door, because a card is a record
   // of a moment and the press can come at any time (D-693).
-  if (isAttack && isOffHand && !onTurn) {
+  //
+  // **SAVE AN OFF-HAND ATTACK PAID FOR WITH THE REACTION** (04's Vengeful Blood, D-1017: *you may
+  // make your **Off-Hand Attack** for the round against it as a Reaction*): made on somebody
+  // else's turn by its own words. It still spends the round's one Off-Hand Attack and the Reaction
+  // below, and rides nothing. No other door prices an off-hand blow at the Reaction
+  // (`rules/wield.mjs#attackOffHand` reads none from a Reaction's budget).
+  if (isAttack && isOffHand && !onTurn && cost !== "reaction") {
     return { ok: false, reason: BUDGET_REFUSALS.offHandNotYourTurn, params: {}, budget };
   }
 
@@ -337,7 +343,9 @@ export function spend(budget, cost, { isAttack = false, isOffHand = false, isMov
   // it may use until the end of its next turn*; the plan's door 9): one that still stands
   // NOW, before the creature's own.
   if (cost === "reaction" && givenReactionsLeft(budget, now) > 0) {
-    return { ok: true, reason: null, params: null, budget: { ...budget, given: spendGiven(budget.given, now) } };
+    // An Off-Hand Attack made as the Reaction (D-1017's riposte) is the round's one either way.
+    return { ok: true, reason: null, params: null, budget: { ...budget, given: spendGiven(budget.given, now),
+      ...(isAttack && isOffHand ? { offHandAttacks: Math.max(0, offHand - 1) } : {}) } };
   }
   if (cost === "reaction") {
     if (budget.reactions < 1) return { ok: false, reason: BUDGET_REFUSALS.noReaction, params: {}, budget };

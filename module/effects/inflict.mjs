@@ -21,6 +21,7 @@
 
 import { AZEROTH } from "../config.mjs";
 import { applyCondition } from "./durations.mjs";
+import { conditionEffectOf } from "../rules/condition-carriers.mjs";
 import { NO_CASTING_FLAG, PARALYTIC_FLAG } from "../rules/class-talents.mjs";
 import { SNARE_FLAG } from "../rules/class-features.mjs";
 // What a landed condition carries since D-778: the Test 07 gives a held or Stunned
@@ -73,7 +74,10 @@ function cleanMarks(marks) {
  * two keywords `applyCondition` reads, or none.
  */
 function cleanUntil(until) {
-  if (until === "endOfNextTurn" || until === "nextTurn" || until === "endOfRound" || until === "encounter") return until;
+  // And *until the end of its turn* (04's Relentless Advance, run F4a), which `applyCondition` reads.
+  if (until === "endOfNextTurn" || until === "nextTurn" || until === "endOfRound" || until === "encounter" || until === "endOfTurn") return until;
+  // D-778's turn-keyed spans that end out of a fight too (the close review's finding 2).
+  if (until === "endOfNextTurnOrRound" || until === "nextTurnOrRound") return until;
   if (until && typeof until === "object" && until.duration && until.start) {
     return { duration: { ...until.duration }, start: { ...until.start } };
   }
@@ -125,10 +129,16 @@ async function inflictHere({ victim, id, value, until = null, marks = {}, byUuid
   // door knows one - the push's own reading (`effects/forced-movement.mjs#beingMovedBy`).
   if (id === "prone" && byUuid) {
     const by = actorAt(byUuid);
-    if (by && beingMovedBy(victim, by)) return landing(victim.name, id, value, false, "outsized");
+    // 05's size rule alone: a creature's own *cannot be moved* is a forced move's refusal, and
+    // its Prone is refused, where it is, by its own condition immunities.
+    if (by && beingMovedBy(victim, by) === "outsized") return landing(victim.name, id, value, false, "outsized");
   }
-  const had = victim.statuses?.has?.(id) === true;
-  const prior = had ? (victim.effects?.find?.(e => e.statuses?.has?.(id))?.getFlag?.("azeroth-rpg", "value") ?? null) : null;
+  // What stood before is the condition's OWN effect (D-997): a carrier holding the status (Frost
+  // Fever's Slowed) is not it, so a hit that lays the condition beside a carrier laid it fresh, and
+  // a withdrawn hit takes that one back off.
+  const ownBefore = conditionEffectOf(victim.effects ?? [], id);
+  const had = Boolean(ownBefore);
+  const prior = had ? (ownBefore.getFlag?.("azeroth-rpg", "value") ?? null) : null;
   const effect = await applyCondition(victim, id, { value: valueOf(value), until: cleanUntil(until) });
   // What the landed effect carries beside its value (D-773): written onto the
   // effect the condition rides, so the mark ends with the condition.

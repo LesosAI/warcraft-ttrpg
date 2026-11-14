@@ -29,6 +29,32 @@
 
 import { AZEROTH } from "../config.mjs";
 import { POOL_CHANGE_TYPE, poolRises } from "./pool-change.mjs";
+import { evaluateExpression } from "./expressions.mjs";
+
+/** The six abilities an amount may name (`rules/expressions.mjs`). */
+const ABILITY_NAMES = Object.freeze(["str", "dex", "con", "int", "wis", "cha"]);
+
+/**
+ * **A SPELL'S DAMAGE THAT ADDS THE CASTER'S MODIFIER** (07's Glacial Advance: *Every creature in
+ * the line takes 5 Frost damage plus half your casting modifier, rounded down*; the lead:
+ * *"Glacial advance. Add half casting modifier to damage"*; D-974): what the effect's own words
+ * add to the Damage Rating, read through the ONE amount grammar (`rules/expressions.mjs`) at the
+ * modifier of the ability the cast uses - half of it rounded down, or the whole of it, and never
+ * below nothing. The Damage field keeps its own number; this is added beside it, once a creature.
+ *
+ * @param {string} effect  the entry's effect, HTML or plain
+ * @param {{ability?: string|null, mod?: number}} o  the cast's ability and its modifier
+ * @returns {number}
+ */
+export function castingModPlus(effect = "", { ability = null, mod = 0 } = {}) {
+  if (!ABILITY_NAMES.includes(ability)) return 0;
+  const text = String(effect ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  const half = /\bdamage plus half your casting modifier, rounded down\b/i.test(text);
+  const whole = !half && /\bdamage plus your casting modifier\b/i.test(text);
+  if (!half && !whole) return 0;
+  const n = evaluateExpression(half ? `floor(${ability}/2)` : ability, { [ability]: Math.trunc(Number(mod)) || 0 });
+  return Math.max(0, Math.trunc(Number(n)) || 0);
+}
 
 const SCHOOL_NAMES = Object.freeze(Object.fromEntries(Object.keys(AZEROTH.schools).map(k => [k, k])));
 
@@ -160,7 +186,12 @@ export function seedApplies(effectText, duration = {}, target = "") {
   // (found reading the lay door for D-770): Light Unending laid Shadow and
   // dropped Fel. The list holds school names alone, so *Ward 3 against Fel and
   // Ward 2 against Shadow* is still two Wards, each with its own number.
-  for (const w of text.matchAll(WARD_LIST)) {
+  // **A WALL'S SECTION IS NOT THE TARGET** (07 §11's Wall of Ice: *It has 10 Health, Defense 8 and
+  // Ward 3 against Frost, and breaking a five-foot section opens a gap*; §17's Ossuary Wall: *Each
+  // 10-foot section has ... Ward 2 against Shadow*; run F4b): the Ward in a sentence about a wall's
+  // sections is the wall's, and the Apply laid it on whoever was targeted.
+  const wardText = sentences(text).filter(s => !/\bsection\b/i.test(s)).join(" ");
+  for (const w of wardText.matchAll(WARD_LIST)) {
     for (const word of w[2].replace(/\*\*/g, "").split(/,\s*(?:and\s+|or\s+)?|\s+(?:and|or)\s+/)) {
       const school = word.trim().toLowerCase();
       if (SCHOOL_NAMES[school]) add(`system.ward.${school}`, w[1]);

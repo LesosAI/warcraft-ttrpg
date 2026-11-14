@@ -283,6 +283,13 @@
     ],
     "reason": "A paladin is surrounded by a bright golden halo. Beacon of Light marks one person as the destination for the paladin’s later healing, matching the visible beacon."
   },
+  "spell:black-mist": {
+    "name": "Black Mist",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_plaguecloud",
+    "previousIcons": [],
+    "reason": "A dark cloud filling the air: Black Mist's darkness that blinds every creature inside it."
+  },
   "spell:blackout": {
     "name": "Blackout",
     "source": "07-MAGIC",
@@ -346,6 +353,13 @@
     ],
     "reason": "The old art is a set of tight chains, which suggests restraint. Blizzard rains ice over an area while the caster sustains it; the replacement shows a swirling ice storm."
   },
+  "spell:blood-bind": {
+    "name": "Blood Bind",
+    "source": "07-MAGIC",
+    "icon": "ability_deathknight_asphixiate",
+    "previousIcons": [],
+    "reason": "A choking hold. Blood Bind slows its target and takes its Reactions."
+  },
   "spell:blood-pact": {
     "name": "Blood Pact",
     "source": "07-MAGIC",
@@ -364,6 +378,13 @@
     ],
     "reason": "Large red droplets fill the icon. Bloodboil moves what is inside people across an area; the blood imagery directly signals the effect."
   },
+  "spell:bloodtrail": {
+    "name": "Bloodtrail",
+    "source": "07-MAGIC",
+    "icon": "ability_rogue_bloodyeye",
+    "previousIcons": [],
+    "reason": "A bloody eye: Bloodtrail follows a creature by the blood it shed."
+  },
   "spell:bloom": {
     "name": "Bloom",
     "source": "07-MAGIC",
@@ -372,6 +393,13 @@
       "spell_druid_wildmushroom_bloom"
     ],
     "reason": "Green mushrooms and new growth spread over the image. Bloom calls growth up all at once, matching the sudden vegetation."
+  },
+  "spell:bone-threshold": {
+    "name": "Bone Threshold",
+    "source": "07-MAGIC",
+    "icon": "ability_deathknight_brittlebones",
+    "previousIcons": [],
+    "reason": "Bones laid across a way. Bone Threshold marks a line the undead cannot cross."
   },
   "spell:borrowed-voice": {
     "name": "Borrowed Voice",
@@ -415,6 +443,13 @@
       "spell_nature_chainlightning"
     ],
     "reason": "A blue electrical bolt forks across the image. Chain Lightning jumps from one target to another, exactly the branching action shown."
+  },
+  "spell:chains-of-ice": {
+    "name": "Chains of Ice",
+    "source": "07-MAGIC",
+    "icon": "spell_frost_chainsofice",
+    "previousIcons": [],
+    "reason": "WoW's own Chains of Ice icon, for the spell of the same name."
   },
   "spell:chaos-bolt": {
     "name": "Chaos Bolt",
@@ -650,6 +685,20 @@
     ],
     "reason": "An orange carved elemental emblem fills the frame. Convocation invites the elements to their own country; the ritual emblem supports the act of summoning them."
   },
+  "spell:corpse-burst": {
+    "name": "Corpse Burst",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_corpseexplode",
+    "previousIcons": [],
+    "reason": "WoW's Corpse Explosion art: a body bursting. Corpse Burst destroys a corpse and damages the creatures around it."
+  },
+  "spell:corpse-eyes": {
+    "name": "Corpse Eyes",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_skull",
+    "previousIcons": [],
+    "reason": "A skull's empty gaze. Corpse Eyes lets the caster see through a corpse."
+  },
   "spell:crucible": {
     "name": "Crucible",
     "source": "07-MAGIC",
@@ -776,6 +825,13 @@
     ],
     "reason": "A jagged violet ward emblem depicts the group protected against Shadow and its first hit."
   },
+  "spell:death-and-decay": {
+    "name": "Death and Decay",
+    "source": "07-MAGIC",
+    "icon": "ability_deathknight_decomposingaura",
+    "previousIcons": [],
+    "reason": "Ground rotting away. Death and Decay blackens an area that damages every enemy starting its turn in it."
+  },
   "spell:death-coil": {
     "name": "Death Coil",
     "source": "07-MAGIC",
@@ -784,6 +840,27 @@
       "spell_shadow_deathcoil"
     ],
     "reason": "Green deathly energy coils around a skull. Death Coil drains a target and gives the stolen life to the caster; the skull and spiral fit the transfer."
+  },
+  "spell:death-pact": {
+    "name": "Death Pact",
+    "source": "07-MAGIC",
+    "icon": "ability_deathknight_deathsiphon2",
+    "previousIcons": [],
+    "reason": "A death siphon. Death Pact destroys an undead servant and gives its Health to the caster."
+  },
+  "spell:deaths-advance": {
+    "name": "Death's Advance",
+    "source": "07-MAGIC",
+    "icon": "spell_deathknight_pathoffrost",
+    "previousIcons": [],
+    "reason": "A path of frost. Death's Advance speeds the caster and lets it ignore Difficult ground."
+  },
+  "spell:deaths-embrace": {
+    "name": "Death's Embrace",
+    "source": "07-MAGIC",
+    "icon": "artifactability_unholydeathknight_deathsembrace",
+    "previousIcons": [],
+    "reason": "WoW's own Death's Embrace art. The spell stuns a creature near death."
   },
   "spell:deep-winter": {
     "name": "Deep Winter",
@@ -1019,6 +1096,20 @@
     ],
     "reason": "A purple claw grips a living target. Drain Soul pulls steadily on what keeps a creature alive, matching the grasping drain."
   },
+  "spell:dread-cry": {
+    "name": "Dread Cry",
+    "source": "07-MAGIC",
+    "icon": "ability_deathknight_heartstopaura",
+    "previousIcons": [],
+    "reason": "A heart-stopping aura. Dread Cry frightens every enemy around the caster."
+  },
+  "spell:dread-visage": {
+    "name": "Dread Visage",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_unholystrength",
+    "previousIcons": [],
+    "reason": "An unholy face. Dread Visage shows the grave in the caster's face to frighten and coerce."
+  },
   "spell:dream-theatre": {
     "name": "Dream Theatre",
     "source": "07-MAGIC",
@@ -1106,6 +1197,13 @@
       "spell_nature_corrosivebreath"
     ],
     "reason": "A rocky figure in green Nature light fits hardened skin, temporary Health, and slower movement."
+  },
+  "spell:echo-of-the-slain": {
+    "name": "Echo of the Slain",
+    "source": "07-MAGIC",
+    "icon": "spell_necro_deathlyecho",
+    "previousIcons": [],
+    "reason": "A deathly echo. Echo of the Slain lets the caster hear a creature's last minute."
   },
   "spell:echo-step": {
     "name": "Echo Step",
@@ -1571,6 +1669,13 @@
     ],
     "reason": "The old art is a handful of pointed shards, suggesting projectiles. Frost Nova freezes the floor and everyone standing on it; the replacement shows a radial burst of ice."
   },
+  "spell:frost-strike": {
+    "name": "Frost Strike",
+    "source": "07-MAGIC",
+    "icon": "spell_deathknight_empowerruneblade2",
+    "previousIcons": [],
+    "reason": "A frost-empowered blade. Frost Strike adds Frost damage to the caster's next melee hit."
+  },
   "spell:frost-ward": {
     "name": "Frost Ward",
     "source": "07-MAGIC",
@@ -1625,6 +1730,13 @@
     ],
     "reason": "A wave of pale blue ice fits the Frost damage left running on a target under Winter’s Chill."
   },
+  "spell:frostwyrm-breath": {
+    "name": "Frostwyrm Breath",
+    "source": "07-MAGIC",
+    "icon": "ability_mount_redfrostwyrm_01",
+    "previousIcons": [],
+    "reason": "A frost wyrm. Frostwyrm Breath freezes every creature in a cone."
+  },
   "spell:frozen-ground": {
     "name": "Frozen Ground",
     "source": "07-MAGIC",
@@ -1668,6 +1780,13 @@
     ],
     "reason": "A blue spirit wolf is centered in the icon. Ghost Wolf lends the shaman a wolf shape for travel, matching the form exactly."
   },
+  "spell:glacial-advance": {
+    "name": "Glacial Advance",
+    "source": "07-MAGIC",
+    "icon": "ability_hunter_glacialtrap",
+    "previousIcons": [],
+    "reason": "Ice rising from the ground. Glacial Advance runs a ridge of ice along a line."
+  },
   "spell:glacial-spike": {
     "name": "Glacial Spike",
     "source": "07-MAGIC",
@@ -1702,6 +1821,13 @@
     "previousIcons": [],
     "reason": "The arcane knowledge icon suits temporary comprehension of a language supplied by another speaker."
   },
+  "spell:grasp-of-the-grave": {
+    "name": "Grasp of the Grave",
+    "source": "07-MAGIC",
+    "icon": "ability_deathknight_necroticaura",
+    "previousIcons": [],
+    "reason": "Necrotic power reaching up. Grasp of the Grave entangles every creature in its area."
+  },
   "spell:grave-coil": {
     "name": "Grave Coil",
     "source": "07-MAGIC",
@@ -1711,6 +1837,13 @@
     ],
     "reason": "A green deathly soul and dark coil depict Shadow damage that returns Health to the caster or heals undead."
   },
+  "spell:grave-labor": {
+    "name": "Grave Labor",
+    "source": "07-MAGIC",
+    "icon": "spell_deathknight_gnaw_ghoul",
+    "previousIcons": [],
+    "reason": "A ghoul at work. Grave Labor raises a mindless servant that never fights."
+  },
   "spell:graveblight": {
     "name": "Graveblight",
     "source": "07-MAGIC",
@@ -1719,6 +1852,13 @@
       "spell_shadow_mindrot"
     ],
     "reason": "A corpse-like face is covered in decay. Graveblight tells the ground nothing should grow again, matching the undead blight."
+  },
+  "spell:gravewell": {
+    "name": "Gravewell",
+    "source": "07-MAGIC",
+    "icon": "spell_necro_necroticcore",
+    "previousIcons": [],
+    "reason": "A well of necrotic power. Gravewell heals the undead allies inside its area."
   },
   "spell:grit-lash": {
     "name": "Grit Lash",
@@ -1828,6 +1968,13 @@
     ],
     "reason": "A dark hand reaching through green light evokes Health being passed from the caster to the target."
   },
+  "spell:heartrend": {
+    "name": "Heartrend",
+    "source": "07-MAGIC",
+    "icon": "ability_deathknight_necroticstrike",
+    "previousIcons": [],
+    "reason": "A necrotic strike. Heartrend damages its target and heals the caster with half of it."
+  },
   "spell:heat-mirage": {
     "name": "Heat Mirage",
     "source": "07-MAGIC",
@@ -1934,6 +2081,13 @@
     ],
     "reason": "The old art is a helmet, which suggests armor. Holy Wrath releases Light downward and outward; the replacement depicts a radiant blast."
   },
+  "spell:horn-of-winter": {
+    "name": "Horn of Winter",
+    "source": "07-MAGIC",
+    "icon": "inv_misc_horn_02",
+    "previousIcons": [],
+    "reason": "A war horn. Horn of Winter gives every ally near the caster a Boon."
+  },
   "spell:horrify": {
     "name": "Horrify",
     "source": "07-MAGIC",
@@ -1978,6 +2132,13 @@
       "ability_warlock_howlofterror"
     ],
     "reason": "A creature opens its mouth in a howl. Howl of Terror sends a sound from the Nether that frightens nearby creatures, matching the image."
+  },
+  "spell:howling-blast": {
+    "name": "Howling Blast",
+    "source": "07-MAGIC",
+    "icon": "spell_frost_arcticwinds",
+    "previousIcons": [],
+    "reason": "Arctic winds. Howling Blast is a burst of icy wind that slows what it strikes."
   },
   "spell:hymn": {
     "name": "Hymn",
@@ -2085,6 +2246,13 @@
     ],
     "reason": "The old art is a golden time symbol. Icewalk forms ice beneath each step and lets it melt behind; the replacement shows a track of ice."
   },
+  "spell:icy-touch": {
+    "name": "Icy Touch",
+    "source": "07-MAGIC",
+    "icon": "spell_deathknight_icetouch",
+    "previousIcons": [],
+    "reason": "WoW's own Icy Touch icon, for the spell of the same name."
+  },
   "spell:immolate": {
     "name": "Immolate",
     "source": "07-MAGIC",
@@ -2166,6 +2334,13 @@
     ],
     "reason": "The old art is a screaming fel-fire face. Kindle lights or puts out a campfire and has no creature target; the replacement shows a simple orange flame."
   },
+  "spell:kinship-of-the-dead": {
+    "name": "Kinship of the Dead",
+    "source": "07-MAGIC",
+    "icon": "achievement_character_undead_male",
+    "previousIcons": [],
+    "reason": "An undead face. Kinship of the Dead makes mindless undead treat the targets as their own."
+  },
   "spell:landslide": {
     "name": "Landslide",
     "source": "07-MAGIC",
@@ -2237,6 +2412,13 @@
       "spell_arcane_portaldalarancrater"
     ],
     "reason": "The old art is a city portal, implying travel. Ley Wound leaves a seam inside a creature; the replacement shows a concentrated arcane tear rather than a destination."
+  },
+  "spell:lichward": {
+    "name": "Lichward",
+    "source": "07-MAGIC",
+    "icon": "spell_deathknight_antimagiczone",
+    "previousIcons": [],
+    "reason": "A shell against magic. Lichward gives Ward against the school of a spell that strikes the caster."
   },
   "spell:light-unending": {
     "name": "Light Unending",
@@ -2382,6 +2564,13 @@
     ],
     "reason": "The old art is a totem binding the earth, not a mark of nature. Mark of the Wild blesses a company with the wild’s protection; the replacement depicts living nature gathered around a figure."
   },
+  "spell:mask-of-the-living": {
+    "name": "Mask of the Living",
+    "source": "07-MAGIC",
+    "icon": "spell_deathknight_subversion",
+    "previousIcons": [],
+    "reason": "A false face. Mask of the Living hides the undead caster behind a living look."
+  },
   "spell:mass-dispel": {
     "name": "Mass Dispel",
     "source": "07-MAGIC",
@@ -2426,6 +2615,13 @@
       "spell_shadow_mindflay"
     ],
     "reason": "A purple psychic eye and tendrils dominate the image. Mind Flay holds a connection while draining the target, matching the invasive mind effect."
+  },
+  "spell:mind-freeze": {
+    "name": "Mind Freeze",
+    "source": "07-MAGIC",
+    "icon": "spell_deathknight_mindfreeze",
+    "previousIcons": [],
+    "reason": "WoW's own Mind Freeze icon, for the spell of the same name."
   },
   "spell:mind-sear": {
     "name": "Mind Sear",
@@ -2686,6 +2882,13 @@
     ],
     "reason": "The old art is a dark blue whirlpool with no cold impact. Numbing Frost makes cold seize a target’s movement; the replacement depicts a sharp frost impact."
   },
+  "spell:ossuary-wall": {
+    "name": "Ossuary Wall",
+    "source": "07-MAGIC",
+    "icon": "ability_deathknight_boneshield",
+    "previousIcons": [],
+    "reason": "A wall of bone. Ossuary Wall raises fused bone that blocks movement and sight."
+  },
   "spell:pact-escrow": {
     "name": "Pact Escrow",
     "source": "07-MAGIC",
@@ -2701,6 +2904,20 @@
       "spell_holy_dispelmagic"
     ],
     "reason": "The old art is scattered purple sparks. Pain Suppression steps between a person and harm without healing them; the replacement visibly depicts an interposing shield."
+  },
+  "spell:pall-of-despair": {
+    "name": "Pall of Despair",
+    "source": "07-MAGIC",
+    "icon": "spell_necro_deathsknell",
+    "previousIcons": [],
+    "reason": "A tolling of death. Pall of Despair weakens the will of every enemy near the caster."
+  },
+  "spell:pestilence": {
+    "name": "Pestilence",
+    "source": "07-MAGIC",
+    "icon": "spell_deathknight_necroticplague",
+    "previousIcons": [],
+    "reason": "WoW's Necrotic Plague art. Pestilence spreads the caster's diseases to the creatures around its target."
   },
   "spell:phantom-footsteps": {
     "name": "Phantom Footsteps",
@@ -2722,6 +2939,13 @@
     "icon": "spell_holy_blessedresillience",
     "previousIcons": [],
     "reason": "The Holy aid icon fits the temporary redistribution of carried burden between willing travelers."
+  },
+  "spell:plaguesight": {
+    "name": "Plaguesight",
+    "source": "07-MAGIC",
+    "icon": "ability_deathknight_unholymutation",
+    "previousIcons": [],
+    "reason": "An unholy mutation. Plaguesight senses the Undeath Corruption creatures carry."
   },
   "spell:portal": {
     "name": "Portal",
@@ -2891,6 +3115,48 @@
       "spell_nature_elementalabsorption"
     ],
     "reason": "Four colored elements meet in a central pattern. Rainmaking calls natural forces to bring rain, matching the elemental gathering."
+  },
+  "spell:raise-abomination": {
+    "name": "Raise Abomination",
+    "source": "07-MAGIC",
+    "icon": "tradeskill_abominationstitching_abominations_mid",
+    "previousIcons": [],
+    "reason": "Stitched flesh. Raise Abomination stitches three corpses into one Abomination."
+  },
+  "spell:raise-crypt-fiend": {
+    "name": "Raise Crypt Fiend",
+    "source": "07-MAGIC",
+    "icon": "ability_deathknight_reanimation",
+    "previousIcons": [],
+    "reason": "Reanimation. Raise Crypt Fiend raises a corpse as a Crypt Fiend."
+  },
+  "spell:raise-dracolich": {
+    "name": "Raise Dracolich",
+    "source": "07-MAGIC",
+    "icon": "achievement_boss_lichking",
+    "previousIcons": [],
+    "reason": "The Lich King's power over dead dragons. Raise Dracolich raises a dragon's corpse as a Dracolich."
+  },
+  "spell:raise-ghoul": {
+    "name": "Raise Ghoul",
+    "source": "07-MAGIC",
+    "icon": "spell_deathknight_explode_ghoul",
+    "previousIcons": [],
+    "reason": "A ghoul. Raise Ghoul raises a corpse as a Plagued Ghoul."
+  },
+  "spell:raise-skeleton": {
+    "name": "Raise Skeleton",
+    "source": "07-MAGIC",
+    "icon": "spell_deathknight_armyofthedead",
+    "previousIcons": [],
+    "reason": "WoW's Army of the Dead art, skeletons rising. Raise Skeleton raises corpses as Risen Skeletons."
+  },
+  "spell:read-the-dead": {
+    "name": "Read the Dead",
+    "source": "07-MAGIC",
+    "icon": "spell_necro_deathsdoor",
+    "previousIcons": [],
+    "reason": "Death's door. Read the Dead learns how a creature died."
   },
   "spell:rebirth": {
     "name": "Rebirth",
@@ -3239,6 +3505,13 @@
     ],
     "reason": "A cloud of glittering arcane dust, the grit worn close that flays whatever reaches in."
   },
+  "spell:seal-the-soul": {
+    "name": "Seal the Soul",
+    "source": "07-MAGIC",
+    "icon": "spell_necro_undyingrelentlessness",
+    "previousIcons": [],
+    "reason": "A held soul. Seal the Soul keeps a creature's spirit in its body."
+  },
   "spell:sealing-flame": {
     "name": "Sealing Flame",
     "source": "07-MAGIC",
@@ -3471,6 +3744,13 @@
     ],
     "reason": "The old art is a green ghostlike eye. Soul Reaper catches a soul as its target nears death; the replacement depicts a soul contained in a dark gem."
   },
+  "spell:soul-rend": {
+    "name": "Soul Rend",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_soulleech_2",
+    "previousIcons": [],
+    "reason": "A soul drawn out. Soul Rend damages its target and stops it regaining Health."
+  },
   "spell:soulburn": {
     "name": "Soulburn",
     "source": "07-MAGIC",
@@ -3629,6 +3909,13 @@
     ],
     "reason": "A raised hand before warm Light depicts saving a target from dropping to 0 Health."
   },
+  "spell:stay-the-rot": {
+    "name": "Stay the Rot",
+    "source": "07-MAGIC",
+    "icon": "spell_necro_dischargenecroticcore",
+    "previousIcons": [],
+    "reason": "Necrotic power held. Stay the Rot keeps a corpse from decay."
+  },
   "spell:stillfrost": {
     "name": "Stillfrost",
     "source": "07-MAGIC",
@@ -3673,6 +3960,13 @@
       "spell_nature_farsight"
     ],
     "reason": "A shield edged in blue lightning fits a wall that blocks ranged attacks and shocks passage."
+  },
+  "spell:strangulate": {
+    "name": "Strangulate",
+    "source": "07-MAGIC",
+    "icon": "spell_deathknight_strangulate",
+    "previousIcons": [],
+    "reason": "WoW's own Strangulate icon, for the spell of the same name."
   },
   "spell:stutter": {
     "name": "Stutter",
@@ -3931,6 +4225,34 @@
     ],
     "reason": "A shadowed face and reaching hand emerge from purple light. Umbra draws on a person’s shadow, matching the dark projection."
   },
+  "spell:unholy-armor": {
+    "name": "Unholy Armor",
+    "source": "07-MAGIC",
+    "icon": "spell_deathknight_unholypresence",
+    "previousIcons": [],
+    "reason": "An unholy aura. Unholy Armor gives the caster temporary Health."
+  },
+  "spell:unholy-blight": {
+    "name": "Unholy Blight",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_contagion",
+    "previousIcons": [],
+    "reason": "A blighting contagion. Unholy Blight damages every enemy that starts its turn near the caster."
+  },
+  "spell:unholy-frenzy": {
+    "name": "Unholy Frenzy",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_unholyfrenzy",
+    "previousIcons": [],
+    "reason": "WoW's own Unholy Frenzy icon, for the spell of the same name."
+  },
+  "spell:unholy-mending": {
+    "name": "Unholy Mending",
+    "source": "07-MAGIC",
+    "icon": "ability_deathknight_deathsiphon",
+    "previousIcons": [],
+    "reason": "A death siphon. Unholy Mending restores Health to an undead creature."
+  },
   "spell:unmaking": {
     "name": "Unmaking",
     "source": "07-MAGIC",
@@ -3948,6 +4270,13 @@
       "spell_arcane_teleportexodar"
     ],
     "reason": "The old art is a Dalaran city portal, implying transport. Unweave pulls apart the magic holding a target together; the replacement shows arcane energy unraveling and dispersing."
+  },
+  "spell:vein-rend": {
+    "name": "Vein Rend",
+    "source": "07-MAGIC",
+    "icon": "ability_deathknight_marrowrend",
+    "previousIcons": [],
+    "reason": "A rending strike. Vein Rend damages its target and leaves it Bleeding."
   },
   "spell:verdance": {
     "name": "Verdance",
@@ -4600,6 +4929,13 @@
     ],
     "reason": "A black dragon's head: the capstone that takes the Black Drake's form."
   },
+  "talent:black-ice": {
+    "name": "Black Ice",
+    "source": "04-TALENTS",
+    "icon": "spell_deathknight_frostfever",
+    "previousIcons": [],
+    "reason": "WoW's own Frost Fever art: a sickly blue frost on flesh. Black Ice makes the knight's Frost Fever bite harder, so the Fever's own picture names it."
+  },
   "talent:blackrock-legacy": {
     "name": "Blackrock Legacy",
     "source": "02-CHARACTER-OPTIONS",
@@ -4711,6 +5047,13 @@
     ],
     "reason": "Align with the named Blood Pact spell: A green demon burns inside the image. Blood Pact takes mana from a demon and leaves it alive, so the demonic subject fits the spell’s source."
   },
+  "talent:blood-shield": {
+    "name": "Blood Shield",
+    "source": "04-TALENTS",
+    "icon": "spell_deathknight_bladedarmor",
+    "previousIcons": [],
+    "reason": "A Death Knight's armored guard. Blood Shield turns Death Strike's restore into temporary Health, a shield the art reads as."
+  },
   "talent:blood-sport": {
     "name": "Blood Sport",
     "source": "04-TALENTS",
@@ -4719,6 +5062,13 @@
       "ability_rogue_bloodsplatter"
     ],
     "reason": "Retain: the blood-splatter image matches the Bleeding condition that earns additional Combo Points."
+  },
+  "talent:blood-tap": {
+    "name": "Blood Tap",
+    "source": "04-TALENTS",
+    "icon": "spell_deathknight_bloodtap",
+    "previousIcons": [],
+    "reason": "WoW's own Blood Tap icon, for the talent of the same name that refills spent Blood runes."
   },
   "talent:bloodied-blade": {
     "name": "Bloodied Blade",
@@ -4976,6 +5326,13 @@
     ],
     "reason": "Retain: the rogue close-combat icon matches an Opening attack against an unaware target."
   },
+  "talent:chill-of-the-grave": {
+    "name": "Chill of the Grave",
+    "source": "04-TALENTS",
+    "icon": "spell_necro_chillofdeath",
+    "previousIcons": [],
+    "reason": "A deathly chill. Chill of the Grave slows what Death Coil strikes, and the cold of the grave is the subject."
+  },
   "talent:chimaera-shot": {
     "name": "Chimaera Shot",
     "source": "04-TALENTS",
@@ -5185,6 +5542,13 @@
     ],
     "reason": "A human face worn as a mask: the guise of one particular humanoid, face and voice, as the black flight walked the courts."
   },
+  "talent:crimson-coil": {
+    "name": "Crimson Coil",
+    "source": "04-TALENTS",
+    "icon": "ability_deathknight_roilingblood",
+    "previousIcons": [],
+    "reason": "Roiling red blood. Crimson Coil turns Death Coil's damage into the knight's temporary Health; the blood is the talent's color and its subject."
+  },
   "talent:critical-strike": {
     "name": "Critical Strike",
     "source": "04-TALENTS",
@@ -5230,6 +5594,20 @@
       "achievement_character_troll_male"
     ],
     "reason": "The green frog's face depicts a hex, matching the curse that puts a Bane on a creature."
+  },
+  "talent:dancing-runeweapon": {
+    "name": "Dancing Runeweapon",
+    "source": "04-TALENTS",
+    "icon": "inv_sword_07",
+    "previousIcons": [],
+    "reason": "A lone blade, the WoW Dancing Rune Weapon's own art: the spectral double that fights beside the knight."
+  },
+  "talent:dark-command": {
+    "name": "Dark Command",
+    "source": "04-TALENTS",
+    "icon": "spell_nature_shamanrage",
+    "previousIcons": [],
+    "reason": "A red figure roaring, WoW's own Dark Command art. The talent draws a creature's attacks to the knight."
   },
   "talent:dark-minion": {
     "name": "Dark Minion",
@@ -5769,6 +6147,13 @@
     ],
     "reason": "Retain: the displacement image depicts entering a shadow passage and moving unseen."
   },
+  "talent:empower-runeweapon": {
+    "name": "Empower Runeweapon",
+    "source": "04-TALENTS",
+    "icon": "spell_deathknight_empowerruneblade",
+    "previousIcons": [],
+    "reason": "WoW's own Empower Rune Weapon icon, for the talent that refills Frost runes."
+  },
   "talent:empowered-mending": {
     "name": "Empowered Mending",
     "source": "04-TALENTS",
@@ -6188,6 +6573,20 @@
     ],
     "reason": "Retain: the frozen core image depicts Frost immunity and empowered Frost damage."
   },
+  "talent:frozen-desecration": {
+    "name": "Frozen Desecration",
+    "source": "04-TALENTS",
+    "icon": "ability_deathknight_desecratedground",
+    "previousIcons": [],
+    "reason": "Desecrated ground. Frozen Desecration makes the knight's Desecration slow what starts its turn in it."
+  },
+  "talent:frozen-edge": {
+    "name": "Frozen Edge",
+    "source": "04-TALENTS",
+    "icon": "spell_deathknight_icytalons",
+    "previousIcons": [],
+    "reason": "Icy claws on a blade. Frozen Edge adds Frost to the dual-wielding knight's hits on a Slowed creature."
+  },
   "talent:frozen-grip": {
     "name": "Frozen Grip",
     "source": "04-TALENTS",
@@ -6268,6 +6667,13 @@
       "ability_hunter_eagleeye"
     ],
     "reason": "Replace: Eagle Eye depicts distant sight. The skull and raised dead image identifies the mindless undead companion this talent can bind."
+  },
+  "talent:grim-harvest": {
+    "name": "Grim Harvest",
+    "source": "04-TALENTS",
+    "icon": "ability_deathknight_soulreaper",
+    "previousIcons": [],
+    "reason": "A reaper's stroke. Grim Harvest heals the knight when it strikes a creature brought to half its Health."
   },
   "talent:grinding-block": {
     "name": "Grinding Block",
@@ -6517,6 +6923,13 @@
     ],
     "reason": "Replace: The proposed art is an hourglass, not a shield that reflects Holy damage. A gold shield in motion fits the Holy damage delivered after a Block."
   },
+  "talent:hungering-cold": {
+    "name": "Hungering Cold",
+    "source": "04-TALENTS",
+    "icon": "inv_staff_15",
+    "previousIcons": [],
+    "reason": "A jagged shard of ice, WoW's own Hungering Cold art: the cold that holds every enemy near the knight."
+  },
   "talent:hunters-mark": {
     "name": "Hunter's Mark",
     "source": "04-TALENTS",
@@ -6571,6 +6984,20 @@
       "spell_frost_chillingblast"
     ],
     "reason": "Align with the named Ice Block spell: The old art is a single purple shard. Ice Block encases the mage and removes them from the fight; the replacement shows a solid wall of enclosing ice."
+  },
+  "talent:icebound-fortitude": {
+    "name": "Icebound Fortitude",
+    "source": "04-TALENTS",
+    "icon": "spell_deathknight_iceboundfortitude",
+    "previousIcons": [],
+    "reason": "WoW's own Icebound Fortitude icon, for the talent of the same name."
+  },
+  "talent:icy-grip": {
+    "name": "Icy Grip",
+    "source": "04-TALENTS",
+    "icon": "ability_deathknight_icygrip",
+    "previousIcons": [],
+    "reason": "WoW's own Icy Grip art, an icy hand pulling: the talent slows the creature Death Grip pulls."
   },
   "talent:icy-veins": {
     "name": "Icy Veins",
@@ -6773,6 +7200,13 @@
       "ability_warrior_decisivestrike"
     ],
     "reason": "Retain: the decisive strike image matches a finishing hit that builds Rage."
+  },
+  "talent:killing-machine": {
+    "name": "Killing Machine",
+    "source": "04-TALENTS",
+    "icon": "inv_sword_122",
+    "previousIcons": [],
+    "reason": "WoW's own Killing Machine art, a frost-rimed blade. The talent sharpens the dual-wielding knight's Frost runes and its strikes."
   },
   "talent:killing-spree": {
     "name": "Killing Spree",
@@ -7096,6 +7530,13 @@
       "ability_druid_mangle"
     ],
     "reason": "Retain: the druid mangle claws directly depict the named Shapeshift attack and its Bleeding."
+  },
+  "talent:mark-of-blood": {
+    "name": "Mark of Blood",
+    "source": "04-TALENTS",
+    "icon": "ability_hunter_rapidkilling",
+    "previousIcons": [],
+    "reason": "WoW's own Mark of Blood art. The talent marks one creature whose blows heal the knight."
   },
   "talent:masons-eye": {
     "name": "Mason's Eye",
@@ -7740,6 +8181,13 @@
     ],
     "reason": "A phoenix egg veined with fire: life rekindled, for the extra Health a Lifebinder's Flame heal gives per rank."
   },
+  "talent:relentless-advance": {
+    "name": "Relentless Advance",
+    "source": "04-TALENTS",
+    "icon": "ability_deathknight_deathchain",
+    "previousIcons": [],
+    "reason": "A death chain. Relentless Advance holds a Slowed creature in the knight's reach: it cannot Disengage."
+  },
   "talent:remembered-life": {
     "name": "Remembered Life",
     "source": "02-CHARACTER-OPTIONS",
@@ -7749,6 +8197,13 @@
       "achievement_character_undead_male"
     ],
     "reason": "An eye on a faded page evokes recollecting something seen in life."
+  },
+  "talent:remorseless-winter": {
+    "name": "Remorseless Winter",
+    "source": "04-TALENTS",
+    "icon": "ability_deathknight_remorselesswinters",
+    "previousIcons": [],
+    "reason": "WoW's own Remorseless Winter icon, for the talent of the same name."
   },
   "talent:remote-control": {
     "name": "Remote Control",
@@ -7887,6 +8342,20 @@
     ],
     "reason": "Retain: the red hunter mark depicts pursuing a wounded or slowed target for more Combo Points."
   },
+  "talent:rune-tap": {
+    "name": "Rune Tap",
+    "source": "04-TALENTS",
+    "icon": "spell_deathknight_runetap",
+    "previousIcons": [],
+    "reason": "WoW's own Rune Tap icon, for the talent of the same name."
+  },
+  "talent:runic-frost": {
+    "name": "Runic Frost",
+    "source": "04-TALENTS",
+    "icon": "spell_deathknight_frostpresence",
+    "previousIcons": [],
+    "reason": "WoW's Frost Presence art: a rune of frost. Runic Frost makes a spent Frost rune cheapen the knight's next Frost spell."
+  },
   "talent:runic-memory": {
     "name": "Runic Memory",
     "source": "02-CHARACTER-OPTIONS",
@@ -7960,6 +8429,20 @@
       "spell_quicksand"
     ],
     "reason": "Running sand, for the talent that teaches Slow, Displacement and Ley Snare."
+  },
+  "talent:sanguine-plague": {
+    "name": "Sanguine Plague",
+    "source": "04-TALENTS",
+    "icon": "spell_deathknight_bloodplague",
+    "previousIcons": [],
+    "reason": "WoW's own Blood Plague icon. Sanguine Plague makes the knight's Blood Plague heal the knight."
+  },
+  "talent:sanguine-tide": {
+    "name": "Sanguine Tide",
+    "source": "04-TALENTS",
+    "icon": "spell_deathknight_bloodboil",
+    "previousIcons": [],
+    "reason": "WoW's own Blood Boil art, blood bursting outward: Sanguine Tide's Shadow damage around the knight when it spends a Blood rune."
   },
   "talent:savage-shift": {
     "name": "Savage Shift",
@@ -9228,6 +9711,13 @@
     ],
     "reason": "Replace: Eye for an Eye depicts retaliation. The shield wall image depicts an immovable stance that resists slowing and falling."
   },
+  "talent:vampiric-blood": {
+    "name": "Vampiric Blood",
+    "source": "04-TALENTS",
+    "icon": "spell_shadow_lifedrain",
+    "previousIcons": [],
+    "reason": "WoW's own Vampiric Blood art, life drawn in. The talent raises every heal the knight takes."
+  },
   "talent:vampiric-touch": {
     "name": "Vampiric Touch",
     "source": "04-TALENTS",
@@ -9245,6 +9735,13 @@
       "spell_holy_fistofjustice"
     ],
     "reason": "Retain: the holy fist image matches the retaliatory strike empowered when an ally falls."
+  },
+  "talent:vengeful-blood": {
+    "name": "Vengeful Blood",
+    "source": "04-TALENTS",
+    "icon": "spell_deathknight_butcher2",
+    "previousIcons": [],
+    "reason": "A bloodied strike. Vengeful Blood deals Shadow damage back to a creature that hits the knight in melee."
   },
   "talent:vile-concoction": {
     "name": "Vile Concoction",

@@ -180,7 +180,13 @@ export function gripOf(item) {
   if (!item) return null;
   const sys = item.system ?? {};
   const traits = Array.isArray(sys.traits) ? sys.traits : [];
-  if (traits.some(t => /^Versatile\b/i.test(String(t)))) return "hand-and-a-half";
+  // **A VERSATILE WEAPON INSCRIBED AT THE TWO-HANDED RUNE COUNT IS TWO-HANDED** until it is
+  // inscribed again after a Long Rest (02 §7's Death Knight; the lead: *"If 2h amounts of runes
+  // are inscribed during a long rest, they are unable to wield it with one hand."*; D-943, D-950
+  // as the F2 review corrected it). Read off the
+  // weapon's own `system.runes.grip` (`rules/runes.mjs#inscribedTwoHanded`), so the off hand
+  // is barred both ways and `twoHandedNote` says why in words.
+  if (traits.some(t => /^Versatile\b/i.test(String(t)))) return sys.runes?.grip === "two" ? "two-handed" : "hand-and-a-half";
 
   const parts = sectionParts(sys.source?.section);
   const grip = GRIP_BY_SECTION[parts[parts.length - 1] ?? ""];
@@ -200,6 +206,19 @@ export function gripOf(item) {
  */
 export function isTwoHanded(item) {
   return gripOf(item) === "two-handed" && !item?.system?.launcher;
+}
+
+/**
+ * **WHY A WEAPON IS HELD IN BOTH HANDS, IN WORDS, WHERE ITS OWN TABLE WOULD NOT SAY
+ * SO** (D-943): a Versatile weapon inscribed at the two-handed rune count. The key the
+ * barred off hand appends to its note, or null where the weapon's grip is its table's.
+ *
+ * @returns {string|null}  an `AZEROTH.Runes.*` key
+ */
+export function twoHandedNote(item) {
+  const traits = Array.isArray(item?.system?.traits) ? item.system.traits : [];
+  const versatile = traits.some(t => /^Versatile\b/i.test(String(t)));
+  return versatile && item?.system?.runes?.grip === "two" ? "AZEROTH.Runes.TwoHandedCount" : null;
 }
 
 /** 04 Fury: a taken Titan's Presence permits a two-handed weapon in each hand.

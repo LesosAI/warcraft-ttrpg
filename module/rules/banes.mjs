@@ -269,8 +269,18 @@ export function baneSpentBy(raw, kind, target = null) {
 /** The flag a laid Boon rides on: the Bane's twin (04's Blessing). */
 export const LAID_BOON_FLAG = "laidBoon";
 
-/** What a laid Boon may bear on: one kind of Test, or every kind (`all`). */
-export const BOON_KINDS = Object.freeze([...BANE_KINDS, "all"]);
+/**
+ * What a laid Boon may bear on: one kind of Test, every kind (`all`), or an Attack Test OR a
+ * Resilience Test, whichever comes first (`attackOrResilience`: 07 §11's Horn of Winter, *a Boon on
+ * its next Attack Test or Resilience Test*; run F4b) - one Boon, spent by the first of the two.
+ */
+export const BOON_KINDS = Object.freeze([...BANE_KINDS, "all", "attackOrResilience"]);
+
+/** The kinds of Test a laid Boon's kind bears on. */
+function boonBearsOn(rowKind, kind) {
+  if (rowKind === kind || rowKind === "all") return true;
+  return rowKind === "attackOrResilience" && (kind === "attack" || kind === "resilience");
+}
 
 /**
  * One stored laid Boon, cleaned, or null (04's Blessing: *A friendly target you
@@ -300,7 +310,7 @@ export function laidBoonRows(raws = []) {
 
 /** The rows that bear on one kind of Test: their own kind, and `all`. */
 export function laidBoonsOn(rows = [], kind) {
-  const mine = laidBoonRows(rows).filter(r => r.kind === kind || r.kind === "all");
+  const mine = laidBoonRows(rows).filter(r => boonBearsOn(r.kind, kind));
   return {
     boons: mine.reduce((n, r) => n + r.boons, 0),
     names: mine.map(r => r.source).filter(Boolean)
@@ -310,5 +320,5 @@ export function laidBoonsOn(rows = [], kind) {
 /** Whether a laid Boon is SPENT by a Test of this kind: a count, of its kind or `all`. */
 export function boonSpentBy(raw, kind) {
   const row = cleanLaidBoon(raw);
-  return Boolean(row) && row.lasting !== true && (row.kind === kind || row.kind === "all");
+  return Boolean(row) && row.lasting !== true && boonBearsOn(row.kind, kind);
 }

@@ -143,7 +143,7 @@ export function creatureSpellsBatch(context) {
         assert.ok(row, `${name} has no row (the tab draws ${rows.map(r => r.dataset.name).join(", ")})`);
         const doc = await fromPack(PACK_FOR.spell, name);
         assert.equal(row.querySelector(".azeroth-spell-school").textContent.trim(),
-          game.i18n.localize(CONFIG.AZEROTH.schools[doc.system.school]), `${name}'s chip is not its school`);
+          game.i18n.localize(CONFIG.AZEROTH.spellSchools[doc.system.school]), `${name}'s chip is not its school`);
         assert.equal(row.querySelector(".azeroth-spell-mana").textContent.trim(),
           String(doc.system.mana), `${name}'s Mana is not 07's`);
         assert.ok(row.closest("ol").previousElementSibling.dataset.tier === String(doc.system.tier),

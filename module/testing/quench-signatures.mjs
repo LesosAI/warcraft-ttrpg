@@ -1223,7 +1223,7 @@ export function signatureBatch(context) {
       // fail on a correct change (CLAUDE.md §14).
       const school = spell.system.school;
       const cost = spell.system.mana;
-      assert.include(Object.keys(CONFIG.AZEROTH.schools), school, "the spell names no school");
+      assert.include(Object.keys(CONFIG.AZEROTH.spellSchools), school, "the spell names no school");
       assert.isAbove(cost, 1, "the fixture's spell is too cheap to show two discounts");
       const School = school[0].toUpperCase() + school.slice(1);
 

@@ -12,7 +12,7 @@
  * judgements every such door asks FIRST. Pure, so a Vitest holds them.
  */
 
-import { cardHealRefusal } from "./class-talents.mjs";
+import { cardHealRefusal, talentLaysOnHit } from "./class-talents.mjs";
 
 /**
  * Whether a write this client must make reaches nobody: the user is no GM, no GM
@@ -25,6 +25,36 @@ import { cardHealRefusal } from "./class-talents.mjs";
 export function gmAbsentFor({ owned = [], isGM = false, gmActive = false } = {}) {
   if (isGM === true || gmActive === true) return false;
   return (owned ?? []).some(o => o !== true);
+}
+
+/**
+ * **AN OPPORTUNITY ATTACK THAT COULD LAY SOMETHING ON A CREATURE THIS CLIENT DOES NOT OWN, WITH NO
+ * GM ONLINE** (the F4c review, M1): 04's Relentless Advance at rank 2 and Hold the Hall lay their
+ * Speed 0 and Prone on an Opportunity Attack's hit, through the GM's client. The Opportunity Attack
+ * door asks this BEFORE it takes the round's free mark or spends the Reaction, so a refusal costs
+ * nothing - the attack door's own check came after both were gone.
+ *
+ * @param {{talents?: Array, owned?: boolean[]|boolean, isGM?: boolean, gmActive?: boolean}} o
+ *   `owned` one entry for each creature the blow will strike (`opportunityOwned`)
+ * @returns {boolean}  true where the Opportunity Attack must be refused
+ */
+export function opportunityNeedsGM({ talents = [], owned = [], isGM = false, gmActive = false } = {}) {
+  const list = Array.isArray(owned) ? owned : [owned];
+  return talentLaysOnHit(talents ?? [], { opportunity: true }) && gmAbsentFor({ owned: list.map(o => o === true), isGM, gmActive });
+}
+
+/**
+ * **WHOM AN OPPORTUNITY ATTACK WILL STRIKE, AS OWNED OR NOT** (the F4d review, item 1): the mover
+ * where its token is on the viewed scene (the door targets it), else whatever the user has
+ * targeted - the door then skips the re-target and the attack strikes those, so the judgement
+ * reads them rather than skipping.
+ *
+ * @param {{onCanvas?: boolean, moverOwned?: boolean|null, targetsOwned?: boolean[]}} o
+ * @returns {boolean[]}
+ */
+export function opportunityOwned({ onCanvas = false, moverOwned = null, targetsOwned = [] } = {}) {
+  if (onCanvas) return [moverOwned === true];
+  return (targetsOwned ?? []).map(o => o === true);
 }
 
 /** The card flags a talent button's presses are recorded under. */

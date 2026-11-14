@@ -83,6 +83,18 @@ export function sandWallData(c, regionId, sense, moveNone) {
 }
 
 /**
+ * **WHAT A PLACED WALL'S AREA BARS**: core's movement type for one area - `NORMAL` where the
+ * area's record says it blocks movement (07 §17's Ossuary Wall, run F4b), `NONE` otherwise
+ * (Sandwall blocks sight alone).
+ *
+ * @param {{blocksMovement?: boolean}|null} area
+ * @param {{NONE: number, NORMAL: number}} moves  core's `CONST.WALL_MOVEMENT_TYPES`
+ */
+export function wallMoveFor(area, moves) {
+  return area?.blocksMovement === true ? moves.NORMAL : moves.NONE;
+}
+
+/**
  * **WHICH WALLS TO RAISE AND WHICH TO TAKE DOWN ON ONE SCENE**: each sight-blocking area's
  * segments, against the Walls flagged for it. An area whose Walls already stand where its shape
  * says keeps them; one whose shape moved has them replaced; a Wall whose area is gone goes.

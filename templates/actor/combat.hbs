@@ -327,6 +327,14 @@
   </details>
   {{/if}}
 
+  {{!-- The Death Knight's runes (D-919; D11 SS4): beside Talents in play, a group a
+        wielded weapon and a socket a rune slot, the Runic Power bar first. --}}
+  {{#if runePanel}}
+  <details class="azeroth-combat-group" data-combat-section="runes"{{#if combatSections.runes}} open{{/if}}><summary class="azeroth-panel-heading azeroth-combat-section">{{localize "AZEROTH.Runes.Panel.Heading"}}</summary>
+  {{> systems/azeroth-rpg/templates/actor/partials/rune-panel.hbs panel=runePanel}}
+  </details>
+  {{/if}}
+
   {{!-- Signatures (08 SS20, S3; D-692): what the things being WORN do, and the
         career's own capability (03 SS5), which had reached no sheet at all.
 

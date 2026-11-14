@@ -227,7 +227,7 @@ export function missRefunds(paid = []) {
  * and the temporary Health the spend granted (`tempHealth`, 04's Obsidian Skin - taken back
  * off the striker).
  */
-export const MISS_REFUND_KINDS = Object.freeze(["momentum", "power", "corruption", "tempHealth"]);
+export const MISS_REFUND_KINDS = Object.freeze(["momentum", "power", "corruption", "tempHealth", "runes"]);
 
 /**
  * One row a creature's pool, the amounts summed, nothing where nothing moved -
@@ -251,6 +251,22 @@ function byPool(rows = [], kinds = ["momentum", "power"]) {
     if (kind === "tempHealth" && typeof p.source === "string" && held.source === undefined) {
       held.source = p.source;
       held.prior = p.prior && typeof p.prior === "object" ? { ...p.prior } : null;
+    }
+    // **A RUNE PRICE NAMES THE RUNES IT TOOK AND THE RUNIC POWER THEY GAVE** (02's Plague;
+    // the F2 review's must-fix 2, O-346): the runes are given back slot by slot and the
+    // Runic Power taken back off (`documents/runes.mjs#refundRunesOn`), never a pool write.
+    if (kind === "runes") {
+      const seen = new Set((held.spent ?? []).map(r => `${r.itemId}|${r.index}`));
+      held.spent = [...(held.spent ?? [])];
+      for (const r of Array.isArray(p.spent) ? p.spent : []) {
+        if (typeof r?.itemId !== "string" || !Number.isInteger(r.index) || seen.has(`${r.itemId}|${r.index}`)) continue;
+        seen.add(`${r.itemId}|${r.index}`);
+        held.spent.push({ itemId: r.itemId, index: r.index, kind: String(r.kind ?? "") });
+      }
+      held.spent.sort((a, b) => a.itemId.localeCompare(b.itemId) || a.index - b.index);
+      held.gained = (held.gained ?? 0) + Math.max(0, Math.trunc(Number(p.gained)) || 0);
+      // The rest generation the runes were spent in (the F3 review), named where the row names it.
+      if (held.restGeneration === undefined && Number.isInteger(p.restGeneration)) held.restGeneration = p.restGeneration;
     }
     out.set(key, held);
   }

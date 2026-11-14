@@ -70,7 +70,12 @@ export function readDeferral(effectText) {
  */
 export function readNextAttack(effectText) {
   const m = /\bYour next weapon attack this turn deals (\d+) more (Physical|[A-Z][a-z]+) damage on a hit(?: and lays Decay (\d+) on the creature it hits)?/.exec(flat(effectText));
-  return m ? { damage: Number(m[1]), type: m[2].toLowerCase(), decay: m[3] ? Number(m[3]) : 0, span: "turn" } : null;
+  if (m) return { damage: Number(m[1]), type: m[2].toLowerCase(), decay: m[3] ? Number(m[3]) : 0, span: "turn" };
+  // **07 §11's FROST STRIKE** (the Death Knight's, run F4b): *Your next melee hit this turn deals
+  // 4 additional Frost damage* - the same promise, held to the turn. AGENT READING (O-item): the
+  // next-attack lane is taken by the next attack this turn, which may be a ranged one or a miss.
+  const f = /\bYour next melee hit this turn deals (\d+) additional ([A-Z][a-z]+) damage\b/.exec(flat(effectText));
+  return f ? { damage: Number(f[1]), type: f[2].toLowerCase(), decay: 0, span: "turn" } : null;
 }
 
 /** Hour of Haste's *Each target gains a Half-Action on its next turn* (07 §12). */
@@ -186,7 +191,15 @@ export function readTauntAura(effectText) {
  * thick rises where you choose. It blocks sight* - the walls the placed line raises.
  */
 export function blocksSight(effectText) {
-  return /\bIt blocks sight\b/.test(flat(effectText));
+  return /\bIt blocks (?:movement and )?sight\b/.test(flat(effectText));
+}
+
+/**
+ * **07 §17's OSSUARY WALL** (*A wall of fused bone rises along the line you choose. It blocks
+ * movement and sight*; run F4b): the wall the placed line raises blocks movement as well as sight.
+ */
+export function blocksMovement(effectText) {
+  return /\bIt blocks movement and sight\b/.test(flat(effectText));
 }
 
 /**

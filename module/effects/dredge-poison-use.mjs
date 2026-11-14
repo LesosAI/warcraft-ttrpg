@@ -1,6 +1,6 @@
 /** GM-owned payment, resistance and initial damage for the worm's poisons. */
 import { DREDGE_POISONS, DREDGE_POISON_FLAG, validDredgePoison } from "../rules/dredge-poison.mjs";
-import { resolveDamage } from "../rules/mitigation.mjs";
+import { resolveRecordedDamage } from "../rules/damage-record.mjs";
 import { wardBySchool } from "../rules/ward.mjs";
 import { schoolArmorBySchool } from "../rules/auras.mjs";
 import { dealtHalvedBy } from "../rules/legacy-uses.mjs";
@@ -88,7 +88,7 @@ export async function dredgePoisonQueryHandler({ actorUuid, index, source, targe
     reason = validate(); if (reason) return refuse(reason);
     if (spec.immediate > 0) {
       const s = victim.system ?? {};
-      const damage = resolveDamage({ rating: spec.immediate, sl: 0, kind: "magical", school: "nature",
+      const damage = resolveRecordedDamage({ rating: spec.immediate, sl: 0, kind: "magical", school: "nature",
         ward: wardBySchool(s.ward).nature ?? 0, schoolArmor: schoolArmorBySchool(s.schoolArmor).nature ?? 0,
         immune: s.immune ?? [], vulnerable: s.vulnerable ?? [], slAddsToDamage: false,
         dealtHalved: dealtHalvedBy(actor), passedHalf: resisted });
@@ -96,7 +96,9 @@ export async function dredgePoisonQueryHandler({ actorUuid, index, source, targe
       if (!damage.immune && damage.damage > 0) {
         result.damageAttempted = true;
         await victim.applyDamage(damage.damage, { struck: true, attack: true, location: "body", type: "nature",
-          by: actor, spell: false, wardTook: damage.wardTook ?? 0, messageId: card?.id ?? null, parts: damage.parts ?? null });
+          by: actor, spell: false, wardTook: damage.wardTook ?? 0, messageId: card?.id ?? null, parts: damage.parts ?? null,
+          // the card's resolver inputs (`rules/damage-record.mjs`), so 04's Icebound Fortitude halves this blow before Armor Points and Ward (the F4b review, S6).
+          mitigation: damage.mitigationSource ?? null });
         result.damageApplied = true;
       }
       reason = validate(); if (reason) return refuse(reason);

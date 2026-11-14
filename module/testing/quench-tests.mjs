@@ -47,6 +47,11 @@ import { classicBatch } from "./quench-classic.mjs";
 import { signatureBatch } from "./quench-signatures.mjs";
 // 08 §20's Legendary readers (D-911).
 import { signatureLegendaryBatch } from "./quench-signature-legendary.mjs";
+import { deathKnightDoorsBatch } from "./quench-death-knight-doors.mjs";
+import { deathKnightNecromancyBatch } from "./quench-death-knight-necromancy.mjs";
+import { deathKnightTalentsBatch } from "./quench-death-knight-talents.mjs";
+import { deathKnightSpellsBatch } from "./quench-death-knight-spells.mjs";
+import { deathKnightAnimationBatch } from "./quench-death-knight-animation.mjs";
 import { reactionBatch } from "./quench-reactions.mjs";
 import { creatureGearBatch } from "./quench-npc-gear.mjs";
 import { creatureSwingBatch } from "./quench-npc-swing.mjs";
@@ -362,6 +367,21 @@ export function registerQuenchTests() {
     });
     quench.registerBatch("azeroth-rpg.signature-legendary", signatureLegendaryBatch, {
       displayName: "AZEROTH: 08 §20's Legendary readers (D-911)"
+    });
+    quench.registerBatch("azeroth-rpg.death-knight-doors", deathKnightDoorsBatch, {
+      displayName: "AZEROTH: The Death Knight's doors, through the rune panel, the Use and the attack dialog (run F2)"
+    });
+    quench.registerBatch("azeroth-rpg.death-knight-necromancy", deathKnightNecromancyBatch, {
+      displayName: "AZEROTH: The Death Knight's raises, presences and mounts, through the sheet and the cast (run F3)"
+    });
+    quench.registerBatch("azeroth-rpg.death-knight-talents", deathKnightTalentsBatch, {
+      displayName: "AZEROTH: The Death Knight's Blood and Frost, and the F3 review, through the real doors (run F4a)"
+    });
+    quench.registerBatch("azeroth-rpg.death-knight-spells", deathKnightSpellsBatch, {
+      displayName: "AZEROTH: The Death Knight's spells through the sheet's Cast, and the F4a review's live coverage (run F4b)"
+    });
+    quench.registerBatch("azeroth-rpg.death-knight-animation", deathKnightAnimationBatch, {
+      displayName: "AZEROTH: The Death Knight's animation and sound, through the real doors (run F5)"
     });
     quench.registerBatch("azeroth-rpg.reactions", reactionBatch, {
       displayName: "AZEROTH: Parry, Block and the Bane Pummel lays"
@@ -1520,7 +1540,8 @@ function packBatch(context) {
       // sidebar does not, so Fire and Frost sit next to each other by accident
       // of spelling. The folder tree is the book's own organization.
       const cases = [
-        { pack: "spells", folders: 42, top: "Fire", nested: "Tier 1" },
+        // Eight schools (Death the eighth, D-918), each a folder holding its five tier folders.
+        { pack: "spells", folders: 8 * 6, top: "Fire", nested: "Tier 1" },
         // A folder a class and one a branch: 9 + 34 since the seven Legacy branches
         // (D-781), read off the one place the counts live (D-690).
         { pack: "talents", folders: PACK_COUNTS.classes.count + PACK_COUNTS.talents.branches, top: "Mage", nested: null },
@@ -1775,8 +1796,8 @@ function packBatch(context) {
         counts[name] = (await pack.getIndex()).size;
       }
       // 08 section 5: 59 weapon and armor traits matching 06 section 3's
-      // roster, plus 15 Mount traits that belong to 08 section 15 alone.
-      assert.equal(counts.traits, 74);
+      // roster, plus 16 Mount traits (Spectral the sixteenth, D-924).
+      assert.equal(counts.traits, PACK_COUNTS.traits.count, PACK_COUNTS.traits.why);
       assert.isAbove(counts.weapons, 100);
       assert.isAbove(counts.armor, 40);
     });
@@ -4308,6 +4329,78 @@ function migrationBatch(context) {
       }
       assert.equal(actor.system.momentum.value, 5, "the migration zeroed a live actor");
       assert.equal(actor.system.power.value, 3);
+    });
+
+    it("0.15.3.1 makes the page a link names and never writes a held page: a GM-edited page survives beside its (book) copy, the old 02 \u00a77 page and the GM's page stay (the lead: Keep the GM's copy)", async function () {
+      this.timeout(180000);
+      const journals = await import("/systems/azeroth-rpg/module/applications/rules-journals.mjs");
+      const { bookCopyId } = await import("/systems/azeroth-rpg/module/rules/rules-journal-repair.mjs");
+      const { migrate } = await import("/systems/azeroth-rpg/module/migrations/0.15.3.1-close-repairs.mjs");
+      const before = game.journal.filter(journals.isImportedChapter).map(j => j.id);
+      await journals.importRulesJournals();
+      const options = journals.worldChapterNamed("02-CHARACTER-OPTIONS");
+      assert.ok(options, "02-CHARACTER-OPTIONS is in the world");
+      const packDoc = (await game.packs.get(journals.RULES_PACK).getDocuments()).find(d => d.name === "02-CHARACTER-OPTIONS");
+      const seven = packDoc?.pages?.get("n5KXEp2qcNzyxjam") ?? null;
+      assert.ok(seven, "the rules pack's 02 \u00a77 is The twelve classes (a pack built before the Death Knight's book)");
+      const inherit = CONST.DOCUMENT_OWNERSHIP_LEVELS.INHERIT;
+      const limited = CONST.DOCUMENT_OWNERSHIP_LEVELS.LIMITED;
+      const entryOwnership = options.ownership.default;
+      // Every page the chapter held before this test; whatever the test or the repair adds goes in
+      // the clean-up (the world keeps what every run leaves, CLAUDE.md \u00a714).
+      const pagesBefore = new Set(options.pages.map(p => p.id));
+      let gmPage = null;
+      let staled = null;
+      let staledWas = null;
+      try {
+        // Stale it on purpose (CLAUDE.md \u00a715, 2026-09-09): \u00a77 under its old name and the id that
+        // name derives, a page whose text a GM edited and whose own ownership they set, and a page
+        // the GM wrote.
+        if (options.pages.has("n5KXEp2qcNzyxjam")) await options.deleteEmbeddedDocuments("JournalEntryPage", ["n5KXEp2qcNzyxjam"]);
+        await options.createEmbeddedDocuments("JournalEntryPage", [{ _id: "IBFmSy4ibtgWC4OI", name: "7. The eleven classes", type: "text", sort: seven.sort,
+          text: { format: 1, content: "<p>ZZ the eleven classes</p>" }, ownership: { default: inherit } }], { keepId: true });
+        staled = options.pages.contents.find(p => p.id !== "IBFmSy4ibtgWC4OI" && packDoc.pages.has(p.id));
+        staledWas = { content: staled.text.content, ownership: staled.ownership.default };
+        await staled.update({ "text.content": "<p>ZZ a GM's note</p>", "ownership.default": limited });
+        [gmPage] = await options.createEmbeddedDocuments("JournalEntryPage", [{ name: "ZZ House rules", type: "text", text: { format: 1, content: "<p>Ours</p>" } }]);
+        await migrate(() => {});
+        // The page a link names is made, under the pack's id, with the book's text.
+        const now = options.pages.get("n5KXEp2qcNzyxjam");
+        assert.equal(now?.name, "7. The twelve classes", "the page a link names was not made");
+        assert.equal(now?.text?.content, seven.text.content, "the new page is not the book's");
+        assert.equal(now?.ownership?.default, inherit, "the new page does not inherit the chapter's ownership");
+        // The GM's edit survives, untouched, with its own ownership; the book's page stands beside it.
+        assert.equal(options.pages.get(staled.id)?.text?.content, "<p>ZZ a GM's note</p>", "a GM-edited page was written over");
+        assert.equal(options.pages.get(staled.id)?.ownership?.default, limited, "a page's own ownership was written");
+        const copyId = bookCopyId("02-CHARACTER-OPTIONS", staled.id);
+        const copy = options.pages.get(copyId);
+        const book = packDoc.pages.get(staled.id);
+        assert.equal(copy?.name, `${book.name} ${game.i18n.localize("AZEROTH.Journals.BookCopy")}`, "the book's copy was not made beside the GM's page");
+        assert.equal(copy?.text?.content, book.text.content, "the book's copy does not carry the book's text");
+        assert.equal(copy?.ownership?.default, inherit, "the book's copy does not inherit the chapter's ownership");
+        assert.isFalse(packDoc.pages.has(copyId), "the copy took an id the pack carries");
+        // Nothing is removed: the old \u00a77 page may hold a GM's writing too, and the GM's own page stays.
+        assert.ok(options.pages.get("IBFmSy4ibtgWC4OI"), "the old 02 \u00a77 page was removed");
+        assert.equal(options.pages.get("IBFmSy4ibtgWC4OI")?.text?.content, "<p>ZZ the eleven classes</p>", "the old 02 \u00a77 page was written");
+        assert.ok(options.pages.get(gmPage.id), "the GM's own page was removed");
+        assert.equal(options.ownership.default, entryOwnership, "the chapter's ownership was written");
+        const linked = await fromUuid(`Compendium.${journals.RULES_PACK}.JournalEntry.${packDoc.id}.JournalEntryPage.n5KXEp2qcNzyxjam`);
+        assert.equal(linked?.name, "7. The twelve classes", "the drakes' link does not resolve");
+        // A second pass writes nothing, and no second (book) page.
+        const count = options.pages.size;
+        const again = await journals.repairRulesJournals(() => {});
+        assert.equal(again.pages, 0, "a second pass wrote pages");
+        assert.equal(options.pages.size, count, "a second pass added a page");
+      } finally {
+        const added = options.pages.filter(p => !pagesBefore.has(p.id) && p.id !== "n5KXEp2qcNzyxjam").map(p => p.id);
+        if (added.length) await options.deleteEmbeddedDocuments("JournalEntryPage", added);
+        if (staled && staledWas && options.pages.has(staled.id)) await options.pages.get(staled.id).update({ "text.content": staledWas.content, "ownership.default": staledWas.ownership });
+        if (!before.length) {
+          await JournalEntry.deleteDocuments(game.journal.filter(journals.isImportedChapter).map(j => j.id));
+          const folder = game.folders.find(f => f.type === "JournalEntry" && f.name === journals.RULES_FOLDER);
+          if (folder) await folder.delete();
+        }
+      }
     });
   });
 }

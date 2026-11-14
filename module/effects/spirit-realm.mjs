@@ -26,6 +26,7 @@ import {
 // The offer's price is the GM's to name (06 §10; the B3 review).
 import { gmAbsentFor } from "../rules/gm-writes.mjs";
 import { talentEffect } from "../rules/talent-effects.mjs";
+import { accruedTracks } from "../rules/undead.mjs";
 import { flaggedEffects, layState } from "./talent-states.mjs";
 import { minuteSpan } from "./durations.mjs";
 
@@ -251,7 +252,11 @@ export async function offerQueryHandler({ actorUuid = null } = {}, { user = null
 async function offerHere(actor) {
   const { chooseOption, accrueCorruption } = game.system.azeroth.workflows;
   const title = { id: `offer-${actor.id}`, name: game.i18n.localize("AZEROTH.Spirit.Offer.Title") };
-  const tracks = Object.keys(AZEROTH.corruptionTracks ?? {});
+  // **ONLY A TRACK THE CHARACTER ACCRUES** (the F1 review; 10 §3, D-946): a Forsaken or a Death
+  // Knight accrues no Undeath, so Undeath offered here would be a return to life for nothing.
+  const tracks = accruedTracks(Object.keys(AZEROTH.corruptionTracks ?? {}), {
+    classes: actor.system?.classKeys ?? [], race: actor.raceItem?.system?.identifier ?? actor.raceItem?.name ?? null
+  });
   const track = await chooseOption(title, tracks.map(key => ({ key, name: game.i18n.localize(AZEROTH.corruptionTracks[key]), description: "" })), null,
     { prompt: game.i18n.localize("AZEROTH.Spirit.Offer.TrackPrompt"), label: "AZEROTH.Spirit.Offer.Take" });
   if (!track) return null;

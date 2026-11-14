@@ -1,5 +1,5 @@
 import { warGolemAttack, warGolemOutcome } from "../rules/war-golem.mjs";
-import { resolveDamage } from "../rules/mitigation.mjs";
+import { resolveRecordedDamage } from "../rules/damage-record.mjs";
 import { dealtHalvedBy } from "../rules/legacy-uses.mjs";
 import { reviewNearbyEnemies } from "./area-enemies.mjs";
 import { forceMove, forcedWords } from "./forced-movement.mjs";
@@ -90,14 +90,16 @@ export async function warGolemQueryHandler({ actorUuid, index, key, source } = {
       if (!outcome) return refuse("unresolved");
       if (!valid()) return refuse("changed");
       const snapshot = targetSnapshots([{ id: target.token.id, actor: target.actor, name: target.token.name, scene }])[0];
-      const damage = resolveDamage({ rating: spec.damage, sl: 0, kind: "physical", school: "physical", location: "body",
+      const damage = resolveRecordedDamage({ rating: spec.damage, sl: 0, kind: "physical", school: "physical", location: "body",
         apByLocation: snapshot.apByLocation, immune: snapshot.immune, vulnerable: snapshot.vulnerable,
         slAddsToDamage: false, dealtHalved: dealtHalvedBy(actor), passedHalf: result.resisted });
       result.damage = damage.damage; result.immune = damage.immune;
       if (!damage.immune) {
         result.damageAttempted = true;
         await target.actor.applyDamage(damage.damage, { struck: true, attack: true, location: "body", type: "physical",
-          by: actor, spell: false, messageId: card?.id ?? null, parts: damage.parts ?? null });
+          by: actor, spell: false, messageId: card?.id ?? null, parts: damage.parts ?? null,
+          // the card's resolver inputs (`rules/damage-record.mjs`), so 04's Icebound Fortitude halves this blow before Armor Points and Ward (the F4b review, S6).
+          mitigation: damage.mitigationSource ?? null });
         result.damageApplied = true;
       }
     }

@@ -75,7 +75,9 @@ export const FORCED_REFUSALS = Object.freeze({
   unmeasured: "AZEROTH.Forced.Refuse.Unmeasured",
   noGM: "AZEROTH.Forced.Refuse.NoGM",
   // 05's *Being moved* (D-912): the creature is more than one size larger than what moves it.
-  outsized: "AZEROTH.Forced.Refuse.Outsized"
+  outsized: "AZEROTH.Forced.Refuse.Outsized",
+  // The creature's own ability: *cannot be moved against its will* (D-691's passive `refuses`).
+  refuses: "AZEROTH.Forced.Refuse.OwnAbility"
 });
 
 /**
@@ -88,10 +90,18 @@ export const FORCED_REFUSALS = Object.freeze({
  * door that says the creature chose it. A move nobody causes is not judged.
  *
  * @param {{targetSize?: string|null, sourceSize?: string|null, willing?: boolean, self?: boolean}} o
- * @returns {"outsized"|null}
+ * @returns {"refuses"|"outsized"|null}
  */
-export function beingMovedRefusal({ targetSize = null, sourceSize = null, willing = false, self = false } = {}) {
-  if (self === true || willing === true || !targetSize || !sourceSize) return null;
+export function beingMovedRefusal({ targetSize = null, sourceSize = null, willing = false, self = false, refuses = [], ignoreSize = null, boss = false } = {}) {
+  if (self === true || willing === true) return null;
+  // **A CREATURE WHOSE OWN ABILITY REFUSES IT** (14's *cannot be moved against its will*,
+  // D-691's passive `refuses`; the lead on Death Grip: **"No, the ability holds"**): asked of
+  // every forced move, before any size rule and whatever waives one.
+  if ((refuses ?? []).includes("forcedMovement")) return "refuses";
+  // **02's DEATH GRIP** (*ignores size limits unless the target is a Boss*; the lead: *"ignore
+  // size restrictions for non-boss targets"*): `ignoreSize: "nonBoss"`.
+  if (ignoreSize === "nonBoss" && boss !== true) return null;
+  if (!targetSize || !sourceSize) return null;
   return resistsForcedMovement(targetSize, sourceSize) ? "outsized" : null;
 }
 

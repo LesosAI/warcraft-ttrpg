@@ -31,8 +31,10 @@ import {
 } from "../rules/area-ticks.mjs";
 import { creatureSnapshot, kindsOf } from "../rules/creature-kinds.mjs";
 import { resolveDamage } from "../rules/mitigation.mjs";
+import { resolveRecordedDamage } from "../rules/damage-record.mjs";
 // A sand spell's Physical damage meets Armor Points at the Body, never a Ward (07 §9, D-864).
 import { PHYSICAL, spellDamageLane } from "../rules/spell-damage-type.mjs";
+import { bonusSchool } from "../rules/schools.mjs";
 import { buffetStacks } from "../rules/flame-buffet.mjs";
 import { wardBySchool } from "../rules/ward.mjs";
 import { schoolArmorBySchool } from "../rules/auras.mjs";
@@ -126,7 +128,9 @@ export function areaDamageOn({ actor, caster = null, spell = {}, damage, signatu
   const damageType = damage?.school ?? null;
   const physical = damageType === PHYSICAL;
   const school = physical ? (spell?.school ?? null) : damageType;
-  const talentRows = caster?.takenTalents ? spellDamageFor(caster.takenTalents(), { name: spellName, school: spell?.school ?? null }) : [];
+  // **A DEATH SPELL'S BONUSES ARE SHADOW'S** (D-941): the one reading the cast takes too.
+  const bonusKey = bonusSchool({ school: spell?.school ?? null, damageSchool: physical ? null : damageType });
+  const talentRows = caster?.takenTalents ? spellDamageFor(caster.takenTalents(), { name: spellName, school: bonusKey }) : [];
   // An ITEM's tick (08 §20's Hand of Ragnaros, D-911) is no spell: nothing the
   // holder's spells add reaches it.
   const bonus = caster && spell?.item !== true
@@ -136,7 +140,7 @@ export function areaDamageOn({ actor, caster = null, spell = {}, damage, signatu
   // **THE WARD THE CASTER'S SPELLS IGNORE** (04's Celestial Alignment: *while it
   // runs your Arcane and Nature spells ignore 2 Ward*; D-771), off the spell's
   // own school, read the same way the cast reads it.
-  const pierce = Math.max(0, Math.trunc(Number(caster?.spellWardPierce?.(spell?.school ?? null)) || 0));
+  const pierce = Math.max(0, Math.trunc(Number(caster?.spellWardPierce?.(bonusKey)) || 0));
   // **AN IMMUNITY A SPELL READS AS WARD** (04's Burning Soul: *Your Fire spells
   // treat Immune (Fire) as Ward 3 instead*; D-775), on a SPELL's area or tick alone
   // - Ignite's and a feature's are no spell - as the cast reads it.
@@ -152,7 +156,10 @@ export function areaDamageOn({ actor, caster = null, spell = {}, damage, signatu
   // SPELL's tick carries it as the cast does, a second amount met by its own Ward;
   // a feature's tick and Ignite's are no spell and carry none.
   const typed = caster && spellBlowOf(spell) ? typedLaneExtras(caster.system, "spell") : [];
-  return resolveDamage({
+  // **THE RESOLVER'S INPUTS TRAVEL WITH THE RESULT** (the F4a review, S1): `mitigationSource` is
+  // what a halving BEFORE Armor Points and Ward (04's Icebound Fortitude, the lead: *"before AP
+  // or ward"*) resolves again at the damage door, as the card's Apply already hands it.
+  return resolveRecordedDamage({
     rating: (Number(damage?.rating) || 0) + bonus, sl: 0, kind: "magical", school,
     // 07 §9's Physical lane over the magical one for a sand spell (D-864).
     ...(physical ? { kind: lane.kind, school: lane.school, location: lane.location, apByLocation: lane.apByLocation } : {}),
@@ -236,7 +243,10 @@ export async function strikeFromArea({ actor, caster = null, spell = {}, damage 
           struck: true, attack: false, location: "body", type: school, by: caster, wardTook: result.wardTook ?? 0,
           spell: spellBlowOf(spell), ignite: spell?.ignite === true,
           // Each second amount of its own type (D-777), already in the damage.
-          parts: result.parts ?? null, outcome: damageOutcome, healthFloor: damage?.healthFloor ?? null
+          parts: result.parts ?? null, outcome: damageOutcome, healthFloor: damage?.healthFloor ?? null,
+          // The resolver's inputs (S1): a halving before Armor Points and Ward resolves them again.
+          // A split tick lands a share of the worked number, which the record no longer describes.
+          mitigation: split ? null : (result.mitigationSource ?? null)
         });
       } else if (result.damage === 0 && actorInWorld(actor) && damageOutcome) {
         damageOutcome.complete = true;
@@ -259,7 +269,7 @@ export async function strikeFromArea({ actor, caster = null, spell = {}, damage 
       const before = health.value ?? 0;
       // A tick's Divine Aegis schools and Miracle's unreduced heal ride to the door (D-779).
       // A Hearthfire ring heals as a Champion's branch spell (04's Kindling Heart; stage 3A).
-      await actor.applyHealing(heal + more, { from: caster ?? null, spell: !feature, feature, aegis: spell?.aegis ?? null, unreduced: spell?.unreduced === true, outcome:healingOutcome, branch: spell?.branch === true });
+      await actor.applyHealing(heal + more, { from: caster ?? null, givenBy: caster ? null : "other", school: spell?.castSchool ?? spell?.school ?? null, spell: !feature, feature, aegis: spell?.aegis ?? null, unreduced: spell?.unreduced === true, outcome:healingOutcome, branch: spell?.branch === true });
       const healed = (actor.system?.health?.value ?? before) - before;
       if (healed > 0) lines.push(game.i18n.format("AZEROTH.Combat.AreaTickHeal", { name: actor.name, amount: healed, spell: spellName }));
     } else if(healingOutcome&&actorInWorld(actor))healingOutcome.complete=true;
@@ -680,6 +690,18 @@ export async function areaTestOutcome({ actor, message, result } = {}) {
     lines.push(decayLine(laid, { spell: spellName }));
   }
   if (areaTransferRefusal(area)) return interrupted();
+  // **02's DESECRATION** (D-938: *its Ward against Shadow is reduced by your Charisma modifier,
+  // to no lower than 0, until the start of its next turn*): one laid effect, through the
+  // Death Knight's door (`effects/death-knight.mjs#layWardDrop`).
+  // **AND A PLAGUE CONTRACTED** (D-962): the knight's own carrier, through Plague's one door.
+  if (outcome.plague) {
+    const { layPlague } = await import("./death-knight.mjs");
+    lines.push(await layPlague({ victim: actor, kind: outcome.plague, by: caster }));
+  }
+  if (outcome.wardDrop) {
+    const { layWardDrop } = await import("./death-knight.mjs");
+    lines.push(await layWardDrop({ victim: actor, ...outcome.wardDrop, by: caster, source: spellName }));
+  }
   if (outcome.bane) {
     // A Bane on this kind of Test UNTIL the end of its next turn - lasting,
     // never spent by the next roll (`rules/banes.mjs`' `lasting`).
@@ -906,7 +928,7 @@ export async function enterAreas(document, movement, operation = {}) {
     if (crossed) {
       // *A creature crossing the ring in either direction makes a Reflex Resilience Test*:
       // once on this move, where it would be put back recorded on its card.
-      const checks = checksFor(tick, "cross", { relation, named });
+      const checks = checksFor(tick, "cross", { relation, named, immune: [...(actor.system?.immune ?? [])] });
       const stopAt = checks.some(c => c.fail?.stop === true) ? stopAtOf(document, region, path, crossed) : null;
       for (const check of checks) {
         if (tokenInWorld(document) && regionInWorld(region)) await postAreaTest({ actor, token: document, region, check, trigger: "cross", caster, extra: { stopAt } });
@@ -952,7 +974,7 @@ export async function enterAreas(document, movement, operation = {}) {
         }
       }
     }
-    for (const check of checksFor(tick, "enter", { relation, named })) {
+    for (const check of checksFor(tick, "enter", { relation, named, immune: [...(actor.system?.immune ?? [])] })) {
       // Out of a fight only Frozen Rune's first entry is judged (above).
       if (!inFight && check.first !== true) continue;
       // **THE FIRST CREATURE TO ENTER, AND NO OTHER** (07's Frozen Rune; the B9a pass):

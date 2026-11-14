@@ -26,19 +26,36 @@
  * drain on a short or long rest"*). It is a Momentum pool and the one that
  * outlives a fight, so both rests write it to 0 whatever was eaten, and the card
  * says how much went (`{kind: "sandEmptied", amount}`).
+ *
+ * **RUNIC POWER EMPTIES WHEN A LONG REST FINISHES, AND ONLY THEN** (D-943; the lead:
+ * **"Only on a Long Rest"**). Both pools are the one pool-keyed rule
+ * (`kept-pools.mjs#emptiedAtRest`), and the card says how much went
+ * (`{kind: "runicPowerEmptied", amount}`). The runes it is spent from refill at the
+ * same Long Rest, at the actor's door (`documents/runes.mjs#refillRunesOn`).
+ *
+ * **A CHARACTER WHO DOES NOT EAT OR DRINK RECOVERS ON A SHORT REST WITHOUT EITHER**
+ * (the lead, on the Death Knight, the Forsaken and the Risen: *"They do recover health
+ * but do not have to eat or drink."*; D-946): `needsNoFood`, read off the class, the
+ * race and 10 §9's ending by `undead.mjs#needsNoFood`.
  */
 
 import { AZEROTH } from "../config.mjs";
-import { SAND, emptySandUpdates } from "./sand.mjs";
+import { emptiedAtRest } from "./kept-pools.mjs";
 
-/** Sand's updates and its card line, off a snapshot (D-848). */
-function sandAtRest(pools) {
-  const updates = emptySandUpdates(pools);
-  // The Sand pool alone (the stage 1 review): another Momentum pool on the same class item
-  // is never counted as Sand emptied.
-  const held = (pools ?? []).filter(p => p?.kind === "momentum" && p.name === SAND && updates.some(u => u.itemId === p.itemId))
-    .reduce((n, p) => n + Math.max(0, Number(p.value) || 0), 0);
-  return { updates, gains: held > 0 ? [{ kind: "sandEmptied", amount: held }] : [] };
+/** The card line each kept pool's emptying prints (D-848, D-943). */
+const EMPTIED_LINE = Object.freeze({ sand: "sandEmptied", runicPower: "runicPowerEmptied" });
+
+/**
+ * The kept pools a rest empties, and their card lines, off a snapshot. The pool
+ * alone (the stage 1 review): another Momentum pool on the same class item is never
+ * counted as emptied.
+ */
+function keptAtRest(pools, event) {
+  const { updates, emptied } = emptiedAtRest(pools, event);
+  const gains = Object.entries(emptied)
+    .filter(([, amount]) => amount > 0)
+    .map(([name, amount]) => ({ kind: EMPTIED_LINE[name], amount }));
+  return { updates, gains };
 }
 
 /** @typedef {{itemId: string, kind: "power"|"momentum", name: string, value: number, max: number}} PoolSnapshot */
@@ -84,6 +101,8 @@ function poolRecovery(pools, valueFor) {
  * @param {boolean} [s.eats]   food was spent on this rest
  * @param {boolean} [s.drinks] drink was spent on this rest
  * @param {boolean} [s.tierAgain] the food was a hot meal or a feast (08 §12)
+ * @param {boolean} [s.needsNoFood] the character does not eat or drink (D-946): Health
+ *   and Mana come back with neither, and no flag says either was missing
  * @param {{itemId?: string|null, amount?: number}} [s.manaExtra] Mana a talent
  *   returns beyond 05's half, WITH a drink and only with one (04's Light's
  *   Reserve: *A Short Rest with a drink returns 3 more Mana per rank*; D-772),
@@ -99,8 +118,19 @@ function poolRecovery(pools, valueFor) {
  */
 export function shortRest({
   health, conMod = 0, tier = 1, fatigue = 0, pools = [],
-  eats = false, drinks = false, tierAgain = false, manaExtra = null
+  eats = false, drinks = false, tierAgain = false, manaExtra = null, needsNoFood = false, needsNoDrink = null
 } = {}) {
+  // **NOTHING TO EAT, AND NOTHING NEEDED** (D-946): the rest recovers as though both
+  // were taken. MY READING, for the lead: *"do not have to eat or drink"* lifts the drink
+  // a Forsaken caster's Mana waits on too. The defaults still withhold: only a caller
+  // that says so passes it.
+  const exempt = needsNoFood === true;
+  // **THE DRINK IS LIFTED SEPARATELY** (the F1 review's note): Undeath's rung at 5 lifts the
+  // food alone, so a caller that says `needsNoDrink: false` still waits on a drink for Mana.
+  // Left null, it follows `needsNoFood`, as before.
+  const noDrink = needsNoDrink === null || needsNoDrink === undefined ? exempt : needsNoDrink === true;
+  if (exempt) eats = true;
+  if (noDrink) drinks = true;
   const extraAmount = drinks ? Math.max(0, Math.trunc(Number(manaExtra?.amount)) || 0) : 0;
   const manaPools = pools.filter(p => p.kind === "power" && p.name === "mana");
   const extraInto = extraAmount > 0
@@ -126,18 +156,19 @@ export function shortRest({
     if (p.name === "focus") return p.max;
     return null;
   });
-  const sand = sandAtRest(pools);
+  const kept = keptAtRest(pools, "shortRest");
   return {
     health: after,
     fatigue,
-    pools: [...updates, ...sand.updates],
+    pools: [...updates, ...kept.updates],
     gains: [
       ...(fedTo > before ? [{ kind: "health", amount: fedTo - before }] : []),
       ...(after > fedTo ? [{ kind: "tierAgain", amount: after - fedTo }] : []),
       ...gains,
-      ...sand.gains,
+      ...kept.gains,
       ...(eats ? [] : [{ kind: "noFood" }]),
-      ...(!drinks && holdsMana ? [{ kind: "noDrink" }] : [])
+      ...(!drinks && holdsMana ? [{ kind: "noDrink" }] : []),
+      ...(exempt ? [{ kind: "needsNoFood" }] : [])
     ]
   };
 }
@@ -153,15 +184,15 @@ export function longRest({ health, conMod = 0, tier = 1, fatigue = 0, pools = []
   const after = diseased ? before : Math.min(health.max, before + gain);
   const rested = diseased ? fatigue : Math.max(0, fatigue - 1);
   const { updates, gains } = poolRecovery(pools, p => (p.name === "mana" || p.name === "focus" ? p.max : null));
-  const sand = sandAtRest(pools);
+  const kept = keptAtRest(pools, "longRest");
   return {
     health: after,
     fatigue: rested,
-    pools: [...updates, ...sand.updates],
+    pools: [...updates, ...kept.updates],
     gains: [
       ...(after > before ? [{ kind: "health", amount: after - before }] : []),
       ...gains,
-      ...sand.gains,
+      ...kept.gains,
       ...(rested < fatigue ? [{ kind: "fatigue", amount: rested - fatigue }] : []),
       ...(diseased ? [{ kind: "diseased" }] : [])
     ]

@@ -172,6 +172,10 @@ export function resolveDamage({
   schoolArmorBySchool = null,
   // Drawn Across on the blow's source (door 25): its worth halved before Armor and Ward.
   dealtHalved = false,
+  // **THE BLOW TAKEN AT HALF** (04's Icebound Fortitude: *deals half its damage to you, rounded
+  // down, before Armor Points and Ward apply*; the lead: *"before AP or ward"*; run F4a): the
+  // target's own halving, one more halving of the worth before Armor and Ward.
+  takenHalved = false,
   // **HALF ON A PASSED TEST** (the lead: *"Build it everywhere"*; 07's *and half of
   // that, rounded down, on a success*, `rules/resisted.mjs`): the worth halved,
   // rounded down, before Armor Points and Ward - Drawn Across's own reading of a
@@ -198,7 +202,7 @@ export function resolveDamage({
   const passes = Boolean(own) && Array.isArray(immuneHalf) && immuneHalf.includes(own) && (immune ?? []).includes(own);
   const immuneNow = passes ? (immune ?? []).filter(t => t !== own) : immune;
   const halved = dealtHalved === true || (dealtHalved && typeof dealtHalved === "object");
-  const halvings = (halved ? 1 : 0) + (passedHalf === true ? 1 : 0) + (passes ? 1 : 0);
+  const halvings = (halved ? 1 : 0) + (passedHalf === true ? 1 : 0) + (passes ? 1 : 0) + (takenHalved === true ? 1 : 0);
   const past = bypass === true;
   const main = resolveOne({
     rating: (Number(rating) || 0) + typed.merged, sl, kind, school, location,
@@ -208,7 +212,7 @@ export function resolveDamage({
   });
   const sourced = sourceDamageBonus > 0 ? { ...main, sourceDamageBonus } : main;
   const flagged = past ? { ...sourced, bypass: true } : sourced;
-  const marked = halvings ? { ...flagged, ...(halved ? { dealtHalved: true } : {}), ...(passedHalf === true ? { passedHalf: true } : {}), ...(passes ? { pastImmune: own } : {}) } : flagged;
+  const marked = halvings ? { ...flagged, ...(halved ? { dealtHalved: true } : {}), ...(passedHalf === true ? { passedHalf: true } : {}), ...(passes ? { pastImmune: own } : {}), ...(takenHalved === true ? { takenHalved: true } : {}) } : flagged;
   if (!typed.extras.length) return marked;
   const meets = past
     ? { immune, vulnerable, wardBySchool: {}, schoolArmorBySchool: {}, apByLocation: {}, location, fireTakenBonus }

@@ -15,6 +15,7 @@
 
 import { AZEROTH } from "../config.mjs";
 import { resistsForcedMovement, rung } from "./size.mjs";
+import { maneuverPriceOf } from "./maneuver-pool.mjs";
 
 const BASE = Object.fromEntries(AZEROTH.maneuvers.map(m => [m.key, m.cost]));
 
@@ -65,6 +66,13 @@ export function maneuverCost(key, { features = [], talents = [], grants = [], ch
       cost = Math.max(0, cost - 2 * stroke);
       rows.push({ name: "Return Stroke", cost });
     }
+  }
+  // **02's RUNIC DISCIPLINE** (*Each maneuver costs you 1 Runic Power, whatever its listed
+  // price*): the price a held feature sets, never above what the rows above made it.
+  const set = maneuverPriceOf(features);
+  if (set !== null && cost > set) {
+    cost = set;
+    rows.push({ name: features.find(f => f?.maneuverPrice === set)?.name ?? "", cost });
   }
   if (chargeAvailable && (key === "sunder" || key === "overbear")) {
     cost = 0;

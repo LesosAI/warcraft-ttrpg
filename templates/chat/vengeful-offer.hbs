@@ -1,0 +1,15 @@
+{{!-- 04's Vengeful Blood in a one-handed weapon in each hand, offered (D-1017): *once a round,
+      when a creature within your reach damages you with a melee attack, you may make your
+      Off-Hand Attack for the round against it as a Reaction*. Posted from the attack card's
+      Apply on the GM's client (`effects/death-knight-talents.mjs#offerVengefulRiposte`), so the
+      button carries the knight: `data-reaction-owner` shows it to whoever owns the knight and
+      nobody else (D-779), and the press judges the offer, the grip, the reach, the Reaction and
+      the round's Off-Hand Attack again (`vengefulRiposteFromCard`). --}}
+<div class="azeroth azeroth-card azeroth-card-feature" data-message-kind="vengefulOffer">
+  <div class="azeroth-card-body">
+    <p class="azeroth-card-line azeroth-fired"><span>{{name}}</span><em>{{text}}</em></p>
+    <div class="azeroth-card-actions" data-reaction-owner="{{holderUuid}}">
+      <button type="button" data-action="vengefulRiposte" data-holder-uuid="{{holderUuid}}" data-target-uuid="{{targetUuid}}">{{label}}</button>
+    </div>
+  </div>
+</div>

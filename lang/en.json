@@ -1393,6 +1393,7 @@
       }
     },
     "Condition": {
+      "CarrierHolds": "{name} is still {condition}: {carrier} holds it, and it ends when {carrier} ends.",
       "Ends": "Ends",
       "Label": "Condition",
       "Bleeding": {
@@ -1478,7 +1479,8 @@
       "Nature": "Nature",
       "Shadow": "Shadow",
       "Fel": "Fel",
-      "Holy": "Holy"
+      "Holy": "Holy",
+      "Death": "Death"
     },
     "DamageType": {
       "Physical": "Physical"
@@ -1525,10 +1527,43 @@
       "ComboPoints": "Combo Points",
       "Ferocity": "Ferocity",
       "Sand": "Sand",
+      "RunicPower": "Runic Power",
       "Mana": "Mana",
       "Focus": "Focus",
       "Energy": "Energy",
-      "Any": "Momentum or Power"
+      "Runes": "Runes",
+      "Any": "Momentum or Power",
+      "Rune": "Rune"
+    },
+    "Runes": {
+      "Blood": "Blood rune",
+      "Frost": "Frost rune",
+      "TwoHandedCount": "{name} carries the two-handed rune count, so it cannot be wielded in one hand until you inscribe it again after a Long Rest.",
+      "SpentBlood": "Spent Blood rune",
+      "SpentFrost": "Spent Frost rune",
+      "EmptySlot": "Empty rune slot",
+      "PoolHere": "Spend and inscribe runes in the rune panel on the Combat tab.",
+      "Meta": "{rarity} · {grip} · {n} rune slots",
+      "Grip": {"one": "one-handed", "two": "two-handed"},
+      "Stalled": "A rune write for {name} had no answer for ten seconds, so the next one went ahead.",
+      "Panel": {"Heading": "Runes", "Inscribe": "Inscribe runes", "Spend": "Spend a rune · Half-Action", "Refuse": {"fight": "You cannot inscribe runes during a fight.", "window": "You inscribe runes when you finish a Long Rest, until you spend your first rune.", "noWeapon": "No weapon you wield and are trained with has rune slots.", "short": "Every rune on the weapons you wield is spent."}},
+      "Refuse": {
+        "untrained": "You are not trained with {name}, so it has no rune slots.",
+        "noSlots": "{name} has no rune slots.",
+        "grip": "Choose the one-handed or the two-handed rune count for {name}.",
+        "ratio": "Inscribe a Blood rune or a Frost rune in every rune slot of {name}.",
+        "count": "Spend a whole number of runes.",
+        "kind": "A rune is a Blood rune or a Frost rune.",
+        "direct": "The runes of {name} change only when a rune is spent, inscribed or refilled. Nothing was written.",
+        "short": "{name} has fewer than {n} unspent runes of that type on the weapons wielded.",
+        "gain": {"unsourced": "Runic Power is gained only by spending a rune, so {name} gains none here. Nothing was written.", "hand": "Only a GM may raise {name}'s Runic Power by hand. Runic Power is gained by spending a rune."}
+      }
+    },
+    "DeathKnight": {"Inscribe": {"Refuse": {"fight": "{name} cannot inscribe runes during a fight.", "window": "{name} inscribes runes when a Long Rest finishes, until the first rune is spent.", "noWeapon": "{name} wields no weapon they are trained with that has rune slots."}, "Grip": {"one": "One-handed: {n} rune slots", "two": "Two-handed: {n} rune slots. You cannot wield it in one hand until you inscribe it again after a Long Rest."}, "GripNote": "A Versatile weapon takes either count.", "GripPrompt": "Choose the rune count for {name}.", "Ratio": "{blood} Blood, {frost} Frost", "RatioPrompt": "Inscribe the {n} rune slots of {name}.", "Done": "{name} inscribes {blood} Blood and {frost} Frost runes on {weapon}."}, "Spend": {"Done": "{name} spends a {rune} and gains {n} Runic Power."}, "DeathStrike": {"Healed": "{name} regains {n} Health from Death Strike, up to {cap}."}, "Desecration": {"NoToken": "{name} has no token on this scene, so Desecration lays no ground.", "Area": "Desecration ({name}, {feet} ft)", "Laid": "{name} desecrates the ground within {feet} feet for {minutes} minutes.", "NotLaid": "The desecrated ground could not be placed for {name}.", "NoWard": "{name} holds no Ward against {school}, so Desecration takes nothing from it.", "NotYours": "{name} is not yours to write on, so its Ward is not reduced.", "Effect": "{source}: Ward against {school} reduced", "WardDropped": "{name}'s Ward against {school} is reduced by {n} until the start of its next turn."}, "Plague": {"FrostFever": "Frost Fever", "BloodPlague": "Blood Plague", "Refuse": {"kind": "No such disease: {name}'s Plague lays Frost Fever or Blood Plague.", "notHeld": "{name} does not hold Plague, so no disease is laid."}, "Immune": "{name} is immune to disease and does not gain {plague}.", "Laid": "{name} gains {plague}.", "NotLaid": "{plague} does not take hold on {name}.", "SpreadTest": "{name} is within 5 feet of {from} and makes a Body Resilience Test against Blood Plague."}, "Presence": {"Laid": "{name} takes up an Unholy Presence. Allies within {feet} feet have +{speed} feet Speed, and undead allies regain Health at the start of their turns.", "Ended": "{name} ends the Unholy Presence."}, "March": {"Laid": "{name} marches for 1 minute. Allies within {feet} feet ignore Difficult ground and cannot be Frightened, Slowed or moved against their will. Undead allies within {undead} feet deal {n} Shadow damage on each melee hit."}, "Talent": {"NoGM": "No GM is online to make this change.", "NoGMNothingSpent": "{name}: no GM is online to end what you laid on a creature you do not own. Nothing was spent.", "AskedInBlow": "{name} is a Reaction you take when a blow damages you. It is offered then.", "NothingSpent": "{name}: {actor} has no spent {kind} to refill. Nothing was spent.", "NoToken": "{name}: {actor} has no token on this scene.", "NoFever": "{name}: no Frost Fever you laid stands on a creature within {feet} feet. Nothing was spent.", "Regained": "{talent}: {name} regains {n} Health.", "Marked": "{talent}: for 1 minute, each time an attack by {target} damages {name}, {name} regains {n} Health.", "MarkHealed": "{talent}: {name} regains {n} Health after the blow.", "Vampiric": "{talent}: for 1 minute, each time {name} regains Health, {name} regains {n} additional Health.", "Dancing": "{talent}: the Dancing Runeweapon fights beside {name} for {n} rounds.", "DancingSubtitle": "{talent}", "DancingRolled": "{talent}: the Dancing Runeweapon of {name} makes one more attack roll.", "Winter": "{talent}: a winter surrounds {name} to {feet} feet for {n} rounds.", "WinterSlowed": "{talent}: {name} starts its turn inside the winter and is Slowed until the end of its turn.", "WinterTest": "{talent}: {name} is already Slowed inside the winter and makes a Body Resilience Test.", "Refilled": "{talent}: {name} refills {n} spent {kind}.", "Empowered": "{talent}: {name} ends {ended} Frost Fever and refills {n} spent Frost rune.", "Tide": "{talent}: the tide around {name} damages {n} enemies.", "TideNoGM": "{talent}: no GM is online to strike the enemies around {name}, so the tide waits for a later round.", "RunicFrost": "{talent}: the next Frost spell {name} casts before the end of this turn costs {n} less Runic Power.", "IceboundCut": "{talent}: the blow on {name} is halved before Armor Points and Ward, {n} less damage.", "AskIcebound": "{talent}: a blow of {n} damages {name}. Spend 1 Frost rune and your Reaction to halve it, and each blow until the end of your next turn, before Armor Points and Ward?", "FrozenEdge": "{talent}: {n} additional Frost damage.", "Harvest": "{talent}: {name} regains {n} Health.", "Shield": "{talent}: {name} gains {n} temporary Health until the end of the encounter.", "NoDisengage": "{name} is Slowed within the reach of {holder} and cannot Disengage ({talent}).", "DesecrationSlowed": "{talent}: {name} starts its turn in the Desecration and is Slowed until the end of its turn.", "SanguinePlague": "{talent}: {name} regains {n} Health.", "GripSlowed": "{talent}: {name} is Slowed until the end of its next turn.", "CoilSlowed": "{talent}: {name} is Slowed until the end of its next turn.", "SpeedZero": "{talent}: {name}'s Speed is 0 until the end of its turn.", "SpeedZeroName": "{talent}: Speed 0", "SpeedZeroText": "Your Speed is 0 until the end of your turn ({talent}).", "SpeedZeroCard": "{talent}: on a hit, the creature's Speed is 0 until the end of its turn.", "SpeedZeroNot": "{talent}: {name}'s Speed was not set to 0.", "SpeedZeroAsked": "{talent}: {name}'s Speed is set to 0 until the end of its turn, through the GM.", "SpeedZeroRefuse": {"card": "{talent}: no Opportunity Attack card names {name}, so its Speed stays as it is.", "notOpportunity": "{talent}: that attack was no Opportunity Attack, so {name}'s Speed stays as it is.", "notKnight": "{talent}: that Opportunity Attack is not yours, so {name}'s Speed stays as it is.", "notVictim": "{talent}: that Opportunity Attack did not strike {name}, so its Speed stays as it is.", "miss": "{talent}: that Opportunity Attack did not hit {name}, so its Speed stays as it is.", "claimed": "{talent}: {name}'s Speed is already 0 from that Opportunity Attack."}, "RelentlessFrost": "{talent}: {n} additional Frost damage on the Opportunity Attack.", "MachineGain": "{talent}: {name} gains {n} Runic Power.", "MachineFull": "{talent}: {name}'s Runic Power is full, so it gains none.", "MachineCritical": "{talent}: the hit inflicts a Critical Injury.", "RiposteShadow": "{talent}: {n} additional Shadow damage.", "EdgeSlowed": "{talent}: the first melee hit this turn. {landed}", "EdgeNoGM": "{talent}: no GM is online to make the creature {condition}, so this turn's first melee hit is still unspent.", "Riposte": {"Offer": "{talent}: {name} damaged {holder} with a melee attack from within reach. {holder} may make the Off-Hand Attack for the round against {name} as a Reaction, and on a hit it deals {n} additional Shadow damage.", "Press": "Make the Off-Hand Attack against {name} ({talent})", "Refuse": {"notYours": "{name} is not yours to act for.", "stale": "{talent}: that blow is past, so {name} can no longer answer it.", "notHeld": "{name} does not hold Vengeful Blood.", "grip": "{talent}: {name} needs a one-handed weapon in each hand.", "noOffHand": "{talent}: {name} holds no weapon in the off hand.", "gone": "{talent}: {target} is no longer on the scene.", "reach": "{talent}: {target} is no longer within {name}'s reach.", "marked": "{talent}: {name} has already answered a blow this round.", "offHandSpent": "{talent}: {name} has already made the Off-Hand Attack this round. Nothing was spent.", "noReaction": "{talent}: {name} has no Reaction left. Nothing was spent."}}}, "Spell": {"Refuse": {"noTarget": "{spell} needs a target. Nothing was spent.", "notHalf": "{spell} needs a creature with half its Health or less, and {name} has more. Nothing was spent.", "unmeasured": "{spell} needs a creature with half its Health or less, and {name}'s Health cannot be read. Nothing was spent.", "oneCarrier": "{spell} needs one target: a creature carrying your Frost Fever or Blood Plague. Nothing was spent.", "notCarrier": "{name} carries none of your Frost Fever or Blood Plague, so {spell} has no disease to spread. Nothing was spent.", "unplaced": "{name} has no token on a scene, so {spell} cannot measure from it. Nothing was spent.", "noRing": "No enemy stands within {n} feet of {name}, so {spell} would strike nobody. Nothing was spent.", "oneServant": "{spell} needs one target: an undead creature you control. Nothing was spent.", "notYours": "{name} is not a creature you control, so {spell} cannot take it. Nothing was spent.", "notUndead": "{name} is not undead, so {spell} cannot take it. Nothing was spent.", "noGM": "{spell} writes on a creature only a GM may change, and no GM is online. Nothing was spent."}, "AlwaysLanded": "{name} is {condition} ({spell}). It can end it with an action and a Resilience Test against the Spell DC.", "AlwaysNot": "{name} is not {condition} ({spell}).", "DeathPact": "{servant} is destroyed. {name} regains {n} Health ({spell}; it had {had}).", "HornLaid": "{name} gains a Boon on its next Attack Test or Resilience Test ({spell}).", "HornNot": "{name} gains no Boon ({spell}).", "HornUnplaced": "{name} has no token on the scene, so {spell} reaches only {name}.", "SightRow": "{name}: {feet} feet {direction}. Highest Undeath threshold crossed: {threshold}.", "SightKeyword": "{name}: {feet} feet {direction}. It carries Undeath; its block gives no threshold.", "SightNone": "none", "SightNobody": "No creature within {n} feet carries Undeath Corruption.", "SightUnplaced": "{name} has no token on the scene, so {spell} senses no creature.", "SightGround": "The ground here is Undeath taint grade {n}.", "SightClean": "The ground here carries no Undeath taint grade.", "SightSent": "{spell}: what {name} senses is whispered to {name}'s own players, or to you where only a GM holds {name}.", "NoHealing": "{name} cannot regain Health until the end of its next turn ({spell}).", "NoHealingNot": "{name}'s no-healing mark was not laid ({spell}): it needs a started fight to count its turn.", "NoReactions": "{name} cannot take Reactions while it is Slowed by {spell}.", "NoDisengageLaid": "{name} cannot Disengage while it is Slowed by {spell}.", "NoDisengage": "{name} is Slowed by {spell} and cannot Disengage.", "SlowedBarName": "{spell}: while Slowed by this spell"}},
+    "Undead": {
+      "HealsUndeadOnly": "{from} heals only the undead. {name} regains no Health.",
+      "OnlyDeathHeals": "{name} is undead, and only a spell of the Death school heals it from another creature. {name} regains no Health.",
+      "AccruesNone": "{name} accrues no {track} Corruption."
     },
     "Sand": {
       "NoHourglass": "No Hourglass in your Ranged slot, so you hold no Sand (08 §9).",
@@ -2151,7 +2186,9 @@
       "Half": "Half-Action",
       "Action": "Action",
       "Full": "Full Action",
-      "Reaction": "Reaction"
+      "Reaction": "Reaction",
+      "Minute": "1 minute",
+      "TimedInFight": "{spell} takes 1 minute to cast, longer than a turn. It cannot be cast in a fight."
     },
     "Reaction": {
       "OpportunityAttack": "Opportunity Attack",
@@ -2220,7 +2257,8 @@
       "Attack": "Attack",
       "Casting": "Casting",
       "Resilience": "Resilience",
-      "Parry": "Parry"
+      "Parry": "Parry",
+      "AttackOrResilience": "Attack or Resilience"
     },
     "TraitKind": {
       "Form": "Form",
@@ -2350,7 +2388,9 @@
       "NoFood": "No food: no Health recovered.",
       "NoDrink": "No drink: no Mana recovered.",
       "TierAgain": "Hot meal",
-      "TalentMana": "{name}: +{n} Mana"
+      "TalentMana": "{name}: +{n} Mana",
+      "InscribeOpen": "Your runes are refilled, and you may inscribe them anew.",
+      "NeedsNoFood": "Does not eat or drink: recovered without either."
     },
     "WeaponType": {
       "Axe": "Axe",
@@ -2425,7 +2465,8 @@
         "Totem": "Totem",
         "Summon": "Summoned",
         "Construct": "Construct",
-        "Thrall": "Thrall"
+        "Thrall": "Thrall",
+        "Raised": "Raised dead"
       },
       "Folder": "Bound",
       "UnboundFolder": "Unbound",
@@ -2500,6 +2541,7 @@
     },
     "Card": {
       "HealRecent": "the damage each target has taken since the start of your last turn, to no more than {n}",
+      "HealUndeadInstead": "on an undead creature it heals instead: {n} Health, and no damage",
       "ApplyToSelfAlt": "Apply the higher amount",
       "EffectNotSustained": "{name} is no longer sustained, so its effect cannot be applied.",
       "SustainCleanupFailed": "A sustained spell's effects could not be removed. The GM should check the affected actors before continuing.",
@@ -2940,7 +2982,11 @@
       "Hold": "The conditions and effects already on it do nothing and do not count down. They resume when it leaves the area or the spell ends.",
       "Taunt": "It takes a Bane on attacks against anyone but {owner}.",
       "AttackDamage": "Your attacks deal {n} more damage.",
-      "Tick": "Takes {n} {type} damage at the start of each of its turns while within reach of {owner}."
+      "Tick": "Takes {n} {type} damage at the start of each of its turns while within reach of {owner}.",
+      "TickHeal": "Regains {n} Health at the start of its turn ({owner}).",
+      "IgnoresGround": "Ignores Difficult ground.",
+      "Unmovable": "Cannot be moved against its will.",
+      "MeleeTyped": "Deals {n} {type} damage on each melee hit."
     },
     "NpcTab": {
       "statistics": "Statistics",
@@ -3045,6 +3091,8 @@
       "LegacyPeople": "Legacy of",
       "FeatureKind": "Kind",
       "CostPool": "Costs from",
+      "RuneSlotsTwo": "Rune slots, two-handed",
+      "RuneSlotsOne": "Rune slots, one-handed",
       "CostAmount": "Cost",
       "CastingTest": "Casting Test",
       "UsesLeft": "Uses left",
@@ -3203,6 +3251,7 @@
           "label": "Kinds",
           "hint": "Only these kinds of creature are slowed. None slows every kind."
         },
+        "spares": {"label": "Spares", "hint": "A creature immune to this school's damage walks the ground freely."},
         "caster": {
           "label": "Caster",
           "hint": "The actor whose enemies are slowed, as a UUID."
@@ -3340,6 +3389,12 @@
       },
       "Note": {
         "Pummel": "Two Banes on the target's next Casting Test.",
+        "InscribedRuneweapon": "Inscribe Blood and Frost runes on the weapons you wield, from the end of a Long Rest until you spend your first rune.",
+        "UnholyLore": "You know Death Coil, outside your spells known, and pay its cost in Runic Power.",
+        "DeathStrike": "A line on the attack's dialog: spend any type of rune; on a hit, regain the damage you took since the start of your last turn, up to 4 plus twice your tier.",
+        "RunicDiscipline": "Every maneuver costs you 1 Runic Power.",
+        "Plague": "Two lines on the attack's dialog, paid only when the attack hits: Frost Fever or Blood Plague.",
+        "TableForNow": "The table applies this feature by hand.",
         "WildBond": "The touch restores Health equal to your tier to your companion.",
         "LifeTap": "Spend any Health; gain twice that much Mana.",
         "Polymorph": "Some targets are immune to Polymorph, and which ones is the GM's call. A creature that fails becomes a Rabbit until it takes damage: its Speed is 10 feet and it cannot attack, cast, use a feature or take a Reaction (Hex's limits, the tool's reading); whether it can speak is the table's call.",
@@ -3610,6 +3665,7 @@
         "Empty": "{name} spends all your {pool}, and you hold none.",
         "Once": "{name} is once a round, and this round's is spent.",
         "Gone": "A rider you ticked is not yours to spend now, so nothing was spent.",
+        "Exclusive": "Choose only one of {name}. Nothing was spent.",
         "Primed": "{name} is paid from the Combat tab: this attack is the charge, and costs nothing more."
       },
       "Card": {
@@ -5054,7 +5110,8 @@
       "Import": "Import the book",
       "Imported": "Imported {added} chapter(s) into the Rules folder; {already} were already here.",
       "AlreadyThere": "All {already} chapters are already in the Journals tab.",
-      "Closed": "Closed {chapters} to players. It was readable by everyone until now, because it was imported before that rule existed."
+      "Closed": "Closed {chapters} to players. It was readable by everyone until now, because it was imported before that rule existed.",
+      "BookCopy": "(book)"
     },
     "Macro": {
       "SaveToHotbar": "Save to hotbar",
@@ -6262,6 +6319,7 @@
         "Unmeasured": "{name}: there is no point on the board to move from, so nothing is moved ({source}).",
         "NoGM": "No GM is online to move {name} ({source}).",
         "Outsized": "{name} is more than one size larger than what moves it, and is not moved ({source}).",
+        "OwnAbility": "{name} cannot be moved against its will, and is not moved ({source}).",
         "Nothing": "{name} is not moved ({source})."
       }
     },
@@ -6381,7 +6439,10 @@
         "TwoHanded": "{name} needs a two-handed weapon in hand.",
         "NoSuit": "{name} needs no armor in your Chest slot.",
         "TwoTypes": "{name} needs melee weapons of two different types, one in each hand.",
-        "HammerOrMace": "{name} needs a hammer or a mace in hand."
+        "HammerOrMace": "{name} needs a hammer or a mace in hand.",
+        "BothHands": "{name} needs a two-handed weapon, or a Versatile weapon in both hands.",
+        "OneInEach": "{name} needs a one-handed weapon in each hand.",
+        "EitherGrip": "{name} needs a two-handed weapon, a Versatile weapon in both hands, or a one-handed weapon in each hand."
       },
       "ThrowNeedsRider": "{weapon} is thrown only as part of {talent}: tick its line to throw it."
     },
@@ -6575,7 +6636,21 @@
       "Full": "{talent}: you control {n} already, so the {name} does not rise.",
       "Risen": "{talent}: the {name} rises as a {entry} that acts on {owner}'s Initiative until the encounter ends.",
       "RisenNoToken": "{talent}: the {name} rises as a {entry} bound to {owner}. Place its token by hand.",
-      "Failed": "{name} could not be raised: its fall stands."
+      "Failed": "{name} could not be raised: its fall stands.",
+      "Label": "Raised dead",
+      "Corpse": "{name} ({feet} ft)",
+      "Prompt": "{name}: choose the corpse that rises as a {entry}.",
+      "PromptMany": "{name}: choose {min} to {max} corpses.",
+      "Raised": "{spell}: {n} {entry} rise under {name}'s control and act on {name}'s Initiative.",
+      "RaisedNoToken": "{spell}: {entry} is bound to {name}. Place its tokens by hand.",
+      "Carrier": "{spell}: {n} {entry}",
+      "CarrierText": "{n} {entry} raised. They collapse when this ends, after {rounds} rounds.",
+      "CarrierLongRest": "{n} {entry} raised. They collapse when you finish a Long Rest.",
+      "Refunded": "{spell}: nothing rose, so {name} gets back {n} {pool}.",
+      "RefundedNone": "{spell}: nothing rose. {name} paid nothing that can be given back.",
+      "UseKept": "{spell}: the use is not spent.",
+      "Refuse": {"destroyed": "{name} has been destroyed and cannot be raised.", "raised": "{name} has risen already.", "kept": "{name} is kept by another caster's Stay the Rot and cannot be raised.", "sealed": "The soul of {name} is sealed, so the body cannot be raised as undead.", "kind": "{name} is not a corpse {spell} can raise.", "size": "{name} is smaller than {spell} needs.", "range": "{name} is out of range.", "few": "{spell} needs at least {min} corpses.", "many": "{spell} raises no more than {max} corpses.", "apart": "{spell} needs corpses within {feet} feet of each other.", "cap": "{spell} costs {n} Runic Power, and the Runic Power cap of {name} is below {n}.", "noToken": "{name} has no token on this scene, so nothing can be raised.", "noGM": "No GM is online to place the dead. Nothing was spent.", "noEntry": "The bestiary holds no {entry}.", "noCorpse": "No corpse in range can be raised by {spell}.", "notKnight": "{name} can raise the dead only from their own token.", "notHeld": "{name} does not hold {spell}.", "failed": "{spell}: the dead could not be placed, so the earlier raise stands. {reason}"},
+      "Marked": {"destroyed": "{spell}: the corpse of {name} is destroyed and cannot be raised.", "kept": "{spell}: the corpse of {name} does not decay for 10 days, and only you can raise it.", "sealed": "{spell}: the corpse of {name} cannot be raised as undead for 1 day."}
     },
     "Splash": {
       "Label": "Around the target",
@@ -6620,7 +6695,9 @@
         "Same": "{name} already stands there.",
         "Unmeasured": "{name}: that space cannot be measured.",
         "Unseen": "{name}: you cannot see that space.",
-        "Unallowed": "{name} is not a creature this step may move there."
+        "Unallowed": "{name} is not a creature this step may move there.",
+        "Refuses": "{name} cannot be moved against its will, and is not pulled ({source}).",
+        "Outsized": "{name} is more than one size larger than what pulls it, and is not pulled ({source})."
       }
     },
     "Trap": {
@@ -6846,7 +6923,9 @@
         "TooFar": "Every creature travelling stands within {feet} feet of you ({name}).",
         "FightScene": "{name}: the pad stands on another scene, and a creature travelling is in a fight."
       }
-    }
+    },
+    "MountWork": {"Option": {"undead": "Undead", "spectral": "Spectral", "hallowed": "Zealous Charger", "felsteed": "Felsteed"}, "Refuse": {"fight": "{feature} is made over a Long Rest, never during a fight.", "rested": "{name} has used {feature} since the last Long Rest. Finish a Long Rest to use it again.", "noMount": "{name} owns no mount for {feature}. A mount is with you or in your Stable."}, "Choice": "{mount}: {option} ({traits})", "Prompt": "{feature}: choose a mount you own.", "Done": "{name}'s {mount} becomes {option} and gains {traits}. It keeps everything else it was.", "Lost": "{mount} loses what {feature} gave it."},
+    "Compass": {"here": "here", "N": "north", "NE": "north-east", "E": "east", "SE": "south-east", "S": "south", "SW": "south-west", "W": "west", "NW": "north-west"}
   },
   "TYPES": {
     "Actor": {

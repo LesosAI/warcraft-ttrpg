@@ -76,6 +76,10 @@ const TEMPLATES = [
   // card as an HTML STRING through `data-tooltip-html`.
   "systems/azeroth-rpg/templates/actor/partials/item-tooltip.hbs",
   "systems/azeroth-rpg/templates/actor/partials/pool.hbs",
+  // The Death Knight's rune panel and its sockets (D-919; run F2).
+  "systems/azeroth-rpg/templates/actor/partials/rune-panel.hbs",
+  "systems/azeroth-rpg/templates/actor/partials/rune-row.hbs",
+  "systems/azeroth-rpg/templates/actor/partials/rune-socket.hbs",
   // One pool row on a creature's sheet, drawn by Statistics and by the Spells
   // tab's header (D-705). A partial a template names and this list does not
   // hold is not a missing style - it THROWS at render, and takes the whole

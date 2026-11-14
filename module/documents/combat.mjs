@@ -73,6 +73,8 @@ import { healingAfterBlock } from "../rules/no-healing.mjs";
 // in three dimensions (D-732); and the one reading of a threatener's reach.
 import { feetBetweenFootprints, footprintOf } from "../canvas/footprints.mjs";
 import { reachOfActor } from "../canvas/engaged.mjs";
+// 04's Relentless Advance at rank 2 in two hands (D-1017): an Opportunity Attack's reach, 5 feet further.
+import { relentlessOpportunityReach } from "../effects/death-knight-talents.mjs";
 // THE LEGACY BRANCHES' DOORS (B1): 02's Focus after a still turn (door 9), 04's
 // Unmoved on Bracing's measure (door 26), Hold the Hall's moving provocation and
 // its free Opportunity Attack (door 22), and no Reaction against the unanswered (door 14).
@@ -1382,7 +1384,9 @@ export class AzerothCombatant extends Combatant {
     const rows = [];
     for (const { other, threat, may, holds } of threats) {
       const from = footprintOf(threat);
-      const reach = reachOfActor(other.actor);
+      // The threatener's reach, and what a talent adds to it for an Opportunity Attack alone
+      // (04's Relentless Advance in two hands, D-1017) - the door that strikes it reads the same.
+      const reach = reachOfActor(other.actor) + relentlessOpportunityReach(other.actor);
       const nearest = list => list.reduce((least, footprint) => {
         const d = feetBetweenFootprints(from, footprint, scene.grid);
         return d === null ? least : Math.min(least, d);
@@ -2359,6 +2363,15 @@ export class AzerothCombat extends Combat {
     } catch (err) {
       console.warn("azeroth-rpg | a Chronomancer's turn start", err);
     }
+    // **THE DEATH KNIGHT'S TURN-START DOORS** (04's Remorseless Winter and Frozen Desecration; run
+    // F4a): an enemy starting its turn inside a knight's winter or Desecration
+    // (`effects/death-knight-talents.mjs#dkTurnStart`). Guarded: neither stops the turn.
+    try {
+      const { dkTurnStart } = await import("../effects/death-knight-talents.mjs");
+      for (const line of await dkTurnStart(combatant)) lines.push(line);
+    } catch (err) {
+      console.warn("azeroth-rpg | a Death Knight's turn start", err);
+    }
     // **THE CHAMPION'S TURN-START DOORS** (04; stage 3B): the Half-Action a Hasten gave this
     // creature for this turn, given now that the budget is reset (`takeHastened`), and the
     // Blue Drake's Mana to each ally within 30 feet as the drake's own turn starts. Guarded:
@@ -2544,7 +2557,7 @@ export class AzerothCombat extends Combat {
         // pass): a creature the cast named makes no Test.
         const namedHere = source.region.flags?.["azeroth-rpg"]?.named;
         const named = Array.isArray(namedHere) && namedHere.includes(actor.uuid);
-        for (const check of checksFor(source.tick, "turn", { relation, atCentre: atCentreOf(token, source.region), holds, named })) {
+        for (const check of checksFor(source.tick, "turn", { relation, atCentre: atCentreOf(token, source.region), holds, named, immune: [...(actor.system?.immune ?? [])] })) {
           tests.push({ region: source.region, check, caster });
         }
       }

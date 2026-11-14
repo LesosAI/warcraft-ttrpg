@@ -8,7 +8,7 @@
 
 import { placeItemArea } from "../canvas/place.mjs";
 const EXPLOSIVE_DAMAGE_CAPABILITY=Symbol("equipment explosive damage");
-import { abilityKeyOf } from "../rules/animation-records.mjs";
+import { abilityKeyOf, featurePrivacyKey } from "../rules/animation-records.mjs";
 // A creature ability's area, IMPORTED rather than awaited inside `placeAreaFromCard`:
 // that door must reach its pick with no await on an embedded item, or a press made
 // straight after the call lands before the board listens and the pick waits for ever
@@ -104,12 +104,14 @@ import { afterSpellApply, chronoAfterResist, heavyHoursOn, layStasis } from "../
 // 04's Grinding Block (the Chronomancer's Guardian of Time, stage 2c): the attacker's Test on a Block's card.
 import { grindAfterResist } from "../effects/guardian.mjs";
 // What a sand spell's words lay beside its numbers (07 §12, D-864, D-866).
-import { blocksSight, failNoReaction, failSpan, readDeferral, targetRefuses } from "../rules/sand-spells.mjs";
+import { blocksMovement, blocksSight, failNoReaction, failSpan, readDeferral, targetRefuses } from "../rules/sand-spells.mjs";
 import { resistLandsUntil, sustainedMark } from "../rules/spell-landings.mjs";
 // O-303: a held cast's carriers say they hold the creature; the card says the Sustain ends.
 import { HOLDS_FLAG, freedEndsSustain, holdMarkOf } from "../rules/held-sustains.mjs";
 import { DEFERRAL_FLAG } from "../rules/deferred-damage.mjs";
 import { IMMUNE_FLAG } from "../rules/legacy-uses.mjs";
+// The undead healing judgement's words (D-946), asked by Lightwell's charge before it is claimed.
+import { HEALING_REFUSAL_WORDS } from "../rules/undead.mjs";
 import { reactionBarEffect } from "../rules/reaction-bar.mjs";
 import { layFear } from "../effects/fear.mjs";
 import { tickEffectsOf } from "../effects/ticks.mjs";
@@ -123,7 +125,8 @@ import { summonWaits, creatureAreaRange } from "../rules/creature-plans.mjs";
 import { BOSS_GRIP_FLAG, bossFailLands } from "../effects/boss-doors.mjs";
 import { AZEROTH } from "../config.mjs";
 import { sunderedChanges } from "../rules/maneuvers.mjs";
-import { applyCondition, clockRounds, minuteSpan, roundsOrClock, spanOn, spellTiming, untilEndOfNextTurn, untilEndOfNextTurnOrRound, untilNextTurn } from "../effects/durations.mjs";
+import { applyCondition, clockRounds, minuteSpan, roundsOrClock, spanOn, spanReadOf, spellTiming, untilEndOfNextTurn, untilEndOfNextTurnOrRound, untilNextTurn } from "../effects/durations.mjs";
+import { conditionEffectOf } from "../rules/condition-carriers.mjs";
 // A heal over time's Ward, asked as it is laid (04's Nature's Ward, D-771).
 import { tickWardChanges, tickWardFor } from "../rules/talent-effects.mjs";
 import { HEALING_AREA_WARD, healingAreaWardStamp, isHealingWardArea } from "../rules/healing-area-ward.mjs";
@@ -771,6 +774,9 @@ export const CARD_ACTIONS = {
   lifeblood: async button => (await import("../effects/chromatic-talents.mjs")).lifebloodFromCard(button),
   // 04's Rewind (stage 3B): the holder's Reaction, pressed from the offer a blow posted.
   rewind: async button => (await import("../effects/chromatic-flights.mjs")).rewindFromCard(button),
+  // 04's Vengeful Blood in a one-handed weapon in each hand (D-1017): the knight's Off-Hand Attack
+  // as a Reaction, pressed from the offer the blow's Apply posted.
+  vengefulRiposte: async button => (await import("../effects/death-knight-talents.mjs")).vengefulRiposteFromCard(button),
   lightwellCharge: (button, message) => lightwellChargeFromCard(button, message),
   // **THE LEGACY BRANCHES'** (B1): 04's Afterimage pressed from the incoming card by
   // the creature struck - *The attack misses* (door 13).
@@ -1010,6 +1016,16 @@ async function lightwellChargeFromCard(button, message) {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: taker.name }));
     return null;
   }
+  // **THE UNDEAD JUDGEMENT FIRST** (the F2 review's should-fix 7; D-946): a Death Knight is healed
+  // by nothing another creature does but a Death spell, so a charge pressed by one is refused in
+  // words before the charge is claimed or the Half-Action spent. The Priest is the giver, or -
+  // the Priest gone - another creature this card cannot name.
+  const wellGiver = priest?.documentName === "Actor" ? priest : null;
+  const undeadRefused = taker._undeadHealingRefusal?.({ from: wellGiver, givenBy: wellGiver ? null : "other" }) ?? null;
+  if (undeadRefused) {
+    ui.notifications?.warn(game.i18n.format(HEALING_REFUSAL_WORDS[undeadRefused], { name: taker.name, from: wellGiver?.name ?? "" }));
+    return null;
+  }
   const short = game.system.azeroth.workflows.turnBudgetRefusal(taker, LIGHTWELL.action);
   if (short) {
     ui.notifications?.warn(game.i18n.format(short.reason, short.params ?? {}));
@@ -1022,7 +1038,7 @@ async function lightwellChargeFromCard(button, message) {
   }
   if (!(await game.system.azeroth.workflows.spendTurnBudget(taker, LIGHTWELL.action))) return null;
   const before = taker.system?.health?.value ?? 0;
-  await taker.applyHealing(Math.max(1, Math.trunc(Number(well.heal)) || 1), { from: priest?.documentName === "Actor" ? priest : null, feature: true, featureName: LIGHTWELL.talent });
+  await taker.applyHealing(Math.max(1, Math.trunc(Number(well.heal)) || 1), { from: wellGiver, givenBy: wellGiver ? null : "other", feature: true, featureName: LIGHTWELL.talent });
   const left = Math.max(0, (Math.trunc(Number(well.charges)) || 0) - ((Math.trunc(Number(message.flags?.["azeroth-rpg"]?.lightwellTaken)) || 0)));
   return ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor: taker }),
@@ -1370,6 +1386,8 @@ export function regionFlagsFromCard(message, actor, item) {
     // **07 §12's SANDWALL** (*It blocks sight*; O-267): the Wall the active GM raises along the
     // placed line and takes down with it (`canvas/sand-walls.mjs`). Named only where it blocks.
     ...(flags.success !== false && blocksSight(flags.effectHTML ?? "") ? { blocksSight: true } : {}),
+    // **07 §17's OSSUARY WALL** (*It blocks movement and sight*; run F4b): its Wall bars movement too.
+    ...(flags.success !== false && blocksMovement(flags.effectHTML ?? "") ? { blocksMovement: true } : {}),
     widen: Number(flags.widen) || 0,
     // What the area's Tests are made against and what Rain of Chaos's *At SL
     // 3 or better* reads (D-757): the caster's Spell DC and the cast's SL.
@@ -2226,15 +2244,39 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
     // spell card's own record and door (Knock Aside's throw, Drag Under's pull), and
     // the rest of its plan - Mana lost, Armor Points, a Bane, a side, a mark - through
     // `effects/boss-doors.mjs#bossFailLands`, here, on the client that rolled the Test.
-    if (abilityCard && result && !passed) {
+    // **AND A CLASS FEATURE'S** (02's Death Grip: *On a failure you pull it into an unoccupied
+    // space within your reach*; the Death Knight plan's door 5): the pull the Use worked out at
+    // the press, on the feature card, landed through the same door - and Death Grip's size rule
+    // (`forcedIgnoresSize`: *ignores size limits unless the target is a Boss*) rides with it.
+    const featureForced = !purpose && message.flags?.["azeroth-rpg"]?.kind === "feature";
+    if ((abilityCard || featureForced) && result && !passed) {
       const forcedA = cleanForced(message.flags?.["azeroth-rpg"]?.forced ?? null);
       if (forcedA?.on === "fail") {
         const token = resisterToken(actor, source);
         const from = forcedFromOf(message, forcedA, token?.parent ?? null);
-        const r = await forceMove({ token, from, feet: forcedA.feet, toward: forcedA.toward, by: casterOf(message), name: actor.name });
+        // A feature card's pull names its feature, so the move writes the record its `arrive` cue
+        // plays from (02's Death Grip; D-1015, O-383): the key the card was filed under, the user's
+        // token it recorded and the (user, feature) pair its privacy was noted under.
+        const fFlags = message.flags?.["azeroth-rpg"] ?? {};
+        const pullCue = featureForced && fFlags.featureKey ? {
+          key: fFlags.featureKey, by: fFlags.source ?? null, privacy: featurePrivacyKey(message.speaker?.actor ?? null, fFlags.featureKey)
+        } : null;
+        const r = await forceMove({ token, from, feet: forcedA.feet, toward: forcedA.toward, by: casterOf(message), name: actor.name,
+          ignoreSize: message.flags?.["azeroth-rpg"]?.forcedIgnoresSize === "nonBoss" ? "nonBoss" : null, cue: pullCue });
         ui.notifications?.info(forcedWords(r, { toward: forcedA.toward, source: message.flags["azeroth-rpg"].title ?? "" }));
+        // **04's ICY GRIP** (*A creature you pull with Death Grip is Slowed until the end of its next
+        // turn*; run F4a): only a creature the pull moved, through the knight's Death Grip patch.
+        if (featureForced && r?.moved === true && message.flags["azeroth-rpg"].forcedIgnoresSize === "nonBoss") {
+          try {
+            const { gripPulled } = await import("../effects/death-knight-talents.mjs");
+            const said = await gripPulled({ victim: actor, knight: casterOf(message) });
+            if (said) ui.notifications?.info(said);
+          } catch (err) {
+            globalThis.console?.warn("azeroth-rpg | Icy Grip", err);
+          }
+        }
       }
-      if (message.flags?.["azeroth-rpg"]?.bossOnFail) await bossFailLands({ actor, message });
+      if (abilityCard && message.flags?.["azeroth-rpg"]?.bossOnFail) await bossFailLands({ actor, message });
     }
     // **AN AREA'S TEST** (D-757): posted by `effects/area-strikes.mjs#postAreaTest`
     // at the start of a turn in the area or on entering it, and rolled HERE, the
@@ -2258,6 +2300,11 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
       // Permafrost's feet on a Slowed the caster's spell laid (O-165).
       const escape = cleanEscape(flags.escape ?? null);
       let dominationConfirmed = true;
+      // **WHAT THIS FAILURE LAID, AND WHAT STOOD BEFORE IT** (the F4b review, S4): by condition,
+      // the effect the failure wrote and - where the creature already carried that condition - the
+      // older effect's span and escape as they were, read before the shared door rewrites them.
+      // The Death Knight's door below keeps the longer span and the older escape.
+      const laidByFailure = {};
       for (const id of flags.onFail?.statuses ?? []) {
         if (!AZEROTH.conditions?.[id]) continue;
         if (flags.identifier === "fear" && id === "frightened") {
@@ -2274,8 +2321,21 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
         // and holds nothing up, A1's own end (07 §12's Epoch: *it is also Stunned*; D-892).
         const lands = resistLandsUntil({ id, named: failSpan(flags.effectHTML ?? ""), timed: Boolean(timing), sustained: flags.sustained === true });
         const failUntil = lands === "endOfNextTurn" ? untilEndOfNextTurnOrRound(actor) : timing;
-        const had = actor.statuses?.has?.(id) === true;
+        // The condition's OWN effect (D-997): a carrier holding the status (Frost Fever's Slowed)
+        // is not the older Slowed, and the failure lays the condition beside it.
+        const older = conditionEffectOf(actor.effects, id);
+        const had = Boolean(older);
+        // The older span is read the way the condition door reads it (`spanReadOf`, with where a
+        // turn-counted span sits in its fight, O-384), so the two judgements cannot disagree.
+        const prior = older ? {
+          effectId: older.id, ...spanReadOf(older),
+          duration: foundry.utils.deepClone(older._source?.duration ?? null), start: foundry.utils.deepClone(older._source?.start ?? null),
+          escape: foundry.utils.deepClone(older.flags?.["azeroth-rpg"]?.[ESCAPE_FLAG] ?? null)
+        } : null;
         const effect = await applyCondition(actor, id, { until: failUntil });
+        // `own` is THIS failure's span: the condition door keeps a longer older one (the close
+        // review's findings 1 and 2), so the effect alone no longer says what this spell gave it.
+        if (effect) laidByFailure[id] = { effectId: effect.id, prior, own: failUntil ? foundry.utils.deepClone(failUntil) : null };
         // **A HELD SPELL'S CONDITION ENDS WITH ITS SUSTAIN** (07 §7; 07 §12's Sand Prison;
         // D-892): the mark every sustained carrier wears, which the active GM's sweep
         // (`effects/sustained-spells.mjs`) reads, on a condition this Test laid.
@@ -2306,6 +2366,15 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
           name: game.i18n.format("AZEROTH.SlRider.NoReactionName", { spell: flags.spellName ?? "" })
         })]);
         ui.notifications?.info(game.i18n.format("AZEROTH.SlRider.NoReactionLanded", { name: actor.name, spell: flags.spellName ?? "" }));
+      }
+      // **07's DEATH KNIGHT SPELLS ON A FAILED RESIST** (run F4b), once the failure's conditions have
+      // landed: Soul Rend's no-healing mark, and the bars Blood Bind and Chains of Ice lay on the Slowed
+      // this failure laid, with Chains of Ice's Slowed held to the spell's minute. Guarded.
+      try {
+        const { dkSpellAfterResist } = await import("../effects/death-knight-spells.mjs");
+        await dkSpellAfterResist({ message, actor, maker: casterOf(message), laid: laidByFailure });
+      } catch (err) {
+        console.warn("azeroth-rpg | a Death Knight spell's failed Resist", err);
       }
       if (flags.onFail?.statuses?.length && dominationConfirmed) {
         ui.notifications?.info(game.i18n.format("AZEROTH.Card.OnFailLanded", {
@@ -3042,7 +3111,13 @@ async function blowShareFromCard(button, message) {
     }
   }
   const before = victim.system?.health?.value ?? 0;
-  await victim.applyDamage(Number(offer.half) || 0, { struck: true, attack: false, location: "body", type: flags.damageType ?? null, by: striker });
+  // **THE SHARE'S RECORD** (O-362; run close-F2): the first target's blow as the resolver met it,
+  // moved and halved (`rules/blow-doors.mjs#resolveRecord`), so a knight taking the share halves
+  // it under Icebound Fortitude before the Armor Points and Ward that met it. The door reads it
+  // only where it resolves to exactly `offer.half`.
+  const { withSteps } = await import("../rules/blow-records.mjs");
+  const shareRecord = withSteps(flags.damageByTarget?.[0]?.mitigationSource ?? null, { moved: true }, { half: true });
+  await victim.applyDamage(Number(offer.half) || 0, { struck: true, attack: false, location: "body", type: flags.damageType ?? null, by: striker, mitigation: shareRecord });
   const dealt = Math.max(0, before - (victim.system?.health?.value ?? before));
   return ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor: striker }),
@@ -3086,6 +3161,11 @@ async function evadeFromCard(button, message) {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Evade.Short", { name: actor.name, talent: evade?.name ?? "", n: evade?.cost ?? 0 }));
     return null;
   }
+  // **AS THOUGH YOU HAD DISENGAGED - AND WHAT BARS A DISENGAGE BARS IT** (the F4b review, S5):
+  // an Anchor, Heavy Hours, Relentless Advance and Chains of Ice, asked at the one door every
+  // Disengage asks, before the Energy is spent.
+  const { refuseDisengage } = await import("../effects/disengage-bars.mjs");
+  if (await refuseDisengage(actor)) return null;
   EVADES_IN_FLIGHT.add(key);
   try {
     await actor.updatePool({ itemId: pool.itemId, kind: pool.kind, value: pool.value - evade.cost });
@@ -3298,7 +3378,10 @@ async function applyDamageToTargets(button, message, recordedAttack = false, tra
       drain: flags.healsDealt?.by ? { by: flags.healsDealt.by, name: flags.healsDealt.name ?? "", messageId: message.id, index: Number(index) } : null,
       // **WHETHER THE CARD IS A BREATH'S** (08 §20's Foror's Lesson, D-912): its own record,
       // judged at the damage door by `rules/signatures.mjs#breathSource`.
-      breath: { title: flags.title ?? null, featureKey: flags.featureKey ?? null, spellName: flags.spellName ?? null }
+      breath: { title: flags.title ?? null, featureKey: flags.featureKey ?? null, spellName: flags.spellName ?? null },
+      // **THE RESOLVER'S INPUTS** (`rules/damage-record.mjs`): 04's Icebound Fortitude halves the
+      // blow before Armor Points and Ward, so the door resolves it again with them (run F4a).
+      mitigation: dealt?.mitigationSource ?? null
     });
     // Resolve only after Apply has accepted the hit, including a zero-damage
     // hit. A withdrawn Parry returned above; the GM checks it again on receipt.
@@ -3310,7 +3393,10 @@ async function applyDamageToTargets(button, message, recordedAttack = false, tra
       try {
         // The row's whole and its half (D-911): a Test made again decides between them.
         await afterSpellApply({ message, target: actor, amount: damageOutcome.amount, kind: "damage",
-          full: row?.damage ?? damage, passed: effective.passedRow?.damage ?? null });
+          full: row?.damage ?? damage, passed: effective.passedRow?.damage ?? null,
+          // The row's resolver records (O-362; run close-F2): what lands again is halved by
+          // Icebound Fortitude before the Armor Points and Ward that met it.
+          records: { landed: dealt?.mitigationSource ?? null, full: row?.mitigationSource ?? null, passed: effective.passedRow?.mitigationSource ?? null } });
       } catch (err) {
         console.warn("azeroth-rpg | a spell landing again", err);
       }
@@ -3345,6 +3431,20 @@ async function applyDamageToTargets(button, message, recordedAttack = false, tra
       } catch (err) {
         globalThis.console?.warn("azeroth-rpg | Breath of the Necropolis", err);
       }
+    }
+    // **THE DEATH KNIGHT'S TALENTS AT THE APPLY** (04's Mark of Blood, Vengeful Blood, Crimson
+    // Coil, Chill of the Grave and Dancing Runeweapon; run F4a): what the blow just landed raises,
+    // through the knight's one door (`effects/death-knight-talents.mjs`). Guarded: the blow stands.
+    try {
+      const dk = await import("../effects/death-knight-talents.mjs");
+      await dk.dkAfterAttackApply({ message, index: Number(index), target: actor, amount: damageOutcome.amount });
+      await dk.dkAfterSpellApply({ message, target: actor, amount: damageOutcome.amount, index: Number(index) });
+      await dk.dancingAfterApply({ message, amount: damageOutcome.amount, index: Number(index) });
+      // 07 §17's Pestilence: the carrier's diseases on each enemy the Apply damaged (run F4b).
+      const dkSpells = await import("../effects/death-knight-spells.mjs");
+      await dkSpells.dkSpellAfterApply({ message, target: actor, amount: damageOutcome.amount });
+    } catch (err) {
+      globalThis.console?.warn("azeroth-rpg | a Death Knight talent at the Apply", err);
     }
     await requestWalkingBombHit(message, Number(index));
     await requestLightningShieldHit(message, Number(index));
@@ -3470,6 +3570,9 @@ async function applyHealingToTargets(button, message) {
   // **WHAT THE CARD CARRIES TO THE ONE HEALING DOOR** (D-779): the schools 04's Divine
   // Aegis was named for at the cast, and 04's Miracle's heal nothing reduces.
   const riders = { aegis: flags.aegis ?? null, unreduced: flags.miracle === true };
+  // The spell's own school (D-946), for the undead healing judgement: a Death Knight is
+  // healed by another creature's Death spell alone.
+  if (spell) riders.school = flags.castSchool ?? null;
   const index = button.dataset.targetIndex;
   if (index !== undefined && flags.targets?.[Number(index)]) {
     const actor = targetActorOf(flags.targets[Number(index)]);
@@ -3479,7 +3582,7 @@ async function applyHealingToTargets(button, message) {
     }
     if (!canHeal(actor)) return;
     const healOutcome = {};
-    const healed = await actor.applyHealing(amount, { from, spell, feature, featureName, ...riders, outcome: healOutcome });
+    const healed = await actor.applyHealing(amount, { from, givenBy: from ? null : "other", spell, feature, featureName, ...riders, outcome: healOutcome });
     // 02's Recurrence: *The damage and healing of the next spell ... land again* (stage 2b).
     if (flags.chronoAgain && healOutcome.restored > 0) {
       try {
@@ -3492,7 +3595,7 @@ async function applyHealingToTargets(button, message) {
   }
   const controlled = canvas.tokens?.controlled ?? [];
   if (controlled.length) {
-    for (const token of controlled) if (canHeal(token.actor)) await token.actor?.applyHealing(amount, { from, spell, feature, featureName, ...riders });
+    for (const token of controlled) if (canHeal(token.actor)) await token.actor?.applyHealing(amount, { from, givenBy: from ? null : "other", spell, feature, featureName, ...riders });
     return;
   }
   const speaker = ChatMessage.getSpeakerActor(message.speaker);
@@ -3910,12 +4013,14 @@ async function applyConditionFromCard(button, message) {
         // The Champion's Dread Presence and Bronze Drake Breath: the creature's own next turn (stage 2B).
         : until === "endOfNextTurn" && CREATURE_TURN_SPANS.includes(message.flags?.["azeroth-rpg"]?.featureKey) ? untilEndOfNextTurnOrRound(actor) : until;
     if (value !== null || span) await applyCondition(actor, id, { value, until: span });
-    else if (!actor.statuses?.has(id)) await actor.toggleStatusEffect(id, { active: true });
+    // The condition's own effect, laid beside a carrier holding the status (D-997), so the marks
+    // below never land on a disease.
+    else if (!conditionEffectOf(actor.effects, id)) await actor.toggleStatusEffect(id, { active: true, ownEffect: true });
     if (slowing?.feet > 0 && actor.isOwner) {
-      const laid = actor.effects.find(e => e.statuses?.has(id)) ?? null;
+      const laid = conditionEffectOf(actor.effects, id);
       if (laid) await addSlowedFeet(laid, slowing);
     }
-    const standing = actor.isOwner ? (actor.effects.find(e => e.statuses?.has(id)) ?? null) : null;
+    const standing = actor.isOwner ? conditionEffectOf(actor.effects, id) : null;
     if (!standing) continue;
     const marks = {};
     if (layer?.uuid) {

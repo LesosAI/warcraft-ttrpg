@@ -5,6 +5,8 @@
 
 import { resolveDamage } from "./mitigation.mjs";
 import { sustainEntryTransferPending } from "./sustain-entry-transfer.mjs";
+// The class that upkeeps its spells in Momentum (D-944).
+import { CLASS_SPELL_POOL } from "./runes.mjs";
 
 /**
  * Bleeding X at the start of your turn (A1): lose X Health, armor and Ward
@@ -123,6 +125,16 @@ export function upkeep(entries = [], pools = [], { costOf = () => 1, health = nu
       return pick ? keyOf(pick) : null;
     }
     const power = pools.find(p => p.kind === "power" && p.itemId === entry?.itemId) ?? null;
+    // **A CLASS THAT PAYS ITS SPELLS IN MOMENTUM UPKEEPS THEM THERE** (D-944): the Death
+    // Knight's Power is its runes, and a Sustain entry recorded with no pool (one cast
+    // before the class's pool was named on it) pays its upkeep in Runic Power, never in
+    // a rune (`casting.mjs#CLASS_SPELL_POOL`).
+    const momentum = power ? CLASS_SPELL_POOL[power.name] ?? null : null;
+    if (momentum) {
+      const paid = pools.find(p => p.kind === "momentum" && p.name === momentum && p.itemId === power.itemId)
+        ?? pools.find(p => p.kind === "momentum" && p.name === momentum) ?? null;
+      return paid ? keyOf(paid) : null;
+    }
     return power ? keyOf(power) : null;
   };
   const other = {};
@@ -138,6 +150,9 @@ export function upkeep(entries = [], pools = [], { costOf = () => 1, health = nu
   let paidCount = 0;
   for (const entry of entries) {
     if (sustainEntryTransferPending(entry)) { kept.push(entry); suspended.push(entry); continue; }
+    // **A SUSTAIN CAST WITH RUNIC POWER OWES NOTHING** (D-949): the cast recorded it; it is
+    // kept, free, and still the one Sustain held.
+    if (entry?.upkeepFree === true) { kept.push(entry); free.push(entry); continue; }
     const raw = costOf(entry);
     const cost = raw && typeof raw === "object" ? raw : { mana: raw, health: 0 };
     const mana = Math.max(0, Math.trunc(Number(cost.mana)) || 0);

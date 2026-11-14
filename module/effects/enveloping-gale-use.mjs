@@ -7,6 +7,7 @@ import { reviewNearbyEnemies } from "./area-enemies.mjs";
 import { inflictCondition } from "./inflict.mjs";
 import { untilEndOfNextTurnOrRound } from "./durations.mjs";
 import { runEnvelopingGale } from "./enveloping-gale-state.mjs";
+import { isConditionCarrier } from "../rules/condition-carriers.mjs";
 
 export const GALE_QUERY = "azeroth-rpg.envelopingGale";
 const busy = new Set();
@@ -100,7 +101,7 @@ export async function envelopingGaleQueryHandler({ actorUuid, index, source, req
         const landed = await inflictCondition({ victim: token.actor, by: actor, id: "stunned", name: token.name,
           until: untilEndOfNextTurnOrRound(token.actor) });
         if (landed?.reason === "immune") return { ok: true, immune: true };
-        const effect = [...(token.actor.effects ?? [])].find(e => !e.disabled && !e.isSuppressed && e.statuses?.has("stunned"));
+        const effect = [...(token.actor.effects ?? [])].find(e => !e.disabled && !e.isSuppressed && e.statuses?.has("stunned") && !isConditionCarrier(e, "stunned"));
         return landed?.landed === true && effect?.id ? { ok: true, effectId: effect.id } : null;
       } });
     if (result.ok) {

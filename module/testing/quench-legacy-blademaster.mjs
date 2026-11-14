@@ -449,8 +449,15 @@ export function legacyBlademasterBatch(context) {
       await setPool(orc, "rage", 10);
       const storm = await until(() => featureNamed(orc, "Bladestorm"), "Bladestorm granted");
       // *while you wield a two-handed weapon*: a Longsword is not one (Versatile's grip is never tracked).
-      const said = await onCombatTab(orc, sheet => pressAndHear(useControl(sheet, storm)));
-      assert.include(said, game.i18n.format(WIELD_REFUSALS.twoHanded, { name: "Bladestorm" }), `not refused in words: ${JSON.stringify(said)}`);
+      // Greyed on the sheet with the door's own words beside it since the Death Knight's grips
+      // (run F4a: a Use whose `onUse.wields` fails is greyed in words, `character-sheet.mjs`), so
+      // the press is refused before the door; the words are read off the row, not a notice.
+      const row = await onCombatTab(orc, sheet => {
+        const li = sheet.element.querySelector(`section[data-tab="combat"] .azeroth-feature[data-item-id="${storm.id}"]`);
+        return { disabled: useControl(sheet, storm)()?.disabled ?? null, why: li?.querySelector(".azeroth-feature-why")?.textContent.trim() ?? null };
+      });
+      assert.isTrue(row.disabled, "Bladestorm's Use is not greyed with a one-handed sword");
+      assert.equal(row.why, game.i18n.format(WIELD_REFUSALS.twoHanded, { name: "Bladestorm" }), "not refused in words beside the control");
       assert.equal(poolOf(orc, "rage").value, 10, "the refused Use spent Rage");
       assert.equal(mine.budget.halfActions, 2, "the refused Use spent the turn");
       // The greatsword in hand.

@@ -32,6 +32,8 @@ import { cleanSlot } from "../../rules/worn.mjs";
 import { cleanBonus } from "../../rules/item-bonuses.mjs";
 // 08 §7's Type column (the Legacy branches' door 15).
 import { cleanWeaponType } from "../../rules/wield.mjs";
+// The Death Knight's runes, stored on the weapon (D-943).
+import { cleanRuneFields } from "../../rules/runes.mjs";
 import { cleanProvision } from "../../rules/provisions.mjs";
 import {prostheticWieldAllowed} from "../../rules/prosthetics.mjs";
 // 02 §7's Consecrated and 04's Sanctified Weapon (D-772): the trait a
@@ -254,7 +256,30 @@ export class WeaponData extends foundry.abstract.TypeDataModel {
         { required: false, initial: [] }
       ),
       // The bundle nocked: an owned item's id, resolved leniently by rules/ammunition.mjs.
-      ammunition: new fields.DocumentIdField({ nullable: true, initial: null })
+      ammunition: new fields.DocumentIdField({ nullable: true, initial: null }),
+      // **A LEGENDARY'S OWN RUNE SLOTS** (02 §7's table: *Legendary | as its entry says*;
+      // 08 §20's *Legendary weapon | Two-handed | One-handed* table; D-943): the count by
+      // grip, null where the table prints a dash or names the weapon not at all, and
+      // `rules/runes.mjs#runeSlots` then reads 8 two-handed or 4 one-handed. Read on a
+      // Legendary alone. A new field with an initial: no stored weapon changes.
+      runeSlots: new fields.SchemaField({
+        two: new fields.NumberField({ required: false, nullable: true, integer: true, min: 1, initial: null }),
+        one: new fields.NumberField({ required: false, nullable: true, integer: true, min: 1, initial: null })
+      }, { required: false, nullable: true, initial: null }),
+      // **THE RUNES INSCRIBED ON IT** (02 §7's Inscribed Runeweapon; D-943): null on a weapon
+      // never inscribed, else the count chosen at inscription (`grip`, a Versatile weapon's
+      // `one` or `two`) and one `{kind, spent}` a rune. Stored on the weapon as a coating's
+      // flag is (D-668); the pool, the slots and the off-hand bar are all DERIVED from it
+      // (`rules/runes.mjs`). Written by `documents/runes.mjs` alone; the packs never emit it.
+      // Free strings, cleaned in `migrateData`: a `choices` would refuse a stored weapon at
+      // load (CLAUDE.md §15).
+      runes: new fields.SchemaField({
+        grip: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+        slots: new fields.ArrayField(new fields.SchemaField({
+          kind: new fields.StringField({ required: true, blank: false, initial: "blood" }),
+          spent: new fields.BooleanField({ initial: false })
+        }), { initial: [] })
+      }, { required: false, nullable: true, initial: null })
     };
   }
 
@@ -275,6 +300,8 @@ export class WeaponData extends foundry.abstract.TypeDataModel {
       cleanBonusField(source);
       cleanSignatureEffect(source);
       cleanWellField(source);
+      // The runes (D-943): only the keys handed in, at every depth (CLAUDE.md §15).
+      cleanRuneFields(source);
     }
     return super.migrateData(source);
   }

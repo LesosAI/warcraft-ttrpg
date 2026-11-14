@@ -81,8 +81,24 @@ function inTheHand(item) {
  *
  * @param {Iterable<{type: string, name?: string, system?: object}>} items
  * @param {{melded?: boolean}} [o]
+ * **THE DEATH KNIGHT'S TWO GRIPS** (04's Blood and Frost; the Death Knight plan's run F4a):
+ *
+ * - **`bothHands`** - *While you wield a two-handed weapon, or a Versatile weapon in both
+ *   hands* (Grim Harvest, Vengeful Blood, Dancing Runeweapon): the main hand two-handed, or a
+ *   Versatile weapon in the main hand with nothing in the off hand - 08 §5's *held in two
+ *   hands*, the reading Versatile's own Rating takes (the lead: *"Versatile counts for Blood
+ *   only in both hands"*: *"Yes"*).
+ * - **`oneInEach`** - *While you wield a one-handed weapon in each hand* (Frozen Edge,
+ *   Relentless Advance, Killing Machine): a melee weapon in each hand, neither two-handed, of
+ *   any type - the Mountain King's *one in each hand* widened; a Versatile weapon in one hand
+ *   counts.
+ * - **`eitherGrip`** - either of the two (D-1017's Dancing Runeweapon: *while you wield a
+ *   two-handed weapon, a Versatile weapon in both hands, or a one-handed weapon in each hand*).
+ *   A gate's `wields` list is ALL-of, so the any-of reading is a fact of its own. A single
+ *   one-handed weapon with an empty off hand holds neither (the lead on D-1017: *"No"*).
+ *
  * @returns {{twoHanded: boolean, noSuit: boolean, twoTypes: boolean, hammerOrMace: boolean,
- *   mainType: string|null, offType: string|null}}
+ *   bothHands: boolean, oneInEach: boolean, eitherGrip: boolean, mainType: string|null, offType: string|null}}
  */
 export function wieldFacts(items = [], { melded = false } = {}) {
   const figure = figureSlots(items);
@@ -90,12 +106,19 @@ export function wieldFacts(items = [], { melded = false } = {}) {
   const off = melded ? null : (figure.offHandKind === "weapon" ? figure.offHand : null);
   const mainType = inTheHand(main) ? cleanWeaponType(main.system?.weaponType) : null;
   const offType = inTheHand(off) ? cleanWeaponType(off.system?.weaponType) : null;
+  const twoHanded = !melded && isTwoHanded(figure.mainHand);
+  const versatile = w => (Array.isArray(w?.system?.traits) ? w.system.traits : []).some(t => /^Versatile\b/i.test(String(t)));
+  const bothHands = twoHanded || (!melded && inTheHand(main) && versatile(main) && !figure.offHand);
+  const oneInEach = !melded && inTheHand(main) && inTheHand(off) && !isTwoHanded(main) && !isTwoHanded(off);
   return {
     // Talent gates ask for the weapon category, not whether it occupies both hands.
-    twoHanded: !melded && isTwoHanded(figure.mainHand),
+    twoHanded,
     noSuit: figure.body === null,
     twoTypes: Boolean(mainType && offType && mainType !== offType),
     hammerOrMace: HAMMER_TYPES.includes(mainType),
+    bothHands,
+    oneInEach,
+    eitherGrip: bothHands || oneInEach,
     mainType,
     offType
   };
@@ -163,7 +186,12 @@ export const WIELD_REFUSALS = Object.freeze({
   twoHanded: "AZEROTH.Wield.Needs.TwoHanded",
   noSuit: "AZEROTH.Wield.Needs.NoSuit",
   twoTypes: "AZEROTH.Wield.Needs.TwoTypes",
-  hammerOrMace: "AZEROTH.Wield.Needs.HammerOrMace"
+  hammerOrMace: "AZEROTH.Wield.Needs.HammerOrMace",
+  // The Death Knight's two grips (run F4a).
+  bothHands: "AZEROTH.Wield.Needs.BothHands",
+  oneInEach: "AZEROTH.Wield.Needs.OneInEach",
+  // Either of them (D-1017's Dancing Runeweapon).
+  eitherGrip: "AZEROTH.Wield.Needs.EitherGrip"
 });
 
 /**

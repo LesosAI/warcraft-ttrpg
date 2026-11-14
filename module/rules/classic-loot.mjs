@@ -2353,7 +2353,9 @@ function buildDoc({ record, parsed, shape, tier, zone, rarity, chosen, found = [
         quantity: null,
         launcher: shape.launcher,
         fits: [],
-        ammunition: null
+        ammunition: null,
+        // A Legendary's own rune slots (08 §20, D-919): a find names none, so 02's 8 or 4 stand.
+        runeSlots: null
       },
       flags
     };

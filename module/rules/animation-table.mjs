@@ -120,6 +120,8 @@
  *  - `count`, `stagger`, `spin`            for repeats and orbits
  *  - `volume`, `bucketed`                  sounds only
  *  - `mask`     true where an area effect is clipped to its Region
+ *  - `fallback` a second placement from `PLACES`, tried once where the record carries nothing
+ *               the first can resolve (D-1014: Corpse Burst's `corpse`, else its `targets`)
  */
 
 import { EXPANDED_SPELL_ANIMATIONS } from "./spell-animation-expansion.mjs";
@@ -128,6 +130,9 @@ import { utilitySpell } from "./thematic-utility.mjs";
 import { SUPPORTED_THEMATIC_OBJECT_CASTS } from "./thematic-objects.mjs";
 import { THEMATIC_FEL_SPELLS } from "./thematic-fel.mjs";
 import { creatureAnimations } from "./creature-animation-table.mjs";
+// The Death Knight's rows and recolours (the Death Knight plan's Phase 6, run F5).
+import { DK_FEATURE_ANIMATIONS, DK_FILTERS, DK_SPELL_ANIMATIONS } from "./death-knight-animations.mjs";
+import { FORCED_MOVE_KEY } from "./animation-records.mjs";
 
 /* ------------------------------------------------------------------ */
 /*  Where a step can go                                                */
@@ -151,7 +156,10 @@ export const PLACES = Object.freeze([
   // each mover a step moved stood before (`step-from`) and stands now (`step-to`),
   // the line between (`step`), every creature the Use stood up (`risen`), and the
   // striker whose blow a hold turned aside (`striker`).
-  "step-from", "step-to", "step", "risen", "striker"
+  "step-from", "step-to", "step", "risen", "striker",
+  // Where the corpse a spell chose lay at the cast (07 §17's Corpse Burst; D-1014). A recipe on
+  // it names a `fallback` placement for a card that recorded none.
+  "corpse"
 ]);
 
 /** The placements that draw between two points, and so may be stretched. */
@@ -293,7 +301,9 @@ export const FILTERS = Object.freeze({
    * 02 §5's Blood Fury. It starts near `SCORCH` and is kept apart from it, so an
    * orc's rage and Flamestrike's column can be tuned apart.
    */
-  BLOOD_RAGE: Object.freeze({ hue: -30, saturate: 0.45, brightness: 0.85 })
+  BLOOD_RAGE: Object.freeze({ hue: -30, saturate: 0.45, brightness: 0.85 }),
+  // The Death Knight's Blood, Frost and grave-green (`rules/death-knight-animations.mjs`).
+  ...DK_FILTERS
 });
 
 /* ------------------------------------------------------------------ */
@@ -823,8 +833,12 @@ export const SPELL_ANIMATIONS = Object.freeze({
     cues: [cue("cast", [fx("jb2a.impact_themed.ice_shard.blue", { place: "target", scale: 0.6 })])]
   },
   frostbite: silent("07 says there is nothing to see"),
+  // The chill's sound is Frost Nova's cold impact, quieter (D-1011, O-380).
   "winters-chill": {
-    cues: [cue("resist", [fx("jb2a.shimmer.01.blue", { place: "resisted", scale: 1.3, opacity: 0.7 })])]
+    cues: [cue("resist", [
+      fx("jb2a.shimmer.01.blue", { place: "resisted", scale: 1.3, opacity: 0.7 }),
+      snd(SOUNDS.cold, { volume: 0.4 })
+    ])]
   },
   "frost-armor": {
     cues: [cue("cast", [
@@ -852,8 +866,12 @@ export const SPELL_ANIMATIONS = Object.freeze({
   "cold-snap": {
     cues: [cue("cast", [fx("jb2a.template_circle.out_pulse.01.burst.bluewhite", { place: "source", scale: 1.6, below: true })])]
   },
+  // The same frost crack as Frost Nova, so the same cold impact, quieter (D-1011, O-380).
   icewalk: {
-    cues: [cue("cast", [fx("jb2a.impact.ground_crack.frost.01.white", { place: "source", scale: 1.2, below: true, hold: 1500, fadeOut: 400 })])]
+    cues: [cue("cast", [
+      fx("jb2a.impact.ground_crack.frost.01.white", { place: "source", scale: 1.2, below: true, hold: 1500, fadeOut: 400 }),
+      snd(SOUNDS.cold, { volume: 0.5 })
+    ])]
   },
   "conjure-water": {
     cues: [cue("cast", [
@@ -1408,7 +1426,11 @@ export const SPELL_ANIMATIONS = Object.freeze({
       fx("jb2a.particle_burst.01.circle.bluepurple", { place: "target", filter: "GOLD_B" }),
       snd(SOUNDS.bless1)
     ])]
-  }
+  },
+
+  /* ================= Death (07 §17) and the Death Knight's curated tier 1 ================= */
+  // Sixteen rows, written in `rules/death-knight-animations.mjs` (run F5).
+  ...DK_SPELL_ANIMATIONS
 });
 
 /* ------------------------------------------------------------------ */
@@ -1434,9 +1456,13 @@ export const SPELL_ANIMATIONS = Object.freeze({
  * tier 1 table's or the expansion's; Stone Grip, the fifth of its own, is tier 1.
  */
 export const TAUGHT_SPELL_ANIMATIONS = Object.freeze({
-  // Shadow Ward's skin, on each ally the Ward reaches.
+  // Shadow Ward's skin, on each ally the Ward reaches. Its sound is the one the other dark skins
+  // play - Unholy Armor, Lichward, Necrotic Shell (D-1011, O-380).
   darkward: {
-    cues: [cue("cast|effect", [fx("jb2a.shimmer.01.blue", { place: "target", scale: 1.3, filter: "SHADOW_B" })])],
+    cues: [cue("cast|effect", [
+      fx("jb2a.shimmer.01.blue", { place: "target", scale: 1.3, filter: "SHADOW_B" }),
+      snd("psfx.1st-level-spells.shield-spell.intro.v1.003", { volume: 0.6 })
+    ])],
     loop: loop("effect", [
       fx("jb2a.shield_themed.below.eldritch_web.01.dark_purple", { place: "holder", scale: 1.4, below: true, opacity: 0.8 }),
       fx("jb2a.shield_themed.above.eldritch_web.01.dark_purple", { place: "holder", scale: 1.4, opacity: 0.8 })
@@ -1557,6 +1583,18 @@ export const ALL_SPELL_ANIMATIONS = Object.freeze({ ...EXPANDED_SPELL_ANIMATIONS
  */
 export const FEATURE_ANIMATIONS = Object.freeze({
   ...creatureAnimations({ fx, snd, cue, recipe: strikeRecipe, SCHOOL_CUES, STRIKE_ANIMATIONS, SOUNDS }),
+  /* ---- Every push and pull no feature names (O-397) ---- */
+  // The forced-movement door records each move it makes on the displacement's own operation
+  // (`rules/animation-records.mjs#FORCED_MOVE_KEY`), and this draws it as Death Grip's pull is
+  // drawn: Death Grip's strands, greyed, along the recorded path, a puff where the creature lands,
+  // and a gust.
+  [FORCED_MOVE_KEY]: {
+    cues: [cue("arrive", [
+      fx("jb2a.energy_strands.range.standard.purple.03", { place: "step", travel: "stretch", movers: ["push", "pull"], filter: "DESATURATE", opacity: 0.8 }),
+      fx("jb2a.smoke.puff.side.grey", { place: "step-to", movers: ["push", "pull"], scale: 0.8, delay: 250 }),
+      snd("psfx.cantrips.gust.v1", { volume: 0.4 })
+    ])]
+  },
   /* ---- 02 §7's Mage ---- */
   blink: {
     cues: [
@@ -3736,7 +3774,10 @@ export const FEATURE_ANIMATIONS = Object.freeze({
         snd("psfx.1st-level-spells.cure-wounds.v1.001")
       ])
     ]
-  }
+  },
+
+  /* ---- 02 §7's Death Knight and 04's Blood and Frost, and the rune flare (run F5) ---- */
+  ...DK_FEATURE_ANIMATIONS
 });
 
 /* ------------------------------------------------------------------ */

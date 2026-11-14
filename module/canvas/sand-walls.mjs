@@ -11,7 +11,7 @@
  * old wall sense constant a deprecated proxy, and it is never read here).
  */
 
-import { SAND_WALL_FLAG, diffSandWalls, sandWallData, wallSegments } from "../rules/sand-walls.mjs";
+import { SAND_WALL_FLAG, diffSandWalls, sandWallData, wallMoveFor, wallSegments } from "../rules/sand-walls.mjs";
 import { isWriter } from "./sustained-areas.mjs";
 import { sceneInWorld } from "./in-world.mjs";
 
@@ -30,7 +30,7 @@ function serial(task) {
 function sandwallsOn(scene) {
   return [...(scene?.regions ?? [])]
     .filter(r => r.flags?.[SCOPE]?.cast && r.flags[SCOPE].blocksSight === true)
-    .map(r => ({ id: r.id, segments: wallSegments((r.shapes ?? []).map(s => (typeof s.toObject === "function" ? s.toObject() : s))) }));
+    .map(r => ({ id: r.id, blocksMovement: r.flags[SCOPE].blocksMovement === true, segments: wallSegments((r.shapes ?? []).map(s => (typeof s.toObject === "function" ? s.toObject() : s))) }));
 }
 
 /** The scene's Walls a Sandwall raised. */
@@ -53,11 +53,14 @@ export function reconcileSandWalls({ scenes = null } = {}) {
     let written = 0;
     for (const scene of scenes ?? game.scenes ?? []) {
       if (!scene?.walls || !sceneInWorld(scene)) continue;
-      const { create, remove } = diffSandWalls(sandwallsOn(scene), flaggedWalls(scene));
+      const areas = sandwallsOn(scene);
+      const { create, remove } = diffSandWalls(areas, flaggedWalls(scene));
       const gone = remove.filter(id => scene.walls.has(id));
       if (gone.length) await scene.deleteEmbeddedDocuments("Wall", gone);
       if (create.length && sceneInWorld(scene)) {
-        await scene.createEmbeddedDocuments("Wall", create.map(w => sandWallData(w.c, w.region, CONST.EDGE_SENSE_TYPES, CONST.WALL_MOVEMENT_TYPES.NONE)));
+        // 07 §17's Ossuary Wall bars movement as well as sight (run F4b): its area says so.
+        await scene.createEmbeddedDocuments("Wall", create.map(w => sandWallData(w.c, w.region, CONST.EDGE_SENSE_TYPES,
+          wallMoveFor(areas.find(a => a.id === w.region), CONST.WALL_MOVEMENT_TYPES))));
       }
       written += gone.length + create.length;
     }

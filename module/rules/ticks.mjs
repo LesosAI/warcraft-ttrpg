@@ -248,7 +248,9 @@ export const UNTICKED = Object.freeze([
   { key: "failedBurn", re: /\bEverything that failed goes on burning\b/, text: "a tick on each creature that failed the area's Test is not built" },
   { key: "replaces", re: /\bat the start of each of its turns for the duration rather than \d+\b/, text: "a tick that replaces another spell's is not built" },
   { key: "turnTest", re: /\bmust pass a \w+ Resilience Test against your Spell DC at the start of each of its turns\b/, text: "a Test made at the start of each turn is not built" },
-  { key: "revive", re: /\breturns to 1 Health at the start of its next turn\b/, text: "a return from 0 Health is not built" }
+  { key: "revive", re: /\breturns to 1 Health at the start of its next turn\b/, text: "a return from 0 Health is not built" },
+  // 07 §17's Unholy Frenzy (run F2): Health LOST is no damage and no heal, so no tick carries it.
+  { key: "healthLost", re: /\bloses \d+ Health at the start of each of its turns\b/, text: "Health lost at the start of each turn is not a tick, which carries damage or Health restored" }
 ]);
 
 /**
@@ -353,7 +355,10 @@ export function layTick(stored, { source = null, castUuid = null, cast = null, n
     ...(via === "feature" ? { via } : {}),
     // **A PHYSICAL TICK REMEMBERS ITS SPELL'S SCHOOL** (07 §9; the 2a review, L1): the damage
     // is Physical while Spellpower and a talent's spell damage read the spell's Arcane school.
-    ...(stored.kind === "damage" && stored.type === "physical" && typeof spellSchool === "string" && spellSchool ? { spellSchool } : {})
+    ...(stored.kind === "damage" && stored.type === "physical" && typeof spellSchool === "string" && spellSchool ? { spellSchool } : {}),
+    // **A HEAL TICK REMEMBERS ITS SPELL'S SCHOOL** (O-333, the Death Knight plan's run F2): a
+    // Death Knight is healed by another creature's Death spell and nothing else of theirs.
+    ...(stored.kind === "heal" && typeof spellSchool === "string" && spellSchool ? { castSchool: spellSchool } : {})
   };
 }
 
@@ -365,7 +370,14 @@ export function layTick(stored, { source = null, castUuid = null, cast = null, n
  * READING, for the lead**: Regrowth's *on the target's next turn* lands as a
  * tick does, at the start of that turn. Null where the feature lays none.
  *
- * @param {{kind?: string|null, amount?: string|null, rounds?: number}|null} stamp
+ * **A DAMAGE TICK CARRIES ITS TYPE** (the Death Knight plan's finding 4, D-947): the
+ * stamp's `type` - a school or `physical` (`spell-damage-type.mjs#isDamageTypeKey`) -
+ * rides into the stored tick, so 02's Plague lays a FROST Frost Fever and a SHADOW
+ * Blood Plague. It was dropped here, and every feature's damage tick landed untyped
+ * (`effects/ticks.mjs`' untyped blow: no Ward, no Immune, no Vulnerable). A heal, or
+ * a type outside the list, carries none.
+ *
+ * @param {{kind?: string|null, amount?: string|null, rounds?: number, type?: string|null}|null} stamp
  * @returns {object|null}
  */
 export function featureTick(stamp) {
@@ -373,7 +385,8 @@ export function featureTick(stamp) {
   const amount = stamp.amount === null || stamp.amount === undefined ? "" : String(stamp.amount);
   const rounds = Math.trunc(Number(stamp.rounds)) || 0;
   if (!amount || rounds < 1) return null;
-  return { ...emptyTick(), kind: stamp.kind, amount, rounds, when: "startOfTurn", hit: true };
+  const type = stamp.kind === "damage" && isDamageTypeKey(stamp.type) ? stamp.type : null;
+  return { ...emptyTick(), kind: stamp.kind, type, amount, rounds, when: "startOfTurn", hit: true };
 }
 
 /**

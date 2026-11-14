@@ -47,7 +47,8 @@ import {
 } from "../rules/class-talents.mjs";
 // 04's Shared Burden: a SHARE of the blow moved, the rest kept, the share met by the
 // holder's own Armor Points and Ward (the Legacy branches' B6).
-import { burdenMet, keptAmount, regrossFor } from "../rules/blow-doors.mjs";
+import { burdenMet, keptAmount } from "../rules/blow-doors.mjs";
+import { recordOf, regrossRecorded, withSteps } from "../rules/blow-records.mjs";
 import { buffetStacks } from "../rules/flame-buffet.mjs";
 import { wardBySchool } from "../rules/ward.mjs";
 import { schoolArmorBySchool } from "../rules/auras.mjs";
@@ -259,7 +260,7 @@ export function redirectCandidates({ target, amount = 0, type = null, attack = f
 /** Selection is one freshly eligible candidate key, or null for no transfer.
  * Undefined preserves the existing sequential path until the unified chooser is wired.
  * Discovery never asks, pays, or writes; a stale selection never substitutes another holder. */
-export async function redirectBlow({ target, amount = 0, type = null, attack = false, spell = false, messageId = null, by = null, location = "body", parts = null, breath = null, selection = undefined } = {}) {
+export async function redirectBlow({ target, amount = 0, type = null, attack = false, spell = false, messageId = null, by = null, location = "body", parts = null, breath = null, selection = undefined, mitigation = null } = {}) {
   if (selection === null) return { moved: false };
   const blow = { target, amount, type, attack, spell, messageId, by };
   const candidates = redirectCandidates(blow).filter(c => selection === undefined || c.key === selection);
@@ -272,6 +273,9 @@ export async function redirectBlow({ target, amount = 0, type = null, attack = f
     const answer = await ask(holder, {
       act: "move", kind: row.kind, holderUuid: holder.uuid, targetUuid: target.uuid, amount, moved, type,
       attack: attack === true, spell: spell === true, messageId, byUuid: by?.uuid ?? null, location, feet, parts, breath,
+      // The blow's resolver record (O-362): the holder's Icebound Fortitude halves it before
+      // the Armor Points and Ward that met it.
+      mitigation: mitigation ? recordOf(mitigation) : null,
       awaitDelivery: selection !== undefined
     });
     if (answer?.moved) {
@@ -295,7 +299,7 @@ export async function redirectBlow({ target, amount = 0, type = null, attack = f
  * `remote` where another client asked through `BLOW_ASK_QUERY` and is waiting on
  * the answer (`blowAskHandler`).
  */
-async function moveHere({ holder, target, kind, amount, moved, type, attack, spell, messageId, by, location, feet, parts, breath = null, remote = false }) {
+async function moveHere({ holder, target, kind, amount, moved, type, attack, spell, messageId, by, location, feet, parts, breath = null, remote = false, mitigation = null }) {
   const row = movesOf(holder).find(r => r.kind === kind) ?? null;
   if (!row) return { moved: false, reason: "unknown" };
   // Judged again on the holder's client (door 14): the striker may have taken Wind
@@ -317,7 +321,7 @@ async function moveHere({ holder, target, kind, amount, moved, type, attack, spe
   let gross = null;
   if (kind === "gauntlet") {
     const spec = game.messages?.get?.(messageId)?.flags?.["azeroth-rpg"]?.blowSpec ?? null;
-    gross = regrossFor(spec, {
+    gross = regrossRecorded(spec, {
       apByLocation: holder.system?.ap ?? {}, wardBySchool: wardBySchool(holder.system?.ward), schoolArmorBySchool: schoolArmorBySchool(holder.system?.schoolArmor),
       fireTakenBonus: buffetStacks([...(holder.effects ?? [])], game.time?.worldTime),
       immune: holder.system?.immune ?? [], vulnerable: holder.system?.vulnerable ?? []
@@ -378,21 +382,32 @@ async function moveHere({ holder, target, kind, amount, moved, type, attack, spe
   // and the share is met by the HOLDER's own Armor Points and Ward (the plan's *As read*:
   // *so your own Armor Points and Ward reduce it*) through `rules/blow-doors.mjs
   // #burdenMet`, what that Ward took handed to the holder's door with it.
-  const met = kind === "burden" ? burdenMet({
-    share: moved, type, location, parts: moved < amount ? null : parts,
-    holder: {
-      apByLocation: holder.system?.ap ?? {}, wardBySchool: wardBySchool(holder.system?.ward), schoolArmorBySchool: schoolArmorBySchool(holder.system?.schoolArmor),
-      fireTakenBonus: buffetStacks([...(holder.effects ?? [])], game.time?.worldTime),
-      immune: holder.system?.immune ?? [], vulnerable: holder.system?.vulnerable ?? []
-    }
-  }) : null;
+  const holderMaps = kind === "burden" ? {
+    apByLocation: holder.system?.ap ?? {}, wardBySchool: wardBySchool(holder.system?.ward), schoolArmorBySchool: schoolArmorBySchool(holder.system?.schoolArmor),
+    fireTakenBonus: buffetStacks([...(holder.effects ?? [])], game.time?.worldTime),
+    immune: holder.system?.immune ?? [], vulnerable: holder.system?.vulnerable ?? []
+  } : null;
+  const met = kind === "burden" ? burdenMet({ share: moved, type, location, parts: moved < amount ? null : parts, holder: holderMaps }) : null;
+  // **THE BLOW'S RECORD, CARRIED ONTO THE HOLDER** (O-362; run close-F2): the resolver's inputs
+  // the blow was met with, and the step this move put it through - Shared Burden's share met by
+  // the holder's own Armor Points and Ward, the Raised Gauntlet's re-resolution on its bearer,
+  // Shield of the Righteous's Ward 1, or the whole blow moved - so the holder's 04 Icebound
+  // Fortitude halves it before the Armor Points and Ward that met it (AGENT READING: the ones
+  // that produced the number arriving; the lead: *"before AP or ward"*). Where the record no
+  // longer describes what arrives (a Block, a standing reduction), the holder halves the arrival.
+  const schoolBlow = () => Boolean(type) && Object.keys(AZEROTH.schools).includes(type);
+  const record = gross ? recordOf(gross.mitigationSource)
+    : !mitigation ? null
+    : kind === "burden" ? withSteps(mitigation, { burden: { share: row.share ?? "half", type, location, holder: holderMaps } })
+    : kind === "righteous" && schoolBlow() ? withSteps(mitigation, { moved: true }, { minus: RIGHTEOUS.ward })
+    : withSteps(mitigation, { moved: true });
   const damageOutcome = {};
   const landing = met
-    ? holder.applyDamage(met.damage, { struck: true, attack, spell, location, type, messageId, by, moved: true, wardTook: met.wardTook, parts: met.parts, outcome: damageOutcome, breath })
+    ? holder.applyDamage(met.damage, { struck: true, attack, spell, location, type, messageId, by, moved: true, wardTook: met.wardTook, parts: met.parts, outcome: damageOutcome, breath, mitigation: record })
     // The Raised Gauntlet's blow as the bearer's own Armor Points and Ward met it (D-913).
-    : gross ? holder.applyDamage(moved, { struck: true, attack, spell, location, type, messageId, by, moved: true, wardTook: gross.wardTook ?? 0, parts: gross.parts ?? null, outcome: damageOutcome, breath })
+    : gross ? holder.applyDamage(moved, { struck: true, attack, spell, location, type, messageId, by, moved: true, wardTook: gross.wardTook ?? 0, parts: gross.parts ?? null, outcome: damageOutcome, breath, mitigation: record })
     // A breath moved stays a breath (D-914): Foror's Lesson halves it on the holder.
-    : holder.applyDamage(moved, { struck: true, attack, spell, location, type, messageId, by, moved: true, parts: movedParts(parts), outcome: damageOutcome, breath });
+    : holder.applyDamage(moved, { struck: true, attack, spell, location, type, messageId, by, moved: true, parts: movedParts(parts), outcome: damageOutcome, breath, mitigation: record });
   // **ANSWERED ONCE IT IS PAID, WHERE ANOTHER CLIENT ASKED** (the review of D-777):
   // the asker stops waiting at ASK_MS and then lands the blow where it was aimed,
   // and the holder's own door can outlast that - a hold it asks in turn is a
@@ -477,17 +492,23 @@ export function divideBlow({ target, amount = 0, selection = undefined } = {}) {
  *
  * @param {{target: Actor, plan: object, type?: string|null, by?: Actor|null, parts?: Array|null}} o
  */
-export async function landShares({ target, plan, type = null, by = null, strict = false, beforeShare = null, afterShare = null, outcomes = null } = {}) {
+export async function landShares({ target, plan, type = null, by = null, strict = false, beforeShare = null, afterShare = null, outcomes = null, record = null } = {}) {
   const said = [];
-  for (const { actor, share, parts = null } of plan?.others ?? []) {
+  const count = (plan?.others?.length ?? 0) + 1;
+  for (const [i, { actor, share, parts = null }] of (plan?.others ?? []).entries()) {
+    // **THE SHARE'S RECORD** (O-362; run close-F2): the struck creature's blow as its resolver met
+    // it, then this creature's share of the division (`divideEvenly`'s index i + 1), so a knight
+    // sharing it halves it under Icebound Fortitude before the Armor Points and Ward that met it.
+    // `record` is handed only where it described the blow at the division (`AzerothActor#applyDamage`).
+    const shareRecord = record ? withSteps(record, { moved: true }, { divide: { count, index: i + 1 } }) : null;
     if (!(share > 0)) continue;
     const damageOutcome = {};
     if (Array.isArray(outcomes)) outcomes.push(damageOutcome);
     try {
       if (beforeShare) await beforeShare(actor);
-      if (actor.isOwner) await actor.applyDamage(share, { struck: true, attack: false, location: "body", type, parts: movedParts(parts), by, shared: true, outcome: damageOutcome });
+      if (actor.isOwner) await actor.applyDamage(share, { struck: true, attack: false, location: "body", type, parts: movedParts(parts), by, shared: true, outcome: damageOutcome, mitigation: shareRecord });
       else {
-        const result = await game.users.activeGM.query(BLOW_SHARE_QUERY, { victimUuid: actor.uuid, strikerUuid: target.uuid, amount: share, type, parts: movedParts(parts), byUuid: by?.uuid ?? null }, { timeout: 15000 });
+        const result = await game.users.activeGM.query(BLOW_SHARE_QUERY, { victimUuid: actor.uuid, strikerUuid: target.uuid, amount: share, type, parts: movedParts(parts), byUuid: by?.uuid ?? null, mitigation: shareRecord }, { timeout: 15000 });
         if (result?.damageOutcome) Object.assign(damageOutcome, result.damageOutcome);
       }
       if (afterShare) await afterShare(actor);
@@ -505,14 +526,16 @@ export async function landShares({ target, plan, type = null, by = null, strict 
  * The GM-side handler (`BLOW_SHARE_QUERY`): the asker must own the creature the
  * blow STRUCK - it was their client that divided it.
  */
-export async function blowShareQueryHandler({ victimUuid = null, strikerUuid = null, amount = 0, type = null, parts = null, byUuid = null } = {}, { user = null } = {}) {
+export async function blowShareQueryHandler({ victimUuid = null, strikerUuid = null, amount = 0, type = null, parts = null, byUuid = null, mitigation = null } = {}, { user = null } = {}) {
   const victim = victimUuid ? await fromUuid(victimUuid) : null;
   const struck = strikerUuid ? await fromUuid(strikerUuid) : null;
   if (victim?.documentName !== "Actor" || struck?.documentName !== "Actor") throw new Error(game.i18n.localize("AZEROTH.Card.TargetGone"));
   if (user && !struck.testUserPermission(user, "OWNER")) throw new Error(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: struck.name }));
   const n = Math.max(0, Math.trunc(Number(amount)) || 0);
   const damageOutcome = {};
-  if (n > 0) await victim.applyDamage(n, { struck: true, attack: false, location: "body", type: type ?? null, parts: movedParts(parts), by: actorAt(byUuid), shared: true, outcome: damageOutcome });
+  // The share's record, in the one shape (`recordOf`); the door reads it only where it resolves
+  // to exactly the share landing (`death-knight-talents.mjs#recordDescribes`).
+  if (n > 0) await victim.applyDamage(n, { struck: true, attack: false, location: "body", type: type ?? null, parts: movedParts(parts), by: actorAt(byUuid), shared: true, outcome: damageOutcome, mitigation: mitigation ? recordOf(mitigation) : null });
   return { landed: n, damageOutcome };
 }
 
@@ -698,6 +721,40 @@ async function borrowHere({ holder, amount }) {
   return { borrowed: true, free: again.held.free === true };
 }
 
+/* -------------------------------------------- */
+/*  04's Icebound Fortitude (run F4a)            */
+/* -------------------------------------------- */
+
+/**
+ * **04's ICEBOUND FORTITUDE, ASKED IN THE BLOW** (*Once per encounter, as a Reaction when a blow
+ * damages you, spend 1 Frost rune*): the knight struck is asked through whoever answers for it
+ * (`ask`, `BLOW_ASK_QUERY`), as Borrowed Time is; the yes pays on the knight's own client
+ * (`effects/death-knight-talents.mjs#iceboundHere`), only while the asker still waits.
+ *
+ * @param {{target: Actor, amount: number, feature: Item}} o
+ * @returns {Promise<{yes: boolean, reason?: string}>}
+ */
+export async function askIcebound({ target, amount = 0, feature = null } = {}) {
+  if (!target || !feature) return { yes: false, reason: "unknown" };
+  const answer = await ask(target, { act: "icebound", holderUuid: target.uuid, targetUuid: target.uuid, amount, featureId: feature.id });
+  return { yes: answer?.yes === true, reason: answer?.reason ?? null };
+}
+
+/** Icebound Fortitude on the knight's own client: asked, then paid while the asker waits. */
+async function iceboundAskHere({ holder, amount, featureId }) {
+  const started = Date.now();
+  const feature = holder.items?.get?.(featureId) ?? null;
+  if (!feature || !(Number(feature.system?.uses?.value) > 0)) return { yes: false, reason: "noUses" };
+  const yes = await confirmHere(holder, {
+    title: feature.name, ms: answerWindow(ASK_MS),
+    text: game.i18n.format("AZEROTH.DeathKnight.Talent.AskIcebound", { name: holder.name, n: amount, talent: feature.name })
+  });
+  if (!yes) return { yes: false, reason: "declined" };
+  if (!answerInTime(started, Date.now(), ASK_MS)) return { yes: false, reason: "late" };
+  const { iceboundHere } = await import("./death-knight-talents.mjs");
+  return iceboundHere(holder, feature);
+}
+
 /** A breath record as a query carries it (D-914): its three names as strings, or null. */
 function breathRecord(b) {
   if (!b || typeof b !== "object") return null;
@@ -725,6 +782,8 @@ export async function blowAskHandler(payload = {}, { user = null } = {}) {
       feet: typeof payload.feet === "number" ? payload.feet : null, parts: Array.isArray(payload.parts) ? payload.parts : null,
       // The card's breath record (D-914): three names, nothing else trusted.
       breath: breathRecord(payload.breath),
+      // The blow's resolver record (O-362), in the one shape.
+      mitigation: payload.mitigation ? recordOf(payload.mitigation) : null,
       // Asked by ANOTHER client, which stops waiting at ASK_MS (`moveHere`).
        remote: Boolean(user?.id) && user.id !== game.user?.id
          && !(payload.awaitDelivery === true && user?.isGM && user.id === game.users?.activeGM?.id)
@@ -735,6 +794,11 @@ export async function blowAskHandler(payload = {}, { user = null } = {}) {
       holder, target, identifier: payload.identifier, before: whole(payload.before), amount: whole(payload.amount),
       attack: payload.attack === true, distance: typeof payload.distance === "number" ? payload.distance : null
     });
+  }
+  // 04's Icebound Fortitude (run F4a): the knight struck is its own holder.
+  if (payload.act === "icebound") {
+    if (holder.uuid !== target.uuid) throw new Error(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: holder.name }));
+    return iceboundAskHere({ holder, amount: whole(payload.amount), featureId: typeof payload.featureId === "string" ? payload.featureId : null });
   }
   // 04's Borrowed Time (stage 2c): the creature struck is its own holder.
   if (payload.act === "borrow") {

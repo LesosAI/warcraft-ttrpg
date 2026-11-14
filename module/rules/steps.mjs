@@ -133,7 +133,11 @@ export const STEP_REFUSALS = Object.freeze({
   gone: "AZEROTH.Step.Refuse.Gone",
   noGM: "AZEROTH.Step.Refuse.NoGM",
   // A token this step may not move, or an item that moves nobody (the B2 review, item h).
-  unallowed: "AZEROTH.Step.Refuse.Unallowed"
+  unallowed: "AZEROTH.Step.Refuse.Unallowed",
+  // A pull against the creature's will that its own ability or March of the Damned refuses
+  // (D-957), and a size it cannot be moved at (05's *Being moved*).
+  refuses: "AZEROTH.Step.Refuse.Refuses",
+  outsized: "AZEROTH.Step.Refuse.Outsized"
 });
 
 /**

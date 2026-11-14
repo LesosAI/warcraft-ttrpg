@@ -43,7 +43,7 @@
  */
 
 /** What the user wields and wears, as a gate may name it (door 15). */
-export const WIELD_FACTS = Object.freeze(["twoHanded", "noSuit", "twoTypes", "hammerOrMace"]);
+export const WIELD_FACTS = Object.freeze(["twoHanded", "noSuit", "twoTypes", "hammerOrMace", "bothHands", "oneInEach", "eitherGrip"]);
 
 /** The keys of a gate that read the TARGET (doors 17 and 18). */
 export const TARGET_GATES = Object.freeze(["targetHas", "targetKind", "laidByUser", "watched", "challenged"]);

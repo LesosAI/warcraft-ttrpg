@@ -38,7 +38,11 @@ import { pixelsPerFoot } from "../canvas/regions.mjs";
 import { loopIdentifiers } from "../rules/animation-table.mjs";
 import {
   CONDITION_MARK_FLAGS, abilityKeyOf, actorIdOfUuid, anchorVisible, cleanFromFeature, cleanHold, cleanRisen, cleanSteps,
-  featurePrivacyKey, hitKeysOf, regionShown, slugOf, stateCast, stateEntriesOf, stateLayerOf, tokenRef
+  featurePrivacyKey, hitKeysOf, regionShown, slugOf, stateCast, stateEntriesOf, stateLayerOf, tokenRef,
+  // The Death Knight's rune flare (run F5).
+  RUNE_PREFIX, RUNE_SPEND_OPTION, cleanRuneSpend,
+  // Corpse Burst's corpse and Death Grip's pull (D-1014, D-1015).
+  FORCED_MOVE_OPTION, cleanCorpse, cleanForcedMoveCue, attackPrivacyKey, FLARE_CARD_WAIT_MS
 } from "../rules/animation-records.mjs";
 import { CHALLENGE_FLAG, WATCH_FLAG } from "../rules/marks.mjs";
 import { TRAP_FLAG } from "../rules/traps.mjs";
@@ -144,16 +148,21 @@ export function notePrivacy(message, { at = Date.now() } = {}) {
   if (hidden) PRIVATE_CASTS.add(key);
   else PRIVATE_CASTS.delete(key);
   // `at` is when THIS client saw it arrive; a card read out of chat at `ready` is 0, so
-  // it never speaks for a state laid now (`stateCueVerdict`'s freshness).
-  FEATURE_CARDS.set(key, { at, private: hidden });
+  // it never speaks for a state laid now (`stateCueVerdict`'s freshness). `ownBlind`: this
+  // client's own blind card, whose content core keeps from its author (O-394).
+  const ownBlind = hidden && message?.blind === true && message?.isAuthor === true;
+  FEATURE_CARDS.set(key, { at, private: hidden, ...(ownBlind ? { ownBlind: true } : {}) });
 }
 
 /**
  * The (user, feature) pair a feature's or a creature ability's card names: its speaker's
- * actor and its `featureKey`. Null for any other card.
+ * actor and its `featureKey`. **And an attack card's (user, attack) pair** (O-394), which the
+ * runes its riders spent name too (`attackPrivacyKey`); a Parry spends no rider. Null for any
+ * other card.
  */
 export function cardPrivacyKey(message) {
   const flags = flagsOf(message);
+  if (flags.kind === "attack" && flags.parry !== true) return attackPrivacyKey(message?.speaker?.actor ?? null);
   if (flags.kind !== "feature" && flags.kind !== "ability") return null;
   return featurePrivacyKey(message?.speaker?.actor ?? null, flags.featureKey ?? null);
 }
@@ -319,7 +328,13 @@ export function cardRecord(message) {
       relayOrigin,
       targets: Array.isArray(flags.targets) ? flags.targets : [],
       // Where the spell moved its caster and its party (Shadow Walk, Dark Passage).
-      steps: cleanSteps(flags.steps)
+      steps: cleanSteps(flags.steps),
+      // **WHAT A RAISE SPELL STOOD UP** (07 §17, run F5): the tokens the raise door placed,
+      // which a `rise` record plays on (`cardRecords`). A missing key is nothing raised.
+      risen: cleanRisen(flags.risen),
+      // **WHERE THE CORPSE A MARKING SPELL CHOSE LAY** (07 §17's Corpse Burst; D-1014): a
+      // `corpse` placement reads it. A card written before it recorded none.
+      ...(cleanCorpse(flags.corpse) ? { corpse: cleanCorpse(flags.corpse) } : {})
     };
   }
   // **A USE** (door 2): a feature's card, or a creature ability's - one table, the
@@ -364,6 +379,23 @@ export function cardRecord(message) {
       identifier: flags.featureKey ?? null,
       source: tokenRef(flags.source),
       risen
+    });
+  }
+  // **THE DEATH KNIGHT'S TWO CARDS THAT ARE NO USE CARD** (02 §7, run F5): Inscribed
+  // Runeweapon's inscription (`effects/death-knight.mjs#useInscription`) and a mount worked over a
+  // Long Rest (`effects/mount-works.mjs#useMountWork`: Deathcharger, Charger's Blessing, Ritual of
+  // the Steed), each speaking from the knight's token, the mount work carrying the kind chosen as
+  // the state its row's cue answers. A feature with no row says `no-row`.
+  if (flags.kind === "inscription" || flags.kind === "mountWork") {
+    const source = speakerToken(message);
+    const inscription = flags.kind === "inscription";
+    const option = typeof flags.option === "string" && flags.option ? flags.option : null;
+    return featureRecord({
+      trigger: "use", contentVisible,
+      sceneId: source?.sceneId ?? null,
+      identifier: inscription ? "inscribed-runeweapon" : (slugOf(flags.feature ?? "") || null),
+      source,
+      ...(!inscription && option ? { states: [option] } : {})
     });
   }
   // **A CONSTRUCT'S CUTTING GEAR** (14 §13's Tinker constructs; the lead, 2026-10-22):
@@ -475,7 +507,7 @@ export function cardRecords(message) {
   }
   const isUse = primary.kind === "feature" && primary.trigger === "use";
   if ((primary.kind === "spell" || isUse) && primary.steps?.length) out.push({ ...primary, trigger: "arrive" });
-  if (isUse && primary.risen.length) out.push({ ...primary, trigger: "rise" });
+  if ((primary.kind === "spell" || isUse) && primary.risen?.length) out.push({ ...primary, trigger: "rise" });
   if (isUse && primary.hold) out.push({ ...primary, trigger: "hold", targets: primary.source ? [primary.source] : [] });
   return out;
 }
@@ -692,6 +724,60 @@ function featureEffectRecords(effect, flags, only = null, { born = "create" } = 
     }
   }
   return out;
+}
+
+/**
+ * **THE RUNE FLARE'S RECORDS** (02 §7: every rune spent, for any reason; run F5): read off the
+ * operation of the update that spent them, where the one rune door wrote what it spent and from
+ * which token (`documents/runes.mjs#spendRunesOn`, `rules/animation-records.mjs
+ * #RUNE_SPEND_OPTION`) - one `use` record a kind, under `rune:<kind>`. An update that names no
+ * spend implies nothing.
+ *
+ * @param {object} options  an `updateActor` hook's operation options
+ * @returns {object[]}
+ */
+export function runeSpendRecords(options = {}) {
+  const spend = cleanRuneSpend(options?.[RUNE_SPEND_OPTION] ?? null);
+  if (!spend) return [];
+  const source = { sceneId: spend.sceneId, tokenId: spend.tokenId };
+  // **A USE'S RUNES FLARE ONLY WHERE ITS CARD MAY BE READ** (D-1013, O-382): the spend is written
+  // before the Use's card, so a flare carrying the Use's (user, feature) pair waits for that card,
+  // exactly as a state laid before it does (`awaitCard`, `stateCueVerdict`), and a card this client
+  // may not read refuses it as `hidden`. **Only a card that arrives AFTER the flare speaks for it**
+  // (`cardFreshMs: 0`): the spend always lands before its own card, so a card seen earlier is an
+  // earlier Use's, and a second Use made within ten seconds must not take the first one's privacy.
+  return spend.kinds.map(kind => {
+    const record = featureRecord({
+      trigger: "use", sceneId: spend.sceneId, identifier: `${RUNE_PREFIX}${kind}`, source,
+      ...(spend.privacy ? { privacy: spend.privacy } : {})
+    });
+    // O-395 and the close review's finding 5: a longer wait (`FLARE_CARD_WAIT_MS`), HIDDEN where it
+    // ends with no card (`cardFailClosed`), and a blind card's own author sees their own (O-394).
+    return spend.privacy ? { ...record, awaitCard: true, cardFreshMs: 0, cardWaitMs: FLARE_CARD_WAIT_MS, cardFailClosed: true, cardOwnBlind: true } : record;
+  });
+}
+
+/**
+ * **A FORCED MOVE'S RECORD** (02's Death Grip, on its failed Test; D-1015, O-383; every push and pull
+ * since O-397): read off the operation of the token's own displacement, where the one
+ * forced-movement door wrote it (`effects/forced-movement.mjs#forceMove`,
+ * `rules/animation-records.mjs#FORCED_MOVE_OPTION`) - an `arrive` record for the feature (or for
+ * `FORCED_MOVE_KEY` where no feature was named), carrying the move as a `pull` or `push` step and
+ * the cause's token as its source where the caller named it. The Use's card arrived before its creature's Test, so its privacy is already known here:
+ * a pair this client knows was private refuses the pull as `hidden`, the rule an update's state cue
+ * follows. A displacement that names no pull implies nothing.
+ *
+ * @param {object} options  an `updateToken` hook's operation options
+ * @returns {object[]}
+ */
+export function forcedMoveRecords(options = {}) {
+  const cue = cleanForcedMoveCue(options?.[FORCED_MOVE_OPTION] ?? null);
+  if (!cue) return [];
+  return [featureRecord({
+    trigger: "arrive", sceneId: cue.step.sceneId ?? cue.by?.sceneId ?? null, identifier: cue.key,
+    contentVisible: !pairPrivate(cue.privacy ?? null), source: cue.by, steps: [cue.step],
+    ...(cue.privacy ? { privacy: cue.privacy } : {})
+  })];
 }
 
 /**

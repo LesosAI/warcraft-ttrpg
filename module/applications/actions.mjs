@@ -57,8 +57,10 @@ import { OVERCHANNEL_MAX_POINTS, castingDC, grantingClass, isHealingSpell, manaP
 // THE LEGACY BRANCHES' DOORS (B1): a spell a talent pays in another pool (door 8),
 // the ability scope (door 16), a throw a rider makes possible (door 15), and no
 // Reaction against the unanswered (door 14).
-import { castCanPay, castingManaPool } from "../rules/casting.mjs";
+import { castCanPay, castingManaPool, spellPayment } from "../rules/casting.mjs";
+import { bonusSchool } from "../rules/schools.mjs";
 import { spellPoolFor } from "../rules/class-talents.mjs";
+import { opportunityNeedsGM, opportunityOwned } from "../rules/gm-writes.mjs";
 import { abilityScope } from "../rules/expressions.mjs";
 import { attackOffHand, riderThrowModifiers, throwAsWeapon } from "../rules/wield.mjs";
 import { extraAttackSelection, extraAttackWeapons } from "../rules/second-attack-choice.mjs";
@@ -157,6 +159,7 @@ import { afflictionsOf } from "../effects/afflictions.mjs";
 import { handLay } from "../effects/bare-afflictions.mjs";
 import { BARE_STATUSES, carrierOwnsChip, clearCarrierChip, stepCarrierPoison } from "../rules/bare-afflictions.mjs";
 import { isAntivenom } from "../rules/antivenom.mjs";
+import { conditionEffectOf } from "../rules/condition-carriers.mjs";
 
 /**
  * WHAT THE THINGS THE TARGET IS WEARING ANSWER BACK (08 SS20, D-692).
@@ -1140,7 +1143,20 @@ export async function takeOpportunity(actor, { tokenId = null, sceneId = null, d
     }));
     return null;
   }
+  // **WHAT THE HIT LAYS NEEDS A GM WHERE THE MOVER IS ANOTHER CLIENT'S** (the F4c review, M1): 04's
+  // Relentless Advance at rank 2 and Hold the Hall lay their Speed 0 and Prone through the GM's
+  // client, so with no GM online the press is refused here, before the round's free mark or the
+  // Reaction is taken (`rules/gm-writes.mjs#opportunityNeedsGM`). **WHOEVER THE BLOW WILL STRIKE**
+  // (the F4d review, item 1): the mover where its token is on the viewed scene, else the user's own
+  // targets, which the attack then strikes - a missing or stale token is no reason to skip it.
   const onCanvas = Boolean(token) && canvas?.scene?.id === scene?.id && Boolean(canvas.tokens?.get(tokenId));
+  const struckOwned = opportunityOwned({ onCanvas, moverOwned: token?.actor?.isOwner === true,
+    targetsOwned: [...(game.user?.targets ?? [])].map(t => t.actor?.isOwner === true) });
+  if (opportunityNeedsGM({ talents: actor.takenTalents?.() ?? [], owned: struckOwned,
+    isGM: game.user?.isGM === true, gmActive: Boolean(game.users?.activeGM) })) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Rider.Inflict.NoGM"));
+    return null;
+  }
   // **AND WHAT THE USER HAD TARGETED IS PUT BACK** (the lead, 2026-09-13).
   // `setTargets` REPLACES the set (14.367, `mode: "replace"` by default), and
   // this is the only place in the system that re-targets for the user: an
@@ -1205,7 +1221,17 @@ export async function takeOpportunity(actor, { tokenId = null, sceneId = null, d
     }
     // An Opportunity Attack is marked one (the Legacy branches' door 22): 04's Hold the
     // Hall's *On a hit it is knocked Prone* rides it alone (`hitLays`, `when: "opportunity"`).
-    return await attackWithDialog(actor, weapon, event, { budget: "none", atDistance: distance, mode: handIfAny(attackModes(weapon.system)), opportunity: true });
+    const opportunityCard = await attackWithDialog(actor, weapon, event, { budget: "none", atDistance: distance, mode: handIfAny(attackModes(weapon.system)), opportunity: true });
+    // **04's RELENTLESS ADVANCE AT RANK 2** (*while you wield a one-handed weapon in each hand,
+    // your Opportunity Attack includes your Off-Hand Attack*; run F4a): one more roll, with the
+    // off hand, inside the same Reaction - nothing paid twice, and not the round's own Off-Hand
+    // Attack (`effects/death-knight-talents.mjs#relentlessOffHand`).
+    if (opportunityCard && actor.type === "character") {
+      const { relentlessOffHand } = await import("../effects/death-knight-talents.mjs");
+      const off = relentlessOffHand(actor, weapon);
+      if (off) await attackWithDialog(actor, off, event, { budget: "none", atDistance: distance, mode: handIfAny(attackModes(off.system)), opportunity: true, offHand: true });
+    }
+    return opportunityCard;
   } finally {
     // Only where this replaced them, and only while the same scene is still
     // in view: `setTargets` reads ids off the viewed canvas, so putting a
@@ -1294,6 +1320,8 @@ export async function rollWithDialog(actor, spec, event = null) {
   // **04's ECHO OF THE BLADE** (the Guardian of Time, stage 2c): every Attack Test this door
   // makes - the first roll, Extra Attack's second - may roll echoes after it, as part of the
   // same Attack, each on its own card (`echoingWorkflow`, `echoChain`).
+  // And 04's Dancing Runeweapon's one more roll (run F4a), after the Attack's first roll alone
+  // (`dancingRoll`, asked inside `echoingWorkflow`).
   workflow = echoingWorkflow(actor, workflow);
   const card = await workflow(args);
   // **ONE ATTACK, TWO CARDS** (02 §6, D-704). The two rolls may be at different
@@ -1334,6 +1362,38 @@ export async function rollWithDialog(actor, spec, event = null) {
 }
 
 /**
+ * **THE DANCING RUNEWEAPON'S ROLL** (04's Dancing Runeweapon; run F4a): after an Attack's first
+ * roll at ONE creature - or, in a one-handed weapon in each hand, after the Off-Hand Attack (D-1017)
+ * - never Extra Attack's second, an echo, a Parry, an Opportunity Attack, an
+ * off-hand blow in two hands or the Dancing Runeweapon's own roll (`rules/death-knight-talents.mjs
+ * #dancingRolls`) - while the knight's state stands, one more roll at the same creature,
+ * `budget: "none"` (`secondRollOverrides`, nothing paid twice), its card marked so its Apply gives
+ * back half the damage it deals. Asked by `echoingWorkflow` after every card it posts.
+ *
+ * @param {Actor} actor
+ * @param {object} a  the roll that may take it, as the workflow was handed it
+ * @param {Function} workflow
+ */
+export async function dancingRoll(actor, a, workflow) {
+  if (actor?.type !== "character") return null;
+  const { dancingOn } = await import("../effects/death-knight-talents.mjs");
+  const { dancingGrip, dancingRolls, dancingShare } = await import("../rules/death-knight-talents.mjs");
+  const standing = dancingOn(actor);
+  // **THE GRIP THE ROLL IS MADE IN** (D-1017): in two hands it rides the Attack and heals half; in
+  // a one-handed weapon in each hand it rides the Off-Hand Attack and heals all it deals.
+  const grip = dancingGrip(actor.gateFacts?.()?.wield ?? null);
+  if (!dancingRolls({ standing: Boolean(standing), kind: a?.kind, parry: a?.parry === true, budget: a?.budget ?? null, opportunity: a?.opportunity === true,
+    offHand: a?.offHand === true, dancing: Boolean(a?.dancing), targets: (a?.targets ?? []).length, grip }) || Number(a?.echo) > 0 || !a?.damage) return null;
+  const next = {
+    // The riposte's Shadow (D-1017) is the Off-Hand Attack's own, never the roll beside it.
+    ...a, ...secondRollOverrides(actor, a, null), vengeful: null, dancing: { name: standing.name, heal: dancingShare(standing, grip) },
+    subtitle: [String(a.subtitle ?? ""), game.i18n.format("AZEROTH.DeathKnight.Talent.DancingSubtitle", { talent: standing.name })].filter(Boolean).join(" · ")
+  };
+  ui.notifications?.info(game.i18n.format("AZEROTH.DeathKnight.Talent.DancingRolled", { name: actor.name, talent: standing.name }));
+  return workflow(next);
+}
+
+/**
  * **A WORKFLOW WHOSE ATTACK TESTS ECHO** (04's Echo of the Blade, stage 2c): the workflow,
  * and after each card it posts for an Attack Test that is no echo itself, the echo chain
  * (`echoChain`), its echoes rolled through the workflow handed in so none echoes twice.
@@ -1346,6 +1406,7 @@ export function echoingWorkflow(actor, workflow) {
   return async a => {
     const card = await workflow(a);
     if (card && !(Number(a?.echo) > 0)) await echoChain(actor, a, card, workflow);
+    if (card) await dancingRoll(actor, a, workflow);
     return card;
   };
 }
@@ -1486,9 +1547,9 @@ export async function castWithDialog(actor, spell, event = null, { targets = nul
   if (actor?.refuseForcedShape?.("cast")) return null;
   const sys = spell.system;
   const classes = (actor.classItems ?? []).map(c => ({
-    itemId: c.id, schools: c.system?.schools ?? [], castingAbility: c.system?.castingAbility ?? null
+    itemId: c.id, name: c.name, schools: c.system?.schools ?? [], castingAbility: c.system?.castingAbility ?? null
   }));
-  const grant = grantingClass(classes, sys.school);
+  const grant = grantingClass(classes, sys.school, sys.classes ?? null);
   // The Mana pool, read the one way the cast reads it (the B1 review): a creature's
   // Power pool whatever its block names it (`casting.mjs#castingManaPool`).
   const pool = castingManaPool({ creature: actor.type === "npc", powers: actor.system.powers ?? [], snapshot: actor.poolSnapshot?.() ?? [], grantItemId: grant?.itemId ?? null });
@@ -1505,14 +1566,16 @@ export async function castWithDialog(actor, spell, event = null, { targets = nul
   // and Icy Veins' rank off the entry's Mana, Backdraft's rung and Soul Fire's
   // promise named in words.
   const talentsNow = actor.takenTalents?.() ?? [];
-  const take = takeNextSpell(pending.live ?? [], { action: sys.action ?? null, healing: isHealingSpell(sys) });
+  const take = takeNextSpell(pending.live ?? [], { action: sys.action ?? null, healing: isHealingSpell(sys), school: sys.school ?? null });
   // In the pool the cast pays, as `castSpell` reads it (04's Shadowcraft's Focus; the
   // Legacy branches' B6).
+  // A Death spell's discounts read Shadow (`schools.mjs#bonusSchool`, O-335), as `castSpell`'s.
+  const discountSchool = bonusSchool({ school: sys.school ?? null, damageSchool: sys.damage?.school ?? null });
   const discount = spellDiscountFor(talentsNow, {
-    school: sys.school ?? null, mana: sys.mana ?? 0, states: veinsStates(flaggedEffects(actor, VEINS_FLAG).map(r => r.flag)),
-    pool: spellPoolFor(talentsNow, { name: spell.name, school: sys.school ?? null })?.pool ?? null
+    school: discountSchool, mana: sys.mana ?? 0, states: veinsStates(flaggedEffects(actor, VEINS_FLAG).map(r => r.flag)),
+    pool: spellPayment(spellPoolFor(talentsNow, { name: spell.name, school: sys.school ?? null }), actor.classItems ?? [])?.pool ?? null
   });
-  const mana = spellManaCost({ mana: sys.mana ?? 0, name: spell.name, school: sys.school }, actor.system?.signatureEffects, { next: take.amount, less: discount.amount });
+  const mana = spellManaCost({ mana: sys.mana ?? 0, name: spell.name, school: discountSchool }, actor.system?.signatureEffects, { next: take.amount, less: discount.amount });
   // 02's Overchannel Mastery (D-779): an Overchannel costs the Mana once more a cast.
   const mastery = actor.hasFeature?.("Overchannel Mastery") === true;
   const promises = [
@@ -1534,7 +1597,7 @@ export async function castWithDialog(actor, spell, event = null, { targets = nul
   // name, its uses the round's record rather than a counter.
   // **AND 04's FIRE BLAST** (*Once a round, a Fire spell of yours costs a
   // Half-Action rather than an action*; D-775): the same line, by the school.
-  const swiftRow = castAsFor(talentsNow, { action: sys.action ?? null, healing: isHealingSpell(sys), name: spell.name, school: sys.school ?? null });
+  const swiftRow = castAsFor(talentsNow, { action: sys.action ?? null, healing: isHealingSpell(sys), name: spell.name, school: discountSchool });
   const swiftCounter = swiftRow && !swiftRow.perRound ? (actor.grantedFeature?.(swiftRow.talentId) ?? null) : null;
   const swiftLeft = swiftRow?.perRound ? roundMarksLeftOf(actor, swiftRow) : (swiftCounter?.system?.uses?.value ?? 0);
   const swiftJudged = swiftRow ? swiftCast({ row: swiftRow, spellAction: sys.action ?? null, healing: true, usesLeft: swiftLeft }) : null;
@@ -1550,7 +1613,8 @@ export async function castWithDialog(actor, spell, event = null, { targets = nul
   // **AND A POOL A TALENT NAMES** (04's Shadowcraft: *paying Focus where 07-MAGIC
   // asks for Mana*; the Legacy branches' door 8), with the ability it casts with.
   const inForm = actor.inShapeshiftForm === true;
-  const talentPool = spellPoolFor(talentsNow, { name: spell.name, school: sys.school ?? null });
+  // And a class that pays in its Momentum (D-944).
+  const talentPool = spellPayment(spellPoolFor(talentsNow, { name: spell.name, school: sys.school ?? null }), actor.classItems ?? []);
   const payPool = talentPool ? ((actor.poolSnapshot?.() ?? []).find(p => p.name === talentPool.pool) ?? null) : null;
   const price = manaPrice(mana, { inShapeshiftForm: inForm, pool: talentPool?.pool ?? null });
   const ferocity = price.pool === "ferocity"
@@ -1897,7 +1961,7 @@ function packFlankOf(actor, targetToken) {
  * has not got is refused in words; no caller in `module/` forces one, and the
  * attacks batch pins the refusal by calling this door with a Javelin in the hand.
  */
-export async function attackWithDialog(actor, weapon, event = null, { location = "body", dc = null, damage = true, offHand = null, budget = null, gainsMomentum = true, atDistance = null, riposte = false, mode = null, ratingDelta = 0, opportunity = false, landsOnHit = null, cardBoons = null, fromFeature = null, targets = null, prepareOnly = false, paidThrowAs = null, testOnly = false } = {}) {
+export async function attackWithDialog(actor, weapon, event = null, { location = "body", dc = null, damage = true, offHand = null, budget = null, gainsMomentum = true, atDistance = null, riposte = false, mode = null, ratingDelta = 0, opportunity = false, landsOnHit = null, cardBoons = null, fromFeature = null, targets = null, prepareOnly = false, paidThrowAs = null, testOnly = false, vengeful = null } = {}) {
   if (testOnly && (!prepareOnly || budget!=="none" || damage!==false)) return null;
   if (!weapon || weapon.type !== "weapon") return null;
   // 07's Hex: *it cannot attack* (D-808) - every attack this door makes, an
@@ -2103,7 +2167,15 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
     }));
     return null;
   }
-  const plan = attackPlan(struckShape, { distance, engaged: engagedNow(actor), mode });
+  // **AN OPPORTUNITY ATTACK THAT REACHES FURTHER** (04's Relentless Advance at rank 2 in two hands,
+  // D-1017: *your Opportunity Attacks reach 5 feet further*): the band a blow in the hand is judged
+  // in, for this attack alone, as the offer measured it (`AzerothCombatant#opportunities`).
+  let reachBonus = 0;
+  if (opportunity === true && actor.type === "character") {
+    const { relentlessOpportunityReach } = await import("../effects/death-knight-talents.mjs");
+    reachBonus = relentlessOpportunityReach(actor);
+  }
+  const plan = attackPlan(struckShape, { distance, engaged: engagedNow(actor), mode, reachBonus });
   // **A WAY THE WEAPON HAS NOT GOT IS REFUSED IN WORDS** (D-731's review). A
   // caller that settles the way is never quietly handed another: a Javelin
   // forced into the hand used to be thrown. `mode` is this door's public option,
@@ -2384,6 +2456,9 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
     // The off hand (D-409) and the budget an attack spends (D-630).
     ...(offHand ? { offHand: true } : {}),
     ...(budget ? { budget } : {}),
+    // 04's Vengeful Blood's riposte (D-1017): the Off-Hand Attack made as a Reaction, which
+    // `rollTest` spends as the Reaction and the round's Off-Hand Attack, its Shadow on the hit.
+    ...(vengeful && offHand && budget === "reaction" ? { vengeful: { name: String(vengeful.name ?? "") } } : {}),
     ...(gainsMomentum ? {} : { gainsMomentum: false }),
     // A maneuver may fix the DC - Disarm's Opposed Test at 12 (D-626).
     ...(dc !== null ? { dc } : {}),
@@ -3003,7 +3078,9 @@ export async function stepPool(actor, target) {
   const pool = poolRowFor(actor, { itemId, kind });
   if (!pool) return null;
   const delta = Number(target.dataset.delta) || 0;
-  return actor.updatePool({ itemId: itemId || null, kind, value: pool.value + delta });
+  // A hand on the sheet is a named door for a Runic Power rise, and a GM's alone
+  // (`rules/runes.mjs#runicGainRefusal`: *Runic Power is only gained by consuming runes*).
+  return actor.updatePool({ itemId: itemId || null, kind, value: pool.value + delta }, {}, { runicGain: "hand" });
 }
 
 /**
@@ -3038,7 +3115,19 @@ export function bindPoolInputs(sheet) {
       }
       const clamped = Math.max(0, Math.min(pool.max, Math.trunc(typed)));
       input.value = String(clamped);
-      sheet.actor.updatePool({ itemId: itemId || null, kind, value: clamped });
+      // A typed rise is a hand on the sheet, the stepper's named door, and a GM's alone
+      // (`rules/runes.mjs#runicGainRefusal`); a player's typed rise is refused in words.
+      // The box is put back to what the pool HOLDS once the write is answered (the F4a review,
+      // N2): a refused rise leaves the stored number, not the number typed, until the next render.
+      const restore = () => {
+        const now = poolRowFor(sheet.actor, { itemId, kind });
+        if (now && input.isConnected) input.value = String(now.value);
+      };
+      Promise.resolve(sheet.actor.updatePool({ itemId: itemId || null, kind, value: clamped }, {}, { runicGain: "hand" }))
+        .then(restore, err => {
+          restore();
+          console.warn("azeroth-rpg | pool box", err);
+        });
     });
   }
 }
@@ -3543,7 +3632,8 @@ export async function effectAction(actor, action, target) {
     }
     case "stepCondition": {
       const delta = Math.trunc(Number(target.dataset.delta)) || 0;
-      const current = actor.effects.find(e => e.statuses?.has(condition));
+      // The condition's own effect, never a tick or affliction carrier holding it (D-997).
+      const current = conditionEffectOf(actor.effects, condition);
       const max = condition === "poisoned" ? AZEROTH.POISONED_MAX : 99;
       // The stepper changes a carried poison's STACKS, never the carrier's existence.
       const owner = condition === "poisoned" ? carrierFor(actor, condition) : null;
@@ -3551,8 +3641,8 @@ export async function effectAction(actor, action, target) {
       if (!current) {
         if (delta <= 0) return null;
         if (condition === "poisoned") return handLay(actor, "poison");
-        await actor.toggleStatusEffect(condition, { active: true });
-        const made = actor.effects.find(e => e.statuses?.has(condition));
+        await actor.toggleStatusEffect(condition, { active: true, ownEffect: true });
+        const made = conditionEffectOf(actor.effects, condition);
         return made?.setFlag("azeroth-rpg", "value", 1) ?? null;
       }
       const value = (current.getFlag("azeroth-rpg", "value") ?? 1) + delta;
