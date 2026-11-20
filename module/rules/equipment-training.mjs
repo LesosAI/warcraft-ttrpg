@@ -6,6 +6,7 @@ import { armorAccessFor } from "./class-talents.mjs";
 import { strikeFor, weaponFacts } from "./strikes.mjs";
 import { gripOf } from "./worn.mjs";
 import { meldsGear } from "./shapes.mjs";
+import { isUnarmed } from "./unarmed.mjs";
 import { AZEROTH } from "../config.mjs";
 
 const ARMOR_ORDER = Object.keys(AZEROTH.armorCategories);
@@ -49,7 +50,8 @@ export function weaponTraining(item, access = []) {
   if (access.includes("any") || item?.natural) return true;
   const sys = sysOf(item);
   const doc = item?.system ? item : { ...item, system: sys };
-  if (sys.identifier === "unarmed" || /^unarmed$/i.test(item?.name ?? "")) return true;
+  // An unarmed strike is always trained (C15; D-1162): 08 §7's Unarmed and the Sovereign's Claws.
+  if (isUnarmed(item) || isUnarmed({ ...item, system: sys })) return true;
   if (sys.launcher) return launcherAccess(sys.launcher, access);
   if (sys.fits?.length) return sys.fits.some(k => launcherAccess(k, access));
   const facts = weaponFacts(doc);

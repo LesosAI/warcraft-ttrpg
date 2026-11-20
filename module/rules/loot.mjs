@@ -74,6 +74,8 @@ import { canGoOn, priceFor } from "./affixes.mjs";
 import { ZONES } from "./classic-tables.mjs";
 import { affixCost, bandFor, build, plan } from "./forge.mjs";
 import { tierForLevel } from "./progression.mjs";
+// An unarmed strike is never a find (the San'layn and Sovereign plan, C15, B.12 finding 10; D-1162).
+import { isUnarmed } from "./unarmed.mjs";
 
 /** The five scenarios (D-666), keyed as `config.mjs` names them. */
 export const SCENARIOS = Object.freeze(["wilderness", "site", "outpost", "dungeon", "boss"]);
@@ -234,6 +236,8 @@ const EXCLUDED = [/·\s*Working animals\s*$/, /·\s*Trained mounts\s*$/, /·\s*W
 /** Whether a pack item may be drawn as a Common find. */
 export function lootable(item) {
   if (!item || item.affix) return false;
+  // 08 §7's Unarmed and the Sovereign's Claws are never looted or sold (C15; D-1162).
+  if (isUnarmed(item)) return false;
   const rarity = item.system?.rarity ?? item.rarity ?? "common";
   if (rarity !== "common") return false;
   const section = String(item.system?.source?.section ?? item.source?.section ?? "");
@@ -797,6 +801,9 @@ export function catalogueRow(document, { blueprintName = null } = {}) {
   const blueprint = gadgetBlueprintOf(document);
   if (!document?.uuid || (!["weapon", "armor", "gear"].includes(document.type) && !blueprint)
     || document.flags?.["azeroth-rpg"]?.affix) return null;
+  // An unarmed strike (08 §7's Unarmed, the Sovereign's Claws) is never offered as loot (C15; D-1162):
+  // the claws' own guard refuses them on a sheet without Blood-Forged Claws, so the offer would land nothing.
+  if (isUnarmed(document)) return null;
   const system = document.system ?? {};
   const rarity = blueprint ? "common" : system.rarity ?? "common";
   const base = {

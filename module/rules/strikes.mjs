@@ -12,8 +12,8 @@
  *      two-handed`), by the §7 identifier the name before its comma slugs to;
  *   4. the 08 §7 IDENTIFIER, which a forged or generated item keeps;
  *   5. the Classic SUBCLASS where the conversion collapsed it onto a base of
- *      another family - every Classic dagger went onto the Scimitar or the
- *      tusk-blade base (D-685), and it is still a dagger;
+ *      another family - a Classic dagger on the Serrated blade base (D-685,
+ *      D-1331) is still a dagger;
  *   6. the WORDS of the name, for a thing a GM made by hand;
  *   7. otherwise nothing, and the record says why.
  *
@@ -115,7 +115,7 @@ export const PROJECTILES = Object.freeze({
 
 /**
  * Every 08 §7 base that is neither a launcher nor ammunition, by identifier:
- * ninety-one rows, and the other thirty-nine resolve through `launcher` and
+ * ninety-two rows, and the other thirty-nine resolve through `launcher` and
  * `fits`. A thrown weapon names its family here - a throwing axe is an axe -
  * and `THROWN_FORMS` turns it into the thrown form WHEN IT IS THROWN (D-731):
  * a Throwing axe has no other way, a Dagger is struck in the hand or thrown.
@@ -142,6 +142,10 @@ export const BASE_FORMS = Object.freeze({
   "throwing-knives": "dagger",
   "tomahawk": "axe",
   "unarmed": "unarmed",
+  // 02 §7's Blood-Forged Claws, 08 §7's row under Unarmed: an unarmed strike that slashes (the
+  // San'layn and Sovereign plan, B.5: *`claw` (slash), with the strike record marked unarmed*;
+  // D-1168). `rules/unarmed.mjs#isUnarmedStrike` reads it unarmed off the weapon's identifier.
+  "sovereign-claws": "claw",
   // One-handed
   "battleaxe": "axe",
   "bilgewater-wrench": "wrench",
@@ -222,9 +226,10 @@ export const BASE_FORMS = Object.freeze({
 
 /**
  * A Classic subclass whose finds sit on a base of another family (D-685). The
- * conversion put every dagger on the Scimitar or the Gurubashi tusk-blade base,
- * because 08 §7's own Dagger is Thrown; every other subclass already agrees
- * with its base's family, and the census over the pack says so.
+ * conversion put every dagger on the Scimitar or the Gurubashi tusk-blade base
+ * until D-1331 moved them onto 08 §7's Light blades for Deft; one that wants
+ * Bleed sits on the Serrated blade, a short sword. Every other subclass already
+ * agrees with its base's family, and the census over the pack says so.
  */
 export const SUBCLASS_FORMS = Object.freeze({ Dagger: "dagger" });
 

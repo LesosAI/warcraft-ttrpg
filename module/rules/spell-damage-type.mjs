@@ -90,7 +90,9 @@ export function spellDamageLane({ type = null, spellSchool = null, apByLocation 
     return {
       kind: "physical", school: PHYSICAL, location: "body", apByLocation: apByLocation ?? {},
       ward: 0, schoolArmor: 0, penetration: 0, slAddsToDamage: false,
-      bonusSchool: spellSchool ?? null, physical: true
+      // A sand spell keeps its Arcane (D-853); a Physical Death spell's bonuses are Shadow's (the Sovereign's
+      // blood made solid, B.13 Q17; D-1252), through the one reading every spell's bonuses take (D-941).
+      bonusSchool: bonusSchool({ school: spellSchool, damageSchool: null }) ?? spellSchool ?? null, physical: true
     };
   }
   return {

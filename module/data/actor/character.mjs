@@ -46,9 +46,14 @@ import { collectBurdenParticipants, derivePilgrimsBurdenLoadState } from "../../
 import { carryFactor, talentLanguages } from "../../rules/talent-effects.mjs";
 import { blockSpeedParts, speedFrom, speedParts } from "../../rules/speed.mjs";
 import { capFor } from "../../rules/momentum.mjs";
+// Crowned in Blood doubles the Tribute cap while its effect stands (02 §7; `rules/tribute.mjs`).
+import { CROWNED_FLAG } from "../../rules/tribute.mjs";
+// 04's Untouchable and Serene Disdain, derived on the character (the Sovereign; pure).
+import { CRIMSON_THRONE, SERENE_DISDAIN, UNTOUCHABLE, WITHERING_CONTEMPT, rankIn as sovRankIn, sereneImmune, sovereignCastBanes, sovereignTargetBanes, untouchableDefense } from "../../rules/sovereign-talents.mjs";
 // The Death Knight (D-943, D-946): its runes are the weapons', it is undead, and it eats nothing.
 import { RUNES, runePool, wieldedRunes } from "../../rules/runes.mjs";
-import { UNDEAD_CLASS_IMMUNE, UNDEAD_CLASS_VULNERABLE, needsNoDrink, needsNoFood, undeadStanding } from "../../rules/undead.mjs";
+import { UNDEAD_CLASS_IMMUNE, UNDEAD_CLASS_VULNERABLE, bloodFed, needsNoDrink, needsNoFood, undeadStanding } from "../../rules/undead.mjs";
+import { peopleImmune } from "../../rules/peoples.mjs";
 import { addLichWard } from "../../rules/necromancer-features.mjs";
 import { trainingProfile, weaponTraining } from "../../rules/equipment-training.mjs";
 import { hourglassOnTile } from "../../rules/sand.mjs";
@@ -72,6 +77,8 @@ import { auraBaneRows, auraBoonRows, auraHalvesHealing, auraStandsFree, emptySch
 import { immunitiesFrom } from "../../rules/legacy-uses.mjs";
 import { invulnerabilityPotionActive } from "../../rules/invulnerability-potion.mjs";
 import { wisdomBonus } from "../../rules/distilled-wisdom.mjs";
+import { skillBoonsOn, veilBanesOn } from "../../rules/sovereign-spells.mjs";
+import { withLaidVulnerable } from "../../rules/laid-vulnerable.mjs";
 import { SOURCE_MIGRATIONS } from "../../migrations/index.mjs";
 
 const fields = foundry.data.fields;
@@ -407,6 +414,12 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // Final-phase ADD changes need a numeric base even for an untrained school.
     this.spellpower = { ...Object.fromEntries(Object.keys(AZEROTH.schools).map(key => [key, 0])), ...worn.spellpower };
     this.skillBoons = worn.boons;
+    // **AND WHAT A SPELL OF THE CHARACTER'S OWN LAYS ON A SKILL** (07 §17's Air of Majesty and Read the
+    // Supplicant: *you have a Boon on Leadership and Intimidation Tests against creatures that can see you*;
+    // D-1250): the source by name, for the span of the effect that carries it, kept APART from what is worn,
+    // because whether the creature qualifies is the table's call (D2 §12; the review's N8) and the roll
+    // dialog draws it as an unticked judgement line.
+    this.spellSkillBoons = skillBoonsOn(this.parent?.effects ?? []);
 
     // ---- what the roll dialog reads off the ROLLER (06 §6, D-693) ----------
     // **A CREATURE HAS HAD THESE SINCE D-691 AND A CHARACTER HAD NONE OF
@@ -493,8 +506,11 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     const chaMod = this.abilities?.cha?.mod ?? 0;
     // Essence's cap is 3 plus the Constitution modifier, never below 3 (the Necromancer plan).
     const conMod = this.abilities?.con?.mod ?? 0;
-    for (const pool of pools.momenta) pool.max = capFor(pool, ranksOf, { hourglass, chaMod, conMod });
-    if (pools.momentum && !pools.momenta.includes(pools.momentum)) pools.momentum.max = capFor(pools.momentum, ranksOf, { hourglass, chaMod, conMod });
+    // Tribute's cap is 3 plus the Charisma modifier, never below 3, doubled while Crowned in Blood
+    // stands (02 §7): the effect's flag, read off the effects the actor holds.
+    const crowned = [...(this.parent?.effects ?? [])].some(e => e.active !== false && e.disabled !== true && e.flags?.["azeroth-rpg"]?.[CROWNED_FLAG]);
+    for (const pool of pools.momenta) pool.max = capFor(pool, ranksOf, { hourglass, chaMod, conMod, crowned });
+    if (pools.momentum && !pools.momenta.includes(pools.momentum)) pools.momentum.max = capFor(pools.momentum, ranksOf, { hourglass, chaMod, conMod, crowned });
     // A pool the character does not hold keeps its stored value untouched and
     // reports a null cap. Zeroing it here would discard data every time a GM
     // detached a class item, and the null `max` is already what tells the sheet
@@ -568,6 +584,8 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     this.vulnerable = [...rungs.vulnerable];
     // **A DEATH KNIGHT IS VULNERABLE (HOLY)** (02 §7's Risen Knight, 10 §9's Risen; D-946).
     if (undeadSelf) for (const type of UNDEAD_CLASS_VULNERABLE) if (!this.vulnerable.includes(type)) this.vulnerable.push(type);
+    // **AND WHAT A LAID EFFECT MAKES IT VULNERABLE TO** (07 §17's Wracking Pain; D-1366), off its active effects.
+    this.vulnerable = withLaidVulnerable(this.vulnerable, this.parent?.effects ?? []);
     // What the Signatures on what is WORN add up to (08 §20, D-692). Read
     // here, applied below beside the numbers each of them belongs to.
     const signature = signatureEffects(usableGear, bearer);
@@ -590,6 +608,7 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // **AND WHAT A USE REFUSES FOR A SPAN** (04's Unfettered: *you cannot be **Slowed**
     // until your next turn*; the Legacy branches' door 25): the conditions an active
     // effect's `immuneTo` names, which ends with the effect.
+    const peopleRace = this.parent?.items?.find?.(i => i.type === "race") ?? null;
     const spanImmune = immunitiesFrom((this.parent?.effects ?? []).filter(e => e.active !== false && e.disabled !== true).map(e => e.flags?.["azeroth-rpg"] ?? {}));
     this.conditionImmunities = [...new Set([
       ...(this.conditionImmunities ?? []),
@@ -600,7 +619,13 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
       // **AND A DEATH KNIGHT REFUSES POISON AND DISEASE** (02 §7's Risen Knight; D-946): the
       // door `toggleStatusEffect` and the affliction door (`effects/afflictions.mjs#afflict`,
       // `rules/afflictions.mjs#afflictRefusal`) both read this list.
-      ...(undeadSelf ? UNDEAD_CLASS_IMMUNE : [])
+      ...(undeadSelf ? UNDEAD_CLASS_IMMUNE : []),
+      // **AND WHAT A PEOPLE REFUSES** (02 §5; the San'layn plan's F1, D-1140): the Forsaken and the
+      // San'layn are immune to disease, which nothing built before `peoples.mjs`.
+      ...peopleImmune(peopleRace?.system?.identifier ?? peopleRace?.name ?? null),
+      // **AND 04's SERENE DISDAIN** (the Sovereign: *While you have 1 or more Tribute, you cannot be Frightened.
+      // At rank 2, ... also cannot be Charmed*): off the Tribute held as this preparation reads it.
+      ...sereneImmune({ rank: sovRankIn(talentRows, SERENE_DISDAIN.identifier), tribute: (this.momenta ?? []).find(p => p.name === "tribute")?.value ?? 0 })
     ])];
     this.damageRatingBonus = rungs.damageBonus;
     // **WHAT ADDS TO THE DAMAGE, BY LANE AND BY TYPE** (04, D-711 phase 2).
@@ -671,6 +696,9 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     this.needsNoFood = needsNoFood({ classes: this.classKeys, race: race?.system?.identifier ?? race?.name ?? null, endings: rungs.endings, rungs: rungs.rungs, undead: this.undead });
     // And who needs no DRINK either (O-331): Undeath's rung at 5 lifts the food alone.
     this.needsNoDrink = needsNoDrink({ classes: this.classKeys, race: race?.system?.identifier ?? race?.name ?? null, endings: rungs.endings, undead: this.undead });
+    // **AND WHO RESTS ON BLOOD** (02 §5's San'layn; D-1141): both rest doors and the rest window
+    // read it, and it outranks the two above (D-1142).
+    this.bloodFed = bloodFed({ race: race?.system?.identifier ?? race?.name ?? null });
     // A shape's size is the block's (D-769): the token, moving through a space
     // and being moved read it. **CARRYING DOES NOT** (the lead, 2026-10-03:
     // *"Druid's own carry"*): the bag slots below read the race's size and the
@@ -892,6 +920,18 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     this.defense = physical && Number.isFinite(physical.defense)
       ? physical.defense + worn.scalars.defense
       : 10 + this.abilities.dex.mod + ownEffects.defense + worn.scalars.defense;
+    // **04's UNTOUCHABLE** (the Sovereign: *While you have temporary Health, your Defense rises by 1 per rank*):
+    // read off the temporary Health as this preparation holds it, and gone with it.
+    this.defense += untouchableDefense({ rank: sovRankIn(talentRows, UNTOUCHABLE.identifier), temp: this.health?.temp ?? 0 });
+    // **THE BANES THIS SOVEREIGN LAYS ON A TEST AT IT** (04's The Crimson Throne on a weapon attack at 5 Tribute or
+    // more; 02 §7's Withering Contempt on a Casting Test whose spell targets it): derived, read by the target
+    // snapshot (`roll-dialog.mjs#targetSnapshots`) and drawn as automatic lines.
+    const tributeHeld = (this.momenta ?? []).find(p => p.name === "tribute")?.value ?? 0;
+    this.sovereignDeterred = sovereignTargetBanes({ kind: "attack", throne: sovRankIn(talentRows, CRIMSON_THRONE.identifier) > 0, tribute: tributeHeld });
+    // **07 §17's VEIL OF MIST** (*each weapon attack against you takes a Bane*; D-1364): the same lane, off the
+    // caster's own effect.
+    this.sovereignDeterred = [...this.sovereignDeterred, ...veilBanesOn(this.parent?.effects ?? [])];
+    this.castDeterred = sovereignCastBanes({ contempt: (this.parent?.items ?? []).some(i => i.type === "feature" && i.name === WITHERING_CONTEMPT.feature) });
 
     // Initiative is never rolled (D-256): it is a static number the side order
     // is compared on. `initiativeFor` rather than `10 +` written a second time,

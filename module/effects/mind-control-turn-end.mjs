@@ -9,7 +9,10 @@ export async function endMindControlTurn(combat,combatant,context,{
   game=globalThis.game,resolve=globalThis.fromUuidSync,repeat=repeatMindControl,settle=settleMindControlSchedule,
   roll=async({actor,resilience,dc,resistOf})=>{
     const {resilienceWithDialog}=await import("../applications/actions.mjs");
-    return resilienceWithDialog(actor,resilience,null,{dc,link:resistOf});
+    // 04's Abject Obedience: *It takes a Bane on that Test while it is Bleeding* (the Sovereign).
+    const {obedienceRepeatBanes}=await import("./sovereign-features.mjs");
+    const talentBanes=obedienceRepeatBanes(actor);
+    return resilienceWithDialog(actor,resilience,null,{dc,link:resistOf,...(talentBanes?{talentBanes}:{})});
   }
 }={}) {
   const actor=combatant?.actor;

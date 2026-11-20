@@ -135,6 +135,10 @@ import { DK_FEATURE_ANIMATIONS, DK_FILTERS, DK_SPELL_ANIMATIONS } from "./death-
 // The Necromancer's (the Necromancer plan's Phase 6): its twelve tier 1 spells, its features, talents
 // and events, and its recolours.
 import { NECRO_FEATURE_ANIMATIONS, NECRO_FILTERS, NECRO_SPELL_ANIMATIONS } from "./necromancer-animations.mjs";
+// The Sovereign's pool cues (the San'layn and Sovereign plan's C14, CORE's share).
+import { SOVEREIGN_CORE_ANIMATIONS } from "./sovereign-core-animations.mjs";
+// The Sovereign's spells, states, features and talents, and its recolours (the plan's C14 and Phase 6).
+import { SOV_FEATURE_ANIMATIONS, SOV_FILTERS, SOV_SPELL_ANIMATIONS } from "./sovereign-animations.mjs";
 import { FORCED_MOVE_KEY } from "./animation-records.mjs";
 
 /* ------------------------------------------------------------------ */
@@ -308,7 +312,9 @@ export const FILTERS = Object.freeze({
   // The Death Knight's Blood, Frost and grave-green (`rules/death-knight-animations.mjs`).
   ...DK_FILTERS,
   // The Necromancer's plague yellow, gut thread and grave vapour (`rules/necromancer-animations.mjs`).
-  ...NECRO_FILTERS
+  ...NECRO_FILTERS,
+  // The Sovereign's blood red, crimson gaze and majesty (`rules/sovereign-animations.mjs`).
+  ...SOV_FILTERS
 });
 
 /* ------------------------------------------------------------------ */
@@ -1458,7 +1464,11 @@ export const SPELL_ANIMATIONS = Object.freeze({
 
   /* ================= The Necromancer's tier 1 (07 §17, Restricted Necromancer) ================= */
   // Twelve rows, written in `rules/necromancer-animations.mjs` (the Necromancer plan's Phase 6).
-  ...NECRO_SPELL_ANIMATIONS
+  ...NECRO_SPELL_ANIMATIONS,
+
+  /* ================= The Sovereign's tier 1 (07 §17, Restricted Sovereign) ================= */
+  // Ten rows, written in `rules/sovereign-animations.mjs` (the San'layn and Sovereign plan's C14).
+  ...SOV_SPELL_ANIMATIONS
 });
 
 /* ------------------------------------------------------------------ */
@@ -2065,6 +2075,20 @@ export const FEATURE_ANIMATIONS = Object.freeze({
   },
 
   /* ---- 02 §5's racial Uses (the B8a2 pass) ---- */
+  // The San'layn's bite (02 §5's Open Vein; D-1146): the teeth at the creature, a spray of red
+  // there, a thread of blood drawn back to the San'layn and a red glow as it heals what it took.
+  // The creature's Test decides the damage and the heal; the bite plays at the Use, as Life
+  // Drain's channel does.
+  "open-vein": {
+    cues: [cue("use", [
+      fx("jb2a.bite.200px.red", { place: "target", scale: 0.9 }),
+      snd("psfx.consumables.food-and-drink.consume.food.bite.soft.001", { volume: 0.9 }),
+      fx("jb2a.liquid.splash02.red", { place: "target", scale: 0.6, delay: 150 }),
+      fx("jb2a.energy_strands.range.standard.purple.01", { place: "target>source", travel: "stretch", filter: "BLOOD_RAGE", delay: 250 }),
+      snd("psfx.consumables.food-and-drink.consume.food.swallow.001", { delay: 450, volume: 0.8 }),
+      fx("jb2a.healing_generic.200px.purple", { place: "source", scale: 0.8, filter: "BLOOD_RAGE", delay: 600 })
+    ])]
+  },
   // The tauren's stamp: the ground cracking and a ring of dust thrown out at the hooves.
   // Nothing is drawn on an enemy: who falls Prone is its Test's, and the failure lands it.
   "war-stomp": {
@@ -3816,11 +3840,29 @@ export const FEATURE_ANIMATIONS = Object.freeze({
     ]
   },
 
+  /* ---- 02 §7's Sovereign: the claws coming out (the plan's C14; D-1168) ---- */
+  // The Equip toggle's brief cue (`rules/claws.mjs#CLAWS_EQUIP_OPTION`): red claws flash at the
+  // Sovereign and a dark swoosh plays. A claw ATTACK plays the `claw` strike recipe, struck with
+  // the Sovereign's Claws' own form (`strikes.mjs#BASE_FORMS`).
+  "claws-equip": {
+    cues: [cue("use", [
+      fx("jb2a.claws.200px.red", { place: "source", scale: 0.55 }),
+      snd("psfx.weapon-swooshes.necrotic.v1.group01", { volume: 0.5 })
+    ])]
+  },
+
   /* ---- 02 §7's Death Knight and 04's Blood and Frost, and the rune flare (run F5) ---- */
   ...DK_FEATURE_ANIMATIONS,
   // 02 §7's Necromancer, 04's Flesh, Bone and Damned, and the Essence wisp, the collapse, the
   // rising and the graft stitching (`rules/necromancer-animations.mjs`, the plan's Phase 6).
-  ...NECRO_FEATURE_ANIMATIONS
+  ...NECRO_FEATURE_ANIMATIONS,
+  // 02 §7's Sovereign: the feeding stream, the Tribute wisp and the Health-drain pulse, each riding the
+  // pool write that makes it (`rules/sovereign-core-animations.mjs`; the San'layn and Sovereign plan's C14).
+  ...SOVEREIGN_CORE_ANIMATIONS,
+  // 02 §7's Sovereign and 04's Dominion, Vainglorious and Ravenous, and the states its blood magic lays - a
+  // blood curse, Blood Prison's bonds, the latch, the leash, the prey mark, the Blood Monarch's wings
+  // (`rules/sovereign-animations.mjs`; the plan's C14).
+  ...SOV_FEATURE_ANIMATIONS
 });
 
 /* ------------------------------------------------------------------ */

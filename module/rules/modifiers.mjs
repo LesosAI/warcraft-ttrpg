@@ -74,6 +74,7 @@ function labelFor(id) {
  * @param {boolean} [s.swarm]            the roller is a swarm (13 §4)
  * @param {boolean} [s.swarmThinned]     and below half its Health
  * @param {string[]} [s.gearBoons]       worn items granting a Boon on this skill (08 §6)
+ * @param {string[]} [s.spellSkillBoons] the roller's own spells granting a Boon on this skill against creatures they name (07 §17), a judgement line
  * @param {string[]} [s.standingBanes]   what Banes this skill: a creature's own passive (14, D-691)
  * @param {number} [s.standingTestBoons] Boons on this KIND of Test, from a passive
  * @param {number} [s.standingTestBanes] Banes on this kind of Test, from a passive
@@ -174,6 +175,7 @@ export function situationalModifiers({
   swarm = false,
   swarmThinned = false,
   gearBoons = [],
+  spellSkillBoons = [],
   standingBanes = [],
   standingTestBoons = 0,
   standingTestBanes = 0,
@@ -193,6 +195,8 @@ export function situationalModifiers({
   talentCancels = null,
   packFlank = null,
   targetDeterred = null,
+  // 02 §7's Withering Contempt: a Bane on a Casting Test whose spell targets its holder.
+  targetCastBanes = null,
   talentBanes = null,
   opening = null,
   untrained = [],
@@ -301,6 +305,9 @@ export function situationalModifiers({
   // 08 §6: a worn affix's Boon on the skill it names - one per item, the
   // roller's own gear, so automatic and still editable (2026-09-06).
   if (kind === "skill" && skill && gearBoons.length) auto("gearBoon", { boons: gearBoons.length });
+  // 07 §17's Air of Majesty and Read the Supplicant: a Boon *against creatures that can see you* or *living
+  // creatures within 10 feet* - whether the creature qualifies is the table's call (D2 §12), so unticked.
+  if (kind === "skill" && skill && spellSkillBoons.length) judge("spellSkillBoon", { boons: spellSkillBoons.length, name: spellSkillBoons.join(", ") });
   // 14: a creature's OWN standing passive - the gnoll that laughs takes a Bane
   // on every Stealth Test, the bandit among bandits a Boon on its attacks. It
   // is the roller's own state, so automatic and still editable (D-691).
@@ -335,6 +342,9 @@ export function situationalModifiers({
   // every attack), a Boon the next attack was promised (Follow Through), and a
   // Boon somebody else laid (Blessing) - the roller's own state, all three.
   if ((talentBoons?.boons ?? 0) > 0) auto("talentBoon", { boons: talentBoons.boons, name: (talentBoons.names ?? []).join(", ") || null });
+  // **02 §7's WITHERING CONTEMPT** (the Sovereign: *A Casting Test for a spell that targets you takes a Bane*;
+  // R27, any caster): the target's own feature, so automatic and named.
+  if (kind === "casting" && (targetCastBanes?.banes ?? 0) > 0) auto("targetCastBane", { banes: targetCastBanes.banes, name: (targetCastBanes.names ?? []).join(", ") || null });
   // 04's Reckless, a line of its own: the attack made with it TICKED lays the
   // exposure (`rollTest` reads the chosen ids), so it cannot share an id.
   if ((reckless?.boons ?? 0) > 0) auto("reckless", { boons: reckless.boons, name: (reckless.names ?? []).join(", ") || null });

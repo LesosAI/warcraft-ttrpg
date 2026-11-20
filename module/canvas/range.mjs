@@ -113,7 +113,9 @@ export function measureTargets(actor, targets = [], { source = null } = {}) {
     if (doc?.parent && !self) distance = mine ? feetApart(mine, doc) : null;
     if (self) distance = 0;
     const willing = self || willingOf(actor, other, { ownerToken: mine, otherToken: doc });
-    out.push({ name: t.name ?? doc?.name ?? other?.name ?? "", distance, self, willing, actor: other });
+    // Charmed, which a *willing or Charmed* Target line takes as willing (07 §17's Blood Bond; D-1373).
+    const charmed = other?.statuses?.has?.("charmed") === true;
+    out.push({ name: t.name ?? doc?.name ?? other?.name ?? "", distance, self, willing, charmed, actor: other });
   }
   return out;
 }

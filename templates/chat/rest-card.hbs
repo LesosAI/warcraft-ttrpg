@@ -16,6 +16,10 @@
     {{#if drank}}
     <p class="azeroth-card-line"><span>{{localize "AZEROTH.Rest.Drank"}}</span><strong>{{drank}}</strong></p>
     {{/if}}
+    {{!-- Where a San'layn's blood came from (02 §5; D-1141, D-1143), one line a source. --}}
+    {{#each bloodLines as |b|}}
+    <p class="azeroth-card-line" data-rest-blood><span>{{localize "AZEROTH.Rest.Blood"}}</span><strong>{{b}}</strong></p>
+    {{/each}}
     {{#if restored}}
     <p class="azeroth-card-line"><span>{{localize "AZEROTH.Rest.UsesRestored"}}</span><strong>{{restored}}</strong></p>
     {{/if}}

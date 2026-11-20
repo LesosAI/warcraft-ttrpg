@@ -36,7 +36,7 @@ import { keptBy } from "./legacy-branches.mjs";
 import { startingRacialState } from "./creator-choices.mjs";
 import { classLearnsSpell } from "./spell-access.mjs";
 // The Mortal guise (the Chromatic Champion plan).
-import { guiseFacts, guiseRequired, guiseSnapshot, isGuiseRace, peopleOf, raceOpensClass } from "./guise.mjs";
+import { guiseFacts, guiseRequired, guiseSnapshot, isGuiseRace, peopleOf, raceOpensClass, wornAsGuise } from "./guise.mjs";
 
 /**
  * The ten steps, in 01 §1's order. Nothing in a step depends on a step below it.
@@ -160,7 +160,9 @@ export const METHODS = Object.freeze(["array", "pointBuy", "roll"]);
 // The Death Knight twelfth, after the Chronomancer (D-942), where 02 §7 writes it up. The
 // Necromancer thirteenth, after the Death Knight (the Necromancer plan; the orchestrator's
 // placement, last as each new class has been - the Vitest says so if 02 lays it elsewhere).
-export const CLASS_ORDER = Object.freeze(["warrior", "paladin", "ranger", "rogue", "priest", "shaman", "mage", "warlock", "druid", "chromatic-champion", "chronomancer", "death-knight", "necromancer"]);
+// The Sovereign fourteenth, after the Necromancer (the San'layn and Sovereign plan; last, as each new
+// class has been - the Vitest says so if 02 lays it elsewhere).
+export const CLASS_ORDER = Object.freeze(["warrior", "paladin", "ranger", "rogue", "priest", "shaman", "mage", "warlock", "druid", "chromatic-champion", "chronomancer", "death-knight", "necromancer", "sovereign"]);
 
 /** "Take these six numbers and assign each to an ability." */
 export const ARRAY = Object.freeze([16, 14, 13, 12, 10, 8]);
@@ -651,6 +653,8 @@ export function validate(p = {}) {
   if (guiseRequired({ race: p.race ?? null, cls: p.cls ?? null })) {
     if (!p.guise) refuse("noGuise", "guise");
     else if (isGuiseRace(p.guise)) refuse("guiseNotAPeople", "guise", { name: p.guise.name ?? "" });
+    // A people 02 §5 keeps out of the guise (the San'layn: A.9 Q6, *No*; D-1153), in words.
+    else if (!wornAsGuise(p.guise)) refuse("guiseNotWorn", "guise", { name: p.guise.name ?? "" });
   }
 
   // 3 — abilities, by method.

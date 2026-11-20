@@ -167,8 +167,33 @@ export const ESCAPE_BY_HOLD = Object.freeze(["Stasis"]);
  * (`effects/mind-control-repeat.mjs#repeatMindControl`); its bold **Stunned** is the CASTER's.
  */
 export const ESCAPE_BY_DOOR = Object.freeze({
-  "Puppet of Flesh": "the Mind Control door's repeated Spirit Test at the end of each of the controlled creature's turns (effects/mind-control-repeat.mjs#repeatMindControl), its Stunned the caster's own"
+  "Puppet of Flesh": "the Mind Control door's repeated Spirit Test at the end of each of the controlled creature's turns (effects/mind-control-repeat.mjs#repeatMindControl), its Stunned the caster's own",
+  // **THE SOVEREIGN'S BLOOD CURSES** (02 §7; D-1248): *It repeats the Test at the end of each of its turns,
+  // and the spell ends on a success* ends what the failure laid, and three of them lay no condition at all
+  // (a lost damage, a Bane, no healing). The curse door writes the repeat on the curse effect itself as a
+  // `curse` escape (`CURSE_ESCAPE`), and on Edict of the Crown's Slowed with its lost damage beside it.
+  "Decree of Frailty": "the blood curse's repeated Spirit Test on its curse effect (effects/sovereign-spells.mjs#layBloodCurse), a pass ending the lost damage",
+  "Overawe": "the blood curse's repeated Spirit Test on its curse effect (effects/sovereign-spells.mjs#layBloodCurse), a pass ending the first Attack Test's Bane",
+  "Edict of Denial": "the blood curse's repeated Body Test on its curse effect (effects/sovereign-spells.mjs#layBloodCurse), a pass ending the bar on healing",
+  "Edict of the Crown": "the blood curse's repeated Spirit Test on the Slowed it laid, the lost damage beside it (effects/sovereign-spells.mjs#layBloodCurse)",
+  // The second batch (D-1374): Burden of Sin lays no condition, and Hemoplague's *Bleeding 3* is no condition the repeat
+  // door ends, so each rides the curse's own escape, a pass ending the effect it is on.
+  "Burden of Sin": "the blood curse's repeated Spirit Test on its curse effect (effects/sovereign-spells.mjs#layBloodCurse), a pass ending the retaliation",
+  "Hemoplague": "the blood curse's repeated Body Test on the Bleeding 3 it laid, as a curse escape (effects/sovereign-spells.mjs#layBloodCurse), a pass ending the Bleeding and the spread"
 });
+
+/**
+ * **A CURSE THAT LAYS NO CONDITION** (02 §7's blood curse; D-1248): the escape kind the curse door
+ * writes on an effect that carries the blood-curse tag and no status. A pass deletes the effect, as a
+ * pass on any escape deletes the effect it rides (`dice/chat.mjs#escapeOutcome`).
+ */
+export const CURSE_ESCAPE = "curse";
+
+/** The word a prompt names an escape by: the condition's, or the curse's own for `CURSE_ESCAPE`. */
+export function escapeLabelKey(escape) {
+  if (escape?.condition === CURSE_ESCAPE) return "AZEROTH.BloodCurse.EscapeLabel";
+  return null;
+}
 
 const RESILIENCES = Object.freeze(["body", "reflex", "spirit"]);
 
@@ -350,7 +375,8 @@ export function cleanEscape(raw) {
   // This exception does not give every Charmed effect a repeat Test.
   const compel = ["compel", "dominate"].includes(raw.identifier) && raw.condition === "charmed"
     && raw.on === "turnEnd" && raw.resilience === "spirit";
-  if ((!ESCAPE_CONDITIONS.includes(raw.condition) && !compel) || !ESCAPE_ON.includes(raw.on) || !RESILIENCES.includes(raw.resilience)) return null;
+  const curse = raw.condition === CURSE_ESCAPE;
+  if ((!ESCAPE_CONDITIONS.includes(raw.condition) && !compel && !curse) || !ESCAPE_ON.includes(raw.on) || !RESILIENCES.includes(raw.resilience)) return null;
   const dc = Math.trunc(Number(raw.dc));
   return {
     ...(compel ? { identifier: raw.identifier } : {}),
@@ -385,6 +411,8 @@ export function cleanEscape(raw) {
 export function escapeOfEffect(effect) {
   if (!effect || effect.disabled === true || effect.active === false || sustainTransferPending(effect)) return null;
   const escape = cleanEscape(effect.flags?.["azeroth-rpg"]?.[ESCAPE_FLAG]);
+  // A curse's escape rides the effect the blood-curse tag is on, which carries no status (D-1248).
+  if (escape?.condition === CURSE_ESCAPE) return effect.flags?.["azeroth-rpg"]?.bloodCurse ? escape : null;
   return escape && [...(effect.statuses ?? [])].includes(escape.condition) ? escape : null;
 }
 

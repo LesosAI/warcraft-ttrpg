@@ -172,7 +172,7 @@ export class AzerothLootGenerator extends HandlebarsApplicationMixin(Application
     };
     const BOSS_FIELDS = ["system.provenance", "flags.azeroth-rpg.classic.boss"];
     const [weapons, armor, gear, affixList, bestiary] = await Promise.all([
-      index(PACKS.weapons, ["system.cost", "system.rarity", "system.rating", "system.range", "system.traits", "system.quantity", "system.fits", "system.budget", "system.source", ...BOSS_FIELDS]),
+      index(PACKS.weapons, ["system.identifier", "system.cost", "system.rarity", "system.rating", "system.range", "system.traits", "system.quantity", "system.fits", "system.budget", "system.source", ...BOSS_FIELDS]),
       index(PACKS.armor, ["system.cost", "system.rarity", "system.category", "system.shield", "system.apBonus", "system.traits", "system.budget", "system.source", ...BOSS_FIELDS]),
       // **`system.use` IS INDEXED, AND THE WINDOW WAS BLIND WITHOUT IT**
       // (D-677's rule, found 2026-09-14). `rules/affixes.mjs#canGoOn` refuses

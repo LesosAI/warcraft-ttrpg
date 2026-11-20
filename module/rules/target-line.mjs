@@ -50,6 +50,8 @@ export function readTargetLine(line) {
     max: Number.isFinite(max) ? max : null,
     self: /^self and\b|\byou and up to\b/.test(t),
     willing: /\bwilling\b|\ball(?:y|ies)\b|\bfriendly targets?\b/.test(t),
+    // 07 §17's Blood Bond: *that is willing or Charmed* (D-1373) - a Charmed creature is taken as a willing one is.
+    orCharmed: /\bwilling or charmed\b/.test(t),
     otherThanYou: /\bother than (?:you|yourself)\b/.test(t),
     chain: /\bthen (?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve) more\b/.test(t)
   };
@@ -109,7 +111,7 @@ export function judgeNamed(read, named = []) {
     if (count > read.max) return { ok: false, reason: "AZEROTH.Range.TooMany", max: read.max, count };
   }
   if (read?.willing) {
-    const unwilling = list.find(r => r.self !== true && r.willing !== true);
+    const unwilling = list.find(r => r.self !== true && r.willing !== true && !(read.orCharmed === true && r.charmed === true));
     if (unwilling) return { ok: false, reason: "AZEROTH.Range.NotWilling", name: unwilling.name ?? "" };
   }
   return { ok: true };

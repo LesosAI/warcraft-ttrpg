@@ -16,6 +16,8 @@
 import { AZEROTH } from "../config.mjs";
 // The class that pays its spells in Momentum (D-944), kept beside the runes it holds.
 import { CLASS_SPELL_POOL } from "./runes.mjs";
+// The Sovereign's Vitae: short of a cost it takes Health, 1 for 1 (02 §7; the plan's V4).
+import { VITAE, vitaePayment } from "./vitae.mjs";
 // 05's *Round - ~6 seconds*: a turn's span out of a fight is one of them (D-778).
 import { ROUND_SECONDS } from "./area-ticks.mjs";
 // 07's *The Druid in a form*: 1 Ferocity for every 2 Mana, rounded up (D-769).
@@ -545,7 +547,7 @@ export function swiftCast({ row = null, spellAction = null, healing = false, use
  * @param {{inShapeshiftForm?: boolean, pool?: string|null, free?: boolean}} [o]
  * @returns {{pool: string, amount: number}}
  */
-export function manaPrice(mana = 0, { inShapeshiftForm = false, pool = null, free = false } = {}) {
+export function spellPrice(mana = 0, { inShapeshiftForm = false, pool = null, free = false } = {}) {
   if (free === true) return { pool: typeof pool === "string" && pool ? pool : "mana", amount: 0 };
   const m = Math.max(0, Number(mana) || 0);
   if (typeof pool === "string" && pool && pool !== "mana" && m > 0) return { pool, amount: m };
@@ -562,6 +564,14 @@ export function manaPrice(mana = 0, { inShapeshiftForm = false, pool = null, fre
  * POWER name, since the runes are what leave the Mana with nowhere to come from.
  */
 export { CLASS_SPELL_POOL };
+
+/**
+ * **THE OLD NAME, KEPT ONE RELEASE** (the San'layn and Sovereign plan's V1: *Rename `manaPrice` to
+ * `spellPrice`, keeping an alias for one release and a census on the old name*). A price is no longer
+ * always Mana - Ferocity, Rage, Runic Power, Focus, Vitae - so the reader is `spellPrice`, and
+ * `vitae.test.mjs` fails a caller of this name anywhere in `module/` outside this file.
+ */
+export const manaPrice = spellPrice;
 
 /**
  * The pool a cast pays in: a talent's (`class-talents.mjs#spellPoolFor`, asked first,
@@ -660,10 +670,17 @@ export function castingManaPool({ creature = false, powers = [], snapshot = [], 
 export function castRefusal({ mana = 0, pool = null, inForm = false, ferocity = null, health = 0, overchannelHealth = 0, spellHealth = 0, noCasting = [], payWith = null, payPool = null } = {}) {
   const barred = (noCasting ?? []).filter(n => typeof n === "string" && n);
   if (barred.length) return { reason: "Garroted", by: barred };
-  const price = manaPrice(mana, { inShapeshiftForm: inForm, pool: payWith });
+  const price = spellPrice(mana, { inShapeshiftForm: inForm, pool: payWith });
   if (price.pool === "ferocity") {
     if (!ferocity) return { reason: "InForm" };
     if ((ferocity.value ?? 0) < price.amount) return { reason: "NoFerocity", amount: price.amount };
+  } else if (price.pool === VITAE) {
+    // **VITAE, AND HEALTH BEHIND IT** (02 §7: *When a cost is more than the Vitae you hold, spend all
+    // your Vitae and pay the rest in Health ... You cannot pay more Health than you have*; R10): refused
+    // only where the cost is more than the Vitae plus the Health the cast's own Health prices leave.
+    if (!payPool) return { reason: "NoPool", pool: price.pool, amount: price.amount };
+    const left = Math.max(0, (Number(health) || 0) - (Number(overchannelHealth) || 0) - (Number(spellHealth) || 0));
+    if (vitaePayment({ held: payPool.value ?? 0, cost: price.amount, health: left }).refusal) return { reason: "NoVitae", pool: VITAE, amount: price.amount };
   } else if (price.pool !== "mana") {
     if (!payPool) return { reason: "NoPool", pool: price.pool, amount: price.amount };
     if ((payPool.value ?? 0) < price.amount) return { reason: "NoPower", pool: price.pool, amount: price.amount };
@@ -683,10 +700,12 @@ export function castRefusal({ mana = 0, pool = null, inForm = false, ferocity = 
  *
  * @param {{price: {pool: string, amount: number}, pool?: {value: number}|null, ferocity?: {value: number}|null, payPool?: {value: number}|null}} o
  */
-export function castCanPay({ price, pool = null, ferocity = null, payPool = null } = {}) {
+export function castCanPay({ price, pool = null, ferocity = null, payPool = null, health = 0 } = {}) {
   const amount = Math.max(0, Number(price?.amount) || 0);
   if (amount === 0) return true;
   if (price.pool === "ferocity") return Boolean(ferocity) && (ferocity.value ?? 0) >= amount;
+  // Vitae with Health behind it (02 §7; R10).
+  if (price.pool === VITAE) return Boolean(payPool) && !vitaePayment({ held: payPool.value ?? 0, cost: amount, health }).refusal;
   if (price.pool !== "mana") return Boolean(payPool) && (payPool.value ?? 0) >= amount;
   return Boolean(pool) && (pool.value ?? 0) >= amount;
 }
@@ -796,7 +815,8 @@ export function showsCreatureSpells({ names = [], dc = null, spellItems = 0 } = 
  * @returns {string|null}
  */
 // And *10 minutes* (the Necromancer's roleplay spells, D-1050): the same refusal, its own word.
-export const TIMED_SPELL_ACTIONS = Object.freeze(["minute", "tenMinutes"]);
+// And *1 hour* (07 §17's Blood Bond, a ritual; D-1360).
+export const TIMED_SPELL_ACTIONS = Object.freeze(["minute", "tenMinutes", "hour"]);
 export function timedCastRefusal({ action = null, inFight = false } = {}) {
   return TIMED_SPELL_ACTIONS.includes(action) && inFight === true ? "AZEROTH.Action.TimedInFight" : null;
 }

@@ -38,11 +38,15 @@ import { loopsFor, plan, pruneKeys, visibleLoops } from "../rules/animation.mjs"
 import * as tables from "../rules/animation-table.mjs";
 import { stateCueVerdict } from "../rules/animation-records.mjs";
 import { animationAvailability, isSettled, loopsOn, setSettled } from "./availability.mjs";
+// The Sovereign's pool cues, read off the pool write's options (the San'layn and Sovereign plan's C14).
+import { sovereignCoreRecords } from "../rules/sovereign-core-animations.mjs";
+// The Sovereign's prey mark, read off the mark's own flag write (the plan's C14).
+import { sovereignAnimationRecords } from "../rules/sovereign-animations.mjs";
 import { SequencerPlayer, warn } from "./player.mjs";
 import {
   cardPrivacyKey, cardRecord, cardRecords, effectRecord, effectRecords, effectUpdateRecords, factsFor, featureCardSeen,
   liveFeatureCasts, markPrivacySeeded, notePrivacy, privateCasts, regionRecord, resistCueRecord, runeSpendRecords, stateSnapshot,
-  forcedMoveRecords, essenceGainRecords, collapseRecords, soulHarvestRecords
+  forcedMoveRecords, essenceGainRecords, collapseRecords, soulHarvestRecords, clawsEquipRecords
 } from "./records.mjs";
 import {
   animationHidden, animationStops, setAnimationHidden, setAnimationStops
@@ -598,12 +602,21 @@ export function registerAnimationHooks() {
   // operation (`documents/runes.mjs#spendRunesOn`), which reaches every client's hook, so each
   // plays the flare for itself. Any other actor update carries no such key and implies nothing.
   Hooks.on("updateActor", guarded("rune-spend", (actor, changed, options) => playCuesFor(runeSpendRecords(options))));
+  // **THE CLAWS COMING OUT** (02 §7; D-1168): the sheet's Equip toggle names the token on the
+  // claws' own update, which reaches every client's hook. Any other item update implies nothing.
+  Hooks.on("updateItem", guarded("claws-equip", (item, changed, options) => playCuesFor(clawsEquipRecords(item, changed, options))));
   // **THE ESSENCE WISP** (02 §7's Necromancer; the animation contract's §2): the death watch writes
   // the gain on the same pool write that raises the Essence, so every client plays it for itself.
   Hooks.on("updateActor", guarded("essence-gain", (actor, changed, options) => playCuesFor(essenceGainRecords(options))));
   // **SOUL HARVEST'S WISP** (02 §7's Warlock; the Necromancer plan's Phase 7): the same death watch
   // writes it on the Mana write it makes, in the Essence wisp's shape, under its own option.
   Hooks.on("updateActor", guarded("soul-harvest", (actor, changed, options) => playCuesFor(soulHarvestRecords(options))));
+  // **THE SOVEREIGN'S FEEDING STREAM, TRIBUTE WISP AND HEALTH-DRAIN PULSE** (the San'layn and Sovereign
+  // plan's C14): each rides the pool write that makes it (`rules/sovereign-core-animations.mjs`).
+  Hooks.on("updateActor", guarded("sovereign-pools", (actor, changed, options) => playCuesFor(sovereignCoreRecords(options))));
+  // **THE SOVEREIGN'S PREY MARKED** (02 §7's Hunt Mortal; the plan's C14): the mark door writes the cue on the
+  // same update that sets the prey flag, which reaches every client's hook. The mark that stands is a loop.
+  Hooks.on("updateActor", guarded("sovereign-prey", (actor, changed, options) => playCuesFor(sovereignAnimationRecords(options))));
   // **A RAISED DEAD COLLAPSING** (the animation contract's section 3): the collapse door writes the
   // bodies on the Token delete that removes them, which reaches every client's hook.
   Hooks.on("deleteToken", guarded("horde-collapse", (token, options) => playCuesFor(collapseRecords(token, options))));
@@ -618,6 +631,9 @@ export function registerAnimationHooks() {
     "createActiveEffect", "updateActiveEffect", "deleteActiveEffect",
     "createRegion", "updateRegion", "deleteRegion",
     "deleteChatMessage",
+    // A fight's end and the world's clock end a Sovereign's prey mark with no write of their own (02 §7:
+    // *The mark ends when ... the fight ends*; outside a fight it lasts 1 minute), so they reconcile too.
+    "deleteCombat", "updateWorldTime",
     "azerothAnimationStops", "azerothAnimationHidden", "azerothAnimationSettings"
   ]) {
     Hooks.on(hook, guarded(hook, () => reconcileSoon()));
@@ -681,7 +697,7 @@ export const animations = {
   plan,
   loopsFor,
   tables,
-  records: { cardRecord, cardRecords, regionRecord, effectRecord, effectRecords, effectUpdateRecords, resistCueRecord, runeSpendRecords, essenceGainRecords, soulHarvestRecords, collapseRecords, forcedMoveRecords, factsFor, stateSnapshot },
+  records: { cardRecord, cardRecords, regionRecord, effectRecord, effectRecords, effectUpdateRecords, resistCueRecord, runeSpendRecords, essenceGainRecords, soulHarvestRecords, collapseRecords, forcedMoveRecords, clawsEquipRecords, factsFor, stateSnapshot },
   director: { reconcile: (options = { force: true }) => reconcileNow(options), setPlayer, resetPlayer, activeLoops, wantedLoops, prune: pruneAnimationKeys },
   // The player that draws nothing, so a batch, a macro or a Playwright script
   // can swap it in without knowing a module path (`quench-tests.mjs` already

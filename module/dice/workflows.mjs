@@ -100,13 +100,13 @@ import { forcedSlOf, resultName, succeeded } from "../rules/resolution.mjs";
 import { areaFor, intScaledArea, lengthenArea, widenArea } from "../rules/areas.mjs";
 // An area that strikes at the start of a turn (D-756): the cast deals none of
 // it, and the tick adds what the caster STANDS on, as the cast does.
-import { areaCarriesSpell, castDealsDamage, castHeals, emptyAreaTick, hasAreaTick, markSpentFirst, roundsIn, tickParts } from "../rules/area-ticks.mjs";
+import { TICK_RATING_FROM, areaCarriesSpell, castDealsDamage, castHeals, emptyAreaTick, hasAreaTick, markSpentFirst, roundsIn, tickParts, tickRating } from "../rules/area-ticks.mjs";
 import { standingFeatureBonus, standingSpellBonus } from "../rules/spell-bonus.mjs";
 import { calledShotCost, situationalModifiers } from "../rules/modifiers.mjs";
 import { endLesserInvisibility } from "../effects/lesser-invisibility.mjs";
 import { requestSpellLockWindow, completeSpellLockWindow } from "../effects/spell-lock-query.mjs";
 import { completeSpellLockGates } from "../effects/spell-lock-gates.mjs";
-import { NEXT_SPELL_FLAG, castRefusal, castingDC, castingManaPool, spellCastingDC, judgeEachTarget, targetSl, grantingClass, isHealingSpell, manaPrice, overchannelCost, overchannelledSL, payFromNow, spellDCFor, spellManaCost, statedCastingDC, swiftCast, takeNextSpell, timedCastRefusal } from "../rules/casting.mjs";
+import { NEXT_SPELL_FLAG, castRefusal, castingDC, castingManaPool, spellCastingDC, judgeEachTarget, targetSl, grantingClass, isHealingSpell, spellPrice, overchannelCost, overchannelledSL, payFromNow, spellDCFor, spellManaCost, statedCastingDC, swiftCast, takeNextSpell, timedCastRefusal } from "../rules/casting.mjs";
 import { resilienceAbility, resilienceRows } from "../rules/resilience.mjs";
 import { injuryConditions } from "../rules/injuries.mjs";
 import { injuryFightOf, injuryProvenance } from "../effects/injury-provenance.mjs";
@@ -416,6 +416,17 @@ import { afterBossPress, bossCardFlags, prepareBossPress, takeMarkedExtra, takeM
 import { bossPressJudgement, bossTurnKey, cleanBossPlan } from "../rules/boss-actions.mjs";
 // A creature's ability that carries a plan, and a summon that arrives later (D-811).
 import { hasCreaturePlan, summonDue } from "../rules/creature-plans.mjs";
+// **THE SOVEREIGN'S CLAWS** (02 §7, 04's Ravenous; the San'layn and Sovereign plan, C16;
+// D-1166, D-1167): the claw rolls one Off-Hand Attack makes, Blooded Claws' free lone blow,
+// and the one hook every claw hit fires.
+import { CLAW_USES_FLAG, freeOffHand, offHandRolls } from "../rules/initiative.mjs";
+import { isClaws as isClawsWeapon } from "../rules/unarmed.mjs";
+import { clawHitPayload, fireClawHits } from "../rules/claw-hit.mjs";
+import { clawRollStamp } from "../rules/claws.mjs";
+// The Sovereign spells' cast doors, asked before their module loads (O-419; `rules/sovereign-scope.mjs`).
+import { sovereignSpellCast } from "../rules/sovereign-scope.mjs";
+// The Sovereign's own spell price (04's Swift Hunger, Crimson Flourish, the Blood Monarch form): pure, read in `castSpell`.
+import { flourishCurrent, sovereignCastPrice } from "../rules/sovereign-talents.mjs";
 
 /**
  * **THE FINISHER AS IT STANDS NOW** (02 §7 with 04's Death Mark, Rupture and
@@ -1078,6 +1089,9 @@ export async function rollTest({
   // (`budget: "reaction"` with `offHand`, which `rules/initiative.mjs#spend` takes off-turn), its
   // Shadow added on the hit off the knight's own row (`effects/death-knight-talents.mjs#dkOnHit`).
   vengeful = null,
+  // **WHICH CLAW ROLL OF THE OFF-HAND ATTACK THIS IS** (04's Ravenous; C16; D-1166): 1 for
+  // the first, then each roll Blooded Claws and Raking Claws add, pressed off the card before.
+  clawRoll = 0,
   echo = 0
 } = {}) {
   if (!militiaDrillSelection(actor.getFlag?.('azeroth-rpg', MILITIA_DRILL_FLAG), chosen, kind).ok) {
@@ -1324,7 +1338,8 @@ export async function rollTest({
   const offHandBuild = kind === "attack" && offHand && !parry ? offHandBuildsFor(talentsHeld, { facts: gateFacts, scope: abilities }) : { builds: false, damage: 0, by: [] };
   // What 05 §11's gain on a hit reads as the off hand: an off hand that builds is read as any other hand.
   const momentumOffHand = offHand && !offHandBuild.builds;
-  const promised = riderAttack ? (actor?.pendingNextAttack?.() ?? null) : null;
+  // The first target's conditions, which a promise held to one reads (07 §17's Scent of Blood; D-1370).
+  const promised = riderAttack ? (actor?.pendingNextAttack?.({ targetStatuses: [...(targetActorOf(list[0])?.statuses ?? [])] }) ?? null) : null;
   // **07 §12's HOURSTRIKE NEEDS A GM WHERE ITS DECAY LANDS ON ANOTHER'S CREATURE** (the 2a
   // review, L2): the promise's Decay is written on the GM's client for a creature this one does
   // not own, so with none online the attack is refused here, before the budget, nothing spent.
@@ -1374,12 +1389,41 @@ export async function rollTest({
   try {
   if (kind === "attack" && !parry && refuseDispersion(actor, "attack")) return null;
   if (kind === "attack" && !parry && refuseDispersedTargets(list)) return null;
+  // **A LONE CLAW BLOW BLOODED CLAWS MAKES FREE** (04: *You may make your Off-Hand Attack with
+  // your claws in a turn in which you do not Attack, and it costs no Half-Action. You can do
+  // this a number of times equal to your tier*; the lead, R45 and R52; D-1166): judged here,
+  // with the budget, and the use marked off only once the budget has agreed. A claw attack that
+  // rides a main-hand Attack costs nothing already and spends no use; Red Feast's form spends none.
+  const clawsWeapon = kind === "attack" && !parry && weaponId ? (actor?.items?.get?.(weaponId) ?? null) : null;
+  const clawsBlow = Boolean(clawsWeapon && clawsWeapon.type === "weapon" && isClawsWeapon(clawsWeapon));
+  const clawFacts = clawsBlow ? (actor.clawFacts?.() ?? null) : null;
+  const clawFree = clawsBlow && offHand ? freeOffHand(clawFacts ?? {}) : null;
+  // **02 §7's LATCHED** (*While you are latched on ... you cannot make an Off-Hand Attack*; the plan's C8): refused
+  // in words before the budget, for a Sovereign who holds a latch.
+  if (kind === "attack" && offHand && !parry && actor?.type === "character" && actor.talentRanks?.("Latch On") > 0) {
+    const { holdsLatch } = await import("../effects/sovereign-features.mjs");
+    if (holdsLatch(actor)) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Sovereign.Latch.NoOffHand", { name: actor.name }));
+      return null;
+    }
+  }
   if (fight && !bossAction && budget !== "none") {
     const combatant = fight.getCombatantsByActor(actor)?.[0] ?? null;
     if (combatant) {
       reloadPaymentStarted = true;
-      const spent = await combatant.spendAction(budget ?? "half", { isAttack: true, isOffHand: offHand, rangeKind: strike?.rangeKind });
-      if (!spent.ok) { reloadPaymentStarted = false; return null; }
+      const lone = combatant.budget?.attacked !== true;
+      const spent = await combatant.spendAction(budget ?? "half", { isAttack: true, isOffHand: offHand, rangeKind: strike?.rangeKind, freeOffHand: clawFree?.free === true });
+      if (!spent.ok) {
+        if (clawFree?.eligible && !clawFree.free && lone) {
+          ui.notifications?.warn(game.i18n.format("AZEROTH.Claws.Refuse.NoFreeUses", { name: actor.name, left: clawFree.left, max: clawFree.max }));
+        }
+        reloadPaymentStarted = false;
+        return null;
+      }
+      if (clawFree?.spendsUse && lone) {
+        await actor.setFlag("azeroth-rpg", CLAW_USES_FLAG, (clawFacts?.spent ?? 0) + 1);
+        ui.notifications?.info(game.i18n.format("AZEROTH.Claws.FreeUsed", { left: Math.max(0, clawFree.left - 1), max: clawFree.max }));
+      }
     }
   }
   // **AN ATTACK ENDS A HIDE** (D-717): the blow is the thing that gives you
@@ -1510,7 +1554,13 @@ export async function rollTest({
   const allModifiers = [...modifiers];
   // An Off-Hand Attack takes -2 (06 SS2, D-409) - not with 04's Second Strike
   // (*Your Off-Hand Attacks do not take the −2*; D-772).
-  const offHandWaived = kind === "attack" && offHand ? offHandPenaltyFor(talentsHeld) : { waived: false, by: [] };
+  // **AND NEVER WITH A LIGHT WEAPON** (06 §1: *A weapon without **Light** takes **−2 on the
+  // Attack Test***; the San'layn and Sovereign plan, B.9's MY READING: *The claws are Light, so
+  // 06's −2 never applies*; D-1165). The door used to lay the −2 on every off-hand blow, a Light
+  // dagger's and the claws' included; the weapon the blow is struck with is read where one is named.
+  const offHandItemTraits = kind === "attack" && offHand && weaponId ? (actor?.items?.get?.(weaponId)?.system?.traits ?? []) : [];
+  const offHandLight = offHandItemTraits.some(t => /^light$/i.test(String(t).trim()));
+  const offHandWaived = kind === "attack" && offHand ? (offHandLight ? { waived: true, by: [] } : offHandPenaltyFor(talentsHeld)) : { waived: false, by: [] };
   if (kind === "attack" && offHand && !offHandWaived.waived) allModifiers.push({ label: "AZEROTH.Dialog.OffHand", value: -2 });
   if (shot.modifier) {
     allModifiers.push({ label: "AZEROTH.Card.CalledShotPenalty", value: shot.modifier });
@@ -1627,9 +1677,26 @@ export async function rollTest({
   if (boonSources.length) {
     roll.options.provenance.push({ label: "AZEROTH.Modifier.LaidBoon", value: null, formula: boonSources.join(", ") });
   }
+  // **04's INSOLENCE REPAID AT RANK 2 IS TAKEN BY THE FIRST SUCH TEST** (R43, *"add a boon to any test"*; O-444):
+  // the skill dialog drew the Boon against the creature that missed (`roll-dialog.mjs`), so this Test takes the
+  // promise against it - after the die, as a laid Bane is spent, and only where one stands (the pure check first,
+  // so no other skill Test loads the Sovereign's door).
+  if (kind === "skill") {
+    const againstUuid = first?.actorUuid ?? targetActorOf(first)?.uuid ?? null;
+    if (againstUuid && (actor.insolenceBoons?.(againstUuid, "skill") ?? 0) > 0) {
+      const { takeInsolence } = await import("../effects/sovereign-features.mjs");
+      await takeInsolence(actor, againstUuid);
+    }
+  }
   // The Effect traits the roll fired (08 §5, 2026-09-06): Nick's damage, a
   // condition the card offers, Maim's table, the rest as fired notes.
   const fired = kind === "attack" ? firedTraits(weaponEffects, outcome) : [];
+  // **04's RAKING CLAWS** (the Sovereign: *it is Bleeding 2, in place of the Bleeding 1 your claws' Bleed gives*):
+  // the claws' own Bleed withdrawn from the card, Raking Claws' Bleeding laid on the claw-hit hook (D-1229).
+  if (clawsBlow && (actor.talentRanks?.("Raking Claws") ?? 0) > 0) {
+    const bleed = fired.findIndex(f => f?.key === "bleed");
+    if (bleed >= 0) fired.splice(bleed, 1);
+  }
   // 08 §12: a poison lands when the weapon lands, and is used up doing it.
   const landed = coatingFired(coating, { success: outcome.success });
   if (landed) fired.push(landed);
@@ -1937,6 +2004,12 @@ export async function rollTest({
       const { dkOnHit } = await import("../effects/death-knight-talents.mjs");
       fired.push(...await dkOnHit({ actor, hit: true, melee: (strike?.rangeKind ?? null) === "melee", first, secondRoll: secondRoll === true,
         offHand: offHand === true, opportunity: opportunity === true, sl: outcome.sl, riposte: Boolean(vengeful), list, recordLanding, recordBuilt, onceMarked: onceMarkedOnHit }));
+    }
+    // **04's BLOODED CLAWS** (the Sovereign; Phase 5): *Your claw hits deal 1 additional Shadow damage per rank* -
+    // a fired row of its own type (D-777), on a claw hit alone (`effects/sovereign-features.mjs#sovereignOnHit`).
+    if (outcome.success && actor?.type === "character" && actor.items?.some?.(i => i.type === "class" && i.system?.identifier === "sovereign")) {
+      const { sovereignOnHit } = await import("../effects/sovereign-features.mjs");
+      fired.push(...await sovereignOnHit({ actor, weaponId }));
     }
     // And on an Opportunity Attack alone where the row says so (04's Hold the Hall:
     // *On a hit it is knocked Prone*; the Legacy branches' door 22).
@@ -2790,6 +2863,15 @@ export async function rollTest({
   const offHandWeapon = kind === "attack" && !parry && !offHand && paidForItself && myTurn
     ? ((actor?.readyWeapons?.() ?? []).find(i => i?.id && i.system?.offHand === true) ?? null)
     : null;
+  // **THE NEXT CLAW ROLL OF THIS OFF-HAND ATTACK** (04's Ravenous; the lead, R44 and R45;
+  // C16; D-1166): one Off-Hand Attack makes `offHandRolls` claw rolls, the first through the
+  // budget and each after it off the card before, `budget: "none"`, each at its own target and
+  // on its own card. Drawn only in the attacker's own turn; the press judges again.
+  const clawRollsMade = clawsBlow && offHand ? offHandRolls(clawFacts ?? {}) : 1;
+  const clawIndex = Math.max(1, Math.trunc(Number(clawRoll)) || 1);
+  const clawNext = clawsBlow && offHand && myTurn && clawIndex < clawRollsMade
+    ? { n: clawIndex + 1, of: clawRollsMade, id: weaponId, label: game.i18n.format("AZEROTH.Claws.Roll.Button", { n: clawIndex + 1, of: clawRollsMade }) }
+    : null;
   // **AN EXTRA ATTACK OFF THIS CARD** (04's Flurry: *Once a round, when an
   // attack reaches SL 2, make one extra attack against the same target*; Wide
   // Swing's Cleave at SL 3, *one attack against another target within reach at
@@ -2839,6 +2921,8 @@ export async function rollTest({
     targets: list.map((t, index) => ({ ...t, index, damage: damageByTarget[index]?.damage ?? null })),
     // The off-hand blow this Attack carries (06 §1, D-711).
     offHandStrike: offHandWeapon ? { id: offHandWeapon.id, name: offHandWeapon.name } : null,
+    // The next claw roll of this Off-Hand Attack (04's Ravenous; D-1166).
+    clawNext,
     // The extra attacks a talent offers off this blow (D-772).
     extraStrikes,
     // Half the blow on a second enemy (04's Blade Flurry, D-773), and a
@@ -3064,6 +3148,9 @@ export async function rollTest({
       // tells a reader this Attack Test was not an attack.
       source: source ?? null,
       ...(kind === "attack" && strike ? { strike } : {}),
+      // Which claw roll of the Off-Hand Attack this was, and how many it makes (D-1166).
+      // And the turn it was made in, so the next roll's button answers for this turn alone (the review's S1).
+      ...(clawsBlow && offHand ? { clawRoll: { index: clawIndex, of: clawRollsMade, ...clawRollStamp(fight?.started ? fight : null, game.time?.worldTime ?? 0) } } : {}),
       ...(kind === "attack" && dancing && typeof dancing === "object" ? { dancingRuneweapon: { name: String(dancing.name ?? ""), heal: Number(dancing.heal) || 0.5 } } : {}),
       // **WHAT ELSE DREW THE BLOW, AND WHAT IT CARRIED** (the Legacy branches' door
       // 2): the feature card it was made from, the bound attack patches that shaped
@@ -3097,6 +3184,32 @@ export async function rollTest({
     ? await routeSignatureHit({actor,roll,weaponId,idolSource:signatureTarget.idolSource,bandSource:signatureTarget.bandSource,bladeSource:signatureTarget.bladeSource,targets:list,targetIndex:signatureTarget.index,publish:publishAttackCard})
     : await publishAttackCard();
   if(unreliableMarker)await recordUnreliableDamage(publishedAttack);
+  // **EVERY CLAW HIT FIRES THE ONE HOOK** (the plan's C16; D-1167): once for each target the
+  // roll hit, after the card exists, on the client that rolled - Tribute on the prey, Raking
+  // Claws, the claw riders and the re-mark all subscribe to `CLAW_HIT_HOOK`.
+  if (publishedAttack && clawsBlow && outcome.success) {
+    const sceneToken = ref => (ref?.sceneId && ref?.tokenId ? `Scene.${ref.sceneId}.Token.${ref.tokenId}` : null);
+    // Read off the card: the blow's own `damageByTarget` and claw count live inside
+    // `publishAttackCard`, and the card is what records them.
+    const landed = publishedAttack.flags?.["azeroth-rpg"]?.damageByTarget ?? [];
+    const clawCount = publishedAttack.flags?.["azeroth-rpg"]?.clawRoll ?? { index: 1, of: 1 };
+    fireClawHits(list.map((t, index) => (landed[index]?.withdrawn === true ? null : clawHitPayload({
+      attackerUuid: actor.uuid, attackerTokenUuid: sceneToken(source), targetActorUuid: targetActorOf(t)?.uuid ?? null,
+      targetTokenUuid: sceneToken(t), sl: outcome.sl, messageId: publishedAttack.id, roll: { total: roll.total, natural: roll.natural ?? null },
+      itemId: weaponId, rollIndex: clawCount.index ?? 1, rolls: clawCount.of ?? 1, targetIndex: index
+    }))));
+  }
+  // **AN ATTACK RESOLVED AT, OR BY, A SOVEREIGN** (04's Beneath Me, Insolence Repaid and Crimson Flourish;
+  // Phase 5): once the card stands. Guarded and asked only where a Sovereign is in it.
+  const sovInIt = a => a?.type === "character" && a.items?.some?.(i => i.type === "class" && i.system?.identifier === "sovereign");
+  if (publishedAttack && kind === "attack" && !parry && (sovInIt(actor) || list.some(t => sovInIt(targetActorOf(t))))) {
+    try {
+      const { onAttackResolved } = await import("../effects/sovereign-features.mjs");
+      await onAttackResolved({ attacker: actor, list, hit: outcome.success === true, weaponId, message: publishedAttack });
+    } catch (err) {
+      console.warn("azeroth-rpg | a Sovereign's attack", err);
+    }
+  }
   // **RELENTLESS ADVANCE'S SPEED 0, ASKED WITH THE CARD** (the F4b review, S3): the GM's handler
   // reads the posted Opportunity Attack card for each row it lands on. A refusal is said in words.
   if (publishedAttack && speedZeroAfterCard.length) {
@@ -3669,6 +3782,22 @@ export async function castSpell({
       first = list[0] ?? null;
     }
   }
+  // **07 §17's SOVEREIGN SPELLS, JUDGED BEFORE ANYTHING IS PAID** (the San'layn and Sovereign plan, B.10;
+  // D-1240; D-768's order): the rings round the caster and Twilight Bloodbolt's splash - whose card rows
+  // become them - Embrace of the Vampyr's held target, Swarming Shadows' and Royal Approach's prey,
+  // Mirror of Self's trigger, the roleplay spells' picks and a GM where a write lands elsewhere
+  // (`effects/sovereign-spells.mjs`).
+  let sovPlan = null;
+  if (sovereignSpellCast(spell?.system ?? {}, actor?.classNames ?? [])) {
+    const { judgeSovereignSpell } = await import("../effects/sovereign-spells.mjs");
+    const judgedSov = await judgeSovereignSpell({ actor, spell, list, source, answers });
+    if (!judgedSov) return null;
+    sovPlan = judgedSov.plan;
+    if (judgedSov.list !== list) {
+      list = judgedSov.list;
+      first = list[0] ?? null;
+    }
+  }
 
   const missileTools=sys.identifier==='arcane-missiles'?await import('../effects/arcane-missiles-targets.mjs'):null;
   if(missileTools&&!missileTools.validArcaneMissilesTargets(list)){
@@ -3913,7 +4042,19 @@ export async function castSpell({
   // Overchanneller's rank off that second charge (`casting.mjs#overchannelPrice`).
   const mastery = !viaItem && !free && actor.hasFeature?.("Overchannel Mastery") === true;
   const oc = overchannelPrice({ points: overchannel, health: actor.system.health?.value ?? 0, tier: sys.tier, relief, mastery, mana: manaBase });
-  const mana = manaBase + oc.mana;
+  // **THE SOVEREIGN'S OWN PRICE** (04's Swift Hunger, Crimson Flourish and the Blood Monarch form; the San'layn
+  // and Sovereign plan's C17): 3 more for Swift Hunger's Half-Action, 2 less after a hit this turn on a
+  // Half-Action Death spell (never below 1), then the form's half, rounded up - on a cast that pays.
+  const sovSwift = swift && !viaItem && !free ? castAsFor(talentsNow, { action: sys.action ?? null, healing: isHealingSpell(sys), name: spell.name, school: castAsSchool }) : null;
+  const sovHalf = sys.action === "half" || Boolean(sovSwift);
+  const sovFight = actor.activeFight?.() ?? null;
+  const mana = viaItem || free || freeLine || freeCastLine ? manaBase + oc.mana : sovereignCastPrice({
+    cost: manaBase + oc.mana,
+    swift: Number(sovSwift?.surcharge) > 0,
+    flourish: sovHalf && String(sys.school ?? "").toLowerCase() === "death"
+      && flourishCurrent({ flag: actor.getFlag?.("azeroth-rpg", "flourishDiscount") ?? null, fight: sovFight ? { id: sovFight.id, round: sovFight.round, turn: sovFight.turn } : null, now: game.time?.worldTime ?? 0 }),
+    monarch: actor.shape?.kind === "bloodQueen"
+  });
   // 07 §8's OWN Health price, where the entry names one: *Casting it costs you
   // 2 Health* (Doom Bolt). Sixteen spells say it and nothing read a word of
   // it, so every one of them was free (the lead, 2026-09-07). It is paid with
@@ -3926,12 +4067,12 @@ export async function castSpell({
   const spellHealth = viaItem ? 0 : Math.max(0, Math.trunc(restatedHealth ?? sys.cost?.health ?? 0));
   // 02 SS7: no Mana can be spent while in a Shapeshift form (D-627) - and 07's
   // *The Druid in a form* pays it in Ferocity instead, 1 for every 2 Mana,
-  // rounded up (D-769). `casting.mjs#manaPrice` is the one reading.
+  // rounded up (D-769). `casting.mjs#spellPrice` is the one reading.
   const inForm = actor.inShapeshiftForm === true;
   const ferocity = inForm ? ((actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === "ferocity") ?? null) : null;
   // The pool a talent pays in (door 8): the actor's own pool of that name.
   const payPool = talentPool ? ((actor.poolSnapshot?.() ?? []).find(p => p.name === talentPool.pool) ?? null) : null;
-  const price = manaPrice(mana, { inShapeshiftForm: inForm, pool: talentPool?.pool ?? null, free: Boolean(freeCastLine) });
+  const price = spellPrice(mana, { inShapeshiftForm: inForm, pool: talentPool?.pool ?? null, free: Boolean(freeCastLine) });
   // 04's Garrote (D-773): *cannot cast while that Bleeding lasts* - the
   // Bleeding's own effect carries the mark, so it ends with the Bleeding.
   const noCasting = noCastingFrom((actor.effects ?? []).filter(e => e.active !== false).map(e => e.flags?.["azeroth-rpg"] ?? {}));
@@ -3956,6 +4097,12 @@ export async function castSpell({
   }
   if (refused?.reason === "Garroted") {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Cast.Garroted", { name: spell.name, by: refused.by.join(", ") }));
+    return null;
+  }
+  // **MORE THAN THE VITAE AND THE HEALTH TOGETHER** (02 §7: *You cannot pay more Health than you have*;
+  // the San'layn and Sovereign plan's V4): refused in words, nothing spent and no budget used.
+  if (refused?.reason === "NoVitae") {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Vitae.Warn.refused", { name: actor.name, n: refused.amount ?? mana, vitae: payPool?.value ?? 0, health }));
     return null;
   }
   if (refused?.reason === "InForm") {
@@ -4038,6 +4185,12 @@ export async function castSpell({
     if (!judged.ok) {
       ui.notifications?.warn(game.i18n.format(judged.reason, { name: spell.name, talent: swiftRow?.name ?? "" }));
       return null;
+    }
+    // **04's SWIFT HUNGER** (*if it targets only one creature and that creature is within your reach*): judged
+    // here with the cast's other refusals, before the budget and the price (D-768).
+    if (swiftRow?.oneInReach) {
+      const { swiftHungerLine } = await import("../effects/sovereign-features.mjs");
+      if (!(await swiftHungerLine({ actor, targets: list }))) return null;
     }
     castAction = judged.action;
   }
@@ -4600,6 +4753,11 @@ export async function castSpell({
   } else if (pool && mana > 0 && price.pool === "mana" && !sandCastLine) {
     const manaNow = poolsNow.find(p => p.itemId === pool.itemId && p.kind === "power" && p.name === pool.name) ?? pool;
     await actor.updatePool({ itemId: pool.itemId, kind: "power", value: payFromNow(manaNow.value, mana).value }, extra);
+  } else if (payPool && price.pool === "vitae" && price.amount > 0) {
+    // **IN VITAE, AND HEALTH BEHIND IT** (02 §7, *When your Vitae runs out*; the San'layn and Sovereign
+    // plan's V4): all the Vitae, then the rest off Health 1 for 1, in one update inside the pool queue,
+    // read when its turn comes. The cast resolves even where the payment drops the caster to 0.
+    await actor.payVitae(price.amount, { extra, label: spell.name });
   } else if (payPool && price.pool === payPool.name && price.amount > 0) {
     // In the pool a talent names (door 8: Shadowcraft's Focus), off the pool as it stands now.
     const payNow = poolsNow.find(p => p.itemId === payPool.itemId && p.kind === payPool.kind && p.name === payPool.name) ?? payPool;
@@ -5606,6 +5764,7 @@ export async function castSpell({
   // Dead, Puppet of Flesh, Mark of the Grave and the roleplay spells' effects read this resolved span -
   // Lasting and a talent's span included - off the plan, never the entry's own line.
   if (necroPlan) necroPlan.duration = duration;
+  if (sovPlan) sovPlan.duration = duration;
   // **A COUNTED TICK WITH NOTHING TO END IT IS NOT LAID** (the D-770 review,
   // item A): out of a fight a creature has no turns to count Moonfire's or Holy
   // Fire's one tick down, and an instant spell's effect carries no span core can
@@ -5657,7 +5816,8 @@ export async function castSpell({
   // Self spell's retaliation stands on the effect its Apply lays (`dice/chat.mjs`'s carrier), and
   // the entry states no change, so the card drew no Apply and the Veil never answered a blow.
   const retaliationApply = spellRetaliation?.recipient === "caster" && sys.duration?.kind !== "sustained";
-  const applies = !["compel", "soul-link"].includes(sys.identifier) && !forcedKindForCard({ kind: "spell", identifier: sys.identifier ?? null })
+  // A Sovereign spell whose own door lays what it lays offers no Apply (D-1240).
+  const applies = sovPlan?.noApply !== true && !["compel", "soul-link"].includes(sys.identifier) && !forcedKindForCard({ kind: "spell", identifier: sys.identifier ?? null })
     && (sys.applies?.active || laidTick || floor || retaliationApply) && success && !areaCarriesSpell(sys) ? {
     self: selfCast,
     targets: list.map((t, index) => ({ index, name: t.name }))
@@ -5807,7 +5967,11 @@ export async function castSpell({
   // **07 §17's RINGS MEASURED AT THE CAST, UNHOLY RENEWAL'S POINT AND BONE BRIDGE'S SPAN** (run 4c-S):
   // the area the card offers and carries where a Necromancer spell's Target line reads another.
   const necroAreaRead = necroAreaOf(sys, actor);
-  const areaOut = necroAreaRead !== undefined ? necroAreaRead : area;
+  // **07 §17's SWARMING SHADOWS STANDS ON THE PREY** (D-1251): its door attaches the Region to the prey's
+  // token after the cast (`effects/sovereign-spells.mjs#swarmLands`), so the card offers no Place area.
+  // **AND SHROUD OF SORROW MOVES WITH ITS CASTER** (*A 10 ft radius around you ... The area moves with you*; D-1367): its
+  // tick stands on the caster's own token (`centre: "self"`), so the card places no Region either.
+  const areaOut = sovPlan?.preyArea || sovPlan?.carried ? null : (necroAreaRead !== undefined ? necroAreaRead : area);
   // The area's tick, said on the card in words (D-756), and carried on it for
   // the Region to take.
   // **04's HEARTHFIRE** (*Your Immolation deals no damage. Instead, each ally that starts its
@@ -5819,7 +5983,10 @@ export async function castSpell({
     : null;
   // **A TICK WORTH THE CASTER'S MODIFIER** (07 §17's Death and Decay: *Shadow damage equal to
   // your casting modifier*; run F2): the number stamped now, off the ability the cast uses.
-  if (heldTick?.damage?.ratingFrom === "castingMod") heldTick.damage = { ...heldTick.damage, rating: Math.max(0, abilityMod) || null };
+  // **AND HALF THE CASTER'S CHARISMA MODIFIER** (07 §17's Shroud of Sorrow; D-1367): `tickRating`, the one reading.
+  if (TICK_RATING_FROM.includes(heldTick?.damage?.ratingFrom)) {
+    heldTick.damage = { ...heldTick.damage, rating: tickRating(heldTick.damage.ratingFrom, { castingMod: abilityMod, cha: actor.system?.abilities?.cha?.mod ?? 0 }) };
+  }
   // **04's ANCHOR OF AGES** (*A creature that starts its turn inside your Arcane Anchor must
   // pass a Spirit Resilience Test against your Spell DC or be Entangled while it stays
   // there*; stage 3B): the caster's own copy of the tick, a check added, whether or not the
@@ -5961,6 +6128,12 @@ export async function castSpell({
   {
     const { necroCardRows } = await import("../effects/necromancer-spells.mjs");
     heal = await necroCardRows({ actor, spell, list, damageByTarget, passedByTarget, healByTarget, resistRows, heal, failStatuses, source, success });
+  }
+  // **WHAT A SOVEREIGN SPELL'S CARD DRAWS** (D-1240): Bloodbolt's heal is the caster's, and only off its
+  // prey (`effects/sovereign-spells.mjs#sovereignCardRows`).
+  if (success && sovereignSpellCast(spell?.system ?? {}, actor?.classNames ?? [])) {
+    const { sovereignCardRows } = await import("../effects/sovereign-spells.mjs");
+    heal = await sovereignCardRows({ actor, spell, list, healByTarget, heal, success });
   }
   // **OVERLOAD** (04: *that spell fires a second time at half damage, rounded
   // down, against the same target*) and **ANCESTRAL KNOWLEDGE** (*A Casting Test
@@ -6121,6 +6294,13 @@ export async function castSpell({
     const { necroSpellAfterCast } = await import("../effects/necromancer-spells.mjs");
     raiseLines.push(...await necroSpellAfterCast({ actor, spell, plan: necroPlan, list, spellDC, cast, source }));
   }
+  // **AND WHAT A SOVEREIGN SPELL DOES THAT NO DESCRIPTOR CARRIES** (D-1240), once the Casting Test has
+  // succeeded: the caster's own states (flight, refusals, Majesty Unbound, Unfading Glory, the skill
+  // Boons, Mirror of Self's temporary Health) and the roleplay spells.
+  if (success && sovPlan) {
+    const { sovereignSpellAfterCast } = await import("../effects/sovereign-spells.mjs");
+    raiseLines.push(...await sovereignSpellAfterCast({ actor, spell, plan: sovPlan, list, spellDC, cast, source }));
+  }
   const content = await renderTemplate(TEMPLATE.spell, {
     dismissEverburn:success&&sys.identifier==='everburn',
     chainLightning: sys.identifier === "chain-lightning",
@@ -6258,6 +6438,9 @@ export async function castSpell({
         ...(dkSpellPlan?.card ? { deathKnightSpell: dkSpellPlan.card } : {}),
         // What a Necromancer spell's Resist and Apply read (Sever the Soul's creature, a curse's rider; run 4c-S).
         ...(necroPlan?.card ? { necroSpell: necroPlan.card } : {}),
+        // What a Sovereign spell's Resist and Apply read, and the blood-curse tag its failure lays (D-1240).
+        ...(sovPlan?.card ? { sovereignSpell: sovPlan.card } : {}),
+        ...(sys.bloodCurse === true ? { bloodCurse: true } : {}),
         ...(necroPlan?.corpse ? { corpse: necroPlan.corpse } : {}),
         // **DRAIN LIFE AND SIPHON LIFE GIVE THE CAST'S HIT BACK** (07: *When you cast this spell and
         // at the start of each of your turns, the target takes N Shadow damage and you regain that much
@@ -6615,6 +6798,17 @@ export async function castSpell({
       console.warn("azeroth-rpg | splash", err);
     }
   }
+  // **A SOVEREIGN'S CAST, ONCE ITS CARD STANDS** (04's Crimson Flourish and Insolence Repaid; Phase 5): the
+  // Boon a Half-Action Death spell promises the next attack, the hit's discount spent, the promise taken.
+  // Guarded: the cast has gone off whatever this does.
+  if (spellCard && actor?.type === "character" && actor.items?.some?.(i => i.type === "class" && i.system?.identifier === "sovereign")) {
+    try {
+      const { afterSovereignCast } = await import("../effects/sovereign-features.mjs");
+      await afterSovereignCast({ actor, spell, castAction, spellCard, target: targetActorOf(list[0] ?? null)?.uuid ?? null });
+    } catch (err) {
+      console.warn("azeroth-rpg | a Sovereign's cast", err);
+    }
+  }
   const aftermath = await completeSpellLockWindow({ actor, castId: spellLock.castId, message: spellCard });
   if (!aftermath?.ok) ui.notifications?.warn("The spell resolved, but Spell Lock's resistance or Silence could not be confirmed. Check the reaction records; do not repeat the spell.");
   return spellCard;
@@ -6645,7 +6839,9 @@ function castTemporary(spell, talents = [], actor = null, { castingMod = 0 } = {
   if (!read?.amount || read.span !== "effect" || sys.applies?.active !== true) return null;
   // 07 §17's Unholy Armor: *2 plus your casting modifier*, the cast's own modifier (run F4b).
   const plus = read.castingMod === true ? Math.trunc(Number(castingMod)) || 0 : 0;
-  const base = Math.max(0, (Math.trunc(Number(evaluateAmount(read.amount, { level: actor?.system?.level ?? 1, tier: actor?.system?.tier ?? 1 }))) || 0) + plus);
+  // 07 §17's Mantle of Majesty: *11 plus your Constitution modifier*, the caster's own (D-1249).
+  const conPlus = read.ability === "con" ? Math.trunc(Number(actor?.system?.abilities?.con?.mod)) || 0 : 0;
+  const base = Math.max(0, (Math.trunc(Number(evaluateAmount(read.amount, { level: actor?.system?.level ?? 1, tier: actor?.system?.tier ?? 1 }))) || 0) + plus + conPlus);
   const more = spellTempFor(talents, { name: spell?.name ?? "" });
   const amount = base + more.add;
   return amount > 0 ? { amount, by: more.by } : null;
@@ -9613,7 +9809,9 @@ export async function useFeature({
     cost: sys.cost, pool,
     discount: (actor.system?.signatureEffects?.empowers?.[item.name]?.cost ?? 0) + grace.amount,
     times: Math.max(1, boundAll.length || 1),
-    inShapeshiftForm: inForm
+    inShapeshiftForm: inForm,
+    // A price in Vitae has the Health behind it (02 §7; the San'layn and Sovereign plan's V4).
+    health: actor.system?.health?.value ?? 0
   });
   // And Improved Blink at rank 2's free Blink (D-775), judged at step 1.
   if (freeMana || blinkFree) Object.assign(payment, { spent: 0, refusal: null });
@@ -9693,6 +9891,16 @@ export async function useFeature({
     const { judgeNecroUse } = await import("../effects/necromancer-horde.mjs");
     necroPlan = await judgeNecroUse(actor, item, { onUse, source: useSource });
     if (!necroPlan) return undoBinds();
+  }
+  // **THE SOVEREIGN'S USES, JUDGED BEFORE ANYTHING IS PAID** (02 §7 and 04's Dominion, Vainglorious and
+  // Ravenous; the San'layn and Sovereign plan's Phase 5): the prey, the creatures gathered, the amount of
+  // Tribute, the space stepped to (`effects/sovereign-features.mjs#judgeSovereignUse`). The card names the
+  // creatures it gathers, so the list is handed across and replaced in place.
+  let sovPlan = null;
+  if (onUse?.sov) {
+    const { judgeSovereignUse } = await import("../effects/sovereign-features.mjs");
+    sovPlan = await judgeSovereignUse({ actor, item, onUse, rank, list, source: useSource });
+    if (!sovPlan) return undoBinds();
   }
 
   // 1e. **THE RUNG A USE OF TWO IS TAKEN AT** (04's Ethereal Form: *At rank 2 you may use
@@ -9926,6 +10134,10 @@ export async function useFeature({
     if (spent > 0 && runeKind) {
       if (!runesPaid) runesPaid = await spendRunesOn(actor, { kind: runeKind, count: spent, privacy: featurePrivacyKey(actor.id, useKey) });
       if (!runesPaid.ok) return null;
+    } else if (spent > 0 && pool.name === "vitae") {
+      // **IN VITAE, AND HEALTH BEHIND IT** (02 §7; the San'layn and Sovereign plan's V4): the one Vitae door,
+      // inside the pool queue, all the Vitae then the rest off Health, and the Use still resolves at 0.
+      await actor.payVitae(spent, { label: item.name });
     } else if (spent > 0) await actor.updatePool({ itemId: pool.itemId, kind: pool.kind, value: payFromNow(poolNow.value, spent).value });
     if (spellstealCommit !== null && (!spellstealUseValid(actor, item, spellstealCommit)
       || (actor.poolSnapshot?.() ?? []).find(p => p.itemId === pool.itemId && p.kind === pool.kind)?.value !== poolNow.value - spent)) return null;
@@ -9999,6 +10211,12 @@ export async function useFeature({
   if (necroPlan) {
     const { landNecroUse } = await import("../effects/necromancer-horde.mjs");
     answerLines.push(...await landNecroUse(actor, item, necroPlan, { targets: list, onRisen: noteRisen }));
+  }
+  // **AND A SOVEREIGN'S** (Phase 5), now that it is paid for: the mark, the barrier, the crown, the edge, the
+  // bloodletting, the rush, the shed condition, the mirror's step, the form.
+  if (sovPlan?.key) {
+    const { landSovereignUse } = await import("../effects/sovereign-features.mjs");
+    answerLines.push(...await landSovereignUse({ actor, item, plan: sovPlan, list }));
   }
   // 2b. **THE SHAPE, NOW THAT IT IS PAID FOR** (D-769): the one writer, which
   // replaces a shape already worn in one go and dresses every token. A form
@@ -11666,6 +11884,8 @@ export async function useFeature({
       // The Chronomancer's records its later doors read (Suspend's failed Resist, Temporal
       // Loop's return; `effects/chronomancer.mjs#chronoAfterResist`).
       ...(chrono.cardFlags ?? {}),
+      // The Sovereign's records its Resist reads (`effects/sovereign-features.mjs#sovereignAfterResist`).
+      ...(sovPlan?.cardFlags ?? {}),
       source: useSource ?? null,
       featureKey: useKey,
       casting: sys.casting === true,

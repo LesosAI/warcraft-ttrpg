@@ -114,7 +114,9 @@ const AREA_IS = [
   /:\s*it is \*\*Difficult ground\*\*/i,
   /\bThe ground (?:stays broken[^.]*?and )?is \*\*Difficult ground\*\*/i,
   // 07 §12's Sandwall: *its space is **Difficult ground*** - the wall's own placed line.
-  /\bits space is \*\*Difficult ground\*\*/i
+  /\bits space is \*\*Difficult ground\*\*/i,
+  // 07 §17's Swarming Shadows (D-1251): *The area is Difficult ground for your enemies*, printed unbold.
+  /\bthe area is Difficult ground for your enemies\b/i
 ];
 
 /** Sandtrap's *for each creature you choose as you cast* (07 §12): the named alone. */

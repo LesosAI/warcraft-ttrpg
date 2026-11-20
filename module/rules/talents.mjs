@@ -16,6 +16,11 @@
  * Index 0 is tier 1. 04 §1: none, 4, 8, 12, 16.
  */
 import { tierForLevel } from "./progression.mjs";
+// 04's Gilded Skin, gated on the Sovereign's Prim and Proper (`canTake`).
+import { GILDED_SKIN } from "./sovereign-talents.mjs";
+
+/** **THE TALENTS A CLASS FEATURE GATES**, by identifier: the feature's name (04's own words). */
+export const FEATURE_GATES = Object.freeze({ [GILDED_SKIN.identifier]: GILDED_SKIN.needs });
 
 export const BRANCH_GATES = Object.freeze([0, 4, 8, 12, 16]);
 
@@ -142,12 +147,17 @@ export function sameTalent(name, talent) {
  * @param {number} [pointsLeft]      Unspent talent points the character holds.
  * @returns {{ok: boolean, reason: string|null}}
  */
-export function canTake(talent, branchTalents = [], pointsLeft = Infinity) {
+export function canTake(talent, branchTalents = [], pointsLeft = Infinity, { features = null } = {}) {
   const taken = Number(talent.taken) || 0;
   const ranks = Number(talent.ranks) || 1;
 
   if (taken >= ranks) return { ok: false, reason: "maxed" };
   if (pointsLeft < 1) return { ok: false, reason: "noPoints" };
+  // **A TALENT GATED ON A CLASS FEATURE** (04's Gilded Skin: *You may take this talent once you have Prim and
+  // Proper*; the San'layn and Sovereign plan's B.13 Q35 (a)): refused until the feature is held. Asked only
+  // where the caller hands the features held, so a caller that names none is unchanged.
+  const needs = FEATURE_GATES[talent.identifier] ?? null;
+  if (needs && Array.isArray(features) && !features.includes(needs)) return { ok: false, reason: "needsFeature", feature: needs };
 
   // The gate reads the branch WITHOUT counting the point about to be spent.
   const spent = pointsSpent(branchTalents);

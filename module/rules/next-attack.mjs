@@ -47,7 +47,7 @@ export const NEXT_ATTACK_FLAG = "nextAttack";
  * next turn* (02's Draconic Leap, stage 2B): through the holder's next turn, read off
  * the turn order the promise was laid in (`at.turn`, `at.own`).
  */
-export const NEXT_ATTACK_LASTS = Object.freeze(["turn", "round", "encounter", "nextTurn"]);
+export const NEXT_ATTACK_LASTS = Object.freeze(["turn", "round", "encounter", "nextTurn", "untilOwnTurn"]);
 
 /** A whole number at or above nothing. */
 const count = v => Math.max(0, Math.trunc(Number(v)) || 0);
@@ -77,6 +77,9 @@ export function nextAttackEntry(grant = {}, now = null) {
     // 07 §12's Hourstrike (D-865): *lays Decay 1 on the creature it hits* - named only
     // where a promise carries it, laid on the hit through `effects/decay.mjs#layDecay`.
     ...(count(grant.decay) > 0 ? { decay: count(grant.decay) } : {}),
+    // 07 §17's Scent of Blood (*Your next Attack Test this turn against one of them*, a Bleeding creature; D-1370):
+    // the condition the attack's target must bear, named only where a promise carries one.
+    ...(typeof grant.targetStatus === "string" && /^[a-z]+$/.test(grant.targetStatus) ? { targetStatus: grant.targetStatus } : {}),
     // **THE DAMAGE'S OWN TYPE** (Hourstrike's *2 more Physical damage*; the 2a review, L3):
     // named only where a promise carries one. The attack adds it to its Rating where the
     // blow is of that type and as a second amount of that type where it is not (D-777).
@@ -86,7 +89,7 @@ export function nextAttackEntry(grant = {}, now = null) {
       combat: String(now.combat), round: Math.trunc(Number(now.round)) || 0, combatant: String(now.combatant ?? ""),
       // Where the turn stood and where the holder's own turn sits, for `nextTurn` alone:
       // indices in the fight's turn order, or null where the fight did not say.
-      ...(grant.lasts === "nextTurn" ? { turn: turnIndex(now.turn), own: turnIndex(now.own) } : {})
+      ...(grant.lasts === "nextTurn" || grant.lasts === "untilOwnTurn" ? { turn: turnIndex(now.turn), own: turnIndex(now.own) } : {})
     }
   };
   return entry.boons || entry.penetration || entry.damage || entry.unanswerable || entry.decay ? entry : null;
@@ -123,6 +126,29 @@ export function nextTurnStands(at, now) {
 }
 
 /**
+ * **BEFORE THE START OF YOUR NEXT TURN** (04's Crimson Flourish, R54): the holder's next turn is found as
+ * `nextTurnStands` finds it, and the promise stands until that turn BEGINS - so an attack made after the
+ * round turns over and before the holder acts (an Opportunity Attack) still takes it. With no turn order
+ * recorded, through the end of the round it was laid in (MY READING: the shortest the words could mean).
+ *
+ * @param {{round: number, turn?: number|null, own?: number|null}} at
+ * @param {{round: number, turn?: number|null}} now
+ * @returns {boolean}
+ */
+export function untilOwnTurnStands(at, now) {
+  const round = Math.trunc(Number(now?.round)) || 0;
+  const laidRound = Math.trunc(Number(at?.round)) || 0;
+  const own = turnIndex(at?.own);
+  const laidTurn = turnIndex(at?.turn);
+  if (own === null || laidTurn === null) return round === laidRound;
+  const startRound = laidTurn < own ? laidRound : laidRound + 1;
+  if (round < startRound) return true;
+  if (round > startRound) return false;
+  const turn = turnIndex(now?.turn);
+  return turn === null ? false : turn < own;
+}
+
+/**
  * The flag after laying new promises: one entry a source, the new replacing the
  * old, in a stable order (by source) because the dialog lists them.
  *
@@ -152,6 +178,7 @@ export function nextAttackStands(entry, now = null) {
   if (!at || !now?.combat || now.combat !== at.combat) return false;
   if (entry.lasts === "encounter") return true;
   if (entry.lasts === "nextTurn") return nextTurnStands(at, now);
+  if (entry.lasts === "untilOwnTurn") return untilOwnTurnStands(at, now);
   if (now.round !== at.round) return false;
   if (entry.lasts === "round") return true;
   if (entry.lasts === "turn") return now.combatant === at.combatant;
@@ -168,16 +195,20 @@ export function nextAttackStands(entry, now = null) {
  * @param {{now?: object|null}} [o]
  * @returns {{boons: number, penetration: number, damage: number, live: object[], lapsed: object[]}}
  */
-export function pendingNextAttack(entries = [], { now = null } = {}) {
+export function pendingNextAttack(entries = [], { now = null, targetStatuses = null } = {}) {
   const live = [];
   const lapsed = [];
+  // A promise held to a target's condition (Scent of Blood's Bleeding; D-1370) waits, neither taken nor lapsed, for
+  // an attack whose target bears it - and an attack that names no target's conditions takes none of them.
+  const bears = new Set(Array.isArray(targetStatuses) ? targetStatuses : []);
   for (const e of Array.isArray(entries) ? entries : []) {
     if (!e || typeof e !== "object" || !(count(e.boons) || count(e.penetration) || count(e.damage) || e.unanswerable === true)) {
       lapsed.push(e);
       continue;
     }
-    if (nextAttackStands(e, now)) live.push(e);
-    else lapsed.push(e);
+    if (!nextAttackStands(e, now)) lapsed.push(e);
+    else if (typeof e.targetStatus === "string" && e.targetStatus && !bears.has(e.targetStatus)) continue;
+    else live.push(e);
   }
   const sum = key => live.reduce((n, e) => n + count(e[key]), 0);
   // A promise that names its damage's type (Hourstrike) is `typed`, never the plain sum: the

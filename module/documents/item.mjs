@@ -56,6 +56,13 @@ import { isGadgetEntry } from "../rules/gadgets.mjs";
 // A Services-compendium entry is bought and never carried (the lead: *"Add services to the compendium"*).
 import { serviceRefusal } from "../rules/services.mjs";
 import { ITEM_CUSTODY_PENDING_FLAG, isItemCustodyPending } from "../rules/item-custody-guard.mjs";
+// The Sovereign's Claws are kept by Blood-Forged Claws and nothing else (02 §7; the San'layn and
+// Sovereign plan, C1; D-1164): a write past the sync is refused in words at this seam.
+import { CLAWS_FEATURE, CLAWS_SYNC, CLAWS_SYNC_KEY, clawsCreateRefusal, clawsUpdateRefusal } from "../rules/claws.mjs";
+import { isClaws } from "../rules/unarmed.mjs";
+
+/** Whether an operation is the claws' own sync (`AzerothActor#_syncClaws`). */
+const clawsSync = operation => operation?.[CLAWS_SYNC_KEY] === CLAWS_SYNC;
 
 /** The item subtypes that are THINGS. A talent, a spell or a class is never judged. */
 const PHYSICAL = new Set(["weapon", "armor", "gear"]);
@@ -284,6 +291,15 @@ export class AzerothItem extends Item {
   async _preUpdate(changes, options, user) {
     const allowed = await super._preUpdate(changes, options, user);
     if (allowed === false) return false;
+    // **THE CLAWS ARE AN UNARMED STRIKE IN THE OFF HAND** (02 §7; the plan's C1; D-1164):
+    // never moved to the main hand, put in a bag, forged, coated or given an affix.
+    if (this.type === "weapon" && this.parent?.documentName === "Actor" && isClaws(this) && !clawsSync(options)) {
+      const refused = clawsUpdateRefusal(changes);
+      if (refused) {
+        ui.notifications?.warn(game.i18n.format(refused, { name: this.name }));
+        return false;
+      }
+    }
     const equipping=changes?.system?.equipped===true||changes?.["system.equipped"]===true;
     if(equipping&&this.actor&&!prostheticWieldAllowed(this.actor,{type:this.type,flags:this.flags,
       system:{...this.system,...changes.system}})){
@@ -329,6 +345,29 @@ export class AzerothItem extends Item {
     // created*) and so cannot refuse anything. This hook sees the whole batch, so a class or a
     // prerequisite created in the same write counts.
     if (!learnSpells(documents, operation, user)) return false;
+
+    // **ONLY BLOOD-FORGED CLAWS MAKES THE CLAWS** (02 §7; the plan's C1; D-1164): a create of
+    // the Sovereign's Claws on a character that is not the sync is refused in words - a
+    // hand drag, a forged copy, a second set - unless the character holds the feature and no
+    // claws yet (a GM putting back what was lost).
+    if (!clawsSync(operation) && operation?.parent?.documentName === "Actor" && operation.parent.type === "character") {
+      const actor = operation.parent;
+      let held = actor.items.filter(i => i.type === "weapon" && isClaws(i)).length;
+      const holdsFeature = actor.items.some(i => i.type === "feature" && i.name === CLAWS_FEATURE);
+      for (let i = 0; i < documents.length; i += 1) {
+        const doc = documents[i];
+        if (doc.type !== "weapon" || !isClaws(doc)) continue;
+        const refused = clawsCreateRefusal({ data: doc.toObject(), holdsFeature, held, sync: false });
+        if (refused) {
+          ui.notifications?.warn(game.i18n.format(refused, { name: doc.name ?? "" }));
+          documents.splice(i, 1);
+          i -= 1;
+          continue;
+        }
+        held += 1;
+      }
+      if (!documents.length) return false;
+    }
 
     // D-739, at every door and on every parent. On a CREATE every schema field
     // is present, so the law's `hasOwnProperty` reads the whole system object
@@ -464,6 +503,16 @@ export class AzerothItem extends Item {
   static async _preDeleteOperation(documents, operation, user) {
     const allowed = await super._preDeleteOperation(documents, operation, user);
     if (allowed === false) return false;
+    // **THE CLAWS GO WITH THE FEATURE, NEVER BY HAND** (02 §7; the plan's C1; D-1164): a
+    // delete that is not the claws' sync and names them on a character is refused, whole
+    // (core lets this hook cancel only the whole operation), and said in words.
+    if (!clawsSync(operation) && operation?.parent?.documentName === "Actor" && operation.parent.type === "character") {
+      const claws = documents.find(doc => doc.type === "weapon" && isClaws(doc)) ?? null;
+      if (claws) {
+        ui.notifications?.warn(game.i18n.format("AZEROTH.Claws.Refuse.Delete", { name: claws.name ?? "" }));
+        return false;
+      }
+    }
     if (!custodyWriteAuthorized(operation, user) && documents.some(isItemCustodyPending)) {
       refusePendingCustody();
       return false;

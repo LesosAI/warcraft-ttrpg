@@ -22,8 +22,15 @@
  * table is drink, and the waterskin is a container with charges (D-671).
  */
 
-/** The three kinds 08 §12's shelf holds. `null` is everything else carried. */
-export const PROVISION_KINDS = Object.freeze(["food", "hotMeal", "drink"]);
+/**
+ * The kinds 08 §12's shelf holds. `null` is everything else carried.
+ *
+ * **AND BLOOD** (02 §5's San'layn, 08 §12's fourth table; D-1141). A San'layn rests on a unit of
+ * blood in place of food and drink, and a **Blood vial** is one unit. It is a kind of its own -
+ * never food and never drink - so a Human's rest window never offers one and a San'layn's offers
+ * nothing else.
+ */
+export const PROVISION_KINDS = Object.freeze(["food", "hotMeal", "drink", "blood"]);
 
 /** The kinds that feed a rest. A hot meal is food that gives the tier again. */
 export const FOOD_KINDS = Object.freeze(["food", "hotMeal"]);
@@ -36,6 +43,11 @@ export function isFood(kind) {
 /** Whether this kind is drunk. */
 export function isDrink(kind) {
   return kind === "drink";
+}
+
+/** Whether this kind is blood (a Blood vial: 1 unit, D-1141). */
+export function isBlood(kind) {
+  return kind === "blood";
 }
 
 /** Whether eating this adds the tier a second time (08 §12's Rule line). */
@@ -56,6 +68,8 @@ export const PROVISION_SHELF = "Food and drink";
 /** The first header cell of each of §12's three tables (D-405's category). */
 const FOOD_CATEGORIES = Object.freeze(["Meal", "Provision"]);
 const DRINK_CATEGORIES = Object.freeze(["Drink"]);
+/** 08 §12's fourth table, `| Blood | Effect | Cost |` (D-1141). Inside the same shelf gate. */
+export const BLOOD_CATEGORIES = Object.freeze(["Blood"]);
 
 /**
  * The Effect run that marks a hot meal (08 §12, after D-733's rewrite).
@@ -83,6 +97,7 @@ export function provisionFor({ shelf = "", category = "", effect = null } = {}) 
     return TIER_AGAIN_EFFECT.test(String(effect ?? "").trim()) ? "hotMeal" : "food";
   }
   if (DRINK_CATEGORIES.includes(cell)) return "drink";
+  if (BLOOD_CATEGORIES.includes(cell)) return "blood";
   return null;
 }
 
@@ -128,7 +143,8 @@ export function isProvision(item, want = PROVISION_KINDS) {
  * fixed order.
  *
  * @param {Iterable<{id?: string, name?: string, type?: string, system?: object}>} items
- * @returns {{food: object[], drink: object[]}} rows of `{itemId, name, quantity, kind}`
+ * @returns {{food: object[], drink: object[], blood: object[]}} rows of `{itemId, name, quantity, kind}`
+ *   - and the Blood vials carried, which only a San'layn's window draws (D-1141)
  */
 export function provisionOptions(items = []) {
   const all = [...(items ?? [])].filter(Boolean);
@@ -141,7 +157,7 @@ export function provisionOptions(items = []) {
       kind: item.system?.provision ?? null
     }))
     .sort((a, b) => a.name.localeCompare(b.name) || String(a.itemId).localeCompare(String(b.itemId)));
-  return { food: rows(isFood), drink: rows(isDrink) };
+  return { food: rows(isFood), drink: rows(isDrink), blood: rows(isBlood) };
 }
 
 /**

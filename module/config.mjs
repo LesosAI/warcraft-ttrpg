@@ -114,7 +114,9 @@ AZEROTH.SIDE_LANGUAGE = { alliance: "common", horde: "orcish" };
 AZEROTH.RACE_SIDE = {
   "human": "alliance", "dwarf": "alliance", "night-elf": "alliance", "gnome": "alliance",
   "orc": "horde", "tauren": "horde", "troll": "horde", "forsaken": "horde",
-  "blood-elf": null, "goblin": null, "ogre": null
+  "blood-elf": null, "goblin": null, "ogre": null,
+  // 02 §1: the San'layn belong to no side, so the creator asks (the plan's A.5; D-1151).
+  "sanlayn": null
 };
 
 // The seven DAMAGE schools (D-296). A school's damage meets its Ward, its
@@ -188,7 +190,9 @@ AZEROTH.resilienceAbility = { body: "con", reflex: "dex", spirit: "wis" };
 // DC; D-942), and Charisma sets its Runic Power cap and gain (`rules/runes.mjs`).
 // The Necromancer casts with Intelligence (the lead: **Intelligence**), and Intelligence sets
 // its horde's capacity (`rules/horde.mjs`).
-AZEROTH.primaryAbility = { warrior: "str", rogue: "dex", ranger: "dex", "chromatic-champion": "con", chronomancer: "int", "death-knight": "cha", necromancer: "int" };
+// The Sovereign casts with Constitution (the lead, R7: *"scales off Constitution as the casting
+// attribute"*; the San'layn and Sovereign plan's T2), which also sizes its Vitae (`rules/vitae.mjs`).
+AZEROTH.primaryAbility = { warrior: "str", rogue: "dex", ranger: "dex", "chromatic-champion": "con", chronomancer: "int", "death-knight": "cha", necromancer: "int", sovereign: "con" };
 
 // **A CLASS TAKEN AT CREATION AND NEVER MULTICLASSED, EITHER WAY** (the lead, on the
 // Chromatic Champion plan: *"Creation only; no 2nd class."*). Keyed by identifier;
@@ -196,7 +200,9 @@ AZEROTH.primaryAbility = { warrior: "str", rogue: "dex", ranger: "dex", "chromat
 // The Chronomancer too (the lead: *"Restrict multiclassing for this."*, D-860).
 // The Death Knight too (the plan's Phase 0 item 6, accepted as drafted: *creation only,
 // and no second class in either direction*; D-942): its Power lives in its weapons.
-AZEROTH.creationOnlyClasses = ["chromatic-champion", "chronomancer", "death-knight"];
+// The Sovereign too (02 §7's *One class.*: *You take this class only at character creation, you
+// never take a second class, and no character takes this one as a second class*).
+AZEROTH.creationOnlyClasses = ["chromatic-champion", "chronomancer", "death-knight", "sovereign"];
 
 // **A CLASS THAT MULTICLASSES WITH A NAMED FEW, EITHER WAY** (the lead, on the Necromancer plan's
 // item 11: *"Multiclassing is allowed with Warrior, Mage, Rogue."*). Keyed by identifier: the
@@ -210,6 +216,18 @@ AZEROTH.multiclassOnlyWith = { necromancer: ["warrior", "mage", "rogue"] };
 // it*): the class's identifier to the race it always is. The guise is one of the
 // other peoples and gives size, Speed and tongue; `rules/guise.mjs` is the reader.
 AZEROTH.guiseRaceFor = { "chromatic-champion": "chromatic-outcast" };
+
+// **TWO FACTS WHERE `guiseRaceFor` HELD ONE** (the San'layn plan's F4; D-1152): *a class only one
+// race may take* and *a race that wears a guise*. The Sovereign is the San'layn's alone and the
+// San'layn wears no guise, so the one map could not hold it.
+// - `classRaceOnly`: a class's identifier to the one race that may take it (02 §3's *Only a
+//   Chromatic Outcast may take the Chromatic Champion* and *Only a San'layn may take the
+//   Sovereign*), read by `rules/guise.mjs#raceOpensClass` and the creator's settle.
+// - `guiseRaces`: the races that wear another people's guise, read by `isGuiseRace`,
+//   `guiseRequired` and `guiseClassOf`.
+// `guiseRaceFor` stays for one release as the guise half of `classRaceOnly`, read by nothing new.
+AZEROTH.classRaceOnly = { "chromatic-champion": "chromatic-outcast", sovereign: "sanlayn" };
+AZEROTH.guiseRaces = ["chromatic-outcast"];
 
 // Six size rungs, smallest first (D-545). Medium is the default. Size does
 // exactly three things -- carrying, moving through a space, resisting being
@@ -250,7 +268,11 @@ AZEROTH.momentumTypes = {
   // feet unless a feature, talent or spell names another way, spent only to empower a spell or
   // a feature, capped at 3 plus Constitution and never below 3, and kept until spent
   // (`rules/essence.mjs`).
-  essence:     "AZEROTH.Pool.Essence"
+  essence:     "AZEROTH.Pool.Essence",
+  // The Sovereign's (02 §7; the San'layn and Sovereign plan's B.4): gained by a claw hit on the prey
+  // and the prey's failed Test (`rules/tribute.mjs`), capped at 3 plus Charisma and never below 3,
+  // emptied by a Critical Injury and the fight's end and NOT by Guard (the lead, R18).
+  tribute:     "AZEROTH.Pool.Tribute"
 };
 AZEROTH.powerTypes = {
   mana:   "AZEROTH.Pool.Mana",
@@ -258,7 +280,10 @@ AZEROTH.powerTypes = {
   energy: "AZEROTH.Pool.Energy",
   // The Death Knight's Power pool is the runes inscribed on the weapons it WIELDS
   // (D-943): derived off the weapons, never stored on the class (`rules/runes.mjs`).
-  runes:  "AZEROTH.Pool.Runes"
+  runes:  "AZEROTH.Pool.Runes",
+  // The Sovereign's Power (02 §7; the lead, R7): 02 §6's chart times 1.5 plus Constitution, refilled
+  // by feeding only (`rules/vitae.mjs`, `rules/feeding.mjs`), and short of a cost it takes Health.
+  vitae:  "AZEROTH.Pool.Vitae"
 };
 // The two kinds of rune (the lead: *"inscribe runes of either Blood or Frost"*).
 AZEROTH.runeKinds = {
@@ -277,7 +302,8 @@ AZEROTH.poolTypes = { ...AZEROTH.momentumTypes, ...AZEROTH.powerTypes };
 AZEROTH.costPoolTypes = { momentum: "AZEROTH.Momentum.Label", any: "AZEROTH.Pool.Any", ...AZEROTH.poolTypes };
 // The pool 07 prints a SPELL's cost in (D-944): Mana, or Runic Power on a spell only a Death
 // Knight can learn. `SpellData.costPool`'s choices and the spell sheet's select.
-AZEROTH.spellCostPools = { mana: "AZEROTH.Card.Mana", runicPower: "AZEROTH.Pool.RunicPower" };
+// And Vitae on a spell only a Sovereign can learn (the plan's B.10: *prints Vitae where 07 prints Mana*).
+AZEROTH.spellCostPools = { mana: "AZEROTH.Card.Mana", runicPower: "AZEROTH.Pool.RunicPower", vitae: "AZEROTH.Pool.Vitae" };
 // What feeds Speed (05 §10, D-621), for the banner's tooltip.
 AZEROTH.speedParts = {
   race:    "AZEROTH.Speed.Race",
@@ -315,7 +341,9 @@ AZEROTH.shapeKinds = {
   polymorphed:   "AZEROTH.Shape.Kind.Polymorphed",
   // The Chromatic Champion's four capstones (the Chromatic Champion plan), worn
   // beside the character off 14 §10's tier 3 drake blocks.
-  drake:         "AZEROTH.Shape.Kind.Drake"
+  drake:         "AZEROTH.Shape.Kind.Drake",
+  // 04's Blood Monarch (the Sovereign's Ravenous capstone): its own look and a 240 ft flight, nothing melded.
+  bloodQueen:    "AZEROTH.Shape.Kind.BloodQueen"
 };
 // A class feature is a thing you do or a thing you are (02 §7, D-612).
 AZEROTH.featureKinds = {
@@ -457,7 +485,9 @@ AZEROTH.heldSlots = {
   ranged:   "AZEROTH.Held.Ranged",
   ammo:     "AZEROTH.Held.Ammo",
   shield:   "AZEROTH.Held.Shield",
-  augment:  "AZEROTH.Held.Augment"
+  augment:  "AZEROTH.Held.Augment",
+  // The Sovereign's Claws, named on the Off hand tile while equipped (02 §7; D-1163).
+  claws:    "AZEROTH.Held.Claws"
 };
 
 // Five rarity rungs and the budget each spends on affixes (08 SS2, D-376).
@@ -519,7 +549,9 @@ AZEROTH.spellActions = {
   minute: "AZEROTH.Action.Minute",
   // The Necromancer's three roleplay spells that print *10 minutes* (Spirit Anchor, Death's
   // Tidings, Call the Departed; the Necromancer plan, D-1050): a timed cast as *1 minute* is.
-  tenMinutes: "AZEROTH.Action.TenMinutes"
+  tenMinutes: "AZEROTH.Action.TenMinutes",
+  // 07 §17's Blood Bond, a ritual that prints *1 hour* (D-1360).
+  hour: "AZEROTH.Action.Hour"
 };
 AZEROTH.HALF_ACTIONS_PER_TURN = 2;
 AZEROTH.REACTIONS_PER_TURN = 1;
@@ -617,7 +649,9 @@ AZEROTH.consumableKinds = {
 AZEROTH.provisionKinds = {
   food:    "AZEROTH.Provision.Food",
   hotMeal: "AZEROTH.Provision.HotMeal",
-  drink:   "AZEROTH.Provision.Drink"
+  drink:   "AZEROTH.Provision.Drink",
+  // 08 §12's Blood vial: a San'layn's rest (02 §5; D-1141).
+  blood:   "AZEROTH.Provision.Blood"
 };
 
 /** Who or what a Use is aimed at. */

@@ -89,6 +89,7 @@ import { meldsGear } from "../rules/shapes.mjs";
 // (door 17), read into every snapshot.
 import { creatureSnapshot, kindsOf } from "../rules/creature-kinds.mjs";
 import { laidByMap } from "../rules/talent-gates.mjs";
+import { cursedBy } from "../rules/sovereign-spells.mjs";
 // A throw a ticked rider makes on its own ability (04's Storm Bolt; the B6 review).
 import { riderThrowModifiers } from "../rules/wield.mjs";
 
@@ -165,6 +166,14 @@ export function targetSnapshots(targets = game.user?.targets ?? []) {
       // And what its own Deterrence lays on attacks against it (04: *Attacks
       // against you take a Bane per rank until the start of your next turn*; D-773).
       deterred: deterrencesOf(actor),
+      // And 04's The Crimson Throne (the Sovereign: *While you have 5 or more Tribute, weapon attacks against
+      // you take a Bane*) and 02 §7's Withering Contempt (*A Casting Test for a spell that targets you takes a
+      // Bane*; R27, any caster): the target's own, derived on its character (`CharacterData`), the first beside
+      // its Deterrence on an attack, the second on a Casting Test (`castingTalentLines`).
+      sovDeterred: s.sovereignDeterred ?? [],
+      castDeterred: s.castDeterred ?? [],
+      // And whose creature it is, for 04's Insolence Repaid's Boon against the one that missed.
+      actorUuid: actor.uuid,
       mirrorImageBanes: s.health?.value>0 ? mirrorImageBanes(actor.getFlag("azeroth-rpg","sustaining")) : 0,
       // What this target wears that a member of a faction attacks at a Bane (08 §20's
       // Scarlet Reckoning, D-912).
@@ -177,7 +186,9 @@ export function targetSnapshots(targets = game.user?.targets ?? []) {
       // undead* - and each condition's `laidBy` (Cursed Prey's *a condition that you
       // or one of your totems laid*; None Escape's *that you have Entangled*).
       kinds: [...kindsOf(creatureSnapshot({ type: actor.type, system: s, race: actor.type === "character" ? (actor.items?.find?.(i => i.type === "race")?.name ?? null) : null }))].sort(),
-      laidBy: laidByMap((actor.effects ?? []).map(e => ({ statuses: [...(e.statuses ?? [])], flags: e.flags ?? {}, disabled: e.active === false })))
+      laidBy: laidByMap((actor.effects ?? []).map(e => ({ statuses: [...(e.statuses ?? [])], flags: e.flags ?? {}, disabled: e.active === false }))),
+      // Whose blood curses it is under (02 §7; D-1241): the Sovereigns' uuids, for `targetFactsOf`'s `cursedBy`.
+      cursedBy: cursedBy((actor.effects ?? []).map(e => ({ flags: e.flags ?? {}, active: e.active !== false })))
     });
   }
   return out;
@@ -384,6 +395,9 @@ function snapshotOf(actor, { kind, skill, targets, resilience = null, ability = 
     swarmThinned: s.thinned === true,
     // What is worn grants a Boon on this skill (08 §6, 2026-09-06): the items by name.
     gearBoons: kind === "skill" && skill ? (s.skillBoons?.[skill] ?? []) : [],
+    // A spell of the roller's own grants a Boon on this skill against creatures it names (07 §17's Air of
+    // Majesty, Read the Supplicant): whether the creature qualifies is the table's, so a judgement line.
+    spellSkillBoons: kind === "skill" && skill ? (s.spellSkillBoons?.[skill] ?? []) : [],
     // A creature's own standing passive (14, D-691): the ability by name where
     // it Banes this skill, and the count where it names a KIND of Test.
     standingBanes: kind === "skill" && skill ? (s.skillBanes?.[skill] ?? []) : [],
@@ -412,7 +426,10 @@ function snapshotOf(actor, { kind, skill, targets, resilience = null, ability = 
     ...(kind === "attack" && !parry ? attackTalentLines(actor, targets[0] ?? null, range, facts) : {}),
     // **A BOON A TALENT GIVES A CASTING TEST** (04's Twisted Faith: *Casting Tests
     // against a target dealt Shadow damage by you gain a Boon*; D-774).
-    ...(kind === "casting" ? castingTalentLines(actor, targets[0] ?? null, kind) : {}),
+    ...(kind === "casting" ? castingTalentLines(actor, targets[0] ?? null, kind, targets) : {}),
+    // And 04's Insolence Repaid at rank 2 on a skill Test at the creature that missed (*your next Test of any kind
+    // against that creature*), the one Boon named.
+    ...(kind === "skill" && (actor?.insolenceBoons?.(targetActorUuid(targets[0] ?? null), kind) ?? 0) > 0 ? { talentBoons: { boons: 1, names: [game.i18n.localize("AZEROTH.Sovereign.InsolenceName")] } } : {}),
     // The Banes a talent of whoever forced this Test lays on it (04's Vile
     // Concoction, D-773), as the door that opened it measured them.
     talentBanes: facts.talentBanes ?? null,
@@ -445,6 +462,20 @@ function snapshotOf(actor, { kind, skill, targets, resilience = null, ability = 
     cancelsBane,
     resilience
   };
+}
+
+/**
+ * **WHOSE CREATURE A TARGET IS** (04's Insolence Repaid, keyed on the creature that missed; D-1292): the
+ * snapshot's own `actorUuid` where `targetSnapshots` wrote one, else the token's actor or the world actor a
+ * bare reference names. An attack door hands the dialog references without `actorUuid`, and the Boon read
+ * `undefined` there, so a rank 1 promise was never drawn on the attack it was made for.
+ */
+function targetActorUuid(target) {
+  if (!target) return null;
+  if (typeof target.actorUuid === "string" && target.actorUuid) return target.actorUuid;
+  const scene = (target.sceneId && game.scenes?.get(target.sceneId)) || canvas?.scene || null;
+  const token = target.tokenId ? scene?.tokens?.get(target.tokenId) : null;
+  return token?.actor?.uuid ?? (target.actorId ? game.actors?.get(target.actorId)?.uuid : null) ?? null;
 }
 
 /**
@@ -483,16 +514,18 @@ function attackTalentLines(actor, target, range, facts = {}) {
     facts: { ...legacy, melee: range === "melee", ranged: range === "ranged", engagedOne: facts.engagedOne === true, shadowDamaged: shadowDamagedBy(actor, target) }
   });
   const reckless = recklessFor(talents);
-  const promised = actor?.pendingNextAttack?.() ?? { boons: 0, live: [] };
+  const promised = actor?.pendingNextAttack?.({ targetStatuses: target?.statuses ?? [] }) ?? { boons: 0, live: [] };
   const cancels = cancelledBanesFor(talents, { range });
-  const deterred = target?.deterred ?? [];
+  // And the Sovereign's own on a weapon attack at it (04's The Crimson Throne), derived on its character.
+  const deterred = [...(target?.deterred ?? []), ...(target?.sovDeterred ?? [])];
   const deterBanes = deterred.reduce((n, d) => n + (Number(d.banes) || 0), 0);
   const opening = target ? (actor?.openingState?.(target, { hidden: facts.hidden === true }) ?? null) : null;
   // A Boon the card's Use gave this attack (04's Fan of Knives at rank 2; door 26),
   // on the talent line with its name.
   const carded = Math.max(0, Math.trunc(Number(facts.cardBoons?.boons)) || 0);
   return {
-    talentBoons: { boons: wrath.boons + carded, names: [...wrath.by, ...(carded ? (facts.cardBoons?.names ?? []) : [])] },
+    // And 04's Insolence Repaid (the Sovereign: *your next attack or spell against that creature ... takes a Boon*).
+    talentBoons: ((ins) => ({ boons: wrath.boons + carded + ins, names: [...wrath.by, ...(carded ? (facts.cardBoons?.names ?? []) : []), ...(ins ? [game.i18n.localize("AZEROTH.Sovereign.InsolenceName")] : [])] }))(actor?.insolenceBoons?.(targetActorUuid(target), "attack") ?? 0),
     reckless: reckless ? { boons: reckless.boons, names: [reckless.name] } : null,
     nextAttackBoons: { boons: promised.boons, names: promised.live.filter(e => (e.boons ?? 0) > 0).map(e => e.name).filter(Boolean) },
     targetExposed: exposedBoonsOn(exposuresAgainst(target?.exposed ?? [], { side: attackerSide(actor), uuid: actor?.uuid ?? null }), { range }),
@@ -527,7 +560,7 @@ function shadowDamagedBy(actor, target) {
  * @param {Actor} actor
  * @param {object|null} target
  */
-function castingTalentLines(actor, target, kind) {
+function castingTalentLines(actor, target, kind, targets = [target]) {
   const talents = actor?.takenTalents?.() ?? [];
   // And 04's Shatter (*Your spells gain a Boon against a target that is Entangled
   // or Slowed, or whose Speed is otherwise reduced*; D-775) on the same line.
@@ -547,9 +580,19 @@ function castingTalentLines(actor, target, kind) {
     standing: (actor?.effects ?? []).some(e => e.active !== false && e.getFlag?.("azeroth-rpg", "identifier") === ARCHMAGE.identifier),
     sustaining: (actor?.getFlag?.("azeroth-rpg", "sustaining") ?? []).length
   }, talents);
-  const boons = faith.boons + every.boons + archmage.boons;
-  const names = [...faith.by, ...every.by, ...(archmage.boons > 0 ? [game.i18n.localize("AZEROTH.Archmage.Label"), ...archmage.by] : [])];
-  return boons > 0 ? { talentBoons: { boons, names } } : {};
+  // And 04's Insolence Repaid (the Sovereign): a spell at the creature that missed takes the Boon.
+  const ins = actor?.insolenceBoons?.(targetActorUuid(target), kind) ?? 0;
+  const boons = faith.boons + every.boons + archmage.boons + ins;
+  const names = [...faith.by, ...every.by, ...(archmage.boons > 0 ? [game.i18n.localize("AZEROTH.Archmage.Label"), ...archmage.by] : []), ...(ins ? [game.i18n.localize("AZEROTH.Sovereign.InsolenceName")] : [])];
+  // **02 §7's WITHERING CONTEMPT ON THE CASTING TEST** (*A Casting Test for a spell that targets you takes a
+  // Bane*): each target's own feature, automatic and named - every creature the spell targets, never the
+  // first alone (the review's N7; MY READING: a Bane for each targeted creature that holds it).
+  const cast = (targets ?? []).filter(Boolean).flatMap(row => row?.castDeterred ?? []);
+  const castBanes = cast.reduce((n, d) => n + (Number(d.banes) || 0), 0);
+  return {
+    ...(boons > 0 ? { talentBoons: { boons, names } } : {}),
+    ...(castBanes > 0 ? { targetCastBanes: { banes: castBanes, names: [...new Set(cast.map(d => d.source).filter(Boolean))].sort() } } : {})
+  };
 }
 
 /**

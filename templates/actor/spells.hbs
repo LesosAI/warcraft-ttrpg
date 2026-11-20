@@ -61,6 +61,8 @@
       {{> systems/azeroth-rpg/templates/actor/partials/star.hbs favorite=spell.favorite}}
       <button type="button" class="azeroth-open" data-action="openItem" data-tooltip="{{localize "AZEROTH.Sheet.Open"}}" aria-label="{{localize "AZEROTH.Sheet.Open"}}"><i class="fa-solid fa-pen-to-square"></i></button>
       <button type="button" class="azeroth-delete" data-action="deleteItem" data-tooltip="{{localize "AZEROTH.Sheet.Delete"}}" aria-label="{{localize "AZEROTH.Sheet.Delete"}}">&times;</button>
+      {{!-- A Vitae price that takes Health, said in words before Cast (02 SS7; the plan's V4). --}}
+      {{#if spell.vitaeWarn}}<p class="azeroth-spell-vitae-warn is-{{spell.vitaeWarnKind}}" role="note">{{spell.vitaeWarn}}</p>{{/if}}
       {{> systems/azeroth-rpg/templates/actor/partials/item-detail.hbs id=spell.id detail=spell.detail description=spell.description}}
     </li>
     {{/each}}

@@ -19,10 +19,12 @@
  * the window, and a Short Rest with nothing chosen recovers nothing.
  */
 
-import { shortRest } from "../rules/rest.mjs";
+import { bloodNeeded, bloodRestPlan, longRest, shortRest, vialUnits } from "../rules/rest.mjs";
 import { provisionOptions, tierAgain } from "../rules/provisions.mjs";
 
 const TEMPLATE = "systems/azeroth-rpg/templates/dialog/rest.hbs";
+/** A San'layn's window, both modes (02 §5; D-1141 to D-1144). */
+const BLOOD_TEMPLATE = "systems/azeroth-rpg/templates/dialog/rest-blood.hbs";
 
 /** The window's element id for an actor - fixed, so a second click focuses the first. */
 export function restDialogId(actor) {
@@ -186,6 +188,9 @@ export async function promptRest(actor) {
  */
 export async function shortRestWithDialog(actor) {
   if (!actor) return null;
+  // **A SAN'LAYN IS ASKED FOR BLOOD, AND FOR NOTHING ELSE** (02 §5; D-1141). Before the
+  // exemption below: a San'layn Death Knight still needs its blood (D-1142).
+  if (actor.system?.bloodFed === true) return bloodRestWithDialog(actor, "short");
   // **A CHARACTER WHO DOES NOT EAT OR DRINK IS ASKED FOR NEITHER** (the lead: *"They do
   // recover health but do not have to eat or drink."*; D-946): the Death Knight, the
   // Forsaken and the Risen rest at once, and the card says why nothing was eaten.
@@ -193,4 +198,141 @@ export async function shortRestWithDialog(actor) {
   const picks = await promptRest(actor);
   if (!picks) return null;
   return actor.shortRest(picks);
+}
+
+/**
+ * **THE SHEET'S LONG REST** (02 §5; the plan's A.6 item 2, *for a blood-fed character, it opens
+ * the dialog in long mode first, asking for `bloodLongRest` units*; D-1144). Anybody else rests at
+ * once, exactly as the sheet's button always did.
+ *
+ * @param {Actor} actor
+ */
+export async function longRestWithDialog(actor) {
+  if (!actor) return null;
+  if (actor.system?.bloodFed === true) return bloodRestWithDialog(actor, "long");
+  return actor.longRest();
+}
+
+/** The `bloodLongRest` world setting, or the rule's default where it cannot be read. */
+function bloodLongRestSetting() {
+  try { return game.settings.get("azeroth-rpg", "bloodLongRest"); } catch { return undefined; }
+}
+
+/**
+ * **A SAN'LAYN'S REST, BOTH MODES** (02 §5, *Your hunger.*; D-1141 to D-1144). Where the feedings
+ * since the last rest already cover it, or the GM's setting asks for none, the rest is taken at
+ * once (the plan's F4: *the race's rest door counts it before asking for vials*); otherwise the
+ * window asks, and the door re-judges what it is handed.
+ *
+ * @param {Actor} actor
+ * @param {"short"|"long"} kind
+ */
+export async function bloodRestWithDialog(actor, kind = "short") {
+  if (!actor) return null;
+  const door = picks => (kind === "long" ? actor.longRest(picks) : actor.shortRest(picks));
+  const needed = bloodNeeded(kind, kind === "long" ? bloodLongRestSetting() : 1);
+  const since = Math.max(0, Number(actor.bloodSinceRest) || 0);
+  if (needed === 0 || since >= needed) return door({});
+  const picks = await promptBloodRest(actor, kind, { needed, since });
+  if (!picks) return null;
+  return door(picks);
+}
+
+/**
+ * Open the San'layn's window and wait. Resolves to the door's picks - `{blood, fresh}` - or null
+ * where it was dismissed or is already open.
+ *
+ * @param {Actor} actor
+ * @param {"short"|"long"} kind
+ * @param {{needed: number, since: number}} o
+ */
+export async function promptBloodRest(actor, kind, { needed, since }) {
+  const { DialogV2 } = foundry.applications.api;
+  const { renderTemplate } = foundry.applications.handlebars;
+  const id = `${restDialogId(actor)}-blood-${kind}`;
+  const open = foundry.applications.instances?.get(id);
+  if (open?.rendered) {
+    open.bringToFront();
+    return null;
+  }
+  const short = kind !== "long";
+  const carried = provisionOptions(actor.items ?? []).blood;
+  // What the rest returns once its blood is met, worked out through the pure rule (D-1141).
+  const s = actor.system ?? {};
+  const base = { health: s.health, conMod: s.abilities?.con?.own?.mod ?? s.abilities?.con?.mod ?? 0, tier: s.tier ?? 1, fatigue: s.fatigue ?? 0, pools: actor.poolSnapshot?.() ?? [] };
+  const r = short ? shortRest({ ...base, bloodFed: true, blood: true }) : longRest({ ...base });
+  const health = r.gains.find(g => g.kind === "health")?.amount ?? 0;
+  const power = r.gains.filter(g => g.kind === "pool").reduce((n, g) => n + g.amount, 0);
+  const vials = carried.map((row, i) => ({
+    value: row.itemId,
+    quantity: row.quantity,
+    label: row.quantity > 1 ? `${row.name} ${game.i18n.format("AZEROTH.Rest.Quantity", { n: row.quantity })}` : row.name,
+    // Short: the first vial carried is preselected. Long: every vial is ticked, and the door
+    // drinks only what the rest still needs.
+    selected: short ? i === 0 : true
+  }));
+  const content = await renderTemplate(BLOOD_TEMPLATE, {
+    id: actor.id,
+    mode: kind,
+    short,
+    needed,
+    vials,
+    needLine: game.i18n.format(short ? "AZEROTH.Rest.BloodNeedShort" : "AZEROTH.Rest.BloodNeedLong", { name: actor.name, n: needed }),
+    sinceLine: since > 0 ? game.i18n.format("AZEROTH.Rest.BloodSinceNote", { n: since }) : null,
+    returns: game.i18n.format("AZEROTH.Rest.BloodReturns", { health, power }),
+    reason: ""
+  });
+  const unitsFrom = form => {
+    if (!form) return { fresh: 0, vials: 0 };
+    const fresh = short ? (form.elements.fresh?.checked ? 1 : 0) : Math.max(0, Math.trunc(Number(form.elements.fresh?.value)) || 0);
+    const picked = short
+      ? (form.elements.blood?.value ? [{ quantity: carried.find(c => c.itemId === form.elements.blood.value)?.quantity ?? 1 }] : [])
+      : [...form.querySelectorAll("[data-blood-vial]")].filter(el => el.checked).map(el => ({ quantity: Number(el.dataset.units) || 1 }));
+    return { fresh, vials: vialUnits(picked) };
+  };
+  return DialogV2.wait({
+    id,
+    classes: ["azeroth", "azeroth-roll-dialog", "azeroth-rest", "azeroth-rest-blood"],
+    window: { title: game.i18n.localize(short ? "AZEROTH.Sheet.ShortRest" : "AZEROTH.Sheet.LongRest"), icon: short ? "fa-solid fa-campground" : "fa-solid fa-bed" },
+    position: { width: 440 },
+    content,
+    rejectClose: false,
+    render: (event, dialog) => {
+      const form = dialog.element.querySelector("form");
+      const button = dialog.element.querySelector('button[data-action="rest"]');
+      const line = form?.querySelector("[data-rest-reason]");
+      const update = () => {
+        const { fresh, vials: units } = unitsFrom(form);
+        const plan = bloodRestPlan({ needed, sinceRest: since, fresh, vials: units });
+        // A SHORT REST WITHOUT ITS UNIT IS REFUSED, AS A MEAL-LESS ONE IS; A LONG REST NEVER IS.
+        // Either way the reason is said in words, never by the grey alone.
+        if (button) button.disabled = short && !plan.met;
+        if (line) {
+          line.textContent = plan.met
+            ? ""
+            : (short
+              ? game.i18n.format("AZEROTH.Rest.NeedsBlood", { name: actor.name })
+              : game.i18n.format("AZEROTH.Rest.BloodShortLong", { n: needed - Math.min(needed, since + fresh + units) }));
+        }
+      };
+      form?.addEventListener("change", update);
+      form?.addEventListener("input", update);
+      update();
+    },
+    buttons: [{
+      action: "rest",
+      label: "AZEROTH.Rest.Rest",
+      icon: short ? "fa-solid fa-campground" : "fa-solid fa-bed",
+      default: true,
+      // ALWAYS an object (D-733's note on `DialogV2#_onClickButton`).
+      callback: (clicked, target) => {
+        const form = target.form;
+        if (short) return { blood: form.elements.blood?.value || null, fresh: form.elements.fresh?.checked === true };
+        return {
+          blood: [...form.querySelectorAll("[data-blood-vial]")].filter(el => el.checked).map(el => el.value),
+          fresh: Math.max(0, Math.trunc(Number(form.elements.fresh?.value)) || 0)
+        };
+      }
+    }]
+  });
 }

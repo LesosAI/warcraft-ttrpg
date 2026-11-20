@@ -233,3 +233,32 @@ export function rulesPackCarriesRepair(chapters = []) {
   const options = (chapters ?? []).find(c => String(c?.name ?? "").toUpperCase() === "02-CHARACTER-OPTIONS");
   return Boolean(options?.pages?.some(p => (classCountOf(p?.name) ?? 0) >= REPAIR_CLASS_COUNT));
 }
+
+/** The race count of the book the San'layn's repair was written for: thirteen (D-1154). */
+export const REPAIR_RACE_COUNT = 13;
+
+/**
+ * The race count 02 §5's page name states (`5. The thirteen races` -> 13), or null.
+ *
+ * @param {string} name
+ * @returns {number|null}
+ */
+export function raceCountOf(name) {
+  const m = /^5\. The ([a-z]+) races$/i.exec(String(name ?? "").trim());
+  return m ? (CLASS_COUNT_WORDS[m[1].toLowerCase()] ?? null) : null;
+}
+
+/**
+ * **WHETHER THE RULES PACK CARRIES THE SAN'LAYN'S BOOK** (the San'layn plan's F7; D-1154). A page's id
+ * is hashed from its title (`rulesPageId`), so renaming 02 §5 to *The thirteen races* and §7 to
+ * *The fourteen classes* gives both new ids: a world that imported the book before holds the old
+ * pages, and `repairRulesJournals` makes the new ones beside them. Keyed on the race COUNT (the
+ * Necromancer plan's finding 6: never on a page's name), so a later people's book still carries it.
+ *
+ * @param {Array<{name: string, pages?: Array<{name: string}>}>} chapters  the compendium's entries
+ * @returns {boolean}
+ */
+export function rulesPackCarriesPeoples(chapters = []) {
+  const options = (chapters ?? []).find(c => String(c?.name ?? "").toUpperCase() === "02-CHARACTER-OPTIONS");
+  return Boolean(options?.pages?.some(p => (raceCountOf(p?.name) ?? 0) >= REPAIR_RACE_COUNT));
+}

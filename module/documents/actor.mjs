@@ -23,6 +23,7 @@
 import { healingFactorOf } from "../rules/afflictions.mjs";
 // 07 §12's ledger of damage taken (D-867).
 import { LEDGER_FLAG, appendLedger, ledgerStamp } from "../rules/recent-damage.mjs";
+import { BLED_AT_FLAG, attackLessOn, burdenFires, weaponLessOn } from "../rules/sovereign-spells.mjs";
 // 07 §12's Dilation (D-866): half a blow put off to the start of the next turn.
 import { DEFERRED_FLAG, appendDeferred, deferralOf, splitDeferred } from "../rules/deferred-damage.mjs";
 // 04's Stasis Lore and Halt the Sands: a spell bought with Sand (D-869).
@@ -144,6 +145,8 @@ import {utilityEffectView} from "../rules/utility-draughts.mjs";
 // What another creature does to a blow, asked as it lands (D-777): a blow moved,
 // a blow divided, a creature held at 1, and 07's Aegis floor.
 import { aegisFloor, askToBorrow, askToHold, divideBlow, landShares, redirectBlow } from "../effects/blow-doors.mjs";
+// 04's Exquisite Taste and Overflowing Cup at the one healing door (the Sovereign; pure).
+import { INSOLENCE_FLAG, healExtra as sovereignHealExtra, insolenceBoons } from "../rules/sovereign-talents.mjs";
 // THE LEGACY BRANCHES' B3 (doors 10, 11 and 25): a Death Step held back or spared, the
 // third one recorded, 06 §10's offer at the second, Ethereal Form's halving at the one
 // damage door, and Life Drain's Health back off what the blow took.
@@ -160,6 +163,8 @@ import { drainHeal } from "../effects/legacy-uses.mjs";
 import { allyOf } from "../canvas/engaged.mjs";
 import { restCard } from "../dice/rest-card.mjs";
 import { burnTether, longRest, shortRest, turnRefill } from "../rules/rest.mjs";
+// A San'layn's rest (02 §5; D-1141 to D-1144): the blood it needs, judged before anything is spent.
+import { BLOOD_SINCE_REST_FLAG, bloodNeeded, bloodRestPlan, bloodSinceRestOf, vialDraws, vialUnits } from "../rules/rest.mjs";
 import { restoreSpellUses } from "../effects/spell-limits.mjs";
 import { restoreApprovedSignatureUses } from "../effects/approved-signature-use.mjs";
 // What a Short Rest eats and drinks (05 SS16, 08 SS12; D-733).
@@ -182,10 +187,16 @@ import { HEALING_REFUSAL_WORDS, healGiver, healingRefusal } from "../rules/undea
 import { SOUL_MARK_FLAG, curseOn, soulMarkRefusal } from "../rules/necromancer-spells.mjs";
 import { creatureSnapshot, kindsOf } from "../rules/creature-kinds.mjs";
 import { refillRunesAtLongRest } from "./runes.mjs";
-import { RUNES, RUNIC_POWER, runicGainRefusal } from "../rules/runes.mjs";
+// The Sovereign's hot-path doors, asked before their modules load (O-419; `rules/sovereign-scope.mjs`).
+import { blowCutCanReach, burdenCanReach, harmEndsCanReach, majestyCanReach, mirrorCanReach, preyMarksOf, unfadingCanReach } from "../rules/sovereign-scope.mjs";
+import { RUNES, RUNIC_POWER } from "../rules/runes.mjs";
+// The ONE named-gain refusal (Runic Power, Essence, Tribute, Vitae; the San'layn and Sovereign plan's C3).
+import { gainSourceFor, isNamedGainPool, namedGainRefusal, namedGainWords } from "../rules/named-gains.mjs";
+// The Sovereign's doors (02 §7): the Vitae payment, the feeding and the prey (`effects/sovereign-core.mjs`).
+import { feedOn as sovereignFeedOn, isPrey as sovereignIsPrey, loseHealthForVitae, markPrey as sovereignMarkPrey, payVitae as sovereignPayVitae, preyOf } from "../effects/sovereign-core.mjs";
 // The Necromancer's Essence (the plan's Phase 3): the doors a rise comes through, and that it
 // never pays a maneuver.
-import { ESSENCE, essenceGainRefusal, paysByKind, restExposure } from "../rules/essence.mjs";
+import { ESSENCE, paysByKind, restExposure } from "../rules/essence.mjs";
 import { empowerLines, fleshOfferingLines, skeletalMasteryLines } from "../rules/necromancer-lines.mjs";
 import { hordeLeadLines } from "../rules/necromancer-features.mjs";
 import { HORDE_LEAD_FLAG, leadFor } from "../rules/horde.mjs";
@@ -211,6 +222,11 @@ import { auraBoonsOn, auraStamp, halvedHealing } from "../rules/auras.mjs";
 // the table judges (D-601). A Long Rest's exposure opens no dialog, so it rolls
 // exactly that (D-755's review).
 import { defaultChoice } from "../applications/roll-dialog.mjs";
+// The Sovereign's Claws: kept by Blood-Forged Claws, read as plain facts (02 §7, 04's Ravenous;
+// the San'layn and Sovereign plan, C1 and C16; D-1164, D-1166).
+import { CLAWS_FEATURE, CLAWS_SYNC, clawFactsFrom, clawsCreateData, clawsDue } from "../rules/claws.mjs";
+import { CLAWS_ID, isClaws as isClawsItem } from "../rules/unarmed.mjs";
+import { CLAW_USES_FLAG } from "../rules/initiative.mjs";
 
 /** What the talent grant reads off the pack's index: the class, the people, and a racial talent's race. */
 const TALENT_INDEX_FIELDS = Object.freeze(["system.className", "system.identifier", "system.legacy", "system.race"]);
@@ -977,7 +993,10 @@ export class AzerothActor extends Actor {
       for (const item of documents.filter(d => d.type === "class")) {
         if (classes.some(c => c?.itemId === item.id)) continue;
         const level = 1;
-        const { powers } = poolsFor([{ ...item.system, itemId: item.id, level }], level);
+        // The casting modifier the pool takes (02 §6; 02 §7's *You start with full Vitae*: the chart times
+        // 1.5 PLUS Constitution), read off the actor's own score so a new pool opens at its true top.
+        const castingMod = item.system?.castingAbility ? (this.system?.abilities?.[item.system.castingAbility]?.mod ?? 0) : 0;
+        const { powers } = poolsFor([{ ...item.system, itemId: item.id, level, castingMod }], level);
         const full = powers.find(p => p.itemId === item.id)?.max ?? 0;
         try {
           classes = addClassEntry(classes, { itemId: item.id, level, power: { value: full }, momentum: { value: 0 } });
@@ -1301,7 +1320,8 @@ export class AzerothActor extends Actor {
    * itself. Everything else calls `updatePool`.
    */
   async writePoolsNow(changes, extra = {}, options = {}) {
-    const { runicGain = null, essenceGain = null, ...updateOptions } = options ?? {};
+    const { runicGain = null, essenceGain = null, tributeGain = null, vitaeGain = null, ...updateOptions } = options ?? {};
+    const gainSources = { runicGain, essenceGain, tributeGain, vitaeGain };
     options = updateOptions;
     const list = Array.isArray(changes) ? changes : [changes];
     if (!list.length && !Object.keys(extra).length) return this;
@@ -1338,23 +1358,15 @@ export class AzerothActor extends Actor {
         continue;
       }
       const next = Math.max(0, Math.min(pool.max, Math.trunc(value)));
-      // **RUNIC POWER RISES THROUGH A NAMED DOOR ALONE** (`rules/runes.mjs#runicGainRefusal`):
-      // a rise this write does not name a source for is refused in words, and the rest of
-      // the batch stands.
-      if (pool.kind === "momentum" && pool.name === RUNIC_POWER) {
-        const refusedGain = runicGainRefusal({ before: entry[kind]?.value ?? 0, after: next, source: runicGain, gm: game.user?.isGM === true });
+      // **RUNIC POWER, ESSENCE, TRIBUTE AND VITAE RISE THROUGH A NAMED DOOR ALONE**
+      // (`rules/named-gains.mjs#namedGainRefusal`, the ONE refusal the four share; the San'layn and
+      // Sovereign plan's C3): a rise this write names no source for - `runicGain`, `essenceGain`,
+      // `tributeGain`, `vitaeGain` - is refused in words, and the rest of the batch stands. Vitae is a
+      // POWER pool, so the rule is asked whatever the write's kind.
+      if (isNamedGainPool(pool.name)) {
+        const refusedGain = namedGainRefusal(pool.name, { before: entry[kind]?.value ?? 0, after: next, source: gainSourceFor(pool.name, gainSources), gm: game.user?.isGM === true });
         if (refusedGain) {
-          ui.notifications?.warn(game.i18n.format(`AZEROTH.Runes.Refuse.gain.${refusedGain}`, { name: this.name }));
-          continue;
-        }
-      }
-      // **ESSENCE RISES THROUGH A NAMED DOOR ALONE** (`rules/essence.mjs#essenceGainRefusal`;
-      // the Necromancer plan: *You gain Essence in no other way unless a feature, talent or
-      // spell says so*): a rise this write names no source for is refused in words.
-      if (pool.kind === "momentum" && pool.name === ESSENCE) {
-        const refusedEssence = essenceGainRefusal({ before: entry[kind]?.value ?? 0, after: next, source: essenceGain, gm: game.user?.isGM === true });
-        if (refusedEssence) {
-          ui.notifications?.warn(game.i18n.format(`AZEROTH.Essence.Refuse.gain.${refusedEssence}`, { name: this.name }));
+          ui.notifications?.warn(game.i18n.format(namedGainWords(pool.name, refusedGain), { name: this.name }));
           continue;
         }
       }
@@ -1575,11 +1587,65 @@ export class AzerothActor extends Actor {
     if (swap.changed && this.isOwner) {
       await this.update({ [`flags.azeroth-rpg.${GADGETS_SPENT_FLAG}`]: foundry.data.operators.ForcedReplacement.create(swap.record) });
     }
+    // **THE SOVEREIGN'S CLAWS GO WITH BLOOD-FORGED CLAWS** (02 §7; the plan's C1; D-1164):
+    // embedded unequipped with the feature, deleted with it, through the one key the
+    // item's batch seam lets past.
+    await this._syncClaws([...wanted.values()].some(({ f }) => f?.name === CLAWS_FEATURE))
+      .catch(err => console.warn("azeroth-rpg | claws sync", err));
     // The creatures bound to this character take its talents' effects (D-643),
     // and the character its own passives (D-648).
     await this.syncBound().catch(err => console.error("azeroth-rpg | bound sync", err));
     await this.syncTalentEffects().catch(err => console.error("azeroth-rpg | talent effects", err));
     return { created: creates.length, updated: updates.length, deleted: doomed.length };
+  }
+
+  /**
+   * **THE CLAWS' ONE WRITER** (02 §7's Blood-Forged Claws; the plan's C1; D-1164): what
+   * `rules/claws.mjs#clawsDue` owes, written with `azerothClaws: "sync"` - the only key
+   * `AzerothItem`'s batch seam lets a create or a delete of the claws through on. The
+   * claws come off the weapons pack's `sovereign-claws`, unequipped and in no container;
+   * where the pack lacks them nothing is made and the console says why.
+   *
+   * @param {boolean} holdsFeature  Blood-Forged Claws stands after this sync
+   */
+  async _syncClaws(holdsFeature) {
+    if (this.type !== "character" || !this.isOwner) return;
+    const due = clawsDue({ holdsFeature, items: this.items });
+    const remove = due.remove.filter(id => this.items.has(id));
+    if (remove.length) await this.deleteEmbeddedDocuments("Item", remove, { azerothClaws: CLAWS_SYNC });
+    if (!due.create) return;
+    const pack = game.packs?.get("azeroth-rpg.weapons") ?? null;
+    const index = pack ? await pack.getIndex({ fields: ["system.identifier"] }) : [];
+    const entry = [...index].find(e => e.system?.identifier === CLAWS_ID) ?? null;
+    const doc = entry ? await pack.getDocument(entry._id) : null;
+    if (!doc) {
+      console.warn(`azeroth-rpg | ${this.name} holds ${CLAWS_FEATURE}, and the weapons pack holds no ${CLAWS_ID}`);
+      return;
+    }
+    // Asked again after the await: a second sync may have made them meanwhile.
+    if (this.items.some(i => i.type === "weapon" && isClawsItem(i))) return;
+    await this.createEmbeddedDocuments("Item", [clawsCreateData(doc.toObject())], { azerothClaws: CLAWS_SYNC });
+  }
+
+  /**
+   * **THE CLAW FACTS** (04's Ravenous; the plan's C16; D-1166): what
+   * `initiative.mjs#offHandRolls` and `#freeOffHand` read - the claws equipped in the off
+   * hand, Blooded Claws' and Raking Claws' ranks by identifier, Red Feast's form off the
+   * shape worn, the tier, and the free claw attacks spent since the last rest
+   * (`CLAW_USES_FLAG`).
+   *
+   * @returns {{claws: boolean, bloodedClawsRank: number, rakingClawsRank: number, redFeastForm: boolean, tier: number, spent: number}}
+   */
+  clawFacts() {
+    const ready = this.readyWeapons?.() ?? [];
+    return clawFactsFrom({
+      talents: this.takenTalents?.() ?? [],
+      // `readyWeapons` is what is in hand (D-769): equipped, and never melded.
+      claws: ready.some(w => w?.type === "weapon" && isClawsItem(w)),
+      shapeKind: this.shape?.kind ?? null,
+      tier: this.system?.tier ?? 1,
+      spent: this.getFlag?.("azeroth-rpg", CLAW_USES_FLAG) ?? 0
+    });
   }
 
   /**
@@ -1813,6 +1879,8 @@ export class AzerothActor extends Actor {
     // Rest and a Long Rest alike.
     if ((event === "short" || event === "long") && this.isOwner) {
       for (const key of ["breathSchool", "arcWiden"]) if (this.getFlag("azeroth-rpg", key)) await this.unsetFlag("azeroth-rpg", key);
+      // 04's Blooded Claws: *you regain the uses when you finish a Short or Long Rest* (D-1166).
+      if (this.getFlag("azeroth-rpg", CLAW_USES_FLAG)) await this.unsetFlag("azeroth-rpg", CLAW_USES_FLAG);
     }
     await restoreApprovedSignatureUses(this, event);
     await restoreSpellUses(this, event);
@@ -1925,6 +1993,9 @@ export class AzerothActor extends Actor {
     const fight = this.activeFight?.() ?? null;
     const out = { [`flags.azeroth-rpg.${LEDGER_FLAG}`]: appendLedger(this.getFlag("azeroth-rpg", LEDGER_FLAG) ?? [], amount,
       ledgerStamp({ combatId: fight?.started ? fight.id : null, round: fight?.round, turn: fight?.turn, time: game.time?.worldTime ?? 0 })) };
+    // **WHEN ITS BLOOD WAS LAST SPILLED** (07 §17's Taste of Lineage: *A creature's blood, spilled within the
+    // last day*; D-1246): the world time, in the same write as the Health.
+    if (Number(amount) > 0) out[`flags.azeroth-rpg.${BLED_AT_FLAG}`] = game.time?.worldTime ?? 0;
     // **02's RECALL COUNTS WHAT IS TAKEN SINCE ITS MARK** (*regain Health equal to the damage you
     // have taken since you marked it*; stage 2b): the ledger keeps two minutes, the mark ten,
     // so the mark keeps its own running total, in the same write as the Health.
@@ -2004,6 +2075,149 @@ export class AzerothActor extends Actor {
     return ids.length;
   }
 
+  /**
+   * **PAY A COST IN VITAE** (02 §7: *When a cost is more than the Vitae you hold, spend all your Vitae and
+   * pay the rest in Health, 1 Health for each 1 Vitae*; the San'layn and Sovereign plan's V4): the one
+   * door a feature, a talent and an upkeep pay Vitae through, inside this actor's pool queue, in one
+   * update. Judge first (`effects/sovereign-core.mjs#vitaeRefusal`).
+   *
+   * @param {number} amount
+   * @param {{extra?: object, label?: string}} [o]
+   */
+  payVitae(amount, o = {}) {
+    return sovereignPayVitae(this, amount, o);
+  }
+
+  /**
+   * **FEED** (02 §7's The Blood Royal; the plan's F2): the one feeding door every talent and spell that
+   * feeds calls - Latch On's free feeding, Drink Deep, Last Draught, Embrace of the Vampyr, the Blood
+   * Monarch's claw hit. `{mode, free, anyDay, vitaeFactor, flat, source, way}`: see
+   * `effects/sovereign-core.mjs#feedOn`.
+   *
+   * @param {Actor|Token|TokenDocument|object} target
+   * @param {object} [o]
+   */
+  feedOn(target, o = {}) {
+    return sovereignFeedOn(this, target, o);
+  }
+
+  /**
+   * **MARK A CREATURE AS YOUR PREY** (02 §7's Hunt Mortal, Blood-Forged Claws, Unending Pursuit; the plan's
+   * C4). `way` is `hunt`, `claws` or `pursuit`.
+   */
+  markPrey(target, { way = "hunt" } = {}) {
+    return sovereignMarkPrey(this, target, { way });
+  }
+
+  /** The prey mark while it stands (`rules/prey.mjs#preyActive`), or null. */
+  preyMark() {
+    return preyOf(this);
+  }
+
+  /** Whether a creature (an actor, a token or a snapshot row) is this Sovereign's prey. */
+  isPrey(target) {
+    return sovereignIsPrey(this, target);
+  }
+
+  /**
+   * **THE FEEDINGS SINCE THE LAST REST** (the plan's B.11 F4 and C-14; D-1143): the units of blood
+   * a San'layn has already drunk for its next rest - Open Vein's living failure, and every feeding
+   * of the Sovereign's. Read by both rest doors before they ask for a vial.
+   * @returns {number}
+   */
+  get bloodSinceRest() {
+    return bloodSinceRestOf(this.getFlag?.("azeroth-rpg", BLOOD_SINCE_REST_FLAG));
+  }
+
+  /**
+   * **THE ONE WRITER OF THAT COUNT** (D-1143): `n` units more, on this character's own actor. The
+   * Sovereign's feeding door and Open Vein call it; a satisfied rest clears it.
+   * @param {number} [n]
+   * @returns {Promise<number>} the count after
+   */
+  async addBloodSinceRest(n = 1) {
+    const add = Math.max(0, Math.trunc(Number(n)) || 0);
+    if (!add || this.type !== "character") return this.bloodSinceRest;
+    const next = this.bloodSinceRest + add;
+    await this.setFlag("azeroth-rpg", BLOOD_SINCE_REST_FLAG, next);
+    return next;
+  }
+
+  /**
+   * **WHAT A REST'S BLOOD IS, JUDGED WHOLE BEFORE ANYTHING IS SPENT** (02 §5, *Your hunger.*;
+   * D-1141 to D-1144). Writes nothing. Answers `{fed, refusal}` and, for a San'layn, the plan.
+   *
+   * - Somebody who does not rest on blood and names a vial or a fresh unit is refused in words.
+   * - A San'layn whose Short Rest names food, a drink or a shared feast is refused in words (*Food
+   *   and drink restore nothing on your rests*), and so is a pick that is not a Blood vial it carries.
+   * - A Short Rest with no unit at all is refused (`NeedsBlood`), as a meal-less one is.
+   * - A Long Rest is never refused for want of blood: the plan comes back unmet, and the door
+   *   rests `withheld`.
+   *
+   * @param {"short"|"long"} kind
+   * @param {{food?: *, drink?: *, feast?: *, blood?: *, fresh?: number|boolean}} picks
+   */
+  _judgeRestBlood(kind, { food = null, drink = null, feast = null, blood = null, fresh = 0 } = {}) {
+    const name = this.name;
+    const fed = this.system?.bloodFed === true;
+    const named = blood === null || blood === undefined || blood === "" ? [] : (Array.isArray(blood) ? blood : [blood]);
+    const freshUnits = fresh === true ? 1 : Math.max(0, Math.trunc(Number(fresh)) || 0);
+    if (!fed) {
+      if (named.length || freshUnits) return { fed: false, refusal: game.i18n.format("AZEROTH.Rest.NotBloodFed", { name }) };
+      return { fed: false, refusal: null };
+    }
+    if (kind === "short" && (food || drink || feast)) {
+      return { fed: true, refusal: game.i18n.format("AZEROTH.Rest.BloodNotFood", { name }) };
+    }
+    const stacks = [];
+    for (const given of named) {
+      const id = given && typeof given === "object" ? given.id : given;
+      const item = id ? (this.items.get(id) ?? null) : null;
+      if (!item || !isProvision(item, "blood")) {
+        return { fed: true, refusal: game.i18n.format("AZEROTH.Rest.NotBlood", { name: item?.name ?? given?.name ?? String(given) }) };
+      }
+      if (!stacks.some(s => s.itemId === item.id)) stacks.push({ itemId: item.id, quantity: item.system?.quantity ?? 1 });
+    }
+    let setting = 1;
+    if (kind === "long") {
+      try { setting = game.settings.get("azeroth-rpg", "bloodLongRest"); } catch { setting = undefined; }
+    }
+    const needed = bloodNeeded(kind, setting);
+    const plan = bloodRestPlan({ needed, sinceRest: this.bloodSinceRest, fresh: freshUnits, vials: vialUnits(stacks) });
+    if (kind === "short" && !plan.met) return { fed: true, refusal: game.i18n.format("AZEROTH.Rest.NeedsBlood", { name }) };
+    return { fed: true, kind, plan, stacks, refusal: null };
+  }
+
+  /**
+   * **SPEND WHAT A MET PLAN NEEDS** (D-1144): the vials it still needs after the count and the
+   * fresh units, each through `consumables.mjs#spendOne` (`useGear`'s own mark-off), then the count
+   * cleared. An unmet plan spends nothing (all or nothing). Answers what the card prints.
+   *
+   * @param {{plan: object, stacks: object[]}} judgement  `_judgeRestBlood`'s answer
+   * @returns {Promise<{needed: number, met: boolean, vials: string[], fresh: number, since: number}>}
+   */
+  async _spendRestBlood(judgement) {
+    const plan = judgement?.plan ?? null;
+    if (!plan?.met) return { needed: plan?.needed ?? 0, met: false, vials: [], fresh: 0, since: 0 };
+    const vials = [];
+    for (const draw of vialDraws(judgement.stacks ?? [], plan.fromVials)) {
+      const item = this.items.get(draw.itemId);
+      if (!item) continue;
+      vials.push(draw.take > 1 ? `${item.name} ${game.i18n.format("AZEROTH.Rest.Quantity", { n: draw.take })}` : item.name);
+      let held = item.system?.quantity ?? 1;
+      let gone = false;
+      for (let i = 0; i < draw.take; i++) {
+        const spend = spendOne(held);
+        if (!spend || spend.delete) { gone = true; break; }
+        held = spend.quantity;
+      }
+      if (gone) await item.delete();
+      else await item.update({ "system.quantity": held });
+    }
+    if (plan.clearSince) await this.unsetFlag("azeroth-rpg", BLOOD_SINCE_REST_FLAG);
+    return { needed: plan.needed, met: true, vials, fresh: plan.fromFresh, since: plan.fromSince };
+  }
+
   /** The starred item ids, in the order they were starred (D-612). */
   get favorites() {
     const ids = this.getFlag("azeroth-rpg", "favorites") ?? [];
@@ -2045,7 +2259,14 @@ export class AzerothActor extends Actor {
    *
    * @param {{food?: Item|string|null, drink?: Item|string|null}} [picks]
    */
-  async shortRest({ food = null, drink = null, feast = null } = {}) {
+  async shortRest({ food = null, drink = null, feast = null, blood = null, fresh = false } = {}) {
+    // **A SAN'LAYN RESTS ON BLOOD, AND NOBODY ELSE DOES** (02 §5, *Your hunger.*; D-1141 to
+    // D-1143). Judged WHOLE before anything is spent, beside the food and drink refusals below.
+    const bloodJudgement = this.type === "character" ? this._judgeRestBlood("short", { food, drink, feast, blood, fresh }) : null;
+    if (bloodJudgement?.refusal) {
+      ui.notifications?.warn(bloodJudgement.refusal);
+      return null;
+    }
     const {withSpecialEquipmentRest}=await import("../effects/special-equipment.mjs");
     return withSpecialEquipmentRest(this,async()=>{
     const {prepareSpecialRest,finishSpecialRest,rechargeSpecialEquipment}=await import("../effects/special-equipment.mjs");
@@ -2069,8 +2290,15 @@ export class AzerothActor extends Actor {
     // block rations and states no such condition, so an NPC's rest recovers
     // exactly what it always did (D-733). A character's picks replace this.
     let picks = { eats: true, drinks: true, tierAgain: false };
+    // What a San'layn drank for this rest, for the card (D-1141).
+    let bloodTaken = null;
 
-    if (this.type === "character") {
+    if (this.type === "character" && bloodJudgement?.fed) {
+      // **THE BLOOD, SPENT AFTER EVERY REFUSAL** (`_judgeRestBlood` above): the count since the
+      // last rest first, then the fresh unit, then the vial - and only what the plan still needs.
+      bloodTaken = await this._spendRestBlood(bloodJudgement);
+      picks = { eats: true, drinks: true, tierAgain: false };
+    } else if (this.type === "character") {
       // 2. REFUSE BEFORE ANYTHING IS SPENT. Both picks are judged first, so a
       // legal food beside an illegal drink costs the character nothing.
       // A pick that was NAMED and is not this character's is refused by name,
@@ -2140,7 +2368,10 @@ export class AzerothActor extends Actor {
       manaExtra: reserve.mana > 0 ? { itemId: reserveClass?.id ?? null, amount: reserve.mana } : null,
       // The Death Knight, the Forsaken and the Risen (D-946).
       needsNoFood: this.type === "character" && this.system?.needsNoFood === true,
-      needsNoDrink: this.type === "character" && this.system?.needsNoDrink === true
+      needsNoDrink: this.type === "character" && this.system?.needsNoDrink === true,
+      // A San'layn's unit of blood (D-1141): judged met above, or the rest was refused.
+      bloodFed: bloodJudgement?.fed === true,
+      blood: bloodJudgement?.fed === true && bloodJudgement.plan?.met === true
     });
     if (reserve.mana > 0 && picks.drinks === true) r.gains.push({ kind: "talentMana", name: reserve.by.join(", "), amount: reserve.mana });
     const restBefore = this.system?.health?.value ?? 0;
@@ -2188,7 +2419,7 @@ export class AzerothActor extends Actor {
     }
     await this.setFlag("azeroth-rpg","restGeneration",restGeneration(this)+1);
     await finishSharedFeast(this,sharedMeal);
-    await restCard({ actor: this, kind: "short", gains: r.gains, restored, cleared, count, ate, drank });
+    await restCard({ actor: this, kind: "short", gains: r.gains, restored, cleared, count, ate, drank, blood: bloodTaken });
     return this;
     });
   }
@@ -2198,11 +2429,24 @@ export class AzerothActor extends Actor {
    * full; one Fatigue; Resolve refreshed; every limited use back. Diseased
    * (A1) takes the Health and the Fatigue away and the card says so.
    */
-  async longRest() {
+  async longRest({ blood = null, fresh = 0 } = {}) {
+    // **A SAN'LAYN'S LONG REST TAKES THE GM'S NUMBER OF UNITS, AND IS NEVER REFUSED FOR IT**
+    // (02 §5; the plan's A.6 item 2 and F10; D-1144). Judged here, BEFORE the first write below
+    // (`endShapeAt`, the Long Watch, the temporary Health): a pick that is not a Blood vial on
+    // this character is refused in words with nothing done, and blood that falls short rests
+    // `withheld` - no Health, no Power, no Fatigue - with every other reset run.
+    const bloodJudgement = this.type === "character" ? this._judgeRestBlood("long", { blood, fresh }) : null;
+    if (bloodJudgement?.refusal) {
+      ui.notifications?.warn(bloodJudgement.refusal);
+      return null;
+    }
     const {withSpecialEquipmentRest}=await import("../effects/special-equipment.mjs");
     return withSpecialEquipmentRest(this,async()=>{
     const {pendingSharedFeast,restGeneration}=await import("../effects/shared-feast.mjs");
     if(pendingSharedFeast(this)){ui.notifications?.warn(game.i18n.localize("AZEROTH.SharedFeast.Pending"));return null;}
+    // The blood, spent only where the plan is met (all or nothing, A.9 Q15).
+    const bloodTaken = bloodJudgement?.fed ? await this._spendRestBlood(bloodJudgement) : null;
+    const withheld = bloodJudgement?.fed === true && bloodJudgement.plan?.met !== true;
     const {rechargeSpecialEquipment}=await import("../effects/special-equipment.mjs");
     // **AN AVATAR OR A METAMORPHOSIS ENDS WITH THE REST** (02 §7, D-769).
     await endShapeAt(this, "long");
@@ -2219,7 +2463,7 @@ export class AzerothActor extends Actor {
     const r = longRest({
       // *Druid's own Health* (the lead, D-769): the character's own Constitution.
       health: s.health, conMod: s.abilities?.con?.own?.mod ?? s.abilities?.con?.mod ?? 0, tier: s.tier ?? 1, fatigue: s.fatigue ?? 0,
-      pools: this.poolSnapshot(), diseased
+      pools: this.poolSnapshot(), diseased, withheld
     });
     // Void's Fatigue does not clear on a Long Rest (10 §5): the floor holds.
     if (this.type === "character") await this.updatePool(r.pools, { "system.health.value": r.health, "system.fatigue": Math.max(r.fatigue, this.system.fatigueFloor ?? 0) });
@@ -2316,11 +2560,13 @@ export class AzerothActor extends Actor {
     // **THE RUNES REFILL WITH THE SAME REST THAT EMPTIES THE RUNIC POWER** (02 §7; D-943):
     // every spent rune on every weapon owned, through the one writer (`documents/runes.mjs`).
     if (this.type === "character") {
-      const refilled = await refillRunesAtLongRest(this, { restGeneration: restGeneration(this) });
+      // **A STARVED REST REFILLS NO RUNE** (02 §5: *a rest without the blood it needs restores no Health and no
+      // Power*; the review's S3): a rune is the Death Knight's Power, and a San'layn may take the Death Knight.
+      const refilled = withheld ? 0 : await refillRunesAtLongRest(this, { restGeneration: restGeneration(this) });
       if (refilled > 0) r.gains.push({ kind: "runesRefilled", amount: refilled });
       if ((this.system?.classKeys ?? []).includes("death-knight")) r.gains.push({ kind: "inscribeOpen" });
     }
-    await restCard({ actor: this, kind: "long", gains: r.gains, restored, cleared, diseased });
+    await restCard({ actor: this, kind: "long", gains: r.gains, restored, cleared, diseased, blood: bloodTaken });
     // 07's Haven and Sanctification: *any that take a Long Rest end it with every disease and
     // poison gone* (Sanctification: and one Critical Injury healed). D12 Phase 6.
     if (this.type === "character" && this.isOwner) {
@@ -2657,7 +2903,11 @@ export class AzerothActor extends Actor {
    *
    * @param {number} amount
    */
-  async loseHealth(amount) {
+  async loseHealth(amount, { vitaeOverflow = false } = {}) {
+    // **HEALTH PAID FOR VITAE** (02 §7, *When your Vitae runs out*: *Health you pay this way is not damage.
+    // Paying it can drop you to 0 Health*; the San'layn and Sovereign plan's V4, B.13 Q22 and Q23): past
+    // the Aegis floor and every hold, no Critical Injury, Prone and Dying at 0, with the drain pulse's cue.
+    if (vitaeOverflow === true) return loseHealthForVitae(this, amount);
     if (refuseIceBlockTarget(this)) return this;
     if (projectionPhaseFor(this)) {
       ui.notifications?.info(game.i18n.localize("AZEROTH.ImageProjection.Protected"));
@@ -2849,7 +3099,11 @@ export class AzerothActor extends Actor {
       name: d.name ?? "", effect: d.system?.effect, taken: d.system?.taken
     }))];
     const features = [...this.items.filter(i => i.type === "feature").map(i => ({ id: i.id, name: i.name, className: i.system?.className ?? "" })),
-      ...rows.filter(d => d.type === "feature" && d._id).map(d => ({ id: d._id, name: d.name ?? "", className: d.system?.className ?? "" }))];
+      ...rows.filter(d => d.type === "feature" && d._id).map(d => ({ id: d._id, name: d.name ?? "", className: d.system?.className ?? "" })),
+      // **A CLASS THAT TEACHES ITS SPELLS ITSELF** (02 §7's Sovereign: *Drain Life, Bloodbolt and Decree of
+      // Frailty are known on top of that count*): the class item, by its name, against `FEATURE_SPELLS`.
+      ...this.items.filter(i => i.type === "class").map(i => ({ id: i.id, name: i.name, className: i.name })),
+      ...rows.filter(d => d.type === "class" && d._id).map(d => ({ id: d._id, name: d.name ?? "", className: d.name ?? "" }))];
     return [
       ...spellGrantsFor(taken).map(g => ({ id: String(g.talent.id), name: g.name })),
       ...featureSpellGrants(features).map(g => ({ id: g.featureId, name: g.spell }))
@@ -3246,8 +3500,9 @@ export class AzerothActor extends Actor {
    *
    * @returns {{boons: number, penetration: number, damage: number, live: object[], lapsed: object[]}}
    */
-  pendingNextAttack() {
-    return pendingNextAttack(this.getFlag?.("azeroth-rpg", NEXT_ATTACK_FLAG) ?? [], { now: this.fightTurnNow() });
+  pendingNextAttack({ targetStatuses = null } = {}) {
+    // The target's conditions, where the attack names a target (07 §17's Scent of Blood; D-1370).
+    return pendingNextAttack(this.getFlag?.("azeroth-rpg", NEXT_ATTACK_FLAG) ?? [], { now: this.fightTurnNow(), targetStatuses });
   }
 
   /**
@@ -3305,6 +3560,22 @@ export class AzerothActor extends Actor {
    * @param {string|null} talentId
    * @returns {Item|null}
    */
+  /**
+   * **04's INSOLENCE REPAID ON A TEST AT A CREATURE** (the Sovereign; D-1225): the Boon this creature's promise
+   * gives a Test of `kind` at the creature whose actor uuid is `targetUuid` - an attack or a Casting Test, any
+   * Test at rank 2 - read off its own flag (`effects/sovereign-features.mjs` lays it and takes it). The roll
+   * dialog's talent lines ask it.
+   *
+   * @param {string|null} targetUuid
+   * @param {string} kind
+   * @returns {number}
+   */
+  insolenceBoons(targetUuid = null, kind = "attack") {
+    const held = this.getFlag?.("azeroth-rpg", INSOLENCE_FLAG) ?? [];
+    if (!Array.isArray(held) || !held.length || !targetUuid) return 0;
+    return insolenceBoons(held, { target: targetUuid, kind, now: game.time?.worldTime ?? 0 });
+  }
+
   grantedFeature(talentId) {
     if (!talentId) return null;
     return this.items.find(i => i.type === "feature" && i.getFlag("azeroth-rpg", "feature")?.talentId === talentId) ?? null;
@@ -3504,10 +3775,18 @@ export class AzerothActor extends Actor {
     // **WHAT WOULD LAND ABOVE THE MAXIMUM, KEPT** (07's Grave Coil and
     // Exsanguinate: *any of it above your Health maximum is kept as temporary
     // Health until your next Long Rest*; D-777), read before the clamp eats it.
+    // **04's EXQUISITE TASTE AND OVERFLOWING CUP** (the Sovereign): a heal its own spell or attack gave it by
+    // damaging a creature - `from` the healer itself, no potion - gains 1 Health, and what lands above the
+    // maximum is kept as temporary Health to the fight's end, up to 3 a rank plus Charisma (`healExtra`).
+    const sovHeal = from === this && this.type === "character" && healed > 0 && !consumable && !overflow && !feature
+      ? sovereignHealExtra({ talents: this.takenTalents(), cha: this.system?.abilities?.cha?.mod ?? 0, before, max: this.system?.health?.max ?? 0, healed })
+      : null;
+    if (sovHeal?.by?.length) healed = sovHeal.healed;
     const excess = overflow ? overflowTemporary({ before, max: this.system?.health?.max ?? 0, healed }) : 0;
     await this.adjustHealth(healed);
     if (this.type === "character" && before === 0 && (this.system?.health?.value ?? 0) > 0) await this.standUp();
     if (excess > 0) await this.grantTemporaryHealth(excess, { source: overflowSource, span: "longRest" });
+    if (sovHeal?.temp > 0) await this.grantTemporaryHealth(sovHeal.temp, { source: "Overflowing Cup", span: "encounter" });
     // **04's UNDYING RAGE: A HEAL CANCELS THE FALL** (the lead, 2026-10-03, on O-173:
     // *"Heals cancel the fall."*; D-779): Health restored while the held rounds run
     // takes the effect off with the fall it was counting to, marked so the delete
@@ -3939,6 +4218,40 @@ export class AzerothActor extends Actor {
     if (by && amount > 0 && !moved && !shared) {
       const weaker = curseOn(by.effects ?? [], "weakness");
       if (weaker > 0) amount = Math.max(0, amount - weaker);
+      // **07 §17's DECREE OF FRAILTY AND EDICT OF THE CROWN** (*each of its attacks deals 3 less damage for
+      // the duration*; the plan's C11, on every attack; D-1245): the largest of the attacker's own curses,
+      // off an attack alone, once, before the blow is moved or shared.
+      const cursedLess = attack ? attackLessOn(by.effects ?? []) : { amount: 0, sources: [] };
+      if (cursedLess.amount > 0 && amount > 0) {
+        amount = Math.max(0, amount - cursedLess.amount);
+        ui.notifications?.info(game.i18n.format("AZEROTH.SovSpell.AttackLess.Took", { name: by.name, n: cursedLess.amount, sources: cursedLess.sources.join(", ") }));
+      }
+      // **02 §7's WITHERING CONTEMPT AND 04's UNWORTHY HAND** (*each of its weapon attacks deals 3 less damage*;
+      // *1 less damage per rank*; R27, R31; the plan's C11, on WEAPON attacks alone): beside the curses' own
+      // step, whoever the blow strikes, once, before it is moved or shared (`sovereignBlowCut`).
+      if (attack && !spell && amount > 0 && blowCutCanReach({ byEffects: by.effects, byUuid: by.uuid, byTokenUuid: by.token?.uuid ?? null, marks: preyMarksOf(game.actors) })) {
+        try {
+          const { sovereignBlowCut } = await import("../effects/sovereign-features.mjs");
+          const withered = await sovereignBlowCut(this, by, { attack, spell, breath: Boolean(breath), ignite, struck });
+          if (withered.cut > 0) {
+            ui.notifications?.info(game.i18n.format("AZEROTH.Sovereign.Cut", { name: by.name, n: Math.min(amount, withered.cut), sources: withered.by.join(", ") }));
+            amount = Math.max(0, amount - withered.cut);
+          }
+        } catch (err) {
+          console.warn("azeroth-rpg | Withering Contempt", err);
+        }
+      }
+      // **07 §17's MAJESTY UNBOUND** (*your spells and attacks deal additional Shadow damage equal to your tier
+      // to your prey*; D-1240): through the prey's Shadow Ward, and the caster's heal once a turn.
+      if (amount > 0 && majestyCanReach(by.effects)) {
+        try {
+          const { majestyOnBlow } = await import("../effects/sovereign-spells.mjs");
+          const majestic = await majestyOnBlow(this, { by, amount, attack, spell });
+          amount = majestic.amount;
+        } catch (err) {
+          console.warn("azeroth-rpg | Majesty Unbound", err);
+        }
+      }
     }
     let potionProtected = false;
     const preventPotionPhysical = () => {
@@ -4121,6 +4434,17 @@ export class AzerothActor extends Actor {
         console.warn("azeroth-rpg | Bone Shield", err);
       }
     }
+    // **07 §17's MIRROR OF SELF** (*When an attack hits you, you gain 8 temporary Health before its damage
+    // applies*; D-1240): asked in the blow as Bone Shield is, its temporary Health landing before 05's
+    // temporary Health takes the blow below.
+    if (this.type === "character" && struck && attack && !moved && !shared && !linkedTransfer && amount > 0 && mirrorCanReach(this.items)) {
+      try {
+        const { mirrorInBlow } = await import("../effects/sovereign-spells.mjs");
+        await mirrorInBlow(this, { amount, attack, by });
+      } catch (err) {
+        console.warn("azeroth-rpg | Mirror of Self", err);
+      }
+    }
     // **08 §20's FOROR'S LESSON** (Quel'Serrar: *A breath weapon deals you half its damage,
     // rounded down*; the lead, on O-319: *"Abilities and spells named Breath"*; D-912): the
     // card's record (`breath`: its title, feature key and spell name) is judged by the
@@ -4179,6 +4503,16 @@ export class AzerothActor extends Actor {
         }
       } catch (err) {
         console.warn("azeroth-rpg | Marrowguard", err);
+      }
+    }
+    // **07 §17's SANGUINE BARRIER** (*each weapon attack that hits you deals less damage. The reduction is half your
+    // Constitution modifier, rounded down, and at least 1*; D-1363): a standing reduction on a WEAPON attack alone - an
+    // attack that is no spell, Withering Contempt's reading (`isWeaponBlow`) - the largest standing, once.
+    if (struck && attack && !spell && !linkedTransfer && amount > 0) {
+      const barrier = weaponLessOn(this.effects ?? []);
+      if (barrier.amount > 0) {
+        ui.notifications?.info(game.i18n.format("AZEROTH.SovSpell.Barrier.Took", { name: this.name, n: Math.min(amount, barrier.amount), sources: barrier.sources.join(", ") }));
+        amount = Math.max(0, amount - barrier.amount);
       }
     }
     // Keep surviving additional lanes bounded after the flat reduction, before
@@ -4249,6 +4583,16 @@ export class AzerothActor extends Actor {
     const soaked = absorbDamage({ temp: this.system?.health?.temp ?? 0, amount });
     if (soaked.absorbed > 0) ui.notifications?.info(game.i18n.format("AZEROTH.Temporary.Absorbed", { name: this.name, n: soaked.absorbed }));
     amount = soaked.amount;
+    // **04's UNMARRED** (*Once a round, when your temporary Health, from any source, absorbs all of a blow's
+    // damage, gain 1 Tribute*): a blow the temporary Health took whole (`sovereignAbsorbed`). Guarded.
+    if (struck && soaked.absorbed > 0 && soaked.amount === 0 && this.type === "character" && this.talentRanks?.("Unmarred") > 0) {
+      try {
+        const { sovereignAbsorbed } = await import("../effects/sovereign-features.mjs");
+        await sovereignAbsorbed(this, { absorbed: soaked.absorbed, reached: soaked.amount });
+      } catch (err) {
+        console.warn("azeroth-rpg | Unmarred", err);
+      }
+    }
     const {manaShieldFor}=await import('../effects/mana-shield-payment.mjs');
     const shield=manaShieldFor(this,amount);
     if(shield)amount=shield.damage;
@@ -4320,6 +4664,25 @@ export class AzerothActor extends Actor {
       }
     }
     await this.adjustHealth(-amount, { temp: soaked.temp, damage: true, manaShield:shield });
+    // **WHAT A HOLD LANDS ONCE THE HEALTH IS WRITTEN** (04's Too Beautiful to Die: *You gain 3 temporary Health
+    // for each Tribute you spend*): after the blow's own temporary Health is written, never under it. Guarded.
+    if (typeof hold?.afterWrite === "function") {
+      try {
+        await hold.afterWrite();
+      } catch (err) {
+        console.warn("azeroth-rpg | a hold's after-write", err);
+      }
+    }
+    // **02 §7's ROYAL DUE** (*Once a turn, when your spell or attack damages your prey, you may spend 2
+    // Tribute*): an offer card for the Sovereign who dealt it, judged there (`offerRoyalDue`). Guarded.
+    if (by && amount > 0 && (attack || spell) && by.type === "character" && by.hasFeature?.("Royal Due")) {
+      try {
+        const { offerRoyalDue } = await import("../effects/sovereign-features.mjs");
+        await offerRoyalDue({ by, target: this, dealt: amount, attack, spell });
+      } catch (err) {
+        console.warn("azeroth-rpg | Royal Due", err);
+      }
+    }
     const healthAfterWrite = (this.system?.health?.value ?? 0) + Math.max(0, Number(this.system?.health?.temp) || 0);
     const healthAfterHoly = this.system?.health?.value ?? 0;
     let verdict = null;
@@ -4444,6 +4807,27 @@ export class AzerothActor extends Actor {
           console.warn("azeroth-rpg | Devour Magic prompt", error);
           ui.notifications?.warn(game.i18n.localize("AZEROTH.DevourMagic.PromptFailed"));
         }
+      }
+    }
+    // **07 §17's ROYAL COMMAND AND GRANT AN AUDIENCE** (*The spell ends if you or your allies harm the
+    // target*; D-1240): a blow that took anything from the creature, dealt by the caster or an ally of it.
+    if (by && amount + soaked.absorbed > 0 && harmEndsCanReach(this.effects)) {
+      try {
+        const { endOnHarm } = await import("../effects/sovereign-spells.mjs");
+        await endOnHarm(this, by);
+      } catch (err) {
+        console.warn("azeroth-rpg | a command ended by harm", err);
+      }
+    }
+    // **07 §17's BURDEN OF SIN** (*each time it damages a creature with an attack, it takes 3 Shadow damage*; D-1365):
+    // an attack - no spell, no tick - that took something from this creature, dealt by a cursed attacker, once, the
+    // blow neither moved nor shared. Asked first off the attacker's effects (O-419).
+    if (by && burdenFires({ attack, spell, moved, shared, took: amount + soaked.absorbed }) && burdenCanReach(by.effects ?? [])) {
+      try {
+        const { burdenOnBlow } = await import("../effects/sovereign-spells.mjs");
+        await burdenOnBlow(by, this);
+      } catch (err) {
+        console.warn("azeroth-rpg | Burden of Sin", err);
       }
     }
     if (seductionSnapshot.length) {
@@ -4990,6 +5374,29 @@ export class AzerothActor extends Actor {
     // Body Resilience Test at DC 20. On a failure, gain 1 Undeath Corruption.*; D-911):
     // the creature's own, automatic - a press that fires itself (`use.trigger`) - after
     // Borrowed Hour and before another's is asked (`blow-doors.mjs#HOLD_ORDER`).
+    // **07 §17's UNFADING GLORY** (*when a blow would drop you to 0 Health while you hold 1 or more Tribute, you
+    // may spend 1 Tribute. You drop to 1 Health instead*; D-1247): the creature's own, before another's.
+    if ((struck || attack) && unfadingCanReach(this.effects)) {
+      try {
+        const { unfadingHold } = await import("../effects/sovereign-spells.mjs");
+        const glory = await unfadingHold(this, { before, amount });
+        if (glory) return glory;
+      } catch (err) {
+        console.warn("azeroth-rpg | Unfading Glory", err);
+      }
+    }
+    // **04's TOO BEAUTIFUL TO DIE** (*Once per Long Rest, when a blow would drop you to 0 Health, you may spend
+    // all your Tribute, at least 1. You drop to 1 Health instead*): beside Unfading Glory, a blow alone - a Vitae
+    // payment never reaches this door (the plan's B.13 Q22) - its temporary Health landed after the write.
+    if ((struck || attack) && this.type === "character" && this.talentRanks?.("Too Beautiful to Die") > 0) {
+      try {
+        const { sovereignHold } = await import("../effects/sovereign-features.mjs");
+        const beautiful = await sovereignHold(this, { before, amount });
+        if (beautiful) return beautiful;
+      } catch (err) {
+        console.warn("azeroth-rpg | Too Beautiful to Die", err);
+      }
+    }
     const undying = this._signatureHold?.({ before, amount }) ?? null;
     if (undying) {
       await undying.item.update({ [`system.signatureEffect.presses.${undying.key}.uses.value`]: Math.max(0, (undying.press.uses?.value ?? 0) - 1) });

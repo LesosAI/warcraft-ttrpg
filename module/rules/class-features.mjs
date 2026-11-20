@@ -73,7 +73,9 @@ import { PUMMEL_BANES, PUMMEL_KIND } from "./reactions.mjs";
 import { aura } from "./auras.mjs";
 // A Mana price in a Shapeshift form is Ferocity (07, D-769): ONE reading, the
 // spell's and the feature's.
-import { manaPrice } from "./casting.mjs";
+import { spellPrice } from "./casting.mjs";
+// A feature priced in Vitae overflows into Health (02 §7; the San'layn and Sovereign plan's V4).
+import { vitaePayment } from "./vitae.mjs";
 // ONE reader for an amount expression (the D-770 review, item B): a feature's,
 // a talent's, a rider's and a tick's.
 import { evaluateExpression } from "./expressions.mjs";
@@ -500,6 +502,37 @@ export const CLASS_FEATURES = Object.freeze({
     // phylactery while a Long Rest's window stands (*When you finish a Long Rest, you may bind
     // yourself to a phylactery you carry*); its return is the GM's card.
     "Lichdom": action({ action: null, onUse: { phylactery: true } })
+  },
+  // **THE SOVEREIGN** (02 §7; the San'layn and Sovereign plan's B.8 and Phase 5). Every number is
+  // `rules/sovereign-talents.mjs`', held to the pack's text by `sovereign-talents.test.mjs`; each `onUse.sov`
+  // is judged by `effects/sovereign-features.mjs#judgeSovereignUse` and landed by `landSovereignUse`. The
+  // feeding, the prey and the Tribute writer are CORE's doors (`effects/sovereign-core.mjs`), the claws WEAPON's.
+  sovereign: {
+    // *Once on each of your turns, mark one creature you can see within 60 feet as your prey*: CORE's mark,
+    // whose turn's once is the round's record. No action is named, so none is spent (R19).
+    "Hunt Mortal": action({ action: null, onUse: { sov: { mark: true } } }),
+    // *You have the Sovereign's Claws ...*: WEAPON's grant, Equip toggle and claw-hit door.
+    "Blood-Forged Claws": passive({ note: "AZEROTH.Feature.Note.BloodForgedClaws" }),
+    // *In a fight, feeding is a Half-Action ...*: CORE's feeding door spends its own Half-Action in a fight,
+    // so the row names none and the Use hands straight across (`feedWithDialog`).
+    "The Blood Royal": action({ action: null, onUse: { sov: { feed: true } } }),
+    // *Once per encounter, as a Half-Action, spend any amount of Tribute*: the amount asked by the one chooser.
+    "Prim and Proper": action({ action: "half", uses: once("encounter"), onUse: { sov: { prim: true } } }),
+    // *Once a turn, when your spell or attack damages your prey, you may spend 2 Tribute*: an offer card on the
+    // blow (`offerRoyalDue`), never a Use.
+    "Royal Due": passive({ note: "AZEROTH.Feature.Note.RoyalDue" }),
+    // *You know the direction and rough distance to your prey ...*: the Use says it; the Tribute and the free
+    // mark on the prey's death are CORE's death-watch listener.
+    "Unending Pursuit": action({ action: null, onUse: { sov: { pursuit: true } } }),
+    // *Once per encounter, as a Half-Action, spend 2 Tribute. Each enemy Humanoid within 60 feet ...*
+    "Look Upon Me": action({ action: "half", cost: cost("tribute", 2), uses: once("encounter"), resist: "spirit", onUse: { sov: { look: true } } }),
+    // *As a Half-Action, spend 10 Vitae ... Spirit Resilience Test ... Blood Prison is a blood curse.*
+    "Blood Prison": action({ action: "half", cost: cost("vitae", 10), resist: "spirit", onUse: { sov: { prison: true } } }),
+    // *While your prey is within 60 feet of you ...*: the damage door's attacker-keyed step and the cast
+    // dialog's automatic Bane line, both read off the feature held.
+    "Withering Contempt": passive({ note: "AZEROTH.Feature.Note.WitheringContempt" }),
+    // *Once per Long Rest, as a Half-Action, spend 25 Vitae. For 1 minute ...*
+    "Crowned in Blood": action({ action: "half", cost: cost("vitae", 25), uses: once("long"), onUse: { sov: { crowned: true } } })
   }
 });
 
@@ -548,7 +581,12 @@ export const RACE_TRAITS = Object.freeze({
   // *You have Ward equal to your tier against Fire, Frost, Arcane and Nature* (02 §5's
   // twelfth people): derived on the character (`chromatic-features.mjs#flightbloodWard`),
   // never a Use. Found beside stage 2B's Hardened Scales, which adds to it.
-  "chromatic-outcast": { name: "Flightblood", ...passive() }
+  "chromatic-outcast": { name: "Flightblood", ...passive() },
+  // *While a hood, gloves or paint cover your eyes and skin, you pass as a living elf, and casual
+  // notice calls for no Test* (02 §5's thirteenth people; D-1147). A passive with no reminder: the
+  // GM chooses the observer's Test (the lead, R2: *"Deception or Medicine can be used as examples
+  // but it's the GM's decision"*), so no dialog line is automatic (D2 §12).
+  sanlayn: { name: "Preserved Countenance", ...passive() }
 });
 
 /** The traits that could bear on a roll (D-613), by race identifier. */
@@ -1176,13 +1214,16 @@ export function rungChoice({ action = null, rungs = [], inFight = false, onTurn 
  *   discount?: number, times?: number, inShapeshiftForm?: boolean}} o
  * @returns {{spent: number, refusal: "NoPool"|"Short"|null}}
  */
-export function featurePayment({ cost = null, pool = null, discount = 0, times = 1, inShapeshiftForm = false } = {}) {
+export function featurePayment({ cost = null, pool = null, discount = 0, times = 1, inShapeshiftForm = false, health = 0 } = {}) {
   if (!cost?.pool) return { spent: 0, refusal: null };
   if (!pool) return { spent: 0, refusal: "NoPool" };
   const value = Number(pool.value) || 0;
   if (cost.all) return { spent: value, refusal: null };
   const due = Math.max(0, (Number(cost.amount) || 0) - (Number(discount) || 0)) * Math.max(1, Math.trunc(Number(times)) || 1);
-  const spent = cost.pool === "mana" ? manaPrice(due, { inShapeshiftForm }).amount : due;
+  const spent = cost.pool === "mana" ? spellPrice(due, { inShapeshiftForm }).amount : due;
+  // **A PRICE IN VITAE HAS HEALTH BEHIND IT** (02 §7, *When your Vitae runs out*; the San'layn and Sovereign
+  // plan's V4): refused only where the Vitae and the Health together fall short (`vitae.mjs#vitaePayment`).
+  if (cost.pool === "vitae") return { spent, refusal: vitaePayment({ held: value, cost: spent, health }).refusal ? "Short" : null };
   return { spent, refusal: value < spent ? "Short" : null };
 }
 
@@ -1211,7 +1252,7 @@ export function paysOnSuccess(sys) {
  * @returns {string|null}
  */
 export function payingPool(costPool, { inShapeshiftForm = false } = {}) {
-  if (costPool === "mana" && inShapeshiftForm) return manaPrice(1, { inShapeshiftForm }).pool;
+  if (costPool === "mana" && inShapeshiftForm) return spellPrice(1, { inShapeshiftForm }).pool;
   return costPool ?? null;
 }
 
@@ -1231,7 +1272,7 @@ export function featurePrice(cost, { inShapeshiftForm = false } = {}) {
   const amount = Number(cost.amount) || 0;
   return {
     pool: payingPool(cost.pool, { inShapeshiftForm }),
-    amount: cost.pool === "mana" ? manaPrice(amount, { inShapeshiftForm }).amount : amount,
+    amount: cost.pool === "mana" ? spellPrice(amount, { inShapeshiftForm }).amount : amount,
     all: cost.all === true
   };
 }

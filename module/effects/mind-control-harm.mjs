@@ -6,6 +6,8 @@ export function mindControlHarmSnapshot(actor) {
     // 07 §17's Puppet of Flesh rides the control and names no end by a blow (run 4c-S): its carrier
     // (`flags.azeroth-rpg.puppet`) is ended by its repeated Test and its minute alone.
     if (effect?.flags?.['azeroth-rpg']?.puppet) return [];
+    // 04's Abject Obedience (the Sovereign) rides the control too and names no end by a blow either.
+    if (effect?.flags?.['azeroth-rpg']?.obedience) return [];
     const record = mindControlOn(effect, actor.uuid);
     return record ? [{ id: effect.id, record }] : [];
   });

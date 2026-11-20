@@ -1,0 +1,54 @@
+{{!--
+  A San'layn's rest window (02 §5, *Your hunger.*; D-1141 to D-1144): the blood it needs in
+  place of food and drink. Two modes over one template.
+
+  SHORT: one select over the Blood vials carried, and an unticked line for blood drunk fresh from
+  a living source the GM approved - printed on the card for the GM, because blood drunk on the
+  spot never sat in a vial.
+
+  LONG: every Blood vial carried as a checkbox, and a count of units drunk fresh. The Long Rest is
+  never refused: blood that falls short rests with no Health, no Power and no Fatigue, and the
+  reason line says so before the button is pressed.
+
+  THE FIRST PAINT IS COMPLETE and the `render` callback in `rest-dialog.mjs` touches only the
+  footer button's `disabled` and the reason line (D-731). NO `data-action` anywhere: DialogV2 has
+  no actions map. `{{o.selected}}` inside `{{#each}}` resolves against the row (D-609).
+--}}
+<div class="azeroth-dialog azeroth-rest-dialog azeroth-rest-blood" data-blood-mode="{{mode}}">
+  <p class="azeroth-dialog-note" data-blood-needed>{{needLine}}</p>
+  {{#if sinceLine}}<p class="azeroth-dialog-note" data-blood-since>{{sinceLine}}</p>{{/if}}
+
+  {{#if short}}
+  <div class="azeroth-dialog-row azeroth-rest-row">
+    <label for="azeroth-rest-blood-{{id}}">{{localize "AZEROTH.Rest.BloodPick"}}</label>
+    <select id="azeroth-rest-blood-{{id}}" name="blood">
+      <option value="">{{localize "AZEROTH.Rest.None"}}</option>
+      {{#each vials as |o|}}
+      <option value="{{o.value}}"{{#if o.selected}} selected{{/if}}>{{o.label}}</option>
+      {{/each}}
+    </select>
+  </div>
+  <div class="azeroth-dialog-row azeroth-rest-row">
+    <label class="checkbox" for="azeroth-rest-fresh-{{id}}">
+      <input type="checkbox" id="azeroth-rest-fresh-{{id}}" name="fresh" data-blood-fresh>
+      {{localize "AZEROTH.Rest.FreshLine"}}
+    </label>
+  </div>
+  {{else}}
+  {{#each vials as |o|}}
+  <div class="azeroth-dialog-row azeroth-rest-row">
+    <label class="checkbox" for="azeroth-rest-vial-{{o.value}}">
+      <input type="checkbox" id="azeroth-rest-vial-{{o.value}}" name="vial" value="{{o.value}}" data-units="{{o.quantity}}"{{#if o.selected}} checked{{/if}} data-blood-vial>
+      {{o.label}}
+    </label>
+  </div>
+  {{/each}}
+  <div class="azeroth-dialog-row azeroth-rest-row">
+    <label for="azeroth-rest-fresh-{{id}}">{{localize "AZEROTH.Rest.FreshUnits"}}</label>
+    <input type="number" id="azeroth-rest-fresh-{{id}}" name="fresh" value="0" min="0" max="{{needed}}" step="1" data-blood-fresh>
+  </div>
+  {{/if}}
+
+  <p class="azeroth-dialog-note">{{returns}}</p>
+  <p class="azeroth-dialog-note azeroth-rest-reason" data-rest-reason>{{reason}}</p>
+</div>

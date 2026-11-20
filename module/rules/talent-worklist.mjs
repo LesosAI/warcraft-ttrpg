@@ -41,6 +41,9 @@ export const TALENT_WORKLIST = Object.freeze({
   "death-knight": Object.freeze({}),
   // THE NECROMANCER (Phase 4c-T): every one of its 36 talents has its row and a door; none left.
   necromancer: Object.freeze({}),
+  // THE SOVEREIGN (the San'layn and Sovereign plan's Phase 5): every one of its 36 talents has its row and a
+  // door (`rules/sovereign-talents.mjs#SOV_DOORS`); none left.
+  sovereign: Object.freeze({}),
   // D-771 (the talent plan's Phase 3): two lines left, each a QUESTION for the
   // lead, its reason on the row's own `gap`. D-777 built Living Seed's
   // temporary Health (the lead: *"raise HP past max as temp hp"*), and D-778
@@ -124,6 +127,8 @@ export const WORKLIST_CEILING = Object.freeze({
   "death-knight": 0,
   // THE NECROMANCER: 0, and 0 after Phase 4c-T wrote the 36 rows - nothing parked, none to fall.
   necromancer: 0,
+  // THE SOVEREIGN: 0 - the rows stage wrote all 36 with the class's own doors; nothing parked.
+  sovereign: 0,
   // 23 to 22 (D-769): Chimera's patch takes two forms. 22 to 14 (D-770):
   // Mangle, Rip and Feral Charge ride the attack dialog as riders. 14 to 2
   // (D-771): every Druid talent built but Living Seed and Typhoon's push. 2 to

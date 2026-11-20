@@ -6,6 +6,7 @@
 
 import { ADOPT_QUERY, BIND_QUERY, UNBIND_QUERY, RELEASE_COMMAND_QUERY, adoptQueryHandler, bindQueryHandler, unbindQueryHandler, releaseCommandQueryHandler } from "./documents/bound.mjs";
 import { SUMMON_QUERY, summonQueryHandler } from "./documents/summon.mjs";
+import { BLOOD_FILL_QUERY, BLOOD_UNIT_QUERY, bloodFillQueryHandler, bloodUnitQueryHandler } from "./effects/blood.mjs";
 import { ROCKET_JUMP_QUERY, rocketJumpHandler } from "./effects/rocket-jump-use.mjs";
 import { SEARING_USE_QUERY, searingUseHandler } from "./effects/searing-totem-use.mjs";
 import { SECOND_STRIKE_QUERY, secondStrikeQueryHandler } from "./effects/second-strike.mjs";
@@ -88,6 +89,9 @@ import { HAUNT_QUERY, hauntQueryHandler } from "./effects/haunt.mjs";
 import { TEMP_HEALTH_QUERY, temporaryHealthQueryHandler } from "./effects/temporary-health.mjs";
 import { BLOW_ASK_QUERY, BLOW_SHARE_QUERY, blowAskHandler, blowShareQueryHandler } from "./effects/blow-doors.mjs";
 import { DEATH_WATCH_QUERY, deathWatchQueryHandler } from "./effects/death-watch.mjs";
+import { SOVEREIGN_QUERY, sovereignQueryHandler } from "./effects/sovereign-core.mjs";
+import { SOV_FEATURES_QUERY, sovereignFeaturesQueryHandler } from "./effects/sovereign-features.mjs";
+import { SOVEREIGN_SPELL_QUERY, sovereignSpellQueryHandler } from "./effects/sovereign-spells.mjs";
 import { AREA_MARK_QUERY, areaMarkQueryHandler } from "./effects/empower-areas.mjs";
 import { DISPEL_QUERY, dispelQueryHandler } from "./effects/dispel.mjs";
 import { NULLIFY_QUERY, massNullifyQueryHandler } from "./effects/nullifier-use.mjs";
@@ -598,6 +602,15 @@ export function registerQueries() {
   // The death watch's gains (the Necromancer plan's door 1): 02 §7's Essence and the Warlock's
   // Soul Harvest, written on the client that answers for the holder, through its pool queue.
   CONFIG.queries[DEATH_WATCH_QUERY] = deathWatchQueryHandler;
+  // 02 §7's Sovereign (the San'layn and Sovereign plan's F2, C3, C4): a feeding's Vitae, a Tribute gain
+  // and the prey's death written on the client that answers for the Sovereign; a feeding's Health on
+  // the GM's.
+  CONFIG.queries[SOVEREIGN_QUERY] = sovereignQueryHandler;
+  // The Sovereign's features and talents (Phase 5): a Shadow strike, an effect laid or dropped and Abject
+  // Obedience on the GM's client; a named Tribute gain, Homage and a miss on the Sovereign's answerer.
+  CONFIG.queries[SOV_FEATURES_QUERY] = sovereignFeaturesQueryHandler;
+  // The Sovereign's spells' writes on a creature, a door or the caster the asker does not own (D-1240).
+  CONFIG.queries[SOVEREIGN_SPELL_QUERY] = sovereignSpellQueryHandler;
   CONFIG.queries[AREA_MARK_QUERY] = areaMarkQueryHandler;
   // 08 §20's Legendary doors on another creature (D-912).
   CONFIG.queries[LEGENDARY_QUERY] = legendaryQueryHandler;
@@ -636,4 +649,8 @@ export function registerQueries() {
   // place*; the B3 review): the track and the price chosen on the GM's client, judged
   // again there and written.
   CONFIG.queries[OFFER_QUERY] = offerQueryHandler;
+  // 02 §5's San'layn (D-1149, D-1150): Open Vein's unit on a card this client may not write, and a
+  // Vial, empty filled with blood on the GM's word.
+  CONFIG.queries[BLOOD_UNIT_QUERY] = bloodUnitQueryHandler;
+  CONFIG.queries[BLOOD_FILL_QUERY] = bloodFillQueryHandler;
 }

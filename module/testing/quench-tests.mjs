@@ -53,16 +53,27 @@ import { deathKnightTalentsBatch } from "./quench-death-knight-talents.mjs";
 import { deathKnightSpellsBatch } from "./quench-death-knight-spells.mjs";
 import { deathKnightAnimationBatch } from "./quench-death-knight-animation.mjs";
 import { necromancerEssenceBatch } from "./quench-necromancer-essence.mjs";
+// The Sovereign's Vitae, feeding, Tribute and prey (the San'layn and Sovereign plan's V, F, T and C4 rows).
+import { sovereignCoreBatch } from "./quench-sovereign-core.mjs";
+import { sovereignDominionBatch, sovereignFeaturesBatch, sovereignRavenousBatch, sovereignVaingloriousBatch } from "./quench-sovereign-features.mjs";
+import { sovereignGapsBatch } from "./quench-sovereign-gaps.mjs";
+import { sovereignSpellsBatch } from "./quench-sovereign-spells.mjs";
+import { sovereignSpells2Batch } from "./quench-sovereign-spells2.mjs";
 import { necromancerFixesBatch } from "./quench-necromancer-fixes.mjs";
 import { necromancerTalentsBatch } from "./quench-necromancer-talents.mjs";
 import { necromancerHordeBatch } from "./quench-necromancer-horde.mjs";
 import { necromancerReviewBatch } from "./quench-necromancer-review.mjs";
+import { sanlaynBatch } from "./quench-sanlayn.mjs";
+// The Sovereign's Claws and 08 §5's Deft (the San'layn and Sovereign plan, C1, C15, C16, DF1 to DF4; D-1160 to D-1169).
+import { clawsBatch, deftBatch } from "./quench-claws.mjs";
 import { necromancerSpellsBatch, necromancerSpellsT3Batch, necromancerSpellsT45Batch } from "./quench-necromancer-spells.mjs";
 import { necromancerVerifyBatch } from "./quench-necromancer-verify.mjs";
 import {
   necromancerAnimationsCreaturesBatch, necromancerAnimationsFeaturesTalentsBatch, necromancerAnimationsSpellsBatch,
   necromancerAnimationsT3Batch, necromancerAnimationsT45Batch
 } from "./quench-necromancer-animations.mjs";
+import { sovereignAnimations2Batch, sovereignAnimationsBatch, sovereignAnimationsFeaturesBatch } from "./quench-sovereign-animations.mjs";
+import { moveThroughBatch } from "./quench-move-through.mjs";
 import { reactionBatch } from "./quench-reactions.mjs";
 import { creatureGearBatch } from "./quench-npc-gear.mjs";
 import { creatureSwingBatch } from "./quench-npc-swing.mjs";
@@ -394,11 +405,56 @@ export function registerQuenchTests() {
     quench.registerBatch("azeroth-rpg.death-knight-animation", deathKnightAnimationBatch, {
       displayName: "AZEROTH: The Death Knight's animation and sound, through the real doors (run F5)"
     });
+    quench.registerBatch("azeroth-rpg.sovereign-core", sovereignCoreBatch, {
+      displayName: "AZEROTH: The Sovereign's Vitae, feeding, Tribute and prey, through the real doors"
+    });
+    quench.registerBatch("azeroth-rpg.sovereign-features", sovereignFeaturesBatch, {
+      displayName: "AZEROTH: The Sovereign's ten features through the real controls (D-1210 to D-1239)"
+    });
+    quench.registerBatch("azeroth-rpg.sovereign-dominion", sovereignDominionBatch, {
+      displayName: "AZEROTH: The Sovereign's Dominion talents through the real controls (D-1210 to D-1239)"
+    });
+    quench.registerBatch("azeroth-rpg.sovereign-vainglorious", sovereignVaingloriousBatch, {
+      displayName: "AZEROTH: The Sovereign's Vainglorious talents through the real controls (D-1210 to D-1239)"
+    });
+    quench.registerBatch("azeroth-rpg.sovereign-ravenous", sovereignRavenousBatch, {
+      displayName: "AZEROTH: The Sovereign's Ravenous talents through the real controls (D-1210 to D-1239)"
+    });
+    quench.registerBatch("azeroth-rpg.sovereign-gaps", sovereignGapsBatch, {
+      displayName: "AZEROTH: The Sovereign's live-test gaps closed through the real controls (O-438, O-439, O-444; D-1290)"
+    });
+    quench.registerBatch("azeroth-rpg.sovereign-spells", sovereignSpellsBatch, {
+      displayName: "AZEROTH: The Sovereign's spells, through the real controls (07 §17; D-1240)"
+    });
+    quench.registerBatch("azeroth-rpg.sovereign-spells2", sovereignSpells2Batch, {
+      displayName: "AZEROTH: The Sovereign's second eighteen spells, through the real controls (07 §17; D-1360)"
+    });
+    quench.registerBatch("azeroth-rpg.sovereign-animations", sovereignAnimationsBatch, {
+      displayName: "AZEROTH: Every Sovereign spell plays a picture and a sound, read back live through the real controls (C14; D-1270)"
+    });
+    quench.registerBatch("azeroth-rpg.sovereign-animations-features", sovereignAnimationsFeaturesBatch, {
+      displayName: "AZEROTH: Every Sovereign feature, talent, state and pool event plays a picture and a sound, read back live (C14; D-1270)"
+    });
+    quench.registerBatch("azeroth-rpg.sovereign-animations2", sovereignAnimations2Batch, {
+      displayName: "AZEROTH: The Sovereign's second eighteen spells and their states play a picture and a sound, read back live (D-1390)"
+    });
+    quench.registerBatch("azeroth-rpg.move-through", moveThroughBatch, {
+      displayName: "AZEROTH: 05's Moving through a space at the move door, with Veil of Mist, Underfoot and the GM's drag (FIXC, O-476)"
+    });
     quench.registerBatch("azeroth-rpg.necromancer-essence", necromancerEssenceBatch, {
       displayName: "AZEROTH: The Necromancer's Essence, its death watch, empower lines, Long Rest exposure and the learning door (Phase 4a)"
     });
     quench.registerBatch("azeroth-rpg.necromancer-horde", necromancerHordeBatch, {
       displayName: "AZEROTH: The Necromancer's horde, its grafts, its features and Lichdom, through the real doors (Phase 4b)"
+    });
+    quench.registerBatch("azeroth-rpg.sanlayn", sanlaynBatch, {
+      displayName: "AZEROTH: The San'layn through the real doors: the creator, the drop, the blood rests, Fill with blood, Open Vein and Courtly Masquerade (D-1140 to D-1155)"
+    });
+    quench.registerBatch("azeroth-rpg.claws", clawsBatch, {
+      displayName: "AZEROTH: The Sovereign's Claws through the real doors: the grant, the Equip toggle, the off hand, the claw rolls, the claw-hit hook and their cues (D-1162 to D-1168)"
+    });
+    quench.registerBatch("azeroth-rpg.deft", deftBatch, {
+      displayName: "AZEROTH: 08 §5's Deft across the system: a Rogue's dagger on Dexterity, a Classic find, the migration (D-1160, D-1169)"
     });
     quench.registerBatch("azeroth-rpg.necromancer-review", necromancerReviewBatch, {
       displayName: "AZEROTH: The Phase 4b review's worklist through the real controls: the raise spells, the Bone and Flesh talents, the features empowered, the plague rising, Enslave, the grafts that fire on their own, Lichdom"
@@ -1771,7 +1827,7 @@ function packBatch(context) {
       assert.isString(doc.system.branch);
     });
 
-    it("holds 02's twelve races and ten classes", async function () {
+    it("holds 02's races and classes, as many as the pack counts say", async function () {
       const races = game.packs.get("azeroth-rpg.races");
       const classes = game.packs.get("azeroth-rpg.classes");
       // The ONE place the counts live (D-690).
@@ -4396,8 +4452,11 @@ function migrationBatch(context) {
       const options = journals.worldChapterNamed("02-CHARACTER-OPTIONS");
       assert.ok(options, "02-CHARACTER-OPTIONS is in the world");
       const packDoc = (await game.packs.get(journals.RULES_PACK).getDocuments()).find(d => d.name === "02-CHARACTER-OPTIONS");
-      const seven = packDoc?.pages?.get("2l77a05DwX3kqHNF") ?? null;
-      assert.ok(seven, "the rules pack's 02 \u00a77 is The thirteen classes (the Necromancer's book; its id is its name's)");
+      // 02 \u00a77 as the pack holds it NOW, by its heading's shape and never a name a later class
+      // renames (the Necromancer's book, then the Sovereign's: D-1154). Its id is its name's.
+      const seven = packDoc?.pages?.find(p => /^7\. The [a-z]+ classes$/.test(p.name)) ?? null;
+      const SEVEN = seven?.id ?? null;
+      assert.ok(seven, "the rules pack's 02 \u00a77 is missing");
       const inherit = CONST.DOCUMENT_OWNERSHIP_LEVELS.INHERIT;
       const limited = CONST.DOCUMENT_OWNERSHIP_LEVELS.LIMITED;
       const entryOwnership = options.ownership.default;
@@ -4411,7 +4470,7 @@ function migrationBatch(context) {
         // Stale it on purpose (CLAUDE.md \u00a715, 2026-09-09): \u00a77 under its old name and the id that
         // name derives, a page whose text a GM edited and whose own ownership they set, and a page
         // the GM wrote.
-        if (options.pages.has("2l77a05DwX3kqHNF")) await options.deleteEmbeddedDocuments("JournalEntryPage", ["2l77a05DwX3kqHNF"]);
+        if (options.pages.has(SEVEN)) await options.deleteEmbeddedDocuments("JournalEntryPage", [SEVEN]);
         await options.createEmbeddedDocuments("JournalEntryPage", [{ _id: "IBFmSy4ibtgWC4OI", name: "7. The eleven classes", type: "text", sort: seven.sort,
           text: { format: 1, content: "<p>ZZ the eleven classes</p>" }, ownership: { default: inherit } }], { keepId: true });
         staled = options.pages.contents.find(p => p.id !== "IBFmSy4ibtgWC4OI" && packDoc.pages.has(p.id));
@@ -4420,8 +4479,8 @@ function migrationBatch(context) {
         [gmPage] = await options.createEmbeddedDocuments("JournalEntryPage", [{ name: "ZZ House rules", type: "text", text: { format: 1, content: "<p>Ours</p>" } }]);
         await migrate(() => {});
         // The page a link names is made, under the pack's id, with the book's text.
-        const now = options.pages.get("2l77a05DwX3kqHNF");
-        assert.equal(now?.name, "7. The thirteen classes", "the page a link names was not made");
+        const now = options.pages.get(SEVEN);
+        assert.equal(now?.name, seven.name, "the page a link names was not made");
         assert.equal(now?.text?.content, seven.text.content, "the new page is not the book's");
         assert.equal(now?.ownership?.default, inherit, "the new page does not inherit the chapter's ownership");
         // The GM's edit survives, untouched, with its own ownership; the book's page stands beside it.
@@ -4439,15 +4498,15 @@ function migrationBatch(context) {
         assert.equal(options.pages.get("IBFmSy4ibtgWC4OI")?.text?.content, "<p>ZZ the eleven classes</p>", "the old 02 \u00a77 page was written");
         assert.ok(options.pages.get(gmPage.id), "the GM's own page was removed");
         assert.equal(options.ownership.default, entryOwnership, "the chapter's ownership was written");
-        const linked = await fromUuid(`Compendium.${journals.RULES_PACK}.JournalEntry.${packDoc.id}.JournalEntryPage.2l77a05DwX3kqHNF`);
-        assert.equal(linked?.name, "7. The thirteen classes", "the drakes' link does not resolve");
+        const linked = await fromUuid(`Compendium.${journals.RULES_PACK}.JournalEntry.${packDoc.id}.JournalEntryPage.${SEVEN}`);
+        assert.equal(linked?.name, seven.name, "the drakes' link does not resolve");
         // A second pass writes nothing, and no second (book) page.
         const count = options.pages.size;
         const again = await journals.repairRulesJournals(() => {});
         assert.equal(again.pages, 0, "a second pass wrote pages");
         assert.equal(options.pages.size, count, "a second pass added a page");
       } finally {
-        const added = options.pages.filter(p => !pagesBefore.has(p.id) && p.id !== "2l77a05DwX3kqHNF").map(p => p.id);
+        const added = options.pages.filter(p => !pagesBefore.has(p.id) && p.id !== SEVEN).map(p => p.id);
         if (added.length) await options.deleteEmbeddedDocuments("JournalEntryPage", added);
         if (staled && staledWas && options.pages.has(staled.id)) await options.pages.get(staled.id).update({ "text.content": staledWas.content, "ownership.default": staledWas.ownership });
         if (!before.length) {

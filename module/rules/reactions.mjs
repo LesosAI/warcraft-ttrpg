@@ -40,6 +40,8 @@
 
 import { BASE_REACH } from "./distance.mjs";
 import { attackModes } from "./ammunition.mjs";
+// An unarmed strike is no melee weapon in hand (the San'layn and Sovereign plan, C15, B.13 Q5; D-1162).
+import { isUnarmed } from "./unarmed.mjs";
 import { succeeded } from "./resolution.mjs";
 import { maneuverPurse } from "./maneuver-pool.mjs";
 // The Necromancer's Essence never pays a Parry (the Necromancer plan).
@@ -260,6 +262,9 @@ export function meleeInHand(weapons = []) {
   for (const weapon of weapons) {
     if (!weapon || weapon.equipped !== true) continue;
     if (weapon.isLauncher === true) continue;
+    // 06 §6's *a melee weapon in hand*: 08 §7's Unarmed and the Sovereign's Claws are an
+    // unarmed strike and never Parry (the plan's B.5: *The claws alone do not Parry*; D-1162).
+    if (isUnarmed(weapon)) continue;
     if (!attackModes(weapon).includes("hand")) continue;
     out.push(weapon.name ?? "");
   }
@@ -607,7 +612,7 @@ export function readyEntry({ trigger = "", action = "", round = null, turn = nul
  * @returns {{ok: boolean, reason: string|null, with: string|null}}
  */
 export function canReact(key, {
-  reactionsLeft = 1, inFight = true, alreadyReacted = false, meleeWeapons = [], shields = [],
+  reactionsLeft = 1, inFight = true, alreadyReacted = false, meleeWeapons = [], shields = [], unarmedOnly = false,
   attacks = [], leftReach = true, readied = null, classNames = [], pools = [], maneuverPool = null, free = {},
   unanswered = false, cannotParryOrBlock = false, lostToBlow = false, spiritRealm = false, noOpportunity = false, snagged = false, disoriented = false, asleep = false, phaseShifted = false, seduced = false, reactionBarred = false, iceBlocked = false, dispersed = false
 } = {}) {
@@ -653,7 +658,8 @@ export function canReact(key, {
     return { ok: true, reason: null, with: shields[0] };
   }
   if (row.requires === "meleeWeapon") {
-    if (!meleeWeapons.length) return { ok: false, reason: "AZEROTH.Reaction.Refuse.NoMelee", with: null };
+    // Holding only an unarmed strike (the claws) is refused in its own words (D-1162).
+    if (!meleeWeapons.length) return { ok: false, reason: unarmedOnly === true ? "AZEROTH.Reaction.Refuse.Unarmed" : "AZEROTH.Reaction.Refuse.NoMelee", with: null };
     return { ok: true, reason: null, with: meleeWeapons[0] };
   }
   if (row.requires === "leavingReach") {

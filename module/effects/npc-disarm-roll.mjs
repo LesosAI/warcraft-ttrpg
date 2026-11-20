@@ -4,7 +4,7 @@ import { disarmInventory } from "./npc-disarm-picker.mjs";
 import { disarmedAttack } from "./npc-disarm.mjs";
 import { weaponTraitEffects } from "../rules/weapon-traits.mjs";
 import { strikeFor, strikeForRow, weaponFacts } from "../rules/strikes.mjs";
-import { attackAbility } from "../rules/ammunition.mjs";
+import { attackAbility, deftScores } from "../rules/ammunition.mjs";
 
 /** A non-damaging Attack Test, not an attack or a Parry. The ordinary dialog
  * supplies attack modifiers, but its runner only rolls and records the Test:
@@ -24,7 +24,7 @@ export async function rollDisarmSide(actor, picked, { valid, source = null, defe
   const strength = sys.abilities?.str;
   // The defender uses the selected weapon's ordinary Attack Test, but does
   // not fire or throw it: no ammunition, damage or ranged attack side effects.
-  const ability = item ? attackAbility(item.system, "hand") : "str";
+  const ability = item ? attackAbility(item.system, "hand", deftScores(sys.abilities)) : "str";
   const abilityLabel = ability === "dex" ? "AZEROTH.Ability.Dex.Label" : "AZEROTH.Ability.Str.Label";
   const effects = weaponTraitEffects((item?.system ?? row)?.traits ?? [], { strength: strength?.total ?? strength?.value ?? 10 });
   const modifiers = row ? [{ label: "AZEROTH.Sheet.AttackBonus", value: row.bonus ?? 0 }]

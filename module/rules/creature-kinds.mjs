@@ -40,13 +40,10 @@ import { undeadByClass } from "./undead.mjs";
 // a construct (the lead, Phase 0 item 2), so an area that strikes the living spares both by kind.
 export const CREATURE_KINDS = Object.freeze(["undead", "fel", "demon", "construct"]);
 
-/** 02 §5's people whose members are undead by the book's own words. */
-const UNDEAD_PEOPLES = Object.freeze(["forsaken"]);
-
-/** A people's name as the table keys it: "Night Elf" → "night-elf". */
-function peopleKey(name) {
-  return String(name ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-}
+// 02 §5's peoples whose members are undead by the book's own words (the Forsaken, the
+// San'layn) are `peoples.mjs`'s `undead: true` (D-1140): one table, keyed as the parser keys
+// a people, so "San'layn" is `sanlayn` here exactly as on its race item (F2).
+import { peopleUndead } from "./peoples.mjs";
 
 /**
  * The facts `kindsOf` reads, as plain data, off anything actor-shaped: a
@@ -101,8 +98,7 @@ export function kindsOf(snapshot = {}) {
   const out = new Set();
   if (!snapshot || typeof snapshot !== "object") return out;
   const type = String(snapshot.creatureType ?? "").toLowerCase();
-  const people = peopleKey(snapshot.race);
-  if (type === "undead" || UNDEAD_PEOPLES.includes(people) || endedAs(snapshot.tracks, "undeath", "The Risen")
+  if (type === "undead" || peopleUndead(snapshot.race) || endedAs(snapshot.tracks, "undeath", "The Risen")
     || snapshot.undead === true || undeadByClass(snapshot.classes)) out.add("undead");
   if (String(snapshot.keyword ?? "").toLowerCase() === "fel" || endedAs(snapshot.tracks, "fel", "The Fel-touched")) out.add("fel");
   if (type === "demon") out.add("demon");

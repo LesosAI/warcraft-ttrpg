@@ -45,6 +45,8 @@
  */
 
 import { gripOf } from "./worn.mjs";
+// The ONE named-gain refusal (the San'layn and Sovereign plan's C3): Runic Power, Essence, Tribute, Vitae.
+import { namedGainRefusal } from "./named-gains.mjs";
 
 /** The Power pool's key (`AZEROTH.powerTypes`). */
 export const RUNES = "runes";
@@ -61,7 +63,10 @@ export const RUNE_KINDS = Object.freeze(["blood", "frost"]);
  * for 1, a Sustain's upkeep included. Read by `casting.mjs#spellPayment` and by
  * `turn-effects.mjs#upkeep`.
  */
-export const CLASS_SPELL_POOL = Object.freeze({ [RUNES]: RUNIC_POWER });
+// **AND THE SOVEREIGN PAYS IN VITAE** (02 §7: *You pay Vitae where 07-MAGIC asks for Mana to cast a
+// spell*; the San'layn and Sovereign plan's V1): its Power IS Vitae, so the pool keyed by the class's
+// Power name is that pool itself, 1 Vitae for each Mana printed.
+export const CLASS_SPELL_POOL = Object.freeze({ [RUNES]: RUNIC_POWER, vitae: "vitae" });
 
 /**
  * **A SUSTAIN CAST WITH RUNIC POWER HAS NO UPKEEP** (D-949; the lead: *"Death and Decay
@@ -132,7 +137,8 @@ export function poolLabelKey(pool, amount, table = {}) {
  *   says so (02's *unless a feature or talent says so*), written by
  *   `effects/death-knight-talents.mjs#dkOnHit` alone.
  */
-export const RUNIC_GAIN_SOURCES = Object.freeze(["rune", "feedsOnBlows", "refund", "hand", "killingMachine"]);
+// The list lives in the ONE named-gain table (`named-gains.mjs`, the San'layn and Sovereign plan's C3).
+export { RUNIC_GAIN_SOURCES } from "./named-gains.mjs";
 
 /**
  * Why this write may not raise Runic Power, or null where it may: a fall or no change is
@@ -142,10 +148,7 @@ export const RUNIC_GAIN_SOURCES = Object.freeze(["rune", "feedsOnBlows", "refund
  * @returns {"unsourced"|"hand"|null}
  */
 export function runicGainRefusal({ before = 0, after = 0, source = null, gm = false } = {}) {
-  if (!(int(after) > int(before))) return null;
-  if (!RUNIC_GAIN_SOURCES.includes(source)) return "unsourced";
-  if (source === "hand" && gm !== true) return "hand";
-  return null;
+  return namedGainRefusal(RUNIC_POWER, { before, after, source, gm });
 }
 
 const int = v => Math.trunc(Number(v)) || 0;
@@ -179,7 +182,9 @@ export function runicPowerCap(chaMod = 0) {
  * here as a word because `essence.mjs` reads this file's neighbours and an import back
  * would be a cycle - `necromancer-groundwork.test.mjs` holds the two words together).
  */
-export const NO_UNIVERSAL_GAINS = Object.freeze([RUNIC_POWER, "essence"]);
+// And Tribute (02 §7: *A hit with your main-hand weapon, scoring SL 2 and winning an Opposed Test give
+// you none*; the San'layn and Sovereign plan's B.4): its two lanes and its named doors are the only way in.
+export const NO_UNIVERSAL_GAINS = Object.freeze([RUNIC_POWER, "essence", "tribute"]);
 
 /**
  * **WHETHER A MOMENTUM POOL GAINS FROM 05 §11's UNIVERSAL TRIGGERS** - the +1 for a

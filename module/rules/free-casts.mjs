@@ -12,7 +12,7 @@
  * names whose free cast is spent since the rest. The rest door empties it
  * (`AzerothActor#resetUses` through `freeCastRefills`), and the cast offers the free
  * cast as a TICKED line on its dialog (*"Cast without Rage, once per Short Rest"*), so
- * the player chooses when to spend it; `casting.mjs#manaPrice` takes `free` and prices
+ * the player chooses when to spend it; `casting.mjs#spellPrice` takes `free` and prices
  * the cast at nothing.
  *
  * And `void: N` on the same row (the plan's Black branch: *"have the black spells at

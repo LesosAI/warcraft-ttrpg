@@ -108,7 +108,7 @@
           dragged to the hotbar becomes a macro that SWINGS it rather than
           core's sheet-toggle one (the lead, 2026-09-13). The Ammunition list
           below is NOT draggable - a bundle is nocked, never swung. --}}
-    <li class="azeroth-weapon draggable" data-item-id="{{this.id}}">
+    <li class="azeroth-weapon draggable{{#if this.claws}} azeroth-weapon--claws{{/if}}" data-item-id="{{this.id}}">
       {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=this.img rarityClass=this.rarityClass trainingTip=this.trainingTip}}
       <span class="azeroth-weapon-name{{#if this.rarityClass}} {{this.rarityClass}}{{/if}}" data-action="expandItem" role="button" tabindex="0" aria-expanded="false">{{this.name}}</span>
       <button type="button" class="azeroth-open" data-action="openItem" data-tooltip="{{localize "AZEROTH.Sheet.Open"}}" aria-label="{{localize "AZEROTH.Sheet.Open"}}"><i class="fa-solid fa-pen-to-square"></i></button>
@@ -133,16 +133,26 @@
         </select>
       </label>
       {{/if}}
+      {{#if this.clawUses}}
+      {{!-- 04's Blooded Claws (D-1166): the free claw attacks left until a rest, in words. --}}
+      <span class="azeroth-weapon-claw-uses" data-tooltip="{{this.clawUses.tip}}">{{this.clawUses.text}}</span>
+      {{/if}}
       <span class="azeroth-weapon-controls">
+        {{#if this.attackable}}
         <button type="button" data-action="rollAttack">
           {{localize "AZEROTH.Sheet.Attack"}}
         </button>
+        {{/if}}
         {{> systems/azeroth-rpg/templates/actor/partials/star.hbs favorite=this.favorite}}
+        {{!-- The claws' Equip toggle (the lead, R6; D-1163) is this same control: their tooltip
+              says what equipping them shows a watching creature (the GM's call, R2). --}}
         <button type="button" class="azeroth-equip{{#if this.equipped}} is-equipped{{/if}}" data-action="toggleEquipped"
-                data-tooltip="{{localize "AZEROTH.Sheet.Equip"}}" aria-pressed="{{this.equipped}}">
+                data-tooltip="{{#if this.equipTip}}{{this.equipTip}}{{else}}{{localize "AZEROTH.Sheet.Equip"}}{{/if}}" aria-pressed="{{this.equipped}}">
           {{#if this.equipped}}{{localize "AZEROTH.Sheet.Equipped"}}{{else}}{{localize "AZEROTH.Sheet.Equip"}}{{/if}}
         </button>
+        {{#if this.deletable}}
         <button type="button" class="azeroth-delete" data-action="deleteItem" data-tooltip="{{localize "AZEROTH.Sheet.Delete"}}" aria-label="{{localize "AZEROTH.Sheet.Delete"}}">&times;</button>
+        {{/if}}
       </span>
       {{> systems/azeroth-rpg/templates/actor/partials/item-detail.hbs id=this.id detail=this.detail description=this.description}}
     </li>
@@ -223,6 +233,14 @@
       <button type="button" class="azeroth-chip-x" data-action="clearMark" aria-label="{{localize "AZEROTH.Combat.ClearMark"}}">&times;</button></span>
     {{/if}}
     {{/if}}
+    {{#if combat.sovereign.hunts}}
+    {{!-- 02 SS7's Hunt Mortal (the San'layn and Sovereign plan's C4): Mark the one creature targeted
+          as the prey; the prey is named in words on the row below. --}}
+    <button type="button" data-action="markPrey">{{localize "AZEROTH.Prey.Mark"}}</button>
+    {{/if}}
+    {{#if combat.sovereign.feeds}}
+    <button type="button" data-action="feed" data-tooltip="{{localize "AZEROTH.Feeding.Tip"}}">{{localize "AZEROTH.Feeding.Button"}}</button>
+    {{/if}}
     {{#if combat.shape}}
     {{!-- Any of the three shapes (D-769), named in words; its x is Leave. --}}
     <span class="azeroth-state-chip">{{combat.shape.line}}
@@ -242,6 +260,38 @@
     {{/if}}
     {{/each}}
   </div>
+
+  {{#if combat.sovereign}}
+  {{!-- 02 SS7's Sovereign (the San'layn and Sovereign plan's C4; D11): the prey named in words with
+        its Clear, then Vitae and Tribute through Core's own pool partial (D-614). --}}
+  <div class="azeroth-sovereign" data-sovereign-panel>
+    <p class="azeroth-prey-row">
+      <span class="azeroth-prey-label">{{localize "AZEROTH.Prey.Label"}}</span>
+      {{#if combat.sovereign.prey}}
+      <span class="azeroth-state-chip azeroth-prey-chip">{{combat.sovereign.prey.words}}
+        <button type="button" class="azeroth-chip-x" data-action="clearPrey" aria-label="{{localize "AZEROTH.Prey.Clear"}}" data-tooltip="{{localize "AZEROTH.Prey.Clear"}}">&times;</button></span>
+      {{else}}
+      <span class="azeroth-prey-none">{{combat.sovereign.none}}</span>
+      {{/if}}
+    </p>
+    {{#if combat.sovereign.latch}}
+    {{!-- 02 SS7's Latched: the creature named in words, and Let go (the latch lives on the prey). --}}
+    <p class="azeroth-prey-row" data-sovereign-latch>
+      <span class="azeroth-state-chip">{{combat.sovereign.latch.words}}</span>
+      <button type="button" data-action="letGo">{{localize "AZEROTH.Sovereign.Latch.LetGo"}}</button>
+    </p>
+    {{/if}}
+    {{#each combat.sovereign.pools}}
+    {{> systems/azeroth-rpg/templates/actor/partials/pool.hbs this}}
+    {{/each}}
+    {{#if combat.sovereign.vial}}
+    {{!-- A Blood vial drunk for Vitae (the plan's F3): twice the tier, and that rest's unit. --}}
+    <p class="azeroth-prey-row">
+      <button type="button" data-action="drinkVial" data-item-id="{{combat.sovereign.vial.id}}">{{localize "AZEROTH.Feeding.DrinkVial" name=combat.sovereign.vial.name n=combat.sovereign.vial.count}}</button>
+    </p>
+    {{/if}}
+  </div>
+  {{/if}}
 
   {{!-- 05 SS11 and 06 SS7: what a Momentum spend buys (D-626). The name
         opens the book's sentence; Use pays and posts the card. --}}

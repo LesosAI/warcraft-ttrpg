@@ -199,10 +199,17 @@ export function overflowTemporary({ before = 0, max = 0, healed = 0 } = {}) {
 }
 
 /** The span a sentence names, or null where it names none. */
-function spanOf(sentence) {
+function spanOfSentence(sentence) {
   if (/\buntil the end of the encounter\b|\buntil the encounter ends\b/i.test(sentence)) return "encounter";
   if (/\buntil your next Long Rest\b/i.test(sentence)) return "longRest";
   if (/\bfor the duration\b|\bfor (?:one|an) (?:hour|minute)\b/i.test(sentence)) return "effect";
+  return null;
+}
+
+/** *It lasts for the duration.* or *It lasts until the end of the fight.*, as its own sentence. */
+function lastsOf(sentence = "") {
+  if (/^It lasts for the duration\b/i.test(sentence)) return "effect";
+  if (/^It lasts until the end of the (?:fight|encounter)\b/i.test(sentence)) return "encounter";
   return null;
 }
 
@@ -231,8 +238,12 @@ const TIMES = Object.freeze({ "": "", twice: "2*", "three times": "3*" });
 export function readTemporaryHealth(text = "") {
   const flat = String(text ?? "").replace(/<[^>]+>/g, " ").replace(/\*\*/g, "").replace(/\s+/g, " ").trim();
   if (!/temporary Health/i.test(flat)) return null;
-  for (const sentence of flat.split(/(?<=[.!?])\s+/)) {
+  const parts = flat.split(/(?<=[.!?])\s+/);
+  for (const [at, sentence] of parts.entries()) {
     if (!/temporary Health/i.test(sentence)) continue;
+    // **A SPAN IN THE NEXT SENTENCE** (07 §17's Veil and Mantle of Majesty: *You gain 7 temporary Health. It
+    // lasts for the duration.*; D-1249): one mechanic a sentence (D4 §14) puts the span after the grant.
+    const spanOf = s => spanOfSentence(s) ?? lastsOf(parts[at + 1] ?? "");
     if (/\babove your Health maximum is kept as temporary Health\b/i.test(sentence)) {
       return { amount: null, span: spanOf(sentence) ?? "longRest", overflow: true, reason: null };
     }
@@ -251,6 +262,10 @@ export function readTemporaryHealth(text = "") {
     // ability modifier is the cast's own (`castSpell`'s `abilityMod`), so the amount names none.
     m = /\btemporary Health equal to (\d+) plus your casting modifier\b/i.exec(sentence);
     if (m) return { amount: m[1], span: spanOf(sentence), overflow: false, reason: null, castingMod: true };
+    // **07 §17's MANTLE OF MAJESTY** (*temporary Health equal to 11 plus your Constitution modifier*; D-1249):
+    // the number, and the caster's own Constitution modifier (`castTemporary`'s `ability`).
+    m = /\btemporary Health equal to (\d+) plus your Constitution modifier\b/i.exec(sentence);
+    if (m) return { amount: m[1], span: spanOf(sentence), overflow: false, reason: null, ability: "con" };
   }
   return { amount: null, span: null, overflow: false, reason: "unread" };
 }

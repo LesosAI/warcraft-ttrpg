@@ -2657,6 +2657,10 @@ export function featureAims({ name = "", lays = null, attack = false, onUse = nu
   if (o.bloodlust) return true;
   // 02's Death Grip names the one creature it pulls (the Death Knight plan's door 5).
   if (o.deathGrip) return true;
+  // The Sovereign's (Phase 5): Hunt Mortal names the creature it marks, The Blood Royal the one it feeds on, and
+  // 04's Bound to the Court the cursed creature it leashes. The Uses that gather their own creatures (Look Upon
+  // Me, Blood Prison, Kneel, Bloodletting) are handed nobody.
+  if (o.sov?.mark || o.sov?.feed || o.sov?.bound) return true;
   // The Chronomancer's (stage 2b): Slipstream's and Master of Hours' creature, Suspend's,
   // and the Chronoweaver's allies - Gift of Moments, Quickstep, Second Chance, Echo of Power,
   // Suspended Moment and Recovered Hours name theirs, Temporal Loop and Unfading the creature

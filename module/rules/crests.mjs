@@ -24,9 +24,12 @@
  * Pure: no Foundry imports.
  */
 
-/** The thirteen class identifiers that have a crest, as `packs-src/classes` spells them. */
+/**
+ * The fourteen class identifiers that have a crest, as `packs-src/classes` spells them. **The Sovereign's is
+ * a placeholder** (D-1195): `Spell_Shadow_ImprovedVampiricEmbrace` set in a disc until real art lands.
+ */
 export const CLASS_CRESTS = Object.freeze([
-  "chromatic-champion", "chronomancer", "death-knight", "druid", "mage", "necromancer", "paladin", "priest", "ranger", "rogue", "shaman", "warlock", "warrior"
+  "chromatic-champion", "chronomancer", "death-knight", "druid", "mage", "necromancer", "paladin", "priest", "ranger", "rogue", "shaman", "sovereign", "warlock", "warrior"
 ]);
 
 /** Where the crests are served from, relative to Foundry's route root. */

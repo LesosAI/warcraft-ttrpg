@@ -58,6 +58,7 @@ import { CARRY_MULTIPLIER, DEFAULT_SIZE, loadLine } from "./size.mjs";
 import { NOT_CARRIED, sectionParts } from "./weight.mjs";
 import { displacedBy, figureSlots, hasTitansPresence } from "./worn.mjs";
 import { isShot } from "./ammunition.mjs";
+import { isUnarmed } from "./unarmed.mjs";
 
 /* -------------------------------------------- */
 /*  The chapter's three ladders                  */
@@ -206,9 +207,18 @@ const ON_A_MOUNT = /\bon a mount\b/i;
  */
 export const CARRIED_TYPES = Object.freeze(["weapon", "armor", "gear"]);
 
-/** Whether this is something a character could put in a bag at all. */
+/**
+ * Whether this is something a character could put in a bag at all.
+ *
+ * **AN UNARMED STRIKE IS NEVER CARRIED** (the San'layn and Sovereign plan, C1 and B.12
+ * finding 9; the lead, R5: *"equipped on the character sheet without taking a gear
+ * slot"*; D-1162): 08 §7's Unarmed and the Sovereign's Claws take no bag slot and weigh
+ * nothing, worn or not, so neither ever reaches a panel.
+ */
 export function isThing(item) {
   const type = item?.type ?? null;
+  if (type !== null && type !== undefined && type !== "weapon") return CARRIED_TYPES.includes(type);
+  if (isUnarmed(item)) return false;
   return type === null || type === undefined || CARRIED_TYPES.includes(type);
 }
 

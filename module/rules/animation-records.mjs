@@ -75,6 +75,43 @@ export const DK_PRESENCE_NAMES = Object.freeze({ presence: "Unholy Presence", ma
 export const DK_NAMED_STATE_FLAGS = Object.freeze(["dancingRuneweapon", "iceboundFortitude", "remorselessWinter"]);
 const TICK_FLAG = "tick";
 export const PLAGUE_FEATURE = "Plague";
+
+/**
+ * **THE SOVEREIGN'S LAID STATES** (the San'layn and Sovereign plan's C14), named here rather than imported
+ * for the same reason as the knight's, and held to their constants by `sovereign-animations.test.mjs`. Each
+ * flag carries no `source` NAME (a curse's `source` is the caster's uuid), so the flag names its state:
+ *
+ * - `bloodCurse` (`rules/sovereign-spells.mjs#BLOOD_CURSE_FLAG`): every blood curse, one look, under
+ *   `blood-curse` - except Blood Prison's own carrier, whose `bloodPrison` names 02 §7's feature;
+ * - `bleedForMe`, `sovereignCommand` (by its `kind`: `command`, `audience`, or Mesmerize's `charm`),
+ *   Blood Bond's `bloodBond` and `sovereignOwn` (the identifier of a spell the Sovereign wears) under
+ *   `sovereigns-blood-magic`;
+ * - `obedience` (`effects/sovereign-features.mjs#layObedience`) under 04's Abject Obedience, and
+ *   `crownedInBlood` (a bare `true`, `rules/tribute.mjs#CROWNED_FLAG`) under 02's Crowned in Blood.
+ *
+ * Latch On's carrier and Bound to the Court's leash name their talent as a `source`, so the general
+ * reading below names them already.
+ *
+ * And the Blood Monarch's form, a shape kind with no feature of its own (`shapes.mjs#SHAPE_KINDS.bloodQueen`,
+ * taken by its talent's Use alone), is named for the talent.
+ */
+const SOV_CURSE_FLAG = "bloodCurse";
+const SOV_PRISON_FLAG = "bloodPrison";
+const SOV_COMMAND_FLAG = "sovereignCommand";
+const SOV_OWN_FLAG = "sovereignOwn";
+const SOV_CROWNED_FLAG = "crownedInBlood";
+const SOV_BOND_FLAG = "bloodBond";
+export const SOVEREIGN_STATE_NAMES = Object.freeze({
+  [SOV_CURSE_FLAG]: "Blood Curse",
+  [SOV_PRISON_FLAG]: "Blood Prison",
+  bleedForMe: "Sovereign's Blood Magic",
+  [SOV_COMMAND_FLAG]: "Sovereign's Blood Magic",
+  [SOV_BOND_FLAG]: "Sovereign's Blood Magic",
+  [SOV_OWN_FLAG]: "Sovereign's Blood Magic",
+  obedience: "Abject Obedience",
+  [SOV_CROWNED_FLAG]: "Crowned in Blood"
+});
+export const SHAPE_STATE_NAMES = Object.freeze({ bloodQueen: "Blood Monarch" });
 export const PLAGUE_STATES = Object.freeze(["frostFever", "bloodPlague"]);
 
 /**
@@ -587,10 +624,45 @@ export function stateEntriesOf(flags, { only = null } = {}) {
       if (text(value)) add(key, value);
       continue;
     }
+    // A spell the Sovereign wears (`effects/sovereign-spells.mjs#layOwn`): its identifier is the state word.
+    if (key === SOV_OWN_FLAG) {
+      if (text(value) && slugOf(value) === value) add(value, SOVEREIGN_STATE_NAMES[key]);
+      continue;
+    }
+    if (key === SOV_CROWNED_FLAG) {
+      if (value === true) add(key, SOVEREIGN_STATE_NAMES[key]);
+      continue;
+    }
     if (!value || typeof value !== "object" || Array.isArray(value)) continue;
     if (key === "shape") {
-      const feature = text(SHAPE_KINDS[value.kind]?.feature);
+      const feature = text(SHAPE_KINDS[value.kind]?.feature) ?? text(SHAPE_STATE_NAMES[value.kind]);
       if (feature) add(key, feature);
+      continue;
+    }
+    // **THE SOVEREIGN'S STATES** (the San'layn and Sovereign plan's C14): see `SOVEREIGN_STATE_NAMES` below.
+    // A blood curse's tag carries its cast, so it is read before the cast rule; Blood Prison's own carrier
+    // is drawn as its bonds, never as a second curse beside them.
+    if (key === SOV_CURSE_FLAG) {
+      if (!Object.hasOwn(flags, SOV_PRISON_FLAG)) add(key, SOVEREIGN_STATE_NAMES[key], value.source ?? null);
+      continue;
+    }
+    if (key === SOV_PRISON_FLAG) {
+      add(key, SOVEREIGN_STATE_NAMES[key], value.by ?? null);
+      continue;
+    }
+    if (key === SOV_COMMAND_FLAG) {
+      // Mesmerize's Charmed is its own state (`charm`), apart from Royal Command's (D-1390).
+      add(value.kind === "audience" ? "audience" : value.kind === "charm" ? "charm" : "command", SOVEREIGN_STATE_NAMES[key], value.by ?? null);
+      continue;
+    }
+    // Blood Bond's Charmed names its spell as a `source`, which the general reading below would file under the
+    // spell's own identifier; it is the blood magic's state instead (D-1390).
+    if (key === SOV_BOND_FLAG) {
+      add(key, SOVEREIGN_STATE_NAMES[key], value.by ?? null);
+      continue;
+    }
+    if (Object.hasOwn(SOVEREIGN_STATE_NAMES, key) && !text(value.source)) {
+      add(key, SOVEREIGN_STATE_NAMES[key], value.by ?? value.holder ?? null);
       continue;
     }
     // **07 §9's DECAY** (the lead: *"the decay animation should be like sand or rust/dust

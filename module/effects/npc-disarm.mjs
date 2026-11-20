@@ -1,5 +1,7 @@
 import { NPC_DISARM_FLAG, npcDisarmBlocks } from "../rules/npc-disarm.mjs";
 import { stonemaulGrip } from "../rules/stonemaul-grip.mjs";
+// An unarmed strike is never disarmed (the San'layn and Sovereign plan, C15; D-1162).
+import { isUnarmed } from "../rules/unarmed.mjs";
 
 /** Use document identities, never the animation's inferred weapon form. */
 export function disarmedAttack(actor, { weaponId = null, strike = null } = {}) {
@@ -10,7 +12,7 @@ export function disarmedAttack(actor, { weaponId = null, strike = null } = {}) {
   const itemId = weaponId ?? strike?.weapon?.id;
   const item = itemId ? actor.items?.get(itemId) : null;
   if (item?.type === "weapon") {
-    if (item.natural) return false;
+    if (item.natural || isUnarmed(item)) return false;
     weapon = { kind: "item", itemId: item.id };
   } else if (Number.isInteger(strike?.row?.index)) {
     const index = strike.row.index;

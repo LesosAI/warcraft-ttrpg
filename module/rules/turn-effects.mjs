@@ -7,6 +7,8 @@ import { resolveDamage } from "./mitigation.mjs";
 import { sustainEntryTransferPending } from "./sustain-entry-transfer.mjs";
 // The class that upkeeps its spells in Momentum (D-944).
 import { CLASS_SPELL_POOL } from "./runes.mjs";
+// The Sovereign's Vitae: an upkeep short of it takes Health, 1 for 1 (02 §7; the plan's V4).
+import { VITAE, vitaePayment } from "./vitae.mjs";
 
 /**
  * Bleeding X at the start of your turn (A1): lose X Health, armor and Ward
@@ -129,7 +131,8 @@ export function upkeep(entries = [], pools = [], { costOf = () => 1, health = nu
     // Knight's Power is its runes, and a Sustain entry recorded with no pool (one cast
     // before the class's pool was named on it) pays its upkeep in Runic Power, never in
     // a rune (`casting.mjs#CLASS_SPELL_POOL`).
-    const momentum = power ? CLASS_SPELL_POOL[power.name] ?? null : null;
+    // A class whose spell pool IS its Power (the Sovereign's Vitae) upkeeps in that pool itself.
+    const momentum = power && CLASS_SPELL_POOL[power.name] !== power.name ? CLASS_SPELL_POOL[power.name] ?? null : null;
     if (momentum) {
       const paid = pools.find(p => p.kind === "momentum" && p.name === momentum && p.itemId === power.itemId)
         ?? pools.find(p => p.kind === "momentum" && p.name === momentum) ?? null;
@@ -160,6 +163,22 @@ export function upkeep(entries = [], pools = [], { costOf = () => 1, health = nu
     if (mana === 0 && hp === 0) { kept.push(entry); free.push(entry); continue; }
     const payer = payerOf(entry);
     const have = payer === null ? undefined : remaining.get(payer);
+    // **VITAE, AND HEALTH BEHIND IT** (02 §7: *While sustaining a spell, you pay its upkeep in Vitae*,
+    // and *When a cost is more than the Vitae you hold, spend all your Vitae and pay the rest in Health*;
+    // the San'layn and Sovereign plan's V4): the upkeep is ended only where the Vitae and the Health
+    // together cannot pay it - which a Dying Sovereign's never can (B.13 Q22 to Q24).
+    if (mana > 0 && payer !== null && payer.endsWith(`|${VITAE}`) && have !== undefined) {
+      const p = vitaePayment({ held: have, cost: mana, health: healthLeft ?? 0 });
+      if (p.refusal || hp > 0) { ended.push(entry); continue; }
+      remaining.set(payer, p.vitaeAfter);
+      if (p.health > 0) {
+        healthLeft = p.healthAfter;
+        paid.health += p.health;
+      }
+      other[VITAE] = (other[VITAE] ?? 0) + p.vitae;
+      kept.push(entry);
+      continue;
+    }
     if (mana > 0 && (have === undefined || have < mana)) { ended.push(entry); continue; }
     if (hp > 0 && (healthLeft === null || healthLeft - hp < 1)) { ended.push(entry); continue; }
     if (mana > 0) remaining.set(payer, have - mana);

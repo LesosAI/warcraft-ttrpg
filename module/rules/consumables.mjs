@@ -27,6 +27,8 @@
 
 // 08 §12's tick poisons (O-114, D-770): *N damage a turn for M turns*.
 import { readPoisonTick } from "./ticks.mjs";
+// An unarmed strike is never coated (the San'layn and Sovereign plan, C15; D-1162).
+import { isUnarmed } from "./unarmed.mjs";
 import { DISEASES, REMEDIES, diseaseByName, readCarried } from "./afflictions.mjs";
 
 /**
@@ -550,6 +552,8 @@ export function goesOnKey(phrase) {
  */
 export function goesOn(appliesTo, item) {
   if (!appliesTo || !item) return false;
+  // 08 §7's Unarmed and the Sovereign's Claws are no blade to coat (C15; D-1162).
+  if (isUnarmed(item)) return false;
   const sys = item.system ?? {};
   const isShield = sys.shield === true;
   const isArmor = item.type === "armor" && !isShield;

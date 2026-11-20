@@ -58,6 +58,12 @@ function keptAtRest(pools, event) {
   return { updates, gains };
 }
 
+/**
+ * **THE POWER POOLS NO REST REFILLS** (the lead, R9: *"Feeding only"*; the plan's V3): the Sovereign's
+ * Vitae comes back by feeding alone (`rules/feeding.mjs`), so both rests leave it and say so.
+ */
+export const REST_NEVER_REFILLS = Object.freeze(["vitae"]);
+
 /** @typedef {{itemId: string, kind: "power"|"momentum", name: string, value: number, max: number}} PoolSnapshot */
 
 /**
@@ -69,6 +75,12 @@ function poolRecovery(pools, valueFor) {
   const gains = [];
   for (const p of pools) {
     if (p.kind !== "power") continue;
+    // **NO REST REFILLS VITAE** (the lead, R9: *"Feeding only"*; the San'layn and Sovereign plan's
+    // V3): the pool is skipped whatever `valueFor` would give it, and the card says so in words.
+    if (REST_NEVER_REFILLS.includes(p.name)) {
+      gains.push({ kind: "noRefill", name: p.name });
+      continue;
+    }
     const value = valueFor(p);
     if (value === null || value === undefined) continue;
     updates.push({ itemId: p.itemId, kind: p.kind, value });
@@ -118,17 +130,29 @@ function poolRecovery(pools, valueFor) {
  */
 export function shortRest({
   health, conMod = 0, tier = 1, fatigue = 0, pools = [],
-  eats = false, drinks = false, tierAgain = false, manaExtra = null, needsNoFood = false, needsNoDrink = null
+  eats = false, drinks = false, tierAgain = false, manaExtra = null, needsNoFood = false, needsNoDrink = null,
+  bloodFed = false, blood = false
 } = {}) {
+  // **A SAN'LAYN RESTS ON BLOOD** (02 §5, *Your hunger.*: *You need blood in place of food and
+  // drink: a Short Rest takes 1 unit of blood ... Food and drink restore nothing on your rests*;
+  // D-1141). The unit stands for both halves and nothing else does: food and drink handed in
+  // are ignored, and the class exemptions below do not lift it (D-1142). `blood` still
+  // WITHHOLDS by default, as `eats` and `drinks` do.
+  const fed = bloodFed === true;
+  if (fed) {
+    eats = blood === true;
+    drinks = blood === true;
+    tierAgain = false;
+  }
   // **NOTHING TO EAT, AND NOTHING NEEDED** (D-946): the rest recovers as though both
   // were taken. MY READING, for the lead: *"do not have to eat or drink"* lifts the drink
   // a Forsaken caster's Mana waits on too. The defaults still withhold: only a caller
   // that says so passes it.
-  const exempt = needsNoFood === true;
+  const exempt = !fed && needsNoFood === true;
   // **THE DRINK IS LIFTED SEPARATELY** (the F1 review's note): Undeath's rung at 5 lifts the
   // food alone, so a caller that says `needsNoDrink: false` still waits on a drink for Mana.
   // Left null, it follows `needsNoFood`, as before.
-  const noDrink = needsNoDrink === null || needsNoDrink === undefined ? exempt : needsNoDrink === true;
+  const noDrink = fed ? false : (needsNoDrink === null || needsNoDrink === undefined ? exempt : needsNoDrink === true);
   if (exempt) eats = true;
   if (noDrink) drinks = true;
   const extraAmount = drinks ? Math.max(0, Math.trunc(Number(manaExtra?.amount)) || 0) : 0;
@@ -166,11 +190,103 @@ export function shortRest({
       ...(after > fedTo ? [{ kind: "tierAgain", amount: after - fedTo }] : []),
       ...gains,
       ...kept.gains,
-      ...(eats ? [] : [{ kind: "noFood" }]),
-      ...(!drinks && holdsMana ? [{ kind: "noDrink" }] : []),
+      // A blood-fed rest says *No blood* once, never *No food* and *No drink* (D-1141).
+      ...(fed ? (blood === true ? [] : [{ kind: "noBlood" }]) : [
+        ...(eats ? [] : [{ kind: "noFood" }]),
+        ...(!drinks && holdsMana ? [{ kind: "noDrink" }] : [])
+      ]),
       ...(exempt ? [{ kind: "needsNoFood" }] : [])
     ]
   };
+}
+
+/**
+ * **THE FLAG A SAN'LAYN'S FEEDINGS SINCE ITS LAST REST ARE COUNTED ON** (the plan's B.11 F4 and
+ * C-14, *One feeding serves both halves*; D-1143). An integer on the character's own actor:
+ * Open Vein's living failure adds 1, and so does every feeding of the Sovereign's (The Blood
+ * Royal and its kin, the class's door). The next rest counts it before it asks for a vial, and a
+ * rest it satisfies clears it. `AzerothActor#bloodSinceRest` reads it and
+ * `AzerothActor#addBloodSinceRest` is the one writer.
+ */
+export const BLOOD_SINCE_REST_FLAG = "bloodSinceRest";
+
+/** The count a flag holds, clean: a non-negative integer, 0 for anything else. */
+export function bloodSinceRestOf(value) {
+  const n = Math.trunc(Number(value));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/** The Long Rest's default unit count, the `bloodLongRest` setting's initial (A.6 item 8; PROPOSAL 2). */
+export const BLOOD_LONG_REST_DEFAULT = 2;
+
+/**
+ * **WHERE A REST'S BLOOD COMES FROM, AND WHETHER IT IS MET** (02 §5, *Your hunger.*; R3: *"1 unit
+ * for short rest and an amount up to the GM for long rest"*; D-1141, D-1143, D-1144). The one
+ * judgement, made before anything is spent.
+ *
+ * Units are counted in this order: the feedings since the last rest (`sinceRest`), then blood
+ * drunk fresh from a living source the GM approved (`fresh`, the rest window's line), then the
+ * Blood vials picked (`vials`). **ALL OR NOTHING** (A.9 Q15, the plan's recommendation): a rest
+ * whose blood falls short takes none of what was offered - no vial is spent and the count stays
+ * for a later rest - and the rest is withheld. A rest that is met spends only the vials it still
+ * needs after the count and the fresh units, and clears the count.
+ *
+ * @param {{needed?: number, sinceRest?: number, fresh?: number|boolean, vials?: number}} o
+ * @returns {{needed: number, fromSince: number, fromFresh: number, fromVials: number, met: boolean,
+ *   clearSince: boolean}}
+ */
+export function bloodRestPlan({ needed = 1, sinceRest = 0, fresh = 0, vials = 0 } = {}) {
+  const want = Math.max(0, Math.trunc(Number(needed)) || 0);
+  const since = bloodSinceRestOf(sinceRest);
+  const freshUnits = fresh === true ? 1 : Math.max(0, Math.trunc(Number(fresh)) || 0);
+  const carried = Math.max(0, Math.trunc(Number(vials)) || 0);
+  if (want === 0) return { needed: 0, fromSince: 0, fromFresh: 0, fromVials: 0, met: true, clearSince: false };
+  const fromSince = Math.min(want, since);
+  const fromFresh = Math.min(want - fromSince, freshUnits);
+  const fromVials = Math.min(want - fromSince - fromFresh, carried);
+  const met = fromSince + fromFresh + fromVials >= want;
+  if (!met) return { needed: want, fromSince: 0, fromFresh: 0, fromVials: 0, met: false, clearSince: false };
+  return { needed: want, fromSince, fromFresh, fromVials, met: true, clearSince: since > 0 };
+}
+
+/**
+ * **WHICH VIALS A REST DRINKS** (D-1144): `units` drawn from the stacks picked, in the order
+ * picked, one unit a vial (*Each Blood vial spent is 1 unit*). A stack of three gives three.
+ *
+ * @param {Array<{itemId: string, quantity?: number}>} stacks
+ * @param {number} units
+ * @returns {Array<{itemId: string, take: number, left: number}>}  `left` the quantity after
+ */
+export function vialDraws(stacks = [], units = 0) {
+  let owed = Math.max(0, Math.trunc(Number(units)) || 0);
+  const out = [];
+  for (const s of stacks ?? []) {
+    if (owed <= 0) break;
+    const have = Math.max(0, Math.trunc(Number(s?.quantity ?? 1)) || 0);
+    const take = Math.min(have, owed);
+    if (take <= 0) continue;
+    out.push({ itemId: s.itemId, take, left: have - take });
+    owed -= take;
+  }
+  return out;
+}
+
+/** How many units the stacks picked hold together. */
+export function vialUnits(stacks = []) {
+  return (stacks ?? []).reduce((n, s) => n + Math.max(0, Math.trunc(Number(s?.quantity ?? 1)) || 0), 0);
+}
+
+/**
+ * How many units a rest asks a blood-fed character for: 1 on a Short Rest, the GM's setting on a
+ * Long Rest (A.6 item 8: 0 means no blood is needed).
+ *
+ * @param {"short"|"long"} kind
+ * @param {number} [setting]  the `bloodLongRest` world setting
+ */
+export function bloodNeeded(kind, setting = BLOOD_LONG_REST_DEFAULT) {
+  if (kind !== "long") return 1;
+  const n = Math.trunc(Number(setting));
+  return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
 /**
@@ -178,12 +294,17 @@ export function shortRest({
  * Diseased (A1): "You regain no Health from a Long Rest and it removes no
  * Fatigue." The pools still fill; the card carries `{kind: "diseased"}`.
  */
-export function longRest({ health, conMod = 0, tier = 1, fatigue = 0, pools = [], diseased = false } = {}) {
+export function longRest({ health, conMod = 0, tier = 1, fatigue = 0, pools = [], diseased = false, withheld = false } = {}) {
+  // **A SAN'LAYN'S LONG REST WITHOUT ITS BLOOD** (02 §5: *A rest without the blood it needs
+  // restores no Health and no Power, and a Long Rest without it removes no Fatigue*; D-1144):
+  // `withheld`. It is never refused - every other reset (uses, runes, kept pools, effects
+  // ending) still runs at the door - and the card says *No blood*.
+  const starved = withheld === true;
   const gain = Math.max(0, Math.ceil(health.max / 4) + conMod);
   const before = health.value ?? 0;
-  const after = diseased ? before : Math.min(health.max, before + gain);
-  const rested = diseased ? fatigue : Math.max(0, fatigue - 1);
-  const { updates, gains } = poolRecovery(pools, p => (p.name === "mana" || p.name === "focus" ? p.max : null));
+  const after = diseased || starved ? before : Math.min(health.max, before + gain);
+  const rested = diseased || starved ? fatigue : Math.max(0, fatigue - 1);
+  const { updates, gains } = poolRecovery(pools, p => (!starved && (p.name === "mana" || p.name === "focus") ? p.max : null));
   const kept = keptAtRest(pools, "longRest");
   return {
     health: after,
@@ -194,7 +315,8 @@ export function longRest({ health, conMod = 0, tier = 1, fatigue = 0, pools = []
       ...gains,
       ...kept.gains,
       ...(rested < fatigue ? [{ kind: "fatigue", amount: rested - fatigue }] : []),
-      ...(diseased ? [{ kind: "diseased" }] : [])
+      ...(diseased ? [{ kind: "diseased" }] : []),
+      ...(starved ? [{ kind: "noBlood" }] : [])
     ]
   };
 }

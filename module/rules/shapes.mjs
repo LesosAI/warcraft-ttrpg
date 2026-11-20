@@ -163,6 +163,17 @@ export const SHAPE_KINDS = Object.freeze({
     ferocity: false, barsMana: false, melds: true, requires: null, overlay: true, keeps: true,
     endsAt: Object.freeze([]),
     entries: Object.freeze({ "Red Drake": "Red Drake", "Blue Drake": "Blue Drake", "Bronze Drake": "Bronze Drake", "Black Drake": "Black Drake" })
+  }),
+  // **04's BLOOD MONARCH** (the Sovereign's Ravenous capstone; R56 to R58; the plan's B.11: *no block, no score
+  // overridden, nothing melded, the character's own Defense and Armor Points kept, a fixed 240 ft flying
+  // Speed*): a form standing BESIDE the character (`overlay`), its snapshot printing no Defense, no Armor Points
+  // and no score, flying at tier 4's pace (D-530: 240 feet). Taken only by its talent's own Use
+  // (`effects/sovereign-features.mjs#takeMonarch`, no menu, no feature), it ends early at 0 Health, and leaving
+  // it costs nothing (*or when you end it*; no action is named, R19).
+  bloodQueen: Object.freeze({
+    feature: null, choice: null,
+    ferocity: false, barsMana: false, melds: false, requires: null, overlay: true,
+    endsAt: Object.freeze(["zeroHealth"])
   })
 });
 
@@ -384,6 +395,8 @@ export const SWIFT_LEAVE = "Predator's Swiftness";
  */
 export function leaveCost({ kind = null, inFight = false, swiftLeft = 0, savage = false } = {}) {
   if (!inFight) return "free";
+  // 04's Blood Monarch: *The form ends early when you drop to 0 Health or when you end it* - no action named (R19).
+  if (kind === "bloodQueen") return "free";
   if (kind === "shapeshift" && savage === true) return "savage";
   if (kind === "shapeshift" && (Number(swiftLeft) || 0) > 0) return "counter";
   return "half";

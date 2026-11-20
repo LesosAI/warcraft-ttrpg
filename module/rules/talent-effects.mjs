@@ -249,6 +249,8 @@
 // patch of the same shape now (Totem Mastery on Totem), and one constructor
 // in the file both readers already import beats two that must agree.
 import { CLASS_FEATURES, action, bindRank, cost, evaluateAmount, mod, once } from "./class-features.mjs";
+// A people's key, the parser's `slugify` (D-1140): the race lookup in `talentEffect`.
+import { peopleKey } from "./peoples.mjs";
 // 02 §5's Tail Sweep: a price from any pool (the lead, 2026-11-09).
 import { ANY_POOL } from "./pools.mjs";
 // What stands on somebody else (D-755): the descriptor, and the stamp that
@@ -263,6 +265,8 @@ import { gateHolds, gateLabel, wieldFails } from "./talent-gates.mjs";
 import { boundFeatureEscape } from "./escapes.mjs";
 // The Necromancer's numbers, each in one place (Phase 4c-T): every row below names its constant.
 import * as NT from "./necromancer-talents.mjs";
+// The Sovereign's numbers (04's Dominion, Vainglorious and Ravenous; the San'layn and Sovereign plan's Phase 5).
+import * as ST from "./sovereign-talents.mjs";
 // A summon's count by rank, bound at the stamp (the Legacy branches' door 4).
 import { summonCountAt } from "./summon-places.mjs";
 
@@ -373,6 +377,57 @@ export const RACE_TALENT_EFFECTS = Object.freeze({
     "wyrm's-regard": {
       grants: grant({ action: null, uses: uses(1, "arc") }),
       reason: "the favor a true dragon grants, and what Nefarian remembers, are the GM's (D2 §12); the Use counts the arc's address"
+    }
+  },
+  // **THE SAN'LAYN'S EIGHT** (02 §5's thirteenth people; the San'layn plan's A.6 item 4; D-1148).
+  // Keyed `sanlayn`, the parser's key: `talentEffect` reads a people through `peopleKey` (F2).
+  sanlayn: {
+    // *Your bite leaves no mark, and a sleeping creature you feed from does not wake.*
+    "clean-feeder": none("whether a bite shows and whether a sleeper wakes are the GM's to judge at the table (D2 §12); no door feeds from a sleeper"),
+    // *You smell fresh blood within 60 feet, even through a closed door. You can tell from the
+    // scent whether the blood is diseased or poisoned.*
+    "blood-sense": none("what the San'layn smells within 60 feet, and whether the blood is diseased or poisoned, is what the GM tells the player (D2 §12)"),
+    // *You know who marched with Kael'thas, which house each came from, and who died at Icecrown.*
+    "the-prince's-march": none("what the San'layn knows of the march, and what a blood elf says of the ones it lost, is the GM's to give (D2 §12)"),
+    // *When a creature tries to see through your cover, you have a Boon on any Test you make to
+    // keep it. Where the GM has only the creature roll, it takes a Bane instead.* The plan's A.6
+    // item 4: a granted passive whose `reminder` draws an UNTICKED judgement line on every skill
+    // Test - no `skills` filter, because the GM picks the skill (the lead, R2: *"Deception or
+    // Medicine can be used as examples but it's the GM's decision"*). Whether a creature is trying
+    // to see through the cover is the table's, so the line is never ticked for the player.
+    "courtly-masquerade": {
+      grants: grant({ kind: "passive", action: null, reminder: { kinds: ["skill"], text: "AZEROTH.Feature.Reminder.CourtlyMasquerade", boons: 1 } }),
+      reason: "the Bane where only the creature rolls is on the GM's own roll for that creature, and whether a creature is trying to see through the cover is the table's call (D2 §12); the San'layn's own Test carries the Boon as an unticked line"
+    },
+    // *Once per encounter, spend a Half-Action and bite a creature within 5 feet. It makes a Body
+    // Resilience Test against 8 plus your Constitution modifier plus your Proficiency Bonus, taking
+    // Physical damage equal to twice your tier on a failure. You recover Health equal to the damage
+    // it takes, and a living creature that fails gives you 1 unit of blood for your next Short
+    // Rest.* Life Drain's shape (`onUse.healsDealt`, the one damage door heals the San'layn by what
+    // the blow took), the Test at `con8` (`class-features.mjs#con8DC`, never the Spell DC), the
+    // damage on a failure alone (`onFail`), the one creature named within 5 feet (`aim`), and the
+    // unit read off this row by the Resist's failure (`effects/blood.mjs#bloodFromResist`).
+    "open-vein": {
+      grants: grant({
+        action: "half", uses: uses(1, "encounter"), resist: "body", resistDc: "con8",
+        damage: { amount: "2*tier", type: "physical", onFail: true }
+      }),
+      onUse: { healsDealt: true, aim: { feet: 5 } },
+      bloodUnit: { living: true, onFail: true, units: 1 },
+      reason: "*Every creature that sees the bite knows what you are* is the table's (D2 §12)"
+    },
+    // *For 1 hour after you drink a unit of blood, your skin is warm and your heart beats.*
+    "borrowed-warmth": none("what a touch or a Medicine Test finds, and what sees through it, is the GM's at the table (D2 §12); the hour after a unit is drunk is the table's to keep"),
+    // *Once between Long Rests, when you drink from a living creature, learn one thing it saw in the
+    // last day.* A counter; what surfaces is the GM's.
+    "what-the-blood-remembers": {
+      grants: grant({ action: null, uses: uses(1, "long") }),
+      reason: "what surfaces from the blood - a face, a place or words - is the GM's to choose (D2 §12); the Use counts the Long Rest's one memory"
+    },
+    // *Once in an arc, call in a debt from a San'layn who still serves in Northrend.* A counter.
+    "a-debt-in-icecrown": {
+      grants: grant({ action: null, uses: uses(1, "arc") }),
+      reason: "the one thing the court does, and who in Icecrown learns where you are, is the GM's (D2 §12); the Use counts the arc's debt"
     }
   },
   human: {
@@ -3624,6 +3679,119 @@ export const TALENT_EFFECTS = Object.freeze({
     "dark-communion": { grants: grant({ action: null, uses: uses(1, "short") }), onUse: { necro: { communion: true } }, necro: { heal: "3*tier", rite: NT.DARK_COMMUNION } },
     // *Once per Long Rest, as a Half-Action ... five times your tier ... Boon on every Test ... Empowered ...*
     "the-black-rite": { grants: grant({ action: "half", uses: uses(1, "long") }), onUse: { necro: { blackRite: true } }, necro: { heal: "5*tier", tempHealth: "int", rite: NT.BLACK_RITE } }
+  },
+  // **THE SOVEREIGN** (04's Dominion, Vainglorious and Ravenous; the San'layn and Sovereign plan's Phase 5).
+  // Every number is `rules/sovereign-talents.mjs`' (ST), held to 04 at every rank by
+  // `sovereign-talents.test.mjs`, and every door is `effects/sovereign-features.mjs`' - named, function by
+  // function, in `ST.SOV_DOORS`, which the test slices with the comments blanked. A Use's `onUse.sov` is
+  // judged by `judgeSovereignUse` and landed by `landSovereignUse`; `sov` itself names what the row does.
+  sovereign: {
+    /* ---- Dominion ---- */
+    // *When a creature repeats a Resilience Test to end one of your blood curses, it takes a −1 penalty per
+    // rank on that Test*: the repeat's prompt, its DC raised by the rank (`postCurseRepeats`).
+    "sovereign-will": { automated: "inline", sov: { will: ST.SOVEREIGN_WILL.perRank } },
+    // *While a creature is under your blood curse, its Speed falls by 5 feet per rank*: stamped on the curse's
+    // own effect at the lay (`bloodCurseEffectData`).
+    "heavy-tread": { sov: { tread: ST.HEAVY_TREAD.perRank } },
+    // *When a creature succeeds on a Resilience Test to end your blood curse, it takes Shadow damage equal to
+    // your tier*: the repeat's success (`curseRepeatLanded`), and 07's own escape on a curse.
+    "price-of-defiance": { sov: { price: true } },
+    // *... it is Slowed until the end of its next turn. At rank 2, it also takes a Bane on its next Attack Test*.
+    "lingering-decree": { sov: { inflicts: [ST.LINGERING_DECREE.condition], bane: ST.LINGERING_DECREE.baneRank } },
+    // *... each of its weapon attacks deals 1 less damage per rank*: the damage door's attacker-keyed step.
+    "unworthy-hand": { sov: { cut: ST.UNWORTHY_HAND.perRank } },
+    // *Once a round, when a creature other than your prey fails ... gain 1 Tribute. At rank 2, twice a round*.
+    "homage": { sov: { homage: true } },
+    // *As a Half-Action, spend 6 Vitae ... Body Resilience Test ... 30 feet ... At rank 2, ... Slowed*.
+    "bound-to-the-court": {
+      grants: grant({ action: "half", cost: cost("vitae", ST.BOUND_TO_THE_COURT.vitae), resist: ST.BOUND_TO_THE_COURT.resilience }),
+      onUse: { sov: { bound: true } }, sov: { leash: ST.BOUND_TO_THE_COURT.leash, inflicts: ["slowed"] }
+    },
+    // *... you may lay that spell's blood curse on another creature within a 15 ft radius of it ... no Vitae*:
+    // an offer card on the death (`onSovereignDeath`).
+    "example-to-others": { sov: { example: true } },
+    // *... it is Frightened of you until the end of its next turn. At rank 2, Price of Defiance deals ...*.
+    "no-pardon": { sov: { inflicts: [ST.NO_PARDON.condition] } },
+    // *Once per encounter, as a Half-Action, spend 3 Tribute ... Prone and Stunned ... Only your prey is Stunned*.
+    "kneel": {
+      grants: grant({ action: "half", cost: cost("tribute", ST.KNEEL.tribute), uses: uses(1, "encounter"), resist: ST.KNEEL.resilience }),
+      onUse: { sov: { kneel: true } }, sov: { inflicts: ["prone", "stunned"] }
+    },
+    // *Your Blood Prison costs 6 Vitae. It deals Shadow damage equal to twice your tier plus your Charisma
+    // modifier*: the price a patch on the feature's stamp (10 to 6), the damage read at the turn's end.
+    "gilded-cage": { modifies: mod("Blood Prison", { cost: { delta: ST.GILDED_CAGE.vitae - ST.BLOOD_PRISON.vitae } }), sov: { cage: true } },
+    // *Once per Long Rest, as an action, spend 15 Vitae ... you control it on your turns for 1 minute*.
+    "abject-obedience": {
+      grants: grant({ action: "action", cost: cost("vitae", ST.ABJECT_OBEDIENCE.vitae), uses: uses(1, "long"), resist: ST.ABJECT_OBEDIENCE.resilience }),
+      onUse: { sov: { obedience: true } }
+    },
+    /* ---- Vainglorious ---- */
+    // *You may take this talent once you have Prim and Proper. Your Prim and Proper grants 1 additional
+    // temporary Health per rank*: the take is gated (`talents.mjs#canTake`), the Health read at the Use.
+    "gilded-skin": { sov: { tempHealth: ST.GILDED_SKIN.perRank, needs: ST.GILDED_SKIN.needs } },
+    // *Once a round, when an attack misses you, gain 1 Tribute. At rank 2, twice a round*.
+    "beneath-me": { sov: { beneath: true } },
+    // *... you regain 1 additional Health*: the one healing door (`healExtra`).
+    "exquisite-taste": { sov: { heal: ST.EXQUISITE_TASTE.add } },
+    // *While you have temporary Health, your Defense rises by 1 per rank*: derived on the character.
+    "untouchable": { sov: { stat: "defense", tempHealth: true } },
+    // *Once a round, spend 2 Tribute. Shed one condition that a Resilience Test could have prevented. At rank
+    // 2, it costs 1 Tribute*: the Use judges the price at its rank and pays it once judged.
+    "above-such-things": { grants: grant({ action: null }), onUse: { sov: { above: true } } },
+    // *... the Health it would restore above your maximum becomes temporary Health, up to 3 per rank plus your
+    // Charisma modifier*: the one healing door (`healExtra`).
+    "overflowing-cup": { sov: { heal: 0, tempHealth: ST.OVERFLOWING_CUP.perRank } },
+    // *When a creature's attack misses you, your next attack or spell against that creature ... takes a Boon*.
+    "insolence-repaid": { sov: { insolence: true } },
+    // *Once per encounter, as a Reaction when an attack hits you, spend 3 Tribute. You take no damage from that
+    // attack. You then move up to 15 feet*: the negating Reaction (Afterimage's door), then the step.
+    "mirrored-self": {
+      grants: grant({ action: "reaction", cost: cost("tribute", ST.MIRRORED_SELF.tribute), uses: uses(1, "encounter") }),
+      onUse: { mitigate: "negate", sov: { mirrored: true } }
+    },
+    // *While you have 1 or more Tribute, you cannot be Frightened. At rank 2, ... Charmed*: derived.
+    "serene-disdain": { sov: { immune: true } },
+    // *Once per Long Rest, when a blow would drop you to 0 Health, you may spend all your Tribute*: the one
+    // hold at 1, its use the counter's; a press of the counter refuses in words.
+    "too-beautiful-to-die": { automated: "inline", grants: counter(1, "long"), onUse: { sov: { offered: true } }, sov: { tempHealth: true, hold: true } },
+    // *Once a round, when your temporary Health ... absorbs all of a blow's damage, gain 1 Tribute*.
+    "unmarred": { automated: "inline", sov: { unmarred: true, tempHealth: true } },
+    // *Your Tribute cap rises by 2. ... While you have 5 or more Tribute, weapon attacks against you take a Bane*.
+    "the-crimson-throne": { sov: { stat: "tributeCap", throne: true } },
+    /* ---- Ravenous ---- */
+    // *Your claw hits deal 1 additional Shadow damage per rank. You may make your Off-Hand Attack with your
+    // claws in a turn in which you do not Attack ... At rank 3, ... two attack rolls*: the Shadow a fired row
+    // (`sovereignOnHit`); the free attack and the rolls WEAPON's (`initiative.mjs#freeOffHand`, `offHandRolls`).
+    "blooded-claws": { sov: { damage: ST.BLOODED_CLAWS.perRank, uses: "tier" } },
+    // *As a Half-Action, spend 2 Vitae. Until the end of your turn ... At rank 2, ... your next turn*.
+    "sanguine-edge": { grants: grant({ action: "half", cost: cost("vitae", ST.SANGUINE_EDGE.vitae) }), onUse: { sov: { sanguine: true } } },
+    // *When your claws hit a creature that is Bleeding, Prone or Stunned, you may spend 1 Tribute*: an offer card.
+    "tasting-bite": { sov: { tempHealth: true, offer: "tastingBite" } },
+    // *When your claws hit your prey, you may spend 1 Tribute to latch on to it ... At the start of each of
+    // your turns ... you regain that much Health*: an offer card, the latch and the holder's turn start.
+    "latch-on": { automated: "inline", sov: { offer: "latchOn", turnStart: true, heal: true } },
+    // *When your claws hit a creature, it is Bleeding 2 ... At rank 2, it is Bleeding 3 ... one extra claw attack
+    // roll*: the Bleeding on the claw-hit door; the roll WEAPON's (`offHandRolls`).
+    "raking-claws": { automated: "inline", sov: { inflicts: ["bleeding"] } },
+    // *When you cast a Death spell as a Half-Action, your next weapon or claw attack ... takes a Boon. At rank
+    // 2, ... costs 2 less Vitae, to a minimum of 1*.
+    "crimson-flourish": { sov: { discount: ST.CRIMSON_FLOURISH.discount } },
+    // *In a fight, you may also feed (The Blood Royal) on a Bleeding creature within your reach ...*: CORE's
+    // feeding judgement and return read the rank (`feedVerdict`, `feedingReturn`).
+    "drink-deep": { automated: "inline", sov: { feed: true } },
+    // *As a Half-Action, spend 5 Vitae. Each Bleeding enemy within your reach ...*.
+    "bloodletting": { grants: grant({ action: "half", cost: cost("vitae", ST.BLOODLETTING.vitae) }), onUse: { sov: { bloodletting: true } }, sov: { tempHealth: true } },
+    // *Once per encounter, as a Half-Action, spend 4 Vitae. Move to an unoccupied space within your reach of
+    // your prey ... 30 feet ... At rank 2, the range is 60 feet*.
+    "blood-rush": { grants: grant({ action: "half", cost: cost("vitae", ST.BLOOD_RUSH.vitae), uses: uses(1, "encounter") }), onUse: { sov: { bloodRush: true } } },
+    // *Once a round, when a creature within your reach dies while it is Bleeding or under your blood curse ...
+    // feed on it, making no Test, for half the Vitae*: an offer card on the death.
+    "last-draught": { sov: { feed: true, offer: "lastDraught" } },
+    // *Once a round, you may cast a Death spell that costs an action as a Half-Action, if it targets only one
+    // creature ... within your reach. It costs 3 more Vitae*: the cast dialog's Half-Action line.
+    "swift-hunger": { castAs: { action: "half", from: "action", schools: ["death", "shadow"], perRound: 1, surcharge: ST.SWIFT_HUNGER.surcharge, oneInReach: true }, sov: { swift: true } },
+    // *Once per Long Rest, as a Half-Action, spend 35 Vitae. For 1 minute you take your Blood Monarch form ...*.
+    "blood-monarch": { grants: grant({ action: "half", cost: cost("vitae", ST.BLOOD_MONARCH.vitae), uses: uses(1, "long") }), onUse: { sov: { monarch: true } } }
   }
 });
 
@@ -3966,6 +4134,8 @@ export const CENSUS_DETECTORS = Object.freeze({
       || Boolean(e.upkeep?.less)
       // And the Necromancer's (Phase 4c-T; `rules/necromancer-talents.mjs`): Flesh Offering's Mana and Practiced Stitcher's Essence.
       || Boolean(e.necro?.discount)
+      // And the Sovereign's (Phase 5): Crimson Flourish's 2 less Vitae on a Half-Action Death spell.
+      || Boolean(e.sov?.discount)
   },
   // *your Block reduces 1 more damage per rank*, *you take 2 less damage*.
   // A Block's own bonus (Redoubt, Shield Wall; D-772).
@@ -4029,6 +4199,9 @@ export const CENSUS_DETECTORS = Object.freeze({
       // And the Necromancer's (Phase 4c-T; `rules/necromancer-talents.mjs`): Gorge, the mendings, Life for a Life's
       // hold, Dark Communion and The Black Rite.
       || Boolean(e.necro?.heal)
+      // And the Sovereign's (Phase 5): Exquisite Taste and Overflowing Cup at the one healing door, Latch On's
+      // turn-start drain (`healExtra`, `sovereignTurnStart`).
+      || (e.sov?.heal !== undefined && e.sov?.heal !== null && e.sov?.heal !== false)
   },
   // *Your Fortitude rises by 2 per rank*, *your Defense rises by 1 per rank*.
   risesBy: {
@@ -4043,6 +4216,8 @@ export const CENSUS_DETECTORS = Object.freeze({
       || Boolean(e.onUse?.armor)
       // And the Necromancer's (Phase 4c-T; `rules/necromancer-talents.mjs`): Grim Sacrament's cap on Dark Ritual.
       || Boolean(e.necro?.cap)
+      // And the Sovereign's (Phase 5): Untouchable's Defense and the Crimson Throne's Tribute cap, derived.
+      || Boolean(e.sov?.stat)
   },
   // A number per rank beside Defense, Armor Points or Ward: *1 more Defense per
   // rank*, *Ward 1 per rank*, *ignore 2 Armor Points per rank*. Not *your Ward
@@ -4064,7 +4239,9 @@ export const CENSUS_DETECTORS = Object.freeze({
       || e.bracing || e.chosenWard
       // And the Legacy branches' (B1): Armor Points a gated attack ignores (The Long
       // Watch's *your attacks against it ignore 2 Armor Points*).
-      || e.pierce)
+      || e.pierce
+      // And the Sovereign's (Phase 5): Untouchable's Defense a rank while temporary Health lasts.
+      || e.sov?.stat === "defense")
   },
   // 05's temporary Health (D-777): a grant at the healing door or on a named
   // spell (`tempHealth`), or a Use's own (Last Stand's `onUse.tempHealth`).
@@ -4075,6 +4252,9 @@ export const CENSUS_DETECTORS = Object.freeze({
       // And the Necromancer's (Phase 4c-T; `rules/necromancer-talents.mjs`): Gorge's and The Black Rite's Empowered lines,
       // the circle's turn starts and Sacrificial Strength.
       || Boolean(e.necro?.tempHealth)
+      // And the Sovereign's (Phase 5): Gilded Skin, Overflowing Cup, Too Beautiful to Die, Tasting Bite and
+      // Bloodletting.
+      || Boolean(e.sov?.tempHealth)
   },
   // *at the start of each of your turns*, *at the start of the target's turns*,
   // *anything starting its turn there*: a tick (the plan's Phase 2b).
@@ -4100,6 +4280,8 @@ export const CENSUS_DETECTORS = Object.freeze({
       // And the Necromancer's (Phase 4c-T; `rules/necromancer-talents.mjs`): Plague Carrier's tick, Regenerating Tissue's
       // mending, Restless Bones' stand and Unholy Fervor's Health loss.
       || Boolean(e.necro?.turnStart)
+      // And the Sovereign's (Phase 5): Latch On's drain at the holder's turn start.
+      || Boolean(e.sov?.turnStart)
   },
   // **THREE THE PLAN'S LIST DID NOT NAME** (D-768), each a family of talents
   // with no row and no carrier, found reading the worklist against 04: a
@@ -4144,6 +4326,9 @@ export const CENSUS_DETECTORS = Object.freeze({
       || Boolean(e.dk?.coilSlows || e.onUse?.dk?.winter) || modifiesOf(e).some(m => m.slows?.condition)
       // And the Necromancer's (Phase 4c-T; `rules/necromancer-talents.mjs`): Surgeon's Hand's Plague Bladder and Grasping Arms.
       || (e.necro?.inflicts ?? []).length > 0
+      // And the Sovereign's (Phase 5): Lingering Decree's Slowed, No Pardon's Frightened, Kneel's Prone and
+      // Stunned, Bound to the Court's Slowed and Raking Claws' Bleeding.
+      || (e.sov?.inflicts ?? []).length > 0
   },
   // A row whose trigger IS a Success Level (D-771): Nature's Grace's next
   // spell and Primal Fury's further Ferocity. And D-772's: Deep Cut's
@@ -4292,7 +4477,9 @@ export function classKey(className) {
 export function talentEffect(className, identifier, race = null) {
   const byClass = TALENT_EFFECTS[classKey(className)]?.[identifier];
   if (byClass) return byClass;
-  return race ? (RACE_TALENT_EFFECTS[classKey(race)]?.[identifier] ?? null) : null;
+  // A people keys as the parser keys it (`peoples.mjs#peopleKey`, D-1140): "San'layn" is
+  // `sanlayn`, where `classKey` would split it into `san-layn` and miss every row (F2).
+  return race ? (RACE_TALENT_EFFECTS[peopleKey(race)]?.[identifier] ?? null) : null;
 }
 
 /** The rows a talent's `modifies` names, always as a list. */
@@ -5173,7 +5360,10 @@ export function castAsFor(talents = [], { action = null, healing = false, name =
     // A rank's Ward pierce on the cast it makes cheaper (04's Fire Blast at rank 2:
     // *it also ignores 2 Ward*; D-775), where a clause carries one.
     const pierce = (c.atRank ?? []).filter(cl => rank >= (Number(cl?.rank) || Infinity)).reduce((n, cl) => n + Math.max(0, Math.trunc(Number(cl.pierce)) || 0), 0);
-    return { identifier: talent.identifier, name: talent.name, talentId: talent.id ?? null, action: c.action, perRound, ...(pierce > 0 ? { pierce } : {}) };
+    // 04's Swift Hunger (the Sovereign): *It costs 3 more Vitae*, and *if it targets only one creature and that
+    // creature is within your reach* - named only where a row carries them.
+    return { identifier: talent.identifier, name: talent.name, talentId: talent.id ?? null, action: c.action, perRound, ...(pierce > 0 ? { pierce } : {}),
+      ...(Number(c.surcharge) > 0 ? { surcharge: Math.trunc(Number(c.surcharge)) } : {}), ...(c.oneInReach === true ? { oneInReach: true } : {}) };
   }
   return null;
 }

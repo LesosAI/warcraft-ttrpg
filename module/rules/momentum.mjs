@@ -19,6 +19,16 @@ import { isKeptPool, keptAfter, keptSurvives } from "./kept-pools.mjs";
 import { RUNIC_POWER, gainsByUniversalTriggers, runicPowerCap } from "./runes.mjs";
 // Essence's cap, 3 plus Constitution and never below 3 (the Necromancer plan; the lead).
 import { ESSENCE, essenceCap } from "./essence.mjs";
+// Tribute's cap, 3 plus Charisma and never below 3, the Throne's 2 and the Crown's doubling (02 §7).
+import { TRIBUTE, CRIMSON_THRONE, tributeCap } from "./tribute.mjs";
+
+/**
+ * **THE POOLS THE GUARD ACTION LEAVES ALONE** (the lead, R18: *"guard does not empty it"*; the San'layn
+ * and Sovereign plan's T3). 05 §11 empties Momentum on a Guard; Tribute is the class exception. A
+ * Critical Injury and the fight's end still empty it, so it is not a KEPT pool (`kept-pools.mjs`):
+ * only the Guard step asks this list. Sand's, Runic Power's and Essence's own rules are unchanged.
+ */
+export const GUARD_KEEPS = Object.freeze([TRIBUTE]);
 
 /**
  * What every pool holds as a fight starts (02 SS7): Momentum at 0 - Zeal at
@@ -69,6 +79,8 @@ export function momentumAfter(value, { criticalInjury = false, guarded = false, 
     const event = criticalInjury ? "criticalInjury" : (guarded ? "guard" : null);
     if (!event || keptSurvives(pool, event)) return keptAfter(pool, value, event);
   }
+  // Tribute survives a Guard (R18) and still empties on a Critical Injury.
+  if (guarded && !criticalInjury && GUARD_KEEPS.includes(pool)) return Math.max(0, value);
   if (criticalInjury || guarded) return 0;
   return Math.max(0, value);
 }
@@ -253,6 +265,8 @@ export function lossOnGuard(pool, { unbroken = false } = {}) {
   if (unbroken && pool?.name === "rage") return pool.value ?? 0;
   // A kept pool survives a Guard (Sand, D-848; Runic Power, D-943).
   if (keptSurvives(pool?.name, "guard")) return pool.value ?? 0;
+  // Tribute survives a Guard (the lead, R18: *"guard does not empty it"*).
+  if (GUARD_KEEPS.includes(pool?.name)) return pool.value ?? 0;
   return 0;
 }
 
@@ -377,7 +391,11 @@ export function unkillableFloor({ before = 0, amount = 0, rage = 0, holds = fals
  * Ranged slot (`sand.mjs#equippedHourglass`), and with none the cap is 0 - the
  * class item's printed 5 is the Common glass's and is never read on its own.
  */
-export function capFor(pool, ranks = () => 0, { hourglass = null, chaMod = 0, conMod = 0 } = {}) {
+export function capFor(pool, ranks = () => 0, { hourglass = null, chaMod = 0, conMod = 0, crowned = false } = {}) {
+  // **TRIBUTE'S CAP IS 3 PLUS CHARISMA, NEVER BELOW 3** (02 §7; the plan's T1): 2 more with The
+  // Crimson Throne (04), doubled while Crowned in Blood stands (`crowned`, its effect's flag). The
+  // class item's printed 3 is the floor.
+  if (pool?.name === TRIBUTE) return tributeCap({ chaMod, throne: ranks(CRIMSON_THRONE) > 0, crowned });
   if (pool?.name === SAND) return sandCap(hourglass);
   // **RUNIC POWER'S CAP IS 10 PLUS CHARISMA, NEVER BELOW 10** (the lead; D-943): `chaMod`
   // the character's Charisma modifier. The class item's printed 10 is the floor.

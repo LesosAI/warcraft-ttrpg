@@ -62,6 +62,13 @@
     ],
     "reason": "The purple arcane whirl is visibly magical rather than physical. Aftersight reads marks left on ley lines, so an arcane trace is an appropriate cue."
   },
+  "spell:air-of-majesty": {
+    "name": "Air of Majesty",
+    "source": "07-MAGIC",
+    "icon": "inv_crown_02",
+    "previousIcons": [],
+    "reason": "A crown: the spell lends its caster a monarch's bearing in Leadership and Intimidation."
+  },
   "spell:amplify-magic": {
     "name": "Amplify Magic",
     "source": "07-MAGIC",
@@ -104,6 +111,13 @@
       "spell_fel_elementaldevastation"
     ],
     "reason": "The old art is a green figure-shaped beam. Annihilation spends the school’s full force on one target; the replacement shows a concentrated magical explosion."
+  },
+  "spell:aortic-unraveling": {
+    "name": "Aortic Unraveling",
+    "source": "07-MAGIC",
+    "icon": "ability_butcher_exsanguination",
+    "previousIcons": [],
+    "reason": "A body bled out: the touch that unravels the target's heart's blood is the class's capstone drain."
   },
   "spell:arcane-anchor": {
     "name": "Arcane Anchor",
@@ -331,6 +345,13 @@
     ],
     "reason": "The old art is a blue shield, which reads as defense. Blazing Speed is a sudden burst of movement that leaves fire behind; the replacement shows a fast streak of flame."
   },
+  "spell:bleed-for-me": {
+    "name": "Bleed for Me",
+    "source": "07-MAGIC",
+    "icon": "ability_rogue_sanguinaryvein",
+    "previousIcons": [],
+    "reason": "An opened vein: the curse keeps the target bleeding while its blood mends the caster."
+  },
   "spell:blessing-of-freedom": {
     "name": "Blessing of Freedom",
     "source": "07-MAGIC",
@@ -374,6 +395,13 @@
     "previousIcons": [],
     "reason": "A choking hold. Blood Bind slows its target and takes its Reactions."
   },
+  "spell:blood-bond": {
+    "name": "Blood Bond",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_netherbond",
+    "previousIcons": [],
+    "reason": "A bond: three feedings on three nights, and the thrall is the court's."
+  },
   "spell:blood-pact": {
     "name": "Blood Pact",
     "source": "07-MAGIC",
@@ -383,6 +411,13 @@
     ],
     "reason": "A green demon burns inside the image. Blood Pact takes mana from a demon and leaves it alive, so the demonic subject fits the spell’s source."
   },
+  "spell:blood-wound": {
+    "name": "Blood Wound",
+    "source": "07-MAGIC",
+    "icon": "ability_ironmaidens_whirlofblood",
+    "previousIcons": [],
+    "reason": "A whirl of blood: every scar in the area opens at once and knots around the ankles."
+  },
   "spell:bloodboil": {
     "name": "Bloodboil",
     "source": "07-MAGIC",
@@ -391,6 +426,20 @@
       "spell_shadow_bloodboil"
     ],
     "reason": "Large red droplets fill the icon. Bloodboil moves what is inside people across an area; the blood imagery directly signals the effect."
+  },
+  "spell:bloodbolt": {
+    "name": "Bloodbolt",
+    "source": "07-MAGIC",
+    "icon": "spell_deathknight_bloodpresence",
+    "previousIcons": [],
+    "reason": "The red rune of blood magic, for the plain bolt of solid blood every Sovereign knows."
+  },
+  "spell:bloodbolt-ascension": {
+    "name": "Bloodbolt Ascension",
+    "source": "07-MAGIC",
+    "icon": "ability_ironmaidens_bloodritual",
+    "previousIcons": [],
+    "reason": "A blood rite in a ring: the caster rises and rains bolts of blood on every enemy around."
   },
   "spell:bloodtrail": {
     "name": "Bloodtrail",
@@ -471,12 +520,26 @@
     "previousIcons": [],
     "reason": "The shadow themed icon supports a temporary alteration of the speaker's voice."
   },
+  "spell:burden-of-sin": {
+    "name": "Burden of Sin",
+    "source": "07-MAGIC",
+    "icon": "spell_paladin_templarsverdict",
+    "previousIcons": [],
+    "reason": "A verdict: the Crimson Hall's sentence, under which the condemned carries every wound it deals."
+  },
   "spell:call-the-departed": {
     "name": "Call the Departed",
     "source": "07-MAGIC",
     "icon": "spell_shadow_haunting",
     "previousIcons": [],
     "reason": "A spirit drawn near. Call the Departed lets the caster speak with a dead creature's spirit."
+  },
+  "spell:captivating-gaze": {
+    "name": "Captivating Gaze",
+    "source": "07-MAGIC",
+    "icon": "ability_bossmannoroth_mannorothsgaze",
+    "previousIcons": [],
+    "reason": "A held gaze: the target cannot pull away from the eyes that bind it."
   },
   "spell:carrion-swarm": {
     "name": "Carrion Swarm",
@@ -495,6 +558,13 @@
       "ability_deathwing_cataclysm"
     ],
     "reason": "The art shows a fiery break in the land. Cataclysm is the destructive spell that broke Draenor, so the scorched terrain conveys its scale."
+  },
+  "spell:cauldron-of-blood": {
+    "name": "Cauldron of Blood",
+    "source": "07-MAGIC",
+    "icon": "inv_alchemy_70_cauldron",
+    "previousIcons": [],
+    "reason": "A cauldron: the ground sinks into a pool of red that boils without heat."
   },
   "spell:celestial-alignment": {
     "name": "Celestial Alignment",
@@ -776,6 +846,20 @@
     "previousIcons": [],
     "reason": "A skull's empty gaze. Corpse Eyes lets the caster see through a corpse."
   },
+  "spell:crimson-carapace": {
+    "name": "Crimson Carapace",
+    "source": "07-MAGIC",
+    "icon": "inv_qiraj_carapaceoldgod",
+    "previousIcons": [],
+    "reason": "A hardened shell: the red plates that rise through the caster's skin and stop the bleeding."
+  },
+  "spell:crimson-cascade": {
+    "name": "Crimson Cascade",
+    "source": "07-MAGIC",
+    "icon": "achievement_dungeon_sanguinedepths",
+    "previousIcons": [],
+    "reason": "A river of blood: the line of solid blood that knocks enemies down and leaves them bleeding."
+  },
   "spell:cripple": {
     "name": "Cripple",
     "source": "07-MAGIC",
@@ -967,6 +1051,13 @@
     "previousIcons": [],
     "reason": "A rune of knowing. Death's Tidings tells whether a named creature lives."
   },
+  "spell:decree-of-frailty": {
+    "name": "Decree of Frailty",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_curseofachimonde",
+    "previousIcons": [],
+    "reason": "A demon lord's curse image for the decree that weakens every attack the target makes."
+  },
   "spell:deep-winter": {
     "name": "Deep Winter",
     "source": "07-MAGIC",
@@ -984,6 +1075,13 @@
       "spell_frost_frostbrand"
     ],
     "reason": "A blue faceted ice crystal evokes the pocket of winter that travels with the party, freezing water and preserving supplies."
+  },
+  "spell:delirious-slash": {
+    "name": "Delirious Slash",
+    "source": "07-MAGIC",
+    "icon": "ability_butcher_gushingwounds",
+    "previousIcons": [],
+    "reason": "Gushing wounds: the five-bladed cut that bleeds the target and makes its eyes swim."
   },
   "spell:deliverance": {
     "name": "Deliverance",
@@ -1326,6 +1424,34 @@
     ],
     "reason": "The arcane step out of one place and into the next, the caster's echo of where they will stand."
   },
+  "spell:edict-of-denial": {
+    "name": "Edict of Denial",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_curseofmannoroth",
+    "previousIcons": [],
+    "reason": "A heavy curse image for the edict that denies the target any healing."
+  },
+  "spell:edict-of-silence": {
+    "name": "Edict of Silence",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_sigilofsilence",
+    "previousIcons": [],
+    "reason": "A sigil of silence: no spell is spoken in the hall until the crown allows it."
+  },
+  "spell:edict-of-stillness": {
+    "name": "Edict of Stillness",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_sigilofchains",
+    "previousIcons": [],
+    "reason": "A sigil of chains: the edict holds the target Entangled where it stands."
+  },
+  "spell:edict-of-the-crown": {
+    "name": "Edict of the Crown",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_curseofsargeras",
+    "previousIcons": [],
+    "reason": "The greatest curse image in the set for the crown's area edict over every enemy in it."
+  },
   "spell:elemental-convergence": {
     "name": "Elemental Convergence",
     "source": "07-MAGIC",
@@ -1379,6 +1505,13 @@
       "spell_fire_burnout"
     ],
     "reason": "An orange flame curls into a hooked lash. Emberlash leaves burning embers attached to its target, matching the grasping fire."
+  },
+  "spell:embrace-of-the-vampyr": {
+    "name": "Embrace of the Vampyr",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_deathsembrace",
+    "previousIcons": [],
+    "reason": "Death's embrace: Taldaram's drain on a held creature, which heals and feeds the caster."
   },
   "spell:enslave-demon": {
     "name": "Enslave Demon",
@@ -1474,6 +1607,13 @@
       "ability_boss_kilrogg_heartseeker"
     ],
     "reason": "The old art is a blade, even though the spell gives the warlock a vision through an eye. The replacement visibly depicts an eye."
+  },
+  "spell:eyes-of-the-swarm": {
+    "name": "Eyes of the Swarm",
+    "source": "07-MAGIC",
+    "icon": "achievement_halloween_bat_01",
+    "previousIcons": [],
+    "reason": "A bat: the swarm of bats the caster sees and hears through."
   },
   "spell:faceless": {
     "name": "Faceless",
@@ -1897,6 +2037,13 @@
     ],
     "reason": "A violet curved opening arcs through the center. Gate holds a door open between places, matching the portal shape."
   },
+  "spell:gaze-from-the-throne": {
+    "name": "Gaze from the Throne",
+    "source": "07-MAGIC",
+    "icon": "achievement_dungeon_frozenthrone",
+    "previousIcons": [],
+    "reason": "The Frozen Throne: the court watches a creature from afar through its spilled blood."
+  },
   "spell:gentle-verdict": {
     "name": "Gentle Verdict",
     "source": "07-MAGIC",
@@ -1967,6 +2114,13 @@
     "icon": "spell_arcane_arcanepotency_nightborne",
     "previousIcons": [],
     "reason": "The arcane knowledge icon suits temporary comprehension of a language supplied by another speaker."
+  },
+  "spell:grant-an-audience": {
+    "name": "Grant an Audience",
+    "source": "07-MAGIC",
+    "icon": "inv_misc_ticket_tarot_nobles",
+    "previousIcons": [],
+    "reason": "The Nobles card: a creature summoned to stand and listen at court."
   },
   "spell:grasp-of-the-grave": {
     "name": "Grasp of the Grave",
@@ -2198,6 +2352,13 @@
     ],
     "reason": "Green Fel energy strikes the ground in a broad blast, fitting the quake’s Fel damage and Stun."
   },
+  "spell:hemoplague": {
+    "name": "Hemoplague",
+    "source": "07-MAGIC",
+    "icon": "ability_argus_wastingplague",
+    "previousIcons": [],
+    "reason": "A wasting plague: the target's blood turns on it and goes looking for other veins."
+  },
   "spell:hex": {
     "name": "Hex",
     "source": "07-MAGIC",
@@ -2303,6 +2464,13 @@
       "ability_mage_timewarp"
     ],
     "reason": "Time hurried for a whole company, an hour emptied into allies at once."
+  },
+  "spell:hour-of-the-court": {
+    "name": "Hour of the Court",
+    "source": "07-MAGIC",
+    "icon": "achievement_boss_princetaldaram",
+    "previousIcons": [],
+    "reason": "Prince Taldaram of the court: the caster rises on wings of blood and holds court in the air."
   },
   "spell:hourstrike": {
     "name": "Hourstrike",
@@ -2469,6 +2637,13 @@
     ],
     "reason": "A face is consumed by orange flame. Incinerate is unreasonable warlock fire, matching the image of a target engulfed in heat."
   },
+  "spell:incite-terror": {
+    "name": "Incite Terror",
+    "source": "07-MAGIC",
+    "icon": "spell_nzinsanity_fearofdeath",
+    "previousIcons": [],
+    "reason": "A terror of death: every enemy in the area is Frightened of the caster."
+  },
   "spell:insect-swarm": {
     "name": "Insect Swarm",
     "source": "07-MAGIC",
@@ -2538,6 +2713,13 @@
       "spell_nature_dryaddispelmagic"
     ],
     "reason": "The old art is an orange explosion, not a moving hillside. Landslide makes a hill move; the replacement depicts earth breaking loose."
+  },
+  "spell:leaden-decree": {
+    "name": "Leaden Decree",
+    "source": "07-MAGIC",
+    "icon": "ability_creature_cursed_05",
+    "previousIcons": [],
+    "reason": "A creature cursed heavy: the decree that leaves the target Slowed."
   },
   "spell:levitate": {
     "name": "Levitate",
@@ -2690,6 +2872,13 @@
     ],
     "reason": "A bright orange flame takes a humanoid shape, fitting the summoned Fire elemental."
   },
+  "spell:majesty-unbound": {
+    "name": "Majesty Unbound",
+    "source": "07-MAGIC",
+    "icon": "ability_priest_darkarchangel",
+    "previousIcons": [],
+    "reason": "A dark winged figure: majesty let loose on the prey, every blow drinking from it."
+  },
   "spell:mana-burn": {
     "name": "Mana Burn",
     "source": "07-MAGIC",
@@ -2744,6 +2933,13 @@
     ],
     "reason": "The old art is a city portal. Manastorm releases raw power across the ground indiscriminately; the replacement depicts a storming field of magic."
   },
+  "spell:mantle-of-majesty": {
+    "name": "Mantle of Majesty",
+    "source": "07-MAGIC",
+    "icon": "inv_qiraj_draperegal",
+    "previousIcons": [],
+    "reason": "Regal drapery: the mantle that wraps the caster in temporary Health and frees its feet."
+  },
   "spell:mark-of-the-grave": {
     "name": "Mark of the Grave",
     "source": "07-MAGIC",
@@ -2791,6 +2987,13 @@
       "ability_rewindtime"
     ],
     "reason": "A wound wound back: the art is time running backward, which is how the sand mends."
+  },
+  "spell:mesmerize": {
+    "name": "Mesmerize",
+    "source": "07-MAGIC",
+    "icon": "achievement_character_bloodelf_female",
+    "previousIcons": [],
+    "reason": "A San'layn face: a low voice and a slow smile, and the stranger is Charmed."
   },
   "spell:meteor": {
     "name": "Meteor",
@@ -2886,6 +3089,13 @@
       "spell_arcane_portalshattrath"
     ],
     "reason": "The old art is a green city portal, which suggests teleportation. Mirror Image creates three copies of the caster; the replacement visibly shows paired mirrored figures."
+  },
+  "spell:mirror-of-self": {
+    "name": "Mirror of Self",
+    "source": "07-MAGIC",
+    "icon": "archaeology_5_0_carvedbronzemirror",
+    "previousIcons": [],
+    "reason": "A hand mirror: the caster's own reflection takes the blow as temporary Health."
   },
   "spell:moments-warning": {
     "name": "Moment's Warning",
@@ -3092,12 +3302,26 @@
     ],
     "reason": "The old art is a dark blue whirlpool with no cold impact. Numbing Frost makes cold seize a target’s movement; the replacement depicts a sharp frost impact."
   },
+  "spell:oath-of-fealty": {
+    "name": "Oath of Fealty",
+    "source": "07-MAGIC",
+    "icon": "inv_inscription_scroll_kings",
+    "previousIcons": [],
+    "reason": "A scroll of kings: a sworn oath of fealty, and the caster knows when it breaks."
+  },
   "spell:ossuary-wall": {
     "name": "Ossuary Wall",
     "source": "07-MAGIC",
     "icon": "ability_deathknight_boneshield",
     "previousIcons": [],
     "reason": "A wall of bone. Ossuary Wall raises fused bone that blocks movement and sight."
+  },
+  "spell:overawe": {
+    "name": "Overawe",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_ragingscream",
+    "previousIcons": [],
+    "reason": "A cry of dread: the target is overawed and its first attack each turn falters."
   },
   "spell:pact-escrow": {
     "name": "Pact Escrow",
@@ -3410,6 +3634,13 @@
     "previousIcons": [],
     "reason": "Death's door. Read the Dead learns how a creature died."
   },
+  "spell:read-the-supplicant": {
+    "name": "Read the Supplicant",
+    "source": "07-MAGIC",
+    "icon": "ability_priest_thoughtsteal01",
+    "previousIcons": [],
+    "reason": "A stolen thought: the caster reads the living creatures who come before it."
+  },
   "spell:reaping": {
     "name": "Reaping",
     "source": "07-MAGIC",
@@ -3604,6 +3835,34 @@
     ],
     "reason": "The old art is a green shielded orb. Rootbind strengthens vines already holding a target; the replacement shows binding, thorned growth."
   },
+  "spell:royal-approach": {
+    "name": "Royal Approach",
+    "source": "07-MAGIC",
+    "icon": "ability_rogue_shadowstep",
+    "previousIcons": [],
+    "reason": "A step through shadow toward the prey, provoking nothing on the way."
+  },
+  "spell:royal-command": {
+    "name": "Royal Command",
+    "source": "07-MAGIC",
+    "icon": "spell_holy_greaterblessingofkings",
+    "previousIcons": [],
+    "reason": "The blessing of kings: a royal command that Charms and is obeyed."
+  },
+  "spell:royal-herald": {
+    "name": "Royal Herald",
+    "source": "07-MAGIC",
+    "icon": "inv_misc_scrollrolled01c",
+    "previousIcons": [],
+    "reason": "A rolled message: the herald carries the caster's words and titles to one creature."
+  },
+  "spell:royal-seal": {
+    "name": "Royal Seal",
+    "source": "07-MAGIC",
+    "icon": "spell_holy_sealofblood",
+    "previousIcons": [],
+    "reason": "A seal of blood: the caster knows when the sealed letter, box or door is opened."
+  },
   "spell:ruination": {
     "name": "Ruination",
     "source": "07-MAGIC",
@@ -3721,6 +3980,27 @@
     ],
     "reason": "A towering column of living sand, the curtain spun up out of nothing and kept turning."
   },
+  "spell:sanguine-barrier": {
+    "name": "Sanguine Barrier",
+    "source": "07-MAGIC",
+    "icon": "inv_soulbarrier",
+    "previousIcons": [],
+    "reason": "A barrier of the self: the film of the caster's own blood that turns the edge of every weapon."
+  },
+  "spell:sanguine-draught": {
+    "name": "Sanguine Draught",
+    "source": "07-MAGIC",
+    "icon": "ability_ironmaidens_maraksbloodcalling",
+    "previousIcons": [],
+    "reason": "Blood called across the room: a thread of the target's blood crosses to the caster's lips."
+  },
+  "spell:scent-of-blood": {
+    "name": "Scent of Blood",
+    "source": "07-MAGIC",
+    "icon": "inv_artifact_bloodoftheassassinated",
+    "previousIcons": [],
+    "reason": "A drop of spilled blood: the breath that finds every bleeding creature within 60 feet."
+  },
   "spell:scentweave": {
     "name": "Scentweave",
     "source": "07-MAGIC",
@@ -3812,6 +4092,13 @@
     "previousIcons": [],
     "reason": "A deathly blow. Sever the Soul deals heavy Shadow damage and frightens the creatures near its target."
   },
+  "spell:shackles-of-the-court": {
+    "name": "Shackles of the Court",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_infernalchains",
+    "previousIcons": [],
+    "reason": "Chains: the court's shackles hold the target Entangled for a round."
+  },
   "spell:shadow-bolt": {
     "name": "Shadow Bolt",
     "source": "07-MAGIC",
@@ -3820,6 +4107,13 @@
       "spell_shadow_shadowbolt"
     ],
     "reason": "Purple-green energy flies from the center. Shadow Bolt is a directed shadow projectile, matching the bolt in flight."
+  },
+  "spell:shadow-lance": {
+    "name": "Shadow Lance",
+    "source": "07-MAGIC",
+    "icon": "achievement_boss_princekeleseth",
+    "previousIcons": [],
+    "reason": "Prince Keleseth, whose Shadow Lance this spell is."
   },
   "spell:shadow-walk": {
     "name": "Shadow Walk",
@@ -3917,6 +4211,13 @@
     "icon": "inv_misc_bone_06",
     "previousIcons": [],
     "reason": "Bones. Shroud of Bone gives up to four creatures Armor Points."
+  },
+  "spell:shroud-of-sorrow": {
+    "name": "Shroud of Sorrow",
+    "source": "07-MAGIC",
+    "icon": "achievement_boss_svalasorrowgrave",
+    "previousIcons": [],
+    "reason": "Svala Sorrowgrave: the grief that hangs around the caster and wounds every enemy in it."
   },
   "spell:shroud-of-the-grave": {
     "name": "Shroud of the Grave",
@@ -4105,6 +4406,13 @@
       "spell_shadow_felarmour"
     ],
     "reason": "A dark purple soul gem depicts the stones the well offers to allies for healing."
+  },
+  "spell:sovereigns-kiss": {
+    "name": "Sovereign's Kiss",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_soothingkiss",
+    "previousIcons": [],
+    "reason": "A kiss: the Half-Action drain at a touch that heals the caster and pays Tribute on the prey."
   },
   "spell:speak-with-the-dead": {
     "name": "Speak with the Dead",
@@ -4299,6 +4607,13 @@
     "previousIcons": [],
     "reason": "The demonic pact icon fits a temporary grant of command permission over a bound demon."
   },
+  "spell:summons-to-court": {
+    "name": "Summons to Court",
+    "source": "07-MAGIC",
+    "icon": "inv_archaeology_orcclans_barbedhook",
+    "previousIcons": [],
+    "reason": "A barbed hook that drags: the herald's summons pulls the target toward the caster."
+  },
   "spell:sundering": {
     "name": "Sundering",
     "source": "07-MAGIC",
@@ -4316,6 +4631,20 @@
       "spell_fire_flameblades"
     ],
     "reason": "A white-hot orange sunburst depicts overwhelming Fire damage across a broad area."
+  },
+  "spell:swarming-shadows": {
+    "name": "Swarming Shadows",
+    "source": "07-MAGIC",
+    "icon": "ability_warlock_voidzone",
+    "previousIcons": [],
+    "reason": "A dark pool on the ground: the shadows that swarm around the prey and follow it."
+  },
+  "spell:taste-of-lineage": {
+    "name": "Taste of Lineage",
+    "source": "07-MAGIC",
+    "icon": "ability_rogue_crimsonvial",
+    "previousIcons": [],
+    "reason": "A vial of blood: one taste tells the caster whose blood it was."
   },
   "spell:tempest": {
     "name": "Tempest",
@@ -4359,6 +4688,13 @@
       "spell_fire_flamebolt"
     ],
     "reason": "A bright orange explosion flares out from a dark center. The Burning releases destructive fire, matching the expanding blast."
+  },
+  "spell:the-crimson-tithe": {
+    "name": "The Crimson Tithe",
+    "source": "07-MAGIC",
+    "icon": "achievement_dungeon_crimsonhall",
+    "previousIcons": [],
+    "reason": "The Crimson Hall: the court's tithe taken in blood from every enemy within 90 feet."
   },
   "spell:the-dead-rise": {
     "name": "The Dead Rise",
@@ -4509,6 +4845,13 @@
     ],
     "reason": "The arcane step taken by a party together, out of one moment and into the next."
   },
+  "spell:tithe-of-the-many": {
+    "name": "Tithe of the Many",
+    "source": "07-MAGIC",
+    "icon": "ability_deathknight_hemorrhagicfever",
+    "previousIcons": [],
+    "reason": "A bleeding sickness: every enemy close around the caster bleeds a tithe."
+  },
   "spell:tranquility": {
     "name": "Tranquility",
     "source": "07-MAGIC",
@@ -4545,6 +4888,13 @@
     ],
     "reason": "A green undead face fills the icon. Turn Undead affects the undead directly, matching the subject."
   },
+  "spell:twilight-bloodbolt": {
+    "name": "Twilight Bloodbolt",
+    "source": "07-MAGIC",
+    "icon": "spell_fire_twilightflamebolt",
+    "previousIcons": [],
+    "reason": "A twilight bolt: Lana'thel's Twilight Bloodbolt, which splashes those beside the target."
+  },
   "spell:umbra": {
     "name": "Umbra",
     "source": "07-MAGIC",
@@ -4553,6 +4903,13 @@
       "spell_shadow_seduction"
     ],
     "reason": "A shadowed face and reaching hand emerge from purple light. Umbra draws on a person’s shadow, matching the dark projection."
+  },
+  "spell:unfading-glory": {
+    "name": "Unfading Glory",
+    "source": "07-MAGIC",
+    "icon": "ability_priest_spiritoftheredeemer",
+    "previousIcons": [],
+    "reason": "A spirit that will not fall: glory that refuses to drop to 0 Health and lends a Boon to every Test."
   },
   "spell:unholy-armor": {
     "name": "Unholy Armor",
@@ -4613,6 +4970,20 @@
       "spell_arcane_teleportexodar"
     ],
     "reason": "The old art is a Dalaran city portal, implying transport. Unweave pulls apart the magic holding a target together; the replacement shows arcane energy unraveling and dispersing."
+  },
+  "spell:veil-of-majesty": {
+    "name": "Veil of Majesty",
+    "source": "07-MAGIC",
+    "icon": "spell_arcane_prismaticcloak",
+    "previousIcons": [],
+    "reason": "A shimmering cloak: the veil of temporary Health the caster draws around itself."
+  },
+  "spell:veil-of-mist": {
+    "name": "Veil of Mist",
+    "source": "07-MAGIC",
+    "icon": "ability_monk_pathofmists",
+    "previousIcons": [],
+    "reason": "A path of mist: the caster passes through blades and creatures as red fog."
   },
   "spell:vein-rend": {
     "name": "Vein Rend",
@@ -4835,6 +5206,13 @@
     ],
     "reason": "Something withered and aged, the wear each grain takes from whoever stands in the circle."
   },
+  "spell:wracking-pain": {
+    "name": "Wracking Pain",
+    "source": "07-MAGIC",
+    "icon": "pandarenracial_quiveringpain",
+    "previousIcons": [],
+    "reason": "Quivering pain: every old wound wakes, and the body is Vulnerable to the next blow."
+  },
   "spell:wraith-bolt": {
     "name": "Wraith Bolt",
     "source": "07-MAGIC",
@@ -4850,6 +5228,28 @@
       "spell_nature_insect_swarm2"
     ],
     "reason": "The old art is a swarm of insects, but Wrath calls elemental wind and thrown growth. The replacement shows a storm being called."
+  },
+  "talent:a-debt-in-icecrown": {
+    "name": "A Debt in Icecrown",
+    "source": "02-CHARACTER-OPTIONS",
+    "race": "San'layn",
+    "icon": "achievement_zone_icecrown_01",
+    "previousIcons": [],
+    "reason": "The citadel on the glacier: a favour called in from the court that still serves there, and somebody in Icecrown learns where you are."
+  },
+  "talent:abject-obedience": {
+    "name": "Abject Obedience",
+    "source": "04-TALENTS",
+    "icon": "ability_priest_psychiclink",
+    "previousIcons": [],
+    "reason": "A mind linked and led: the prey under the curse obeys the Sovereign on its turns."
+  },
+  "talent:above-such-things": {
+    "name": "Above Such Things",
+    "source": "04-TALENTS",
+    "icon": "ability_priest_ascension",
+    "previousIcons": [],
+    "reason": "An ascension: the Sovereign sheds a condition beneath its notice."
   },
   "talent:absolute-zero": {
     "name": "Absolute Zero",
@@ -5228,6 +5628,13 @@
     ],
     "reason": "The roaring mouth fits the fearsome audible Bane."
   },
+  "talent:beneath-me": {
+    "name": "Beneath Me",
+    "source": "04-TALENTS",
+    "icon": "ability_warlock_avoidance",
+    "previousIcons": [],
+    "reason": "An avoided blow: every attack that misses the Sovereign pays Tribute."
+  },
   "talent:berserk": {
     "name": "Berserk",
     "source": "04-TALENTS",
@@ -5409,6 +5816,13 @@
     ],
     "reason": "A dragon's eye in every colour: one true answer remembered by the four flights."
   },
+  "talent:blood-monarch": {
+    "name": "Blood Monarch",
+    "source": "04-TALENTS",
+    "icon": "achievement_boss_lanathel",
+    "previousIcons": [],
+    "reason": "Blood-Queen Lana'thel, whose winged form the Blood Monarch takes."
+  },
   "talent:blood-pact": {
     "name": "Blood Pact",
     "source": "04-TALENTS",
@@ -5417,6 +5831,21 @@
       "spell_shadow_abominationexplosion"
     ],
     "reason": "Align with the named Blood Pact spell: A green demon burns inside the image. Blood Pact takes mana from a demon and leaves it alive, so the demonic subject fits the spell’s source."
+  },
+  "talent:blood-rush": {
+    "name": "Blood Rush",
+    "source": "04-TALENTS",
+    "icon": "ability_heroicleap",
+    "previousIcons": [],
+    "reason": "A leap: the Sovereign rushes to the prey's side without provoking."
+  },
+  "talent:blood-sense": {
+    "name": "Blood-Sense",
+    "source": "02-CHARACTER-OPTIONS",
+    "race": "San'layn",
+    "icon": "ability_racial_bloodrage",
+    "previousIcons": [],
+    "reason": "A red-lit face with the blood up: the scent of fresh blood through a closed door, and whether it is diseased or poisoned."
   },
   "talent:blood-shield": {
     "name": "Blood Shield",
@@ -5441,6 +5870,13 @@
     "previousIcons": [],
     "reason": "WoW's own Blood Tap icon, for the talent of the same name that refills spent Blood runes."
   },
+  "talent:blooded-claws": {
+    "name": "Blooded Claws",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_monsterclaw_03",
+    "previousIcons": [],
+    "reason": "A clawed hand: the claws deal Shadow damage and strike in turns without an Attack."
+  },
   "talent:bloodied-blade": {
     "name": "Bloodied Blade",
     "source": "04-TALENTS",
@@ -5449,6 +5885,13 @@
       "ability_arakkoa_spinning_blade"
     ],
     "reason": "Retain: the spinning bloodied blade corresponds to the two-handed critical-injury trigger."
+  },
+  "talent:bloodletting": {
+    "name": "Bloodletting",
+    "source": "04-TALENTS",
+    "icon": "ability_skeer_bloodletting",
+    "previousIcons": [],
+    "reason": "Bloodletting: every bleeding enemy in reach pays its Bleeding in Shadow damage."
   },
   "talent:bloodthirst": {
     "name": "Bloodthirst",
@@ -5534,6 +5977,21 @@
       "achievement_guild_timeoff"
     ],
     "reason": "Borrowed time, half a blow put off to the next turn."
+  },
+  "talent:borrowed-warmth": {
+    "name": "Borrowed Warmth",
+    "source": "02-CHARACTER-OPTIONS",
+    "race": "San'layn",
+    "icon": "spell_holy_heal02",
+    "previousIcons": [],
+    "reason": "A warm golden glow at the hands: for an hour after a unit of blood, the skin is warm and the heart beats like a living elf's."
+  },
+  "talent:bound-to-the-court": {
+    "name": "Bound to the Court",
+    "source": "04-TALENTS",
+    "icon": "ability_deathknight_aoedeathgrip",
+    "previousIcons": [],
+    "reason": "A grip that pulls in: the cursed creature cannot move far from the Sovereign."
   },
   "talent:bracing": {
     "name": "Bracing",
@@ -5769,6 +6227,14 @@
     ],
     "reason": "A clan record fits knowing allegiance, debts, and wars."
   },
+  "talent:clean-feeder": {
+    "name": "Clean Feeder",
+    "source": "02-CHARACTER-OPTIONS",
+    "race": "San'layn",
+    "icon": "ability_druid_cower",
+    "previousIcons": [],
+    "reason": "A low, careful crouch: the bite that leaves no mark, and the sleeper who never wakes for it."
+  },
   "talent:cleanse": {
     "name": "Cleanse",
     "source": "04-TALENTS",
@@ -5948,12 +6414,27 @@
     ],
     "reason": "A human face worn as a mask: the guise of one particular humanoid, face and voice, as the black flight walked the courts."
   },
+  "talent:courtly-masquerade": {
+    "name": "Courtly Masquerade",
+    "source": "02-CHARACTER-OPTIONS",
+    "race": "San'layn",
+    "icon": "ability_rogue_disguise",
+    "previousIcons": [],
+    "reason": "A hooded figure wearing another face: the practised manners that keep a San'layn's cover under a close look."
+  },
   "talent:crimson-coil": {
     "name": "Crimson Coil",
     "source": "04-TALENTS",
     "icon": "ability_deathknight_roilingblood",
     "previousIcons": [],
     "reason": "Roiling red blood. Crimson Coil turns Death Coil's damage into the knight's temporary Health; the blood is the talent's color and its subject."
+  },
+  "talent:crimson-flourish": {
+    "name": "Crimson Flourish",
+    "source": "04-TALENTS",
+    "icon": "ability_rogue_sabreslash",
+    "previousIcons": [],
+    "reason": "A flourishing slash: a Half-Action spell and a blade hit feed each other."
   },
   "talent:critical-strike": {
     "name": "Critical Strike",
@@ -6374,6 +6855,13 @@
     ],
     "reason": "Retain: the dreamstate icon directly matches the shortened Dreamwalk and its restorative rest."
   },
+  "talent:drink-deep": {
+    "name": "Drink Deep",
+    "source": "04-TALENTS",
+    "icon": "inv_tradeskill_cooking_feastofblood",
+    "previousIcons": [],
+    "reason": "A feast of blood: the Sovereign feeds on a bleeding creature and drinks more Vitae."
+  },
   "talent:earth-shock": {
     "name": "Earth Shock",
     "source": "04-TALENTS",
@@ -6665,6 +7153,13 @@
     ],
     "reason": "Replace: the assigned Water Shield art is a blue sphere. The inspected Evil Eye image is a staring eye, matching the named area fear effect."
   },
+  "talent:example-to-others": {
+    "name": "Example to Others",
+    "source": "04-TALENTS",
+    "icon": "spell_shadow_painfulafflictions",
+    "previousIcons": [],
+    "reason": "Spreading afflictions: a fallen creature's curse passes to one beside it."
+  },
   "talent:executioner": {
     "name": "Executioner",
     "source": "04-TALENTS",
@@ -6699,6 +7194,13 @@
       "ability_hunter_beastcall"
     ],
     "reason": "Replace: Beast Call depicts a hunter and pet. The red bomb explosion directly depicts the Fire burst added to the triggered snare."
+  },
+  "talent:exquisite-taste": {
+    "name": "Exquisite Taste",
+    "source": "04-TALENTS",
+    "icon": "inv_drink_29_sunkissedwine",
+    "previousIcons": [],
+    "reason": "A fine wine: a drain restores 1 more Health."
   },
   "talent:fade-step": {
     "name": "Fade Step",
@@ -7082,6 +7584,20 @@
     ],
     "reason": "Replace: Web depicts entanglement. The green healing image matches the extra Health restored by healing spells and features."
   },
+  "talent:gilded-cage": {
+    "name": "Gilded Cage",
+    "source": "04-TALENTS",
+    "icon": "ability_priest_bindingprayers",
+    "previousIcons": [],
+    "reason": "Binding bands: a cheaper Blood Prison that tears harder."
+  },
+  "talent:gilded-skin": {
+    "name": "Gilded Skin",
+    "source": "04-TALENTS",
+    "icon": "ability_deathknight_sanguinfortitude",
+    "previousIcons": [],
+    "reason": "A blood-red fortitude: Prim and Proper grants more temporary Health."
+  },
   "talent:glimpse-ahead": {
     "name": "Glimpse Ahead",
     "source": "04-TALENTS",
@@ -7326,6 +7842,13 @@
     ],
     "reason": "A slowing weight, the Bane a decayed creature takes against the caster's spells."
   },
+  "talent:heavy-tread": {
+    "name": "Heavy Tread",
+    "source": "04-TALENTS",
+    "icon": "ability_thunderking_maim",
+    "previousIcons": [],
+    "reason": "A maimed stride: a cursed creature's Speed falls."
+  },
   "talent:hoard-sense": {
     "name": "Hoard-Sense",
     "source": "02-CHARACTER-OPTIONS",
@@ -7391,6 +7914,13 @@
       "spell_holy_borrowedtime"
     ],
     "reason": "Replace: The proposed art is an hourglass, not a shield that reflects Holy damage. A gold shield in motion fits the Holy damage delivered after a Block."
+  },
+  "talent:homage": {
+    "name": "Homage",
+    "source": "04-TALENTS",
+    "icon": "achievement_boss_valanar",
+    "previousIcons": [],
+    "reason": "Prince Valanar of the court: homage paid in Tribute when a lesser creature fails against the curse."
   },
   "talent:hungering-cold": {
     "name": "Hungering Cold",
@@ -7567,6 +8097,13 @@
     ],
     "reason": "Align with the named Insect Swarm spell: A group of green insects fills the frame. Insect Swarm summons many small creatures, matching the visible swarm."
   },
+  "talent:insolence-repaid": {
+    "name": "Insolence Repaid",
+    "source": "04-TALENTS",
+    "icon": "ability_rogue_turnthetables",
+    "previousIcons": [],
+    "reason": "The tables turned: a creature that misses the Sovereign gives it a Boon against that creature."
+  },
   "talent:interposed-moment": {
     "name": "Interposed Moment",
     "source": "04-TALENTS",
@@ -7713,6 +8250,13 @@
     ],
     "reason": "Retain: the ancestral awakening image depicts extending the ethereal protection to an ally."
   },
+  "talent:kneel": {
+    "name": "Kneel",
+    "source": "04-TALENTS",
+    "icon": "ability_rogue_trip",
+    "previousIcons": [],
+    "reason": "A trip to the ground: the prey falls Prone and Stunned, and others under the curse fall Prone."
+  },
   "talent:kodo-bond": {
     "name": "Kodo-Bond",
     "source": "02-CHARACTER-OPTIONS",
@@ -7762,6 +8306,13 @@
     ],
     "reason": "Replace: The proposed blue spectral animal suggests astral travel, not harming undead. A green undead form recoils from holy power, matching bonus damage against undead."
   },
+  "talent:last-draught": {
+    "name": "Last Draught",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_bloodlet",
+    "previousIcons": [],
+    "reason": "Blood let from the dying: the Sovereign feeds at a death in reach."
+  },
   "talent:last-stand": {
     "name": "Last Stand",
     "source": "04-TALENTS",
@@ -7770,6 +8321,13 @@
       "ability_warrior_deepcuts"
     ],
     "reason": "Replace: The proposed slashing blade signals offense rather than temporary survival Health. A stubborn face enduring flames conveys the warrior lasting through a desperate stand."
+  },
+  "talent:latch-on": {
+    "name": "Latch On",
+    "source": "04-TALENTS",
+    "icon": "ability_hunter_mongoosebite",
+    "previousIcons": [],
+    "reason": "A bite that holds: the Sovereign latches on to its prey and drains it each turn."
   },
   "talent:lava-burst": {
     "name": "Lava Burst",
@@ -7859,6 +8417,13 @@
       "spell_holy_devineaegis"
     ],
     "reason": "Replace: Divine Aegis depicts a shield. The hymn image better represents a font of healing Light with spendable charges."
+  },
+  "talent:lingering-decree": {
+    "name": "Lingering Decree",
+    "source": "04-TALENTS",
+    "icon": "spell_shadow_unstableaffliction_2",
+    "previousIcons": [],
+    "reason": "An affliction that lingers: the creature that ends the curse is still Slowed."
   },
   "talent:living-bomb": {
     "name": "Living Bomb",
@@ -8148,6 +8713,13 @@
     ],
     "reason": "Retain: the dispel magic burst depicts the exceptional healing spell guaranteed by this talent."
   },
+  "talent:mirrored-self": {
+    "name": "Mirrored Self",
+    "source": "04-TALENTS",
+    "icon": "trade_archaeology_highbornesoulmirror",
+    "previousIcons": [],
+    "reason": "A highborne mirror: the blow lands on a reflection and the Sovereign steps away."
+  },
   "talent:molten-skin": {
     "name": "Molten Skin",
     "source": "04-TALENTS",
@@ -8241,6 +8813,13 @@
     ],
     "reason": "A corpse-like silhouette in darkness fits passing as dead and escaping living-sense hunters."
   },
+  "talent:no-pardon": {
+    "name": "No Pardon",
+    "source": "04-TALENTS",
+    "icon": "ability_rogue_stayofexecution",
+    "previousIcons": [],
+    "reason": "No stay of execution: the creature that ends the curse is Frightened of the Sovereign."
+  },
   "talent:none-escape": {
     "name": "None Escape",
     "source": "04-TALENTS",
@@ -8288,6 +8867,14 @@
     ],
     "reason": "Retain: the divine hymn image depicts healing light, matching an extra use of Lay on Hands."
   },
+  "talent:open-vein": {
+    "name": "Open Vein",
+    "source": "02-CHARACTER-OPTIONS",
+    "race": "San'layn",
+    "icon": "spell_shadow_vampiricaura",
+    "previousIcons": [],
+    "reason": "Blood drawn up out of a body in a red mist: the bite that takes Physical damage and heals the San'layn by what it took."
+  },
   "talent:overchanneller": {
     "name": "Overchanneller",
     "source": "04-TALENTS",
@@ -8315,6 +8902,13 @@
       "spell_frost_manarecharge"
     ],
     "reason": "An orb brimming with arcane power, for the extra Mana Font of Magic gives."
+  },
+  "talent:overflowing-cup": {
+    "name": "Overflowing Cup",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_herb_bloodcup",
+    "previousIcons": [],
+    "reason": "Bloodcup: Health a drain would restore past the maximum becomes temporary Health."
   },
   "talent:overkill": {
     "name": "Overkill",
@@ -8485,6 +9079,13 @@
     ],
     "reason": "Retain: the rogue preparation image depicts getting ready before combat, matching the Initiative-time Stealth Test."
   },
+  "talent:price-of-defiance": {
+    "name": "Price of Defiance",
+    "source": "04-TALENTS",
+    "icon": "ability_rogue_vendetta",
+    "previousIcons": [],
+    "reason": "A vendetta: throwing off the curse costs the creature Shadow damage."
+  },
   "talent:primal-fury": {
     "name": "Primal Fury",
     "source": "04-TALENTS",
@@ -8547,6 +9148,13 @@
       "spell_nature_mentalquickness"
     ],
     "reason": "A quick step, an ally moved at once."
+  },
+  "talent:raking-claws": {
+    "name": "Raking Claws",
+    "source": "04-TALENTS",
+    "icon": "ability_druid_rake",
+    "previousIcons": [],
+    "reason": "A rake of claws: Delirious Slash's deep Bleeding, and another claw roll."
   },
   "talent:rampage": {
     "name": "Rampage",
@@ -8962,6 +9570,13 @@
     ],
     "reason": "Running sand, for the talent that teaches Slow, Displacement and Ley Snare."
   },
+  "talent:sanguine-edge": {
+    "name": "Sanguine Edge",
+    "source": "04-TALENTS",
+    "icon": "ability_ironmaidens_sanguinestrikes",
+    "previousIcons": [],
+    "reason": "Sanguine strikes: blood laid on the edge of weapon and claw."
+  },
   "talent:sanguine-plague": {
     "name": "Sanguine Plague",
     "source": "04-TALENTS",
@@ -9068,6 +9683,13 @@
       "spell_holy_serendipity"
     ],
     "reason": "Retain: the Serendipity image directly matches added healing from Mend and Mass Mend."
+  },
+  "talent:serene-disdain": {
+    "name": "Serene Disdain",
+    "source": "04-TALENTS",
+    "icon": "ability_priest_clarityofwill",
+    "previousIcons": [],
+    "reason": "Clarity of will: with Tribute held, the Sovereign cannot be Frightened or Charmed."
   },
   "talent:serpent-ward": {
     "name": "Serpent Ward",
@@ -9444,6 +10066,13 @@
     ],
     "reason": "Retain: the violet soul-transfer effect is the named Soul Swap and matches moving ongoing effects between targets."
   },
+  "talent:sovereign-will": {
+    "name": "Sovereign Will",
+    "source": "04-TALENTS",
+    "icon": "spell_shadow_sealofkings",
+    "previousIcons": [],
+    "reason": "A seal of kings: a creature trying to throw off the Sovereign's curse fights the Sovereign's will."
+  },
   "talent:spellbreak": {
     "name": "Spellbreak",
     "source": "04-TALENTS",
@@ -9713,6 +10342,13 @@
     ],
     "reason": "Time hurried further, Slipstream's reach widened."
   },
+  "talent:swift-hunger": {
+    "name": "Swift Hunger",
+    "source": "04-TALENTS",
+    "icon": "ability_deathknight_hungeringruneblade",
+    "previousIcons": [],
+    "reason": "A hungering blade: an action spell cast as a Half-Action at arm's length."
+  },
   "talent:swiftmend": {
     "name": "Swiftmend",
     "source": "04-TALENTS",
@@ -9740,6 +10376,13 @@
       "inv_misc_dragoncostume_tail"
     ],
     "reason": "A dragon's tail, swept to knock nearby enemies Prone."
+  },
+  "talent:tasting-bite": {
+    "name": "Tasting Bite",
+    "source": "04-TALENTS",
+    "icon": "ability_druid_ferociousbite",
+    "previousIcons": [],
+    "reason": "A ferocious bite on a creature already bleeding, Prone or Stunned."
   },
   "talent:taunt": {
     "name": "Taunt",
@@ -9832,6 +10475,13 @@
     ],
     "reason": "Replace: Second Wind depicts recovery. The warrior challenge image depicts naming and drawing a foe into attacking you."
   },
+  "talent:the-crimson-throne": {
+    "name": "The Crimson Throne",
+    "source": "04-TALENTS",
+    "icon": "inv_crown_15",
+    "previousIcons": [],
+    "reason": "A crown: the throne raises the Tribute cap and turns weapon attacks aside."
+  },
   "talent:the-crossing": {
     "name": "The Crossing",
     "source": "04-TALENTS",
@@ -9913,6 +10563,14 @@
       "warrior_talent_icon_avatar"
     ],
     "reason": "Retain: the warrior avatar icon depicts an empowered armored form, matching the armor, Ward, and weapon bonuses."
+  },
+  "talent:the-princes-march": {
+    "name": "The Prince's March",
+    "source": "02-CHARACTER-OPTIONS",
+    "race": "San'layn",
+    "icon": "inv_misc_tournaments_banner_bloodelf",
+    "previousIcons": [],
+    "reason": "Silvermoon's banner, carried north with Kael'thas: who marched under it, which house each came from, and who died at Icecrown."
   },
   "talent:the-vault-opens": {
     "name": "The Vault Opens",
@@ -10053,6 +10711,13 @@
       "ability_warrior_focusedrage"
     ],
     "reason": "Replace: the assigned Focused Rage art is a red face. The inspected paired-blade image depicts wielding a weapon in each hand, including two two-handed weapons."
+  },
+  "talent:too-beautiful-to-die": {
+    "name": "Too Beautiful to Die",
+    "source": "04-TALENTS",
+    "icon": "achievement_dungeon_blackrockcaverns_beauty",
+    "previousIcons": [],
+    "reason": "Beauty: the Sovereign spends its Tribute and stays at 1 Health."
   },
   "talent:toughness": {
     "name": "Toughness",
@@ -10263,6 +10928,13 @@
     ],
     "reason": "Time rewound, the damage put off that never arrives."
   },
+  "talent:unmarred": {
+    "name": "Unmarred",
+    "source": "04-TALENTS",
+    "icon": "ability_priest_reflectiveshield",
+    "previousIcons": [],
+    "reason": "A reflective shield: a blow temporary Health absorbs whole pays Tribute."
+  },
   "talent:unmoved": {
     "name": "Unmoved",
     "source": "04-TALENTS",
@@ -10296,6 +10968,20 @@
     "icon": "spell_shadow_sacrificialshield",
     "previousIcons": [],
     "reason": "A sacrifice. Unsummon collapses a servant for Mana."
+  },
+  "talent:untouchable": {
+    "name": "Untouchable",
+    "source": "04-TALENTS",
+    "icon": "ability_rogue_nervesofsteel",
+    "previousIcons": [],
+    "reason": "Nerves of steel: while temporary Health lasts, the Sovereign's Defense rises."
+  },
+  "talent:unworthy-hand": {
+    "name": "Unworthy Hand",
+    "source": "04-TALENTS",
+    "icon": "ability_rogue_dismantle",
+    "previousIcons": [],
+    "reason": "A weapon taken apart: a cursed creature's weapon attacks deal less damage."
   },
   "talent:unyielding": {
     "name": "Unyielding",
@@ -10482,6 +11168,14 @@
       "achievement_character_undead_male"
     ],
     "reason": "A white disguise mask fits the hidden Forsaken agent who appears on call."
+  },
+  "talent:what-the-blood-remembers": {
+    "name": "What the Blood Remembers",
+    "source": "02-CHARACTER-OPTIONS",
+    "race": "San'layn",
+    "icon": "spell_shadow_improvedvampiricembrace",
+    "previousIcons": [],
+    "reason": "A dark embrace that draws something out with the blood: one face, place or word the creature saw in the last day."
   },
   "talent:whirlwind": {
     "name": "Whirlwind",

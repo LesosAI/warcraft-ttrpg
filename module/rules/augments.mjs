@@ -57,7 +57,10 @@ export const AUGMENTS = Object.freeze({
   // The Necromancer's (the plan's *The Augment*; the lead, 2026-11-18, *"Yes."*): the standard
   // bonus, +1 at tiers 1 and 2 and +2 at tiers 3 and 4. The forms are 07 §3's row, word for
   // word (`augments.test.mjs`).
-  bonecharm: Object.freeze({ className: "Necromancer", forms: "A carved skull, a finger-bone rosary, a wand of fused vertebrae" })
+  bonecharm: Object.freeze({ className: "Necromancer", forms: "A carved skull, a finger-bone rosary, a wand of fused vertebrae" }),
+  // The Sovereign's (D-1133, the Bonecharm's shape): the standard bonus, +1 at tiers 1 and 2 and +2 at
+  // tiers 3 and 4. The forms are 07 §3's row, word for word (`augments.test.mjs`).
+  bloodglass: Object.freeze({ className: "Sovereign", forms: "A stoppered vial on a chain, a phial set in a ring, a glass heart worn at the throat" })
 });
 
 /**

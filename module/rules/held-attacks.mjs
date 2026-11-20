@@ -52,7 +52,7 @@
  * caller's own statement, in `grant-doors.test.mjs`' shape.
  */
 
-import { attackAbility, isShot } from "./ammunition.mjs";
+import { attackAbility, deftScores, isShot } from "./ammunition.mjs";
 import { thinnedRating } from "./swarm.mjs";
 
 /** A live Item, a plain snapshot, or the system data itself. */
@@ -138,7 +138,8 @@ export function swingable(weapon) {
  */
 export function heldAttackRow(weapon, creature = {}) {
   const sys = systemOf(weapon);
-  const ability = attackAbility(sys);
+  // A Deft weapon a creature holds takes the higher of its two scores (08 §5; D-1160).
+  const ability = attackAbility(sys, null, deftScores(creature.abilities));
   return {
     itemId: weapon?.id ?? weapon?._id ?? null,
     name: weapon?.name ?? "",

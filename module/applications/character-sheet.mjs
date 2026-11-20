@@ -35,7 +35,7 @@ import { stepUses } from "../rules/uses.mjs";
 import { maneuverCost } from "../rules/maneuvers.mjs";
 import { targetSnapshots } from "./roll-dialog.mjs";
 // A Short Rest asks what is eaten and drunk before it rests (05 §16, D-733).
-import { shortRestWithDialog } from "./rest-dialog.mjs";
+import { longRestWithDialog, shortRestWithDialog } from "./rest-dialog.mjs";
 import { reviewChainLightningCast } from "./chain-lightning-review.mjs";
 import { clearHidden, clearMark, clearReady, disengage, guard, hide, leaveShapeControl, markQuarry, primeRider, ready } from "./combat-actions.mjs";
 // A rider paid before the blow, the Combat tab's control (D-770).
@@ -48,7 +48,11 @@ import { FORCED_SPEED, SHAPE_ABILITIES, SHAPE_KINDS, isOverlayKind, meldsGear, s
 import { wieldRefusal } from "../rules/wield.mjs";
 import { classFeatureOnUse, featurePrice, rungsChip } from "../rules/class-features.mjs";
 import { FORCED_ENDS, forcedRefusalFor, shapeLabel } from "../documents/shapes.mjs";
-import { attackAbility } from "../rules/ammunition.mjs";
+import { attackAbility, deftScores } from "../rules/ammunition.mjs";
+// The Sovereign's Claws: an unarmed strike in the off hand (02 §7; D-1162, D-1163).
+import { isClaws } from "../rules/unarmed.mjs";
+import { freeOffHand } from "../rules/initiative.mjs";
+import { CLAWS_EQUIP_OPTION } from "../rules/claws.mjs";
 // Whether the character is out of sight, for the Combat tab's chip (D-717).
 import { isHidden } from "../effects/stealth.mjs";
 import { POINTS_AVAILABLE, buildTree, canTake, canTakeRacial, canUntake, canUntakeRacial, racialPicksFor, pointsSpent, talentPointsFor, tileState } from "../rules/talents.mjs";
@@ -58,7 +62,9 @@ import { branchRank } from "../rules/legacy-branches.mjs";
 import { crestPath } from "../rules/crests.mjs";
 import { exitsFrom, isEligible } from "../rules/careers.mjs";
 import { tierForLevel, featuresUnlocked, secondaryLevel, secondaryTier } from "../rules/progression.mjs";
-import { manaPrice, showsSpells, spellsKnown, spellPayment } from "../rules/casting.mjs";
+import { spellPrice, showsSpells, spellsKnown, spellPayment } from "../rules/casting.mjs";
+// The Spells tab's words for a Vitae price that takes Health (02 §7; the San'layn and Sovereign plan's V4).
+import { VITAE_WARNING_WORDS, vitaeWarning } from "../rules/vitae.mjs";
 import { onUseOf, talentEffect } from "../rules/talent-effects.mjs";
 // A Use whose first choice is free is pressed with its use spent (the B3 review).
 import { usesAskedLater } from "../rules/legacy-uses.mjs";
@@ -67,7 +73,7 @@ import { containerOf, hasCharges, isContainer, isWorn } from "../rules/container
 import { canCarry, heldAugment } from "../rules/augments.mjs";
 import { SAND } from "../rules/sand.mjs";
 import { FIGURE_HANDS, FIGURE_LEFT, FIGURE_RIGHT, copyLabels, displacedBy, figureSlots, fitsSlot, handFor, twoHandedNote } from "../rules/worn.mjs";
-import { BASE_SLOTS, MAX_CONTAINERS, REFUSALS, areTwins, arrange, isMount, judgeMerge, judgePlace, judgeSplit, judgeSwap, ledger, placeOf, slotLine, slotsIn, stackKey, unitsOf, wearNew, wellsOf } from "../rules/slots.mjs";
+import { BASE_SLOTS, MAX_CONTAINERS, REFUSALS, areTwins, arrange, isMount, isThing, judgeMerge, judgePlace, judgeSplit, judgeSwap, ledger, placeOf, slotLine, slotsIn, stackKey, unitsOf, wearNew, wellsOf } from "../rules/slots.mjs";
 // The Gear tab as bag slots (D-738): the panels, the order and the tooltip.
 import { BLURB_KINDS, TILE_KINDS, TILE_PLACES, badgeOf, buildPanels, gridStep, kindOf, nextSort, primaryAction, slotOrder, tidyBags, tipModel } from "../rules/bags.mjs";
 // A find still under offer is taken from the loot window, never dragged
@@ -107,6 +113,8 @@ import { capacityOf, collapseHordeMember, enslavedOf, essenceOf, hordeActorsOf, 
 import { RUNES, RUNIC_POWER, poolLabelKey, spendRefusal as runeSpendRefusal } from "../rules/runes.mjs";
 import { inscriptionRefusalFor, spendRuneBare, useInscription } from "../effects/death-knight.mjs";
 import { spectralMove } from "../effects/mount-works.mjs";
+// 02 §7's *Latched*: the latch a Sovereign holds, read for the Combat tab's Let go (the review's S7).
+import { latchesOn } from "../rules/latch.mjs";
 
 const { HandlebarsApplicationMixin } = foundry.applications.api;
 const { ActorSheetV2 } = foundry.applications.sheets;
@@ -314,6 +322,14 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       clearHidden: AzerothCharacterSheet.#onClearHidden,
       markQuarry: AzerothCharacterSheet.#onMarkQuarry,
       clearMark: AzerothCharacterSheet.#onClearMark,
+      // 02 §7's Sovereign: Hunt Mortal's mark on the creature targeted, its Clear, and The Blood
+      // Royal's feeding (the San'layn and Sovereign plan's C4, F2).
+      markPrey: AzerothCharacterSheet.#onMarkPrey,
+      clearPrey: AzerothCharacterSheet.#onClearPrey,
+      feed: AzerothCharacterSheet.#onFeed,
+      drinkVial: AzerothCharacterSheet.#onDrinkVial,
+      // 02 §7's *or when you let go*: every latch the Sovereign holds ended (the review's S7).
+      letGo: AzerothCharacterSheet.#onLetGo,
       // Leave the shape (D-769): the banner's Leave and the Combat chip's x.
       leaveShape: AzerothCharacterSheet.#onLeaveShape,
       // A rider paid before the blow (D-770; the lead: *"Either order"*).
@@ -662,6 +678,10 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       // Quarry is held; the form worn.
       canMark: (this.actor.poolSnapshot?.() ?? []).some(p => p.kind === "momentum" && p.name === "quarry"),
       mark: this.actor.getFlag("azeroth-rpg", "mark") ?? null,
+      // 02 §7's Sovereign (the San'layn and Sovereign plan's C4; D11): the prey row - the prey named in
+      // words, Hunt Mortal's Mark and its Clear, The Blood Royal's Feed - and the Vitae and Tribute bars
+      // through Core's own pool rows.
+      sovereign: this.#sovereignCombat(),
       disengaging: this.actor.statuses?.has("disengaging") === true,
       // Out of sight (D-717). Read off the STATUS rather than off the system's
       // own flag, so a GM's hand-toggled invisibility draws the chip too and
@@ -1482,12 +1502,19 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
    */
   async #equipInSlot(item, slot, index) {
     const update = { _id: item.id, "system.equipped": true };
-    if (item.type === "weapon") update["system.offHand"] = slot === "offHand";
+    // The claws are the off hand's whatever tile is named (02 §7; D-1163).
+    if (item.type === "weapon") update["system.offHand"] = isClaws(item) || slot === "offHand";
+    // `hand`: the tile a weapon is put in, so the claws and an off-hand weapon put each
+    // other away by the hand it is going to (`worn.mjs#displacedBy`).
+    const hand = item.type === "weapon" ? (isClaws(item) ? "offHand" : slot) : null;
     const updates = [
       update,
-      ...displacedBy(item, this.actor.items, { index }).map(o => ({ _id: o.id, "system.equipped": false }))
+      ...displacedBy(item, this.actor.items, { index, hand }).map(o => ({ _id: o.id, "system.equipped": false }))
     ];
-    return this.actor.updateEmbeddedDocuments("Item", updates);
+    // The claws coming out play a brief cue at the Sovereign's token (D-1168).
+    const token = isClaws(item) ? (this.actor.getActiveTokens?.(true, true)?.[0] ?? null) : null;
+    const cue = token?.parent?.id ? { [CLAWS_EQUIP_OPTION]: { sceneId: token.parent.id, tokenId: token.id } } : {};
+    return this.actor.updateEmbeddedDocuments("Item", updates, cue);
   }
 
   /**
@@ -2353,7 +2380,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     const held = this.actor.items.filter(i => i.type === "spell");
     const byTier = new Map();
     // **IN A SHAPESHIFT FORM A SPELL IS PRICED IN FEROCITY** (07, D-769): the
-    // column says what Cast will take, through `manaPrice` - the reading
+    // column says what Cast will take, through `spellPrice` - the reading
     // `castSpell` pays with - and the tab says so in words above the tiers, so
     // the number is never read as Mana. A Sustain already held is still Mana
     // (the lead: *"Upkeep unchanged"*).
@@ -2364,19 +2391,26 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // from, through the same `spellPoolFor`, and that pool's bar joins the header.
     const taken = this.actor.takenTalents?.() ?? [];
     const paidIn = new Set();
+    const vitaeHeld = (this.actor.poolSnapshot?.() ?? []).find(p => p.kind === "power" && p.name === "vitae")?.value ?? 0;
+    const healthNow = system.health?.value ?? 0;
     for (const item of held) {
       const tier = item.system.tier ?? 1;
       if (!byTier.has(tier)) byTier.set(tier, []);
       const school = item.system.school;
       if (school && !order.includes(school)) order.push(school);
       const mana = item.system.mana ?? null;
-      const price = inForm && mana > 0 ? manaPrice(mana, { inShapeshiftForm: true }) : null;
+      const price = inForm && mana > 0 ? spellPrice(mana, { inShapeshiftForm: true }) : null;
       // And a class that pays in its Momentum (D-944): the Death Knight's Runic Power.
       const paid = spellPayment(spellPoolFor(taken, { name: item.name, school }), this.actor.classItems ?? []);
       const payWith = paid?.pool && paid.pool !== "mana" ? paid.pool : null;
       if (payWith) paidIn.add(payWith);
       const payWord = payWith ? game.i18n.localize(AZEROTH.momentumTypes[payWith] ?? AZEROTH.powerTypes[payWith] ?? payWith) : manaWord;
+      // **WHAT A VITAE PRICE WILL TAKE FROM HEALTH, IN WORDS** (02 §7, *When your Vitae runs out*; the
+      // San'layn and Sovereign plan's V4: *"This will drop you to 0 Health"*): the row says so before Cast.
+      const vitaeKind = payWith === "vitae" && mana > 0 ? vitaeWarning({ held: vitaeHeld, cost: mana, health: healthNow }) : null;
       byTier.get(tier).push({
+        vitaeWarn: vitaeKind ? game.i18n.format(VITAE_WARNING_WORDS[vitaeKind], { name: this.actor.name, n: mana, vitae: vitaeHeld, health: healthNow }) : null,
+        vitaeWarnKind: vitaeKind,
         id: item.id,
         name: item.name,
         img: item.img,
@@ -2418,13 +2452,17 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       };
     }).filter(Boolean);
     const minimum = known.reduce((sum, k) => sum + k.minimum, 0);
+    // **A SPELL A CLASS, A FEATURE OR A TALENT TEACHES IS ON TOP OF THE COUNT** (02 §7's Sovereign: *Drain
+    // Life, Bloodbolt and Decree of Frailty are known on top of that count*; Unholy Lore's and Grave Calling's
+    // *does not count against your spells known*): a spell carrying `spellFrom` is drawn and never counted.
+    const counted = held.filter(i => !i.getFlag?.("azeroth-rpg", "spellFrom")).length;
 
     return {
       tiers,
-      count: held.length,
+      count: counted,
       known,
       minimum,
-      short: known.length > 0 && held.length < minimum,
+      short: known.length > 0 && counted < minimum,
       // The words that say the column is Ferocity, in a Shapeshift form alone.
       ferocityNote: inForm ? game.i18n.format("AZEROTH.Shape.SpellsInFerocity", { form: shapeLabel(this.actor.shape) }) : null,
       // **EVERY ROW SAYS ITS POOL WHERE ANY ROW PAYS IN ANOTHER** (F6's question 6; run close-F2): a
@@ -2635,11 +2673,13 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     const state = canTake(
       { ...item.system, name: item.name },
       branch,
-      this.#talentPoints().left
+      this.#talentPoints().left,
+      // 04's Gilded Skin (*once you have Prim and Proper*): the features this character holds.
+      { features: this.actor.items.filter(i => i.type === "feature").map(i => i.name) }
     );
     if (!state.ok) {
       ui.notifications?.warn(
-        game.i18n.localize(`AZEROTH.Talent.Locked.${state.reason}`)
+        game.i18n.format(`AZEROTH.Talent.Locked.${state.reason}`, { feature: state.feature ?? "" })
       );
       return;
     }
@@ -2770,6 +2810,43 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
    * constant** (D11 §2) — and a pool the character does not hold draws an
    * em-dash rather than an empty bar (D-509).
    */
+  /**
+   * **THE SOVEREIGN'S COMBAT ROW** (02 §7; the San'layn and Sovereign plan's C4 and D11): drawn only where
+   * the character holds Hunt Mortal or a Vitae or Tribute pool. The prey is named in words (never by a
+   * colour alone), with Hunt Mortal's Mark, its Clear and The Blood Royal's Feed; the two bars are Core's
+   * own rows (`#pools`), so the Combat tab and Core never draw a pool two ways (D-614).
+   */
+  #sovereignCombat() {
+    const pools = this.#pools().filter(p => p.held && (p.name === "vitae" || p.name === "tribute"));
+    const hunts = this.actor.hasFeature?.("Hunt Mortal") === true;
+    if (!pools.length && !hunts) return null;
+    const mark = this.actor.preyMark?.() ?? null;
+    // A Blood vial carried (08 §12): a Sovereign drinks one for twice its tier in Vitae (the plan's F3).
+    const vial = pools.some(p => p.name === "vitae")
+      ? (this.actor.items.find(i => i.type === "gear" && i.system?.provision === "blood") ?? null)
+      : null;
+    // The latch the Sovereign holds (02 §7's *Latched*): on a creature of the viewed scene or a world actor,
+    // named in words with its Let go beside it - the latch lives on the prey, which a player does not own.
+    const latched = [];
+    const seen = new Set();
+    const scan = a => {
+      if (!a || seen.has(a.uuid)) return;
+      seen.add(a.uuid);
+      if (latchesOn([...(a.effects ?? [])]).some(l => l.holder === this.actor.uuid)) latched.push(a.token?.name ?? a.name);
+    };
+    for (const token of canvas?.scene?.tokens ?? []) scan(token.actor);
+    for (const a of game.actors ?? []) scan(a);
+    return {
+      pools,
+      hunts,
+      latch: latched.length ? { words: game.i18n.format("AZEROTH.Sovereign.Latch.Held", { target: latched.sort().join(", ") }) } : null,
+      vial: vial ? { id: vial.id, name: vial.name, count: vial.system?.quantity ?? 1 } : null,
+      feeds: this.actor.hasFeature?.("The Blood Royal") === true,
+      prey: mark ? { name: mark.name, words: game.i18n.format("AZEROTH.Prey.Is", { target: mark.name }) } : null,
+      none: game.i18n.localize("AZEROTH.Prey.None")
+    };
+  }
+
   #pools() {
     const system = this.actor.system;
     const build = (pool, stored, kind = null) => {
@@ -2883,7 +2960,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     const first = shape.forms[0] ?? {};
     const melds = meldsGear(shape.kind);
     const attacks = (this.actor.readyWeapons?.() ?? []).filter(w => w.natural).map((w, index) => {
-      const ability = attackAbility(w.system, null);
+      const ability = attackAbility(w.system, null, deftScores(system.abilities));
       const bonus = (system.abilities?.[ability]?.mod ?? 0) + (system.proficiency ?? 0) + (system.attackBonus ?? 0);
       return {
         index,
@@ -3030,6 +3107,11 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
   #weapons() {
     const weapons = this.actor.items.filter(i => i.type === "weapon");
     const bundles = weapons.map(i => ({ id: i.id, name: i.name, ...i.system }));
+    // **THE CLAWS' ROW** (02 §7's Blood-Forged Claws; the lead, R6: *"An Equip toggle on the
+    // sheet"*; the plan's B.13 Q11, the Combat tab; D-1163): the Equip toggle stands, Attack is
+    // offered only while they are equipped, there is no Delete (they go with the feature), and
+    // Blooded Claws' free attacks are counted on the row.
+    const clawFree = freeOffHand(this.actor.clawFacts?.() ?? {});
     return weapons
       // A bundle of shot is not a weapon to swing (D-641): it lists beneath.
       .filter(item => !item.system.isShot)
@@ -3039,10 +3121,18 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         // shot's plus the launcher's, a dash while nothing fits (D-406).
         const fitting = sys.isLauncher ? fittingBundles(sys, bundles) : [];
         const chosen = sys.isLauncher ? selectAmmunition(sys, fitting) : null;
+        const claws = isClaws(item);
         return {
           id: item.id,
           name: item.name,
           img: item.img,
+          claws,
+          attackable: !claws || sys.equipped === true,
+          deletable: !claws,
+          clawUses: claws && clawFree.eligible
+            ? { text: game.i18n.format("AZEROTH.Claws.FreeUses", { left: clawFree.left, max: clawFree.max }), tip: game.i18n.localize("AZEROTH.Claws.FreeUsesTip") }
+            : null,
+          equipTip: claws ? game.i18n.localize("AZEROTH.Claws.Uncover") : null,
           rating: sys.isLauncher ? (chosen ? shotDamage(sys, chosen).rating : null) : sys.rating,
           range: sys.range,
           traits: sys.traits ?? [],
@@ -3168,6 +3258,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     const tiles = new Map();
     for (const item of items) {
       if (!["weapon", "armor", "gear"].includes(item.type)) continue;
+      // An unarmed strike is never carried and draws no tile (the Sovereign's Claws; D-1162).
+      if (!isThing(item)) continue;
       tiles.set(item.id, await this.#bagRow(item, described.get(item.id) ?? {}, { led, words, names, starred }));
     }
 
@@ -3973,6 +4065,45 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
   static async #onClearHidden() { return clearHidden(this.actor); }
   static async #onMarkQuarry() { return markQuarry(this.actor); }
   static async #onClearMark() { return clearMark(this.actor); }
+  /**
+   * **HUNT MORTAL** (02 §7): the one creature targeted becomes the prey, judged by the prey door
+   * (`effects/sovereign-core.mjs#markPrey`) - once a turn in a fight, within 60 feet.
+   */
+  static async #onMarkPrey() {
+    const targets = [...(game.user?.targets ?? [])];
+    if (targets.length !== 1) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Prey.Refuse.target", { name: this.actor.name }));
+      return null;
+    }
+    const r = await this.actor.markPrey(targets[0], { way: "hunt" });
+    this.render();
+    return r;
+  }
+  static async #onClearPrey() {
+    const { clearPrey } = await import("../effects/sovereign-core.mjs");
+    await clearPrey(this.actor);
+    return this.render();
+  }
+  /** **THE BLOOD ROYAL** (02 §7): feed on the one creature targeted (`effects/sovereign-core.mjs#feedWithDialog`). */
+  static async #onFeed() {
+    const { feedWithDialog } = await import("../effects/sovereign-core.mjs");
+    return feedWithDialog(this.actor);
+  }
+  /** **A BLOOD VIAL FOR VITAE** (the plan's F3): the vial the control names, 2 x tier Vitae. */
+  static async #onDrinkVial(event, target) {
+    const vial = this.actor.items.get(target?.dataset?.itemId ?? "");
+    const { drinkVial } = await import("../effects/sovereign-core.mjs");
+    const r = await drinkVial(this.actor, vial);
+    this.render();
+    return r;
+  }
+  /** **LET GO** (02 §7: *or when you let go*): every latch the Sovereign holds ended, the GM asked first where needed. */
+  static async #onLetGo() {
+    const { letGo } = await import("../effects/sovereign-features.mjs");
+    const r = await letGo(this.actor);
+    this.render();
+    return r;
+  }
   static async #onLeaveShape() { return leaveShapeControl(this.actor); }
   /**
    * Pay a rider before the blow (D-770): the control's `data-rider` names it.
@@ -4440,7 +4571,10 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     const worn = (Array.isArray(held) ? held[index ?? 0] : held) ?? null;
     // FROM THE ACTOR'S OWN ITEMS, and nothing else. `fitsSlot` is the same
     // rule the drop is refused by.
-    const candidates = items.filter(i => fitsSlot(i, slot)).sort((a, b) => a.name.localeCompare(b.name));
+    // **THE CLAWS ARE NEVER A ROW** (the lead, R6: *"An Equip toggle on the sheet. No bag
+    // slot and no paper-doll tile of their own"*; D-1163): the Combat tab's toggle puts them
+    // on and takes them off, and the picker lists what is carried.
+    const candidates = items.filter(i => fitsSlot(i, slot) && !isClaws(i)).sort((a, b) => a.name.localeCompare(b.name));
     if (!candidates.length) {
       ui.notifications?.info(game.i18n.format("AZEROTH.Overview.NothingFor", { slot: label }));
       return null;
@@ -4463,7 +4597,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     const otherTag = slot === "mainHand" ? "AZEROTH.Overview.InOffHand" : "AZEROTH.Overview.InMainHand";
     const rows = [
       // Where the tile is filled, taking it off is the first choice.
-      ...(worn ? [{ key: "", name: game.i18n.localize("AZEROTH.Overview.TakeOff"), description: "", available: true }] : []),
+      ...(worn && !isClaws(worn) ? [{ key: "", name: game.i18n.localize("AZEROTH.Overview.TakeOff"), description: "", available: true }] : []),
       ...candidates.map(item => {
         // 08 §9 locks an Augment to its class; the row is listed and GREYED
         // rather than hidden, and its line says why (D-673's shape).
@@ -4672,7 +4806,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
    * A Long Rest rests directly: 05 §16 puts no condition on it.
    */
   static async #onShortRest() { return shortRestWithDialog(this.actor); }
-  static async #onLongRest() { return this.actor.longRest(); }
+  // A San'layn's Long Rest asks for its blood first (02 §5; D-1144): `longRestWithDialog`.
+  static async #onLongRest() { return longRestWithDialog(this.actor); }
   static async #onBurnTether() { return this.actor.burnTether(); }
 
   /** A new item of the button's type, opened for editing. */

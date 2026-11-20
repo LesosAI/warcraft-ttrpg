@@ -17,6 +17,8 @@
 import { DK_EXPANDED_SPELL_ANIMATIONS } from "./death-knight-animations.mjs";
 // The Necromancer's thirty-eight above tier 1 (the Necromancer plan's Phase 6).
 import { NECRO_EXPANDED_SPELL_ANIMATIONS } from "./necromancer-animations.mjs";
+// The Sovereign's twenty-six above tier 1 (the San'layn and Sovereign plan's C14).
+import { SOV_EXPANDED_SPELL_ANIMATIONS } from "./sovereign-animations.mjs";
 
 const fx = (asset, options = {}) => Object.freeze({kind: "effect", asset, ...options});
 const snd = (asset, options = {}) => Object.freeze({kind: "sound", asset, volume: 0.6, ...options});
@@ -486,4 +488,7 @@ export const EXPANDED_SPELL_ANIMATIONS = Object.freeze({
   // The Necromancer's own (07 §17, Restricted Necromancer); Graveblight and Contagion keep the
   // knight's rows above.
   ...NECRO_EXPANDED_SPELL_ANIMATIONS,
+  // The Sovereign's own (07 §17, Restricted Sovereign); Drain Life, Siphon Life, Exsanguinate,
+  // Graveblight and Contagion keep the rows they already play.
+  ...SOV_EXPANDED_SPELL_ANIMATIONS,
 });

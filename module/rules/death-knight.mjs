@@ -92,7 +92,13 @@ export const FEATURE_SPELLS = Object.freeze({
   "Unholy Lore": Object.freeze({ className: DK_CLASS_NAME, spell: "Death Coil" }),
   // 02 §7's Grave Calling (the Necromancer plan's door 5): *You know Raise Dead and Animate Corpse.
   // They do not count against your spells known* - two spells, one row each.
-  "Grave Calling": Object.freeze({ className: "Necromancer", spells: Object.freeze(["Raise Dead", "Animate Corpse"]) })
+  "Grave Calling": Object.freeze({ className: "Necromancer", spells: Object.freeze(["Raise Dead", "Animate Corpse"]) }),
+  // **AND A CLASS THAT GIVES THEM ITSELF** (02 §7's Sovereign, *Your spells.*: *Drain Life, Bloodbolt and
+  // Decree of Frailty are known on top of that count*; the San'layn and Sovereign plan's B.7 and B.13
+  // Q36 (b)). The rules block is no feature, so the row is keyed by the CLASS item's name and
+  // `AzerothActor#spellGrantTable` hands the class items in beside the features: the spells are flagged
+  // with the class item and withdrawn with it.
+  "Sovereign": Object.freeze({ className: "Sovereign", spells: Object.freeze(["Drain Life", "Bloodbolt", "Decree of Frailty"]) })
 });
 
 /**

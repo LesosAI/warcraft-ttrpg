@@ -13,7 +13,7 @@
 
 import { AZEROTH } from "../../config.mjs";
 import {
-  AREA_CHECK_ON, AREA_REMAINS_WHEN, AREA_TICK_KINDS, AREA_TICK_WHO, AREA_UNTIL, cleanAreaTick
+  AREA_CHECK_ON, AREA_REMAINS_WHEN, AREA_TICK_KINDS, AREA_TICK_WHO, AREA_UNTIL, TICK_RATING_FROM, cleanAreaTick
 } from "../../rules/area-ticks.mjs";
 import { cleanAreaGround } from "../../rules/area-ground.mjs";
 import { TICK_KINDS, TICK_UNTIL, TICK_WHEN, cleanTick } from "../../rules/ticks.mjs";
@@ -53,8 +53,15 @@ export class SpellData extends foundry.abstract.TypeDataModel {
       // into `mana` above with the pool named here. `mana` on every other spell, and
       // the parser emits the key only where it is not, so no stored spell changes and
       // a world copy reads the initial as its pack copy does (no migration). What a
-      // caster PAYS is `rules/casting.mjs#manaPrice`'s, whatever is printed.
-      costPool: new fields.StringField({ required: false, blank: false, initial: "mana", choices: () => ["mana", "runicPower"] }),
+      // caster PAYS is `rules/casting.mjs#spellPrice`'s, whatever is printed.
+      // **AND VITAE, THE SOVEREIGN'S** (02 §7; the San'layn and Sovereign plan, V1; D-1240): 07 prints
+      // **Vitae** on the 36 spells the Sovereign alone casts, and a choice list without it made the
+      // model refuse the word and `migrateData` fold it back to Mana.
+      costPool: new fields.StringField({ required: false, blank: false, initial: "mana", choices: () => ["mana", "runicPower", "vitae"] }),
+      // **A BLOOD CURSE IS A TAG THE ENTRY STATES** (02 §7, *Blood curses*; D-1126, D-1241): true on
+      // the eight spells whose effect says *This spell is a blood curse*, stamped by the parser, read by
+      // `effects/sovereign-spells.mjs` to tag the effect a failure lays. False on every other spell.
+      bloodCurse: new fields.BooleanField({ initial: false }),
       // 07's word for a timed cast too (O-351): `AZEROTH.spellActions` widens the ladder with `minute`.
       action: choiceField(AZEROTH.spellActions, { initial: "action" }),
       range: new fields.StringField({ required: false, blank: true, initial: "" }),
@@ -172,7 +179,13 @@ export class SpellData extends foundry.abstract.TypeDataModel {
         // **THE DAMAGE'S TYPE**: a school, or a sand spell's `physical` (07 §9, D-864).
         damage: new fields.SchemaField({
           rating: optionalNumberField({ min: 0 }),
-          school: choiceField(AZEROTH.damageTypes)
+          school: choiceField(AZEROTH.damageTypes),
+          // **A NUMBER THAT IS THE CASTER'S** (D-920's Death and Decay, D-1367's Shroud of Sorrow): kept only where
+          // the descriptor names it - pruned before, so the item lost what the pack carried.
+          ratingFrom: new fields.StringField({ required: false, blank: false, choices: [...TICK_RATING_FROM] }),
+          // 07 §17's Shroud of Sorrow (D-1367): the Health the caster regains for each enemy the damage reaches, only
+          // where the entry says so.
+          drain: new fields.NumberField({ required: false, nullable: true, integer: true, min: 0 })
         }),
         heal: optionalNumberField({ min: 0 }),
         against: new fields.ArrayField(new fields.SchemaField({
@@ -338,7 +351,7 @@ export class SpellData extends foundry.abstract.TypeDataModel {
   static migrateData(source) {
     // The printed cost's pool (D-944): a word the choices lack is Mana, and only
     // where the key is PRESENT, since this runs over partial updates too (D-671).
-    if (source && typeof source === "object" && "costPool" in source && !["mana", "runicPower"].includes(source.costPool)) source.costPool = "mana";
+    if (source && typeof source === "object" && "costPool" in source && !["mana", "runicPower", "vitae"].includes(source.costPool)) source.costPool = "mana";
     if (source?.rider && source.rider.mode !== undefined && source.rider.mode !== null && !["replace", "add"].includes(source.rider.mode)) source.rider.mode = null;
     if (source && typeof source === "object" && "areaTick" in source) {
       if (source.areaTick && typeof source.areaTick === "object" && !Array.isArray(source.areaTick)) cleanAreaTick(source.areaTick);

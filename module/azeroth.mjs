@@ -36,6 +36,7 @@ import { registerFelShodHooks } from "./canvas/fel-shod.mjs";
 import { registerReflectionHooks } from "./effects/reflection.mjs";
 import { registerVeknissHooks } from "./effects/vekniss.mjs";
 import { registerBloodpetalHooks } from "./effects/bloodpetal.mjs";
+import { registerBloodHooks } from "./effects/blood.mjs";
 import { registerDredgePoisonHooks } from "./effects/dredge-poison.mjs";
 import { registerAfflictionHooks } from "./effects/affliction-clock.mjs";
 // 08 §5's Plaguebound on the world's clock (D-911).
@@ -224,6 +225,8 @@ Hooks.once("init", () => {
   registerReflectionHooks();
   registerVeknissHooks();
   registerBloodpetalHooks();
+  // The San'layn's Open Vein unit lines on its card (02 §5; D-1149).
+  registerBloodHooks();
   registerDredgePoisonHooks();
   registerAfflictionHooks();
   registerTraitClockHooks();
@@ -260,6 +263,14 @@ Hooks.once("init", () => {
   // 07 §17's Necromancer spells (run 4c-S): Soul Cage and Mark of the Grave on the death watch, Corpse
   // Candle's light and the markers put out, Deathmask's face put back, Contagion's daily spread.
   import("./effects/necromancer-spells.mjs").then(m => m.registerNecroSpellHooks()).catch(err => console.warn("azeroth-rpg | Necromancer spell hooks", err));
+  // 02 §7's Sovereign (the San'layn and Sovereign plan's F2, C3, C4): the claw lane, the prey's death on the
+  // death watch, and the claw hit's *Mark as prey*.
+  import("./effects/sovereign-core.mjs").then(m => m.registerSovereignCore()).catch(err => console.warn("azeroth-rpg | Sovereign hooks", err));
+  // The Sovereign's features and talents (Phase 5): the claw-hit talents, the death watch's offers, the offer
+  // buttons and the latch's watch.
+  import("./effects/sovereign-features.mjs").then(m => m.registerSovereignFeatures()).catch(err => console.warn("azeroth-rpg | Sovereign features", err));
+  // The Sovereign's spells: held blood off a claw hit, and Royal Seal's door and sheet (D-1240).
+  import("./effects/sovereign-spells.mjs").then(m => m.registerSovereignSpellHooks()).catch(err => console.warn("azeroth-rpg | Sovereign spell hooks", err));
   registerCrushridgeHelpHooks();
   registerTokenShrinkHooks();
   registerElunesLightHooks();

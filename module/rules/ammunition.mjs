@@ -138,18 +138,61 @@ export function attackModeOf(weapon, mode = null) {
   return modes.includes(mode) ? mode : modes[0];
 }
 
+/** Whether a weapon carries 08 §5's Deft trait (the lead, R15: *"new weapon trait - Deft"*). */
+export function isDeft(weapon) {
+  return (weapon?.traits ?? weapon?.system?.traits ?? []).some(t => /^deft$/i.test(String(t).trim()));
+}
+
+/** Whether a weapon is the Sovereign's Claws (02 §7), by identifier. */
+function isClawsWeapon(weapon) {
+  return String(weapon?.identifier ?? weapon?.system?.identifier ?? "").trim().toLowerCase() === "sovereign-claws";
+}
+
+/**
+ * **THE TWO SCORES DEFT CHOOSES BETWEEN**, off an actor's `system.abilities`: the
+ * Strength and the Dexterity modifier, a `—` score (a creature's null) a zero.
+ *
+ * @param {object|null} abilities  `actor.system.abilities`
+ * @returns {{str: number, dex: number}}
+ */
+export function deftScores(abilities = null) {
+  const mod = key => {
+    const n = Number(abilities?.[key]?.mod);
+    return Number.isFinite(n) ? n : 0;
+  };
+  return { str: mod("str"), dex: mod("dex") };
+}
+
 /**
  * The ability an attack adds (06 §1): Strength in the hand, Dexterity on a shot
  * or a throw. With no mode, the weapon's first - so a Dagger asked nothing is a
  * Dagger in the hand, and a Javelin is a throw because it has no other way.
+ *
+ * **A DEFT WEAPON IN THE HAND TAKES THE HIGHER OF STRENGTH AND DEXTERITY** (08 §5's
+ * Deft; the lead, R14: *"weapon attacks use dexterity or strength as the weapon
+ * specifiies"*, R15: *"new weapon trait - Deft"*; D-1160, the plan's B.13 Q29
+ * recommendation *the higher, automatically, with the dialog naming the ability*).
+ * `scores` are the attacker's modifiers (`deftScores`); a tie keeps Strength, and a
+ * caller that hands none keeps 06 §1's Strength - `ammunition.test.mjs`'s census holds
+ * every caller in `module/` to handing them. **The Sovereign's Claws are Dexterity**
+ * (R14 on the claws: *"dexterity"*, twice), whatever the scores. A Deft weapon thrown
+ * is a throw, and a throw is Dexterity already.
+ *
+ * @param {object} weapon
+ * @param {string|null} [mode]
+ * @param {{str?: number, dex?: number}|null} [scores]
+ * @returns {"str"|"dex"}
  */
-export function attackAbility(weapon, mode = null) {
+export function attackAbility(weapon, mode = null, scores = null) {
   const used = attackModeOf(weapon, mode);
   // **A THROW A TALENT MAKES ON STRENGTH** (04's Storm Bolt: *an attack made with
   // one uses Strength*; the Legacy branches' door 15): `wield.mjs#throwAsWeapon`
   // names the ability the throw it adds is made with.
   if (used === "thrown" && (weapon?.throwAbility === "str" || weapon?.throwAbility === "dex")) return weapon.throwAbility;
-  return used === "hand" ? "str" : "dex";
+  if (used !== "hand") return "dex";
+  if (isClawsWeapon(weapon)) return "dex";
+  if (isDeft(weapon) && scores && (Number(scores.dex) || 0) > (Number(scores.str) || 0)) return "dex";
+  return "str";
 }
 
 /** A shot: it fits something and carries a Rating. Mill-ground powder fits a firearm and is not a shot. */

@@ -395,14 +395,18 @@ export const ENCHANT_OF_SCHOOL = Object.freeze({
  * row to flip and its scope is countable.
  */
 export const BASES = Object.freeze({
-  // --- A2: a main-hand dagger is a Scimitar, an off-hand one a Dagger ---
+  // --- A2, flipped by D-1331: every dagger is a Light blade, so it carries 08
+  // §5's Deft (the lead's R15: "apply this to the relevant items across the
+  // entire system"). It was a Scimitar, which left 68 of 69 found daggers
+  // without Deft. Every row here is a Light blade that carries Deft; the
+  // Serrated blade is the one that carries Bleed. ---
   "Dagger|One-Hand": {
     type: "weapon", grip: "one-handed", flag: "base:dagger",
     rows: [
-      { name: "Scimitar", trait: null },
-      { name: "Cutlass", trait: "Hook" },
-      { name: "Gurubashi tusk-blade", trait: "Bleed" },
-      { name: "Farstrider's blade", trait: "Nick" }
+      { name: "Dagger", trait: null },
+      { name: "Main-gauche", trait: "Nick" },
+      { name: "Punch dagger", trait: "Pierce" },
+      { name: "Serrated blade", trait: "Bleed" }
     ]
   },
   "Dagger|Off Hand": {

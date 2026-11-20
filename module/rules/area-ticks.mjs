@@ -298,10 +298,23 @@ const BASE = [
     const m = /^Each living creature that starts its turn (?:in|inside) the area takes (\d+) ([A-Z][a-z]+) damage\b/.exec(s);
     return m && schoolOf(m[2]) ? { who: "creature", damage: { rating: Number(m[1]), school: schoolOf(m[2]) } } : null;
   },
+  // 07 §17's Swarming Shadows (D-1251): *Each enemy that starts its turn in the area takes 4 Shadow damage* -
+  // the caster's enemies alone, on the Region its door attaches to the prey.
+  s => {
+    const m = /^Each enemy that starts its turn (?:in|inside) the area takes (\d+) ([A-Z][a-z]+) damage\b/.exec(s);
+    return m && schoolOf(m[2]) ? { who: "enemy", damage: { rating: Number(m[1]), school: schoolOf(m[2]) } } : null;
+  },
   // *Every creature in the area takes 4 Frost damage at the start of each of its turns*.
   s => {
     const m = /^Every creature in the area takes (\d+) ([A-Z][a-z]+) damage at the start of each of its turns\b/.exec(s);
     return m ? { who: "creature", damage: { rating: Number(m[1]), school: schoolOf(m[2]) } } : null;
+  },
+  // 07 §17's Shroud of Sorrow (D-1367): *Each enemy that starts its turn within 10 feet of you takes Shadow
+  // damage equal to half your Charisma modifier, rounded down, and at least 1* - the caster's enemies round the
+  // caster, the number the caster's own (`ratingFrom`, worked out by `tickRating`).
+  s => {
+    const m = /^Each enemy that starts its turn within (\d+) feet of you takes ([A-Z][a-z]+) damage equal to half your Charisma modifier, rounded down, and at least 1\b/.exec(s);
+    return m && schoolOf(m[2]) ? { who: "enemy", centre: "self", feet: Number(m[1]), damage: { rating: null, school: schoolOf(m[2]), ratingFrom: "halfCha" } } : null;
   },
   // Immolation: *A creature that starts its turn within 5 feet of you, or that
   // hits you with a melee attack, takes 2 Fire damage.*
@@ -868,6 +881,11 @@ export function readAreaTick(effectText, fields = {}) {
   tick.grows = grows ? Number(grows[1]) : null;
   tick.excludesCaster = Boolean(baseSentence && excludesHolder(baseSentence));
   tick.retaliate = Boolean(baseSentence && /\bor that hits you with a melee attack\b/.test(baseSentence));
+  // 07 §17's Shroud of Sorrow (D-1367): *You regain 1 Health for each enemy that takes damage from this spell* -
+  // on the damage it rides, named only where the entry says it, so every other spell's descriptor (and the shape
+  // `check-packs.mjs` diffs) is what it was.
+  const drain = /\bYou regain (\d+) Health for each enemy that takes damage from this spell\b/.exec(body);
+  if (drain && tick.damage) tick.damage = { ...tick.damage, drain: Number(drain[1]) };
   tick.onEnter = /\bagain the first time it enters\b|\benters (?:the area|or crosses)\b|\bwhen it first enters\b|\bthe first time it enters\b|\bcreature entering it\b/i.test(body);
   tick.difficult = /\*\*Difficult ground\*\*|\bdifficult (?:ground|terrain)\b/i.test(body);
   tick.lasts = { rounds: roundsIn(fields?.duration ?? {}) };
@@ -898,8 +916,29 @@ export function castDealsDamage(sys = {}) {
   if (spellRetaliationFrom({ type: "spell", system: sys })) return false;
   const tick = sys?.areaTick;
   if (!hasAreaTick(tick)) return true;
-  const ticks = (tick.damage?.rating ?? null) !== null || (tick.against ?? []).some(r => (r?.rating ?? null) !== null);
+  const ticks = (tick.damage?.rating ?? null) !== null || TICK_RATING_FROM.includes(tick.damage?.ratingFrom) || (tick.against ?? []).some(r => (r?.rating ?? null) !== null);
   return !ticks;
+}
+
+/**
+ * **A TICK WHOSE NUMBER IS THE CASTER'S** (D-920's Death and Decay, *equal to your casting modifier*; D-1367's
+ * Shroud of Sorrow, *half your Charisma modifier, rounded down, and at least 1*): the word the descriptor carries
+ * in `damage.ratingFrom`, and the number it is worth for a caster.
+ */
+export const TICK_RATING_FROM = Object.freeze(["castingMod", "halfCha"]);
+
+/**
+ * The rating a `ratingFrom` tick deals: the casting modifier (never below 0, and null at 0, as D-920 stamped it),
+ * or half the Charisma modifier rounded down and at least 1. Null for a word it does not know.
+ *
+ * @param {string|null|undefined} from
+ * @param {{castingMod?: number, cha?: number}} mods
+ * @returns {number|null}
+ */
+export function tickRating(from, { castingMod = 0, cha = 0 } = {}) {
+  if (from === "castingMod") return Math.max(0, Math.trunc(Number(castingMod)) || 0) || null;
+  if (from === "halfCha") return Math.max(1, Math.floor((Math.trunc(Number(cha)) || 0) / 2));
+  return null;
 }
 
 /**
@@ -1640,6 +1679,8 @@ export function cleanAreaTick(tick) {
     else {
       if ("rating" in tick.damage) tick.damage.rating = nullableNumber(tick.damage.rating);
       if ("school" in tick.damage && tick.damage.school !== null && !isDamageTypeKey(tick.damage.school)) tick.damage.school = null;
+      if ("ratingFrom" in tick.damage && !TICK_RATING_FROM.includes(tick.damage.ratingFrom)) delete tick.damage.ratingFrom;
+      if ("drain" in tick.damage) tick.damage.drain = nullableNumber(tick.damage.drain);
     }
   }
   if ("heal" in tick) tick.heal = nullableNumber(tick.heal);

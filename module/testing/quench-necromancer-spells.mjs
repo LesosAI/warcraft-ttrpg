@@ -25,6 +25,7 @@ import { ESCAPE_FLAG, SHED_DC_FLAG } from "../rules/escapes.mjs";
 import { MIND_CONTROL_FLAG } from "../rules/mind-control.mjs";
 import { CORPSE_FLAG } from "../rules/raise.mjs";
 import { SPELL_USES_FLAG } from "../rules/spell-limits.mjs";
+import { resistRecordOn } from "../rules/resisted.mjs";
 
 const SCOPE = "azeroth-rpg";
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -192,11 +193,25 @@ async function castRefused(actor, spellName, opts = {}) {
   return card?.refusal ?? "";
 }
 
-/** Press a card's Resist for a row at a face; the resilience card it posted. */
+/**
+ * Press a card's Resist for a row at a face; the resilience card it posted, once the card holds the Test's record.
+ *
+ * **THE RECORD LANDS AFTER THE RESILIENCE CARD** (O-482; FIXC): `dice/chat.mjs#rollResists` posts the Test's own
+ * card first, lands what a failure lays, and only then writes the record onto the spell's card
+ * (`dice/annotate.mjs#recordResist`), which is what the card's Apply reads for the half. An Apply pressed in between
+ * started its GM operation before the record and was judged *changed* once it landed - after the row had been
+ * claimed `applying` - so the row stayed claimed and every later press read *being written now* (the
+ * `sovereign-spells2` flake on Delirious Slash and Cauldron of Blood). Wait for exactly that record.
+ */
 export async function resist(card, index, face = 1) {
   const rolled = untilHook("createChatMessage", 30000, m => m.flags?.[SCOPE]?.kind === "resilience").then(([m]) => { made.push(m); return m; });
   const p = await pressCard(card, `button[data-action="resistTest"][data-target-index="${index}"]`, { face });
-  try { return await rolled; } finally { await p.release(); await sleep(400); }
+  try {
+    const result = await rolled;
+    const row = card.flags?.[SCOPE]?.targets?.[index] ?? null;
+    if (row) await until(() => resistRecordOn(card.flags?.[SCOPE]?.resists ?? null, row), `the card's record of ${row.name ?? "the row"}'s Test`, 20000);
+    return result;
+  } finally { await p.release(); await sleep(400); }
 }
 
 /** Press a card's Apply damage for a row; resolves once the row's creature has taken it. */

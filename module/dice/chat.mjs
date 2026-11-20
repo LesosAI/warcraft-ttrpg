@@ -165,7 +165,7 @@ import { UNDISPELLABLE_FLAG } from "../rules/dispel.mjs";
 import { STRUCK_TEST_FLAG, cleanStruckTest, struckRefusal } from "../rules/struck-tests.mjs";
 import { cleanForced } from "../rules/forced-movement.mjs";
 import { forceFromRegion, forceMove, forcedWords, regionCentreOf } from "../effects/forced-movement.mjs";
-import { ESCAPE_FLAG, SHED_DC_FLAG, cleanShedDc, cleanEscape, escapeRefusal, escapeAction, escapeOfEffect, escapeEffectMatches, higherShedDc } from "../rules/escapes.mjs";
+import { ESCAPE_FLAG, SHED_DC_FLAG, cleanShedDc, cleanEscape, escapeRefusal, escapeAction, escapeOfEffect, escapeEffectMatches, higherShedDc, escapeLabelKey } from "../rules/escapes.mjs";
 // 08 §20's Emerald Slumber's *until it takes damage* (D-911).
 import { ENDS_ON_DAMAGE_FLAG, refusedFromSource, resistBanesOn } from "../rules/signatures.mjs";
 // O-292: the last creature out of a held spell ends its Sustain (the GM's door), said on the card.
@@ -193,8 +193,14 @@ import { markAnswers } from "../rules/reactions.mjs";
 // Cutting Gear (the lead's ruling), Drawn Across's halving and a thrall on a failed Resist.
 import { realmStateFor, takeOffer } from "../effects/spirit-realm.mjs";
 import { thrallOn, useCuttingGear } from "../effects/legacy-uses.mjs";
+// 02 §5's Open Vein: the unit a living creature's failed Resist gives the San'layn (D-1149).
+import { bloodFromResist } from "../effects/blood.mjs";
 import { HALVES_DEALT_FLAG, dealtHalvedBy, halvedAmount, namesCreature } from "../rules/legacy-uses.mjs";
 import { layState } from "../effects/talent-states.mjs";
+// The claw roll's turn (the review's S1), and the Sovereign's Resist and Apply doors asked before their
+// modules load (O-419; `rules/sovereign-scope.mjs`).
+import { clawRollStale } from "../rules/claws.mjs";
+import { preyMarksOf, resistCanReachCore, sovereignCardFlags } from "../rules/sovereign-scope.mjs";
 
 /**
  * Whether the card's row this button names was turned into a miss (the Legacy
@@ -702,6 +708,8 @@ export const CARD_ACTIONS = {
   necroGraveWard: async (button, message) => (await import("../effects/necromancer-spells.mjs")).graveWardFromCard(button, message),
   // And a Necromancer spell's own card (fix run 4-S): Contagion's Dismiss, Spirit Anchor's look, Mark of the Grave's direction.
   necroCard: async (button, message) => (await import("../effects/necromancer-spells.mjs")).necroCardPress(button, message),
+  // The Sovereign's spells' presses (D-1240): Look, Broken, Command carried out and the GM's End the audience.
+  sovereignCard: async (button, message) => (await import("../effects/sovereign-spells.mjs")).sovereignCardPress(button, message),
   touchEverburn: async (_button,message) => {
     const {touchEverburn}=await import('../effects/everburn-touch.mjs');
     const result=await touchEverburn(message);
@@ -758,6 +766,8 @@ export const CARD_ACTIONS = {
   attackFromCard: (button, message) => attackFromCard(button, message),
   // 06 §1's Off-Hand Attack, riding the blow this card records (D-711).
   offHandFromCard: (button, message) => offHandFromCard(button, message),
+  // 04's Ravenous: the next claw roll of one Off-Hand Attack (D-1166).
+  clawRollFromCard: (button, message) => clawRollFromCard(button, message),
   // An extra attack a talent offers off this blow (04's Flurry, Wide Swing; D-772).
   extraStrike: (button, message) => extraStrikeFromCard(button, message),
   // **THE RANGER'S AND THE ROGUE'S** (D-773): one more attack a kill gives (Killing
@@ -1764,7 +1774,7 @@ function currentEscape(actor, effect, escape) {
 
 async function escapeOutcome({ actor, effect, escape, passed }) {
   if (!currentEscape(actor, effect, escape)) return;
-  const condition = game.i18n.localize(AZEROTH.conditions[escape.condition] ?? escape.condition);
+  const condition = game.i18n.localize(escapeLabelKey(escape) ?? AZEROTH.conditions[escape.condition] ?? escape.condition);
   const lines = [];
   if (passed) {
     // 07 §12's Sand Prison: *leaves the spell when it succeeds* - its other conditions too,
@@ -1998,6 +2008,12 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
         continue;
       }
     }
+    // **A FEEDING'S TEST IS ROLLED ONCE** (02 §7's The Blood Royal): a card already landed refuses in words
+    // before anything is rolled.
+    if (purpose === "feeding" && message.flags?.["azeroth-rpg"]?.feeding?.resolved === true) {
+      ui.notifications?.warn(game.i18n.localize("AZEROTH.Feeding.Landed"));
+      continue;
+    }
     let poisonHeld = null;
     if (purpose === "poisoned") {
       const record = message.flags?.["azeroth-rpg"]?.poisoned;
@@ -2215,6 +2231,30 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
     if (purpose === "reach" && result && !(await game.system.azeroth.workflows.spendTurnBudget(actor, "half"))) continue;
     // (02 §7's Binding is recorded inside its claim, straight after the roll above.)
     const passed = result?.rolls?.[0]?.outcome?.success === true;
+    // **02 §7's THE BLOOD ROYAL, LANDED** (the San'layn and Sovereign plan's F2): the creature's failure
+    // takes its Health here, where it is owned, and the Sovereign's answerer writes the Vitae. One landing
+    // a card. **AND THE SOVEREIGN'S WILL LANE** (R17: *"The target failing any resilience test from the
+    // Sovereign should provide 1 tribute once per round"*, **"Your prey"**): a feeding's, a spell's, a
+    // feature's or an escape's failure against the Sovereign whose prey this is. Guarded, so a throw never
+    // skips what the Test lands next.
+    if (result) {
+      if (resistCanReachCore({ purpose, uuid: actor.uuid, tokenUuid: actor.token?.uuid ?? null, marks: preyMarksOf(game.actors) })) try {
+        const { feedingAfterTest, tributeAfterResist } = await import("../effects/sovereign-core.mjs");
+        if (purpose === "feeding") await feedingAfterTest({ message, actor, passed, result });
+        await tributeAfterResist({ message, actor, maker, purpose, passed, result });
+      } catch (err) {
+        console.warn("azeroth-rpg | the Sovereign's Test", err);
+      }
+      // 07 §17's Gaze from the Throne: *On a success the spell ends and the target feels watched* (D-1240).
+      if (purpose === "spell" && passed && sovereignCardFlags(message.flags?.["azeroth-rpg"])) {
+        try {
+          const { sovereignSpellAfterPass } = await import("../effects/sovereign-spells.mjs");
+          await sovereignSpellAfterPass({ message, actor });
+        } catch (err) {
+          console.warn("azeroth-rpg | a Sovereign spell's passed Resist", err);
+        }
+      }
+    }
     // **WHAT A GRAFT'S FAILED TEST LANDS** (the lead's Q7 of the 4b review: *"auto"*): Meat Hook's
     // pull, Grasping Arms' Entangled, Plague Bladder's Poisoned (`effects/graft-riders.mjs`).
     if (purpose === "graft" && result) {
@@ -2555,6 +2595,15 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
       } catch (err) {
         console.warn("azeroth-rpg | a Necromancer spell's failed Resist", err);
       }
+      // **07 §17's SOVEREIGN SPELLS ON A FAILED RESIST** (D-1240): the blood curse with its repeat, Bleeding
+      // at its number, the lost damage, no healing, Overawe's Bane, Captivating Gaze's leash, Royal
+      // Command's and Grant an Audience's ends, and the caster's heal for each failure. Guarded.
+      if (sovereignCardFlags(message.flags?.["azeroth-rpg"])) try {
+        const { sovereignSpellAfterResist } = await import("../effects/sovereign-spells.mjs");
+        await sovereignSpellAfterResist({ message, actor, maker: casterOf(message), laid: laidByFailure, result });
+      } catch (err) {
+        console.warn("azeroth-rpg | a Sovereign spell's failed Resist", err);
+      }
       if (flags.onFail?.statuses?.length && dominationConfirmed) {
         ui.notifications?.info(game.i18n.format("AZEROTH.Card.OnFailLanded", {
           name: actor.name, conditions: flags.onFail.statuses.map(id => game.i18n.localize(AZEROTH.conditions[id] ?? id)).join(", ")
@@ -2644,6 +2693,16 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
     // **SAND FOR THE CASTER** (02 §7: *Gain 1 when a creature fails a Resilience Test against
     // a spell or feature of yours, once a cast*; D-848): through the one door, once a cast.
     if (link && result && !passed) await gainSandFromResist(casterOf(message), { message, resister: actor });
+    // **02 §5's OPEN VEIN: A LIVING CREATURE THAT FAILS GIVES THE SAN'LAYN 1 UNIT OF BLOOD** (D-1149):
+    // read off the biter's own talent row, once a creature a card (`effects/blood.mjs`). Guarded:
+    // the Test stands whatever the unit's write does.
+    if (link && result && !passed && !purpose && message.flags?.["azeroth-rpg"]?.kind === "feature") {
+      try {
+        await bloodFromResist(casterOf(message), { message, resister: actor, passed, result });
+      } catch (err) {
+        console.warn("azeroth-rpg | Open Vein's unit", err);
+      }
+    }
     // **THE CHRONOMANCER'S FAILED RESISTS** (stage 2b): Suspend's hold, Temporal Loop's return
     // and Arrested Moment's Stun (`effects/chronomancer.mjs#chronoAfterResist`). Guarded: none
     // undoes the Test.
@@ -2652,6 +2711,19 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
         for (const line of await chronoAfterResist({ message, actor, passed, purpose, caster: casterOf(message), slowedBy: slowedBefore })) ui.notifications?.info(line);
       } catch (err) {
         console.warn("azeroth-rpg | a Chronomancer's Resist", err);
+      }
+    }
+    // **THE SOVEREIGN'S RESISTS** (02 §7, 04; the San'layn and Sovereign plan's Phase 5): Look Upon Me's Bane,
+    // Blood Prison's curse, Bound to the Court's leash, Kneel and Abject Obedience on a failure; Bound to the
+    // Court's repeat, the latch's escape and a spread curse's Test; a blood curse thrown off by 07's escape -
+    // read before that escape's own landing below deletes it (`effects/sovereign-features.mjs`). Guarded.
+    if (result && (message.flags?.["azeroth-rpg"]?.sovereign || ["sovRepeat", "sovLatch", "sovSpread", "escape"].includes(purpose)
+      || (purpose === "spell" && message.flags?.["azeroth-rpg"]?.bloodCurse === true))) {
+      try {
+        const { sovereignAfterResist } = await import("../effects/sovereign-features.mjs");
+        for (const line of await sovereignAfterResist({ message, actor, passed, purpose, caster: casterOf(message), result })) ui.notifications?.info(line);
+      } catch (err) {
+        console.warn("azeroth-rpg | a Sovereign's Resist", err);
       }
     }
     // **04's GRINDING BLOCK** (stage 2c): the attacker's Spirit Test on the Block's card, its one
@@ -3070,6 +3142,72 @@ async function offHandFromCard(button, message) {
     return;
   }
   return attackWithDialog(actor, weapon, null, { offHand: true });
+}
+
+/** The claw rolls pressed and not yet rolled on this client (D-1166). */
+const CLAW_ROLLS_IN_FLIGHT = new Set();
+
+/**
+ * **THE NEXT CLAW ROLL OF ONE OFF-HAND ATTACK** (04's Blooded Claws at rank 3: *your
+ * Off-Hand Attack with your claws makes two attack rolls in place of one, and each roll may
+ * target a different creature within your reach*; Raking Claws at rank 2: *each time you make
+ * your Off-Hand Attack with your claws, you make one extra claw attack roll as part of it*;
+ * the lead, R44, R45 and R53; the plan's C16; D-1166).
+ *
+ * The rolls sit inside the one Off-Hand Attack the first roll paid for, so each after it is
+ * `budget: "none"` and spends nothing - the door Extra Attack's second roll uses. Refused in
+ * words, before anything is rolled: a roll past the count (`offHandRolls` read NOW), a roll
+ * outside the attacker's own turn, the claws no longer equipped, and a card already pressed.
+ * The press is marked on the card once the roll's own card exists, so a dismissed dialog
+ * spends nothing. Each roll aims at what the presser has targeted.
+ */
+async function clawRollFromCard(button, message) {
+  const actor = ChatMessage.getSpeakerActor(message.speaker);
+  if (!actor) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Card.ActorGone"));
+    return null;
+  }
+  if (!actor.isOwner) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Card.NotYours"));
+    return null;
+  }
+  const flags = message.flags?.["azeroth-rpg"] ?? {};
+  const n = Math.trunc(Number(button.dataset.clawRoll)) || 0;
+  if (flags.clawPressed === true || CLAW_ROLLS_IN_FLIGHT.has(message.id)) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.Claws.Roll.Refuse.Pressed"));
+    return null;
+  }
+  const ready = actor.readyWeapons?.() ?? [];
+  const claws = ready.find(w => w?.id && w.id === button.dataset.itemId) ?? null;
+  if (!claws) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Claws.Roll.Refuse.NoClaws", { name: actor.name }));
+    return null;
+  }
+  const { offHandRolls } = await import("../rules/initiative.mjs");
+  const of = offHandRolls(actor.clawFacts?.() ?? {});
+  if (n < 2 || n > of) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Claws.Roll.Refuse.PastCount", { name: actor.name, of }));
+    return null;
+  }
+  const fight = actor.activeFight?.() ?? null;
+  if (fight && !(fight.getCombatantsByActor?.(actor) ?? []).some(c => c.id === fight.combatant?.id)) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Claws.Roll.Refuse.NotYourTurn", { name: actor.name }));
+    return null;
+  }
+  // **THIS TURN'S CARD ALONE** (the review's S1): a roll left unpressed on an old card is no free attack later.
+  // The card records the fight, round and turn it was made in (`rules/claws.mjs#clawRollStamp`).
+  if (clawRollStale(flags.clawRoll ?? null, { fight: fight ? { id: fight.id, round: fight.round, turn: fight.turn } : null, worldTime: game.time?.worldTime ?? 0 })) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Claws.Roll.Refuse.Stale", { name: actor.name }));
+    return null;
+  }
+  CLAW_ROLLS_IN_FLIGHT.add(message.id);
+  try {
+    const card = await attackWithDialog(actor, claws, null, { offHand: true, budget: "none", clawRoll: n });
+    if (card) await message.update({ "flags.azeroth-rpg.clawPressed": true });
+    return card;
+  } finally {
+    CLAW_ROLLS_IN_FLIGHT.delete(message.id);
+  }
 }
 
 /** The extra attacks pressed and not yet rolled on this client, so a second press waits (D-772). */
@@ -3631,6 +3769,14 @@ async function applyDamageToTargets(button, message, recordedAttack = false, tra
       await necroSpells.necroSpellAfterApply({ message, target: actor, amount: damageOutcome.amount });
     } catch (err) {
       globalThis.console?.warn("azeroth-rpg | a Necromancer spell at the Apply", err);
+    }
+    // 07 §17's Sovereign spells at the Apply (D-1240): a hit's Bleeding, the prey's Tribute, Aortic
+    // Unraveling's kill and Embrace of the Vampyr's feeding. Guarded.
+    if (sovereignCardFlags(message.flags?.["azeroth-rpg"])) try {
+      const sovSpells = await import("../effects/sovereign-spells.mjs");
+      await sovSpells.sovereignSpellAfterApply({ message, target: actor, amount: damageOutcome.amount, index: Number(index) });
+    } catch (err) {
+      globalThis.console?.warn("azeroth-rpg | a Sovereign spell at the Apply", err);
     }
     await requestWalkingBombHit(message, Number(index));
     await requestLightningShieldHit(message, Number(index));

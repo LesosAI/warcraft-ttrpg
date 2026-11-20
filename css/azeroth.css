@@ -96,6 +96,8 @@
     --azeroth-bone-edge: #e6dbc0;
     --azeroth-flesh-edge: #e8604f;
     --azeroth-health-fill: #6fd36a;
+    --azeroth-vitae: #d13a5c;
+    --azeroth-tribute: #e3b34a;
   }
   .azeroth, .azeroth-card {
     --content-link-text-color: var(--azeroth-ink);
@@ -1126,6 +1128,13 @@
     font-size: 13px;
     color: var(--azeroth-page-ink-soft);
     overflow-wrap: anywhere;
+  }
+  .azeroth.sheet.actor .azeroth-carried-item .azeroth-weapon-claw-uses, .azeroth.sheet.actor .azeroth-weapon .azeroth-weapon-claw-uses {
+    order: 12;
+    flex: 1 1 100%;
+    padding-left: 28px;
+    font-size: 13px;
+    color: var(--azeroth-page-ink-soft);
   }
   .azeroth.sheet.actor .azeroth-carried-item .azeroth-weapon-ammo, .azeroth.sheet.actor .azeroth-weapon .azeroth-weapon-ammo {
     order: 11;
@@ -6036,6 +6045,49 @@
   }
   .azeroth.sheet.actor.npc .azeroth-horde-banner-grafts {
     font-style: italic;
+  }
+  .azeroth.sheet.actor.character .azeroth-sovereign {
+    display: grid;
+    gap: 6px;
+    margin: 6px 0 10px;
+    padding: 8px;
+    border: 1px solid var(--azeroth-page-edge);
+    border-radius: 3px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prey-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: 13px;
+    color: var(--azeroth-page-ink);
+  }
+  .azeroth.sheet.actor.character .azeroth-prey-label {
+    font-weight: 700;
+  }
+  .azeroth.sheet.actor.character .azeroth-prey-none {
+    color: var(--azeroth-page-ink-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-pool.is-vitae .azeroth-segment.is-filled {
+    background: var(--azeroth-vitae);
+  }
+  .azeroth.sheet.actor.character .azeroth-pool.is-tribute .azeroth-segment.is-filled {
+    background: var(--azeroth-tribute);
+  }
+  .azeroth.sheet.actor.character .azeroth-pool.is-vitae .azeroth-pool-track {
+    gap: 1px;
+  }
+  .azeroth.sheet.actor.character .azeroth-spell-vitae-warn {
+    grid-column: 1/-1;
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--azeroth-page-ink);
+  }
+  .azeroth.sheet.actor.character .azeroth-spell-vitae-warn.is-toZero, .azeroth.sheet.actor.character .azeroth-spell-vitae-warn.is-refused {
+    color: var(--azeroth-page-alarm);
+    font-weight: 700;
   }
   .azeroth-roll-dialog .window-content {
     background: var(--azeroth-parchment);

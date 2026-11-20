@@ -1,6 +1,8 @@
 /** Tar-beast reactions. Pure decisions over GM-read attack and ability records.
  * Document identity, ownership, scene membership and atomic writes belong to
  * the runtime adapter. A client-supplied snapshot is never sufficient. */
+// One unarmed predicate (C15; D-1162): Sticky Tar spares the claws as it spares a fist.
+import { isUnarmedStrike } from "./unarmed.mjs";
 export const TAR_CLAIMS = "tarReactionClaims";
 export const TAR_REACTIONS = Object.freeze({
   sticky: Object.freeze({ name: "Sticky Tar", resilience: "body" }),
@@ -23,7 +25,7 @@ export function tarHit({ messageId, flags, index, success } = {}) {
     || attacker.tokenId === defender.tokenId) return null;
   // Natural rows and unarmed strikes do not become held weapons because a
   // display label resembles one. Unknown forms may still name a real item.
-  const weaponId = !flags.strike.row && flags.strike.form !== "unarmed"
+  const weaponId = !flags.strike.row && !isUnarmedStrike(flags.strike)
     && named(flags.strike.weapon?.id) ? flags.strike.weapon.id : null;
   return { messageId, index, attacker, defender, weaponId };
 }

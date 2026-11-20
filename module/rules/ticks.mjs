@@ -254,6 +254,9 @@ export const UNTICKED = Object.freeze([
   { key: "replaces", re: /\bat the start of each of its turns for the duration rather than \d+\b/, text: "a tick that replaces another spell's is not built" },
   { key: "turnTest", re: /\bmust pass a \w+ Resilience Test against your Spell DC at the start of each of its turns\b/, text: "a Test made at the start of each turn is not built" },
   { key: "revive", re: /\breturns to 1 Health at the start of its next turn\b/, text: "a return from 0 Health is not built" },
+  // 07 §17's Hemoplague (D-1377): *At the start of each of its turns, each other enemy of yours within 10 feet of it that is
+  // not Bleeding becomes Bleeding 1* - a condition laid on OTHER creatures, by the Sovereign door at the carrier's turn.
+  { key: "spread", re: /\beach other enemy of yours within \d+ feet of it that is not \*?\*?Bleeding\*?\*? becomes\b/, text: "a Bleeding spread to the caster's enemies near the carrier is the Sovereign door's (effects/sovereign-spells.mjs#hemoplagueSpread), never a tick" },
   // 07 §17's Unholy Frenzy (run F2): Health LOST is no damage and no heal, so no tick carries it.
   { key: "healthLost", re: /\bloses \d+ Health at the start of each of its turns\b/, text: "Health lost at the start of each turn is not a tick, which carries damage or Health restored" }
 ]);

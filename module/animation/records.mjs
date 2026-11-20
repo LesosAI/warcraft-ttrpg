@@ -52,6 +52,10 @@ import { FLOOR_FLAG } from "../rules/blow-doors.mjs";
 import { CUTTING_GEAR } from "../rules/escapes.mjs";
 import { librariesOn, soundsOn } from "./availability.mjs";
 import { reflectionPaths } from "../rules/reflection.mjs";
+// The Sovereign's claws coming out (02 §7; D-1168).
+import { CLAWS_EQUIP_CUE, clawsEquipCue } from "../rules/claws.mjs";
+// The Sovereign's prey mark, standing on the prey (the San'layn and Sovereign plan's C14).
+import { PREY_FLAG, preyMarkState, sovereignCardCue } from "../rules/sovereign-animations.mjs";
 
 /**
  * The spells whose row loops on a recorded Resilience Test, which is the only
@@ -413,7 +417,40 @@ export function cardRecord(message) {
       source
     });
   }
+  // **A SOVEREIGN DOOR'S OWN CARD** (02 §7 and 04; the plan's C14): Too Beautiful to Die's hold, Royal Due,
+  // Tasting Bite and Latch On landed, the latch's drain, Blood Prison's tear and a blood curse thrown off -
+  // each speaking from the token it names, its creature resolved off the uuid the card carries
+  // (`rules/sovereign-animations.mjs#sovereignCardCue`). Any other `sovereign` card plays nothing.
+  const sov = sovereignCardCue(flags);
+  if (sov) {
+    const source = speakerToken(message);
+    // Hemoplague's spread names every creature it reached (`targetUuids`, D-1392); every other card one.
+    const targets = sov.self ? [source] : (Array.isArray(sov.targetUuids) ? sov.targetUuids : [sov.targetUuid]).map(tokenOfUuid);
+    const named = targets.filter(Boolean);
+    return featureRecord({
+      trigger: sov.trigger, contentVisible,
+      sceneId: source?.sceneId ?? named[0]?.sceneId ?? null,
+      identifier: sov.key,
+      source,
+      targets: named
+    });
+  }
   return null;
+}
+
+/**
+ * The token one uuid names, as a record keeps one: a token's own, or an actor's (a synthetic actor's
+ * token, else its token on the viewed scene). Null where it names neither.
+ */
+function tokenOfUuid(uuid) {
+  if (!uuid) return null;
+  let doc = null;
+  try { doc = globalThis.fromUuidSync?.(uuid) ?? null; } catch { doc = null; }
+  if (doc?.documentName === "Token") return tokenRef({ sceneId: doc.parent?.id ?? null, tokenId: doc.id });
+  if (doc?.documentName !== "Actor") return null;
+  if (doc.isToken && doc.token) return tokenRef({ sceneId: doc.token.parent?.id ?? null, tokenId: doc.token.id });
+  const tokenId = ownTokenIdsOf(doc)[0] ?? null;
+  return tokenId ? tokenRef({ sceneId: viewed()?.id ?? null, tokenId }) : null;
 }
 
 /** The token a card's speaker names, as a record keeps one, or null. */
@@ -742,6 +779,23 @@ function featureEffectRecords(effect, flags, only = null, { born = "create" } = 
  * @param {object} options  an `updateActor` hook's operation options
  * @returns {object[]}
  */
+/**
+ * **THE CLAWS COMING OUT** (02 §7's Blood-Forged Claws; the plan's C14; D-1168): read off the
+ * claws' own equip update, where the sheet's Equip toggle named the token
+ * (`rules/claws.mjs#CLAWS_EQUIP_OPTION`) - one `use` record under `claws-equip` at the
+ * Sovereign. Any other item update, and the claws taken off, imply nothing.
+ *
+ * @param {Item} item
+ * @param {object} changed
+ * @param {object} options  an `updateItem` hook's operation options
+ * @returns {object[]}
+ */
+export function clawsEquipRecords(item, changed, options = {}) {
+  const at = clawsEquipCue(item, changed, options);
+  if (!at) return [];
+  return [featureRecord({ trigger: "use", sceneId: at.sceneId, identifier: CLAWS_EQUIP_CUE, source: { sceneId: at.sceneId, tokenId: at.tokenId } })];
+}
+
 export function runeSpendRecords(options = {}) {
   const spend = cleanRuneSpend(options?.[RUNE_SPEND_OPTION] ?? null);
   if (!spend) return [];
@@ -1071,6 +1125,9 @@ export function stateSnapshot({ resisted = RESISTED_IDENTIFIERS } = {}) {
     // this client owns the user (the lead: *"Yes"*).
     const watch = markRow("watch", actor.getFlag?.("azeroth-rpg", WATCH_FLAG) ?? null, { cast: actor.id, owned: actor.isOwner === true, actorId: actor.id });
     if (watch) marks.push(watch);
+    // The Sovereign's prey (02 §7's Hunt Mortal), on the creature marked, seen by every reader.
+    const prey = preyRowOf(actor);
+    if (prey) marks.push(prey);
     for (const effect of actor.effects ?? []) {
       if (effect.active === false) continue;
       const challenge = markRow("challenge", flagsOf(effect)[CHALLENGE_FLAG] ?? null, { cast: effect.id, owned: true, actorId: actor.id });
@@ -1163,6 +1220,30 @@ export function stateSnapshot({ resisted = RESISTED_IDENTIFIERS } = {}) {
   };
 }
 
+/** The cast a Sovereign's prey loop is keyed on: one a Sovereign, so a new mark replaces the old. */
+const preyCastOf = actor => `prey${actor.id}`;
+
+/**
+ * **THE SOVEREIGN'S PREY, AS A MARK** (02 §7's Hunt Mortal; the plan's C14): the mark while it stands
+ * (`rules/sovereign-animations.mjs#preyMarkState`, CORE's own `preyActive`), on the token the flag
+ * recorded or, for a mark made on an actor alone, that actor's token on the viewed scene. Null where no
+ * mark stands or no token of the prey is here.
+ */
+function preyRowOf(actor) {
+  const raw = actor.getFlag?.("azeroth-rpg", PREY_FLAG) ?? null;
+  if (!raw) return null;
+  let prey = null;
+  try { prey = globalThis.fromUuidSync?.(raw.actorUuid ?? "") ?? null; } catch { prey = null; }
+  const dead = Number(prey?.system?.health?.value) <= 0
+    || prey?.statuses?.has?.(globalThis.CONFIG?.specialStatusEffects?.DEFEATED ?? "dead") === true;
+  const liveCombats = [...(game.combats ?? [])].filter(c => c?.started).map(c => c.id);
+  const state = preyMarkState(raw, { liveCombats, now: Number(game.time?.worldTime) || 0, preyDead: dead });
+  if (!state) return null;
+  const sceneId = state.sceneId ?? viewed()?.id ?? null;
+  const tokenId = state.tokenId ?? (prey ? ownTokenIdsOf(prey)[0] ?? null : null);
+  return markRow("prey", { tokenId, sceneId, source: state.source }, { cast: preyCastOf(actor), owned: true, actorId: actor.id });
+}
+
 /**
  * One mark as the snapshot keeps it: the feature's key off the name the mark
  * records (`source`, written by `workflows.useFeature` beside the creature), the
@@ -1201,6 +1282,7 @@ export function liveFeatureCasts() {
     if (!actor || seen.has(actor.uuid)) continue;
     seen.add(actor.uuid);
     if (actor.getFlag?.("azeroth-rpg", WATCH_FLAG)) casts.add(actor.id);
+    if (actor.getFlag?.("azeroth-rpg", PREY_FLAG)) casts.add(preyCastOf(actor));
     for (const effect of actor.effects ?? []) {
       const flags = flagsOf(effect);
       if (flags[CHALLENGE_FLAG]) casts.add(effect.id);

@@ -106,9 +106,16 @@ import { reactionStateOf } from "../applications/actions.mjs";
 // An area that strikes at the start of a turn (D-756): the law, what the
 // creature is, who it is to the caster, what the caster stands on, and the
 // sweep that takes an area away when its spell has gone.
-import { checksFor, hasAreaTick, holdsPoint, shapeCentre, tickFor } from "../rules/area-ticks.mjs";
+import { checksFor, hasAreaTick, holdsPoint, shapeCentre, tickFor, tickRating } from "../rules/area-ticks.mjs";
 import { spellAreaFor } from "../rules/talent-effects.mjs";
 import { feetApart } from "../canvas/footprints.mjs";
+// The Sovereign's leash (the plan's C7), its turn-end predicate and Sovereign Will's penalty: pure.
+import { brokenLeash, leashesOn } from "../rules/leash.mjs";
+// 05's *Moving through a space* and the permissions that lift it (FIXC, O-476): pure.
+import { MOVE_THROUGH_REFUSALS, footprintsAlong, moveThroughOf, moveThroughRefusal } from "../rules/move-through.mjs";
+import { VEIL_FLAG } from "../rules/sovereign-spells.mjs";
+import { ETHEREAL_FLAG } from "../rules/spirit-realm.mjs";
+import { sovereignTurnDue, sovereignWillPenalty } from "../rules/sovereign-talents.mjs";
 import {
   actorOf, areaRecord, armAreas, casterTokenOn, growAreas, isDown, scenesOfFight, staleIn, sweepFightAreas, worldClock
 } from "../canvas/sustained-areas.mjs";
@@ -143,6 +150,9 @@ import { WRITE_PATIENCE_MS, writeQueue } from "../rules/write-queue.mjs";
 // THE CROSS-CLASS RULINGS (D-778): a Sustain's upkeep by its entry, Void Rift's pull
 // at a turn's start, and the Test 07 gives a held or Stunned creature.
 import { upkeepCost, upkeepOf } from "../rules/upkeep.mjs";
+// An upkeep short of Vitae takes Health (02 §7; the San'layn and Sovereign plan's V4). Static, never a
+// turn-start dynamic import (O-419's lesson).
+import { afterOverflowToZero, upkeepOverflowOptions } from "../effects/sovereign-core.mjs";
 import { cleanForced } from "../rules/forced-movement.mjs";
 import { forceMove, forcedWords, regionCentreOf } from "../effects/forced-movement.mjs";
 import { SHED_DC_FLAG, cleanShedDc, escapesDue, escapeAction } from "../rules/escapes.mjs";
@@ -166,7 +176,9 @@ import { collapsingNow, hordeTurnFor, hordeTurnStart, leadTaken, surgeTaken } fr
 // 07 §17's Contagion: whether a turn's end can meet a blight, asked before its door is imported.
 import { blightCanReach } from "../rules/necromancer-spells.mjs";
 import { endTurnDamageCanReach } from "../rules/end-turn-damage.mjs";
-import { compelRepairDue } from "../rules/escapes.mjs";
+import { compelRepairDue, escapeLabelKey } from "../rules/escapes.mjs";
+// The Sovereign spells' turn start, asked before its module loads (O-419; `rules/sovereign-scope.mjs`).
+import { sovereignTurnStartDue } from "../rules/sovereign-scope.mjs";
 
 /** An area's forced move at a turn's start (07's Void Rift; D-778), off the Region's own record. */
 function turnForced(region) {
@@ -1688,6 +1700,127 @@ function historyProbe(document, action) {
 }
 
 /**
+ * **THE FIRST LEASH A WILLING MOVE BREAKS**, or null (the plan's C7; `rules/leash.mjs`): every leash the mover
+ * carries, its holder - a token, or an actor's token on this scene - measured footprint to footprint
+ * (D-732) to where the move ends. Synchronous, as `preMoveToken` must be; a holder off the scene measures
+ * nothing and refuses nothing.
+ *
+ * @param {TokenDocument} document
+ * @param {object} movement  core's `preMoveToken` movement
+ * @returns {object|null}  the leash broken, with `limit` and `toFeet`
+ */
+export function leashRefusalFor(document, movement) {
+  const leashes = leashesOn([...(document?.actor?.effects ?? [])]);
+  if (!leashes.length) return null;
+  const scene = document?.parent ?? null;
+  const waypoints = movement?.passed?.waypoints ?? [];
+  const pending = movement?.pending?.waypoints ?? [];
+  const to = movement?.destination ?? pending.at(-1) ?? waypoints.at(-1) ?? null;
+  if (!scene || !to || !Number.isFinite(Number(to.x)) || !Number.isFinite(Number(to.y))) return null;
+  const measure = holder => {
+    let held = null;
+    try {
+      held = fromUuidSync(holder);
+    } catch {
+      held = null;
+    }
+    const token = held?.documentName === "Token" ? held
+      : held?.documentName === "Actor" ? ([...(scene.tokens ?? [])].find(t => t.actor === held || (t.actorLink && t.actorId === held.id)) ?? null) : null;
+    if (!token || token.parent?.id !== scene.id || token.id === document.id) return null;
+    return feetApart(token, document, { to: { x: Number(to.x), y: Number(to.y), ...(Number.isFinite(Number(to.elevation)) ? { elevation: Number(to.elevation) } : {}) } });
+  };
+  return brokenLeash(leashes, measure);
+}
+
+/**
+ * **THE MOVER'S FOOTPRINT AT EACH SQUARE IT ENTERS** (FIXC, O-476): the origin, then every passed waypoint and, where
+ * the move stops with nothing pending, every pending one - each segment walked square by square along core's own
+ * direct path (`BaseGrid#getDirectPath`, 14.367 `common/grid/square.mjs`), the footprint laid out at each anchor
+ * square. A blink adds only the footprint it lands on. Null where the scene is not a square grid or core threw.
+ *
+ * @param {TokenDocument} document
+ * @param {object} movement  core's `preMoveToken` movement
+ * @returns {{path: Array<object>, stops: boolean}|null}
+ */
+function moveThroughPath(document, movement) {
+  const scene = document?.parent ?? null;
+  const grid = scene?.grid ?? null;
+  if (!grid?.isSquare) return null;
+  const origin = movement?.origin ?? null;
+  const passed = movement?.passed?.waypoints ?? [];
+  const pending = movement?.pending?.waypoints ?? [];
+  const stops = pending.length === 0;
+  const points = [origin, ...passed];
+  if (!origin || points.length < 2) return null;
+  try {
+    const at = point => footprintOf(document, point);
+    const first = at(origin);
+    if (first?.kind !== "squares") return null;
+    const span = { rows: first.i1 - first.i0 + 1, cols: first.j1 - first.j0 + 1 };
+    const path = [{ i0: first.i0, i1: first.i1, j0: first.j0, j1: first.j1, elevation: first.elevation }];
+    let prev = first;
+    for (const w of points.slice(1)) {
+      const next = at(w);
+      if (next?.kind !== "squares") return null;
+      const steps = w.action === "blink"
+        ? [{ i: next.i0, j: next.j0 }]
+        : grid.getDirectPath([{ i: prev.i0, j: prev.j0 }, { i: next.i0, j: next.j0 }]).slice(1);
+      path.push(...footprintsAlong(steps, span, next.elevation));
+      prev = next;
+    }
+    return { path, stops };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * **THE FIRST CREATURE A WILLING MOVE MAY NOT PASS OR STOP ON**, or null (05 §Size, *Moving through a space*; 07's
+ * Veil of Mist; FIXC, O-476; `rules/move-through.mjs`). Asked only of a player's move, on the mover's own turn in a
+ * started fight, on a square grid, by a mover with a size; every other token with an actor, not hidden, not defeated
+ * and above 0 Health is in the way. Synchronous, as `preMoveToken` must be.
+ *
+ * @param {TokenDocument} document
+ * @param {object} movement  core's `preMoveToken` movement
+ * @param {{user?: User}} [o]  who made the move: the hook's own client (`game.user`); the live batch hands a player
+ *   with a movement core built, since a Quench run is a GM's
+ * @returns {{kind: string, id: string, name: string}|null}
+ */
+export function moveThroughRefusalFor(document, movement, { user = game.user } = {}) {
+  if (user?.isGM) return null;
+  if (!creatureMoved(movement)) return null;
+  const { combatant } = turnMover(document);
+  if (!combatant) return null;
+  const actor = document.actor ?? null;
+  const moverSize = actor?.system?.size ?? null;
+  if (!actor || !moverSize) return null;
+  const laid = moveThroughPath(document, movement);
+  if (!laid) return null;
+  const defeated = CONFIG.specialStatusEffects?.DEFEATED ?? "dead";
+  const others = [];
+  for (const t of document.parent?.tokens ?? []) {
+    if (t.id === document.id || t.hidden || !t.actor) continue;
+    if (t.actor.statuses?.has?.(defeated) || (Number(t.actor.system?.health?.value) || 0) <= 0) continue;
+    const fp = footprintOf(t);
+    if (fp?.kind !== "squares") continue;
+    others.push({ id: t.id, name: t.name ?? t.actor.name, size: t.actor.system?.size ?? null, i0: fp.i0, i1: fp.i1, j0: fp.j0, j1: fp.j1, elevation: fp.elevation });
+  }
+  others.sort((a, b) => a.id.localeCompare(b.id));
+  const through = moveThroughOf({
+    effects: [...(actor.effects ?? [])].map(e => ({ active: e.active, disabled: e.disabled, description: e.description ?? "", flags: e.flags })),
+    texts: [
+      // A race's trait and a class feature (02's Underfoot), and a creature's abilities (14's Unstoppable).
+      ...actor.items.filter(i => i.type === "feature").map(i => i.system?.description ?? ""),
+      ...actor.items.filter(i => i.type === "race").map(i => i.system?.trait?.description ?? ""),
+      ...(actor.system?.creatureAbilities ?? []).map(a => `${a?.name ?? ""}. ${a?.description ?? ""}`)
+    ],
+    veilFlag: VEIL_FLAG,
+    etherealFlag: ETHEREAL_FLAG
+  });
+  return moveThroughRefusal({ moverSize, through, path: laid.path, others, stops: laid.stops, height: Number(document.parent?.grid?.distance) || 5 });
+}
+
+/**
  * The `preMoveToken` hook (D-718): a drag is REFUSED where the turn's
  * Half-Actions do not pay for it.
  *
@@ -1716,6 +1849,26 @@ function historyProbe(document, action) {
  */
 export function onPreMoveToken(document, movement) {
   if (permittedDespairWalk(document, movement)) return true;
+  // **THE LEASH** (04's Bound to the Court, 02 §7's *Latched*, 07's Captivating Gaze; the plan's C7): *it cannot
+  // willingly move to a space more than N feet from you*. A willing move alone - a displacement is no willing
+  // move - measured footprint to footprint at the destination, and refused in words; asked before the
+  // movement limit, which a table may switch off while a leash still holds.
+  if (creatureMoved(movement)) {
+    const leash = leashRefusalFor(document, movement);
+    if (leash) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Sovereign.Leash.Refused", { name: document.actor?.name ?? document.name, source: leash.source, feet: leash.limit }));
+      return false;
+    }
+  }
+  // **05's MOVING THROUGH A SPACE** (FIXC, O-476): a player's willing move on its own turn may not pass through a
+  // creature fewer than two sizes apart, unless a permission it holds covers it (07's Veil of Mist, Windwalk, 04's
+  // Ethereal Form, 02's Underfoot, 14's Unstoppable), and may never stop in another creature's space. Asked before
+  // the movement limit, which a table may switch off while 05 still holds.
+  const blocked = moveThroughRefusalFor(document, movement);
+  if (blocked) {
+    ui.notifications?.warn(game.i18n.format(MOVE_THROUGH_REFUSALS[blocked.kind], { name: document.actor?.name ?? document.name, other: blocked.name }));
+    return false;
+  }
   if (!movementLimited()) return true;
   // **A DISPLACEMENT SPENDS NO FEET, SO THE LIMIT NEVER REFUSES ONE** (D-769):
   // the turn's history is in the metered sum too, so a creature that had
@@ -2151,6 +2304,16 @@ export class AzerothCombat extends Combat {
     } catch (err) {
       console.warn("azeroth-rpg | Necromancer talents' turn start", err);
     }
+    // **04's LATCH ON** (the Sovereign: *At the start of each of your turns while you are latched on, your prey
+    // takes Shadow damage equal to your tier, and you regain that much Health*): only a Sovereign who holds it.
+    if (combatant.actor?.type === "character" && combatant.actor.talentRanks?.("Latch On") > 0) {
+      try {
+        const { sovereignTurnStart } = await import("../effects/sovereign-features.mjs");
+        await sovereignTurnStart(this, combatant);
+      } catch (err) {
+        console.warn("azeroth-rpg | Latch On's turn start", err);
+      }
+    }
     // **04's PLAGUE BLADDER** (*Each enemy that starts its turn within 5 feet of it makes a Body
     // Resilience Test against your Spell DC*; the lead's Q7 of the 4b review: *"auto"*): each grafted
     // enemy within 5 feet asks the creature starting its turn (`effects/graft-riders.mjs`).
@@ -2255,16 +2418,30 @@ export class AzerothCombat extends Combat {
     }
     for (const { id, escape } of escapesDue(plain, on)) {
       const resilience = game.i18n.localize(AZEROTH.resiliences[escape.resilience] ?? escape.resilience);
-      const condition = game.i18n.localize(AZEROTH.conditions[escape.condition] ?? escape.condition);
+      const condition = game.i18n.localize(escapeLabelKey(escape) ?? AZEROTH.conditions[escape.condition] ?? escape.condition);
+      // **04's SOVEREIGN WILL** (*When a creature repeats a Resilience Test to end one of your blood curses, it
+      // takes a −1 penalty per rank on that Test*): on an escape riding a blood curse's effect, the curser's
+      // rank laid on the DC the prompt rolls at - the same arithmetic as the penalty, said on the card.
+      const curseTag = plain.find(e => e.id === id)?.flags?.["azeroth-rpg"]?.bloodCurse ?? null;
+      let willRank = 0;
+      if (curseTag) {
+        try {
+          willRank = fromUuidSync(curseTag.source ?? escape.by ?? "")?.talentRanks?.("Sovereign Will") ?? 0;
+        } catch {
+          willRank = 0;
+        }
+      }
+      const will = sovereignWillPenalty(willRank);
+      const dcNow = Number.isFinite(escape.dc) ? escape.dc + will : escape.dc;
       await this._prompt(actor, {
-        purpose: "escape", ownerSees: true, resilience: escape.resilience, effectId: id, escape, dc: escape.dc,
+        purpose: "escape", ownerSees: true, resilience: escape.resilience, effectId: id, escape, dc: dcNow,
         title: game.i18n.format("AZEROTH.Escape.Title", { condition }),
         text: game.i18n.format(on === "action"
           ? (escapeAction(actor.takenTalents?.() ?? [], escape) === "half" ? "AZEROTH.Escape.PromptHalf" : "AZEROTH.Escape.PromptAction")
           : "AZEROTH.Escape.PromptTurnEnd", {
-          name: actor.name, condition, source: escape.source, resilience, dc: escape.dc ?? "—", banes: escape.banes
-        }),
-        testLabel: game.i18n.format("AZEROTH.Card.ResistTest", { resilience, dc: escape.dc ?? "—" })
+          name: actor.name, condition, source: escape.source, resilience, dc: dcNow ?? "—", banes: escape.banes
+        }) + (will ? ` ${game.i18n.format("AZEROTH.Sovereign.WillPenalty", { n: will, talent: "Sovereign Will" })}` : ""),
+        testLabel: game.i18n.format("AZEROTH.Card.ResistTest", { resilience, dc: dcNow ?? "—" })
       });
     }
   }
@@ -2470,8 +2647,13 @@ export class AzerothCombat extends Combat {
         upkeepFor(holdTalents, { name: entry?.name ?? "", held: activeHeld, weave })
       );
       const r = upkeep(sustaining, actor.poolSnapshot(), { costOf, health: actor.system?.health?.value ?? null });
-      if (r.updates.length) await actor.updatePool(r.updates, r.health !== null ? { "system.health.value": r.health } : {});
-      else if (r.health !== null) await actor.update({ "system.health.value": r.health });
+      // **AN UPKEEP SHORT OF VITAE TAKES HEALTH** (02 §7; the San'layn and Sovereign plan's V4): the drain
+      // pulse rides the same write (`sovereign-core.mjs#upkeepOverflowOptions`), and 0 Health so paid
+      // leaves the Sovereign Prone and Dying with no Critical Injury.
+      const vitaeOptions = upkeepOverflowOptions(actor, r);
+      if (r.updates.length) await actor.updatePool(r.updates, r.health !== null ? { "system.health.value": r.health } : {}, vitaeOptions);
+      else if (r.health !== null) await actor.update({ "system.health.value": r.health }, vitaeOptions);
+      if (vitaeOptions.azerothVitaeOverflow && r.health === 0) await afterOverflowToZero(actor);
       if (r.ended.length) {
         await actor.setFlag("azeroth-rpg", "sustaining", r.kept);
         for (const e of r.ended) {
@@ -2668,6 +2850,12 @@ export class AzerothCombat extends Combat {
         if (payload.damage || (payload.heal !== null && payload.heal !== undefined)) {
           for (const line of await strikeFromArea({ actor, caster, spell: source.spell ?? {}, damage: payload.damage, heal: payload.heal, damageOutcome, healingOutcome })) lines.push(line);
           await markPotent(strikeLanded({ damageOutcome, healingOutcome }));
+          // **07 §17's SHROUD OF SORROW'S DRAIN** (*You regain 1 Health for each enemy that takes damage from this
+          // spell*; D-1367): only where the tick names one, so no other area loads the door.
+          if (Number(source.tick?.damage?.drain) > 0 && caster && damageOutcome.dealtDamage === true && relation === "enemy") {
+            lines.push(...await import("../effects/sovereign-spells.mjs").then(m => m.shroudDrain({ caster, victim: actor, per: source.tick.damage.drain, spell: source.spell ?? {} }))
+              .catch(err => { console.warn("azeroth-rpg | Shroud of Sorrow's drain", err); return []; }));
+          }
         }
       }
       // **TEMPORARY HEALTH AT THE START OF A TURN** (04's Circle of the Damned: *Each ally that starts
@@ -2745,6 +2933,12 @@ export class AzerothCombat extends Combat {
     lines.push(...await advanceMindFlay(actor, this));
     // 07 §17's Frenzy of the Dead's Health and Drain Life's drain at the caster's turn start (run 4c-S).
     lines.push(...await import("../effects/necromancer-spells.mjs").then(m => m.advanceNecroSpells(actor, this)).catch(err => { console.warn("azeroth-rpg | a Necromancer spell's turn", err); return []; }));
+    // 07 §17's Bleed for Me's Health back to its caster, and Overawe's Bane on the cursed creature's first
+    // Attack Test this turn (D-1240).
+    // Asked first, off what the creatures carry, so a fight with no Sovereign loads nothing (O-419).
+    if (sovereignTurnStartDue({ uuid: actor.uuid, own: actor.effects, others: [...(this.combatants ?? [])].map(c => c.actor?.effects ?? []) })) {
+      lines.push(...await import("../effects/sovereign-spells.mjs").then(m => m.advanceSovereignSpells(actor, this)).catch(err => { console.warn("azeroth-rpg | a Sovereign spell's turn", err); return []; }));
+    }
     // 14's Grab (D-809): *takes 5 damage at the start of each of Stitches's turns* -
     // the HOLDER's turn, so it is this creature's grips on the others that strike.
     lines.push(...((await this._bossGrips?.(actor)) ?? []));
@@ -3102,6 +3296,10 @@ export class AzerothCombat extends Combat {
       // Rimebind, Thornguard ...; D-778): Poisoned's shape, a card and no combatant
       // write, so `previous` stands.
       await this._escapePrompts(combatant, "turnEnd").catch(err => console.warn("azeroth-rpg | an escape prompt", err));
+      // **THE SOVEREIGN'S TURN-END DOORS** (02 §7's Blood Prison, 04's Bound to the Court, *Latched*; the plan's
+      // C8, C10): only where the creature carries a curse, a leash or a latch - a pure predicate guards the
+      // `import()` (O-419's lesson).
+      if (sovereignTurnDue(combatant.actor?.effects ?? [])) await import("../effects/sovereign-features.mjs").then(m => m.sovereignTurnEnd(this, combatant)).catch(err => console.warn("azeroth-rpg | a Sovereign's turn end", err));
       // 07 §17's Contagion: a creature ending its turn in the blight makes its Test (run 4c-S).
       // **ONLY WHERE A BLIGHT STANDS** (fix run MC-R): the `import()` alone cost 1.2 s a turn on the
       // test machine, ahead of Mind Control's repeat below, and pushed its dialog past the spec's wait.
@@ -3286,13 +3484,18 @@ function tickSpellOf(item, name = "") {
  */
 function selfTicksOf(actor) {
   const out = [];
+  // **A NUMBER THAT IS THE CARRIER'S, READ NOW** (07 §17's Shroud of Sorrow, *half your Charisma modifier*; D-1367):
+  // the live modifier, so a Charisma that moved since the cast deals what it is now.
+  const live = tick => (tick?.damage?.ratingFrom === "halfCha"
+    ? { ...tick, damage: { ...tick.damage, rating: tickRating("halfCha", { cha: actor.system?.abilities?.cha?.mod ?? 0 }) } }
+    : tick);
   const itemOf = (id, uuid) => actor.items?.get?.(id) ?? actor.items?.find?.(i => i.type === "spell" && i.uuid === uuid) ?? null;
   for (const entry of actor.getFlag?.("azeroth-rpg", "sustaining") ?? []) {
     if (sustainEntryTransferPending(entry, actor.uuid)) continue;
     const item = entry?.areaTick && entry?.tickSpell ? null : itemOf(entry?.spellId, entry?.uuid);
     const tick = entry?.areaTick ?? item?.system?.areaTick;
     if (!hasAreaTick(tick) || tick.centre !== "self") continue;
-    out.push({ tick, cast: entry.cast ?? null, signatureDamageCast:entry.signatureDamageCast??null, spell: entry.tickSpell ?? tickSpellOf(item, entry.name) });
+    out.push({ tick: live(tick), cast: entry.cast ?? null, signatureDamageCast:entry.signatureDamageCast??null, spell: entry.tickSpell ?? tickSpellOf(item, entry.name) });
   }
   for (const effect of actor.effects ?? []) {
     if (effect.active === false) continue;
@@ -3304,7 +3507,7 @@ function selfTicksOf(actor) {
     const tick = f.areaTick ?? item?.system?.areaTick;
     // A Sustain answers to its entry above; only a TIMED tick answers to its effect.
     if (!hasAreaTick(tick) || tick.centre !== "self" || !(Number(tick.lasts?.rounds) > 0)) continue;
-    out.push({ tick, cast: f.cast ?? null, signatureDamageCast:f.signatureDamageCast??null, spell: f.tickSpell ?? tickSpellOf(item, f.spellName) });
+    out.push({ tick: live(tick), cast: f.cast ?? null, signatureDamageCast:f.signatureDamageCast??null, spell: f.tickSpell ?? tickSpellOf(item, f.spellName) });
   }
   return out;
 }

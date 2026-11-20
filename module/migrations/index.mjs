@@ -101,6 +101,9 @@ import * as v0152 from "./0.15.2-legendary-runs.mjs";
 import * as v0153 from "./0.15.3-death-knight.mjs";
 import * as v01531 from "./0.15.3.1-close-repairs.mjs";
 import * as v0154 from "./0.15.4-necromancer.mjs";
+import * as v01541 from "./0.15.4.1-sanlayn-journals.mjs";
+import * as v01542 from "./0.15.4.2-deft.mjs";
+import * as v01546 from "./0.15.4.6-sovereign-spells.mjs";
 import { forgetPacks } from "./walk.mjs";
 
 // Ordered oldest to newest. Add new entries at the end.
@@ -274,7 +277,17 @@ const CHAIN = [
   { version: "0.15.3.1", module: v01531 },
   // 0.15.4: the Necromancer release - a held Graveblight prints Mana and carries its Sustain
   // sentence, and the Restricted lines that gained the Necromancer, each against its pack copy.
-  { version: "0.15.4", module: v0154 }
+  { version: "0.15.4", module: v0154 },
+  // 0.15.4.1: a point step after the released 0.15.4 - every rules chapter the world already
+  // imported brought up to the San'layn's book, whose 02 §5 and §7 pages carry new ids (F7, D-1154).
+  { version: "0.15.4.1", module: v01541 },
+  // 0.15.4.2: 08 §5's Deft on every weapon a world already holds whose pack copy gained it,
+  // against the pack copy, at the pack's own place in the list (the plan's DF4, D-1169).
+  { version: "0.15.4.2", module: v01542 },
+  // 0.15.4.6: the Sovereign's 07 on the spells a world holds - Vitae where the pack prints it, the
+  // blood-curse tag, and the Sovereign (with the Necromancer 0.15.4 could not add) on the widened
+  // Restricted lines, each against its pack copy (D-1242). Numbered past the build's other point steps.
+  { version: "0.15.4.6", module: v01546 }
 ];
 
 /**

@@ -26,27 +26,53 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+// Whether a people may be worn as a guise at all (02 §5's San'layn may not; D-1153).
+import { peopleWornAsGuise } from "./peoples.mjs";
 
-/** The guise races, by identifier: every value of `AZEROTH.guiseRaceFor`. */
+/**
+ * **TWO FACTS, TWO MAPS** (the San'layn plan's F4; D-1152). `AZEROTH.classRaceOnly` is *a class
+ * only one race may take* (the Chromatic Champion and the Outcast; the Sovereign and the San'layn)
+ * and `AZEROTH.guiseRaces` is *a race that wears another people's guise* (the Outcast alone). The
+ * one map `guiseRaceFor` held both, so a race-exclusive class that wears no guise could not exist.
+ */
+const classRaceOnly = () => AZEROTH.classRaceOnly ?? AZEROTH.guiseRaceFor ?? {};
+
+/** The guise races, by identifier: `AZEROTH.guiseRaces`. */
 export function guiseRaces() {
-  return [...new Set(Object.values(AZEROTH.guiseRaceFor ?? {}))].sort();
+  return [...new Set(AZEROTH.guiseRaces ?? Object.values(AZEROTH.guiseRaceFor ?? {}))].sort();
 }
 
-/** The race a class always is, by identifier, or null for a class that picks its people. */
-export function guiseRaceOf(cls) {
+/** The one race a class is open to, by identifier, or null for a class any race on its list may take. */
+export function classRaceOf(cls) {
   const id = String(cls?.identifier ?? "").toLowerCase();
-  return (AZEROTH.guiseRaceFor ?? {})[id] ?? null;
+  return classRaceOnly()[id] ?? null;
+}
+
+/** The race a class always is AND that wears a guise (the Champion's Outcast), or null. */
+export function guiseRaceOf(cls) {
+  const race = classRaceOf(cls);
+  return race && guiseRaces().includes(race) ? race : null;
 }
 
 /** The class whose people a guise race is, by identifier, or null. */
 export function guiseClassOf(race) {
   const id = String(race?.identifier ?? "").toLowerCase();
-  return Object.entries(AZEROTH.guiseRaceFor ?? {}).find(([, r]) => r === id)?.[0] ?? null;
+  if (!guiseRaces().includes(id)) return null;
+  return Object.entries(classRaceOnly()).find(([, r]) => r === id)?.[0] ?? null;
 }
 
 /** Whether a race is one that wears a guise (the Chromatic Outcast). */
 export function isGuiseRace(race) {
-  return guiseClassOf(race) !== null;
+  const id = String(race?.identifier ?? "").toLowerCase();
+  return Boolean(id) && guiseRaces().includes(id);
+}
+
+/**
+ * Whether a people may be worn as a guise: not a guise race itself, and not a people 02 §5 keeps
+ * out of it (the San'layn: the lead's A.9 Q6, *No*; D-1153).
+ */
+export function wornAsGuise(race) {
+  return Boolean(race) && !isGuiseRace(race) && peopleWornAsGuise(race.identifier ?? race.name ?? null);
 }
 
 /** Whether a proposal walks the Mortal guise step in place of the race step. */
@@ -56,7 +82,7 @@ export function guiseRequired({ race = null, cls = null } = {}) {
 
 /** The peoples a guise may be: every race that is not itself a guise race, in the order given. */
 export function guiseChoices(races = []) {
-  return (races ?? []).filter(r => r && !isGuiseRace(r));
+  return (races ?? []).filter(r => wornAsGuise(r));
 }
 
 /**
@@ -69,7 +95,8 @@ export function guiseChoices(races = []) {
  * @param {{identifier?: string, name?: string}|null} cls
  */
 export function raceOpensClass(race, cls) {
-  const wanted = guiseRaceOf(cls);
+  // A class one race alone may take (D-1152): the Champion's Outcast, the Sovereign's San'layn.
+  const wanted = classRaceOf(cls);
   if (wanted) return String(race?.identifier ?? "").toLowerCase() === wanted;
   return Boolean(race?.classes?.includes(cls?.name));
 }
@@ -130,6 +157,17 @@ export function settleGuise(state = {}, { races = [], classes = [], changed = nu
     }
     return patch;
   }
+  // **A CLASS ONE RACE ALONE MAY TAKE, WITH NO GUISE** (02 §3's *Only a San'layn may take the
+  // Sovereign*; D-1152): picking the class picks its people, as picking the Champion picks the
+  // Outcast. A race picked afterwards that does not open it stays where the player put it, and
+  // `validate` refuses the pair in words (`classNotOpen`), as it does for every other race.
+  const only = classRaceOf(cls);
+  if (only && changed !== "race") {
+    const people = races.find(r => r.identifier === only) ?? null;
+    if (people && race?.uuid !== people.uuid) patch.race = people.uuid;
+    if (state.guise) patch.guise = null;
+    return patch;
+  }
   if (race && isGuiseRace(race)) {
     if (!cls || guiseRaceOpens(race, cls) || changed !== "cls") return patch;
     patch.race = state.guise ?? null;
@@ -148,7 +186,7 @@ export function settleGuise(state = {}, { races = [], classes = [], changed = nu
  * @returns {{uuid: string, identifier: string, name: string, img: string, size: string, speed: number|null, languages: string[]}|null}
  */
 export function guiseSnapshot(race) {
-  if (!race || isGuiseRace(race)) return null;
+  if (!race || !wornAsGuise(race)) return null;
   const speed = Number(race.speed);
   return {
     uuid: String(race.uuid ?? ""),

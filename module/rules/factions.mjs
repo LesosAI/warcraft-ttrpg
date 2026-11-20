@@ -39,10 +39,10 @@ export const PEOPLE_FACTIONS = Object.freeze({
   forsaken: "Horde"
 });
 
-/** A people's name as the table keys it: "Night Elf" -> "night-elf". */
-function peopleKey(name) {
-  return String(name ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-}
+// A people's name as the table keys it: "Night Elf" -> "night-elf", "San'layn" -> "sanlayn"
+// (`peoples.mjs#peopleKey`, the parser's `slugify`; D-1140). The San'layn belong to no faction
+// (02 §1), so the table has no row for them.
+import { peopleKey } from "./peoples.mjs";
 
 /**
  * The factions a people belongs to: one, or none.

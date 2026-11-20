@@ -81,6 +81,15 @@
     </div>
     {{/if}}
 
+    {{#if clawNext}}
+    {{!-- 04's Ravenous (the lead, R44 and R45; D-1166): the next claw roll of this one
+          Off-Hand Attack, at no further cost, at any target in reach, on its own card.
+          The press judges the count, the turn and the claws again. --}}
+    <div class="azeroth-card-actions">
+      <button type="button" data-action="clawRollFromCard" data-item-id="{{clawNext.id}}" data-claw-roll="{{clawNext.n}}">{{clawNext.label}}</button>
+    </div>
+    {{/if}}
+
     {{#if extraStrikes.length}}
     {{!-- 04's Flurry and Wide Swing (D-772): one extra attack off this blow,
           the round's record its clock, judged again at the press. The label

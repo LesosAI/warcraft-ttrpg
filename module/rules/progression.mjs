@@ -1,4 +1,6 @@
 import { AZEROTH } from "../config.mjs";
+// The Sovereign's Vitae is sized off the same chart, times 1.5 (the San'layn and Sovereign plan's V2).
+import { chartPool, poolScale, scaledPoolMax } from "./vitae.mjs";
 
 /**
  * Progression: levels, tiers, Proficiency, Health and the class pools.
@@ -232,8 +234,14 @@ export function poolsFor(classItems = [], level = 1) {
     // 02 §6: "Add your casting ability modifier to your Mana." The class item
     // carries the modifier the actor read off its casting ability (D-636);
     // Focus and Energy are flat and take none. Never below zero.
-    const mod = pool.name === "mana" ? (Math.trunc(Number(item?.castingMod)) || 0) : 0;
-    const max = Math.max(0, base + mod);
+    // **AND TO VITAE** (02 §7: *Your Vitae is the pool on the casting chart in section 6 times
+    // 1.5, plus your Constitution modifier*; the San'layn and Sovereign plan's V2): the chart
+    // times the pool's scale (`vitae.mjs#poolScale`), then the casting modifier - the class's
+    // Constitution. A printed maximum is taken as it stands.
+    const mod = chartPool(pool.name) ? (Math.trunc(Number(item?.castingMod)) || 0) : 0;
+    const max = chartPool(pool.name) && !Number.isFinite(pool.max)
+      ? scaledPoolMax({ chart: base, scale: poolScale(pool), mod })
+      : Math.max(0, base + mod);
     powers.push({
       name: pool.name,
       max,
@@ -261,7 +269,8 @@ export function poolsFor(classItems = [], level = 1) {
  * seeing rather than a zero worth drawing.
  */
 export function powerMax(name, level = 1, caster = "full") {
-  if (name !== "mana") return POWER_FLAT[name] ?? null;
+  // Vitae reads the same band (02 §7); `poolsFor` scales it.
+  if (!chartPool(name)) return POWER_FLAT[name] ?? null;
   if (caster === "none") return null;
   const l = clampLevel(level);
   const band = MANA_BY_BAND.find(b => l <= b.maxLevel) ?? MANA_BY_BAND.at(-1);
@@ -325,7 +334,9 @@ export const EXTRA_FEATURE_LEVELS = Object.freeze({
   // Breath (02 §7; 02 §6: *the Chromatic Champion one more at level 3*).
   "chromatic-champion": Object.freeze([3]),
   // Death Grip at 3 and Deathcharger at 15 (the drafts' roster, D-942).
-  "death-knight": Object.freeze([3, 15])
+  "death-knight": Object.freeze([3, 15]),
+  // Prim and Proper at 3 (R30: *"Move to level 3"*; the San'layn and Sovereign plan's B.8).
+  sovereign: Object.freeze([3])
 });
 
 /** The levels one class grants a feature at: the ladder plus its own extras. */

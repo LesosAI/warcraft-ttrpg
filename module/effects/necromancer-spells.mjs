@@ -43,6 +43,7 @@ import { ENDS_ON_DAMAGE_FLAG } from "../rules/signatures.mjs";
 import { AZEROTH } from "../config.mjs";
 import { corpseRecord } from "../rules/animation-records.mjs";
 import { BARBED_BONE_KEY } from "../rules/necromancer-animations.mjs";
+import { sovereignOpenDeath } from "../rules/sovereign-spells.mjs";
 
 const SCOPE = "azeroth-rpg";
 
@@ -502,6 +503,9 @@ export async function judgeNecroSpell({ actor, spell, list = [], source = null, 
  * exactly as before.
  */
 export function necroScope(sys = {}, actor = null) {
+  // **AND CONTAGION FOR A SOVEREIGN** (07 §17: an open Death spell at tier 4, which the Sovereign reaches as a
+  // full caster and the knight never does; D-1244): this door carries it for a Sovereign too.
+  if (sovereignOpenDeath(sys, actor?.classNames ?? [])) return true;
   return necroCaster(sys?.classes ?? [], actor?.classNames ?? []);
 }
 

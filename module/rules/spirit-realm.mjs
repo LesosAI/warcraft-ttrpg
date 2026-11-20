@@ -53,8 +53,9 @@
  * the one word that differs from The Crossing's *on any creature but yourself*. Its
  * halving is 04's *physical damage you take is halved, rounded down*
  * (`etherealTaken`), at the one damage door; *you may move through the space of any
- * creature* asks nothing of the system, since nothing in it stops a walk through
- * another creature's space (`ETHEREAL_UNBUILT`).
+ * creature* is read off this flag by 05's move door (`rules/move-through.mjs#moveThroughOf`,
+ * FIXC), which refuses a walk through a creature fewer than two sizes apart and a move
+ * that stops in another's space (`ETHEREAL_UNBUILT` is empty now).
  */
 
 import { isHealingSpell } from "./casting.mjs";
@@ -129,10 +130,11 @@ export const ETHEREAL_REFUSALS = Object.freeze({
   cast: "AZEROTH.Ethereal.Refuse.Cast"
 });
 
-/** What of Ethereal Form asks nothing of the system, with the reason. */
-export const ETHEREAL_UNBUILT = Object.freeze({
-  passes: "nothing in the system stops a walk through another creature's space; a step only refuses ENDING in one (`rules/steps.mjs#stepRefusal`)"
-});
+/**
+ * What of Ethereal Form asks nothing of the system, with the reason: nothing since FIXC, whose move door reads
+ * *you may move through the space of any creature* off the flag (`rules/move-through.mjs`).
+ */
+export const ETHEREAL_UNBUILT = Object.freeze({});
 
 /** The spans a laid Ethereal Form may take: *Until your next turn* - the USER's. */
 export const ETHEREAL_SPANS = Object.freeze(["userTurnStart"]);

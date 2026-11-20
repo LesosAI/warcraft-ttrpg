@@ -37,6 +37,8 @@ import { DISPOSITIONS } from "./distance.mjs";
 import { kindsOf } from "./creature-kinds.mjs";
 import { castTestOf } from "./resisted.mjs";
 import { readForced } from "./forced-movement.mjs";
+// The ONE named-gain refusal (the San'layn and Sovereign plan's C3).
+import { namedGainRefusal } from "./named-gains.mjs";
 
 /** The pool's key in `AZEROTH.momentumTypes`. */
 export const ESSENCE = "essence";
@@ -173,7 +175,8 @@ export function essenceFromDeath({ living = false, enemy = false, feet = null, p
  * - `refund` - a withdrawn use giving back a price it took;
  * - `hand` - a GM's own hand on the sheet. A player's hand is refused.
  */
-export const ESSENCE_GAIN_SOURCES = Object.freeze(["death", "soulCage", "soulRip", "refund", "hand"]);
+// The list lives in the ONE named-gain table (`named-gains.mjs`, the San'layn and Sovereign plan's C3).
+export { ESSENCE_GAIN_SOURCES } from "./named-gains.mjs";
 
 /**
  * Why this write may not raise Essence, or null where it may: a fall or no change is
@@ -183,10 +186,7 @@ export const ESSENCE_GAIN_SOURCES = Object.freeze(["death", "soulCage", "soulRip
  * @returns {"unsourced"|"hand"|null}
  */
 export function essenceGainRefusal({ before = 0, after = 0, source = null, gm = false } = {}) {
-  if (!(int(after) > int(before))) return null;
-  if (!ESSENCE_GAIN_SOURCES.includes(source)) return "unsourced";
-  if (source === "hand" && gm !== true) return "hand";
-  return null;
+  return namedGainRefusal(ESSENCE, { before, after, source, gm });
 }
 
 /**

@@ -1,6 +1,7 @@
 import { openSpellLockWindow, finishSpellLockWindow, SPELL_LOCK_WINDOWS } from "./spell-lock-window.mjs";
 import { collectSpellLockReactions } from "./spell-lock-reactions.mjs";
 import { postSpellLockResult } from "./spell-lock-feedback.mjs";
+import { VITAE_TO_ZERO_FLAG, paidItselfToZero } from "../rules/vitae.mjs";
 
 export const SPELL_LOCK_QUERY = "azeroth-rpg.spellLock";
 const gmHere = () => globalThis.game?.user?.isGM === true && game.users?.activeGM?.id === game.user.id;
@@ -56,9 +57,16 @@ export async function spellLockQueryHandler(data = {}, { user } = {}) {
   if (!owner()) return refuse("owner");
   if (phase === "open") {
     const origin = source ? game.scenes?.get(source.sceneId)?.tokens?.get(source.tokenId) : null;
-    const valid = () => owner() && actor.system?.health?.value > 0 && testExists(actor, test)
+    // A caster at 0 Health casts nothing, except the one cast whose own Vitae payment took it there (02 §7: *The
+    // spell or feature you paid for still takes effect*; D-1296): the payment is made before the Test. The
+    // licence is read ONCE, here as the window opens, on the server's clock, and the mark is spent in the same
+    // step (the review's S2): it licenses this cast alone, and a slow reaction window never outlives it.
+    const licensed = paidItselfToZero({ health: actor.system?.health?.value ?? 0, at: actor.getFlag?.("azeroth-rpg", VITAE_TO_ZERO_FLAG), now: Number(game.time?.serverTime) || Date.now() });
+    const standing = () => actor.system?.health?.value > 0 || licensed;
+    const valid = () => owner() && standing() && testExists(actor, test)
       && (!source || (origin?.actor === actor && game.scenes?.get(source.sceneId)?.tokens?.get(source.tokenId) === origin));
     if (!valid()) return refuse("testOrSource");
+    if (licensed) await actor.unsetFlag("azeroth-rpg", VITAE_TO_ZERO_FLAG);
     return openSpellLockWindow({ actor, castId, requesterId: user.id, validate: valid,
       collect: args => collectSpellLockReactions({ ...args, actor, source }) });
   }

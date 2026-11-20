@@ -27,6 +27,8 @@
 
 import { sectionParts } from "./weight.mjs";
 import { fittingBundles, isShot, selectAmmunition } from "./ammunition.mjs";
+// The Sovereign's Claws are the off hand while equipped (02 §7; the lead, R6; D-1163).
+import { isClaws } from "./unarmed.mjs";
 
 /**
  * 08 §11's Slot column, in the figure's reading order - left column head to
@@ -65,10 +67,12 @@ export function capacityOf(slot) {
  * the Ranged slot (D-850, amending D-674), and they exist here only so the Off
  * hand and Ranged tiles can name what each is showing.
  *
- * `AZEROTH.heldSlots` labels them.
+ * `AZEROTH.heldSlots` labels them. **`claws` draws no tile either** (the lead, R6: *"No bag
+ * slot and no paper-doll tile of their own. While equipped, the off hand is the claws"*;
+ * D-1163): it names what the Off hand tile shows, *Your claws*.
  */
 export const HELD_SLOTS = Object.freeze([
-  "body", "mainHand", "offHand", "ranged", "ammo", "shield", "augment"
+  "body", "mainHand", "offHand", "ranged", "ammo", "shield", "augment", "claws"
 ]);
 
 /** 08 §11's row names, as the chapter prints them, to the Slot it prints beside. */
@@ -320,15 +324,20 @@ export function figureSlots(items = []) {
   const augment = held.filter(i => Boolean(i.system?.augment)).sort((a, b) => String(a.id ?? "").localeCompare(String(b.id ?? "")))[0] ?? null;
 
   const weapons = held.filter(i => i.type === "weapon").sort(byName);
-  filled.mainHand = weapons.find(i => i.system?.offHand !== true && !i.system?.launcher) ?? null;
+  // The claws never fill the main hand, whatever a stored flag says (02 §7; D-1163).
+  filled.mainHand = weapons.find(i => i.system?.offHand !== true && !i.system?.launcher && !isClaws(i)) ?? null;
   const launcher = weapons.find(i => Boolean(i.system?.launcher)) ?? null;
   // The Ranged slot holds a launcher or an Augment (D-850).
   filled.ranged = launcher ?? augment ?? null;
   filled.rangedKind = launcher ? "weapon" : (augment ? "augment" : null);
 
-  const offWeapon = weapons.find(i => i.system?.offHand === true && !i.system?.launcher) ?? null;
-  filled.offHand = offWeapon ?? shield ?? null;
-  filled.offHandKind = offWeapon ? "weapon" : (shield ? "shield" : null);
+  // **WHILE EQUIPPED, THE OFF HAND IS THE CLAWS** (the lead, R6; D-1163): they fill the
+  // Off hand tile before any weapon or shield, and `offHandKind` names them so the tile
+  // says *Your claws*. A world that holds both keeps the other in `alsoReady`.
+  const claws = weapons.find(i => isClaws(i)) ?? null;
+  const offWeapon = weapons.find(i => i.system?.offHand === true && !i.system?.launcher && !isClaws(i)) ?? null;
+  filled.offHand = claws ?? offWeapon ?? shield ?? null;
+  filled.offHandKind = claws ? "claws" : (offWeapon ? "weapon" : (shield ? "shield" : null));
 
   // The bundle nocked on the launcher, over every bundle carried (D-641). An
   // Augment in the Ranged slot fires nothing, so it nocks nothing.
@@ -342,7 +351,7 @@ export function figureSlots(items = []) {
 
   filled.twoHanded = isTwoHanded(filled.mainHand) && !hasTitansPresence(all);
 
-  const drawn = new Set([filled.mainHand, offWeapon, launcher, filled.ammo].filter(Boolean));
+  const drawn = new Set([filled.mainHand, claws ?? offWeapon, launcher, filled.ammo].filter(Boolean));
   filled.alsoReady = weapons.filter(w => !drawn.has(w));
   return filled;
 }
@@ -381,6 +390,8 @@ export function figureSlots(items = []) {
  */
 export function handFor(item, items = []) {
   const sys = item?.system ?? {};
+  // The claws are the off hand's own (02 §7; D-1163).
+  if (isClaws(item)) return "offHand";
   if (sys.launcher) return "ranged";
   if (isShot(sys)) return "mainHand";
   if (isTwoHanded(item) && !hasTitansPresence(items)) return "mainHand";
@@ -450,7 +461,7 @@ export function fitsSlot(item, slot) {
   const sys = item.system ?? {};
   if (isWornSlot(slot)) return item.type === "gear" && sys.slot === slot;
   if (slot === "body") return item.type === "armor" && sys.shield !== true;
-  if (slot === "mainHand") return item.type === "weapon" && !sys.launcher;
+  if (slot === "mainHand") return item.type === "weapon" && !sys.launcher && !isClaws(item);
   // 08 §8's shield is held in the off hand; the Augment is not (D-850).
   if (slot === "offHand") {
     return (item.type === "weapon" && !sys.launcher)
@@ -525,7 +536,7 @@ function isTwoHandedMain(item) {
  * @param {{index?: number}} [options]  which tile of a capacity-2 slot was used
  * @returns {Array} the equipped items to unequip, in the order they were given
  */
-export function displacedBy(item, items, { index, titansPresence = hasTitansPresence(items) } = {}) {
+export function displacedBy(item, items, { index, hand = null, titansPresence = hasTitansPresence(items) } = {}) {
   if (!item) return [];
   const all = [...(items ?? [])].filter(Boolean);
   const same = other => other === item
@@ -559,11 +570,25 @@ export function displacedBy(item, items, { index, titansPresence = hasTitansPres
     }
   }
 
-  // The two-handed grip, both ways (D-689).
+  // The two-handed grip, both ways (D-689). The claws are an off-hand thing (their
+  // `offHand` is always true), so a two-handed main hand and the claws put each other
+  // away here too (the plan's B.5; D-1163).
   if (!titansPresence && isTwoHandedMain(item)) {
     for (const other of equipped) if (isOffHandThing(other)) victims.add(other);
-  } else if (!titansPresence && isOffHandThing(item)) {
+  } else if (!titansPresence && (isOffHandThing(item) || (hand === "offHand" && item.type === "weapon"))) {
     for (const other of equipped) if (isTwoHandedMain(other)) victims.add(other);
+  }
+
+  // **THE CLAWS AND ANYTHING ELSE IN THE OFF HAND PUT EACH OTHER AWAY** (the lead, R6:
+  // *"While equipped, the off hand is the claws, so no shield or second weapon"*; D-1163).
+  // Scoped to `sovereign-claws` alone: a Warrior's dagger and mace keep 06 §2's hands,
+  // where a one-handed weapon displaces nothing. `hand` is the tile a weapon is being
+  // put in (a drop or a pick on the Off hand), since its stored `offHand` is still the
+  // old one when this is asked.
+  if (isClaws(item)) {
+    for (const other of equipped) if (isOffHandThing(other) && !isClaws(other)) victims.add(other);
+  } else if (isOffHandThing(item) || (hand === "offHand" && item.type === "weapon")) {
+    for (const other of equipped) if (isClaws(other)) victims.add(other);
   }
 
   return all.filter(other => victims.has(other));

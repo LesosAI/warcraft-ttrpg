@@ -266,6 +266,10 @@ export function targetFactsOf(snapshot, { own = [], marks = {} } = {}) {
     kinds: [...(snapshot.kinds ?? [])].map(String).sort(),
     laidByUser,
     watched: names(marks?.watch ?? null, snapshot),
-    challenged: names(marks?.challenge ?? null, snapshot)
+    challenged: names(marks?.challenge ?? null, snapshot),
+    // **WHOSE BLOOD CURSES IT IS UNDER** (02 §7; the plan's B.6: *`targetFactsOf` gains `cursedBy`*;
+    // D-1241): every Sovereign's uuid off the snapshot, and whether one is the user's hand.
+    cursedBy: [...new Set((Array.isArray(snapshot.cursedBy) ? snapshot.cursedBy : []).map(String))].sort(),
+    cursedByUser: (Array.isArray(snapshot.cursedBy) ? snapshot.cursedBy : []).some(u => hands.has(u))
   };
 }

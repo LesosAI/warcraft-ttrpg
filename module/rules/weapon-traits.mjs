@@ -42,7 +42,10 @@ export const FORM = Object.freeze({
   loud: Object.freeze({}),
   thrown: Object.freeze({}),
   reload: Object.freeze({}),
-  pierce: Object.freeze({})
+  pierce: Object.freeze({}),
+  // **DEFT** (08 §5; the lead, R15: *"new weapon trait - Deft"*): in the hand, the
+  // higher of Strength and Dexterity (`ammunition.mjs#attackAbility`, D-1160).
+  deft: Object.freeze({ dexterity: true })
 });
 
 /** Effect traits: fire on SL 1 (Minor), SL 2 (Standard), or the Critical Injury (Severe). */

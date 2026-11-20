@@ -50,6 +50,8 @@ import { sentinelEnrageBonus } from "../../rules/sentinel-enrage.mjs";
 import { nearbyCreatures } from "../../effects/passives.mjs";
 // 05's temporary Health, its stored value cleaned where present (D-777).
 import { cleanTempSource } from "../../rules/temporary-health.mjs";
+import { withLaidVulnerable } from "../../rules/laid-vulnerable.mjs";
+import { veilBanesOn } from "../../rules/sovereign-spells.mjs";
 
 /**
  * An ability's automation (D-647), in `rules/class-features`' vocabulary:
@@ -496,6 +498,11 @@ export class NpcData extends foundry.abstract.TypeDataModel {
     // five onto creatures at once.
     this.signatureEffects = signature;
     if (invulnerabilityPotionActive(this.parent?.effects ?? [])) this.immune = [...new Set([...(this.immune ?? []), "physical"])];
+    // 07 §17's Wracking Pain (*Vulnerable (Physical) until the end of its next turn*; D-1366): a laid type ADDED
+    // to the block's own list, which the stored copy never sees.
+    this.vulnerable = withLaidVulnerable(this.vulnerable ?? [], this.parent?.effects ?? []);
+    // 07 §17's Veil of Mist on a creature that cast it (D-1364): the roll dialog's `sovDeterred` lane, as a character's.
+    this.sovereignDeterred = veilBanesOn(this.parent?.effects ?? []);
     // **EVERY LINE ADDS TO WHAT IS THERE** and never recomputes from `_source`
     // (D-691's own scar): the `initial` phase lands before this method, so a
     // plain assignment writes an Active Effect's own point back out again.

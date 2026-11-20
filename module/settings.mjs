@@ -9,6 +9,10 @@ import { SETTING_KEY as MIGRATION_KEY } from "./migrations/index.mjs";
 import { cleanState, emptyState } from "./rules/regions.mjs";
 import { cleanOffer } from "./rules/loot-offer.mjs";
 import { cleanKeyMap } from "./rules/animation.mjs";
+import { BLOOD_LONG_REST_DEFAULT } from "./rules/rest.mjs";
+
+/** How many units of blood a San'layn's Long Rest takes, the GM's number (D-1145). */
+export const BLOOD_LONG_REST_SETTING = "bloodLongRest";
 
 export const ROLL_DIALOG_SETTING = "rollDialog";
 /** The folder the NPC generator last created into (D-637); a client's own. */
@@ -351,6 +355,20 @@ export function registerSettings() {
       skip: "AZEROTH.Setting.RollDialog.Skip"
     },
     default: "always"
+  });
+
+  // WORLD, the GM's (02 §5's San'layn, *a Long Rest takes as many units as the GM sets*; the lead,
+  // R3: *"an amount up to the GM for long rest"*; the plan's A.6 item 8 and A.9 Q16; D-1145). Read
+  // by both Long Rest doors through `rules/rest.mjs#bloodNeeded`; 0 asks for no blood at all. No
+  // reload: the next rest reads it.
+  game.settings.register("azeroth-rpg", BLOOD_LONG_REST_SETTING, {
+    name: "AZEROTH.Setting.BloodLongRest.Name",
+    hint: "AZEROTH.Setting.BloodLongRest.Hint",
+    scope: "world",
+    config: true,
+    type: new foundry.data.fields.NumberField({ required: true, nullable: false, integer: true, min: 0, initial: BLOOD_LONG_REST_DEFAULT }),
+    default: BLOOD_LONG_REST_DEFAULT,
+    requiresReload: false
   });
 }
 

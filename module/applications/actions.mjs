@@ -1,5 +1,7 @@
 import {reloadMenuEntries} from "./reload.mjs";
 import { npcArmamentFor } from "../rules/npc-armament.mjs";
+// 08 §17's empty vial, which a San'layn may fill with blood (D-1150).
+import { VIAL_EMPTY } from "../rules/sanlayn.mjs";
 import {healingSignatureReviewState} from '../effects/signature-healing-review.mjs';
 import {damageSignatureCards} from '../effects/signature-damage-review.mjs';
 import {orphanDamageCasts} from '../effects/signature-damage-orphans.mjs';
@@ -53,11 +55,13 @@ import { THINNED_RATING_DROP, thinnedRating } from "../rules/swarm.mjs";
 import { fieldsFor } from "./item-fields.mjs";
 import { shouldPrompt } from "../settings.mjs";
 import { guardPendingCustodyItem } from "../rules/item-custody-guard.mjs";
-import { OVERCHANNEL_MAX_POINTS, castingDC, grantingClass, isHealingSpell, manaPrice, maxOverchannel, overchannelPerPoint, spellManaCost, statedCastingDC, swiftCast, takeNextSpell } from "../rules/casting.mjs";
+import { OVERCHANNEL_MAX_POINTS, castingDC, grantingClass, isHealingSpell, spellPrice, maxOverchannel, overchannelPerPoint, spellManaCost, statedCastingDC, swiftCast, takeNextSpell } from "../rules/casting.mjs";
 // THE LEGACY BRANCHES' DOORS (B1): a spell a talent pays in another pool (door 8),
 // the ability scope (door 16), a throw a rider makes possible (door 15), and no
 // Reaction against the unanswered (door 14).
 import { castCanPay, castingManaPool, spellPayment } from "../rules/casting.mjs";
+// The Sovereign's own spell price, shown as `castSpell` charges it (D-1231; pure).
+import { flourishCurrent, sovereignCastPrice } from "../rules/sovereign-talents.mjs";
 import { bonusSchool } from "../rules/schools.mjs";
 import { spellPoolFor } from "../rules/class-talents.mjs";
 import { opportunityNeedsGM, opportunityOwned } from "../rules/gm-writes.mjs";
@@ -82,7 +86,9 @@ import { flaggedEffects } from "../effects/talent-states.mjs";
 // A shape's gear melds and Metamorphosis adds to a blow (02 §7, D-769).
 import { isForcedKind, meldsGear, shapeDamageBonus } from "../rules/shapes.mjs";
 import { scoreHeldBy, storedFromShown } from "../rules/abilities.mjs";
-import { attackAbility, attackModes, canFire, fittingBundles, pierceOf, selectAmmunition, shotDamage } from "../rules/ammunition.mjs";
+import { attackAbility, attackModes, canFire, deftScores, fittingBundles, pierceOf, selectAmmunition, shotDamage } from "../rules/ammunition.mjs";
+// One unarmed predicate (C15; D-1162): the claws and a fist never Parry.
+import { isUnarmed } from "../rules/unarmed.mjs";
 // In the hand or thrown (D-731): the ways a blow may be struck, one variant each.
 import { attackPlan, withAttackMode } from "../rules/attack-modes.mjs";
 // 02 §6's *two attacks each time you Attack* (D-704): how many Tests one
@@ -162,6 +168,7 @@ import { handLay } from "../effects/bare-afflictions.mjs";
 import { BARE_STATUSES, carrierOwnsChip, clearCarrierChip, stepCarrierPoison } from "../rules/bare-afflictions.mjs";
 import { isAntivenom } from "../rules/antivenom.mjs";
 import { conditionEffectOf } from "../rules/condition-carriers.mjs";
+import { audienceListening, veiledFrom } from "../rules/sovereign-spells.mjs";
 
 /**
  * WHAT THE THINGS THE TARGET IS WEARING ANSWER BACK (08 SS20, D-692).
@@ -317,6 +324,8 @@ export function reactionStateOf(actor, { messageId = null, against = null, targe
     inFight: Boolean(fight?.started && combatant),
     alreadyReacted: Boolean(messageId) && answered?.messageId === messageId,
     meleeWeapons: melee,
+    // Only an unarmed strike in hand - the Sovereign's Claws - is Parry's own refusal (D-1162).
+    unarmedOnly: !melee.length && ready.some(i => isUnarmed(i)),
     shields: shape && meldsGear(shape.kind)
       ? []
       : shieldsHeld((actor?.items ?? []).filter(i => i.type === "armor").map(i => ({ name: i.name, ...i.system }))),
@@ -945,15 +954,18 @@ function retortOf(actor, messageId) {
 async function parryNow(actor, weaponName, { attackTotal, messageId, targetIndex = null, event, freeBy = null, answeredWithLost = false, parryCommit = null }) {
   // What is in hand is `readyWeapons` (D-769): a natural attack parries.
   const ready = actor.readyWeapons?.() ?? (actor.items ?? []).filter(i => i.type === "weapon" && i.system?.equipped);
-  const weapon = ready.find(w => w.name === weaponName) ?? ready[0] ?? null;
+  // An unarmed strike never Parries (06 §6's *a melee weapon in hand*; D-1162), so the claws
+  // are never the fallback a Parry is made with.
+  const parriers = ready.filter(w => !isUnarmed(w));
+  const weapon = parriers.find(w => w.name === weaponName) ?? parriers[0] ?? null;
   if (!weapon) {
-    ui.notifications?.warn(game.i18n.format("AZEROTH.Reaction.Refuse.NoMelee", { name: actor.name }));
+    ui.notifications?.warn(game.i18n.format(ready.some(w => isUnarmed(w)) ? "AZEROTH.Reaction.Refuse.Unarmed" : "AZEROTH.Reaction.Refuse.NoMelee", { name: actor.name }));
     return null;
   }
   const sys = weapon.system;
   // A Parry is made IN THE HAND (D-731): a Dagger that may be thrown still
   // parries with Strength, and never as a throw.
-  const ability = attackAbility(sys, "hand");
+  const ability = attackAbility(sys, "hand", deftScores(actor.system?.abilities));
   const strength = actor.system.abilities.str?.total ?? actor.system.abilities.str?.value ?? 10;
   const traitEffects = weaponTraitEffects(sys.traits ?? [], { strength });
   const card = await rollWithDialog(actor, {
@@ -1620,14 +1632,14 @@ export async function castWithDialog(actor, spell, event = null, { targets = nul
     reason: swiftJudged.reason ? game.i18n.format(swiftJudged.reason, { name: spell.name, talent: swiftRow.name }) : null
   } : null;
   // **IN A SHAPESHIFT FORM THE PRICE IS FEROCITY** (07, D-769), read through
-  // the same `manaPrice` the cast pays by, so the dialog says what it will take.
+  // the same `spellPrice` the cast pays by, so the dialog says what it will take.
   // **AND A POOL A TALENT NAMES** (04's Shadowcraft: *paying Focus where 07-MAGIC
   // asks for Mana*; the Legacy branches' door 8), with the ability it casts with.
   const inForm = actor.inShapeshiftForm === true;
   // And a class that pays in its Momentum (D-944).
   const talentPool = spellPayment(spellPoolFor(talentsNow, { name: spell.name, school: sys.school ?? null }), actor.classItems ?? []);
   const payPool = talentPool ? ((actor.poolSnapshot?.() ?? []).find(p => p.name === talentPool.pool) ?? null) : null;
-  const price = manaPrice(mana, { inShapeshiftForm: inForm, pool: talentPool?.pool ?? null });
+  const price = spellPrice(mana, { inShapeshiftForm: inForm, pool: talentPool?.pool ?? null });
   const ferocity = price.pool === "ferocity"
     ? ((actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === "ferocity") ?? null)
     : null;
@@ -1660,7 +1672,13 @@ export async function castWithDialog(actor, spell, event = null, { targets = nul
     casting: {
       tier: sys.tier,
       conflagrate: sys.identifier === "conflagrate",
-      mana,
+      // The Sovereign's own price as `castSpell` takes it (04's Crimson Flourish and the Blood Monarch; D-1231):
+      // the dialog says what the cast pays. Swift Hunger's 3 more is the ticked line's, said on the line.
+      mana: sovereignCastPrice({
+        cost: mana, monarch: actor.shape?.kind === "bloodQueen",
+        flourish: sys.action === "half" && String(sys.school ?? "").toLowerCase() === "death"
+          && flourishCurrent({ flag: actor.getFlag?.("azeroth-rpg", "flourishDiscount") ?? null, fight: (f => (f ? { id: f.id, round: f.round, turn: f.turn } : null))(actor.activeFight?.() ?? null), now: game.time?.worldTime ?? 0 })
+      }),
       // The pool the price comes out of: a talent's (door 8), else the Mana.
       pool: payPool ? { name: payPool.name, value: payPool.value, max: payPool.max } : (pool ? { name: pool.name, value: pool.value, max: pool.max } : null),
       // The word the price is said in where a talent names another pool (door 8).
@@ -1672,7 +1690,8 @@ export async function castWithDialog(actor, spell, event = null, { targets = nul
         : null,
       // **A PRICE WITH NOTHING TO PAY IT CANNOT BE PAID** (door 8): the one reading
       // beside `castRefusal` - it said *can pay* for a class holding no Mana.
-      canPay: castCanPay({ price, pool, ferocity, payPool }),
+      // A Vitae price has the Health behind it (02 §7; the San'layn and Sovereign plan's V4).
+      canPay: castCanPay({ price, pool, ferocity, payPool, health }),
       health,
       perPoint: overchannelPerPoint(sys.tier),
       // 04's Overchanneller (D-775): the Health off the price lets a point more be paid.
@@ -1977,12 +1996,19 @@ function packFlankOf(actor, targetToken) {
  * has not got is refused in words; no caller in `module/` forces one, and the
  * attacks batch pins the refusal by calling this door with a Javelin in the hand.
  */
-export async function attackWithDialog(actor, weapon, event = null, { location = "body", dc = null, damage = true, offHand = null, budget = null, gainsMomentum = true, atDistance = null, riposte = false, mode = null, ratingDelta = 0, opportunity = false, landsOnHit = null, cardBoons = null, fromFeature = null, targets = null, prepareOnly = false, paidThrowAs = null, testOnly = false, vengeful = null } = {}) {
+export async function attackWithDialog(actor, weapon, event = null, { location = "body", dc = null, damage = true, offHand = null, budget = null, gainsMomentum = true, atDistance = null, riposte = false, mode = null, ratingDelta = 0, opportunity = false, landsOnHit = null, cardBoons = null, fromFeature = null, targets = null, prepareOnly = false, paidThrowAs = null, testOnly = false, vengeful = null, clawRoll = 0 } = {}) {
   if (testOnly && (!prepareOnly || budget!=="none" || damage!==false)) return null;
   if (!weapon || weapon.type !== "weapon") return null;
   // 07's Hex: *it cannot attack* (D-808) - every attack this door makes, an
   // Opportunity Attack and a Riposte included, before anything is worked out.
   if (actor?.refuseForcedShape?.("attack")) return null;
+  // 07 §17's Grant an Audience: *it attacks no one* for the duration (D-1258), refused in words before anything is
+  // spent - a pure predicate imported statically (O-419), never a dynamic import inside the attack door.
+  const listening = audienceListening(actor?.effects ?? []);
+  if (listening !== null) { ui.notifications?.warn(game.i18n.format("AZEROTH.SovSpell.Audience.NoAttack", { name: actor.name, spell: listening })); return null; }
+  // 07 §17's Veil of Mist: *You cannot make a weapon or claw attack for the duration* (D-1364), the same shape.
+  const veiled = veiledFrom(actor?.effects ?? []);
+  if (veiled !== null) { ui.notifications?.warn(game.i18n.format("AZEROTH.SovSpell.Veil.NoAttack", { name: actor.name, spell: veiled })); return null; }
   if (!guardPendingCustodyItem(weapon).ok) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.Item.CustodyPending"));
     return null;
@@ -2162,7 +2188,8 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
   // Dagger there opens in the hand with D-716's warning.
   // 04's Longshot (D-773): *Your weapon's maximum Range increases by 25% per
   // rank* - the farthest the band allows, never where its Bane begins.
-  const shape = { launcher: sys.launcher ?? null, range: sys.range ?? null, traits: traitNames, longshot: rangeStretchFor(actor.takenTalents?.() ?? []).percent };
+  // The identifier rides too: the Sovereign's Claws are struck on Dexterity (08 §5's Deft; D-1160).
+  const shape = { launcher: sys.launcher ?? null, range: sys.range ?? null, traits: traitNames, identifier: sys.identifier ?? null, longshot: rangeStretchFor(actor.takenTalents?.() ?? []).percent };
   // **A HAMMER OR A MACE THROWN FOR STORM BOLT** (04: *For this attack a weapon of the
   // hammer or mace type counts as Thrown (20 ft), and an attack made with one uses
   // Strength*; the Legacy branches' door 15): the throw is a way of striking this
@@ -2191,7 +2218,7 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
     const { relentlessOpportunityReach } = await import("../effects/death-knight-talents.mjs");
     reachBonus = relentlessOpportunityReach(actor);
   }
-  const plan = attackPlan(struckShape, { distance, engaged: engagedNow(actor), mode, reachBonus });
+  const plan = attackPlan(struckShape, { distance, engaged: engagedNow(actor), mode, reachBonus, scores: deftScores(system.abilities) });
   // **A WAY THE WEAPON HAS NOT GOT IS REFUSED IN WORDS** (D-731's review). A
   // caller that settles the way is never quietly handed another: a Javelin
   // forced into the hand used to be thrown. `mode` is this door's public option,
@@ -2211,14 +2238,15 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
   }
   // The modifier lines of a blow struck this way: Strength in the hand,
   // Dexterity on a shot or a throw (06 §1).
-  const modifiersFor = ability => [
+  // A Deft blow names itself on the dialog (08 §5; D-1160): *Dexterity (Deft)*.
+  const modifiersFor = (ability, deft = false) => [
     // **A `—` ABILITY IS A ZERO** (the lead's N2, 2026-09-10). `npc.mjs` keeps
     // an absent score as null on purpose - a Mindless thing carries no Int,
     // and the Searing Totem carries none of the six - so every reader has to
     // answer for it before it reaches a card that prints a signed number.
     // No modifier, never a 10: that is what the block's own printed Bonus
     // says about a creature with no Strength.
-    { label: AZEROTH.abilities[ability], value: system.abilities[ability]?.mod ?? 0 },
+    { label: deft ? game.i18n.format("AZEROTH.Deft.AbilityLine", { ability: game.i18n.localize(AZEROTH.abilities[ability]) }) : AZEROTH.abilities[ability], value: system.abilities[ability]?.mod ?? 0 },
     { label: "AZEROTH.Sheet.Proficiency", value: system.proficiency ?? 0 },
     // **WHAT IS WORN ADDS TO THE ATTACK TEST** (08 §20's `+N Attack`,
     // 2026-09-10 - the lead's hit ratings). A character composes this
@@ -2237,7 +2265,7 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
     const v = plan.variants[m];
     const byRider = m === "thrown" && thrownByRider;
     return [m, {
-      modifiers: modifiersFor(v.ability),
+      modifiers: modifiersFor(v.ability, v.deft),
       rangeKind: v.rangeKind,
       rangeBand: v.band,
       engaged: v.engaged,
@@ -2475,6 +2503,8 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
     // 04's Vengeful Blood's riposte (D-1017): the Off-Hand Attack made as a Reaction, which
     // `rollTest` spends as the Reaction and the round's Off-Hand Attack, its Shadow on the hit.
     ...(vengeful && offHand && budget === "reaction" ? { vengeful: { name: String(vengeful.name ?? "") } } : {}),
+    // Which claw roll of the Off-Hand Attack this is (04's Ravenous; C16; D-1166).
+    ...(offHand && (Math.trunc(Number(clawRoll)) || 0) > 1 ? { clawRoll: Math.trunc(Number(clawRoll)) } : {}),
     ...(gainsMomentum ? {} : { gainsMomentum: false }),
     // A maneuver may fix the DC - Disarm's Opposed Test at 12 (D-626).
     ...(dc !== null ? { dc } : {}),
@@ -2547,6 +2577,12 @@ export async function npcAttackWithDialog(actor, index, event = null, { title = 
   }
   // A hexed creature's own block attacks no more than a character does (D-808).
   if (actor?.refuseForcedShape?.("attack")) return null;
+  // 07 §17's Grant an Audience: *it attacks no one* for the duration (D-1258), refused in words before anything is
+  // spent - a pure predicate imported statically (O-419), never a dynamic import inside the attack door.
+  const listening = audienceListening(actor?.effects ?? []);
+  if (listening !== null) { ui.notifications?.warn(game.i18n.format("AZEROTH.SovSpell.Audience.NoAttack", { name: actor.name, spell: listening })); return null; }
+  const veiled = veiledFrom(actor?.effects ?? []);
+  if (veiled !== null) { ui.notifications?.warn(game.i18n.format("AZEROTH.SovSpell.Veil.NoAttack", { name: actor.name, spell: veiled })); return null; }
   if (damageSchool !== null && (typeof damageSchool !== "string" || !Object.hasOwn(AZEROTH.schools, damageSchool))) return null;
   const sys = actor.system;
   const bonus = sys.damageBonus ?? 0;
@@ -3105,7 +3141,7 @@ export async function stepPool(actor, target) {
   const delta = Number(target.dataset.delta) || 0;
   // A hand on the sheet is a named door for a Runic Power rise, and a GM's alone
   // (`rules/runes.mjs#runicGainRefusal`: *Runic Power is only gained by consuming runes*).
-  return actor.updatePool({ itemId: itemId || null, kind, value: pool.value + delta }, {}, { runicGain: "hand", essenceGain: "hand" });
+  return actor.updatePool({ itemId: itemId || null, kind, value: pool.value + delta }, {}, { runicGain: "hand", essenceGain: "hand", tributeGain: "hand", vitaeGain: "hand" });
 }
 
 /**
@@ -3148,7 +3184,7 @@ export function bindPoolInputs(sheet) {
         const now = poolRowFor(sheet.actor, { itemId, kind });
         if (now && input.isConnected) input.value = String(now.value);
       };
-      Promise.resolve(sheet.actor.updatePool({ itemId: itemId || null, kind, value: clamped }, {}, { runicGain: "hand", essenceGain: "hand" }))
+      Promise.resolve(sheet.actor.updatePool({ itemId: itemId || null, kind, value: clamped }, {}, { runicGain: "hand", essenceGain: "hand", tributeGain: "hand", vitaeGain: "hand" }))
         .then(restore, err => {
           restore();
           console.warn("azeroth-rpg | pool box", err);
@@ -4054,6 +4090,17 @@ export function itemContextMenu(sheet) {
     { label: "AZEROTH.Container.TakeOut", icon: "fa-solid fa-hand",
       visible: target => !!itemOf(target)?.system?.container,
       onClick: (event, target) => itemOf(target)?.update({ "system.container": null }) },
+    // **FILL WITH BLOOD...** (08 §12: *A Vial, empty filled from a source the GM approves becomes a
+    // Blood vial*; D-1150): a San'layn's carried Vial, empty, filled on the GM's word. A menu entry
+    // with a direct call, as the hotbar's is; the door is `effects/blood.mjs#fillWithBlood`.
+    { label: "AZEROTH.BloodFill.Menu", icon: "fa-solid fa-droplet",
+      visible: target => { const item = itemOf(target); return actor.system?.bloodFed === true && item?.type === "gear" && item.system?.identifier === VIAL_EMPTY; },
+      onClick: async (event, target) => {
+        const item = itemOf(target);
+        if (!item) return null;
+        const { fillWithBlood } = await import("../effects/blood.mjs");
+        return fillWithBlood(actor, item);
+      } },
     // The hotbar (the lead, 2026-09-13). Not a sheet ACTION: nothing in a
     // template carries it, and the audit's MENU_ONLY names only registered
     // actions - this is a menu entry with a direct call, so there is nothing

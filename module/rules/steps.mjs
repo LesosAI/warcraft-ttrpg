@@ -361,5 +361,8 @@ export function corpseStepFeet(step, rangeFeet) {
  * new one.
  */
 export const STEP_UNREAD = Object.freeze({
-  Translocate: "the TARGET is moved and an unwilling one may resist with a Spirit Resilience Test first, which is a Resist the card would have to answer before the move; the move stays the table's"
+  Translocate: "the TARGET is moved and an unwilling one may resist with a Spirit Resilience Test first, which is a Resist the card would have to answer before the move; the move stays the table's",
+  // 07 §17's Royal Approach (D-1253): not this reader's step - the space must be closer to the caster's prey,
+  // which the Sovereign spell door judges at the pick and moves to (`effects/sovereign-spells.mjs#approachLands`).
+  "Royal Approach": "the space must be closer to the caster's prey than its own, so the Sovereign spell door picks and judges it before the payment and displaces the token itself (effects/sovereign-spells.mjs#approachLands)"
 });

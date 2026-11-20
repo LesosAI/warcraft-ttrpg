@@ -47,7 +47,9 @@ function flat(text) {
 export function readUpkeep(effectText) {
   const text = flat(effectText);
   // *While sustaining this spell you pay 2 Mana and 1 Health at the start of each of your turns*
-  let m = /\bWhile sustaining this spell you pay (\d+) Mana(?: and (\d+) Health)? at the start of each of your turns\b/.exec(text);
+  // **OR VITAE** (02 §7's Sovereign, 07's blood spells: *you pay 4 Vitae at the start of each of your turns*;
+  // the San'layn and Sovereign plan's B.10): the caster's own pool pays it, by D-1181's law.
+  let m = /\bWhile sustaining this spell you pay (\d+) (?:Mana|Vitae)(?: and (\d+) Health)? at the start of each of your turns\b/.exec(text);
   if (m) return { mana: Number(m[1]), health: m[2] ? Number(m[2]) : 0 };
   // Felstep: *you pay 2 Health at the start of each of your turns rather than Mana*
   m = /\byou pay (\d+) Health at the start of each of your turns rather than Mana\b/.exec(text);
@@ -64,7 +66,7 @@ export function readUpkeep(effectText) {
  */
 export function isUpkeepSentence(sentence) {
   const s = String(sentence ?? "");
-  return /^While sustaining this spell you pay \d+ Mana(?: and \d+ Health)? at the start of each of your turns/i.test(s)
+  return /^While sustaining this spell you pay \d+ (?:Mana|Vitae)(?: and \d+ Health)? at the start of each of your turns/i.test(s)
     || /\byou pay \d+ Health at the start of each of your turns rather than Mana\b/i.test(s);
 }
 

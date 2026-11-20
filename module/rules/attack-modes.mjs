@@ -39,16 +39,21 @@ import { defaultAttackMode, rangeBand, reachAndRange, reachOf, thrownRange } fro
  *   `reachBonus`: feet a blow in the hand reaches further for THIS attack alone (04's Relentless Advance
  *   in two hands, D-1017: *your Opportunity Attacks reach 5 feet further*)
  */
-export function attackVariant(weapon, mode, { distance = null, engaged = false, reachBonus = 0 } = {}) {
+export function attackVariant(weapon, mode, { distance = null, engaged = false, reachBonus = 0, scores = null } = {}) {
   const used = attackModeOf(weapon, mode);
   const own = reachAndRange(weapon, used);
   const extra = Math.max(0, Math.trunc(Number(reachBonus)) || 0);
   const spec = own.kind === "melee" && extra > 0 ? { ...own, reach: (Number(own.reach) || 0) + extra } : own;
   const band = rangeBand(distance, spec);
   const rangeKind = spec.kind === "melee" ? "melee" : "ranged";
+  // A Deft weapon in the hand takes the higher of the two (08 §5; D-1160): `scores`.
+  const ability = attackAbility(weapon, used, scores);
   return {
     mode: used,
-    ability: attackAbility(weapon, used),
+    ability,
+    // Dexterity IN THE HAND is only ever Deft's (the claws carry the trait too), so the
+    // dialog names it: *Dexterity (Deft)* (the plan's B.13 Q29).
+    deft: used === "hand" && ability === "dex",
     spec,
     band,
     rangeKind,
@@ -72,11 +77,11 @@ export function attackVariant(weapon, mode, { distance = null, engaged = false, 
  * @param {{distance?: number|null, engaged?: boolean, mode?: string|null}} [o]
  * @returns {{modes: string[], mode: string|null, variants: Record<string, object>, lacks: string|null}}
  */
-export function attackPlan(weapon, { distance = null, engaged = false, mode = null, reachBonus = 0 } = {}) {
+export function attackPlan(weapon, { distance = null, engaged = false, mode = null, reachBonus = 0, scores = null } = {}) {
   const all = attackModes(weapon);
   if (mode && !all.includes(mode)) return { modes: [], mode: null, variants: {}, lacks: String(mode) };
   const offered = mode ? [mode] : all;
-  const variants = Object.fromEntries(offered.map(m => [m, attackVariant(weapon, m, { distance, engaged, reachBonus })]));
+  const variants = Object.fromEntries(offered.map(m => [m, attackVariant(weapon, m, { distance, engaged, reachBonus, scores })]));
   const usable = offered.filter(m => !variants[m].refused);
   const traits = weapon?.traits ?? [];
   const extra = Math.max(0, Math.trunc(Number(reachBonus)) || 0);

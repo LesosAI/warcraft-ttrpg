@@ -105,6 +105,65 @@ export function rollsPerAttack({ extraAttack = false, isOffHand = false, reactio
   return extraAttack ? ROLLS_PER_EXTRA_ATTACK : 1;
 }
 
+/**
+ * **HOW MANY CLAW ROLLS ONE OFF-HAND ATTACK MAKES** (04's Ravenous; the lead, R44: *"The
+ * Ravenous talents should allow more claw attacks and to remove the penalty to do so"*,
+ * R45: *"Fold into existing talents"*, offered as *"Blooded Claws rank 3 adds a second
+ * claw roll, and Raking Claws rank 2 adds a third"*; the plan's C16; D-1166).
+ *
+ * Still ONE Off-Hand Attack a round, made on your own turn: the rolls sit inside it the
+ * way Extra Attack's two sit inside one Attack. 1, plus 1 at Blooded Claws rank 3, plus 1
+ * at Raking Claws rank 2 - **for the Sovereign's Claws alone** (`claws`, read by identity
+ * through `rules/unarmed.mjs#isClaws`), never another off-hand weapon: a Warrior's dagger
+ * stays at one roll. Raking Claws rank 2 adds its roll whether or not Blooded Claws is at
+ * rank 3 (the plan's MY READING).
+ *
+ * @param {{claws?: boolean, bloodedClawsRank?: number, rakingClawsRank?: number}} [facts]
+ * @returns {number}
+ */
+export function offHandRolls({ claws = false, bloodedClawsRank = 0, rakingClawsRank = 0 } = {}) {
+  if (claws !== true) return 1;
+  const blooded = Math.trunc(Number(bloodedClawsRank)) || 0;
+  const raking = Math.trunc(Number(rakingClawsRank)) || 0;
+  return 1 + (blooded >= 3 ? 1 : 0) + (raking >= 2 ? 1 : 0);
+}
+
+/** The actor flag that counts Blooded Claws' free claw attacks since the last rest (D-1166). */
+export const CLAW_USES_FLAG = "clawUses";
+
+/** Blooded Claws' free claw attacks a Short Rest: your tier (the lead, R52). */
+export function clawUsesMax(tier = 1) {
+  return Math.max(1, Math.min(4, Math.trunc(Number(tier)) || 1));
+}
+
+/**
+ * **A CLAW ATTACK IN A TURN WITHOUT AN ATTACK, AT NO HALF-ACTION** (04's Blooded Claws:
+ * *You may make your Off-Hand Attack with your claws in a turn in which you do not
+ * Attack, and it costs no Half-Action. You can do this a number of times equal to your
+ * tier, and you regain the uses when you finish a Short or Long Rest*; the lead, R45 and
+ * R52: *"Set a limit to the out of turn attacks to a number of times per short rest equal
+ * to tier"*; D-1166).
+ *
+ * Asked only of a LONE claw blow - no main-hand Attack this turn. A claw attack that rides
+ * a main-hand Attack costs nothing already (06 §1) and spends no use (the plan's MY
+ * READING of R52). **Red Feast's form spends none** (04's Red Feast: *the claw attacks of
+ * Blooded Claws spend no uses*).
+ *
+ * @param {{claws?: boolean, bloodedClawsRank?: number, redFeastForm?: boolean, tier?: number, spent?: number}} facts
+ * @returns {{eligible: boolean, free: boolean, spendsUse: boolean, left: number, max: number}}
+ *   `eligible`: Blooded Claws held and the claws in the off hand; `free`: this lone blow
+ *   costs no Half-Action; `spendsUse`: it marks one off; `left`/`max`: the uses.
+ */
+export function freeOffHand({ claws = false, bloodedClawsRank = 0, redFeastForm = false, tier = 1, spent = 0 } = {}) {
+  const max = clawUsesMax(tier);
+  const left = Math.max(0, max - Math.max(0, Math.trunc(Number(spent)) || 0));
+  if (claws !== true || (Math.trunc(Number(bloodedClawsRank)) || 0) < 1) {
+    return { eligible: false, free: false, spendsUse: false, left, max };
+  }
+  if (redFeastForm === true) return { eligible: true, free: true, spendsUse: false, left, max };
+  return { eligible: true, free: left > 0, spendsUse: left > 0, left, max };
+}
+
 /** Off-Hand Attacks left this round; a budget written before D-704 has one. */
 function offHandLeft(budget) {
   const n = budget?.offHandAttacks;
@@ -278,7 +337,7 @@ export function loseTurn(budget) {
  *                                       but for the at-once allowance, and the
  *                                       off hand by its own name.
  */
-export function spend(budget, cost, { isAttack = false, isOffHand = false, isMove = false, onTurn = true, attackSlowed = false, now = null } = {}) {
+export function spend(budget, cost, { isAttack = false, isOffHand = false, isMove = false, onTurn = true, attackSlowed = false, now = null, freeOffHand = false } = {}) {
   cost = ancientDreadAction(cost, { affected: attackSlowed,
     attack: isAttack && !(isOffHand && budget.attacked === true) });
   const base = { half: 1, action: 2, full: 2, reaction: 0 }[cost];
@@ -310,7 +369,9 @@ export function spend(budget, cost, { isAttack = false, isOffHand = false, isMov
   // the lead's ruling in the decision, and the only reading under which the off
   // hand is not simply a free extra attack every turn.
   const rides = isAttack && isOffHand && cost !== "reaction";
-  const halves = rides ? (budget.attacked === true ? 0 : attackSlowed ? base : 1) : base;
+  // **A LONE CLAW BLOW BLOODED CLAWS MAKES FREE** (04; the lead, R45; D-1166): `freeOffHand`
+  // is `freeOffHand(...).free`, judged by the door, and it still spends the round's one.
+  const halves = rides ? (budget.attacked === true || freeOffHand === true ? 0 : attackSlowed ? base : 1) : base;
 
   // **ONE OFF-HAND ATTACK A ROUND** (06 §2: *You may make one each round*),
   // asked BEFORE the Half-Actions so a second one is refused by its own rule

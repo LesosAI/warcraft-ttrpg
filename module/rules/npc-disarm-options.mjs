@@ -1,10 +1,12 @@
 import { swingable } from "./held-attacks.mjs";
+// One unarmed predicate (C15; D-1162): 08 §7's Unarmed and the Sovereign's Claws are never disarmed.
+import { isUnarmed } from "./unarmed.mjs";
 
 /** `readyItems` comes from the actor's readyWeapons door, so melded weapons
  * are not silently offered. NPC rows require a separate GM classification. */
 export function disarmOptions({ readyItems = [], rows = [] } = {}) {
   const items = readyItems.filter(item => item?.id && !item.natural && swingable(item)
-    && item.system?.identifier !== "unarmed").map(item => ({
+    && !isUnarmed(item)).map(item => ({
     key: `item:${item.id}`, name: item.name, weapon: { kind: "item", itemId: item.id },
     confirmHeldWeapon: false
   }));

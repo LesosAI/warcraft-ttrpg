@@ -168,9 +168,14 @@ export function intScaledArea(area, effectText, intMod = 0) {
  */
 function originOf(text) {
   if (/centered on (?:you|yourself)\b/i.test(text)) return ORIGINS.SELF;
+  // 07 §17's Shroud of Sorrow (*A 10 ft radius around you*; D-1367): the caster's own circle. *Around your prey*
+  // is not this (`you\b` stops before the *r*).
+  if (/\baround (?:you|yourself)\b/i.test(text)) return ORIGINS.SELF;
   if (/centered on\b/i.test(text)) return ORIGINS.TARGET;
   if (/\bon the ground\b/i.test(text)) return ORIGINS.POINT;
-  if (/of a point you can see\b/i.test(text)) return ORIGINS.POINT;
+  // And Incite Terror's *Each enemy within a 15 ft radius of a point you choose* (D-1367): a placed point, read
+  // before the bare *within* below sends it to the caster.
+  if (/of a point you (?:can see|choose)\b/i.test(text)) return ORIGINS.POINT;
   // "Each ally within 15 ft" — 07 §9 measures from the caster unless the entry
   // says otherwise, and this entry does not.
   if (/\bwithin\b/i.test(text)) return ORIGINS.SELF;

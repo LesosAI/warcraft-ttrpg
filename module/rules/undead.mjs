@@ -24,6 +24,8 @@
 
 import { DEATH } from "./schools.mjs";
 import { DEATH_KNIGHT } from "./runes.mjs";
+// What 02 §5 says each people is (D-1140): one table, keyed as the parser keys a people.
+import { peopleAccruesUndeath, peopleBloodFed, peopleFood } from "./peoples.mjs";
 
 /** The class identifiers whose holder is undead (02 §7). */
 export const UNDEAD_CLASSES = Object.freeze([DEATH_KNIGHT]);
@@ -49,8 +51,8 @@ export const HEALS_ONLY_UNDEAD_CLASSES = Object.freeze([DEATH_KNIGHT]);
  */
 export const HEALS_ONLY_UNDEAD_FEATURES = Object.freeze([Object.freeze({ className: "Necromancer", name: "Lichdom" })]);
 
-/** 02 §5's people that do not eat (*"You do not breathe or eat"*). */
-const NO_FOOD_PEOPLES = Object.freeze(["forsaken"]);
+// 02 §5's people that do not eat (*"You do not breathe or eat"*) are `peoples.mjs`'s
+// `food: "none"` now (D-1140, F3): *eats nothing* and *accrues no Undeath* are two facts.
 
 /** The conditions a Death Knight refuses (10 §9's Risen: *Immune to poison and disease*). */
 export const UNDEAD_CLASS_IMMUNE = Object.freeze(["poisoned", "diseased"]);
@@ -115,8 +117,25 @@ export function needsNoFood({ classes = [], race = null, endings = [], rungs = [
  */
 export function needsNoDrink({ classes = [], race = null, endings = [], undead = null } = {}) {
   if (undead === true || undeadByClass(classes)) return true;
-  if (NO_FOOD_PEOPLES.includes(key(race))) return true;
+  if (peopleFood(race) === "none") return true;
   return (endings ?? []).some(e => (e?.notes ?? []).includes("noFood"));
+}
+
+/**
+ * **WHO RESTS ON BLOOD IN PLACE OF FOOD AND DRINK** (02 §5's San'layn, *Your hunger.*: *You
+ * need blood in place of food and drink*; the lead, R3: *"does require to consume blood from a
+ * source a GM approves for a short rest or long rest"*; D-1141). Derived on the character as
+ * `system.bloodFed` and read by both rest doors.
+ *
+ * **A PEOPLE'S BLOOD OUTRANKS A CLASS'S EXEMPTION** (D-1142, MY READING for the lead): a San'layn
+ * Death Knight still needs its blood. The knight's *"do not have to eat or drink"* lifts food and
+ * drink; the race's need is blood, which that sentence does not name.
+ *
+ * @param {{race?: string|null}} o  the race item's identifier or name
+ * @returns {boolean}
+ */
+export function bloodFed({ race = null } = {}) {
+  return peopleBloodFed(race);
 }
 
 /**
@@ -135,7 +154,7 @@ export function needsNoDrink({ classes = [], race = null, endings = [], undead =
 export function accruesTrack({ track, classes = [], race = null, undead = null } = {}) {
   if (track !== "undeath") return true;
   if (undead === true || undeadByClass(classes)) return false;
-  return !NO_FOOD_PEOPLES.includes(key(race));
+  return peopleAccruesUndeath(race);
 }
 
 /**

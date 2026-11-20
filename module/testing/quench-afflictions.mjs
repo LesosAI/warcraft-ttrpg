@@ -575,8 +575,11 @@ export function afflictionsBatch(context) {
       const [e] = await actor.createEmbeddedDocuments("ActiveEffect", [{ name: "Slowed", statuses: ["slowed"] }]);
       return e;
     };
-    async function caster(name, cls, spells, at = { x: 1000, y: 1000 }) {
-      const actor = await makeCharacter({ name, classes: [[cls, 10]] });
+    // `level` 10 is tier 2. 07 §4's cast cap (D-1082, 0.15.4) refuses a tier 3 spell below tier 3,
+    // so a tier 3 cure (Cure Blight, Absolution, Moonwell) is cast at level 11. These three failed
+    // from 0.15.4 on with "no card": the cap was right and the fixture was stale.
+    async function caster(name, cls, spells, at = { x: 1000, y: 1000 }, level = 10) {
+      const actor = await makeCharacter({ name, classes: [[cls, level]] });
       for (const s of spells) if (!actor.items.find(i => i.type === "spell" && i.name === s)) await give(actor, s, PACK_FOR.spell);
       await fillMana(actor);
       return actor;
@@ -803,7 +806,7 @@ export function afflictionsBatch(context) {
 
     it("Cure Blight ends every poison and disease and takes Bleeding to 0", async function () {
       this.timeout(240000);
-      const druid = await caster("ZZ Cure Druid Three", "Druid", ["Cure Blight"]);
+      const druid = await caster("ZZ Cure Druid Three", "Druid", ["Cure Blight"], undefined, 11);
       const patient = await makeCharacter({ name: "ZZ Blight Patient" });
       await place([{ actor: druid, x: 1000, y: 1000 }, { actor: patient, x: 1100, y: 1000 }]);
       await afflict(patient, { aff: poison("Slow Venom") });
@@ -817,7 +820,7 @@ export function afflictionsBatch(context) {
 
     it("Absolution ends every condition, poison and disease, heals 8 and lays a Bane", async function () {
       this.timeout(240000);
-      const priest = await caster("ZZ Cure Priest", "Priest", ["Absolution"]);
+      const priest = await caster("ZZ Cure Priest", "Priest", ["Absolution"], undefined, 11);
       const patient = await makeCharacter({ name: "ZZ Absolve Patient" });
       await place([{ actor: priest, x: 1000, y: 1000 }, { actor: patient, x: 1100, y: 1000 }]);
       await afflict(patient, { aff: poison("Slow Venom") });
@@ -834,7 +837,7 @@ export function afflictionsBatch(context) {
 
     it("Moonwell, at the start of an ally's turn, heals 4 and ends one poison", async function () {
       this.timeout(300000);
-      const druid = await caster("ZZ Cure Moon Druid", "Druid", ["Moonwell"]);
+      const druid = await caster("ZZ Cure Moon Druid", "Druid", ["Moonwell"], undefined, 11);
       const ally = await makeCharacter({ name: "ZZ Moon Ally" });
       await place([{ actor: druid, x: 1000, y: 1000 }, { actor: ally, x: 1100, y: 1000 }]);
       const spell = druid.items.find(i => i.name === "Moonwell");
@@ -864,8 +867,10 @@ export function afflictionsBatch(context) {
 
     it("Restoration and Deliverance end every poison and disease inside the placed area, Deliverance only on the willing", async function () {
       this.timeout(300000);
-      const priest = await caster("ZZ Cure Area Priest", "Priest", ["Deliverance"]);
-      const druid = await caster("ZZ Cure Area Druid", "Druid", ["Restoration"]);
+      // Deliverance and Restoration are tier 4: at level 10 the cast cap (D-1082) refused both casts,
+      // the null cards went into `made` and the batch's afterAll threw on them. Level 17 is tier 4.
+      const priest = await caster("ZZ Cure Area Priest", "Priest", ["Deliverance"], undefined, 17);
+      const druid = await caster("ZZ Cure Area Druid", "Druid", ["Restoration"], undefined, 17);
       const ally = await makeCharacter({ name: "ZZ Area Ally" });
       const foe = await makeNpc("Bandit");
       await place([

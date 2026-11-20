@@ -1491,6 +1491,10 @@
       "Reflex": "Reflex",
       "Spirit": "Spirit"
     },
+    "MoveThrough": {
+      "Through": "{name} cannot move through {other}'s space. A creature may pass through the space of one two or more sizes larger or smaller.",
+      "End": "{name} cannot end a move in {other}'s space."
+    },
     "Size": {
       "Tiny": "Tiny",
       "Small": "Small",
@@ -1530,6 +1534,8 @@
       "Sand": "Sand",
       "RunicPower": "Runic Power",
       "Essence": "Essence",
+      "Tribute": "Tribute",
+      "Vitae": "Vitae",
       "Mana": "Mana",
       "Focus": "Focus",
       "Energy": "Energy",
@@ -1596,6 +1602,94 @@
         "notApplicable": "{name} was not cast: {benefit} does not apply to this spell. Nothing was spent.",
         "short": "{name} was not cast: {n} Essence is needed for the benefits chosen. Nothing was spent."
       }
+    },
+    "Vitae": {
+      "Refuse": {
+        "gain": {
+          "unsourced": "{name} regains Vitae only by feeding. Nothing was written.",
+          "hand": "Only a GM may raise {name}'s Vitae by hand. Feeding gives Vitae."
+        },
+        "noPool": "{name} holds no Vitae."
+      },
+      "Warn": {
+        "refused": "{name} cannot pay {n} Vitae: it holds {vitae} Vitae and {health} Health. Nothing was spent.",
+        "toZero": "This will drop {name} to 0 Health: {n} Vitae costs all {vitae} Vitae and the rest in Health.",
+        "overflow": "This takes Health: {n} Vitae costs all {vitae} Vitae and the rest in Health, 1 for 1."
+      },
+      "Paid": "{name} paid {vitae} Vitae and {health} Health for {source}. Health paid this way is not damage.",
+      "ToZero": "{name} paid the last of their Health for {source} and is Dying. They take no Critical Injury from it."
+    },
+    "Tribute": {
+      "Refuse": {
+        "gain": {
+          "unsourced": "{name} gains Tribute only from a claw hit on the prey, the prey's failed Test, or a feature, talent or spell that says so. Nothing was written.",
+          "hand": "Only a GM may raise {name}'s Tribute by hand."
+        }
+      },
+      "Claw": "{name}'s claws hit their prey, {target}: {n} Tribute.",
+      "Will": "{name}'s prey failed its Test: {n} Tribute."
+    },
+    "Prey": {
+      "Label": "Prey",
+      "None": "No prey marked.",
+      "Is": "{target}",
+      "Mark": "Hunt Mortal: mark target",
+      "MarkButton": "Mark as prey",
+      "Clear": "Clear the prey",
+      "Marked": "{name} marks {target} as their prey.",
+      "ClawOffer": "{name}'s claws hit {target}, which is not their prey. Blood-Forged Claws may mark it.",
+      "Pursuit": "{name}'s prey died: the mark ends, {name} gains {n} Tribute and may mark a new prey this turn.",
+      "Refuse": {
+        "feature": "{name} does not hold the feature that marks a prey.",
+        "self": "{name} cannot mark themself as their prey.",
+        "same": "{target} is already {name}'s prey.",
+        "turn": "{name} has marked a prey this turn, or it is not their turn. Hunt Mortal marks once on each of their turns.",
+        "far": "{target} is more than {feet} feet from {name}.",
+        "dead": "{target} is at 0 Health and cannot be marked.",
+        "target": "Target exactly one creature for {name} to mark."
+      }
+    },
+    "Feeding": {
+      "Title": "The Blood Royal",
+      "Button": "Feed",
+      "Tip": "The Blood Royal: feed on the one creature targeted.",
+      "TestText": "{name} feeds on {target}. {target} makes a Body Resilience Test against DC {dc}. On a failure, {name} feeds and {target} loses {loss} Health.",
+      "TestLabel": "Body Test, DC {dc}",
+      "Resisted": "{target} resisted the feeding. Nothing was taken.",
+      "Landed": "This feeding's Test has already been rolled.",
+      "Fed": "{name} fed on {target} through {source}: {n} Vitae.",
+      "Vial": "{name} drank a Blood vial: {n} Vitae.",
+      "DrinkVial": "Drink {name} for Vitae ({n} carried)",
+      "WayPrompt": "How does {target} come to be fed on?",
+      "NoAnswer": "{name}'s client did not answer: {reason}",
+      "Way": {
+        "willing": "It is willing",
+        "sleeping": "It is asleep",
+        "charmed": "It is Charmed",
+        "helpless": "It is helpless",
+        "beast": "A beast held still"
+      },
+      "Refuse": {
+        "self": "{name} cannot feed on themself.",
+        "bloodless": "{target} has no blood to drink: undead, constructs and elementals cannot be fed on.",
+        "fedToday": "{name} has already fed on {target} today.",
+        "reach": "{target} is not within {name}'s reach.",
+        "open": "{target} is not Stunned, Entangled or Prone, and {name} is not latched on to it.",
+        "way": "Outside a fight, {name} feeds on a willing, sleeping, Charmed or helpless creature, or a beast held still.",
+        "corpseAge": "{target} died more than 10 minutes ago, or its death was not seen.",
+        "alive": "{target} is not dead.",
+        "noPool": "{name} holds no Vitae to feed into.",
+        "noTarget": "Target exactly one creature for {name} to feed on.",
+        "noGM": "No GM is online to write {target}'s Health. Nothing was spent.",
+        "budget": "{name} has no Half-Action left to feed.",
+        "vial": "{name} has no {item} left to drink.",
+        "vialNoPool": "{name} holds no Vitae for a Blood vial to fill.",
+        "vialNoVial": "{name} does not carry {item}.",
+        "vialNotBlood": "{item} is not a Blood vial. Only a Blood vial gives Vitae.",
+        "vialEmpty": "{name} has no {item} left to drink.",
+        "vialFull": "{name}'s Vitae is full. The Blood vial is kept."
+      },
+      "Already": "The feeding on {target} has already been rolled. Nothing more is taken."
     },
     "Spell": {
       "LearnRefused": {
@@ -1792,6 +1886,223 @@
         "holy": "Holy damage felled it: Restless Bones does not stand it again.",
         "once": "It has stood again this way once already."
       }
+    },
+    "SovSpell": {
+      "Refuse": {
+        "mirrorTrigger": "{spell} is cast as a Reaction when an attack hits you; it is asked in the blow.",
+        "mirrorAttack": "{spell} answers an attack that hits you, and this is no attack.",
+        "mirrorReaction": "{spell} needs your Reaction, and it is spent.",
+        "mirrorLate": "The blow {spell} answered has already landed.",
+        "notHeld": "{spell} needs a creature that is {conditions}, and {name} is none of those.",
+        "oneTarget": "{spell} names one creature: target exactly one.",
+        "twoTargets": "{spell} names two willing creatures: target exactly two.",
+        "noToken": "{name} has no token on this scene, so {spell} has nowhere to start.",
+        "noPrey": "{name} has no prey marked, so {spell} has nothing to follow.",
+        "preyUnplaced": "{name}, the prey, has no token on this scene, so {spell} cannot reach it.",
+        "noGM": "{spell} writes on a creature you do not own, and no GM is online to write it. Nothing was spent.",
+        "noBlood": "{name}'s blood has not been spilled, so {spell} has none to taste.",
+        "bloodOld": "{name}'s blood was spilled more than a day ago, so {spell} cannot read it.",
+        "noBloodHeld": "You hold no creature's blood spilled within the last month, so {spell} has nothing to look through.",
+        "noSealTarget": "There is no door within reach and nothing carried to seal with {spell}.",
+        "approachFar": "{spell} moves you up to {feet} feet: that space is farther.",
+        "approachCloser": "{spell} moves you closer to {name}: that space is no closer.",
+        "notYours": "You do not own the caster of this spell.",
+        "notLiving": "{spell} needs a living creature, and {name} is not living. Nothing was spent.",
+        "wrongKind": "{spell} needs a {kind}, and {name} is not one. Nothing was spent.",
+        "bondDays": "{spell} needs a creature you have fed on three times, each on a different day. You have fed on {name} on {n} of {need} days. Nothing was spent.",
+        "bondWilling": "{spell} needs a creature that is willing or Charmed, and {name} is neither. Nothing was spent."
+      },
+      "PreyHeal": "Your prey: you regain {n} Health.",
+      "Shield": {
+        "Granted": "{name} gains a Sanguine Shield: {n} temporary Health while {spell} lasts."
+      },
+      "Carapace": {
+        "Laid": "{name} gains {n} additional Armor Points at every location and cannot become {conditions} while {spell} lasts."
+      },
+      "Barrier": {
+        "Laid": "Each weapon attack that hits {name} deals {n} less damage while {spell} lasts.",
+        "Took": "{sources}: the weapon attack on {name} deals {n} less damage."
+      },
+      "Veil": {
+        "Laid": "{name} turns to mist: each weapon attack against {name} takes a Bane, and {name} makes no weapon or claw attack, until the start of the next turn. {name} may move through a creature's space and cannot end a Move there.",
+        "NoAttack": "{name} is mist ({spell}) and cannot make a weapon or claw attack."
+      },
+      "Scent": {
+        "Row": "{name}: {feet} feet away, Bleeding.",
+        "Unseen": "An unseen creature",
+        "None": "No Bleeding creature is within {feet} feet of {name}.",
+        "NoToken": "{name} has no token on this scene, so no Bleeding creature is found.",
+        "Laid": "{name} knows where {n} Bleeding creatures within {feet} feet are.",
+        "Boon": "{name}'s next Attack Test this turn against a Bleeding creature takes a Boon."
+      },
+      "Draught": {
+        "NotBleeding": "{name} is not Bleeding, so {spell} does nothing. The Vitae is spent.",
+        "Fed": "{name} feeds on {target} from across the room.",
+        "Lost": "{name} loses {n} Health."
+      },
+      "Vulnerable": {
+        "Laid": "{name} is Vulnerable ({types}) until the end of its next turn ({spell})."
+      },
+      "Burden": {
+        "Laid": "Each time {name} damages a creature with an attack, it takes {n} Shadow damage ({spell}).",
+        "Struck": "{name} carries the burden of {spell} and takes {n} Shadow damage."
+      },
+      "Hemoplague": {
+        "Laid": "At the start of each of its turns, {name} makes each of the caster's enemies within {feet} feet bleed ({spell}).",
+        "Spread": "{name} stands within reach of {from}'s plague and is Bleeding {n}."
+      },
+      "Mesmerize": {
+        "Landed": "{name} is Charmed by {caster}. The spell ends if {caster} or an ally harms it. The GM decides what {name} remembers afterward."
+      },
+      "Also": {
+        "Laid": "{name} is also {condition} until the end of its next turn ({spell})."
+      },
+      "NextBane": {
+        "Laid": "{name} takes a Bane on its next Attack Test before the end of its next turn ({spell})."
+      },
+      "Pull": {
+        "Beside": "{name} already stands next to {caster}, so it is not pulled."
+      },
+      "Shroud": {
+        "Drained": "{name} regains {n} Health as {target} suffers in {spell}.",
+        "Struck": "{target} takes damage from {name}'s {spell}."
+      },
+      "Bond": {
+        "NotLaid": "The bond did not take hold on {name}.",
+        "Laid": "{name} is bound to {caster}. Press End the bond to end it at any time.",
+        "Landed": "{name} is Charmed by {caster} until the bond is broken. The GM decides how long it holds and what {name} will do.",
+        "End": "End the bond",
+        "Ended": "The bond between {caster} and {name} is broken.",
+        "CasterOnly": "Only the Sovereign who made the bond may end it."
+      },
+      "Curse": {
+        "Name": "Blood curse: {spell}",
+        "Laid": "{name} is under the blood curse of {spell}."
+      },
+      "AttackLess": {
+        "Laid": "Each attack {name} makes deals {n} less damage while {spell} lasts.",
+        "Took": "{name}'s blood curse takes {n} off the attack ({sources})."
+      },
+      "Bleed": {
+        "Laid": "{name} is Bleeding {n} from {spell}."
+      },
+      "BleedForMe": {
+        "Medicine": "The Medicine Test to end this Bleeding is against DC {dc} ({spell}).",
+        "Healed": "{name} regains {n} Health from Bleed for Me."
+      },
+      "NoHealing": {
+        "Laid": "{name} cannot regain Health while {spell} lasts.",
+        "Text": "Regains no Health while {spell} lasts."
+      },
+      "Gaze": {
+        "Laid": "{name} cannot willingly move more than {feet} feet from {caster} until the end of its next turn, and takes a Bane on Attack Tests against them."
+      },
+      "Overawe": {
+        "Bane": "{name}'s first Attack Test this turn takes a Bane ({spell})."
+      },
+      "FailHeal": {
+        "Healed": "{name} regains {n} Health from {spell}."
+      },
+      "Flight": {
+        "Laid": "{name} rises into the air: a flying Speed of {n} feet until the start of their next turn.",
+        "LaidDuration": "{name} rises into the air: a flying Speed of {n} feet while {spell} lasts."
+      },
+      "Refuses": {
+        "Laid": "{name} cannot be {conditions} while {spell} lasts."
+      },
+      "SkillBoon": {
+        "Laid": "{name} has a Boon on {skills} Tests while {spell} lasts."
+      },
+      "Majesty": {
+        "Laid": "{name}'s spells and attacks deal additional Shadow damage to their prey while {spell} lasts.",
+        "Extra": "{name} takes {n} more Shadow damage from Majesty Unbound.",
+        "Healed": "{name} regains {n} Health from Majesty Unbound."
+      },
+      "Unfading": {
+        "Laid": "{name} has a Boon on every Test and refuses to fall while {spell} lasts.",
+        "Held": "{name} spends {n} Tribute and drops to 1 Health instead (Unfading Glory)."
+      },
+      "Mirror": {
+        "Ask": "An attack hits {name}. Cast {spell} as your Reaction for {n} Vitae?",
+        "Granted": "{name} gains {n} temporary Health from Mirror of Self."
+      },
+      "Approach": {
+        "Hint": "Choose a space up to {feet} feet away that is closer to {name}.",
+        "Moved": "{name} moves up to {feet} feet toward their prey, provoking no Opportunity Attack.",
+        "NoToken": "{name}'s token is gone, so Royal Approach moved nothing."
+      },
+      "Taste": {
+        "People": "{name}'s people or kind: {people}.",
+        "Living": "{name} is living.",
+        "Undead": "{name} is undead.",
+        "Noble": "Whether {name} is of noble birth is the GM's to say.",
+        "Unknown": "unknown",
+        "Done": "{name} tastes the blood of {target}."
+      },
+      "Seal": {
+        "Prompt": "What does {spell} seal?",
+        "Door": "A door within reach",
+        "Laid": "{name} seals {target}.",
+        "Opened": "Your Royal Seal is broken: {target} was opened."
+      },
+      "Herald": {
+        "Prompt": "Who does the herald of {spell} speak to?",
+        "Message": "The message, up to {n} words",
+        "Sent": "{name}'s herald walks out to {to}.",
+        "Delivered": "A herald in the livery of {from} announces: \"{message}\""
+      },
+      "Oath": {
+        "Words": "The oath both creatures speak",
+        "Sworn": "{name} has sworn: \"{words}\"",
+        "Break": "The oath is broken",
+        "Broken": "{name} has broken the oath of fealty.",
+        "Laid": "{name} binds {names} to an oath of fealty."
+      },
+      "Swarm": {
+        "Risen": "A swarm of bats rises from {name} and flies where they direct, up to {miles} mile away.",
+        "Look": "See through the swarm",
+        "Laid": "{name}'s swarm of bats is aloft.",
+        "OnPrey": "The shadows of {spell} follow {name}.",
+        "NotPlaced": "The shadows of {spell} could not be laid on {name}."
+      },
+      "Throne": {
+        "Prompt": "Whose blood does {spell} look through?",
+        "Seen": "You see and hear {name} and what is within {feet} feet of them, at any distance.",
+        "Look": "Look through their eyes",
+        "Landed": "{caster} watches {name} from the throne.",
+        "Watched": "{name} feels watched."
+      },
+      "Command": {
+        "Words": "The command, up to {n} words",
+        "Laid": "{name} is Charmed and obeys your command.",
+        "Landed": "{name} is Charmed by {caster} and obeys their command.",
+        "Done": "The command is carried out",
+        "Ended": "{spell} ends on {name}.",
+        "Harmed": "{name} is harmed by its commander's side: the command ends."
+      },
+      "Audience": {
+        "Text": "Stays and listens to {caster}, and attacks no one.",
+        "Laid": "{name} stays and listens to you.",
+        "Landed": "{name} stays to hear {caster} and attacks no one.",
+        "End": "End the audience",
+        "GMOnly": "Only the GM ends an audience short of harm.",
+        "NoAttack": "{name} is granting an audience ({spell}) and attacks no one."
+      },
+      "Tribute": {
+        "Kiss": "{name} gains {n} Tribute from their prey.",
+        "Aortic": "{name} gains {n} Tribute from the kill."
+      },
+      "Feed": {
+        "Fed": "{name} feeds on {target}.",
+        "Not": "{name} could not feed on {target} ({reason}).",
+        "Undead": "{name} is not living: there is nothing to feed on."
+      },
+      "Words": {
+        "Ok": "Speak"
+      }
+    },
+    "BloodCurse": {
+      "EscapeLabel": "Blood curse"
     },
     "NecroSpell": {
       "AgeUnknown": {
@@ -2782,12 +3093,43 @@
       "Ranged": "Ranged",
       "Ammo": "Ammunition",
       "Shield": "Shield",
-      "Augment": "Augment"
+      "Augment": "Augment",
+      "Claws": "Your claws"
+    },
+    "Deft": {
+      "AbilityLine": "{ability} (Deft)"
+    },
+    "Claws": {
+      "Refuse": {
+        "Delete": "{name} go only with Blood-Forged Claws. They cannot be deleted by hand.",
+        "Create": "{name} come only with Blood-Forged Claws, and a character holds one set.",
+        "OffHand": "{name} are always your off hand and cannot be held in the main hand.",
+        "Container": "{name} take no bag slot and cannot be put in a container.",
+        "Forge": "{name} are an unarmed strike, and no smith works them.",
+        "Coating": "{name} are an unarmed strike and take no coating.",
+        "Affix": "{name} are an unarmed strike and take no affix.",
+        "NoFreeUses": "Blooded Claws: {name} has no free claw attacks left until a rest ({left} of {max}). A claw attack in a turn without an Attack costs a Half-Action."
+      },
+      "FreeUses": "Free claw attacks: {left} of {max}",
+      "FreeUsesTip": "Blooded Claws: a claw attack in a turn in which you do not Attack costs no Half-Action, a number of times equal to your tier. A Short or Long Rest restores them.",
+      "FreeUsed": "Blooded Claws: a claw attack at no Half-Action. {left} of {max} left until a rest.",
+      "Uncover": "Equipping your claws where a creature can see you uncovers an unnatural feature.",
+      "Roll": {
+        "Button": "Claw roll {n} of {of}",
+        "Refuse": {
+          "PastCount": "{name} makes {of} claw rolls in one Off-Hand Attack and has made them all.",
+          "NotYourTurn": "Claw rolls are made on {name}'s own turn.",
+          "Pressed": "That claw roll has already been made.",
+          "NoClaws": "{name} no longer has the claws equipped.",
+          "Stale": "That claw roll belongs to an earlier turn. {name} makes the next roll from this turn's Off-Hand Attack."
+        }
+      }
     },
     "Provision": {
       "Food": "Food",
       "HotMeal": "Hot meal",
-      "Drink": "Drink"
+      "Drink": "Drink",
+      "Blood": "Blood"
     },
     "Rarity": {
       "Common": "Common",
@@ -2803,6 +3145,7 @@
       "Reaction": "Reaction",
       "Minute": "1 minute",
       "TenMinutes": "10 minutes",
+      "Hour": "1 hour",
       "TimedInFight": "{spell} takes {time} to cast, longer than a turn. It cannot be cast in a fight."
     },
     "Reaction": {
@@ -2837,6 +3180,7 @@
         "AttackState": "A Reaction cannot answer this attack in its current state. It may be resolving, awaiting review, or already resolved.",
         "NoShield": "{name} is carrying no shield, and Block needs one.",
         "NoMelee": "{name} has no melee weapon in hand, and Parry needs one.",
+        "Unarmed": "{name} holds only an unarmed strike, such as claws, and Parry needs a melee weapon in hand.",
         "NoMomentumClass": "{name} builds no Momentum, and Parry belongs to the classes that do.",
         "NoMomentum": "{name} has no point left to spend on a Parry.",
         "NoWeapon": "{name} has nothing in hand to strike with.",
@@ -3002,10 +3346,73 @@
       "Drank": "Drank",
       "NoFood": "No food: no Health recovered.",
       "NoDrink": "No drink: no Mana recovered.",
+      "NoRefill": "No rest refills {pool}: only feeding does.",
       "TierAgain": "Hot meal",
       "TalentMana": "{name}: +{n} Mana",
       "InscribeOpen": "Your runes are refilled, and you may inscribe them anew.",
-      "NeedsNoFood": "Does not eat or drink: recovered without either."
+      "NeedsNoFood": "Does not eat or drink: recovered without either.",
+      "NotBloodFed": "{name} does not rest on blood. Rest on food and drink.",
+      "BloodNotFood": "{name} rests on blood. Food and drink restore nothing on a San'layn's rest.",
+      "NotBlood": "{name} is not a Blood vial.",
+      "NeedsBlood": "A Short Rest takes 1 unit of blood. {name} has none: carry a Blood vial, or drink from a living source the GM approves.",
+      "Blood": "Blood",
+      "BloodSince": "{n} from a feeding since the last rest",
+      "BloodFresh": "{n} drunk from a living source the GM approved",
+      "BloodVials": "{names}",
+      "BloodNoneNeeded": "None needed: the GM's Long Rest takes no blood",
+      "NoBlood": "No blood: no Health and no Power recovered.",
+      "NoBloodLong": "Not enough blood: no Health, no Power and no Fatigue recovered. Everything else the rest gives back came back.",
+      "BloodPick": "Blood vial",
+      "FreshLine": "Drank from a living source the GM approved",
+      "FreshUnits": "Units drunk from a living source the GM approved",
+      "BloodNeedShort": "{name} rests on blood: this Short Rest takes 1 unit.",
+      "BloodNeedLong": "{name} rests on blood: this Long Rest takes {n} units.",
+      "BloodSinceNote": "{n} already drunk since the last rest counts first.",
+      "BloodReturns": "With its blood: Health +{health}, Power +{power}",
+      "BloodShortLong": "{n} short: the rest restores no Health, no Power and no Fatigue, and spends no vial."
+    },
+    "Sanlayn": {
+      "BloodUnitLine": "{target} gave {name} 1 unit of blood for the next Short Rest.",
+      "BloodUnitNoGM": "No GM is online to record the unit of blood {name} took."
+    },
+    "BloodFill": {
+      "Menu": "Fill with blood…",
+      "Title": "Fill with blood",
+      "Prompt": "Where does {name} fill the vial? The GM approves the source.",
+      "Note": "A Vial, empty filled from a source the GM approves becomes a Blood vial. Blood older than three days counts for nothing.",
+      "Ask": "Ask the GM",
+      "Filled": "{name} filled a vial with blood: {source}.",
+      "GMAsk": "{player} asks to fill a vial with blood for {name}. Source: {source}. Approve it?",
+      "Source": {
+        "donor": "A willing donor",
+        "sleeper": "A sleeping or Charmed creature",
+        "beast": "A beast or livestock",
+        "butcher": "A butcher's yard",
+        "apothecary": "An apothecary or a black market",
+        "slain": "A creature just slain",
+        "globe": "A blood globe or crystal"
+      },
+      "SourceNote": {
+        "donor": "A minute, and somebody who agrees. A donor gives 1 unit a day.",
+        "sleeper": "A minute beside it. It wakes bitten unless you hold Clean Feeder.",
+        "beast": "A minute with an animal you can hold still.",
+        "butcher": "A few coppers to a butcher who fills your vial and asks nothing.",
+        "apothecary": "A Blood vial at its price, from somebody who knows what kind of buyer you are.",
+        "slain": "Filled within 10 minutes of the death, after a Test the GM names.",
+        "globe": "Found in the Scourge's holdings in the north, never sold."
+      },
+      "Refuse": {
+        "notBloodFed": "{name} does not rest on blood.",
+        "notVial": "{vial} is not a Vial, empty.",
+        "notOwned": "{name} does not carry {vial}.",
+        "noSource": "Name where the blood comes from.",
+        "noGM": "No GM is online to approve the source. The vial stays empty.",
+        "denied": "The GM did not approve the source. The vial stays empty.",
+        "noAnswer": "The GM did not answer. The vial stays empty.",
+        "noRoom": "{name} has no room for a Blood vial. The vial stays empty.",
+        "noPack": "The gear compendium holds no Blood vial. The vial stays empty.",
+        "inFlight": "The GM is already deciding on this vial. Wait for that answer."
+      }
     },
     "WeaponType": {
       "Axe": "Axe",
@@ -4005,6 +4412,9 @@
       },
       "Note": {
         "Pummel": "Two Banes on the target's next Casting Test.",
+        "BloodForgedClaws": "Your claws are an unarmed strike in your off hand: Equip them on the Combat tab. A claw hit on a creature that is not your prey offers Mark as prey.",
+        "RoyalDue": "Once a turn, when your spell or attack damages your prey, a card offers Royal Due for 2 Tribute.",
+        "WitheringContempt": "Your prey's weapon attacks deal 3 less damage while it is within 60 feet of you. A Casting Test for a spell that targets you takes a Bane.",
         "InscribedRuneweapon": "Inscribe Blood and Frost runes on the weapons you wield, from the end of a Long Rest until you spend your first rune.",
         "UnholyLore": "You know Death Coil, outside your spells known, and pay its cost in Runic Power.",
         "CommandTheDead": "The Use is the Empowered line: every creature in your horde takes two Half-Actions on its next turn.",
@@ -4084,7 +4494,8 @@
         "Shapeshift": "No Mana can be spent while in a Shapeshift form.",
         "Stonefast": "Boon on Body Resilience Tests against poison and cold.",
         "Endurance": "Boon on Body Resilience Tests.",
-        "WillOfTheForsaken": "Once between Long Rests, a Spirit Resilience Test against fear or domination succeeds."
+        "WillOfTheForsaken": "Once between Long Rests, a Spirit Resilience Test against fear or domination succeeds.",
+        "CourtlyMasquerade": "Courtly Masquerade: a Boon on a Test to keep your cover when a creature tries to see through it."
       },
       "NoFeatures": "No class features.",
       "Choose": "{name}: which?",
@@ -4141,7 +4552,8 @@
         "notTaken": "Nothing has been spent on that talent.",
         "required": "{name} requires it. Take that one back first.",
         "gateBelow": "{name} would be left without the points beneath it. Take that one back first.",
-        "inFight": "A point may only be taken back between fights."
+        "inFight": "A point may only be taken back between fights.",
+        "needsFeature": "You may take this talent once you have {feature}."
       },
       "Racial": "{race} talents",
       "PicksLeft": "Picks left",
@@ -4325,6 +4737,197 @@
         "Unknown": "{condition} is not a condition."
       }
     },
+    "SovereignAsk": {
+      "notYours": "You do not own the creature this asks for. Nothing was written.",
+      "notGM": "Only the GM's client may ask that. Nothing was written.",
+      "strike": "No talent or feature of the dealer's strikes that way. Nothing was dealt.",
+      "unknownEffect": "That effect names no Sovereign you own. Nothing was laid.",
+      "changes": "That effect changes something a Sovereign's effect never changes. Nothing was laid.",
+      "statuses": "That effect lays a condition the system does not know. Nothing was laid.",
+      "drop": "That effect is not the asker's to end. Nothing was ended.",
+      "card": "The card does not name this creature for that Sovereign. Nothing was laid.",
+      "notHeld": "The Sovereign does not hold that talent. Nothing was laid.",
+      "result": "No Test of that creature's answers this card. Nothing was laid.",
+      "passed": "The creature passed its Test. Nothing was laid.",
+      "noCard": "The card is gone or is not a feeding card. Nothing was taken.",
+      "notFailed": "The feeding card's Test has not failed. Nothing was taken.",
+      "landed": "That card has already landed. Nothing more is given.",
+      "source": "Tribute comes from no such source. Nothing was given.",
+      "noPrey": "That creature is not the Sovereign's prey.",
+      "alive": "The prey is not dead.",
+      "notMirror": "That spell is not Mirror of Self.",
+      "reaction": "The Sovereign's Reaction is spent.",
+      "late": "The blow has already landed.",
+      "notFed": "The caster has not fed on this creature within the last minute, so no Health is lost.",
+      "notBleeding": "The creature is no longer Bleeding, so no Health is lost."
+    },
+    "Sovereign": {
+      "NoAnswer": "The Sovereign's write was not answered: {reason}",
+      "NoGM": "No GM is connected to write {name} on {target}. Nothing was spent.",
+      "OneTarget": "{name} needs one creature targeted.",
+      "NoPrey": "{name} needs your prey standing on this scene.",
+      "NotCursed": "{target} is not under your blood curse.",
+      "Far": "{name} reaches {feet} feet.",
+      "Short": "{name} needs {n} Tribute.",
+      "OnceRound": "{name} has been used this round.",
+      "Offered": "{name} acts on its own when a blow would drop you to 0 Health; it is not pressed.",
+      "Marked": "{name} marks {target} as their prey.",
+      "Cut": "{name}'s weapon attack deals {n} less damage ({sources}).",
+      "WillPenalty": "The Test takes a −{n} penalty ({talent}), laid on the DC above.",
+      "Prim": {
+        "NoTribute": "{name} needs 1 or more Tribute to spend.",
+        "Prompt": "{name}: spend how much Tribute?",
+        "Option": "{n} Tribute, {temp} temporary Health",
+        "Landed": "{name} spends {n} Tribute and gains {temp} temporary Health until the end of the fight."
+      },
+      "Pursuit": {
+        "NoPrey": "{name} has no prey to sense.",
+        "Elsewhere": "{name} senses {target} somewhere beyond this place; the GM gives the direction.",
+        "TooFar": "{target} is more than a mile from {name}.",
+        "Sense": "{name} senses {target} to the {dir}, about {feet} feet away.",
+        "Dir": {
+          "North": "north",
+          "NorthEast": "north-east",
+          "East": "east",
+          "SouthEast": "south-east",
+          "South": "south",
+          "SouthWest": "south-west",
+          "West": "west",
+          "NorthWest": "north-west"
+        }
+      },
+      "Look": {
+        "Nobody": "{name}: no enemy Humanoid stands within {feet} feet.",
+        "Landed": "{name} fails and takes a Bane on attacks against anyone but {by} until the end of its next turn."
+      },
+      "Prison": {
+        "Landed": "{name} is held in {by}'s Blood Prison.",
+        "Tear": "{name} moved in the Blood Prison and its own blood tears at it: {n} Shadow damage."
+      },
+      "Crowned": "{name} is Crowned in Blood for 1 minute: the Tribute cap is doubled, each gain gives 1 more, and Royal Due costs 1 Tribute.",
+      "Sanguine": "{name}'s weapon and claw hits deal {n} additional Shadow damage.",
+      "Bloodletting": {
+        "Nobody": "{name}: no Bleeding enemy stands within your reach.",
+        "Hit": "{target} takes {n} Shadow damage.",
+        "Temp": "{name} gains {n} temporary Health until the end of the fight."
+      },
+      "Rush": {
+        "Far": "{name}: your prey must be within {feet} feet.",
+        "NotBeside": "{name}: the space must be within your reach ({feet} feet) of your prey.",
+        "Moved": "{name} rushes to their prey.",
+        "NotMoved": "{name} could not move to that space."
+      },
+      "Above": {
+        "Nothing": "{name}: you carry no condition a Resilience Test could have prevented.",
+        "Prompt": "{name}: shed which condition?",
+        "Shed": "{name} sheds {condition}."
+      },
+      "Mirrored": {
+        "Moved": "{name} steps up to {feet} feet away, leaving a mirror image behind.",
+        "Stayed": "{name} stays where they stand."
+      },
+      "Monarch": {
+        "Shaped": "{name}: you already wear another shape.",
+        "Taken": "{name} takes the Blood Monarch form for 1 minute and flies at {feet} feet.",
+        "NotTaken": "{name} could not take the Blood Monarch form."
+      },
+      "Bound": { "Landed": "{name} fails and cannot willingly move more than {feet} feet from its Sovereign." },
+      "Kneel": {
+        "Prey": "{name} is Prone and Stunned until the end of its next turn.",
+        "Other": "{name} is Prone until the end of its next turn."
+      },
+      "Obedience": {
+        "notPrey": "{name}: Abject Obedience takes your prey.",
+        "notCursed": "{name}: your prey must be under your blood curse.",
+        "boss": "{target} is a Boss.",
+        "tier": "{target}'s tier is above yours.",
+        "Landed": "{name} fails and obeys {by} on their turns for 1 minute.",
+        "NotLanded": "{name}'s obedience could not be laid; a GM must be connected."
+      },
+      "Repeat": {
+        "Title": "End {source}",
+        "Text": "{name} makes a {resilience} Resilience Test against DC {dc}. A success ends {source}.",
+        "Already": "{name} has already made this Test.",
+        "Ended": "{name} succeeds and ends {source}."
+      },
+      "Price": "{name} throws the curse off and takes {n} Shadow damage ({talent}).",
+      "Lingering": "{name} is Slowed until the end of its next turn ({talent}).",
+      "LingeringBane": "{name} takes a Bane on its next Attack Test before the end of its next turn ({talent}).",
+      "NoPardon": "{name} is Frightened of the Sovereign until the end of its next turn ({talent}).",
+      "Homage": "{name} gains 1 Tribute as {target} fails against the blood curse ({talent}).",
+      "Beneath": "{name} gains 1 Tribute as the attack misses ({talent}).",
+      "Insolence": "{name}'s next Test against that creature takes a Boon ({talent}).",
+      "InsolenceName": "Insolence Repaid",
+      "TooBeautiful": "{name} is too beautiful to die: {n} Tribute spent, 1 Health, and {temp} temporary Health ({talent}).",
+      "BloodedClaws": "{talent}: {n} Shadow damage.",
+      "ClawOffer": "{name}'s claws hit {target}.",
+      "Tasting": {
+        "Button": "Tasting Bite ({n} Tribute)",
+        "Refused": "{target} is not Bleeding, Prone or Stunned.",
+        "Landed": "{name} bites {target}: {n} Shadow damage and {temp} temporary Health."
+      },
+      "LatchOn": {
+        "Button": "Latch On ({n} Tribute)",
+        "Landed": "{name} latches on to {target}.",
+        "NoFeed": "{name} cannot feed on it now."
+      },
+      "Latch": {
+        "Name": "Latched ({name})",
+        "NoOffHand": "{name} is latched on and cannot make an Off-Hand Attack.",
+        "EscapeTitle": "Break the latch",
+        "EscapeText": "{name} makes a Body Resilience Test against DC {dc}. A success breaks {holder}'s latch.",
+        "Escaped": "{name} breaks the latch.",
+        "Holds": "{name} fails, and the latch holds.",
+        "Tick": "{name} drains {target}: {n} Shadow damage, and {name} regains that much Health.",
+        "Held": "Latched on to {target}",
+        "LetGo": "Let go",
+        "LetGoDone": "{name} lets go of {target}.",
+        "NoneHeld": "{name} is not latched on to anything.",
+        "Refuse": {
+          "self": "{name} cannot latch on to themselves.",
+          "stunned": "{name} is Stunned and cannot latch on.",
+          "zero": "{name} or {target} is at 0 Health.",
+          "far": "{target} is more than 5 feet from {name}.",
+          "pending": "The latch could not be laid on {target}."
+        },
+        "Ended": {
+          "stunned": "{name} is Stunned, and the latch on {target} ends.",
+          "zero": "The latch on {target} ends at 0 Health.",
+          "far": "{name} and {target} are more than 5 feet apart, and the latch ends."
+        }
+      },
+      "Leash": { "Refused": "{name} cannot willingly move more than {feet} feet from the one who holds it ({source})." },
+      "RoyalDue": {
+        "Offer": "{name} has damaged their prey {target}: Royal Due for {cost} Tribute deals {n} Shadow damage and restores that much Health.",
+        "Button": "Royal Due ({cost} Tribute)",
+        "Landed": "{name} takes their due from {target}: {n} Shadow damage, and {name} regains that much Health.",
+        "Refuse": {
+          "notHeld": "{name} does not hold Royal Due.",
+          "notPrey": "{target} is not {name}'s prey.",
+          "noDamage": "No damage was dealt.",
+          "used": "{name} has taken Royal Due this turn.",
+          "tribute": "{name} has too little Tribute."
+        }
+      },
+      "Flourish": { "Discount": "{name}'s next Half-Action Death spell this turn costs {n} less Vitae." },
+      "Swift": {
+        "notHeld": "{name} does not hold {talent}.",
+        "notAction": "{talent} reaches a spell that costs an action.",
+        "oneTarget": "{talent}: the spell must target one creature.",
+        "far": "{talent}: the creature must be within your reach.",
+        "used": "{talent} has been used this round."
+      },
+      "LastDraught": {
+        "Offer": "{target} dies within reach of {name}: Last Draught feeds with no Test.",
+        "Button": "Feed (Last Draught)"
+      },
+      "Example": {
+        "Offer": "{target} falls under {name}'s {source}. Lay it on another creature with no Vitae:",
+        "Title": "Resist {source}",
+        "Text": "{name} makes a {resilience} Resilience Test against DC {dc}. A failure lays {source} on it.",
+        "Landed": "{name} fails and is under {source}."
+      }
+    },
     "Modifier": {
       "InvisibleStealth": "Invisibility — Stealth",
       "Fatigue": "Fatigue 3 or higher",
@@ -4353,6 +4956,7 @@
       "Footing": "Poor footing or heavy weather",
       "Untrained": "Equipment you are not trained to use",
       "GearBoon": "Worn: a Boon on this skill (08 §6)",
+      "SpellSkillBoon": "Your spell: a Boon on this skill against the creatures it names",
       "GearTestBoon": "Worn: a Boon on this Test (08 §20)",
       "GearTestBane": "Worn: a Bane on this Test (08 §20)",
       "HeavyWeapon": "Heavy weapon below Strength 13 (08 §5)",
@@ -4388,6 +4992,7 @@
       "TalentBane": "lays a Bane on this Test",
       "Opening": "holds the target under your Opening: a Boon on this attack",
       "TargetDeterred": "on the target: a Bane on attacks against it",
+      "TargetCastBane": "on the target: a Bane on a Casting Test for a spell that targets it",
       "TargetMirrorImages": "Mirror Image: a Bane against this target",
       "AttackerBane": "The target wears what your faction attacks at a Bane",
       "LesserInvisibleTarget": "Lesser Invisibility: two Banes against this target",
@@ -4403,6 +5008,10 @@
       "MovementLimit": {
         "Name": "Hold a drag to the turn's Half-Actions",
         "Hint": "In a started fight, on the mover's own turn, refuse a drag further than the turn's remaining Half-Actions pay for. Turn it off to leave the distance to the table."
+      },
+      "BloodLongRest": {
+        "Name": "Units of blood a San'layn's Long Rest takes",
+        "Hint": "A San'layn's Short Rest takes 1 unit of blood and its Long Rest takes this many. A Long Rest without enough restores no Health, no Power and no Fatigue. Set 0 to need none."
       }
     },
     "Cast": {
@@ -4611,7 +5220,8 @@
         "Battlerig": "Gnomish Battle Rig",
         "Hexed": "Hex",
         "Polymorphed": "Polymorph",
-        "Drake": "Drake form"
+        "Drake": "Drake form",
+        "BloodQueen": "Blood Monarch form"
       },
       "EffectName": {
         "shapeshift": "{name} form",
@@ -5028,6 +5638,7 @@
         "classNotOpen": "{race} cannot take the {cls}.",
         "noGuise": "Choose the people whose guise you wear.",
         "guiseNotAPeople": "{name} cannot be a guise. Choose one of the other peoples.",
+        "guiseNotWorn": "{name} cannot be worn as a guise. Choose one of the other peoples.",
         "noMethod": "Pick a method.",
         "abilityUnassigned": "Every ability needs a score.",
         "scoreUnnatural": "{score} is outside 3 to 20.",
@@ -5165,7 +5776,7 @@
         "Type": "Choose one of the eight types.",
         "Marker": "{marker} is not a marker; Mindless is the only one.",
         "Size": "Choose a size.",
-        "Race": "{race} is not one of the eleven peoples.",
+        "Race": "{race} is not one of the peoples in 02-CHARACTER-OPTIONS.",
         "RaceSize": "A {race} is {want}, not {have}.",
         "ThreatShare": "The Threat Share is the weight class's: {want}.",
         "BossDungeon": "A Boss names its Dungeon.",
@@ -6379,7 +6990,8 @@
         "turn": "{name}'s next attack this turn takes {talent}.",
         "round": "{name}'s next attack this round takes {talent}.",
         "encounter": "{name}'s next attack this encounter takes {talent}.",
-        "nextTurn": "{name}'s next attack before the end of their next turn takes {talent}."
+        "nextTurn": "{name}'s next attack before the end of their next turn takes {talent}.",
+        "untilOwnTurn": "{name}'s next attack before the start of their next turn takes {talent}."
       }
     },
     "NoHealing": {

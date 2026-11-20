@@ -69,7 +69,9 @@ export async function mindControlSavesForEffect(actor,effect) {
   let result;
   if(choice.action==='resume') result=await resumeMindControlRepeat({...args,roll:async({actor,resilience,dc,resistOf})=>{
     const {resilienceWithDialog}=await import('./actions.mjs');
-    return resilienceWithDialog(actor,resilience,null,{dc,link:resistOf});
+    const {obedienceRepeatBanes}=await import('../effects/sovereign-features.mjs');
+    const talentBanes=obedienceRepeatBanes(actor);
+    return resilienceWithDialog(actor,resilience,null,{dc,link:resistOf,...(talentBanes?{talentBanes}:{})});
   }});
   else result=await reviewMindControlRepeat({...args,acknowledged:choice.acknowledged});
   ui.notifications[result.ok?'info':'warn'](words(result.ok?'Done':'Unresolved'));

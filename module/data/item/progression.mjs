@@ -94,7 +94,14 @@ export class ClassData extends foundry.abstract.TypeDataModel {
       power: new fields.SchemaField({
         name: choiceField(AZEROTH.powerTypes),
         max: optionalNumberField({ min: 0 }),
-        caster: choiceField(AZEROTH.casterGrades, { initial: "none", nullable: false })
+        caster: choiceField(AZEROTH.casterGrades, { initial: "none", nullable: false }),
+        // **A POOL SCALED OFF THE CHART** (02 §7's Sovereign: *the pool on the casting chart in section 6
+        // times 1.5, plus your Constitution modifier*; the San'layn and Sovereign plan's V1): the scale and
+        // the ability the parser reads off the entry, null on every other class. `rules/vitae.mjs
+        // #poolScale` falls back to the pool's own scale where a document carries none, so a world copy
+        // made before these fields reads the same size and needs no migration.
+        scale: new fields.NumberField({ required: false, nullable: true, integer: false, initial: null, min: 0 }),
+        ability: choiceField(AZEROTH.abilities)
       }),
 
       // A class trains two of the three Resiliences (05 §1) - the Chronomancer

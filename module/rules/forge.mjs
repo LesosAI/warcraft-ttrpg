@@ -24,6 +24,8 @@ import {
   emptySignature, gatesWithNothingBehind, pressedSentences, seedSignature, signatureEffectOf
 } from "./signatures.mjs";
 import { htmlFromProse } from "./prose.mjs";
+// An unarmed strike is never forged (the San'layn and Sovereign plan, C15; D-1162).
+import { isUnarmed } from "./unarmed.mjs";
 
 /** 08 §20's Signature table: what an Epic pays for one out of its budget. */
 export const SIGNATURE_KINDS = Object.freeze({
@@ -137,6 +139,9 @@ export function plan({ base, rarity = "common", prefixes = [], suffix = null, gr
   const reasons = [];
   const notes = [];
   if (!base) return { ok: false, reasons: ["no base item"], notes, spent: 0, band: null, price: null, name: null };
+  // 08 §7's Unarmed and the Sovereign's Claws are an unarmed strike, never a thing a
+  // smith works (the plan's B.5: *not sold, looted, forged or coated*; D-1162).
+  if (isUnarmed(base)) return { ok: false, reasons: ["an unarmed strike is never forged (08 §7)"], notes, spent: 0, band: null, price: null, name: null };
   if (specialEquipmentOf(base)?.slot
     && (prefixes.some(Boolean) || suffix))
     reasons.push("special designs carry their own effect and no affixes (08 §11)");
