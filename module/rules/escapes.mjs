@@ -159,6 +159,17 @@ export const ESCAPE_UNREAD = Object.freeze({
  */
 export const ESCAPE_BY_HOLD = Object.freeze(["Stasis"]);
 
+/**
+ * **EVERY TEST 07 REPEATS THAT ANOTHER DOOR BUILDS**, by name, with the door: the reader takes nothing
+ * off the words (the condition they name is not the creature's), and the door that lays the control
+ * repeats the Test itself. 07 §17's Puppet of Flesh rides the Mind Control door (run 4c-S), whose
+ * repeated Spirit Test at the end of each of the controlled creature's turns ends the control
+ * (`effects/mind-control-repeat.mjs#repeatMindControl`); its bold **Stunned** is the CASTER's.
+ */
+export const ESCAPE_BY_DOOR = Object.freeze({
+  "Puppet of Flesh": "the Mind Control door's repeated Spirit Test at the end of each of the controlled creature's turns (effects/mind-control-repeat.mjs#repeatMindControl), its Stunned the caster's own"
+});
+
 const RESILIENCES = Object.freeze(["body", "reflex", "spirit"]);
 
 /** HTML to flat text, `**` kept: the condition's bold is how 07 names it. */
@@ -225,6 +236,20 @@ export function readEscapeAny(effectText, fields = {}) {
       ? [...s.matchAll(/\*\*(\w+)\*\*/g)].map(x => conditionOf(x[1])).filter(id => id && id !== conditionOf(named[1]) && !/^decay$/.test(id))
       : [];
     return { condition: conditionOf(named[1]), on: "turnEnd", resilience: test ? test[1].toLowerCase() : own, banes: repeat[1] ? 1 : 0, ...(also.length ? { also } : {}), ...(leaves ? { leaves: true } : {}) };
+  }
+  // **07 §17's NECROMANCER REPEAT** (Cripple, Bone Prison: *It repeats the Test at the end of each of its
+  // turns, and the spell ends on a success*; run 4c-S): the creature's OWN Test, every turn and never
+  // *may*, ending the condition its failure laid - read off the nearest sentence before it that names
+  // the failure, so Bone Prison's *While it is Entangled by this spell ...* between them is passed over.
+  // Puppet of Flesh's *The target repeats* is the Mind Control door's (`ESCAPE_BY_DOOR`).
+  for (let i = 0; i < list.length; i++) {
+    if (!/^It repeats the Test at the end of each of its turns, and the spell ends on a success\b/.test(list[i])) continue;
+    for (let j = i - 1; j >= 0; j--) {
+      if (!/\bOn a failure\b/.test(list[j])) continue;
+      const named = /\*\*(\w+)\*\*/.exec(list[j]);
+      if (!named) break;
+      return { condition: conditionOf(named[1]), on: "turnEnd", resilience: own, banes: 0 };
+    }
   }
   return null;
 }
@@ -421,4 +446,35 @@ export function escapeRefusal({ held = false, on = "turnEnd", budgetShort = fals
 export function leavesSustain({ escape = null, othersHeld = null } = {}) {
   if (escape?.leaves !== true || !escape.cast || !escape.by) return false;
   return Number.isInteger(othersHeld) && othersHeld === 0;
+}
+
+/** The two spells whose Charmed carrier rides its own end-turn Spirit Test (`cleanEscape`'s exception). */
+export const COMPEL_IDENTIFIERS = Object.freeze(["compel", "dominate"]);
+
+/**
+ * **A COMPEL OR DOMINATE CARRIER STILL MISSING ITS REPEAT TEST** (`effects/compel.mjs#repairCompelEscapes`):
+ * a live Charmed effect of one of the two spells whose stored escape is not its own. The repair's loop
+ * asks this of every effect and passes over the rest, so a creature carrying none has nothing to repair.
+ *
+ * @param {{flags?: object, disabled?: boolean, active?: boolean, statuses?: Set<string>}|null} effect
+ * @returns {boolean}
+ */
+export function compelEscapeMissing(effect) {
+  const f = effect?.flags?.["azeroth-rpg"];
+  if (!COMPEL_IDENTIFIERS.includes(f?.identifier) || effect.disabled || effect.active === false
+    || !effect.statuses?.has?.("charmed")) return false;
+  return cleanEscape(f.escape)?.identifier !== f.identifier;
+}
+
+/**
+ * **WHETHER A TURN'S END HAS A COMPEL ESCAPE TO REPAIR** (`AzerothCombat#_escapePrompts`, team IMP after
+ * fix run MC-R): asked BEFORE `effects/compel.mjs` is imported, because the `import()` alone took about
+ * 1 s at every end of every turn on the test machine, ahead of Mind Control's repeat Test.
+ *
+ * @param {Iterable<object>|null} effects  the actor's effects
+ * @returns {boolean}
+ */
+export function compelRepairDue(effects) {
+  for (const effect of effects ?? []) if (compelEscapeMissing(effect)) return true;
+  return false;
 }

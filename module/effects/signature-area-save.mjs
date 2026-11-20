@@ -2,6 +2,7 @@ import {deliverSignatureAreaDamage} from './signature-area-delivery.mjs';
 import {checkOutcome} from '../rules/area-ticks.mjs';
 import {kindsOfActor} from './area-strikes.mjs';
 import {areaTransferRefusal} from './pending-area-transfer.mjs';
+import {potentForStrike,recordAreaMark} from './empower-areas.mjs';
 const scope='azeroth-rpg';
 const resolve=uuid=>{try{return fromUuidSync(uuid);}catch{return null;}};
 
@@ -38,7 +39,12 @@ export async function deliverRecordedAreaSignature({message,result,record,user}=
  const saved=evidence();
  const outcome=checkOutcome(area.check,{success:record.success,kinds:kindsOfActor(actor)});
  if(!outcome.damage)return {ok:true,lines:[]};
- return deliverSignatureAreaDamage({message:original,caster,actor,token,spell:area.spell??{},damage:outcome.damage,
+ // 02 §7's Potent on a failed area Test (the 4a review's MUST-FIX 2; O-413): the rise rides the
+ // Signature's delivery, and the Region records the creature only once that delivery is ok.
+ const rise=potentForStrike(region,actor,{damage:outcome.damage});
+ const delivered=await deliverSignatureAreaDamage({message:original,caster,actor,token,spell:area.spell??{},damage:rise.damage,
   event:`areaSave:${message.uuid}:${result.uuid}`,
   validate:()=>admitted()&&resolve(region.uuid)===region&&evidence()===saved});
+ if(delivered?.ok&&rise.rose>0)await recordAreaMark(region,'potentStruck',actor.uuid);
+ return delivered;
 }

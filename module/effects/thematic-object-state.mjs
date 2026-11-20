@@ -231,7 +231,7 @@ export async function sha256ThematicText(text) {
 }
 
 /** Player-facing preparation; the GM reviews every object fact before payment. */
-export async function prepareThematicObject({actor, spell, source, targets = []} = {}) {
+export async function prepareThematicObject({actor, spell, source, targets = [], farReaching = false} = {}) {
   const identifier = spell?.system?.identifier;
   if (!SUPPORTED_CASTS.has(identifier)) return THEMATIC_OBJECT_SPELLS.includes(identifier) ? refuse("adapter-not-implemented") : null;
   const fields = choiceFields(identifier);
@@ -245,7 +245,8 @@ export async function prepareThematicObject({actor, spell, source, targets = []}
     // **HELD TO 07's RANGE BEFORE THE PAYMENT** (stage 11, D-906): the one point rule
     // (`canvas/range.mjs#spellPointAccept`), the same the card's Place area holds the anchor to.
     const {spellPointAccept} = await import("../canvas/range.mjs");
-    const accept = spellPointAccept(tokenAt(refOf(source)), spell);
+    // 02 §7's Far-reaching doubles the Range the point is held to (the 4a review's SHOULD-FIX).
+    const accept = spellPointAccept(tokenAt(refOf(source)), spell, {farReaching: farReaching === true});
     // 07's *A 5 ft radius* since O-314 (the cube 07 printed before has no shape on the board).
     const point = await pickPoint({hint: game.i18n.localize("AZEROTH.HeatMirage.PickAnchor"), sceneId, ...(accept ? {accept} : {})});
     if (!point || globalThis.canvas?.scene?.id !== sceneId) return refuse("cancelled");

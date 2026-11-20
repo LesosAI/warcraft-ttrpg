@@ -42,7 +42,7 @@ import { SequencerPlayer, warn } from "./player.mjs";
 import {
   cardPrivacyKey, cardRecord, cardRecords, effectRecord, effectRecords, effectUpdateRecords, factsFor, featureCardSeen,
   liveFeatureCasts, markPrivacySeeded, notePrivacy, privateCasts, regionRecord, resistCueRecord, runeSpendRecords, stateSnapshot,
-  forcedMoveRecords
+  forcedMoveRecords, essenceGainRecords, collapseRecords, soulHarvestRecords
 } from "./records.mjs";
 import {
   animationHidden, animationStops, setAnimationHidden, setAnimationStops
@@ -598,6 +598,15 @@ export function registerAnimationHooks() {
   // operation (`documents/runes.mjs#spendRunesOn`), which reaches every client's hook, so each
   // plays the flare for itself. Any other actor update carries no such key and implies nothing.
   Hooks.on("updateActor", guarded("rune-spend", (actor, changed, options) => playCuesFor(runeSpendRecords(options))));
+  // **THE ESSENCE WISP** (02 §7's Necromancer; the animation contract's §2): the death watch writes
+  // the gain on the same pool write that raises the Essence, so every client plays it for itself.
+  Hooks.on("updateActor", guarded("essence-gain", (actor, changed, options) => playCuesFor(essenceGainRecords(options))));
+  // **SOUL HARVEST'S WISP** (02 §7's Warlock; the Necromancer plan's Phase 7): the same death watch
+  // writes it on the Mana write it makes, in the Essence wisp's shape, under its own option.
+  Hooks.on("updateActor", guarded("soul-harvest", (actor, changed, options) => playCuesFor(soulHarvestRecords(options))));
+  // **A RAISED DEAD COLLAPSING** (the animation contract's section 3): the collapse door writes the
+  // bodies on the Token delete that removes them, which reaches every client's hook.
+  Hooks.on("deleteToken", guarded("horde-collapse", (token, options) => playCuesFor(collapseRecords(token, options))));
   // **A FORCED MOVE** (02's Death Grip, D-1015; every push and pull, O-397): the one forced-movement
   // door writes the move on the token's own displacement, which reaches every client's hook, so each
   // plays the `arrive` cue for itself. Any other token update implies nothing.
@@ -672,7 +681,7 @@ export const animations = {
   plan,
   loopsFor,
   tables,
-  records: { cardRecord, cardRecords, regionRecord, effectRecord, effectRecords, effectUpdateRecords, resistCueRecord, runeSpendRecords, forcedMoveRecords, factsFor, stateSnapshot },
+  records: { cardRecord, cardRecords, regionRecord, effectRecord, effectRecords, effectUpdateRecords, resistCueRecord, runeSpendRecords, essenceGainRecords, soulHarvestRecords, collapseRecords, forcedMoveRecords, factsFor, stateSnapshot },
   director: { reconcile: (options = { force: true }) => reconcileNow(options), setPlayer, resetPlayer, activeLoops, wantedLoops, prune: pruneAnimationKeys },
   // The player that draws nothing, so a batch, a macro or a Playwright script
   // can swap it in without knowing a module path (`quench-tests.mjs` already

@@ -2,31 +2,21 @@ import { CRUSHRIDGE, crushridgeDeath } from "../rules/crushridge.mjs";
 import { CRUSHRIDGE_DEATH, resolveCrushridgeDeath } from "./crushridge-death-resolve.mjs";
 import { CRUSHRIDGE_SOURCE_REVIEW, selectCrushridgeDeathSource } from "./crushridge-death-source.mjs";
 import { captureCrushridgeDeath } from "./crushridge-review.mjs";
+import { onDeath } from "./death-watch.mjs";
 const values = collection => [...(collection?.values?.() ?? collection ?? [])];
 const writer = () => globalThis.game?.user?.isGM === true && game.users?.activeGM?.id === game.user.id;
 
-/** Seed observations on load/handoff, never infer an unobserved death. Pending
- * or partial records survive reload for explicit review instead of replay. */
+/** The death watch (`effects/death-watch.mjs`) keeps the Health baseline for every actor on
+ * every client, primed on load and kept through a GM handoff, and never infers an unobserved
+ * death; this listens on the active GM's client. Pending or partial records survive reload for
+ * explicit review instead of replay. */
 export function registerCrushridgeDeathHooks() {
-  const health = new Map(), pending = new Set();
+  const pending = new Set();
   const tokens = () => values(game.scenes).flatMap(scene => values(scene.tokens));
-  const seed = () => {
-    health.clear();
-    for (const token of tokens()) if (token.actor?.uuid) health.set(token.actor.uuid, token.actor.system?.health?.value);
-  };
-  Hooks.on("ready", seed);
-  let gmId = game.users?.activeGM?.id;
-  Hooks.on("updateUser", () => {
-    const next = game.users?.activeGM?.id;
-    if (next !== gmId) { gmId = next; seed(); }
-  });
-  Hooks.on("createToken", token => {
-    if (token.actor?.uuid) health.set(token.actor.uuid, token.actor.system?.health?.value);
-  });
-  Hooks.on("updateActor", async actor => {
-    if (!actor?.uuid) return;
-    const previous = health.get(actor.uuid), current = actor.system?.health?.value;
-    health.set(actor.uuid, current);
+  onDeath(async event => {
+    const actor = event.actor;
+    if (!actor?.uuid || !event.healthFell) return;
+    const previous = event.before, current = event.after;
     if (!writer() || !crushridgeDeath(previous, current) || pending.has(actor.uuid)
       || !actor.system?.creatureAbilities?.some(row => row.name === CRUSHRIDGE.donorAbility)) return;
     const sources = tokens().filter(token => token.actor === actor);

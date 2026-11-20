@@ -691,7 +691,15 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
       // is made off the table as often as on it, and this is the second door.
       // The handler re-checks all of it at the press, because a rendered
       // banner is a record of a moment.
-      plantable: this.isEditable && bond.kind === "totem" && !standsAnywhere(this.actor)
+      plantable: this.isEditable && bond.kind === "totem" && !standsAnywhere(this.actor),
+      // **A HORDE CREATURE'S MARKS IN WORDS** (02 §7; 07's grafts; the Necromancer plan's door 15):
+      // that it keeps its Reaction, and every graft it was given. Release here is a dismissal.
+      horde: bond.kind === "raised" && bond.horde === true ? {
+        keepsReaction: bond.keepsReaction === true,
+        grafts: (this.actor.getFlag("azeroth-rpg", "grafts") ?? bond.grafts ?? []).map(g => (g === "wardedHide" && (this.actor.getFlag("azeroth-rpg", "graftWard") ?? []).length
+          ? game.i18n.format("AZEROTH.Horde.Panel.GraftSchool", { graft: game.i18n.localize(`AZEROTH.Graft.${g}`), schools: (this.actor.getFlag("azeroth-rpg", "graftWard") ?? []).map(s => game.i18n.localize(AZEROTH.schools?.[s] ?? s)).join(", ") })
+          : game.i18n.localize(`AZEROTH.Graft.${g}`))).join(" · ")
+      } : null
     };
   }
 
@@ -1044,7 +1052,9 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
     if (isThrallBond(bond)) return releaseThrallBond(this.actor);
     const owner = bond?.ownerUuid ? await fromUuid(bond.ownerUuid) : null;
     if (!owner) return worldActorOf(this.actor).unsetFlag("azeroth-rpg", "bond");
-    return release(owner, worldActorOf(this.actor).uuid);
+    // The GM's Release is no collapse by the Necromancer's own choice (the lead's Q4 of the 4b
+    // review); the Necromancer's player releasing their own raised dead from the banner is.
+    return release(owner, worldActorOf(this.actor).uuid, { byChoice: !game.user?.isGM });
   }
 
   /**

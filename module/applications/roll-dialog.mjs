@@ -20,6 +20,9 @@
 import { eachTargetFor, spellAimsAtTier } from "../canvas/engaged.mjs";
 // O-307: a DC field's text read the one way, per target and on the single field.
 import { typedDcValue } from "../rules/casting.mjs";
+// The Necromancer's Essence pays no called shot (the Necromancer plan).
+import { paysByKind } from "../rules/essence.mjs";
+import { drawnManaPrice } from "../rules/necromancer-lines.mjs";
 import { AZEROTH } from "../config.mjs";
 import { mirrorImageBanes } from "../rules/mirror-image.mjs";
 import { untrainedForRoll } from "../rules/equipment-training.mjs";
@@ -657,7 +660,7 @@ export function prepareRoll(actor, given) {
   // The pool a called shot pays from: the roller's own, or - a companion whose owner
   // holds 04's Shared Quarry - the owner's Quarry (D-779; `AzerothActor#momentumPayer`).
   const calledPayer = actor.momentumPayer?.({ amount: AZEROTH.CALLED_SHOT_MOMENTUM }) ?? null;
-  const momentum = calledPayer?.pool ?? actor.system?.momenta?.[0] ?? null;
+  const momentum = calledPayer?.pool ?? (actor.system?.momenta ?? []).find(p => paysByKind(p?.name)) ?? null;
   // The called shot's price: 06 §7's 2, or what Runic Discipline sets (02 §7, run F2).
   const calledShotCost = calledPayer?.price ?? AZEROTH.CALLED_SHOT_MOMENTUM;
   // D-613: the passives that could bear on this roll. One with a Boon or
@@ -1355,6 +1358,10 @@ export async function promptRoll(actor, spec) {
         drawModifiers(form, lines);
         const momentumBox = form.elements.momentum;
         if (momentumBox) momentumBox.disabled = !shown.canPay || !choice.location || choice.location === "body";
+        // **THE PRICE DRAWN FOLLOWS A TICKED FLESH OFFERING** (O-412): the number above the lines is
+        // what `castSpell` will charge (`rules/necromancer-lines.mjs#drawnManaPrice`).
+        const price = form.querySelector("[data-mana-base]");
+        if (price) price.textContent = String(drawnManaPrice(Number(price.dataset.manaBase), shown.p.talentLines ?? [], choice.talentLines ?? []));
       };
       // A target's DC field typed (O-307): kept by target key, so a render puts it back and no
       // other target's field ever reads it.

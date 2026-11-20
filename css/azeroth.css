@@ -87,10 +87,15 @@
     --azeroth-alliance-blue-dark: #6fb2f0;
     --azeroth-horde-red-dark: #e8604f;
     --azeroth-void-dark: #a678e0;
-    --azeroth-rune-blood: #e8604f;
-    --azeroth-rune-frost: #6fb2f0;
+    --azeroth-rune-blood: #e5483e;
+    --azeroth-rune-frost: #2f6fe0;
     --azeroth-rune-spent: #8e877b;
     --azeroth-rune-strike: #f2ece0;
+    --azeroth-runic-power: #8fd3ff;
+    --azeroth-essence: #b9e4c0;
+    --azeroth-bone-edge: #e6dbc0;
+    --azeroth-flesh-edge: #e8604f;
+    --azeroth-health-fill: #6fd36a;
   }
   .azeroth, .azeroth-card {
     --content-link-text-color: var(--azeroth-ink);
@@ -5651,7 +5656,16 @@
   .azeroth.sheet.actor.character .azeroth-rune-power-fill {
     display: block;
     height: 100%;
-    background-color: var(--azeroth-rune-frost);
+    background-color: var(--azeroth-runic-power);
+  }
+  .azeroth.sheet.actor.character .azeroth-pool.is-runicPower .azeroth-segment.is-filled {
+    background: var(--azeroth-runic-power);
+  }
+  .azeroth.sheet.actor.character .azeroth-pool.is-runes .azeroth-segment.is-filled.is-blood {
+    background: var(--azeroth-rune-blood);
+  }
+  .azeroth.sheet.actor.character .azeroth-pool.is-runes .azeroth-segment.is-filled.is-frost {
+    background: var(--azeroth-rune-frost);
   }
   .azeroth.sheet.actor.character .azeroth-rune-weapon {
     display: grid;
@@ -5790,6 +5804,238 @@
   .azeroth.sheet.actor.character .azeroth-rune-none {
     color: var(--azeroth-page-ink-soft);
     font-size: var(--font-size-12, 12px);
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-panel {
+    --azeroth-rarity-uncommon: var(--azeroth-rarity-uncommon-dark);
+    --azeroth-rarity-rare: var(--azeroth-rarity-rare-dark);
+    --azeroth-rarity-epic: var(--azeroth-rarity-epic-dark);
+    --azeroth-rarity-legendary: var(--azeroth-rarity-legendary-dark);
+    display: grid;
+    gap: 10px;
+    padding: 8px;
+    background-color: var(--azeroth-panel-dark);
+    color: var(--azeroth-page-ink);
+    border: 1px solid var(--azeroth-page-edge);
+    border-radius: 3px;
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-meters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+    gap: 8px;
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-meter {
+    display: grid;
+    gap: 5px;
+    padding: 8px 10px;
+    background-color: var(--azeroth-slot);
+    border: 1px solid var(--azeroth-slot-edge);
+    border-radius: 4px;
+    min-width: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-meter-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-meter-title {
+    font-weight: 700;
+    color: var(--azeroth-gold-text);
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-count {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-note {
+    color: var(--azeroth-page-ink-soft);
+    font-size: var(--font-size-12, 12px);
+  }
+  .azeroth.sheet.actor.character .azeroth-essence-sockets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .azeroth.sheet.actor.character .azeroth-essence-socket {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    border-radius: 50%;
+    background-color: var(--azeroth-slot);
+    box-shadow: inset 0 0 0 2px var(--azeroth-slot-edge);
+  }
+  .azeroth.sheet.actor.character .azeroth-essence-socket.is-held {
+    background-color: var(--azeroth-essence);
+    box-shadow: inset 0 0 0 2px var(--azeroth-essence);
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-bar {
+    display: block;
+    height: 8px;
+    min-width: 40px;
+    background-color: var(--azeroth-slot);
+    border: 1px solid var(--azeroth-slot-edge);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-bar-fill {
+    display: block;
+    height: 100%;
+    background-color: var(--azeroth-health-fill);
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-rows {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-row {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    gap: 6px 10px;
+    align-items: start;
+    margin: 0;
+    padding: 8px 10px;
+    background-color: var(--azeroth-slot);
+    border: 1px solid var(--azeroth-slot-edge);
+    border-radius: 4px;
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-icon {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    overflow: hidden;
+    border-radius: 4px;
+    background-color: var(--azeroth-panel-dark);
+    color: var(--azeroth-page-ink-soft);
+    font-weight: 700;
+    font-size: var(--font-size-13, 13px);
+    box-shadow: inset 0 0 0 2px var(--azeroth-slot-edge);
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-icon.is-bone {
+    box-shadow: inset 0 0 0 2px var(--azeroth-bone-edge);
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-icon.is-flesh {
+    box-shadow: inset 0 0 0 2px var(--azeroth-flesh-edge);
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-icon.is-bone:has(img) {
+    outline: 2px solid var(--azeroth-bone-edge);
+    outline-offset: -2px;
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-icon.is-flesh:has(img) {
+    outline: 2px solid var(--azeroth-flesh-edge);
+    outline-offset: -2px;
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-main {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-name {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 6px;
+    font-weight: 700;
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-meta,
+  .azeroth.sheet.actor.character .azeroth-horde-health-text {
+    color: var(--azeroth-page-ink-soft);
+    font-size: var(--font-size-13, 13px);
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-health {
+    display: grid;
+    grid-template-columns: minmax(40px, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-health-text {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--azeroth-page-ink);
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-grafts {
+    font-size: var(--font-size-13, 13px);
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-grafts b {
+    color: var(--azeroth-page-ink-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-mark {
+    display: inline-block;
+    padding: 1px 5px;
+    border: 1px solid var(--azeroth-page-ink);
+    border-radius: 3px;
+    color: var(--azeroth-page-ink);
+    font-size: var(--font-size-13, 13px);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    line-height: 1.3;
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-mark.is-lead {
+    border-color: var(--azeroth-gold-text);
+    color: var(--azeroth-gold-text);
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-mark.is-react {
+    border-style: dashed;
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-mark.is-pending {
+    border-style: dotted;
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: stretch;
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-control {
+    height: auto;
+    min-height: 26px;
+    padding: 3px 10px;
+    white-space: nowrap;
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-empty {
+    margin: 0;
+    color: var(--azeroth-page-ink-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    margin: 0;
+    padding: 8px 0 0;
+    list-style: none;
+    border-top: 1px solid var(--azeroth-slot-edge);
+    color: var(--azeroth-page-ink-soft);
+    font-size: var(--font-size-13, 13px);
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-legend li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-horde-overview {
+    font-variant-numeric: tabular-nums;
+  }
+  .azeroth.sheet.actor.npc .azeroth-horde-mark {
+    display: inline-block;
+    padding: 0 5px;
+    border: 1px dashed currentColor;
+    border-radius: 3px;
+    font-weight: 700;
+  }
+  .azeroth.sheet.actor.npc .azeroth-horde-banner-grafts {
+    font-style: italic;
   }
   .azeroth-roll-dialog .window-content {
     background: var(--azeroth-parchment);

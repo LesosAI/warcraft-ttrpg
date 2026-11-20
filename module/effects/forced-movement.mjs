@@ -112,6 +112,9 @@ export function resistingSize(actor) {
  */
 export function beingMovedBy(victim, by, { ignoreSize = null } = {}) {
   if (!victim) return null;
+  // **07 §17's BONE PRISON** (*While it is Entangled by this spell, it cannot be moved*; run 4c-S): the
+  // prison's Entangled holds it against every move, its own allies' and its own pull included.
+  if ([...(victim.effects ?? [])].some(e => e.active !== false && e.disabled !== true && e.statuses?.has?.("entangled") && e.flags?.["azeroth-rpg"]?.bonePrison)) return "refuses";
   // The creature's own refusal (14's *cannot be moved against its will*), and March of the
   // Damned's while it stands on it (`rules/auras.mjs#auraHoldsUnmoved`).
   const refuses = [...(victim.system?.refuses ?? []), ...(auraHoldsUnmoved([...(victim.effects ?? [])]) ? ["forcedMovement"] : [])];

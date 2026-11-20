@@ -1,5 +1,5 @@
 import {feetApart} from '../canvas/footprints.mjs';
-import {endTurnDamageStamp} from '../rules/end-turn-damage.mjs';
+import {endTurnDamageStamp,endTurnDamageArmed} from '../rules/end-turn-damage.mjs';
 import {deliverSignatureAreaDamage} from './signature-area-delivery.mjs';
 import {actorOf,areaRecord,staleIn,worldClock} from '../canvas/sustained-areas.mjs';
 const scope='azeroth-rpg';
@@ -39,6 +39,7 @@ export async function deliverEndTurnDamage(combat,combatant,stamp){
  for(const other of scene.tokens){
   if(other.id===token.id||!other.actor)continue;
   for(const effect of other.actor.effects){
+   if(!endTurnDamageArmed(effect,'self'))continue;
    const flags=effect.flags?.[scope],message=game.messages.get(flags?.messageId),f=message?.flags?.[scope];
    const source=endTurnDamageStamp(f,'self');
    if(!source||flags?.cast!==f.cast||!same(flags.endTurnDamage,source.endTurnDamage)
@@ -59,6 +60,7 @@ export async function deliverEndTurnDamage(combat,combatant,stamp){
   }
  }
  for(const region of scene.regions){
+  if(!endTurnDamageArmed(region,'area'))continue;
   const flags=region.flags?.[scope],message=game.messages.get(flags?.messageId),f=message?.flags?.[scope];
   const source=endTurnDamageStamp(f,'area'),caster=actorOf(flags?.caster);
   if(!source||!caster||flags.cast!==f.cast||f.spellLockCaster!==caster.uuid

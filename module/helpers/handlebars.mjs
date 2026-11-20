@@ -78,6 +78,7 @@ const TEMPLATES = [
   "systems/azeroth-rpg/templates/actor/partials/pool.hbs",
   // The Death Knight's rune panel and its sockets (D-919; run F2).
   "systems/azeroth-rpg/templates/actor/partials/rune-panel.hbs",
+  "systems/azeroth-rpg/templates/actor/partials/horde-panel.hbs",
   "systems/azeroth-rpg/templates/actor/partials/rune-row.hbs",
   "systems/azeroth-rpg/templates/actor/partials/rune-socket.hbs",
   // One pool row on a creature's sheet, drawn by Statistics and by the Spells

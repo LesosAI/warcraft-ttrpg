@@ -732,6 +732,88 @@ export function claimEntry(region, tokenId, turnKey) {
 }
 
 /**
+ * **EVERY AREA ONE CAST PLACED** (02 §7's Potent; the lead, on the 4c review's Q4: *"4 - per cast"*;
+ * D-1100): the Regions carrying the same card (`messageId`, `dice/chat.mjs#regionFlagsFromCard`), else
+ * the same `cast`, on every scene - the region itself always among them.
+ *
+ * @param {RegionDocument|null} region
+ * @returns {RegionDocument[]}
+ */
+export function castRegions(region) {
+  if (!region) return [];
+  const f = region.flags?.[SCOPE] ?? {};
+  const messageId = f.messageId ?? null;
+  const cast = f.cast ?? null;
+  const out = [];
+  if (messageId || cast) {
+    for (const scene of globalThis.game?.scenes ?? []) {
+      for (const r of scene.regions ?? []) {
+        const g = r.flags?.[SCOPE] ?? {};
+        if ((messageId && g.messageId === messageId) || (!messageId && cast && g.cast === cast)) out.push(r);
+      }
+    }
+  }
+  if (!out.includes(region)) out.push(region);
+  return out;
+}
+
+/** The creatures Potent has already risen for on ANY area of this region's cast. */
+export function castStruck(region) {
+  const out = new Set();
+  for (const r of castRegions(region)) for (const uuid of r.flags?.[SCOPE]?.potentStruck ?? []) out.add(uuid);
+  const messageId = region?.flags?.[SCOPE]?.messageId ?? null;
+  for (const uuid of (messageId ? globalThis.game?.messages?.get(messageId)?.flags?.[SCOPE]?.potentStruckCast : null) ?? []) out.add(uuid);
+  return [...out];
+}
+
+/**
+ * **WHO A PLACED AREA HAS ALREADY REACHED, RECORDED INSIDE THE QUEUE** (02 §7's Potent and
+ * Binding; the 4a review's MUST-FIX 2 and 3): a creature's uuid appended to one of the two
+ * lists an empowered area keeps - `potentStruck` (the first strike carried the rise) and
+ * `binding.spent` (the first Test carried the Bane) - read and written as one queued pass,
+ * so two strikes landing at once cannot each find the creature unrecorded. Only an area that
+ * carries the benefit takes the mark. On the active GM's client; `effects/empower-areas.mjs`
+ * is the door every other client asks through. Potent's mark is judged across every area of
+ * the cast and kept on the cast's card as well (`castStruck`; D-1100).
+ *
+ * @param {RegionDocument} region
+ * @param {"potentStruck"|"binding"} key
+ * @param {string} uuid
+ * @returns {Promise<boolean>} whether this call wrote the mark
+ */
+export function markArea(region, key, uuid) {
+  return serial(async () => {
+    if (!isWriter() || !regionInWorld(region) || typeof uuid !== "string" || !uuid) return false;
+    const f = region.flags?.[SCOPE] ?? {};
+    if (key === "potentStruck") {
+      if (!(Number(f.potent) > 0)) return false;
+      const struck = Array.isArray(f.potentStruck) ? f.potentStruck : [];
+      // Once per CAST, across every area it placed (the lead, on the 4c review's Q4: *"4 - per cast"*; D-1100).
+      if (castStruck(region).includes(uuid) || !regionInWorld(region)) return false;
+      // The cast's own record on its card outlives a Region taken off by hand: an area put down again
+      // from the card is seeded with it (`dice/chat.mjs#empowerAreaFlags`).
+      const card = f.messageId ? globalThis.game?.messages?.get(f.messageId) ?? null : null;
+      if (card) {
+        const onCard = Array.isArray(card.flags?.[SCOPE]?.potentStruckCast) ? card.flags[SCOPE].potentStruckCast : [];
+        if (!onCard.includes(uuid)) await card.update({ [`flags.${SCOPE}.potentStruckCast`]: [...onCard, uuid] });
+      }
+      // The card's write is a round trip: the area may have been taken off meanwhile (D-757).
+      if (!regionInWorld(region)) return true;
+      await region.update({ [`flags.${SCOPE}.potentStruck`]: [...struck, uuid] });
+      return true;
+    }
+    if (key === "binding") {
+      if (!f.binding || typeof f.binding !== "object") return false;
+      const spent = Array.isArray(f.binding.spent) ? f.binding.spent : [];
+      if (spent.includes(uuid) || !regionInWorld(region)) return false;
+      await region.update({ [`flags.${SCOPE}.binding.spent`]: [...spent, uuid] });
+      return true;
+    }
+    return false;
+  }).then(wrote => wrote === true);
+}
+
+/**
  * **HOARFROST GROWS** (D-757): *at the start of each of your turns it grows by 5
  * feet in every direction* - the caster's areas whose descriptor carries
  * `grows`, a circle's radius and the `area` record widened together, so the

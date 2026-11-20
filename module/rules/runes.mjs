@@ -173,13 +173,22 @@ export function runicPowerCap(chaMod = 0) {
 }
 
 /**
+ * **THE MOMENTUM POOLS 05 §11's UNIVERSAL TRIGGERS NEVER REACH**: Runic Power (the lead:
+ * *"Runic Power is only gained by consuming runes"*) and the Necromancer's Essence (the
+ * lead: *Essence from "living" enemies dying within 120ft*; `essence.mjs#ESSENCE`, named
+ * here as a word because `essence.mjs` reads this file's neighbours and an import back
+ * would be a cycle - `necromancer-groundwork.test.mjs` holds the two words together).
+ */
+export const NO_UNIVERSAL_GAINS = Object.freeze([RUNIC_POWER, "essence"]);
+
+/**
  * **WHETHER A MOMENTUM POOL GAINS FROM 05 §11's UNIVERSAL TRIGGERS** - the +1 for a
- * hit, the +1 more at SL 2 and the +1 for winning an Opposed Test. Runic Power does
- * not (the lead: *"Runic Power is only gained by consuming runes"*); a feature or a
- * talent row that names it is the only other way in.
+ * hit, the +1 more at SL 2 and the +1 for winning an Opposed Test. Neither pool in
+ * `NO_UNIVERSAL_GAINS` does; a feature or a talent row that names one is the only other
+ * way in.
  */
 export function gainsByUniversalTriggers(poolName) {
-  return poolName !== RUNIC_POWER;
+  return !NO_UNIVERSAL_GAINS.includes(poolName);
 }
 
 /* ------------------------------------------------------------------ */

@@ -20,6 +20,9 @@ import { AZEROTH } from "../config.mjs";
 import { bindingFor, boundEffects, boundSignatureEffects, capacity, eligible, healthAfterMaxChange } from "../rules/bound.mjs";
 // Dark Minion's count, judged on the GM's client (the B2 review).
 import { raiseRefusal, raiseRowsFor } from "../rules/raise.mjs";
+// The Necromancer's lead, read by the bound sync for 04's Bone Vanguard (Phase 4c-T).
+import { HORDE_LEAD_FLAG, leadFor } from "../rules/horde.mjs";
+import { hordeMember } from "../rules/necromancer-features.mjs";
 import { prototypeTokenFor } from "../rules/bestiary.mjs";
 // A thrall's bond (04's Thrall of the Banshee; the lead's ruling of 2026-10-22).
 import { THRALL_FLAG, isThrallBond } from "../rules/legacy-uses.mjs";
@@ -195,16 +198,22 @@ function ownershipFor(owner) {
  * built by `rules/bound.mjs#totemBlock`). One actor stands for a multiple
  * summon, its tokens unlinked so each carries its own Health.
  */
-export async function createBoundActor({ owner, feature = null, entry = null, block = null, kind, until = null, uncounted = false, school = null, count = 1, sourceName = null, halfActions = null, raise = null, raiseId = null }) {
-  const data = entry
+export async function createBoundActor({ owner, feature = null, entry = null, block = null, kind, until = null, uncounted = false, school = null, count = 1, sourceName = null, halfActions = null, raise = null, raiseId = null, linkedAs = null, folderId = null, bondExtra = null, transform = null }) {
+  const raw = entry
     ? entry.toObject()
     : { name: block.name, type: "npc", img: block.img ?? "icons/svg/mystery-man.svg", system: block.system };
+  // **A HORDE CREATURE IS MADE FROM ITS BLOCK, CHANGED** (02 §7's Command the Dead; the
+  // Necromancer plan's door 3): Loose Bones struck, its grafts stamped, its Health doubled by
+  // Masterwork Abomination - the caller's `transform` over the block's own data.
+  const data = typeof transform === "function" ? (transform(raw) ?? raw) : raw;
   delete data._id;
-  const folder = await boundFolder();
-  const linked = count === 1 && until === null;
+  const folder = folderId ? null : await boundFolder();
+  // A horde creature is ONE linked actor however long it stands (`linkedAs`), so its Health and
+  // effects follow it between scenes; anything else keeps D-643's rule.
+  const linked = typeof linkedAs === "boolean" ? linkedAs : count === 1 && until === null;
   const actor = await Actor.create({
     ...data,
-    folder: folder?.id ?? null,
+    folder: folderId ?? folder?.id ?? null,
     ownership: ownershipFor(owner),
     prototypeToken: { ...prototypeTokenFor({ name: data.name, img: data.img, size: data.system?.size ?? "medium" }), disposition: 1, actorLink: linked },
     flags: {
@@ -225,7 +234,10 @@ export async function createBoundActor({ owner, feature = null, entry = null, bl
           // **A RAISED DEAD NAMES ITS RAISE AND ITS CARRIER** (07 §17; the Death Knight plan):
           // which raise made it, so a recast collapses that raise alone, and the carrier on the
           // knight whose span is its clock (`rules/raise.mjs#RAISE_FLAG`).
-          ...(kind === "raised" && typeof raise === "string" && raise ? { raise, raiseId: typeof raiseId === "string" && raiseId ? raiseId : null } : {})
+          ...(kind === "raised" && typeof raise === "string" && raise ? { raise, raiseId: typeof raiseId === "string" && raiseId ? raiseId : null } : {}),
+          // A horde raise's own marks (`effects/necromancer-horde.mjs`): `horde`, `keepsReaction`,
+          // `outside`, `grafts`, `places` - plain data only.
+          ...(bondExtra && typeof bondExtra === "object" ? bondExtra : {})
         }
       }
     }
@@ -502,9 +514,48 @@ export async function commandDemon({ owner, actor, feature = null, placement = n
  */
 export async function releaseAtLongRest(owner) {
   for (const bound of boundOf(owner)) {
+    // **THE HORDE COLLAPSES AT THE LONG REST** (07 §17's table: *Until your next Long Rest*; The
+    // Dead Rise's hour cannot outlast it): through each creature's carrier, not by choice.
+    if (bondOf(bound)?.kind === "raised" && bondOf(bound)?.horde === true) {
+      const { collapseHordeMember } = await import("../effects/necromancer-horde.mjs");
+      await collapseHordeMember(owner, bound, { byChoice: false, reason: "longRest" });
+      continue;
+    }
     if (bondOf(bound)?.until === "longRest") await release(owner, bound.uuid);
   }
 }
+
+/**
+ * **A NECROMANCER'S OWN ACTORS FOLDER** (the lead: *"The horde should go into their own folder on
+ * actors and be bound to the caster"*): one folder a caster, named for them, inside the Bound
+ * folder, found by the caster's uuid on its flag so a renamed character keeps its folder. Made
+ * once: two raises at one moment share the one creation.
+ *
+ * @param {Actor} owner
+ * @returns {Promise<Folder|null>}
+ */
+export async function hordeFolder(owner) {
+  if (!owner) return null;
+  const held = game.folders.find(f => f.type === "Actor" && f.getFlag?.("azeroth-rpg", "hordeOf") === owner.uuid);
+  if (held) return held;
+  if (HORDE_FOLDERS.has(owner.uuid)) return HORDE_FOLDERS.get(owner.uuid);
+  const made = (async () => {
+    const parent = await boundFolder();
+    return Folder.create({
+      name: game.i18n.format("AZEROTH.Horde.Folder", { name: owner.name }), type: "Actor",
+      folder: parent?.id ?? null, flags: { "azeroth-rpg": { hordeOf: owner.uuid } }
+    });
+  })();
+  HORDE_FOLDERS.set(owner.uuid, made);
+  try {
+    return await made;
+  } finally {
+    HORDE_FOLDERS.delete(owner.uuid);
+  }
+}
+
+/** The horde folders being made on this client, by caster (one creation each). */
+const HORDE_FOLDERS = new Map();
 
 /** A temporary command's permission grant ends on the GM, even when the
  * player's Long Rest initiated it. Keep the bond until the final actor write
@@ -570,7 +621,7 @@ export async function releaseCommandQueryHandler({ ownerUuid, actorUuid } = {}, 
  * which stays in the folder; a creature called for the encounter goes, with
  * its tokens. The feature's `known` forgets it either way.
  */
-export async function release(owner, uuid) {
+export async function release(owner, uuid, { byChoice = true } = {}) {
   // **A THRALL IS RELEASED ON ITS OWN TOKEN** (the lead's ruling of 2026-10-22): its bond
   // is the token's actor's, never the world actor's, and its side and Charmed go with it.
   let named = null;
@@ -592,6 +643,15 @@ export async function release(owner, uuid) {
   const bound = worldActorOf(await fromUuid(uuid));
   if (!bound) return null;
   const bond = bondOf(bound);
+  // **A HORDE CREATURE RELEASED BY HAND COLLAPSES THROUGH ITS CARRIER** (02 §7: *You may dismiss
+  // any of your raised dead at any time*), so the collapse plays. **Whether it is by the
+  // Necromancer's choice is the caller's** (the lead's Q4 of the 4b review, *"I agree"*): the
+  // player's dismissal is; the GM's Release on the creature's banner is not (`byChoice: false`).
+  if (bond?.kind === "raised" && bond.horde === true) {
+    const { collapseHordeMember } = await import("../effects/necromancer-horde.mjs");
+    await collapseHordeMember(owner, bound, { byChoice: byChoice === true, reason: byChoice === true ? "dismiss" : "release" });
+    return null;
+  }
   // A raised dead COLLAPSES (07 §17): released by its clock, a recast or a Long Rest, it goes
   // with its tokens exactly as a creature called for the encounter does.
   if (bond?.until === "encounter" || bond?.kind === "raised") {
@@ -634,10 +694,20 @@ export function registerBoundHooks() {
   // carrier on the knight ending - its span out, a recast, a Long Rest, a hand - collapses
   // the dead it carries, and the last of them gone takes the carrier with it. The active GM
   // alone, which may delete every token (`effects/death-knight-necromancy.mjs`).
-  Hooks.on("deleteActiveEffect", effect => {
+  Hooks.on("deleteActiveEffect", (effect, options = {}) => {
     if (!game.users?.activeGM?.isSelf) return;
     const raised = effect?.flags?.["azeroth-rpg"]?.raised ?? null;
     if (!raised?.raiseId) return;
+    // **A HORDE CREATURE'S CARRIER SAYS HOW IT WENT** (02 §7's Command the Dead): a dismissal, a
+    // collapse chosen at the places, a Dark Ritual - by the Necromancer's choice - or its span, a
+    // Long Rest, its death. The deleting client's operation carries it (`HORDE_COLLAPSE_OPTION`).
+    if (raised.horde === true) {
+      const how = options?.azerothHordeCollapse ?? {};
+      import("../effects/death-knight-necromancy.mjs")
+        .then(m => m.collapseRaise(raised.raiseId, { byChoice: how.byChoice === true, reason: typeof how.reason === "string" ? how.reason : "span", by: how.by ?? null, ownerUuid: effect?.parent?.uuid ?? null }))
+        .catch(err => console.warn("azeroth-rpg | a horde creature's collapse", err));
+      return;
+    }
     import("../effects/death-knight-necromancy.mjs")
       .then(m => m.collapseRaise(raised.raiseId))
       .catch(err => console.warn("azeroth-rpg | a raise's collapse", err));
@@ -702,7 +772,14 @@ export async function syncBoundFor(owner, { encounter } = {}) {
     inMetamorphosis: owner.shape?.kind === "metamorphosis",
     // And the shape itself (the Legacy branches' B2): 04's Gnomish Battle Rig,
     // *While you wear it, your constructs add your tier to their damage*.
-    shapeKind: owner.shape?.kind ?? null
+    shapeKind: owner.shape?.kind ?? null,
+    // **THE NECROMANCER'S LEAD AND SURGES** (Phase 4c-T): Bone Vanguard reads the lead, Ghoul Frenzy
+    // and Commander of Bone their Empowered surges (`rules/necromancer-talents.mjs#raisedTalentRows`).
+    hordeLead: leadFor({
+      flag: owner.getFlag("azeroth-rpg", HORDE_LEAD_FLAG) ?? null,
+      members: boundOf(owner, "raised").map(a => hordeMember({ id: a.id, name: a.name, health: a.system?.health?.value ?? null, bond: bondOf(a) })).filter(m => m && !(typeof m.health === "number" && m.health <= 0))
+    }),
+    surges: [...(owner.effects ?? [])].filter(e => e.active !== false && !e.disabled).map(e => e.flags?.["azeroth-rpg"]?.necroSurge?.key).filter(Boolean).sort()
   };
   let touched = 0;
   for (const bound of boundOf(owner)) {
@@ -713,7 +790,7 @@ export async function syncBoundFor(owner, { encounter } = {}) {
     if (isThrallBond(bond)) continue;
     // The school chosen at the summoning rides the bond (04's Demonic Aegis at rank
     // 2, D-775), and `boundEffects` lays its Ward.
-    const creature = { name: bound.name, ap: bound._source.system?.ap ?? {}, weightClass: bound.system.weightClass, tier: bound.system.tier, school: bond?.school ?? null };
+    const creature = { name: bound.name, ap: bound._source.system?.ap ?? {}, weightClass: bound.system.weightClass, tier: bound.system.tier, school: bond?.school ?? null, id: bound.id, entry: bond?.entryName ?? null };
     // **AND WHAT THE OWNER IS WEARING** (D-698). Four Ahn'Qiraj set bonuses
     // improve a bound creature, and a Signature had no way to reach one; the
     // rows are in `boundEffects`' own shape and are diffed beside the

@@ -34,6 +34,8 @@
  * key is that name's slug and no second record is needed.
  */
 
+import { ESSENCE_GAIN_OPTION, SOUL_HARVEST_KEY, SOUL_HARVEST_OPTION } from "../rules/animation-records.mjs";
+import { COLLAPSE_OPTION, collapseRecordFor, essenceGainRecord, raisedWithRecords } from "../rules/necromancer-animations.mjs";
 import { pixelsPerFoot } from "../canvas/regions.mjs";
 import { loopIdentifiers } from "../rules/animation-table.mjs";
 import {
@@ -508,6 +510,10 @@ export function cardRecords(message) {
   const isUse = primary.kind === "feature" && primary.trigger === "use";
   if ((primary.kind === "spell" || isUse) && primary.steps?.length) out.push({ ...primary, trigger: "arrive" });
   if ((primary.kind === "spell" || isUse) && primary.risen?.length) out.push({ ...primary, trigger: "rise" });
+  // **WHAT TOUCHED THE HORDE AS IT ROSE** (the animation contract's section 1): the graft stitching
+  // and Deathly Vigor's skin on the tokens the raise card names, carrying the card's verdict.
+  // A plague ghoul's summon card carries it too (Grafted Flesh on the rising; the 4b review's S9).
+  if (primary.kind === "spell" || flagsOf(message).kind === "summon") out.push(...raisedWithRecords(flagsOf(message), primary));
   if (isUse && primary.hold) out.push({ ...primary, trigger: "hold", targets: primary.source ? [primary.source] : [] });
   return out;
 }
@@ -755,6 +761,50 @@ export function runeSpendRecords(options = {}) {
     // ends with no card (`cardFailClosed`), and a blind card's own author sees their own (O-394).
     return spend.privacy ? { ...record, awaitCard: true, cardFreshMs: 0, cardWaitMs: FLARE_CARD_WAIT_MS, cardFailClosed: true, cardOwnBlind: true } : record;
   });
+}
+
+/**
+ * **THE ESSENCE WISP'S RECORD** (02 §7's Necromancer; the animation contract's §2): read off the
+ * operation of the pool write that raised the Essence, where the death watch wrote the gain
+ * (`effects/death-watch.mjs`, `rules/animation-records.mjs#ESSENCE_GAIN_OPTION`) - one `use`
+ * record under `essence:gain`, the wisp running from the corpse to the Necromancer. An update that
+ * names no gain (a GM's hand, a refund) implies nothing.
+ *
+ * @param {object} options  an `updateActor` hook's operation options
+ * @returns {object[]}
+ */
+export function essenceGainRecords(options = {}) {
+  const record = essenceGainRecord(options?.[ESSENCE_GAIN_OPTION] ?? null);
+  return record ? [record] : [];
+}
+
+/**
+ * **SOUL HARVEST'S WISP** (02 §7's Warlock; the Necromancer plan's Phase 7): read off the operation
+ * of the Mana write the death watch made for it (`effects/death-watch.mjs#deathWatchQueryHandler`,
+ * `rules/animation-records.mjs#SOUL_HARVEST_OPTION`) - one `use` record under `soul-harvest`, in
+ * the Essence wisp's shape, from the corpse to the Warlock. Any other Mana write implies nothing.
+ *
+ * @param {object} options  an `updateActor` hook's operation options
+ * @returns {object[]}
+ */
+export function soulHarvestRecords(options = {}) {
+  const record = essenceGainRecord(options?.[SOUL_HARVEST_OPTION] ?? null, SOUL_HARVEST_KEY);
+  return record ? [record] : [];
+}
+
+/**
+ * **A RAISED DEAD COLLAPSING** (02 §7's Command the Dead; the animation contract's section 3): read
+ * off the operation of the Token delete that removed it, where the collapse door wrote the bodies
+ * (`effects/necromancer-horde.mjs#collapseHordeTokens`) - one `use` record under `horde:collapse`.
+ * A token deleted with no cue (a GM's hand delete, a scene's deletion) implies nothing.
+ *
+ * @param {TokenDocument} token
+ * @param {object} options  a `deleteToken` hook's operation options
+ * @returns {object[]}
+ */
+export function collapseRecords(token, options = {}) {
+  const record = collapseRecordFor(options?.[COLLAPSE_OPTION] ?? null, token?.id ?? null);
+  return record ? [record] : [];
 }
 
 /**

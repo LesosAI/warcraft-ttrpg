@@ -51,7 +51,7 @@
       <span class="azeroth-dialog-note">&middot; {{casting.ferocity.value}} / {{casting.ferocity.max}}</span>
       {{else}}
       {{!-- A talent's own pool says its own word (04's Shadowcraft's Focus, B1 door 8). --}}
-      {{#if casting.payLabel}}{{localize casting.payLabel}}{{else}}{{localize "AZEROTH.Card.Mana"}}{{/if}} <strong>{{casting.mana}}</strong>
+      {{#if casting.payLabel}}{{localize casting.payLabel}}{{else}}{{localize "AZEROTH.Card.Mana"}}{{/if}} <strong data-mana-base="{{casting.mana}}">{{casting.mana}}</strong>
       {{!-- The dot keeps "Mana 2" and "0 / 20" from reading as one number (the eye, D-619). --}}
       {{#if casting.pool}}<span class="azeroth-dialog-note">&middot; {{casting.pool.value}} / {{casting.pool.max}}</span>{{/if}}
       {{/if}}

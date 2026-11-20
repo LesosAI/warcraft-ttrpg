@@ -15,6 +15,8 @@
 
 // The Death Knight's spells above tier 1 (the Death Knight plan's Phase 6, run F5).
 import { DK_EXPANDED_SPELL_ANIMATIONS } from "./death-knight-animations.mjs";
+// The Necromancer's thirty-eight above tier 1 (the Necromancer plan's Phase 6).
+import { NECRO_EXPANDED_SPELL_ANIMATIONS } from "./necromancer-animations.mjs";
 
 const fx = (asset, options = {}) => Object.freeze({kind: "effect", asset, ...options});
 const snd = (asset, options = {}) => Object.freeze({kind: "sound", asset, volume: 0.6, ...options});
@@ -481,4 +483,7 @@ export const EXPANDED_SPELL_ANIMATIONS = Object.freeze({
   // death (07 §17): every Death Knight spell above tier 1, Grave Coil, Graveblight, Necrotic
   // Shell and Contagion among them since they moved from the Warlock (run F5).
   ...DK_EXPANDED_SPELL_ANIMATIONS,
+  // The Necromancer's own (07 §17, Restricted Necromancer); Graveblight and Contagion keep the
+  // knight's rows above.
+  ...NECRO_EXPANDED_SPELL_ANIMATIONS,
 });

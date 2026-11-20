@@ -27,7 +27,9 @@ const CONDITION_WORDS = ["Bleeding", "Blinded", "Charmed", "Deafened", "Diseased
  * @returns {{conditions: string[]}|null}
  */
 export function targetRefuses(effectText) {
-  const m = /\bEach target cannot be ([^.]+)\./.exec(flat(effectText));
+  // 07 §17's Shroud of the Grave writes it mid-sentence: *For the duration, each target cannot be
+  // **Frightened**, **Poisoned** or **Diseased*** (run 4c-S).
+  const m = /\b[Ee]ach target cannot be ([^.]+)\./.exec(flat(effectText));
   if (!m) return null;
   const conditions = CONDITION_WORDS.filter(w => new RegExp(`\\b${w}\\b`).test(m[1])).map(w => w.toLowerCase()).sort();
   return conditions.length ? { conditions } : null;

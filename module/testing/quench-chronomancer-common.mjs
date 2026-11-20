@@ -28,6 +28,14 @@ export const manaOf = actor => actor.poolSnapshot().find(p => p.kind === "power"
 export const parsed = message => new DOMParser().parseFromString(message.content, "text/html");
 export const textOf = message => parsed(message).body.textContent.replace(/\s+/g, " ");
 
+/**
+ * **A WAIT A BATCH MAY HANG ON EVERY NEW SCENE** (team ANI): the animation batches set `wait` to a
+ * function that resolves once the animation layer's settle gate has opened on the new board, so a
+ * cast made straight after `sceneWith` is planned rather than refused `unavailable:unsettled`.
+ * Null for every other batch, which then waits for nothing more than before.
+ */
+export const SCENE_SETTLE = { wait: null };
+
 /** A scene at five feet a hundred-pixel square with the actors' linked tokens on it, viewed. */
 export async function sceneWith(placements) {
   const scene = await Scene.create({ name: "ZZ Chronomancer Scene", width: 4000, height: 2400, grid: { size: 100, distance: 5, units: "ft" } });
@@ -42,6 +50,7 @@ export async function sceneWith(placements) {
   if (data.length) await scene.createEmbeddedDocuments("Token", data);
   await until(() => placements.every(p => tokenDrawn(tokenOf(p.actor))), "every token drawn");
   await settle();
+  if (SCENE_SETTLE.wait) await SCENE_SETTLE.wait();
   return scene;
 }
 
@@ -55,6 +64,7 @@ export async function fightWith(actors) {
   await combat.startCombat();
   await settled;
   await until(() => combat.combatants.every(c => c.getFlag("azeroth-rpg", "budget") !== undefined), "every combatant's budget", 30000);
+  await viewFight(combat);
   return combat;
 }
 
@@ -143,7 +153,10 @@ export async function pressUse(actor, featureName, targets = [], face = 15) {
   const done = async () => {
     try { return await posted; } finally {
       unpin();
-      canvas.tokens?.setTargets([]);
+      // A Use that posts no card (Lichdom's binding) resolves this 30 s later, often after the batch
+      // has deleted its scene: core's `User#_onUpdateTokenTargets` reads `canvas.scene.id` and throws
+      // on a null scene (14.367), a page error that fails the run. Clear targets only on a viewed scene.
+      if (canvas?.scene) canvas.tokens?.setTargets([]);
       await game.settings.set("azeroth-rpg", ROLL_DIALOG_SETTING, before);
       await sheet.close();
     }
@@ -229,6 +242,7 @@ export async function chronoInFight(name, { at = { x: 800, y: 1000 }, enemies = 
   await combat.startCombat();
   await settled;
   await until(() => combat.combatants.every(x => x.getFlag("azeroth-rpg", "budget") !== undefined), "every combatant's budget", 30000);
+  await viewFight(combat);
   await settle();
   return { c, scene, combat, foes, friends: friends.map(f => f.actor) };
 }
@@ -277,9 +291,45 @@ export async function answerAskIfAny(yes = false, ms = 4000) {
 }
 
 /**
+ * **THE TRACKER'S OWN NEXT TURN CONTROL FOR THIS FIGHT**, waited for while a render lands (core
+ * renders the tracker without awaiting it), or a failure naming what the tracker shows instead.
+ *
+ * @param {Combat} combat
+ * @param {number} [ms]
+ * @returns {Promise<HTMLButtonElement>}
+ */
+export async function trackerNextTurn(combat, ms = 10000) {
+  const start = Date.now();
+  for (;;) {
+    const viewed = ui.combat?.viewed ?? null;
+    const control = viewed?.id === combat.id ? ui.combat.element?.querySelector('button[data-action="nextTurn"]') : null;
+    if (control && !control.disabled) return control;
+    if (Date.now() - start > ms) {
+      const shows = viewed ? `${viewed.id === combat.id ? "this fight" : `another fight (${viewed.id})`}${control ? " with its Next Turn greyed" : ", with no Next Turn drawn"}` : "no fight";
+      throw new Error(`the combat tracker shows ${shows}, not a Next Turn for fight ${combat.id}: view the fight first (viewFight)`);
+    }
+    await new Promise(r => setTimeout(r, 50));
+  }
+}
+
+/**
+ * **SHOW THIS FIGHT ON THE COMBAT TRACKER**, as a GM does by choosing it in the tracker's own
+ * list: the tracker renders with the fight and its Next Turn is waited for.
+ *
+ * @param {Combat} combat
+ */
+export async function viewFight(combat) {
+  if (ui.combat?.viewed?.id !== combat.id) await ui.combat.render({ combat, force: true });
+  if (combat.started) await trackerNextTurn(combat);
+  return combat;
+}
+
+/**
  * **MOVE THE FIGHT ON WITH THE TRACKER'S OWN NEXT TURN** until it is this creature's turn, so
- * every turn end and turn start between runs exactly as at the table. Falls back to
- * `combat.nextTurn()` only where the tracker is not drawn for this fight.
+ * every turn end and turn start between runs exactly as at the table. **It FAILS where the
+ * tracker is not showing this fight** (the 4c review): it used to fall back to
+ * `combat.nextTurn()` in silence, which is the function behind the control and not the
+ * control. A test whose fight the tracker does not show views it first (`viewFight`).
  *
  * @param {Actor|Combatant} who  an actor (its combatant in the fight) or a combatant
  * @param {Combat} [combat]
@@ -289,10 +339,9 @@ export async function nextTurnUntil(who, combat = game.combat) {
     : combat.combatants.find(x => x.actor === who || x.actor?.id === who?.id || x.token?.actor === who) ?? null;
   if (!mine) throw new Error(`${who?.name ?? "the creature"} is not in the fight`);
   for (let i = 0; i <= combat.turns.length + 1 && combat.combatant?.id !== mine.id; i++) {
+    const control = await trackerNextTurn(combat);
     const settled = untilHook("combatTurnChange", 60000, x => x.id === combat.id);
-    const control = ui.combat?.viewed?.id === combat.id ? ui.combat.element?.querySelector('button[data-action="nextTurn"]') : null;
-    if (control && !control.disabled) control.click();
-    else await combat.nextTurn();
+    control.click();
     await settled;
   }
   if (combat.combatant?.id !== mine.id) throw new Error(`the fight never reached ${mine.name}'s turn`);

@@ -15,22 +15,13 @@ export function aberrationBlastDamage(resisted) {
   return resisted ? Math.floor(ABERRATION_BLAST.rating / 2) : ABERRATION_BLAST.rating;
 }
 
-/** Only a newly observed living-to-zero transition starts a death event.
- * Priming a loaded corpse, repeated updates and unrelated NPCs stay silent. */
-export function aberrationDeathObserver() {
-  const health = new WeakMap();
-  return {
-    prime(actor) {
-      if (actor && typeof actor === "object" && !health.has(actor)) health.set(actor, actor.system?.health?.value);
-    },
-    observe(actor) {
-      if (!actor || typeof actor !== "object") return false;
-      const before = health.get(actor), after = actor.system?.health?.value;
-      health.set(actor, after);
-      return actor.type === "npc" && Number.isInteger(before) && before > 0 && after === 0
-        && actor.system?.creatureAbilities?.some(row => row.name === ABERRATION_DEATH.name) === true;
-    }
-  };
+/** Whether a death the watch observed (`effects/death-watch.mjs`, its `healthFell`) is an
+ * Arcane Aberration's: an NPC whose whole-number Health went from above 0 to exactly 0 and
+ * which carries Unraveling Mana. A loaded corpse gives the watch no event at all.
+ */
+export function aberrationDeath({ actor = null, before = null, after = null } = {}) {
+  return actor?.type === "npc" && Number.isInteger(before) && before > 0 && after === 0
+    && actor.system?.creatureAbilities?.some(row => row.name === ABERRATION_DEATH.name) === true;
 }
 
 export function aberrationDeathClaim({ tokenUuid, actorUuid, health, existing = null, observedDeath = false } = {}) {

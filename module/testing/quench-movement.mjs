@@ -421,7 +421,10 @@ export function movementBatch(context) {
         const own = Object.prototype.hasOwnProperty.call(combatant, "update");
         const held = combatant.update;
         combatant.update = function (data, ...rest) {
-          if (!letGo && data?.flags?.["azeroth-rpg"]?.budget !== undefined) return new Promise(resolve => { letGo = resolve; });
+          // Either shape a budget write takes: `spendAction` writes the dotted key since 0.12.32
+          // (`{"flags.azeroth-rpg.budget": ...}`, ccfcae9c4), the charge the nested one.
+          const budgetWrite = data?.flags?.["azeroth-rpg"]?.budget !== undefined || data?.["flags.azeroth-rpg.budget"] !== undefined;
+          if (!letGo && budgetWrite) return new Promise(resolve => { letGo = resolve; });
           return held.call(this, data, ...rest);
         };
         restore = () => {

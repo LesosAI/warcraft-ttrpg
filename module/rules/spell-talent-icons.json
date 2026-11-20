@@ -89,6 +89,13 @@
     ],
     "reason": "The old art is a green magical burst, with no ancestral presence. Ancestral Tide calls the shamans who came before; the replacement shows an ancestral, totemlike spirit emblem."
   },
+  "spell:animate-corpse": {
+    "name": "Animate Corpse",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_animatedead",
+    "previousIcons": [],
+    "reason": "A corpse rising. Animate Corpse raises corpses as Risen Zombies."
+  },
   "spell:annihilation": {
     "name": "Annihilation",
     "source": "07-MAGIC",
@@ -283,6 +290,13 @@
     ],
     "reason": "A paladin is surrounded by a bright golden halo. Beacon of Light marks one person as the destination for the paladin’s later healing, matching the visible beacon."
   },
+  "spell:bind-banshee": {
+    "name": "Bind Banshee",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_haunting_grey",
+    "previousIcons": [],
+    "reason": "A grey wailing spirit. Bind Banshee raises a Banshee from a corpse."
+  },
   "spell:black-mist": {
     "name": "Black Mist",
     "source": "07-MAGIC",
@@ -394,6 +408,41 @@
     ],
     "reason": "Green mushrooms and new growth spread over the image. Bloom calls growth up all at once, matching the sudden vegetation."
   },
+  "spell:bone-bridge": {
+    "name": "Bone Bridge",
+    "source": "07-MAGIC",
+    "icon": "inv_misc_bone_02",
+    "previousIcons": [],
+    "reason": "A long bone. Bone Bridge forms a bridge across a span."
+  },
+  "spell:bone-courier": {
+    "name": "Bone Courier",
+    "source": "07-MAGIC",
+    "icon": "inv_misc_bone_humanskull_02",
+    "previousIcons": [],
+    "reason": "A skull. Bone Courier sends a skull to speak a message."
+  },
+  "spell:bone-prison": {
+    "name": "Bone Prison",
+    "source": "07-MAGIC",
+    "icon": "inv_misc_bone_09",
+    "previousIcons": [],
+    "reason": "Bones. Bone Prison holds a creature Entangled in place."
+  },
+  "spell:bone-shards": {
+    "name": "Bone Shards",
+    "source": "07-MAGIC",
+    "icon": "inv_misc_bone_03",
+    "previousIcons": [],
+    "reason": "Bone fragments. Bone Shards strikes one creature with Shadow damage."
+  },
+  "spell:bone-shield": {
+    "name": "Bone Shield",
+    "source": "07-MAGIC",
+    "icon": "ability_deathknight_boneshield",
+    "previousIcons": [],
+    "reason": "Bone plates circling the caster. Bone Shield takes damage off an attack as a Reaction."
+  },
   "spell:bone-threshold": {
     "name": "Bone Threshold",
     "source": "07-MAGIC",
@@ -401,12 +450,33 @@
     "previousIcons": [],
     "reason": "Bones laid across a way. Bone Threshold marks a line the undead cannot cross."
   },
+  "spell:bone-ward": {
+    "name": "Bone Ward",
+    "source": "07-MAGIC",
+    "icon": "inv_misc_bone_04",
+    "previousIcons": [],
+    "reason": "Bones. Bone Ward gives the caster Armor Points at every location."
+  },
+  "spell:borrowed-senses": {
+    "name": "Borrowed Senses",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_detectlesserinvisibility",
+    "previousIcons": [],
+    "reason": "An eye of shadow. Borrowed Senses lets the caster see and hear through a raised servant."
+  },
   "spell:borrowed-voice": {
     "name": "Borrowed Voice",
     "source": "07-MAGIC",
     "icon": "spell_shadow_twistedfaith",
     "previousIcons": [],
     "reason": "The shadow themed icon supports a temporary alteration of the speaker's voice."
+  },
+  "spell:call-the-departed": {
+    "name": "Call the Departed",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_haunting",
+    "previousIcons": [],
+    "reason": "A spirit drawn near. Call the Departed lets the caster speak with a dead creature's spirit."
   },
   "spell:carrion-swarm": {
     "name": "Carrion Swarm",
@@ -692,12 +762,26 @@
     "previousIcons": [],
     "reason": "WoW's Corpse Explosion art: a body bursting. Corpse Burst destroys a corpse and damages the creatures around it."
   },
+  "spell:corpse-candle": {
+    "name": "Corpse Candle",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_soulleech_3",
+    "previousIcons": [],
+    "reason": "A cold green glow. Corpse Candle makes a corpse shed dim light."
+  },
   "spell:corpse-eyes": {
     "name": "Corpse Eyes",
     "source": "07-MAGIC",
     "icon": "spell_shadow_skull",
     "previousIcons": [],
     "reason": "A skull's empty gaze. Corpse Eyes lets the caster see through a corpse."
+  },
+  "spell:cripple": {
+    "name": "Cripple",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_cripple",
+    "previousIcons": [],
+    "reason": "WoW's own Cripple. The spell Slows the target and lowers its Strength."
   },
   "spell:crucible": {
     "name": "Crucible",
@@ -848,6 +932,20 @@
     "previousIcons": [],
     "reason": "A death siphon. Death Pact destroys an undead servant and gives its Health to the caster."
   },
+  "spell:death-trance": {
+    "name": "Death Trance",
+    "source": "07-MAGIC",
+    "icon": "ability_rogue_feigndeath",
+    "previousIcons": [],
+    "reason": "A body lying still. Death Trance makes the caster seem dead."
+  },
+  "spell:deathmask": {
+    "name": "Deathmask",
+    "source": "07-MAGIC",
+    "icon": "inv_misc_head_undead_01",
+    "previousIcons": [],
+    "reason": "A dead face. Deathmask gives the caster the face of a dead creature."
+  },
   "spell:deaths-advance": {
     "name": "Death's Advance",
     "source": "07-MAGIC",
@@ -861,6 +959,13 @@
     "icon": "artifactability_unholydeathknight_deathsembrace",
     "previousIcons": [],
     "reason": "WoW's own Death's Embrace art. The spell stuns a creature near death."
+  },
+  "spell:deaths-tidings": {
+    "name": "Death's Tidings",
+    "source": "07-MAGIC",
+    "icon": "inv_misc_rune_09",
+    "previousIcons": [],
+    "reason": "A rune of knowing. Death's Tidings tells whether a named creature lives."
   },
   "spell:deep-winter": {
     "name": "Deep Winter",
@@ -1110,6 +1215,13 @@
     "previousIcons": [],
     "reason": "An unholy face. Dread Visage shows the grave in the caster's face to frighten and coerce."
   },
+  "spell:dread-whisper": {
+    "name": "Dread Whisper",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_deathscream",
+    "previousIcons": [],
+    "reason": "A scream of dread. Dread Whisper makes the target Frightened."
+  },
   "spell:dream-theatre": {
     "name": "Dream Theatre",
     "source": "07-MAGIC",
@@ -1276,6 +1388,13 @@
       "spell_shadow_enslavedemon"
     ],
     "reason": "The icon depicts a demon under a controlling sigil. Enslave Demon places the warlock’s name over the demon’s own, matching the controlled figure."
+  },
+  "spell:enslave-the-dead": {
+    "name": "Enslave the Dead",
+    "source": "07-MAGIC",
+    "icon": "spell_necro_conclave",
+    "previousIcons": [],
+    "reason": "Undead bound in a circle. Enslave the Dead takes control of an undead creature."
   },
   "spell:entangling-vines": {
     "name": "Entangling Vines",
@@ -1480,6 +1599,13 @@
     ],
     "reason": "The old art is a demon’s face, with no movement. Felstep moves the warlock through the Nether; the replacement depicts a portal-like phase shift."
   },
+  "spell:field-of-bones": {
+    "name": "Field of Bones",
+    "source": "07-MAGIC",
+    "icon": "inv_misc_bone_05",
+    "previousIcons": [],
+    "reason": "Bones on the ground. Field of Bones damages enemies and leaves Difficult ground."
+  },
   "spell:fire-nova": {
     "name": "Fire Nova",
     "source": "07-MAGIC",
@@ -1651,6 +1777,13 @@
     ],
     "reason": "A hammer works a glowing piece of metal. Forge Flame holds heat at an exact working temperature, directly matching the smithing image."
   },
+  "spell:frenzy-of-the-dead": {
+    "name": "Frenzy of the Dead",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_unholyfrenzy",
+    "previousIcons": [],
+    "reason": "WoW's Unholy Frenzy. The spell drives the raised dead to deal more damage."
+  },
   "spell:frost-armor": {
     "name": "Frost Armor",
     "source": "07-MAGIC",
@@ -1780,6 +1913,20 @@
     ],
     "reason": "A blue spirit wolf is centered in the icon. Ghost Wolf lends the shaman a wolf shape for travel, matching the form exactly."
   },
+  "spell:ghostly-servant": {
+    "name": "Ghostly Servant",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_ghostkey",
+    "previousIcons": [],
+    "reason": "A ghostly key. Ghostly Servant calls an invisible servant that fetches and carries."
+  },
+  "spell:ghoul-rising": {
+    "name": "Ghoul Rising",
+    "source": "07-MAGIC",
+    "icon": "spell_deathknight_gnaw_ghoul",
+    "previousIcons": [],
+    "reason": "A ghoul. Ghoul Rising raises a corpse as a Plagued Ghoul."
+  },
   "spell:glacial-advance": {
     "name": "Glacial Advance",
     "source": "07-MAGIC",
@@ -1843,6 +1990,48 @@
     "icon": "spell_deathknight_gnaw_ghoul",
     "previousIcons": [],
     "reason": "A ghoul at work. Grave Labor raises a mindless servant that never fights."
+  },
+  "spell:grave-rot": {
+    "name": "Grave Rot",
+    "source": "07-MAGIC",
+    "icon": "ability_creature_disease_01",
+    "previousIcons": [],
+    "reason": "Rot. Grave Rot damages the living around a corpse."
+  },
+  "spell:grave-sense": {
+    "name": "Grave Sense",
+    "source": "07-MAGIC",
+    "icon": "spell_holy_senseundead",
+    "previousIcons": [],
+    "reason": "Sensing the dead. Grave Sense finds every corpse and grave nearby."
+  },
+  "spell:grave-step": {
+    "name": "Grave Step",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_demoniccircleteleport",
+    "previousIcons": [],
+    "reason": "A shadow step. Grave Step moves the caster beside a corpse."
+  },
+  "spell:grave-tide": {
+    "name": "Grave Tide",
+    "source": "07-MAGIC",
+    "icon": "spell_necro_deathrift",
+    "previousIcons": [],
+    "reason": "A rift of death. Grave Tide damages enemies in a line and heals the undead."
+  },
+  "spell:grave-touch": {
+    "name": "Grave Touch",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_chilltouch",
+    "previousIcons": [],
+    "reason": "A chilling touch. Grave Touch damages a creature and heals the caster."
+  },
+  "spell:grave-ward": {
+    "name": "Grave Ward",
+    "source": "07-MAGIC",
+    "icon": "spell_necro_deathsdoor",
+    "previousIcons": [],
+    "reason": "A sealed door of death. Grave Ward guards a grave and warns the caster."
   },
   "spell:graveblight": {
     "name": "Graveblight",
@@ -2555,6 +2744,13 @@
     ],
     "reason": "The old art is a city portal. Manastorm releases raw power across the ground indiscriminately; the replacement depicts a storming field of magic."
   },
+  "spell:mark-of-the-grave": {
+    "name": "Mark of the Grave",
+    "source": "07-MAGIC",
+    "icon": "inv_misc_rune_06",
+    "previousIcons": [],
+    "reason": "A mark. Mark of the Grave tracks a creature and tells the caster of its death."
+  },
   "spell:mark-of-the-wild": {
     "name": "Mark of the Wild",
     "source": "07-MAGIC",
@@ -2579,6 +2775,13 @@
       "spell_holy_devotion"
     ],
     "reason": "The old art is a purple clenched fist. Mass Dispel removes effects from everyone in an area; the replacement depicts a cleansing sweep."
+  },
+  "spell:mend-the-dead": {
+    "name": "Mend the Dead",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_soulleech",
+    "previousIcons": [],
+    "reason": "Soul energy drawn in. Mend the Dead heals an undead creature."
   },
   "spell:mending-sands": {
     "name": "Mending Sands",
@@ -2765,6 +2968,13 @@
     ],
     "reason": "A face twisted in purple Shadow fits lingering necrotic pain that prevents healing and harms those who touch the target."
   },
+  "spell:necrotic-nova": {
+    "name": "Necrotic Nova",
+    "source": "07-MAGIC",
+    "icon": "spell_necro_dischargenecroticcore",
+    "previousIcons": [],
+    "reason": "A necrotic burst. Necrotic Nova damages enemies and heals undead allies in an area."
+  },
   "spell:necrotic-shell": {
     "name": "Necrotic Shell",
     "source": "07-MAGIC",
@@ -2940,6 +3150,27 @@
     "previousIcons": [],
     "reason": "The Holy aid icon fits the temporary redistribution of carried burden between willing travelers."
   },
+  "spell:plague-cloud": {
+    "name": "Plague Cloud",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_plaguecloud",
+    "previousIcons": [],
+    "reason": "WoW's plague cloud. The spell damages the living who start a turn in it."
+  },
+  "spell:plague-of-undeath": {
+    "name": "Plague of Undeath",
+    "source": "07-MAGIC",
+    "icon": "achievement_boss_kelthuzad_01",
+    "previousIcons": [],
+    "reason": "Kel'Thuzad, whose plague it is. The spell infects the living with every disease and raises its dead."
+  },
+  "spell:plague-wind": {
+    "name": "Plague Wind",
+    "source": "07-MAGIC",
+    "icon": "ability_creature_disease_03",
+    "previousIcons": [],
+    "reason": "Disease. Plague Wind damages creatures in a cone and makes them Diseased."
+  },
   "spell:plaguesight": {
     "name": "Plaguesight",
     "source": "07-MAGIC",
@@ -3053,6 +3284,13 @@
     ],
     "reason": "A purple figure hangs beneath lines like a marionette. Puppet makes another body move at the caster’s direction, matching the controlled figure."
   },
+  "spell:puppet-of-flesh": {
+    "name": "Puppet of Flesh",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_possession",
+    "previousIcons": [],
+    "reason": "WoW's Possession. Puppet of Flesh takes control of a living creature."
+  },
   "spell:purging-flame": {
     "name": "Purging Flame",
     "source": "07-MAGIC",
@@ -3130,6 +3368,20 @@
     "previousIcons": [],
     "reason": "Reanimation. Raise Crypt Fiend raises a corpse as a Crypt Fiend."
   },
+  "spell:raise-crypt-horror": {
+    "name": "Raise Crypt Horror",
+    "source": "07-MAGIC",
+    "icon": "ability_hunter_pet_spider",
+    "previousIcons": [],
+    "reason": "A great spider. Raise Crypt Horror raises a large corpse as a Crypt Horror."
+  },
+  "spell:raise-dead": {
+    "name": "Raise Dead",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_raisedead",
+    "previousIcons": [],
+    "reason": "WoW's Raise Dead. The spell raises a corpse as two Risen Skeletons."
+  },
   "spell:raise-dracolich": {
     "name": "Raise Dracolich",
     "source": "07-MAGIC",
@@ -3157,6 +3409,13 @@
     "icon": "spell_necro_deathsdoor",
     "previousIcons": [],
     "reason": "Death's door. Read the Dead learns how a creature died."
+  },
+  "spell:reaping": {
+    "name": "Reaping",
+    "source": "07-MAGIC",
+    "icon": "spell_necro_deathall",
+    "previousIcons": [],
+    "reason": "Death all around. Reaping damages every enemy around the caster."
   },
   "spell:rebirth": {
     "name": "Rebirth",
@@ -3546,6 +3805,13 @@
     ],
     "reason": "The old art is a city portal, which implies physical travel. Sending places a sentence directly in someone’s mind; the replacement shows a focused psychic beam."
   },
+  "spell:sever-the-soul": {
+    "name": "Sever the Soul",
+    "source": "07-MAGIC",
+    "icon": "spell_necro_deathlyslam",
+    "previousIcons": [],
+    "reason": "A deathly blow. Sever the Soul deals heavy Shadow damage and frightens the creatures near its target."
+  },
   "spell:shadow-bolt": {
     "name": "Shadow Bolt",
     "source": "07-MAGIC",
@@ -3645,6 +3911,20 @@
     ],
     "reason": "Uneven warped time across a field, slow for some and quick for others."
   },
+  "spell:shroud-of-bone": {
+    "name": "Shroud of Bone",
+    "source": "07-MAGIC",
+    "icon": "inv_misc_bone_06",
+    "previousIcons": [],
+    "reason": "Bones. Shroud of Bone gives up to four creatures Armor Points."
+  },
+  "spell:shroud-of-the-grave": {
+    "name": "Shroud of the Grave",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_nethercloak",
+    "previousIcons": [],
+    "reason": "A shadow cloak. Shroud of the Grave gives temporary Health and wards off fear and disease."
+  },
   "spell:signal-fire": {
     "name": "Signal Fire",
     "source": "07-MAGIC",
@@ -3717,6 +3997,20 @@
     ],
     "reason": "Glowing embers trail away from a hot center. Smolder is fire kept alive at a low heat, matching the lingering coals."
   },
+  "spell:soul-cage": {
+    "name": "Soul Cage",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_soulgem",
+    "previousIcons": [],
+    "reason": "A soul in a gem. Soul Cage Stuns a weakened creature and claims its death."
+  },
+  "spell:soul-lash": {
+    "name": "Soul Lash",
+    "source": "07-MAGIC",
+    "icon": "ability_warlock_coil3",
+    "previousIcons": [],
+    "reason": "A coil of shadow. Soul Lash damages a creature and gives it a Bane."
+  },
   "spell:soul-ledger": {
     "name": "Soul Ledger",
     "source": "07-MAGIC",
@@ -3750,6 +4044,13 @@
     "icon": "spell_shadow_soulleech_2",
     "previousIcons": [],
     "reason": "A soul drawn out. Soul Rend damages its target and stops it regaining Health."
+  },
+  "spell:soul-rip": {
+    "name": "Soul Rip",
+    "source": "07-MAGIC",
+    "icon": "ability_warlock_soulsiphon",
+    "previousIcons": [],
+    "reason": "A siphoned soul. Soul Rip damages a creature and gives Essence from the living."
   },
   "spell:soulburn": {
     "name": "Soulburn",
@@ -3827,6 +4128,13 @@
     "icon": "spell_arcane_arcanetactics",
     "previousIcons": [],
     "reason": "The arcane craft icon suits a temporary written mark that stores a prepared spell."
+  },
+  "spell:spirit-anchor": {
+    "name": "Spirit Anchor",
+    "source": "07-MAGIC",
+    "icon": "inv_misc_rune_08",
+    "previousIcons": [],
+    "reason": "An anchoring rune. Spirit Anchor lets the caster see and hear at a marked place."
   },
   "spell:spirit-of-redemption": {
     "name": "Spirit of Redemption",
@@ -3925,6 +4233,13 @@
     ],
     "reason": "An icy blue face enclosed in frost evokes a living target preserved outside time."
   },
+  "spell:stitch-abomination": {
+    "name": "Stitch Abomination",
+    "source": "07-MAGIC",
+    "icon": "tradeskill_abominationstitching_abominations_mid",
+    "previousIcons": [],
+    "reason": "Abomination stitching. Stitch Abomination builds an Abomination with grafts."
+  },
   "spell:stone-grip": {
     "name": "Stone Grip",
     "source": "07-MAGIC",
@@ -4020,6 +4335,13 @@
     ],
     "reason": "A timewalker's shield, the circle where the sand stops falling."
   },
+  "spell:terror-of-the-grave": {
+    "name": "Terror of the Grave",
+    "source": "07-MAGIC",
+    "icon": "ability_warlock_howlofterror",
+    "previousIcons": [],
+    "reason": "A howl of terror. Terror of the Grave frightens enemies in an area."
+  },
   "spell:the-black-harvest": {
     "name": "The Black Harvest",
     "source": "07-MAGIC",
@@ -4037,6 +4359,13 @@
       "spell_fire_flamebolt"
     ],
     "reason": "A bright orange explosion flares out from a dark center. The Burning releases destructive fire, matching the expanding blast."
+  },
+  "spell:the-dead-rise": {
+    "name": "The Dead Rise",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_nightofthedead",
+    "previousIcons": [],
+    "reason": "A night of the dead. The Dead Rise raises every corpse nearby, up to ten."
   },
   "spell:the-deep": {
     "name": "The Deep",
@@ -4252,6 +4581,20 @@
     "icon": "ability_deathknight_deathsiphon",
     "previousIcons": [],
     "reason": "A death siphon. Unholy Mending restores Health to an undead creature."
+  },
+  "spell:unholy-renewal": {
+    "name": "Unholy Renewal",
+    "source": "07-MAGIC",
+    "icon": "spell_shadow_improvedvampiricembrace",
+    "previousIcons": [],
+    "reason": "Dark renewal. Unholy Renewal heals undead allies in an area."
+  },
+  "spell:unholy-restoration": {
+    "name": "Unholy Restoration",
+    "source": "07-MAGIC",
+    "icon": "spell_necro_necroticcore",
+    "previousIcons": [],
+    "reason": "A necrotic core. Unholy Restoration heals one undead creature."
   },
   "spell:unmaking": {
     "name": "Unmaking",
@@ -4492,6 +4835,13 @@
     ],
     "reason": "Something withered and aged, the wear each grain takes from whoever stands in the circle."
   },
+  "spell:wraith-bolt": {
+    "name": "Wraith Bolt",
+    "source": "07-MAGIC",
+    "icon": "ability_warlock_coil2",
+    "previousIcons": [],
+    "reason": "A bolt of shadow. Wraith Bolt deals Shadow damage to one creature."
+  },
   "spell:wrath": {
     "name": "Wrath",
     "source": "07-MAGIC",
@@ -4518,6 +4868,13 @@
       "spell_holy_absolution"
     ],
     "reason": "Replace: Absolution is a closed book, not a protective image. The inspected shield and halo depict the Ward trigger that absorbs all damage and converts it to Mana."
+  },
+  "talent:acolytes-sacrifice": {
+    "name": "Acolyte's Sacrifice",
+    "source": "04-TALENTS",
+    "icon": "spell_shadow_ritualofsacrifice",
+    "previousIcons": [],
+    "reason": "A ritual of sacrifice. Acolyte's Sacrifice turns a raised servant into a Shade."
   },
   "talent:adrenaline": {
     "name": "Adrenaline",
@@ -4800,6 +5157,13 @@
     ],
     "reason": "Replace: the assigned Combat Experience art is a purple hood. The inspected Psychic Scream image shows a screaming face, matching the audible area fear effect."
   },
+  "talent:barbed-bone": {
+    "name": "Barbed Bone",
+    "source": "04-TALENTS",
+    "icon": "ability_deathknight_desolation",
+    "previousIcons": [],
+    "reason": "Desolation. Barbed Bone makes Bone Shield damage the attacker."
+  },
   "talent:barrage": {
     "name": "Barrage",
     "source": "04-TALENTS",
@@ -5019,6 +5383,13 @@
     ],
     "reason": "Retain: the bright Avenging Wrath image depicts a holy blessing empowering a friendly target’s next Test."
   },
+  "talent:bloated-dead": {
+    "name": "Bloated Dead",
+    "source": "04-TALENTS",
+    "icon": "spell_shadow_abominationexplosion",
+    "previousIcons": [],
+    "reason": "An abomination bursting. Bloated Dead makes fallen servants damage the enemies near them."
+  },
   "talent:blood-craze": {
     "name": "Blood Craze",
     "source": "04-TALENTS",
@@ -5105,6 +5476,27 @@
       "ability_hunter_aspectofthefox"
     ],
     "reason": "Retain: the fox companion image directly fits the talent increasing a companion’s Health."
+  },
+  "talent:bone-armor": {
+    "name": "Bone Armor",
+    "source": "04-TALENTS",
+    "icon": "ability_deathknight_brittlebones",
+    "previousIcons": [],
+    "reason": "Brittle bones. Bone Armor spends a skeleton for Armor Points."
+  },
+  "talent:bone-storm": {
+    "name": "Bone Storm",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_bone_07",
+    "previousIcons": [],
+    "reason": "Bones. Bone Storm collapses skeletons to damage the enemies beside them."
+  },
+  "talent:bone-vanguard": {
+    "name": "Bone Vanguard",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_bone_orcskull_01",
+    "previousIcons": [],
+    "reason": "A skull. Bone Vanguard strengthens a skeleton that leads the horde."
   },
   "talent:bones-and-feathers": {
     "name": "Bones and Feathers",
@@ -5360,6 +5752,13 @@
     ],
     "reason": "Retain: the radiant holy circle depicts the additional nearby recipient of Mend."
   },
+  "talent:circle-of-the-damned": {
+    "name": "Circle of the Damned",
+    "source": "04-TALENTS",
+    "icon": "spell_necro_deathlyecho",
+    "previousIcons": [],
+    "reason": "An echoing circle. Circle of the Damned gives allies in it temporary Health."
+  },
   "talent:clan-word": {
     "name": "Clan Word",
     "source": "02-CHARACTER-OPTIONS",
@@ -5478,6 +5877,13 @@
     ],
     "reason": "Replace: Animatedead depicts a risen corpse. The demonic figure in Demonic Empowerment matches binding a living demon."
   },
+  "talent:commander-of-bone": {
+    "name": "Commander of Bone",
+    "source": "04-TALENTS",
+    "icon": "spell_deathknight_darkconviction",
+    "previousIcons": [],
+    "reason": "Dark conviction. Commander of Bone raises every skeleton's Damage Rating."
+  },
   "talent:common-tongue": {
     "name": "Common Tongue",
     "source": "02-CHARACTER-OPTIONS",
@@ -5567,6 +5973,13 @@
     ],
     "reason": "Retain: the bright holy strike depicts the attack empowered by spending Zeal."
   },
+  "talent:cult-fervor": {
+    "name": "Cult Fervor",
+    "source": "04-TALENTS",
+    "icon": "spell_shadow_shadowpact",
+    "previousIcons": [],
+    "reason": "A shadow pact. Cult Fervor gives allies in the circle a Boon on Resilience Tests."
+  },
   "talent:curse-of-agony": {
     "name": "Curse of Agony",
     "source": "04-TALENTS",
@@ -5608,6 +6021,13 @@
     "icon": "spell_nature_shamanrage",
     "previousIcons": [],
     "reason": "A red figure roaring, WoW's own Dark Command art. The talent draws a creature's attacks to the knight."
+  },
+  "talent:dark-communion": {
+    "name": "Dark Communion",
+    "source": "04-TALENTS",
+    "icon": "ability_priest_cascade_shadow",
+    "previousIcons": [],
+    "reason": "A cascade of shadow. Dark Communion heals allies over a rite."
   },
   "talent:dark-minion": {
     "name": "Dark Minion",
@@ -6254,6 +6674,13 @@
     ],
     "reason": "Replace: The proposed bull-rush horn reads as movement, not a finishing critical blow. A hard weapon strike against purple metal fits an increased Critical Injury chance on wounded prey."
   },
+  "talent:exhume": {
+    "name": "Exhume",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_bone_skull_01",
+    "previousIcons": [],
+    "reason": "A skull dug up. Exhume casts Stitch Abomination where the dead lie buried."
+  },
   "talent:explorers-league": {
     "name": "Explorers' League",
     "source": "02-CHARACTER-OPTIONS",
@@ -6454,6 +6881,13 @@
     ],
     "reason": "Retain: the fleet-footed icon depicts a runner, matching movement that raises Defense."
   },
+  "talent:flesh-offering": {
+    "name": "Flesh Offering",
+    "source": "04-TALENTS",
+    "icon": "spell_shadow_corpseexplode",
+    "previousIcons": [],
+    "reason": "A corpse spent. Flesh Offering destroys a corpse to lower a Death spell's Mana."
+  },
   "talent:flurry": {
     "name": "Flurry",
     "source": "04-TALENTS",
@@ -6623,6 +7057,13 @@
     ],
     "reason": "Retain: the death knight strike depicts attacking from concealment with a blow that cannot be parried."
   },
+  "talent:ghoul-frenzy": {
+    "name": "Ghoul Frenzy",
+    "source": "04-TALENTS",
+    "icon": "spell_deathknight_thrash_ghoul",
+    "previousIcons": [],
+    "reason": "A ghoul in a frenzy. Ghoul Frenzy raises the Plagued Ghouls' Damage Rating."
+  },
   "talent:gift-of-moments": {
     "name": "Gift of Moments",
     "source": "04-TALENTS",
@@ -6659,6 +7100,27 @@
     ],
     "reason": "Replace: Feign Death depicts a fallen figure. The blue mechanical figure under power is a closer image for taking the form of a Gnomish Battle Rig."
   },
+  "talent:gorge": {
+    "name": "Gorge",
+    "source": "04-TALENTS",
+    "icon": "spell_deathknight_butcher",
+    "previousIcons": [],
+    "reason": "Butchery. Gorge destroys a corpse and restores a servant's Health."
+  },
+  "talent:grafted-flesh": {
+    "name": "Grafted Flesh",
+    "source": "04-TALENTS",
+    "icon": "ability_deathknight_unholymutation",
+    "previousIcons": [],
+    "reason": "Mutated flesh. Grafted Flesh gives zombies and ghouls grafts."
+  },
+  "talent:grand-circle": {
+    "name": "Grand Circle",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_rune_13",
+    "previousIcons": [],
+    "reason": "A wide rune. Grand Circle widens the circle and lets it move."
+  },
   "talent:grave-bond": {
     "name": "Grave Bond",
     "source": "04-TALENTS",
@@ -6674,6 +7136,13 @@
     "icon": "ability_deathknight_soulreaper",
     "previousIcons": [],
     "reason": "A reaper's stroke. Grim Harvest heals the knight when it strikes a creature brought to half its Health."
+  },
+  "talent:grim-sacrament": {
+    "name": "Grim Sacrament",
+    "source": "04-TALENTS",
+    "icon": "spell_shadow_darkritual",
+    "previousIcons": [],
+    "reason": "WoW's Dark Ritual. Grim Sacrament makes Dark Ritual restore more Mana."
   },
   "talent:grinding-block": {
     "name": "Grinding Block",
@@ -7339,6 +7808,13 @@
     ],
     "reason": "Retain: the dark red siphon art depicts Health being transferred, matching the spell’s name and effect."
   },
+  "talent:life-for-a-life": {
+    "name": "Life for a Life",
+    "source": "04-TALENTS",
+    "icon": "ability_rogue_cheatdeath",
+    "previousIcons": [],
+    "reason": "Cheating death. Life for a Life keeps an ally at 1 Health for a servant's collapse."
+  },
   "talent:lifebinders-flame": {
     "name": "Lifebinder's Flame",
     "source": "04-TALENTS",
@@ -7538,6 +8014,13 @@
     "previousIcons": [],
     "reason": "WoW's own Mark of Blood art. The talent marks one creature whose blows heal the knight."
   },
+  "talent:marrowguard": {
+    "name": "Marrowguard",
+    "source": "04-TALENTS",
+    "icon": "ability_deathknight_marrowrend",
+    "previousIcons": [],
+    "reason": "Marrow. Marrowguard lowers Physical damage while a skeleton stands beside you."
+  },
   "talent:masons-eye": {
     "name": "Mason's Eye",
     "source": "02-CHARACTER-OPTIONS",
@@ -7601,6 +8084,13 @@
       "spell_shadow_charm"
     ],
     "reason": "Replace: The proposed face in a charm aura points to mind control, not demon summoning. A demonic silhouette emerging from green light depicts calling bound demons."
+  },
+  "talent:masterwork-abomination": {
+    "name": "Masterwork Abomination",
+    "source": "04-TALENTS",
+    "icon": "achievement_boss_patchwerk",
+    "previousIcons": [],
+    "reason": "Patchwerk, the great Abomination. Masterwork Abomination doubles its Health and grafts."
   },
   "talent:mekkatorques-blueprint": {
     "name": "Mekkatorque's Blueprint",
@@ -7926,6 +8416,13 @@
     ],
     "reason": "Replace: Blinding Shot depicts an eye effect. The aimed projectile image matches an attack that penetrates Armor Points."
   },
+  "talent:plague-carrier": {
+    "name": "Plague Carrier",
+    "source": "04-TALENTS",
+    "icon": "ability_creature_disease_04",
+    "previousIcons": [],
+    "reason": "Disease. Plague Carrier makes the servants' hits deal Shadow damage each turn."
+  },
   "talent:plainswalker": {
     "name": "Plainswalker",
     "source": "02-CHARACTER-OPTIONS",
@@ -7953,6 +8450,13 @@
       "spell_holy_powerwordshield"
     ],
     "reason": "Align with the named Power Word: Shield spell: A bright shield fills the image. Power Word: Shield makes the world argue before reaching the target, matching direct protection."
+  },
+  "talent:practiced-stitcher": {
+    "name": "Practiced Stitcher",
+    "source": "04-TALENTS",
+    "icon": "spell_shadow_scourgebuild",
+    "previousIcons": [],
+    "reason": "Scourge building. Practiced Stitcher makes grafts cost less Essence."
   },
   "talent:precise-strike": {
     "name": "Precise Strike",
@@ -8052,6 +8556,13 @@
       "ability_warrior_rampage"
     ],
     "reason": "Retain: the charging warrior image matches the extra Half-Action and Rage earned after a takedown."
+  },
+  "talent:ranks-of-bone": {
+    "name": "Ranks of Bone",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_bone_skull_03",
+    "previousIcons": [],
+    "reason": "A skull. Ranks of Bone lets Raise Dead raise more corpses."
   },
   "talent:rapid-fire": {
     "name": "Rapid Fire",
@@ -8154,6 +8665,13 @@
     ],
     "reason": "A green landscape within a portal suggests finding a route to a safe settlement."
   },
+  "talent:regenerating-tissue": {
+    "name": "Regenerating Tissue",
+    "source": "04-TALENTS",
+    "icon": "spell_misc_petheal",
+    "previousIcons": [],
+    "reason": "A servant healed. Regenerating Tissue restores Health to ghouls and Abominations each turn."
+  },
   "talent:reinforced-plating": {
     "name": "Reinforced Plating",
     "source": "04-TALENTS",
@@ -8240,6 +8758,13 @@
       "spell_holy_divinepurpose"
     ],
     "reason": "Align with the named Repentance spell: A person kneels beneath descending Light. Repentance compels a target to acknowledge wrongdoing, matching the kneeling figure."
+  },
+  "talent:restless-bones": {
+    "name": "Restless Bones",
+    "source": "04-TALENTS",
+    "icon": "ability_deathknight_reanimation",
+    "previousIcons": [],
+    "reason": "Reanimation. Restless Bones makes a fallen skeleton stand again."
   },
   "talent:return-stroke": {
     "name": "Return Stroke",
@@ -8401,6 +8926,13 @@
       "spell_holy_divinespirit"
     ],
     "reason": "Retain: the divine spirit image depicts self-sacrifice to protect another from a Critical Injury."
+  },
+  "talent:sacrificial-strength": {
+    "name": "Sacrificial Strength",
+    "source": "04-TALENTS",
+    "icon": "ability_warlock_demonicempowerment",
+    "previousIcons": [],
+    "reason": "Empowerment. Sacrificial Strength gives allies temporary Health when a servant is spent."
   },
   "talent:salvage": {
     "name": "Salvage",
@@ -8663,6 +9195,13 @@
     ],
     "reason": "Retain: the rage image depicts the defensive reaction and resource surge this talent grants."
   },
+  "talent:shambling-horde": {
+    "name": "Shambling Horde",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_head_undead_02",
+    "previousIcons": [],
+    "reason": "A zombie's head. Shambling Horde lets Animate Corpse raise more corpses."
+  },
   "talent:shared-burden": {
     "name": "Shared Burden",
     "source": "04-TALENTS",
@@ -8808,6 +9347,20 @@
       "spell_shadow_contagion"
     ],
     "reason": "Retain: the contagion image depicts Shadow or Fel energy flowing from targets back to the caster."
+  },
+  "talent:skeletal-archery": {
+    "name": "Skeletal Archery",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_bone_humanskull_01",
+    "previousIcons": [],
+    "reason": "A skull. Skeletal Archery lets Raise Dead raise Skeletal Archers."
+  },
+  "talent:skeletal-mastery": {
+    "name": "Skeletal Mastery",
+    "source": "04-TALENTS",
+    "icon": "spell_shadow_callofbone",
+    "previousIcons": [],
+    "reason": "A call of bone. Skeletal Mastery lets Raise Dead raise Skeletal Mages."
   },
   "talent:slow-time": {
     "name": "Slow Time",
@@ -9119,6 +9672,13 @@
     ],
     "reason": "Replace: Kidney Shot depicts a close attack. The blue powered mechanical figure depicts supercharging a construct’s Finisher."
   },
+  "talent:surgeons-hand": {
+    "name": "Surgeon's Hand",
+    "source": "04-TALENTS",
+    "icon": "spell_deathknight_plaguestrike",
+    "previousIcons": [],
+    "reason": "A diseased cut. Surgeon's Hand adds three grafts to Stitch Abomination's list."
+  },
   "talent:survival-instincts": {
     "name": "Survival Instincts",
     "source": "04-TALENTS",
@@ -9136,6 +9696,13 @@
       "ability_bossmagistrix_timewarp2"
     ],
     "reason": "A moment suspended, conditions that do nothing for a turn."
+  },
+  "talent:swelling-ranks": {
+    "name": "Swelling Ranks",
+    "source": "04-TALENTS",
+    "icon": "spell_deathknight_armyofthedead",
+    "previousIcons": [],
+    "reason": "An army of the dead. Swelling Ranks lets the horde hold more skeletons."
   },
   "talent:swift-current": {
     "name": "Swift Current",
@@ -9249,6 +9816,13 @@
     ],
     "reason": "Retain: the mechanical chicken image depicts a constructed machine, matching a talent that builds constructs."
   },
+  "talent:the-black-rite": {
+    "name": "The Black Rite",
+    "source": "04-TALENTS",
+    "icon": "spell_necro_inevitableend",
+    "previousIcons": [],
+    "reason": "An inevitable end. The Black Rite spends the raised dead to heal and bless allies."
+  },
   "talent:the-challenge": {
     "name": "The Challenge",
     "source": "04-TALENTS",
@@ -9276,6 +9850,13 @@
       "achievement_character_undead_male"
     ],
     "reason": "A ghostly dead figure fits locating a plague victim and learning their fate."
+  },
+  "talent:the-endless-host": {
+    "name": "The Endless Host",
+    "source": "04-TALENTS",
+    "icon": "spell_necro_undyingrelentlessness",
+    "previousIcons": [],
+    "reason": "Undying relentlessness. The Endless Host lets the horde hold more skeletons."
   },
   "talent:the-glass-turns-back": {
     "name": "The Glass Turns Back",
@@ -9666,6 +10247,13 @@
     ],
     "reason": "Replace: Nightblade depicts a weapon. The rogue sprint image depicts ending and resisting movement restrictions."
   },
+  "talent:unholy-fervor": {
+    "name": "Unholy Fervor",
+    "source": "04-TALENTS",
+    "icon": "spell_shadow_unholystrength",
+    "previousIcons": [],
+    "reason": "Unholy strength. Unholy Fervor adds Shadow damage to a living ally's hits."
+  },
   "talent:unmade-wound": {
     "name": "Unmade Wound",
     "source": "04-TALENTS",
@@ -9701,6 +10289,13 @@
       "spell_shadow_creepingplague"
     ],
     "reason": "Retain: the creeping shadow plague depicts an ongoing curse that erupts when ended early."
+  },
+  "talent:unsummon": {
+    "name": "Unsummon",
+    "source": "04-TALENTS",
+    "icon": "spell_shadow_sacrificialshield",
+    "previousIcons": [],
+    "reason": "A sacrifice. Unsummon collapses a servant for Mana."
   },
   "talent:unyielding": {
     "name": "Unyielding",
@@ -9825,6 +10420,13 @@
       "achievement_character_orc_male"
     ],
     "reason": "The war drum fits oral history carried in a war-song."
+  },
+  "talent:watchful-shades": {
+    "name": "Watchful Shades",
+    "source": "04-TALENTS",
+    "icon": "spell_shadow_detectinvisibility",
+    "previousIcons": [],
+    "reason": "An eye that sees the hidden. Watchful Shades lets Shades see invisible creatures."
   },
   "talent:waylay": {
     "name": "Waylay",

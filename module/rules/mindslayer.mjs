@@ -43,22 +43,11 @@ export function dyingMindClaim({ sceneId, tokenId, actorUuid, health, existing =
   return { version: 1, sceneId, tokenId, actorUuid, state: "claimed" };
 }
 
-/** Observe actual living-to-zero transitions, never infer one from a loaded
- * corpse. Each synthetic actor has its own baseline; GM handoff must keep
- * observing on other clients without executing their effects.
+/** Whether a death the watch observed (`effects/death-watch.mjs`, its `healthFell`) is a
+ * Mindslayer's: an NPC whose whole-number Health went from above 0 to exactly 0 and which
+ * carries Dying Mind. The baseline is the watch's, one for every actor on every client.
  */
-export function mindslayerDeathObserver() {
-  const health = new WeakMap();
-  return {
-    prime(actor) {
-      if (actor && typeof actor === "object" && !health.has(actor)) health.set(actor, actor.system?.health?.value);
-    },
-    observe(actor) {
-      if (!actor || typeof actor !== "object") return false;
-      const before = health.get(actor), after = actor.system?.health?.value;
-      health.set(actor, after);
-      return actor.type === "npc" && Number.isInteger(before) && before > 0 && after === 0
-        && (actor.system?.creatureAbilities ?? []).some(row => row.name === MINDSLAYER_DEATH.name);
-    }
-  };
+export function mindslayerDeath({ actor = null, before = null, after = null } = {}) {
+  return actor?.type === "npc" && Number.isInteger(before) && before > 0 && after === 0
+    && (actor.system?.creatureAbilities ?? []).some(row => row.name === MINDSLAYER_DEATH.name);
 }

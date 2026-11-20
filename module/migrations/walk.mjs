@@ -141,7 +141,7 @@ export async function walkWorld({ item = null, actor = null, items = null, embed
     }
     const made = embeds ? await embeds(doc) : null;
     if (made?.length) {
-      await doc.createEmbeddedDocuments("Item", made, { render: false, azerothBags: "bypass" });
+      await doc.createEmbeddedDocuments("Item", made, { render: false, azerothBags: "bypass", azerothLearn: "bypass" });
       log(`azeroth-rpg | ${where}: ${doc.name} (${doc.id}) — ${made.length} item(s) embedded`);
       touched += made.length;
     }

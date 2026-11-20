@@ -186,7 +186,9 @@ AZEROTH.resilienceAbility = { body: "con", reflex: "dex", spirit: "wis" };
 // rename. `rules/creation.mjs#primaryAbilities` is the reader.
 // The Death Knight casts with Charisma (the lead: **Charisma**, Casting Test and Spell
 // DC; D-942), and Charisma sets its Runic Power cap and gain (`rules/runes.mjs`).
-AZEROTH.primaryAbility = { warrior: "str", rogue: "dex", ranger: "dex", "chromatic-champion": "con", chronomancer: "int", "death-knight": "cha" };
+// The Necromancer casts with Intelligence (the lead: **Intelligence**), and Intelligence sets
+// its horde's capacity (`rules/horde.mjs`).
+AZEROTH.primaryAbility = { warrior: "str", rogue: "dex", ranger: "dex", "chromatic-champion": "con", chronomancer: "int", "death-knight": "cha", necromancer: "int" };
 
 // **A CLASS TAKEN AT CREATION AND NEVER MULTICLASSED, EITHER WAY** (the lead, on the
 // Chromatic Champion plan: *"Creation only; no 2nd class."*). Keyed by identifier;
@@ -195,6 +197,13 @@ AZEROTH.primaryAbility = { warrior: "str", rogue: "dex", ranger: "dex", "chromat
 // The Death Knight too (the plan's Phase 0 item 6, accepted as drafted: *creation only,
 // and no second class in either direction*; D-942): its Power lives in its weapons.
 AZEROTH.creationOnlyClasses = ["chromatic-champion", "chronomancer", "death-knight"];
+
+// **A CLASS THAT MULTICLASSES WITH A NAMED FEW, EITHER WAY** (the lead, on the Necromancer plan's
+// item 11: *"Multiclassing is allowed with Warrior, Mage, Rogue."*). Keyed by identifier: the
+// class's second class is one of these, and a character holding one of these may take the class
+// second; any other pairing is refused. `rules/multiclass.mjs#multiclassRefusal` is the one
+// reader.
+AZEROTH.multiclassOnlyWith = { necromancer: ["warrior", "mage", "rogue"] };
 
 // **A CLASS WHOSE PEOPLE IS FIXED AND WEARS ANOTHER'S GUISE** (the Chromatic Champion
 // plan, *The Chromatic Outcast is a real race item, and the guise is a pick beside
@@ -236,7 +245,12 @@ AZEROTH.momentumTypes = {
   // The Death Knight's (D-943): gained ONLY by spending a rune unless a feature or
   // talent names another way, capped at 10 plus Charisma and never below 10, kept
   // between fights and emptied only when a Long Rest finishes (`rules/runes.mjs`).
-  runicPower:  "AZEROTH.Pool.RunicPower"
+  runicPower:  "AZEROTH.Pool.RunicPower",
+  // The Necromancer's (the Necromancer plan): gained only when a living enemy dies within 120
+  // feet unless a feature, talent or spell names another way, spent only to empower a spell or
+  // a feature, capped at 3 plus Constitution and never below 3, and kept until spent
+  // (`rules/essence.mjs`).
+  essence:     "AZEROTH.Pool.Essence"
 };
 AZEROTH.powerTypes = {
   mana:   "AZEROTH.Pool.Mana",
@@ -502,7 +516,10 @@ AZEROTH.actions = {
 // item's Use keep the ladder (`AZEROTH.actions`).
 AZEROTH.spellActions = {
   ...AZEROTH.actions,
-  minute: "AZEROTH.Action.Minute"
+  minute: "AZEROTH.Action.Minute",
+  // The Necromancer's three roleplay spells that print *10 minutes* (Spirit Anchor, Death's
+  // Tidings, Call the Departed; the Necromancer plan, D-1050): a timed cast as *1 minute* is.
+  tenMinutes: "AZEROTH.Action.TenMinutes"
 };
 AZEROTH.HALF_ACTIONS_PER_TURN = 2;
 AZEROTH.REACTIONS_PER_TURN = 1;

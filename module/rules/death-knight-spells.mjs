@@ -440,8 +440,8 @@ export const DK_SPELL_AUTOMATION = Object.freeze({
   "seal-the-soul": { doors: ["corpse-mark:sealed"], table: "questioning, calling or binding the spirit is the GM's; only the raise it bars is a rule the system reads" },
   "soul-rend": { doors: ["card:damage", "card:resist", "dk:noHealingOnFail"] },
   "unholy-blight": { doors: ["areaTick", "region:attached"] },
-  // 07 §17, tier 4 and 5
-  "contagion": { doors: [], reason: "tier 4: no Death Knight casts it, and it waits for the Necromancer (the plan's reading of 07 §4)" },
+  // 07 §17, tier 5 (Contagion, open at tier 4, is the Necromancer's census's: 07 §4's chart bars the
+  // knight from tier 4, and `necromancer-spells.mjs#NECRO_SPELL_AUTOMATION` carries its door; run 4c-S)
   "raise-dracolich": { doors: ["raise"] },
   // 07 §11, Restricted Death Knight
   "frost-strike": { doors: ["nextAttack"], table: "the promise is taken by the next attack this turn, a ranged one or a miss included, where 07 says the next melee hit (O-363)" },
@@ -460,7 +460,7 @@ export const DK_SPELL_AUTOMATION = Object.freeze({
 });
 
 /** How many whole spells stay the table's: a ceiling that may only fall. */
-export const DK_SPELL_REASON_CEILING = 12;
+export const DK_SPELL_REASON_CEILING = 11;
 
 /** How many spells leave a clause to the table: a ceiling that may only fall. */
 export const DK_SPELL_TABLE_CEILING = 7;
@@ -513,7 +513,7 @@ export const DK_SPELL_DOORS = Object.freeze({
     { file: "module/dice/chat.mjs", fn: "rollResists", contains: "if (effect && escape?.condition === id) await effect.setFlag(\"azeroth-rpg\", ESCAPE_FLAG, escape);" },
     { file: "module/documents/combat.mjs", fn: "_onEndTurn", contains: "await this._escapePrompts(combatant, \"turnEnd\")" }
   ],
-  "raise": [{ file: "module/dice/workflows.mjs", fn: "castSpell", contains: "raisePlan = await judgeRaise(actor, spell, { key: sys.identifier, source });" }],
+  "raise": [{ file: "module/dice/workflows.mjs", fn: "castSpell", contains: "raisePlan = await judgeRaise(actor, spell, { key: sys.identifier, source" }],
   "corpse-mark:destroyed": [
     { file: "module/rules/raise.mjs", fn: "CORPSE_MARKS", contains: "\"corpse-burst\": Object.freeze({ state: \"destroyed\"" },
     { file: "module/dice/workflows.mjs", fn: "castSpell", contains: "raiseLines.push(...await markCorpse(actor, corpsePlan));" }

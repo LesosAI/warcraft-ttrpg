@@ -176,6 +176,10 @@ export function seedApplies(effectText, duration = {}, target = "") {
   if (/\bSpeed doubles\b/.test(text)) changes.push({ key: "system.speed", type: "multiply", value: "2" });
   if ((m = /\bBody Armor Points rise by (\d+)/.exec(text))) add("system.ap.body", m[1]);
   if ((m = /\bArmor Points rise by (\d+) at every location\b/.exec(text))) for (const loc of ["body", "head", "limb"]) add(`system.ap.${loc}`, m[1]);
+  // **07 §17's BONE WARD AND SHROUD OF BONE** (run 4c-S): *You have 1 additional Armor Point at every
+  // location for the duration*, *Each target has 2 additional Armor Points at every location* - the
+  // caster's or each target's, never a graft's *It has* (Stitch Abomination's Bone Plating is the raise's).
+  if ((m = /\b(?:You have|Each target has) (\d+) additional Armor Points? at every location\b/.exec(text))) for (const loc of ["body", "head", "limb"]) add(`system.ap.${loc}`, m[1]);
   // *Damage the target takes is reduced by 3 for the duration* (07's Pain
   // Suppression and Barkskin; found beside 04's Pain Suppression, D-774): the
   // every-source reduction D-696 made `system.damageReduction`, which the one

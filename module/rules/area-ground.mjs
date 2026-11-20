@@ -44,7 +44,9 @@
  *              "target" where it is the ground at a single target (2a above);
  *              "" from the moment the area is placed
  *   who        "" every creature, or "named": Sandtrap's *for each creature you choose
- *              as you cast* (07 §12, D-864) - the creatures the cast named alone
+ *              as you cast* (07 §12, D-864) - the creatures the cast named alone - or
+ *              "enemy": the Necromancer's Field of Bones, *Difficult ground for your
+ *              enemies*, the caster's enemies alone, as Desecration's door lays it (D-938)
  *   ignores    the spell's target ignores Difficult ground
  *   reason     every Difficult-ground sentence the machinery cannot carry,
  *              "; "-joined, counted under a CEILING in `area-ground.test.mjs`
@@ -117,6 +119,8 @@ const AREA_IS = [
 
 /** Sandtrap's *for each creature you choose as you cast* (07 §12): the named alone. */
 const CHOSEN = /\bfor each creature you choose as you cast\b/i;
+/** *Difficult ground for your enemies* (the Necromancer's Field of Bones). */
+const FOR_ENEMIES = /\bDifficult ground\b\W*\s*for your enemies\b/i;
 
 /** 07's *until the end of your next turn*: the ground outlasts the cast by one round. */
 const NEXT_TURN = /\buntil the end of your next turn\b/i;
@@ -259,6 +263,7 @@ export function readAreaGround(effectText, fields = {}) {
       ground.difficult = true;
       if (NEXT_TURN.test(s)) ground.lasts = { rounds: 1 };
       if (CHOSEN.test(s)) ground.who = "named";
+      else if (FOR_ENEMIES.test(s)) ground.who = "enemy";
       continue;
     }
     // The ground at a single target (2a): the cast places it on the creature (stage 3B).
@@ -384,7 +389,7 @@ export function cleanAreaGround(ground) {
     }
   }
   if ("from" in ground && !["", "landing", "target"].includes(ground.from)) ground.from = "";
-  if ("who" in ground && !["", "named"].includes(ground.who)) ground.who = "";
+  if ("who" in ground && !["", "named", "enemy"].includes(ground.who)) ground.who = "";
   if ("ignores" in ground && typeof ground.ignores !== "boolean") ground.ignores = ground.ignores === true;
   if ("reason" in ground && typeof ground.reason !== "string") ground.reason = "";
   return ground;

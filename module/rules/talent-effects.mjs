@@ -261,6 +261,8 @@ import { widenAreaText } from "./areas.mjs";
 import { gateHolds, gateLabel, wieldFails } from "./talent-gates.mjs";
 // A feature's condition's own escape, bound at the rank (the Legacy branches' door 19).
 import { boundFeatureEscape } from "./escapes.mjs";
+// The Necromancer's numbers, each in one place (Phase 4c-T): every row below names its constant.
+import * as NT from "./necromancer-talents.mjs";
 // A summon's count by rank, bound at the stamp (the Legacy branches' door 4).
 import { summonCountAt } from "./summon-places.mjs";
 
@@ -3522,6 +3524,106 @@ export const TALENT_EFFECTS = Object.freeze({
       grants: grant({ action: "half", cost: cost("runes", 3), uses: uses(1, "encounter") }),
       onUse: { runes: { kind: "frost" }, dk: { winter: { feet: 15, rounds: 3 } } }
     }
+  },
+  // **THE NECROMANCER** (04's Flesh, Bone and Damned; the Necromancer plan's Phase 4c-T and Phase 5).
+  // Every row names its door in `necro` - the numbers are `rules/necromancer-talents.mjs`' constants,
+  // held to 04 at every rank by `necromancer-talents.test.mjs` - and a Use rides `grants` and
+  // `onUse.necro`, judged by `effects/necromancer-talents.mjs#judgeNecroTalentUse` before anything is
+  // paid. The raise talents are read by the horde's own doors (`effects/necromancer-horde.mjs`), the
+  // passives on the raised dead by `rules/bound.mjs#boundEffects`' `raised` branch.
+  necromancer: {
+    /* ---- Flesh ---- */
+    // *Each of your Plagued Ghouls adds your rank to its Damage Rating. At rank 3, ... 10 additional feet
+    // of Speed. Empowered. As a Half-Action, spend 1 Essence ...* The bound sync and the surge's Use.
+    "ghoul-frenzy": { grants: grant({ action: "half", cost: cost("essence", NT.GHOUL_FRENZY.essence) }), onUse: { necro: { surge: NT.GHOUL_FRENZY.identifier } }, necro: { bound: NT.GHOUL_FRENZY } },
+    // *Your Animate Corpse may target 1 additional corpse per rank* (`raise.mjs#RAISE_WIDENED_BY`).
+    "shambling-horde": { necro: { corpses: { spell: "animate-corpse", perRank: 1 } } },
+    // *... a corpse within its reach. The corpse is destroyed. That creature regains all its Health.
+    // Empowered ... temporary Health equal to twice your tier.*
+    "gorge": { grants: grant({ action: "half" }), onUse: { necro: { gorge: true } }, necro: { heal: "all", tempHealth: "2*tier", door: NT.GORGE } },
+    // *you may give it one graft ... At rank 2, ... two grafts* (`grafts.mjs#graftMenu`).
+    "grafted-flesh": { necro: { grafts: { entries: ["Risen Zombie", "Plagued Ghoul"], perRank: 1 } } },
+    // *... Body Resilience Test against your Spell DC. On a failure it takes Shadow damage equal to your
+    // rank at the start of each of its turns for 1 minute. Empowered ... Poisoned 1 ...* The hit's Test
+    // card (`effects/graft-riders.mjs`) and the surge's Use.
+    "plague-carrier": { grants: grant({ action: "half", cost: cost("essence", NT.PLAGUE_CARRIER.essence) }), onUse: { necro: { surge: NT.PLAGUE_CARRIER.identifier } }, necro: { turnStart: true, hitTest: NT.PLAGUE_CARRIER } },
+    // *... destroy one corpse within 30 feet of you. The spell costs 1 less Mana per rank, to a minimum
+    // of 1* (`necromancer-lines.mjs#FLESH_OFFERING`, a line on the cast dialog).
+    "flesh-offering": { necro: { discount: { perRank: 1, floor: 1, feet: 30 } } },
+    // *Stitch Abomination's list of grafts gains Butcher's Arm and Plague Bladder. At rank 2, ... Grasping
+    // Arms* (`grafts.mjs`; the bladder and the arms fire on their own, `effects/graft-riders.mjs`).
+    "surgeons-hand": { necro: { grafts: { gains: ["butchersArm", "plagueBladder"], atRank2: ["graspingArms"] }, inflicts: ["poisoned", "entangled"] } },
+    // *... cost 1 less Essence in total per rank, to a minimum of 0. This discount applies once a casting.*
+    "practiced-stitcher": { necro: { discount: { perRank: 1, floor: 0, once: "casting" } } },
+    // *... drops to 0 Health, each enemy within a 5 ft radius of it takes Shadow damage equal to your
+    // tier ...* The raised-dead event's burst (`effects/necromancer-talents.mjs#bloatedDeadOn`).
+    "bloated-dead": { necro: { burst: NT.BLOATED_DEAD } },
+    // *... regains Health equal to your tier at the start of its turn. At rank 2, ... twice your tier.
+    // Empowered ...* The turn start's mending and the Empowered Use.
+    "regenerating-tissue": { grants: grant({ action: "half", cost: cost("essence", NT.REGENERATING_TISSUE.essence) }), onUse: { necro: { mend: NT.REGENERATING_TISSUE.identifier } }, necro: { heal: "tier", turnStart: true } },
+    // *Once per Long Rest, you may cast Stitch Abomination with no corpses ... The GM judges the place.*
+    "exhume": { grants: counter(1, "long", null), onUse: { necro: { exhume: true } }, necro: { exhume: NT.EXHUME }, reason: "where the dead lie buried - a graveyard, a battlefield, a barrow or a crypt - is the GM's to judge (the lead: *enforced by the GM not automation/code*); Stitch Abomination asks for no corpse, and the Use counts the Long Rest's casting" },
+    // *... rises with twice its 14-BESTIARY Health. You may give it each graft twice* (`horde-stamps.mjs`, `grafts.mjs`).
+    "masterwork-abomination": { necro: { health: 2, perGraft: 2 } },
+    /* ---- Bone ---- */
+    // *... any of the skeletons may rise as Skeletal Archers* (`raise.mjs#entryCompositions`).
+    "skeletal-archery": { necro: { entry: "Skeletal Archer" } },
+    // *... up to your rank may rise as Skeletal Mages. Empowered ... One more* (`necromancer-lines.mjs#SKELETAL_MASTERY`).
+    "skeletal-mastery": { necro: { entry: "Skeletal Mage", perRank: 1, empowered: 1 } },
+    // *... It collapses. You have 1 additional Armor Point at every location until you finish a Long
+    // Rest ... up to your rank. Empowered ... until the end of the encounter ...*
+    "bone-armor": { grants: grant({ action: "half" }), onUse: { necro: { boneArmor: true } }, necro: { ap: NT.BONE_ARMOR } },
+    // *... adds your rank to its Damage Rating and to its Defense. Empowered ... three times your tier.*
+    "bone-vanguard": { grants: grant({ action: "half", cost: cost("essence", NT.BONE_VANGUARD.essence) }), onUse: { necro: { mend: NT.BONE_VANGUARD.identifier } }, necro: { heal: "3*tier", lead: true } },
+    // *... it stands again with half its Health at the start of your next turn ... once. At rank 2 ...
+    // immediately. Empowered ... all its Health.* The one 0-Health judgement's second source.
+    "restless-bones": { necro: { turnStart: true, standAgain: NT.RESTLESS_BONES } },
+    // *... the Physical damage an attack deals you falls by your rank* (the damage door's standing reduction).
+    "marrowguard": { necro: { reduce: NT.MARROWGUARD } },
+    // *Your horde has 1 additional place per rank, for skeletons only* (`horde.mjs#hordeCapacity`).
+    "swelling-ranks": { necro: { places: { perRank: 1, skeletons: true } } },
+    // *Your Raise Dead may target 1 additional corpse per rank* (`raise.mjs#RAISE_WIDENED_BY`).
+    "ranks-of-bone": { necro: { corpses: { spell: "raise-dead", perRank: 1 } } },
+    // *When your Bone Shield reduces an attack's damage, the attacker takes Shadow damage equal to twice
+    // your rank ...* Bone Shield's Reaction is team 4c-S's door, and its card posts under `BARBED_BONE_KEY`.
+    "barbed-bone": { necro: { retaliate: { amount: "2*rank", spellpower: "shadow", spell: "Bone Shield" } } },
+    // *Each of your skeletons adds your rank to its Damage Rating. Empowered ... twice your rank.*
+    "commander-of-bone": { grants: grant({ action: "half", cost: cost("essence", NT.COMMANDER_OF_BONE.essence) }), onUse: { necro: { surge: NT.COMMANDER_OF_BONE.identifier } }, necro: { bound: NT.COMMANDER_OF_BONE } },
+    // *Once per encounter, as a Half-Action, choose any number of your skeletons within 60 feet ...*
+    "bone-storm": { grants: grant({ action: "half", uses: uses(1, "encounter") }), onUse: { necro: { boneStorm: true } }, necro: { burst: NT.BONE_STORM } },
+    // *Your horde has additional places equal to your Arcana Ranks, for skeletons only.*
+    "the-endless-host": { necro: { places: { arcana: true, skeletons: true } } },
+    /* ---- Damned ---- */
+    // *... It collapses. A Shade ... rises in its space ... Empowered ... no place in your horde.*
+    "acolytes-sacrifice": { grants: grant({ action: "half" }), onUse: { necro: { sacrifice: true } }, necro: { raise: NT.ACOLYTES_SACRIFICE } },
+    // *Once a round, as a Half-Action ... Mana equal to your Intelligence modifier ... At rank 2,
+    // Unsummon takes no action* (the architect's Q1).
+    "unsummon": { grants: grant({ action: "half", atRank: [{ rank: NT.UNSUMMON.freeRank, action: null }] }), onUse: { necro: { unsummon: true } }, necro: { mana: "int", once: "round" } },
+    // *... A 10 ft radius around it is your circle for 1 minute. Each ally that starts its turn in your
+    // circle gains temporary Health equal to your rank ... Empowered ...*
+    "circle-of-the-damned": { grants: grant({ action: "half" }), onUse: { necro: { circle: true } }, necro: { tempHealth: "rank", area: NT.CIRCLE } },
+    // *Each ally in your circle has a Boon on Spirit Resilience Tests. At rank 2, ... Body* (the circle's riders).
+    "cult-fervor": { necro: { boons: NT.CULT_FERVOR } },
+    // *... each ally within 10 feet of it gains temporary Health equal to your tier per rank* (a collapse by choice).
+    "sacrificial-strength": { necro: { tempHealth: "tier*rank", feet: NT.SACRIFICIAL_STRENGTH.feet } },
+    // *... its hits deal additional Shadow damage equal to half your Intelligence modifier, rounded down.
+    // It loses 1 Health at the start of its next turn ... At rank 2, choose two living allies.*
+    "unholy-fervor": { grants: grant({ action: "half" }), onUse: { necro: { fervor: true } }, necro: { turnStart: true, typed: NT.UNHOLY_FERVOR } },
+    // *Your Shades see invisible creatures within 60 feet ... At rank 2, ... a Half-Action to see and hear
+    // through one of your Shades* (core's `seeInvisibility` on the Shade, and the rank 2 Use).
+    "watchful-shades": { grants: grant({ action: "half", minRank: NT.WATCHFUL_SHADES.sightRank }), onUse: { necro: { borrow: true } }, necro: { sees: NT.WATCHFUL_SHADES } },
+    // *Your circle's radius is 15 feet. At rank 2, it is 20 feet. At rank 2, you may move your circle ...*
+    "grand-circle": { grants: grant({ action: "half", minRank: NT.GRAND_CIRCLE.moveRank }), onUse: { necro: { moveCircle: true } }, necro: { radius: NT.GRAND_CIRCLE } },
+    // *Once a round, when an ally in your circle would drop to 0 Health, you may collapse one of your
+    // raised dead ... The ally drops to 1 Health instead. At rank 2, ... regains Health equal to your
+    // tier.* The asked hold (`blow-doors.mjs#ASKED_HOLDS`).
+    "life-for-a-life": { holds: { kind: "lifeForALife" }, necro: { heal: "tier", hold: NT.LIFE_FOR_A_LIFE } },
+    // *Your Dark Ritual's cap rises by 2 Mana per rank* (`necromancer-features.mjs#darkRitualCap`).
+    "grim-sacrament": { necro: { cap: NT.GRIM_SACRAMENT } },
+    // *Once per Short Rest, ... a 10-minute rite with up to five willing allies ... three times your tier.*
+    "dark-communion": { grants: grant({ action: null, uses: uses(1, "short") }), onUse: { necro: { communion: true } }, necro: { heal: "3*tier", rite: NT.DARK_COMMUNION } },
+    // *Once per Long Rest, as a Half-Action ... five times your tier ... Boon on every Test ... Empowered ...*
+    "the-black-rite": { grants: grant({ action: "half", uses: uses(1, "long") }), onUse: { necro: { blackRite: true } }, necro: { heal: "5*tier", tempHealth: "int", rite: NT.BLACK_RITE } }
   }
 });
 
@@ -3862,6 +3964,8 @@ export const CENSUS_DETECTORS = Object.freeze({
       || Boolean(e.spellCost?.less || e.onUse?.veins?.less)
       // And D-778's: a Sustain's upkeep made cheaper (Arcane Concentration).
       || Boolean(e.upkeep?.less)
+      // And the Necromancer's (Phase 4c-T; `rules/necromancer-talents.mjs`): Flesh Offering's Mana and Practiced Stitcher's Essence.
+      || Boolean(e.necro?.discount)
   },
   // *your Block reduces 1 more damage per rank*, *you take 2 less damage*.
   // A Block's own bonus (Redoubt, Shield Wall; D-772).
@@ -3922,6 +4026,9 @@ export const CENSUS_DETECTORS = Object.freeze({
       || e.tempHealth?.on === "deathStrike" || Boolean(e.dk?.harvest || e.dk?.tide)
       || Boolean(e.onUse?.dk?.regain || e.onUse?.dk?.markOfBlood || e.onUse?.dk?.vampiric || e.onUse?.dk?.dancing)
       || modifiesOf(e).some(m => m.plagueHeals)
+      // And the Necromancer's (Phase 4c-T; `rules/necromancer-talents.mjs`): Gorge, the mendings, Life for a Life's
+      // hold, Dark Communion and The Black Rite.
+      || Boolean(e.necro?.heal)
   },
   // *Your Fortitude rises by 2 per rank*, *your Defense rises by 1 per rank*.
   risesBy: {
@@ -3934,6 +4041,8 @@ export const CENSUS_DETECTORS = Object.freeze({
       // And the Legacy branches' (B3): Armor Points and Ward a Use lays for the
       // encounter (The Mountain Wakes' *your Armor Points rise by 2*).
       || Boolean(e.onUse?.armor)
+      // And the Necromancer's (Phase 4c-T; `rules/necromancer-talents.mjs`): Grim Sacrament's cap on Dark Ritual.
+      || Boolean(e.necro?.cap)
   },
   // A number per rank beside Defense, Armor Points or Ward: *1 more Defense per
   // rank*, *Ward 1 per rank*, *ignore 2 Armor Points per rank*. Not *your Ward
@@ -3963,6 +4072,9 @@ export const CENSUS_DETECTORS = Object.freeze({
     re: /\btemporary Health\b/i,
     // And Obsidian Skin's, on a spend of Void (stage 3A, `chromatic-talents.mjs#voidSpendFor`).
     covers: e => Boolean(e.tempHealth || e.onUse?.tempHealth) || e.voidSpend?.tempHealth !== undefined
+      // And the Necromancer's (Phase 4c-T; `rules/necromancer-talents.mjs`): Gorge's and The Black Rite's Empowered lines,
+      // the circle's turn starts and Sacrificial Strength.
+      || Boolean(e.necro?.tempHealth)
   },
   // *at the start of each of your turns*, *at the start of the target's turns*,
   // *anything starting its turn there*: a tick (the plan's Phase 2b).
@@ -3985,6 +4097,9 @@ export const CENSUS_DETECTORS = Object.freeze({
       // And the Guardian of Time's (stage 2c): the half Borrowed Time puts off and the rest
       // of a blow Borrowed Hour holds, landed at the turn's start (`deferred-damage.mjs`).
       || Boolean(e.borrowed || e.borrowedHour)
+      // And the Necromancer's (Phase 4c-T; `rules/necromancer-talents.mjs`): Plague Carrier's tick, Regenerating Tissue's
+      // mending, Restless Bones' stand and Unholy Fervor's Health loss.
+      || Boolean(e.necro?.turnStart)
   },
   // **THREE THE PLAN'S LIST DID NOT NAME** (D-768), each a family of talents
   // with no row and no carrier, found reading the worklist against 04: a
@@ -4027,6 +4142,8 @@ export const CENSUS_DETECTORS = Object.freeze({
       // feature's patch that slows (Icy Grip on Death Grip, Frozen Desecration), and Remorseless
       // Winter's Slowed and Entangled at a turn's start.
       || Boolean(e.dk?.coilSlows || e.onUse?.dk?.winter) || modifiesOf(e).some(m => m.slows?.condition)
+      // And the Necromancer's (Phase 4c-T; `rules/necromancer-talents.mjs`): Surgeon's Hand's Plague Bladder and Grasping Arms.
+      || (e.necro?.inflicts ?? []).length > 0
   },
   // A row whose trigger IS a Success Level (D-771): Nature's Grace's next
   // spell and Primal Fury's further Ferocity. And D-772's: Deep Cut's

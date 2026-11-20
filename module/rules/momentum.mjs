@@ -17,6 +17,8 @@ import { SAND, sandCap } from "./sand.mjs";
 import { isKeptPool, keptAfter, keptSurvives } from "./kept-pools.mjs";
 // Runic Power's cap, and the rule that 05 §11's universal gains never reach it (D-943).
 import { RUNIC_POWER, gainsByUniversalTriggers, runicPowerCap } from "./runes.mjs";
+// Essence's cap, 3 plus Constitution and never below 3 (the Necromancer plan; the lead).
+import { ESSENCE, essenceCap } from "./essence.mjs";
 
 /**
  * What every pool holds as a fight starts (02 SS7): Momentum at 0 - Zeal at
@@ -375,11 +377,15 @@ export function unkillableFloor({ before = 0, amount = 0, rage = 0, holds = fals
  * Ranged slot (`sand.mjs#equippedHourglass`), and with none the cap is 0 - the
  * class item's printed 5 is the Common glass's and is never read on its own.
  */
-export function capFor(pool, ranks = () => 0, { hourglass = null, chaMod = 0 } = {}) {
+export function capFor(pool, ranks = () => 0, { hourglass = null, chaMod = 0, conMod = 0 } = {}) {
   if (pool?.name === SAND) return sandCap(hourglass);
   // **RUNIC POWER'S CAP IS 10 PLUS CHARISMA, NEVER BELOW 10** (the lead; D-943): `chaMod`
   // the character's Charisma modifier. The class item's printed 10 is the floor.
   if (pool?.name === RUNIC_POWER) return runicPowerCap(chaMod);
+  // **ESSENCE'S CAP IS 3 PLUS CONSTITUTION, NEVER BELOW 3** (the lead: *"base plus
+  // Constitution modifier"*, the base *3, never below 3*): `conMod` the character's
+  // Constitution modifier. The class item's printed 3 is the floor.
+  if (pool?.name === ESSENCE) return essenceCap(conMod);
   const max = pool?.max ?? 0;
   if (pool?.name === "zeal" && ranks("Zealotry") > 0) return 15;
   if (pool?.name === "quarry") return max + 2 * Math.max(0, ranks("Hunter's Mark"));

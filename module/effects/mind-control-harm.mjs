@@ -3,6 +3,9 @@ const pending = new Map();
 
 export function mindControlHarmSnapshot(actor) {
   return [...(actor?.effects ?? [])].flatMap(effect => {
+    // 07 §17's Puppet of Flesh rides the control and names no end by a blow (run 4c-S): its carrier
+    // (`flags.azeroth-rpg.puppet`) is ended by its repeated Test and its minute alone.
+    if (effect?.flags?.['azeroth-rpg']?.puppet) return [];
     const record = mindControlOn(effect, actor.uuid);
     return record ? [{ id: effect.id, record }] : [];
   });

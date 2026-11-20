@@ -281,7 +281,7 @@ export function tableBatch(context) {
 
     it("of Embers worn adds a point of Spellpower to a tier-3 Fire spell's damage and none to a tier-1", async function () {
       this.timeout(60000);
-      const mage = await makeCharacter({ name: "ZZ Ember Mage", classes: [["Mage", 9]], spells: ["Ashfall", "Blast Wave"], armor: ["Robes"] });
+      const mage = await makeCharacter({ name: "ZZ Ember Mage", classes: [["Mage", 11]], spells: ["Ashfall", "Blast Wave"], armor: ["Robes"] });
       const robes = mage.items.find(i => i.name === "Robes");
       await applyAffixInPlace(robes, await affixNamed("of Embers"));
       await robes.update({ "system.equipped": true });

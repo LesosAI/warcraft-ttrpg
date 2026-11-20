@@ -137,7 +137,9 @@ export const STEP_REFUSALS = Object.freeze({
   // A pull against the creature's will that its own ability or March of the Damned refuses
   // (D-957), and a size it cannot be moved at (05's *Being moved*).
   refuses: "AZEROTH.Step.Refuse.Refuses",
-  outsized: "AZEROTH.Step.Refuse.Outsized"
+  outsized: "AZEROTH.Step.Refuse.Outsized",
+  // 07 §17's Grave Step: the space is not within the feet of a corpse within range (run 4c-S).
+  noCorpse: "AZEROTH.Step.Refuse.NoCorpse"
 });
 
 /**
@@ -219,13 +221,16 @@ export function stepHeldBy(refuseWhile = [], statuses = []) {
  * @param {{feet: number, apart?: number|null, sight?: string, seen?: boolean|null, occupied?: boolean, same?: boolean}} o
  * @returns {string|null}  a `STEP_REFUSALS` key
  */
-export function stepRefusal({ feet, apart = null, sight = "see", seen = null, occupied = false, same = false } = {}) {
+export function stepRefusal({ feet, apart = null, sight = "see", seen = null, occupied = false, same = false, nearCorpse = null } = {}) {
   if (same === true) return "same";
   const reach = feetOf(feet);
   const d = Number(apart);
   if (!reach || apart === null || apart === undefined || !Number.isFinite(d)) return "unmeasured";
   if (d > reach + 1e-6) return "far";
   if (sight === "see" && seen !== true) return "unseen";
+  // **A SPACE BESIDE A CORPSE** (07 §17's Grave Step: *within 5 feet of a corpse within range*): asked
+  // only of a corpse step, and a space no corpse stands near is refused in words (run 4c-S).
+  if (sight === "corpse" && nearCorpse !== true) return "noCorpse";
   if (occupied === true) return "occupied";
   return null;
 }
@@ -327,7 +332,27 @@ export function readSpellStep(effectText) {
   // each targeted creature its own space, picked before the payment.
   m = /\bEach target teleports up to (\d+) feet to a space you can see\b/.exec(text);
   if (m) return { who: "targets", feet: Number(m[1]), sight: "see", shadow };
+  // **07 §17's GRAVE STEP** (run 4c-S): *You move to an unoccupied space within 5 feet of a corpse
+  // within range. This movement does not provoke Opportunity Attacks* - the caster, to a space beside
+  // a corpse the spell's Range reaches (`corpse`: the cast measures the Range and the corpses on the
+  // board, `near` the feet from the corpse), by the step door's displacement, which provokes nothing.
+  m = /\bYou move to an unoccupied space within (\d+) feet of a corpse within range\b/.exec(text);
+  if (m) return { who: "self", feet: null, sight: "corpse", near: Number(m[1]), corpse: true, shadow };
   return null;
+}
+
+/**
+ * **HOW FAR A CORPSE STEP REACHES** (07 §17's Grave Step): the corpse within the spell's Range, and the
+ * space within `near` feet of it - so the space may lie up to the Range and the near feet from the
+ * caster. Null where the Range is no distance.
+ *
+ * @param {{near?: number}} step
+ * @param {number|null} rangeFeet
+ */
+export function corpseStepFeet(step, rangeFeet) {
+  const r = Number(rangeFeet);
+  if (!(r > 0)) return null;
+  return r + Math.max(0, Math.trunc(Number(step?.near)) || 0);
 }
 
 /**

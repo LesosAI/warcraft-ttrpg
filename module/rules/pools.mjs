@@ -39,6 +39,8 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+// The Necromancer's Essence pays no price a cost names by KIND (the Necromancer plan).
+import { paysByKind } from "./essence.mjs";
 
 /**
  * @typedef {object} PoolSnapshot
@@ -86,7 +88,9 @@ export function anyPoolPayers(pools = [], amount = 0) {
     // **NEVER THE RUNES** (D-943): a Death Knight's runes are a derived Power pool that only
     // `documents/runes.mjs` spends, with the Runic Power each rune gives; a price from any
     // pool is paid from the others.
-    .filter(p => p && (p.kind === "momentum" || p.kind === "power") && p.name !== "runes" && (Number(p.value) || 0) >= due)
+    // **NOR ESSENCE** (the Necromancer plan: *You spend Essence only to empower a spell or a
+    // feature*): a price from any pool is never paid in it.
+    .filter(p => p && (p.kind === "momentum" || p.kind === "power") && p.name !== "runes" && paysByKind(p.name) && (Number(p.value) || 0) >= due)
     .sort((a, b) => (order[a.kind] - order[b.kind])
       || String(a.name ?? "").localeCompare(String(b.name ?? ""))
       || String(a.itemId ?? "").localeCompare(String(b.itemId ?? "")));
@@ -167,7 +171,9 @@ export function poolNamed(pools = [], name = null, { itemId = null } = {}) {
   // maneuver's reading (`AzerothActor#momentumPayer`: `momenta[0]`). A racial talent's
   // grant names no class, so it takes the primary's.
   if (name === ANY_MOMENTUM) {
-    const momenta = list.filter(p => p?.kind === "momentum");
+    // Never Essence (`essence.mjs#paysByKind`): a Necromancer who multiclasses pays in the
+    // other class's Momentum, and one holding Essence alone pays nothing here.
+    const momenta = list.filter(p => p?.kind === "momentum" && paysByKind(p.name));
     return momenta.find(p => itemId && p.itemId === itemId) ?? momenta[0] ?? null;
   }
   const named = list.filter(p => p?.name === name);

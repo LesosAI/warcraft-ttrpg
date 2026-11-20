@@ -237,6 +237,11 @@ export const UNTICKED = Object.freeze([
   // built it: the turn's start charges it (`rules/upkeep.mjs`), and `isUpkeep`
   // reads it as the caster's upkeep, never a per-turn sentence.
   { key: "delayed", re: /\blands at the start of your next turn\b/, text: "a blast that lands at the start of the caster's next turn is not built" },
+  // The Necromancer's Plague of Undeath: *A creature that failed takes 4 Shadow damage at the start
+  // of each of its turns for the duration* - a tick laid on each creature that failed the Test, by
+  // the failed Test's own door (`effects/necromancer-horde.mjs#plagueFailed`, D-770's carrier),
+  // never by the card's Apply, which would lay it on every creature named.
+  { key: "failedArea", re: /\bA creature that failed takes \d+ [A-Z][a-z]+ damage at the start of each of its turns\b/, text: "a tick laid on each creature that failed the Test by the failed Test's own door (effects/necromancer-horde.mjs#plagueFailed), never by the card's Apply" },
   // An area's own clauses at the caster's turn: D-757's growth is the area
   // descriptor's (`areaTick.grows`), and the choice of whom to strike its reason.
   { key: "areaGrows", re: /\bat the start of each of your turns it grows by \d+ feet\b/i, text: "the area's growth at the caster's turn is the area's own descriptor's (D-757)" },
@@ -451,7 +456,12 @@ export function tickCountdown(laid) {
 export function tickLanding(laid) {
   const amount = Math.max(0, Math.trunc(Number(laid?.amount)) || 0);
   const n = Math.max(0, Math.trunc(Number(laid?.doubled)) || 0);
-  return n > 0 ? { amount: amount * 2, doubled: true, left: n - 1 } : { amount, doubled: false, left: 0 };
+  const base = n > 0 ? { amount: amount * 2, doubled: true, left: n - 1 } : { amount, doubled: false, left: 0 };
+  // **02 §7's POTENT** (*rises by your tier the first time it damages, heals or grants temporary
+  // Health to each creature*): a tick whose cast dealt nothing carries the rise to its first
+  // landing, after any doubling, and the door clears it there.
+  const potent = Math.max(0, Math.trunc(Number(laid?.potent)) || 0);
+  return potent ? { ...base, amount: base.amount + potent, potent } : base;
 }
 
 /**

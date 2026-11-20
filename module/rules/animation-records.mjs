@@ -123,6 +123,56 @@ export function cleanRuneSpend(raw) {
 }
 
 /**
+ * **THE ESSENCE WISP'S RECORD** (02 §7's Necromancer: *When a living enemy dies within 120 feet
+ * of you, gain 1 Essence*; the Necromancer plan: *a cue that rides the actor update, as the rune
+ * flare does*). The death watch's write (`effects/death-watch.mjs#deathWatchQueryHandler`) carries
+ * it under `ESSENCE_GAIN_OPTION` on the SAME update that raises the Essence, so every client reads
+ * the event and plays it for itself (D-729). `holder` is the Necromancer's token and `corpse` the
+ * dead creature's, as the GM's client saw them when it judged the death (D-724); the wisp runs from
+ * the corpse to the holder. A gain no death gave (a GM's hand, a refund) records nothing.
+ */
+export const ESSENCE_GAIN_OPTION = "azerothEssenceGain";
+export const ESSENCE_GAIN_KEY = "essence:gain";
+
+/**
+ * **SOUL HARVEST'S WISP** (02 §7's Warlock: *When a creature dies within 30 feet of you or a bound
+ * demon, you gain 2 Mana*; the Necromancer plan's Phase 7, where the death watch that gives Essence
+ * gives it too). The same cue shape as the Essence wisp (`essenceGainCue`), written by the same
+ * door under its own option on the Mana write, and played under the feature's own key - the
+ * Warlock's token as the holder, the dead creature's as the corpse.
+ */
+export const SOUL_HARVEST_OPTION = "azerothSoulHarvest";
+export const SOUL_HARVEST_KEY = "soul-harvest";
+
+/**
+ * One gain's record, cleaned, or null where no holder token was recorded.
+ *
+ * @param {{holder?: {sceneId?: string, tokenId?: string}|null, corpse?: {sceneId?: string, tokenId?: string}|null, amount?: number}} o
+ * @returns {{sceneId: string|null, tokenId: string, corpse: {sceneId: string|null, tokenId: string}|null, amount: number}|null}
+ */
+export function essenceGainCue({ holder = null, corpse = null, amount = 1 } = {}) {
+  return cleanEssenceGain({ sceneId: holder?.sceneId ?? null, tokenId: holder?.tokenId ?? null, corpse, amount });
+}
+
+/**
+ * An Essence gain's record as an operation carried it, cleaned, or null.
+ *
+ * @param {unknown} raw
+ * @returns {{sceneId: string|null, tokenId: string, corpse: {sceneId: string|null, tokenId: string}|null, amount: number}|null}
+ */
+export function cleanEssenceGain(raw) {
+  const tokenId = idOf(raw?.tokenId);
+  if (!tokenId) return null;
+  const corpseToken = idOf(raw?.corpse?.tokenId);
+  const amount = Math.max(1, Math.trunc(Number(raw?.amount)) || 1);
+  return {
+    sceneId: idOf(raw?.sceneId), tokenId,
+    corpse: corpseToken ? { sceneId: idOf(raw?.corpse?.sceneId), tokenId: corpseToken } : null,
+    amount
+  };
+}
+
+/**
  * A (user, feature) privacy pair as a record carried it, rebuilt through `featurePrivacyKey`, or
  * null: `feature:<actor id>:<feature key>`, nothing else.
  *

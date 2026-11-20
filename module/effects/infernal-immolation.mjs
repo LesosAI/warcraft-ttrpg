@@ -20,6 +20,9 @@ export async function advanceInfernalImmolation(combat, combatant) {
   const refuse = reason => ({ ok: false, reason, results: [] });
   const target = combatant?.actor, victim = combatant?.token, scene = victim?.parent;
   const round = combat?.round, turn = combat?.turn;
+  // A combatant with no token stands nowhere an Immolation can reach: skipped quietly, never a
+  // throw (`victim.actor` on no token) that the tracker reports as an unconfirmed tick every turn.
+  if (!victim) return { ok: true, results: [] };
   const current = () => gmHere() && present(combat) && present(combatant) && present(target)
     && combat.started && combat.combatant === combatant && combatant.parent === combat
     && combat.round === round && combat.turn === turn && combatant.actor === target && combatant.token === victim

@@ -11,6 +11,8 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+// The Necromancer's Essence never pays a maneuver (the Necromancer plan).
+import { paysByKind } from "./essence.mjs";
 
 /* -------------------------------------------- */
 /*  06 §6's Parry (O-166, O-180)                 */
@@ -212,6 +214,8 @@ export function bracingChanges(amount = 0, locations = ["body", "head", "limb"])
  * @returns {{payer: "own"|"owner", pool: object}|null}
  */
 export function momentumPayer({ own = null, owner = null, shares = false, amount = 0 } = {}) {
+  // Essence pays no maneuver (`essence.mjs#paysByKind`): a pool that may not is no pool here.
+  if (own && !paysByKind(own.name)) own = null;
   const due = Math.max(0, Number(amount) || 0);
   const holds = pool => Boolean(pool) && (Number(pool.value) || 0) >= due;
   const quarry = shares ? owner : null;

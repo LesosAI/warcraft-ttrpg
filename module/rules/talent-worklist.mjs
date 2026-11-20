@@ -39,6 +39,8 @@ export const TALENT_WORKLIST = Object.freeze({
   // THE DEATH KNIGHT (D-942): no lines while the pack holds none of its 24 talents;
   // see its ceiling below.
   "death-knight": Object.freeze({}),
+  // THE NECROMANCER (Phase 4c-T): every one of its 36 talents has its row and a door; none left.
+  necromancer: Object.freeze({}),
   // D-771 (the talent plan's Phase 3): two lines left, each a QUESTION for the
   // lead, its reason on the row's own `gap`. D-777 built Living Seed's
   // temporary Health (the lead: *"raise HP past max as temp hp"*), and D-778
@@ -120,6 +122,8 @@ export const WORKLIST_CEILING = Object.freeze({
   // stage (the plan's Phase 5) writes their rows or parks the lines here with this
   // ceiling raised for this class alone, as the Chronomancer's did.
   "death-knight": 0,
+  // THE NECROMANCER: 0, and 0 after Phase 4c-T wrote the 36 rows - nothing parked, none to fall.
+  necromancer: 0,
   // 23 to 22 (D-769): Chimera's patch takes two forms. 22 to 14 (D-770):
   // Mangle, Rip and Feral Charge ride the attack dialog as riders. 14 to 2
   // (D-771): every Druid talent built but Living Seed and Typhoon's push. 2 to
@@ -195,4 +199,35 @@ export function pendingLegacyRows(className) {
 /** Whether a talent's row is still pending on phase B6. */
 export function legacyRowPending(className, identifier) {
   return pendingLegacyRows(className).includes(identifier);
+}
+
+/**
+ * **THE NECROMANCER'S THIRTY-SIX, WAITING ON THEIR ROWS** (the Necromancer plan: Phase 3b's
+ * parse put 04's Flesh, Bone and Damned in the talent pack, and Phase 5 writes their
+ * `rules/talent-effects.mjs` rows). The Legacy branches' pattern exactly: gated HERE and
+ * nowhere else, by branch in 04's row order; a pending talent is held to having NO row (it is
+ * named, never skipped in silence), every other Necromancer talent to having one, and
+ * `talent-effects.test.mjs` holds the list to the pack both ways. Phase 5 strikes each
+ * identifier as its row lands, and the list ends empty.
+ */
+export const NECROMANCER_ROWS_PENDING = Object.freeze({
+  // Phase 4c-T wrote all thirty-six rows and struck each here as it landed. Every branch is EMPTY:
+  // every Necromancer talent is held to having its row.
+  Flesh: Object.freeze([]),
+  Bone: Object.freeze([]),
+  Damned: Object.freeze([])
+});
+
+/** Every pending Necromancer identifier, flat, in the list's order. */
+export function pendingNecromancerRows() {
+  return Object.values(NECROMANCER_ROWS_PENDING).flat();
+}
+
+/**
+ * **WHETHER A TALENT'S ROW IS PENDING ON A LATER PHASE** - a Legacy branch's (phase B6, now
+ * empty) or the Necromancer's (Phase 5). The ONE question every per-talent census asks.
+ */
+export function rowPending(className, identifier) {
+  if (legacyRowPending(className, identifier)) return true;
+  return String(className ?? "") === "Necromancer" && pendingNecromancerRows().includes(identifier);
 }

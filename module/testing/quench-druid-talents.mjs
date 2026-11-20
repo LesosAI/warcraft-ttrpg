@@ -465,7 +465,8 @@ export function druidTalentsBatch(context) {
 
     it("NATURE'S SWIFTNESS: a healing spell that costs an action is cast at a Half-Action, one use a time", async function () {
       this.timeout(240000);
-      const druid = await druidWith("ZZ DT Natures Swiftness", { level: 9, ranks: { "Nature's Swiftness": 1 }, spells: ["Moonwell"] });
+      // Level 11 (tier 3): Moonwell is a tier 3 spell, and 07 §4's cast cap (D-1082) refuses it at tier 2.
+      const druid = await druidWith("ZZ DT Natures Swiftness", { level: 11, ranks: { "Nature's Swiftness": 1 }, spells: ["Moonwell"] });
       const ghoul = await makeNpc("Plagued Ghoul");
       const combat = await fightWith([druid, ghoul]);
       const mine = await giveTurn(combat, druid);

@@ -353,13 +353,16 @@ export async function makeCharacter({
     [PACK_FOR.armor, armor], [PACK_FOR.gear, gear], [PACK_FOR.talent, talents]]) {
     for (const n of names) embed.push((await fromPack(packId, n)).toObject());
   }
-  const items = embed.length ? orThrow(embed, await actor.createEmbeddedDocuments("Item", embed), name) : [];
+  // The learning door's bypass (07 §9; `AzerothItem._preCreateOperation`): a fixture is a GM's
+  // macro and states what the character holds. Never the bags' (D-737).
+  const items = embed.length ? orThrow(embed, await actor.createEmbeddedDocuments("Item", embed, { azerothLearn: "bypass" }), name) : [];
 
   // A class brings its thirty-six talents with it, after the link update
   // lands. Wait for them here so no test sees the sheet re-render under it.
   if (classes.length) {
-    // Twelve a branch: three branches, two for the Death Knight (D-927).
-    const want = classes.reduce((n, [c]) => n + (c === "Death Knight" ? 24 : 36), 0);
+    // Twelve a branch (D11 §4), the branches read off each class item the pack gave - three, two
+    // for the Death Knight (D-927) - never a count kept here (the Necromancer plan's finding 8).
+    const want = embed.filter(d => d.type === "class").reduce((n, d) => n + 12 * (d.system?.branches?.length ?? 3), 0);
     // Class talents only: a race's eight land on the same chain (D-620) and
     // would otherwise satisfy the count before the class's had arrived.
     for (let i = 0; i < 200 && actor.items.filter(t => t.type === "talent" && !t.system?.race).length < want; i++) {
@@ -431,7 +434,7 @@ export async function makeBoss() {
 export async function give(actor, name, packId = PACK_FOR.equipment) {
   const doc = await fromPack(packId, name);
   const data = doc.toObject();
-  const [item] = orThrow([data], await actor.createEmbeddedDocuments("Item", [data]), actor.name);
+  const [item] = orThrow([data], await actor.createEmbeddedDocuments("Item", [data], { azerothLearn: "bypass" }), actor.name);
   return item;
 }
 

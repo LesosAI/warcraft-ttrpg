@@ -66,6 +66,8 @@ import { attackOffHand, riderThrowModifiers, throwAsWeapon } from "../rules/wiel
 import { extraAttackSelection, extraAttackWeapons } from "../rules/second-attack-choice.mjs";
 import { throwAsOffer } from "../rules/riders.mjs";
 import { unansweredBy } from "../rules/reactions.mjs";
+// The Necromancer's Essence pays no maneuver (the Necromancer plan).
+import { paysByKind } from "../rules/essence.mjs";
 import { reactionLostToBlow } from "../rules/miss.mjs";
 import { withdrawHit, withdrawnWords } from "../effects/miss.mjs";
 import { onUseLegacy } from "../rules/class-talents.mjs";
@@ -1542,9 +1544,16 @@ function secondRollOverrides(actor, args, secondTargets) {
  * 10 + 2 per tier (07 SS2), Overchannel and the Mana are shown, and
  * `castSpell` pays first and rolls.
  */
-export async function castWithDialog(actor, spell, event = null, { targets = null, run = null } = {}) {
+export async function castWithDialog(actor, spell, event = null, { targets = null, run = null, itemCast = false } = {}) {
   // 07's Hex: *it cannot attack, cast or speak* (D-808) - before the dialog opens.
   if (actor?.refuseForcedShape?.("cast")) return null;
+  // 07 §4's cast cap, before the dialog opens (`castSpell` asks again before anything is paid).
+  // An item's own spell (a Legendary's press: `itemCast`) is the item's, and is not capped.
+  const capped = itemCast ? null : (actor?.castCapWords?.(spell) ?? null);
+  if (capped) {
+    ui.notifications?.warn(capped);
+    return null;
+  }
   const sys = spell.system;
   const classes = (actor.classItems ?? []).map(c => ({
     itemId: c.id, name: c.name, schools: c.system?.schools ?? [], castingAbility: c.system?.castingAbility ?? null
@@ -1569,8 +1578,10 @@ export async function castWithDialog(actor, spell, event = null, { targets = nul
   const take = takeNextSpell(pending.live ?? [], { action: sys.action ?? null, healing: isHealingSpell(sys), school: sys.school ?? null });
   // In the pool the cast pays, as `castSpell` reads it (04's Shadowcraft's Focus; the
   // Legacy branches' B6).
-  // A Death spell's discounts read Shadow (`schools.mjs#bonusSchool`, O-335), as `castSpell`'s.
-  const discountSchool = bonusSchool({ school: sys.school ?? null, damageSchool: sys.damage?.school ?? null });
+  // A discount reads the spell's own school (O-335; the lead: *"Yes read the death school"*), as
+  // `castSpell`'s; the cast-as row keeps `schools.mjs#bonusSchool` (D-941).
+  const discountSchool = sys.school ?? null;
+  const castAsSchool = bonusSchool({ school: sys.school ?? null, damageSchool: sys.damage?.school ?? null });
   const discount = spellDiscountFor(talentsNow, {
     school: discountSchool, mana: sys.mana ?? 0, states: veinsStates(flaggedEffects(actor, VEINS_FLAG).map(r => r.flag)),
     pool: spellPayment(spellPoolFor(talentsNow, { name: spell.name, school: sys.school ?? null }), actor.classItems ?? [])?.pool ?? null
@@ -1597,7 +1608,7 @@ export async function castWithDialog(actor, spell, event = null, { targets = nul
   // name, its uses the round's record rather than a counter.
   // **AND 04's FIRE BLAST** (*Once a round, a Fire spell of yours costs a
   // Half-Action rather than an action*; D-775): the same line, by the school.
-  const swiftRow = castAsFor(talentsNow, { action: sys.action ?? null, healing: isHealingSpell(sys), name: spell.name, school: discountSchool });
+  const swiftRow = castAsFor(talentsNow, { action: sys.action ?? null, healing: isHealingSpell(sys), name: spell.name, school: castAsSchool });
   const swiftCounter = swiftRow && !swiftRow.perRound ? (actor.grantedFeature?.(swiftRow.talentId) ?? null) : null;
   const swiftLeft = swiftRow?.perRound ? roundMarksLeftOf(actor, swiftRow) : (swiftCounter?.system?.uses?.value ?? 0);
   const swiftJudged = swiftRow ? swiftCast({ row: swiftRow, spellAction: sys.action ?? null, healing: true, usesLeft: swiftLeft }) : null;
@@ -1691,12 +1702,15 @@ export async function castWithDialog(actor, spell, event = null, { targets = nul
     // Focus's free Mana, Lava Burst's Ward ignored on a Fire spell, Static
     // Charge's tier on one that deals damage. Unticked; `castSpell` judges the
     // ticked ones again. And Fel Fire's line on a Fire spell (D-775).
-    talentLineOffer: actor.talentLineOffer?.({
+    // An item's own spell (`itemCast`) pays no Mana: only the empower lines reach it (`castSpell`'s `unpriced`).
+    talentLineOffer: itemCast ? (actor.castLineOffer?.(sys, { mana: 0, priced: false }) ?? []) : [...(actor.talentLineOffer?.({
       roll: "spell", school: sys.damage?.school ?? sys.school ?? null, damages: castDealsDamage(sys), mana,
       ticks: sys.tick?.kind === "damage",
       // The spell's name, for a line on one spell alone (04's Devouring Plague, D-779).
       spell: spell.name
-    }) ?? [],
+    }) ?? []),
+    // 02 §7's empower lines and 04's Flesh Offering (the Necromancer plan's door 2).
+    ...(actor.castLineOffer?.(sys, { mana }) ?? [])],
     run: run ?? game.system.azeroth.workflows.castSpell
   };
   if (blademasterFor(talentsNow)) {
@@ -1788,6 +1802,8 @@ export async function castItemSpell(actor, item, index, event = null) {
     casting: { tier: sys.tier, mana: 0, pool: null, canPay: true, health, perPoint: overchannelPerPoint(sys.tier), maxPoints: 0 },
     provenanceExtra: [{ label: "AZEROTH.Card.FromItem", value: null, formula: item.name }],
     viaItem: { itemId: item.id, index, name: item.name, dc: entry.dc ?? null },
+    // 02 §7's empower lines reach an item's casting too (*when you cast a spell*), with nothing priced in Mana.
+    talentLineOffer: actor.castLineOffer?.(sys, { mana: 0, priced: false }) ?? [],
     run: game.system.azeroth.workflows.castSpell
   }, event);
 }
@@ -2895,6 +2911,12 @@ export async function castFreeSpell(actor, name, { by = "", target = null, event
     ui.notifications?.warn(game.i18n.format("AZEROTH.Cast.SpellMissing", { name }));
     return null;
   }
+  // 07 §4's cast cap, before the dialog opens (`castSpell` asks again before anything is paid).
+  const capped = actor?.castCapWords?.(spell) ?? null;
+  if (capped) {
+    ui.notifications?.warn(capped);
+    return null;
+  }
   const sys = spell.system;
   const classes = (actor.classItems ?? []).map(c => ({
     itemId: c.id, schools: c.system?.schools ?? [], castingAbility: c.system?.castingAbility ?? null
@@ -2925,6 +2947,8 @@ export async function castFreeSpell(actor, name, { by = "", target = null, event
       casting: { tier: sys.tier, mana: 0, pool: null, canPay: true, health: actor.system.health?.value ?? 0, perPoint: overchannelPerPoint(sys.tier), maxPoints: 0 },
       provenanceExtra: [{ label: "AZEROTH.Cast.FreeRow", value: null, formula: by }],
       free: { by },
+      // 02 §7's empower lines reach a free cast too (*when you cast a spell*), with nothing priced in Mana.
+      talentLineOffer: actor.castLineOffer?.(sys, { mana: 0, priced: false }) ?? [],
       run: game.system.azeroth.workflows.castSpell
     }, event);
   } finally {
@@ -2993,7 +3017,8 @@ export function rollAbility(actor, key, event = null) {
  */
 export function maneuversContext(actor) {
   const ctx = actor.maneuverContext?.() ?? {};
-  const pool = (actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum") ?? null;
+  // Never Essence (`rules/essence.mjs#paysByKind`): a Necromancer's rows read no pool.
+  const pool = (actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && paysByKind(p.name)) ?? null;
   return AZEROTH.maneuvers.map(m => {
     const priced = maneuverCost(m.key, ctx);
     const usable = m.key !== "calledShot";
@@ -3080,7 +3105,7 @@ export async function stepPool(actor, target) {
   const delta = Number(target.dataset.delta) || 0;
   // A hand on the sheet is a named door for a Runic Power rise, and a GM's alone
   // (`rules/runes.mjs#runicGainRefusal`: *Runic Power is only gained by consuming runes*).
-  return actor.updatePool({ itemId: itemId || null, kind, value: pool.value + delta }, {}, { runicGain: "hand" });
+  return actor.updatePool({ itemId: itemId || null, kind, value: pool.value + delta }, {}, { runicGain: "hand", essenceGain: "hand" });
 }
 
 /**
@@ -3123,7 +3148,7 @@ export function bindPoolInputs(sheet) {
         const now = poolRowFor(sheet.actor, { itemId, kind });
         if (now && input.isConnected) input.value = String(now.value);
       };
-      Promise.resolve(sheet.actor.updatePool({ itemId: itemId || null, kind, value: clamped }, {}, { runicGain: "hand" }))
+      Promise.resolve(sheet.actor.updatePool({ itemId: itemId || null, kind, value: clamped }, {}, { runicGain: "hand", essenceGain: "hand" }))
         .then(restore, err => {
           restore();
           console.warn("azeroth-rpg | pool box", err);

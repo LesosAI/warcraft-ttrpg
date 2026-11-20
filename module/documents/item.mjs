@@ -129,6 +129,52 @@ function refusePendingCustody() {
   ui.notifications?.warn(game.i18n.localize("AZEROTH.Item.CustodyPending"));
 }
 
+/**
+ * **A SPELL A CHARACTER LEARNS IS JUDGED BY 07 §4 AND §9** (the Necromancer plan's learning door;
+ * the 4a review's MUST-FIX 4 and 5 and its SHOULD-FIX). Every spell created on a character in one
+ * write: a player's is refused in words, spliced out of the batch with nothing written, where
+ * `AzerothActor#learnVerdict` refuses it - no class the character holds learns it, its
+ * prerequisite is not known or bars it, it is tier 5 and no tier 3 spell is known, or it is tier 5
+ * at all (a tier 5 spell is the GM's to teach). A grant's `spellFrom` that names an item this
+ * character does not hold is stripped before the judgement.
+ *
+ * **A GM's own write is the GM teaching** (the lead: *"learnable by the GM manually"*): it passes,
+ * as 4a's door let a GM's macro pass. The GM's sheet drop asks *teach anyway* first
+ * (`CharacterSheet#_onDropItem`) and then writes with the bypass.
+ *
+ * **The bypass is `operation.azerothLearn === "bypass"`** and a closed list holds it, as
+ * `azerothBags` is held (`spell-access.test.mjs` scans `module/` for the word): the creator's
+ * Finish (it judges its own picks), the feature and talent grants (`syncClassFeatures`, whose
+ * `spellFrom` names the item that teaches), the sheet's *teach anyway*, the migrations and the
+ * Quench fixtures.
+ *
+ * @returns {boolean} false where nothing is left to create
+ */
+function learnSpells(documents, operation, user) {
+  if (operation?.azerothLearn === "bypass") return true;
+  const actor = operation?.parent ?? null;
+  if (actor?.documentName !== "Actor" || actor.type !== "character" || typeof actor.learnVerdict !== "function") return true;
+  if (!documents.some(d => d.type === "spell")) return true;
+  const gm = user?.isGM === true;
+  const refused = [];
+  const kept = [];
+  for (const doc of documents) {
+    if (doc.type !== "spell") { kept.push(doc); continue; }
+    const data = doc.toObject();
+    const verdict = actor.learnVerdict(data, { batch: [...kept.map(d => d.toObject()), ...documents.filter(d => d !== doc && d.type === "class").map(d => d.toObject())], gm });
+    // A foreign `spellFrom` goes, so the spell is never withdrawn by a sync for an item it never had.
+    if (verdict.strip) doc.updateSource({ flags: { "azeroth-rpg": { spellFrom: null } } });
+    if (verdict.act === "allow" || (gm && verdict.act === "confirm")) { kept.push(doc); continue; }
+    refused.push({ doc, text: verdict.text });
+  }
+  if (!refused.length) return true;
+  for (let i = documents.length - 1; i >= 0; i -= 1) {
+    if (refused.some(r => r.doc === documents[i])) documents.splice(i, 1);
+  }
+  for (const r of refused) if (r.text) ui.notifications?.warn(r.text);
+  return documents.length > 0;
+}
+
 export class AzerothItem extends Item {
   /**
    * @inheritDoc
@@ -159,9 +205,12 @@ export class AzerothItem extends Item {
       // otherwise."*), read off the race item the character holds.
       const raceItem = actor.items.find(i => i.type === "race") ?? null;
       const race = raceItem ? { identifier: raceItem.system?.identifier ?? "", name: raceItem.name, classes: raceItem.system?.classes ?? [] } : null;
-      const barred = multiclassRefusal(heldItems, { identifier: data.system?.identifier ?? this.system?.identifier ?? "", name: data.name ?? this.name }, { race });
+      // A partner's name as the class pack prints it (the Necromancer's Warrior, Mage and Rogue).
+      const classIndex = game.packs?.get("azeroth-rpg.classes")?.index ?? null;
+      const nameOf = id => classIndex?.find?.(e => String(e.name ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") === id)?.name ?? null;
+      const barred = multiclassRefusal(heldItems, { identifier: data.system?.identifier ?? this.system?.identifier ?? "", name: data.name ?? this.name }, { race, nameOf });
       if (barred) {
-        ui.notifications?.warn(game.i18n.format(barred.reason, { name: barred.name, race: barred.race ?? "" }));
+        ui.notifications?.warn(game.i18n.format(barred.reason, { name: barred.name, race: barred.race ?? "", partners: barred.partners ?? "" }));
         return false;
       }
     }
@@ -271,6 +320,15 @@ export class AzerothItem extends Item {
       refusePendingCustody();
       return false;
     }
+
+    // **07 §9's LEARNING DOOR, AT THE ONE SEAM EVERY CREATE PASSES** (the 4a review's SHOULD-FIX;
+    // the lead on tier 5: *"Yes the tier 5 spells learned via tomes should be learnable by the GM
+    // manually to the character"*). Judged here rather than in `_preCreateDescendantDocuments`,
+    // which core runs AFTER the server has written the create (14.367
+    // `client/documents/abstract/client-document.mjs:607-617`: *after descendant documents have been
+    // created*) and so cannot refuse anything. This hook sees the whole batch, so a class or a
+    // prerequisite created in the same write counts.
+    if (!learnSpells(documents, operation, user)) return false;
 
     // D-739, at every door and on every parent. On a CREATE every schema field
     // is present, so the law's `hasOwnProperty` reads the whole system object

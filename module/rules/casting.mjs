@@ -591,11 +591,16 @@ export function spellPayment(talentPool = null, classes = []) {
  * `**Runic Power** 2` on a spell only a Death Knight can learn), else Mana. The browser row,
  * the spell sheet and the spell card read it, so a Runic Power spell never says *Mana*.
  *
+ * **A POOL PAID IS THE WORD, MANA INCLUDED** (the Necromancer plan's finding 1): a card that
+ * knows the payment names it, so a Necromancer paying Mana for a spell 07 prints in Runic Power
+ * (Graveblight before Phase 3b's parse) reads *Mana*. `paidIn` null is a row with no payer -
+ * the browser - and reads the pool 07 prints.
+ *
  * @param {{costPool?: string|null, paidIn?: string|null}} o
  * @returns {string}  a lang key
  */
 export function spellCostLabel({ costPool = "mana", paidIn = null } = {}) {
-  const pool = paidIn && paidIn !== "mana" ? paidIn : (costPool && costPool !== "mana" ? costPool : null);
+  const pool = paidIn ? (paidIn !== "mana" ? paidIn : null) : (costPool && costPool !== "mana" ? costPool : null);
   if (!pool) return "AZEROTH.Card.Mana";
   return AZEROTH.momentumTypes?.[pool] ?? AZEROTH.powerTypes?.[pool] ?? "AZEROTH.Card.Mana";
 }
@@ -703,6 +708,43 @@ export function spellsKnown({ caster = "none", castingMod = 0, tier = 1 } = {}) 
 }
 
 /**
+ * **07 §4's CHART: THE HIGHEST TIER A CLASS CASTS AT EACH CHARACTER TIER** - a full caster reaches
+ * every tier as they come to it; a half caster keeps pace to tier 2 and falls a step behind (1, 2, 2,
+ * 3). Its Vitest reads the chart off the chapter.
+ */
+export const HALF_CASTER_REACH = Object.freeze([1, 2, 2, 3]);
+
+/**
+ * The tier a class casts up to (07 §4's chart), at the tier that class runs at - the character's for
+ * the first class, one behind for the second (02 §10, `progression.mjs#secondaryTier`). A class
+ * whose grade is none casts at the character's own tier: the cap is *your own tier*.
+ *
+ * @param {{caster?: "full"|"half"|"none", tier?: number}} o
+ * @returns {number}
+ */
+export function castingReach({ caster = "full", tier = 1 } = {}) {
+  const t = Math.min(4, Math.max(1, Math.trunc(Number(tier)) || 1));
+  return caster === "half" ? HALF_CASTER_REACH[t - 1] : t;
+}
+
+/**
+ * **07 §4's CAST CAP** (*What you may cast is capped at your own tier, whatever a tome says. A tier 2
+ * character who copies a tier 4 spell out of a tome carries it until the level arrives.*): a spell of
+ * a tier above the reach is refused. **Tier 5 is outside that cap** (*because it is outside the
+ * ladder. It is found rather than reached, so there is no tier to be behind*). The lead,
+ * 2026-11-18: *"Yes"* to building it for every class.
+ *
+ * @param {{spellTier?: number, reach?: number}} o
+ * @returns {{reason: "tierCap", reach: number}|null}
+ */
+export function castCapRefusal({ spellTier = 1, reach = 1 } = {}) {
+  const t = Math.trunc(Number(spellTier)) || 1;
+  if (t >= 5) return null;
+  const r = Math.max(1, Math.trunc(Number(reach)) || 1);
+  return t > r ? { reason: "tierCap", reach: r } : null;
+}
+
+/**
  * A class that casts: a caster grade and an ability to cast with. The Ranger
  * carries a casting ability for its Spell DC alone (02 §6: traps and the
  * companion force Tests) with a grade of none, and is not a caster.
@@ -753,7 +795,8 @@ export function showsCreatureSpells({ names = [], dc = null, spellItems = 0 } = 
  * @param {{action?: string|null, inFight?: boolean}} o
  * @returns {string|null}
  */
-export const TIMED_SPELL_ACTIONS = Object.freeze(["minute"]);
+// And *10 minutes* (the Necromancer's roleplay spells, D-1050): the same refusal, its own word.
+export const TIMED_SPELL_ACTIONS = Object.freeze(["minute", "tenMinutes"]);
 export function timedCastRefusal({ action = null, inFight = false } = {}) {
   return TIMED_SPELL_ACTIONS.includes(action) && inFight === true ? "AZEROTH.Action.TimedInFight" : null;
 }

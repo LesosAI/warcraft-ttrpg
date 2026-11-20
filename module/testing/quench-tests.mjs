@@ -52,6 +52,17 @@ import { deathKnightNecromancyBatch } from "./quench-death-knight-necromancy.mjs
 import { deathKnightTalentsBatch } from "./quench-death-knight-talents.mjs";
 import { deathKnightSpellsBatch } from "./quench-death-knight-spells.mjs";
 import { deathKnightAnimationBatch } from "./quench-death-knight-animation.mjs";
+import { necromancerEssenceBatch } from "./quench-necromancer-essence.mjs";
+import { necromancerFixesBatch } from "./quench-necromancer-fixes.mjs";
+import { necromancerTalentsBatch } from "./quench-necromancer-talents.mjs";
+import { necromancerHordeBatch } from "./quench-necromancer-horde.mjs";
+import { necromancerReviewBatch } from "./quench-necromancer-review.mjs";
+import { necromancerSpellsBatch, necromancerSpellsT3Batch, necromancerSpellsT45Batch } from "./quench-necromancer-spells.mjs";
+import { necromancerVerifyBatch } from "./quench-necromancer-verify.mjs";
+import {
+  necromancerAnimationsCreaturesBatch, necromancerAnimationsFeaturesTalentsBatch, necromancerAnimationsSpellsBatch,
+  necromancerAnimationsT3Batch, necromancerAnimationsT45Batch
+} from "./quench-necromancer-animations.mjs";
 import { reactionBatch } from "./quench-reactions.mjs";
 import { creatureGearBatch } from "./quench-npc-gear.mjs";
 import { creatureSwingBatch } from "./quench-npc-swing.mjs";
@@ -382,6 +393,50 @@ export function registerQuenchTests() {
     });
     quench.registerBatch("azeroth-rpg.death-knight-animation", deathKnightAnimationBatch, {
       displayName: "AZEROTH: The Death Knight's animation and sound, through the real doors (run F5)"
+    });
+    quench.registerBatch("azeroth-rpg.necromancer-essence", necromancerEssenceBatch, {
+      displayName: "AZEROTH: The Necromancer's Essence, its death watch, empower lines, Long Rest exposure and the learning door (Phase 4a)"
+    });
+    quench.registerBatch("azeroth-rpg.necromancer-horde", necromancerHordeBatch, {
+      displayName: "AZEROTH: The Necromancer's horde, its grafts, its features and Lichdom, through the real doors (Phase 4b)"
+    });
+    quench.registerBatch("azeroth-rpg.necromancer-review", necromancerReviewBatch, {
+      displayName: "AZEROTH: The Phase 4b review's worklist through the real controls: the raise spells, the Bone and Flesh talents, the features empowered, the plague rising, Enslave, the grafts that fire on their own, Lichdom"
+    });
+    quench.registerBatch("azeroth-rpg.necromancer-talents", necromancerTalentsBatch, {
+      displayName: "AZEROTH: The Necromancer's Flesh, Bone and Damned talents through the real controls (Phase 4c-T)"
+    });
+    quench.registerBatch("azeroth-rpg.necromancer-spells", necromancerSpellsBatch, {
+      displayName: "AZEROTH: The Necromancer's tier 1 and 2 spells through the sheet's Cast and the card's buttons (Phase 4c-S)"
+    });
+    quench.registerBatch("azeroth-rpg.necromancer-spells-t3", necromancerSpellsT3Batch, {
+      displayName: "AZEROTH: The Necromancer's tier 3 spells through the sheet's Cast and the card's buttons (Phase 4c-S)"
+    });
+    quench.registerBatch("azeroth-rpg.necromancer-spells-t45", necromancerSpellsT45Batch, {
+      displayName: "AZEROTH: The Necromancer's tier 4 and 5 spells and the spells it shares, through the real controls (Phase 4c-S)"
+    });
+    quench.registerBatch("azeroth-rpg.necromancer-fixes", necromancerFixesBatch, {
+      displayName: "AZEROTH: The Necromancer fix run: Potent and Binding on areas, the cast cap, the tier 5 gate and teach anyway, the death watch live (after Phase 4b)"
+    });
+    quench.registerBatch("azeroth-rpg.necromancer-verify", necromancerVerifyBatch, {
+      displayName: "AZEROTH: The Necromancer verified: what plays through the real doors (the recorder), the sheet's Long Rest exposure and Grave Calling (Phase 7)"
+    });
+    // Team ANI: every Necromancer item's picture and sound, read back live through the recorder while
+    // the earlier batches press the real controls, one verdict an item.
+    quench.registerBatch("azeroth-rpg.necromancer-animations-spells", necromancerAnimationsSpellsBatch, {
+      displayName: "AZEROTH: The Necromancer's tier 1 and 2 spells and Essence, each played live with a picture and a sound (team ANI)"
+    });
+    quench.registerBatch("azeroth-rpg.necromancer-animations-t3", necromancerAnimationsT3Batch, {
+      displayName: "AZEROTH: The Necromancer's tier 3 spells, each played live with a picture and a sound (team ANI)"
+    });
+    quench.registerBatch("azeroth-rpg.necromancer-animations-t45", necromancerAnimationsT45Batch, {
+      displayName: "AZEROTH: The Necromancer's tier 4 and 5 spells and the spells it shares, each played live with a picture and a sound (team ANI)"
+    });
+    quench.registerBatch("azeroth-rpg.necromancer-animations-features-talents", necromancerAnimationsFeaturesTalentsBatch, {
+      displayName: "AZEROTH: The Necromancer's features, talents and horde events, each played live with a picture and a sound (team ANI)"
+    });
+    quench.registerBatch("azeroth-rpg.necromancer-animations-creatures", necromancerAnimationsCreaturesBatch, {
+      displayName: "AZEROTH: The Necromancer's grafts and raised creatures, and the review's items, each played live with a picture and a sound (team ANI)"
     });
     quench.registerBatch("azeroth-rpg.reactions", reactionBatch, {
       displayName: "AZEROTH: Parry, Block and the Bane Pummel lays"
@@ -4341,8 +4396,8 @@ function migrationBatch(context) {
       const options = journals.worldChapterNamed("02-CHARACTER-OPTIONS");
       assert.ok(options, "02-CHARACTER-OPTIONS is in the world");
       const packDoc = (await game.packs.get(journals.RULES_PACK).getDocuments()).find(d => d.name === "02-CHARACTER-OPTIONS");
-      const seven = packDoc?.pages?.get("n5KXEp2qcNzyxjam") ?? null;
-      assert.ok(seven, "the rules pack's 02 \u00a77 is The twelve classes (a pack built before the Death Knight's book)");
+      const seven = packDoc?.pages?.get("2l77a05DwX3kqHNF") ?? null;
+      assert.ok(seven, "the rules pack's 02 \u00a77 is The thirteen classes (the Necromancer's book; its id is its name's)");
       const inherit = CONST.DOCUMENT_OWNERSHIP_LEVELS.INHERIT;
       const limited = CONST.DOCUMENT_OWNERSHIP_LEVELS.LIMITED;
       const entryOwnership = options.ownership.default;
@@ -4356,7 +4411,7 @@ function migrationBatch(context) {
         // Stale it on purpose (CLAUDE.md \u00a715, 2026-09-09): \u00a77 under its old name and the id that
         // name derives, a page whose text a GM edited and whose own ownership they set, and a page
         // the GM wrote.
-        if (options.pages.has("n5KXEp2qcNzyxjam")) await options.deleteEmbeddedDocuments("JournalEntryPage", ["n5KXEp2qcNzyxjam"]);
+        if (options.pages.has("2l77a05DwX3kqHNF")) await options.deleteEmbeddedDocuments("JournalEntryPage", ["2l77a05DwX3kqHNF"]);
         await options.createEmbeddedDocuments("JournalEntryPage", [{ _id: "IBFmSy4ibtgWC4OI", name: "7. The eleven classes", type: "text", sort: seven.sort,
           text: { format: 1, content: "<p>ZZ the eleven classes</p>" }, ownership: { default: inherit } }], { keepId: true });
         staled = options.pages.contents.find(p => p.id !== "IBFmSy4ibtgWC4OI" && packDoc.pages.has(p.id));
@@ -4365,8 +4420,8 @@ function migrationBatch(context) {
         [gmPage] = await options.createEmbeddedDocuments("JournalEntryPage", [{ name: "ZZ House rules", type: "text", text: { format: 1, content: "<p>Ours</p>" } }]);
         await migrate(() => {});
         // The page a link names is made, under the pack's id, with the book's text.
-        const now = options.pages.get("n5KXEp2qcNzyxjam");
-        assert.equal(now?.name, "7. The twelve classes", "the page a link names was not made");
+        const now = options.pages.get("2l77a05DwX3kqHNF");
+        assert.equal(now?.name, "7. The thirteen classes", "the page a link names was not made");
         assert.equal(now?.text?.content, seven.text.content, "the new page is not the book's");
         assert.equal(now?.ownership?.default, inherit, "the new page does not inherit the chapter's ownership");
         // The GM's edit survives, untouched, with its own ownership; the book's page stands beside it.
@@ -4384,15 +4439,15 @@ function migrationBatch(context) {
         assert.equal(options.pages.get("IBFmSy4ibtgWC4OI")?.text?.content, "<p>ZZ the eleven classes</p>", "the old 02 \u00a77 page was written");
         assert.ok(options.pages.get(gmPage.id), "the GM's own page was removed");
         assert.equal(options.ownership.default, entryOwnership, "the chapter's ownership was written");
-        const linked = await fromUuid(`Compendium.${journals.RULES_PACK}.JournalEntry.${packDoc.id}.JournalEntryPage.n5KXEp2qcNzyxjam`);
-        assert.equal(linked?.name, "7. The twelve classes", "the drakes' link does not resolve");
+        const linked = await fromUuid(`Compendium.${journals.RULES_PACK}.JournalEntry.${packDoc.id}.JournalEntryPage.2l77a05DwX3kqHNF`);
+        assert.equal(linked?.name, "7. The thirteen classes", "the drakes' link does not resolve");
         // A second pass writes nothing, and no second (book) page.
         const count = options.pages.size;
         const again = await journals.repairRulesJournals(() => {});
         assert.equal(again.pages, 0, "a second pass wrote pages");
         assert.equal(options.pages.size, count, "a second pass added a page");
       } finally {
-        const added = options.pages.filter(p => !pagesBefore.has(p.id) && p.id !== "n5KXEp2qcNzyxjam").map(p => p.id);
+        const added = options.pages.filter(p => !pagesBefore.has(p.id) && p.id !== "2l77a05DwX3kqHNF").map(p => p.id);
         if (added.length) await options.deleteEmbeddedDocuments("JournalEntryPage", added);
         if (staled && staledWas && options.pages.has(staled.id)) await options.pages.get(staled.id).update({ "text.content": staledWas.content, "ownership.default": staledWas.ownership });
         if (!before.length) {

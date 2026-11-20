@@ -157,8 +157,10 @@ export const METHODS = Object.freeze(["array", "pointBuy", "roll"]);
  * Chromatic Champion (D-847; the orchestrator's placement, the drafts' second
  * option - the Vitest says so if the book lays it elsewhere).
  */
-// The Death Knight twelfth, after the Chronomancer (D-942), where 02 §7 writes it up.
-export const CLASS_ORDER = Object.freeze(["warrior", "paladin", "ranger", "rogue", "priest", "shaman", "mage", "warlock", "druid", "chromatic-champion", "chronomancer", "death-knight"]);
+// The Death Knight twelfth, after the Chronomancer (D-942), where 02 §7 writes it up. The
+// Necromancer thirteenth, after the Death Knight (the Necromancer plan; the orchestrator's
+// placement, last as each new class has been - the Vitest says so if 02 lays it elsewhere).
+export const CLASS_ORDER = Object.freeze(["warrior", "paladin", "ranger", "rogue", "priest", "shaman", "mage", "warlock", "druid", "chromatic-champion", "chronomancer", "death-knight", "necromancer"]);
 
 /** "Take these six numbers and assign each to an ability." */
 export const ARRAY = Object.freeze([16, 14, 13, 12, 10, 8]);

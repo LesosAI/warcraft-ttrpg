@@ -1,0 +1,19 @@
+{{!--
+  A graft's Test (the lead's Q7 of the 4b review: Meat Hook, Grasping Arms and Plague Bladder fire
+  on their own): posted by `effects/graft-riders.mjs#postGraftTest` when a grafted creature's hit or
+  an enemy's turn start asks it. The button is the Resist door (`dice/chat.mjs#resistTestFromCard`,
+  purpose `graft`), naming the creature whose Test it is, so its owner and the GM see it and nobody
+  else (`data-resist-owner`); the Test is made once (`claimCardPress`). What a failure lands is said
+  in words before the button.
+--}}
+<div class="azeroth azeroth-card azeroth-card-spell" data-message-kind="graftTest">
+  {{> systems/azeroth-rpg/templates/chat/partials/card-header.hbs title=title subtitle=name}}
+
+  <div class="azeroth-card-body">
+    <p class="azeroth-card-text">{{text}}</p>
+    {{#if fail}}<p class="azeroth-card-line">{{fail}}</p>{{/if}}
+    <div class="azeroth-card-actions" data-resist-owner="{{actorUuid}}">
+      <button type="button" data-action="resistTest" data-purpose="graft" data-resilience="{{resilience}}"{{#if dc}} data-dc="{{dc}}"{{/if}} data-actor-uuid="{{actorUuid}}" data-against="{{against}}">{{testLabel}}</button>
+    </div>
+  </div>
+</div>

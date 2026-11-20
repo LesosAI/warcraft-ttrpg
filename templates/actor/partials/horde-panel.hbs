@@ -1,0 +1,61 @@
+{{!--
+  The Necromancer's horde panel on the Combat tab (D11 §2; the frozen artboard
+  `docs/design/artboards/HordePanel.html`; the plan's door 14), beside Talents in play: two meters -
+  Essence n / cap with a socket a point, and the horde's places used / places - then one row for each
+  of the raised dead in the order raised, each with its own Dismiss, and a legend. Every mark says
+  what it means in words; colour is never the only carrier and opacity is never a dimmer. There is
+  no Call the horde control (the lead). The context is `rules/horde-panel.mjs#hordePanelContext`.
+--}}
+<div class="azeroth-horde-panel">
+  <div class="azeroth-horde-meters">
+    {{#if panel.essence}}
+    <div class="azeroth-horde-meter">
+      <div class="azeroth-horde-meter-head"><span class="azeroth-horde-meter-title">{{localize "AZEROTH.Horde.Panel.Essence"}}</span><b class="azeroth-horde-count">{{panel.essence.text}}</b></div>
+      <ul class="azeroth-essence-sockets" aria-label="{{panel.essence.text}}">
+        {{#each panel.essence.sockets as |s|}}<li class="azeroth-essence-socket{{#if s.on}} is-held{{/if}}" data-tooltip="{{s.label}}" aria-label="{{s.label}}"></li>{{/each}}
+      </ul>
+      <span class="azeroth-horde-note">{{localize "AZEROTH.Horde.Panel.EssenceNote"}}</span>
+    </div>
+    {{/if}}
+    <div class="azeroth-horde-meter">
+      <div class="azeroth-horde-meter-head"><span class="azeroth-horde-meter-title">{{localize "AZEROTH.Horde.Panel.Heading"}}</span><b class="azeroth-horde-count">{{panel.places.text}}</b></div>
+      <span class="azeroth-horde-bar" aria-hidden="true"><span class="azeroth-horde-bar-fill" style="width: {{panel.places.percent}}%"></span></span>
+      <span class="azeroth-horde-note">{{localize "AZEROTH.Horde.Panel.PlacesNote"}}{{#if panel.places.skeletons}} {{panel.places.skeletons}}{{/if}}</span>
+    </div>
+  </div>
+  {{#if panel.empty}}
+  <p class="azeroth-horde-empty">{{localize "AZEROTH.Horde.Panel.Empty"}}</p>
+  {{else}}
+  <ul class="azeroth-horde-rows">
+    {{#each panel.rows as |row|}}
+    <li class="azeroth-horde-row" data-horde-id="{{row.id}}">
+      <span class="azeroth-horde-icon is-{{row.kind}}" data-tooltip="{{row.kindWord}}">{{#if row.img}}<img src="{{row.img}}" alt="" />{{else}}{{row.initials}}{{/if}}</span>
+      <div class="azeroth-horde-main">
+        <div class="azeroth-horde-name">{{row.name}}
+          {{#if row.lead}}<span class="azeroth-horde-mark is-lead" data-tooltip="{{localize "AZEROTH.Horde.Panel.LeadTitle"}}">{{localize "AZEROTH.Horde.Panel.Lead"}}</span>{{/if}}
+          {{#if row.pending}}<span class="azeroth-horde-mark is-pending">{{localize "AZEROTH.Horde.Panel.LeadPending"}}</span>{{/if}}
+          {{#if row.keepsReaction}}<span class="azeroth-horde-mark is-react">{{localize "AZEROTH.Horde.Panel.KeepsReaction"}}</span>{{/if}}
+          {{#if row.fallen}}<span class="azeroth-horde-mark is-fallen">{{localize "AZEROTH.Horde.Panel.Fallen"}}</span>{{/if}}
+        </div>
+        <div class="azeroth-horde-meta">{{row.meta}}</div>
+        <div class="azeroth-horde-health">
+          <span class="azeroth-horde-bar" aria-hidden="true"><span class="azeroth-horde-bar-fill is-health" style="width: {{row.percent}}%"></span></span>
+          <span class="azeroth-horde-health-text">{{row.healthText}}</span>
+        </div>
+        {{#if row.grafts}}<div class="azeroth-horde-grafts"><b>{{localize "AZEROTH.Horde.Panel.Grafts"}}:</b> {{row.grafts}}</div>{{/if}}
+      </div>
+      <div class="azeroth-horde-controls">
+        {{#if row.canLead}}<button type="button" class="azeroth-horde-control" data-action="makeHordeLead" data-horde-id="{{row.id}}" data-tooltip="{{localize "AZEROTH.Horde.Panel.MakeLeadTitle" name=row.name}}">{{localize "AZEROTH.Horde.Panel.MakeLead"}}</button>{{/if}}
+        {{#if row.canDismiss}}<button type="button" class="azeroth-horde-control" data-action="dismissRaised" data-horde-id="{{row.id}}" data-tooltip="{{localize "AZEROTH.Horde.Panel.DismissTitle" name=row.name}}">{{localize "AZEROTH.Horde.Panel.Dismiss"}}</button>{{/if}}
+      </div>
+    </li>
+    {{/each}}
+  </ul>
+  {{/if}}
+  <ul class="azeroth-horde-legend">
+    <li><span class="azeroth-horde-mark is-lead">{{localize "AZEROTH.Horde.Panel.Lead"}}</span> {{localize "AZEROTH.Horde.Panel.LegendLead"}}</li>
+    <li><span class="azeroth-horde-mark is-react">{{localize "AZEROTH.Horde.Panel.KeepsReaction"}}</span> {{localize "AZEROTH.Horde.Panel.LegendReact"}}</li>
+    <li>{{localize "AZEROTH.Horde.Panel.LegendOthers"}}</li>
+    <li>{{localize "AZEROTH.Horde.Panel.LegendPlaces"}}</li>
+  </ul>
+</div>

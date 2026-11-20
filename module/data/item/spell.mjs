@@ -286,8 +286,9 @@ export class SpellData extends foundry.abstract.TypeDataModel {
         // (stage 3B of the Chromatic Champion plan; `rules/area-ground.mjs#targetGroundOf`).
         from: new fields.StringField({ required: true, blank: true, initial: "", choices: ["", "landing", "target"] }),
         // 07 §12's Sandtrap: *for each creature you choose as you cast* - the creatures
-        // named at the cast alone (D-864).
-        who: new fields.StringField({ required: true, blank: true, initial: "", choices: ["", "named"] }),
+        // named at the cast alone (D-864). "enemy": the Necromancer's Field of Bones, *Difficult
+        // ground for your enemies* - widened choices only, so no stored spell needs a migration.
+        who: new fields.StringField({ required: true, blank: true, initial: "", choices: ["", "named", "enemy"] }),
         ignores: new fields.BooleanField({ initial: false }),
         reason: new fields.StringField({ required: true, blank: true, initial: "" })
       }),

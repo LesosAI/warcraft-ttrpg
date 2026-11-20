@@ -42,6 +42,8 @@ import { BASE_REACH } from "./distance.mjs";
 import { attackModes } from "./ammunition.mjs";
 import { succeeded } from "./resolution.mjs";
 import { maneuverPurse } from "./maneuver-pool.mjs";
+// The Necromancer's Essence never pays a Parry (the Necromancer plan).
+import { paysByKind } from "./essence.mjs";
 
 /** 06 §6's rows, in the chapter's own order. */
 export const REACTION_KEYS = Object.freeze([
@@ -330,7 +332,9 @@ export function blockedDamage(damage, { bonus = 0 } = {}) {
 export function parryPoolFor(pools = [], { maneuverPool = null } = {}) {
   const list = pools ?? [];
   if (maneuverPool) return maneuverPurse(list, maneuverPool);
-  const momenta = list.filter(p => p?.kind === "momentum" && (p.max ?? 0) > 0);
+  // **ESSENCE NEVER PAYS A PARRY** (the Necromancer plan: *It never pays for a spell, for
+  // Parry or for a maneuver*): a class holding Essence alone builds no Momentum a Parry reads.
+  const momenta = list.filter(p => p?.kind === "momentum" && (p.max ?? 0) > 0 && paysByKind(p.name));
   if (!momenta.length) return null;
   const purse = pool => (pool.name === PARRY_COMBO_POOL
     ? list.find(p => p?.kind === "power" && p.name === PARRY_ENERGY_POOL) ?? null

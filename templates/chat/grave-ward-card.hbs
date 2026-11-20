@@ -1,0 +1,25 @@
+{{!--
+  A Necromancer spell's own card (07 §17; run 4c-S, fix run 4-S): a title, the line it says, and the
+  controls its spell gives. Grave Ward's Disturbed is the GM's alone: they rule the grave disturbed,
+  target the opener and press it (`effects/necromancer-spells.mjs#graveWardFromCard`). Every other
+  control is a `necroCard` press named by `data-necro-press` - Contagion's Dismiss, Spirit Anchor's Look
+  through the anchor, Mark of the Grave's Sense the direction - judged again at the press
+  (`necroCardPress`).
+--}}
+<div class="azeroth azeroth-card azeroth-card-feature">
+  <div class="azeroth-card-body">
+    <p><strong>{{title}}</strong></p>
+    <p class="azeroth-card-line">{{text}}</p>
+    {{#if buttons.length}}
+    <div class="azeroth-card-actions">
+      {{#each buttons}}
+      {{#if this.press}}
+      <button type="button" data-action="necroCard" data-necro-press="{{this.press}}">{{this.label}}</button>
+      {{else}}
+      <button type="button" data-action="necroGraveWard" data-gm-only>{{this.label}}</button>
+      {{/if}}
+      {{/each}}
+    </div>
+    {{/if}}
+  </div>
+</div>

@@ -160,7 +160,7 @@ export async function repairRulesJournals(log = console.log) {
   const documents = await pack.getDocuments();
   const chapters = documents.map(d => ({ name: d.name, pages: [...d.pages].map(p => ({ name: p.name })) }));
   if (!rulesPackCarriesRepair(chapters)) {
-    console.warn(`azeroth-rpg | ${RULES_PACK} predates the Death Knight's book (no 02 \u00a77 "The twelve classes"), so no held chapter was brought up to it. `
+    console.warn(`azeroth-rpg | ${RULES_PACK} predates the Death Knight's book (02 \u00a77 counts fewer than twelve classes), so no held chapter was brought up to it. `
       + "Run `npm run packs:parse` and `npm run packs:build`, restart the server, set `migrationVersion` back below 0.15.3.1 and reload.");
     return { chapters: 0, pages: 0, stale: true };
   }

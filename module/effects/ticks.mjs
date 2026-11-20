@@ -148,7 +148,12 @@ export async function landTicks(actor, {combat = null, combatant = null} = {}) {
       // 1 turn after."*; D-779): a tick still carrying doubled landings deals twice its
       // number, and one fewer is left (`rules/ticks.mjs#tickLanding`).
       const landing = tickLanding(tick);
-      const amount = landing.amount;
+      let amount = landing.amount;
+      // 02 §7's Potent rides the first landing alone, and is spent there (the Necromancer plan).
+      if (landing.potent) {
+        const still = actor.effects.get(id);
+        if (still) await still.update({ [`flags.azeroth-rpg.${TICK_FLAG}.potent`]: 0 });
+      }
       if (landing.doubled) {
         lines.push(game.i18n.format("AZEROTH.DevouringPlague.Doubled", { name: actor.name, source: spell.name, n: amount }));
         const still = actor.effects.get(id);
@@ -164,6 +169,7 @@ export async function landTicks(actor, {combat = null, combatant = null} = {}) {
       }
       for (let landed = 0; landed < landings.times; landed++) {
       if (landed > 0 && (!actorInWorld(actor) || (actor.type === "npc" && (actor.system?.health?.value ?? 0) <= 0))) break;
+      if (landed > 0 && landing.potent) amount = landing.amount - landing.potent;
       if (tick.kind === "damage" && tick.type) {
         // A Smolder split at its cast (04's Smoldering Life; stage 3A) carries the split.
         const plagueBefore = tick.plague === "bloodPlague" ? (actor.system?.health?.value ?? 0) + (Number(actor.system?.health?.temp) || 0) : null;

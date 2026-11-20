@@ -30,7 +30,7 @@ import { DEFERRED_FLAG, appendDeferred, deferralOf, splitDeferred } from "../rul
 import { echoingSandsLine, gritLines, recallCounts, RECALL_FLAG, stormLines } from "../rules/chronomancer.mjs";
 import { sharedHours, suspendedNow, witheringHalves } from "../effects/chronomancer.mjs";
 import { sandCastLines } from "../rules/sand-casts.mjs";
-import { addClassEntry, hostileExposures, poolsFor, removeClassEntry, resyncsFeatures, secondaryLevel, setCharacterLevel } from "../rules/progression.mjs";
+import { addClassEntry, hostileExposures, poolsFor, removeClassEntry, resyncsFeatures, secondaryLevel, secondaryTier, setCharacterLevel } from "../rules/progression.mjs";
 import { hasCauseInsanity } from "../rules/cause-insanity.mjs";
 import { racialTalentIcon } from "../rules/icons.mjs";
 import { hasReaverEnrage } from "../rules/reaver-enrage.mjs";
@@ -44,7 +44,7 @@ import { grantsFor, healBonusFor, healingPatchesFor, passivesFor, patchFeature, 
 import { HEALS_ONE_TARGET } from "../rules/class-talents.mjs";
 // What the next spell was promised (04's Nature's Grace, Predator's Swiftness;
 // D-771), and a heal shared between two partners (04's Symbiosis).
-import { NEXT_SPELL_FLAG, pendingNextSpell, spellPayment } from "../rules/casting.mjs";
+import { NEXT_SPELL_FLAG, castCapRefusal, castingReach, grantingClass, pendingNextSpell, spellPayment } from "../rules/casting.mjs";
 import { endSymbiosis, shareHealing } from "../effects/symbiosis.mjs";
 // The Warrior's and the Paladin's kinds (D-772): what the next attack was
 // promised, Wounded Beast's price, Light's Reserve, a heal Mortal Strike blocks,
@@ -177,10 +177,19 @@ import { healingReceived } from "../rules/corruption-effects.mjs";
 import { heldAugment } from "../rules/augments.mjs";
 import { emptySandUpdates } from "../rules/sand.mjs";
 // The Death Knight (D-943, D-946): the one healing judgement, and the runes' Long Rest refill.
-import { HEALING_REFUSAL_WORDS, healGiver, healingRefusal, undeadByClass } from "../rules/undead.mjs";
+import { HEALING_REFUSAL_WORDS, healGiver, healingRefusal } from "../rules/undead.mjs";
+// 07 §17's soul marks and 07 §14's Curse of Weakness (run 4c-S).
+import { SOUL_MARK_FLAG, curseOn, soulMarkRefusal } from "../rules/necromancer-spells.mjs";
 import { creatureSnapshot, kindsOf } from "../rules/creature-kinds.mjs";
 import { refillRunesAtLongRest } from "./runes.mjs";
 import { RUNES, RUNIC_POWER, runicGainRefusal } from "../rules/runes.mjs";
+// The Necromancer's Essence (the plan's Phase 3): the doors a rise comes through, and that it
+// never pays a maneuver.
+import { ESSENCE, essenceGainRefusal, paysByKind, restExposure } from "../rules/essence.mjs";
+import { empowerLines, fleshOfferingLines, skeletalMasteryLines } from "../rules/necromancer-lines.mjs";
+import { hordeLeadLines } from "../rules/necromancer-features.mjs";
+import { HORDE_LEAD_FLAG, leadFor } from "../rules/horde.mjs";
+import { learnDoor, spellFromHonoured, spellLearnRefusal } from "../rules/spell-access.mjs";
 import { poolWrite } from "./pool-writes.mjs";
 import { displacedBy } from "../rules/worn.mjs";
 // What a character's token looks like before anybody touches it (D-718's
@@ -1260,9 +1269,10 @@ export class AzerothActor extends Actor {
    *
    * @param {{itemId: string, kind: "power"|"momentum", value: number}[]|object} changes
    * @param {object} [extra]  Other fields to write in the same update.
-   * @param {{runicGain?: string|null}} [options]  core's update options, and - read here and
-   *   never sent - the door a RISE of Runic Power comes through (`rules/runes.mjs
-   *   #RUNIC_GAIN_SOURCES`)
+   * @param {{runicGain?: string|null, essenceGain?: string|null}} [options]  core's update
+   *   options, and - read here and never sent - the door a RISE of Runic Power comes through
+   *   (`rules/runes.mjs#RUNIC_GAIN_SOURCES`), and of Essence (`rules/essence.mjs
+   *   #ESSENCE_GAIN_SOURCES`)
    */
   async updatePool(changes, extra = {}, options = {}) {
     return poolWrite(this, () => this.writePoolsNow(changes, extra, options));
@@ -1291,7 +1301,7 @@ export class AzerothActor extends Actor {
    * itself. Everything else calls `updatePool`.
    */
   async writePoolsNow(changes, extra = {}, options = {}) {
-    const { runicGain = null, ...updateOptions } = options ?? {};
+    const { runicGain = null, essenceGain = null, ...updateOptions } = options ?? {};
     options = updateOptions;
     const list = Array.isArray(changes) ? changes : [changes];
     if (!list.length && !Object.keys(extra).length) return this;
@@ -1335,6 +1345,16 @@ export class AzerothActor extends Actor {
         const refusedGain = runicGainRefusal({ before: entry[kind]?.value ?? 0, after: next, source: runicGain, gm: game.user?.isGM === true });
         if (refusedGain) {
           ui.notifications?.warn(game.i18n.format(`AZEROTH.Runes.Refuse.gain.${refusedGain}`, { name: this.name }));
+          continue;
+        }
+      }
+      // **ESSENCE RISES THROUGH A NAMED DOOR ALONE** (`rules/essence.mjs#essenceGainRefusal`;
+      // the Necromancer plan: *You gain Essence in no other way unless a feature, talent or
+      // spell says so*): a rise this write names no source for is refused in words.
+      if (pool.kind === "momentum" && pool.name === ESSENCE) {
+        const refusedEssence = essenceGainRefusal({ before: entry[kind]?.value ?? 0, after: next, source: essenceGain, gm: game.user?.isGM === true });
+        if (refusedEssence) {
+          ui.notifications?.warn(game.i18n.format(`AZEROTH.Essence.Refuse.gain.${refusedEssence}`, { name: this.name }));
           continue;
         }
       }
@@ -1518,9 +1538,9 @@ export class AzerothActor extends Actor {
     // **AND A CLASS FEATURE'S** (02 §7's Unholy Lore: *You know Death Coil. It does not count
     // against your spells known*; O-343): the same embed, flagged with the feature, withdrawn
     // with it (`rules/death-knight.mjs#featureSpellGrants`).
-    const known = spellGrantsFor(taken);
-    known.push(...featureSpellGrants(this.items.filter(i => i.type === "feature").map(i => ({ id: i.id, name: i.name, className: i.system?.className ?? "" })))
-      .map(g => ({ talent: { id: g.featureId }, name: g.spell })));
+    // ONE grant table (`spellGrantTable`), the one the learning door and the cast cap read to honour
+    // a `spellFrom` (the fix runs' review): what the sync embeds is exactly what they honour.
+    const known = this.spellGrantTable({ talents: taken }).map(g => ({ talent: { id: g.id }, name: g.name }));
     const fromTalents = this.items.filter(i => i.type === "spell" && i.getFlag("azeroth-rpg", "spellFrom"));
     const staleSpells = fromTalents
       .filter(s => !known.some(k => k.talent.id === s.getFlag("azeroth-rpg", "spellFrom") && k.name === s.name))
@@ -1548,7 +1568,9 @@ export class AzerothActor extends Actor {
     }
     if (doomed.length) await this.deleteEmbeddedDocuments("Item", doomed);
     if (updates.length) await this.updateEmbeddedDocuments("Item", updates);
-    if (creates.length) await this.createEmbeddedDocuments("Item", creates);
+    // A spell a talent or a feature teaches carries `spellFrom` naming it, and passes 07 §9's door (the
+    // learning door's closed bypass list; `AzerothItem._preCreateOperation`).
+    if (creates.length) await this.createEmbeddedDocuments("Item", creates, { azerothLearn: "bypass" });
     // Replaced whole: a flag object is merged, and a gadget's record that went must go.
     if (swap.changed && this.isOwner) {
       await this.update({ [`flags.azeroth-rpg.${GADGETS_SPENT_FLAG}`]: foundry.data.operators.ForcedReplacement.create(swap.record) });
@@ -2248,6 +2270,17 @@ export class AzerothActor extends Actor {
       const { endAtLongRest } = await import("../effects/death-knight-necromancy.mjs");
       await endAtLongRest(this);
     }
+    // **04's BONE ARMOR** (*until you finish a Long Rest*; Phase 4c-T): its stacks end with the rest.
+    if (this.type === "character") {
+      const { necroLongRest } = await import("../effects/necromancer-talents.mjs");
+      await necroLongRest(this);
+    }
+    // **02 §7's LICHDOM: *When you finish a Long Rest, you may bind yourself to a phylactery you
+    // carry*** (the Necromancer plan's door 11): the window Lichdom's Use binds in, opened here.
+    if (this.type === "character" && this.hasFeature?.("Lichdom")) {
+      const { openPhylacteryWindow } = await import("../effects/necromancer-horde.mjs");
+      for (const line of await openPhylacteryWindow(this)) ui.notifications?.info(line);
+    }
     if (this.getFlag("azeroth-rpg", SACRIFICED_FLAG)) await this.unsetFlag("azeroth-rpg", SACRIFICED_FLAG);
     // **WHAT MEKKATORQUE'S BLUEPRINT BUILT WORKS FOR A DAY** (02's gnome; the Legacy
     // branches' door 7; next Long Rest approved by the lead, 2026-11-01): the device carried
@@ -2339,6 +2372,21 @@ export class AzerothActor extends Actor {
         actor: this, track: row.track, dc: row.dc, resilience: row.resilience, points: row.amount, occasion: "signature",
         boons: choice.boons, banes: choice.banes,
         provenanceExtra: [...choice.provenanceExtra, ...auraBoonProvenance(this, row.resilience, choice)]
+      });
+    }
+    // **02 §7's NECROMANCER: HOLDING ESSENCE THROUGH A LONG REST** (*When you finish a Long Rest
+    // holding any Essence, make a Body Resilience Test against DC 12 plus the Essence you hold. On a
+    // failure, gain 1 Undeath*; the lead: *"DC 12 + essence held"*; the Necromancer plan's door 12):
+    // the Essence the rest left, read after it (no rest empties it), through the one exposure door,
+    // which makes no Test for a creature that accrues no Undeath (a Forsaken, a lich: `accruesTrack`).
+    const essenceHeld = (this.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === ESSENCE)?.value ?? 0;
+    const essenceRisk = this.type === "character" ? restExposure({ held: essenceHeld }) : null;
+    if (essenceRisk) {
+      const choice = defaultChoice(this, { kind: "resilience", resilience: essenceRisk.resilience, dc: essenceRisk.dc, targets: [] });
+      await game.system.azeroth.workflows.corruptionExposure({
+        actor: this, track: essenceRisk.track, dc: essenceRisk.dc, resilience: essenceRisk.resilience, points: essenceRisk.points, occasion: essenceRisk.occasion,
+        boons: choice.boons, banes: choice.banes,
+        provenanceExtra: [...choice.provenanceExtra, ...auraBoonProvenance(this, essenceRisk.resilience, choice)]
       });
     }
     // **08 §5's FELWROUGHT** (*For each Long Rest it is kept, its rider makes a Spirit
@@ -2708,6 +2756,118 @@ export class AzerothActor extends Actor {
    * that hangs on one - Unkillable, 02 §7's level 20 - asks this and not
    * `talentRanks`, which no talent named Unkillable could ever answer.
    */
+  /**
+   * **WHAT THE LEARNING DOOR DOES WITH A SPELL, AND WHY, IN WORDS** (07 §4, §9; the Necromancer
+   * plan's learning door; the lead: *"fix this"*, and on tier 5: *"Yes the tier 5 spells learned via
+   * tomes should be learnable by the GM manually to the character"*): the class that learns it, the
+   * prerequisite known, the prerequisite's restriction and 07 §4's tier 3 rule
+   * (`rules/spell-access.mjs#spellLearnRefusal`), then what the door does with that
+   * (`learnDoor`): `allow`, `refuse` (a player; a tier 5 spell is the GM's to teach) or `confirm` (a
+   * GM, whose *teach anyway* passes every gate).
+   *
+   * **The batch counts** (the 4a review's SHOULD-FIX): a class or a prerequisite created in the same
+   * write is held for the judgement. **A grant's `spellFrom` is honoured only where the grant table
+   * pairs the item it names with this spell** - this actor's items or the batch's (`spellGrantTable`,
+   * `spellFromHonoured`; the 4a review's MUST-FIX 5, tightened by the fix runs' review); any other flag
+   * is reported in `strip` and judged.
+   *
+   * A creature is held by 14's review instead (D-706).
+   *
+   * @param {object} data  the spell's data (`name`, `system`, `flags`, `type`)
+   * @param {{batch?: object[], gm?: boolean}} [o]  the other documents of the same write, as data
+   * @returns {{act: "allow"|"refuse"|"confirm", text: string|null, strip: boolean}}
+   */
+  learnVerdict(data = {}, { batch = [], gm = game.user?.isGM === true } = {}) {
+    const allow = { act: "allow", text: null, strip: false };
+    if (this.type !== "character" || data?.type !== "spell") return allow;
+    const rows = (batch ?? []).filter(d => d && d !== data);
+    const spellFrom = data.flags?.["azeroth-rpg"]?.spellFrom ?? null;
+    if (spellFromHonoured({ spellFrom, name: data.name ?? "", grants: this.spellGrantTable({ batch: rows }) })) return allow;
+    const spell = data.system ?? {};
+    const knownSpells = [...this.items.filter(i => i.type === "spell").map(i => ({ name: i.name, system: i.system ?? {} })),
+      ...rows.filter(d => d.type === "spell").map(d => ({ name: d.name ?? "", system: d.system ?? {} }))];
+    const pre = String(spell.prerequisite ?? "").trim().toLowerCase();
+    const prerequisite = pre ? (knownSpells.find(i => String(i.name).trim().toLowerCase() === pre)?.system ?? null) : null;
+    const classes = [...(this.classItems ?? []).map(c => ({ name: c.name, schools: c.system?.schools ?? [] })),
+      ...rows.filter(d => d.type === "class").map(d => ({ name: d.name ?? "", schools: d.system?.schools ?? [] }))];
+    const refused = spellLearnRefusal({
+      classes, spell, known: knownSpells.map(i => i.name), prerequisite, knownTiers: knownSpells.map(i => i.system?.tier ?? 1)
+    });
+    const door = learnDoor({ gm, refusal: refused, tier: spell.tier ?? 1 });
+    if (door.act === "allow") return { ...allow, strip: Boolean(spellFrom) };
+    const named = (spell.classes ?? []).filter(Boolean);
+    const text = game.i18n.format(`AZEROTH.Spell.LearnRefused.${door.reason}`, {
+      name: this.name, spell: data.name ?? "", prerequisite: refused?.prerequisite ?? "",
+      classes: named.length ? named.join(", ") : game.i18n.localize("AZEROTH.Spell.LearnRefused.school")
+    });
+    return { act: door.act, text, strip: Boolean(spellFrom) };
+  }
+
+  /**
+   * **07 §4's CAST CAP, IN WORDS** (*What you may cast is capped at your own tier, whatever a tome
+   * says*; the lead, 2026-11-18: *"Yes"* to it for every class), or null: a character's spell above
+   * the tier its granting class reaches on 07 §4's chart (`casting.mjs#castingReach`, a second class
+   * one tier behind) is refused before anything is spent. Tier 5 is outside the cap
+   * (`castCapRefusal`). **A spell a talent or a feature teaches** (`spellFrom` naming an item the grant
+   * table pairs with this spell, `spellGrantTable`; 07 §9) is outside the tome's cap: the talent's own gate placed it. A creature's
+   * spells are bounded by 14's review (D-706) and an item's spell is the item's, so neither is asked.
+   *
+   * @param {Item|{name?: string, system?: object}} spell
+   * @returns {string|null}
+   */
+  castCapWords(spell) {
+    if (this.type !== "character" || !spell) return null;
+    const spellFrom = spell.getFlag?.("azeroth-rpg", "spellFrom") ?? spell.flags?.["azeroth-rpg"]?.spellFrom ?? null;
+    if (spellFromHonoured({ spellFrom, name: spell.name ?? "", grants: this.spellGrantTable() })) return null;
+    const sys = spell.system ?? {};
+    const classes = (this.classItems ?? []).map((c, index) => ({
+      itemId: c.id, name: c.name, schools: c.system?.schools ?? [], castingAbility: c.system?.castingAbility ?? null,
+      caster: c.system?.power?.caster ?? "none", index
+    }));
+    const grant = grantingClass(classes, sys.school ?? null, sys.classes ?? null);
+    const tier = this.system?.tier ?? 1;
+    const reach = castingReach({ caster: grant?.caster ?? "full", tier: grant?.index === 1 ? secondaryTier(tier) : tier });
+    const refused = castCapRefusal({ spellTier: sys.tier ?? 1, reach });
+    return refused ? game.i18n.format("AZEROTH.Cast.TierCap", { name: this.name, spell: spell.name ?? "", tier: sys.tier ?? 1, reach: refused.reach }) : null;
+  }
+
+  /**
+   * **THE SPELLS THIS CHARACTER'S TALENTS AND FEATURES TEACH, AS THE SYNC EMBEDS THEM** (D-642's
+   * *You know Fireball*; 02 §7's Unholy Lore and Grave Calling): one `{id, name}` row a grant, `id` the
+   * teaching item, `name` the spell. The sync embeds exactly these (`_syncClassFeaturesNow`), and a
+   * spell's `spellFrom` is honoured at the learning door and the cast cap only where a row pairs that
+   * item with that spell (`rules/spell-access.mjs#spellFromHonoured`; the fix runs' review). `batch`
+   * adds the talents and features of the same write, as data.
+   *
+   * @param {{talents?: object[], batch?: object[]}} [o]
+   * @returns {Array<{id: string, name: string}>}
+   */
+  spellGrantTable({ talents = null, batch = [] } = {}) {
+    const rows = (batch ?? []).filter(d => d && typeof d === "object");
+    const taken = [...(talents ?? this.takenTalents()), ...rows.filter(d => d.type === "talent" && (Number(d.system?.taken) || 0) > 0 && d._id).map(d => ({
+      id: d._id, identifier: d.system?.identifier, className: d.system?.className, race: d.system?.race ?? null, branch: d.system?.branch ?? "",
+      name: d.name ?? "", effect: d.system?.effect, taken: d.system?.taken
+    }))];
+    const features = [...this.items.filter(i => i.type === "feature").map(i => ({ id: i.id, name: i.name, className: i.system?.className ?? "" })),
+      ...rows.filter(d => d.type === "feature" && d._id).map(d => ({ id: d._id, name: d.name ?? "", className: d.system?.className ?? "" }))];
+    return [
+      ...spellGrantsFor(taken).map(g => ({ id: String(g.talent.id), name: g.name })),
+      ...featureSpellGrants(features).map(g => ({ id: g.featureId, name: g.spell }))
+    ];
+  }
+
+  /**
+   * **WHY THIS CHARACTER MAY NOT LEARN A SPELL, IN WORDS**, or null - `learnVerdict` read as a
+   * refusal for a player (a GM's `confirm` is a refusal too, until the GM confirms).
+   *
+   * @param {object} data
+   * @returns {string|null}
+   */
+  learnRefusal(data = {}) {
+    const verdict = this.learnVerdict(data);
+    return verdict.act === "allow" ? null : verdict.text;
+  }
+
   hasFeature(name) {
     return this.items.some(i => i.type === "feature" && i.name === name);
   }
@@ -2802,7 +2962,11 @@ export class AzerothActor extends Actor {
       const purse = maneuverPurse(this.poolSnapshot?.() ?? [], named);
       return purse ? priced({ actor: this, pool: purse, shared: false }) : null;
     }
-    const own = this.system?.momenta?.[0] ?? (this.poolSnapshot?.() ?? []).find(p => p.kind === "momentum") ?? null;
+    // **ESSENCE NEVER PAYS A MANEUVER** (`rules/essence.mjs#paysByKind`; the Necromancer
+    // plan: *It never pays for a spell, for Parry or for a maneuver*): the first Momentum pool
+    // that may, and none for a character holding Essence alone.
+    const own = (this.system?.momenta ?? []).find(p => paysByKind(p?.name))
+      ?? (this.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && paysByKind(p.name)) ?? null;
     let owner = null;
     let quarry = null;
     // A companion's Ranger is asked WHATEVER the companion's own pool: every creature
@@ -2882,6 +3046,46 @@ export class AzerothActor extends Actor {
     const sandNow = (this.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === "sand")?.value ?? null;
     lines.push(...sandCastLines(talents, { spell, sand: sandNow }, talentEffect));
     return [...lines, ...freeCastLines(talents, { spell, spent, pool })];
+  }
+
+  /**
+   * **02 §7's FOUR EMPOWER LINES AND 04's FLESH OFFERING ON A SPELL'S DIALOG** (the Necromancer
+   * plan's door 2), beside `talentLineOffer`'s and in its shape: unticked, priced in Essence (or a
+   * corpse), greyed with the reason in words. `castSpell` judges the ticked ones again, whole,
+   * before the budget. Flesh Offering reads the spell's OWN school (O-335), never the damage it
+   * deals. None for a creature.
+   *
+   * @param {object} spellSystem  the spell's `system`
+   * @param {{mana?: number}} [o]  the Mana due before Flesh Offering
+   * @returns {Array<object>}
+   */
+  castLineOffer(spellSystem = null, { mana = 0, priced = true } = {}) {
+    if (this.type !== "character" || !spellSystem) return [];
+    const essenceHeld = (this.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === ESSENCE)?.value ?? null;
+    return [
+      ...empowerLines(spellSystem, { essence: essenceHeld, tier: this.system?.tier ?? 1 }).map(l => ({ ...l, name: game.i18n.localize(l.name) })),
+      // An item's casting and a free cast pay no Mana, so Flesh Offering has nothing to take off (`priced: false`).
+      ...(priced ? fleshOfferingLines(this.takenTalents(), { school: spellSystem.school ?? null, mana }) : []),
+      // 04's Skeletal Mastery's Empowered line, on Raise Dead (the 4b review's MUST-FIX 5).
+      ...skeletalMasteryLines(this.takenTalents(), { identifier: spellSystem.identifier ?? null, essence: essenceHeld }),
+      // 02 §7's new lead, named at a cast (the Necromancer plan's door 3).
+      ...hordeLeadLines(this.#hordeStanding()).map(l => ({ ...l, name: game.i18n.localize(l.name) }))
+    ];
+  }
+
+  /**
+   * The raised dead of this Necromancer's horde standing now, and whether one leads - read off the
+   * world's actors with no import of the horde's door (`rules/horde.mjs#leadFor`).
+   */
+  #hordeStanding() {
+    // Only a Necromancer keeps a horde (02 §7), so nobody else's spell dialog reads the world's actors
+    // (the final review's nit: this was the cast dialog's one O(actors) read, on every caster).
+    if (!this.items.some(i => i.type === "class" && (i.name === "Necromancer" || i.system?.identifier === "necromancer"))) return { standing: 0, lead: false };
+    const members = (game.actors?.contents ?? [])
+      .map(a => ({ a, b: a.getFlag?.("azeroth-rpg", "bond") ?? null }))
+      .filter(({ a, b }) => b?.kind === "raised" && b.horde === true && b.ownerUuid === this.uuid && b.outside !== true && (a.system?.health?.value ?? 0) > 0)
+      .map(({ a, b }) => ({ id: a.id, entry: b.entryName ?? a.name, raisedAt: Number(b.since) || 0 }));
+    return { standing: members.length, lead: Boolean(leadFor({ flag: this.getFlag("azeroth-rpg", HORDE_LEAD_FLAG) ?? null, members })) };
   }
 
   /**
@@ -3123,7 +3327,9 @@ export class AzerothActor extends Actor {
     if (named.foreign) {
       return healingRefusal({
         targetUndead: kindsOf(creatureSnapshot({ type: this.type, system: this.system, race: this.type === "character" ? (this.raceItem?.name ?? null) : null })).has("undead"),
-        targetDeathKnight: this.type === "character" && undeadByClass(this.system?.classKeys ?? []),
+        // An undead CHARACTER (`system.undead`: a Death Knight or a lich; `rules/undead.mjs
+        // #undeadStanding`).
+        targetDeathKnight: this.type === "character" && this.system?.undead === true,
         sourceDeathKnight: false, self: false, giver: true,
         consumable: consumable === true, spell: spell === true, school
       });
@@ -3137,8 +3343,11 @@ export class AzerothActor extends Actor {
     });
     return healingRefusal({
       targetUndead: kindsOf(snapshot(this)).has("undead"),
-      targetDeathKnight: this.type === "character" && undeadByClass(this.system?.classKeys ?? []),
-      sourceDeathKnight: from?.type === "character" && undeadByClass(from?.system?.classKeys ?? []),
+      // An undead character is healed by another only through a Death spell; a giver who HEALS
+      // ONLY THE UNDEAD is a Death Knight or a lich (`system.healsOnlyUndead`; the lead: *"No it
+      // can't heal living targets"*), never a Forsaken.
+      targetDeathKnight: this.type === "character" && this.system?.undead === true,
+      sourceDeathKnight: from?.type === "character" && from?.system?.healsOnlyUndead === true,
       self: Boolean(self), giver: true, consumable: consumable === true, spell: spell === true, school
     });
   }
@@ -3188,6 +3397,17 @@ export class AzerothActor extends Actor {
     const refused = Math.trunc(amount) > 0 ? this._undeadHealingRefusal({ from, givenBy, shared, spell, school, consumable }) : null;
     if (refused) {
       ui.notifications?.info(game.i18n.format(HEALING_REFUSAL_WORDS[refused], { name: this.name, from: from?.name ?? (givenBy && typeof givenBy === "object" ? givenBy.name : "") ?? "" }));
+      if (outcome) outcome.complete = true;
+      return this;
+    }
+    // **07 §17's SOUL MARKS** (Sever the Soul: *nothing can raise or restore it*; Soul Cage: *no one but
+    // you can raise, question or restore it*; run 4c-S): a dead creature so marked is restored by
+    // nobody, or by its caster alone - said in words, and nothing lands.
+    const soulBar = Math.trunc(amount) > 0 && (this.system?.health?.value ?? 0) <= 0
+      ? soulMarkRefusal(this.getFlag?.("azeroth-rpg", SOUL_MARK_FLAG) ?? null, { by: (givenBy && typeof givenBy === "object" ? givenBy.uuid : null) ?? from?.uuid ?? null, act: "restore" })
+      : null;
+    if (soulBar) {
+      ui.notifications?.info(game.i18n.format(`AZEROTH.NecroSpell.SoulMark.${soulBar}`, { name: this.name }));
       if (outcome) outcome.complete = true;
       return this;
     }
@@ -3713,6 +3933,13 @@ export class AzerothActor extends Actor {
     };
     const linkedTransfer = preparedTransfer?.candidate?.kind === "soulLink" ? preparedTransfer.candidate.plan : null;
     let amount = Math.max(0, Math.trunc(damage));
+    // **07 §14's CURSE OF WEAKNESS** (*deals 2 less damage for the duration, and 1 less again for each
+    // point of Spellpower: Shadow you carry*; run 4c-S): off every blow its bearer deals, once, before
+    // the blow is moved or shared.
+    if (by && amount > 0 && !moved && !shared) {
+      const weaker = curseOn(by.effects ?? [], "weakness");
+      if (weaker > 0) amount = Math.max(0, amount - weaker);
+    }
     let potionProtected = false;
     const preventPotionPhysical = () => {
       if (!invulnerabilityPotionActive(this.effects)) return;
@@ -3820,6 +4047,33 @@ export class AzerothActor extends Actor {
         amount = Math.trunc(Number(redirected.kept));
       }
     }
+    // **02 §7's GRAVE GUARD, IN THE BLOW** (*When a blow would damage you, you may use your Reaction
+    // to choose one of your raised dead within 10 feet of you. The blow damages that creature
+    // instead of you ... Damage beyond that creature's Health is dealt to you*; the Necromancer
+    // plan's door 8): asked after the mark and any ally's move, before this creature's own
+    // reductions; what passes the servant's Health lands here through the rest of this door.
+    // Guarded: a door beyond this creature never cancels its blow.
+    // Whether what reaches the rest of this door is Grave Guard's overflow (Bone Shield is asked on it).
+    let graveGuardOverflow = false;
+    if (this.type === "character" && struck && !transferUsed && amount > 0 && this.hasFeature?.("Grave Guard")) {
+      try {
+        const { graveGuardInBlow } = await import("../effects/grave-guard.mjs");
+        const guard = await graveGuardInBlow(this, { amount, type, attack, spell, location, by, mitigation, messageId });
+        if (guard.guarded) {
+          transferUsed = true;
+          graveGuardOverflow = guard.overflow > 0;
+          if (report) report.transferred = true;
+          if (!(guard.overflow > 0)) return completeOutcome();
+          amount = guard.overflow;
+          parts = null;
+          wardTook = 0;
+          // The overflow's own record (the 4b review's S3): the servant-met blow less its room.
+          mitigation = guard.record ?? null;
+        }
+      } catch (err) {
+        console.warn("azeroth-rpg | Grave Guard", err);
+      }
+    }
     // **04's ICEBOUND FORTITUDE, IN THE BLOW** (*That blow, and each blow until the end of your
     // next turn, deals half its damage to you, rounded down, before Armor Points and Ward apply*;
     // the lead: *"before AP or ward"*; run F4a): where the state stands the blow is halved, and
@@ -3841,6 +4095,30 @@ export class AzerothActor extends Actor {
         }
       } catch (err) {
         console.warn("azeroth-rpg | Icebound Fortitude", err);
+      }
+    }
+    // **07 §17's BONE SHIELD, IN THE BLOW** (*When an attack hits you, you take 6 less damage from that
+    // attack*; run 4c-S): asked of the Necromancer struck, after the mark and any move, a yes casting the
+    // spell there with its Reaction, its Mana and its Casting Test; what reaches this door is the blow
+    // less the shield, and 04's Barbed Bone strikes the attacker. Guarded: the blow stands.
+    // **AFTER ICEBOUND FORTITUDE'S HALVING** (D-1098, D-1099; D-777's order): Icebound halves the blow
+    // before Armor Points and Ward, re-resolving the card's record, and 6 less is taken off what then
+    // arrives - asked before it, Icebound's re-resolution would write the shield back out.
+    // **AND ON GRAVE GUARD'S OVERFLOW** (the lead, 2026-11-19: *"yes it should"*): where Grave Guard
+    // moved the attack onto a raised dead and the damage beyond its Health reaches the Necromancer, that
+    // overflow is an attack that hits them, so Bone Shield is asked on it - once, here, with its own
+    // deadline, Reaction and Mana - and Barbed Bone fires as usual. Every other transfer still asks nothing.
+    if (this.type === "character" && struck && attack && (!transferUsed || graveGuardOverflow) && !linkedTransfer && amount > 0) {
+      try {
+        const { boneShieldInBlow } = await import("../effects/necromancer-spells.mjs");
+        const shield = await boneShieldInBlow(this, { amount, attack, by });
+        if (shield.shielded) {
+          amount = shield.amount;
+          parts = null;
+          if (!(amount > 0)) return completeOutcome();
+        }
+      } catch (err) {
+        console.warn("azeroth-rpg | Bone Shield", err);
       }
     }
     // **08 §20's FOROR'S LESSON** (Quel'Serrar: *A breath weapon deals you half its damage,
@@ -3888,6 +4166,21 @@ export class AzerothActor extends Actor {
     // carrying Shield Discipline's reduction prevented that much (Atonement).
     amount = damageStages.standingDamage;
     const standingTook = damageStages.standingTook;
+    // **04's MARROWGUARD** (*While one of your skeletons is adjacent to you, the Physical damage an
+    // attack deals you falls by your rank*; Phase 4c-T): a standing reduction on an attack's Physical
+    // share alone, beside the others (`effects/necromancer-talents.mjs#marrowguardOn`). Guarded.
+    if (this.type === "character" && struck && attack && !linkedTransfer && amount > 0) {
+      try {
+        const { marrowguardOn } = await import("../effects/necromancer-talents.mjs");
+        const guarded = await marrowguardOn(this, { amount, type, parts, attack: true });
+        if (guarded.cut > 0) {
+          amount = guarded.amount;
+          parts = guarded.parts ?? parts;
+        }
+      } catch (err) {
+        console.warn("azeroth-rpg | Marrowguard", err);
+      }
+    }
     // Keep surviving additional lanes bounded after the flat reduction, before
     // a new Wounded Beast amount is added to the main lane.
     if (potionProtected) preventPotionPhysical();
@@ -4013,6 +4306,18 @@ export class AzerothActor extends Actor {
     if (hold?.borrowedHour) {
       const { commitBorrowedHour } = await import("../effects/guardian.mjs");
       await commitBorrowedHour(this, hold.borrowedHour).catch(err => console.warn("azeroth-rpg | borrowed hour", err));
+    }
+    // **THE BLOW THAT REACHES ONE OF THE RAISED DEAD'S HEALTH** (04's Restless Bones: *from anything but
+    // Holy damage*; Phase 4c-T): its type, written on the creature just before the Health, so the death
+    // watch's raised-dead event reads the killing blow off it (`rules/necromancer-talents.mjs
+    // #killingBlowType`). Past every refusal above; guarded, so the blow stands whatever it says.
+    if (amount > 0 && this.getFlag?.("azeroth-rpg", "bond")?.kind === "raised" && this.isOwner) {
+      try {
+        const { killingBlowType } = await import("../rules/necromancer-talents.mjs");
+        await this.setFlag("azeroth-rpg", "lastBlow", { type: killingBlowType({ type, parts }) });
+      } catch (err) {
+        console.warn("azeroth-rpg | the last blow's type", err);
+      }
     }
     await this.adjustHealth(-amount, { temp: soaked.temp, damage: true, manaShield:shield });
     const healthAfterWrite = (this.system?.health?.value ?? 0) + Math.max(0, Number(this.system?.health?.temp) || 0);

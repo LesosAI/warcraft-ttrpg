@@ -66,10 +66,12 @@ import { registerNpcSneakHooks } from "./effects/npc-sneak.mjs";
 import { registerWhirlwindInterruptions } from "./effects/syndicate-whirlwind-interruptions.mjs";
 import { registerWhirlwindLifecycle } from "./effects/syndicate-whirlwind-lifecycle.mjs";
 import { registerCrushridgeDeathHooks } from "./effects/crushridge-death-hooks.mjs";
+import { registerDeathWatch } from "./effects/death-watch.mjs";
 import { registerCrushridgeHelpHooks } from "./effects/crushridge-call-for-kin.mjs";
 import { registerMobileFlareVisibility } from "./effects/mobile-alert-visibility.mjs";
 import { registerTokenShrinkHooks } from "./canvas/token-shrink.mjs";
 import { registerElunesLightHooks } from "./canvas/elunes-light.mjs";
+import { registerCorpseCandle } from "./canvas/corpse-candle.mjs";
 import { registerSentinelPackHooks } from "./effects/anubisath-pack-hooks.mjs";
 import { registerSentinelStrikeHooks } from "./effects/sentinel-mortal-strike.mjs";
 import { registerSentinelMendingHooks } from "./effects/sentinel-mending.mjs";
@@ -250,9 +252,18 @@ Hooks.once("init", () => {
   registerWhirlwindInterruptions();
   registerWhirlwindLifecycle();
   registerCrushridgeDeathHooks();
+  // THE ONE DEATH OBSERVER (the Necromancer plan's door 1): the four creature listeners above
+  // register on it, and it carries Essence and Soul Harvest.
+  registerDeathWatch();
+  // 02 §7's horde: the death watch's Necromancer listeners, the phylactery and Enslave the Dead.
+  import("./effects/necromancer-horde.mjs").then(m => m.registerHordeHooks()).catch(err => console.warn("azeroth-rpg | horde hooks", err));
+  // 07 §17's Necromancer spells (run 4c-S): Soul Cage and Mark of the Grave on the death watch, Corpse
+  // Candle's light and the markers put out, Deathmask's face put back, Contagion's daily spread.
+  import("./effects/necromancer-spells.mjs").then(m => m.registerNecroSpellHooks()).catch(err => console.warn("azeroth-rpg | Necromancer spell hooks", err));
   registerCrushridgeHelpHooks();
   registerTokenShrinkHooks();
   registerElunesLightHooks();
+  registerCorpseCandle();
   registerSentinelPackHooks();
   registerSentinelStrikeHooks();
   registerSentinelMendingHooks();

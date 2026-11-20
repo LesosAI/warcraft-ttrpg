@@ -17,6 +17,8 @@ import { SHAPE_KINDS } from "./shapes.mjs";
 import { constructCapacity, constructEligible, constructsFor } from "./constructs.mjs";
 import { evaluateExpression } from "./expressions.mjs";
 import { talentEffect } from "./talent-effects.mjs";
+// The Necromancer's talents on its raised dead (Phase 4c-T).
+import { raisedTalentRows } from "./necromancer-talents.mjs";
 
 /**
  * The bound kinds (D-643). `construct` is the sixth (the Legacy branches' door 6):
@@ -321,6 +323,13 @@ export function boundEffects(kind, owner = {}, talents = [], creature = {}, enco
       const n = Math.max(0, Math.trunc(Number(evaluateExpression(String(rig.boundDamage), { tier }))) || 0);
       if (n) push("battle-rig", "AZEROTH.Bound.Effect.BattleRig", [add("system.damageBonus", n)]);
     }
+  }
+
+  // **THE NECROMANCER'S RAISED DEAD** (finding 17; Phase 4c-T): 04's Ghoul Frenzy, Commander of Bone
+  // and their Empowered surges, and Bone Vanguard on a skeleton that leads - off the creature's 14
+  // entry (`creature.entry`), the owner's lead (`owner.hordeLead`) and its surges (`owner.surges`).
+  if (kind === "raised") {
+    for (const row of raisedTalentRows({ entry: creature.entry ?? creature.name ?? null, isLead: Boolean(creature.id) && owner.hordeLead === creature.id, talents, surges: owner.surges ?? [] })) out.push(row);
   }
 
   // **A BOUND ATTACK PATCH** (door 20): the school, and the strike's form where named.

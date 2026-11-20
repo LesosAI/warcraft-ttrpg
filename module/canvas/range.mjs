@@ -17,6 +17,7 @@
  * calls `spellRangeRefusal` or `useRangeRefusal`.
  */
 
+import { farReach } from "../rules/necromancer-lines.mjs";
 import { feetApart, feetToPoint } from "./footprints.mjs";
 import { allyOf, combatantIn, reachOfActor } from "./engaged.mjs";
 import { answerReach, check, feetWords, judgesPoint, judgesTargets, rangeInText, readRange, touchAt, widenReach } from "../rules/range.mjs";
@@ -159,11 +160,12 @@ export function judgeRange({ actor, name, targets = [], reach = null, line = nul
  * @param {{actor: Actor, spell: Item, targets: object[], source?: object|null}} o
  * @returns {string|null}  the refusal in words, or null
  */
-export function spellRangeRefusal({ actor, spell, targets = [], source = null } = {}) {
+export function spellRangeRefusal({ actor, spell, targets = [], source = null, farReaching = false } = {}) {
   const sys = spell?.system ?? {};
   if (!judgesTargets(sys.target)) return null;
-  // A healing spell's Touch, cast at 30 feet under the Hand of the Church (D-912).
-  const reach = touchAt(readRange(sys.range), isHealingSpell(sys) ? (actor?.system?.signatureEffects?.touchHealingFeet ?? 0) : 0);
+  // A healing spell's Touch, cast at 30 feet under the Hand of the Church (D-912); and 02 §7's
+  // Far-reaching, which doubles a range in feet (`rules/necromancer-lines.mjs#farReach`).
+  const reach = farReach(touchAt(readRange(sys.range), isHealingSpell(sys) ? (actor?.system?.signatureEffects?.touchHealingFeet ?? 0) : 0), farReaching === true);
   return judgeRange({ actor, name: spell?.name ?? "", targets, reach, line: sys.target ?? null, source });
 }
 
@@ -245,9 +247,9 @@ export function pointAccept(token, reach, name) {
  * @param {Token|TokenDocument|null} token
  * @param {Item|null} spell
  */
-export function spellPointAccept(token, spell) {
+export function spellPointAccept(token, spell, { farReaching = false } = {}) {
   const sys = spell?.system ?? {};
-  return judgesPoint(sys.target) ? pointAccept(token, readRange(sys.range), spell?.name ?? "") : null;
+  return judgesPoint(sys.target) ? pointAccept(token, farReach(readRange(sys.range), farReaching === true), spell?.name ?? "") : null;
 }
 
 /**

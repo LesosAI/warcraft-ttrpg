@@ -102,8 +102,10 @@ async function failResist(card, index) {
   await settle();
 }
 
+// Level 16 (tier 4): Bastion of Hours is a tier 4 spell, and 07 §4's cast cap (D-1082) refuses a
+// spell above the tier the class reaches. At level 15 (tier 3) the cast was refused and posted no card.
 async function chronomancer(name, spells) {
-  const c = await makeCharacter({ name, classes: [["Chronomancer", 15]], race: "Gnome", spells, bags: [], gear: [], abilities: { int: 18, con: 14 } });
+  const c = await makeCharacter({ name, classes: [["Chronomancer", 16]], race: "Gnome", spells, bags: [], gear: [], abilities: { int: 18, con: 14 } });
   await fullMana(c);
   return c;
 }

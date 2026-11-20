@@ -116,6 +116,7 @@ import {
 // healing land through, the Resist card its Tests post, and the one reading of
 // what a creature is and who it is to the caster.
 import { casterTurnTests, kindsOfActor, postAreaTest, relationTo, strikeFromArea } from "../effects/area-strikes.mjs";
+import { potentForStrike, recordAreaMark, strikeLanded } from "../effects/empower-areas.mjs";
 // Damage or healing laid on the creature itself, at the start of its turn (D-770).
 import { advanceAfflictionsInFight } from "../effects/affliction-clock.mjs";
 import { landTicks } from "../effects/ticks.mjs";
@@ -160,6 +161,12 @@ import { CUTTING_GEAR, holdsCuttingGear } from "../rules/escapes.mjs";
 import { refreshBossPoints } from "../effects/boss-points.mjs";
 import { secondsLeftAfterFight } from "../rules/fight-spans.mjs";
 import { advanceBossGrips, bossRoundStart, bossTurnSkip } from "../effects/boss-doors.mjs";
+// 02 §7's Command the Dead: the horde's shared turn, its lead and its surge (the Necromancer plan's door 3).
+import { collapsingNow, hordeTurnFor, hordeTurnStart, leadTaken, surgeTaken } from "../effects/necromancer-horde.mjs";
+// 07 §17's Contagion: whether a turn's end can meet a blight, asked before its door is imported.
+import { blightCanReach } from "../rules/necromancer-spells.mjs";
+import { endTurnDamageCanReach } from "../rules/end-turn-damage.mjs";
+import { compelRepairDue } from "../rules/escapes.mjs";
 
 /** An area's forced move at a turn's start (07's Void Rift; D-778), off the Region's own record. */
 function turnForced(region) {
@@ -383,7 +390,10 @@ export class AzerothCombatant extends Combatant {
     // spent while the fight's first turn was still opening, it landed after
     // that spend and wiped it - three batches spend exactly then - which is a
     // turn-boundary rule the lead did not ask to change.
+    // Whether this is the creature's OWN turn, for the horde's lead and surge (`_turnFacts`).
+    this._azerothOwnTurn = ownTurn === true;
     const flags = { budget: freshTurn(this._turnFacts()) };
+    this._azerothOwnTurn = false;
     // **A ROUND'S START REFRESHES NO REACTION** (05: *The Reaction refreshes at the start of
     // your turn*; the lead, D-915): the round's reset carries the Reaction as it stands
     // (`rules/initiative.mjs#roundStartBudget`) - the first round excepted - and only the
@@ -403,7 +413,22 @@ export class AzerothCombatant extends Combatant {
     if (this.getFlag("azeroth-rpg", "moveHalves")) flags.moveHalves = foundry.data.operators.ForcedDeletion.create();
     // Clear on every budget reset, including a GM rewind to the same round/turn.
     if (this.getFlag("azeroth-rpg", "swimMovement")) flags.swimMovement = foundry.data.operators.ForcedDeletion.create();
-    return this.update({ flags: { "azeroth-rpg": flags } });
+    // **A HORDE CREATURE'S OWN TURN READ ITS LEAD AND ITS SURGE** (02 §7): a lead named at a cast
+    // leads from this turn, and Command the Dead's surge is spent by it - each written once the
+    // budget above has read it. **The budget is written FIRST** (the 4b review's S4): the reset is
+    // deliberately unqueued (D-761), so no actor write may stand between the read above and this
+    // update - the horde's two writes follow it.
+    const hordeTurn = ownTurn && this.actor?.type === "npc" && hordeTurnFor(this.actor);
+    const written = await this.update({ flags: { "azeroth-rpg": flags } });
+    if (hordeTurn) {
+      try {
+        await leadTaken(this.actor.isToken ? (game.actors.get(this.actor.id) ?? this.actor) : this.actor);
+        await surgeTaken(this.actor);
+      } catch (err) {
+        console.warn("azeroth-rpg | horde turn", err);
+      }
+    }
+    return written;
   }
 
   /** The Reactions given that still stand at the turn now starting (04's Second Chance; stage 2b). */
@@ -429,6 +454,12 @@ export class AzerothCombatant extends Combatant {
         reactions: realm.reactions
       };
     }
+    // **THE HORDE'S SHARED TURN** (02 §7's Command the Dead: *Your lead takes its own turn. Each
+    // other creature in your horde ... takes one Half-Action. It takes no Reaction unless the spell
+    // that raised it says it keeps its Reaction*): off the Necromancer's `hordeLead` flag and the
+    // creature's own bond (`effects/necromancer-horde.mjs#hordeTurnFor`), the surge included.
+    const horde = this.actor?.type === "npc" ? hordeTurnFor(this.actor, { ownTurn: this._azerothOwnTurn === true }) : null;
+    if (horde) return { extraAttack: this._hasExtraAttack(), freeMove: this._freeMoves(), halfActions: horde.halfActions, reactions: horde.reactions };
     return {
       extraAttack: this._hasExtraAttack(),
       freeMove: this._freeMoves(),
@@ -2103,6 +2134,32 @@ export class AzerothCombat extends Combat {
     // (05 SS12: "refills 3 a turn"); Focus as above ("refills 2 a turn"). The combatant's
     // OWN turn: what refreshes only then (Ten Thousand Years' second Reaction) is cleared.
     await combatant.resetBudget({ ownTurn: true });
+    // **THE NECROMANCER'S TURN** (02 §7; 07's Plague of Undeath): a plague ghoul queued is offered,
+    // and the raised dead still at 0 Health with no offer standing collapse.
+    if (combatant.actor?.type === "character") {
+      try {
+        await hordeTurnStart(combatant.actor);
+      } catch (err) {
+        console.warn("azeroth-rpg | horde turn start", err);
+      }
+    }
+    // **04's REGENERATING TISSUE AND UNHOLY FERVOR** (Phase 4c-T): a ghoul's or an Abomination's
+    // mending at its own turn's start, and the Health a fervent ally loses at its next one.
+    try {
+      const { necroTalentTurnStart } = await import("../effects/necromancer-talents.mjs");
+      await necroTalentTurnStart(combatant);
+    } catch (err) {
+      console.warn("azeroth-rpg | Necromancer talents' turn start", err);
+    }
+    // **04's PLAGUE BLADDER** (*Each enemy that starts its turn within 5 feet of it makes a Body
+    // Resilience Test against your Spell DC*; the lead's Q7 of the 4b review: *"auto"*): each grafted
+    // enemy within 5 feet asks the creature starting its turn (`effects/graft-riders.mjs`).
+    try {
+      const { bladderTurnStart } = await import("../effects/graft-riders.mjs");
+      await bladderTurnStart(combatant);
+    } catch (err) {
+      console.warn("azeroth-rpg | Plague Bladder", err);
+    }
     // **A TINKER'S CONSTRUCTS START THEIR SHARED TURN WITH THE TINKER'S OWN** (04's The
     // Bench, *each turn*; the B2 review), not with the round.
     if (combatant.getFlag("azeroth-rpg", "constructTurn") !== undefined) await combatant.resetConstructTurn();
@@ -2169,7 +2226,9 @@ export class AzerothCombat extends Combat {
   async _escapePrompts(combatant, on) {
     const actor = combatant?.actor ?? null;
     if (!actor || combatant.isDefeated) return;
-    if (on === "turnEnd") {
+    // **ONLY WHERE A COMPEL CARRIER LACKS ITS REPEAT TEST** (team IMP, after fix run MC-R): the
+    // repair's own first filter, asked before the `import()` that alone cost about 1 s a turn.
+    if (on === "turnEnd" && compelRepairDue(actor.effects)) {
       const { repairCompelEscapes } = await import("../effects/compel.mjs");
       const repaired = await repairCompelEscapes(actor);
       if (repaired.unresolved) ui.notifications?.warn(game.i18n.format("AZEROTH.Compel.RepeatUnresolved", { name: actor.name }));
@@ -2561,8 +2620,24 @@ export class AzerothCombat extends Combat {
           tests.push({ region: source.region, check, caster });
         }
       }
-      const payload = tickFor(source.tick, { relation, kinds });
-      if (!payload) continue;
+      const bare = tickFor(source.tick, { relation, kinds });
+      if (!bare) continue;
+      // **02 §7's POTENT ON AN AREA** (the 4a review's MUST-FIX 2): the area's first strike on each
+      // creature rises by the caster's tier (`rules/essence.mjs#potentAreaRise`), on every door -
+      // the plain strike and a Signature's alike (O-413) - and the Region records the creature only
+      // once the strike has LANDED (`recordAreaMark` below), so a strike that dealt or restored
+      // nothing leaves the rise for the next.
+      const risen = (current, tick) => {
+        const p = tickFor(tick, current);
+        if (!p) return p;
+        const r = potentForStrike(source.region, actor, p);
+        return { ...p, damage: r.damage, heal: r.heal };
+      };
+      const rise = potentForStrike(source.region, actor, bare);
+      const payload = { ...bare, damage: rise.damage, heal: rise.heal };
+      const markPotent = async landed => {
+        if (rise.rose > 0 && landed && source.region) await recordAreaMark(source.region, "potentStruck", actor.uuid);
+      };
       // The ONE door an area's damage and healing land through (D-757): the
       // tick, an entry and a failed Test all strike through it.
       const healingSignatures=payload.heal>0?await import('../effects/signature-healing-areas.mjs'):null;
@@ -2572,9 +2647,10 @@ export class AzerothCombat extends Combat {
         const result=await damageSignatures.landSignatureAreaDamage({combat:this,combatant,source,payload,validate:()=>
           tickSources(scene,token,worldClock()).some(current=>current.region===source.region&&current.caster===caster
             &&current.cast===source.cast&&current.casterToken===source.casterToken
-            &&JSON.stringify({tick:current.tick,payload:tickFor(current.tick,{kinds:kindsOfActor(actor),
-              relation:relationTo({caster,casterToken:current.casterToken,actor,token,fight:this})})})===snapshot)});
+            &&JSON.stringify({tick:current.tick,payload:risen({kinds:kindsOfActor(actor),
+              relation:relationTo({caster,casterToken:current.casterToken,actor,token,fight:this})},current.tick)})===snapshot)});
         if(!result.ok){console.warn('azeroth-rpg | signature area damage unresolved',result.reason);continue;}
+        await markPotent(true);
         lines.push(...result.lines);
       }else if(healingSignatures&&(source.region?.flags?.['azeroth-rpg']?.signatureHealingCast||healingSignatures.signatureHealingCardFor(source))){
         const {landSignatureAreaHealing}=healingSignatures;
@@ -2582,11 +2658,26 @@ export class AzerothCombat extends Combat {
         const result=await landSignatureAreaHealing({combat:this,combatant,source,payload,validate:()=>
           tickSources(scene,token,worldClock()).some(current=>current.region===source.region&&current.caster===caster
             &&current.cast===source.cast&&current.casterToken===source.casterToken
-            &&JSON.stringify({tick:current.tick,payload:tickFor(current.tick,{kinds:kindsOfActor(actor),
-              relation:relationTo({caster,casterToken:current.casterToken,actor,token,fight:this})})})===snapshot)});
+            &&JSON.stringify({tick:current.tick,payload:risen({kinds:kindsOfActor(actor),
+              relation:relationTo({caster,casterToken:current.casterToken,actor,token,fight:this})},current.tick)})===snapshot)});
         if(!result.ok){console.warn('azeroth-rpg | signature area healing unresolved',result.reason);continue;}
+        await markPotent(true);
         lines.push(...result.lines);
-      }else for (const line of await strikeFromArea({ actor, caster, spell: source.spell ?? {}, damage: payload.damage, heal: payload.heal })) lines.push(line);
+      }else{
+        const damageOutcome = {}, healingOutcome = {};
+        if (payload.damage || (payload.heal !== null && payload.heal !== undefined)) {
+          for (const line of await strikeFromArea({ actor, caster, spell: source.spell ?? {}, damage: payload.damage, heal: payload.heal, damageOutcome, healingOutcome })) lines.push(line);
+          await markPotent(strikeLanded({ damageOutcome, healingOutcome }));
+        }
+      }
+      // **TEMPORARY HEALTH AT THE START OF A TURN** (04's Circle of the Damned: *Each ally that starts
+      // its turn in your circle gains temporary Health equal to your rank*; Phase 4c-T): `tickFor`'s
+      // `temp`, granted through 05's one door, which refreshes rather than piles up.
+      if (Number(payload.temp) > 0 && !(actor.type === "npc" && (actor.system?.health?.value ?? 0) <= 0)) {
+        const span = this.started ? "encounter" : "longRest";
+        const granted = await actor.grantTemporaryHealth?.(payload.temp, { source: source.spell?.name ?? source.region?.name ?? "", span, combatId: this.started ? this.id : null });
+        if (granted?.landed) lines.push(game.i18n.format("AZEROTH.NecroTalent.CircleTemp", { name: actor.name, n: granted.temp, area: source.spell?.name ?? "" }));
+      }
       // **MOONWELL'S OTHER HALF** (07: *an ally that starts its turn in the area regains
       // 4 Health, and one poison or one disease on it ends*; D12 Phase 6). The GM's
       // client lands the tick and shows no chooser: the first by urgency ends.
@@ -2652,6 +2743,8 @@ export class AzerothCombat extends Combat {
     lines.push(...await advanceWildRegeneration(actor, this));
     lines.push(...await advanceSentinelMending(actor, this));
     lines.push(...await advanceMindFlay(actor, this));
+    // 07 §17's Frenzy of the Dead's Health and Drain Life's drain at the caster's turn start (run 4c-S).
+    lines.push(...await import("../effects/necromancer-spells.mjs").then(m => m.advanceNecroSpells(actor, this)).catch(err => { console.warn("azeroth-rpg | a Necromancer spell's turn", err); return []; }));
     // 14's Grab (D-809): *takes 5 damage at the start of each of Stitches's turns* -
     // the HOLDER's turn, so it is this creature's grips on the others that strike.
     lines.push(...((await this._bossGrips?.(actor)) ?? []));
@@ -2974,10 +3067,16 @@ export class AzerothCombat extends Combat {
       // area lays from the end of a turn inside it is armed now, on the area's
       // own flag - never a combatant write, which would move `previous`.
       const token = combatant.token ?? null;
-      const {deliverEndTurnDamage}=await import('../effects/end-turn-damage.mjs');
-      const endDamage=await deliverEndTurnDamage(this,combatant,{
-        round:context?.round??previous?.round??this.round,turn:context?.turn??previous?.turn??this.turn});
-      if(endDamage.some(result=>!result.ok))console.warn('azeroth-rpg | end-turn damage requires review',endDamage);
+      // **ONLY WHERE END-TURN DAMAGE IS ARMED** (team IMP, after fix run MC-R): Firewalk's,
+      // Pyroclasm's and Everburn's door is imported only where a Region or another token's
+      // effect on this token's scene carries the row its own loop asks for first, since the
+      // `import()` alone cost about 1 s a turn on the test machine, ahead of Mind Control's repeat.
+      if (endTurnDamageCanReach(token)) {
+        const {deliverEndTurnDamage}=await import('../effects/end-turn-damage.mjs');
+        const endDamage=await deliverEndTurnDamage(this,combatant,{
+          round:context?.round??previous?.round??this.round,turn:context?.turn??previous?.turn??this.turn});
+        if(endDamage.some(result=>!result.ok))console.warn('azeroth-rpg | end-turn damage requires review',endDamage);
+      }
       if (token?.parent) await armAreas(token.parent, token, "turnEnd").catch(err => console.warn("azeroth-rpg | an area rider did not arm", err));
       // Poisoned (A1): a Body Resilience Test at the end of each of your turns
       // against the poison's DC; a success sheds a stack. The Test is a card
@@ -3003,6 +3102,10 @@ export class AzerothCombat extends Combat {
       // Rimebind, Thornguard ...; D-778): Poisoned's shape, a card and no combatant
       // write, so `previous` stands.
       await this._escapePrompts(combatant, "turnEnd").catch(err => console.warn("azeroth-rpg | an escape prompt", err));
+      // 07 §17's Contagion: a creature ending its turn in the blight makes its Test (run 4c-S).
+      // **ONLY WHERE A BLIGHT STANDS** (fix run MC-R): the `import()` alone cost 1.2 s a turn on the
+      // test machine, ahead of Mind Control's repeat below, and pushed its dialog past the spec's wait.
+      if (blightCanReach(combatant.token)) await import("../effects/necromancer-spells.mjs").then(m => m.necroTurnEnd(combatant)).catch(err => console.warn("azeroth-rpg | Contagion", err));
       const controls = await endMindControlTurn(this, combatant, context)
         .catch(error => { console.warn("azeroth-rpg | Mind Control repeat", error); return [{ok:false,reason:"pending"}]; });
       if (controls.some(result => !result.ok && result.reason !== "resolved"))
@@ -3025,6 +3128,10 @@ export class AzerothCombat extends Combat {
    */
   async _leaveFight(combatant, { ended = false } = {}) {
     const actor = combatant.actor;
+    // **ONE OF THE RAISED DEAD COLLAPSING TAKES NOTHING WITH IT** (fix run 4-T): the collapse is
+    // deleting its world actor, and a write on it here lands after that delete - the server refuses
+    // an update of an actor it no longer holds. Its flags go with its combatant.
+    if (collapsingNow(actor)) return;
     // **EVERY MOMENTUM POOL GOES - BUT A FANATIC'S ZEAL** (04's Fanaticism at
     // rank 1: *Your Zeal does not drain out of combat*; D-772): read by name, the
     // inline row's own way, and kept between the fights.

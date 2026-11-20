@@ -335,6 +335,14 @@
   </details>
   {{/if}}
 
+  {{!-- The Necromancer's horde (D11 SS2; the frozen artboard HordePanel.html): beside Talents in
+        play, Essence and the places first, then a row for each of the raised dead. --}}
+  {{#if hordePanel}}
+  <details class="azeroth-combat-group" data-combat-section="horde"{{#if combatSections.horde}} open{{/if}}><summary class="azeroth-panel-heading azeroth-combat-section">{{localize "AZEROTH.Horde.Panel.Heading"}}</summary>
+  {{> systems/azeroth-rpg/templates/actor/partials/horde-panel.hbs panel=hordePanel}}
+  </details>
+  {{/if}}
+
   {{!-- Signatures (08 SS20, S3; D-692): what the things being WORN do, and the
         career's own capability (03 SS5), which had reached no sheet at all.
 

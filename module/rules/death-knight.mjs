@@ -89,7 +89,10 @@ export function ratioOptions(slots = 0) {
  * flagged with the feature and withdrawn with it). The Runic Power is D-944's 1 for 1.
  */
 export const FEATURE_SPELLS = Object.freeze({
-  "Unholy Lore": Object.freeze({ className: DK_CLASS_NAME, spell: "Death Coil" })
+  "Unholy Lore": Object.freeze({ className: DK_CLASS_NAME, spell: "Death Coil" }),
+  // 02 §7's Grave Calling (the Necromancer plan's door 5): *You know Raise Dead and Animate Corpse.
+  // They do not count against your spells known* - two spells, one row each.
+  "Grave Calling": Object.freeze({ className: "Necromancer", spells: Object.freeze(["Raise Dead", "Animate Corpse"]) })
 });
 
 /**
@@ -101,8 +104,8 @@ export const FEATURE_SPELLS = Object.freeze({
 export function featureSpellGrants(features = []) {
   return (features ?? [])
     .filter(f => FEATURE_SPELLS[f?.name] && (!f.className || f.className === FEATURE_SPELLS[f.name].className))
-    .map(f => ({ featureId: String(f.id), spell: FEATURE_SPELLS[f.name].spell }))
-    .sort((a, b) => a.featureId.localeCompare(b.featureId));
+    .flatMap(f => (FEATURE_SPELLS[f.name].spells ?? [FEATURE_SPELLS[f.name].spell]).map(spell => ({ featureId: String(f.id), spell })))
+    .sort((a, b) => a.featureId.localeCompare(b.featureId) || a.spell.localeCompare(b.spell));
 }
 
 /* ------------------------------------------------------------------ */

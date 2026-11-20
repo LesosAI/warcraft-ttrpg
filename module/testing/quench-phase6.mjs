@@ -157,7 +157,7 @@ export function feedbackBatch(context) {
 
     it("the spell card's Effect line and the talent card's Effect are enriched", async function () {
       this.timeout(40000);
-      const actor = await makeCharacter({ name: "ZZ Feedback Caster", classes: [["Priest", 5]], spells: ["Cure Blight"] });
+      const actor = await makeCharacter({ name: "ZZ Feedback Caster", classes: [["Priest", 11]], spells: ["Cure Blight"] });
       const spell = actor.items.find(i => i.type === "spell");
       assert.ok(spell, "Cure Blight is not in the pack");
       const pool = actor.system.powers.find(p => p.name === "mana");
@@ -1526,7 +1526,16 @@ export function feedbackBatch(context) {
       const names = options.map(o => o.name);
       assert.include(names, "Fire Elemental");
       assert.include(names, "Greater Water Elemental");
-      assert.lengthOf(names, 8, `14 SS9 holds eight elementals; offered: ${names.join(", ")}`);
+      // **THE COUNT IS THE PACK'S, READ THROUGH THE RULE** (CLAUDE.md §15: scope the assertion to what the
+      // rule owns). 14 SS9 held eight elementals when this was written; the bestiary has grown since
+      // (the Necromancer's Phase 3b pack holds 40 in *Elementals, Oozes and Constructs*), and the rule
+      // is every elemental of that section at the Shaman's tier or below - the GM's own world
+      // elementals beside them are D-650's and are not this test's to count.
+      const index = await game.packs.get("azeroth-rpg.bestiary").getIndex({ fields: ["system.creatureType", "system.tier", "system.source.section"] });
+      const sectionElementals = index.filter(e => e.system?.creatureType === "elemental" && /Elementals, Oozes and Constructs/.test(e.system?.source?.section ?? "") && (e.system?.tier ?? 1) <= 4).map(e => e.name).sort();
+      const offeredFromPack = options.filter(o => o.uuid?.startsWith("Compendium.azeroth-rpg.bestiary.")).map(o => o.name).sort();
+      assert.isAbove(sectionElementals.length, 7, "the bestiary holds 14 SS9's eight elementals at least");
+      assert.deepEqual(offeredFromPack, sectionElementals, `every elemental of 14's section at tier 4 or below, and no other pack creature; offered: ${names.join(", ")}`);
       // Typed elemental, but SS13's: the eye caught both on the first capture.
       assert.notInclude(names, "Searing Totem");
       assert.notInclude(names, "Treant");
@@ -1567,10 +1576,24 @@ export function feedbackBatch(context) {
       const { featureChoices } = await import("../dice/workflows.mjs");
       const pack = game.packs.get("azeroth-rpg.bestiary");
       const index = await pack.getIndex({ fields: ["system.creatureType", "system.weightClass"] });
-      const eligible = index.filter(e => e.system?.creatureType === "beast" && ["chaff", "standard"].includes(e.system?.weightClass)).length;
+      // **THE COUNT IS THE BOOK'S, WORKED OUT HERE** (the fix runs' review: reading it through
+      // `isShapeshiftForm` asserted the rule against itself): 14 §8's Beasts at Chaff or Standard weight,
+      // counted off the pack's own fields, then the named exceptions asserted one by one - the Frog and
+      // the Rabbit are the forms Hex and Polymorph lay (D-808) and are never offered, and 02's Mountain
+      // Lion at Soldier is (the lead, 2026-11-01).
+      const beasts = index.filter(e => e.system?.creatureType === "beast" && ["chaff", "standard"].includes(e.system?.weightClass));
+      const lion = index.find(e => e.name === "Mountain Lion");
+      assert.ok(lion, "the bestiary holds no Mountain Lion");
+      assert.equal(lion.system?.weightClass, "soldier", "the Mountain Lion is the Soldier exception");
+      const forced = beasts.filter(e => ["Frog", "Rabbit"].includes(e.name)).length;
+      const eligible = beasts.length - forced + 1;
       assert.isAbove(eligible, 5, "the bestiary holds too few Beasts to test with");
       let options = await featureChoices(actor, shift);
-      assert.lengthOf(options, eligible, "not every Beast at Chaff or Standard weight is offered");
+      assert.lengthOf(options, eligible, "not every Beast at Chaff or Standard weight is offered, less the Frog and the Rabbit, with the Mountain Lion");
+      const names = options.map(o => o.name);
+      assert.notInclude(names, "Frog", "the Frog is a forced form");
+      assert.notInclude(names, "Rabbit", "the Rabbit is a forced form");
+      assert.include(names, "Mountain Lion", "02's Mountain Lion is offered at Soldier");
       assert.ok(options.every(o => o.learn && !o.known), "a form is known before any was taken");
       assert.notInclude(options.map(o => o.name), "Devilsaur", "an Elite Beast is offered");
 

@@ -302,6 +302,10 @@ import { castTestGate, castTestOf, castTestRefusal, governed, passedHalf } from 
 // What a creature is, for a cast Test only a kind makes (Holy Wrath's undead; the B9a pass).
 import { creatureSnapshot, kindsOf } from "../rules/creature-kinds.mjs";
 import { undeadHealFromText } from "../rules/healing.mjs";
+// 07 §17's Necromancer spells' card (run 4c-S): the area a ring replaces, Shroud of the Grave's temporary
+// Health, and 07 §14's Curse of Tongues on the cursed creature's own price.
+import { necroArea as necroAreaOf, necroTemporary as necroTemporaryOf } from "../effects/necromancer-spells.mjs";
+import { curseOn, frenzyExtras, pastDeadline, readCasterTurnDrain } from "../rules/necromancer-spells.mjs";
 // 07's Nature's Grasp: the Test the next blow on the caster asks (the B9a pass).
 import { cleanStruckTest, readStruckTest } from "../rules/struck-tests.mjs";
 // What a spell deals around its target, a Test at a time (07's Stormfury; the B8a pass).
@@ -348,6 +352,11 @@ import {
   chosenWardFor, divineAegisFor, foresightFor, lavaLashFor, plagueFor, rangedParryFor, snakeTrapFor
 } from "../rules/class-talents.mjs";
 import { OVERCHANNEL_MAX_POINTS, overchannelPrice, takeForFeature, spellPayment, spellCostLabel } from "../rules/casting.mjs";
+// The Necromancer's Essence pays no maneuver (the Necromancer plan).
+import { ESSENCE, empowerPlan, paysByKind } from "../rules/essence.mjs";
+import { FLESH_OFFERING, empowerEffects, empowerPicks, essenceDue, fleshOfferingPrice, lastingDuration, lastingTickRounds } from "../rules/necromancer-lines.mjs";
+// What a horde raise touched, for its card (the animation contract's section 1).
+import { GRAFT_KEY, MASTERY_KEY, RAISED_WITH_FLAG, raisedWithEntry } from "../rules/necromancer-animations.mjs";
 import { ROUNDS_PER_MINUTE } from "../rules/area-ticks.mjs";
 import { areaOriginFor, pickPoint, pickFacing } from "../canvas/place.mjs";
 import { placeArea, regionDataFor, schoolColor } from "../canvas/regions.mjs";
@@ -2133,6 +2142,18 @@ export async function rollTest({
       });
     }
   }
+  // **A GRAFTED CREATURE'S HIT ASKS ITS GRAFT'S TEST** (07's Stitch Abomination's Meat Hook, 04's
+  // Grasping Arms; the lead's Q7 of the 4b review: *"auto"*, O-414 closed): a Test card for each
+  // creature the card records at the Necromancer's Spell DC, its failure landing the pull or the hold
+  // on its own (`effects/graft-riders.mjs`); the card says in words what was asked.
+  // And 04's Plague Carrier (Phase 4c-T): a hit by one of a Necromancer's raised dead asks the door too,
+  // which reads the owner's talent (`effects/necromancer-talents.mjs#plagueCarrierOf`).
+  if (kind === "attack" && !parry && outcome.success && actor?.type === "npc" && ((actor.flags?.["azeroth-rpg"]?.grafts ?? game.actors?.get(actor.id)?.flags?.["azeroth-rpg"]?.grafts ?? []).length
+    || (actor.flags?.["azeroth-rpg"]?.bond ?? game.actors?.get(actor.id)?.flags?.["azeroth-rpg"]?.bond)?.horde === true)) {
+    const { graftHitTests } = await import("../effects/graft-riders.mjs");
+    const asked = await graftHitTests({ striker: actor, targets: list, attackName: title, rangeKind: strike?.rangeKind ?? null });
+    if (asked.length) fired.push({ key: "talent", name: game.i18n.localize("AZEROTH.GraftRider.Title"), text: asked.join(" ") });
+  }
   // **DAMAGE A HIT ADDS AT AN SL, AFTER THE DIE** (04's Critical Strike: *an attack of
   // yours that reaches SL 2 adds half your Dexterity modifier, rounded up, to its
   // damage. At rank 2 an attack that reaches SL 3 adds twice that instead and ignores
@@ -2399,6 +2420,9 @@ export async function rollTest({
     // half your Charisma modifier, rounded down, on each melee hit*): the laid aura's own amount on
     // a MELEE blow, a creature's as much as a character's (`rules/auras.mjs#meleeTypedExtras`).
     ...(kind === "attack" && !parry ? meleeTypedExtras([...(actor?.effects ?? [])], { melee: (strike?.rangeKind ?? null) === "melee" }) : []),
+    // **07 §17's FRENZY OF THE DEAD** (*Each target deals 2 additional Shadow damage with each hit*; run
+    // 4c-S): the laid frenzy's own amount on every hit, melee or ranged, as its own type.
+    ...(kind === "attack" && !parry ? frenzyExtras([...(actor?.effects ?? [])]) : []),
     // A promise's damage of ANOTHER type rides as its own amount (Hourstrike's Physical on a
     // Fire blade; the 2a review, L3); one of the blow's own type rides the Rating below.
     ...(kind === "attack" && !parry && damage ? (promised?.typed ?? []).filter(x => x.type !== blowType).map(x => ({ type: x.type, amount: x.amount })) : [])
@@ -3487,7 +3511,11 @@ export async function castSpell({
   dispersionExecution = null,
   // **THE ATTACK A REACTION SPELL ANSWERS** (07 §12's Never Was and Moment's Warning; O-264):
   // `{messageId, index}`, the incoming card's row the press named (`dice/chat.mjs#spellAnswerFromCard`).
-  answers = null
+  answers = null,
+  // **A SPELL CAST AS A REACTION BY A FEATURE** (02 §7's Claim the Fallen: *you may use your
+  // Reaction to cast Raise Dead or Animate Corpse*): `"reaction"` charges the Reaction in place of
+  // the spell's own action; every other price stands.
+  castAs = null
 } = {}) {
   if (dispersionExecution && !validDispersionExecution(dispersionExecution, actor, spell)) return null;
   // 07's Hex: *it cannot attack, cast or speak* (D-808), before anything is spent.
@@ -3497,7 +3525,13 @@ export async function castSpell({
   // **07 §9's RANGE AND THE TARGET LINE, BEFORE ANYTHING IS PAID** (O-288, O-293, D-893; the
   // lead: *"it should be stopped before resources are spent"*): every creature named inside the
   // Range, no more of them than the line allows, and willing where it says so.
-  if (refuseOutOfRange(spellRangeRefusal({ actor, spell, targets: targets ?? [], source }))) return null;
+  // **02 §7's FAR-REACHING** (*The spell's range doubles, if it is not Self or Touch*): the line
+  // asked doubles the reach judged here; the line itself is judged with the rest below, and a
+  // refusal there spends nothing either.
+  // An item's casting and a free cast are casts too (02 §7: *when you cast a spell*; the 4a review's
+  // SHOULD-FIX), so the empower lines reach them.
+  const farReachingAsked = (talentLines ?? []).includes("empower-farReaching");
+  if (refuseOutOfRange(spellRangeRefusal({ actor, spell, targets: targets ?? [], source, farReaching: farReachingAsked }))) return null;
   if (spell?.system?.identifier === "chain-lightning") {
     if (source == null) {
       const { chainLightningSource } = await import("../effects/chain-lightning-source.mjs");
@@ -3521,7 +3555,7 @@ export async function castSpell({
     const inFight = Boolean(fight?.started && fight.getCombatantsByActor?.(actor)?.length);
     const timed = timedCastRefusal({ action: spell?.system?.action ?? null, inFight });
     if (timed) {
-      ui.notifications?.warn(game.i18n.format(timed, { spell: spell?.name ?? "" }));
+      ui.notifications?.warn(game.i18n.format(timed, { spell: spell?.name ?? "", time: game.i18n.localize(AZEROTH.spellActions[spell?.system?.action] ?? "") }));
       return null;
     }
   }
@@ -3566,6 +3600,14 @@ export async function castSpell({
   // and a free cast count, as 0.12.32 built it).
   const limited = spellLimitRefusal(actor, spell);
   if (limited) { ui.notifications?.warn(limited); return null; }
+  // **07 §4's CAST CAP** (*What you may cast is capped at your own tier, whatever a tome says*; the lead,
+  // 2026-11-18: *"Yes"* to it for every class): a character's spell above the tier its class reaches
+  // is refused in words before anything is paid, a free cast's included. Tier 5 is outside the cap; an
+  // item's spell is the item's (`AzerothActor#castCapWords`).
+  if (!viaItem && free?.item !== true) {
+    const capped = actor?.castCapWords?.(spell) ?? null;
+    if (capped) { ui.notifications?.warn(capped); return null; }
+  }
   const sys = spell.system;
   const {sealingFlameFrom} = await import('../rules/sealing-flame.mjs');
   const sealingFlame = sealingFlameFrom(spell);
@@ -3610,6 +3652,20 @@ export async function castSpell({
     dkSpellPlan = judgedDk.plan;
     if (judgedDk.list !== list) {
       list = judgedDk.list;
+      first = list[0] ?? null;
+    }
+  }
+  // **07 §17's NECROMANCER SPELLS, JUDGED BEFORE ANYTHING IS PAID** (run 4c-S; D-768's order): the
+  // target lines, the rows a ring or a horde makes, the picks a roleplay spell needs, Bone Shield's
+  // trigger and a GM where a write lands elsewhere (`effects/necromancer-spells.mjs`).
+  let necroPlan = null;
+  {
+    const { judgeNecroSpell } = await import("../effects/necromancer-spells.mjs");
+    const judgedNecro = await judgeNecroSpell({ actor, spell, list, source, answers, farReaching: farReachingAsked });
+    if (!judgedNecro) return null;
+    necroPlan = judgedNecro.plan;
+    if (judgedNecro.list !== list) {
+      list = judgedNecro.list;
       first = list[0] ?? null;
     }
   }
@@ -3721,22 +3777,44 @@ export async function castSpell({
   // casting and a free cast pay none and take none.
   // The pool the cast is paid in, so a discount named in one pool (04's Shadowcraft's
   // Focus; the Legacy branches' B6) reaches no other.
-  // **A DEATH SPELL'S DISCOUNTS ARE SHADOW'S** (the F1 review's note, O-335): a talent, a
-  // discount or a Signature that names a school reads `schools.mjs#bonusSchool`, so a
-  // Warlock's Shadow discounts still reach Drain Life; for the seven it is the spell's own.
-  const discountSchool = bonusSchool({ school, damageSchool: sys.damage?.school ?? null });
-  const discount = viaItem || free ? { amount: 0, by: [] } : spellDiscountFor(talentsNow, { school: discountSchool, mana: sys.mana ?? 0, states: veinsStates(flaggedEffects(actor, VEINS_FLAG).map(r => r.flag)), pool: talentPool?.pool ?? null });
-  const manaDue = spellManaCost({ mana: sys.mana ?? 0, name: spell.name, school: discountSchool }, actor.system?.signatureEffects, { viaItem: Boolean(viaItem) || Boolean(free), next: take.amount, less: discount.amount });
+  // **A DISCOUNT READS THE SPELL'S OWN SCHOOL** (O-335; the lead, 2026-11-18: *"Yes read the death
+  // school"*): a talent's or a Signature's *N less Mana* on a school's spells names the spell's own
+  // school, so a Death spell takes a Death discount and no Shadow one. Spellpower, damage and a
+  // cast-as row still read `schools.mjs#bonusSchool` (D-941).
+  const discountSchool = school;
+  const castAsSchool = bonusSchool({ school, damageSchool: sys.damage?.school ?? null });
+  const discountRead = viaItem || free ? { amount: 0, by: [] } : spellDiscountFor(talentsNow, { school: discountSchool, mana: sys.mana ?? 0, states: veinsStates(flaggedEffects(actor, VEINS_FLAG).map(r => r.flag)), pool: talentPool?.pool ?? null });
+  // **04's FLESH OFFERING** (*The spell costs 1 less Mana per rank, to a minimum of 1*), asked on the
+  // dialog and folded into the talents' discount here, so the one price below carries it; the line
+  // is offered at the price before it (`manaListed`) and judged with the rest below.
+  // **07 §14's CURSE OF TONGUES** (*pays 2 more Mana for every spell it casts for the duration, and 2
+  // more again for each point of Spellpower: Shadow you carry*; run 4c-S): on the cursed caster's own
+  // spell, before its discounts, a free cast and an item's casting paying none.
+  const tonguesMore = viaItem || free ? 0 : curseOn(actor.effects ?? [], "tongues");
+  const manaListed = spellManaCost({ mana: (sys.mana ?? 0) + tonguesMore, name: spell.name, school: discountSchool }, actor.system?.signatureEffects, { viaItem: Boolean(viaItem) || Boolean(free), next: take.amount, less: discountRead.amount });
+  const fleshAsked = !viaItem && !free && (talentLines ?? []).includes(FLESH_OFFERING.identifier) ? (talentsNow.find(t => t.identifier === FLESH_OFFERING.identifier && t.className === FLESH_OFFERING.className) ?? null) : null;
+  const fleshLess = fleshAsked ? manaListed - fleshOfferingPrice(manaListed, fleshAsked.taken) : 0;
+  const discount = fleshLess > 0 ? { ...discountRead, amount: discountRead.amount + fleshLess } : discountRead;
+  const manaDue = spellManaCost({ mana: (sys.mana ?? 0) + tonguesMore, name: spell.name, school: discountSchool }, actor.system?.signatureEffects, { viaItem: Boolean(viaItem) || Boolean(free), next: take.amount, less: discount.amount });
   // **WHAT A COUNTER OR A CHARGE BUYS, JUDGED AGAIN** (D-774): a ticked line no
   // longer offered - its counter or charge spent since the dialog opened -
   // refuses the cast in words with nothing spent. An item's casting and a free
   // cast take none.
-  const lineOffer = (talentLines ?? []).length && !viaItem && !free ? (actor.talentLineOffer?.({
-    roll: "spell", school: sys.damage?.school ?? school ?? null, damages: castDealsDamage(sys), mana: manaDue, spell: spell.name,
-    // A spell whose damage is its tick (D-770) - Fel Fire's line reaches it (D-775).
-    ticks: sys.tick?.kind === "damage"
-  }) ?? []) : [];
-  const linesNow = talentLinesTaken(lineOffer, viaItem || free ? [] : talentLines);
+  // **02 §7's EMPOWER LINES REACH AN ITEM'S CASTING AND A FREE CAST** (the 4a review's SHOULD-FIX: *when
+  // you cast a spell*): those casts pay no Mana, so they take no talent's Mana line and no Flesh
+  // Offering (`castLineOffer`'s `priced: false`), and a ticked line they cannot take is let go as
+  // before - but Potent, Binding, Lasting and Far-reaching are judged and paid as on any cast.
+  const unpriced = Boolean(viaItem) || Boolean(free);
+  const lineOffer = (talentLines ?? []).length ? (unpriced
+    ? (actor.castLineOffer?.(sys, { mana: 0, priced: false }) ?? [])
+    : (actor.talentLineOffer?.({
+      roll: "spell", school: sys.damage?.school ?? school ?? null, damages: castDealsDamage(sys), mana: manaListed, spell: spell.name,
+      // A spell whose damage is its tick (D-770) - Fel Fire's line reaches it (D-775).
+      ticks: sys.tick?.kind === "damage"
+    }) ?? []).concat(actor.castLineOffer?.(sys, { mana: manaListed }) ?? [])) : [];
+  // (02 §7's empower lines and 04's Flesh Offering are judged again off the spell above: door 2.)
+  const unpricedKeys = new Set(lineOffer.map(l => l.identifier));
+  const linesNow = talentLinesTaken(lineOffer, unpriced ? (talentLines ?? []).filter(k => unpricedKeys.has(k)) : talentLines);
   if (linesNow.lost.length) {
     ui.notifications?.warn(game.i18n.format("AZEROTH.TalentLine.Lost", { name: spell.name, lines: linesNow.lost.join(", ") }));
     return null;
@@ -3799,6 +3877,29 @@ export async function castSpell({
   let splitPicked = null;
   // **INNER FOCUS** (04: *a spell or feature requiring a Casting Test costs no
   // Mana*; D-774): nothing to pay, and its use struck once the cast is paid for.
+  // **02 §7's EMPOWER LINES, JUDGED WHOLE** (the Necromancer plan's door 2; D-768's order): each
+  // a benefit the spell can take, none twice, and the Essence held for all of them, read now -
+  // refused in words with nothing spent. Paid with the cast, before the Test, so a failed
+  // Casting Test spends it too (*The Essence is spent even if the Casting Test fails*).
+  const empowerKeys = empowerPicks(linesNow.taken);
+  const essenceNow = (actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === ESSENCE) ?? null;
+  const empowerPlanned = empowerKeys.length ? empowerPlan(sys, empowerKeys, essenceNow) : null;
+  if (empowerPlanned && !empowerPlanned.ok) {
+    ui.notifications?.warn(game.i18n.format(`AZEROTH.Essence.EmpowerRefused.${empowerPlanned.refusal}`, {
+      name: spell.name, benefit: empowerPlanned.key ? game.i18n.localize(`AZEROTH.Essence.Empower.${empowerPlanned.key}`) : "", n: empowerKeys.length
+    }));
+    return null;
+  }
+  const empowerFx = empowerEffects(empowerPlanned?.picks ?? [], { tier: actor.system?.tier ?? 1 });
+  const empowerTaken = linesNow.taken.filter(l => l.kind === "empower");
+  // **04's SKELETAL MASTERY, EMPOWERED** (*Spend 1 Essence when you cast Raise Dead. One more
+  // skeleton may rise as a Skeletal Mage*; the 4b review's MUST-FIX 5): the line ticked, handed to
+  // the raise below and judged with the cast's other Essence in the one pool check.
+  const masteryLine = linesNow.taken.find(l => l.kind === "masteryEmpower") ?? null;
+  // **04's FLESH OFFERING** (*When you cast a Death spell, you may destroy one corpse within 30 feet
+  // of you. The spell costs 1 less Mana per rank, to a minimum of 1*): the line ticked lowers the
+  // price here, and the corpse is chosen below, after the pool's refusals and before the budget.
+  const fleshLine = linesNow.taken.find(l => l.kind === "fleshOffering") ?? null;
   const manaBase = freeLine || freeCastLine ? 0 : manaDue;
   // The item naming this spell, read again further down for what it adds to the
   // Health the spell restores (D-698's heal half).
@@ -3870,6 +3971,10 @@ export async function castSpell({
     ui.notifications?.warn(game.i18n.format("AZEROTH.Cast.NoMana", { name: spell.name, mana }));
     return null;
   }
+  // Flesh Offering's corpse is chosen AFTER the raise's and the corpse mark's own corpses (the 4a
+  // review's must-fix 1: an offering could destroy the corpse the same cast raises), below.
+  let fleshPlan = null;
+  const fleshAsk = Boolean(fleshLine) && refused?.reason !== "NoHealth" && (refused?.reason !== "NoMana" || sandCastLine);
   if (refused?.reason === "NoHealth") {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Cast.NoHealth", { name: spell.name, health: spellHealth }));
     return null;
@@ -3917,7 +4022,7 @@ export async function castSpell({
   // uses the round's record, marked once the cast is paid for.
   // And 04's Fire Blast (*Once a round, a Fire spell of yours costs a Half-Action
   // rather than an action*; D-775): the same line, by the spell's school.
-  const swiftRow = swift && !viaItem ? castAsFor(talentsNow, { action: sys.action ?? null, healing: isHealingSpell(sys), name: spell.name, school: discountSchool }) : null;
+  const swiftRow = swift && !viaItem ? castAsFor(talentsNow, { action: sys.action ?? null, healing: isHealingSpell(sys), name: spell.name, school: castAsSchool }) : null;
   const swiftCounter = swiftRow && !swiftRow.perRound ? (actor.grantedFeature?.(swiftRow.talentId) ?? null) : null;
   const swiftFight = swiftRow?.perRound ? (actor.activeFight?.() ?? null) : null;
   const swiftMine = swiftFight ? (swiftFight.getCombatantsByActor(actor)?.[0] ?? null) : null;
@@ -3945,6 +4050,7 @@ export async function castSpell({
   const { ancientDreadAction, hasAncientDread } = await import("../rules/ancient-dread.mjs");
   const beforeDreadAction = castAction;
   castAction = ancientDreadAction(castAction, { affected: hasAncientDread(actor), casting: true });
+  if (castAs === "reaction") castAction = "reaction";
   if (castAction !== beforeDreadAction) provenanceExtra = [...provenanceExtra, {
     label: "AZEROTH.AncientDread.Label", value: null,
     formula: game.i18n.format("AZEROTH.AncientDread.CastingCost", { cost: game.i18n.localize(AZEROTH.actions[castAction]) })
@@ -4079,6 +4185,13 @@ export async function castSpell({
     ui.notifications?.warn(game.i18n.format("AZEROTH.Step.NoFeet", { spell: spell.name, n: spellStep.perInt }));
     return null;
   }
+  // **07 §17's GRAVE STEP** (run 4c-S): the corpses within the spell's Range (Far-reaching's doubled),
+  // read now; none in reach is refused in words before the pick and before anything is paid.
+  if (spellStep?.corpse) {
+    const { corpseStepPlan } = await import("../effects/necromancer-spells.mjs");
+    const planned = await corpseStepPlan(actor, spell, spellStep, { farReaching: farReachingAsked });
+    if (!planned) return null;
+  }
   let stepPicked = null;
   // **07 §12's TIMESLIP** (D-864): each targeted creature's own space, picked before the
   // payment through the step door's pick; a target this client does not own needs a GM.
@@ -4136,6 +4249,7 @@ export async function castSpell({
       const stepName = casterDoc.name ?? actor.name;
       const picked = await pickStep(casterDoc, {
         feet: spellStep.feet, sight: spellStep.sight, name: stepName, except: party.map(d => d.id),
+        corpses: spellStep.corpses ?? [], near: spellStep.near ?? 5,
         hint: spellStep.shadow ? game.i18n.format("AZEROTH.Step.PickShadow", { name: stepName, feet: spellStep.feet }) : null
       });
       if (!picked) return null;
@@ -4186,7 +4300,8 @@ export async function castSpell({
     if (utilityReview.reason !== "cancelled") ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.BeforeFailed"));
     return null;
   }
-  const shadowReview = shadowTools ? await shadowTools.prepareShadowCastWithPoint({actor, spell, source, targets: list}) : null;
+  // 02 §7's Far-reaching reaches the two point pickers too (the 4a review's SHOULD-FIX: right code with no caller).
+  const shadowReview = shadowTools ? await shadowTools.prepareShadowCastWithPoint({actor, spell, source, targets: list, farReaching: empowerFx.farReaching === true}) : null;
   if (shadowReview && !shadowReview.ok) {
     if (shadowReview.reason !== "cancelled") ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.BeforeFailed"));
     return null;
@@ -4196,7 +4311,7 @@ export async function castSpell({
     if (custodyReview.reason !== "cancelled") ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.BeforeFailed"));
     return null;
   }
-  const objectReview = custodyTools ? null : await objectTools.prepareThematicObject({actor, spell, source, targets: list});
+  const objectReview = custodyTools ? null : await objectTools.prepareThematicObject({actor, spell, source, targets: list, farReaching: empowerFx.farReaching === true});
   if (objectReview && !objectReview.ok) {
     if (objectReview.reason !== "cancelled") ui.notifications?.warn(game.i18n.localize("AZEROTH.Utility.BeforeFailed"));
     return null;
@@ -4299,12 +4414,65 @@ export async function castSpell({
   let corpsePlan = null;
   if (raiseOf(sys.identifier)) {
     const { judgeRaise } = await import("../effects/death-knight-necromancy.mjs");
-    raisePlan = await judgeRaise(actor, spell, { key: sys.identifier, source });
+    // What the cast's lines bought reaches the raise (MUST-FIX 5 and 6): Skeletal Mastery's extra
+    // mage, Lasting's doubled span and Far-reaching's doubled reach.
+    raisePlan = await judgeRaise(actor, spell, { key: sys.identifier, source, empower: { mastery: Boolean(masteryLine), lasting: empowerFx.lasting, farReaching: empowerFx.farReaching } });
     if (!raisePlan) return null;
   } else {
     const { judgeCorpseMark } = await import("../effects/death-knight-necromancy.mjs");
     corpsePlan = await judgeCorpseMark(actor, spell, { source });
     if (corpsePlan === false) return null;
+  }
+  // **07's ENSLAVE THE DEAD, JUDGED BEFORE ANYTHING IS PAID** (the Necromancer plan's door 3): its
+  // target line, a GM, and the places it will take - the collapse chosen now - carried on the card
+  // for the failed Test's door (`effects/necromancer-horde.mjs#requestEnslave`).
+  let enslavePlan = null;
+  if (sys.identifier === "enslave-the-dead") {
+    const { judgeEnslave } = await import("../effects/necromancer-horde.mjs");
+    enslavePlan = await judgeEnslave(actor, spell, list);
+    if (!enslavePlan) return null;
+  }
+  // **EVERY ESSENCE THIS CAST SPENDS, JUDGED AS ONE** (07's Stitch Abomination; the Necromancer plan's
+  // door 15; the 4b review's MUST-FIX 2 and 5): the empower benefits, the grafts, Skeletal Mastery's
+  // Empowered line and Claim the Fallen's Empowered Reaction (`free.essence`) out of one pool, read
+  // now, refused in words with nothing spent where it cannot hold them all.
+  const essenceCast = essenceDue({
+    empower: empowerPlanned?.cost ?? 0, graft: raisePlan?.graftCost ?? 0,
+    mastery: raisePlan?.masteryEssence ?? 0, claim: free?.essence ?? 0,
+    held: (actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === ESSENCE)?.value ?? null
+  });
+  if (!essenceCast.ok) {
+    ui.notifications?.warn(game.i18n.format((raisePlan?.graftCost ?? 0) > 0 ? "AZEROTH.Graft.Refuse.withEmpower" : "AZEROTH.Essence.CastShort", { spell: spell.name, name: actor.name, n: essenceCast.due }));
+    return null;
+  }
+  // **02 §7's NEW LEAD, NAMED AT THE CAST** (*When you cast a spell, you may name another of your
+  // raised dead your lead, from that creature's next turn*): the line ticked, the creature chosen
+  // now through the one chooser; written once the cast is paid for.
+  let leadPick = null;
+  if (linesNow.taken.some(l => l.kind === "hordeLead")) {
+    const { hordeActorsOf, leadOf } = await import("../effects/necromancer-horde.mjs");
+    const current = leadOf(actor);
+    const options = hordeActorsOf(actor).filter(a => (a.system?.health?.value ?? 0) > 0 && a.id !== current)
+      .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
+      .map(a => ({ key: a.id, available: true, name: a.name, description: "" }));
+    if (!options.length) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Horde.Refuse.noOtherLead", { name: actor.name }));
+      return null;
+    }
+    const pick = await chooseOption(spell, options, null, { prompt: game.i18n.format("AZEROTH.Horde.LeadPrompt", { name: actor.name }) });
+    if (!pick) return null;
+    leadPick = pick.key;
+  }
+  // **04's FLESH OFFERING'S CORPSE, CHOSEN AFTER THE RAISE'S** (the 4a review's must-fix 1): every
+  // corpse this cast raises or marks is excluded, and where the only one in reach is one of them the
+  // offering is refused in words with nothing spent. The corpse door's own chooser, within 30 feet,
+  // every mark judged; a dismissed chooser casts nothing.
+  if (fleshAsk) {
+    const talent = actor.items.find(i => i.type === "talent" && i.system?.identifier === FLESH_OFFERING.identifier && (i.system?.taken ?? 0) > 0) ?? null;
+    const { judgeCorpseMark } = await import("../effects/death-knight-necromancy.mjs");
+    const exclude = [...(raisePlan?.corpses ?? []), ...(corpsePlan?.corpse ? [corpsePlan.corpse] : [])];
+    fleshPlan = talent ? await judgeCorpseMark(actor, talent, { source, exclude }) : null;
+    if (!fleshPlan) return null;
   }
 
   // 1b. The turn's budget, in a fight (2026-09-06): the spell's Action line, or
@@ -4358,6 +4526,33 @@ export async function castSpell({
   // the budget on the cast is made; what moved is the coordinator's to settle
   // off the card (`chain-lightning-cast.mjs` keeps the claim pending, and
   // `dispersion-reaction-resolution.mjs` annotates no blow that changed).
+  // **FLESH OFFERING'S CORPSE IS TAKEN BEFORE ANYTHING IS PAID** (the 4a review's should-fix): the
+  // mark written on the GM's client now, just before the coordinators' last checks, so a GM's refusal costs the
+  // discount nothing - and only where the budget would pay, so a refused budget destroys nothing.
+  // **BONE SHIELD'S WINDOW, ASKED AGAIN BEFORE ANYTHING IS PAID** (the fix run 4 review): the
+  // judgement read it some hundreds of lines and many awaits ago, so a blow that landed while this
+  // cast was being judged is refused here, with the Reaction and the Mana kept, before the corpse
+  // mark and the budget.
+  if (answers?.boneShield === true && pastDeadline(answers?.deadline ?? null, Date.now())) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.NecroSpell.Refuse.boneShieldLate", { spell: spell.name }));
+    return null;
+  }
+  // **THE CAST'S ESSENCE, ASKED AGAIN LAST BEFORE ANYTHING IS PAID** (the final review's nit): judged
+  // above before the lead's chooser and the coordinators' claims, so a pool another door spent while
+  // they waited would pay what was left and still give every empowered benefit. Refused here in words
+  // with nothing spent - before the corpse mark and the budget, never refunded after it (the lead: from
+  // the budget on, the cast is made).
+  const essenceNowHeld = (actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === ESSENCE)?.value ?? null;
+  if (essenceCast.due > 0 && !((Number(essenceNowHeld) || 0) >= essenceCast.due)) {
+    ui.notifications?.warn(game.i18n.format((raisePlan?.graftCost ?? 0) > 0 ? "AZEROTH.Graft.Refuse.withEmpower" : "AZEROTH.Essence.CastShort", { spell: spell.name, name: actor.name, n: essenceCast.due }));
+    return null;
+  }
+  let fleshMarked = null;
+  if (fleshPlan && turnBudgetRefusal(actor, castAction) === null) {
+    const { markCorpseNow } = await import("../effects/death-knight-necromancy.mjs");
+    fleshMarked = await markCorpseNow(actor, fleshPlan);
+    if (!fleshMarked.ok) return null;
+  }
   if (chainExecution && !chainExecution.valid()) return null;
   if (dispersionExecution && !validDispersionExecution(dispersionExecution, actor, spell)) return null;
   if (chainExecution) chainExecution.started = true;
@@ -4420,6 +4615,46 @@ export async function castSpell({
   if (sandCastPaid) await actor.updatePool([sandCastPaid]);
   // Grit of Ages' and Storm of Ages' Sand, paid with the cast (*before you roll*; stage 2b),
   // off the pool as it stands now.
+  // **THE ESSENCE THE EMPOWER LINES COST** (02 §7), paid straight after the cast's own price, off
+  // the pool as it stands now (D-770's rule), before the Casting Test.
+  // The card's rows for what was paid, laid on the roll once it is built (below).
+  const necroRows = [];
+  // **ONE ESSENCE PAYMENT FOR THE WHOLE CAST** (the 4b review's MUST-FIX 2 and the small item on
+  // Essence writes): the empower lines, the grafts (07's Stitch Abomination: *When you cast this
+  // spell, you may spend Essence to give the Abomination grafts*), Skeletal Mastery's line and Claim
+  // the Fallen's Empowered price, taken as ONE delta inside the pool's queue (`adjustPool`), read
+  // when its turn comes. The pool was asked again last before the budget (above); only a spend landing
+  // in the moments between the budget and this queued write pays what is held, since from the budget on
+  // the cast is made and the budget is never refunded (the lead, D-768). What it took rides
+  // the raise and Enslave's plan, so a GM's refusal gives exactly that back (S10).
+  let essencePaidNow = 0;
+  if (essenceCast.due > 0) {
+    const { adjustPool } = await import("../documents/pool-writes.mjs");
+    const moved = await adjustPool(actor, { kind: "momentum", name: ESSENCE }, -essenceCast.due);
+    essencePaidNow = Math.max(0, (moved.before ?? 0) - (moved.after ?? 0));
+    for (const l of empowerTaken) necroRows.push({ label: l.name, value: null, formula: game.i18n.format("AZEROTH.Essence.EmpowerPaid", { n: l.price ?? 1 }) });
+    if (masteryLine && raisePlan?.mastery) necroRows.push({ label: masteryLine.name, value: null, formula: game.i18n.format("AZEROTH.Essence.EmpowerPaid", { n: raisePlan.masteryEssence ?? 1 }) });
+    if ((free?.essence ?? 0) > 0) necroRows.push({ label: free.by ?? "", value: null, formula: game.i18n.format("AZEROTH.Essence.EmpowerPaid", { n: free.essence }) });
+  }
+  if (raisePlan) raisePlan.essencePaid = essencePaidNow;
+  // **WHAT ENSLAVE THE DEAD PAID, ON ITS CARD** (S5, S10): the pool and the Mana it took and the
+  // Essence, so a control the GM's client refuses gives them back (`necromancer-horde.mjs#refundEnslave`).
+  if (enslavePlan) {
+    const paidPool = price.pool === "mana" && !sandCastLine ? pool : payPool && price.pool === payPool.name ? payPool : null;
+    enslavePlan.paid = {
+      pool: paidPool ? { itemId: paidPool.itemId ?? null, kind: paidPool.kind ?? "power", name: paidPool.name } : null,
+      amount: paidPool ? (price.pool === "mana" ? mana : price.amount) : 0, essence: essencePaidNow
+    };
+  }
+  // The new lead named at the cast, written once the cast is paid for (02 §7).
+  if (leadPick) {
+    const { nameLead } = await import("../effects/necromancer-horde.mjs");
+    await nameLead(actor, leadPick, { casting: true });
+  }
+  // Flesh Offering's corpse, destroyed before the budget (above); its card row here.
+  if (fleshPlan && fleshMarked?.ok) {
+    necroRows.push({ label: fleshLine.name, value: null, formula: [game.i18n.format("AZEROTH.Necromancer.FleshOffering.Row", { n: fleshLine.amount }), ...fleshMarked.lines].join(" ") });
+  }
   const sandForCast = (gritLine?.price ?? 0) + (stormLine?.price ?? 0);
   if (sandForCast > 0) {
     const nowSand = (actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === "sand") ?? null;
@@ -4570,6 +4805,8 @@ export async function castSpell({
   if (spellLock.banes > 0) roll.options.provenance.push({ label: "Spell Lock", value: null,
     formula: `${spellLock.banes} ${spellLock.banes === 1 ? "Bane" : "Banes"}` });
   roll.options.provenance.push(...provenanceExtra);
+  // 02 §7's empower benefits and 04's Flesh Offering, paid before the Test (door 2).
+  if (necroRows.length) roll.options.provenance.push(...necroRows);
   // What the talents took off the Mana, by name (D-775).
   for (const d of discount.by) roll.options.provenance.push({ label: d.name, value: null, formula: game.i18n.format("AZEROTH.Cast.NextSpellRow", { n: d.amount }) });
   if (oc.relief) roll.options.provenance.push({ label: "AZEROTH.Cast.OverchannelRelief", value: null, formula: game.i18n.format("AZEROTH.Cast.OverchannelReliefRow", { n: oc.relief }) });
@@ -4816,7 +5053,12 @@ export async function castSpell({
   // takes none of it anyway) and Soul Fire's tier (*adds your tier to its damage*):
   // on the cast's hit where it deals one, else on its tick (MY READING, for the
   // lead: *its damage* is the tick of a spell whose damage is its tick).
-  const promisedDamage = (convertLine?.amount ?? 0) + take.damage;
+  // **02 §7's POTENT** (*The spell's damage ... rises by your tier the first time it damages ...
+  // each creature*): the cast's own blow is the first time; a spell whose damage is its tick or
+  // its area's carries the rise there instead.
+  const potentHit = castDealsDamage(sys) ? empowerFx.potent : 0;
+  // **AND 02 §7's POTENT** on the cast's own blow (`potentHit`, nothing where the damage is the tick).
+  const promisedDamage = (convertLine?.amount ?? 0) + take.damage + potentHit;
   // **07's GLACIAL ADVANCE** (*takes 5 Frost damage plus half your casting modifier, rounded
   // down*; D-974): what the entry's own words add to the Rating, at the ability the cast uses,
   // once a creature as the Rating is (`rules/spell-effects.mjs#castingModPlus`). An item's cast
@@ -4863,6 +5105,7 @@ export async function castSpell({
   }
   if (namesBonuses && eclipseBonus) roll.options.provenance.push({ label: alternate.name, value: eclipseBonus });
   if (namesBonuses && convertLine?.amount) roll.options.provenance.push({ label: convertLine.name, value: convertLine.amount });
+  if (namesBonuses && potentHit) roll.options.provenance.push({ label: game.i18n.localize("AZEROTH.Essence.Empower.potent"), value: potentHit });
   if (namesBonuses && take.damage) roll.options.provenance.push({ label: soulFire?.name || "AZEROTH.SoulFire.Label", value: take.damage });
   // **THE WARD THIS CAST IGNORES** (04's Celestial Alignment: *while it runs
   // your Arcane and Nature spells ignore 2 Ward*; D-771), off the SPELL's
@@ -4930,6 +5173,8 @@ export async function castSpell({
   // offers no damage, no Apply and no rider for it.
   const hit = rating !== null && success && !chainUnresolved && castDealsDamage(sys)
     && (!conflagrateTools || (conflagrate?.ok && conflagrate.targets[0].burning));
+  // 07's Drain Life and Siphon Life deal their number at the cast for every caster (the lead, on the 4c
+  // review's Q1: *"1 - on cast"*; D-1100), and drain again at each of the caster's turn starts while sustained.
   if (hit && halvedCast) roll.options.provenance.push({ label: halvedCast.source, value: null, formula: game.i18n.localize("AZEROTH.HalvesDealt.Row") });
   // **A STATIC CHARGE SPENT ON THIS DAMAGE** (04: *When you deal damage you may
   // spend a Static Charge to add your tier to that damage*; D-774): where the
@@ -5327,6 +5572,10 @@ export async function castSpell({
     : null;
   const stampedTick = extendedTick ? {
     ...extendedTick,
+    // **02 §7's LASTING** doubles a tick counted over the spell's own span, and **POTENT** rides its
+    // first landing where the cast itself deals or heals nothing (`ticks.mjs#tickLanding`).
+    ...(empowerFx.lasting ? lastingTickRounds(extendedTick, roundsIn(sys.duration ?? {})) : {}),
+    ...(empowerFx.potent && ((extendedTick.kind === "damage" && !castDealsDamage(sys)) || (extendedTick.kind === "heal" && !castHeals(sys))) ? { potent: empowerFx.potent } : {}),
     ...(chosenSignaturePreparation.bonuses.length && extendedTick.kind === "damage" ? {signatureCast:cast} : {}),
     ...(healingSignaturePreparation.bonuses.length && extendedTick.kind === "heal" ? {signatureHealingCast:cast} : {}),
     ...(plagued && extendedTick.kind === "damage" ? { doubled: plague?.landings ?? 2 } : {}),
@@ -5348,7 +5597,15 @@ export async function castSpell({
   // the minutes longer (D-775).
   const talentSpan = spellDurationFor(talentsNow, { name: spell.name }) ?? extendedSpan(sys.duration ?? {}, longer.minutes);
   if (longer.minutes > 0 && talentSpan) roll.options.provenance.push({ label: longer.by.join(", "), value: null, formula: game.i18n.format("AZEROTH.Cast.LongerRow", { n: longer.minutes }) });
-  const duration = effectDuration(talentSpan ? { text: talentSpan } : (sys.duration ?? {}), { inFight: Boolean(actor.activeFight?.()) });
+  const durationRead = effectDuration(talentSpan ? { text: talentSpan } : (sys.duration ?? {}), { inFight: Boolean(actor.activeFight?.()) });
+  // **02 §7's LASTING** (*The spell's duration doubles, if it lasts 1 minute or longer and is not
+  // Sustained*): the span every door after the cast reads off the card - the Apply's carrier and a
+  // timed area - is twice as long.
+  const duration = empowerFx.lasting ? lastingDuration(durationRead) : durationRead;
+  // **AND EVERY SPAN A NECROMANCER DOOR LAYS ITSELF** (fix run 4-S, D-1099): the curses, Frenzy of the
+  // Dead, Puppet of Flesh, Mark of the Grave and the roleplay spells' effects read this resolved span -
+  // Lasting and a talent's span included - off the plan, never the entry's own line.
+  if (necroPlan) necroPlan.duration = duration;
   // **A COUNTED TICK WITH NOTHING TO END IT IS NOT LAID** (the D-770 review,
   // item A): out of a fight a creature has no turns to count Moonfire's or Holy
   // Fire's one tick down, and an instant spell's effect carries no span core can
@@ -5372,6 +5629,8 @@ export async function castSpell({
   // Ice Barrier, *Each rank adds 2*; D-777): read off the entry, raised by the
   // talent, carried on the card and granted with the effect its Apply lays.
   const temporary = success ? castTemporary(spell, talentsNow, actor, { castingMod: abilityMod }) : null;
+  // 02 §7's Potent on the temporary Health the Apply grants (*... or temporary Health rises by your tier*).
+  if (temporary && empowerFx.potent) temporary.amount += empowerFx.potent;
   if (temporary) for (const b of temporary.by) roll.options.provenance.push({ label: b.name, value: null, formula: game.i18n.format("AZEROTH.Temporary.AddRow", { n: b.amount }) });
   // **07's FLOOR** (Aegis of the Light; D-777): laid by the Apply on each target,
   // held at the one damage door until the end of the caster's next turn.
@@ -5455,6 +5714,16 @@ export async function castSpell({
   // against their Banish with a Bane*; D-912): judged at the cast, recorded on the card,
   // and read at each Resist off the resister (`dice/chat.mjs#rollResists`).
   const resistBanes = resist && !viaItem ? ((await actor._resistBanesAtCast?.({ school, name: spell.name })) ?? []) : [];
+  // **02 §7's BINDING** (*Each creature takes a Bane on the first Resilience Test the spell asks of
+  // it*): a row on the card's Resist, read off each resister at the press as the worn rows are.
+  // `binding: true` marks the row, so a creature an area of this cast has already asked takes none
+  // (`dice/chat.mjs#rollResists`, the 4a review's MUST-FIX 3).
+  if (empowerFx.binding && resist) resistBanes.push({ name: game.i18n.localize("AZEROTH.Essence.Empower.binding"), banes: 1, binding: true });
+  // **07's ENSLAVE THE DEAD: *A Mindless target takes a Bane on this Test*** (the Necromancer plan's
+  // door 3): the one target's own marker, read off the creature.
+  if (enslavePlan && resist && /mindless/i.test(String(targetActorOf(list[0])?.system?.typeMarker ?? ""))) {
+    resistBanes.push({ name: game.i18n.localize("AZEROTH.Horde.MindlessBane"), banes: 1 });
+  }
   // **ONE RESIST ROW PER RECORDED TARGET** (07 §2, D-616, D-726). The Test is
   // the TARGET's to make and the card is the caster's, so each row names its
   // creature's uuid and `dice/chat.mjs` shows it to that creature's owner and
@@ -5535,6 +5804,10 @@ export async function castSpell({
     for (const k of Object.keys(area)) delete area[k];
     Object.assign(area, glyph);
   }
+  // **07 §17's RINGS MEASURED AT THE CAST, UNHOLY RENEWAL'S POINT AND BONE BRIDGE'S SPAN** (run 4c-S):
+  // the area the card offers and carries where a Necromancer spell's Target line reads another.
+  const necroAreaRead = necroAreaOf(sys, actor);
+  const areaOut = necroAreaRead !== undefined ? necroAreaRead : area;
   // The area's tick, said on the card in words (D-756), and carried on it for
   // the Region to take.
   // **04's HEARTHFIRE** (*Your Immolation deals no damage. Instead, each ally that starts its
@@ -5632,6 +5905,11 @@ export async function castSpell({
     // **AND WHAT A TALENT ADDS TO THIS SPELL'S HEAL** (04's Healing Wave: *Each rank
     // adds 1 to the Health it restores*; D-774).
     const talentHeal = heal && !heal.self ? spellHealFor(actor.takenTalents(), { name: spell.name }) : { amount: 0, by: [] };
+    // 02 §7's Potent on the Health the cast restores (each creature's first healing from it).
+    if (heal && empowerFx.potent && !heal.recent) {
+      heal.amount += empowerFx.potent;
+      roll.options.provenance.push({ label: game.i18n.localize("AZEROTH.Essence.Empower.potent"), value: null, formula: game.i18n.format("AZEROTH.Card.HealAddRow", { n: empowerFx.potent }) });
+    }
     if (talentHeal.amount > 0) {
       heal.amount += talentHeal.amount;
       for (const b of talentHeal.by) roll.options.provenance.push({ label: b.name, value: null, formula: game.i18n.format("AZEROTH.Card.HealAddRow", { n: b.amount }) });
@@ -5677,6 +5955,13 @@ export async function castSpell({
   for (const a of adds.by) roll.options.provenance.push({ label: a.name, value: null, formula: game.i18n.format("AZEROTH.Card.AddsRow", { n: a.amount }) });
   const failMore = spellOnFailFor(actor.takenTalents(), { name: spell.name });
   const failStatuses = [...new Set([...(sys.onFail?.statuses ?? []), ...(success ? failMore.statuses : [])])];
+  // **WHAT A NECROMANCER SPELL'S CARD DRAWS** (run 4c-S): Grave Touch's heal on the caster, Grave Tide's
+  // and Necrotic Nova's undead allies healed instead, Sever the Soul's ring taking its Test and no
+  // damage, Puppet of Flesh's Stunned the caster's (`effects/necromancer-spells.mjs#necroCardRows`).
+  {
+    const { necroCardRows } = await import("../effects/necromancer-spells.mjs");
+    heal = await necroCardRows({ actor, spell, list, damageByTarget, passedByTarget, healByTarget, resistRows, heal, failStatuses, source, success });
+  }
   // **OVERLOAD** (04: *that spell fires a second time at half damage, rounded
   // down, against the same target*) and **ANCESTRAL KNOWLEDGE** (*A Casting Test
   // of yours that fails costs no Mana*; D-774): each a button on the card that
@@ -5788,6 +6073,9 @@ export async function castSpell({
   // **WHAT ROSE, FOR THE CARD** (run F5): the tokens the raise door placed, which the card records
   // as `risen` and the animation layer plays its `rise` cue on (`animation/records.mjs#cardRecords`).
   const raisedMade = [];
+  // **WHAT TOUCHED THEM** (the animation contract's §1): the tokens that took a graft and the tokens
+  // Deathly Vigor reached, for the card's `raisedWith`.
+  const raisedWithMade = [];
   if (success && raisePlan) {
     const { raiseDead, refundRefusedRaise } = await import("../effects/death-knight-necromancy.mjs");
     // **A RAISE THE GM'S CLIENT REFUSES GIVES ITS PRICE BACK** (the final review's finding 2,
@@ -5799,6 +6087,10 @@ export async function castSpell({
     raiseLines.push(...await raiseDead(actor, raisePlan, { onRisen: placed => {
       const risen = risenRecord(placed);
       if (risen) raisedMade.push(risen);
+      // What touched the horde as it rose: the grafts, Deathly Vigor, and Skeletal Mastery's
+      // Empowered mage (MUST-FIX 5's cue).
+      const touched = { [GRAFT_KEY]: placed.grafted ?? [], "deathly-vigor": placed.vigor ?? [], [MASTERY_KEY]: placed.mastered ?? [] };
+      if (raisePlan.horde === true) raisedWithMade.push(...Object.entries(touched).map(([key, tokenIds]) => raisedWithEntry({ key, placed: { sceneId: placed.sceneId, tokenIds } })).filter(Boolean));
     }, onRefused: async () => {
       raiseRefunds.push(...await refundRefusedRaise(actor, { pool: raisePaidPool, amount: raisePaid, spell: spell.name }));
     } }));
@@ -5822,6 +6114,13 @@ export async function castSpell({
     const { dkSpellAfterCast } = await import("../effects/death-knight-spells.mjs");
     raiseLines.push(...await dkSpellAfterCast({ actor, spell, plan: dkSpellPlan, list, spellDC, cast, source }));
   }
+  // **AND WHAT A NECROMANCER SPELL DOES THAT NO DESCRIPTOR CARRIES** (run 4c-S), once the Casting Test
+  // has succeeded: Soul Cage's cage, Frenzy of the Dead, Unholy Restoration's condition, Mark of the
+  // Grave, Contagion and the roleplay spells.
+  if (success) {
+    const { necroSpellAfterCast } = await import("../effects/necromancer-spells.mjs");
+    raiseLines.push(...await necroSpellAfterCast({ actor, spell, plan: necroPlan, list, spellDC, cast, source }));
+  }
   const content = await renderTemplate(TEMPLATE.spell, {
     dismissEverburn:success&&sys.identifier==='everburn',
     chainLightning: sys.identifier === "chain-lightning",
@@ -5831,8 +6130,10 @@ export async function castSpell({
     title: spell.name,
     subtitle: game.i18n.localize(AZEROTH.spellSchools[school] ?? ""),
     mana,
-    // The word the cost is printed in (`casting.mjs#spellCostLabel`, D-944).
-    manaLabel: spellCostLabel({ costPool: sys.costPool ?? "mana", paidIn: talentPool?.pool ?? null }),
+    // The word the cost is printed in (`casting.mjs#spellCostLabel`, D-944): THE POOL PAID
+    // (the Necromancer plan's finding 1) - the talent's or the class's, else Mana - and the pool
+    // 07 prints only for an item's casting or a free cast, which pay nothing.
+    manaLabel: spellCostLabel({ costPool: sys.costPool ?? "mana", paidIn: viaItem || free ? null : (talentPool?.pool ?? "mana") }),
     action: sys.action,
     range: sys.range,
     target: sys.target,
@@ -5861,7 +6162,8 @@ export async function castSpell({
     criticalInjury: Boolean(spellCritical),
     riderApplied: rider && hit && first && ratingFor(first).applied ? riderContext?.conditions ?? null : null,
     rider: riderContext,
-    applies,
+    // A Necromancer spell whose own door lays what it lays offers no Apply (run 4c-S).
+    applies: necroPlan?.noApply === true ? null : applies,
     // The Resist Test's failure lands the conditions the entry names (2026-09-06).
     onFail: resist && failStatuses.length ? failStatuses.map(id => game.i18n.localize(AZEROTH.conditions[id] ?? id)).join(", ") : null,
     heal,
@@ -5882,7 +6184,7 @@ export async function castSpell({
     // (the lead, 2026-09-26). The card's `flags.area` below keeps the shape
     // the animation layer's record carries, which refuses a failed cast off
     // `success` (D-728); an old card's Place area refuses at its door.
-    area: success ? area : null,
+    area: success ? areaOut : null,
     // 07 §8's own words where the Test failed, in place of the controls.
     didNotGoOff: !success,
     // What the area does at the start of a turn, in words (D-756). A failed
@@ -5954,6 +6256,14 @@ export async function castSpell({
         identifier: sys.identifier ?? null,
         // What a Death Knight spell's Apply reads (07 §17's Pestilence: the carrier's diseases; run F4b).
         ...(dkSpellPlan?.card ? { deathKnightSpell: dkSpellPlan.card } : {}),
+        // What a Necromancer spell's Resist and Apply read (Sever the Soul's creature, a curse's rider; run 4c-S).
+        ...(necroPlan?.card ? { necroSpell: necroPlan.card } : {}),
+        ...(necroPlan?.corpse ? { corpse: necroPlan.corpse } : {}),
+        // **DRAIN LIFE AND SIPHON LIFE GIVE THE CAST'S HIT BACK** (07: *When you cast this spell and
+        // at the start of each of your turns, the target takes N Shadow damage and you regain that much
+        // Health*; D-1100): the one damage door's drain heals the caster by what the Apply took, held
+        // to the row's own number (`legacy-uses.mjs#drainHeal`), for every caster.
+        ...(hit && readCasterTurnDrain(sys.effect)?.cast === true ? { healsDealt: { by: actor.uuid, name: spell.name } } : {}),
         // What lands again at the caster's next turn start (02's Recurrence, 04's Echoing Sands).
         // **AND THE TEST IT IS MADE AGAIN WITH** (02's Recurrence and 08 §20's Echo of the
         // Infinite: *A creature makes the spell's Resilience Test again when it lands again*;
@@ -5985,6 +6295,8 @@ export async function castSpell({
         ...(stepPicked?.made?.length ? { steps: stepPicked.made } : {}),
         // **WHAT A RAISE SPELL STOOD UP** (07 §17, run F5), read by the animation layer alone.
         ...(raisedMade.length ? { risen: raisedMade } : {}),
+        ...(raisedWithMade.length ? { [RAISED_WITH_FLAG]: raisedWithMade } : {}),
+        ...(enslavePlan ? { enslave: enslavePlan } : {}),
         // **WHERE THE CORPSE A MARKING SPELL CHOSE LAY** (07 §17's Corpse Burst; D-1014), read by the
         // animation layer alone: the burst is drawn there.
         ...(corpseMade ? { corpse: corpseMade } : {}),
@@ -5998,7 +6310,8 @@ export async function castSpell({
         // from while an unlinked token speaks for it. `dice/chat.mjs#casterOf`.
         caster: actor.uuid,
         viaItem,
-        area,
+        // A Necromancer spell's own area where its Target line reads another (run 4c-S).
+        area: areaOut,
         // **WHAT THE REGION PLACED FROM THIS CARD ANSWERS TO** (D-756): whether
         // a Sustain entry was written for this cast, the tick as it stood at
         // the cast, the Difficult ground a talent lays, and how many feet a
@@ -6017,6 +6330,13 @@ export async function castSpell({
         lengthen: spellArea.lengthen,
         // What the caster's items lay on the Resist (The Blade Hungers, The Fifth Pylon; D-912).
         ...(resistBanes.length ? { resistBanes } : {}),
+        // **02 §7's EMPOWER BENEFITS THIS CAST BOUGHT** (door 2): what the Place area reads off the card -
+        // Far-reaching's range, and Potent and Binding for every area the cast places (the 4a review's
+        // MUST-FIX 2 and 3). `strikes`: the cast deals, heals or grants temporary Health on its own, so
+        // the creatures it names took Potent there (`dice/chat.mjs#empowerAreaFlags`).
+        ...(empowerPlanned?.picks?.length ? { empower: { picks: [...empowerPlanned.picks], essence: empowerPlanned.cost,
+          potent: empowerFx.potent, binding: empowerFx.binding, lasting: empowerFx.lasting, farReaching: empowerFx.farReaching,
+          strikes: castDealsDamage(sys) || Boolean(heal && !heal.self) || Boolean(temporary) } } : {}),
         // Shatter's Critical Injury (D-775), which the card's one press rolls.
         ...(spellCritical ? { spellCritical } : {}),
         tickSpell,
@@ -6317,6 +6637,10 @@ export async function castSpell({
  */
 function castTemporary(spell, talents = [], actor = null, { castingMod = 0 } = {}) {
   const sys = spell?.system ?? {};
+  // 07 §17's Shroud of the Grave (*Each target gains 12 temporary Health*), which names no span of its
+  // own: the temporary Health its effect carries for the minute (`necroTemporary`, run 4c-S).
+  const necroTemp = necroTemporaryOf(spell, actor);
+  if (necroTemp) return necroTemp;
   const read = readTemporaryHealth(sys.effect ?? "");
   if (!read?.amount || read.span !== "effect" || sys.applies?.active !== true) return null;
   // 07 §17's Unholy Armor: *2 plus your casting modifier*, the cast's own modifier (run F4b).
@@ -9360,6 +9684,16 @@ export async function useFeature({
     dkTalentPlan = await judgeDkUse({ actor, item, onUse, rank, list: list.map(x => ({ actor: targetActorOf(x), tokenId: x?.tokenId ?? null, name: x?.name ?? "" })) });
     if (!dkTalentPlan) return undoBinds();
   }
+  // **THE NECROMANCER'S USES, JUDGED BEFORE ANYTHING IS PAID** (02 §7; the Necromancer plan's doors 3
+  // and 9): Command the Dead's surge needs a horde standing; Dark Ritual's servant within 30 feet is
+  // chosen, and its Empowered line, now (`effects/necromancer-horde.mjs#judgeNecroUse`).
+  let necroPlan = null;
+  // And 04's Flesh, Bone and Damned (Phase 4c-T): a talent's Use (`onUse.necro`), judged by its own door.
+  if (onUse?.hordeSurge || onUse?.darkRitual || onUse?.offered || onUse?.phylactery || onUse?.necro) {
+    const { judgeNecroUse } = await import("../effects/necromancer-horde.mjs");
+    necroPlan = await judgeNecroUse(actor, item, { onUse, source: useSource });
+    if (!necroPlan) return undoBinds();
+  }
 
   // 1e. **THE RUNG A USE OF TWO IS TAKEN AT** (04's Ethereal Form: *At rank 2 you may use
   // it as a Reaction*; the B6 review - a second way, never the only one): out of a fight
@@ -9659,6 +9993,12 @@ export async function useFeature({
   if (dkTalentPlan) {
     const { landDkUse } = await import("../effects/death-knight-talents.mjs");
     answerLines.push(...await landDkUse({ actor, item, plan: dkTalentPlan }));
+  }
+  // **AND A NECROMANCER'S** (02 §7), now that it is paid for: the horde surged, or the servant
+  // collapsed for its Mana - the creatures it touched recorded on the card's targets.
+  if (necroPlan) {
+    const { landNecroUse } = await import("../effects/necromancer-horde.mjs");
+    answerLines.push(...await landNecroUse(actor, item, necroPlan, { targets: list, onRisen: noteRisen }));
   }
   // 2b. **THE SHAPE, NOW THAT IT IS PAID FOR** (D-769): the one writer, which
   // replaces a shape already worn in one go and dresses every token. A form
@@ -13039,9 +13379,10 @@ export async function useSignature({ actor, item, targets = null, approved = nul
     let done = false;
     if (b2.feature) done = Boolean(await useFeature({ actor, item: b2.feature, freeAction: true }));
     else if (b2.spell) {
+      // The item's own spell (07 §4's cast cap reads the caster's spells, never an item's: `item`).
       done = Boolean(await game.system.azeroth.actions.castWithDialog(actor, b2.spell, null, {
-        targets: lst,
-        run: opts => castSpell({ ...opts, targets: lst, free: { by: runLabel || item.name, action: true } })
+        targets: lst, itemCast: true,
+        run: opts => castSpell({ ...opts, targets: lst, free: { by: runLabel || item.name, action: true, item: true } })
       }));
     } else {
       for (const target of pressAttackTargets(use.attacks, lst)) {
@@ -15026,7 +15367,7 @@ async function markFreeCast(actor, line) {
 function refusesTrack(actor, track) {
   if (actor?.type !== "character") return false;
   const race = actor.raceItem?.system?.identifier ?? actor.raceItem?.name ?? null;
-  if (accruesTrack({ track, classes: actor.system?.classKeys ?? [], race })) return false;
+  if (accruesTrack({ track, classes: actor.system?.classKeys ?? [], race, undead: actor.system?.undead === true })) return false;
   ui.notifications?.info(game.i18n.format("AZEROTH.Undead.AccruesNone", {
     name: actor.name, track: game.i18n.localize(AZEROTH.corruptionTracks[track] ?? track)
   }));
@@ -15349,7 +15690,8 @@ export async function useManeuver({ actor, key, targets = null } = {}) {
   const ctx = actor.maneuverContext?.() ?? {};
   const priced = maneuverCost(key, ctx);
   const payer = actor.momentumPayer?.({ amount: priced.cost }) ?? null;
-  const pool = payer?.pool ?? (actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum") ?? null;
+  // Never Essence (`rules/essence.mjs#paysByKind`): with no pool a maneuver is refused in words.
+  const pool = payer?.pool ?? (actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && paysByKind(p.name)) ?? null;
   const payingActor = payer?.actor ?? actor;
   if (!pool) {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Maneuver.NoPool", { name }));

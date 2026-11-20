@@ -255,7 +255,8 @@ async function offerHere(actor) {
   // **ONLY A TRACK THE CHARACTER ACCRUES** (the F1 review; 10 §3, D-946): a Forsaken or a Death
   // Knight accrues no Undeath, so Undeath offered here would be a return to life for nothing.
   const tracks = accruedTracks(Object.keys(AZEROTH.corruptionTracks ?? {}), {
-    classes: actor.system?.classKeys ?? [], race: actor.raceItem?.system?.identifier ?? actor.raceItem?.name ?? null
+    classes: actor.system?.classKeys ?? [], race: actor.raceItem?.system?.identifier ?? actor.raceItem?.name ?? null,
+    undead: actor.system?.undead === true
   });
   const track = await chooseOption(title, tracks.map(key => ({ key, name: game.i18n.localize(AZEROTH.corruptionTracks[key]), description: "" })), null,
     { prompt: game.i18n.localize("AZEROTH.Spirit.Offer.TrackPrompt"), label: "AZEROTH.Spirit.Offer.Take" });

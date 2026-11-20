@@ -153,6 +153,11 @@
             Core and the Corruption note - are left alone. --}}
       <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Overview.Stats"}}</h3>
 
+      {{#if hordePanel.overview}}
+      {{!-- The Necromancer's compact Essence row (D11 SS2): the pool and the horde's places. --}}
+      <p class="azeroth-force-line azeroth-horde-overview" data-horde-overview>{{hordePanel.overview}}</p>
+      {{/if}}
+
       {{#if overview.inForce.shape}}
       {{!-- THE SHAPE WORN (02 §7, D-769), first: every number under it that
             the block gives moved with it, and the line says whose they are. --}}

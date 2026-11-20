@@ -104,14 +104,24 @@ function castContext(data, user) {
 
 /** The caller supplies a measured canvas point. A GM confirms visible placement. */
 export function prepareShadowCast({ actor, spell, source = null, targets = [], point = null,
-  casterPoint = null, targetPoint = null } = {}) {
+  casterPoint = null, targetPoint = null, farReaching = false } = {}) {
   if (!Object.hasOwn(SHADOW_SPELLS, spell?.system?.identifier)) return null;
   return request({ phase: "prepare", actorUuid: actor?.uuid, spellUuid: spell.uuid,
-    source: refOf(source), targets: targets.map(refOf), point, casterPoint, targetPoint });
+    source: refOf(source), targets: targets.map(refOf), point, casterPoint, targetPoint, farReaching: farReaching === true });
+}
+
+/**
+ * **MINDSTATIC'S 30 FEET, OR 60 WITH 02 §7's FAR-REACHING** (the 4a review's SHOULD-FIX): the GM's
+ * own reading of the reach, doubled only where the caster holds an Essence pool to have bought it
+ * with (the cast pays and judges the line itself).
+ */
+function staticReachFt(actor, farReaching) {
+  const holds = (actor?.poolSnapshot?.() ?? []).some(p => p.kind === "momentum" && p.name === "essence");
+  return farReaching === true && holds ? 60 : 30;
 }
 
 /** Pick a visible scene point before payment; all geometry uses scene feet. */
-export async function prepareShadowCastWithPoint({ actor, spell, source = null, targets = [] } = {}) {
+export async function prepareShadowCastWithPoint({ actor, spell, source = null, targets = [], farReaching = false } = {}) {
   if (!Object.hasOwn(SHADOW_SPELLS, spell?.system?.identifier)) return null;
   const scene = canvas?.scene, grid = scene?.grid;
   if (!scene || !grid?.size || !Number.isFinite(grid.distance) || grid.distance <= 0
@@ -125,14 +135,15 @@ export async function prepareShadowCastWithPoint({ actor, spell, source = null, 
   // Mindstatic's point is held to 07's Range before the payment (stage 11, D-906), by the one point
   // rule the card's Place area holds it to (`canvas/range.mjs#spellPointAccept`).
   const { spellPointAccept } = await import("../canvas/range.mjs");
-  const inRange = spell.system.identifier === "mindstatic" ? spellPointAccept(sourceToken, spell) : null;
+  // 02 §7's Far-reaching doubles it (the 4a review's SHOULD-FIX).
+  const inRange = spell.system.identifier === "mindstatic" ? spellPointAccept(sourceToken, spell, { farReaching: farReaching === true }) : null;
   const chosen = await pickPoint({ sceneId: scene.id, hint: words("PickPoint"),
     accept: point => Number.isFinite(point?.x) && Number.isFinite(point?.y) && (!inRange || inRange(point)) });
   if (!chosen || canvas?.scene?.id !== scene.id) return no("cancelled");
   const point = { sceneId: scene.id, xFt: chosen.x * grid.distance / grid.size,
     yFt: chosen.y * grid.distance / grid.size };
   const prepared = await prepareShadowCast({ actor, spell, source, targets, point,
-    casterPoint: tokenPoint(sourceToken), targetPoint: tokenPoint(targetToken) });
+    casterPoint: tokenPoint(sourceToken), targetPoint: tokenPoint(targetToken), farReaching });
   // **MINDSTATIC'S POINT, FOR ITS CARD** (O-314): the card's Place area lays the Region at the
   // point picked here, in canvas pixels, so the boundary and its Region are one circle.
   return prepared?.ok && spell.system.identifier === "mindstatic"
@@ -190,12 +201,12 @@ export async function shadowQueryHandler(data = {}, { user } = {}) {
   }) : startMindstatic({ cast: "provisional", casterUuid: ctx.actor.uuid,
     area: { ...data.point, radiusFt: 15 } });
   if (!phantom && casterPoint && (casterPoint.sceneId !== data.point.sceneId
-    || Math.hypot(casterPoint.xFt - data.point.xFt, casterPoint.yFt - data.point.yFt) > 30)) return no("range");
+    || Math.hypot(casterPoint.xFt - data.point.xFt, casterPoint.yFt - data.point.yFt) > staticReachFt(ctx.actor, data.farReaching))) return no("range");
   if (!choice.ok) return choice;
   const fresh = castContext(data, user);
   if (!fresh.ok || fresh.target?.uuid !== ctx.target?.uuid) return no("changed");
   const state = { version: 1, status: "prepared", userId: user.id, wallExpires: Date.now() + 600000,
-    identifier: ctx.identifier, actorUuid: ctx.actor.uuid, spellUuid: ctx.spell.uuid, point: data.point,
+    identifier: ctx.identifier, actorUuid: ctx.actor.uuid, spellUuid: ctx.spell.uuid, point: data.point, farReaching: data.farReaching === true,
     source: refOf(data.source), targets: (data.targets ?? []).map(refOf), choice: choice.value,
     targetUuid: ctx.target?.uuid ?? null, effectId: foundry.utils.randomID(), cueMessageId: foundry.utils.randomID() };
   const receipt = await createPrivateSpellMessage({ whisper: gmIds(), content: content(ctx.spell.name),
@@ -215,7 +226,7 @@ async function shadowOperation(data, user) {
     if (state.identifier === "mindstatic" && tokenPoint(ctx.source)
       && (tokenPoint(ctx.source).sceneId !== state.point?.sceneId
         || Math.hypot(tokenPoint(ctx.source).xFt - state.point.xFt,
-          tokenPoint(ctx.source).yFt - state.point.yFt) > 30)) return no("range");
+          tokenPoint(ctx.source).yFt - state.point.yFt) > staticReachFt(ctx.actor, state.farReaching))) return no("range");
     await write(receipt, { ...state, claimCast: data.cast, claimTime: game.time.worldTime });
     return { ok: true };
   }

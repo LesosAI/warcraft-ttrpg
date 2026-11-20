@@ -48,7 +48,8 @@ import { blockSpeedParts, speedFrom, speedParts } from "../../rules/speed.mjs";
 import { capFor } from "../../rules/momentum.mjs";
 // The Death Knight (D-943, D-946): its runes are the weapons', it is undead, and it eats nothing.
 import { RUNES, runePool, wieldedRunes } from "../../rules/runes.mjs";
-import { UNDEAD_CLASS_IMMUNE, UNDEAD_CLASS_VULNERABLE, needsNoDrink, needsNoFood, undeadByClass } from "../../rules/undead.mjs";
+import { UNDEAD_CLASS_IMMUNE, UNDEAD_CLASS_VULNERABLE, needsNoDrink, needsNoFood, undeadStanding } from "../../rules/undead.mjs";
+import { addLichWard } from "../../rules/necromancer-features.mjs";
 import { trainingProfile, weaponTraining } from "../../rules/equipment-training.mjs";
 import { hourglassOnTile } from "../../rules/sand.mjs";
 import { figureSlots } from "../../rules/worn.mjs";
@@ -317,7 +318,16 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // Death Knight as undead off them through `creatureSnapshot`, and the rest door reads
     // whether the character needs food. Derived, never stored.
     this.classKeys = classItems.map(c => c.identifier).filter(id => typeof id === "string" && id);
-    const undeadClass = undeadByClass(this.classKeys);
+    // **WHETHER THIS CHARACTER IS UNDEAD, AND WHETHER IT HEALS ONLY THE UNDEAD** - one derivation
+    // (`rules/undead.mjs#undeadStanding`; the Necromancer plan's Lichdom groundwork): a Death
+    // Knight by its class, a lich by its feature. Every reader takes these two, never the class.
+    const standing = undeadStanding({
+      classes: this.classKeys,
+      features: (this.parent?.items ?? []).filter(i => i.type === "feature").map(i => ({ name: i.name, className: i.system?.className ?? "" }))
+    });
+    this.undead = standing.undead;
+    this.healsOnlyUndead = standing.healsOnlyUndead;
+    const undeadSelf = this.undead;
 
     // The bearer, for every Signature gate judged on this sheet (08 §20,
     // D-692). Read ONCE, from the actor's own getter, so the standing grants
@@ -481,8 +491,10 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     const hourglass = hourglassOnTile(figureSlots([...(this.parent?.items ?? [])]));
     // Runic Power's cap is 10 plus the Charisma modifier, never below 10 (D-943).
     const chaMod = this.abilities?.cha?.mod ?? 0;
-    for (const pool of pools.momenta) pool.max = capFor(pool, ranksOf, { hourglass, chaMod });
-    if (pools.momentum && !pools.momenta.includes(pools.momentum)) pools.momentum.max = capFor(pools.momentum, ranksOf, { hourglass, chaMod });
+    // Essence's cap is 3 plus the Constitution modifier, never below 3 (the Necromancer plan).
+    const conMod = this.abilities?.con?.mod ?? 0;
+    for (const pool of pools.momenta) pool.max = capFor(pool, ranksOf, { hourglass, chaMod, conMod });
+    if (pools.momentum && !pools.momenta.includes(pools.momentum)) pools.momentum.max = capFor(pools.momentum, ranksOf, { hourglass, chaMod, conMod });
     // A pool the character does not hold keeps its stored value untouched and
     // reports a null cap. Zeroing it here would discard data every time a GM
     // detached a class item, and the null `max` is already what tells the sheet
@@ -555,7 +567,7 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     this.healingReduction = rungs.healingReduction;
     this.vulnerable = [...rungs.vulnerable];
     // **A DEATH KNIGHT IS VULNERABLE (HOLY)** (02 §7's Risen Knight, 10 §9's Risen; D-946).
-    if (undeadClass) for (const type of UNDEAD_CLASS_VULNERABLE) if (!this.vulnerable.includes(type)) this.vulnerable.push(type);
+    if (undeadSelf) for (const type of UNDEAD_CLASS_VULNERABLE) if (!this.vulnerable.includes(type)) this.vulnerable.push(type);
     // What the Signatures on what is WORN add up to (08 §20, D-692). Read
     // here, applied below beside the numbers each of them belongs to.
     const signature = signatureEffects(usableGear, bearer);
@@ -588,7 +600,7 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
       // **AND A DEATH KNIGHT REFUSES POISON AND DISEASE** (02 §7's Risen Knight; D-946): the
       // door `toggleStatusEffect` and the affliction door (`effects/afflictions.mjs#afflict`,
       // `rules/afflictions.mjs#afflictRefusal`) both read this list.
-      ...(undeadClass ? UNDEAD_CLASS_IMMUNE : [])
+      ...(undeadSelf ? UNDEAD_CLASS_IMMUNE : [])
     ])];
     this.damageRatingBonus = rungs.damageBonus;
     // **WHAT ADDS TO THE DAMAGE, BY LANE AND BY TYPE** (04, D-711 phase 2).
@@ -656,9 +668,9 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // **WHO RECOVERS ON A SHORT REST WITHOUT FOOD OR DRINK** (the lead: *"They do recover
     // health but do not have to eat or drink."*; D-946): a Death Knight, a Forsaken, The
     // Risen. Read by the rest dialog, which then asks for nothing, and by the rest door.
-    this.needsNoFood = needsNoFood({ classes: this.classKeys, race: race?.system?.identifier ?? race?.name ?? null, endings: rungs.endings, rungs: rungs.rungs });
+    this.needsNoFood = needsNoFood({ classes: this.classKeys, race: race?.system?.identifier ?? race?.name ?? null, endings: rungs.endings, rungs: rungs.rungs, undead: this.undead });
     // And who needs no DRINK either (O-331): Undeath's rung at 5 lifts the food alone.
-    this.needsNoDrink = needsNoDrink({ classes: this.classKeys, race: race?.system?.identifier ?? race?.name ?? null, endings: rungs.endings });
+    this.needsNoDrink = needsNoDrink({ classes: this.classKeys, race: race?.system?.identifier ?? race?.name ?? null, endings: rungs.endings, undead: this.undead });
     // A shape's size is the block's (D-769): the token, moving through a space
     // and being moved read it. **CARRYING DOES NOT** (the lead, 2026-10-03:
     // *"Druid's own carry"*): the bag slots below read the race's size and the
@@ -987,6 +999,9 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // **A WARD FLOOR A SIGNATURE SETS** (08 §20's Sulfuras, Firelord's Grip: *You have Ward
     // 3 against Fire, unless you already have more*; D-911): the higher of the two, once
     // every `final` change has landed - so it is a floor and never a sum - and before the cap.
+    // **02 §7's LICHDOM: *You have Ward 3 (Frost) and Ward 3 (Shadow)*** (the Necromancer plan's door
+    // 11), derived beside every other Ward and before the floor and 05's cap of 10 below.
+    if ((this.parent?.items ?? []).some(i => i.type === "feature" && i.name === "Lichdom" && (i.system?.className ?? "Necromancer") === "Necromancer")) addLichWard(this.ward);
     wardFloorOn(this.ward, this.signatureEffects?.wardFloor);
     // **WARD IS AT MOST 10 AGAINST ANY SCHOOL** (the Chromatic Champion plan; the lead:
     // *"increase the ward max to 10 system wide. gear counts towards this max"*): LAST,

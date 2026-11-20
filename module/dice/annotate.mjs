@@ -173,7 +173,7 @@ async function refundOne(row) {
   if (!now) return;
   const value = refundedValue(now, amount);
   // A price given back is a named door for a Runic Power rise (`rules/runes.mjs#RUNIC_GAIN_SOURCES`).
-  if (value !== now.value) await attacker.updatePool({ itemId: now.itemId, kind: now.kind, value }, {}, { runicGain: "refund" });
+  if (value !== now.value) await attacker.updatePool({ itemId: now.itemId, kind: now.kind, value }, {}, { runicGain: "refund", essenceGain: "refund" });
 }
 
 /**

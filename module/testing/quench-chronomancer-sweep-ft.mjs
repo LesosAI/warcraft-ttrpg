@@ -993,12 +993,14 @@ export function chronomancerSweepGuardianBatch(context) {
       });
     });
 
-    it("SAND: the glass's rarity caps it at 5, 6, 7, 8 and 8; the sheet counts it; Guard keeps it; out of the slot it is gone; a Short Rest empties it", async function () {
+    it("SAND: the glass's rarity caps it at 5, 6, 7, 8 and 10; the sheet counts it; Guard keeps it; out of the slot it is gone; a Short Rest empties it", async function () {
       this.timeout(300000);
       await sweepTest("Sand", assert, async sw => {
         const { c } = await guardianInFight("ZZ S4 Sand", { sand: 6 });
         const glass = c.items.find(i => i.name === "Hourglass");
-        for (const [rarity, cap] of [["common", 5], ["uncommon", 6], ["rare", 7], ["epic", 8], ["legendary", 8]]) {
+        // A Legendary glass holds 10 (08 §9, D-909, 0.15.2: `rules/sand.mjs#SAND_CAP_BY_RARITY`); this
+        // test still read 8, as an Epic, from before that rule.
+        for (const [rarity, cap] of [["common", 5], ["uncommon", 6], ["rare", 7], ["epic", 8], ["legendary", 10]]) {
           await glass.update({ "system.rarity": rarity });
           await sw.wait(() => sandOf(c)?.max === cap, `${rarity}: a cap of ${cap}`);
         }

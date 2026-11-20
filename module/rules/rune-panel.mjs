@@ -74,6 +74,41 @@ export function runePanelContext({ rows = [], weapons = {}, runicPower = null, i
   };
 }
 
+/**
+ * **THE RUNES POOL'S SEGMENTS** on Core and the Spells header (D-1103; the lead: *"I want the
+ * rune tracker to be red or darker blue depending on the rune type"*). One segment for each
+ * rune inscribed, each carrying its kind, so `pool.hbs` draws a Blood rune red and a Frost
+ * rune the darker blue, and says the kind in words in its tooltip and `aria-label`.
+ *
+ * **THE ORDER IS A RULE, NOT THE WEAPONS' ORDER**: the unspent runes first, Blood then Frost,
+ * then the spent ones, Blood then Frost. The bar keeps every other pool's shape, filled from
+ * the left and empty to the right, and a spend or an inscription never shuffles the colours
+ * between renders. A spent segment keeps the empty well's look; its words name the kind.
+ *
+ * @param {{max?: number, blood?: {value: number, max: number}, frost?: {value: number, max: number}}} pool
+ *   `system.runes` (`rules/runes.mjs#runePool`)
+ * @param {Record<string, string>} words  `blood`, `frost`, `spentBlood`, `spentFrost`
+ * @returns {Array<{filled: boolean, kind: "blood"|"frost", label: string}>}
+ */
+export function runePoolSegments(pool, words = {}) {
+  const count = n => Math.max(0, Math.trunc(Number(n)) || 0);
+  const of = kind => {
+    const max = count(pool?.[kind]?.max);
+    return { held: Math.min(count(pool?.[kind]?.value), max), max };
+  };
+  const blood = of("blood");
+  const frost = of("frost");
+  const run = (n, filled, kind) => Array.from({ length: n }, () => ({
+    filled, kind, label: words[filled ? kind : (kind === "blood" ? "spentBlood" : "spentFrost")] ?? ""
+  }));
+  return [
+    ...run(blood.held, true, "blood"),
+    ...run(frost.held, true, "frost"),
+    ...run(blood.max - blood.held, false, "blood"),
+    ...run(frost.max - frost.held, false, "frost")
+  ];
+}
+
 /** The sockets the paper doll draws under one hand's tile, or null where that hand holds no runes. */
 export function handSockets(context, hand) {
   return (context?.groups ?? []).find(g => g.hand === hand)?.sockets ?? null;

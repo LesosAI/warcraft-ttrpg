@@ -87,6 +87,9 @@ import { CHRONO_FEATURES, RECALL_USES } from "./chronomancer.mjs";
 // The Death Knight's numbers (02 §7; run F2).
 import { DESECRATION, MARCH_OF_THE_DAMNED, RUNIC_DISCIPLINE, UNHOLY_PRESENCE } from "./death-knight.mjs";
 
+// The Necromancer's numbers (02 §7; the Necromancer plan's Phase 4).
+import { COMMAND_SURGE } from "./necromancer-features.mjs";
+
 // The descriptor vocabulary, shared with `rules/talent-effects.mjs` (D-642).
 export const passive = (extra = {}) => ({ kind: "passive", action: null, cost: null, casting: false, uses: null, heal: null, damage: null, resist: null, ...extra });
 export const action = (extra = {}) => ({ kind: "action", action: "action", cost: null, casting: false, uses: null, heal: null, damage: null, resist: null, ...extra });
@@ -267,6 +270,8 @@ export const CLASS_FEATURES = Object.freeze({
     // alone): the row's own `onSuccess` now, the door every such price shares (the B8a2 pass).
     "Curse": action({ action: "action", cost: onSuccess(cost("mana", 4)), casting: true, resist: "spirit" }),
     "Greater Demon": passive(),
+    // *When a creature dies within 30 feet of you or a bound demon, you gain 2 Mana*: the death
+    // watch reads the feature by name (`effects/death-watch.mjs`, `rules/death-watch.mjs#SOUL_HARVEST`).
     "Soul Harvest": passive(),
     // *Over a Long Rest, work a mount you own into a Felsteed*: the one mount door (door 9).
     "Ritual of the Steed": action({ action: null, onUse: { mountWork: true } }),
@@ -459,6 +464,42 @@ export const CLASS_FEATURES = Object.freeze({
     // *As an action, spend 5 Runic Power* (door 12): a laid effect on the knight for 1 minute, its
     // two radii through the aura door (`presenceAuraSources`).
     "March of the Damned": action({ action: "action", cost: cost("runicPower", MARCH_OF_THE_DAMNED.cost), onUse: { marchOfTheDamned: true }, auraReason: "the knight's own laid march holds its two radii up (`rules/death-knight.mjs#presenceAuraSources`, read by `effects/auras.mjs#auraSourcesOf`), so the feature item stamps none" })
+  },
+  // **THE NECROMANCER** (02 §7; the Necromancer plan's Phase 4 door 3 and doors 5 to 11). The laws
+  // are `rules/horde.mjs`, `rules/necromancer-features.mjs`, `rules/essence.mjs`, `rules/grafts.mjs`
+  // and `rules/undead.mjs`; the doors `effects/necromancer-horde.mjs` and `effects/grave-guard.mjs`.
+  // A row whose Use is OFFERED elsewhere (Claim the Fallen on a death, Grave Guard in the blow,
+  // Unending Dead on a fall) refuses its sheet press in words before anything is paid, as Another
+  // Timeline's does (`judgeNecroUse`).
+  necromancer: {
+    // *Your horde has a number of places equal to 2 plus your Intelligence modifier ...*: the places,
+    // the collapse chooser and the shared turn are the raise door's and `AzerothCombatant#_turnFacts`'.
+    // The Use is the Empowered line: *As a Half-Action, spend 1 Essence. Each creature in your horde
+    // takes two Half-Actions on its next turn*.
+    "Command the Dead": action({ action: "half", cost: cost("essence", COMMAND_SURGE.essence), onUse: { hordeSurge: true }, note: "AZEROTH.Feature.Note.CommandTheDead" }),
+    // *You know Raise Dead and Animate Corpse. They do not count against your spells known*: the
+    // feature sync embeds both (`rules/death-knight.mjs#FEATURE_SPELLS`), as Unholy Lore's Death Coil.
+    "Grave Calling": passive({ note: "AZEROTH.Feature.Note.GraveCalling" }),
+    // *When one of your spells raises a creature, it gains temporary Health equal to your
+    // Intelligence modifier*: granted by the raise door on the linked actor (`grantTemporaryHealth`).
+    "Deathly Vigor": passive({ note: "AZEROTH.Feature.Note.DeathlyVigor" }),
+    // *... you may use your Reaction to cast Raise Dead or Animate Corpse on its corpse*: offered on
+    // the death watch's living death as a card row (D-779).
+    "Claim the Fallen": action({ action: "reaction", onUse: { offered: "claimTheFallen" } }),
+    // *When a blow would damage you, you may use your Reaction to choose one of your raised dead
+    // within 10 feet of you*: asked IN the blow at the one damage door (`effects/grave-guard.mjs`).
+    "Grave Guard": action({ action: "reaction", onUse: { offered: "graveGuard" } }),
+    // *Once per encounter, as a Half-Action, choose one of your raised dead within 30 feet of you. It
+    // collapses. You regain Mana equal to its current Health, up to three times your tier*.
+    "Dark Ritual": action({ action: "half", uses: once("encounter"), onUse: { darkRitual: true } }),
+    // *... you may spend 1 Essence. It stands again with half its Health*: offered on the death
+    // watch's raised-dead event.
+    "Unending Dead": action({ action: null, cost: cost("essence", 1), onUse: { offered: "unendingDead" } }),
+    // *You are undead ...*: the undead package and Ward 3 (Frost) and (Shadow) are DERIVED
+    // (`rules/undead.mjs#undeadStanding`, `necromancer-features.mjs#addLichWard`). The Use binds the
+    // phylactery while a Long Rest's window stands (*When you finish a Long Rest, you may bind
+    // yourself to a phylactery you carry*); its return is the GM's card.
+    "Lichdom": action({ action: null, onUse: { phylactery: true } })
   }
 });
 

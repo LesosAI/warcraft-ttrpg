@@ -45,3 +45,32 @@ export function poolWrite(actor, task) {
 export function poolWritePending(actor) {
   return QUEUE.pending(actor?.uuid ?? actor?.id ?? "none");
 }
+
+/**
+ * **A POOL MOVED BY A NUMBER, INSIDE THE QUEUE** (the 4b review's last small item: an Essence spend
+ * read the snapshot and wrote an absolute value outside the queue, so a gain landing between the
+ * read and the write was written over). The pool is read when this task's turn comes, the delta is
+ * applied - floored at nothing, capped at the pool's top on a rise - and written through
+ * `AzerothActor#writePoolsNow`. With `need`, a spend the pool cannot cover writes nothing and says
+ * so. A rise of Essence or Runic Power names its door through `options` (`essenceGain`, `runicGain`).
+ *
+ * @param {Actor} actor
+ * @param {{kind: string, name: string}} which
+ * @param {number} delta
+ * @param {{need?: boolean, options?: object}} [o]
+ * @returns {Promise<{ok: boolean, reason: null|"noPool"|"short", before: number, after: number}>}
+ */
+export function adjustPool(actor, { kind, name } = {}, delta = 0, { need = false, options = {} } = {}) {
+  return poolWrite(actor, async () => {
+    const pool = (actor?.poolSnapshot?.() ?? []).find(p => p.kind === kind && p.name === name) ?? null;
+    if (!pool) return { ok: false, reason: "noPool", before: 0, after: 0 };
+    const before = Math.max(0, Math.trunc(Number(pool.value)) || 0);
+    const d = Math.trunc(Number(delta)) || 0;
+    if (need && d < 0 && before < -d) return { ok: false, reason: "short", before, after: before };
+    const top = Math.trunc(Number(pool.max));
+    const raised = before + d;
+    const after = Math.max(0, d > 0 && Number.isFinite(top) && top >= 0 ? Math.min(Math.max(top, before), raised) : raised);
+    if (after !== before) await actor.writePoolsNow([{ itemId: pool.itemId, kind, value: after }], {}, options);
+    return { ok: true, reason: null, before, after };
+  });
+}

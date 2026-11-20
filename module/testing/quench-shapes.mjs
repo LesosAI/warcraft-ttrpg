@@ -298,7 +298,7 @@ export function shapesBatch(context) {
 
     it("FEROCITY: a 7-Mana spell in a form takes 4 Ferocity and no Mana, and one short is refused with nothing spent", async function () {
       this.timeout(90000);
-      const druid = await makeCharacter({ name: "ZZ Shapes Moonfall", classes: [["Druid", 9]], spells: ["Moonfall"] });
+      const druid = await makeCharacter({ name: "ZZ Shapes Moonfall", classes: [["Druid", 11]], spells: ["Moonfall"] });
       const spell = druid.items.find(i => i.type === "spell" && i.name === "Moonfall");
       assert.equal(spell.system.mana, 7);
       await shapes().takeShape(druid, { kind: "shapeshift", entries: [bear] });

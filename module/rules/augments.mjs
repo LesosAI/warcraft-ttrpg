@@ -53,7 +53,11 @@ export const AUGMENTS = Object.freeze({
     forms: "A brass-caged glass, a sand-glass on a chain, a glass set in a staff-head",
     bonus: 0,
     holds: "sand"
-  })
+  }),
+  // The Necromancer's (the plan's *The Augment*; the lead, 2026-11-18, *"Yes."*): the standard
+  // bonus, +1 at tiers 1 and 2 and +2 at tiers 3 and 4. The forms are 07 §3's row, word for
+  // word (`augments.test.mjs`).
+  bonecharm: Object.freeze({ className: "Necromancer", forms: "A carved skull, a finger-bone rosary, a wand of fused vertebrae" })
 });
 
 /**

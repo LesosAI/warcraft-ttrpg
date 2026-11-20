@@ -28,6 +28,27 @@ import { DEATH_KNIGHT } from "./runes.mjs";
 /** The class identifiers whose holder is undead (02 §7). */
 export const UNDEAD_CLASSES = Object.freeze([DEATH_KNIGHT]);
 
+/**
+ * **THE FEATURES WHOSE HOLDER IS UNDEAD** (the Necromancer plan's *Living, Undeath and
+ * Lichdom*): 02 §7's Lichdom, the Necromancer's capstone (the lead: *"Yes"*) - *You are undead* -
+ * the first undead made by a feature rather than a class. Keyed by the feature's class and name,
+ * as `AzerothActor#syncClassFeatures` stamps them.
+ */
+export const UNDEAD_FEATURES = Object.freeze([Object.freeze({ className: "Necromancer", name: "Lichdom" })]);
+
+/**
+ * **THE CLASSES WHOSE HOLDER HEALS ONLY THE UNDEAD** (the lead, on the knight: *"require the
+ * target to be undead for all healing the death knight has access to"*).
+ */
+export const HEALS_ONLY_UNDEAD_CLASSES = Object.freeze([DEATH_KNIGHT]);
+
+/**
+ * **AND THE FEATURES** (the lead, on whether a lich's healing reaches the living: *"No it can't
+ * heal living targets"*): Lichdom. *Is undead* and *heals only the undead* stay two values - a
+ * Forsaken is undead and heals anybody - and these two lists set the second.
+ */
+export const HEALS_ONLY_UNDEAD_FEATURES = Object.freeze([Object.freeze({ className: "Necromancer", name: "Lichdom" })]);
+
 /** 02 §5's people that do not eat (*"You do not breathe or eat"*). */
 const NO_FOOD_PEOPLES = Object.freeze(["forsaken"]);
 
@@ -45,6 +66,29 @@ export function undeadByClass(classes = []) {
 }
 
 /**
+ * **WHETHER A CHARACTER IS UNDEAD, AND WHETHER IT HEALS ONLY THE UNDEAD** - the ONE derivation
+ * (the Necromancer plan's Lichdom groundwork). `CharacterData#prepareDerivedData` stores the two
+ * as `system.undead` and `system.healsOnlyUndead` (derived, never persisted), and every reader -
+ * the Holy weakness and the poison and disease immunity, the rest without food, the healing
+ * judgement on both sides, `creature-kinds.mjs#kindsOf` and the Undeath refusal - reads them, so
+ * a lich made by a feature is undead wherever a Death Knight is.
+ *
+ * @param {{classes?: Array<string|{identifier?: string, name?: string}>,
+ *   features?: Array<{name?: string, className?: string}>}} o  the class identifiers held, and
+ *   the features held as `{name, className}`
+ * @returns {{undead: boolean, healsOnlyUndead: boolean}}
+ */
+export function undeadStanding({ classes = [], features = [] } = {}) {
+  const holds = list => (features ?? []).some(f => list.some(u =>
+    key(u.name) === key(f?.name) && key(u.className) === key(f?.className)));
+  const ids = (classes ?? []).map(c => key(typeof c === "string" ? c : (c?.identifier ?? c?.name)));
+  return {
+    undead: undeadByClass(classes) || holds(UNDEAD_FEATURES),
+    healsOnlyUndead: ids.some(id => HEALS_ONLY_UNDEAD_CLASSES.includes(id)) || holds(HEALS_ONLY_UNDEAD_FEATURES)
+  };
+}
+
+/**
  * **WHO NEEDS NO FOOD OR DRINK TO RECOVER ON A SHORT REST** (the lead: *"They do recover
  * health but do not have to eat or drink."*): a Death Knight, a Forsaken (02 §5: *You do
  * not breathe or eat*), and a character who has become The Risen (10 §9: *You do not
@@ -52,8 +96,8 @@ export function undeadByClass(classes = []) {
  *
  * @param {{classes?: Array<string|{identifier?: string}>, race?: string|null, endings?: Array<{notes?: string[]}>}} o
  */
-export function needsNoFood({ classes = [], race = null, endings = [], rungs = [] } = {}) {
-  if (needsNoDrink({ classes, race, endings })) return true;
+export function needsNoFood({ classes = [], race = null, endings = [], rungs = [], undead = null } = {}) {
+  if (needsNoDrink({ classes, race, endings, undead })) return true;
   // **10 §6's UNDEATH AT 5, *Touched by it*** (the F1 review's note): *You no longer need to
   // eat* - the food alone, so the drink a caster's Mana waits on is still asked for.
   return (rungs ?? []).some(r => (r?.notes ?? []).includes("noFood"));
@@ -64,10 +108,13 @@ export function needsNoFood({ classes = [], race = null, endings = [], rungs = [
  * or drink."*, O-331): the Death Knight, the Forsaken and The Risen. Undeath's rung at 5
  * lifts the food alone (`needsNoFood`'s `rungs`), so it is not here.
  *
- * @param {{classes?: Array, race?: string|null, endings?: Array<{notes?: string[]}>}} o
+ * `undead` is the character's derived `system.undead` (`undeadStanding`), where the caller
+ * has it; left null, the classes alone are read, as before.
+ *
+ * @param {{classes?: Array, race?: string|null, endings?: Array<{notes?: string[]}>, undead?: boolean|null}} o
  */
-export function needsNoDrink({ classes = [], race = null, endings = [] } = {}) {
-  if (undeadByClass(classes)) return true;
+export function needsNoDrink({ classes = [], race = null, endings = [], undead = null } = {}) {
+  if (undead === true || undeadByClass(classes)) return true;
   if (NO_FOOD_PEOPLES.includes(key(race))) return true;
   return (endings ?? []).some(e => (e?.notes ?? []).includes("noFood"));
 }
@@ -79,12 +126,15 @@ export function needsNoDrink({ classes = [], race = null, endings = [] } = {}) {
  * and nothing built until this plan (CLAUDE.md §7's *a rule the book states once*): the
  * exposure Test and the unresisted point both ask it.
  *
- * @param {{track: string, classes?: Array, race?: string|null}} o
+ * `undead` is the character's derived `system.undead` (`undeadStanding`: a lich accrues no
+ * Undeath either), where the caller has it.
+ *
+ * @param {{track: string, classes?: Array, race?: string|null, undead?: boolean|null}} o
  * @returns {boolean}
  */
-export function accruesTrack({ track, classes = [], race = null } = {}) {
+export function accruesTrack({ track, classes = [], race = null, undead = null } = {}) {
   if (track !== "undeath") return true;
-  if (undeadByClass(classes)) return false;
+  if (undead === true || undeadByClass(classes)) return false;
   return !NO_FOOD_PEOPLES.includes(key(race));
 }
 
@@ -94,11 +144,11 @@ export function accruesTrack({ track, classes = [], race = null } = {}) {
  * never offered Undeath, which it would pay nothing for.
  *
  * @param {string[]} tracks
- * @param {{classes?: Array, race?: string|null}} o
+ * @param {{classes?: Array, race?: string|null, undead?: boolean|null}} o
  * @returns {string[]}
  */
-export function accruedTracks(tracks = [], { classes = [], race = null } = {}) {
-  return (tracks ?? []).filter(track => accruesTrack({ track, classes, race }));
+export function accruedTracks(tracks = [], { classes = [], race = null, undead = null } = {}) {
+  return (tracks ?? []).filter(track => accruesTrack({ track, classes, race, undead }));
 }
 
 /**
@@ -120,7 +170,11 @@ export function accruedTracks(tracks = [], { classes = [], race = null } = {}) {
  * @param {{targetUndead?: boolean, targetDeathKnight?: boolean, sourceDeathKnight?: boolean,
  *   self?: boolean, giver?: boolean, consumable?: boolean, spell?: boolean, school?: string|null}} o
  *   `giver` a creature gives the heal; `self` that creature is the target; `school` the
- *   SPELL's own school where a spell gives it
+ *   SPELL's own school where a spell gives it. **`targetDeathKnight` is an undead CHARACTER**
+ *   (`system.undead`: a Death Knight or a lich) and **`sourceDeathKnight` a giver who heals only
+ *   the undead** (`system.healsOnlyUndead`: a Death Knight or a lich, the lead's *"No it can't
+ *   heal living targets"*); the names stand because the knight's census reads this function's
+ *   lines.
  * @returns {"livingTarget"|"notDeath"|null}
  */
 export function healingRefusal({

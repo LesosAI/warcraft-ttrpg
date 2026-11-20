@@ -100,6 +100,7 @@ import * as v0143 from "./0.14.3-augment-ranged.mjs";
 import * as v0152 from "./0.15.2-legendary-runs.mjs";
 import * as v0153 from "./0.15.3-death-knight.mjs";
 import * as v01531 from "./0.15.3.1-close-repairs.mjs";
+import * as v0154 from "./0.15.4-necromancer.mjs";
 import { forgetPacks } from "./walk.mjs";
 
 // Ordered oldest to newest. Add new entries at the end.
@@ -270,7 +271,10 @@ const CHAIN = [
   // 0.15.3.1: a point step inside the unreleased 0.15.3, so a world the working tree already took
   // to 0.15.3 runs it too - 07's timed *1 minute* Action on a held spell (O-351), and every rules
   // chapter the world already imported brought up to the book (F6's question 5; run close-F2).
-  { version: "0.15.3.1", module: v01531 }
+  { version: "0.15.3.1", module: v01531 },
+  // 0.15.4: the Necromancer release - a held Graveblight prints Mana and carries its Sustain
+  // sentence, and the Restricted lines that gained the Necromancer, each against its pack copy.
+  { version: "0.15.4", module: v0154 }
 ];
 
 /**

@@ -49,9 +49,12 @@ import { END_TICK_QUERY, LAY_POISON_QUERY, endTickQueryHandler, layPoisonQueryHa
 import { LAY_PLAGUE_QUERY, layPlagueQueryHandler } from "./effects/death-knight.mjs";
 // The Death Knight's raises and the corpses' marks (07 §17; the Death Knight plan, run F3).
 import { CORPSE_QUERY, RAISE_QUERY, corpseQueryHandler, raiseQueryHandler } from "./effects/death-knight-necromancy.mjs";
+import { ENSLAVE_QUERY, HORDE_QUERY, enslaveQueryHandler, hordeQueryHandler } from "./effects/necromancer-horde.mjs";
+import { NECRO_TALENT_QUERY, necroTalentQueryHandler } from "./effects/necromancer-talents.mjs";
 // The Death Knight's talents' writes on creatures the knight's client does not own (04; run F4a).
 import { DK_TALENT_QUERY, dkTalentQueryHandler } from "./effects/death-knight-talents.mjs";
 import { DK_SPELL_QUERY, dkSpellQueryHandler } from "./effects/death-knight-spells.mjs";
+import { NECRO_SPELL_QUERY, necroSpellQueryHandler } from "./effects/necromancer-spells.mjs";
 import { LOSE_REACTION_QUERY, loseReactionQueryHandler } from "./effects/reaction-loss.mjs";
 import { SPEED_DROP_QUERY, speedDropQueryHandler } from "./effects/speed-drop.mjs";
 import { HIT_MARK_QUERY, hitMarkQueryHandler } from "./effects/hit-marks.mjs";
@@ -84,6 +87,8 @@ import { SOUL_SWAP_QUERY, soulSwapQueryHandler } from "./effects/soul-swap.mjs";
 import { HAUNT_QUERY, hauntQueryHandler } from "./effects/haunt.mjs";
 import { TEMP_HEALTH_QUERY, temporaryHealthQueryHandler } from "./effects/temporary-health.mjs";
 import { BLOW_ASK_QUERY, BLOW_SHARE_QUERY, blowAskHandler, blowShareQueryHandler } from "./effects/blow-doors.mjs";
+import { DEATH_WATCH_QUERY, deathWatchQueryHandler } from "./effects/death-watch.mjs";
+import { AREA_MARK_QUERY, areaMarkQueryHandler } from "./effects/empower-areas.mjs";
 import { DISPEL_QUERY, dispelQueryHandler } from "./effects/dispel.mjs";
 import { NULLIFY_QUERY, massNullifyQueryHandler } from "./effects/nullifier-use.mjs";
 import { CURE_QUERY, curePoisonQueryHandler } from "./effects/cure-poison-use.mjs";
@@ -545,10 +550,20 @@ export function registerQueries() {
   CONFIG.queries[LAY_PLAGUE_QUERY] = layPlagueQueryHandler;
   CONFIG.queries[RAISE_QUERY] = raiseQueryHandler;
   CONFIG.queries[CORPSE_QUERY] = corpseQueryHandler;
+  // 02 §7's horde (the Necromancer plan's door 3): Enslave the Dead's control and a collapse the
+  // asker could not write itself.
+  CONFIG.queries[ENSLAVE_QUERY] = enslaveQueryHandler;
+  CONFIG.queries[HORDE_QUERY] = hordeQueryHandler;
+  // 04's Flesh, Bone and Damned (Phase 4c-T): a heal, temporary Health, a blow, Unholy Fervor, Gorge's
+  // corpse and the circle written where the asker may not, and the Essence asked of the Necromancer.
+  CONFIG.queries[NECRO_TALENT_QUERY] = necroTalentQueryHandler;
   // 04's Blood and Frost (run F4a): Sanguine Tide, Mark of Blood, Vengeful Blood, Crimson Coil,
   // Chill of the Grave, Dancing Runeweapon's heal and Empower Runeweapon's Fevers.
   CONFIG.queries[DK_TALENT_QUERY] = dkTalentQueryHandler;
   CONFIG.queries[DK_SPELL_QUERY] = dkSpellQueryHandler;
+  // 07 §17's Necromancer spells (run 4c-S): Soul Cage's and Soul Rip's Essence, the marks on the dead,
+  // Puppet of Flesh's control, a light, a marker and the blight.
+  CONFIG.queries[NECRO_SPELL_QUERY] = necroSpellQueryHandler;
   // The Priest's and the Shaman's (D-774): 02's Ward laid on a creature the priest
   // does not own and Absorption's Mana back to a priest the striker's client does
   // not own; Hymn of Hope's Mana and Undying Spirit's friend stood up at 1 Health.
@@ -580,6 +595,10 @@ export function registerQueries() {
   // and a share of a blow Spirit Link Totem divides, on the GM's client.
   CONFIG.queries[TEMP_HEALTH_QUERY] = temporaryHealthQueryHandler;
   CONFIG.queries[BLOW_ASK_QUERY] = blowAskHandler;
+  // The death watch's gains (the Necromancer plan's door 1): 02 §7's Essence and the Warlock's
+  // Soul Harvest, written on the client that answers for the holder, through its pool queue.
+  CONFIG.queries[DEATH_WATCH_QUERY] = deathWatchQueryHandler;
+  CONFIG.queries[AREA_MARK_QUERY] = areaMarkQueryHandler;
   // 08 §20's Legendary doors on another creature (D-912).
   CONFIG.queries[LEGENDARY_QUERY] = legendaryQueryHandler;
   CONFIG.queries[BLOW_SHARE_QUERY] = blowShareQueryHandler;

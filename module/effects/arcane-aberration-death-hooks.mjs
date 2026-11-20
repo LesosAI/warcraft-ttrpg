@@ -1,16 +1,13 @@
-/** Foundry updateActor observes the updated document. Retain a local Health
- * baseline on every client; only the active GM resolves a new death. */
-import { aberrationDeathObserver } from "../rules/arcane-aberration.mjs";
+/** The death watch (`effects/death-watch.mjs`) keeps the Health baseline for every actor on
+ * every client and hands a new death to this listener on the active GM's client alone. */
+import { aberrationDeath } from "../rules/arcane-aberration.mjs";
+import { onDeath } from "./death-watch.mjs";
 import { resolveAberrationDeath } from "./arcane-aberration-death.mjs";
 const gmHere = () => game.user?.isGM === true && game.users?.activeGM?.id === game.user.id;
 const values = collection => collection?.values?.() ?? collection ?? [];
 
 export function registerAberrationDeathHooks() {
-  const observer = aberrationDeathObserver(), pending = new Set();
-  const prime = () => {
-    for (const actor of values(game.actors)) observer.prime(actor);
-    for (const scene of values(game.scenes)) for (const token of values(scene.tokens)) observer.prime(token.actor);
-  };
+  const pending = new Set();
   const resolveDeath = async actor => {
     if (!gmHere() || pending.has(actor.uuid)) return;
     pending.add(actor.uuid);
@@ -43,9 +40,5 @@ export function registerAberrationDeathHooks() {
       ui.notifications?.warn("Unraveling Mana could not be confirmed. Check Mana and Health before making a correction.");
     } finally { pending.delete(actor.uuid); }
   };
-  Hooks.on("ready", prime);
-  Hooks.on("canvasReady", prime);
-  Hooks.on("createActor", actor => observer.prime(actor));
-  Hooks.on("createToken", token => observer.prime(token.actor));
-  Hooks.on("updateActor", actor => observer.observe(actor) ? resolveDeath(actor) : undefined);
+  onDeath(event => (event.healthFell && aberrationDeath(event) ? resolveDeath(event.actor) : undefined));
 }

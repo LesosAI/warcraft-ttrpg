@@ -45,7 +45,9 @@
     {{/unless}}
   </div>
   <div class="azeroth-pool-track">
-    {{#each this.segments}}<span class="azeroth-segment{{#if this.filled}} is-filled{{/if}}"></span>{{/each}}
+    {{!-- A rune's segment carries its kind (D-1103): the colour, and its words in core's
+          tooltip and an `aria-label`, so the colour is never the only carrier. --}}
+    {{#each this.segments}}<span class="azeroth-segment{{#if this.filled}} is-filled{{/if}}{{#if this.kind}} is-{{this.kind}}{{/if}}"{{#if this.label}} data-tooltip="{{this.label}}" aria-label="{{this.label}}" role="img"{{/if}}></span>{{/each}}
   </div>
   {{#if this.noHourglass}}<p class="azeroth-pool-note">{{localize "AZEROTH.Sand.NoHourglass"}}</p>{{/if}}
   {{#if this.runes}}<p class="azeroth-pool-note azeroth-runes-here">{{localize "AZEROTH.Runes.PoolHere"}}</p>{{/if}}

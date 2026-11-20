@@ -980,7 +980,7 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
       // already held to the character's own bag slots by `validate`'s `noRoom`
       // refusal, which reads the size off the proposal, and `arrange` below
       // puts everything where it fits.
-      const items = await actor.createEmbeddedDocuments("Item", docs, { azerothBags: "bypass" });
+      const items = await actor.createEmbeddedDocuments("Item", docs, { azerothBags: "bypass", azerothLearn: "bypass" });
       createdItems.push(...items.map(i => i.id));
       await this.#untilGranted(actor, proposal);
 

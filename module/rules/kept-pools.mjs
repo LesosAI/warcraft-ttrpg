@@ -11,6 +11,7 @@
  * |---|---|---|
  * | **Sand** (the Chronomancer) | a Short Rest, a Long Rest, the Hourglass leaving the Ranged slot | *"It should only drain on a short or long rest"*; *"swamp empties sand."* |
  * | **Runic Power** (the Death Knight) | a Long Rest | *Runic Power keeps out of fights*; **"Only on a Long Rest"**; a Critical Injury and Guard leave it alone (*"yes"*) |
+ * | **Essence** (the Necromancer) | nothing | *"keep essence until spent"*; a Critical Injury and Guard leave it alone (the lead, 2026-11-18, *"Yes"*) |
  *
  * This was Sand's own list (`SAND_EMPTIED_BY`, `sandSurvives`, `sandAfter`), and the
  * plan's Phase 3 made it ONE pool-keyed rule so the Death Knight's pool reads the same
@@ -27,7 +28,10 @@ export const KEPT_EVENTS = Object.freeze([
 /** The events that EMPTY each kept pool, by the pool's key in `AZEROTH.momentumTypes`. */
 export const EMPTIED_BY = Object.freeze({
   sand: Object.freeze(["shortRest", "longRest", "hourglassOut"]),
-  runicPower: Object.freeze(["longRest"])
+  runicPower: Object.freeze(["longRest"]),
+  // No event empties it (the lead: *"keep essence until spent"*). Held through a Long Rest it risks 1 Undeath
+  // (`essence.mjs#restExposure`), and spending is the only thing that lowers it.
+  essence: Object.freeze([])
 });
 
 /** Whether a Momentum pool is one a fight does not empty. */

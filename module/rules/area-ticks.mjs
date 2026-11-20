@@ -292,6 +292,12 @@ const BASE = [
     const m = /^(A creature|An enemy) takes ([A-Z][a-z]+) damage equal to your casting modifier when it starts its turn (?:inside the area|in the area)\b/.exec(s);
     return m && schoolOf(m[2]) ? { who: m[1] === "An enemy" ? "enemy" : "creature", damage: { rating: null, school: schoolOf(m[2]), ratingFrom: "castingMod" } } : null;
   },
+  // The Necromancer's Plague Cloud: *Each living creature that starts its turn in the area takes
+  // 3 Shadow damage* - every creature, and a kind clause below spares the undead and constructs.
+  s => {
+    const m = /^Each living creature that starts its turn (?:in|inside) the area takes (\d+) ([A-Z][a-z]+) damage\b/.exec(s);
+    return m && schoolOf(m[2]) ? { who: "creature", damage: { rating: Number(m[1]), school: schoolOf(m[2]) } } : null;
+  },
   // *Every creature in the area takes 4 Frost damage at the start of each of its turns*.
   s => {
     const m = /^Every creature in the area takes (\d+) ([A-Z][a-z]+) damage at the start of each of its turns\b/.exec(s);
@@ -345,6 +351,12 @@ const ON_FAILURE = /^On a failure it takes (\d+) ([A-Z][a-z]+) damage\b/;
  * of the kind whoever it stands with.
  */
 const KIND = [
+  // *Each living creature that starts its turn ...* (the Necromancer's Plague Cloud): a living
+  // creature is neither undead nor a construct (the lead, Phase 0 item 2), so those two take
+  // nothing instead - an `instead` row with no rating and no heal.
+  s => (/^Each living creature that starts its turn\b/.test(s)
+    ? { kinds: ["undead", "construct"], who: "", rating: null, school: null, heal: null, instead: true }
+    : null),
   s => {
     const m = /, and an? (undead creature|demon) takes (\d+) instead\b/.exec(s);
     return m ? { kinds: [kindWord(m[1])], who: "", rating: Number(m[2]), school: null, heal: null, instead: true } : null;
@@ -1043,8 +1055,13 @@ export function tickFor(tick, { relation = "other", kinds = [] } = {}) {
     if ((row.rating ?? null) !== null) damage = { rating: row.rating, school: row.school ?? null };
     if ((row.heal ?? null) !== null) heal = row.heal;
   }
-  if (!damage && heal === null) return null;
-  return { damage, heal };
+  // **05's TEMPORARY HEALTH A TURN'S START GRANTS** (04's Circle of the Damned: *Each ally that starts
+  // its turn in your circle gains temporary Health equal to your rank*; Phase 4c-T): a talent's area
+  // carries `temp` (`rules/necromancer-talents.mjs#circleTick`); 07's spells carry none, so the
+  // parser's stamped shape is unchanged and every other tick answers exactly as before.
+  const temp = base && Number(tick.temp) > 0 ? Math.trunc(Number(tick.temp)) : null;
+  if (!damage && heal === null && temp === null) return null;
+  return temp === null ? { damage, heal } : { damage, heal, temp };
 }
 
 /* -------------------------------------------- */
@@ -1382,7 +1399,13 @@ export function riderPayload(row, { judged = false } = {}) {
   // **A BOON ON A KIND OF TEST** (04's Burial Ground: *every friendly target inside it
   // gains a Boon on Resilience Tests*; the Legacy branches' door 25): every Resilience
   // where the kind is Resilience (`resilience: "all"`, `rules/auras.mjs#auraBoonsOn`).
-  if (row?.boon && row.boon !== "all") out.boon = row.boon === "resilience" ? { kind: "resilience", resilience: "all", boons: 1 } : { kind: row.boon, boons: 1 };
+  // And a Resilience's own name is a Boon on that Resilience alone (04's Cult Fervor: *a Boon on Spirit
+  // Resilience Tests*; Phase 4c-T), the Bane's own reading above.
+  if (row?.boon && row.boon !== "all") {
+    out.boon = row.boon === "resilience" ? { kind: "resilience", resilience: "all", boons: 1 }
+      : REMAINS_RESILIENCES.includes(row.boon) ? { kind: "resilience", resilience: row.boon, boons: 1 }
+        : { kind: row.boon, boons: 1 };
+  }
   if ((row?.boonAgainst ?? []).length) out.boon = { kind: "resilience", against: [...row.boonAgainst], boons: 1 };
   if (row?.speed) out.speed = row.speed;
   if (row?.healing === "half") out.healing = "half";

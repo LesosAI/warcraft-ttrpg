@@ -42,8 +42,9 @@ import { abilityScope } from "../rules/expressions.mjs";
 import { laidByOne } from "../rules/forced-movement.mjs";
 import { countsAsAlly } from "../rules/distance.mjs";
 import {
-  FEATURE_STEPS, PULL_REFUSALS, STEP_KINDS, STEP_REFUSALS, occupiedBy, partyRadius, pullRefusal, readSpellStep, stepOf, stepRefusal, topLeftFor
+  FEATURE_STEPS, PULL_REFUSALS, STEP_KINDS, STEP_REFUSALS, corpseStepFeet, occupiedBy, partyRadius, pullRefusal, readSpellStep, stepOf, stepRefusal, topLeftFor
 } from "../rules/steps.mjs";
+import { rangeFeetOf } from "../rules/raise.mjs";
 import { feetApart, feetToPoint } from "../canvas/footprints.mjs";
 import { allyStandingOf, combatantIn } from "../canvas/engaged.mjs";
 import { pickPoint } from "../canvas/place.mjs";
@@ -117,7 +118,7 @@ function inSight(doc, centre) {
  *   false skips the sight test (the GM-side handler, which cannot see for the asker)
  * @returns {{refusal: string|null, to: {x: number, y: number}|null, apart: number|null}}
  */
-export function judgeStep(token, point, { feet, sight = "see", except = [], askSight = true } = {}) {
+export function judgeStep(token, point, { feet, sight = "see", except = [], askSight = true, corpses = [], near = 5 } = {}) {
   const doc = docOf(token);
   if (!doc?.parent || !point) return { refusal: "noToken", to: null, apart: null };
   const to = snappedTopLeft(doc, point);
@@ -126,7 +127,15 @@ export function judgeStep(token, point, { feet, sight = "see", except = [], askS
   const apart = feetToPoint(doc, centre);
   const seen = sight === "see" && askSight ? inSight(doc, centre) : true;
   const occupied = occupiedBy(box, standingBoxes(doc), { except });
-  const refusal = stepRefusal({ feet, apart, sight: askSight ? sight : "seen", seen, occupied, same: to.x === Math.round(doc.x) && to.y === Math.round(doc.y) });
+  // **07 §17's GRAVE STEP** (run 4c-S): the space within `near` feet of one of the corpses the cast
+  // found within its Range - each measured footprint to footprint with the mover laid at the space (D-732).
+  const nearCorpse = sight === "corpse" && askSight
+    ? (corpses ?? []).some(c => {
+      const d = feetApart(c, doc, { to: { x: to.x, y: to.y } });
+      return typeof d === "number" && d <= Math.max(0, Number(near) || 0) + 1e-6;
+    })
+    : null;
+  const refusal = stepRefusal({ feet, apart, sight: askSight ? sight : "seen", seen, occupied, same: to.x === Math.round(doc.x) && to.y === Math.round(doc.y), nearCorpse });
   return { refusal, to, apart };
 }
 
@@ -143,15 +152,15 @@ export function stepWords(refusal, { name = "", feet = 0 } = {}) {
  * @param {{feet: number, sight?: "see"|"seen", name?: string, hint?: string|null, except?: string[]}} o
  * @returns {Promise<{point: {x: number, y: number}, to: {x: number, y: number}}|null>}
  */
-export async function pickStep(token, { feet, sight = "see", name = "", hint = null, except = [] } = {}) {
+export async function pickStep(token, { feet, sight = "see", name = "", hint = null, except = [], corpses = [], near = 5 } = {}) {
   const doc = docOf(token);
   if (!doc?.parent) return null;
   let landed = null;
   const point = await pickPoint({
-    hint: hint ?? game.i18n.format(sight === "seen" ? "AZEROTH.Step.PickSeen" : "AZEROTH.Step.Pick", { name, feet }),
+    hint: hint ?? game.i18n.format(sight === "corpse" ? "AZEROTH.Step.PickCorpse" : sight === "seen" ? "AZEROTH.Step.PickSeen" : "AZEROTH.Step.Pick", { name, feet, near }),
     sceneId: doc.parent.id,
     accept: p => {
-      const judged = judgeStep(doc, p, { feet, sight, except });
+      const judged = judgeStep(doc, p, { feet, sight, except, corpses, near });
       if (!judged.refusal) {
         landed = judged.to;
         return true;
@@ -256,7 +265,9 @@ export function stepAllowance(by, item) {
     // 04's Weaver's Lore on Farstep (*you may bring one willing creature within 5 feet of
     // you*; stage 2b): its companion is a party step of the talent's feet.
     const companion = farstepCompanion(by.takenTalents?.() ?? [], { spell: item.name }, talentEffect);
-    return { feet: step.feet, friend: null, party: step.who === "selfAndTargets" ? partyRadius(item.system?.target ?? "") : (companion?.feet ?? null), pull: null };
+    // 07 §17's Grave Step (run 4c-S): the spell's Range and the near feet beside the corpse.
+    const feet = step.corpse ? corpseStepFeet(step, rangeFeetOf(item.system?.range ?? "")) : step.feet;
+    return { feet, friend: null, party: step.who === "selfAndTargets" ? partyRadius(item.system?.target ?? "") : (companion?.feet ?? null), pull: null };
   }
   if (item.type !== "feature") return null;
   if (item.name === BLINK.feature) {

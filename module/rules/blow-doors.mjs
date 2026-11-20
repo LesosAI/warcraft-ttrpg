@@ -44,10 +44,14 @@ import { extraPart } from "./mitigation.mjs";
  */
 // **08 §20's UNDYING** (D-911) is the creature's own too, a Signature press that fires
 // itself (`signature`), after Borrowed Hour and before another's is asked.
-export const HOLD_ORDER = Object.freeze(["aegis", "unkillable", "cauterize", "borrowedHour", "signature", "intervention", "spiritShell", "guardianSpirit"]);
+// **04's LIFE FOR A LIFE** (the Necromancer's Damned, Phase 4c-T: *Once a round, when an ally in your
+// circle would drop to 0 Health, you may collapse one of your raised dead within 30 feet of that ally*)
+// is asked last: its price is a servant, not a use, and its judgement is the circle's
+// (`effects/necromancer-talents.mjs#lifeForALifeJudged`), handed in as `life`.
+export const HOLD_ORDER = Object.freeze(["aegis", "unkillable", "cauterize", "borrowedHour", "signature", "intervention", "spiritShell", "guardianSpirit", "lifeForALife"]);
 
 /** The holds a holder is ASKED for: another creature's talent and its use. */
-export const ASKED_HOLDS = Object.freeze(["intervention", "spiritShell", "guardianSpirit"]);
+export const ASKED_HOLDS = Object.freeze(["intervention", "spiritShell", "guardianSpirit", "lifeForALife"]);
 
 /**
  * The moves a holder is asked for. `burden` is 04's Shared Burden (the Legacy branches'
@@ -59,7 +63,11 @@ export const ASKED_HOLDS = Object.freeze(["intervention", "spiritShell", "guardi
 // `gauntlet` is 08 §20's The Raised Gauntlet (D-912): *as a Reaction when an attack hits an
 // ally within 15 feet of you, the attack hits you instead, and your Armor Points apply* - a
 // Signature's press, its use the press's own.
-export const MOVE_KINDS = Object.freeze(["guardian", "righteous", "burden", "interposed", "sentinel", "gauntlet"]);
+// `graveGuard` is 02 §7's Grave Guard (the Necromancer plan's door 8): the creature STRUCK moves the
+// blow onto one of its own raised dead within 10 feet, judged by `necromancer-features.mjs
+// #graveGuardJudgement` and landed by `effects/grave-guard.mjs` - never by `moveJudgement`, which
+// refuses a move onto oneself's own blow.
+export const MOVE_KINDS = Object.freeze(["guardian", "righteous", "burden", "interposed", "sentinel", "gauntlet", "graveGuard"]);
 
 /** What a burden move takes: half the blow, rounded down, or all of it. */
 export const MOVE_SHARES = Object.freeze(["half", "all"]);
@@ -111,8 +119,10 @@ export function heldAt({ before = 0, amount = 0, stay = 1 } = {}) {
  * @param {{attack?: boolean, friendly?: boolean, distance?: number|null, warded?: boolean, usesLeft?: number, holderUp?: boolean}} o
  * @returns {{ok: boolean, reason: string|null}}  `reason` an `AZEROTH.BlowDoor.Refuse.*` key's tail
  */
-export function holdJudgement(row = {}, { attack = false, friendly = false, distance = null, warded = false, usesLeft = 0, holderUp = true } = {}) {
+export function holdJudgement(row = {}, { attack = false, friendly = false, distance = null, warded = false, usesLeft = 0, holderUp = true, life = null } = {}) {
   if (!row?.kind || !ASKED_HOLDS.includes(row.kind)) return { ok: false, reason: "unknown" };
+  // Life for a Life: no use to count; the circle's own judgement, made by the door that reads the board.
+  if (row.kind === "lifeForALife") return life && typeof life === "object" ? { ok: life.ok === true, reason: life.ok === true ? null : (life.reason ?? "unknown") } : { ok: false, reason: "unknown" };
   if (holderUp !== true) return { ok: false, reason: "down" };
   if (!(whole(usesLeft) > 0)) return { ok: false, reason: "noUses" };
   if (row.kind === "spiritShell") {

@@ -25,6 +25,7 @@
 import { AZEROTH } from "../config.mjs";
 import {heldSpellRetaliations} from './spell-retaliation-sources.mjs';
 import { areaTransferRefusal } from "./pending-area-transfer.mjs";
+import { bindingOnArea, potentForStrike, recordAreaMark, strikeLanded } from "./empower-areas.mjs";
 import { sustainEntryTransferPending } from "../rules/sustain-entry-transfer.mjs";
 import {
   areaLapsed, checkOutcome, checksFor, enterFor, hasAreaTick, relationOf, tickFor
@@ -435,6 +436,11 @@ export async function postAreaTest({ actor, token = null, region, check, trigger
   const failed = checkOutcome(check, { success: false, kinds });
   const fail = outcomeWords(failed, caster?.name ?? "");
   const pass = outcomeWords(checkOutcome(check, { success: true, kinds }), caster?.name ?? "");
+  // **02 §7's BINDING ON THE AREA'S TEST** (the 4a review's MUST-FIX 3; O-411): the first Test the
+  // spell asks of this creature takes the Bane. **SPENT ONLY WHEN THE CREATURE ROLLS IT** (the lead, on
+  // the 4c review's Q6: *"6 - Only on creature's roll"*; D-1100): posting the card records nothing; the
+  // roll records it (`dice/chat.mjs#rollResists`), so a Test posted and never rolled leaves the Bane owed.
+  const binding = bindingOnArea(region, actor);
   const { renderTemplate } = foundry.applications.handlebars;
   const content = await renderTemplate("systems/azeroth-rpg/templates/chat/area-card.hbs", {
     title: spell.name ?? region.name,
@@ -458,6 +464,8 @@ export async function postAreaTest({ actor, token = null, region, check, trigger
     content,
     flags: { [SCOPE]: {
       kind: "areaTest",
+      // What the cast laid on this Test (02 §7's Binding), read at the press (`dice/chat.mjs#rollResists`).
+      ...(binding ? { resistBanes: [{ name: game.i18n.localize("AZEROTH.Essence.Empower.binding"), banes: 1, binding: true }] } : {}),
       area: {
         sceneId: region.parent?.id ?? null, regionId: region.id, cast: f.cast ?? null,
         ...(f.signatureDamageCast ? { signatureDamageCast: f.signatureDamageCast, signatureMessageId: f.messageId } : {}),
@@ -659,7 +667,15 @@ export async function areaTestOutcome({ actor, message, result } = {}) {
   };
   // Signature damage was delivered on the GM while recording this save.
   // The owner's continuation handles only the remaining non-damage riders.
-  if (outcome.damage && !area.signatureDamageCast) lines.push(...await strikeFromArea({ actor, caster, spell: area.spell ?? {}, damage: outcome.damage }));
+  // **02 §7's POTENT ON A FAILED AREA TEST** (the 4a review's MUST-FIX 2): the area's first strike on
+  // this creature rises, off the Region the card names, and is recorded once it has landed.
+  if (outcome.damage && !area.signatureDamageCast) {
+    const region = area.regionId ? game.scenes?.get(area.sceneId ?? "")?.regions?.get(area.regionId) ?? null : null;
+    const rise = potentForStrike(region, actor, { damage: outcome.damage });
+    const damageOutcome = {};
+    lines.push(...await strikeFromArea({ actor, caster, spell: area.spell ?? {}, damage: rise.damage, damageOutcome }));
+    if (rise.rose > 0 && strikeLanded({ damageOutcome })) await recordAreaMark(region, "potentStruck", actor.uuid);
+  }
   if (areaTransferRefusal(area)) return interrupted();
   // **THE ESCAPE A CHECK'S FAILURE CARRIES** (04's Anchor of Ages; the 3B review, M2): a
   // check row may name its own way out (`fail.escape`, stamped at the cast with the caster's
@@ -960,16 +976,25 @@ export async function enterAreas(document, movement, operation = {}) {
             && !staleIn(scene, [areaRecord(region)], worldClock()).length
             && (!(Number(tick.enter.rounds) > 0)
               || !areaLapsed({ lasts: { rounds: tick.enter.rounds }, placedAt: f.placedAt ?? null }, worldClock()));
+          // **02 §7's POTENT** rides the entry's strike too (the 4a review's MUST-FIX 2; O-413), and
+          // the Region records the creature once the Signature's delivery has landed it.
+          const rise = potentForStrike(region, actor, { damage });
           const result = message && eventId && message.flags?.[SCOPE]?.cast === f.signatureDamageCast
             && f.signatureDamageCast === f.cast
             ? await deliverSignatureAreaDamage({ message, caster, actor, token: document,
-              spell: f.spell ?? {}, damage, event: `areaEnter:${f.cast}:${document.uuid}:${eventId}`, validate: valid })
+              spell: f.spell ?? {}, damage: rise.damage, event: `areaEnter:${f.cast}:${document.uuid}:${eventId}`, validate: valid })
             : { ok: false, reason: 'context' };
           if (result.ok) {
+            if (rise.rose > 0) await recordAreaMark(region, "potentStruck", actor.uuid);
             if (tokenInWorld(document) && regionInWorld(region) && actorInWorld(actor)) await postLines(actor, result.lines);
           } else console.warn('azeroth-rpg | signature area entry unresolved', result.reason);
         } else {
-          const lines = await strikeFromArea({ actor, caster, spell: f.spell ?? {}, damage });
+          // **02 §7's POTENT ON AN AREA'S ENTRY** (the 4a review's MUST-FIX 2): the first strike on
+          // this creature, by whichever door, rises; recorded once it has landed.
+          const rise = potentForStrike(region, actor, { damage });
+          const damageOutcome = {};
+          const lines = await strikeFromArea({ actor, caster, spell: f.spell ?? {}, damage: rise.damage, damageOutcome });
+          if (rise.rose > 0 && strikeLanded({ damageOutcome })) await recordAreaMark(region, "potentStruck", actor.uuid);
           if (tokenInWorld(document) && regionInWorld(region) && actorInWorld(actor)) await postLines(actor, lines);
         }
       }

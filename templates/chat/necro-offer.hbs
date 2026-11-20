@@ -1,0 +1,36 @@
+{{!-- The Necromancer's offers (02 §7; the Necromancer plan's doors 7, 10 and 11), posted on the
+      active GM's client by `effects/necromancer-horde.mjs#postOffer`, so each row names its own
+      audience (D-779): `data-reaction-owner` shows Claim the Fallen, Unending Dead and a plague
+      ghoul's rising to whoever owns the Necromancer, and the lich's return is whispered to the GMs
+      alone. Every press judges again before anything is spent. --}}
+<div class="azeroth azeroth-card azeroth-card-feature azeroth-necro-offer" data-message-kind="necroOffer">
+  <div class="azeroth-card-body">
+    <p class="azeroth-card-line azeroth-fired"><span>{{title}}</span><em>{{text}}</em></p>
+    {{#if claim}}
+    <div class="azeroth-card-actions" data-reaction-owner="{{holderUuid}}">
+      {{#each spells}}
+      <button type="button" data-action="claimTheFallen" data-holder-uuid="{{../holderUuid}}" data-scene-id="{{../sceneId}}" data-corpse-id="{{../corpseId}}" data-spell="{{this.key}}" data-empowered="false">{{localize "AZEROTH.Horde.ClaimCast" spell=this.name}}</button>
+      {{#if ../empowerable}}
+      <button type="button" data-action="claimTheFallen" data-holder-uuid="{{../holderUuid}}" data-scene-id="{{../sceneId}}" data-corpse-id="{{../corpseId}}" data-spell="{{this.key}}" data-empowered="true">{{localize "AZEROTH.Horde.ClaimEmpowered" spell=this.name n=../essence}}</button>
+      {{/if}}
+      {{/each}}
+    </div>
+    {{/if}}
+    {{#if unending}}
+    <div class="azeroth-card-actions" data-reaction-owner="{{holderUuid}}">
+      <button type="button" data-action="unendingDead" data-holder-uuid="{{holderUuid}}" data-servant-uuid="{{servantUuid}}" data-fall="false">{{localize "AZEROTH.Horde.StandAgain"}}</button>
+      <button type="button" data-action="unendingDead" data-holder-uuid="{{holderUuid}}" data-servant-uuid="{{servantUuid}}" data-fall="true">{{localize "AZEROTH.Horde.LetFall"}}</button>
+    </div>
+    {{/if}}
+    {{#if rising}}
+    <div class="azeroth-card-actions" data-reaction-owner="{{holderUuid}}">
+      <button type="button" data-action="hordeRise" data-holder-uuid="{{holderUuid}}" data-scene-id="{{sceneId}}" data-corpse-id="{{corpseId}}">{{localize "AZEROTH.Horde.PlagueRiseButton"}}</button>
+    </div>
+    {{/if}}
+    {{#if lich}}
+    <div class="azeroth-card-actions" data-gm-only>
+      <button type="button" data-action="lichReturn" data-holder-uuid="{{holderUuid}}">{{localize "AZEROTH.Lich.ReturnButton"}}</button>
+    </div>
+    {{/if}}
+  </div>
+</div>

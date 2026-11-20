@@ -1,7 +1,7 @@
 /** Compel owns a distinct Charmed carrier: a generic condition cannot prove
  * command or be removed with the caster's Sustain without affecting others. */
 import { sustainedSpellLive } from "./sustained-spells.mjs";
-import { cleanEscape } from "../rules/escapes.mjs";
+import { cleanEscape, compelEscapeMissing } from "../rules/escapes.mjs";
 import { nextEnslaveMinute } from '../rules/enslave-clock.mjs';
 
 const SCOPE = "azeroth-rpg";
@@ -44,10 +44,9 @@ export async function repairCompelEscapes(actor) {
   const writer = () => game.user?.isGM === true && game.users?.activeGM?.id === game.user.id;
   if (!writer() || !actor?.isOwner) return result;
   for (const effect of [...(actor.effects ?? [])]) {
+    // The filter `AzerothCombat#_escapePrompts` asks through `compelRepairDue` before importing this.
+    if (!compelEscapeMissing(effect)) continue;
     const f = effect.flags?.[SCOPE];
-    if (!["compel", "dominate"].includes(f?.identifier) || effect.disabled || effect.active === false
-      || !effect.statuses?.has("charmed")) continue;
-    if (cleanEscape(f.escape)?.identifier === f.identifier) continue;
     const card = game.messages?.get(f.messageId), cast = card?.flags?.[SCOPE];
     if (f.escape != null || cast?.kind !== "spell" || cast.identifier !== f.identifier || cast.success !== true
       || !f.cast || cast.cast !== f.cast || cast.caster !== effect.origin || cast.sustained !== true

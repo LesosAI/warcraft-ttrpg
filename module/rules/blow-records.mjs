@@ -24,9 +24,12 @@ const whole = v => Math.max(0, Math.trunc(Number(v)) || 0);
  * (`movedParts`); `minus`: a flat number off it (Shield of the Righteous's Ward 1 on a blow of
  * a school); `half`: half of it, rounded down (Blade Flurry's share, Echoing Sands); `burden`:
  * Shared Burden's share met by the holder's own Armor Points and Ward (`burdenMet`); `divide`:
- * one creature's share of a Spirit Link's division (`divideEvenly`).
+ * one creature's share of a Spirit Link's division (`divideEvenly`); `graveGuard`: what passes the
+ * servant that took the blow for its Necromancer (02 §7's Grave Guard: *Damage beyond that creature's
+ * Health is dealt to you*; the 4b review's S3) - the blow less the servant's room, `{room}`, its
+ * Health and temporary Health.
  */
-export const RECORD_STEPS = Object.freeze(["moved", "minus", "half", "burden", "divide"]);
+export const RECORD_STEPS = Object.freeze(["moved", "minus", "half", "burden", "divide", "graveGuard"]);
 
 /**
  * **A BLOW'S RECORD, CARRIED ONTO ANOTHER DOOR** (O-362; run close-F2): the resolver's inputs the
@@ -86,6 +89,9 @@ export function resolveRecord(record, input = record?.input) {
       const share = movedAmount({ kind: "burden", amount: r.damage, share: b.share ?? "half" });
       const met = burdenMet({ share, type: b.type ?? null, location: b.location ?? "body", holder: b.holder ?? {}, parts: share < r.damage ? null : (r.parts ?? null) });
       r = { damage: met.damage, wardTook: met.wardTook, parts: met.parts };
+    } else if (step.graveGuard) {
+      const { parts: _parts, mainDamage: _main, ...rest } = r;
+      r = { ...rest, wardTook: 0, damage: Math.max(0, r.damage - whole(step.graveGuard.room)), parts: null };
     } else if (step.divide) {
       const { shares } = divideEvenly(r.damage, whole(step.divide.count) || 1);
       const { parts: _parts, mainDamage: _main, ...rest } = r;
@@ -93,6 +99,20 @@ export function resolveRecord(record, input = record?.input) {
     }
   }
   return r;
+}
+
+/**
+ * **GRAVE GUARD'S OVERFLOW, RECORDED** (02 §7; the 4b review's S3): the blow as the servant met it
+ * (its Armor Points and Ward in the record's inputs), moved, less the servant's room - what reaches
+ * the Necromancer, with the chain a later door (04's Icebound Fortitude) can resolve again. Null
+ * where there is no record to carry.
+ *
+ * @param {object|null} servantRecord  the record with the servant's inputs
+ * @param {{room?: number}} o
+ * @returns {object|null}
+ */
+export function graveGuardRecord(servantRecord, { room = 0 } = {}) {
+  return withSteps(servantRecord, { moved: true }, { graveGuard: { room: whole(room) } });
 }
 
 /**

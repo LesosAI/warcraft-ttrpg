@@ -65,6 +65,13 @@ export function weaponTraining(item, access = []) {
   const hammer = type === "hammer" || ["hammer", "warhammer", "maul"].includes(form);
   const axe = type === "axe" || ["axe", "greataxe", "thrown-axe"].includes(form);
   const polearm = type === "polearm" || classic === "polearm" || ["halberd", "scythe"].includes(form);
+  // **"sickles"** and **"scythes"** are 02's Necromancer row (*Daggers, staves, wands, sickles,
+  // scythes*; the lead: *"Add sickles and scythes"*): the Sickle's form or a name holding
+  // *sickle*, and the `scythe` form or a name holding *scythe* - the Scythe, the Amani war-scythe
+  // and a Classic find named for one - and no other axe or polearm. A word the reader lacks gives
+  // every such weapon the untrained Bane, which is how the Chronomancer's *swords* went live.
+  const sickle = form === "sickle" || /\bsickles?\b/.test(words);
+  const scythe = form === "scythe" || /scythe/.test(words);
   const wand = classic === "wand" || /\bwand\b/.test(words);
   const claw = type === "fist" || classic === "fist weapon" || /\bclaws?\b/.test(words);
   const thrown = classic === "thrown" || (sys.traits ?? []).some(t => /^Thrown\b/i.test(t));
@@ -78,6 +85,7 @@ export function weaponTraining(item, access = []) {
     || (a === "short blades" && shortBlade) || (a === "staves" && staff) || (a === "maces" && mace)
     || (a === "hammers" && hammer) || (a === "axes" && axe) || (a === "polearms" && polearm)
     || (a === "wands" && wand) || (a === "claws" && claw) || (a === "thrown" && thrown)
+    || (a === "sickles" && sickle) || (a === "scythes" && scythe)
     || (a === "one-handed melee" && oneHanded));
 }
 

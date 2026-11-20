@@ -99,7 +99,11 @@ import { temporaryHealthContext } from "../effects/temporary-health.mjs";
 import { spellPoolFor } from "../rules/class-talents.mjs";
 // The Death Knight's rune panel (D-919; D11 §4; run F2): the context is pure, the doors
 // are `effects/death-knight.mjs`'s.
-import { handSockets, runePanelContext } from "../rules/rune-panel.mjs";
+import { handSockets, runePanelContext, runePoolSegments } from "../rules/rune-panel.mjs";
+// The Necromancer's horde panel (D11 §2; the plan's door 14): the pure context and the doors it presses.
+import { hordePanelContext } from "../rules/horde-panel.mjs";
+import { HORDE_LEAD_FLAG } from "../rules/horde.mjs";
+import { capacityOf, collapseHordeMember, enslavedOf, essenceOf, hordeActorsOf, leadOf, nameLead } from "../effects/necromancer-horde.mjs";
 import { RUNES, RUNIC_POWER, poolLabelKey, spendRefusal as runeSpendRefusal } from "../rules/runes.mjs";
 import { inscriptionRefusalFor, spendRuneBare, useInscription } from "../effects/death-knight.mjs";
 import { spectralMove } from "../effects/mount-works.mjs";
@@ -220,6 +224,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       rollSkill: AzerothCharacterSheet.#onRollSkill,
       // The rune panel's two controls (D-919; run F2).
       inscribeRunes: AzerothCharacterSheet.#onInscribeRunes,
+      dismissRaised: AzerothCharacterSheet.#onDismissRaised,
+      makeHordeLead: AzerothCharacterSheet.#onMakeHordeLead,
       spendRune: AzerothCharacterSheet.#onSpendRune,
       rollAbility: AzerothCharacterSheet.#onRollAbility,
       shortRest: AzerothCharacterSheet.#onShortRest,
@@ -454,7 +460,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     context.factionList = (this.actor.signatureState?.factions ?? []).join(", ");
     context.canConfigureCombatSheet = game.user.isGM;
     context.showManeuvers = showsManeuvers(system, this.actor.getFlag("azeroth-rpg", "showManeuvers"));
-    context.combatSections = Object.fromEntries(["maneuvers", "features", "talents", "runes", "signatures"].map(key =>
+    context.combatSections = Object.fromEntries(["maneuvers", "features", "talents", "runes", "horde", "signatures"].map(key =>
       [key, game.user.getFlag("azeroth-rpg", `combatSections.${key}`) !== false]));
     context.tabs = this._prepareTabs("primary");
 
@@ -569,6 +575,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // The rune panel (D-919): a Death Knight's alone, built before the Overview, whose
     // hand tiles draw the same sockets.
     context.runePanel = this.#runePanel();
+    // The horde panel (D11 §2): a Necromancer's alone - a character holding the Essence pool.
+    context.hordePanel = this.#hordePanel();
     context.favorites = await this.#favorites();
     // Every row's inline detail opens on what the entry says (2026-09-06).
     await this.#describeRows([
@@ -852,6 +860,37 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
    * @inheritDoc
    */
   async _onDropItem(event, item) {
+    // **A SPELL LEARNED AFTER CREATION IS JUDGED BY 07 §4 AND §9** (the Necromancer plan's learning
+    // door; the lead: *"fix this"*, and on tier 5: *"Yes the tier 5 spells learned via tomes should be
+    // learnable by the GM manually to the character"*): a spell dragged in from outside - the sidebar,
+    // a compendium, the browser - is refused in words for a player, with nothing written, where no
+    // class the character holds learns it, its prerequisite is not known or bars it, it is tier 5 and
+    // no tier 3 spell is known, or it is tier 5 at all (`AzerothActor#learnVerdict`). A GM is asked
+    // whether to TEACH IT ANYWAY, and a yes writes it past every gate with the bypass; the document's
+    // own seam (`AzerothItem._preCreateOperation`) judges every other write.
+    if (item?.type === "spell" && this.actor.uuid !== item.parent?.uuid) {
+      const data = item.toObject?.() ?? item;
+      const verdict = this.actor.learnVerdict?.(data) ?? { act: "allow" };
+      if (verdict.act === "refuse") {
+        ui.notifications?.warn(verdict.text);
+        return null;
+      }
+      if (verdict.act === "confirm") {
+        const yes = await foundry.applications.api.DialogV2.confirm({
+          window: { title: game.i18n.localize("AZEROTH.Spell.Teach.Title") },
+          content: `<p>${verdict.text}</p><p>${game.i18n.format("AZEROTH.Spell.Teach.Ask", { name: this.actor.name, spell: data.name ?? "" })}</p>`,
+          yes: { label: game.i18n.localize("AZEROTH.Spell.Teach.Yes") },
+          no: { label: game.i18n.localize("AZEROTH.Spell.Teach.No") },
+          rejectClose: false
+        });
+        if (!yes) return null;
+        // A taught spell names no item that teaches it: a foreign `spellFrom` would let a sync withdraw it.
+        if (verdict.strip) foundry.utils.setProperty(data, "flags.azeroth-rpg.spellFrom", null);
+        const [taught] = await this.actor.createEmbeddedDocuments("Item", [data], { azerothLearn: "bypass" });
+        if (taught) ui.notifications?.info(game.i18n.format("AZEROTH.Spell.Teach.Done", { name: this.actor.name, spell: data.name ?? "" }));
+        return taught ?? null;
+      }
+    }
     // **A GADGETS-COMPENDIUM ENTRY GOES STRAIGHT TO THE CREATE** (the lead, 2026-10-24),
     // whose veto refuses it in words (`AzerothItem#_preCreate`): no zone below may put
     // anything away for it first (D-745's order), or answer with a refusal of its own - a
@@ -2227,6 +2266,69 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     });
   }
 
+  /**
+   * **THE HORDE PANEL** (D11 §2; the frozen artboard; the plan's door 14): the Essence meter, the
+   * places and a row for each of the raised dead. Null for a character who holds no Essence pool.
+   * The context is `rules/horde-panel.mjs`'s, pure; the words are composed here.
+   */
+  #hordePanel() {
+    const essence = essenceOf(this.actor);
+    if (!essence) return null;
+    const L = k => game.i18n.localize(k);
+    const F = (k, d) => game.i18n.format(k, d);
+    const flag = this.actor.getFlag("azeroth-rpg", HORDE_LEAD_FLAG) ?? null;
+    const lead = leadOf(this.actor);
+    const members = [
+      ...hordeActorsOf(this.actor).map(a => {
+        const bond = a.getFlag("azeroth-rpg", "bond") ?? {};
+        return {
+          id: a.id, name: a.name, entry: bond.entryName ?? a.name, raisedAt: Number(bond.since) || 0,
+          weightClass: a.system?.weightClass ? L(AZEROTH.weightClasses?.[a.system.weightClass] ?? a.system.weightClass) : null,
+          spell: bond.sourceName ?? null, health: a.system?.health?.value ?? 0, max: a.system?.health?.max ?? 0, temp: a.system?.health?.temp ?? 0,
+          keepsReaction: bond.keepsReaction === true, outside: bond.outside === true, grafts: a.getFlag("azeroth-rpg", "grafts") ?? bond.grafts ?? [],
+          wardSchools: a.getFlag("azeroth-rpg", "graftWard") ?? [],
+          img: a.prototypeToken?.texture?.src ?? a.img ?? null
+        };
+      }),
+      ...enslavedOf(this.actor).map(({ actor, record }) => ({
+        id: actor.uuid, name: actor.name, entry: record.entry ?? actor.name, raisedAt: Number(record.since) || 0,
+        weightClass: actor.system?.weightClass ? L(AZEROTH.weightClasses?.[actor.system.weightClass] ?? actor.system.weightClass) : null,
+        spell: L("AZEROTH.Horde.Panel.EnslaveSpell"), health: actor.system?.health?.value ?? 0, max: actor.system?.health?.max ?? 0, temp: actor.system?.health?.temp ?? 0,
+        controlled: true, img: actor.img ?? null
+      }))
+    ];
+    return hordePanelContext({
+      essence: { value: essence.value ?? 0, max: essence.max ?? 0 }, capacity: capacityOf(this.actor), members, lead,
+      pendingLead: flag?.taken === false ? flag.id : null, editable: this.isEditable,
+      words: {
+        held: L("AZEROTH.Horde.Panel.Held"), empty: L("AZEROTH.Horde.Panel.EmptySocket"),
+        "kind.bone": L("AZEROTH.Horde.Panel.KindBone"), "kind.flesh": L("AZEROTH.Horde.Panel.KindFlesh"), "kind.other": L("AZEROTH.Horde.Panel.KindOther"),
+        weight: ({ weight }) => weight, from: ({ spell }) => F("AZEROTH.Horde.Panel.From", { spell }),
+        place: () => L("AZEROTH.Horde.Panel.PlaceTaken"), places: ({ n }) => F("AZEROTH.Horde.Panel.PlacesTaken", { n }),
+        outside: L("AZEROTH.Horde.Panel.Outside"), controlled: L("AZEROTH.Horde.Panel.Controlled"),
+        health: d => F("AZEROTH.Horde.Panel.HealthCount", d), healthTemp: d => F("AZEROTH.Horde.Panel.HealthTemp", d),
+        essenceCount: d => F("AZEROTH.Horde.Panel.EssenceCap", d), placesCount: d => F("AZEROTH.Horde.Panel.PlacesUsed", d),
+        skeletonPlaces: d => F("AZEROTH.Horde.Panel.SkeletonPlaces", d), overview: d => F("AZEROTH.Horde.Panel.OverviewRow", d),
+        ...Object.fromEntries(["meatHook", "bonePlating", "wardedHide", "swollen", "butchersArm", "plagueBladder", "graspingArms"].map(g => [`graft.${g}`, L(`AZEROTH.Graft.${g}`)])),
+        ...Object.fromEntries(Object.entries(AZEROTH.schools ?? {}).map(([k, label]) => [`school.${k}`, L(label)])),
+        graftSchool: d => F("AZEROTH.Horde.Panel.GraftSchool", d)
+      }
+    });
+  }
+
+  /** Dismiss one of the raised dead from the panel (02 §7: *at any time, using no action*). */
+  static async #onDismissRaised(event, target) {
+    const id = target?.dataset?.hordeId;
+    const servant = id ? game.actors.get(id) : null;
+    if (servant) await collapseHordeMember(this.actor, servant, { byChoice: true, reason: "dismiss" });
+  }
+
+  /** Name a lead from the panel (02 §7: once the lead has collapsed; at a cast, through the cast's line). */
+  static async #onMakeHordeLead(event, target) {
+    const id = target?.dataset?.hordeId;
+    if (id) await nameLead(this.actor, id, { casting: false });
+  }
+
   /** Inscribed Runeweapon's Use from the panel (02 §7): the feature's own door. */
   static async #onInscribeRunes() {
     const feature = this.actor.items.find(i => i.type === "feature" && i.name === "Inscribed Runeweapon");
@@ -2694,8 +2796,14 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         value: stored.value,
         max: pool.max,
         // One segment per point the class allows: a Warrior's bar has ten and
-        // a Rogue's has five.
-        segments: Array.from({ length: pool.max }, (_, i) => ({ filled: i < stored.value })),
+        // a Rogue's has five. The runes' segments carry their kind (D-1103): a Blood rune
+        // draws red and a Frost rune the darker blue, each named in its tooltip.
+        segments: runes
+          ? runePoolSegments(system.runes, {
+            blood: game.i18n.localize("AZEROTH.Runes.Blood"), frost: game.i18n.localize("AZEROTH.Runes.Frost"),
+            spentBlood: game.i18n.localize("AZEROTH.Runes.SpentBlood"), spentFrost: game.i18n.localize("AZEROTH.Runes.SpentFrost")
+          })
+          : Array.from({ length: pool.max }, (_, i) => ({ filled: i < stored.value })),
         // **SAND IS HELD IN THE HOURGLASS** (D-848): the partial draws the glass
         // beside the count, and with none in the Ranged slot it says so in words,
         // since a bar of no segments alone would read as a broken pool.

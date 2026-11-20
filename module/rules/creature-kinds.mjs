@@ -36,7 +36,9 @@ import { rungsInForce } from "./corruption-effects.mjs";
 import { undeadByClass } from "./undead.mjs";
 
 /** The three words a rule may say, and nothing else (D-753). */
-export const CREATURE_KINDS = Object.freeze(["undead", "fel", "demon"]);
+// And `construct` (the Necromancer plan): 07's *living creature* is one that is neither undead nor
+// a construct (the lead, Phase 0 item 2), so an area that strikes the living spares both by kind.
+export const CREATURE_KINDS = Object.freeze(["undead", "fel", "demon", "construct"]);
 
 /** 02 §5's people whose members are undead by the book's own words. */
 const UNDEAD_PEOPLES = Object.freeze(["forsaken"]);
@@ -77,7 +79,10 @@ export function creatureSnapshot({ type = null, system = null, race = null, clas
       ? Object.fromEntries(Object.entries(corruption).map(([k, v]) => [k, Math.trunc(Number(v) || 0)]))
       : null,
     // A character's classes (D-946): what it was handed, else what its data derived.
-    classes: !npc ? [...(Array.isArray(classes) ? classes : (Array.isArray(s.classKeys) ? s.classKeys : []))] : []
+    classes: !npc ? [...(Array.isArray(classes) ? classes : (Array.isArray(s.classKeys) ? s.classKeys : []))] : [],
+    // And whether its data derived it undead (`undead.mjs#undeadStanding`): a Death Knight by its
+    // class, a lich by its feature (the Necromancer plan's Lichdom groundwork).
+    undead: !npc && s.undead === true
   };
 }
 
@@ -98,8 +103,9 @@ export function kindsOf(snapshot = {}) {
   const type = String(snapshot.creatureType ?? "").toLowerCase();
   const people = peopleKey(snapshot.race);
   if (type === "undead" || UNDEAD_PEOPLES.includes(people) || endedAs(snapshot.tracks, "undeath", "The Risen")
-    || undeadByClass(snapshot.classes)) out.add("undead");
+    || snapshot.undead === true || undeadByClass(snapshot.classes)) out.add("undead");
   if (String(snapshot.keyword ?? "").toLowerCase() === "fel" || endedAs(snapshot.tracks, "fel", "The Fel-touched")) out.add("fel");
   if (type === "demon") out.add("demon");
+  if (type === "construct") out.add("construct");
   return out;
 }

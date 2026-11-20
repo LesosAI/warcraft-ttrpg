@@ -61,6 +61,8 @@
     {{!-- The bond that holds this creature (D-643), and its release. --}}
     <div class="azeroth-identity-line">
       <span>{{identity.bond.line}}</span>
+      {{#if identity.bond.horde.keepsReaction}}<span class="azeroth-horde-mark is-react">{{localize "AZEROTH.Horde.Panel.KeepsReaction"}}</span>{{/if}}
+      {{#if identity.bond.horde.grafts}}<span class="azeroth-horde-banner-grafts">{{localize "AZEROTH.Horde.Panel.Grafts"}}: {{identity.bond.horde.grafts}}</span>{{/if}}
       {{!-- A totem bound with nowhere to stand (02 §7, D-708). --}}
       {{#if identity.bond.plantable}}<button type="button" class="azeroth-build" data-action="plantTotem">{{localize "AZEROTH.Totem.Plant"}}</button>{{/if}}
       {{#if identity.bond.releasable}}<button type="button" class="azeroth-build" data-action="release">{{localize "AZEROTH.Bound.Release"}}</button>{{/if}}

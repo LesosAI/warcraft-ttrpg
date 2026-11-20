@@ -12,6 +12,8 @@
  * **The Death Knight's is one too** (O-330): WoW does have a Death Knight crest, but
  * not in the icon set this repository vendors, so it is `Spell_DeathKnight_Festering
  * Strike` set in a disc the same way until real art lands (D-942).
+ * **The Necromancer's is generated art** (the plan's Phase 0 item 13): WoW has no Necromancer
+ * class, so the art team made one, framed as the Warlock's is (`assets/MANIFEST.md`).
  *
  * **A path is answered only for a crest that is on disk.** An `<img>` that
  * 404s is a console error, and the smoke run fails on one (CLAUDE.md §16), so
@@ -22,9 +24,9 @@
  * Pure: no Foundry imports.
  */
 
-/** The twelve class identifiers that have a crest, as `packs-src/classes` spells them. */
+/** The thirteen class identifiers that have a crest, as `packs-src/classes` spells them. */
 export const CLASS_CRESTS = Object.freeze([
-  "chromatic-champion", "chronomancer", "death-knight", "druid", "mage", "paladin", "priest", "ranger", "rogue", "shaman", "warlock", "warrior"
+  "chromatic-champion", "chronomancer", "death-knight", "druid", "mage", "necromancer", "paladin", "priest", "ranger", "rogue", "shaman", "warlock", "warrior"
 ]);
 
 /** Where the crests are served from, relative to Foundry's route root. */

@@ -196,16 +196,40 @@ export function planIsEmpty(plan) {
   return !plan || !plan.create?.length;
 }
 
+/** The class count of the book this repair was written for: the Death Knight's twelve (D-942). */
+export const REPAIR_CLASS_COUNT = 12;
+
+/** The number words 02 §7's heading may count its classes in. */
+const CLASS_COUNT_WORDS = Object.freeze({
+  nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16
+});
+
+/**
+ * The class count 02 §7's page name states (`7. The thirteen classes` -> 13), or null where the
+ * name is not that heading or counts in a word the table lacks.
+ *
+ * @param {string} name
+ * @returns {number|null}
+ */
+export function classCountOf(name) {
+  const m = /^7\. The ([a-z]+) classes$/i.exec(String(name ?? "").trim());
+  return m ? (CLASS_COUNT_WORDS[m[1].toLowerCase()] ?? null) : null;
+}
+
 /**
  * **WHETHER THE RULES PACK CARRIES THE BOOK THIS REPAIR WAS WRITTEN FOR** (D-758's rule, as
- * migration 0.15.3's steps have it): a pack built before the Death Knight's 02 §7 holds no page
- * named *The twelve classes*, and a pass over it would bring the world up to an old book and mark
- * the world past this version.
+ * migration 0.15.3's steps have it): a pack built before the Death Knight's 02 §7 counts fewer
+ * than twelve classes, and a pass over it would bring the world up to an old book and mark the
+ * world past this version.
+ *
+ * **KEYED ON THE CLASS COUNT, NEVER ON THE PAGE'S NAME** (the Necromancer plan's finding 6): it
+ * asked for a page named *The twelve classes*, so the thirteenth class's book renamed §7 and the
+ * repair read every newer pack as stale. A count of `REPAIR_CLASS_COUNT` or more carries it.
  *
  * @param {Array<{name: string, pages?: Array<{name: string}>}>} chapters  the compendium's entries
  * @returns {boolean}
  */
 export function rulesPackCarriesRepair(chapters = []) {
   const options = (chapters ?? []).find(c => String(c?.name ?? "").toUpperCase() === "02-CHARACTER-OPTIONS");
-  return Boolean(options?.pages?.some(p => /^7\. The twelve classes$/.test(String(p?.name ?? ""))));
+  return Boolean(options?.pages?.some(p => (classCountOf(p?.name) ?? 0) >= REPAIR_CLASS_COUNT));
 }

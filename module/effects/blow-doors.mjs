@@ -587,7 +587,9 @@ function holdFacts(offer, target, { attack }) {
   return {
     attack, friendly: true, distance: offer.distance,
     warded: wardsOn(target).some(w => w.ward.by === offer.holder.uuid),
-    usesLeft: usesLeft(offer.holder, offer.row), holderUp: standing(offer.holder)
+    usesLeft: usesLeft(offer.holder, offer.row), holderUp: standing(offer.holder),
+    // 04's Life for a Life (Phase 4c-T): the circle's judgement, made by its own door in `askToHold`.
+    life: offer.life ?? null
   };
 }
 
@@ -601,7 +603,15 @@ function holdFacts(offer, target, { attack }) {
  */
 export async function askToHold({ target, before = 0, amount = 0, attack = false } = {}) {
   if (!target || !wouldDrop({ before, amount }) || (!tokenOf(target) && !wardsOn(target).length)) return { amount, held: null };
-  for (const offer of holdOffers(target)) {
+  const offers = holdOffers(target);
+  // **04's LIFE FOR A LIFE** (Phase 4c-T): judged off the board by the Necromancer's own door - the
+  // ally inside the holder's circle, a raised dead within 30 feet of it, the round's one use.
+  if (offers.some(o => o.row.kind === "lifeForALife")) {
+    const { lifeForALifeJudged } = await import("./necromancer-talents.mjs");
+    const { feetApart } = await import("../canvas/footprints.mjs");
+    for (const o of offers) if (o.row.kind === "lifeForALife") o.life = lifeForALifeJudged(o.holder, target, feetApart);
+  }
+  for (const offer of offers) {
     if (!holdJudgement(offer.row, holdFacts(offer, target, { attack })).ok) continue;
     const answer = await ask(offer.holder, {
       act: "hold", identifier: offer.row.identifier, holderUuid: offer.holder.uuid, targetUuid: target.uuid,
@@ -617,6 +627,12 @@ export async function askToHold({ target, before = 0, amount = 0, attack = false
 
 /** The hold on the holder's own client: judged again, asked, and its use struck. */
 async function holdHere({ holder, target, identifier, before, amount, attack, distance }) {
+  // 04's Life for a Life (Phase 4c-T): its own door - the one chooser naming the servant that pays.
+  if (identifier === "life-for-a-life") {
+    if (!wouldDrop({ before, amount })) return { held: false, reason: "noDrop" };
+    const { lifeForALifeHere } = await import("./necromancer-talents.mjs");
+    return lifeForALifeHere({ holder, target, askMs: ASK_MS });
+  }
   const row = holdRowsFor(holder.takenTalents?.() ?? [], { tier: holder.system?.tier ?? 1 }).find(r => r.identifier === identifier) ?? null;
   if (!row) return { held: false, reason: "unknown" };
   const offer = { holder, row, distance };
@@ -799,6 +815,19 @@ export async function blowAskHandler(payload = {}, { user = null } = {}) {
   if (payload.act === "icebound") {
     if (holder.uuid !== target.uuid) throw new Error(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: holder.name }));
     return iceboundAskHere({ holder, amount: whole(payload.amount), featureId: typeof payload.featureId === "string" ? payload.featureId : null });
+  }
+  // 02 §7's Grave Guard (the Necromancer plan's door 8): the Necromancer struck is its own holder.
+  if (payload.act === "graveGuard") {
+    if (holder.uuid !== target.uuid) throw new Error(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: holder.name }));
+    const { graveGuardHere } = await import("./grave-guard.mjs");
+    // The answerer returns the choice and its payment alone; the asker lands the blow (the 4b review's S2).
+    return graveGuardHere({ holder, amount: whole(payload.amount) });
+  }
+  // 07 §17's Bone Shield (run 4c-S): the Necromancer struck is its own holder, and casts it there.
+  if (payload.act === "boneShield") {
+    if (holder.uuid !== target.uuid) throw new Error(game.i18n.format("AZEROTH.Reaction.Refuse.NotYours", { name: holder.name }));
+    const { boneShieldHere } = await import("./necromancer-spells.mjs");
+    return boneShieldHere({ holder, amount: whole(payload.amount) });
   }
   // 04's Borrowed Time (stage 2c): the creature struck is its own holder.
   if (payload.act === "borrow") {

@@ -132,6 +132,9 @@ import { THEMATIC_FEL_SPELLS } from "./thematic-fel.mjs";
 import { creatureAnimations } from "./creature-animation-table.mjs";
 // The Death Knight's rows and recolours (the Death Knight plan's Phase 6, run F5).
 import { DK_FEATURE_ANIMATIONS, DK_FILTERS, DK_SPELL_ANIMATIONS } from "./death-knight-animations.mjs";
+// The Necromancer's (the Necromancer plan's Phase 6): its twelve tier 1 spells, its features, talents
+// and events, and its recolours.
+import { NECRO_FEATURE_ANIMATIONS, NECRO_FILTERS, NECRO_SPELL_ANIMATIONS } from "./necromancer-animations.mjs";
 import { FORCED_MOVE_KEY } from "./animation-records.mjs";
 
 /* ------------------------------------------------------------------ */
@@ -303,7 +306,9 @@ export const FILTERS = Object.freeze({
    */
   BLOOD_RAGE: Object.freeze({ hue: -30, saturate: 0.45, brightness: 0.85 }),
   // The Death Knight's Blood, Frost and grave-green (`rules/death-knight-animations.mjs`).
-  ...DK_FILTERS
+  ...DK_FILTERS,
+  // The Necromancer's plague yellow, gut thread and grave vapour (`rules/necromancer-animations.mjs`).
+  ...NECRO_FILTERS
 });
 
 /* ------------------------------------------------------------------ */
@@ -426,7 +431,8 @@ export const SCHOOL_CUES = Object.freeze({
     snd("psfx.1st-level-spells.dissonant-whispers.v1.001", { volume: 0.7 })
   ]),
   fel: Object.freeze([
-    fx("jb2a.cast_generic.fire.01.orange", { place: "source", scale: 0.8, filter: "FEL_O" })
+    fx("jb2a.cast_generic.fire.01.orange", { place: "source", scale: 0.8, filter: "FEL_O" }),
+    snd("psfx.casting.fire.001", { volume: 0.6 })
   ])
 });
 
@@ -683,6 +689,19 @@ function loop(binding, layers, { state = null } = {}) {
  * never waits for Place area. Only the eleven PLACED areas - six ground
  * circles, Flare, three cones and the line - carry a `region` cue.
  */
+/**
+ * **THE NECROMANCER'S TWELVE TIER 1 SPELLS, WAITING ON THEIR ROWS** (the Necromancer plan's
+ * Phase 6: *The 12 new tier 1 spells each need an `animation-table.mjs` row*). Phase 3b's parse
+ * put them in the pack; until Phase 6 reviews a direction for each (`tools/animation/
+ * directions.mjs`) and writes its row, each is NAMED here and held to having neither, and the
+ * census holds every other tier 1 spell to both. Phase 6 strikes each as its row lands.
+ *
+ * **EMPTY SINCE PHASE 6**: all twelve have their rows (`rules/necromancer-animations.mjs
+ * #NECRO_SPELL_ANIMATIONS`) and their directions, and the census holds every tier 1 spell to both.
+ * The list stays, empty and held empty, for the next class that parses spells before its rows land.
+ */
+export const SPELL_ANIMATIONS_PENDING = Object.freeze([]);
+
 export const SPELL_ANIMATIONS = Object.freeze({
   /* ================= Fire ================= */
   fireball: {
@@ -770,11 +789,11 @@ export const SPELL_ANIMATIONS = Object.freeze({
     ])
   },
   immolation: {
-    cues: [cue("cast", [fx("jb2a.impact.fire.01.orange", { place: "source", scale: 0.9 })])],
+    cues: [cue("cast", [fx("jb2a.impact.fire.01.orange", { place: "source", scale: 0.9 }), snd("psfx.casting.fire.001", { volume: 0.4 })])],
     loop: loop("sustain-self", [fx("jb2a.flames.04.loop.orange", { place: "holder", scale: 1.3, opacity: 0.85 })])
   },
   "blazing-speed": {
-    cues: [cue("cast", [fx("jb2a.flames.02.orange", { place: "source", below: true, hold: 1200, fadeOut: 400 })])]
+    cues: [cue("cast", [fx("jb2a.flames.02.orange", { place: "source", below: true, hold: 1200, fadeOut: 400 }), snd("psfx.casting.fire.001", { volume: 0.4 })])]
   },
   flare: {
     cues: [cue("region", [
@@ -830,7 +849,7 @@ export const SPELL_ANIMATIONS = Object.freeze({
     loop: loop("sustain-region", [fx("jb2a.sleet_storm.01.blue", { place: "region", area: 1, mask: true, opacity: 0.9 })])
   },
   "numbing-frost": {
-    cues: [cue("cast", [fx("jb2a.impact_themed.ice_shard.blue", { place: "target", scale: 0.6 })])]
+    cues: [cue("cast", [fx("jb2a.impact_themed.ice_shard.blue", { place: "target", scale: 0.6 }), snd(SOUNDS.cold, { volume: 0.5 })])]
   },
   frostbite: silent("07 says there is nothing to see"),
   // The chill's sound is Frost Nova's cold impact, quieter (D-1011, O-380).
@@ -850,7 +869,7 @@ export const SPELL_ANIMATIONS = Object.freeze({
     loop: loop("effect", [fx("jb2a.shield_themed.below.ice.01.blue", { place: "holder", scale: 1.35, opacity: 0.6, below: true })])
   },
   "frost-ward": {
-    cues: [cue("cast|effect", [fx("jb2a.impact_themed.ice_shard.blue", { place: "target", scale: 0.5 })])],
+    cues: [cue("cast|effect", [fx("jb2a.impact_themed.ice_shard.blue", { place: "target", scale: 0.5 }), snd(SOUNDS.cold, { volume: 0.4 })])],
     loop: loop("effect", [
       fx("jb2a.shield_themed.below.ice.01.blue", { place: "holder", scale: 1.5, below: true }),
       fx("jb2a.shield_themed.above.ice.01.blue", { place: "holder", scale: 1.5 })
@@ -864,7 +883,7 @@ export const SPELL_ANIMATIONS = Object.freeze({
     loop: loop("sustain-region", [fx("jb2a.energy_wall.01.25x05ft.01.loop.orange", { place: "region-line", travel: "span", filter: "ICE_O" })])
   },
   "cold-snap": {
-    cues: [cue("cast", [fx("jb2a.template_circle.out_pulse.01.burst.bluewhite", { place: "source", scale: 1.6, below: true })])]
+    cues: [cue("cast", [fx("jb2a.template_circle.out_pulse.01.burst.bluewhite", { place: "source", scale: 1.6, below: true }), snd(SOUNDS.cold, { volume: 0.5 })])]
   },
   // The same frost crack as Frost Nova, so the same cold impact, quieter (D-1011, O-380).
   icewalk: {
@@ -896,12 +915,14 @@ export const SPELL_ANIMATIONS = Object.freeze({
   moonfire: {
     cues: [cue("cast", [
       fx("jb2a.moonbeam.01.intro.blue", { place: "target", scale: 1.3, filter: "STAR" }),
+      snd("psfx.2nd-level-spells.moonbeam.intro.v1.001", { volume: 0.6 }),
       fx("jb2a.markers.light.complete.blue", { place: "target", opacity: 0.6, delay: 900 })
     ])]
   },
   starfire: {
     cues: [cue("cast", [
       fx("jb2a.sacred_flame.target.yellow", { place: "target", scale: 1.5, filter: "STAR_Y" }),
+      snd("psfx.cantrips.sacred-flame.v1.001.target"),
       fx("jb2a.explosion.04.blue", { place: "target", delay: 700 }),
       fx("jb2a.particle_burst.01.star.bluepurple", { place: "target", delay: 700 })
     ])]
@@ -909,11 +930,12 @@ export const SPELL_ANIMATIONS = Object.freeze({
   "arcane-explosion": {
     cues: [cue("cast", [
       fx("jb2a.particle_burst.01.circle.bluepurple", { place: "source", area: 1 }),
+      snd(SOUNDS.generic),
       fx("jb2a.template_circle.out_pulse.02.burst.bluewhite", { place: "source", area: 1, filter: "PURPLE_B" })
     ])]
   },
   starfall: {
-    cues: [cue("region", [fx("jb2a.particle_burst.01.star.bluepurple", { place: "region", area: 0.4 })])],
+    cues: [cue("region", [fx("jb2a.particle_burst.01.star.bluepurple", { place: "region", area: 0.4 }), snd(SOUNDS.generic, { volume: 0.6 })])],
     loop: loop("sustain-region", [
       fx("jb2a.sleet_storm.02.blue", { place: "region", area: 1, mask: true, filter: "STAR", opacity: 0.6 }),
       fx("jb2a.particle_burst.01.star.bluepurple", { place: "region-scatter", count: 3, area: [0.25, 0.4], stagger: 900, filter: "STAR" })
@@ -929,7 +951,7 @@ export const SPELL_ANIMATIONS = Object.freeze({
     loop: loop("sustain-self", [fx("jb2a.shield.01.loop.blue", { place: "holder", scale: 1.5, filter: "PURPLE_B", opacity: 0.6 })])
   },
   "dampen-magic": {
-    cues: [cue("cast|effect", [fx("jb2a.shimmer.01.blue", { place: "target", scale: 1.3, filter: "PURPLE_B" })])],
+    cues: [cue("cast|effect", [fx("jb2a.shimmer.01.blue", { place: "target", scale: 1.3, filter: "PURPLE_B" }), snd("psfx.1st-level-spells.shield-spell.intro.v1.003", { volume: 0.5 })])],
     // Borderline: an hour of lattice. The stop door is the release valve.
     loop: loop("effect", [fx("jb2a.shield_themed.above.eldritch_web.01.dark_purple", { place: "holder", opacity: 0.4 })])
   },
@@ -1113,17 +1135,18 @@ export const SPELL_ANIMATIONS = Object.freeze({
     ])]
   },
   "faerie-fire": {
-    cues: [cue("cast|effect", [fx("jb2a.markers.light.intro.blue", { place: "target", scale: 1.2, filter: "FAERIE" })])],
+    cues: [cue("cast|effect", [fx("jb2a.markers.light.intro.blue", { place: "target", scale: 1.2, filter: "FAERIE" }), snd("psfx.cantrips.light.v1.001", { volume: 0.6 })])],
     loop: loop("effect", [fx("jb2a.markers.light.nopulse.blue", { place: "holder", filter: "FAERIE", opacity: 0.55 })])
   },
   "ghost-wolf": {
     cues: [cue("cast", [
       fx("jb2a.shimmer.01.blue", { place: "source", scale: 1.5 }),
-      fx("jb2a.smoke.puff.ring.01.white", { place: "source" })
+      fx("jb2a.smoke.puff.ring.01.white", { place: "source" }),
+      snd(SOUNDS.gust, { volume: 0.6 })
     ])]
   },
   "water-walking": {
-    cues: [cue("cast|effect", [fx("jb2a.water_splash.circle.01.blue", { place: "target", below: true, hold: 1600, fadeOut: 400 })])]
+    cues: [cue("cast|effect", [fx("jb2a.water_splash.circle.01.blue", { place: "target", below: true, hold: 1600, fadeOut: 400 }), snd("psfx.casting.water.001", { volume: 0.5 })])]
   },
   "mark-of-the-wild": {
     cues: [cue("cast|effect", [
@@ -1197,7 +1220,7 @@ export const SPELL_ANIMATIONS = Object.freeze({
     ])]
   },
   "shadow-ward": {
-    cues: [cue("cast|effect", [fx("jb2a.shimmer.01.blue", { place: "target", scale: 1.3, filter: "SHADOW_B" })])],
+    cues: [cue("cast|effect", [fx("jb2a.shimmer.01.blue", { place: "target", scale: 1.3, filter: "SHADOW_B" }), snd("psfx.1st-level-spells.shield-spell.intro.v1.003", { volume: 0.6 })])],
     loop: loop("effect", [
       fx("jb2a.shield_themed.below.eldritch_web.01.dark_purple", { place: "holder", scale: 1.5, below: true }),
       fx("jb2a.shield_themed.above.eldritch_web.01.dark_purple", { place: "holder", scale: 1.5 })
@@ -1205,7 +1228,7 @@ export const SPELL_ANIMATIONS = Object.freeze({
   },
   // The token's alpha is never touched: the priest stays visible (07's own words).
   fade: {
-    cues: [cue("cast", [fx("jb2a.smoke.puff.ring.01.white", { place: "source", scale: 1.1, filter: "DIM" })])]
+    cues: [cue("cast", [fx("jb2a.smoke.puff.ring.01.white", { place: "source", scale: 1.1, filter: "DIM" }), snd(SOUNDS.gust, { volume: 0.4 })])]
   },
   // **THE CARD RECORDS THE MOVE NOW** (the Legacy branches' doors 2 and 3): the
   // departure where the priest stood, at cast, and the arrival where the step put
@@ -1282,13 +1305,13 @@ export const SPELL_ANIMATIONS = Object.freeze({
   banish: {
     cues: [
       cue("cast", SCHOOL_CUES.fel),
-      cue("resist", [fx("jb2a.markers.chain.spectral_standard.complete.02.blue", { place: "resisted", filter: "FEL_B" })])
+      cue("resist", [fx("jb2a.markers.chain.spectral_standard.complete.02.blue", { place: "resisted", filter: "FEL_B" }), snd(SOUNDS.necrotic, { volume: 0.55 })])
     ]
   },
   "enslave-demon": {
     cues: [
       cue("cast", SCHOOL_CUES.fel),
-      cue("resist", [fx("jb2a.markers.chain.standard.complete.02.red", { place: "resisted", filter: "FEL_R" })])
+      cue("resist", [fx("jb2a.markers.chain.standard.complete.02.red", { place: "resisted", filter: "FEL_R" }), snd(SOUNDS.necrotic, { volume: 0.55 })])
     ]
   },
   consume: silent("nothing resolves; no sacrifice is recorded"),
@@ -1320,10 +1343,10 @@ export const SPELL_ANIMATIONS = Object.freeze({
     loop: loop("effect", [fx("jb2a.energy_strands.range.standard.purple.01", { place: "channel-back", travel: "stretch", filter: "FEL_P", opacity: 0.35 })])
   },
   felstep: {
-    cues: [cue("cast", [fx("jb2a.shimmer.01.blue", { place: "source", below: true, filter: "FEL_B" })])]
+    cues: [cue("cast", [fx("jb2a.shimmer.01.blue", { place: "source", below: true, filter: "FEL_B" }), snd("psfx.2nd-level-spells.misty-step.v1.intro.generic", { volume: 0.6 })])]
   },
   "demonic-sight": {
-    cues: [cue("cast", [fx("jb2a.eyes.01.dark_green.single", { place: "source", hold: 1600, fadeOut: 400 })])]
+    cues: [cue("cast", [fx("jb2a.eyes.01.dark_green.single", { place: "source", hold: 1600, fadeOut: 400 }), snd("psfx.incantations.whispers.masc.001.forward.standard.003", { volume: 0.45 })])]
   },
 
   /* ================= Holy ================= */
@@ -1336,6 +1359,7 @@ export const SPELL_ANIMATIONS = Object.freeze({
   "holy-fire": {
     cues: [cue("cast", [
       fx("jb2a.sacred_flame.target.yellow", { place: "target", scale: 1.3 }),
+      snd("psfx.cantrips.sacred-flame.v1.001.target"),
       fx("jb2a.markers.light.complete.blue", { place: "target", filter: "GOLD_B", opacity: 0.7, delay: 1100 })
     ])]
   },
@@ -1430,7 +1454,11 @@ export const SPELL_ANIMATIONS = Object.freeze({
 
   /* ================= Death (07 §17) and the Death Knight's curated tier 1 ================= */
   // Sixteen rows, written in `rules/death-knight-animations.mjs` (run F5).
-  ...DK_SPELL_ANIMATIONS
+  ...DK_SPELL_ANIMATIONS,
+
+  /* ================= The Necromancer's tier 1 (07 §17, Restricted Necromancer) ================= */
+  // Twelve rows, written in `rules/necromancer-animations.mjs` (the Necromancer plan's Phase 6).
+  ...NECRO_SPELL_ANIMATIONS
 });
 
 /* ------------------------------------------------------------------ */
@@ -1621,6 +1649,18 @@ export const FEATURE_ANIMATIONS = Object.freeze({
         snd("psfx.2nd-level-spells.misty-step.v1.outro.generic", { volume: 0.6 })
       ])
     ]
+  },
+
+  /* ---- 02 §7's Warlock ---- */
+  // Soul Harvest (the Necromancer plan's Phase 7): the death watch's Mana write carries the Essence
+  // wisp's record (`rules/animation-records.mjs#SOUL_HARVEST_OPTION`) - a violet strand from the
+  // corpse to the Warlock, and a fel glow there as the 2 Mana arrive.
+  "soul-harvest": {
+    cues: [cue("use", [
+      fx("jb2a.energy_strands.range.standard.purple.02", { place: "target>source", travel: "stretch", opacity: 0.85 }),
+      snd("psfx.incantations.feminine.001.demonic.help.008", { volume: 0.35 }),
+      fx("jb2a.particles.inward.greenyellow.01.02", { place: "source", scale: 0.8, opacity: 0.8, waitFor: "travel", overlap: -150 })
+    ])]
   },
 
   /* ---- 02 §7's Chromatic Champion (stage 2B) ---- */
@@ -1840,7 +1880,7 @@ export const FEATURE_ANIMATIONS = Object.freeze({
   quickstep: {
     cues: [
       cue("use", [fx("jb2a.swirling_feathers.outburst.01.textured", { place: "step-from", scale: 0.8, filter: "SAND", below: true }), snd(SOUNDS.gust)]),
-      cue("arrive", [fx("jb2a.misty_step.02.blue", { place: "step-to", scale: 1.0, filter: "SAND" })])
+      cue("arrive", [fx("jb2a.misty_step.02.blue", { place: "step-to", scale: 1.0, filter: "SAND" }), snd("psfx.2nd-level-spells.misty-step.v1.outro.generic", { volume: 0.6 })])
     ]
   },
   // 04's Second Chance: a turn of sand round the ally as its extra Reaction is given.
@@ -1941,7 +1981,7 @@ export const FEATURE_ANIMATIONS = Object.freeze({
   "interposed-moment": {
     cues: [
       cue("use", [fx("jb2a.misty_step.01.blue", { place: "step-from", scale: 1.0, filter: "SAND" }), snd(SOUNDS.gust, { volume: 0.7 })]),
-      cue("arrive", [fx("jb2a.misty_step.02.blue", { place: "step-to", scale: 1.0, filter: "SAND" })])
+      cue("arrive", [fx("jb2a.misty_step.02.blue", { place: "step-to", scale: 1.0, filter: "SAND" }), snd("psfx.2nd-level-spells.misty-step.v1.outro.generic", { volume: 0.6 })])
     ]
   },
   // 04's Unmade Wound: the put-off damage drawn out of the Guardian as sand.
@@ -2334,13 +2374,13 @@ export const FEATURE_ANIMATIONS = Object.freeze({
         fx("jb2a.template_circle.out_pulse.02.burst.bluewhite", { place: "source", area: 1, filter: "SHADOW_B" }),
         snd("psfx.magic-signs.circle.v1.abjuration.intro", { volume: 0.8 })
       ]),
-      cue("effect", [fx("jb2a.markers.chain.spectral_standard.complete.02.blue", { place: "effect", scale: 1.2 })], { state: "escape" })
+      cue("effect", [fx("jb2a.markers.chain.spectral_standard.complete.02.blue", { place: "effect", scale: 1.2 }), snd("psfx.magic-signs.circle.v1.abjuration.intro", { volume: 0.5 })], { state: "escape" })
     ],
     loop: loop("effect", [fx("jb2a.markers.chain.spectral_standard.loop.02.blue", { place: "holder", scale: 1.2, opacity: 0.7 })], { state: "escape" })
   },
   "wardens-cage": {
     cues: [
-      cue("use", [fx("jb2a.cast_generic.02.blue", { place: "source", scale: 0.8, filter: "SHADOW_B" })]),
+      cue("use", [fx("jb2a.cast_generic.02.blue", { place: "source", scale: 0.8, filter: "SHADOW_B" }), snd("psfx.1st-level-spells.dissonant-whispers.v1.001", { volume: 0.6 })]),
       cue("effect", [
         fx("jb2a.bubble.001.001.complete.blue", { place: "effect", scale: 1.3, filter: "SHADOW_B" }),
         snd("psfx.magic-signs.circle.v1.abjuration.intro", { volume: 0.5 })
@@ -2351,7 +2391,7 @@ export const FEATURE_ANIMATIONS = Object.freeze({
   // Every creature pulled, each its own drag and its own chains; the warden moves not.
   "none-escape": {
     cues: [
-      cue("use", [fx("jb2a.cast_generic.02.blue", { place: "source", scale: 1, filter: "SHADOW_B" })]),
+      cue("use", [fx("jb2a.cast_generic.02.blue", { place: "source", scale: 1, filter: "SHADOW_B" }), snd("psfx.1st-level-spells.dissonant-whispers.v1.001", { volume: 0.6 })]),
       cue("arrive", [
         fx("jb2a.energy_strands.range.standard.purple.02", { place: "step", travel: "stretch", movers: ["pull"], filter: "SHADOW_B", stagger: 120 }),
         fx("jb2a.markers.chain.spectral_standard.complete.02.blue", { place: "step-to", movers: ["pull"], scale: 1.1, stagger: 120, delay: 300 }),
@@ -3670,7 +3710,7 @@ export const FEATURE_ANIMATIONS = Object.freeze({
         fx("jb2a.markers.on_token_mask.complete.01.orange", { place: "source", scale: 1 }),
         snd("psfx.incantations.masculine.002.dry.harm.004", { volume: 0.8 })
       ]),
-      cue("effect", [fx("jb2a.condition.curse.01.001.red", { place: "effect", scale: 1.1, hold: 1200, fadeOut: 400 })], { state: "escape" })
+      cue("effect", [fx("jb2a.condition.curse.01.001.red", { place: "effect", scale: 1.1, hold: 1200, fadeOut: 400 }), snd(SOUNDS.necrotic, { volume: 0.5 })], { state: "escape" })
     ],
     loop: loop("effect", [fx("jb2a.markers.on_token_mask.loop.01.orange", { place: "holder", scale: 1.1, opacity: 0.85 })], { state: "escape" })
   },
@@ -3713,7 +3753,7 @@ export const FEATURE_ANIMATIONS = Object.freeze({
   },
   "ancestors-hand": {
     cues: [
-      cue("use", [fx("jb2a.spirit_guardians.blueyellow.ring", { place: "source", scale: 2.4, opacity: 0.7, hold: 1100, fadeOut: 400 })]),
+      cue("use", [fx("jb2a.spirit_guardians.blueyellow.ring", { place: "source", scale: 2.4, opacity: 0.7, hold: 1100, fadeOut: 400 }), snd(SOUNDS.bless1, { volume: 0.6 })]),
       cue("rise", [
         fx("jb2a.divine_smite.caster.blueyellow", { place: "risen", scale: 1.1, stagger: 150 }),
         fx("jb2a.healing_generic.burst.greenorange", { place: "risen", scale: 1, stagger: 150, delay: 200 }),
@@ -3758,7 +3798,7 @@ export const FEATURE_ANIMATIONS = Object.freeze({
         fx("jb2a.energy_strands.range.standard.purple.03", { place: "source>target", travel: "stretch", filter: "GOLD_B" }),
         snd(SOUNDS.strands, { bucketed: true, volume: 0.7 })
       ]),
-      cue("effect", [fx("jb2a.shimmer.01.blue", { place: "effect", scale: 1.3, filter: "DIM" })], { state: "halvesDealt" })
+      cue("effect", [fx("jb2a.shimmer.01.blue", { place: "effect", scale: 1.3, filter: "DIM" }), snd("psfx.conditions.generic-layer.002", { volume: 0.5 })], { state: "halvesDealt" })
     ],
     loop: loop("effect", [fx("jb2a.energy_field.01.blue", { place: "holder", scale: 1.2, opacity: 0.35 })], { state: "halvesDealt" })
   },
@@ -3777,7 +3817,10 @@ export const FEATURE_ANIMATIONS = Object.freeze({
   },
 
   /* ---- 02 §7's Death Knight and 04's Blood and Frost, and the rune flare (run F5) ---- */
-  ...DK_FEATURE_ANIMATIONS
+  ...DK_FEATURE_ANIMATIONS,
+  // 02 §7's Necromancer, 04's Flesh, Bone and Damned, and the Essence wisp, the collapse, the
+  // rising and the graft stitching (`rules/necromancer-animations.mjs`, the plan's Phase 6).
+  ...NECRO_FEATURE_ANIMATIONS
 });
 
 /* ------------------------------------------------------------------ */

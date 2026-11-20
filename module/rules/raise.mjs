@@ -127,6 +127,103 @@ export const RAISES = Object.freeze({
   "army-of-the-dead": Object.freeze({ entry: "Risen Skeleton", corpses: Object.freeze({ min: 1, max: 6 }), per: "corpse", kinds: null, minSize: null, together: null, feet: 60, span: Object.freeze({ rounds: 3 }), capAtLeast: null })
 });
 
+/**
+ * **THE NECROMANCER'S RAISES** (07 §17's *The Necromancer raises a horde* table; 02 §7's Command
+ * the Dead; the Necromancer plan's door 3). The knight's row shape, and four keys more:
+ *
+ * - `horde: true` - the raise stands in the caster's horde: one LINKED world actor and one carrier
+ *   a creature, a recast adds to what stands (*Casting a raise spell again does not collapse the
+ *   dead it raised before*), and the places are judged before anything is paid;
+ * - `keepsReaction` - the entry's *It keeps its Reaction* (Stitch Abomination, Bind Banshee, Raise
+ *   Crypt Horror), read by the shared turn (`horde.mjs#turnShape`);
+ * - `perCorpse` - how many rise from one corpse (Raise Dead's *two Risen Skeletons*);
+ * - `choices` - the entries a creature may rise as instead (The Dead Rise's *a Risen Skeleton or a
+ *   Plagued Ghoul, your choice for each*); `outside` - *They take no places in your horde*;
+ * - `maxSize` - Animate Corpse's *Medium or smaller*; `corpses: null` - Stitch Abomination's
+ *   material, which the GM judges (the lead: *"enforced by the GM not automation/code"*), so no
+ *   corpse is claimed and the Abomination stands at a space the caster picks within its Range;
+ * - `table` - a clause the door never judges and the census carries (Bind Banshee's *female* and
+ *   *dead less than a day*: the lead's ruling, no block records either).
+ *
+ * `necromancer-horde.test` holds every number to 07's table and entries.
+ */
+const HORDE_ROW = Object.freeze({ together: null, capAtLeast: null, horde: true, keepsReaction: false, perCorpse: 1, choices: null, outside: false, maxSize: null, table: null });
+export const NECRO_RAISES = Object.freeze({
+  "raise-dead": Object.freeze({ ...HORDE_ROW, entry: "Risen Skeleton", corpses: Object.freeze({ min: 1, max: 1 }), per: "corpse", perCorpse: 2, kinds: Object.freeze(["humanoid"]), minSize: null, feet: null, span: Object.freeze({ longRest: true }) }),
+  "animate-corpse": Object.freeze({ ...HORDE_ROW, entry: "Risen Zombie", corpses: Object.freeze({ min: 1, max: 2 }), per: "corpse", kinds: null, minSize: null, maxSize: "medium", feet: null, span: Object.freeze({ longRest: true }) }),
+  "ghoul-rising": Object.freeze({ ...HORDE_ROW, entry: "Plagued Ghoul", corpses: Object.freeze({ min: 1, max: 1 }), per: "corpse", kinds: Object.freeze(["humanoid"]), minSize: null, feet: null, span: Object.freeze({ longRest: true }) }),
+  "stitch-abomination": Object.freeze({ ...HORDE_ROW, entry: "Abomination", corpses: null, per: "raise", kinds: null, minSize: null, feet: null, span: Object.freeze({ longRest: true }), keepsReaction: true, table: "material" }),
+  "bind-banshee": Object.freeze({ ...HORDE_ROW, entry: "Banshee", corpses: Object.freeze({ min: 1, max: 1 }), per: "corpse", kinds: Object.freeze(["humanoid"]), minSize: null, feet: null, span: Object.freeze({ longRest: true }), keepsReaction: true, table: "female" }),
+  "raise-crypt-horror": Object.freeze({ ...HORDE_ROW, entry: "Crypt Horror", corpses: Object.freeze({ min: 1, max: 1 }), per: "corpse", kinds: null, minSize: "large", feet: null, span: Object.freeze({ longRest: true }), keepsReaction: true }),
+  "the-dead-rise": Object.freeze({ ...HORDE_ROW, entry: "Risen Skeleton", choices: Object.freeze(["Risen Skeleton", "Plagued Ghoul"]), corpses: Object.freeze({ min: 1, max: 10 }), per: "corpse", kinds: Object.freeze(["humanoid"]), minSize: null, feet: 60, span: Object.freeze({ rounds: 600 }), outside: true })
+});
+
+/**
+ * **A RISING THAT NO CAST CHOOSES** (07's Plague of Undeath: *When a creature that failed dies
+ * before the duration ends, it rises as a Plagued Ghoul under your control at the start of your
+ * next turn. It stands until your next Long Rest*): its own row, never in `RAISES`, because the
+ * spell's cast is an area and `castSpell` judges a raise off `raiseOf`.
+ */
+export const HORDE_RISINGS = Object.freeze({
+  "plague-of-undeath": Object.freeze({ ...HORDE_ROW, entry: "Plagued Ghoul", corpses: null, per: "raise", kinds: null, minSize: null, feet: null, span: Object.freeze({ longRest: true }) }),
+  // 04's Acolyte's Sacrifice (Phase 4c-T): *A Shade ... rises in its space as one of your raised dead,
+  // until your next Long Rest* - no corpse; the space is the creature's that collapsed for it.
+  "acolytes-sacrifice": Object.freeze({ ...HORDE_ROW, entry: "Shade", corpses: null, per: "raise", kinds: null, minSize: null, feet: 30, span: Object.freeze({ longRest: true }) })
+});
+
+/** The talents that widen a Necromancer raise's corpses (04's Ranks of Bone, Shambling Horde: *1 additional corpse per rank*). */
+export const RAISE_WIDENED_BY = Object.freeze({ "raise-dead": "Ranks of Bone", "animate-corpse": "Shambling Horde" });
+
+/**
+ * **A NECROMANCER RAISE AT THE CASTER'S RANKS**: the row with its corpses widened by the talent
+ * that names it, read by name off `ranksOf(name)`. Any other row comes back unchanged.
+ *
+ * @param {string} key
+ * @param {(name: string) => number} [ranksOf]
+ * @returns {object|null}
+ */
+export function hordeRaiseRow(key, ranksOf = () => 0) {
+  const row = NECRO_RAISES[String(key ?? "")] ?? null;
+  if (!row) return null;
+  const talent = RAISE_WIDENED_BY[key];
+  const more = talent ? Math.max(0, Math.trunc(Number(ranksOf(talent))) || 0) : 0;
+  return more > 0 && row.corpses ? { ...row, corpses: { min: row.corpses.min, max: row.corpses.max + more } } : row;
+}
+
+/**
+ * **WHAT THE CREATURES OF ONE RAISE MAY RISE AS** - every composition, one a choice in the one
+ * chooser (D-673), the plain one first: The Dead Rise's ghouls for any of its creatures; Raise
+ * Dead's Skeletal Archers (04's Skeletal Archery: *any of the skeletons may rise as Skeletal
+ * Archers*) and Skeletal Mages (Skeletal Mastery: *a number of the skeletons up to your rank*).
+ * Each composition is the entries in rising order, so the plan never reorders.
+ *
+ * @param {object} row  a `NECRO_RAISES` row
+ * @param {{count?: number, archery?: number, mastery?: number}} o
+ * @returns {Array<{key: string, entries: string[], counts: Record<string, number>}>}
+ */
+export function entryCompositions(row, { count = 0, archery = 0, mastery = 0 } = {}) {
+  const n = Math.max(0, Math.trunc(Number(count)) || 0);
+  const make = counts => {
+    const entries = [];
+    for (const [name, k] of Object.entries(counts)) for (let i = 0; i < k; i++) entries.push(name);
+    const key = Object.entries(counts).filter(([, k]) => k > 0).map(([name, k]) => `${k}x${name}`).join("+");
+    return { key, entries, counts: Object.fromEntries(Object.entries(counts).filter(([, k]) => k > 0)) };
+  };
+  if (!row || n < 1) return [];
+  if (Array.isArray(row.choices) && row.choices.length > 1) {
+    const [base, other] = row.choices;
+    return Array.from({ length: n + 1 }, (_, k) => make({ [base]: n - k, [other]: k }));
+  }
+  if (row.entry !== "Risen Skeleton" || !row.horde) return [make({ [row.entry]: n })];
+  const archers = Math.trunc(Number(archery)) > 0;
+  const mages = Math.max(0, Math.min(n, Math.trunc(Number(mastery)) || 0));
+  const out = [];
+  for (let m = 0; m <= mages; m++) {
+    for (let a = 0; a <= (archers ? n - m : 0); a++) out.push(make({ "Risen Skeleton": n - m - a, "Skeletal Archer": a, "Skeletal Mage": m }));
+  }
+  return out;
+}
+
 /** The flag a raise's carrier rides on the knight, and a corpse's own mark rides its token. */
 export const RAISE_FLAG = "raised";
 export const CORPSE_FLAG = "corpse";
@@ -140,7 +237,10 @@ export const CORPSE_FLAG = "corpse";
 export const CORPSE_MARKS = Object.freeze({
   "corpse-burst": Object.freeze({ state: "destroyed", seconds: null }),
   "stay-the-rot": Object.freeze({ state: "kept", seconds: 10 * 86400 }),
-  "seal-the-soul": Object.freeze({ state: "sealed", seconds: 86400 })
+  "seal-the-soul": Object.freeze({ state: "sealed", seconds: 86400 }),
+  // **04's FLESH OFFERING** (*you may destroy one corpse within 30 feet of you*; the Necromancer
+  // plan's door 2): a TALENT's mark, its reach its own 30 feet rather than a spell's Range.
+  "flesh-offering": Object.freeze({ state: "destroyed", seconds: null, talent: true, feet: 30 })
 });
 
 /**
@@ -158,12 +258,60 @@ export function rangeFeetOf(text = "") {
   return m ? Number(m[1]) : null;
 }
 
+/**
+ * **A RAISE'S REACH, WITH 02 §7's FAR-REACHING** (*The spell's range doubles, if it is not Self or
+ * Touch*; the 4b review's MUST-FIX 6): the reach a row states (The Dead Rise's *within 60 ft of
+ * you*, a feature's) or the spell's Range in feet, doubled only where the Range itself is a
+ * distance - a Self or Touch spell, and a row's own reach under a Self Range, are never doubled.
+ * Null where nothing is read (no reach judged).
+ *
+ * @param {object} row
+ * @param {string} rangeText  the spell's **Range**
+ * @param {{farReaching?: boolean}} [o]
+ * @returns {number|null}
+ */
+export function raiseReach(row = {}, rangeText = "", { farReaching = false } = {}) {
+  const range = rangeFeetOf(rangeText);
+  const base = row?.feet ?? range;
+  if (base === null || base === undefined) return null;
+  const doubles = farReaching === true && row?.feet == null && typeof range === "number" && range > 5;
+  return doubles ? base * 2 : base;
+}
+
+/**
+ * **A RAISE'S SPAN, WITH 02 §7's LASTING** (*The spell's duration doubles, if it lasts 1 minute or
+ * longer and is not Sustained*): the carrier's rounds (`raiseRounds`) twice over; *until your next
+ * Long Rest* is no count and is left as it is (the review: *a Long Rest span unaffected*).
+ *
+ * @param {object} row
+ * @param {{lasting?: boolean}} [o]
+ * @returns {number|null}
+ */
+export function raiseSpanRounds(row = {}, { lasting = false } = {}) {
+  const rounds = raiseRounds(row);
+  return rounds && lasting === true ? rounds * 2 : rounds;
+}
+
 /** 05's size ladder, smallest first (`AZEROTH.sizes`), for *Medium or larger*. */
 const SIZE_LADDER = Object.freeze(["tiny", "small", "medium", "large", "huge", "enormous"]);
 
 /** The raise a spell or feature is, by identifier, or null. */
 export function raiseOf(identifier) {
-  return RAISES[String(identifier ?? "")] ?? null;
+  const key = String(identifier ?? "");
+  return RAISES[key] ?? NECRO_RAISES[key] ?? null;
+}
+
+/**
+ * How many creatures a raise stands from the corpses it took, at the row's `perCorpse` (Raise
+ * Dead's two from one); a raise with no corpse rule (Stitch Abomination) stands one.
+ *
+ * @param {object} row
+ * @param {number} corpses
+ */
+export function hordeCount(row, corpses = 0) {
+  if (!row) return 0;
+  if (!row.corpses) return 1;
+  return raisedCount(row, corpses) * Math.max(1, Math.trunc(Number(row.perCorpse)) || 1);
 }
 
 /**
@@ -202,7 +350,9 @@ export function isCorpse({ dead = false, npc = false, health = null, raised = fa
  */
 export function corpseMark(raw) {
   if (!raw || typeof raw !== "object") return null;
-  const state = ["raised", "destroyed", "kept", "sealed"].includes(raw.state) ? raw.state : null;
+  // 07 §17's Soul Cage (`caged`: *no one but you can raise ... it*) and Sever the Soul (`severed`:
+  // *nothing can raise or restore it*), laid when the creature died (run 4c-S).
+  const state = ["raised", "destroyed", "kept", "sealed", "caged", "severed"].includes(raw.state) ? raw.state : null;
   if (!state) return null;
   // `Number(null)` is 0, so a mark for ever (`until: null`) must be read as null BEFORE it is
   // cast, or every such mark would read as ended at the world's time 0 (found by the live run).
@@ -219,7 +369,7 @@ export function corpseMark(raw) {
  * @param {{kind?: string|null, size?: string|null, feet?: number|null, mark?: object|null}} corpse
  * @param {object} row  `RAISES`'
  * @param {{knightUuid?: string|null, reach?: number|null, now?: number}} o
- * @returns {"destroyed"|"raised"|"kept"|"sealed"|"kind"|"size"|"range"|null}
+ * @returns {"destroyed"|"raised"|"kept"|"sealed"|"kind"|"size"|"sizeMax"|"range"|null}
  */
 export function corpseRefusal(corpse = {}, row = {}, { knightUuid = null, reach = null, now = 0 } = {}) {
   const mark = corpseMark(corpse?.mark);
@@ -228,8 +378,12 @@ export function corpseRefusal(corpse = {}, row = {}, { knightUuid = null, reach 
   if (live && mark.state === "raised") return "raised";
   if (live && mark.state === "sealed") return "sealed";
   if (live && mark.state === "kept" && mark.by !== knightUuid) return "kept";
+  if (live && mark.state === "severed") return "severed";
+  if (live && mark.state === "caged" && mark.by !== knightUuid) return "caged";
   if (Array.isArray(row?.kinds) && row.kinds.length && !row.kinds.includes(corpse?.kind ?? null)) return "kind";
   if (row?.minSize && SIZE_LADDER.indexOf(corpse?.size ?? "") < SIZE_LADDER.indexOf(row.minSize)) return "size";
+  // Animate Corpse's *Medium or smaller*: a size the ladder does not know is refused too.
+  if (row?.maxSize && !(SIZE_LADDER.indexOf(corpse?.size ?? "") >= 0 && SIZE_LADDER.indexOf(corpse.size) <= SIZE_LADDER.indexOf(row.maxSize))) return "sizeMax";
   const feet = corpse?.feet;
   if (reach !== null && reach !== undefined && !(typeof feet === "number" && Number.isFinite(feet) && feet <= reach + 1e-6)) return "range";
   return null;
@@ -302,7 +456,7 @@ export function raiseAskRefusal({ row = null, fromActorId = null, ownerId = null
  * @returns {string|null}
  */
 export function corpseMarkRefusal(refusal = null, state = "") {
-  if ((refusal === "kept" || refusal === "sealed") && state === "destroyed") return null;
+  if ((refusal === "kept" || refusal === "sealed" || refusal === "caged" || refusal === "severed") && state === "destroyed") return null;
   return refusal ?? null;
 }
 

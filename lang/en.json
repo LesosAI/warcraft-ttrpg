@@ -8,7 +8,8 @@
       "NotSecond": "{name} is taken at creation only and is never a second class.",
       "HoldsCreationOnly": "A {name} takes no second class.",
       "NotOnRow": "{name} is not on the {race} row of the race and class table, so it cannot be this character's second class.",
-      "NotForRace": "{name} is open only to its own race, and this character is a {race}."
+      "NotForRace": "{name} is open only to its own race, and this character is a {race}.",
+      "NotPaired": "A {name} multiclasses only with these classes: {partners}."
     },
     "FreeCast": {
       "Spent": "{name}: the free cast is spent until the next Short Rest.",
@@ -1528,6 +1529,7 @@
       "Ferocity": "Ferocity",
       "Sand": "Sand",
       "RunicPower": "Runic Power",
+      "Essence": "Essence",
       "Mana": "Mana",
       "Focus": "Focus",
       "Energy": "Energy",
@@ -1564,6 +1566,618 @@
       "HealsUndeadOnly": "{from} heals only the undead. {name} regains no Health.",
       "OnlyDeathHeals": "{name} is undead, and only a spell of the Death school heals it from another creature. {name} regains no Health.",
       "AccruesNone": "{name} accrues no {track} Corruption."
+    },
+    "Essence": {
+      "Refuse": {
+        "gain": {
+          "unsourced": "{name} gains Essence only when a living enemy dies within 120 feet, or from a feature, talent or spell that says so. Nothing was written.",
+          "hand": "Only a GM may raise {name}'s Essence by hand. A living enemy that dies within 120 feet gives Essence."
+        }
+      },
+      "Empower": {
+        "potent": "Potent",
+        "binding": "Binding",
+        "lasting": "Lasting",
+        "farReaching": "Far-reaching"
+      },
+      "EmpowerDoes": {
+        "potent": "Spend {price} Essence: the damage, healing or temporary Health rises by {n} the first time it reaches each creature.",
+        "binding": "Spend {price} Essence: each creature takes a Bane on the first Resilience Test the spell asks of it.",
+        "lasting": "Spend {price} Essence: the spell's duration doubles.",
+        "farReaching": "Spend {price} Essence: the spell's range doubles."
+      },
+      "EmpowerShort": "{name}: no Essence is left to spend.",
+      "CastShort": "{spell}: this cast needs {n} Essence, and {name} holds less. Nothing was spent.",
+      "EmpowerPaid": "{n} Essence spent",
+      "EmpowerRefused": {
+        "noPool": "{name} was not cast: you hold no Essence to empower it with. Nothing was spent.",
+        "unknown": "{name} was not cast: that benefit does not exist. Nothing was spent.",
+        "twice": "{name} was not cast: {benefit} may be chosen once a casting. Nothing was spent.",
+        "notApplicable": "{name} was not cast: {benefit} does not apply to this spell. Nothing was spent.",
+        "short": "{name} was not cast: {n} Essence is needed for the benefits chosen. Nothing was spent."
+      }
+    },
+    "Spell": {
+      "LearnRefused": {
+        "class": "{name} cannot learn {spell}: only {classes} learn it. Nothing was added.",
+        "prerequisite": "{name} cannot learn {spell} until they know {prerequisite}. Nothing was added.",
+        "inherited": "{name} cannot learn {spell}: it carries the restriction of {prerequisite}, and no class {name} holds learns {prerequisite}. Nothing was added.",
+        "tierFive": "{name} cannot learn {spell} until they know a tier 3 spell. Nothing was added.",
+        "foundOnly": "{spell} is a tier 5 spell. Only the GM can teach it to {name}. Nothing was added.",
+        "school": "a class that holds its school"
+      },
+      "Teach": {
+        "Title": "Teach the spell anyway?",
+        "Ask": "Teach {spell} to {name} anyway? It skips the class, the prerequisite and the tier 3 rule.",
+        "Yes": "Teach it",
+        "No": "Do not teach it",
+        "Done": "{name} learns {spell}."
+      }
+    },
+    "DeathWatch": {
+      "NoAnswer": "{name}'s owner did not answer, so what a death gave {name} was not written ({reason}).",
+      "SoulHarvest": "Soul Harvest: {name} gains {mana} Mana."
+    },
+    "Necromancer": {
+      "FleshOffering": {
+        "Does": "Destroy a corpse within {feet} feet: the spell costs {n} less Mana.",
+        "Floor": "{name}: the spell already costs 1 Mana or less.",
+        "Row": "{n} less Mana for a corpse destroyed."
+      },
+      "SkeletalMastery": {
+        "Does": "Spend 1 Essence: one more skeleton may rise as a Skeletal Mage.",
+        "Paid": "Skeletal Mastery: {n} Essence spent, and {mages} more skeleton rose as a Skeletal Mage."
+      }
+    },
+    "GraftRider": {
+      "Title": "Graft",
+      "Already": "This graft Test has already been made.",
+      "Pressed": "The graft Test was made.",
+      "Passed": "{name} passes the {graft} Test.",
+      "Unmeasured": "{name} is not on the same scene as the Abomination, so nothing pulls it.",
+      "AlreadyAdjacent": "{name} already stands beside the Abomination.",
+      "Ask": {
+        "meatHook": "{creature}'s Meat Hook hit {name}. {name} makes a {resilience} Resilience Test against DC {dc}.",
+        "graspingArms": "{creature}'s Grasping Arms hit {name}. {name} makes a {resilience} Resilience Test against DC {dc}.",
+        "plagueBladder": "{name} starts its turn within 5 feet of {creature}'s Plague Bladder. {name} makes a {resilience} Resilience Test against DC {dc}."
+      },
+      "OnFail": {
+        "meatHook": "On a failure, {name} is pulled to the nearest unoccupied space beside {creature}.",
+        "graspingArms": "On a failure, {name} is Entangled until the end of its next turn. It ends with an action and a Reflex Resilience Test against DC {dc}.",
+        "plagueBladder": "On a failure, {name} is Poisoned 1, and the DC to shed it is {dc}."
+      },
+      "Asked": {
+        "meatHook": "Meat Hook: {name} makes a Body Resilience Test against DC {dc}.",
+        "graspingArms": "Grasping Arms: {name} makes a Body Resilience Test against DC {dc}."
+      },
+      "Landed": {
+        "meatHook": "{creature}'s Meat Hook pulls {name} in.",
+        "graspingArms": "{creature}'s Grasping Arms hold {name}.",
+        "plagueBladder": "{creature}'s Plague Bladder poisons {name}."
+      }
+    },
+    "NecroTalent": {
+      "Name": {
+        "bloated-dead": "Bloated Dead",
+        "gorge": "Gorge",
+        "plague-carrier": "Plague Carrier",
+        "regenerating-tissue": "Regenerating Tissue",
+        "restless-bones": "Restless Bones",
+        "sacrificial-strength": "Sacrificial Strength"
+      },
+      "Bound": {
+        "GhoulFrenzy": "Ghoul Frenzy",
+        "CommanderOfBone": "Commander of Bone",
+        "BoneVanguard": "Bone Vanguard"
+      },
+      "NoGM": "This needs a GM online: the creature is not yours to write on.",
+      "ServantOption": "{name} ({health} Health, {feet} ft)",
+      "AllyOption": "{name} ({feet} ft)",
+      "ShadeOption": "{name} (on {scene})",
+      "PlainOption": "Use it plainly",
+      "EmpoweredOption": "Empowered: spend {n} Essence",
+      "EmpowerPrompt": "{feature}: use it plainly, or empowered?",
+      "SacrificeEmpowered": "Empowered: spend {n} Essence; the Shade takes no place in your horde",
+      "CircleEmpowered": "Empowered: spend {n} Essence; the temporary Health adds your Intelligence modifier",
+      "BlackRiteEmpowered": "Empowered: spend {n} Essence; each ally chosen also gains temporary Health equal to your Intelligence modifier",
+      "BoneArmorEmpowered": "Empowered: spend {n} Essence for 1 more Armor Point until the end of the encounter",
+      "MendPrompt": "{feature}: which of your Plagued Ghouls or Abominations within {feet} feet regains Health?",
+      "GorgeServantPrompt": "{feature}: which of your Plagued Ghouls or Abominations feeds?",
+      "GorgeCorpsePrompt": "{feature}: which corpse within {name}'s reach?",
+      "BoneArmorPrompt": "{feature}: which Risen Skeleton within {feet} feet collapses? ({n} of {rank} stacks)",
+      "BoneStormPrompt": "{feature}: which of your skeletons within {feet} feet collapse?",
+      "SacrificePrompt": "{feature}: which of your raised dead within {feet} feet collapses for the Shade?",
+      "UnsummonPrompt": "{feature}: which of your raised dead within {feet} feet collapses?",
+      "FervorPrompt": "{feature}: choose up to {n} living allies within {feet} feet.",
+      "BorrowPrompt": "{feature}: which Shade do you see and hear through?",
+      "CommunionPrompt": "{feature}: a {minutes}-minute rite with up to {n} willing allies.",
+      "BlackRitePrompt": "{feature}: which of your raised dead within {feet} feet collapse?",
+      "BlackRiteAllyPrompt": "{feature}: the ally for offering {n} of {of} ({name}).",
+      "CirclePick": "{feature}: click the point for your circle.",
+      "Surged": "{name} empowers {feature} until the end of their next turn.",
+      "SurgeEffect": "{feature} (empowered)",
+      "SurgeText": {
+        "ghoul-frenzy": "Until the end of your next turn, each of your Plagued Ghouls adds twice your rank to its Damage Rating.",
+        "commander-of-bone": "Until the end of your next turn, each of your skeletons adds twice your rank to its Damage Rating.",
+        "plague-carrier": "Until the end of your next turn, a creature that fails Plague Carrier's Test is also Poisoned 1 against your Spell DC."
+      },
+      "Exhumed": "{name} casts Stitch Abomination with no corpses where the dead lie buried ({feature}). The GM judges the place.",
+      "Mended": "{name} regains {n} Health ({feature}).",
+      "Gorged": "{name} devours the corpse and regains {n} Health ({feature}).",
+      "GorgeTemp": "{name} gains {n} temporary Health.",
+      "BoneArmorRest": "{name} gains 1 Armor Point at every location until a Long Rest ({feature}: {n} stacks).",
+      "BoneArmorEncounter": "{name} gains {n} more Armor Point at every location until the end of the encounter ({feature}).",
+      "BoneArmorStackName": "{feature} ({n})",
+      "BoneArmorEncounterName": "{feature} (encounter)",
+      "BoneArmorRestText": "1 additional Armor Point at every location until you finish a Long Rest.",
+      "BoneArmorEncounterText": "1 more Armor Point at every location until the end of the encounter.",
+      "BoneStormNone": "{name}'s skeletons collapse; no enemy stood within 5 feet of them ({feature}).",
+      "ShadeRose": "A Shade rises in its place as one of {name}'s raised dead ({feature}).",
+      "ShadeRoseOutside": "A Shade rises in its place as one of {name}'s raised dead, taking no place in the horde ({feature}).",
+      "Unsummoned": "{servant} collapses and {name} regains {n} Mana.",
+      "UnsummonedFresh": "{servant} collapses; it was raised this round, so {name} regains no Mana.",
+      "CircleArea": "{name}'s circle ({feet} ft radius)",
+      "CircleDrawn": "{name} draws a {feet} ft circle: each ally that starts its turn in it gains {n} temporary Health.",
+      "CircleDrawnEmpowered": "{name} draws an empowered {feet} ft circle: each ally that starts its turn in it gains {n} temporary Health.",
+      "CircleNotDrawn": "{name}'s circle could not be drawn.",
+      "CircleMoved": "{name} moves the circle ({feature}).",
+      "CircleTemp": "{name} gains {n} temporary Health from {area}.",
+      "Fervor": "{name} deals {n} additional Shadow damage on each hit until the end of its next turn ({feature}).",
+      "FervorText": "Hits deal {n} additional Shadow damage. Loses {lose} Health at the start of its next turn, bypassing armor and Ward.",
+      "FervorLoss": "{name} loses {n} Health ({feature}).",
+      "BorrowEffect": "{feature}: borrowed senses",
+      "BorrowText": "You see and hear through {name} until the start of your next turn.",
+      "Borrowed": "{name} sees and hears through {shade} until the start of their next turn ({feature}).",
+      "Communed": "{name} regains {n} Health.",
+      "RiteHealed": "{name} regains {n} Health ({times} offerings) and has a Boon on every Test until the end of its next turn.",
+      "RiteTemp": "{name} gains {n} temporary Health.",
+      "RiteShort": "{n} offerings did not collapse and bought nothing.",
+      "EssenceShortFallback": "{name}'s Essence fell short of {n}: {feature} is used without its Empowered benefit.",
+      "BoneArmorShort": "{name} no longer holds {n} Essence, so {feature} falls back to its plain use.",
+      "BoneArmorFallbackPrompt": "{feature}: {name} no longer holds the Essence. Choose a Risen Skeleton within {feet} feet to collapse for one stack, or close this and the Half-Action buys nothing.",
+      "BoneArmorSpent": "No Risen Skeleton collapsed, so {name}'s Half-Action for {feature} buys nothing.",
+      "Look": {
+        "noScene": "The scene {name} stood on is gone, so you cannot look through it.",
+        "cannotView": "You may not view {scene}, where {name} stands, so you cannot look through it. Ask the GM to show you that scene.",
+        "noToken": "{name} no longer stands on {scene}, so you cannot look through it.",
+        "failed": "The board could not show what {name} sees. Ask the GM."
+      },
+      "Regenerated": "{name} regains {n} Health (Regenerating Tissue).",
+      "RestlessHalf": "{name} stands again with {n} Health (Restless Bones).",
+      "RestlessFull": "{name} stands again with all its Health, {n} (Restless Bones, empowered).",
+      "AskRestless": "Restless Bones stands {name} again. Spend {n} Essence so it stands with all its Health?",
+      "AskBloated": "{name} bursts for {tier} Shadow damage. Spend {n} Essence to double it?",
+      "AskLifeForALife": "{name} would drop to 0 Health in your circle. Choose one of your raised dead to collapse in its place ({feature}), or close this to let it fall.",
+      "Burst": "{name} bursts: each enemy within {feet} ft takes {n} Shadow damage ({count} struck).",
+      "BurstEmpowered": "{name} bursts, empowered: each enemy within {feet} ft takes {n} Shadow damage ({count} struck).",
+      "LifeHeld": "{servant} collapses and {name} drops to 1 Health instead (Life for a Life).",
+      "LifeHeldHeal": "{servant} collapses; {name} drops to 1 Health instead and regains {n} Health (Life for a Life).",
+      "Marrowguard": "Marrowguard: {name} takes {to} Physical damage, not {from}.",
+      "PlagueAsk": "{creature} hits {name}: {name} makes a {resilience} Resilience Test against DC {dc}.",
+      "PlagueOnFail": "On a failure {name} takes {n} Shadow damage at the start of each of its turns for 1 minute.",
+      "PlagueAsked": "Plague Carrier: {name} makes a Body Resilience Test against DC {dc}.",
+      "PlagueLaid": "{name} carries the plague: {n} Shadow damage at the start of each of its turns for 1 minute.",
+      "PlagueText": "{n} Shadow damage at the start of each of its turns for 1 minute.",
+      "Refuse": {
+        "noToken": "{name} has no token on this scene.",
+        "noGM": "This needs a GM online: nothing was spent.",
+        "noServant": "That creature has gone; nothing more happens.",
+        "noServantNear": "{name} has none of its raised dead within {feet} feet for {feature}. Nothing was spent.",
+        "noServantKind": "{name} has no raised dead of the kind {feature} names. Nothing was spent.",
+        "noSkeletonLead": "{name}'s lead is not one of its skeletons: {feature} has nobody to mend. Nothing was spent.",
+        "noSkeletonNear": "{name} has no skeleton within {feet} feet for {feature}. Nothing was spent.",
+        "wrongKind": "{name} is not a creature this talent names.",
+        "noCorpse": "No corpse lies within reach. Nothing was spent.",
+        "noCorpseReach": "No corpse lies within {feet} feet of {name} for {feature}. Nothing was spent.",
+        "noEssence": "{name} holds too little Essence for {feature}. Nothing was spent.",
+        "stacksFull": "{name} already has {feature} {rank} times, the most its rank allows. Nothing was spent.",
+        "noEncounter": "{feature}'s Empowered line lasts until the end of the encounter, and {name} is in no fight.",
+        "noEntry": "The bestiary holds no {entry}. Nothing was spent.",
+        "roundUsed": "{name} has used {feature} this round already. Nothing was spent.",
+        "noCircle": "{name} has no circle to move. Nothing was spent.",
+        "circleElsewhere": "{name}'s circle is on another scene. Nothing was spent.",
+        "noLivingAlly": "{name} has no living ally within {feet} feet for {feature}. Nothing was spent.",
+        "noShade": "{name} has no Shade to see through. Nothing was spent.",
+        "shadeNowhere": "{name} stands on no scene.",
+        "inFight": "{feature} is a {minutes}-minute rite and cannot be led in a fight. Nothing was spent.",
+        "noAlly": "{name} has no ally to choose for {feature}. Nothing was spent.",
+        "tooMany": "{feature} takes up to {n} willing allies. Nothing was spent.",
+        "picks": "Choose one ally for each creature that collapses. Nothing was spent.",
+        "cannotSee": "{name} cannot see that point.",
+        "noCollapse": "{servant} did not collapse, so {feature} gives nothing.",
+        "notInCircle": "That ally is not in {name}'s circle.",
+        "down": "{name} is down and cannot answer.",
+        "notHeld": "{name} does not hold {feature}.",
+        "notSkeleton": "That creature is not a skeleton.",
+        "holy": "Holy damage felled it: Restless Bones does not stand it again.",
+        "once": "It has stood again this way once already."
+      }
+    },
+    "NecroSpell": {
+      "AgeUnknown": {
+        "day": "Nothing recorded when {name} died, so whether it has lain less than a day is the GM's to judge.",
+        "month": "Nothing recorded when {name} died, so whether it has lain less than a month is the GM's to judge."
+      },
+      "Anchor": {
+        "Card": "{name}'s anchor watches its place. For the day, spend a Half-Action to see and hear from it.",
+        "Laid": "{name} sets {spell}. Spend a Half-Action to look out from the anchor.",
+        "Look": "Look through the anchor",
+        "Looked": "{name} sees and hears from the anchor ({spell})."
+      },
+      "Bane": { "Laid": "{name} takes a Bane on its next Attack Test ({spell})." },
+      "Barbed": {
+        "NoGM": "{talent}: no GM is online to deal the damage to {attacker}.",
+        "Struck": "{talent}: {attacker} takes {n} Shadow damage from {name}'s Bone Shield."
+      },
+      "Borrowed": { "Laid": "{name} sees and hears through {servant}, and is Blinded and Deafened." },
+      "Cage": {
+        "Laid": "{spell} cages the soul of {name} until the end of the caster's next turn.",
+        "Text": "If this creature dies before the end of {name}'s next turn, nobody but {name} can raise, question or restore it."
+      },
+      "Candle": {
+        "Lit": "A pale flame stands on {name} and sheds dim light out to {n} feet.",
+        "OwnersSee": "Only you, your raised dead and the GM see the candle's light."
+      },
+      "Contagion": {
+        "Card": "{name}'s Contagion has taken root. It spreads each day until dismissed.",
+        "Dismiss": "Dismiss",
+        "Dismissed": "{name} dismisses {spell}.",
+        "Laid": "{spell} takes root and spreads {n} feet each day until you dismiss it.",
+        "NoBlight": "Your Graveblight area is gone, so the blight cannot take root.",
+        "Nothing": "No area of your {under} stands here, so {spell} does nothing and the Mana is spent."
+      },
+      "Courier": {
+        "Cut": "The courier carries the first {n} words to {name}.",
+        "Message": "The message (up to {n} words)",
+        "Prompt": "{spell}: choose the creature to carry the message to",
+        "Send": "Send",
+        "Sent": "The courier carries {n} words to {name}.",
+        "Speaks": "A small skeleton finds {name} and speaks a message from {from}:"
+      },
+      "Curse": {
+        "Laid": {
+          "tongues": "{name} pays {n} more Mana for every spell it casts for the duration.",
+          "weakness": "{name} deals {n} less damage for the duration."
+        },
+        "tongues": "This creature pays {n} more Mana for every spell it casts.",
+        "weakness": "This creature deals {n} less damage."
+      },
+      "Departed": {
+        "Laid": "{name} casts {spell}.",
+        "Prompt": "{spell}: choose the creature whose spirit you call",
+        "Speaks": "The spirit of {name} speaks with you for 10 minutes. It answers as it chooses."
+      },
+      "Drain": {
+        "Healed": "{name} regains {n} Health ({spell})."
+      },
+      "Drops": { "Laid": "{name}'s Damage Rating falls by {rating} and its Strength by {strength} ({spell})." },
+      "Essence": {
+        "Gained": "{name} gains {n} Essence ({spell}).",
+        "None": "{name} gains no Essence ({spell}): the pool is full or gone."
+      },
+      "Frenzy": {
+        "Laid": "{name} deals {n} more Shadow damage with each hit ({spell}).",
+        "Lost": "{name} loses {n} Health to its frenzy."
+      },
+      "InsteadHeal": "Each undead ally regains {n} Health instead of taking damage.",
+      "Mark": {
+        "Card": "The mark is on {name}. For the day, sense its direction while it is within a mile.",
+        "Died": "You know at once: {name} has died.",
+        "Elsewhere": "{name} is not on this scene. The GM tells you its direction if it is within a mile.",
+        "Far": "{name} is more than a mile away, so you sense no direction.",
+        "Laid": "{spell} marks {name}.",
+        "Near": "{name} lies to the {direction}, {feet} feet away.",
+        "Sense": "Sense the direction",
+        "Text": "{name} knows the direction to this creature within a mile, and knows at once if it dies."
+      },
+      "Mask": {
+        "Laid": "{name} wears the face of {face}.",
+        "Text": "Your face looks like the face of {name}. Take a Boon on Tests to pass as that creature. The spell ends if you take damage."
+      },
+      "NotLaid": "{spell} could not be laid on {name}.",
+      "PickPoint": "{spell}: click a point within {feet} feet. Right-click or Escape to cancel.",
+      "Poisoned": { "Laid": "{name} is Poisoned {n} against DC {dc} ({spell})." },
+      "Prison": { "Laid": "{name} cannot be moved while the bones hold it ({spell})." },
+      "Puppet": {
+        "Laid": "{caster} controls {name} on their turns, and their own body is Stunned.",
+        "Not": "{caster} could not take control of {name} ({reason})."
+      },
+      "Reaping": { "Healed": "{name} regains {n} Health ({spell})." },
+      "Refuse": {
+        "anchorBudget": "{name} cannot look through the anchor now: {reason}",
+        "anchorGone": "Your {spell} no longer stands.",
+        "boneShieldLate": "The blow has already landed, so {spell} is not cast and nothing is paid.",
+        "boneShieldTrigger": "{spell} is cast as a Reaction when an attack hits you. It asks you then.",
+        "casterGone": "The caster of {spell} is gone.",
+        "contagionGone": "That {spell} is already gone.",
+        "markGone": "Your {spell} is no longer on {name}.",
+        "notYours": "{name} is not yours, so you cannot use {spell}.",
+        "tooOld": {
+          "day": "{name} has been dead a day or more, so {spell} cannot take it.",
+          "month": "{name} has been dead a month or more, so {spell} cannot take it."
+        },
+        "departedOnce": "You have already called the spirit of {name} with {spell}.",
+        "far": "That point is more than {feet} feet away.",
+        "noCorpse": "{name} has no corpse in reach for {spell}.",
+        "noGM": "No GM is online to make {spell} land on a creature you do not own.",
+        "noRaised": "None of your raised dead stand within {feet} feet for {spell}.",
+        "noTarget": "Target a creature for {spell}.",
+        "noToken": "{name} has no token on this scene.",
+        "noUndeadAlly": "None of the creatures targeted is an undead ally for {spell}.",
+        "notAlly": "{name} is not your ally, so {spell} cannot reach it.",
+        "notDead": "{name} is not dead.",
+        "notHumanoid": "{name} was not a Humanoid, so {spell} cannot take its face.",
+        "notRaised": "{name} is not one of your raised dead.",
+        "notUndead": "{name} is not undead, so {spell} cannot reach it.",
+        "oneTarget": "Target exactly one creature for {spell}.",
+        "puppet": {
+          "boss": "{name} is a Boss, so {spell} cannot take it.",
+          "notHumanoid": "{name} is not a Humanoid, so {spell} cannot take it.",
+          "notLiving": "{name} is not living, so {spell} cannot take it.",
+          "tier": "{name} is not of a tier lower than yours, so {spell} cannot take it."
+        },
+        "question": {
+          "caged": "The soul of {name} is caged by another, so it cannot be questioned.",
+          "questioned": "{name} has been questioned before. A corpse answers once."
+        },
+        "tooMany": "{spell} reaches up to {n} creatures.",
+        "unknownEffect": "That effect is not a Necromancer spell's."
+      },
+      "Restore": {
+        "Ended": "{condition} ends on {name}.",
+        "Kept": "No condition ends on {name}.",
+        "None": "{name} has no condition to end.",
+        "Prompt": "Choose the condition that ends on {name}"
+      },
+      "SelfHeal": "You regain {n} Health.",
+      "Sense": {
+        "Days": "{n} days",
+        "Graves": "A grave the board does not show is the GM's to tell.",
+        "Hours": "{n} hours",
+        "Laid": "{name} senses the dead nearby.",
+        "Minutes": "{n} minutes",
+        "None": "No corpse lies within {n} feet.",
+        "Row": "{name}: {feet} ft to the {direction}, dead for {age}.",
+        "Unknown": "an unknown time"
+      },
+      "Sent": "{spell}: the answer goes to {name} alone.",
+      "Servant": { "Laid": "An invisible servant attends {name} for the hour ({spell})." },
+      "Sever": { "NoTest": "{name} makes no Test: it takes the damage of {spell}." },
+      "Severed": "The soul of {name} is severed. Nothing can raise or restore it.",
+      "Shield": {
+        "Ask": "An attack hits {name} for {n}. Cast {spell} for {mana} Mana and your Reaction to take 6 less?",
+        "Yes": "Cast {spell}"
+      },
+      "SoulMark": {
+        "caged": "The soul of {name} is caged, so only its caster can restore it.",
+        "severed": "The soul of {name} is severed, so nothing can restore it."
+      },
+      "Speak": {
+        "Answers": "The corpse of {name} answers up to five questions in the minute.",
+        "Laid": "{name} casts {spell}."
+      },
+      "Tidings": {
+        "Gone": "{name} is not in the world.",
+        "Prompt": "{spell}: choose the creature you name",
+        "alive": "{name} is alive.",
+        "dead": "{name} is dead.",
+        "undead": "{name} is undead."
+      },
+      "Trance": { "Laid": "{name} has no breath and no heartbeat for the hour." },
+      "Unplaced": "{name} has no token on this scene, so {spell} senses nothing.",
+      "Ward": {
+        "Card": "{name}'s Grave Ward watches the grave. When it is opened, the GM targets the opener and presses Disturbed: it makes its Test against DC {dc}.",
+        "Disturbed": "Disturbed",
+        "Laid": "{name} sets {spell} on the grave.",
+        "NoOpener": "Target the creature that opened the grave.",
+        "Told": "Your Grave Ward is disturbed by {names}."
+      }
+    },
+    "Horde": {
+      "Folder": "{name}'s horde",
+      "MindlessBane": "Mindless: a Bane on Enslave the Dead's Test",
+      "Panel": {
+        "Heading": "Horde",
+        "Essence": "Essence",
+        "EssenceCap": "{value} / {max}",
+        "PlacesUsed": "{used} / {total} places",
+        "SkeletonPlaces": "{n} of them for skeletons only",
+        "Empty": "No raised dead stand in your horde.",
+        "Lead": "Lead",
+        "LeadPending": "Leads from its next turn",
+        "KeepsReaction": "Keeps its Reaction",
+        "Controlled": "Enslaved",
+        "Outside": "No place",
+        "Fallen": "At 0 Health",
+        "PlacesTaken": "{n} places",
+        "PlaceTaken": "1 place",
+        "Grafts": "Grafts",
+        "Dismiss": "Dismiss",
+        "DismissTitle": "Dismiss {name}: it collapses and leaves no corpse.",
+        "MakeLead": "Make lead",
+        "MakeLeadTitle": "Name {name} your lead, from its next turn. You may do this when your lead has collapsed, or when you cast a spell.",
+        "OverviewRow": "Essence {value} / {max} · Horde {used} / {total} places",
+        "EssenceNote": "Cap: 3 plus your Constitution modifier, never below 3.",
+        "PlacesNote": "Places: 2 plus your Intelligence modifier, never fewer than 2.",
+        "LeadTitle": "Your lead: it takes its own turn.",
+        "LegendLead": "takes its own turn",
+        "LegendReact": "raised by a spell that says it keeps its Reaction",
+        "LegendOthers": "Every other creature takes one Half-Action and no Reaction.",
+        "LegendPlaces": "An Abomination takes 2 places. Every other creature takes 1.",
+        "Held": "Essence held",
+        "EmptySocket": "Empty",
+        "KindBone": "Skeleton",
+        "KindFlesh": "Flesh",
+        "KindOther": "Undead",
+        "From": "from {spell}",
+        "HealthCount": "{value} / {max} Health",
+        "HealthTemp": "{value} / {max} Health · {temp} temporary",
+        "EnslaveSpell": "Enslave the Dead",
+        "GraftSchool": "{graft} ({schools})"
+      },
+      "Carrier": "{name} ({spell})",
+      "CarrierText": "{name} stands for {rounds} rounds, then collapses. Deleting this effect collapses it.",
+      "CarrierLongRest": "{name} stands until your next Long Rest. Deleting this effect collapses it.",
+      "Raised": "{spell}: {names} rise under the control of {name}.",
+      "Vigor": "Deathly Vigor: each creature that rose gains {n} temporary Health.",
+      "EntryCount": "{n} {entry}",
+      "EntryPrompt": "What do the {n} creatures of {spell} rise as?",
+      "CollapseOption": "{name} ({places} places)",
+      "CollapsePrompt": "{spell} would take your horde past its places. Choose at least {n} of your raised dead to collapse before you pay.",
+      "PickSpace": "Click an unoccupied space within {feet} feet for {spell}. Right-click cancels.",
+      "LeadLine": "Name a new lead",
+      "LeadLineDoes": "Choose another of your raised dead as your lead. It leads from its next turn.",
+      "LeadLineNone": "No other raised dead stand to lead.",
+      "LeadPrompt": "Which of the raised dead of {name} leads from its next turn?",
+      "LeadNamed": "{name} leads the horde of {owner} from its next turn.",
+      "Surged": "Command the Dead: {n} creatures in the horde of {name} take two Half-Actions on their next turn.",
+      "ServantOption": "{name} (Health {health}, {feet} ft)",
+      "DarkRitualPrompt": "Choose one of your raised dead within {feet} feet for {feature}.",
+      "DarkRitualPlain": "Regain Mana",
+      "DarkRitualEmpowered": "Empowered: spend {n} Essence and regain Health too",
+      "EmpowerPrompt": "Empower {feature}?",
+      "DarkRitualPlainFallback": "{name} no longer holds {n} Essence, so {feature} is made without its Empowered benefit.",
+      "DarkRitualDone": "Dark Ritual: {servant} collapses, and {name} regains {n} Mana (it had {health} Health).",
+      "DarkRitualHealed": "Dark Ritual: {name} regains {n} Health.",
+      "ClaimOffer": "A creature died within {feet} feet of {name}. {name} may use the Reaction to raise {corpse}.",
+      "ClaimCast": "Cast {spell}",
+      "ClaimEmpowered": "Cast {spell} for no Mana ({n} Essence)",
+      "UnendingOffer": "{name} dropped to 0 Health. {owner} may spend {n} Essence to stand it again with half its Health.",
+      "StandAgain": "Stand it again",
+      "LetFall": "Let it fall",
+      "StoodAgain": "Unending Dead: {name} stands again with {n} Health.",
+      "GuardAsk": "A blow of {n} would damage {name}. Choose one of your raised dead within {feet} feet to take it.",
+      "GuardWith": "{servant} ({feet} ft), Reaction",
+      "GuardEmpowered": "{servant}, {n} Essence",
+      "GuardNo": "No",
+      "Guarded": "Grave Guard: {servant} takes {n} damage in place of {name}.",
+      "GuardOverflow": "Grave Guard: {servant} takes {n} damage in place of {name}, and {over} passes its Health and is dealt to {name}.",
+      "PlagueTick": "{name} takes 4 Shadow damage at the start of each of its turns for 1 minute, and rises as a Plagued Ghoul if it dies first.",
+      "PlagueRiseTitle": "Plague of Undeath",
+      "PlagueRiseOffer": "{name} died of the plague. It rises as a Plagued Ghoul under the control of {owner}.",
+      "PlagueRiseButton": "Raise the Plagued Ghoul",
+      "PlagueRose": "{name} rises as a Plagued Ghoul under the control of {owner}.",
+      "RisingReoffered": "{name} did not rise. The Plagued Ghoul is offered to {owner} again at the start of {owner}'s next turn.",
+      "EnslavedText": "{name} obeys {owner} for the duration and takes its own turn. When this ends, it returns to its own side.",
+      "EnslaveEnded": "{name} is no longer under {owner}'s control and returns to its own side.",
+      "EssenceRefunded": "{name} has {n} Essence given back: the raise was refused.",
+      "UnendingOfferClock": "{name} dropped to 0 Health. {owner} may spend {n} Essence to stand it again with half its Health. Outside a fight, it collapses when time moves on.",
+      "PressedRise": "The rising was pressed.",
+      "PressedUnending": "This offer was answered.",
+      "Offered": {
+        "claimTheFallen": "{feature} is offered on a card when a living creature dies within 30 feet of {name}. Nothing was spent.",
+        "graveGuard": "{feature} is offered when a blow would damage {name}. Nothing was spent.",
+        "unendingDead": "{feature} is offered on a card when one of your raised dead drops to 0 Health. Nothing was spent."
+      },
+      "Refuse": {
+        "noHorde": "{feature}: no raised dead stand in the horde of {name}. Nothing was spent.",
+        "noServant": "{feature}: that creature no longer stands. Nothing was spent.",
+        "noServantNear": "{feature}: none of the raised dead of {name} stands within {feet} feet. Nothing was spent.",
+        "tooFar": "{feature}: that creature is not within {feet} feet of {name}. Nothing was spent.",
+        "noUses": "{feature}: {name} has used it this encounter. Nothing was spent.",
+        "noEssence": "{feature}: {name} holds no Essence to spend. Nothing was spent.",
+        "notEnough": "{spell}: the raised dead chosen do not free enough places. Choose at least {n}. Nothing was spent.",
+        "places": "{spell}: the horde has no room for it now ({n} places). Nothing rose.",
+        "entries": "{spell}: what the creatures rise as no longer matches your talents. Nothing rose.",
+        "spaceRange": "{spell}: that space is more than {feet} feet away. Nothing was spent.",
+        "spaceOccupied": "{spell}: a creature stands in that space. Pick an unoccupied space. Nothing was spent.",
+        "ritualNoCollapse": "{feature}: {servant} did not collapse, so {name} regains no Mana.",
+        "pressed": "This card has already been pressed.",
+        "leadNotYours": "That creature is not one of the raised dead of {name}.",
+        "leadStands": "{lead} leads the horde of {name}. Name another lead when you cast a spell.",
+        "noOtherLead": "No other raised dead of {name} stand to lead. Nothing was spent.",
+        "risingGone": "The plague ghoul of {name} cannot rise now: its body or the caster's token is gone.",
+        "failed": "{spell}: nothing rose. {reason}",
+        "claim": {
+          "notLiving": "{feature}: only a living creature's death allows it.",
+          "tooFar": "{feature}: the corpse is not within {feet} feet of {name}.",
+          "noSpell": "{feature}: {name} knows neither Raise Dead nor Animate Corpse.",
+          "noReaction": "{feature}: {name} has no Reaction left. Nothing was spent.",
+          "noEssence": "{feature}: {name} holds no Essence to empower it. Nothing was spent.",
+          "gone": "{feature}: the corpse is gone."
+        },
+        "unending": {
+          "notHeld": "{owner} does not hold Unending Dead.",
+          "once": "{name} has already stood again this way.",
+          "standing": "{name} is standing.",
+          "tooFar": "{name} is not within {feet} feet of {owner}.",
+          "noEssence": "{owner} holds no Essence to spend.",
+          "notYours": "{name} is not yours to stand again.",
+          "gone": "The raised dead this offer named is gone."
+        },
+        "guard": {
+          "notHeld": "{name} does not hold Grave Guard.",
+          "nothing": "The blow deals nothing to move.",
+          "noServant": "None of the raised dead of {name} stands within {feet} feet. The blow lands on {name}.",
+          "noEssence": "{name} holds no Essence. The blow lands on {name}.",
+          "noEssenceMarked": "{name} holds no Essence. The blow lands on {name}, and the empowered Grave Guard is used for this round.",
+          "roundUsed": "{name} has used the empowered Grave Guard this round. The blow lands on {name}.",
+          "noReaction": "{name} has no Reaction left. The blow lands on {name}.",
+          "gone": "The raised dead chosen is gone or fallen. The blow lands on {name}."
+        },
+        "enslave": {
+          "one": "{spell} needs one target: an undead creature. Nothing was spent.",
+          "notUndead": "{target} is not undead, so {spell} cannot take it. Nothing was spent.",
+          "boss": "{target} is a Boss, so {spell} cannot take it. Nothing was spent.",
+          "tier": "{target} is of a higher tier than {name}, so {spell} cannot take it. Nothing was spent.",
+          "places": "{spell}: {target} no longer fits in the horde of {name} ({n} places). The control is not laid.",
+          "noGM": "{spell} writes on a creature only a GM may change, and no GM is online. Nothing was spent.",
+          "exceeds": "{spell}: the creature alone takes more places than the horde holds ({n}). Nothing was spent."
+        }
+      }
+    },
+    "Lich": {
+      "WindowOpen": "Lichdom: {name} may bind a phylactery they carry now. Use Lichdom from the sheet.",
+      "NoWindow": "Lichdom: {name} binds a phylactery when a Long Rest finishes. Nothing was changed.",
+      "BindPrompt": "Bind {name} to a phylactery?",
+      "Keep": "Keep the phylactery you have",
+      "None": "Bind no phylactery",
+      "BindTo": "Bind yourself to {name}",
+      "Bound": "Lichdom: {name} is bound to {item}.",
+      "ReturnName": "Phylactery: returning",
+      "ReturnText": "{name} returns to life 1 day after death, beside {item}, while it exists.",
+      "ReturnCard": "{name} returns to life with full Health. Place their token in an unoccupied space beside {item} ({where}), then press the button.",
+      "Nowhere": "held by nobody",
+      "ReturnButton": "The lich returns",
+      "Returned": "Lichdom: {name} returns to life with full Health."
+    },
+    "Graft": {
+      "meatHook": "Meat Hook",
+      "bonePlating": "Bone Plating",
+      "wardedHide": "Warded Hide",
+      "swollen": "Swollen",
+      "butchersArm": "Butcher's Arm",
+      "plagueBladder": "Plague Bladder",
+      "graspingArms": "Grasping Arms",
+      "Ability": {
+        "meatHook": "A creature the Chain hook hits makes a Body Resilience Test against DC {dc}. On a failure it is pulled to the nearest unoccupied space adjacent to the Abomination. The hit asks the Test.",
+        "plagueBladder": "Each enemy that starts its turn within 5 feet makes a Body Resilience Test against DC {dc}. On a failure it is Poisoned 1. The turn asks the Test.",
+        "graspingArms": "A creature this creature hits with a melee attack makes a Body Resilience Test against DC {dc}. On a failure it is Entangled until the end of its next turn. The hit asks the Test."
+      },
+      "Does": {
+        "meatHook": "Its Chain hook has Range 30 ft, and a creature the hook hits makes a Body Resilience Test or is pulled adjacent.",
+        "bonePlating": "It has 2 additional Armor Points at every location.",
+        "wardedHide": "It has Ward 3 against one school you choose.",
+        "swollen": "It has additional Health equal to five times your tier.",
+        "butchersArm": "It adds your tier to its Damage Rating.",
+        "plagueBladder": "Each enemy that starts its turn within 5 feet makes a Body Resilience Test or is Poisoned 1.",
+        "graspingArms": "A creature it hits with a melee attack makes a Body Resilience Test or is Entangled until the end of its next turn."
+      },
+      "None": "No graft",
+      "Again": "{name} (second)",
+      "Prompt": "Give {entry} grafts, up to {n}. Each costs 1 Essence.",
+      "SchoolPrompt": "Choose the school {entry}'s Warded Hide wards against.",
+      "Paid": "{n} Essence spent on grafts",
+      "Refuse": {
+        "none": "{spell}: this creature takes no grafts. Nothing was spent.",
+        "unknown": "{spell}: {name} is not a graft you may give. Nothing was spent.",
+        "twice": "{spell}: {name} may be given once. Nothing was spent.",
+        "tooMany": "{spell}: too many grafts for this creature. Nothing was spent.",
+        "school": "{spell}: Warded Hide needs a school. Nothing was spent.",
+        "noPool": "{spell}: you hold no Essence for grafts. Nothing was spent.",
+        "short": "{spell}: the grafts need {n} Essence, and you hold less. Nothing was spent.",
+        "withEmpower": "{spell}: the grafts and the empower benefits need {n} Essence together, and you hold less. Nothing was spent."
+      }
     },
     "Sand": {
       "NoHourglass": "No Hourglass in your Ranged slot, so you hold no Sand (08 §9).",
@@ -2188,7 +2802,8 @@
       "Full": "Full Action",
       "Reaction": "Reaction",
       "Minute": "1 minute",
-      "TimedInFight": "{spell} takes 1 minute to cast, longer than a turn. It cannot be cast in a fight."
+      "TenMinutes": "10 minutes",
+      "TimedInFight": "{spell} takes {time} to cast, longer than a turn. It cannot be cast in a fight."
     },
     "Reaction": {
       "OpportunityAttack": "Opportunity Attack",
@@ -3240,7 +3855,8 @@
       "Kind": {
         "undead": "Undead",
         "fel": "Fel",
-        "demon": "Demon"
+        "demon": "Demon",
+        "construct": "Construct"
       },
       "FIELDS": {
         "who": {
@@ -3391,6 +4007,9 @@
         "Pummel": "Two Banes on the target's next Casting Test.",
         "InscribedRuneweapon": "Inscribe Blood and Frost runes on the weapons you wield, from the end of a Long Rest until you spend your first rune.",
         "UnholyLore": "You know Death Coil, outside your spells known, and pay its cost in Runic Power.",
+        "CommandTheDead": "The Use is the Empowered line: every creature in your horde takes two Half-Actions on its next turn.",
+        "GraveCalling": "You know Raise Dead and Animate Corpse, outside your spells known.",
+        "DeathlyVigor": "Each creature your spells raise gains temporary Health equal to your Intelligence modifier.",
         "DeathStrike": "A line on the attack's dialog: spend any type of rune; on a hit, regain the damage you took since the start of your last turn, up to 4 plus twice your tier.",
         "RunicDiscipline": "Every maneuver costs you 1 Runic Power.",
         "Plague": "Two lines on the attack's dialog, paid only when the attack hits: Frost Fever or Blood Plague.",
@@ -3797,6 +4416,7 @@
       "NoPower": "{name} costs {n} {pool} through {talent}, and there is not that much in the pool.",
       "NoUses": "{item} has no casting of {name} left until it refreshes.",
       "SpellMissing": "{name} is no longer in the spells pack.",
+      "TierCap": "{name} cannot cast {spell}: it is a tier {tier} spell, and {name} casts up to tier {reach}. Nothing was spent.",
       "InForm": "{name} needs Mana, and none can be spent in the {form} form.",
       "Augment": "Augment",
       "ItemBonus": "Item bonus",
@@ -3857,7 +4477,8 @@
       "Metamorphosis": "{name}: the form of a greater demon",
       "SpiritOffer": "{name}: the offer in the Spirit Realm",
       "Signature": "A Signature's price",
-      "Gear": "The price of what you carry"
+      "Gear": "The price of what you carry",
+      "Essence": "Essence held through a Long Rest"
     },
     "Effects": {
       "Conditions": "Conditions",
@@ -6649,7 +7270,7 @@
       "Refunded": "{spell}: nothing rose, so {name} gets back {n} {pool}.",
       "RefundedNone": "{spell}: nothing rose. {name} paid nothing that can be given back.",
       "UseKept": "{spell}: the use is not spent.",
-      "Refuse": {"destroyed": "{name} has been destroyed and cannot be raised.", "raised": "{name} has risen already.", "kept": "{name} is kept by another caster's Stay the Rot and cannot be raised.", "sealed": "The soul of {name} is sealed, so the body cannot be raised as undead.", "kind": "{name} is not a corpse {spell} can raise.", "size": "{name} is smaller than {spell} needs.", "range": "{name} is out of range.", "few": "{spell} needs at least {min} corpses.", "many": "{spell} raises no more than {max} corpses.", "apart": "{spell} needs corpses within {feet} feet of each other.", "cap": "{spell} costs {n} Runic Power, and the Runic Power cap of {name} is below {n}.", "noToken": "{name} has no token on this scene, so nothing can be raised.", "noGM": "No GM is online to place the dead. Nothing was spent.", "noEntry": "The bestiary holds no {entry}.", "noCorpse": "No corpse in range can be raised by {spell}.", "notKnight": "{name} can raise the dead only from their own token.", "notHeld": "{name} does not hold {spell}.", "failed": "{spell}: the dead could not be placed, so the earlier raise stands. {reason}"},
+      "Refuse": {"destroyed": "{name} has been destroyed and cannot be raised.", "raised": "{name} has risen already.", "kept": "{name} is kept by another caster's Stay the Rot and cannot be raised.", "sealed": "The soul of {name} is sealed, so the body cannot be raised as undead.", "caged": "The soul of {name} is caged by another, so nobody else can raise it.", "severed": "The soul of {name} is severed, so nothing can raise it.", "kind": "{name} is not a corpse {spell} can raise.", "size": "{name} is smaller than {spell} needs.", "range": "{name} is out of range.", "few": "{spell} needs at least {min} corpses.", "many": "{spell} raises no more than {max} corpses.", "apart": "{spell} needs corpses within {feet} feet of each other.", "cap": "{spell} costs {n} Runic Power, and the Runic Power cap of {name} is below {n}.", "noToken": "{name} has no token on this scene, so nothing can be raised.", "noGM": "No GM is online to place the dead. Nothing was spent.", "noEntry": "The bestiary holds no {entry}.", "noCorpse": "No corpse in range can be raised by {spell}.", "notKnight": "{name} can raise the dead only from their own token.", "notHeld": "{name} does not hold {spell}.", "failed": "{spell}: the dead could not be placed, so the earlier raise stands. {reason}", "exceeds": "{spell}: the creatures alone take more places than the horde holds ({n}). Nothing was spent.", "sizeMax": "{name} is larger than {spell} can raise.", "neededByRaise": "The only corpse in reach for {spell} is one this cast raises or marks. Nothing was spent."},
       "Marked": {"destroyed": "{spell}: the corpse of {name} is destroyed and cannot be raised.", "kept": "{spell}: the corpse of {name} does not decay for 10 days, and only you can raise it.", "sealed": "{spell}: the corpse of {name} cannot be raised as undead for 1 day."}
     },
     "Splash": {
@@ -6684,6 +7305,7 @@
       "Pick": "{name}: click a space you can see within {feet} feet. Right-click or Escape to cancel.",
       "PickSeen": "{name}: click a space within {feet} feet. Right-click or Escape to cancel.",
       "PickShadow": "{name}: click a space you can see within {feet} feet. Both ends must be in darkness or in shadow, which is the table's call. Right-click or Escape to cancel.",
+      "PickCorpse": "{name}: click an empty space within {near} feet of a corpse. Right-click or Escape to cancel.",
       "NoFeet": "{spell} moves you {n} feet for each point of your Intelligence modifier, and your modifier gives it none. Nothing was spent.",
       "Refuse": {
         "Far": "{name}: that space is more than {feet} feet away.",
@@ -6697,7 +7319,8 @@
         "Unseen": "{name}: you cannot see that space.",
         "Unallowed": "{name} is not a creature this step may move there.",
         "Refuses": "{name} cannot be moved against its will, and is not pulled ({source}).",
-        "Outsized": "{name} is more than one size larger than what pulls it, and is not pulled ({source})."
+        "Outsized": "{name} is more than one size larger than what pulls it, and is not pulled ({source}).",
+        "NoCorpse": "{name}: no corpse lies within 5 feet of that space."
       }
     },
     "Trap": {

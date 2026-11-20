@@ -47,7 +47,7 @@ export const RAISE_QUERY = "azeroth-rpg.raiseDead";
 export const CORPSE_QUERY = "azeroth-rpg.markCorpse";
 
 /** Run a query on the GM's client, or the handler here where this client is a GM. */
-async function askGM(name, handler, payload) {
+export async function askGM(name, handler, payload) {
   if (game.user.isGM) return handler(payload, { user: game.user });
   const gm = game.users.activeGM;
   if (!gm) throw new Error(game.i18n.localize("AZEROTH.Bound.NoGM"));
@@ -55,14 +55,14 @@ async function askGM(name, handler, payload) {
 }
 
 /** The knight's token: the one the Use was made from, else the first on the viewed scene. */
-function knightToken(actor, source = null) {
+export function knightToken(actor, source = null) {
   const scene = (source?.sceneId ? game.scenes?.get(source.sceneId) : null) ?? canvas?.scene ?? null;
   const token = (source?.tokenId && scene?.tokens?.get(source.tokenId)) || scene?.tokens?.find?.(tk => tk.actor === actor || tk.actorId === actor?.id) || null;
   return scene && token ? { scene, token } : null;
 }
 
 /** Whether a token's creature is a corpse (`rules/raise.mjs#isCorpse`). */
-function corpseToken(token) {
+export function corpseToken(token) {
   const actor = token?.actor ?? null;
   if (!actor) return false;
   const dead = actor.statuses?.has?.(CONFIG.specialStatusEffects?.DEFEATED ?? "dead") === true || token.combatant?.isDefeated === true;
@@ -101,8 +101,16 @@ function corpsesFor(actor, row, { scene, from, reach = null, viewer = game.user,
   return out.sort((a, b) => (a.feet ?? Infinity) - (b.feet ?? Infinity) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 }
 
+/**
+ * The corpses on a scene as one raise reads them, for the horde's door (`necromancer-horde.mjs`):
+ * `corpsesFor` itself, synchronous as it is, so the GM's handler still claims with no await between.
+ */
+export function corpsesOn(actor, row, options) {
+  return corpsesFor(actor, row, options);
+}
+
 /** The corpses chosen, through the one chooser; null where dismissed. */
-async function chooseCorpses(item, row, rows) {
+export async function chooseCorpses(item, row, rows) {
   const { chooseOption } = game.system.azeroth.workflows;
   const max = row.corpses.max;
   let ticked = 0;
@@ -131,9 +139,17 @@ async function chooseCorpses(item, row, rows) {
  * @param {{key: string, source?: object|null}} o
  * @returns {Promise<{key: string, sceneId: string, tokenId: string, corpses: string[], name: string}|null>}
  */
-export async function judgeRaise(actor, item, { key, source = null } = {}) {
+export async function judgeRaise(actor, item, { key, source = null, empower = {} } = {}) {
   const row = raiseOf(key);
   if (!row) return null;
+  // **THE NECROMANCER'S RAISES ARE THE HORDE'S DOOR** (02 §7's Command the Dead; the Necromancer
+  // plan's door 3): one linked actor a creature, the places judged before anything is paid - and
+  // what the cast's lines bought (`empower`: Skeletal Mastery's extra mage, Lasting, Far-reaching;
+  // the 4b review's MUST-FIX 5 and 6) handed to it.
+  if (row.horde === true) {
+    const { judgeHordeRaise } = await import("./necromancer-horde.mjs");
+    return judgeHordeRaise(actor, item, { key, source, empower });
+  }
   const refuse = (k, data = {}) => {
     ui.notifications?.warn(t(`AZEROTH.Raise.Refuse.${k}`, { name: actor.name, spell: item.name, entry: row.entry, ...data }));
     return null;
@@ -175,7 +191,12 @@ export async function judgeRaise(actor, item, { key, source = null } = {}) {
 // the corpses may rise. No record of the PAYMENT exists to judge: the raise is asked before the
 // spell's card or the Use's card is posted, and the card is written by its author anyway. That a
 // cast or a Use was paid is the asker's word, as a card's author is believed elsewhere (O-379).
-export async function raiseQueryHandler({ ownerUuid = null, key = null, sceneId = null, tokenId = null, corpses = [], name = "" } = {}, { user = null } = {}) {
+export async function raiseQueryHandler({ ownerUuid = null, key = null, sceneId = null, tokenId = null, corpses = [], name = "", ...rest } = {}, { user = null } = {}) {
+  // A horde raise (the Necromancer's) is made by its own handler, judged again there.
+  if (rest.horde === true || raiseOf(key)?.horde === true) {
+    const { hordeRaiseQueryHandler } = await import("./necromancer-horde.mjs");
+    return hordeRaiseQueryHandler({ ownerUuid, key, sceneId, tokenId, corpses, name, ...rest }, { user });
+  }
   const owner = ownerUuid ? await fromUuid(ownerUuid) : null;
   if (owner?.documentName !== "Actor") throw new Error(game.i18n.localize("AZEROTH.Bound.NoOwner"));
   if (user && !owner.testUserPermission(user, "OWNER")) throw new Error(game.i18n.localize("AZEROTH.Bound.NotOwner"));
@@ -282,6 +303,26 @@ export async function raiseQueryHandler({ ownerUuid = null, key = null, sceneId 
 const CLAIMED = new Set();
 
 /**
+ * **ONE CLAIM SET FOR EVERY RAISE ON THIS CLIENT** (the horde's handler shares it): claim the
+ * corpses at once, with no await between a caller's read and this call, or answer the first one
+ * another raise already holds.
+ *
+ * @param {string[]} ids
+ * @returns {string|null}  a corpse already claimed, or null where every one is now this caller's
+ */
+export function claimCorpses(ids = []) {
+  const taken = ids.find(id => CLAIMED.has(id));
+  if (taken) return taken;
+  for (const id of ids) CLAIMED.add(id);
+  return null;
+}
+
+/** The claims a raise took, given back once it is done. */
+export function releaseCorpses(ids = []) {
+  for (const id of ids) CLAIMED.delete(id);
+}
+
+/**
  * **THE DEAD RISE** once the raise is paid for (and, for a spell, cast): through the GM's client.
  * Answers the card's lines.
  *
@@ -291,6 +332,10 @@ const CLAIMED = new Set();
  */
 export async function raiseDead(actor, plan, { onRisen = null, onRefused = null } = {}) {
   if (!plan) return [];
+  if (plan.horde === true) {
+    const { raiseHorde } = await import("./necromancer-horde.mjs");
+    return raiseHorde(actor, plan, { onRisen, onRefused });
+  }
   // The raise carriers this key holds before the ask, so a failed ask can tell whether the dead
   // rose anyway (a query that timed out after the GM made them; finding 2, D-997).
   const carriersNow = () => [...(actor?.effects ?? [])].filter(e => e.flags?.[SCOPE]?.[RAISE_FLAG]?.raise === plan.key).map(e => e.id);
@@ -328,7 +373,9 @@ export async function raiseDead(actor, plan, { onRisen = null, onRefused = null 
  */
 export async function refundRefusedRaise(actor, { pool = null, amount = 0, spell = "", useKept = false } = {}) {
   const lines = [];
-  const now = pool ? ((actor?.poolSnapshot?.() ?? []).find(p => (p.itemId ?? null) === (pool.itemId ?? null) && p.kind === pool.kind && p.name === pool.name) ?? null) : null;
+  // A cast's Mana pool comes off `system.powers`, which carries no `kind`: a pool naming none is a
+  // Power pool (the 4b review's S10 - a Necromancer's refused raise gave no Mana back for it).
+  const now = pool ? ((actor?.poolSnapshot?.() ?? []).find(p => (p.itemId ?? null) === (pool.itemId ?? null) && p.kind === (pool.kind ?? "power") && p.name === pool.name) ?? null) : null;
   const value = now ? refundedValue(now, amount) : null;
   const back = now ? Math.max(0, value - (Math.trunc(Number(now.value)) || 0)) : 0;
   if (back > 0) await actor.updatePool({ itemId: now.itemId ?? null, kind: now.kind, value }, {}, { runicGain: "refund" });
@@ -343,20 +390,49 @@ export async function refundRefusedRaise(actor, { pool = null, amount = 0, spell
 const COLLAPSING = new Set();
 
 /**
+ * **A CARRIER ITS COLLAPSE DELETES ITSELF** (the horde's `collapseNow`): held here while that door
+ * collapses the creature and then deletes the carrier, so `dropEmptyCarrier` - run off the
+ * creature's deletion - never deletes the same carrier a second time (core: *ActiveEffect ... does
+ * not exist*).
+ */
+const CARRIERS_HELD = new Set();
+
+/** Hold a raise's carrier for its own collapse; the release. */
+export function holdCarrier(raiseId) {
+  if (!raiseId) return () => {};
+  CARRIERS_HELD.add(raiseId);
+  return () => CARRIERS_HELD.delete(raiseId);
+}
+
+/**
  * **A RAISE COLLAPSES** (07 §17: *The dead it raises collapse when its duration ends*): every
  * world actor whose bond names this raise, deleted with its tokens through the called creature's
  * path (`unbindQueryHandler`). The active GM's alone (`registerBoundHooks`).
  *
  * @param {string} raiseId
  */
-export async function collapseRaise(raiseId) {
+export async function collapseRaise(raiseId, how = {}) {
   if (!raiseId || COLLAPSING.has(raiseId)) return 0;
   COLLAPSING.add(raiseId);
   try {
     let n = 0;
     for (const a of game.actors.filter(x => bondOf(x)?.kind === "raised" && bondOf(x)?.raiseId === raiseId)) {
       if (!game.actors.has(a.id)) continue;
-      await unbindQueryHandler({ uuid: a.uuid }, { user: game.user });
+      // **A HORDE CREATURE COLLAPSES WITH ITS PICTURE** (the animation contract's §3): its tokens
+      // deleted first, carrying the collapse cue, and the collapse told to whoever listens
+      // (`effects/necromancer-horde.mjs#collapseHordeTokens`).
+      const hordeFx = bondOf(a)?.horde === true ? await import("./necromancer-horde.mjs") : null;
+      try {
+        if (hordeFx) {
+          const { collapseHordeTokens } = hordeFx;
+          await collapseHordeTokens(a, how);
+        }
+        await unbindQueryHandler({ uuid: a.uuid }, { user: game.user });
+      } finally {
+        // A creature that survived its collapse (the unbind refused, or a write failed) loses the
+        // collapsing mark at once, so the fight's cleanup reaches it (the fix run 4 review).
+        hordeFx?.forgetCollapsingIfStanding(a);
+      }
       n += 1;
     }
     return n;
@@ -372,7 +448,7 @@ export async function collapseRaise(raiseId) {
  * @param {{ownerUuid: string, raiseId: string}} bond
  */
 export async function dropEmptyCarrier(bond) {
-  if (!bond?.raiseId || COLLAPSING.has(bond.raiseId)) return;
+  if (!bond?.raiseId || COLLAPSING.has(bond.raiseId) || CARRIERS_HELD.has(bond.raiseId)) return;
   if (game.actors.some(a => bondOf(a)?.raiseId === bond.raiseId)) return;
   let owner = null;
   try {
@@ -429,7 +505,7 @@ export async function collapseStranded(gone) {
  *
  * @returns {Promise<{key: string, sceneId: string, corpse: string, name: string}|false|null>}
  */
-export async function judgeCorpseMark(actor, item, { source = null } = {}) {
+export async function judgeCorpseMark(actor, item, { source = null, exclude = [] } = {}) {
   const key = item?.system?.identifier ?? "";
   const mark = CORPSE_MARKS[key];
   if (!mark) return null;
@@ -441,8 +517,13 @@ export async function judgeCorpseMark(actor, item, { source = null } = {}) {
   if (!site) return refuse("noToken");
   if (gmAbsentFor({ owned: [false], isGM: game.user?.isGM === true, gmActive: Boolean(game.users?.activeGM) })) return refuse("noGM");
   const { feetApart } = await import("../canvas/footprints.mjs");
-  const rows = markRows(actor, item, mark, { scene: site.scene, from: site.token, feetApart });
-  if (!rows.some(r => !r.refusal)) return refuse("noCorpse");
+  // **A CORPSE THIS CAST ALREADY TAKES IS NOT OFFERED** (the 4a review's must-fix 1): 04's Flesh
+  // Offering never destroys the corpse the same cast raises or marks, and where that one is the only
+  // corpse in reach the refusal says so in words.
+  const taken = new Set((exclude ?? []).filter(id => typeof id === "string" && id));
+  const all = markRows(actor, item, mark, { scene: site.scene, from: site.token, feetApart });
+  const rows = all.filter(r => !taken.has(r.id));
+  if (!rows.some(r => !r.refusal)) return refuse(all.some(r => !r.refusal && taken.has(r.id)) ? "neededByRaise" : "noCorpse");
   const ids = await chooseCorpses(item, MARK_ROW(item.name), rows);
   if (!ids?.length) return false;
   return { key, sceneId: site.scene.id, tokenId: site.token.id, corpse: ids[0], name: item.name };
@@ -456,7 +537,8 @@ const MARK_ROW = name => ({ corpses: { min: 1, max: 1 }, kinds: null, minSize: n
  * (`rules/raise.mjs#corpseMarkRefusal`): the asker's door and the GM's handler read the one list.
  */
 function markRows(actor, item, mark, { scene, from, viewer = game.user, feetApart }) {
-  return corpsesFor(actor, MARK_ROW(item?.name ?? ""), { scene, from, reach: rangeFeetOf(item?.system?.range ?? ""), viewer, feetApart })
+  // A talent's mark (04's Flesh Offering) reaches its own feet; a spell's, its Range.
+  return corpsesFor(actor, MARK_ROW(item?.name ?? ""), { scene, from, reach: mark.talent ? (mark.feet ?? null) : rangeFeetOf(item?.system?.range ?? ""), viewer, feetApart })
     .map(r => ({ ...r, refusal: corpseMarkRefusal(r.refusal, mark.state) }));
 }
 
@@ -475,7 +557,10 @@ export async function corpseQueryHandler({ ownerUuid = null, key = null, sceneId
   const scene = game.scenes.get(sceneId) ?? null;
   const token = scene?.tokens?.get(corpse) ?? null;
   if (!mark || !token || !corpseToken(token)) throw new Error(t("AZEROTH.Raise.Refuse.noCorpse", { name: owner.name }));
-  const item = owner.items.find(i => i.type === "spell" && i.system?.identifier === key) ?? null;
+  // The spell the mark is cast with, or the TALENT that lays it (04's Flesh Offering), taken.
+  const item = owner.items.find(i => i.system?.identifier === key && (mark.talent
+    ? i.type === "talent" && (i.system?.taken ?? 0) > 0
+    : i.type === "spell")) ?? null;
   if (!item) throw new Error(t("AZEROTH.Raise.Refuse.notHeld", { name: owner.name, spell: key }));
   const from = scene.tokens.get(tokenId) ?? null;
   if (!from || from.actorId !== owner.id) throw new Error(t("AZEROTH.Raise.Refuse.notKnight", { name: owner.name }));
@@ -493,6 +578,24 @@ export async function corpseQueryHandler({ ownerUuid = null, key = null, sceneId
     CLAIMED.delete(corpse);
   }
   return { name: token.name, state: mark.state };
+}
+
+/**
+ * **THE MARK LAID BEFORE THE PRICE IS PAID** (04's Flesh Offering; the 4a review's should-fix): the
+ * same GM-side write as `markCorpse`, answering whether it landed, so a refusal stops the cast with
+ * nothing spent rather than leaving the discount standing.
+ *
+ * @returns {Promise<{ok: boolean, lines: string[]}>}
+ */
+export async function markCorpseNow(actor, plan) {
+  if (!plan) return { ok: false, lines: [] };
+  try {
+    const done = await askGM(CORPSE_QUERY, corpseQueryHandler, { ownerUuid: actor.uuid, ...plan });
+    return { ok: true, lines: [t(`AZEROTH.Raise.Marked.${done.state}`, { name: done.name, spell: plan.name })] };
+  } catch (err) {
+    ui.notifications?.warn(err.message);
+    return { ok: false, lines: [err.message] };
+  }
 }
 
 /** The mark laid once the spell is cast; the card's line. */

@@ -6,6 +6,7 @@
  * selectors, so a card's markup and its behaviour stay in step.
  */
 
+import { farReach } from "../rules/necromancer-lines.mjs";
 import { placeItemArea } from "../canvas/place.mjs";
 const EXPLOSIVE_DAMAGE_CAPABILITY=Symbol("equipment explosive damage");
 import { abilityKeyOf, featurePrivacyKey } from "../rules/animation-records.mjs";
@@ -145,6 +146,8 @@ import { areaResultWords, areaTestName, recordAreaTest, recordResist, resisterOf
 // Who acted (D-724) and who resisted (D-726), as the cards record them.
 import { sourceOf } from "../applications/roll-dialog.mjs";
 import { orderedResists, resistLink, resistKey } from "../rules/records.mjs";
+import { potentAreaSeed } from "../rules/essence.mjs";
+import { bindingOnArea, recordAreaMark, regionsOfCard } from "../effects/empower-areas.mjs";
 // A timed area's span, counted in rounds (D-756).
 import { roundsIn } from "../rules/area-ticks.mjs";
 // What an area's Test lands, rolled through this card door (D-757), and the
@@ -312,6 +315,10 @@ export function registerChatHooks() {
       if (!game.user.isGM && !ownsActor(el.dataset.resistOwner)) el.remove();
     }
 
+    // **AN OFFER OR A GRAFT'S TEST ALREADY PRESSED SAYS SO** (the 4b review's MUST-FIX 3): a
+    // Necromancer's rising, Unending Dead and a graft's Test take one press, recorded on the card;
+    // the buttons give way to the words for every reader.
+    showOncePressed(message, html);
     // Only the GM and the message's owner should see the rest of the buttons.
     if (!message.isOwner && !game.user.isGM) {
       for (const el of html.querySelectorAll(".azeroth-card-actions")) {
@@ -643,6 +650,28 @@ function showAreaResult(message, html) {
   } else (html.querySelector(".azeroth-card-body") ?? html).append(line);
 }
 
+/** The one-press cards whose press is drawn in words once recorded: the press and its lang key. */
+const ONCE_PRESSES = Object.freeze({
+  necroOffer: Object.freeze({ hordeRise: "AZEROTH.Horde.PressedRise", unendingDead: "AZEROTH.Horde.PressedUnending" }),
+  graftTest: Object.freeze({ graftTest: "AZEROTH.GraftRider.Pressed" })
+});
+
+/** A one-press card's buttons replaced by the press, in words, once the card records it. */
+function showOncePressed(message, html) {
+  const flags = message.flags?.["azeroth-rpg"] ?? {};
+  const presses = ONCE_PRESSES[flags.kind] ?? null;
+  if (!presses) return;
+  for (const [press, key] of Object.entries(presses)) {
+    if (!flags.pressed?.[press]) continue;
+    for (const block of html.querySelectorAll(".azeroth-card-actions")) {
+      const said = document.createElement("p");
+      said.className = "azeroth-card-line";
+      said.textContent = game.i18n.localize(key);
+      block.replaceWith(said);
+    }
+  }
+}
+
 /** Whether this client owns the actor a uuid names. A missing one owns nothing. */
 function ownsActor(uuid) {
   if (!uuid) return false;
@@ -662,6 +691,17 @@ function ownsActor(uuid) {
  * is exactly the silent no-op the audit exists to catch.
  */
 export const CARD_ACTIONS = {
+  // **THE NECROMANCER'S OFFERS** (02 §7; `templates/chat/necro-offer.hbs`): Claim the Fallen,
+  // Unending Dead (and its *let it fall*), a Plague of Undeath ghoul's rising and a lich's return,
+  // each judged again at the press (`effects/necromancer-horde.mjs`).
+  claimTheFallen: async button => (await import("../effects/necromancer-horde.mjs")).claimFromCard(button),
+  unendingDead: async (button, message) => (await import("../effects/necromancer-horde.mjs")).unendingFromCard(button, message),
+  hordeRise: async (button, message) => (await import("../effects/necromancer-horde.mjs")).risingFromCard(button, message),
+  lichReturn: async button => (await import("../effects/necromancer-horde.mjs")).lichReturnFromCard(button),
+  // 07 §17's Grave Ward: the GM rules the grave disturbed, and the opener makes its Test (run 4c-S).
+  necroGraveWard: async (button, message) => (await import("../effects/necromancer-spells.mjs")).graveWardFromCard(button, message),
+  // And a Necromancer spell's own card (fix run 4-S): Contagion's Dismiss, Spirit Anchor's look, Mark of the Grave's direction.
+  necroCard: async (button, message) => (await import("../effects/necromancer-spells.mjs")).necroCardPress(button, message),
   touchEverburn: async (_button,message) => {
     const {touchEverburn}=await import('../effects/everburn-touch.mjs');
     const result=await touchEverburn(message);
@@ -1236,7 +1276,8 @@ async function placeAreaFromCard(message) {
     const placed = flags.kind === "feature" ? rangeInText(item.system.description ?? "") : null;
     const reach = flags.kind === "feature"
       ? (placed?.kind === "point" ? { kind: "feet", feet: placed.distance } : { kind: "none", feet: null })
-      : readRange(item.system.range);
+      // 02 §7's Far-reaching doubles the range a point is held to (the card's `empower` record).
+      : farReach(readRange(item.system.range), flags.empower?.farReaching === true);
     // The one point rule (`canvas/range.mjs#pointAccept`), which a point the cast recorded before
     // its payment is held to as well (`placeItemArea`'s recorded branch; stage 11, D-906).
     if (flags.kind === "feature" || judgesPoint(item.system.target)) aimAccept = pointAccept(token, reach, item.name);
@@ -1268,6 +1309,9 @@ async function placeAreaFromCard(message) {
     // sweep's stage 2, D-891): the area the cast worked out and the card prints, never the Target
     // line's one space, which is what the door laid before.
     ...(flags.kind === "spell" && flags.area && isIntScaled(item?.system?.effect ?? "") ? { areaShape: flags.area } : {}),
+    // **AND A NECROMANCER SPELL'S AREA THE CARD WORKED OUT** (07 §17's Bone Bridge, *A span up to 30 ft
+    // long*, a line 5 feet wide; Unholy Renewal's point; run 4c-S), which the Target line names no shape for.
+    ...(flags.kind === "spell" && flags.necroSpell && flags.area ? { areaShape: flags.area } : {}),
     // Relay records the selected alternate origin and facing before the Test.
     // The Region uses it verbatim and retains the card's real caster token.
     placementOverride: flags.spellRelayPlacement ?? null,
@@ -1347,6 +1391,41 @@ async function placeAreaFromCard(message) {
  * @param {Item|null} item       the spell
  * @returns {object}
  */
+/**
+ * **WHAT A PLACED AREA KEEPS OF 02 §7's EMPOWER BENEFITS** (the 4a review's MUST-FIX 2 and 3):
+ * `potent` and `potentStruck` (`rules/essence.mjs#potentAreaSeed` over the card's rows, where the
+ * cast struck on its own), and `binding {spent}` (each creature whose Resist the card records).
+ * Nothing where the Casting Test failed.
+ *
+ * @param {object} flags  the spell card's flags
+ * @returns {object}
+ */
+function empowerAreaFlags(flags = {}) {
+  const empower = flags.empower ?? null;
+  if (!empower || flags.success === false) return {};
+  const out = {};
+  if (Number(empower.potent) > 0) {
+    // A card written before the seed (4a's `potentOnArea`) struck nobody on its own.
+    const strikes = empower.potentOnArea === true ? false : empower.strikes === true;
+    const rows = Array.isArray(flags.targets) ? flags.targets : [];
+    const verdicts = Array.isArray(flags.eachTarget) ? rows.map((_, i) => flags.eachTarget[i]?.success ?? null) : null;
+    out.potent = Math.trunc(Number(empower.potent));
+    out.potentStruck = potentAreaSeed({ strikes, success: flags.success, targets: rows.map(t => targetActorOf(t)?.uuid ?? null), verdicts });
+    // Once per CAST (the lead, on the 4c review's Q4: *"4 - per cast"*; D-1100): an area put down again
+    // carries every creature an earlier area of this cast already rose for (`markArea`'s card record).
+    out.potentStruck = [...new Set([...out.potentStruck, ...(Array.isArray(flags.potentStruckCast) ? flags.potentStruckCast : [])])];
+  }
+  if (empower.binding === true) {
+    const spent = [];
+    for (const record of orderedResists(flags.resists)) {
+      const uuid = resisterOf(record)?.actor?.uuid ?? null;
+      if (uuid && !spent.includes(uuid)) spent.push(uuid);
+    }
+    out.binding = { spent };
+  }
+  return out;
+}
+
 export function regionFlagsFromCard(message, actor, item) {
   const flags = message?.flags?.["azeroth-rpg"] ?? {};
   const token = casterTokenOf(flags.source ?? null, actor);
@@ -1375,6 +1454,12 @@ export function regionFlagsFromCard(message, actor, item) {
     // on O-182: *"Yes"*): a rider for the creatures the cast named, laid by the aura
     // door while each stays inside (`rules/class-answers.mjs#chosenWardRemains`).
     areaTick: flags.success === false ? null : withChosenWard(flags.areaTick ?? null, flags.chosenWard ?? null),
+    // **02 §7's POTENT AND BINDING ON AN AREA** (the 4a review's MUST-FIX 2 and 3; O-411): every area
+    // a Potent cast places carries the rise for each creature's first strike, seeded with the
+    // creatures the cast's own blow or heal already reached; and every area a Binding cast places
+    // carries the Bane for each creature's first Test, seeded with the creatures that have made
+    // the card's own Resist (`effects/empower-areas.mjs`).
+    ...empowerAreaFlags(flags),
     // **THE CREATURES NAMED AT THE CAST** (07's Ring of Fire, Blackout and The Deep; the
     // B9a pass): the ones a check row that spares them lets be (`rules/area-ticks.mjs
     // #checksFor`'s `named`), by uuid, only where the cast named any.
@@ -1562,6 +1647,11 @@ async function resistTestFromCard(button, message, {gadgetOverride=false} = {}) 
     ui.notifications?.warn(game.i18n.localize("AZEROTH.TalentLine.Pressed"));
     return null;
   }
+  // A graft's Test (the lead's Q7 of the 4b review) is made once: refused in words once recorded.
+  if (button.dataset.purpose === "graft" && flags0.pressed?.graftTest) {
+    ui.notifications?.warn(game.i18n.localize("AZEROTH.GraftRider.Already"));
+    return null;
+  }
   const area = button.dataset.purpose === "area";
   const gadget = !button.dataset.purpose && resistedGadget(flags0);
   if (gadget && GADGET_RESIST_PRESSES.has(message.id)) return null;
@@ -1630,6 +1720,15 @@ async function loseHeldSustain(actor, spellName) {
 
 /** The escape prompts a press is in flight on, on this client (D-778). */
 const ESCAPE_PRESSES = new Set();
+
+/**
+ * **02 §7's BINDING, CLAIMED FROM ITS CHECK TO ITS RECORD** (the fix run 4 review): `area|creature`
+ * keys whose first-Test Bane a roll on this client is carrying now. The check and the claim stand
+ * together with no await between them, and the claim holds until the record has landed, so two Tests
+ * for one creature rolled at once carry the Bane once - the second reads it as spent.
+ */
+const BINDING_CLAIMS = new Set();
+const bindingKey = (region, actor) => `${region?.uuid ?? ""}|${actor?.uuid ?? ""}`;
 
 /**
  * **A CONDITION HELD UNTIL THE END OF THE CREATURE'S OWN NEXT TURN** (stage 2B): the
@@ -1960,8 +2059,39 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
     }
     // **WHAT THE CASTER'S ITEMS LAID ON THIS RESIST** (The Blade Hungers, The Fifth Pylon;
     // D-912): the card's record, a row naming a creature type reaching that type alone.
-    if (purpose === "spell") {
-      const worn = resistBanesOn(message.flags?.["azeroth-rpg"]?.resistBanes ?? [], actor.system?.creatureType ?? null);
+    // **AND 02 §7's BINDING** (the 4a review's MUST-FIX 3; O-411): on the card's own Resist, unless an
+    // area this card placed has already asked this creature its first Test; on an area's Test card,
+    // the row `postAreaTest` wrote for the creature's first.
+    let bindingHere = false;
+    let bindingArea = null;
+    const bindingClaims = [];
+    if (purpose === "spell" || purpose === "area") {
+      let rows = message.flags?.["azeroth-rpg"]?.resistBanes ?? [];
+      if (purpose === "spell") {
+        const bindingLabel = game.i18n.localize("AZEROTH.Essence.Empower.binding");
+        const isBinding = r => r?.binding === true || (message.flags?.["azeroth-rpg"]?.empower?.binding === true && r?.name === bindingLabel);
+        if (rows.some(isBinding)) {
+          const placed = regionsOfCard(message).filter(r => r.flags?.["azeroth-rpg"]?.binding);
+          if (placed.some(r => !bindingOnArea(r, actor) || BINDING_CLAIMS.has(bindingKey(r, actor)))) rows = rows.filter(r => !isBinding(r));
+          else {
+            bindingHere = true;
+            for (const r of placed) bindingClaims.push(bindingKey(r, actor));
+          }
+        }
+      }
+      // **AN AREA TEST'S BANE IS SPENT BY ITS ROLL** (the lead, on the 4c review's Q6: *"6 - Only on
+      // creature's roll"*; D-1100): the row `postAreaTest` wrote stands only while the area still owes
+      // this creature its first Bane, and the roll below records it as spent.
+      if (purpose === "area" && rows.some(r => r?.binding === true)) {
+        const at = message.flags?.["azeroth-rpg"]?.area ?? null;
+        const region = game.scenes?.get(at?.sceneId ?? "")?.regions?.get(at?.regionId ?? "") ?? null;
+        if (region && (!bindingOnArea(region, actor) || BINDING_CLAIMS.has(bindingKey(region, actor)))) rows = rows.filter(r => r?.binding !== true);
+        else if (region) {
+          bindingArea = region;
+          bindingClaims.push(bindingKey(region, actor));
+        }
+      }
+      const worn = resistBanesOn(rows, actor.system?.creatureType ?? null);
       if (worn) talentBanes = talentBanes ? { banes: talentBanes.banes + worn.banes, names: [...talentBanes.names, ...worn.names] } : worn;
     }
     if (purpose === "poison" && maker && typeof maker.takenTalents === "function") {
@@ -1991,9 +2121,21 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
     } : null;
     const tie = link ?? (area ? areaTestLink(message, actor) : null);
     if (escapeHeld || poisonHeld) ESCAPE_PRESSES.add(message.id);
+    // Binding's claim, taken with no await since its check above (one step with its record below).
+    for (const k of bindingClaims) BINDING_CLAIMS.add(k);
     let result = null;
     try {
       result = await resilienceWithDialog(actor, resilience, null, { dc: poisonHeld?.dc ?? dc, link: tie, source, against, ...(talentBanes ? { talentBanes } : {}), ...(talentBoons ? { talentBoons } : {}) });
+      // **BINDING IS SPENT BY THE ROLL, RECORDED INSIDE ITS CLAIM** (D-1100; the fix run 4 review):
+      // the card's own Resist was this creature's first Test, so every area the card placed records
+      // it and the area's Test asks it with no second Bane (02 §7's Binding; O-411); an area Test
+      // this creature rolled was its first, so the area records the Bane spent.
+      if (bindingHere && result) {
+        for (const region of regionsOfCard(message)) {
+          if (region.flags?.["azeroth-rpg"]?.binding) await recordAreaMark(region, "binding", actor.uuid);
+        }
+      }
+      if (bindingArea && result) await recordAreaMark(bindingArea, "binding", actor.uuid);
       if (snakeTrap && typeof result?.rolls?.[0]?.outcome?.success === "boolean"
         && !(await claimSnakeTrapCatch(message, actor, result))) {
         ui.notifications?.warn(game.i18n.localize("AZEROTH.SnakeTrap.CatchRefused"));
@@ -2003,6 +2145,15 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
         const claimed = await claimCardPress(message, { kind: "once", press: "relapse" });
         if (!claimed.ok) {
           ui.notifications?.warn(game.i18n.localize("AZEROTH.Afflictions.Relapse.Unavailable"));
+          continue;
+        }
+      }
+      // **A GRAFT'S TEST IS MADE ONCE** (the lead's Q7 of the 4b review): the press claimed on the
+      // card before anything lands, so a double press or two clients at once land once.
+      if (purpose === "graft" && typeof result?.rolls?.[0]?.outcome?.success === "boolean") {
+        const claimed = await claimCardPress(message, { kind: "once", press: "graftTest" });
+        if (!claimed.ok) {
+          ui.notifications?.warn(game.i18n.localize("AZEROTH.GraftRider.Already"));
           continue;
         }
       }
@@ -2041,6 +2192,7 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
       }
     } finally {
       if (escapeHeld || poisonHeld) ESCAPE_PRESSES.delete(message.id);
+      for (const k of bindingClaims) BINDING_CLAIMS.delete(k);
     }
     if (gadgetDelivery) {
       if (!result) continue;
@@ -2061,7 +2213,14 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
       if (!(await game.system.azeroth.workflows.spendTurnBudget(actor, escapeAction(actor.takenTalents?.() ?? [], { condition: "entangled", action: SNARE.action })))) continue;
     }
     if (purpose === "reach" && result && !(await game.system.azeroth.workflows.spendTurnBudget(actor, "half"))) continue;
+    // (02 §7's Binding is recorded inside its claim, straight after the roll above.)
     const passed = result?.rolls?.[0]?.outcome?.success === true;
+    // **WHAT A GRAFT'S FAILED TEST LANDS** (the lead's Q7 of the 4b review: *"auto"*): Meat Hook's
+    // pull, Grasping Arms' Entangled, Plague Bladder's Poisoned (`effects/graft-riders.mjs`).
+    if (purpose === "graft" && result) {
+      const { graftTestLanded } = await import("../effects/graft-riders.mjs");
+      for (const line of await graftTestLanded({ actor, message, passed })) ui.notifications?.info(line);
+    }
     // **WHO HAD SLOWED IT WHEN IT FAILED** (04's Arrested Moment: *when a creature you have
     // Slowed fails a Resilience Test*; the live fix): read BEFORE this Test's failure lays
     // anything, so a Slowed this very failure lays (Stutter's, Sand Breath's) is not one the
@@ -2295,6 +2454,17 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
         const { requestMindSoothe } = await import("../effects/mind-soothe.mjs");
         await requestMindSoothe(actor, message, result);
       }
+      // **07's ENSLAVE THE DEAD AND PLAGUE OF UNDEATH ON A FAILURE** (the Necromancer plan's door 3):
+      // the control laid through the active GM, the creature handed back when its hour ends; the
+      // plague's diseases, its tick and the mark its death reads (`effects/necromancer-horde.mjs`).
+      if (flags.identifier === "enslave-the-dead") {
+        const { requestEnslave } = await import("../effects/necromancer-horde.mjs");
+        await requestEnslave(actor, message);
+      }
+      if (flags.identifier === "plague-of-undeath") {
+        const { plagueFailed } = await import("../effects/necromancer-horde.mjs");
+        for (const line of await plagueFailed(actor, message)) ui.notifications?.info(line);
+      }
       // **WHAT THE LANDED CONDITION CARRIES** (D-778): the escape 07 gives a held or
       // Stunned creature (Frost Nova's, Absolute Zero's ...; O-159), and 04's
       // Permafrost's feet on a Slowed the caster's spell laid (O-165).
@@ -2375,6 +2545,15 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
         await dkSpellAfterResist({ message, actor, maker: casterOf(message), laid: laidByFailure });
       } catch (err) {
         console.warn("azeroth-rpg | a Death Knight spell's failed Resist", err);
+      }
+      // **07 §17's NECROMANCER SPELLS ON A FAILED RESIST** (run 4c-S): Soul Lash's Bane, Cripple's drops,
+      // Plague Wind's Poisoned at the Spell DC, Bone Prison's hold, Soul Rip's Essence, Reaping's Health,
+      // Puppet of Flesh's control and the curses' riders. Guarded.
+      try {
+        const { necroSpellAfterResist } = await import("../effects/necromancer-spells.mjs");
+        await necroSpellAfterResist({ message, actor, maker: casterOf(message), laid: laidByFailure, result });
+      } catch (err) {
+        console.warn("azeroth-rpg | a Necromancer spell's failed Resist", err);
       }
       if (flags.onFail?.statuses?.length && dominationConfirmed) {
         ui.notifications?.info(game.i18n.format("AZEROTH.Card.OnFailLanded", {
@@ -3445,6 +3624,13 @@ async function applyDamageToTargets(button, message, recordedAttack = false, tra
       await dkSpells.dkSpellAfterApply({ message, target: actor, amount: damageOutcome.amount });
     } catch (err) {
       globalThis.console?.warn("azeroth-rpg | a Death Knight talent at the Apply", err);
+    }
+    // 07 §17's Sever the Soul: a creature this Apply dropped to 0 is severed (run 4c-S). Guarded.
+    try {
+      const necroSpells = await import("../effects/necromancer-spells.mjs");
+      await necroSpells.necroSpellAfterApply({ message, target: actor, amount: damageOutcome.amount });
+    } catch (err) {
+      globalThis.console?.warn("azeroth-rpg | a Necromancer spell at the Apply", err);
     }
     await requestWalkingBombHit(message, Number(index));
     await requestLightningShieldHit(message, Number(index));
