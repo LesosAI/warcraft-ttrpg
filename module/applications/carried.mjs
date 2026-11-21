@@ -23,6 +23,8 @@ import { isWornSlot } from "../rules/worn.mjs";
 import { rarityClass } from "../helpers/rarity.mjs";
 import { reloadStatus } from "./reload.mjs";
 import { dispersionRefusal } from "../rules/dispersion.mjs";
+// 08 §4: a thing the viewer is kept from is named by its kind and shows none of its numbers (D-1435).
+import { hiddenToViewer, shownName } from "../helpers/identify-words.mjs";
 
 /**
  * The three subtypes that are things rather than progression. Private: an
@@ -45,9 +47,11 @@ export function carriedRows(actor) {
   const useRefusal = dispersionRefusal(actor, "gear");
   return [...(actor?.items ?? [])]
     .filter(i => kinds.has(i.type))
-    .map(item => ({
+    .map(item => ({ item, hidden: hiddenToViewer(item) }))
+    .map(({ item, hidden }) => ({
       id: item.id,
-      name: item.name,
+      name: shownName(item),
+      hidden,
       reloadStatus: reloadStatus(item),
       img: item.img,
       type: item.type,
@@ -61,21 +65,22 @@ export function carriedRows(actor) {
       equipped: item.system.equipped === true,
       // 08 §11's slot, as a chip beside the name.
       slot: isWornSlot(item.system.slot) ? game.i18n.localize(AZEROTH.wornSlots[item.system.slot]) : null,
-      augment: item.system.augment ? { ...item.system.augment } : null,
+      augment: !hidden && item.system.augment ? { ...item.system.augment } : null,
       rarityClass: rarityClass(item.system.rarity),
       // What Use does, where 08 gives the thing one (D-668).
       usable: hasUse(item.system.use),
       useRefusal,
       quantity: item.type === "gear" ? (item.system.quantity ?? null) : null,
       // A stone, an oil or a poison laid on this thing, while it lasts (D-670).
-      coating: item.getFlag("azeroth-rpg", "coating")?.name ?? null,
+      coating: hidden ? null : (item.getFlag("azeroth-rpg", "coating")?.name ?? null),
       // Where it is kept, and what it holds (08 SS11, D-671).
       container: item.system.container ?? null,
       capacity: item.system.capacity ?? null,
-      charges: hasCharges(item.system.charges) ? { ...item.system.charges } : null,
+      charges: !hidden && hasCharges(item.system.charges) ? { ...item.system.charges } : null,
       detail: detailFields(item)
     }))
-    .sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
+    // The rows, by the name each shows (08 §4).
+    .sort((x, y) => x.type.localeCompare(y.type) || x.name.localeCompare(y.name));
 }
 
 /**

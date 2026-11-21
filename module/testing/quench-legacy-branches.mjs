@@ -24,7 +24,7 @@
  * deleted in `after`.
  */
 
-import { cleanup, fromPack, made, makeCharacter, openSheet, settle, PACK_FOR } from "./fixtures.mjs";
+import { cleanup, fromPack, made, makeCharacter, openSheet, settle, PACK_FOR, KNOWN } from "./fixtures.mjs";
 import { pointsSpent } from "../rules/talents.mjs";
 
 /** Wait for a condition, or say what was being waited for. */
@@ -103,7 +103,7 @@ export function legacyBranchesBatch(context) {
 
       // A dwarf now: Mountain King arrives untaken and Blademaster leaves, its two points with it.
       const dwarf = (await fromPack(PACK_FOR.race, "Dwarf")).toObject();
-      await actor.createEmbeddedDocuments("Item", [dwarf]);
+      await actor.createEmbeddedDocuments("Item", [dwarf], { ...KNOWN });
       await until(() => actor.raceItem?.name === "Dwarf" && legacyOf(actor, "Orc").length === 0 && legacyOf(actor, "Dwarf").length === 12,
         "Blademaster withdrawn and Mountain King embedded", 20000);
       assert.lengthOf(actor.items.filter(i => i.type === "race"), 1, "two races held");

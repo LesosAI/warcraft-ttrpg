@@ -14,7 +14,7 @@ import { isEligible } from "../rules/careers.mjs";
 import { checkClipping, checkColumns, checkNotEmpty, checkOverlap, checkText } from "./geometry.mjs";
 // The talent frame's batch (D-758) builds a real Warrior through the one
 // fixture factory and measures colour through the one colour module.
-import { chooseControl, cleanup as cleanupFixtures, makeCharacter, openSheet, pinDie, pressTool, settle, toolButton } from "./fixtures.mjs";
+import { chooseControl, cleanup as cleanupFixtures, makeCharacter, openSheet, pinDie, pressTool, settle, toolButton, KNOWN } from "./fixtures.mjs";
 import { parseColour } from "./colour.mjs";
 import { sameTalent } from "../rules/talents.mjs";
 // A pool's count is an input on an editable sheet (2026-09-13).
@@ -74,6 +74,8 @@ import {
 } from "./quench-necromancer-animations.mjs";
 import { sovereignAnimations2Batch, sovereignAnimationsBatch, sovereignAnimationsFeaturesBatch } from "./quench-sovereign-animations.mjs";
 import { moveThroughBatch } from "./quench-move-through.mjs";
+// 08 §4's unidentified items and 08 §14's scrolls (D-1435, D-1436).
+import { identifyBatch, scrollsBatch } from "./quench-identify.mjs";
 import { reactionBatch } from "./quench-reactions.mjs";
 import { creatureGearBatch } from "./quench-npc-gear.mjs";
 import { creatureSwingBatch } from "./quench-npc-swing.mjs";
@@ -437,6 +439,12 @@ export function registerQuenchTests() {
     });
     quench.registerBatch("azeroth-rpg.sovereign-animations2", sovereignAnimations2Batch, {
       displayName: "AZEROTH: The Sovereign's second eighteen spells and their states play a picture and a sound, read back live (D-1390)"
+    });
+    quench.registerBatch("azeroth-rpg.identify", identifyBatch, {
+      displayName: "AZEROTH: 08 §4's unidentified items through the real doors: the stamp, Identify, the stone, the locks, the GM's box (D-1435)"
+    });
+    quench.registerBatch("azeroth-rpg.scrolls", scrollsBatch, {
+      displayName: "AZEROTH: 08 §14's scrolls through the real doors: the GM's inscription, Read scroll at the writer's total, the spend (D-1436)"
     });
     quench.registerBatch("azeroth-rpg.move-through", moveThroughBatch, {
       displayName: "AZEROTH: 05's Moving through a space at the move door, with Veil of Mist, Underfoot and the GM's drag (FIXC, O-476)"
@@ -988,7 +996,7 @@ function itemDataBatch(context) {
       const [warrior] = await actor.createEmbeddedDocuments("Item", [{
         name: "Warrior", type: "class",
         system: { frame: "hardy", momentum: { name: "rage", max: 10 } }
-      }]);
+      }], { ...KNOWN });
       await actor.update({ "system.classes": [{ itemId: warrior.id, level: 1 }] });
 
       assert.equal(actor.system.momentum.max, 10, "Rage caps at 10");
@@ -1005,7 +1013,7 @@ function itemDataBatch(context) {
           momentum: { name: "comboPoints", max: 5 },
           power: { name: "energy", max: 10, caster: "none" }
         }
-      }]);
+      }], { ...KNOWN });
       await actor.update({ "system.classes": [{ itemId: rogue.id, level: 1 }] });
 
       assert.equal(actor.system.momentum.max, 5, "Combo Points cap at 5");
@@ -1023,7 +1031,7 @@ function itemDataBatch(context) {
           schools: ["holy", "shadow"],
           castingAbility: "wis"
         }
-      }]);
+      }], { ...KNOWN });
       await actor.update({
         "system.classes": [
           { itemId: warrior.id, level: 9 },
@@ -1053,7 +1061,7 @@ function itemDataBatch(context) {
       const [warlock] = await actor.createEmbeddedDocuments("Item", [{
         name: "Warlock", type: "class",
         system: { frame: "slight", power: { name: "mana", max: 20, caster: "full" }, schools: ["fel", "shadow"] }
-      }]);
+      }], { ...KNOWN });
       const priest = actor.items.find(i => i.name === "Priest");
       await actor.update({
         "system.classes": [
@@ -1854,7 +1862,7 @@ function packBatch(context) {
 
       const actor = await Actor.create({ name: "Quench Real Warrior", type: "character" });
       try {
-        const [copy] = await actor.createEmbeddedDocuments("Item", [warriorClass.toObject()]);
+        const [copy] = await actor.createEmbeddedDocuments("Item", [warriorClass.toObject()], { ...KNOWN });
         await actor.update({ "system.classes": [{ itemId: copy.id, level: 1 }] });
         assert.equal(actor.system.momentum.max, 10, "Rage caps at 10, from the pack");
         assert.isNull(actor.system.power.max, "a Warrior holds no Power");
@@ -1877,7 +1885,7 @@ function packBatch(context) {
 
       const actor = await Actor.create({ name: "Quench Real Priest", type: "character" });
       try {
-        const [copy] = await actor.createEmbeddedDocuments("Item", [priestClass.toObject()]);
+        const [copy] = await actor.createEmbeddedDocuments("Item", [priestClass.toObject()], { ...KNOWN });
         await actor.update({ "system.classes": [{ itemId: copy.id, level: 1 }] });
         assert.equal(actor.system.power.max, 10, "a full caster at level 1 holds 10 Mana");
         await actor.update({ "system.classes": [{ itemId: copy.id, level: 17 }] });
@@ -3387,7 +3395,7 @@ function talentTreeBatch(context) {
 
       const docs = [];
       for (const entry of branch) docs.push((await pack.getDocument(entry._id)).toObject());
-      await actor.createEmbeddedDocuments("Item", docs);
+      await actor.createEmbeddedDocuments("Item", docs, { ...KNOWN });
 
       sheet = actor.sheet;
       await sheet.render({ force: true });
@@ -3456,7 +3464,7 @@ function talentTreeBatch(context) {
       const career = await pack.getDocument(tier1._id);
 
       const walker = await Actor.create({ name: "Quench Career Walker", type: "character" });
-      await walker.createEmbeddedDocuments("Item", [career.toObject()]);
+      await walker.createEmbeddedDocuments("Item", [career.toObject()], { ...KNOWN });
 
       // The Actor points itself at the career it was just given, in an
       // `_onCreateDescendantDocuments` update. Let that land before rendering.
@@ -4569,7 +4577,7 @@ function multiclassBatch(context) {
       made.push(actor);
       const items = await actor.createEmbeddedDocuments(
         "Item", pairs.map(([n]) => classes[n].toObject())
-      );
+      , { ...KNOWN });
       // MATCH BY NAME, NEVER BY RETURN ORDER. `createEmbeddedDocuments` makes no
       // promise about the order it hands documents back, and index 0 of
       // `system.classes` is what "primary" means - so a fixture that trusted
@@ -4770,7 +4778,7 @@ function usableBatch(context) {
         made.push(actor);
         const pack = game.packs.get("azeroth-rpg.weapons");
         const weapons = await pack.getDocuments();
-        await actor.createEmbeddedDocuments("Item", [weapons[0].toObject()]);
+        await actor.createEmbeddedDocuments("Item", [weapons[0].toObject()], { ...KNOWN });
         sheet = actor.sheet;
         await sheet.render({ force: true });
       });

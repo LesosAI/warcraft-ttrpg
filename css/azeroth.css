@@ -4753,6 +4753,63 @@
     font-style: italic;
     color: var(--azeroth-ink-soft);
   }
+  .azeroth.sheet.item .azeroth-item__identified {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    align-self: flex-start;
+    margin-top: 0.2rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--azeroth-ink);
+    cursor: pointer;
+  }
+  .azeroth.sheet.item .azeroth-item__identified input[type=checkbox] {
+    margin: 0;
+    flex: none;
+  }
+  .azeroth.sheet.item {
+    /* ---- an unidentified thing, as a player sees it (08 §4) -------------- */
+  }
+  .azeroth.sheet.item .azeroth-item__unidentified-facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--field-gap) 0.75rem;
+    margin: 0.75rem 0 0;
+  }
+  .azeroth.sheet.item .azeroth-item__unidentified-facts > div {
+    display: grid;
+    grid-template-columns: minmax(80px, 40%) 1fr;
+    gap: 0.5rem;
+    align-items: baseline;
+    padding: 0.2rem 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  }
+  .azeroth.sheet.item .azeroth-item__unidentified-facts dt {
+    font-weight: 600;
+    font-size: 0.8rem;
+    color: var(--azeroth-ink-soft);
+  }
+  .azeroth.sheet.item .azeroth-item__unidentified-facts dd {
+    margin: 0;
+    color: var(--azeroth-ink);
+  }
+  .azeroth.sheet.item .azeroth-item__unidentified-note {
+    margin: 0.75rem 0 0;
+    font-style: italic;
+    color: var(--azeroth-ink);
+  }
+  .azeroth.sheet.item .azeroth-item-spell-total {
+    width: 4.5rem;
+    flex: none;
+    box-sizing: border-box;
+    background: rgba(255, 255, 255, 0.45);
+    border: 1px solid var(--azeroth-ink-soft);
+    color: var(--azeroth-ink);
+    font-size: 0.8125rem;
+    height: auto;
+    padding: 1px 4px;
+  }
   .azeroth.sheet.item {
     /* ---- the field list -------------------------------------------------- */
   }

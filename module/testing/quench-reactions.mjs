@@ -13,7 +13,7 @@
  * Every document a test makes is deleted in `after`.
  */
 
-import { cleanup, dialogFor, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook, useAction, tokenDrawn, tokenData, quietScrollingText } from "./fixtures.mjs";
+import { cleanup, dialogFor, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook, useAction, tokenDrawn, tokenData, quietScrollingText, KNOWN } from "./fixtures.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 // The GM-side door a player's Parry or Block asks through (D-720): what it
 // refuses is the half no unit test can reach.
@@ -900,7 +900,7 @@ export function reactionBatch(context) {
         if (!entry) throw new Error("the weapons pack no longer holds Gorehowl");
         return pack.getDocument(entry._id);
       })();
-      const [held] = await warrior.createEmbeddedDocuments("Item", [axe.toObject()]);
+      const [held] = await warrior.createEmbeddedDocuments("Item", [axe.toObject()], { ...KNOWN });
       await held.update({ "system.equipped": true });
       const victim = await makeNpc("Plagued Ghoul");
 

@@ -22,7 +22,7 @@
  *   rule the card prints, so the two can never disagree.
  */
 
-import { cleanup, give, made, makeCharacter, makeNpc, openSheet, restDialogFor, settle, useAction } from "./fixtures.mjs";
+import { cleanup, give, made, makeCharacter, makeNpc, openSheet, restDialogFor, settle, useAction, KNOWN } from "./fixtures.mjs";
 import { checkText } from "./geometry.mjs";
 import { provisionOptions } from "../rules/provisions.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
@@ -539,7 +539,7 @@ export function restBatch(context) {
       await until(() => (bread.system.provision ?? null) === null, "the stale bread");
       // And a GM's own stew, which no row in 08 describes: it stays null and
       // the select on its item sheet is the door for it (D-689 on guessing).
-      const [stew] = await actor.createEmbeddedDocuments("Item", [{ name: "ZZ Stew", type: "gear" }]);
+      const [stew] = await actor.createEmbeddedDocuments("Item", [{ name: "ZZ Stew", type: "gear" }], { ...KNOWN });
       assert.isNull(stew.system.provision ?? null, "a hand-made meal came out of the schema stamped");
 
       const touched = await migrate(() => {});

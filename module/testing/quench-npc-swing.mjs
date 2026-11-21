@@ -14,7 +14,7 @@
  * card back.
  */
 
-import { cleanup, fromPack, makeCharacter, makeNpc, pinDie, settle, PACK_FOR } from "./fixtures.mjs";
+import { cleanup, fromPack, makeCharacter, makeNpc, pinDie, settle, PACK_FOR, KNOWN } from "./fixtures.mjs";
 import { attackWithDialog, reactionStateOf, takeOpportunity } from "../applications/actions.mjs";
 import { canReact, defensiveReactions } from "../rules/reactions.mjs";
 import { THINNED_RATING_DROP } from "../rules/swarm.mjs";
@@ -32,7 +32,7 @@ const until = async (fn, what, ms = 5000) => {
 async function arm(actor, name) {
   const doc = await fromPack(PACK_FOR.weapon, name);
   if (!doc) throw new Error(`the weapons pack holds no "${name}"`);
-  const [item] = await actor.createEmbeddedDocuments("Item", [{ ...doc.toObject(), system: { ...doc.toObject().system, equipped: true } }]);
+  const [item] = await actor.createEmbeddedDocuments("Item", [{ ...doc.toObject(), system: { ...doc.toObject().system, equipped: true } }], { ...KNOWN });
   await until(() => actor.items.get(item.id)?.system?.equipped === true, `${name} to be in hand`);
   return actor.items.get(item.id);
 }

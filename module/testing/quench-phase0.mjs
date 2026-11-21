@@ -30,8 +30,7 @@ import { macroReusable } from "../rules/macros.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import {
   made, cleanup, settle, untilHook, fromPack, firstFromPack, makeCharacter, makeNpc,
-  makeBoss, itemOf, openSheet, browserOpen, useAction, forgeDrop, cardOf, PACK_FOR
-} from "./fixtures.mjs";
+  makeBoss, itemOf, openSheet, browserOpen, useAction, forgeDrop, cardOf, PACK_FOR, KNOWN } from "./fixtures.mjs";
 
 /**
  * The legibility debt, per surface, as a ceiling. The lead's type-floor ruling
@@ -687,7 +686,7 @@ export function dropsBatch(context) {
       // own hotbarDrop makes a macro that OPENS the item's sheet, and the
       // system had no macro code at all.
       const sword = await fromPack(PACK_FOR.weapon, "Longsword");
-      const [held] = await actor.createEmbeddedDocuments("Item", [sword.toObject()]);
+      const [held] = await actor.createEmbeddedDocuments("Item", [sword.toObject()], { ...KNOWN });
       const macros = game.system.azeroth.macros;
 
       // Empty page 1 first, and put back whatever was there in the finally.

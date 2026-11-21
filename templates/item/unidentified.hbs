@@ -1,0 +1,21 @@
+{{!--
+  AN UNIDENTIFIED THING, AS A PLAYER SEES IT (08 §4, *Unidentified items*; D-1435; the lead:
+  *"Kind + rarity"*). The sheet draws this part ALONE for a viewer `hiddenFrom` keeps from the
+  item: its icon in its rarity ring, the name it wears (*Longsword (unidentified)*), its kind and
+  its quality in words, and a line saying where Identify is. Nothing here is a form field, so the
+  sheet's submit-on-change has nothing to write. A GM never sees this part.
+--}}
+<section class="azeroth-item__unidentified">
+  <header class="azeroth-item__header">
+    <img class="azeroth-item__portrait{{#if disguise.rarityClass}} {{disguise.rarityClass}}{{/if}}" src="{{disguise.img}}" alt="{{disguise.name}}">
+    <div class="azeroth-item__identity">
+      <h1 class="azeroth-item__name{{#if disguise.rarityClass}} {{disguise.rarityClass}}{{/if}}">{{disguise.name}}</h1>
+      <p class="azeroth-item__type">{{disguise.type}}</p>
+    </div>
+  </header>
+  <dl class="azeroth-item__unidentified-facts">
+    <div><dt>{{localize "AZEROTH.Identify.SheetKind"}}</dt><dd>{{disguise.kind}}</dd></div>
+    <div><dt>{{localize "AZEROTH.Identify.SheetQuality"}}</dt><dd>{{disguise.quality}}</dd></div>
+  </dl>
+  <p class="azeroth-item__unidentified-note">{{localize "AZEROTH.Identify.Note"}}</p>
+</section>

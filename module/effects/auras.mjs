@@ -100,6 +100,8 @@ import { TICK_FLAG } from "./ticks.mjs";
 import { chainLightningLiving } from "../rules/chain-lightning.mjs";
 // A Legendary's aura reads ITS run's words, not every run the item prints (D-910).
 import { runProse } from "../rules/signatures.mjs";
+// An unidentified thing's aura still reaches its allies and names no more than its kind (D-1435).
+import { isUnidentified } from "../rules/identify.mjs";
 // 07 §12's Temporal Sanctuary and Bastion of Hours (O-265, the 2a fix stage): the sources a laid
 // effect holds up, the `immuneTo` flag Temporal Sanctuary lays and the Taunt Bane Bastion lays.
 import { sandAuraSources } from "./sand-auras.mjs";
@@ -163,7 +165,10 @@ export function auraSourcesOf(actor) {
     if (row.targets === "party" && actor.isParty !== true) continue;
     const item = actor.items?.get?.(row.key) ?? null;
     const key = `${actor.uuid}:${row.key}`;
-    const text = plain(runProse(item?.system?.signature ?? "", row.label ?? ""));
+    // The run's own words decide *other than you*; an UNIDENTIFIED thing lays none of them on
+    // anybody's effect (08 §4; D-1435), and its row's name is already *an unidentified item*.
+    const words = plain(runProse(item?.system?.signature ?? "", row.label ?? ""));
+    const text = isUnidentified(item) ? "" : words;
     out.push({
       key, group: key, name: row.name, origin: actor.uuid,
       img: item?.img || AURA_FALLBACK_ICON, text,
@@ -178,7 +183,7 @@ export function auraSourcesOf(actor) {
       // Hand of Ragnaros's turn-start damage, and who among those in reach.
       aura: {
         feet: row.feet, targets: row.targets, centre: "self", damageReduction: row.damageReduction,
-        spellDamage: row.spellDamage ?? null, floor: row.floor ?? null, excludeOwner: excludesHolder(text),
+        spellDamage: row.spellDamage ?? null, floor: row.floor ?? null, excludeOwner: excludesHolder(words),
         boon: row.boon ?? null, bane: row.bane ?? null, attackDamage: row.attackDamage ?? null,
         tick: row.tick ?? null, who: row.who ?? null
       }

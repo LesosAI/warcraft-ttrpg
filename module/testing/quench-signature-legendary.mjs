@@ -13,7 +13,7 @@
  * `QUENCH_BATCH=azeroth-rpg.signature-legendary npx playwright test tests/e2e/smoke.spec.mjs`.
  */
 
-import { cleanup, drainAreaWork, fromPack, made, makeCharacter, makeNpc, openSheet, pinDie, quietScrollingText, settle, untilHook, warnings } from "./fixtures.mjs";
+import { cleanup, drainAreaWork, fromPack, made, makeCharacter, makeNpc, openSheet, pinDie, quietScrollingText, settle, untilHook, warnings, KNOWN } from "./fixtures.mjs";
 import { reactionRows, useSignatureWithDialog } from "../applications/actions.mjs";
 import { targetSnapshots } from "../applications/roll-dialog.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
@@ -46,7 +46,7 @@ async function until(fn, what, ms = 15000) {
 /** A shipped Legendary on an actor, equipped. */
 async function wield(actor, pack, name) {
   const source = await fromPack(pack, name);
-  const [item] = await actor.createEmbeddedDocuments("Item", [source.toObject()]);
+  const [item] = await actor.createEmbeddedDocuments("Item", [source.toObject()], { ...KNOWN });
   await item.update({ "system.equipped": true });
   return actor.items.get(item.id);
 }
@@ -62,7 +62,7 @@ const combatantOf = (combat, actor) => combat.combatants.find(c => c.actorId ===
 /** A thing from the armor pack put on. */
 async function wear(actor, name) {
   const source = (await fromPack("azeroth-rpg.armor", name)).toObject();
-  const [item] = await actor.createEmbeddedDocuments("Item", [source]);
+  const [item] = await actor.createEmbeddedDocuments("Item", [source], { ...KNOWN });
   await item.update({ "system.equipped": true });
   await until(() => actor.items.get(item.id)?.system?.equipped === true, `${name} on`);
   return actor.items.get(item.id);

@@ -29,7 +29,7 @@
  * `after`.
  */
 
-import { cleanup, fromPack, give, made, makeCharacter, makeNpc, PACK_FOR, pinDie, settle, warnings } from "./fixtures.mjs";
+import { cleanup, fromPack, give, made, makeCharacter, makeNpc, PACK_FOR, pinDie, settle, warnings, KNOWN } from "./fixtures.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { giveMana } from "../effects/gifts.mjs";
 import { antiMagicShieldEffect } from "../rules/anti-magic-shield.mjs";
@@ -234,18 +234,18 @@ export function chromaticEngineBatch(context) {
         assert.notOk(actor.items.some(i => i.type === "talent" && i.system?.race === "Dwarf"), "a Dwarf talent was embedded");
         // The Champion is still never a second class, for an Outcast either.
         const champion = (await fromPack(PACK_FOR.class, CHAMPION)).toObject();
-        const said = await warnings(() => actor.createEmbeddedDocuments("Item", [champion]));
+        const said = await warnings(() => actor.createEmbeddedDocuments("Item", [champion], { ...KNOWN }));
         assert.notOk(actor.items.some(i => i.name === CHAMPION), "an Outcast Warrior took the Champion as a second class");
         assert.include(said, game.i18n.format("AZEROTH.Multiclass.NotSecond", { name: CHAMPION }));
         // The second class must be on the race's row (the lead, 2026-11-09: *"The second
         // class must be on your race's row in 02 §3, refused in words otherwise."*): a Druid
         // is refused in words, a Mage is taken.
         const druid = (await fromPack(PACK_FOR.class, "Druid")).toObject();
-        const offRow = await warnings(() => actor.createEmbeddedDocuments("Item", [druid]));
+        const offRow = await warnings(() => actor.createEmbeddedDocuments("Item", [druid], { ...KNOWN }));
         assert.notOk(actor.items.some(i => i.name === "Druid"), "an Outcast took a Druid as a second class");
         assert.include(offRow, game.i18n.format("AZEROTH.Multiclass.NotOnRow", { name: "Druid", race: OUTCAST }));
         const mage = (await fromPack(PACK_FOR.class, "Mage")).toObject();
-        await actor.createEmbeddedDocuments("Item", [mage]);
+        await actor.createEmbeddedDocuments("Item", [mage], { ...KNOWN });
         await until(() => actor.items.some(i => i.type === "class" && i.name === "Mage"), "the Mage taken as a second class");
       } finally {
         await creator.close();
@@ -256,12 +256,12 @@ export function chromaticEngineBatch(context) {
       this.timeout(90000);
       const warrior = await makeCharacter({ name: "ZZ Engine Two Classes", classes: [["Warrior", 3]] });
       const champion = (await fromPack(PACK_FOR.class, CHAMPION)).toObject();
-      const said = await warnings(() => warrior.createEmbeddedDocuments("Item", [champion]));
+      const said = await warnings(() => warrior.createEmbeddedDocuments("Item", [champion], { ...KNOWN }));
       assert.notOk(warrior.items.some(i => i.name === CHAMPION), "the Champion became a second class");
       assert.include(said, game.i18n.format("AZEROTH.Multiclass.NotSecond", { name: CHAMPION }));
       const drake = await makeCharacter({ name: "ZZ Engine No Second", classes: [[CHAMPION, 3]], race: OUTCAST });
       const mage = (await fromPack(PACK_FOR.class, "Mage")).toObject();
-      const refused = await warnings(() => drake.createEmbeddedDocuments("Item", [mage]));
+      const refused = await warnings(() => drake.createEmbeddedDocuments("Item", [mage], { ...KNOWN }));
       assert.notOk(drake.items.some(i => i.name === "Mage"), "a Champion took a second class");
       assert.include(refused, game.i18n.format("AZEROTH.Multiclass.HoldsCreationOnly", { name: CHAMPION }));
     });

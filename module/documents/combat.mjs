@@ -102,7 +102,7 @@ import { reveal } from "../effects/stealth.mjs";
 import { manaPool } from "../rules/pools.mjs";
 // A poison's minute (08 §12, D-719).
 import { coatingEndsWithFight, coatingExpired, coatingStartsIn } from "../rules/consumables.mjs";
-import { reactionStateOf } from "../applications/actions.mjs";
+import { reactionStateOf, shownWith } from "../applications/actions.mjs";
 // An area that strikes at the start of a turn (D-756): the law, what the
 // creature is, who it is to the caster, what the caster stands on, and the
 // sweep that takes an area away when its spell has gone.
@@ -1527,7 +1527,8 @@ export async function offerOpportunities(combatant, movement) {
       note: game.i18n.localize("AZEROTH.Reaction.OpportunityNote"),
       ownerUuid: row.actorUuid,
       opportunity: true,
-      weapon: row.with,
+      // The card is public: the weapon is named as a player would see it (D-1435).
+      weapon: shownWith(combatant.combat?.combatants?.get(row.combatantId)?.actor ?? null, row.with, "parry"),
       tokenId: mover?.id ?? "",
       sceneId: mover?.parent?.id ?? "",
       distance: row.distance

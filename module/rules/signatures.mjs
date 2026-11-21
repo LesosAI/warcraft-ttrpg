@@ -156,6 +156,9 @@ import { injuryConditions } from "./injuries.mjs";
 // both read that run. Splitting the marked text is what keeps the two halves of
 // a sentence — the marked one and the flat one — the same words.
 import { flatText, sentences } from "./spell-effects.mjs";
+// Whether a worn thing is still unidentified (08 §4; D-1435): its rows then carry the name
+// the caller hands in, never the true one.
+import { isUnidentified } from "./identify.mjs";
 
 /**
  * The kinds a Signature can take. `none` is the absence — the 196 placeholders
@@ -2074,13 +2077,19 @@ export function signatureEffects(items = [], state = {}, { weaponId = null } = {
     if (weaponId !== null && type === "weapon" && (item?.id ?? null) !== weaponId) continue;
     const signature = signatureEffectOf(item);
     if (!signature) continue;
-    const name = item?.name ?? "";
+    // **AN UNIDENTIFIED THING STILL WORKS, AND SAYS NOTHING** (08 §4; D-1435: *"Works,
+    // hidden"*). Its rows fire as they always did, but every row a card, a Block's line or an
+    // ally's aura prints carries the name the CALLER hands in (`state.unidentifiedName`, *an
+    // unidentified item*) - this module is pure and holds no words - and neither the item's
+    // sentence nor the run's label.
+    const hidden = isUnidentified(item);
+    const name = hidden ? String(state.unidentifiedName ?? "") : (item?.name ?? "");
     // The item's own sentence, for a card that would otherwise print one
     // generic line for all 288 of them - and on a Legendary THE RUN'S OWN
     // (D-910), so Wrath of Ragnaros's card prints Wrath of Ragnaros and not
     // all four of Sulfuras's runs.
     const prose = signatureProse(item);
-    const ctx = part => ({ item, name, text: plainText(runProse(prose, part?.label ?? "")), state });
+    const ctx = part => ({ item, name, hidden, text: hidden ? "" : plainText(runProse(prose, part?.label ?? "")), state });
 
     // THE TRUNK, under the trunk's own gate.
     if (gateHolds(signature.gates, state)) applyPart(out, signature, ctx(signature));
@@ -2106,9 +2115,11 @@ export function signatureEffects(items = [], state = {}, { weaponId = null } = {
  *
  * @param {object} out    the aggregate being built
  * @param {object} part   a whole descriptor or one of its `gated` branches
- * @param {{item: object, name: string, text: string, state: object}} ctx
+ * @param {{item: object, name: string, hidden?: boolean, text: string, state: object}} ctx
  */
-function applyPart(out, part, { item, name, text, state }) {
+function applyPart(out, part, { item, name, hidden = false, text, state }) {
+  // The run's label as a row prints it: none for an unidentified thing (D-1435).
+  const label = hidden ? "" : (part.label ?? "");
   // Every sentence here has already been through `parseGrant` — that is what
   // `cleanSignature` drops an unreadable one at — so these are handed on as
   // 08 §6 sentences for `grantsOn` and `grantsFor` to read, one door and not
@@ -2178,7 +2189,7 @@ function applyPart(out, part, { item, name, text, state }) {
   const gain = part.corruptionGain ?? null;
   if (gain?.at === "longRest" && gain.track && gain.amount && gain.resilience && gain.dc) {
     out.exposures.push({
-      key: item?.id ?? item?.uuid ?? name, name, label: part.label ?? "",
+      key: item?.id ?? item?.uuid ?? name, name, label,
       track: gain.track, amount: gain.amount, resilience: gain.resilience, dc: gain.dc
     });
   }
@@ -2193,6 +2204,9 @@ function applyPart(out, part, { item, name, text, state }) {
     // ally's own sheet.
     // `label` is the run that lays it (D-910), so the writer reads THAT run's
     // words for *other than you* and not every run the item prints.
+    // The aura alone keeps its run's label even when hidden: the writer prints no label and
+    // needs that run's own words for *other than you*, and it blanks the text it lays for an
+    // unidentified thing itself (`effects/auras.mjs#auraSourcesOf`; D-1435).
     out.auras.push({ key: item?.id ?? item?.uuid ?? name, name, label: part.label ?? "", ...part.aura });
   }
   // One named ability improved (D-698). Summed by name, so a second item
@@ -2211,7 +2225,7 @@ function applyPart(out, part, { item, name, text, state }) {
     out.bound.push({ key: item?.id ?? item?.uuid ?? name, name, damage: part.bound.damage, ...(part.bound.creatureType ? { creatureType: part.bound.creatureType } : {}) });
   }
   // The Legendary readers (D-911).
-  applyLegendary(out, part, { item, name });
+  applyLegendary(out, part, { item, name, label });
   // The target answers the parts of the row only it can (Perdition's Blade).
   const hit = resolveOnHit(part.onHit, state.target ?? null);
   if (firesOnHit(hit)) {
@@ -2255,7 +2269,7 @@ function applyPart(out, part, { item, name, text, state }) {
  *
  * Pure, and folded through the same gate the trunk and every branch go through.
  */
-function applyLegendary(out, part, { item, name }) {
+function applyLegendary(out, part, { item, name, label = part.label ?? "" }) {
   const ward = part.wardFloor?.ward ?? null;
   if (ward) {
     const schools = part.wardFloor.schools?.length ? part.wardFloor.schools : Object.keys(AZEROTH.schools);
@@ -2269,7 +2283,7 @@ function applyLegendary(out, part, { item, name }) {
   const block = part.onBlock ?? null;
   if ((block?.pool?.pool && block?.pool?.amount) || block?.condition?.id) {
     out.onBlock.push({
-      name, label: part.label ?? "",
+      name, label,
       ...(block.pool?.pool && block.pool?.amount ? { pool: { pool: block.pool.pool, amount: block.pool.amount } } : {}),
       ...(block.condition?.id ? { condition: { id: block.condition.id, value: block.condition.value ?? null, until: block.condition.until ?? null } } : {}),
       melee: block.melee === true
@@ -2292,14 +2306,14 @@ function applyLegendary(out, part, { item, name }) {
   }
   const rb = part.resistBane ?? null;
   if (rb?.banes && (rb.school || rb.name)) {
-    out.resistBane.push({ name, label: part.label ?? "", school: rb.school ?? null, spell: rb.name || null, creatureType: rb.creatureType ?? null, banes: rb.banes, per: rb.per ?? null });
+    out.resistBane.push({ name, label, school: rb.school ?? null, spell: rb.name || null, creatureType: rb.creatureType ?? null, banes: rb.banes, per: rb.per ?? null });
   }
   if (part.freeSpell && !out.freeSpell.includes(part.freeSpell)) out.freeSpell.push(part.freeSpell);
   out.touchHealingFeet = Math.max(out.touchHealingFeet, part.touchHealingFeet ?? 0);
   if (part.ordination === true && !out.ordination.includes(name)) out.ordination.push(name);
   const sdt = part.spellDamageTest ?? null;
   if (sdt?.school && sdt?.resilience && sdt?.onFail?.id) {
-    out.spellDamageTest.push({ name, label: part.label ?? "", school: sdt.school, resilience: sdt.resilience, onFail: { id: sdt.onFail.id, value: sdt.onFail.value ?? null, until: sdt.onFail.until ?? null } });
+    out.spellDamageTest.push({ name, label, school: sdt.school, resilience: sdt.resilience, onFail: { id: sdt.onFail.id, value: sdt.onFail.value ?? null, until: sdt.onFail.until ?? null } });
   }
   out.sizeStep += part.sizeStep ?? 0;
   for (const n of part.secondReaction ?? []) if (!out.secondReaction.includes(n)) out.secondReaction.push(n);

@@ -31,7 +31,7 @@
  * in `after`.
  */
 
-import { cleanup, drainAreaWork, give, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook, warnings, tokenDrawn, quietScrollingText, tokenData } from "./fixtures.mjs";
+import { cleanup, drainAreaWork, give, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook, warnings, tokenDrawn, quietScrollingText, tokenData, KNOWN } from "./fixtures.mjs";
 // The Gadgets compendium (the lead, 2026-10-24): the browser, the links, the drop.
 import { bagZone, browserOpen, forgeDrop } from "./fixtures.mjs";
 import { GADGETS, GADGETS_PACK, GADGET_ENTRY_FLAG, GADGET_UUID_PREFIX, withoutGadgetLinks } from "../rules/gadgets.mjs";
@@ -869,7 +869,7 @@ export function legacyTinkerBatch(context) {
         await sheet.close();
       }
       const byMacro = await warnings(async () => {
-        const createdNow = await gnome.createEmbeddedDocuments("Item", [entry.toObject()]);
+        const createdNow = await gnome.createEmbeddedDocuments("Item", [entry.toObject()], { ...KNOWN });
         assert.lengthOf(createdNow, 0, "the Item door made an entry on the sheet");
       });
       assert.deepEqual(byMacro, [refusal]);

@@ -6,7 +6,7 @@
  * choice is not the thing under test, and open the dialog where it is.
  */
 
-import { cleanup, gearInspector, gearTab, give, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook } from "./fixtures.mjs";
+import { cleanup, gearInspector, gearTab, give, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook, KNOWN } from "./fixtures.mjs";
 import { attackWithDialog } from "../applications/actions.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { checkText } from "./geometry.mjs";
@@ -194,7 +194,7 @@ export function consumableBatch(context) {
 
       const pack = game.packs.get("azeroth-rpg.armor");
       const suit = (await pack.getDocuments()).find(d => d.name === "Chain hauberk" || (d.system.category === "mail" && !d.system.shield));
-      const [worn] = await actor.createEmbeddedDocuments("Item", [suit.toObject()]);
+      const [worn] = await actor.createEmbeddedDocuments("Item", [suit.toObject()], { ...KNOWN });
       await worn.update({ "system.equipped": true });
       const body = worn.system.armorPoints.body;
       await use(actor, await give(actor, "Armor kit"));

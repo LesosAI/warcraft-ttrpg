@@ -9,7 +9,7 @@ export const SKILL_TEXT = Object.freeze({
   acrobatics: "<p>Keeping your feet, tumbling past somebody, crossing a ledge, landing from a fall. The surface and the drop set the DC.</p>",
   sleightOfHand: "<p>Lifting a purse, palming a coin, planting something on somebody. Opposed by their Perception if they have any reason to be watching.</p>",
   stealth: "<p>Moving unseen and unheard. Opposed by Perception, and plate has never once been quiet.</p>",
-  arcana: "<p>Recognizing a spell, a ward, an enchantment, or the hand that made it. Older and stranger ones are harder to read.</p>",
+  arcana: "<p>Recognizing a spell, a ward, an enchantment, or the hand that made it. Older and stranger ones are harder to read. Arcana also identifies an item; see <strong>08-EQUIPMENT</strong>, <em>Unidentified items</em>.</p>",
   archaeology: "<p>Dating a ruin, reading Titan work, telling a Vrykul barrow from a Nerubian one. The Explorers' League has spent a decade building this skill and longer arguing about what it found.</p>",
   investigation: "<p>Searching a room, following a paper trail, working out what happened here. How well it was hidden sets the DC.</p>",
   medicine: "<p>Stopping bleeding, setting bone, naming a poison or a plague. Stabilizing a Dying character is DC 12, in <strong>06-COMBAT</strong>.</p>",

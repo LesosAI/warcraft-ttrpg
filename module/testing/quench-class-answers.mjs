@@ -24,7 +24,7 @@
  * Every document a test makes is deleted in `after`.
  */
 
-import { cleanup, drainAreaWork, fromPack, giveTurn, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings, PACK_FOR } from "./fixtures.mjs";
+import { cleanup, drainAreaWork, fromPack, giveTurn, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings, PACK_FOR, KNOWN } from "./fixtures.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 import { reactionStateOf } from "../applications/actions.mjs";
@@ -86,7 +86,7 @@ async function characterWith(name, [cls, level], { ranks = {}, spells = [], abil
 /** A weapon from the pack, put in hand (quench-attacks.mjs's own `arm`). */
 async function arm(actor, name, extra = {}) {
   const source = (await fromPack(PACK_FOR.weapon, name)).toObject();
-  const [item] = await actor.createEmbeddedDocuments("Item", [{ ...source, system: { ...source.system, equipped: true, ...extra } }]);
+  const [item] = await actor.createEmbeddedDocuments("Item", [{ ...source, system: { ...source.system, equipped: true, ...extra } }], { ...KNOWN });
   await until(() => actor.items.get(item.id)?.system?.equipped === true, `${name} in hand`);
   return actor.items.get(item.id);
 }

@@ -80,6 +80,9 @@ import { wisdomBonus } from "../../rules/distilled-wisdom.mjs";
 import { skillBoonsOn, veilBanesOn } from "../../rules/sovereign-spells.mjs";
 import { withLaidVulnerable } from "../../rules/laid-vulnerable.mjs";
 import { SOURCE_MIGRATIONS } from "../../migrations/index.mjs";
+// 08 §4: a bonus from a hidden item is credited to *an unidentified item* (D-1435).
+import { unidentifiedSource } from "../../helpers/identify-words.mjs";
+import { hiddenFrom } from "../../rules/identify.mjs";
 
 const fields = foundry.data.fields;
 
@@ -374,15 +377,36 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // keeps its delta. Spellpower by school, a Boon by skill and Fortitude
     // ride to the cast, the dialog and the Health maximum. Derived, never
     // stored. **Affixes on a melded thing still grant** (the lead).
-    const worn = grantsFor(usableGear.map(i => ({
-      equipped: i.system?.equipped === true, name: i.name, grants: grantsOn(i, bearer)
-    })));
+    // **WHAT A HIDDEN ITEM GRANTS IS CREDITED TO *AN UNIDENTIFIED ITEM*** (08 §4; D-1435; the
+    // plan's default: *a roll-dialog line it adds is labelled an unidentified item*). The points
+    // land as they always did - "works, hidden" - and only the NAME behind them is hidden.
+    // **DERIVED DATA KNOWS NO VIEWER**: it is the same on every client, and a GM rolling for a
+    // player posts a public card, so BOTH names are derived here - the true `name` and the
+    // `publicName` a player may read - and the reader chooses: the In-force column and the
+    // plate's tooltip by viewer (`helpers/identify-words.mjs#shownGrants`, `#shownSourceName`),
+    // the roll dialog's lines and the card's provenance ALWAYS the public one.
+    const publicName = i => (hiddenFrom(i, { isGM: false }) ? unidentifiedSource() : i.name);
+    const wornRows = usableGear.map(i => ({
+      equipped: i.system?.equipped === true, name: i.name, publicName: publicName(i), grants: grantsOn(i, bearer)
+    }));
+    const worn = grantsFor(wornRows);
+    // The same sum with the public names: one walk of the same rows in the same order, so every
+    // list below lines up entry for entry with its true twin.
+    const wornPublic = grantsFor(wornRows.map(row => ({ ...row, name: row.publicName })));
+    const withPublic = (list, twin) => (list ?? []).map((src, n) => ({ ...src, publicName: twin?.[n]?.name ?? src.name }));
+    for (const key of Object.keys(worn.abilitySources)) worn.abilitySources[key] = withPublic(worn.abilitySources[key], wornPublic.abilitySources[key]);
+    for (const key of Object.keys(worn.scalarSources)) worn.scalarSources[key] = withPublic(worn.scalarSources[key], wornPublic.scalarSources[key]);
+    worn.public = {
+      abilitySources: wornPublic.abilitySources, boons: wornPublic.boons, skillBanes: wornPublic.skillBanes,
+      scalarSources: wornPublic.scalarSources, testBoonSources: wornPublic.testBoonSources, testBaneSources: wornPublic.testBaneSources
+    };
     this.grants = worn;
     // The two bonuses a GM types on a thing that have no grant sentence: a Damage
     // Rating for the attack lane below and a Casting Test line the cast door
     // adds. Affixes on a melded thing still count, as the grants above do.
+    // No reader prints these sources' names; where one ever does, it reads the public one.
     this.itemBonus = bonusTotals(usableGear.map(i => ({
-      equipped: i.system?.equipped === true, name: i.name, bonus: i.system?.bonus
+      equipped: i.system?.equipped === true, name: publicName(i), bonus: i.system?.bonus
     })));
     for (const [key, ability] of Object.entries(this.abilities)) {
       // **THE DELTA IS AN EFFECT'S CHANGE TO `mod`, read against the score as
@@ -413,7 +437,9 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     }
     // Final-phase ADD changes need a numeric base even for an untrained school.
     this.spellpower = { ...Object.fromEntries(Object.keys(AZEROTH.schools).map(key => [key, 0])), ...worn.spellpower };
-    this.skillBoons = worn.boons;
+    // Read by the roll dialog alone, whose lines go into a public card's provenance: the public
+    // names (D-1435). The In-force column reads `grants.boons` by viewer.
+    this.skillBoons = worn.public.boons;
     // **AND WHAT A SPELL OF THE CHARACTER'S OWN LAYS ON A SKILL** (07 §17's Air of Majesty and Read the
     // Supplicant: *you have a Boon on Leadership and Intimidation Tests against creatures that can see you*;
     // D-1250): the source by name, for the span of the effect that carries it, kept APART from what is worn,
@@ -441,7 +467,8 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // today, and a Signature may write one). Kept in the same bag the dialog
     // already reads a creature's standing Bane out of, additively.
     this.skillBanes = { ...(this.skillBanes ?? {}) };
-    for (const [skill, names] of Object.entries(worn.skillBanes)) {
+    // The public names, as `skillBoons` above: the roll dialog is this bag's one reader.
+    for (const [skill, names] of Object.entries(worn.public.skillBanes)) {
       this.skillBanes[skill] = [...(this.skillBanes[skill] ?? []), ...names];
     }
     // **WHAT IS WORN IS A SECOND SOURCE AND IT IS KEPT APART** (2026-09-10).
@@ -588,6 +615,8 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     this.vulnerable = withLaidVulnerable(this.vulnerable, this.parent?.effects ?? []);
     // What the Signatures on what is WORN add up to (08 §20, D-692). Read
     // here, applied below beside the numbers each of them belongs to.
+    // A hidden thing's rows carry *an unidentified item*, never its name (D-1435): the bearer
+    // (`AzerothActor#signatureState`) hands `unidentifiedName` in.
     const signature = signatureEffects(usableGear, bearer);
     this.signatureEffects = signature;
 

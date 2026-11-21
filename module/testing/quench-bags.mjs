@@ -27,8 +27,7 @@
 import {
   bagOf, bagWell, bagZone, browserOpen, cleanup, dragOver, forgeDrop, fromPack, gearInspector,
   gearTab, gearTile, inspect, made, makeCharacter, makeNpc, openSheet, settle, useAction,
-  warnings, wellOfTile, PACK_FOR
-} from "./fixtures.mjs";
+  warnings, wellOfTile, PACK_FOR, KNOWN } from "./fixtures.mjs";
 import { checkSheet, checkText, formatFindings } from "./geometry.mjs";
 import { SORT_STEP } from "../rules/bags.mjs";
 import { ledger } from "../rules/slots.mjs";
@@ -70,13 +69,13 @@ async function tryGive(actor, names, packId = PACK_FOR.equipment, system = null)
     if (system) foundry.utils.mergeObject(data, { system });
     payloads.push(data);
   }
-  return actor.createEmbeddedDocuments("Item", payloads);
+  return actor.createEmbeddedDocuments("Item", payloads, { ...KNOWN });
 }
 
 /** `n` copies of one pack item, in ONE create call. */
 async function tryGiveMany(actor, name, n, packId = PACK_FOR.equipment) {
   const one = await dataOf(name, packId);
-  return actor.createEmbeddedDocuments("Item", Array.from({ length: n }, () => foundry.utils.deepClone(one)));
+  return actor.createEmbeddedDocuments("Item", Array.from({ length: n }, () => foundry.utils.deepClone(one)), { ...KNOWN });
 }
 
 /** A container the character is wearing, created and then put on. */

@@ -14,6 +14,14 @@
       {{!-- Never a page number: pagination shifts on every compile (D3 §5). --}}
       <p class="azeroth-item__source">{{provenance}}</p>
     {{/if}}
+    {{#if identifyToggle}}
+      {{!-- 08 §4 (D-1435): the GM's switch. Ticked is known; the form name is turned into the
+            flag by `_processFormData`, never written as a document path. --}}
+      <label class="azeroth-item__identified">
+        <input type="checkbox" name="azerothIdentified" data-identify-toggle data-was="{{#if identified}}true{{else}}false{{/if}}"{{#if identified}} checked{{/if}}{{#unless editable}} disabled{{/unless}}>
+        {{localize "AZEROTH.Identify.Toggle"}}
+      </label>
+    {{/if}}
   </div>
   {{#if castable}}
   <div class="azeroth-item__actions">

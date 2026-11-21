@@ -90,6 +90,11 @@ import { derivedValue } from "./item-fields.mjs";
 import { carriedRows, describeRows } from "./carried.mjs";
 import { WORN_SCALARS } from "../rules/grants.mjs";
 import { rarityClass } from "../helpers/rarity.mjs";
+// 08 §4: an unidentified item's spells are locked (D-1435), and every builder below names a thing
+// the viewer is kept from by its kind (`shownName`) and draws none of its numbers.
+import { arrivalFlag, isUnidentified } from "../rules/identify.mjs";
+import { hiddenToViewer, shownGrants, shownName, shownRefusalData, shownSourceName } from "../helpers/identify-words.mjs";
+import { isScroll, writtenDC } from "../rules/scrolls.mjs";
 import { fittingBundles, selectAmmunition, shotDamage } from "../rules/ammunition.mjs";
 import { calledShotCost } from "../rules/modifiers.mjs";
 import { AzerothCharacterCreator } from "./creator.mjs";
@@ -517,7 +522,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       // The plate shows the score as worn and says how it got there on hover
       // (the lead, 2026-09-06): `15 + 1 · Longsword of the Bear`.
       formula: ability.bonus
-        ? `${ability.value} ${(ability.sources ?? []).map(src => `${src.points < 0 ? "−" : "+"} ${Math.abs(src.points)} · ${src.name}`).join(" ")}`
+        ? `${ability.value} ${(ability.sources ?? []).map(src => `${src.points < 0 ? "−" : "+"} ${Math.abs(src.points)} · ${shownSourceName(src)}`).join(" ")}`
         : null,
       form: formed
         ? {
@@ -993,6 +998,12 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
   async #dropForeign(item, zone) {
     const data = item.toObject();
     delete data._id;
+    // **08 §4: THE NEWCOMER IS JUDGED AS IT WILL ARRIVE, so it never merges into a known twin**
+    // (the Phase 3 review, M1). A merge creates nothing, so the create seam's stamp never sees it,
+    // and `stackKey` reads an absent flag as known: an Uncommon+ find dropped on an identified twin
+    // was poured into it and laundered. Writing the arrival flag first makes the two differ.
+    const arrival = arrivalFlag({ type: data.type, rarity: data.system?.rarity, flags: data.flags }, this.actor.type, {});
+    if (arrival !== null) foundry.utils.setProperty(data, "flags.azeroth-rpg.unidentified", arrival);
     // **A MOUNT IS NEVER IN A BAG** (08 §15). `admit` gives it the mount place
     // and hands back no placement, so a preferred container written here would
     // simply be stored - invisible, since it stands in the Stable either way,
@@ -1027,7 +1038,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         if (verdict.ok) {
           await this.actor.updateEmbeddedDocuments("Item",
             [{ _id: twin.id, "system.quantity": verdict.quantity }], { azerothBags: "bypass" });
-          ui.notifications?.info(game.i18n.format("AZEROTH.Bags.Merged", { name: twin.name, n: verdict.quantity }));
+          ui.notifications?.info(game.i18n.format("AZEROTH.Bags.Merged", { name: shownName(twin), n: verdict.quantity }));
           return this.actor.items.get(twin.id) ?? null;
         }
       }
@@ -1106,7 +1117,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // a bag panel was written into it, and the write moved nothing a reader
     // could see. The mount place and the Stable are its two doors.
     if (isMount(target)) {
-      ui.notifications?.warn(game.i18n.format("AZEROTH.Bags.Refused.MountNotCarried", { name: target.name }));
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Bags.Refused.MountNotCarried", { name: shownName(target) }));
       return null;
     }
     const here = containerOf(target);
@@ -1143,13 +1154,13 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       const legal = containersFor(this.actor, target).find(c => c.id === container);
       const bag = this.actor.items.get(container);
       if (!legal) {
-        ui.notifications?.warn(game.i18n.format("AZEROTH.Container.Refused", { name: target.name, container: bag?.name ?? "" }));
+        ui.notifications?.warn(game.i18n.format("AZEROTH.Container.Refused", { name: shownName(target), container: bag ? shownName(bag) : "" }));
         return null;
       }
       // `containersFor` already says a thing ALREADY in the bag is legal
       // however full it reads (D-737), so a move between two wells passes.
       if (!legal.ok) {
-        ui.notifications?.warn(game.i18n.format("AZEROTH.Container.NoRoom", { name: target.name, container: bag.name }));
+        ui.notifications?.warn(game.i18n.format("AZEROTH.Container.NoRoom", { name: shownName(target), container: shownName(bag) }));
         return null;
       }
     }
@@ -1161,7 +1172,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     if (well !== null) {
       const verdict = judgePlace(this.#rows(), this.#baseSlots(), target.id, container, well);
       if (!verdict.ok) {
-        ui.notifications?.warn(game.i18n.format(verdict.reason, verdict.data ?? {}));
+        ui.notifications?.warn(game.i18n.format(verdict.reason, shownRefusalData(this.actor, verdict.data ?? {})));
         return null;
       }
       return this.actor.updateEmbeddedDocuments("Item", verdict.writes);
@@ -1184,7 +1195,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
   async #swapWells(target, over) {
     const verdict = judgeSwap(this.#rows(), this.#baseSlots(), target.id, over.id);
     if (!verdict.ok) {
-      ui.notifications?.warn(game.i18n.format(verdict.reason, verdict.data ?? {}));
+      ui.notifications?.warn(game.i18n.format(verdict.reason, shownRefusalData(this.actor, verdict.data ?? {})));
       return null;
     }
     return this.actor.updateEmbeddedDocuments("Item", verdict.writes);
@@ -1201,13 +1212,13 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
   async #merge(into, from) {
     const verdict = judgeMerge(this.#rows(), this.#baseSlots(), into.id, from.id);
     if (!verdict.ok) {
-      ui.notifications?.warn(game.i18n.format(verdict.reason, verdict.data ?? {}));
+      ui.notifications?.warn(game.i18n.format(verdict.reason, shownRefusalData(this.actor, verdict.data ?? {})));
       return null;
     }
     await this.actor.updateEmbeddedDocuments("Item",
       [{ _id: into.id, "system.quantity": verdict.quantity }], { azerothBags: "bypass" });
     await this.actor.deleteEmbeddedDocuments("Item", [from.id], { azerothBags: "bypass" });
-    ui.notifications?.info(game.i18n.format("AZEROTH.Bags.Merged", { name: into.name, n: verdict.quantity }));
+    ui.notifications?.info(game.i18n.format("AZEROTH.Bags.Merged", { name: shownName(into), n: verdict.quantity }));
     return into;
   }
 
@@ -1240,7 +1251,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // reader who dropped a hand-made horse here needs to be told what makes
     // one, since `isMount` reads 08's own four sections off the entry.
     if (!isMount(item)) {
-      ui.notifications?.warn(game.i18n.format("AZEROTH.Bags.Refused.NotMount", { name: item?.name ?? "" }));
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Bags.Refused.NotMount", { name: item ? shownName(item) : "" }));
       return null;
     }
     if ((item.system?.equipped === true) === with_) return null;
@@ -1277,7 +1288,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // wears or holds - and that reads honestly from the panel, from the bar
     // and from the row's own menu alike.
     if (!item || !wearable(item)) {
-      ui.notifications?.warn(game.i18n.format("AZEROTH.Bags.Refused.NotWorn", { name: item?.name ?? "" }));
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Bags.Refused.NotWorn", { name: item ? shownName(item) : "" }));
       return null;
     }
     if (item.system?.equipped === true) return null;
@@ -1285,7 +1296,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // rather than letting a caster cast through it silently.
     const augment = item.system?.augment ?? null;
     if (augment && !canCarry(augment.category, this.actor.classNames ?? [])) {
-      ui.notifications?.warn(game.i18n.format("AZEROTH.Augment.NotYours", { name: item.name, className: augment.className }));
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Augment.NotYours", { name: shownName(item), className: augment.className }));
       return null;
     }
     // **A WEAPON GOES IN A HAND** (the lead, 2026-09-13): `handFor` is the
@@ -1325,17 +1336,17 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     const label = game.i18n.localize(AZEROTH.wornSlots[slot] ?? AZEROTH.heldSlots[slot] ?? slot);
     const refused = () => {
       if (!fitsSlot(item, slot)) {
-        return game.i18n.format("AZEROTH.Overview.DropRefused", { name: item.name, slot: label });
+        return game.i18n.format("AZEROTH.Overview.DropRefused", { name: shownName(item), slot: label });
       }
       // The barred Off hand (D-689). The tile carries no action and no drop may
       // reach it; this says which weapon is holding it shut.
       const barred = this.#barredMainHand(slot);
-      if (barred) return game.i18n.format("AZEROTH.Overview.DropBarred", { name: item.name, main: barred.name });
+      if (barred) return game.i18n.format("AZEROTH.Overview.DropBarred", { name: shownName(item), main: shownName(barred) });
       // 08 §9 locks an Augment to its class, and the Equip button refuses it at
       // this same door rather than letting a caster cast through it silently.
       const augment = item.system?.augment ?? null;
       if (augment && !canCarry(augment.category, this.actor.classNames ?? [])) {
-        return game.i18n.format("AZEROTH.Augment.NotYours", { name: item.name, className: augment.className });
+        return game.i18n.format("AZEROTH.Augment.NotYours", { name: shownName(item), className: augment.className });
       }
       return null;
     };
@@ -1384,7 +1395,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // the sheet is a second copy of a rule, and the wrong copy goes quiet.
     if (underOffer(item)) return this.#dropForeign(item, { kind: "equipped" });
     if (!item || !wearable(item)) {
-      ui.notifications?.warn(game.i18n.format("AZEROTH.Bags.Refused.NotWorn", { name: item?.name ?? "" }));
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Bags.Refused.NotWorn", { name: item ? shownName(item) : "" }));
       return null;
     }
     // A mount is never worn and never carried: it is brought along, and
@@ -1397,14 +1408,14 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
 
     const augment = item.system?.augment ?? null;
     if (augment && !canCarry(augment.category, this.actor.classNames ?? [])) {
-      ui.notifications?.warn(game.i18n.format("AZEROTH.Augment.NotYours", { name: item.name, className: augment.className }));
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Augment.NotYours", { name: shownName(item), className: augment.className }));
       return null;
     }
     const hand = item.type === "weapon" ? (slot ?? handFor(item, this.actor.items)) : slot;
     if (hand === "offHand") {
       const barred = this.#barredMainHand("offHand");
       if (barred) {
-        ui.notifications?.warn(game.i18n.format("AZEROTH.Overview.DropBarred", { name: item.name, main: barred.name }));
+        ui.notifications?.warn(game.i18n.format("AZEROTH.Overview.DropBarred", { name: shownName(item), main: shownName(barred) }));
         return null;
       }
     }
@@ -1427,7 +1438,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       // onto a full bar would be refused as a fifth container.
       const refusal = this.#barPlaceRefusal(held, led, data, displace);
       if (refusal) {
-        ui.notifications?.warn(game.i18n.format(refusal.reason, refusal.data));
+        ui.notifications?.warn(game.i18n.format(refusal.reason, shownRefusalData(this.actor, refusal.data ?? {})));
         return null;
       }
     }
@@ -1440,7 +1451,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     if (augment) judged.system = { ...judged.system, augment };
     const verdict = wearNew(rows, base, judged, { index });
     if (!verdict.ok) {
-      ui.notifications?.warn(game.i18n.format(verdict.reason, verdict.data ?? {}));
+      ui.notifications?.warn(game.i18n.format(verdict.reason, shownRefusalData(this.actor, verdict.data ?? {})));
       return null;
     }
     // The displaced go first, judged like any other write: the room the
@@ -2270,7 +2281,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     const weapons = Object.fromEntries(rows.map(r => {
       const item = this.actor.items.get(r.itemId);
       const hand = figure.mainHand?.id === r.itemId ? "main" : figure.offHand?.id === r.itemId ? "off" : null;
-      return [r.itemId, { img: item?.img ?? null, rarity: item?.system?.rarity ?? "common", rarityClass: rarityClass(item?.system?.rarity), hand }];
+      // The weapon's name as this viewer knows it (08 §4): an unidentified runeblade is its kind.
+      return [r.itemId, { name: item ? shownName(item) : null, img: item?.img ?? null, rarity: item?.system?.rarity ?? "common", rarityClass: rarityClass(item?.system?.rarity), hand }];
     }));
     const pool = (this.actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === RUNIC_POWER) ?? null;
     const L = k => game.i18n.localize(k);
@@ -2983,7 +2995,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     const melded = melds
       ? this.actor.items
         .filter(i => ["weapon", "armor", "gear"].includes(i.type) && i.system?.equipped === true)
-        .map(i => i.name)
+        .map(i => shownName(i))
         .sort((a, b) => a.localeCompare(b))
       : [];
     return {
@@ -3106,7 +3118,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
    */
   #weapons() {
     const weapons = this.actor.items.filter(i => i.type === "weapon");
-    const bundles = weapons.map(i => ({ id: i.id, name: i.name, ...i.system }));
+    const bundles = weapons.map(i => ({ id: i.id, name: shownName(i), ...i.system }));
     // **THE CLAWS' ROW** (02 §7's Blood-Forged Claws; the lead, R6: *"An Equip toggle on the
     // sheet"*; the plan's B.13 Q11, the Combat tab; D-1163): the Equip toggle stands, Attack is
     // offered only while they are equipped, there is no Delete (they go with the feature), and
@@ -3122,10 +3134,14 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         const fitting = sys.isLauncher ? fittingBundles(sys, bundles) : [];
         const chosen = sys.isLauncher ? selectAmmunition(sys, fitting) : null;
         const claws = isClaws(item);
+        // **AN UNIDENTIFIED WEAPON IS ITS KIND** (08 §4; D-1435): its Rating and traits are among
+        // the numbers identifying reveals, so the row draws a dash and no chips. Attack still works.
+        const hidden = hiddenToViewer(item);
         return {
           id: item.id,
-          name: item.name,
+          name: shownName(item),
           img: item.img,
+          hidden,
           claws,
           attackable: !claws || sys.equipped === true,
           deletable: !claws,
@@ -3133,18 +3149,19 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
             ? { text: game.i18n.format("AZEROTH.Claws.FreeUses", { left: clawFree.left, max: clawFree.max }), tip: game.i18n.localize("AZEROTH.Claws.FreeUsesTip") }
             : null,
           equipTip: claws ? game.i18n.localize("AZEROTH.Claws.Uncover") : null,
-          rating: sys.isLauncher ? (chosen ? shotDamage(sys, chosen).rating : null) : sys.rating,
-          range: sys.range,
-          traits: sys.traits ?? [],
+          rating: hidden ? null : (sys.isLauncher ? (chosen ? shotDamage(sys, chosen).rating : null) : sys.rating),
+          range: hidden ? null : sys.range,
+          traits: hidden ? [] : (sys.traits ?? []),
           equipped: sys.equipped === true,
           rarityClass: rarityClass(sys.rarity),
           detail: detailFields(item),
           editable: this.isEditable,
           launcher: sys.isLauncher ? game.i18n.localize(AZEROTH.launcherKinds[sys.launcher]) : null,
-          ammo: sys.isLauncher ? fitting.map(b => ({ id: b.id, name: b.name, quantity: b.quantity ?? 0, selected: b.id === chosen?.id })) : []
+          ammo: sys.isLauncher ? fitting.map(shot => ({ id: shot.id, name: shot.name, quantity: shot.quantity ?? 0, selected: shot.id === chosen?.id })) : []
         };
       })
-      .sort((a, b) => a.name.localeCompare(b.name));
+      // The ROWS, by the name each already shows (08 §4: a hidden thing sorts under its kind).
+      .sort((x, y) => x.name.localeCompare(y.name));
   }
 
   /** The bundles of shot carried, beneath the weapons (D-641): counted, never swung. */
@@ -3154,7 +3171,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       .filter(i => i.type === "weapon" && i.system.isShot)
       .map(item => ({
         id: item.id,
-        name: item.name,
+        name: shownName(item),
         img: item.img,
         quantity: item.system.quantity ?? 0,
         fits: (item.system.fits ?? []).map(k => game.i18n.localize(AZEROTH.launcherKinds[k] ?? k)).join(", "),
@@ -3162,7 +3179,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         favorite: favorites.has(item.id),
         detail: detailFields(item)
       }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((x, y) => x.name.localeCompare(y.name));
   }
 
   /**
@@ -3203,6 +3220,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       place: Object.fromEntries(TILE_PLACES.map(k => [k, game.i18n.localize(`AZEROTH.Bags.Place.${k}`)])),
       blurb: Object.fromEntries(BLURB_KINDS.map(k => [k, game.i18n.localize(`AZEROTH.Bags.Blurb.${k}`)])),
       rarity: enumWords("rarities"),
+      // 08 §4's line on an unidentified thing's card (`tipModel`'s `hidden`).
+      unidentified: game.i18n.localize("AZEROTH.Identify.TipLine"),
       hold: enumWords("holdKinds"),
       weight: game.i18n.localize("AZEROTH.Sheet.Pounds"),
       count: game.i18n.localize("AZEROTH.Bags.Count"),
@@ -3251,7 +3270,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     const items = [...this.actor.items];
     const led = ledger(items, Number.isFinite(base) ? base : BASE_SLOTS);
     const words = this.#bagWords();
-    const names = new Map(items.map(item => [item.id, item.name]));
+    // A bag's own name heads its panel, so an unidentified bag is its kind there too (08 §4).
+    const names = new Map(items.map(item => [item.id, shownName(item)]));
     const starred = new Set(this.actor.favorites);
     const described = new Map((rows ?? []).map(row => [row.id, row]));
 
@@ -3286,7 +3306,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       stable: led.stable.map(id => tiles.get(id)).filter(Boolean),
       // The hidden cards, in a stable order so the DOM does not churn between
       // renders (CLAUDE.md §15).
-      inspect: [...tiles.values()].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
+      inspect: [...tiles.values()].sort((x, y) => x.name.localeCompare(y.name) || x.id.localeCompare(y.id))
     };
   }
 
@@ -3337,19 +3357,25 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
   async #bagRow(item, described, { led, words, names, starred }) {
     const sys = item.system ?? {};
     const place = this.#placeOf(item.id, led, names);
+    // **AN UNIDENTIFIED THING KEEPS ITS ICON, ITS RING AND ITS PLACE** (08 §4; D-1435; the lead:
+    // *"Kind + rarity"*): its name is its kind, and its fields, prose, charges, coating and
+    // Augment bonus are left off the tile, the tooltip and the inspector. What it weighs, how many
+    // wells it takes and how many there are stay, because the bags are arranged by them.
+    const hidden = hiddenToViewer(item);
     const row = {
       ...described,
       trainingTip: this.#trainingTip(item),
       id: item.id,
-      name: item.name,
+      name: shownName(item),
       img: item.img,
       type: item.type,
       sort: item.sort ?? 0,
       system: sys,
+      hidden,
       rarityClass: rarityClass(sys.rarity),
       favorite: starred.has(item.id),
-      coating: item.getFlag("azeroth-rpg", "coating")?.name ?? null,
-      charges: hasCharges(sys.charges) ? { ...sys.charges } : null,
+      coating: hidden ? null : (item.getFlag("azeroth-rpg", "coating")?.name ?? null),
+      charges: !hidden && hasCharges(sys.charges) ? { ...sys.charges } : null,
       usable: hasUse(sys.use),
       useRefusal: dispersionRefusal(this.actor, "gear"),
       quantity: sys.quantity ?? null,
@@ -3358,7 +3384,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       // rule `carried.mjs` keeps for the creature's tab.
       equippable: wearable(item),
       equipped: sys.equipped === true,
-      augment: sys.augment ? { ...sys.augment } : null,
+      augment: !hidden && sys.augment ? { ...sys.augment } : null,
       // Every field the item stores, LESS the bag-slot line: the card prints
       // that above in words and a second copy under a label read as a bug.
       detail: (described.detail ?? detailFields(item)).filter(f => f.label !== words.bagSlotsLabel),
@@ -3374,7 +3400,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     row.badge = badgeOf(row);
     row.primary = primaryAction(row);
     row.ariaLabel = game.i18n.format("AZEROTH.Bags.TileLabel", {
-      name: item.name,
+      name: row.name,
       kind: row.kindLine,
       slots: row.bagLine ?? ""
     });
@@ -3413,7 +3439,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     if (!base) return null;
     const need = slotsIn(item, base);
     if (base.used + need <= base.wells) return null;
-    return game.i18n.format("AZEROTH.Bags.Refused.NoRoomToRemove", { name: item.name });
+    return game.i18n.format("AZEROTH.Bags.Refused.NoRoomToRemove", { name: shownName(item) });
   }
 
   /**
@@ -3442,14 +3468,18 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
    */
   async #slotTip(item, slotLabel, words, note = null) {
     const sys = item.system ?? {};
+    // The Gear tab's own disguise (08 §4): the kind for a name, no coating, and `hidden` telling
+    // `tipModel` to leave off the blurb and the charges and to say *Unidentified*.
+    const hidden = hiddenToViewer(item);
     const tip = tipModel({
-      name: item.name,
+      name: shownName(item),
       trainingTip: this.#trainingTip(item),
       type: item.type,
       system: sys,
+      hidden,
       rarityClass: rarityClass(sys.rarity),
       bagLine: null,
-      coating: item.getFlag("azeroth-rpg", "coating")?.name ?? null,
+      coating: hidden ? null : (item.getFlag("azeroth-rpg", "coating")?.name ?? null),
       usable: hasUse(sys.use)
     }, { words, slot: note ? `${slotLabel} · ${note}` : slotLabel });
     return foundry.applications.handlebars.renderTemplate(
@@ -3485,7 +3515,9 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     const system = this.actor.system;
     const items = [...this.actor.items];
     const figure = figureSlots(items);
-    const grants = system.grants ?? {};
+    // The source lists as THIS viewer reads them (D-1435): a GM the true names, a player
+    // *an unidentified item* for a hidden thing.
+    const grants = shownGrants(system.grants);
     // The Gear tab's own vocabulary, because the figure's tooltip is the Gear
     // tab's own card: ONE composer (`rules/bags.mjs#tipModel`) for both.
     const words = this.#bagWords();
@@ -3507,9 +3539,10 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
           : null);
       // A Versatile weapon held in both hands by its rune count says so (D-943).
       const runeNote = barred ? twoHandedNote(figure.mainHand) : null;
+      const mainName = figure.mainHand ? shownName(figure.mainHand) : "";
       const barredNote = barred
-        ? [game.i18n.format("AZEROTH.Overview.TwoHanded", { name: figure.mainHand?.name ?? "" }),
-          ...(runeNote ? [game.i18n.format(runeNote, { name: figure.mainHand?.name ?? "" })] : [])].join(" ")
+        ? [game.i18n.format("AZEROTH.Overview.TwoHanded", { name: mainName }),
+          ...(runeNote ? [game.i18n.format(runeNote, { name: mainName })] : [])].join(" ")
         : null;
       // **THE SOCKET CARRIES NO WORDS** (the lead, 2026-09-20, against WoW's
       // own character pane): the icon in its rarity ring is the whole tile, so
@@ -3518,7 +3551,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       // eyes each get the slot AND what is in it, in that order.
       const what = barred
         ? game.i18n.format("AZEROTH.Overview.BarredLabel", { note: barredNote })
-        : (item?.name ?? game.i18n.localize("AZEROTH.Overview.Empty"));
+        : (item ? shownName(item) : game.i18n.localize("AZEROTH.Overview.Empty"));
       const ariaLabel = game.i18n.format("AZEROTH.Overview.TileLabel", { slot: label, what });
       const pickTip = game.i18n.format("AZEROTH.Overview.PickTip", { slot: label });
       return {
@@ -3591,7 +3624,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       alsoReady: figure.alsoReady.map(item => ({
         id: item.id,
         trainingTip: this.#trainingTip(item),
-        name: item.name,
+        name: shownName(item),
         img: item.img,
         rarityClass: rarityClass(item.system?.rarity)
       })),
@@ -3625,7 +3658,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
             key,
             label: AZEROTH.abilities[key],
             points: a.bonus,
-            from: (a.sources ?? []).map(s => s.name).join(", ")
+            from: (a.sources ?? []).map(s => shownSourceName(s)).join(", ")
           })),
         ward: Object.entries(system.ward ?? {}).filter(([, v]) => Number(v) > 0).sort(bySchool)
           .map(([school, value]) => ({ school, label: AZEROTH.schools[school] ?? school, value })),
@@ -3659,7 +3692,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
             key,
             label: AZEROTH.wornScalars[key],
             points: grants.scalars[key],
-            from: (grants.scalarSources?.[key] ?? []).map(s => s.name).sort().join(", ")
+            from: (grants.scalarSources?.[key] ?? []).map(s => shownSourceName(s)).sort().join(", ")
           })),
         fortitude: grants.fortitude ?? 0,
         defense: system.defense ?? null,
@@ -3670,7 +3703,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         })),
         // An Hourglass holds Sand and adds nothing to a Casting Test (07 §3, D-849): the line
         // says so, rather than *+0* (the 2a review's should-fix, stage 2b).
-        augment: augment ? { name: augment.name, bonus: augment.bonus, className: augment.className, holds: Boolean(augment.holds) } : null,
+        // A hidden Augment's number is hidden too (D-1435): it works, and the line says nothing of what it adds.
+        augment: augment ? { name: augment.item ? shownName(augment.item) : augment.name, hidden: Boolean(augment.item && hiddenToViewer(augment.item)), bonus: augment.item && hiddenToViewer(augment.item) ? null : augment.bonus, className: augment.className, holds: Boolean(augment.holds) } : null,
         // WHAT THE SIGNATURES ON WHAT IS WORN ARE DOING (08 §20, S3; D-692):
         // one row per equipped Signature, beside Ward, Spellpower and the
         // Boons, saying whether its gate holds and carrying a button where
@@ -3829,13 +3863,17 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     const worn = this.actor.items
       .filter(i => ["weapon", "armor", "gear"].includes(i.type) && i.system?.equipped === true)
       .filter(i => hasSignature(i.system?.signatureEffect))
+      // **AN UNIDENTIFIED THING HAS NO SIGNATURE ROW FOR A PLAYER** (08 §4; D-1435): that it has
+      // one at all is what identifying reveals. Its standing Signature still works; its Use is
+      // locked at the door. A GM's sheet keeps the row, greyed and said (`signatureContext`).
+      .filter(i => !hiddenToViewer(i))
       // An embedded collection's order is not stable across a re-sync, so a
-      // list a person reads is sorted (2026-09-06).
-      .sort((a, b) => a.name.localeCompare(b.name));
+      // list a person reads is sorted (2026-09-06), by the name it shows.
+      .sort((a, b) => shownName(a).localeCompare(shownName(b)) || a.id.localeCompare(b.id));
     for (const item of worn) {
       rows.push({
         id: item.id,
-        name: item.name,
+        name: shownName(item),
         img: item.img,
         rarityClass: rarityClass(item.system?.rarity),
         career: false,
@@ -3970,9 +4008,11 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       const item = this.actor.items.get(id);
       if (!item) continue;
       if (item.type === "feature") { rows.push(await this.#featureRow(item, favorites)); continue; }
+      // An unidentified thing is its kind, with no Rating beside it (08 §4; D-1435).
+      const hidden = hiddenToViewer(item);
       rows.push({
         id: item.id,
-        name: item.name,
+        name: shownName(item),
         img: item.img,
         // Favorites lists weapons, suits and gear and carried no rarity at
         // all, so its icons went unringed while every other list's did
@@ -3984,7 +4024,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         usable: hasUse(item.system.use),
         useRefusal: dispersionRefusal(this.actor, "gear"),
         equipped: item.system?.equipped === true,
-        meta: item.type === "spell" ? `T${item.system.tier}` : (item.type === "weapon" ? (item.system.rating ?? null) : null),
+        meta: item.type === "spell" ? `T${item.system.tier}` : (item.type === "weapon" && !hidden ? (item.system.rating ?? null) : null),
         favorite: true,
         detail: detailFields(item),
         origin: this.#origin(item)
@@ -4002,7 +4042,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     const charges = item?.system?.charges;
     if (!hasCharges(charges)) return;
     await item.update({ "system.charges.value": charges.max });
-    ui.notifications?.info(game.i18n.format("AZEROTH.Container.Filled", { name: item.name }));
+    ui.notifications?.info(game.i18n.format("AZEROTH.Container.Filled", { name: shownName(item) }));
   }
 
   /** Spend one (09 SS5: a day with no water costs a point of Fatigue). */
@@ -4014,7 +4054,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     if (!hasCharges(charges)) return;
     const left = Math.max(0, (charges.value ?? 0) - 1);
     await item.update({ "system.charges.value": left });
-    if (left === 0) ui.notifications?.warn(game.i18n.format("AZEROTH.Container.Empty", { name: item.name }));
+    if (left === 0) ui.notifications?.warn(game.i18n.format("AZEROTH.Container.Empty", { name: shownName(item) }));
   }
 
   /**
@@ -4027,7 +4067,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     if (!item) return;
     const held = item.getFlag("azeroth-rpg", "coating");
     await item.unsetFlag("azeroth-rpg", "coating");
-    if (held) ui.notifications?.info(game.i18n.format("AZEROTH.Use.Wiped", { name: held.name, item: item.name }));
+    if (held) ui.notifications?.info(game.i18n.format("AZEROTH.Use.Wiped", { name: held.name, item: shownName(item) }));
   }
 
   /** 08 SS12 and SS13's Use (D-668): drink it, lay it on a thing, throw it. */
@@ -4250,7 +4290,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     if (held < 2) return null;
 
     const n = await foundry.applications.api.DialogV2.prompt({
-      window: { title: game.i18n.format("AZEROTH.Bags.SplitTitle", { name: item.name }) },
+      window: { title: game.i18n.format("AZEROTH.Bags.SplitTitle", { name: shownName(item) }) },
       classes: ["azeroth", "azeroth-split-dialog"],
       content: `<p>${foundry.utils.escapeHTML(game.i18n.format("AZEROTH.Bags.SplitPrompt", { n: held }))}</p>`
         + `<input type="number" name="n" value="1" min="1" max="${held - 1}" step="1" autofocus>`,
@@ -4264,7 +4304,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
 
     const verdict = judgeSplit(this.#rows(), this.#baseSlots(), item.id, n);
     if (!verdict.ok) {
-      ui.notifications?.warn(game.i18n.format(verdict.reason, verdict.data ?? {}));
+      ui.notifications?.warn(game.i18n.format(verdict.reason, shownRefusalData(this.actor, verdict.data ?? {})));
       return null;
     }
     const data = item.toObject();
@@ -4285,7 +4325,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // creating and then failing to lower leaves a duplicate - which a drop on
     // its twin merges back (D-741). Nothing about a split is worth losing
     // arrows over.
-    const [made] = await this.actor.createEmbeddedDocuments("Item", [data], { azerothBags: "bypass" });
+    const [made] = await this.actor.createEmbeddedDocuments("Item", [data], { azerothBags: "bypass", azerothIdentify: "known" });
     if (!made) return null;
     await this.actor.updateEmbeddedDocuments("Item",
       [{ _id: item.id, "system.quantity": verdict.quantity }], { azerothBags: "bypass" });
@@ -4529,6 +4569,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
    * lore under every row buries the choice.
    */
   #pickLine(item) {
+    // What an unidentified thing grants, its traits and its numbers are hidden (08 §4; D-1435).
+    if (hiddenToViewer(item)) return game.i18n.localize("AZEROTH.Identify.TipLine");
     const grants = grantsOf(item);
     if (grants.length) return grants.join(" · ");
     const traits = (Array.isArray(item.system?.traits) ? item.system.traits : []).map(String).filter(Boolean);
@@ -4562,7 +4604,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // second door, the way #dropOnSlot's is (D-689).
     const barred = this.#barredMainHand(slot);
     if (barred) {
-      ui.notifications?.info(game.i18n.format("AZEROTH.Overview.TwoHanded", { name: barred.name }));
+      ui.notifications?.info(game.i18n.format("AZEROTH.Overview.TwoHanded", { name: shownName(barred) }));
       return null;
     }
     if (slot === "ammo") return this.#pickAmmunition(figure, items, label);
@@ -4574,7 +4616,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // **THE CLAWS ARE NEVER A ROW** (the lead, R6: *"An Equip toggle on the sheet. No bag
     // slot and no paper-doll tile of their own"*; D-1163): the Combat tab's toggle puts them
     // on and takes them off, and the picker lists what is carried.
-    const candidates = items.filter(i => fitsSlot(i, slot) && !isClaws(i)).sort((a, b) => a.name.localeCompare(b.name));
+    const candidates = items.filter(i => fitsSlot(i, slot) && !isClaws(i)).sort((a, b) => shownName(a).localeCompare(shownName(b)) || a.id.localeCompare(b.id));
     if (!candidates.length) {
       ui.notifications?.info(game.i18n.format("AZEROTH.Overview.NothingFor", { slot: label }));
       return null;
@@ -4584,12 +4626,13 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     const refusalFor = item => {
       const augment = item.system?.augment ?? null;
       if (!augment || canCarry(augment.category, classes)) return null;
-      return game.i18n.format("AZEROTH.Augment.NotYours", { name: item.name, className: augment.className });
+      return game.i18n.format("AZEROTH.Augment.NotYours", { name: shownName(item), className: augment.className });
     };
     // **TWO OF ONE THING ARE TWO ROWS READING THE SAME WORD** (the lead,
     // 2026-09-13), which cannot be chosen between. Numbered by id, since an
     // embedded collection's order is not stable across a re-sync.
-    const copies = copyLabels(candidates);
+    // Numbered by the name the reader SEES: two unidentified longswords read alike (08 §4).
+    const copies = copyLabels(candidates.map(i => ({ id: i.id, name: shownName(i) })));
     // And the one already in the OTHER hand is named as such, so a second
     // Dagger offered for the off hand says where the first one is.
     const otherHand = slot === "mainHand" ? "offHand" : (slot === "offHand" ? "mainHand" : null);
@@ -4605,7 +4648,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         const copy = copies.get(item.id);
         return {
           key: item.id,
-          name: copy ? game.i18n.format("AZEROTH.Overview.Copy", { name: item.name, n: copy }) : item.name,
+          name: copy ? game.i18n.format("AZEROTH.Overview.Copy", { name: shownName(item), n: copy }) : shownName(item),
           tag: item.id === worn?.id
             ? game.i18n.localize("AZEROTH.Overview.WornNow")
             : (inOther && item.id === inOther.id ? game.i18n.localize(otherTag) : null),
@@ -4646,18 +4689,19 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
    */
   async #pickAmmunition(figure, items, label) {
     const launcher = figure.ranged;
-    const carried = items.filter(i => i.type === "weapon").map(i => ({ id: i.id, name: i.name, ...(i.system ?? {}) }));
+    const carried = items.filter(i => i.type === "weapon").map(i => ({ id: i.id, name: shownName(i), ...(i.system ?? {}) }));
     const bundles = launcher ? fittingBundles(launcher.system ?? {}, carried) : [];
     if (!bundles.length) {
       ui.notifications?.info(game.i18n.format("AZEROTH.Overview.NothingFor", { slot: label }));
       return null;
     }
     const nocked = figure.ammo;
-    const rows = bundles.map(bundle => ({
-      key: bundle.id,
-      name: bundle.name,
-      tag: bundle.id === nocked?.id ? game.i18n.localize("AZEROTH.Overview.NockedNow") : null,
-      description: `<p>${foundry.utils.escapeHTML(game.i18n.format("AZEROTH.Card.ShotsLeft", { n: bundle.quantity ?? 0 }))}</p>`,
+    // `carried` is already named as this viewer sees it (`shownName`), so each shot's name is.
+    const rows = bundles.map(shot => ({
+      key: shot.id,
+      name: shot.name,
+      tag: shot.id === nocked?.id ? game.i18n.localize("AZEROTH.Overview.NockedNow") : null,
+      description: `<p>${foundry.utils.escapeHTML(game.i18n.format("AZEROTH.Card.ShotsLeft", { n: shot.quantity ?? 0 }))}</p>`,
       available: true
     }));
     const chosen = await game.system.azeroth.workflows.chooseOption(this.actor, rows, null, {
@@ -4724,15 +4768,27 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     const rows = [];
     for (const item of this.actor.items) {
       const list = Array.isArray(item.system?.spells) ? item.system.spells : [];
+      // **A PLAYER SEES NO SPELL ON AN UNIDENTIFIED THING** (08 §4; D-1435): that it casts is what
+      // identifying reveals. A GM sees the row with Cast greyed (`locked`).
+      if (list.length && hiddenToViewer(item)) continue;
+      const locked = isUnidentified(item);
+      // A written scroll says whose Test it is (08 §14; D-1436): *Written at 17 (DC 12)*.
+      const scroll = isScroll(item);
       list.forEach((s, index) => {
         const max = s.uses?.max ?? 0;
         const value = s.uses?.value ?? 0;
+        const written = scroll && Number.isInteger(s.writerTotal);
         rows.push({
-          itemId: item.id, index, name: s.name, itemName: item.name,
-          dcLabel: s.dc != null ? game.i18n.format("AZEROTH.Sheet.ItemSpellDC", { dc: s.dc }) : game.i18n.localize("AZEROTH.Forge.BearersDC"),
-          limited: max > 0, value, max, full: value >= max,
+          itemId: item.id, index, name: s.name, itemName: shownName(item),
+          dcLabel: written
+            ? game.i18n.format("AZEROTH.Scroll.WrittenAt", { total: s.writerTotal, dc: writtenDC(item) })
+            : (s.dc != null ? game.i18n.format("AZEROTH.Sheet.ItemSpellDC", { dc: s.dc }) : game.i18n.localize("AZEROTH.Forge.BearersDC")),
+          // Consumed by reading, never by its uses: no count and no stepper (08 §14).
+          written,
+          limited: !written && max > 0, value, max, full: value >= max,
           perLabel: s.uses?.per ? game.i18n.localize(AZEROTH.usesPer?.[s.uses.per] ?? s.uses.per) : "",
-          available: max === 0 || value > 0,
+          available: !locked && (max === 0 || value > 0),
+          locked,
           rarityClass: rarityClass(item.system?.rarity)
         });
       });
@@ -4827,7 +4883,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     if (!item) return;
     const yes = await foundry.applications.api.DialogV2.confirm({
       window: { title: game.i18n.localize("AZEROTH.Sheet.Delete") },
-      content: `<p>${game.i18n.format("AZEROTH.Sheet.DeleteConfirm", { name: item.name })}</p>`,
+      content: `<p>${game.i18n.format("AZEROTH.Sheet.DeleteConfirm", { name: shownName(item) })}</p>`,
       rejectClose: false
     });
     if (yes) return item.delete();

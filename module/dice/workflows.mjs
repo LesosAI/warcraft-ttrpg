@@ -94,6 +94,10 @@ import { blastRadius } from "../rules/blast-radius.mjs";
 import { featureReady } from "../effects/feature-ready.mjs";
 import { afflictPoison, markFirstTestBane } from "./afflictions-workflows.mjs";
 import { AzerothRoll } from "./azeroth-roll.mjs";
+// 08 §4's unidentified items and 08 §14's scrolls (D-1435, D-1436).
+import { isUnidentified } from "../rules/identify.mjs";
+import { isScroll, readerResistDC } from "../rules/scrolls.mjs";
+import { cardName, disguisedNameOf, hiddenToViewer, shownName } from "../helpers/identify-words.mjs";
 import { routeSignatureHit, prepareSignatureHitTarget } from "../effects/signature-hit-routing.mjs";
 import { hitBonusDamageForTarget } from "../rules/signature-hit-target.mjs";
 import { forcedSlOf, resultName, succeeded } from "../rules/resolution.mjs";
@@ -729,6 +733,8 @@ async function restoreMana(actor, pool, amount) {
 export { calledShotCost };
 export { medicineTest, exposeAffliction, addAffliction, afflictionCatalogue, chooseAffliction, afflictPoison, afflictDisease,
   resolveRelapse, markFirstTestBane } from "./afflictions-workflows.mjs";
+// 08 §4's Identify door (D-1435): the item menu's Arcana Test.
+export { identifyTest } from "./identify-workflows.mjs";
 
 /**
  * The actor a target snapshot points at: its token on its scene, else the
@@ -1448,8 +1454,8 @@ export async function rollTest({
   if (bundle && spendsShot(plan?.paid ?? [])) {
     const remaining = spendShot(bundleLeft);
     await bundle.update({ "system.quantity": remaining });
-    fired0 = { itemId: bundle.id, name: bundle.name, remaining };
-  } else if (bundle) fired0 = { itemId: bundle.id, name: bundle.name, remaining: bundleLeft };
+    fired0 = { itemId: bundle.id, name: cardName(bundle), remaining };
+  } else if (bundle) fired0 = { itemId: bundle.id, name: cardName(bundle), remaining: bundleLeft };
   // **OFF THE POOL AS IT STANDS NOW** (the D-770 review, item D): the pool read
   // for the judgement was read before the budget's queued spend and the reveal,
   // and writing `value - spent` off THAT wrote over anything that moved it in
@@ -3633,6 +3639,17 @@ export async function castSpell({
   if (dispersionExecution && !validDispersionExecution(dispersionExecution, actor, spell)) return null;
   // 07's Hex: *it cannot attack, cast or speak* (D-808), before anything is spent.
   if (actor?.refuseForcedShape?.("cast")) return null;
+  // **AN UNIDENTIFIED ITEM'S SPELL CANNOT BE CALLED ON** (08 §4; D-1435), whatever door handed it
+  // here - `castItemSpell` refuses first, and this is the floor under every other caller.
+  const viaCarrier = viaItem?.itemId ? (actor?.items?.get?.(viaItem.itemId) ?? null) : null;
+  if (viaCarrier && isUnidentified(viaCarrier)) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Identify.SpellLocked", { item: disguisedNameOf(viaCarrier) }));
+    return null;
+  }
+  // **A SCROLL CASTS AT THE WRITER'S TEST** (08 §14; D-1436): read off the carrier's OWN entry,
+  // never off a payload, so no door can hand in a total of its choosing. Null for every other cast.
+  const writtenEntry = viaCarrier && isScroll(viaCarrier) ? (viaCarrier.system?.spells?.[viaItem.index] ?? null) : null;
+  const writtenTotal = Number.isInteger(writtenEntry?.writerTotal) ? writtenEntry.writerTotal : null;
   if (refuseDispersion(actor, "cast")) return null;
   if (refuseDispersedTargets(targets)) return null;
   // **07 §9's RANGE AND THE TARGET LINE, BEFORE ANYTHING IS PAID** (O-288, O-293, D-893; the
@@ -4952,15 +4969,21 @@ export async function castSpell({
     : eachTargetFor(actor, spell, list, { given: dc, stated: statedDc, typed: dcByTarget });
   const resolvedDC = eachTarget ? Math.min(...eachTarget.map(r => r.dc))
     : (dc ?? statedDc ?? spellCastingDC({ tier: sys.tier, area: aimsAtTier, targetDefense: first?.defense ?? null }));
-  const roll = AzerothRoll.build({
-    dc: resolvedDC, modifiers, boons, banes: banes + spellLock.banes, kind: attackCalculation ? "attack" : "casting", rollData: actor.getRollData()
-  });
+  // A read scroll's Test is the writer's total against THIS cast's DC (the lead, 2026-11-21:
+  // *"Same as casting it"* - the target's Defense for a spell aimed at one creature, the entry's
+  // stated DC, else 10 + 2 a tier, worked out above exactly as for any cast). No die, so no Boon,
+  // Bane, modifier or Spell Lock reaches it (`AzerothRoll.written`).
+  const roll = writtenTotal !== null
+    ? AzerothRoll.written({ total: writtenTotal, dc: resolvedDC })
+    : AzerothRoll.build({
+      dc: resolvedDC, modifiers, boons, banes: banes + spellLock.banes, kind: attackCalculation ? "attack" : "casting", rollData: actor.getRollData()
+    });
   if (attackCalculation) {
     roll.options.attackTest = {...attackTest};
     roll.options.provenance.push({label:"AZEROTH.Blademaster.Row",value:null,formula:attackCalculation.title});
   }
-  roll.options.spellLock = { castId: spellLock.castId, banes: spellLock.banes };
-  if (spellLock.banes > 0) roll.options.provenance.push({ label: "Spell Lock", value: null,
+  roll.options.spellLock = { castId: spellLock.castId, banes: writtenTotal !== null ? 0 : spellLock.banes };
+  if (spellLock.banes > 0 && writtenTotal === null) roll.options.provenance.push({ label: "Spell Lock", value: null,
     formula: `${spellLock.banes} ${spellLock.banes === 1 ? "Bane" : "Banes"}` });
   roll.options.provenance.push(...provenanceExtra);
   // 02 §7's empower benefits and 04's Flesh Offering, paid before the Test (door 2).
@@ -5033,7 +5056,9 @@ export async function castSpell({
       console.warn("azeroth-rpg | Disrupt Weave", err);
     }
   }
-  await actor.offerElunesRegard?.(roll);
+  // **NOT ON A READ SCROLL** (08 §14): Elune's Regard, Paradox, Time Lapse and Another Timeline
+  // all turn or re-roll the roller's own die, and a scroll's Test is the writer's, with none.
+  if (writtenTotal === null) await actor.offerElunesRegard?.(roll);
   // **HALT BOUGHT WITH SAND SUCCEEDS** (04's Halt the Sands; the lead: *"if you do, the
   // casting test always succeeds"*; D-869): at SL 0 or better, said on the card.
   const outcomeRolled = roll.outcome;
@@ -5051,12 +5076,13 @@ export async function castSpell({
   // makes*, and this is that Test. Spent after the die, whatever the roller
   // did with the dialog's line.
   if (attackPromises) await takeNextAttack(actor,attackPromises);
-  const pummelled = await spendLaidBanes(actor, attackCalculation ? "attack" : "casting");
+  // A read scroll is not the reader's Casting Test, so a Bane or a Boon laid on that Test waits.
+  const pummelled = writtenTotal !== null ? [] : await spendLaidBanes(actor, attackCalculation ? "attack" : "casting");
   if (pummelled.length) {
     roll.options.provenance.push({ label: "AZEROTH.Modifier.LaidBane", value: null, formula: pummelled.join(", ") });
   }
   // And a Boon somebody laid (04's Blessing, D-772): spent the same way.
-  const blessed = await spendLaidBoons(actor, attackCalculation ? "attack" : "casting");
+  const blessed = writtenTotal !== null ? [] : await spendLaidBoons(actor, attackCalculation ? "attack" : "casting");
   if (blessed.length) {
     roll.options.provenance.push({ label: "AZEROTH.Modifier.LaidBoon", value: null, formula: blessed.join(", ") });
   }
@@ -5088,7 +5114,8 @@ export async function castSpell({
   // conditions and the card's targets the animation record reads - so nothing lands on it and it
   // gets no impact step; the card names it with its miss. The Mana was paid once, above.
   const eachJudged = eachTarget ? judgeEachTarget({
-    natural: roll.natural, total: roll.total, dcs: eachTarget.map(r => r.dc),
+    // A read scroll's roll has no face (08 §14; the Phase 3 review, S7): handed as none, never as a 0.
+    natural: roll.options?.written ? null : roll.natural, total: roll.total, dcs: eachTarget.map(r => r.dc),
     criticalOn: roll.options.criticalOn ?? 20, forcedSl: forcedSlOf(roll.options), failed: !success
   }).map((r, i) => ({ ...r, ...eachTarget[i] })) : null;
   const eachByKey = new Map((eachJudged ?? []).map(r => [r.key, r]));
@@ -5824,7 +5851,10 @@ export async function castSpell({
   } : null;
 
   // 5. The Resist line, and what else the entry carries.
-  const spellDC = viaItem?.dc ?? (ability ? spellDCFor({ abilityMod, proficiency }) : (actor.system.spellDC ?? actor.system.spells?.dc ?? null));
+  const readerDC = viaItem?.dc ?? (ability ? spellDCFor({ abilityMod, proficiency }) : (actor.system.spellDC ?? actor.system.spells?.dc ?? null));
+  // **A READ SCROLL IS RESISTED AT THE READER'S SPELL DC, ELSE THE WRITER'S LEVEL** (08 §14; the
+  // lead, 2026-11-21): `rules/scrolls.mjs#readerResistDC`, the one place that reading lives.
+  const spellDC = writtenTotal !== null ? readerResistDC(readerDC, sys.tier) : readerDC;
   // **THE TEST 07 GIVES A HELD OR STUNNED CREATURE** (D-778; the lead, 2026-10-03, on
   // O-159: *"Yes."*): what the Entangled or the Stun a failure lays carries - 07's
   // escape (*until it spends an action and passes another Reflex Resilience Test*,
@@ -6220,13 +6250,24 @@ export async function castSpell({
   }
 
   // An item's casting strikes a use (D-633); the card is posted either way.
+  // **A SCROLL IS CONSUMED INSTEAD, WHETHER THE SPELL WENT OFF OR NOT** (08 §14: *the scroll is
+  // consumed*; D-1436): one off the stack through the one mark-off rule, deleted with the last,
+  // and its `uses` never struck - a struck entry would part the stack from its twins and leave
+  // the next scroll on it spent (the architect's review, must-fix 6). This block runs on a failed
+  // Test too: nothing between the die and here returns.
   if (viaItem?.itemId) {
     const carrier = actor.items.get(viaItem.itemId);
-    const spells = foundry.utils.deepClone(carrier?.system?.toObject?.().spells ?? []);
-    const entry = spells[viaItem.index];
-    if (carrier && entry?.uses?.max > 0) {
-      entry.uses.value = Math.max(0, (entry.uses.value ?? 0) - 1);
-      await carrier.update({ "system.spells": spells });
+    if (carrier && isScroll(carrier)) {
+      const spend = spendOne(carrier.system?.quantity ?? 1);
+      if (spend?.delete) await carrier.delete();
+      else if (spend) await carrier.update({ "system.quantity": spend.quantity });
+    } else {
+      const spells = foundry.utils.deepClone(carrier?.system?.toObject?.().spells ?? []);
+      const entry = spells[viaItem.index];
+      if (carrier && entry?.uses?.max > 0) {
+        entry.uses.value = Math.max(0, (entry.uses.value ?? 0) - 1);
+        await carrier.update({ "system.spells": spells });
+      }
     }
   }
 
@@ -6348,7 +6389,10 @@ export async function castSpell({
     onFail: resist && failStatuses.length ? failStatuses.map(id => game.i18n.localize(AZEROTH.conditions[id] ?? id)).join(", ") : null,
     heal,
     speakerName: actor.name,
-    source: [viaItem ? game.i18n.format("AZEROTH.Card.FromItem", { name: viaItem.name })
+    // A read scroll says whose Test it was (08 §14; D-1436): *From Scroll of X, written at N*.
+    source: [viaItem ? (writtenTotal !== null
+      ? game.i18n.format("AZEROTH.Scroll.FromWritten", { name: viaItem.name, total: writtenTotal })
+      : game.i18n.format("AZEROTH.Card.FromItem", { name: viaItem.name }))
       : (free ? game.i18n.format("AZEROTH.Cast.FreeBy", { name: free.by ?? "" }) : null),
       chainUnresolved ? game.i18n.localize("AZEROTH.ChainLightning.RouteUnresolved") : null,
       conflagrateTools && success ? game.i18n.localize(!conflagrate?.ok ? "AZEROTH.Conflagrate.Unresolved"
@@ -12985,7 +13029,7 @@ export async function useGear({ actor, item, targets = null } = {}) {
   if (refuseAncientDespair(actor, "gear")) return null;
   // A consumable's reach, before anything is spent (O-288, D-893): after the two refusals that
   // must not inspect the item, before every door that pays.
-  if (item && refuseOutOfRange(useRangeRefusal({ actor, name: item.name ?? "", text: useTextOf(item, actor), targets: targets ?? [] }))) return null;
+  if (item && refuseOutOfRange(useRangeRefusal({ actor, name: shownName(item), text: useTextOf(item, actor), targets: targets ?? [] }))) return null;
   if(item?.type==="gear"&&item.system?.identifier==="repair-kit-mechanical")return useMechanicalRepairKit({actor,item});
   if(item?.type==="gear"&&item.system?.identifier==="rocket-boots")return useRocketBoots({actor,item});
   if(item?.type==="gear"&&["target-dummy","spring-loaded-grapple"].includes(item.system?.identifier))return usePlacedDevice({actor,item});
@@ -13009,6 +13053,11 @@ export async function useGear({ actor, item, targets = null } = {}) {
   // A gear REMEDY ends the one disease it names, on the user or a creature touched (D12 Phase 6).
   if (isRemedy(use)) return (await import("../effects/cures.mjs")).useRemedy(actor, item, { targets: targets ?? [] });
   const source = JSON.stringify({name:item.name,use});
+  // **WHAT THE CARD AND THE LAID EFFECT CALL IT** (08 §4; D-1435): drinking an unidentified potion
+  // is not locked, but what it is stays hidden, so every word a player reads names its kind. The
+  // logic keys below (`consumable`, the coating's key, the receipt) keep the true name.
+  const shown = cardName(item);
+  const veiled = shown !== item.name;
   const releaseUse = acquireConsumableUse(actor);
   if (!releaseUse) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.Use.Busy"));
@@ -13028,7 +13077,7 @@ export async function useGear({ actor, item, targets = null } = {}) {
   // 1. Is there one to use?
   const held = item.system.quantity === undefined ? 1 : item.system.quantity;
   if (held !== null && held <= 0) {
-    ui.notifications?.warn(game.i18n.format("AZEROTH.Use.NoneLeft", { name: item.name }));
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Use.NoneLeft", { name: shown }));
     return null;
   }
 
@@ -13137,7 +13186,7 @@ export async function useGear({ actor, item, targets = null } = {}) {
       throw Error('Coating target changed during payment');
     const fight = actor.activeFight?.() ?? null;
     await onto.setFlag("azeroth-rpg", "coating", {
-      name: item.name, kind: use.kind, trait: use.trait ?? null, rating: use.rating ?? null,
+      name: shown, kind: use.kind, trait: use.trait ?? null, rating: use.rating ?? null,
       statuses: [...(use.statuses ?? [])],
       resist: use.resist?.resilience ? { ...use.resist } : null,
       // **HOW LONG, AND FROM WHEN** (08 §12, D-719): *it lasts for one minute
@@ -13170,7 +13219,7 @@ export async function useGear({ actor, item, targets = null } = {}) {
       } : {}),
       at: Date.now()
     });
-    lines.push(game.i18n.format("AZEROTH.Use.LaidOn", { name: item.name, item: onto.name }));
+    lines.push(game.i18n.format("AZEROTH.Use.LaidOn", { name: shown, item: cardName(onto) }));
     if (freeApply) lines.push(game.i18n.localize("AZEROTH.Use.FreeApply"));
   } else {
     const teaRefill = thistleTeaRefill(use, actor.classItems ?? [], actor.poolSnapshot?.() ?? []);
@@ -13180,7 +13229,7 @@ export async function useGear({ actor, item, targets = null } = {}) {
       const before = current.value;
       const carrier = [...actor.effects].find(e => e.flags?.['azeroth-rpg']?.[WISDOM_FLAG]?.version === 1);
       const data = {
-        name: item.name, img: item.img, origin: actor.uuid, disabled: false,
+        name: shown, img: item.img, origin: actor.uuid, disabled: false,
         ...timing,
         flags: { 'azeroth-rpg': { [WISDOM_FLAG]: { version: 1, itemId: current.itemId ?? null, poolName: current.name ?? null } } }
       };
@@ -13197,7 +13246,7 @@ export async function useGear({ actor, item, targets = null } = {}) {
       const raised = actor.poolSnapshot().find(p => p.kind === 'power' && p.itemId === current.itemId && p.name === current.name);
       await actor.updatePool({ itemId: current.itemId, kind: 'power', value: Math.min(raised.max, before + 6) });
       lines.push(game.i18n.format('AZEROTH.Use.Mana', { n: Math.min(6, raised.max - before) }));
-      lines.push(game.i18n.format('AZEROTH.Use.Lasts', { name: item.name }));
+      lines.push(game.i18n.format('AZEROTH.Use.Lasts', { name: shown }));
     }
     if (teaRefill) {
       await actor.updatePool(teaRefill);
@@ -13253,7 +13302,7 @@ export async function useGear({ actor, item, targets = null } = {}) {
     const wardChange = wardingElixirChange(warding, wardSchool, schools);
     const powerChange = supremePowerChange(supreme, wardSchool, schools);
     if (powerChange) {
-      const data = {name:`${item.name} (${game.i18n.localize(AZEROTH.schools[wardSchool])})`, img:item.img, origin:actor.uuid,
+      const data = {name:`${shown} (${game.i18n.localize(AZEROTH.schools[wardSchool])})`, img:item.img, origin:actor.uuid,
         ...timing, disabled:false, system:{changes:[powerChange]},
         flags:{'azeroth-rpg':{consumable:item.system.identifier || item.name, [SUPREME_POWER_FLAG]:{version:1,school:wardSchool}}}};
       const existing = [...actor.effects].filter(effect => effect.getFlag('azeroth-rpg', SUPREME_POWER_FLAG)?.version === 1);
@@ -13266,17 +13315,17 @@ export async function useGear({ actor, item, targets = null } = {}) {
     const useChanges = [...(use.changes ?? []), ...(wardChange ? [wardChange] : [])];
     if (useChanges.length || immuneConditions.length || invulnerability) {
       await writeConsumableEffect(actor, {
-        name: wardChange ? `${item.name} (${game.i18n.localize(AZEROTH.schools[wardSchool])})` : item.name,
+        name: wardChange ? `${shown} (${game.i18n.localize(AZEROTH.schools[wardSchool])})` : shown,
         img: item.img,
         origin: actor.uuid,
-        description: await enrich(item.system.description, { relativeTo: item }),
+        description: veiled ? "" : await enrich(item.system.description, { relativeTo: item }),
         system: { changes: useChanges.map(c => ({ key: c.key, type: c.type ?? "add", value: String(c.value ?? ""), phase: c.phase ?? "final" })) },
         ...timing,
         flags: { "azeroth-rpg": { consumable: item.system.identifier || item.name,
           ...(invulnerability ? { [INVULNERABILITY_POTION_FLAG]: { version: 1 } } : {}),
           ...(immuneConditions.length ? { [IMMUNE_FLAG]: { conditions: immuneConditions, source: item.name } } : {}) } }
       });
-      lines.push(game.i18n.format("AZEROTH.Use.Lasts", { name: item.name }));
+      lines.push(game.i18n.format("AZEROTH.Use.Lasts", { name: shown }));
     }
     if (use.perRest === "short") await actor.setFlag("azeroth-rpg", "dressed", true);
     // **05's TEMPORARY HEALTH A DRAUGHT GRANTS** (08 §12's Flask of the Titans: *For
@@ -13288,8 +13337,8 @@ export async function useGear({ actor, item, targets = null } = {}) {
     if (flaskAmount > 0) {
       const timed = flaskTemp.span === "effect" && timing?.duration;
       const carrier = timed ? await writeConsumableEffect(actor, {
-        name: item.name, img: item.img, origin: actor.uuid,
-        description: await enrich(item.system.description, { relativeTo: item }),
+        name: shown, img: item.img, origin: actor.uuid,
+        description: veiled ? "" : await enrich(item.system.description, { relativeTo: item }),
         ...timing,
         flags: { "azeroth-rpg": { consumable: item.system.identifier || item.name } }
       }) : null;
@@ -13321,7 +13370,7 @@ export async function useGear({ actor, item, targets = null } = {}) {
 
   const content = await renderTemplate(TEMPLATE.feature, {
     config: AZEROTH,
-    title: item.name,
+    title: shown,
     subtitle: actor.name,
     // Free where Deft Hands or Poisoner paid for it (the lead's item 27).
     action: freeApply ? null : explosiveAction(item,use),
@@ -13337,8 +13386,10 @@ export async function useGear({ actor, item, targets = null } = {}) {
     area,
     attack: false,
     inflicts,
-    effect: await enrich(item.system.description, { relativeTo: item }),
-    note: [use.note || null, ...lines].filter(Boolean).join(" \u00b7 ") || null,
+    // An unidentified draught's entry and its note are what identifying reveals (08 §4); the
+    // lines of what moved are still said, because they are what happened.
+    effect: veiled ? null : await enrich(item.system.description, { relativeTo: item }),
+    note: [veiled ? null : (use.note || null), ...lines].filter(Boolean).join(" \u00b7 ") || null,
     targets: lst.map((t, i) => ({ ...t, index: i })),
     provenance: []
   });
@@ -13347,7 +13398,7 @@ export async function useGear({ actor, item, targets = null } = {}) {
     speaker: ChatMessage.getSpeaker({ actor }),
     content,
     flags: { "azeroth-rpg": {
-      kind: "gear", itemId: item.id, title: item.name, targets: lst,
+      kind: "gear", itemId: item.id, title: shown, targets: lst,
       ...(explosiveRule(item)?{explosiveDealerHalved}:{}),
       damageByTarget: lst.map(() => (damage ? { damage: damage.final } : null)),
       heal: null, sl: 0, area,
@@ -13403,6 +13454,8 @@ function durationOf(use) {
 export function refuseSignaturePress({ actor, item, approved = null, press: pressAt = null } = {}) {
   const signature = signatureEffectOf(item);
   if (!actor || !item || !signature) return true;
+  // 08 §4: the `spell` kind reaches here from the sheet without passing `useSignature` (D-1435).
+  if (!approved && refuseUnidentifiedPress(item)) return true;
   // **ONE OF A LEGENDARY'S OTHER BUTTONS** (D-910): its own gate and its own
   // uses, through the one judgement the three surfaces grey on.
   if (pressAt) {
@@ -13455,6 +13508,17 @@ export function refuseSignaturePress({ actor, item, approved = null, press: pres
 }
 
 /**
+ * **WHETHER AN UNIDENTIFIED ITEM'S USE WAS REFUSED**, said in words (08 §4: *a Use or a spell it
+ * carries cannot be called on until it is identified*; D-1435). Its standing Signature still
+ * works; only the press is locked. True where it refused.
+ */
+function refuseUnidentifiedPress(item) {
+  if (!item || !isUnidentified(item)) return false;
+  ui.notifications?.warn(game.i18n.format("AZEROTH.Identify.UseLocked", { item: disguisedNameOf(item) }));
+  return true;
+}
+
+/**
  * Press an item's Signature.
  *
  * **`useGear`'s order exactly** - refuse, spend the turn's budget, pay, the
@@ -13495,11 +13559,14 @@ export async function useSignature({ actor, item, targets = null, approved = nul
   if (refuseAncientDespair(actor, "signature")) return null;
   // A creature under Hex or Polymorph presses no Signature (D-808).
   if (actor?.refuseForcedShape?.("signature")) return null;
+  // **AN UNIDENTIFIED ITEM'S USE CANNOT BE CALLED ON** (08 §4; D-1435), before an approved use is
+  // asked of the GM. An approved call was judged on the press that asked for it.
+  if (!approved && refuseUnidentifiedPress(item)) return null;
   // A Signature's reach, before an approved use is asked of the GM (O-288, D-893).
   // **THE PRESSED RUN'S OWN REACH** (D-913, F7): a Legendary's press is judged against its
   // own run's words, never the whole item's - Atiesh's aura says nothing of Starfall Volley.
   const rangeText = item && press ? runProse(signatureProse(item), pressesOf(signatureEffectOf(item)).find(p => p.key === press)?.press?.label ?? "") : null;
-  if (item && refuseOutOfRange(useRangeRefusal({ actor, name: item.name ?? "", text: rangeText ?? useTextOf(item, actor, { signature: true }), targets: targets ?? [] }))) return null;
+  if (item && refuseOutOfRange(useRangeRefusal({ actor, name: shownName(item), text: rangeText ?? useTextOf(item, actor, { signature: true }), targets: targets ?? [] }))) return null;
   if(approvedRestSignature(item?.system?.identifier)&&approved?.authority!==SIGNATURE_USE_AUTHORITY)
     return requestApprovedSignatureUse(actor,item,targets??[]);
   if(approved?.authority!==SIGNATURE_USE_AUTHORITY)approved=null;
@@ -13926,9 +13993,13 @@ export async function postSignatureTest({ actor, item = null, label = "", target
   const dc = signatureDcOf(actor);
   const resist = { key: resilience, label: AZEROTH.resiliences[resilience], dc };
   const onFailInflicts = (onFail ?? []).filter(f => f?.id).map(f => ({ condition: f.id, value: f.value ?? null, until: f.until ?? null }));
-  const runText = item ? runProse(signatureProse(item), label) : "";
+  // A Signature that fires itself works hidden (08 §4; D-1435): the card names the kind and
+  // prints neither the run's label nor its words.
+  const hidden = Boolean(item) && isUnidentified(item);
+  const runText = item && !hidden ? runProse(signatureProse(item), label) : "";
+  const title = item ? cardName(item) : label;
   const content = await renderTemplate(TEMPLATE.feature, {
-    config: AZEROTH, title: item?.name ?? label, subtitle: label || game.i18n.localize("AZEROTH.Item.Signature"),
+    config: AZEROTH, title, subtitle: (hidden ? "" : label) || game.i18n.localize("AZEROTH.Item.Signature"),
     action: null, cost: null, uses: null, rolled: false, heal: null, speakerName: actor.name, damage: null, resist,
     area: null, attack: false, summon: null,
     effect: runText ? await enrich(runText, item ? { relativeTo: item } : {}) : null,
@@ -13938,7 +14009,7 @@ export async function postSignatureTest({ actor, item = null, label = "", target
     speaker: ChatMessage.getSpeaker({ actor }),
     content,
     flags: { "azeroth-rpg": {
-      kind: "signature", itemId: item?.id ?? null, title: item?.name ?? label, targets: [target],
+      kind: "signature", itemId: item?.id ?? null, title, targets: [target],
       damageByTarget: [null], heal: null, sl: 0, area: null, summon: null,
       ...(onFailInflicts.length ? { onFailInflicts } : {})
     } }
@@ -14209,15 +14280,16 @@ async function chooseCoatingTarget(actor, item, use) {
   const candidates = actor.items.filter(i => ["weapon", "armor"].includes(i.type) && goesOn(use.appliesTo, i));
   const kind = game.i18n.localize(`AZEROTH.Use.GoesOn.${use.appliesTo || "weapon"}`);
   if (!candidates.length) {
-    ui.notifications?.warn(game.i18n.format("AZEROTH.Use.NothingToCoat", { name: item.name, kind }));
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Use.NothingToCoat", { name: shownName(item), kind }));
     return null;
   }
   if (candidates.length === 1) return candidates[0];
   const coated = i => i.getFlag("azeroth-rpg", "coating")?.name ?? null;
+  // A thing the user is kept from is listed by its kind, with none of its prose (D-1435).
   const chosen = await chooseOption(item, candidates.map(i => ({
-    name: i.name,
+    name: shownName(i),
     tag: coated(i) ? game.i18n.format("AZEROTH.Use.Coated", { name: coated(i) }) : null,
-    description: i.system.description ?? "",
+    description: hiddenToViewer(i) ? "" : (i.system.description ?? ""),
     itemId: i.id
   })), kind);
   return chosen ? (actor.items.get(chosen.itemId) ?? null) : null;
@@ -14845,10 +14917,12 @@ export async function chooseOption(item, options, note = null, { label = "AZEROT
   const closeExpired = () => { Promise.resolve(shown?.close?.()).catch(error => console.warn("azeroth-rpg | timed chooser close", error)); };
   const count = Math.max(1, Math.trunc(Number(max) || 1));
   const many = count > 1;
+  // The thing being used, as THIS user sees it: its kind where they are kept from it (D-1435).
+  const itemName = shownName(item);
   const content = await renderTemplate(TEMPLATE.choose, {
     prompt: prompt ?? (many
-      ? game.i18n.format("AZEROTH.Feature.ChooseUpTo", { name: item.name, count })
-      : game.i18n.format("AZEROTH.Feature.Choose", { name: item.name })),
+      ? game.i18n.format("AZEROTH.Feature.ChooseUpTo", { name: itemName, count })
+      : game.i18n.format("AZEROTH.Feature.Choose", { name: itemName })),
     note,
     multi: many,
     max: count,
@@ -14874,7 +14948,7 @@ export async function chooseOption(item, options, note = null, { label = "AZEROT
   const waiting = DialogV2.wait({
     id: `azeroth-choose-${item.id}`,
     classes: ["azeroth", "azeroth-roll-dialog"],
-    window: { title: item.name },
+    window: { title: itemName },
     position: { width: 440 },
     content,
     rejectClose: false,

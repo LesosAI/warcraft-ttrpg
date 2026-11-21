@@ -22,7 +22,7 @@
  *    maximum since D-637 and the write door had not.
  */
 
-import { cleanup, forgeDrop, fromPack, made, makeNpc, openSheet, pinDie, settle, PACK_FOR } from "./fixtures.mjs";
+import { cleanup, forgeDrop, fromPack, made, makeNpc, openSheet, pinDie, settle, PACK_FOR, KNOWN } from "./fixtures.mjs";
 // A pool's count is an input on an editable sheet (2026-09-13), so the reader
 // is shared rather than copied into every test that asserts on it.
 import { poolCount } from "./expectations.mjs";
@@ -103,7 +103,7 @@ export function creatureSpellsBatch(context) {
       // Sustain in progress (so `endSustain` is drawn at all): both branches
       // are conditional, which is exactly what the static audit cannot see.
       const frostbolt = await fromPack(PACK_FOR.spell, "Frostbolt");
-      await actor.createEmbeddedDocuments("Item", [frostbolt.toObject()]);
+      await actor.createEmbeddedDocuments("Item", [frostbolt.toObject()], { ...KNOWN });
       const first = await fromPack(PACK_FOR.spell, actor.system.spells.names[0]);
       await actor.setFlag("azeroth-rpg", "sustaining", [{ spellId: null, uuid: first.uuid, name: first.name, itemId: null }]);
 

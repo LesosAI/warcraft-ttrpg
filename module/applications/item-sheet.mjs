@@ -23,6 +23,10 @@ import { applyAffixInPlace } from "./affix-dialog.mjs";
 import { grantsOf } from "./actions.mjs";
 import { rarityClass } from "../helpers/rarity.mjs";
 import { baseTrait } from "../rules/bestiary.mjs";
+// 08 §4's unidentified items and 08 §14's scrolls (D-1435, D-1436).
+import { IDENTIFIABLE_TYPES, IDENTIFY_SCOPE, TRIED_FLAG, UNIDENTIFIED_FLAG, identifiable, isUnidentified } from "../rules/identify.mjs";
+import { inscribeRefusal, inscription, isScroll, scrollDC, writtenDC } from "../rules/scrolls.mjs";
+import { hiddenToViewer, kindNounOf, shownName } from "../helpers/identify-words.mjs";
 
 const { HandlebarsApplicationMixin } = foundry.applications.api;
 const { ItemSheetV2 } = foundry.applications.sheets;
@@ -49,6 +53,9 @@ export class AzerothItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
 
   /** @inheritDoc */
   static PARTS = {
+    // 08 §4 (D-1435): drawn ALONE for a viewer the item is hidden from, and never otherwise
+    // (`_configureRenderParts`).
+    unidentified: { template: "systems/azeroth-rpg/templates/item/unidentified.hbs" },
     header: { template: "systems/azeroth-rpg/templates/item/header.hbs" },
     details: { template: "systems/azeroth-rpg/templates/item/details.hbs" },
     spells: { template: "systems/azeroth-rpg/templates/item/spells.hbs" },
@@ -58,7 +65,40 @@ export class AzerothItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   /** @inheritDoc */
   get title() {
     const type = game.i18n.localize(`TYPES.Item.${this.document.type}`);
-    return `${this.document.name} — ${type}`;
+    // The window's title is a surface too (08 §4): an unidentified thing is its kind.
+    return `${shownName(this.document)} — ${type}`;
+  }
+
+  /**
+   * **THE PARTS THIS VIEWER IS SHOWN** (08 §4; D-1435; the plan's default: *players get a disguised
+   * read-only item sheet*). A player looking at a thing `hiddenFrom` keeps from them gets the
+   * `unidentified` part alone; everybody else gets every other part. Asked at every render, so a
+   * GM's toggle or a successful Identify switches an open sheet in place.
+   * @inheritDoc
+   */
+  _configureRenderParts(options) {
+    const parts = super._configureRenderParts(options);
+    const hidden = hiddenToViewer(this.document);
+    for (const id of Object.keys(parts)) if ((id === "unidentified") !== hidden) delete parts[id];
+    return parts;
+  }
+
+  /**
+   * A partial render naming a part this viewer is not shown would name a part with no
+   * descriptor; it renders every part this viewer IS shown instead.
+   * @inheritDoc
+   */
+  _configureRenderOptions(options) {
+    const asked = Array.isArray(options.parts) ? [...options.parts] : null;
+    super._configureRenderOptions(options);
+    const shown = Object.keys(this._configureRenderParts(options));
+    const kept = (asked ?? options.parts ?? []).filter(id => shown.includes(id));
+    options.parts = kept.length ? kept : shown;
+    // **AND THE TITLE FOLLOWS THE FLAG** (D-1435): core retitles the window only when the NAME
+    // changed (14.367 `DocumentSheetV2#_configureRenderOptions`), so a GM's toggle or a
+    // successful Identify left *Longsword (unidentified)* on an open sheet that now shows the
+    // truth. Every re-render of an open sheet takes the title from `get title` again.
+    if (this.hasFrame && options.renderContext) options.window = { ...(options.window ?? {}), title: this.title };
   }
 
   /** @inheritDoc */
@@ -66,6 +106,21 @@ export class AzerothItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
     const context = await super._prepareContext(options);
     const item = this.document;
     const editable = this.isEditable;
+    // **A HIDDEN THING'S CONTEXT CARRIES ITS DISGUISE AND NOTHING ELSE** (08 §4; D-1435): no field,
+    // prose, Signature or spell is composed for a viewer who may not see it.
+    if (hiddenToViewer(item)) {
+      return Object.assign(context, {
+        item: null, system: null, editable: false,
+        disguise: {
+          name: shownName(item),
+          img: item.img,
+          rarityClass: rarityClass(item.system?.rarity),
+          type: game.i18n.localize(`TYPES.Item.${item.type}`),
+          kind: kindNounOf(item),
+          quality: game.i18n.localize(AZEROTH.rarities?.[item.system?.rarity] ?? item.system?.rarity ?? "")
+        }
+      });
+    }
 
     return Object.assign(context, {
       item,
@@ -88,7 +143,13 @@ export class AzerothItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       // not require inventing a sixth tab.
       castable: item.type === "spell" && !!item.actor,
       // The Forge (D-633): a weapon, a suit or gear, by its owner.
-      forgeable: editable && ["weapon", "armor", "gear"].includes(item.type) && !item.getFlag("azeroth-rpg", "affix"),
+      // A scroll is written by a dropped spell, never forged (08 §14; must-fix 4).
+      forgeable: editable && ["weapon", "armor", "gear"].includes(item.type) && !item.getFlag("azeroth-rpg", "affix") && !isScroll(item),
+      // **THE GM'S IDENTIFIED BOX** (08 §4; D-1435): drawn for a GM alone, on a thing whose quality
+      // has a DC. Ticked is known. It carries the form name `azerothIdentified`, which
+      // `_processFormData` turns into the flag, so the box never writes a document path itself.
+      identifyToggle: Boolean(game.user?.isGM) && IDENTIFIABLE_TYPES.includes(item.type) && identifiable(item.system?.rarity),
+      identified: !isUnidentified(item),
       spells: this.#itemSpells(),
       // **A RARE CARRIES A SIGNATURE** (D-686, and common since the Classic
       // conversion): the block used to require Epic or Legendary OR a stored
@@ -280,6 +341,41 @@ export class AzerothItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
     for (const select of form.querySelectorAll("select[data-nullable]")) {
       if (select.name && select.value === "") foundry.utils.setProperty(data, select.name, null);
     }
+    // **THE IDENTIFIED BOX WRITES THE FLAG, AND ONLY WHEN IT MOVED** (08 §4; D-1435). Ticked is
+    // known, written `false` and never unset (the architect's review, must-fix 1): an absent flag
+    // is stamped on the next create. An untouched box writes nothing, so an edit to the name never
+    // turns a legacy item's absent flag into a stored one. A player's form carries no such box.
+    // **MOVED FROM WHAT WAS DRAWN, NOT FROM THE DOCUMENT NOW** (the Phase 3 review, S2): a GM's
+    // sheet left open while a player identified the thing would otherwise read its unticked box as
+    // *hide it* on the next unrelated submit. Ticking it also ends the tried mark (S3), as a
+    // successful Identify does.
+    const box = form.querySelector("input[data-identify-toggle]");
+    delete data.azerothIdentified;
+    // **AND ONLY AFTER THE GM TOUCHED IT** (the lead: *"ensure the toggle doesn't change by equipping or
+    // unequipping"*): `_onRender` marks the box on its own `change`, so a submit that merely carries the
+    // box - a name edit, an Equipped tick, a close - never reads a box a redraw or a restore left out
+    // of step with the document as a click.
+    if (box && game.user?.isGM && box.dataset.touched === "1" && box.checked !== (box.dataset.was === "true")) {
+      foundry.utils.setProperty(data, `flags.${IDENTIFY_SCOPE}.${UNIDENTIFIED_FLAG}`, !box.checked);
+      if (box.checked && this.document.getFlag(IDENTIFY_SCOPE, TRIED_FLAG) !== undefined) {
+        foundry.utils.setProperty(data, `flags.${IDENTIFY_SCOPE}.${TRIED_FLAG}`, foundry.data.operators.ForcedDeletion.create());
+      }
+    }
+    // **A GM CORRECTS A WRITTEN SCROLL'S TOTAL IN PLACE** (08 §14; D-1436): the input carries no
+    // document path; a changed whole number at or above 0 rewrites the one entry it sits on.
+    delete data.azerothWriterTotal;
+    if (game.user?.isGM && isScroll(this.document)) {
+      const spells = this.document.system.toObject().spells ?? [];
+      let moved = false;
+      for (const input of form.querySelectorAll("input[data-writer-total]")) {
+        const entry = spells[Number(input.dataset.index)];
+        const n = Math.trunc(Number(input.value));
+        if (!entry || !Number.isFinite(n) || n < 0 || n === entry.writerTotal) continue;
+        entry.writerTotal = n;
+        moved = true;
+      }
+      if (moved) foundry.utils.setProperty(data, "system.spells", spells);
+    }
     // A price is typed as it is printed - `2s 40c`, or a bare number of
     // copper - and stored in copper (08 §2, D-672). An empty box is no
     // price, which is what the dash on a locked sheet means; anything the
@@ -328,17 +424,32 @@ export class AzerothItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   #itemSpells() {
     const item = this.document;
     const list = Array.isArray(item.system?.spells) ? item.system.spells : [];
+    // An unidentified item's spells cannot be called on (08 §4; D-1435): no Cast is drawn, and
+    // `locked` is there for the surface Phase 4 disguises.
+    const locked = isUnidentified(item);
+    const scroll = isScroll(item);
     return list.map((s, index) => {
       const max = s.uses?.max ?? 0;
       const value = s.uses?.value ?? 0;
+      // **A WRITTEN SCROLL SAYS WHOSE TEST IT IS** (08 §14; D-1436): *Written at 17 (DC 12)*, and a
+      // GM may correct the total in place. It is consumed by reading, never by its uses, so it
+      // draws no uses and no stepper.
+      const written = scroll && Number.isInteger(s.writerTotal);
       return {
         index, name: s.name,
-        dcLabel: s.dc != null ? game.i18n.format("AZEROTH.Sheet.ItemSpellDC", { dc: s.dc }) : game.i18n.localize("AZEROTH.Forge.BearersDC"),
-        limited: max > 0, value, max, full: value >= max,
+        dcLabel: written
+          ? game.i18n.format("AZEROTH.Scroll.WrittenAt", { total: s.writerTotal, dc: writtenDC(item) })
+          : (s.dc != null ? game.i18n.format("AZEROTH.Sheet.ItemSpellDC", { dc: s.dc }) : game.i18n.localize("AZEROTH.Forge.BearersDC")),
+        written,
+        writerEditable: written && this.isEditable && Boolean(game.user?.isGM),
+        limited: !written && max > 0, value, max, full: value >= max,
         perLabel: s.uses?.per ? game.i18n.localize(AZEROTH.usesPer?.[s.uses.per] ?? s.uses.per) : "",
-        available: max === 0 || value > 0,
-        castable: !!item.actor,
-        steppable: this.isEditable && max > 0
+        available: !locked && (max === 0 || value > 0),
+        castable: !!item.actor && !locked,
+        locked,
+        // A written scroll's total (08 §14), for the surface; null on every other item.
+        writerTotal: written ? s.writerTotal : null,
+        steppable: !written && this.isEditable && max > 0
       };
     });
   }
@@ -423,9 +534,57 @@ export class AzerothItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
     return this.document.update({ [path]: current.filter(t => t !== tag) });
   }
 
+  /**
+   * Write a spell on this scroll (08 §14; D-1436): `inscribeRefusal`, then the writer's total
+   * through a `DialogV2`, then `inscription`'s one update. Nothing is written on a refusal or a
+   * dismissed dialog.
+   */
+  async #inscribe(spell) {
+    const scroll = this.document;
+    const refusal = inscribeRefusal({ scroll, spell, isGM: Boolean(game.user?.isGM) });
+    if (refusal) {
+      ui.notifications?.warn(game.i18n.format(`AZEROTH.Scroll.Refuse.${refusal.reason}`, {
+        scroll: scroll.name, spell: spell.name ?? "", scrollTier: refusal.scrollTier ?? "", spellTier: refusal.spellTier ?? ""
+      }));
+      return null;
+    }
+    const prefill = scrollDC(spell);
+    const total = await foundry.applications.api.DialogV2.prompt({
+      window: { title: game.i18n.format("AZEROTH.Scroll.Inscribe.Title", { spell: spell.name }) },
+      classes: ["azeroth", "azeroth-inscribe-dialog"],
+      content: `<p>${foundry.utils.escapeHTML(game.i18n.format("AZEROTH.Scroll.Inscribe.Prompt", { spell: spell.name, dc: prefill }))}</p>`
+        + `<input type="number" name="total" value="${prefill}" min="0" step="1" autofocus>`,
+      ok: {
+        label: game.i18n.localize("AZEROTH.Scroll.Inscribe.Label"),
+        callback: (ev, button) => {
+          const n = Math.trunc(Number(button.form.elements.total.value));
+          return Number.isFinite(n) && n >= 0 ? n : null;
+        }
+      },
+      rejectClose: false
+    });
+    if (total === null || total === undefined) return null;
+    // Judged again: the scroll may have been written while the dialog stood open.
+    if (inscribeRefusal({ scroll: this.document, spell, isGM: Boolean(game.user?.isGM) })) return null;
+    return this.document.update(inscription({
+      scroll: this.document, spell, writerTotal: total,
+      words: { scrollName: game.i18n.localize("AZEROTH.Scroll.Name") }
+    }));
+  }
+
   /** @inheritDoc */
   _onRender(context, options) {
     super._onRender(context, options);
+    // A switch between the disguised part and the true ones leaves the other set in the DOM,
+    // because core replaces only the parts it renders: those this viewer is not shown go.
+    const shown = Object.keys(this._configureRenderParts(options));
+    for (const stale of this.element.querySelectorAll("[data-application-part]")) {
+      if (!shown.includes(stale.dataset.applicationPart)) stale.remove();
+    }
+    // The GM's Identified box is written only after the GM clicked it (`_processFormData`).
+    for (const box of this.element.querySelectorAll("input[data-identify-toggle]")) {
+      box.addEventListener("change", () => { box.dataset.touched = "1"; });
+    }
     for (const input of this.element.querySelectorAll("input.azeroth-item__tag-input")) {
       input.addEventListener("keydown", async event => {
         if (event.key !== "Enter") return;
@@ -442,11 +601,18 @@ export class AzerothItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
    * appends its name, anything else falls through to core.
    */
   async _onDropDocument(event, document) {
+    // A sheet that shows only the disguise takes no drop (08 §4; D-1435): an affix, a trait or
+    // anything else would write onto a thing whose fields this viewer is not shown.
+    if (hiddenToViewer(this.document)) return null;
     if (document?.documentName !== "Item") return super._onDropDocument(event, document);
     const affix = document.getFlag?.("azeroth-rpg", "affix");
     if (affix?.kind === "prefix" || affix?.kind === "suffix") {
       return applyAffixInPlace(this.document, { id: document.id, ...affix });
     }
+    // **A SPELL DROPPED ON A SCROLL WRITES IT** (08 §14; D-1436; the lead: *"The GM drops a spell
+    // on a blank scroll's item sheet"*). Judged first and refused in words; then the writer's
+    // total, asked of the GM with the spell's bare Casting DC prefilled; then ONE update.
+    if (document.type === "spell" && isScroll(this.document)) return this.#inscribe(document);
     if (document.type === "trait" && ["weapon", "armor", "gear"].includes(this.document.type)) {
       // The pack names a rated trait with a placeholder (`Pierce X`); the tag takes the base (D-645).
       return this.#addTag("system.traits", baseTrait(document.name));

@@ -14,7 +14,15 @@
     <li class="azeroth-item-spell" data-index="{{s.index}}">
       <span class="azeroth-item-spell-name">{{s.name}}</span>
       <span class="azeroth-item-spell-dc">{{s.dcLabel}}</span>
+      {{#if s.written}}
+      {{!-- 08 §14 (D-1436): a written scroll is consumed by reading, so it draws no uses; a GM may
+            correct the writer's total, which `_processFormData` writes onto this entry alone. --}}
+      {{#if s.writerEditable}}
+      <input class="azeroth-item-spell-total" type="number" name="azerothWriterTotal" data-writer-total data-index="{{s.index}}" value="{{s.writerTotal}}" min="0" step="1" aria-label="{{localize "AZEROTH.Scroll.WriterTotal"}}" data-tooltip="{{localize "AZEROTH.Scroll.WriterTotal"}}">
+      {{/if}}
+      {{else}}
       <span class="azeroth-item-spell-uses">{{#if s.limited}}{{s.value}}/{{s.max}} {{s.perLabel}}{{else}}{{localize "AZEROTH.Forge.Unlimited"}}{{/if}}</span>
+      {{/if}}
       {{#if s.castable}}
       <button type="button" class="azeroth-cast" data-action="castItemSpell" data-index="{{s.index}}"{{#unless s.available}} disabled{{/unless}}>{{localize "AZEROTH.Sheet.Cast"}}</button>
       {{/if}}

@@ -60,12 +60,33 @@ import { ITEM_CUSTODY_PENDING_FLAG, isItemCustodyPending } from "../rules/item-c
 // Sovereign plan, C1; D-1164): a write past the sync is refused in words at this seam.
 import { CLAWS_FEATURE, CLAWS_SYNC, CLAWS_SYNC_KEY, clawsCreateRefusal, clawsUpdateRefusal } from "../rules/claws.mjs";
 import { isClaws } from "../rules/unarmed.mjs";
+// 08 §4's unidentified items (D-1435): the one stamp law.
+import { IDENTIFY_SCOPE, UNIDENTIFIED_FLAG, arrivalFlag } from "../rules/identify.mjs";
+import { hiddenToViewer, shownName, shownRefusalData as shownData } from "../helpers/identify-words.mjs";
 
 /** Whether an operation is the claws' own sync (`AzerothActor#_syncClaws`). */
 const clawsSync = operation => operation?.[CLAWS_SYNC_KEY] === CLAWS_SYNC;
 
 /** The item subtypes that are THINGS. A talent, a spell or a class is never judged. */
 const PHYSICAL = new Set(["weapon", "armor", "gear"]);
+
+/**
+ * Write `flags.azeroth-rpg.unidentified` on every pending document that arrives at a
+ * character with no flag yet (08 §4; D-1435). The judgement is `arrivalFlag`'s alone: a
+ * weapon, a suit or gear of Uncommon or higher arrives `true` (found), or `false` (known)
+ * where the operation says `azerothIdentify: "known"`, or untouched where it says `"asIs"`.
+ */
+function stampUnidentified(documents, operation) {
+  const parent = operation?.parent ?? null;
+  const parentType = parent?.documentName === "Actor" ? parent.type : null;
+  if (parentType !== "character") return;
+  for (const doc of documents) {
+    const source = doc._source ?? {};
+    const flag = arrivalFlag({ type: doc.type, rarity: source.system?.rarity, flags: source.flags }, parentType, operation);
+    if (flag === null) continue;
+    doc.updateSource({ flags: { [IDENTIFY_SCOPE]: { [UNIDENTIFIED_FLAG]: flag } } });
+  }
+}
 
 /**
  * The character whose bags this operation touches, or null.
@@ -238,7 +259,7 @@ export class AzerothItem extends Item {
     // and THEN creates it, so an offered ring took the character's own ring off
     // and had nothing created in its place.
     if (actor?.documentName === "Actor" && underOffer(data) && options?.azerothLootSettle !== true) {
-      ui.notifications?.warn(game.i18n.format("AZEROTH.LootOffer.UnderOffer", { name: data.name ?? "" }));
+      ui.notifications?.warn(game.i18n.format("AZEROTH.LootOffer.UnderOffer", { name: shownName(data) }));
       return false;
     }
     // **A GADGETS-COMPENDIUM ENTRY IS NEVER A SHEET'S** (the lead, 2026-10-24). A gadget a
@@ -378,6 +399,12 @@ export class AzerothItem extends Item {
       if (extra) doc.updateSource({ system: extra });
     }
 
+    // **A FOUND THING ARRIVES UNIDENTIFIED** (08 §4, *Unidentified items*; D-1435). Stamped
+    // HERE, before the bags' early return, because the loot settle carries the bags' bypass
+    // and must still be stamped. `rules/identify.mjs#arrivalFlag` is the law; the opt-out is
+    // `azerothIdentify` and a closed list holds it (`identify-doors.test.mjs`).
+    stampUnidentified(documents, operation);
+
     const actor = bagsActor(operation);
     if (!actor) return allowed;
     const things = documents.filter(doc => PHYSICAL.has(doc.type));
@@ -423,7 +450,7 @@ export class AzerothItem extends Item {
       for (const { doc, reason } of refused) {
         const key = reason ?? REFUSALS.noRoom;
         if (!byReason.has(key)) byReason.set(key, []);
-        byReason.get(key).push(doc.name ?? "");
+        byReason.get(key).push(shownName(doc));
       }
       const lines = [...byReason].map(([reason, names]) => game.i18n.format("AZEROTH.Bags.LeftBehindPart", {
         reason: game.i18n.format(reason, { name: names[0] ?? "" }),
@@ -464,7 +491,7 @@ export class AzerothItem extends Item {
     const updates = operation.updates ?? [];
     const verdict = judge(rowsOf(actor), baseOf(actor), updates);
     if (!verdict.ok) {
-      sayRefusal(verdict.reason ?? REFUSALS.noRoom, verdict.data ?? {});
+      sayRefusal(verdict.reason ?? REFUSALS.noRoom, shownData(actor, verdict.data));
       return false;
     }
 
@@ -525,7 +552,7 @@ export class AzerothItem extends Item {
 
     const verdict = judgeDelete(rowsOf(actor), ids);
     if (!verdict.ok) {
-      sayRefusal(verdict.reason ?? REFUSALS.deleteHolder, verdict.data ?? {});
+      sayRefusal(verdict.reason ?? REFUSALS.deleteHolder, shownData(actor, verdict.data));
       return false;
     }
     return allowed;

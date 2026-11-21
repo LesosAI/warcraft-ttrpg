@@ -21,6 +21,20 @@
 
 import { bloodNeeded, bloodRestPlan, longRest, shortRest, vialUnits } from "../rules/rest.mjs";
 import { provisionOptions, tierAgain } from "../rules/provisions.mjs";
+import { shownName } from "../helpers/identify-words.mjs";
+
+/**
+ * What the character carries to eat and drink, each row named as THIS user sees the thing (08 §4;
+ * D-1435). `provisionOptions` is pure and reads the true name; the window disguises it here.
+ */
+function shownProvisions(actor) {
+  const carried = provisionOptions(actor.items ?? []);
+  const shown = rows => rows.map(row => {
+    const item = actor.items?.get?.(row.itemId) ?? null;
+    return item ? { ...row, name: shownName(item) } : row;
+  });
+  return { food: shown(carried.food), drink: shown(carried.drink), blood: shown(carried.blood) };
+}
 
 const TEMPLATE = "systems/azeroth-rpg/templates/dialog/rest.hbs";
 /** A San'layn's window, both modes (02 §5; D-1141 to D-1144). */
@@ -103,7 +117,7 @@ export async function promptRest(actor) {
     return null;
   }
 
-  const carried = provisionOptions(actor.items ?? []);
+  const carried = shownProvisions(actor);
   const {sharedFeastOptions}=await import("../effects/shared-feast.mjs");
   const sharedMeals=await sharedFeastOptions(actor);
   const foodOptions=[...optionsFor(carried.food),...sharedMeals];
@@ -256,7 +270,7 @@ export async function promptBloodRest(actor, kind, { needed, since }) {
     return null;
   }
   const short = kind !== "long";
-  const carried = provisionOptions(actor.items ?? []).blood;
+  const carried = shownProvisions(actor).blood;
   // What the rest returns once its blood is met, worked out through the pure rule (D-1141).
   const s = actor.system ?? {};
   const base = { health: s.health, conMod: s.abilities?.con?.own?.mod ?? s.abilities?.con?.mod ?? 0, tier: s.tier ?? 1, fatigue: s.fatigue ?? 0, pools: actor.poolSnapshot?.() ?? [] };

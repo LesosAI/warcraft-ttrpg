@@ -204,7 +204,13 @@ const forged = () => ({
       uuid: new fields.StringField({ required: true, blank: false }),
       name: new fields.StringField({ required: true, blank: true, initial: "" }),
       dc: new fields.NumberField({ required: false, nullable: true, integer: true, initial: null, min: 0 }),
-      uses: usesField()
+      uses: usesField(),
+      // **A SCROLL'S WRITER'S TOTAL** (08 §14, D-1436): the Casting Test total
+      // the GM writes at inscription, which the scroll is read at instead of the
+      // reader's roll. Null on every other casting, which keeps today's
+      // behaviour, so no migration; the parsers never emit it, so
+      // `check-packs.mjs` is unmoved. `rules/scrolls.mjs#inscription` writes it.
+      writerTotal: new fields.NumberField({ required: false, nullable: true, integer: true, initial: null, min: 0 })
     }),
     { required: false, initial: [] }
   )

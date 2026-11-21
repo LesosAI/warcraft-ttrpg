@@ -36,6 +36,8 @@ import { lootOffer } from "../settings.mjs";
 import { chooseOption } from "../dice/workflows.mjs";
 import { coins } from "../helpers/coins.mjs";
 import { rarityClass } from "../helpers/rarity.mjs";
+// 08 §4: an Uncommon+ find under offer is named by its kind to a player (D-1435).
+import { shownName } from "../helpers/identify-words.mjs";
 
 const TEMPLATE = "systems/azeroth-rpg/templates/dialog/loot-offer.hbs";
 
@@ -209,13 +211,19 @@ export class AzerothLootOffer extends HandlebarsApplicationMixin(ApplicationV2) 
     const note = coin && !may
       ? game.i18n.format("AZEROTH.LootOffer.Refuse.NotEligible", { name: row.name })
       : null;
+    // **AN OFFERED FIND IS AS HIDDEN AS IT WILL BE ON A SHEET** (08 §4; D-1435; the plan's
+    // default): the world copy carries the offer's mark, so `hiddenFrom` names an Uncommon+ find
+    // by its kind to a player, and the row and its View button say that name. The rarity ring and
+    // the price stay; the GM's window shows the true name.
+    const thing = coin ? null : game.items.get(row.id) ?? null;
+    const name = thing ? shownName(thing) : row.name;
 
     return {
       id: row.id,
       mine: may,
       pending,
       isCoin: coin,
-      name: coin ? game.i18n.format("AZEROTH.LootOffer.Share", { name: row.name }) : row.name,
+      name: coin ? game.i18n.format("AZEROTH.LootOffer.Share", { name: row.name }) : name,
       uuid: row.uuid ?? null,
       img: row.img ?? null,
       rarityClass: coin ? "" : rarityClass(row.rarity),
@@ -223,7 +231,7 @@ export class AzerothLootOffer extends HandlebarsApplicationMixin(ApplicationV2) 
         ? game.i18n.format("AZEROTH.LootOffer.Quantity", { n: row.quantity })
         : null,
       price: coin ? coins(row.copper) : coins(row.price),
-      viewLabel: game.i18n.format("AZEROTH.LootOffer.View", { name: row.name }),
+      viewLabel: game.i18n.format("AZEROTH.LootOffer.View", { name }),
       state: game.i18n.format(STATES[state] ?? STATES.open, { name: claimant }),
       note,
       refusal: this.#refusals.get(row.id) ?? null,

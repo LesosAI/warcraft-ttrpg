@@ -27,7 +27,7 @@ import { manaPool } from "./pools.mjs";
 // The one predicate for a class a Restricted line names (D-930).
 import { classLearnsSpell } from "./spell-access.mjs";
 // 05 §1 and §2: one roll read against each target's own number (O-301).
-import { SL_CAP, computeSL, resolveTest } from "./resolution.mjs";
+import { SL_CAP, computeSL, resolveTest, succeeded } from "./resolution.mjs";
 
 /** 07 §2: two numbers cover every spell. */
 export function castingDC({ tier = 1, targetDefense = null } = {}) {
@@ -144,6 +144,9 @@ export function judgeEachTarget({ natural = null, total = 0, dcs = [], criticalO
     if (forcedSl !== null && forcedSl !== undefined && Number.isFinite(Number(forcedSl))) {
       return { dc, total, success: true, sl: Math.max(0, Math.trunc(Number(forcedSl)) || 0), critical: false, forced: true };
     }
+    // **NO FACE, NO NATURAL** (a read scroll, 08 §14; the Phase 3 review, S7): the total alone,
+    // through 05 §2's margin, and never a critical - rather than a 0 handed to `resolveTest`.
+    if (natural === null || natural === undefined) return { dc, total, success: succeeded(total, dc), sl: computeSL(total, dc), critical: false };
     const nat = Math.trunc(Number(natural));
     const r = resolveTest({ natural: nat, modifier: total - nat, dc, criticalOn });
     return { dc, total: r.total, success: r.success, sl: r.sl, critical: r.critical === true };

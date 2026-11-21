@@ -111,6 +111,9 @@ function livingActor(actor) {
 }
 // The Legacy branches' B2: the tinker's constructs and gadgets, the gnome's two talents.
 import { constructsFor, isWrecked } from "../rules/constructs.mjs";
+// 08 §4's Identify Test comes back with a Long Rest (D-1435).
+import { IDENTIFY_SCOPE, TRIED_FLAG, UNIDENTIFIED_FLAG, isUnidentified, knownBatch, triedThisRest } from "../rules/identify.mjs";
+import { cardName, shownName, unidentifiedSource } from "../helpers/identify-words.mjs";
 import { BLUEPRINT_FLAG, GADGETS_SPENT_FLAG, OVERCLOCK_ENDS, OVERCLOCK_FLAG, cleanBlueprint, gadgetByKey, gadgetFeature, gadgetSpentSwap, gadgetsKnownFor, knownGadgets } from "../rules/gadgets.mjs";
 // THE LEGACY BRANCHES' DOORS (B1): one fact-builder for a row's gate (doors 15, 17,
 // 18), the ability scope (door 16), and the Watch cleared at a Long Rest (door 18).
@@ -586,6 +589,15 @@ export class AzerothActor extends Actor {
     if (this.type !== "character") return;
     const patch = characterTokenPatch(data?.prototypeToken ?? {});
     if (Object.keys(patch).length) this.prototypeToken.updateSource(patch);
+    // **A CHARACTER MADE WITH ITS THINGS ALREADY ON IT HOLDS THEM KNOWN** (08 §4; D-1435; the
+    // Phase 3 review, S6): an imported pregen, a duplicated legacy actor, a compendium character.
+    // `Actor.create({items})` runs no item create seam, so those things would carry no flag and be
+    // stamped the next time one moved. The migration's own judgement (`knownBatch`) writes them
+    // `false`, as 0.15.6 writes what a world already holds; a flag either way is left alone.
+    const known = knownBatch([...this.items].map(i => ({ _id: i.id, type: i.type, system: i._source?.system, flags: i._source?.flags })));
+    if (known.length) {
+      this.updateSource({ items: known.map(({ _id }) => ({ _id, flags: { [IDENTIFY_SCOPE]: { [UNIDENTIFIED_FLAG]: false } } })) });
+    }
   }
 
   /** @inheritDoc */
@@ -829,7 +841,11 @@ export class AzerothActor extends Actor {
       health: { value: s.health?.value ?? 0, max: s.health?.max ?? 0 },
       // The three tracks and their scores, or nothing. A creature's keyword is
       // not a score, so it is not one of these.
-      corruption: s.corruption && typeof s.corruption === "object" ? s.corruption : null
+      corruption: s.corruption && typeof s.corruption === "object" ? s.corruption : null,
+      // **THE NAME AN UNIDENTIFIED THING'S ROWS CARRY** (08 §4; D-1435): `signatureEffects` is
+      // pure and holds no words, and every door that composes it - the attack, the cast, the
+      // damage, the reaction, the derived aggregate - reads the bearer off here.
+      unidentifiedName: unidentifiedSource()
     };
   }
 
@@ -1624,7 +1640,7 @@ export class AzerothActor extends Actor {
     }
     // Asked again after the await: a second sync may have made them meanwhile.
     if (this.items.some(i => i.type === "weapon" && isClawsItem(i))) return;
-    await this.createEmbeddedDocuments("Item", [clawsCreateData(doc.toObject())], { azerothClaws: CLAWS_SYNC });
+    await this.createEmbeddedDocuments("Item", [clawsCreateData(doc.toObject())], { azerothClaws: CLAWS_SYNC, azerothIdentify: "known" });
   }
 
   /**
@@ -1887,7 +1903,8 @@ export class AzerothActor extends Actor {
     const due = this.items.filter(i => i.system?.uses?.per && refreshes(i.system.uses.per, event)
       && i.system.uses.value < i.system.uses.max);
     const updates = due.map(i => ({ _id: i.id, "system.uses.value": i.system.uses.max }));
-    const names = due.map(i => i.name);
+    // The rest's card is public: a thing a player is kept from is named by its kind (D-1435).
+    const names = due.map(i => cardName(i));
     // An item's castings refresh on the same clock (D-633).
     for (const item of this.items) {
       const spells = Array.isArray(item.system?.spells) ? item.system.spells : [];
@@ -1896,7 +1913,8 @@ export class AzerothActor extends Actor {
       const next = foundry.utils.deepClone(item.system.toObject().spells).map(s =>
         (s.uses?.per && refreshes(s.uses.per, event)) ? { ...s, uses: { ...s.uses, value: s.uses.max } } : s);
       updates.push({ _id: item.id, "system.spells": next });
-      names.push(...stale.map(s => `${s.name} (${item.name})`));
+      // A hidden thing's spells are hidden too (D-1435): the card names its kind alone.
+      names.push(...(isUnidentified(item) ? [cardName(item)] : stale.map(s => `${s.name} (${item.name})`)));
     }
     // **AND A SIGNATURE'S OWN USES** (08 §20, D-692). They live at
     // `system.signatureEffect.use.uses`, which neither pass above walks -
@@ -1913,7 +1931,7 @@ export class AzerothActor extends Actor {
       if (!uses?.per || !refreshes(uses.per, event)) continue;
       if ((uses.value ?? 0) >= (uses.max ?? 0)) continue;
       updates.push({ _id: item.id, "system.signatureEffect.use.uses.value": uses.max });
-      names.push(item.name);
+      names.push(cardName(item));
     }
     // **AND A LEGENDARY'S OTHER BUTTONS** (08 §20: *counts its uses apart from
     // the item's other Signatures*; D-910). Each at its own dotted path under
@@ -1927,7 +1945,7 @@ export class AzerothActor extends Actor {
         if (!uses?.per || !refreshes(uses.per, event)) continue;
         if ((uses.value ?? 0) >= (uses.max ?? 0)) continue;
         updates.push({ _id: item.id, [`system.signatureEffect.presses.${key}.uses.value`]: uses.max });
-        names.push(game.i18n.format("AZEROTH.Signature.RunName", { name: item.name, label: entry.label ?? key }));
+        names.push(isUnidentified(item) ? cardName(item) : game.i18n.format("AZEROTH.Signature.RunName", { name: item.name, label: entry.label ?? key }));
       }
     }
     // **A FREE CAST COMES BACK WITH ITS REST** (the Chromatic Champion plan: *"once per
@@ -2174,7 +2192,7 @@ export class AzerothActor extends Actor {
       const id = given && typeof given === "object" ? given.id : given;
       const item = id ? (this.items.get(id) ?? null) : null;
       if (!item || !isProvision(item, "blood")) {
-        return { fed: true, refusal: game.i18n.format("AZEROTH.Rest.NotBlood", { name: item?.name ?? given?.name ?? String(given) }) };
+        return { fed: true, refusal: game.i18n.format("AZEROTH.Rest.NotBlood", { name: item ? shownName(item) : (given?.name ?? String(given)) }) };
       }
       if (!stacks.some(s => s.itemId === item.id)) stacks.push({ itemId: item.id, quantity: item.system?.quantity ?? 1 });
     }
@@ -2305,11 +2323,11 @@ export class AzerothActor extends Actor {
       // before the general refusal: *carrying neither* would be the wrong words
       // for somebody who pointed at another character's ration.
       if (food && !eaten) {
-        ui.notifications?.warn(game.i18n.format("AZEROTH.Rest.NotFood", { name: food?.name ?? String(food) }));
+        ui.notifications?.warn(game.i18n.format("AZEROTH.Rest.NotFood", { name: food?.name !== undefined ? shownName(food) : String(food) }));
         return null;
       }
       if (drink && !drunk) {
-        ui.notifications?.warn(game.i18n.format("AZEROTH.Rest.NotDrink", { name: drink?.name ?? String(drink) }));
+        ui.notifications?.warn(game.i18n.format("AZEROTH.Rest.NotDrink", { name: drink?.name !== undefined ? shownName(drink) : String(drink) }));
         return null;
       }
       // **A CHARACTER WHO DOES NOT EAT OR DRINK RESTS WITHOUT EITHER** (the lead: *"They do
@@ -2547,6 +2565,12 @@ export class AzerothActor extends Actor {
       if (built?.gadget) await this.syncClassFeatures();
     }
     const restored = await this.resetUses("long");
+    // **THE IDENTIFY TESTS COME BACK** (08 §4: *once per Long Rest*; D-1435): the tried mark on
+    // every item this actor holds, in ONE write, deleted rather than written false, so a tried
+    // stack and its untried twin merge again (`rules/slots.mjs#stackKey` reads the flags).
+    const tried = [...this.items].filter(i => triedThisRest(i))
+      .map(i => ({ _id: i.id, [`flags.${IDENTIFY_SCOPE}.${TRIED_FLAG}`]: foundry.data.operators.ForcedDeletion.create() }));
+    if (tried.length) await this.updateEmbeddedDocuments("Item", tried);
     await rechargeSpecialEquipment(this,"long");
     // Sealing Flame limits the recipient, not the caster. An unresolved
     // reservation requires review; only a consumed benefit resets at rest.
@@ -5177,7 +5201,8 @@ export class AzerothActor extends Actor {
     const state = this.signatureState ?? {};
     const out = [];
     for (const item of this.items ?? []) {
-      if (item.system?.equipped !== true) continue;
+      // A press is a Signature's Use, locked while the thing is unidentified (08 §4; D-1435).
+      if (item.system?.equipped !== true || isUnidentified(item)) continue;
       for (const { key, press } of pressesOf(item.system?.signatureEffect)) {
         if (press.trigger !== "blowMoved" || !(Number(press.move?.feet) > 0)) continue;
         if (!gateHolds(press.gates ?? [], state)) continue;
@@ -5201,7 +5226,8 @@ export class AzerothActor extends Actor {
     const state = this.signatureState ?? {};
     const found = [];
     for (const item of this.items ?? []) {
-      if (item.system?.equipped !== true) continue;
+      // A press is a Signature's Use, locked while the thing is unidentified (08 §4; D-1435).
+      if (item.system?.equipped !== true || isUnidentified(item)) continue;
       for (const { key, press } of pressesOf(item.system?.signatureEffect)) {
         if (press.negates !== true) continue;
         if (pressEntryRefusal(press, { holds: gateHolds(press.gates ?? [], state) })) continue;
@@ -5223,7 +5249,8 @@ export class AzerothActor extends Actor {
     const state = this.signatureState ?? {};
     const found = [];
     for (const item of this.items ?? []) {
-      if (item.system?.equipped !== true) continue;
+      // A press is a Signature's Use, locked while the thing is unidentified (08 §4; D-1435).
+      if (item.system?.equipped !== true || isUnidentified(item)) continue;
       for (const { key, press } of pressesOf(item.system?.signatureEffect)) {
         const trigger = pressTrigger(press);
         if (press.negates === true || (trigger !== "hitOnYou" && trigger !== "attackOnYou")) continue;
@@ -5399,8 +5426,10 @@ export class AzerothActor extends Actor {
     }
     const undying = this._signatureHold?.({ before, amount }) ?? null;
     if (undying) {
+      // A hold that fires itself works hidden (D-1435) and names no more than *an unidentified item*.
+      const source = isUnidentified(undying.item) ? unidentifiedSource() : undying.press.label;
       await undying.item.update({ [`system.signatureEffect.presses.${undying.key}.uses.value`]: Math.max(0, (undying.press.uses?.value ?? 0) - 1) });
-      ui.notifications?.info(game.i18n.format("AZEROTH.Signature.Held", { name: this.name, source: undying.press.label }));
+      ui.notifications?.info(game.i18n.format("AZEROTH.Signature.Held", { name: this.name, source }));
       const gain = undying.press.corruptionGain ?? null;
       if (gain?.track && gain?.amount && gain?.resilience && gain?.dc) {
         // The hold stands whatever the Test does; a Test that could not be made is SAID,
@@ -5408,11 +5437,11 @@ export class AzerothActor extends Actor {
         try {
           await game.system.azeroth.workflows.corruptionExposure({ actor: this, track: gain.track, dc: gain.dc, resilience: gain.resilience, points: gain.amount, occasion: "signature" });
         } catch (err) {
-          ui.notifications?.error(game.i18n.format("AZEROTH.Signature.CorruptionTestLost", { name: this.name, source: undying.press.label, dc: gain.dc }));
+          ui.notifications?.error(game.i18n.format("AZEROTH.Signature.CorruptionTestLost", { name: this.name, source, dc: gain.dc }));
           console.warn("azeroth-rpg | Undying's Corruption Test was not made", err);
         }
       }
-      return { amount: Math.max(0, before - 1), held: { kind: "signature", name: undying.press.label } };
+      return { amount: Math.max(0, before - 1), held: { kind: "signature", name: source } };
     }
     try {
       const asked = await askToHold({ target: this, before, amount, attack: struck && attack });

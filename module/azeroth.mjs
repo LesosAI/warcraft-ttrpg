@@ -154,6 +154,7 @@ import { AzerothLootOffer, registerLootOfferHooks } from "./applications/loot-of
 import { registerLootOfferFolderDoor } from "./applications/loot-offer-folder.mjs";
 import { registerGeneratorButton } from "./applications/npc-generator-button.mjs";
 import { registerLootButton } from "./applications/loot-generator-button.mjs";
+import { registerIdentifyDirectory } from "./applications/identify-directory.mjs";
 import { registerWorldMapButton } from "./applications/world-map-button.mjs";
 import { registerRulesJournalsButton } from "./applications/rules-journals-button.mjs";
 import * as bestiary from "./rules/bestiary.mjs";
@@ -455,6 +456,8 @@ Hooks.once("init", () => {
   registerGeneratorButton();
   // The loot generator's (D-666), in the Item directory.
   registerLootButton();
+  // A hidden thing in the Items sidebar reads by its kind for a player (08 §4; D-1435).
+  registerIdentifyDirectory();
   // The offer of loot (D-721): the window that answers the world setting, and
   // the *Offer to players…* door on an Item folder's right click. The
   // generator's own button and the offered card's are registered with them.

@@ -254,7 +254,7 @@ export function blurbOf(row) {
  * than rendering blank at the table.
  */
 export const TIP_PATHS = Object.freeze([
-  "name", "type", "system", "rarityClass", "bagLine", "coating", "usable", "trainingTip"
+  "name", "type", "system", "rarityClass", "bagLine", "coating", "usable", "trainingTip", "hidden"
 ]);
 
 /** Fill `{name}` placeholders. The sheet's i18n does this; the bag carries the template. */
@@ -299,6 +299,12 @@ export function tipModel(row, { words = {}, place = null, slot = null } = {}) {
   const rarity = sys.rarity ?? null;
   add("kind", [words.kind?.[kind], rarity ? words.rarity?.[rarity] : null]
     .filter(Boolean).join(" · "));
+  // **AN UNIDENTIFIED THING SAYS SO, AND SAYS NO MORE** (08 §4; D-1435): `row.hidden` is the
+  // sheet's `hiddenToViewer`. Its kind, its quality, where it is, its weight and its count are what
+  // its owner can see; the blurb (traits, Rating, AP, what it holds), the charges, a coating and
+  // its Use are what identifying reveals.
+  const hidden = row?.hidden === true;
+  if (hidden) add("unidentified", words.unidentified);
   add("bag", row?.bagLine);
   add("training", row?.trainingTip);
   // WHICH SLOT IT IS WORN IN, on the figure. It stands where `place` stands on
@@ -315,7 +321,7 @@ export function tipModel(row, { words = {}, place = null, slot = null } = {}) {
   const count = Math.trunc(Number(sys.quantity));
   if (Number.isFinite(count) && count > 1) add("count", fill(words.count, { n: count }));
 
-  const blurb = blurbOf(row);
+  const blurb = hidden ? null : blurbOf(row);
   if (blurb) {
     add("blurb", fill(words.blurb?.[blurb.kind], {
       value: blurb.value,
@@ -323,14 +329,14 @@ export function tipModel(row, { words = {}, place = null, slot = null } = {}) {
     }));
   }
 
-  const charges = sys.charges ?? null;
+  const charges = hidden ? null : (sys.charges ?? null);
   if (charges && charges.max) {
     add("charges", fill(words.charges, {
       value: charges.value ?? 0, max: charges.max, unit: charges.unit ?? ""
     }));
   }
-  if (row?.coating) add("coating", fill(words.coated, { name: row.coating }));
-  if (row?.usable || hasUse(sys.use)) add("use", words.use);
+  if (row?.coating && !hidden) add("coating", fill(words.coated, { name: row.coating }));
+  if (!hidden && (row?.usable || hasUse(sys.use))) add("use", words.use);
 
   return { name: row?.name ?? "", rarityClass: row?.rarityClass ?? null, lines };
 }

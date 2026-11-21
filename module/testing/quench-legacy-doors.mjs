@@ -46,7 +46,7 @@
  * Every document a test makes is deleted in `after`.
  */
 
-import { cleanup, drainAreaWork, fromPack, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook, warnings, PACK_FOR, tokenDrawn, quietScrollingText, tokenData } from "./fixtures.mjs";
+import { cleanup, drainAreaWork, fromPack, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook, warnings, PACK_FOR, tokenDrawn, quietScrollingText, tokenData, KNOWN } from "./fixtures.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 import { ESCAPE_FLAG } from "../rules/escapes.mjs";
@@ -165,7 +165,7 @@ async function warriorWith(name, { level = 5, ranks = {}, weapons = [], abilitie
 /** A weapon or a suit from the pack, put in hand or on. */
 async function wear(actor, packId, name, extra = {}) {
   const source = (await fromPack(packId, name)).toObject();
-  const [item] = await actor.createEmbeddedDocuments("Item", [{ ...source, system: { ...source.system, equipped: true, ...extra } }]);
+  const [item] = await actor.createEmbeddedDocuments("Item", [{ ...source, system: { ...source.system, equipped: true, ...extra } }], { ...KNOWN });
   await until(() => actor.items.get(item.id)?.system?.equipped === true, `${name} on`);
   return actor.items.get(item.id);
 }
@@ -430,7 +430,7 @@ export function legacyDoorsBatch(context) {
         },
         // A Use naming no DC, on a class with no Spell DC (the B1 review, item d).
         { name: "ZZ Unnamed Shout", type: "feature", system: { kind: "action", action: "half", resist: "spirit" } }
-      ]);
+      ], { ...KNOWN });
       const clap = embedded.find(i => i.name === "ZZ Thunder Clap");
       const shout = embedded.find(i => i.name === "ZZ Unnamed Shout");
       const strDc = 10 + (clapper.system.abilities?.str?.mod ?? 0) + (clapper.system.proficiency ?? 0);

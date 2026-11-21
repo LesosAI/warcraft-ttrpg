@@ -408,8 +408,10 @@ function snapshotOf(actor, { kind, skill, targets, resilience = null, ability = 
     // And what a thing being WORN grants on this kind of Test, by name (08 §20,
     // 2026-09-10). `system.grants` is `rules/grants.mjs#grantsFor`'s own output,
     // computed once on the model, so this is a read and never a second sum.
-    gearTestBoons: wornNames(s.grants?.testBoonSources),
-    gearTestBanes: wornNames(s.grants?.testBaneSources),
+    // The PUBLIC names (D-1435): a line's label is the card's provenance, and a card is public,
+    // so a hidden thing reads *an unidentified item* whoever rolls (`CharacterData` derives both).
+    gearTestBoons: wornNames(s.grants?.public?.testBoonSources ?? s.grants?.testBoonSources),
+    gearTestBanes: wornNames(s.grants?.public?.testBaneSources ?? s.grants?.testBaneSources),
     // What SOMEBODY ELSE laid on this Test (06 §6's Pummel, 08 §20's
     // Gorehowl; D-693). The Active Effect on the roller is the carrier and the
     // clock; `effects/banes.mjs#spendLaidBanes` deletes it after the die,
@@ -696,7 +698,8 @@ export function prepareRoll(actor, given) {
   const eachTarget = test.kind === "casting" ? eachTargetFor(actor, spec.spell, targets, { given: spec.dc ?? null }) : null;
   let dc, dcSource;
   if (eachTarget) { dc = null; dcSource = "each"; }
-  else if (spec.dc != null) { dc = spec.dc; dcSource = "given"; }
+  // A DC the rule fixes (08 §4's Identify, by quality) is drawn read-only and said so (`dcLocked`).
+  else if (spec.dc != null) { dc = spec.dc; dcSource = spec.dcLocked === true ? "ruled" : "given"; }
   else if (usesDefense) { dc = target.defense; dcSource = "defense"; }
   else if (spec.fallbackDC != null) { dc = spec.fallbackDC; dcSource = spec.fallbackSource ?? "given"; }
   else { dc = standardDC(actor.system?.tier ?? 1); dcSource = "standard"; }
@@ -761,6 +764,7 @@ export function prepareRoll(actor, given) {
     reminders: reminders.notes,
     dc,
     dcSource,
+    dcLocked: spec.dcLocked === true && !eachTarget,
     // Every target's number where each is judged on its own (O-301), else null.
     eachTarget,
     momentum,
@@ -1026,7 +1030,8 @@ function readForm(form, p) {
     riders,
     talentLines,
     conflagrateBurning: p.casting?.conflagrate === true && f.conflagrateBurning?.checked === true,
-    dc: Number.isFinite(dcRaw) ? dcRaw : p.dc,
+    // A DC the rule fixes is drawn read-only, and the form is never trusted with it (D-1435).
+    dc: p.dcLocked ? p.dc : (Number.isFinite(dcRaw) ? dcRaw : p.dc),
     ...(dcByTarget ? { dcByTarget } : {}),
     boons,
     banes,
@@ -1175,6 +1180,7 @@ async function dialogVariant(actor, spec) {
     title: spec.title,
     kind: spec.kind,
     dc: p.dc,
+    dcLocked: p.dcLocked === true,
     dcSource: `AZEROTH.Dialog.DC.${p.dcSource[0].toUpperCase()}${p.dcSource.slice(1)}`,
     // **ONE DC FIELD PER TARGET** (O-307; the lead, 2026-11-11: *"307 - one field per target"*):
     // each target named, its own 07 §2 number in the field and the reason beside it in words, the

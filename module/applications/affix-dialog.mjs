@@ -9,6 +9,8 @@
  */
 
 import { generate } from "../rules/affixes.mjs";
+// A scroll takes no affix (08 §14; the Phase 3 review, S4): it is written, never enchanted.
+import { isScroll } from "../rules/scrolls.mjs";
 
 const TEMPLATE = "systems/azeroth-rpg/templates/dialog/affix.hbs";
 
@@ -43,7 +45,7 @@ async function affixById(id) {
  * multiply the rarity's price multiplier twice.
  */
 export async function applyAffixInPlace(item, affix) {
-  if (!item || !["weapon", "armor", "gear"].includes(item.type)) {
+  if (!item || !["weapon", "armor", "gear"].includes(item.type) || isScroll(item)) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.Affix.NotABase"));
     return null;
   }
@@ -74,7 +76,7 @@ export async function applyAffixInPlace(item, affix) {
 /** Base candidates: the actor's own weapons, suits and gear, else the world's. */
 function loadBases(actor) {
   const source = actor ? actor.items : game.items;
-  return source.filter(i => ["weapon", "armor", "gear"].includes(i.type) && !i.getFlag("azeroth-rpg", "affix"));
+  return source.filter(i => ["weapon", "armor", "gear"].includes(i.type) && !i.getFlag("azeroth-rpg", "affix") && !isScroll(i));
 }
 
 /**
@@ -130,7 +132,10 @@ export async function generateAffixedItem({ actor = null } = {}) {
     type: result.item.type,
     img: base.img,
     system,
-    flags: { "azeroth-rpg": { grants, generated: { base: base.id, prefix: prefix?.id ?? null, suffix: suffix?.id ?? null } } }
+    // **THE WHOLE BASE, as `applyAffixInPlace` stashes it** (the architect's review, must-fix
+    // 8d): an id here left a later in-place affix regenerating from a string, and left 08 §4's
+    // disguise (`rules/identify.mjs#kindWord`) with no base name to read.
+    flags: { "azeroth-rpg": { grants, generated: { base: { name: base.name, type: base.type, system: base.system.toObject() }, prefix: prefix?.id ?? null, suffix: suffix?.id ?? null } } }
   };
   const [item] = actor
     ? await actor.createEmbeddedDocuments("Item", [data])

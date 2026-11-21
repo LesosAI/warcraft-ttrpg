@@ -17,7 +17,7 @@
  * Every test makes its own documents and `cleanup` removes them.
  */
 
-import { cleanup, inspect, made, makeCharacter, makeNpc, openSheet, pinDie, settle, cardOf, fromPack, PACK_FOR, untilHook, tokenData } from "./fixtures.mjs";
+import { cleanup, inspect, made, makeCharacter, makeNpc, openSheet, pinDie, settle, cardOf, fromPack, PACK_FOR, untilHook, tokenData, KNOWN } from "./fixtures.mjs";
 import { checkText } from "./geometry.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 // The GM-side door a Resist row's record goes through (D-726): what it refuses
@@ -267,7 +267,7 @@ export function tableBatch(context) {
       this.timeout(60000);
       const actor = await makeCharacter({ name: "ZZ Prowler", classes: [["Rogue", 1]] });
       // A worn thing from 08 §11 - the fixture's `gear` is the affix pool, so the item is embedded by hand.
-      const [cloak] = await actor.createEmbeddedDocuments("Item", [(await fromPack(PACK_FOR.equipment, "Bedroll")).toObject()]);
+      const [cloak] = await actor.createEmbeddedDocuments("Item", [(await fromPack(PACK_FOR.equipment, "Bedroll")).toObject()], { ...KNOWN });
       await applyAffixInPlace(cloak, await affixNamed("of the Prowler"));
       await cloak.update({ "system.equipped": true });
       await until(() => (actor.system.skillBoons?.stealth ?? []).length === 1, "the Boon on Stealth");

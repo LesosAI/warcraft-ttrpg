@@ -25,7 +25,7 @@
  * Every test makes its own documents and `cleanup` removes them.
  */
 
-import { PACK_FOR, cleanup, dragOver, forgeDrop, makeCharacter, openSheet, settle } from "./fixtures.mjs";
+import { PACK_FOR, cleanup, dragOver, forgeDrop, makeCharacter, openSheet, settle, KNOWN } from "./fixtures.mjs";
 import { checkNoRawKeys } from "./expectations.mjs";
 import { checkText } from "./geometry.mjs";
 import { parseColour } from "./colour.mjs";
@@ -52,7 +52,7 @@ async function give(actor, name, packId = PACK_FOR.equipment) {
   // An exact name first: *Ring* and *Ring of the school* are both in the pack.
   const doc = docs.find(d => d.name === name);
   if (!doc) throw new Error(`${name} is not in ${packId}`);
-  const [item] = await actor.createEmbeddedDocuments("Item", [doc.toObject()]);
+  const [item] = await actor.createEmbeddedDocuments("Item", [doc.toObject()], { ...KNOWN });
   return item;
 }
 
@@ -65,7 +65,7 @@ async function giveWhere(actor, predicate, packId = PACK_FOR.equipment) {
     .filter(predicate)
     .sort((a, b) => a.name.localeCompare(b.name));
   if (!docs.length) throw new Error(`nothing in ${packId} matches`);
-  const [item] = await actor.createEmbeddedDocuments("Item", [docs[0].toObject()]);
+  const [item] = await actor.createEmbeddedDocuments("Item", [docs[0].toObject()], { ...KNOWN });
   return item;
 }
 

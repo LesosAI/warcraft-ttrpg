@@ -18,7 +18,7 @@
  * test makes is deleted in `after`.
  */
 
-import { cleanup, drainAreaWork, fromPack, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings, PACK_FOR, tokenDrawn, tokenData } from "./fixtures.mjs";
+import { cleanup, drainAreaWork, fromPack, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings, PACK_FOR, tokenDrawn, tokenData, KNOWN } from "./fixtures.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { useFeatureWithDialog } from "../applications/actions.mjs";
 import { strikeFromArea } from "../effects/area-strikes.mjs";
@@ -207,7 +207,7 @@ export function talentRootsBatch(context) {
       const laid = () => paladin.effects.find(e => e.getFlag("azeroth-rpg", "talentEffect") === "shield-of-faith") ?? null;
       assert.isNull(laid(), "Shield of Faith stood with no shield in hand");
       const source = (await fromPack(PACK_FOR.armor, "Buckler")).toObject();
-      const [shield] = await paladin.createEmbeddedDocuments("Item", [{ ...source, system: { ...source.system, equipped: true } }]);
+      const [shield] = await paladin.createEmbeddedDocuments("Item", [{ ...source, system: { ...source.system, equipped: true } }], { ...KNOWN });
       assert.ok(shield, "the Buckler was not made");
       await until(() => laid(), "Shield of Faith laid by a shield created in hand");
       await shield.delete();

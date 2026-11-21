@@ -16,6 +16,8 @@
  */
 
 import { computeSL, forcedOutcome, forcedSlOf, netAdvantage, resolveTest, testFormula } from "../rules/resolution.mjs";
+// A read scroll's Test is the writer's total, with no die (08 §14; D-1436).
+import { writtenOutcome } from "../rules/scrolls.mjs";
 
 export class AzerothRoll extends Roll {
   /**
@@ -71,6 +73,34 @@ export class AzerothRoll extends Roll {
     });
   }
 
+  /**
+   * **A TEST WITH NO DIE: THE WRITER'S TOTAL ON A SCROLL** (08 §14: *A scroll casts at the
+   * writer's Casting Test, not yours*; D-1436). The formula is the constant, so `total` is the
+   * total and `dice` is empty; `options.written` is what tells `outcome` to read the margin
+   * through `rules/scrolls.mjs#writtenOutcome` - the one route to the SL - rather than look for a
+   * natural face it does not have. No Boon, Bane or modifier reaches it: it is not the reader's
+   * Test.
+   *
+   * @param {{total: number, dc?: number, kind?: string, flavor?: string}} o
+   * @returns {AzerothRoll}
+   */
+  static written({ total = 0, dc = 10, kind = "casting", flavor = "" } = {}) {
+    const fixed = Math.max(0, Math.trunc(Number(total)) || 0);
+    return new this(String(fixed), {}, {
+      azeroth: true,
+      kind,
+      dc,
+      location: null,
+      boons: 0,
+      banes: 0,
+      net: 0,
+      modifier: 0,
+      written: { total: fixed },
+      provenance: [{ label: "AZEROTH.Scroll.WrittenRow", value: null, formula: String(fixed) }],
+      flavor
+    });
+  }
+
   /* -------------------------------------------- */
 
   /** The kept d20 face — the natural roll for every purpose (05 §4). */
@@ -102,13 +132,19 @@ export class AzerothRoll extends Roll {
    * Null until the roll is evaluated.
    */
   get successLevel() {
-    if (!this._evaluated || this.natural === null) return null;
+    if (!this._evaluated) return null;
+    if (this.natural === null && !this.options?.written) return null;
     return this.outcome.sl;
   }
 
   /** The full outcome: total, SL, success, and whether it was a 20 or a 1. */
   get outcome() {
-    if (!this._evaluated || this.natural === null) return null;
+    if (!this._evaluated) return null;
+    // A read scroll (08 §14): the writer's total, no natural face, forced SL and miss honoured.
+    if (this.options?.written) {
+      return writtenOutcome({ total: this.total, dc: this.dc ?? 10, forcedSl: forcedSlOf(this.options), forcedMiss: this.options.forcedMiss === true });
+    }
+    if (this.natural === null) return null;
     // 04's Trueshot (D-773): a hit at a set SL, without a roll - carried on the
     // options so the card read back off its message says the same.
     const forced = forcedSlOf(this.options);

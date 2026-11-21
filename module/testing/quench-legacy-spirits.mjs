@@ -38,7 +38,7 @@
  * deleted in `after`.
  */
 
-import { cleanup, drainAreaWork, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook, PACK_FOR, fromPack, tokenDrawn, quietScrollingText, tokenData } from "./fixtures.mjs";
+import { cleanup, drainAreaWork, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook, PACK_FOR, fromPack, tokenDrawn, quietScrollingText, tokenData, KNOWN } from "./fixtures.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 import { cancelPick } from "../canvas/place.mjs";
@@ -179,7 +179,7 @@ async function pressForCard(control, speaker, face = 15, { kind = null, ms = 300
 /** A weapon from the pack, in hand. */
 async function wield(actor, name) {
   const source = (await fromPack(PACK_FOR.weapon, name)).toObject();
-  const [item] = await actor.createEmbeddedDocuments("Item", [{ ...source, system: { ...source.system, equipped: true } }]);
+  const [item] = await actor.createEmbeddedDocuments("Item", [{ ...source, system: { ...source.system, equipped: true } }], { ...KNOWN });
   await until(() => actor.items.get(item.id)?.system?.equipped === true, `${name} in hand`);
   return actor.items.get(item.id);
 }
@@ -650,7 +650,7 @@ export function legacySpiritsBatch(context) {
       this.timeout(180000);
       const priest = await makeCharacter({ name: "ZZ LS Nova", classes: [["Priest", 9]] });
       const source = (await fromPack(PACK_FOR.spell, "Holy Nova")).toObject();
-      const [nova] = await priest.createEmbeddedDocuments("Item", [source]);
+      const [nova] = await priest.createEmbeddedDocuments("Item", [source], { ...KNOWN });
       await sceneWith([{ actor: priest, x: 1000, y: 1000 }]);
       await layEthereal(priest, { source: "Ethereal Form", span: null });
       await until(() => priest.effects.some(e => e.flags?.["azeroth-rpg"]?.ethereal), "the ethereal state");

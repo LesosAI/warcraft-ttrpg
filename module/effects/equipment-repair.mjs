@@ -3,6 +3,8 @@ import {guardPendingCustodyItem} from "../rules/item-custody-guard.mjs";
 import {realmRefusalFor} from "./spirit-realm.mjs";
 import {refuseDispersion} from "./dispersion-protection.mjs";
 import {refuseAncientDespair} from "./ancient-despair-refusal.mjs";
+// 08 §4 (D-1435): a hidden weapon is listed and carded by its kind.
+import {cardName,shownName} from "../helpers/identify-words.mjs";
 export const EQUIPMENT_REPAIR_QUERY="azeroth-rpg.equipmentRepair";
 const NS="azeroth-rpg",RECEIPT="equipmentRepairReceipt",busy=new Set();
 const writer=()=>game.user?.isGM===true&&game.users?.activeGM?.id===game.user.id;
@@ -42,7 +44,7 @@ export async function useMechanicalRepairKit({actor,item}={}) {
   const candidates=[...actor.items].filter(i=>unreliableDamage(i)&&unreliableWeapon(i));
   if(!candidates.length){ui.notifications?.warn(words("NoTarget"));return null;}
   const {chooseOption}=await import("../dice/workflows.mjs");
-  const choice=await chooseOption(item,candidates.map(i=>({key:i.id,name:i.name,description:words("Damaged")})),null,{prompt:words("ChooseTarget")});
+  const choice=await chooseOption(item,candidates.map(i=>({key:i.id,name:shownName(i),description:words("Damaged")})),null,{prompt:words("ChooseTarget")});
   if(!choice)return null;
   const target=actor.items.get(choice.key);
   if(!target||!unreliableDamage(target))return null;
@@ -100,7 +102,7 @@ export async function equipmentRepairQueryHandler(data={}, {user}={}) {
     if(await fromUuid(data.actorUuid)!==actor||!valid(data.quantity-1))throw Error("Repair recipient changed after payment");
     await weapon.setFlag(NS,UNRELIABLE_DAMAGE,null);requireWriter();
     if(unreliableDamage(weapon))throw Error("Repair unconfirmed");
-    const card=await ChatMessage.create({speaker:ChatMessage.getSpeaker({actor}),content:`<p>${game.i18n.format("AZEROTH.EquipmentRepair.Repaired",{name:foundry.utils.escapeHTML(weapon.name)})}</p>`});
+    const card=await ChatMessage.create({speaker:ChatMessage.getSpeaker({actor}),content:`<p>${game.i18n.format("AZEROTH.EquipmentRepair.Repaired",{name:foundry.utils.escapeHTML(cardName(weapon))})}</p>`});
     requireWriter();await actor.setFlag(NS,RECEIPT,{...actor.getFlag(NS,RECEIPT),stage:"complete",messageUuid:card.uuid});
     return {ok:true,messageUuid:card.uuid};
   }catch(error){console.warn("azeroth-rpg | equipment repair requires GM review",error);return {ok:false,pending:true};}
@@ -140,7 +142,7 @@ export async function reviewEquipmentRepair(actor,{weaponId=null}={}){
 async function chooseRepairReview(actor){
   const receipt=actor.getFlag(NS,RECEIPT),options=[];
   if(receipt&&!["complete","reviewed"].includes(receipt.stage))options.push({key:"receipt",name:words("ReviewPayment"),description:words("ReviewPrompt")});
-  for(const item of actor.items)if(unreliableDamage(item))options.push({key:item.id,name:item.name,description:words("ManualPrompt")});
+  for(const item of actor.items)if(unreliableDamage(item))options.push({key:item.id,name:shownName(item),description:words("ManualPrompt")});
   const {chooseOption}=await import("../dice/workflows.mjs");
   const choice=await chooseOption({name:words("Review")},options,null,{prompt:words("Review")});
   if(choice)return reviewEquipmentRepair(actor,{weaponId:choice.key==="receipt"?null:choice.key});

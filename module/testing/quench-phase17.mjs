@@ -4,7 +4,7 @@
  * worth its grade on the Casting Test and on nothing else.
  */
 
-import { cleanup, firstFromPack, gearTab, give, inspect, makeCharacter, openSheet, pinDie, settle, PACK_FOR } from "./fixtures.mjs";
+import { cleanup, firstFromPack, gearTab, give, inspect, makeCharacter, openSheet, pinDie, settle, PACK_FOR, KNOWN } from "./fixtures.mjs";
 import { castWithDialog } from "../applications/actions.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { checkText } from "./geometry.mjs";
@@ -23,7 +23,7 @@ async function giveAugment(actor, name) {
   const pack = game.packs.get(PACK_FOR.equipment);
   const doc = (await pack.getDocuments()).find(d => d.name === name);
   if (!doc) throw new Error(`${name} is not in the gear pack`);
-  const [item] = await actor.createEmbeddedDocuments("Item", [doc.toObject()]);
+  const [item] = await actor.createEmbeddedDocuments("Item", [doc.toObject()], { ...KNOWN });
   return item;
 }
 

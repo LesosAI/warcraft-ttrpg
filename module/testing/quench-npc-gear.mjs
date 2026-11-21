@@ -10,7 +10,7 @@
  * regenerated from the chapter (D3 §7).
  */
 
-import { cleanup, fromPack, made, makeNpc, settle, PACK_FOR } from "./fixtures.mjs";
+import { cleanup, fromPack, made, makeNpc, settle, PACK_FOR, KNOWN } from "./fixtures.mjs";
 
 /** Wait for a condition. */
 const until = async (fn, what, ms = 5000) => {
@@ -25,7 +25,7 @@ const until = async (fn, what, ms = 5000) => {
 async function give(actor, name, packId) {
   const doc = await fromPack(packId, name);
   if (!doc) throw new Error(`${name} is not in ${packId}`);
-  const [item] = await actor.createEmbeddedDocuments("Item", [doc.toObject()]);
+  const [item] = await actor.createEmbeddedDocuments("Item", [doc.toObject()], { ...KNOWN });
   return item;
 }
 
@@ -36,7 +36,7 @@ async function grant(actor, name, sentences, extra = {}) {
     type: "gear",
     system: { equipped: true, ...extra },
     flags: { "azeroth-rpg": { grants: sentences } }
-  }]);
+  }], { ...KNOWN });
   made.push(item);
   return item;
 }
@@ -182,7 +182,7 @@ export function creatureGearBatch(context) {
           equipped: true,
           signatureEffect: { kind: "standing", gates: [], grants: ["A Boon on Parry Tests"] }
         }
-      }]);
+      }], { ...KNOWN });
       await until(() => (actor.system.grants?.testBoonSources?.parry ?? []).length === 1,
         "the Test Boon reaching `system.grants`, which is the bag the dialog reads");
     });
@@ -199,7 +199,7 @@ export function creatureGearBatch(context) {
       const [load] = await actor.createEmbeddedDocuments("Item", [{
         name: "ZZ A great deal of ore", type: "gear",
         system: { weight: capacity + 1 }
-      }]);
+      }], { ...KNOWN });
       made.push(load);
       await until(() => actor.system.load === "encumbered", "the creature to become Encumbered");
       assert.equal(actor.system.speed, speed - 5, "Encumbered costs 5 feet (05 §10)");
@@ -228,7 +228,7 @@ export function creatureGearBatch(context) {
       const speed = actor.system.speed;
       const [load] = await actor.createEmbeddedDocuments("Item", [{
         name: "ZZ A heavy chest", type: "gear", system: { weight: 500 }
-      }]);
+      }], { ...KNOWN });
       made.push(load);
       await settle();
       assert.equal(actor.system.load, "unencumbered", "a creature with no Strength was Overloaded");

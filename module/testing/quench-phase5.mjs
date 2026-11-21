@@ -4,7 +4,7 @@
  * what is worn and taken off a spell's damage.
  */
 
-import { cleanup, settle, untilHook, firstFromPack, made, makeCharacter, makeNpc, PACK_FOR } from "./fixtures.mjs";
+import { cleanup, settle, untilHook, firstFromPack, made, makeCharacter, makeNpc, PACK_FOR, KNOWN } from "./fixtures.mjs";
 import { AzerothCompendiumBrowser } from "../applications/compendium-browser.mjs";
 
 const click = el => el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
@@ -363,7 +363,7 @@ export function toolsBatch(context) {
         .find(d => d.getFlag("azeroth-rpg", "affix")?.family === "ward" && d.getFlag("azeroth-rpg", "affix")?.school === "arcane");
       assert.ok(cloak, "no Arcane Ward affix in the pack");
       const target = await makeCharacter({ name: "ZZ Tools Warded", classes: [["Warrior", 5]] });
-      const [worn] = await target.createEmbeddedDocuments("Item", [{ ...cloak.toObject(), system: { ...cloak.system.toObject(), equipped: true } }]);
+      const [worn] = await target.createEmbeddedDocuments("Item", [{ ...cloak.toObject(), system: { ...cloak.system.toObject(), equipped: true } }], { ...KNOWN });
       assert.equal(target.system.ward?.arcane, 1, "an equipped Arcane Ward affix did not derive Ward 1 (Arcane)");
       await worn.update({ "system.equipped": false });
       assert.equal(target.system.ward?.arcane, 0, "an unequipped Ward is still counted");

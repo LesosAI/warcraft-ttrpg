@@ -133,7 +133,7 @@
   {{else}}
   <div class="azeroth-dialog-row azeroth-dialog-dc">
     <label for="azeroth-dialog-dc">{{localize "AZEROTH.Dialog.DC.Label"}}</label>
-    <input type="number" id="azeroth-dialog-dc" name="dc" value="{{dc}}" min="0" step="1" autofocus>
+    <input type="number" id="azeroth-dialog-dc" name="dc" value="{{dc}}" min="0" step="1"{{#if dcLocked}} readonly aria-readonly="true"{{else}} autofocus{{/if}}>
     <span class="azeroth-dialog-note">{{localize dcSource}}</span>
   </div>
   {{/if}}

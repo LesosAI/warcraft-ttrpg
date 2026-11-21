@@ -6,7 +6,7 @@
  * sheet, the affix drop, the floating Health text and the row detail.
  */
 
-import { cleanup, settle, untilHook, dialogFor, firstFromPack, made, makeCharacter, makeNpc, openSheet, pinDie, useAction, cardOf, PACK_FOR } from "./fixtures.mjs";
+import { cleanup, settle, untilHook, dialogFor, firstFromPack, made, makeCharacter, makeNpc, openSheet, pinDie, useAction, cardOf, PACK_FOR, KNOWN } from "./fixtures.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { AzerothCompendiumBrowser } from "../applications/compendium-browser.mjs";
 import { checkText } from "./geometry.mjs";
@@ -1244,7 +1244,7 @@ export function feedbackBatch(context) {
         await settle();
         assert.notEqual(plain.tabGroups.primary, "spells", "changeTab reached a tab the nav does not draw");
         const scroll = await fromPack(PACK_FOR.spell, "Cure Blight");
-        const [held] = await warrior.createEmbeddedDocuments("Item", [scroll.toObject()]);
+        const [held] = await warrior.createEmbeddedDocuments("Item", [scroll.toObject()], { ...KNOWN });
         await until(() => navTabs().includes("spells"));
         plain.changeTab("spells", "primary");
         await settle();

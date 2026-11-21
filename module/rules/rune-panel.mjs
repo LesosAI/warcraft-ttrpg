@@ -53,7 +53,9 @@ export function runePanelContext({ rows = [], weapons = {}, runicPower = null, i
     const w = weapons[row.itemId] ?? {};
     return {
       itemId: row.itemId,
-      name: row.name,
+      // The sheet's own name for the weapon where it gives one (08 §4: an unidentified blade is
+      // named by its kind), else the row's.
+      name: w.name ?? row.name,
       img: w.img ?? null,
       rarity: w.rarity ?? "common",
       rarityClass: w.rarityClass ?? null,

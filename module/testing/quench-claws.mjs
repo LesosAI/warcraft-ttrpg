@@ -11,7 +11,7 @@
  * Every document a test makes is deleted in `after`.
  */
 
-import { cleanup, fromPack, give, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, PACK_FOR, settle, tokenData, tokenDrawn, untilHook, warnings } from "./fixtures.mjs";
+import { cleanup, fromPack, give, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, PACK_FOR, settle, tokenData, tokenDrawn, untilHook, warnings, KNOWN } from "./fixtures.mjs";
 import { ANIMATIONS_SETTING, ANIMATION_SOUNDS_SETTING, ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { attackWithDialog, reactionStateOf } from "../applications/actions.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
@@ -90,7 +90,7 @@ async function hold(actor, name, { offHand = false } = {}) {
   const doc = await fromPack(PACK_FOR.weapon, name);
   if (!doc) throw new Error(`the weapons pack holds no "${name}"`);
   const source = doc.toObject();
-  const [item] = await actor.createEmbeddedDocuments("Item", [{ ...source, system: { ...source.system, equipped: true, offHand } }]);
+  const [item] = await actor.createEmbeddedDocuments("Item", [{ ...source, system: { ...source.system, equipped: true, offHand } }], { ...KNOWN });
   await until(() => actor.items.get(item.id)?.system?.equipped === true, `${name} in hand`);
   return actor.items.get(item.id);
 }
@@ -178,7 +178,7 @@ export function clawsBatch(context) {
         assert.include(said, game.i18n.format("AZEROTH.Claws.Refuse.Delete", { name: claws.name }), `the refusal did not say why: ${JSON.stringify(said)}`);
         // A hand create of a second set is refused too.
         const twice = await warnings(async () => {
-          await actor.createEmbeddedDocuments("Item", [claws.toObject()]).catch(() => null);
+          await actor.createEmbeddedDocuments("Item", [claws.toObject()], { ...KNOWN }).catch(() => null);
         });
         assert.equal(actor.items.filter(i => isClaws(i)).length, 1, "a second set was made by hand");
         assert.include(twice, game.i18n.format("AZEROTH.Claws.Refuse.Create", { name: claws.name }));
@@ -244,7 +244,7 @@ export function clawsBatch(context) {
         await pressRow(sheet, claws, "toggleEquipped");
         await until(() => actor.items.get(claws.id).system.equipped === true, "the claws equipped");
         const gsDoc = (await fromPack(PACK_FOR.weapon, "Greatsword")).toObject();
-        const [gs] = await actor.createEmbeddedDocuments("Item", [{ ...gsDoc, system: { ...gsDoc.system, equipped: false } }]);
+        const [gs] = await actor.createEmbeddedDocuments("Item", [{ ...gsDoc, system: { ...gsDoc.system, equipped: false } }], { ...KNOWN });
         await sheet.render({ force: true });
         await pressRow(sheet, gs, "toggleEquipped");
         await until(() => actor.items.get(gs.id).system.equipped === true, "the greatsword equipped");
@@ -561,7 +561,7 @@ export function deftBatch(context) {
       const [dagger, sword] = await owner.createEmbeddedDocuments("Item", [
         { ...daggerDoc, system: { ...daggerDoc.system, traits: oldTraits } },
         { ...swordDoc }
-      ]);
+      ], { ...KNOWN });
       const swordTraits = [...sword.system.traits];
       assert.notInclude(owner.items.get(dagger.id).system.traits, "Deft", "the old-world dagger already holds Deft");
       // The law alone, against the pack copy.

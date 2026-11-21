@@ -14,8 +14,7 @@
 
 import {
   bagOf, bagZone, cleanup, forgeDrop, gearInspector, gearTab, gearTile, inspect,
-  makeCharacter, openSheet, settle, warnings
-} from "./fixtures.mjs";
+  makeCharacter, openSheet, settle, warnings, KNOWN } from "./fixtures.mjs";
 import { checkText } from "./geometry.mjs";
 
 /** Wait for a condition. */
@@ -32,7 +31,7 @@ async function give(actor, name, packId = "azeroth-rpg.gear") {
   const pack = game.packs.get(packId);
   const doc = (await pack.getDocuments()).find(d => d.name === name);
   if (!doc) throw new Error(`${name} is not in ${packId}`);
-  const [item] = await actor.createEmbeddedDocuments("Item", [doc.toObject()]);
+  const [item] = await actor.createEmbeddedDocuments("Item", [doc.toObject()], { ...KNOWN });
   return item;
 }
 

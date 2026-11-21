@@ -28,7 +28,7 @@
  * deleted in `after`.
  */
 
-import { cleanup, drainAreaWork, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook, warnings, PACK_FOR, fromPack, tokenDrawn, quietScrollingText, tokenData } from "./fixtures.mjs";
+import { cleanup, drainAreaWork, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook, warnings, PACK_FOR, fromPack, tokenDrawn, quietScrollingText, tokenData, KNOWN } from "./fixtures.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { realmStateFor } from "../effects/spirit-realm.mjs";
 import { applyCondition } from "../effects/durations.mjs";
@@ -113,7 +113,7 @@ async function setHealth(actor, value) {
 /** A weapon from the pack, in hand. */
 async function wield(actor, name) {
   const source = (await fromPack(PACK_FOR.weapon, name)).toObject();
-  const [item] = await actor.createEmbeddedDocuments("Item", [{ ...source, system: { ...source.system, equipped: true } }]);
+  const [item] = await actor.createEmbeddedDocuments("Item", [{ ...source, system: { ...source.system, equipped: true } }], { ...KNOWN });
   await until(() => actor.items.get(item.id)?.system?.equipped === true, `${name} in hand`);
   return actor.items.get(item.id);
 }

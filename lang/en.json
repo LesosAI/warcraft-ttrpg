@@ -4,6 +4,80 @@
   "AZEROTH.Falling.Amount": "Damage",
   "AZEROTH.Falling.Apply": "Apply",
   "AZEROTH": {
+    "Identify": {
+      "Menu": "Identify",
+      "Title": "Identify the {item}",
+      "Card": "Identify",
+      "Passed": "{name} identifies the {item}: it is {identified}.",
+      "Failed": "{name} does not identify the {item}. It can be tried again after a Long Rest.",
+      "ComponentSpent": "One {component} is used up.",
+      "Gone": "The item to identify is no longer carried.",
+      "Refuse": {
+        "known": "That item is already identified.",
+        "notOwner": "You are unable to Identify the {item}. Only its owner can.",
+        "triedThisRest": "You are unable to Identify the {item} until after a Long Rest.",
+        "noComponent": "You are unable to Identify the {item} without {component}."
+      },
+      "Disguise": "{kind} (unidentified)",
+      "Slot": {
+        "head": "Helm",
+        "neck": "Necklace",
+        "shoulder": "Mantle",
+        "back": "Cloak",
+        "clothing": "Garment",
+        "tabard": "Tabard",
+        "wrist": "Bracers",
+        "hands": "Gloves",
+        "waist": "Belt",
+        "legs": "Leggings",
+        "feet": "Boots",
+        "finger": "Ring",
+        "trinket": "Trinket"
+      },
+      "Category": {
+        "cloth": "Cloth armor",
+        "leather": "Leather armor",
+        "studded": "Studded armor",
+        "mail": "Mail armor",
+        "plate": "Plate armor",
+        "none": "Shield"
+      },
+      "Type": {
+        "weapon": "Weapon",
+        "armor": "Armor",
+        "gear": "Item",
+        "consumable": "Consumable"
+      },
+      "UseLocked": "The {item} is unidentified: its Use cannot be called on until it is identified.",
+      "UseLockedShort": "Unidentified: its Use cannot be called on until it is identified.",
+      "SpellLocked": "The {item} is unidentified: its spells cannot be cast until it is identified.",
+      "Toggle": "Identified",
+      "Source": "an unidentified item",
+      "TipLine": "Unidentified",
+      "Note": "Unidentified: you know its kind and its quality and nothing more. It works when worn or wielded. Identify it from its right-click menu.",
+      "SheetKind": "Kind",
+      "SheetQuality": "Quality"
+    },
+    "Scroll": {
+      "Menu": "Read scroll",
+      "Name": "Scroll of {spell}",
+      "WrittenRow": "Written at",
+      "WrittenAt": "Written at {total} (DC {dc})",
+      "FromWritten": "From {name}, written at {total}",
+      "WriterTotal": "The writer's total",
+      "Inscribe": {
+        "Title": "Write {spell} on the scroll",
+        "Prompt": "The writer's Casting Test total for {spell}. {dc} is a bare success.",
+        "Label": "Write"
+      },
+      "Refuse": {
+        "notGM": "Only the GM writes a scroll.",
+        "notScroll": "{scroll} is not a scroll.",
+        "notSpell": "Only a spell can be written on {scroll}.",
+        "alreadyInscribed": "{scroll} is already written.",
+        "tierMismatch": "{spell} is a tier {spellTier} spell, and {scroll} takes a tier {scrollTier} spell."
+      }
+    },
     "Multiclass": {
       "NotSecond": "{name} is taken at creation only and is never a second class.",
       "HoldsCreationOnly": "A {name} takes no second class.",
@@ -3570,6 +3644,7 @@
       "FearCleanupFailed": "Damage was applied, but Fear could not be removed. Check the target's Fear effects before continuing.",
       "MindlessUnaffected": "{name} has no mind and is unaffected by {spell}.",
       "FromItem": "From {name}",
+      "FromItemRow": "From",
       "Inflict": "Inflict {condition}",
       "WoundedBeast": "Wounded Beast",
       "InflictOn": "{condition} on {name}",
@@ -4570,6 +4645,7 @@
       "DC": {
         "Label": "DC",
         "Given": "as the rule names it",
+        "Ruled": "set by the item's quality; it cannot be changed",
         "Defense": "the target's Defense",
         "Standard": "a Standard Test at your tier",
         "Spell": "10 + 2 per tier of the spell",

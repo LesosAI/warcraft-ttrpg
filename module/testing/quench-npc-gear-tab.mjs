@@ -19,7 +19,7 @@
  *    empty name input and failed every submit in silence.
  */
 
-import { cleanup, forgeDrop, fromPack, made, makeNpc, openSheet, pinDie, settle, useAction, PACK_FOR } from "./fixtures.mjs";
+import { cleanup, forgeDrop, fromPack, made, makeNpc, openSheet, pinDie, settle, useAction, PACK_FOR, KNOWN } from "./fixtures.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 
 /** Wait for a condition, the way every other batch does. */
@@ -35,7 +35,7 @@ const until = async (fn, what, ms = 5000) => {
 async function give(actor, name, packId) {
   const doc = await fromPack(packId, name);
   if (!doc) throw new Error(`${name} is not in ${packId}`);
-  const [item] = await actor.createEmbeddedDocuments("Item", [doc.toObject()]);
+  const [item] = await actor.createEmbeddedDocuments("Item", [doc.toObject()], { ...KNOWN });
   return item;
 }
 

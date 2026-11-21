@@ -23,7 +23,7 @@
  * Every document a test makes is deleted in `after`.
  */
 
-import { cleanup, giveTurn, made, makeBoss, makeCharacter, makeNpc, dialogFor, fromPack, pinDie, settle, untilHook, PACK_FOR, tokenData } from "./fixtures.mjs";
+import { cleanup, giveTurn, made, makeBoss, makeCharacter, makeNpc, dialogFor, fromPack, pinDie, settle, untilHook, PACK_FOR, tokenData, KNOWN } from "./fixtures.mjs";
 import { attackWithDialog, castWithDialog, npcAttackWithDialog, reactionRows } from "../applications/actions.mjs";
 // Where a distance between tokens is measured (D-732).
 import { distanceBetween, enemyDistances } from "../applications/roll-dialog.mjs";
@@ -91,7 +91,7 @@ async function arm(actor, name) {
   const doc = await fromPack(PACK_FOR.weapon, name);
   if (!doc) throw new Error(`the weapons pack holds no "${name}"`);
   const source = doc.toObject();
-  const [item] = await actor.createEmbeddedDocuments("Item", [{ ...source, system: { ...source.system, equipped: true } }]);
+  const [item] = await actor.createEmbeddedDocuments("Item", [{ ...source, system: { ...source.system, equipped: true } }], { ...KNOWN });
   await until(() => actor.items.get(item.id)?.system?.equipped === true, `${name} to be in hand`);
   return actor.items.get(item.id);
 }

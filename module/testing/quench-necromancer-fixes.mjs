@@ -19,7 +19,7 @@
  * Run alone with `QUENCH_BATCH=azeroth-rpg.necromancer-fixes`.
  */
 
-import { cleanup, forgeDrop, made, makeCharacter, makeNpc, openSheet, pinDie, quietScrollingText, settle, tokenData, untilHook, warnings } from "./fixtures.mjs";
+import { cleanup, forgeDrop, made, makeCharacter, makeNpc, openSheet, pinDie, quietScrollingText, settle, tokenData, untilHook, warnings, KNOWN } from "./fixtures.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { castFromSheet, chooser, fightWith, manaOf, nextTurnUntil, pick, pressCard, sceneWith, textOf, tokenOf, until } from "./quench-chronomancer-common.mjs";
 import { castWith, nextCard, npcAttacks, refusedCast, tick } from "./quench-necromancer-review.mjs";
@@ -450,7 +450,7 @@ export function necromancerFixesBatch(context) {
         const uuid = await spellUuid("Bone Shards");
         const [wand] = await necro.createEmbeddedDocuments("Item", [{
           name: "ZZ Wand of Shards", type: "gear", system: { rarity: "epic", budget: 4, spells: [{ uuid, name: "Bone Shards", dc: 14, uses: { value: 1, max: 1, per: "short" } }] }
-        }]);
+        }], { ...KNOWN });
         await bankMana(necro, 20);
         await bankEssence(necro, 2);
         const mana = manaOf(necro).value;

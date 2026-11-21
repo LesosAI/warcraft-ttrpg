@@ -16,7 +16,7 @@
  * `combatTurnChange` is called only once they are done.
  */
 
-import { cleanup, drainAreaWork, fromPack, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings, tokenDrawn, tokenData } from "./fixtures.mjs";
+import { cleanup, drainAreaWork, fromPack, made, makeCharacter, makeNpc, pinDie, settle, untilHook, warnings, tokenDrawn, tokenData, KNOWN } from "./fixtures.mjs";
 import { CARD_ACTIONS, regionFlagsFromCard } from "../dice/chat.mjs";
 import { pixelsPerFoot, placeArea } from "../canvas/regions.mjs";
 import { sweepAreas } from "../canvas/sustained-areas.mjs";
@@ -603,7 +603,7 @@ export function paladinBatch(context) {
       await fillPower(sorceress);
       // Owned, so the card's door finds the spell at once and arms its click
       // in the same call (quench-phase12's press follows the call the same way).
-      const [owned] = await sorceress.createEmbeddedDocuments("Item", [blizzard.toObject()]);
+      const [owned] = await sorceress.createEmbeddedDocuments("Item", [blizzard.toObject()], { ...KNOWN });
       const [token] = await scene.createEmbeddedDocuments("Token", [
         (await tokenData(sorceress, { x: 300, y: 300, actorLink: false, disposition: CONST.TOKEN_DISPOSITIONS.HOSTILE }))
       ]);

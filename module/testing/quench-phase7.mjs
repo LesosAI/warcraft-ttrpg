@@ -5,7 +5,7 @@
  * names its decision.
  */
 
-import { cleanup, settle, give, giveTurn, made, makeCharacter, makeNpc, openSheet, cardOf, dialogFor, untilHook, PACK_FOR, tokenData } from "./fixtures.mjs";
+import { cleanup, settle, give, giveTurn, made, makeCharacter, makeNpc, openSheet, cardOf, dialogFor, untilHook, PACK_FOR, tokenData, KNOWN } from "./fixtures.mjs";
 import { checkText } from "./geometry.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
@@ -867,7 +867,7 @@ export function automationBatch(context) {
       const index = await pack.getIndex({ fields: ["system.school", "system.duration.kind"] });
       const entry = index.find(e => e.system?.duration?.kind === "sustained" && e.system?.school === "holy");
       assert.ok(entry, "no sustained Holy spell in the pack");
-      const [spell] = await priest.createEmbeddedDocuments("Item", [(await pack.getDocument(entry._id)).toObject()]);
+      const [spell] = await priest.createEmbeddedDocuments("Item", [(await pack.getDocument(entry._id)).toObject()], { ...KNOWN });
       await priest.updatePool({ itemId: mana.itemId, kind: "power", value: mana.max });
       await priest.setFlag("azeroth-rpg", "sustaining", [{ spellId: "old", uuid: "old", name: "Old Sustain", itemId: mana.itemId }]);
       const card = await cardOf("spell", priest, { spell, face: 20 });

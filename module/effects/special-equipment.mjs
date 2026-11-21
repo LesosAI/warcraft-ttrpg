@@ -27,6 +27,9 @@ import {registerAlarmBot} from "./alarm-bot.mjs";
 import {registerHealerKit} from "./healer-kit.mjs";
 import {registerHarmBelt} from "./harm-prevention.mjs";
 import {registerUtilityVision} from "./utility-vision.mjs";
+// 08 §4 (D-1435): an unidentified Rare names its kind on every card, dialog and effect.
+import {cardName} from "../helpers/identify-words.mjs";
+import {enrich} from "../helpers/enrich.mjs";
 
 export const SPECIAL_EQUIPMENT_QUERY="azeroth-rpg.specialEquipment";
 export const WOLFSHEAD_QUERY="azeroth-rpg.wolfsheadEntry";
@@ -85,7 +88,7 @@ export async function requestSpecialEquipment({actor,item,targets=[],reaction=fa
     if(!budget)return null;reaction=budget.key==="reaction";
   }
   if(entry.preparation){
-    const confirmed=await foundry.applications.api.DialogV2.confirm({window:{title:item.name},content:`<p>${game.i18n.localize("AZEROTH.SpecialEquipment.Minute")}</p>`});
+    const confirmed=await foundry.applications.api.DialogV2.confirm({window:{title:cardName(item)},content:`<p>${game.i18n.localize("AZEROTH.SpecialEquipment.Minute")}</p>`});
     if(!confirmed)return null;
   }
   if(sourceOf(item)!==source){warn();return null;}
@@ -134,8 +137,10 @@ async function timed(actor,item,entry,{result=null,seconds=entry.seconds,changes
   if(old.length)await actor.deleteEmbeddedDocuments("ActiveEffect",old);
   requireWriter();
   const timing=entry.key==="spider-belt"?untilEndOfNextTurn(actor):null;
-  const data={name:item.name,img:item.img,origin:item.uuid,disabled:false,transfer:false,
-    description:item.system.description,system:{changes},
+  // The effect is read on the wearer's sheet: an unidentified thing names its kind and lays no prose (D-1435).
+  const shown=cardName(item),veiled=shown!==item.name;
+  const data={name:shown,img:item.img,origin:item.uuid,disabled:false,transfer:false,
+    description:veiled?"":item.system.description,system:{changes},
     ...(timing??spellTiming(actor,{value:seconds,units:"seconds"})),
     flags:{[NS]:{[FLAG]:{version:1,key:entry.key,result,expiresAt:timing?null:clock()+seconds,food:entry.food===true,appearance:entry.appearance===true&&result!=="featherfall"},...extraFlags}}};
   const made=(await actor.createEmbeddedDocuments("ActiveEffect",[data]))[0];
@@ -153,12 +158,15 @@ export async function specialEquipmentQueryHandler(data={}, {user}={}){
     if((owner.getFlag(NS,"specialEquipmentRequests")??[]).some(r=>r.id===data.requestId))return {ok:false,replay:true};
     if(realmRefusalFor(actor,"gear")||dispersionRefusal(actor,"gear"))return {ok:false};
     const item=actor.items.get(data.itemId),entry=specialEquipmentOf(item);
+    // What every title, the roll, the immunity and the card call it: the kind where a player is
+    // kept from the thing, because the card is public and the GM's dialogs say what it posts (D-1435).
+    const shown=item?cardName(item):"",veiled=Boolean(item)&&shown!==item.name;
     const doorsOpen=()=>!realmRefusalFor(actor,"gear")&&!dispersionRefusal(actor,"gear")
       &&!forcedShapeRefusal(actor.shape,entry?.slot?"signature":data.reaction?"reaction":null,{gm:user.isGM===true});
     const current=()=>gm()&&eligible(actor)&&doorsOpen()&&actor.testUserPermission(user,"OWNER")&&actor.items.get(data.itemId)===item&&sourceOf(item)===data.source&&guardPendingCustodyItem(item).ok;
     if(!entry||entry.passive||!current()||(entry.slot&&!item.system.equipped)||(!entry.slot&&item.system.quantity!==null&&item.system.quantity<=0))return {ok:false};
     if(entry.preparation){
-      const completed=await foundry.applications.api.DialogV2.confirm({window:{title:item.name},content:`<p>${game.i18n.localize("AZEROTH.SpecialEquipment.Minute")}</p>`});
+      const completed=await foundry.applications.api.DialogV2.confirm({window:{title:shown},content:`<p>${game.i18n.localize("AZEROTH.SpecialEquipment.Minute")}</p>`});
       if(!completed||!current())return {ok:false};
     }
     if(entry.per&&!equipmentLimitAvailable(entry.key,usesOf(owner),usesOf(item)))return {ok:false};
@@ -176,7 +184,7 @@ export async function specialEquipmentQueryHandler(data={}, {user}={}){
       target=await fromUuid(data.targetUuid);
       if(!target||!await touchAllowed())return {ok:false};
       if(!target.testUserPermission(user,"OWNER")){
-        const yes=await foundry.applications.api.DialogV2.confirm({window:{title:item.name},content:`<p>${foundry.utils.escapeHTML(game.i18n.format("AZEROTH.SpecialEquipment.Consent",{name:target.name}))}</p>`});
+        const yes=await foundry.applications.api.DialogV2.confirm({window:{title:shown},content:`<p>${foundry.utils.escapeHTML(game.i18n.format("AZEROTH.SpecialEquipment.Consent",{name:target.name}))}</p>`});
         if(!yes||!current()||!await touchAllowed())return {ok:false};
       }
     }
@@ -219,7 +227,7 @@ export async function specialEquipmentQueryHandler(data={}, {user}={}){
     let result=null;
     if(entry.random){
       const roll=await new Roll(`1d${entry.random}`).evaluate();
-      result=roll.total;await roll.toMessage({speaker:ChatMessage.getSpeaker({actor}),flavor:item.name});
+      result=roll.total;await roll.toMessage({speaker:ChatMessage.getSpeaker({actor}),flavor:shown});
       requireWriter();
     }
     if(exchange){
@@ -244,7 +252,7 @@ export async function specialEquipmentQueryHandler(data={}, {user}={}){
         const changes=(e.system?.changes??[]).filter(c=>!(dedicated&&c.key==="system.speed"&&c.type==="override"&&Number(c.value)===0));
         await e.update({statuses,"system.changes":changes});
       }
-      await timed(actor,item,entry,{extraFlags:{[IMMUNE_FLAG]:{conditions:["entangled"],source:item.name}}});
+      await timed(actor,item,entry,{extraFlags:{[IMMUNE_FLAG]:{conditions:["entangled"],source:shown}}});
     }else{
       let seconds=entry.seconds,changes=[];
       if(entry.key==="noggenfogger-elixir"){
@@ -254,7 +262,9 @@ export async function specialEquipmentQueryHandler(data={}, {user}={}){
       await timed(actor,item,entry,{result,seconds,changes});
     }
     requireWriter();
-    const message=await ChatMessage.create({speaker:ChatMessage.getSpeaker({actor}),content:`<h3>${foundry.utils.escapeHTML(item.name)}</h3>${item.system.description}`,
+    // The prose is enriched, never posted raw (CLAUDE.md §15), and an unidentified thing posts none.
+    const prose=veiled?"":await enrich(item.system.description??"",{relativeTo:item});
+    const message=await ChatMessage.create({speaker:ChatMessage.getSpeaker({actor}),content:`<h3>${foundry.utils.escapeHTML(shown)}</h3>${prose}`,
       flags:{[NS]:{kind:"specialEquipment",key:entry.key,result,requestId:data.requestId}}});
     requireWriter();await owner.setFlag(NS,RECEIPT,{...owner.getFlag(NS,RECEIPT),stage:"complete",messageUuid:message.uuid});
     return {ok:true,messageUuid:message.uuid};
@@ -350,7 +360,7 @@ export async function wolfsheadAfterShape(actor,{before,kind,effect}){
   if(!item)return;
   const entry=specialEquipmentOf(item),owner=ownerOf(actor);
   if(!equipmentLimitAvailable(entry.key,usesOf(owner),usesOf(item)))return;
-  const yes=await foundry.applications.api.DialogV2.confirm({window:{title:item.name},content:`<p>${game.i18n.localize("AZEROTH.SpecialEquipment.Wolfshead")}</p>`});
+  const yes=await foundry.applications.api.DialogV2.confirm({window:{title:cardName(item)},content:`<p>${game.i18n.localize("AZEROTH.SpecialEquipment.Wolfshead")}</p>`});
   if(!yes||!item.system.equipped||!actor.effects.has(effect.id)||!equipmentLimitAvailable(entry.key,usesOf(owner),usesOf(item)))return;
   const data={actorUuid:actor.uuid,itemId:item.id,effectId:effect.id,entryId:effect.getFlag(NS,"equipmentShapeEntry")?.id};
   return gm()?wolfsheadQueryHandler(data,{user:game.user}):game.users?.activeGM?.query(WOLFSHEAD_QUERY,data,{timeout:180000});

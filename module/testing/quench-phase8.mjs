@@ -5,7 +5,7 @@
  * outside a fight and the stepper's glyphs.
  */
 
-import { cleanup, settle, gearTab, gearTile, give, inspect, made, makeCharacter, openSheet, fromPack, PACK_FOR } from "./fixtures.mjs";
+import { cleanup, settle, gearTab, gearTile, give, inspect, made, makeCharacter, openSheet, fromPack, PACK_FOR, KNOWN } from "./fixtures.mjs";
 import { checkText } from "./geometry.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { rarityClass } from "../helpers/rarity.mjs";
@@ -39,7 +39,7 @@ export function forgeBatch(context) {
     };
     const embed = async (actor, packId, name) => {
       const doc = await fromPack(packId, name);
-      const [item] = await actor.createEmbeddedDocuments("Item", [doc.toObject()]);
+      const [item] = await actor.createEmbeddedDocuments("Item", [doc.toObject()], { ...KNOWN });
       return item;
     };
 
@@ -240,7 +240,7 @@ export function forgeBatch(context) {
       const [relic] = await actor.createEmbeddedDocuments("Item", [{
         name: "Chalice of the Dawn", type: "gear",
         system: { cost: 100, rarity: "rare", budget: 0, signature: SIGNATURE_HTML }
-      }]);
+      }], { ...KNOWN });
       const forge = new AzerothForge({ item: relic });
       await forge.render({ force: true });
       await settle();
@@ -265,7 +265,7 @@ export function forgeBatch(context) {
       const [relic] = await actor.createEmbeddedDocuments("Item", [{
         name: "Vigil Lantern", type: "gear",
         system: { cost: 100, rarity: "rare", budget: 0, signature: SIGNATURE_HTML }
-      }]);
+      }], { ...KNOWN });
       const sentence = "It glows faintly when undead are near.";
       const forge = new AzerothForge({ item: relic });
       await forge.render({ force: true });
@@ -316,7 +316,7 @@ export function forgeBatch(context) {
       const actor = await makeCharacter({ name: actorName });
       const [relic] = await actor.createEmbeddedDocuments("Item", [{
         name: itemName, type: "gear", system: { cost: 100, rarity: "rare", budget: 0 }
-      }]);
+      }], { ...KNOWN });
       const forge = new AzerothForge({ item: relic });
       await forge.render({ force: true });
       await settle();
@@ -411,7 +411,7 @@ export function forgeBatch(context) {
       const { castItemSpell } = await import("../applications/actions.mjs");
       await game.settings.set("azeroth-rpg", ROLL_DIALOG_SETTING, "skip");
       const actor = await makeCharacter({ name: "ZZ Forge Wand", classes: [["Shaman", 5]] });
-      const [wand] = await actor.createEmbeddedDocuments("Item", [{ name: "Wand", type: "gear", system: { cost: 100, rarity: "common", budget: 0 } }]);
+      const [wand] = await actor.createEmbeddedDocuments("Item", [{ name: "Wand", type: "gear", system: { cost: 100, rarity: "common", budget: 0 } }], { ...KNOWN });
       const gronn = await affix("of the Gronn");
       const wave = await fromPack(PACK_FOR.spell, "Healing Wave");
       const forge = new AzerothForge({ item: wand });
@@ -452,7 +452,7 @@ export function forgeBatch(context) {
       const [wand] = await actor.createEmbeddedDocuments("Item", [{
         name: "Wand of Renewal", type: "gear",
         system: { rarity: "epic", budget: 4, spells: [{ uuid: wave.uuid, name: wave.name, dc: 14, uses: { value: 1, max: 1, per: "short" } }] }
-      }]);
+      }], { ...KNOWN });
       const sheet = await openSheet(actor);
       try {
         sheet.changeTab("spells", "primary");
@@ -595,7 +595,7 @@ export function forgeBatch(context) {
       assert.lengthOf(empty.options, 0);
       assert.ok(empty.note, "no note says a poison must be carried");
       const poison = await fromPack(PACK_FOR.equipment, "Crippling poison");
-      await rogue.createEmbeddedDocuments("Item", [poison.toObject()]);
+      await rogue.createEmbeddedDocuments("Item", [poison.toObject()], { ...KNOWN });
       const some = await featureChoices(rogue, feature(rogue, "Poisoner"));
       assert.deepEqual(some.map(o => o.name), ["Crippling poison"]);
     });

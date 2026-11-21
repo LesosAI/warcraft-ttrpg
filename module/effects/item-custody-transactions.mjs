@@ -7,6 +7,8 @@
  * reconcile source, custody and destination documents before acting.
  */
 import { weightFor } from "../rules/weight.mjs";
+// 08 §4 (D-1435): a parcel is named as each reader may see it.
+import { cardName, shownName } from "../helpers/identify-words.mjs";
 import { advanceItemCustody, createItemCustodyRecord } from "../rules/item-custody.mjs";
 import { ITEM_CUSTODY_PENDING_FLAG, isItemCustodyPending } from "../rules/item-custody-guard.mjs";
 import { utilityDialog } from "../applications/thematic-utility-dialog.mjs";
@@ -22,6 +24,9 @@ export const ITEM_CUSTODY_FINISH_QUERY = "azeroth-rpg.itemCustodyFinish";
 export const ITEM_CUSTODY_OPERATION_QUERY = "azeroth-rpg.itemCustodyOperation";
 export const ITEM_CUSTODY_RECEIPT = "thematicItemCustody";
 const CUSTODY_WRITE_OPTIONS = Object.freeze({azerothItemCustody: "bypass"});
+// A parcel arrives exactly as it left: no identification flag is written on the way, because
+// `same` compares the created document with the parcel (08 §4; D-1435).
+const CUSTODY_CREATE_OPTIONS = Object.freeze({...CUSTODY_WRITE_OPTIONS, azerothIdentify: "asIs"});
 const NS = "azeroth-rpg";
 const refuse = reason => ({ok: false, reason});
 const resolve = uuid => { try { return fromUuidSync(uuid); } catch { return null; } };
@@ -201,7 +206,7 @@ async function chooseCustodyCast(data, user) {
       const parcel = physicalParcel(owner, item.id);
       if (!parcel || parcel.weightLb > (pact ? 10 : 1) || item.system?.equipped) continue;
       candidates.push({ownerUuid: owner.uuid, itemId: item.id, participantTokenUuid: target.uuid,
-        label: `${owner.name}: ${item.name} (${parcel.weightLb} lb)`});
+        label: `${owner.name}: ${shownName(item)} (${parcel.weightLb} lb)`});
     }
   }
   if (!candidates.length) return refuse("no-eligible-parcels");
@@ -347,7 +352,7 @@ async function writeReceipt(message, state) {
 function itemAt(actor, id) { return actor?.items?.get?.(id) ?? null; }
 
 async function createItem(actor, data) {
-  const made = await actor.createEmbeddedDocuments("Item", [structuredClone(data)], CUSTODY_WRITE_OPTIONS);
+  const made = await actor.createEmbeddedDocuments("Item", [structuredClone(data)], CUSTODY_CREATE_OPTIONS);
   const item = made?.[0] ?? null;
   return item && itemAt(actor, item.id) === item ? item : null;
 }
@@ -537,7 +542,7 @@ async function prepareItemCustodyInternal({kind, transactionId = foundry.utils.r
       && current?.parcels?.some(prior => prior.itemUuid === row.itemUuid);
   }));
   if (reserved) return refuse("item-already-reserved");
-  const summary = rows.map(row => `${worldActor(row.ownerUuid).name} deposits ${row.itemData.name} (${row.weightLb} lb) for ${worldActor(row.recipientUuid).name}`).join("; ");
+  const summary = rows.map(row => `${worldActor(row.ownerUuid).name} deposits ${shownName(row.itemData)} (${row.weightLb} lb) for ${worldActor(row.recipientUuid).name}`).join("; ");
   for (const row of rows) {
     const actor = worldActor(row.ownerUuid);
     const consent = await askOwnerConsent(actor, {kind, ownerUuid: actor.uuid, itemId: row.itemId, itemUuid: row.itemUuid,
@@ -549,7 +554,7 @@ async function prepareItemCustodyInternal({kind, transactionId = foundry.utils.r
     // direct parcels query. The chooser is convenience only and never supplies
     // the rules-critical casting-time or unattended-object judgement.
     const review = await utilityDialog({title: "GM review: Pact Escrow", note:
-      `Confirm the one-minute casting time elapsed and both selected items stayed unattended as specific, nonliving objects: ${rows.map(row => row.itemData.name).join(" and ")}.`, fields: [
+      `Confirm the one-minute casting time elapsed and both selected items stayed unattended as specific, nonliving objects: ${rows.map(row => shownName(row.itemData)).join(" and ")}.`, fields: [
       {name: "minute", type: "checkbox", label: "The one-minute casting time has elapsed"},
       {name: "unattended", type: "checkbox", label: "Both are specific unattended nonliving objects"}
     ]});
@@ -561,12 +566,12 @@ async function prepareItemCustodyInternal({kind, transactionId = foundry.utils.r
         || !Number.isFinite(mission.distanceMiles) || mission.distanceMiles < 0 || mission.distanceMiles > 20) return refuse("destination");
     const row = rows[0], recipient = worldActor(row.recipientUuid), caster = worldActor(row.ownerUuid);
     const consent = await askRecipientConsent(recipient, {recipientUuid: recipient.uuid, casterName: caster.name,
-      parcelName: row.itemData.name, destinationLabel: mission.destinationLabel});
+      parcelName: cardName(row.itemData), destinationLabel: mission.destinationLabel});
     if (!consent.ok) return consent;
   }
   let approvedMission = null;
   if (kind === "phoenix-courier") {
-    const review = await utilityDialog({title: "GM review: Phoenix Courier", note: `${rows[0].itemData.name} to ${mission.destinationLabel} (${mission.distanceMiles} miles). Confirm the destination was visited and route is physically traversable.`, fields: [
+    const review = await utilityDialog({title: "GM review: Phoenix Courier", note: `${shownName(rows[0].itemData)} to ${mission.destinationLabel} (${mission.distanceMiles} miles). Confirm the destination was visited and route is physically traversable.`, fields: [
       {name: "visited", type: "checkbox", label: "The caster has visited this destination"},
       {name: "withinRange", type: "checkbox", label: "This destination is within 20 miles"},
       {name: "route", type: "checkbox", label: "A physically traversable route exists and closed barriers will stop the courier"},

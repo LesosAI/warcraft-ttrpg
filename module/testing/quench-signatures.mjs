@@ -19,7 +19,7 @@
  * Every document a test makes is deleted in `after`.
  */
 
-import { cardOf, cleanup, fromPack, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle } from "./fixtures.mjs";
+import { cardOf, cleanup, fromPack, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle, KNOWN } from "./fixtures.mjs";
 import { attackWithDialog, useSignatureWithDialog } from "../applications/actions.mjs";
 import { prepareRoll } from "../applications/roll-dialog.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
@@ -135,7 +135,7 @@ async function plainCreature() {
 
 /** Put a pack document on an actor, equipped. */
 async function equip(actor, source, name = `ZZ ${source.name}`) {
-  const [item] = await actor.createEmbeddedDocuments("Item", [{ ...source.toObject(), name }]);
+  const [item] = await actor.createEmbeddedDocuments("Item", [{ ...source.toObject(), name }], { ...KNOWN });
   await item.update({ "system.equipped": true });
   return item;
 }
@@ -218,7 +218,7 @@ export function signatureBatch(context) {
           signature: "<p>You cannot be Frightened.</p>",
           signatureEffect: { kind: "standing", gates: [], refuses: ["frightened"] }
         }
-      }]);
+      }], { ...KNOWN });
       made.push(helm);
       await until(() => (actor.system.conditionImmunities ?? []).includes("frightened"),
         "the Signature's refusal reaching the prepared actor");
@@ -260,7 +260,7 @@ export function signatureBatch(context) {
             use: { action: "half", uses: { max: 1, value: 0, per: "short" }, note: "ZZ the note" }
           }
         }
-      }]);
+      }], { ...KNOWN });
       made.push(item);
       assert.equal(item.system.signatureEffect.use.uses.value, 0, "the fixture did not spend the use");
 
@@ -383,7 +383,7 @@ export function signatureBatch(context) {
           signature: "<p>A Paladin wearing it adds 2 to their Strength.</p>",
           signatureEffect: { kind: "standing", gates: [{ kind: "class", value: "Paladin" }], grants: ["+2 Strength"] }
         }
-      }]);
+      }], { ...KNOWN });
       made.push(belt);
       await until(() => actor.system.abilities.str.total === before + 2,
         "the Signature's grant reaching the score");
@@ -431,7 +431,7 @@ export function signatureBatch(context) {
             grants: ["+2 Defense", "+10 Speed", "+1 Initiative", "+3 Attack"]
           }
         }
-      }]);
+      }], { ...KNOWN });
       made.push(charm);
       await until(() => actor.system.defense === before.defense + 2,
         "the Signature's +2 Defense reaching the prepared actor");
@@ -488,7 +488,7 @@ export function signatureBatch(context) {
             signature: "<p>It adds 3 to your Attack Tests.</p>",
             signatureEffect: { kind: "standing", gates: [], grants: ["+3 Attack"] }
           }
-        }]);
+        }], { ...KNOWN });
         made.push(ring);
         await until(() => actor.system.attackBonus === 3, "the +3 Attack reaching the prepared actor");
         const armed = await attackWithDialog(actor, sword, null, { dc: 5 });
@@ -516,7 +516,7 @@ export function signatureBatch(context) {
           signature: "<p>You take a Boon on Parry Tests.</p>",
           signatureEffect: { kind: "standing", gates: [], grants: ["A Boon on Parry Tests"] }
         }
-      }]);
+      }], { ...KNOWN });
       made.push(aegis);
       await until(() => (actor.system.grants?.testBoonSources?.parry ?? []).length === 1,
         "the Boon on the Parry reaching the prepared actor");
@@ -555,7 +555,7 @@ export function signatureBatch(context) {
           signature: "<p>It adds 2 to your Initiative.</p>",
           signatureEffect: { kind: "standing", gates: [], grants: ["+2 Initiative"] }
         }
-      }]);
+      }], { ...KNOWN });
       made.push(pendant);
       await until(() => actor.system.initiative === 14, "the +2 Initiative on a Dex 14 character (10 + 2 + 2)");
 
@@ -601,7 +601,7 @@ export function signatureBatch(context) {
       // ---- the draught, through the real door. NO BONUS.
       const draught = await fromPack("azeroth-rpg.gear", "Healing draught");
       assert.equal(draught.system.use.heal.health, 4, "the pack no longer heals 4 with a Healing draught");
-      const [held] = await priest.createEmbeddedDocuments("Item", [{ ...draught.toObject(), name: "ZZ Healing draught" }]);
+      const [held] = await priest.createEmbeddedDocuments("Item", [{ ...draught.toObject(), name: "ZZ Healing draught" }], { ...KNOWN });
       const hurt = Math.max(1, priest.system.health.max - 10);
       await priest.update({ "system.health.value": hurt });
       await until(() => priest.system.health.value === hurt, "the Priest's Health set");
@@ -627,7 +627,7 @@ export function signatureBatch(context) {
             use: { action: "half", uses: { max: 1, value: 1, per: "short" }, heal: { health: 4 } }
           }
         }
-      }]);
+      }], { ...KNOWN });
       made.push(horn);
       // Health with room to give back, so the heal is visible.
       await actor.update({ "system.health.value": 1 });
@@ -668,7 +668,7 @@ export function signatureBatch(context) {
             use: { action: "reaction", mitigates: { halve: true } }
           }
         }
-      }]);
+      }], { ...KNOWN });
       made.push(plate);
 
       const warned = await noticesFrom("warn", async () => {
@@ -711,7 +711,7 @@ export function signatureBatch(context) {
           spells: [{ uuid, name: first.name, dc: 13, uses: { max: 0, value: 0 } }],
           signatureEffect: { kind: "spell", gates: [{ kind: "class", value: "Priest" }] }
         }
-      }]);
+      }], { ...KNOWN });
       made.push(robe);
 
       const since = game.messages.size;
@@ -758,7 +758,7 @@ export function signatureBatch(context) {
             gated: [{ gates: [{ kind: "class", value: "Shaman" }], grants: ["+2 Damage Rating"] }]
           }
         }
-      }]);
+      }], { ...KNOWN });
       made.push(axe);
 
       // **THE PREPARED ACTOR** — `CharacterData#prepareDerivedData` composes
@@ -834,7 +834,7 @@ export function signatureBatch(context) {
       });
 
       const rogue = await makeCharacter({ name: "ZZ Press Gate Rogue", classes: [["Rogue", 3]] });
-      const [rogueHorn] = await rogue.createEmbeddedDocuments("Item", [horn()]);
+      const [rogueHorn] = await rogue.createEmbeddedDocuments("Item", [horn()], { ...KNOWN });
       made.push(rogueHorn);
       await rogue.update({ "system.health.value": 1 });
 
@@ -874,7 +874,7 @@ export function signatureBatch(context) {
 
       // ---- and the same item on a Shaman presses.
       const shaman = await makeCharacter({ name: "ZZ Press Gate Shaman", classes: [["Shaman", 3]] });
-      const [shamanHorn] = await shaman.createEmbeddedDocuments("Item", [horn()]);
+      const [shamanHorn] = await shaman.createEmbeddedDocuments("Item", [horn()], { ...KNOWN });
       made.push(shamanHorn);
       await shaman.update({ "system.health.value": 1 });
       const before = game.messages.size;
@@ -916,7 +916,7 @@ export function signatureBatch(context) {
       const [blade] = await actor.createEmbeddedDocuments("Item", [{
         name: "ZZ Tidecaller's Blade", type: "weapon",
         system: { rarity: "epic", equipped: true, signature: prose, signatureEffect: descriptor }
-      }]);
+      }], { ...KNOWN });
       made.push(blade);
       // THE STORED SHAPE, through the schema and `cleanSignature`: an empty
       // branch that reached the document would draw the row all the same.
@@ -997,7 +997,7 @@ export function signatureBatch(context) {
           signature: "<p>A Paladin wearing it inflicts a Critical Injury on a natural 19.</p>",
           signatureEffect: { kind: "standing", gates: [{ kind: "class", value: "Paladin" }], criticalOn: 19 }
         }
-      }]);
+      }], { ...KNOWN });
       made.push(pressed);
       for (const i of actor.items.filter(x => x.name.startsWith("ZZ "))) made.push(i);
 
@@ -1072,7 +1072,7 @@ export function signatureBatch(context) {
           signature: "<p>At the start of each of your turns, regain 1 Health.</p>",
           signatureEffect: { kind: "tick", gates: [], tick: { health: 1 } }
         }
-      }]);
+      }], { ...KNOWN });
       made.push(ring);
       const sheet = ring.sheet;
       await sheet.render({ force: true });
@@ -1242,7 +1242,7 @@ export function signatureBatch(context) {
       /** One base, forged with the sentence, embedded on the Mage and worn. */
       const forgeOnto = async (entry, text, label) => {
         const source = await pack.getDocument(entry._id);
-        const [item] = await actor.createEmbeddedDocuments("Item", [{ ...source.toObject(), name: `ZZ ${label}` }]);
+        const [item] = await actor.createEmbeddedDocuments("Item", [{ ...source.toObject(), name: `ZZ ${label}` }], { ...KNOWN });
         assert.isTrue(AzerothForge.forgeable(item), `${label} cannot be forged`);
         const forge = new AzerothForge({ item });
         const p = await forge.apply({ signatureKind: "gated", signatureText: text });
@@ -1643,7 +1643,7 @@ export function signatureBatch(context) {
       const raised = [];
       const hook = Hooks.on("preUpdateActor", doc => { if (doc.id === npc.id) raised.push(doc.id); });
       try {
-        await npc.createEmbeddedDocuments("Item", [career.toObject()]);
+        await npc.createEmbeddedDocuments("Item", [career.toObject()], { ...KNOWN });
         await settle();
         await new Promise(r => setTimeout(r, 250));
         assert.deepEqual(raised, [], "dropping a career on a creature still updates it");
@@ -1660,7 +1660,7 @@ export function signatureBatch(context) {
       assert.equal(two.length, 2, "the races pack holds fewer than two peoples");
       for (const entry of two) {
         const doc = await races.getDocument(entry._id);
-        await npc.createEmbeddedDocuments("Item", [doc.toObject()]);
+        await npc.createEmbeddedDocuments("Item", [doc.toObject()], { ...KNOWN });
         await settle();
       }
       await new Promise(r => setTimeout(r, 250));
@@ -1690,7 +1690,7 @@ export function signatureBatch(context) {
             kind: "standing", gates: [{ kind: "race", value: "Orc" }], refuses: ["frightened"]
           }
         }
-      }]);
+      }], { ...KNOWN });
       made.push(banner);
       await until(() => (npc.system.conditionImmunities ?? []).includes("frightened"),
         "the race-gated refusal reaching the creature");
@@ -1724,7 +1724,7 @@ export function signatureBatch(context) {
             kind: "standing", gates: [{ kind: "corruption", value: "fel 0" }], refuses: ["frightened"]
           }
         }
-      }]);
+      }], { ...KNOWN });
       made.push(idol);
       await settle();
       await new Promise(r => setTimeout(r, 250));
@@ -1758,7 +1758,7 @@ export function signatureBatch(context) {
             use: { action: "half", cost: { pool: "mana", amount: 1 }, heal: { health: 3 } }
           }
         }
-      }]);
+      }], { ...KNOWN });
       made.push(rod);
       await npc.update({ "system.health.value": 1 });
 
@@ -1798,7 +1798,7 @@ export function signatureBatch(context) {
             use: { action: "half", resist: { resilience: "spirit", dc: null } }
           }
         }
-      }]);
+      }], { ...KNOWN });
       made.push(censer);
 
       const card = await useSignatureWithDialog(npc, censer);
@@ -1825,7 +1825,7 @@ export function signatureBatch(context) {
           description: "<p><strong>Effect.</strong> The drinker removes 1 Fatigue.</p>",
           use: { kind: "draught", action: "half", target: "self", heal: { fatigue: 1 } }
         }
-      }]);
+      }], { ...KNOWN });
       made.push(draught);
 
       const card = await game.system.azeroth.workflows.useGear({ actor: npc, item: draught, targets: [] });

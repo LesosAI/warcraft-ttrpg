@@ -16,7 +16,7 @@
  * Every document a test makes is deleted in `after`.
  */
 
-import { cleanup, fromPack, giveTurn, made, makeCharacter, makeNpc, pinDie, settle, untilHook, PACK_FOR, tokenDrawn, tokenData } from "./fixtures.mjs";
+import { cleanup, fromPack, giveTurn, made, makeCharacter, makeNpc, pinDie, settle, untilHook, PACK_FOR, tokenDrawn, tokenData, KNOWN } from "./fixtures.mjs";
 import { attackWithDialog, npcAttackWithDialog } from "../applications/actions.mjs";
 // The card's own Apply, pressed rather than imitated: the `damaged` mark is
 // written on that path and nothing else (D-681).
@@ -77,7 +77,7 @@ async function arm(actor, name) {
   const doc = await fromPack(PACK_FOR.weapon, name);
   if (!doc) throw new Error(`the weapons pack holds no "${name}"`);
   const source = doc.toObject();
-  const [item] = await actor.createEmbeddedDocuments("Item", [{ ...source, system: { ...source.system, equipped: true } }]);
+  const [item] = await actor.createEmbeddedDocuments("Item", [{ ...source, system: { ...source.system, equipped: true } }], { ...KNOWN });
   await until(() => actor.items.get(item.id)?.system?.equipped === true, `${name} to be in hand`);
   return actor.items.get(item.id);
 }

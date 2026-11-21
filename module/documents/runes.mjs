@@ -26,6 +26,7 @@ import { RUNIC_POWER, inscribe, refillRunes, refundRunes, restedSlots, runeWrite
 import { trainingProfile, weaponTraining } from "../rules/equipment-training.mjs";
 import { INSCRIBE_FLAG, inscriptionOpened } from "../rules/death-knight.mjs";
 import { poolWrite } from "./pool-writes.mjs";
+import { shownName } from "../helpers/identify-words.mjs";
 // The rune flare's record, written on the spend's own update (run F5).
 import { RUNE_SPEND_OPTION, runeSpendCue } from "../rules/animation-records.mjs";
 
@@ -69,7 +70,7 @@ export async function inscribeRunes(actor, weapon, { blood = 0, frost = 0, grip 
     const trained = Boolean(weapon) && weaponTraining(weapon, accessOf(actor));
     const made = inscribe({ weapon, trained, blood, frost, grip });
     if (made.refusal) {
-      ui.notifications?.warn(game.i18n.format(`AZEROTH.Runes.Refuse.${made.refusal}`, { name: weapon?.name ?? "" }));
+      ui.notifications?.warn(game.i18n.format(`AZEROTH.Runes.Refuse.${made.refusal}`, { name: weapon ? shownName(weapon) : "" }));
       return { ok: false, refusal: made.refusal };
     }
     await weapon.update({ "system.runes": made.runes });

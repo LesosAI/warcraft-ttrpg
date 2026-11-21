@@ -64,13 +64,15 @@ export function kindOf(item) {
  * @param {{actorUuid?: string|null}} [options]
  * @returns {object|null} null where the item is not something to press
  */
-export function macroPayloadFor(item, { actorUuid = null } = {}) {
+export function macroPayloadFor(item, { actorUuid = null, itemName } = {}) {
   const kind = kindOf(item);
   if (!kind) return null;
   return {
     kind,
     itemId: item.id ?? null,
-    itemName: item.name ?? "",
+    // The caller may withhold the name (08 §4, an unidentified thing; D-1435): `null` then, and
+    // `matchItem` finds the thing by its id alone.
+    itemName: itemName === undefined ? (item.name ?? "") : itemName,
     actorUuid: actorUuid ?? null
   };
 }
@@ -87,8 +89,8 @@ export function macroPayloadFor(item, { actorUuid = null } = {}) {
  * @param {{actorUuid?: string|null}} [options]
  * @returns {string|null}
  */
-export function macroCommandFor(item, { actorUuid = null } = {}) {
-  const payload = macroPayloadFor(item, { actorUuid });
+export function macroCommandFor(item, { actorUuid = null, itemName } = {}) {
+  const payload = macroPayloadFor(item, { actorUuid, itemName });
   if (!payload) return null;
   return `await game.system.azeroth.macros.useItem(${JSON.stringify(payload)});`;
 }

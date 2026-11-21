@@ -311,6 +311,18 @@ function orThrow(asked, made, who) {
   return made;
 }
 
+/**
+ * **A FIXTURE'S THING ARRIVES KNOWN** (08 §4; D-1435). A fixture is a GM's macro stating what
+ * a character holds, and a Rare it embeds would otherwise arrive unidentified and lock its
+ * Signature's Use and its spells. The Quench fixtures are on the closed list of the
+ * identification opt-out (`identify-doors.test.mjs`); a test that wants a found thing asks
+ * `give(..., {unidentified: true})`.
+ */
+// **SPREAD IT, NEVER PASS IT** (`{ ...KNOWN }`): core writes `parent` and its own keys onto the
+// operation object it is handed, so the frozen original throws *object is not extensible*, and a
+// shared mutable one would carry the last create's parent into the next.
+export const KNOWN = Object.freeze({ azerothIdentify: "known" });
+
 export async function makeCharacter({
   name = "ZZ Quench Character",
   classes = [],          // [["Warrior", 5], ["Rogue", 3]]
@@ -337,7 +349,7 @@ export async function makeCharacter({
   if (bags.length) {
     const carried = [];
     for (const n of bags) carried.push((await fromPack(PACK_FOR.equipment, n)).toObject());
-    const holders = orThrow(carried, await actor.createEmbeddedDocuments("Item", carried), name);
+    const holders = orThrow(carried, await actor.createEmbeddedDocuments("Item", carried, { ...KNOWN }), name);
     await actor.updateEmbeddedDocuments("Item", holders.map(h => ({ _id: h.id, "system.equipped": true })));
     for (const holder of holders) {
       if (holder.system?.equipped !== true) throw new Error(`${name} could not wear ${holder.name}`);
@@ -355,7 +367,7 @@ export async function makeCharacter({
   }
   // The learning door's bypass (07 §9; `AzerothItem._preCreateOperation`): a fixture is a GM's
   // macro and states what the character holds. Never the bags' (D-737).
-  const items = embed.length ? orThrow(embed, await actor.createEmbeddedDocuments("Item", embed, { azerothLearn: "bypass" }), name) : [];
+  const items = embed.length ? orThrow(embed, await actor.createEmbeddedDocuments("Item", embed, { azerothLearn: "bypass", ...KNOWN }), name) : [];
 
   // A class brings its thirty-six talents with it, after the link update
   // lands. Wait for them here so no test sees the sheet re-render under it.
@@ -431,10 +443,13 @@ export async function makeBoss() {
  * @param {string} name    the document's name in the pack
  * @param {string} [packId]
  */
-export async function give(actor, name, packId = PACK_FOR.equipment) {
+export async function give(actor, name, packId = PACK_FOR.equipment, { unidentified = false } = {}) {
   const doc = await fromPack(packId, name);
   const data = doc.toObject();
-  const [item] = orThrow([data], await actor.createEmbeddedDocuments("Item", [data], { azerothLearn: "bypass" }), actor.name);
+  // A fixture states what the character holds, so a thing arrives KNOWN unless the test asks
+  // for it found (08 §4; D-1435): `{unidentified: true}` lets the item's own stamp run.
+  const options = unidentified ? { azerothLearn: "bypass" } : { azerothLearn: "bypass", ...KNOWN };
+  const [item] = orThrow([data], await actor.createEmbeddedDocuments("Item", [data], options), actor.name);
   return item;
 }
 
@@ -453,7 +468,7 @@ export async function itemOf(type, { owned = null, name = null } = {}) {
     data = { name: `ZZ Quench ${type}`, type };
   }
   if (owned) {
-    const [item] = await owned.createEmbeddedDocuments("Item", [data]);
+    const [item] = await owned.createEmbeddedDocuments("Item", [data], { ...KNOWN });
     return item;
   }
   const item = await Item.create(data);

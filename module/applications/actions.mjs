@@ -2,6 +2,10 @@ import {reloadMenuEntries} from "./reload.mjs";
 import { npcArmamentFor } from "../rules/npc-armament.mjs";
 // 08 §17's empty vial, which a San'layn may fill with blood (D-1150).
 import { VIAL_EMPTY } from "../rules/sanlayn.mjs";
+// 08 §4's unidentified items and 08 §14's scrolls (D-1435, D-1436).
+import { isUnidentified } from "../rules/identify.mjs";
+import { isInscribed, isScroll } from "../rules/scrolls.mjs";
+import { cardName, disguisedNameOf, hiddenToViewer, shownName } from "../helpers/identify-words.mjs";
 import {healingSignatureReviewState} from '../effects/signature-healing-review.mjs';
 import {damageSignatureCards} from '../effects/signature-damage-review.mjs';
 import {orphanDamageCasts} from '../effects/signature-damage-orphans.mjs';
@@ -45,7 +49,7 @@ import { coins } from "../helpers/coins.mjs";
 import { accepts, containerOf, isContainer } from "../rules/containers.mjs";
 // What a thing takes and where it may go, in bag slots (05, 08 §11; D-735).
 import { BASE_SLOTS, isMount, ledger, slotsIn } from "../rules/slots.mjs";
-import { canCarry, castingAugment } from "../rules/augments.mjs";
+import { canCarry, castingAugment, heldAugment } from "../rules/augments.mjs";
 import { isWornSlot } from "../rules/worn.mjs";
 // What a row is worth putting on the hotbar (the lead, 2026-09-13). The PURE
 // half; the write is `module/macros.mjs`, reached through `game.system.azeroth`.
@@ -469,6 +473,34 @@ function heldFor(actor, name) {
 }
 
 /**
+ * The Augment in hand for the cast dialog's note (07 §3, D-674), named as THIS user sees the
+ * thing: its kind where they are kept from it (08 §4; D-1435). `rules/augments.mjs` stays pure.
+ */
+function shownAugment(actor) {
+  const gear = actor.items.filter(i => i.type === "gear");
+  const augment = castingAugment(gear, actor.classNames ?? []);
+  const item = augment ? (heldAugment(gear)?.item ?? null) : null;
+  return augment && item ? { ...augment, name: shownName(item) } : augment;
+}
+
+/** The shield of that name the creature holds, or null. */
+function shieldFor(actor, name) {
+  const shields = (actor?.items ?? []).filter(i => i.type === "armor" && i.name === name);
+  return shields.find(i => i.system?.equipped) ?? shields[0] ?? null;
+}
+
+/**
+ * **THE NAME A REACTION CARD GIVES THE THING ANSWERED WITH** (08 §4; D-1435). `canReact` answers
+ * with a raw name - the lookup key `heldFor` and the doors match on - and a card is public, so the
+ * thing it names is found again and named through `cardName`. A block's own row (a creature's
+ * attack) is no item and keeps its name.
+ */
+export function shownWith(actor, name, kind) {
+  const found = kind === "block" ? shieldFor(actor, name) : heldFor(actor, name);
+  return found ? cardName(found) : name;
+}
+
+/**
  * **The preferred way for a blow that is only offered, never forced** (D-731's
  * review): the hand where the weapon or the row has one, and its own way where
  * it has not. 06 §6's Opportunity Attack is *one attack against them*, not a
@@ -583,9 +615,11 @@ export function reactionRows(targets = [], { attacker = null, hidden = false } =
       index,
       name: snapshot.name ?? actor.name,
       actorUuid: actor.uuid,
-      block: block.ok ? block.with : null,
+      // The card is public, so the thing answered WITH is named as a player would see it
+      // (D-1435); the press finds it again by its own key through `canReact`.
+      block: block.ok ? shownWith(actor, block.with, "block") : null,
       blockOff: blockOffFor(actor),
-      parry: parry.ok ? parry.with : null,
+      parry: parry.ok ? shownWith(actor, parry.with, "parry") : null,
       negate: answer, phaseShift, answersSig
     });
   }
@@ -835,7 +869,7 @@ async function blockNow(actor, shield, messageId, targetIndex = null, { freeBy =
   // message - the indexed row `dice/chat.mjs#applyDamageToTargets` already reads.
   const retort = retortOf(actor, messageId);
   const free = freeBy ? ` ${game.i18n.format("AZEROTH.Reaction.FreeBy", { talent: freeBy })}` : "";
-  const lines = [`<p class="azeroth-drain">${game.i18n.format("AZEROTH.Reaction.Blocked", { name: actor.name, with: shield, n: off })}${free}</p>`];
+  const lines = [`<p class="azeroth-drain">${game.i18n.format("AZEROTH.Reaction.Blocked", { name: actor.name, with: shownWith(actor, shield, "block"), n: off })}${free}</p>`];
   if (retort) {
     lines.push(`<p class="azeroth-card-line azeroth-fired"><span>${foundry.utils.escapeHTML(retort.name)}</span><em>${game.i18n.format("AZEROTH.HolyShield.Line", { target: foundry.utils.escapeHTML(retort.target.name ?? ""), n: retort.result.damage })}</em></p>`);
     lines.push(`<div class="azeroth-card-actions"><button type="button" data-action="applyDamage" data-target-index="0" data-damage="${retort.result.damage}">${game.i18n.format("AZEROTH.Card.ApplyTo", { name: foundry.utils.escapeHTML(retort.target.name ?? "") })} <strong>${retort.result.damage}</strong></button></div>`);
@@ -974,7 +1008,7 @@ async function parryNow(actor, weaponName, { attackTotal, messageId, targetIndex
     budget: "none",
     gainsMomentum: false,
     damage: null,
-    title: game.i18n.format("AZEROTH.Reaction.ParryTitle", { name: weapon.name }),
+    title: game.i18n.format("AZEROTH.Reaction.ParryTitle", { name: cardName(weapon) }),
     ...(attackTotal !== null ? { dc: attackTotal } : {}),
     weaponEffects: traitEffects,
     heavyBane: traitEffects.heavyBane,
@@ -1021,7 +1055,7 @@ async function parryNow(actor, weaponName, { attackTotal, messageId, targetIndex
     await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor }),
       content: `<p class="azeroth-drain">${game.i18n.format("AZEROTH.Reaction.ParryUnpaid",
-        { name: actor.name, with: weapon.name })}</p>`,
+        { name: actor.name, with: cardName(weapon) })}</p>`,
       flags: { "azeroth-rpg": { kind: "reaction", reaction: "parry", held: false } }
     });
     recordParryOutcome(parryCommit, "unpaid", card);
@@ -1076,7 +1110,7 @@ async function parryNow(actor, weaponName, { attackTotal, messageId, targetIndex
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
     content: `<p class="azeroth-drain">${game.i18n.format(held ? "AZEROTH.Reaction.ParryHeld" : "AZEROTH.Reaction.ParryMissed",
-      { name: actor.name, with: weapon.name, total, dc })}${cost}</p>`,
+      { name: actor.name, with: cardName(weapon), total, dc })}${cost}</p>`,
     flags: { "azeroth-rpg": { kind: "reaction", reaction: "parry", held } }
   });
   recordParryOutcome(parryCommit, held ? "held" : "missed", card);
@@ -1706,7 +1740,7 @@ export async function castWithDialog(actor, spell, event = null, { targets = nul
       // **AN AUGMENT HELD COUNTS IN A DRAKE FORM** (the lead's ruling of 2026-11-08, *"I approve
       // those 4"*: what is worn melds and its Signatures still work, and the Broodstone bears on
       // the branch spells), so no shape is asked here.
-      augment: castingAugment(actor.items.filter(i => i.type === "gear"), actor.classNames ?? []),
+      augment: shownAugment(actor),
       // What the next spell was promised, by name (D-771), and Nature's
       // Swiftness's line where the talent reaches this spell. A talent's own
       // discount beside them (D-775), and what else is promised in words.
@@ -1743,7 +1777,7 @@ export async function castWithDialog(actor, spell, event = null, { targets = nul
       for (const mode of Object.keys(attack.modes ?? {})) {
         const key=`${weaponId}:${mode}`;
         modes[key]=castingWithAttackTest(castingSpec,withAttackMode(attack,mode),{weaponId,mode});
-        castTestChoices[key]=game.i18n.format("AZEROTH.Blademaster.Attack",{name:weapon.name,mode:game.i18n.localize(AZEROTH.attackModes[mode])});
+        castTestChoices[key]=game.i18n.format("AZEROTH.Blademaster.Attack",{name:shownName(weapon),mode:game.i18n.localize(AZEROTH.attackModes[mode])});
       }
     }
     if (Object.keys(modes).length>1) Object.assign(castingSpec,{mode:"casting",modes,castTestChoices});
@@ -1784,9 +1818,14 @@ export function roundMarksLeftOf(actor, row) {
 export async function castItemSpell(actor, item, index, event = null) {
   const entry = item?.system?.spells?.[index] ?? null;
   if (!entry) return null;
+  // **AN UNIDENTIFIED ITEM'S SPELL CANNOT BE CALLED ON** (08 §4; D-1435): before any dialog.
+  if (isUnidentified(item)) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Identify.SpellLocked", { item: disguisedNameOf(item) }));
+    return null;
+  }
   if (actor?.refuseForcedShape?.("cast")) return null;
   if ((entry.uses?.max ?? 0) > 0 && (entry.uses?.value ?? 0) <= 0) {
-    ui.notifications?.warn(game.i18n.format("AZEROTH.Cast.NoUses", { name: entry.name, item: item.name }));
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Cast.NoUses", { name: entry.name, item: shownName(item) }));
     return null;
   }
   const spell = await fromUuid(entry.uuid);
@@ -1795,6 +1834,22 @@ export async function castItemSpell(actor, item, index, event = null) {
     return null;
   }
   const sys = spell.system;
+  // **A WRITTEN SCROLL IS READ, NOT ROLLED** (08 §14: *A scroll casts at the writer's Casting
+  // Test, not yours*; D-1436). No dialog: no Boon, Bane, Engaged Bane, Overchannel or talent
+  // line is the reader's to add. `castSpell` reads the writer's total off the scroll's own entry
+  // and judges it against the DC this cast works out for these targets, as any cast does (the
+  // lead, 2026-11-21: *"Same as casting it"*). The spell's own Action is still spent.
+  if (isScroll(item) && entry.writerTotal !== null && entry.writerTotal !== undefined) {
+    return game.system.azeroth.workflows.castSpell({
+      actor, spell,
+      targets: targetSnapshots(),
+      source: sourceOf(actor),
+      // The card names the carrier as any reader sees it (`cardName`; a scroll is Common, so this is
+      // its own name), and `castSpell` adds *written at N* to the card's source line.
+      provenanceExtra: [{ label: "AZEROTH.Card.FromItemRow", value: null, formula: cardName(item) }],
+      viaItem: { itemId: item.id, index, name: cardName(item), dc: entry.dc ?? null }
+    });
+  }
   const classes = (actor.classItems ?? []).map(c => ({
     itemId: c.id, schools: c.system?.schools ?? [], castingAbility: c.system?.castingAbility ?? null
   }));
@@ -1819,8 +1874,10 @@ export async function castItemSpell(actor, item, index, event = null) {
     fallbackDC: castingDC({ tier: sys.tier }),
     fallbackSource: "spell",
     casting: { tier: sys.tier, mana: 0, pool: null, canPay: true, health, perPoint: overchannelPerPoint(sys.tier), maxPoints: 0 },
-    provenanceExtra: [{ label: "AZEROTH.Card.FromItem", value: null, formula: item.name }],
-    viaItem: { itemId: item.id, index, name: item.name, dc: entry.dc ?? null },
+    // **`FromItemRow`, not `FromItem`**: a provenance label is localised bare, so *From {name}*
+    // printed its placeholder beside the item's name on every item-spell card until 0.15.6.
+    provenanceExtra: [{ label: "AZEROTH.Card.FromItemRow", value: null, formula: cardName(item) }],
+    viaItem: { itemId: item.id, index, name: cardName(item), dc: entry.dc ?? null },
     // 02 §7's empower lines reach an item's casting too (*when you cast a spell*), with nothing priced in Mana.
     talentLineOffer: actor.castLineOffer?.(sys, { mana: 0, priced: false }) ?? [],
     run: game.system.azeroth.workflows.castSpell
@@ -2023,7 +2080,7 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
   // before the shift, a script - and it refuses in words.
   const worn = actor?.type === "character" ? (actor.shape ?? null) : null;
   if (!weapon.natural && worn && meldsGear(worn.kind)) {
-    ui.notifications?.warn(game.i18n.format("AZEROTH.Shape.WeaponMelded", { name: weapon.name, form: (worn.forms ?? []).map(f => f.name).join(", ") }));
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Shape.WeaponMelded", { name: shownName(weapon), form: (worn.forms ?? []).map(f => f.name).join(", ") }));
     return null;
   }
   const system = actor.system;
@@ -2051,11 +2108,12 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
       damageSpec = { rating: phantom.rating + wounded, kind: "magical", school: phantom.type, penetration: 0 };
     } else if (!state.ok && !testOnly) {
       ui.notifications?.warn(game.i18n.format(state.reason === "empty" ? "AZEROTH.Attack.EmptyBundle" : "AZEROTH.Attack.NoAmmunition", {
-        weapon: weapon.name, launcher: game.i18n.localize(AZEROTH.launcherKinds[sys.launcher])
+        weapon: shownName(weapon), launcher: game.i18n.localize(AZEROTH.launcherKinds[sys.launcher])
       }));
       return null;
     }
-    ammunition = chosen && !phantom ? { itemId: chosen.id, name: chosen.name } : null;
+    // The card names the shot as a player would see it (D-1435); the bundle snapshot holds no flags.
+    ammunition = chosen && !phantom ? { itemId: chosen.id, name: cardName(actor.items.get(chosen.id) ?? chosen) } : null;
     if (!phantom) damageSpec = chosen ? shotDamage(sys, chosen) : null;
     // **WOUNDED BEAST ON A SHOT TOO** (04: *Your weapon attacks add 1 to their
     // Damage Rating per rank*; D-772): a bow is a weapon, and the shot's Rating
@@ -2226,7 +2284,7 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
   // Opportunity Attack prefers the hand and passes nothing where there is none -
   // and the attacks batch calls the door with one to keep it reached.
   if (plan.lacks) {
-    ui.notifications?.warn(game.i18n.format(AZEROTH.attackModeRefusals[plan.lacks] ?? "AZEROTH.Attack.NoWay.Hand", { name: weapon.name }));
+    ui.notifications?.warn(game.i18n.format(AZEROTH.attackModeRefusals[plan.lacks] ?? "AZEROTH.Attack.NoWay.Hand", { name: shownName(weapon) }));
     return null;
   }
   if (!plan.mode) {
@@ -2361,6 +2419,10 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
       if (weaponEffects.damageMultiplier) {
         signatureProvenance.push({ label: "AZEROTH.Card.SignatureMultiplier", value: null, formula: `×${weaponEffects.damageMultiplier}` });
       }
+      // **AN UNIDENTIFIED WEAPON'S SIGNATURE WORKS AND IS NOT NAMED** (08 §4; D-1435; the plan's
+      // default: *a line it adds is labelled an unidentified item*). The number still moves the
+      // Rating, so the row stays; its label stops saying *Signature*. A card is public.
+      if (cardName(weapon) !== weapon.name) for (const row of signatureProvenance) row.label = "AZEROTH.Identify.Source";
     }
   }
   // **TWO TESTS IN ONE ATTACK** (02 §6, D-704). Extra Attack is *two attacks
@@ -2437,7 +2499,7 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
     ...(damage ? { talentLineOffer: actor.talentLineOffer?.({ roll: "attack", damages: true }) ?? [] } : {}),
     ...(rolls > 1 ? { rolls,
       extraWeapons: extraChoices.map(pick => ({ id: pick.id, offHand: pick.offHand,
-        label: game.i18n.format(pick.offHand ? "AZEROTH.Dialog.ExtraWeaponOff" : "AZEROTH.Dialog.ExtraWeaponMain", { name: pick.weapon.name }) })),
+        label: game.i18n.format(pick.offHand ? "AZEROTH.Dialog.ExtraWeaponOff" : "AZEROTH.Dialog.ExtraWeaponMain", { name: shownName(pick.weapon) }) })),
       validateExtra: id => Boolean(extraChoiceNow(id))
     } : {}),
     ...(rolls > 1 ? { rebuildSecond: async ({ args, secondTargets, firstCard, extraWeapon }) => {
@@ -2530,9 +2592,11 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
       ...(damageSpec && thinnedBlow ? [{ label: "AZEROTH.Sheet.Thinned", value: -THINNED_RATING_DROP }] : []),
       ...signatureProvenance
     ] } : {}),
-    // The traits defined on the card (D-649).
-    traits: await traitDefinitions(sys.traits ?? [], actor),
-    title: weapon.name,
+    // The traits defined on the card (D-649) - none for an unidentified weapon, whose traits are
+    // among the things a player is kept from (08 §4; D-1435). They still fire.
+    traits: await traitDefinitions(cardName(weapon) !== weapon.name ? [] : (sys.traits ?? []), actor),
+    // A card is public: an unidentified weapon is named by its kind (08 §4; D-1435).
+    title: cardName(weapon),
     // The default way's modifier lines; each way carries its own under `modes`.
     modifiers: chosen.modifiers,
     // A launcher with no Rating contributes none; the ammunition carries it
@@ -3296,7 +3360,12 @@ export function signatureContext(item, actor = null) {
   // in words (`unequipped`), never a grey alone.
   const worn = Boolean(actor) && signatureWorn(item);
   const unworn = signaturePressable(signature) && !worn ? "unequipped" : null;
-  const refusal = gearRefusal ?? shared?.refusal ?? unworn ?? (state ? pressRefusal(signature, { holds: pressHolds, spells, worn }) : null);
+  // **AN UNIDENTIFIED ITEM'S USE IS LOCKED** (08 §4; D-1435): said in words beside the greyed
+  // control on a sheet that still shows the true face (the GM's); a player's surface is
+  // disguised whole. `locked` is the flag a template reads. The standing Signature still works.
+  const locked = isUnidentified(item);
+  const lockLabel = locked ? "AZEROTH.Identify.UseLockedShort" : null;
+  const refusal = (locked ? "unidentified" : null) ?? gearRefusal ?? shared?.refusal ?? unworn ?? (state ? pressRefusal(signature, { holds: pressHolds, spells, worn }) : null);
   const use = signature.use ?? {};
   const clause = g => ({
     kind: g.kind,
@@ -3358,12 +3427,12 @@ export function signatureContext(item, actor = null) {
       // A press that answers an attack on its bearer is pressed from that attack's card
       // (D-913): the sheet's button says so rather than refusing on the click.
       const answersCard = ["hitOnYou", "attackOnYou"].includes(pressTrigger(press));
-      const why = gearRefusal ?? (press.trigger ? "automatic" : null) ?? (worn ? null : "unequipped") ?? (state ? pressEntryRefusal(press, { holds: stands, worn }) : null) ?? (answersCard ? "fromCard" : null);
+      const why = (locked ? "unidentified" : null) ?? gearRefusal ?? (press.trigger ? "automatic" : null) ?? (worn ? null : "unequipped") ?? (state ? pressEntryRefusal(press, { holds: stands, worn }) : null) ?? (answersCard ? "fromCard" : null);
       return {
         key, label: press.label,
         gates: (press.gates ?? []).map(clause).filter(g => g.label),
         refusal: why,
-        refusalLabel: gearRefusal ?? (why ? AZEROTH.signatureRefusals[why] ?? null : null),
+        refusalLabel: lockLabel ?? gearRefusal ?? (why ? AZEROTH.signatureRefusals[why] ?? null : null),
         actionLabel: press.action ? AZEROTH.actions[press.action] ?? null : null,
         cost: press.cost?.pool && press.cost?.amount
           ? { amount: press.cost.amount, label: AZEROTH.poolTypes[press.cost.pool] ?? press.cost.pool }
@@ -3381,8 +3450,9 @@ export function signatureContext(item, actor = null) {
       ? press.map(clause).filter(g => g.label)
       : [],
     pressable: signaturePressable(signature),
+    locked,
     refusal,
-    refusalLabel: gearRefusal ?? (refusal ? AZEROTH.signatureRefusals[refusal] ?? null : null),
+    refusalLabel: lockLabel ?? gearRefusal ?? (refusal ? AZEROTH.signatureRefusals[refusal] ?? null : null),
     actionLabel: use.action ? AZEROTH.actions[use.action] ?? null : null,
     cost: use.cost?.pool && use.cost?.amount
       ? { amount: use.cost.amount, label: AZEROTH.poolTypes[use.cost.pool] ?? use.cost.pool }
@@ -3845,6 +3915,9 @@ function locationWords() {
 }
 
 export function detailFields(item) {
+  // **AN UNIDENTIFIED ITEM SHOWS NO FIELD TO A PLAYER** (08 §4: *its owner knows its kind and
+  // quality only*; D-1435): every number, affix and trait is on this list, so it is empty.
+  if (hiddenToViewer(item)) return [];
   return fieldsFor(item.type, item.system, { labels: locationWords() })
     .filter(f => f.type !== "checkbox" && f.type !== "table")
     .map(f => {
@@ -3871,6 +3944,9 @@ export function detailFields(item) {
  */
 export async function detailProse(item) {
   if (!item) return "";
+  // **AND NO PROSE** (08 §4; D-1435): the description, the effect, the Signature and the grants
+  // are what identifying reveals, so a player reads one line saying so and where Identify is.
+  if (hiddenToViewer(item)) return `<p class="azeroth-item-unidentified">${foundry.utils.escapeHTML(game.i18n.localize("AZEROTH.Identify.Note"))}</p>`;
   const sys = item.system ?? {};
   const parts = [];
   const lore = await enrich(sys.description ?? "", { relativeTo: item });
@@ -3975,7 +4051,8 @@ export function containersFor(actor, item, led = null) {
     const here = (containerOf(item) ?? null) === panel.containerId;
     const ok = here || panel.used + slotsIn(item, panel) <= panel.wells;
     out.push({
-      id: panel.containerId, name: bag.name, item: bag, ok, reason: ok ? null : "full",
+      // Listed as THIS user sees the bag (08 §4; D-1435).
+      id: panel.containerId, name: shownName(bag), item: bag, ok, reason: ok ? null : "full",
       used: panel.used, wells: panel.wells
     });
   }
@@ -3990,7 +4067,7 @@ export function containersFor(actor, item, led = null) {
 export async function putInContainer(actor, item) {
   const options = containersFor(actor, item);
   if (!options.length) {
-    ui.notifications?.warn(game.i18n.format("AZEROTH.Container.NowhereFor", { name: item.name }));
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Container.NowhereFor", { name: shownName(item) }));
     return null;
   }
   // **IN BAG SLOTS** (D-735), which is the unit the panel beside it prints
@@ -4008,12 +4085,12 @@ export async function putInContainer(actor, item) {
     }))
   ];
   if (!rows.some(r => r.available !== false)) {
-    ui.notifications?.warn(game.i18n.format("AZEROTH.Container.AllFull", { name: item.name }));
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Container.AllFull", { name: shownName(item) }));
     return null;
   }
   const chosen = await game.system.azeroth.workflows.chooseOption(item, rows, null, {
     label: "AZEROTH.Container.Put",
-    prompt: game.i18n.format("AZEROTH.Container.Where", { name: item.name })
+    prompt: game.i18n.format("AZEROTH.Container.Where", { name: shownName(item) })
   });
   if (!chosen) return null;
   return item.update({ "system.container": chosen.key || null });
@@ -4101,6 +4178,20 @@ export function itemContextMenu(sheet) {
         const { fillWithBlood } = await import("../effects/blood.mjs");
         return fillWithBlood(actor, item);
       } },
+    // **IDENTIFY** (08 §4; D-1435): an Arcana Test on an unidentified thing a character holds,
+    // once per Long Rest. A direct call, as *Fill with blood* is; the door judges and says why.
+    { label: "AZEROTH.Identify.Menu", icon: "fa-solid fa-magnifying-glass",
+      visible: target => actor.type === "character" && isUnidentified(itemOf(target)),
+      onClick: async (event, target) => {
+        const item = itemOf(target);
+        if (!item) return null;
+        const { identifyTest } = await import("../dice/identify-workflows.mjs");
+        return identifyTest({ actor, item, event });
+      } },
+    // **READ SCROLL** (08 §14; D-1436): a written scroll, read by anyone, through the item-spell door.
+    { label: "AZEROTH.Scroll.Menu", icon: "fa-solid fa-scroll",
+      visible: target => { const item = itemOf(target); return isScroll(item) && isInscribed(item); },
+      onClick: (event, target) => { const item = itemOf(target); return item ? castItemSpell(actor, item, 0, event) : null; } },
     // The hotbar (the lead, 2026-09-13). Not a sheet ACTION: nothing in a
     // template carries it, and the audit's MENU_ONLY names only registered
     // actions - this is a menu entry with a direct call, so there is nothing
@@ -4182,7 +4273,7 @@ export function afflictionsContext(actor) {
     if (isAntivenom(use)) antivenom += n;
     else if (use.kind === "remedy" && use.cures) {
       const have = remedies[use.cures];
-      remedies[use.cures] = have ? { ...have, count: have.count + n } : { name: item.name, count: n, itemId: item.id };
+      remedies[use.cures] = have ? { ...have, count: have.count + n } : { name: shownName(item), count: n, itemId: item.id };
     }
   }
   const groups = {};

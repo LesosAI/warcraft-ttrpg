@@ -104,6 +104,7 @@ import * as v0154 from "./0.15.4-necromancer.mjs";
 import * as v01541 from "./0.15.4.1-sanlayn-journals.mjs";
 import * as v01542 from "./0.15.4.2-deft.mjs";
 import * as v01546 from "./0.15.4.6-sovereign-spells.mjs";
+import * as v0156 from "./0.15.6-identified.mjs";
 import { forgetPacks } from "./walk.mjs";
 
 // Ordered oldest to newest. Add new entries at the end.
@@ -287,7 +288,11 @@ const CHAIN = [
   // 0.15.4.6: the Sovereign's 07 on the spells a world holds - Vitae where the pack prints it, the
   // blood-curse tag, and the Sovereign (with the Necromancer 0.15.4 could not add) on the widened
   // Restricted lines, each against its pack copy (D-1242). Numbered past the build's other point steps.
-  { version: "0.15.4.6", module: v01546 }
+  { version: "0.15.4.6", module: v01546 },
+  // 0.15.6: 08 §4's unidentified items - every Uncommon+ thing a character already holds is
+  // written known (`unidentified: false`), so an absent flag is never stamped on the next move
+  // (D-1435; the architect's review, must-fix 2).
+  { version: "0.15.6", module: v0156 }
 ];
 
 /**

@@ -29,6 +29,8 @@ import {
   attackWithDialog, castWithDialog, useFeatureWithDialog, useGearWithDialog, useSignatureWithDialog
 } from "./applications/actions.mjs";
 import { firstFreeSlot, kindOf, macroCommandFor, macroNameFor, macroReusable, matchItem } from "./rules/macros.mjs";
+// 08 §4 (D-1435): a hidden thing's macro is named by its kind and keeps no true name.
+import { hiddenToViewer, shownName } from "./helpers/identify-words.mjs";
 
 /** The flag every macro this module makes carries, so one can be found again. */
 export const MACRO_FLAG = "macro";
@@ -97,7 +99,7 @@ export async function useItem(payload = {}, event = null) {
     case "feature": return useFeatureWithDialog(actor, item, event);
     case "gear": return useGearWithDialog(actor, item);
     case "signature": return useSignatureWithDialog(actor, item, event);
-    default: return refuse("NoItem", { name: item.name, actor: actor.name });
+    default: return refuse("NoItem", { name: shownName(item), actor: actor.name });
   }
 }
 
@@ -119,11 +121,16 @@ export async function useItem(payload = {}, event = null) {
 export async function saveToHotbar(item, { actor = null, slot = null } = {}) {
   if (!item) return null;
   const owner = actor ?? item.parent ?? null;
-  if (!kindOf(item)) return refuse("NoItem", { name: item.name, actor: owner?.name ?? "" });
+  // **A THING THE USER IS KEPT FROM IS SAVED BY ITS KIND** (08 §4; D-1435): the button reads
+  // *Longsword (unidentified)*, and neither the macro's flag nor its command carries the true
+  // name - the command finds the thing by its id (`matchItem` asks the id first).
+  const shown = shownName(item);
+  const itemName = hiddenToViewer(item) ? null : item.name;
+  if (!kindOf(item)) return refuse("NoItem", { name: shown, actor: owner?.name ?? "" });
   if (!game.user?.can("MACRO_SCRIPT")) return refuse("NoScripts");
 
-  const command = macroCommandFor(item, { actorUuid: owner?.uuid ?? null });
-  if (!command) return refuse("NoItem", { name: item.name, actor: owner?.name ?? "" });
+  const command = macroCommandFor(item, { actorUuid: owner?.uuid ?? null, itemName });
+  if (!command) return refuse("NoItem", { name: shown, actor: owner?.name ?? "" });
 
   const page = game.user.getHotbarMacros(1);
   const free = slot ?? firstFreeSlot(page);
@@ -139,21 +146,22 @@ export async function saveToHotbar(item, { actor = null, slot = null } = {}) {
   const existing = game.macros.find(m => macroReusable(
     { flag: m.getFlag("azeroth-rpg", MACRO_FLAG), isOwner: m.isOwner }, { itemId: item.id, kind }
   ));
+  const name = macroNameFor({ name: shown });
   const macro = existing ?? await Macro.implementation.create({
-    name: macroNameFor(item),
+    name,
     type: "script",
     img: item.img,
     command,
-    flags: { "azeroth-rpg": { [MACRO_FLAG]: { kind, itemId: item.id, itemName: item.name } } }
+    flags: { "azeroth-rpg": { [MACRO_FLAG]: { kind, itemId: item.id, itemName } } }
   });
   if (!macro) return null;
   // **A REUSED MACRO IS BROUGHT UP TO DATE.** The item may have been renamed,
   // re-iconed or moved to another actor since; a button that presses a name
   // the sheet no longer shows is the same fault in a different place.
-  if (existing && (existing.command !== command || existing.name !== macroNameFor(item) || existing.img !== item.img)) {
+  if (existing && (existing.command !== command || existing.name !== name || existing.img !== item.img)) {
     await existing.update({
-      name: macroNameFor(item), img: item.img, command,
-      [`flags.azeroth-rpg.${MACRO_FLAG}`]: { kind, itemId: item.id, itemName: item.name }
+      name, img: item.img, command,
+      [`flags.azeroth-rpg.${MACRO_FLAG}`]: { kind, itemId: item.id, itemName }
     });
   }
   await game.user.assignHotbarMacro(macro, free);

@@ -1476,6 +1476,19 @@ export function stackKey(item) {
     if (STACK_IGNORES_DOC.includes(k) || k === "system") continue;
     doc[k] = v;
   }
+  // **KNOWN IS KNOWN, WHETHER IT SAYS SO OR NOT** (08 §4; D-1435; the architect's review,
+  // must-fix 3): `unidentified: false` and an absent flag are the same state, so a legacy
+  // stack and one identified since are twins. `true` and the tried mark still part them: an
+  // unidentified stack never merges into a known one, and a tried one never launders its mark.
+  // An empty system scope is dropped on both sides, so a scope emptied by the strip reads as
+  // none at all.
+  if (doc.flags && typeof doc.flags === "object") {
+    const own = { ...flags };
+    if (own.unidentified === false) delete own.unidentified;
+    doc.flags = { ...doc.flags };
+    if (Object.keys(own).length) doc.flags["azeroth-rpg"] = own;
+    else delete doc.flags["azeroth-rpg"];
+  }
   return canonical({ ...doc, system: rest });
 }
 

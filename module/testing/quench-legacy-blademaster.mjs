@@ -30,7 +30,7 @@
  * deleted in `after`.
  */
 
-import { cleanup, drainAreaWork, fromPack, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook, warnings, PACK_FOR, tokenDrawn, quietScrollingText, tokenData } from "./fixtures.mjs";
+import { cleanup, drainAreaWork, fromPack, giveTurn, made, makeCharacter, makeNpc, openSheet, pinDie, settle, untilHook, warnings, PACK_FOR, tokenDrawn, quietScrollingText, tokenData, KNOWN } from "./fixtures.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 import { PARRY_COST, UNANSWERED_FLAG } from "../rules/reactions.mjs";
@@ -108,7 +108,7 @@ async function setPool(actor, name, value) {
 /** A weapon or a suit from the pack, put in hand or on. */
 async function wear(actor, packId, name, extra = {}) {
   const source = (await fromPack(packId, name)).toObject();
-  const [item] = await actor.createEmbeddedDocuments("Item", [{ ...source, system: { ...source.system, equipped: true, ...extra } }]);
+  const [item] = await actor.createEmbeddedDocuments("Item", [{ ...source, system: { ...source.system, equipped: true, ...extra } }], { ...KNOWN });
   await until(() => actor.items.get(item.id)?.system?.equipped === true, `${name} on`);
   return actor.items.get(item.id);
 }

@@ -40,6 +40,8 @@ import { admit } from "../rules/slots.mjs";
 import { lootOffer, setLootOffer } from "../settings.mjs";
 import { coins } from "../helpers/coins.mjs";
 import { AZEROTH } from "../config.mjs";
+// 08 §4: a card is public, so a hidden find is named by its kind on it (D-1435).
+import { cardName } from "../helpers/identify-words.mjs";
 
 const { renderTemplate } = foundry.applications.handlebars;
 
@@ -747,7 +749,9 @@ function carriedCopy(doc) {
  * into the link it builds - so only what is composed here needs the escape.
  */
 function gaveLine({ name, made, copper }) {
-  const links = made.map(doc => `@UUID[${doc.uuid}]{${doc.name}}`);
+  // What a player took arrives unidentified where it is Uncommon or higher (08 §4): the link's
+  // label is its kind, and the sheet it opens is the disguised one.
+  const links = made.map(doc => `@UUID[${doc.uuid}]{${cardName(doc)}}`);
   const who = foundry.utils.escapeHTML(String(name ?? ""));
   const takes = game.i18n.format("AZEROTH.LootOffer.Card.Gave", { name: who });
   if (links.length && copper > 0) {
@@ -883,7 +887,7 @@ export async function lootCardHTML({ mode = "offered", offer, reason = "complete
         const item = game.items.get(row.id);
         // The link's label is the enricher's to write; the FALLBACK is a raw
         // name going straight into a triple stash, so it is escaped here.
-        return item ? `@UUID[${item.uuid}]{${item.name}}` : foundry.utils.escapeHTML(String(row.name ?? ""));
+        return item ? `@UUID[${item.uuid}]{${cardName(item)}}` : foundry.utils.escapeHTML(String(row.name ?? ""));
       }),
     notes,
     offerId: offer?.id ?? "",

@@ -13,7 +13,7 @@
  * `quench-npc-gear*.mjs` still reads them.
  */
 
-import { cleanup, gearTab, makeCharacter, openSheet, settle, PACK_FOR } from "./fixtures.mjs";
+import { cleanup, gearTab, makeCharacter, openSheet, settle, PACK_FOR, KNOWN } from "./fixtures.mjs";
 import { checkText } from "./geometry.mjs";
 
 /** Wait for a condition. */
@@ -29,7 +29,7 @@ const until = async (fn, what, ms = 5000) => {
 async function give(actor, name, packId = PACK_FOR.equipment) {
   const doc = (await game.packs.get(packId).getDocuments()).find(d => d.name === name);
   if (!doc) throw new Error(`${name} is not in ${packId}`);
-  const [item] = await actor.createEmbeddedDocuments("Item", [doc.toObject()]);
+  const [item] = await actor.createEmbeddedDocuments("Item", [doc.toObject()], { ...KNOWN });
   return item;
 }
 
@@ -155,7 +155,7 @@ export function weightBatch(context) {
       // sixteen; untaken, the same twelve are four over eight.
       const torch = (await game.packs.get(PACK_FOR.equipment).getDocuments()).find(d => d.name === "Torch");
       await goblin.createEmbeddedDocuments("Item",
-        Array.from({ length: 12 }, () => foundry.utils.deepClone(torch.toObject())));
+        Array.from({ length: 12 }, () => foundry.utils.deepClone(torch.toObject())), { ...KNOWN });
       await until(() => goblin.system.bagSlots.used === 12, "the goblin to carry twelve bag slots");
       assert.equal(goblin.system.load, "unencumbered");
 

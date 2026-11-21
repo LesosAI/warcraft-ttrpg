@@ -19,7 +19,7 @@
  * makes is deleted in `after`.
  */
 
-import { cleanup, made, makeCharacter, makeNpc, openSheet, pinDie, quietScrollingText, settle, tokenData, tokenDrawn, untilHook, warnings, giveTurn, cardOf, fromPack } from "./fixtures.mjs";
+import { cleanup, made, makeCharacter, makeNpc, openSheet, pinDie, quietScrollingText, settle, tokenData, tokenDrawn, untilHook, warnings, giveTurn, cardOf, fromPack, KNOWN } from "./fixtures.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 import { targetSnapshots } from "../applications/roll-dialog.mjs";
@@ -128,7 +128,7 @@ async function arm(actor, name) {
   const doc = await fromPack("azeroth-rpg.weapons", name);
   if (!doc) throw new Error(`the weapons pack holds no "${name}"`);
   const source = doc.toObject();
-  const [item] = await actor.createEmbeddedDocuments("Item", [{ ...source, system: { ...source.system, equipped: true } }]);
+  const [item] = await actor.createEmbeddedDocuments("Item", [{ ...source, system: { ...source.system, equipped: true } }], { ...KNOWN });
   await until(() => actor.items.get(item.id)?.system?.equipped === true, `${name} in hand`);
   return actor.items.get(item.id);
 }

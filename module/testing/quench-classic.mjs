@@ -18,7 +18,7 @@
  */
 
 import { PACK_COUNTS } from "./pack-counts.mjs";
-import { PACK_FOR, browserOpen, cleanup, fromPack, inspect, made, makeCharacter, openSheet, settle } from "./fixtures.mjs";
+import { PACK_FOR, browserOpen, cleanup, fromPack, inspect, made, makeCharacter, openSheet, settle, KNOWN } from "./fixtures.mjs";
 import { checkNoRawKeys } from "./expectations.mjs";
 import { checkText } from "./geometry.mjs";
 import { plan } from "../rules/forge.mjs";
@@ -245,7 +245,7 @@ export function classicBatch(context) {
       const usedBefore = actor.system.bagSlots.used;
       const strBefore = actor.system.abilities.str.total;
 
-      const [ring] = await actor.createEmbeddedDocuments("Item", [source.toObject()]);
+      const [ring] = await actor.createEmbeddedDocuments("Item", [source.toObject()], { ...KNOWN });
 
       // **WHAT IS WORN TAKES NO BAG SLOT AND WHAT IS CARRIED TAKES ONE**
       // (05 *Speed and movement*, 08 §11; D-735). In a bag the ring is one
@@ -305,7 +305,7 @@ export function classicBatch(context) {
       const actor = await makeCharacter({ name: "ZZ Classic Girdle", classes: [["Warrior", 1]] });
       const strBefore = actor.system.abilities.str.total;
       const conBefore = actor.system.abilities.con.total;
-      const [girdle] = await actor.createEmbeddedDocuments("Item", [source.toObject()]);
+      const [girdle] = await actor.createEmbeddedDocuments("Item", [source.toObject()], { ...KNOWN });
       assert.equal(actor.system.abilities.str.total, strBefore, "an unworn belt granted Strength");
 
       await girdle.update({ "system.equipped": true });
@@ -337,7 +337,7 @@ export function classicBatch(context) {
       const source = await pack.getDocument(entry._id);
 
       const actor = await makeCharacter({ name: "ZZ Classic Forge", classes: [["Warrior", 5]] });
-      const [item] = await actor.createEmbeddedDocuments("Item", [source.toObject()]);
+      const [item] = await actor.createEmbeddedDocuments("Item", [source.toObject()], { ...KNOWN });
       const text = "<p>Once per Short Rest, a Warrior holding it strikes without paying the Half-Action.</p>";
 
       // The law first: 08 §20 as D-686 amended it. A Rare pays for its

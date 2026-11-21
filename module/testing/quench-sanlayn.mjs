@@ -8,7 +8,7 @@
  * and the card. The die is pinned through `fixtures.mjs#pinDie` wherever a Test decides anything.
  */
 
-import { cleanup, dialogFor, fromPack, give, made, makeCharacter, makeNpc, openSheet, pinDie, PACK_FOR, settle, tokenData, tokenDrawn, untilHook, warnings } from "./fixtures.mjs";
+import { cleanup, dialogFor, fromPack, give, made, makeCharacter, makeNpc, openSheet, pinDie, PACK_FOR, settle, tokenData, tokenDrawn, untilHook, warnings, KNOWN } from "./fixtures.mjs";
 import { ANIMATIONS_SETTING, ANIMATION_SOUNDS_SETTING, BLOOD_LONG_REST_SETTING, ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 import { animationAvailability } from "../animation/availability.mjs";
@@ -162,7 +162,7 @@ export function sanlaynBatch(context) {
       this.timeout(120000);
       const warrior = await makeCharacter({ name: "ZZ San'layn Drop", classes: [["Warrior", 3]] });
       const race = (await fromPack(PACK_FOR.race, SANLAYN)).toObject();
-      await warrior.createEmbeddedDocuments("Item", [race]);
+      await warrior.createEmbeddedDocuments("Item", [race], { ...KNOWN });
       await until(() => featureNamed(warrior, "Preserved Countenance"), "the Trait granted on the drop");
       await until(() => warrior.items.filter(t => t.type === "talent" && t.system?.race === SANLAYN).length === 8, "the eight embedded");
       const feature = featureNamed(warrior, "Preserved Countenance");

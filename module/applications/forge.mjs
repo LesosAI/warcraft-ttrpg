@@ -24,6 +24,7 @@ import { htmlFromProse, proseFromHtml } from "../rules/prose.mjs";
 import { coins } from "../helpers/coins.mjs";
 import { bindPickers } from "./picker.mjs";
 import { sectionTail } from "../rules/icons.mjs";
+import { isScroll } from "../rules/scrolls.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -104,7 +105,10 @@ export class AzerothForge extends HandlebarsApplicationMixin(ApplicationV2) {
 
   /** A weapon, a suit or gear, by its owner; never an affix document itself. */
   static forgeable(item) {
-    return Boolean(item) && PHYSICAL.has(item.type) && item.isOwner && !item.getFlag?.("azeroth-rpg", "affix");
+    // **A SCROLL IS WRITTEN, NEVER FORGED** (08 §14; D-1436; the architect's review, must-fix
+    // 4): `build` rebuilds `system.spells` without the writer's total, and the Epic gate on an
+    // item that casts would refuse the save anyway. A GM writes one by dropping a spell on it.
+    return Boolean(item) && PHYSICAL.has(item.type) && item.isOwner && !item.getFlag?.("azeroth-rpg", "affix") && !isScroll(item);
   }
 
   /** The current state (read-only), for the tests and the summary. */
