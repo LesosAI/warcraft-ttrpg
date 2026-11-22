@@ -80,8 +80,10 @@ function verdictOf(roll, dc) {
   };
 }
 
-async function evaluate({ actor, kind, dc, boons = 0, banes = 0, modifiers = [], provenanceExtra = [] }) {
+async function evaluate({ actor, kind, dc, boons = 0, banes = 0, modifiers = [], provenanceExtra = [], resilience = null }) {
   const roll = AzerothRoll.build({ dc, kind, boons, banes, modifiers, rollData: actor.getRollData() });
+  // The Resilience the after-the-die seam reads (02's Beyond Limits, D-1724).
+  if (kind === "resilience" && resilience) roll.options.resilience = resilience;
   roll.options.provenance.push(...provenanceExtra);
   await roll.evaluate();
   await actor.offerElunesRegard?.(roll);
@@ -314,7 +316,7 @@ export async function exposeAffliction({ actor, key, kind, dc = null, event = nu
 async function exposeRun({ actor, dc = 12, boons = 0, banes = 0, modifiers = [], provenanceExtra = [], afflictionCtx = null } = {}) {
   const entry = afflictionCtx ? await entryFor(afflictionCtx.kind, afflictionCtx.key) : null;
   if (!entry) return null;
-  const roll = await evaluate({ actor, kind: "resilience", dc, boons, banes, modifiers, provenanceExtra });
+  const roll = await evaluate({ actor, kind: "resilience", dc, boons, banes, modifiers, provenanceExtra, resilience: "body" });
   const failed = roll.outcome.success !== true;
   let done = null;
   if (failed) done = await layEntry(actor, entry, null);

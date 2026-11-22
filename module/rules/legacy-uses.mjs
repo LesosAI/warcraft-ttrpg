@@ -555,7 +555,11 @@ export function transportRefusal(choice, { inFight = false, token = true, pad = 
 export function usesAskedLater(onUse) {
   // And 02's Recall (the Chronomancer's stage 2b): a use buys the MARK, and the return a mark
   // standing allows spends none, so the judgement asks for the use once it knows which.
-  return Boolean(onUse?.transporter && typeof onUse.transporter === "object") || onUse?.recall === true;
+  return Boolean(onUse?.transporter && typeof onUse.transporter === "object") || onUse?.recall === true
+    // And 02's I Have Prepared (the Demon Hunter plan's Phase 4a): *You may also end it on your turn at no cost* -
+    // a Use while the minute stands ends it and spends no use, so the use is asked by the door once it knows
+    // which (`effects/demon-hunter-features.mjs#judgeDemonHunterUse`).
+    || onUse?.dh?.prepared === true;
 }
 
 /**

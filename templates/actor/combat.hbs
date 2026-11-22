@@ -241,6 +241,14 @@
     {{#if combat.sovereign.feeds}}
     <button type="button" data-action="feed" data-tooltip="{{localize "AZEROTH.Feeding.Tip"}}">{{localize "AZEROTH.Feeding.Button"}}</button>
     {{/if}}
+    {{!-- 02 SS7's Spectral Sight (the Demon Hunter review's S1): the demons within 60 feet, whispered on a card;
+          and 07's Flame Crash (C4): a Pick up for each glaive lying where it landed, named in words. --}}
+    {{#if combat.demonHunter.senses}}
+    <button type="button" data-action="senseDemons" data-tooltip="{{localize "AZEROTH.DemonHunter.Sense.Tip"}}">{{localize "AZEROTH.DemonHunter.Sense.Button"}}</button>
+    {{/if}}
+    {{#each combat.demonHunter.glaives as |g|}}
+    <button type="button" data-action="pickUpGlaive" data-glaive-id="{{g.id}}" data-tooltip="{{localize "AZEROTH.DemonHunter.PickUp.Tip"}}">{{g.label}}</button>
+    {{/each}}
     {{#if combat.shape}}
     {{!-- Any of the three shapes (D-769), named in words; its x is Leave. --}}
     <span class="azeroth-state-chip">{{combat.shape.line}}

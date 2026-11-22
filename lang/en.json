@@ -1610,6 +1610,7 @@
       "Essence": "Essence",
       "Tribute": "Tribute",
       "Vitae": "Vitae",
+      "Hatred": "Hatred",
       "Mana": "Mana",
       "Focus": "Focus",
       "Energy": "Energy",
@@ -1702,6 +1703,32 @@
       },
       "Claw": "{name}'s claws hit their prey, {target}: {n} Tribute.",
       "Will": "{name}'s prey failed its Test: {n} Tribute."
+    },
+    "Hatred": {
+      "Refuse": {
+        "gain": {
+          "unsourced": "{name} gains Hatred only by casting a spell, from Beyond Limits, or from a feature or talent that says so. A hit gives none. Nothing was written.",
+          "hand": "Only a GM may raise {name}'s Hatred by hand.",
+          "unleashed": "{name} gains no Hatred while unleashed. Nothing was written."
+        }
+      },
+      "CastGain": "+{n} Hatred for the cast (1 plus its tier: {of})",
+      "AboveCap": "Above the cap: a gain adds nothing until you spend below {cap}.",
+      "Ladder": "Cap 5, plus 2 for each 5 Fel Corruption you hold. Fel {fel}: cap {cap}.",
+      "NextRung": "At Fel {fel}: cap {cap}.",
+      "LadderTop": "The cap is at its top.",
+      "RestCost": "At a rest: +{n} Fel.",
+      "RestNothing": "At a rest: nothing.",
+      "OverSegment": "Held above the cap",
+      "Count": "Hatred {n} / {cap}",
+      "Panel": "Hatred",
+      "Shed": {
+        "Points": "A Fel Lash hit sheds {n} Fel.",
+        "ended": "The Fel track has ended and a Fel Lash hit sheds nothing.",
+        "prepared": "A Fel Lash hit sheds nothing while I Have Prepared lasts.",
+        "once": "A Fel Lash hit has shed its Fel this turn.",
+        "none": "No Fel to shed: a Fel Lash hit sheds nothing."
+      }
     },
     "Prey": {
       "Label": "Prey",
@@ -1959,6 +1986,102 @@
         "notSkeleton": "That creature is not a skeleton.",
         "holy": "Holy damage felled it: Restless Bones does not stand it again.",
         "once": "It has stood again this way once already."
+      }
+    },
+    "DhSpell": {
+      "Refuse": {
+        "oneTarget": "{spell} takes one creature. Nothing was spent.",
+        "noGM": "{spell} needs a GM online to write on a creature or a board you do not own. Nothing was spent.",
+        "noToken": "{name} needs a token on this scene to cast {spell}. Nothing was spent.",
+        "nothingToEnd": "{spell} finds no spell of tier {tier} or lower it may end there. Nothing was spent.",
+        "devourTrigger": "{spell} is cast at the start of the turn of a creature Sustaining a spell of tier 3 or lower within 30 feet, when the system offers it. Nothing was spent.",
+        "glaivesFar": "{name}'s thrown glaives lie beyond the mile, or on another scene. Nothing was spent.",
+        "noGlaiveAway": "{name} has no equipped glaive lying away to call back. Nothing was spent.",
+        "noGlaive": "{name} wields no glaive to throw. Nothing was spent.",
+        "crashFar": "That point is more than {feet} feet away. Choose another.",
+        "noWeapon": "{name} has no weapon in hand for {spell}. Nothing was spent.",
+        "noEnemyInReach": "No enemy stands within {name}'s reach ({feet} ft) for {spell}. Nothing was spent.",
+        "notYours": "That spell is not yours to write.",
+        "unknownEffect": "That effect is not one a Demon Hunter spell lays.",
+        "crashCard": "That card is not a Flame Crash that went off."
+      },
+      "Pick": {
+        "Effect": "{spell} on {name}",
+        "Sustain": "{spell}, Sustained by {name}",
+        "Tier": "Tier {n}",
+        "Prompt": {
+          "sunder": "{spell}: choose the tier {tier} spell to end on a failure.",
+          "siphon": "{spell}: choose the spell of tier {tier} or lower to end."
+        },
+        "Ended": "{by} ends {spell} on {name}.",
+        "NotEnded": "{spell} ended nothing: the spell is gone or no longer one it may end.",
+        "SustainNotice": "{name} stops sustaining {spell}."
+      },
+      "Brand": {
+        "Laid": "{name} is branded. Press Track to know its direction and distance.",
+        "LaidDemon": "{name} is branded. It is a demon: it cannot be invisible to you or hidden from you.",
+        "Track": "Track",
+        "Ended": "The brand on {name} has ended.",
+        "Reading": "{name} is {feet} feet away, {point}.",
+        "Far": "{name} is more than a mile away: the brand tells you nothing.",
+        "Elsewhere": "{name} is not on your board: the GM says where it is."
+      },
+      "Compass": {
+        "n": "to the north",
+        "ne": "to the northeast",
+        "e": "to the east",
+        "se": "to the southeast",
+        "s": "to the south",
+        "sw": "to the southwest",
+        "w": "to the west",
+        "nw": "to the northwest",
+        "here": "beside you"
+      },
+      "Edge": { "Laid": "{name}'s weapon hits deal {n} more {type} damage for the duration." },
+      "Gaze": {
+        "Prompt": "{spell}: choose the allies who see what you see.",
+        "Laid": "{name} looks out through {spell}, for themselves and {n} allies."
+      },
+      "Agility": { "Laid": "Attacks against {name} take a Bane, and {name} provokes no Opportunity Attacks." },
+      "Hunting": { "Laid": "{name} holds Hunting Ground: {feet} feet round where they stand." },
+      "Aura": { "Light": "{name} sheds bright light in a {feet} ft radius while sustaining {spell}." },
+      "Recall": { "Back": "{name}'s glaives fly back to their hands: {glaives}." },
+      "Crash": {
+        "Prompt": "{spell}: choose the glaives to throw.",
+        "Hint": "Choose where {glaive} lands, within {feet} feet.",
+        "Thrown": "{name} throws {glaives}.",
+        "Ground": "The ground burns where {name}'s glaives landed ({n})."
+      },
+      "Tempest": { "Struck": "{name} makes {n} weapon attacks." },
+      "Glaive": { "Away": "{weapon} lies where it was thrown: {name} cannot attack with it until it is back." },
+      "Beam": { "Scorched": "{name} is Scorched {n} by {spell}." },
+      "Shear": { "Laid": "{name}'s Health maximum drops by {n} for the duration ({spell})." },
+      "Draw": { "Healed": "{name} regains {n} Health from {spell}." },
+      "Torment": { "Laid": "{name} takes {n} Fel damage at the start of each of its turns ({spell})." },
+      "Snare": {
+        "Laid": "{name} cannot teleport, turn invisible or pass through a portal ({spell}).",
+        "NoTeleport": "{name} cannot teleport while held by {spell}.",
+        "Boon": "Nether Snare: Banish and Soulchains gain a Boon against it ({name})"
+      },
+      "Siphon": { "Energy": "{name} regains {n} Energy." },
+      "Devour": {
+        "Hatred": "{name} gains {n} Hatred.",
+        "Ask": "{creature} starts its turn Sustaining {spell} (tier {tier}) within {feet} feet of {name}. Cast Devour the Spell for {n} Energy and your Reaction?",
+        "AskMany": "{creature} starts its turn Sustaining more than one spell of tier 3 or lower within {feet} feet of {name}. Cast Devour the Spell for {n} Energy and your Reaction, and choose which?",
+        "Pick": "{spell}: choose the spell {creature} Sustains to devour.",
+        "Title": "{spell}",
+        "Passed": "{creature} succeeds on its Spirit Resilience Test ({total} against DC {dc}). {spell} stands.",
+        "Failed": "{creature} fails its Spirit Resilience Test ({total} against DC {dc}).",
+        "NoDC": "{spell} by {name} carries no Spell DC, so no Spirit Test was rolled. The GM rolls it at the table.",
+        "Refuse": {
+          "trigger": "{spell} is cast only at the start of the turn of a creature Sustaining a spell of tier 3 or lower within 30 feet, before it pays that spell's upkeep. Nothing was spent."
+        }
+      },
+      "Flames": {
+        "Offer": "{name} burns. Spend an action to put the flames out.",
+        "PutOut": "Put out the flames",
+        "Gone": "The flames on {name} are already out.",
+        "Out": "{name} puts out the flames ({spell})."
       }
     },
     "SovSpell": {
@@ -3436,6 +3559,7 @@
       "BloodNoneNeeded": "None needed: the GM's Long Rest takes no blood",
       "NoBlood": "No blood: no Health and no Power recovered.",
       "NoBloodLong": "Not enough blood: no Health, no Power and no Fatigue recovered. Everything else the rest gives back came back.",
+      "HatredFel": "{n} Hatred held: {fel} Fel Corruption, not resisted.",
       "BloodPick": "Blood vial",
       "FreshLine": "Drank from a living source the GM approved",
       "FreshUnits": "Units drunk from a living source the GM approved",
@@ -4468,7 +4592,8 @@
       "Block": "Stat block",
       "Grant": "What you wear",
       "Waived": "Encumbering waived (talent)",
-      "Scales": "Encumbering waived (Scales)"
+      "Scales": "Encumbering waived (Scales)",
+      "Stride": "Hunter's Stride"
     },
     "Feature": {
       "Kind": {
@@ -4498,6 +4623,13 @@
         "DeathStrike": "A line on the attack's dialog: spend any type of rune; on a hit, regain the damage you took since the start of your last turn, up to 4 plus twice your tier.",
         "RunicDiscipline": "Every maneuver costs you 1 Runic Power.",
         "Plague": "Two lines on the attack's dialog, paid only when the attack hits: Frost Fever or Blood Plague.",
+        "SpectralSight": "You cannot be Blinded. Your tokens see in darkness and see invisible creatures to 30 feet, plus 10 feet for each 5 Fel Corruption.",
+        "BaneOfTheLegion": "Your weapon hits on a demon, or on a creature that holds Mana or is Sustaining a spell, deal extra damage equal to your tier and mark it until the end of your next turn.",
+        "FelLash": "A line on the attack's dialog: spend 2 Hatred; a hit deals Fel damage and takes Fel Corruption off you.",
+        "FelSurge": "Lines on a Half-Action or Action spell's dialog: each point of Hatred spent adds 1 to the damage or 1 to your Spell DC.",
+        "HuntersStride": "Your Speed rises by 5 feet for each tier you have reached.",
+        "ManaRend": "A line on the attack's dialog: spend 3 Energy; a hit takes Power off the target, and Fel damage for each point it could not lose.",
+        "WardingTattoos": "At a rest, 3 of the Hatred you hold are left out of the count.",
         "TableForNow": "The table applies this feature by hand.",
         "WildBond": "The touch restores Health equal to your tier to your companion.",
         "LifeTap": "Spend any Health; gain twice that much Mana.",
@@ -4837,6 +4969,239 @@
       "notFed": "The caster has not fed on this creature within the last minute, so no Health is lost.",
       "notBleeding": "The creature is no longer Bleeding, so no Health is lost."
     },
+    "DemonHunter": {
+      "NoGainUnleashed": "{name} gains no Hatred while unleashed.",
+      "HatredGained": "{name} gains {n} Hatred.",
+      "Offered": "{name} is offered on its own card when a creature you damaged this round drops to 0 Health near you. It is not used from the sheet.",
+      "Unknown": "{name} has nothing to do.",
+      "NoGM": "{name} needs a GM online to write on that creature. Nothing was spent.",
+      "Sense": {
+        "Button": "Sense demons",
+        "Tip": "Spectral Sight: the direction and distance of every demon within 60 feet, whispered to you.",
+        "Title": "Every demon within {feet} feet:",
+        "Row": "{target}: {feet} feet, {point}.",
+        "None": "No demon within {feet} feet.",
+        "NoFeature": "{name} does not hold Spectral Sight."
+      },
+      "PickUp": {
+        "Button": "Pick up {glaive}",
+        "Tip": "A glaive Flame Crash threw lies where it landed. Stand within 5 feet of it to pick it up.",
+        "Done": "{name} picks up {glaive}.",
+        "Refuse": {
+          "notAway": "{name} is not lying anywhere to pick up.",
+          "elsewhere": "{name} lies on another scene, or you have no token on the scene it lies on.",
+          "far": "You must stand within {feet} feet of {name} to pick it up."
+        }
+      },
+      "Talent": {
+        "NoOne": "No one",
+        "NeedsShape": "{name} needs the demon's shape that Demon Unleashed or Gift of the Skull gives you. Nothing was spent.",
+        "NoToken": "{name}: you have no token on this scene. Nothing was spent.",
+        "EnergyGained": "{name} gains {n} Energy.",
+        "FreeDevour": "{name} spends no Reaction on this devour.",
+        "Gorging": "Gorging Lash: {name} regains {n} Health.",
+        "FeedOnPower": "{talent}: {name} gains {n} Energy.",
+        "Taste": {
+          "Refuse": {
+            "pool": "{name} fills your Hatred, and you hold no Hatred pool. Nothing was spent.",
+            "unleashed": "{name}: you gain no Hatred while unleashed. Nothing was spent."
+          },
+          "Occasion": "{name}",
+          "Fel": "{name} gains {n} Fel Corruption, with no Test."
+        },
+        "Skull": {
+          "Refuse": {
+            "unleashed": "{name}: you are already in the shape Demon Unleashed gives you. Nothing was spent.",
+            "already": "{name}: you are already in this demon's shape. Nothing was spent."
+          },
+          "Taken": "{name} takes a demon's shape for {n} rounds: +1 Damage Rating and 1 Armor Point on every location.",
+          "NotTaken": "{name}'s demon's shape could not be written."
+        },
+        "GlaiveWard": {
+          "Prompt": "{name}: choose the school of the spell that targets you.",
+          "Laid": "{name} gains Ward {n} against {school} for this casting."
+        },
+        "Silence": {
+          "Prompt": "{name}: choose any number of creatures within {feet} feet. Each takes a Bane on every Casting Test for 10 minutes.",
+          "Ended": "Ended: {names}.",
+          "Nothing": "No spell or spell effect of tier 3 or lower stood within 30 feet.",
+          "Held": "Its caster's successful Spirit Resilience Test keeps: {names}.",
+          "NotDone": "{name}: the spells within 30 feet could not be ended. Ask the GM to end them by hand.",
+          "Bane": "{name} takes a Bane on every Casting Test for {minutes} minutes.",
+          "NoBane": "{name} takes no Bane."
+        },
+        "Bargain": {
+          "Prompt": "{name}: how long does your demon's shape last?",
+          "Rounds": "1 round for each Hatred you spend",
+          "Rest": "Until you finish a Short Rest; gain {n} Fel Corruption when it ends",
+          "Hostile": "Until it ends, you look like the demon you are, and most respectable people who see you treat you as hostile.",
+          "Taken": "{name} takes their demon's shape until they finish a Short Rest, and gains {n} Fel Corruption when it ends.",
+          "Occasion": "{name}",
+          "Ended": "{name}'s demon's shape ends: {name} gains {n} Fel Corruption, with no Test."
+        },
+        "Fall": {
+          "Test": "{name} is within 5 feet of where you land and makes a Body Resilience Test against your Spell DC."
+        },
+        "Steady": {
+          "Ended": "Steady Footing: {name} is no longer {conditions}."
+        },
+        "Hobbling": {
+          "Landed": "{target} is Slowed until the end of its next turn.",
+          "NotLanded": "{target} is not Slowed."
+        },
+        "Sweep": {
+          "Prompt": "{name}: choose the other enemy within your reach.",
+          "Landed": "{target} takes {n} Shadow damage. {lines}"
+        },
+        "TurnFire": {
+          "Struck": "{target} takes {n} Fel damage ({spell}). {lines}"
+        },
+        "Hoard": {
+          "Prompt": "{name}: regain the Health, or keep the soul?",
+          "Heal": "Regain {n} Health",
+          "Keep": "Keep it as a Crystalized Soul (you hold up to {n})",
+          "Refuse": {
+            "full": "You already hold {n} Crystalized Souls.",
+            "untaken": "You do not have Hoarded Soul."
+          },
+          "Kept": "{name} keeps the soul as a Crystalized Soul ({n} Health).",
+          "Lost": "{name} has no free bag slot, so the soul is lost."
+        },
+        "Feast": {
+          "Prompt": "{name}: choose any number of creatures within {feet} feet. Each makes a Spirit Resilience Test against your Spell DC.",
+          "Done": "Feast of Souls. Failed: {failed}. Succeeded: {passed}.",
+          "NotDone": "Feast of Souls: the Tests could not be made. Ask the GM to roll them by hand."
+        },
+        "Swallow": {
+          "Ended": "{target}'s spells end: {names}.",
+          "Nothing": "No spell {target} cast is still in force.",
+          "NotDone": "{target}'s spells could not be ended. Ask the GM to end them by hand."
+        },
+        "Due": {
+          "Text": "Your next Fel Lash before the end of your next turn costs no Hatred and deals {n} more damage.",
+          "Laid": "Demon's Due: {name}'s next Fel Lash costs no Hatred."
+        },
+        "Kill": {
+          "Prompt": "{name}: make a Hunter's Leap, spending no Energy and no Reaction?",
+          "Leap": "Leap",
+          "Stay": "Stay where you are",
+          "Boon": "Kill After Kill: {name}'s next attack this turn gains a Boon."
+        },
+        "Crystal": {
+          "Prompt": "{name}: choose what the soul gives you.",
+          "heal": "Regain {n} Health",
+          "energy": "Gain {n} Energy",
+          "hatred": "Gain {n} Hatred",
+          "Refuse": {
+            "maker": "{name}: only the hunter who made it can use it.",
+            "zero": "{name}: you cannot use it while you are at 0 Health."
+          },
+          "Healed": "{name} regains {n} Health."
+        },
+        "Legion": {
+          "Refused": "Refuse the Legion: a demon cannot Charm {name}.",
+          "Bane": "1 Bane: the spell targets a creature near {names}"
+        },
+        "Sight": {
+          "Name": "Sight Beyond Sight: {target} is {true}.",
+          "Shape": "Sight Beyond Sight: {target} is {true}, in the shape of {shape}."
+        }
+      },
+      "Unleashed": {
+        "Refuse": {
+          "empty": "{name} spends all your Hatred, at least 1, and you hold none. Nothing was spent.",
+          "already": "{name}: you are already in your demon's shape. Nothing was spent."
+        },
+        "Taken": "{name} takes their demon's shape for {n} rounds ({spent} Hatred spent).",
+        "NotTaken": "{name}'s demon's shape could not be written."
+      },
+      "BeyondLimits": {
+        "Refuse": {
+          "turn": "{name} is used once each turn, and it has been used this turn. Nothing was spent.",
+          "clock": "{name} is used once each turn; out of a fight, wait a round. Nothing was spent."
+        },
+        "Prompt": "{name}: choose one.",
+        "AfterTheTest": "Offered after you roll a Body or Reflex Resilience Test, where the 2 changes the result.",
+        "Ask": "{name} rolled {total} against DC {dc} on a {test} Resilience Test. Use Beyond Limits to add {n} and gain {gain} Hatred?",
+        "Row": "+{n} after the roll ({first} to {second}).",
+        "OneCreature": "{name}: target the one creature whose Opportunity Attack you avoid. Nothing was spent.",
+        "Choice": {
+          "further": "Your next Move this turn goes {feet} feet further",
+          "ground": "One Move ignores Difficult ground",
+          "noOpportunity": "One Move provokes no Opportunity Attack from one creature you choose",
+          "climbSwim": "You climb or swim at full Speed until the end of your turn",
+          "resilience": "Add {n} to a Body or Reflex Resilience Test"
+        },
+        "Landed": {
+          "further": "{name}'s Speed rises by {feet} feet for the rest of the turn.",
+          "ground": "{name} ignores Difficult ground for the rest of the turn.",
+          "noOpportunity": "{target} cannot take an Opportunity Attack against {name} this turn.",
+          "climbSwim": "{name} climbs and swims at full Speed until the end of the turn."
+        }
+      },
+      "Leap": {
+        "Table": "{name} leaps up to {feet} feet. No token stands on this scene, so the table moves it."
+      },
+      "Prepared": {
+        "Text": "Your class features and talents treat your Fel Corruption as 20. When this ends you gain {fel} Fel Corruption (you held {from} when it began) and lose all your Hatred.",
+        "Begun": "{name} is prepared for 1 minute. When it ends they gain {fel} Fel Corruption (20 less the {from} they held, halved and rounded up).",
+        "Ended": {
+          "end": "{name}'s minute is over: {fel} Fel Corruption, and their Hatred empties.",
+          "zero": "{name} dropped to 0 Health: the minute ends, {fel} Fel Corruption, and their Hatred empties.",
+          "choice": "{name} ends the minute: {fel} Fel Corruption, and their Hatred empties."
+        }
+      },
+      "Bane": {
+        "Damage": "+{n} damage against {target}.",
+        "Marked": "{target} cannot be invisible to {name} or hidden from them until the end of {name}'s next turn.",
+        "NotMarked": "{target}'s mark was not laid; the table holds it.",
+        "MarkText": "Until the end of {name}'s next turn, this creature cannot be invisible to {name} or hidden from them."
+      },
+      "FelLash": {
+        "Damage": "+{n} Fel damage.",
+        "Shed": {
+          "Done": "{name} loses {n} Fel Corruption ({from} to {to}).",
+          "ended": "{name}'s Fel Corruption has reached 20 and falls no more.",
+          "prepared": "While I Have Prepared lasts, Fel Lash takes no Fel Corruption off {name}.",
+          "once": "Fel Lash has already taken Fel Corruption off {name} this turn.",
+          "none": "{name} holds no Fel Corruption to lose."
+        }
+      },
+      "ManaRend": {
+        "Landed": "{target} loses {lost} Power and takes {n} Fel damage for the Power it could not lose.",
+        "NotDone": "The GM did not answer, so {target} loses no Power and takes no Fel damage."
+      },
+      "Devour": {
+        "Offer": "{target} has dropped to 0 Health near {name}. Devour its soul with your Reaction: regain {n} Health, and {hatred} Hatred for a demon's soul.",
+        "UndeadNote": "An undead creature without a soul gives nothing: the GM decides whether this one has one.",
+        "Button": "Devour Soul",
+        "Healed": "{name} devours the soul of {target} and regains {n} Health.",
+        "Refuse": {
+          "gone": "{name}: the creature is not at 0 Health any more. Nothing was spent.",
+          "self": "{name} cannot devour their own soul.",
+          "devoured": "{name}: that soul has already been devoured.",
+          "soulless": "{name}: a construct has no soul to devour.",
+          "struck": "{name}: you did not damage that creature this round.",
+          "far": "{name}: the creature must be within {feet} feet of you.",
+          "reaction": "{name}: your Reaction is spent.",
+          "zero": "{name}: you cannot devour a soul while you are at 0 Health. Nothing was spent."
+        }
+      },
+      "FelSurge": {
+        "Name": "Fel Surge",
+        "Paid": "{n} Hatred spent before the cast: +{damage} damage, +{dc} Spell DC",
+        "Short": "The {n} Hatred was no longer held, so the surge adds nothing.",
+        "DcRow": "+{n} Spell DC (DC {dc})",
+        "Refuse": {
+          "action": "{name}: Fel Surge reaches only a spell whose Action is a Half-Action or an Action. Nothing was spent.",
+          "none": "{name}: you hold no Hatred to spend on Fel Surge. Nothing was spent.",
+          "overTier": "{name}: Fel Surge spends no more Hatred than your tier ({max}). Nothing was spent.",
+          "short": "{name}: you hold too little Hatred for that much Fel Surge ({max} at most). Nothing was spent.",
+          "noDamage": "{name} deals no damage, so Fel Surge cannot add to it. Nothing was spent.",
+          "noTest": "{name} calls for no Test, so Fel Surge cannot add to its Spell DC. Nothing was spent."
+        }
+      }
+    },
     "Sovereign": {
       "NoAnswer": "The Sovereign's write was not answered: {reason}",
       "NoGM": "No GM is connected to write {name} on {target}. Nothing was spent.",
@@ -5163,7 +5528,9 @@
       "SpiritOffer": "{name}: the offer in the Spirit Realm",
       "Signature": "A Signature's price",
       "Gear": "The price of what you carry",
-      "Essence": "Essence held through a Long Rest"
+      "Essence": "Essence held through a Long Rest",
+      "Hatred": "{n} Hatred held at the end of a {rest}",
+      "Prepared": "{name} ended: 20 less the {from} Fel Corruption held when it began, halved and rounded up"
     },
     "Effects": {
       "Conditions": "Conditions",
@@ -5297,7 +5664,9 @@
         "Hexed": "Hex",
         "Polymorphed": "Polymorph",
         "Drake": "Drake form",
-        "BloodQueen": "Blood Monarch form"
+        "BloodQueen": "Blood Monarch form",
+        "Unleashed": "Demon Unleashed",
+        "Skull": "Gift of the Skull"
       },
       "EffectName": {
         "shapeshift": "{name} form",
@@ -5306,8 +5675,12 @@
         "battlerig": "{name}",
         "hexed": "{name} (Hex)",
         "polymorphed": "{name} (Polymorph)",
-        "drake": "{name} form"
+        "drake": "{name} form",
+        "unleashed": "{name}",
+        "skull": "{name}"
       },
+      "EffectTextUnleashed": "{name}: you add 2 to your Damage Rating, you gain 2 Armor Points on every location, you have Ward 2 against Fel, and you cannot be Frightened or Charmed. Fel Lash costs no Hatred and takes Fel Corruption off you only once a turn, and you gain no Hatred. At 10 Fel Corruption or more you fly at 240 feet; at 15 or more your Energy refills 5 a turn. Your own statistics, weapons and armor stay yours.",
+      "EffectTextSkull": "{name}: you add 1 to your Damage Rating and you gain 1 Armor Point on every location. Your own statistics, weapons and armor stay yours.",
       "EffectTextOverlay": "{name}: you are Large and fly at the drake's flying pace. What you wear and carry melds into the form, and the Signatures on it still work. You fight with the drake's bite, claws and tail in place of your weapons, at your own Strength modifier and Proficiency Bonus. Your Defense and your Armor Points at each location are the drake's or your own, whichever is higher. Your Health, attributes, ground Speed, Tests, Spell DC, features, talents and branch spells stay yours. Only you end it, as a Half-Action, from the character sheet.",
       "EffectText": "{name}: Strength, Dexterity, Constitution, Defense, Armor Points, Speed, size and attacks are the block's. Health and carrying stay the character's own. What is worn melds into the shape, and its Signatures and affixes still count. Leave it from the character sheet.",
       "InForm": "In {form}",
@@ -6998,6 +7371,10 @@
       "GMChoice": "The GM must resolve this Starfall choice because not all eligible creatures are visible to you.",
       "Empty": "No eligible creatures remain in this Starfall area."
     },
+    "Starweave": {
+      "AimOutside": "Place {name} inside a Starfall you are sustaining.",
+      "SkyfallOutside": "Place {name} on your Starweave. Its Starfall must still be sustained."
+    },
     "Beacon": {
       "Line": "Beacon on {partner} until the next Long Rest",
       "Named": "{name}'s Beacon rests on {partner} until {name}'s next Long Rest.",
@@ -7243,6 +7620,10 @@
         "freeCast": "cast without {pool}, once per Short Rest",
         "lifebinder": "split the damage: half to the target, the rest heals up to {n} creatures you choose",
         "voidSurge": "spend {n} Void Corruption for more damage",
+        "limits": "+{n} to this Test, once this turn; gain 1 Hatred",
+        "felSurgeDamage": "spend 1 Hatred: +1 to the spell's damage",
+        "felSurgeDc": "spend 1 Hatred: +1 to your Spell DC for this spell",
+        "ironWill": "+{n} to this Test, if it is against Fel Corruption, or against being Charmed or Frightened",
         "gritDamage": "{n} more damage, for {price} Sand, spent before the roll",
         "gritSl": "{n} more SL on a success, for {price} Sand, spent before the roll",
         "echoing": "spend {price} Sand: half the damage it deals lands again at the start of your next turn",
@@ -7751,7 +8132,9 @@
         "HammerOrMace": "{name} needs a hammer or a mace in hand.",
         "BothHands": "{name} needs a two-handed weapon, or a Versatile weapon in both hands.",
         "OneInEach": "{name} needs a one-handed weapon in each hand.",
-        "EitherGrip": "{name} needs a two-handed weapon, a Versatile weapon in both hands, or a one-handed weapon in each hand."
+        "EitherGrip": "{name} needs a two-handed weapon, a Versatile weapon in both hands, or a one-handed weapon in each hand.",
+        "GlaiveEach": "{name} needs a glaive in each hand.",
+        "ScytheTwoHands": "{name} needs a scythe wielded in two hands."
       },
       "ThrowNeedsRider": "{weapon} is thrown only as part of {talent}: tick its line to throw it."
     },

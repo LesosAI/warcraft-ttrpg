@@ -43,7 +43,7 @@ import { AZEROTH } from "../config.mjs";
 import { emptiedAtRest } from "./kept-pools.mjs";
 
 /** The card line each kept pool's emptying prints (D-848, D-943). */
-const EMPTIED_LINE = Object.freeze({ sand: "sandEmptied", runicPower: "runicPowerEmptied" });
+const EMPTIED_LINE = Object.freeze({ sand: "sandEmptied", runicPower: "runicPowerEmptied", hatred: "hatredEmptied" });
 
 /**
  * The kept pools a rest empties, and their card lines, off a snapshot. The pool

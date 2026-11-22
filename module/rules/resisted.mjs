@@ -49,7 +49,10 @@ import { sentences } from "./spell-effects.mjs";
  * Explosive Trap's *makes a Reflex Resilience Test against your Spell DC for half,
  * rounded down*. Read over flattened text (`flatText`): the book is hard-wrapped.
  */
-export const HALF_ON_PASS_RE = /\bhalf (?:of )?that,? rounded down,? on a success\b|\bon a success it takes half of that\b|\bfor half,? rounded down\b/i;
+// 07's Eye Beam (the Demon Hunter's, D-1437 to D-1449) writes *On a success it takes half the damage,
+// rounded down*, and 04's Chaos Blast *and on a success half of that, rounded down*: the same half,
+// which read as no damage at all on a pass until these alternatives.
+export const HALF_ON_PASS_RE = /\bhalf (?:of )?that,? rounded down,? on a success\b|\bon a success (?:it takes )?half (?:of that|the damage)\b|\bfor half,? rounded down\b/i;
 
 /**
  * Prose as one line of plain words: tags off, entities read, whitespace one space.

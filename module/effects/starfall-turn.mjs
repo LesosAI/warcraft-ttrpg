@@ -1,4 +1,6 @@
 import { starfallContexts } from "./starfall-context.mjs";
+// Starweave's second target (07 §11; the spell audit, D-1710): read at the turn's snapshot.
+import { starweaveDoubles } from "./starweave-context.mjs";
 
 export const STARFALL_START = "starfallStart";
 const scope = "azeroth-rpg";
@@ -25,7 +27,9 @@ export function beginStarfallTurn(combat, combatant) {
       .filter(t => t.className === "Druid" && t.identifier === "starfall").map(t => Number(t.taken) || 0));
     const record = { ...stamp, version: 1, refusal: inventory.ok ? null : inventory.reason,
       casts: inventory.ok ? inventory.contexts.map(row => ({ regionUuid: row.regionUuid, cast: row.cast,
-        candidates: row.candidates.map(candidate => candidate.uuid), talentRank })) : [] };
+        candidates: row.candidates.map(candidate => candidate.uuid), talentRank,
+        // A live timed Starweave linked to THIS Starfall cast: two creatures this turn (D-1710).
+        starweave: starweaveDoubles(actor, scene, [...(scene.regions ?? [])].find(region => region.uuid === row.regionUuid) ?? null) })) : [] };
     if (!current() || !same(combat.getFlag(scope, STARFALL_START) ?? null, prior)) return { ok: false, reason: "changed" };
     await combat.setFlag(scope, STARFALL_START, record);
     if (!same(combat.getFlag(scope, STARFALL_START), record)) return { ok: false, reason: "review" };

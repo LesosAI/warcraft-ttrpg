@@ -340,7 +340,7 @@ export function necromancerSpellsBatch(context) {
       assert.notOk(tokenOf(body).document.getFlag(SCOPE, CORPSE_FLAG), "the corpse is not destroyed");
     });
 
-    it("Grave Touch: the target takes the blow and the CASTER regains 2", async function () {
+    it("Grave Touch: the target takes the blow and the CASTER regains 1 (the spell audit, D-1701)", async function () {
       this.timeout(120000);
       const n = await necro("ZZ NS Touch", { spells: ["Grave Touch"] });
       const foe = await creature("Bandit", "NS Touch Foe");
@@ -348,7 +348,7 @@ export function necromancerSpellsBatch(context) {
       await n.update({ "system.health.value": Math.max(1, health(n) - 5) });
       const card = await castOk(n, "Grave Touch", { targets: [foe] });
       assert.ok(await applyRow(card, 0, foe) > 0, "the target takes Shadow damage");
-      assert.equal(await healRow(card, 'button[data-action="applyHealing"][data-self]', n), 2, "the caster regains 2");
+      assert.equal(await healRow(card, 'button[data-action="applyHealing"][data-self]', n), 1, "the caster regains 1");
     });
 
     it("Dread Whisper: a failed Spirit Test leaves the target Frightened", async function () {

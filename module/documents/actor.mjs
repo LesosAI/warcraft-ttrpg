@@ -200,6 +200,18 @@ import { feedOn as sovereignFeedOn, isPrey as sovereignIsPrey, loseHealthForVita
 // The Necromancer's Essence (the plan's Phase 3): the doors a rise comes through, and that it
 // never pays a maneuver.
 import { ESSENCE, paysByKind, restExposure } from "../rules/essence.mjs";
+// The Demon Hunter's Hatred (the Demon Hunter plan): a write never trims it to a fallen cap, and a
+// rest turns what is held into Fel Corruption.
+import { HATRED, featureFel, hatredAtRest, hatredWrite, keepsAboveCap, restModifiersOf } from "../rules/hatred.mjs";
+// The one Energy pool two classes share (02 §10, D-1723): found by any member, written on the holder, mirrored.
+import { poolHeldBy } from "../rules/pools.mjs";
+import { mirrorMembers, sharedPoolValue } from "../rules/energy-merge.mjs";
+// The Demon Hunter's features (the Demon Hunter plan's Phase 4a): the two riders, Fel Surge's lines, the shape's
+// Energy refill and its no-gain rule.
+import { FEL_SURGE_FEATURE, QUIET_THE_WHISPERS, demonHunterRiders, felSurgeLines, freeFelLash, unleashedGainRefusal, unleashedRefillExtra } from "../rules/demon-hunter-features.mjs";
+// 04's Demon's Due (the Demon Hunter plan's Phase 5): who makes a Fel Lash free.
+import { DEMONS_DUE, felLashFreeBy } from "../rules/demon-hunter-talents.mjs";
+import { castDealsDamage } from "../rules/area-ticks.mjs";
 import { empowerLines, fleshOfferingLines, skeletalMasteryLines } from "../rules/necromancer-lines.mjs";
 import { hordeLeadLines } from "../rules/necromancer-features.mjs";
 import { HORDE_LEAD_FLAG, leadFor } from "../rules/horde.mjs";
@@ -216,6 +228,8 @@ import { grantsOn } from "../rules/grants.mjs";
 // (D-769): the physical half, what melds, and what ends it.
 import { AVATAR, SHAPE_FLAG, isForcedKind, meldsGear, naturalWeapon, readShape, shapePhysical } from "../rules/shapes.mjs";
 import { endShapeAt, endShapeOnDamage, refuseForcedShape } from "./shapes.mjs";
+// A glaive Flame Crash threw (07 §15; D-1549): equipped, and out of the hand until it is back.
+import { glaiveAway } from "../rules/demon-hunter-spells.mjs";
 // 14's Hex the Loudest (D-809): a creature that cannot attack.
 import { refuseCannotAttack } from "../effects/boss-doors.mjs";
 // What a feature lays on every ally in reach, stamped whole (D-755), and the
@@ -643,7 +657,8 @@ export class AzerothActor extends Actor {
    * 3B): every Test door calls this once its die is evaluated and before anything follows
    * from it. In order: a nearby holder's Paradox on an enemy's Attack or Casting Test
    * (`effects/chromatic-reactions.mjs#askParadox`), the roller's own Time Lapse on a failure,
-   * then Elune's Regard. A Test a Disrupt Weave has failed is the spell's failure, not the
+   * Another Timeline, a Demon Hunter's Beyond Limits on a Body or Reflex Resilience Test
+   * (`effects/demon-hunter-features.mjs#offerBeyondLimits`), then Elune's Regard. A Test a Disrupt Weave has failed is the spell's failure, not the
    * die's, and nothing here reaches it.
    */
   async offerElunesRegard(roll) {
@@ -663,6 +678,15 @@ export class AzerothActor extends Actor {
       await askAnotherTimeline({ roller: this, roll });
     } catch (err) {
       console.warn("azeroth-rpg | Another Timeline", err);
+    }
+    // **02's BEYOND LIMITS, AFTER THE DIE** (*add 2 to a Body or Reflex Resilience Test after you roll it and see the
+    // result*; D-1720, D-1724): the roller's own, on a Test the door stamped with its Resilience, and only where the 2
+    // changes the result or its SL - asked before Elune's Regard, which reads the result this leaves.
+    try {
+      const { offerBeyondLimits } = await import("../effects/demon-hunter-features.mjs");
+      await offerBeyondLimits(this, roll);
+    } catch (err) {
+      console.warn("azeroth-rpg | Beyond Limits", err);
     }
     return offerElunesRegard(this, roll);
   }
@@ -941,7 +965,10 @@ export class AzerothActor extends Actor {
     }
     // A drake form melds too (02, *Drake form*: *You fight with the block's attacks in
     // place of your weapons*), so it takes the branch above; nothing in hand is added.
-    return this.items.filter(i => i.type === "weapon" && i.system?.equipped === true);
+    // **A THROWN GLAIVE IS NOT IN THE HAND** (07 §15's Flame Crash: *A thrown glaive lies where it landed until you
+    // pick it up or cast Call the Glaives, and you cannot attack with it until then*; C55, C57; D-1549): it keeps its
+    // slot and is no ready weapon, so its hand is empty.
+    return this.items.filter(i => i.type === "weapon" && i.system?.equipped === true && !glaiveAway(i));
   }
 
   /**
@@ -1014,8 +1041,11 @@ export class AzerothActor extends Actor {
         const castingMod = item.system?.castingAbility ? (this.system?.abilities?.[item.system.castingAbility]?.mod ?? 0) : 0;
         const { powers } = poolsFor([{ ...item.system, itemId: item.id, level, castingMod }], level);
         const full = powers.find(p => p.itemId === item.id)?.max ?? 0;
+        // **A SECOND ENERGY CLASS JOINS THE POOL ALREADY HELD** (02 §10, D-1723): its entry mirrors the
+        // holder's value rather than opening full, so the one pool is not refilled by taking a class.
+        const joined = sharedPoolValue(classes, id => this.items.get(id)?.system?.power?.name ?? null, item.system?.power?.name ?? null);
         try {
-          classes = addClassEntry(classes, { itemId: item.id, level, power: { value: full }, momentum: { value: 0 } });
+          classes = addClassEntry(classes, { itemId: item.id, level, power: { value: joined ?? full }, momentum: { value: 0 } });
           changed = true;
         } catch {
           // The item's _preCreate veto should have refused it; if a door got
@@ -1265,7 +1295,10 @@ export class AzerothActor extends Actor {
       }
       return out;
     }
-    for (const p of s.powers ?? []) out.push({ itemId: p.itemId, kind: "power", name: p.name, value: p.value ?? 0, max: p.max ?? 0 });
+    // **THE ONE ENERGY POOL TWO CLASSES SHARE** (02 §10, D-1723) carries `itemIds`, its members, the
+    // holder first; every other row carries none. A write that names any member reaches it
+    // (`rules/pools.mjs#poolHeldBy`).
+    for (const p of s.powers ?? []) out.push({ itemId: p.itemId, kind: "power", name: p.name, value: p.value ?? 0, max: p.max ?? 0, ...(Array.isArray(p.itemIds) ? { itemIds: [...p.itemIds] } : {}) });
     for (const p of s.momenta ?? []) out.push({ itemId: p.itemId, kind: "momentum", name: p.name, value: p.value ?? 0, max: p.max ?? 0 });
     return out;
   }
@@ -1336,8 +1369,8 @@ export class AzerothActor extends Actor {
    * itself. Everything else calls `updatePool`.
    */
   async writePoolsNow(changes, extra = {}, options = {}) {
-    const { runicGain = null, essenceGain = null, tributeGain = null, vitaeGain = null, ...updateOptions } = options ?? {};
-    const gainSources = { runicGain, essenceGain, tributeGain, vitaeGain };
+    const { runicGain = null, essenceGain = null, tributeGain = null, vitaeGain = null, hatredGain = null, ...updateOptions } = options ?? {};
+    const gainSources = { runicGain, essenceGain, tributeGain, vitaeGain, hatredGain };
     options = updateOptions;
     const list = Array.isArray(changes) ? changes : [changes];
     if (!list.length && !Object.keys(extra).length) return this;
@@ -1362,8 +1395,11 @@ export class AzerothActor extends Actor {
     const classes = (this.system?.classes ?? []).map(c => ({ ...c, power: { ...c.power }, momentum: { ...c.momentum } }));
     let moved = false;
     for (const { itemId, kind, value } of list) {
-      const entry = classes.find(c => c.itemId === itemId);
-      const pool = snapshot.find(p => p.itemId === itemId && p.kind === kind);
+      // **ONE ENERGY POOL, WRITTEN ON THE HOLDER AND MIRRORED** (02 §10, D-1723): a write naming any
+      // member of the merged pool finds it (`poolHeldBy`), lands on the holder's entry, and the same
+      // value is mirrored into every other member's `power.value` below.
+      const pool = poolHeldBy(snapshot, itemId, kind);
+      const entry = pool ? classes.find(c => c.itemId === pool.itemId) : null;
       if (!entry || !pool) continue;
       // **THE RUNES ARE NEVER WRITTEN HERE** (D-943; the F1 review): the pool is DERIVED off
       // the weapons wielded, and a rune changes only through `documents/runes.mjs`, which
@@ -1373,8 +1409,13 @@ export class AzerothActor extends Actor {
         if (Math.trunc(value) !== (pool.value ?? 0)) ui.notifications?.warn(game.i18n.format("AZEROTH.Runes.Refuse.direct", { name: this.name }));
         continue;
       }
-      const next = Math.max(0, Math.min(pool.max, Math.trunc(value)));
-      // **RUNIC POWER, ESSENCE, TRIBUTE AND VITAE RISE THROUGH A NAMED DOOR ALONE**
+      // **HATRED IS NEVER TRIMMED TO A FALLEN CAP** (the Demon Hunter plan, Q14 left as written): a
+      // fall lands as written and a rise stops at the higher of the cap and what is held
+      // (`rules/hatred.mjs#hatredWrite`). Every other pool is clamped to its cap, as before.
+      const next = keepsAboveCap(pool.name)
+        ? hatredWrite({ before: entry[kind]?.value ?? 0, value, cap: pool.max })
+        : Math.max(0, Math.min(pool.max, Math.trunc(value)));
+      // **RUNIC POWER, ESSENCE, TRIBUTE, VITAE AND HATRED RISE THROUGH A NAMED DOOR ALONE**
       // (`rules/named-gains.mjs#namedGainRefusal`, the ONE refusal the four share; the San'layn and
       // Sovereign plan's C3): a rise this write names no source for - `runicGain`, `essenceGain`,
       // `tributeGain`, `vitaeGain` - is refused in words, and the rest of the batch stands. Vitae is a
@@ -1385,9 +1426,23 @@ export class AzerothActor extends Actor {
           ui.notifications?.warn(game.i18n.format(namedGainWords(pool.name, refusedGain), { name: this.name }));
           continue;
         }
+        // **YOU GAIN NO HATRED WHILE UNLEASHED** (02's Demon Unleashed; the Demon Hunter plan's Phase 4a): the one
+        // backstop every Hatred door meets, I Have Prepared's own fill, a refund and a GM's hand excepted
+        // (`demon-hunter-features.mjs#unleashedGainRefusal`).
+        if (pool.name === HATRED && unleashedGainRefusal({ unleashed: this.shape?.kind === "unleashed", source: gainSources.hatredGain, before: entry[kind]?.value ?? 0, after: next })) {
+          ui.notifications?.warn(game.i18n.format("AZEROTH.Hatred.Refuse.gain.unleashed", { name: this.name }));
+          continue;
+        }
       }
       if (next !== (entry[kind]?.value ?? 0)) moved = true;
       entry[kind] = { ...entry[kind], value: next };
+      // The mirror: a write that moves only a member's copy still counts as a move, so a stale mirror heals.
+      for (const memberId of mirrorMembers(pool)) {
+        const member = classes.find(c => c.itemId === memberId);
+        if (!member) continue;
+        if ((member[kind]?.value ?? 0) !== next) moved = true;
+        member[kind] = { ...member[kind], value: next };
+      }
     }
     // A write that moves nothing is skipped: the fight's end zeroes twice
     // (before the confirm and again on exit) and the second is silent.
@@ -2368,6 +2423,10 @@ export class AzerothActor extends Actor {
     // refused leaves the shape standing; Demonic Ascendance keeps a
     // Metamorphosis through a Short one (04).
     await endShapeAt(this, "short");
+    // **HATRED HELD AT A SHORT REST BECOMES FEL** (the Demon Hunter plan's R2: *gain 1 Fel Corruption
+    // for every 3 Momentum held, rounded up, and the pool empties; no Test*), after every refusal
+    // above and before the rest empties the pool (`kept-pools.mjs#EMPTIED_BY.hatred`).
+    const hatredHeld = this.type === "character" ? await this._hatredAtRest("short") : null;
 
     // READ AFTER THE SPEND. Deleting an embedded item resets the actor, which
     // rebuilds `this.system`: a reference taken at the top of the method would
@@ -2392,6 +2451,7 @@ export class AzerothActor extends Actor {
       blood: bloodJudgement?.fed === true && bloodJudgement.plan?.met === true
     });
     if (reserve.mana > 0 && picks.drinks === true) r.gains.push({ kind: "talentMana", name: reserve.by.join(", "), amount: reserve.mana });
+    if (hatredHeld) r.gains.push({ kind: "hatredFel", held: hatredHeld.counted, fel: hatredHeld.fel });
     const restBefore = this.system?.health?.value ?? 0;
     if (this.type === "character") await this.updatePool(r.pools, { "system.health.value": r.health, "system.fatigue": Math.max(r.fatigue, this.system.fatigueFloor ?? 0) });
     else {
@@ -2475,6 +2535,8 @@ export class AzerothActor extends Actor {
     // rulings' READING, 2026-10-03, for the lead: lost at a Long Rest whatever its
     // span; D-777).
     await this.endTemporaryHealth({ kind: "longRest" });
+    // **HATRED HELD AT A LONG REST BECOMES FEL** (R2), before the rest empties the pool.
+    const hatredHeld = this.type === "character" ? await this._hatredAtRest("long") : null;
     const s = this.system;
     const restBefore = s?.health?.value ?? 0;
     const diseased = this.statuses?.has("diseased") ?? false;
@@ -2483,6 +2545,7 @@ export class AzerothActor extends Actor {
       health: s.health, conMod: s.abilities?.con?.own?.mod ?? s.abilities?.con?.mod ?? 0, tier: s.tier ?? 1, fatigue: s.fatigue ?? 0,
       pools: this.poolSnapshot(), diseased, withheld
     });
+    if (hatredHeld) r.gains.push({ kind: "hatredFel", held: hatredHeld.counted, fel: hatredHeld.fel });
     // Void's Fatigue does not clear on a Long Rest (10 §5): the floor holds.
     if (this.type === "character") await this.updatePool(r.pools, { "system.health.value": r.health, "system.fatigue": Math.max(r.fatigue, this.system.fatigueFloor ?? 0) });
     else {
@@ -2685,6 +2748,52 @@ export class AzerothActor extends Actor {
     });
   }
 
+  /**
+   * **THE HATRED A REST TURNS INTO FEL** (the Demon Hunter plan's R2, C41, C42, C45): the Hatred held,
+   * capped at the cap the rest finds (the orchestrator's brief: the cap is enforced when Hatred is
+   * gained and at a rest), less Warding Tattoos and Warding Ink, at 1 Fel per 3 (4 or 5 with Bridle
+   * the Demon) rounded up, less Measured Breath (`rules/hatred.mjs#hatredAtRest`). The Fel lands
+   * unresisted through the ONE unresisted door (`workflows.accrueCorruption`); the pool empties with
+   * the rest's own pool write, which runs in the one pool queue. Judged whole before it writes, and
+   * never thrown: a Fel write that fails is said and the rest goes on.
+   *
+   * Quiet the Whispers (04, the Sufferer: a Spirit Test to gain none) is the talent phase's.
+   *
+   * @param {"short"|"long"} kind
+   * @returns {Promise<{held: number, counted: number, fel: number}|null>}
+   */
+  async _hatredAtRest(kind) {
+    // Quiet the Whispers' uses come back at a Long Rest, before its own conversion draws on them (MY READING).
+    if (kind === "long" && this.getFlag("azeroth-rpg", "quietWhispers")) await this.unsetFlag("azeroth-rpg", "quietWhispers");
+    const pool = (this.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === HATRED) ?? null;
+    const judged = pool ? hatredAtRest({ held: pool.value, cap: pool.max, modifiers: restModifiersOf(this) }) : null;
+    if (!judged) return null;
+    // **04's QUIET THE WHISPERS, ROLLED LAST** (the Sufferer's stacking line; the Demon Hunter plan's Phase 4a):
+    // after Warding Tattoos, Warding Ink, Bridle the Demon and Measured Breath have reduced it, a Spirit
+    // Resilience Test at DC 10 plus the Hatred held when the rest ended; a success cancels the Fel that remains.
+    // Its count is a use a rank, emptied at a Long Rest (above).
+    // By the talent's name off the law (`QUIET_THE_WHISPERS.name`); its row is the talents phase's.
+    if (judged.fel > 0 && (this.talentRanks?.(QUIET_THE_WHISPERS.name) ?? 0) > 0) {
+      try {
+        const { quietTheWhispers } = await import("../effects/demon-hunter-features.mjs");
+        judged.fel = await quietTheWhispers(this, { fel: judged.fel, held: judged.held, kind });
+      } catch (err) {
+        console.warn("azeroth-rpg | Quiet the Whispers", err);
+      }
+    }
+    if (judged.fel > 0) {
+      try {
+        await game.system.azeroth.workflows.accrueCorruption(this, {
+          track: "fel", points: judged.fel,
+          occasion: game.i18n.format("AZEROTH.Occasion.Hatred", { n: judged.counted, rest: game.i18n.localize(kind === "long" ? "AZEROTH.Sheet.LongRest" : "AZEROTH.Sheet.ShortRest") })
+        });
+      } catch (err) {
+        console.warn("azeroth-rpg | Hatred at a rest", err);
+      }
+    }
+    return judged;
+  }
+
   /** 05 §14, 06 §9: stand at 1 Health for one Tether, no Test. */
   async burnTether() {
     const r = burnTether({ tether: this.system?.spiritTether, health: this.system?.health });
@@ -2700,7 +2809,12 @@ export class AzerothActor extends Actor {
   async refillTurn({ still = false } = {}) {
     // 04's Adrenaline (D-773): *Your Energy pool returns 1 more per rank at the
     // start of your turn*, beside 05 §12's own refill.
-    const extra = this.type === "character" ? turnStartRestoreFor(this.takenTalents()).byPool : {};
+    const extra = this.type === "character" ? { ...turnStartRestoreFor(this.takenTalents()).byPool } : {};
+    // 02's Demon Unleashed: *At 15 Fel Corruption or more your Energy refills 5 at the start of each of your turns
+    // instead of 3* (the Demon Hunter plan's C15), off the Fel a feature's threshold reads (`featureFel`: I Have
+    // Prepared's 20, never Embrace the Pain's 5 more; the review's M1).
+    const unleashedMore = this.type === "character" ? unleashedRefillExtra({ unleashed: this.shape?.kind === "unleashed", fel: featureFel(this) }) : 0;
+    if (unleashedMore > 0) extra.energy = (Number(extra.energy) || 0) + unleashedMore;
     // 02's Focus refills only after a still turn (the Legacy branches' door 9):
     // `still` is the combat door's measure, and a caller that names none refills
     // no Focus (`rules/rest.mjs#turnRefill`, a gate closed by default).
@@ -3243,8 +3357,10 @@ export class AzerothActor extends Actor {
     // **ESSENCE NEVER PAYS A MANEUVER** (`rules/essence.mjs#paysByKind`; the Necromancer
     // plan: *It never pays for a spell, for Parry or for a maneuver*): the first Momentum pool
     // that may, and none for a character holding Essence alone.
-    const own = (this.system?.momenta ?? []).find(p => paysByKind(p?.name))
-      ?? (this.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && paysByKind(p.name)) ?? null;
+    // **AND HATRED PAYS EVERY MANEUVER** (the Demon Hunter plan's C62: *"Hatred can pay all
+    // maneuvers."*), the called shot among them, and no other cost that names no pool.
+    const own = (this.system?.momenta ?? []).find(p => paysByKind(p?.name, "maneuver"))
+      ?? (this.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && paysByKind(p.name, "maneuver")) ?? null;
     let owner = null;
     let quarry = null;
     // A companion's Ranger is asked WHATEVER the companion's own pool: every creature
@@ -3347,7 +3463,14 @@ export class AzerothActor extends Actor {
       // 04's Skeletal Mastery's Empowered line, on Raise Dead (the 4b review's MUST-FIX 5).
       ...skeletalMasteryLines(this.takenTalents(), { identifier: spellSystem.identifier ?? null, essence: essenceHeld }),
       // 02 §7's new lead, named at a cast (the Necromancer plan's door 3).
-      ...hordeLeadLines(this.#hordeStanding()).map(l => ({ ...l, name: game.i18n.localize(l.name) }))
+      ...hordeLeadLines(this.#hordeStanding()).map(l => ({ ...l, name: game.i18n.localize(l.name) })),
+      // 02 §7's Fel Surge (the Demon Hunter plan's C64): a line a point, judged again by `castSpell`.
+      ...felSurgeLines({
+        holds: this.hasFeature?.(FEL_SURGE_FEATURE) === true,
+        held: (this.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === HATRED)?.value ?? 0,
+        tier: this.system?.tier ?? 1, action: spellSystem.action ?? null,
+        hasDamage: castDealsDamage(spellSystem), hasTest: Boolean(spellSystem.test?.resilience)
+      })
     ];
   }
 
@@ -3413,8 +3536,11 @@ export class AzerothActor extends Actor {
    *   one that needs it (04's Garrote, D-773) - null where nothing could say
    * @returns {Array<object>} `rules/riders.mjs#ridersFor`'s lines; none for a creature
    */
-  riderLines({ weapon = null, opening = null, target = null } = {}) {
+  riderLines({ weapon = null, opening = null, target = null, unarmed = false } = {}) {
     if (this.type !== "character") return [];
+    // **WHOSE POOL A RIDER PAYS FROM** (the Demon Hunter review's M2): the class item the row's class names, so a
+    // Rogue and a Demon Hunter each pay their own Energy (`riders.mjs#ridersFor`'s `classPool`).
+    const classPool = className => (this.classItems ?? []).find(c => c.name === className)?.id ?? null;
     const fight = this.activeFight();
     const combatant = fight ? fight.getCombatantsByActor(this)?.[0] ?? null : null;
     const round = combatant?.getFlag("azeroth-rpg", "round") ?? {};
@@ -3436,9 +3562,21 @@ export class AzerothActor extends Actor {
       activeDiscounts: riderDiscountsOf(this.effects.filter(e => e.active !== false).map(e => e.flags?.["azeroth-rpg"] ?? {})),
       tier: this.system?.tier ?? 1,
       facts: target ? this.gateFacts(target) : null,
-      abilities: abilityScope(this.system)
+      abilities: abilityScope(this.system),
+      classPool
     };
-    const featureLines = held.talents.length ? ridersFor(held.talents, { ...sharedRiderOptions, rowOf: held.rowOf }) : [];
+    const dkLines = held.talents.length ? ridersFor(held.talents, { ...sharedRiderOptions, rowOf: held.rowOf }) : [];
+    // **AND THE DEMON HUNTER'S** (02 §7's Fel Lash and Mana Rend; the Demon Hunter plan's Phase 4a), through the
+    // same reading; Fel Lash costs no Hatred while Demon Unleashed's shape stands (`freeFelLash`).
+    // An unarmed strike carries neither (the review's M3: *As part of a weapon attack*; `rules/unarmed.mjs` decides).
+    const dh = demonHunterRiders(this.items.filter(i => i.type === "feature").map(i => i.name), { unarmed });
+    const dhLines = dh.talents.length
+      // And 04's Demon's Due (Phase 5): the promise a devoured demon laid makes the next Fel Lash free too.
+      ? freeFelLash(ridersFor(dh.talents, { ...sharedRiderOptions, rowOf: dh.rowOf }), {
+        freeBy: felLashFreeBy({ shapeKind: this.shape?.kind ?? null, due: this.effects.some(e => e.active !== false && e.flags?.["azeroth-rpg"]?.[DEMONS_DUE.flag]) })
+      })
+      : [];
+    const featureLines = [...dkLines, ...dhLines];
     return [...ridersFor(this.takenTalents(), {
       pools: this.riderPools(),
       form: this.inShapeshiftForm === true,
@@ -3456,7 +3594,8 @@ export class AzerothActor extends Actor {
       // through the one fact-builder; null where nobody is targeted.
       facts: target ? this.gateFacts(target) : null,
       // And the striker's ability modifiers for an amount that names one (door 16).
-      abilities: abilityScope(this.system)
+      abilities: abilityScope(this.system),
+      classPool
     }), ...featureLines].sort((a, b) => a.name.localeCompare(b.name) || a.identifier.localeCompare(b.identifier));
   }
 
@@ -3524,9 +3663,11 @@ export class AzerothActor extends Actor {
    *
    * @returns {{boons: number, penetration: number, damage: number, live: object[], lapsed: object[]}}
    */
-  pendingNextAttack({ targetStatuses = null } = {}) {
+  pendingNextAttack({ targetStatuses = null, secondRoll = false } = {}) {
     // The target's conditions, where the attack names a target (07 §17's Scent of Blood; D-1370).
-    return pendingNextAttack(this.getFlag?.("azeroth-rpg", NEXT_ATTACK_FLAG) ?? [], { now: this.fightTurnNow(), targetStatuses });
+    // And whether this is the Attack's second roll, which alone reads a promise to every roll
+    // its first roll marked (07 §11's Frost Strike; D-1711).
+    return pendingNextAttack(this.getFlag?.("azeroth-rpg", NEXT_ATTACK_FLAG) ?? [], { now: this.fightTurnNow(), targetStatuses, secondRoll: secondRoll === true });
   }
 
   /**
@@ -4685,6 +4826,19 @@ export class AzerothActor extends Actor {
         await this.setFlag("azeroth-rpg", "lastBlow", { type: killingBlowType({ type, parts }) });
       } catch (err) {
         console.warn("azeroth-rpg | the last blow's type", err);
+      }
+    }
+    // **02's DEVOUR SOUL: *a creature you damaged this round*, BY ANY MEANS** (the Demon Hunter review's M5; the
+    // orchestrator's ruling): a spell's, an area's or an attack's damage landing on this creature is put on the
+    // hunter's record here, before the Health is written, so the death watch's offer finds it - and 04's Tear the Soul
+    // gives its free devour only to the attack's blow that drops the creature to 0 (L15). Asked only of a Demon Hunter.
+    if (by && by !== this && by.type === "character" && (amount > 0 || soaked.absorbed > 0)
+      && by.items?.some?.(i => i.type === "class" && i.system?.identifier === "demon-hunter")) {
+      try {
+        const { noteDamagedBy } = await import("../effects/demon-hunter-features.mjs");
+        await noteDamagedBy(by, this, { attack: attack === true && spell !== true, drops: amount > 0 && amount >= (Number(this.system?.health?.value) || 0) });
+      } catch (err) {
+        console.warn("azeroth-rpg | Devour Soul's record of a creature damaged", err);
       }
     }
     await this.adjustHealth(-amount, { temp: soaked.temp, damage: true, manaShield:shield });

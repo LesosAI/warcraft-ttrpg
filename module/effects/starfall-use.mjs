@@ -3,6 +3,7 @@ import { createStarfallDelivery } from "./starfall-delivery.mjs";
 import { strikeFromArea } from "./area-strikes.mjs";
 import { STARFALL_START } from "./starfall-turn.mjs";
 import { refreshStarfallOffers } from "./starfall-offers.mjs";
+import { starweaveDoubles } from "./starweave-context.mjs";
 
 export const STARFALL_RECEIPTS = "starfallTurns";
 export const STARFALL_QUERY = "azeroth-rpg.starfall";
@@ -36,16 +37,17 @@ export function deliverStarfall(payload = {}, { user = game.user } = {}) {
         || start.combatantId !== request.combatantId || start.casterUuid !== caster.uuid) return null;
       const offered = start.casts?.find(row => row.cast === context.cast && row.regionUuid === region.uuid);
       if (!offered || !Array.isArray(offered.candidates)) return null;
-      // Starweave must be associated with its specific Starfall area. Until
-      // placement records that link, refuse rather than silently use one target.
-      const held = caster.getFlag(scope, "sustaining") ?? [];
-      if (held.some(entry => entry.identifier === "starweave" || entry.name === "Starweave")) return null;
+      // **STARWEAVE'S SECOND TARGET** (07 §11; the spell audit, D-1710): a live timed Starweave
+      // linked at its placement to THIS Starfall cast, read again here on the GM and held to what
+      // the turn's snapshot offered - so a Starweave that ended, or one placed after the turn's
+      // start, gives nothing this turn.
+      const starweave = offered.starweave === true && starweaveDoubles(caster, scene, region);
       const talentRank = Math.max(0, ...(caster.takenTalents?.() ?? [])
         .filter(t => t.className === "Druid" && t.identifier === "starfall").map(t => Number(t.taken) || 0));
       return { combatUuid: combat.uuid, combatantId: combat.combatant.id, round: combat.round, turn: combat.turn,
         casterUuid: caster.uuid, regionUuid: region.uuid, cast: context.cast,
         candidates: context.candidates.map(row => row.uuid).filter(uuid => offered.candidates.includes(uuid)),
-        talentRank: Math.min(talentRank, offered.talentRank), starweave: false };
+        talentRank: Math.min(talentRank, offered.talentRank), starweave };
     };
     if (!read()) return { ok: false, reason: "context" };
     let expected = structuredClone(combat.getFlag(scope, STARFALL_RECEIPTS) ?? []);

@@ -115,7 +115,7 @@ export const PROJECTILES = Object.freeze({
 
 /**
  * Every 08 §7 base that is neither a launcher nor ammunition, by identifier:
- * ninety-two rows, and the other thirty-nine resolve through `launcher` and
+ * ninety-nine rows (the Demon Hunter's seven glaives the last, D-1437 to D-1449), and the other thirty-nine resolve through `launcher` and
  * `fits`. A thrown weapon names its family here - a throwing axe is an axe -
  * and `THROWN_FORMS` turns it into the thrown form WHEN IT IS THROWN (D-731):
  * a Throwing axe has no other way, a Dagger is struck in the hand or thrown.
@@ -136,6 +136,11 @@ export const BASE_FORMS = Object.freeze({
   "main-gauche": "rapier",
   "moonglaive": "glaive",
   "punch-dagger": "dagger",
+  // The Demon Hunter's four Light glaives (08 §7, D-1437 to D-1449): every one a glaive, thrown or struck.
+  "short-warglaive": "glaive",
+  "crescent-glaive": "glaive",
+  "barbed-glaive": "glaive",
+  "hooked-glaive": "glaive",
   "serrated-blade": "shortsword",
   "short-sword": "shortsword",
   "sickle": "sickle",
@@ -164,6 +169,10 @@ export const BASE_FORMS = Object.freeze({
   "rapier": "rapier",
   "scimitar": "scimitar",
   "sentinels-glaive": "glaive",
+  // And its three One-handed glaives (08 §7, D-1437 to D-1449).
+  "curved-warglaive": "glaive",
+  "throwing-warglaive": "glaive",
+  "ring-glaive": "glaive",
   "spear": "spear",
   "stromgarde-broadsword": "sword",
   "trident": "spear",

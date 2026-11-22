@@ -45,6 +45,17 @@
       <p><span class="azeroth-rung-label">{{localize "AZEROTH.Corruption.YouAreNot"}}</span> {{{this.ending.areNot}}}</p>
     </div>
     {{/if}}
+    {{!-- The Demon Hunter's Hatred under the Fel track it feeds and Fel Lash lowers (D11; D-1581): the count,
+          the cap the Fel gives and its next rung, the rest's price, and what a Fel Lash hit sheds now. --}}
+    {{#if (and @root.hatred (eq this.key "fel"))}}
+    <div class="azeroth-hatred-panel" data-hatred-panel>
+      <p class="azeroth-rung-head"><strong>{{localize "AZEROTH.Hatred.Panel"}}</strong> <span class="azeroth-rung-at">{{@root.hatred.count}}</span></p>
+      <p>{{@root.hatred.hatredLadder}} {{@root.hatred.hatredNext}}</p>
+      <p>{{@root.hatred.hatredRest}}</p>
+      {{#if @root.hatred.above}}<p>{{@root.hatred.above}}</p>{{/if}}
+      {{#if @root.hatred.hatredShed}}<p data-hatred-shed>{{@root.hatred.hatredShed}}</p>{{/if}}
+    </div>
+    {{/if}}
   </div>
   {{/each}}
   {{!-- Poisons and diseases carried until cured (D12): always drawn, so the tab does not jump. --}}

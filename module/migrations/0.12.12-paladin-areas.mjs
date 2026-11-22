@@ -153,6 +153,21 @@ export const INTERIM_SPELLS = Object.freeze({
   ],
   "hallowed-ground": [
     "An ally that starts its turn in the area regains 2 Health, gains Ward 2 against Shadow and Ward 2 against Fel until it leaves, and has a Boon on Resilience Tests against Frightened and Charmed. An undead creature or a demon that starts its turn in the area takes 4 Holy damage and has a Bane on Attack Tests while it remains. While sustaining this spell you pay 3 Mana at the start of each of your turns."
+  ],
+  // **THE SPELL AUDIT OF 2026-11-21** (D-1702, D-1710): Cinderfall's 16, Meteor's 14,
+  // Hoarfrost's 40-foot ceiling and Slagfall's Scorched Earth moved each sentence on from
+  // this version's own words with the term swapped, which 07 held until the audit.
+  "cinderfall": [
+    "The fall lands at the start of your next turn. Every creature in the area then makes a Reflex Resilience Test against your Spell DC: on a failure it takes 12 Fire damage and is knocked Prone, and on a success it takes half of that, rounded down. Ash lies over the area for the duration: it is Difficult ground, and a creature inside it cannot see out and cannot be seen from outside."
+  ],
+  "hoarfrost": [
+    "A creature takes 2 Frost damage when it starts its turn inside the area and its Speed drops by 10 feet until it leaves. The area is Difficult ground, every liquid in it freezes solid, and at the start of each of your turns it grows by 5 feet in every direction. While sustaining this spell you pay 3 Mana at the start of each of your turns."
+  ],
+  "meteor": [
+    "The area must be your Scorched Earth, or the spell does nothing and the Mana is spent. The meteor lands at the start of your next turn. Every creature in the area then makes a Reflex Resilience Test against your Spell DC: on a failure it takes 12 Fire damage and is knocked Prone, and on a success it takes half of that, rounded down, and keeps its feet. The crater is Difficult ground for the duration."
+  ],
+  "slagfall": [
+    "The ground must already be burning from Scorched Earth. A creature takes 4 Fire damage when it starts its turn in the area, the area is Difficult ground, and a creature that ends its turn there has its Speed drop by 10 feet until it leaves. While sustaining this spell you pay 3 Mana at the start of each of your turns."
   ]
 });
 

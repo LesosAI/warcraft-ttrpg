@@ -444,7 +444,9 @@ export const DK_SPELL_AUTOMATION = Object.freeze({
   // knight from tier 4, and `necromancer-spells.mjs#NECRO_SPELL_AUTOMATION` carries its door; run 4c-S)
   "raise-dracolich": { doors: ["raise"] },
   // 07 §11, Restricted Death Knight
-  "frost-strike": { doors: ["nextAttack"], table: "the promise is taken by the next attack this turn, a ranged one or a miss included, where 07 says the next melee hit (O-363)" },
+  // The spell audit made 07 say what the lane does (D-1702, D-1711): *Each hit of your next Attack
+  // this turn*, every roll of it, ranged or not, so O-363 has no clause left.
+  "frost-strike": { doors: ["nextAttack"] },
   "horn-of-winter": { doors: ["dk:horn"] },
   "icy-touch": { doors: ["card:damage", "card:resist", "onFail:slowed"] },
   "chains-of-ice": { doors: ["card:resist", "onFail:entangled+slowed", "escape:turnEnd", "dk:slowedRest", "dk:slowedBars:disengage"] },
@@ -463,7 +465,7 @@ export const DK_SPELL_AUTOMATION = Object.freeze({
 export const DK_SPELL_REASON_CEILING = 11;
 
 /** How many spells leave a clause to the table: a ceiling that may only fall. */
-export const DK_SPELL_TABLE_CEILING = 7;
+export const DK_SPELL_TABLE_CEILING = 6;
 
 /**
  * **A DESCRIPTOR DOOR**: a label the pack's own descriptor proves (`death-knight-spells.test.mjs`

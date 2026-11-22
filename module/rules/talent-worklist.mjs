@@ -19,6 +19,7 @@
  * Data, not law: nothing in the system imports this file.
  */
 
+
 export const TALENT_WORKLIST = Object.freeze({
   // THE CHROMATIC CHAMPION (D-815): 04's 48 branch talents reached the pack in the
   // parser stage (2A) before any of them had a row in `talent-effects.mjs`, so the
@@ -41,6 +42,9 @@ export const TALENT_WORKLIST = Object.freeze({
   "death-knight": Object.freeze({}),
   // THE NECROMANCER (Phase 4c-T): every one of its 36 talents has its row and a door; none left.
   necromancer: Object.freeze({}),
+  // THE DEMON HUNTER (the Demon Hunter plan's Phase 5, D-1560): every one of its 36 talents has its row and a door
+  // (`rules/demon-hunter-talents.mjs#DH_TALENT_DOORS`); none left.
+  "demon-hunter": Object.freeze({}),
   // THE SOVEREIGN (the San'layn and Sovereign plan's Phase 5): every one of its 36 talents has its row and a
   // door (`rules/sovereign-talents.mjs#SOV_DOORS`); none left.
   sovereign: Object.freeze({}),
@@ -129,6 +133,8 @@ export const WORKLIST_CEILING = Object.freeze({
   necromancer: 0,
   // THE SOVEREIGN: 0 - the rows stage wrote all 36 with the class's own doors; nothing parked.
   sovereign: 0,
+  // THE DEMON HUNTER: 0 - the talents phase (D-1560) wrote all 36 with the class's own doors; nothing parked.
+  "demon-hunter": 0,
   // 23 to 22 (D-769): Chimera's patch takes two forms. 22 to 14 (D-770):
   // Mangle, Rip and Feral Charge ride the attack dialog as riders. 14 to 2
   // (D-771): every Druid talent built but Living Seed and Typhoon's push. 2 to
@@ -230,7 +236,8 @@ export function pendingNecromancerRows() {
 
 /**
  * **WHETHER A TALENT'S ROW IS PENDING ON A LATER PHASE** - a Legacy branch's (phase B6, now
- * empty) or the Necromancer's (Phase 5). The ONE question every per-talent census asks.
+ * empty), the Necromancer's (Phase 5, now empty) or the Demon Hunter's (its Phase 5). The ONE
+ * question every per-talent census asks.
  */
 export function rowPending(className, identifier) {
   if (legacyRowPending(className, identifier)) return true;

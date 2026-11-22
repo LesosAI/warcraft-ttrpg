@@ -27,7 +27,7 @@
  * its card), which the watch does not see.
  */
 
-import { DEATH_GIVEN_FLAG, deathGives, deathObserver, healedAboveZero, soulHarvestGain, SOUL_HARVEST } from "../rules/death-watch.mjs";
+import { DEATH_GIVEN_FLAG, HEAL_CLEARS, deathGives, deathObserver, healedAboveZero, soulHarvestGain, SOUL_HARVEST } from "../rules/death-watch.mjs";
 import { ESSENCE, ESSENCE_PER_DEATH, essenceEnemy, essenceFromDeath, isLiving } from "../rules/essence.mjs";
 import { creatureSnapshot } from "../rules/creature-kinds.mjs";
 import { ESSENCE_GAIN_OPTION, SOUL_HARVEST_OPTION, essenceGainCue } from "../rules/animation-records.mjs";
@@ -109,9 +109,12 @@ function primeAll() {
 function look(actor) {
   if (!actor || typeof actor !== "object") return Promise.resolve();
   const change = observer.observe(actor, factsOf(actor));
-  // A creature that heals above 0 may die again and give again (`rules/death-watch.mjs#DEATH_GIVEN_FLAG`).
-  if (gmHere() && healedAboveZero(change.before, change.after) && actor.getFlag?.("azeroth-rpg", DEATH_GIVEN_FLAG)) {
-    Promise.resolve(actor.unsetFlag?.("azeroth-rpg", DEATH_GIVEN_FLAG)).catch(err => console.warn("azeroth-rpg | a death's mark was not cleared", err));
+  // A creature that heals above 0 may die again and give again (`rules/death-watch.mjs#DEATH_GIVEN_FLAG`), and have its
+  // soul devoured again (`HEAL_CLEARS`, the Demon Hunter review's L14): every mark it holds cleared, one after another.
+  const clears = gmHere() && healedAboveZero(change.before, change.after) ? HEAL_CLEARS.filter(f => actor.getFlag?.("azeroth-rpg", f)) : [];
+  if (clears.length) {
+    clears.reduce((p, f) => p.then(() => actor.unsetFlag?.("azeroth-rpg", f)), Promise.resolve())
+      .catch(err => console.warn("azeroth-rpg | a death's mark was not cleared", err));
   }
   if (!(change.healthFell || change.died || change.raisedDown) || !gmHere()) return Promise.resolve();
   const event = Object.freeze({ actor, ...change });

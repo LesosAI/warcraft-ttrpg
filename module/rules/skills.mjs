@@ -13,6 +13,8 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+// 04's Demonic Visage (the Demon Hunter plan's Phase 5): a talent's row on an Intimidation Test.
+import { talentSkillBonus } from "./demon-hunter-talents.mjs";
 
 /**
  * The label of each ability's skill modifier on a roll's provenance, written out
@@ -90,12 +92,16 @@ export function skillModOf(actor, ability) {
  */
 export function skillRowsFor(actor, key) {
   const ability = AZEROTH.skillAbility[key];
-  return skillRows({
+  const rows = skillRows({
     ability,
     skillMod: skillModOf(actor, ability) ?? 0,
     proficiency: actor?.system?.proficiency ?? 0,
     rank: skillRankOf(actor, key)
   });
+  // **A TALENT'S OWN ROW** (04's Demonic Visage: *+1 per rank on Intimidation Tests*; the Demon Hunter plan's
+  // Phase 5), named for the talent and drawn only where one is taken, so every other Test keeps its three.
+  const talent = actor?.type === "character" ? talentSkillBonus([...(actor.items ?? [])], key) : null;
+  return talent ? [...rows, talent] : rows;
 }
 
 /**

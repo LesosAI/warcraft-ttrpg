@@ -275,8 +275,12 @@ export function targetBoonsFor(talents = [], { kind = "attack", health = null } 
  * @param {Array} talents
  * @returns {{waived: boolean, by: string[]}}
  */
-export function offHandPenaltyFor(talents = [], rowOf = talentEffect) {
-  const rows = rowsOfKind(talents, "offHand", rowOf).filter(r => r.row.noPenalty === true);
+export function offHandPenaltyFor(talents = [], rowOf = talentEffect, { facts = null } = {}) {
+  // **A WAIVER BEHIND A GATE** (04's Twin Blades: *With a glaive in each hand, your Off-Hand Attack takes no
+  // −2*; the Demon Hunter plan's Phase 5): read through the one predicate off the attack door's facts, and
+  // closed where the door hands none. A row with no `when` (Second Strike, Frozen Edge) waives as it did.
+  const rows = rowsOfKind(talents, "offHand", rowOf)
+    .filter(r => r.row.noPenalty === true && (!r.row.when || gateHolds(r.row.when, facts ?? {}) === true));
   return { waived: rows.length > 0, by: rows.map(r => r.talent.name) };
 }
 
@@ -2661,6 +2665,10 @@ export function featureAims({ name = "", lays = null, attack = false, onUse = nu
   // 04's Bound to the Court the cursed creature it leashes. The Uses that gather their own creatures (Look Upon
   // Me, Blood Prison, Kneel, Bloodletting) are handed nobody.
   if (o.sov?.mark || o.sov?.feed || o.sov?.bound) return true;
+  // 02's Beyond Limits (the Demon Hunter plan's Phase 6, D-1581): its third choice spares one creature's
+  // Opportunity Attack, the creature targeted, so from the sheet it was refused *one creature* whatever was
+  // targeted. The other four choices read no target and are untouched by the hand-over.
+  if (o.dh?.limits) return true;
   // The Chronomancer's (stage 2b): Slipstream's and Master of Hours' creature, Suspend's,
   // and the Chronoweaver's allies - Gift of Moments, Quickstep, Second Chance, Echo of Power,
   // Suspended Moment and Recovered Hours name theirs, Temporal Loop and Unfading the creature

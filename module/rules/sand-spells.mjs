@@ -73,11 +73,12 @@ export function readDeferral(effectText) {
 export function readNextAttack(effectText) {
   const m = /\bYour next weapon attack this turn deals (\d+) more (Physical|[A-Z][a-z]+) damage on a hit(?: and lays Decay (\d+) on the creature it hits)?/.exec(flat(effectText));
   if (m) return { damage: Number(m[1]), type: m[2].toLowerCase(), decay: m[3] ? Number(m[3]) : 0, span: "turn" };
-  // **07 §11's FROST STRIKE** (the Death Knight's, run F4b): *Your next melee hit this turn deals
-  // 4 additional Frost damage* - the same promise, held to the turn. AGENT READING (O-item): the
-  // next-attack lane is taken by the next attack this turn, which may be a ranged one or a miss.
-  const f = /\bYour next melee hit this turn deals (\d+) additional ([A-Z][a-z]+) damage\b/.exec(flat(effectText));
-  return f ? { damage: Number(f[1]), type: f[2].toLowerCase(), decay: 0, span: "turn" } : null;
+  // **07 §11's FROST STRIKE** (the Death Knight's; the spell audit, D-1702): *Each hit of your next
+  // Attack this turn deals 6 additional Frost damage* - the same promise held to the turn, to EVERY
+  // roll of that Attack (`rolls: "each"`; Extra Attack's second roll too, D-1711). The next Attack
+  // takes it whatever it is, a ranged one or a miss included, as the words say.
+  const f = /\bEach hit of your next Attack this turn deals (\d+) additional ([A-Z][a-z]+) damage\b/.exec(flat(effectText));
+  return f ? { damage: Number(f[1]), type: f[2].toLowerCase(), decay: 0, span: "turn", rolls: "each" } : null;
 }
 
 /** Hour of Haste's *Each target gains a Half-Action on its next turn* (07 §12). */

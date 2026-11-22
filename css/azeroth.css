@@ -6146,6 +6146,48 @@
     color: var(--azeroth-page-alarm);
     font-weight: 700;
   }
+  .azeroth.sheet.actor.character .azeroth-pool.is-hatred .azeroth-segment.is-over {
+    border-style: dashed;
+    border-color: var(--azeroth-page-ink-soft);
+    background-image: repeating-linear-gradient(45deg, transparent 0 2px, var(--azeroth-page-ink-soft) 2px 3px);
+  }
+  .azeroth.sheet.actor.character .azeroth-hatred-ladder,
+  .azeroth.sheet.actor.character .azeroth-hatred-rest {
+    color: var(--azeroth-page-ink-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-hatred-panel {
+    margin: 8px 0 0;
+    padding: 6px 8px;
+    border: 1px solid var(--azeroth-page-edge);
+    border-radius: 3px;
+    color: var(--azeroth-page-ink);
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .azeroth.sheet.actor.character .azeroth-hatred-panel p {
+    margin: 2px 0 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-hatred-overview {
+    color: var(--azeroth-page-ink);
+  }
+  .azeroth .azeroth-dialog-talent-lines label.is-fel-surge {
+    display: inline-flex;
+    width: auto;
+    margin: 2px 6px 2px 0;
+    padding: 2px 6px;
+    border: 1px solid var(--azeroth-page-rule, currentColor);
+    border-radius: 3px;
+    vertical-align: top;
+  }
+  .azeroth .azeroth-dialog-talent-lines label.is-fel-surge ~ label.is-fel-surge .azeroth-tline-name,
+  .azeroth .azeroth-dialog-talent-lines label.is-fel-surge ~ label.is-fel-surge .azeroth-dialog-cost {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
   .azeroth-roll-dialog .window-content {
     background: var(--azeroth-parchment);
     color: var(--azeroth-ink);

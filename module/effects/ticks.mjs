@@ -218,7 +218,13 @@ export async function landTicks(actor, {combat = null, combatant = null} = {}) {
         await still.delete();
         lines.push(game.i18n.format("AZEROTH.Tick.Ended", { name: actor.name, source: spell.name }));
       } else {
-        await still.update({ [`flags.azeroth-rpg.${TICK_FLAG}.rounds`]: next.rounds });
+        // A RISING tick (07's Agonizing Flames, D-1500) writes the next landing's amount
+        // beside its count, in the same update (`rules/ticks.mjs#tickCountdown`).
+        // A sustained rising tick (Soul Reaper; D-1712) has no count, so only its amount moves.
+        await still.update({
+          ...(next.rounds !== undefined ? { [`flags.azeroth-rpg.${TICK_FLAG}.rounds`]: next.rounds } : {}),
+          ...(next.amount !== undefined ? { [`flags.azeroth-rpg.${TICK_FLAG}.amount`]: next.amount } : {})
+        });
       }
     } catch (err) {
       console.warn("azeroth-rpg | a tick did not land", err);

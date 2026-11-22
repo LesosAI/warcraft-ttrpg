@@ -647,7 +647,7 @@ export function chronomancerSweepTier3Batch(context) {
       });
     });
 
-    it("SCOURING VEIL: a Half-Action; until the end of the caster's next turn each creature that hits the caster in melee takes 3 Physical less its AP and gains Decay 1", async function () {
+    it("SCOURING VEIL: a Half-Action; for a minute each creature that hits the caster in melee takes 5 Physical less its AP and gains Decay 1 (the spell audit, D-1701)", async function () {
       this.timeout(600000);
       await sweepTest("Scouring Veil", assert, async sw => {
         const { c, combat, foes } = await chronoInFight("ZZ SW3 Veil", { level: 11, spells: ["Scouring Veil"], enemies: [{ name: "Raptor", x: AT.x + 100, y: AT.y, health: 80 }] });
@@ -663,7 +663,7 @@ export function chronomancerSweepTier3Batch(context) {
         sw.log("card", { text: textOf(live(card)), buttons: buttonsOn(card), rows: flagsOf(card).damageByTarget ?? null, retaliation: flagsOf(card).spellRetaliation ?? null });
         await checkPaid(sw, c, spell, before, card);
         sw.check(halvesOf(spell) === 1, "a Half-Action", spell.system.action);
-        sw.check(!buttonsOn(card).some(b => b.action === "applyDamage"), "its 3 is never dealt at its own cast", buttonsOn(card));
+        sw.check(!buttonsOn(card).some(b => b.action === "applyDamage"), "its 5 is never dealt at its own cast", buttonsOn(card));
         checkDC(sw, card, 16, "aimed at nothing");
         if (sw.check(buttonsOn(card).some(b => b.action === "applySpellEffect"), "the card offers the Apply that carries the Veil", buttonsOn(card))) await applyEffect(sw, card, { self: true });
         const veil = await sw.wait(() => c.effects.find(e => e.name?.includes("Scouring Veil") || e.flags?.["azeroth-rpg"]?.spellRetaliation), "the Veil on the caster", 20000);
@@ -685,7 +685,7 @@ export function chronomancerSweepTier3Batch(context) {
           const back = '[data-action="applyDamage"][data-self="1"][data-struck-index="0"]';
           const drawn = await sw.wait(() => document.querySelector(`[data-message-id="${bite.id}"] button${back}`), "the bite's card offers the Veil's answer", 15000);
           if (drawn) {
-            sw.check(new RegExp(`\\b${Math.max(0, 3 - apR)}\\b`).test(drawn.textContent), `it reads 3 less the Raptor's Body AP ${apR}`, drawn.textContent.trim());
+            sw.check(new RegExp(`\\b${Math.max(0, 5 - apR)}\\b`).test(drawn.textContent), `it reads 5 less the Raptor's Body AP ${apR}`, drawn.textContent.trim());
             sw.log("the answer as drawn", { attrs: Object.fromEntries([...drawn.attributes].map(a => [a.name, a.value])), rows: flagsOf(bite).signatureRetaliations ?? null, resolution: flagsOf(bite).attackResolution?.targets?.[0] ?? null });
             // The answer is refused until the bite's own Apply has finished writing (D-888's
             // *Applying* to *Applied*): the Health moves before the record says so.
@@ -695,14 +695,15 @@ export function chronomancerSweepTier3Batch(context) {
             const said = await warnings(async () => { const pt = await press(sw, bite, `button${back}`); if (pt) await pt.release(); await sleep(4000); });
             sw.log("the answer's press said", said);
           }
-          await sw.wait(() => raptor.actor.system.health.value === hpR - Math.max(0, 3 - apR), `the Raptor took 3 less Body AP ${apR}`, 20000);
+          await sw.wait(() => raptor.actor.system.health.value === hpR - Math.max(0, 5 - apR), `the Raptor took 5 less Body AP ${apR}`, 20000);
           await sw.wait(() => decayValue(raptor.actor) === 1, "and gained Decay 1", 20000);
           sw.log("retaliation", { hpR, now: raptor.actor.system.health.value, decay: decayValue(raptor.actor) });
         }
-        // Past the end of the caster's next turn the Veil is gone, and a bite then is not answered.
-        await nextTurnUntil(c, combat);
-        await stepTurn(combat);
-        await sw.wait(() => !c.effects.find(e => e.id === veil?.id), "the Veil ended at the end of the caster's next turn", 20000);
+        // The Veil lasts a minute since the spell audit (D-1701): ten of the fight's rounds. Taken
+        // off by hand here, and a bite then is not answered.
+        if (veil) sw.check(fightRoundsSpan(veil, 10), "the Veil lasts a minute", spanOf(veil));
+        if (c.effects.get(veil?.id)) await veil.delete();
+        await sw.wait(() => !c.effects.find(e => e.id === veil?.id), "the Veil is gone", 20000);
         await nextTurnUntil(combatantOfToken(combat, raptor.doc), combat);
         const hpR2 = raptor.actor.system.health.value;
         const hpC2 = c.system.health.value;

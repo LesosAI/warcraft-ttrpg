@@ -21,6 +21,8 @@ import { RUNIC_POWER, gainsByUniversalTriggers, runicPowerCap } from "./runes.mj
 import { ESSENCE, essenceCap } from "./essence.mjs";
 // Tribute's cap, 3 plus Charisma and never below 3, the Throne's 2 and the Crown's doubling (02 §7).
 import { TRIBUTE, CRIMSON_THRONE, tributeCap } from "./tribute.mjs";
+// Hatred's cap, 5 plus 2 for each 5 Fel Corruption held (the Demon Hunter plan's R5 and C5).
+import { HATRED, hatredCap } from "./hatred.mjs";
 
 /**
  * **THE POOLS THE GUARD ACTION LEAVES ALONE** (the lead, R18: *"guard does not empty it"*; the San'layn
@@ -28,7 +30,10 @@ import { TRIBUTE, CRIMSON_THRONE, tributeCap } from "./tribute.mjs";
  * Critical Injury and the fight's end still empty it, so it is not a KEPT pool (`kept-pools.mjs`):
  * only the Guard step asks this list. Sand's, Runic Power's and Essence's own rules are unchanged.
  */
-export const GUARD_KEEPS = Object.freeze([TRIBUTE]);
+// Hatred too (the Demon Hunter plan: *A Critical Injury and Guard leave it alone*). It is a KEPT pool
+// as well (`kept-pools.mjs#EMPTIED_BY.hatred`), so the kept rule answers first; it is named here so
+// the Guard step's own list says it.
+export const GUARD_KEEPS = Object.freeze([TRIBUTE, HATRED]);
 
 /**
  * What every pool holds as a fight starts (02 SS7): Momentum at 0 - Zeal at
@@ -391,7 +396,11 @@ export function unkillableFloor({ before = 0, amount = 0, rage = 0, holds = fals
  * Ranged slot (`sand.mjs#equippedHourglass`), and with none the cap is 0 - the
  * class item's printed 5 is the Common glass's and is never read on its own.
  */
-export function capFor(pool, ranks = () => 0, { hourglass = null, chaMod = 0, conMod = 0, crowned = false } = {}) {
+export function capFor(pool, ranks = () => 0, { hourglass = null, chaMod = 0, conMod = 0, crowned = false, fel = 0 } = {}) {
+  // **HATRED'S CAP IS 5 PLUS 2 FOR EACH 5 FEL CORRUPTION HELD** (the Demon Hunter plan's R5, C5):
+  // `fel` is `hatred.mjs#felFor`'s reading, the one every Fel-scaling door asks. The class item's
+  // printed 5 is the base.
+  if (pool?.name === HATRED) return hatredCap(fel);
   // **TRIBUTE'S CAP IS 3 PLUS CHARISMA, NEVER BELOW 3** (02 §7; the plan's T1): 2 more with The
   // Crimson Throne (04), doubled while Crowned in Blood stands (`crowned`, its effect's flag). The
   // class item's printed 3 is the floor.

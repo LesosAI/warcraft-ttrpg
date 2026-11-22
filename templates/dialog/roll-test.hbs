@@ -232,9 +232,11 @@
   <fieldset class="azeroth-dialog-lines azeroth-dialog-riders azeroth-dialog-talent-lines">
     <legend>{{localize "AZEROTH.TalentLine.Legend"}}</legend>
     {{#each talentLines}}
-    <label class="checkbox azeroth-dialog-line azeroth-dialog-rider{{#unless this.available}} is-refused{{/unless}}">
+    {{!-- 02's Fel Surge draws a point a line (D-1520); the class lays its open lines out as a compact row of
+          chips, its name and the Hatred held said on the first alone, the one-line-per-point DOM kept (D-1581). --}}
+    <label class="checkbox azeroth-dialog-line azeroth-dialog-rider{{#unless this.available}} is-refused{{/unless}}{{#if (eq this.kind "felSurge")}}{{#if this.available}} is-fel-surge{{/if}}{{/if}}">
       <input type="checkbox" name="tline-{{this.identifier}}"{{#if this.checked}} checked{{/if}}{{#unless this.available}} disabled{{/unless}}>
-      <span><strong>{{this.name}}</strong> {{this.does}}</span>
+      <span><strong class="azeroth-tline-name">{{this.name}}</strong> {{this.does}}</span>
       <span class="azeroth-dialog-cost">{{this.left}}</span>
     </label>
     {{#if this.reason}}<p class="azeroth-dialog-note azeroth-dialog-rider-reason">{{this.reason}}</p>{{/if}}

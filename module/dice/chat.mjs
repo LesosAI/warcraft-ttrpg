@@ -90,6 +90,8 @@ import { feetBetweenTokens } from "../canvas/engaged.mjs";
 // Read without an await at Place area: an await before the pick arms lets a press land on no pick.
 import { judgesPoint, rangeInText, readRange } from "../rules/range.mjs";
 import { pointAccept } from "../canvas/range.mjs";
+// 07 §11's Starweave and Skyfall (the spell audit; D-1710): where each may be placed.
+import { castIntoAim } from "../effects/starweave-context.mjs";
 // What the Ranger's and the Rogue's talents land from a card (D-773): a Reaction
 // taken, a Snare's escape, and the creature a Test's failure entangles.
 import { loseReaction, reactionLossText } from "../effects/reaction-loss.mjs";
@@ -201,6 +203,10 @@ import { layState } from "../effects/talent-states.mjs";
 // modules load (O-419; `rules/sovereign-scope.mjs`).
 import { clawRollStale } from "../rules/claws.mjs";
 import { preyMarksOf, resistCanReachCore, sovereignCardFlags } from "../rules/sovereign-scope.mjs";
+// The Demon Hunter's spell Resist door, asked before its module loads (07 §15; D-1540).
+import { dhCardFlags } from "../rules/demon-hunter-scope.mjs";
+// 04's Turn Their Fire (the Demon Hunter plan's Phase 5): the rank asked before its door loads.
+import { dhRankOfItems } from "../rules/demon-hunter-talents.mjs";
 
 /**
  * Whether the card's row this button names was turned into a miss (the Legacy
@@ -710,6 +716,11 @@ export const CARD_ACTIONS = {
   necroCard: async (button, message) => (await import("../effects/necromancer-spells.mjs")).necroCardPress(button, message),
   // The Sovereign's spells' presses (D-1240): Look, Broken, Command carried out and the GM's End the audience.
   sovereignCard: async (button, message) => (await import("../effects/sovereign-spells.mjs")).sovereignCardPress(button, message),
+  // The Demon Hunter's spells' presses (D-1540): Hunter's Brand's Track and Agonizing Flames' Put out.
+  demonHunterCard: async (button, message) => (await import("../effects/demon-hunter-spells.mjs")).dhCardPress(button, message),
+  // **02's DEVOUR SOUL** (the Demon Hunter plan's Phase 4a; `templates/chat/dh-offer.hbs`): the death watch's
+  // offer, judged again at the press (`effects/demon-hunter-features.mjs#devourFromCard`).
+  devourSoul: async (button, message) => (await import("../effects/demon-hunter-features.mjs")).devourFromCard(button, message),
   touchEverburn: async (_button,message) => {
     const {touchEverburn}=await import('../effects/everburn-touch.mjs');
     const result=await touchEverburn(message);
@@ -1305,6 +1316,14 @@ async function placeAreaFromCard(message) {
       ui.notifications?.warn(game.i18n.format("AZEROTH.Construct.AimTooFar", { name: flags.aimFrom.name ?? "", feet }));
       return false;
     };
+  }
+  // **CAST INTO A STARFALL, OR ONTO A STARWEAVE** (07 §11; the spell audit, D-1710): Starweave's
+  // point must lie in a Starfall the caster is sustaining, Skyfall's in the caster's own live
+  // Starweave - refused in words while the pick waits on, on top of the Range's own rule.
+  const castInto = castIntoAim(actor, item, globalThis.canvas?.scene ?? null);
+  if (castInto) {
+    const within = aimAccept;
+    aimAccept = point => (within ? within(point) : true) && castInto(point);
   }
   const region = await placeItemArea({
     item, actor, token, guessToken: false,
@@ -2604,6 +2623,15 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
       } catch (err) {
         console.warn("azeroth-rpg | a Sovereign spell's failed Resist", err);
       }
+      // **07 §15's DEMON HUNTER SPELLS ON A FAILED RESIST** (D-1540): Eye Beam's Scorched 2, Shear's lowered maximum,
+      // Draw Soul's heal, Inner Demon's torment, Nether Snare's snare, and the spell Spellsunder, Siphon the Weave or
+      // Devour the Spell ends, with its Energy or its Hatred. Guarded.
+      if (dhCardFlags(message.flags?.["azeroth-rpg"])) try {
+        const { dhSpellAfterResist } = await import("../effects/demon-hunter-spells.mjs");
+        await dhSpellAfterResist({ message, actor, maker: casterOf(message), laid: laidByFailure, result });
+      } catch (err) {
+        console.warn("azeroth-rpg | a Demon Hunter spell's failed Resist", err);
+      }
       if (flags.onFail?.statuses?.length && dominationConfirmed) {
         ui.notifications?.info(game.i18n.format("AZEROTH.Card.OnFailLanded", {
           name: actor.name, conditions: flags.onFail.statuses.map(id => game.i18n.localize(AZEROTH.conditions[id] ?? id)).join(", ")
@@ -2690,6 +2718,18 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
     // (`dice/annotate.mjs#verifiedResist` reads it off the creature) - and is what the
     // card's Apply reads to land the half on a creature that passed.
     if (link && result) await recordResist({ message, result });
+    // **04's TURN THEIR FIRE** (the Demon Hunter plan's Phase 5): *When you succeed on a Resilience Test against a
+    // spell, gain 1 Energy per rank, and the spell's caster takes Fel damage equal to your rank.* A spell's card and
+    // a passed Test, for a hunter who holds the talent; guarded, so the Test stands whatever the door does.
+    if (link && result && passed && message.flags?.["azeroth-rpg"]?.kind === "spell" && dhRankOfItems(actor.items ?? [], "turn-their-fire") > 0) {
+      try {
+        const { turnTheirFireOn } = await import("../effects/demon-hunter-talents.mjs");
+        const line = await turnTheirFireOn({ actor, caster: casterOf(message), spellName: message.flags["azeroth-rpg"].spellName ?? "" });
+        if (line) ui.notifications?.info(line);
+      } catch (err) {
+        console.warn("azeroth-rpg | Turn Their Fire", err);
+      }
+    }
     // **SAND FOR THE CASTER** (02 §7: *Gain 1 when a creature fails a Resilience Test against
     // a spell or feature of yours, once a cast*; D-848): through the one door, once a cast.
     if (link && result && !passed) await gainSandFromResist(casterOf(message), { message, resister: actor });

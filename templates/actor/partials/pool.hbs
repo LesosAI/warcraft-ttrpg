@@ -51,6 +51,14 @@
   </div>
   {{#if this.noHourglass}}<p class="azeroth-pool-note">{{localize "AZEROTH.Sand.NoHourglass"}}</p>{{/if}}
   {{#if this.runes}}<p class="azeroth-pool-note azeroth-runes-here">{{localize "AZEROTH.Runes.PoolHere"}}</p>{{/if}}
+  {{!-- Hatred's cap ladder and the rest's price in words (D11; D-1581): the cap the Fel gives now and the
+        next rung, what the next rest turns into Fel, and a line where a fallen cap left more than it
+        allows. The warning is the words; the over-cap segments carry their own label. --}}
+  {{#if this.hatredLadder}}
+  <p class="azeroth-pool-note azeroth-hatred-ladder" data-hatred-ladder>{{this.hatredLadder}} {{this.hatredNext}}</p>
+  <p class="azeroth-pool-note azeroth-hatred-rest" data-hatred-rest>{{this.hatredRest}}</p>
+  {{/if}}
+  {{#if this.hatredAbove}}<p class="azeroth-pool-note">{{this.hatredAbove}}</p>{{/if}}
   {{else}}
   {{!-- A pool nobody has draws an em-dash, not an empty bar (D-509). --}}
   <div class="azeroth-pool-head is-absent">

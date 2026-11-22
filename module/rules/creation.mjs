@@ -162,7 +162,9 @@ export const METHODS = Object.freeze(["array", "pointBuy", "roll"]);
 // placement, last as each new class has been - the Vitest says so if 02 lays it elsewhere).
 // The Sovereign fourteenth, after the Necromancer (the San'layn and Sovereign plan; last, as each new
 // class has been - the Vitest says so if 02 lays it elsewhere).
-export const CLASS_ORDER = Object.freeze(["warrior", "paladin", "ranger", "rogue", "priest", "shaman", "mage", "warlock", "druid", "chromatic-champion", "chronomancer", "death-knight", "necromancer", "sovereign"]);
+// The Demon Hunter fifteenth, after the Sovereign (the Demon Hunter plan; last, as each new class has
+// been - the Vitest says so if 02 lays it elsewhere).
+export const CLASS_ORDER = Object.freeze(["warrior", "paladin", "ranger", "rogue", "priest", "shaman", "mage", "warlock", "druid", "chromatic-champion", "chronomancer", "death-knight", "necromancer", "sovereign", "demon-hunter"]);
 
 /** "Take these six numbers and assign each to an ability." */
 export const ARRAY = Object.freeze([16, 14, 13, 12, 10, 8]);

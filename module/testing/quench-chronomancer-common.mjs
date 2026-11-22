@@ -139,7 +139,9 @@ export async function chronomancerWith(name, { level = 20, ranks = {}, spells = 
  */
 export async function pressUse(actor, featureName, targets = [], face = 15) {
   const feature = await until(() => featureNamed(actor, featureName), `${featureName} granted`);
-  canvas.tokens?.setTargets(targets.map(t => t.id));
+  // Core's `User#_onUpdateTokenTargets` reads `canvas.scene.id` and throws with no scene viewed (14.367): a Use
+  // that aims at nobody on a world with no viewed scene sets no targets at all.
+  if (canvas?.scene || targets.length) canvas.tokens?.setTargets(targets.map(t => t.id));
   const sheet = await openSheet(actor);
   const control = sheet.element.querySelector(`section[data-tab="combat"] [data-item-id="${feature.id}"] [data-action="useFeature"]`)
     ?? sheet.element.querySelector(`[data-item-id="${feature.id}"] [data-action="useFeature"]`);
@@ -384,7 +386,8 @@ export function boardRead({ actors = [], scene = canvas?.scene ?? null } = {}) {
 export async function castFromSheet(actor, spellName, { targets = [], face = 15, lines = null, ms = 30000 } = {}) {
   const spell = actor.items.find(i => i.type === "spell" && i.name === spellName);
   if (!spell) throw new Error(`${actor.name} holds no ${spellName}`);
-  canvas.tokens?.setTargets(targets.map(t => t.id ?? t));
+  // No targets set with no scene viewed (see `pressUse`).
+  if (canvas?.scene || targets.length) canvas.tokens?.setTargets(targets.map(t => t.id ?? t));
   const sheet = await openSheet(actor);
   const control = sheet.element.querySelector(`section[data-tab="spells"] [data-item-id="${spell.id}"] [data-action="castSpell"]`)
     ?? sheet.element.querySelector(`[data-item-id="${spell.id}"] [data-action="castSpell"]`);
@@ -413,7 +416,7 @@ export async function castFromSheet(actor, spellName, { targets = [], face = 15,
     return await posted;
   } finally {
     unpin();
-    canvas.tokens?.setTargets([]);
+    if (canvas?.scene) canvas.tokens?.setTargets([]);
     await game.settings.set("azeroth-rpg", ROLL_DIALOG_SETTING, before);
     await sheet.close();
   }

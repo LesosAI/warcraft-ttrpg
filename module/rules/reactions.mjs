@@ -17,7 +17,7 @@
  * | Reaction | Requires | Effect |
  * |---|---|---|
  * | Opportunity Attack | an enemy leaving your reach without Disengaging | one attack at the moment they leave |
- * | Parry | a melee weapon in hand, a class that builds Momentum, and 1 Momentum (a Rogue pays 1 Energy) | an Attack Test against the attacker's total; meet or beat it and the attack deals no damage |
+ * | Parry | a melee weapon in hand, a class that builds Momentum, and 1 Momentum (a Rogue, a Chromatic Champion or a Demon Hunter pays 1 Energy) | an Attack Test against the attacker's total; meet or beat it and the attack deals no damage |
  * | Block | a shield | reduce the damage of one attack by 4 |
  * | Pummel | Warrior or Rogue, engaged in melee | that creature takes two Banes on its next Casting Test |
  * | Readied action | having used Ready on your turn | the action you named, when the trigger fires |
@@ -57,7 +57,8 @@ export const BLOCK_REDUCTION = 4;
 
 /**
  * *A melee weapon in hand, a class that builds Momentum, and 1 Momentum (a
- * Rogue pays 1 Energy).* (06 §6's Requires column, D-720.)
+ * Rogue, a Chromatic Champion or a Demon Hunter pays 1 Energy).* (06 §6's
+ * Requires column, D-720; the Demon Hunter by the lead's ruling, D-1438.)
  *
  * **A caster never sees the Parry button.** The gate is the POOL and not the
  * class name: a Warrior, a Paladin, a Ranger, a Rogue and a Druid each hold a
@@ -72,6 +73,13 @@ export const PARRY_COST = 1;
 /** A Rogue's Momentum is Combo Points, and 06 says the Parry comes off Energy. */
 export const PARRY_COMBO_POOL = "comboPoints";
 export const PARRY_ENERGY_POOL = "energy";
+/**
+ * **THE MOMENTUM POOLS WHOSE PARRY COMES OFF ENERGY** (06 §6): the Rogue's Combo Points (D-720)
+ * and the Demon Hunter's Hatred (the lead: *"Demon Hunter can pay energy for Parry"*, D-1438;
+ * 02 §7: *You pay for **Parry** with 1 Energy, as a Rogue does*). Hatred itself never pays a
+ * Parry (`essence.mjs#paysByKind`): it pays maneuvers and what names it, and nothing else.
+ */
+export const PARRY_ENERGY_MOMENTA = Object.freeze([PARRY_COMBO_POOL, "hatred"]);
 
 /** *That creature takes two Banes on the next Casting Test it makes.* */
 export const PUMMEL_BANES = 2;
@@ -316,9 +324,13 @@ export function blockedDamage(damage, { bonus = 0 } = {}) {
  * WHICH POOL A PARRY COMES OUT OF (06 §6, D-720), or null where the reactor
  * builds no Momentum at all and so may not Parry.
  *
- * *A class that builds Momentum, and 1 Momentum (a Rogue pays 1 Energy).* The
- * Rogue's Momentum is Combo Points and the chapter sends the cost to Energy
- * instead, which is the one redirection in the rule.
+ * *A class that builds Momentum, and 1 Momentum (a Rogue, a Chromatic Champion
+ * or a Demon Hunter pays 1 Energy).* The Rogue's Momentum is Combo Points and the
+ * Demon Hunter's is Hatred, and the chapter sends the cost to Energy instead
+ * (`PARRY_ENERGY_MOMENTA`): the Energy pool of the same class - a Rogue and a
+ * Demon Hunter together hold ONE, which both Momenta reach (02 §10, D-1723) - else
+ * the first. The
+ * Champion's goes there through its feature (`maneuverPool`, below).
  *
  * A character holding two Momentum pools (02 §10's multiclass) pays from one
  * that can; with neither able to pay the first is returned so `canReact` can
@@ -339,11 +351,15 @@ export function parryPoolFor(pools = [], { maneuverPool = null } = {}) {
   if (maneuverPool) return maneuverPurse(list, maneuverPool);
   // **ESSENCE NEVER PAYS A PARRY** (the Necromancer plan: *It never pays for a spell, for
   // Parry or for a maneuver*): a class holding Essence alone builds no Momentum a Parry reads.
-  const momenta = list.filter(p => p?.kind === "momentum" && (p.max ?? 0) > 0 && paysByKind(p.name));
+  // A pool whose Parry comes off Energy builds Momentum for the rule even where it pays no Parry itself
+  // (the Demon Hunter's Hatred, which pays maneuvers alone; D-1438).
+  const momenta = list.filter(p => p?.kind === "momentum" && (p.max ?? 0) > 0 && (paysByKind(p.name) || PARRY_ENERGY_MOMENTA.includes(p.name)));
   if (!momenta.length) return null;
-  const purse = pool => (pool.name === PARRY_COMBO_POOL
-    ? list.find(p => p?.kind === "power" && p.name === PARRY_ENERGY_POOL) ?? null
-    : pool);
+  const energyOf = pool => {
+    const energy = list.filter(p => p?.kind === "power" && p.name === PARRY_ENERGY_POOL);
+    return energy.find(p => p.itemId !== undefined && p.itemId === pool.itemId) ?? energy[0] ?? null;
+  };
+  const purse = pool => (PARRY_ENERGY_MOMENTA.includes(pool.name) ? energyOf(pool) : pool);
   const candidates = momenta.map(purse).filter(Boolean);
   if (!candidates.length) return null;
   return candidates.find(p => (p.value ?? 0) >= PARRY_COST) ?? candidates[0];

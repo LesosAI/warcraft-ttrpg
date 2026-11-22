@@ -35,6 +35,8 @@
 
 import { figureSlots, isTwoHanded } from "./worn.mjs";
 import { isShot } from "./ammunition.mjs";
+// A glaive thrown by Flame Crash lies where it landed and is in no hand (the review's C4).
+import { glaiveAway } from "./demon-hunter-spells.mjs";
 
 /** Ordinary Attack follows the equipped hand; special strikes keep their own economy. */
 export function attackOffHand(weapon, { offHand = null, budget = null, damage = true, opportunity = false, riposte = false, fromFeature = null } = {}) {
@@ -71,6 +73,19 @@ export function cleanWeaponType(value) {
 /** Whether an item is a weapon struck in the hand: neither a launcher nor a bundle of shot. */
 function inTheHand(item) {
   return item?.type === "weapon" && !item.system?.launcher && !isShot(item.system ?? {});
+}
+
+/** The words a weapon is named by, lower case: its identifier and its name. */
+const wordsOf = item => [item?.system?.identifier, item?.name].filter(Boolean).join(" ").toLowerCase();
+
+/** A glaive in the hand: 08's Glaive type or a name holding *glaive* (`equipment-training.mjs`' reading). */
+export function isGlaive(item) {
+  return inTheHand(item) && (cleanWeaponType(item.system?.weaponType) === "glaive" || /glaive/.test(wordsOf(item)));
+}
+
+/** A scythe in the hand: a name holding *scythe* (`equipment-training.mjs`' reading). */
+export function isScythe(item) {
+  return inTheHand(item) && /scythe/.test(wordsOf(item));
 }
 
 /**
@@ -110,6 +125,13 @@ export function wieldFacts(items = [], { melded = false } = {}) {
   const versatile = w => (Array.isArray(w?.system?.traits) ? w.system.traits : []).some(t => /^Versatile\b/i.test(String(t)));
   const bothHands = twoHanded || (!melded && inTheHand(main) && versatile(main) && !figure.offHand);
   const oneInEach = !melded && inTheHand(main) && inTheHand(off) && !isTwoHanded(main) && !isTwoHanded(off);
+  // **THE DEMON HUNTER'S TWO GRIPS** (04's Betrayer and Souleater; the Demon Hunter plan's Phase 5): *With a
+  // glaive in each hand* (Twin Blades) and *While you wield a scythe in two hands* (Reaper's Grip, Sweeping Arc,
+  // Hobbling Reap) - 08's Glaive type or a name holding *glaive*, and a name holding *scythe* (the Scythe, the
+  // Amani war-scythe, a Classic find named for one), the access words `equipment-training.mjs` reads.
+  // A glaive lying away (Flame Crash's *A thrown glaive lies where it landed*) is in no hand (the review's C4).
+  const glaiveEach = !melded && isGlaive(main) && isGlaive(off) && !isTwoHanded(main) && !isTwoHanded(off) && !glaiveAway(main) && !glaiveAway(off);
+  const scytheTwoHands = !melded && isScythe(main) && isTwoHanded(main);
   return {
     // Talent gates ask for the weapon category, not whether it occupies both hands.
     twoHanded,
@@ -119,6 +141,8 @@ export function wieldFacts(items = [], { melded = false } = {}) {
     bothHands,
     oneInEach,
     eitherGrip: bothHands || oneInEach,
+    glaiveEach,
+    scytheTwoHands,
     mainType,
     offType
   };
@@ -191,7 +215,10 @@ export const WIELD_REFUSALS = Object.freeze({
   bothHands: "AZEROTH.Wield.Needs.BothHands",
   oneInEach: "AZEROTH.Wield.Needs.OneInEach",
   // Either of them (D-1017's Dancing Runeweapon).
-  eitherGrip: "AZEROTH.Wield.Needs.EitherGrip"
+  eitherGrip: "AZEROTH.Wield.Needs.EitherGrip",
+  // The Demon Hunter's two (Phase 5): Twin Blades', and the Souleater's scythe.
+  glaiveEach: "AZEROTH.Wield.Needs.GlaiveEach",
+  scytheTwoHands: "AZEROTH.Wield.Needs.ScytheTwoHands"
 });
 
 /**

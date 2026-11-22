@@ -62,7 +62,7 @@ export async function sandSpellAfterCast({ actor, spell, sys, targets = [], viaI
   const promise = readNextAttack(sys?.effect ?? "");
   if (promise) {
     const { layNextAttack } = await import("./next-attack.mjs");
-    const laid = await layNextAttack(actor, [{ source: spell.uuid ?? spell.name, name: spell.name, damage: promise.damage, type: promise.type, decay: promise.decay, lasts: promise.span }]);
+    const laid = await layNextAttack(actor, [{ source: spell.uuid ?? spell.name, name: spell.name, damage: promise.damage, type: promise.type, decay: promise.decay, lasts: promise.span, ...(promise.rolls === "each" ? { rolls: "each" } : {}) }]);
     lines.push(game.i18n.format(laid.length ? "AZEROTH.NextAttack.SpellLaid" : "AZEROTH.NextAttack.NoFight", { name: actor.name, talent: spell.name, n: promise.damage, decay: promise.decay }));
   }
   if (grantsHalfAction(sys?.effect ?? "")) {

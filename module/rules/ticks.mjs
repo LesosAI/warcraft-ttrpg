@@ -43,6 +43,12 @@
  *               Spellpower: X you carry*: the caster's Spellpower in that
  *               school added at each turn, as a tier 3 spell's always is (07
  *               §9: on a damage-over-time spell it raises the ongoing damage)
+ *   ramp        `{step, max}`: an amount that RISES each landing (07's Agonizing
+ *               Flames, the Demon Hunter's: *at the start of each of its turns
+ *               after that it takes 1 more than the turn before, to a maximum
+ *               of your tier plus 2*). `step` is the rise, `max` an expression
+ *               (`tier + 2`) worked out at the cast; `{step: null, max: ""}`
+ *               on every other spell
  *   reason      every per-turn sentence of the entry the tick does not carry,
  *               and every clause beside the one it reads, `"; "`-joined -
  *               counted under a CEILING in `ticks.test.mjs` that may only fall
@@ -81,7 +87,17 @@ const ROUNDS_PER_MINUTE = 10;
 
 /** No tick: the whole shape, every leaf empty. */
 export function emptyTick() {
-  return { kind: "", type: null, amount: "", rounds: null, until: "", when: "", hit: false, sl: null, spellpower: false, reason: "" };
+  return { kind: "", type: null, amount: "", rounds: null, until: "", when: "", hit: false, sl: null, spellpower: false, ramp: emptyRamp(), reason: "" };
+}
+
+/** No rise: the `ramp` of every tick that lands the same number each turn. */
+export function emptyRamp() {
+  return { step: null, max: "" };
+}
+
+/** Whether a stored or laid tick rises at each landing. */
+export function hasRamp(tick) {
+  return Number(tick?.ramp?.step) > 0;
 }
 
 /** Whether a stored or laid descriptor is a tick at all. */
@@ -186,6 +202,38 @@ const SHAPES = [
     if (m.groups.sp && m.groups.sp !== m.groups.w) return null;
     return { tick: { kind: "damage", type: schoolOf(m.groups.w), amount: m.groups.n, rounds: 1, hit: true, spellpower: Boolean(m.groups.sp) }, beside: [] };
   },
+  // **A RISING TICK WITH A FIXED CEILING** (07 §13's Soul Reaper since the spell audit; D-1702,
+  // D-1712): *It takes 4 Fel damage at the start of each of its turns, and that amount rises by 4
+  // on each of its turns after the first, to a maximum of 16.* The Agonizing Flames `ramp` with
+  // an absolute `max` ("16"), which `layTick` evaluates as it evaluates `tier + 2`. Sustained,
+  // so no count: `tickCountdown` raises a sustained rising tick's amount without one.
+  (s, fields) => {
+    const m = /^(?:The target|It) takes (?<n>\d+) (?<w>[A-Z][a-z]+) damage at the start of each of its turns, and that amount rises by (?<step>\d+) on each of its turns after the first, to a maximum of (?<max>\d+)\.?$/.exec(s);
+    if (!m) return null;
+    return {
+      tick: {
+        kind: "damage", type: schoolOf(m.groups.w), amount: m.groups.n, rounds: roundsIn(fields?.duration ?? {}),
+        ramp: { step: Number(m.groups.step), max: m.groups.max }
+      },
+      beside: []
+    };
+  },
+  // **A RISING TICK** (07's Agonizing Flames, the Demon Hunter's; D-1500): *The target
+  // takes 1 Fel damage at the start of its next turn, and at the start of each of its
+  // turns after that it takes 1 more than the turn before, to a maximum of your tier plus
+  // 2.* The number IS the tick (`hit` false: the cast deals nothing), it lands for the
+  // span (*1 minute*, ten turn starts), and `ramp` carries the rise and the cap.
+  (s, fields) => {
+    const m = /^The target takes (?<n>\d+) (?<w>[A-Z][a-z]+) damage at the start of its next turn, and at the start of each of its turns after that it takes (?<step>\d+) more than the turn before, to a maximum of your tier plus (?<plus>\d+)\.?$/.exec(s);
+    if (!m) return null;
+    return {
+      tick: {
+        kind: "damage", type: schoolOf(m.groups.w), amount: m.groups.n, rounds: roundsIn(fields?.duration ?? {}),
+        ramp: { step: Number(m.groups.step), max: `tier + ${m.groups.plus}` }
+      },
+      beside: []
+    };
+  },
   // Fireball: *At SL 3 or better it is set alight and takes a further 2 Fire
   // damage at the start of its next turn.*
   s => {
@@ -249,7 +297,8 @@ export const UNTICKED = Object.freeze([
   { key: "casterTurn", re: /\bat the start of (?:each of )?your(?: next)? turns?\b/i, text: "what happens at the start of the CASTER's turn is not a tick, which lands at its carrier's" },
   { key: "mana", re: /\bregains \d+ Mana at the start of each of its turns\b/, text: "Mana regained each turn is not a tick, which carries damage or Health" },
   { key: "whileCondition", re: /\bwhile it remains \*?\*?Entangled|\bwhile held\b/, text: "a tick that lasts while a condition holds is not built" },
-  { key: "doubles", re: /\bdoubles on each of its turns\b/, text: "an amount that doubles each turn is not built" },
+  // Soul Reaper's *doubles on each of its turns* was a reason here until the spell audit made it
+  // rise by 4 to at most 16 (D-1702), which the rising-tick shape reads (D-1712).
   { key: "failedBurn", re: /\bEverything that failed goes on burning\b/, text: "a tick on each creature that failed the area's Test is not built" },
   { key: "replaces", re: /\bat the start of each of its turns for the duration rather than \d+\b/, text: "a tick that replaces another spell's is not built" },
   { key: "turnTest", re: /\bmust pass a \w+ Resilience Test against your Spell DC at the start of each of its turns\b/, text: "a Test made at the start of each turn is not built" },
@@ -259,6 +308,20 @@ export const UNTICKED = Object.freeze([
   { key: "spread", re: /\beach other enemy of yours within \d+ feet of it that is not \*?\*?Bleeding\*?\*? becomes\b/, text: "a Bleeding spread to the caster's enemies near the carrier is the Sovereign door's (effects/sovereign-spells.mjs#hemoplagueSpread), never a tick" },
   // 07 §17's Unholy Frenzy (run F2): Health LOST is no damage and no heal, so no tick carries it.
   { key: "healthLost", re: /\bloses \d+ Health at the start of each of its turns\b/, text: "Health lost at the start of each turn is not a tick, which carries damage or Health restored" }
+  // 07 §15's Flame Crash (the Demon Hunter's) was a reason here until D-1542: its *starts its turn in a burning area
+  // or enters one* is the AREA's start-of-turn clause now (`area-ticks.mjs`' BASE row and WHERE), on the one Region
+  // its door places with a circle where each glaive lands.
+]);
+
+/**
+ * **A PER-TURN SENTENCE A NAMED DOOR CARRIES** (D-1543): read by no shape because the card's Apply must not lay it -
+ * it lands on a creature that FAILED, with the conditions its failure lays - and carried by the failed Test's own
+ * door, named here so the census holds it without a reason. 07 §15's Inner Demon is the one: *On a failure it is
+ * **Frightened** and **Entangled** for the duration, and it takes 3 Fel damage at the start of each of its turns*
+ * (`effects/demon-hunter-spells.mjs#dhSpellAfterResist`, the census's `dh:torment`).
+ */
+export const TICK_DOORS = Object.freeze([
+  { key: "failedTorment", re: /\bOn a failure it is \*?\*?Frightened\*?\*? and \*?\*?Entangled\*?\*? for the duration, and it takes \d+ [A-Z][a-z]+ damage at the start of each of its turns\b/, door: "effects/demon-hunter-spells.mjs#dhSpellAfterResist" }
 ]);
 
 /**
@@ -291,13 +354,27 @@ export function readTickSentences(effectText, fields = {}) {
         continue;
       }
     }
+    // A sentence a named door carries is no reason (D-1543): said with the door, never in the stamp.
+    const door = TICK_DOORS.find(u => u.re.test(s)) ?? null;
+    if (door) {
+      unread.push({ sentence: s, reason: null, door: door.key });
+      continue;
+    }
     const why = UNTICKED.find(u => u.re.test(s)) ?? null;
     unread.push({ sentence: s, reason: why?.key ?? null });
     if (why) reasons.push(why.text);
   }
+  // **A TICK NOTHING REDUCES** (Soul Reaper: *Nothing reduces this damage and no Ward applies to
+  // it*; O-603): the tick is built and lands through the area door, which meets Ward and Armor
+  // Points as every tick does, so the clause is said in the reason until a door carries it.
+  if (read && UNREDUCED_RE.test(flatText(effectText))) reasons.push(UNREDUCED_TEXT);
   tick.reason = [...new Set(reasons)].join("; ");
   return { tick, read, unread };
 }
+
+/** Soul Reaper's clause (O-603): a tick no Ward and no reduction meets. */
+const UNREDUCED_RE = /\bNothing reduces this damage and no Ward applies to it\b/;
+export const UNREDUCED_TEXT = "a tick nothing reduces and no Ward meets lands through the area door, which applies Ward and Armor Points, until a door carries it (O-603)";
 
 /**
  * The stored descriptor for one spell, the parser's stamp: `readTickSentences`'
@@ -351,6 +428,11 @@ export function layTick(stored, { source = null, castUuid = null, cast = null, n
   if (!(base > 0)) return null;
   const amount = base + Math.max(0, Math.trunc(Number(add)) || 0);
   const rounds = stored.rounds === null || stored.rounds === undefined ? null : Math.max(1, Math.trunc(Number(stored.rounds)) || 1);
+  // A RISING tick (Agonizing Flames, D-1500) carries its rise and its cap worked out at the
+  // cast: the cap names the caster's tier (`tier + 2`), so it is a number from here on.
+  const ramp = hasRamp(stored)
+    ? { step: Math.trunc(Number(stored.ramp.step)), max: Math.trunc(evaluateExpression(stored.ramp.max, { ...abilities, rank, tier }) ?? 0) || null }
+    : null;
   return {
     kind: stored.kind,
     type: stored.kind === "damage" ? (stored.type ?? null) : null,
@@ -359,6 +441,7 @@ export function layTick(stored, { source = null, castUuid = null, cast = null, n
     until: TICK_UNTIL.includes(stored.until) ? stored.until : "",
     when: "startOfTurn",
     spellpower: stored.spellpower === true,
+    ...(ramp ? { ramp } : {}),
     source, castUuid, cast, name: String(name ?? ""),
     ...(via === "feature" ? { via } : {}),
     // **A PHYSICAL TICK REMEMBERS ITS SPELL'S SCHOOL** (07 §9; the 2a review, L1): the damage
@@ -434,16 +517,37 @@ export function tickHasClock(tick, { duration = null, carrierInFight = false, ca
 /**
  * What one turn start leaves of a laid tick: `{rounds}` counted down, `{delete:
  * true}` where that was its last, or null where it is not counted - a
- * Sustain's, which ends with the Sustain.
+ * Sustain's, which ends with the Sustain. **A RISING tick** (D-1500) also
+ * answers the next landing's `amount`: this one's plus the step, never past
+ * the cap the cast worked out.
  *
  * @param {object} laid
- * @returns {{rounds: number}|{delete: true}|null}
+ * @returns {{rounds: number, amount?: number}|{delete: true}|null}
  */
 export function tickCountdown(laid) {
   const n = laid?.rounds;
-  if (n === null || n === undefined) return null;
+  // A SUSTAINED rising tick (Soul Reaper; D-1712) has no count to keep and still rises: the
+  // next landing's amount alone. Any other uncounted tick is the Sustain's to end.
+  if (n === null || n === undefined) return hasRamp(laid) ? { amount: rampedAmount(laid) } : null;
   const left = Math.trunc(Number(n)) - 1;
-  return left >= 1 ? { rounds: left } : { delete: true };
+  if (left < 1) return { delete: true };
+  return hasRamp(laid) ? { rounds: left, amount: rampedAmount(laid) } : { rounds: left };
+}
+
+/**
+ * The amount a rising tick lands at its NEXT turn start (D-1500): the amount it
+ * holds plus its step, capped at its `max` where it has one. A tick that does
+ * not rise keeps its amount.
+ *
+ * @param {object} laid  a laid tick
+ * @returns {number}
+ */
+export function rampedAmount(laid) {
+  const amount = Math.max(0, Math.trunc(Number(laid?.amount)) || 0);
+  if (!hasRamp(laid)) return amount;
+  const next = amount + Math.trunc(Number(laid.ramp.step));
+  const max = Math.trunc(Number(laid.ramp.max));
+  return max > 0 ? Math.min(next, Math.max(max, amount)) : next;
 }
 
 /**
@@ -552,6 +656,17 @@ export function cleanTick(raw) {
     raw.sl = raw.sl === null || !Number.isFinite(n) ? null : n;
   }
   if (has("spellpower")) raw.spellpower = raw.spellpower === true;
+  // The rise (D-1500), one level down and present-key safe there too (CLAUDE.md §15).
+  if (has("ramp")) {
+    if (!raw.ramp || typeof raw.ramp !== "object" || Array.isArray(raw.ramp)) raw.ramp = emptyRamp();
+    else {
+      if ("step" in raw.ramp) {
+        const n = Math.trunc(Number(raw.ramp.step));
+        raw.ramp.step = raw.ramp.step === null || !Number.isFinite(n) || n < 1 ? null : n;
+      }
+      if ("max" in raw.ramp) raw.ramp.max = raw.ramp.max === null || raw.ramp.max === undefined ? "" : String(raw.ramp.max);
+    }
+  }
   if (has("reason")) raw.reason = typeof raw.reason === "string" ? raw.reason : "";
   return raw;
 }

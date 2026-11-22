@@ -89,6 +89,26 @@ export function packGrants(table, raw, name) {
   return table?.grantsByIdentifier?.get(k.identifier) ?? table?.grantsByName?.get(k.name) ?? null;
 }
 
+/**
+ * **A STORED DESCRIPTOR AGAINST ITS PACK COPY**: key order ignored, and a property whose value is
+ * null or undefined counted as absent, at every depth. The parser writes an optional key only where
+ * the entry says so (`areaTick.damage.drain`, D-1367; `castRating`, D-1714) and the model stores it
+ * as null on every other spell, so a plain comparison found a difference on every held spell, wrote
+ * the pack copy, and the model stored the null again: a restamp that touched the same documents on
+ * every run. Array members are compared as they stand.
+ *
+ * @param {*} a  the stored value
+ * @param {*} b  the pack copy's value
+ * @returns {boolean}
+ */
+export function sameStored(a, b) {
+  const norm = v => (Array.isArray(v) ? v.map(norm)
+    : v && typeof v === "object"
+      ? Object.fromEntries(Object.keys(v).sort().filter(k => v[k] !== null && v[k] !== undefined).map(k => [k, norm(v[k])]))
+      : v);
+  return JSON.stringify(norm(a ?? null)) === JSON.stringify(norm(b ?? null));
+}
+
 /** A document's stored system, before preparation. */
 export function rawSystem(doc) {
   return doc._source?.system ?? doc.toObject?.().system ?? doc.system;

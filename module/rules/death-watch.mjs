@@ -95,6 +95,13 @@ export function deathObserver() {
 export const DEATH_GIVEN_FLAG = "deathGiven";
 
 /**
+ * **EVERY ONCE-A-DEATH MARK A HEAL ABOVE 0 CLEARS** (the Demon Hunter review's L14): the death's own gift, and 02's
+ * Devour Soul's soul taken (`demon-hunter-features.mjs#DEVOUR_SOUL.given`, held equal by its Vitest), so a creature
+ * that heals and dies again may give and be devoured again.
+ */
+export const HEAL_CLEARS = Object.freeze([DEATH_GIVEN_FLAG, "soulDevoured"]);
+
+/**
  * Whether this look at a creature is it healing above 0 Health: below or at 0 before, above it now.
  *
  * @param {number|null} before

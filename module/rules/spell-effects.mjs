@@ -30,6 +30,10 @@
 import { AZEROTH } from "../config.mjs";
 import { POOL_CHANGE_TYPE, poolRises } from "./pool-change.mjs";
 import { evaluateExpression } from "./expressions.mjs";
+// A spell whose Damage is the melee retaliation it lays (D-1547): what it also states is the Apply's.
+import { spellRetaliationFrom } from "./spell-retaliation.mjs";
+// A Demon Hunter spell whose own door lays its effect (D-1540): the stamp carries no Apply.
+import { dhLaysOwnEffect } from "./demon-hunter-spells.mjs";
 
 /** The six abilities an amount may name (`rules/expressions.mjs`). */
 const ABILITY_NAMES = Object.freeze(["str", "dex", "con", "int", "wis", "cha"]);
@@ -180,6 +184,8 @@ export function seedApplies(effectText, duration = {}, target = "") {
   // location for the duration*, *Each target has 2 additional Armor Points at every location* - the
   // caster's or each target's, never a graft's *It has* (Stitch Abomination's Bone Plating is the raise's).
   if ((m = /\b(?:You have|Each target has) (\d+) additional Armor Points? at every location\b/.exec(text))) for (const loc of ["body", "head", "limb"]) add(`system.ap.${loc}`, m[1]);
+  // **07 §15's DEMON SPIKES** (the Demon Hunter's; D-1547): *For the duration you gain 1 Armor Point on every location*.
+  if ((m = /\bFor the duration you gain (\d+) Armor Points? on every location\b/.exec(text))) for (const loc of ["body", "head", "limb"]) add(`system.ap.${loc}`, m[1]);
   // *Damage the target takes is reduced by 3 for the duration* (07's Pain
   // Suppression and Barkskin; found beside 04's Pain Suppression, D-774): the
   // every-source reduction D-696 made `system.damageReduction`, which the one
@@ -257,8 +263,16 @@ export function seedSpellEffects({ effect = "", duration = {}, target = "", dama
   const sustainedSlow = hasDamage && duration?.kind === "sustained"
     && /^One creature$/i.test(String(target).trim())
     ? /\bThe target takes \d+ [A-Z][a-z]+ damage at the start of each of its turns and its Speed drops by (\d+) feet while sustaining this spell\./.exec(flatText(effect)) : null;
+  // **A RETALIATION'S DAMAGE IS NOT THE CAST'S, AND WHAT IT STATES BESIDE IT IS LAID** (07 §15's Demon Spikes: *For
+  // the duration you gain 1 Armor Point on every location, and a creature that hits you with a melee attack takes 1
+  // Fel damage*; D-1547): its Damage field is what strikes the attacker (`spell-retaliation.mjs`), so the change it
+  // states is the Apply's - where it states one, so 07 §12's Scouring Veil, which states none, is what it was.
+  const besideRetaliation = hasDamage && spellRetaliationFrom({ type: "spell", system: { effect, target } }) ? seedApplies(effect, duration, target) : null;
   return {
     applies: sustainedSlow ? { changes: [{ key: "system.speed", type: "add", value: String(-Number(sustainedSlow[1])) }], statuses: [] }
+      // 07 §15's Demon Hunter spells whose own door lays the effect (D-1540): no generic Apply beside it.
+      : dhLaysOwnEffect(effect) ? null
+      : besideRetaliation?.changes?.length ? besideRetaliation
       : hasDamage ? null : seedApplies(effect, duration, target),
     rider: hasDamage ? seedRider(effect) : null,
     onFail: seedOnFail(effect),

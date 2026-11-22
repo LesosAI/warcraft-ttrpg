@@ -525,6 +525,27 @@ export function restBatch(context) {
       assert.notInclude(card.text, "No drink", "a creature's card asked it for a drink");
     });
 
+    /* ---- one Energy pool for two Energy classes (02 §10, D-1723) --------- */
+
+    it("a Long Rest on a Rogue/Demon Hunter writes the one Energy pool once and keeps both entries in step", async function () {
+      this.timeout(120000);
+      // The lead, 2026-11-22: *"rogue - one merged pool"*. A rest writes the one row, and the mirror holds after it.
+      const actor = await makeCharacter({ name: "ZZ Rest One Energy", classes: [["Rogue", 3], ["Demon Hunter", 3]], race: "Night Elf" });
+      await actor._talentGrant;
+      const energy = () => actor.poolSnapshot().filter(p => p.kind === "power" && p.name === "energy");
+      await until(() => energy().length === 1, "one Energy pool");
+      const hunter = actor.items.find(i => i.type === "class" && i.name === "Demon Hunter");
+      await actor.updatePool({ itemId: hunter.id, kind: "power", value: 2 });
+      await until(() => energy()[0].value === 2, "the pool at 2");
+      await actor.update({ "system.health.value": 1 });
+      const { result, warned } = await warningsDuring(() => actor.longRest());
+      assert.ok(result, `the Long Rest was refused: ${warned.join(" | ")}`);
+      assert.equal(energy().length, 1, "the rest split the pool");
+      const values = actor.system.classes.map(c => c.power?.value);
+      assert.equal(new Set(values).size, 1, `the two entries no longer agree: ${values.join(", ")}`);
+      assert.equal(values[0], energy()[0].value, "the stored value is the pool's");
+    });
+
     /* ---- the world migration (CLAUDE.md §10) ----------------------------- */
 
     it("stamps a world's food and drink once, leaves a hand-made meal alone, and a second run touches nothing (0.12.9)", async function () {

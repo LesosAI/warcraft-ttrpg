@@ -91,7 +91,12 @@ import { BLOW_ASK_QUERY, BLOW_SHARE_QUERY, blowAskHandler, blowShareQueryHandler
 import { DEATH_WATCH_QUERY, deathWatchQueryHandler } from "./effects/death-watch.mjs";
 import { SOVEREIGN_QUERY, sovereignQueryHandler } from "./effects/sovereign-core.mjs";
 import { SOV_FEATURES_QUERY, sovereignFeaturesQueryHandler } from "./effects/sovereign-features.mjs";
+import { DH_FEATURES_QUERY, demonHunterQueryHandler } from "./effects/demon-hunter-features.mjs";
+import { DH_TALENTS_QUERY, demonHunterTalentsQueryHandler } from "./effects/demon-hunter-talents.mjs";
 import { SOVEREIGN_SPELL_QUERY, sovereignSpellQueryHandler } from "./effects/sovereign-spells.mjs";
+import { DH_SPELL_QUERY, demonHunterSpellQueryHandler } from "./effects/demon-hunter-spells.mjs";
+// 07's Devour the Spell at a creature's turn start: the GM asks the hunter's answering client to cast (D-1726).
+import { DEVOUR_CAST_QUERY, devourCast } from "./effects/devour-the-spell-reaction.mjs";
 import { AREA_MARK_QUERY, areaMarkQueryHandler } from "./effects/empower-areas.mjs";
 import { DISPEL_QUERY, dispelQueryHandler } from "./effects/dispel.mjs";
 import { NULLIFY_QUERY, massNullifyQueryHandler } from "./effects/nullifier-use.mjs";
@@ -609,8 +614,19 @@ export function registerQueries() {
   // The Sovereign's features and talents (Phase 5): a Shadow strike, an effect laid or dropped and Abject
   // Obedience on the GM's client; a named Tribute gain, Homage and a miss on the Sovereign's answerer.
   CONFIG.queries[SOV_FEATURES_QUERY] = sovereignFeaturesQueryHandler;
+  // 02 §7's Demon Hunter (the Demon Hunter plan's Phase 4a): Mana Rend's Power, Bane of the Legion's mark and a
+  // soul marked devoured, on a creature the hunter's client does not own (`effects/demon-hunter-features.mjs`).
+  CONFIG.queries[DH_FEATURES_QUERY] = demonHunterQueryHandler;
+  // 04's Demon Hunter talents (the Demon Hunter plan's Phase 5): Sweeping Arc's and Turn Their Fire's strike, Swallow
+  // Their Magic's and Silence the Weave's ended spells, and Feast of Souls' Tests (`effects/demon-hunter-talents.mjs`).
+  CONFIG.queries[DH_TALENTS_QUERY] = demonHunterTalentsQueryHandler;
   // The Sovereign's spells' writes on a creature, a door or the caster the asker does not own (D-1240).
   CONFIG.queries[SOVEREIGN_SPELL_QUERY] = sovereignSpellQueryHandler;
+  // The Demon Hunter's spells' writes on a creature, a card or the caster the asker does not own (D-1540): the brand,
+  // a picked spell's end, Siphon's Energy, Devour's Hatred, Draw Soul's heal and Flame Crash's ground.
+  CONFIG.queries[DH_SPELL_QUERY] = demonHunterSpellQueryHandler;
+  // Devour the Spell, cast on the hunter's answering client at the creature's turn start (D-1726).
+  CONFIG.queries[DEVOUR_CAST_QUERY] = devourCast;
   CONFIG.queries[AREA_MARK_QUERY] = areaMarkQueryHandler;
   // 08 §20's Legendary doors on another creature (D-912).
   CONFIG.queries[LEGENDARY_QUERY] = legendaryQueryHandler;

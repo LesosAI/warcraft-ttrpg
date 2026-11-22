@@ -234,6 +234,20 @@ export function rulesPackCarriesRepair(chapters = []) {
   return Boolean(options?.pages?.some(p => (classCountOf(p?.name) ?? 0) >= REPAIR_CLASS_COUNT));
 }
 
+/**
+ * **WHETHER THE RULES PACK'S 02 §7 COUNTS AT LEAST `count` CLASSES** (migration 0.16.0, the Demon
+ * Hunter's book: *The fifteen classes*). Keyed on the count, never on the page's name (the
+ * Necromancer plan's finding 6), so a later class's book still carries it.
+ *
+ * @param {Array<{name: string, pages?: Array<{name: string}>}>} chapters  the compendium's entries
+ * @param {number} count
+ * @returns {boolean}
+ */
+export function rulesPackCountsClasses(chapters = [], count = REPAIR_CLASS_COUNT) {
+  const options = (chapters ?? []).find(c => String(c?.name ?? "").toUpperCase() === "02-CHARACTER-OPTIONS");
+  return Boolean(options?.pages?.some(p => (classCountOf(p?.name) ?? 0) >= count));
+}
+
 /** The race count of the book the San'layn's repair was written for: thirteen (D-1154). */
 export const REPAIR_RACE_COUNT = 13;
 

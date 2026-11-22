@@ -43,7 +43,11 @@ import { feetApart } from "./footprints.mjs";
 import { allyOf } from "./engaged.mjs";
 import { CREATURE_KINDS } from "../rules/creature-kinds.mjs";
 import { DIFFICULT_BEHAVIOR, IGNORES_GROUND_FLAG, difficultApplies } from "../rules/area-ground.mjs";
+// 07 §15's Hunting Ground, inside its area alone (D-1545).
+import { huntingGroundFor, huntingGroundFree } from "../effects/demon-hunter-sight.mjs";
 import { movementFactsFor } from "../rules/talent-effects.mjs";
+// 02's Beyond Limits' free climb and swim (the Demon Hunter plan's Phase 4a).
+import { climbsAndSwimsFree } from "../rules/demon-hunter-features.mjs";
 import { actorOf, casterTokenOn } from "./sustained-areas.mjs";
 import { kindsOfActor, relationTo } from "../effects/area-strikes.mjs";
 
@@ -94,9 +98,12 @@ export function movementFactsOf(actor) {
   if (!actor) return { ignoresGround: false, climbsFree: false, swimsFree: false, swims: 0, aquaticOnly: false };
   const talents = movementFactsFor(actor.takenTalents?.() ?? []);
   const laid = (actor.effects ?? []).some(e => e.active !== false && e.flags?.["azeroth-rpg"]?.[IGNORES_GROUND_FLAG] === true);
+  // 02's Beyond Limits: *you climb or swim at full Speed until the end of your turn*, a laid effect's flag (the
+  // Demon Hunter plan's Phase 4a).
+  const limits = climbsAndSwimsFree((actor.effects ?? []).filter(e => e.active !== false).map(e => e.flags?.["azeroth-rpg"] ?? {}));
   const swims = Math.max(talents.swimsFree ? 1 : 0, swimMultiplier(actor.system?.senses ?? []));
   const aquaticOnly = new Set(actor.system?.senses ?? []).has("aquaticOnly");
-  return { ignoresGround: talents.ignoresGround || laid, climbsFree: talents.climbsFree, swimsFree: swims > 0, swims, aquaticOnly };
+  return { ignoresGround: talents.ignoresGround || laid, climbsFree: talents.climbsFree || limits, swimsFree: swims > 0 || limits, swims: Math.max(swims, limits ? 1 : 0), aquaticOnly };
 }
 
 /**
@@ -142,12 +149,16 @@ export class AzerothTerrainData extends foundry.data.TerrainData {
 
   /** @override */
   static getMovementCostFunction(token, options) {
-    const { ignoresGround } = movementFactsOf(token?.actor ?? null);
+    const { ignoresGround: ignoresAnywhere } = movementFactsOf(token?.actor ?? null);
     // 04's Master of the Land (D-779): the table's terrain costs a foot a foot; a
     // spell's Difficult ground still charges what it charges.
     const landed = landwiseNear(token);
+    // 07 §15's Hunting Ground (*Inside the area you ignore Difficult ground*; D-1545): the caster's own circle, read
+    // once a path and asked a step at a time, so a step outside the area pays what the ground costs.
+    const hunting = huntingGroundFor(token);
     return (from, to, distance, segment) => {
       const terrain = segment?.terrain ?? null;
+      const ignoresGround = ignoresAnywhere || (hunting !== null && huntingGroundFree(token, to, hunting));
       const difficulty = landed ? (terrain?.magical ?? 1) : (terrain?.difficulty ?? 1);
       return distance * paidDifficulty(difficulty, { ignoresGround });
     };

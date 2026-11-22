@@ -46,6 +46,11 @@ import { collectBurdenParticipants, derivePilgrimsBurdenLoadState } from "../../
 import { carryFactor, talentLanguages } from "../../rules/talent-effects.mjs";
 import { blockSpeedParts, speedFrom, speedParts } from "../../rules/speed.mjs";
 import { capFor } from "../../rules/momentum.mjs";
+import { featureFel, felFor } from "../../rules/hatred.mjs";
+// The Demon Hunter's derived numbers (the Demon Hunter plan's Phase 4a): Spectral Sight, Hunter's Stride, the wings.
+import { dhDerived } from "../../rules/demon-hunter-features.mjs";
+// 04's Wings of the Betrayer (the Demon Hunter plan's Phase 5).
+import { WINGS_OF_THE_BETRAYER, dhRankIn } from "../../rules/demon-hunter-talents.mjs";
 // Crowned in Blood doubles the Tribute cap while its effect stands (02 §7; `rules/tribute.mjs`).
 import { CROWNED_FLAG } from "../../rules/tribute.mjs";
 // 04's Untouchable and Serene Disdain, derived on the character (the Sovereign; pure).
@@ -78,6 +83,7 @@ import { immunitiesFrom } from "../../rules/legacy-uses.mjs";
 import { invulnerabilityPotionActive } from "../../rules/invulnerability-potion.mjs";
 import { wisdomBonus } from "../../rules/distilled-wisdom.mjs";
 import { skillBoonsOn, veilBanesOn } from "../../rules/sovereign-spells.mjs";
+import { agilityBanesOn } from "../../rules/demon-hunter-spells.mjs";
 import { withLaidVulnerable } from "../../rules/laid-vulnerable.mjs";
 import { SOURCE_MIGRATIONS } from "../../migrations/index.mjs";
 // 08 §4: a bonus from a hidden item is credited to *an unidentified item* (D-1435).
@@ -536,8 +542,11 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // Tribute's cap is 3 plus the Charisma modifier, never below 3, doubled while Crowned in Blood
     // stands (02 §7): the effect's flag, read off the effects the actor holds.
     const crowned = [...(this.parent?.effects ?? [])].some(e => e.active !== false && e.disabled !== true && e.flags?.["azeroth-rpg"]?.[CROWNED_FLAG]);
-    for (const pool of pools.momenta) pool.max = capFor(pool, ranksOf, { hourglass, chaMod, conMod, crowned });
-    if (pools.momentum && !pools.momenta.includes(pools.momentum)) pools.momentum.max = capFor(pools.momentum, ranksOf, { hourglass, chaMod, conMod, crowned });
+    // Hatred's cap is 5 plus 2 for each 5 Fel Corruption, read through the ONE reader every Fel-scaling
+    // door asks (`rules/hatred.mjs#felFor`), so I Have Prepared and Embrace the Pain reach it.
+    const fel = felFor(this.parent);
+    for (const pool of pools.momenta) pool.max = capFor(pool, ranksOf, { hourglass, chaMod, conMod, crowned, fel });
+    if (pools.momentum && !pools.momenta.includes(pools.momentum)) pools.momentum.max = capFor(pools.momentum, ranksOf, { hourglass, chaMod, conMod, crowned, fel });
     // A pool the character does not hold keeps its stored value untouched and
     // reports a null cap. Zeroing it here would discard data every time a GM
     // detached a class item, and the null `max` is already what tells the sheet
@@ -639,12 +648,20 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // effect's `immuneTo` names, which ends with the effect.
     const peopleRace = this.parent?.items?.find?.(i => i.type === "race") ?? null;
     const spanImmune = immunitiesFrom((this.parent?.effects ?? []).filter(e => e.active !== false && e.disabled !== true).map(e => e.flags?.["azeroth-rpg"] ?? {}));
+    // **02 §7's DEMON HUNTER** (the Demon Hunter plan's Phase 4a): Spectral Sight's *You cannot be Blinded*,
+    // Hunter's Stride's Speed and Demon Unleashed's wings at its Fel, read once (`rules/demon-hunter-features.mjs
+    // #dhDerived`) off the feature names, the tier, the shape and the Fel a threshold reads (`featureFel`: the wings at
+    // Fel 10 are reached by I Have Prepared and never by Embrace the Pain, the review's M1).
+    // And 04's Wings of the Betrayer's rank (Phase 5): smaller wings in either demon's shape at any Fel.
+    const dhRead = dhDerived({ features: (this.parent?.items ?? []).filter(i => i.type === "feature").map(i => i.name), tier: this.tier, shapeKind: shape?.kind ?? null, fel: featureFel(this.parent),
+      wings: dhRankIn(talentRows, WINGS_OF_THE_BETRAYER.identifier) });
     this.conditionImmunities = [...new Set([
       ...(this.conditionImmunities ?? []),
       ...rungs.immune,
       ...signature.conditionImmunities,
       ...steadfast.immune,
       ...spanImmune,
+      ...dhRead.immune,
       // **AND A DEATH KNIGHT REFUSES POISON AND DISEASE** (02 §7's Risen Knight; D-946): the
       // door `toggleStatusEffect` and the affliction door (`effects/afflictions.mjs#afflict`,
       // `rules/afflictions.mjs#afflictRefusal`) both read this list.
@@ -863,6 +880,9 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // stacks with Encumbering and with the load exactly as every other part
     // does and the banner's tooltip says where it came from.
     if (worn.scalars.speed) this.speedParts.push({ key: "grant", value: worn.scalars.speed });
+    // 02's Hunter's Stride: *Your Speed rises by 5 feet for each tier you have reached* - a part, so the
+    // banner's tooltip names it and every cost stacks on it as on any other.
+    if (dhRead.speed) this.speedParts.push({ key: "stride", value: dhRead.speed });
     this.speed = speedFrom(this.speedParts);
     // **A SPEED THAT CANNOT BE REDUCED** (04's Unyielding; D-772): what the
     // parts that ADD come to, alone. Held here against a suit's cost, a load and
@@ -886,6 +906,9 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // A drake flies at its BLOCK's tier (the plan: *"tier 3 in scaling"*, so 240 feet),
     // and a drake block that flies not leaves the character's own field alone.
     if (overlay?.flies) this.flyingSpeed = flyingPace(overlay.tier ?? 3);
+    // 02's Demon Unleashed: *At 10 Fel Corruption or more you have wings and a flying Speed of 240 feet*, read at
+    // the Fel the features read each preparation (a Fel Lash that sheds below 10 folds the wings).
+    if (dhRead.flying) this.flyingSpeed = dhRead.flying;
     // Derived anew each preparation, so leaving a form removes its swimming
     // restrictions and breathing traits immediately.
     this.senses = [...((physical ?? overlay)?.movementSenses ?? [])];
@@ -960,6 +983,8 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // **07 §17's VEIL OF MIST** (*each weapon attack against you takes a Bane*; D-1364): the same lane, off the
     // caster's own effect.
     this.sovereignDeterred = [...this.sovereignDeterred, ...veilBanesOn(this.parent?.effects ?? [])];
+    // **07 §15's UNNATURAL AGILITY** (*attacks against you take a Bane*; D-1546): the same lane, off the caster's own effect.
+    this.sovereignDeterred = [...this.sovereignDeterred, ...agilityBanesOn(this.parent?.effects ?? [])];
     this.castDeterred = sovereignCastBanes({ contempt: (this.parent?.items ?? []).some(i => i.type === "feature" && i.name === WITHERING_CONTEMPT.feature) });
 
     // Initiative is never rolled (D-256): it is a static number the side order

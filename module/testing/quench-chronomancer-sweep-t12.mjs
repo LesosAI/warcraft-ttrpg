@@ -1194,7 +1194,7 @@ export function chronomancerSweepTier2Batch(context) {
         if (!blow) return;
         const rows = flagsOf(blow).damageByTarget ?? [];
         sw.log("blow", { text: textOf(live(blow)), rows });
-        sw.check(Number(rows[0]?.damage) === plainDamage + 2, "2 more damage on the hit", { plainDamage, now: rows[0]?.damage });
+        sw.check(Number(rows[0]?.damage) === plainDamage + 4, "4 more damage on the hit (the spell audit, D-1701)", { plainDamage, now: rows[0]?.damage });
         await applyDamageRow(sw, blow, 0, raptor.actor);
         await sw.wait(() => decayValue(raptor.actor) === 1, "Decay 1 on the creature hit", 20000);
         // The promise is spent by the blow: a second swing this turn adds nothing.

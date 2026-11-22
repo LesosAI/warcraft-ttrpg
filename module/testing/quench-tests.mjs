@@ -76,6 +76,11 @@ import { sovereignAnimations2Batch, sovereignAnimationsBatch, sovereignAnimation
 import { moveThroughBatch } from "./quench-move-through.mjs";
 // 08 §4's unidentified items and 08 §14's scrolls (D-1435, D-1436).
 import { identifyBatch, scrollsBatch } from "./quench-identify.mjs";
+import { demonHunterGroundworkBatch } from "./quench-demon-hunter-groundwork.mjs";
+import { demonHunterFeaturesBatch } from "./quench-demon-hunter-features.mjs";
+import { demonHunterSpellsBatch } from "./quench-demon-hunter-spells.mjs";
+import { demonHunterTalentsBatch } from "./quench-demon-hunter-talents.mjs";
+import { demonHunterAnimationsBatch } from "./quench-demon-hunter-animations.mjs";
 import { reactionBatch } from "./quench-reactions.mjs";
 import { creatureGearBatch } from "./quench-npc-gear.mjs";
 import { creatureSwingBatch } from "./quench-npc-swing.mjs";
@@ -445,6 +450,21 @@ export function registerQuenchTests() {
     });
     quench.registerBatch("azeroth-rpg.scrolls", scrollsBatch, {
       displayName: "AZEROTH: 08 §14's scrolls through the real doors: the GM's inscription, Read scroll at the writer's total, the spend (D-1436)"
+    });
+    quench.registerBatch("azeroth-rpg.demon-hunter-groundwork", demonHunterGroundworkBatch, {
+      displayName: "AZEROTH: The Demon Hunter's Hatred and Energy through the real doors: the cap, a cast, both rests (the Demon Hunter plan)"
+    });
+    quench.registerBatch("azeroth-rpg.demon-hunter-features", demonHunterFeaturesBatch, {
+      displayName: "AZEROTH: The Demon Hunter's class features through the real controls: Fel Lash, the leap, Demon Unleashed, I Have Prepared (Phase 4a)"
+    });
+    quench.registerBatch("azeroth-rpg.demon-hunter-spells", demonHunterSpellsBatch, {
+      displayName: "AZEROTH: The Demon Hunter's spells through the real controls: the brand, the glaives, the aura, the spells it ends (Phase 4b)"
+    });
+    quench.registerBatch("azeroth-rpg.demon-hunter-talents", demonHunterTalentsBatch, {
+      displayName: "AZEROTH: The Demon Hunter's 36 talents through the real controls: the Betrayer, the Souleater, the Sufferer (Phase 5, D-1560)"
+    });
+    quench.registerBatch("azeroth-rpg.demon-hunter-animations", demonHunterAnimationsBatch, {
+      displayName: "AZEROTH: The Demon Hunter's animations and sounds, read back live off the real controls (Phase 6, D-1580)"
     });
     quench.registerBatch("azeroth-rpg.move-through", moveThroughBatch, {
       displayName: "AZEROTH: 05's Moving through a space at the move door, with Veil of Mist, Underfoot and the GM's drag (FIXC, O-476)"
@@ -4450,6 +4470,32 @@ function migrationBatch(context) {
       assert.equal(actor.system.power.value, 3);
     });
 
+    it("0.16.0.2 makes two Energy classes' stored values one pool's, and takes Fast off a held Short warglaive (D-1723)", async function () {
+      this.timeout(120000);
+      const { migrate } = await import("/systems/azeroth-rpg/module/migrations/0.16.0.2-energy-pool.mjs");
+      const classPack = await game.packs.get("azeroth-rpg.classes").getDocuments();
+      const weaponPack = await game.packs.get("azeroth-rpg.weapons").getDocuments();
+      const actor = await legacyActor({}, "ZZ 0.16.0.2 Energy");
+      await actor.createEmbeddedDocuments("Item", ["Rogue", "Demon Hunter"].map(n => classPack.find(d => d.name === n).toObject()), { azerothBags: "bypass" });
+      const until = async (fn, what) => { const t0 = Date.now(); while (!fn()) { if (Date.now() - t0 > 10000) throw new Error(`timed out waiting for ${what}`); await new Promise(r => setTimeout(r, 25)); } };
+      await until(() => (actor.system.classes ?? []).length === 2, "both classes linked");
+      // Stored apart, as a world held them before the merge.
+      await actor.update({ "system.classes": actor.system.classes.map((c, i) => ({ ...(c.toObject?.() ?? c), power: { value: i === 0 ? 3 : 8 } })) });
+      const glaive = weaponPack.find(d => d.system?.identifier === "short-warglaive").toObject();
+      const fresh = [...glaive.system.traits];
+      glaive.system.traits = ["Light", "Fast", "Deft"];
+      const [held] = await actor.createEmbeddedDocuments("Item", [glaive], { azerothBags: "bypass" });
+      await migrate(() => {});
+      const values = actor.system.classes.map(c => c.power?.value);
+      assert.equal(new Set(values).size, 1, `the two entries still disagree: ${values.join(", ")}`);
+      assert.equal(values[0], Math.min(8, actor.system.powers.find(p => p.name === "energy").max), "the larger stored value, held to the cap");
+      assert.deepEqual(actor.items.get(held.id).system.traits, fresh, "the held Short warglaive kept Fast (is the weapons pack rebuilt?)");
+      // A second run writes nothing.
+      const stamp = JSON.stringify([actor._source.system.classes, actor.items.get(held.id)._source.system.traits]);
+      await migrate(() => {});
+      assert.equal(JSON.stringify([actor._source.system.classes, actor.items.get(held.id)._source.system.traits]), stamp, "a second run wrote");
+    });
+
     it("0.15.3.1 makes the page a link names and never writes a held page: a GM-edited page survives beside its (book) copy, the old 02 \u00a77 page and the GM's page stay (the lead: Keep the GM's copy)", async function () {
       this.timeout(180000);
       const journals = await import("/systems/azeroth-rpg/module/applications/rules-journals.mjs");
@@ -4626,6 +4672,25 @@ function multiclassBatch(context) {
       const [mana, energy] = actor.system.powers;
       assert.equal(mana.value, 3);
       assert.equal(energy.value, 7, "the two pools are sharing one number");
+    });
+
+    it("gives a Rogue/Demon Hunter ONE Energy pool and one number, written on the holder and mirrored (02 §10, D-1723)", async function () {
+      this.timeout(20000);
+      // The lead, 2026-11-22: *"rogue - one merged pool"*. Two classes that both give Energy share one pool,
+      // the larger of the two, refilled once a turn.
+      const actor = await build([["Rogue", 9], ["Demon Hunter", 5]], "ZZ One Energy");
+      const energy = () => actor.system.powers.filter(p => p.name === "energy");
+      assert.equal(energy().length, 1, "two Energy classes drew two pools");
+      const [rogue, hunter] = actor.system.classes;
+      assert.deepEqual(energy()[0].itemIds, [rogue.itemId, hunter.itemId], "the merged pool names both classes, the holder first");
+      // A write naming the Demon Hunter's class item lands on the holder and is mirrored into the other entry.
+      await actor.updatePool({ itemId: hunter.itemId, kind: "power", value: 4 });
+      assert.equal(energy()[0].value, 4);
+      assert.deepEqual(actor.system.classes.map(c => c.power?.value), [4, 4], "the mirror");
+      // The turn's refill: 3, once.
+      await actor.refillTurn();
+      assert.equal(energy()[0].value, 7, "refilled once, not twice");
+      assert.deepEqual(actor.system.classes.map(c => c.power?.value), [7, 7]);
     });
 
     it("gives a multiclass every Momentum pool its classes carry", async function () {

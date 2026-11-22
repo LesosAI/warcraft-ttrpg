@@ -102,6 +102,14 @@ export function namesDifficultGround(sentence) {
 const IGNORES = /\bignores? (?:\*\*)?Difficult ground(?:\*\*)?/i;
 
 /**
+ * **THE GROUND IGNORED INSIDE AN AREA ALONE** (07 §15's Hunting Ground: *Inside the area you ignore **Difficult
+ * ground***; the parse report's flag, D-1545): not the target's for the whole Sustain, so no laid effect carries
+ * it. The Demon Hunter door lays the area on its caster and the terrain's cost function asks it a step at a time
+ * (`effects/demon-hunter-sight.mjs#huntingGroundFree`); the stamp's `ignores` stays false.
+ */
+export const IGNORES_INSIDE = /\bInside the area you ignore (?:\*\*)?Difficult ground\b/i;
+
+/**
  * THE PLACED AREA'S OWN GROUND, in 07's grammar. The subject is the area, or
  * what lies over it and IS it for the duration (*Ash then hangs over the area
  * for the duration: it is*); a colon between the two is 07's own way of saying
@@ -235,7 +243,11 @@ export const NON_SPELL_GROUND = Object.freeze({
   "Desecration": { automated: "a placed area carrying `areaGround` (`who: enemy`, `spares: shadow`), laid by `effects/death-knight.mjs#placeDesecration` and given its `difficultFor` behavior by the GM's `reconcileGround` (D-938)" },
   // *You and each ally within 30 feet of you ignore Difficult ground for 1 minute*: door 12, run F3's.
   "March of the Damned": { reason: "02's level 20 feature, whose aura is the Death Knight plan's door 12 (run F3); until then the table's" },
-  "Distortion Field": { automated: "the talent's `field` row: a Region attached to the holder's token carrying the `difficultFor` behavior for the holder's enemies, 10 or 15 feet past its own squares, laid and kept by the active GM (`canvas/distortion-field.mjs#reconcileFields`)" }
+  "Distortion Field": { automated: "the talent's `field` row: a Region attached to the holder's token carrying the `difficultFor` behavior for the holder's enemies, 10 or 15 feet past its own squares, laid and kept by the active GM (`canvas/distortion-field.mjs#reconcileFields`)" },
+  // The Demon Hunter's (02 §7; the features phase, D-1520): Beyond Limits' *one Move ignores Difficult ground*
+  // and Hunter's Leap's *The leap ignores Difficult ground*.
+  "Beyond Limits": { automated: "the chooser's second choice lays an effect carrying `ignoresGround` on the hunter for the turn (`effects/demon-hunter-features.mjs#landDemonHunterUse`), which `canvas/behaviors.mjs#movementFactsOf` reads" },
+  "Hunter's Leap": { automated: "the leap is the step door's displacement (`effects/steps.mjs#stepTo`, `effects/demon-hunter-features.mjs#landDemonHunterUse`), which meters no foot, so Difficult ground costs it nothing" }
 });
 
 /**
@@ -254,6 +266,7 @@ export function readAreaGround(effectText, fields = {}) {
   const atTarget = placed ? null : targetGroundOf(effectText, fields);
   for (const s of list) {
     if (!namesDifficultGround(s)) continue;
+    if (IGNORES_INSIDE.test(s)) continue;
     if (IGNORES.test(s)) {
       ground.ignores = true;
       // A laid effect is what carries it, and an Instant spell lays none

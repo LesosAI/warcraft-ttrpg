@@ -56,6 +56,7 @@ import { reflectionPaths } from "../rules/reflection.mjs";
 import { CLAWS_EQUIP_CUE, clawsEquipCue } from "../rules/claws.mjs";
 // The Sovereign's prey mark, standing on the prey (the San'layn and Sovereign plan's C14).
 import { PREY_FLAG, preyMarkState, sovereignCardCue } from "../rules/sovereign-animations.mjs";
+import { demonHunterCardCue } from "../rules/demon-hunter-animations.mjs";
 
 /**
  * The spells whose row loops on a recorded Resilience Test, which is the only
@@ -431,6 +432,21 @@ export function cardRecord(message) {
       trigger: sov.trigger, contentVisible,
       sceneId: source?.sceneId ?? named[0]?.sceneId ?? null,
       identifier: sov.key,
+      source,
+      targets: named
+    });
+  }
+  // **A DEMON HUNTER DOOR'S OWN CARD** (the Demon Hunter plan's Phase 6; D-1580): Devour Soul's landed devour,
+  // speaking from the hunter's token and naming the creature whose soul was taken
+  // (`rules/demon-hunter-animations.mjs#demonHunterCardCue`). Any other `demonHunterCard` card plays nothing.
+  const dh = demonHunterCardCue(flags);
+  if (dh) {
+    const source = speakerToken(message);
+    const named = [tokenOfUuid(dh.targetUuid)].filter(Boolean);
+    return featureRecord({
+      trigger: dh.trigger, contentVisible,
+      sceneId: source?.sceneId ?? named[0]?.sceneId ?? null,
+      identifier: dh.key,
       source,
       targets: named
     });

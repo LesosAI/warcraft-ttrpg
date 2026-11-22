@@ -52,7 +52,9 @@ export async function chooseStarfall(message) {
     candidates.push({ uuid, name: tokens[0].actor.name });
   }
   const rank = Math.max(0, ...(actor.takenTalents?.() ?? []).filter(t => t.className === "Druid" && t.identifier === "starfall").map(t => Number(t.taken) || 0));
-  const required = Math.min(candidates.length, starfallTargetLimit({ talentRank: Math.min(rank, held.talentRank) }));
+  // The turn's snapshot says whether a live Starweave gives this Starfall its second target (D-1710);
+  // the GM's delivery judges it again.
+  const required = Math.min(candidates.length, starfallTargetLimit({ talentRank: Math.min(rank, held.talentRank), starweave: held.starweave === true }));
   if (!required) { ui.notifications.info(text("Empty")); return null; }
   const content = await foundry.applications.handlebars.renderTemplate("systems/azeroth-rpg/templates/dialog/starfall.hbs", {
     candidates, description: text("ChooseCount", { count: required })

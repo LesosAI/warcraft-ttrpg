@@ -12,6 +12,7 @@
  * | **Sand** (the Chronomancer) | a Short Rest, a Long Rest, the Hourglass leaving the Ranged slot | *"It should only drain on a short or long rest"*; *"swamp empties sand."* |
  * | **Runic Power** (the Death Knight) | a Long Rest | *Runic Power keeps out of fights*; **"Only on a Long Rest"**; a Critical Injury and Guard leave it alone (*"yes"*) |
  * | **Essence** (the Necromancer) | nothing | *"keep essence until spent"*; a Critical Injury and Guard leave it alone (the lead, 2026-11-18, *"Yes"*) |
+ * | **Hatred** (the Demon Hunter) | a Short Rest, a Long Rest | *"Holding this resource should provide Fel Corruption if not spent by a short or long rest, meaning it doesn't drain between combats"* |
  *
  * This was Sand's own list (`SAND_EMPTIED_BY`, `sandSurvives`, `sandAfter`), and the
  * plan's Phase 3 made it ONE pool-keyed rule so the Death Knight's pool reads the same
@@ -31,7 +32,10 @@ export const EMPTIED_BY = Object.freeze({
   runicPower: Object.freeze(["longRest"]),
   // No event empties it (the lead: *"keep essence until spent"*). Held through a Long Rest it risks 1 Undeath
   // (`essence.mjs#restExposure`), and spending is the only thing that lowers it.
-  essence: Object.freeze([])
+  essence: Object.freeze([]),
+  // A Short or a Long Rest (the lead's first notes), after the Hatred held becomes Fel at the actor's
+  // door (`AzerothActor#_hatredAtRest`, `hatred.mjs#hatredAtRest`).
+  hatred: Object.freeze(["shortRest", "longRest"])
 });
 
 /** Whether a Momentum pool is one a fight does not empty. */

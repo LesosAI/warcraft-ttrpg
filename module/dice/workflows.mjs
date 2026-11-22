@@ -288,7 +288,7 @@ import {publishHelmetHit} from '../effects/helmet-hit-use.mjs';
 // on one and both handlers below said *no Mana pool* to a creature holding one.
 // And `poolNamed` is the same reading for a COST — `poolFor` below matched a
 // pool by name alone, so a Signature that costs a pool refused on all 164.
-import { ANY_MOMENTUM, ANY_POOL, anyPoolChoice, anyPoolKey, manaPool, poolNamed } from "../rules/pools.mjs";
+import { ANY_MOMENTUM, ANY_POOL, anyPoolChoice, anyPoolKey, manaPool, grantingClassOf, poolNamed } from "../rules/pools.mjs";
 // A free cast once per rest, and the Void a branch spell builds (the Chromatic Champion plan).
 import { FREE_CAST_FLAG, castVoidFor, spentAfter } from "../rules/free-casts.mjs";
 import { MIRROR_IMAGE_COUNT } from "../rules/mirror-image.mjs";
@@ -358,6 +358,13 @@ import {
 import { OVERCHANNEL_MAX_POINTS, overchannelPrice, takeForFeature, spellPayment, spellCostLabel } from "../rules/casting.mjs";
 // The Necromancer's Essence pays no maneuver (the Necromancer plan).
 import { ESSENCE, empowerPlan, paysByKind } from "../rules/essence.mjs";
+// The Demon Hunter's Hatred: a cast gives 1 plus its tier (the Demon Hunter plan's C63).
+import { HATRED, castGain, felSurgePlan } from "../rules/hatred.mjs";
+// The Demon Hunter's features (the Demon Hunter plan's Phase 4a): a track lowered (Fel Lash's shed) and the gain
+// refused while unleashed, both pure.
+import { corruptionReduction, dhWeaponAttack, unleashedGainRefusal } from "../rules/demon-hunter-features.mjs";
+// 04's Iron Will on a Spirit Test against Fel (the Demon Hunter plan's Phase 5).
+import { IRON_WILL, dhRankOfItems, ironWillAutomatic, ironWillLines } from "../rules/demon-hunter-talents.mjs";
 import { FLESH_OFFERING, empowerEffects, empowerPicks, essenceDue, fleshOfferingPrice, lastingDuration, lastingTickRounds } from "../rules/necromancer-lines.mjs";
 // What a horde raise touched, for its card (the animation contract's section 1).
 import { GRAFT_KEY, MASTERY_KEY, RAISED_WITH_FLAG, raisedWithEntry } from "../rules/necromancer-animations.mjs";
@@ -424,11 +431,13 @@ import { hasCreaturePlan, summonDue } from "../rules/creature-plans.mjs";
 // D-1166, D-1167): the claw rolls one Off-Hand Attack makes, Blooded Claws' free lone blow,
 // and the one hook every claw hit fires.
 import { CLAW_USES_FLAG, freeOffHand, offHandRolls } from "../rules/initiative.mjs";
-import { isClaws as isClawsWeapon } from "../rules/unarmed.mjs";
+import { isClaws as isClawsWeapon, isUnarmedStrike } from "../rules/unarmed.mjs";
 import { clawHitPayload, fireClawHits } from "../rules/claw-hit.mjs";
 import { clawRollStamp } from "../rules/claws.mjs";
 // The Sovereign spells' cast doors, asked before their module loads (O-419; `rules/sovereign-scope.mjs`).
 import { sovereignSpellCast } from "../rules/sovereign-scope.mjs";
+// The Demon Hunter's spell doors, asked before their module loads (07 §15; D-1540; `rules/demon-hunter-scope.mjs`).
+import { dhSpellCast } from "../rules/demon-hunter-scope.mjs";
 // The Sovereign's own spell price (04's Swift Hunger, Crimson Flourish, the Blood Monarch form): pure, read in `castSpell`.
 import { flourishCurrent, sovereignCastPrice } from "../rules/sovereign-talents.mjs";
 
@@ -991,6 +1000,10 @@ export async function rollTest({
   // called shot's Momentum and the Finisher, and their on-hit effect landing
   // with the blow.
   riders = [],
+  // **WHAT AN EXTRA ATTACK'S SECOND ROLL PAYS AGAIN** (02's Fel Lash: *You may use it on each attack you make,
+  // paying each time*; the Demon Hunter plan's Q9): the first roll's ticked rider, paid again here where its
+  // line is still open - never refused, so a pool the first roll emptied leaves the second roll without it.
+  againRiders = [],
   title = "",
   subtitle = "",
   offHand = false,
@@ -1223,11 +1236,16 @@ export async function rollTest({
   // A rider that needs the Opening (04's Garrote, D-773) is judged against the
   // target as it stands now, through the one reading the dialog asked.
   const riderLinesNow = riderAttack
-    ? (actor?.riderLines?.({ weapon: strike?.rangeKind ?? null, opening: openingGate(actor?.openingState?.(first, { hidden: hiddenAtRoll }) ?? null, first), target: first }) ?? [])
+    // An unarmed strike carries no Demon Hunter weapon rider (the review's M3; `rules/unarmed.mjs` decides).
+    ? (actor?.riderLines?.({ weapon: strike?.rangeKind ?? null, opening: openingGate(actor?.openingState?.(first, { hidden: hiddenAtRoll }) ?? null, first), target: first, unarmed: isUnarmedStrike(strike) }) ?? [])
     : [];
   const primedLines = riderLinesNow.filter(l => l.primed);
   const primedIds = primedLines.map(l => l.identifier);
   const riderPicks = riderAttack && Array.isArray(riders) ? [...new Set(riders.filter(id => id && !primedIds.includes(id)))] : [];
+  // 02's Fel Lash on Extra Attack's second roll (the Demon Hunter plan's Q9): added where its line is open now.
+  const againOpen = riderAttack && secondRoll === true && Array.isArray(againRiders)
+    ? againRiders.filter(id => riderLinesNow.some(l => l.identifier === id && l.available)) : [];
+  for (const id of againOpen) if (!primedIds.includes(id) && !riderPicks.includes(id)) riderPicks.push(id);
   let plan = null;
   if (riderPicks.length) {
     const lines = riderLinesNow;
@@ -1345,7 +1363,9 @@ export async function rollTest({
   // What 05 §11's gain on a hit reads as the off hand: an off hand that builds is read as any other hand.
   const momentumOffHand = offHand && !offHandBuild.builds;
   // The first target's conditions, which a promise held to one reads (07 §17's Scent of Blood; D-1370).
-  const promised = riderAttack ? (actor?.pendingNextAttack?.({ targetStatuses: [...(targetActorOf(list[0])?.statuses ?? [])] }) ?? null) : null;
+  // And whether this is Extra Attack's second roll, which alone reads a promise to every roll of the
+  // Attack its first roll marked (07 §11's Frost Strike; D-1711).
+  const promised = riderAttack ? (actor?.pendingNextAttack?.({ targetStatuses: [...(targetActorOf(list[0])?.statuses ?? [])], secondRoll: secondRoll === true }) ?? null) : null;
   // **07 §12's HOURSTRIKE NEEDS A GM WHERE ITS DECAY LANDS ON ANOTHER'S CREATURE** (the 2a
   // review, L2): the promise's Decay is written on the GM's client for a creature this one does
   // not own, so with none online the attack is refused here, before the budget, nothing spent.
@@ -1566,10 +1586,22 @@ export async function rollTest({
   // dagger's and the claws' included; the weapon the blow is struck with is read where one is named.
   const offHandItemTraits = kind === "attack" && offHand && weaponId ? (actor?.items?.get?.(weaponId)?.system?.traits ?? []) : [];
   const offHandLight = offHandItemTraits.some(t => /^light$/i.test(String(t).trim()));
-  const offHandWaived = kind === "attack" && offHand ? (offHandLight ? { waived: true, by: [] } : offHandPenaltyFor(talentsHeld)) : { waived: false, by: [] };
+  // 04's Twin Blades waives it behind a gate (*With a glaive in each hand*), read off this blow's facts.
+  const offHandWaived = kind === "attack" && offHand ? (offHandLight ? { waived: true, by: [] } : offHandPenaltyFor(talentsHeld, undefined, { facts: gateFacts })) : { waived: false, by: [] };
   if (kind === "attack" && offHand && !offHandWaived.waived) allModifiers.push({ label: "AZEROTH.Dialog.OffHand", value: -2 });
   if (shot.modifier) {
     allModifiers.push({ label: "AZEROTH.Card.CalledShotPenalty", value: shot.modifier });
+  }
+  // **02's BEYOND LIMITS IS NO LONGER A LINE HERE** (D-1720, D-1724): *after you roll it and see the result* is
+  // offered at the after-the-die seam (`AzerothActor#offerElunesRegard` -> `offerBeyondLimits`), off the Resilience
+  // this door stamps on the roll below.
+  // **04's IRON WILL** (*+1 per rank on Spirit Resilience Tests against Fel, and against being Charmed or
+  // Frightened*; the Demon Hunter plan's Phase 5): the dialog's unticked line, judged again here - the table said
+  // the Test is one it reaches by ticking it - and added as a modifier named for the talent.
+  if (kind === "resilience" && (talentLines ?? []).includes("iron-will")) {
+    const { judgeIronWillLine } = await import("../effects/demon-hunter-talents.mjs");
+    const will = judgeIronWillLine(actor, { resilience });
+    if (will) allModifiers.push({ label: will.name, value: will.amount });
   }
 
   let roll = AzerothRoll.build({
@@ -1581,6 +1613,9 @@ export async function rollTest({
     location,
     rollData: actor?.getRollData() ?? {}
   });
+  // **WHICH RESILIENCE THE TEST IS** (D-1724): stamped for the after-the-die seam, which offers 02's Beyond Limits
+  // on a Body or Reflex Test alone; an unstamped roll is never offered it.
+  if (kind === "resilience" && resilience) roll.options.resilience = resilience;
 
   // The dialog's rows - what circumstance was counted - and the Momentum
   // paid, after the die and the modifiers. A formula row carries no value,
@@ -2016,6 +2051,14 @@ export async function rollTest({
     if (outcome.success && actor?.type === "character" && actor.items?.some?.(i => i.type === "class" && i.system?.identifier === "sovereign")) {
       const { sovereignOnHit } = await import("../effects/sovereign-features.mjs");
       fired.push(...await sovereignOnHit({ actor, weaponId }));
+    }
+    // **02's BANE OF THE LEGION, FEL LASH AND MANA REND** (the Demon Hunter plan's Phase 4a): fired rows of their
+    // own (D-777) on a hit, and the round's record of who the hunter struck (`effects/demon-hunter-features.mjs
+    // #demonHunterOnHit`). Asked only of a character who holds the class, so no other class imports the door.
+    if (actor?.type === "character" && actor.items?.some?.(i => i.type === "class" && i.system?.identifier === "demon-hunter")) {
+      const { demonHunterOnHit } = await import("../effects/demon-hunter-features.mjs");
+      // A weapon attack, never an unarmed strike (the review's M3): Bane of the Legion and the scythe's talents ask it.
+      fired.push(...await demonHunterOnHit({ actor, hit: outcome.success, riderRows, list, weaponId, weaponAttack: dhWeaponAttack({ weaponId, strike }) }));
     }
     // And on an Opportunity Attack alone where the row says so (04's Hold the Hall:
     // *On a hit it is knocked Prone*; the Legacy branches' door 22).
@@ -3590,6 +3633,9 @@ export async function castSpell({
   actor,
   spell,
   sealingFlameClaim = null,
+  // **07's DEVOUR THE SPELL, CAST AT A CREATURE'S TURN START** (D-1717, D-1726): the claim the turn's gate hands
+  // (`effects/devour-the-spell-reaction.mjs#devourCast`), held to this moment before anything is paid.
+  devourClaim = null,
   attackTest = null,
   modifier = 0,
   dc = null,
@@ -3749,6 +3795,15 @@ export async function castSpell({
       return null;
     }
   }
+  // **DEVOUR THE SPELL ONLY THROUGH ITS TRIGGER** (07: *Cast this at the start of the turn of a creature ...*;
+  // D-1726): refused in words, before anything is paid, without a claim that still names the creature's turn start.
+  if (sys.identifier === "devour-the-spell") {
+    const { devourWindow } = await import("../effects/devour-the-spell-reaction.mjs");
+    if (!devourWindow({ caster: actor, claim: devourClaim })) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.DhSpell.Devour.Refuse.trigger", { spell: spell.name }));
+      return null;
+    }
+  }
   const reactionBar = earthShockBars(actor.takenTalents?.() ?? [], { identifier: sys.identifier, viaItem });
   if (reactionBar && !game.users.activeGM) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.ReactionBar.NeedGM"));
@@ -3764,7 +3819,8 @@ export async function castSpell({
   // Mana*; the Legacy branches' door 8): the talent's pool and ability, where it
   // names this spell. An item's casting and a free cast pay nothing either way.
   // **AND A CLASS THAT PAYS IN ITS MOMENTUM** (D-944): the Death Knight's Runic Power, 1 for 1.
-  const talentPool = viaItem || free ? null : spellPayment(spellPoolFor(actor?.takenTalents?.() ?? [], { name: spell.name, school }), actor?.classItems ?? []);
+  // **AND THE DEMON HUNTER'S ENERGY** (R1), for a spell the class itself learns (`casting.mjs#classSpellPayment`).
+  const talentPool = viaItem || free ? null : spellPayment(spellPoolFor(actor?.takenTalents?.() ?? [], { name: spell.name, school }), actor?.classItems ?? [], { school, classes: sys.classes ?? null });
   const ability = talentPool?.ability ?? grant?.castingAbility ?? null;
   const abilityMod = ability ? (actor.system.abilities?.[ability]?.mod ?? 0) : 0;
   const proficiency = actor.system.proficiency ?? 0;
@@ -3812,6 +3868,22 @@ export async function castSpell({
     sovPlan = judgedSov.plan;
     if (judgedSov.list !== list) {
       list = judgedSov.list;
+      first = list[0] ?? null;
+    }
+  }
+  // **07 §15's DEMON HUNTER SPELLS, JUDGED BEFORE ANYTHING IS PAID** (the Demon Hunter plan's Phase 4b; D-1540;
+  // D-768's order): the brand's creature, the allies a Gaze outlines for, the spell Spellsunder, Siphon the Weave
+  // or Devour the Spell ends, the glaives recalled or thrown and their points, Hellstrike's landing and Glaive
+  // Tempest's enemies - whose card rows become them - and a GM where a write lands elsewhere
+  // (`effects/demon-hunter-spells.mjs`). A borrowed Fel spell never reaches it (`dhSpellCast`).
+  let dhPlan = null;
+  if (dhSpellCast(spell?.system ?? {}, actor?.classNames ?? [])) {
+    const { judgeDhSpell } = await import("../effects/demon-hunter-spells.mjs");
+    const judgedDh = await judgeDhSpell({ actor, spell, list, source, answers, devourClaim });
+    if (!judgedDh) return null;
+    dhPlan = judgedDh.plan;
+    if (judgedDh.list !== list) {
+      list = judgedDh.list;
       first = list[0] ?? null;
     }
   }
@@ -3966,6 +4038,21 @@ export async function castSpell({
     return null;
   }
   const freeLine = linesNow.taken.find(l => l.kind === "free") ?? null;
+  // **02's FEL SURGE, JUDGED WHOLE** (the Demon Hunter plan's C64; D-768's order): the points ticked on the
+  // dialog, each +1 to the damage or +1 to the Spell DC, judged against the spell's Action, the tier and the
+  // Hatred held BEFORE the cast (`hatred.mjs#felSurgePlan`), refused in words with nothing spent. Paid below,
+  // before the cast's own Hatred is gained, so a cast never pays for itself.
+  const felSurgeLines = linesNow.taken.filter(l => l.kind === "felSurge");
+  const felSurgeCast = felSurgeLines.length ? felSurgePlan({
+    held: (actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === HATRED)?.value ?? 0,
+    tier: actor.system?.tier ?? 1, action: sys.action ?? null,
+    damage: felSurgeLines.filter(l => l.part === "damage").length, dc: felSurgeLines.filter(l => l.part === "dc").length,
+    hasDamage: castDealsDamage(sys), hasTest: Boolean(sys.test?.resilience)
+  }) : null;
+  if (felSurgeCast && !felSurgeCast.ok) {
+    ui.notifications?.warn(game.i18n.format(`AZEROTH.DemonHunter.FelSurge.Refuse.${felSurgeCast.reason}`, { name: spell.name, max: felSurgeCast.max }));
+    return null;
+  }
   // **A FREE CAST, ONCE PER REST** (the Chromatic Champion plan: *"the utility spells
   // can be cast without rage once per short rest"*): the ticked line, judged again by
   // `talentLinesTaken` against the talent item's flag as it stands now, and marked
@@ -4088,7 +4175,9 @@ export async function castSpell({
   const inForm = actor.inShapeshiftForm === true;
   const ferocity = inForm ? ((actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === "ferocity") ?? null) : null;
   // The pool a talent pays in (door 8): the actor's own pool of that name.
-  const payPool = talentPool ? ((actor.poolSnapshot?.() ?? []).find(p => p.name === talentPool.pool) ?? null) : null;
+  // The class item's own pool where the payment names one (the Demon Hunter's Energy beside a Rogue's).
+  const payPool = talentPool ? ((actor.poolSnapshot?.() ?? []).find(p => p.name === talentPool.pool && (talentPool.itemId == null || p.itemId === talentPool.itemId))
+    ?? (actor.poolSnapshot?.() ?? []).find(p => p.name === talentPool.pool) ?? null) : null;
   const price = spellPrice(mana, { inShapeshiftForm: inForm, pool: talentPool?.pool ?? null, free: Boolean(freeCastLine) });
   // 04's Garrote (D-773): *cannot cast while that Bleeding lasts* - the
   // Bleeding's own effect carries the mark, so it ends with the Bleeding.
@@ -4812,6 +4901,34 @@ export async function castSpell({
     if ((free?.essence ?? 0) > 0) necroRows.push({ label: free.by ?? "", value: null, formula: game.i18n.format("AZEROTH.Essence.EmpowerPaid", { n: free.essence }) });
   }
   if (raisePlan) raisePlan.essencePaid = essencePaidNow;
+  // **A CAST GIVES HATRED, 1 PLUS ITS TIER, WHATEVER THE TEST** (the Demon Hunter plan's C63: *"have
+  // spells give 1+ tier of Hatred for cast"*; Q7, a failed Casting Test included): written after the
+  // cast's own price, so a cast never pays for itself (C64 (d)), as ONE delta inside the pool queue
+  // (`adjustPool`), capped at the cap a gain meets and never trimming what a fallen cap left
+  // (`hatred.mjs#hatredWrite`). Only a caster holding a Hatred pool, so no other class reads the
+  // pool-writes module here.
+  const hatredPool = (actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === HATRED) ?? null;
+  // **FEL SURGE IS PAID FIRST** (C64 (d): *You pay from the Hatred you held before the cast, and the Hatred the
+  // cast gives you comes after*): one delta in the same pool queue as the gain below, which it precedes. A
+  // pool that fell short since the judgement pays nothing and the surge adds nothing, said in words.
+  let felSurgePaid = { damage: 0, dc: 0 };
+  if (hatredPool && felSurgeCast?.spend > 0) {
+    const { adjustPool } = await import("../documents/pool-writes.mjs");
+    const paidSurge = await adjustPool(actor, { kind: "momentum", name: HATRED }, -felSurgeCast.spend, { need: true });
+    if (paidSurge.ok) felSurgePaid = { damage: felSurgeCast.damage, dc: felSurgeCast.dc };
+    necroRows.push({ label: game.i18n.localize("AZEROTH.DemonHunter.FelSurge.Name"), value: null, formula: game.i18n.format(paidSurge.ok ? "AZEROTH.DemonHunter.FelSurge.Paid" : "AZEROTH.DemonHunter.FelSurge.Short", { n: felSurgeCast.spend, damage: felSurgeCast.damage, dc: felSurgeCast.dc }) });
+  }
+  if (hatredPool) {
+    const { adjustPool } = await import("../documents/pool-writes.mjs");
+    const due = castGain(sys.tier ?? 1);
+    // **YOU GAIN NO HATRED WHILE UNLEASHED** (02's Demon Unleashed): the gain withheld and said on the card.
+    if (unleashedGainRefusal({ unleashed: actor.shape?.kind === "unleashed", source: "cast", before: 0, after: due })) {
+      necroRows.push({ label: game.i18n.localize("AZEROTH.Pool.Hatred"), value: null, formula: game.i18n.format("AZEROTH.DemonHunter.NoGainUnleashed", { name: actor.name }) });
+    } else {
+      const moved = await adjustPool(actor, { kind: "momentum", name: HATRED }, due, { options: { hatredGain: "cast" } });
+      necroRows.push({ label: game.i18n.localize("AZEROTH.Pool.Hatred"), value: null, formula: game.i18n.format("AZEROTH.Hatred.CastGain", { n: Math.max(0, (moved.after ?? 0) - (moved.before ?? 0)), of: due }) });
+    }
+  }
   // **WHAT ENSLAVE THE DEAD PAID, ON ITS CARD** (S5, S10): the pool and the Mana it took and the
   // Essence, so a control the GM's client refuses gives them back (`necromancer-horde.mjs#refundEnslave`).
   if (enslavePlan) {
@@ -4973,11 +5090,17 @@ export async function castSpell({
   // *"Same as casting it"* - the target's Defense for a spell aimed at one creature, the entry's
   // stated DC, else 10 + 2 a tier, worked out above exactly as for any cast). No die, so no Boon,
   // Bane, modifier or Spell Lock reaches it (`AzerothRoll.written`).
+  // **04's REFUSE THE LEGION** (*When a demon casts a spell at a creature within ... of you, its Casting Test takes a
+  // Bane*; the Demon Hunter plan's Phase 5): asked only of a creature that is a demon, so no other caster imports it.
+  const legion = writtenTotal === null && !attackCalculation && actor.type === "npc" && kindsOf(creatureSnapshot({ type: actor.type, system: actor.system })).has("demon")
+    ? await (await import("../effects/demon-hunter-talents.mjs")).refuseLegionAt(actor, list)
+    : { banes: 0, by: [] };
   const roll = writtenTotal !== null
     ? AzerothRoll.written({ total: writtenTotal, dc: resolvedDC })
     : AzerothRoll.build({
-      dc: resolvedDC, modifiers, boons, banes: banes + spellLock.banes, kind: attackCalculation ? "attack" : "casting", rollData: actor.getRollData()
+      dc: resolvedDC, modifiers, boons, banes: banes + spellLock.banes + legion.banes, kind: attackCalculation ? "attack" : "casting", rollData: actor.getRollData()
     });
+  if (legion.banes > 0) roll.options.provenance.push({ label: "Refuse the Legion", value: null, formula: game.i18n.format("AZEROTH.DemonHunter.Talent.Legion.Bane", { names: legion.by.join(", ") }) });
   if (attackCalculation) {
     roll.options.attackTest = {...attackTest};
     roll.options.provenance.push({label:"AZEROTH.Blademaster.Row",value:null,formula:attackCalculation.title});
@@ -5243,7 +5366,9 @@ export async function castSpell({
   // its area's carries the rise there instead.
   const potentHit = castDealsDamage(sys) ? empowerFx.potent : 0;
   // **AND 02 §7's POTENT** on the cast's own blow (`potentHit`, nothing where the damage is the tick).
-  const promisedDamage = (convertLine?.amount ?? 0) + take.damage + potentHit;
+  // **AND 02's FEL SURGE** (C64 (e)): its damage points ride the spell's own printed damage, named on the card.
+  const promisedDamage = (convertLine?.amount ?? 0) + take.damage + potentHit + (castDealsDamage(sys) ? felSurgePaid.damage : 0);
+  if (castDealsDamage(sys) && felSurgePaid.damage > 0) roll.options.provenance.push({ label: game.i18n.localize("AZEROTH.DemonHunter.FelSurge.Name"), value: felSurgePaid.damage });
   // **07's GLACIAL ADVANCE** (*takes 5 Frost damage plus half your casting modifier, rounded
   // down*; D-974): what the entry's own words add to the Rating, at the ability the cast uses,
   // once a creature as the Rating is (`rules/spell-effects.mjs#castingModPlus`). An item's cast
@@ -5851,10 +5976,13 @@ export async function castSpell({
   } : null;
 
   // 5. The Resist line, and what else the entry carries.
-  const readerDC = viaItem?.dc ?? (ability ? spellDCFor({ abilityMod, proficiency }) : (actor.system.spellDC ?? actor.system.spells?.dc ?? null));
+  const surgelessDC = viaItem?.dc ?? (ability ? spellDCFor({ abilityMod, proficiency }) : (actor.system.spellDC ?? actor.system.spells?.dc ?? null));
+  // 02's Fel Surge's DC points: *add 1 to your Spell DC for that spell* (C64), on this cast's Resist alone.
+  const readerDC = surgelessDC !== null && surgelessDC !== undefined && felSurgePaid.dc > 0 ? surgelessDC + felSurgePaid.dc : surgelessDC;
   // **A READ SCROLL IS RESISTED AT THE READER'S SPELL DC, ELSE THE WRITER'S LEVEL** (08 §14; the
   // lead, 2026-11-21): `rules/scrolls.mjs#readerResistDC`, the one place that reading lives.
   const spellDC = writtenTotal !== null ? readerResistDC(readerDC, sys.tier) : readerDC;
+  if (felSurgePaid.dc > 0 && Number.isFinite(Number(spellDC))) roll.options.provenance.push({ label: game.i18n.localize("AZEROTH.DemonHunter.FelSurge.Name"), value: null, formula: game.i18n.format("AZEROTH.DemonHunter.FelSurge.DcRow", { n: felSurgePaid.dc, dc: spellDC }) });
   // **THE TEST 07 GIVES A HELD OR STUNNED CREATURE** (D-778; the lead, 2026-10-03, on
   // O-159: *"Yes."*): what the Entangled or the Stun a failure lays carries - 07's
   // escape (*until it spends an action and passes another Reflex Resilience Test*,
@@ -5895,7 +6023,9 @@ export async function castSpell({
   // then (D-756, D-757) - so their card offers none, and Thornguard's failure no longer
   // lays its Entangled on whoever was targeted (`rules/resisted.mjs#castTestOf`).
   const castTest = castTestOf(sys);
-  const resist = success && castTest
+  // **AND NOT WHERE A DEMON HUNTER SPELL ASKS NONE** (07 §15's Siphon the Weave: *If the creature is the spell's
+  // caster, it makes a Spirit Resilience Test*; D-1548): a spell on another creature ends with no Test.
+  const resist = success && castTest && dhPlan?.noResist !== true
     ? { key: castTest, label: AZEROTH.resiliences[castTest], dc: spellDC }
     : null;
   // **WHAT THE CASTER'S ITEMS LAY ON THE RESIST** (08 §20's The Blade Hungers: *Once each
@@ -6001,7 +6131,10 @@ export async function castSpell({
   // token after the cast (`effects/sovereign-spells.mjs#swarmLands`), so the card offers no Place area.
   // **AND SHROUD OF SORROW MOVES WITH ITS CASTER** (*A 10 ft radius around you ... The area moves with you*; D-1367): its
   // tick stands on the caster's own token (`centre: "self"`), so the card places no Region either.
-  const areaOut = sovPlan?.preyArea || sovPlan?.carried ? null : (necroAreaRead !== undefined ? necroAreaRead : area);
+  // **AND A DEMON HUNTER SPELL WHOSE AREA ITS DOOR LAYS** (07 §15; D-1542): Gaze of the Sightless' and Hunting
+  // Ground's circle where the caster stands, Hellstrike's landing and Flame Crash's ground, which its door places
+  // once the card stands - the card offers no Place area for any of them.
+  const areaOut = sovPlan?.preyArea || sovPlan?.carried ? null : (dhPlan?.noArea === true ? null : (necroAreaRead !== undefined ? necroAreaRead : area));
   // The area's tick, said on the card in words (D-756), and carried on it for
   // the Region to take.
   // **04's HEARTHFIRE** (*Your Immolation deals no damage. Instead, each ally that starts its
@@ -6342,6 +6475,12 @@ export async function castSpell({
     const { sovereignSpellAfterCast } = await import("../effects/sovereign-spells.mjs");
     raiseLines.push(...await sovereignSpellAfterCast({ actor, spell, plan: sovPlan, list, spellDC, cast, source }));
   }
+  // **AND WHAT A DEMON HUNTER SPELL DOES THAT NO DESCRIPTOR CARRIES** (D-1540), once the Casting Test has succeeded:
+  // the caster's own states, the brand, the glaives thrown and recalled, the leap and Immolation Aura's light.
+  if (success && dhPlan) {
+    const { dhSpellAfterCast } = await import("../effects/demon-hunter-spells.mjs");
+    raiseLines.push(...await dhSpellAfterCast({ actor, spell, plan: dhPlan, list, spellDC, cast, source }));
+  }
   const content = await renderTemplate(TEMPLATE.spell, {
     dismissEverburn:success&&sys.identifier==='everburn',
     chainLightning: sys.identifier === "chain-lightning",
@@ -6484,6 +6623,8 @@ export async function castSpell({
         ...(necroPlan?.card ? { necroSpell: necroPlan.card } : {}),
         // What a Sovereign spell's Resist and Apply read, and the blood-curse tag its failure lays (D-1240).
         ...(sovPlan?.card ? { sovereignSpell: sovPlan.card } : {}),
+        // What a Demon Hunter spell's Resist reads: the spell Spellsunder, Siphon the Weave or Devour the Spell ends (D-1540).
+        ...(dhPlan?.card ? { demonHunterSpell: dhPlan.card } : {}),
         ...(sys.bloodCurse === true ? { bloodCurse: true } : {}),
         ...(necroPlan?.corpse ? { corpse: necroPlan.corpse } : {}),
         // **DRAIN LIFE AND SIPHON LIFE GIVE THE CAST'S HIT BACK** (07: *When you cast this spell and
@@ -6851,6 +6992,16 @@ export async function castSpell({
       await afterSovereignCast({ actor, spell, castAction, spellCard, target: targetActorOf(list[0] ?? null)?.uuid ?? null });
     } catch (err) {
       console.warn("azeroth-rpg | a Sovereign's cast", err);
+    }
+  }
+  // **A DEMON HUNTER SPELL, ONCE ITS CARD STANDS** (07 §15's Flame Crash and Glaive Tempest; D-1542, D-1549): the
+  // burning ground on the GM's client and the attacks through the attack door. Guarded: the cast has gone off.
+  if (spellCard && dhPlan && success) {
+    try {
+      const { dhSpellAfterCard } = await import("../effects/demon-hunter-spells.mjs");
+      await dhSpellAfterCard({ actor, spell, plan: dhPlan, spellCard, success });
+    } catch (err) {
+      console.warn("azeroth-rpg | a Demon Hunter spell after its card", err);
     }
   }
   const aftermath = await completeSpellLockWindow({ actor, castId: spellLock.castId, message: spellCard });
@@ -9946,6 +10097,15 @@ export async function useFeature({
     sovPlan = await judgeSovereignUse({ actor, item, onUse, rank, list, source: useSource });
     if (!sovPlan) return undoBinds();
   }
+  // **THE DEMON HUNTER'S USES, JUDGED BEFORE ANYTHING IS PAID** (02 §7; the Demon Hunter plan's Phase 4a):
+  // Beyond Limits' turn and choice, Hunter's Leap's space, the Hatred Demon Unleashed spends, I Have Prepared's
+  // minute (`effects/demon-hunter-features.mjs#judgeDemonHunterUse`).
+  let dhPlan = null;
+  if (onUse?.dh) {
+    const { judgeDemonHunterUse } = await import("../effects/demon-hunter-features.mjs");
+    dhPlan = await judgeDemonHunterUse({ actor, item, onUse, rank, list, source: useSource });
+    if (!dhPlan) return undoBinds();
+  }
 
   // 1e. **THE RUNG A USE OF TWO IS TAKEN AT** (04's Ethereal Form: *At rank 2 you may use
   // it as a Reaction*; the B6 review - a second way, never the only one): out of a fight
@@ -10261,6 +10421,14 @@ export async function useFeature({
   if (sovPlan?.key) {
     const { landSovereignUse } = await import("../effects/sovereign-features.mjs");
     answerLines.push(...await landSovereignUse({ actor, item, plan: sovPlan, list }));
+  }
+  // **AND A DEMON HUNTER'S** (Phase 4a), now that it is paid for: the choice laid and its Hatred, the leap, the
+  // shape for its rounds, the minute begun.
+  if (dhPlan?.key) {
+    const { landDemonHunterUse } = await import("../effects/demon-hunter-features.mjs");
+    answerLines.push(...await landDemonHunterUse({ actor, item, plan: dhPlan, list }));
+    // Hunter's Leap's step, recorded on the card so its landing plays where the hunter came down (Phase 6, D-1580).
+    if (dhPlan.step) stepsMade.push(dhPlan.step);
   }
   // 2b. **THE SHAPE, NOW THAT IT IS PAID FOR** (D-769): the one writer, which
   // replaces a shape already worn in one go and dresses every token. A form
@@ -13027,6 +13195,10 @@ export async function useGear({ actor, item, targets = null } = {}) {
     return (await import("../effects/healer-kit.mjs")).useHealerKit({actor,item,targets});
   if (refuseDispersion(actor, "gear")) return null;
   if (refuseAncientDespair(actor, "gear")) return null;
+  // 04's Hoarded Soul (the Demon Hunter plan's Phase 5): a Crystalized Soul's Use is the talent's own door - after the
+  // two refusals every gear Use meets (the review's L11), so Dispersion and Ancient Despair refuse it too.
+  if (item?.type === "gear" && item.system?.identifier === "crystalized-soul")
+    return (await import("../effects/demon-hunter-talents.mjs")).useCrystalizedSoul({ actor, item });
   // A consumable's reach, before anything is spent (O-288, D-893): after the two refusals that
   // must not inspect the item, before every door that pays.
   if (item && refuseOutOfRange(useRangeRefusal({ actor, name: shownName(item), text: useTextOf(item, actor), targets: targets ?? [] }))) return null;
@@ -15000,7 +15172,18 @@ export async function chooseOption(item, options, note = null, { label = "AZEROT
  * `rules/pools.mjs#poolNamed` is the judgement, and it is pure.
  */
 function poolFor(actor, poolName, classId) {
-  return poolNamed(actor.poolSnapshot?.() ?? [], poolName, { itemId: classId });
+  return poolNamed(actor.poolSnapshot?.() ?? [], poolName, { itemId: grantingClassId(actor, classId) });
+}
+
+/**
+ * **THE CLASS A GRANTED FEATURE PAYS FROM** (the Demon Hunter review's M2): a feature a TALENT grants is flagged with
+ * the talent's id (`AzerothActor#_syncClassFeaturesNow` keys it by the talent), which names no pool - so 04's Chaos
+ * Blast and Glaive Ward paid from the first Energy pool, a Rogue's where a Rogue came first. The talent's class
+ * (`className`) is read back to that class item's id; a class item's id, or anything else, is handed back as it was.
+ */
+function grantingClassId(actor, classId) {
+  const item = classId ? (actor?.items?.get?.(classId) ?? null) : null;
+  return grantingClassOf(classId, { talent: item?.type === "talent" ? { className: item.system?.className ?? null } : null, classes: (actor?.classItems ?? []).map(c => ({ id: c.id, name: c.name })) });
 }
 
 /* -------------------------------------------- */
@@ -15018,18 +15201,26 @@ export function trainedResiliences(actor) {
 }
 
 /** The provenance rows a Resilience Test carries for this actor. */
-export function resilienceModifiers(actor, resilience) {
+export function resilienceModifiers(actor, resilience, { track = null } = {}) {
   const ability = resilienceAbility(resilience);
   const abilityMod = actor.system.abilities?.[ability]?.mod
     ?? abilityModifier(actor.system.abilities?.[ability]?.value ?? 10);
   const trained = trainedResiliences(actor).includes(resilience);
-  return resilienceRows({
+  const rows = resilienceRows({
     resilience, abilityMod,
     proficiency: actor.system.proficiency ?? 0,
     trained,
     // 02's Timeless Mind (stage 2b): the feature held, a Spirit Test, the Proficiency counted.
     doubled: timelessMindDoubles({ resilience, trained, holds: actor.hasFeature?.(CHRONO_FEATURES.timelessMind.feature) === true })
   });
+  // **04's IRON WILL ON A TEST AGAINST FEL** (*+1 per rank on Spirit Resilience Tests against Fel*; the Demon Hunter
+  // plan's Phase 5): where the caller names the track (a corruption exposure), the door knows the Test is one the
+  // talent reaches and counts it by itself, named for the talent. Against Charmed or Frightened it is the dialog's line.
+  if (ironWillAutomatic({ resilience, track })) {
+    const will = ironWillLines({ rank: dhRankOfItems(actor.items ?? [], IRON_WILL.identifier), resilience })[0] ?? null;
+    if (will) return [...rows, { label: will.name, value: will.amount }];
+  }
+  return rows;
 }
 
 /** A bare Resilience Test (05), through rollTest so the dialog's choice applies. */
@@ -15075,15 +15266,18 @@ export async function corruptionExposure({
   // and the reason is said in words.
   if (refusesTrack(actor, track)) return null;
   const resilience = named && AZEROTH.resiliences[named] ? named : AZEROTH.corruptionResilience[track];
-
+  // **04's IRON WILL** (*+1 per rank on Spirit Resilience Tests against Fel*; the Demon Hunter plan's Phase 5): the
+  // track handed to the rows, so a Spirit Test against Fel Corruption counts the talent by itself.
   const roll = AzerothRoll.build({
     dc,
     kind: "resilience",
     boons,
     banes,
-    modifiers: resilienceModifiers(actor, resilience),
+    modifiers: resilienceModifiers(actor, resilience, { track }),
     rollData: actor.getRollData()
   });
+  // The Resilience the seam reads (D-1724).
+  roll.options.resilience = resilience;
   roll.options.provenance.push(...provenanceExtra);
   await roll.evaluate();
 
@@ -15722,6 +15916,28 @@ export async function accrueCorruption(actor, { track, points = 1, occasion = ""
 }
 
 /**
+ * **A TRACK LOWERED BY A FEATURE** (02's Fel Lash: *The hit also takes Fel Corruption off you equal to half
+ * your tier, rounded down, and at least 1. If your Fel Corruption has reached 20, you lose none*; 10's *The
+ * Demon Hunter's Fel*; the Demon Hunter plan's C7, D-1520): the points off the track, floored at 0, refused on
+ * a track that has ended (10 §9), unresisted. The rung effects re-derive off the value, since they are never
+ * stored (D-654). The ONE lowerer of a track besides the rite (10 §8), and its only caller is the Demon
+ * Hunter's door: `demon-hunter-features.test.mjs` holds both.
+ *
+ * @param {Actor} actor
+ * @param {{track: string, points: number, occasion?: string}} o
+ * @returns {Promise<{from: number, to: number, lost: number, refused: null|"ended"|"none"}|null>}
+ */
+export async function reduceCorruption(actor, { track, points = 1, occasion = "" } = {}) {
+  if (!actor || actor.type !== "character" || !AZEROTH.corruptionTracks[track]) return null;
+  const from = Math.max(0, Math.trunc(Number(actor.system?.corruption?.[track])) || 0);
+  const r = corruptionReduction({ before: from, points });
+  if (r.refused) return { from, to: from, lost: 0, refused: r.refused };
+  // No operation option: nothing read `azerothCorruptionLowered` (the review's S9). `occasion` names the door for its callers.
+  await actor.update({ [`system.corruption.${track}`]: r.after });
+  return { from, to: r.after, lost: r.lost, refused: null };
+}
+
+/**
  * A Boss shrugging off one of its first two Critical Injuries (14 §1).
  *
  * Returns the card where it did, and null where the injury lands — so the
@@ -15985,7 +16201,7 @@ export async function useManeuver({ actor, key, targets = null } = {}) {
   const priced = maneuverCost(key, ctx);
   const payer = actor.momentumPayer?.({ amount: priced.cost }) ?? null;
   // Never Essence (`rules/essence.mjs#paysByKind`): with no pool a maneuver is refused in words.
-  const pool = payer?.pool ?? (actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && paysByKind(p.name)) ?? null;
+  const pool = payer?.pool ?? (actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && paysByKind(p.name, "maneuver")) ?? null;
   const payingActor = payer?.actor ?? actor;
   if (!pool) {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Maneuver.NoPool", { name }));

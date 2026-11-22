@@ -26,7 +26,7 @@
 import {
   FORCED_SPEED, RESTORE_FLAG, SHAPE_FLAG, SHAPE_KINDS, SWIFT_LEAVE, appearanceFor, centredResize, endsOnDamage, forcedKindForCard,
   forcedShapeChanges, forcedShapeRefusal, isForcedKind, isOverlayKind, keepsFerocity, readShape, shapeChanges, shapeEnds,
-  shapeEntryOf, shapeMayReplace, shapePhysical, snapshotOf
+  shapeEntryOf, shapeMayReplace, shapePhysical, shapeRewriteReset, snapshotOf
 } from "../rules/shapes.mjs";
 // A forced shape is written on a GM's client, judged before anything is spent (D-808).
 import { gmAbsentFor } from "../rules/gm-writes.mjs";
@@ -181,11 +181,20 @@ export function shapeLabel(shape) {
  * @param {Actor} actor
  * @param {{kind: string, forms: object[], ward?: object|null, laid?: object|null}} shape
  */
-export function shapeEffectData(actor, { kind, forms, ward = null, laid = null }) {
+export function shapeEffectData(actor, { kind, forms, ward = null, laid = null, more = null }) {
   // A drake form overrides no score (`rules/shapes.mjs#shapePhysical`).
   const physical = shapePhysical(kind, forms);
   const label = shapeLabel({ kind, forms });
   const forced = isForcedKind(kind);
+  // **WHAT A KIND ADDS BESIDE ITS BLOCK** (02's Demon Unleashed, D-1520): Armor Points on every location in the
+  // `final` phase and the conditions it refuses through the effect's own `immuneTo` (`legacy-uses.mjs
+  // #immunitiesFrom`, which `CharacterData` already reads), and what a talent adds to its Damage Rating. Named
+  // only where the kind carries them, so every other shape's data is byte for byte what it was.
+  const k = SHAPE_KINDS[kind] ?? {};
+  const apBonus = Math.max(0, Math.trunc(Number(k.apBonus)) || 0);
+  const extraChanges = apBonus ? ["body", "head", "limb"].map(l => ({ key: `system.ap.${l}`, type: "add", value: String(apBonus), phase: "final" })) : [];
+  const extraFlags = Array.isArray(k.immune) && k.immune.length ? { immuneTo: { conditions: [...k.immune], source: label } } : {};
+  const moreDamage = Math.max(0, Math.trunc(Number(more)) || 0);
   return {
     name: label,
     img: forms[0]?.token || SHAPE_FALLBACK_ICON,
@@ -195,15 +204,17 @@ export function shapeEffectData(actor, { kind, forms, ward = null, laid = null }
     // shape has no duration. The icon on the token is the effect kept.
     showIcon: CONST.ACTIVE_EFFECT_SHOW_ICON.ALWAYS,
     disabled: false,
-    description: `<p>${foundry.utils.escapeHTML(forced ? forcedText(kind, label) : game.i18n.format(isOverlayKind(kind) ? "AZEROTH.Shape.EffectTextOverlay" : "AZEROTH.Shape.EffectText", { name: label }))}</p>`,
+    // Demon Unleashed says what it does in its own words; the drake's overlay text names a block it has none of.
+    // And 04's Gift of the Skull in its own (Phase 5).
+    description: `<p>${foundry.utils.escapeHTML(forced ? forcedText(kind, label) : game.i18n.format(kind === "unleashed" ? "AZEROTH.Shape.EffectTextUnleashed" : kind === "skull" ? "AZEROTH.Shape.EffectTextSkull" : isOverlayKind(kind) ? "AZEROTH.Shape.EffectTextOverlay" : "AZEROTH.Shape.EffectText", { name: label }))}</p>`,
     system: {
       changes: forced
         ? forcedShapeChanges(kind, { flies: fliesOfItsOwn(actor) })
-        : shapeChanges(physical)
+        : [...shapeChanges(physical), ...extraChanges]
     },
     // EVERY KEY, EVERY TIME: an update merges a flag object key by key, so a
     // `ward` left out would survive from the shape before.
-    flags: { "azeroth-rpg": { [SHAPE_FLAG]: { kind, forms, ward: ward ?? null }, ...(forced ? forcedLifetime(kind, laid) : {}) } }
+    flags: { "azeroth-rpg": { [SHAPE_FLAG]: { kind, forms, ward: ward ?? null, ...(moreDamage ? { more: moreDamage } : {}) }, ...extraFlags, ...(forced ? forcedLifetime(kind, laid) : {}) } }
   };
 }
 
@@ -289,7 +300,7 @@ async function followShape(actor, { zero = false } = {}) {
  *   `{caster, spellUuid, spellName, cast, sustained, messageId}`
  * @returns {Promise<ActiveEffect|null>}
  */
-export async function takeShape(actor, { kind, entries = [], forms = null, ward = null, laid = null } = {}) {
+export async function takeShape(actor, { kind, entries = [], forms = null, ward = null, laid = null, more = null } = {}) {
   if (!actor || !SHAPE_KINDS[kind]) return null;
   // A creature of any kind may be hexed (D-808); only a character takes a shape of
   // its own.
@@ -304,11 +315,12 @@ export async function takeShape(actor, { kind, entries = [], forms = null, ward 
     ui.notifications?.warn(game.i18n.format("AZEROTH.ForcedShape.Holds", { name: actor.name, form: shapeLabel(before) }));
     return null;
   }
-  const data = shapeEffectData(actor, { kind, forms: snapshots, ward, laid });
+  const data = shapeEffectData(actor, { kind, forms: snapshots, ward, laid, more });
   data.flags["azeroth-rpg"].equipmentShapeEntry = !before && kind === "shapeshift"
     && [...(actor.items??[])].some(i=>i.system?.equipped&&i.system.identifier==="wolfshead-helm")
     ? {id:foundry.utils.randomID(32),at:game.time.worldTime} : null;
-  const expectedShape = JSON.stringify(data.flags["azeroth-rpg"][SHAPE_FLAG]);
+  let expectedShape = JSON.stringify(data.flags["azeroth-rpg"][SHAPE_FLAG]);
+  let bargainOver = null;
   const held = shapeEffectsOf(actor);
   // What a forced shape rewritten in place was living on: a Hex replaced by a rabbit,
   // or by a second Hex, ends the Sustain that held the first (`endLaidSustain`).
@@ -319,6 +331,20 @@ export async function takeShape(actor, { kind, entries = [], forms = null, ward 
   try {
     if (held.length) {
       const [keep, ...extra] = held;
+      // A shape rewritten in place drops the conditions the shape before refused (Demon Unleashed's `immuneTo`):
+      // an update merges a flag key by key, so the key is written empty rather than left out.
+      if (keep.getFlag?.("azeroth-rpg", "immuneTo") && !data.flags["azeroth-rpg"].immuneTo) data.flags["azeroth-rpg"].immuneTo = null;
+      // **AND NOTHING ELSE OF THE SHAPE BEFORE** (the review's H3, `rules/shapes.mjs#shapeRewriteReset`): a talent's
+      // Damage Rating (`more`), Demon Unleashed's own flag and the rounds it was given are written empty, so the
+      // caller lays its own span afresh. The shape the write must confirm is read again after.
+      const heldShape = keep.getFlag?.("azeroth-rpg", SHAPE_FLAG) ?? {};
+      const reset = shapeRewriteReset({ more: heldShape.more ?? null, unleashed: keep.getFlag?.("azeroth-rpg", "unleashed") ?? null, durationValue: keep.duration?.value ?? keep._source?.duration?.value ?? null }, data.flags["azeroth-rpg"][SHAPE_FLAG]);
+      Object.assign(data.flags["azeroth-rpg"][SHAPE_FLAG], reset.shape);
+      Object.assign(data.flags["azeroth-rpg"], reset.flags);
+      Object.assign(data, reset.effect);
+      expectedShape = JSON.stringify(data.flags["azeroth-rpg"][SHAPE_FLAG]);
+      // 04's Betrayer's Bargain (*gain 5 Fel Corruption when it ends*): a Bargain shape written over has ended.
+      if (keep.getFlag?.("azeroth-rpg", "unleashed")?.bargain) bargainOver = keep.toObject();
       await actor.updateEmbeddedDocuments("ActiveEffect", [{ _id: keep.id, ...data }], { [SHAPE_OPTION]: true });
       const stale = extra.map(e => e.id).filter(id => actor.effects.has(id));
       if (stale.length) await actor.deleteEmbeddedDocuments("ActiveEffect", stale, { [SHAPE_OPTION]: true });
@@ -340,6 +366,11 @@ export async function takeShape(actor, { kind, entries = [], forms = null, ward 
   const zero = Boolean(effect)
     && !keepsFerocity({ from: before?.kind ?? null, to: kind, savageShift: actor.talentRanks?.("Savage Shift") ?? 0 });
   await followShape(actor, { zero });
+  // The Bargain's Fel, once the shape it lived on is written over (H3; `effects/demon-hunter-talents.mjs#bargainEnded`).
+  if (effect && bargainOver) {
+    const { bargainEnded } = await import("../effects/demon-hunter-talents.mjs");
+    await bargainEnded(actor, bargainOver).catch(err => console.warn("azeroth-rpg | Betrayer's Bargain's end", err));
+  }
   if(effect?.getFlag("azeroth-rpg","equipmentShapeEntry")) {
     const {wolfsheadAfterShape}=await import("../effects/special-equipment.mjs");
     await wolfsheadAfterShape(actor,{before,kind,effect});

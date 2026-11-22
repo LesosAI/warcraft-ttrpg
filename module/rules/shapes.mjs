@@ -174,6 +174,35 @@ export const SHAPE_KINDS = Object.freeze({
     feature: null, choice: null,
     ferocity: false, barsMana: false, melds: false, requires: null, overlay: true,
     endsAt: Object.freeze(["zeroHealth"])
+  }),
+  // **02's DEMON UNLEASHED** (the Demon Hunter's level 17; the Demon Hunter plan's door map: *a new shape kind
+  // `unleashed` (overlay like `bloodQueen`)*; D-1520): *You take your demon's shape for 1 round for each Hatred
+  // you spent. While you are in it, you add 2 to your Damage Rating, you gain 2 Armor Points on every location,
+  // you have Ward 2 against Fel, and you cannot be Frightened or Charmed.* A form BESIDE the character
+  // (`overlay`): no block, no score overridden, nothing melded - the hunter's own Defense and Armor Points, with
+  // the 2 Armor Points added in the `final` phase (`apBonus`), Ward 2 against Fel on the shape's `ward`, the two
+  // conditions refused through the effect's `immuneTo` (`immune`), the 2 Damage Rating at the attack door
+  // (`shapeDamageBonus`), and the wings read at its Fel each preparation (`demon-hunter-features.mjs
+  // #unleashedFlying`), never off a snapshot. It ends when its rounds run out (core's expiry on the fight's
+  // rounds or the world's clock) and at a rest (MY READING: no rest is shorter than its span). Taken by the
+  // feature's own Use and by I Have Prepared, no menu (`effects/demon-hunter-features.mjs#takeUnleashed`).
+  unleashed: Object.freeze({
+    feature: null, choice: null,
+    ferocity: false, barsMana: false, melds: false, requires: null, overlay: true,
+    endsAt: Object.freeze(["short", "long"]),
+    damageRating: 2, apBonus: 2, immune: Object.freeze(["frightened", "charmed"])
+  }),
+  // **04's GIFT OF THE SKULL** (the Betrayer's tier 2; the Demon Hunter plan's Phase 5, D-1561): *You take a
+  // demon's shape for your rank plus 1 rounds. While you are in it, you add 1 to your Damage Rating and you gain
+  // 1 Armor Point on every location.* Demon Unleashed's machinery with its own numbers: an overlay with no block,
+  // nothing melded, the Armor Point a `final` change on the effect (`apBonus`), the Damage Rating at the attack
+  // door (`shapeDamageBonus`). It refuses nothing and gives no Ward; it ends when its rounds run out and at a
+  // rest (MY READING, as Demon Unleashed's), taken by the talent's own Use (`effects/demon-hunter-talents.mjs`).
+  skull: Object.freeze({
+    feature: null, choice: null,
+    ferocity: false, barsMana: false, melds: false, requires: null, overlay: true,
+    endsAt: Object.freeze(["short", "long"]),
+    damageRating: 1, apBonus: 1
   })
 });
 
@@ -755,7 +784,10 @@ export function readShape(flag) {
   const ward = flag.ward && typeof flag.ward === "object" && flag.ward.school
     ? { school: String(flag.ward.school), value: Math.max(0, Math.trunc(Number(flag.ward.value)) || 0) }
     : null;
-  return { kind: flag.kind, forms, ward };
+  // 02's Demon Unleashed carries what a talent adds to its Damage Rating (`more`; 04's Eternal Hunger), named
+  // only where it is, so every other shape reads back the shape it always did.
+  const more = Math.max(0, Math.trunc(Number(flag.more)) || 0);
+  return { kind: flag.kind, forms, ward, ...(more > 0 ? { more } : {}) };
 }
 
 /**
@@ -766,7 +798,13 @@ export function readShape(flag) {
  * @returns {number}
  */
 export function shapeDamageBonus(shape) {
-  return shape?.kind === "metamorphosis" ? METAMORPHOSIS.damageRating : 0;
+  if (shape?.kind === "metamorphosis") return METAMORPHOSIS.damageRating;
+  // 02's Demon Unleashed: *you add 2 to your Damage Rating*, and 04's Eternal Hunger's rank the shape carries
+  // (`more`, written by the door that took it; Phase 5's talent).
+  if (shape?.kind === "unleashed") return SHAPE_KINDS.unleashed.damageRating + Math.max(0, Math.trunc(Number(shape.more)) || 0);
+  // 04's Gift of the Skull: *you add 1 to your Damage Rating* (Phase 5).
+  if (shape?.kind === "skull") return SHAPE_KINDS.skull.damageRating;
+  return 0;
 }
 
 /**
@@ -796,4 +834,27 @@ export function formPicksRefusal(picks = [], { known = 0, allowed = 0 } = {}) {
   const learning = (Array.isArray(picks) ? picks : []).filter(p => p?.learn === true).length;
   const room = Math.max(0, (Number(allowed) || 0) - (Number(known) || 0));
   return learning > room ? { room } : null;
+}
+
+/** An Active Effect's duration with nothing in it (14.367 `common/documents/active-effect.mjs`' defaults). */
+export const NO_DURATION = Object.freeze({ value: null, units: "seconds", expiry: null, expired: false });
+
+/**
+ * **WHAT A SHAPE REWRITTEN IN PLACE MUST CLEAR OF THE ONE BEFORE** (the Demon Hunter review's H3): an update merges
+ * a flag key by key and leaves a duration where it was, so a Hex written over Demon Unleashed with Eternal Hunger
+ * kept its Damage Rating (`more`) and the `unleashed` flag, and a Demon Unleashed with Betrayer's Bargain written
+ * over Gift of the Skull kept the skull's rounds. What the held shape carried and the new one does not is written
+ * empty: `more` null, the `unleashed` flag null, the duration and its start emptied. Nothing where the held shape
+ * carried none of them, so every other rewrite is what it was.
+ *
+ * @param {{more?: number|null, unleashed?: object|null, durationValue?: number|null}} held  the shape before
+ * @param {{more?: number}} [next]  the new shape's flag
+ * @returns {{shape: object, flags: object, effect: object}}  keys to lay over the update's data
+ */
+export function shapeRewriteReset(held = {}, next = {}) {
+  const out = { shape: {}, flags: {}, effect: {} };
+  if (held?.more !== undefined && held.more !== null && (next?.more === undefined || next.more === null)) out.shape.more = null;
+  if (held?.unleashed) out.flags.unleashed = null;
+  if (held?.durationValue !== undefined && held.durationValue !== null) out.effect = { duration: { ...NO_DURATION }, start: null };
+  return out;
 }

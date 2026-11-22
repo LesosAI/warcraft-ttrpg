@@ -69,6 +69,15 @@ export const RUNE_KINDS = Object.freeze(["blood", "frost"]);
 export const CLASS_SPELL_POOL = Object.freeze({ [RUNES]: RUNIC_POWER, vitae: "vitae" });
 
 /**
+ * **A CLASS THAT PAYS ITS SPELLS FROM A POWER POOL ANOTHER CLASS ALSO HOLDS** (the Demon Hunter plan's
+ * R1: *"use energy as the power resource"*; MY READING: Energy pays wherever 07 asks for Mana, a
+ * Sustain's upkeep included). Keyed by the class's IDENTIFIER, never by the pool's name: the Rogue's
+ * Power is Energy too and casts nothing, so a Rogue/Mage keyed by the pool would pay the Mage's spells
+ * in Energy. `casting.mjs#spellPayment` asks it only for a spell the class itself learns.
+ */
+export const CLASS_SPELL_POOL_BY_CLASS = Object.freeze({ "demon-hunter": "energy" });
+
+/**
  * **A SUSTAIN CAST WITH RUNIC POWER HAS NO UPKEEP** (D-949; the lead: *"Death and Decay
  * and other spells should not have a sustain cost if the caster uses Runic Power to cast
  * them."*). Decided AT THE CAST from the pool the cast was paid in and recorded on the
@@ -184,7 +193,8 @@ export function runicPowerCap(chaMod = 0) {
  */
 // And Tribute (02 §7: *A hit with your main-hand weapon, scoring SL 2 and winning an Opposed Test give
 // you none*; the San'layn and Sovereign plan's B.4): its two lanes and its named doors are the only way in.
-export const NO_UNIVERSAL_GAINS = Object.freeze([RUNIC_POWER, "essence", "tribute"]);
+// And Hatred (the Demon Hunter plan's class entry: *Hitting, SL 2 and winning an Opposed Test give you none*).
+export const NO_UNIVERSAL_GAINS = Object.freeze([RUNIC_POWER, "essence", "tribute", "hatred"]);
 
 /**
  * **WHETHER A MOMENTUM POOL GAINS FROM 05 §11's UNIVERSAL TRIGGERS** - the +1 for a

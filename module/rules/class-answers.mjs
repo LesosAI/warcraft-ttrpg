@@ -215,7 +215,8 @@ export function bracingChanges(amount = 0, locations = ["body", "head", "limb"])
  */
 export function momentumPayer({ own = null, owner = null, shares = false, amount = 0 } = {}) {
   // Essence pays no maneuver (`essence.mjs#paysByKind`): a pool that may not is no pool here.
-  if (own && !paysByKind(own.name)) own = null;
+  // Hatred pays every maneuver (the Demon Hunter plan's C62), which is what this payer pays.
+  if (own && !paysByKind(own.name, "maneuver")) own = null;
   const due = Math.max(0, Number(amount) || 0);
   const holds = pool => Boolean(pool) && (Number(pool.value) || 0) >= due;
   const quarry = shares ? owner : null;

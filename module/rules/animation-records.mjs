@@ -111,8 +111,23 @@ export const SOVEREIGN_STATE_NAMES = Object.freeze({
   obedience: "Abject Obedience",
   [SOV_CROWNED_FLAG]: "Crowned in Blood"
 });
-export const SHAPE_STATE_NAMES = Object.freeze({ bloodQueen: "Blood Monarch" });
+export const SHAPE_STATE_NAMES = Object.freeze({ bloodQueen: "Blood Monarch", unleashed: "Demon Unleashed", skull: "Gift of the Skull" });
 export const PLAGUE_STATES = Object.freeze(["frostFever", "bloodPlague"]);
+
+/**
+ * **THE DEMON HUNTER'S LAID STATES** (the Demon Hunter plan's Phase 6; D-1580), named here rather than imported
+ * for the same reason as the knight's, and held to their constants by `demon-hunter-animations.test.mjs`:
+ *
+ * - Demon Unleashed's shape (`shapes.mjs#SHAPE_KINDS.unleashed`, no feature of its own) is named for 02's
+ *   feature, its state the shape's own word or `unleashedWinged` where `takeUnleashed` stamped the wings; Gift of
+ *   the Skull's lesser shape (`skull`) is named for 04's talent;
+ * - I Have Prepared's carrier (`demon-hunter-features.mjs#I_HAVE_PREPARED.flag`, `prepared {from}`) carries no
+ *   `source`, so the flag names 02's feature;
+ * - Inner Demon's torment (`demon-hunter-spells.mjs#TORMENT_FLAG`, `innerDemon {by, cast}`) carries its cast, so
+ *   it is read before the cast rule and named apart from the spell, whose identifier is never a feature key.
+ */
+export const DH_STATE_NAMES = Object.freeze({ prepared: "I Have Prepared", innerDemon: "Inner Demon's Torment" });
+export const DH_WINGED_STATE = "unleashedWinged";
 
 /**
  * **THE RUNE FLARE'S RECORD** (02 §7: *every rune spent, for any reason*; run F5). The one rune
@@ -636,7 +651,15 @@ export function stateEntriesOf(flags, { only = null } = {}) {
     if (!value || typeof value !== "object" || Array.isArray(value)) continue;
     if (key === "shape") {
       const feature = text(SHAPE_KINDS[value.kind]?.feature) ?? text(SHAPE_STATE_NAMES[value.kind]);
-      if (feature) add(key, feature);
+      // Demon Unleashed's wings, stamped at the take (`effects/demon-hunter-features.mjs#takeUnleashed`).
+      const winged = value.kind === "unleashed" && flags.unleashed?.winged === true;
+      if (feature) add(winged ? DH_WINGED_STATE : key, feature);
+      continue;
+    }
+    // **THE DEMON HUNTER'S CARRIERS** (Phase 6): see `DH_STATE_NAMES` above; the torment's cast is its spell's,
+    // and the torment is still its own state.
+    if (Object.hasOwn(DH_STATE_NAMES, key)) {
+      add(key, DH_STATE_NAMES[key], value.by ?? null);
       continue;
     }
     // **THE SOVEREIGN'S STATES** (the San'layn and Sovereign plan's C14): see `SOVEREIGN_STATE_NAMES` below.

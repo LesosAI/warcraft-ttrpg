@@ -396,6 +396,10 @@ export function compatibleGearUse(system) {
   if(system?.identifier==="healers-kit-10-uses"&&system.source?.document==="08-EQUIPMENT"
     &&system.source.section==="11 · Adventuring gear · Trade kits"&&(!old?.kind||old.kind==="none"))
     return {...emptyUse(),kind:"special",action:"half",target:"creature",note:"Healer's kit"};
+  // 04's Hoarded Soul (the Demon Hunter plan's Phase 5): a Crystalized Soul is used *as a free action*, through the
+  // talent's own door (`effects/demon-hunter-talents.mjs#useCrystalizedSoul`); 08 prints it with no Use of its own.
+  if(system?.identifier==="crystalized-soul"&&system.source?.document==="08-EQUIPMENT"&&(!old?.kind||old.kind==="none"))
+    return {...emptyUse(),kind:"special",action:null,target:"self",note:"Crystalized Soul"};
   if(system?.identifier==="sappers-satchel"&&system.source?.document==="08-EQUIPMENT"
     &&system.source.section==="13 · Ordnance and devices · Explosives"&&old?.kind==="explosive"&&old.action==="half")return {...old,action:"full"};
   if(old?.kind && old.kind!=="none")return old;

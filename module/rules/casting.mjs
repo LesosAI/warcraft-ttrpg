@@ -15,7 +15,7 @@
 
 import { AZEROTH } from "../config.mjs";
 // The class that pays its spells in Momentum (D-944), kept beside the runes it holds.
-import { CLASS_SPELL_POOL } from "./runes.mjs";
+import { CLASS_SPELL_POOL, CLASS_SPELL_POOL_BY_CLASS } from "./runes.mjs";
 // The Sovereign's Vitae: short of a cost it takes Health, 1 for 1 (02 §7; the plan's V4).
 import { VITAE, vitaePayment } from "./vitae.mjs";
 // 05's *Round - ~6 seconds*: a turn's span out of a fight is one of them (D-778).
@@ -566,7 +566,7 @@ export function spellPrice(mana = 0, { inShapeshiftForm = false, pool = null, fr
  * pays for spells at 1 per Mana*; *"they don't use mana"*). Keyed by the class's
  * POWER name, since the runes are what leave the Mana with nowhere to come from.
  */
-export { CLASS_SPELL_POOL };
+export { CLASS_SPELL_POOL, CLASS_SPELL_POOL_BY_CLASS };
 
 /**
  * **THE OLD NAME, KEPT ONE RELEASE** (the San'layn and Sovereign plan's V1: *Rename `manaPrice` to
@@ -587,14 +587,45 @@ export const manaPrice = spellPrice;
  *   the caster's class items, or their systems
  * @returns {{pool: string, ability: string|null, name: string}|null}
  */
-export function spellPayment(talentPool = null, classes = []) {
+export function spellPayment(talentPool = null, classes = [], spell = null) {
   if (talentPool) return talentPool;
-  for (const c of classes ?? []) {
+  const list = [...(classes ?? [])];
+  for (const c of list) {
     const power = c?.system?.power?.name ?? c?.power?.name ?? null;
     const pool = power ? CLASS_SPELL_POOL[power] : null;
     if (pool) return { pool, ability: null, name: String(c?.name ?? "") };
   }
-  return null;
+  return classSpellPayment(list, spell);
+}
+
+const classSysOf = c => c?.system ?? c ?? {};
+const classIdOf = c => String(classSysOf(c).identifier ?? c?.identifier ?? "");
+const casts = c => ["full", "half"].includes(classSysOf(c).power?.caster ?? null);
+
+/**
+ * **A CLASS THAT PAYS ITS SPELLS FROM A POOL KEYED BY THE CLASS** (`runes.mjs#CLASS_SPELL_POOL_BY_CLASS`:
+ * the Demon Hunter's Energy, R1). The pool pays a spell the class itself learns
+ * (`spell-access.mjs#classLearnsSpell` off the spell's school and Restricted line): the first class the
+ * caster holds that learns it, primary first (MY READING for a Warlock and a Demon Hunter sharing a
+ * borrowed Fel spell). Handed no spell, the pool pays only where no other class the caster holds casts,
+ * so a Demon Hunter and a Mage never price a Mage spell in Energy. The answer names the class item
+ * (`itemId`); beside a Rogue's or a Champion's Energy it names a member of the ONE pool they share (02 §10,
+ * D-1723), which `pools.mjs#poolHeldBy` and the fallback to the first by name both reach.
+ *
+ * @param {Array<object>} classes  the caster's class items, or their systems
+ * @param {{school?: string|null, classes?: string[]|null}|null} spell
+ * @returns {{pool: string, ability: null, name: string, itemId: string|null}|null}
+ */
+export function classSpellPayment(classes = [], spell = null) {
+  const keyed = (classes ?? []).filter(c => CLASS_SPELL_POOL_BY_CLASS[classIdOf(c)]);
+  if (!keyed.length) return null;
+  const answer = c => ({ pool: CLASS_SPELL_POOL_BY_CLASS[classIdOf(c)], ability: null, name: String(c?.name ?? ""), itemId: c?.id ?? c?._id ?? null });
+  if (spell && typeof spell === "object") {
+    const learner = (classes ?? []).find(c => classLearnsSpell({ name: c?.name, schools: classSysOf(c).schools ?? [] }, { school: spell.school ?? null, classes: spell.classes ?? null }));
+    return learner && CLASS_SPELL_POOL_BY_CLASS[classIdOf(learner)] ? answer(learner) : null;
+  }
+  const otherCaster = (classes ?? []).some(c => !CLASS_SPELL_POOL_BY_CLASS[classIdOf(c)] && casts(c));
+  return otherCaster ? null : answer(keyed[0]);
 }
 
 /**

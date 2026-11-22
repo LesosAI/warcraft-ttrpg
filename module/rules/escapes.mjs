@@ -267,6 +267,19 @@ export function readEscapeAny(effectText, fields = {}) {
   // *may*, ending the condition its failure laid - read off the nearest sentence before it that names
   // the failure, so Bone Prison's *While it is Entangled by this spell ...* between them is passed over.
   // Puppet of Flesh's *The target repeats* is the Mind Control door's (`ESCAPE_BY_DOOR`).
+  // **07 §15's INNER DEMON** (the Demon Hunter's; D-1543): *On a failure it is **Frightened** and **Entangled** for the
+  // duration ... It repeats the Test at the end of each of its turns, and on a success the spell and both conditions
+  // end* - the creature's own Test every turn, riding the first condition its failure names, a pass ending the other
+  // with it (`also`; the shared door's Sand Prison shape) and the torment the Demon Hunter door ties to it.
+  for (let i = 0; i < list.length; i++) {
+    if (!/^It repeats the Test at the end of each of its turns, and on a success the spell and both conditions end\b/.test(list[i])) continue;
+    for (let j = i - 1; j >= 0; j--) {
+      if (!/\bOn a failure\b/.test(list[j])) continue;
+      const named = [...list[j].matchAll(/\*\*(\w+)\*\*/g)].map(x => conditionOf(x[1])).filter(Boolean);
+      if (!named.length) break;
+      return { condition: named[0], on: "turnEnd", resilience: own, banes: 0, ...(named.length > 1 ? { also: named.slice(1) } : {}) };
+    }
+  }
   for (let i = 0; i < list.length; i++) {
     if (!/^It repeats the Test at the end of each of its turns, and the spell ends on a success\b/.test(list[i])) continue;
     for (let j = i - 1; j >= 0; j--) {

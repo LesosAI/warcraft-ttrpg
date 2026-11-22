@@ -267,6 +267,8 @@ import { boundFeatureEscape } from "./escapes.mjs";
 import * as NT from "./necromancer-talents.mjs";
 // The Sovereign's numbers (04's Dominion, Vainglorious and Ravenous; the San'layn and Sovereign plan's Phase 5).
 import * as ST from "./sovereign-talents.mjs";
+// The Demon Hunter's numbers (04's Betrayer, Souleater and Sufferer; the Demon Hunter plan's Phase 5).
+import * as DT from "./demon-hunter-talents.mjs";
 // A summon's count by rank, bound at the stamp (the Legacy branches' door 4).
 import { summonCountAt } from "./summon-places.mjs";
 
@@ -2623,14 +2625,12 @@ export const TALENT_EFFECTS = Object.freeze({
     "moonfire": { spell: { names: ["Moonfire"], learn: true }, tick: { spells: ["Moonfire"], add: "rank" } },
     // *Each rank adds 1 to the Health it restores each turn* (D-771).
     "rejuvenation": { spell: { names: ["Rejuvenation"], learn: true }, tick: { spells: ["Rejuvenation"], add: "rank" } },
-    // The caster-turn chooser now delivers the talent's two distinct targets.
-    // Keep the incomplete census disposition until Starweave's exact-area
-    // association and Sustain policy are settled and integrated.
-    "starfall": {
-      spell: { names: ["Starfall"], learn: true },
-      automated: "none",
-      reason: "Caster-turn target selection and damage are automated through the Starfall chooser; Starweave area/Sustain integration remains incomplete pending its rules decisions"
-    },
+    // The caster-turn chooser delivers the talent's two distinct targets
+    // (`effects/starfall-use.mjs`, `rules/starfall.mjs#starfallTargetLimit`'s
+    // `talentRank`), and since the spell audit made Starweave a timed minute
+    // (D-1705) its own second target rides the same chooser through the link its
+    // Region records (`rules/starweave.mjs`, D-1710). Nothing is left to the table.
+    "starfall": { spell: { names: ["Starfall"], learn: true } },
     "starfire": { spell: { names: ["Starfire"], learn: true, damage: 1 } },
     // *After a Casting Test you make meets or exceeds SL 2, your next spell
     // costs 1 less Mana per rank* (D-771): laid on the druid by the Test,
@@ -3680,6 +3680,114 @@ export const TALENT_EFFECTS = Object.freeze({
     // *Once per Long Rest, as a Half-Action ... five times your tier ... Boon on every Test ... Empowered ...*
     "the-black-rite": { grants: grant({ action: "half", uses: uses(1, "long") }), onUse: { necro: { blackRite: true } }, necro: { heal: "5*tier", tempHealth: "int", rite: NT.BLACK_RITE } }
   },
+  // **THE DEMON HUNTER** (04's Betrayer, Souleater and Sufferer; the Demon Hunter plan's Phase 5, D-1560 to
+  // D-1569). Every number is `rules/demon-hunter-talents.mjs`' (DT), held to 04 at every rank by
+  // `demon-hunter-talents.test.mjs`, and every door is named, function by function, in `DT.DH_TALENT_DOORS`. A
+  // talent that changes one of 02's features rides the `mod(...)` patch on its row (`patchRowsOf`, D-773 to
+  // D-775); a Use's `onUse.dh.talent` is judged by `effects/demon-hunter-talents.mjs#judgeDhTalentUse` before
+  // anything is paid. C8: no row here holds the hunter above 0.
+  "demon-hunter": {
+    /* ---- Betrayer ---- */
+    // *With a glaive in each hand, your Off-Hand Attack takes no −2 even if the weapon lacks Light. At rank 2,
+    // your Off-Hand Attack deals 1 more damage.* The −2's waiver behind the grip (`offHandPenaltyFor`), and the
+    // damage on the off-hand blow (`offHandBuildsFor`), both at the attack door.
+    "twin-blades": { offHand: { noPenalty: true, when: { wields: [DT.TWIN_BLADES.wields] }, atRank: [{ rank: DT.TWIN_BLADES.damageRank, damage: DT.TWIN_BLADES.damage }] }, dh: { offHand: true } },
+    // *Fel Lash deals 1 more damage per rank*: the patch on 02's Fel Lash, read by its hit.
+    "fel-tempered": { modifies: mod("Fel Lash", { dh: { damage: "rank" } }) },
+    // *You gain 1 Armor Point on your Body per rank, and +1 per rank on Intimidation Tests*: the Armor Point a
+    // passive, the Intimidation a row of the Skill Test's one door (`skills.mjs#skillRowsFor`).
+    "demonic-visage": { passive: passive([add("system.ap.body", "rank")]), dh: { skill: DT.DEMONIC_VISAGE.skill } },
+    // *Once per Short Rest per rank, as a free action, gain 1 Fel Corruption, with no Test. Your Hatred fills to
+    // your cap and you gain 3 Energy.*
+    "taste-of-power": { grants: grant({ action: null, uses: uses("rank", DT.TASTE_OF_POWER.per) }), onUse: { dh: { talent: "taste" } } },
+    // *As a Half-Action, spend 4 Hatred. You take a demon's shape for your rank plus 1 rounds ...*: the `skull` shape.
+    "gift-of-the-skull": { grants: grant({ action: "half", cost: cost("hatred", DT.GIFT_OF_THE_SKULL.hatred) }), onUse: { dh: { talent: "skull" } } },
+    // *Spectral Sight, Fel Lash and your Hatred cap treat your Fel Corruption as 5 higher*: `hatred.mjs#felFor`.
+    "embrace-the-pain": { dh: { felFor: DT.EMBRACE_THE_PAIN.step } },
+    // *... you have wings whatever your Fel Corruption, and a flying Speed of 30 feet. At rank 2, it is 60 feet.*
+    "wings-of-the-betrayer": { dh: { wings: true } },
+    // *... as a Half-Action, spend 3 Energy. One creature within 60 feet makes a Reflex Resilience Test against your
+    // Spell DC. On a failure it takes Fel damage equal to 2 plus twice your rank, and on a success half of that.*
+    "chaos-blast": {
+      grants: grant({ action: "half", cost: cost("energy", DT.CHAOS_BLAST.energy), resist: DT.CHAOS_BLAST.resilience,
+        damage: { amount: `${DT.CHAOS_BLAST.base}+${DT.CHAOS_BLAST.perRank}*rank`, type: DT.CHAOS_BLAST.type, half: true } }),
+      onUse: { aim: { feet: DT.CHAOS_BLAST.feet }, dh: { talent: "chaosBlast" } }
+    },
+    // *When Fel Lash hits a demon or a creature that holds Mana, gain 1 Energy per rank.*
+    "feed-on-power": { modifies: mod("Fel Lash", { dh: { energy: "rank" } }) },
+    // *Demon Unleashed adds 1 more to your Damage Rating per rank and lasts 1 more round per rank.*
+    "eternal-hunger": { modifies: mod("Demon Unleashed", { dh: { damage: "rank", rounds: "rank" } }) },
+    // *When you finish a Hunter's Leap while you are in the demon's shape ... Body Resilience Test against your
+    // Spell DC. On a failure it takes Fel damage equal to your tier and falls Prone.* A splash Test a creature.
+    "fall-upon-them": { modifies: mod("Hunter's Leap", { dh: { fall: true } }), dh: { onFail: true } },
+    // *When you use Demon Unleashed, you may make it last until you finish a Short Rest ... gain 5 Fel Corruption
+    // when it ends, with no Test.* The hostility is the GM's (C28), a line on the card.
+    "betrayers-bargain": { modifies: mod("Demon Unleashed", { dh: { bargain: DT.BETRAYERS_BARGAIN.fel } }) },
+    /* ---- Souleater ---- */
+    // *You can devour souls ... within 5 feet ... regain Health equal to your tier per rank ... When you devour a
+    // soul with Devour Soul, add your tier per rank.* The death watch's offer and the press.
+    "soul-hunger": { modifies: mod("Devour Soul", { dh: { heal: "tier*rank" } }), dh: { heal: true } },
+    // *While you wield a scythe in two hands, add 1 per rank to its Damage Rating, and Soul Hunger reaches ... 10 feet*.
+    "reapers-grip": { damage: damage(["all"], "attack", { when: { wields: [DT.REAPERS_GRIP.wields] } }), dh: { reach: DT.REAPERS_GRIP.reach } },
+    // *When Fel Lash hits, you regain 1 Health per rank.*
+    "gorging-lash": { modifies: mod("Fel Lash", { dh: { heal: "rank" } }), dh: { heal: true } },
+    // *... you may keep it instead of regaining Health. It becomes a Crystalized Soul in your bags if you have a free
+    // bag slot ... use one to regain the Health it would have restored, gain 3 Energy, or gain 2 Hatred.*
+    "hoarded-soul": { modifies: mod("Devour Soul", { dh: { hoard: true } }), dh: { heal: true } },
+    // *When you devour a demon's soul, your next Fel Lash before the end of your next turn costs no Hatred and deals 1
+    // more damage per rank.*
+    "demons-due": { modifies: mod("Fel Lash", { dh: { damage: "rank", free: true } }) },
+    // *While you wield a scythe in two hands, once a turn when your attack hits, one other enemy within your reach
+    // takes Shadow damage equal to half your Wisdom modifier, rounded down, and at least 1 ...*
+    "sweeping-arc": { dh: { sweep: true } },
+    // *When you devour a soul, you may make a Hunter's Leap without spending Energy or your Reaction. At rank 2, your
+    // next attack this turn gains a Boon.*
+    "kill-after-kill": { modifies: mod("Hunter's Leap", { dh: { free: true } }) },
+    // *Fel Lash against a creature below half its Health deals 1 more damage per rank. If the blow drops it to 0 ...
+    // without spending your Reaction.*
+    "tear-the-soul": { modifies: mod("Fel Lash", { dh: { damage: "rank", freeDevour: true } }) },
+    // *... once a round when your attack hits a creature, it is Slowed until the end of its next turn.*
+    "hobbling-reap": { dh: { inflicts: [DT.HOBBLING_REAP.condition] } },
+    // *Devour Soul reaches 20 feet further per rank, and once a round it costs no Reaction.*
+    "endless-appetite": { modifies: mod("Devour Soul", { dh: { reach: `${DT.ENDLESS_APPETITE.feetPerRank}*rank`, free: "round" } }) },
+    // *When you devour a creature that held Mana or a Power pool, gain 2 Hatred. Every spell that creature cast and
+    // that is still in force ends ...*
+    "swallow-their-magic": { dh: { swallow: true } },
+    // *When you devour a soul ... Spirit Resilience Test against your Spell DC. On a failure it takes Shadow damage
+    // equal to your Wisdom modifier. Gain 1 Hatred for each creature this damage reduces to 0 Health.*
+    "feast-of-souls": { dh: { feast: true, onFail: true } },
+    /* ---- Sufferer ---- */
+    // *You gain +1 per rank on Spirit Resilience Tests against Fel, and against being Charmed or Frightened.*
+    "iron-will": { dh: { line: "ironWill" } },
+    // *... gain 1 less Fel Corruption per rank, to no lower than 0*: the rest door's `less` (`hatred.mjs#restFel`).
+    "measured-breath": { dh: { rest: "less" } },
+    // *Spectral Sight reaches 20 feet further*: the token's sight (`syncSpectralSight`). The stone and the wood
+    // are the table's: a Foundry wall has no thickness to see through.
+    "eyes-of-the-nether": { modifies: mod("Spectral Sight", { dh: { feet: `${DT.EYES_OF_THE_NETHER.feet}*rank` } }), reason: "seeing through 1 foot of stone or wood is the GM's to show: a Foundry wall has no thickness (D2 §12)" },
+    // *... leave 1 Hatred per rank out of the count*: the rest door's `leftOut`.
+    "warding-ink": { dh: { rest: "leftOut" } },
+    // *As a Reaction when a spell targets you, spend 3 Energy. You gain Ward equal to your rank plus 1 against that
+    // spell's school for that casting.* A laid Ward (D-774's rule), spent with the casting's turn.
+    "glaive-ward": { grants: grant({ action: "reaction", cost: cost("energy", DT.GLAIVE_WARD.energy) }), onUse: { dh: { talent: "glaiveWard" } } },
+    // *Whichever Beyond Limits choice you make, it also ends Slowed and Entangled on you.*
+    "steady-footing": { modifies: mod("Beyond Limits", { dh: { ends: [...DT.STEADY_FOOTING.ends] } }) },
+    // *Once per Long Rest per rank ... make a Spirit Resilience Test after every other talent and feature has reduced
+    // it*: the rest door reads it by name, rolled last (`effects/demon-hunter-features.mjs#quietTheWhispers`).
+    "quiet-the-whispers": { automated: "inline", dh: { rest: "quiet" } },
+    // *When you succeed on a Resilience Test against a spell, gain 1 Energy per rank, and the spell's caster takes Fel
+    // damage equal to your rank.* The spell card's Resist door.
+    "turn-their-fire": { dh: { turnFire: true } },
+    // *At rank 2, you see the true form of a shapeshifted or disguised creature*: a whisper when such a creature is
+    // targeted. *Illusions never deceive you* is the GM's: no document records an illusion.
+    "sight-beyond-sight": { dh: { trueForm: DT.SIGHT_BEYOND_SIGHT.trueFormRank }, reason: "an illusion is the GM's to show as false: no document records an illusion (D2 §12)" },
+    // *... at 1 for each 4 Hatred at rank 1, or 1 for each 5 at rank 2*: the rest door's `per`.
+    "bridle-the-demon": { dh: { rest: "per" } },
+    // *You cannot be Charmed by a demon. When a demon casts a spell at a creature within ... of you, its Casting Test
+    // takes a Bane.* The effect's creation refused, and the cast door's Bane.
+    "refuse-the-legion": { dh: { legion: true } },
+    // *Once per Short Rest, as an Action, end every spell and spell effect of tier 3 or lower within 30 feet ...*
+    "silence-the-weave": { grants: grant({ action: "action", uses: uses(1, DT.SILENCE_THE_WEAVE.per) }), onUse: { dh: { talent: "silence" } } }
+  },
   // **THE SOVEREIGN** (04's Dominion, Vainglorious and Ravenous; the San'layn and Sovereign plan's Phase 5).
   // Every number is `rules/sovereign-talents.mjs`' (ST), held to 04 at every rank by
   // `sovereign-talents.test.mjs`, and every door is `effects/sovereign-features.mjs`' - named, function by
@@ -4202,6 +4310,9 @@ export const CENSUS_DETECTORS = Object.freeze({
       // And the Sovereign's (Phase 5): Exquisite Taste and Overflowing Cup at the one healing door, Latch On's
       // turn-start drain (`healExtra`, `sovereignTurnStart`).
       || (e.sov?.heal !== undefined && e.sov?.heal !== null && e.sov?.heal !== false)
+      // And the Demon Hunter's (Phase 5): Soul Hunger's devour, Gorging Lash's Health on a Fel Lash hit and a
+      // Crystalized Soul's Health (`effects/demon-hunter-talents.mjs`, `rules/demon-hunter-talents.mjs`).
+      || e.dh?.heal === true
   },
   // *Your Fortitude rises by 2 per rank*, *your Defense rises by 1 per rank*.
   risesBy: {
@@ -4329,6 +4440,8 @@ export const CENSUS_DETECTORS = Object.freeze({
       // And the Sovereign's (Phase 5): Lingering Decree's Slowed, No Pardon's Frightened, Kneel's Prone and
       // Stunned, Bound to the Court's Slowed and Raking Claws' Bleeding.
       || (e.sov?.inflicts ?? []).length > 0
+      // And the Demon Hunter's (Phase 5): Hobbling Reap's Slowed on a scythe hit (`dhTalentsOnHit`).
+      || (e.dh?.inflicts ?? []).length > 0
   },
   // A row whose trigger IS a Success Level (D-771): Nature's Grace's next
   // spell and Primal Fury's further Ferocity. And D-772's: Deep Cut's

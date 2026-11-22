@@ -60,8 +60,9 @@ export async function takeNextAttack(actor, pending) {
   const taken = [...(pending?.live ?? []), ...(pending?.lapsed ?? [])];
   if (!taken.length) return;
   const held = actor.getFlag?.("azeroth-rpg", NEXT_ATTACK_FLAG) ?? [];
-  const left = afterTake(held, taken);
+  // A promise to every roll is marked by the first roll, not taken (D-1711).
+  const left = afterTake(held, taken, pending?.live ?? []);
   // Nothing the attack read is still there (another door took or replaced it).
-  if (Array.isArray(held) && left.length === held.length) return;
+  if (Array.isArray(held) && left.length === held.length && left.every((e, i) => e === held[i])) return;
   await actor.setFlag("azeroth-rpg", NEXT_ATTACK_FLAG, left);
 }

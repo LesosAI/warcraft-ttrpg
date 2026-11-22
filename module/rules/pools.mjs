@@ -45,6 +45,8 @@ import { paysByKind } from "./essence.mjs";
 /**
  * @typedef {object} PoolSnapshot
  * @property {string|null} itemId   the class item that owns it; null on a creature
+ * @property {string[]} [itemIds]   on the one Energy pool two classes share (02 §10, D-1723): every class
+ *   item it stands for, the holder first; absent on every other pool
  * @property {"power"|"momentum"} kind
  * @property {string|null} name     a key of `AZEROTH.poolTypes`, or null on a creature
  * @property {number} value
@@ -177,11 +179,53 @@ export function poolNamed(pools = [], name = null, { itemId = null } = {}) {
     return momenta.find(p => itemId && p.itemId === itemId) ?? momenta[0] ?? null;
   }
   const named = list.filter(p => p?.name === name);
-  if (named.length) return named.find(p => p.itemId === itemId) ?? named[0];
+  if (named.length) return named.find(p => holdsItem(p, itemId)) ?? named[0];
   const kind = poolKind(name);
   if (!kind) return null;
   const unnamed = list.filter(p => p?.kind === kind && !p.name);
   return unnamed.length === 1 ? unnamed[0] : null;
+}
+
+/**
+ * Whether a pool row stands for a class item: its holder (`itemId`) or, on a merged Energy pool, any
+ * member (`itemIds`). Null and undefined never match.
+ */
+function holdsItem(pool, itemId) {
+  if (itemId === null || itemId === undefined || !pool) return false;
+  return pool.itemId === itemId || (Array.isArray(pool.itemIds) && pool.itemIds.includes(itemId));
+}
+
+/**
+ * **THE POOL A CLASS ITEM'S WRITE MEANS** (02 §10's one Energy pool for two classes that both give it;
+ * D-1723): the row of that kind whose holder is the item, or - on a merged pool - whose `itemIds` names
+ * it, optionally of one name. A Demon Hunter second to a Rogue writes its Energy to the Rogue's row, the
+ * holder, and `AzerothActor#writePoolsNow` mirrors it into the Demon Hunter's entry. Null where none.
+ *
+ * @param {PoolSnapshot[]} [pools]
+ * @param {string|null} itemId
+ * @param {"power"|"momentum"} kind
+ * @param {string|null} [name]  a key of `AZEROTH.poolTypes`, where the write names one
+ * @returns {PoolSnapshot|null}
+ */
+export function poolHeldBy(pools = [], itemId, kind = "power", name = null) {
+  const list = (Array.isArray(pools) ? pools : []).filter(p => p?.kind === kind && (name === null || name === undefined || p.name === name));
+  return list.find(p => p.itemId === itemId && itemId !== undefined) ?? list.find(p => holdsItem(p, itemId)) ?? null;
+}
+
+/**
+ * **THE CLASS A GRANTED FEATURE PAYS FROM** (the Demon Hunter review's M2): a feature a TALENT grants is flagged with
+ * the talent's id (`AzerothActor#_syncClassFeaturesNow`), which names no pool, so a Demon Hunter's Chaos Blast and
+ * Glaive Ward paid from the first Energy pool, a Rogue's where the Rogue came first. The talent's class is read back
+ * to that class item's id; a class item's id, or anything else, is handed back as it was.
+ *
+ * @param {string|null} classId  the feature flag's `classId`
+ * @param {{talent?: {className?: string|null}|null, classes?: Array<{id: string, name: string}>}} [o]
+ * @returns {string|null}
+ */
+export function grantingClassOf(classId = null, { talent = null, classes = [] } = {}) {
+  if (!classId) return classId ?? null;
+  if (!talent?.className) return classId;
+  return (Array.isArray(classes) ? classes : []).find(c => c?.name === talent.className)?.id ?? classId;
 }
 
 /**

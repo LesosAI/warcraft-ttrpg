@@ -18,6 +18,10 @@
  */
 
 import { eachTargetFor, spellAimsAtTier } from "../canvas/engaged.mjs";
+// 07 §15's Demon Hunter spells on the target (D-1544, D-1550): who sees through it, and Nether Snare's Boon.
+import { dhRevealTo } from "../effects/demon-hunter-sight.mjs";
+import { seesThrough, snareBoon, snaredFrom } from "../rules/demon-hunter-spells.mjs";
+import { isUnarmedStrike } from "../rules/unarmed.mjs";
 // O-307: a DC field's text read the one way, per target and on the single field.
 import { typedDcValue } from "../rules/casting.mjs";
 // The Necromancer's Essence pays no called shot (the Necromancer plan).
@@ -119,6 +123,11 @@ export function targetSnapshots(targets = game.user?.targets ?? []) {
       name: token.name ?? actor.name,
       defense: s.defense ?? null,
       invisible: invisibilityActive(actor.effects, game.time?.worldTime),
+      // **WHO SEES THROUGH IT** (07 §15's Hunter's Brand on a demon, Hunting Ground and Gaze of the Sightless; D-1544):
+      // the uuids of the hunters for whom it cannot be invisible, read by `snapshotOf`'s invisible lines.
+      revealTo: dhRevealTo(actor, token),
+      // 07 §15's Nether Snare on it: *Banish and Soulchains against it gain a Boon* (D-1550), read by `prepareRoll`.
+      netherSnared: snaredFrom(actor.effects ?? []),
       lesserInvisible: lesserInvisibilityActive(actor.effects, actor.uuid, game.time?.worldTime)
         && isHiddenFor(actor, { tokenId: token.id, sceneId: token.scene?.id ?? token.document?.parent?.id ?? null }),
       // **AND ROCKBITER'S RISE AGAINST THE FIRST ATTACK EACH ROUND** (04, D-774):
@@ -371,8 +380,9 @@ function snapshotOf(actor, { kind, skill, targets, resilience = null, ability = 
     poisoned: poisoned ? (poisoned.getFlag?.("azeroth-rpg", "value") ?? 1) : 0,
     armorBanes: s.armorBanes ?? [],
     targetStatuses: targets[0]?.statuses ?? [],
-    targetLesserInvisible: targets[0]?.lesserInvisible === true,
-    targetInvisible: targets[0]?.invisible === true,
+    // Not for a hunter who sees through it (07 §15; D-1544): *cannot be invisible to you or hidden from you*.
+    targetLesserInvisible: targets[0]?.lesserInvisible === true && !seesThrough(actor?.uuid ?? null, targets[0]?.revealTo ?? []),
+    targetInvisible: targets[0]?.invisible === true && !seesThrough(actor?.uuid ?? null, targets[0]?.revealTo ?? []),
     invisible: invisibilityActive(actor.effects, game.time?.worldTime),
     targetMirrorImages: (targets[0]?.mirrorImageBanes??0)>0,
     // Scarlet Reckoning (D-912): the roller's factions against what the target wears.
@@ -681,6 +691,14 @@ export function prepareRoll(actor, given) {
       name: partner.name, boons: 1, banes: 0, modifier: 0, checked: true
     });
   }
+  // **07 §15's NETHER SNARE** (*Banish and Soulchains against it gain a Boon*; D-1550): an automatic line on the
+  // Casting Test of either spell at a snared creature, whoever casts it.
+  if (test.kind === "casting" && snareBoon(targets[0]?.netherSnared ?? null, spec.spell?.system?.identifier ?? null)) {
+    situational.automatic.push({
+      id: "nether-snare", label: "AZEROTH.DhSpell.Snare.Boon",
+      name: targets[0]?.netherSnared?.source ?? "", boons: 1, banes: 0, modifier: 0, checked: true
+    });
+  }
   // **A BANE A TALENT TAKES OFF IS SAID WITH ITS NAME** (04's Careful Shot,
   // D-773): the pure rule raises the warning's key; the names are composed here.
   if (situational.warnings.includes(TALENT_CANCELLED)) {
@@ -706,7 +724,7 @@ export function prepareRoll(actor, given) {
   // The pool a called shot pays from: the roller's own, or - a companion whose owner
   // holds 04's Shared Quarry - the owner's Quarry (D-779; `AzerothActor#momentumPayer`).
   const calledPayer = actor.momentumPayer?.({ amount: AZEROTH.CALLED_SHOT_MOMENTUM }) ?? null;
-  const momentum = calledPayer?.pool ?? (actor.system?.momenta ?? []).find(p => paysByKind(p?.name)) ?? null;
+  const momentum = calledPayer?.pool ?? (actor.system?.momenta ?? []).find(p => paysByKind(p?.name, "maneuver")) ?? null;
   // The called shot's price: 06 §7's 2, or what Runic Discipline sets (02 §7, run F2).
   const calledShotCost = calledPayer?.price ?? AZEROTH.CALLED_SHOT_MOMENTUM;
   // D-613: the passives that could bear on this roll. One with a Boon or
@@ -821,7 +839,8 @@ function riderOffer(actor, spec, target = null) {
   // variant's range kind says `ranged` - so a rider *as part of an attack with a
   // Thrown weapon* rides a throw alone (04's Storm Bolt; the Legacy branches' B1);
   // and the target, for a rider made free against it (Cursed Prey, door 17).
-  return actor?.riderLines?.({ weapon: spec.strike?.rangeKind ?? spec.rangeKind ?? null, opening, target }) ?? [];
+  // An unarmed strike draws no Demon Hunter weapon rider (the review's M3; `rules/unarmed.mjs` decides).
+  return actor?.riderLines?.({ weapon: spec.strike?.rangeKind ?? spec.rangeKind ?? null, opening, target, unarmed: isUnarmedStrike(spec.strike) }) ?? [];
 }
 
 /**
@@ -1225,11 +1244,14 @@ async function dialogVariant(actor, spec) {
     talentLines: (p.talentLines ?? []).map(l => ({
       identifier: l.identifier,
       name: l.name,
+      // The line's kind, for the template's layout alone: Fel Surge's points draw as a row of chips (D-1581).
+      kind: l.kind ?? null,
       // A line may name its own words (04's Grit of Ages: damage or SL, and the Sand it costs).
       does: game.i18n.format(l.doesKey ?? `AZEROTH.TalentLine.Does.${l.kind}`, {
         n: l.amount, price: l.price ?? l.amount, feet: l.feet ?? 0, pool: game.i18n.localize(AZEROTH.poolTypes[l.pool ?? "mana"] ?? l.pool ?? "mana")
       }),
-      left: game.i18n.format(l.kind === "charge" ? "AZEROTH.TalentLine.Charges" : "AZEROTH.TalentLine.Left", { n: l.left }),
+      // A line with no count (04's Iron Will, a standing bonus) prints none.
+      left: l.left === null ? "" : game.i18n.format(l.kind === "charge" ? "AZEROTH.TalentLine.Charges" : "AZEROTH.TalentLine.Left", { n: l.left }),
       available: l.available,
       // A free cast once per rest opens ticked (the Chromatic Champion plan).
       checked: l.available && l.checked === true,

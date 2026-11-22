@@ -18,6 +18,12 @@
  */
 
 // 02's Timeless Mind on the sheet's Resilience numbers (stage 2b).
+// The Demon Hunter's Hatred: its cap is read off the one Fel reader (the Demon Hunter plan).
+import { HATRED, felFor, heldFel, restModifiersOf } from "../rules/hatred.mjs";
+// The Hatred bar's ladder, rest cost and Fel Lash's shed (D11; the Demon Hunter plan's Phase 6, D-1581).
+import { hatredView } from "../rules/hatred-view.mjs";
+import { FEL_LASH, I_HAVE_PREPARED, SPECTRAL_SIGHT, felLashShed } from "../rules/demon-hunter-features.mjs";
+import { awayOf } from "../rules/demon-hunter-spells.mjs";
 import { CHRONO_FEATURES, timelessMindDoubles } from "../rules/chronomancer.mjs";
 import { AZEROTH } from "../config.mjs";
 import { dispersionRefusal } from "../rules/dispersion.mjs";
@@ -332,6 +338,9 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       markPrey: AzerothCharacterSheet.#onMarkPrey,
       clearPrey: AzerothCharacterSheet.#onClearPrey,
       feed: AzerothCharacterSheet.#onFeed,
+      // 02 §7's Spectral Sight and 07's Flame Crash (the Demon Hunter review's S1 and C4).
+      senseDemons: AzerothCharacterSheet.#onSenseDemons,
+      pickUpGlaive: AzerothCharacterSheet.#onPickUpGlaive,
       drinkVial: AzerothCharacterSheet.#onDrinkVial,
       // 02 §7's *or when you let go*: every latch the Sovereign holds ended (the review's S7).
       letGo: AzerothCharacterSheet.#onLetGo,
@@ -598,6 +607,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     context.runePanel = this.#runePanel();
     // The horde panel (D11 §2): a Necromancer's alone - a character holding the Essence pool.
     context.hordePanel = this.#hordePanel();
+    // The Demon Hunter's Hatred in words, for the Overview's Stats pane and the Corruption tab (D-1581).
+    context.hatred = this.#hatredPanel();
     context.favorites = await this.#favorites();
     // Every row's inline detail opens on what the entry says (2026-09-06).
     await this.#describeRows([
@@ -687,6 +698,9 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       // words, Hunt Mortal's Mark and its Clear, The Blood Royal's Feed - and the Vitae and Tribute bars
       // through Core's own pool rows.
       sovereign: this.#sovereignCombat(),
+      // 02 §7's Demon Hunter (the review's S1 and C4): Spectral Sight's Sense demons, and a Pick up for each glaive
+      // Flame Crash left lying on the board.
+      demonHunter: this.#demonHunterCombat(),
       disengaging: this.actor.statuses?.has("disengaging") === true,
       // Out of sight (D-717). Read off the STATUS rather than off the system's
       // own flag, so a GM's hand-toggled invisibility draws the chip too and
@@ -2413,7 +2427,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       const mana = item.system.mana ?? null;
       const price = inForm && mana > 0 ? spellPrice(mana, { inShapeshiftForm: true }) : null;
       // And a class that pays in its Momentum (D-944): the Death Knight's Runic Power.
-      const paid = spellPayment(spellPoolFor(taken, { name: item.name, school }), this.actor.classItems ?? []);
+      const paid = spellPayment(spellPoolFor(taken, { name: item.name, school }), this.actor.classItems ?? [], { school, classes: item.system.classes ?? null });
       const payWith = paid?.pool && paid.pool !== "mana" ? paid.pool : null;
       if (payWith) paidIn.add(payWith);
       const payWord = payWith ? game.i18n.localize(AZEROTH.momentumTypes[payWith] ?? AZEROTH.powerTypes[payWith] ?? payWith) : manaWord;
@@ -2828,6 +2842,18 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
    * colour alone), with Hunt Mortal's Mark, its Clear and The Blood Royal's Feed; the two bars are Core's
    * own rows (`#pools`), so the Combat tab and Core never draw a pool two ways (D-614).
    */
+  /**
+   * **THE DEMON HUNTER'S COMBAT ROW** (the review's S1 and C4): Sense demons where Spectral Sight is held, and a Pick
+   * up for each glaive lying away, by name. Null for anybody with neither.
+   */
+  #demonHunterCombat() {
+    const senses = this.actor.items.some(i => i.type === "feature" && i.name === SPECTRAL_SIGHT.feature);
+    const glaives = this.actor.items.filter(i => i.type === "weapon" && awayOf(i))
+      .map(i => ({ id: i.id, label: game.i18n.format("AZEROTH.DemonHunter.PickUp.Button", { glaive: i.name }) }))
+      .sort((a, b) => a.label.localeCompare(b.label) || a.id.localeCompare(b.id));
+    return senses || glaives.length ? { senses, glaives } : null;
+  }
+
   #sovereignCombat() {
     const pools = this.#pools().filter(p => p.held && (p.name === "vitae" || p.name === "tribute"));
     const hunts = this.actor.hasFeature?.("Hunt Mortal") === true;
@@ -2892,12 +2918,20 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
             blood: game.i18n.localize("AZEROTH.Runes.Blood"), frost: game.i18n.localize("AZEROTH.Runes.Frost"),
             spentBlood: game.i18n.localize("AZEROTH.Runes.SpentBlood"), spentFrost: game.i18n.localize("AZEROTH.Runes.SpentFrost")
           })
-          : Array.from({ length: pool.max }, (_, i) => ({ filled: i < stored.value })),
+          : pool.name === HATRED ? this.#hatredSegments(stored.value)
+            : Array.from({ length: pool.max }, (_, i) => ({ filled: i < stored.value })),
         // **SAND IS HELD IN THE HOURGLASS** (D-848): the partial draws the glass
         // beside the count, and with none in the Ranged slot it says so in words,
         // since a bar of no segments alone would read as a broken pool.
         sand: pool.name === SAND,
-        noHourglass: pool.name === SAND && !(pool.max > 0)
+        noHourglass: pool.name === SAND && !(pool.max > 0),
+        // **HATRED'S CAP IS SAID IN WORDS** (the Demon Hunter plan, R5 and C5): the cap and the Fel it
+        // reads (`rules/hatred.mjs#felFor`), and a line where a fallen cap left Hatred above it, which
+        // a gain cannot add to (`hatredWrite`). The ladder panel is the sheet phase's.
+        // D11's ladder in words and the rest's price (D-1581): `#hatredWords` reads the one cap reader, the one
+        // rest reader and Fel Lash's own law, so the bar and the Corruption tab say the same thing.
+        ...(pool.name === HATRED ? this.#hatredWords(stored.value) : {}),
+        hatredAbove: pool.name === HATRED && (stored.value ?? 0) > (pool.max ?? 0) ? game.i18n.format("AZEROTH.Hatred.AboveCap", { cap: pool.max }) : null
       };
     };
     // ONE ENTRY PER POWER POOL THE CHARACTER HOLDS (02 §10). A double-caster
@@ -2913,6 +2947,67 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       ...(momenta.length ? momenta : [build(null, {})]),
       ...(powers.length ? powers : [build(null, {})])
     ];
+  }
+
+  /**
+   * **THE HATRED BAR'S MODEL** (D11; D-1581), off the Hatred held: the cap the Fel the features read gives, the
+   * rest's price with Warding Tattoos and the Sufferer's talents in it, and what a Fel Lash hit sheds now.
+   *
+   * @param {number} held
+   */
+  #hatredModel(held) {
+    const actor = this.actor;
+    const fel = felFor(actor);
+    const holdsLash = actor.items.some(i => i.type === "feature" && i.name === FEL_LASH.feature);
+    const prepared = actor.effects.some(e => e.getFlag?.("azeroth-rpg", I_HAVE_PREPARED.flag));
+    // The turn's one shed spent (D-1721), off the round's record in a started fight - read only, never claimed here.
+    const fight = actor.activeFight?.() ?? null;
+    const mine = fight?.started ? (fight.getCombatantsByActor?.(actor)?.[0] ?? null) : null;
+    const record = mine?.getFlag?.("azeroth-rpg", "round") ?? null;
+    const shedThisTurn = Boolean(mine && record?.number === fight.round && (record.once ?? []).includes(`${FEL_LASH.shedMark}@${fight.turn}`));
+    const shed = holdsLash ? felLashShed({ tier: actor.system?.tier ?? 1, held: heldFel(actor), prepared, shedThisTurn }) : null;
+    return hatredView({ held, fel, modifiers: restModifiersOf(actor), shed });
+  }
+
+  /** The bar's segments: the cap, and Hatred held above it drawn and said in words, never trimmed (Q14). */
+  #hatredSegments(held) {
+    const over = game.i18n.localize("AZEROTH.Hatred.OverSegment");
+    return this.#hatredModel(held).segments.map(seg => ({ filled: seg.filled, ...(seg.over ? { kind: "over", label: over } : {}) }));
+  }
+
+  /** The bar's words: the ladder, its next rung, and the rest's price (D11: *At a rest: +k Fel*). */
+  #hatredWords(held) {
+    const view = this.#hatredModel(held);
+    const f = game.i18n.format.bind(game.i18n);
+    return {
+      hatredLadder: f("AZEROTH.Hatred.Ladder", { fel: view.fel, cap: view.cap }),
+      hatredNext: view.next ? f("AZEROTH.Hatred.NextRung", { fel: view.next.fel, cap: view.next.cap }) : game.i18n.localize("AZEROTH.Hatred.LadderTop"),
+      hatredRest: view.restFel === null ? game.i18n.localize("AZEROTH.Hatred.RestNothing") : f("AZEROTH.Hatred.RestCost", { n: view.restFel }),
+      hatredShed: this.#shedWords(view.shed)
+    };
+  }
+
+  /** What a Fel Lash hit does to the Fel track now, in words, or null for a hunter without the feature. */
+  #shedWords(shed) {
+    if (!shed) return null;
+    if (shed.points > 0) return game.i18n.format("AZEROTH.Hatred.Shed.Points", { n: shed.points });
+    return game.i18n.localize(`AZEROTH.Hatred.Shed.${shed.reason ?? "none"}`);
+  }
+
+  /**
+   * **THE HATRED PANEL** (D-1581): the Overview's one line and the Corruption tab's panel, drawn for a character
+   * holding a Hatred pool, else null. The Fel track itself stays the Corruption tab's (D11).
+   */
+  #hatredPanel() {
+    const pool = (this.actor.system?.momenta ?? []).find(m => m.name === HATRED) ?? null;
+    if (!pool) return null;
+    const words = this.#hatredWords(pool.value);
+    const count = game.i18n.format("AZEROTH.Hatred.Count", { n: pool.value ?? 0, cap: pool.max ?? 0 });
+    return {
+      count, ...words,
+      above: (pool.value ?? 0) > (pool.max ?? 0) ? game.i18n.format("AZEROTH.Hatred.AboveCap", { cap: pool.max }) : null,
+      overview: [count, words.hatredRest, words.hatredShed].filter(Boolean).join(" \u00b7 ")
+    };
   }
 
   /**
@@ -4125,6 +4220,20 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     return this.render();
   }
   /** **THE BLOOD ROYAL** (02 §7): feed on the one creature targeted (`effects/sovereign-core.mjs#feedWithDialog`). */
+  /** **SENSE DEMONS** (02's Spectral Sight; the review's S1): the demons within 60 feet, whispered on a card. */
+  static async #onSenseDemons() {
+    const { senseDemons } = await import("../effects/demon-hunter-features.mjs");
+    return senseDemons(this.actor);
+  }
+
+  /** **PICK UP A THROWN GLAIVE** (07's Flame Crash; the review's C4): the glaive the control names. */
+  static async #onPickUpGlaive(event, target) {
+    const { pickUpGlaive } = await import("../effects/demon-hunter-features.mjs");
+    const done = await pickUpGlaive(this.actor, target?.dataset?.glaiveId ?? "");
+    this.render();
+    return done;
+  }
+
   static async #onFeed() {
     const { feedWithDialog } = await import("../effects/sovereign-core.mjs");
     return feedWithDialog(this.actor);

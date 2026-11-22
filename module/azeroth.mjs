@@ -70,6 +70,8 @@ import { registerCrushridgeDeathHooks } from "./effects/crushridge-death-hooks.m
 import { registerDeathWatch } from "./effects/death-watch.mjs";
 import { registerCrushridgeHelpHooks } from "./effects/crushridge-call-for-kin.mjs";
 import { registerMobileFlareVisibility } from "./effects/mobile-alert-visibility.mjs";
+// 07 §15's Hunter's Brand, Hunting Ground and Gaze of the Sightless: core's invisibility answered for the hunter (D-1544).
+import { registerHunterSight } from "./effects/demon-hunter-sight.mjs";
 import { registerTokenShrinkHooks } from "./canvas/token-shrink.mjs";
 import { registerElunesLightHooks } from "./canvas/elunes-light.mjs";
 import { registerCorpseCandle } from "./canvas/corpse-candle.mjs";
@@ -178,6 +180,7 @@ Hooks.once("init", () => {
   // tracker and skipping it throws on the second data preparation.
   CONFIG.Actor.documentClass = AzerothActor;
   registerMobileFlareVisibility();
+  registerHunterSight();
   CONFIG.Item.documentClass = AzerothItem;
   // Side-based turn order. Initiative is never rolled (D-256), so the sort is
   // replaced rather than the formula configured.
@@ -272,6 +275,15 @@ Hooks.once("init", () => {
   import("./effects/sovereign-features.mjs").then(m => m.registerSovereignFeatures()).catch(err => console.warn("azeroth-rpg | Sovereign features", err));
   // The Sovereign's spells: held blood off a claw hit, and Royal Seal's door and sheet (D-1240).
   import("./effects/sovereign-spells.mjs").then(m => m.registerSovereignSpellHooks()).catch(err => console.warn("azeroth-rpg | Sovereign spell hooks", err));
+  // 02 §7's Demon Hunter (the Demon Hunter plan's Phase 4a): Devour Soul on the death watch, I Have Prepared's end,
+  // and Spectral Sight's token sight.
+  import("./effects/demon-hunter-features.mjs").then(m => m.registerDemonHunterFeatures()).catch(err => console.warn("azeroth-rpg | Demon Hunter features", err));
+  // 04's Demon Hunter talents (the Demon Hunter plan's Phase 5): Refuse the Legion's refused Charm, Betrayer's Bargain's
+  // Fel, Eyes of the Nether's sight and Sight Beyond Sight's whisper.
+  import("./effects/demon-hunter-talents.mjs").then(m => m.registerDemonHunterTalents()).catch(err => console.warn("azeroth-rpg | Demon Hunter talents", err));
+  // 07 §15's Demon Hunter spells (the Demon Hunter plan's Phase 4b; D-1540): the hunter's sight, Immolation Aura's
+  // entering strike and light, Agonizing Flames' way out and Inner Demon's torment.
+  import("./effects/demon-hunter-spells.mjs").then(m => m.registerDemonHunterSpellHooks()).catch(err => console.warn("azeroth-rpg | Demon Hunter spell hooks", err));
   registerCrushridgeHelpHooks();
   registerTokenShrinkHooks();
   registerElunesLightHooks();

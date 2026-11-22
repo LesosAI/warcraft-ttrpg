@@ -24,17 +24,13 @@
  * both until they end.
  */
 
-import { packCopy, packSystems, rawSystem, walkWorld } from "./walk.mjs";
+import { packCopy, packSystems, rawSystem, sameStored, walkWorld } from "./walk.mjs";
 import { plainOf } from "./0.12.12-paladin-areas.mjs";
 
 const clone = value => JSON.parse(JSON.stringify(value));
 
-/** Deep equality with key order ignored: a stored object and a pack copy may list keys differently. */
-function same(a, b) {
-  const sorted = v => (Array.isArray(v) ? v.map(sorted)
-    : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map(k => [k, sorted(v[k])])) : v);
-  return JSON.stringify(sorted(a ?? null)) === JSON.stringify(sorted(b ?? null));
-}
+/** Deep equality with key order ignored and a null key read as absent (`walk.mjs#sameStored`). */
+const same = sameStored;
 
 /** The descriptors this version restamps, in the order the parser stamps them. */
 export const RESTAMPED = Object.freeze(["onFail", "areaTick", "tick"]);

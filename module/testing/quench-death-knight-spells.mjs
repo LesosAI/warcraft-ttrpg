@@ -624,7 +624,7 @@ export function deathKnightSpellsBatch(context) {
         await combat.delete();
       });
 
-      it("Frost Strike: the next attack this turn is promised 4 Frost", async function () {
+      it("Frost Strike: each roll of the next Attack this turn is promised 6 Frost (the spell audit, D-1711)", async function () {
         this.timeout(120000);
         const knight = await knightWith("ZZ DK5 Strike", { spells: ["Frost Strike"] });
         const npc = await foe(30);
@@ -634,14 +634,30 @@ export function deathKnightSpellsBatch(context) {
         await bank(knight, 13);
         assert.ok(await castFromSheet(knight, "Frost Strike", { face: 20 }), "the cast posted its card");
         const entry = await until(() => (knight.getFlag(SCOPE, NEXT_ATTACK_FLAG) ?? []).find(e => e.name === "Frost Strike"), "the promise laid");
-        assert.equal(entry.damage, 4);
+        assert.equal(entry.damage, 6);
         assert.equal(entry.type, "frost");
-        // The next attack takes it: 4 Frost on the row, and the promise gone.
-        const weapon = knight.items.find(i => i.type === "weapon" && i.name === "Greatsword");
-        const blow = await attackFromSheet(knight, weapon, tokenOf(npc), { face: 18 });
-        const frost = (flagsOf(blow).damageByTarget?.[0]?.parts ?? []).filter(p => p?.type === "frost").map(p => p.damage);
-        assert.deepEqual(frost, [4], `4 Frost rides the next attack (${JSON.stringify(flagsOf(blow).damageByTarget?.[0] ?? {}).slice(0, 300)})`);
-        await until(() => !(knight.getFlag(SCOPE, NEXT_ATTACK_FLAG) ?? []).some(e => e.name === "Frost Strike"), "the promise taken");
+        assert.equal(entry.rolls, "each", "a promise to every roll of the Attack");
+        // The next Attack's first roll reads it and MARKS it; that Attack's second roll (Extra
+        // Attack's, which a level 20 knight makes: the run answers its roll dialog under "skip")
+        // reads the marked promise and takes it. So both rolls carry 6 Frost and nothing is left.
+        // (The first draft of this test waited for the mark to stand after the Attack, which it
+        // never does once the second roll has made its take; the live run of the audit found it.)
+        const frostOf = card => (flagsOf(card).damageByTarget?.[0]?.parts ?? []).filter(p => p?.type === "frost").map(p => p.damage);
+        const cards = [];
+        const hook = Hooks.on("createChatMessage", m => { if (m.speaker?.actor === knight.id && m.flags?.[SCOPE]?.kind === "attack") cards.push(m); });
+        try {
+          const weapon = knight.items.find(i => i.type === "weapon" && i.name === "Greatsword");
+          const blow = await attackFromSheet(knight, weapon, tokenOf(npc), { face: 18 });
+          assert.deepEqual(frostOf(blow), [6], `6 Frost rides the next attack (${JSON.stringify(flagsOf(blow).damageByTarget?.[0] ?? {}).slice(0, 300)})`);
+          await until(() => cards.length >= 2, "Extra Attack's second roll posted its card");
+        } finally {
+          Hooks.off("createChatMessage", hook);
+        }
+        assert.deepEqual(frostOf(cards[1]), [6], `the second roll carries the 6 Frost too (${JSON.stringify(flagsOf(cards[1]).damageByTarget?.[0] ?? {}).slice(0, 300)})`);
+        await until(() => !(knight.getFlag(SCOPE, NEXT_ATTACK_FLAG) ?? []).some(e => e.name === "Frost Strike"),
+          `the second roll took the promise: ${JSON.stringify(knight.getFlag(SCOPE, NEXT_ATTACK_FLAG) ?? [])}`);
+        assert.notOk(knight.pendingNextAttack().typed.some(t => t.name === "Frost Strike"), "another Attack's first roll reads nothing");
+        assert.notOk(knight.pendingNextAttack({ secondRoll: true }).typed.some(t => t.name === "Frost Strike"), "nor its second roll");
         await combat.delete();
       });
 

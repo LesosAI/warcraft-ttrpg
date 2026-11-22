@@ -58,6 +58,10 @@ export async function restCard({
     else if (g.kind === "sandEmptied") lines.push({ label: game.i18n.localize("AZEROTH.Pool.Sand"), value: `\u2212${Math.abs(g.amount)}` });
     // Runic Power empties when a Long Rest finishes, and only then (D-943).
     else if (g.kind === "runicPowerEmptied") lines.push({ label: game.i18n.localize("AZEROTH.Pool.RunicPower"), value: `\u2212${Math.abs(g.amount)}` });
+    // Hatred empties when a Short or Long Rest finishes (the Demon Hunter plan's R2), and the Fel it
+    // gave is said beside it; the Fel's own card follows from the unresisted door.
+    else if (g.kind === "hatredEmptied") lines.push({ label: game.i18n.localize("AZEROTH.Pool.Hatred"), value: `\u2212${Math.abs(g.amount)}` });
+    else if (g.kind === "hatredFel") flags.push(game.i18n.format("AZEROTH.Rest.HatredFel", { n: g.held ?? 0, fel: g.fel ?? 0 }));
     // A character who does not eat or drink recovered with neither (D-946), said so the
     // rest does not read as a meal forgotten.
     else if (g.kind === "needsNoFood") flags.push(game.i18n.localize("AZEROTH.Rest.NeedsNoFood"));

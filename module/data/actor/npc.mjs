@@ -52,6 +52,7 @@ import { nearbyCreatures } from "../../effects/passives.mjs";
 import { cleanTempSource } from "../../rules/temporary-health.mjs";
 import { withLaidVulnerable } from "../../rules/laid-vulnerable.mjs";
 import { veilBanesOn } from "../../rules/sovereign-spells.mjs";
+import { agilityBanesOn } from "../../rules/demon-hunter-spells.mjs";
 
 /**
  * An ability's automation (D-647), in `rules/class-features`' vocabulary:
@@ -503,6 +504,8 @@ export class NpcData extends foundry.abstract.TypeDataModel {
     this.vulnerable = withLaidVulnerable(this.vulnerable ?? [], this.parent?.effects ?? []);
     // 07 §17's Veil of Mist on a creature that cast it (D-1364): the roll dialog's `sovDeterred` lane, as a character's.
     this.sovereignDeterred = veilBanesOn(this.parent?.effects ?? []);
+    // And 07 §15's Unnatural Agility on a creature that cast it (D-1546): the same lane.
+    this.sovereignDeterred = [...this.sovereignDeterred, ...agilityBanesOn(this.parent?.effects ?? [])];
     // **EVERY LINE ADDS TO WHAT IS THERE** and never recomputes from `_source`
     // (D-691's own scar): the `initial` phase lands before this method, so a
     // plain assignment writes an Active Effect's own point back out again.

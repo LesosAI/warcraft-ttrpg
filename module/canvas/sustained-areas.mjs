@@ -40,7 +40,7 @@
  */
 
 import { fightScenes } from "../rules/fight-scenes.mjs";
-import { areaLapsed, firstEntry, hasAreaTick, joinFight, staleAreas } from "../rules/area-ticks.mjs";
+import { areaLapsed, firstEntry, grownRadius, hasAreaTick, joinFight, staleAreas } from "../rules/area-ticks.mjs";
 import {casterLifeEnded} from '../rules/end-turn-damage.mjs';
 import {AZEROTH} from '../config.mjs';
 import { sustainRegionTransferPending } from "../rules/sustain-region-suspension.mjs";
@@ -52,6 +52,8 @@ import { spellAreaFor } from "../rules/talent-effects.mjs";
 // Whether what a queued pass writes is still in the world when the pass runs
 // (the full-suite fix of D-757): a deleted scene's object keeps its Regions.
 import { actorInWorld, regionInWorld, sceneInWorld } from "./in-world.mjs";
+// 07 §11's Starweave and Skyfall (the spell audit; D-1710): the link each writes as it is placed.
+import { ENDS_AREA, registerAreaLinkHooks } from "../effects/starweave-context.mjs";
 
 /** The flags scope a placed area carries (`dice/chat.mjs#regionFlagsFromCard`). */
 const SCOPE = "azeroth-rpg";
@@ -122,10 +124,25 @@ export function areaRecord(region) {
     ...(sustainRegionTransferPending(region) ? { transferPending: true } : {}),
     lasts: f.lasts ?? null,
     placedAt: f.placedAt ?? null,
+    // **ENDED BY ANOTHER AREA** (07 §11's Skyfall: *The Starweave ends*; D-1710): a Region on the
+    // same scene names this one and its cast in its `endsArea`, so the sweep takes it off.
+    ...(endedByAnother(region) ? { consumed: true } : {}),
     // An area whose span is the world's clock alone, fight or no fight (04's
     // Lightwell, D-779): never given a fight's clock by `clockAreasNow`.
     ...(f.worldClock === true ? { worldClock: true } : {})
   };
+}
+
+/** Whether another Region on the scene records that it ends this one (Skyfall's Starweave; D-1710). */
+function endedByAnother(region) {
+  const cast = region?.flags?.[SCOPE]?.cast ?? null;
+  if (!cast || !region?.uuid) return false;
+  for (const other of region.parent?.regions ?? []) {
+    if (other === region) continue;
+    const ends = other?.flags?.[SCOPE]?.[ENDS_AREA];
+    if (ends?.regionUuid === region.uuid && ends.cast === cast) return true;
+  }
+  return false;
 }
 
 /**
@@ -846,10 +863,17 @@ export function growAreas(scene, caster, token = null) {
       if (shape?.type !== "circle") continue;
       const data = typeof shape.toObject === "function" ? shape.toObject() : { ...shape };
       const area = f.area && typeof f.area === "object" ? { ...f.area } : null;
+      // **NEVER PAST ITS CEILING** (Hoarfrost's *to a radius of at most 40 feet*, the spell audit;
+      // D-1713): the radius in feet off the shape, grown by `grownRadius`, which answers null at
+      // the ceiling, so an area there is left alone.
+      const radiusFt = (Number(data.radius) || 0) / scale;
+      const nextFt = grownRadius(radiusFt, feet, f.areaTick?.growsMax ?? null);
+      if (nextFt === null) continue;
+      const added = nextFt - radiusFt;
       updates.push({
         _id: region.id,
-        shapes: [{ ...data, radius: (Number(data.radius) || 0) + feet * scale }],
-        ...(area ? { [`flags.${SCOPE}.area`]: { ...area, distanceFt: (Number(area.distanceFt) || 0) + feet } } : {})
+        shapes: [{ ...data, radius: nextFt * scale }],
+        ...(area ? { [`flags.${SCOPE}.area`]: { ...area, distanceFt: (Number(area.distanceFt) || 0) + added } } : {})
       });
     }
     const grown = updates.filter(u => regionInWorld(scene.regions.get(u._id)));
@@ -896,6 +920,10 @@ function quietly(promise) {
  *   moved. Both passes go through the one queue.
  */
 export function registerSustainedAreaHooks() {
+  // **A STARWEAVE OR A SKYFALL TAKES ITS LINK AS IT IS CREATED** (D-1710), on the client creating it,
+  // whoever that is: the link is part of the creation, never a second write - so it is no writer's hook,
+  // and it lives with its law (`effects/starweave-context.mjs`).
+  registerAreaLinkHooks();
   Hooks.on("updateActor", (actor, changed) => {
     if (!isWriter()) return;
     if (changed?.flags?.[SCOPE]) quietly(sweepAreas({ caster: actor.uuid }));
@@ -907,7 +935,10 @@ export function registerSustainedAreaHooks() {
     // A Breath's cone (02's Breath): taken away once its cue has played.
     if (Number(region?.flags?.[SCOPE]?.afterCue) > 0) quietly(removeAfterCue(region));
     if (!region?.flags?.[SCOPE]?.cast) return;
-    quietly(sweepAreas({ scenes: [region.parent], ids: [region.id] }));
+    // A Skyfall's Starweave is judged with it, and goes (D-1710).
+    const ends = region.flags[SCOPE][ENDS_AREA]?.regionUuid ?? null;
+    const endsId = ends ? (region.parent?.regions ?? []).find(r => r.uuid === ends)?.id ?? null : null;
+    quietly(sweepAreas({ scenes: [region.parent], ids: [region.id, ...(endsId ? [endsId] : [])] }));
     // A placed area whose spell, or whose caster's talent, makes it
     // Difficult ground takes its behavior on the GM's client (D-757).
     quietly(reconcileGround({ scenes: [region.parent] }));

@@ -7,6 +7,7 @@ import { resolveDamage } from "./mitigation.mjs";
 import { sustainEntryTransferPending } from "./sustain-entry-transfer.mjs";
 // The class that upkeeps its spells in Momentum (D-944).
 import { CLASS_SPELL_POOL } from "./runes.mjs";
+import { poolHeldBy } from "./pools.mjs";
 // The Sovereign's Vitae: an upkeep short of it takes Health, 1 for 1 (02 §7; the plan's V4).
 import { VITAE, vitaePayment } from "./vitae.mjs";
 
@@ -123,10 +124,13 @@ export function upkeep(entries = [], pools = [], { costOf = () => 1, health = nu
     const named = typeof entry?.pool === "string" && entry.pool && entry.pool !== "mana" ? entry.pool : null;
     if (named) {
       const of = pools.filter(p => p.name === named);
-      const pick = of.find(p => p.itemId === entry.itemId) ?? of[0] ?? null;
+      // A merged Energy pool answers for every member (02 §10, D-1723).
+      const pick = of.find(p => p.itemId === entry.itemId) ?? of.find(p => (p.itemIds ?? []).includes(entry.itemId)) ?? of[0] ?? null;
       return pick ? keyOf(pick) : null;
     }
-    const power = pools.find(p => p.kind === "power" && p.itemId === entry?.itemId) ?? null;
+    // **THE ONE ENERGY POOL TWO CLASSES SHARE** (02 §10, D-1723): a Sustain a Demon Hunter second to a Rogue cast
+    // names the Demon Hunter's class item, which is a MEMBER of the merged row, never its holder.
+    const power = poolHeldBy(pools, entry?.itemId, "power");
     // **A CLASS THAT PAYS ITS SPELLS IN MOMENTUM UPKEEPS THEM THERE** (D-944): the Death
     // Knight's Power is its runes, and a Sustain entry recorded with no pool (one cast
     // before the class's pool was named on it) pays its upkeep in Runic Power, never in

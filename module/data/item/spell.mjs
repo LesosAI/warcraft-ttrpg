@@ -57,7 +57,9 @@ export class SpellData extends foundry.abstract.TypeDataModel {
       // **AND VITAE, THE SOVEREIGN'S** (02 §7; the San'layn and Sovereign plan, V1; D-1240): 07 prints
       // **Vitae** on the 36 spells the Sovereign alone casts, and a choice list without it made the
       // model refuse the word and `migrateData` fold it back to Mana.
-      costPool: new fields.StringField({ required: false, blank: false, initial: "mana", choices: () => ["mana", "runicPower", "vitae"] }),
+      // **AND ENERGY, THE DEMON HUNTER'S** (the Demon Hunter plan: *The DH-only spells print **Energy**
+      // in the cost field*); migration 0.16.0 stamps a held copy whose pack copy prints it.
+      costPool: new fields.StringField({ required: false, blank: false, initial: "mana", choices: () => ["mana", "runicPower", "vitae", "energy"] }),
       // **A BLOOD CURSE IS A TAG THE ENTRY STATES** (02 §7, *Blood curses*; D-1126, D-1241): true on
       // the eight spells whose effect says *This spell is a blood curse*, stamped by the parser, read by
       // `effects/sovereign-spells.mjs` to tag the effect a failure lays. False on every other spell.
@@ -185,7 +187,10 @@ export class SpellData extends foundry.abstract.TypeDataModel {
           ratingFrom: new fields.StringField({ required: false, blank: false, choices: [...TICK_RATING_FROM] }),
           // 07 §17's Shroud of Sorrow (D-1367): the Health the caster regains for each enemy the damage reaches, only
           // where the entry says so.
-          drain: new fields.NumberField({ required: false, nullable: true, integer: true, min: 0 })
+          drain: new fields.NumberField({ required: false, nullable: true, integer: true, min: 0 }),
+          // 07 §16's Firewake (the spell audit; D-1714): the cast's own number where the area's is another, only where
+          // the entry says so.
+          castRating: new fields.NumberField({ required: false, nullable: true, integer: true, min: 0 })
         }),
         heal: optionalNumberField({ min: 0 }),
         against: new fields.ArrayField(new fields.SchemaField({
@@ -279,6 +284,9 @@ export class SpellData extends foundry.abstract.TypeDataModel {
           standFree: new fields.BooleanField({ initial: false })
         }), { initial: [] }),
         grows: optionalNumberField({ min: 1 }),
+        // Hoarfrost's ceiling, the radius in feet its growth stops at (the spell audit; D-1713). Null for every
+        // other spell, and for a document stored before the key, which grows as it did.
+        growsMax: optionalNumberField({ min: 1 }),
         excludesCaster: new fields.BooleanField({ initial: false }),
         retaliate: new fields.BooleanField({ initial: false }),
         reason: new fields.StringField({ required: true, blank: true, initial: "" })
@@ -321,6 +329,12 @@ export class SpellData extends foundry.abstract.TypeDataModel {
         hit: new fields.BooleanField({ initial: false }),
         sl: optionalNumberField(),
         spellpower: new fields.BooleanField({ initial: false }),
+        // A RISING tick (07's Agonizing Flames, D-1500): the rise a landing and the cap,
+        // an expression worked out at the cast. Empty on every other spell.
+        ramp: new fields.SchemaField({
+          step: optionalNumberField({ min: 1 }),
+          max: new fields.StringField({ required: true, blank: true, initial: "" })
+        }),
         reason: new fields.StringField({ required: true, blank: true, initial: "" })
       }),
 
@@ -351,7 +365,7 @@ export class SpellData extends foundry.abstract.TypeDataModel {
   static migrateData(source) {
     // The printed cost's pool (D-944): a word the choices lack is Mana, and only
     // where the key is PRESENT, since this runs over partial updates too (D-671).
-    if (source && typeof source === "object" && "costPool" in source && !["mana", "runicPower", "vitae"].includes(source.costPool)) source.costPool = "mana";
+    if (source && typeof source === "object" && "costPool" in source && !["mana", "runicPower", "vitae", "energy"].includes(source.costPool)) source.costPool = "mana";
     if (source?.rider && source.rider.mode !== undefined && source.rider.mode !== null && !["replace", "add"].includes(source.rider.mode)) source.rider.mode = null;
     if (source && typeof source === "object" && "areaTick" in source) {
       if (source.areaTick && typeof source.areaTick === "object" && !Array.isArray(source.areaTick)) cleanAreaTick(source.areaTick);

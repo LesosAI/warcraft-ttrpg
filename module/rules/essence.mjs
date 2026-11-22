@@ -33,6 +33,8 @@
  * `EMPOWER_OPTIONS`, so a later ruling changes one place.
  */
 
+// The Demon Hunter's Hatred pays every maneuver (C62).
+import { HATRED, hatredPays } from "./hatred.mjs";
 import { DISPOSITIONS } from "./distance.mjs";
 import { kindsOf } from "./creature-kinds.mjs";
 import { castTestOf } from "./resisted.mjs";
@@ -194,13 +196,20 @@ export function essenceGainRefusal({ before = 0, after = 0, source = null, gm = 
  * Parry or for a maneuver*; D-1051). A cost that names no pool - a maneuver, the called shot,
  * a Parry, `pools.mjs`'s *any Momentum* (`ANY_MOMENTUM`) and *any pool* (`ANY_POOL`) - is
  * paid from a pool this answers true for, and Essence is never one of them. A cost that names
- * Essence by name still finds it.
+ * Essence by name still finds it. `kind` is `maneuver` at a maneuver's door (the called shot's
+ * included), which the Demon Hunter's Hatred pays and no other kind.
  *
  * @param {string|null} poolName
+ * @param {string} [kind]
  * @returns {boolean}
  */
-export function paysByKind(poolName) {
-  return poolName !== ESSENCE;
+export function paysByKind(poolName, kind = "any") {
+  if (poolName === ESSENCE) return false;
+  // **HATRED PAYS EVERY MANEUVER AND NOTHING ELSE BY KIND** (the Demon Hunter plan's C62: *"Hatred
+  // can pay all maneuvers."*; `hatred.mjs#hatredPays`): a maneuver door names its kind, and a Parry,
+  // *any Momentum* and *any pool* name none, so Hatred pays none of those.
+  if (poolName === HATRED) return hatredPays(kind);
+  return true;
 }
 
 /* ------------------------------------------------------------------ */

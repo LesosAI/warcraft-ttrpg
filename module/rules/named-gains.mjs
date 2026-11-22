@@ -2,7 +2,7 @@
  * **A POOL THAT RISES THROUGH A NAMED DOOR ALONE** (the San'layn and Sovereign plan's C3 and
  * B.12 finding 4). Pure: no Foundry imports (CLAUDE.md §3).
  *
- * Four pools may rise only where a door names its source, and each had (or would have had) its
+ * Five pools may rise only where a door names its source, and each had (or would have had) its
  * own copy of the same refusal beside the others in `AzerothActor#writePoolsNow`:
  *
  * | Pool | Kind | The rule | Sources |
@@ -11,6 +11,7 @@
  * | **Essence** (the Necromancer) | Momentum | *You gain Essence in no other way unless a feature, talent or spell says so* | `ESSENCE_GAIN_SOURCES` |
  * | **Tribute** (the Sovereign) | Momentum | *You gain Tribute in no other way unless a feature, talent or spell says so* (02 §7) | `TRIBUTE_GAIN_SOURCES` |
  * | **Vitae** (the Sovereign) | Power | *"Feeding only"* (the lead, R9) | `VITAE_GAIN_SOURCES` |
+ * | **Hatred** (the Demon Hunter) | Momentum | *Hitting, SL 2 and winning an Opposed Test give you none* (the Demon Hunter plan's class entry) | `HATRED_GAIN_SOURCES` |
  *
  * This module is the ONE table and the ONE refusal. `runes.mjs` and `essence.mjs` re-export their
  * lists and keep their named refusals as wrappers over `namedGainRefusal`, so every reader that
@@ -61,12 +62,31 @@ export const TRIBUTE_GAIN_SOURCES = Object.freeze([
  */
 export const VITAE_GAIN_SOURCES = Object.freeze(["feed", "vial", "source", "refund", "hand"]);
 
+/**
+ * **THE DEMON HUNTER'S HATRED** (the Demon Hunter plan's class entry: *Gain Hatred equal to 1 plus the
+ * tier of the spell each time you cast one, 1 each time you use Beyond Limits, and Hatred wherever a
+ * feature or talent says so. Hitting, SL 2 and winning an Opposed Test give you none.*), each door by
+ * its own word so a census can read it:
+ *
+ * - `cast` - a spell cast, 1 plus its tier, on a successful and a failed Casting Test (C63, Q7);
+ * - `limit` - Beyond Limits, 1 once a turn;
+ * - `devour` - a soul devoured: Devour Soul's demon, Swallow Their Magic, Feast of Souls, a
+ *   Crystalized Soul spent for Hatred, Devour the Spell;
+ * - `rend` - Mana Rend's hit;
+ * - `flows` - Taste of Power's fill to the cap;
+ * - `prepared` - I Have Prepared's fill to 13;
+ * - `refund` - a withdrawn use giving back a price it took;
+ * - `hand` - a GM's own hand on the sheet. A player's hand is refused.
+ */
+export const HATRED_GAIN_SOURCES = Object.freeze(["cast", "limit", "devour", "rend", "flows", "prepared", "refund", "hand"]);
+
 /** The table: pool key (`AZEROTH.poolTypes`) to the sources a rise may name. */
 export const NAMED_GAIN_SOURCES = Object.freeze({
   runicPower: RUNIC_GAIN_SOURCES,
   essence: ESSENCE_GAIN_SOURCES,
   tribute: TRIBUTE_GAIN_SOURCES,
-  vitae: VITAE_GAIN_SOURCES
+  vitae: VITAE_GAIN_SOURCES,
+  hatred: HATRED_GAIN_SOURCES
 });
 
 /**
@@ -78,7 +98,8 @@ export const GAIN_OPTION = Object.freeze({
   runicPower: "runicGain",
   essence: "essenceGain",
   tribute: "tributeGain",
-  vitae: "vitaeGain"
+  vitae: "vitaeGain",
+  hatred: "hatredGain"
 });
 
 /** The lang key prefix a refusal is said in, by pool: the prefix, then the reason (`unsourced`, `hand`). */
@@ -86,7 +107,8 @@ export const GAIN_WORDS = Object.freeze({
   runicPower: "AZEROTH.Runes.Refuse.gain.",
   essence: "AZEROTH.Essence.Refuse.gain.",
   tribute: "AZEROTH.Tribute.Refuse.gain.",
-  vitae: "AZEROTH.Vitae.Refuse.gain."
+  vitae: "AZEROTH.Vitae.Refuse.gain.",
+  hatred: "AZEROTH.Hatred.Refuse.gain."
 });
 
 /** Whether a pool rises only through a named door. */
@@ -94,7 +116,7 @@ export function isNamedGainPool(pool) {
   return typeof pool === "string" && Object.hasOwn(NAMED_GAIN_SOURCES, pool);
 }
 
-/** Every option key `writePoolsNow` reads and never sends (the four of `GAIN_OPTION`). */
+/** Every option key `writePoolsNow` reads and never sends (the five of `GAIN_OPTION`). */
 export const GAIN_OPTION_KEYS = Object.freeze(Object.values(GAIN_OPTION));
 
 /**

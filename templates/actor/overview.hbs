@@ -158,6 +158,12 @@
       <p class="azeroth-force-line azeroth-horde-overview" data-horde-overview>{{hordePanel.overview}}</p>
       {{/if}}
 
+      {{#if hatred}}
+      {{!-- The Demon Hunter's compact Hatred row (D11; D-1581): the count against the cap, the rest's price and
+            what a Fel Lash hit sheds now. --}}
+      <p class="azeroth-force-line azeroth-hatred-overview" data-hatred-overview>{{hatred.overview}}</p>
+      {{/if}}
+
       {{#if overview.inForce.shape}}
       {{!-- THE SHAPE WORN (02 §7, D-769), first: every number under it that
             the block gives moved with it, and the line says whose they are. --}}

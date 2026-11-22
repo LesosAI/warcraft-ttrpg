@@ -870,9 +870,9 @@ export function spellEffectBatch(context) {
       assert.equal(plain.message.flags["azeroth-rpg"].damageByTarget[0].damage, 1, "the base Rating against an unhindered target");
       const button = plain.element.querySelector('[data-action="applyDamage"][data-rider]');
       assert.ok(button, "no rider button for the table's call");
-      assert.equal(Number(button.dataset.damage), 5, "the rider's Rating is 5 instead");
+      assert.equal(Number(button.dataset.damage), 4, "the rider's Rating is 4 instead (the spell audit, D-1702)");
       const slowed = await cardOf("spell", mage, { spell, face: 20, args: { targets: [snapshotOf(npc, ["slowed"])] } });
-      assert.equal(slowed.message.flags["azeroth-rpg"].damageByTarget[0].damage, 5, "a Slowed target takes the rider's Rating without a click");
+      assert.equal(slowed.message.flags["azeroth-rpg"].damageByTarget[0].damage, 4, "a Slowed target takes the rider's Rating without a click");
       assert.isNull(slowed.element.querySelector('[data-action="applyDamage"][data-rider]'), "no button where the rider already applied");
       assert.include(slowed.element.querySelector(".azeroth-damage em")?.textContent ?? "", "Slowed");
     });

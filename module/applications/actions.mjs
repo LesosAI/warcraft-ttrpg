@@ -173,6 +173,10 @@ import { BARE_STATUSES, carrierOwnsChip, clearCarrierChip, stepCarrierPoison } f
 import { isAntivenom } from "../rules/antivenom.mjs";
 import { conditionEffectOf } from "../rules/condition-carriers.mjs";
 import { audienceListening, veiledFrom } from "../rules/sovereign-spells.mjs";
+// A glaive Flame Crash threw is swung by nobody until it is back (07 §15; D-1549).
+import { awayRefusal } from "../rules/demon-hunter-spells.mjs";
+// And the talents' (Phase 5): Iron Will's line on a Spirit Resilience Test's dialog.
+import { ironWillLineOffer } from "../effects/demon-hunter-talents.mjs";
 
 /**
  * WHAT THE THINGS THE TARGET IS WEARING ANSWER BACK (08 SS20, D-692).
@@ -816,8 +820,9 @@ export async function reactWithDialog(actor, reaction, { attackTotal = null, mes
 }
 
 /**
- * *A class that builds Momentum, and 1 Momentum (a Rogue pays 1 Energy)*
- * (06 §6, D-720). The pool was checked at the door (`canReact`) and is spent
+ * *A class that builds Momentum, and 1 Momentum (a Rogue, a Chromatic Champion or a
+ * Demon Hunter pays 1 Energy)* (06 §6, D-720, D-1438; `parryPoolFor` sends a Demon
+ * Hunter's to its Energy, never its Hatred). The pool was checked at the door (`canReact`) and is spent
  * once there is a roll to spend it on.
  *
  * **A DISMISSED DIALOG IS NOT A PARRY.** This used to run before the dialog
@@ -1039,7 +1044,7 @@ async function parryNow(actor, weaponName, { attackTotal, messageId, targetIndex
   // Reaction `reactWithDialog` spent at the door stands (D-720).
   if (parryCommit !== null && !parryCommitValid(parryCommit, actor, messageId, targetIndex)) throw Error("Parry claim changed");
   if (!card) { recordParryOutcome(parryCommit, "cancelled"); return null; }
-  // *…and 1 Momentum (a Rogue pays 1 Energy)* (06 §6, D-720), now that there is
+  // *…and 1 Momentum (a Rogue, a Chromatic Champion or a Demon Hunter pays 1 Energy)* (06 §6, D-720), now that there is
   // a Test to pay for: it holds or it misses and the point is gone either way.
   const paid = parryCommit !== null ? await payClaimedParry(parryCommit) : await payParry(actor);
   // **AND A PARRY NOBODY PAID FOR DOES NOT HOLD** (the final review,
@@ -1564,6 +1569,12 @@ function secondRollOverrides(actor, args, secondTargets) {
     // ONE Attack with two rolls (D-704): it was paid with the first, and its
     // on-hit rides the first roll's card.
     riders: [],
+    // **EXCEPT 02's FEL LASH** (*You may use it on each attack you make, paying each
+    // time*; the Demon Hunter plan's Q9): ticked on the first roll's dialog, it is
+    // handed to the second as `againRiders`, and `rollTest` pays it again where its
+    // line is still open now that the first has paid (`demon-hunter-features.mjs
+    // #PER_ROLL_RIDERS`, the one list, held to this literal by its Vitest).
+    againRiders: (args.riders ?? []).filter(id => id === "fel-lash"),
     // Nor any talent line (D-774): Static Charge's tier rode the first roll.
     talentLines: [],
     // And what *a melee attack* earns rides the first roll alone (04's
@@ -1630,7 +1641,7 @@ export async function castWithDialog(actor, spell, event = null, { targets = nul
   const castAsSchool = bonusSchool({ school: sys.school ?? null, damageSchool: sys.damage?.school ?? null });
   const discount = spellDiscountFor(talentsNow, {
     school: discountSchool, mana: sys.mana ?? 0, states: veinsStates(flaggedEffects(actor, VEINS_FLAG).map(r => r.flag)),
-    pool: spellPayment(spellPoolFor(talentsNow, { name: spell.name, school: sys.school ?? null }), actor.classItems ?? [])?.pool ?? null
+    pool: spellPayment(spellPoolFor(talentsNow, { name: spell.name, school: sys.school ?? null }), actor.classItems ?? [], { school: sys.school ?? null, classes: sys.classes ?? null })?.pool ?? null
   });
   const mana = spellManaCost({ mana: sys.mana ?? 0, name: spell.name, school: discountSchool }, actor.system?.signatureEffects, { next: take.amount, less: discount.amount });
   // 02's Overchannel Mastery (D-779): an Overchannel costs the Mana once more a cast.
@@ -1671,8 +1682,10 @@ export async function castWithDialog(actor, spell, event = null, { targets = nul
   // asks for Mana*; the Legacy branches' door 8), with the ability it casts with.
   const inForm = actor.inShapeshiftForm === true;
   // And a class that pays in its Momentum (D-944).
-  const talentPool = spellPayment(spellPoolFor(talentsNow, { name: spell.name, school: sys.school ?? null }), actor.classItems ?? []);
-  const payPool = talentPool ? ((actor.poolSnapshot?.() ?? []).find(p => p.name === talentPool.pool) ?? null) : null;
+  const talentPool = spellPayment(spellPoolFor(talentsNow, { name: spell.name, school: sys.school ?? null }), actor.classItems ?? [], { school: sys.school ?? null, classes: sys.classes ?? null });
+  // The class item's own pool where the payment names one (the Demon Hunter's Energy beside a Rogue's).
+  const payPool = talentPool ? ((actor.poolSnapshot?.() ?? []).find(p => p.name === talentPool.pool && (talentPool.itemId == null || p.itemId === talentPool.itemId))
+    ?? (actor.poolSnapshot?.() ?? []).find(p => p.name === talentPool.pool) ?? null) : null;
   const price = spellPrice(mana, { inShapeshiftForm: inForm, pool: talentPool?.pool ?? null });
   const ferocity = price.pool === "ferocity"
     ? ((actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === "ferocity") ?? null)
@@ -1986,6 +1999,10 @@ export function resilienceWithDialog(actor, resilience, event = null, { dc = nul
     // And the Boon a talent of whoever forced it gives the creature resisting (04's Drawn
     // Across: *A Boss makes the Test with a Boon*; the Legacy branches' door 25), named.
     ...(talentBoons?.boons > 0 ? { talentBoons } : {}),
+    // 04's Iron Will on a Spirit Test (Phase 5): unticked, the table saying the Test is against Fel, or against
+    // being Charmed or Frightened; `rollTest` judges it again. 02's Beyond Limits is no line here: it is offered after
+    // the die, at the seam (D-1720, D-1724: `AzerothActor#offerElunesRegard`).
+    talentLineOffer: [...ironWillLineOffer(actor, resilience)],
     run: game.system.azeroth.workflows.rollResilience
   }, event);
 }
@@ -2066,6 +2083,10 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
   // 07 §17's Veil of Mist: *You cannot make a weapon or claw attack for the duration* (D-1364), the same shape.
   const veiled = veiledFrom(actor?.effects ?? []);
   if (veiled !== null) { ui.notifications?.warn(game.i18n.format("AZEROTH.SovSpell.Veil.NoAttack", { name: actor.name, spell: veiled })); return null; }
+  // 07 §15's Flame Crash: a thrown glaive lies where it landed, *and you cannot attack with it until then* (C57;
+  // D-1549). `readyWeapons` lists it nowhere; this is the door for whatever hands it in regardless.
+  const away = awayRefusal(weapon);
+  if (away) { ui.notifications?.warn(game.i18n.format(away, { name: actor.name, weapon: weapon.name })); return null; }
   if (!guardPendingCustodyItem(weapon).ok) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.Item.CustodyPending"));
     return null;
@@ -3118,7 +3139,7 @@ export function rollAbility(actor, key, event = null) {
 export function maneuversContext(actor) {
   const ctx = actor.maneuverContext?.() ?? {};
   // Never Essence (`rules/essence.mjs#paysByKind`): a Necromancer's rows read no pool.
-  const pool = (actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && paysByKind(p.name)) ?? null;
+  const pool = (actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && paysByKind(p.name, "maneuver")) ?? null;
   return AZEROTH.maneuvers.map(m => {
     const priced = maneuverCost(m.key, ctx);
     const usable = m.key !== "calledShot";

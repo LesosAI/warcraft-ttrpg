@@ -139,6 +139,9 @@ import { NECRO_FEATURE_ANIMATIONS, NECRO_FILTERS, NECRO_SPELL_ANIMATIONS } from 
 import { SOVEREIGN_CORE_ANIMATIONS } from "./sovereign-core-animations.mjs";
 // The Sovereign's spells, states, features and talents, and its recolours (the plan's C14 and Phase 6).
 import { SOV_FEATURE_ANIMATIONS, SOV_FILTERS, SOV_SPELL_ANIMATIONS } from "./sovereign-animations.mjs";
+// The Demon Hunter's eight tier 1 spells, its features, states and talents, and its recolours (the Demon
+// Hunter plan's Phase 6; D-1580). Every talent's row has landed, so every talent's picture is in the table.
+import { DH_FEATURE_ANIMATIONS, DH_FILTERS, DH_SPELL_ANIMATIONS, liveTalentAnimations } from "./demon-hunter-animations.mjs";
 import { FORCED_MOVE_KEY } from "./animation-records.mjs";
 
 /* ------------------------------------------------------------------ */
@@ -314,7 +317,9 @@ export const FILTERS = Object.freeze({
   // The Necromancer's plague yellow, gut thread and grave vapour (`rules/necromancer-animations.mjs`).
   ...NECRO_FILTERS,
   // The Sovereign's blood red, crimson gaze and majesty (`rules/sovereign-animations.mjs`).
-  ...SOV_FILTERS
+  ...SOV_FILTERS,
+  // The Demon Hunter's fel washes for a near-white file (`rules/demon-hunter-animations.mjs`).
+  ...DH_FILTERS
 });
 
 /* ------------------------------------------------------------------ */
@@ -705,6 +710,9 @@ function loop(binding, layers, { state = null } = {}) {
  * **EMPTY SINCE PHASE 6**: all twelve have their rows (`rules/necromancer-animations.mjs
  * #NECRO_SPELL_ANIMATIONS`) and their directions, and the census holds every tier 1 spell to both.
  * The list stays, empty and held empty, for the next class that parses spells before its rows land.
+ *
+ * **THE DEMON HUNTER'S EIGHT** (D-1580): all eight have their rows and their directions, so the class's
+ * pending constant is gone (the Demon Hunter review's S4) and the list is empty again.
  */
 export const SPELL_ANIMATIONS_PENDING = Object.freeze([]);
 
@@ -1232,10 +1240,8 @@ export const SPELL_ANIMATIONS = Object.freeze({
       fx("jb2a.shield_themed.above.eldritch_web.01.dark_purple", { place: "holder", scale: 1.5 })
     ])
   },
-  // The token's alpha is never touched: the priest stays visible (07's own words).
-  fade: {
-    cues: [cue("cast", [fx("jb2a.smoke.puff.ring.01.white", { place: "source", scale: 1.1, filter: "DIM" }), snd(SOUNDS.gust, { volume: 0.4 })])]
-  },
+  // Fade moved to tier 2 in the spell audit (D-1702): its row is in
+  // `spell-animation-expansion.mjs`, the same cue.
   // **THE CARD RECORDS THE MOVE NOW** (the Legacy branches' doors 2 and 3): the
   // departure where the priest stood, at cast, and the arrival where the step put
   // them - both off the card's own `steps`, never off where the token stands when
@@ -1468,7 +1474,11 @@ export const SPELL_ANIMATIONS = Object.freeze({
 
   /* ================= The Sovereign's tier 1 (07 §17, Restricted Sovereign) ================= */
   // Ten rows, written in `rules/sovereign-animations.mjs` (the San'layn and Sovereign plan's C14).
-  ...SOV_SPELL_ANIMATIONS
+  ...SOV_SPELL_ANIMATIONS,
+
+  /* ================= The Demon Hunter's tier 1 (07, Restricted Demon Hunter) ================= */
+  // Eight rows, written in `rules/demon-hunter-animations.mjs` (the Demon Hunter plan's Phase 6).
+  ...DH_SPELL_ANIMATIONS
 });
 
 /* ------------------------------------------------------------------ */
@@ -3862,7 +3872,12 @@ export const FEATURE_ANIMATIONS = Object.freeze({
   // 02 §7's Sovereign and 04's Dominion, Vainglorious and Ravenous, and the states its blood magic lays - a
   // blood curse, Blood Prison's bonds, the latch, the leash, the prey mark, the Blood Monarch's wings
   // (`rules/sovereign-animations.mjs`; the plan's C14).
-  ...SOV_FEATURE_ANIMATIONS
+  ...SOV_FEATURE_ANIMATIONS,
+  // 02 §7's Demon Hunter and the states it lays - the demon's shape, I Have Prepared's minute, Inner Demon's
+  // torment, Flame Crash's burning ground - and 04's talents whose rows have landed
+  // (`rules/demon-hunter-animations.mjs`; the Demon Hunter plan's Phase 6).
+  ...DH_FEATURE_ANIMATIONS,
+  ...liveTalentAnimations()
 });
 
 /* ------------------------------------------------------------------ */
@@ -3921,7 +3936,6 @@ export const COMPARISONS = Object.freeze({
   "drain-life": { what: "loop", direction: "a narrow channel", draft: "jb2a.energy_strands.range.standard.purple.01", candidate: "jaamod.sequencer_fx_master.green_ray", filter: "PURPLE_G" },
   "drain-soul": { what: "loop", direction: "a narrow channel", draft: "jb2a.energy_strands.range.standard.purple.03", candidate: "jaamod.sequencer_fx_master.green_ray" },
   "health-funnel": { what: "loop", direction: "a narrow channel, caster to recipient", draft: "jb2a.energy_strands.range.standard.purple.04", candidate: "jaamod.sequencer_fx_master.green_ray" },
-  fade: { what: "cue", direction: "a brief cast cue; the priest stays visible", draft: "jb2a.smoke.puff.ring.01.white", candidate: "jaamod.smoke.color.purple" },
   "fel-bolt": { what: "cue", direction: "a green fel projectile", draft: "jb2a.ranged.04.projectile.01.green", candidate: "jaamod.sequencer_fx_master.projectile.green", also: "jaamod.sequencer_fx_master.vector_boom.green" },
   "doom-bolt": { what: "cue", direction: "a green fel projectile that gathers longer", draft: "jb2a.energy_strands.in.green.01", candidate: "jaamod.assets.pentagram_spin", filter: "FEL_O" },
   hellfire: { what: "loop", direction: "fel fire over the ground around the caster", draft: "jb2a.ground_cracks.01.orange", candidate: "jaamod.fire.fire_flat", filter: "FEL_O" },

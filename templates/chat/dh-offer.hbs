@@ -1,0 +1,13 @@
+{{!-- The Demon Hunter's Devour Soul offer (02 §7; the Demon Hunter plan's Phase 4a), posted on the active
+      GM's client by `effects/demon-hunter-features.mjs#offerDevour`, so the row names its own audience
+      (D-779): `data-reaction-owner` shows it to whoever owns the hunter. The press judges again before
+      anything is spent. An undead creature is offered with the note that a soulless one gives nothing. --}}
+<div class="azeroth azeroth-card azeroth-card-feature azeroth-dh-offer" data-message-kind="dhOffer">
+  <div class="azeroth-card-body">
+    <p class="azeroth-card-line azeroth-fired"><span>{{title}}</span><em>{{text}}</em></p>
+    {{#if undead}}<p class="azeroth-card-line azeroth-card-note">{{localize "AZEROTH.DemonHunter.Devour.UndeadNote"}}</p>{{/if}}
+    <div class="azeroth-card-actions" data-reaction-owner="{{holderUuid}}">
+      <button type="button" data-action="devourSoul" data-holder-uuid="{{holderUuid}}" data-victim-uuid="{{victimUuid}}" data-scene-id="{{sceneId}}" data-token-id="{{tokenId}}">{{localize "AZEROTH.DemonHunter.Devour.Button"}}</button>
+    </div>
+  </div>
+</div>

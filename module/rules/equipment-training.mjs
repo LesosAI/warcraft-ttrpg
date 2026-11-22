@@ -76,6 +76,11 @@ export function weaponTraining(item, access = []) {
   const scythe = form === "scythe" || /scythe/.test(words);
   const wand = classic === "wand" || /\bwand\b/.test(words);
   const claw = type === "fist" || classic === "fist weapon" || /\bclaws?\b/.test(words);
+  // **"glaives"** and **"fist weapons"** are 02's Demon Hunter row (*Glaives, blades, daggers, fist
+  // weapons, scythes*; the lead, R10 and C1): 08's Glaive type or a name holding *glaive* (the
+  // Moonglaive, the Warglaive, the seven glaives of C59), and 08's Fist type or a Classic fist weapon.
+  const glaive = type === "glaive" || /glaive/.test(words);
+  const fist = type === "fist" || classic === "fist weapon";
   const thrown = classic === "thrown" || (sys.traits ?? []).some(t => /^Thrown\b/i.test(t));
   const grip = gripOf(doc);
   const shortBlade = dagger || (sword && (form === "shortsword" || /\bLight\b/i.test((sys.traits ?? []).join(" "))));
@@ -88,6 +93,7 @@ export function weaponTraining(item, access = []) {
     || (a === "hammers" && hammer) || (a === "axes" && axe) || (a === "polearms" && polearm)
     || (a === "wands" && wand) || (a === "claws" && claw) || (a === "thrown" && thrown)
     || (a === "sickles" && sickle) || (a === "scythes" && scythe)
+    || (a === "glaives" && glaive) || (a === "fist weapons" && fist)
     || (a === "one-handed melee" && oneHanded));
 }
 

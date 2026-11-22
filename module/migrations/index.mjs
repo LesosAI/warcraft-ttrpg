@@ -105,6 +105,9 @@ import * as v01541 from "./0.15.4.1-sanlayn-journals.mjs";
 import * as v01542 from "./0.15.4.2-deft.mjs";
 import * as v01546 from "./0.15.4.6-sovereign-spells.mjs";
 import * as v0156 from "./0.15.6-identified.mjs";
+import * as v0160 from "./0.16.0-demon-hunter.mjs";
+import * as v01601 from "./0.16.0.1-spell-audit.mjs";
+import * as v01602 from "./0.16.0.2-energy-pool.mjs";
 import { forgetPacks } from "./walk.mjs";
 
 // Ordered oldest to newest. Add new entries at the end.
@@ -292,7 +295,19 @@ const CHAIN = [
   // 0.15.6: 08 §4's unidentified items - every Uncommon+ thing a character already holds is
   // written known (`unidentified: false`), so an absent flag is never stamped on the next move
   // (D-1435; the architect's review, must-fix 2).
-  { version: "0.15.6", module: v0156 }
+  { version: "0.15.6", module: v0156 },
+  // 0.16.0: the Demon Hunter release - the ten borrowed Fel spells name the Demon Hunter, its own
+  // spells print Energy, the Night Elf and the Blood Elf a character holds open it, each against its
+  // pack copy, and the rules chapters brought up to the book whose 02 §7 counts fifteen classes.
+  { version: "0.16.0", module: v0160 },
+  // 0.16.0.1: the spell audit on the spells a world holds - the book's numbers, words and descriptors on
+  // the 77 spells it moved, never the tier or the CLASSES line, never a GM's own words, and a Starweave
+  // Sustain released, each against its pack copy. A point step of the unreleased 0.16.0 (D-1715).
+  { version: "0.16.0.1", module: v01601 },
+  // 0.16.0.2: the Demon Hunter's third round - two Energy classes' stored values made one pool's (02 §10), the
+  // Short and Curved warglaives without Fast (08 §7) and Devour the Spell's turn-start trigger (07), each restamp
+  // against its pack copy. A point step of the unreleased 0.16.0 (D-1723).
+  { version: "0.16.0.2", module: v01602 }
 ];
 
 /**

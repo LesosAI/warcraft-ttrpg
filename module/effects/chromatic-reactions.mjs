@@ -172,6 +172,8 @@ export async function askDisruptWeave({ caster, spell, roll }) {
       dc, kind: "resilience", banes: row.banes,
       modifiers: resilienceModifiers(caster, row.resilience), rollData: caster.getRollData?.() ?? {}
     });
+    // The Resilience the after-the-die seam reads (02's Beyond Limits, D-1724).
+    test.options.resilience = row.resilience;
     await test.evaluate();
     await caster.offerElunesRegard?.(test);
     const passed = test.outcome?.success === true;

@@ -23,20 +23,20 @@
 export const PACK_COUNTS = Object.freeze({
   conditions: { count: 15, why: "A1 holds fifteen (D-307, D-472, D-519, D-695)" },
   talents: {
-    count: 588, branches: 49, legacy: 84,
-    why: "12 classes x 3 branches x 12 (the Chronomancer the tenth, D-847; the Necromancer's Flesh, Bone and Damned; the Sovereign's Dominion, Vainglorious and Ravenous, D-1128 to D-1130), the Chromatic Champion's 4 x 12 (04 §2, 02 §6) and the Death Knight's 2 x 12 (D-927), plus the seven Legacy branches x 12 that 04 §1's roster gives four of them (D-781)"
+    count: 624, branches: 52, legacy: 84,
+    why: "12 classes x 3 branches x 12 (the Chronomancer the tenth, D-847; the Necromancer's Flesh, Bone and Damned; the Sovereign's Dominion, Vainglorious and Ravenous, D-1128 to D-1130), the Chromatic Champion's 4 x 12 (04 §2, 02 §6) and the Death Knight's 2 x 12 (D-927), the Demon Hunter's Betrayer, Souleater and Sufferer (D-1437 to D-1449), plus the seven Legacy branches x 12 that 04 §1's roster gives four of them (D-781)"
   },
   gadgets: {
     count: 16,
     why: "04 §2's Gadgets table under the Tinker: eight original gadgets plus eight additions (2026-10-24)"
   },
   spells: {
-    count: 620,
-    why: "07 holds 620 across eight schools and five tiers, including the 24 approved thematic additions, the Chromatic Champion's five Earth-Warder spells (Stone Grip, Thunderlash, Earthmeld, Earthen Spike, Shattering Bolt), the Chronomancer's 34 sand spells (D-847), and the Death Knight's 47 (35 new Death spells, Raise Dracolich among them, and twelve Restricted to it in Frost and Shadow; D-918, D-922, D-932), and the Necromancer's 50 new Death spells (12, 11 and 12 at tiers 1 to 3, 9 at tier 4, 6 at tier 5), and the Sovereign's 54 (12, 15 and 14 at tiers 1 to 3, 8 at tier 4, 5 at tier 5; D-1131, and the second batch's 18, D-1340)"
+    count: 640,
+    why: "07 holds 640 across eight schools and five tiers, including the 24 approved thematic additions, the Chromatic Champion's five Earth-Warder spells (Stone Grip, Thunderlash, Earthmeld, Earthen Spike, Shattering Bolt), the Chronomancer's 34 sand spells (D-847), and the Death Knight's 47 (35 new Death spells, Raise Dracolich among them, and twelve Restricted to it in Frost and Shadow; D-918, D-922, D-932), and the Necromancer's 50 new Death spells (12, 11 and 12 at tiers 1 to 3, 9 at tier 4, 6 at tier 5), and the Sovereign's 54 (12, 15 and 14 at tiers 1 to 3, 8 at tier 4, 5 at tier 5; D-1131, and the second batch's 18, D-1340), and the Demon Hunter's 20 Restricted to it (8, 6 and 6 at tiers 1 to 3, paid in Energy; D-1437 to D-1449)"
   },
   careers: { count: 53, why: "03 holds 53 across four tiers" },
   races: { count: 13, why: "02 §5's thirteen races: eleven mortal peoples, the Chromatic Outcast and the San'layn (D-1151)" },
-  classes: { count: 14, why: "02 §7's fourteen classes (the Chronomancer the eleventh, D-847; the Death Knight the twelfth, D-917; the Necromancer the thirteenth; the Sovereign the fourteenth, D-1120)" },
+  classes: { count: 15, why: "02 §7's fifteen classes (the Chronomancer the eleventh, D-847; the Death Knight the twelfth, D-917; the Necromancer the thirteenth; the Sovereign the fourteenth, D-1120; the Demon Hunter the fifteenth, D-1437)" },
   traits: {
     count: 76,
     why: "08 §5: form 17 (Deft the seventeenth, D-1124) + cut 4 + effect 11 + enchantment 28 = 60, matching 06 §3's roster, plus 16 Mount traits that belong to 08 §15 alone (D-399), Spectral the sixteenth (the Death Knight's Deathcharger, D-924)"
@@ -63,16 +63,16 @@ export const PACK_COUNTS = Object.freeze({
   // Scale* through - its whole conversion is a converting `Use:` at 4, which
   // 08 §4's own 3 could not buy, so it reached no floor and was refused.
   weapons: {
-    count: 673, classic: 517,
-    why: "08 §7's weapon tables, every row (D-406 launchers included; the Sovereign's Claws under Unarmed, D-1123), plus §20's 25 named weapons and shot (D-632; ten Legendaries added by D-909), plus 517 Classic finds off the vendored record (D-685)"
+    count: 680, classic: 517,
+    why: "08 §7's weapon tables, every row (D-406 launchers included; the Sovereign's Claws under Unarmed, D-1123; the Demon Hunter's seven glaives, D-1437 to D-1449), plus §20's 25 named weapons and shot (D-632; ten Legendaries added by D-909), plus 517 Classic finds off the vendored record (D-685)"
   },
   armor: {
     count: 285, classic: 203,
     why: "08's armor categories, every row, §8's 12 shields (D-636), plus §20's 17 named suits and shields (D-632; five Legendaries added by D-909), plus 203 Classic finds off the vendored record (D-685)"
   },
   gear: {
-    count: 1545, classic: 1052,
-    why: "08 §9 to §17's catalogue tables by header name, two Augments a class (nine classes, the Broodstone the seventh, the Necromancer's Bonecharm the eighth and the Sovereign's Bloodglass the ninth, D-1133), §12's Blood vial (D-1107) and the Chronomancer's one ungraded Hourglass (D-847), the Necromancer's Phylactery, and §20's Epic consumables and the Grimoire (D-632) and its eight Legendary worn things and Augments (D-909), plus §11's Leggings and Trinket (D-686), Mantle (D-689), eighteen approved special designs and provisions (D-813), and 1,052 Classic finds off the vendored record (D-685, D-690, D-692)"
+    count: 1547, classic: 1052,
+    why: "08 §9 to §17's catalogue tables by header name, two Augments a class (nine classes, the Broodstone the seventh, the Necromancer's Bonecharm the eighth and the Sovereign's Bloodglass the ninth, D-1133), §12's Blood vial (D-1107) and the Chronomancer's one ungraded Hourglass (D-847), the Necromancer's Phylactery, the Demon Hunter's Blindfold and Crystalized Soul, and §20's Epic consumables and the Grimoire (D-632) and its eight Legendary worn things and Augments (D-909), plus §11's Leggings and Trinket (D-686), Mantle (D-689), eighteen approved special designs and provisions (D-813), and 1,052 Classic finds off the vendored record (D-685, D-690, D-692)"
   },
   services: {
     count: 41,

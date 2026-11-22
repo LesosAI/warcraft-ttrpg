@@ -84,6 +84,8 @@
  *              door lays them (`effects/auras.mjs`, `centre: "region"`).
  *   grows      feet the area grows at the start of each of the caster's turns
  *              (Hoarfrost), or null
+ *   growsMax   the radius in feet the growth stops at (Hoarfrost's *to a radius of
+ *              at most 40 feet*, the spell audit; D-1713), or null where it names none
  *   excludesCaster   the base sentence says *other than you*
  *   retaliate  the base clause also strikes a creature that hits the caster
  *              with a melee attack (Immolation)
@@ -116,6 +118,9 @@ import { readEscape } from "./escapes.mjs";
 import { damageTypeKey, isDamageTypeKey } from "./spell-damage-type.mjs";
 // A spell whose damage is a retaliation (07 §12's Scouring Veil) deals none at the cast.
 import { spellRetaliationFrom } from "./spell-retaliation.mjs";
+// A Demon Hunter spell whose damage rides the weapon blows or a failed Test's tick, and whose healing is the
+// caster's a failure at a time (07 §15; D-1541): the card deals and heals none of it at the cast.
+import { dhDamageNotCast, dhHealNotCast } from "./demon-hunter-spells.mjs";
 
 /** The kinds a clause may name (D-753): `creature-kinds.mjs#kindsOf` answers them. */
 export const AREA_TICK_KINDS = CREATURE_KINDS;
@@ -206,6 +211,7 @@ export function emptyAreaTick() {
     checks: [],
     remains: [],
     grows: null,
+    growsMax: null,
     excludesCaster: false,
     retaliate: false,
     reason: ""
@@ -247,7 +253,9 @@ function slug(name) {
  * on the creature, not in the area, and are not ticks (O-144).
  */
 const START = /\b(?:starts|begins) (?:its|their) turns?\b|\bat the start of (?:each of )?(?:its|their) turns?\b/i;
-const WHERE = /\binside\b|\bin (?:the area|the line|it)\b|\bwithin \d+ feet\b|\bthere\b|\bat the center\b/i;
+// And 07 §15's Flame Crash, *in a burning area* (the Demon Hunter's; D-1542): one of the areas its glaives left.
+// And 07 §16's Firewake since the spell audit, *in the burning area* (D-1702, D-1714).
+const WHERE = /\binside\b|\bin (?:the area|the line|it)\b|\bwithin \d+ feet\b|\bthere\b|\bat the center\b|\bin a burning area\b|\bin the burning area\b/i;
 
 /** Whether a sentence is one of those: what the census counts. */
 export function isStartOfTurnSentence(sentence) {
@@ -275,8 +283,18 @@ const BASE = [
   // A sand spell's (07 §12, D-864): *A creature that starts its turn in the area takes 5
   // Physical damage* (Withering Sands), *... takes 4 Physical damage and makes a Reflex
   // Resilience Test* (Sandstorm) - the damage every creature takes, its Test a check row.
+  // And Firewake's *A creature that starts its turn in the burning area takes 3 Fire damage* (the
+  // spell audit; D-1714): its own number, while the entry's Damage field is the cast's (`castRating`).
   s => {
-    const m = /^A creature that starts its turn in the area takes (\d+) ([A-Z][a-z]+) damage\b/.exec(s);
+    const m = /^A creature that starts its turn in the (?:burning )?area takes (\d+) ([A-Z][a-z]+) damage\b/.exec(s);
+    return m && schoolOf(m[2]) ? { who: "creature", damage: { rating: Number(m[1]), school: schoolOf(m[2]) } } : null;
+  },
+  // 07 §15's Flame Crash (the Demon Hunter's; D-1542): *A creature takes 2 Fel damage when it starts its turn in a
+  // burning area or enters one, once a turn however many areas it is in* - every creature, on the ONE Region whose
+  // circles are the glaives' landing points (`effects/demon-hunter-spells.mjs#placeCrashHere`), so the area's own
+  // once a turn is the spell's.
+  s => {
+    const m = /^A creature takes (\d+) ([A-Z][a-z]+) damage when it starts its turn in a burning area or enters one\b/.exec(s);
     return m && schoolOf(m[2]) ? { who: "creature", damage: { rating: Number(m[1]), school: schoolOf(m[2]) } } : null;
   },
   // *A creature takes 2 Fire damage when it starts its turn inside the area*,
@@ -316,6 +334,13 @@ const BASE = [
     const m = /^Each enemy that starts its turn within (\d+) feet of you takes ([A-Z][a-z]+) damage equal to half your Charisma modifier, rounded down, and at least 1\b/.exec(s);
     return m && schoolOf(m[2]) ? { who: "enemy", centre: "self", feet: Number(m[1]), damage: { rating: null, school: schoolOf(m[2]), ratingFrom: "halfCha" } } : null;
   },
+  // 07 §15's Immolation Aura (the Demon Hunter's, D-1500): *Each enemy that starts its turn within 5 feet
+  // of you, or moves within 5 feet of you on its turn, takes 2 Fel damage, once a turn.* The caster's
+  // enemies round the caster; the entering half is a reason until the spells phase builds it.
+  s => {
+    const m = /^Each enemy that starts its turn within (\d+) feet of you\b[^.]*?\btakes (\d+) ([A-Z][a-z]+) damage\b/.exec(s);
+    return m && schoolOf(m[3]) ? { who: "enemy", centre: "self", feet: Number(m[1]), damage: { rating: Number(m[2]), school: schoolOf(m[3]) } } : null;
+  },
   // Immolation: *A creature that starts its turn within 5 feet of you, or that
   // hits you with a melee attack, takes 2 Fire damage.*
   s => {
@@ -342,7 +367,7 @@ const BASE = [
   // Test*, *A creature that is not native to fire and begins its turn in the
   // area makes a Body Resilience Test*.
   s => {
-    const m = /^(?:While you hold both, )?[Aa] creature (?:that is not native to fire and |that )?(?:enters the area or )?(?:starts|begins) its turn (?:inside it|inside|in the area|in it|there)\b[^.]*?\b(?:makes|must pass) an? (Body|Reflex|Spirit) Resilience Test\b/.exec(s);
+    const m = /^(?:While you hold both, |For the duration, while you sustain that [A-Z][a-z]+, )?[Aa] creature (?:that is not native to fire and |that )?(?:enters the area or )?(?:starts|begins) its turn (?:inside it|inside|in the area|in it|there)\b[^.]*?\b(?:makes|must pass) an? (Body|Reflex|Spirit) Resilience Test\b/.exec(s);
     return m ? { who: "creature", test: { resilience: RESILIENCE.get(m[1]) ?? null } } : null;
   },
   // Glacier: *…and a creature that begins its turn in it makes the Test again
@@ -352,6 +377,15 @@ const BASE = [
     return { who: "creature", test: { resilience: fields?.test?.resilience ?? null } };
   }
 ];
+
+/**
+ * **A CLAUSE GATED ON A SECOND SPELL THE CASTER SUSTAINS**: Starweave's *For the duration, while
+ * you sustain that Starfall* since the spell audit made it an Instant of 1 minute (D-1705; it
+ * read *While you hold both* while it was Sustained, which a held copy may still say). The gate
+ * names the spell the entry says the area is cast into (*where you are sustaining **Starfall***),
+ * and `regionHolds` answers it for the ONE cast the Region was linked to (D-1710).
+ */
+const HOLDS_GATE = /\bWhile you hold both\b|\bwhile you sustain that [A-Z][a-z]+\b/;
 
 /** Thornguard's second sentence: the damage the base Test's FAILURE lands. */
 const ON_FAILURE = /^On a failure it takes (\d+) ([A-Z][a-z]+) damage\b/;
@@ -415,6 +449,9 @@ const ENTER_AGAIN = /\band again the first time it enters (?:the area|or crosses
 const ENTER_SAME = /\btakes (\d+) ([A-Z][a-z]+) damage\b[^.]*?\ba creature takes the same the first time it enters the area on a turn\b/;
 const ENTER_WINDOW = /^A creature that enters the area before the end of your next turn takes (\d+) ([A-Z][a-z]+) damage\b/;
 const ENTER_SL = /^At SL (\d+) or better the ground burns until the end of your next turn and a creature entering it takes (\d+) ([A-Z][a-z]+) damage\b/;
+// 07 §15's Flame Crash (D-1542): *... when it starts its turn in a burning area or enters one, once a turn* - the
+// entry strikes once a turn, sharing the turn with the start-of-turn strike.
+const ENTER_ONE = /\btakes (\d+) ([A-Z][a-z]+) damage when it starts its turn in a burning area or enters one, once a turn\b/;
 
 /** The damage a creature takes on entering, or null. `base` is the base clause's damage. */
 function readEnter(list, base) {
@@ -428,6 +465,8 @@ function readEnter(list, base) {
     if (m) return { rating: Number(m[1]), school: schoolOf(m[2]), once: false, rounds: 1, sl: null };
     m = ENTER_SL.exec(s);
     if (m) return { rating: Number(m[2]), school: schoolOf(m[3]), once: false, rounds: 1, sl: Number(m[1]) };
+    m = ENTER_ONE.exec(s);
+    if (m) return { rating: Number(m[1]), school: schoolOf(m[2]), once: true, rounds: null, sl: null };
   }
   return null;
 }
@@ -480,7 +519,7 @@ const ALSO_FAILS = /^If it also fails an? (Body|Reflex|Spirit) Resilience Test a
 function checkTrigger(s) {
   if (CROSS_TRIGGER.test(s)) return "cross";
   if (FIRST_ENTRY.test(s)) return "enter";
-  if (/^(?:While you hold both, )?[Aa] creature that enters the area or (?:starts|begins) its turn (?:inside it|there|in it|inside|in the area)\b/.test(s)) return "both";
+  if (/^(?:While you hold both, |For the duration, while you sustain that [A-Z][a-z]+, )?[Aa] creature that enters the area or (?:starts|begins) its turn (?:inside it|there|in it|inside|in the area)\b/.test(s)) return "both";
   if (/^A creature that enters the area\b(?! or)/.test(s)) return "enter";
   if (/\b(?:[Aa] creature|one) (?:you choose )?that (?:is not native to fire and )?(?:starts|begins) its turn (?:in the area|inside|in it|there|at the center)\b/.test(s)) return "turn";
   return null;
@@ -602,7 +641,7 @@ function readChecks(list, fields = {}, body = "") {
   // them*, and Blackout's and The Deep's *You and any creature you name as you cast* -
   // the cast's own targets, carried on the Region (`dice/chat.mjs#regionFlagsFromCard`).
   const spares = /\bName any number of creatures as you cast\b|\bYou and any creature you name as you cast\b/.test(body) ? "named" : "";
-  const holds = /\bWhile you hold both\b/.test(body) ? /\bsustaining \*\*([^*]+)\*\*/.exec(body) : null;
+  const holds = HOLDS_GATE.test(body) ? /\bsustaining \*\*([^*]+)\*\*/.exec(body) : null;
   for (let i = 0; i < list.length; i++) {
     const s = list[i];
     // **WITHERING SANDS' FOLLOWING TEST** (07 §12; D-865): *If it also fails a Spirit
@@ -628,7 +667,7 @@ function readChecks(list, fields = {}, body = "") {
     row.on = on;
     row.resilience = resilience;
     row.where = /\bat the center\b/.test(s) ? "centre" : "";
-    row.gate = holds && /\bWhile you hold both\b/.test(s) ? `holds:${slug(holds[1])}` : "";
+    row.gate = holds && HOLDS_GATE.test(s) ? `holds:${slug(holds[1])}` : "";
     row.exempt = exempt;
     // Named only where the row has one (the B9a pass), so every other row keeps its shape.
     if (FIRST_ENTRY.test(s)) row.first = true;
@@ -761,6 +800,10 @@ export const UNEXPRESSED = Object.freeze([
   { key: "drink", re: /\bdrinks from it\b/i, text: "an ally drinking from it as an action", covered: () => false },
   { key: "standFree", re: /\bstand from \*\*Prone\*\* without spending movement\b/i, text: "standing from Prone costs no movement", covered: t => t.remains.some(r => r.standFree) },
   { key: "retaliate", re: /\bhits you with a melee attack\b/i, text: "damage to a creature that hits the caster in melee", covered: t => t.retaliate },
+  // Immolation Aura's second half (D-1500, built by D-1543): an enemy that comes within the reach on its own turn,
+  // struck once a turn - carried by the self-centred aura's own door at the move
+  // (`effects/demon-hunter-spells.mjs#immolationOnMove`), which reads the caster's enemies round its token.
+  { key: "movesNear", re: /\bmoves within \d+ feet of you on its turn\b/i, text: "damage to an enemy that moves within reach of the caster on its turn, once a turn", covered: t => t.centre === "self" && t.who === "enemy" && Number(t.feet) > 0 },
   // Tempest's push and Void Rift's pull (D-778; the lead: *"Yes."*): read by
   // `readForced` and landed by the forced-movement door - and Nether Rift's pull at the
   // CASTER's turn (the B9a pass; the lead: *"Build the triggers"*), its Test posted by
@@ -865,6 +908,8 @@ export function readAreaTick(effectText, fields = {}) {
   const checks = readChecks(list, fields, body);
   const remains = readRemains(list, tick.against);
   const grows = /\bat the start of each of your turns it grows by (\d+) feet\b/.exec(body);
+  // Hoarfrost's ceiling since the spell audit (D-1713): *in every direction, to a radius of at most 40 feet*.
+  const growsMax = grows ? /\bat the start of each of your turns it grows by \d+ feet in every direction, to a radius of at most (\d+) feet\b/.exec(body) : null;
   if (!found && (enter || checks.length || remains.length)) {
     found = true;
     tick.who = "creature";
@@ -879,6 +924,16 @@ export function readAreaTick(effectText, fields = {}) {
   tick.checks = checks;
   tick.remains = remains;
   tick.grows = grows ? Number(grows[1]) : null;
+  tick.growsMax = growsMax ? Number(growsMax[1]) : null;
+  // **THE CAST'S OWN NUMBER BESIDE THE AREA'S** (07 §16's Firewake since the spell audit; D-1714):
+  // *Every creature in the area makes a Reflex Resilience Test ... On a failure it takes 7 Fire
+  // damage*, the entry's Damage field, and *a creature that starts its turn in the burning area
+  // takes 3 Fire damage*, the area's. Named only where the tick's number is not the field's and the
+  // cast's Test lands the field's, so the card keeps the cast's damage (`castDealsDamage`).
+  const castHit = /\bEvery creature in the area makes an? (?:Body|Reflex|Spirit) Resilience Test against your Spell DC\. On a failure it takes (\d+) [A-Z][a-z]+ damage\b/.exec(body);
+  const field = Number(fields?.damage?.rating);
+  if (castHit && tick.damage?.rating !== null && tick.damage?.rating !== undefined && Number.isFinite(field)
+    && Number(castHit[1]) === field && tick.damage.rating !== field) tick.damage = { ...tick.damage, castRating: field };
   tick.excludesCaster = Boolean(baseSentence && excludesHolder(baseSentence));
   tick.retaliate = Boolean(baseSentence && /\bor that hits you with a melee attack\b/.test(baseSentence));
   // 07 §17's Shroud of Sorrow (D-1367): *You regain 1 Health for each enemy that takes damage from this spell* -
@@ -886,7 +941,7 @@ export function readAreaTick(effectText, fields = {}) {
   // `check-packs.mjs` diffs) is what it was.
   const drain = /\bYou regain (\d+) Health for each enemy that takes damage from this spell\b/.exec(body);
   if (drain && tick.damage) tick.damage = { ...tick.damage, drain: Number(drain[1]) };
-  tick.onEnter = /\bagain the first time it enters\b|\benters (?:the area|or crosses)\b|\bwhen it first enters\b|\bthe first time it enters\b|\bcreature entering it\b/i.test(body);
+  tick.onEnter = /\bagain the first time it enters\b|\benters (?:the area|or crosses)\b|\bwhen it first enters\b|\bthe first time it enters\b|\bcreature entering it\b|\bor enters one\b/i.test(body);
   tick.difficult = /\*\*Difficult ground\*\*|\bdifficult (?:ground|terrain)\b/i.test(body);
   tick.lasts = { rounds: roundsIn(fields?.duration ?? {}) };
   tick.reason = UNEXPRESSED.filter(c => c.re.test(body) && !c.covered(tick, body, fields)).map(c => c.text).join("; ");
@@ -914,8 +969,13 @@ export function castDealsDamage(sys = {}) {
   // that hits you with a melee attack takes 3 Physical damage*; D-864): the Damage field is
   // what strikes the attacker, through the retaliation door, never the caster at the cast.
   if (spellRetaliationFrom({ type: "spell", system: sys })) return false;
+  // **AND NOT A DEMON HUNTER SPELL WHOSE DAMAGE IS SOMEWHERE ELSE** (07 §15; D-1541): Searing Edge's and Glaive
+  // Tempest's *more Fel damage* rides the weapon hits (the typed lane), and Inner Demon's 3 is the failed Test's tick.
+  if (dhDamageNotCast(sys)) return false;
   const tick = sys?.areaTick;
   if (!hasAreaTick(tick)) return true;
+  // Firewake's cast deals the entry's own number beside the area's (D-1714).
+  if (Number(tick.damage?.castRating) > 0) return true;
   const ticks = (tick.damage?.rating ?? null) !== null || TICK_RATING_FROM.includes(tick.damage?.ratingFrom) || (tick.against ?? []).some(r => (r?.rating ?? null) !== null);
   return !ticks;
 }
@@ -960,6 +1020,9 @@ function creatureTickIs(tick, kind) {
 export function castHeals(sys = {}) {
   // Rejuvenation's 2 is the target's at the start of each of its turns (D-770).
   if (creatureTickIs(sys?.tick, "heal")) return false;
+  // And 07 §15's Draw Soul: *You regain 2 Health for each creature that failed* is the caster's, a failure at a time
+  // (`effects/demon-hunter-spells.mjs#dhSpellAfterResist`), never the card's heal on the creatures in the cone (D-1541).
+  if (dhHealNotCast(sys)) return false;
   const tick = sys?.areaTick;
   if (!hasAreaTick(tick)) return true;
   return !((tick.heal ?? null) !== null || (tick.against ?? []).some(r => (r?.heal ?? null) !== null));
@@ -1557,11 +1620,33 @@ export function joinFight(placedAt = null, { combatId = null, round = 0, turn = 
  * @param {{time?: number, fights?: Record<string, number>, turns?: Record<string, number>}} now
  * @returns {string[]}
  */
+/**
+ * **HOW FAR AN AREA GROWS THIS TURN** (Hoarfrost; D-757, and its ceiling since the spell audit,
+ * D-1713): the radius in feet after one growth of `grows` feet, never past `max` where the entry
+ * names one, or null where it does not grow now - no growth, or already at the ceiling. A Region
+ * already wider than the ceiling (a talent's widening) is left as it is, never shrunk.
+ *
+ * @param {number} currentFt  the radius now, in feet
+ * @param {number|null} grows  `areaTick.grows`
+ * @param {number|null} [max]  `areaTick.growsMax`
+ * @returns {number|null}
+ */
+export function grownRadius(currentFt, grows, max = null) {
+  const now = Number(currentFt);
+  const step = Number(grows);
+  if (!Number.isFinite(now) || now < 0 || !(step > 0)) return null;
+  const cap = Number(max) > 0 ? Number(max) : null;
+  if (cap !== null && now >= cap) return null;
+  return cap === null ? now + step : Math.min(now + step, cap);
+}
+
 export function staleAreas(regions = [], held = new Map(), now = {}) {
   const out = [];
   for (const r of regions ?? []) {
     if (!r?.id || !r.cast) continue;
     if(r.dismissed===true){out.push(r.id);continue;}
+    // Another area ended it (07 §11's Skyfall: *The Starweave ends*; D-1710).
+    if (r.consumed === true) { out.push(r.id); continue; }
     if(r.endsOnCasterDeath===true&&r.casterDead===true){out.push(r.id);continue;}
     if (r.sustained === true && (r.down === true || !held?.get?.(r.caster ?? "")?.has(r.cast))) {
       out.push(r.id);
@@ -1681,6 +1766,7 @@ export function cleanAreaTick(tick) {
       if ("school" in tick.damage && tick.damage.school !== null && !isDamageTypeKey(tick.damage.school)) tick.damage.school = null;
       if ("ratingFrom" in tick.damage && !TICK_RATING_FROM.includes(tick.damage.ratingFrom)) delete tick.damage.ratingFrom;
       if ("drain" in tick.damage) tick.damage.drain = nullableNumber(tick.damage.drain);
+      if ("castRating" in tick.damage) tick.damage.castRating = nullableNumber(tick.damage.castRating);
     }
   }
   if ("heal" in tick) tick.heal = nullableNumber(tick.heal);
@@ -1725,6 +1811,7 @@ export function cleanAreaTick(tick) {
   if ("checks" in tick) tick.checks = Array.isArray(tick.checks) ? tick.checks.filter(r => r && typeof r === "object").map(cleanCheckRow) : [];
   if ("remains" in tick) tick.remains = Array.isArray(tick.remains) ? tick.remains.filter(r => r && typeof r === "object").map(cleanRemainsRow) : [];
   if ("grows" in tick) tick.grows = typeof tick.grows === "number" && Number.isInteger(tick.grows) && tick.grows > 0 ? tick.grows : null;
+  if ("growsMax" in tick) tick.growsMax = typeof tick.growsMax === "number" && Number.isInteger(tick.growsMax) && tick.growsMax > 0 ? tick.growsMax : null;
   if ("excludesCaster" in tick && typeof tick.excludesCaster !== "boolean") tick.excludesCaster = tick.excludesCaster === true;
   if ("retaliate" in tick && typeof tick.retaliate !== "boolean") tick.retaliate = tick.retaliate === true;
   if ("reason" in tick && typeof tick.reason !== "string") tick.reason = "";

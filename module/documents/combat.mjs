@@ -72,6 +72,9 @@ import { healingAfterBlock } from "../rules/no-healing.mjs";
 // Where a departure is measured from: the nearest spaces, never the centres,
 // in three dimensions (D-732); and the one reading of a threatener's reach.
 import { feetBetweenFootprints, footprintOf } from "../canvas/footprints.mjs";
+// 07 §15's Unnatural Agility, Hunting Ground and Nether Snare at the move (D-1546, D-1550): pure reads, static.
+import { dhSparesOpportunity } from "../effects/demon-hunter-sight.mjs";
+import { snaredFrom } from "../rules/demon-hunter-spells.mjs";
 import { reachOfActor } from "../canvas/engaged.mjs";
 // 04's Relentless Advance at rank 2 in two hands (D-1017): an Opportunity Attack's reach, 5 feet further.
 import { relentlessOpportunityReach } from "../effects/death-knight-talents.mjs";
@@ -107,6 +110,8 @@ import { reactionStateOf, shownWith } from "../applications/actions.mjs";
 // creature is, who it is to the caster, what the caster stands on, and the
 // sweep that takes an area away when its spell has gone.
 import { checksFor, hasAreaTick, holdsPoint, shapeCentre, tickFor, tickRating } from "../rules/area-ticks.mjs";
+// Starweave's Slow waits on the ONE Starfall cast its Region is linked to (the spell audit; D-1710).
+import { starweaveGateHolds } from "../rules/starweave.mjs";
 import { spellAreaFor } from "../rules/talent-effects.mjs";
 import { feetApart } from "../canvas/footprints.mjs";
 // The Sovereign's leash (the plan's C7), its turn-end predicate and Sovereign Will's penalty: pure.
@@ -179,6 +184,8 @@ import { endTurnDamageCanReach } from "../rules/end-turn-damage.mjs";
 import { compelRepairDue, escapeLabelKey } from "../rules/escapes.mjs";
 // The Sovereign spells' turn start, asked before its module loads (O-419; `rules/sovereign-scope.mjs`).
 import { sovereignTurnStartDue } from "../rules/sovereign-scope.mjs";
+// 02's Beyond Limits' spared threatener (the Demon Hunter plan's Phase 4a).
+import { sparesOpportunity } from "../rules/demon-hunter-features.mjs";
 
 /** An area's forced move at a turn's start (07's Void Rift; D-778), off the Region's own record. */
 function turnForced(region) {
@@ -1400,9 +1407,16 @@ export class AzerothCombatant extends Combatant {
     if (!combat || !mover || !scene || !scene.grid) return [];
     const disengaged = this.actor?.statuses?.has("disengaging") === true;
     if (unansweredBy((this.actor?.effects ?? []).filter(e => e.active !== false).map(e => e.flags?.["azeroth-rpg"] ?? {})).length) return [];
+    // 07 §15's Unnatural Agility (*you provoke no Opportunity Attacks*) and Hunting Ground (*Inside the area you ...
+    // provoke no Opportunity Attacks*, a move that stays inside the caster's circle; D-1546).
+    if (dhSparesOpportunity(this.actor, mover, pathPoints(movement))) return [];
     const threats = [];
+    // **02's BEYOND LIMITS** (*one Move provokes no Opportunity Attack from one creature you choose*; the Demon
+    // Hunter plan's Phase 4a): the creature the mover's laid choice names is no threatener this turn.
+    const moverFlags = (this.actor?.effects ?? []).filter(e => e.active !== false).map(e => e.flags?.["azeroth-rpg"] ?? {});
     for (const other of combat.combatants) {
       if (other.id === this.id || other.side === this.side || other.isDefeated) continue;
+      if (sparesOpportunity(moverFlags, { actorUuid: other.actor?.uuid ?? null, tokenId: other.tokenId ?? null })) continue;
       const threat = other.token;
       if (!threat || threat.parent?.id !== scene.id) continue;
       // What it would be struck with, so the button can say so; a threatener
@@ -1860,6 +1874,13 @@ export function onPreMoveToken(document, movement) {
       ui.notifications?.warn(game.i18n.format("AZEROTH.Sovereign.Leash.Refused", { name: document.actor?.name ?? document.name, source: leash.source, feet: leash.limit }));
       return false;
     }
+  }
+  // **07 §15's NETHER SNARE** (*cannot teleport ... for the duration*; D-1550): a snared creature's own move made as a
+  // blink - core's teleport action - is refused in words, whoever drags it.
+  const snared = snaredFrom([...(document.actor?.effects ?? [])]);
+  if (snared?.teleport === true && [...(movement?.passed?.waypoints ?? []), ...(movement?.pending?.waypoints ?? [])].some(w => w?.action === "blink")) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.DhSpell.Snare.NoTeleport", { name: document.actor?.name ?? document.name, spell: snared.source ?? "" }));
+    return false;
   }
   // **05's MOVING THROUGH A SPACE** (FIXC, O-476): a player's willing move on its own turn may not pass through a
   // creature fewer than two sizes apart, unless a permission it holds covers it (07's Veil of Mist, Windwalk, 04's
@@ -2331,6 +2352,15 @@ export class AzerothCombat extends Combat {
     // Guard holds until your next turn (05 SS10).
     const actor = combatant.actor;
     if (actor?.statuses?.has("guarded")) await actor.toggleStatusEffect("guarded", { active: false });
+    // **07's DEVOUR THE SPELL, BEFORE THE UPKEEP** (*Cast this at the start of the turn of a creature ... that is
+    // Sustaining a spell of tier 3 or lower, before it pays that spell's upkeep*; D-1717, D-1726): an in-flight gate
+    // on the active GM's client, awaited before `_turnTicks` pays the upkeep. A fault is said and the turn goes on.
+    try {
+      const { devourTurnStart } = await import("../effects/devour-the-spell-reaction.mjs");
+      await devourTurnStart(this, combatant);
+    } catch (err) {
+      console.warn("azeroth-rpg | Devour the Spell's turn start", err);
+    }
     await this._turnTicks(combatant);
     try {
       const { advanceInfernalImmolation } = await import("../effects/infernal-immolation.mjs");
@@ -2794,7 +2824,9 @@ export class AzerothCombat extends Combat {
       // Deep Winter, Hailstorm, Nether Collapse, Void Rift - each the creature's
       // own Resist card, through the spell card's door, after its ticks land.
       if (source.region) {
-        const holds = new Set((caster?.getFlag?.("azeroth-rpg", "sustaining") ?? []).map(e => e?.identifier).filter(Boolean));
+        // The Sustains the caster holds, Starweave's Starfall counted only while the cast its link
+        // names is held (`rules/starweave.mjs#starweaveGateHolds`, D-1710).
+        const holds = starweaveGateHolds(source.region.flags?.["azeroth-rpg"], caster?.getFlag?.("azeroth-rpg", "sustaining") ?? []);
         // Blackout's and The Deep's *You and any creature you name as you cast* (the B9a
         // pass): a creature the cast named makes no Test.
         const namedHere = source.region.flags?.["azeroth-rpg"]?.named;

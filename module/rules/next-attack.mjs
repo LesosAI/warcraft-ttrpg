@@ -37,6 +37,14 @@
  * rider is paid with the first roll and the second carries none (D-770). A
  * Parry is not an attack (06 §6) and takes nothing; an Opportunity Attack and a
  * Riposte are attacks and do.
+ *
+ * **EXCEPT A PROMISE TO EVERY ROLL OF THE NEXT ATTACK** (07 §11's Frost Strike since the
+ * spell audit: *Each hit of your next Attack this turn deals 6 additional Frost damage*;
+ * D-1711): `rolls: "each"`. The first roll of the next Attack reads it as any promise and
+ * MARKS it (`rolled: true`) rather than taking it, and only that Attack's second roll
+ * (Extra Attack's, `secondRoll`) reads a marked promise, and takes it. Held to its turn as
+ * before, so a marked promise an Attack of one roll leaves behind lapses with the turn and
+ * the next take sweeps it.
  */
 
 /** The actor flag the promises stand under. */
@@ -84,6 +92,8 @@ export function nextAttackEntry(grant = {}, now = null) {
     // named only where a promise carries one. The attack adds it to its Rating where the
     // blow is of that type and as a second amount of that type where it is not (D-777).
     ...(typeof grant.type === "string" && grant.type && count(grant.damage) > 0 ? { type: grant.type } : {}),
+    // **EVERY ROLL OF THE NEXT ATTACK** (Frost Strike; D-1711): named only where a promise carries it.
+    ...(grant.rolls === "each" ? { rolls: "each" } : {}),
     lasts: grant.lasts,
     at: {
       combat: String(now.combat), round: Math.trunc(Number(now.round)) || 0, combatant: String(now.combatant ?? ""),
@@ -195,7 +205,7 @@ export function nextAttackStands(entry, now = null) {
  * @param {{now?: object|null}} [o]
  * @returns {{boons: number, penetration: number, damage: number, live: object[], lapsed: object[]}}
  */
-export function pendingNextAttack(entries = [], { now = null, targetStatuses = null } = {}) {
+export function pendingNextAttack(entries = [], { now = null, targetStatuses = null, secondRoll = false } = {}) {
   const live = [];
   const lapsed = [];
   // A promise held to a target's condition (Scent of Blood's Bleeding; D-1370) waits, neither taken nor lapsed, for
@@ -207,6 +217,9 @@ export function pendingNextAttack(entries = [], { now = null, targetStatuses = n
       continue;
     }
     if (!nextAttackStands(e, now)) lapsed.push(e);
+    // A promise to every roll that the next Attack's first roll has marked (D-1711): read by
+    // that Attack's second roll alone, and by no first roll, neither taken nor lapsed by one.
+    else if (e.rolled === true && secondRoll !== true) continue;
     else if (typeof e.targetStatus === "string" && e.targetStatus && !bears.has(e.targetStatus)) continue;
     else live.push(e);
   }
@@ -227,17 +240,29 @@ export function pendingNextAttack(entries = [], { now = null, targetStatuses = n
  * never read, and stays. An entry that is not an object or names no source can
  * promise nothing and is swept either way.
  *
+ * **A PROMISE TO EVERY ROLL IS MARKED, NOT TAKEN, BY THE FIRST ROLL** (D-1711): an entry
+ * carrying `rolls: "each"` that the attack read LIVE and had not marked stays, marked
+ * `rolled: true`, for the same Attack's second roll; one already marked goes with the
+ * second roll that read it. `live` is the attack's own live list; without it every entry
+ * read goes, as before.
+ *
  * @param {Array<object>} held   the flag, read again at the write
  * @param {Array<object>} taken  `pendingNextAttack`'s `live` and `lapsed`
+ * @param {Array<object>|null} [live]  `pendingNextAttack`'s `live` alone
  * @returns {Array<object>}
  */
-export function afterTake(held = [], taken = []) {
+export function afterTake(held = [], taken = [], live = null) {
   const key = e => (e && typeof e === "object" && e.source
     ? JSON.stringify([String(e.source), e.at?.combat ?? null, e.at?.round ?? null, e.at?.combatant ?? null])
     : null);
   const gone = new Set((taken ?? []).map(key).filter(Boolean));
-  return (Array.isArray(held) ? held : []).filter(e => {
+  const marks = new Set((live ?? []).filter(e => e?.rolls === "each" && e.rolled !== true).map(key).filter(Boolean));
+  const out = [];
+  for (const e of Array.isArray(held) ? held : []) {
     const k = key(e);
-    return k !== null && !gone.has(k);
-  });
+    if (k === null) continue;
+    if (!gone.has(k)) out.push(e);
+    else if (marks.has(k) && e.rolls === "each" && e.rolled !== true) out.push({ ...e, rolled: true });
+  }
+  return out;
 }

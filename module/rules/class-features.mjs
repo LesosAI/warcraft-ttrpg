@@ -91,6 +91,8 @@ import { DESECRATION, MARCH_OF_THE_DAMNED, RUNIC_DISCIPLINE, UNHOLY_PRESENCE } f
 
 // The Necromancer's numbers (02 §7; the Necromancer plan's Phase 4).
 import { COMMAND_SURGE } from "./necromancer-features.mjs";
+// The Demon Hunter's numbers (02 §7; the Demon Hunter plan's Phase 4a).
+import { HUNTERS_LEAP } from "./demon-hunter-features.mjs";
 
 // The descriptor vocabulary, shared with `rules/talent-effects.mjs` (D-642).
 export const passive = (extra = {}) => ({ kind: "passive", action: null, cost: null, casting: false, uses: null, heal: null, damage: null, resist: null, ...extra });
@@ -533,6 +535,42 @@ export const CLASS_FEATURES = Object.freeze({
     "Withering Contempt": passive({ note: "AZEROTH.Feature.Note.WitheringContempt" }),
     // *Once per Long Rest, as a Half-Action, spend 25 Vitae. For 1 minute ...*
     "Crowned in Blood": action({ action: "half", cost: cost("vitae", 25), uses: once("long"), onUse: { sov: { crowned: true } } })
+  },
+  // **THE DEMON HUNTER** (02 §7; the Demon Hunter plan's Phase 4a, D-1520). Every number is
+  // `rules/demon-hunter-features.mjs`', held to 02 by `demon-hunter-features.test.mjs`; each `onUse.dh` is
+  // judged by `effects/demon-hunter-features.mjs#judgeDemonHunterUse` before anything is paid and landed by
+  // `landDemonHunterUse` once it is (D-768). Fel Lash and Mana Rend are LINES on the attack's dialog
+  // (`demon-hunter-features.mjs#DH_FEATURE_RIDERS`, D-770), Fel Surge a line on the cast's, Devour Soul an
+  // offer the death watch posts, and the passives are read where their numbers are made.
+  "demon-hunter": {
+    // *You cannot be Blinded. Within 30 feet, plus 10 feet for each 5 Fel ...*: the refused condition and the
+    // token's sight, DERIVED (`dhDerived`, `effects/demon-hunter-features.mjs#syncSpectralSight`).
+    "Spectral Sight": passive({ note: "AZEROTH.Feature.Note.SpectralSight" }),
+    // *extra damage equal to your tier against a demon ...*: the attack door's on-hit (`demonHunterOnHit`).
+    "Bane of the Legion": passive({ note: "AZEROTH.Feature.Note.BaneOfTheLegion" }),
+    // *Once each turn, gain 1 Hatred and choose one*: no action named, so none is spent; the chooser and the
+    // turn's mark are the door's. The fifth choice is a line on a Body or Reflex Resilience Test's dialog.
+    "Beyond Limits": action({ action: null, onUse: { dh: { limits: true } } }),
+    // *As part of a weapon attack, spend 2 Hatred*: a line on the attack's dialog.
+    "Fel Lash": passive({ note: "AZEROTH.Feature.Note.FelLash" }),
+    // *As a Reaction, at any moment on any creature's turn, spend 2 Energy. Leap ...*: the step door's
+    // displacement (`effects/steps.mjs#stepTo`), which meters no foot and provokes nothing.
+    "Hunter's Leap": action({ action: "reaction", cost: cost("energy", HUNTERS_LEAP.energy), onUse: { dh: { leap: true } } }),
+    // *When you cast a spell whose Action is a Half-Action or an Action, you may spend Hatred*: the cast's line.
+    "Fel Surge": passive({ note: "AZEROTH.Feature.Note.FelSurge" }),
+    "Extra Attack": passive({ extraAttack: true }),
+    // *Your Speed rises by 5 feet for each tier you have reached*: a Speed part (`dhDerived`).
+    "Hunter's Stride": passive({ note: "AZEROTH.Feature.Note.HuntersStride" }),
+    // *As part of a weapon attack, spend 3 Energy*: a line on the attack's dialog.
+    "Mana Rend": passive({ note: "AZEROTH.Feature.Note.ManaRend" }),
+    // *As a Reaction, when a creature you damaged this round drops to 0 Health ...*: offered on the death watch.
+    "Devour Soul": action({ action: "reaction", onUse: { dh: { offered: true } } }),
+    // *leave 3 Hatred out of the count*: read by the rest door (`hatred.mjs#restModifiersOf`).
+    "Warding Tattoos": passive({ note: "AZEROTH.Feature.Note.WardingTattoos" }),
+    // *As a Half-Action, spend all your Hatred, at least 1*: the `unleashed` shape for 1 round a Hatred spent.
+    "Demon Unleashed": action({ action: "half", cost: { pool: "hatred", amount: 0, all: true }, onUse: { dh: { unleash: true } } }),
+    // *Once per Long Rest, as a Half-Action, ... for 1 minute* (D-752's count); a Use while it stands ends it.
+    "I Have Prepared": action({ action: "half", uses: once("long"), onUse: { dh: { prepared: true } } })
   }
 });
 

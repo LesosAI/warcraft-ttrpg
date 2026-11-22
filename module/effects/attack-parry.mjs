@@ -2,6 +2,7 @@ import { resolveAttackOperation } from "./attack-resolution-state.mjs";
 import { canReact, parryPoolFor, PARRY_COST, standingMarkRefusal } from "../rules/reactions.mjs";
 import { confirmedParryOutcome, confirmedStandaloneParryOutcome } from "../rules/parry-outcome.mjs";
 import { AZEROTH } from "../config.mjs";
+import { poolHeldBy } from "../rules/pools.mjs";
 import { refuseDisarmedParry } from "./npc-disarm.mjs";
 import {parrySignatureBonus} from '../rules/signature-parry.mjs';
 import {deliverTurnSignatures} from './signature-turn-use.mjs';
@@ -55,7 +56,8 @@ export async function parryPayQueryHandler({ key } = {}, { user } = {}) {
   entry.payment = "paying";
   try {
     await entry.actor.updatePool({ itemId, kind, value: expectedValue });
-    const current = entry.actor.poolSnapshot().find(p => p.itemId === itemId && p.kind === kind);
+    // The merged Energy pool answers for every member (02 §10, D-1723).
+    const current = poolHeldBy(entry.actor.poolSnapshot(), itemId, kind);
     if (!entry.valid() || current?.value !== expectedValue) throw Error("Parry payment unconfirmed");
     entry.payment = "paid";
     entry.paid = { cost: PARRY_COST, name: game.i18n.localize(AZEROTH.poolTypes[purse.name] ?? "AZEROTH.Momentum.Label") };

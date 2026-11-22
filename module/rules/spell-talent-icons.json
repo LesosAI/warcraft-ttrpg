@@ -62,6 +62,13 @@
     ],
     "reason": "The purple arcane whirl is visibly magical rather than physical. Aftersight reads marks left on ley lines, so an arcane trace is an appropriate cue."
   },
+  "spell:agonizing-flames": {
+    "name": "Agonizing Flames",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_fierybrand",
+    "previousIcons": [],
+    "reason": "A small green flame curling upward: flames that start small and grow at every turn."
+  },
   "spell:air-of-majesty": {
     "name": "Air of Majesty",
     "source": "07-MAGIC",
@@ -533,6 +540,13 @@
     "icon": "spell_shadow_haunting",
     "previousIcons": [],
     "reason": "A spirit drawn near. Call the Departed lets the caster speak with a dead creature's spirit."
+  },
+  "spell:call-the-glaives": {
+    "name": "Call the Glaives",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_throwglaive",
+    "previousIcons": [],
+    "reason": "A glaive spinning through the air: the hunter's glaives flying back to the hand."
   },
   "spell:captivating-gaze": {
     "name": "Captivating Gaze",
@@ -1092,6 +1106,13 @@
     ],
     "reason": "A gold cross and radiant figure fill the icon. Deliverance reaches a whole village with the Light, matching the visible holy rescue."
   },
+  "spell:demon-spikes": {
+    "name": "Demon Spikes",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_demonspikes",
+    "previousIcons": [],
+    "reason": "Black bone spikes breaking out of the skin: the spell's name, drawn."
+  },
   "spell:demonheart": {
     "name": "Demonheart",
     "source": "07-MAGIC",
@@ -1172,6 +1193,13 @@
       "spell_holy_devotionaura"
     ],
     "reason": "A bright shield is centered in a blue ring. Devotion Aura protects people standing near the paladin, matching the shielded aura."
+  },
+  "spell:devour-the-spell": {
+    "name": "Devour the Spell",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_consumemagic",
+    "previousIcons": [],
+    "reason": "A clawed hand tearing a green thread of magic loose: a Sustained spell bitten off its caster."
   },
   "spell:dilation": {
     "name": "Dilation",
@@ -1298,6 +1326,13 @@
       "spell_shadow_curse"
     ],
     "reason": "A purple claw grips a living target. Drain Soul pulls steadily on what keeps a creature alive, matching the grasping drain."
+  },
+  "spell:draw-soul": {
+    "name": "Draw Soul",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_shatteredsouls",
+    "previousIcons": [],
+    "reason": "A hand drawing a pale soul out of a body: souls pulled loose from the living in a cone."
   },
   "spell:dread-cry": {
     "name": "Dread Cry",
@@ -1599,6 +1634,13 @@
     ],
     "reason": "Purple energy is pulled from a living figure. Exsanguinate opens a drain the rest of the way and empties the target, matching the siphon."
   },
+  "spell:eye-beam": {
+    "name": "Eye Beam",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_eyebeam",
+    "previousIcons": [],
+    "reason": "Green light pouring from a demon's eyes: the spell's name, drawn."
+  },
   "spell:eyes-of-kilrogg": {
     "name": "Eyes of Kilrogg",
     "source": "07-MAGIC",
@@ -1845,6 +1887,13 @@
     ],
     "reason": "A single orange flame streaks diagonally across the square. Flame Burst is a directed fire strike, matching the fiery projectile."
   },
+  "spell:flame-crash": {
+    "name": "Flame Crash",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_infernalstrike2",
+    "previousIcons": [],
+    "reason": "A glaive coming down point first in green fire: a thrown glaive setting the ground alight where it lands."
+  },
   "spell:flame-shock": {
     "name": "Flame Shock",
     "source": "07-MAGIC",
@@ -2044,6 +2093,13 @@
     "previousIcons": [],
     "reason": "The Frozen Throne: the court watches a creature from afar through its spilled blood."
   },
+  "spell:gaze-of-the-sightless": {
+    "name": "Gaze of the Sightless",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_spectralsight",
+    "previousIcons": [],
+    "reason": "A green eye of light in the dark: the spectral sight that shows what is false and outlines what is invisible."
+  },
   "spell:gentle-verdict": {
     "name": "Gentle Verdict",
     "source": "07-MAGIC",
@@ -2107,6 +2163,13 @@
       "spell_frost_glacier"
     ],
     "reason": "A mass of blue ice surges forward. Glacier sends moving ice at the pace of natural ice, matching the advancing formation."
+  },
+  "spell:glaive-tempest": {
+    "name": "Glaive Tempest",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_bladedance",
+    "previousIcons": [],
+    "reason": "Red and white blade trails whirling: the hunter spinning in place and striking everyone in reach."
   },
   "spell:grand-lexicon": {
     "name": "Grand Lexicon",
@@ -2352,6 +2415,13 @@
     ],
     "reason": "Green Fel energy strikes the ground in a broad blast, fitting the quake’s Fel damage and Stun."
   },
+  "spell:hellstrike": {
+    "name": "Hellstrike",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_infernalstrike1",
+    "previousIcons": [],
+    "reason": "A fist slamming down into green fire: the hunter landing from a great leap on the enemy below."
+  },
   "spell:hemoplague": {
     "name": "Hemoplague",
     "source": "07-MAGIC",
@@ -2497,6 +2567,20 @@
     "previousIcons": [],
     "reason": "Arctic winds. Howling Blast is a burst of icy wind that slows what it strikes."
   },
+  "spell:hunters-brand": {
+    "name": "Hunter's Brand",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_brandofthehunt",
+    "previousIcons": [],
+    "reason": "A fel-lit skull between two crossed blades: the mark a hunter puts on its quarry, which it follows from then on."
+  },
+  "spell:hunting-ground": {
+    "name": "Hunting Ground",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_sigilofinquisition",
+    "previousIcons": [],
+    "reason": "A green sigil laid on the ground: an area the hunter owns, where nothing stays hidden."
+  },
   "spell:hymn": {
     "name": "Hymn",
     "source": "07-MAGIC",
@@ -2628,6 +2712,13 @@
     ],
     "reason": "The caster’s silhouette is surrounded by fire. Immolation burns the caster while leaving their carried things alone, matching the self-centered flames."
   },
+  "spell:immolation-aura": {
+    "name": "Immolation Aura",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_immolation",
+    "previousIcons": [],
+    "reason": "A figure standing inside green fire that does not burn it: the aura that burns whoever comes close."
+  },
   "spell:incinerate": {
     "name": "Incinerate",
     "source": "07-MAGIC",
@@ -2643,6 +2734,13 @@
     "icon": "spell_nzinsanity_fearofdeath",
     "previousIcons": [],
     "reason": "A terror of death: every enemy in the area is Frightened of the caster."
+  },
+  "spell:inner-demon": {
+    "name": "Inner Demon",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_eyeofleotheras",
+    "previousIcons": [],
+    "reason": "A blindfolded elf with green fel light at the eyes: Leotheras the Blind, whose torment the spell hands on."
   },
   "spell:insect-swarm": {
     "name": "Insect Swarm",
@@ -3229,6 +3327,13 @@
       "spell_shadow_demoniccirclesummon"
     ],
     "reason": "Green light opens around a dark center. Nether Rift holds a seam open in the air, matching the visible opening."
+  },
+  "spell:nether-snare": {
+    "name": "Nether Snare",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_infernalchains",
+    "previousIcons": [],
+    "reason": "A spiked fel-green binding: a net of fel cord that holds a demon in place."
   },
   "spell:nether-ward": {
     "name": "Nether Ward",
@@ -4060,6 +4165,13 @@
     ],
     "reason": "An orange fire-edged shield depicts the life-saving Fire effect that closes wounds at 0 Health."
   },
+  "spell:searing-edge": {
+    "name": "Searing Edge",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_felblade",
+    "previousIcons": [],
+    "reason": "A crescent blade glowing green along its edge: fel set on the glaive's edge for the duration."
+  },
   "spell:searing-pain": {
     "name": "Searing Pain",
     "source": "07-MAGIC",
@@ -4196,6 +4308,13 @@
     ],
     "reason": "A heavy lightning bolt, for the branch's heaviest single-target strike."
   },
+  "spell:shear": {
+    "name": "Shear",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_hatefulstrike",
+    "previousIcons": [],
+    "reason": "A curved glaive sweeping in a green arc: a cut that takes Health no bandage can cover."
+  },
   "spell:shifting-hours": {
     "name": "Shifting Hours",
     "source": "07-MAGIC",
@@ -4243,6 +4362,13 @@
       "spell_shaman_unleashweapon_life"
     ],
     "reason": "The old art is a green weapon, suggesting a strike. Siphon Life opens a line that drains a target into the caster; the replacement visibly depicts life being drawn away."
+  },
+  "spell:siphon-the-weave": {
+    "name": "Siphon the Weave",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_reversemagic",
+    "previousIcons": [],
+    "reason": "A hand drawing a stream of blue magic away: a spell taken apart as it lands, its energy drawn back."
   },
   "spell:skyfall": {
     "name": "Skyfall",
@@ -4429,6 +4555,13 @@
     "icon": "spell_arcane_arcane03",
     "previousIcons": [],
     "reason": "The arcane icon fits the transfer of a willing caster's already prepared spell."
+  },
+  "spell:spellsunder": {
+    "name": "Spellsunder",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_manabreak",
+    "previousIcons": [],
+    "reason": "A blade cutting through a band of blue magic: a hunter finding the end of a spell's thread and cutting it."
   },
   "spell:spellwrights-mark": {
     "name": "Spellwright's Mark",
@@ -4961,6 +5094,13 @@
       "spell_shadow_focusedpower"
     ],
     "reason": "A blue beam cuts through a figure. Unmaking pulls apart what the Nether has made, matching the destructive arcane ray."
+  },
+  "spell:unnatural-agility": {
+    "name": "Unnatural Agility",
+    "source": "07-MAGIC",
+    "icon": "ability_demonhunter_blur",
+    "previousIcons": [],
+    "reason": "A figure blurred by its own speed: a body moving faster than attacks can follow."
   },
   "spell:unweave": {
     "name": "Unweave",
@@ -5663,6 +5803,13 @@
     ],
     "reason": "Retain: the hunter aspect image signals an empowered companion, matching the encounter-long attack bonus."
   },
+  "talent:betrayers-bargain": {
+    "name": "Betrayer's Bargain",
+    "source": "04-TALENTS",
+    "icon": "artifactability_havocdemonhunter_anguishofthedeceiver",
+    "previousIcons": [],
+    "reason": "Illidan's face in fel light: the Betrayer's own bargain, the demon kept until the rest."
+  },
   "talent:better-living-through-chemistry": {
     "name": "Better Living Through Chemistry",
     "source": "02-CHARACTER-OPTIONS",
@@ -6002,6 +6149,13 @@
     ],
     "reason": "Replace: Blood Frenzy shows an aggressive red attack. The shielded defensive stance depicts holding position while Armor rises."
   },
+  "talent:bridle-the-demon": {
+    "name": "Bridle the Demon",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_imprison",
+    "previousIcons": [],
+    "reason": "Hands gripping prison bars: the demon held behind a bridle."
+  },
   "talent:bronze-drake": {
     "name": "Bronze Drake",
     "source": "04-TALENTS",
@@ -6139,6 +6293,13 @@
       "spell_nature_chainlightning"
     ],
     "reason": "Align with the named Chain Lightning spell: A blue electrical bolt forks across the image. Chain Lightning jumps from one target to another, exactly the branching action shown."
+  },
+  "talent:chaos-blast": {
+    "name": "Chaos Blast",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_chaosnova",
+    "previousIcons": [],
+    "reason": "A burst of green light: a bolt of chaos thrown from the demon's shape."
   },
   "talent:chaos-bolt": {
     "name": "Chaos Bolt",
@@ -6673,6 +6834,20 @@
     ],
     "reason": "Retain: the blood boil image matches dismissing a demon to gain its stored power."
   },
+  "talent:demonic-visage": {
+    "name": "Demonic Visage",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_specdps",
+    "previousIcons": [],
+    "reason": "A horned face lit green from inside: horns and scales showing through the skin."
+  },
+  "talent:demons-due": {
+    "name": "Demon's Due",
+    "source": "04-TALENTS",
+    "icon": "ability_warlock_demonicempowerment",
+    "previousIcons": [],
+    "reason": "A horned demon skull: a demon's soul devoured, and the next Fel Lash paid for by it."
+  },
   "talent:deterrence": {
     "name": "Deterrence",
     "source": "04-TALENTS",
@@ -7046,6 +7221,13 @@
     ],
     "reason": "Retain: the blue flame bolt depicts the Fire and Fel spells whose Mana cost is reduced."
   },
+  "talent:embrace-the-pain": {
+    "name": "Embrace the Pain",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_torment",
+    "previousIcons": [],
+    "reason": "A demon roaring against a red ground: the hunter leaning into the Fel instead of away from it."
+  },
   "talent:embrace-the-shadows": {
     "name": "Embrace the Shadows",
     "source": "04-TALENTS",
@@ -7070,6 +7252,13 @@
       "spell_holy_blessingofprotection"
     ],
     "reason": "Replace: The proposed gold shield suggests prevention, while the talent expands Mass Mend. A healer raising blue and gold light depicts stronger, farther-reaching group mending."
+  },
+  "talent:endless-appetite": {
+    "name": "Endless Appetite",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_soulcleave4",
+    "previousIcons": [],
+    "reason": "A spectral blade reaching out: Devour Soul reaching further."
   },
   "talent:engineering-upgrade": {
     "name": "Engineering Upgrade",
@@ -7125,6 +7314,13 @@
       "achievement_character_gnome_male"
     ],
     "reason": "A hook and rope evoke wriggling out of a bind or grapple."
+  },
+  "talent:eternal-hunger": {
+    "name": "Eternal Hunger",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_metamorphasisdps",
+    "previousIcons": [],
+    "reason": "A clawed demon hand wreathed in green fire: Demon Unleashed held longer and hitting harder."
   },
   "talent:ethereal-form": {
     "name": "Ethereal Form",
@@ -7202,6 +7398,13 @@
     "previousIcons": [],
     "reason": "A fine wine: a drain restores 1 more Health."
   },
+  "talent:eyes-of-the-nether": {
+    "name": "Eyes of the Nether",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_vengefulretreat",
+    "previousIcons": [],
+    "reason": "A dark face with glowing yellow eyes: spectral sight reaching further and through stone."
+  },
   "talent:fade-step": {
     "name": "Fade Step",
     "source": "04-TALENTS",
@@ -7210,6 +7413,13 @@
       "ability_rogue_envelopingshadows"
     ],
     "reason": "Retain: the enveloping shadow image depicts disappearing and stepping to a visible space."
+  },
+  "talent:fall-upon-them": {
+    "name": "Fall Upon Them",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_demonictrample",
+    "previousIcons": [],
+    "reason": "A winged demon crashing down in fire: the hunter's leap landing hard on everyone below."
   },
   "talent:false-opening": {
     "name": "False Opening",
@@ -7248,6 +7458,20 @@
     ],
     "reason": "The sharp eagle gaze marks exceptional long-range sight."
   },
+  "talent:feast-of-souls": {
+    "name": "Feast of Souls",
+    "source": "04-TALENTS",
+    "icon": "artifactability_vengeancedemonhunter_painbringer",
+    "previousIcons": [],
+    "reason": "A demon hunter wreathed in violet soul-fire: every soul nearby feeding the devour."
+  },
+  "talent:feed-on-power": {
+    "name": "Feed on Power",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_chaoticimprint_arcane",
+    "previousIcons": [],
+    "reason": "A rune crackling with violet arcane: energy taken from a demon or a caster."
+  },
   "talent:feign-death": {
     "name": "Feign Death",
     "source": "04-TALENTS",
@@ -7283,6 +7507,13 @@
       "spell_fire_felfire"
     ],
     "reason": "Retain: the green Fel fire image directly depicts converting Fire spells to Fel damage."
+  },
+  "talent:fel-tempered": {
+    "name": "Fel-Tempered",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_chaosstrike",
+    "previousIcons": [],
+    "reason": "A glaive striking in a green flare: Fel Lash made stronger."
   },
   "talent:felguard": {
     "name": "Felguard",
@@ -7584,6 +7815,13 @@
     ],
     "reason": "Replace: Web depicts entanglement. The green healing image matches the extra Health restored by healing spells and features."
   },
+  "talent:gift-of-the-skull": {
+    "name": "Gift of the Skull",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_skullfel_03",
+    "previousIcons": [],
+    "reason": "A skull glowing with fel: the Skull of Gul'dan, where Illidan first took a demon's shape."
+  },
   "talent:gilded-cage": {
     "name": "Gilded Cage",
     "source": "04-TALENTS",
@@ -7597,6 +7835,13 @@
     "icon": "ability_deathknight_sanguinfortitude",
     "previousIcons": [],
     "reason": "A blood-red fortitude: Prim and Proper grants more temporary Health."
+  },
+  "talent:glaive-ward": {
+    "name": "Glaive Ward",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_concentratedsigils",
+    "previousIcons": [],
+    "reason": "A green sigil drawn in rings: a ward raised against a spell's school."
   },
   "talent:glimpse-ahead": {
     "name": "Glimpse Ahead",
@@ -7622,6 +7867,13 @@
     "icon": "spell_deathknight_butcher",
     "previousIcons": [],
     "reason": "Butchery. Gorge destroys a corpse and restores a servant's Health."
+  },
+  "talent:gorging-lash": {
+    "name": "Gorging Lash",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_bloodlet",
+    "previousIcons": [],
+    "reason": "A blade dripping blood over fel: Fel Lash feeding the hunter."
   },
   "talent:grafted-flesh": {
     "name": "Grafted Flesh",
@@ -7859,6 +8111,13 @@
     ],
     "reason": "A coin, for knowing what a thing is worth and where it was made."
   },
+  "talent:hoarded-soul": {
+    "name": "Hoarded Soul",
+    "source": "04-TALENTS",
+    "icon": "spell_shadow_soulgem",
+    "previousIcons": [],
+    "reason": "A dark gem holding a soul: a soul kept as a Crystalized Soul for later."
+  },
   "talent:hoarders-claim": {
     "name": "Hoarder's Claim",
     "source": "02-CHARACTER-OPTIONS",
@@ -7868,6 +8127,13 @@
       "inv_misc_gem_diamond_01"
     ],
     "reason": "A kept gem: you always know where a thing you hoarded is."
+  },
+  "talent:hobbling-reap": {
+    "name": "Hobbling Reap",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_2h_farmscythe_a_01",
+    "previousIcons": [],
+    "reason": "A plain reaping scythe: a low cut that leaves the creature Slowed."
   },
   "talent:hold-the-hall": {
     "name": "Hold the Hall",
@@ -8131,6 +8397,13 @@
     ],
     "reason": "Replace: The proposed icon depicts a small handler or beast-training scene, not the companion terrifying its victim. A roaring beast head depicts the companion imposing a Bane through fear."
   },
+  "talent:iron-will": {
+    "name": "Iron Will",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_spectank",
+    "previousIcons": [],
+    "reason": "A horned, armored figure standing firm: a will that holds against Fel and fear."
+  },
   "talent:irradiated-memory": {
     "name": "Irradiated Memory",
     "source": "02-CHARACTER-OPTIONS",
@@ -8197,6 +8470,13 @@
       "ability_hunter_efficiency"
     ],
     "reason": "Retain: the hunter’s arrow image matches a ranged attack that frightens its target."
+  },
+  "talent:kill-after-kill": {
+    "name": "Kill After Kill",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_vengefulretreat2",
+    "previousIcons": [],
+    "reason": "A figure leaping away: a leap from one kill to the next."
   },
   "talent:killing-blow": {
     "name": "Killing Blow",
@@ -8656,6 +8936,13 @@
     "icon": "achievement_boss_patchwerk",
     "previousIcons": [],
     "reason": "Patchwerk, the great Abomination. Masterwork Abomination doubles its Health and grafts."
+  },
+  "talent:measured-breath": {
+    "name": "Measured Breath",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_sigilblue",
+    "previousIcons": [],
+    "reason": "A calm blue sigil: a measured breath that keeps Fel off the hunter at a rest."
   },
   "talent:mekkatorques-blueprint": {
     "name": "Mekkatorque's Blueprint",
@@ -9149,6 +9436,13 @@
     ],
     "reason": "A quick step, an ally moved at once."
   },
+  "talent:quiet-the-whispers": {
+    "name": "Quiet the Whispers",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_sigilpurple",
+    "previousIcons": [],
+    "reason": "A violet sigil closing in on itself: the demon's whispers silenced at a rest."
+  },
   "talent:raking-claws": {
     "name": "Raking Claws",
     "source": "04-TALENTS",
@@ -9218,6 +9512,13 @@
     ],
     "reason": "Retain: the ready stance image fits the talent that refreshes one Ranger feature of choice."
   },
+  "talent:reapers-grip": {
+    "name": "Reaper's Grip",
+    "source": "04-TALENTS",
+    "icon": "inv_archaeology_80_witch_bonescythe",
+    "previousIcons": [],
+    "reason": "A bone scythe: the two-handed scythe the branch is built on."
+  },
   "talent:reckless": {
     "name": "Reckless",
     "source": "04-TALENTS",
@@ -9272,6 +9573,13 @@
       "achievement_character_human_male"
     ],
     "reason": "A green landscape within a portal suggests finding a route to a safe settlement."
+  },
+  "talent:refuse-the-legion": {
+    "name": "Refuse the Legion",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_sigilofmisery",
+    "previousIcons": [],
+    "reason": "A violet sigil of refusal: the Legion's charms and spells turned away."
   },
   "talent:regenerating-tissue": {
     "name": "Regenerating Tissue",
@@ -9914,6 +10222,13 @@
     ],
     "reason": "Replace: The proposed cat face suggests reflexes, while this is a command for a companion to attack now. A whistle depicts the hunter issuing an immediate attack command to the beast."
   },
+  "talent:sight-beyond-sight": {
+    "name": "Sight Beyond Sight",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_darkness",
+    "previousIcons": [],
+    "reason": "A face half seen in shadow: sight that finds the true form behind an illusion or a disguise."
+  },
   "talent:silence": {
     "name": "Silence",
     "source": "04-TALENTS",
@@ -9922,6 +10237,13 @@
       "ability_priest_silence"
     ],
     "reason": "Retain: the violet silence icon matches the named interrupting effect."
+  },
+  "talent:silence-the-weave": {
+    "name": "Silence the Weave",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_sigilofsilence",
+    "previousIcons": [],
+    "reason": "A cyan sigil of silence: every spell nearby ended, and casters left fumbling."
   },
   "talent:silent-tread": {
     "name": "Silent Tread",
@@ -10038,6 +10360,13 @@
       "spell_fire_fire"
     ],
     "reason": "Replace: The proposed ordinary flame omits the Health spent to empower the next spell. A flaming hand evokes burning one’s own life to fuel the empowered spell."
+  },
+  "talent:soul-hunger": {
+    "name": "Soul Hunger",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_soulcleave2",
+    "previousIcons": [],
+    "reason": "A pale skull with a soul pulled from it: a soul devoured."
   },
   "talent:soul-link": {
     "name": "Soul Link",
@@ -10181,6 +10510,13 @@
       "ability_hisek_aim"
     ],
     "reason": "Retain: the red crosshair icon matches taking a steady aim and recovering Focus."
+  },
+  "talent:steady-footing": {
+    "name": "Steady Footing",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_doublejump",
+    "previousIcons": [],
+    "reason": "A bare foot springing off the ground: footing that shakes off Slowed and Entangled."
   },
   "talent:stonemaul-grip": {
     "name": "Stonemaul Grip",
@@ -10326,6 +10662,20 @@
     ],
     "reason": "A moment suspended, conditions that do nothing for a turn."
   },
+  "talent:swallow-their-magic": {
+    "name": "Swallow Their Magic",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_chaoticimprint_shadow",
+    "previousIcons": [],
+    "reason": "A rune crackling with shadow: a caster's spells swallowed with its soul."
+  },
+  "talent:sweeping-arc": {
+    "name": "Sweeping Arc",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_soulcleave",
+    "previousIcons": [],
+    "reason": "A violet blade sweeping in an arc: the scythe cutting a second enemy beside the first."
+  },
   "talent:swelling-ranks": {
     "name": "Swelling Ranks",
     "source": "04-TALENTS",
@@ -10377,6 +10727,13 @@
     ],
     "reason": "A dragon's tail, swept to knock nearby enemies Prone."
   },
+  "talent:taste-of-power": {
+    "name": "Taste of Power",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_chaoticimprint_fire",
+    "previousIcons": [],
+    "reason": "A fel rune flaring with fire: a taste of the demon's power taken on purpose, and paid for in Fel."
+  },
   "talent:tasting-bite": {
     "name": "Tasting Bite",
     "source": "04-TALENTS",
@@ -10392,6 +10749,13 @@
       "ability_physical_taunt"
     ],
     "reason": "Retain: the roaring face directly depicts drawing an enemy’s attacks toward you."
+  },
+  "talent:tear-the-soul": {
+    "name": "Tear the Soul",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_soulcleave3",
+    "previousIcons": [],
+    "reason": "A violet blade tearing through a soul: Fel Lash against a creature already near its end."
   },
   "talent:telling-blow": {
     "name": "Telling Blow",
@@ -10792,6 +11156,13 @@
     ],
     "reason": "Retain: the focused bow image fits an attack that hits without a roll."
   },
+  "talent:turn-their-fire": {
+    "name": "Turn Their Fire",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_netherbond",
+    "previousIcons": [],
+    "reason": "Violet lightning running between two points: a spell's force turned back on its caster."
+  },
   "talent:turned-aside": {
     "name": "Turned Aside",
     "source": "04-TALENTS",
@@ -10800,6 +11171,13 @@
       "inv_shield_06"
     ],
     "reason": "A shield, Sand gained from a Block and a missed attack."
+  },
+  "talent:twin-blades": {
+    "name": "Twin Blades",
+    "source": "04-TALENTS",
+    "icon": "inv_glaive_1h_artifactazgalor_d_02dual",
+    "previousIcons": [],
+    "reason": "A pair of fel-lit warglaives: one in each hand."
   },
   "talent:twinned-hours": {
     "name": "Twinned Hours",
@@ -11097,6 +11475,13 @@
     ],
     "reason": "Retain: the green mail armor image depicts the studded and mail armor access granted."
   },
+  "talent:warding-ink": {
+    "name": "Warding Ink",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_empowerwards",
+    "previousIcons": [],
+    "reason": "A fel rune drawn as a ward: tattoo ink that holds back more of the demon."
+  },
   "talent:warsong-memory": {
     "name": "Warsong Memory",
     "source": "02-CHARACTER-OPTIONS",
@@ -11249,6 +11634,13 @@
       "spell_magic_featherfall"
     ],
     "reason": "Feather Fall's art: no damage from a fall."
+  },
+  "talent:wings-of-the-betrayer": {
+    "name": "Wings of the Betrayer",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_glide",
+    "previousIcons": [],
+    "reason": "A figure spreading leathery wings: the demon's wings, whatever the Fel."
   },
   "talent:witch-doctor": {
     "name": "Witch Doctor",

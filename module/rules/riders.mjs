@@ -352,6 +352,10 @@ export function riderOutcome(rider, { hit = false, spent = 0, rank = 1, tier = 1
   if (on.recentHeal) out.recentHeal = hit ? Math.max(0, Math.trunc(evaluateExpression(on.recentHeal, scope) ?? 0)) : 0;
   // **02's PLAGUE** (door 7): the disease a hit lays on the creature struck.
   if (on.plague) out.plague = hit ? on.plague : null;
+  // **02's FEL LASH AND MANA REND** (the Demon Hunter's two riders; D-1520): what the hit does is the door's
+  // (`effects/demon-hunter-features.mjs#demonHunterOnHit`), named here only where a rider carries it.
+  if (on.felLash) out.felLash = hit;
+  if (on.manaRend) out.manaRend = hit;
   // **THE RANGER'S AND THE ROGUE'S** (D-773), each named only where carried.
   // Piercing Shot's Pierce rides the blow, landed or not (a miss pierces nothing).
   if (on.pierce !== null && on.pierce !== undefined) out.pierce = Math.max(0, Math.trunc(evaluateExpression(on.pierce, scope) ?? 0));
@@ -486,7 +490,9 @@ export function riderWritesOnTarget(line, { tier = 1 } = {}) {
   if (!line) return false;
   const done = outcomeOfLine(line, { hit: true, spent: Math.max(1, Math.trunc(Number(line.cost)) || 1), tier, sl: 6 });
   return riderConditions(done).length > 0 || done.loseReaction === true || (Number(done.speedDrop) || 0) > 0
-    || Boolean(done.noHealing) || Boolean(done.bane) || Boolean(done.plague);
+    || Boolean(done.noHealing) || Boolean(done.bane) || Boolean(done.plague)
+    // Mana Rend takes Power off the creature struck (02 §7; D-1520).
+    || Boolean(done.manaRend);
 }
 
 /**
@@ -512,7 +518,7 @@ export function riderWritesOnTarget(line, { tier = 1 } = {}) {
  *   from, so what it does is read off the row and never off the line
  *   (`outcomeOfLine`)
  */
-export function ridersFor(talents = [], { pools = [], form = false, weapon = null, shield = false, opening = null, usedThisRound = [], primed = [], activeDiscounts = [], tier = 1, facts = null, abilities = {}, rowOf = talentEffect } = {}) {
+export function ridersFor(talents = [], { pools = [], form = false, weapon = null, shield = false, opening = null, usedThisRound = [], primed = [], activeDiscounts = [], tier = 1, facts = null, abilities = {}, rowOf = talentEffect, classPool = null } = {}) {
   const rows = takenRiders(talents, rowOf);
   const discounts = rows
     .filter(r => r.rider.discount && activeDiscounts.includes(r.talent.identifier))
@@ -537,7 +543,14 @@ export function ridersFor(talents = [], { pools = [], form = false, weapon = nul
     // target, no fight) left for the table to tick - never drawn at a target the
     // door knows is not.
     if (rider.needs === "opening" && opening === false) continue;
-    const pool = (pools ?? []).find(p => p?.name === rider.cost.pool) ?? null;
+    // **WHOSE POOL, WHERE TWO CLASSES HOLD ONE BY THIS NAME** (the Demon Hunter review's M2): the pool of the class
+    // the row names (`classPool(className)`, the class item's id), else the first by name. A Rogue and a Demon Hunter
+    // hold ONE merged Energy pool (02 §10, D-1723), so their Energy lines find one row and name no item. The line names the pool's item only where two pools share the
+    // name (`poolItemId`), so `riderPlan` and `settleRiders` pay that one and every single-pool line is unchanged.
+    const named = (pools ?? []).filter(p => p?.name === rider.cost.pool);
+    const prefer = typeof classPool === "function" ? (classPool(talent.className) ?? null) : null;
+    const pool = named.find(p => prefer && p.itemId === prefer) ?? named[0] ?? null;
+    const poolItemId = named.length > 1 && pool ? (pool.itemId ?? null) : null;
     const all = rider.cost.amount === "all";
     // **FREE AGAINST THIS TARGET** (Cursed Prey at rank 2; B1): a talent's
     // `riderCost` naming this rider, its gate held - *all* is never made free.
@@ -565,6 +578,7 @@ export function ridersFor(talents = [], { pools = [], form = false, weapon = nul
       name: talent.name,
       rank,
       pool: rider.cost.pool,
+      ...(poolItemId ? { poolItemId } : {}),
       all,
       cost,
       spend,
@@ -693,8 +707,13 @@ export function riderPlan(lines = [], chosen = [], { pools = [] } = {}) {
     if (!byId.has(id)) return { ok: false, reason: { key: RIDER_REFUSALS.gone, params: { name: id } } };
   }
   const left = new Map();
-  const poolOf = name => (pools ?? []).find(p => p?.name === name) ?? null;
-  const have = name => (left.has(name) ? left.get(name) : Math.max(0, Math.trunc(Number(poolOf(name)?.value) || 0)));
+  // A line naming its pool's item (`poolItemId`: two classes hold a pool by this name) is keyed by both.
+  const keyOf = line => (line?.poolItemId ? `${line.pool}#${line.poolItemId}` : line?.pool);
+  const poolOf = key => {
+    const [name, itemId] = String(key ?? "").split("#");
+    return (pools ?? []).find(p => p?.name === name && (!itemId || p.itemId === itemId)) ?? null;
+  };
+  const have = key => (left.has(key) ? left.get(key) : Math.max(0, Math.trunc(Number(poolOf(key)?.value) || 0)));
   const picked = (lines ?? []).filter(l => ids.includes(l.identifier));
   // **ONE OF A CHOICE** (02's Plague: *your Frost Fever or your Blood Plague*): two lines of
   // one `exclusive` group ticked together refuse the roll in words, nothing spent.
@@ -706,13 +725,13 @@ export function riderPlan(lines = [], chosen = [], { pools = [] } = {}) {
   const paid = [];
   for (const line of [...picked.filter(l => !l.all), ...picked.filter(l => l.all)]) {
     if (!line.available) return { ok: false, reason: line.reason };
-    const pool = poolOf(line.pool);
+    const pool = poolOf(keyOf(line));
     if (!pool) return { ok: false, reason: { key: RIDER_REFUSALS.noPool, params: { name: line.name, pool: line.pool, cost: line.cost ?? 0, value: 0 } } };
-    const now = have(line.pool);
+    const now = have(keyOf(line));
     const spent = line.all ? (Number.isFinite(line.cap) ? Math.min(now, line.cap) : now) : line.cost;
     if (line.all && now < 1) return { ok: false, reason: { key: RIDER_REFUSALS.empty, params: { name: line.name, pool: line.pool, cost: 0, value: now } } };
     if (!line.all && now < spent) return { ok: false, reason: { key: RIDER_REFUSALS.short, params: { name: line.name, pool: line.pool, cost: spent, value: now } } };
-    left.set(line.pool, now - spent);
+    left.set(keyOf(line), now - spent);
     paid.push({ identifier: line.identifier, name: line.name, pool: line.pool, spent, line });
   }
   const writes = [...left.entries()].map(([name, value]) => {
@@ -751,20 +770,25 @@ export function riderPlan(lines = [], chosen = [], { pools = [] } = {}) {
  *   writes: Array<{itemId: string|null, kind: string, value: number}>}}
  */
 export function settleRiders(plan, { pools = [] } = {}) {
-  const poolOf = name => (pools ?? []).find(p => p?.name === name) ?? null;
+  // Keyed as `riderPlan` keys it: by the pool's item where the line names one (the review's M2).
+  const keyOf = p => (p?.line?.poolItemId ? `${p.pool}#${p.line.poolItemId}` : p?.pool);
+  const poolOf = key => {
+    const [name, itemId] = String(key ?? "").split("#");
+    return (pools ?? []).find(x => x?.name === name && (!itemId || x.itemId === itemId)) ?? null;
+  };
   const left = new Map();
   const have = name => (left.has(name) ? left.get(name) : Math.max(0, Math.trunc(Number(poolOf(name)?.value) || 0)));
   const order = plan?.paid ?? [];
   const settled = new Map();
   for (const p of [...order.filter(x => !x.line?.all), ...order.filter(x => x.line?.all)]) {
-    if (!poolOf(p.pool)) {
+    if (!poolOf(keyOf(p))) {
       settled.set(p, { ...p, spent: 0 });
       continue;
     }
-    const now = have(p.pool);
+    const now = have(keyOf(p));
     const price = Math.max(0, Math.trunc(Number(p.spent)) || 0);
     const spent = p.line?.all ? (Number.isFinite(p.line?.cap) ? Math.min(now, p.line.cap) : now) : Math.min(now, price);
-    left.set(p.pool, now - spent);
+    left.set(keyOf(p), now - spent);
     settled.set(p, { ...p, spent });
   }
   const writes = [...left.entries()].map(([name, value]) => {

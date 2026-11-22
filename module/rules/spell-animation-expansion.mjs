@@ -19,6 +19,8 @@ import { DK_EXPANDED_SPELL_ANIMATIONS } from "./death-knight-animations.mjs";
 import { NECRO_EXPANDED_SPELL_ANIMATIONS } from "./necromancer-animations.mjs";
 // The Sovereign's twenty-six above tier 1 (the San'layn and Sovereign plan's C14).
 import { SOV_EXPANDED_SPELL_ANIMATIONS } from "./sovereign-animations.mjs";
+// The Demon Hunter's twelve above tier 1 (the Demon Hunter plan's Phase 6; D-1580).
+import { DH_EXPANDED_SPELL_ANIMATIONS } from "./demon-hunter-animations.mjs";
 
 const fx = (asset, options = {}) => Object.freeze({kind: "effect", asset, ...options});
 const snd = (asset, options = {}) => Object.freeze({kind: "sound", asset, volume: 0.6, ...options});
@@ -305,7 +307,8 @@ export const EXPANDED_SPELL_ANIMATIONS = Object.freeze({
   "skyfall": spell("arcane", "moon", "region", "region", 1),
   "starbind": spell("arcane", "moon", "target", "cast", 1),
   "starsurge": spell("arcane", "moon", "target", "cast", 1),
-  "starweave": spell("arcane", "moon", "region", "region", 1, "sustain-region"),
+  // A timed minute since the spell audit (D-1705), so a cue and no Sustain loop, as Skyfall's.
+  "starweave": spell("arcane", "moon", "region", "region", 1),
   "stasis": spell("arcane", "mental", "resisted", "resist", 1),
   "translocate": spell("arcane", "step", "target", "cast", 1),
   "unweave": spell("arcane", "impact", "target", "cast|effect", 1),
@@ -446,6 +449,12 @@ export const EXPANDED_SPELL_ANIMATIONS = Object.freeze({
   "watchfire": spell("fire", "flame", "source", "cast", 1.1), // No object/remote destination is recorded: cast cue only.
   "wildfire": spell("fire", "burst", "region", "region", 1),
   // shadow
+  // **FADE, MOVED UP FROM TIER 1 BY THE SPELL AUDIT** (D-1702): the tier 1 table's own cue,
+  // unchanged. The token's alpha is never touched: the priest stays visible (07's own words).
+  "fade": Object.freeze({cues: Object.freeze([cue("cast", [
+    fx("jb2a.smoke.puff.ring.01.white", {place: "source", scale: 1.1, filter: "DIM"}),
+    snd("psfx.cantrips.gust.v1", {volume: 0.4})
+  ])])}),
   "bargain": spell("shadow", "detect", "source", "cast", 1.1), // No object/remote destination is recorded: cast cue only.
   "blackout": spell("shadow", "darkness", "region", "region", 1, "sustain-region"),
   "curse-of-the-elements": spell("shadow", "mental", "resisted", "resist", 1),
@@ -491,4 +500,6 @@ export const EXPANDED_SPELL_ANIMATIONS = Object.freeze({
   // The Sovereign's own (07 §17, Restricted Sovereign); Drain Life, Siphon Life, Exsanguinate,
   // Graveblight and Contagion keep the rows they already play.
   ...SOV_EXPANDED_SPELL_ANIMATIONS,
+  // The Demon Hunter's own (07, Restricted Demon Hunter); the ten borrowed Fel spells keep the rows they play.
+  ...DH_EXPANDED_SPELL_ANIMATIONS,
 });

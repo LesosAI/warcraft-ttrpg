@@ -192,7 +192,9 @@ AZEROTH.resilienceAbility = { body: "con", reflex: "dex", spirit: "wis" };
 // its horde's capacity (`rules/horde.mjs`).
 // The Sovereign casts with Constitution (the lead, R7: *"scales off Constitution as the casting
 // attribute"*; the San'layn and Sovereign plan's T2), which also sizes its Vitae (`rules/vitae.mjs`).
-AZEROTH.primaryAbility = { warrior: "str", rogue: "dex", ranger: "dex", "chromatic-champion": "con", chronomancer: "int", "death-knight": "cha", necromancer: "int", sovereign: "con" };
+// The Demon Hunter fights with Dexterity and casts with Wisdom (the lead, R7: *"Wisdom
+// (Recommended)"*): its glaives are Deft (C59), so it holds two stars as the Ranger does.
+AZEROTH.primaryAbility = { warrior: "str", rogue: "dex", ranger: "dex", "chromatic-champion": "con", chronomancer: "int", "death-knight": "cha", necromancer: "int", sovereign: "con", "demon-hunter": "dex" };
 
 // **A CLASS TAKEN AT CREATION AND NEVER MULTICLASSED, EITHER WAY** (the lead, on the
 // Chromatic Champion plan: *"Creation only; no 2nd class."*). Keyed by identifier;
@@ -272,7 +274,12 @@ AZEROTH.momentumTypes = {
   // The Sovereign's (02 §7; the San'layn and Sovereign plan's B.4): gained by a claw hit on the prey
   // and the prey's failed Test (`rules/tribute.mjs`), capped at 3 plus Charisma and never below 3,
   // emptied by a Critical Injury and the fight's end and NOT by Guard (the lead, R18).
-  tribute:     "AZEROTH.Pool.Tribute"
+  tribute:     "AZEROTH.Pool.Tribute",
+  // The Demon Hunter's (the Demon Hunter plan, R6: *"Hatred (Recommended)"*): gained by a cast (1 plus
+  // its tier), Beyond Limits and the features that say so, capped at 5 plus 2 for each 5 Fel Corruption
+  // held, kept between fights, and turned into Fel Corruption when a Short or Long Rest finishes
+  // (`rules/hatred.mjs`).
+  hatred:      "AZEROTH.Pool.Hatred"
 };
 AZEROTH.powerTypes = {
   mana:   "AZEROTH.Pool.Mana",
@@ -285,6 +292,11 @@ AZEROTH.powerTypes = {
   // by feeding only (`rules/vitae.mjs`, `rules/feeding.mjs`), and short of a cost it takes Health.
   vitae:  "AZEROTH.Pool.Vitae"
 };
+// **THE POWER POOLS TWO CLASSES SHARE** (02 §10: *Two classes that both give Energy share one Energy
+// pool*; 05 §12; D-1723): a character whose two classes both give one of these holds ONE pool of it, the
+// larger of the two, refilled once a turn (`rules/progression.mjs#poolsFor`). Mana, Focus, the runes
+// and Vitae stay one pool a class.
+AZEROTH.sharedPowerPools = Object.freeze(["energy"]);
 // The two kinds of rune (the lead: *"inscribe runes of either Blood or Frost"*).
 AZEROTH.runeKinds = {
   blood: "AZEROTH.Runes.Blood",
@@ -303,7 +315,9 @@ AZEROTH.costPoolTypes = { momentum: "AZEROTH.Momentum.Label", any: "AZEROTH.Pool
 // The pool 07 prints a SPELL's cost in (D-944): Mana, or Runic Power on a spell only a Death
 // Knight can learn. `SpellData.costPool`'s choices and the spell sheet's select.
 // And Vitae on a spell only a Sovereign can learn (the plan's B.10: *prints Vitae where 07 prints Mana*).
-AZEROTH.spellCostPools = { mana: "AZEROTH.Card.Mana", runicPower: "AZEROTH.Pool.RunicPower", vitae: "AZEROTH.Pool.Vitae" };
+// And Energy on a spell only a Demon Hunter can learn (the Demon Hunter plan: *The DH-only spells print
+// **Energy** in the cost field*).
+AZEROTH.spellCostPools = { mana: "AZEROTH.Card.Mana", runicPower: "AZEROTH.Pool.RunicPower", vitae: "AZEROTH.Pool.Vitae", energy: "AZEROTH.Pool.Energy" };
 // What feeds Speed (05 §10, D-621), for the banner's tooltip.
 AZEROTH.speedParts = {
   race:    "AZEROTH.Speed.Race",
@@ -325,7 +339,9 @@ AZEROTH.speedParts = {
   // 04's Warden's Mail at rank 2: the Encumbering trait's Speed given back (door 23).
   waived: "AZEROTH.Speed.Waived",
   // 02's Chromatic Champion's Scales: the suit's Encumbering Speed given back (stage 2B).
-  scales: "AZEROTH.Speed.Scales"
+  scales: "AZEROTH.Speed.Scales",
+  // 02's Demon Hunter's Hunter's Stride: 5 feet for each tier reached (the Demon Hunter plan's Phase 4a).
+  stride: "AZEROTH.Speed.Stride"
 };
 // The three kinds of shape a character may wear (02 §7, D-769): the law is
 // `rules/shapes.mjs#SHAPE_KINDS`, and `shapes.test.mjs` holds the two in step.
@@ -343,7 +359,11 @@ AZEROTH.shapeKinds = {
   // beside the character off 14 §10's tier 3 drake blocks.
   drake:         "AZEROTH.Shape.Kind.Drake",
   // 04's Blood Monarch (the Sovereign's Ravenous capstone): its own look and a 240 ft flight, nothing melded.
-  bloodQueen:    "AZEROTH.Shape.Kind.BloodQueen"
+  bloodQueen:    "AZEROTH.Shape.Kind.BloodQueen",
+  // 04's Gift of the Skull (the Demon Hunter's Betrayer): the lesser demon's shape, an overlay like Demon Unleashed.
+  skull:         "AZEROTH.Shape.Kind.Skull",
+  // 02's Demon Unleashed (the Demon Hunter's level 17): the hunter's own statistics, nothing melded.
+  unleashed:     "AZEROTH.Shape.Kind.Unleashed"
 };
 // A class feature is a thing you do or a thing you are (02 §7, D-612).
 AZEROTH.featureKinds = {

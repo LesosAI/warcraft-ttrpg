@@ -1,6 +1,7 @@
 import { AZEROTH } from "../config.mjs";
 // The Sovereign's Vitae is sized off the same chart, times 1.5 (the San'layn and Sovereign plan's V2).
 import { chartPool, poolScale, scaledPoolMax } from "./vitae.mjs";
+import { keepsAboveCap } from "./hatred.mjs";
 
 /**
  * Progression: levels, tiers, Proficiency, Health and the class pools.
@@ -217,6 +218,9 @@ export function poolsFor(classItems = [], level = 1) {
   // possible pairings are double-Power and a Mage/Rogue was getting Mana and
   // no Energy at all.
   //
+  // **EXCEPT ENERGY** (02 §10, D-1723): two classes that both give Energy share ONE pool, the
+  // larger of the two, merged below by `mergeSharedPowers` after every class's row is built.
+  //
   // The level is per class, because 02 §10's second class runs behind the
   // first and Mana comes off a band table. A class entry that carries no level
   // falls back to the character's.
@@ -251,14 +255,46 @@ export function poolsFor(classItems = [], level = 1) {
     });
   }
 
+  // **ENERGY IS THE EXCEPTION** (02 §10, D-1723): two classes that both give it hold one pool.
+  const held = mergeSharedPowers(powers);
   return {
     momenta,
-    powers,
+    powers: held,
     // The primary class's pools. Kept so a caller that only ever draws one
     // pool - a chat card, a macro - kept working when these went plural.
     momentum: momenta[0] ?? null,
-    power: powers[0] ?? null
+    power: held[0] ?? null
   };
+}
+
+/**
+ * **TWO CLASSES THAT BOTH GIVE ENERGY SHARE ONE ENERGY POOL** (02 §10, 05 §12; the lead's
+ * ruling of 2026-11-22, D-1723). One row stands for every class entry whose Power pool is a
+ * shared one (`AZEROTH.sharedPowerPools`): at the FIRST such class's place, with its `itemId`
+ * (the HOLDER, whose stored value is the pool's), the larger cap, and an `itemIds` array naming
+ * every member. A pool of one class keeps no `itemIds`, so a Rogue alone reads as before. Mana,
+ * Focus, the runes and Vitae are never merged.
+ *
+ * @param {Array<{name: string, max: number, itemId: string|null}>} powers
+ * @returns {Array<object>}
+ */
+export function mergeSharedPowers(powers = []) {
+  const shared = new Set(AZEROTH.sharedPowerPools ?? []);
+  const out = [];
+  const at = new Map();
+  for (const pool of powers) {
+    if (!shared.has(pool?.name)) { out.push(pool); continue; }
+    const held = at.get(pool.name);
+    if (!held) {
+      const row = { ...pool };
+      at.set(pool.name, row);
+      out.push(row);
+      continue;
+    }
+    held.itemIds = [...(held.itemIds ?? [held.itemId]), pool.itemId];
+    if ((Number(pool.max) || 0) > (Number(held.max) || 0)) held.max = pool.max;
+  }
+  return out;
 }
 
 /**
@@ -284,6 +320,10 @@ export function powerMax(name, level = 1, caster = "full") {
  */
 export function clampPool(value, pool) {
   if (!pool) return null;
+  // **HATRED IS NEVER TRIMMED TO A FALLEN CAP** (the Demon Hunter plan, Q14 left as written; the
+  // orchestrator's brief: the cap is enforced when Hatred is gained and at a rest). A Fel Lash hit
+  // lowers the Fel and so the cap, and the Hatred held stays until it is spent or the rest takes it.
+  if (keepsAboveCap(pool.name)) return Math.max(0, Math.trunc(value ?? 0));
   return Math.max(0, Math.min(Math.trunc(value ?? 0), pool.max));
 }
 
@@ -336,7 +376,9 @@ export const EXTRA_FEATURE_LEVELS = Object.freeze({
   // Death Grip at 3 and Deathcharger at 15 (the drafts' roster, D-942).
   "death-knight": Object.freeze([3, 15]),
   // Prim and Proper at 3 (R30: *"Move to level 3"*; the San'layn and Sovereign plan's B.8).
-  sovereign: Object.freeze([3])
+  sovereign: Object.freeze([3]),
+  // Hunter's Leap and Fel Surge at 3 (the Demon Hunter plan's features table, C64).
+  "demon-hunter": Object.freeze([3])
 });
 
 /** The levels one class grants a feature at: the ladder plus its own extras. */
