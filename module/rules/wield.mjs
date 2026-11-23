@@ -53,10 +53,13 @@ export function attackOffHand(weapon, { offHand = null, budget = null, damage = 
  * missing: the attack door swung every Versatile weapon at its one-handed Rating whatever the
  * off hand held, so the trait was a note and nothing more (the lead, 2026-11-23).
  *
- * The answer is the printed X **only where it beats the Rating the item already has**. Every
- * base weapon in 08 §7 prints X one above its Rating, but a forged or found item keeps the base's
- * `Versatile (5)` over a Rating its affixes have raised, and a Rating swapped for a lower X
- * would punish the two-handed grip. So a two-handed blow never swings below the one-handed one.
+ * The answer is **the printed X or the one-handed Rating plus 1, whichever is more** (the lead,
+ * 2026-11-23: *"applied to all weapons that have or have the versatile trait added to it"*). Every
+ * base weapon in 08 §7 prints X exactly one above its Rating, so for those the two readings are the
+ * same number. A forged or found item keeps the base's `Versatile (5)` over a Rating its affixes
+ * have raised (62 of the weapons pack's 138 Versatile items print X at or below their Rating), and
+ * a trait added by hand may print no X at all; the step of 1 is what the trait is worth there, so a
+ * two-handed blow always swings above the one-handed one and never below the printed X.
  *
  * @param {{type?: string, system?: object}} weapon  the weapon swung
  * @param {Iterable<object>} items  what the actor owns (`figureSlots` reads which are equipped)
@@ -69,12 +72,12 @@ export function versatileRating(weapon, items = [], { offHand = false, melded = 
   if (sys.equipped !== true || sys.launcher || isShot(sys)) return null;
   const rating = Number(sys.rating);
   if (!Number.isFinite(rating)) return null;
-  const trait = (Array.isArray(sys.traits) ? sys.traits : []).map(t => /^Versatile\s*\(\s*(\d+)\s*\)/i.exec(String(t))).find(Boolean);
+  const trait = (Array.isArray(sys.traits) ? sys.traits : []).map(t => /^Versatile\b(?:\s*\(\s*(\d+)\s*\))?/i.exec(String(t))).find(Boolean);
   if (!trait) return null;
   // The Off hand tile is the figure's own: a shield, a second weapon and the claws all fill it.
   if (figureSlots([...(items ?? [])]).offHand) return null;
-  const printed = Number(trait[1]);
-  return printed > rating ? printed : null;
+  // A bare `Versatile`, or an X that no longer clears the Rating, is worth the step of 1.
+  return Math.max(Number.isFinite(Number(trait[1])) ? Number(trait[1]) : 0, rating + 1);
 }
 
 /**
