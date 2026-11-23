@@ -343,8 +343,19 @@
   .azeroth.azeroth-card .azeroth-card-resisted > em {
     grid-column: 2;
   }
+  .azeroth.azeroth-card .azeroth-area-tick {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 6px;
+    row-gap: 1px;
+    align-items: baseline;
+  }
   .azeroth.azeroth-card .azeroth-area-tick > strong {
-    flex: 1 1 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .azeroth.azeroth-card .azeroth-area-tick > em {
+    grid-column: 2;
     min-width: 0;
     overflow-wrap: anywhere;
   }
