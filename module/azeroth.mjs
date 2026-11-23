@@ -75,6 +75,7 @@ import { registerHunterSight } from "./effects/demon-hunter-sight.mjs";
 import { registerTokenShrinkHooks } from "./canvas/token-shrink.mjs";
 import { registerElunesLightHooks } from "./canvas/elunes-light.mjs";
 import { registerCorpseCandle } from "./canvas/corpse-candle.mjs";
+import { registerTempHealthHud } from "./canvas/hud-temp.mjs";
 import { registerSentinelPackHooks } from "./effects/anubisath-pack-hooks.mjs";
 import { registerSentinelStrikeHooks } from "./effects/sentinel-mortal-strike.mjs";
 import { registerSentinelMendingHooks } from "./effects/sentinel-mending.mjs";
@@ -287,6 +288,7 @@ Hooks.once("init", () => {
   registerTokenShrinkHooks();
   registerElunesLightHooks();
   registerCorpseCandle();
+  registerTempHealthHud();
   registerSentinelPackHooks();
   registerSentinelStrikeHooks();
   registerSentinelMendingHooks();

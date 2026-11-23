@@ -46,6 +46,38 @@ export function attackOffHand(weapon, { offHand = null, budget = null, damage = 
 }
 
 /**
+ * **A VERSATILE WEAPON IN TWO HANDS** (08 §5: *Versatile (X): Damage Rating X when used in two
+ * hands*). The weapon is used in two hands when it is the one swung in the main hand and the Off
+ * hand tile holds nothing - no shield, no second weapon, no claws. `wieldFacts#bothHands` reads
+ * the same grip for the Death Knight's talents; this is the Rating's reading of it, and it was
+ * missing: the attack door swung every Versatile weapon at its one-handed Rating whatever the
+ * off hand held, so the trait was a note and nothing more (the lead, 2026-11-23).
+ *
+ * The answer is the printed X **only where it beats the Rating the item already has**. Every
+ * base weapon in 08 §7 prints X one above its Rating, but a forged or found item keeps the base's
+ * `Versatile (5)` over a Rating its affixes have raised, and a Rating swapped for a lower X
+ * would punish the two-handed grip. So a two-handed blow never swings below the one-handed one.
+ *
+ * @param {{type?: string, system?: object}} weapon  the weapon swung
+ * @param {Iterable<object>} items  what the actor owns (`figureSlots` reads which are equipped)
+ * @param {{offHand?: boolean, melded?: boolean}} [o]  an Off-Hand Attack is never two-handed
+ * @returns {number|null} the Damage Rating to swing at, or null where nothing changes
+ */
+export function versatileRating(weapon, items = [], { offHand = false, melded = false } = {}) {
+  if (!weapon || weapon.type !== "weapon" || offHand === true || melded === true) return null;
+  const sys = weapon.system ?? {};
+  if (sys.equipped !== true || sys.launcher || isShot(sys)) return null;
+  const rating = Number(sys.rating);
+  if (!Number.isFinite(rating)) return null;
+  const trait = (Array.isArray(sys.traits) ? sys.traits : []).map(t => /^Versatile\s*\(\s*(\d+)\s*\)/i.exec(String(t))).find(Boolean);
+  if (!trait) return null;
+  // The Off hand tile is the figure's own: a shield, a second weapon and the claws all fill it.
+  if (figureSlots([...(items ?? [])]).offHand) return null;
+  const printed = Number(trait[1]);
+  return printed > rating ? printed : null;
+}
+
+/**
  * 08 §7's Type column, in the order the item sheet's select offers it: the lead's
  * ten (*"Type, not kind"*), then the three the book stream added for weapons that
  * fit none - fist (the cestus), glaive and whip - which D-781 records as awaiting

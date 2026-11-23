@@ -98,6 +98,7 @@ import { laidByMap } from "../rules/talent-gates.mjs";
 import { cursedBy } from "../rules/sovereign-spells.mjs";
 // A throw a ticked rider makes on its own ability (04's Storm Bolt; the B6 review).
 import { riderThrowModifiers } from "../rules/wield.mjs";
+import { groupLines } from "../rules/line-groups.mjs";
 
 const TEMPLATE = "systems/azeroth-rpg/templates/dialog/roll-test.hbs";
 
@@ -1295,6 +1296,12 @@ async function dialogVariant(actor, spec) {
   const riderModifiers = resolved.riderModifiers?.identifier && Array.isArray(resolved.riderModifiers.modifiers)
     ? { identifier: resolved.riderModifiers.identifier, modifiers: resolved.riderModifiers.modifiers.map(m => ({ label: m.label, value: m.value })) }
     : null;
+  // **EACH KIND OF SPEND LINE UNDER ITS OWN NAME** (the lead, 2026-11-23: *"Just label it what it is"*): the
+  // template draws a fieldset a group, its legend `AZEROTH.TalentLine.Group.<group>`. The lines keep their
+  // `tline-<identifier>` names, so `readForm` reads them as it always has.
+  context.talentGroups = groupLines(context.talentLines).map(g => ({
+    group: g.group, legend: game.i18n.localize(`AZEROTH.TalentLine.Group.${g.group}`), lines: g.lines
+  }));
   return { p, modifiers, canPay, riderModifiers, html: await renderTemplate(TEMPLATE, context) };
 }
 

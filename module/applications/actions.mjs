@@ -70,7 +70,7 @@ import { bonusSchool } from "../rules/schools.mjs";
 import { spellPoolFor } from "../rules/class-talents.mjs";
 import { opportunityNeedsGM, opportunityOwned } from "../rules/gm-writes.mjs";
 import { abilityScope } from "../rules/expressions.mjs";
-import { attackOffHand, riderThrowModifiers, throwAsWeapon } from "../rules/wield.mjs";
+import { attackOffHand, riderThrowModifiers, throwAsWeapon, versatileRating } from "../rules/wield.mjs";
 import { extraAttackSelection, extraAttackWeapons } from "../rules/second-attack-choice.mjs";
 import { roundHolds, throwAsOffer } from "../rules/riders.mjs";
 import { unansweredBy } from "../rules/reactions.mjs";
@@ -2151,6 +2151,8 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
   let flametongueScorch = null;
   // Starfire Arrow's shot with no ammunition (D-912), or null.
   let phantom = null;
+  // A Versatile weapon's printed Rating where it is used in two hands (08 §5), or null.
+  let versatileTwoHanded = null;
   // Wounded Beast (04, D-648): a weapon attack's Rating rises by the rank.
   const wounded = actor.talentRanks?.("Wounded Beast") ?? 0;
   if (sys.isLauncher) {
@@ -2178,13 +2180,17 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
     if (damageSpec && wounded) damageSpec = { ...damageSpec, rating: damageSpec.rating + wounded };
   } else if (sys.rating !== null) {
     // A melee weapon's own Pierce reaches the roll the same way (08 §5).
-    damageSpec = { rating: sys.rating + wounded, kind: "physical", penetration: pierceOf(sys.traits) };
+    // **A VERSATILE WEAPON WITH THE OFF HAND EMPTY SWINGS AT ITS TWO-HANDED RATING** (08 §5's
+    // *Versatile (X)*: *Damage Rating X when used in two hands*; the lead, 2026-11-23). `versatileRating`
+    // is null for an Off-Hand Attack and wherever the Off hand holds a shield, a weapon or the claws.
+    versatileTwoHanded = versatileRating(weapon, actor.items, { offHand });
+    damageSpec = { rating: (versatileTwoHanded ?? sys.rating) + wounded, kind: "physical", penetration: pierceOf(sys.traits) };
   }
   // **WHAT THE WEAPON ITSELF GIVES THE BLOW** (D-772), carried beside the Rating
   // so a blow struck with something else - 04's Shield Slam, *strike with your
   // shield at Damage Rating 4* - can take the weapon's own part out and leave
   // what stands on the striker.
-  if (damageSpec) damageSpec = { ...damageSpec, weaponRating: Math.max(0, Number(sys.isLauncher ? (damageSpec.rating - wounded) : sys.rating) || 0) };
+  if (damageSpec) damageSpec = { ...damageSpec, weaponRating: Math.max(0, Number(sys.isLauncher ? (damageSpec.rating - wounded) : (versatileTwoHanded ?? sys.rating)) || 0) };
   // **A RATING CHANGED FOR ONE EXTRA BLOW** (08 §5's Cleave, *at Damage Rating
   // −2*, off 04's Wide Swing; D-772): the card's own offer says by how much.
   if (damageSpec && ratingDelta) damageSpec = { ...damageSpec, rating: Math.max(0, damageSpec.rating + Math.trunc(Number(ratingDelta))) };

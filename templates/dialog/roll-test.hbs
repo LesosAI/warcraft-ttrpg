@@ -229,9 +229,12 @@
         player's call (D2 SS12) - and a line with nothing left greyed WITH its
         reason in words beneath it (D5). `tline-<identifier>` is readForm's
         contract, and the workflow judges every tick again. --}}
-  <fieldset class="azeroth-dialog-lines azeroth-dialog-riders azeroth-dialog-talent-lines">
-    <legend>{{localize "AZEROTH.TalentLine.Legend"}}</legend>
-    {{#each talentLines}}
+  {{!-- A fieldset a KIND of line, each named for what it is (the lead, 2026-11-23): Empowerments, Fel Surge,
+        Sand, and the plain Talents for the counters and charges. --}}
+  {{#each talentGroups}}
+  <fieldset class="azeroth-dialog-lines azeroth-dialog-riders azeroth-dialog-talent-lines" data-line-group="{{this.group}}">
+    <legend>{{this.legend}}</legend>
+    {{#each this.lines}}
     {{!-- 02's Fel Surge draws a point a line (D-1520); the class lays its open lines out as a compact row of
           chips, its name and the Hatred held said on the first alone, the one-line-per-point DOM kept (D-1581). --}}
     <label class="checkbox azeroth-dialog-line azeroth-dialog-rider{{#unless this.available}} is-refused{{/unless}}{{#if (eq this.kind "felSurge")}}{{#if this.available}} is-fel-surge{{/if}}{{/if}}">
@@ -242,6 +245,7 @@
     {{#if this.reason}}<p class="azeroth-dialog-note azeroth-dialog-rider-reason">{{this.reason}}</p>{{/if}}
     {{/each}}
   </fieldset>
+  {{/each}}
   {{/if}}
 
   {{#if damageLines.length}}

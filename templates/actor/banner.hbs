@@ -66,7 +66,7 @@
   <dl class="azeroth-callouts">
     <div class="azeroth-callout">
       <dt>{{localize "AZEROTH.Health.Label"}}</dt>
-      <dd>
+      <dd{{#if temporaryHealth}} class="azeroth-has-temp"{{/if}}>
         <input type="number" name="system.health.value" value="{{system.health.value}}" min="0" step="1">
         <span class="azeroth-of">/ {{system.health.max}}</span>
         {{!-- 05's temporary Health (D-777; the lead: *"raise HP past max as temp

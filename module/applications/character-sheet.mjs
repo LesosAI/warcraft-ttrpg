@@ -51,7 +51,7 @@ import { chargeControl } from "../helpers/rider-words.mjs";
 // A shape on the sheet (02 §7, D-769): its name, what melds, the attack's ability.
 import { FORCED_SPEED, SHAPE_ABILITIES, SHAPE_KINDS, isOverlayKind, meldsGear, shapeKindOf, shapeRefusal } from "../rules/shapes.mjs";
 // What a Use needs in hand, greyed in words (run F4a).
-import { wieldRefusal } from "../rules/wield.mjs";
+import { versatileRating, wieldRefusal } from "../rules/wield.mjs";
 import { classFeatureOnUse, featurePrice, rungsChip } from "../rules/class-features.mjs";
 import { FORCED_ENDS, forcedRefusalFor, shapeLabel } from "../documents/shapes.mjs";
 import { attackAbility, deftScores } from "../rules/ammunition.mjs";
@@ -3251,7 +3251,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
             ? { text: game.i18n.format("AZEROTH.Claws.FreeUses", { left: clawFree.left, max: clawFree.max }), tip: game.i18n.localize("AZEROTH.Claws.FreeUsesTip") }
             : null,
           equipTip: claws ? game.i18n.localize("AZEROTH.Claws.Uncover") : null,
-          rating: hidden ? null : (sys.isLauncher ? (chosen ? shotDamage(sys, chosen).rating : null) : sys.rating),
+          // A Versatile weapon with the Off hand empty reads its two-handed Rating, the one the attack swings at (08 §5).
+          rating: hidden ? null : (sys.isLauncher ? (chosen ? shotDamage(sys, chosen).rating : null) : (versatileRating(item, this.actor.items, { offHand: sys.offHand === true }) ?? sys.rating)),
           range: hidden ? null : sys.range,
           traits: hidden ? [] : (sys.traits ?? []),
           equipped: sys.equipped === true,

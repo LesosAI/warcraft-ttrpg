@@ -1530,7 +1530,7 @@
     },
     "Health": {
       "Label": "Health",
-      "Temporary": "+{n} temporary",
+      "Temporary": "+{n} temp",
       "TemporaryTip": "Temporary Health from {source}, {span}. Damage takes it first; healing never restores it.",
       "TemporaryUnsourced": "a grant the table made"
     },
@@ -7746,7 +7746,16 @@
       "TooFar": "{name}: {names} stand(s) more than {feet} feet from the first target."
     },
     "TalentLine": {
-      "Legend": "What a talent spends",
+      "Group": {
+        "empowerments": "Empowerments",
+        "fleshOffering": "Flesh Offering",
+        "horde": "Horde",
+        "felSurge": "Fel Surge",
+        "sand": "Sand",
+        "freeCasts": "Free casts",
+        "championSpells": "Branch spells",
+        "talents": "Talents"
+      },
       "NoCharge": "{name}: no charge is held.",
       "NoUses": "{name}: no use is left until the next rest.",
       "Lost": "{name}: {lines} can no longer be spent - nothing was spent.",
