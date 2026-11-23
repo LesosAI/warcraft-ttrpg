@@ -667,9 +667,9 @@ export function sovereignRavenousBatch(context) {
       assert.equal(s.system.flyingSpeed, 240, "a 240 ft flight");
       // O-446: the form wears its own plate and token, not the character's.
       const effect = s.effects.find(e => e.getFlag("azeroth-rpg", "shape")?.kind === "bloodQueen");
-      assert.equal(effect?.img, "systems/azeroth-rpg/assets/art/bestiary/tokens/blood-monarch.png", "the form's effect is drawn in the Blood Monarch token");
+      assert.equal(effect?.img, "systems/azeroth-rpg/assets/art/bestiary/tokens/blood-monarch.webp", "the form's effect is drawn in the Blood Monarch token");
       const doc = tokenOf(s)?.document ?? tokenOf(s);
-      await until(() => doc?._source?.texture?.src === "systems/azeroth-rpg/assets/art/bestiary/tokens/blood-monarch.png", "the token dressed as the Blood Monarch");
+      await until(() => doc?._source?.texture?.src === "systems/azeroth-rpg/assets/art/bestiary/tokens/blood-monarch.webp", "the token dressed as the Blood Monarch");
       assert.isTrue(await useGreyed(s, "Blood Monarch"), "a second use before a Long Rest is greyed on the sheet");
     });
   });

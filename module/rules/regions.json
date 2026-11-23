@@ -19,12 +19,11 @@
         ]
       },
       "weightClass": {
-        "text": "Chaff across the farmland and the coast road, in numbers, with a Soldier standing over them wherever the Scourge has bothered to organise. The only Elites in the province are behind the Monastery's gate, and the Boss is behind the one after that",
+        "text": "Chaff across the farmland and the coast road, in numbers, with a Soldier standing over them wherever the Scourge has bothered to organise. The only Elites in the province are behind the Monastery's gate, and there are Bosses in each of its four courts",
         "classes": [
           "chaff",
           "soldier",
-          "elite",
-          "boss"
+          "elite"
         ]
       },
       "taint": {
@@ -365,12 +364,11 @@
         ]
       },
       "weightClass": {
-        "text": "Chaff in packs off the road, worgen and worse after dark, with a Soldier at each Forsaken post. The Keep holds the province's only Elite and its only Boss, and both of them are the same problem",
+        "text": "Chaff in packs off the road, worgen and worse after dark, with a Soldier at each Forsaken post. The Keep holds the province's Elites and its Bosses, and the archmage is the problem behind all of them",
         "classes": [
           "chaff",
           "soldier",
-          "elite",
-          "boss"
+          "elite"
         ]
       },
       "taint": {
@@ -509,22 +507,21 @@
       "hook": "The province of Andorhal was Lordaeron's granary, and the plague was put into its grain first. From a distance it still looks like farmland.",
       "threat": {
         "tier": 2,
-        "text": "Tier 2, and Tier 3 at Scholomance",
+        "text": "Tier 2, and Tier 3 at Scholomance and Andorhal",
         "overrides": [
           {
             "tier": 3,
-            "place": "at Scholomance"
+            "place": "at Scholomance and Andorhal"
           }
         ]
       },
       "weightClass": {
-        "text": "Chaff in the fields and along the fencelines, Soldiers on every road the Scourge patrols, and a Standard wherever either side has fortified a building. Elites are kept indoors — the granaries at Andorhal, the Crusade's inner keep at Hearthglen. The Boss in this province is under Caer Darrow and has not come up since the Crusade arrived",
+        "text": "Chaff in the fields and along the fencelines, Soldiers on every road the Scourge patrols, and a Standard wherever either side has fortified a building. Elites are kept indoors — the granaries at Andorhal, the Crusade's inner keep at Hearthglen. Araj the Summoner holds Andorhal, and Scholomance's masters are under Caer Darrow and have not come up since the Crusade arrived",
         "classes": [
           "chaff",
           "soldier",
           "standard",
-          "elite",
-          "boss"
+          "elite"
         ]
       },
       "taint": {
@@ -1027,7 +1024,7 @@
         "overrides": []
       },
       "weightClass": {
-        "text": "Standards in formation on both sides, because both sides are armies. Elites hold the towers. Each side has a Boss asleep in a hall at the far end and neither has been reached",
+        "text": "Standards in formation on both sides, because both sides are armies. Elites hold the towers. Each commander is a Boss in his own hall, Vanndar Stormpike at Dun Baldar and Drek'Thar at Frostwolf Keep, and each side has a captain who is a Boss at a forward post, Balinda Stonehearth at Stonehearth Outpost and Galvangar at Iceblood Garrison. Each side also has a Boss asleep in a hall at the far end, and neither has been reached",
         "classes": [
           "standard",
           "elite",
@@ -1293,11 +1290,16 @@
       "hook": "A gryphon hold and two troll kingdoms in one forest, and the trolls were here first.",
       "threat": {
         "tier": 3,
-        "text": "Tier 3",
-        "overrides": []
+        "text": "Tier 3, and Tier 4 at Seradane",
+        "overrides": [
+          {
+            "tier": 4,
+            "place": "at Seradane"
+          }
+        ]
       },
       "weightClass": {
-        "text": "Standards as the ordinary troll, and there are a great many trolls. Elites on the terraces at Jintha'Alor. One Boss at the top of them, in the open air, waiting",
+        "text": "Standards as the ordinary troll, and there are a great many trolls. Elites on the terraces at Jintha'Alor. One Boss at the top of them, in the open air, waiting. At Seradane, a dragon of the Nightmare: Lethon",
         "classes": [
           "standard",
           "elite",
@@ -1516,12 +1518,11 @@
         ]
       },
       "weightClass": {
-        "text": "Chaff on the snowfields and Soldiers where the Frostmane have a hold. The only Elites in the province are underground, and what is under Gnomeregan is the Boss",
+        "text": "Chaff on the snowfields and Soldiers where the Frostmane have a hold. The only Elites in the province are underground, and the Bosses are under Gnomeregan",
         "classes": [
           "chaff",
           "soldier",
-          "elite",
-          "boss"
+          "elite"
         ]
       },
       "taint": {
@@ -1767,7 +1768,7 @@
         ]
       },
       "weightClass": {
-        "text": "Soldiers and Standards, and there are more kinds of them than in any province north of here. The Elites are ogre chieftains and one thing under the ground",
+        "text": "Soldiers and Standards, and there are more kinds of them than in any province north of here. The Elites are ogre chieftains. The Bosses are under the ground, in Uldaman's halls",
         "classes": [
           "soldier",
           "standard",
@@ -2047,7 +2048,7 @@
         "overrides": []
       },
       "weightClass": {
-        "text": "Elites are the ordinary adversary here and Standards arrive as their retinue. There are four Bosses in this mountain, each with a name older than the war, and none of them is aware of all the others",
+        "text": "Elites are the ordinary adversary here and Standards arrive as their retinue. Bosses hold every hall of this mountain, each with a name older than the war, and none of them is aware of all the others",
         "classes": [
           "standard",
           "elite"
@@ -2079,7 +2080,36 @@
           "open": true
         }
       ],
-      "settlements": []
+      "settlements": [
+        {
+          "name": "Blackrock Depths",
+          "class": "site",
+          "heldBy": "The Dark Iron",
+          "trainers": [],
+          "quartermaster": null
+        },
+        {
+          "name": "The Molten Core",
+          "class": "site",
+          "heldBy": "Ragnaros",
+          "trainers": [],
+          "quartermaster": null
+        },
+        {
+          "name": "Blackrock Spire",
+          "class": "site",
+          "heldBy": "The Blackrock clan",
+          "trainers": [],
+          "quartermaster": null
+        },
+        {
+          "name": "Blackwing Lair",
+          "class": "site",
+          "heldBy": "Nefarian",
+          "trainers": [],
+          "quartermaster": null
+        }
+      ]
     },
     {
       "key": "elwynn-forest",
@@ -2090,16 +2120,19 @@
       "hook": "The last human kingdom's home county, and everything wrong with it is somebody's crime rather than somebody's plague.",
       "threat": {
         "tier": 1,
-        "text": "Tier 1",
-        "overrides": []
+        "text": "Tier 1, and Tier 2 in the Stockade",
+        "overrides": [
+          {
+            "tier": 2,
+            "place": "in the Stockade"
+          }
+        ]
       },
       "weightClass": {
-        "text": "Chaff in numbers — kobolds in the mines, gnolls on the treeline, bandits on the road — with a Soldier behind them wherever somebody is organising. There is no Elite in this province and no Boss at all",
+        "text": "Chaff in numbers — kobolds in the mines, gnolls on the treeline, bandits on the road — with a Soldier behind them wherever somebody is organising. Under the city, the prisoners who hold the Stockade have Bosses of their own",
         "classes": [
           "chaff",
-          "soldier",
-          "elite",
-          "boss"
+          "soldier"
         ]
       },
       "taint": {
@@ -2200,6 +2233,13 @@
           "heldBy": "Kobolds",
           "trainers": [],
           "quartermaster": null
+        },
+        {
+          "name": "The Stockade",
+          "class": "site",
+          "heldBy": "Rioting prisoners",
+          "trainers": [],
+          "quartermaster": null
         }
       ]
     },
@@ -2221,12 +2261,10 @@
         ]
       },
       "weightClass": {
-        "text": "Chaff and Soldiers, and almost all of them are people with a grievance. One Elite at the bottom of the mine and it is a machine, and the man who owns the mine is the Boss behind it",
+        "text": "Chaff and Soldiers, and almost all of them are people with a grievance. Bosses hold the mine from its first chamber to the ship in the cove, and VanCleef is the last of them",
         "classes": [
           "chaff",
-          "soldier",
-          "elite",
-          "boss"
+          "soldier"
         ]
       },
       "taint": {
@@ -2426,11 +2464,16 @@
       "hook": "A forest that went dark twenty years ago, and the people who stayed have a militia and a curfew.",
       "threat": {
         "tier": 2,
-        "text": "Tier 2",
-        "overrides": []
+        "text": "Tier 2, and Tier 4 at the Twilight Grove",
+        "overrides": [
+          {
+            "tier": 4,
+            "place": "at the Twilight Grove"
+          }
+        ]
       },
       "weightClass": {
-        "text": "Soldiers as the ordinary dead, because what walks in Duskwood was buried in ranks. Elites at the cemetery. Two named Bosses in the dark and the Night Watch can tell you both names",
+        "text": "Soldiers as the ordinary dead, because what walks in Duskwood was buried in ranks. Elites at the cemetery. Named Bosses in the dark, and the Night Watch can tell you their names. Ysondre of the green dragonflight holds the Twilight Grove",
         "classes": [
           "soldier",
           "elite"
@@ -2601,11 +2644,10 @@
         ]
       },
       "weightClass": {
-        "text": "Standards in the water, in numbers, and the water is everywhere. Elites on the temple steps. One Boss under them and the whole province is the approach",
+        "text": "Standards in the water, in numbers, and the water is everywhere. Elites on the temple steps. The Temple's Bosses under them, and the whole province is the approach",
         "classes": [
           "standard",
-          "elite",
-          "boss"
+          "elite"
         ]
       },
       "taint": {
@@ -2684,15 +2726,19 @@
       "hook": "A garrison built to watch a door, twenty-five years into the watch, and the door has not opened.",
       "threat": {
         "tier": 3,
-        "text": "Tier 3",
-        "overrides": []
+        "text": "Tier 3, and Tier 4 at the Tainted Scar",
+        "overrides": [
+          {
+            "tier": 4,
+            "place": "at the Tainted Scar"
+          }
+        ]
       },
       "weightClass": {
-        "text": "Standards as ogres and stranded demons in roughly equal number. Elites in threes. One Boss standing on a rise where everybody can see it, which is the province being honest",
+        "text": "Standards as ogres and stranded demons in roughly equal number. Elites in threes. Lord Kazzak in the open at the Tainted Scar, and Razelikh, his lieutenant, standing on a rise where everybody can see him, which is the province being honest",
         "classes": [
           "standard",
-          "elite",
-          "boss"
+          "elite"
         ]
       },
       "taint": {
@@ -2783,7 +2829,7 @@
         ]
       },
       "weightClass": {
-        "text": "Standards as trolls and as the jungle's own animals, which here are a serious proposition. Elites at the ruins. The Boss is behind a river gate at Zul'Gurub and what is being called there has its own weight entirely",
+        "text": "Standards as trolls and as the jungle's own animals, which here are a serious proposition. Elites at the ruins. A Boss holds Kurzen's Compound in the north. The Bosses of Zul'Gurub are behind a river gate, and what is being called there has its own weight entirely",
         "classes": [
           "standard",
           "elite",
@@ -2872,6 +2918,13 @@
           "name": "Mosh'Ogg Ogre Mound",
           "class": "site",
           "heldBy": "Mosh'Ogg ogres",
+          "trainers": [],
+          "quartermaster": null
+        },
+        {
+          "name": "The Bloodsail Compound",
+          "class": "site",
+          "heldBy": "The Bloodsail Buccaneers",
           "trainers": [],
           "quartermaster": null
         }
@@ -3420,7 +3473,7 @@
         "overrides": []
       },
       "weightClass": {
-        "text": "Standards as satyr and naga, in numbers, and both are organised. Elites at Legion Hold. One Boss in the bay and it does not come out of it",
+        "text": "Standards as satyr and naga, in numbers, and both are organised. Elites at Legion Hold. One Boss in the bay, a blue dragon who fights whoever comes for what the bay holds",
         "classes": [
           "standard",
           "elite",
@@ -3526,11 +3579,16 @@
       "hook": "A forest guarded for ten thousand years, being cut for a war the Horde says it needs.",
       "threat": {
         "tier": 2,
-        "text": "Tier 2",
-        "overrides": []
+        "text": "Tier 2, and Tier 4 at Bough Shadow",
+        "overrides": [
+          {
+            "tier": 4,
+            "place": "at Bough Shadow"
+          }
+        ]
       },
       "weightClass": {
-        "text": "Soldiers on both sides, because both sides are armies with orders. Elites as satyr and one furbolg chieftain. One Boss in the canyon and it is a memorial rather than a garrison, and another under the water at Blackfathom",
+        "text": "Soldiers on both sides, because both sides are armies with orders. Elites as satyr and one furbolg chieftain. One Boss in the canyon and it is a memorial rather than a garrison, Blackfathom's Bosses under the water, and Taerar at Bough Shadow",
         "classes": [
           "soldier",
           "elite",
@@ -3660,6 +3718,13 @@
           "heldBy": "Satyr",
           "trainers": [],
           "quartermaster": null
+        },
+        {
+          "name": "Bough Shadow",
+          "class": "site",
+          "heldBy": "The green dragonflight",
+          "trainers": [],
+          "quartermaster": null
         }
       ]
     },
@@ -3676,7 +3741,7 @@
         "overrides": []
       },
       "weightClass": {
-        "text": "Chaff on the flats and along the coast. Soldiers as Burning Blade cultists, and there are more of them than Orgrimmar admits. One Elite in a cave and one Boss on the isles",
+        "text": "Chaff on the flats and along the coast. Soldiers as Burning Blade cultists, and there are more of them than Orgrimmar admits. One Elite in a cave, one Boss on the isles, and the cult's Bosses under Orgrimmar in Ragefire Chasm",
         "classes": [
           "chaff",
           "soldier",
@@ -3756,6 +3821,13 @@
         },
         {
           "name": "Skull Rock",
+          "class": "site",
+          "heldBy": "The Burning Blade",
+          "trainers": [],
+          "quartermaster": null
+        },
+        {
+          "name": "Ragefire Chasm",
           "class": "site",
           "heldBy": "The Burning Blade",
           "trainers": [],
@@ -4159,11 +4231,10 @@
         ]
       },
       "weightClass": {
-        "text": "Soldiers as centaur, in raiding parties, constantly. The khans are the Elites. One Boss underground at Maraudon and the province is the road to her",
+        "text": "Soldiers as centaur, in raiding parties, constantly. The khans are the Elites. Theradras and her court underground at Maraudon, and the province is the road to them",
         "classes": [
           "soldier",
-          "elite",
-          "boss"
+          "elite"
         ]
       },
       "taint": {
@@ -4470,16 +4541,16 @@
       "hook": "A city of the old empire still standing and still lit, and the ogres in the other nine tenths do not know what the library is.",
       "threat": {
         "tier": 3,
-        "text": "Tier 3, and Tier 4 inside Dire Maul",
+        "text": "Tier 3, and Tier 4 inside Dire Maul and at the Dream Bough",
         "overrides": [
           {
             "tier": 4,
-            "place": "inside Dire Maul"
+            "place": "inside Dire Maul and at the Dream Bough"
           }
         ]
       },
       "weightClass": {
-        "text": "Standards as gnolls and ogres, in numbers, across the whole province. Elites in the ruins. Three Bosses behind one wall at Dire Maul",
+        "text": "Standards as gnolls and ogres, in numbers, across the whole province. Elites in the ruins. Bosses in every wing of Dire Maul, and Emeriss at the Dream Bough",
         "classes": [
           "standard",
           "elite"
@@ -4570,6 +4641,13 @@
           "heldBy": "Nobody",
           "trainers": [],
           "quartermaster": null
+        },
+        {
+          "name": "The Dream Bough",
+          "class": "site",
+          "heldBy": "The green dragonflight",
+          "trainers": [],
+          "quartermaster": null
         }
       ]
     },
@@ -4586,11 +4664,10 @@
         "overrides": []
       },
       "weightClass": {
-        "text": "Standards as trolls and elementals, and both are organised. Elites in the pyramid. One Boss on top of it, in the open, where the Sandfury want it seen",
+        "text": "Standards as trolls and elementals, and both are organised. Elites in the pyramid. Bosses in Zul'Farrak's courts and at its sacred pool, and Chief Ukorz on top of the pyramid, in the open, where the Sandfury want him seen",
         "classes": [
           "standard",
-          "elite",
-          "boss"
+          "elite"
         ]
       },
       "taint": {
@@ -4693,7 +4770,7 @@
         "overrides": []
       },
       "weightClass": {
-        "text": "Standards as raptors, in numbers. The devilsaurs are Elites and there is no garrison anywhere to run to. The crater itself is the Boss",
+        "text": "Standards as raptors, in numbers. The devilsaurs are Elites and there is no garrison anywhere to run to. One Boss, King Mosh, at the Lakkari Tar Pits",
         "classes": [
           "standard",
           "elite",
@@ -4751,7 +4828,7 @@
         {
           "name": "The Lakkari Tar Pits",
           "class": "site",
-          "heldBy": "Nobody",
+          "heldBy": "King Mosh",
           "trainers": [],
           "quartermaster": null
         },
@@ -4777,11 +4854,10 @@
         "overrides": []
       },
       "weightClass": {
-        "text": "Elites are the ordinary adversary here and Standards arrive as their escort, which is the reverse of everywhere else. One Boss behind a wall with a lock on it, and the lock is the province",
+        "text": "Elites are the ordinary adversary here and Standards arrive as their escort, which is the reverse of everywhere else. The qiraji's Bosses behind a wall with a lock on it, and the lock is the province",
         "classes": [
           "standard",
-          "elite",
-          "boss"
+          "elite"
         ]
       },
       "taint": {
@@ -4845,6 +4921,20 @@
           "name": "The Scarab Wall",
           "class": "site",
           "heldBy": "Sealed",
+          "trainers": [],
+          "quartermaster": null
+        },
+        {
+          "name": "The Ruins of Ahn'Qiraj",
+          "class": "site",
+          "heldBy": "The qiraji",
+          "trainers": [],
+          "quartermaster": null
+        },
+        {
+          "name": "The Temple of Ahn'Qiraj",
+          "class": "site",
+          "heldBy": "The qiraji",
           "trainers": [],
           "quartermaster": null
         },

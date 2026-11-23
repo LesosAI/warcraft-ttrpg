@@ -48,10 +48,11 @@ import { extraPart } from "./mitigation.mjs";
 // circle would drop to 0 Health, you may collapse one of your raised dead within 30 feet of that ally*)
 // is asked last: its price is a servant, not a use, and its judgement is the circle's
 // (`effects/necromancer-talents.mjs#lifeForALifeJudged`), handed in as `life`.
-export const HOLD_ORDER = Object.freeze(["aegis", "unkillable", "cauterize", "borrowedHour", "signature", "intervention", "spiritShell", "guardianSpirit", "lifeForALife"]);
+export const HOLD_ORDER = Object.freeze(["aegis", "unkillable", "cauterize", "borrowedHour", "signature", "intervention", "guardianSpirit", "lifeForALife"]);
 
 /** The holds a holder is ASKED for: another creature's talent and its use. */
-export const ASKED_HOLDS = Object.freeze(["intervention", "spiritShell", "guardianSpirit", "lifeForALife"]);
+// Spirit Shell held no one at 1 after the class talent audit (B13, R4; D-1884), and its kind is gone.
+export const ASKED_HOLDS = Object.freeze(["intervention", "guardianSpirit", "lifeForALife"]);
 
 /**
  * The moves a holder is asked for. `burden` is 04's Shared Burden (the Legacy branches'
@@ -106,8 +107,6 @@ export function heldAt({ before = 0, amount = 0, stay = 1 } = {}) {
  * holder is asked and again on the holder's own client before the use is struck.
  *
  * - `intervention`: *A friendly target within 30 feet* - friendly, and in reach;
- * - `spiritShell`: *A target of your Ward class feature ... as the result of an
- *   attack* - this priest's Ward stands on it, and the blow is an attack;
  * - `guardianSpirit`: *A target you can see* - the seeing is the table's (D2
  *   §12), so the holder is asked wherever the two stand on one scene; MY
  *   READING, for the lead: a creature the priest counts as an ally, since
@@ -116,20 +115,15 @@ export function heldAt({ before = 0, amount = 0, stay = 1 } = {}) {
  * Every one needs a use left and a holder still standing.
  *
  * @param {{kind?: string, feet?: number|null}} row  the holder's hold
- * @param {{attack?: boolean, friendly?: boolean, distance?: number|null, warded?: boolean, usesLeft?: number, holderUp?: boolean}} o
+ * @param {{attack?: boolean, friendly?: boolean, distance?: number|null, usesLeft?: number, holderUp?: boolean}} o
  * @returns {{ok: boolean, reason: string|null}}  `reason` an `AZEROTH.BlowDoor.Refuse.*` key's tail
  */
-export function holdJudgement(row = {}, { attack = false, friendly = false, distance = null, warded = false, usesLeft = 0, holderUp = true, life = null } = {}) {
+export function holdJudgement(row = {}, { friendly = false, distance = null, usesLeft = 0, holderUp = true, life = null } = {}) {
   if (!row?.kind || !ASKED_HOLDS.includes(row.kind)) return { ok: false, reason: "unknown" };
   // Life for a Life: no use to count; the circle's own judgement, made by the door that reads the board.
   if (row.kind === "lifeForALife") return life && typeof life === "object" ? { ok: life.ok === true, reason: life.ok === true ? null : (life.reason ?? "unknown") } : { ok: false, reason: "unknown" };
   if (holderUp !== true) return { ok: false, reason: "down" };
   if (!(whole(usesLeft) > 0)) return { ok: false, reason: "noUses" };
-  if (row.kind === "spiritShell") {
-    if (attack !== true) return { ok: false, reason: "notAttack" };
-    if (warded !== true) return { ok: false, reason: "notWarded" };
-    return { ok: true, reason: null };
-  }
   if (friendly !== true) return { ok: false, reason: "notFriendly" };
   if (row.kind === "intervention") {
     if (typeof distance !== "number" || distance > (Number(row.feet) || 0)) return { ok: false, reason: "tooFar" };
@@ -438,4 +432,138 @@ export function floorsHolding({ before = 0, amount = 0, floors = [] } = {}) {
  */
 export function floorRefusesCritical(flagsList = []) {
   return floorsOf(flagsList).some(f => f.held && f.noCritical);
+}
+
+/* -------------------------------------------- */
+/*  R4: holds at 1, by regime (D-1863)           */
+/* -------------------------------------------- */
+
+/**
+ * **WHICH LIMIT A HOLD AT 1 OBEYS** (the class talent audit's R4, the lead's *"6 - okay"*;
+ * D-1863, overturning D-793's repeating Unkillable):
+ *
+ * 1. a creature is held at 1 by **one effect a blow** - `_holdAtOne` returns at the first
+ *    hold that saves, as built;
+ * 2. `granted`: a hold **another creature grants** works on a given creature **once per
+ *    encounter**, whoever grants it (Intervention, Spirit Shell, Guardian Spirit, and the
+ *    class agents' new rows);
+ * 3. `self`: a hold **on yourself** is once per Long Rest - the row's own counter
+ *    (`counter(1, "long")`) is that limit, so the record asks nothing more (Cauterize, an
+ *    Undying Signature);
+ * 4. `identity`: a hold on yourself that is the class's identity is **once per round**
+ *    (02's Unkillable);
+ * 5. `lasting`: a hold that lasts (07's Aegis floor, 04's Big Bad Voodoo, Beacon of Hope) holds
+ *    while it stands and **ends with the encounter** at most (`lastingHoldEnds`, read by
+ *    `AzerothCombat#_leaveFight`).
+ *
+ * A row names its regime as `regime` beside its `kind`; a kind already built takes
+ * `HOLD_REGIME_OF`'s. A kind with no regime (the newer classes' Borrowed Hour, Too Beautiful
+ * to Die, Life for a Life, Unfading Glory - out of the audit's scope) is limited by nothing
+ * here, as before.
+ */
+export const HOLD_REGIMES = Object.freeze(["granted", "self", "identity", "lasting"]);
+
+/** The regime of each hold kind already built (R4, D-1863). */
+export const HOLD_REGIME_OF = Object.freeze({
+  aegis: "lasting",
+  unkillable: "identity",
+  cauterize: "self",
+  signature: "self",
+  intervention: "granted",
+  guardianSpirit: "granted"
+});
+
+/** The combatant flag that records which once-limited holds a creature has had this fight (D-1863). */
+export const HOLD_MARK_FLAG = "heldAtOne";
+
+/**
+ * A hold row's regime: its own `regime`, else its kind's, else null (unlimited here).
+ *
+ * @param {{kind?: string, regime?: string}|null} row
+ * @returns {"granted"|"self"|"identity"|"lasting"|null}
+ */
+export function holdRegimeOf(row) {
+  const r = row?.regime ?? HOLD_REGIME_OF[row?.kind] ?? null;
+  return HOLD_REGIMES.includes(r) ? r : null;
+}
+
+/**
+ * **A GRANTED HOLD THAT LASTS** (06 §9 rule 2: *... once per encounter, whoever grants it, unless it
+ * lasts, in which case it holds while it lasts*; the wave 1 review): a row may be `granted` AND carry
+ * `holdLasting: true` (Beacon of Hope: laid on an ally once an encounter, holding while it stands).
+ * A `lasting` regime lasts by definition. A lasting hold is never refused blow by blow; the
+ * granter's door claims the `granted` mark once when it LAYS the hold, and the fight's end takes it.
+ *
+ * @param {{kind?: string, regime?: string, holdLasting?: boolean}|null} row
+ * @returns {boolean}
+ */
+export function holdLasts(row) {
+  return holdRegimeOf(row) === "lasting" || (row?.holdLasting === true && holdRegimeOf(row) !== null);
+}
+
+/** A hold record, cleaned: `{granted: boolean, identityRound: number|null}`. */
+function cleanHoldRecord(record) {
+  const r = record && typeof record === "object" ? record : {};
+  const round = Math.trunc(Number(r.identityRound));
+  return { granted: r.granted === true, identityRound: Number.isFinite(round) && r.identityRound !== null ? round : null };
+}
+
+/**
+ * **WHY A HOLD OF THIS REGIME MAY NOT HOLD THIS CREATURE NOW**, or null. Only inside a started
+ * fight is anything refused: out of one there is no encounter or round to count, and the row's
+ * own counter (a `self` hold's Long Rest) still binds.
+ *
+ * @param {{regime?: string|null, record?: object|null, round?: number, inFight?: boolean}} o
+ * @returns {"grantedSpent"|"identitySpent"|null}  a reason word; `identitySpent` is an
+ *   `AZEROTH.BlowDoor.Refuse.*` tail `_holdAtOne` says aloud, a spent granted hold is simply not asked
+ */
+export function holdRegimeRefusal({ regime = null, record = null, round = 0, inFight = false, lasting = false } = {}) {
+  if (!inFight || lasting === true) return null;
+  const r = cleanHoldRecord(record);
+  if (regime === "granted" && r.granted) return "grantedSpent";
+  if (regime === "identity" && r.identityRound === (Math.trunc(Number(round)) || 0)) return "identitySpent";
+  return null;
+}
+
+/**
+ * The record after a hold of this regime has held, read when its turn comes in the
+ * combatant's queue (`AzerothCombatant#markHold`): `added` says whether THIS write claimed it,
+ * so two blows in flight cannot both find it unspent. `self` and `lasting` write nothing.
+ *
+ * @param {object|null} record
+ * @param {{regime?: string|null, round?: number}} o
+ * @returns {{changed: boolean, added: boolean, record: {granted: boolean, identityRound: number|null}}}
+ */
+export function holdMarked(record, { regime = null, round = 0 } = {}) {
+  const r = cleanHoldRecord(record);
+  const now = Math.trunc(Number(round)) || 0;
+  if (regime === "granted") return r.granted ? { changed: false, added: false, record: r } : { changed: true, added: true, record: { ...r, granted: true } };
+  if (regime === "identity") return r.identityRound === now ? { changed: false, added: false, record: r } : { changed: true, added: true, record: { ...r, identityRound: now } };
+  return { changed: false, added: true, record: r };
+}
+
+/**
+ * The record after a claimed hold is given back (the granter declined, or its own judgement refused
+ * after the claim): the claim this write made comes off, so no use is lost to a no.
+ *
+ * @param {object|null} record
+ * @param {{regime?: string|null}} o
+ * @returns {{changed: boolean, record: {granted: boolean, identityRound: number|null}}}
+ */
+export function holdReleased(record, { regime = null } = {}) {
+  const r = cleanHoldRecord(record);
+  if (regime === "granted" && r.granted) return { changed: true, record: { ...r, granted: false } };
+  if (regime === "identity" && r.identityRound !== null) return { changed: true, record: { ...r, identityRound: null } };
+  return { changed: false, record: r };
+}
+
+/**
+ * Whether an effect is a lasting hold that ends with the encounter (R4's rule 4): a floor
+ * (`FLOOR_FLAG`: 07's Aegis, 04's Big Bad Voodoo) or an effect a row flags `holdLasting`.
+ *
+ * @param {object|null} flags  an effect's `flags["azeroth-rpg"]`
+ * @returns {boolean}
+ */
+export function lastingHoldEnds(flags) {
+  return Boolean(flags && typeof flags === "object" && (flags[FLOOR_FLAG] || flags.holdLasting === true));
 }

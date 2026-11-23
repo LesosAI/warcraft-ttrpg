@@ -46,6 +46,11 @@
     {{!-- What the standing passives enforce (D-691): a refused condition is
           refused at the toggle, and a sense is what the creature has. Both are
           localised in the context, because both are PHRASES. --}}
+    {{!-- The GM's own Boons and Banes (D-1761), only where it holds any. --}}
+    {{#if boonsBanes.length}}
+    <div><dt>{{localize "AZEROTH.Sheet.BoonsBanes"}}</dt>
+      <dd>{{#each boonsBanes}}{{this.label}}{{#unless @last}} &middot; {{/unless}}{{/each}}</dd></div>
+    {{/if}}
     <div><dt>{{localize "AZEROTH.Sheet.Refuses"}}</dt>
       <dd>{{#each refuses}}{{this.label}}{{#unless @last}} &middot; {{/unless}}{{else}}&mdash;{{/each}}</dd></div>
     <div><dt>{{localize "AZEROTH.Sheet.Senses"}}</dt>

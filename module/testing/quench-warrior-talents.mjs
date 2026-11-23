@@ -26,6 +26,7 @@ import { CARD_ACTIONS } from "../dice/chat.mjs";
 import { disengage } from "../applications/combat-actions.mjs";
 import { reactWithDialog, reactionRows } from "../applications/actions.mjs";
 import { AZEROTH } from "../config.mjs";
+import { hitGain } from "../rules/momentum.mjs";
 
 /** Wait for a condition, or say what was being waited for. */
 async function until(fn, what, ms = 15000) {
@@ -232,20 +233,24 @@ export function warriorTalentsBatch(context) {
       }
     });
 
-    it("PRECISE STRIKE: the Use pays 4 Rage and lays a Pierce of the rank on the next attack this turn, which takes it", async function () {
+    // A line on the attack's own dialog since the class talent audit (D-1870), never a Use.
+    it("PRECISE STRIKE: a 4 Rage line on the attack; a hit pays it and ignores the rank's Armor Points", async function () {
       this.timeout(240000);
       const warrior = await warriorWith("ZZ WT Precise", { weapons: ["Longsword"], ranks: { "Precise Strike": 2 } });
       const ghoul = await makeNpc("Plagued Ghoul");
       const combat = await fightWith([warrior, ghoul]);
       await giveTurn(combat, warrior);
       await setPool(warrior, "rage", 6);
-      const card = await use(warrior, "Precise Strike");
-      assert.ok(card, "the Use posted no card");
-      assert.equal(poolOf(warrior, "rage").value, 2, "the Use did not take 4 Rage");
-      await until(() => warrior.pendingNextAttack().penetration === 2, "a Pierce of 2 promised");
-      const blow = await strike(warrior, { targets: [rowOf(ghoul)], budget: "none" });
-      assert.include(textOf(blow), game.i18n.format("AZEROTH.NextAttack.PierceRow", { n: 2 }), "the attack does not name the promise it took");
-      await until(() => (warrior.getFlag("azeroth-rpg", "nextAttack") ?? []).length === 0, "the promise taken");
+      assert.isNull(featureNamed(warrior, "Precise Strike"), "Precise Strike still grants a Use");
+      const line = warrior.riderLines({ weapon: "melee" }).find(l => l.identifier === "precise-strike");
+      assert.ok(line, "no Precise Strike line on the attack");
+      assert.equal(line.does.pierce, 2, "rank 2 does not ignore 2 Armor Points");
+      const blow = await strike(warrior, { targets: [rowOf(ghoul)], riders: ["precise-strike"] });
+      assert.isTrue(blow.rolls[0].outcome.success);
+      // The hit builds 05 §11's Rage too (+1, +1 more at SL 2), so the pool ends at 6 less 4 plus that gain.
+      const precise = 6 - 4 + hitGain(blow.rolls[0].outcome.sl);
+      await until(() => poolOf(warrior, "rage").value === precise, `the line's 4 Rage paid (${precise} left)`);
+      assert.include(textOf(blow), game.i18n.format("AZEROTH.Rider.Card.Paid", { n: 4, pool: game.i18n.localize(AZEROTH.poolTypes.rage) }), "the card does not say it paid 4 Rage");
     });
 
     it("FOLLOW THROUGH and RAMPAGE: a kill promises a Boon this round and gives a Half-Action", async function () {
@@ -288,28 +293,30 @@ export function warriorTalentsBatch(context) {
       assert.equal(ghoul.system.health.value, 1, "a blocked creature restored Health");
     });
 
-    it("BLADETURN: the first Parry of a round costs no Reaction, marked through the round's record", async function () {
+    // Bladeturn is Overpower since the class talent audit (D-1870).
+    it("OVERPOWER: a miss gives 1 Rage a rank and, once a turn, a Boon on the next attack at that creature", async function () {
       this.timeout(240000);
-      const warrior = await warriorWith("ZZ WT Bladeturn", { weapons: ["Longsword"], ranks: { Bladeturn: 1 } });
+      const warrior = await warriorWith("ZZ WT Overpower", { weapons: ["Longsword"], ranks: { Overpower: 2 } });
       const ghoul = await makeNpc("Plagued Ghoul");
       const combat = await fightWith([warrior, ghoul]);
-      const mine = combat.getCombatantsByActor(warrior)[0];
-      await setPool(warrior, "rage", 3);
-      await mine.spendAction("reaction");
-      await until(() => mine.budget.reactions === 0, "the Reaction spent");
-      const card = await reactWithDialog(warrior, "parry", { attackTotal: 12 });
-      assert.ok(card, "the free Parry was refused");
-      made.push(card);
-      assert.include(mine.getFlag("azeroth-rpg", "round")?.once ?? [], "bladeturn:1", "the round does not record the free Parry");
-      assert.equal(mine.budget.reactions, 0, "the budget moved");
-      await warrior.unsetFlag("azeroth-rpg", "reacted");
-      const said = await warnings(async () => { await reactWithDialog(warrior, "parry", { attackTotal: 12 }); });
-      assert.isNotEmpty(said, "a second Parry with no Reaction left was not refused");
+      const mine = await giveTurn(combat, warrior);
+      await setPool(warrior, "rage", 0);
+      const row = rowOf(ghoul);
+      const miss = await strike(warrior, { face: 1, dc: 30, targets: [row] });
+      assert.isFalse(miss.rolls[0].outcome.success);
+      await until(() => poolOf(warrior, "rage").value === 2, "1 Rage a rank");
+      assert.include(mine.getFlag("azeroth-rpg", "round")?.once ?? [], `overpower@${combat.turn}`, "the turn does not record the promise");
+      const key = row.tokenId ?? row.actorId;
+      await until(() => warrior.pendingNextAttack({ targetKey: key }).boons === 1, "the Boon promised at that creature");
+      assert.equal(warrior.pendingNextAttack({ targetKey: "someone-else" }).boons, 0, "the Boon reaches another creature");
+      // A second miss this turn gives the Rage and no second promise. That second attack is the next one at
+      // the creature, so it takes the first promise (D-772's take), and nothing is promised after it.
+      await strike(warrior, { face: 1, dc: 30, targets: [row], budget: "none" });
+      await until(() => poolOf(warrior, "rage").value === 4, "the second miss's Rage");
+      assert.equal(warrior.pendingNextAttack({ targetKey: key }).boons, 0, "a second promise this turn");
     });
 
-    /* ---- Fury ---------------------------------------------------------- */
-
-    it("RECKLESS: an attack made with its line ticked lays the exposure on the warrior, ranged-only at rank 2", async function () {
+    it("RECKLESS: an attack made with its line ticked lays the exposure on the warrior, melee and ranged alike", async function () {
       this.timeout(240000);
       const warrior = await warriorWith("ZZ WT Reckless", { weapons: ["Longsword"], ranks: { Reckless: 2 } });
       const ghoul = await makeNpc("Plagued Ghoul");
@@ -317,25 +324,27 @@ export function warriorTalentsBatch(context) {
       await giveTurn(combat, warrior);
       await strike(warrior, { targets: [rowOf(ghoul)], chosen: ["reckless"], boons: 1 });
       const effect = await until(() => warrior.effects.find(e => e.getFlag("azeroth-rpg", "exposed")), "the exposure");
-      assert.deepEqual(effect.getFlag("azeroth-rpg", "exposed"), { boons: 1, ranged: true, source: "Reckless" });
+      // Rank 2 gives Rage for a hit taken while exposed since the class talent audit (D-1870); no ranged-only rider.
+      assert.deepEqual(effect.getFlag("azeroth-rpg", "exposed"), { boons: 1, ranged: false, source: "Reckless" });
       assert.equal(effect.duration?.expiry, "turnStart", "the exposure does not end at the warrior's next turn");
     });
 
-    it("BLOODTHIRST: a miss spends no Rage; a hit spends 6 and restores the rank", async function () {
+    it("BLOODTHIRST: a miss spends no Rage; a hit spends 4 and restores the tier plus the rank", async function () {
       this.timeout(180000);
       const warrior = await warriorWith("ZZ WT Bloodthirst", { weapons: ["Longsword"], ranks: { Bloodthirst: 2 } });
       await setPool(warrior, "rage", 10);
-      await warrior.update({ "system.health.value": Math.max(1, warrior.system.health.max - 5) });
+      await warrior.update({ "system.health.value": Math.max(1, warrior.system.health.max - 8) });
       const before = warrior.system.health.value;
       const rage = game.i18n.localize(AZEROTH.poolTypes.rage);
       const miss = await strike(warrior, { face: 1, dc: 30, riders: ["bloodthirst"] });
       assert.isFalse(miss.rolls[0].outcome.success);
       assert.equal(poolOf(warrior, "rage").value, 10, "a miss spent Bloodthirst's Rage");
-      assert.notInclude(textOf(miss), game.i18n.format("AZEROTH.Rider.Card.Paid", { n: 6, pool: rage }), "the miss's card says it paid");
+      assert.notInclude(textOf(miss), game.i18n.format("AZEROTH.Rider.Card.Paid", { n: 4, pool: rage }), "the miss's card says it paid");
       const hit = await strike(warrior, { riders: ["bloodthirst"] });
       assert.isTrue(hit.rolls[0].outcome.success);
-      await until(() => warrior.system.health.value === before + 2, "the rank restored");
-      assert.include(textOf(hit), game.i18n.format("AZEROTH.Rider.Card.Paid", { n: 6, pool: rage }), "the hit's card does not say it paid 6 Rage");
+      const want = Math.min(warrior.system.health.max, before + warrior.system.tier + 2);
+      await until(() => warrior.system.health.value === want, "the tier plus the rank restored");
+      assert.include(textOf(hit), game.i18n.format("AZEROTH.Rider.Card.Paid", { n: 4, pool: rage }), "the hit's card does not say it paid 4 Rage");
     });
 
     it("SECOND STRIKE: an Off-Hand Attack takes no −2", async function () {
@@ -355,21 +364,18 @@ export function warriorTalentsBatch(context) {
       assert.deepEqual(reactionRows([rowOf(defender)], { attacker: titan }), [], "Titan's Presence left a Parry or a Block on the card");
     });
 
-    it("BLOOD CRAZE: more than 7 Rage at the start of the warrior's turn restores the rank, and 7 restores nothing", async function () {
+    // A refusal of Frightened (and Charmed at rank 2) over 7 Rage since the class talent audit (D-1870).
+    it("BLOOD CRAZE: over 7 Rage Frightened is refused, Charmed too at rank 2; at 7 both land", async function () {
       this.timeout(240000);
-      const warrior = await warriorWith("ZZ WT Craze", { weapons: ["Longsword"], ranks: { Bloodthirst: 1, "Blood Craze": 2 } });
-      const ghoul = await makeNpc("Plagued Ghoul");
-      const combat = await fightWith([warrior, ghoul]);
-      await warrior.update({ "system.health.value": Math.max(1, warrior.system.health.max - 5) });
-      const before = warrior.system.health.value;
-      // The turn's own door, which `_turnTicks` runs at the start of each of
-      // the warrior's turns on the active GM's client.
-      await setPool(warrior, "rage", 7);
-      assert.deepEqual(await combat._talentTicks(warrior), [], "7 Rage is not more than 7");
+      const warrior = await warriorWith("ZZ WT Craze", { weapons: ["Longsword"], ranks: { "Blood Craze": 2 } });
       await setPool(warrior, "rage", 8);
-      const lines = await combat._talentTicks(warrior);
-      await until(() => warrior.system.health.value === before + 2, "Blood Craze's 2");
-      assert.include(lines.join(" "), "Blood Craze", "the turn's line does not name the talent");
+      await until(() => ["frightened", "charmed"].every(c => warrior.system.conditionImmunities?.includes(c)), "both refused over 7 Rage");
+      await warrior.toggleStatusEffect("frightened", { active: true });
+      assert.isFalse(warrior.statuses.has("frightened"), "Frightened landed over 7 Rage");
+      await setPool(warrior, "rage", 7);
+      await until(() => !warrior.system.conditionImmunities?.includes("frightened"), "the refusal lifting at 7");
+      await warrior.toggleStatusEffect("charmed", { active: true });
+      await until(() => warrior.statuses.has("charmed"), "Charmed lands at 7 Rage");
     });
 
     it("FLURRY: an attack at SL 2 offers one extra attack against the same target, pressed once a round", async function () {
@@ -489,20 +495,28 @@ export function warriorTalentsBatch(context) {
       assert.isFalse(ghoul.statuses?.has("disengaging") === true);
     });
 
-    it("SHIELD SLAM: 6 Rage strikes with the shield at Damage Rating 4, no Pierce, and Stuns at SL 2 at rank 2", async function () {
+    // The weapon's own blow, the tier plus 2 more and a Bane since the class talent audit (D-1870); rank 2's SL 2
+    // ends a Sustain (`azeroth-rpg.audit-martial`).
+    it("SHIELD SLAM: needs a shield; 6 Rage adds the tier plus 2 and lays a Bane on the target's attacks", async function () {
       this.timeout(240000);
-      const warrior = await warriorWith("ZZ WT Slam", { weapons: ["Longsword"], armor: ["Kite shield"], ranks: { "Shield Slam": 2 } });
+      const warrior = await warriorWith("ZZ WT Slam", { weapons: ["Longsword"], armor: ["Kite shield"], ranks: { "Shield Slam": 1 } });
       const ghoul = await makeNpc("Plagued Ghoul");
       const combat = await fightWith([warrior, ghoul]);
       await giveTurn(combat, warrior);
       await setPool(warrior, "rage", 6);
+      const line = warrior.riderLines({ weapon: "melee" }).find(l => l.identifier === "shield-slam");
+      assert.ok(line, "no Shield Slam line with a shield in hand");
+      assert.equal(line.does.damage, warrior.system.tier + 2, "the line does not add the tier plus 2");
       const card = await strike(warrior, { targets: [rowOf(ghoul)], riders: ["shield-slam"] });
-      const sl = card.rolls[0].outcome.sl;
-      assert.isAtLeast(sl, 2);
-      const damage = card.flags["azeroth-rpg"].damage;
-      assert.equal(damage.damage, 4 + sl, "the blow is not the shield's 4 and the SL");
-      assert.equal(damage.penetration, 0, "the shield carried the sword's Pierce");
-      await until(() => ghoul.statuses?.has("stunned"), "Stunned on the ghoul");
+      assert.isTrue(card.rolls[0].outcome.success);
+      // The hit builds 05 §11's Rage too (+1, +1 more at SL 2), so the pool ends at 6 less 6 plus that gain.
+      const slam = 6 - 6 + hitGain(card.rolls[0].outcome.sl);
+      await until(() => poolOf(warrior, "rage").value === slam, `the 6 Rage paid (${slam} left)`);
+      await until(() => ghoul.effects.some(e => e.getFlag("azeroth-rpg", "laidBane")), "the Bane on the ghoul");
+      const shield = itemNamed(warrior, "Kite shield");
+      await shield.update({ "system.equipped": false });
+      await until(() => warrior.shieldInHand === false, "the shield put away");
+      assert.isUndefined(warrior.riderLines({ weapon: "melee" }).find(l => l.identifier === "shield-slam"), "the line is drawn with no shield");
     });
 
     it("UNBREAKABLE: with a shield, a Critical Injury rolls two dice and takes the lower; without, one", async function () {

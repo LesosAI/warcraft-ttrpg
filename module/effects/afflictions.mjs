@@ -285,6 +285,18 @@ export async function applyCure(actor, cure, { by = null, ask = null } = {}) {
 
 export const CARD_TEMPLATE = "systems/azeroth-rpg/templates/chat/affliction-card.hbs";
 
+/** The actor a carrier's `source` names, where it is still an actor in the world (D-1729), else null. */
+function carrierSource(aff) {
+  const uuid = typeof aff?.source?.uuid === "string" ? aff.source.uuid : null;
+  if (!uuid) return null;
+  try {
+    const found = globalThis.fromUuidSync?.(uuid) ?? null;
+    return found?.documentName === "Actor" ? found : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * One card in the system card shape. `accent` is a card class: `azeroth-card-attack`
  * (red) for a harm landing, `azeroth-card-spell` (blue) for Medicine and cures.
@@ -327,7 +339,10 @@ export async function landEvents(actor, effectId, events, { patch = {}, ended = 
   if (tick) {
     const alive = actor.type !== "npc" || (actor.system?.health?.value ?? 0) > 0;
     if (tick.damage > 0 && alive) {
-      await actor.applyDamage(tick.damage, { struck: true, attack: false, location: "body", type: null });
+      // **WHOSE POISON OR DISEASE IT IS** (D-1729): the creature that laid the carrier, named for 10 §3's
+      // exposure alone (`dealtBy`), never as the striker - nothing `by` drives runs on a tick. A source
+      // that is not an actor still in the world (gone since, or an item) names nobody.
+      await actor.applyDamage(tick.damage, { struck: true, attack: false, location: "body", type: null, dealtBy: carrierSource(aff) });
     }
     if (tick.fatigue > 0 && actor.type === "character") {
       const now = fatigueAfter(actor.system?.fatigue ?? 0, tick.fatigue, CONFIG.AZEROTH?.FATIGUE_MAX ?? 6);

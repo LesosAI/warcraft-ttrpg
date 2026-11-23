@@ -129,7 +129,8 @@ export function judgeStep(token, point, { feet, sight = "see", except = [], askS
   const occupied = occupiedBy(box, standingBoxes(doc), { except });
   // **07 §17's GRAVE STEP** (run 4c-S): the space within `near` feet of one of the corpses the cast
   // found within its Range - each measured footprint to footprint with the mover laid at the space (D-732).
-  const nearCorpse = sight === "corpse" && askSight
+  // And 02's Shadowstep's space beside its creature (`beside`; D-1880), the creature for the corpse.
+  const nearCorpse = (sight === "corpse" || sight === "beside") && askSight
     ? (corpses ?? []).some(c => {
       const d = feetApart(c, doc, { to: { x: to.x, y: to.y } });
       return typeof d === "number" && d <= Math.max(0, Number(near) || 0) + 1e-6;
@@ -274,7 +275,7 @@ export function stepAllowance(by, item) {
     const reach = blinkFor(by.takenTalents?.() ?? []);
     return { feet: reach.feet ?? FEATURE_STEPS.Blink.feet, friend: reach.friendly?.feet ?? null, party: null, pull: null };
   }
-  if (item.name === "Shadowstep" && item.system?.className === "Rogue") return { feet: FEATURE_STEPS.Shadowstep.feet, friend: null, party: null, pull: null };
+  if (item.name === "Shadowstep" && item.system?.className === "Rogue") return { feet: FEATURE_STEPS.Shadowstep.feet + FEATURE_STEPS.Shadowstep.near, friend: null, party: null, pull: null };
   const flag = item.getFlag?.("azeroth-rpg", "feature") ?? item.flags?.["azeroth-rpg"]?.feature ?? {};
   const talent = flag.talentId ? (by.items?.get?.(flag.talentId) ?? null) : null;
   // 02's Recall (*you may return to that space*; stage 2b): the user's own token back to the

@@ -24,7 +24,7 @@ import { speedFrom, speedParts } from "./speed.mjs";
 import { CHAMPION_CLASS, scalesWaive } from "./chromatic-features.mjs";
 import { tokenSize } from "./size.mjs";
 import { MAX_CONTAINERS, arrange, baseCapacity, isMount, ledger, wellsOf } from "./slots.mjs";
-import { carryFactor, classKey, talentLanguages } from "./talent-effects.mjs";
+import { carryFactor, classKey, spellGrantsFor, talentLanguages } from "./talent-effects.mjs";
 import { characterToken } from "./tokens.mjs";
 import { RANK_MAX, rankCost, rankCostBetween } from "./xp.mjs";
 import { spellsKnown } from "./casting.mjs";
@@ -538,6 +538,22 @@ export function talentArmorFor(p = {}) {
   return armorAccessFor([{ identifier: t.identifier, className: t.className, race: t.race ?? null, name: t.name ?? "", taken: 1 }]).categories;
 }
 
+/**
+ * **THE SPELLS THE CREATOR'S TALENT PICK TEACHES** (04's *You know Fireball*; the lead, 2026-11-22:
+ * *"If a talent gives a spell, it should not coutn towards their spells known"*; D-1862): the class
+ * talent chosen at step 9, at rank 1, through `spellGrantsFor` - the sync's own reading. Those
+ * spells are known on top of 07 §5's count, so the spells step neither offers nor counts them.
+ *
+ * @param {{classTalent?: {identifier?: string, className?: string, name?: string, race?: string|null}|null}} p
+ * @returns {string[]}
+ */
+export function talentTaughtSpells(p = {}) {
+  const t = p?.classTalent ?? null;
+  if (!t?.identifier) return [];
+  return spellGrantsFor([{ id: t.identifier, identifier: t.identifier, className: t.className, race: t.race ?? null, name: t.name ?? "", taken: 1 }])
+    .map(g => g.name);
+}
+
 /* -------------------------------------------- */
 /*  The numbers (01 §7, 05)                      */
 /* -------------------------------------------- */
@@ -722,6 +738,11 @@ export function validate(p = {}) {
   }
   const required = spellsRequired(p.cls, p.abilities);
   const chosen = p.spells ?? [];
+  // A spell the talent pick teaches is known on top of the count (D-1862): choosing it as well would
+  // spend a pick on a spell already known, and Finish would embed it twice.
+  const taught = talentTaughtSpells(p);
+  const doubled = chosen.find(spell => taught.includes(spell?.name));
+  if (doubled) refuse("spellTaughtByTalent", "spells", { name: doubled.name, talent: p.classTalent?.name ?? "" });
   if (chosen.length !== required) refuse("spellCount", "spells", { required, chosen: chosen.length });
   for (const spell of chosen) {
     if ((spell.tier ?? 1) > 1) { refuse("spellTier", "spells", { name: spell.name }); break; }

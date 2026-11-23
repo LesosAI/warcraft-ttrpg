@@ -26,10 +26,12 @@
 import {
   FORCED_SPEED, RESTORE_FLAG, SHAPE_FLAG, SHAPE_KINDS, SWIFT_LEAVE, appearanceFor, centredResize, endsOnDamage, forcedKindForCard,
   forcedShapeChanges, forcedShapeRefusal, isForcedKind, isOverlayKind, keepsFerocity, readShape, shapeChanges, shapeEnds,
-  shapeEntryOf, shapeMayReplace, shapePhysical, shapeRewriteReset, snapshotOf
+  shapeEntryOf, shapeMayReplace, shapePhysical, shapeRewriteReset, snapshotOf, bossFormOf
 } from "../rules/shapes.mjs";
 // A forced shape is written on a GM's client, judged before anything is spent (D-808).
 import { gmAbsentFor } from "../rules/gm-writes.mjs";
+// 04's Heart of the Wild's Ferocity at a shape's start (the class talent audit, D-1892).
+import { shapeStartFor } from "../rules/class-talents.mjs";
 
 /**
  * **THE QUERY A FORCED SHAPE IS LAID THROUGH** (D-808): the bestiary pack is the
@@ -236,6 +238,29 @@ export async function formsFrom(entries = []) {
   return out;
 }
 
+/**
+ * The blocks a shape is made from, as `{name, weightClass}` (D-1804): the entries handed
+ * in, and the entry each given snapshot names by uuid. A snapshot with no uuid (an
+ * overlay with no block) adds nothing.
+ *
+ * @param {Array<string|object>} entries
+ * @param {Array<{uuid?: string|null}>} snapshots
+ * @returns {Promise<Array<{name: string, weightClass: string|null}>>}
+ */
+export async function shapeBlocks(entries = [], snapshots = []) {
+  const out = [];
+  const take = doc => { if (doc) out.push({ name: doc.name ?? "", weightClass: doc.system?.weightClass ?? null }); };
+  // A uuid that no longer resolves is no block; the shape's own read refuses it in words.
+  const look = async uuid => {
+    try { return typeof globalThis.fromUuid === "function" ? await globalThis.fromUuid(uuid) : null; } catch { return null; }
+  };
+  for (const entry of entries ?? []) take(typeof entry === "string" ? await look(entry) : entry);
+  for (const form of snapshots ?? []) {
+    if (typeof form?.uuid === "string" && form.uuid) take(await look(form.uuid));
+  }
+  return out;
+}
+
 /** Empty the Ferocity pool (02 §7: *lose all of it the moment you drop the form*). */
 async function zeroFerocity(actor) {
   const ferocity = (actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === "ferocity") ?? null;
@@ -307,6 +332,17 @@ export async function takeShape(actor, { kind, entries = [], forms = null, ward 
   if (actor.type !== "character" && !isForcedKind(kind)) return null;
   const snapshots = forms ?? await formsFrom(entries);
   if (!snapshots.length) return null;
+  // **NEVER A BOSS'S BLOCK** (D-1804; the lead, 2026-11-22: *"boss's like King Mosh can't be
+  // shapeshift or summon targets"*): the chooser lists none and `useFeature` refuses one
+  // before anything is paid; this is the door's own refusal, for any other caller. A shape
+  // laid on somebody else (Hex, Polymorph) takes 14 SS15's fixed forms and is not asked.
+  if (!isForcedKind(kind)) {
+    const boss = bossFormOf(await shapeBlocks(entries, forms ? snapshots : []));
+    if (boss !== null) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Shape.Boss", { name: actor.name, form: boss }));
+      return null;
+    }
+  }
   const before = actor.shape;
   // **THE SECOND-SHAPE RULE** (D-808, `rules/shapes.mjs#shapeMayReplace`): a forced
   // shape replaces whatever stands; a shape of the creature's own never replaces one
@@ -366,6 +402,18 @@ export async function takeShape(actor, { kind, entries = [], forms = null, ward 
   const zero = Boolean(effect)
     && !keepsFerocity({ from: before?.kind ?? null, to: kind, savageShift: actor.talentRanks?.("Savage Shift") ?? 0 });
   await followShape(actor, { zero });
+  // **04's HEART OF THE WILD** (the class talent audit, D-1892: *You begin each Shapeshift form with
+  // Ferocity equal to your tier*): after the shape and its zeroing, the Ferocity raised to the tier -
+  // never lowered (Savage Shift's kept Ferocity stands where it is more), never past the pool's cap.
+  if (effect && actor.type === "character") {
+    const start = shapeStartFor(actor.takenTalents?.() ?? [], { kind, tier: actor.system?.tier ?? 1 });
+    const pool = start ? (actor.poolSnapshot?.() ?? []).find(p => p.kind === "momentum" && p.name === start.pool) ?? null : null;
+    const value = pool ? Math.min(Math.max(0, Number(pool.max) || 0), Math.max(pool.value, start.amount)) : null;
+    if (pool && value > pool.value) {
+      await actor.updatePool?.({ itemId: pool.itemId, kind: pool.kind, value })?.catch?.(err => console.warn("azeroth-rpg | Heart of the Wild", err));
+      ui.notifications?.info(game.i18n.format("AZEROTH.HeartOfTheWild.Line", { name: actor.name, n: value, talent: start.name }));
+    }
+  }
   // The Bargain's Fel, once the shape it lived on is written over (H3; `effects/demon-hunter-talents.mjs#bargainEnded`).
   if (effect && bargainOver) {
     const { bargainEnded } = await import("../effects/demon-hunter-talents.mjs");

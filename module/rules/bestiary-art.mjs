@@ -16,8 +16,9 @@
  * `system.art` carries the illustration, and the banner opens it on click.
  *
  * **The map is data, the art is not.** `bestiary-art.json` is tracked and
- * reviewable; the PNGs live under `assets/art/bestiary/`, which is gitignored
- * with `assets/MANIFEST.md` recording where they came from (CLAUDE.md §1). A
+ * reviewable; the WebP files live under `assets/art/bestiary/` (committed; their
+ * PNG masters are outside git) with `assets/MANIFEST.md` recording where they
+ * came from (CLAUDE.md §1). A
  * fresh clone therefore parses the chapter to exactly the same documents and
  * shows `FALLBACK` where the files are not on disk — the paths are decided by
  * the map, never by looking at the folder, because `check-packs.mjs` diffs
@@ -37,6 +38,13 @@ import map from "./bestiary-art.json" with { type: "json" };
 /** Where the art lives, served by Foundry as part of the system directory. */
 export const PORTRAIT_DIR = "systems/azeroth-rpg/assets/art/bestiary/portraits";
 export const TOKEN_DIR = "systems/azeroth-rpg/assets/art/bestiary/tokens";
+
+/**
+ * The format both ship in (D-1902). The PNG masters live outside git and
+ * `tools/bestiary-art/encode-webp.py` writes the WebP: the PNG set took the
+ * public release zip past GitHub's 2 GiB limit.
+ */
+export const ART_EXT = "webp";
 
 /**
  * What a creature with no art wears. This is what every one of the 164 wore
@@ -61,7 +69,7 @@ export function slugFor(name) {
  */
 export function tokenFor(name) {
   const slug = slugFor(name);
-  return slug ? `${TOKEN_DIR}/${slug}.png` : FALLBACK;
+  return slug ? `${TOKEN_DIR}/${slug}.${ART_EXT}` : FALLBACK;
 }
 
 /**
@@ -73,5 +81,5 @@ export function tokenFor(name) {
  */
 export function portraitFor(name) {
   const slug = slugFor(name);
-  return slug ? `${PORTRAIT_DIR}/${slug}.png` : "";
+  return slug ? `${PORTRAIT_DIR}/${slug}.${ART_EXT}` : "";
 }

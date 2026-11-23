@@ -48,6 +48,7 @@ import { forgeDrop, fromPack, gearInspector, gearTab, gearTile, give, itemOf, to
 import { affixOf } from "../applications/affix-dialog.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 import { canGoOn, nameFor, priceFor } from "../rules/affixes.mjs";
+import { elementalFamily } from "../rules/bound.mjs";
 
 const click = el => el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 const RULES_LINK = 'a.content-link[data-uuid^="Compendium.azeroth-rpg.rules.JournalEntry."]';
@@ -1527,18 +1528,21 @@ export function feedbackBatch(context) {
       assert.include(names, "Fire Elemental");
       assert.include(names, "Greater Water Elemental");
       // **THE COUNT IS THE PACK'S, READ THROUGH THE RULE** (CLAUDE.md §15: scope the assertion to what the
-      // rule owns). 14 SS9 held eight elementals when this was written; the bestiary has grown since
-      // (the Necromancer's Phase 3b pack holds 40 in *Elementals, Oozes and Constructs*), and the rule
-      // is every elemental of that section at the Shaman's tier or below - the GM's own world
-      // elementals beside them are D-650's and are not this test's to count.
-      const index = await game.packs.get("azeroth-rpg.bestiary").getIndex({ fields: ["system.creatureType", "system.tier", "system.source.section"] });
-      const sectionElementals = index.filter(e => e.system?.creatureType === "elemental" && /Elementals, Oozes and Constructs/.test(e.system?.source?.section ?? "") && (e.system?.tier ?? 1) <= 4).map(e => e.name).sort();
+      // rule owns). The rule is the four element families (D-1796, `rules/bound.mjs#elementalFamily`) at
+      // the Shaman's tier or below - the GM's own world elementals beside them are D-650's and are not
+      // this test's to count.
+      const index = await game.packs.get("azeroth-rpg.bestiary").getIndex({ fields: ["system.creatureType", "system.tier", "system.weightClass"] });
+      const familyElementals = index.filter(e => e.system?.creatureType === "elemental" && elementalFamily({ name: e.name, weightClass: e.system?.weightClass }) && (e.system?.tier ?? 1) <= 4).map(e => e.name).sort();
       const offeredFromPack = options.filter(o => o.uuid?.startsWith("Compendium.azeroth-rpg.bestiary.")).map(o => o.name).sort();
-      assert.isAbove(sectionElementals.length, 7, "the bestiary holds 14 SS9's eight elementals at least");
-      assert.deepEqual(offeredFromPack, sectionElementals, `every elemental of 14's section at tier 4 or below, and no other pack creature; offered: ${names.join(", ")}`);
+      assert.isAbove(familyElementals.length, 7, "the bestiary holds the four families' eight plain elementals at least");
+      assert.deepEqual(offeredFromPack, familyElementals, `every elemental of the four families at tier 4 or below, and no other pack creature; offered: ${names.join(", ")}`);
       // Typed elemental, but SS13's: the eye caught both on the first capture.
       assert.notInclude(names, "Searing Totem");
       assert.notInclude(names, "Treant");
+      // **NEVER A NAMED LEADER, A PLANT, A BOG OR A TAR CREATURE** (D-1796, the lead: *"No"*).
+      for (const refused of ["The Windreaver", "Princess Tempestria", "Baron Charr", "Avalanchion", "Swampwalker", "Bloodpetal Lasher", "Tar Beast", "Mana Surge"]) {
+        assert.notInclude(names, refused, `Elemental Bond offered ${refused}`);
+      }
       assert.isBelow(names.indexOf("Water Elemental"), names.indexOf("Greater Fire Elemental"), "an Elite listed before a Standard");
       assert.ok(options.every(o => o.uuid?.startsWith("Compendium.azeroth-rpg.bestiary.")), "an option without its block's uuid");
       assert.ok(options.every(o => /Tier \d/.test(o.tag)), "an option without its tier on the tag");

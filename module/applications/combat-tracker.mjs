@@ -158,6 +158,9 @@ export class AzerothCombatTracker extends CombatTracker {
     const combatant = this.viewed?.combatants.get(target.closest("[data-combatant-id]")?.dataset.combatantId);
     if (!combatant) return null;
     const cost = { restoreHalf: "half", restoreReaction: "reaction" }[target.dataset.action];
+    // **AN UNDONE HALF-ACTION GIVES THE TURN'S ATTACK BACK ONLY WHERE IT BOUGHT ONE** (R6; the class talent
+    // audit's final review): the budget records what each Half-Action paid for, and `rules/initiative.mjs
+    // #restore` reads the last one inside the combatant's queued write - never a guess off the count here.
     return combatant.restoreAction(cost);
   }
 

@@ -16,9 +16,20 @@
  *   expr    := term (("+" | "-") term)*
  *   term    := factor (("*" | "/") factor)*
  *   factor  := integer | name | "floor(" expr ")" | "ceil(" expr ")"
+ *            | "min(" expr ("," expr)+ ")" | "max(" expr ("," expr)+ ")"
  *            | "(" expr ")" | "-" factor
  *   name    := rank | tier | level | sl | spent | weapon
- *            | str | dex | con | int | wis | cha | prof
+ *            | str | dex | con | int | wis | cha | prof | castingMod
+ *
+ * **`min` AND `max` TAKE TWO OR MORE ARGUMENTS** (the class talent audit's R1;
+ * D-1861): *a talent whose rank adds damage ... adds it to no more than your
+ * tier* is `min(rank,tier)`, and Elemental Fury's *1 a rank, to no more than
+ * your tier* is the same. One argument is a fault and reads as null, as a
+ * dangling comma does: `min(rank)` says nothing a row author meant.
+ *
+ * **`castingMod`** is the casting ability modifier (02 §6's, the one the Spell DC
+ * adds; the audit's Review corrections for Regrowth's `2*tier+castingMod`),
+ * handed in by `abilityScope` off the derived `system.castingMod`.
  *
  * `weapon` is the striker's own Damage Rating - the main-hand weapon's, or 08
  * §7's Unarmed 1 with none (04's Wrath of the Light: *Holy damage at your Damage
@@ -44,7 +55,34 @@
 export const ABILITY_NAMES = Object.freeze(["str", "dex", "con", "int", "wis", "cha"]);
 
 /** The names an amount may use, and what each is. */
-export const EXPRESSION_NAMES = Object.freeze(["rank", "tier", "level", "sl", "spent", "weapon", ...ABILITY_NAMES, "prof"]);
+export const EXPRESSION_NAMES = Object.freeze(["rank", "tier", "level", "sl", "spent", "weapon", ...ABILITY_NAMES, "prof", "castingMod"]);
+
+/**
+ * **THE ONE CAP A ROW NAMES** (the class talent audit's R1; D-1861): `cap` on a
+ * `spell` damage row, a `tick` row or any reader that asks, holding a per-rank
+ * amount to *no more than your tier*. `"tier"` is the rule's own word; any other
+ * string is an expression read at the same scope (`"tier+1"`, `"2*tier"`); a
+ * number is a flat ceiling. No cap, or one that cannot be read, leaves the amount
+ * alone - a cap that fails to read must never zero a bonus the row states.
+ */
+export const TIER_CAP = "tier";
+
+/**
+ * An amount held under a row's `cap`, at the scope the door hands in.
+ *
+ * @param {number} amount
+ * @param {string|number|null|undefined} cap
+ * @param {{tier?: number, rank?: number, level?: number}} [scope]
+ * @returns {number}
+ */
+export function capAmount(amount, cap, scope = {}) {
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return 0;
+  if (cap === null || cap === undefined || cap === "") return n;
+  const limit = typeof cap === "number" ? cap : evaluateExpression(String(cap), { tier: 1, ...scope });
+  if (limit === null || !Number.isFinite(limit)) return n;
+  return Math.min(n, Math.max(0, Math.trunc(limit)));
+}
 
 /**
  * **WHAT A DOOR HANDS IN FOR THE ABILITY NAMES** (door 16): each ability's
@@ -60,11 +98,17 @@ export function abilityScope(system = {}) {
   const out = {};
   for (const key of ABILITY_NAMES) out[key] = Math.trunc(Number(system?.abilities?.[key]?.mod)) || 0;
   out.prof = Math.trunc(Number(system?.proficiency)) || 0;
+  // The casting ability modifier (02 §6), derived beside the Spell DC in
+  // `CharacterData#prepareDerivedData`; 0 for a creature or a class that casts nothing.
+  out.castingMod = Math.trunc(Number(system?.castingMod)) || 0;
   return out;
 }
 
 /** The functions an amount may call. Both round toward their own side, as 04 says. */
 const FUNCTIONS = Object.freeze({ floor: Math.floor, ceil: Math.ceil });
+
+/** The functions that take two or more arguments (R1, D-1861). */
+const VARIADIC = Object.freeze({ min: Math.min, max: Math.max });
 
 /** The tokens of an expression, or null where a character is not one of its own. */
 function tokens(text) {
@@ -75,9 +119,10 @@ function tokens(text) {
     const rest = s.slice(i);
     const number = /^\d+/.exec(rest);
     if (number) { out.push({ t: "num", v: Number(number[0]) }); i += number[0].length; continue; }
-    const word = /^[a-z]+/.exec(rest);
+    // A word may be camelCase (`castingMod`); a name outside the list still reads null.
+    const word = /^[a-zA-Z]+/.exec(rest);
     if (word) { out.push({ t: "word", v: word[0] }); i += word[0].length; continue; }
-    if ("+-*/()".includes(s[i])) { out.push({ t: s[i] }); i += 1; continue; }
+    if ("+-*/(),".includes(s[i])) { out.push({ t: s[i] }); i += 1; continue; }
     return null;
   }
   return out;
@@ -121,6 +166,13 @@ export function evaluateExpression(expr, scope = {}) {
       if (!take("(")) return null;
       const v = expression();
       return v !== null && take(")") ? FUNCTIONS[word.v](v) : null;
+    }
+    if (VARIADIC[word.v]) {
+      if (!take("(")) return null;
+      const args = [expression()];
+      while (args[args.length - 1] !== null && take(",")) args.push(expression());
+      if (args.length < 2 || args.some(a => a === null) || !take(")")) return null;
+      return VARIADIC[word.v](...args);
     }
     return value(word.v);
   }

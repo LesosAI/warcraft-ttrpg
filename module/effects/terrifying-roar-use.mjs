@@ -1,4 +1,4 @@
-import { TERRIFYING_ROAR as SPEC } from "../rules/king-mosh.mjs";
+import { TERRIFYING_ROAR as SPEC, roarDC } from "../rules/king-mosh.mjs";
 import { reviewNearbyEnemies } from "./area-enemies.mjs";
 import { feetApart } from "../canvas/footprints.mjs";
 import { sleepRefusal } from "../rules/dreadlord-sleep.mjs";
@@ -77,10 +77,10 @@ export async function terrifyingRoarQueryHandler({ actorUuid, index, source, req
       radius: SPEC.feet, validOrigin: () => gmHere() && scene.tokens.get(origin.id) === origin
         && origin.actor === actor && point(origin) === points.get(origin) && walls() === wallStamp && clock() === started,
       includeToken: token => token._source?.level === origin._source?.level,
-      payment: "Spend one Action and the encounter use. Each reviewed enemy makes a DC 17 Spirit Test or becomes Frightened until its next turn ends.",
+      payment: `Spend one Action and the encounter use. Each reviewed enemy makes a DC ${roarDC(actor.system)} Spirit Test or becomes Frightened until its next turn ends.`,
       chooseOption: (menu, options, note, settings) => chooseOption(menu, options.map(option => option.key === "other"
         ? { ...option, name: "Ally, neutral or unable to hear", description: "Exclude allies, fallen creatures and creatures that cannot hear the roar." }
-        : option.key === "enemy" ? { ...option, name: "Living enemy that can hear", description: "This creature makes a DC 17 Spirit Test against the roar." } : option), note, settings)
+        : option.key === "enemy" ? { ...option, name: "Living enemy that can hear", description: `This creature makes a DC ${roarDC(actor.system)} Spirit Test against the roar.` } : option), note, settings)
     });
     if (!selection.ok) return refuse(selection.reason);
     tokens = selection.targets.map(row => row.token);

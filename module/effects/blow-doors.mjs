@@ -16,9 +16,6 @@
  * - `askToHold` - 04's Intervention, Spirit Shell and Guardian Spirit: a blow
  *   that would drop a creature to 0 is put to each holder in turn, and the first
  *   yes strikes a use and holds it at 1 (Guardian Spirit restoring the tier).
- * - `registerBlowDoorHooks` - 07's Aegis of the Light: a creature its floor held
- *   restores the caster's tier when the floor goes, where the caster holds 04's
- *   talent of the name.
  * - **The Chronomancer's Guardian of Time** (stage 2c): Interposed Moment a move that
  *   swaps the two first, Timeless Sentinel a move asked of nobody and paid with
  *   nothing, and `askToBorrow` - Borrowed Time, the creature struck asked about its
@@ -40,10 +37,10 @@
 import { AZEROTH } from "../config.mjs";
 import { creaturesWithin } from "../canvas/engaged.mjs";
 import {
-  ASKED_HOLDS, FLOOR_FLAG, divideEvenly, floorOf, floorsHolding, floorsOf, heldAt, holdJudgement, moveJudgement, movedAmount, movedParts, wouldDrop
+  ASKED_HOLDS, FLOOR_FLAG, divideEvenly, floorsHolding, floorsOf, heldAt, holdJudgement, moveJudgement, movedAmount, movedParts, wouldDrop
 } from "../rules/blow-doors.mjs";
 import {
-  RIGHTEOUS, SPIRIT_LINK_FLAG, aegisHealFor, guardianFor, holdRowsFor, righteousReach, spiritLinkFor
+  RIGHTEOUS, SPIRIT_LINK_FLAG, guardianFor, holdRowsFor, righteousReach, spiritLinkFor
 } from "../rules/class-talents.mjs";
 // 04's Shared Burden: a SHARE of the blow moved, the rest kept, the share met by the
 // holder's own Armor Points and Ward (the Legacy branches' B6).
@@ -54,7 +51,6 @@ import { wardBySchool } from "../rules/ward.mjs";
 import { schoolArmorBySchool } from "../rules/auras.mjs";
 import { burdenFor } from "../rules/class-talents.mjs";
 import { gmAbsentFor } from "../rules/gm-writes.mjs";
-import { wardsOn } from "./wards.mjs";
 import { bondOf } from "../documents/bound.mjs";
 // No Reaction against a creature Wind Walk or Bladestorm holds (the Legacy branches' door 14).
 import { unansweredBy } from "../rules/reactions.mjs";
@@ -562,14 +558,6 @@ function holdOffers(target) {
     seen.add(actor.uuid);
     add(actor, feet);
   }
-  // Spirit Shell: the priests whose Ward stands on it, wherever they are -
-  // their Spirit Shell and nothing else, since nothing measured them.
-  for (const { ward } of wardsOn(target)) {
-    const priest = actorAt(ward.by);
-    if (!priest || seen.has(priest.uuid)) continue;
-    seen.add(priest.uuid);
-    add(priest, null, "spiritShell");
-  }
   const order = new Map(ASKED_HOLDS.map((k, i) => [k, i]));
   return offers
     .filter(o => ASKED_HOLDS.includes(o.row.kind))
@@ -586,7 +574,6 @@ function usesLeft(holder, row) {
 function holdFacts(offer, target, { attack }) {
   return {
     attack, friendly: true, distance: offer.distance,
-    warded: wardsOn(target).some(w => w.ward.by === offer.holder.uuid),
     usesLeft: usesLeft(offer.holder, offer.row), holderUp: standing(offer.holder),
     // 04's Life for a Life (Phase 4c-T): the circle's judgement, made by its own door in `askToHold`.
     life: offer.life ?? null
@@ -601,9 +588,11 @@ function holdFacts(offer, target, { attack }) {
  * @param {{target: Actor, before: number, amount: number, attack?: boolean}} o
  * @returns {Promise<{amount: number, held: {kind: string, name: string, holder: Actor, heal: number}|null}>}
  */
-export async function askToHold({ target, before = 0, amount = 0, attack = false } = {}) {
-  if (!target || !wouldDrop({ before, amount }) || (!tokenOf(target) && !wardsOn(target).length)) return { amount, held: null };
-  const offers = holdOffers(target);
+export async function askToHold({ target, before = 0, amount = 0, attack = false, regimeOpen = null, claim = null, release = null } = {}) {
+  if (!target || !wouldDrop({ before, amount }) || !tokenOf(target)) return { amount, held: null };
+  // **R4: A HOLD ANOTHER GRANTS IS ONCE AN ENCOUNTER ON THIS CREATURE** (D-1863): an offer whose
+  // regime the creature's fight record has spent is never asked (`_holdAtOne` hands the judgement).
+  const offers = holdOffers(target).filter(o => typeof regimeOpen !== "function" || regimeOpen(o.row.regime ?? null, o.row.lasting === true));
   // **04's LIFE FOR A LIFE** (Phase 4c-T): judged off the board by the Necromancer's own door - the
   // ally inside the holder's circle, a raised dead within 30 feet of it, the round's one use.
   if (offers.some(o => o.row.kind === "lifeForALife")) {
@@ -613,14 +602,32 @@ export async function askToHold({ target, before = 0, amount = 0, attack = false
   }
   for (const offer of offers) {
     if (!holdJudgement(offer.row, holdFacts(offer, target, { attack })).ok) continue;
-    const answer = await ask(offer.holder, {
-      act: "hold", identifier: offer.row.identifier, holderUuid: offer.holder.uuid, targetUuid: target.uuid,
-      before, amount, attack: attack === true, distance: offer.distance
-    });
+    // **THE CLAIM BEFORE THE GRANTER PAYS** (R4; the wave 1 review): the creature's fight record is
+    // claimed before the holder is asked - and so before its use is struck on a yes - and given back
+    // on a no. A claim that does not land refuses the hold in words, with nothing paid.
+    const regime = offer.row.lasting === true ? null : (offer.row.regime ?? null);
+    if (typeof claim === "function" && regime && !(await claim(regime))) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.BlowDoor.Refuse.unclaimed", { talent: offer.row.name, name: target.name }));
+      continue;
+    }
+    // **A THROWN ASK GIVES THE CLAIM BACK** (the class talent audit's final review): the holder's own
+    // client answers in-process (`blowAskHandler`), and a throw there would leave the creature's fight
+    // record claimed for a hold nobody granted. Read as a no, said in words.
+    let answer = null;
+    try {
+      answer = await ask(offer.holder, {
+        act: "hold", identifier: offer.row.identifier, holderUuid: offer.holder.uuid, targetUuid: target.uuid,
+        before, amount, attack: attack === true, distance: offer.distance
+      });
+    } catch (err) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.BlowDoor.NoAnswer", { name: offer.holder.name, reason: err?.message ?? "" }));
+      answer = null;
+    }
     if (answer?.held) {
       const saved = heldAt({ before, amount, stay: 1 });
-      return { amount: saved.amount, held: { kind: offer.row.kind, name: offer.row.name, holder: offer.holder, heal: Math.max(0, Math.trunc(Number(answer.heal)) || 0) } };
+      return { amount: saved.amount, held: { kind: offer.row.kind, regime: offer.row.regime ?? null, name: offer.row.name, holder: offer.holder, heal: Math.max(0, Math.trunc(Number(answer.heal)) || 0) } };
     }
+    if (typeof release === "function" && regime) await release(regime);
   }
   return { amount, held: null };
 }
@@ -876,26 +883,6 @@ export async function aegisFloor({ target, before = 0, amount = 0 } = {}) {
   return { amount: saved.amount, held: { kind: "aegis", name: names.join(", ") } };
 }
 
-/**
- * **WHAT A FLOOR'S END GIVES THE CREATURE IT HELD** (04's Aegis of the Light: *A
- * creature held at 1 Health by it restores Health equal to your tier when the
- * spell ends*), on the client that deleted the effect - core's expiry at the
- * caster's turn's end, or a hand.
- */
-export function registerBlowDoorHooks() {
-  Hooks.on("deleteActiveEffect", (effect, options, userId) => {
-    if (userId !== game.user.id) return;
-    const floor = floorOf([effect?.flags?.["azeroth-rpg"] ?? {}]);
-    const actor = effect?.parent;
-    if (!floor?.held || actor?.documentName !== "Actor") return;
-    // An aura's floor (04's Big Bad Voodoo; the Legacy branches' door 12) is no Aegis:
-    // its end restores nothing.
-    if (effect?.flags?.["azeroth-rpg"]?.aura) return;
-    const caster = actorAt(floor.by);
-    const heal = caster ? aegisHealFor(caster.takenTalents?.() ?? [], { tier: caster.system?.tier ?? 1 }) : null;
-    if (!heal) return;
-    actor.applyHealing(heal.amount, { from: caster, spell: true })
-      .then(() => ui.notifications?.info(game.i18n.format("AZEROTH.AegisLight.Healed", { name: actor.name, n: heal.amount, talent: heal.name })))
-      .catch(err => console.error("azeroth-rpg | aegis of the light", err));
-  });
-}
+// **NOTHING IS RESTORED WHEN A FLOOR ENDS** (the class talent audit's Benediction, D-1875): 04's Aegis of the
+// Light talent is gone, and with it `registerBlowDoorHooks`' heal at the floor's end - deleted in the wave-2
+// fix run, because its `aegis` key had come to match Divine Aegis's row.

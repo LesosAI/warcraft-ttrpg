@@ -21,6 +21,11 @@ import { baseArmorPoints } from "./armor.mjs";
 import { SIZES, flyingPace, isSize, tokenSize } from "./size.mjs";
 import { initiativeFor } from "./initiative.mjs";
 import { RANK_MAX } from "./xp.mjs";
+// A creature's own Spellpower (D-1727): the generator's rows and the gear ceiling the review notes against.
+import { GEAR_SPELLPOWER_CEILING, spellpowerFromRows, spellpowerStateRows } from "./creature-spellpower.mjs";
+// Its own Casting Test bonus, Boons and Banes and condition immunities (D-1760 to D-1762).
+import { boonsBanesFromRows, boonsBanesStateRows, castingBonusCeiling, conditionImmuneFrom } from "./creature-bonuses.mjs";
+import { cleanPoints } from "./item-bonuses.mjs";
 
 /* -------------------------------------------- */
 /*  13 §5's tables                               */
@@ -28,7 +33,8 @@ import { RANK_MAX } from "./xp.mjs";
 
 /** "Take its numbers from the table" - a Standard, by tier. */
 export const BAND = Object.freeze({
-  health:  Object.freeze({ 1: 12, 2: 32, 3: 35, 4: 41 }),
+  // Raised by a quarter, rounded half up (D-1900): 12, 32, 35, 41 before.
+  health:  Object.freeze({ 1: 15, 2: 40, 3: 44, 4: 51 }),
   defense: Object.freeze({ 1: 12, 2: 14, 3: 16, 4: 18 }),
   bonus:   Object.freeze({ 1: 4, 2: 6, 3: 8, 4: 10 }),
   damage:  Object.freeze({ 1: 5, 2: 7, 3: 9, 4: 11 }),
@@ -48,7 +54,8 @@ export const WEIGHTS = Object.freeze({
 
 /** "A Boss": Health a centre, the DC and the actions off the tier, what an action deals. */
 export const BOSS = Object.freeze({
-  health:       Object.freeze({ 1: 75, 2: 194, 3: 212, 4: 246 }),
+  // Raised by a quarter, rounded half up (D-1900): 75, 194, 212, 246 before.
+  health:       Object.freeze({ 1: 94, 2: 243, 3: 265, 4: 308 }),
   spellDC:      Object.freeze({ ...AZEROTH.BOSS_DC }),
   power:        Object.freeze({ 1: 8, 2: 10, 3: 12, 4: 16 }),
   actions:      Object.freeze({ ...AZEROTH.BOSS_ACTIONS }),
@@ -314,6 +321,53 @@ export function suggest(spec = {}) {
 const lower = s => String(s ?? "").toLowerCase();
 const plainText = html => String(html ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 
+/**
+ * The words a Behavior paragraph uses for a school it fights with (D-1730):
+ * `tools/check-bestiary.ps1`'s own SCHOOLWORDS, word for word. A school with no
+ * row is read by its own name.
+ */
+export const SCHOOL_WORDS = Object.freeze({
+  fire: /\bfire|\bflame|\bburn/i,
+  frost: /\bfrost|\bice\b|\bicy\b|\bcold\b|\bfreez/i,
+  nature: /\bnature\b|\blightning|\bstorm|\bpoison|\bvenom/i,
+  shadow: /\bshadow/i,
+  holy: /\bholy\b|\bthe Light\b/i,
+  fel: /\bfel\b/i,
+  arcane: /\barcane\b/i
+});
+
+/** A spell's school as a Ward reads it: a Death spell deals Shadow damage (D-918). */
+const wardSchoolOf = entry => {
+  const school = lower(entry?.school).trim();
+  if (!school) return null;
+  return school === "death" ? "shadow" : school;
+};
+
+/**
+ * **THE SCHOOL A CREATURE IS BUILT ON**, or null (D-1730, D-1742): the school
+ * holding a strict majority of its Spells run, where its Behavior names that
+ * school by a word for it or by one of those spells. The checker's reading:
+ * the count is over the whole run, so a spell 07 does not hold still counts
+ * against the majority, and the spell names are matched as written.
+ *
+ * @param {{names?: string[], spells?: Map<string, {school?: string}>|null, behavior?: string}} o
+ * @returns {string|null}  a key of `AZEROTH.schools`
+ */
+export function schoolBuilt({ names = [], spells = null, behavior = "" } = {}) {
+  if (!spells || !names.length) return null;
+  const counts = new Map();
+  for (const name of names) {
+    const school = wardSchoolOf(spells.get(name));
+    if (school) counts.set(school, (counts.get(school) ?? 0) + 1);
+  }
+  const main = [...counts].find(([, n]) => 2 * n > names.length)?.[0] ?? null;
+  if (!main) return null;
+  const text = plainText(behavior);
+  const words = SCHOOL_WORDS[main] ?? new RegExp(`\\b${main}\\b`, "i");
+  const named = words.test(text) || names.some(n => wardSchoolOf(spells.get(n)) === main && text.includes(n));
+  return named ? main : null;
+}
+
 /** Whether an attack reaches past melee by its name or its traits (D-531). */
 export function reachesPastMelee(attack = {}) {
   const name = lower(attack.name).trim();
@@ -422,6 +476,16 @@ export function review(doc = {}, refs = {}) {
   for (const [school, value] of Object.entries(s.ward ?? {})) {
     if (Number(value) >= 5) note("Ward", { value: Number(value), school });
   }
+  // A creature's own Spellpower (D-1727) above the most gear gives a character
+  // in one school (08 §10: *3 is the ceiling from gear*). A note: theme may
+  // set the number (D-104).
+  for (const [school, value] of Object.entries(s.spellpowerBase ?? {})) {
+    if (Number(value) > GEAR_SPELLPOWER_CEILING) note("Spellpower", { value: Number(value), school, ceiling: GEAR_SPELLPOWER_CEILING });
+  }
+  // Its own Casting Test bonus (D-1760) above the most an Augment gives a
+  // character of its tier (08 §9: +1 at tiers 1 and 2, +2 at 3 and 4). A note.
+  const castingBonus = Math.trunc(Number(s.castingBonus)) || 0;
+  if (castingBonus > castingBonusCeiling(t ?? 1)) note("CastingBonus", { value: castingBonus, ceiling: castingBonusCeiling(t ?? 1), tier: t ?? 1 });
 
   // ---- attacks -------------------------------------------------------------
   const abilityNames = new Set([...(s.creatureAbilities ?? []), ...(s.bossActions ?? [])].map(a => lower(a?.name)));
@@ -490,6 +554,15 @@ export function review(doc = {}, refs = {}) {
         if (mana > power) note("SpellMana", { name, mana, power });
       }
     }
+  }
+  // D-1730, D-1742: a creature built on a school carries a Ward or an Immunity to it. The
+  // checker's own note, with its three conditions: one school holds a strict majority of the
+  // Spells run (a Death spell counts as Shadow, D-918), the Behavior names that school by a
+  // word for it or by one of those spells, and the block holds neither a Ward nor an Immune in
+  // it. A note and never a refusal: where the lore says otherwise the block may stand (D-104).
+  const school = schoolBuilt({ names, spells, behavior: s.behavior });
+  if (school && !(Number(s.ward?.[school]) > 0) && !(s.immune ?? []).map(lower).includes(school)) {
+    note("SchoolWard", { school });
   }
   if (boss && band && s.power?.max !== null && s.power?.max !== undefined && Number(s.power.max) !== band.power) note("Power", { power: s.power.max, want: band.power });
 
@@ -610,6 +683,10 @@ export function stateFromSystem(system = {}, { name = "", img = "" } = {}) {
       wards: Object.entries(s.ward ?? {})
         .filter(([k, v]) => AZEROTH.schools[k] && Number(v) > 0)
         .map(([school, value]) => ({ school, value: Number(value) })),
+      // The creature's OWN Spellpower, a row a school (D-1727). Read off the
+      // stored base and never off the derived `spellpower`, which carries what
+      // its passives and gear add and would be written back as the base.
+      spellpower: spellpowerStateRows(s.spellpowerBase ?? {}),
       speed: s.speed ?? 30, flies: Boolean(s.flies), initiative: s.initiative ?? 10
     },
     abilities: Object.fromEntries(ABILITIES.map(k => [k, s.abilities?.[k]?.value ?? null])),
@@ -617,7 +694,12 @@ export function stateFromSystem(system = {}, { name = "", img = "" } = {}) {
       name: a.name ?? "", ability: "str", bonus: a.bonus ?? 0, damage: a.damage ?? null,
       traits: [...(a.traits ?? [])], range: a.range ?? null
     })),
-    spells: { caster: Boolean((s.spells?.names ?? []).length || s.spells?.dc), dc: s.spells?.dc ?? null, names: [...(s.spells?.names ?? [])] },
+    spells: {
+      caster: Boolean((s.spells?.names ?? []).length || s.spells?.dc), dc: s.spells?.dc ?? null, names: [...(s.spells?.names ?? [])],
+      // Its OWN Casting Test bonus (D-1760), the stored number and never the
+      // derived `itemBonus.casting`, which carries what its gear adds.
+      castingBonus: cleanPoints(s.castingBonus)
+    },
     creatureAbilities: (s.creatureAbilities ?? []).map(a => ({ name: a.name ?? "", description: proseFromHtml(a.description), automation: cleanAutomation(a.automation) })),
     bossActions: (s.bossActions ?? []).map(a => ({ name: a.name ?? "", description: proseFromHtml(a.description), cost: a.cost ?? 1, automation: cleanAutomation(a.automation) })),
     keywords: {
@@ -625,6 +707,11 @@ export function stateFromSystem(system = {}, { name = "", img = "" } = {}) {
       resilience: [...(s.resilience ?? [])],
       immune: (s.immune ?? []).map(lower), vulnerable: (s.vulnerable ?? []).map(lower),
       inflicts: (s.inflicts ?? []).map(lower),
+      // The GM's own Boons and Banes and condition immunities (D-1761, D-1762),
+      // off the stored lists and never off the derived bags, which carry a
+      // passive's and a ring's.
+      boonsBanes: boonsBanesStateRows(s.boonsBanes ?? []),
+      conditionImmune: conditionImmuneFrom(s.conditionImmune ?? []),
       momentum: { name: s.momentum?.name ?? null, max: s.momentum?.max ?? null },
       power: { name: s.power?.name ?? null, max: s.power?.max ?? null }
     },
@@ -676,6 +763,8 @@ export function toSystem(state = {}) {
     ward: Object.fromEntries((n.wards ?? [])
       .filter(w => w?.school && AZEROTH.schools[w.school] && num(w.value) !== null && num(w.value) > 0)
       .map(w => [w.school, Math.trunc(num(w.value))])),
+    // The GM's own Spellpower by school (D-1727); a school at 0 is dropped.
+    spellpowerBase: spellpowerFromRows(n.spellpower ?? []),
     speed: Math.max(0, Math.trunc(Number(n.speed)) || 0),
     flies: Boolean(n.flies),
     initiative: Math.trunc(Number(n.initiative)) || 0,
@@ -691,6 +780,8 @@ export function toSystem(state = {}) {
       dc: state.spells?.caster ? num(state.spells?.dc) : null,
       names: state.spells?.caster ? [...(state.spells?.names ?? [])] : []
     },
+    // The GM's own Casting Test bonus (D-1760), on a creature that casts, as the Spell DC is.
+    castingBonus: state.spells?.caster ? cleanPoints(state.spells?.castingBonus) : 0,
     creatureAbilities: (state.creatureAbilities ?? []).map(a => ({ name: String(a.name ?? "").trim(), description: htmlFromProse(a.description), automation: cleanAutomation(a.automation) })),
     bossActions: (state.bossActions ?? []).map(a => ({
       name: String(a.name ?? "").trim(), description: htmlFromProse(a.description), cost: Number(a.cost) === 2 ? 2 : 1, automation: cleanAutomation(a.automation)
@@ -707,6 +798,9 @@ export function toSystem(state = {}) {
     immune: (k.immune ?? []).map(lower),
     vulnerable: (k.vulnerable ?? []).map(lower),
     inflicts: (k.inflicts ?? []).map(lower),
+    // The GM's own Boons and Banes and condition immunities (D-1761, D-1762).
+    boonsBanes: boonsBanesFromRows(k.boonsBanes ?? []),
+    conditionImmune: conditionImmuneFrom(k.conditionImmune ?? []),
     momentum: { name: k.momentum?.name || null, value: num(k.momentum?.max), max: num(k.momentum?.max) },
     power: { name: k.power?.name || null, value: num(k.power?.max), max: num(k.power?.max) },
     behavior: htmlFromProse(p.behavior),

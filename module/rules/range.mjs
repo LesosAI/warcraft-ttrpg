@@ -185,6 +185,10 @@ export function rangeInText(text) {
       const clause = before.split(/[,;:]/).pop() ?? "";
       if (of && of !== "you" && of !== "yourself") { keep("relative", n, phrase); continue; }
       if (TRIGGER.test(clause)) { keep("trigger", n, phrase); continue; }
+      // *For each that hits, one friendly target within 10 feet of you recovers Health* (02's Divine
+      // Storm since the class talent audit, D-1872): a consequence of the attacks, whose creature the
+      // Use's door picks itself, so it names no creature the Use is aimed at.
+      if (/^for each (?:one )?(?:that|which) hits\b/i.test(before.trim())) { keep("trigger", n, phrase); continue; }
       if (/\battacks?\b/i.test(before) && n <= 10) { keep("attack", n, phrase); continue; }
       // The noun nearest the distance decides: *targets in a 20-foot area within 60 feet* (02's
       // Hurricane) is an area placed within 60 feet, not targets within it.

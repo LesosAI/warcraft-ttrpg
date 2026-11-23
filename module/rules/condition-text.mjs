@@ -5,7 +5,7 @@
  */
 
 export const CONDITION_TEXT = Object.freeze({
-  "bleeding": Object.freeze({ name: "Bleeding", text: "<p>At the start of each of your turns you lose X Health. Armor and Ward do not apply to it. Values from separate sources add together.</p>", ends: "A Half-Action and a Medicine Test at DC 12, or at the DC the source names. Restoring Health does not clear it." }),
+  "bleeding": Object.freeze({ name: "Bleeding", text: "<p>At the start of each of your turns you lose X Health. Armor and Ward do not apply to it. Values from separate sources add together. A source is the one talent, feature, spell or trait that laid it: Bleeding laid again by the same source does not add, and you keep the higher of the two values.</p>", ends: "A Half-Action and a Medicine Test at DC 12, or at the DC the source names. Restoring Health does not clear it." }),
   "blinded": Object.freeze({ name: "Blinded", text: "<p>You cannot see. Bane on your Attack Tests and on any Test that needs sight, and attacks against you gain a Boon.</p>", ends: "As the source says." }),
   "charmed": Object.freeze({ name: "Charmed", text: "<p>You treat the charmer as an ally and cannot willingly attack them. You obey their spoken commands only where the source says you do.</p>", ends: "When the source ends, or when the charmer or one of their allies harms you." }),
   "deafened": Object.freeze({ name: "Deafened", text: "<p>You cannot hear. Bane on any Test that needs hearing, and you fail outright any Test to hear something.</p>", ends: "As the source says." }),

@@ -203,7 +203,8 @@ export function druidTalentsBatch(context) {
       await fightWith([patient]);
       await fill(druid, "mana");
       const card = await cast(druid, "Rejuvenation", { targets: [rowOf(patient)] });
-      assert.deepInclude(card.flags["azeroth-rpg"].tick, { kind: "heal", amount: 5 }, "Rejuvenation's tick is not 2 + 3");
+      // Each rank adds 1, to no more than the druid's tier (R1, D-1892).
+      assert.deepInclude(card.flags["azeroth-rpg"].tick, { kind: "heal", amount: 2 + Math.min(3, druid.system.tier) }, "Rejuvenation's tick is not 2 + the capped rank");
     });
 
     it("NATURE'S GRACE: an SL 2 Casting Test lays 1 Mana a rank off the next spell, which takes it whole", async function () {
@@ -218,7 +219,8 @@ export function druidTalentsBatch(context) {
       // A low die: this cast takes the discount and lays no new one.
       const second = await cast(druid, "Moonfire", { targets: [rowOf(ghoul)], face: 2 });
       assert.ok(second, "Moonfire was refused");
-      assert.equal(poolOf(druid, "mana").value, before - Math.max(0, spellNamed(druid, "Moonfire").system.mana - 2), "the next spell's Mana was not discounted by 2");
+      // A next spell's discount stops at 1 Mana (R7, D-1847, D-1865).
+      assert.equal(poolOf(druid, "mana").value, before - Math.max(1, spellNamed(druid, "Moonfire").system.mana - 2), "the next spell's Mana was not discounted by 2, to no less than 1");
       await until(() => druid.pendingNextSpell().amount === 0, "the discount taken whole");
       assert.include(textOf(second), "Nature's Grace", "the card does not name the discount");
     });
@@ -235,51 +237,9 @@ export function druidTalentsBatch(context) {
       await until(() => druid.getFlag("azeroth-rpg", "alternate") === "nature", "the Nature bonus pending");
     });
 
-    it("CELESTIAL ALIGNMENT: two minutes on the card, and its 2 Ward ignored while it stands", async function () {
-      this.timeout(240000);
-      const druid = await druidWith("ZZ DT Alignment", { level: 20, ranks: { "Lunar Guidance": 1, "Celestial Alignment": 1 }, spells: ["Wrath"] });
-      const ghoul = await makeNpc("Plagued Ghoul");
-      await fill(druid, "mana");
-      const card = await cast(druid, "Celestial Alignment");
-      assert.deepEqual(card.flags["azeroth-rpg"].duration, { value: 2, units: "minutes" }, "the span is not the talent's two minutes");
-      // Before it stands: Ward 3 takes 3 off Wrath's 4.
-      const warded = rowOf(ghoul, { wardBySchool: { nature: 3 } });
-      const plain = await cast(druid, "Wrath", { targets: [warded] });
-      assert.equal(plain.flags["azeroth-rpg"].damageByTarget[0].damage, 1);
-      const apply = parsed(card).querySelector('[data-action="applySpellEffect"]');
-      assert.ok(apply, "the card offers no Apply");
-      await CARD_ACTIONS.applySpellEffect(apply, card);
-      await until(() => druid.effects.some(e => e.getFlag("azeroth-rpg", "identifier") === "celestial-alignment"), "Celestial Alignment laid");
-      assert.equal(druid.spellWardPierce("nature"), 2);
-      const pierced = await cast(druid, "Wrath", { targets: [warded] });
-      assert.equal(pierced.flags["azeroth-rpg"].damageByTarget[0].damage, 3, "Wrath did not ignore 2 of the Ward");
-    });
+    // CELESTIAL ALIGNMENT is Celestial Focus now (the class talent audit, D-1892): `druid-talents.test.mjs` holds the tier and the rung.
 
-    it("TYPHOON: Hurricane lays Slowed at rank 1 and Prone beside it at rank 2, and Slowed ends at the druid's turn start", async function () {
-      this.timeout(240000);
-      const druid = await druidWith("ZZ DT Typhoon", { level: 9, ranks: { Typhoon: 1 } });
-      const ghoul = await makeNpc("Plagued Ghoul");
-      const conditions = message => [...parsed(message).querySelectorAll('[data-action="applyCondition"]')].map(b => b.dataset.condition);
-      // Out of a fight first: two Uses that cost an action each spend no turn.
-      await fill(druid, "mana");
-      const one = await useFeature(druid, "Hurricane", { targets: [rowOf(ghoul)] });
-      assert.deepEqual(conditions(one), ["slowed"], "Hurricane does not lay its own Slowed");
-      await talentNamed(druid, "Typhoon").update({ "system.taken": 2 });
-      await until(() => (featureNamed(druid, "Hurricane")?.system?.inflicts ?? []).length === 2, "Typhoon's Prone stamped on Hurricane");
-      // In a fight, on the druid's turn, so Slowed takes the druid's turn start.
-      const combat = await fightWith([druid, ghoul]);
-      await giveTurn(combat, druid);
-      await fill(druid, "mana");
-      const two = await useFeature(druid, "Hurricane", { targets: [rowOf(ghoul)] });
-      assert.deepEqual(conditions(two), ["slowed", "prone"]);
-      const slowed = parsed(two).querySelector('[data-action="applyCondition"][data-condition="slowed"]');
-      assert.equal(slowed.dataset.until, "casterTurnStart");
-      await CARD_ACTIONS.applyCondition(slowed, two);
-      const effect = await until(() => ghoul.effects.find(e => e.statuses?.has("slowed")), "Slowed on the ghoul");
-      const mine = combat.getCombatantsByActor(druid)[0];
-      assert.equal(effect.start?.combatant, mine.id, "Slowed is not keyed on the druid's own turn");
-      assert.equal(effect.duration?.expiry, "turnStart");
-    });
+    // TYPHOON's Prone rides Hurricane's card still; Hurricane's Slowed lands on a failed Reflex Test now (C10, D-1895): `azeroth-rpg.audit-arcane` presses it.
 
     /* ---- Feral --------------------------------------------------------- */
 
@@ -388,7 +348,8 @@ export function druidTalentsBatch(context) {
       const mana = await fill(druid, "mana");
       const card = await cast(druid, "Rejuvenation", { face: 2 });
       assert.ok(card, "Rejuvenation was refused");
-      assert.equal(poolOf(druid, "mana").value, mana.value - Math.max(0, spellNamed(druid, "Rejuvenation").system.mana - 2));
+      // A next spell's discount stops at 1 Mana (R7, D-1847, D-1865).
+      assert.equal(poolOf(druid, "mana").value, mana.value - Math.max(1, spellNamed(druid, "Rejuvenation").system.mana - 2));
       assert.equal(druid.pendingNextSpell().amount, 0);
     });
 
@@ -419,7 +380,8 @@ export function druidTalentsBatch(context) {
       await fill(druid, "mana");
       const tier = druid.system.tier;
       const card = await useFeature(druid, "Regrowth", { targets: [rowOf(patient)] });
-      assert.equal(card.flags["azeroth-rpg"].heal, 2 * tier + 2, "the heal is not twice the tier plus the rank");
+      // The class talent audit's Tune (D-1895): twice the tier plus the casting modifier, and the rank.
+      assert.equal(card.flags["azeroth-rpg"].heal, 2 * tier + (druid.system.castingMod ?? 0) + 2, "the heal is not twice the tier plus the casting modifier plus the rank");
       assert.deepInclude(card.flags["azeroth-rpg"].tick, { kind: "heal", amount: tier, rounds: 3, via: "feature" });
       const apply = parsed(card).querySelector('[data-action="applySpellEffect"][data-target-index="0"]');
       assert.ok(apply, "the card offers no Apply for the lingering heal");
@@ -482,7 +444,8 @@ export function druidTalentsBatch(context) {
       let again = null;
       const said = await warnings(async () => { again = await cast(druid, "Moonwell", { swift: true }); });
       assert.isNull(again);
-      assert.include(said, game.i18n.format("AZEROTH.Cast.Swift.NoUses", { name: "Moonwell", talent: "Nature's Swiftness" }));
+      // R7 (D-1865, D-1892): once a round, and the rank's uses an encounter - the round's mark says it first.
+      assert.include(said, game.i18n.format("AZEROTH.Cast.Swift.NoRoundUses", { name: "Moonwell", talent: "Nature's Swiftness" }));
     });
 
     it("GIFT OF NATURE: a heal a spell or a feature gives a conditioned target restores the rank more, and nothing more otherwise", async function () {

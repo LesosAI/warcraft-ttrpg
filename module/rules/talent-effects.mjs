@@ -217,7 +217,7 @@
  * talents.mjs` documents each and holds its ONE reader.
  *
  * **THE CROSS-CLASS RULINGS' KINDS** (D-778; the lead's answers of 2026-10-03 on
- * O-157 to O-165): `undispellable` (Improved Moonfire), `dispelGate` and
+ * O-157 to O-165): `dispelGate` (Improved Moonfire since the class talent audit) and
  * `unstable` (Everlasting Affliction, Unstable Affliction), `immovable`,
  * `escape` (Frost Nova, Deep Freeze, Absolute Zero), `slowing` (Permafrost) and
  * `healing` (Devotion, Holy Guidance, Divine Providence: a patch every healing
@@ -248,7 +248,7 @@
 // `mod` moved to `class-features.mjs` with D-710: a CLASS FEATURE lays a
 // patch of the same shape now (Totem Mastery on Totem), and one constructor
 // in the file both readers already import beats two that must agree.
-import { CLASS_FEATURES, action, bindRank, cost, evaluateAmount, mod, once } from "./class-features.mjs";
+import { CLASS_FEATURES, FULL_HEAL, action, bindRank, cost, evaluateAmount, mod, once } from "./class-features.mjs";
 // A people's key, the parser's `slugify` (D-1140): the race lookup in `talentEffect`.
 import { peopleKey } from "./peoples.mjs";
 // 02 §5's Tail Sweep: a price from any pool (the lead, 2026-11-09).
@@ -271,6 +271,8 @@ import * as ST from "./sovereign-talents.mjs";
 import * as DT from "./demon-hunter-talents.mjs";
 // A summon's count by rank, bound at the stamp (the Legacy branches' door 4).
 import { summonCountAt } from "./summon-places.mjs";
+// R1's cap on a per-rank bonus (the class talent audit; D-1861).
+import { capAmount } from "./expressions.mjs";
 
 const uses = (max, per) => ({ max, per });
 const grant = (extra = {}) => action(extra);
@@ -574,64 +576,78 @@ export const TALENT_EFFECTS = Object.freeze({
     // the dialog's own line.
     "heavy-hand": { calledShot: { headModifier: 0 } },
     // *When an attack of yours reaches SL 2, the target gains Bleeding equal to
-    // your rank in this talent* (D-772): it lands with the blow, as a rider's
-    // condition does (the lead, 2026-10-03, on a rider: *"Lands automatically"*).
-    "deep-cut": { hitLays: { sl: 2, condition: "bleeding", value: "rank" } },
+    // your rank in this talent, to no more than your tier* (D-772; the class talent
+    // audit's R1 and R8, D-1870): it lands with the blow, as a rider's condition does
+    // (the lead, 2026-10-03, on a rider: *"Lands automatically"*), named for its source.
+    "deep-cut": { hitLays: { sl: 2, condition: "bleeding", value: "min(rank,tier)" } },
     // *Cleave triggers on SL 3 rather than only when an attack you made reduces
     // a target to 0 Health. At rank 2 it triggers on SL 2* (D-772): 08 §5's
     // Cleave - *one attack against another target within reach at Damage Rating
     // −2. Once per round* - offered as a button on the card of a blow with a
     // Cleave weapon at the SL. Cleave's own kill trigger stays 08's note.
     "wide-swing": { extraStrike: { sl: 3, trait: "Cleave", count: 1, target: "other", rating: -2, atRank: [{ rank: 2, sl: 2 }] } },
-    // *As a Half-Action, spend 4 Rage. Your next attack this turn ignores 1
-    // Armor Point per rank* (D-772): the Use lays the promise, held to the turn,
-    // and the next attack takes it as Pierce (`rules/next-attack.mjs`).
-    "precise-strike": { grants: grant({ action: "half", cost: cost("rage", 4) }), onUse: { nextAttack: { penetration: "rank", lasts: "turn" } } },
+    // *As part of an attack, spend 4 Rage. That attack ignores 1 Armor Point per
+    // rank* (the class talent audit, D-1870): a rider, its Pierce on the blow's own
+    // (`riders.mjs#riderPierce`). It was a Half-Action's promise to the next attack.
+    "precise-strike": { rider: rider("rage", 4, { onHit: { pierce: "rank" } }) },
     // *When an attack or effect of yours reduces a target to 0 Health, your next
-    // attack this round gains a Boon. At rank 2 you also gain a Half-Action*
-    // (D-772): from the one damage door (`afterBlow`).
-    "follow-through": { kill: { nextAttack: { boons: 1, lasts: "round" }, atRank: [{ rank: 2, halfActions: 1 }] } },
+    // attack this round gains a Boon. At rank 2 that attack also adds your tier to
+    // its damage* (D-772; the audit, D-1870): from the one damage door (`afterBlow`),
+    // the tier in scope (`killRewardsFor`).
+    "follow-through": { kill: { nextAttack: { boons: 1, lasts: "round" }, atRank: [{ rank: 2, nextAttack: { boons: 1, damage: "tier", lasts: "round" } }] } },
     // *Your Sunder strips 1 more Armor Point per rank* and *costs 2 Rage less per
     // rank, to a minimum of 2*: `rules/maneuvers.mjs` reads both by name (D-626, D-768).
     "rend-armor": { automated: "inline" },
     // *You inflict a Critical Injury on 19 or 20 against a target below half
     // Health. At rank 2 this applies below three quarters* (D-772).
     "executioner": { critical: { on: 19, below: 0.5, atRank: [{ rank: 2, below: 0.75 }] } },
-    // *As part of an attack, spend 8 Rage. On a hit, the target recovers no
-    // Health from any source until the end of your next turn* (D-772): a rider,
-    // and its mark on the target (`rules/no-healing.mjs`).
-    "mortal-strike": { rider: rider("rage", 8, { onHit: { noHealing: "strikerTurnEnd" } }) },
-    "sundering-blows": { automated: "inline" },
-    // *Your first Parry each round costs no Reaction. At rank 2 the second costs
-    // none either* (D-772): the round's record, through the queued door.
-    "bladeturn": { freeReaction: { reaction: "parry", count: "rank" } },
+    // *As part of an attack, spend 8 Rage. On a hit the attack adds twice your tier
+    // to its damage, and the target recovers no Health until the end of your next
+    // turn* (D-772; the audit, D-1870): a rider, its damage on the Rating and its
+    // mark on the target (`rules/no-healing.mjs`).
+    "mortal-strike": { rider: rider("rage", 8, { onHit: { damage: "2*tier", noHealing: "strikerTurnEnd" } }) },
+    // *Once a round, when you hit a target that has lost Armor Points to your Sunder,
+    // gain 1 more Rage. At rank 2 that hit also adds 1 to its damage* (the audit,
+    // D-1870): the hit door (`effects/audit-martial.mjs#martialOnRoll`) reads who
+    // sundered the target off its Sundered effect (`audit-martial.mjs#sunderedBy`).
+    "sundering-blows": { automated: "inline", martial: { kind: "sunderingBlows" } },
+    // *When an attack of yours misses, or is Parried or Blocked, gain 1 Rage per rank.
+    // Once a turn, your next attack against that target this turn gains a Boon*
+    // (renamed from Bladeturn by the audit, D-1870): the miss at the roll and the
+    // Parry or Block at the Reaction's door, the Boon a promise held to the turn.
+    "overpower": { automated: "inline", martial: { kind: "overpower" } },
     "killing-blow": { automated: "inline" },
-    // *As a Full Action, spend 10 Rage to make one attack against every enemy
-    // within your reach.* The card's Attack button rolls each (D-616); who is
-    // within reach is the table's to target.
-    // *one attack against every enemy within your reach*: one press per creature
-    // (the architect's review of D-773).
-    "whirlwind": { grants: grant({ action: "full", cost: cost("rage", 10), attack: true, attacks: "each" }) },
+    // *As an action, spend 8 Rage. Make two attacks against every enemy within your
+    // reach, each rolled separately* (the audit's R5, D-1871): two presses of the
+    // card's Attack per creature (`cardAttackAllowance`'s `each:2`), counted as one
+    // Attack on the turn (R6).
+    "whirlwind": { grants: grant({ action: "action", cost: cost("rage", 8), attack: true, attacks: "each:2" }) },
     // ---- Fury ----
     "enrage": { automated: "inline" },
     "quick-draw": none("drawing, sheathing and swapping already cost no action anywhere in this system: 05's Interact Half-Action is not charged (rules/reactions.mjs HALF_ACTIONS.interact), so there is nothing for the talent to waive"),
     // *Your attacks gain a Boon. Until your next turn, attacks against you gain
-    // one too. At rank 2 only ranged attacks do* (D-772): a checked line on the
-    // holder's attack dialog, and the attack made with it lays the exposure.
-    "reckless": { reckless: { boons: 1, exposed: { boons: 1, ranged: false }, atRank: [{ rank: 2, exposed: { boons: 1, ranged: true } }] } },
-    // *When one of your attacks hits, spend 6 Rage to recover Health equal to
-    // your rank in this talent* (D-772): a rider ticked on the dialog and paid
-    // only when the blow lands (MY READING, for the lead).
-    "bloodthirst": { rider: rider("rage", 6, { pays: "hit", onHit: { heal: "rank" } }) },
+    // one too. At rank 2, each hit against you while this lasts gives you 1 more
+    // Rage* (D-772; the audit, D-1870): a checked line on the holder's attack
+    // dialog, the attack made with it laying the exposure, and the struck door's
+    // further Rage at rank 2 (`effects/audit-martial.mjs#martialWhenStruck`).
+    "reckless": { automated: "inline", reckless: { boons: 1, exposed: { boons: 1, ranged: false } }, martial: { kind: "reckless", rank: 2 } },
+    // *When one of your attacks hits, spend 4 Rage. You recover Health equal to
+    // your tier plus your rank* (D-772; the audit's T4, D-1870): a rider ticked on
+    // the dialog and paid only when the blow lands (MY READING, for the lead).
+    "bloodthirst": { rider: rider("rage", 4, { pays: "hit", onHit: { heal: "tier+rank" } }) },
     // A failed Test offers the reroll before its consequences are resolved;
     // its original action, ammunition and riders are never paid a second time.
     "second-strike": {
       offHand: { noPenalty: true },
       reroll: { pool: "rage", cost: 4, rank2: 2, per: "round" }
     },
-    "frenzy": { automated: "inline" },
+    // *The first time each encounter you drop below half Health, gain Rage equal to
+    // twice your tier* (the audit, D-1870): the struck door, its once an encounter the
+    // counter the talent grants (`effects/audit-martial.mjs#martialWhenStruck`).
+    "frenzy": { grants: counter(1, "encounter"), martial: { kind: "frenzy" } },
     // *When an attack or effect of yours reduces a target to 0 Health, gain a
-    // Half-Action. At rank 2 you also gain 2 Rage* (D-772).
+    // Half-Action. It cannot buy a third Attack. At rank 2 you also gain 2 Rage*
+    // (D-772; the audit's R6, D-1864): the budget refuses the third Attack.
     "rampage": { kill: { halfActions: 1, atRank: [{ rank: 2, gain: { pool: "rage", amount: 2 } }] } },
     // The equipment law reads the taken talent before filtering physical items.
     // Each weapon takes one hand; the category remains two-handed for talent
@@ -639,9 +655,10 @@ export const TALENT_EFFECTS = Object.freeze({
     "titans-presence": {
       unanswerable: true
     },
-    // *While you hold more than 7 Rage, recover 1 Health per rank at the start of
-    // each of your turns* (D-772): `AzerothCombat#_turnTicks`.
-    "blood-craze": { turnStart: { heal: "rank", while: { pool: "rage", above: 7 } } },
+    // *While you hold more than 7 Rage, you cannot be Frightened. At rank 2 you cannot
+    // be Charmed either* (the audit, D-1870): refused at `toggleStatusEffect` through
+    // the derived `conditionImmunities`, read off the Rage this preparation holds.
+    "blood-craze": { steadfast: { immune: ["frightened"], while: { pool: "rage", above: 7 }, atRank: [{ rank: 2, immune: ["frightened", "charmed"] }] } },
     // *Once a round, when an attack reaches SL 2, make one extra attack against
     // the same target. At rank 2 this may happen twice a round* (D-772): a button
     // on the card, the round's record its clock.
@@ -659,9 +676,10 @@ export const TALENT_EFFECTS = Object.freeze({
     },
     // ---- Bulwark ----
     // *While a friendly target is within 5 feet of you, your Block reduces 1 more
-    // damage per rank* (D-772): the Block's door measures the friendly target -
-    // somebody other than the warrior (MY READING, for the lead).
-    "shield-wall": { block: { add: "rank", allyWithin: 5 } },
+    // damage per rank, to no more than your tier* (D-772; R1, D-1870): the Block's
+    // door measures the friendly target - somebody other than the warrior (MY READING,
+    // for the lead) - and reads the cap at the blocker's tier.
+    "shield-wall": { block: { add: "min(rank,tier)", allyWithin: 5 } },
     // *you cannot be pushed by any effect that does not lift you* (D-778): the
     // forced-movement door refuses the holder a push, in words (`refusesPushFor`).
     // MY READING, for the lead: none of the pushes the system makes lifts, and a
@@ -702,20 +720,33 @@ export const TALENT_EFFECTS = Object.freeze({
     // provokes as normal* (D-772): read by name at the departure's measure and
     // at the Disengage control.
     "anchor": { automated: "inline" },
-    // *As a Half-Action, spend 10 Rage for temporary Health equal to twice your
-    // tier per rank. It lasts until the encounter ends* (D-777; the lead: *"raise
-    // HP past max as temp hp"*): the Use grants it to the warrior through 05's
-    // law, until the fight ends.
+    // *As a Half-Action, spend 6 Rage for temporary Health equal to twice your
+    // tier per rank. It lasts until the encounter ends* (D-777; the audit, D-1870:
+    // 6 Rage, it was 10; the lead: *"raise HP past max as temp hp"*): the Use grants
+    // it to the warrior through 05's law, until the fight ends.
     "last-stand": {
-      grants: grant({ action: "half", cost: cost("rage", 10) }),
+      grants: grant({ action: "half", cost: cost("rage", 6) }),
       onUse: { tempHealth: { amount: "2*tier*rank", span: "encounter" } }
     },
-    // *As part of an attack, spend 6 Rage to strike with your shield at Damage
-    // Rating 4. At rank 2 a hit at SL 2 also applies Stun* (D-772).
-    "shield-slam": { rider: rider("rage", 6, { needs: "shield", weapon: "melee", strike: { rating: 4 }, atRank: [{ rank: 2, onHit: { condition: "stunned", sl: 2 } }] }) },
-    // *While you carry a shield, roll any Critical Injury against you twice and
-    // take the lower result* (D-772): read by name at the Critical Injury's roll.
-    "unbreakable": { automated: "inline" },
+    // *As part of an attack while you carry a shield, spend 6 Rage. On a hit it adds
+    // your tier plus 2 to its damage, and the target's next attack before the end of
+    // your next turn takes a Bane. At rank 2 a hit at SL 2 also ends one spell the
+    // target is Sustaining* (the audit, D-1870): the shield still needed, the weapon's
+    // own Rating kept, the Bane laid through 06 §6's door, and the Sustain ended after
+    // the card stands (`effects/audit-martial.mjs#martialAfterCard`).
+    "shield-slam": { rider: rider("rage", 6, { needs: "shield", onHit: { damage: "tier+2", bane: { kind: "attack", banes: 1, until: "strikerTurnEnd" } } }), martial: { kind: "shieldSlam", rank: 2, sl: 2 } },
+    // *While you carry a shield, roll any Critical Injury against you twice and take
+    // the lower. Once per encounter, as a Reaction, spend 6 Rage. Until the start of
+    // your next turn every attack against a friendly target within 10 feet of you
+    // targets you instead, and you Block each without spending a Reaction* (the audit,
+    // D-1870): the first sentence read by name at the Critical Injury's roll; the Use
+    // lays one effect on the warrior, read by the damage door as Timeless Sentinel's
+    // move is (`effects/blow-doors.mjs#movesOf`) and by the Block's door as a free Block.
+    "unbreakable": {
+      automated: "inline",
+      grants: grant({ action: "reaction", cost: cost("rage", 6), uses: once("encounter") }),
+      onUse: { martial: "unbreakable" }
+    },
     // ---- Blademaster (Orc; the Legacy branches, D-781) ----
     // **THE LEGACY BRANCHES' ROWS** (the plan's phase B6): every one rides a door
     // phases B1 to B3 built, named beside it; `warrior-talents.test.mjs` holds each
@@ -752,13 +783,13 @@ export const TALENT_EFFECTS = Object.freeze({
     // stands, never below nothing.
     "return-stroke": { automated: "inline" },
     // *Once per turn, name a creature that can see you. This costs no action and no Rage.
-    // Until the end of your next turn it takes a Bane on attacks against anybody but you,
-    // and your attacks against it gain a Boon. Naming another creature ends it on the
-    // first*: door 18's mark with its Bane, once on each of your own turns, and the Boon
-    // its fact gates (`targetBoonsWith`).
+    // Until the end of your next turn your attacks against it gain a Boon. Naming another
+    // creature ends it on the first* (the class talent audit's A3, D-1870: the taunt's Bane
+    // went): door 18's mark, once on each of your own turns, and the Boon its fact gates
+    // (`targetBoonsWith`). `noBane` tells the mark's door to lay no Bane.
     "the-challenge": {
       grants: grant({ action: null }),
-      onUse: { mark: "challenge" },
+      onUse: { mark: "challenge", noBane: true },
       targetBoon: { kind: "attack", boons: 1, when: "challenged" },
       reason: "whether the creature named can see you is the table's (D2 §12)"
     },
@@ -789,15 +820,16 @@ export const TALENT_EFFECTS = Object.freeze({
     // attack of yours inflicts a Critical Injury, gain 3 Rage per rank*: a further gain on
     // the attack's own Critical Injury, both wield facts read off the hands.
     "bloodied-blade": { momentum: { pool: "rage", amount: "3*rank", form: false, when: ["critical", { wields: ["twoHanded", "noSuit"] }] } },
-    // *As a Full Action while you wield a two-handed weapon, spend 10 Rage. Move up to your
-    // Speed. No creature may take a Reaction against you until your next turn. Make one
-    // attack against every enemy that comes within your reach during the move, rolled
-    // separately, each enemy once. Until your next turn your Armor Points rise by your
-    // Dexterity modifier*: the wield refused in words, the free Move, the unanswered
-    // state, one press of the card's Attack for each creature named (Whirlwind's shape),
-    // and the Armor Points on the Use's own effect until the warrior's next turn.
+    // *As an action while you wield a two-handed weapon, spend 10 Rage. Move up to your
+    // Speed. No creature may take a Reaction against you until your next turn. Make two
+    // attacks against each enemy that comes within your reach during the move, rolled
+    // separately; no enemy is attacked more than twice. Until your next turn your Armor
+    // Points rise by your Dexterity modifier* (the class talent audit's R5, D-1871): the
+    // wield refused in words, the free Move, the unanswered state, two presses of the
+    // card's Attack for each creature named (Whirlwind's shape, `each:2`), and the Armor
+    // Points on the Use's own effect until the warrior's next turn.
     "bladestorm": {
-      grants: grant({ action: "full", cost: cost("rage", 10), attack: true, attacks: "each" }),
+      grants: grant({ action: "action", cost: cost("rage", 10), attack: true, attacks: "each:2" }),
       onUse: { wields: ["twoHanded"], unanswered: true, freeMove: {}, armor: { ap: "dex", until: "userTurnStart" } },
       reason: "which enemies come within reach during the move is the table's to name: target them before the Use and the card's Attack makes one roll for each, as Whirlwind's does"
     },
@@ -828,8 +860,9 @@ export const TALENT_EFFECTS = Object.freeze({
       }),
       reason: "*The weapon returns to your hand* asks nothing: no door takes a thrown weapon out of the hand"
     },
-    // *When you end your turn without having moved, gain 2 Rage*: Bracing's own measure.
-    "unmoved": { stood: { gain: { pool: "rage", amount: 2 } } },
+    // *When you end your turn without having moved, gain 1 Rage* (the class talent audit's T3,
+    // D-1870; it was 2): Bracing's own measure.
+    "unmoved": { stood: { gain: { pool: "rage", amount: 1 } } },
     // *Your Charge class feature applies to one more Overbear or Sunder each encounter per
     // rank*: Charge's own count of uses, 1 and the rank, struck by each maneuver it frees.
     "rockslide": { modifies: mod("Charge", { uses: { max: "1+rank" } }) },
@@ -887,9 +920,13 @@ export const TALENT_EFFECTS = Object.freeze({
   paladin: {
     // ---- Retribution ----
     // *As part of an attack, spend 4 Zeal to add your tier to its damage. At rank
-    // 2 add twice your tier* (D-772): a rider whose hit adds to the Rating.
-    "crusader-strike": { rider: rider("zeal", 4, { onHit: { damage: "tier" }, atRank: [{ rank: 2, onHit: { damage: "2*tier" } }] }) },
-    "righteous-fury": { automated: "inline" },
+    // 2 it costs 3 Zeal* (D-772; the class talent audit's T5, D-1874): a rider whose
+    // hit adds to the Rating, its rank clause lowering the price (`ridersFor`).
+    "crusader-strike": { rider: rider("zeal", 4, { onHit: { damage: "tier" }, atRank: [{ rank: 2, cost: { amount: 3 } }] }) },
+    // *Whenever a friendly target within 20 feet takes damage, gain 1 Zeal, to no more
+    // than your rank each round* (the audit, D-1874): the damage door's Zeal walk, its
+    // ceiling the round's counted marks (`effects/audit-martial.mjs#claimRoundCount`).
+    "righteous-fury": { automated: "inline", martial: { kind: "righteousFury" } },
     // *Your Zeal caps at 15 rather than 10*: `rules/momentum.mjs#capFor` reads it
     // by name through the actor's `ranksOf` (D-627, D-768).
     "zealotry": { automated: "inline" },
@@ -899,10 +936,11 @@ export const TALENT_EFFECTS = Object.freeze({
     // *As a Half-Action, spend 6 Zeal. The target takes a Bane on attacks against
     // anyone but you for one round per rank* (D-772).
     "judgement": { grants: grant({ action: "half", cost: cost("zeal", 6) }), onUse: { laysBane: { kind: "attack", banes: 1, except: "user", rounds: "rank" } } },
-    // *Your Consecrated weapon counts as Blessed at Greater grade, converting its
-    // damage to Holy* (D-772): read by name where the weapon 02's Consecrated
-    // enchanted derives its trait (`WeaponData#prepareDerivedData`), and on the
-    // Use's card.
+    // *Against an undead or a demon, your Consecrated weapon counts as Blessed at
+    // Greater grade, converting its damage to Holy* (D-772; the audit's A5, D-1874):
+    // read by name where the weapon 02's Consecrated enchanted derives its trait
+    // (`WeaponData#prepareDerivedData`), the grade a Greater one only against a target
+    // whose kinds name undead or demon (`effects/audit-martial.mjs#sanctifiedAgainst`).
     "sanctified-weapon": { automated: "inline" },
     // Rank 1, *1 Zeal per rank returns* (D-627), and rank 2, *a spell or feature
     // of yours that cost 5 or more Zeal also applies Hammer of Justice to its
@@ -920,17 +958,15 @@ export const TALENT_EFFECTS = Object.freeze({
     // *Until the encounter ends, all Holy damage you deal adds 1 damage per
     // rank.* Switched on by USING the feature the talent grants, so
     // `useFeature` lays it as a self effect and `_leaveFight` lifts it.
+    // *Once per encounter* since the class talent audit (D-1874; it was once per Short Rest).
     "seal-of-command": {
-      grants: grant({ action: null, cost: cost("zeal", 5), uses: once("short") }),
+      grants: grant({ action: null, cost: cost("zeal", 5), uses: once("encounter") }),
       damage: damage(["holy"], "both", { until: "encounter" })
     },
-    // *Your Zeal does not drain out of combat. At rank 2 you begin every fight
-    // holding 3* (D-627, D-772): `_leaveFight` keeps it, `_fightStart` sets 3.
-    // *Your Zeal does not drain out of combat. At rank 2 you begin every fight
-    // holding 3* (D-772). INLINE: the fight's end keeps the Zeal and the fight's
-    // start reads the rank by name - and the Zeal kept carries into the next fight
-    // (D-779; the lead, 2026-10-03, on O-172: *"Yes"*; `momentum.mjs#fightStart`'s
-    // `keepsZeal`). Rank 2's 3 is left as built: floor or reset is CLARIFY.
+    // *You begin every fight holding 2 Zeal per rank* (the class talent audit, D-1874; it
+    // kept the Zeal out of combat and began at 3 from rank 2). INLINE: the fight's start
+    // reads the rank by name (`momentum.mjs#fightStart`), and the fight's end drains Zeal
+    // as it drains every pool.
     "fanaticism": { automated: "inline" },
     // *As a Full Action, spend 10 Zeal. Every enemy within 20 feet takes Holy
     // damage at your Damage Rating, and each makes a Spirit Resilience Test
@@ -941,72 +977,77 @@ export const TALENT_EFFECTS = Object.freeze({
     // within 20 feet gathered, the Holy on each whatever its Test comes to, and the
     // Blinded the Test's alone - laid at once on a failure (`onFail`).
     "wrath-of-the-light": { grants: grant({ action: "full", cost: cost("zeal", 10), resist: "spirit", area: "A 20 ft radius centered on you", who: "enemy", damage: { amount: "weapon", type: "holy" }, inflicts: [{ condition: "blinded", value: null, until: "casterTurnStart", onFail: true }] }) },
-    // ---- Benediction ----
-    // *As a Half-Action, spend 2 Mana. A friendly target you can see gains a Boon
-    // on their next Test. At rank 2 it applies to every Test they make this
-    // round* (D-772): a laid Boon on the one creature targeted.
-    "blessing": { grants: grant({ action: "half", cost: cost("mana", 2) }), onUse: { laysBoon: { kinds: "all", boons: 1, until: "next", atRank: [{ rank: 2, until: "round" }] }, friendly: true } },
+    // ---- Benediction (reworked by the class talent audit after Uther, A8; D-1875) ----
+    // *As a Half-Action, spend 4 Zeal. A friendly target within 30 feet that you can see
+    // recovers Health equal to twice your tier. At rank 2 add your Charisma modifier*: a
+    // granted feature whose card heals the one friendly creature named (Blessing's
+    // `friendly` judgement), its reach the Use's own 30 feet off the text.
+    "mending-word": {
+      grants: grant({ action: "half", cost: cost("zeal", 4), heal: "2*tier", atRank: [{ rank: 2, heal: "2*tier+cha" }] }),
+      onUse: { friendly: true }
+    },
+    // *Your Holy spells and your Lay on Hands class feature restore 1 more Health per rank,
+    // to no more than your tier*: the `heal` kind at the one healing door, reached by a
+    // Holy spell or Lay on Hands alone (`healBonusFor`'s `schools` and `features`).
+    "healing-hands": { heal: { add: "min(rank,tier)", via: ["spell", "feature"], schools: ["holy"], features: ["Lay on Hands"] } },
+    // *When Mending Word restores Health, one other friendly target within 10 feet of its
+    // target recovers half as much, rounded down*: the healing door passes it on
+    // (`effects/audit-martial.mjs#martialAfterHeal`).
+    "twofold-light": { martial: { kind: "twofold" } },
+    // *As a Half-Action, spend 2 Mana. A friendly target you can see gains a Boon on every
+    // Test it makes until the start of your next turn. At rank 2 choose two targets*: a
+    // lasting Boon spanned to the Paladin's next turn, on one creature or two.
+    "blessing": { grants: grant({ action: "half", cost: cost("mana", 2) }), onUse: { laysBoon: { kinds: "all", boons: 1, until: "userTurnStart", atRank: [{ rank: 2, targets: 2 }] }, friendly: true } },
     // *You may use your Lay on Hands class feature one more time per Long
     // Rest* (D-752): the feature's own count goes to two.
     "open-hand": { modifies: mod("Lay on Hands", { uses: { max: 2 } }) },
-    // *Every feature of yours that restores Health restores an extra amount
-    // equal to your rank* and *Add your rank to the Health restored by any of
-    // your healing features* (D-772): a `heal.add` patch on EVERY healing feature
-    // the character holds, of any class (the lead, 2026-10-03, on O-160: *"Yes."*
-    // to whether a second class's healing feature counts; D-778) - the `healing`
-    // kind, laid by the feature sync (`healingPatchesFor`), a class feature's and
-    // a talent's granted one alike. It was Lay on Hands' alone.
-    "devotion": { healing: { heal: { add: "rank" } } },
     // *You know Cleanse. At rank 2 it ends two effects rather than one.* The
     // spell is taught; ending an effect is the table's (nothing ends one off the
-    // card), so the rank's change rides the card's note.
+    // card), so the rank's change rides the card's note. A talent's spell casts
+    // whatever the caster's tier (the lead, 2026-11-23).
     "cleanse": { spell: { names: ["Cleanse"], learn: true } },
-    // *A Short Rest with a drink returns 3 more Mana per rank* (D-772): the rest's
-    // own arithmetic takes it, into the Paladin's pool.
-    "lights-reserve": { rest: { short: { mana: "3*rank", drink: true } } },
     // *When a Casting Test of yours reaches SL 2 or better, 1 Mana per rank
     // returns to you* (D-772): a spell's and a casting feature's.
     "illumination": { manaBack: { sl: 2, amount: "rank" } },
+    // *When a Holy spell of yours restores Health to a friendly target, gain 1 Zeal, to no
+    // more than your rank each round*: the healing door, its ceiling the round's counted
+    // marks (`effects/audit-martial.mjs#martialAfterHeal`).
+    "fervor": { automated: "inline", martial: { kind: "fervor" } },
     // Approved 2026-10-29: four Death Steps at either rank. The injury application
     // coordinator offers the original injury at 30/60 feet before applying it,
     // pays Reaction + 4 Mana, and guards the card against repeat application.
     "sacrifice": {
       grants: grant({ action: "reaction", cost: cost("mana", 4) })
     },
-    // *Choose a friendly target you know during a Long Rest. When another target
-    // within 120 feet of you restores Health from your spells and effects, your
-    // chosen target restores half as much, rounded down* (D-772): a Use once a
-    // Long Rest names the creature (Symbiosis's door), and the healing door passes
-    // the share on.
-    "beacon": { grants: grant({ action: null, uses: once("long") }), onUse: { beacon: true }, beacon: { share: "half", feet: 120 } },
-    // Devotion's twin (D-778): every healing feature of any class.
-    "holy-guidance": { healing: { heal: { add: "rank" } } },
     // *A friendly target within 30 feet who would drop to 0 Health stays at 1
     // instead. You may use this a number of times equal to your rank per Long
     // Rest* (D-777; the lead: *"Yes."*): the damage door ASKS the Paladin as the
     // blow would drop a friendly target in reach to 0, and a yes strikes a use of
     // the counter and holds it at 1 (`effects/blow-doors.mjs#holdBlow`).
     "intervention": { grants: counter("rank", "long"), holds: { kind: "intervention", feet: 30 } },
-    // *Your first healing feature after each Long Rest costs no Mana. At rank 2
-    // the first two cost none* (D-772): the counter's uses are the free ones, and
-    // a healing feature's Use takes one instead of its Mana - of any class the
-    // character holds (D-778, O-160: `class-talents.mjs#waives`).
-    "divine-favor": { grants: counter("rank", "long"), freeHealing: true },
-    // *You know Aegis of the Light. A creature held at 1 Health by it restores
-    // Health equal to your tier when the spell ends* (D-777): 07's floor is laid
-    // by the spell card's Apply and held at the one damage door, and a creature it
-    // held restores the tier when the laid floor goes (`effects/blow-doors.mjs`).
-    "aegis-of-the-light": {
-      spell: { names: ["Aegis of the Light"], learn: true },
-      aegis: { heal: "tier" }
+    // *Once a round, and once per encounter per rank, you may cast a Holy spell that
+    // restores Health as a Half-Action when it would cost an action* (the class talent
+    // audit's R7, D-1875; a different talent under the same identifier): Nature's
+    // Swiftness's door (`castAsFor`), once a round on the round's record and counted on
+    // the encounter counter the talent grants.
+    "divine-favor": {
+      grants: counter("rank", "encounter"),
+      castAs: { action: "half", from: "action", healing: true, schools: ["holy"], perRound: 1, counted: true }
     },
+    // *Your Lay on Hands restores all of the target's Health and ends one condition on it
+    // of your choice. Each Short Rest returns one use of it* (the audit's R2 capstone,
+    // D-1875): a patch on Lay on Hands - the full heal (`FULL_HEAL`), the condition its
+    // Use ends through the one chooser (`ends`, `effects/audit-martial.mjs`), and one use
+    // back at each Short Rest (`refill`, `uses.mjs#refillAfter`).
+    "mercy-of-uther": { modifies: mod("Lay on Hands", { heal: FULL_HEAL, ends: 1, refill: "short" }) },
     // ---- Aegis ----
     "shield-of-faith": { passive: passive([add("system.defense", "rank")], "shield") },
     // *Your Aura of Resolve class feature reaches 10 feet further per rank*
     // (D-755): 30 at rank 1, 40 at rank 2.
     "wide-aura": { modifies: mod("Aura of Resolve", { auraReach: "10*rank" }) },
-    // *Your Block reduces 1 more damage per rank* (D-772).
-    "redoubt": { block: { add: "rank" } },
+    // *Your Block reduces 1 more damage per rank, to no more than your tier* (D-772; R1,
+    // D-1874).
+    "redoubt": { block: { add: "min(rank,tier)" } },
     // *You know Consecration. Your Consecration is also Difficult ground to an
     // enemy that is undead or fel. At rank 2 its radius is 10 feet wider.*
     // (D-753, D-756).
@@ -1061,15 +1102,16 @@ export const TALENT_EFFECTS = Object.freeze({
     // *As part of an attack, spend 3 Focus. The attack gains Pierce equal to your
     // rank* (D-773): a rider, its Pierce on the blow's own.
     "piercing-shot": { rider: rider("focus", 3, { onHit: { pierce: "rank" } }) },
-    // *Your Quarry maximum increases by 2 per rank*: `rules/momentum.mjs#capFor`
-    // reads it by name (D-627), which the `none` row it carried denied (D-768).
-    "hunters-mark": { automated: "inline" },
-    // *As an action, spend 4 Focus to attack up to four targets within a 10-foot
-    // radius. Roll each attack separately* (D-773): the Use refuses a fifth target
-    // before anything is paid, and the card's Attack button costs nothing more -
-    // the action paid for every attack (a fault every attacking feature shared).
+    // *Your attacks against your marked target add 1 to their damage per rank* (the class
+    // talent audit, D-1876; it lifted the Quarry cap): a damage line gated on the target
+    // being the Ranger's Quarry (`talent-gates.mjs`' `quarried` fact, D-1868).
+    "hunters-mark": { damage: damage(["all"], "attack", { when: { quarried: true } }) },
+    // *As a Half-Action, spend 4 Focus to attack up to four targets within a 10-foot
+    // radius. Roll each attack separately* (D-773; the audit's R5, D-1876): the Use refuses
+    // a fifth target before anything is paid, and the card's Attack button costs nothing
+    // more - the Half-Action paid for every attack, counted as one Attack (R6).
     "barrage": {
-      grants: grant({ action: "action", cost: cost("focus", 4), attack: true, area: "A 10 ft radius on the ground" }),
+      grants: grant({ action: "half", cost: cost("focus", 4), attack: true, area: "A 10 ft radius on the ground" }),
       barrage: { grant: "barrage", targets: 4 }
     },
     // *Once a round, when an attack reaches SL 2, 2 Focus per rank returns to you*
@@ -1086,13 +1128,13 @@ export const TALENT_EFFECTS = Object.freeze({
     // *As part of an attack, spend 5 Focus. The attack hits without a roll and
     // counts as SL 2, or SL 3 at rank 2* (D-773).
     "trueshot": { rider: rider("focus", 5, { onHit: { forced: 2 }, atRank: [{ rank: 2, onHit: { forced: 3 } }] }) },
-    // *Once per Long Rest, spend a Full Action to make four attacks against one
-    // target per rank.* The Use pays the Full Action; each attack is the card's
-    // Attack button, which costs nothing more (D-773).
+    // *Once per encounter, as an action, make three attacks against one target per rank*
+    // (the audit's R5, D-1876). The Use pays the action; each attack is the card's Attack
+    // button, which costs nothing more (D-773).
     "rapid-fire": {
-      // *four attacks against one target per rank*: at most four a rank, the
-      // larger of the two readings (the architect's review of D-773).
-      grants: grant({ action: "full", uses: once("long"), attack: true, attacks: "4*rank" }),
+      // *three attacks against one target per rank*: at most three a rank, the larger of
+      // the two readings (the architect's review of D-773).
+      grants: grant({ action: "action", uses: once("encounter"), attack: true, attacks: "3*rank" }),
       reason: "the attacks are the card's Attack button, each costing nothing more: how many of the rank's fours the table presses, and at which targets, is the table's count"
     },
     // *While your Quarry is full, you inflict a Critical Injury on 17 to 20* (D-773).
@@ -1111,8 +1153,9 @@ export const TALENT_EFFECTS = Object.freeze({
     // companion* (D-773): 06 §5's Boon, ticked where the door measured both.
     "pack-tactics": { flank: { companion: true, any: false, atRank: [{ rank: 2, any: true }] } },
     // *When your companion's attack reaches SL 2, the target gains Bleeding equal
-    // to your rank* (D-773): off the owner's talents, landing as Deep Cut's does.
-    "ferocious-bite": { hitLays: { sl: 2, condition: "bleeding", value: "rank", via: "companion" } },
+    // to your rank, to no more than your tier* (D-773; R1 and R8, D-1876): off the
+    // owner's talents, landing as Deep Cut's does, at the owner's tier.
+    "ferocious-bite": { hitLays: { sl: 2, condition: "bleeding", value: "min(rank,tier)", via: "companion" } },
     // *As a Half-Action, spend 3 Focus. Your companion recovers Health equal to
     // your tier per rank* (D-773): the companion heals, never the Ranger - the
     // card's heal used to fall back on the speaker.
@@ -1148,10 +1191,10 @@ export const TALENT_EFFECTS = Object.freeze({
     // ---- Survival ----
     "trapper": { modifies: mod("Snare", { action: null }) },
     "track": none("following a trail of an age and never becoming lost in a natural landscape are the terms of a Survival Test the table sets (D2 §12): no door rolls for a trail"),
-    // *As part of an attack, spend 2 Focus. On a hit the target's Speed drops 10
-    // feet per rank until your next turn* (D-773): an effect on the target's Speed
-    // until the start of the STRIKER's next turn.
-    "wing-clip": { rider: rider("focus", 2, { onHit: { speedDrop: "10*rank", until: "strikerTurnStart" } }) },
+    // *As part of a melee attack, spend 2 Focus. On a hit the target's Speed drops 10
+    // feet per rank until your next turn* (D-773; the audit, D-1876: melee alone): an
+    // effect on the target's Speed until the start of the STRIKER's next turn.
+    "wing-clip": { rider: rider("focus", 2, { weapon: "melee", onHit: { speedDrop: "10*rank", until: "strikerTurnStart" } }) },
     "camouflage": none("Stealth's cover, terrain and pace are the table's: the Hide door (D-717) asks none of them, so there is nothing for the talent to waive"),
     // *As a Reaction when an attack targets you, spend 3 Focus. Attacks against you
     // take a Bane per rank until the start of your next turn* (D-773).
@@ -1178,17 +1221,21 @@ export const TALENT_EFFECTS = Object.freeze({
       grants: grant({ action: "half", uses: once("short") }),
       reason: "being treated as dead, how convincing it is and for how long are the table's (D2 §12): the Use pays the Half-Action and counts the rest's use"
     },
-    // A further use of a Ranger feature of your choice: the counter is the
-    // talent's, struck when the player takes the extra use (D2 §12).
-    "readiness": { grants: grant({ action: null, uses: uses("rank", "short") }) },
-    // *... You may set your Snare class feature any number of times during your
-    // movement* (D-773): no action, as Trapper's. **The first sentence is always on**
-    // (D-779; the lead, 2026-10-03, on O-179: *"Always on"*): every ally within 30
-    // feet of the Ranger, the Ranger included, pays a foot a foot on Difficult
-    // ground no spell, enchanted item or class feature laid, and on a climb or a
-    // swim (`canvas/behaviors.mjs`, `class-answers.mjs#landwise`).
+    // *Once per Short Rest per rank, as no action, refill your Focus* (the class talent
+    // audit, D-1876): a Use of no action whose counter is the rank a Short Rest, refilling
+    // the Focus through the one pool queue (`effects/audit-martial.mjs#landMartialUse`).
+    "readiness": { grants: grant({ action: null, uses: uses("rank", "short") }), onUse: { martial: "readiness" } },
+    // *Any number of friendly targets within 30 feet of you ignore movement penalties from
+    // non-magical sources and leave no trail for a day. Your Snare Entangles every creature
+    // that enters its radius, not only the first, and you may keep twice as many Snares set*
+    // (the audit, D-1876). **The first sentence is always on** (D-779; the lead, 2026-10-03,
+    // on O-179: *"Always on"*): every ally within 30 feet of the Ranger, the Ranger included,
+    // pays a foot a foot on Difficult ground no spell, enchanted item or class feature laid,
+    // and on a climb or a swim (`canvas/behaviors.mjs`, `class-answers.mjs#landwise`). The
+    // Snare's patch catches every creature (`catches: "all"`) and doubles the standing count
+    // (`snares: 2`), both read by the Snare's own door (`effects/audit-martial.mjs`).
     "master-of-the-land": {
-      modifies: mod("Snare", { action: null }),
+      modifies: mod("Snare", { catches: "all", snares: 2 }),
       landwise: { feet: 30 },
       reason: "*leave no trail* is the table's (a Survival Test's terms, D2 §12), and a Speed reduction - a condition, a load - is no terrain"
     },
@@ -1302,12 +1349,16 @@ export const TALENT_EFFECTS = Object.freeze({
     // one no target has seen; the free point lands on the hit, in place of the
     // Opening's paid trade.
     "cheap-shot": { modifies: mod("Opening", { unseen: true, atRank: [{ rank: 2, freeCombo: 1 }] }) },
-    // *A poison you apply deals 1 more damage per rank.* The rank rides the
-    // coating flag (08 §12, D-719) and `coatingFired` carries it onto the blow
-    // the poison lands on, so it is applied by name in the code.
+    // *A poison you apply that deals damage deals 1 more damage per rank, to no more
+    // than your tier* (the class talent audit's R1, D-1880): the rank, capped at the
+    // tier (`consumables.mjs#envenomFor`), rides the coating flag (08 §12, D-719) and
+    // `coatingFired` carries it onto the blow the poison lands on, so it is applied by
+    // name in the code.
     "envenom": { automated: "inline" },
-    // *Applying a poison during a weapon attack does not cost an action*:
-    // `rules/consumables.mjs#coatingAction` reads the rank by name.
+    // *A poison you apply uses your Spell DC in place of its own when yours is higher*
+    // (the audit's adopted method, D-1880): the higher of the two DCs stamped on the
+    // coating as it is laid (`consumables.mjs#poisonDcFor`), read by name in the code.
+    // The free application is 02's Poisoner's now, not this talent's.
     "deft-hands": { automated: "inline" },
     // *A target already suffering one of your poisons takes a Bane per rank on
     // Resilience Tests against your poisons* (D-773).
@@ -1330,16 +1381,20 @@ export const TALENT_EFFECTS = Object.freeze({
     // next Reaction. At rank 2 it is Entangled until it passes a Resilience Test
     // against your poisons* (D-773).
     "paralytic": { poisonFail: { loseReaction: true, atRank: [{ rank: 2, entangle: true }] } },
-    // *Your Finisher class feature may apply Bleeding equal to twice the Combo
-    // Points spent plus your rank, instead of dealing damage* (D-773).
-    "rupture": { modifies: mod("Finisher", { bleeding: "2*spent+rank" }) },
+    // *Your Finisher class feature may lay Bleeding equal to the Combo Points spent
+    // instead of adding damage. At rank 2, ending that Bleeding takes a Medicine Test
+    // against your Spell DC* (B9, D-1880): the points, and at rank 2 the Rogue's Spell
+    // DC stamped on the Bleeding as the DC its source names (A1's *or at the DC the
+    // source names*). R8: Rupture is the Bleeding's source.
+    "rupture": { modifies: mod("Finisher", { bleeding: "spent", atRank: [{ rank: 2, endsDc: "spellDc" }] }) },
     // *When you deal damage with an attack to a target affected by Bleeding, you
     // build 1 more Combo Point per rank* (D-773).
     "blood-sport": { momentum: { pool: "comboPoints", amount: "rank", when: "bleedingDealt" } },
     // *Once per Short Rest, name a target you can see. Until your next Short or
-    // Long Rest your Finisher class feature against it costs no Combo Points and
-    // counts as having spent five* (D-773).
-    "death-mark": { modifies: mod("Finisher", { free: true, counts: 5 }), grants: counter(1, "short"), onUse: { deathMark: true } },
+    // Long Rest, once a round, your Finisher class feature against it costs no Combo
+    // Points and counts as having spent five* (B15, D-1880): `perRound` 1, the free
+    // Finisher claimed on the round's record when it lands (`DEATH_MARK_ROUND`).
+    "death-mark": { modifies: mod("Finisher", { free: true, counts: 5, perRound: 1 }), grants: counter(1, "short"), onUse: { deathMark: true } },
     // ---- Duelling ----
     // *While you have moved at least 10 feet this turn, your Defense rises by 1
     // per rank until your next turn* (D-773).
@@ -1358,12 +1413,16 @@ export const TALENT_EFFECTS = Object.freeze({
     // Bladeturn's door, counted on the fight's turn (`class-answers.mjs#turnMark`).
     // 04's words are drafted for the lead in `book-edits-2.md` (a).
     "main-gauche": { freeReaction: { reaction: "parry", count: "rank", per: "turn", needs: "dualMelee" }, reworked: "O-180" },
-    // *Your Energy pool returns 1 more per rank at the start of your turn. Once a
-    // round per rank, you may spend 2 Energy to gain 1 Combo Point* (D-773).
+    // *Your Rogue features and talents cost 1 less Energy per rank, to a minimum of 1.
+    // Once a round, you may spend 2 Energy to gain 1 Combo Point* (decision 13 and B12,
+    // D-1881): a DISCOUNT on what a Rogue feature or talent costs in Energy
+    // (`class-talents.mjs#classDiscountFor`, read at `useFeature`'s payment, a rider's
+    // price and Elusive's), never a refill - so nothing reaches the Energy pool a
+    // Demon Hunter or a Chromatic Champion shares with the Rogue (02 §10, D-1723).
     "adrenaline": {
-      turnStart: { restore: { pool: "energy", amount: "rank" } },
+      classDiscount: { pool: "energy", amount: "rank", className: "Rogue", min: 1 },
       grants: grant({ action: null, cost: cost("energy", 2) }),
-      onUse: { gain: { pool: "comboPoints", amount: 1 }, perRound: "rank" }
+      onUse: { gain: { pool: "comboPoints", amount: 1 }, perRound: 1 }
     },
     // *A Parry that reduces an attack's damage to 0 builds 1 Combo Point* (D-773):
     // a Parry that holds, since 06 §6's Parry is all or nothing.
@@ -1374,18 +1433,23 @@ export const TALENT_EFFECTS = Object.freeze({
     // a Parry of a ranged blow struck within 30 feet, marked on the round's record
     // (`class-answers.mjs#parryReaches`).
     "anticipation": { rangedParry: { feet: 30, count: "rank" } },
-    // *When a Riposte of yours reduces a target to 0 Health, make one attack
-    // immediately against another target within reach* (D-773).
-    "killing-spree": { kill: { strike: { who: "self", riposte: true, target: "other", count: 1 } } },
+    // *Once a round, when your attack or your Riposte reduces a creature to 0 Health,
+    // you may move up to 10 feet, provoking nothing, and make one attack against another
+    // creature within reach* (the audit, D-1882): any kill of the Rogue's, the round's
+    // record its clock (`once: "round"`), a free 10-foot displacement picked before the
+    // attack (`step`), and one roll (R6's triggered attack).
+    "killing-spree": { kill: { strike: { who: "self", target: "other", count: 1, once: "round", step: 10 } } },
     // *While you are Engaged with exactly one enemy, your attacks against it deal
     // 1 more damage per rank.* Engaged is measured (06, D-669).
     "deadly-poise": { damage: damage(["all"], "attack", { when: "engagedOne" }) },
     // *Once a round per rank, when you hit with an attack, a second enemy within 5
     // feet of the target takes half the damage, rounded down* (D-773).
     "blade-flurry": { blowShare: { share: "half", feet: 5, count: "rank" } },
-    // *You gain one further Reaction each round per rank, usable only to Parry*
-    // (D-773): Bladeturn's door, a Parry a rank that costs no Reaction.
-    "combat-reflexes": { freeReaction: { reaction: "parry", count: "rank" } },
+    // *Once a round, your Riposte costs no Combo Points. At rank 2 it gains a Boon*
+    // (the audit, D-1882): 06 §7's Riposte priced at nothing once a round
+    // (`maneuvers.mjs#maneuverCost`, the round's record `COMBAT_REFLEXES_ROUND`), and the
+    // Riposte's attack an automatic Boon at rank 2 (`riposte` is the attack door's fact).
+    "combat-reflexes": { riposteFree: { per: "round" }, targetBoon: { kind: "attack", boons: 0, when: "riposte", atRank: [{ rank: 2, boons: 1 }] } },
     // *While you are Engaged with exactly one enemy, your attacks against it gain a
     // Boon and inflict a Critical Injury on 19 or 20* (D-773).
     "master-duellist": { critical: { on: 19, when: "engagedOne" }, targetBoon: { kind: "attack", boons: 1, when: "engagedOne" } },
@@ -1410,8 +1474,8 @@ export const TALENT_EFFECTS = Object.freeze({
     // *As a Half-Action, spend 4 Energy to count as hidden until the end of your
     // next turn even while observed* (D-773).
     "shadow-dance": { grants: grant({ action: "half", cost: cost("energy", 4), uses: uses("rank", "short") }), onUse: { hide: { until: "userTurnEnd" } } },
-    // *Your attacks while hidden ignore 2 Armor Points per rank* (D-773).
-    "find-weakness": { hidden: { pierce: "2*rank" } },
+    // *Your attacks while hidden ignore 1 Armor Point per rank* (the audit, D-1882).
+    "find-weakness": { hidden: { pierce: "rank" } },
     // *An attack you make while hidden cannot be Parried or Blocked* (D-773).
     "ghostly-strike": { unanswerable: "hidden" },
     "smoke-bomb": {
@@ -1421,9 +1485,12 @@ export const TALENT_EFFECTS = Object.freeze({
     // *A target you attack while hidden is treated as being under your Opening
     // class feature, for a number of rounds equal to your rank* (D-773).
     "subterfuge": { modifies: mod("Opening", { marks: "rank" }) },
-    // *Taking actions while hidden does not make you visible* (D-773): the attack
-    // and the cast leave the Hide standing.
-    "master-of-shadows": { stealth: { keep: true } },
+    // *Once per Short Rest, as a Half-Action, for one minute taking actions while hidden
+    // does not make you visible. Taking damage does* (B10, D-1882): the Use lays a
+    // minute's state (`SHADOWS_FLAG`); while it stands the attack and the cast leave the
+    // Hide standing (`effects/stealth.mjs#reveal`), and a blow that deals damage ends the
+    // state and the Hide (`effects/after-blow.mjs`).
+    "master-of-shadows": { grants: grant({ action: "half", uses: once("short") }), onUse: { shadows: { minutes: 1 } } },
     // ---- Warden (the Night Elf's Legacy; D-781, the Legacy branches' phase B6) ----
     // *You may wear studded and mail armor. At rank 2 the Encumbering trait does not
     // reduce your Speed* (door 23): the categories added to the class's own Access,
@@ -1536,11 +1603,14 @@ export const TALENT_EFFECTS = Object.freeze({
       constructs: { holds: 1 },
       reason: "*Building one takes a Short Rest* is the table's clock (D2 §12): the Use is refused in a fight and without a tinker's kit, builds or rebuilds on its pick, and says on its card how long the work takes"
     },
-    // Gadgeteer's one rank grants 2 + character tier known gadgets. The Bench
-    // replaces one during a Long Rest; each has its own Short Rest use.
+    // Gadgeteer grants 2 + character tier known gadgets. The Bench replaces one during
+    // a Long Rest; each has its own Short Rest use. *At rank 2, choose one gadget you
+    // know: you may use it twice between Short Rests* (B17, D-1883): the Use asks which
+    // at rank 2 (`GADGET_TWICE_FLAG` on the feature) and the sync stamps that gadget two
+    // uses (`gadgets.mjs#gadgetFeature`).
     "gadgeteer": {
       grants: grant({ action: null, choice: "gadgets" }),
-      gadgets: { known: "2+tier" },
+      gadgets: { known: "2+tier", atRank: [{ rank: 2, twice: 1 }] },
       reason: "During a Long Rest, The Bench lets you replace one known gadget. Initial learning and newly earned slots can be filled outside a fight; replacing a gadget never refreshes a spent use."
     },
     // *Constructs you build with The Bench gain Health equal to three times your tier
@@ -1550,14 +1620,14 @@ export const TALENT_EFFECTS = Object.freeze({
     // *As a Half-Action, spend 4 Energy. One of your constructs fires at a point within
     // 60 feet of it. Every creature within 10 feet of that point makes a Reflex
     // Resilience Test against your Spell DC, taking Fire damage equal to your tier plus
-    // twice your rank on a failure and half that, rounded down, on a success. Usable a
+    // your rank on a failure and half that, rounded down, on a success. Usable a
     // number of times equal to your tier between Short Rests* (door 6): the construct
     // picked, the point picked within its 60 feet (`onUse.aimFrom`), every creature within
     // 10 feet of it gathered - allies and the gnome included (`who`; the lead: *"Measure
     // the area"*) - and the half a passed Test leaves landed by the card's Apply (`half`;
     // *"Build it everywhere"*).
     "cluster-rockets": {
-      grants: grant({ action: "half", cost: cost("energy", 4), uses: uses("tier", "short"), resist: "reflex", area: "A 10 ft radius on the ground", who: "creature", damage: { amount: "tier+2*rank", type: "fire", half: true } }),
+      grants: grant({ action: "half", cost: cost("energy", 4), uses: uses("tier", "short"), resist: "reflex", area: "A 10 ft radius on the ground", who: "creature", damage: { amount: "tier+rank", type: "fire", half: true } }),
       onUse: { aimFrom: { kind: "construct", feet: 60 } }
     },
     // *Your constructs take two Half-Actions each turn between them, rather than one. At
@@ -1632,12 +1702,12 @@ export const TALENT_EFFECTS = Object.freeze({
   // mechanism and its reader reads the patch).
   priest: {
     // ---- Discipline ----
-    // *You know Power Word: Shield. Each rank adds 2 to the temporary Health it
-    // grants* (D-777): 07's 6 and the rank's 2 ride the card, and its Apply grants
-    // them with the laid effect (`castSpell`, `applySpellEffectFromCard`).
+    // *You know Power Word: Shield. Each rank adds your tier to the temporary Health it
+    // grants* (the audit, D-1884): 07's 6 and the rank's tier ride the card, and its
+    // Apply grants them with the laid effect (`castSpell`, `applySpellEffectFromCard`).
     "power-word-shield": {
       spell: { names: ["Power Word: Shield"], learn: true },
-      tempHealth: { spells: ["Power Word: Shield"], add: "2*rank" }
+      tempHealth: { spells: ["Power Word: Shield"], add: "tier*rank" }
     },
     // *A number of times equal to your rank per Short Rest, a spell or feature
     // requiring a Casting Test costs no Mana* (D-774): a line on the Casting
@@ -1655,9 +1725,9 @@ export const TALENT_EFFECTS = Object.freeze({
       foresight: true,
       reason: "Rank 1 answers before damage reveal; rank 2 may also answer afterwards, before Apply. Payment/delivery coordination and interrupted-operation recovery remain under audit."
     },
-    // *You know Pain Suppression. Each rank adds 1 to the damage it prevents*
-    // (D-774): the spell's own *reduced by 3* on the laid effect, and the rank on it.
-    "pain-suppression": { spell: { names: ["Pain Suppression"], learn: true, adds: [{ key: "system.damageReduction", amount: "rank" }] } },
+    // *You know Pain Suppression. At rank 2 it reduces damage by 1 more* (the audit,
+    // D-1884): the spell's own *reduced by 3* on the laid effect, and rank 2's 1 on it.
+    "pain-suppression": { spell: { names: ["Pain Suppression"], learn: true, adds: [{ key: "system.damageReduction", amount: "rank-1" }] } },
     // *When a target of your Ward class feature reduces damage to 0, you gain 1
     // Mana per rank* (D-774): read at the one damage door (`effects/wards.mjs`).
     "absorption": { modifies: mod("Ward", { absorb: { mana: "rank" } }) },
@@ -1672,29 +1742,31 @@ export const TALENT_EFFECTS = Object.freeze({
       modifies: mod("Dispel", { further: { count: 1, feet: 20 } }),
       grants: counter("rank", "short")
     },
-    // *You know Barrier. Each rank adds 1 to the Ward it grants* (D-779; the lead,
-    // 2026-10-03, on O-182: *"Yes"*): the creatures the cast targets are the ones
-    // chosen, and the area its card places carries their Ward - 07's 3 and the
-    // rank - as a rider the aura door lays while each stays inside
-    // (`class-answers.mjs#chosenWardRemains`).
+    // *You know Barrier. At rank 2 sustaining it costs 3 Mana a turn rather than 4*
+    // (the audit, D-1884): 07's Ward stays the spell's own (`chosenWard` adds nothing
+    // now), and rank 2 sets the Sustain's upkeep (`rules/upkeep.mjs#upkeepFor`). The
+    // creatures the cast targets are still the ones chosen (O-182).
     "barrier": {
       spell: { names: ["Barrier"], learn: true },
-      chosenWard: { spells: ["Barrier"], add: "rank" }
+      chosenWard: { spells: ["Barrier"], add: 0 },
+      upkeep: { spells: ["Barrier"], less: 1, min: 3, minRank: 2 }
     },
     // *Your Ward class feature may name two targets rather than one* (D-774).
     "mass-ward": { modifies: mod("Ward", { targets: 2 }) },
-    // *A target carrying your Ward class feature takes 1 less damage per rank
-    // from every source* (D-774): the laid Ward carries it on `damageReduction`.
-    "shield-discipline": { modifies: mod("Ward", { reduction: "rank" }) },
-    // *A target of your Ward class feature whose Health would drop to 0 as the
-    // result of an attack instead stays at 1 Health. You may use this a number
-    // of times equal to your rank per Long Rest* (D-777): the damage door ASKS the
-    // priest whose Ward stands on the creature an attack would drop to 0, and a
-    // yes strikes a use and holds it at 1. The Ward's patch names the talent.
+    // *A target carrying your Ward class feature takes 1 less damage per rank from
+    // every source, to no more than your tier* (R1, D-1884): the laid Ward carries it
+    // on `damageReduction`.
+    "shield-discipline": { modifies: mod("Ward", { reduction: "min(rank,tier)" }) },
+    // *As an action, spend 6 Mana. Every friendly target within 20 feet of you gains
+    // your Ward class feature against a school you name. You may use this a number of
+    // times equal to your rank per Short Rest* (B13, D-1884): no hold at 1 any more
+    // (R4). The Use asks the school, gathers every ally within 20 feet - the priest
+    // included (D-755) - before anything is paid, and lays 02's Ward with its talents
+    // on each through the Ward's one door (`effects/wards.mjs#layWard`).
     "spirit-shell": {
-      modifies: mod("Ward", { shell: true }),
-      grants: counter("rank", "long"),
-      holds: { kind: "spiritShell" }
+      grants: grant({ action: "action", cost: cost("mana", 6), uses: uses("rank", "short"), choice: "schools", area: "Each ally within 20 ft" }),
+      onUse: { wardArea: { feet: 20 } },
+      auraReason: "the Ward each ally within 20 feet gains is laid once by the Use's own door (`onUse.wardArea`, then `effects/wards.mjs#layWard`) and lasts as 02's Ward does; nothing follows the priest, so it is no aura"
     },
     // *When your Ward class feature prevents damage, the target may restore
     // Health equal to your tier* (D-774): at the one damage door, automatic (MY
@@ -1708,11 +1780,12 @@ export const TALENT_EFFECTS = Object.freeze({
       modifies: mod("Ward", { choice: null, everySchool: true, undispellable: true })
     },
     // ---- Radiance ----
-    // *You know Renew. Each rank adds 1 to the Health it restores each turn*
-    // (D-774): D-771's tick row, Rejuvenation's shape.
-    "renew": { spell: { names: ["Renew"], learn: true }, tick: { spells: ["Renew"], add: "rank" } },
-    // *Add your rank to the Health restored by your Mend and Mass Mend class features* (D-768).
-    "serendipity": { modifies: [mod("Mend", { heal: { add: "rank" } }), mod("Mass Mend", { heal: { add: "rank" } })] },
+    // *You know Renew. Each rank adds 1 to the Health it restores each turn, to no more
+    // than your tier* (R1, D-1884): D-771's tick row, Rejuvenation's shape.
+    "renew": { spell: { names: ["Renew"], learn: true }, tick: { spells: ["Renew"], add: "min(rank,tier)" } },
+    // *Add your rank, to no more than your tier, to the Health restored by your Mend
+    // and Mass Mend class features* (R1, D-1884).
+    "serendipity": { modifies: [mod("Mend", { heal: { add: "min(rank,tier)" } }), mod("Mass Mend", { heal: { add: "min(rank,tier)" } })] },
     // *Casting Mend on a target at full Health grants temporary Health equal to
     // your tier plus your rank* (D-777): read at the one healing door, where the
     // creature's Health before the heal is known. 04 names no span: until a Long
@@ -1768,25 +1841,26 @@ export const TALENT_EFFECTS = Object.freeze({
     // Hands, Regrowth - of any class the character holds (D-778, O-160:
     // `class-talents.mjs#healTargetsFor`), its chip laid by the feature sync.
     "divine-providence": { healing: { names: 2, oneTarget: true } },
-    // *Once per Long Rest, one healing feature of yours restores its full amount
-    // to every friendly target within 60 feet without a Casting Test* (D-779; the
-    // lead, 2026-10-03, on O-185: *"use of it's own, Cast a healing spell without
-    // requiring a casting test for the next healing spell. That healing spell
-    // amoutn can't be reduced."*): a Use of its own, at no action, laying the
-    // promise the next healing spell takes - no Casting Test and a heal nothing
-    // reduces (`casting.mjs#takeNextSpell`'s `miracle`).
+    // *Once per Short Rest, as a Half-Action, spend 8 Mana. For one minute your Mend
+    // class feature costs no Mana, and once a round you may use it as a Reaction* (R2's
+    // capstone, D-1884; O-185's next-spell promise is retired with the old text): the
+    // Use lays a minute's state (`MIRACLE_FLAG`); while it stands Mend's Mana is
+    // nothing and Mend offers a Reaction rung beside its Half-Action, the Reaction once
+    // a round on the round's record (`MIRACLE_ROUND`).
     "miracle": {
-      grants: counter(1, "long"),
-      onUse: { miracle: true }
+      grants: grant({ action: "half", cost: cost("mana", 8), uses: once("short") }),
+      onUse: { miracle: { minutes: 1 } }
     },
     // ---- Shadow ----
     // *You know Shadow Word: Pain. Each rank adds 1 to its Damage Rating*
     // (D-774): its Damage Rating IS its tick (D-770), so the rank rides the tick.
     // It was `spell.damage`, which added to a Rating the cast never deals - a
     // no-op since D-770 (D-681's shape).
-    "shadow-word-pain": { spell: { names: ["Shadow Word: Pain"], learn: true }, tick: { spells: ["Shadow Word: Pain"], add: "rank" } },
-    // *You know Mind Flay. Each rank adds 1 to the damage it deals each turn* (D-774).
-    "mind-flay": { spell: { names: ["Mind Flay"], learn: true }, tick: { spells: ["Mind Flay"], add: "rank" } },
+    // R1 (D-1884): *to no more than your tier*.
+    "shadow-word-pain": { spell: { names: ["Shadow Word: Pain"], learn: true }, tick: { spells: ["Shadow Word: Pain"], add: "min(rank,tier)" } },
+    // *You know Mind Flay. Each rank adds 1 to the damage it deals each turn, to no
+    // more than your tier* (D-774; R1, D-1884).
+    "mind-flay": { spell: { names: ["Mind Flay"], learn: true }, tick: { spells: ["Mind Flay"], add: "min(rank,tier)" } },
     // *If you have not dealt Holy damage or used a healing spell or feature since
     // your last turn, you may add 1 Shadow damage per rank to your spells and
     // attacks* (D-774): the fact is read now - the priest's `shadowform` flag,
@@ -1794,7 +1868,10 @@ export const TALENT_EFFECTS = Object.freeze({
     // turn - so the line comes ticked where it holds. It reaches a Shadow blow alone,
     // as built since D-711 (the lead, 2026-10-03, on O-187: *"No it has no effect on
     // non-shadow spells."*; D-779).
-    "shadowform": { damage: damage(["shadow"], "both", { when: "shadowform" }) },
+    // **ONCE A ROUND** (the audit, D-1884: *once a round you may add*): the line is
+    // offered while the round's record holds no `SHADOWFORM_ROUND`, and taking it marks
+    // the record (`effects/shadowform.mjs#markShadowformRound`).
+    "shadowform": { damage: damage(["shadow"], "both", { when: "shadowform", once: "round" }) },
     // *At rank 2 its radius is 15 feet*: 07's is 10 (D-756, `spellAreaFor`).
     "psychic-scream": { spell: { names: ["Psychic Scream"], learn: true, atRank: [{ rank: 2, widen: 5 }] } },
     // *Once a round, when Shadow damage from you reduces a target's Health, you
@@ -1834,17 +1911,26 @@ export const TALENT_EFFECTS = Object.freeze({
     // enemy within 20 feet takes Shadow damage equal to your tier* (D-774): from
     // the one damage door, a card of its own with an Apply for each.
     "shadowy-apparition": { apparition: { feet: 20, amount: "tier", type: "shadow" } },
-    // *You know Void Eruption. Its radius is 40 feet, and a creature that fails
-    // the Test is also Silenced until the end of your next turn* (D-756; D-774:
-    // the Silenced rides the failure beside 07's own Stunned).
-    "void-eruption": { spell: { names: ["Void Eruption"], learn: true, widen: 10, onFail: ["silenced"] } }
+    // *Once per Short Rest, as a Half-Action, spend 8 Mana. For one minute you may
+    // Sustain one more effect than you could, and when a Shadow spell you Sustain deals
+    // damage at the start of a creature's turn, one other creature of your choice
+    // within 10 feet of it takes the same damage* (B7, R2's capstone, D-1885; it
+    // replaces Void Eruption, which taught a tier 5 spell): the Use lays a minute's
+    // state (`HERALD_FLAG`); while it stands the Sustain cap reads one more
+    // (`class-talents.mjs#sustainsFor`'s `heraldStanding`), and a sustained Shadow tick landing posts the spread
+    // on its own card for the GM to apply (`effects/audit-cunning.mjs#heraldSpreadAfterTicks`).
+    "herald-of-the-void": {
+      grants: grant({ action: "half", cost: cost("mana", 8), uses: once("short") }),
+      onUse: { herald: { minutes: 1, sustains: 1, spread: { feet: 10, school: "shadow" } } }
+    }
   },
   // **THE SHAMAN'S THIRTY-SIX** (D-774, the talent plan's Phase 9).
   shaman: {
     // ---- Elemental ----
-    // *Fire and Nature damage you deal increases by 1 per rank against a target
-    // that has taken damage from you* (D-768's lane): the attacker's damaged mark.
-    "elemental-fury": { damage: damage(["fire", "nature"], "both", { when: "damagedTarget" }) },
+    // *Fire and Nature damage you deal increases by 1 per rank, to no more than your
+    // tier, against a target that has taken damage from you* (D-768's lane; R1,
+    // D-1886): the attacker's damaged mark.
+    "elemental-fury": { damage: damage(["fire", "nature"], "both", { when: "damagedTarget", amount: "min(rank,tier)" }) },
     // *When a Casting Test you make meets or exceeds SL 2, you gain a Static
     // Charge. You may hold a number of Static Charges equal to your rank. When you
     // deal damage you may spend a Static Charge to add your tier to that damage*
@@ -1902,26 +1988,36 @@ export const TALENT_EFFECTS = Object.freeze({
       modifies: mod("Elemental Bond"),
       reason: "rules/elemental-turns.mjs adds a second slot immediately after the owner in AzerothCombat's turn order; both slots use the same combatant, ordinary start/end events and refreshed turn budget, with shared once-per-round marks"
     },
-    // *A Storm elemental, an Earth elemental and a Fire elemental appear*: ONE
-    // of each. `count` is how many of EACH entry are called, so the 3 this row
-    // carried called nine (D-768).
-    "storm-earth-and-fire": { grants: grant({ action: null, cost: cost("mana", 15), uses: once("long"), summons: summons(["Storm Elemental", "Earth Elemental", "Fire Elemental"], 1) }) },
+    // *Once per Short Rest, as a Half-Action, spend 10 Mana. While you Sustain it, at the
+    // start of each of your turns one creature of your choice within 60 feet takes
+    // Nature damage equal to your tier plus 2, and you gain a Static Charge, to no more
+    // than you may hold. Sustaining it costs 2 Mana a turn* (B8, D-1886; it replaces
+    // Storm, Earth and Fire): a Sustain of its own keyed `eye-of-the-storm` (Big Bad
+    // Voodoo's shape), whose turn start posts the strike on a card of its own and gives
+    // the Static Charge (`effects/audit-cunning.mjs#shamanTurnStart`, from `AzerothCombat#_turnTicks`).
+    "eye-of-the-storm": {
+      grants: grant({ action: "half", cost: cost("mana", 10), uses: once("short") }),
+      onUse: { sustain: { identifier: "eye-of-the-storm", upkeep: { mana: 2 } } },
+      eyeOfTheStorm: { feet: 60, damage: { amount: "tier+2", type: "nature" }, charge: 1 }
+    },
     // ---- Enhancement ----
     // *Once a round, when you hit with a weapon attack, add Nature damage equal to
     // your rank* (D-774, D-777; the lead: *"Different damage types in one attack
     // are possible"*): a second amount on the blow, NATURE, met by the target's own
     // Nature Ward, Immune and Vulnerable (`mitigation.mjs#resolveDamage`'s extras).
-    "stormlash": { stormlash: { amount: "rank", once: "round", type: "nature" } },
-    // *While you Sustain it, your weapon attacks deal Fire damage rather than
-    // Physical. At rank 2 they add 1 damage as well*
-    // (D-779; the lead, 2026-10-03, on O-188: *"1 mana"*): the Use begins a Sustain
-    // of its own for 1 Mana, held for 1 Mana at the start of each of the shaman's
-    // turns as any Sustain is (05 §12), and while it stands a weapon blow is Fire
-    // (`class-answers.mjs#flametongueStrike`).
+    // R1 (D-1886): *to no more than your tier*.
+    "stormlash": { stormlash: { amount: "min(rank,tier)", once: "round", type: "nature" } },
+    // *While you Sustain it, your weapon hits lay Scorched 1 on the target, or Scorched 2
+    // at rank 2. A creature holds no more Scorched from this talent than that. Beginning
+    // it costs 1 Mana* (B11, D-1886; the 1 Mana is O-188's): the Use begins a Sustain of
+    // its own, held for 1 Mana at the start of each of the shaman's turns as any Sustain
+    // is (05 §12), and while it stands a weapon hit lays the Scorched with no button
+    // pressed - its source the talent, so a second hit keeps the higher value rather than
+    // adding (`applications/actions.mjs#attackWithDialog`'s `landsOnHit`). The blow's own type is untouched.
     "flametongue": {
       grants: grant({ action: null, cost: cost("mana", 1) }),
       onUse: { sustain: { identifier: "flametongue" } },
-      flametongue: { add: 0, atRank: [{ rank: 2, add: 1 }] }
+      flametongue: { scorched: 1, atRank: [{ rank: 2, scorched: 2 }] }
     },
     // *While you carry a shield, your Armor Points rise by 1 per rank against the
     // first attack each round* (D-774): the target snapshot carries them, and the
@@ -1964,10 +2060,10 @@ export const TALENT_EFFECTS = Object.freeze({
     // *Your Stormlash triggers on every hit until your next turn. You may use this
     // a number of times equal to your rank per Short Rest* (D-774).
     "doom-winds": { grants: counter("rank", "short"), onUse: { doomWinds: { until: "userTurnStart" } } },
-    // *While a totem of yours stands, you take 2 less damage from every source*
-    // (D-774): a passive gated on a totem bound to the shaman (D-643), on
-    // `system.damageReduction` (D-696).
-    "earthen-shield": { passive: passive([add("system.damageReduction", 2)], "totem") },
+    // *While a totem of yours stands, you take less damage from every source, equal to
+    // half your tier, rounded down* (the audit, D-1886): a passive gated on a totem bound
+    // to the shaman (D-643), on `system.damageReduction` (D-696).
+    "earthen-shield": { passive: passive([add("system.damageReduction", "floor(tier/2)")], "totem") },
     // *Your weapon attacks count as spells for your own talents and features, and
     // you may make Casting Tests with your Attack Test instead*
     // (D-779; the lead, 2026-10-03, on O-190: *"Any spell cast or magic damage from
@@ -1979,8 +2075,9 @@ export const TALENT_EFFECTS = Object.freeze({
       reason: "Casting Tests with your Attack Test use the selected readied attack's calculation without Augment (actions.mjs, roll-dialog.mjs, workflows.castSpell). GM and player combat acceptance passed. O-229 retains an open range interpretation: the current implementation keeps spell range rather than weapon range."
     },
     // ---- Restoration ----
-    // *You know Healing Wave. Each rank adds 1 to the Health it restores* (D-774).
-    "healing-wave": { spell: { names: ["Healing Wave"], learn: true, heal: 1 } },
+    // *You know Healing Wave. Each rank adds 1 to the Health it restores, to no more
+    // than your tier* (D-774; R1, D-1886).
+    "healing-wave": { spell: { names: ["Healing Wave"], learn: true, heal: 1, cap: "tier" } },
     // *Your Healing Stream totem restores 1 more Health per rank ...*
     "healing-stream-totem": { restorativeTotem: "Healing Stream",
       reason: "rules/restorative-totems.mjs adds Health and target count by rank; the owner's turn offers the GM-coordinated recovery" },
@@ -1991,11 +2088,11 @@ export const TALENT_EFFECTS = Object.freeze({
     // *Your Healing Wave also restores half as much, rounded down, to one further
     // friendly target within 10 feet per rank* (D-774).
     "chain-heal": { spell: { names: ["Healing Wave"], further: { count: "rank", share: "half", feet: 10 } } },
-    // *When you make a melee attack, you may restore Health to yourself equal to
-    // half your tier, rounded down, plus your rank* (D-774): every melee attack,
-    // landed or not (MY READING: the door has no moment to ask, and nobody turns
-    // the Health down).
-    "earthliving": { earthliving: { heal: "floor(tier/2)+rank", melee: true } },
+    // *Once a round, when you hit with a melee attack, you may restore Health to yourself
+    // equal to half your tier, rounded down, plus your rank* (the audit, D-1886): a melee
+    // HIT, once a round on the round's record (`EARTHLIVING_ROUND`); nobody turns the
+    // Health down, so it lands with the hit.
+    "earthliving": { earthliving: { heal: "floor(tier/2)+rank", melee: true, hit: true, once: "round" } },
     // *Your Mana Tide totem returns 1 more Mana per rank ...*
     "mana-tide-totem": { restorativeTotem: "Mana Tide",
       reason: "rules/restorative-totems.mjs adds Mana and range by rank; each recipient chooses a Mana pool on their turn" },
@@ -2027,16 +2124,27 @@ export const TALENT_EFFECTS = Object.freeze({
     // rather than 1, and one Dying friendly target within 30 feet returns with you
     // at 1 Health* (D-774): Reincarnation's Use is built, and this patches it.
     "undying-spirit": { modifies: mod("Reincarnation", { returnAt: "half", ally: { feet: 30 } }) },
-    // *You know Ancestral Tide. Each target also regains 4 Health at the start of
-    // their next turn* (D-774): a tick the cast stamps (D-770's carrier).
-    "ancestral-tide": { spell: { names: ["Ancestral Tide"], learn: true, addTick: { kind: "heal", amount: 4, rounds: 1 } } },
+    // *Once per Short Rest, as a Half-Action, spend 10 Mana and set a totem within 5 feet
+    // of you. It stands as your other totems do and does not count against how many you
+    // may have. At the start of each of your turns, every friendly target within 30 feet
+    // of it regains Health equal to your tier, and one condition on one of them ends. It
+    // lasts until the encounter ends or it is destroyed* (B7, R2's capstone, D-1887; it
+    // replaces Ancestral Tide, which taught a tier 5 spell): the totem planted through
+    // the one door (`documents/totems.mjs#plantTotem`) off `bound.mjs#totemBlock`, bound
+    // outside the tier's count (`uncounted`), for the encounter; its heal and its one
+    // ended condition are offered on a card at the start of the shaman's turns
+    // (`effects/audit-cunning.mjs#shamanTurnStart`, the condition through `tideEndCondition`).
+    "tide-of-the-ancestors": {
+      grants: grant({ action: "half", cost: cost("mana", 10), uses: once("short") }),
+      onUse: { tide: { totem: "Tide of the Ancestors", within: 5, feet: 30, heal: "tier", cures: 1 } }
+    },
     // ---- Shadow Hunter (the Troll's Legacy; D-781, the Legacy branches' phase B6) ----
     // *As a Half-Action, spend 2 Mana. A friendly target within 30 feet restores Health
-    // equal to your rank plus 1 at the start of each of its turns for one minute*
-    // (D-770's carrier): one friendly creature within 30 feet (`onUse.aim`), the card's
-    // Apply laying the tick for ten of its turns.
+    // equal to your rank at the start of each of its turns for one minute* (D-770's
+    // carrier; the audit, D-1887): one friendly creature within 30 feet (`onUse.aim`), the
+    // card's Apply laying the tick for ten of its turns.
     "trolls-blood": {
-      grants: grant({ action: "half", cost: cost("mana", 2), tick: { kind: "heal", amount: "rank+1", rounds: 10 } }),
+      grants: grant({ action: "half", cost: cost("mana", 2), tick: { kind: "heal", amount: "rank", rounds: 10 } }),
       onUse: { aim: { feet: 30, friendly: true } }
     },
     // *You know Hex. At rank 2 sustaining it costs no Mana* (D-778's upkeep): the spell
@@ -2056,10 +2164,12 @@ export const TALENT_EFFECTS = Object.freeze({
       onUse: { cures: { count: 1, friendly: true }, aim: { feet: 30, friendly: true } }
     },
     // *Your Searing totem spits venom. Its attack deals Nature damage rather than Fire,
-    // and a creature it hits is Poisoned 1, and the DC to shed it is your Spell DC. At
-    // rank 2 that creature is also Slowed until the end of its next turn* (door 20): the
-    // bound totem's attack patched, its hit laying what the row lays.
-    "serpent-ward": { boundAttack: { kind: "totem", match: "Searing", school: "nature", lays: [{ condition: "poisoned", value: 1, shed: "spellDc" }, { condition: "slowed", until: "endOfNextTurn", minRank: 2 }] } },
+    // and a creature it hits that is not already Poisoned is Poisoned 1, and the DC to
+    // shed it is your Spell DC. At rank 2 that creature is also Slowed until the end of
+    // its next turn* (door 20; the audit, D-1887): the bound totem's attack patched, its
+    // hit laying what the row lays, the Poisoned only on a creature not already Poisoned
+    // (`unless`).
+    "serpent-ward": { boundAttack: { kind: "totem", match: "Searing", school: "nature", lays: [{ condition: "poisoned", value: 1, shed: "spellDc", unless: "poisoned" }, { condition: "slowed", until: "endOfNextTurn", minRank: 2 }] } },
     // *Your melee attacks gain a Boon against a creature suffering a condition that you
     // or one of your totems laid. At rank 2 your Jinx costs no Mana against it* (door
     // 17): the Boon an automatic line where the gate holds, and Jinx's line priced at
@@ -2118,13 +2228,14 @@ export const TALENT_EFFECTS = Object.freeze({
       aura: aura({ feet: 20, targets: "allies", excludeOwner: true, gate: "sustain:big-bad-voodoo", healthFloor: 1 })
     },
     // ---- Spirit Walker (the Tauren's Legacy; D-781, the Legacy branches' phase B6) ----
-    // *You have Ward against Nature and Shadow equal to your rank. As a Reaction, spend 2
-    // Mana. A creature within 30 feet that would take a Death Step does not take it. You
-    // may use this a number of times equal to your rank per Short Rest* (door 11): the
-    // standing Ward, the hold asked at the one Death Step door, and the counter the hold
-    // strikes (`effects/death-holds.mjs`) - never pressed from the sheet.
+    // *You have Ward against Nature and Shadow equal to your rank, to no more than your
+    // tier. As a Reaction, spend 2 Mana. A creature within 30 feet that would take a Death
+    // Step does not take it. You may use this a number of times equal to your rank per
+    // Short Rest* (door 11; R1, D-1887): the standing Ward, the hold asked at the one Death
+    // Step door, and the counter the hold strikes (`effects/death-holds.mjs`) - never
+    // pressed from the sheet.
     "hold-the-thread": {
-      passive: passive([add("system.ward.nature", "rank"), add("system.ward.shadow", "rank")]),
+      passive: passive([add("system.ward.nature", "min(rank,tier)"), add("system.ward.shadow", "min(rank,tier)")]),
       deathHold: { feet: 30, cost: { pool: "mana", amount: 2 } },
       grants: grant({ action: "reaction", cost: cost("mana", 2), uses: uses("rank", "short") })
     },
@@ -2231,7 +2342,11 @@ export const TALENT_EFFECTS = Object.freeze({
     // lead, 2026-10-03, on O-163: *"cost by the entry or 1 Power if not
     // mentioned."*), and the rank comes off each Sustain's Mana at the turn's
     // start, never below 1 by the talent's own hand (`rules/upkeep.mjs`).
-    "arcane-concentration": { upkeep: { less: "rank", min: 1 } },
+    // **THE CLASS TALENT AUDIT** (C, D-1890): *The upkeep of an effect you Sustain falls
+    // by 1 at the start of your turn, to a minimum of 0, for a number of effects equal
+    // to your rank* - 1 off each of the first `effects` Sustains that pay Mana, in the
+    // order the caster holds them (`upkeepFor`'s `index`; MY READING, for the lead).
+    "arcane-concentration": { upkeep: { less: 1, min: 0, effects: "rank" } },
     // *Your Blink class feature reaches 10 feet further per rank. At rank 2 it
     // costs no Mana once per Short Rest* (D-775): the reach on Blink's patch
     // (`blinkFor`), and rank 2's free Blink the counter the talent grants at
@@ -2250,17 +2365,27 @@ export const TALENT_EFFECTS = Object.freeze({
     // cast"*): with 02's Overchannel Mastery an Overchannel costs the spell's Mana
     // once more a cast and no Health, and the rank comes off that second charge
     // (`casting.mjs#overchannelPrice`).
+    // **PER POINT NOW** (the class talent audit, C3; 07 §8 and 04 agree): *Each point
+    // of Overchannel you take costs 1 less per rank, to a minimum of 1: 1 less Health,
+    // or 1 less Mana once you hold Overchannel Mastery* - off EACH point's price, never
+    // below 1 a point (`casting.mjs#overchannelPrice`). O-192's per-cast reading is overturned.
     "overchanneller": {
-      overchannel: { less: "rank" }
+      overchannel: { less: "rank", min: 1 }
     },
     // "You know X": the spell is learned with the talent, and the rank's rider rides its card.
-    "arcane-missiles": { spell: { names: ["Arcane Missiles"], learn: true, damage: 1 } },
-    // *When you Overchannel and the Casting Test succeeds, 2 Mana per rank returns
-    // to you* (D-775): Illumination's door (D-772), gated on an Overchannel.
-    "clearcasting": { manaBack: { overchannel: true, amount: "2*rank" } },
-    // *You know Mana Shield. At rank 2 it costs no Mana to hold* (D-775): the
-    // upkeep the turn's start charges it is nothing from rank 2.
-    "mana-shield": { spell: { names: ["Mana Shield"], learn: true }, upkeep: { spells: ["Mana Shield"], free: true, minRank: 2 } },
+    // R1 (D-1861): *to no more than your tier*.
+    "arcane-missiles": { spell: { names: ["Arcane Missiles"], learn: true, damage: 1, cap: "tier" } },
+    // *When you Overchannel and the Casting Test succeeds, you may take up to your rank
+    // in points of Overchannel on your next spell before the end of your next turn
+    // without paying for them* (the class talent audit, D-1890): free points on the
+    // next spell (`nextSpell.overchannel`), laid only by an Overchannelled success
+    // (`on: "overchannelSuccess"`), lapsing after the mage's next turn (`through`).
+    // The Mana back is gone, and with it the endless pool.
+    "clearcasting": { nextSpell: { overchannel: "rank", on: "overchannelSuccess", sl: null, turn: false, through: "nextTurn" } },
+    // *You know Mana Shield. At rank 2, every 2 damage it takes costs you 1 Mana,
+    // rounded up* (the class talent audit, D-1890): the shield's own payment
+    // (`rules/mana-shield.mjs#manaShieldDamage`'s `ratio`), read at the damage door.
+    "mana-shield": { spell: { names: ["Mana Shield"], learn: true }, manaShield: { ratio: 2, minRank: 2 } },
     // *Until the end of your next turn your spells add 1 Arcane damage per
     // rank.* Laid by the feature's own Use and expired by core (D-628). **EVERY
     // spell** (D-775), and **ARCANE** (D-777; the lead: *"Different damage types
@@ -2268,9 +2393,15 @@ export const TALENT_EFFECTS = Object.freeze({
     // (`system.damageBonus.typed.spell.arcane`), so a Fire spell lands its Fire
     // and a second amount of Arcane, each met by its own Ward - a creature Immune
     // to Fire still takes the Arcane - and an Arcane spell's own Rating takes it.
+    // **THE CLASS TALENT AUDIT** (D-1890): *Once per Short Rest, using no action, spend 4
+    // Mana. Until the end of your turn your spells deal additional damage equal to your
+    // tier, of each spell's own type. At rank 2 it lasts until the end of your next
+    // turn* - the tier on the spell lane of every type (each spell's own, never a second
+    // Arcane amount), laid by the Use's own door at the mage's tier (`onUse.arcanePower`,
+    // `onUseMageWarlock`), its span the turn and rank 2's the next turn's end.
     "arcane-power": {
-      grants: grant({ action: "half", cost: cost("mana", 4), uses: once("short") }),
-      damage: damage(["all"], "spell", { until: "endOfNextTurn", as: "arcane" })
+      grants: grant({ action: null, cost: cost("mana", 4), uses: once("short") }),
+      onUse: { arcanePower: { amount: "tier", until: "endOfTurn", atRank: [{ rank: 2, until: "endOfNextTurn" }] } }
     },
     // *You may use your Blink class feature on a friendly target you can see
     // within 30 feet instead of on yourself* (D-775): the Use names the friend,
@@ -2290,19 +2421,33 @@ export const TALENT_EFFECTS = Object.freeze({
     // (D-778, O-163) off each entry's own upkeep, by the count held as the turn
     // starts, while the mage holds Shape the Weave. 07 §7's *pays for all five
     // every turn* is the book conflict the records name.
+    // **THE CLASS TALENT AUDIT** (D-1890): *Your Shape the Weave class feature Sustains 1
+    // further effect per rank* - the limit alone; the upkeep reduction is gone, so a mage
+    // holding five Sustains pays for all five as 07 §7 says.
     "netherwind": {
-      modifies: mod("Shape the Weave", { sustains: "rank", upkeepLess: "held" })
+      modifies: mod("Shape the Weave", { sustains: "rank" })
     },
     // *As a Reaction, spend 6 Mana. You gain Ward 2 against every school until
     // the end of your next turn* (D-775): Cloak of Shadows' door (D-773), every
     // school and no chooser, its span the end of the mage's next turn.
     "prismatic-ward": { grants: grant({ action: "reaction", cost: cost("mana", 6) }), onUse: { ward: { amount: 2, everySchool: true, until: "userTurnEnd" } } },
-    // *You know Archmage. While it runs you may sustain one further spell than
-    // you otherwise could, and its maximum is four Boons rather than three*
-    // (D-775): the limit and 07's Boon line, both while its laid effect stands.
-    "archmage": { spell: { names: ["Archmage"], learn: true }, archmage: { sustains: 1, boons: 4 } },
+    // **MASTER OF THE WEAVE** (the class talent audit, C1, D-1890; it was Archmage, which
+    // taught the tier 5 spell and broke 05 §4's cap with four Boons): *You may Sustain one
+    // more effect than your features and talents allow. While you Sustain three or more
+    // effects, your Casting Tests gain a Boon, and Dispel and similar effects end a
+    // Sustained spell of yours only on a Casting Test that meets or exceeds SL 2* - the
+    // limit (`sustainsFor`'s `weave`), an automatic Casting Test line on the count held
+    // (`castingBoonsFor`'s `sustainingThree`), and D-248's SL floor on the mage's
+    // Sustained casts (`dispelGatesFor`'s `sustained`).
+    "master-of-the-weave": {
+      weave: { sustains: 1 },
+      castingBoon: { boons: 1, while: "sustainingThree" },
+      dispelGate: { sl: 2, sustained: true }
+    },
     // ---- Fire ----
-    "fireball": { spell: { names: ["Fireball"], learn: true, damage: 1 } },
+    // R1 (the class talent audit, D-1861): *Each rank adds 1 to its Damage Rating, to
+    // no more than your tier* - the first row to carry `cap`, the engine's proof.
+    "fireball": { spell: { names: ["Fireball"], learn: true, damage: 1, cap: "tier" } },
     // *When your Fire damage reduces a target's Health, it takes 1 further Fire
     // damage per rank at the start of its next turn* (D-775): a tick laid from
     // the one damage door (`afterBlow`), its own landing never laying another (MY
@@ -2327,12 +2472,13 @@ export const TALENT_EFFECTS = Object.freeze({
     // the blow back rides Immolation's door (`retaliationRows`, D-757).
     "molten-skin": { passive: passive([add("system.ward.fire", "rank")]), retaliate: { type: "fire", amount: "rank", melee: true } },
     // *As a Full Action, spend 6 Mana and make a Casting Test. On success a target
-    // takes Fire damage equal to twice your tier plus your rank. At rank 2 a
-    // Casting Test at SL 3 or better also applies Stun until your next turn*
-    // (D-775): the Stun a button per target, as Hurricane's Slowed is (D-771).
+    // takes Fire damage equal to three times your tier plus your rank. At rank 2 a
+    // Casting Test at SL 3 or better also applies Stunned until your next turn*
+    // (D-775; the class talent audit's Tune, D-1890): the Stun a button per target,
+    // as Hurricane's Slowed is (D-771).
     "pyroblast": {
       grants: grant({
-        action: "full", cost: cost("mana", 6), casting: true, damage: { amount: "2*tier+rank", type: "fire" },
+        action: "full", cost: cost("mana", 6), casting: true, damage: { amount: "3*tier+rank", type: "fire" },
         inflicts: [{ condition: "stunned", value: null, until: "casterTurnStart", sl: 3, minRank: 2 }]
       })
     },
@@ -2345,21 +2491,30 @@ export const TALENT_EFFECTS = Object.freeze({
     // *Once per Short Rest, as a Half-Action, spend 8 Mana and make a Casting
     // Test. On success a 20-foot area within 60 feet burns until the end of your
     // next turn, and anything starting its turn there takes Fire damage equal to
-    // your tier per rank and suffers your Ignite* (D-775): the area's tick, as
-    // D-756's (the Use deals nothing itself), the Ignite Ignite's own door's.
+    // your tier plus your rank and suffers your Ignite* (D-775; the class talent
+    // audit's Tune, D-1890): the area's tick, as D-756's (the Use deals nothing
+    // itself), the Ignite Ignite's own door's.
     "firestorm": {
       grants: grant({ action: "half", cost: cost("mana", 8), casting: true, uses: once("short"), area: "A 20 ft radius on the ground" }),
-      onUse: { areaTick: { who: "creature", amount: "tier*rank", type: "fire", rounds: 1 } }
+      onUse: { areaTick: { who: "creature", amount: "tier+rank", type: "fire", rounds: 1 } }
     },
     // *Once per Long Rest, when you would drop to 0 Health you stay at 1 instead,
     // and every enemy within 10 feet takes Fire damage equal to your tier*
     // (D-775): at the one damage door, the counter's use struck (MY READING: the
     // first such blow, as Divine Favor's first heal).
     "cauterize": { grants: counter(1, "long"), cauterize: { stay: 1, feet: 10, amount: "tier", type: "fire" } },
-    // *You know Sunfire. Its Casting Test is against DC 22 rather than 26* (D-775).
-    "sunfire": { spell: { names: ["Sunfire"], learn: true, dc: 22 } },
+    // **PYROMANIAC** (the class talent audit, C1, D-1890; it was Sunfire): *Your Ignite
+    // deals Fire damage equal to your tier rather than your rank. Your Fire spells
+    // ignore 2 Ward against a target burning from Ignite* - Ignite's amount restated
+    // (`igniteFor` reads `igniteAmount`), and a Ward pierce gated on the TARGET's own
+    // Ignite tick (`wardPierceFor`'s `facts.ignited`, `AzerothActor#spellWardPierceAt`).
+    "pyromaniac": {
+      igniteAmount: "tier",
+      spell: { schools: ["fire"], ignoresWard: { amount: 2, schools: ["fire"], whenTarget: "ignited" } }
+    },
     // ---- Frost ----
-    "frostbolt": { spell: { names: ["Frostbolt"], learn: true, damage: 1 } },
+    // R1 (D-1861): *to no more than your tier*.
+    "frostbolt": { spell: { names: ["Frostbolt"], learn: true, damage: 1, cap: "tier" } },
     // *You know Frost Armor. At rank 2 its Ward against Frost is 2* (D-775): the
     // laid effect's own Ward 1 and one more from rank 2.
     "frost-armor": { spell: { names: ["Frost Armor"], learn: true, adds: [{ key: "system.ward.frost", amount: 1, minRank: 2 }] } },
@@ -2394,8 +2549,13 @@ export const TALENT_EFFECTS = Object.freeze({
       targetBoon: { on: ["casting"], boons: 1, when: "slowedTarget" },
       spellCritical: { on: 19, when: "slowedTarget", minRank: 2 }
     },
-    // *You know Cone of Cold. Each rank adds 5 feet to the cone* (D-775).
-    "cone-of-cold": { spell: { names: ["Cone of Cold"], learn: true, lengthen: "5*rank" } },
+    // *You know Cone of Cold. A creature that fails its Test takes Frost damage equal to
+    // your tier plus your rank, and each rank adds 5 feet to the cone* (D-775; the class
+    // talent audit's Tune, D-1890). MY READING, for the lead: the tier plus the rank
+    // RESTATES 07's 2 - `spell.amount` is the difference over 07's own Rating, read by
+    // `spellDamageFor` (`mage-talents.test.mjs` holds the 2 to the pack) - so a success still
+    // takes half of it, as 07 says.
+    "cone-of-cold": { spell: { names: ["Cone of Cold"], learn: true, lengthen: "5*rank", amount: "max(0,tier+rank-2)" } },
     // *You know Ice Barrier. Each rank adds 2 to the temporary Health it grants*
     // (D-777): 07's 8 and the rank's 2 ride the card, and its Apply grants them
     // with the laid effect.
@@ -2419,13 +2579,17 @@ export const TALENT_EFFECTS = Object.freeze({
     // *You are Immune (Frost), and your Frost damage ignores 2 Ward* (D-775): the
     // derived `system.immune`, and Chastise's Ward pierce (D-774).
     "frozen-core": { immune: { types: ["frost"] }, spell: { schools: ["frost"], ignoresWard: { amount: 2, schools: ["frost"] } } },
-    // *You know Absolute Zero. A creature it Stuns takes a Bane on every Test to
-    // end the Stun* (D-778, O-159): 07's *Stunned until it passes the Test again at
-    // the end of one of its turns* is a prompt at the end of each of the creature's
-    // turns, Poisoned's shape (D-628), and the Bane rides the escape the Stun carries.
-    "absolute-zero": {
-      spell: { names: ["Absolute Zero"], learn: true },
-      escape: { spells: ["Absolute Zero"], banes: 1 }
+    // **SHATTERING COLD** (the class talent audit, C1, D-1890; it was Absolute Zero): *A
+    // creature you have Slowed or Entangled takes a Bane on Resilience Tests against your
+    // Frost spells. Once a round, when a Frost spell of yours damages an Entangled
+    // creature, it is Stunned until the end of its next turn unless it succeeds on a Body
+    // Resilience Test against your Spell DC.* The Bane rides the Resist a Frost spell's
+    // card asks (`resistTalentsOn`, off the resister's own `laidBy`), and the Stun is
+    // asked of the damage door's Frost blow (`effects/after-blow.mjs#shatteringColdFrom`),
+    // once a round on the mage's round record.
+    "shattering-cold": {
+      resistBane: { banes: 1, schools: ["frost"], laidBy: ["slowed", "entangled"] },
+      frozenStun: { on: "entangled", schools: ["frost"], condition: "stunned", resilience: "body", once: "round" }
     }
   },
   // **THE WARLOCK'S THIRTY-SIX** (D-775, the talent plan's Phase 11).
@@ -2436,13 +2600,19 @@ export const TALENT_EFFECTS = Object.freeze({
     // (D-775): the tick of a curse that has one, and a further minute on every
     // other - 07's *Curse of ...* by name and 02's Curse (MY READING: *your
     // curses* are those).
+    // **THE CLASS TALENT AUDIT** (D-1891): *Your curses deal 1 more damage per rank at the
+    // start of the target's turns, to no more than your tier. A creature takes a −1 penalty
+    // per rank on a Resilience Test against a curse of yours that deals no damage* - the
+    // tick raised under R1's cap, and the penalty a modifier on the Resist the curse's card
+    // asks (`resistTalentsOn`); the minute a rank is gone.
     "malediction": {
-      tick: { spells: ["Curse of Agony", "Curse of Doom"], add: "rank" },
-      extend: { spells: ["Curse of Weakness", "Curse of Tongues", "Curse of the Elements", "Curse of Exhaustion", "Curse of Ruin"], features: ["Curse"], minutes: "rank" }
+      tick: { spells: ["Curse of Agony", "Curse of Doom"], add: "rank", cap: "tier" },
+      resistPenalty: { amount: "rank", spells: ["Curse of Weakness", "Curse of Tongues", "Curse of the Elements", "Curse of Exhaustion", "Curse of Ruin"], features: ["Curse"] }
     },
-    // *Your Life Tap class feature returns 1 further Mana per rank for each Health
-    // you spend* (D-775): on 02's Life Tap, built with it.
-    "improved-life-tap": { modifies: mod("Life Tap", { mana: "rank" }) },
+    // *Your Life Tap class feature returns 1 further Mana for every 2 Health you spend,
+    // per rank* (D-775; the class talent audit's Tune, D-1891): on 02's Life Tap, built
+    // with it - `perTwo` a rank, read by `lifeTapFor` and priced by `lifeTapChoices`.
+    "improved-life-tap": { modifies: mod("Life Tap", { perTwo: "rank" }) },
     // *At the start of your turn, if any target lost Health to Shadow or Fel
     // damage from you since the start of your last turn, you restore Health equal
     // to the highest amount a single target lost, to a maximum of twice your
@@ -2452,7 +2622,11 @@ export const TALENT_EFFECTS = Object.freeze({
     // *You know Curse of Agony. Each rank adds 1 to its Damage Rating* (D-775): its
     // Damage Rating IS its tick (D-770), so the rank rides the tick, as D-774
     // moved Shadow Word: Pain's.
-    "curse-of-agony": { spell: { names: ["Curse of Agony"], learn: true }, tick: { spells: ["Curse of Agony"], add: "rank" } },
+    // **THE RAMP** (the class talent audit, D-1891; Classic's Curse of Agony): *Its damage
+    // rises by 1 at the start of each of the target's turns after the first, to no more than
+    // 1 more per rank* - nothing at the cast, a rise the tick carries (`tick.rises`), read by
+    // `rules/ticks.mjs#risenAmount` at each landing.
+    "curse-of-agony": { spell: { names: ["Curse of Agony"], learn: true }, tickRise: { spells: ["Curse of Agony"], by: 1, max: "rank" } },
     // *You know Drain Soul. Each rank adds 1 Mana to what its target's death
     // returns* (D-775): 07's 3 Mana on the death of a target the warlock is
     // holding it on, built with it, and the rank beside it.
@@ -2464,16 +2638,25 @@ export const TALENT_EFFECTS = Object.freeze({
     // warlock's tier, met by its own Ward. MY READING, for the lead: once an
     // effect ended, and a hand's delete or a span running out is no ending by a
     // target.
-    "unstable-affliction": { unstable: { amount: "2*tier*rank", type: "fel" } },
+    // **THE CLASS TALENT AUDIT** (D-1891): *A creature that ends one of your ongoing effects
+    // early, by Dispel, by a Resilience Test or by any other means, takes Fel damage equal to
+    // your tier per rank* - the amount halved, and the trigger widened: 02's Dispel's door
+    // and the escape Test's (`effects/escapes`' success, `unstableStrikes`).
+    "unstable-affliction": { unstable: { amount: "tier*rank", type: "fel" } },
     // *Your Curse class feature may name one further target within 30 feet per
     // rank* (D-775): on 02's Curse, built with it (MY READING: within 30 feet of
     // the first, as D-774 read Circle of Healing's further target).
     "pandemic": { modifies: mod("Curse", { further: { count: "rank", feet: 30 } }) },
-    // *You know Blood Pact, and it takes Health from a demon of your Bound Demon
-    // class feature rather than from one you merely command.*
-    "blood-pact": {
-      spell: { names: ["Blood Pact"], learn: true },
-      reason: "The Blood Pact spell workflow confirms a donor, restricts this talent to the Bound Demon class feature, and transfers Health into the granting Mana pool through the GM. Interrupted transfers require review."
+    // **DARK PACT** (the class talent audit, C1 and decision 14, D-1891; it was Blood Pact,
+    // and Classic's Dark Pact drained the pet's mana): *Once per Short Rest, as a Half-Action,
+    // a demon of your Bound Demon class feature within 30 feet loses Health equal to twice
+    // your tier, and you gain that much Mana. It cannot drop below 1 Health this way.* The
+    // Use picks the demon (`bound.action: "drain"`), judges the 30 feet and the Health left
+    // before anything is paid, and the Mana is what the demon lost, into the Warlock's own
+    // pool (`darkPactDrain`). Once a Short Rest, so a healer cannot make the demon a well.
+    "dark-pact": {
+      grants: grant({ action: "half", uses: once("short"), bound: bound("demon", "drain") }),
+      onUse: { darkPact: { feet: 30, amount: "2*tier" } }
     },
     // *As a Half-Action, name a target within 30 feet suffering an ongoing effect
     // of yours and a second target within 30 feet of the first. Every ongoing
@@ -2494,16 +2677,22 @@ export const TALENT_EFFECTS = Object.freeze({
     // exceeds SL 2* (D-775): the minute, built; rank 2 (D-778) gates every one of
     // the warlock's effects a Dispel selects on the DISPELLER's Casting Test at SL
     // 2 or better, one Test an effect (MY READING, for the lead).
+    // **THE CLASS TALENT AUDIT** (D-1891; D-248's SL floor): *Dispel and similar effects end
+    // one of your ongoing effects only on a Casting Test that meets or exceeds SL 1 per rank*
+    // - the gate at the rank (`dispelGatesFor` reads `sl: "rank"`); the minute is gone.
     "everlasting-affliction": {
-      extend: { ongoing: true, minutes: "rank" },
-      dispelGate: { sl: 2, minRank: 2 }
+      dispelGate: { sl: "rank" }
     },
-    // *You know Soul Reaper. Sustaining it costs no Mana, and when the target dies
-    // you restore Health equal to twice your tier* (D-775).
-    "soul-reaper": {
-      spell: { names: ["Soul Reaper"], learn: true },
-      upkeep: { spells: ["Soul Reaper"], free: true },
-      death: { spell: "Soul Reaper", heal: "2*tier" }
+    // **DARK HARVEST** (the class talent audit, C1, D-1891; it was Soul Reaper): *At the
+    // start of your turn, each creature within 60 feet carrying two or more of your ongoing
+    // effects takes Shadow damage equal to your tier. Once a round, Soul Swap costs no
+    // action.* The harvest is read at the warlock's turn start (`AzerothCombat#_talentTicks`,
+    // Siphon's door, through `effects/dark-harvest.mjs`), the count by `swappableEffects`'
+    // one reading of *your ongoing effects*; the free Soul Swap is `freeUse`, once a round
+    // on the round's record.
+    "dark-harvest": {
+      harvest: { feet: 60, count: 2, amount: "tier", type: "shadow" },
+      freeUse: { feature: "Soul Swap", per: "round", action: true }
     },
     // ---- Demonology ----
     "demonic-embrace": { modifies: mod("Bound Demon"), automated: "inline" },
@@ -2540,8 +2729,12 @@ export const TALENT_EFFECTS = Object.freeze({
     // *Fel and Shadow damage from your spells and features adds 1 damage of that
     // type per rank. At rank 2 your Casting Tests gain a Boon while you control a
     // Bound Demon* (D-775: the Boon an automatic line on the Casting Test).
+    // **THE CLASS TALENT AUDIT** (D-1891): *While you control a Bound Demon, you gain Ward 1
+    // against Fel and against Shadow. At rank 2 your Casting Tests also gain a Boon while you
+    // control a Bound Demon* - the damage lane gone, a passive gated on a Bound Demon held
+    // (`passivesFor`'s `boundDemon`, re-synced when a bond is made or released).
     "demonic-knowledge": {
-      damage: damage(["fel", "shadow"], "spell", { features: true, when: "boundDemon" }),
+      passive: passive([add("system.ward.fel", 1), add("system.ward.shadow", 1)], "boundDemon"),
       castingBoon: { boons: 1, while: "boundDemon", minRank: 2 }
     },
     // *While you control a Bound Demon, you and every friendly target within 20
@@ -2565,31 +2758,39 @@ export const TALENT_EFFECTS = Object.freeze({
       modifies: [mod("Metamorphosis", { action: "half" }), mod("Bound Demon")], automated: "inline"
     },
     // ---- Destruction ----
-    // *Each rank adds 1 to its Damage Rating* - the number, not only the note.
-    "shadow-bolt": { spell: { names: ["Shadow Bolt"], learn: true, damage: 1 } },
-    // *You know Immolate. Each rank adds 1 to its Damage Rating* (D-775): its
-    // Damage Rating IS its tick (D-770), so the rank rides the tick.
-    "immolate": { spell: { names: ["Immolate"], learn: true }, tick: { spells: ["Immolate"], add: "rank" } },
+    // *Each rank adds 1 to its Damage Rating, to no more than your tier* - the number,
+    // not only the note; R1's cap (D-1861).
+    "shadow-bolt": { spell: { names: ["Shadow Bolt"], learn: true, damage: 1, cap: "tier" } },
+    // *You know Immolate. Each rank adds 1 to the damage it deals at the start of the
+    // target's turns, to no more than your tier* (D-775; R1, D-1861): the tick's number.
+    "immolate": { spell: { names: ["Immolate"], learn: true }, tick: { spells: ["Immolate"], add: "rank", cap: "tier" } },
     // *If you have spent Health since the start of your last turn…* Nothing
     // records it, so the line is the table's (D2 §12).
     "devastation": { damage: damage(["fel", "fire", "shadow"], "spell", { when: "judgement" }) },
-    // *Each rank adds 1 to its Damage Rating, before Immolate doubles it.*
+    // *Each rank adds 1 to its Damage Rating, or 2 against a target burning from Immolate,
+    // to no more than your tier* (the class talent audit, D-1891). MY READING, for the lead:
+    // the cap holds the ranks counted at the tier, and 07's Immolate doubles the whole Rating
+    // the talent's part included - so 1 a counted rank, or 2 against Immolate, as printed.
     "conflagrate": {
-      spell: { names: ["Conflagrate"], learn: true, damage: 1 },
+      spell: { names: ["Conflagrate"], learn: true, damage: 1, cap: "tier" },
       reason: "the rank rides the Rating before the Conflagrate casting workflow doubles it against Immolate; GM queries consume the recorded Sustains and apply damage once"
     },
-    // *When one of your spells inflicts a Critical Injury, roll twice on the table
-    // and take the higher result. At rank 2 you also gain 2 Mana* (D-775): read
-    // where a spell's Critical Injury is rolled - a creature it drops to 0, and
-    // the spell card's own button.
-    "ruin": { ruin: { higher: true, mana: 2, minRank: 2 } },
-    // *After a Casting Test you make meets or exceeds SL 3, your next spell costs
-    // a Half-Action rather than an action. You may use this a number of times
-    // equal to your rank per Short Rest* (D-775): Nature's Grace's door (D-771),
-    // a use struck when a spell takes it.
-    "backdraft": { grants: counter("rank", "short"), nextSpell: { cast: "half", on: "casting", sl: 3, turn: false } },
-    // *You know Chaos Bolt. Each rank adds 2 to the damage it deals* (D-775).
-    "chaos-bolt": { spell: { names: ["Chaos Bolt"], learn: true, damage: 2 } },
+    // **RUIN** (the class talent audit, D-1891; Classic's Ruin raised critical damage):
+    // *When your Casting Test against a creature's Defense shows a natural 19 or 20, the
+    // spell deals additional damage equal to your tier per rank* - read off the cast's own
+    // die where its DC was a creature's Defense (`ruinFor`, `castSpell`'s `ruinAdd`).
+    "ruin": { onNatural: { faces: [19, 20], damage: "tier*rank", vsDefense: true } },
+    // **R7** (the class talent audit, D-1865, D-1891): *After a Casting Test you make meets
+    // or exceeds SL 2, your next spell may cost a Half-Action rather than an action. You may
+    // use this once a round, and a number of times each encounter equal to your rank* - the
+    // rung laid on SL 2, once a round on the round's record and counted an encounter.
+    "backdraft": { grants: counter("rank", "encounter"), nextSpell: { cast: "half", on: "casting", sl: 2, turn: false, perRound: true } },
+    // *You know Curse of Doom and Chaos Bolt. Each rank adds 2 to the damage Chaos Bolt
+    // deals* (D-775; the class talent audit's C11, D-1891): the row moved to branch tier 4
+    // and teaches 07's Prerequisite with it. A talent-taught spell casts whatever the tier
+    // (the lead's reversal of R3: *"The spells can be cast if talents give them, they
+    // shouldn't be blocked"*).
+    "chaos-bolt": { spell: { names: ["Curse of Doom", "Chaos Bolt"], learn: true, damage: 2, damageNames: ["Chaos Bolt"] } },
     // *A spell of yours that reduces a target to 0 Health returns 3 Mana per rank
     // to you* (D-775): a kill row (D-772), a spell's alone.
     "shadowburn": { kill: { spell: true, gain: { pool: "mana", amount: "3*rank" } } },
@@ -2603,9 +2804,22 @@ export const TALENT_EFFECTS = Object.freeze({
     // this turn counts its Casting Test as reaching SL 3 and adds your tier to its
     // damage* (D-775): the Health paid at the Use, the promise the next spell's.
     "soul-fire": { grants: grant({ action: null, uses: once("short") }), onUse: { soulFire: { health: "2*tier", sl: 3, damage: "tier" } } },
-    // *You know Cataclysm. Its Casting Test is against DC 22 rather than 26, and it
-    // costs you 6 Health rather than 10* (D-775).
-    "cataclysm": { spell: { names: ["Cataclysm"], learn: true, dc: 22, health: 6 } }
+    // **SHADOWFURY** (the class talent audit, C1 and C11, D-1891; it was Cataclysm): *Once
+    // per Short Rest, as a Half-Action, spend Health equal to twice your tier. Each creature
+    // you choose in a 10-foot radius within 60 feet takes Shadow damage equal to twice your
+    // tier and makes a Body Resilience Test against your Spell DC. On a failure it is Stunned
+    // until the end of its next turn.* The Health is judged before anything is paid and
+    // paid with the Use, never below 1 (05, *Spending Health*; Soul Fire's door through
+    // `onUse.payHealth`); the damage and the Resist ride the card as Hurricane's do, a
+    // failure laying the Stun at once (`onFail`), until the end of the CREATURE's next turn.
+    "shadowfury": {
+      grants: grant({
+        action: "half", uses: once("short"), area: "A 10 ft radius within 60 ft", who: "creature",
+        damage: { amount: "2*tier", type: "shadow" }, resist: "body",
+        inflicts: [{ condition: "stunned", value: null, until: "targetTurnEnd", onFail: true }]
+      }),
+      onUse: { payHealth: "2*tier" }
+    }
   },
   druid: {
     // *You know Celestial Alignment. Its duration is 2 minutes, and while it
@@ -2613,25 +2827,34 @@ export const TALENT_EFFECTS = Object.freeze({
     // replaces 07's minute on the card and the laid effect; the Ward is
     // ignored while the spell's own laid effect stands on the druid, read by
     // `AzerothActor#spellWardPierce` at the cast and at a tick of theirs.
-    "celestial-alignment": {
-      spell: {
-        names: ["Celestial Alignment"], learn: true, duration: "2 minutes",
-        ignoresWard: { amount: 2, schools: ["arcane", "nature"], while: "celestial-alignment" }
-      }
+    // **CELESTIAL FOCUS** (the class talent audit, C1 and R7, D-1892; it was Celestial
+    // Alignment): *When a spell of yours takes Eclipse's bonus, it adds your tier rather than
+    // your rank. Once per encounter, that spell may cost a Half-Action rather than an
+    // action.* Eclipse's amount restated (`alternateFor` reads `alternateAmount`), and the
+    // rung a cast-dialog line through `castAsFor` (`eclipse: true`: only a cast that takes
+    // the bonus), counted on the encounter counter the talent grants.
+    "celestial-focus": {
+      alternateAmount: "tier",
+      grants: counter(1, "encounter"),
+      castAs: { action: "half", from: "action", eclipse: true, counted: true, perRound: 1 }
     },
-    "insect-swarm": { spell: { names: ["Insect Swarm"], learn: true, damage: 1 } },
+    // *You know Insect Swarm. Each rank adds 5 feet to its radius* (the class talent audit's
+    // Tune, D-1892): the radius widened (`spellAreaFor`'s `widen`, at the rank).
+    "insect-swarm": { spell: { names: ["Insect Swarm"], learn: true, widen: "5*rank" } },
     // *Each rank adds 1 to the damage it deals at the start of the target's
     // turns* (D-771): the TICK's number, stamped at the cast (D-770).
     "moonfire": { spell: { names: ["Moonfire"], learn: true }, tick: { spells: ["Moonfire"], add: "rank" } },
     // *Each rank adds 1 to the Health it restores each turn* (D-771).
-    "rejuvenation": { spell: { names: ["Rejuvenation"], learn: true }, tick: { spells: ["Rejuvenation"], add: "rank" } },
+    // R1 (D-1861, D-1892): *to no more than your tier*.
+    "rejuvenation": { spell: { names: ["Rejuvenation"], learn: true }, tick: { spells: ["Rejuvenation"], add: "rank", cap: "tier" } },
     // The caster-turn chooser delivers the talent's two distinct targets
     // (`effects/starfall-use.mjs`, `rules/starfall.mjs#starfallTargetLimit`'s
     // `talentRank`), and since the spell audit made Starweave a timed minute
     // (D-1705) its own second target rides the same chooser through the link its
     // Region records (`rules/starweave.mjs`, D-1710). Nothing is left to the table.
     "starfall": { spell: { names: ["Starfall"], learn: true } },
-    "starfire": { spell: { names: ["Starfire"], learn: true, damage: 1 } },
+    // R1 (D-1861, D-1892): *to no more than your tier*.
+    "starfire": { spell: { names: ["Starfire"], learn: true, damage: 1, cap: "tier" } },
     // *After a Casting Test you make meets or exceeds SL 2, your next spell
     // costs 1 less Mana per rank* (D-771): laid on the druid by the Test,
     // taken by the next cast's Mana.
@@ -2645,11 +2868,20 @@ export const TALENT_EFFECTS = Object.freeze({
     // each school, while the druid carries the spell's laid effect - the druid
     // among them, since the caster counts as an ally (the lead, 2026-09-26).
     // The spell's own AP 4 and Ward 4 on the druid is O-143.
-    "tree-of-life": {
-      // *Its radius is 40 feet*: 07's *every ally within 30 feet* regains its
-      // Health 10 feet further out (D-756, the self-centred tick's reach).
-      spell: { names: ["Tree of Life"], learn: true, widen: 10 },
-      aura: aura({ feet: 40, gate: "spell:tree-of-life", floor: { ap: 2, ward: 2 } })
+    // **HEART OF THE GROVE** (the class talent audit, C1, D-1892; it was Tree of Life, the
+    // talent that taught the tier 5 spell): *While you are not in a Shapeshift form, each ally
+    // within 30 feet of you, you included, who carries one of your ongoing healing effects has
+    // 1 more Armor Point at every location and Ward 1 against every school, or 2 and 2 from
+    // tier 4.* An aura (D-755's door): centred on the druid, reaching only an ally carrying a
+    // heal over time this druid laid (`who.healTick`), ADDING Armor Points and Ward in every
+    // school (`armor`, `ward`; amounts at the tier, `talentAurasFor`), and shut in a Shapeshift
+    // form (`gate: "notForm"`). The druid is an ally (D-755), as the words say.
+    "heart-of-the-grove": {
+      aura: aura({
+        feet: 30, gate: "notForm", armor: "1+min(1,max(0,tier-3))",
+        ward: { schools: ["arcane", "fel", "fire", "frost", "holy", "nature", "shadow"], amount: "1+min(1,max(0,tier-3))" },
+        who: { healTick: true }
+      })
     },
     // *After a Long Rest, name a friendly target. Whenever either of you
     // restores Health, the other restores half as much, rounded down* (D-771).
@@ -2725,7 +2957,11 @@ export const TALENT_EFFECTS = Object.freeze({
     // the Combat tab's control pays it BEFORE the blow on the druid's own turn,
     // and the next attack is the charge (`combat-actions.mjs#primeRider`).
     "feral-charge": { rider: rider("ferocity", 2, { once: "round", form: true, move: "speed", atRank: [{ rank: 2, onHit: { prone: true } }] }) },
-    "heart-of-the-wild": { modifies: mod("Avatar of the Wild", { action: "half" }), spell: { schools: ["nature", "arcane"] } },
+    // *You begin each Shapeshift form with Ferocity equal to your tier. Your Avatar of the
+    // Wild class feature costs a Half-Action* (the class talent audit, D-1892): the Ferocity
+    // written by `documents/shapes.mjs#takeShape` in the shape's own update
+    // (`shapeStartFor`), never above the pool's cap, and never lower than what is held.
+    "heart-of-the-wild": { modifies: mod("Avatar of the Wild", { action: "half" }), shapeStart: { pool: "ferocity", amount: "tier", kinds: ["shapeshift"] }, spell: { schools: ["nature", "arcane"] } },
     // *Once a round, your Shapeshift class feature costs no action. At rank 2
     // you keep your Ferocity when changing from one Shapeshift form to
     // another.* INLINE, both ranks (D-771): `useFeature` reads rank 1 by name
@@ -2770,7 +3006,11 @@ export const TALENT_EFFECTS = Object.freeze({
     // **AND A FULL ACTION HEALING SPELL, AND A HEALING CLASS FEATURE** (D-779; the
     // lead, 2026-10-03, on O-168: *"Yes to both."*): a Full Action healing spell at a
     // Half-Action, and Regrowth or Mass Mend through the feature's own dialog.
-    "natures-swiftness": { grants: counter("rank", "short"), castAs: { action: "half", from: ["action", "full"], healing: true, features: true } },
+    // **R7** (the class talent audit, D-1865, D-1892): *Once a round, a healing spell of yours
+    // may cost a Half-Action rather than an action. You may use this a number of times each
+    // encounter equal to your rank* - once a round on the round's record, counted on the
+    // encounter counter the talent grants (`counted`).
+    "natures-swiftness": { grants: counter("rank", "encounter"), castAs: { action: "half", from: ["action", "full"], healing: true, features: true, perRound: 1, counted: true } },
     // *While in a Shapeshift form, reduce the damage of one attack against you
     // by half, rounded down, and gain 1 Ferocity per rank* (D-771): the Use is
     // refused out of a Shapeshift form, lays the one-attack mark a Block and a
@@ -2808,7 +3048,11 @@ export const TALENT_EFFECTS = Object.freeze({
     // last turn.* The damaged mark is the attacker's own flag; WHICH school
     // was dealt is not recorded, so the line comes checked and the table may
     // untick it.
-    "lunar-guidance": { damage: damage(["arcane", "nature"], "spell", { when: "lunarTarget" }) },
+    // **THE CLASS TALENT AUDIT** (D-1892): *Your Arcane and Nature spells ignore 1 Ward per
+    // rank against a target that has taken Arcane or Nature damage from you since the start
+    // of your last turn* - the damage lane gone, a Ward pierce gated on the TARGET's mark
+    // (`wardPierceFor`'s `facts.lunarTarget`, `AzerothActor#spellWardPierceAt`).
+    "lunar-guidance": { spell: { schools: ["arcane", "nature"], ignoresWard: { amount: "rank", schools: ["arcane", "nature"], whenTarget: "lunarTarget" } } },
     // *While in a Shapeshift form, your attacks add 1 damage per rank against
     // a target you are flanking.* The form is the actor's Shapeshift shape
     // (`AzerothActor#inShapeshiftForm`, D-769); flanking is the table's call
@@ -2817,11 +3061,16 @@ export const TALENT_EFFECTS = Object.freeze({
     // *Your Moonfire deals 1 further damage per rank. At rank 2 it cannot be ended
     // by Dispel or similar effects.* The row named only the first sentence (O-157):
     // at rank 2 the effect Moonfire's card lays carries the mark, and 02's Dispel
-    // lists it greyed in the talent's name (D-778, `undispellableFor`).
+    // lists it greyed in the talent's name (D-778; its reader went with the audit's rewrite below).
     // **AND ITS TICK** (D-779; the lead, 2026-10-03, on O-170: *"Yes."* to *does
     // the rank add to the tick as well?*): the rank rides Moonfire's hit and the
     // number its tick lands each turn, stamped at the cast (`tickBonusFor`).
-    "improved-moonfire": { spell: { names: ["Moonfire"], damage: 1 }, tick: { spells: ["Moonfire"], add: "rank" }, undispellable: { spells: ["Moonfire"], minRank: 2 } }
+    // **THE CLASS TALENT AUDIT** (D-1892; the front matter's wording; D-248's SL floor): *Your
+    // Moonfire deals its damage at the start of the target's turns for 1 more round per rank.
+    // At rank 2 Dispel and similar effects end it only on a Casting Test that meets or exceeds
+    // SL 2* - the spell tick's count raised at the cast (`tick.rounds`, read by
+    // `tickRoundsFor` where `castSpell` stamps the tick), and the gate on Moonfire alone.
+    "improved-moonfire": { spell: { names: ["Moonfire"] }, tickRounds: { spells: ["Moonfire"], add: "rank" }, dispelGate: { sl: 2, minRank: 2, spells: ["Moonfire"] } }
   },
   // **THE CHROMATIC CHAMPION'S FORTY-EIGHT** (04's Life-Binder, Spell-Weaver, Timewalker and
   // Earth-Warder). Every *You know* talent of all four branches is a `spell` row through
@@ -4244,6 +4493,10 @@ export const CENSUS_DETECTORS = Object.freeze({
       || Boolean(e.necro?.discount)
       // And the Sovereign's (Phase 5): Crimson Flourish's 2 less Vitae on a Half-Action Death spell.
       || Boolean(e.sov?.discount)
+      // And the class talent audit's Adrenaline (class agent B, D-1881): a Rogue spend's Energy, for good.
+      || Boolean(e.classDiscount)
+      // And the class talent audit's Overchanneller (class agent C, D-1890): each point's price.
+      || Boolean(e.overchannel?.less)
   },
   // *your Block reduces 1 more damage per rank*, *you take 2 less damage*.
   // A Block's own bonus (Redoubt, Shield Wall; D-772).
@@ -4313,6 +4566,13 @@ export const CENSUS_DETECTORS = Object.freeze({
       // And the Demon Hunter's (Phase 5): Soul Hunger's devour, Gorging Lash's Health on a Fel Lash hit and a
       // Crystalized Soul's Health (`effects/demon-hunter-talents.mjs`, `rules/demon-hunter-talents.mjs`).
       || e.dh?.heal === true
+      // And the class talent audit's Benediction (class agent A, D-1875): Twofold Light's share and Fervor's Zeal
+      // at the healing door (`effects/audit-martial.mjs#martialAfterHeal`), and Divine Favor's Holy healing spell
+      // cast at a Half-Action (`castAs.healing`).
+      || e.martial?.kind === "twofold" || e.martial?.kind === "fervor" || e.castAs?.healing === true
+      // And class agent B's (D-1887): Tide of the Ancestors' heal at the shaman's turn start
+      // (`effects/audit-cunning.mjs#shamanTurnStart`).
+      || Boolean(e.onUse?.tide?.heal)
   },
   // *Your Fortitude rises by 2 per rank*, *your Defense rises by 1 per rank*.
   risesBy: {
@@ -4329,6 +4589,8 @@ export const CENSUS_DETECTORS = Object.freeze({
       || Boolean(e.necro?.cap)
       // And the Sovereign's (Phase 5): Untouchable's Defense and the Crimson Throne's Tribute cap, derived.
       || Boolean(e.sov?.stat)
+      // And the class talent audit's Curse of Agony (class agent C, D-1891): a tick that rises.
+      || Boolean(e.tickRise)
   },
   // A number per rank beside Defense, Armor Points or Ward: *1 more Defense per
   // rank*, *Ward 1 per rank*, *ignore 2 Armor Points per rank*. Not *your Ward
@@ -4352,7 +4614,9 @@ export const CENSUS_DETECTORS = Object.freeze({
       // Watch's *your attacks against it ignore 2 Armor Points*).
       || e.pierce
       // And the Sovereign's (Phase 5): Untouchable's Defense a rank while temporary Health lasts.
-      || e.sov?.stat === "defense")
+      || e.sov?.stat === "defense"
+      // And the class talent audit's Precise Strike (class agent A, D-1870): a rider's Pierce on its own blow.
+      || (e.rider?.onHit?.pierce !== undefined && e.rider?.onHit?.pierce !== null))
   },
   // 05's temporary Health (D-777): a grant at the healing door or on a named
   // spell (`tempHealth`), or a Use's own (Last Stand's `onUse.tempHealth`).
@@ -4382,6 +4646,9 @@ export const CENSUS_DETECTORS = Object.freeze({
       // And D-778's: a Sustain's upkeep, which the turn's start charges (Arcane
       // Concentration; Netherwind's patch on Shape the Weave).
       || Boolean(e.upkeep) || modifiesOf(e).some(m => m.upkeepLess)
+      // And the class talent audit's (class agent C, D-1891, D-1892): Curse of Agony's rise, Improved
+      // Moonfire's further rounds, Dark Harvest's turn start.
+      || Boolean(e.tickRise || e.tickRounds || e.harvest)
       // And the Chronomancer's (stage 2b): Echoing Sands' landing at the caster's turn start
       // (`effects/chronomancer.mjs#landAgain`).
       || Boolean(e.echoing)
@@ -4393,6 +4660,9 @@ export const CENSUS_DETECTORS = Object.freeze({
       || Boolean(e.necro?.turnStart)
       // And the Sovereign's (Phase 5): Latch On's drain at the holder's turn start.
       || Boolean(e.sov?.turnStart)
+      // And class agent B's (D-1886, D-1887): Eye of the Storm's strike and Tide of the Ancestors' heal
+      // at the shaman's turn start (`effects/audit-cunning.mjs#shamanTurnStart`).
+      || Boolean(e.eyeOfTheStorm || e.onUse?.tide)
   },
   // **THREE THE PLAN'S LIST DID NOT NAME** (D-768), each a family of talents
   // with no row and no carrier, found reading the worklist against 04: a
@@ -4416,6 +4686,8 @@ export const CENSUS_DETECTORS = Object.freeze({
       || modifiesOf(e).some(m => [m, ...(m.atRank ?? [])].some(c => Array.isArray(c?.inflicts) && c.inflicts.some(i => i?.condition)))
       // And D-778's: a Stun a failed escape lays (Deep Freeze).
       || Boolean(e.escape?.failStun)
+      // And the class talent audit's Shattering Cold (class agent C, D-1890): the Stun a Frost blow lays.
+      || Boolean(e.frozenStun?.condition)
       // And the Legacy branches' bodies (B2): a trap's condition (Shadow Trap's *is
       // Entangled until*) and what a bound creature's hit lays (Serpent Ward's *is
       // also Slowed until*).
@@ -4457,11 +4729,16 @@ export const CENSUS_DETECTORS = Object.freeze({
       // And D-778's: a Dispel that ends the holder's effect only at an SL
       // (Everlasting Affliction at rank 2).
       || Number(e.dispelGate?.sl) > 0
+      // And at the rank (the class talent audit's Everlasting Affliction: *SL 1 per rank*; D-1891).
+      || (typeof e.dispelGate?.sl === "string" && e.dispelGate.sl.length > 0)
       // And the Legacy branches' (B1): damage a hit adds at an SL (Critical Strike,
       // door 26), and a Test the user's own hit forces at one (Keening Arrows).
       || Number(e.damage?.sl) > 0 || Number(e.hitTest?.sl) > 0
       // And D-1019's: Killing Machine's two-handed half, a hit at SL 2 on its row's `alt`.
       || Number(e.dk?.killingMachine?.alt?.sl) > 0
+      // And the class talent audit's Shield Slam at rank 2 (class agent A, D-1870): a hit at SL 2 ends a Sustain,
+      // after the card stands (`effects/audit-martial.mjs#martialAfterCard`).
+      || Number(e.martial?.sl) > 0
   },
   // A widened Critical Injury range (Executioner, D-772), and a spell's (Shatter, D-775).
   criticalRange: {
@@ -4732,7 +5009,18 @@ function applyPatch(descriptor, patch, rank, evaluate) {
     // for the Use, and each patch binds its OWN rank, so two talents on one
     // feature cannot borrow each other's.
     const own = v => (v === null || v === undefined ? v : bindRank(v, rank));
-    if (c.uses) d.uses = { max: own(c.uses.max) ?? d.uses?.max ?? 1, per: c.uses.per ?? d.uses?.per ?? null };
+    if (c.uses) d.uses = { max: own(c.uses.max) ?? d.uses?.max ?? 1, per: c.uses.per ?? d.uses?.per ?? null,
+      ...((c.uses.refill ?? d.uses?.refill) ? { refill: c.uses.refill ?? d.uses.refill } : {}) };
+    // **ONE USE BACK AT EACH SHORT REST** (the class talent audit's Mercy of Uther; D-1868): a patch's
+    // `refill: "short"` on the feature's own uses (`rules/uses.mjs#refillAfter`).
+    if (c.refill && d.uses) d.uses = { ...d.uses, refill: c.refill };
+    // **ALL OF THE TARGET'S HEALTH** (Mercy of Uther: *restores all of the target's Health*; D-1868):
+    // `heal: "max"` makes the feature's heal `FULL_HEAL`, which the Use resolves per target.
+    if (c.heal === FULL_HEAL) d.heal = FULL_HEAL;
+    // **CONDITIONS THE USE ENDS ON ITS TARGET** (the class talent audit's Mercy of Uther: *ends one condition
+    // on it of your choice*; D-1875): the count, chosen through the one chooser at the Use
+    // (`effects/audit-martial.mjs#landMartialUse`). The largest patch wins; a number, never stacked.
+    if (Number(c.ends) > 0) d.ends = Math.max(Math.trunc(Number(d.ends) || 0), Math.trunc(Number(c.ends)));
     if (c.heal?.add) {
       const more = String(own(c.heal.add));
       d.heal = d.heal ? `${d.heal}+${more}` : more;
@@ -4855,13 +5143,31 @@ export function decayScaleFor(talents = [], { tier = 1 } = {}, rowOf = talentEff
   return out;
 }
 
-export function spellDamageFor(talents = [], { name = "", school = null } = {}) {
-  return takenRows(talents)
-    .filter(({ entry }) => Number(entry.spell?.damage) > 0)
-    .filter(({ entry }) => (entry.spell.names ?? []).includes(name) || (school && (entry.spell.schools ?? []).includes(school)))
+/**
+ * **AND A PER-RANK BONUS STOPS AT THE TIER WHERE THE ROW SAYS SO** (the class
+ * talent audit's R1, the lead's *"3 - okay"*; D-1861): a row's `spell.cap` -
+ * `"tier"` for *to no more than your tier*, or an expression at the same scope -
+ * holds `rank * damage` under it through `expressions.mjs#capAmount`. Every caller
+ * hands in the caster's `tier` (a census in `rank-caps.test.mjs` reads the three);
+ * one that does not withholds at tier 1. A row with no `cap` is unchanged.
+ */
+export function spellDamageFor(talents = [], { name = "", school = null, tier = 1 } = {}, rowOf = talentEffect) {
+  return takenRows(talents, rowOf)
+    .filter(({ entry }) => Number(entry.spell?.damage) > 0 || typeof entry.spell?.amount === "string")
+    // **`damageNames`** (04's Chaos Bolt, the class talent audit: *You know Curse of Doom and Chaos
+    // Bolt. Each rank adds 2 to the damage Chaos Bolt deals*; D-1891): the spells the damage
+    // reaches where the row teaches more than it raises.
+    .filter(({ entry }) => (entry.spell.damageNames ?? entry.spell.names ?? []).includes(name) || (school && (entry.spell.schools ?? []).includes(school)))
     .map(({ talent, entry }) => {
       const rank = Math.max(1, Math.trunc(Number(talent.taken) || 0));
-      return { name: talent.name, rank, amount: rank * Number(entry.spell.damage) };
+      const at = Number(tier) || 1;
+      // **AN AMOUNT AT THE RANK AND THE TIER** (04's Cone of Cold: *Frost damage equal to your
+      // tier plus your rank*, restating 07's 2; D-1890): `spell.amount`, an expression.
+      const raw = typeof entry.spell.amount === "string"
+        ? Math.max(0, Math.trunc(Number(evaluateAmount(entry.spell.amount, { rank, tier: at }))) || 0)
+        : rank * Number(entry.spell.damage);
+      const amount = capAmount(raw, entry.spell.cap, { tier: at, rank });
+      return { name: talent.name, rank, amount };
     })
     .filter(r => r.amount > 0);
 }
@@ -4896,7 +5202,9 @@ export function spellAreaFor(talents = [], { name = "" } = {}) {
     const row = entry.spell;
     if (!row || !(row.names ?? []).includes(name)) continue;
     const rank = Math.max(1, Math.trunc(Number(talent.taken) || 0));
-    let feet = Math.max(0, Math.trunc(Number(row.widen) || 0));
+    // A number, or an amount at the rank (04's Insect Swarm: *Each rank adds 5 feet to its
+    // radius*, `"5*rank"`; the class talent audit, D-1892).
+    let feet = typeof row.widen === "string" ? atRankAmount(row.widen, rank) : Math.max(0, Math.trunc(Number(row.widen) || 0));
     for (const clause of row.atRank ?? []) {
       if (rank >= (clause?.rank ?? 1)) feet += Math.max(0, Math.trunc(Number(clause.widen) || 0));
     }
@@ -4983,13 +5291,16 @@ export function spellNamesAtRank(spell, rank = 1) {
  * @param {Array<{identifier, className, name, taken, img?}>} talents
  * @param {{form?: boolean, shield?: boolean}} [state]
  */
-export function passivesFor(talents = [], { form = false, shield = false, totem = false, wield = null } = {}, rowOf = talentEffect) {
+export function passivesFor(talents = [], { form = false, shield = false, totem = false, wield = null, boundDemon = false, tier = 1 } = {}, rowOf = talentEffect) {
   const out = [];
   for (const { talent, entry } of takenRows(talents, rowOf)) {
     const p = entry.passive;
     if (!p) continue;
     if (p.when === "form" && !form) continue;
     if (p.when === "shield" && !shield) continue;
+    // *While you control a Bound Demon* (04's Demonic Knowledge; the class talent audit, D-1891):
+    // a demon bound to the character (D-643), re-synced when a bond is made or released.
+    if (p.when === "boundDemon" && !boundDemon) continue;
     // *While a totem of yours stands* (04's Earthen Shield, D-774): a totem
     // bound to the character (D-643).
     if (p.when === "totem" && !totem) continue;
@@ -5004,7 +5315,9 @@ export function passivesFor(talents = [], { form = false, shield = false, totem 
     const rank = Number(talent.taken) || 1;
     const changes = p.changes.map(c => ({
       key: c.key, type: c.type ?? "add", phase: "final",
-      value: String(typeof c.value === "number" ? c.value : (evaluateAmount(String(c.value), { rank }) ?? 0))
+      // The tier rides the scope (R1's `min(rank,tier)`, Earthen Shield's `floor(tier/2)`; the class
+      // talent audit, D-1886, D-1887): the sync re-lays the effect when the tier moves.
+      value: String(typeof c.value === "number" ? c.value : (evaluateAmount(String(c.value), { rank, tier: Number(tier) || 1 }) ?? 0))
     }));
     out.push({ talent, identifier: talent.identifier, name: talent.name, changes });
   }
@@ -5070,20 +5383,25 @@ export function talentEffectDiff(desired = [], held = []) {
  * @param {Array<{identifier, className, race?, name, taken}>} talents
  * @returns {Array<{talent: object, identifier: string, name: string, rank: number, aura: object}>}
  */
-export function talentAurasFor(talents = [], rowOf = talentEffect) {
+export function talentAurasFor(talents = [], rowOf = talentEffect, { tier = 1 } = {}) {
   const out = [];
   for (const { talent, entry } of takenRows(talents, rowOf)) {
     if (!entry.aura) continue;
     const rank = Number(talent.taken) || 1;
-    const amount = v => (typeof v === "string" ? (evaluateAmount(v, { rank }) ?? 0) : v);
+    // The holder's tier in scope beside the rank (04's Heart of the Grove: *or 2 and 2 from
+    // tier 4*; the class talent audit, D-1892). A caller that hands none reads tier 1.
+    const amount = v => (typeof v === "string" ? (evaluateAmount(v, { rank, tier: Number(tier) || 1 }) ?? 0) : v);
     const stamped = auraStamp(entry.aura, { amount });
     // **A BANE THE AURA LAYS** (the Legacy branches' door 20: 04's Loa Drum, *a Bane on
     // Spirit Resilience Tests*): carried beside the stamp - a feature's stored aura
     // has no `bane` in its schema, and a talent's is read here fresh every pass.
     // **AND A FLOOR UNDER HEALTH** (door 12: 04's Big Bad Voodoo), the same way.
+    // **AND WARD ADDED, AND WHO IT REACHES** (04's Heart of the Grove, D-1892), the same way.
     const beside = {
       ...(entry.aura.bane ? { bane: { ...entry.aura.bane } } : {}),
-      ...(entry.aura.healthFloor ? { healthFloor: amount(entry.aura.healthFloor) } : {})
+      ...(entry.aura.healthFloor ? { healthFloor: amount(entry.aura.healthFloor) } : {}),
+      ...(entry.aura.ward ? { ward: { schools: [...(entry.aura.ward.schools ?? [])], amount: amount(entry.aura.ward.amount) } } : {}),
+      ...(entry.aura.who ? { who: { ...entry.aura.who } } : {})
     };
     out.push({ talent, identifier: talent.identifier, name: talent.name, rank, aura: Object.keys(beside).length ? { ...stamped, ...beside } : stamped });
   }
@@ -5178,13 +5496,18 @@ const atRankAmount = (expr, rank) => Math.max(0, Math.trunc(Number(evaluateAmoun
  * @param {{name?: string}} spell
  * @returns {{amount: number, by: Array<{name: string, amount: number}>}}
  */
-export function tickBonusFor(talents = [], { name = "" } = {}) {
+export function tickBonusFor(talents = [], { name = "", tier = 1 } = {}, rowOf = talentEffect) {
   let amount = 0;
   const by = [];
-  for (const { talent, entry } of takenRows(talents)) {
+  for (const { talent, entry } of takenRows(talents, rowOf)) {
     const t = entry.tick;
     if (!t || !(t.spells ?? []).includes(name)) continue;
-    const n = atRankAmount(t.add, rankOfTaken(talent));
+    // **R1's CAP** (D-1861): `add` is read with the caster's tier in scope, so
+    // `min(rank,tier)` reads; `cap` holds the result under the tier as a spell
+    // damage row's does. A caller that hands no tier withholds at tier 1.
+    const rank = rankOfTaken(talent);
+    const at = Number(tier) || 1;
+    const n = capAmount(Math.max(0, Math.trunc(Number(evaluateAmount(String(t.add ?? "rank"), { rank, tier: at }))) || 0), t.cap, { tier: at, rank });
     if (n <= 0) continue;
     amount += n;
     by.push({ name: talent.name, amount: n });
@@ -5192,9 +5515,55 @@ export function tickBonusFor(talents = [], { name = "" } = {}) {
   return { amount, by };
 }
 
+/**
+ * **THE ROUNDS A TALENT ADDS TO A SPELL'S TICK** (04's Improved Moonfire, the class talent audit:
+ * *Your Moonfire deals its damage at the start of the target's turns for 1 more round per rank*;
+ * D-1892): each taken `tickRounds` row naming the spell, at its rank. `castSpell` adds the sum to
+ * the tick's `rounds` as it stamps it, where the tick counts rounds at all.
+ *
+ * @param {Array} talents
+ * @param {{name?: string}} spell
+ * @returns {{add: number, by: string[]}}
+ */
+export function tickRoundsFor(talents = [], { name = "" } = {}, rowOf = talentEffect) {
+  let add = 0;
+  const by = [];
+  for (const { talent, entry } of takenRows(talents, rowOf)) {
+    const r = entry.tickRounds;
+    if (!r || !(r.spells ?? []).includes(name)) continue;
+    const n = atRankAmount(r.add ?? "rank", rankOfTaken(talent));
+    if (n <= 0) continue;
+    add += n;
+    by.push(talent.name);
+  }
+  return { add, by };
+}
+
+/**
+ * **A TICK THAT RISES** (04's Curse of Agony, the class talent audit: *Its damage rises by 1 at
+ * the start of each of the target's turns after the first, to no more than 1 more per rank*;
+ * D-1891): the step and the most it rises, at the rank, or null. `castSpell` stamps it on the tick
+ * (`rise {by, max}`) and `rules/ticks.mjs#risenAmount` reads it at each landing.
+ *
+ * @param {Array} talents
+ * @param {{name?: string}} spell
+ * @returns {{by: number, max: number, name: string}|null}
+ */
+export function tickRiseFor(talents = [], { name = "" } = {}, rowOf = talentEffect) {
+  for (const { talent, entry } of takenRows(talents, rowOf)) {
+    const r = entry.tickRise;
+    if (!r || !(r.spells ?? []).includes(name)) continue;
+    const by = Math.max(0, Math.trunc(Number(r.by)) || 0);
+    const max = atRankAmount(r.max ?? "rank", rankOfTaken(talent));
+    if (by > 0 && max > 0) return { by, max, name: talent.name };
+  }
+  return null;
+}
+
 /** What a `nextSpell` row is laid on (D-771). */
 // And 04's Runic Frost's Frost rune spent, laid by the rune door (run F4a).
-export const NEXT_SPELL_ON = Object.freeze(["casting", "swiftLeave", "frostRune"]);
+// And 04's Clearcasting's Overchannelled success (the class talent audit, D-1890).
+export const NEXT_SPELL_ON = Object.freeze(["casting", "swiftLeave", "frostRune", "overchannelSuccess"]);
 
 /**
  * **THE NEXT SPELL'S DISCOUNTS A TRIGGER LAYS** (04's Nature's Grace and
@@ -5207,9 +5576,9 @@ export const NEXT_SPELL_ON = Object.freeze(["casting", "swiftLeave", "frostRune"
  * @param {{on: string, sl?: number|null}} o
  * @returns {Array<{source: string, name: string, amount: number, turn: boolean}>}
  */
-export function nextSpellGrants(talents = [], { on = "", sl = null } = {}) {
+export function nextSpellGrants(talents = [], { on = "", sl = null } = {}, rowOf = talentEffect) {
   const out = [];
-  for (const { talent, entry } of takenRows(talents)) {
+  for (const { talent, entry } of takenRows(talents, rowOf)) {
     const n = entry.nextSpell;
     if (!n || n.on !== on) continue;
     if (n.sl !== null && n.sl !== undefined && !((Number(sl) || 0) >= Number(n.sl))) continue;
@@ -5217,9 +5586,17 @@ export function nextSpellGrants(talents = [], { on = "", sl = null } = {}) {
     // a Half-Action rather than an action*; D-775): no Mana, and the rung it
     // promises; the door asks the talent's counter for a use before laying it.
     const cast = n.cast === "half" ? "half" : null;
-    const amount = cast && n.amount === undefined ? 0 : atRankAmount(n.amount, rankOfTaken(talent));
-    if (amount <= 0 && !cast) continue;
+    // **FREE OVERCHANNEL POINTS** (04's Clearcasting, the class talent audit: *you may take up to
+    // your rank in points of Overchannel on your next spell before the end of your next turn
+    // without paying for them*; D-1890): `overchannel` at the rank, lapsing after the caster's
+    // next turn (`through: "nextTurn"`, `casting.mjs#pendingNextSpell`).
+    const overchannel = n.overchannel !== undefined ? atRankAmount(n.overchannel, rankOfTaken(talent)) : 0;
+    const amount = (cast || overchannel > 0) && n.amount === undefined ? 0 : atRankAmount(n.amount, rankOfTaken(talent));
+    if (amount <= 0 && !cast && overchannel <= 0) continue;
     out.push({ source: talent.identifier, name: talent.name, amount, turn: n.turn === true, ...(cast ? { cast, talentId: talent.id ?? null } : {}), ...(n.features === true ? { features: true } : {}),
+      ...(overchannel > 0 ? { overchannel } : {}), ...(n.through === "nextTurn" ? { through: "nextTurn" } : {}),
+      // R7 (D-1865): a lowered rung once a round, on the round's record (`takeNextSpell`'s `roundUsed`).
+      ...(cast && n.perRound === true ? { perRound: true } : {}),
       // A next spell of one school alone (04's Runic Frost: *the next Frost spell*; run F4a).
       ...(Array.isArray(n.schools) && n.schools.length ? { schools: [...n.schools] } : {}) });
   }
@@ -5285,13 +5662,33 @@ export const ALTERNATE_FLAG = "alternate";
  * @param {Array} talents
  * @returns {{identifier: string, name: string, schools: string[], amount: number}|null}
  */
-export function alternateFor(talents = []) {
+export function alternateFor(talents = [], { tier = 1 } = {}) {
+  // **CELESTIAL FOCUS** (the class talent audit, D-1892: *When a spell of yours takes Eclipse's
+  // bonus, it adds your tier rather than your rank*): a taken `alternateAmount` restates it.
+  const restated = takenRows(talents).find(({ entry }) => typeof entry.alternateAmount === "string") ?? null;
   for (const { talent, entry } of takenRows(talents)) {
     const a = entry.alternate;
     if (!Array.isArray(a?.schools) || a.schools.length !== 2) continue;
-    return { identifier: talent.identifier, name: talent.name, schools: [...a.schools], amount: atRankAmount(a.amount, rankOfTaken(talent)) };
+    const amount = restated
+      ? Math.max(0, Math.trunc(Number(evaluateAmount(restated.entry.alternateAmount, { rank: rankOfTaken(restated.talent), tier: Number(tier) || 1 }))) || 0)
+      : atRankAmount(a.amount, rankOfTaken(talent));
+    return { identifier: talent.identifier, name: talent.name, schools: [...a.schools], amount, ...(restated ? { restatedBy: restated.talent.name } : {}) };
   }
   return null;
+}
+
+/**
+ * **WHETHER THIS CAST WILL TAKE ECLIPSE'S BONUS** (04's Celestial Focus's rung; the class
+ * talent audit, D-1892), asked before the Test: the pending school is the spell's own and
+ * the druid holds Eclipse. A failed Test then takes nothing (MY READING, as `alternateCast`).
+ *
+ * @param {string|null} pending
+ * @param {string|null} school  the spell's own school
+ * @param {{schools: string[]}|null} alt  `alternateFor`'s
+ * @returns {boolean}
+ */
+export function eclipseDue(pending = null, school = null, alt = null) {
+  return Boolean(alt) && typeof pending === "string" && pending === school && (alt.schools ?? []).includes(school);
 }
 
 /**
@@ -5349,7 +5746,7 @@ export function spellDurationFor(talents = [], { name = "" } = {}) {
  * @param {{school?: string|null, standing?: string[]}} o
  * @returns {{amount: number, by: string[]}}
  */
-export function wardPierceFor(talents = [], { school = null, standing = [] } = {}) {
+export function wardPierceFor(talents = [], { school = null, standing = [], facts = null } = {}) {
   let amount = 0;
   const by = [];
   if (!school) return { amount, by };
@@ -5357,6 +5754,12 @@ export function wardPierceFor(talents = [], { school = null, standing = [] } = {
     const w = entry.spell?.ignoresWard;
     if (!w || !(w.schools ?? []).includes(school)) continue;
     if (w.while && !(standing ?? []).includes(w.while)) continue;
+    // **A PIERCE GATED ON THE TARGET** (04's Pyromaniac: *against a target burning from Ignite*;
+    // Lunar Guidance: *against a target that has taken Arcane or Nature damage from you since the
+    // start of your last turn*; the class talent audit, D-1890, D-1892): read ONLY where the door
+    // hands the target's `facts` (`AzerothActor#spellWardPierceAt`), and the caster-wide reading
+    // (no `facts`) never counts it, so the two never add one row twice.
+    if (w.whenTarget ? !(facts && facts[w.whenTarget] === true) : facts !== null) continue;
     // A number, or an amount at the rank (04's Chastise: *2 Ward per rank*; D-774).
     const n = typeof w.amount === "number" ? Math.max(0, Math.trunc(w.amount)) : atRankAmount(w.amount, rankOfTaken(talent));
     if (n <= 0) continue;
@@ -5412,7 +5815,7 @@ export const HEAL_VIA = Object.freeze(["spell", "feature"]);
  *   `conditioned` the target carries one of A1's conditions
  * @returns {{amount: number, by: string[]}}
  */
-export function healBonusFor(talents = [], { via = null, conditioned = false } = {}) {
+export function healBonusFor(talents = [], { via = null, conditioned = false, school = null, featureName = null, tier = 1 } = {}) {
   let amount = 0;
   const by = [];
   if (!HEAL_VIA.includes(via)) return { amount, by };
@@ -5420,7 +5823,13 @@ export function healBonusFor(talents = [], { via = null, conditioned = false } =
     const h = entry.heal;
     if (!h || !(h.via ?? []).includes(via)) continue;
     if (h.when === "conditioned" && conditioned !== true) continue;
-    const n = atRankAmount(h.add, rankOfTaken(talent));
+    // **A HEAL OF ONE SCHOOL OR ONE FEATURE** (the class talent audit's Healing Hands: *Your Holy spells and
+    // your Lay on Hands class feature restore 1 more Health per rank, to no more than your tier*; D-1875): a
+    // spell's heal reaches the row only where its school is named, a feature's only where its name is.
+    if (via === "spell" && Array.isArray(h.schools) && !h.schools.includes(school)) continue;
+    if (via === "feature" && Array.isArray(h.features) && !h.features.includes(featureName)) continue;
+    // The healer's tier in scope, so `min(rank,tier)` reads (R1).
+    const n = Math.max(0, Math.trunc(Number(evaluateAmount(String(h.add ?? "rank"), { rank: rankOfTaken(talent), tier: Math.max(1, Math.trunc(Number(tier)) || 1) }))) || 0);
     if (n <= 0) continue;
     amount += n;
     by.push(talent.name);
@@ -5459,13 +5868,17 @@ export function healBonusFor(talents = [], { via = null, conditioned = false } =
  * @param {{action?: string|null, healing?: boolean, name?: string, school?: string|null, feature?: boolean}} spell
  * @returns {{identifier: string, name: string, talentId: string|null, action: string, perRound: number|null, pierce: number}|null}
  */
-export function castAsFor(talents = [], { action = null, healing = false, name = "", school = null, feature = false } = {}) {
+export function castAsFor(talents = [], { action = null, healing = false, name = "", school = null, feature = false, eclipse = false } = {}) {
   for (const { talent, entry } of takenRows(talents)) {
     const c = entry.castAs;
     const from = Array.isArray(c?.from) ? c.from : [c?.from];
     if (!c?.action || !from.includes(action)) continue;
     if (feature === true && c.features !== true) continue;
     if (c.healing === true && healing !== true) continue;
+    // **ONLY A SPELL TAKING ECLIPSE'S BONUS** (04's Celestial Focus: *Once per encounter, that
+    // spell may cost a Half-Action*; the class talent audit, D-1892): the door says whether this
+    // cast takes it (`eclipseDue`: Eclipse's pending school is the spell's own).
+    if (c.eclipse === true && eclipse !== true) continue;
     if (Array.isArray(c.spells) && !c.spells.includes(name)) continue;
     if (Array.isArray(c.schools) && !c.schools.includes(school)) continue;
     const rank = rankOfTaken(talent);
@@ -5475,7 +5888,9 @@ export function castAsFor(talents = [], { action = null, healing = false, name =
     const pierce = (c.atRank ?? []).filter(cl => rank >= (Number(cl?.rank) || Infinity)).reduce((n, cl) => n + Math.max(0, Math.trunc(Number(cl.pierce)) || 0), 0);
     // 04's Swift Hunger (the Sovereign): *It costs 3 more Vitae*, and *if it targets only one creature and that
     // creature is within your reach* - named only where a row carries them.
-    return { identifier: talent.identifier, name: talent.name, talentId: talent.id ?? null, action: c.action, perRound, ...(pierce > 0 ? { pierce } : {}),
+    // R7 (D-1865): `counted` - the talent's counter binds beside `perRound` (uses an encounter
+    // equal to the rank, once a round). A row with no `perRound` is counted as it always was.
+    return { identifier: talent.identifier, name: talent.name, talentId: talent.id ?? null, action: c.action, perRound, ...(c.counted === true ? { counted: true } : {}), ...(pierce > 0 ? { pierce } : {}),
       ...(Number(c.surcharge) > 0 ? { surcharge: Math.trunc(Number(c.surcharge)) } : {}), ...(c.oneInReach === true ? { oneInReach: true } : {}) };
   }
   return null;

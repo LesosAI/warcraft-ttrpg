@@ -16,7 +16,7 @@ import { areaFor } from "../rules/areas.mjs";
 // O-301: each target of a multi-target spell on its own 07 §2 number.
 import { eachTargetDCs, judgesEachTarget, typedTargetDCs } from "../rules/casting.mjs";
 import { countsAsAlly, countsAsEnemy, isEngaged, threatReach } from "../rules/distance.mjs";
-import { feetBetweenFootprints, feetToPoint, footprintOf } from "./footprints.mjs";
+import { feetApart, feetBetweenFootprints, feetToPoint, footprintOf } from "./footprints.mjs";
 // Whom an area Use gathers (the B6 fix; the lead: *"Measure the area"*).
 import { gathers, insideCircle } from "../rules/area-gather.mjs";
 // THE ONE PREDICATE FOR WILLING (D-893; the lead: *"296 - ally means willing target"*), read
@@ -381,6 +381,51 @@ export function feetBetweenTokens(a, b) {
   if (a === b) return 0;
   if (a.document?.parent?.id !== b.document?.parent?.id) return null;
   return feetBetweenFootprints(footprintOf(a), footprintOf(b), a.document?.parent?.grid ?? globalThis.canvas?.grid ?? null);
+}
+
+/**
+ * **A CREATURE'S TOKEN DOCUMENT ON A SCENE, READ OFF THE SCENE'S DATA** (the class talent audit's
+ * final review): a synthetic actor's own token where it stands on that scene, else the first linked
+ * token of the actor there, by id. Never the drawn canvas, so a GM viewing another scene judges a
+ * distance as well as the player standing on it. Null where it has no token there.
+ *
+ * @param {Actor|null} actor
+ * @param {Scene|null} scene
+ * @returns {TokenDocument|null}
+ */
+export function tokenDocOn(actor, scene) {
+  if (!actor || !scene) return null;
+  if (actor.isToken) return actor.token?.parent?.id === scene.id ? actor.token : null;
+  const docs = [...(actor.getDependentTokens?.({ scenes: scene, linked: true }) ?? [])].filter(d => d?.parent?.id === scene.id);
+  return docs.sort((x, y) => String(x.id).localeCompare(String(y.id)))[0] ?? null;
+}
+
+/**
+ * **FEET BETWEEN TWO CREATURES ON ONE SCENE**, off the scene's token documents
+ * (`canvas/footprints.mjs#feetApart`, D-732's nearest spaces with elevation): on the scene given;
+ * with none given, a synthetic actor's own scene, else the first of the viewed scene, the active
+ * scene and every other scene by id on which BOTH stand. 0 for a creature and itself; null where
+ * they share no scene, which a door judging a reach reads as a refusal (fail closed).
+ *
+ * @param {Actor|null} a
+ * @param {Actor|null} b
+ * @param {Scene|null} [scene]
+ * @returns {number|null}
+ */
+export function feetBetweenActors(a, b, scene = null) {
+  if (!a || !b) return null;
+  if (a === b || (a.uuid && a.uuid === b.uuid)) return 0;
+  const synthetic = (a.isToken ? a.token?.parent : null) ?? (b.isToken ? b.token?.parent : null) ?? null;
+  const scenes = scene ? [scene] : synthetic ? [synthetic] : [
+    globalThis.canvas?.scene ?? null, globalThis.game?.scenes?.active ?? null,
+    ...[...(globalThis.game?.scenes ?? [])].sort((x, y) => String(x.id).localeCompare(String(y.id)))
+  ];
+  for (const on of scenes) {
+    const first = tokenDocOn(a, on);
+    const second = first ? tokenDocOn(b, on) : null;
+    if (first && second) return feetApart(first, second);
+  }
+  return null;
 }
 
 /**

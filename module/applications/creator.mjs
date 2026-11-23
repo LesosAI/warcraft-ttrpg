@@ -32,7 +32,7 @@ import {
   ARRAY, CLASS_ORDER, METHODS, POINT_BUY, PURSE, ROLL_DICE, ROLL_KEEP, STARTING_XP, STEPS,
   accessNote, castingLine, classOpenTo, inCareerSkills, kitRows, numbersFor, plan, pointBuyCost, pointBuyTotal, talentArmorFor, talentShieldsFor,
   primaryAbilities, rankSpend,
-  rollFloorMet, sideFor, skillUuid, spellsRequired, stepOnStrip, stepsFor, castsSpells, validate
+  rollFloorMet, sideFor, skillUuid, spellsRequired, stepOnStrip, stepsFor, castsSpells, talentTaughtSpells, validate
 } from "../rules/creation.mjs";
 import { arrange } from "../rules/slots.mjs";
 // The Mortal guise (the Chromatic Champion plan).
@@ -51,7 +51,7 @@ const TEMPLATE = "systems/azeroth-rpg/templates/creator/creator.hbs";
 const DEFAULT_IMG = "icons/svg/mystery-man.svg";
 // The Goblin item icon depicts coins; the creator needs the people themselves.
 const raceImage = race => race.identifier === "goblin"
-  ? "systems/azeroth-rpg/assets/art/bestiary/portraits/steamwheedle-trader.png"
+  ? "systems/azeroth-rpg/assets/art/bestiary/portraits/steamwheedle-trader.webp"
   : race.img;
 const PACKS = {
   races: "azeroth-rpg.races", classes: "azeroth-rpg.classes", careers: "azeroth-rpg.careers",
@@ -608,7 +608,9 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
 
   async #spellsPane(s, p) {
     const required = spellsRequired(p.cls, p.abilities);
-    const eligible = this.#data.spells.filter(sp => startingSpell(sp, p.cls));
+    // The talent pick's own spells are known on top of the count and never offered (D-1862).
+    const taught = talentTaughtSpells(p);
+    const eligible = this.#data.spells.filter(sp => startingSpell(sp, p.cls) && !taught.includes(sp.name));
     const definitions = { school: { path: "school", kind: "choice" }, action: { path: "action", kind: "choice" }, mana: { path: "mana", kind: "range" } };
     const states = new Map([
       ["school", { values: new Set(s.spellSchool ? [s.spellSchool] : []) }],

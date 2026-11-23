@@ -193,7 +193,8 @@ export function warlockTalentsBatch(context) {
     });
     after(async function () {
       this.timeout(180000);
-      canvas?.tokens?.setTargets?.([]);
+      // Core's `setTargets` broadcasts the viewed scene's id, so it is called only where one is viewed.
+      if (canvas?.scene) canvas.tokens?.setTargets?.([]);
       for (const app of [...foundry.applications.instances.values()]) {
         if (app.element?.id?.startsWith("azeroth-roll-") || app.element?.id?.startsWith("azeroth-choose-")) await app.close().catch(() => {});
       }
@@ -209,33 +210,21 @@ export function warlockTalentsBatch(context) {
 
     /* ---- Affliction ------------------------------------------------------ */
 
-    it("MALEDICTION: Curse of Agony's tick deals the rank more, and Curse of Weakness lasts a minute a rank longer", async function () {
-      this.timeout(240000);
-      const warlock = await warlockWith("ZZ WlT Maled", { ranks: { "Curse of Agony": 1, Malediction: 2 }, spells: ["Curse of Weakness"] });
-      const ghoul = await makeNpc("Plagued Ghoul");
-      const bare = await warlockWith("ZZ WlT Maled Bare", { ranks: { "Curse of Agony": 1 } });
-      await fill(bare, "mana");
-      const plain = await cast(bare, "Curse of Agony", { targets: [rowOf(ghoul)] });
-      await fill(warlock, "mana");
-      const card = await cast(warlock, "Curse of Agony", { targets: [rowOf(ghoul)] });
-      assert.equal(Number(card.flags["azeroth-rpg"].tick.amount), Number(plain.flags["azeroth-rpg"].tick.amount) + 2, "Malediction did not raise the tick");
-      await fill(warlock, "mana");
-      const weak = await cast(warlock, "Curse of Weakness", { targets: [rowOf(ghoul)] });
-      assert.include(textOf(weak), "3 minutes", "Curse of Weakness's span is not three minutes");
-    });
+    // MALEDICTION lengthens nothing now (the class talent audit, D-1891): its tick cap and its Resist penalty are `warlock-talents.test.mjs`'s.
 
-    it("02's LIFE TAP with IMPROVED LIFE TAP: Health spent through the chooser, 4 Mana a Health at rank 2, never below 1", async function () {
+    it("02's LIFE TAP with IMPROVED LIFE TAP: Health spent through the chooser, 2 a Health and 2 more for every 2 at rank 2, never below 1", async function () {
       this.timeout(180000);
       const warlock = await warlockWith("ZZ WlT Tap", { ranks: { "Improved Life Tap": 2 } });
       await setPool(warlock, "mana", 0);
       await setHealth(warlock, 10);
       const item = await until(() => featureNamed(warlock, "Life Tap"), "Life Tap held");
       const used = workflows().useFeature({ actor: warlock, item });
-      await pickOne(item, "3 Health");
+      await pickOne(item, "4 Health");
       const card = await used;
       if (card) made.push(card);
-      await until(() => warlock.system.health.value === 7, "3 Health spent");
-      assert.equal(poolOf(warlock, "mana").value, 12, "the Mana is not 4 a Health");
+      await until(() => warlock.system.health.value === 6, "4 Health spent");
+      // The class talent audit's Tune (D-1891): 2 a Health, and 1 more for every 2 Health a rank.
+      assert.equal(poolOf(warlock, "mana").value, 12, "the Mana is not 8 and 4 more");
       await setHealth(warlock, 1);
       const said = await warnings(async () => {
         assert.isNull(await workflows().useFeature({ actor: warlock, item }), "Life Tap took the last Health");
@@ -287,7 +276,8 @@ export function warlockTalentsBatch(context) {
       assert.equal(poolOf(warlock, "mana").value, full, "a failed Curse spent Mana");
       assert.isNull(parsed(failed).querySelector('[data-action="resistTest"]'), "a failed Curse forced a Resist");
       const card = await use(warlock, "Curse", { targets: ghouls.slice(0, 3).map(g => rowOf(g)), face: 18, dc: 10 });
-      await until(() => poolOf(warlock, "mana").value === full - 4, "4 Mana on the success");
+      // 02's Curse costs 6 Mana on its success since the class talent audit (C5, D-1894).
+      await until(() => poolOf(warlock, "mana").value === full - 6, "6 Mana on the success");
       assert.ok(parsed(card).querySelector('[data-action="resistTest"]'), "the success forced no Resist");
     });
 
@@ -297,7 +287,8 @@ export function warlockTalentsBatch(context) {
       const ghoul = await makeNpc("Plagued Ghoul");
       await fill(warlock, "mana");
       const card = await use(warlock, "Curse", { targets: [rowOf(ghoul)], face: 18, dc: 10 });
-      assert.equal(card.flags["azeroth-rpg"].curse?.minutes, 2, "Malediction's minute is not on the card");
+      // Malediction adds no minute since the class talent audit (D-1891): 02's Curse lasts its 1 minute.
+      assert.equal(card.flags["azeroth-rpg"].curse?.minutes, 1, "the Curse's minute is not on the card");
       const button = parsed(card).querySelector('[data-action="resistTest"]');
       const unpin = pinDie(1);
       try { await CARD_ACTIONS.resistTest(button, card); } finally { unpin(); }
@@ -348,36 +339,9 @@ export function warlockTalentsBatch(context) {
       await until(() => warlock.system.health.value === before + (warlock.system.tier ?? 1), "the tier restored on its death");
     });
 
-    it("EVERLASTING AFFLICTION: Curse of Agony's tick counts ten turns more a rank, and a timed curse's span a minute more", async function () {
-      this.timeout(180000);
-      const warlock = await warlockWith("ZZ WlT Everlast", { level: 13, ranks: { "Curse of Agony": 1, "Everlasting Affliction": 1 } });
-      const ghoul = await makeNpc("Plagued Ghoul");
-      await fill(warlock, "mana");
-      const card = await cast(warlock, "Curse of Agony", { targets: [rowOf(ghoul)] });
-      assert.equal(card.flags["azeroth-rpg"].tick.rounds, 20, "the tick did not count on with the minute");
-      assert.include(textOf(card), "2 minutes");
-    });
+    // EVERLASTING AFFLICTION lengthens nothing now (D-1891): its SL floor a rank is `warlock-talents.test.mjs`'s.
 
-    it("SOUL REAPER: the turn's start holds it for nothing, and its target's death restores twice the tier", async function () {
-      this.timeout(300000);
-      const warlock = await warlockWith("ZZ WlT Reaper", { level: 17, ranks: { "Everlasting Affliction": 1, "Soul Reaper": 1 } });
-      const ghoul = await makeNpc("Plagued Ghoul");
-      await layTickOf(warlock, ghoul);
-      await fill(warlock, "mana");
-      const card = await cast(warlock, "Soul Reaper", { targets: [rowOf(ghoul)] });
-      assert.ok(card, "Soul Reaper was refused");
-      await until(() => sustained(warlock).some(e => e.name === "Soul Reaper"), "Soul Reaper held");
-      const combat = await fightWith([warlock, ghoul]);
-      await giveTurn(combat, ghoul);
-      const held = poolOf(warlock, "mana").value;
-      await giveTurn(combat, warlock);
-      await settle();
-      assert.equal(poolOf(warlock, "mana").value, held, "the upkeep charged Soul Reaper");
-      await setHealth(warlock, warlock.system.health.max - 20);
-      const before = warlock.system.health.value;
-      await ghoul.applyDamage(ghoul.system.health.value + 5, { struck: true, attack: false, type: "fel", by: warlock, spell: true });
-      await until(() => warlock.system.health.value === before + 2 * (warlock.system.tier ?? 1), "twice the tier restored");
-    });
+    // SOUL REAPER is Dark Harvest now (D-1891): `warlock-talents.test.mjs` holds the harvest and the free Soul Swap.
 
     /* ---- Demonology ------------------------------------------------------ */
 
@@ -460,23 +424,9 @@ export function warlockTalentsBatch(context) {
 
     /* ---- Destruction ----------------------------------------------------- */
 
-    it("RUIN: a spell that drops a character to 0 rolls the injury twice and keeps the higher, with 2 Mana at rank 2", async function () {
-      this.timeout(240000);
-      const warlock = await warlockWith("ZZ WlT Ruin", { ranks: { Ruin: 2 } });
-      const victim = await makeCharacter({ name: "ZZ WlT Ruin Victim", classes: [["Warrior", 3]] });
-      await setPool(warlock, "mana", 0);
-      const posted = untilHook("createChatMessage", 30000, m => m.flags?.["azeroth-rpg"]?.kind === "critical");
-      await victim.applyDamage(victim.system.health.value + 5, { struck: true, attack: false, type: "shadow", by: warlock, spell: true });
-      // `untilHook` hands back the hook's arguments, the message first (B8b: the array
-      // itself was read as the card and pushed for deletion).
-      const [card] = await posted;
-      made.push(card);
-      assert.lengthOf(card.rolls, 2, "the injury was rolled once");
-      assert.include(textOf(card), game.i18n.format("AZEROTH.Card.CriticalTwiceHigher", { totals: card.rolls.map(r => r.total).join(", ") }));
-      await until(() => poolOf(warlock, "mana").value === 2, "Ruin's 2 Mana");
-    });
+    // RUIN adds damage on a natural 19 or 20 now (D-1891): `warlock-talents.test.mjs` holds the reader and the cast's door.
 
-    it("BACKDRAFT: an SL 3 Casting Test lays a Half-Action on the next spell that costs an action, a use struck when it is taken", async function () {
+    it("BACKDRAFT: an SL 2 Casting Test lays a Half-Action on the next spell that costs an action, a use struck when it is taken", async function () {
       this.timeout(300000);
       const warlock = await warlockWith("ZZ WlT Backdraft", { ranks: { "Shadow Bolt": 1, Backdraft: 1 } });
       const ghoul = await makeNpc("Plagued Ghoul");
@@ -511,7 +461,9 @@ export function warlockTalentsBatch(context) {
       const ghoul = await makeNpc("Plagued Ghoul");
       await fill(warlock, "mana");
       const card = await cast(warlock, "Shadow Bolt", { targets: [rowOf(ghoul)] });
-      assert.ok((card.rolls[0].options.provenance ?? []).some(p => p.label === "Shadow Bolt" && p.value === 3));
+      // Each rank adds 1, to no more than the warlock's tier (R1, D-1891).
+      const want = Math.min(3, warlock.system.tier);
+      assert.ok((card.rolls[0].options.provenance ?? []).some(p => p.label === "Shadow Bolt" && p.value === want), `the rank does not ride the Rating at ${want}`);
     });
 
     it("SHADOWBURN: a spell's kill in a fight returns 3 Mana a rank, an attack's none", async function () {
@@ -580,17 +532,6 @@ export function warlockTalentsBatch(context) {
       assert.include(labels(card), "Soul Fire");
     });
 
-    it("CATACLYSM: the Test opens at DC 22 and the cast costs 6 Health, where 07 states 26 and 10", async function () {
-      this.timeout(180000);
-      const warlock = await warlockWith("ZZ WlT Cata", { level: 17, ranks: { "Fel Fire": 1, Cataclysm: 1 } });
-      await until(() => spellNamed(warlock, "Cataclysm"), "Cataclysm learned");
-      await fill(warlock, "mana");
-      await setHealth(warlock, warlock.system.health.max);
-      const before = warlock.system.health.value;
-      const card = await cast(warlock, "Cataclysm");
-      assert.ok(card, "Cataclysm was refused");
-      assert.equal(card.rolls[0].options.dc, 22, "the Test was not against DC 22");
-      assert.equal(warlock.system.health.value, before - 6, "the cast did not cost 6 Health");
-    });
+    // CATACLYSM is Shadowfury now (D-1891): `azeroth-rpg.audit-arcane` presses it.
   });
 }

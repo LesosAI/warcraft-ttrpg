@@ -203,13 +203,16 @@ function deepFreeze(value) {
 export function aura({
   feet, targets = "allies", centre = "self", excludeOwner = false, gate = null,
   boon = null, schoolArmor = null, floor = null, spellDamage = null, damageReduction = null,
-  armor = null, holderOnly = false, bane = null, healthFloor = null
+  armor = null, holderOnly = false, bane = null, healthFloor = null, ward = null, who = null
 } = {}) {
   // `bane` (door 20) and `healthFloor` (door 12) are carried only where a row names
-  // one, so every descriptor before them keeps its exact shape.
+  // one, so every descriptor before them keeps its exact shape. So are `ward` (Ward ADDED
+  // in some schools) and `who` (who among those in reach), 04's Heart of the Grove's
+  // (the class talent audit, D-1892).
   return deepFreeze({
     feet, targets, centre, excludeOwner, gate, boon, schoolArmor, floor, spellDamage, damageReduction, armor, holderOnly,
-    ...(bane ? { bane } : {}), ...(healthFloor ? { healthFloor } : {})
+    ...(bane ? { bane } : {}), ...(healthFloor ? { healthFloor } : {}),
+    ...(ward ? { ward } : {}), ...(who ? { who } : {})
   });
 }
 
@@ -554,6 +557,26 @@ export function meleeTypedExtras(effects = [], { melee = false } = {}) {
   return [...by.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([type, amount]) => ({ type, amount }));
 }
 
+/**
+ * **WHETHER A CREATURE CARRIES ONE OF THE HOLDER'S ONGOING HEALING EFFECTS** (04's Heart of
+ * the Grove: *each ally ... who carries one of your ongoing healing effects*; the class talent
+ * audit, D-1892): an active laid tick of kind `heal` whose hand (`tick.source`) is the holder -
+ * Rejuvenation's, Regrowth's lingering heal, Wild Growth's. Nothing for an unknown holder.
+ *
+ * @param {Iterable<{active?: boolean, disabled?: boolean, flags?: object}>} effects  the candidate's
+ * @param {string|null} by  the holder's uuid
+ * @returns {boolean}
+ */
+export function carriesHealTick(effects = [], by = null) {
+  if (typeof by !== "string" || !by) return false;
+  for (const e of effects ?? []) {
+    if (e?.active === false || e?.disabled === true) continue;
+    const tick = e?.flags?.["azeroth-rpg"]?.tick ?? null;
+    if (tick && tick.kind === "heal" && tick.source === by) return true;
+  }
+  return false;
+}
+
 /** Whether a laid aura holds this creature against being moved against its will (March of the Damned). */
 export function auraHoldsUnmoved(effects = []) {
   for (const e of effects ?? []) {
@@ -668,6 +691,10 @@ export function auraReaches(aura, candidate = {}) {
   // doors 10 and 12): `creature-kinds.mjs#kindsOf`'s reading, measured by the pass, so an
   // enemy undead is reached by nothing (it is no ally) and a living ally by nothing either.
   if (aura.who?.undead === true && candidate.undead !== true) return false;
+  // **ONLY ONE CARRYING THE HOLDER'S HEAL OVER TIME** (04's Heart of the Grove: *who carries one
+  // of your ongoing healing effects*; the class talent audit, D-1892): measured by the pass off
+  // the candidate's own laid ticks (`healTick`, a heal whose hand is the holder's).
+  if (aura.who?.healTick === true && candidate.healTick !== true) return false;
   const feet = candidate.feet;
   if (typeof feet !== "number" || !Number.isFinite(feet)) return false;
   return feet <= aura.feet;
@@ -974,6 +1001,9 @@ export function auraGateOpen(gate, facts = {}) {
   if (kind === "shield") return facts.shield === true;
   if (kind === "spell") return Boolean(value) && (facts.spells ?? []).includes(value);
   if (kind === "sustain") return Boolean(value) && (facts.sustains ?? []).includes(value);
+  // **NOT IN A SHAPESHIFT FORM** (04's Heart of the Grove: *While you are not in a Shapeshift
+  // form*; the class talent audit, D-1892): the holder's own shape, measured by the pass.
+  if (kind === "notForm") return facts.form !== true;
   return false;
 }
 
@@ -1030,8 +1060,9 @@ export function ownerAuras(sources = [], facts = {}) {
       holderOnly: a.holderOnly === true,
       // Who among those in reach (D-911): a faction, or only the living. Carried
       // only where it names one, so every source before it keeps its shape.
-      ...(a.who && (a.who.faction || a.who.living === true || a.who.undead === true)
-        ? { who: { faction: a.who.faction ?? null, living: a.who.living === true, ...(a.who.undead === true ? { undead: true } : {}) } } : {}),
+      ...(a.who && (a.who.faction || a.who.living === true || a.who.undead === true || a.who.healTick === true)
+        ? { who: { faction: a.who.faction ?? null, living: a.who.living === true, ...(a.who.undead === true ? { undead: true } : {}),
+          ...(a.who.healTick === true ? { healTick: true } : {}) } } : {}),
       // What `effects/auras.mjs` reads to know a follow-up pass may be owed.
       readsOwnArmor: ownArmor,
       ...auraPayloadOf({ ...a, schoolArmor })

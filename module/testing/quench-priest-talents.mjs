@@ -26,6 +26,7 @@ import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 import { CARD_ACTIONS } from "../dice/chat.mjs";
 import { castWithDialog } from "../applications/actions.mjs";
 import { AZEROTH } from "../config.mjs";
+import { wardAmount } from "../rules/class-talents.mjs";
 
 /** Wait for a condition, or say what was being waited for. */
 async function until(fn, what, ms = 15000) {
@@ -208,7 +209,7 @@ export function priestTalentsBatch(context) {
 
     /* ---- 02's Ward ------------------------------------------------------ */
 
-    it("WARD: out of a fight a round of the world's clock (D-778); in one, Ward 1 of the school chosen on the creature targeted, until the priest's next turn", async function () {
+    it("WARD: out of a fight a round of the world's clock (D-778); in one, Ward of half the tier (B6) of the school chosen on the creature targeted, until the priest's next turn", async function () {
       this.timeout(240000);
       const priest = await priestWith("ZZ PrT Ward");
       const ally = await allyNamed("ZZ PrT Ward Ally");
@@ -228,7 +229,8 @@ export function priestTalentsBatch(context) {
       assert.ok(card, "the Ward posted no card");
       const effect = await until(() => wardOn(ally), "the Ward on the ally");
       assert.deepEqual(effect.getFlag("azeroth-rpg", "priestWard").schools, ["fire"]);
-      await until(() => (ally.system.ward?.fire ?? 0) === before + 1, "Ward 1 against Fire");
+      // Half the priest's tier, rounded up (B6, D-1884): Ward 2 at level 9.
+      await until(() => (ally.system.ward?.fire ?? 0) === before + wardAmount(priest.system.tier), "Ward of half the tier against Fire");
       assert.equal(effect.duration?.expiry, "turnStart", "the Ward does not end at a turn's start");
       assert.equal(effect.start?.combatant, combat.getCombatantsByActor(priest)[0].id, "the Ward is not keyed on the priest's own turn");
       assert.equal(poolOf(priest, "mana").value, poolOf(priest, "mana").max - 2, "the Ward did not cost 2 Mana");
@@ -283,7 +285,7 @@ export function priestTalentsBatch(context) {
       assert.ok(card, "the Ward was refused");
       const effect = await until(() => wardOn(ally), "the Ward");
       assert.sameMembers(effect.getFlag("azeroth-rpg", "priestWard").schools, Object.keys(AZEROTH.schools));
-      assert.include(effect.name, game.i18n.format("AZEROTH.Ward.EffectNameAegis", { schools: game.i18n.localize("AZEROTH.Ward.EverySchool"), name: priest.name }));
+      assert.include(effect.name, game.i18n.format("AZEROTH.Ward.EffectNameAegis", { schools: game.i18n.localize("AZEROTH.Ward.EverySchool"), name: priest.name, n: wardAmount(priest.system.tier) }));
     });
 
     it("ABSORPTION and ATONEMENT: a Fire blow the Ward takes to nothing returns the rank's Mana, and heals the tier", async function () {
@@ -352,7 +354,7 @@ export function priestTalentsBatch(context) {
       assert.equal(poolOf(priest, "mana").value, full, "a refused cast spent Mana");
     });
 
-    it("PAIN SUPPRESSION: the Apply lays 07's reduction of 3 and the rank's 1 more, and no Bleeding", async function () {
+    it("PAIN SUPPRESSION: the Apply lays 07's reduction of 3 and rank 2's 1 more, and no Bleeding (D-1884)", async function () {
       this.timeout(240000);
       const priest = await priestWith("ZZ PrT Pain", { ranks: { "Pain Suppression": 2 } });
       const ally = await allyNamed("ZZ PrT Pain Ally");
@@ -362,7 +364,7 @@ export function priestTalentsBatch(context) {
       const apply = parsed(card).querySelector('[data-action="applySpellEffect"]');
       assert.ok(apply, "the card offers no Apply");
       await CARD_ACTIONS.applySpellEffect(apply, card);
-      await until(() => (ally.system.damageReduction ?? 0) === before + 5, "3 + 2 less damage");
+      await until(() => (ally.system.damageReduction ?? 0) === before + 4, "3 + 1 less damage");
       assert.isFalse(ally.statuses.has("bleeding"), "the Bleeding it may ignore was laid");
     });
 
@@ -473,10 +475,12 @@ export function priestTalentsBatch(context) {
       await fightWith([ghoul]);
       await fill(priest, "mana");
       const pain = await cast(priest, "Shadow Word: Pain", { targets: [rowOf(ghoul)] });
-      assert.deepInclude(pain.flags["azeroth-rpg"].tick, { kind: "damage", type: "shadow", amount: 2 + 3 });
+      // Each rank adds 1, to no more than the priest's tier (R1, D-1884: `min(rank,tier)`).
+      const tier = priest.system.tier;
+      assert.deepInclude(pain.flags["azeroth-rpg"].tick, { kind: "damage", type: "shadow", amount: 2 + Math.min(3, tier) });
       await fill(priest, "mana");
       const flay = await cast(priest, "Mind Flay", { targets: [rowOf(ghoul)] });
-      assert.deepInclude(flay.flags["azeroth-rpg"].tick, { kind: "damage", type: "shadow", amount: 3 + 2 });
+      assert.deepInclude(flay.flags["azeroth-rpg"].tick, { kind: "damage", type: "shadow", amount: 3 + Math.min(2, tier) });
     });
 
     it("SHADOWFORM: the line comes ticked in a fight, a heal given marks it off, and the end of the priest's turn clears the mark", async function () {
@@ -598,14 +602,16 @@ export function priestTalentsBatch(context) {
       assert.isTrue(card.flags["azeroth-rpg"].notAttack, "the apparition is an attack");
     });
 
-    it("VOID ERUPTION: a creature that fails the Test is Silenced beside 07's Stunned", async function () {
+    it("HERALD OF THE VOID: 8 Mana for a minute's state that raises the Sustain cap by one, and no tier 5 spell taught (B7, D-1885)", async function () {
       this.timeout(240000);
-      const priest = await priestWith("ZZ PrT Eruption", { level: 20, ranks: { Silence: 1, "Void Eruption": 1 } });
-      const ghoul = await makeNpc("Plagued Ghoul");
+      const priest = await priestWith("ZZ PrT Herald", { level: 20, ranks: { "Shadowy Apparition": 1, "Herald of the Void": 1 } });
       await fill(priest, "mana");
-      const card = await cast(priest, "Void Eruption", { targets: [rowOf(ghoul)], face: 20 });
-      assert.ok(card, "Void Eruption was refused");
-      assert.sameMembers(card.flags["azeroth-rpg"].onFail.statuses, ["stunned", "silenced"]);
+      const before = poolOf(priest, "mana").value;
+      const card = await use(priest, "Herald of the Void");
+      assert.ok(card, "Herald of the Void was refused");
+      await until(() => priest.effects.some(e => e.getFlag("azeroth-rpg", "heraldOfTheVoid")), "the minute's state");
+      assert.equal(poolOf(priest, "mana").value, before - 8, "the 8 Mana was not paid");
+      assert.isUndefined(priest.items.find(i => i.type === "spell" && i.name === "Void Eruption"), "the capstone still taught Void Eruption");
     });
   });
 }

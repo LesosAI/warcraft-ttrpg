@@ -412,6 +412,14 @@ const OWN_DOOR = Object.freeze({
 });
 
 /**
+ * **AN OWN DOOR IS ROUTED BY ITS LABEL ALONE, SO NO OTHER BLOCK MAY PRINT IT** (D-1781, D-1788).
+ * Each door carries its own numbers (Knock Away's DC 18 and 10 feet, Cause Insanity's 4 Mana and
+ * DC 20, Mortal Strike's Felaxe). Where 14 gave another block an ability of the same name with
+ * other numbers, the lead's ruling was to rename it with the creature prefix (*Deathclasp Knock
+ * Away*, *Hakkar Cause Insanity*, *Gordok Mortal Strike*), the Sentinel's convention, so the label
+ * stays the one key. `ability-doors.test.mjs` pins which blocks print each door's label and fails
+ * a new one.
+ *
  * The descriptor an own door stamps for `name`, or null (D-807). The census
  * (`ability-doors.test.mjs`) and the audit's generator ask this rather than read
  * the table, so a row counts as DEDICATED only where its door is named here.
@@ -869,6 +877,8 @@ const BOON_RE = /\btakes?\s+(Boon|Bane)\s+on\s+(?:every\s+|all\s+)?([A-Za-z' ]+?
 const BOON_LATE_RE = /\b([A-Za-z' ]+?)\s+Tests?\s+takes?\s+(Boon|Bane)\b/gi;
 /** `takes +1 to Defense`, `+2 to Initiative`, `+1 to Damage Rating`. */
 const BONUS_RE = /\btakes?\s+\+(\d+)\s+to\s+(Defense|Initiative|Damage Rating|attack Tests|Speed)\b/gi;
+/** *his attacks add 1 to their Damage Rating* (14's catalogue, D-1832): the same grant, the other way round. */
+const ADD_RATING_RE = /\battacks?\s+add\s+(\d+)\s+to\s+(?:its|their)\s+Damage Rating\b/gi;
 
 /**
  * `A Boon on <phrase>` as a grant sentence, trimming the phrase back from the
@@ -943,6 +953,9 @@ function readPassive(text) {
     const sentence = sentenceAround(text, m.index ?? 0);
     return !GRANTS_TO_OTHERS.test(sentence) || SELF_AND.test(sentence);
   };
+  for (const m of text.matchAll(ADD_RATING_RE)) {
+    if (mine(m)) grants.push(`+${m[1]} Damage Rating`);
+  }
   for (const m of text.matchAll(BONUS_RE)) {
     if (!mine(m)) continue;
     const what = m[2].toLowerCase() === "attack tests" ? "Attack" : m[2];
@@ -995,6 +1008,9 @@ function nearClause(text) {
   // which would have made *Frightened* the block to stand beside (D-691).
   const m = /\b(two other|three other|each other|another|other)\s+((?:[A-Z][\w'’-]*)(?:\s+[A-Z][\w'’-]*)*)/.exec(text);
   if (!m) return null;
+  // *another Dark Iron creature* names a people, never a block (D-1832): no creature is called
+  // *Dark Iron*, so the gate would never hold, and a faction no field holds is the table's.
+  if (/^\s+creatures?\b/.test(text.slice((m.index ?? 0) + m[0].length))) return null;
   const raw = m[2].trim();
   const count = HOW_MANY[m[1].toLowerCase()] ?? 1;
   // *two other Bandits* names the block *Bandit*.

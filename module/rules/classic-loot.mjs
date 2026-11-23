@@ -55,7 +55,7 @@ import { damageIn, parseTooltip } from "./classic-tooltip.mjs";
 import { emptySignature, gate, signatureEffectOf, hasSignature } from "./signatures.mjs";
 import {
   ABILITY_NAMED, CONDITION_WORD, CREATURE_WORD, ENCHANT_OF_SCHOOL, OVERRIDES, REASON_TEXT,
-  SCHOOL_OF_CLASS, SETS, STAT_MAP, SUMMON_ENTRY, TEMPLATES, USE_ATTRIBUTE, baseRowFor, zoneFor
+  SCHOOL_OF_CLASS, SETS, STAT_MAP, SUMMON_ENTRY, TEMPLATES, USE_ATTRIBUTE, baseRowFor, zoneFor, zoneWings
 } from "./classic-tables.mjs";
 
 /* =============================================================== the caps */
@@ -416,7 +416,8 @@ export function tierFor(record, ctx = {}) {
     return { zone: null, tier: record?.quality === "Epic" ? 4 : 3 };
   }
   if (zone.tier !== null && zone.tier !== undefined) return { zone, tier: zone.tier };
-  const level = ctx?.dungeonLevel?.get?.(zone.dungeon) ?? null;
+  const levels = zoneWings(zone).map(w => ctx?.dungeonLevel?.get?.(w)).filter(l => l !== undefined && l !== null);
+  const level = levels.length ? Math.max(...levels) : null;
   return { zone, tier: level === null ? 4 : tierForLevel(level) };
 }
 

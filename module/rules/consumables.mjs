@@ -456,10 +456,96 @@ export function spendOne(held) {
  * @param {{deftHands?: number, poisoner?: boolean, coatedBlades?: boolean}} [held]
  * @returns {string|null} the action rung, or null for free
  */
-export function coatingAction(use, { deftHands = 0, poisoner = false, coatedBlades = false } = {}) {
+export function coatingAction(use, { poisoner = false, coatedBlades = false } = {}) {
   const action = use?.action ?? null;
   if (use?.kind !== "poison") return action;
-  return (Number(deftHands) || 0) > 0 || poisoner === true || coatedBlades === true ? null : action;
+  // Deft Hands no longer makes the application free (the class talent audit, D-1880):
+  // its rank now raises the poison's DC (`poisonDcFor`), and 02's Poisoner frees it.
+  return poisoner === true || coatedBlades === true ? null : action;
+}
+
+/**
+ * **04's ENVENOM** (*1 more damage per rank, to no more than your tier*; R1, D-1880):
+ * the points a poison laid now adds on the blow it lands on.
+ *
+ * @param {number} rank
+ * @param {number} tier
+ * @returns {number}
+ */
+export function envenomFor(rank = 0, tier = 1) {
+  const r = Math.max(0, Math.trunc(Number(rank)) || 0);
+  return Math.min(r, Math.max(1, Math.trunc(Number(tier)) || 1));
+}
+
+/**
+ * **04's DEFT HANDS** (*A poison you apply uses your Spell DC in place of its own when
+ * yours is higher*; the audit, D-1880): the DC a coating's Test is made against. A
+ * poison with no Test of its own is left alone - there is no DC to replace.
+ *
+ * @param {number|null} dc  the poison's own DC (08 §12)
+ * @param {{deftHands?: number, spellDc?: number|null}} o
+ * @returns {number|null}
+ */
+export function poisonDcFor(dc, { deftHands = 0, spellDc = null } = {}) {
+  const own = Number.isFinite(Number(dc)) && dc !== null ? Math.trunc(Number(dc)) : null;
+  if (own === null) return null;
+  const mine = Math.trunc(Number(spellDc)) || 0;
+  return (Number(deftHands) || 0) > 0 && mine > own ? mine : own;
+}
+
+/**
+ * **02's POISONER: TWO POISONS ON ONE WEAPON** (*a weapon you poison may carry two poisons
+ * at once. Each lands on every hit*; the audit, D-1880): the coating a new one leaves. A
+ * Poisoner laying a poison on a weapon that already carries a DIFFERENT poison keeps the
+ * one it carries beside it (`also`, one level only); anything else replaces it, as 08 §12
+ * always has. A stone or an oil never pairs.
+ *
+ * @param {object|null} prior  the coating the weapon carries
+ * @param {object} next        the coating being laid
+ * @param {{poisoner?: boolean}} o
+ * @returns {object}
+ */
+export function coatingWith(prior, next, { poisoner = false } = {}) {
+  if (!next) return prior ?? null;
+  const { also: _dropped, ...kept } = prior ?? {};
+  if (poisoner !== true || prior?.kind !== "poison" || next?.kind !== "poison" || !prior?.name || prior.name === next.name) return { ...next };
+  return { ...next, also: kept };
+}
+
+/**
+ * Every coating a weapon carries, the first and the Poisoner's second (`also`): the
+ * list the hit fires and the sheet names. Empty for none.
+ *
+ * @param {object|null} coating
+ * @returns {object[]}
+ */
+export function coatingsOf(coating) {
+  if (!coating) return [];
+  const { also, ...first } = coating;
+  return also && typeof also === "object" ? [first, also] : [first];
+}
+
+/** The coatings' names as a row shows them: *Crippling poison + Deadly poison*, or null. */
+export function coatingName(coating) {
+  const names = coatingsOf(coating).map(c => c?.name).filter(Boolean);
+  return names.length ? names.join(" + ") : null;
+}
+
+/**
+ * **WHAT IS LEFT ON A WEAPON WHEN ITS COATINGS ARE JUDGED** (08 §12's minute, D-719,
+ * with 02's Poisoner's second poison): the one whose judgement holds comes off, the
+ * other stays. `gone(c)` answers whether one coating is over.
+ *
+ * @param {object|null} coating
+ * @param {(c: object) => boolean} gone
+ * @returns {{kept: object|null, ended: object[], changed: boolean}}
+ */
+export function coatingAfter(coating, gone) {
+  const list = coatingsOf(coating);
+  const ended = list.filter(c => gone(c) === true);
+  if (!ended.length) return { kept: coating ?? null, ended: [], changed: false };
+  const left = list.filter(c => !ended.includes(c));
+  return { kept: left.length ? { ...left[0] } : null, ended, changed: true };
 }
 
 /* -------------------------------------------- */

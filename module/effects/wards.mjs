@@ -40,7 +40,9 @@
  */
 
 import { AZEROTH } from "../config.mjs";
-import { WARD_BASE, WARD_FLAG, wardChanges, wardOptionsFor, wardPrevented, wardSchools } from "../rules/class-talents.mjs";
+import { WARD_BASE, WARD_FLAG, wardAmount, wardChanges, wardOptionsFor, wardPrevented, wardSchools } from "../rules/class-talents.mjs";
+// 02's Divine Hymn's Ward 3 for ten minutes (the class talent audit's B5, D-1884).
+export const HYMN_WARD = Object.freeze({ feature: "Divine Hymn", amount: 3 });
 // D-779: a Ward pressed from an incoming card answers that blow (04's Foresight).
 import { foresightDamage } from "../rules/foresight-damage.mjs";
 import { markAnswers, mitigatedDamage } from "../rules/reactions.mjs";
@@ -161,6 +163,8 @@ function cleanWard(w = {}) {
   return {
     schools, amount: Math.max(1, n(w.amount) || 1), reduction: n(w.reduction),
     undispellable, absorb: n(w.absorb), atone: n(w.atone),
+    // Divine Hymn's Ward, which no Ward talent reaches (D-1884).
+    ...(w.hymn === true ? { hymn: true } : {}),
     // Who says Dispel cannot end it (04's Aegis Eternal), which 02's Dispel names
     // beside the greyed Ward (`rules/dispel.mjs`, D-778).
     ...(undispellable && typeof w.undispellableBy === "string" && w.undispellableBy ? { undispellableBy: w.undispellableBy.slice(0, 200) } : {})
@@ -280,15 +284,17 @@ async function layWardEffect({ priest, victim, ward, span, img = null, descripti
   let protection = wardTargetRefusal(victim);
   if (protection) return { name: victim.name, landed: false, reason: protection, answered: 0 };
   const before = answers ? structuredClone(victim.system?.ward ?? {}) : null;
-  const stale = (victim.effects ?? []).filter(e => e.flags?.["azeroth-rpg"]?.[WARD_FLAG]?.by === priest.uuid).map(e => e.id);
+  // One of each kind a priest a creature: 02's Ward replaces a Ward, Divine Hymn a Hymn (D-1884).
+  const stale = (victim.effects ?? []).filter(e => e.flags?.["azeroth-rpg"]?.[WARD_FLAG]?.by === priest.uuid
+    && (e.flags["azeroth-rpg"][WARD_FLAG].hymn === true) === (ward.hymn === true)).map(e => e.id);
   if (stale.length) await victim.deleteEmbeddedDocuments("ActiveEffect", stale);
   protection = wardTargetRefusal(victim);
   if (protection) return { name: victim.name, landed: false, reason: protection, answered: 0 };
   if (stale.some(id => (victim.effects ?? []).some(effect => effect.id === id)))
     throw new Error("The previous Ward could not be removed. No replacement was created; ask the GM to review the existing Ward.");
   if (!stillValid()) throw new Error("Foresight target changed");
-  const name = game.i18n.format(ward.undispellable ? "AZEROTH.Ward.EffectNameAegis" : "AZEROTH.Ward.EffectName", {
-    schools: schoolWords(ward.schools), name: priest.name
+  const name = game.i18n.format(ward.hymn ? "AZEROTH.Ward.EffectNameHymn" : ward.undispellable ? "AZEROTH.Ward.EffectNameAegis" : "AZEROTH.Ward.EffectName", {
+    schools: schoolWords(ward.schools), name: priest.name, n: ward.amount ?? 1
   });
   const [made] = await victim.createEmbeddedDocuments("ActiveEffect", [{
     name, img: img ?? "icons/svg/shield.svg", origin: priest.uuid, description,
@@ -377,10 +383,18 @@ export async function wardQueryHandler({ act = "lay", priestUuid = null, victimU
   // What the Ward carries is worked out again off the priest's own talents; the
   // request names only the school the chooser picked.
   const asked = cleanWard(ward);
+  // **DIVINE HYMN'S WARD 3** (B5, D-1884): a priest holding 02's Divine Hymn, the school asked, Ward 3 and
+  // nothing a talent adds - judged here off the priest, never the request.
+  if (asked.hymn) {
+    if (!priest.hasFeature?.(HYMN_WARD.feature) || !asked.schools.length) return { name: victim.name, landed: false, reason: "refused" };
+    const hymned = { schools: [asked.schools[0]], amount: HYMN_WARD.amount, reduction: 0, undispellable: false, absorb: 0, atone: 0, hymn: true };
+    return layHere({ priest, victim, ward: hymned, span: cleanSpan(span), img, description });
+  }
   const opts = wardOptionsFor(priest.takenTalents?.() ?? [], { tier: priest.system?.tier ?? 1 });
   const schools = wardSchools({ chosen: asked.schools[0] ?? null, everySchool: opts.everySchool, schools: Object.keys(AZEROTH.schools ?? {}) });
   const rebuilt = {
-    schools, amount: WARD_BASE.amount, reduction: opts.reduction, undispellable: opts.undispellable, absorb: opts.absorb, atone: opts.atone,
+    // 02's Ward at half the priest's tier, rounded up (B6, D-1884).
+    schools, amount: wardAmount(priest.system?.tier ?? 1), reduction: opts.reduction, undispellable: opts.undispellable, absorb: opts.absorb, atone: opts.atone,
     undispellableBy: (opts.by?.undispellable ?? []).join(", ")
   };
   if (!schools.length) return { name: victim.name, landed: false, reason: "refused" };

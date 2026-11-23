@@ -69,12 +69,16 @@ import { crestPath } from "../rules/crests.mjs";
 import { exitsFrom, isEligible } from "../rules/careers.mjs";
 import { tierForLevel, featuresUnlocked, secondaryLevel, secondaryTier } from "../rules/progression.mjs";
 import { spellPrice, showsSpells, spellsKnown, spellPayment } from "../rules/casting.mjs";
+// What counts toward spells known (07 §5; the lead's "If a talent gives a spell, it should not coutn
+// towards their spells known", D-1862).
+import { countsTowardKnown } from "../rules/spell-access.mjs";
 // The Spells tab's words for a Vitae price that takes Health (02 §7; the San'layn and Sovereign plan's V4).
 import { VITAE_WARNING_WORDS, vitaeWarning } from "../rules/vitae.mjs";
 import { onUseOf, talentEffect } from "../rules/talent-effects.mjs";
 // A Use whose first choice is free is pressed with its use spent (the B3 review).
 import { usesAskedLater } from "../rules/legacy-uses.mjs";
 import { hasUse } from "../rules/consumables.mjs";
+import { coatingName } from "../rules/consumables.mjs";
 import { containerOf, hasCharges, isContainer, isWorn } from "../rules/containers.mjs";
 import { canCarry, heldAugment } from "../rules/augments.mjs";
 import { SAND } from "../rules/sand.mjs";
@@ -2481,7 +2485,10 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // **A SPELL A CLASS, A FEATURE OR A TALENT TEACHES IS ON TOP OF THE COUNT** (02 §7's Sovereign: *Drain
     // Life, Bloodbolt and Decree of Frailty are known on top of that count*; Unholy Lore's and Grave Calling's
     // *does not count against your spells known*): a spell carrying `spellFrom` is drawn and never counted.
-    const counted = held.filter(i => !i.getFlag?.("azeroth-rpg", "spellFrom")).length;
+    // Through the one predicate and the sync's one grant table (D-1862), so a spell is off the count
+    // exactly where the cast door honours what taught it.
+    const grants = this.actor.spellGrantTable?.() ?? [];
+    const counted = held.filter(i => countsTowardKnown({ spellFrom: i.getFlag?.("azeroth-rpg", "spellFrom") ?? null, name: i.name, grants })).length;
 
     return {
       tiers,
@@ -3469,7 +3476,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       hidden,
       rarityClass: rarityClass(sys.rarity),
       favorite: starred.has(item.id),
-      coating: hidden ? null : (item.getFlag("azeroth-rpg", "coating")?.name ?? null),
+      coating: hidden ? null : coatingName(item.getFlag("azeroth-rpg", "coating") ?? null),
       charges: !hidden && hasCharges(sys.charges) ? { ...sys.charges } : null,
       usable: hasUse(sys.use),
       useRefusal: dispersionRefusal(this.actor, "gear"),
@@ -3574,7 +3581,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       hidden,
       rarityClass: rarityClass(sys.rarity),
       bagLine: null,
-      coating: hidden ? null : (item.getFlag("azeroth-rpg", "coating")?.name ?? null),
+      coating: hidden ? null : coatingName(item.getFlag("azeroth-rpg", "coating") ?? null),
       usable: hasUse(sys.use)
     }, { words, slot: note ? `${slotLabel} · ${note}` : slotLabel });
     return foundry.applications.handlebars.renderTemplate(

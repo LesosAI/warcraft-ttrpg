@@ -248,9 +248,11 @@ export function lootBatch(context) {
       await settle();
       const select = generator.element.querySelector('select[name="dungeon"]');
       assert.ok(select, "no Dungeon select on the Dungeon scenario");
-      assert.lengthOf(select.querySelectorAll("option"), 42, "41 dungeons and the blank");
+      // One option a dungeon, never one a Boss: 60 dungeons and the blank since the 2026-11
+      // bestiary's 303 Bosses (D-1823).
+      assert.lengthOf(select.querySelectorAll("option"), 61, "60 dungeons and the blank");
       assert.isAbove(select.querySelectorAll("optgroup").length, 1, "the list is not grouped by band");
-      const monastery = [...select.options].find(o => o.textContent.includes("The Scarlet Monastery"));
+      const monastery = [...select.options].find(o => o.textContent.trim() === "The Scarlet Monastery, the cathedral");
       assert.ok(monastery, "the Scarlet Monastery is not listed");
       select.value = monastery.value;
       change(select);
@@ -259,11 +261,11 @@ export function lootBatch(context) {
       assert.equal(generator.element.querySelector('select[name="tier"]').value, "2");
       // The option and the line say the DUNGEON, never its one Boss (D-703):
       // the loot is the whole dungeon's and the label used to say otherwise.
-      assert.equal(monastery.textContent.trim(), "The Scarlet Monastery", "the option still names the Boss");
+      assert.equal(monastery.textContent.trim(), "The Scarlet Monastery, the cathedral", "the option still names the Boss");
       assert.notInclude(generator.element.textContent, "High Inquisitor Whitemane",
         "the Dungeon line still names the Boss as though the loot were his");
       assert.include(generator.element.textContent,
-        game.i18n.format("AZEROTH.Loot.DungeonLine", { dungeon: "The Scarlet Monastery", band: "5–10", tier: 2 }),
+        game.i18n.format("AZEROTH.Loot.DungeonLine", { dungeon: "The Scarlet Monastery, the cathedral", band: "5–10", tier: 2 }),
         "the Dungeon line does not name the place, its band and its tier");
 
       // A row's own kind select redraws that row alone.

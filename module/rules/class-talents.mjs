@@ -42,8 +42,8 @@
  *                 (Illumination)
  *   rest          `{short: {mana, drink}}`: what a rest returns beyond 05's
  *                 (Light's Reserve)
- *   freeHealing   `true`: a healing feature costs no Mana while the counter the
- *                 talent grants has a use (Divine Favor)
+ *   freeHealing   retired with the class talent audit's Benediction (D-1875): no
+ *                 row carries it and nothing reads it
  *   steadfast     `{immune, speedFloor}`: conditions refused and a Speed that
  *                 cannot be reduced (Unyielding)
  *   plate         `{ward, fromBodyAP, atRank}`: Ward against the school named
@@ -67,7 +67,7 @@ import { emptyAreaTick, emptyRemains } from "./area-ticks.mjs";
 import { evaluateExpression } from "./expressions.mjs";
 // The ONE hold at 1 Health (D-777): Cauterize's catch reads it, and so do
 // Intervention, Spirit Shell, Guardian Spirit and 07's Aegis of the Light.
-import { ASKED_HOLDS, heldAt } from "./blow-doors.mjs";
+import { ASKED_HOLDS, heldAt, holdLasts, holdRegimeOf } from "./blow-doors.mjs";
 // What a grant of temporary Health is (05; D-777).
 import { TEMP_SPANS } from "./temporary-health.mjs";
 // ONE reading of a row's gate (the Legacy branches' doors 15, 17 and 18).
@@ -156,7 +156,7 @@ export function calledShotFor(talents = [], rowOf = talentEffect) {
  * @param {{sl?: number, hit?: boolean}} o
  * @returns {Array<{identifier: string, name: string, id: string, value: number|null}>}
  */
-export function hitConditionsFor(talents = [], { sl = 0, hit = false, opportunity = false } = {}, rowOf = talentEffect) {
+export function hitConditionsFor(talents = [], { sl = 0, hit = false, opportunity = false, tier = 1 } = {}, rowOf = talentEffect) {
   if (!hit) return [];
   const out = [];
   for (const { talent, row: base, rank } of rowsOfKind(talents, "hitLays", rowOf)) {
@@ -188,7 +188,9 @@ export function hitConditionsFor(talents = [], { sl = 0, hit = false, opportunit
       out.push({ identifier: talent.identifier, name: talent.name, id: row.condition, value: null, ...span });
       continue;
     }
-    const n = amount(row.value, { rank });
+    // **R1's CAP** (the class talent audit, D-1870): Deep Cut's *equal to your rank in this
+    // talent, to no more than your tier* reads `min(rank,tier)` with the striker's tier in scope.
+    const n = amount(row.value, { rank, tier: Math.max(1, Math.trunc(Number(tier)) || 1) });
     if (n > 0) out.push({ identifier: talent.identifier, name: talent.name, id: row.condition, value: n, ...span });
   }
   return out;
@@ -462,11 +464,13 @@ export function freeReactionsFor(talents = [], reaction, rowOf = talentEffect) {
  *   within 5 feet, as the Block's door measured it
  * @returns {{bonus: number, rows: Array<{name: string, amount: number}>}}
  */
-export function blockBonusFor(talents = [], { allyNear = false } = {}, rowOf = talentEffect) {
+export function blockBonusFor(talents = [], { allyNear = false, tier = 1 } = {}, rowOf = talentEffect) {
   const rows = [];
   for (const { talent, row, rank } of rowsOfKind(talents, "block", rowOf)) {
     if (row.allyWithin && allyNear !== true) continue;
-    const n = amount(row.add ?? "rank", { rank });
+    // R1 (D-1870): Redoubt's and Shield Wall's *1 more damage per rank, to no more than your
+    // tier* reads `min(rank,tier)` at the blocker's tier.
+    const n = amount(row.add ?? "rank", { rank, tier: Math.max(1, Math.trunc(Number(tier)) || 1) });
     if (n > 0) rows.push({ name: talent.name, amount: n });
   }
   return { bonus: rows.reduce((s, r) => s + r.amount, 0), rows };
@@ -513,8 +517,11 @@ export function blockRetortFor(talents = [], rowOf = talentEffect) {
  * @returns {{halfActions: number, gains: Array<{pool: string, amount: number}>,
  *   nextAttack: Array<{source: string, name: string, boons: number, lasts: string}>, by: string[]}}
  */
-export function killRewardsFor(talents = [], rowOf = talentEffect, { spell = false } = {}) {
+export function killRewardsFor(talents = [], rowOf = talentEffect, { spell = false, tier = 1 } = {}) {
   const out = { halfActions: 0, gains: [], nextAttack: [], by: [] };
+  // The killer's tier (the class talent audit's Follow Through: *At rank 2 that attack also adds
+  // your tier to its damage*; D-1870), in scope for every amount the row names.
+  const scope = rank => ({ rank, tier: Math.max(1, Math.trunc(Number(tier)) || 1) });
   for (const { talent, row, rank } of rowsOfKind(talents, "kill", rowOf ?? talentEffect)) {
     const r = atRankOf(row, rank);
     if (r.spell === true && spell !== true) continue;
@@ -522,12 +529,12 @@ export function killRewardsFor(talents = [], rowOf = talentEffect, { spell = fal
     // D-773) gives the kill's maker nothing here: `killStrikesFor` reads it.
     if (!r.halfActions && !r.gain && !r.nextAttack) continue;
     out.halfActions += Math.max(0, Math.trunc(Number(r.halfActions)) || 0);
-    if (r.gain?.pool && amount(r.gain.amount, { rank }) > 0) out.gains.push({ pool: r.gain.pool, amount: amount(r.gain.amount, { rank }) });
+    if (r.gain?.pool && amount(r.gain.amount, scope(rank)) > 0) out.gains.push({ pool: r.gain.pool, amount: amount(r.gain.amount, scope(rank)) });
     if (r.nextAttack) {
       out.nextAttack.push({
         source: talent.identifier, name: talent.name,
-        boons: amount(r.nextAttack.boons ?? 0, { rank }), penetration: amount(r.nextAttack.penetration ?? 0, { rank }),
-        damage: amount(r.nextAttack.damage ?? 0, { rank }), lasts: r.nextAttack.lasts
+        boons: amount(r.nextAttack.boons ?? 0, scope(rank)), penetration: amount(r.nextAttack.penetration ?? 0, scope(rank)),
+        damage: amount(r.nextAttack.damage ?? 0, scope(rank)), lasts: r.nextAttack.lasts
       });
     }
     out.by.push(talent.name);
@@ -621,7 +628,7 @@ export function turnStartHealFor(talents = [], { pools = [] } = {}, rowOf = tale
  * @param {{sl?: number, overchannelled?: boolean, success?: boolean}} o
  * @returns {{amount: number, by: string[]}}
  */
-export function manaBackFor(talents = [], { sl = 0, overchannelled = false, success = true } = {}, rowOf = talentEffect) {
+export function manaBackFor(talents = [], { sl = 0, overchannelled = false, success = true, cost = null } = {}, rowOf = talentEffect) {
   let total = 0;
   const by = [];
   for (const { talent, row, rank } of rowsOfKind(talents, "manaBack", rowOf)) {
@@ -632,7 +639,10 @@ export function manaBackFor(talents = [], { sl = 0, overchannelled = false, succ
     total += n;
     by.push(talent.name);
   }
-  return { amount: total, by };
+  // **R7: NEVER MORE THAN THE CAST COST** (D-1865): where the door hands the cost, the Mana back
+  // stops at it, so a cast that paid nothing returns nothing and Clearcasting cannot gain.
+  if (cost !== null && cost !== undefined) total = Math.max(0, Math.min(total, Math.trunc(Number(cost)) || 0));
+  return { amount: total, by: total > 0 ? by : [] };
 }
 
 /**
@@ -661,34 +671,9 @@ export function restBonusFor(talents = [], { kind = "short", drinks = false } = 
   return { mana, by, className };
 }
 
-/**
- * **DIVINE FAVOR** (04: *Your first healing feature after each Long Rest costs no
- * Mana. At rank 2 the first two cost none*): the talent whose counter waives a
- * healing feature's Mana, or null. The counter is the feature the talent grants
- * (`counter("rank", "long")`); the door strikes one of its uses. **A healing
- * feature of ANY class the character holds** (`waives`; the lead, 2026-10-03, on
- * O-160: *"Yes."* to *does your healing features count a healing feature the
- * character holds from a second class?*; D-778).
- *
- * @param {Array} talents
- * @returns {{identifier: string, name: string, talentId: string|null}|null}
- */
-export function freeHealingFor(talents = [], rowOf = talentEffect) {
-  const [first] = rowsOfKind(talents, "freeHealing", rowOf);
-  return first ? { identifier: first.talent.identifier, name: first.talent.name, talentId: first.talent.id ?? null, className: first.talent.className ?? null } : null;
-}
-
-/**
- * Whether Divine Favor's waiver reaches this feature: a healing feature priced
- * in Mana, of whichever class granted it (D-778; it was the talent's own class
- * alone, D-772's reading, until the lead ruled on O-160).
- *
- * @param {{className: string|null}|null} favor  `freeHealingFor`'s answer
- * @param {{heal?: string|null, cost?: {pool?: string}|null, className?: string}} feature  the descriptor
- */
-export function waives(favor, feature = {}) {
-  return Boolean(favor) && Boolean(feature?.heal) && feature?.cost?.pool === "mana";
-}
+// Divine Favor's free healing feature (`freeHealingFor`, `waives`) left with the class talent audit's
+// Benediction (D-1875): the talent of that name is a Holy heal cast as a Half-Action (`castAs`), and no
+// row waives a healing feature's Mana any more (deleted in the wave-2 fix run).
 
 /**
  * **THE CONDITIONS A1 SETS THE SPEED TO 0 IN** (D-779): Entangled (*Your Speed is
@@ -707,9 +692,18 @@ export const SPEED_ZERO_CONDITIONS = Object.freeze(["entangled", "prone"]);
  * @param {Array} talents
  * @returns {{immune: string[], speedFloor: boolean, by: string[]}}
  */
-export function steadfastFor(talents = [], rowOf = talentEffect) {
+export function steadfastFor(talents = [], rowOf = talentEffect, { pools = null } = {}) {
   const out = { immune: [], speedFloor: false, by: [] };
-  for (const { talent, row } of rowsOfKind(talents, "steadfast", rowOf)) {
+  for (const { talent, row: base, rank } of rowsOfKind(talents, "steadfast", rowOf)) {
+    // **A REFUSAL AT A RANK, WHILE A POOL HOLDS** (the class talent audit's Blood Craze: *While you
+    // hold more than 7 Rage, you cannot be Frightened. At rank 2 you cannot be Charmed either*;
+    // D-1870): `while {pool, above}` read off the pools this preparation handed in - closed where
+    // none were handed in - and a rank's clause's `immune` laid over the row's.
+    const row = atRankOf(base, rank);
+    if (row.while?.pool) {
+      const pool = (pools ?? []).find(p => p?.name === row.while.pool) ?? null;
+      if (!pool || !((Number(pool.value) || 0) > (Number(row.while.above) || 0))) continue;
+    }
     const refused = [...(row.immune ?? []), ...(row.speedZero === true ? SPEED_ZERO_CONDITIONS : [])];
     for (const id of refused) if (!out.immune.includes(id)) out.immune.push(id);
     if (row.speedFloor === true) out.speedFloor = true;
@@ -826,7 +820,10 @@ export function onUseLays(onUse, rank = 1) {
     } : null,
     boon: boon ? {
       kinds: boon.kinds ?? "all", boons: amount(boon.boons ?? 1, { rank }), until: boon.until ?? "next",
-      ...(reach > 0 ? { feet: reach } : {})
+      ...(reach > 0 ? { feet: reach } : {}),
+      // How many creatures it may be laid on (the class talent audit's Blessing at rank 2: *choose two
+      // targets*; D-1874), named only where a row carries it.
+      ...(Number(boon.targets) > 1 ? { targets: Math.trunc(Number(boon.targets)) } : {})
     } : null
   };
 }
@@ -961,11 +958,10 @@ export function lowerRoll(totals = []) {
  *   stealth       `{keep}`: actions do not end a Hide (Master of Shadows)
  *   evade         `{cost, feet}`: a Disengaged step after a blow that missed or
  *                 dealt nothing (Elusive) - a button on the card
- *   turnStart     gained `restore {pool, amount}` (Adrenaline's Energy)
  *
  * And `onUse` gained `deters` (Deterrence), `ward` (Cloak of Shadows), `hide`
  * (Shadow Dance), `holdOpening` (Overkill), `deathMark` (Death Mark), `perRound`
- * (Adrenaline's once a round per rank) and `skillTest` (Preparation); `laysBane`
+ * (Adrenaline's once a round) and `skillTest` (Preparation); `laysBane`
  * gained `only` (Feint's *against you*); a rider gained `pierce`, `forced`
  * (Trueshot), `loseReaction`, `speedDrop`, `until` and `noCasting`, and `needs:
  * "opening"` (Garrote).
@@ -1228,13 +1224,14 @@ export function companionHitTestsFor(talents = [], rowOf = talentEffect) {
  * @param {Array} talents  the owner's
  * @param {{sl?: number, hit?: boolean}} o
  */
-export function companionHitConditionsFor(talents = [], { sl = 0, hit = false } = {}, rowOf = talentEffect) {
+export function companionHitConditionsFor(talents = [], { sl = 0, hit = false, tier = 1 } = {}, rowOf = talentEffect) {
   if (!hit) return [];
   const out = [];
   for (const { talent, row, rank } of rowsOfKind(talents, "hitLays", rowOf)) {
     if (row.via !== "companion" || !row.condition) continue;
     if ((Math.trunc(Number(sl)) || 0) < (Number(row.sl) || 0)) continue;
-    const n = row.value === null || row.value === undefined ? null : at(row.value, { rank });
+    // R1 (D-1870): *equal to your rank, to no more than your tier* - the OWNER's tier.
+    const n = row.value === null || row.value === undefined ? null : at(row.value, { rank, tier: Math.max(1, Math.trunc(Number(tier)) || 1) });
     if (n !== null && n <= 0) continue;
     out.push({ identifier: talent.identifier, name: talent.name, id: row.condition, value: n });
   }
@@ -1274,7 +1271,9 @@ export function killStrikesFor(talents = [], { who = "self", riposte = false } =
     if (s.riposte === true && riposte !== true) continue;
     const count = at(s.count ?? 1, { rank });
     if (count < 1) continue;
-    out.push({ identifier: talent.identifier, name: talent.name, count, target: ["same", "other"].includes(s.target) ? s.target : "any" });
+    // Killing Spree's *Once a round* and its *move up to 10 feet* (the class talent audit, D-1882).
+    out.push({ identifier: talent.identifier, name: talent.name, count, target: ["same", "other"].includes(s.target) ? s.target : "any",
+      ...(s.once === "round" ? { once: true } : {}), ...(Number(s.step) > 0 ? { step: Math.trunc(Number(s.step)) } : {}) });
   }
   return out;
 }
@@ -1552,6 +1551,88 @@ export function unseenComboFor(talents = [], rowOf = talentEffect) {
 /** The actor flag Death Mark's named target stands under, until a rest. */
 export const DEATH_MARK_FLAG = "deathMark";
 
+/* ---- the class talent audit's Rogue, Priest and Shaman (D-1880 to D-1887) ---- */
+
+/** The round's record key Death Mark's free Finisher claims (*once a round*; B15). */
+export const DEATH_MARK_ROUND = "death-mark";
+/** The round's record key Combat Reflexes' free Riposte claims (*Once a round*). */
+export const COMBAT_REFLEXES_ROUND = "combat-reflexes";
+/** The round's record key Miracle's Reaction Mend claims (*once a round*). */
+export const MIRACLE_ROUND = "miracle-reaction";
+/** The round's record key Shadowform's line claims (*once a round*). */
+export const SHADOWFORM_ROUND = "shadowform";
+/** The round's record key Earthliving's heal claims (*Once a round*). */
+export const EARTHLIVING_ROUND = "earthliving";
+/** The effect flag Master of Shadows' minute stands under (B10). */
+export const SHADOWS_FLAG = "masterOfShadows";
+/** The effect flag Miracle's minute stands under (R2's capstone). */
+export const MIRACLE_FLAG = "miracleMinute";
+/** The effect flag Herald of the Void's minute stands under (B7). */
+export const HERALD_FLAG = "heraldOfTheVoid";
+
+/**
+ * **02's WARD AT HALF YOUR TIER, ROUNDED UP** (B6, D-1884: *grant a target Ward of one
+ * school equal to half your tier, rounded up*): 1 at tiers 1 and 2, 2 at tiers 3 and 4.
+ *
+ * @param {number} tier
+ * @returns {number}
+ */
+export function wardAmount(tier = 1) {
+  return Math.max(1, Math.ceil(Math.max(1, Math.trunc(Number(tier)) || 1) / 2));
+}
+
+/**
+ * **02's ASSASSINATE** (*Against a target under your Opening, you inflict a Critical
+ * Injury on 18 to 20*; the audit, D-1880): the critical floor where the feature is held
+ * and the target is under the Opening, else null.
+ *
+ * @param {{held?: boolean, underOpening?: boolean|null}} o
+ * @returns {number|null}
+ */
+export function assassinateOn({ held = false, underOpening = false } = {}) {
+  return held === true && underOpening === true ? 18 : null;
+}
+
+/**
+ * **A DISCOUNT ON ONE CLASS'S SPENDS** (04's Adrenaline: *Your Rogue features and talents
+ * cost 1 less Energy per rank, to a minimum of 1*; decision 13, D-1881): the Energy a
+ * taken `classDiscount` row takes off a price in its pool, where the thing priced is its
+ * class's - never below its `min`, never on a price of nothing. A refill was the old text,
+ * and it leaked into the Energy pool a Rogue shares with a Demon Hunter (02 §10).
+ *
+ * @param {Array} talents
+ * @param {{pool?: string|null, className?: string|null, amount?: number}} o
+ * @returns {{discount: number, by: string[]}}  `discount` the points taken off
+ */
+export function classDiscountFor(talents = [], { pool = null, className = null, amount = 0 } = {}, rowOf = talentEffect) {
+  const price = Math.max(0, Math.trunc(Number(amount)) || 0);
+  let off = 0;
+  const by = [];
+  for (const { talent, row, rank } of rowsOfKind(talents, "classDiscount", rowOf)) {
+    if (!pool || row.pool !== pool || !className || row.className !== className) continue;
+    const n = at(row.amount ?? "rank", { rank });
+    if (n <= 0) continue;
+    off += n;
+    by.push(talent.name);
+  }
+  if (!price || !off) return { discount: 0, by: [] };
+  const floor = Math.max(1, ...rowsOfKind(talents, "classDiscount", rowOf).map(r => Math.trunc(Number(r.row.min)) || 1));
+  const discount = Math.max(0, Math.min(off, price - Math.min(price, floor)));
+  return { discount, by: discount > 0 ? by : [] };
+}
+
+/**
+ * **COMBAT REFLEXES' FREE RIPOSTE** (04: *Once a round, your Riposte costs no Combo
+ * Points*): the talent whose `riposteFree` row frees one, or null.
+ *
+ * @param {Array} talents
+ * @returns {{name: string, identifier: string}|null}
+ */
+export function riposteFreeFor(talents = [], rowOf = talentEffect) {
+  const [first] = rowsOfKind(talents, "riposteFree", rowOf);
+  return first ? { name: first.talent.name, identifier: first.talent.identifier } : null;
+}
+
 /**
  * **WHAT THE TALENTS DO TO 02's FINISHER**, read off their `mod("Finisher")`
  * patches (the chip on the feature is theirs too):
@@ -1581,8 +1662,10 @@ export const DEATH_MARK_FLAG = "deathMark";
 export function finisherOptionsFor(talents = [], rowOf = talentEffect) {
   const out = { bleeding: null, mark: null, back: null, shackle: null };
   for (const { talent: t, patch: m, rank } of patchRowsOf(talents, "Finisher", rowOf)) {
-    if (m.bleeding && !out.bleeding) out.bleeding = { name: t.name, rank, expr: String(m.bleeding) };
-    if (m.free === true && !out.mark) out.mark = { name: t.name, counts: Math.max(1, at(m.counts ?? 5, { rank })) };
+    // Rupture's source (R8) and its rank 2 DC (*ending that Bleeding takes a Medicine Test
+    // against your Spell DC*; the class talent audit, D-1880).
+    if (m.bleeding && !out.bleeding) out.bleeding = { name: t.name, rank, expr: String(m.bleeding), identifier: t.identifier ?? null, endsDc: atRankOf(m, rank).endsDc ?? null };
+    if (m.free === true && !out.mark) out.mark = { name: t.name, counts: Math.max(1, at(m.counts ?? 5, { rank })), perRound: Math.trunc(Number(m.perRound)) || 0 };
     if (m.back && !out.back) out.back = { name: t.name, sl: Math.trunc(Number(m.back.sl)) || 0, amount: at(m.back.amount ?? "rank", { rank }) };
     if (m.shackle && typeof m.shackle === "object" && !out.shackle) {
       const condition = typeof m.shackle.condition === "string" && /^[a-z]+$/.test(m.shackle.condition) ? m.shackle.condition : "entangled";
@@ -1805,34 +1888,12 @@ export function evadeFor(talents = [], rowOf = talentEffect) {
   return feet > 0 && first.row.cost?.pool ? { name: first.talent.name, pool: first.row.cost.pool, cost, feet } : null;
 }
 
-/**
- * **WHAT THE TURN'S START RESTORES TO A POOL** (04's Adrenaline: *Your Energy pool
- * returns 1 more per rank at the start of your turn*): beside 05 §12's own refill,
- * by pool.
- *
- * @param {Array} talents
- * @returns {{byPool: Record<string, number>, by: string[]}}
- */
-export function turnStartRestoreFor(talents = [], rowOf = talentEffect) {
-  const byPool = {};
-  const by = [];
-  for (const { talent, row, rank } of rowsOfKind(talents, "turnStart", rowOf)) {
-    const r = row.restore ?? null;
-    if (!r?.pool) continue;
-    const n = at(r.amount ?? "rank", { rank });
-    if (n <= 0) continue;
-    byPool[r.pool] = (byPool[r.pool] ?? 0) + n;
-    by.push(talent.name);
-  }
-  return { byPool, by };
-}
-
 /* ---- What a Use does, beyond its descriptor ------------------------------ */
 
 /**
  * **WHAT THE RANGER'S AND THE ROGUE'S USES LAY, AT THE RANK** (D-773): Deterrence's
  * Banes on attacks against the user, Cloak of Shadows' Ward, Shadow Dance's hide,
- * Overkill's hold, Death Mark's naming, Adrenaline's once a round per rank, and
+ * Overkill's hold, Death Mark's naming, Adrenaline's once a round, and
  * Preparation's Stealth Test. Null keys where the row says nothing.
  *
  * @param {object|null} onUse  the granting talent's `onUse`
@@ -2360,10 +2421,11 @@ export const DOOM_WINDS_FLAG = "doomWinds";
  * @param {{doomWinds?: boolean}} [o]
  * @returns {{identifier: string, name: string, amount: number, once: boolean}|null}
  */
-export function stormlashFor(talents = [], { doomWinds = false } = {}, rowOf = talentEffect) {
+export function stormlashFor(talents = [], { doomWinds = false, tier = 1 } = {}, rowOf = talentEffect) {
   const [first] = rowsOfKind(talents, "stormlash", rowOf);
   if (!first) return null;
-  const amount = at(first.row.amount ?? "rank", { rank: first.rank });
+  // R1 (the class talent audit, D-1886): *to no more than your tier*, read with the striker's tier.
+  const amount = at(first.row.amount ?? "rank", { rank: first.rank, tier });
   // *add NATURE damage* (D-777): the type the amount is, a second amount on the
   // blow met by its own Ward - the lead: *"Different damage types in one attack
   // are possible"*.
@@ -2659,6 +2721,10 @@ export function featureAims({ name = "", lays = null, attack = false, onUse = nu
   if (o.spellbreak || o.hasten || o.rewind) return true;
   // 02's Bloodlust names its up to six targets (the lead, 2026-11-08: *"Fix it now"*).
   if (o.bloodlust) return true;
+  // 02's Lay on Hands names the creature it touches, and 04's Mercy of Uther ends a condition on it, chosen
+  // in the judgement off that creature (the class talent audit, D-1875): from the sheet it was handed
+  // nobody, so the chooser never opened (the live pass).
+  if (o.martial === "layOnHands") return true;
   // 02's Death Grip names the one creature it pulls (the Death Knight plan's door 5).
   if (o.deathGrip) return true;
   // The Sovereign's (Phase 5): Hunt Mortal names the creature it marks, The Blood Royal the one it feeds on, and
@@ -2736,12 +2802,15 @@ export function spellAddsFor(changes = [], talents = [], { name = "" } = {}, row
  * @param {{name?: string}} spell
  * @returns {{amount: number, by: Array<{name: string, amount: number}>}}
  */
-export function spellHealFor(talents = [], { name = "" } = {}, rowOf = talentEffect) {
+export function spellHealFor(talents = [], { name = "", tier = 1 } = {}, rowOf = talentEffect) {
   let amount = 0;
   const by = [];
   for (const { talent, row, rank } of rowsOfKind(talents, "spell", rowOf)) {
     if (!(Number(row.heal) > 0) || !(row.names ?? []).includes(name)) continue;
-    const n = rank * Math.trunc(Number(row.heal));
+    // R1 (the class talent audit, D-1886: Healing Wave's *to no more than your tier*): a row's
+    // `cap: "tier"` holds the rank's sum under the caster's tier. A caller naming no tier reads 1.
+    const raw = rank * Math.trunc(Number(row.heal));
+    const n = row.cap === "tier" ? Math.min(raw, Math.max(1, Math.trunc(Number(tier)) || 1)) : raw;
     amount += n;
     by.push({ name: talent.name, amount: n });
   }
@@ -3015,31 +3084,35 @@ export function overchannelReliefFor(talents = [], rowOf = talentEffect) {
  *   the caster holds, and whether the caster holds Shape the Weave
  * @returns {{free: boolean, by: string[], less: number, min: number, lessBy: string[], weaveLess: number, weaveBy: string[]}}
  */
-export function upkeepFor(talents = [], { name = "", held = 0, weave = false } = {}, rowOf = talentEffect) {
+export function upkeepFor(talents = [], { name = "", held = 0, weave = false, index = null } = {}, rowOf = talentEffect) {
   const out = { free: false, by: [], less: 0, min: 1, lessBy: [], weaveLess: 0, weaveBy: [] };
+  let minSeen = null;
   for (const { talent, row, rank } of rowsOfKind(talents, "upkeep", rowOf)) {
     if (rank < (Number(row.minRank) || 1)) continue;
     // A row naming spells reaches those alone; one naming none reaches every Sustain.
     if (Array.isArray(row.spells) && row.spells.length && !row.spells.includes(name)) continue;
+    // **FOR A NUMBER OF EFFECTS** (04's Arcane Concentration, the class talent audit: *for a
+    // number of effects equal to your rank*; D-1890): `effects` at the rank counts the
+    // Sustains reached, and `index` is this one's place among those that pay Mana (the
+    // door's). A caller that names no place is reached as the first.
+    if (row.effects !== undefined && (Math.trunc(Number(index)) || 0) >= at(row.effects, { rank })) continue;
     if (row.free === true) out.by.push(talent.name);
     if (row.less !== undefined) {
       const n = at(row.less, { rank });
       if (n > 0) {
         out.less += n;
-        out.min = Math.max(out.min, Math.max(0, Math.trunc(Number(row.min ?? 1)) || 0));
+        // The minimum the rows name, the highest of them; 1 where none names one (05's floor).
+        minSeen = Math.max(minSeen ?? 0, Math.max(0, Math.trunc(Number(row.min ?? 1)) || 0));
         out.lessBy.push(talent.name);
       }
     }
   }
+  if (minSeen !== null) out.min = minSeen;
   out.free = out.by.length > 0;
-  if (weave) {
-    const count = Math.max(0, Math.trunc(Number(held)) || 0);
-    for (const { talent, patch, rank } of patchRowsOf(talents, "Shape the Weave", rowOf)) {
-      if (atRankOf(patch, rank).upkeepLess !== "held" || count <= 0) continue;
-      out.weaveLess = count;
-      out.weaveBy.push(talent.name);
-    }
-  }
+  // Netherwind's *the Mana each costs ... is reduced by the number of effects you are
+  // Sustaining* is gone (the class talent audit, D-1890), so no patch carries `upkeepLess`
+  // and `weaveLess` stays 0; `held` and `weave` are still handed in by the door.
+  void held; void weave;
   return out;
 }
 
@@ -3055,12 +3128,22 @@ export function upkeepFor(talents = [], { name = "", held = 0, weave = false } =
  * @param {{holdsWeave?: boolean, archmageStanding?: boolean}} o
  * @returns {{more: number, by: string[]}}
  */
-export function sustainsFor(talents = [], { holdsWeave = false, archmageStanding = false } = {}, rowOf = talentEffect) {
+export function sustainsFor(talents = [], { holdsWeave = false, archmageStanding = false, heraldStanding = false } = {}, rowOf = talentEffect) {
   let more = 0;
   const by = [];
   if (holdsWeave) {
     for (const { talent, patch, rank } of patchRowsOf(talents, "Shape the Weave", rowOf)) {
       const n = at(atRankOf(patch, rank).sustains ?? 0, { rank });
+      if (n <= 0) continue;
+      more += n;
+      by.push(talent.name);
+    }
+  }
+  // **04's HERALD OF THE VOID** (*For one minute you may Sustain one more effect than you could*;
+  // the class talent audit's B7, D-1885): while its minute's state stands on the caster.
+  if (heraldStanding) {
+    for (const { talent, row } of rowsOfKind(talents, "onUse", rowOf)) {
+      const n = Math.max(0, Math.trunc(Number(row?.herald?.sustains)) || 0);
       if (n <= 0) continue;
       more += n;
       by.push(talent.name);
@@ -3073,6 +3156,14 @@ export function sustainsFor(talents = [], { holdsWeave = false, archmageStanding
       more += n;
       by.push(talent.name);
     }
+  }
+  // **MASTER OF THE WEAVE** (the class talent audit, D-1890: *You may Sustain one more effect
+  // than your features and talents allow*): always, with no spell standing.
+  for (const { talent, row } of rowsOfKind(talents, "weave", rowOf)) {
+    const n = Math.max(0, Math.trunc(Number(row.sustains)) || 0);
+    if (n <= 0) continue;
+    more += n;
+    by.push(talent.name);
   }
   return { more, by };
 }
@@ -3117,10 +3208,16 @@ export const IGNITE_MARK = "ignite";
  * @param {Array} talents  the ATTACKER's
  * @returns {{identifier: string, name: string, amount: number, type: string}|null}
  */
-export function igniteFor(talents = [], rowOf = talentEffect) {
+export function igniteFor(talents = [], rowOf = talentEffect, { tier = 1 } = {}) {
   const [first] = rowsOfKind(talents, "ignite", rowOf);
   if (!first) return null;
-  const amount = at(first.row.amount ?? "rank", { rank: first.rank });
+  // **PYROMANIAC** (the class talent audit, D-1890: *Your Ignite deals Fire damage equal to
+  // your tier rather than your rank*): a taken `igniteAmount` restates the amount, at the
+  // mage's tier.
+  const [restated] = rowsOfKind(talents, "igniteAmount", rowOf);
+  const amount = restated
+    ? at(restated.row, { rank: restated.rank, tier: Number(tier) || 1 })
+    : at(first.row.amount ?? "rank", { rank: first.rank });
   return amount > 0 ? { identifier: first.talent.identifier, name: first.talent.name, amount, type: first.row.type ?? "fire" } : null;
 }
 
@@ -3687,26 +3784,38 @@ export const LIFE_TAP = Object.freeze({ feature: "Life Tap", mana: 2 });
  */
 export function lifeTapFor(talents = [], rowOf = talentEffect) {
   let perHealth = LIFE_TAP.mana;
+  // **PER TWO HEALTH** (the class talent audit's Tune, D-1891: *returns 1 further Mana for
+  // every 2 Health you spend, per rank*): `perTwo` a rank, beside 02's 2 a Health.
+  let perTwo = 0;
   const by = [];
   for (const { talent, patch, rank } of patchRowsOf(talents, LIFE_TAP.feature, rowOf)) {
-    const n = at(atRankOf(patch, rank).mana ?? 0, { rank });
-    if (n <= 0) continue;
+    const p = atRankOf(patch, rank);
+    const n = at(p.mana ?? 0, { rank });
+    const two = at(p.perTwo ?? 0, { rank });
+    if (n <= 0 && two <= 0) continue;
     perHealth += n;
+    perTwo += two;
     by.push(talent.name);
   }
-  return { perHealth, by };
+  return { perHealth, perTwo, by };
+}
+
+/** The Mana one Life Tap of `health` buys: 02's per Health, and a talent's per 2 Health. */
+export function lifeTapMana(health = 0, { perHealth = LIFE_TAP.mana, perTwo = 0 } = {}) {
+  const h = Math.max(0, Math.trunc(Number(health)) || 0);
+  return h * Math.max(0, Math.trunc(Number(perHealth)) || 0) + Math.floor(h / 2) * Math.max(0, Math.trunc(Number(perTwo)) || 0);
 }
 
 /**
  * The amounts a Life Tap may spend (05, *Spending Health*: never below 1 Health),
  * each with the Mana it buys, for the one chooser.
  *
- * @param {{health?: number, perHealth?: number}} o
+ * @param {{health?: number, perHealth?: number, perTwo?: number}} o
  * @returns {Array<{health: number, mana: number}>}
  */
-export function lifeTapChoices({ health = 0, perHealth = LIFE_TAP.mana } = {}) {
+export function lifeTapChoices({ health = 0, perHealth = LIFE_TAP.mana, perTwo = 0 } = {}) {
   const most = Math.max(0, (Math.trunc(Number(health)) || 0) - 1);
-  return Array.from({ length: most }, (_, i) => ({ health: i + 1, mana: (i + 1) * Math.max(0, Math.trunc(Number(perHealth)) || 0) }));
+  return Array.from({ length: most }, (_, i) => ({ health: i + 1, mana: lifeTapMana(i + 1, { perHealth, perTwo }) }));
 }
 
 /** 02's Counterspell: *Spend 4 Mana as a Reaction to force a Bane on a Casting Test you can see within 30 feet*. */
@@ -3810,14 +3919,18 @@ export function sacrificedWardChanges(ward = {}) {
 /**
  * **WHY COMMAND DEMON IS REFUSED, BEFORE ANYTHING IS PAID** (04: *make a Casting
  * Test targeting a Demon you can see within 20 feet*; D-775): one creature, a
- * demon, within the reach where both stand, and none already bound to anybody.
+ * demon, within the reach where both stand, and none already bound to anybody - and
+ * never a Boss (D-1804; the lead, 2026-11-22: *"boss's like King Mosh can't be
+ * shapeshift or summon targets"*), which the caller reads through `rules/bound.mjs
+ * #bossRefusal`.
  *
- * @param {{named?: number, demon?: boolean, feet?: number|null, reach?: number, bound?: boolean}} o
+ * @param {{named?: number, demon?: boolean, feet?: number|null, reach?: number, bound?: boolean, boss?: boolean}} o
  * @returns {string|null}  a lang key
  */
-export function commandRefusal({ named = 0, demon = false, feet = null, reach = 20, bound = false } = {}) {
+export function commandRefusal({ named = 0, demon = false, feet = null, reach = 20, bound = false, boss = false } = {}) {
   if (named !== 1) return "AZEROTH.Laid.OneTarget";
   if (!demon) return "AZEROTH.CommandDemon.NotDemon";
+  if (boss === true) return "AZEROTH.CommandDemon.Boss";
   if (bound) return "AZEROTH.CommandDemon.Bound";
   if (typeof feet === "number" && Number.isFinite(feet) && feet > reach) return "AZEROTH.Laid.TooFar";
   return null;
@@ -3826,23 +3939,30 @@ export function commandRefusal({ named = 0, demon = false, feet = null, reach = 
 /* ---- Destruction ----------------------------------------------------------- */
 
 /**
- * **RUIN** (04: *When one of your spells inflicts a Critical Injury, roll twice on
- * the table and take the higher result. At rank 2 you also gain 2 Mana*; D-775).
+ * **WHAT A NATURAL ON THE CASTING TEST ADDS** (04's Ruin, the class talent audit: *When your
+ * Casting Test against a creature's Defense shows a natural 19 or 20, the spell deals additional
+ * damage equal to your tier per rank*; D-1891): the damage the taken `onNatural` rows add for
+ * this die, where its face is one they name and - `vsDefense` - the Test's DC was a creature's
+ * Defense. `castSpell` adds it to the cast's damage.
  *
  * @param {Array} talents  the CASTER's
- * @returns {{name: string, higher: boolean, mana: number}|null}
+ * @param {{natural?: number|null, vsDefense?: boolean, tier?: number}} o
+ * @returns {{amount: number, by: string[]}}
  */
-export function ruinFor(talents = [], rowOf = talentEffect) {
-  const [first] = rowsOfKind(talents, "ruin", rowOf);
-  if (!first) return null;
-  const mana = first.rank >= (Number(first.row.minRank) || 1) ? Math.max(0, Math.trunc(Number(first.row.mana)) || 0) : 0;
-  return { name: first.talent.name, higher: first.row.higher === true, mana };
-}
-
-/** The higher of the dice a Critical Injury rolled (Ruin's; Unbreakable's is `lowerRoll`). */
-export function higherRoll(totals = []) {
-  const list = (totals ?? []).map(Number).filter(Number.isFinite);
-  return list.length ? Math.max(...list) : null;
+export function onNaturalFor(talents = [], { natural = null, vsDefense = false, tier = 1 } = {}, rowOf = talentEffect) {
+  let amount = 0;
+  const by = [];
+  const face = Math.trunc(Number(natural));
+  if (!Number.isFinite(face)) return { amount, by };
+  for (const { talent, row, rank } of rowsOfKind(talents, "onNatural", rowOf)) {
+    if (!(row.faces ?? []).includes(face)) continue;
+    if (row.vsDefense === true && vsDefense !== true) continue;
+    const n = at(row.damage ?? 0, { rank, tier: Number(tier) || 1 });
+    if (n <= 0) continue;
+    amount += n;
+    by.push(talent.name);
+  }
+  return { amount, by };
 }
 
 /**
@@ -3858,6 +3978,172 @@ export function higherRoll(totals = []) {
  */
 export function soulFireRefusal({ health = 0, cost = 0 } = {}) {
   if ((Math.trunc(Number(health)) || 0) - Math.max(0, Math.trunc(Number(cost)) || 0) < 1) return "AZEROTH.SoulFire.NoHealth";
+  return null;
+}
+
+/* ---- The class talent audit's Mage, Warlock and Druid readers (D-1890 to D-1899) ---- */
+
+/**
+ * **04's MANA SHIELD AT RANK 2** (*every 2 damage it takes costs you 1 Mana, rounded up*): the
+ * damage one Mana takes, 07's 1 where no taken row reaches it. Read where the shield pays
+ * (`effects/mana-shield-payment.mjs`).
+ *
+ * @param {Array} talents
+ * @returns {{ratio: number, by: string[]}}
+ */
+export function manaShieldRatioFor(talents = [], rowOf = talentEffect) {
+  let ratio = 1;
+  const by = [];
+  for (const { talent, row, rank } of rowsOfKind(talents, "manaShield", rowOf)) {
+    if (rank < (Number(row.minRank) || 1)) continue;
+    const r = Math.max(1, Math.trunc(Number(row.ratio)) || 1);
+    if (r > ratio) ratio = r;
+    by.push(talent.name);
+  }
+  return { ratio, by };
+}
+
+/**
+ * **WHAT THE CASTER'S TALENTS DO TO THE RESIST A SPELL OR A CURSE ASKS** (04's Shattering
+ * Cold: *A creature you have Slowed or Entangled takes a Bane on Resilience Tests against your
+ * Frost spells*; Malediction: *A creature takes a −1 penalty per rank on a Resilience Test
+ * against a curse of yours that deals no damage*): read by the card's Resist at the press
+ * (`dice/chat.mjs#rollResists`), off the caster's talents and the RESISTER's own effects - a
+ * condition the caster laid carries the caster in its `laidBy` (`effects/inflict.mjs`).
+ *
+ * @param {Array} talents  the CASTER's
+ * @param {{spell?: string|null, feature?: string|null, school?: string|null, damages?: boolean,
+ *   caster?: string|null, effects?: Array<{statuses?: string[], flags?: object, active?: boolean}>}} o
+ * @returns {{banes: number, banesBy: string[], modifiers: Array<{label: string, value: number}>}}
+ */
+export function resistTalentsOn(talents = [], { spell = null, feature = null, school = null, damages = false, caster = null, effects = [] } = {}, rowOf = talentEffect) {
+  const out = { banes: 0, banesBy: [], modifiers: [] };
+  const laid = new Set();
+  for (const e of effects ?? []) {
+    if (e?.active === false) continue;
+    const by = e?.flags?.["azeroth-rpg"]?.laidBy ?? [];
+    if (!caster || !Array.isArray(by) || !by.includes(caster)) continue;
+    for (const s of e.statuses ?? []) laid.add(s);
+  }
+  for (const { talent, row } of rowsOfKind(talents, "resistBane", rowOf)) {
+    if (!spell || !(row.schools ?? []).includes(school)) continue;
+    if (!(row.laidBy ?? []).some(s => laid.has(s))) continue;
+    const n = Math.max(0, Math.trunc(Number(row.banes)) || 0);
+    if (n <= 0) continue;
+    out.banes += n;
+    out.banesBy.push(talent.name);
+  }
+  for (const { talent, row, rank } of rowsOfKind(talents, "resistPenalty", rowOf)) {
+    if (damages === true) continue;
+    const named = (spell && (row.spells ?? []).includes(spell)) || (feature && (row.features ?? []).includes(feature));
+    if (!named) continue;
+    const n = at(row.amount ?? "rank", { rank });
+    if (n > 0) out.modifiers.push({ label: talent.name, value: -n });
+  }
+  return out;
+}
+
+/**
+ * **04's SHATTERING COLD, THE STUN** (*Once a round, when a Frost spell of yours damages an
+ * Entangled creature, it is Stunned until the end of its next turn unless it succeeds on a
+ * Body Resilience Test against your Spell DC*): the row, where the blow is a SPELL of a school
+ * the row names, it dealt damage, and the creature struck carries the condition; else null.
+ * The once a round is the caster's round record, claimed by the door.
+ *
+ * @param {Array} talents  the CASTER's
+ * @param {{spell?: boolean, type?: string|null, dealt?: number, statuses?: string[]}} o
+ * @returns {{identifier: string, name: string, condition: string, resilience: string, once: string|null}|null}
+ */
+export function frozenStunFor(talents = [], { spell = false, type = null, dealt = 0, statuses = [] } = {}, rowOf = talentEffect) {
+  if (spell !== true || !((Number(dealt) || 0) > 0)) return null;
+  for (const { talent, row } of rowsOfKind(talents, "frozenStun", rowOf)) {
+    if (!(row.schools ?? []).includes(type)) continue;
+    if (!(statuses ?? []).includes(row.on)) continue;
+    if ((statuses ?? []).includes(row.condition)) continue;
+    return { identifier: talent.identifier, name: talent.name, condition: row.condition, resilience: row.resilience ?? "body", once: row.once ?? null };
+  }
+  return null;
+}
+
+/**
+ * **04's DARK HARVEST** (*At the start of your turn, each creature within 60 feet carrying two
+ * or more of your ongoing effects takes Shadow damage equal to your tier*): the row at the
+ * warlock's tier, or null. The count is `swappableEffects`' one reading of *your ongoing
+ * effects*, made by the door (`effects/dark-harvest.mjs`).
+ *
+ * @param {Array} talents
+ * @param {{tier?: number}} o
+ * @returns {{identifier: string, name: string, feet: number, count: number, amount: number, type: string}|null}
+ */
+export function harvestFor(talents = [], { tier = 1 } = {}, rowOf = talentEffect) {
+  const [first] = rowsOfKind(talents, "harvest", rowOf);
+  if (!first) return null;
+  const amount = at(first.row.amount ?? "tier", { rank: first.rank, tier: Number(tier) || 1 });
+  if (amount <= 0) return null;
+  return {
+    identifier: first.talent.identifier, name: first.talent.name, feet: Math.max(0, Number(first.row.feet) || 0),
+    count: Math.max(1, Math.trunc(Number(first.row.count)) || 1), amount, type: first.row.type ?? "shadow"
+  };
+}
+
+/** Whether a creature carrying `held` of the warlock's ongoing effects, `feet` away, is harvested. */
+export function harvested(row, { held = 0, feet = null } = {}) {
+  if (!row) return false;
+  if (!(typeof feet === "number" && Number.isFinite(feet)) || feet > row.feet) return false;
+  return (Math.trunc(Number(held)) || 0) >= row.count;
+}
+
+/**
+ * **04's DARK PACT, JUDGED** (*a demon of your Bound Demon class feature within 30 feet loses
+ * Health equal to twice your tier, and you gain that much Mana. It cannot drop below 1 Health
+ * this way*): what the demon loses - never below 1 - and so what the warlock gains, or the
+ * refusal in a lang key. Judged before anything is paid; an unmeasured distance (a demon or a
+ * warlock with no token on the board) is the table's.
+ *
+ * @param {{amount?: number, health?: number, feet?: number|null, reach?: number, owned?: boolean}} o
+ * @returns {{ok: true, loss: number}|{ok: false, reason: string}}
+ */
+export function darkPactDrain({ amount = 0, health = 0, feet = null, reach = 30, owned = true } = {}) {
+  if (owned !== true) return { ok: false, reason: "AZEROTH.DarkPact.NotYours" };
+  if (typeof feet === "number" && Number.isFinite(feet) && feet > reach) return { ok: false, reason: "AZEROTH.DarkPact.TooFar" };
+  const loss = Math.max(0, Math.min(Math.trunc(Number(amount)) || 0, (Math.trunc(Number(health)) || 0) - 1));
+  if (loss <= 0) return { ok: false, reason: "AZEROTH.DarkPact.NoHealth" };
+  return { ok: true, loss };
+}
+
+/**
+ * **04's HEART OF THE WILD** (*You begin each Shapeshift form with Ferocity equal to your
+ * tier*): the pool and the amount a shape of this kind starts with, at the tier, or null.
+ * `documents/shapes.mjs#takeShape` writes it after the shape, never lowering what is held and
+ * never past the pool's cap.
+ *
+ * @param {Array} talents
+ * @param {{kind?: string|null, tier?: number}} o
+ * @returns {{pool: string, amount: number, name: string}|null}
+ */
+export function shapeStartFor(talents = [], { kind = null, tier = 1 } = {}, rowOf = talentEffect) {
+  for (const { talent, row, rank } of rowsOfKind(talents, "shapeStart", rowOf)) {
+    if (Array.isArray(row.kinds) && !row.kinds.includes(kind)) continue;
+    const amount = at(row.amount ?? "tier", { rank, tier: Number(tier) || 1 });
+    if (amount > 0) return { pool: row.pool ?? "ferocity", amount, name: talent.name };
+  }
+  return null;
+}
+
+/**
+ * **A USE ONCE A ROUND AT NO ACTION** (04's Dark Harvest: *Once a round, Soul Swap costs no
+ * action*): the taken `freeUse` row naming this feature with `per: "round"` and `action`, or
+ * null. The door claims the round's record (`markRoundOnce`) before it waives the budget.
+ *
+ * @param {Array} talents
+ * @param {string} feature
+ * @returns {{identifier: string, name: string, mark: string}|null}
+ */
+export function freeActionFor(talents = [], feature = "", rowOf = talentEffect) {
+  for (const { talent, row } of rowsOfKind(talents, "freeUse", rowOf)) {
+    if (row.feature !== feature || row.per !== "round" || row.action !== true) continue;
+    return { identifier: talent.identifier, name: talent.name, mark: `${talent.identifier}:free-action` };
+  }
   return null;
 }
 
@@ -3896,8 +4182,27 @@ export function onUseMageWarlock(onUse, { rank = 1, tier = 1 } = {}) {
     soulFire: o.soulFire ? {
       health: at(o.soulFire.health ?? "2*tier", { rank, tier }), sl: Math.max(0, Math.trunc(Number(o.soulFire.sl)) || 0),
       damage: at(o.soulFire.damage ?? "tier", { rank, tier })
-    } : null
+    } : null,
+    // 04's Dark Pact (the class talent audit, D-1891): the demon's loss at the tier and the reach.
+    darkPact: o.darkPact ? { feet: Math.max(0, Number(o.darkPact.feet) || 0), amount: at(o.darkPact.amount ?? "2*tier", { rank, tier }) } : null,
+    // 04's Shadowfury (D-1891): *spend Health equal to twice your tier*, paid with the Use.
+    payHealth: o.payHealth ? at(o.payHealth, { rank, tier }) : 0,
+    // 04's Arcane Power (D-1890): *your spells deal additional damage equal to your tier, of each
+    // spell's own type*, until the end of this turn, or the next at rank 2.
+    arcanePower: o.arcanePower ? (p => ({ amount: at(p.amount ?? "tier", { rank, tier }), until: p.until ?? "endOfTurn" }))(atRankOf(o.arcanePower, rank)) : null
   };
+}
+
+/**
+ * **THE CHANGES ARCANE POWER LAYS** (04, the class talent audit; D-1890): the tier on the spell
+ * lane of every damage type, `final` (the damage bonus is derived, CLAUDE.md §15).
+ *
+ * @param {{amount: number}|null} power  `onUseMageWarlock`'s `arcanePower`
+ * @returns {Array<{key: string, type: "add", value: string, phase: "final"}>}
+ */
+export function arcanePowerChanges(power) {
+  const n = Math.max(0, Math.trunc(Number(power?.amount)) || 0);
+  return n > 0 ? [{ key: "system.damageBonus.spell.all", type: "add", value: String(n), phase: "final" }] : [];
 }
 
 /**
@@ -3948,8 +4253,6 @@ export function useAreaTick({ who = "creature", amount = 0, type = null, rounds 
  *   links       `{feet}`: the damage a linked ally takes divided among every
  *               ally within the feet of the totem (Spirit Link Totem:
  *               `spiritLinkFor`, at `effects/blow-doors.mjs#divideBlow`)
- *   aegis       `{heal}`: the Health a creature 07's Aegis of the Light held
- *               restores when the spell ends (`aegisHealFor`)
  *
  * and the patch `mod("Shield of the Righteous", { reach })` - Guardian of the
  * Weak's - which `righteousReach` reads off the patch (`patchRowsOf`).
@@ -4014,12 +4317,14 @@ export function healTempFor(talents = [], { tier = 1, healedToFull = false, atFu
  * @param {{name?: string}} spell
  * @returns {{add: number, by: Array<{name: string, amount: number}>}}
  */
-export function spellTempFor(talents = [], { name = "" } = {}, rowOf = talentEffect) {
+export function spellTempFor(talents = [], { name = "", tier = 1 } = {}, rowOf = talentEffect) {
   let add = 0;
   const by = [];
   for (const { talent, row, rank } of rowsOfKind(talents, "tempHealth", rowOf)) {
     if (!(row.spells ?? []).includes(name)) continue;
-    const n = at(row.add ?? 0, { rank });
+    // The caster's tier in scope (04's Power Word: Shield, *Each rank adds your tier*; the class
+    // talent audit, D-1884). A caller naming no tier reads 1.
+    const n = at(row.add ?? 0, { rank, tier: Math.max(1, Math.trunc(Number(tier)) || 1) });
     if (n > 0) {
       add += n;
       by.push({ name: talent.name, amount: n });
@@ -4042,7 +4347,11 @@ export function holdRowsFor(talents = [], { tier = 1 } = {}, rowOf = talentEffec
     .filter(({ row }) => ASKED_HOLDS.includes(row.kind))
     .map(({ talent, row, rank }) => ({
       kind: row.kind, identifier: talent.identifier, name: talent.name, talentId: talent.id ?? null,
-      feet: Math.max(0, Number(row.feet) || 0), heal: row.heal ? at(row.heal, { rank, tier }) : 0
+      feet: Math.max(0, Number(row.feet) || 0), heal: row.heal ? at(row.heal, { rank, tier }) : 0,
+      // R4's regime (D-1863): the row's own `regime`, else its kind's (`HOLD_REGIME_OF`).
+      regime: holdRegimeOf(row),
+      // A granted hold that lasts holds while it stands (06 §9 rule 2; the wave 1 review).
+      lasting: holdLasts(row)
     }));
 }
 
@@ -4136,21 +4445,9 @@ export function spiritLinkFor(talents = [], rowOf = talentEffect) {
 /** The shaman's flag naming the totem Spirit Link Totem's Use added its effect to (D-777). */
 export const SPIRIT_LINK_FLAG = "spiritLink";
 
-/**
- * **04's AEGIS OF THE LIGHT** (*A creature held at 1 Health by it restores Health
- * equal to your tier when the spell ends*): the Health, at the caster's tier, or
- * null where the caster holds no such talent.
- *
- * @param {Array} talents  the CASTER's
- * @param {{tier?: number}} [o]
- * @returns {{identifier: string, name: string, amount: number}|null}
- */
-export function aegisHealFor(talents = [], { tier = 1 } = {}, rowOf = talentEffect) {
-  const [first] = rowsOfKind(talents, "aegis", rowOf);
-  if (!first) return null;
-  const n = at(first.row.heal ?? "tier", { rank: first.rank, tier });
-  return n > 0 ? { identifier: first.talent.identifier, name: first.talent.name, amount: n } : null;
-}
+// 04's Aegis of the Light TALENT left with the class talent audit's Benediction (D-1875), and with it the
+// heal a held creature restored when 07's spell ended (`aegisHealFor`, deleted in the wave-2 fix run: its
+// `aegis` key had come to match Divine Aegis's row and gave a Priest a heal nobody granted).
 
 /**
  * 02's War Cry's **Rallying Cry** as the book prints it (the Warrior's level 14:
@@ -4171,9 +4468,6 @@ export const RALLYING_CRY = Object.freeze({ feature: "War Cry", key: "rallying",
  *
  *   mod("Dispel")   `{further: {count, feet}}` (Rapture) - `raptureFor`, read by
  *                   `workflows.useFeature` as 02's Dispel is used
- *   undispellable   `{spells, minRank}`: a laid spell Dispel cannot end (Improved
- *                   Moonfire at rank 2) - `undispellableFor`, read by `castSpell`,
- *                   whose card's Apply marks the effect it lays
  *   dispelGate      `{sl, minRank}`: an ongoing effect of the holder's that a Dispel
  *                   ends only on a Casting Test at that SL (Everlasting Affliction
  *                   at rank 2) - `dispelGateFor`, read by the Dispel door
@@ -4228,24 +4522,6 @@ export function raptureFor(talents = [], rowOf = talentEffect) {
 }
 
 /**
- * **A LAID SPELL DISPEL CANNOT END** (04's Improved Moonfire: *At rank 2 it cannot
- * be ended by Dispel or similar effects*): the talents that mark this spell's laid
- * effect, at their rank, or null.
- *
- * @param {Array} talents  the CASTER's
- * @param {{spell?: string}} o  the spell's name
- * @returns {{by: string}|null}
- */
-export function undispellableFor(talents = [], { spell = "" } = {}, rowOf = talentEffect) {
-  const by = [];
-  for (const { talent, row, rank } of rowsOfKind(talents, "undispellable", rowOf)) {
-    if (!(row.spells ?? []).includes(spell) || rank < (Number(row.minRank) || 1)) continue;
-    by.push(talent.name);
-  }
-  return by.length ? { by: by.join(", ") } : null;
-}
-
-/**
  * **04's EVERLASTING AFFLICTION AT RANK 2** (*Dispel and similar effects end one of
  * them only on a Casting Test that meets or exceeds SL 2*): the gate, or null.
  *
@@ -4253,12 +4529,27 @@ export function undispellableFor(talents = [], { spell = "" } = {}, rowOf = tale
  * @returns {{sl: number, name: string}|null}
  */
 export function dispelGateFor(talents = [], rowOf = talentEffect) {
+  return dispelGatesFor(talents, rowOf).find(g => !g.sustained && !g.spells) ?? null;
+}
+
+/**
+ * **EVERY SL FLOOR A CASTER'S TALENTS SET ON A DISPEL** (D-248's method; the class talent
+ * audit, D-1890 to D-1892): each taken `dispelGate` at its rank - Everlasting Affliction's *SL 1
+ * per rank* on every ongoing effect (`sl: "rank"`), Improved Moonfire's SL 2 on Moonfire alone
+ * (`spells`), Master of the Weave's SL 2 on a Sustained spell (`sustained`). `rules/dispel.mjs
+ * #dispelGated` picks the one an effect meets.
+ *
+ * @param {Array} talents  the effect's owner's
+ * @returns {Array<{sl: number, name: string, spells: string[]|null, sustained: boolean}>}
+ */
+export function dispelGatesFor(talents = [], rowOf = talentEffect) {
+  const out = [];
   for (const { talent, row, rank } of rowsOfKind(talents, "dispelGate", rowOf)) {
     if (rank < (Number(row.minRank) || 1)) continue;
-    const sl = Math.max(1, Math.trunc(Number(row.sl)) || 1);
-    return { sl, name: talent.name };
+    const sl = Math.max(1, at(row.sl ?? 1, { rank }) || 1);
+    out.push({ sl, name: talent.name, spells: Array.isArray(row.spells) && row.spells.length ? [...row.spells] : null, sustained: row.sustained === true });
   }
-  return null;
+  return out;
 }
 
 /**
@@ -4599,7 +4890,8 @@ export function plagueFor(talents = [], rowOf = talentEffect) {
 export function flametongueFor(talents = [], rowOf = talentEffect) {
   for (const { talent, row, rank } of rowsOfKind(talents, "flametongue", rowOf)) {
     const r = atRankOf(row, rank);
-    return { identifier: talent.identifier, name: talent.name, add: Math.max(0, Math.trunc(Number(r.add)) || 0) };
+    // The Scorched a weapon hit lays while it is held (the class talent audit's B11, D-1886).
+    return { identifier: talent.identifier, name: talent.name, add: Math.max(0, Math.trunc(Number(r.add)) || 0), scorched: Math.max(0, Math.trunc(Number(r.scorched)) || 0) };
   }
   return null;
 }

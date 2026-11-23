@@ -400,13 +400,13 @@ export function crossClassBatch(context) {
 
     /* ---- O-160: a second class's healing feature ------------------------- */
 
-    it("DEVOTION: a Paladin-Priest's Mend restores the rank more, and names the talent", async function () {
+    // Devotion left 04 with the class talent audit's Benediction (D-1875); Divine Providence is the O-160 talent
+    // still reaching a second class's healing feature.
+    it("DIVINE PROVIDENCE: a Paladin-Priest's Lay on Hands may name two targets, and its chip names the talent", async function () {
       this.timeout(120000);
-      const both = await characterWith("ZZ XC Devotion", [["Paladin", 5], ["Priest", 5]], { ranks: { Devotion: 2 } });
-      const mend = await until(() => featureNamed(both, "Mend"), "Mend granted");
-      await until(() => String(featureNamed(both, "Mend")?.system?.heal ?? "").endsWith("+2"), "Devotion's rank on Mend's heal");
-      assert.include(featureNamed(both, "Mend").system.modifiedBy ?? [], "Devotion");
-      assert.ok(mend);
+      const both = await characterWith("ZZ XC Providence", [["Paladin", 5], ["Priest", 5]], { ranks: { "Divine Providence": 1 } });
+      await until(() => (featureNamed(both, "Lay on Hands")?.system?.modifiedBy ?? []).includes("Divine Providence"), "Divine Providence's chip on Lay on Hands");
+      assert.notInclude(featureNamed(both, "Lay on Hands").system.modifiedBy ?? [], "Devotion", "a talent no longer in 04 still patches Lay on Hands");
     });
 
     /* ---- O-161: a Use at any time --------------------------------------- */

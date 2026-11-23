@@ -350,7 +350,7 @@ export function necromancerHordeBatch(context) {
         assert.ok(abom, "an Abomination rose");
         assert.deepEqual(abom.getFlag(SCOPE, "grafts"), ["meatHook", "wardedHide", "swollen"], "its sheet lists the three grafts");
         assert.equal(abom.system.ward.fire, 3, "Warded Hide: Ward 3 against Fire");
-        assert.equal(abom.system.health.max, 64 + 15, "Swollen: five times tier 3");
+        assert.equal(abom.system.health.max, 80 + 15, "Swollen: five times tier 3");
         assert.equal(abom.system.attacks.find(r => r.name === "Chain hook").range, 30, "the Chain hook reaches 30 ft");
         assert.ok(abom.system.creatureAbilities.some(r => r.automation?.plan?.forced?.toward === "toward"), "the Hook's pull is an ability");
         assert.equal(essenceOf(necro).value, 0, "3 Essence spent");

@@ -41,6 +41,22 @@ import { talentEffect } from "./talent-effects.mjs";
 /** The `uuid` a gadget known is recorded under on the Gadgeteer feature's `known`. */
 export const GADGET_PREFIX = "gadget:";
 
+/** The Gadgeteer feature's flag naming the gadget used twice at rank 2 (04; D-1883). */
+export const GADGET_TWICE_FLAG = "gadgetTwice";
+
+/**
+ * **WHICH GADGET IS USED TWICE** (04's Gadgeteer at rank 2: *choose one gadget you know: you
+ * may use it twice between Short Rests*; D-1883): the key the feature names, while the rank
+ * holds and the gadget is still known; else null.
+ *
+ * @param {{rank?: number, chosen?: string|null, known?: string[]}} o
+ * @returns {string|null}
+ */
+export function gadgetTwiceKey({ rank = 1, chosen = null, known = [] } = {}) {
+  if ((Math.trunc(Number(rank)) || 0) < 2 || typeof chosen !== "string" || !chosen) return null;
+  return (known ?? []).includes(chosen) ? chosen : null;
+}
+
 /** The actor flag a Blueprint's gadget or device stands under (*It works for a day*). */
 export const BLUEPRINT_FLAG = "blueprint";
 
@@ -321,14 +337,16 @@ export function knownGadgets(known = [], allowed = Infinity) {
  * @param {object} gadget  a `GADGETS` row
  * @returns {object}
  */
-export function gadgetFeature(gadget) {
+export function gadgetFeature(gadget, { twice = false } = {}) {
   return {
     ...gadget.grant,
     name: gadget.name,
     level: 1,
     // The Effect cell, bold as the chapter sets it (the card enriches it).
     description: `<p>${String(gadget.text ?? "").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")}</p>`,
-    uses: { max: 1, per: "short" },
+    // *At rank 2, choose one gadget you know: you may use it twice between Short Rests*
+    // (04's Gadgeteer; the class talent audit's B17, D-1883).
+    uses: { max: twice === true ? 2 : 1, per: "short" },
     source: { document: "04-TALENTS", section: "Gadgets" }
   };
 }

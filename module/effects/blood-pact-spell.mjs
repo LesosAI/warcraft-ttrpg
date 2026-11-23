@@ -22,11 +22,6 @@ const actorAt = row => row?.sceneId || row?.tokenId
   ? (tokenAt(row)?.actor?.id === row.actorId ? tokenAt(row).actor : null) : game.actors?.get(row?.actorId);
 
 function snapshot(caster, donor, spell, targets, source) {
-  const talents = caster.takenTalents?.() ?? [];
-  const talent = talents.some(t => t.identifier === "blood-pact" && t.className === "Warlock" && t.taken > 0);
-  const boundFeatureIds = [...(caster.items ?? [])].filter(i => i.type === "feature"
-    && i.system?.identifier === "bound-demon" && i.system.className === "Warlock"
-    && i.system.source?.document === "02-CHARACTER-OPTIONS").map(i => i.id);
   const commands = [...(donor.effects ?? [])].map(e => {
     const f = e.flags?.[SCOPE] ?? {};
     return { identifier: f.identifier, origin: e.origin, cast: f.cast, effectId: e.id,
@@ -54,7 +49,7 @@ function snapshot(caster, donor, spell, targets, source) {
     distance = feetApart(origin, target);
     if (!Number.isFinite(distance)) return null;
   }
-  return { casterUuid: caster.uuid, talent, boundFeatureIds, pool, distance,
+  return { casterUuid: caster.uuid, pool, distance,
     donor: { uuid: donor.uuid, creatureType: donor.system.creatureType,
       health: donor.system.health?.value, bond: bondOf(donor), commands } };
 }

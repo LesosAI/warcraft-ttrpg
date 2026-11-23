@@ -1,4 +1,4 @@
-import { TERRIFYING_ROAR as SPEC } from "../rules/king-mosh.mjs";
+import { TERRIFYING_ROAR as SPEC, roarDC } from "../rules/king-mosh.mjs";
 import { inflictCondition } from "./inflict.mjs";
 import { untilEndOfNextTurnOrRound } from "./durations.mjs";
 
@@ -30,7 +30,7 @@ export async function resolveTerrifyingRoar({ actor, targets, valid, checkpoint 
       continue;
     }
     if (!await save(token, { stage: "resisting", index })) return stop("checkpoint");
-    const card = await rollResilience({ actor: victim, resilience: SPEC.resilience, dc: SPEC.dc, subtitle: SPEC.name });
+    const card = await rollResilience({ actor: victim, resilience: SPEC.resilience, dc: roarDC(actor.system), subtitle: SPEC.name });
     const passed = card?.rolls?.[0]?.outcome?.success;
     if (!card?.id || typeof passed !== "boolean") return stop("testUnresolved");
     row.testId = card.id; row.outcome = passed ? "resisted" : null;

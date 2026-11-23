@@ -49,6 +49,8 @@ import { EXPOSED_FLAG, calledShotFor, exposedBoonsOn, exposuresAgainst, reckless
 // The Ranger's and the Rogue's lines (D-773): Careful Shot's cancelled Banes, a
 // Boon off the target's Health or a measured fact (Hammer of Wrath, Master
 // Duellist), the Opening measured, and the Finisher the talents reshape.
+import { roundHolds } from "../rules/riders.mjs";
+import { DEATH_MARK_ROUND } from "../rules/class-talents.mjs";
 import { DEATH_MARK_FLAG, cancelledBanesFor, finisherOffer as finisherOfferOf, finisherOptionsFor, namesTarget, openingGate, targetBoonsWith } from "../rules/class-talents.mjs";
 // What stands on the target (Deterrence) and whether the roller is hidden.
 import { deterrencesOf, flaggedEffects } from "../effects/talent-states.mjs";
@@ -523,10 +525,12 @@ function attackTalentLines(actor, target, range, facts = {}) {
   const legacy = actor?.gateFacts?.(target) ?? {};
   const wrath = targetBoonsWith(talents, {
     kind: "attack", health: target?.health ?? null,
-    facts: { ...legacy, melee: range === "melee", ranged: range === "ranged", engagedOne: facts.engagedOne === true, shadowDamaged: shadowDamagedBy(actor, target) }
+    facts: { ...legacy, melee: range === "melee", ranged: range === "ranged", engagedOne: facts.engagedOne === true, riposte: facts.riposte === true, shadowDamaged: shadowDamagedBy(actor, target) }
   });
   const reckless = recklessFor(talents);
-  const promised = actor?.pendingNextAttack?.({ targetStatuses: target?.statuses ?? [] }) ?? { boons: 0, live: [] };
+  // At a creature, the promises held to that creature as well (04's Overpower; D-1870); with none, the rest.
+  const promiseKey = target?.tokenId ?? target?.actorId ?? null;
+  const promised = (promiseKey ? actor?.pendingNextAttack?.({ targetKey: promiseKey, targetStatuses: target?.statuses ?? [] }) : actor?.pendingNextAttack?.({ targetStatuses: target?.statuses ?? [] })) ?? { boons: 0, live: [] };
   const cancels = cancelledBanesFor(talents, { range });
   // And the Sovereign's own on a weapon attack at it (04's The Crimson Throne), derived on its character.
   const deterred = [...(target?.deterred ?? []), ...(target?.sovDeterred ?? [])];
@@ -585,7 +589,8 @@ function castingTalentLines(actor, target, kind, targets = [target]) {
   // for each spell you are sustaining, to a maximum of three*; 04's Archmage: *four
   // Boons rather than three*), built with the talent, while its laid effect stands.
   const every = castingBoonsFor(talents, {
-    facts: { boundDemon: boundOf(actor, "demon").length > 0 },
+    // 04's Master of the Weave (the class talent audit, D-1890: *While you Sustain three or more effects*).
+    facts: { boundDemon: boundOf(actor, "demon").length > 0, sustainingThree: (actor?.getFlag?.("azeroth-rpg", "sustaining") ?? []).length >= 3 },
     states: veinsStates(flaggedEffects(actor, VEINS_FLAG).map(r => r.flag))
   });
   const archmage = archmageBoons({
@@ -667,6 +672,8 @@ export function prepareRoll(actor, given) {
     facts: {
       lesserInvisible: lesserInvisibilityActive(actor.effects, actor.uuid, game.time?.worldTime) && isHiddenFor(actor, source),
       engagedOne: test.engagedOne === true,
+      // 06 §7's Riposte (04's Combat Reflexes' Boon at rank 2; the class talent audit, D-1882).
+      riposte: test.riposte === true || spec.riposte === true,
       packFlank: test.packFlank ?? null,
       hidden: test.kind === "attack" && isHiddenFor(actor, source),
       talentBanes: spec.talentBanes?.banes > 0 ? spec.talentBanes : null,
@@ -867,7 +874,11 @@ function finisherOffer(actor, spec, target = null) {
   const payer = actor?.finisherPayer?.() ?? actor;
   if (!(payer?.items ?? []).some(i => i.type === "feature" && i.name === "Finisher")) return null;
   const pool = (payer.system?.momenta ?? []).find(p => p.name === "comboPoints") ?? null;
-  const marked = namesTarget(payer.getFlag?.("azeroth-rpg", DEATH_MARK_FLAG) ?? null, target);
+  // Death Mark once a round (B15, D-1880): spent where the round's record holds it.
+  const markFight = payer.activeFight?.() ?? null;
+  const markRound = markFight ? (markFight.getCombatantsByActor?.(payer)?.[0]?.getFlag?.("azeroth-rpg", "round") ?? null) : null;
+  const marked = namesTarget(payer.getFlag?.("azeroth-rpg", DEATH_MARK_FLAG) ?? null, target)
+    && !roundHolds(markRound, markFight?.round ?? 0, DEATH_MARK_ROUND);
   return finisherOfferOf(pool, finisherOptionsFor(payer.takenTalents?.() ?? []), { marked });
 }
 
@@ -1001,8 +1012,11 @@ function restoreFieldTexts(form, texts) {
 /** Read the form into a choice. Shared by the live preview and the Roll button. */
 function readForm(form, p) {
   const f = form.elements;
+  // **A TICKED RIDER THAT TAKES A LINE OFF** (02's Aimed Shot: *It ignores cover and long-range Banes*;
+  // the class talent audit, D-1872): the lines every ticked rider's row `cancels` count for nothing.
+  const cancelled = new Set((p.riders ?? []).filter(l => l.available && f[`rider-${l.identifier}`]?.checked).flatMap(l => l.row?.cancels ?? []));
   const lines = [...p.situational.automatic, ...p.situational.judgement]
-    .map(l => ({ ...l, checked: f[`line-${l.id}`]?.checked ?? false }));
+    .map(l => ({ ...l, checked: !cancelled.has(l.id) && (f[`line-${l.id}`]?.checked ?? false) }));
   const extraBoons = Math.max(0, Math.trunc(Number(f.extraBoons?.value)) || 0);
   const extraBanes = Math.max(0, Math.trunc(Number(f.extraBanes?.value)) || 0);
   const { boons, banes, modifier } = countModifiers(lines, { extraBoons, extraBanes });

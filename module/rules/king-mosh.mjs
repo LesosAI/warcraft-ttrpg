@@ -6,6 +6,14 @@ export const TERRIFYING_ROAR = Object.freeze({ name: "Terrifying Roar", action: 
 export const VICIOUS_REND = Object.freeze({ name: "Vicious Rend", action: "action",
   uses: 1, per: "encounter", weapon: "Jaws", condition: "bleeding", seconds: 12 });
 
+/** The roar's DC for the creature roaring (D-1806): a Boss forces its tier's Boss DC (14 §1),
+ * which the NPC model derives as `bossDC`; every other roarer, the Tyrant Devilsaur, the
+ * printed 17. King Mosh, a tier 3 Boss, roars at 19. */
+export function roarDC(system) {
+  const boss = Number(system?.bossDC);
+  return Number.isFinite(boss) && boss > 0 ? boss : TERRIFYING_ROAR.dc;
+}
+
 /** A reviewed set of all living enemies in the trample area. No arbitrary
  * target cap: unlike Guard Cleave this affects each enemy in the area.
  * One ordinary Stamp per creature preserves its defense, armor and reactions. */

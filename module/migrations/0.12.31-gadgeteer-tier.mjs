@@ -23,6 +23,12 @@ export function buildGadgeteerUpdate(raw, pack) {
 export async function migrate(log = console.log) {
   const talents = await packSystems("azeroth-rpg.talents");
   const pack = talents.byIdentifier.get("gadgeteer");
+  // **A LATER PACK GIVES IT TWO RANKS AGAIN** (the class talent audit's B17, D-1883): migration
+  // 0.16.2.2 brings an owned Gadgeteer level with that pack, so this step stamps nothing against it.
+  if (pack?.ranks === 2 && pack.effect?.includes("2 + your tier")) {
+    log("azeroth-rpg | 0.12.31: the talents pack holds the audit's two-rank Gadgeteer; migration 0.16.2.2 brings an owned one level with it");
+    return 0;
+  }
   if (pack?.ranks !== 1 || !pack.effect?.includes("2 + your tier"))
     throw new Error("Gadgeteer's updated pack is missing. Rebuild the packs and restart Foundry before retrying this migration.");
   return walkWorld({ item: doc => doc.type === "talent"

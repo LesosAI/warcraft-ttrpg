@@ -71,7 +71,7 @@
 import { AZEROTH } from "../config.mjs";
 import { gadgetByKey, GADGET_UUID_PREFIX, isGadgetEntry } from "./gadgets.mjs";
 import { canGoOn, priceFor } from "./affixes.mjs";
-import { ZONES } from "./classic-tables.mjs";
+import { ZONES, zoneWings } from "./classic-tables.mjs";
 import { affixCost, bandFor, build, plan } from "./forge.mjs";
 import { tierForLevel } from "./progression.mjs";
 // An unarmed strike is never a find (the San'layn and Sovereign plan, C15, B.12 finding 10; D-1162).
@@ -308,18 +308,47 @@ export function classicBoss(item) {
 }
 
 /**
+ * **14 §14's DUNGEONS, ONE ROW EACH** (D-1823), off the bestiary's Boss entries.
+ * Until the 2026-11 bestiary every dungeon held one Boss, so a row per Boss was a
+ * row per dungeon; now Naxxramas holds eighteen, and a list built a row per Boss
+ * offered the GM eighteen *Naxxramas* options. A dungeon is as deep as the worst
+ * thing in it, so its tier is the highest of its Bosses'; its `uuid` is its first
+ * Boss by name, which keeps the select's value still from one load to the next.
+ *
+ * @param {Array<{uuid: string, name: string, weightClass?: string, dungeon?: string|null, tier?: number}>} bestiary
+ * @returns {Array<{uuid: string, dungeon: string, tier: number, bosses: string[]}>}  sorted by dungeon
+ */
+export function dungeonRoster(bestiary = []) {
+  const byDungeon = new Map();
+  const ordered = [...bestiary].filter(b => b?.weightClass === "boss" && b.dungeon)
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)) || String(a.uuid).localeCompare(String(b.uuid)));
+  for (const b of ordered) {
+    const tier = Number(b.tier) || 1;
+    const row = byDungeon.get(b.dungeon);
+    if (!row) byDungeon.set(b.dungeon, { uuid: b.uuid, dungeon: b.dungeon, tier, bosses: [b.name] });
+    else {
+      row.tier = Math.max(row.tier, tier);
+      row.bosses.push(b.name);
+    }
+  }
+  return [...byDungeon.values()].sort((a, b) => a.dungeon.localeCompare(b.dungeon));
+}
+
+/**
  * Every Classic zone, bound to the dungeon 14 §14 names for it and to the
  * tier that dungeon sits at.
  *
  * **`classic-tables.mjs#ZONES` is the one vocabulary and it is imported
  * rather than re-derived.** A zone name is not the dungeon's name — 14 §14
- * files Nefarian under *The mountain's peak*, which is Blackwing Lair, and
+ * filed Nefarian under *The mountain's peak*, which is Blackwing Lair, and
  * no amount of string normalising finds that. The binding is a hand row and
  * `classic-tables.test.mjs` holds it against the chapter.
  *
- * **THE INDEX IS THE SOURCE WHEREVER IT SPEAKS**, which is why only three
- * of the 26 rows carry a `tier` of their own: Ragefire Chasm, the Stockade
- * and the Ruins of Ahn'Qiraj have no Boss in 14 §14 and so no band to read.
+ * **THE INDEX IS THE SOURCE WHEREVER IT SPEAKS**, and since the 2026-11
+ * bestiary it speaks for all 26: Ragefire Chasm's hand `tier` went last
+ * (D-1837, closing O-650). A zone's
+ * tier is the deepest of the Dungeon cells it covers (`zoneWings`), and the
+ * entry carries those `wings` so naming any one of them draws the zone (D-1823).
  * A zone that resolves to neither is `unresolved` and is reported rather
  * than dropped, because a zone that silently stopped resolving would take
  * its whole shelf of finds out of the generator without a word (D-681).
@@ -339,12 +368,14 @@ export function zoneTiers(dungeons = []) {
   const zones = new Map();
   const unresolved = [];
   for (const zone of ZONES) {
-    const tier = (zone.dungeon ? byDungeon.get(zone.dungeon) : null) ?? zone.tier ?? null;
+    const wings = zoneWings(zone);
+    const read = wings.map(w => byDungeon.get(w)).filter(t => t !== undefined);
+    const tier = (read.length ? Math.max(...read) : null) ?? zone.tier ?? null;
     if (tier === null || tier === undefined) {
       unresolved.push(zone.name);
       continue;
     }
-    zones.set(zone.name, { zone: zone.name, dungeon: zone.dungeon ?? null, tier });
+    zones.set(zone.name, { zone: zone.name, dungeon: zone.dungeon ?? null, wings, tier });
   }
   return { zones, unresolved };
 }
@@ -445,16 +476,23 @@ export function poolsFrom({ weapons = [], armor = [], gear = [], affixes = [], z
  *   was already true before D-703: `found.dungeon` comes off the ZONE binding,
  *   so naming Naxxramas has always reached all 436 of its finds rather than
  *   Kel'Thuzad's 36. **Do not narrow it.**
- * - **neither** named draws the whole tier's, so a find whose zone 14 §14
- *   gives no dungeon at all - Ragefire Chasm, the Stockade, the Ruins of
- *   Ahn'Qiraj - is drawn there and nowhere else. That is *items that do not
- *   belong to a dungeon, add them to the other loot tables* (D-702).
+ * - **neither** named draws the whole tier's, so a find whose zone is bound
+ *   to no dungeon - none since Ragefire Chasm read the index (D-1837) -
+ *   is drawn there and nowhere else. That is *items that do not belong to a
+ *   dungeon, add them to the other loot tables* (D-702). A dungeon named
+ *   matches any wing its zone covers (`foundIn`, D-1823).
  */
+/** Whether a find's place covers a 14 §14 Dungeon cell: any of its zone's wings (D-1823). */
+function foundIn(found, dungeon) {
+  if (!found || !dungeon) return false;
+  return (Array.isArray(found.wings) && found.wings.length ? found.wings : [found.dungeon]).includes(dungeon);
+}
+
 function findsFor(pools, { rarity, kind, dungeon = null, boss = null, tier = null }) {
   const finds = pools?.found?.[rarity]?.[kind] ?? [];
   if (!finds.length) return [];
-  if (boss) return finds.filter(b => b.found?.dungeon === dungeon && b.found?.boss === boss);
-  if (dungeon) return finds.filter(b => b.found?.dungeon === dungeon);
+  if (boss) return finds.filter(b => foundIn(b.found, dungeon) && b.found?.boss === boss);
+  if (dungeon) return finds.filter(b => foundIn(b.found, dungeon));
   return finds.filter(b => b.found?.tier === Number(tier));
 }
 
@@ -497,7 +535,7 @@ export function bossesIn(pools, dungeon) {
   for (const rarity of ["rare", "epic"]) {
     for (const kind of ["combat", "noncombat"]) {
       for (const base of pools?.found?.[rarity]?.[kind] ?? []) {
-        if (base.found?.dungeon !== dungeon || !base.found?.boss) continue;
+        if (!foundIn(base.found, dungeon) || !base.found?.boss) continue;
         counts.set(base.found.boss, (counts.get(base.found.boss) ?? 0) + 1);
       }
     }

@@ -108,6 +108,13 @@ import * as v0156 from "./0.15.6-identified.mjs";
 import * as v0160 from "./0.16.0-demon-hunter.mjs";
 import * as v01601 from "./0.16.0.1-spell-audit.mjs";
 import * as v01602 from "./0.16.0.2-energy-pool.mjs";
+import * as v01611 from "./0.16.1.1-bestiary-audit.mjs";
+import * as v0162e from "./0.16.2-class-audit-engine.mjs";
+import * as v01621a from "./0.16.2.1-class-audit-a.mjs";
+import * as v01622b from "./0.16.2.2-class-audit-b.mjs";
+import * as v01623c from "./0.16.2.3-class-audit-c.mjs";
+import * as v01624h from "./0.16.2.4-bestiary-health.mjs";
+import * as v01625w from "./0.16.2.5-bestiary-webp.mjs";
 import { forgetPacks } from "./walk.mjs";
 
 // Ordered oldest to newest. Add new entries at the end.
@@ -307,7 +314,31 @@ const CHAIN = [
   // 0.16.0.2: the Demon Hunter's third round - two Energy classes' stored values made one pool's (02 §10), the
   // Short and Curved warglaives without Fast (08 §7) and Devour the Spell's turn-start trigger (07), each restamp
   // against its pack copy. A point step of the unreleased 0.16.0 (D-1723).
-  { version: "0.16.0.2", module: v01602 }
+  { version: "0.16.0.2", module: v01602 },
+  // 0.16.1.1: the 2026-11 bestiary audit on the creatures a world holds - Initiative, scores, attack rows,
+  // Wards, Immunities, types, ability rows and words, each field written only where it still holds release
+  // 0.16.1's pack value and with the rebuilt pack's. A point step after the released 0.16.1 (D-1801 to D-1803).
+  { version: "0.16.1.1", module: v01611 },
+  // 0.16.2: the class talent audit's shared engine - a standing Bleeding takes its value as one
+  // unsourced layer (R8, D-1866); nothing else the engine changed is stored (D-1860 to D-1868).
+  { version: "0.16.2", module: v0162e },
+  // 0.16.2.1: the class talent audit's Warrior, Paladin and Ranger - Bladeturn renamed Overpower in its own slot
+  // with the rank carried, Benediction's five removed talents deleted (ranks handed back), Divine Favor refunded
+  // to 0, the five new ones embedded, and every changed talent's words and ranks off the pack copy (D-1870 to D-1879).
+  { version: "0.16.2.1", module: v01621a },
+  // 0.16.2.2: the class talent audit's Rogue, Shaman and Priest - three capstones renamed in their own slot
+  // with the rank taken carried, and every changed talent's words and ranks off the pack copy (D-1880 to D-1887).
+  { version: "0.16.2.2", module: v01622b },
+  // 0.16.2.3: the class talent audit's Mage, Warlock and Druid - eight talents renamed in their own slot
+  // with the rank taken carried and the spell they taught kept, Chaos Bolt and Fel Fire swapped (a rank the
+  // tree no longer allows refunded), and every changed talent's words off the pack copy (D-1890 to D-1899).
+  { version: "0.16.2.3", module: v01623c },
+  // 0.16.2.4: the bestiary's Health raised by a quarter (D-1900, closing O-658) - a creature's stored
+  // maximum written only where it still holds the old pack value, its value moved in proportion.
+  { version: "0.16.2.4", module: v01624h },
+  // 0.16.2.5: the bestiary's portraits and tokens are WebP (D-1902) - every stored path to a bestiary
+  // portrait or token `.png`, on actors, items, effects, placed tokens and unlocked world packs, takes `.webp`.
+  { version: "0.16.2.5", module: v01625w }
 ];
 
 /**

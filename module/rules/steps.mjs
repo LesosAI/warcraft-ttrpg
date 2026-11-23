@@ -139,7 +139,10 @@ export const STEP_REFUSALS = Object.freeze({
   refuses: "AZEROTH.Step.Refuse.Refuses",
   outsized: "AZEROTH.Step.Refuse.Outsized",
   // 07 §17's Grave Step: the space is not within the feet of a corpse within range (run 4c-S).
-  noCorpse: "AZEROTH.Step.Refuse.NoCorpse"
+  noCorpse: "AZEROTH.Step.Refuse.NoCorpse",
+  // 02's Shadowstep (the class talent audit, D-1880): the space is not within 5 feet of the
+  // creature named.
+  notBeside: "AZEROTH.Step.Refuse.NotBeside"
 });
 
 /**
@@ -150,7 +153,9 @@ export const STEP_REFUSALS = Object.freeze({
  */
 export const FEATURE_STEPS = Object.freeze({
   Blink: Object.freeze({ feet: 20, sight: "seen" }),
-  Shadowstep: Object.freeze({ feet: 60, sight: "see" })
+  // The class talent audit (D-1880): *a space within 5 feet of a creature you can see within
+  // 60 feet* - the creature within `feet`, the space within `near` of it.
+  Shadowstep: Object.freeze({ feet: 60, sight: "beside", near: 5 })
 });
 
 /** A whole number of feet above 0, or null. */
@@ -231,6 +236,9 @@ export function stepRefusal({ feet, apart = null, sight = "see", seen = null, oc
   // **A SPACE BESIDE A CORPSE** (07 §17's Grave Step: *within 5 feet of a corpse within range*): asked
   // only of a corpse step, and a space no corpse stands near is refused in words (run 4c-S).
   if (sight === "corpse" && nearCorpse !== true) return "noCorpse";
+  // **A SPACE BESIDE THE CREATURE NAMED** (02's Shadowstep: *Move to a space within 5 feet of a
+  // creature you can see*; D-1880): Grave Step's reading with the creature for the corpse.
+  if (sight === "beside" && nearCorpse !== true) return "notBeside";
   if (occupied === true) return "occupied";
   return null;
 }

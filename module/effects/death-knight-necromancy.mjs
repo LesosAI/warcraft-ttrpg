@@ -25,7 +25,7 @@
 
 import {
   CORPSE_FLAG, CORPSE_MARKS, RAISE_FLAG, corpseMarkRefusal, corpseRefusal, isCorpse, rangeFeetOf, raiseAskRefusal, raiseCapRefusal,
-  raiseOf, raiseRoseAnyway, raiseRounds, raiseSetRefusal, raiseUntil, raisedCount, strandedRaises
+  raiseOf, raiseRoseAnyway, raiseRounds, raiseRowAtEntry, raiseSetRefusal, raiseUntil, raisedCount, strandedRaises
 } from "../rules/raise.mjs";
 import { refundedValue } from "../rules/miss.mjs";
 import { AZEROTH } from "../config.mjs";
@@ -109,6 +109,19 @@ export function corpsesOn(actor, row, options) {
   return corpsesFor(actor, row, options);
 }
 
+/**
+ * The words a corpse refusal takes beyond the names (D-1808's `kindSize`): the row's creature
+ * types and its least size, localised - *Dragonkin*, *Huge*.
+ *
+ * @param {object} row  at its entry's size (`raiseRowAtEntry`)
+ * @returns {{kind: string, size: string}}
+ */
+export function raiseWords(row = {}) {
+  const kind = (row?.kinds ?? []).map(k => game.i18n.localize(AZEROTH.creatureTypes?.[k] ?? k)).join(" / ");
+  const size = AZEROTH.sizes?.[row?.minSize] ? game.i18n.localize(AZEROTH.sizes[row.minSize]) : String(row?.minSize ?? "");
+  return { kind, size };
+}
+
 /** The corpses chosen, through the one chooser; null where dismissed. */
 export async function chooseCorpses(item, row, rows) {
   const { chooseOption } = game.system.azeroth.workflows;
@@ -121,7 +134,7 @@ export async function chooseCorpses(item, row, rows) {
     return {
       key: r.id, available: open, checked,
       name: t("AZEROTH.Raise.Corpse", { name: r.name, feet: r.feet ?? "-" }),
-      description: r.refusal ? `<p>${t(`AZEROTH.Raise.Refuse.${r.refusal}`, { name: r.name, spell: item.name })}</p>` : ""
+      description: r.refusal ? `<p>${t(`AZEROTH.Raise.Refuse.${r.refusal}`, { name: r.name, spell: item.name, ...raiseWords(row) })}</p>` : ""
     };
   });
   const prompt = t(max > 1 ? "AZEROTH.Raise.PromptMany" : "AZEROTH.Raise.Prompt", { name: item.name, entry: row.entry, min: row.corpses.min, max });
@@ -140,8 +153,9 @@ export async function chooseCorpses(item, row, rows) {
  * @returns {Promise<{key: string, sceneId: string, tokenId: string, corpses: string[], name: string}|null>}
  */
 export async function judgeRaise(actor, item, { key, source = null, empower = {} } = {}) {
-  const row = raiseOf(key);
-  if (!row) return null;
+  const base = raiseOf(key);
+  if (!base) return null;
+  let row = base;
   // **THE NECROMANCER'S RAISES ARE THE HORDE'S DOOR** (02 §7's Command the Dead; the Necromancer
   // plan's door 3): one linked actor a creature, the places judged before anything is paid - and
   // what the cast's lines bought (`empower`: Skeletal Mastery's extra mage, Lasting, Far-reaching;
@@ -151,7 +165,7 @@ export async function judgeRaise(actor, item, { key, source = null, empower = {}
     return judgeHordeRaise(actor, item, { key, source, empower });
   }
   const refuse = (k, data = {}) => {
-    ui.notifications?.warn(t(`AZEROTH.Raise.Refuse.${k}`, { name: actor.name, spell: item.name, entry: row.entry, ...data }));
+    ui.notifications?.warn(t(`AZEROTH.Raise.Refuse.${k}`, { name: actor.name, spell: item.name, entry: row.entry, ...raiseWords(row), ...data }));
     return null;
   };
   const capped = raiseCapRefusal(row, { cap: runicPowerCap(actor.system?.abilities?.cha?.mod ?? 0) });
@@ -162,8 +176,11 @@ export async function judgeRaise(actor, item, { key, source = null, empower = {}
   // is refused here, before the Runic Power, never after it (`rules/gm-writes.mjs`).
   if (gmAbsentFor({ owned: [false], isGM: game.user?.isGM === true, gmActive: Boolean(game.users?.activeGM) })) return refuse("noGM");
   const pack = game.packs.get("azeroth-rpg.bestiary");
-  const index = pack ? await pack.getIndex() : null;
-  if (!index?.find(e => e.name === row.entry)) return refuse("noEntry");
+  const index = pack ? await pack.getIndex({ fields: ["system.size"] }) : null;
+  const block = index?.find(e => e.name === row.entry) ?? null;
+  if (!block) return refuse("noEntry");
+  // **RAISE DRACOLICH'S SIZE IS THE DRACOLICH'S** (D-1808): read off the block it raises.
+  row = raiseRowAtEntry(base, block.system?.size ?? null);
   const reach = row.feet ?? rangeFeetOf(item.system?.range ?? "");
   const { feetApart } = await import("../canvas/footprints.mjs");
   const rows = corpsesFor(actor, row, { scene: site.scene, from: site.token, reach, feetApart });
@@ -221,10 +238,12 @@ export async function raiseQueryHandler({ ownerUuid = null, key = null, sceneId 
   // The distance reader is imported BEFORE the corpses are read (the F4a review, S2): from the
   // read to the claim below there is no await, so no second handler can run in between.
   const { feetApart } = await import("../canvas/footprints.mjs");
-  const rows = corpsesFor(owner, row, { scene, from, reach, viewer: user ?? game.user, feetApart });
+  // Raise Dracolich's least size is the Dracolich's own (D-1808), read off the block loaded above.
+  const sized = raiseRowAtEntry(row, entry.system?.size ?? null);
+  const rows = corpsesFor(owner, sized, { scene, from, reach, viewer: user ?? game.user, feetApart });
   const ids = [...new Set((corpses ?? []).filter(id => typeof id === "string"))];
   const bad = ids.map(id => rows.find(r => r.id === id)).find(r => !r || r.refusal);
-  if (bad !== undefined) throw new Error(t(`AZEROTH.Raise.Refuse.${bad?.refusal ?? "noCorpse"}`, { name: bad?.name ?? "", spell: name, entry: row.entry }));
+  if (bad !== undefined) throw new Error(t(`AZEROTH.Raise.Refuse.${bad?.refusal ?? "noCorpse"}`, { name: bad?.name ?? "", spell: name, entry: row.entry, ...raiseWords(sized) }));
   const set = raiseSetRefusal(ids, row, (a, b) => feetApart(scene.tokens.get(a), scene.tokens.get(b)));
   if (set) throw new Error(t(`AZEROTH.Raise.Refuse.${set}`, { spell: name, entry: row.entry, min: row.corpses.min, max: row.corpses.max, feet: row.together ?? 0 }));
   // **THE CORPSES ARE TAKEN FIRST** (the F3 review's must-fix): claimed on this client at once,

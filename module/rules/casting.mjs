@@ -20,6 +20,8 @@ import { CLASS_SPELL_POOL, CLASS_SPELL_POOL_BY_CLASS } from "./runes.mjs";
 import { VITAE, vitaePayment } from "./vitae.mjs";
 // 05's *Round - ~6 seconds*: a turn's span out of a fight is one of them (D-778).
 import { ROUND_SECONDS } from "./area-ticks.mjs";
+// *Before the end of your next turn* (04's Clearcasting; the class talent audit, D-1890): the one reading.
+import { nextTurnStands } from "./next-attack.mjs";
 // 07's *The Druid in a form*: 1 Ferocity for every 2 Mana, rounded up (D-769).
 import { ferocityFor } from "./shapes.mjs";
 // A creature's Power pool IS its Mana (the lead, 2026-09-10).
@@ -185,10 +187,23 @@ export function overchannelPerPoint(tier = 1) {
  * the Health taken off each Overchannel - MY READING, for the lead: off the
  * cast's whole price, never off each point - so a point more may be affordable.
  */
-export function maxOverchannel({ health = 0, tier = 1, relief = 0 } = {}) {
-  const per = overchannelPerPoint(tier);
-  const less = Math.max(0, Math.trunc(Number(relief)) || 0);
-  return Math.max(0, Math.floor((Math.max(0, health) - 1 + less) / per));
+export function maxOverchannel({ health = 0, tier = 1, relief = 0, free = 0 } = {}) {
+  // **PER POINT** (the class talent audit's C3; 07 §8 and 04 now agree, D-1890): Overchanneller
+  // takes its rank off EACH point, to a minimum of 1 a point; Clearcasting's free points
+  // (`free`) cost nothing and are counted first.
+  const per = overchannelPointHealth(tier, relief);
+  const f = Math.max(0, Math.trunc(Number(free)) || 0);
+  return f + Math.max(0, Math.floor((Math.max(0, health) - 1) / per));
+}
+
+/** 07 §8's Health a point at a tier, less Overchanneller's rank, never below 1 (D-1890). */
+export function overchannelPointHealth(tier = 1, relief = 0) {
+  return Math.max(1, overchannelPerPoint(tier) - Math.max(0, Math.trunc(Number(relief)) || 0));
+}
+
+/** 02's Overchannel Mastery's Mana a point - the spell's tier - less Overchanneller's rank, never below 1 (D-1890). */
+export function overchannelPointMana(tier = 1, relief = 0) {
+  return Math.max(1, Math.max(1, Math.trunc(Number(tier)) || 1) - Math.max(0, Math.trunc(Number(relief)) || 0));
 }
 
 /**
@@ -217,11 +232,46 @@ export function payFromNow(now = 0, price = 0, { floor = 0 } = {}) {
  * The Health a number of points costs, clamped to what can be paid, with a
  * talent's relief taken off the whole price and the price floored at nothing.
  */
-export function overchannelCost({ points = 0, health = 0, tier = 1, relief = 0 } = {}) {
-  const taken = Math.min(Math.max(0, Math.trunc(points) || 0), maxOverchannel({ health, tier, relief }));
-  const gross = taken * overchannelPerPoint(tier);
-  const less = taken > 0 ? Math.min(gross, Math.max(0, Math.trunc(Number(relief)) || 0)) : 0;
-  return { points: taken, health: gross - less, relief: less };
+export function overchannelCost({ points = 0, health = 0, tier = 1, relief = 0, free = 0 } = {}) {
+  const taken = Math.min(Math.max(0, Math.trunc(points) || 0), maxOverchannel({ health, tier, relief, free }));
+  // Clearcasting's points are taken first and cost nothing (D-1890).
+  const freeTaken = Math.min(taken, Math.max(0, Math.trunc(Number(free)) || 0));
+  const paid = taken - freeTaken;
+  const gross = paid * overchannelPerPoint(tier);
+  const net = paid * overchannelPointHealth(tier, relief);
+  return { points: taken, health: net, relief: gross - net, ...(freeTaken > 0 ? { free: freeTaken } : {}) };
+}
+
+/**
+ * **02's EVOCATION'S MANA BACK** (*regain half your total Mana, rounded down*; the wave-2 review): the
+ * pool handed is the Mage class's own (`workflows.mjs#poolFor` by the feature's class item), never
+ * the first Mana pool, so a Warlock / Mage refills the Mage's. Null where there is no pool.
+ *
+ * @param {{itemId?: string, kind?: string, value?: number, max?: number}|null} pool
+ * @returns {{itemId: string, kind: string, value: number, restored: number}|null}
+ */
+export function halfManaRestore(pool = null) {
+  if (!pool) return null;
+  const max = Math.max(0, Math.trunc(Number(pool.max)) || 0);
+  const value = Math.max(0, Math.trunc(Number(pool.value)) || 0);
+  const restored = Math.floor(max / 2);
+  return { itemId: pool.itemId, kind: pool.kind ?? "power", value: Math.min(max, value + restored), restored };
+}
+
+/**
+ * **WHETHER A CAST LAYS 04's CLEARCASTING** (*When you Overchannel and the Casting Test succeeds*; the
+ * class talent audit, D-1890). A successful cast that took at least one Overchannel point it PAID for.
+ * The orchestrator's reading (the wave-2 review), by the audit's aim of closing the Mana loop: a cast
+ * whose points were all Clearcasting's free ones lays none, or the free points would refresh
+ * themselves for ever.
+ *
+ * @param {{success?: boolean, points?: number, free?: number}} o  `points` taken, `free` of them free
+ * @returns {boolean}
+ */
+export function clearcastingLays({ success = false, points = 0, free = 0 } = {}) {
+  const taken = Math.max(0, Math.trunc(Number(points)) || 0);
+  const gratis = Math.max(0, Math.trunc(Number(free)) || 0);
+  return success === true && taken > gratis;
 }
 
 /**
@@ -245,13 +295,21 @@ export const OVERCHANNEL_MAX_POINTS = 6;
  *   `mana` the cast's Mana as it will be charged, every discount taken
  * @returns {{points: number, health: number, relief: number, mana: number}}
  */
-export function overchannelPrice({ points = 0, health = 0, tier = 1, relief = 0, mastery = false, mana = 0 } = {}) {
-  if (!mastery) return { ...overchannelCost({ points, health, tier, relief }), mana: 0 };
+export function overchannelPrice({ points = 0, health = 0, tier = 1, relief = 0, mastery = false, mana = 0, free = 0 } = {}) {
+  // **PER POINT, AT THE TIER** (the class talent audit's C3, overturning O-192's *"Per cast"*;
+  // 02: *Each point costs Mana equal to the spell's tier instead*; D-1890): with the feature each
+  // point costs the spell's tier in Mana and no Health, Overchanneller takes its rank off each
+  // point to a minimum of 1, and Clearcasting's free points (`free`) cost nothing. `mana` (the
+  // cast's own price) no longer prices it, and is kept for the callers that hand it.
+  void mana;
+  if (!mastery) return { ...overchannelCost({ points, health, tier, relief, free }), mana: 0 };
   const taken = Math.min(Math.max(0, Math.trunc(Number(points)) || 0), OVERCHANNEL_MAX_POINTS);
   if (!taken) return { points: 0, health: 0, relief: 0, mana: 0 };
-  const doubled = Math.max(0, Math.trunc(Number(mana)) || 0);
-  const less = Math.min(doubled, Math.max(0, Math.trunc(Number(relief)) || 0));
-  return { points: taken, health: 0, relief: less, mana: doubled - less };
+  const freeTaken = Math.min(taken, Math.max(0, Math.trunc(Number(free)) || 0));
+  const paid = taken - freeTaken;
+  const gross = paid * Math.max(1, Math.trunc(Number(tier)) || 1);
+  const net = paid * overchannelPointMana(tier, relief);
+  return { points: taken, health: 0, relief: gross - net, mana: net, ...(freeTaken > 0 ? { free: freeTaken } : {}) };
 }
 
 /**
@@ -330,7 +388,10 @@ export function spellManaCost({ mana = 0, name = "", school = null } = {}, signa
   const n = v => Number(v) || 0;
   const named = name ? n(signatureEffects?.empowers?.[name]?.cost) : 0;
   const bySchool = school ? n(signatureEffects?.spellCost?.[school]) : 0;
-  const paid = Math.max(0, n(mana) - named - bySchool - Math.max(0, n(next)) - Math.max(0, n(less)));
+  // **A NEXT SPELL'S DISCOUNT NEVER TAKES THE COST BELOW 1** (the class talent audit's R7; D-1865):
+  // what the other discounts leave is the cost the promise is taken off, and it stops at 1.
+  const before = Math.max(0, n(mana) - named - bySchool - Math.max(0, n(less)));
+  const paid = before - nextDiscountTaken({ cost: before, next });
   // **A SCHOOL DISCOUNT'S OWN FLOOR** (Atiesh's Guardian's Economy, *to a
   // minimum of 1*; D-910): where a Signature discounting this school names one,
   // the Mana goes no lower than it - and never above the entry's own Mana, so a
@@ -341,6 +402,28 @@ export function spellManaCost({ mana = 0, name = "", school = null } = {}, signa
 
 /** The actor flag the next spell's discounts stand under (D-771). */
 export const NEXT_SPELL_FLAG = "nextSpell";
+
+/**
+ * **R7's MANA LIMITS** (the class talent audit; the lead's *"All other propsals are approved"*;
+ * D-1865): *a Mana discount never refunds more than the spell's cost and never takes a point
+ * below 1* - the Clearcasting loop, Nature's Grace and Predator's Swiftness, Overchanneller,
+ * Illumination and Hammer of Justice's refund. The refund half is `class-talents.mjs#manaBackFor`'s
+ * `cost`, the one door Mana comes back through on a cast.
+ */
+export const NEXT_SPELL_MANA_FLOOR = 1;
+
+/**
+ * How much of a next spell's discount a cost of `cost` takes: never past the floor of 1, and
+ * nothing off a cost already under it (a spell that costs nothing is not made to cost 1).
+ *
+ * @param {{cost?: number, next?: number}} o
+ * @returns {number}
+ */
+export function nextDiscountTaken({ cost = 0, next = 0 } = {}) {
+  const c = Math.max(0, Math.trunc(Number(cost)) || 0);
+  const d = Math.max(0, Math.trunc(Number(next)) || 0);
+  return Math.max(0, Math.min(d, c - NEXT_SPELL_MANA_FLOOR));
+}
 
 /**
  * **THE NEXT SPELL'S DISCOUNTS THAT STILL STAND** (04's Nature's Grace and
@@ -379,6 +462,18 @@ export function pendingNextSpell(entries = [], { now = null, time = null } = {})
       continue;
     }
     const turn = e.turn && typeof e.turn === "object" ? e.turn : null;
+    // **BEFORE THE END OF YOUR NEXT TURN** (04's Clearcasting; the class talent audit, D-1890):
+    // `through: "nextTurn"` and the turn it was laid in - lapsed once the caster's next turn has
+    // ended (`next-attack.mjs#nextTurnStands`), or out of a fight two rounds of the world's clock.
+    if (e.through === "nextTurn" && turn) {
+      if (Number.isFinite(Number(turn.clock)) && turn.combat === undefined) {
+        const at = time === null || time === undefined ? NaN : Number(time);
+        if (now || !Number.isFinite(at) || at - Number(turn.clock) >= 2 * ROUND_SECONDS) lapsed.push(e);
+        else live.push(e);
+      } else if (now && turn.combat === now.combat && nextTurnStands(turn, now)) live.push(e);
+      else lapsed.push(e);
+      continue;
+    }
     if (turn && Number.isFinite(Number(turn.clock)) && turn.combat === undefined) {
       // A caller that names no time cannot say the round is still running: lapsed.
       const at = time === null || time === undefined ? NaN : Number(time);
@@ -401,7 +496,9 @@ export function pendingNextSpell(entries = [], { now = null, time = null } = {})
  * and a heal nothing reduces.
  */
 function promisesAnything(e) {
-  return Math.trunc(Number(e.amount)) > 0 || e.cast === "half" || Math.trunc(Number(e.forcedSl)) > 0 || Math.trunc(Number(e.damage)) > 0 || e.miracle === true;
+  return Math.trunc(Number(e.amount)) > 0 || e.cast === "half" || Math.trunc(Number(e.forcedSl)) > 0 || Math.trunc(Number(e.damage)) > 0 || e.miracle === true
+    // 04's Clearcasting's free Overchannel points (the class talent audit, D-1890).
+    || Math.trunc(Number(e.overchannel)) > 0;
 }
 
 /**
@@ -423,10 +520,16 @@ function promisesAnything(e) {
  * @returns {{taken: object[], kept: object[], amount: number, cast: object|null, forcedSl: number, damage: number,
  *   miracle: object|null}}
  */
-export function takeNextSpell(live = [], { action = null, healing = false, school = null } = {}) {
+export function takeNextSpell(live = [], { action = null, healing = false, school = null, roundUsed = [] } = {}) {
   const taken = [];
   const kept = [];
   for (const e of live ?? []) {
+    // **R7: A LOWERED RUNG ONCE A ROUND** (D-1865): a Half-Action promise laid by a row marked
+    // `perRound` (Backdraft) is kept, not taken, while the round's record holds its mark.
+    if (e?.cast === "half" && e.perRound === true && (roundUsed ?? []).includes(`${e.source}:1`)) {
+      kept.push(e);
+      continue;
+    }
     // **A PROMISE TO ONE SCHOOL** (04's Runic Frost: *the next Frost spell you cast*; run F4a): an
     // entry naming its schools is taken only by a spell of one of them, and kept otherwise.
     if (Array.isArray(e?.schools) && e.schools.length && !e.schools.includes(school)) {
@@ -439,7 +542,8 @@ export function takeNextSpell(live = [], { action = null, healing = false, schoo
       continue;
     }
     const rung = e?.cast === "half";
-    const other = Math.trunc(Number(e?.amount)) > 0 || Math.trunc(Number(e?.forcedSl)) > 0 || Math.trunc(Number(e?.damage)) > 0;
+    const other = Math.trunc(Number(e?.amount)) > 0 || Math.trunc(Number(e?.forcedSl)) > 0 || Math.trunc(Number(e?.damage)) > 0
+      || Math.trunc(Number(e?.overchannel)) > 0;
     if (rung && !other && action !== "action") kept.push(e);
     else taken.push(e);
   }
@@ -447,6 +551,8 @@ export function takeNextSpell(live = [], { action = null, healing = false, schoo
   return {
     taken,
     kept,
+    // 04's Clearcasting (D-1890): *your next spell* takes the free points whatever it is.
+    overchannel: taken.reduce((sum, e) => sum + n(e.overchannel), 0),
     amount: taken.reduce((sum, e) => sum + n(e.amount), 0),
     cast: action === "action" ? (taken.find(e => e.cast === "half") ?? null) : null,
     forcedSl: taken.reduce((m, e) => Math.max(m, n(e.forcedSl)), 0),

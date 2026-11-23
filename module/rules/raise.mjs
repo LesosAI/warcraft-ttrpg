@@ -98,6 +98,12 @@ export function raiseRefusal({ held = 0, count = 0 } = {}) {
 /* ------------------------------------------------------------------ */
 
 /**
+ * A row's `minSize` that means *the raised entry's own size* (D-1808): Raise Dracolich takes a
+ * dragon of the Dracolich's size or larger. `raiseRowAtEntry` puts the entry's size in its place.
+ */
+export const ENTRY_SIZE = "entry";
+
+/**
  * **THE DEATH KNIGHT'S RAISES** (07 §17's *Raising the dead* table; 02 §7's Army of the Dead;
  * the Death Knight plan's *Raising the dead*). Each row is one spell or feature:
  *
@@ -106,7 +112,10 @@ export function raiseRefusal({ held = 0, count = 0 } = {}) {
  *   rises as its own creature (Raise Skeleton's *Each corpse rises*, Army of the Dead's six),
  *   `per: "raise"` where they make one (Raise Abomination's *three corpses stitch together*);
  * - `kinds` / `minSize` - what a corpse must have been (*Humanoid*, *Medium or larger*, *a
- *   dragon*); `together` - the feet every corpse stands within of every other (*within 10 ft
+ *   dragon*). `minSize: ENTRY_SIZE` is the raised entry's OWN size, read off its block by the door
+ *   (`raiseRowAtEntry`) and never typed here: Raise Dracolich's *The corpse of a dragon of Huge
+ *   size or larger*, the Dracolich being Huge (D-1808; the lead: *"raise dracolich can target any
+ *   dragon of equal or greater size. The summon is a frost wyrm from it"*); `together` - the feet every corpse stands within of every other (*within 10 ft
  *   of each other*); `feet` - the reach a feature states (Army of the Dead's *within 60 feet*),
  *   a spell's own being its Range;
  * - `span` - how long it stands: `rounds` (1 minute is ten, 1 hour six hundred, Army of the
@@ -121,7 +130,7 @@ export const RAISES = Object.freeze({
   "raise-ghoul": Object.freeze({ entry: "Plagued Ghoul", corpses: Object.freeze({ min: 1, max: 1 }), per: "corpse", kinds: Object.freeze(["humanoid"]), minSize: null, together: null, feet: null, span: Object.freeze({ rounds: 10 }), capAtLeast: null }),
   "raise-crypt-fiend": Object.freeze({ entry: "Crypt Fiend", corpses: Object.freeze({ min: 1, max: 1 }), per: "corpse", kinds: null, minSize: "medium", together: null, feet: null, span: Object.freeze({ rounds: 10 }), capAtLeast: null }),
   "raise-abomination": Object.freeze({ entry: "Abomination", corpses: Object.freeze({ min: 3, max: 3 }), per: "raise", kinds: null, minSize: null, together: 10, feet: null, span: Object.freeze({ rounds: 600 }), capAtLeast: null }),
-  "raise-dracolich": Object.freeze({ entry: "Dracolich", corpses: Object.freeze({ min: 1, max: 1 }), per: "corpse", kinds: Object.freeze(["dragonkin"]), minSize: null, together: null, feet: null, span: Object.freeze({ longRest: true }), capAtLeast: 15 }),
+  "raise-dracolich": Object.freeze({ entry: "Dracolich", corpses: Object.freeze({ min: 1, max: 1 }), per: "corpse", kinds: Object.freeze(["dragonkin"]), minSize: ENTRY_SIZE, together: null, feet: null, span: Object.freeze({ longRest: true }), capAtLeast: 15 }),
   // 02 §7: *Up to six corpses within 60 feet of you rise as Risen Skeletons ... for three
   // rounds ... They collapse at the end of the third round.*
   "army-of-the-dead": Object.freeze({ entry: "Risen Skeleton", corpses: Object.freeze({ min: 1, max: 6 }), per: "corpse", kinds: null, minSize: null, together: null, feet: 60, span: Object.freeze({ rounds: 3 }), capAtLeast: null })
@@ -295,6 +304,24 @@ export function raiseSpanRounds(row = {}, { lasting = false } = {}) {
 /** 05's size ladder, smallest first (`AZEROTH.sizes`), for *Medium or larger*. */
 const SIZE_LADDER = Object.freeze(["tiny", "small", "medium", "large", "huge", "enormous"]);
 
+/**
+ * **A RAISE'S ROW AT ITS ENTRY'S SIZE** (D-1808): a row whose `minSize` is `ENTRY_SIZE` takes the
+ * size of the 14 block it raises (`entrySize`, read off the bestiary by the door), so Raise
+ * Dracolich asks for a corpse of the Dracolich's own size or larger and the size is held in one
+ * place. Any other row comes back unchanged. An entry size the ladder does not know leaves the
+ * sentinel in place, and `corpseRefusal` then refuses every corpse for its size (closed, never
+ * open).
+ *
+ * @param {object} row
+ * @param {string|null} entrySize  the raised entry's `system.size`
+ * @returns {object}
+ */
+export function raiseRowAtEntry(row = {}, entrySize = null) {
+  if (row?.minSize !== ENTRY_SIZE) return row;
+  const size = typeof entrySize === "string" ? entrySize.trim().toLowerCase() : "";
+  return SIZE_LADDER.includes(size) ? { ...row, minSize: size } : row;
+}
+
 /** The raise a spell or feature is, by identifier, or null. */
 export function raiseOf(identifier) {
   const key = String(identifier ?? "");
@@ -369,7 +396,7 @@ export function corpseMark(raw) {
  * @param {{kind?: string|null, size?: string|null, feet?: number|null, mark?: object|null}} corpse
  * @param {object} row  `RAISES`'
  * @param {{knightUuid?: string|null, reach?: number|null, now?: number}} o
- * @returns {"destroyed"|"raised"|"kept"|"sealed"|"kind"|"size"|"sizeMax"|"range"|null}
+ * @returns {"destroyed"|"raised"|"kept"|"sealed"|"kind"|"size"|"kindSize"|"sizeMax"|"range"|null}
  */
 export function corpseRefusal(corpse = {}, row = {}, { knightUuid = null, reach = null, now = 0 } = {}) {
   const mark = corpseMark(corpse?.mark);
@@ -380,8 +407,14 @@ export function corpseRefusal(corpse = {}, row = {}, { knightUuid = null, reach 
   if (live && mark.state === "kept" && mark.by !== knightUuid) return "kept";
   if (live && mark.state === "severed") return "severed";
   if (live && mark.state === "caged" && mark.by !== knightUuid) return "caged";
-  if (Array.isArray(row?.kinds) && row.kinds.length && !row.kinds.includes(corpse?.kind ?? null)) return "kind";
-  if (row?.minSize && SIZE_LADDER.indexOf(corpse?.size ?? "") < SIZE_LADDER.indexOf(row.minSize)) return "size";
+  // **A KIND AND A SIZE TOGETHER ARE ONE REFUSAL** (D-1808): Raise Dracolich's *a dragon of Huge
+  // size or larger* is said whole, whichever half the corpse fails (`kindSize`).
+  const kinds = Array.isArray(row?.kinds) && row.kinds.length ? row.kinds : null;
+  const both = Boolean(kinds && row?.minSize);
+  if (kinds && !kinds.includes(corpse?.kind ?? null)) return both ? "kindSize" : "kind";
+  // A `minSize` the ladder does not know (an `ENTRY_SIZE` the door never resolved) refuses every
+  // corpse, so an unread entry size never opens the raise to anything.
+  if (row?.minSize && (!SIZE_LADDER.includes(row.minSize) || SIZE_LADDER.indexOf(corpse?.size ?? "") < SIZE_LADDER.indexOf(row.minSize))) return both ? "kindSize" : "size";
   // Animate Corpse's *Medium or smaller*: a size the ladder does not know is refused too.
   if (row?.maxSize && !(SIZE_LADDER.indexOf(corpse?.size ?? "") >= 0 && SIZE_LADDER.indexOf(corpse.size) <= SIZE_LADDER.indexOf(row.maxSize))) return "sizeMax";
   const feet = corpse?.feet;

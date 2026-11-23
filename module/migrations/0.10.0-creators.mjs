@@ -13,6 +13,7 @@
  */
 
 import { AZEROTH } from "../config.mjs";
+import { isDataOperator } from "../rules/creature-spellpower.mjs";
 
 /** The class tables this version adds, copied from the pack where a held copy lacks them. */
 export const CLASS_TABLES = Object.freeze(["kit"]);
@@ -36,7 +37,9 @@ export function migrateNpcSource(source) {
   for (const key of LOWERCASE_ROWS) {
     if (Array.isArray(source[key])) source[key] = source[key].map(v => String(v).toLowerCase());
   }
-  if (source.skills && typeof source.skills === "object") {
+  // A data operator is left whole (D-1727's review): Rework writes the skills
+  // as a `ForcedReplacement`, and a plain rebuild turned it into a merge.
+  if (source.skills && typeof source.skills === "object" && !isDataOperator(source.skills)) {
     const out = {};
     for (const [key, value] of Object.entries(source.skills)) {
       if (!(key in AZEROTH.skills)) continue;

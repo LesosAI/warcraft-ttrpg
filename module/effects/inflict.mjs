@@ -34,6 +34,8 @@ import { LAID_BY_FLAG, laidByWith } from "../rules/talent-gates.mjs";
 // 08 §20 (D-911): a condition refused from one source, and a mark the damage door ends.
 import { ENDS_ON_DAMAGE_FLAG, refusedFromSource } from "../rules/signatures.mjs";
 import { beingMovedBy } from "./forced-movement.mjs";
+// R8: Bleeding by source (the class talent audit; D-1866).
+import { BLEED_SOURCES_FLAG, BLEED_SOURCE_MARK, UNSOURCED, bleedLayered, bleedLayers, bleedReconciled, bleedTotal } from "../rules/bleeding.mjs";
 
 export const INFLICT_QUERY = "azeroth-rpg.inflictCondition";
 
@@ -48,7 +50,8 @@ export const INFLICT_QUERY = "azeroth-rpg.inflictCondition";
  */
 // And 08 §20's Emerald Slumber's *until it takes damage* (D-911): `endsOnDamage`, which
 // `AzerothActor#applyDamage` ends on the next blow that lands.
-const MARKS = Object.freeze([NO_CASTING_FLAG, PARALYTIC_FLAG, SNARE_FLAG, ENDS_ON_DAMAGE_FLAG]);
+// R8's source of a Bleeding (D-1866): read by the landing, never written onto the effect as a mark.
+const MARKS = Object.freeze([NO_CASTING_FLAG, PARALYTIC_FLAG, SNARE_FLAG, ENDS_ON_DAMAGE_FLAG, BLEED_SOURCE_MARK]);
 
 /** The marks a request carries, cleaned: each a `{source}` object, or dropped. */
 function cleanMarks(marks) {
@@ -166,6 +169,23 @@ async function inflictHere({ victim, id, value, until = null, marks = {}, byUuid
     const kept = higherShedDc(heldShed, flagsOnly[SHED_DC_FLAG]);
     if (heldShed && kept && kept.dc === heldShed.dc && kept.source === heldShed.source) delete flagsOnly[SHED_DC_FLAG];
     else flagsOnly[SHED_DC_FLAG] = kept;
+  }
+  // **R8: BLEEDING FROM ONE SOURCE REFRESHES, FROM TWO IT ADDS** (the class talent audit; D-1866):
+  // a Bleeding is laid as its source's layer (`marks.bleedSource`, or the unsourced layer) and the
+  // condition's value is the layers' sum (`rules/bleeding.mjs`).
+  const bleedMark = flagsOnly[BLEED_SOURCE_MARK] ?? null;
+  delete flagsOnly[BLEED_SOURCE_MARK];
+  const layeredBefore = had ? (ownBefore.flags?.["azeroth-rpg"]?.[BLEED_SOURCES_FLAG] ?? null) : null;
+  // Every Bleeding is layered, an unsourced one too: two unsourced Bleedings add (A1; the wave 1 review).
+  // **AND A SCORCHED THAT NAMES ITS SOURCE** (04's Flametongue: *A creature holds no more
+  // Scorched from this talent than that*; the class talent audit, D-1886): A1 adds Scorched
+  // from separate sources as it adds Bleeding, so a sourced Scorched takes the same layers.
+  if (effect && (id === "bleeding" || (id === "scorched" && bleedMark))) {
+    // Held first to what the condition still carries (`bleedReconciled`): a cure or a withdrawn hit
+    // lowered the value and left the layers, and no removed amount may come back.
+    const held = had ? bleedReconciled(bleedLayers({ [BLEED_SOURCES_FLAG]: layeredBefore, value: prior }), prior ?? 1) : {};
+    const layers = bleedLayered(held, { source: bleedMark?.source ?? UNSOURCED, value: valueOf(value) ?? 1 });
+    await effect.update({ [`flags.azeroth-rpg.${BLEED_SOURCES_FLAG}`]: layers, "flags.azeroth-rpg.value": bleedTotal(layers) });
   }
   if (effect && Object.keys(flagsOnly).length) {
     await effect.update(Object.fromEntries(Object.entries(flagsOnly).map(([k, v]) => [`flags.azeroth-rpg.${k}`, v])));

@@ -22,12 +22,20 @@
  * `raisedDown` (one of the raised dead dropping to 0) is handed to the listeners as its own
  * event; nothing in this door reads it yet beyond the event itself.
  *
+ * **A CHARACTER'S DROP TO 0 HEALTH** (`characterFell`, D-1729) goes to its own listeners
+ * (`onCharacterDown`), with the dealer the damage write named (`DAMAGE_BY_OPTION`): 10 §3's
+ * *A creature exposes you when it reduces you to 0 Health* is `exposeOnDrop`, the one caller of
+ * `workflows.corruptionExposure` with the `creature` occasion, its Test made on the character's
+ * own client through the same query.
+ *
  * **Drain Soul's `deathRewards` and Dark Minion's `raiseFallen` stay on `afterBlow`** (the plan:
  * *moved onto it only if their tests stay green*): both read the blow that killed (its caster,
  * its card), which the watch does not see.
  */
 
-import { DEATH_GIVEN_FLAG, HEAL_CLEARS, deathGives, deathObserver, healedAboveZero, soulHarvestGain, SOUL_HARVEST } from "../rules/death-watch.mjs";
+import { DAMAGE_BY_OPTION, DEATH_GIVEN_FLAG, HEAL_CLEARS, deathGives, deathObserver, healedAboveZero, soulHarvestGain, SOUL_HARVEST } from "../rules/death-watch.mjs";
+import { CREATURE_OCCASION, creatureExposure, exposureFor } from "../rules/corruption-exposure.mjs";
+import { gmAbsentFor } from "../rules/gm-writes.mjs";
 import { ESSENCE, ESSENCE_PER_DEATH, essenceEnemy, essenceFromDeath, isLiving } from "../rules/essence.mjs";
 import { creatureSnapshot } from "../rules/creature-kinds.mjs";
 import { ESSENCE_GAIN_OPTION, SOUL_HARVEST_OPTION, essenceGainCue } from "../rules/animation-records.mjs";
@@ -37,6 +45,8 @@ export const DEATH_WATCH_QUERY = "azeroth-rpg.deathWatch";
 
 /** How long the GM waits on a holder's client before saying so. */
 const ASK_MS = 10000;
+/** An exposure Test may stop at a prompt after the die (Elune's Regard, Beyond Limits), so the GM waits longer before saying it was not made. */
+const EXPOSURE_ASK_MS = 60000;
 
 const gmHere = () => game.user?.isGM === true && game.users?.activeGM?.id === game.user.id;
 const values = collection => [...(collection?.values?.() ?? collection ?? [])];
@@ -44,6 +54,8 @@ const defeatedStatus = () => globalThis.CONFIG?.specialStatusEffects?.DEFEATED ?
 
 let observer = deathObserver();
 const listeners = [];
+/** A character's drop to 0 Health has its own listeners (D-1729), so no creature listener sees it. */
+const downListeners = [];
 
 /**
  * Hand every death to `fn` on the active GM's client: `{actor, healthFell, died, raisedDown,
@@ -60,10 +72,28 @@ export function onDeath(fn) {
   };
 }
 
+/**
+ * Hand every CHARACTER's drop to 0 Health to `fn` on the active GM's client: `{actor, before,
+ * after, dealtBy}`, where `dealtBy` is the dealer the damage door named on the write that dropped
+ * it (`rules/death-watch.mjs#DAMAGE_BY_OPTION`) or null. Off the one baseline; returns the
+ * unregister.
+ *
+ * @param {(event: object) => unknown} fn
+ * @returns {() => void}
+ */
+export function onCharacterDown(fn) {
+  downListeners.push(fn);
+  return () => {
+    const at = downListeners.indexOf(fn);
+    if (at >= 0) downListeners.splice(at, 1);
+  };
+}
+
 /** A fresh observer and no listeners - for a Vitest's own fixture, and nothing else. */
 export function resetDeathWatch() {
   observer = deathObserver();
   listeners.length = 0;
+  downListeners.length = 0;
 }
 
 /** Whether any combatant of this actor is marked defeated, in any fight. */
@@ -89,7 +119,8 @@ function factsOf(actor) {
     health: typeof health === "number" ? health : null,
     npc: actor?.type === "npc",
     dead: actor?.statuses?.has?.(defeatedStatus()) === true || combatantDefeated(actor),
-    raised
+    raised,
+    character: actor?.type === "character"
   };
 }
 
@@ -106,9 +137,14 @@ function primeAll() {
  * Look at an actor; on the active GM, hand a death to every listener. Resolves once every
  * listener has settled (core's hooks ignore it; a test awaits it).
  */
-function look(actor) {
+function look(actor, options = null) {
   if (!actor || typeof actor !== "object") return Promise.resolve();
   const change = observer.observe(actor, factsOf(actor));
+  // **A CHARACTER'S DROP** (D-1729): its own listeners, with the dealer the write named. Only the
+  // update that took the Health from above 0 to 0 carries `characterFell`, so a blow on a character
+  // already at 0 is no drop, and several creatures' blows in one batch drop it once - the one whose
+  // write crossed.
+  const downs = change.characterFell && gmHere() ? handDown(actor, change, options) : Promise.resolve();
   // A creature that heals above 0 may die again and give again (`rules/death-watch.mjs#DEATH_GIVEN_FLAG`), and have its
   // soul devoured again (`HEAL_CLEARS`, the Demon Hunter review's L14): every mark it holds cleared, one after another.
   const clears = gmHere() && healedAboveZero(change.before, change.after) ? HEAL_CLEARS.filter(f => actor.getFlag?.("azeroth-rpg", f)) : [];
@@ -116,7 +152,7 @@ function look(actor) {
     clears.reduce((p, f) => p.then(() => actor.unsetFlag?.("azeroth-rpg", f)), Promise.resolve())
       .catch(err => console.warn("azeroth-rpg | a death's mark was not cleared", err));
   }
-  if (!(change.healthFell || change.died || change.raisedDown) || !gmHere()) return Promise.resolve();
+  if (!(change.healthFell || change.died || change.raisedDown) || !gmHere()) return downs;
   const event = Object.freeze({ actor, ...change });
   const runs = [...listeners].map(fn => {
     try {
@@ -126,7 +162,22 @@ function look(actor) {
       return Promise.resolve();
     }
   });
-  return Promise.all(runs);
+  return Promise.all([downs, ...runs]);
+}
+
+/** Hand a character's drop to every `onCharacterDown` listener, each guarded. */
+function handDown(actor, change, options) {
+  const raw = options && typeof options === "object" ? options[DAMAGE_BY_OPTION] : null;
+  const dealtBy = raw && typeof raw === "object" ? Object.freeze({ uuid: raw.uuid ?? null, actorId: raw.actorId ?? null, name: String(raw.name ?? "") }) : null;
+  const event = Object.freeze({ actor, before: change.before, after: change.after, dealtBy });
+  return Promise.all([...downListeners].map(fn => {
+    try {
+      return Promise.resolve(fn(event)).catch(err => console.warn("azeroth-rpg | death watch drop listener", err));
+    } catch (err) {
+      console.warn("azeroth-rpg | death watch drop listener", err);
+      return Promise.resolve();
+    }
+  }));
 }
 
 /** The actor a token or an effect belongs to, where it is an actor. */
@@ -141,7 +192,7 @@ export function registerDeathWatch() {
   Hooks.on("canvasReady", primeAll);
   Hooks.on("createActor", actor => prime(actor));
   Hooks.on("createToken", token => prime(token?.actor));
-  Hooks.on("updateActor", actor => look(actor));
+  Hooks.on("updateActor", (actor, changed, options) => look(actor, options));
   const markChanged = effect => {
     const actor = actorOfEffect(effect);
     return actor && effect?.statuses?.has?.(defeatedStatus()) ? look(actor) : undefined;
@@ -152,6 +203,71 @@ export function registerDeathWatch() {
     return changed && Object.hasOwn(changed, "defeated") ? look(combatant?.actor ?? null) : undefined;
   });
   onDeath(event => (event.died ? harvest(event.actor) : undefined));
+  onCharacterDown(exposeOnDrop);
+}
+
+/* ------------------------------------------------------------------ */
+/*  10 §3's exposure: what puts you down                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The creature the write named, resolved on this client: the uuid first (a token's synthetic actor
+ * keeps its own block, delta and all), else the world actor by id (D-650's `worldActorOf` reading,
+ * for a token deleted since the blow). Null where neither is there - and then nobody is exposed.
+ */
+function dealerOf(dealtBy) {
+  if (!dealtBy) return null;
+  let found = null;
+  try {
+    found = dealtBy.uuid ? (globalThis.fromUuidSync?.(dealtBy.uuid) ?? null) : null;
+  } catch {
+    found = null;
+  }
+  if (found?.documentName === "Actor") return found;
+  const world = dealtBy.actorId ? (globalThis.game?.actors?.get?.(dealtBy.actorId) ?? null) : null;
+  return world?.documentName === "Actor" ? world : null;
+}
+
+/** What `accruesTrack` reads off a character, as `workflows.mjs#refusesTrack` reads it. */
+function targetSnapshot(actor, before, after) {
+  return {
+    type: actor?.type ?? null,
+    before,
+    after,
+    classes: actor?.system?.classKeys ?? [],
+    race: actor?.raceItem?.system?.identifier ?? actor?.raceItem?.name ?? null,
+    undead: actor?.system?.undead === true
+  };
+}
+
+/**
+ * **A CREATURE THAT REDUCES A CHARACTER TO 0 HEALTH EXPOSES THEM TO ITS TRACK** (10 §3; D-1729).
+ * Judged here on the active GM's client (`rules/corruption-exposure.mjs#creatureExposure`), then
+ * the Test is the character's own roll, made on the client that answers for it (an active owning
+ * player, else this GM; `blow-doors.mjs#answererOf`) through `CONFIG.queries`, which makes it
+ * through `workflows.corruptionExposure` with the `creature` occasion and posts the card.
+ *
+ * **WHAT IS NOT ATTRIBUTED EXPOSES NOBODY**: a write that names no dealer (a condition's tick,
+ * Dilation's or Borrowed Time's deferred half, a hand edit) is not a creature reducing anybody, as
+ * far as this door can tell, and no creature is guessed for it (O-624).
+ */
+export async function exposeOnDrop({ actor, before, after, dealtBy } = {}) {
+  const dealer = dealerOf(dealtBy);
+  const verdict = creatureExposure({
+    target: targetSnapshot(actor, before, after),
+    dealer: dealer ? { type: dealer.type, corruption: dealer.system?.corruption ?? null } : null
+  });
+  if (!verdict.expose) return { ok: false, reason: verdict.reason };
+  // The write lands on a creature this client may not own; with no GM it could not be asked. The watch
+  // hands drops to the active GM alone, so this holds by construction - asked anyway, before anything
+  // is rolled or written, as every door that writes for another client asks it (D-774's review).
+  if (gmAbsentFor({ owned: [actor.isOwner === true], isGM: game.user?.isGM === true, gmActive: Boolean(game.users?.activeGM) })) {
+    return { ok: false, reason: "noGM" };
+  }
+  return ask(actor, {
+    act: "exposure", holderUuid: actor.uuid, track: verdict.track,
+    source: { uuid: dealer.uuid ?? null, name: dealer.name ?? dealtBy?.name ?? "" }
+  }, "AZEROTH.DeathWatch.NoExposureAnswer", EXPOSURE_ASK_MS);
 }
 
 /* ------------------------------------------------------------------ */
@@ -247,15 +363,15 @@ function cueSource({ token, corpse }) {
 }
 
 /** Ask the user who answers for the holder to write the gain; here where that is this user. */
-async function ask(holder, payload) {
+async function ask(holder, payload, warnKey = "AZEROTH.DeathWatch.NoAnswer", ms = ASK_MS) {
   const { answererOf } = await import("./blow-doors.mjs");
   const who = answererOf(holder);
   if (!who) return { ok: false, reason: "nobody" };
   if (who.id === game.user.id) return deathWatchQueryHandler(payload, { user: game.user });
   try {
-    return await who.query(DEATH_WATCH_QUERY, payload, { timeout: ASK_MS });
+    return await who.query(DEATH_WATCH_QUERY, payload, { timeout: ms });
   } catch (err) {
-    ui.notifications?.warn(game.i18n.format("AZEROTH.DeathWatch.NoAnswer", { name: holder.name, reason: err?.message ?? "" }));
+    ui.notifications?.warn(game.i18n.format(warnKey, { name: holder.name, reason: err?.message ?? "" }));
     return { ok: false, reason: "error" };
   }
 }
@@ -302,6 +418,22 @@ export async function deathWatchQueryHandler(payload = {}, { user = null } = {})
       ui.notifications?.info(game.i18n.format("AZEROTH.DeathWatch.SoulHarvest", { name: holder.name, mana: verdict.gain }));
       return { ok: true, gain: verdict.gain, value: verdict.value };
     });
+  }
+  if (payload.act === "exposure") {
+    // **10 §3's TEST, ON THE CHARACTER'S OWN CLIENT** (D-1729): the track is the GM's judgement, the
+    // DC and the Resilience the table's, never the payload's (D-982's rule). A track that is not a
+    // creature's is refused; `corruptionExposure` itself refuses a track the character accrues none
+    // of, in words, so a Forsaken asked about Undeath rolls nothing.
+    const row = exposureFor(String(payload.track ?? ""));
+    if (!row) return { ok: false, reason: "noTrack" };
+    const { defaultChoice } = await import("../applications/roll-dialog.mjs");
+    const choice = defaultChoice(holder, { kind: "resilience", resilience: row.resilience, dc: row.dc, targets: [] });
+    const message = await game.system.azeroth.workflows.corruptionExposure({
+      actor: holder, track: row.track, dc: row.dc, resilience: row.resilience, occasion: CREATURE_OCCASION,
+      source: String(payload.source?.name ?? ""),
+      boons: choice.boons, banes: choice.banes, provenanceExtra: [...(choice.provenanceExtra ?? [])]
+    });
+    return message ? { ok: true, messageId: message.id ?? null } : { ok: false, reason: "noTest" };
   }
   throw new Error(`deathWatch: no such act ${JSON.stringify(payload.act ?? null)}`);
 }

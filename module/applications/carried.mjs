@@ -18,6 +18,7 @@
 import { AZEROTH } from "../config.mjs";
 import { detailFields, detailProse } from "./actions.mjs";
 import { hasUse } from "../rules/consumables.mjs";
+import { coatingName } from "../rules/consumables.mjs";
 import { hasCharges } from "../rules/containers.mjs";
 import { isWornSlot } from "../rules/worn.mjs";
 import { rarityClass } from "../helpers/rarity.mjs";
@@ -72,7 +73,7 @@ export function carriedRows(actor) {
       useRefusal,
       quantity: item.type === "gear" ? (item.system.quantity ?? null) : null,
       // A stone, an oil or a poison laid on this thing, while it lasts (D-670).
-      coating: hidden ? null : (item.getFlag("azeroth-rpg", "coating")?.name ?? null),
+      coating: hidden ? null : coatingName(item.getFlag("azeroth-rpg", "coating") ?? null),
       // Where it is kept, and what it holds (08 SS11, D-671).
       container: item.system.container ?? null,
       capacity: item.system.capacity ?? null,

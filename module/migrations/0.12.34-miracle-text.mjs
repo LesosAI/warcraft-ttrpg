@@ -15,8 +15,12 @@ export function buildMiracleTextUpdate(raw, pack) {
 export async function migrate(log = console.log) {
   const talents = await packSystems("azeroth-rpg.talents");
   const pack = talents.byIdentifier.get("miracle");
+  // **A LATER PACK HOLDS LATER WORDS** (the class talent audit, D-1884): Miracle's text moved on with
+  // 0.16.2.2, which brings an owned Miracle level with the pack itself. A world older than this step
+  // stamps nothing here and leaves it to that migration, rather than throwing on every load (D-758).
   if (!standard(pack) || plainOf(pack.effect) !== plainOf(CURRENT)) {
-    throw new Error("Miracle's approved next-healing-spell text is missing. Rebuild packs and restart Foundry before retrying this migration.");
+    log("azeroth-rpg | 0.12.34: the talents pack holds a later Miracle; migration 0.16.2.2 brings an owned one level with it");
+    return 0;
   }
   return walkWorld({ item: doc => doc.type === "talent"
     ? buildMiracleTextUpdate(rawSystem(doc), packCopy(talents, rawSystem(doc), doc.name)) : null }, log);

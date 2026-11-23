@@ -14,7 +14,7 @@
  * blow, and the GM may write every holder).
  */
 
-import { SHADOWFORM_FLAG, marksLightUse } from "../rules/class-talents.mjs";
+import { SHADOWFORM_FLAG, SHADOWFORM_ROUND, marksLightUse } from "../rules/class-talents.mjs";
 
 /**
  * Mark the holder, in a fight, once a fight's turn.
@@ -41,4 +41,22 @@ export async function clearLightUsed(actor) {
   if (!actor?.isOwner || !actor.getFlag?.("azeroth-rpg", SHADOWFORM_FLAG)) return false;
   await actor.unsetFlag("azeroth-rpg", SHADOWFORM_FLAG);
   return true;
+}
+
+/**
+ * **04's SHADOWFORM, ONCE A ROUND** (*once a round you may add 1 Shadow damage per rank*;
+ * the class talent audit, D-1884): the round's record claimed when a roll's damage rows
+ * carry the talent's line, so the next dialog this round draws it unticked and unavailable
+ * (`applications/actions.mjs`, the `shadowform` fact). Quiet out of a fight.
+ *
+ * @param {Actor} actor
+ * @param {Array<{name: string}>} damageRows  the lines the roller left ticked
+ */
+export async function markShadowformRound(actor, damageRows = []) {
+  const talent = (actor?.takenTalents?.() ?? []).find(t => t.className === "Priest" && t.identifier === "shadowform");
+  if (!talent || !(damageRows ?? []).some(r => r?.name === talent.name)) return false;
+  const fight = actor.activeFight?.() ?? null;
+  const mine = fight ? (fight.getCombatantsByActor?.(actor)?.[0] ?? null) : null;
+  if (!mine?.isOwner) return false;
+  return (await mine.markRoundOnce(SHADOWFORM_ROUND))?.added === true;
 }

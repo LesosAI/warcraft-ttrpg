@@ -36,7 +36,7 @@ import { areaRecord, isDown } from "../canvas/sustained-areas.mjs";
 import { sustainEntryTransferPending } from "../rules/sustain-entry-transfer.mjs";
 // O-308: a held Sustained cast is ended through the one end door, and the sweep takes what it laid.
 import { reconcileSustainedSpells } from "./sustained-spells.mjs";
-import { dispelGateFor, unstableFor } from "../rules/class-talents.mjs";
+import { dispelGatesFor, unstableFor } from "../rules/class-talents.mjs";
 import { wardBySchool } from "../rules/ward.mjs";
 import { strikeCard } from "./after-blow.mjs";
 // An area's dispel (04's Disenchant; the Legacy branches' door 25), judged off the
@@ -440,10 +440,13 @@ export function dispelGatesOn(target, ids = []) {
   const effects = (target?.effects ?? []).filter(e => want.has(e.id)).map(plainEffect);
   const gates = {};
   for (const e of effects) {
-    const owner = ongoingOwner(e);
+    // A Sustained cast's caster too (04's Master of the Weave; the class talent audit, D-1890).
+    const owner = sustainOf(e)?.by ?? ongoingOwner(e);
     if (!owner || owner in gates) continue;
     const warlock = actorAt(owner);
-    gates[owner] = typeof warlock?.takenTalents === "function" ? dispelGateFor(warlock.takenTalents()) : null;
+    // Every gate the owner's talents set (Everlasting Affliction, Improved Moonfire, Master of
+    // the Weave; D-1890 to D-1892), and `dispelGated` picks the one each effect meets.
+    gates[owner] = typeof warlock?.takenTalents === "function" ? dispelGatesFor(warlock.takenTalents()) : null;
   }
   return dispelGated(effects, gates);
 }

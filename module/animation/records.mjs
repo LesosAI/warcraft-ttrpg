@@ -363,6 +363,19 @@ export function cardRecord(message) {
       hold: cleanHold(flags.hold)
     });
   }
+  // **A TALENT'S EVENT NO USE CARD RECORDS** (the class talent audit's wave-2 review): 04's Dark
+  // Harvest at the turn start and Shattering Cold's Stun (`effects/feature-events.mjs`), played as
+  // the talent's `use` from the token it happened at to the creatures it reached.
+  if (flags.kind === "featureEvent") {
+    const targets = (Array.isArray(flags.targets) ? flags.targets : []).map(tokenRef).filter(Boolean);
+    return featureRecord({
+      trigger: "use", contentVisible,
+      sceneId: flags.source?.sceneId ?? targets[0]?.sceneId ?? null,
+      identifier: flags.featureKey ?? null,
+      source: tokenRef(flags.source),
+      targets
+    });
+  }
   // **A DEATH STEP HELD BACK** (04's Hold the Thread; `AzerothActor#takeDeathStep`):
   // the holder who answered and the creature it spared.
   if (flags.kind === "deathHold") {

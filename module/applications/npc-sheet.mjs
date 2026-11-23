@@ -33,6 +33,10 @@ import { attackWithDialog, blankItemMenu, browseItems, effectAction, effectsCont
 // The Spells tab (D-705): the character's own row shape over 14's block.
 import { castWithDialog, detailFields, detailProse } from "./actions.mjs";
 import { showsCreatureSpells } from "../rules/casting.mjs";
+// The creature's Spellpower as chips on the Spells tab's header (D-1727).
+import { spellpowerRows } from "../rules/creature-spellpower.mjs";
+// A creature's own Casting Test bonus, Boons and Banes and condition immunities (D-1760 to D-1762).
+import { boonsBanesSheetRows, refusedKeys } from "../rules/creature-bonuses.mjs";
 import { adopt, bondOf, featureForKind, release, releaseThrallBond, worldActorOf } from "../documents/bound.mjs";
 // A thrall's bond is its Use's alone, and its release the token's (the lead's ruling of 2026-10-22).
 import { BINDABLE_KINDS } from "../rules/bound.mjs";
@@ -328,6 +332,12 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
       tiers,
       count: rows.length,
       dc: system.spells?.dc ?? null,
+      // Its Spellpower by school, the DERIVED total (its own base, passives and
+      // gear; D-1727), drawn only where a school holds any.
+      spellpower: spellpowerRows(system.spellpower),
+      // Its Casting Test bonus, the DERIVED total the cast reads (its own number and
+      // its gear's; D-1760), drawn only where it is not 0.
+      castingBonus: Math.trunc(Number(system.itemBonus?.casting)) || 0,
       // The Power a creature casts from IS its Mana (D-647, `rules/pools.mjs`).
       // The SAME row the Statistics tab draws, handed in rather than rebuilt,
       // so the two surfaces cannot print two different numbers.
@@ -459,9 +469,19 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
     // Localised HERE and joined with the block's own separator: these are
     // phrases rather than words - *Being moved against its will* - and a row
     // of them with a space between reads as one long sentence (D-691).
-    context.refuses = (system.refuses ?? []).map(id => ({
+    // The block's own refusals and then the GM's condition immunities (D-1762).
+    context.refuses = refusedKeys(system.refuses ?? [], system.conditionImmune ?? []).map(id => ({
       key: id,
       label: game.i18n.localize(AZEROTH.conditions[id] ?? AZEROTH.refusalExtras[id] ?? id)
+    }));
+    // The GM's own Boons and Banes (D-1761), off the stored list, in words.
+    context.boonsBanes = boonsBanesSheetRows(system.boonsBanes ?? []).map(row => ({
+      key: `${row.kind}-${row.on}`,
+      label: game.i18n.format(row.word, {
+        what: row.test
+          ? game.i18n.format("AZEROTH.Generator.EveryTest", { kind: game.i18n.localize(row.target) })
+          : game.i18n.localize(row.target)
+      })
     }));
     // A swim sense is a NUMBER once the creature's own Speed is known, so the
     // measured pace stands in for the words rather than beside them.

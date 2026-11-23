@@ -58,6 +58,28 @@ export function refreshes(per, event) {
   return false;
 }
 
+/** The rests that give one use back to a thing refilled whole at a longer one (D-1868). */
+export const USES_REFILL = Object.freeze(["short"]);
+
+/**
+ * **WHAT A PARTIAL REFILL GIVES BACK AT THIS EVENT** (the class talent audit's Mercy of Uther: *Each
+ * Short Rest returns one use of it*; D-1868): the uses in hand after one comes back, or null where
+ * nothing does - no `refill`, a word nothing knows, an event the uses already refill whole at
+ * (`refreshes` handles that), or uses already full. A Long Rest includes a Short Rest, but it
+ * refills whole, so it never reaches here.
+ *
+ * @param {{value?: number, max?: number, per?: string|null, refill?: string|null}|null} uses
+ * @param {"short"|"long"|"encounter"} event
+ * @returns {number|null}
+ */
+export function refillAfter(uses, event) {
+  if (!uses?.per || !USES_REFILL.includes(uses.refill) || uses.refill !== event) return null;
+  if (refreshes(uses.per, event)) return null;
+  const value = Math.max(0, Math.trunc(Number(uses.value)) || 0);
+  const max = Math.max(0, Math.trunc(Number(uses.max)) || 0);
+  return value < max ? value + 1 : null;
+}
+
 /**
  * **THE USES IN HAND WHEN A FEATURE'S MAXIMUM MOVES** (D-621's restamp; the
  * Paladin phase's review, S4). A limit that rises mid-day gives its new use

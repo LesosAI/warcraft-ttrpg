@@ -63,6 +63,8 @@ export const PRESS_FLAGS = Object.freeze({
   healMade: "guidanceMade",
   healed: "guidanceHealed",
   attacks: "attacksMade",
+  // The class talent audit's wave-2 fix run: a feature card's presses by creature (Whirlwind, Rapid Fire).
+  attacksAt: "attacksAt",
   // D-779: the charges taken from 04's Lightwell's font.
   charges: "lightwellTaken"
 });
@@ -108,7 +110,12 @@ export function pressClaim(flags = {}, claim = {}) {
     return { ok: true, reason: null, update: { [PRESS_FLAGS.healMade]: made + 1, [PRESS_FLAGS.healed]: [...healed, claim.uuid] } };
   }
   if (claim?.kind === "count" && claim.flag === PRESS_FLAGS.attacks) {
-    return { ok: true, reason: null, update: { [claim.flag]: (Math.max(0, Math.trunc(Number(f[claim.flag])) || 0)) + 1 } };
+    // **AND THE CREATURES IT STRUCK** (Whirlwind's, Bladestorm's and Rapid Fire's per-creature law; the class
+    // talent audit's wave-2 fix run): `attacksAt` one higher for each, where the press names them.
+    const struck = Array.isArray(claim.targets) ? claim.targets : [];
+    const prior = f[PRESS_FLAGS.attacksAt] && typeof f[PRESS_FLAGS.attacksAt] === "object" ? f[PRESS_FLAGS.attacksAt] : {};
+    const at = struck.length ? Object.fromEntries([...Object.entries(prior), ...struck.map(k => [k, (Math.max(0, Math.trunc(Number(prior[k])) || 0)) + 1])]) : null;
+    return { ok: true, reason: null, update: { [claim.flag]: (Math.max(0, Math.trunc(Number(f[claim.flag])) || 0)) + 1, ...(at ? { [PRESS_FLAGS.attacksAt]: at } : {}) } };
   }
   // **A CHARGE OF A FONT** (04's Lightwell; the lead, 2026-10-03, on O-184; D-779):
   // `lightwellTaken` one higher, refused once the card's charges are spent.
@@ -134,7 +141,11 @@ export function cleanClaim(claim = {}) {
   if (c.kind === "heal" && typeof c.uuid === "string" && c.uuid) {
     return { kind: "heal", uuid: c.uuid, allowed: Math.max(1, Math.trunc(Number(c.allowed)) || 1) };
   }
-  if (c.kind === "count" && c.flag === PRESS_FLAGS.attacks) return { kind: "count", flag: PRESS_FLAGS.attacks };
+  if (c.kind === "count" && c.flag === PRESS_FLAGS.attacks) {
+    // The creatures a press struck: token or actor ids, a handful at most (a card's own allowance bounds them).
+    const targets = Array.isArray(c.targets) ? [...new Set(c.targets.filter(k => typeof k === "string" && /^[A-Za-z0-9]{1,32}$/.test(k)))].slice(0, 20) : [];
+    return { kind: "count", flag: PRESS_FLAGS.attacks, ...(targets.length ? { targets } : {}) };
+  }
   if (c.kind === "charge" && typeof c.uuid === "string" && c.uuid) return { kind: "charge", uuid: c.uuid, allowed: Math.max(0, Math.trunc(Number(c.allowed)) || 0) };
   return null;
 }

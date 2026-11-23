@@ -59,7 +59,7 @@ import { THINNED_RATING_DROP, thinnedRating } from "../rules/swarm.mjs";
 import { fieldsFor } from "./item-fields.mjs";
 import { shouldPrompt } from "../settings.mjs";
 import { guardPendingCustodyItem } from "../rules/item-custody-guard.mjs";
-import { OVERCHANNEL_MAX_POINTS, castingDC, grantingClass, isHealingSpell, spellPrice, maxOverchannel, overchannelPerPoint, spellManaCost, statedCastingDC, swiftCast, takeNextSpell } from "../rules/casting.mjs";
+import { OVERCHANNEL_MAX_POINTS, castingDC, grantingClass, isHealingSpell, spellPrice, maxOverchannel, overchannelPerPoint, overchannelPointHealth, overchannelPointMana, spellManaCost, statedCastingDC, swiftCast, takeNextSpell } from "../rules/casting.mjs";
 // THE LEGACY BRANCHES' DOORS (B1): a spell a talent pays in another pool (door 8),
 // the ability scope (door 16), a throw a rider makes possible (door 15), and no
 // Reaction against the unanswered (door 14).
@@ -72,7 +72,7 @@ import { opportunityNeedsGM, opportunityOwned } from "../rules/gm-writes.mjs";
 import { abilityScope } from "../rules/expressions.mjs";
 import { attackOffHand, riderThrowModifiers, throwAsWeapon } from "../rules/wield.mjs";
 import { extraAttackSelection, extraAttackWeapons } from "../rules/second-attack-choice.mjs";
-import { throwAsOffer } from "../rules/riders.mjs";
+import { roundHolds, throwAsOffer } from "../rules/riders.mjs";
 import { unansweredBy } from "../rules/reactions.mjs";
 // The Necromancer's Essence pays no maneuver (the Necromancer plan).
 import { paysByKind } from "../rules/essence.mjs";
@@ -117,7 +117,7 @@ import { feetApart } from "../canvas/footprints.mjs";
 // Parry or a Block that costs no Reaction, and an attack nobody may answer.
 import { blockAllyFeet, blockBonusFor, blockRetortFor, nextRoundMark } from "../rules/class-talents.mjs";
 // Whom a feature's Use is aimed at, and what is left of a round's marks (D-774).
-import { SHADOWFORM_FLAG, featureAims, roundMarksLeft, shadowformHolds } from "../rules/class-talents.mjs";
+import { SHADOWFORM_FLAG, SHADOWFORM_ROUND, featureAims, roundMarksLeft, shadowformHolds } from "../rules/class-talents.mjs";
 // The Ranger's and the Rogue's (D-773): every talent that frees a Parry, what a
 // Parry that holds builds, an attack from hiding nobody may answer, Longshot's
 // maximum, and Pack Tactics' flanking.
@@ -126,10 +126,12 @@ import { asksFact, flankingFor, freeReactionRowsFor, packFlanks, parryGainsFor, 
 // what a Parry takes back off (O-166, O-180).
 import { blademasterFor, flametongueFor, rangedParryFor } from "../rules/class-talents.mjs";
 import { blademasterWeaponKey, castingWithAttackTest } from "../rules/blademaster-test.mjs";
-import { blademasterReaches, flametongueStrike, parryReaches, turnMark } from "../rules/class-answers.mjs";
+import { blademasterReaches, parryReaches, turnMark } from "../rules/class-answers.mjs";
 import { isHiddenFor } from "../effects/stealth.mjs";
 // What a talent adds to a blow's damage, per rank (04, D-711 phase 2).
 import { FORM_LANE, castAsFor, damageChosen, damageLinesFor, damageRowsFor, featureDamageLane, onUseOf, talentEffect } from "../rules/talent-effects.mjs";
+// Celestial Focus's rung (the class talent audit, D-1892).
+import { ALTERNATE_FLAG, alternateFor, eclipseDue } from "../rules/talent-effects.mjs";
 // A class feature's own `onUse` (stage 2B: the Chromatic Champion's Wing Buffet and Dread
 // Presence aim at the creatures targeted), read as a granting talent's row is.
 import { classFeatureOnUse } from "../rules/class-features.mjs";
@@ -177,6 +179,15 @@ import { audienceListening, veiledFrom } from "../rules/sovereign-spells.mjs";
 import { awayRefusal } from "../rules/demon-hunter-spells.mjs";
 // And the talents' (Phase 5): Iron Will's line on a Spirit Resilience Test's dialog.
 import { ironWillLineOffer } from "../effects/demon-hunter-talents.mjs";
+// The class talent audit's Unbreakable (class agent A; D-1873): the standing effect that frees every Block.
+import { sanctifiedTraits, unbreakableName } from "../rules/audit-martial.mjs";
+import { creatureSnapshot, kindsOf } from "../rules/creature-kinds.mjs";
+import { overpowerAnswered } from "../effects/audit-martial.mjs";
+
+/** The name of the Unbreakable effect standing on this creature, or null. */
+function unbreakableStanding(actor) {
+  return unbreakableName([...(actor?.effects ?? [])].filter(e => e.active !== false && e.disabled !== true).map(e => e.flags?.["azeroth-rpg"] ?? {}));
+}
 
 /**
  * WHAT THE THINGS THE TARGET IS WEARING ANSWER BACK (08 SS20, D-692).
@@ -256,7 +267,8 @@ function damagedAlready(actor, target) {
  */
 function talentDamageLines(actor, { lane, type, target = null, extraFacts = () => ({}), alsoSpell = false, feature = false } = {}) {
   // The amount at the door's ability scope (the Legacy branches' door 16).
-  const rows = damageRowsFor(actor.takenTalents?.() ?? [], { lane, type, alsoSpell, feature, scope: abilityScope(actor.system) });
+  // The tier rides the scope too: R1's *to no more than your tier* (`min(rank,tier)`; D-1880 to D-1887).
+  const rows = damageRowsFor(actor.takenTalents?.() ?? [], { lane, type, alsoSpell, feature, scope: { ...abilityScope(actor.system), tier: actor.system?.tier ?? 1 } });
   if (!rows.length) return [];
   return damageLinesFor(rows, {
     // **WHAT A LEGACY'S GATE READS** (doors 15, 17, 18): what is wielded and worn, the
@@ -276,7 +288,9 @@ function talentDamageLines(actor, { lane, type, target = null, extraFacts = () =
     battleRig: actor.shape?.kind === "battlerig",
     // 04's Shadowform (D-774): no Holy dealt and no heal given since the priest's
     // last turn - readable in a fight, the table's line out of one.
-    shadowform: shadowformHolds({ fightId: actor.activeFight?.()?.id ?? null, mark: actor.getFlag?.("azeroth-rpg", SHADOWFORM_FLAG) ?? null }) === true,
+    // And once a round (the class talent audit, D-1884): not where the round's record holds it.
+    shadowform: shadowformHolds({ fightId: actor.activeFight?.()?.id ?? null, mark: actor.getFlag?.("azeroth-rpg", SHADOWFORM_FLAG) ?? null }) === true
+      && !roundHolds(actor.activeFight?.()?.getCombatantsByActor?.(actor)?.[0]?.getFlag?.("azeroth-rpg", "round") ?? null, actor.activeFight?.()?.round ?? 0, SHADOWFORM_ROUND),
     // 04's Combustion (*against a target already burning from Ignite*; D-775): the
     // target carries an Ignite tick this roller laid.
     ignited: igniteBurning(((target ? targetActorOf(target) : null)?.effects ?? []).filter(e => e.active !== false).map(e => e.flags?.["azeroth-rpg"]?.tick ?? null), { source: actor.uuid }),
@@ -454,6 +468,9 @@ function freeReactionOf(actor, key, { combatant: given = null } = {}) {
   // costs no Reaction (lead, 2026-11-01). Marks name both the turn and use.
   const ready = actor.readyWeapons?.() ?? (actor.items ?? []).filter(i => i.type === "weapon");
   const dualMelee = meleeInHand(ready.map(i => ({ name: i.name, ...i.system }))).length >= 2;
+  // **04's UNBREAKABLE, STANDING** (the class talent audit: *you Block each without spending a
+  // Reaction*; D-1873): every Block costs no Reaction while its effect stands - no mark, no count.
+  if (key === "block" && unbreakableStanding(actor)) return { identifier: "unbreakable", name: unbreakableStanding(actor), count: Infinity, mark: null, combatant };
   for (const row of freeReactionRowsFor(actor.takenTalents?.() ?? [], key)) {
     if (row.needs === "dualMelee" && !dualMelee) continue;
     const mark = row.per === "turn" ? turnMark(row.identifier, fight.turn, used, row.count) : nextRoundMark(row.identifier, row.count, used);
@@ -532,7 +549,7 @@ function handIfAny(modes) {
 function blockOffFor(actor) {
   const talents = actor?.takenTalents?.() ?? [];
   const feet = blockAllyFeet(talents);
-  const talent = blockBonusFor(talents, { allyNear: feet !== null && allyWithin(actor, feet) });
+  const talent = blockBonusFor(talents, { allyNear: feet !== null && allyWithin(actor, feet), tier: actor?.system?.tier ?? 1 });
   return blockReduction({
     bonus: (actor?.system?.signatureEffects?.blockBonus ?? 0) + talent.bonus,
     shieldbearer: actor?.hasFeature?.(SHIELDBEARER) === true
@@ -802,7 +819,9 @@ export async function reactWithDialog(actor, reaction, { attackTotal = null, mes
   let freeBy = null;
   if (!answeredWithLost) {
     const free = freeReactionOf(actor, reaction);
-    if (free?.combatant?.isOwner && (await free.combatant.markRoundOnce(free.mark))?.added === true) freeBy = free.name;
+    // Unbreakable's standing Block is free with no mark to take (D-1873).
+    if (free && free.mark === null) freeBy = free.name;
+    else if (free?.combatant?.isOwner && (await free.combatant.markRoundOnce(free.mark))?.added === true) freeBy = free.name;
   }
   if (!freeBy && !answeredWithLost && !(await game.system.azeroth.workflows.spendTurnBudget(actor, "reaction"))) return null;
   // A free defensive reaction is still a reaction and interrupts a channel.
@@ -890,6 +909,10 @@ async function blockNow(actor, shield, messageId, targetIndex = null, { freeBy =
   // swung a MELEE blow - the card's own `strike.rangeKind` (D-779), and a blow whose
   // way was never recorded is left to the table and said so.
   for (const line of await signatureOnBlock(actor, messageId)) lines.push(`<p class="azeroth-card-line azeroth-fired">${line}</p>`);
+  // **04's OVERPOWER ON A BLOCK** (the class talent audit, D-1870): the attacker's Rage and its promise
+  // (`effects/audit-martial.mjs#overpowerAnswered`).
+  const overpowered = await overpowerAnswered({ messageId, defender: actor });
+  if (overpowered) lines.push(`<p class="azeroth-card-line azeroth-fired">${foundry.utils.escapeHTML(overpowered)}</p>`);
   if (guard.resistHTML) lines.push(guard.resistHTML);
   const card = Boolean(retort || guard.resistHTML);
   return ChatMessage.create({
@@ -1105,6 +1128,9 @@ async function parryNow(actor, weaponName, { attackTotal, messageId, targetIndex
     if (undone.conditions.length) built += ` ${game.i18n.format("AZEROTH.Reaction.ParryUndid", { name: actor.name, conditions: undone.conditions.join(", ") })}`;
     const more = withdrawnWords(actor.name, { ...undone, conditions: [] });
     if (more) built += ` ${more}`;
+    // **04's OVERPOWER ON A PARRY** (the class talent audit, D-1870): the attacker's Rage and its promise.
+    const overpowered = await overpowerAnswered({ messageId, defender: actor });
+    if (overpowered) built += ` ${overpowered}`;
   }
   // `paid` is never null here: the branch above returns on an unpaid Parry.
   const cost = ` ${game.i18n.format("AZEROTH.Reaction.ParryCost", { n: paid.cost, pool: paid.name })}`
@@ -1644,10 +1670,12 @@ export async function castWithDialog(actor, spell, event = null, { targets = nul
     pool: spellPayment(spellPoolFor(talentsNow, { name: spell.name, school: sys.school ?? null }), actor.classItems ?? [], { school: sys.school ?? null, classes: sys.classes ?? null })?.pool ?? null
   });
   const mana = spellManaCost({ mana: sys.mana ?? 0, name: spell.name, school: discountSchool }, actor.system?.signatureEffects, { next: take.amount, less: discount.amount });
-  // 02's Overchannel Mastery (D-779): an Overchannel costs the Mana once more a cast.
+  // 02's Overchannel Mastery (the class talent audit's C3, D-1890): each point costs the spell's tier
+  // in Mana, Overchanneller's rank off each to a minimum of 1; and 04's Clearcasting's free points.
   const mastery = actor.hasFeature?.("Overchannel Mastery") === true;
   const promises = [
-    ...(mastery ? [game.i18n.format("AZEROTH.Cast.MasteryNote", { n: Math.max(0, mana - overchannelReliefFor(talentsNow).amount) })] : []),
+    ...(mastery ? [game.i18n.format("AZEROTH.Cast.MasteryNote", { n: overchannelPointMana(sys.tier ?? 1, overchannelReliefFor(talentsNow).amount) })] : []),
+    ...(take.overchannel > 0 ? [game.i18n.format("AZEROTH.Clearcasting.Note", { name: take.taken.find(e => Number(e.overchannel) > 0)?.name ?? "", n: take.overchannel })] : []),
     ...(take.miracle ? [game.i18n.format("AZEROTH.Miracle.Note", { name: take.miracle.name })] : []),
     ...(take.cast ? [game.i18n.format("AZEROTH.Cast.NextSpellHalfNote", { name: take.cast.name })] : []),
     ...take.taken.filter(e => Number(e.forcedSl) > 0).map(e => game.i18n.format("AZEROTH.SoulFire.Note", { name: e.name, sl: e.forcedSl, n: e.damage ?? 0 }))
@@ -1665,14 +1693,18 @@ export async function castWithDialog(actor, spell, event = null, { targets = nul
   // name, its uses the round's record rather than a counter.
   // **AND 04's FIRE BLAST** (*Once a round, a Fire spell of yours costs a
   // Half-Action rather than an action*; D-775): the same line, by the school.
-  const swiftRow = castAsFor(talentsNow, { action: sys.action ?? null, healing: isHealingSpell(sys), name: spell.name, school: castAsSchool });
-  const swiftCounter = swiftRow && !swiftRow.perRound ? (actor.grantedFeature?.(swiftRow.talentId) ?? null) : null;
+  // 04's Celestial Focus (the class talent audit, D-1892): only a cast taking Eclipse's bonus.
+  const eclipseNow = eclipseDue(actor.getFlag?.("azeroth-rpg", ALTERNATE_FLAG) ?? null, sys.school ?? null, alternateFor(talentsNow));
+  const swiftRow = castAsFor(talentsNow, { action: sys.action ?? null, healing: isHealingSpell(sys), eclipse: eclipseNow, name: spell.name, school: castAsSchool });
+  // R7 (D-1865): a row `counted` reads its counter beside the round's marks, as `castSpell` does.
+  const swiftCounter = swiftRow && (!swiftRow.perRound || swiftRow.counted) ? (actor.grantedFeature?.(swiftRow.talentId) ?? null) : null;
   const swiftLeft = swiftRow?.perRound ? roundMarksLeftOf(actor, swiftRow) : (swiftCounter?.system?.uses?.value ?? 0);
-  const swiftJudged = swiftRow ? swiftCast({ row: swiftRow, spellAction: sys.action ?? null, healing: true, usesLeft: swiftLeft }) : null;
+  const swiftLeftNow = swiftRow?.perRound && swiftRow.counted ? Math.min(swiftLeft, swiftCounter?.system?.uses?.value ?? 0) : swiftLeft;
+  const swiftJudged = swiftRow ? swiftCast({ row: swiftRow, spellAction: sys.action ?? null, healing: true, usesLeft: swiftLeftNow }) : null;
   const swift = swiftRow ? {
     name: swiftRow.name,
     available: swiftJudged.ok,
-    left: swiftLeft,
+    left: swiftLeftNow,
     max: swiftRow.perRound ?? (swiftCounter?.system?.uses?.max ?? 0),
     reason: swiftJudged.reason ? game.i18n.format(swiftJudged.reason, { name: spell.name, talent: swiftRow.name }) : null
   } : null;
@@ -1740,12 +1772,11 @@ export async function castWithDialog(actor, spell, event = null, { targets = nul
       // A Vitae price has the Health behind it (02 §7; the San'layn and Sovereign plan's V4).
       canPay: castCanPay({ price, pool, ferocity, payPool, health }),
       health,
-      perPoint: overchannelPerPoint(sys.tier),
-      // 04's Overchanneller (D-775): the Health off the price lets a point more be paid.
-      // **02's OVERCHANNEL MASTERY** (the lead, 2026-10-03, on O-192: *"Per cast"*;
-      // D-779): the price is the spell's Mana once more a cast and no Health, so the
-      // points are bounded by 05 §2's SL cap alone; the note says so.
-      maxPoints: mastery ? OVERCHANNEL_MAX_POINTS : maxOverchannel({ health, tier: sys.tier, relief: overchannelReliefFor(talentsNow).amount }),
+      // 04's Overchanneller per point (the class talent audit, D-1890): each point's Health, never below 1.
+      perPoint: overchannelPointHealth(sys.tier, overchannelReliefFor(talentsNow).amount),
+      // **02's OVERCHANNEL MASTERY** (the class talent audit's C3, D-1890): the tier in Mana a point
+      // and no Health, so the points are bounded by 05's SL cap alone; the note says the price.
+      maxPoints: mastery ? OVERCHANNEL_MAX_POINTS : maxOverchannel({ health, tier: sys.tier, relief: overchannelReliefFor(talentsNow).amount, free: take.overchannel }),
       // The Augment in hand (07 §3, D-674). It adds to the Casting Test and
       // to nothing else, so it is a number on this dialog rather than an
       // effect on a score - and the box was defaulting to 0 with every
@@ -1980,13 +2011,16 @@ export async function useFeatureWithDialog(actor, item, event = null, { targets 
  * spell card's failure, an area's (D-757) - which is what lets a Boon *against
  * **Frightened** and **Charmed*** reach it; null leaves it the table's line.
  */
-export function resilienceWithDialog(actor, resilience, event = null, { dc = null, link = null, source = null, against = null, talentBanes = null, talentBoons = null } = {}) {
+export function resilienceWithDialog(actor, resilience, event = null, { dc = null, link = null, source = null, against = null, talentBanes = null, talentBoons = null, talentModifiers = [] } = {}) {
   if (!AZEROTH.resiliences[resilience]) return null;
   return rollWithDialog(actor, {
     kind: "resilience",
     resilience,
     title: game.i18n.localize(AZEROTH.resiliences[resilience]),
-    modifiers: game.system.azeroth.workflows.resilienceModifiers(actor, resilience),
+    // A penalty a talent of whoever forced this Test lays on it (04's Malediction: *a -1 penalty per
+    // rank on a Resilience Test against a curse of yours that deals no damage*; the class talent
+    // audit, D-1891), a named row beside the creature's own.
+    modifiers: [...game.system.azeroth.workflows.resilienceModifiers(actor, resilience), ...(Array.isArray(talentModifiers) ? talentModifiers : [])],
     // A card's Resist button carries the caster's Spell DC (D-616); the
     // dialog still shows it, since the table may know better.
     dc: dc ?? undefined,
@@ -2070,7 +2104,7 @@ function packFlankOf(actor, targetToken) {
  * has not got is refused in words; no caller in `module/` forces one, and the
  * attacks batch pins the refusal by calling this door with a Javelin in the hand.
  */
-export async function attackWithDialog(actor, weapon, event = null, { location = "body", dc = null, damage = true, offHand = null, budget = null, gainsMomentum = true, atDistance = null, riposte = false, mode = null, ratingDelta = 0, opportunity = false, landsOnHit = null, cardBoons = null, fromFeature = null, targets = null, prepareOnly = false, paidThrowAs = null, testOnly = false, vengeful = null, clawRoll = 0 } = {}) {
+export async function attackWithDialog(actor, weapon, event = null, { location = "body", dc = null, damage = true, offHand = null, budget = null, gainsMomentum = true, atDistance = null, riposte = false, mode = null, ratingDelta = 0, opportunity = false, landsOnHit = null, cardBoons = null, fromFeature = null, targets = null, prepareOnly = false, paidThrowAs = null, testOnly = false, vengeful = null, clawRoll = 0, triggered = false } = {}) {
   if (testOnly && (!prepareOnly || budget!=="none" || damage!==false)) return null;
   if (!weapon || weapon.type !== "weapon") return null;
   // 07's Hex: *it cannot attack* (D-808) - every attack this door makes, an
@@ -2113,6 +2147,8 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
   let damageSpec = null;
   // What Flametongue made of the blow, for the card (D-779).
   let flametongueLine = null;
+  // 04's Flametongue's Scorched, laid by the hit (the class talent audit, D-1886).
+  let flametongueScorch = null;
   // Starfire Arrow's shot with no ammunition (D-912), or null.
   let phantom = null;
   // Wounded Beast (04, D-648): a weapon attack's Rating rises by the rank.
@@ -2183,7 +2219,13 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
   // What the traits do to the blow (08 §5, 2026-09-06): Fast's Momentum,
   // Heavy's Bane below Strength 13, Keen's Critical, the Effect traits
   // waiting on the roll. A launcher fires its shot's traits as well as its own.
-  const traitNames = [...(sys.traits ?? []), ...(ammunition ? (actor.items.get(ammunition.itemId)?.system?.traits ?? []) : [])];
+  // **SANCTIFIED WEAPON AGAINST AN UNDEAD OR A DEMON ALONE** (the class talent audit's A5, D-1874): the
+  // Greater grade the talent gives reads as the Lesser at any other target (`audit-martial.mjs#sanctifiedTraits`).
+  const sanctifiedAt = (targets ? game.scenes?.get(targets[0]?.sceneId)?.tokens?.get(targets[0]?.tokenId)?.actor : [...(game.user?.targets ?? [])][0]?.actor) ?? null;
+  const traitNames = [...sanctifiedTraits(sys.traits ?? [], {
+    consecrated: Boolean(weapon.flags?.["azeroth-rpg"]?.consecrated), stored: weapon._source?.system?.traits ?? [],
+    kinds: sanctifiedAt ? kindsOf(creatureSnapshot({ type: sanctifiedAt.type, system: sanctifiedAt.system, race: sanctifiedAt.raceItem?.name ?? null })) : null
+  }), ...(ammunition ? (actor.items.get(ammunition.itemId)?.system?.traits ?? []) : [])];
   const traitEffects = weaponTraitEffects(traitNames, { strength: system.abilities.str?.total ?? system.abilities.str?.value ?? 10 });
   // **WHAT SCHOOL THIS BLOW IS, AND WHAT IT PIERCES** (08 §7, D-711 phase 2).
   // *A weapon with a Greater School enchantment deals damage of that school
@@ -2202,16 +2244,14 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
     damageSpec = { ...damageSpec, kind: gadgetSchool ? "magical" : converted.kind, school: gadgetSchool ?? converted.school, penetration: converted.penetration };
     // Starfire Arrow's shot keeps its own school (D-912).
     if (phantom) damageSpec = { ...damageSpec, kind: "magical", school: phantom.type };
-    // **04's FLAMETONGUE, HELD** (*While you Sustain it, your weapon attacks deal Fire
-    // damage rather than Physical. At rank 2 they add 1 damage as well*; the lead,
-    // 2026-10-03, on O-188: *"1 mana"*; D-779): while the shaman's Sustain stands, a
-    // Physical blow is Fire, met by the Ward as 08 §7's Greater enchantment is, and
-    // the rank's damage is added (`class-answers.mjs#flametongueStrike`).
+    // **04's FLAMETONGUE, HELD** (its 1 Mana is O-188's, D-779), **REWRITTEN BY THE CLASS
+    // TALENT AUDIT** (B11, D-1886: *your weapon hits lay Scorched 1
+    // on the target, or Scorched 2 at rank 2*): the blow's type is left alone, and the hit lays
+    // the Scorched, the talent its source (`landsOnHit`, read by `workflows.rollTest`).
     const tongue = flametongueFor(actor.takenTalents?.() ?? []);
-    if (tongue && (actor.getFlag?.("azeroth-rpg", "sustaining") ?? []).some(s => s?.identifier === tongue.identifier)) {
-      const before = damageSpec;
-      damageSpec = flametongueStrike(damageSpec, { add: tongue.add });
-      if (damageSpec !== before) flametongueLine = { label: tongue.name, value: null, formula: game.i18n.format("AZEROTH.Flametongue.Row", { n: tongue.add }) };
+    if (tongue && tongue.scorched > 0 && (actor.getFlag?.("azeroth-rpg", "sustaining") ?? []).some(s => s?.identifier === tongue.identifier)) {
+      flametongueScorch = { condition: "scorched", value: tongue.scorched, source: tongue.name, sourceId: tongue.identifier };
+      flametongueLine = { label: tongue.name, value: null, formula: game.i18n.format("AZEROTH.Flametongue.Row", { n: tongue.scorched }) };
     }
     // **WHAT STANDS ON THE CHARACTER** (04, D-711 phase 2): the derived map a
     // `final`-phase effect adds to - Seal of Command's Holy for the encounter,
@@ -2454,11 +2494,14 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
   // `budget: "none"` means somebody has already paid for it; and a maneuver's
   // Opposed Test carries no damage row (06 §7's Disarm, D-626), which is the
   // one attack door that resolves something other than a blow.
+  // **A TRIGGERED ATTACK IS ONE ROLL** (R6, D-1864): a talent's door that grants an attack on a
+  // trigger hands `triggered: true`, and Extra Attack does not double it.
   const rolls = rollsPerAttack({
     extraAttack: actor.hasExtraAttack === true,
     isOffHand: offHand,
     reaction: budget === "none" || budget === "reaction",
-    opposed: damage === false
+    opposed: damage === false,
+    triggered: triggered === true
   });
   const extraChoices = rolls > 1 ? extraAttackWeapons(weapon, actor.readyWeapons?.() ?? [], actor.takenTalents?.() ?? []) : [];
   const extraChoiceNow = id => {
@@ -2557,7 +2600,7 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
     ...(opportunity === true ? { opportunity: true } : {}),
     // What this blow's hit lays whatever it strikes (04's Net-o-Matic Projector; the
     // Legacy branches' door 7), read by `workflows.rollTest`.
-    ...(Array.isArray(landsOnHit) && landsOnHit.length ? { landsOnHit } : {}),
+    ...((Array.isArray(landsOnHit) && landsOnHit.length) || flametongueScorch ? { landsOnHit: [...(Array.isArray(landsOnHit) ? landsOnHit : []), ...(flametongueScorch ? [flametongueScorch] : [])] } : {}),
     // A Boon the card's Use gives each of its attacks (04's Fan of Knives at rank 2;
     // door 26), read by the dialog as a talent's Boon.
     ...((Number(cardBoons?.boons) || 0) > 0 ? { cardBoons: { boons: Math.trunc(Number(cardBoons.boons)), names: [...(cardBoons.names ?? [])] } } : {}),
@@ -2968,7 +3011,10 @@ export async function useAbilityWithDialog(actor, list, index, event = null) {
         if (refuseOutOfRange(spellRangeRefusal({ actor, spell, targets: args?.targets ?? [], source: args?.source ?? null }))) return null;
         const claimed = await claimBossPoints(actor, row);
         if (!claimed.ok) return null;
-        return game.system.azeroth.workflows.castSpell({ ...args, actor, spell, bossAction: true });
+        // *casts Frostbolt without paying its Mana* (D-1829): the row's plan says so, and the
+        // cast goes as a free cast, its card naming the Boss Action that paid for it.
+        const freeMana = (await import("../rules/boss-actions.mjs")).cleanBossPlan(a.plan).freeMana === true;
+        return game.system.azeroth.workflows.castSpell({ ...args, actor, spell, bossAction: true, ...(freeMana ? { free: { by: row.name } } : {}) });
       } });
     }
     const delegation = delegatedAbilitySpell(row.description ?? "");

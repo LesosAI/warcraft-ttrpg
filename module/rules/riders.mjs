@@ -180,7 +180,9 @@ export const RIDER_REFUSALS = Object.freeze({
   primed: "AZEROTH.Rider.Refused.Primed",
   // Two lines of one choice ticked together (02's Plague: *your Frost Fever OR your Blood
   // Plague*; the Death Knight plan's door 7).
-  exclusive: "AZEROTH.Rider.Refused.Exclusive"
+  exclusive: "AZEROTH.Rider.Refused.Exclusive",
+  // A blow at a target its row's gate does not name (02's Kill Shot at the marked target; D-1872).
+  gate: "AZEROTH.Rider.Refused.Gate"
 });
 
 /** Why the Combat tab's control cannot pay a rider before the blow, as `lang/en.json` keys. */
@@ -370,7 +372,9 @@ export function riderOutcome(rider, { hit = false, spent = 0, rank = 1, tier = 1
   // Stormstrike's Bane on the target's next attack (D-774), named only where carried.
   if (on.bane?.kind) {
     const banes = Math.max(0, Math.trunc(evaluateExpression(on.bane.banes ?? 1, scope) ?? 0));
-    out.bane = hit && reachedFor("bane") && banes > 0 ? { kind: on.bane.kind, banes } : null;
+    // And its span where the row names one (the class talent audit's Shield Slam: *the target's next
+    // attack before the end of your next turn takes a Bane*; D-1870), named only where carried.
+    out.bane = hit && reachedFor("bane") && banes > 0 ? { kind: on.bane.kind, banes, ...(on.bane.until === "strikerTurnEnd" ? { until: "strikerTurnEnd" } : {}) } : null;
   }
   // **A SECOND CONDITION THE HIT LAYS, ON ITS OWN SPAN** (04's Shadow Strike: *the target
   // gains Bleeding equal to your rank and is Slowed until the start of your next turn*;
@@ -524,6 +528,13 @@ export function ridersFor(talents = [], { pools = [], form = false, weapon = nul
     .filter(r => r.rider.discount && activeDiscounts.includes(r.talent.identifier))
     .map(r => r.rider.discount);
   const frees = freeRiderCosts(talents, facts, rowOf);
+  // **04's ADRENALINE** (*Your Rogue features and talents cost 1 less Energy per rank, to a
+  // minimum of 1*; decision 13, D-1881): a taken `classDiscount` row, laid on the rider of
+  // a talent of its class as `discountedCost` lays any discount.
+  const classOffs = (talents ?? []).filter(t => (Math.trunc(Number(t?.taken)) || 0) > 0)
+    .map(t => ({ rank: Math.trunc(Number(t.taken)) || 0, row: rowOf(t.className, t.identifier, t.race ?? null)?.classDiscount ?? null }))
+    .filter(r => r.row?.pool && r.row.className)
+    .map(r => ({ pool: r.row.pool, className: r.row.className, amount: Math.max(0, Math.trunc(evaluateExpression(String(r.row.amount ?? "rank"), { rank: r.rank }) ?? 0)), min: r.row.min ?? 1 }));
   const family = weaponFamily(weapon);
   const out = [];
   for (const { talent, rider, rank } of rows) {
@@ -555,7 +566,10 @@ export function ridersFor(talents = [], { pools = [], form = false, weapon = nul
     // **FREE AGAINST THIS TARGET** (Cursed Prey at rank 2; B1): a talent's
     // `riderCost` naming this rider, its gate held - *all* is never made free.
     const freeBy = !all ? (frees.get(talent.identifier) ?? null) : null;
-    const cost = all ? null : (freeBy ? 0 : discountedCost(rider.cost.amount, rider.cost.pool, discounts));
+    // **A PRICE A RANK LOWERS** (the class talent audit's Crusader Strike: *At rank 2 it costs 3 Zeal*;
+    // D-1874): the last `atRank` clause the rank reached that names `cost.amount`, else the row's.
+    const amountAt = (rider.atRank ?? []).reduce((a, cl) => (rank >= (Number(cl?.rank) || Infinity) && Number.isInteger(cl?.cost?.amount) ? cl.cost.amount : a), rider.cost.amount);
+    const cost = all ? null : (freeBy ? 0 : discountedCost(amountAt, rider.cost.pool, [...discounts, ...classOffs.filter(d => d.className === talent.className)]));
     const value = Math.max(0, Math.trunc(Number(pool?.value) || 0));
     // **SPEND UP TO A NUMBER** (04's Void Surge: *spend up to your tier in Void
     // Corruption*; stage 3A of the Chromatic Champion plan): a rider of `"all"` with a
@@ -572,6 +586,10 @@ export function ridersFor(talents = [], { pools = [], form = false, weapon = nul
     else if (rider.once === "round" && (usedThisRound ?? []).includes(talent.identifier)) reason = { key: RIDER_REFUSALS.once, params };
     else if (all && value < 1) reason = { key: RIDER_REFUSALS.empty, params };
     else if (!all && value < cost) reason = { key: RIDER_REFUSALS.short, params };
+    // **A BLOW AT ONE TARGET ALONE** (02's Kill Shot: *As part of an attack against your marked target*;
+    // the class talent audit, D-1872): a row's `gate`, read through the one predicate off the facts the
+    // door measured - greyed in words wherever it does not hold, an unmeasured target included.
+    else if (rider.gate && gateHolds(rider.gate, facts ?? {}) !== true) reason = { key: RIDER_REFUSALS.gate, params };
     out.push({
       id: `rider-${talent.identifier}`,
       identifier: talent.identifier,
@@ -828,6 +846,21 @@ export function roundRiders(round, number, { mark = [], prime = false, consume =
   const primed = [...new Set([...primedHeld.filter(id => !gone.includes(id)), ...(prime ? added : [])])].sort();
   const changed = !same || added.length > 0 || primed.length !== primedHeld.length || primed.some(id => !primedHeld.includes(id));
   return { round: { ...(same ? round : {}), number, riders, primed }, added, changed };
+}
+
+/**
+ * **WHETHER THE ROUND'S RECORD ALREADY HOLDS A ONCE-A-ROUND MARK** (the class talent
+ * audit's once-a-round clauses, D-1880 to D-1887): Death Mark's free Finisher, Combat
+ * Reflexes' free Riposte, Miracle's Reaction, Shadowform's line. False for a record of
+ * an older round, which is a new round's.
+ *
+ * @param {{number?: number, once?: string[]}|null} round
+ * @param {number} number
+ * @param {string} key
+ * @returns {boolean}
+ */
+export function roundHolds(round, number, key) {
+  return Boolean(round) && round.number === number && typeof key === "string" && (round.once ?? []).includes(key);
 }
 
 /**

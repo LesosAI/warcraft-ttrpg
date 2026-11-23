@@ -36,6 +36,8 @@
  */
 
 import { DEFAULT_SIZE, isSize, rung, tokenSize } from "./size.mjs";
+// A Boss is never a form a character takes (D-1804).
+import { isBossEntry } from "./boss-entries.mjs";
 
 /** The flag the shape effect carries, under `azeroth-rpg`. */
 export const SHAPE_FLAG = "shape";
@@ -814,9 +816,42 @@ export function shapeDamageBonus(shape) {
  */
 export function isShapeshiftForm(entry = {}) {
   if (FORCED_FORMS.includes(entry.name)) return false;
+  // **NEVER A BOSS** (D-1804; the lead, 2026-11-22: *"boss's like King Mosh can't be
+  // shapeshift or summon targets"*): refused by name of the rule, not by the accident of
+  // the weight classes below.
+  if (isBossEntry(entry)) return false;
   return entry.creatureType === "beast"
     && (["chaff", "standard"].includes(entry.weightClass)
       || (entry.name === "Mountain Lion" && entry.weightClass === "soldier"));
+}
+
+/**
+ * **WHAT THE AVATAR OF THE WILD MAY BECOME** (02 §7: *the Avatar block, or any Beast at
+ * Elite*; D-635), and never a Boss (D-1804). Read by the Avatar's chooser, which held the
+ * filter inline before.
+ *
+ * @param {{name?: string, creatureType?: string|null, weightClass?: string|null}} entry
+ * @returns {boolean}
+ */
+export function isAvatarForm(entry = {}) {
+  if (isBossEntry(entry)) return false;
+  return entry.name === "Avatar" || (entry.creatureType === "beast" && entry.weightClass === "elite");
+}
+
+/**
+ * **A BLOCK A CHARACTER MAY NOT TAKE AS A SHAPE** (D-1804): the first Boss among the
+ * blocks a shape is made from, by name, or null. Asked before anything is paid
+ * (`useFeature`) and again where the shape is written (`documents/shapes.mjs#takeShape`).
+ * A shape with no block (an overlay) has nothing to refuse.
+ *
+ * @param {Array<object>} blocks  bestiary actors, their sources, or chooser rows
+ * @returns {string|null}
+ */
+export function bossFormOf(blocks = []) {
+  for (const b of Array.isArray(blocks) ? blocks : []) {
+    if (isBossEntry(b)) return String(b?.name ?? "");
+  }
+  return null;
 }
 
 /**
@@ -857,4 +892,25 @@ export function shapeRewriteReset(held = {}, next = {}) {
   if (held?.unleashed) out.flags.unleashed = null;
   if (held?.durationValue !== undefined && held.durationValue !== null) out.effect = { duration: { ...NO_DURATION }, start: null };
   return out;
+}
+
+/**
+ * **A DRUID'S FORM IS NO HIGHER IN TIER THAN THE DRUID** (the class talent audit's C6, the
+ * audit's largest single fault: a level 1 Druid could wear a tier 4 beast at 2.16 a striker; the
+ * lead's *"All other propsals are approved"*; D-1867). The tier is the Shapeshift class's own, a
+ * second class one tier behind (02 §10), and the block's is the form's `tier`. The chooser greys a
+ * form above it in words (`featureMenu`'s `forms`), and the Use refuses one before anything is
+ * paid (`useFeature`). The first form above the tier, or null; a block with no tier is tier 1.
+ *
+ * @param {Array<{name?: string, tier?: number|null, system?: {tier?: number}}>} forms  snapshots, blocks or chooser rows
+ * @param {{tier?: number}} o  the Druid's tier
+ * @returns {{name: string, tier: number}|null}
+ */
+export function formOverTier(forms = [], { tier = 1 } = {}) {
+  const cap = Math.max(1, Math.trunc(Number(tier)) || 1);
+  for (const f of Array.isArray(forms) ? forms : []) {
+    const t = Math.max(1, Math.trunc(Number(f?.tier ?? f?.system?.tier)) || 1);
+    if (t > cap) return { name: String(f?.name ?? ""), tier: t };
+  }
+  return null;
 }

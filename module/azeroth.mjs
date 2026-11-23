@@ -95,7 +95,6 @@ import { registerStruckTestHooks } from "./effects/struck-tests.mjs";
 // The damage door's rulings (D-777): temporary Health that ends with the effect
 // carrying it, and 07's Aegis floor's heal when it goes.
 import { registerTemporaryHealthHooks } from "./effects/temporary-health.mjs";
-import { registerBlowDoorHooks } from "./effects/blow-doors.mjs";
 // A thrall released when its Charmed ends (the Legacy branches' door 25).
 import { registerLegacyUseHooks } from "./effects/legacy-uses.mjs";
 // D-779: Undying Rage's fall when its held rounds run out, and Bracing lifted by a move.
@@ -433,11 +432,10 @@ Hooks.once("init", () => {
   // A shape on the board (D-769): a token placed for a shifted character wears
   // the shape, and a shape effect deleted by any door is leaving the shape.
   shapes.registerShapeHooks();
-  // 05's temporary Health goes with the effect that carried it, and a creature
-  // 07's Aegis floor held restores the caster's tier when the floor goes (D-777):
-  // both on the client that deleted the effect.
+  // 05's temporary Health goes with the effect that carried it (D-777), on the client
+  // that deleted the effect. A floor's end restores nothing since the class talent
+  // audit's Benediction (D-1875).
   registerTemporaryHealthHooks();
-  registerBlowDoorHooks();
   registerLegacyUseHooks();
   registerClassAnswerHooks();
   // 05 §10's movement costs and 07's Difficult ground (D-757). At `init`,

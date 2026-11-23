@@ -455,9 +455,13 @@ const TEST_14 = String.raw`(?:(?:Body|Reflex|Spirit) Resilience Test|Resilience 
  * **AN ABILITY'S DAMAGE THAT HALVES ON A PASS**, in 14's wordings: *8 Fire damage, or half
  * on a Resilience (Reflex) Test at DC 20*; *takes 6 damage and is **Entangled**, or half and
  * neither on a Resilience (Body) Test*; *or half and no throw on ...*; *takes 5 damage,
- * halved on a Resilience (Reflex) Test*. Never *as a Half-Action*.
+ * halved on a Resilience (Reflex) Test*; and *or takes half and is not Stunned on a ...* or
+ * *or takes half damage and is not pushed if it passes a ...* (the Doomguard's War Stomp and
+ * Deathclasp Knock Away, D-1782), and the catalogue's *and takes half and stays where it stands on a
+ * passed ...* and *A creature takes half and is not pushed on a passed ...*, and every wording with
+ * *on a passed* where it had said *on a* (D-1834). Never *as a Half-Action*.
  */
-export const ABILITY_HALF_RE = new RegExp(String.raw`\bor half\b[^.]*?\bon an? ${TEST_14}|\bhalved on an? ${TEST_14}`, "i");
+export const ABILITY_HALF_RE = new RegExp(String.raw`\bor half\b[^.]*?\bon an? (?:passed )?${TEST_14}|\bhalved on an? (?:passed )?${TEST_14}|\bor takes half\b[^.]*?\b(?:on|if it passes) an? (?:passed )?${TEST_14}|\b(?:and|creature) takes half\b[^.]*?\bon a passed ${TEST_14}`, "i");
 
 /**
  * **AN ABILITY'S DAMAGE THAT A PASS SPARES WHOLE**, in 14's wordings: *or none on a
@@ -465,16 +469,17 @@ export const ABILITY_HALF_RE = new RegExp(String.raw`\bor half\b[^.]*?\bon an? $
  * Resilience (Reflex) Test*; and the Wild Kodo's *Each one makes a Resilience (Reflex) Test at
  * DC 14 or takes 3 damage and is knocked **Prone***.
  */
-export const ABILITY_NONE_RE = new RegExp(String.raw`\bor none on an? ${TEST_14}|\btakes?\s+\d+\s+(?:[A-Za-z]+\s+)?damage\b[^.]*?\bunless it passes an? ${TEST_14}|${TEST_14}(?:\s+at\s+DC\s+\d+)?\s+or\s+takes?\s+\d+\s+(?:[A-Za-z]+\s+)?damage\b`, "i");
+export const ABILITY_NONE_RE = new RegExp(String.raw`\bor none on an? (?:passed )?${TEST_14}|\btakes?\s+\d+\s+(?:[A-Za-z]+\s+)?damage\b[^.]*?\bunless it passes an? ${TEST_14}|${TEST_14}(?:\s+at\s+DC\s+\d+)?\s+or\s+takes?\s+\d+\s+(?:[A-Za-z]+\s+)?damage\b`, "i");
 
 /**
  * **A SENTENCE THAT HANDS A CONDITION TO THE TEST**, in 14's wordings: *... and is
  * **Stunned** until the end of its next turn unless it passes*, *or takes 3 damage and is
  * knocked **Prone***, *or half and neither*, *or half and no throw*, Azuregos's *or neither on
  * a Resilience (Spirit) Test*, Skeram's *or not on a Resilience (Spirit) Test*, Cho'gall's *A
- * creature that fails is also **Numbed***, and 07's *On a failure*.
+ * creature that fails is also **Numbed***, 07's *On a failure*, and the catalogue's *is not
+ * **Entangled** on a passed ...* and *neither pushed nor knocked **Prone** on a passed ...* (D-1834).
  */
-const ABILITY_GOVERNS_RE = /\bunless it passes\b|\bor (?:takes?|is|be|becomes)\b|\bor (?:half and )?(?:neither|not|no)\b|\bthat fails\b|\bon (?:a )?fail(?:ure|ed save)\b/i;
+const ABILITY_GOVERNS_RE = /\bunless it passes\b|\bor (?:takes?|is|be|becomes)\b|\bor (?:half and )?(?:neither|not|no)\b|\bthat fails\b|\bon (?:a )?fail(?:ure|ed save)\b|\b(?:not|nor) (?:knocked )?\w+ on a passed\b/i;
 
 /**
  * Whether an ability's words halve its damage on a passed Test (`ABILITY_HALF_RE`).

@@ -9,9 +9,11 @@
  *   the GM's query for a holder another user owns (the architect's review);
  *   Fanaticism's Zeal kept and begun at 3; Wrath of the Light at the weapon's
  *   Rating.
- * - Benediction: Blessing's Boon, spent and lasting; Devotion and Holy Guidance
- *   on Lay on Hands; Light's Reserve at the rest; Illumination's Mana back;
- *   Beacon's half; Divine Favor's free Lay on Hands.
+ * - Benediction (rebuilt by the class talent audit, D-1875): Blessing's lasting
+ *   Boon on one friend and on two at rank 2; Healing Hands on Lay on Hands;
+ *   Mending Word with Twofold Light's half; Illumination's Mana back; Divine
+ *   Favor's counter, and no Mana waived any more. Beacon of Hope and Mercy of
+ *   Uther are `azeroth-rpg.audit-martial`'s.
  * - Aegis: Redoubt and Holy Shield at the Block; Blessed Plate's school;
  *   Unyielding's Prone refused and Speed held; Sacred Duty's aura.
  *
@@ -324,17 +326,16 @@ export function paladinTalentsBatch(context) {
       assert.deepEqual(none, [], "a creature still standing laid Vengeance");
     });
 
-    it("FANATICISM: a fight begins at 3 Zeal at rank 2, and the Zeal is kept when the fight ends", async function () {
+    // 2 Zeal a rank, and the Zeal no longer kept, since the class talent audit (D-1874).
+    it("FANATICISM: a fight begins at 2 Zeal a rank, and the Zeal drains when the fight ends", async function () {
       this.timeout(240000);
       const paladin = await paladinWith("ZZ PT Fanatic", { weapons: ["Longsword"], ranks: { Fanaticism: 2 } });
       const ghoul = await makeNpc("Plagued Ghoul");
       const combat = await fightWith([paladin, ghoul]);
-      await until(() => poolOf(paladin, "zeal").value === 3, "3 Zeal at the fight's start");
+      await until(() => poolOf(paladin, "zeal").value === 4, "4 Zeal at the fight's start");
       await setPool(paladin, "zeal", 5);
       await combat.delete();
-      await settle();
-      await new Promise(r => setTimeout(r, 1000));
-      assert.equal(poolOf(paladin, "zeal").value, 5, "the Zeal drained out of the fight");
+      await until(() => poolOf(paladin, "zeal").value === 0, "the Zeal drained at the fight's end", 30000);
     });
 
     it("WRATH OF THE LIGHT: 10 Zeal deals Holy at the main-hand weapon's Rating, and offers Blinded until the Paladin's turn starts", async function () {
@@ -354,14 +355,16 @@ export function paladinTalentsBatch(context) {
 
     /* ---- Benediction --------------------------------------------------- */
 
-    it("BLESSING: rank 1 lays a Boon the friend's next Test spends; rank 2 in a fight lasts the round and no Test spends it", async function () {
+    // Until the start of the Paladin's next turn, and two friends at rank 2, since the class talent audit (D-1874).
+    it("BLESSING: rank 1 lays a lasting Boon no Test spends; rank 2 lays one on each of two friends", async function () {
       this.timeout(300000);
       const paladin = await paladinWith("ZZ PT Blessing", { ranks: { Blessing: 1 } });
       const friend = await makeCharacter({ name: "ZZ PT Blessed", classes: [["Warrior", 3]] });
+      const other = await makeCharacter({ name: "ZZ PT Blessed Too", classes: [["Warrior", 3]] });
       await fill(paladin, "mana");
       await use(paladin, "Blessing", { targets: [rowOf(friend)] });
-      const laid = await until(() => friend.effects.find(e => e.getFlag("azeroth-rpg", "laidBoon")), "the Boon on the friend");
-      assert.deepEqual(laid.getFlag("azeroth-rpg", "laidBoon"), { kind: "all", boons: 1, source: "Blessing" });
+      const laid = await until(() => friend.effects.find(e => e.getFlag("azeroth-rpg", "laidBoon")?.lasting === true), "the lasting Boon on the friend");
+      assert.equal(laid.duration?.units, "seconds", "out of a fight it does not run a round of the world's clock");
       const unpin = pinDie(10);
       try {
         const test = await workflows().rollTest({ actor: friend, kind: "skill", dc: 10, title: "Athletics" });
@@ -369,47 +372,58 @@ export function paladinTalentsBatch(context) {
       } finally {
         unpin();
       }
-      await until(() => !friend.effects.some(e => e.getFlag("azeroth-rpg", "laidBoon")), "the Boon spent by the Test");
+      assert.ok(friend.effects.get(laid.id), "a Test spent the lasting Boon");
       await talentNamed(paladin, "Blessing").update({ "system.taken": 2 });
       await until(() => talentNamed(paladin, "Blessing").system.taken === 2, "rank 2");
-      const combat = await fightWith([paladin, friend]);
-      await giveTurn(combat, paladin);
       await fill(paladin, "mana");
-      await use(paladin, "Blessing", { targets: [rowOf(friend)] });
-      const lasting = await until(() => friend.effects.find(e => e.getFlag("azeroth-rpg", "laidBoon")?.lasting === true), "the round's Boon");
-      assert.equal(lasting.duration?.expiry, "roundEnd");
-      const again = await workflows().rollTest({ actor: friend, kind: "skill", dc: 10, title: "Athletics" });
-      made.push(again);
-      assert.ok(friend.effects.get(lasting.id), "a Test spent the round's Boon");
+      await use(paladin, "Blessing", { targets: [rowOf(friend), rowOf(other)] });
+      await until(() => other.effects.some(e => e.getFlag("azeroth-rpg", "laidBoon")?.lasting === true), "the Boon on the second friend");
     });
 
-    it("DEVOTION and HOLY GUIDANCE: Lay on Hands restores the level and both ranks", async function () {
+    // Devotion and Holy Guidance left 04 with the class talent audit's Benediction (D-1875); Healing Hands adds its
+    // rank, to no more than the tier, where the heal lands.
+    it("HEALING HANDS: Lay on Hands restores its rank more, to no more than the tier", async function () {
       this.timeout(240000);
-      const paladin = await paladinWith("ZZ PT Devotion", { ranks: { Devotion: 3, "Holy Guidance": 2 } });
+      const paladin = await paladinWith("ZZ PT Healing Hands", { level: 9, ranks: { "Healing Hands": 3 } });
       const patient = await makeCharacter({ name: "ZZ PT Patient", classes: [["Warrior", 3]] });
-      await until(() => (featureNamed(paladin, "Lay on Hands")?.system?.modifiedBy ?? []).length === 2, "both patches on Lay on Hands", 30000);
-      await fill(paladin, "mana");
-      const card = await use(paladin, "Lay on Hands", { targets: [rowOf(patient)] });
-      assert.equal(card.flags["azeroth-rpg"].heal, paladin.system.level + 3 + 2, "the heal is not the level and both ranks");
+      await patient.update({ "system.health.value": 1 });
+      await patient.applyHealing(5, { from: paladin, feature: true, featureName: "Lay on Hands" });
+      const want = Math.min(patient.system.health.max, 1 + 5 + Math.min(3, paladin.system.tier));
+      await until(() => patient.system.health.value === want, "the rank, capped at the tier, more");
     });
 
-    it("LIGHT'S RESERVE: a Short Rest with a drink returns half the Mana and 3 a rank more", async function () {
-      this.timeout(240000);
-      const paladin = await paladinWith("ZZ PT Reserve", { ranks: { "Light's Reserve": 2 } });
-      const pool = poolOf(paladin, "mana");
-      await setPool(paladin, "mana", 0);
-      const bread = await give(paladin, "Bread and cheese");
-      const ale = await give(paladin, "Ale, a pint");
-      await paladin.shortRest({ food: bread, drink: ale });
-      await until(() => poolOf(paladin, "mana").value === Math.min(pool.max, Math.floor(pool.max / 2) + 6), "half and 6 more", 30000);
-      const card = game.messages.contents.at(-1);
-      made.push(card);
-      assert.include(textOf(card), "Light's Reserve", "the rest card does not name the talent");
+    // Light's Reserve left 04 with the class talent audit's Benediction (D-1875). Mending Word and Twofold Light:
+    it("MENDING WORD and TWOFOLD LIGHT: 4 Zeal heals a friend twice the tier, and a second friend within 10 feet half", async function () {
+      this.timeout(300000);
+      const paladin = await paladinWith("ZZ PT Mending", { ranks: { "Mending Word": 1, "Twofold Light": 1 } });
+      const first = await makeCharacter({ name: "ZZ PT Mended", classes: [["Warrior", 3]] });
+      const second = await makeCharacter({ name: "ZZ PT Mended Too", classes: [["Warrior", 3]] });
+      await sceneWith([{ actor: paladin, x: 1500, y: 1000 }, { actor: first, x: 1000, y: 1000 }, { actor: second, x: 1100, y: 1000 }]);
+      // Twofold Light's *friendly target* is the ally rule (D-755): out of a fight, a Party member (D-658).
+      for (const a of [paladin, first, second]) await a.setParty(true);
+      await first.update({ "system.health.value": 1 });
+      await second.update({ "system.health.value": 1 });
+      await setPool(paladin, "zeal", 6);
+      const card = await use(paladin, "Mending Word", { targets: [rowOf(first)] });
+      assert.ok(card, "the Use posted no card");
+      assert.equal(poolOf(paladin, "zeal").value, 2, "Mending Word did not take 4 Zeal");
+      const heal = 2 * paladin.system.tier;
+      assert.equal(card.flags["azeroth-rpg"].heal, heal);
+      // The heal names its card, as the card's own Apply does (the class talent audit's final review).
+      await first.applyHealing(heal, { from: paladin, feature: true, featureName: "Mending Word", messageId: card.id });
+      await until(() => second.system.health.value === 1 + Math.floor(heal / 2), "half to the second friend");
+      await until(() => card.flags["azeroth-rpg"].twofoldShared === true, "the card marked as having shared");
+      // A second heal off the same card shares nothing: the card is claimed once.
+      await first.update({ "system.health.value": 1 });
+      const sharedOnce = second.system.health.value;
+      await first.applyHealing(heal, { from: paladin, feature: true, featureName: "Mending Word", messageId: card.id });
+      await new Promise(r => setTimeout(r, 1500));
+      assert.equal(second.system.health.value, sharedOnce, "a second heal off one Mending Word card shared again");
     });
 
     it("ILLUMINATION: a Casting Test at SL 2 returns a Mana a rank", async function () {
       this.timeout(240000);
-      const paladin = await paladinWith("ZZ PT Illumination", { spells: ["Holy Light"], ranks: { Devotion: 1, Illumination: 2 } });
+      const paladin = await paladinWith("ZZ PT Illumination", { spells: ["Holy Light"], ranks: { Illumination: 2 } });
       await setPool(paladin, "mana", 6);
       const spell = await until(() => itemNamed(paladin, "Holy Light"), "Holy Light known");
       const unpin = pinDie(18);
@@ -425,32 +439,22 @@ export function paladinTalentsBatch(context) {
       assert.include(textOf(card), game.i18n.format("AZEROTH.Cast.ManaBackRow", { n: 2 }));
     });
 
-    it("BEACON: the Use names one friend, and a heal of the Paladin's on another creature within 120 feet passes half on", async function () {
-      this.timeout(300000);
-      const paladin = await paladinWith("ZZ PT Beacon", { ranks: { Beacon: 1 } });
-      const partner = await makeCharacter({ name: "ZZ PT Beacon Partner", classes: [["Warrior", 3]] });
-      const patient = await makeCharacter({ name: "ZZ PT Beacon Patient", classes: [["Warrior", 3]] });
-      await sceneWith([{ actor: paladin, x: 1000, y: 1000 }, { actor: partner, x: 1500, y: 1000 }, { actor: patient, x: 1200, y: 1000 }]);
-      await use(paladin, "Beacon", { targets: [rowOf(partner)] });
-      await until(() => paladin.getFlag("azeroth-rpg", "beacon")?.partner === partner.uuid, "the partner named");
-      await partner.update({ "system.health.value": 1 });
-      await patient.update({ "system.health.value": 1 });
-      await patient.applyHealing(6, { from: paladin });
-      await until(() => partner.system.health.value === 1 + 3, "half of 6 to the partner");
-    });
+    // The Beacon talent left 04 with the class talent audit's Benediction (D-1875); 02's Beacon of Hope is
+    // `azeroth-rpg.audit-martial`'s.
 
-    it("DIVINE FAVOR: the first Lay on Hands after a Long Rest costs no Mana and strikes the counter; the next pays", async function () {
+    // A Holy heal cast as a Half-Action since the class talent audit (D-1875): its counter is the rank an encounter,
+    // and no healing feature's Mana is waived any more (the wave-2 fix run deleted the old waiver).
+    it("DIVINE FAVOR: its counter is the rank an encounter, and Lay on Hands pays its Mana", async function () {
       this.timeout(240000);
-      const paladin = await paladinWith("ZZ PT Favor", { ranks: { "Divine Favor": 1 } });
+      const paladin = await paladinWith("ZZ PT Favor", { ranks: { "Divine Favor": 2 } });
       const patient = await makeCharacter({ name: "ZZ PT Favor Patient", classes: [["Warrior", 3]] });
       const counter = await until(() => featureNamed(paladin, "Divine Favor"), "the counter");
+      assert.equal(Number(counter.system.uses?.max), 2);
+      assert.equal(counter.system.uses?.per, "encounter");
       await setPool(paladin, "mana", 5);
       await use(paladin, "Lay on Hands", { targets: [rowOf(patient)] });
-      assert.equal(poolOf(paladin, "mana").value, 5, "the favoured Use paid Mana");
-      await until(() => paladin.items.get(counter.id).system.uses.value === 0, "a use struck off the counter");
-      await featureNamed(paladin, "Lay on Hands").update({ "system.uses.value": 1 });
-      await use(paladin, "Lay on Hands", { targets: [rowOf(patient)] });
-      await until(() => poolOf(paladin, "mana").value === 5 - 2, "the next Use pays its 2");
+      await until(() => poolOf(paladin, "mana").value === 5 - 2, "Lay on Hands pays its 2");
+      assert.equal(paladin.items.get(counter.id).system.uses.value, 2, "the counter was struck by a feature");
     });
 
     /* ---- Aegis --------------------------------------------------------- */

@@ -203,6 +203,15 @@ import { legacyDarkRangerBatch } from "./quench-legacy-dark-ranger.mjs";
 // Migration 0.13.1 (D-807): the bestiary audit's descriptors on the creatures a world holds,
 // through core's compendium record, the NPC model and an unlinked token's own delta.
 import { bestiaryDescriptorsBatch } from "./quench-bestiary-descriptors.mjs";
+import { bestiaryAuditBatch } from "./quench-bestiary-audit.mjs";
+// The class talent audit's shared engine (D-1860 to D-1868).
+import { auditEngineBatch } from "./quench-audit-engine.mjs";
+// The class talent audit's Mage, Warlock and Druid (D-1890 to D-1899).
+import { auditArcaneBatch } from "./quench-audit-arcane.mjs";
+// The class talent audit's Rogue, Priest and Shaman (D-1880 to D-1887).
+import { auditCunningBatch } from "./quench-audit-cunning.mjs";
+// The class talent audit's Warrior, Paladin and Ranger (D-1870 to D-1879).
+import { auditMartialBatch } from "./quench-audit-martial.mjs";
 import { creaturePlansBatch } from "./quench-creature-plans.mjs";
 import { slRidersBatch } from "./quench-sl-riders.mjs";
 // The Chronomancer's sand spells, Decay and Physical damage (07 §12; D-864 to D-869).
@@ -671,6 +680,21 @@ export function registerQuenchTests() {
     });
     quench.registerBatch("azeroth-rpg.bestiary-descriptors", bestiaryDescriptorsBatch, {
       displayName: "AZEROTH: Migration 0.13.1 - the bestiary audit's descriptors on a world's creatures"
+    });
+    quench.registerBatch("azeroth-rpg.bestiary-audit", bestiaryAuditBatch, {
+      displayName: "AZEROTH: Migration 0.16.1.1 - the 2026-11 bestiary audit on a world's creatures"
+    });
+    quench.registerBatch("azeroth-rpg.audit-engine", auditEngineBatch, {
+      displayName: "AZEROTH: The class talent audit's shared engine (D-1860 to D-1868)"
+    });
+    quench.registerBatch("azeroth-rpg.audit-arcane", auditArcaneBatch, {
+      displayName: "AZEROTH: The class talent audit's Mage, Warlock and Druid (D-1890 to D-1899)"
+    });
+    quench.registerBatch("azeroth-rpg.audit-cunning", auditCunningBatch, {
+      displayName: "AZEROTH: The class talent audit's Rogue, Priest and Shaman (D-1880 to D-1887)"
+    });
+    quench.registerBatch("azeroth-rpg.audit-martial", auditMartialBatch, {
+      displayName: "AZEROTH: The class talent audit's Warrior, Paladin and Ranger (D-1870 to D-1879)"
     });
     quench.registerBatch("azeroth-rpg.boss-economy", bossEconomyBatch, {
       displayName: "AZEROTH: 14 SS1's Boss Action economy (D-809)"
@@ -1612,6 +1636,75 @@ function chatCardBatch(context) {
       }
     });
 
+    // **10 §3's WHAT PUTS YOU DOWN, ON ITS OWN** (D-1729): the creature's damage door names it on the
+    // write that drops the character, the death watch on this (the active GM's) client judges the drop,
+    // and the Test is made through `corruptionExposure` with the creature occasion. WRITTEN, NOT RUN in
+    // the session that wrote it.
+    describe("a creature that reduces a character to 0 Health exposes them (D-1729)", function () {
+      const cardFor = (subject, since) => game.messages.contents.find(m => m.flags?.["azeroth-rpg"]?.kind === "corruption"
+        && m.flags["azeroth-rpg"].occasion === "creature" && m.speaker?.actor === subject.id && m.timestamp >= since) ?? null;
+      const waitFor = async (fn, what, ms = 15000) => {
+        const t0 = Date.now();
+        for (;;) {
+          const v = fn();
+          if (v) return v;
+          if (Date.now() - t0 > ms) throw new Error(`timed out waiting for ${what}`);
+          await new Promise(r => setTimeout(r, 50));
+        }
+      };
+
+      it("a ghoul with Undeath drops a character to 0: the Body Test at DC 15 is made, a failure gains a point, the card names the ghoul", async function () {
+        this.timeout(30000);
+        const subject = await Actor.create({ name: "ZZ Quench Put Down", type: "character", system: { corruption: { undeath: 2 } } });
+        const ghoul = await Actor.create({ name: "ZZ Quench Ghoul", type: "npc", system: { corruption: "undeath" } });
+        // A natural 10 and no Constitution or training: 10 against DC 15 fails, and is no natural 1.
+        const release = pinDie(10);
+        try {
+          const since = Date.now();
+          await subject.update({ "system.health.value": 4 });
+          await subject.applyDamage(30, { struck: true, attack: false, by: ghoul });
+          assert.equal(subject.system.health.value, 0, "the blow dropped the character");
+          const card = await waitFor(() => cardFor(subject, since), "the exposure card");
+          messages.push(card);
+          assert.equal(card.flags["azeroth-rpg"].track, "undeath");
+          assert.equal(card.flags["azeroth-rpg"].from, 2);
+          assert.equal(card.flags["azeroth-rpg"].to, 3, "a failure gains exactly one point");
+          assert.equal(card.flags["azeroth-rpg"].source, ghoul.name);
+          assert.equal(card.rolls[0].options.dc, 15, "10 §3's DC for Undeath");
+          assert.equal(card.rolls[0].options.resilience, "body", "Undeath names a Body Test");
+          assert.equal(subject.system.corruption.undeath, 3);
+          assert.include(card.content, ghoul.name, "the card names who put the character down");
+          assert.include(card.content, game.i18n.localize("AZEROTH.Card.Exposed"), "the verdict is in words");
+          // A second blow at 0 is no new drop: no second card.
+          await subject.applyDamage(5, { struck: true, attack: false, by: ghoul });
+          await new Promise(r => setTimeout(r, 1500));
+          assert.lengthOf(game.messages.contents.filter(m => m.flags?.["azeroth-rpg"]?.occasion === "creature" && m.speaker?.actor === subject.id && m.timestamp >= since), 1, "one card for one drop");
+        } finally {
+          release();
+          await subject.delete();
+          await ghoul.delete();
+        }
+      });
+
+      it("a creature with no track drops a character and exposes nobody", async function () {
+        this.timeout(20000);
+        const subject = await Actor.create({ name: "ZZ Quench Put Down Clean", type: "character" });
+        const wolf = await Actor.create({ name: "ZZ Quench Wolf", type: "npc", system: { corruption: null } });
+        try {
+          const since = Date.now();
+          await subject.update({ "system.health.value": 4 });
+          await subject.applyDamage(30, { struck: true, attack: false, by: wolf });
+          assert.equal(subject.system.health.value, 0);
+          await new Promise(r => setTimeout(r, 1500));
+          assert.isNull(cardFor(subject, since), "no exposure card");
+          assert.equal(subject.system.corruption.undeath ?? 0, 0);
+        } finally {
+          await subject.delete();
+          await wolf.delete();
+        }
+      });
+    });
+
     it("rolls a Critical Injury on the table for the location struck", async function () {
       const message = await workflows().rollCriticalInjury({ actor, location: "limb" });
       messages.push(message);
@@ -2502,8 +2595,12 @@ function combatBatch(context) {
       const c = combat.combatants.contents[0];
       assert.equal(c.budget.halfActions, 2);
       assert.equal(c.budget.reactions, 1);
-      // No Attack counter since D-711: each Half-Action may be an Attack.
-      assert.notProperty(c.budget, "attacks");
+      // The turn counts its main-hand Attacks again (R6, D-1846, D-1864, overturning D-711's
+      // "no counter" in the code): `freshTurn` writes `attacks: 0` and `spend` refuses a third.
+      assert.equal(c.budget.attacks, 0);
+      // And what each Half-Action paid for, so the GM's undo gives an Attack back only where
+      // the Half-Action it restores bought one (the class talent audit's final review).
+      assert.deepEqual(c.budget.paidFor, []);
       assert.isFalse(c.budget.attacked);
       assert.equal(c.budget.offHandAttacks, 1);
     });

@@ -16,7 +16,7 @@
  *    or one ×2, after each turn of the fight.
  *
  * 2. **What each Boss Action does.** `BOSS_PLANS` is the hand-reviewed table over
- *    all 109 rows in 14, keyed by the creature's name and the action's. The
+ *    all 112 rows in 14, keyed by the creature's name and the action's. The
  *    bestiary parser lays each row's overrides on the seeded descriptor
  *    (`applyBossPlan`), so the pack carries them and `packs:parse` regenerates
  *    them; `boss-action-census.test.mjs` holds the table to 14 both ways and
@@ -26,6 +26,8 @@
  *    generic descriptor cannot hold rides `automation.plan`, read by
  *    `effects/boss-doors.mjs` and by the card's own doors.
  */
+
+import { CATALOGUE_BOSS_PLANS } from "./boss-plans-catalogue.mjs";
 
 /** The doors a plan may name for what the generic descriptor cannot hold. */
 export const BOSS_DOORS = Object.freeze([
@@ -110,6 +112,9 @@ export function cleanBossPlan(raw) {
     if (feet > 0 && on && toward) out.forced = { on, feet, toward };
   }
   if (raw.selfHeal === true) out.selfHeal = true;
+  // *casts Frostbolt without paying its Mana* (D-1829): a Boss Action that casts pays no Mana,
+  // read by `applications/actions.mjs#useAbilityWithDialog` as a free cast.
+  if (raw.freeMana === true) out.freeMana = true;
   if (int(raw.healAlt) > 0) out.healAlt = int(raw.healAlt);
   if (isObj(raw.drain)) {
     if (raw.drain.dealt === true) out.drain = { dealt: true };
@@ -207,7 +212,9 @@ export function cleanBossPlan(raw) {
     out.door = door;
     if (int(raw.feet) > 0) out.feet = int(raw.feet);
     if (raw.missNext === true) out.missNext = true;
-    if (int(raw.boons) > 0) out.boons = int(raw.boons);
+    // `boons: 0` is kept (D-1829): *one ogre ally makes one attack at once* names no Boon, and
+    // the ally door's own default is one.
+    if (int(raw.boons) !== null && int(raw.boons) >= 0) out.boons = int(raw.boons);
     if (int(raw.extra) > 0) out.extra = int(raw.extra);
     if (int(raw.count) > 0) out.count = int(raw.count);
     if (int(raw.health) > 0) out.health = int(raw.health);
@@ -313,10 +320,10 @@ export function addsBodies(words) {
  */
 const ZONE = (damage, school, lasts, extra = {}) => ({ lasts, difficult: false, ...(damage ? { damage, school } : {}), ...extra });
 
-export const BOSS_PLANS = Object.freeze({
+const HAND_BOSS_PLANS = Object.freeze({
   "Aku'mai": {
     "The Water Rises": { plan: { gather: { who: "creature", feet: 20 }, forced: { on: "fail", feet: 10, toward: "toward" } } },
-    "Second Coil": { type: "physical" }
+    "Poison Cloud": { type: "nature", area: "A 7.5 ft radius on the ground" }
   },
   "Amnennar the Coldbringer": {
     "Raise the Warren": {},
@@ -333,9 +340,14 @@ export const BOSS_PLANS = Object.freeze({
     "Shadow Step": { kind: "utility", plan: { door: "relocateSelf", feet: 60, missNext: true } }
   },
   "Azuregos": {
-    "Arcane Breath": { type: "arcane", until: "endOfRound", area: "A 30 ft cone" },
-    "Reave the Ley": { until: "endOfNextTurn", plan: { poolLoss: { pool: "mana", amount: 4, on: "fail" } } },
-    "Elsewhere": { kind: "utility", plan: { door: "relocateTarget", feet: 60 } }
+    // D-1758: the hostile world boss. *pulled to a space next to Azuregos* names no feet, so the
+    // pull is the 60 feet the gather reaches, and `forcedPlan` stops a pull at the puller.
+    "Arcane Vacuum": { plan: { gather: { who: "creature", feet: 60 }, forced: { on: "fail", feet: 60, toward: "toward" } } },
+    // ANNOUNCED (D-1780): a mark held for the encounter that Slows at a turn start within 30 feet,
+    // and a spell turned back on its caster for the round. No door lays either, so each is the
+    // GM's from the card and spends its point there (O-628).
+    "Mark of Frost": { kind: "none", reason: "narrative", clear: ["inflicts"] },
+    "Reflection": { kind: "none", reason: "narrative" }
   },
   "Baron Rivendare": {
     "Deathcharger's Trample": { type: "physical", area: "A 50 ft line", plan: { door: "selfLine" } },
@@ -379,16 +391,21 @@ export const BOSS_PLANS = Object.freeze({
     "Fight Me": { plan: { reminder: { on: "fail" } } }
   },
   "Hakkar the Soulflayer": {
-    "Blood of the Gurubashi": { plan: { gather: { who: "creature", feet: 20 } } },
+    // ANNOUNCED (D-1780): *Corrupted blood* is a disease 09 does not hold, so there is no clock to
+    // lay; its spread and its 3 damage a turn are the GM's from the card (O-628, O-629).
+    "Corrupted Blood": { kind: "none", reason: "narrative", clear: ["damage", "inflicts"] },
     "The Priests Chant": {},
     "Drain the Chamber": { type: "shadow", plan: { gather: { who: "creature", feet: 30 }, drain: { fixed: 3 } } }
   },
   "High Inquisitor Whitemane": {
     "Deliver Judgement": { type: "holy", until: "endOfNextTurn" },
-    "Raise Mograine": { plan: { door: "raise" } }
+    // D-1831: 14 names the body raised, Scarlet Commander Mograine, where he fell; the raise door
+    // places that entry, so the row is a summon through the door, as Raise the Fallen is.
+    "Raise Mograine": { kind: "summon", summon: { entry: "Scarlet Commander Mograine", count: 1 }, plan: { door: "raise" } }
   },
   "Immol'thar": {
-    "Arcane Lash": { type: "arcane" },
+    // D-1831: Arcane Lash left 14; the Eyes are new and read as the seed has them.
+    "The Eyes Open": {},
     "Feed": { plan: { selfHeal: true, poolLoss: { pool: "power", amount: 1, on: "press" } } },
     "Thrash": { type: "physical", clear: ["dc"], plan: { gather: { who: "creature", feet: "reach" }, forced: { on: "press", feet: 10, toward: "away" } } }
   },
@@ -403,7 +420,9 @@ export const BOSS_PLANS = Object.freeze({
     "The Attendants": {}
   },
   "Kel'Thuzad": {
-    "The Dead Attend": { kind: "summon", summon: { entry: "Plagued Ghoul", count: 1 }, plan: { door: "raise", feet: 60, all: true } },
+    // D-1831: The Dead Attend became two Guardians of Icecrown through the far gate, a summon the
+    // seed reads whole; the half-Health gate is the GM's moment, as every Boss Action's is.
+    "Guardians of Icecrown": {},
     "Frost Blast": { type: "frost" },
     "Shadow Fissure": { type: "shadow", area: "A 10 ft radius on the ground" }
   },
@@ -411,6 +430,13 @@ export const BOSS_PLANS = Object.freeze({
     "Bellow": { until: "endOfNextTurn", plan: { gather: { who: "enemy", feet: 30 } } },
     "The Court Attends": {},
     "Sweep": { type: "physical", plan: { gather: { who: "creature", feet: "reach" } } }
+  },
+  "King Mosh": {
+    // D-1806: the lead's *"make King Mosh a Boss"*. Snap is one Jaws attack, Ursal's Maul without
+    // its Boon; Earthshaker is Shake the Roots' gather; Recklessness is Amani Fury's door.
+    "Snap": { kind: "attack", plan: { attack: { allowance: 1 } } },
+    "Earthshaker": { plan: { gather: { who: "creature", feet: 15 } } },
+    "Recklessness": { kind: "utility", plan: { door: "amaniFury" } }
   },
   "Lokholar the Ice Lord": {
     "Glacier": { kind: "utility", area: "A 10 ft radius on the ground", clear: ["damage", "dc"], plan: { zone: ZONE(4, "frost", "encounter", { difficult: true }) } },
@@ -431,12 +457,16 @@ export const BOSS_PLANS = Object.freeze({
     "Sorrow": { until: "endOfNextTurn", plan: { gather: { who: "creature", feet: 20 } } }
   },
   "Mutanus the Devourer": {
-    "Drag Under": { plan: { forced: { on: "fail", feet: 10, toward: "toward" } } },
-    "The Caverns Wail": { type: "physical", until: "endOfNextTurn" }
+    // D-1759. Naralex's Nightmare's Stun is laid to the end of the next turn; that it ends sooner
+    // on damage is the GM's (O-628).
+    "Thundercrack": { type: "nature", until: "endOfNextTurn", plan: { gather: { who: "creature", feet: 10 } } },
+    "Naralex's Nightmare": { until: "endOfNextTurn", plan: { target: { count: 1, feet: 30 } } }
   },
   "Nefarian": {
     "Class Call": { kind: "utility", plan: { door: "classCall" } },
-    "Breath": { type: "fire", area: "A 30 ft cone" },
+    // ANNOUNCED (D-1780): 5 Fire and 5 Shadow in one cone; an ability's descriptor carries one
+    // damage type, so the GM lands it from the card (O-628).
+    "Shadow Flame": { kind: "none", reason: "narrative" },
     "The Experiment": {}
   },
   "Onyxia": {
@@ -455,7 +485,8 @@ export const BOSS_PLANS = Object.freeze({
     "The Highborne Attend": {}
   },
   "Princess Theradras": {
-    "The Cavern Is Alive": { area: "A 10 ft radius on the ground" },
+    // The dust stands to the end of the round; the Blind lasts to the end of the creature's next turn.
+    "Dust Field": { until: "endOfNextTurn", area: "A 10 ft radius on the ground", plan: { zone: ZONE(null, null, "round") } },
     "Landslide": { type: "physical", area: "A 30 ft line" },
     "Stone Mends Stone": { plan: { selfHeal: true, healAlt: 18 } }
   },
@@ -475,7 +506,7 @@ export const BOSS_PLANS = Object.freeze({
     "Break Them": { type: "physical", plan: { gather: { who: "creature", feet: 20 } } }
   },
   "Sicco Thermaplugg": {
-    "Pull the Lever": { type: "physical", area: "A 7.5 ft radius on the ground" },
+    "Activate Bombs": {},
     "Vent the Section": {
       kind: "utility", area: "A 10 ft radius on the ground", clear: ["damage", "dc", "resist", "inflicts", "afflict"],
       // The Test's Poisoned is the poison's carrier (D12), which holds the condition itself.
@@ -507,9 +538,20 @@ export const BOSS_PLANS = Object.freeze({
   "Zul'jin": {
     "Amani Fury": { kind: "utility", plan: { door: "amaniFury" } },
     "Call the Amani": {},
-    "Throw the Axe": { type: "physical" }
+    "The Bear Roars": { until: "endOfNextTurn", plan: { gather: { who: "creature", feet: 20 } } }
   }
 });
+
+/**
+ * **THE ONE TABLE**: the hand rows above (the 112 of D-809 and their phase 1 rewrites) and the
+ * catalogue's (`boss-plans-catalogue.mjs`, D-1829), keyed by creature. A creature named in both
+ * is a fault in the merge, never a second row for one action, so the load throws.
+ */
+export const BOSS_PLANS = (() => {
+  const both = Object.keys(CATALOGUE_BOSS_PLANS).filter(name => Object.hasOwn(HAND_BOSS_PLANS, name));
+  if (both.length) throw new Error(`BOSS_PLANS: ${both.join(", ")} in both the hand table and the catalogue`);
+  return Object.freeze({ ...HAND_BOSS_PLANS, ...CATALOGUE_BOSS_PLANS });
+})();
 
 /** The row a creature's Boss Action takes from the table, or null where the table has none. */
 export function bossPlanFor(creature, action) {
@@ -555,12 +597,19 @@ export function applyPlanRow(automation, row, empty) {
   for (const key of row.clear ?? []) out[key] = structuredClone(empty[key]);
   if (row.kind) {
     out.kind = row.kind;
-    out.reason = "";
+    // A row that leaves the action announced records why (D-1780); every other kind carries none.
+    out.reason = row.kind === "none" && typeof row.reason === "string" ? row.reason : "";
   }
   if (row.type && out.damage) out.damage = { ...out.damage, type: row.type };
   if (row.until && out.inflicts) out.inflicts = { ...out.inflicts, until: row.until };
   if (row.area) out.area = row.area;
   if (row.summon) out.summon = { ...out.summon, ...row.summon };
+  // **WHAT THE SEED COULD NOT READ, STATED BY THE ROW** (D-1829): the condition where the words
+  // lay two (*Entangled and Silenced*) or name it beside a Prone, a heal the words give another
+  // creature (*one ally within 30 feet recovers 8 Health*), and the spell a row casts by name.
+  if (row.inflicts) out.inflicts = { ...out.inflicts, ...row.inflicts };
+  if (Number.isInteger(row.heal) && row.heal > 0) out.heal = row.heal;
+  if (typeof row.spell === "string" && row.spell) out.spell = row.spell;
   if (row.note) out.note = row.note;
   const plan = cleanBossPlan(row.plan ?? {});
   if (Object.keys(plan).length) out.plan = plan;
@@ -579,6 +628,6 @@ export function applyPlanRow(automation, row, empty) {
 export function bossActionDoor(row) {
   const a = row?.automation ?? {};
   const plan = cleanBossPlan(a.plan);
-  const parts = Object.keys(plan).filter(k => !["feet", "missNext", "boons", "extra", "count", "health", "defense", "all", "kinds", "lasts"].includes(k));
+  const parts = Object.keys(plan).filter(k => !["feet", "missNext", "boons", "extra", "count", "health", "defense", "all", "kinds", "lasts", "freeMana"].includes(k));
   return { door: plan.door ?? (a.kind === "spell" ? "spell" : "ability"), spends: true, parts };
 }

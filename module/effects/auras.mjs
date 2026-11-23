@@ -93,7 +93,12 @@ import { actorInWorld, sceneInWorld } from "../canvas/in-world.mjs";
 // A floor under Health an aura lays, in 07's Aegis floor's own flag (the Legacy
 // branches' door 12: 04's Big Bad Voodoo).
 import { FLOOR_FLAG } from "../rules/blow-doors.mjs";
-import { auraTickFlag, healthFloorFlag } from "../rules/auras.mjs";
+import { auraTickFlag, healthFloorFlag, carriesHealTick } from "../rules/auras.mjs";
+
+/** Whether this creature carries a heal over time laid by `uuid` (04's Heart of the Grove, D-1892). */
+function carriesHealTickBy(actor, uuid) {
+  return carriesHealTick([...(actor?.effects ?? [])].map(e => ({ active: e.active, disabled: e.disabled, flags: e.flags })), uuid);
+}
 // Hand of Ragnaros's turn-start damage rides the laid tick's own flag (D-911), and
 // Rivendare's Dread reads *living* as Chain Lightning does.
 import { TICK_FLAG } from "./ticks.mjs";
@@ -198,7 +203,7 @@ export function auraSourcesOf(actor) {
       aura: item.system.aura
     });
   }
-  for (const { talent, identifier, name, aura } of talentAurasFor(actor.takenTalents?.() ?? [])) {
+  for (const { talent, identifier, name, aura } of talentAurasFor(actor.takenTalents?.() ?? [], undefined, { tier: actor.system?.tier ?? 1 })) {
     const item = actor.items?.get?.(talent.id) ?? null;
     out.push({
       key: `${actor.uuid}:talent:${identifier}`, group: `talent:${identifier}`, name, origin: actor.uuid,
@@ -270,6 +275,9 @@ function holderFacts(actor) {
     shield: !(shape && meldsGear(shape.kind))
       && (actor?.items ?? []).some(i => i.type === "armor" && i.system?.shield === true && i.system?.equipped === true),
     spells: [...spells].sort(),
+    // A Shapeshift form worn (04's Heart of the Grove's `notForm` gate; D-1892): the Avatar
+    // is not one (D-251, D-769).
+    form: shape?.kind === "shapeshift",
     bodyAP: Math.max(0, Math.trunc(Number(actor?.system?.ap?.body ?? 0)) || 0),
     sustains: [...new Set((actor?.getFlag?.("azeroth-rpg", "sustaining") ?? []).map(e => e?.identifier).filter(id => typeof id === "string" && id))].sort()
   };
@@ -777,7 +785,10 @@ async function syncAurasNow(scene) {
             statuses: [...(actor.statuses ?? [])]
           }),
           // *Each undead ally* (doors 10 and 12): `kindsOf`'s reading, the Death Knight among it.
-          undead: kindsOfActor(actor).has("undead")
+          undead: kindsOfActor(actor).has("undead"),
+          // *Who carries one of your ongoing healing effects* (04's Heart of the Grove, D-1892):
+          // an active laid heal tick whose hand is the holder's.
+          ...(source.who.healTick === true ? { healTick: carriesHealTickBy(actor, holder.uuid) } : {})
         } : {})
       }));
       // **AN AURA ON ITS HOLDER ALONE** (04's Sacred Duty, D-772): it stands on
@@ -981,6 +992,9 @@ export function registerAuraHooks() {
     if (effect?.flags?.["azeroth-rpg"]?.[SAND_AURA_FLAG]) return true;
     // The Death Knight's presence or march laid, lifted or switched (doors 10 and 12).
     if (effect?.flags?.["azeroth-rpg"]?.deathKnightPresence) return true;
+    // A heal over time laid or lifted on anybody (04's Heart of the Grove reaches only the
+    // allies carrying one; the class talent audit, D-1892).
+    if (effect?.flags?.["azeroth-rpg"]?.tick?.kind === "heal") return true;
     let actor = effect?.parent ?? null;
     if (actor?.documentName === "Item") actor = actor.parent ?? null;
     if (actor?.documentName !== "Actor") return false;

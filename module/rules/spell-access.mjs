@@ -116,3 +116,24 @@ export function spellFromHonoured({ spellFrom = null, name = "", grants = [] } =
   if (typeof spellFrom !== "string" || !spellFrom.length || typeof name !== "string" || !name.length) return false;
   return (grants ?? []).some(g => g && String(g.id) === spellFrom && g.name === name);
 }
+
+/**
+ * **WHAT KIND OF ITEM TEACHES A SPELL** (D-1862): `AzerothActor#spellGrantTable` stamps each row with
+ * `talent`, `feature` or `class`. None of them is capped at the cast: the lead reversed the class
+ * talent audit's R3 on 2026-11-23 (*"The spells can be cast if talents give them, they shouldn't be
+ * blocked"*; D-1869), so every honoured grant is outside 07 §4's cap as D-1083 had it.
+ */
+export const GRANT_KINDS = Object.freeze(["talent", "feature", "class"]);
+
+/**
+ * **WHETHER A SPELL COUNTS TOWARD SPELLS KNOWN** (07 §5; the lead, 2026-11-22: *"If a talent gives
+ * a spell, it should not coutn towards their spells known"*; D-1862). A spell any grant row honours -
+ * a talent's, a feature's (Unholy Lore, Grave Calling) or a class's (the Sovereign's three) - is known
+ * on top of the count; every other spell counts. The sheet's count and the creator's step read this.
+ *
+ * @param {{spellFrom?: string|null, name?: string, grants?: Array<{id: string, name: string}>}} o
+ * @returns {boolean}
+ */
+export function countsTowardKnown({ spellFrom = null, name = "", grants = [] } = {}) {
+  return !spellFromHonoured({ spellFrom, name, grants });
+}

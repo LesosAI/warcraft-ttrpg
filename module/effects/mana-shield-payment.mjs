@@ -1,5 +1,8 @@
 import {manaShieldPlan} from '../rules/mana-shield.mjs';
+import {manaShieldRatioFor} from '../rules/class-talents.mjs';
 const scope='azeroth-rpg',busy=new Set();
+/** The damage one Mana takes for this caster: 04's Mana Shield at rank 2 makes it 2 (D-1890). */
+const ratioOf=actor=>actor?.type==='character'?manaShieldRatioFor(actor.takenTalents?.()??[]).ratio:1;
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 
 /** The held cast supplies protection; no extra Apply click is needed for
@@ -9,7 +12,7 @@ export function manaShieldFor(actor,damage){
  const entry=(actor.getFlag(scope,'sustaining')??[]).find(row=>row.sustainTransfer==null
   &&(row.identifier==='mana-shield'||(row.identifier==null&&row.name==='Mana Shield')));
  if(!entry)return null;
- const plan=manaShieldPlan({entry,pools:actor.poolSnapshot(),damage});
+ const plan=manaShieldPlan({entry,pools:actor.poolSnapshot(),damage,ratio:ratioOf(actor)});
  if(!plan.ok)throw Error(`Mana Shield cannot resolve its casting pool: ${plan.reason}`);
  return plan;
 }
@@ -26,7 +29,7 @@ export async function commitManaShieldHealth({actor,plan,update={},options={}}={
   const held=actor.getFlag(scope,'sustaining')??[];
   const entries=held.filter(entry=>entry.cast===plan.cast);
   if(entries.length!==1)throw Error('Mana Shield Sustain changed before payment');
-  const current=manaShieldPlan({entry:entries[0],pools:actor.poolSnapshot(),damage:plan.absorbed+plan.damage});
+  const current=manaShieldPlan({entry:entries[0],pools:actor.poolSnapshot(),damage:plan.absorbed+plan.damage,ratio:plan.ratio??1});
   if(!current.ok||!same(current,plan))throw Error('Mana Shield pool or Sustain changed before payment');
   const patch={...update};
   if(plan.ends)patch[`flags.${scope}.sustaining`]=held.filter(entry=>entry.cast!==plan.cast);

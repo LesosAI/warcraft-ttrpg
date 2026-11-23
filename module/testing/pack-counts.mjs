@@ -42,8 +42,8 @@ export const PACK_COUNTS = Object.freeze({
     why: "08 §5: form 17 (Deft the seventeenth, D-1124) + cut 4 + effect 11 + enchantment 28 = 60, matching 06 §3's roster, plus 16 Mount traits that belong to 08 §15 alone (D-399), Spectral the sixteenth (the Death Knight's Deathcharger, D-924)"
   },
   bestiary: {
-    count: 376,
-    why: "14 holds 376 across five weight classes: the prior 348 plus 26 researched tier 1/2 faction NPCs (BESTIARY-TIER12-EXPANSION.md), the Dracolich (D-932) and the Necromancer's Skeletal Archer; verification status is recorded in the production tracker"
+    count: 902, bosses: 303,
+    why: "14 holds 902 across five weight classes (303 Boss, 188 Elite, 303 Standard, 52 Soldier, 56 Chaff): the 376 of release 0.16.1 (the prior 348, 26 researched tier 1/2 faction NPCs, the Dracolich of D-932 and the Necromancer's Skeletal Archer), wave 1's 433 dungeon entries (D-1809) and wave 2's 93 raid entries (D-1816); verification status is recorded in the production tracker"
   },
   legacies: { count: 7, why: "15 §2's seven, one per Legacy on 04 §1's roster, lore and no ranks (D-781)" },
   affixes: {

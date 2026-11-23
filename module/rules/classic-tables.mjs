@@ -20,8 +20,10 @@
  * off that index, so the index is the source wherever it speaks: Scholomance
  * is tier 3 and Stratholme 4 because their Bosses' party-level bands say so,
  * not because anybody typed a number here. Ragefire Chasm, the Stockade and
- * the Ruins of Ahn'Qiraj have no Boss in the index, so those three carry a
- * hand row and `classic-tables.test.mjs` fails a fourth.
+ * the Ruins of Ahn'Qiraj carried a hand row while the index had no Boss for
+ * them; the 2026-11 bestiary gave each one, and Ragefire Chasm, whose band
+ * disagreed with its hand tier, follows the index too (D-1837, closing O-650).
+ * No hand row is left, and `classic-tables.test.mjs` fails one (D-1823).
  *
  * The law's own tables follow the fetch's: `BASES` (what a WoW subclass and
  * slot becomes), `KNOWN_AS` (the §20 names a record must not duplicate),
@@ -63,15 +65,31 @@ export const DROP_CATEGORIES = Object.freeze(["Boss Drop", "Zone Drop"]);
  * `aliases` carries the other zone ids upstream files the same place under.
  * Only one does: the Sunken Temple (1417) and the Temple of Atal'Hakkar
  * (1477) are two ids for one dungeon, and both appear on drops.
+ *
+ * `dungeon` is the ONE 14 §14 Dungeon cell a conversion reads its tier off,
+ * and `wings`, where present, is every cell the zone covers: the 2026-11
+ * bestiary split the Scarlet Monastery, Blackrock Spire and Dire Maul into
+ * wings, each with Bosses of its own, and a GM naming any wing draws the
+ * whole zone's finds (D-1823). Every wing sits in the same band as the
+ * primary row. The same build gave the Stockade and the Ruins of Ahn'Qiraj
+ * Bosses at the tiers their hand rows held, so they read the index now;
+ * Ragefire Chasm reads it too, at tier 1 (D-1837).
  */
 export const ZONES = Object.freeze([
-  { id: 2437, aliases: Object.freeze([]), name: "Ragefire Chasm", kind: "Dungeons", dungeon: null, tier: 2 },
+  // 14 §14 gives Ragefire Chasm Bosses at party level 1-4, tier 1, and the index is the one
+  // source (D3 §7, D-1837, closing O-650): its six finds convert at tier 1 now, where a hand
+  // row had held them at 2, and the whole-file ranks move twelve documents.
+  { id: 2437, aliases: Object.freeze([]), name: "Ragefire Chasm", kind: "Dungeons", dungeon: "Ragefire Chasm", tier: null },
   { id: 1581, aliases: Object.freeze([]), name: "The Deadmines", kind: "Dungeons", dungeon: "The Deadmines", tier: null },
   { id: 718, aliases: Object.freeze([]), name: "Wailing Caverns", kind: "Dungeons", dungeon: "The Wailing Caverns", tier: null },
   { id: 209, aliases: Object.freeze([]), name: "Shadowfang Keep", kind: "Dungeons", dungeon: "Shadowfang Keep", tier: null },
-  { id: 796, aliases: Object.freeze([]), name: "Scarlet Monastery", kind: "Dungeons", dungeon: "The Scarlet Monastery", tier: null },
+  // Whitemane's cathedral is the primary row, as the undivided index had her.
+  {
+    id: 796, aliases: Object.freeze([]), name: "Scarlet Monastery", kind: "Dungeons", dungeon: "The Scarlet Monastery, the cathedral", tier: null,
+    wings: Object.freeze(["The Scarlet Monastery, the graveyard", "The Scarlet Monastery, the library", "The Scarlet Monastery, the armory", "The Scarlet Monastery, the cathedral"])
+  },
   { id: 719, aliases: Object.freeze([]), name: "Blackfathom Deeps", kind: "Dungeons", dungeon: "Blackfathom Deeps", tier: null },
-  { id: 717, aliases: Object.freeze([]), name: "The Stockade", kind: "Dungeons", dungeon: null, tier: 2 },
+  { id: 717, aliases: Object.freeze([]), name: "The Stockade", kind: "Dungeons", dungeon: "The Stockade", tier: null },
   { id: 491, aliases: Object.freeze([]), name: "Razorfen Kraul", kind: "Dungeons", dungeon: "Razorfen Kraul", tier: null },
   { id: 721, aliases: Object.freeze([]), name: "Gnomeregan", kind: "Dungeons", dungeon: "Gnomeregan", tier: null },
   { id: 722, aliases: Object.freeze([]), name: "Razorfen Downs", kind: "Dungeons", dungeon: "Razorfen Downs", tier: null },
@@ -82,22 +100,42 @@ export const ZONES = Object.freeze([
     id: 1477, aliases: Object.freeze([1417]), name: "The Temple of Atal'Hakkar",
     kind: "Dungeons", dungeon: "The Temple of Atal'Hakkar", tier: null
   },
-  // 14 §14 files three Bosses under three wings; the north wing is the row a
-  // zone-wide drop takes, and all three sit in the same band.
-  { id: 2557, aliases: Object.freeze([]), name: "Dire Maul", kind: "Dungeons", dungeon: "Dire Maul, the north wing", tier: null },
+  // 14 §14 files Bosses under three wings; the north wing is the row a
+  // conversion takes, and all three sit in the same band.
+  {
+    id: 2557, aliases: Object.freeze([]), name: "Dire Maul", kind: "Dungeons", dungeon: "Dire Maul, the north wing", tier: null,
+    wings: Object.freeze(["Dire Maul, the east wing", "Dire Maul, the west wing", "Dire Maul, the north wing"])
+  },
   { id: 1584, aliases: Object.freeze([]), name: "Blackrock Depths", kind: "Dungeons", dungeon: "Blackrock Depths", tier: null },
-  { id: 1583, aliases: Object.freeze([]), name: "Blackrock Spire", kind: "Dungeons", dungeon: "Blackrock Spire", tier: null },
+  // Rend's upper halls are the primary row, as the undivided index had him.
+  {
+    id: 1583, aliases: Object.freeze([]), name: "Blackrock Spire", kind: "Dungeons", dungeon: "Blackrock Spire, the upper halls", tier: null,
+    wings: Object.freeze(["Blackrock Spire, the lower halls", "Blackrock Spire, the upper halls"])
+  },
   { id: 2057, aliases: Object.freeze([]), name: "Scholomance", kind: "Dungeons", dungeon: "Scholomance", tier: null },
   { id: 2017, aliases: Object.freeze([]), name: "Stratholme", kind: "Dungeons", dungeon: "Stratholme", tier: null },
   { id: 2717, aliases: Object.freeze([]), name: "Molten Core", kind: "Raids", dungeon: "The Molten Core", tier: null },
   { id: 2159, aliases: Object.freeze([]), name: "Onyxia's Lair", kind: "Raids", dungeon: "Onyxia's Lair", tier: null },
-  // 14 §14 files Nefarian under *The mountain's peak*, which is Blackwing Lair.
-  { id: 2677, aliases: Object.freeze([]), name: "Blackwing Lair", kind: "Raids", dungeon: "The mountain's peak", tier: null },
+  // 14 §14 filed Nefarian under *The mountain's peak* until the 2026-11 build named Blackwing Lair.
+  { id: 2677, aliases: Object.freeze([]), name: "Blackwing Lair", kind: "Raids", dungeon: "Blackwing Lair", tier: null },
   { id: 1977, aliases: Object.freeze([]), name: "Zul'Gurub", kind: "Raids", dungeon: "Zul'Gurub", tier: null },
-  { id: 3429, aliases: Object.freeze([]), name: "Ruins of Ahn'Qiraj", kind: "Raids", dungeon: null, tier: 4 },
-  { id: 3428, aliases: Object.freeze([]), name: "Ahn'Qiraj", kind: "Raids", dungeon: "Ahn'Qiraj", tier: null },
+  { id: 3429, aliases: Object.freeze([]), name: "Ruins of Ahn'Qiraj", kind: "Raids", dungeon: "The Ruins of Ahn'Qiraj", tier: null },
+  { id: 3428, aliases: Object.freeze([]), name: "Ahn'Qiraj", kind: "Raids", dungeon: "The Temple of Ahn'Qiraj", tier: null },
   { id: 3456, aliases: Object.freeze([]), name: "Naxxramas", kind: "Raids", dungeon: "Naxxramas", tier: null }
 ]);
+
+/**
+ * Every 14 §14 Dungeon cell a zone covers: its `wings`, else its one `dungeon`,
+ * else none (D-1823). The ONE reading of a zone's place, for the tier, the
+ * generator's scoping and the fetch's boss recovery alike.
+ *
+ * @param {{dungeon?: string|null, wings?: string[]}|null} zone
+ * @returns {string[]}
+ */
+export function zoneWings(zone) {
+  if (Array.isArray(zone?.wings) && zone.wings.length) return [...zone.wings];
+  return zone?.dungeon ? [zone.dungeon] : [];
+}
 
 /** Every upstream zone id the filter accepts, aliases included. */
 export const ZONE_IDS = Object.freeze(ZONES.flatMap(z => [z.id, ...z.aliases]));

@@ -516,7 +516,8 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     const heldRunes = runePool(runeRows);
     this.runes = { weapons: runeRows, ...heldRunes };
     for (const pool of pools.powers) if (pool.name === RUNES) pool.max = heldRunes.max;
-    // A talent that lifts a cap (04, D-627): Zealotry, Hunter's Mark. Items
+    // A talent that lifts a cap (04, D-627): Zealotry (Hunter's Mark lifted the Quarry cap
+    // until the class talent audit, D-1870, and adds damage against the marked target now). Items
     // are prepared before the actor's derived data, so the ranks are here.
     const taken = (this.parent?.items ?? []).filter(i => i.type === "talent" && (i.system?.taken ?? 0) > 0);
     const ranksOf = name => taken.filter(t => t.name === name).reduce((n, t) => n + (t.system.taken ?? 0), 0);
@@ -642,7 +643,8 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // the other.
     // **AND WHAT A TALENT REFUSES** (04's Unyielding: *you are immune to the
     // Prone condition*; D-772): the door `toggleStatusEffect` already refuses at.
-    const steadfast = steadfastFor(talentRows);
+    // Blood Craze's *While you hold more than 7 Rage* reads the pools as this preparation holds them (D-1870).
+    const steadfast = steadfastFor(talentRows, undefined, { pools: this.momenta ?? [] });
     // **AND WHAT A USE REFUSES FOR A SPAN** (04's Unfettered: *you cannot be **Slowed**
     // until your next turn*; the Legacy branches' door 25): the conditions an active
     // effect's `immuneTo` names, which ends with the effect.
@@ -1009,6 +1011,10 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // character whose classes cast nothing.
     const casting = classItems.find(c => c.castingAbility)?.castingAbility ?? null;
     this.spellDC = casting ? 10 + this.abilities[casting].mod + this.proficiency : null;
+    // The casting ability modifier the Spell DC adds, derived beside it and never
+    // stored: what an amount's `castingMod` reads (`expressions.mjs#abilityScope`;
+    // the audit's Regrowth, D-1861). 0 where the classes cast nothing.
+    this.castingMod = casting ? (this.abilities[casting].mod ?? 0) : 0;
 
     // Ward by school, from the Ward grants on what is worn (08 SS6, D-607).
     // A grant rides on `flags.azeroth-rpg.grants` (a generated item) or on the

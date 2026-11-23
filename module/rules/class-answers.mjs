@@ -428,22 +428,8 @@ export function plagueRefusal({ health = null, doubledBefore = false, usesLeft =
  */
 export const FLAMETONGUE = Object.freeze({ identifier: "flametongue", talent: "Flametongue", type: "fire", upkeep: Object.freeze({ mana: 1, health: 0 }) });
 
-/**
- * **A WEAPON BLOW WHILE FLAMETONGUE IS HELD** (04: *your weapon attacks deal Fire
- * damage rather than Physical. At rank 2 they add 1 damage as well*): a Physical
- * blow made Fire, through the Ward as 08 §7's Greater enchantment is, and the
- * rank's damage added. A blow of another type is left as it is (READING: the
- * talent converts Physical alone).
- *
- * @param {{rating: number, kind: string, school?: string|null}} spec  the attack's damage
- * @param {{add?: number}} o
- */
-export function flametongueStrike(spec, { add = 0 } = {}) {
-  if (!spec) return spec;
-  const physical = (spec.kind ?? "physical") === "physical" && (!spec.school || spec.school === "physical");
-  if (!physical) return spec;
-  return { ...spec, kind: "magical", school: FLAMETONGUE.type, rating: (Number(spec.rating) || 0) + Math.max(0, Math.trunc(Number(add)) || 0) };
-}
+/* 04's Flametongue converted a weapon blow to Fire until the class talent audit (B11, D-1886);
+ * its hits lay Scorched now, through the attack's `landsOnHit` (`applications/actions.mjs`). */
 
 /* -------------------------------------------- */
 /*  04's Lava Lash (O-189)                       */

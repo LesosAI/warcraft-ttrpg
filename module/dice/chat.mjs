@@ -69,16 +69,19 @@ import { layBane } from "../effects/banes.mjs";
 import { conditionValues } from "../effects/conditions.mjs";
 // The once-a-round mark an extra attack off a card spends (04's Flurry and
 // Wide Swing, D-772).
+import { classDiscountFor } from "../rules/class-talents.mjs";
 import { PARALYTIC_FLAG, evadeFor, isPoisonTickBy, namesTarget, nextRoundMark, poisonFailFor, poisonTestBanesFor, snareEscapeFor } from "../rules/class-talents.mjs";
 import { irradiatedMemory } from "../rules/irradiated-memory.mjs";
 // A card that heals counts its presses (D-774), and a heal's reach is measured.
 import { cardHealRefusal } from "../rules/class-talents.mjs";
 // 04's Ruin on a spell's Critical Injury, and 02's Curse's Bane on a failed Test (D-775).
-import { CURSE, ruinFor } from "../rules/class-talents.mjs";
+import { CURSE, resistTalentsOn } from "../rules/class-talents.mjs";
 import { healAlly } from "../effects/gifts.mjs";
 // A card's talent press recorded where this client may not write the card (the
 // architect's review of D-774), and the judgement every door asks before a spend.
 import { cardPressUnrecordable, claimCardPress } from "../effects/card-presses.mjs";
+// A feature card's per-creature law (Whirlwind, Bladestorm, Rapid Fire; the class talent audit's wave-2 fix run).
+import { cardTargetRefusal } from "../rules/audit-martial.mjs";
 import { claimSnakeTrapCatch, finishSnakeTrapCatch, assertSnakeTrapDelivery } from "../effects/snake-trap-catches.mjs";
 import { snakeTrapCatchPlan } from "../rules/snake-trap-catches.mjs";
 import { snareOwnsCondition, snarePoisonEligible } from "../rules/snare-trigger.mjs";
@@ -1173,12 +1176,8 @@ async function criticalInjuryFromCard(message) {
       return;
     }
   }
-  // **RUIN** (04: *When one of your spells inflicts a Critical Injury, roll twice on
-  // the table and take the higher result. At rank 2 you also gain 2 Mana*; D-775):
-  // the caster's talent, on a spell's card.
-  // Whoever HOLDS the cast, not the speaker (the review, S3): `casterOf`.
-  const caster = flags.kind === "spell" ? casterOf(message) : null;
-  const ruin = caster && typeof caster.takenTalents === "function" ? ruinFor(caster.takenTalents()) : null;
+  // 04's Ruin no longer touches a Critical Injury (the class talent audit, D-1891: *a natural 19
+  // or 20 ... deals additional damage*), so the card rolls one die as any card does.
   // **08 §20's KINGSLAYER** (Garona's Leathers: *A Boss cannot ignore a Critical Injury
   // a Rogue wearing it inflicts with an attack made while hidden from that Boss*; D-911):
   // the attack card's own record of the moment - `hiddenAtRoll` - and the attacker's
@@ -1186,8 +1185,7 @@ async function criticalInjuryFromCard(message) {
   const striker = flags.kind === "attack" && flags.parry !== true ? ChatMessage.getSpeakerActor(message.speaker) : null;
   const kingslayer = flags.hiddenAtRoll === true ? (striker?.system?.signatureEffects?.bossCannotIgnore ?? [])[0] ?? null : null;
   for (const actor of actors) {
-    await game.system.azeroth.workflows.rollCriticalInjury({ actor, location: flags.location ?? "body", higher: ruin?.higher ? ruin.name : null, unignorable: kingslayer });
-    if (ruin?.mana > 0) await game.system.azeroth.workflows.ruinMana(caster, ruin);
+    await game.system.azeroth.workflows.rollCriticalInjury({ actor, location: flags.location ?? "body", unignorable: kingslayer });
   }
 }
 
@@ -1821,6 +1819,18 @@ async function escapeOutcome({ actor, effect, escape, passed }) {
     lines.push(game.i18n.format("AZEROTH.Escape.Freed", { name: actor.name, condition, source: escape.source }));
     // O-292 (the lead: *"292 - end when target escapes"*): the card says the Sustain ends.
     if (lastOut) lines.push(game.i18n.format("AZEROTH.Escape.SustainLeft", { name: actor.name, source: escape.source, caster: actorAt(escape.by)?.name ?? "" }));
+    // **04's UNSTABLE AFFLICTION** (the class talent audit, D-1891: *A creature that ends one of your
+    // ongoing effects early, by Dispel, by a Resilience Test or by any other means, takes Fel damage
+    // equal to your tier per rank*): the Test that freed it is one such ending, answered by the hand
+    // that laid it through Dispel's own door (`effects/dispel.mjs#unstableStrikes`).
+    if (escape.by) {
+      try {
+        const { unstableStrikes } = await import("../effects/dispel.mjs");
+        for (const line of await unstableStrikes({ dispeller: actor, ended: [{ id: effect.id, name: condition, owner: escape.by }] })) lines.push(line);
+      } catch (err) {
+        console.warn("azeroth-rpg | Unstable Affliction on an escape", err);
+      }
+    }
   } else {
     lines.push(game.i18n.format("AZEROTH.Escape.Held", { name: actor.name, condition, source: escape.source }));
     if (escape.failStun === "casterTurnEnd") {
@@ -2129,6 +2139,27 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
       const worn = resistBanesOn(rows, actor.system?.creatureType ?? null);
       if (worn) talentBanes = talentBanes ? { banes: talentBanes.banes + worn.banes, names: [...talentBanes.names, ...worn.names] } : worn;
     }
+    // **WHAT THE CASTER'S TALENTS DO TO THIS RESIST** (the class talent audit; D-1890, D-1891): 04's
+    // Shattering Cold's Bane on a Frost spell's Resist for a creature the caster has Slowed or
+    // Entangled (its own effects' `laidBy`), and Malediction's -1 a rank on a curse that deals no
+    // damage - a spell's card or 02's Curse's own feature card (`resistTalentsOn`).
+    let talentModifiers = [];
+    {
+      const cardFlags = message.flags?.["azeroth-rpg"] ?? {};
+      const featureUse = !purpose && cardFlags.kind === "feature";
+      if (purpose === "spell" || featureUse) {
+        const caster = purpose === "spell" ? casterOf(message) : maker;
+        const featureName = featureUse ? (caster?.items?.get?.(cardFlags.itemId)?.name ?? null) : null;
+        const read = caster?.type === "character" && typeof caster.takenTalents === "function"
+          ? resistTalentsOn(caster.takenTalents(), {
+            spell: purpose === "spell" ? (cardFlags.spellName ?? null) : null, feature: featureName,
+            school: cardFlags.castSchool ?? null, damages: Array.isArray(cardFlags.damageByTarget) ? cardFlags.damageByTarget.some(r => Number(r?.damage) > 0) : Number(cardFlags.damage) > 0,
+            caster: caster.uuid, effects: [...(actor.effects ?? [])].map(e => ({ active: e.active, statuses: [...(e.statuses ?? [])], flags: e.flags }))
+          }) : null;
+        if (read?.banes > 0) talentBanes = talentBanes ? { banes: talentBanes.banes + read.banes, names: [...talentBanes.names, ...read.banesBy] } : { banes: read.banes, names: read.banesBy };
+        if (read?.modifiers?.length) talentModifiers = read.modifiers;
+      }
+    }
     if (purpose === "poison" && maker && typeof maker.takenTalents === "function") {
       const vile = poisonTestBanesFor(maker.takenTalents());
       const suffering = vile.banes > 0 && tickEffectsOf(actor).some(e => isPoisonTickBy(e.flags?.["azeroth-rpg"]?.tick ?? null, maker.uuid));
@@ -2160,7 +2191,7 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
     for (const k of bindingClaims) BINDING_CLAIMS.add(k);
     let result = null;
     try {
-      result = await resilienceWithDialog(actor, resilience, null, { dc: poisonHeld?.dc ?? dc, link: tie, source, against, ...(talentBanes ? { talentBanes } : {}), ...(talentBoons ? { talentBoons } : {}) });
+      result = await resilienceWithDialog(actor, resilience, null, { dc: poisonHeld?.dc ?? dc, link: tie, source, against, ...(talentBanes ? { talentBanes } : {}), ...(talentBoons ? { talentBoons } : {}), ...(talentModifiers.length ? { talentModifiers } : {}) });
       // **BINDING IS SPENT BY THE ROLL, RECORDED INSIDE ITS CLAIM** (D-1100; the fix run 4 review):
       // the card's own Resist was this creature's first Test, so every area the card placed records
       // it and the area's Test asks it with no second Bane (02 §7's Binding; O-411); an area Test
@@ -2414,7 +2445,9 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
         }
         const caster = f.until === "casterTurnStart" || f.until === "casterTurnEnd" ? casterOf(message) : null;
         // The Champion's Dread Presence and Bronze Drake Breath: the creature's own next turn (stage 2B).
-        const until = f.until === "endOfNextTurn" && CREATURE_TURN_SPANS.includes(cardFlags.featureKey) ? untilEndOfNextTurnOrRound(actor)
+        // *Until the end of its next turn* - the creature's own (04's Shadowfury; the class talent audit, D-1891).
+        const until = f.until === "targetTurnEnd" ? untilEndOfNextTurnOrRound(actor)
+          : f.until === "endOfNextTurn" && CREATURE_TURN_SPANS.includes(cardFlags.featureKey) ? untilEndOfNextTurnOrRound(actor)
           : f.until === "casterTurnStart" ? (caster ? (untilNextTurn(caster) ?? null) : null)
           // 04's Whisper of Madness: *until the end of your next turn*, the user's, held to the
           // world's clock out of a fight (D-778; stage 3A).
@@ -3052,13 +3085,25 @@ async function attackFromCard(button, message) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.Card.PressNoGM"));
     return null;
   }
+  // **SO MANY AT ONE CREATURE** (Whirlwind's and Bladestorm's two at each, Rapid Fire's sets of three at one
+  // target each; the wave-2 fix run): the creatures this press aims at, judged against the card's own record of
+  // presses by creature (`attacksAt`) before the attack, refused in words.
+  const aimedAt = [...(game.user?.targets ?? [])].filter(t => t?.id).map(t => ({ key: t.id, name: t.name ?? t.actor?.name ?? "" }));
+  const targetRefused = cardTargetRefusal({ attacksAt: message.getFlag("azeroth-rpg", "attacksAt") ?? {}, aimed: aimedAt, limit: flags0.attacks ?? null });
+  if (targetRefused) {
+    ui.notifications?.warn(game.i18n.format(targetRefused.key, { feature: actor.items.get(flags0.itemId)?.name ?? flags0.title ?? "", name: targetRefused.name, n: targetRefused.n }));
+    return null;
+  }
   FEATURE_ATTACKS_IN_FLIGHT.add(message.id);
   try {
     const card = await attackFromCardNow(button, message, actor, flags0);
     // Counted once the attack is made (a dismissed dialog counts nothing), on the
-    // GM's client where this one may not write the card.
+    // GM's client where this one may not write the card - with the creatures it struck where the card keeps a
+    // per-creature law.
     if (card) {
-      const counted = await claimCardPress(message, { kind: "count", flag: "attacksMade" });
+      const struckKeys = (flags0.attacks?.perTarget || flags0.attacks?.maxTargets)
+        ? (card.flags?.["azeroth-rpg"]?.targets ?? []).map(t => t?.tokenId ?? t?.actorId ?? null).filter(Boolean) : [];
+      const counted = await claimCardPress(message, { kind: "count", flag: "attacksMade", ...(struckKeys.length ? { targets: struckKeys } : {}) });
       if (!counted.ok) ui.notifications?.warn(game.i18n.localize(counted.reason ?? "AZEROTH.Card.PressNoGM"));
     }
     return card;
@@ -3392,8 +3437,19 @@ async function killStrikeFromCard(button, message) {
     }
   }
   KILL_STRIKES_IN_FLIGHT.add(message.id);
+  // **THE ROUND IS CLAIMED BEFORE THE ATTACK** (the wave 2 review): a second press in flight finds the
+  // mark spent and is refused in words; a dismissed dialog gives the mark back (`releaseRoundMarks`).
+  let claimed = false;
+  if (combatant?.isOwner && mark) {
+    claimed = (await combatant.markRoundOnce(mark))?.added === true;
+    if (!claimed) {
+      KILL_STRIKES_IN_FLIGHT.delete(message.id);
+      ui.notifications?.warn(game.i18n.format("AZEROTH.ExtraStrike.Spent", { name: offer.name }));
+      return null;
+    }
+  }
+  let card = null;
   try {
-    let card = null;
     if (striker.type === "npc") card = await npcAttackWithDialog(striker, 0, null, { budget: "none" });
     else {
       const ready = striker.readyWeapons?.() ?? [];
@@ -3402,11 +3458,23 @@ async function killStrikeFromCard(button, message) {
         ui.notifications?.warn(game.i18n.localize("AZEROTH.Card.NoWeapon"));
         return null;
       }
-      card = await attackWithDialog(striker, weapon, null, { budget: "none" });
+      // **KILLING SPREE'S STEP, THEN ITS ONE ATTACK** (*you may move up to 10 feet, provoking
+      // nothing, and make one attack*; the class talent audit, D-1882): the space picked on
+      // the board - Escape stays put - as a displacement, then R6's triggered attack, one roll.
+      if (offer.step > 0) {
+        const own = striker.getActiveTokens?.(true)?.[0]?.document ?? null;
+        if (own?.parent && own.parent.id === canvas?.scene?.id) {
+          const { pickStep, stepTo } = await import("../effects/steps.mjs");
+          const picked = await pickStep(own, { feet: offer.step, sight: "seen", name: own.name ?? striker.name,
+            hint: game.i18n.format("AZEROTH.KillStrike.StepHint", { name: own.name ?? striker.name, feet: offer.step }) });
+          if (picked) await stepTo({ token: own, to: picked.to, feet: offer.step, by: striker, move: null });
+        }
+      }
+      card = await attackWithDialog(striker, weapon, null, { budget: "none", triggered: true });
     }
-    if (card && combatant?.isOwner && mark) await combatant.markRoundOnce(mark);
     return card;
   } finally {
+    if (!card && claimed) await combatant.releaseRoundMarks({ round: combatant.combat?.round ?? 0, once: [mark] });
     KILL_STRIKES_IN_FLIGHT.delete(message.id);
   }
 }
@@ -3512,7 +3580,9 @@ async function evadeFromCard(button, message) {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Evade.Already", { name: actor.name }));
     return null;
   }
-  const evade = evadeFor(actor.takenTalents?.() ?? []);
+  const evadeRow = evadeFor(actor.takenTalents?.() ?? []);
+  // 04's Adrenaline takes its Energy off Elusive's price too (decision 13, D-1881).
+  const evade = evadeRow ? { ...evadeRow, cost: evadeRow.cost - classDiscountFor(actor.takenTalents?.() ?? [], { pool: evadeRow.pool, className: "Rogue", amount: evadeRow.cost }).discount } : null;
   const pool = evade ? (actor.poolSnapshot?.() ?? []).find(p => p.name === evade.pool) ?? null : null;
   if (!evade || !pool || (pool.value ?? 0) < evade.cost) {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Evade.Short", { name: actor.name, talent: evade?.name ?? "", n: evade?.cost ?? 0 }));
@@ -3607,6 +3677,19 @@ async function applyDamageToTargets(button, message, recordedAttack = false, tra
   if (flags.attackResolution && button.dataset.self === undefined && !recordedAttack) {
     return requestAttackApply(message, Number(button.dataset.targetIndex));
   }
+  // **04's EYE OF THE STORM: ONE CREATURE, WITHIN 60 FEET, ONCE** (the wave 2 review): its card's Apply
+  // is judged and written by the strike's own door (`effects/audit-cunning.mjs#eyeApply`).
+  if (flags.kind === "feature" && flags.identifier === "eye-of-the-storm" && button.dataset.self === undefined) {
+    const { eyeApply } = await import("../effects/audit-cunning.mjs");
+    return eyeApply(message);
+  }
+  // **04's HERALD OF THE VOID: ONE OTHER CREATURE, WITHIN 10 FEET OF THE ONE STRUCK, ONCE** (the class talent
+  // audit's final review): its card's Apply is judged and written by the spread's own door, never the
+  // controlled-token fallback below, which struck every selected token as often as it was pressed.
+  if (flags.kind === "feature" && flags.identifier === "herald-of-the-void" && button.dataset.self === undefined) {
+    const { heraldApply } = await import("../effects/audit-cunning.mjs");
+    return heraldApply(message);
+  }
   if (flags.kind === "spell" && flags.identifier === "mana-burn") {
     const { applyManaBurn } = await import("../effects/mana-burn.mjs");
     try {
@@ -3663,7 +3746,9 @@ async function applyDamageToTargets(button, message, recordedAttack = false, tra
     // halves it (the B3 review: no `resolveDamage` meets this number).
     const struckRow = button.dataset.struckIndex !== undefined ? (message.flags?.["azeroth-rpg"]?.targets?.[Number(button.dataset.struckIndex)] ?? null) : null;
     const answerer = struckRow ? targetActorOf(struckRow) : null;
-    await self.applyDamage(halvedAmount(Number(button.dataset.damage) || 0, dealtHalvedBy(answerer)), { struck: true, attack: false, location: "body", type: button.dataset.damageType || null, messageId: message.id });
+    // The creature struck is named for 10 §3's exposure alone (`dealtBy`, D-1729): a creature whose thorns
+    // drop its attacker reduced it to 0, and still nothing `by` drives runs on a retaliation.
+    await self.applyDamage(halvedAmount(Number(button.dataset.damage) || 0, dealtHalvedBy(answerer)), { struck: true, attack: false, location: "body", type: button.dataset.damageType || null, messageId: message.id, dealtBy: answerer });
     return;
   }
   const index = button.dataset.targetIndex;
@@ -3954,7 +4039,7 @@ async function applyHealingToTargets(button, message) {
     }
     if (!canHeal(actor)) return;
     const healOutcome = {};
-    const healed = await actor.applyHealing(amount, { from, givenBy: from ? null : "other", spell, feature, featureName, ...riders, outcome: healOutcome });
+    const healed = await actor.applyHealing(amount, { from, givenBy: from ? null : "other", spell, feature, featureName, ...riders, outcome: healOutcome, messageId: message.id });
     // 02's Recurrence: *The damage and healing of the next spell ... land again* (stage 2b).
     if (flags.chronoAgain && healOutcome.restored > 0) {
       try {
@@ -3967,7 +4052,7 @@ async function applyHealingToTargets(button, message) {
   }
   const controlled = canvas.tokens?.controlled ?? [];
   if (controlled.length) {
-    for (const token of controlled) if (canHeal(token.actor)) await token.actor?.applyHealing(amount, { from, givenBy: from ? null : "other", spell, feature, featureName, ...riders });
+    for (const token of controlled) if (canHeal(token.actor)) await token.actor?.applyHealing(amount, { from, givenBy: from ? null : "other", spell, feature, featureName, ...riders, messageId: message.id });
     return;
   }
   const speaker = ChatMessage.getSpeakerActor(message.speaker);
@@ -3980,7 +4065,7 @@ async function applyHealingToTargets(button, message) {
   // Vestments' *a Priest healing themselves is still the giver* - never reached
   // a heal that fell back to the one who gave it.
   if (!canHeal(speaker)) return;
-  return speaker.applyHealing(amount, { from: speaker, spell, feature, featureName, ...riders });
+  return speaker.applyHealing(amount, { from: speaker, spell, feature, featureName, ...riders, messageId: message.id });
 }
 
 /** The presses a card has taken on this client, so a double click is one (D-774). */
@@ -4380,7 +4465,9 @@ async function applyConditionFromCard(button, message) {
     }
     // *For one minute* (door 26): the fight's ten rounds, or the world's minute,
     // keyed on the creature the condition lands on.
-    const span = until === "minute" ? minuteSpan(actor)
+    // *Until the end of its next turn* - this creature's own (04's Shadowfury; the class talent audit, D-1891).
+    const span = until === "targetTurnEnd" ? untilEndOfNextTurnOrRound(actor)
+      : until === "minute" ? minuteSpan(actor)
       : until === "endOfNextTurn" && (gadgetByKey(message.flags?.["azeroth-rpg"]?.featureKey) || message.flags?.["azeroth-rpg"]?.featureKey === "ability:seduction" || message.flags?.["azeroth-rpg"]?.featureKey === "ability:frost-shock") ? untilEndOfNextTurnOrRound(actor)
         // The Champion's Dread Presence and Bronze Drake Breath: the creature's own next turn (stage 2B).
         : until === "endOfNextTurn" && CREATURE_TURN_SPANS.includes(message.flags?.["azeroth-rpg"]?.featureKey) ? untilEndOfNextTurnOrRound(actor) : until;

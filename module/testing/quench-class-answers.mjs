@@ -186,7 +186,9 @@ export function classAnswersBatch(context) {
       assert.isFalse(paladin.statuses.has("entangled"), "Unyielding's holder was Entangled");
     });
 
-    it("FANATICISM: the Zeal kept out of one fight carries into the next, where a paladin without it starts at 0", async function () {
+    // *You begin every fight holding 2 Zeal per rank* since the class talent audit (D-1874): the fight's start
+    // sets the fanatic's Zeal to the rank's, never what it carried in.
+    it("FANATICISM: a fight begins with 2 Zeal a rank, where a paladin without it starts at 0", async function () {
       this.timeout(180000);
       const fanatic = await characterWith("ZZ CA Fanatic", ["Paladin", 9], { ranks: { Fanaticism: 1 } });
       const plain = await characterWith("ZZ CA Plain Paladin", ["Paladin", 9]);
@@ -196,7 +198,7 @@ export function classAnswersBatch(context) {
       // The fight's start resets every Momentum pool: wait for the one it should reset.
       await until(() => poolOf(plain, "zeal").value === 0, "the plain paladin's Zeal reset at the fight's start", 30000);
       await settle();
-      assert.equal(poolOf(fanatic, "zeal").value, 4, "the fight's start reset the fanatic's Zeal");
+      await until(() => poolOf(fanatic, "zeal").value === 2, "the fanatic's 2 Zeal at the fight's start", 30000);
     });
 
     it("IMPROVED MOONFIRE: Moonfire's tick carries Moonfire's rank and Improved Moonfire's", async function () {
@@ -208,7 +210,11 @@ export function classAnswersBatch(context) {
       await fill(druid, "mana");
       const card = await cast(druid, "Moonfire", { targets: [rowOf(ghoul)] });
       assert.ok(card, "Moonfire was refused");
-      assert.deepInclude(card.flags["azeroth-rpg"].tick, { kind: "damage", type: "arcane", amount: 2 + 1 + 2 }, "the tick is not 2 + Moonfire's 1 + Improved Moonfire's 2");
+      // Improved Moonfire adds a round a rank since the class talent audit (D-1892), and Moonfire's rank adds 1 to
+      // no more than the tier (R1): the amount is 2 + Moonfire's 1, and the rounds two more than the spell's own.
+      assert.deepInclude(card.flags["azeroth-rpg"].tick, { kind: "damage", type: "arcane", amount: 2 + Math.min(1, druid.system.tier) }, "the tick is not 2 + Moonfire's 1");
+      const base = Number(spellNamed(druid, "Moonfire")?.system?.tick?.rounds);
+      if (Number.isFinite(base)) assert.equal(card.flags["azeroth-rpg"].tick.rounds, base + 2, "Improved Moonfire's 2 rounds are not on the tick");
     });
 
     it("UNDYING RAGE: a drop to 0 holds the warrior at 1 and spends the Rage, and a heal cancels the fall", async function () {
@@ -282,7 +288,8 @@ export function classAnswersBatch(context) {
       assert.include((await blow("melee")).content, 'data-action="reactParry"', "a melee blow offered no Parry");
     });
 
-    it("OVERCHANNEL MASTERY: an Overchannel costs the spell's Mana once more and no Health", async function () {
+    // Each point costs the spell's tier in Mana since the class talent audit (C3, D-1893; overturns O-192's *per cast*).
+    it("OVERCHANNEL MASTERY: each point of Overchannel costs the spell's tier in Mana, and no Health", async function () {
       this.timeout(120000);
       const mage = await characterWith("ZZ CA Mastery", ["Mage", 9], { spells: ["Frostbolt"], abilities: { int: 16 } });
       await until(() => featureNamed(mage, "Overchannel Mastery"), "Overchannel Mastery granted");
@@ -294,20 +301,21 @@ export function classAnswersBatch(context) {
       const card = await cast(mage, "Frostbolt", { targets: [rowOf(ghoul)], overchannel: 3 });
       assert.ok(card, "the Overchannelled cast was refused");
       assert.equal(health(mage), hp, "Overchannel Mastery's Overchannel cost Health");
-      await until(() => poolOf(mage, "mana").value === mana - 2 * spell.system.mana, "the spell's Mana charged twice");
+      await until(() => poolOf(mage, "mana").value === mana - spell.system.mana - 3 * spell.system.tier, "the spell's Mana and its tier for each of 3 points");
     });
 
-    it("MIRACLE: the Use's promise makes the next healing spell succeed on a 1, and the promise is taken", async function () {
+    it("MIRACLE: the Use lays a minute in which Mend costs no Mana (the class talent audit's R2 capstone, D-1884; O-185's promise retired)", async function () {
       this.timeout(180000);
-      const priest = await characterWith("ZZ CA Miracle", ["Priest", 9], { ranks: { "Hymn of Hope": 1, Miracle: 1 }, spells: ["Flash of Light"], abilities: { wis: 16 } });
-      assert.ok(await use(priest, "Miracle"), "Miracle's Use was refused");
-      await until(() => (priest.getFlag("azeroth-rpg", "nextSpell") ?? []).some(e => e.miracle), "Miracle's promise laid");
+      const priest = await characterWith("ZZ CA Miracle", ["Priest", 9], { ranks: { "Hymn of Hope": 1, Miracle: 1 }, abilities: { wis: 16 } });
       await fill(priest, "mana");
-      const card = await cast(priest, "Flash of Light", { targets: [rowOf(priest)], face: 1 });
-      assert.ok(card, "the healing spell was refused");
-      assert.isTrue(card.rolls[0].outcome.success, "a 1 failed under Miracle");
-      assert.isTrue(card.flags["azeroth-rpg"].miracle, "the card does not mark its heal unreduced");
-      await until(() => !(priest.getFlag("azeroth-rpg", "nextSpell") ?? []).some(e => e.miracle), "the promise taken");
+      const before = poolOf(priest, "mana").value;
+      assert.ok(await use(priest, "Miracle"), "Miracle's Use was refused");
+      await until(() => priest.effects.some(e => e.getFlag("azeroth-rpg", "miracleMinute")), "Miracle's minute laid");
+      assert.equal(poolOf(priest, "mana").value, before - 8, "Miracle did not cost 8 Mana");
+      assert.isFalse((priest.getFlag("azeroth-rpg", "nextSpell") ?? []).some(e => e.miracle), "the retired next-spell promise was laid");
+      const mana = poolOf(priest, "mana").value;
+      assert.ok(await use(priest, "Mend", { targets: [rowOf(priest)] }), "Mend was refused inside the minute");
+      assert.equal(poolOf(priest, "mana").value, mana, "Mend took Mana inside the minute");
     });
 
     it("DIVINE AEGIS: the school named at the cast becomes Ward 1 when the card's heal restores to full", async function () {

@@ -137,6 +137,22 @@
         </ol>
         {{#if numbers.wardOptions.length}}<div class="azeroth-forge-add"><button type="button" data-action="generatorAddWard">{{localize "AZEROTH.Generator.AddWard"}}</button></div>{{/if}}
       </div>
+      {{!-- The creature's own Spellpower, a school a row (D-1727): what gear would
+            give a character. 13 SS5 prints no band for it, so none is suggested. --}}
+      <div class="azeroth-generator-wards azeroth-generator-spellpower">
+        <span class="azeroth-generator-wards-label">{{localize "AZEROTH.Sheet.Spellpower"}}</span>
+        <span class="azeroth-generator-hint">{{localize "AZEROTH.Generator.SpellpowerHint"}}</span>
+        <ol class="azeroth-forge-list azeroth-generator-ward-rows">
+          {{#each numbers.spellpower as |w|}}
+          <li>
+            <select name="spellpower-school-{{w.index}}" data-generator="spellpower" aria-label="{{localize "AZEROTH.Sheet.Spellpower"}}">{{#each w.options}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}</select>
+            <input type="number" name="spellpower-value-{{w.index}}" value="{{w.value}}" min="0" data-generator="spellpower" aria-label="{{localize "AZEROTH.Sheet.Spellpower"}}">
+            <button type="button" class="azeroth-forge-quiet" data-action="generatorRemoveSpellpower" data-index="{{w.index}}" aria-label="{{localize "AZEROTH.Generator.Remove"}}">&times;</button>
+          </li>
+          {{/each}}
+        </ol>
+        {{#if numbers.spellpowerOptions.length}}<div class="azeroth-forge-add"><button type="button" data-action="generatorAddSpellpower">{{localize "AZEROTH.Generator.AddSpellpower"}}</button></div>{{/if}}
+      </div>
     </div>
     <div class="azeroth-generator-scores">
       {{#each numbers.scores as |sc|}}
@@ -187,9 +203,14 @@
         {{#if spells.caster}}
         <label class="azeroth-forge-check">{{localize "AZEROTH.Creator.Numbers.spellDC"}} <input type="number" name="spell-dc" value="{{spells.dc}}" min="0" data-generator="spell"></label>
         <span class="azeroth-generator-band">{{localize "AZEROTH.Generator.Band" n=spells.dcBand}}</span>
+        {{!-- Its own Casting Test bonus (D-1760): what an Augment or a ring gives a
+              character. No band is suggested; the review notes one past the tier's Augment. --}}
+        <label class="azeroth-forge-check">{{localize "AZEROTH.Generator.CastingBonus"}} <input type="number" name="casting-bonus" value="{{spells.castingBonus}}" min="-20" max="20" step="1" data-generator="spell"></label>
+        <span class="azeroth-generator-band">{{localize "AZEROTH.Generator.CastingBand" n=spells.castingBand}}</span>
         {{/if}}
       </span>
     </div>
+    {{#if spells.caster}}<p class="azeroth-generator-hint">{{localize "AZEROTH.Generator.CastingBonusHint"}}</p>{{/if}}
     {{#if spells.caster}}
     <ol class="azeroth-forge-list">
       {{#each spells.names as |sp|}}
@@ -258,6 +279,25 @@
       <select name="skillAdd" aria-label="{{localize "AZEROTH.Sheet.Skills"}}">{{#each keywords.skillOptions}}<option value="{{this.value}}">{{this.label}}</option>{{/each}}</select>
       <button type="button" data-action="generatorAddSkill">{{localize "AZEROTH.Generator.AddSkill"}}</button>
     </div>
+    {{!-- The GM's own Boons and Banes (D-1761): a Boon or a Bane a row, on one skill
+          or on every Test of a kind, what a worn thing gives a character (08 SS6). --}}
+    <div class="azeroth-generator-wards azeroth-generator-edges">
+      <span class="azeroth-generator-wards-label">{{localize "AZEROTH.Generator.BoonsBanes"}}</span>
+      <span class="azeroth-generator-hint">{{localize "AZEROTH.Generator.BoonsBanesHint"}}</span>
+      <ol class="azeroth-forge-list azeroth-generator-ward-rows">
+        {{#each keywords.boonsBanes as |row|}}
+        <li>
+          <select name="edge-kind-{{row.index}}" data-generator="edge" aria-label="{{localize "AZEROTH.Generator.BoonOrBane"}}">{{#each row.kinds}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}</select>
+          <select name="edge-on-{{row.index}}" data-generator="edge" aria-label="{{localize "AZEROTH.Generator.BoonBaneOn"}}">
+            <optgroup label="{{localize "AZEROTH.Sheet.Skills"}}">{{#each row.skills}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}</optgroup>
+            <optgroup label="{{localize "AZEROTH.Generator.TestKinds"}}">{{#each row.tests}}<option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>{{/each}}</optgroup>
+          </select>
+          <button type="button" class="azeroth-forge-quiet" data-action="generatorRemoveBoonBane" data-index="{{row.index}}" aria-label="{{localize "AZEROTH.Generator.Remove"}}">&times;</button>
+        </li>
+        {{/each}}
+      </ol>
+      <div class="azeroth-forge-add"><button type="button" data-action="generatorAddBoonBane">{{localize "AZEROTH.Generator.AddBoonBane"}}</button></div>
+    </div>
     <div class="azeroth-forge-row">
       <span class="azeroth-forge-label">{{localize "AZEROTH.Sheet.Resilience"}}</span>
       <span class="azeroth-forge-control">
@@ -275,6 +315,11 @@
       <span class="azeroth-forge-control">
         {{#each keywords.conditions as |c|}}<label class="azeroth-forge-check"><input type="checkbox" name="inflicts-{{c.key}}" data-generator="inflicts" {{#if c.checked}}checked{{/if}}> {{c.label}}</label>{{/each}}
         <button type="button" class="azeroth-forge-quiet" data-action="generatorSuggestInflicts">{{localize "AZEROTH.Generator.SuggestInflicts"}}</button>
+      </span>
+      {{!-- The A1 conditions the GM makes it immune to (D-1762): refused at every Inflict door. --}}
+      <span class="azeroth-forge-label">{{localize "AZEROTH.Generator.ConditionImmune"}}</span>
+      <span class="azeroth-forge-control">
+        {{#each keywords.conditionImmune as |c|}}<label class="azeroth-forge-check"><input type="checkbox" name="cond-immune-{{c.key}}" data-generator="condImmune" {{#if c.checked}}checked{{/if}}> {{c.label}}</label>{{/each}}
       </span>
       <span class="azeroth-forge-label">{{localize "AZEROTH.Momentum.Label"}}</span>
       <span class="azeroth-forge-control">

@@ -985,7 +985,7 @@ export const NECRO_SPELL_DOORS = Object.freeze({
   "step:corpse": [
     { file: "module/rules/steps.mjs", fn: "readSpellStep", contains: "if (m) return { who: \"self\", feet: null, sight: \"corpse\", near: Number(m[1]), corpse: true, shadow };" },
     { file: "module/dice/workflows.mjs", fn: "castSpell", contains: "const planned = await corpseStepPlan(actor, spell, spellStep, { farReaching: farReachingAsked });" },
-    { file: "module/effects/steps.mjs", fn: "judgeStep", contains: "const nearCorpse = sight === \"corpse\" && askSight" }
+    { file: "module/effects/steps.mjs", fn: "judgeStep", contains: "const nearCorpse = (sight === \"corpse\" || sight === \"beside\") && askSight" }
   ],
   "necro:ghostlyServant": [
     { file: "module/effects/necromancer-spells.mjs", fn: "necroSpellAfterCast", contains: "if (readGhostlyServant(sys.effect) && plan?.point) lines.push(...await layOwn(" }

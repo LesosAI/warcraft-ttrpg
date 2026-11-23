@@ -5,19 +5,14 @@
  */
 export const BLOOD_PACT_SPELL = Object.freeze({ health: 6, mana: 4, floor: 1, feet: 30 });
 
-/** Return the source of command, never infer it from actor ownership or names. */
-export function bloodPactAuthority({ casterUuid, donor, talent = false, boundFeatureIds = [] } = {}) {
+/** Return the source of command, never infer it from actor ownership or names.
+ * (04's Blood Pact talent's narrower branch - the Bound Demon class feature's demon alone - went
+ * with the talent: it is Dark Pact since the class talent audit, D-1891, and teaches no spell.) */
+export function bloodPactAuthority({ casterUuid, donor } = {}) {
   if (typeof casterUuid !== "string" || !casterUuid || !donor?.uuid || donor.uuid === casterUuid) return null;
   if (String(donor.creatureType ?? "").trim().toLowerCase() !== "demon") return null;
   const bond = donor.bond;
   const bound = bond?.kind === "demon" && bond.ownerUuid === casterUuid;
-  if (talent) {
-    // Older Command Demon casts stamped the Bound Demon feature's sourceId.
-    // Their temporary, uncounted bond is still not that class feature's demon.
-    if (bond?.until === "longRest" && bond.uncounted === true) return null;
-    return bound && typeof bond.sourceId === "string" && boundFeatureIds.includes(bond.sourceId)
-      ? { kind: "bound", sourceId: bond.sourceId } : null;
-  }
   if (bound) return { kind: "bound", sourceId: bond.sourceId ?? null };
   const command = (donor.commands ?? []).find(row => row?.identifier === "compel"
     && row.origin === casterUuid && row.sustained === true && row.live === true
@@ -32,9 +27,9 @@ export function bloodPactAuthority({ casterUuid, donor, talent = false, boundFea
  * ordinary spell use off-scene. A supplied invalid distance is never treated so.
  * The adapter chooses the granting pool; this function never substitutes another.
  */
-export function bloodPactTransfer({ casterUuid, donor, talent = false, boundFeatureIds = [], pool, distance = null } = {}) {
+export function bloodPactTransfer({ casterUuid, donor, pool, distance = null } = {}) {
   const refuse = reason => ({ ok: false, reason });
-  const authority = bloodPactAuthority({ casterUuid, donor, talent, boundFeatureIds });
+  const authority = bloodPactAuthority({ casterUuid, donor });
   if (!authority) return refuse("donor");
   if (distance !== null && (!Number.isFinite(distance) || distance < 0 || distance > BLOOD_PACT_SPELL.feet)) return refuse("range");
   const health = donor.health;

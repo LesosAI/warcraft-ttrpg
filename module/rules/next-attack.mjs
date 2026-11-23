@@ -94,6 +94,10 @@ export function nextAttackEntry(grant = {}, now = null) {
     ...(typeof grant.type === "string" && grant.type && count(grant.damage) > 0 ? { type: grant.type } : {}),
     // **EVERY ROLL OF THE NEXT ATTACK** (Frost Strike; D-1711): named only where a promise carries it.
     ...(grant.rolls === "each" ? { rolls: "each" } : {}),
+    // **AGAINST THAT TARGET** (the class talent audit's Overpower: *your next attack against that target this
+    // turn gains a Boon*; D-1870): the token id, else the actor id, the attack's target must carry - named only
+    // where a promise carries one.
+    ...(typeof grant.targetKey === "string" && grant.targetKey ? { targetKey: grant.targetKey } : {}),
     lasts: grant.lasts,
     at: {
       combat: String(now.combat), round: Math.trunc(Number(now.round)) || 0, combatant: String(now.combatant ?? ""),
@@ -205,7 +209,7 @@ export function nextAttackStands(entry, now = null) {
  * @param {{now?: object|null}} [o]
  * @returns {{boons: number, penetration: number, damage: number, live: object[], lapsed: object[]}}
  */
-export function pendingNextAttack(entries = [], { now = null, targetStatuses = null, secondRoll = false } = {}) {
+export function pendingNextAttack(entries = [], { now = null, targetStatuses = null, secondRoll = false, targetKey = null } = {}) {
   const live = [];
   const lapsed = [];
   // A promise held to a target's condition (Scent of Blood's Bleeding; D-1370) waits, neither taken nor lapsed, for
@@ -221,6 +225,9 @@ export function pendingNextAttack(entries = [], { now = null, targetStatuses = n
     // that Attack's second roll alone, and by no first roll, neither taken nor lapsed by one.
     else if (e.rolled === true && secondRoll !== true) continue;
     else if (typeof e.targetStatus === "string" && e.targetStatus && !bears.has(e.targetStatus)) continue;
+    // A promise held to one creature (Overpower; D-1870) waits for an attack at it - and an attack that names
+    // no target takes none of them.
+    else if (typeof e.targetKey === "string" && e.targetKey && e.targetKey !== targetKey) continue;
     else live.push(e);
   }
   const sum = key => live.reduce((n, e) => n + count(e[key]), 0);

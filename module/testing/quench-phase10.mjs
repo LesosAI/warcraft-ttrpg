@@ -5,7 +5,7 @@
  * and the window at the floor.
  */
 
-import { cleanup, forgeDrop, made, makeNpc, openSheet, settle, useAction, warnings } from "./fixtures.mjs";
+import { cardOf, cleanup, forgeDrop, fromPack, made, makeNpc, openSheet, settle, useAction, warnings } from "./fixtures.mjs";
 import { baseTrait } from "../rules/bestiary.mjs";
 import { checkText } from "./geometry.mjs";
 // A pool's count is an input on an editable sheet (2026-09-13).
@@ -46,8 +46,8 @@ export function generatorBatch(context) {
       made.push(actor);
       assert.equal(game.actors.size, before + 1);
       const s = actor.system;
-      assert.equal(s.health.max, 12);
-      assert.equal(s.health.value, 12);
+      assert.equal(s.health.max, 15);
+      assert.equal(s.health.value, 15);
       assert.equal(s.defense, 12);
       assert.equal(s.threatShare, 1);
       assert.deepEqual({ body: s.ap.body, head: s.ap.head, limb: s.ap.limb }, { body: 2, head: 1, limb: 1 });
@@ -76,7 +76,7 @@ export function generatorBatch(context) {
       change(tier);
       await settle();
       const state = generator.state;
-      assert.equal(state.numbers.health, 194, "the Boss centre was not suggested");
+      assert.equal(state.numbers.health, 243, "the Boss centre was not suggested");
       const lines = [...generator.element.querySelectorAll(".azeroth-forge-cost")].map(e => e.textContent).join(" ");
       assert.include(lines, "DC 18", "the Boss line does not print the tier's DC");
       const actions = [
@@ -90,7 +90,7 @@ export function generatorBatch(context) {
       assert.isTrue(made2.ok, JSON.stringify(made2.reasons));
       made.push(made2.actor);
       const s = made2.actor.system;
-      assert.equal(s.health.max, 194);
+      assert.equal(s.health.max, 243);
       assert.isNull(s.threatShare);
       assert.equal(s.bossActions.length, 2);
       assert.equal(s.bossActions[1].cost, 2);
@@ -139,7 +139,7 @@ export function generatorBatch(context) {
       change(tier);
       await settle();
       const state = generator.state;
-      assert.equal(state.numbers.health, 32, "an untouched Health did not take the band");
+      assert.equal(state.numbers.health, 40, "an untouched Health did not take the band");
       assert.equal(state.numbers.defense, 15, "a typed Defense was overwritten");
       assert.include(state.touched, "numbers.defense");
       await generator.close();
@@ -154,14 +154,15 @@ export function generatorBatch(context) {
       assert.equal(result.actor.id, whitemane.id);
       const s = whitemane.system;
       assert.equal(s.defense, 16);
-      assert.equal(s.health.max, 194);
-      assert.equal(s.health.value, 194, "an unhurt creature keeps full Health");
+      assert.equal(s.health.max, 243);
+      assert.equal(s.health.value, 243, "an unhurt creature keeps full Health");
       assert.equal(s.bossActions.length, 2);
       assert.equal(s.bossActions.find(a => a.name === "Raise Mograine")?.cost, 2);
       assert.equal(s.power.max, 10);
       assert.deepEqual(Object.keys(s.skills).sort(), ["insight", "intimidation", "leadership", "spiritLore"]);
-      assert.deepEqual(s.ward, { shadow: 2 }, "the rework dropped her Ward");
-      assert.equal(s.dungeon, "The Scarlet Monastery");
+      // The 2026-11 bestiary gave her Ward 2 Holy and the cathedral wing (D-1809).
+      assert.deepEqual(s.ward, { holy: 2 }, "the rework dropped her Ward");
+      assert.equal(s.dungeon, "The Scarlet Monastery, the cathedral");
       assert.ok(whitemane.getFlag("azeroth-rpg", "built"), "a reworked creature carries the built flag");
     });
 
@@ -206,6 +207,188 @@ export function generatorBatch(context) {
       } finally {
         await generator.close();
       }
+    });
+
+    // D-1727: a creature carries no gear, so the GM sets its Spellpower here.
+    it("gives a creature its own Spellpower (D-1727): Apply stores the base, the total adds an effect's points, Rework loads the base alone, a removed school is gone", async function () {
+      this.timeout(90000);
+      const order = schools => Object.keys(AZEROTH.schools).filter(k => schools.includes(k));
+      const result = await generatorOf(null).apply(kobold({ name: "ZZ Quench Pyromancer", numbers: { spellpower: [{ school: "shadow", value: 1 }, { school: "fire", value: 2 }] } }));
+      assert.isTrue(result.ok, JSON.stringify(result.reasons));
+      const actor = result.actor;
+      made.push(actor);
+      assert.deepEqual({ ...actor.system._source.spellpowerBase }, { shadow: 1, fire: 2 }, "Apply did not store the base");
+      assert.equal(actor.system.spellpower.fire, 2, "the derived total does not carry the base");
+      assert.equal(actor.system.spellpower.shadow, 1);
+      // A `final` effect on the TOTAL (a worn grant's shape): the total moves, the base does not.
+      await actor.createEmbeddedDocuments("ActiveEffect", [{
+        name: "ZZ Fire Spellpower", img: "icons/svg/aura.svg",
+        system: { changes: [{ key: "system.spellpower.fire", type: "add", value: "3", phase: "final" }] }
+      }]);
+      assert.equal(actor.system.spellpower.fire, 5, "the effect did not reach the total");
+      const generator = generatorOf(actor);
+      const loaded = await generator.setState({});
+      assert.deepEqual(loaded.numbers.spellpower.map(r => r.school), order(["fire", "shadow"]));
+      assert.equal(loaded.numbers.spellpower.find(r => r.school === "fire")?.value, 2, "Rework loaded the total, not the base");
+      // Rework with the Shadow row removed: the replacement drops it, and the base never takes the effect's 3.
+      const reworked = await generator.apply({ numbers: { spellpower: [{ school: "fire", value: 2 }] } });
+      assert.isTrue(reworked.ok, JSON.stringify(reworked.reasons));
+      assert.deepEqual({ ...actor.system._source.spellpowerBase }, { fire: 2 }, "a removed school survived the Rework, or the total came back as the base");
+      assert.equal(actor.system.spellpower.fire, 5);
+      assert.equal(actor.system.spellpower.shadow, 0);
+      // The sheet's Spells tab draws it only where the creature casts; this one does not.
+      const sheet = await openSheet(actor);
+      try {
+        assert.isNull(sheet.element.querySelector(".azeroth-npc-spellpower"), "a creature with no spells drew a Spellpower line");
+      } finally {
+        await sheet.close();
+      }
+    });
+
+    it("a creature's own Shadow Spellpower adds to a tier 3 Death spell's damage on the card (D-1727, 07's Spellpower)", async function () {
+      this.timeout(90000);
+      const spell = await fromPack("azeroth-rpg.spells", "Wraith Bolt");
+      assert.equal(spell.system.tier, 3);
+      assert.equal(spell.system.damage.school, "shadow");
+      const result = await generatorOf(null).apply(kobold({
+        name: "ZZ Quench Wraithcaller",
+        identity: { weightClass: "standard", tier: 3, creatureType: "undead", typeMarker: null, size: "medium", race: null, corruption: null, handlingDC: null, dungeon: null },
+        spells: { caster: true, dc: 17, names: ["Wraith Bolt"] },
+        numbers: { spellpower: [{ school: "shadow", value: 2 }] },
+        keywords: { skills: {}, resilience: [], immune: [], vulnerable: [], inflicts: [], momentum: { name: null, max: null }, power: { name: null, max: 12 } }
+      }));
+      assert.isTrue(result.ok, JSON.stringify(result.reasons));
+      const caster = result.actor;
+      made.push(caster);
+      assert.equal(caster.system.spellpower.shadow, 2);
+      const target = await makeNpc("Plagued Ghoul");
+      const snap = { tokenId: null, sceneId: null, actorId: target.id, name: target.name, defense: target.system.defense,
+        apByLocation: { body: 0, head: 0, limb: 0 }, absent: [], wardBySchool: {}, immune: [], vulnerable: [], statuses: [] };
+      const card = await cardOf("spell", caster, { spell, face: 20, args: { targets: [snap] } });
+      assert.ok(card.message, "the cast posted no card");
+      const flags = card.message.flags["azeroth-rpg"];
+      assert.equal(flags.damageByTarget?.[0]?.damage, spell.system.damage.rating + 2, "the creature's Spellpower did not reach the damage");
+      const label = game.i18n.localize("AZEROTH.Card.Spellpower");
+      const rows = [...(card.element?.querySelectorAll(".azeroth-provenance li") ?? [])].map(li => li.textContent.replace(/\s+/g, " ").trim());
+      assert.ok(rows.some(r => r.startsWith(label) && /\+2$/.test(r)), `the card names no Spellpower +2: ${rows.join(" | ")}`);
+      // And the Spells tab says it, school and number in words.
+      const sheet = await openSheet(caster);
+      try {
+        await sheet.changeTab("spells", "primary");
+        await settle();
+        const line = sheet.element.querySelector("section[data-tab='spells'] .azeroth-npc-spellpower");
+        assert.ok(line, "the Spells tab draws no Spellpower");
+        assert.include(line.textContent.replace(/\s+/g, " "), `${game.i18n.localize(AZEROTH.schools.shadow)} +2`);
+        const findings = checkText(sheet.element);
+        assert.deepEqual(findings, [], findings.map(f => `${f.kind} ${f.detail}`).join("; "));
+      } finally {
+        await sheet.close();
+      }
+    });
+
+    // D-1760: a creature carries no gear, so the GM sets its Casting Test bonus here.
+    it("gives a creature its own Casting Test bonus (D-1760): the cast's card adds it as a line, the total moves by it, and Rework to 0 takes it off", async function () {
+      this.timeout(90000);
+      const spell = await fromPack("azeroth-rpg.spells", "Wraith Bolt");
+      const result = await generatorOf(null).apply(kobold({
+        name: "ZZ Quench Hexcaller",
+        identity: { weightClass: "standard", tier: 3, creatureType: "undead", typeMarker: null, size: "medium", race: null, corruption: null, handlingDC: null, dungeon: null },
+        spells: { caster: true, dc: 17, names: ["Wraith Bolt"], castingBonus: 2 },
+        keywords: { skills: {}, resilience: [], immune: [], vulnerable: [], inflicts: [], momentum: { name: null, max: null }, power: { name: null, max: 12 } }
+      }));
+      assert.isTrue(result.ok, JSON.stringify(result.reasons));
+      const actor = result.actor;
+      made.push(actor);
+      assert.equal(actor.system._source.castingBonus, 2, "Apply did not store the bonus");
+      assert.equal(actor.system.itemBonus?.casting, 2, "the derived itemBonus does not carry the creature's own bonus");
+      const target = await makeNpc("Plagued Ghoul");
+      const snap = { tokenId: null, sceneId: null, actorId: target.id, name: target.name, defense: target.system.defense,
+        apByLocation: { body: 0, head: 0, limb: 0 }, absent: [], wardBySchool: {}, immune: [], vulnerable: [], statuses: [] };
+      const castOf = async () => (await cardOf("spell", actor, { spell, face: 10, args: { targets: [snap] } })).message;
+      const withBonus = await castOf();
+      assert.ok(withBonus, "the cast posted no card");
+      const line = withBonus.rolls[0].options.provenance.find(p => p.label === "AZEROTH.Cast.ItemBonus");
+      assert.equal(line?.value, 2, "the card names no Casting Test bonus of 2");
+      // Rework to 0: the line goes and the same die totals 2 less.
+      const reworked = await generatorOf(actor).apply({ spells: { caster: true, dc: 17, names: ["Wraith Bolt"], castingBonus: 0 } });
+      assert.isTrue(reworked.ok, JSON.stringify(reworked.reasons));
+      assert.equal(actor.system._source.castingBonus, 0);
+      const without = await castOf();
+      assert.isUndefined(without.rolls[0].options.provenance.find(p => p.label === "AZEROTH.Cast.ItemBonus"));
+      assert.equal(withBonus.rolls[0].total - without.rolls[0].total, 2, "the bonus did not move the Casting Test total by 2");
+    });
+
+    // D-1761: the GM's own Boon or Bane on a named skill or a kind of Test.
+    it("gives a creature its own Boons and Banes (D-1761): a Perception Test takes the Boon, a Casting Test the Bane, the Traits tab says so, and Rework removing a row removes it", async function () {
+      this.timeout(90000);
+      const { defaultChoice } = await import("../applications/roll-dialog.mjs");
+      const result = await generatorOf(null).apply(kobold({
+        name: "ZZ Quench Lookout",
+        keywords: { skills: { perception: 2 }, resilience: [], immune: [], vulnerable: [], inflicts: [], momentum: { name: null, max: null }, power: { name: null, max: null },
+          boonsBanes: [{ on: "perception", kind: "boon" }, { on: "casting", kind: "bane" }] }
+      }));
+      assert.isTrue(result.ok, JSON.stringify(result.reasons));
+      const actor = result.actor;
+      made.push(actor);
+      assert.deepEqual(actor.system._source.boonsBanes.map(r => ({ ...r })), [{ on: "perception", kind: "boon" }, { on: "casting", kind: "bane" }]);
+      assert.lengthOf(actor.system.skillBoons.perception ?? [], 1, "the derived skill Boons do not carry the row");
+      const perceptionWith = defaultChoice(actor, { kind: "skill", skill: "perception", targets: [] });
+      const stealthWith = defaultChoice(actor, { kind: "skill", skill: "stealth", targets: [] });
+      const castingWith = defaultChoice(actor, { kind: "casting", targets: [] });
+      const sheet = await openSheet(actor);
+      try {
+        await sheet.changeTab("traits", "primary");
+        await settle();
+        const text = sheet.element.querySelector("section[data-tab='traits']")?.textContent.replace(/\s+/g, " ") ?? "";
+        assert.include(text, game.i18n.format("AZEROTH.Sheet.BoonOn", { what: game.i18n.localize(AZEROTH.skills.perception) }));
+      } finally {
+        await sheet.close();
+      }
+      // Rework with the Perception row removed: a plain list replaces the stored one whole.
+      const reworked = await generatorOf(actor).apply({ keywords: { boonsBanes: [{ on: "casting", kind: "bane" }] } });
+      assert.isTrue(reworked.ok, JSON.stringify(reworked.reasons));
+      assert.deepEqual(actor.system._source.boonsBanes.map(r => ({ ...r })), [{ on: "casting", kind: "bane" }], "a removed row survived the Rework");
+      const perceptionWithout = defaultChoice(actor, { kind: "skill", skill: "perception", targets: [] });
+      assert.equal(perceptionWith.boons - perceptionWithout.boons, 1, "the row's Boon did not reach a Perception Test");
+      assert.equal(stealthWith.boons, defaultChoice(actor, { kind: "skill", skill: "stealth", targets: [] }).boons, "a Perception Boon reached Stealth");
+      assert.equal(castingWith.banes, defaultChoice(actor, { kind: "casting", targets: [] }).banes, "the Casting Bane moved with an unrelated row");
+      assert.isAtLeast(castingWith.banes, 1, "the Casting Test row gave no Bane");
+    });
+
+    // D-1762: the GM's own condition immunities, refused at every door that reads conditionImmunities.
+    it("makes a creature immune to a condition (D-1762): Stunned is refused at the toggle and the Inflict door, Blinded still lands, Refuses lists it, Rework undoes it", async function () {
+      this.timeout(90000);
+      const { applyCondition } = await import("../effects/durations.mjs");
+      const result = await generatorOf(null).apply(kobold({
+        name: "ZZ Quench Stoneskin",
+        keywords: { skills: {}, resilience: [], immune: [], vulnerable: [], inflicts: [], momentum: { name: null, max: null }, power: { name: null, max: null }, conditionImmune: ["stunned"] }
+      }));
+      assert.isTrue(result.ok, JSON.stringify(result.reasons));
+      const actor = result.actor;
+      made.push(actor);
+      assert.deepEqual([...actor.system._source.conditionImmune], ["stunned"]);
+      assert.include(actor.system.conditionImmunities, "stunned");
+      assert.isFalse(await actor.toggleStatusEffect("stunned", { active: true }), "the toggle laid Stunned");
+      assert.isNull(await applyCondition(actor, "stunned"), "the Inflict door laid Stunned");
+      assert.isFalse(actor.statuses.has("stunned"));
+      await actor.toggleStatusEffect("blinded", { active: true });
+      assert.isTrue(actor.statuses.has("blinded"), "an immunity to Stunned refused Blinded");
+      await actor.toggleStatusEffect("blinded", { active: false });
+      const sheet = await openSheet(actor);
+      try {
+        await sheet.changeTab("traits", "primary");
+        await settle();
+        const text = sheet.element.querySelector("section[data-tab='traits']")?.textContent.replace(/\s+/g, " ") ?? "";
+        assert.include(text, game.i18n.localize(AZEROTH.conditions.stunned), "Refuses does not list Stunned");
+      } finally {
+        await sheet.close();
+      }
+      const reworked = await generatorOf(actor).apply({ keywords: { conditionImmune: [] } });
+      assert.isTrue(reworked.ok, JSON.stringify(reworked.reasons));
+      assert.deepEqual([...actor.system._source.conditionImmune], [], "a removed immunity survived the Rework");
+      await actor.toggleStatusEffect("stunned", { active: true });
+      assert.isTrue(actor.statuses.has("stunned"), "Stunned is still refused after the Rework");
+      await actor.toggleStatusEffect("stunned", { active: false });
     });
 
     it("builds a swarm of six zombies (13 §4, D-646): the members' Health and share, Defense two under, one attack on every target, no Critical Injury, Thinned below half, an Elite refused", async function () {
@@ -543,7 +726,7 @@ export function generatorBatch(context) {
       findings = checkText(rework.element);
       assert.deepEqual(findings, [], findings.map(f => `${f.kind} ${f.detail}`).join("; "));
       assert.equal(rework.element.querySelector("input[name=name]")?.value, whitemane.name);
-      assert.equal(rework.element.querySelector("input[name=health]")?.value, "194");
+      assert.equal(rework.element.querySelector("input[name=health]")?.value, "243");
       await rework.close();
     });
 

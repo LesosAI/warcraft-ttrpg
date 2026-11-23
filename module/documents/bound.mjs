@@ -17,7 +17,7 @@
  */
 
 import { AZEROTH } from "../config.mjs";
-import { bindingFor, boundEffects, boundSignatureEffects, capacity, eligible, healthAfterMaxChange } from "../rules/bound.mjs";
+import { bindingFor, bossRefusal, boundEffects, boundSignatureEffects, capacity, eligible, healthAfterMaxChange } from "../rules/bound.mjs";
 // Dark Minion's count, judged on the GM's client (the B2 review).
 import { raiseRefusal, raiseRowsFor } from "../rules/raise.mjs";
 // The Necromancer's lead, read by the bound sync for 04's Bone Vanguard (Phase 4c-T).
@@ -193,6 +193,26 @@ function ownershipFor(owner) {
 }
 
 /**
+ * **THE WEIGHT CLASS OF THE 14 ENTRY A WORLD CREATURE WAS MADE FROM** (D-1804, read as
+ * D-1798 reads an elemental's family): `_stats.compendiumSource`, else its bond's
+ * `entryUuid`, looked up synchronously - a loaded document or the pack's index entry,
+ * which carries `system.weightClass` once any chooser has read the index. Null where
+ * neither names a bestiary entry or the entry is not to hand.
+ *
+ * @param {Actor} actor
+ * @returns {string|null}
+ */
+export function sourceWeightClassOf(actor) {
+  for (const uuid of [actor?._stats?.compendiumSource, bondOf(actor)?.entryUuid]) {
+    if (typeof uuid !== "string" || !uuid.startsWith("Compendium.azeroth-rpg.bestiary.")) continue;
+    const found = fromUuidSync(uuid, { strict: false });
+    const weight = found?.system?.weightClass ?? null;
+    if (typeof weight === "string" && weight) return weight;
+  }
+  return null;
+}
+
+/**
  * Make the world actor for a bond. `entry` is a bestiary document; `block`
  * is `{name, img, system}` for a creature 14 prints no block for (a totem,
  * built by `rules/bound.mjs#totemBlock`). One actor stands for a multiple
@@ -263,6 +283,13 @@ export async function bindQueryHandler({ ownerUuid, featureId = null, entryUuid 
     throw new Error(game.i18n.format("AZEROTH.Bound.NoEntry", { name: entryUuid }));
   }
   if (!entry && !block?.system) throw new Error(game.i18n.format("AZEROTH.Bound.NoEntry", { name: block?.name ?? "" }));
+  // **A BOSS IS NEVER BOUND, CALLED OR RAISED FOR A CHARACTER** (D-1804; the lead,
+  // 2026-11-22: *"boss's like King Mosh can't be shapeshift or summon targets"*): every
+  // kind, judged here off the entry's own block, so a payload naming a Boss binds nothing
+  // whatever menu it came from.
+  if (bossRefusal(entry?.system ?? block?.system ?? {})) {
+    throw new Error(game.i18n.format("AZEROTH.Bound.Boss", { name: entry?.name ?? block?.name ?? "" }));
+  }
   const feature = featureId ? owner.items.get(featureId) ?? null : null;
   // **A CONSTRUCT IS ONE OF THE TABLE'S, AT THE TINKER'S TIER** (04's The Bench; the B2
   // review: only the capacity was judged here, so a uuid named any creature): judged on
@@ -270,6 +297,14 @@ export async function bindQueryHandler({ ownerUuid, featureId = null, entryUuid 
   if (kind === "construct") {
     const fit = eligible("construct", { name: entry?.name ?? block?.name ?? "" }, { tier: owner.system?.tier ?? 1 });
     if (!fit.ok) throw new Error(game.i18n.format(fit.reason === "Tier" ? "AZEROTH.Construct.Refuse.Tier" : "AZEROTH.Construct.Refuse.NotOnTable", { name: entry?.name ?? block?.name ?? "" }));
+  }
+  // **AN ELEMENTAL IS ONE OF THE FOUR FAMILIES** (D-1796): judged here off the entry's own
+  // name, so a payload naming a named leader, a plant or a tar creature binds nothing. The
+  // tier stays the menu's, as it was.
+  if (kind === "elemental") {
+    const name = entry?.name ?? block?.name ?? "";
+    const fit = eligible("elemental", { name, weightClass: entry?.system?.weightClass ?? block?.system?.weightClass ?? null });
+    if (!fit.ok) throw new Error(game.i18n.format("AZEROTH.Bound.NotElementalFamily", { name }));
   }
   const room = capacity(kind, { level: owner.system.level ?? 1, talents: talentsOf(owner) });
   if (!uncounted && boundCount(owner, kind) >= room) {
@@ -345,6 +380,10 @@ export async function bind({ owner, feature = null, entry = null, block = null, 
   }
   const actor = await fromUuid(uuid);
   await syncBoundFor(owner);
+  // A bond made or released moves the owner's own passives that wait on one (04's Demonic Knowledge's
+  // *While you control a Bound Demon*; the class talent audit, D-1891). A totem's own line below
+  // syncs for it; a failure is a warning, the bond already made (CLAUDE.md §16).
+  if (kind !== "totem") await owner.syncTalentEffects?.()?.catch?.(err => console.warn("azeroth-rpg | talent effects", err));
   // A totem standing moves the owner's own passives (04's Earthen Shield, D-774).
   if (kind === "totem") await owner.syncTalentEffects?.()?.catch?.(err => console.error("azeroth-rpg | talent effects", err));
   ui.notifications?.info(game.i18n.format("AZEROTH.Bound.Bound", { owner: owner.name, name: actor?.name ?? "" }));
@@ -376,6 +415,24 @@ export async function adopt({ owner, actor, kind, feature = null, until = null, 
   if (!actor.isOwner) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.Bound.NotOwner"));
     return null;
+  }
+  // **A BOSS IS NEVER ADOPTED** (D-1804): the banner's Bind to, a menu's world creature and
+  // Command Demon all come through here. Its own weight class (a GM's homebrew Boss is
+  // one) or the 14 entry it was made from.
+  if (bossRefusal({ weightClass: actor.system?.weightClass ?? null, sourceWeightClass: sourceWeightClassOf(actor) })) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Bound.Boss", { name: actor.name }));
+    return null;
+  }
+  // **AN ELEMENTAL IS ONE OF THE FOUR FAMILIES** (D-1796): a creature standing in the world
+  // is judged by its name or the 14 entry it was made from, so the banner's Bind to cannot
+  // bond what Elemental Bond's menu refuses. No tier gate here, as for every other kind.
+  if (kind === "elemental") {
+    const made = actor._stats?.compendiumSource ?? null;
+    const sourceName = typeof made === "string" && made.startsWith("Compendium.azeroth-rpg.bestiary.") ? (fromUuidSync(made, { strict: false })?.name ?? null) : null;
+    if (!eligible("elemental", { name: actor.name, sourceName, weightClass: actor.system?.weightClass ?? null }).ok) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Bound.NotElementalFamily", { name: actor.name }));
+      return null;
+    }
   }
   const room = capacity(kind, { level: owner.system.level ?? 1, talents: talentsOf(owner) });
   // **A CREATURE THAT COUNTS AGAINST NOTHING** (04's Command Demon: *does not
@@ -422,6 +479,10 @@ export async function adopt({ owner, actor, kind, feature = null, until = null, 
     if (updates.length) await scene.updateEmbeddedDocuments("Token", updates);
   }
   await syncBoundFor(owner);
+  // A bond made or released moves the owner's own passives that wait on one (04's Demonic Knowledge's
+  // *While you control a Bound Demon*; the class talent audit, D-1891). A totem's own line below
+  // syncs for it; a failure is a warning, the bond already made (CLAUDE.md §16).
+  if (kind !== "totem") await owner.syncTalentEffects?.()?.catch?.(err => console.warn("azeroth-rpg | talent effects", err));
   if (kind === "totem") await owner.syncTalentEffects?.()?.catch?.(err => console.error("azeroth-rpg | talent effects", err));
   ui.notifications?.info(game.i18n.format("AZEROTH.Bound.Bound", { owner: owner.name, name: actor.name }));
   return actor;
@@ -452,6 +513,10 @@ export async function adoptQueryHandler({ ownerUuid = null, actorUuid = null, fe
   try {
     if (target.system?.creatureType !== "demon") throw new Error(game.i18n.format("AZEROTH.CommandDemon.NotDemon", { target: target.name }));
     if (bondOf(target)) throw new Error(game.i18n.format("AZEROTH.CommandDemon.Bound", { target: target.name }));
+    // A Boss demon is never bound (D-1804): judged here too, in words, not left to `adopt`.
+    if (bossRefusal({ weightClass: target.system?.weightClass ?? null, sourceWeightClass: sourceWeightClassOf(target) })) {
+      throw new Error(game.i18n.format("AZEROTH.CommandDemon.Boss", { target: target.name }));
+    }
     const feature = featureId ? owner.items.get(featureId) ?? null : null;
     // Read the granting talent now: a feature can outlive a refund while its
     // asynchronous class-feature sync is pending. The class's Bound Demon is

@@ -55,6 +55,20 @@ export const REACTIONS_PER_TURN = AZEROTH.REACTIONS_PER_TURN;
 /** *You may make one each round* (06 §2). */
 export const OFF_HAND_ATTACKS_PER_ROUND = 1;
 
+/**
+ * **TWO ATTACKS A TURN, AND A GRANTED HALF-ACTION NEVER BUYS A THIRD** (05 §10: *You may Attack
+ * once for each Half-Action you spend on it*, of a turn's two; the class talent audit's R6, the
+ * lead's *"All other propsals are approved"*; D-1864). D-711 counted nothing because two
+ * Half-Actions could buy at most two; a Half-Action a feature or talent GRANTS (Rampage, Follow
+ * Through, Bloodlust, Slipstream, Master of Hours) took the turn past two and bought a third.
+ * `spend` counts the turn's main-hand Attacks on the budget (`attacks`) - an Attack paid with a
+ * Half-Action or an action is ONE Attack (Lash of Pain beside a Resolve Half-Action is a legal
+ * second Attack; the wave 1 review), one paid with a Full Action takes both - and refuses the one
+ * that would pass this. The off hand rides and is not counted; a Reaction's blow, Extra Attack's
+ * second roll and a blow somebody already paid for (`budget: "none"`) spend nothing here.
+ */
+export const ATTACKS_PER_TURN = 2;
+
 /** One additional roll per Attack action; its weapon is explicitly chosen in the popup. */
 export const ROLLS_PER_EXTRA_ATTACK = 2;
 
@@ -69,7 +83,9 @@ export const BUDGET_REFUSALS = Object.freeze({
   // Any Half-Action, action or Full Action outside its owner's turn (the lead:
   // *"Refuse off-turn Half-Actions"*), with the at-once allowance spent.
   notYourTurn: "AZEROTH.Budget.Refuse.NotYourTurn",
-  nothingToRestore: "AZEROTH.Budget.Refuse.NothingToRestore"
+  nothingToRestore: "AZEROTH.Budget.Refuse.NothingToRestore",
+  // R6 (D-1864): a third Attack in one turn, whatever Half-Actions are left.
+  attackLimit: "AZEROTH.Budget.Refuse.AttackLimit"
 });
 
 /**
@@ -79,9 +95,17 @@ export const BUDGET_REFUSALS = Object.freeze({
  * martial and 4 at SL 2 or better, against 1 and 2 under the other reading.
  * Against the code as it stood the RATE does not move - two Attack actions
  * already built twice - but it cost both Half-Actions and now costs one.
- * **The book does not settle it** (O-109); this is the one line to change.
+ *
+ * **SETTLED: IT DOES NOT** (O-109 closed by the class talent audit's M1; the
+ * lead's *"2 - Yes"*, 2026-11-22; D-1860). D-711 let a striker Attack twice a
+ * turn, so a level-5 martial standing still made four rolls and built twice
+ * D1 §9b's rate; with the second roll of each Attack building none, levels 5
+ * to 20 sit on §9b's rate exactly. The second roll still hits, deals damage and
+ * lands its Critical Injury: only the pool gain is withheld, through the one
+ * reader (`actions.mjs#secondRollOverrides`, `gainsMomentum: false`), which
+ * every pool's on-hit gain in `workflows.rollTest` is gated on.
  */
-export const EXTRA_ATTACK_ROLLS_BUILD_MOMENTUM = true;
+export const EXTRA_ATTACK_ROLLS_BUILD_MOMENTUM = false;
 
 /**
  * How many Attack Tests one Attack action rolls (02 §6).
@@ -100,8 +124,10 @@ export const EXTRA_ATTACK_ROLLS_BUILD_MOMENTUM = true;
  * The last two are the tool's rulings where 02 and 06 meet; the book says only
  * *two attacks each time you Attack*.
  */
-export function rollsPerAttack({ extraAttack = false, isOffHand = false, reaction = false, opposed = false } = {}) {
-  if (isOffHand || reaction || opposed) return 1;
+export function rollsPerAttack({ extraAttack = false, isOffHand = false, reaction = false, opposed = false, triggered = false } = {}) {
+  // **A TRIGGERED ATTACK IS ONE ROLL** (R6, D-1864): *an attack a talent grants on a trigger is one
+  // attack, not doubled by Extra Attack* - Flurry, Beast Frenzy, Return Stroke, Sic 'Em.
+  if (isOffHand || reaction || opposed || triggered) return 1;
   return extraAttack ? ROLLS_PER_EXTRA_ATTACK : 1;
 }
 
@@ -266,6 +292,14 @@ export function freshTurn({ extraAttack = false, freeMove = 0, halfActions = nul
     // attacking is whether there is anything to ride. It is not a limit and
     // nothing refuses on it.
     attacked: false,
+    // **THE TURN'S MAIN-HAND ATTACKS** (R6, D-1864): `spend` refuses a third. Written 0 here
+    // because the turn's reset MERGES into the stored budget (`AzerothCombatant#resetBudget`),
+    // so a count `freshTurn` did not name would outlive the turn that made it.
+    attacks: 0,
+    // **WHAT EACH HALF-ACTION PAID FOR, IN ORDER** (the class talent audit's final review): one entry
+    // for each Half-Action `spend` took (`PAID_KINDS`), so the GM's undo (`restore`) gives an Attack back
+    // only where the Half-Action it puts back bought one. Written in the same budget write as the spend.
+    paidFor: [],
     // Moves that cost no Half-Action. `AzerothCombatant#_freeMoves` is what
     // decides there is one, off the features the actor holds and whether the
     // combatant has acted yet; this only carries the number.
@@ -381,6 +415,14 @@ export function spend(budget, cost, { isAttack = false, isOffHand = false, isMov
     return { ok: false, reason: BUDGET_REFUSALS.offHandSpent, params: {}, budget };
   }
 
+  // **NEVER A THIRD ATTACK** (05 §10; R6, D-1864): a main-hand Attack bought with the turn's
+  // Half-Actions counts one for each Half-Action it costs, and the count stops at two whatever a
+  // grant has added to the Half-Actions. Judged below, once the Half-Actions are known to be
+  // there: a turn with none left is refused for want of them, as D-711 always was.
+  const counts = isAttack && !isOffHand && cost !== "reaction";
+  const slots = counts ? (cost === "full" ? 2 : 1) : 0;
+  const made = attacksMade(budget);
+
   // A free Move is spent before the Half-Actions (02 §7's Sprint, D-712).
   const free = isMove ? Math.min(halves, freeMovesLeft(budget)) : 0;
   const owed = halves - free;
@@ -419,6 +461,11 @@ export function spend(budget, cost, { isAttack = false, isOffHand = false, isMov
     return { ok: false, reason: BUDGET_REFUSALS.fullTakesReaction, params: {}, budget };
   }
 
+  // R6 (D-1864): the Half-Actions are there, and only a grant put them there - a third Attack.
+  if (counts && made + slots > ATTACKS_PER_TURN) {
+    return { ok: false, reason: BUDGET_REFUSALS.attackLimit, params: { n: ATTACKS_PER_TURN }, budget };
+  }
+
   return {
     ok: true,
     reason: null,
@@ -439,6 +486,13 @@ export function spend(budget, cost, { isAttack = false, isOffHand = false, isMov
       // walked past. The card draws no button for a Reaction's blow either, and
       // this is the rule behind that.
       attacked: budget.attacked === true || (isAttack && !isOffHand && cost !== "reaction"),
+      // The turn's main-hand Attacks (R6, D-1864), written only where one was bought, so a budget
+      // that has made none is written exactly as before.
+      ...(counts ? { attacks: made + slots } : {}),
+      // What each Half-Action owed paid for (the final review), where the budget holds the record.
+      ...("paidFor" in (budget ?? {}) && owed > 0 && cost !== "reaction"
+        ? { paidFor: [...paidList(budget), ...paidEntries(owed, slots, isAttack && isOffHand ? PAID_KINDS.offHand : isMove ? PAID_KINDS.move : PAID_KINDS.other)] }
+        : {}),
       // The at-once allowance, where the budget holds the key: spent first by a
       // spend outside the turn, and never more than the Half-Actions left. A budget
       // that never had one is written exactly as before.
@@ -447,6 +501,62 @@ export function spend(budget, cost, { isAttack = false, isOffHand = false, isMov
       } : {})
     }
   };
+}
+
+/**
+ * **WHAT A HALF-ACTION PAID FOR** (the class talent audit's final review), one entry a Half-Action on the
+ * budget's `paidFor`: `attack` for each Half-Action an Attack COUNTED (`attacks`), `offHand` for a lone off-hand
+ * blow that paid for itself, `move` for a Move, `other` for anything else - and for the Half-Action an Attack
+ * bought with an action took beyond the one it counts.
+ */
+export const PAID_KINDS = Object.freeze({ attack: "attack", offHand: "offHand", move: "move", other: "other" });
+
+/** The budget's `paidFor`, each entry a known kind. */
+function paidList(budget) {
+  const kinds = Object.values(PAID_KINDS);
+  return (Array.isArray(budget?.paidFor) ? budget.paidFor : []).filter(k => kinds.includes(k));
+}
+
+/**
+ * The entries one spend adds: `owed` Half-Actions, the last `slots` of them the Attack it counted.
+ *
+ * @param {number} owed   Half-Actions the spend took
+ * @param {number} slots  Attacks it counted (`spend`'s `slots`)
+ * @param {string} kind   what the rest paid for
+ */
+function paidEntries(owed, slots, kind) {
+  const n = Math.max(0, Math.trunc(Number(owed)) || 0);
+  const attacks = Math.min(n, Math.max(0, Math.trunc(Number(slots)) || 0));
+  return [...Array(n - attacks).fill(kind), ...Array(attacks).fill(PAID_KINDS.attack)];
+}
+
+/**
+ * The main-hand Attacks a turn's budget has bought (R6, D-1864): 0 where it holds no count.
+ *
+ * @param {object|null} budget
+ * @returns {number}
+ */
+export function attacksMade(budget) {
+  return Math.max(0, Math.trunc(Number(budget?.attacks)) || 0);
+}
+
+/**
+ * **A READIED ATTACK PAST THE TURN'S TWO** (R6; the wave 1 review): a readied action the Ready door
+ * recorded as an Attack (`entry.attack`, the readier's own tick in the Ready dialog,
+ * `rules/reactions.mjs#readyEntry`) is judged as one before the Reaction is spent - on the readier's
+ * budget with the readied Half-Action handed back at once, as `takeReadied` will hand it. The refusal
+ * key, or null. **The words are never read for meaning** (the class talent audit's final review): an
+ * entry not marked an Attack is never refused here, whatever it says, and one marked so is judged
+ * whatever it says.
+ *
+ * @param {object|null} budget  the readier's budget now
+ * @param {{attack?: boolean}|null} [entry]  the Ready's stored entry
+ * @returns {string|null}
+ */
+export function readiedAttackRefusal(budget, entry = null) {
+  if (entry?.attack !== true) return null;
+  const judged = spend(grantAtOnce(budget ?? freshTurn(), 1), "half", { isAttack: true, onTurn: false });
+  return judged.ok || judged.reason !== BUDGET_REFUSALS.attackLimit ? null : judged.reason;
 }
 
 /**
@@ -594,6 +704,11 @@ export function withReactionBack(budget) {
  * Half-Action, and it refuses rather than silently doing nothing — a control
  * that greys out with no words is the fault this system keeps fixing.
  *
+ * **The Half-Action put back is the LAST one spent** (the class talent audit's final review): `paidFor` says
+ * what it paid for, and only where that was an Attack does the turn's Attack count go back with it - an Attack
+ * then a Move, undone once, undoes the Move and leaves the Attack made. A budget with no record (one written
+ * before the record existed, until its next turn's reset) gives no Attack back.
+ *
  * @param {object} budget
  * @param {"half"|"reaction"} cost
  */
@@ -602,9 +717,15 @@ export function restore(budget, cost) {
     if ((budget?.halfActions ?? 0) >= HALF_ACTIONS_PER_TURN) {
       return { ok: false, reason: BUDGET_REFUSALS.nothingToRestore, params: {}, budget };
     }
+    const paid = paidList(budget);
+    const undone = paid.length ? paid[paid.length - 1] : null;
+    const attacks = undone === PAID_KINDS.attack && attacksMade(budget) > 0 ? { attacks: attacksMade(budget) - 1 } : {};
     return {
       ok: true, reason: null, params: null,
-      budget: { ...budget, halfActions: Math.min(HALF_ACTIONS_PER_TURN, (budget.halfActions ?? 0) + 1) }
+      budget: {
+        ...budget, halfActions: Math.min(HALF_ACTIONS_PER_TURN, (budget.halfActions ?? 0) + 1), ...attacks,
+        ...("paidFor" in budget ? { paidFor: paid.slice(0, -1) } : {})
+      }
     };
   }
   if (cost === "reaction") {

@@ -334,10 +334,16 @@ export const WEAPON_WORDS = Object.freeze([
 export const CREATURE_HEADS = Object.freeze([
   // A dragonling's *Flame jet* (D-781) is a jet of fire at range, as a Searing
   // Totem's flame is.
-  ["firebolt", ["firebolt", "searing flame", "lava lash", "flame jet"]],
-  ["shard", ["nether shard"]],
+  // Ragnaros' *Magma blast* and Zul'jin's *Dragonhawk flame* (14's phase 1, D-1785) are fire at
+  // range; the Water Elemental's *Waterbolt* is a cold bolt, the ice shard's picture.
+  // The 902-entry bestiary (D-1825): Lord Incendius' and Emberseer's *Flame lash* is Ragnaros'
+  // Lava lash in another fire, and Lord Roccor's *Hurled magma* is fire at range; Ouro's and the
+  // Twilight Geolord's *Hurled boulder* is the boulder, and Sneed's Shredder's *Buzz saw* the saw.
+  ["firebolt", ["firebolt", "searing flame", "lava lash", "flame jet", "magma blast", "dragonhawk flame", "flame lash", "hurled magma"]],
+  ["shard", ["nether shard", "waterbolt"]],
   ["shock", ["shock", "thunderstrike"]],
-  ["saw", ["saw arm", "thresher arm"]],
+  ["saw", ["saw arm", "thresher arm", "buzz saw"]],
+  ["boulder", ["hurled boulder"]],
   ["net", ["web"]],
   ["pincer", ["grapple claw"]],
   ["club", ["rifle butt"]]
@@ -361,13 +367,17 @@ export const CREATURE_HEADS = Object.freeze([
 export const CREATURE_WORDS = Object.freeze([
   ["pincer", ["pincer", "pincers"]],
   // A *Peck* is a beak's strike (the Gnomish Battle Chicken, D-781).
-  ["bite", ["bite", "bites", "jaws", "beak", "fangs", "peck"]],
-  ["claw", ["claw", "claws", "foreclaws", "talons"]],
+  // The 902-entry bestiary (D-1825): a silithid's *Mandibles*, a ghoul's *Teeth* and Ouro's
+  // *Maw* bite; a bear's *paw* and a spider's *Legs* and *Forelegs* claw; an ancient's
+  // *Crushing limbs* and an ooze's *Toxic slap* slam; Vem's *Horn* gores; Loatheb's *Rotting
+  // tendrils* and Viscidus' *Pseudopod* are tentacles.
+  ["bite", ["bite", "bites", "jaws", "beak", "fangs", "peck", "mandibles", "teeth", "maw"]],
+  ["claw", ["claw", "claws", "foreclaws", "talons", "paw", "legs", "forelegs"]],
   ["sting", ["sting", "stinger"]],
   ["shield", ["shield"]],
-  ["slam", ["slam", "fist", "fists", "buffet", "hooves", "stamp", "backhand", "wave", "tail", "head butt", "headbutt", "butt"]],
-  ["gore", ["horns", "antlers", "tusks"]],
-  ["tentacle", ["tentacle", "tentacles", "coils", "tendril"]],
+  ["slam", ["slam", "fist", "fists", "buffet", "hooves", "stamp", "backhand", "wave", "tail", "head butt", "headbutt", "butt", "limbs", "slap"]],
+  ["gore", ["horns", "antlers", "tusks", "horn"]],
+  ["tentacle", ["tentacle", "tentacles", "coils", "tendril", "tendrils", "pseudopod"]],
   ["touch", ["touch", "grasp"]],
   ["unarmed", ["kick", "hands"]]
 ]);
@@ -392,7 +402,58 @@ export const CREATURE_NAMED = Object.freeze({
   "ironfoe's return": "warhammer",
   "kick": "slam",
   "sul'thraze": "greatsword",
-  "sulfuras": "maul"
+  "sulfuras": "maul",
+  // **THE 902-ENTRY BESTIARY'S ROWS** (D-1825), each read by its whole name because a word
+  // table would also read a weapon in the packs. A named weapon takes the subclass the Classic
+  // record gives it (`tools/classic/classic-loot.json`): Nordic Longshank and Demonshear are
+  // swords, Herod's Ravager and Mr. Smite's reavers axes, Galgann's Firehammer a mace and his
+  // Fireblaster a gun, Fineous Darkvire's Ironfel a mace. The rest are the plainest stand-in:
+  // blades in a pair are swords, a sabre and a machete scimitars, a shank a dagger, a shovel a
+  // staff, a cask and a cobra's spit a flask's arc and splash, a thrown stone the thrown hammer,
+  // a gauntlet, a boot, knuckles and an open hand unarmed, a water lash a tentacle as a vine
+  // lash is, and Grubbis' Heavy *Strike* the trogg's club.
+  "ale cask": "flask",
+  "baleful glare": "shard",
+  "battleguard blades": "sword",
+  "belaying pin": "club",
+  "bladed forearms": "claw",
+  "boneslicer": "sword",
+  "colonel's sabre": "scimitar",
+  "cookie's tenderizer": "mace",
+  "corrupted ashbringer": "greatsword",
+  "curved blades": "scimitar",
+  "debt collector": "club",
+  "demonshear": "greatsword",
+  "draining blow": "touch",
+  "galgann's fireblaster": "bullet",
+  "galgann's firehammer": "mace",
+  "garrote wire": "whip",
+  "gauntlet": "unarmed",
+  "gnoll punisher": "mace",
+  "graverobber's shovel": "quarterstaff",
+  "iron boot": "unarmed",
+  "iron knuckles": "unarmed",
+  "ironfel": "mace",
+  "jungle machete": "scimitar",
+  "lashing blades": "sword",
+  "mining shovel": "quarterstaff",
+  "nordic longshank": "sword",
+  "open hand": "unarmed",
+  "paired blades": "sword",
+  "paired reavers": "axe",
+  "poisoned blades": "sword",
+  "prison shank": "dagger",
+  "ravager": "greataxe",
+  "reaping arm": "scythe",
+  "shard strike": "slam",
+  "spit": "flask",
+  "strike": "club",
+  "table leg": "club",
+  "thrown knives": "dagger",
+  "thrown stone": "thrown-hammer",
+  "twin swords": "sword",
+  "water lash": "tentacle",
+  "zath's blades": "sword"
 });
 
 /**
@@ -536,7 +597,7 @@ function modeIn(modes, mode) {
  * D-531: *melee is assumed; anything further names its distance* - and a block
  * that names a row *Thrown dagger* has said which blow it is. VanCleef and
  * Zul'jin each print a separate melee row at a different Damage Rating, and
- * Zul'jin a *Throw the Axe* Boss Action besides, so reading the form alone
+ * Zul'jin a *Throw the Axe* Boss Action besides (until 14's phase 1 pass), so reading the form alone
  * let the throw stab and invented an attack neither block prints.
  *
  * @param {{name?: string, traits?: string[], range?: number|null}} row

@@ -880,8 +880,9 @@ AZEROTH.auraCentres = ["self", "boundDemon", "boundTotem"];
 // for the spell's laid effect. `rules/auras.mjs#auraGateOpen` reads the part
 // before the colon, and a kind outside this list fails closed. `sustain:<identifier>`
 // (the Legacy branches' door 12: 04's Big Bad Voodoo, *While you Sustain it*) is a
-// Sustain entry of that identifier the holder holds.
-AZEROTH.auraGates = ["shield", "spell", "sustain"];
+// Sustain entry of that identifier the holder holds. `notForm` (04's Heart of the Grove,
+// the class talent audit, D-1892) holds while the holder wears no Shapeshift form.
+AZEROTH.auraGates = ["shield", "spell", "sustain", "notForm"];
 
 // WHY A SIGNATURE IS STILL PROSE, in `abilityReasons`' shape (D-691). A kind
 // of `none` with no reason is a Signature nobody has read; a reason is one
@@ -1012,7 +1013,10 @@ AZEROTH.untilKinds = {
   minute: "AZEROTH.Until.Minute",
   // *Until the end of the round* (14's Arcane Breath, Enfeeble, Amani Fury; D-809): core's
   // `roundEnd` expiry (`effects/durations.mjs#untilEndOfRound`).
-  endOfRound: "AZEROTH.Until.EndOfRound"
+  endOfRound: "AZEROTH.Until.EndOfRound",
+  // *Until the end of ITS next turn* - the creature's own (04's Shadowfury and Shattering Cold; the
+  // class talent audit, D-1891, D-1890): held to the world's clock out of a fight (D-778).
+  targetTurnEnd: "AZEROTH.Until.TargetTurnEnd"
 };
 // A creature's two pools, by kind: the block names no type (D-637).
 AZEROTH.npcPoolKinds = { momentum: "AZEROTH.Momentum.Label", power: "AZEROTH.Sheet.Power" };

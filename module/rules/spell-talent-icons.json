@@ -5391,14 +5391,68 @@
     "previousIcons": [],
     "reason": "An ascension: the Sovereign sheds a condition beneath its notice."
   },
-  "talent:absolute-zero": {
-    "name": "Absolute Zero",
+  "talent:divine-favor": {
+    "name": "Divine Favor",
+    "source": "04-TALENTS",
+    "icon": "spell_holy_heal",
+    "previousIcons": [
+      "spell_holy_divinehymn"
+    ],
+    "reason": "Divine Favor is a different talent under its old identifier (the class talent audit, D-1875): Classic's own Divine Favor icon, for a Holy heal cast as a Half-Action."
+  },
+  "talent:fervor": {
+    "name": "Fervor",
+    "source": "04-TALENTS",
+    "icon": "spell_holy_divinepurpose",
+    "previousIcons": [
+      "spell_holy_divinepurpose"
+    ],
+    "reason": "Fervor (the class talent audit's Benediction, D-1875): divine purpose is the Zeal a Holy heal kindles."
+  },
+  "talent:healing-hands": {
+    "name": "Healing Hands",
+    "source": "04-TALENTS",
+    "icon": "spell_holy_heal02",
+    "previousIcons": [
+      "spell_holy_heal02"
+    ],
+    "reason": "Healing Hands (the class talent audit's Benediction, D-1875): the open hands of the Light are the Holy heals and Lay on Hands it strengthens."
+  },
+  "talent:mending-word": {
+    "name": "Mending Word",
+    "source": "04-TALENTS",
+    "icon": "spell_holy_flashheal",
+    "previousIcons": [
+      "spell_holy_flashheal"
+    ],
+    "reason": "Mending Word (the class talent audit's Benediction, D-1875): the quick flash of the Light is the Half-Action's heal on a friend."
+  },
+  "talent:mercy-of-uther": {
+    "name": "Mercy of Uther",
+    "source": "04-TALENTS",
+    "icon": "spell_holy_restoration",
+    "previousIcons": [
+      "spell_holy_restoration"
+    ],
+    "reason": "Mercy of Uther (the class talent audit's Benediction capstone, D-1875): restoration is Lay on Hands making the creature whole and ending its condition."
+  },
+  "talent:overpower": {
+    "name": "Overpower",
+    "source": "04-TALENTS",
+    "icon": "ability_warrior_punishingblow",
+    "previousIcons": [
+      "ability_parry"
+    ],
+    "reason": "Overpower replaces Bladeturn (the class talent audit, D-1870): the punishing blow is the strike that answers a miss, a Parry or a Block."
+  },
+  "talent:shattering-cold": {
+    "name": "Shattering Cold",
     "source": "04-TALENTS",
     "icon": "spell_frost_arcticwinds",
     "previousIcons": [
       "spell_frost_arcticwinds"
     ],
-    "reason": "Align with the named Absolute Zero spell: The art is a blue spiral of icy wind. Absolute Zero describes cold so complete it becomes its absence; the frozen vortex communicates the spell’s subject."
+    "reason": "Retain the arctic winds: the capstone punishes creatures the mage has already slowed or rooted with deeper cold."
   },
   "talent:absorption": {
     "name": "Absorption",
@@ -5433,15 +5487,6 @@
       "spell_holy_arcaneintellect"
     ],
     "reason": "Replace: Arcane Intellect is an abstract blue arcane knot, not protection. The inspected Power Word: Shield image is a clear shield, matching universal Ward that cannot be removed."
-  },
-  "talent:aegis-of-the-light": {
-    "name": "Aegis of the Light",
-    "source": "04-TALENTS",
-    "icon": "spell_holy_powerwordshield",
-    "previousIcons": [
-      "spell_holy_ashestoashes"
-    ],
-    "reason": "Align with the named Aegis of the Light spell: The old art is a blue arcane knot, not a protective shape. The spell lays the Light between a whole company and incoming harm; the replacement visibly depicts a shield held in front of its bearer."
   },
   "talent:afterimage": {
     "name": "Afterimage",
@@ -5507,14 +5552,15 @@
     ],
     "reason": "Retain: the multi-totem spirit image reads as a group return from death, matching the long-rest resurrection effect."
   },
-  "talent:ancestral-tide": {
-    "name": "Ancestral Tide",
+  "talent:tide-of-the-ancestors": {
+    "name": "Tide of the Ancestors",
     "source": "04-TALENTS",
-    "icon": "spell_nature_ancestralguardian",
+    "icon": "ability_shaman_healingtide",
     "previousIcons": [
+      "spell_nature_ancestralguardian",
       "spell_nature_acid_01"
     ],
-    "reason": "Align with the named Ancestral Tide spell: The old art is a green magical burst, with no ancestral presence. Ancestral Tide calls the shamans who came before; the replacement shows an ancestral, totemlike spirit emblem."
+    "reason": "Tide of the Ancestors replaces Ancestral Tide (the class talent audit, D-1887): the healing tide totem is the totem the capstone sets."
   },
   "talent:anchor": {
     "name": "Anchor",
@@ -5589,14 +5635,15 @@
     ],
     "reason": "Retain: the bright arcane orb depicts a short-lived spell damage surge, the exact effect granted here."
   },
-  "talent:archmage": {
-    "name": "Archmage",
+  "talent:master-of-the-weave": {
+    "name": "Master of the Weave",
     "source": "04-TALENTS",
     "icon": "spell_arcane_arcanetactics",
     "previousIcons": [
-      "spell_arcane_arcane03"
+      "spell_arcane_arcane03",
+      "spell_arcane_arcanetactics"
     ],
-    "reason": "Align with the named Archmage spell: A robed mage silhouette stands above a group. Archmage names a caster’s attained mastery, and the image clearly identifies a powerful mage."
+    "reason": "Retain the robed archmage over a gathering: the capstone is a mage's mastery of many woven spells at once."
   },
   "talent:arclight-spanner": {
     "name": "Arclight Spanner",
@@ -5730,15 +5777,6 @@
       "ability_druid_bash"
     ],
     "reason": "Retain: the druid strike image matches the melee hit that removes a target’s Reaction and may knock it Prone."
-  },
-  "talent:beacon": {
-    "name": "Beacon",
-    "source": "04-TALENTS",
-    "icon": "ability_paladin_beaconoflight",
-    "previousIcons": [
-      "spell_holy_auraoflight"
-    ],
-    "reason": "Replace: the assigned Aura of Light art is a purple gem. The inspected Beacon of Light image shows a radiant figure, matching the chosen healing beacon."
   },
   "talent:beast-frenzy": {
     "name": "Beast Frenzy",
@@ -5891,15 +5929,6 @@
     ],
     "reason": "Retain: the warrior whirlwind image is an exact fit for the moving multi-target attack."
   },
-  "talent:bladeturn": {
-    "name": "Bladeturn",
-    "source": "04-TALENTS",
-    "icon": "ability_parry",
-    "previousIcons": [
-      "ability_warrior_bladestorm"
-    ],
-    "reason": "Replace: the assigned Bladestorm whirlwind implies an attack. The crossed blades in Parry depict the free Parry that this talent grants."
-  },
   "talent:blast-radius": {
     "name": "Blast Radius",
     "source": "02-CHARACTER-OPTIONS",
@@ -5970,14 +5999,15 @@
     "previousIcons": [],
     "reason": "Blood-Queen Lana'thel, whose winged form the Blood Monarch takes."
   },
-  "talent:blood-pact": {
-    "name": "Blood Pact",
+  "talent:dark-pact": {
+    "name": "Dark Pact",
     "source": "04-TALENTS",
-    "icon": "spell_fel_incinerate",
+    "icon": "spell_shadow_darkritual",
     "previousIcons": [
-      "spell_shadow_abominationexplosion"
+      "spell_shadow_abominationexplosion",
+      "spell_fel_incinerate"
     ],
-    "reason": "Align with the named Blood Pact spell: A green demon burns inside the image. Blood Pact takes mana from a demon and leaves it alive, so the demonic subject fits the spell’s source."
+    "reason": "Classic Dark Pact's own art: the warlock draws power out of a bound demon."
   },
   "talent:blood-rush": {
     "name": "Blood Rush",
@@ -6249,14 +6279,14 @@
     ],
     "reason": "The gold coin marks a costly trade contact in any port."
   },
-  "talent:cataclysm": {
-    "name": "Cataclysm",
+  "talent:shadowfury": {
+    "name": "Shadowfury",
     "source": "04-TALENTS",
-    "icon": "ability_deathwing_cataclysm",
+    "icon": "spell_shadow_shadowfury",
     "previousIcons": [
       "ability_deathwing_cataclysm"
     ],
-    "reason": "Align with the named Cataclysm spell: The art shows a fiery break in the land. Cataclysm is the destructive spell that broke Draenor, so the scorched terrain conveys its scale."
+    "reason": "Classic Shadowfury's own art: a burst of shadow that stuns the creatures it strikes."
   },
   "talent:cauterize": {
     "name": "Cauterize",
@@ -6267,14 +6297,15 @@
     ],
     "reason": "Retain: the blue flame depicts the fire that prevents death and burns nearby enemies."
   },
-  "talent:celestial-alignment": {
-    "name": "Celestial Alignment",
+  "talent:celestial-focus": {
+    "name": "Celestial Focus",
     "source": "04-TALENTS",
     "icon": "spell_arcane_starfire",
     "previousIcons": [
-      "spell_nature_agitatingtotem"
+      "spell_nature_agitatingtotem",
+      "spell_arcane_starfire"
     ],
-    "reason": "Replace: the assigned Agitating Totem image is a red-orange eye. The starfire image depicts the celestial Arcane and Nature alignment this talent names."
+    "reason": "Retain the starfire: the capstone deepens Eclipse's bonus between Arcane and Nature."
   },
   "talent:chain-heal": {
     "name": "Chain Heal",
@@ -6866,15 +6897,6 @@
     ],
     "reason": "Replace: Bluefire Ward depicts a shield. The Fel fire blast depicts the increased damage across Fire, Fel, and Shadow spells."
   },
-  "talent:devotion": {
-    "name": "Devotion",
-    "source": "04-TALENTS",
-    "icon": "spell_holy_devotion",
-    "previousIcons": [
-      "spell_holy_devotion"
-    ],
-    "reason": "Retain: the holy devotion emblem depicts the healing power this talent adds to restorative features."
-  },
   "talent:devouring-plague": {
     "name": "Devouring Plague",
     "source": "04-TALENTS",
@@ -6928,15 +6950,6 @@
       "spell_holy_blessedresillience"
     ],
     "reason": "Replace: The proposed gold starburst suggests healing, not the Ward gained after full healing. A gold protective figure within a bright aura depicts the new Ward."
-  },
-  "talent:divine-favor": {
-    "name": "Divine Favor",
-    "source": "04-TALENTS",
-    "icon": "spell_holy_divinehymn",
-    "previousIcons": [
-      "spell_holy_blessingofagility"
-    ],
-    "reason": "Replace: Blessing of Agility depicts movement. The sacred hymn image better matches this talent reducing the Mana cost of healing features."
   },
   "talent:divine-providence": {
     "name": "Divine Providence",
@@ -8163,15 +8176,6 @@
     ],
     "reason": "The foaming drink depicts the drinking contest that produces an unguarded confession."
   },
-  "talent:holy-guidance": {
-    "name": "Holy Guidance",
-    "source": "04-TALENTS",
-    "icon": "spell_holy_holyguidance",
-    "previousIcons": [
-      "spell_holy_holyguidance"
-    ],
-    "reason": "Retain: the golden guidance image matches increased Health restoration from healing features."
-  },
   "talent:holy-shield": {
     "name": "Holy Shield",
     "source": "04-TALENTS",
@@ -8679,15 +8683,6 @@
       "spell_holy_lightsgrace"
     ],
     "reason": "Retain: the Light’s Grace image depicts the named healing effect granting temporary Health."
-  },
-  "talent:lights-reserve": {
-    "name": "Light's Reserve",
-    "source": "04-TALENTS",
-    "icon": "spell_holy_crusaderaura",
-    "previousIcons": [
-      "spell_holy_crusaderaura"
-    ],
-    "reason": "Retain: the crusader aura image depicts a restorative reserve, matching Mana returned during a drink break."
   },
   "talent:lightwell": {
     "name": "Lightwell",
@@ -10377,14 +10372,15 @@
     ],
     "reason": "Align with the named Soul Link spell: A violet chain joins two figures. Soul Link shares harm between its two participants, matching the visible connection."
   },
-  "talent:soul-reaper": {
-    "name": "Soul Reaper",
+  "talent:dark-harvest": {
+    "name": "Dark Harvest",
     "source": "04-TALENTS",
     "icon": "spell_shadow_deathcoil",
     "previousIcons": [
-      "spell_shadow_corpseexplode"
+      "spell_shadow_corpseexplode",
+      "spell_shadow_deathcoil"
     ],
-    "reason": "Replace: The proposed cyan silhouettes signal detecting hidden creatures, not killing and reaping Health. A green soul-like figure amid death magic fits the kill that restores Health."
+    "reason": "Retain the death coil: the capstone reaps shadow from every creature carrying the warlock's afflictions."
   },
   "talent:soul-swap": {
     "name": "Soul Swap",
@@ -10537,14 +10533,15 @@
     ],
     "reason": "Retain: the storm and lightning image matches the thrown attack’s added Fire damage."
   },
-  "talent:storm-earth-and-fire": {
-    "name": "Storm, Earth and Fire",
+  "talent:eye-of-the-storm": {
+    "name": "Eye of the Storm",
     "source": "04-TALENTS",
-    "icon": "spell_shaman_stormearthfire",
+    "icon": "spell_nature_eyeofthestorm",
     "previousIcons": [
+      "spell_shaman_stormearthfire",
       "ability_demonhunter_chaoticimprint_fire"
     ],
-    "reason": "Replace: Chaotic Imprint Fire shows a single demonic fire imprint. The inspected Storm, Earth and Fire icon shows lightning striking scorched earth, a closer visual for the three summoned elemental forces."
+    "reason": "Eye of the Storm replaces Storm, Earth and Fire (the class talent audit, D-1886): the eye of a storm is the Sustain's lightning at the start of each turn."
   },
   "talent:storm-of-ages": {
     "name": "Storm of Ages",
@@ -10609,14 +10606,15 @@
     ],
     "reason": "Replace: Endless Rage depicts a raging warrior. Sunder depicts the armor-breaking action whose Rage cost this talent reduces."
   },
-  "talent:sunfire": {
-    "name": "Sunfire",
+  "talent:pyromaniac": {
+    "name": "Pyromaniac",
     "source": "04-TALENTS",
     "icon": "spell_fire_felflamering_red",
     "previousIcons": [
-      "spell_fire_burnout"
+      "spell_fire_burnout",
+      "spell_fire_felflamering_red"
     ],
-    "reason": "Align with the named spell: a white-hot orange sunburst depicts Fire damage across a wide area."
+    "reason": "Retain the ring of flame: the capstone is Ignite made fiercer and fire that burns through a burning target's wards."
   },
   "talent:sunwells-loss": {
     "name": "Sunwell's Loss",
@@ -11129,14 +11127,14 @@
     ],
     "reason": "Replace: Cobra Shot depicts a venomous projectile. The ice trap image directly represents setting the Snare feature."
   },
-  "talent:tree-of-life": {
-    "name": "Tree of Life",
+  "talent:heart-of-the-grove": {
+    "name": "Heart of the Grove",
     "source": "04-TALENTS",
     "icon": "ability_druid_treeoflife",
     "previousIcons": [
       "ability_druid_treeoflife"
     ],
-    "reason": "Align with the named Tree of Life spell: A luminous green leaf curls across the frame. Tree of Life is a druidic life form, matching the living plant motif."
+    "reason": "Retain the tree of life: the capstone shelters every ally carrying the druid's healing."
   },
   "talent:trolls-blood": {
     "name": "Troll's Blood",
@@ -11206,6 +11204,15 @@
       "inv_misc_head_02"
     ],
     "reason": "The two-headed ogre face fits the ogre-magi pair debating a Casting Test."
+  },
+  "talent:twofold-light": {
+    "name": "Twofold Light",
+    "source": "04-TALENTS",
+    "icon": "spell_holy_blessedrecovery",
+    "previousIcons": [
+      "spell_holy_healingaura"
+    ],
+    "reason": "Twofold Light (the class talent audit's Benediction, D-1875): a blessed recovery is Mending Word's heal reaching a second friend; spell_holy_healingaura is the Chromatic Champion's Lifeblood's own."
   },
   "talent:typhoon": {
     "name": "Typhoon",
@@ -11411,14 +11418,15 @@
     ],
     "reason": "Replace: Dismantle depicts taking a weapon apart. Deadly Brew depicts the poisons and their added resistance penalty."
   },
-  "talent:void-eruption": {
-    "name": "Void Eruption",
+  "talent:herald-of-the-void": {
+    "name": "Herald of the Void",
     "source": "04-TALENTS",
-    "icon": "spell_shadow_shadowfury",
+    "icon": "ability_priest_darkarchangel",
     "previousIcons": [
+      "spell_shadow_shadowfury",
       "spell_shadow_cripple"
     ],
-    "reason": "Replace: Cripple depicts a slowing effect. Shadowfury depicts the large area burst and silence of Void Eruption."
+    "reason": "Herald of the Void replaces Void Eruption (the class talent audit, D-1885): the dark archangel is the priest given over to the Void for a minute."
   },
   "talent:void-surge": {
     "name": "Void Surge",

@@ -326,10 +326,11 @@ export function leaveFightPools(pools = [], { keepsZeal = false } = {}) {
 }
 
 /**
- * 04's Killing Blow: *When you reduce a target below half Health, gain 6 Rage.*
- * The Rage the ATTACKER gains for one blow, or 0 (D-627, D-768).
+ * 04's Killing Blow: *When you reduce a target below half Health, gain 3 Rage* (the class
+ * talent audit's T2, D-1870; it was 6). The Rage the ATTACKER gains for one blow, or 0
+ * (D-627, D-768).
  */
-export const KILLING_BLOW_RAGE = 6;
+export const KILLING_BLOW_RAGE = 3;
 export function killingBlowRage({ before = 0, after = 0, max = 0, ranks = 0 } = {}) {
   if (!(Number(ranks) > 0)) return 0;
   return before >= max / 2 && after < max / 2 ? KILLING_BLOW_RAGE : 0;
@@ -389,8 +390,10 @@ export function unkillableFloor({ before = 0, amount = 0, rage = 0, holds = fals
 }
 
 /**
- * A pool's cap with the talents that lift it (04): Zealotry caps Zeal at 15,
- * Hunter's Mark adds 2 Quarry a rank. `ranks` is a name-to-ranks lookup.
+ * A pool's cap with the talents that lift it (04): Zealotry caps Zeal at 15. `ranks` is a
+ * name-to-ranks lookup. **Hunter's Mark no longer lifts the Quarry cap** (the class talent
+ * audit, D-1870: *Your attacks against your marked target add 1 to their damage per rank* -
+ * a damage line gated on the `quarried` fact, `talent-effects.mjs`).
  *
  * **Sand's cap is the Hourglass's** (08 §9, D-848): `hourglass` is the one in the
  * Ranged slot (`sand.mjs#equippedHourglass`), and with none the cap is 0 - the
@@ -415,6 +418,5 @@ export function capFor(pool, ranks = () => 0, { hourglass = null, chaMod = 0, co
   if (pool?.name === ESSENCE) return essenceCap(conMod);
   const max = pool?.max ?? 0;
   if (pool?.name === "zeal" && ranks("Zealotry") > 0) return 15;
-  if (pool?.name === "quarry") return max + 2 * Math.max(0, ranks("Hunter's Mark"));
   return max;
 }

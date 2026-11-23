@@ -29,11 +29,36 @@ import { actorRevealedByMobileFlare } from "./mobile-alert-visibility.mjs";
 import { CONCEAL_FLAG, concealEnds } from "../rules/legacy-uses.mjs";
 // What keeps a Hide standing through an action (04's Master of Shadows and
 // Shadow Dance, D-773).
-import { keepsHidden } from "../rules/class-talents.mjs";
+import { SHADOWS_FLAG, keepsHidden } from "../rules/class-talents.mjs";
 import { dancing } from "./talent-states.mjs";
 import { endNpcSneak } from "./npc-sneak.mjs";
 import { refuseIceBlockTarget } from "./ice-block-protection.mjs";
 import { endEquipmentInvisibility } from "./equipment-travel.mjs";
+
+/**
+ * **04's MASTER OF SHADOWS' MINUTE STANDS** (*for one minute taking actions while hidden
+ * does not make you visible*; the class talent audit's B10, D-1882): the state its Use laid.
+ */
+export function shadowsStanding(actor) {
+  return (actor?.effects ?? []).some(e => e.active !== false && e.flags?.["azeroth-rpg"]?.[SHADOWS_FLAG]);
+}
+
+/**
+ * **TAKING DAMAGE DOES** (Master of Shadows' second sentence): a blow that dealt damage
+ * ends the minute and the Hide with it. Quiet where no minute stands or nothing was dealt.
+ *
+ * @param {Actor} actor
+ * @param {number} dealt  the Health the blow took
+ * @returns {Promise<boolean>}
+ */
+export async function shadowsEndOnDamage(actor, dealt = 0) {
+  if (!(Number(dealt) > 0) || !actor?.isOwner) return false;
+  const ids = (actor.effects ?? []).filter(e => e.flags?.["azeroth-rpg"]?.[SHADOWS_FLAG]).map(e => e.id);
+  if (!ids.length) return false;
+  await actor.deleteEmbeddedDocuments("ActiveEffect", ids.filter(id => actor.effects.has(id)));
+  await reveal(actor);
+  return true;
+}
 
 /** The flag that says this invisibility is a Hide and nothing else. */
 export const HIDDEN_FLAG = "hidden";
@@ -100,7 +125,7 @@ export async function reveal(actor, { force = false, acting = false, kind = null
   const concealmentEnded = acting && (kind === "attack" || kind === "cast") ? await endConcealments(actor, kind) : false;
   const ended = sneakEnded || concealmentEnded || equipmentEnded;
   if (!valid()) return ended;
-  if (acting && !force && (keepsHidden(actor.takenTalents?.() ?? []) || dancing(actor))) return ended;
+  if (acting && !force && (keepsHidden(actor.takenTalents?.() ?? []) || shadowsStanding(actor) || dancing(actor))) return ended;
   const ours = actor.getFlag?.("azeroth-rpg", HIDDEN_FLAG) === true;
   if (!ours && !force) return ended;
   if (isHidden(actor)) {

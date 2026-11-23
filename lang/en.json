@@ -1127,8 +1127,8 @@
     },
     "MobileAlert": {
       "Feedback": {
-        "warning": "The Mobile Alert System sounds its alarm. Nearby creatures that can hear it are alerted; the GM decides which respond. Interrupt the machine before its next turn to prevent the delayed sentries and flare.",
-        "arrival": "Two Mechanized Sentries have arrived. Each is a separate Tier 2 Elite and contributes 2 Threat Shares. The alarm can move and attack again.",
+        "warning": "The Mobile Alert System sounds its alarm. Nearby creatures that can hear it are alerted; the GM decides which respond. Interrupt the machine before its next turn to prevent the delayed guardians and flare.",
+        "arrival": "Two Mechanized Guardians have arrived. Each is a separate Tier 2 Elite and contributes 2 Threat Shares. The alarm can move and attack again.",
         "flare": "The alarm's flare ignites: bright light in a 20-foot radius for one minute. Creatures inside cannot benefit from hiding or invisibility. The flare continues burning if the alarm is destroyed."
       },
       "Charging": "This Mobile Alert System cannot move or attack while its alarm is charging. Resolve the alarm or have the GM review an interrupted operation first."
@@ -1545,6 +1545,8 @@
       "Begin": "Azeroth RPG | migrating world data to {version}",
       "Done": "Azeroth RPG | migration to {version} complete: {count} document(s) updated",
       "Failed": "Azeroth RPG | migration to {version} failed. See the console.",
+      "BestiaryAudit": "Migration 0.16.1.1 brought {creatures} creature(s) up to the 2026-11 bestiary. {kept} field(s) a GM had changed were kept as they are, and {unmatched} row(s) could not be matched. The console names each one.",
+      "BestiaryHealth": "Migration 0.16.2.4 raised the Health of {raised} creature(s) by a quarter, as the bestiary now prints it. {kept} creature(s) whose Health a GM had changed were kept as they are. The console names each one.",
       "LegacyTitles": "A Legacy is a talent branch now, and its ranks are gone. These characters held a Legacy title: {names}. Each keeps the Legacy item as lore, and a character of its people who holds its class has the branch on the Progress tab, untaken."
     },
     "School": {
@@ -1811,6 +1813,7 @@
     },
     "DeathWatch": {
       "NoAnswer": "{name}'s owner did not answer, so what a death gave {name} was not written ({reason}).",
+      "NoExposureAnswer": "{name}'s owner did not answer, so the exposure Test for the creature that put {name} down was not made ({reason}).",
       "SoulHarvest": "Soul Harvest: {name} gains {mana} Mana."
     },
     "Necromancer": {
@@ -3666,7 +3669,8 @@
       "CasterTurnStart": "until the start of the caster's next turn",
       "CasterTurnEnd": "until the end of the caster's next turn",
       "Minute": "for one minute",
-      "EndOfRound": "until the end of the round"
+      "EndOfRound": "until the end of the round",
+      "TargetTurnEnd": "until the end of its next turn"
     },
     "Swarm": {
       "Attack": "Swarm",
@@ -3699,11 +3703,15 @@
       "Held": "Held: {names}.",
       "InWorld": "in the world",
       "TierAbove": "tier {tier}: above yours",
+      "Boss": "{name} is a Boss, and a Boss is never bound, called, tamed or raised for a character.",
+      "BossTag": "a Boss: never bound",
+      "NotElementalFamily": "{name} cannot be bound as an elemental: an Elemental Bond calls only the Earth, Fire, Water and Air elementals, never a named leader, a plant, or a bog or tar creature.",
       "AlreadyHeld": "{owner} already holds {name}.",
       "NoOwner": "No character to bind to.",
       "NotOwner": "Only the character's owner may bind or release for them.",
       "NoEntry": "14-BESTIARY holds no {name} to bind.",
       "SummonRefused": "{feature} calls {names}, which 14-BESTIARY does not print: nothing was called and nothing was spent.",
+      "SummonBoss": "{feature} calls {names}, and a Boss is never called for a character: nothing was called and nothing was spent.",
       "NoGM": "Binding needs a GM online.",
       "NoCreature": "{name} has no {kind} bound to act.",
       "NoTarget": "Nothing is targeted, so {name}'s blow names nobody. Target the creature before pressing Apply damage.",
@@ -3906,6 +3914,9 @@
       "Resisted": "Resisted",
       "Exposed": "Exposed",
       "ThresholdCrossed": "Threshold crossed at",
+      "ExposedBy": "{source} reduced {name} to 0 Health: exposure to {track}, DC {dc}.",
+      "ExposureGain": "Failure: {name} gains {n} {track}.",
+      "ExposureNothing": "Success: nothing is gained, and nothing is remembered.",
       "CriticalInjury": "Critical Injury",
       "Severity": "Severity",
       "Permanent": "Permanent",
@@ -3941,7 +3952,6 @@
       "PressNoGM": "No GM is online to record this press on a card you did not post: nothing was spent.",
       "HealAddRow": "+{n} Health restored",
       "AddsRow": "+{n} on the laid effect",
-      "CriticalTwiceHigher": "rolled twice ({totals}); the higher is taken",
       "Part": "+ {n} {type}",
       "PartImmune": "+ 0 {type} (Immune)",
       "PartVulnerable": "+ {n} {type} (Vulnerable)",
@@ -3974,6 +3984,11 @@
       "Classes": "Classes",
       "ClassFeatures": "Class features",
       "SpellsKnown": "Spells known",
+      "Spellpower": "Spellpower",
+      "CastingBonus": "Casting Test bonus",
+      "BoonsBanes": "Boons and Banes",
+      "BoonOn": "Boon on {what}",
+      "BaneOn": "Bane on {what}",
       "SpellsMinimum": "{minimum} at tier {tier} ({ability} {mod})",
       "NoCaster": "No casting class.",
       "Favorites": "Favorites",
@@ -4635,7 +4650,7 @@
         "LifeTap": "Spend any Health; gain twice that much Mana.",
         "Polymorph": "Some targets are immune to Polymorph, and which ones is the GM's call. A creature that fails becomes a Rabbit until it takes damage: its Speed is 10 feet and it cannot attack, cast, use a feature or take a Reaction (Hex's limits, the tool's reading); whether it can speak is the table's call.",
         "Charge": "Your first Overbear or Sunder this encounter costs no Rage and grants 1.",
-        "Finisher": "Spend every Combo Point on an attack's roll dialog; each one adds 1 damage.",
+        "Finisher": "Tick it on an attack's roll dialog: on a hit, every Combo Point is spent and each adds 1 damage. A miss keeps them.",
         "Sprint": "Your first Move of a fight costs no Half-Action.",
         "Scales": "In Mail or Plate, the suit's Encumbering costs you no Speed and puts no Bane on Stealth.",
         "ChromaticBlood": "Your race is the Chromatic Outcast, wearing a guise. You took this class at creation and take no second class.",
@@ -4681,18 +4696,15 @@
         "Charge": "Your first Overbear or Sunder this encounter costs no Rage and grants 1; you may move your Speed in a straight line first.",
         "ExtraAttack": "Two attacks each time you Attack.",
         "ExtraAttackForm": "Two attacks each time you Attack, while in a Shapeshift form.",
-        "Deathwish": "Below half Health: +1 Damage Rating, and your Rage does not drain.",
-        "Consecrated": "The weapon you Consecrated carries Blessed until you use this again: Lesser grade, or Greater with Sanctified Weapon.",
-        "AvengingWrath": "While Avenging Wrath runs: a Boon to every Test, one more each round, up to three.",
+        "Deathwish": "Below half Health: a hit adds 2 to its Damage Rating, and the first hit each round gives 2 more Rage. The roll applies both.",
+        "Consecrated": "The weapon you Consecrated carries Blessed until you use this again: Lesser grade, or Greater against an undead or a demon with Sanctified Weapon.",
         "Quarry": "Quarry builds against your one marked target; marking another empties it.",
-        "AimedShot": "3 Focus: ignore cover and long-range Banes on this attack.",
-        "KillShot": "Against your marked target, spend all Quarry: +1 damage each and the target's AP falls by 2 each, to 6.",
         "WildBond": "You may use your companion's Resilience ratings for this Test.",
         "Opening": "Against a target that has not yet acted. On a hit, 2 Energy buys 1 Combo Point.",
-        "Finisher": "Spend all your Combo Points: add that many to this attack's damage.",
+        "Finisher": "On a hit, spend all your Combo Points: add that many to this attack's damage.",
         "Evasion": "On a success against an attack or spell, you take no damage at all.",
-        "Poisoner": "A poison may be applied as part of this attack.",
-        "Assassinate": "Against a target that has not acted, a Critical Injury on 18 to 20.",
+        "Poisoner": "A poison may be applied as part of this attack, and the weapon may carry two poisons at once.",
+        "Assassinate": "Against a target under your Opening, a Critical Injury on 18 to 20.",
         "SustainedFaith": "You may Sustain two effects at once.",
         "OverchannelMastery": "Overchannel costs twice the Mana instead of Health.",
         "ShapeTheWeave": "Sustain up to three effects; each beyond the first costs half the spell's Mana at the start of your turn.",
@@ -4715,6 +4727,8 @@
       "Learned": "{name}: {form} is now a known form.",
       "NeedsForm": "{name} needs a Shapeshift form.",
       "AttacksSpent": "{name}'s card has made its {n} attacks: none is left.",
+      "TargetSpent": "{feature} has already struck {name} {n} times: choose another target.",
+      "TargetsSpent": "{feature} may strike no more than {n} different targets: {name} would be one too many.",
       "AttacksAllowed": "{n} attacks from this card",
       "OnSuccess": {
         "Unpaid": "{name} failed its Casting Test: no {pool} was spent, and it does nothing.",
@@ -4814,6 +4828,7 @@
         "laidByUser": "against a target suffering a condition you or your totem laid",
         "watched": "against the creature you are watching",
         "challenged": "against the creature you challenged",
+        "quarried": "against your Quarry",
         "wields": "while you wield and wear what it asks"
       },
       "SecondAttack": "Second attack",
@@ -4865,6 +4880,8 @@
       "NoClock": "Out of a fight nothing counts {spell}'s turns down, so its tick is not laid.",
       "NoClockOn": "{spell} is not laid on {name}: out of a fight it has no turn to land at and nothing to end it.",
       "BonusRow": "+{n} each turn",
+      "RoundsRow": "{n} more round(s)",
+      "RiseRow": "rises {n} a turn, to {max} more",
       "WardPrompt": "{name}: Ward {n} against which school while this heal runs?",
       "WardNone": "{name}: no school was chosen, so this heal carries no Ward.",
       "NoGM": "No GM is online to end what is laid on {name}."
@@ -4905,7 +4922,8 @@
         "Once": "{name} is once a round, and this round's is spent.",
         "Gone": "A rider you ticked is not yours to spend now, so nothing was spent.",
         "Exclusive": "Choose only one of {name}. Nothing was spent.",
-        "Primed": "{name} is paid from the Combat tab: this attack is the charge, and costs nothing more."
+        "Primed": "{name} is paid from the Combat tab: this attack is the charge, and costs nothing more.",
+        "Gate": "{name} rides an attack at your marked target alone, and this target is not it."
       },
       "Card": {
         "Outsized": "{name} is more than one size larger than what knocks it down and is not {condition}.",
@@ -5396,7 +5414,7 @@
       "CannotSee": "You cannot see the target",
       "Footing": "Poor footing or heavy weather",
       "Untrained": "Equipment you are not trained to use",
-      "GearBoon": "Worn: a Boon on this skill (08 §6)",
+      "GearBoon": "A Boon on this skill (08 §6)",
       "SpellSkillBoon": "Your spell: a Boon on this skill against the creatures it names",
       "GearTestBoon": "Worn: a Boon on this Test (08 §20)",
       "GearTestBane": "Worn: a Bane on this Test (08 §20)",
@@ -5469,7 +5487,7 @@
       "TierCap": "{name} cannot cast {spell}: it is a tier {tier} spell, and {name} casts up to tier {reach}. Nothing was spent.",
       "InForm": "{name} needs Mana, and none can be spent in the {form} form.",
       "Augment": "Augment",
-      "ItemBonus": "Item bonus",
+      "ItemBonus": "Casting Test bonus",
       "Overchannel": "Overchannel",
       "OverchannelNote": "{per} Health a point, {max} at most",
       "OverchannelRow": "+{points} SL for {health} Health",
@@ -5510,7 +5528,7 @@
       "NextSpellHalfNote": "{name}: this spell costs a Half-Action rather than an action.",
       "OverchannelRelief": "Overchanneller",
       "OverchannelReliefRow": "{n} Health less for the Overchannel",
-      "MasteryNote": "Overchannel Mastery: Overchannelling costs no Health. This spell's Mana is charged once more ({n}), however many points you take.",
+      "MasteryNote": "Overchannel Mastery: Overchannelling costs no Health. Each point costs {n} Mana.",
       "OverchannelManaRow": "{points} point(s), {mana} Mana (Overchannel Mastery)",
       "NextSpellFeatureRow": "{talent}: {n} Mana less."
     },
@@ -5521,6 +5539,7 @@
       "Scourge": "Put down by the Scourge or the risen",
       "Demon": "Put down by a demon or the fel-touched",
       "VoidThing": "Put down by a void-thing or what the Old Gods sent",
+      "Creature": "Put down by a creature that carries the track",
       "Handled": "Something handled, at the table's DC",
       "HostileSchools": "Two classes that do not agree",
       "CastTierFive": "Cast {name}",
@@ -5553,7 +5572,8 @@
         "OffHandSpent": "An Off-Hand Attack has already been made this round.",
         "OffHandNotYourTurn": "An Off-Hand Attack is made in your own turn, and it is not your turn.",
         "NotYourTurn": "It is not your turn. A Half-Action, an action or a Full Action is spent on your own turn; outside it only a Reaction can be taken.",
-        "NothingToRestore": "Nothing has been spent to put back."
+        "NothingToRestore": "Nothing has been spent to put back.",
+        "AttackLimit": "You have already made {n} Attacks this turn. A Half-Action you were given does not buy another."
       }
     },
     "Combat": {
@@ -5576,6 +5596,7 @@
       "ReadyTriggerHint": "he steps out from behind the pillar",
       "ReadyActionHint": "Loose the arrow I am holding",
       "ReadySave": "Ready it",
+      "ReadyIsAttack": "The action is an Attack",
       "ReadyNeedsTrigger": "Name what you are waiting for.",
       "ReadyNeedsAction": "Name what you will do when it happens.",
       "ReadyNeedsFight": "Ready names a trigger inside a fight, and there is no fight to wait in.",
@@ -5697,6 +5718,9 @@
       "WardLine": "Ward {ward} against {school}",
       "Ended": "{name}: {form} ends.",
       "NoBlock": "{name}: {form} has no block in the bestiary to take.",
+      "Boss": "{name}: {form} is a Boss, and a Boss is never a shape a character takes. Nothing was spent.",
+      "FormTier": "{name}: {form} is a tier {tier} beast, and a Druid takes no form above their own tier ({druid}). Nothing was spent.",
+      "FormTierTag": "Tier {tier}: waits for the Druid's tier (now {druid})",
       "TooManyNew": "{name}: no more than {room} new form can be learned now (the Forms table).",
       "WardPrompt": "Metamorphosis grants Ward {ward}. Against which school?",
       "DamageBonus": "Metamorphosis",
@@ -6112,6 +6136,7 @@
         "classTalentNotYourPeople": "{name} is on the {people}'s Legacy branch, which only the {people} keep.",
         "classTalentTier": "{name} is above tier 1.",
         "spellCount": "This class knows {required} spells at level 1; {chosen} chosen.",
+        "spellTaughtByTalent": "{talent} already teaches {name}, and a spell a talent teaches is known on top of the count. Choose another spell.",
         "spellTier": "{name} is above tier 1.",
         "spellSchool": "{name} is not of this class's schools.",
         "spellRestricted": "{name} is not open to this class.",
@@ -6182,6 +6207,21 @@
       "ActionsBand": "holds {n} · deals up to {damage}",
       "AddSkill": "Add a skill",
       "AddWard": "Add a Ward",
+      "AddSpellpower": "Add Spellpower",
+      "SpellpowerHint": "What gear gives a character. Each point adds 1 to the damage of the creature's tier 3 and higher spells that deal damage of that school (07-MAGIC, Spellpower).",
+      "CastingBonus": "Casting Test bonus",
+      "CastingBand": "an Augment gives {n}",
+      "CastingBonusHint": "What an Augment or a ring gives a character. It adds to every Casting Test the creature makes, for a spell or an ability that casts.",
+      "BoonsBanes": "Boons and Banes",
+      "BoonsBanesHint": "What a worn thing gives a character (08-EQUIPMENT, §6): a Boon or a Bane on one skill, or on every Test of one kind.",
+      "AddBoonBane": "Add a Boon or Bane",
+      "Boon": "Boon",
+      "Bane": "Bane",
+      "BoonOrBane": "Boon or Bane",
+      "BoonBaneOn": "on",
+      "TestKinds": "Every Test of a kind",
+      "EveryTest": "{kind} Tests",
+      "ConditionImmune": "Immune to conditions",
       "SwarmOf": "Swarm of",
       "SwarmMembers": "members",
       "SwarmOfName": "of what",
@@ -6277,7 +6317,10 @@
         "InflictsMissing": "The block names {condition} and Inflicts does not list it.",
         "MechanicInProse": "{field} carries a mechanic ({match}); a mechanic lives on the block.",
         "AbilityDefers": "{name} points at a chapter and states no rule of its own.",
-        "Tier3": "Tier 3 and above: the first arc holds to tiers 1 and 2."
+        "Tier3": "Tier 3 and above: the first arc holds to tiers 1 and 2.",
+        "Spellpower": "Spellpower {value} in {school} is above {ceiling}, the most gear gives a character in one school.",
+        "CastingBonus": "A Casting Test bonus of {value} is above {ceiling}, the most an Augment gives a character at tier {tier}.",
+        "SchoolWard": "Its Spells and its Behavior are built on {school}, and it holds neither a Ward nor an Immune in {school}."
       }
     },
     "Forge": {
@@ -7388,6 +7431,7 @@
       "NextText": "{n} Boon on the next Test this creature makes, spent by that Test.",
       "LineNext": "{target} gains {n} Boon on their next Test",
       "LineRound": "{target} gains {n} Boon on every Test this round",
+      "LineTurn": "{target} gains {n} Boon on every Test until the start of {name}'s next turn",
       "LineEncounter": "{target} gains {n} Boon on every {kind} Test until the encounter ends",
       "EncounterText": "{n} Boon on every {kind} Test this creature makes until the encounter ends.",
       "EveryTest": "kind of"
@@ -7395,9 +7439,6 @@
     "Consecrated": {
       "Line": "{weapon} carries {trait} until the next use",
       "NoWeapon": "{name} enchants the weapon in your main hand, and you hold none."
-    },
-    "DivineFavor": {
-      "Line": "{talent}: {name} cost no Mana"
     },
     "ExtraStrike": {
       "Gone": "{name}'s extra attack can no longer be made.",
@@ -7417,6 +7458,55 @@
     "Kill": {
       "Rewarded": "{name}'s kill pays out: {talents}."
     },
+    "Martial": {
+      "NoPool": "{feature}: {name} holds no {pool}. Nothing was spent.",
+      "NoGM": "No GM is online to write on a creature or a scene you do not own. Nothing was spent.",
+      "QueryAuthority": "Only the active GM writes this, for a creature the asker owns.",
+      "Readiness": "{name} refills their Focus to {n}.",
+      "AvengingWrath": "{name} gains a Boon on every Test until the encounter ends, and their attacks and Holy spells add 1 damage for each round since, to {max}.",
+      "AvengingWrathHit": "Avenging Wrath adds {n} to this hit's damage.",
+      "AvengingWrathRow": "Avenging Wrath",
+      "BeaconOfHope": "Until the encounter ends, the first time each ally within {feet} feet of {name} drops to 0 Health, they return to 1 instead.",
+      "BeaconHeld": "Beacon of Hope holds {name} at 1 Health ({holder}).",
+      "Unbreakable": "Until the start of {name}'s next turn, every attack against a friendly target within {feet} feet targets {name} instead, and {name} Blocks each without spending a Reaction.",
+      "MercyPrompt": "Mercy of Uther: choose up to {n} condition to end on {name}.",
+      "MercyEnded": "Mercy of Uther ends {condition} on {name}.",
+      "MercyNot": "Mercy of Uther could not end {condition} on {name}.",
+      "MercyNoTalent": "{name} holds no Mercy of Uther, so no condition is ended.",
+      "MercyNoUse": "Mercy of Uther ends nothing on {name}: no Lay on Hands chose that condition on them.",
+      "MercyAgain": "Mercy of Uther has already ended that condition for this Lay on Hands.",
+      "MercyFar": "Mercy of Uther cannot reach {name}: Lay on Hands is by touch, within {feet} feet.",
+      "SnareLimit": "You may keep {limit} Snares set.",
+      "SnareEnded": "Setting this Snare ends your oldest: {n} taken up. You may keep {limit} set.",
+      "SunderingBlows": "Sundering Blows: {n} more Rage off a sundered target, and {damage} more damage.",
+      "Deathwish": "Deathwish: below half Health, the hit adds {rating} to its damage and gives {n} more Rage.",
+      "Overpower": "Overpower: {n} Rage.",
+      "OverpowerBoon": "Overpower: {n} Rage, and your next attack at {target} this turn gains a Boon.",
+      "OverpowerNotYours": "Overpower: {name} is not yours to write, so their Rage is the table's to add.",
+      "Frenzy": "Frenzy: {name} drops below half Health and gains {n} Rage.",
+      "Fervor": "Fervor: {name} gains {n} Zeal.",
+      "Twofold": "Twofold Light: {name} recovers {n} Health.",
+      "TwofoldPrompt": "Twofold Light: choose the friendly target within 10 feet of {name} who recovers {n} Health.",
+      "DivineStormPrompt": "Divine Storm: choose the friendly target within 10 feet who recovers {n} Health.",
+      "DivineStormHealed": "Divine Storm heals {name} for {n}.",
+      "DivineStormNone": "Divine Storm: no wounded friendly target within {feet} feet to heal.",
+      "DivineStormSkipped": "Divine Storm: no friendly target was chosen, so nobody recovers Health.",
+      "DivineStormRefused": "Divine Storm heals nobody here: that hit is not this Paladin's Divine Storm.",
+      "DivineStormAgain": "Divine Storm has already healed for that hit.",
+      "DivineStormFar": "Divine Storm cannot heal {name}: only a friendly target within {feet} feet of the Paladin.",
+      "HealNoGM": "{feature}: a creature another player owns needs a GM online to heal, so only your own are offered.",
+      "TwofoldNobody": "Twofold Light: nobody is online to choose for {name}, so no second target recovers Health.",
+      "TwofoldRefused": "Twofold Light cannot reach {name}: only one other friendly target within 10 feet of the first.",
+      "TwofoldNoCard": "Twofold Light shares nothing here: only a heal from {name}'s own Mending Word card, on the creature it names.",
+      "TwofoldAgain": "This Mending Word has already shared its heal through Twofold Light.",
+      "BeaconNoGM": "Beacon of Hope cannot hold {name}: {holder}'s Beacon needs a GM online to record it.",
+      "BeaconStanding": "{name} already has a {feature} standing; it ends when the encounter ends.",
+      "ShieldSlamPrompt": "Shield Slam: choose the spell {name} is Sustaining to end.",
+      "ShieldSlamEnded": "Shield Slam ends {spell}, which {name} was Sustaining.",
+      "ShieldSlamNot": "Shield Slam could not end {spell} on {name}.",
+      "ShieldSlamNotice": "{name} stops Sustaining {spell}.",
+      "ShieldSlamRefused": "Shield Slam's card does not show a hit at SL 2 on {name}, so no spell is ended."
+    },
     "Laid": {
       "BaneLine": "{target} takes {n} Bane attacking anyone but {name}",
       "NextTestBaneLine": "{target} takes {n} Bane on their next Test.",
@@ -7424,6 +7514,7 @@
       "CannotHearDelivery": "{name}: {target} is Deafened and cannot hear you. No new Bane was applied; this does not refund any spent use or action.",
       "NotFriendly": "{name} names a friendly creature, and {target} is hostile.",
       "OneTarget": "{name} names one creature: target exactly one.",
+      "UpToTargets": "{name} names up to {n} creatures: target one, or up to {n}. Nothing was spent.",
       "SomeTargets": "{name}: target at least one creature that can hear you.",
       "NeedsSight": "{name} requires a creature you can see. You are Blinded. Nothing was spent.",
       "CannotHear": "{name}: {target} is Deafened and cannot hear you. Nothing was spent.",
@@ -7510,7 +7601,58 @@
       "Card": "On a failed Test the target takes {banes} Bane on every Test for {n} round.",
       "Laid": "{talent}: {name} takes a Bane on every Test for {n} round."
     },
+    "Assassinate": {
+      "Label": "Assassinate"
+    },
+    "Poisoner": {
+      "Second": "{name} stays on {item} beside it (Poisoner)."
+    },
+    "Rupture": {
+      "EndsDc": "Ending that Bleeding takes a Medicine Test against DC {dc} ({name})."
+    },
+    "Shadowstep": {
+      "Pick": "Pick the space {name} steps to, within {near} feet of {target}.",
+      "Opening": "{name} is under the Opening until the end of the turn."
+    },
+    "CombatReflexes": {
+      "Spent": "{name}: the free Riposte is already spent this round."
+    },
+    "Audit": {
+      "Minute": "{name}: for {minutes} minute.",
+      "Shadows": "For {minutes} minute, taking actions while hidden does not make {name} visible. Taking damage does.",
+      "Miracle": "For {minutes} minute, {name}'s Mend costs no Mana, and once a round it may be used as a Reaction.",
+      "Herald": "For {minutes} minute, {name} may Sustain one more effect, and a sustained Shadow spell's damage at the start of a creature's turn may spread to one other creature within 10 feet.",
+      "EyeName": "Eye of the Storm",
+      "EyeExplain": "{n} Nature damage to one creature within {feet} feet",
+      "EyeStrike": "At the start of {name}'s turn, one creature of their choice within {feet} feet takes {n} Nature damage. Select it and press Apply.",
+      "EyeCharge": "{name} gains a Static Charge ({n} held).",
+      "EyeChargeFull": "{name} already holds as many Static Charges as they may.",
+      "EyeNoCharge": "{name} holds no Static Charge talent, so gains no charge.",
+      "TideHealed": "{name} regains {n} Health (Tide of the Ancestors).",
+      "TideAsked": "One condition on one of them ends: the shaman chooses which.",
+      "TidePrompt": "Tide of the Ancestors: which condition ends on one of the creatures {name}'s totem healed?",
+      "TideEnded": "Tide of the Ancestors: {condition} ends on {name}.",
+      "TideNoneEnded": "Tide of the Ancestors: no condition was ended for {name}.",
+      "EyeRefuse": {
+        "one": "Eye of the Storm strikes one creature: target exactly one.",
+        "far": "Eye of the Storm strikes a creature within {feet} feet of the shaman.",
+        "struck": "This Eye of the Storm strike has already landed.",
+        "unmeasured": "Eye of the Storm cannot measure how far that creature is from the shaman: both need a token on the card's scene."
+      },
+      "HeraldRefuse": {
+        "one": "Herald of the Void strikes one other creature: target exactly one.",
+        "other": "Herald of the Void strikes one other creature, never the one its Shadow spell struck.",
+        "far": "Herald of the Void strikes a creature within {feet} feet of the one its Shadow spell struck.",
+        "unmeasured": "Herald of the Void cannot measure how far that creature is from the one struck: both need a token on that scene.",
+        "struck": "This Herald of the Void strike has already landed."
+      },
+      "TideSet": "{name} sets the Tide of the Ancestors. At the start of each of {name}'s turns, every friendly target within {feet} feet of it regains {n} Health.",
+      "TideNotSet": "The Tide of the Ancestors totem was not set. Set it by hand.",
+      "HeraldName": "Herald of the Void",
+      "HeraldSpread": "Herald of the Void: one other creature of {caster}'s choice within {feet} feet of {name} takes {n} Shadow damage. Select it and press Apply."
+    },
     "KillStrike": {
+      "StepHint": "{name} may move up to {feet} feet first, provoking nothing. Pick the space, or press Escape to stay.",
       "Button": "Attack again ({name})",
       "Text": "{name} brought {target} to 0 Health and may attack again immediately ({n} a round).",
       "TextOther": "{name} brought {target} to 0 Health: one attack immediately against another target within reach."
@@ -7591,8 +7733,9 @@
       "NoGM": "No GM is online to lay the Ward on a creature you do not own.",
       "NoFeature": "{name} does not hold the Ward class feature.",
       "EverySchool": "every school",
-      "EffectName": "Ward 1 ({schools}) from {name}",
-      "EffectNameAegis": "Ward 1 ({schools}) from {name}, which Dispel cannot remove",
+      "EffectName": "Ward {n} ({schools}) from {name}",
+      "EffectNameAegis": "Ward {n} ({schools}) from {name}, which Dispel cannot remove",
+      "EffectNameHymn": "Divine Hymn: Ward {n} ({schools}) from {name}",
       "Atoned": "Atonement: {name} restores {n} Health ({priest}'s Ward prevented damage).",
       "Absorbed": "Absorption: {priest} gains {n} Mana.",
       "Laid": "{name} gains Ward {n} until the priest's next turn.",
@@ -7735,6 +7878,7 @@
       "Line": "{demon} is bound to {name} until their next Long Rest, and counts against no limit.",
       "NotBound": "{demon} was not bound to {name}.",
       "NotDemon": "{target} is not a demon.",
+      "Boss": "{target} is a Boss, and a Boss is never bound.",
       "Refused": "{target} could not be bound."
     },
     "Curse": {
@@ -7774,8 +7918,52 @@
       "Line": "{name} gains Ward {n} against every school until the end of their next turn.",
       "Name": "{name}: Ward {n} (every school)"
     },
-    "Ruin": {
-      "Mana": "{talent}: {name} gains {n} Mana."
+    "Clearcasting": {
+      "Label": "Clearcasting",
+      "Row": "{n} Overchannel point(s) free",
+      "Laid": "{talent}: {name} may take {n} point(s) of Overchannel on the next spell without paying for them, before the end of their next turn.",
+      "Note": "{name}: up to {n} Overchannel point(s) on this spell cost nothing."
+    },
+    "DarkPact": {
+      "NotYours": "{name}: {demon} is not yours to drain from this client.",
+      "TooFar": "{name}: {demon} is more than {feet} feet away.",
+      "NoHealth": "{name}: {demon} has no Health to give above 1.",
+      "Line": "{name} draws on {demon}: it loses {health} Health and {name} gains {mana} Mana."
+    },
+    "Shadowfury": {
+      "NoHealth": "{name}: paying {n} Health would take you below 1 Health.",
+      "Paid": "{name} spends {n} Health on {feature}."
+    },
+    "ArcanePower": {
+      "Line": "{name}'s spells deal {n} more damage, of each spell's own type."
+    },
+    "Hibernate": {
+      "Line": "{name} takes a Short Rest's recovery in ten minutes ({feature}).",
+      "NotRested": "{feature}: {name}'s rest was not taken.",
+      "Prompt": "Who rests with {name}? Each one ticked is offered a Short Rest's recovery.",
+      "OfferedTo": "{feature}: a Short Rest's recovery is offered to {names}.",
+      "Unanswered": "{feature}: nobody online answers for {names}, so no rest is offered.",
+      "Offered": "{druid}'s {feature}: {name} may take a Short Rest's recovery now.",
+      "OfferFailed": "{feature}: the rest offered to {name} could not be opened.",
+      "Refuse": {
+        "notHibernate": "That rest is not offered by {druid}'s Hibernate.",
+        "noUse": "{druid}'s {feature} did not offer {name} a rest with this Use.",
+        "taken": "{name} has already taken the rest {druid}'s {feature} offered."
+      }
+    },
+    "Ritual": {
+      "Failed": "{feature} fails: the demons do not come, and {name} takes a Critical Injury."
+    },
+    "DarkHarvest": {
+      "Line": "{talent}: every creature near {name} carrying two or more of their ongoing effects takes {n} Shadow damage.",
+      "FreeSwap": "{talent}: {name} costs no action this round."
+    },
+    "HeartOfTheWild": {
+      "Line": "{talent}: {name} begins the form with {n} Ferocity."
+    },
+    "ShatteringCold": {
+      "Resisted": "{talent}: {name} passes the Body Resilience Test and is not Stunned.",
+      "Stunned": "{talent}: {name} is Stunned until the end of its next turn."
     },
     "Sacrifice": {
       "Title": "Sacrifice",
@@ -7930,7 +8118,8 @@
         "short": "{talent}: {name} no longer holds the price.",
         "noReaction": "{talent}: {name} has no Reaction left.",
         "noUses": "{talent}: {name} has no use left.",
-        "notWarded": "{talent}: {name}'s Ward no longer stands on the creature struck."
+        "identitySpent": "{talent}: {name} has already been held at 1 Health by it this round.",
+        "unclaimed": "{talent}: the hold could not be recorded on {name}'s fight, so it does not hold. Nothing was spent."
       }
     },
     "AegisLight": {
@@ -7938,12 +8127,10 @@
       "CardLine": "Until the end of your next turn no target the Apply reaches is reduced below {n} Health by any source.",
       "NoClock": "{spell} lays no floor on {name}: out of a fight there is no next turn of yours to end it on.",
       "Held": "{spell} holds {name} at 1 Health.",
-      "NoCritical": "{name} takes no Critical Injury: Aegis of the Light holds them at 1 Health.",
-      "Healed": "{talent}: {name} restores {n} Health as the floor that held them ends."
+      "NoCritical": "{name} takes no Critical Injury: Aegis of the Light holds them at 1 Health."
     },
     "Dispel": {
       "Label": "Dispel",
-      "CardMarked": "{by}: what this spell lays cannot be ended by Dispel.",
       "NoTarget": "{name} ends effects on one creature: target one.",
       "TooMany": "{name} names {n} creature(s) at most: target no more.",
       "TooFar": "{talent}: {names} stand(s) more than {feet} feet from the first target.",
@@ -8046,7 +8233,7 @@
       "Nobody": "{talent}: no enemy stands within {feet} feet of the target to take the Scorched."
     },
     "Flametongue": {
-      "Row": "a Fire blow, +{n}",
+      "Row": "Scorched {n} on a hit",
       "Held": "{name} is held: weapon blows deal Fire, {n} Mana at the start of each turn.",
       "Already": "{name} is already held. Drop it from the Sustaining strip to begin it again."
     },
@@ -8054,7 +8241,8 @@
       "Label": "Miracle",
       "Row": "no Casting Test is needed, and nothing reduces the Health it restores",
       "Note": "{name}: this healing spell needs no Casting Test, and nothing reduces the Health it restores.",
-      "Laid": "{name}'s next healing spell needs no Casting Test, and nothing will reduce what it restores ({talent})."
+      "Laid": "For one minute {name}'s Mend costs no Mana, and once a round it may be used as a Reaction ({talent}).",
+      "ReactionSpent": "{name} has already been used as a Reaction this round (Miracle)."
     },
     "DevouringPlague": {
       "NoUses": "{talent} has no use left until a Short Rest.",
@@ -8264,6 +8452,8 @@
       "EntryRefused": "{name} is a service. Pay for it from the purse; you cannot add it to a sheet."
     },
     "Gadget": {
+      "TwicePrompt": "Gadgeteer, rank 2: which gadget may {name} use twice between Short Rests?",
+      "Twice": "{name} may be used twice between Short Rests (Gadgeteer).",
       "EntryRefused":"Choose {name} through Gadgeteer, or build it with Mekkatorque's Blueprint. You cannot add it directly from the compendium.",
       "InFight": "{name}: you cannot choose or replace gadgets during a fight.",
       "Known": "Gadgets known: {names}.",
@@ -8341,7 +8531,7 @@
       "Refunded": "{spell}: nothing rose, so {name} gets back {n} {pool}.",
       "RefundedNone": "{spell}: nothing rose. {name} paid nothing that can be given back.",
       "UseKept": "{spell}: the use is not spent.",
-      "Refuse": {"destroyed": "{name} has been destroyed and cannot be raised.", "raised": "{name} has risen already.", "kept": "{name} is kept by another caster's Stay the Rot and cannot be raised.", "sealed": "The soul of {name} is sealed, so the body cannot be raised as undead.", "caged": "The soul of {name} is caged by another, so nobody else can raise it.", "severed": "The soul of {name} is severed, so nothing can raise it.", "kind": "{name} is not a corpse {spell} can raise.", "size": "{name} is smaller than {spell} needs.", "range": "{name} is out of range.", "few": "{spell} needs at least {min} corpses.", "many": "{spell} raises no more than {max} corpses.", "apart": "{spell} needs corpses within {feet} feet of each other.", "cap": "{spell} costs {n} Runic Power, and the Runic Power cap of {name} is below {n}.", "noToken": "{name} has no token on this scene, so nothing can be raised.", "noGM": "No GM is online to place the dead. Nothing was spent.", "noEntry": "The bestiary holds no {entry}.", "noCorpse": "No corpse in range can be raised by {spell}.", "notKnight": "{name} can raise the dead only from their own token.", "notHeld": "{name} does not hold {spell}.", "failed": "{spell}: the dead could not be placed, so the earlier raise stands. {reason}", "exceeds": "{spell}: the creatures alone take more places than the horde holds ({n}). Nothing was spent.", "sizeMax": "{name} is larger than {spell} can raise.", "neededByRaise": "The only corpse in reach for {spell} is one this cast raises or marks. Nothing was spent."},
+      "Refuse": {"destroyed": "{name} has been destroyed and cannot be raised.", "raised": "{name} has risen already.", "kept": "{name} is kept by another caster's Stay the Rot and cannot be raised.", "sealed": "The soul of {name} is sealed, so the body cannot be raised as undead.", "caged": "The soul of {name} is caged by another, so nobody else can raise it.", "severed": "The soul of {name} is severed, so nothing can raise it.", "kind": "{name} is not a corpse {spell} can raise.", "size": "{name} is smaller than {spell} needs.", "kindSize": "{name} is not a {kind} corpse of {size} size or larger, so {spell} cannot raise it.", "range": "{name} is out of range.", "few": "{spell} needs at least {min} corpses.", "many": "{spell} raises no more than {max} corpses.", "apart": "{spell} needs corpses within {feet} feet of each other.", "cap": "{spell} costs {n} Runic Power, and the Runic Power cap of {name} is below {n}.", "noToken": "{name} has no token on this scene, so nothing can be raised.", "noGM": "No GM is online to place the dead. Nothing was spent.", "noEntry": "The bestiary holds no {entry}.", "noCorpse": "No corpse in range can be raised by {spell}.", "notKnight": "{name} can raise the dead only from their own token.", "notHeld": "{name} does not hold {spell}.", "failed": "{spell}: the dead could not be placed, so the earlier raise stands. {reason}", "exceeds": "{spell}: the creatures alone take more places than the horde holds ({n}). Nothing was spent.", "sizeMax": "{name} is larger than {spell} can raise.", "neededByRaise": "The only corpse in reach for {spell} is one this cast raises or marks. Nothing was spent."},
       "Marked": {"destroyed": "{spell}: the corpse of {name} is destroyed and cannot be raised.", "kept": "{spell}: the corpse of {name} does not decay for 10 days, and only you can raise it.", "sealed": "{spell}: the corpse of {name} cannot be raised as undead for 1 day."}
     },
     "Splash": {
@@ -8391,7 +8581,8 @@
         "Unallowed": "{name} is not a creature this step may move there.",
         "Refuses": "{name} cannot be moved against its will, and is not pulled ({source}).",
         "Outsized": "{name} is more than one size larger than what pulls it, and is not pulled ({source}).",
-        "NoCorpse": "{name}: no corpse lies within 5 feet of that space."
+        "NoCorpse": "{name}: no corpse lies within 5 feet of that space.",
+        "NotBeside": "{name}: that space is not within 5 feet of the creature named."
       }
     },
     "Trap": {
@@ -8461,7 +8652,12 @@
     },
     "Drain": {
       "Healed": "{name} recovers {n} Health ({source}) from the damage {target} took.",
-      "Failed": "{source}: the Health drained from {target} could not be restored. The blow stands."
+      "Failed": "{source}: the Health drained from {target} could not be restored. The blow stands.",
+      "Standing": "{name} already stands this turn: Drain is used once a turn.",
+      "Laid": "{name} uses {feature}: until the end of the turn, damage they deal restores half as much Health to them.",
+      "NotLaid": "{feature}: the state could not be laid on {name}.",
+      "NoGM": "{feature}: no GM is online to restore {name}'s Health. The blow stands.",
+      "Gone": "{name}'s Drain no longer stands: no Health is restored."
     },
     "Ethereal": {
       "Name": "{source}: ethereal",

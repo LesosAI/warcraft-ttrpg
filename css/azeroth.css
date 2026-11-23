@@ -2453,6 +2453,11 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
+  .azeroth.sheet.actor.npc .azeroth-npc-spellpower {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
   .azeroth.azeroth-browser {
     --azeroth-rarity-uncommon: var(--azeroth-rarity-uncommon-dark);
     --azeroth-rarity-rare: var(--azeroth-rarity-rare-dark);
@@ -7409,6 +7414,17 @@
   }
   .azeroth-generator .azeroth-generator-wards .azeroth-forge-add {
     margin-top: 0;
+  }
+  .azeroth-generator .azeroth-generator-hint {
+    font-size: 13px;
+    line-height: 1.3;
+    color: var(--azeroth-ink);
+  }
+  .azeroth-generator p.azeroth-generator-hint {
+    margin: 2px 0 6px;
+  }
+  .azeroth-generator .azeroth-generator-edges .azeroth-generator-ward-rows select[name^=edge-kind-] {
+    width: 76px;
   }
   .azeroth-generator .azeroth-forge-label {
     font-weight: 600;

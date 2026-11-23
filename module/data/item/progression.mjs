@@ -365,6 +365,12 @@ export class FeatureData extends foundry.abstract.TypeDataModel {
       dc: optionalNumberField({ min: 1 }),
       uses: usesField(),
       heal: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+      // **CONDITIONS THE USE ENDS ON ITS TARGET, BY THE USER'S CHOICE** (the class talent audit's Mercy of
+      // Uther on Lay on Hands: *ends one condition on it of your choice*; D-1875): 0 for none. A new number
+      // with an initial, restamped by the sync at world load (D-621) - the precedent of `picks` and
+      // `freeMove` - so a stored feature takes 0 and is stamped on the next preparation, and migration
+      // 0.16.2.1 resyncs every Paladin who holds Mercy of Uther.
+      ends: new fields.NumberField({ required: true, integer: true, initial: 0, min: 0, max: 3 }),
       damage: new fields.SchemaField({
         amount: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
         type: choiceField(AZEROTH.damageTypes),
@@ -469,12 +475,13 @@ export class FeatureData extends foundry.abstract.TypeDataModel {
       modifiedBy: new fields.ArrayField(new fields.StringField({ required: true, blank: false }), { initial: [] }),
       // A creature the feature acts on, and how (D-642; the door is D-643's).
       // `construct` and `build` are the Legacy branches' door 6 (04's The Bench and
-      // Arclight Spanner), added to the lists: nothing stored is refused (D-621).
+      // Arclight Spanner), added to the lists: nothing stored is refused (D-621). `drain` is
+      // 04's Dark Pact (the class talent audit, D-1891): the Use takes Health from the demon.
       bound: new fields.SchemaField({
         kind: new fields.StringField({ required: false, nullable: true, blank: false, initial: null,
           choices: ["companion", "demon", "elemental", "totem", "summon", "construct"] }),
         action: new fields.StringField({ required: false, nullable: true, blank: false, initial: null,
-          choices: ["attack", "heal", "buff", "dismiss", "bind", "build"] })
+          choices: ["attack", "heal", "buff", "dismiss", "bind", "build", "drain"] })
       }),
       // What the feature calls: 14's entries, how many, for how long.
       summons: new fields.SchemaField({

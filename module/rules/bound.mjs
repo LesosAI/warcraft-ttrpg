@@ -16,6 +16,9 @@ import { tierForLevel } from "./progression.mjs";
 import { SHAPE_KINDS } from "./shapes.mjs";
 import { constructCapacity, constructEligible, constructsFor } from "./constructs.mjs";
 import { evaluateExpression } from "./expressions.mjs";
+// A Boss is never a character's creature (D-1804): the one predicate, in a leaf so
+// `shapes.mjs` may read it too.
+import { isBossEntry } from "./boss-entries.mjs";
 import { talentEffect } from "./talent-effects.mjs";
 // The Necromancer's talents on its raised dead (Phase 4c-T).
 import { raisedTalentRows } from "./necromancer-talents.mjs";
@@ -73,7 +76,27 @@ export function bindingFor({ name = "", choice = null } = {}) {
   if (SHAPES.has(name)) return null;
   const kind = KIND_OF_CHOICE[choice] ?? null;
   if (!kind) return null;
-  return { kind, until: UNTIL[kind], uncounted: name === "Ritual of Summoning" };
+  // 02's Ritual of Summoning: *They are Bound, act on your Initiative and stay until the
+  // encounter ends* (the class talent audit's C5, D-1894).
+  const ritual = name === "Ritual of Summoning";
+  return { kind, until: ritual ? "encounter" : UNTIL[kind], uncounted: ritual };
+}
+
+export { isBossEntry };
+
+/**
+ * **A BOSS IS NEVER BOUND, CALLED, TAMED OR RAISED FOR A CHARACTER** (D-1804; the lead,
+ * 2026-11-22: *"boss's like King Mosh can't be shapeshift or summon targets"*): the
+ * refusal every door that does not go through `eligible` asks - the GM's bind handler,
+ * the banner's adopt, Command Demon's adopt - in `eligible`'s own shape. `entry` is a
+ * chooser row, an actor's `system`, or an actor's source; `sourceWeightClass` is the 14
+ * entry a world creature was made from (D-1798's reading).
+ *
+ * @param {object} entry
+ * @returns {{ok: false, reason: "Boss"}|null}
+ */
+export function bossRefusal(entry = {}) {
+  return isBossEntry(entry) ? { ok: false, reason: "Boss" } : null;
 }
 
 const rankOf = (talents, identifier) => {
@@ -142,16 +165,106 @@ export function moreTotemsFor(talents = [], rowOf = talentEffect) {
  * nothing spent. The GM-side bind still refuses on its own (D-643); this only
  * moves what can be known to before the payment.
  *
- * @param {{names: string[], known: Iterable<string>, room?: number, held?: number}} o
+ * **AND NEVER A BOSS** (D-1804): `bosses` is the bestiary's Boss entry names, and a
+ * talent that named one is refused before anything is paid - none does today (the census
+ * in `boss-refusal.test.mjs`).
+ *
+ * @param {{names: string[], known: Iterable<string>, bosses?: Iterable<string>, room?: number, held?: number}} o
  *   `known` is the bestiary's entry names; `room` the kind's `capacity`, `held`
  *   its `boundCount` (a summon holds no limit today, D-709's table).
- * @returns {null|{reason: "NoEntry", names: string[]}|{reason: "Full", room: number}}
+ * @returns {null|{reason: "NoEntry"|"Boss", names: string[]}|{reason: "Full", room: number}}
  */
-export function summonRefusal({ names = [], known = [], room = Infinity, held = 0 } = {}) {
+export function summonRefusal({ names = [], known = [], bosses = [], room = Infinity, held = 0 } = {}) {
   const have = new Set(known);
   const missing = [...new Set(names)].filter(n => !have.has(n));
   if (missing.length) return { reason: "NoEntry", names: missing };
+  const boss = new Set(bosses);
+  const named = [...new Set(names)].filter(n => boss.has(n));
+  if (named.length) return { reason: "Boss", names: named };
   if ((Number(held) || 0) + names.length > room) return { reason: "Full", room };
+  return null;
+}
+
+/**
+ * **WHAT AN ELEMENTAL BOND MAY CALL: THE FOUR ELEMENT FAMILIES** (02's Elemental Bond:
+ * *call an elemental of your tier from 14-BESTIARY*; 14 §9: *the four elements standing
+ * up*; D-1796, the lead, 2026-11-22: *"No"* to the bond drawing every elemental 14 types
+ * Elemental). Every unnamed elemental of Earth, Fire, Water or Air in 14 §9, by entry
+ * name, to its element. The census in `elemental-bond.test.mjs` holds this table and
+ * `ELEMENTAL_BOND_EXCLUDED` to the bestiary pack: every entry typed Elemental sits on
+ * exactly one of the two, so a new one fails until it is placed (D-1797).
+ */
+export const BONDABLE_ELEMENTALS = Object.freeze({
+  // Fire
+  "Fire Elemental": "fire", "Greater Fire Elemental": "fire", "Rogue Flame Spirit": "fire",
+  "Blazing Invader": "fire", "Blazing Fireguard": "fire", "Lava Annihilator": "fire",
+  // The 2026-11 build (D-1821): the Firelord's lent destroyers, the Core's unnamed host and
+  // the Molten Giant, an Elemental since D-1810.
+  "Fireguard Destroyer": "fire", "Firelord": "fire", "Lava Surger": "fire", "Molten Giant": "fire",
+  // Earth
+  "Earth Elemental": "earth", "Greater Earth Elemental": "earth", "Enraged Stone Spirit": "earth",
+  "Stone Rumbler": "earth", "Thundering Invader": "earth", "Theradrim Guardian": "earth",
+  // Water
+  "Water Elemental": "water", "Greater Water Elemental": "water", "Lesser Water Elemental": "water",
+  "Befouled Water Elemental": "water", "Sea Elemental": "water", "Watery Invader": "water",
+  "Sea Spray": "water", "Toxic Horror": "water",
+  // Air: 14's storm elementals and the Silithus wind
+  "Storm Elemental": "air", "Greater Storm Elemental": "air", "Dust Devil": "air",
+  "Dust Stormer": "air", "Whirling Invader": "air"
+});
+
+/** The four element families an Elemental Bond calls from. */
+export const ELEMENT_FAMILIES = Object.freeze(["earth", "fire", "water", "air"]);
+
+/**
+ * **THE ELEMENTALS AN ELEMENTAL BOND NEVER CALLS, EACH WITH ITS REASON** (D-1796): a
+ * named leader or a Boss, a thing of the arcane, a made construct, a plant, a bog or tar
+ * creature, and 14 §13's own servants (a totem is the Totem feature's, the Treant the
+ * Druid's). A creature that exists only while another calls it is `summoned` wherever it
+ * stands; one bound to a named master whose block reads that master is `servant` (D-1821).
+ */
+export const ELEMENTAL_BOND_EXCLUDED = Object.freeze({
+  "The Windreaver": "named", "Princess Tempestria": "named", "Baron Charr": "named", "Avalanchion": "named",
+  "Ivus the Forest Lord": "boss", "Lokholar the Ice Lord": "boss", "Princess Theradras": "boss", "Ragnaros": "boss",
+  "Mana Surge": "arcane", "Arcane Aberration": "arcane",
+  "Heavy War Golem": "construct", "Obsidian Destroyer": "construct",
+  "Bloodpetal Lasher": "plant", "Bloodpetal Trapper": "plant", "Warpwood Moss Flayer": "plant", "Warpwood Crusher": "plant",
+  "Swampwalker": "bog", "Swampwalker Elder": "bog", "Rotting Behemoth": "bog",
+  "Tar Beast": "tar", "Tar Lord": "tar",
+  "Grounding Totem": "totem", "Healing Stream Totem": "totem", "Mana Tide Totem": "totem", "Searing Totem": "totem",
+  "Stoneskin Totem": "totem", "Tremor Totem": "totem", "Windfury Totem": "totem",
+  "Treant": "summoned",
+  // The 2026-11 build (D-1821).
+  "Bael'Gar": "boss", "Baron Aquanis": "boss", "Baron Geddon": "boss", "C'Thun": "boss", "Garr": "boss",
+  "Golemagg the Incinerator": "boss", "Hydrospawn": "boss", "Landslide the Enthralled": "boss", "Lord Incendius": "boss",
+  "Lord Magmus": "boss", "Lord Roccor": "boss", "Meshlok the Harvester": "boss", "Moam": "boss", "Noxxion": "boss",
+  "Pyroguard Emberseer": "boss", "Razorlash": "boss", "Tendris Warpwood": "boss", "Verdan the Everliving": "boss",
+  "Viscous Fallout": "boss",
+  "Obsidian Eradicator": "construct",
+  "Ancient of Lore": "plant", "Ancient of War": "plant", "Ancient Protector": "plant", "Deeprot Stomper": "plant",
+  "Son of Flame": "summoned", "Theradrim Shardling": "summoned",
+  "Firesworn": "servant"
+});
+
+/** The reasons `ELEMENTAL_BOND_EXCLUDED` may give. */
+export const ELEMENTAL_EXCLUSION_REASONS = Object.freeze(["named", "boss", "arcane", "construct", "plant", "bog", "tar", "totem", "summoned", "servant"]);
+
+/**
+ * The element family an Elemental Bond may call an entry as, or null. Read off the
+ * entry's name, then `sourceName` - the 14 entry a world creature was made from
+ * (`_stats.compendiumSource`, or its bond's `entryName`) - so a GM's renamed Fire
+ * Elemental still answers while a GM's own homebrew elemental does not. A Boss never
+ * answers, whatever its name.
+ *
+ * @param {{name?: string, sourceName?: string|null, weightClass?: string|null}} entry
+ * @returns {"earth"|"fire"|"water"|"air"|null}
+ */
+export function elementalFamily(entry = {}) {
+  if (isBossEntry(entry)) return null;
+  for (const n of [entry?.name, entry?.sourceName]) {
+    const family = typeof n === "string" ? BONDABLE_ELEMENTALS[n] : undefined;
+    if (family) return family;
+  }
   return null;
 }
 
@@ -181,27 +294,45 @@ export function eligible(kind, entry = {}, { talents = [], tier = null, graveBon
   // 1 knight's Raise Abomination raises a tier 2 Elite by the book's own table.
   if (kind === "raised") {
     if (!raises || String(entry.name ?? "") !== String(raises)) return { ok: false, reason: "NotRaised" };
+    // No raise in 07 §17 names a Boss (the census in `boss-refusal.test.mjs`); a GM's
+    // homebrew raise that did would still be refused (D-1804).
+    if (isBossEntry(entry)) return { ok: false, reason: "Boss" };
     return { ok: true, reason: null };
   }
   // The construct's own law (the B2 review: this comment named it and nothing called
   // it): one of 04's table, at the tinker's tier or below.
   if (kind === "construct") {
     const fit = constructEligible(entry, { tier: tier ?? 1 });
-    return fit.ok ? { ok: true, reason: null } : { ok: false, reason: fit.reason === "tier" ? "Tier" : "NotConstruct" };
+    if (!fit.ok && fit.reason !== "tier") return { ok: false, reason: "NotConstruct" };
+    // **A BOSS, BEFORE THE TIER** (D-1804): none of 04's four is one; asked all the same.
+    if (isBossEntry(entry)) return { ok: false, reason: "Boss" };
+    return fit.ok ? { ok: true, reason: null } : { ok: false, reason: "Tier" };
   }
   if (kind === "companion") {
     const type = entry.creatureType ?? null;
     const dragon = type === "dragonkin" && rankOf(talents, "master-of-wilds") > 0;
     if (type === "undead" && graveBond === true) {
       if (String(entry.typeMarker ?? "").toLowerCase() !== "mindless") return { ok: false, reason: "NotMindless" };
-      if (entry.weightClass === "boss") return { ok: false, reason: "Boss" };
+      if (isBossEntry(entry)) return { ok: false, reason: "Boss" };
       // **NO CAP** (the lead): Grave Bond names no tier, so an undead of any tier
       // may be bonded - the tier gate below is the Handling Test's, not this one's.
       return { ok: true, reason: null, test: "spirit" };
     }
     if (type !== "beast" && !dragon) return { ok: false, reason: "NotBeast" };
+    // **A BOSS IS NO COMPANION** (D-1804): Aku'mai prints a Handling DC and was a pick
+    // until the lead's ruling; judged after the kind (a Boss that is no beast is hidden as
+    // no beast) and before the Handling DC and the tier, so the menu says why.
+    if (isBossEntry(entry)) return { ok: false, reason: "Boss" };
     if (entry.handlingDC === null || entry.handlingDC === undefined) return { ok: false, reason: "NoHandling" };
   }
+  // **A BOSS IS NEVER BOUND OR CALLED** (D-1804; the lead, 2026-11-22: *"boss's like King
+  // Mosh can't be shapeshift or summon targets"*): every other kind - a demon, an
+  // elemental, a summon, a totem - asks it here, before the family and the tier, so a
+  // refusal names the real reason.
+  if (isBossEntry(entry)) return { ok: false, reason: "Boss" };
+  // **AN ELEMENTAL IS ONE OF THE FOUR FAMILIES** (D-1796): judged before the tier, as the
+  // companion's NotBeast is, so a refusal names the real reason.
+  if (kind === "elemental" && !elementalFamily(entry)) return { ok: false, reason: "NotElementalFamily" };
   // A creature above the character's tier waits on the level (D-650): the
   // chapter's own band, the lead's ruling to gate the list by level.
   if (tier !== null && tier !== undefined && (entry.tier ?? 1) > tier) return { ok: false, reason: "Tier" };
@@ -375,7 +506,10 @@ export function boundAttacksFor(talents = [], { kind = null, name = "" } = {}, r
         condition: l.condition,
         value: Number.isInteger(l.value) && l.value > 0 ? l.value : null,
         until: typeof l.until === "string" && l.until ? l.until : null,
-        shed: l.shed === "spellDc" ? "spellDc" : null
+        shed: l.shed === "spellDc" ? "spellDc" : null,
+        // *a creature it hits that is not already Poisoned* (04's Serpent Ward; the class talent
+        // audit, D-1887): a condition the creature already holds is not laid again.
+        ...(typeof l.unless === "string" && /^[a-z]+$/.test(l.unless) ? { unless: l.unless } : {})
       }));
     out.push({
       identifier: String(t.identifier), name: String(t.name ?? ""),

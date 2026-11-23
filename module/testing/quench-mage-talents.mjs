@@ -259,64 +259,25 @@ export function mageTalentsBatch(context) {
 
     it("OVERCHANNELLER: an Overchannel's Health is the rank less, and the card says so", async function () {
       this.timeout(180000);
-      const mage = await mageWith("ZZ MaT Overch", { ranks: { Overchanneller: 2 }, spells: ["Frostbolt"] });
+      // Level 5: 02's Overchannel Mastery (level 9) turns the Health into Mana, which `audit-arcane` holds.
+      const mage = await mageWith("ZZ MaT Overch", { level: 5, ranks: { Overchanneller: 2 }, spells: ["Frostbolt"] });
       const ghoul = await makeNpc("Plagued Ghoul");
       await fill(mage, "mana");
       await setHealth(mage, mage.system.health.max);
       const before = mage.system.health.value;
       const card = await cast(mage, "Frostbolt", { targets: [rowOf(ghoul)], overchannel: 1 });
       assert.ok(card, "the cast was refused");
-      // Frostbolt is tier 1: a point costs 2 Health, and Overchanneller at rank 2 takes 2 off.
-      assert.equal(mage.system.health.value, before, "the Overchannel still cost Health");
-      assert.include(formulas(card), game.i18n.format("AZEROTH.Cast.OverchannelReliefRow", { n: 2 }));
+      // Frostbolt is tier 1: a point costs 2 Health, and Overchanneller at rank 2 takes 2 off EACH
+      // point, to a minimum of 1 (the class talent audit's C3, D-1890): 1 Health, 1 taken off.
+      assert.equal(mage.system.health.value, before - 1, "the point did not cost its 1 Health");
+      assert.include(formulas(card), game.i18n.format("AZEROTH.Cast.OverchannelReliefRow", { n: 1 }));
     });
 
-    it("CLEARCASTING: an Overchannelled cast that succeeds returns 2 Mana a rank", async function () {
-      this.timeout(180000);
-      const mage = await mageWith("ZZ MaT Clear", { ranks: { Overchanneller: 1, Clearcasting: 2 }, spells: ["Frostbolt"] });
-      const ghoul = await makeNpc("Plagued Ghoul");
-      const full = await fill(mage, "mana");
-      await setHealth(mage, mage.system.health.max);
-      const card = await cast(mage, "Frostbolt", { targets: [rowOf(ghoul)], overchannel: 1, face: 18 });
-      assert.isTrue(card.flags["azeroth-rpg"].success, "the pinned cast failed");
-      const mana = card.flags["azeroth-rpg"].mana ?? 2;
-      await until(() => poolOf(mage, "mana").value === Math.min(full.max, full.value - mana + 4), "4 Mana back");
-      assert.include(labels(card).join(" "), "Clearcasting");
-    });
+    // CLEARCASTING returns no Mana now (the class talent audit, D-1890): its free points are `azeroth-rpg.audit-arcane`'s.
 
-    it("MANA SHIELD: at rank 2 the turn's start holds it for nothing, and says so", async function () {
-      this.timeout(300000);
-      const mage = await mageWith("ZZ MaT Shield", { ranks: { "Mana Shield": 2 } });
-      const ghoul = await makeNpc("Plagued Ghoul");
-      await fill(mage, "mana");
-      const card = await cast(mage, "Mana Shield");
-      assert.ok(card, "Mana Shield was refused");
-      await until(() => sustained(mage).length === 1, "Mana Shield held");
-      const combat = await fightWith([mage, ghoul]);
-      await giveTurn(combat, ghoul);
-      const held = poolOf(mage, "mana").value;
-      await giveTurn(combat, mage);
-      await settle();
-      assert.equal(poolOf(mage, "mana").value, held, "the upkeep charged Mana for a free Sustain");
-      assert.lengthOf(sustained(mage), 1, "the Sustain ended");
-    });
+    // MANA SHIELD at rank 2 halves what the damage costs rather than its upkeep (D-1890): `mage-talents.test.mjs` holds the ratio.
 
-    it("ARCANE POWER: every spell adds the rank until the end of the next turn", async function () {
-      this.timeout(240000);
-      const mage = await mageWith("ZZ MaT Power", { ranks: { "Arcane Missiles": 1, "Arcane Power": 2 }, spells: ["Frostbolt"] });
-      const ghoul = await makeNpc("Plagued Ghoul");
-      const combat = await fightWith([mage, ghoul]);
-      const mine = await giveTurn(combat, mage);
-      await fill(mage, "mana");
-      const plain = await cast(mage, "Frostbolt", { targets: [rowOf(ghoul)] });
-      await mine.resetBudget();
-      assert.ok(await use(mage, "Arcane Power"), "Arcane Power was refused");
-      await until(() => mage.effects.some(e => e.getFlag("azeroth-rpg", "talentBuff") === "Arcane Power"), "the buff laid");
-      await mine.resetBudget();
-      await fill(mage, "mana");
-      const powered = await cast(mage, "Frostbolt", { targets: [rowOf(ghoul)] });
-      assert.equal(powered.flags["azeroth-rpg"].damageByTarget[0].damage, plain.flags["azeroth-rpg"].damageByTarget[0].damage + 2, "a Frost spell did not take Arcane Power's 2");
-    });
+    // ARCANE POWER is no action and the tier now (D-1890): `azeroth-rpg.audit-arcane` presses it.
 
     it("SPELLSTEAL: a Counterspell at a caster ends one Sustain it holds, chosen before the Mana", async function () {
       this.timeout(180000);
@@ -368,18 +329,7 @@ export function mageTalentsBatch(context) {
       }
     });
 
-    it("ARCHMAGE: while 07's spell stands, one Sustain more and a Boon a Sustain to four", async function () {
-      this.timeout(300000);
-      const mage = await mageWith("ZZ MaT Archmage", { ranks: { Archmage: 1 }, spells: ["Mana Shield"] });
-      await mage.createEmbeddedDocuments("ActiveEffect", [{ name: "Archmage", origin: mage.uuid, flags: { "azeroth-rpg": { identifier: "archmage" } } }]);
-      for (let i = 0; i < 2; i++) {
-        await fill(mage, "mana");
-        await cast(mage, "Mana Shield");
-      }
-      await until(() => sustained(mage).length === 2, "two Sustains where 05 §12 alone allows one");
-      await mage.setFlag("azeroth-rpg", "sustaining", [...sustained(mage), ...sustained(mage), { name: "ZZ" }]);
-      assert.equal(await castingBoons(mage), 4, "Archmage's Boons are not four");
-    });
+    // ARCHMAGE is Master of the Weave now (D-1890): `mage-talents.test.mjs` holds its limit, its Boon and its gate.
 
     /* ---- Fire ------------------------------------------------------------ */
 
@@ -516,7 +466,8 @@ export function mageTalentsBatch(context) {
       await fill(mage, "mana");
       const card = await use(mage, "Firestorm", { face: 18, dc: 10 });
       const flags = card.flags["azeroth-rpg"];
-      assert.equal(flags.areaTick?.damage?.rating, 2 * (mage.system.tier ?? 1), "the tick is not the tier a rank");
+      // The class talent audit's Tune (D-1890): *your tier plus your rank*.
+      assert.equal(flags.areaTick?.damage?.rating, (mage.system.tier ?? 1) + 2, "the tick is not the tier plus the rank");
       assert.equal(flags.lasts?.rounds, 1);
       assert.ok(parsed(card).querySelector('[data-action="placeArea"]'), "the card offers no area");
     });
@@ -538,15 +489,7 @@ export function mageTalentsBatch(context) {
       await until(() => mage.system.health.value === 0, "the second blow is not caught");
     });
 
-    it("SUNFIRE: the Casting Test opens at DC 22, where 07 states 26", async function () {
-      this.timeout(180000);
-      const mage = await mageWith("ZZ MaT Sun", { level: 17, ranks: { Firestorm: 1, Sunfire: 1 } });
-      await until(() => spellNamed(mage, "Sunfire"), "Sunfire learned");
-      await fill(mage, "mana");
-      const card = await cast(mage, "Sunfire");
-      assert.ok(card, "Sunfire was refused");
-      assert.equal(card.rolls[0].options.dc, 22, "the Test was not made against DC 22");
-    });
+    // SUNFIRE is Pyromaniac now (D-1890) and teaches nothing: `mage-talents.test.mjs` holds its Ignite and its pierce.
 
     /* ---- Frost ----------------------------------------------------------- */
 

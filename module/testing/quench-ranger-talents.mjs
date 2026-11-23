@@ -333,17 +333,20 @@ export function rangerTalentsBatch(context) {
       assert.include(formulas(card), game.i18n.format("AZEROTH.Card.Forced", { n: 3 }));
     });
 
-    it("RAPID FIRE: the Use pays its Full Action once a Long Rest, and the card's Attack costs nothing more", async function () {
+    // An action once an encounter, three attacks a rank, one target a set of three, since the class talent audit
+    // (D-1876; the wave-2 fix run's per-target law).
+    it("RAPID FIRE: the Use pays its action once an encounter, the card allows three a rank at one target a set, and a press costs nothing more", async function () {
       this.timeout(240000);
       const ranger = await rangerWith("ZZ RT Rapid", { level: 13, weapons: ["Shortbow", "Broadhead arrows"], ranks: { "Rapid Fire": 1 } });
       const ghoul = await makeNpc("Plagued Ghoul");
       const combat = await fightWith([ranger, ghoul]);
       const mine = await giveTurn(combat, ranger);
+      const feature = await until(() => featureNamed(ranger, "Rapid Fire"), "Rapid Fire granted");
+      assert.equal(feature.system.action, "action");
+      assert.equal(feature.system.uses?.per, "encounter");
       const card = await use(ranger, "Rapid Fire");
       assert.ok(card, "Rapid Fire was refused");
-      // *four attacks against one target per rank*: the allowance the feature's stamp
-      // carries now (B8b: `featureStamp` never wrote `attacks`, and the card allowed one).
-      assert.equal(card.flags["azeroth-rpg"].attacks?.allowed, 4, "the card does not allow rank 1's four attacks");
+      assert.deepInclude(card.flags["azeroth-rpg"].attacks, { allowed: 3, perTarget: 3, maxTargets: 1 }, "the card does not record rank 1's three at one target");
       const halves = mine.budget.halfActions;
       const button = parsed(card).querySelector('[data-action="attackFromCard"]');
       assert.equal(button?.dataset.budget, "none", "the Attack button charges the budget");
@@ -491,13 +494,15 @@ export function rangerTalentsBatch(context) {
 
     it("WING CLIP: a hit drops the target's Speed 10 feet a rank until the Ranger's next turn", async function () {
       this.timeout(240000);
-      const ranger = await rangerWith("ZZ RT Wing Clip", { weapons: ["Shortbow"], ranks: { "Wing Clip": 2 } });
+      // A melee weapon's since the class talent audit (D-1876).
+      const ranger = await rangerWith("ZZ RT Wing Clip", { weapons: ["Longsword"], ranks: { "Wing Clip": 2 } });
       const ghoul = await makeNpc("Plagued Ghoul");
       const combat = await fightWith([ranger, ghoul]);
       await giveTurn(combat, ranger);
       await fill(ranger, "focus");
       const speed = ghoul.system.speed;
-      await strike(ranger, { targets: [rowOf(ghoul)], riders: ["wing-clip"] });
+      // A melee blow: `strike` shoots unless told otherwise, and the rider is a melee attack's (D-1876).
+      await strike(ranger, { targets: [rowOf(ghoul)], riders: ["wing-clip"], ranged: false });
       await until(() => ghoul.system.speed === Math.max(0, speed - 20), "20 feet off the ghoul's Speed");
       const drop = ghoul.effects.find(e => e.getFlag("azeroth-rpg", "speedDrop"));
       assert.equal(drop?.duration?.expiry, "turnStart");
@@ -540,9 +545,22 @@ export function rangerTalentsBatch(context) {
       assert.include(said, game.i18n.format("AZEROTH.Snare.NotCaught", { name: ghoul.name }));
       assert.isTrue(ghoul.statuses.has("entangled"), "the escape ended an Entangled the Snare did not lay");
       await ghoul.toggleStatusEffect("entangled", { active: false });
-      // The Snare's own catch, through the card's Inflict, carries its flag.
-      const inflict = parsed(card).querySelector('[data-action="applyCondition"][data-condition="entangled"]');
-      await CARD_ACTIONS.applyCondition(inflict, card);
+      // The Snare's own catch carries its flag. **The Entangled lands when a creature ENTERS the
+      // Snare's area** (0.12.32; `rules/snare-trigger.mjs#snareOwnsCondition`): the card's Inflict
+      // refuses it, so the catch goes through the entry door - the area placed from the card and
+      // the ghoul walked into it, as `tests/e2e/snare-trigger.spec.mjs` drives it.
+      const { regionFlagsFromCard } = await import("../dice/chat.mjs");
+      const { regionDataFor } = await import("../canvas/regions.mjs");
+      const snare = featureNamed(ranger, "Snare");
+      // A 15 ft radius 25 ft from the ghoul's square and 40 ft from the Ranger's.
+      await canvas.scene.createEmbeddedDocuments("Region", [regionDataFor({
+        item: snare, areaText: snare.system.area, scene: canvas.scene, origin: { x: 1900, y: 1050 },
+        flags: regionFlagsFromCard(card, ranger, snare)
+      })]);
+      const walker = ghoul.getActiveTokens(true)[0].document;
+      const entered = untilHook("azerothAreasEntered", 30000, t => t.id === walker.id);
+      await walker.move({ x: 1700, y: 1000 }, { animate: false });
+      await entered;
       const caught = await until(() => ghoul.effects.find(e => e.statuses?.has("entangled")), "the Snare's Entangled");
       assert.deepEqual(caught.getFlag("azeroth-rpg", "snare"), { source: ranger.uuid });
       const theirs = await giveTurn(combat, ghoul);
@@ -569,30 +587,20 @@ export function rangerTalentsBatch(context) {
       canvas.tokens.releaseAll();
     });
 
-    it("KILL SHOT: the card's Attack is made once, and a second press is refused in words before anything happens", async function () {
+    // A line on the attack's own dialog since the class talent audit (D-1873), never a Use: all the Quarry, at the
+    // marked target alone, refused in words anywhere else.
+    it("KILL SHOT: a passive feature whose line spends all the Quarry, greyed in words at a target not marked", async function () {
       this.timeout(240000);
-      const ranger = await rangerWith("ZZ RT Kill Shot", { level: 17, weapons: ["Shortbow", "Broadhead arrows"] });
+      const ranger = await rangerWith("ZZ RT Kill Shot", { level: 20, weapons: ["Shortbow", "Broadhead arrows"] });
       const ghoul = await makeNpc("Plagued Ghoul");
-      const combat = await fightWith([ranger, ghoul]);
-      await giveTurn(combat, ranger);
       await setPool(ranger, "quarry", 3);
-      const card = await use(ranger, "Kill Shot", { targets: [rowOf(ghoul)] });
-      assert.ok(card, "Kill Shot was refused");
-      assert.equal(card.flags["azeroth-rpg"].attacks?.allowed, 1, "the card records no allowance of one");
-      const button = parsed(card).querySelector('[data-action="attackFromCard"]');
-      const unpin = pinDie(15);
-      try {
-        const shot = await CARD_ACTIONS.attackFromCard(button, card);
-        assert.ok(shot, "the first press made no attack");
-        made.push(shot);
-      } finally {
-        unpin();
-      }
-      await until(() => game.messages.get(card.id)?.getFlag("azeroth-rpg", "attacksMade") === 1, "the press counted on the card");
-      const before = game.messages.contents.length;
-      const said = await warnings(async () => { assert.isNull(await CARD_ACTIONS.attackFromCard(button, game.messages.get(card.id))); });
-      assert.include(said, game.i18n.format("AZEROTH.Feature.AttacksSpent", { name: "Kill Shot", n: 1 }));
-      assert.equal(game.messages.contents.length, before, "the refused press posted something");
+      const feature = await until(() => featureNamed(ranger, "Kill Shot"), "Kill Shot granted");
+      assert.equal(feature.system.kind, "passive", "Kill Shot still draws a Use");
+      const line = ranger.riderLines({ weapon: "ranged", target: ghoul }).find(l => l.identifier === "kill-shot");
+      assert.ok(line, "no Kill Shot line on the attack");
+      assert.isTrue(line.all, "Kill Shot does not spend all the Quarry");
+      assert.isFalse(line.available, "Kill Shot was open at a creature not marked");
+      assert.equal(line.reason?.key, "AZEROTH.Rider.Refused.Gate");
     });
 
     it("TRAPPER: the Snare is set with no Half-Action", async function () {
@@ -622,7 +630,8 @@ export function rangerTalentsBatch(context) {
       assert.equal(combat.getCombatantsByActor(ranger)[0].budget.halfActions, halves, "the coating cost an action");
       const card = await strike(ranger, { weapon: ranger.items.get(dagger.id), targets: [rowOf(ghoul)], ranged: false, coating: ranger.items.get(dagger.id).getFlag("azeroth-rpg", "coating"), budget: "none" });
       assert.isNull(parsed(card).querySelector('[data-action="resistTest"][data-purpose="poison"]'), "the card still offers the poison's Test");
-      await until(() => ghoul.effects.find(e => e.getFlag("azeroth-rpg", "tick")?.source === ranger.uuid), "the tick on the ghoul");
+      // A poison lands as the creature's carrier since D-800 (`effects/afflictions.mjs#afflict`), never a bare tick.
+      await until(() => ghoul.effects.find(e => e.getFlag("azeroth-rpg", "affliction") && e.name === "Serpent's tears"), "the poison carried by the ghoul");
     });
   });
 }

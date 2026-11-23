@@ -1,6 +1,8 @@
-import { MOBILE_ALERT } from "./mobile-alert.mjs";
+import { MOBILE_ALERT, MOBILE_ALERT_FORMER_ENTRIES } from "./mobile-alert.mjs";
 const id = value => typeof value === "string" && value.trim().length > 0;
 const refuse = reason => ({ ok: false, reason });
+/** A pair summoned before the rename (D-1819) is still the alarm's own pair. */
+const ownEntry = entry => entry === MOBILE_ALERT.entry || MOBILE_ALERT_FORMER_ENTRIES.includes(entry);
 
 /** Recovery never creates or heals a sentry. Reset explicitly removes the
  * reviewed alarm's remaining tokens before its receipt can be cleared. */
@@ -13,7 +15,7 @@ export function mobileAlertRecovery({ ownerUuid, record, tokens, inventoryComple
   const owned = tokens.filter(token => token?.ownerUuid === ownerUuid);
   if (inCombat || owned.some(token => token.inCombat)) return refuse("combat");
   if (owned.length > MOBILE_ALERT.count || new Set(owned.map(token => token.uuid)).size !== owned.length) return refuse("multiple");
-  if (owned.some(token => !id(token.uuid) || token.cast !== record.cast || token.entry !== MOBILE_ALERT.entry)) return refuse("identity");
+  if (owned.some(token => !id(token.uuid) || token.cast !== record.cast || !ownEntry(token.entry))) return refuse("identity");
   const uuids = owned.map(token => token.uuid).sort();
   if (operation === "reset") return { ok: true, action: uuids.length ? "remove" : "clear", tokens: uuids };
   return { ok: true, action: "retain", record: { ...record,

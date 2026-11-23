@@ -142,6 +142,9 @@ import { SOV_FEATURE_ANIMATIONS, SOV_FILTERS, SOV_SPELL_ANIMATIONS } from "./sov
 // The Demon Hunter's eight tier 1 spells, its features, states and talents, and its recolours (the Demon
 // Hunter plan's Phase 6; D-1580). Every talent's row has landed, so every talent's picture is in the table.
 import { DH_FEATURE_ANIMATIONS, DH_FILTERS, DH_SPELL_ANIMATIONS, liveTalentAnimations } from "./demon-hunter-animations.mjs";
+import { AUDIT_CUNNING_ANIMATIONS } from "./audit-cunning-animations.mjs";
+// The class talent audit's Mage, Warlock and Druid (D-1890 to D-1899).
+import { AUDIT_ARCANE_ANIMATIONS } from "./audit-arcane-animations.mjs";
 import { FORCED_MOVE_KEY } from "./animation-records.mjs";
 
 /* ------------------------------------------------------------------ */
@@ -1657,6 +1660,176 @@ export const FEATURE_ANIMATIONS = Object.freeze({
     ]
   },
 
+  /* ---- the class talent audit's Warrior, Paladin and Ranger (class agent A, D-1870 to D-1879) ---- */
+  // 02's Second Wind: a breath drawn in, and a warm glow on the warrior as the Health comes back.
+  "second-wind": {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "source", scale: 0.8 }),
+      fx("jb2a.healing_generic.200px.yellow", { place: "source", scale: 0.9, filter: "SCORCH", delay: 200 }),
+      snd(SOUNDS.boon, { delay: 200 })
+    ])]
+  },
+  // 04's Precise Strike: a pale spark where the blow finds the gap in the armour, a beat after its impact.
+  "precise-strike": {
+    cues: [cue("hit", [
+      fx("jb2a.impact.001.blue", { place: "target", scale: 0.6, filter: "DESATURATE", delay: 420 }),
+      snd(SOUNDS.slash, { delay: 420, volume: 0.7 })
+    ])]
+  },
+  // 04's Mortal Strike: a heavy red spark on the blow that leaves the wound unable to heal.
+  "mortal-strike": {
+    cues: [cue("hit", [
+      fx("jb2a.impact.013.001.orangeyellow", { place: "target", scale: 0.9, filter: "SCORCH", delay: 420 }),
+      snd(SOUNDS.blunt, { delay: 420, volume: 0.9 })
+    ])]
+  },
+  // 04's Whirlwind: a whirl of steel thrown out at the warrior as the Use is made, each blow of it a whirling cut.
+  whirlwind: {
+    cues: [cue("use", [
+      fx("jb2a.template_circle.whirl.intro.blue", { place: "source", scale: 1.8, filter: "DESATURATE" }),
+      snd(SOUNDS.swingHeavy)
+    ])],
+    strike: strike({ swing: melee("jb2a.melee_generic.whirlwind.01.orange", { heavy: true }), impact: blow(SOUNDS.slash) })
+  },
+  // 04's Bloodthirst: a red glow on the warrior as the hit's Health comes back.
+  bloodthirst: {
+    cues: [cue("hit", [
+      fx("jb2a.healing_generic.200px.yellow", { place: "source", scale: 0.8, filter: "SCORCH", delay: 450 }),
+      snd(SOUNDS.boon, { delay: 450, volume: 0.6 })
+    ])]
+  },
+  // 04's Last Stand: a stone-hard shield thrown up about the warrior as the temporary Health arrives.
+  "last-stand": {
+    cues: [cue("use", [
+      fx("jb2a.shield_themed.above.molten_earth.01.orange", { place: "source", scale: 1.2, filter: "EARTH", hold: 900, fadeOut: 400 }),
+      snd("psfx.1st-level-spells.shield-spell.intro.v1.003", { volume: 0.7 })
+    ])]
+  },
+  // 04's Shield Slam: the shield's jolt where the blow lands, a beat after its impact.
+  "shield-slam": {
+    cues: [cue("hit", [
+      fx("jb2a.impact.ground_crack.orange.02", { place: "target", scale: 0.6, filter: "EARTH", delay: 420 }),
+      snd(SOUNDS.blunt, { delay: 420 })
+    ])]
+  },
+  // 04's Unbreakable: a warrior's roar and a brief ring of stone thrown out across the 10 feet it guards.
+  unbreakable: {
+    cues: [cue("use", [
+      fx("jb2a.smoke.puff.ring.01.white", { place: "source", scale: 1.4, below: true, filter: "EARTH" }),
+      snd("psfx.creature.dragons.roar.small", { volume: 0.5 }),
+      fx("jb2a.shield.01.intro.blue", { place: "source", scale: 1.1, filter: "EARTH", delay: 200 })
+    ])]
+  },
+  // 02's Lay on Hands: a golden heal on the creature touched.
+  "lay-on-hands": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.02.blue", { place: "source", scale: 0.7, filter: "GOLD_B" }),
+      fx("jb2a.healing_generic.400px.yellow", { place: "target", scale: 1.0, delay: 250 }),
+      snd(SOUNDS.bless1, { delay: 250 })
+    ])]
+  },
+  // 02's Divine Storm: a golden whirl thrown out at the Paladin; each heal its own card's line.
+  "divine-storm": {
+    cues: [cue("use", [
+      fx("jb2a.template_circle.whirl.intro.blue", { place: "source", scale: 1.4, filter: "GOLD_B" }),
+      snd(SOUNDS.swingHeavy),
+      fx("jb2a.extras.tmfx.outpulse.circle.01.normal", { place: "source", scale: 1.0, filter: "GOLD_B", delay: 200 })
+    ])]
+  },
+  // 02's Avenging Wrath: a burst of the Light at the Paladin as the encounter's Boon is laid.
+  "avenging-wrath": {
+    cues: [cue("use", [
+      fx("jb2a.divine_smite.caster.blueyellow", { place: "source", scale: 1.2 }),
+      snd(SOUNDS.bless2)
+    ])]
+  },
+  // 02's Beacon of Hope: a golden pulse thrown out from the Paladin across the 30 feet it reaches.
+  "beacon-of-hope": {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.outpulse.circle.01.normal", { place: "source", sizeFt: 60, filter: "GOLD_B" }),
+      fx("jb2a.bless.200px.intro.yellow", { place: "source", scale: 0.9, delay: 150 }),
+      snd(SOUNDS.bless1)
+    ])]
+  },
+  // 04's Crusader Strike: the Light's spark on the blow, a beat after its impact.
+  "crusader-strike": {
+    cues: [cue("hit", [
+      fx("jb2a.divine_smite.target.blueyellow", { place: "target", scale: 0.7, delay: 420 }),
+      snd(SOUNDS.generic, { delay: 420, volume: 0.7 })
+    ])]
+  },
+  // 04's Seal of Command: a brief golden flare at the Paladin as the encounter's Holy damage is switched on.
+  "seal-of-command": {
+    cues: [cue("use", [
+      fx("jb2a.cast_generic.02.blue", { place: "source", scale: 1.0, filter: "GOLD_B" }),
+      snd(SOUNDS.bless2, { volume: 0.7 })
+    ])]
+  },
+  // 04's Blessing: a golden blessing on the creature named.
+  blessing: {
+    cues: [cue("use", [
+      fx("jb2a.bless.200px.intro.yellow", { place: "target", scale: 0.8 }),
+      snd(SOUNDS.boon)
+    ])]
+  },
+  // 04's Mending Word: a word of the Light carried to the friend and a golden heal there.
+  "mending-word": {
+    cues: [cue("use", [
+      fx("jb2a.energy_strands.range.standard.purple.01", { place: "source>target", travel: "stretch", filter: "GOLD_B" }),
+      fx("jb2a.healing_generic.200px.yellow", { place: "target", scale: 0.9, waitFor: "travel", overlap: -200 }),
+      snd(SOUNDS.bless1)
+    ])]
+  },
+  // 02's Snare: a brief puff of dust where the trap is set; the Entangled is the trap's own line.
+  snare: {
+    cues: [cue("use", [
+      fx("jb2a.smoke.puff.ring.01.white", { place: "source", scale: 0.7, below: true, filter: "EARTH" }),
+      snd(SOUNDS.gust, { volume: 0.5 })
+    ])]
+  },
+  // 02's Aimed Shot: a pale spark where the shot finds its mark, a beat after its impact.
+  "aimed-shot": {
+    cues: [cue("hit", [
+      fx("jb2a.impact.001.blue", { place: "target", scale: 0.6, filter: "DESATURATE", delay: 420 }),
+      snd(SOUNDS.longbow, { delay: 300, volume: 0.6 })
+    ])]
+  },
+  // 02's Kill Shot: a heavy flash on the marked target where every point of Quarry lands.
+  "kill-shot": {
+    cues: [cue("hit", [
+      fx("jb2a.impact.013.001.orangeyellow", { place: "target", scale: 1.0, delay: 420 }),
+      snd(SOUNDS.blunt, { delay: 420 })
+    ])]
+  },
+  // 04's Barrage: the ranger's draw, a brief gust of loosed arrows; each shot is its own card's.
+  barrage: {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.outpulse.circle.01.normal", { place: "source", scale: 0.6, filter: "DESATURATE" }),
+      snd(SOUNDS.longbow)
+    ])]
+  },
+  // 04's Rapid Fire: a brief quickening at the ranger as the volley begins.
+  "rapid-fire": {
+    cues: [cue("use", [
+      fx("jb2a.on_token_buff.001.001.orangeyellow", { place: "source", scale: 0.9, filter: "DESATURATE" }),
+      snd(SOUNDS.longbow)
+    ])]
+  },
+  // 04's Wing Clip: a jolt on the melee blow that slows its target, a beat after its impact.
+  "wing-clip": {
+    cues: [cue("hit", [
+      fx("jb2a.impact.ground_crack.orange.02", { place: "target", scale: 0.5, below: true, filter: "EARTH", delay: 420 }),
+      snd(SOUNDS.slash, { delay: 420, volume: 0.6 })
+    ])]
+  },
+  // 04's Readiness: focus drawn back into the ranger.
+  readiness: {
+    cues: [cue("use", [
+      fx("jb2a.particles.inward.greenyellow.01.01", { place: "source", scale: 0.9 }),
+      snd(SOUNDS.gust, { volume: 0.6 })
+    ])]
+  },
+
   /* ---- 02 §7's Rogue ---- */
   shadowstep: {
     cues: [
@@ -2755,6 +2928,13 @@ export const FEATURE_ANIMATIONS = Object.freeze({
       snd(SOUNDS.blunt, { volume: 0.3 })
     ])]
   },
+  // Its own label since D-1788, and the picture Knock Away's row gave it under the shared one.
+  "ability:deathclasp-knock-away": {
+    cues: [cue("use", [
+      fx("jb2a.melee_generic.creature_attack.fist.001.red", { place: "target", filter: "DESATURATE", scale: 0.6 }),
+      snd(SOUNDS.blunt, { volume: 0.3 })
+    ])]
+  },
   "ability:wild-regeneration": {
     cues: [cue("use", [
       fx("jb2a.healing_generic.200px.green", { place: "source", scale: 1.2 }),
@@ -3205,6 +3385,13 @@ export const FEATURE_ANIMATIONS = Object.freeze({
     ])]
   },
   "ability:cause-insanity": {
+    cues: [cue("use", [
+      fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "target", filter: "PSYCHIC", scale: 0.7 }),
+      snd(SOUNDS.psychic, { volume: 0.25 })
+    ])]
+  },
+  // Its own label since D-1788, and the picture Cause Insanity's row gave it under the shared one.
+  "ability:hakkar-cause-insanity": {
     cues: [cue("use", [
       fx("jb2a.extras.tmfx.inpulse.circle.01.normal", { place: "target", filter: "PSYCHIC", scale: 0.7 }),
       snd(SOUNDS.psychic, { volume: 0.25 })
@@ -3725,6 +3912,11 @@ export const FEATURE_ANIMATIONS = Object.freeze({
       swing: { asset: "jb2a.ranged.04.projectile.01.green", place: "source>target", travel: "stretch", sound: snd("psfx.cantrips.poison-spray.v1", { volume: 0.8 }) },
       impact: { asset: "jb2a.liquid.splash.blue", place: "target", scale: 0.6, filter: "VENOM_B", waitFor: "travel", overlap: -250, sound: snd(SOUNDS.necrotic, { volume: 0.5 }) }
     }),
+    // The Poisoned laid, with its sound (the class talent audit's wave 2 review: every action row a sound step).
+    cues: [cue("effect", [
+      fx("jb2a.markers.poison.dark_green.01", { place: "effect", scale: 1.1, hold: 1000, fadeOut: 400 }),
+      snd("psfx.cantrips.poison-spray.v1", { volume: 0.5 })
+    ], { state: "shedDc" })],
     loop: loop("effect", [fx("jb2a.markers.poison.dark_green.01", { place: "holder", scale: 1.1, opacity: 0.65 })], { state: "shedDc" })
   },
   "evil-eye": {
@@ -3877,6 +4069,10 @@ export const FEATURE_ANIMATIONS = Object.freeze({
   // torment, Flame Crash's burning ground - and 04's talents whose rows have landed
   // (`rules/demon-hunter-animations.mjs`; the Demon Hunter plan's Phase 6).
   ...DH_FEATURE_ANIMATIONS,
+  // The class talent audit's Rogue, Priest and Shaman (D-1880 to D-1887; `rules/audit-cunning-animations.mjs`).
+  ...AUDIT_CUNNING_ANIMATIONS,
+  // The class talent audit's Mage, Warlock and Druid (D-1890 to D-1899; `rules/audit-arcane-animations.mjs`).
+  ...AUDIT_ARCANE_ANIMATIONS,
   ...liveTalentAnimations()
 });
 

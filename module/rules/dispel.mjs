@@ -381,14 +381,44 @@ export function dispelGated(effects = [], gates = {}) {
   const out = [];
   for (const e of effects ?? []) {
     // A Sustained cast's effect is not an ongoing effect (07 §7: *Talents that speak of your
-    // ongoing effects mean what an Instant spell left behind*), so no gate holds it (O-308).
-    if (sustainOf(e)) continue;
-    const owner = ongoingOwner(e);
-    const gate = owner ? gates?.[owner] ?? null : null;
+    // ongoing effects mean what an Instant spell left behind*), so no ongoing-effect gate holds
+    // it (O-308) - only a gate that names Sustained spells (04's Master of the Weave: *Dispel
+    // and similar effects end a Sustained spell of yours only on a Casting Test that meets or
+    // exceeds SL 2*; the class talent audit, D-1890), keyed on the cast's caster.
+    const sustain = sustainOf(e);
+    const owner = sustain ? sustain.by : ongoingOwner(e);
+    const held = owner ? gates?.[owner] ?? null : null;
+    const gate = pickGate(held, { sustained: Boolean(sustain), names: effectSpellNames(e) });
     if (!gate || !(Number(gate.sl) > 0)) continue;
     out.push({ id: String(e.id), sl: Math.trunc(Number(gate.sl)), by: String(gate.name ?? ""), owner });
   }
   return out.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/**
+ * The gate an effect meets among one owner's (the class talent audit, D-1890 to D-1892): a
+ * list from `class-talents.mjs#dispelGatesFor`, or one bare gate (a caller before it, read as
+ * a gate on every ongoing effect). A Sustained effect meets only a `sustained` gate; an ongoing
+ * one a gate naming no spells or naming this one. The highest SL wins.
+ *
+ * @param {object|object[]|null} held
+ * @param {{sustained?: boolean, names?: string[]}} o
+ */
+function pickGate(held, { sustained = false, names = [] } = {}) {
+  const list = Array.isArray(held) ? held : (held ? [{ ...held, sustained: false, spells: null }] : []);
+  let best = null;
+  for (const g of list) {
+    if (!g || (g.sustained === true) !== sustained) continue;
+    if (Array.isArray(g.spells) && g.spells.length && !g.spells.some(n => names.includes(n))) continue;
+    if (!best || Number(g.sl) > Number(best.sl)) best = g;
+  }
+  return best;
+}
+
+/** The names an effect answers to as a spell: its own, its tick's and its laid spell's. */
+function effectSpellNames(effect) {
+  const f = flagsOf(effect);
+  return [effect?.name, f.tick?.name, f.spellName].filter(n => typeof n === "string" && n);
 }
 
 /**

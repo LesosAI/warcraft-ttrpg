@@ -1196,6 +1196,12 @@ export function signatureField() {
  */
 function applyCoating(system, coating) {
   if (!coating) return;
+  // 02's Poisoner's second poison (the class talent audit, D-1880) applies beside the first.
+  if (coating.also && typeof coating.also === "object") {
+    const { also, ...first } = coating;
+    applyCoating(system, also);
+    coating = first;
+  }
   if (coating.trait && !(system.traits ?? []).includes(coating.trait)) {
     system.traits = [...(system.traits ?? []), coating.trait];
   }

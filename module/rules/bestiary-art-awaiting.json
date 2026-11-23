@@ -1,0 +1,4 @@
+{
+  "note": "The bestiary blocks awaiting art (D-1820): each wears FALLBACK until its portrait and token land in assets/art/bestiary/ and `node tools/bestiary-art/build-map.mjs` maps it, and then it leaves this list. A ceiling that may only fall. Empty since the 526 plates of 2026-11-23 (docs/design/BESTIARY-NEW-ART-GENERATIONS-2026-11.json).",
+  "names": []
+}

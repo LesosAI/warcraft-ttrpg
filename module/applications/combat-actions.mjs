@@ -28,6 +28,8 @@ import { RIDER_REFUSALS, primeJudgement, settleRiders } from "../rules/riders.mj
 import { poolLabel, riderReason } from "../helpers/rider-words.mjs";
 // The Spirit Realm closes the fight's own controls (06 §10; the B3 review).
 import { realmRefusalFor } from "../effects/spirit-realm.mjs";
+// R6's readied Attack (the class talent audit; D-1864).
+import { ATTACKS_PER_TURN, readiedAttackRefusal } from "../rules/initiative.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 
@@ -244,7 +246,7 @@ export async function ready(actor) {
  * The half of Ready that does not ask, so a test drives it without clicking
  * (CLAUDE.md §5's `apply(state)`) and a macro can name both halves.
  */
-export async function readyWith(actor, { trigger = "", action = "" } = {}) {
+export async function readyWith(actor, { trigger = "", action = "", attack = false } = {}) {
   if (realmBars(actor)) return null;
   if (actor?.refuseForcedShape?.("ready")) return null;
   const combat = fightOf(actor);
@@ -253,7 +255,7 @@ export async function readyWith(actor, { trigger = "", action = "" } = {}) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.Combat.ReadyNeedsFight"));
     return null;
   }
-  const made = readyEntry({ trigger, action, round: combat.round, turn: combat.turn });
+  const made = readyEntry({ trigger, action, attack, round: combat.round, turn: combat.turn });
   if (!made.ok) {
     ui.notifications?.warn(game.i18n.localize(made.reason));
     return null;
@@ -281,13 +283,17 @@ async function askForReady() {
       <div class="azeroth-dialog-row"><label for="azeroth-ready-action">${action}</label>
         <input type="text" id="azeroth-ready-action" name="action"
                placeholder="${game.i18n.localize("AZEROTH.Combat.ReadyActionHint")}"></div>
+      <div class="azeroth-dialog-row"><label for="azeroth-ready-attack">${game.i18n.localize("AZEROTH.Combat.ReadyIsAttack")}</label>
+        <input type="checkbox" id="azeroth-ready-attack" name="attack"></div>
     </div>`,
     rejectClose: false,
     buttons: [{
       action: "ready", label: "AZEROTH.Combat.ReadySave", default: true,
       callback: (event, button) => ({
         trigger: button.form.elements.trigger?.value ?? "",
-        action: button.form.elements.action?.value ?? ""
+        action: button.form.elements.action?.value ?? "",
+        // R6 (the class talent audit's final review): the readier says whether it is an Attack; nothing reads the words.
+        attack: button.form.elements.attack?.checked === true
       })
     }]
   });
@@ -360,6 +366,15 @@ export async function takeReadied(actor, { messageId = null } = {}) {
     ui.notifications?.warn(game.i18n.format(may.reason, {
       name: actor.name, reaction: game.i18n.localize(AZEROTH.reactions.readied), source: unansweredOf(against).join(", ")
     }));
+    return null;
+  }
+  // **A READIED ATTACK IS JUDGED BEFORE THE REACTION IS SPENT** (R6; the wave 1 review): one that
+  // would be the turn's third Attack is refused in words with nothing spent - an action the Ready door
+  // recorded as an Attack (the entry's `attack`), never one guessed from its words (the final review).
+  const readyNow = combatantOf(actor);
+  const readiedRefusal = readyNow ? readiedAttackRefusal(readyNow.budget ?? null, readyNow.getFlag?.("azeroth-rpg", "ready") ?? null) : null;
+  if (readiedRefusal) {
+    ui.notifications?.warn(game.i18n.format(readiedRefusal, { n: ATTACKS_PER_TURN }));
     return null;
   }
   if (!(await game.system.azeroth.workflows.spendTurnBudget(actor, "reaction"))) return null;

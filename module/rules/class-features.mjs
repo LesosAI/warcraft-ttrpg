@@ -118,7 +118,9 @@ export const lays = (kind, banes) => ({ kind, banes });
 
 export const CLASS_FEATURES = Object.freeze({
   warrior: {
-    "Second Wind": action({ action: "half", cost: cost("rage", 6), heal: "tier" }),
+    // *As a Half-Action, spend 6 Rage to recover Health equal to twice your tier plus your
+    // Constitution modifier* (the class talent audit's A13, D-1871; it was the tier alone).
+    "Second Wind": action({ action: "half", cost: cost("rage", 6), heal: "2*tier+con" }),
     // 06 §6: *that creature takes two Banes on the next Casting Test it
     // makes.* The count and the kind are the Reaction table's, never typed
     // here, and `effects/banes.mjs` is what writes them onto the caster.
@@ -128,10 +130,15 @@ export const CLASS_FEATURES = Object.freeze({
     // Overbear or Sunder of the encounter goes free.
     "Charge": passive({ uses: once("encounter"), note: "AZEROTH.Feature.Note.Charge" }),
     "Extra Attack": passive({ extraAttack: true }),
+    // *Your Sunder costs 3 Rage instead of 4* (the audit's A2, D-1871): `maneuvers.mjs#maneuverCost`.
     "Sunder Armor": passive(),
     "Unbroken": action({ action: "action", uses: once("encounter") }),
     "War Cry": action({ action: "half", uses: once("short"), area: "Each ally within 30 ft", choice: "warCry" }),
+    // *Below half Health, add 2 to your Damage Rating, and the first hit you land each round gives 2
+    // more Rage* (the audit, D-1871): the hit door (`effects/audit-martial.mjs#martialOnRoll`).
     "Deathwish": passive(),
+    // *... It can save you no more than once a round* (R4's identity regime, D-1863): the one hold
+    // at 1 (`AzerothActor#_holdAtOne`) claims it on the fight's record.
     "Unkillable": passive()
   },
   paladin: {
@@ -139,7 +146,10 @@ export const CLASS_FEATURES = Object.freeze({
     // play-test, 2026-09-25). It had no limit at all. Open Hand's patch gives
     // it a second use, and the uses census below holds every rest-bound limit
     // 02 writes to the descriptor that counts it.
-    "Lay on Hands": action({ action: "half", cost: cost("mana", 2), heal: "level", uses: once("long") }),
+    // *... to restore Health equal to five times your tier* (the class talent audit's A12, D-1872; it
+    // was the level). `onUse.martial` is Mercy of Uther's door: a Use whose stamp carries `ends` asks
+    // which condition to end (`effects/audit-martial.mjs`), and one with none asks nothing.
+    "Lay on Hands": action({ action: "half", cost: cost("mana", 2), heal: "5*tier", uses: once("long"), onUse: { martial: "layOnHands" } }),
     "Consecrated": action({ action: null, uses: once("short") }),
     "Extra Attack": passive({ extraAttack: true }),
     // 02 §7: *Allies within 20 feet of you gain a Boon on Resilience (Spirit)
@@ -150,14 +160,25 @@ export const CLASS_FEATURES = Object.freeze({
     // read by the ally's dialog as a ticked line. Wide Aura widens it.
     "Aura of Resolve": passive({ aura: aura({ feet: 20, boon: { kind: "resilience", resilience: "spirit", boons: 1 } }) }),
     "Shield of the Righteous": action({ action: "reaction", cost: cost("zeal", 6), choice: "schools" }),
-    // *an attack against any number of enemies within 10 feet of you*: one press
-    // per creature (the architect's review of D-773).
-    "Divine Storm": action({ action: "action", cost: cost("zeal", 10), attack: true, attacks: "each", area: "A 10 ft radius centered on you" }),
+    // *As a Half-Action, spend 10 Zeal to make one attack against each enemy within 10 feet of you,
+    // rolled separately. For each that hits, one friendly target within 10 feet of you recovers Health
+    // equal to your tier* (the class talent audit's A10, D-1872): one press per creature, the Half-Action
+    // counted as one Attack (R6), and each hit's heal asked at the roll (`effects/audit-martial.mjs
+    // #martialOnRoll`).
+    "Divine Storm": action({ action: "half", cost: cost("zeal", 10), attack: true, attacks: "each", area: "A 10 ft radius centered on you" }),
     // *Over a Long Rest, lay the Light on a mount you own*: the one mount door (the Death Knight
     // plan's door 9, `effects/mount-works.mjs`), which asks the mount and spends nothing.
     "Charger's Blessing": action({ action: null, onUse: { mountWork: true } }),
-    "Avenging Wrath": action({ action: "half", cost: cost("mana", 12) }),
-    "Beacon of Hope": passive()
+    // *As a Half-Action, spend 12 Mana. Until the encounter ends you gain a Boon on all Tests, and your
+    // attacks and Holy spells add 1 damage for each round since you used this, to a maximum of 3* (the
+    // audit's A6, D-1872): the encounter's Boon laid on the Paladin (`laysBoon`), and the climb an effect
+    // whose round the attack and the cast read (`audit-martial.mjs#avengingWrathBonus`).
+    "Avenging Wrath": action({ action: "half", cost: cost("mana", 12), onUse: { laysBoon: { kinds: "all", boons: 1, until: "encounter" }, self: true, martial: "avengingWrath" } }),
+    // *As a Half-Action, spend 15 Mana. Until the encounter ends, the first time each ally within 30 feet
+    // drops to 0 Health, they return to 1 instead* (the audit's A7 and R4, D-1872): a granted hold that
+    // lasts (`regime: "granted"`, `holdLasting`), read by the one hold at 1 (`effects/audit-martial.mjs
+    // #beaconOfHopeHold`) off the effect the Use lays.
+    "Beacon of Hope": action({ action: "half", cost: cost("mana", 15), onUse: { martial: "beaconOfHope" } })
   },
   ranger: {
     "Quarry": passive(),
@@ -167,15 +188,24 @@ export const CLASS_FEATURES = Object.freeze({
     // passes a Reflex Resilience Test against your Spell DC* (02 §7). The Entangled
     // was never built (found beside Entrapment, D-773): a button per target on the
     // card, and the Reflex Test is the card's own escape (`SNARE`).
+    // *... You may keep as many Snares set as your tier, and setting another ends your oldest* (the class
+    // talent audit's A9, D-1873): the Snare's own door counts the standing Regions this Ranger set and
+    // ends the oldest past the limit (`effects/audit-martial.mjs`, `audit-martial.mjs#snaresToEnd`).
     "Snare": action({
       action: "half", resist: "reflex", area: "A 15 ft radius on the ground",
-      inflicts: [{ condition: "entangled", value: null, until: null }]
+      inflicts: [{ condition: "entangled", value: null, until: null }],
+      onUse: { martial: "snare" }
     }),
     "Extra Attack": passive({ extraAttack: true }),
-    "Aimed Shot": action({ action: null, cost: cost("focus", 3) }),
+    // *As part of an attack, spend 3 Focus. It ignores cover and long-range Banes and adds your tier to
+    // its damage* (the audit's A10, D-1873): a rider on the attack's dialog
+    // (`audit-martial.mjs#RANGER_FEATURE_RIDERS`), so the feature itself is passive.
+    "Aimed Shot": passive(),
     "Disengage": action({ action: "reaction", uses: once("encounter") }),
     "Killing Ground": action({ action: "half", cost: cost("focus", 3), area: "A 30 ft radius on the ground" }),
-    "Kill Shot": action({ action: "action", cost: { pool: "quarry", amount: 0, all: true }, attack: true }),
+    // *As part of an attack against your marked target, spend all your Quarry ...* (the audit's A10,
+    // D-1873): a rider as Aimed Shot's is, so the feature itself is passive.
+    "Kill Shot": passive(),
     "Wild Bond": passive({ heal: "tier", note: "AZEROTH.Feature.Note.WildBond" })
   },
   rogue: {
@@ -201,10 +231,22 @@ export const CLASS_FEATURES = Object.freeze({
     "Extra Attack": passive({ extraAttack: true }),
     "Evasion": passive(),
     "Vanish": action({ action: "half", cost: cost("energy", 5), uses: once("encounter") }),
-    // The poisons carried (08 SS12), as the menu (D-635).
+    // The poisons carried (08 SS12), as the menu (D-635). *Apply a poison as part of an
+    // attack rather than as a Half-Action, and a weapon you poison may carry two poisons
+    // at once. Each lands on every hit* (the audit, D-1880): the free application
+    // (`consumables.mjs#coatingAction`), and a second poison held beside the first on the
+    // coating (`coatingWith`), both fired by the hit (`coatingsOf`).
     "Poisoner": action({ action: null, choice: "poisons" }),
+    // *Against a target under your Opening, you inflict a Critical Injury on 18 to 20*
+    // (the audit, D-1880): read at the attack door off the Opening's own state
+    // (`class-talents.mjs#assassinateOn`).
     "Assassinate": passive(),
-    "Shadowstep": action({ action: "half", cost: cost("comboPoints", 4) })
+    // *As a Half-Action, spend 2 Combo Points. Move to a space within 5 feet of a creature
+    // you can see within 60 feet, provoking nothing. That creature is under your Opening
+    // until the end of your turn* (B15, D-1880): one creature targeted within 60 feet, the
+    // space picked beside it before anything is paid (`rules/steps.mjs`'s `beside`), and
+    // the Opening marked on it to the end of the turn (`effects/talent-states.mjs#markOpening`).
+    "Shadowstep": action({ action: "half", cost: cost("comboPoints", 2), onUse: { shadowstep: { feet: 60, beside: 5 } } })
   },
   priest: {
     "Mend": action({ action: "half", cost: cost("mana", 2), casting: true, heal: "2*tier+sl" }),
@@ -213,7 +255,8 @@ export const CLASS_FEATURES = Object.freeze({
     // *As a Full Action, make a Casting Test. On success, spend 6 Mana to restore Health ...*
     // (02 §7): the price is the success's (`onSuccess`; the B8a2 pass), and a failed Test
     // costs nothing. So are Shadow Word: Death's 8, Divine Hymn's 15 and the Warlock's Curse.
-    "Mass Mend": action({ action: "full", cost: onSuccess(cost("mana", 6)), casting: true, heal: "tier", area: "Each ally within 20 ft" }),
+    // And B16 (D-1884): *restore Health equal to your tier plus 2*.
+    "Mass Mend": action({ action: "full", cost: onSuccess(cost("mana", 6)), casting: true, heal: "tier+2", area: "Each ally within 20 ft" }),
     "Sustained Faith": passive(),
     // *On success, spend 8 Mana to force a target to make a Spirit Resilience Test against
     // your Spell DC. On a failed save, the target takes your level plus the SL bonus of the
@@ -223,7 +266,11 @@ export const CLASS_FEATURES = Object.freeze({
     // And its 8 Mana is paid on the success (the B8a2 pass): it was paid before the Test.
     "Shadow Word: Death": action({ action: "action", cost: onSuccess(cost("mana", 8)), casting: true, damage: { amount: "level+sl", type: "shadow", onFail: true }, resist: "spirit" }),
     "Resurrection": action({ action: "full", cost: cost("mana", 20), casting: true, dc: 22, uses: once("long") }),
-    "Divine Hymn": action({ action: "action", cost: onSuccess(cost("mana", 15)), casting: true, area: "Each ally within 60 ft", choice: "schools" })
+    // *Any number of targets within 60 feet gains Ward 3 of that school for 10 minutes.
+    // This does not need to be Sustained* (B5, D-1884): on the success, a Ward 3 of the
+    // school named on every creature targeted within 60 feet, for ten minutes of the
+    // world's clock, through the Ward's one door (`effects/wards.mjs#layWard`, `hymn`).
+    "Divine Hymn": action({ action: "action", cost: onSuccess(cost("mana", 15)), casting: true, area: "Each ally within 60 ft", choice: "schools", onUse: { hymn: { feet: 60, ward: 3, minutes: 10 } } })
   },
   shaman: {
     "Totem": action({ action: "half", cost: cost("mana", 2), area: "A 30 ft radius centered on you", choice: "totems" }),
@@ -233,7 +280,9 @@ export const CLASS_FEATURES = Object.freeze({
     // unless the shaman is Dying (06 §9: at 0 Health), and 04's Undying Spirit
     // patches what it returns them at and whom it brings (D-774).
     "Reincarnation": action({ action: null, uses: once("long") }),
-    "Forked Lightning": action({ action: "half", casting: true, damage: { amount: 6, type: "nature" } }),
+    // *As a Half-Action, spend 2 Mana and make a Casting Test* (B3 as corrected by T6,
+    // D-1886): paid before the Test, as Mend's is.
+    "Forked Lightning": action({ action: "half", cost: cost("mana", 2), casting: true, damage: { amount: 6, type: "nature" } }),
     // 02 §7, D-710: *as a Half-Action, you may place up to four totems at
     // once, each within 5 feet of you and each paying its Mana*, and the
     // tether widens to sixty feet - which the row has always said and nothing
@@ -254,7 +303,9 @@ export const CLASS_FEATURES = Object.freeze({
     "Earthquake": action({ action: "full", cost: cost("mana", 15), resist: "reflex", inflicts: [{ condition: "prone", value: null, until: null, onFail: true }] })
   },
   mage: {
-    "Evocation": action({ action: "action", uses: once("short"), restore: "halfMana" }),
+    // *Once per Long Rest, as a Full Action, restore half your total Mana, rounded down* (the
+    // class talent audit's C2, D-1893): a Mage's day is no longer two and a half pools.
+    "Evocation": action({ action: "full", uses: once("long"), restore: "halfMana" }),
     "Blink": action({ action: "reaction", cost: cost("mana", 2) }),
     "Counterspell": action({ action: "reaction", cost: cost("mana", 4) }),
     "Overchannel Mastery": passive(),
@@ -263,16 +314,23 @@ export const CLASS_FEATURES = Object.freeze({
     // #rollResists`); *Some targets are immune* names none, so the note leaves that
     // to the GM in words (O-236).
     "Polymorph": action({ action: "action", cost: cost("mana", 8), casting: true, resist: "spirit", note: "AZEROTH.Feature.Note.Polymorph" }),
-    "Time Warp": action({ action: "action", cost: cost("mana", 12), casting: true, uses: once("long") }),
+    // *Once per encounter, as an action, spend 12 Mana ...* (the class talent audit's C4, D-1893).
+    "Time Warp": action({ action: "action", cost: cost("mana", 12), casting: true, uses: once("encounter") }),
     "Arcane Mastery": action({ action: "half", cost: cost("mana", 20) })
   },
   warlock: {
     "Life Tap": action({ action: "half", note: "AZEROTH.Feature.Note.LifeTap" }),
     "Bound Demon": action({ action: "full", cost: cost("mana", 4), choice: "demons" }),
-    "Drain": action({ action: "reaction", cost: cost("mana", 4) }),
-    // *On success, spend 4 Mana* (02 §7; D-775 paid it on the success by the feature's name
-    // alone): the row's own `onSuccess` now, the door every such price shares (the B8a2 pass).
-    "Curse": action({ action: "action", cost: onSuccess(cost("mana", 4)), casting: true, resist: "spirit" }),
+    // *Once a turn, using no action, spend 4 Mana. Until the end of your turn, damage you deal
+    // restores half as much Health to you, rounded down* (the class talent audit, D-1894; it was
+    // a Reaction with no trigger, and nothing it promised was built): a state on the warlock
+    // until the turn's end (`onUse.drainState`), one at a time - which is the once a turn - and
+    // read at the one damage door (`AzerothActor#applyDamage`, `effects/warlock-drain.mjs`).
+    "Drain": action({ action: null, cost: cost("mana", 4), onUse: { drainState: { divisor: 2 } } }),
+    // *On success, spend 6 Mana* (02 §7; the class talent audit's Tune, D-1894; D-775 paid it on
+    // the success by the feature's name alone): the row's own `onSuccess`, the door every such
+    // price shares (the B8a2 pass).
+    "Curse": action({ action: "action", cost: onSuccess(cost("mana", 6)), casting: true, resist: "spirit" }),
     "Greater Demon": passive(),
     // *When a creature dies within 30 feet of you or a bound demon, you gain 2 Mana*: the death
     // watch reads the feature by name (`effects/death-watch.mjs`, `rules/death-watch.mjs#SOUL_HARVEST`).
@@ -280,7 +338,14 @@ export const CLASS_FEATURES = Object.freeze({
     // *Over a Long Rest, work a mount you own into a Felsteed*: the one mount door (door 9).
     "Ritual of the Steed": action({ action: null, onUse: { mountWork: true } }),
     "Metamorphosis": action({ action: "full", cost: cost("mana", 12), choice: "greaterDemons" }),
-    "Ritual of Summoning": action({ action: "full", cost: cost("mana", 20), casting: true, dc: 26, choice: "greaterDemons" })
+    // *Once per Long Rest, as a Full Action, spend 20 Mana and make a Casting Test against DC 20.
+    // On success, you call up to 3 Greater Demons ... They are Bound, act on your Initiative and
+    // stay until the encounter ends. On failure, you take a Critical Injury* (the class talent
+    // audit's C5, D-1894): the demons are released on a failure and one Critical Injury is rolled
+    // (`onUse.failInjury`, read off this table at the Use by `classFeatureOnUse`: `featureStamp`
+    // carries no such key, so a stamped flag never reached the item), and they stay for the
+    // encounter (`rules/bound.mjs#bindingFor`).
+    "Ritual of Summoning": action({ action: "full", cost: cost("mana", 20), casting: true, dc: 20, uses: once("long"), choice: "greaterDemons", onUse: { failInjury: true } })
   },
   druid: {
     "Shapeshift": action({ action: "half", choice: "forms" }),
@@ -288,7 +353,10 @@ export const CLASS_FEATURES = Object.freeze({
     // twice your tier. On the target's next turn, they restore Health equal to
     // your tier* (02 §7). The second sentence is a TICK the card's Apply lays
     // (D-771): it was never built, so Regrowth healed once.
-    "Regrowth": action({ action: "action", cost: cost("mana", 3), casting: true, heal: "2*tier", tick: { kind: "heal", amount: "tier", rounds: 1 } }),
+    // The class talent audit's Tune (D-1895): *spend 2 Mana ... restores Health equal to twice
+    // your tier plus your casting modifier* - `castingMod`, the expression grammar's name for
+    // the casting class's ability modifier (D-1861), read at the Use's ability scope.
+    "Regrowth": action({ action: "action", cost: cost("mana", 2), casting: true, heal: "2*tier+castingMod", tick: { kind: "heal", amount: "tier", rounds: 1 } }),
     // *Two attacks each time you Attack, while in a Shapeshift form* (02 §7).
     // The gate is the shape's KIND (D-769): an Avatar is not a Shapeshift form
     // (D-251), so it does not double a Druid's blow.
@@ -296,9 +364,15 @@ export const CLASS_FEATURES = Object.freeze({
     // *... take 6 Nature damage and are Slowed until the start of your next
     // turn* (02 §7). The Slowed was never built (found beside Typhoon, D-771):
     // a button per target on the card, ending as the DRUID's next turn starts.
+    // **THE CLASS TALENT AUDIT** (C10, D-1895): *every creature in a 20-foot radius within 60
+    // feet makes a Reflex Resilience Test against your Spell DC. On a failure it takes Nature
+    // damage equal to twice your tier and is Slowed until the start of your next turn; on a
+    // success it takes half of that, rounded down* - the card's Resist (`resist`), the half on a
+    // pass (`halfOnPass`, the D-789 door), and the Slowed laid by the failure alone (`onFail`).
     "Hurricane": action({
-      action: "action", cost: cost("mana", 6), casting: true, damage: { amount: 6, type: "nature" }, area: "A 20 ft radius on the ground",
-      inflicts: [{ condition: "slowed", value: null, until: "casterTurnStart" }]
+      action: "action", cost: cost("mana", 6), casting: true, damage: { amount: "2*tier", type: "nature", half: true }, area: "A 20 ft radius within 60 ft",
+      resist: "reflex",
+      inflicts: [{ condition: "slowed", value: null, until: "casterTurnStart", onFail: true }]
     }),
     "Dreamwalk": passive(),
     // *On success, any number of targets within a 20-foot area are **Entangled** until
@@ -309,11 +383,19 @@ export const CLASS_FEATURES = Object.freeze({
     // button per target the caster chose, Hurricane's shape (D-771), carrying its
     // escape on the action at the Spell DC (door 19's record), which the creature's own
     // turn prompts (`AzerothCombat#_escapePrompts`).
+    // **THE CLASS TALENT AUDIT** (C10, D-1895): *each creature you choose in a 20-foot radius
+    // within 60 feet makes a Reflex Resilience Test against your Spell DC. On a failure it is
+    // Entangled until it spends an action and passes the Test again* - a Resist at the cast
+    // now (`resist`), the Entangled laid by its failure (`onFail`), carrying the escape.
     "Entangling Roots": action({
-      action: "action", cost: cost("mana", 8), casting: true, area: "A 20 ft radius on the ground",
-      inflicts: [{ condition: "entangled", value: null, until: null, escape: { on: "action", resilience: "reflex", dc: "spellDc" } }]
+      action: "action", cost: cost("mana", 8), casting: true, area: "A 20 ft radius within 60 ft", resist: "reflex",
+      inflicts: [{ condition: "entangled", value: null, until: null, onFail: true, escape: { on: "action", resilience: "reflex", dc: "spellDc" } }]
     }),
-    "Hibernate": passive({ uses: once("long") }),
+    // *Once per Long Rest, you and every ally resting with you take a Short Rest's recovery in
+    // ten minutes* (the class talent audit's C7, D-1895): a Use (`onUse.partyRest`) that rests
+    // the druid through the rest window's own door and offers each ally the same, on a card;
+    // who rests with the druid is the table's (D2 §12).
+    "Hibernate": action({ action: null, uses: once("long"), onUse: { partyRest: "short" } }),
     "Avatar of the Wild": action({ action: "full", cost: cost("mana", 15), choice: "avatar" })
   },
   // **THE CHROMATIC CHAMPION** (02 §7, *Features by level*; stage 2B of the plan). Every
@@ -679,13 +761,14 @@ export const FEATURE_REMINDERS = Object.freeze({
     // Aura of Resolve has NO reminder (D-755): it is the ALLIES' Boon, laid on
     // them by the aura door, and the Paladin's own dialog carried it on every
     // Resilience Test while no ally's ever did.
-    "Avenging Wrath": { kinds: ["any"], text: "AZEROTH.Feature.Reminder.AvengingWrath", boons: 1 }
+    // Avenging Wrath carries no reminder since the class talent audit (D-1872): its Boon is laid on the
+    // Paladin for the encounter by its Use, and a second line would count it twice.
   },
   ranger: {
     "Quarry": { kinds: ["attack"], text: "AZEROTH.Feature.Reminder.Quarry" },
     "Extra Attack": { kinds: ["attack"], text: "AZEROTH.Feature.Reminder.ExtraAttack" },
-    "Aimed Shot": { kinds: ["attack"], text: "AZEROTH.Feature.Reminder.AimedShot" },
-    "Kill Shot": { kinds: ["attack"], text: "AZEROTH.Feature.Reminder.KillShot" },
+    // Aimed Shot and Kill Shot are lines on the attack's dialog since the class talent audit (D-1873),
+    // priced and paid there, so they carry no reminder.
     "Wild Bond": { kinds: ["resilience"], text: "AZEROTH.Feature.Reminder.WildBond" }
   },
   rogue: {
@@ -852,7 +935,25 @@ export function featurePatchesFor(features = [], featureName) {
  * `floor` and `ceil` - and `amounts.test.mjs` runs every amount string in the
  * tables and the packs through both and holds them to the same number.
  */
-export function evaluateAmount(expr, { tier = 1, level = 1, sl = 0, rank = 1, weapon = 0, str = 0, dex = 0, con = 0, int = 0, wis = 0, cha = 0, prof = 0 } = {}) {
+/**
+ * **A HEAL OF ALL THE TARGET'S HEALTH** (the class talent audit's Mercy of Uther: *Your Lay on Hands
+ * restores all of the target's Health*; D-1868): a feature's `heal` set to this word by a patch's
+ * `heal: "max"`. No amount reads it (`evaluateAmount` answers null for a word off the list); the Use
+ * resolves it per target to that target's Health maximum (`fullHealAmount`).
+ */
+export const FULL_HEAL = "max";
+
+/**
+ * What a full heal restores to one creature: its Health maximum, the most `applyHealing` can give.
+ *
+ * @param {{health?: {max?: number}}|null} system  the creature's derived system
+ * @returns {number}
+ */
+export function fullHealAmount(system) {
+  return Math.max(0, Math.trunc(Number(system?.health?.max)) || 0);
+}
+
+export function evaluateAmount(expr, { tier = 1, level = 1, sl = 0, rank = 1, weapon = 0, str = 0, dex = 0, con = 0, int = 0, wis = 0, cha = 0, prof = 0, castingMod = 0 } = {}) {
   if (expr === null || expr === undefined) return null;
   if (typeof expr === "number") return expr;
   if (!String(expr).trim()) return 0;
@@ -869,7 +970,9 @@ export function evaluateAmount(expr, { tier = 1, level = 1, sl = 0, rank = 1, we
     // negative, and is passed as it is.
     str: Number(str) || 0, dex: Number(dex) || 0, con: Number(con) || 0,
     int: Number(int) || 0, wis: Number(wis) || 0, cha: Number(cha) || 0,
-    prof: Number(prof) || 0
+    prof: Number(prof) || 0,
+    // The casting ability modifier (`abilityScope`'s; the audit's Regrowth, D-1861).
+    castingMod: Number(castingMod) || 0
   });
 }
 
@@ -1016,6 +1119,11 @@ export function cardAttackAllowance({ attacks = null, named = 0, targets = null,
     return n > 0 ? Math.min(n, limit) : limit;
   }
   if (attacks === "each") return n > 0 ? n : Math.max(1, Math.trunc(Number(measured)) || 0);
+  // **SO MANY AGAINST EACH** (the class talent audit's R5, D-1871: Whirlwind's *Make two attacks against
+  // every enemy within your reach*, Bladestorm's *two attacks against each enemy*): `each:<n>`, the count
+  // of creatures times n.
+  const per = /^each:(\d+)$/.exec(String(attacks ?? ""));
+  if (per) return (n > 0 ? n : Math.max(1, Math.trunc(Number(measured)) || 0)) * Math.max(1, Number(per[1]));
   if (attacks !== null && attacks !== undefined && String(attacks).trim()) {
     return Math.max(1, Math.trunc(Number(evaluateAmount(String(attacks), { rank }))) || 1);
   }
@@ -1090,12 +1198,19 @@ export function consecratedTrait({ sanctified = 0 } = {}) {
  */
 export function bindRank(expr, rank = 1) {
   if (expr === null || expr === undefined || typeof expr === "number") return expr;
-  const s = String(expr).replace(/\s+/g, "");
-  if (!/rank/.test(s)) return expr;
+  const raw = String(expr).replace(/\s+/g, "");
+  if (!/rank/.test(raw)) return expr;
   const r = Math.trunc(Number(rank)) || 0;
+  // **R1's `min(rank,tier)`, BOUND** (the class talent audit, D-1884: Serendipity's *Add your rank, to
+  // no more than your tier*): the rank written into the term and the term kept whole for the Use,
+  // which reads the tier. An added term only; anything else falls through to the linear parse.
+  const extras = [];
+  const s = raw.replace(/\+min\(rank,(tier|level)\)|\+min\((tier|level),rank\)|^min\(rank,(tier|level)\)|^min\((tier|level),rank\)/g,
+    (_, a, b, c, d) => { extras.push(`min(${r},${a ?? b ?? c ?? d})`); return ""; });
   let constant = 0;
   const vars = new Map();
   const addVar = (name, k) => vars.set(name, (vars.get(name) ?? 0) + k);
+  if (extras.length && /rank/.test(s)) return expr;
   for (const term of s.replace(/-/g, "+-").split("+").filter(Boolean)) {
     const sign = term.startsWith("-") ? -1 : 1;
     const body = term.replace(/^-/, "");
@@ -1114,8 +1229,8 @@ export function bindRank(expr, rank = 1) {
     const term = Math.abs(k) === 1 ? name : `${Math.abs(k)}*${name}`;
     parts.push(k < 0 ? `-${term}` : term);
   }
-  if (constant || !parts.length) parts.push(String(constant));
-  return parts.join("+").replace(/\+-/g, "-");
+  if (constant || (!parts.length && !extras.length)) parts.push(String(constant));
+  return [...parts, ...extras].join("+").replace(/\+-/g, "-");
 }
 
 /**

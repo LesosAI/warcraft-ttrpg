@@ -370,9 +370,8 @@ export function turnMoved({ paid = 0, roundOnce = [] } = {}) {
 
 /**
  * @param {PoolSnapshot[]} pools
- * @param {{extra?: Record<string, number>, still?: boolean}} [o]  what a talent adds to a pool's
- *   refill (04's Adrenaline: *Your Energy pool returns 1 more per rank at the
- *   start of your turn*; D-773), by pool name, on a pool that refills at all;
+ * @param {{extra?: Record<string, number>, still?: boolean}} [o]  what a feature adds to a pool's
+ *   refill (02's Demon Unleashed's Energy), by pool name, on a pool that refills at all;
  *   and `still` - `focusRefills`' answer - without which Focus refills nothing
  *   (door 9). **It defaults CLOSED** (the lead's rule for a gate: a default that
  *   grants is a leak by construction): a caller that does not say the turn was

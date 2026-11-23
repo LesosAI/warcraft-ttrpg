@@ -38,11 +38,15 @@ export async function layNextSpell(actor, grants = []) {
     ...(g.miracle === true ? { miracle: true } : {}),
     ...(Number(g.forcedSl) > 0 ? { forcedSl: Math.trunc(Number(g.forcedSl)) } : {}),
     ...(Number(g.damage) > 0 ? { damage: Math.trunc(Number(g.damage)) } : {}),
+    // 04's Clearcasting's free points, held before the end of the caster's next turn (D-1890).
+    ...(Number(g.overchannel) > 0 ? { overchannel: Math.trunc(Number(g.overchannel)) } : {}),
+    ...(g.through === "nextTurn" ? { through: "nextTurn" } : {}),
     // *That turn* (Predator's Swiftness, Soul Fire): the fight's turn, or - out of
     // a fight, where Soul Fire is no longer refused (D-778; the lead: *"Player can
     // use them at anytime if selected."*) - one round of the world's clock from
-    // now (`rules/casting.mjs#pendingNextSpell`).
-    turn: g.turn ? (now ?? { clock: Number(game.time?.worldTime) || 0 }) : null
+    // now (`rules/casting.mjs#pendingNextSpell`). *Before the end of your next turn*
+    // (Clearcasting) is stamped the same way and read through the caster's next turn.
+    turn: g.turn || g.through === "nextTurn" ? (now ?? { clock: Number(game.time?.worldTime) || 0 }) : null
   })).filter(e => !(e.turn === null && grants.find(g => g.source === e.source)?.turn));
   if (!laid.length) return held;
   const sources = new Set(laid.map(e => e.source));
@@ -51,8 +55,9 @@ export async function layNextSpell(actor, grants = []) {
   for (const e of laid) {
     // Miracle says its own words on its card (`workflows.useFeature`), so no toast here.
     if (e.miracle) continue;
-    const key = e.cast ? "AZEROTH.Cast.NextSpellHalf" : e.forcedSl ? "AZEROTH.SoulFire.Laid" : (e.turn ? "AZEROTH.Cast.NextSpellTurn" : "AZEROTH.Cast.NextSpellLaid");
-    ui.notifications?.info(game.i18n.format(key, { name: actor.name, talent: e.name, n: e.amount, sl: e.forcedSl ?? 0, damage: e.damage ?? 0 }));
+    const key = e.cast ? "AZEROTH.Cast.NextSpellHalf" : e.forcedSl ? "AZEROTH.SoulFire.Laid"
+      : e.overchannel ? "AZEROTH.Clearcasting.Laid" : (e.turn ? "AZEROTH.Cast.NextSpellTurn" : "AZEROTH.Cast.NextSpellLaid");
+    ui.notifications?.info(game.i18n.format(key, { name: actor.name, talent: e.name, n: e.overchannel ?? e.amount, sl: e.forcedSl ?? 0, damage: e.damage ?? 0 }));
   }
   return next;
 }

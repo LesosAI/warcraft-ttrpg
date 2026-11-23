@@ -18,6 +18,11 @@
  * - **`raisedDown`** - one of the raised dead dropped to 0 Health. `isCorpse` is false for
  *   the raised dead, so this is a separate event: Unending Dead, Bloated Dead and Restless
  *   Bones read it.
+ * - **`characterFell`** - a CHARACTER's Health went from above 0 to 0 (10 §3: *A creature
+ *   exposes you when it reduces you to 0 Health*; D-1729). It has its own listeners
+ *   (`effects/death-watch.mjs#onCharacterDown`), so no creature listener above is handed it.
+ *   A character already at 0 who takes another blow has not fallen again; one healed above 0
+ *   and dropped again has.
  *
  * **An unobserved death is never inferred**: an actor with no baseline (a corpse loaded
  * with the world, a token placed at 0) gives no event, and its first look only primes it.
@@ -29,9 +34,10 @@ const finite = v => typeof v === "number" && Number.isFinite(v);
 
 /**
  * The facts one look at an actor gives: its Health, whether it is an NPC, whether it is
- * marked defeated, and whether it is one of the raised dead.
+ * marked defeated, whether it is one of the raised dead, and whether it is a character
+ * (D-1729's drop).
  *
- * @typedef {{health: number|null, npc: boolean, dead: boolean, raised: boolean}} DeathFacts
+ * @typedef {{health: number|null, npc: boolean, dead: boolean, raised: boolean, character?: boolean}} DeathFacts
  */
 
 /**
@@ -39,21 +45,51 @@ const finite = v => typeof v === "number" && Number.isFinite(v);
  *
  * @param {DeathFacts|null} before
  * @param {DeathFacts} after
- * @returns {{healthFell: boolean, died: boolean, raisedDown: boolean, before: number|null, after: number|null}}
+ * @returns {{healthFell: boolean, died: boolean, raisedDown: boolean, characterFell: boolean, before: number|null, after: number|null}}
  */
 export function deathChange(before, after) {
   const was = before?.health ?? null;
   const now = after?.health ?? null;
-  const none = { healthFell: false, died: false, raisedDown: false, before: was, after: now };
+  const none = { healthFell: false, died: false, raisedDown: false, characterFell: false, before: was, after: now };
   if (!before || !after) return none;
   const fell = finite(was) && finite(now) && was > 0 && now <= 0;
   return {
     healthFell: after.npc === true && fell,
     died: !isCorpse(before) && isCorpse(after),
     raisedDown: after.raised === true && fell,
+    characterFell: after.character === true && fell,
     before: was,
     after: now
   };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Who dealt the blow                                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * **THE UPDATE OPTION THAT NAMES WHO DEALT THE DAMAGE** (D-1729). `AzerothActor#adjustHealth`
+ * writes it on the same update that writes the Health, beside `azerothDamageApplied`, from the
+ * damage door's `by` (or `dealtBy`, the attribution-only name a door with no striker gives);
+ * core hands an operation's own keys to every client's `updateActor` hook, so the death watch
+ * on the active GM reads it off the write that dropped the character - never off a guess made
+ * afterwards. A write that names nobody exposes nobody.
+ */
+export const DAMAGE_BY_OPTION = "azerothDamageBy";
+
+/**
+ * The plain record of the dealer the option carries: its uuid (a token's synthetic actor keeps
+ * its own), its world id and its name. Null where there is nothing to name.
+ *
+ * @param {{uuid?: string, id?: string, name?: string}|null} actor
+ * @returns {{uuid: string|null, actorId: string|null, name: string}|null}
+ */
+export function dealerRecord(actor) {
+  if (!actor || typeof actor !== "object") return null;
+  const uuid = typeof actor.uuid === "string" && actor.uuid ? actor.uuid : null;
+  const actorId = typeof actor.id === "string" && actor.id ? actor.id : null;
+  if (!uuid && !actorId) return null;
+  return { uuid, actorId, name: String(actor.name ?? "") };
 }
 
 /**

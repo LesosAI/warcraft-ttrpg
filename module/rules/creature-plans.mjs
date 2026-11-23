@@ -85,6 +85,125 @@ export const CREATURE_PLANS = Object.freeze({
   // Boon.* Zul'jin's Amani Fury, held for the encounter rather than the round.
   "Troll Berserker": {
     "Berserk": { plan: { door: "amaniFury", lasts: "encounter" } }
+  },
+  // **14's PHASE 1 BLOCKS** (D-1781, D-1782). *As an Action, Azuregos breathes a 30-foot cone* -
+  // the seed reads no area off *breathes a*, and the Slowed is *until the end of its next turn*.
+  "Azuregos": {
+    "Frost Breath": { area: "A 30 ft cone", until: "endOfNextTurn" }
+  },
+  // *Stunned until the end of its next turn*, *Frightened until the end of its next turn*: the
+  // span the seed does not read off these three, and War Stomp's *each enemy within 10 feet*.
+  "Doomguard": {
+    "War Stomp": { until: "endOfNextTurn", plan: { gather: { who: "enemy", feet: 10 } } }
+  },
+  "Mutanus the Devourer": {
+    "Terrify": { until: "endOfNextTurn" }
+  },
+  "Princess Theradras": {
+    "Repulsive Gaze": { until: "endOfNextTurn", plan: { target: { count: 1, feet: 30 } } }
+  },
+  // *strikes one creature within five feet ... is pushed 10 feet away, or ... not pushed if it
+  // passes*, and the push lands on a failure. Its own label (D-1788), so the Molten Giant's door
+  // (DC 18, 10 feet) never stamps it.
+  "Deathclasp": {
+    "Deathclasp Knock Away": { plan: { target: { count: 1, feet: 5 }, forced: { on: "fail", feet: 10, toward: "away" } } }
+  },
+  // *names one creature within 60 feet. It is Charmed until the end of its next turn*; which
+  // creature it attacks is the table's. Its own label (D-1788), never the Qiraji Mindslayer's door.
+  "Hakkar the Soulflayer": {
+    "Hakkar Cause Insanity": { until: "endOfNextTurn", plan: { target: { count: 1, feet: 60 } } }
+  },
+  // *makes one attack with the king's club*: the press grants the one attack. The halved
+  // healing on a hit is the GM's until a creature attack can carry that mark (O-630). Its own
+  // label (D-1788), never the Felguard's door, which wants a Felaxe.
+  "King Gordok": {
+    "Gordok Mortal Strike": { plan: { attack: { allowance: 1 } } }
+  },
+  // **THE CATALOGUE'S SHELLS THAT A BOSS DOOR LANDS** (D-1832): 24 creature abilities of 14's new
+  // entries whose words are an attack count, a reach of blows, a heal on an ally, a Boon at the
+  // press or another creature's blow - the shapes the rows above already read. A blow's extra
+  // damage and a Health the user pays are the GM's from the card (O-655).
+  "Ancient of Lore": {
+    "Lore of the Wild": { kind: "heal", heal: 9, plan: { target: { count: 1, feet: 30 } } }
+  },
+  "Atal'ai Priest": {
+    "Blood Chant": { kind: "heal", heal: 4, plan: { gather: { who: "ally", feet: 30 } } }
+  },
+  "Captain Kromcrush": {
+    "Mortal Cleave": { kind: "attack", plan: { attack: { allowance: 2 } } }
+  },
+  "Chromatic Elite Guard": {
+    "Elite Guard Mortal Strike": { kind: "attack", plan: { attack: { allowance: 1 } } }
+  },
+  "Dustbelcher Lord": {
+    "Lord's Bellow": { plan: { gather: { who: "ally", feet: 30 }, boon: { kind: "attack", on: "press" } } }
+  },
+  "Earthen Guardian": {
+    "Earthen Guardian Whirlwind": { kind: "attack", plan: { attack: { allowance: "reach" } } }
+  },
+  "Felguard Sentry": {
+    "Sentry Charge": { kind: "attack", plan: { attack: { allowance: 1, boons: 1 } } }
+  },
+  "Gahz'ranka": {
+    "Gahz'ranka Thrash": { kind: "attack", plan: { attack: { allowance: 2 } } }
+  },
+  "Galak Marauder": {
+    "Galak Marauder Rushing Charge": { kind: "attack", plan: { attack: { allowance: 1 } } }
+  },
+  "Gnarlpine Warrior": {
+    "Gnarlpine Whirlwind": { kind: "attack", plan: { attack: { allowance: "reach" } } }
+  },
+  "Grimtotem Reaver": {
+    "Reaver's Strike": { kind: "attack", plan: { attack: { allowance: 1 } } }
+  },
+  "Hakkari Priest": {
+    "Blood Offering": { kind: "heal", heal: 8, plan: { target: { count: 1, feet: 60 } } }
+  },
+  "Houndmaster Grebmar": {
+    "Grebmar Bloodlust": { plan: { target: { count: 1, feet: 30 }, boon: { kind: "attack", on: "press" } } }
+  },
+  "Houndmaster Loksey": {
+    "Loksey Bloodlust": { plan: { gather: { who: "ally", feet: 30 }, boon: { kind: "attack", on: "press" } } }
+  },
+  "King Bangalash": {
+    "Leaping Rush": { kind: "attack", plan: { door: "disengage", attack: { allowance: 1 } } }
+  },
+  "Pridewing Patriarch": {
+    "Pridewing Dive": { kind: "attack", plan: { attack: { allowance: 1, boons: 1 } } }
+  },
+  "Scarlet Beastmaster": {
+    "Loose the Hound": { kind: "utility", plan: { door: "allyAttack", feet: 60, boons: 0 } }
+  },
+  "Scarlet Monk": {
+    "Monk Thrash": { kind: "attack", plan: { attack: { allowance: 3 } } }
+  },
+  "Shadowmaw Panther": {
+    "Leaping Rush": { kind: "attack", plan: { door: "disengage", attack: { allowance: 1 } } }
+  },
+  "Shardtooth Mauler": {
+    "Shardtooth Maul": { kind: "attack", plan: { attack: { allowance: 1 } } }
+  },
+  "Stonelash Flayer": {
+    "Flayer Thrash": { kind: "attack", plan: { attack: { allowance: 3 } } }
+  },
+  "Vilebranch Scalper": {
+    "Scalp Slash": { kind: "attack", plan: { attack: { allowance: 1 } } }
+  },
+  "Woodpaw Alpha": {
+    "Alpha Strike": { kind: "attack", plan: { attack: { allowance: 1 } } }
+  },
+  "Zulian Prowler": {
+    "Prowler's Thrash": { kind: "attack", plan: { attack: { allowance: 2 } } }
+  },
+  // **A DISEASE 09 DOES NOT HOLD** (D-1832): *Defender's plague* and *Qiraji plague* are the
+  // Anubisath's own diseases and 09 prints neither, so no carrier can be laid and a bare Diseased
+  // is never laid by a door (D12). The card rolls the Test; the GM lays what a failure carries.
+  // The thistle bear's Rabid names 09's Mange (D-1836) and the reader lays it.
+  "Anubisath Defender": {
+    "Defender Plague": { clear: ["inflicts"] }
+  },
+  "Anubisath Guardian": {
+    "Guardian Plague": { clear: ["inflicts"] }
   }
 });
 

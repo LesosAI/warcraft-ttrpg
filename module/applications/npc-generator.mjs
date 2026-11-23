@@ -30,6 +30,8 @@ import {
 import { buildSwarm, canSwarm, swarmsFrom } from "../rules/swarm.mjs";
 import { cleanAutomation, emptyAutomation, hasAutomation, mergeSeed, seedAutomation } from "../rules/ability-automation.mjs";
 import { tokenSize } from "../rules/size.mjs";
+// A creature's own Casting Test bonus and Boons and Banes (D-1760, D-1761).
+import { EDGE_KINDS, castingBonusCeiling, isSkillEdge } from "../rules/creature-bonuses.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -81,6 +83,10 @@ export class AzerothNpcGenerator extends HandlebarsApplicationMixin(ApplicationV
       generatorAddWard: AzerothNpcGenerator.#onAddWard,
       generatorSeedAbility: AzerothNpcGenerator.#onSeedAbility,
       generatorRemoveWard: AzerothNpcGenerator.#onRemoveWard,
+      generatorAddSpellpower: AzerothNpcGenerator.#onAddSpellpower,
+      generatorRemoveSpellpower: AzerothNpcGenerator.#onRemoveSpellpower,
+      generatorAddBoonBane: AzerothNpcGenerator.#onAddBoonBane,
+      generatorRemoveBoonBane: AzerothNpcGenerator.#onRemoveBoonBane,
       generatorSuggestInflicts: AzerothNpcGenerator.#onSuggestInflicts,
       generatorResuggest: AzerothNpcGenerator.#onResuggest,
       generatorReload: AzerothNpcGenerator.#onReload,
@@ -261,6 +267,7 @@ export class AzerothNpcGenerator extends HandlebarsApplicationMixin(ApplicationV
     const v = this.#review(s);
     const band = bandFor({ weightClass: s.identity.weightClass, tier: s.identity.tier });
     const heldWards = new Set((s.numbers.wards ?? []).map(w => w.school));
+    const heldPower = new Set((s.numbers.spellpower ?? []).map(w => w.school));
     const boss = s.identity.weightClass === "boss";
     // The prefixes stay literal, dot and all, so the lang audit can follow them.
     const reason = entry => game.i18n.format(`AZEROTH.Generator.Reason.${entry.code}`, this.#say(entry.params ?? {}));
@@ -333,6 +340,13 @@ export class AzerothNpcGenerator extends HandlebarsApplicationMixin(ApplicationV
         })),
         wardOptions: Object.entries(AZEROTH.schools).filter(([k]) => !heldWards.has(k)).map(([value, label]) => ({ value, label: game.i18n.localize(label) })),
         wardBand: band.ward,
+        // The creature's own Spellpower (D-1727), Ward's row shape, and no band:
+        // 13 SS5 suggests none, so nothing here is ever re-suggested.
+        spellpower: (s.numbers.spellpower ?? []).map((w, index) => ({
+          index, school: w.school, value: w.value,
+          options: choicesOf(Object.fromEntries(Object.entries(AZEROTH.schools).filter(([k]) => k === w.school || !heldPower.has(k))), w.school)
+        })),
+        spellpowerOptions: Object.entries(AZEROTH.schools).filter(([k]) => !heldPower.has(k)).map(([value, label]) => ({ value, label: game.i18n.localize(label) })),
         speed: s.numbers.speed, flies: Boolean(s.numbers.flies),
         flying: game.i18n.format("AZEROTH.Generator.Flying", { pace: system.flyingSpeed ?? (s.identity.tier >= 3 ? 240 : 120) }),
         initiative: s.numbers.initiative, initiativeBand: 10 + mods.dex,
@@ -348,6 +362,8 @@ export class AzerothNpcGenerator extends HandlebarsApplicationMixin(ApplicationV
       traitOptions: this.#data.traitNames.map(n => ({ name: n, search: n.toLowerCase() })),
       spells: {
         caster: Boolean(s.spells.caster), dc: s.spells.dc, dcBand: band.spellDC,
+        // Its own Casting Test bonus (D-1760); the ceiling is the tier's Augment, a note past it.
+        castingBonus: s.spells.castingBonus ?? 0, castingBand: castingBonusCeiling(s.identity.tier),
         names: s.spells.names.map((name, index) => ({ index, name })),
         options: this.#data.spells.filter(sp => !s.spells.names.includes(sp.name)).map(sp => ({
           name: sp.name, search: sp.name.toLowerCase(),
@@ -372,6 +388,18 @@ export class AzerothNpcGenerator extends HandlebarsApplicationMixin(ApplicationV
           key, label: game.i18n.localize(label), immune: s.keywords.immune.includes(key), vulnerable: s.keywords.vulnerable.includes(key)
         })),
         conditions: Object.entries(AZEROTH.conditions).map(([key, label]) => ({ key, label: game.i18n.localize(label), checked: s.keywords.inflicts.includes(key) })),
+        // The GM's own Boons and Banes (D-1761): a row a target and a word, the
+        // target one select over the skills and the kinds of Test.
+        boonsBanes: (s.keywords.boonsBanes ?? []).map((row, index) => ({
+          index,
+          skills: Object.entries(AZEROTH.skills).map(([value, label]) => ({ value, label: game.i18n.localize(label), selected: value === row.on })),
+          tests: Object.entries(AZEROTH.testKinds).map(([value, label]) => ({
+            value, label: game.i18n.format("AZEROTH.Generator.EveryTest", { kind: game.i18n.localize(label) }), selected: value === row.on
+          })),
+          kinds: EDGE_KINDS.map(value => ({ value, label: game.i18n.localize(value === "boon" ? "AZEROTH.Generator.Boon" : "AZEROTH.Generator.Bane"), selected: value === row.kind }))
+        })),
+        // And the A1 conditions it is immune to (D-1762), `AZEROTH.conditions`' own list.
+        conditionImmune: Object.entries(AZEROTH.conditions).map(([key, label]) => ({ key, label: game.i18n.localize(label), checked: (s.keywords.conditionImmune ?? []).includes(key) })),
         momentum: { names: choicesOf(AZEROTH.momentumTypes, s.keywords.momentum.name, { blank: dash }), max: s.keywords.momentum.max },
         power: { names: choicesOf(AZEROTH.powerTypes, s.keywords.power.name, { blank: dash }), max: s.keywords.power.max, band: band.power }
       },
@@ -459,6 +487,8 @@ export class AzerothNpcGenerator extends HandlebarsApplicationMixin(ApplicationV
     if (out.row) out.row = game.i18n.localize(out.row === "immune" ? "AZEROTH.Sheet.Immune" : "AZEROTH.Sheet.Vulnerable");
     if (out.weight && AZEROTH.weightClasses[out.weight]) out.weight = game.i18n.localize(AZEROTH.weightClasses[out.weight]);
     if (out.pool && AZEROTH.npcPoolKinds[out.pool]) out.pool = game.i18n.localize(AZEROTH.npcPoolKinds[out.pool]);
+    // The Ward and Spellpower notes name a school (D-1727).
+    if (out.school && AZEROTH.schools[out.school]) out.school = game.i18n.localize(AZEROTH.schools[out.school]);
     return out;
   }
 
@@ -536,6 +566,10 @@ export class AzerothNpcGenerator extends HandlebarsApplicationMixin(ApplicationV
       read(`ward-school-${i}`, e => { w.school = e.value || null; });
       read(`ward-value-${i}`, e => { w.value = num(e.value) ?? 0; });
     });
+    (s.numbers.spellpower ?? []).forEach((w, i) => {
+      read(`spellpower-school-${i}`, e => { w.school = e.value || null; });
+      read(`spellpower-value-${i}`, e => { w.value = Math.max(0, num(e.value) ?? 0); });
+    });
     read("speed", e => { s.numbers.speed = num(e.value) ?? 30; });
     read("flies", e => { s.numbers.flies = e.checked; });
     read("initiative", e => { s.numbers.initiative = num(e.value) ?? 10; });
@@ -550,6 +584,7 @@ export class AzerothNpcGenerator extends HandlebarsApplicationMixin(ApplicationV
     });
     read("caster", e => { s.spells.caster = e.checked; });
     read("spell-dc", e => { s.spells.dc = num(e.value); });
+    read("casting-bonus", e => { s.spells.castingBonus = Math.trunc(num(e.value) ?? 0) || 0; });
     s.creatureAbilities.forEach((a, i) => {
       read(`ability-name-${i}`, e => { a.name = e.value; });
       read(`ability-text-${i}`, e => { a.description = e.value; });
@@ -574,6 +609,11 @@ export class AzerothNpcGenerator extends HandlebarsApplicationMixin(ApplicationV
     if (el(`vulnerable-${types[0]}`)) s.keywords.vulnerable = types.filter(k => el(`vulnerable-${k}`)?.checked);
     const conditions = Object.keys(AZEROTH.conditions);
     if (el(`inflicts-${conditions[0]}`)) s.keywords.inflicts = conditions.filter(k => el(`inflicts-${k}`)?.checked);
+    if (el(`cond-immune-${conditions[0]}`)) s.keywords.conditionImmune = conditions.filter(k => el(`cond-immune-${k}`)?.checked);
+    (s.keywords.boonsBanes ?? []).forEach((row, i) => {
+      read(`edge-on-${i}`, e => { row.on = e.value; });
+      read(`edge-kind-${i}`, e => { row.kind = e.value; });
+    });
     read("momentum-name", e => { s.keywords.momentum.name = e.value || null; });
     read("momentum-max", e => { s.keywords.momentum.max = num(e.value); });
     read("power-name", e => { s.keywords.power.name = e.value || null; });
@@ -667,7 +707,12 @@ export class AzerothNpcGenerator extends HandlebarsApplicationMixin(ApplicationV
           // A plain object merges its keys into a TypedObjectField; a dropped
           // skill or Ward would survive. Replace the maps whole.
           skills: foundry.data.operators.ForcedReplacement.create(system.skills),
-          ward: foundry.data.operators.ForcedReplacement.create(system.ward)
+          ward: foundry.data.operators.ForcedReplacement.create(system.ward),
+          // And the creature's own Spellpower (D-1727): a school removed is gone.
+          spellpowerBase: foundry.data.operators.ForcedReplacement.create(system.spellpowerBase)
+          // `boonsBanes` and `conditionImmune` (D-1761, D-1762) need no operator:
+          // they are ArrayFields, which a v14 update replaces whole
+          // (`ArrayField#_updateDiff`, 14.367), so a row removed is gone.
         },
         "flags.azeroth-rpg.built": built
       };
@@ -894,6 +939,43 @@ export class AzerothNpcGenerator extends HandlebarsApplicationMixin(ApplicationV
   static async #onRemoveWard(event, target) {
     this.#readForm();
     this.#state.numbers.wards.splice(Number(target.dataset.index), 1);
+    this.render();
+  }
+
+  /** Spellpower in the first school the creature does not hold, at 1 (D-1727). */
+  static async #onAddSpellpower() {
+    this.#readForm();
+    const s = this.#state;
+    const held = new Set((s.numbers.spellpower ?? []).map(w => w.school));
+    const school = Object.keys(AZEROTH.schools).find(k => !held.has(k));
+    if (!school) return;
+    s.numbers.spellpower = [...(s.numbers.spellpower ?? []), { school, value: 1 }];
+    this.render();
+  }
+
+  static async #onRemoveSpellpower(event, target) {
+    this.#readForm();
+    this.#state.numbers.spellpower?.splice(Number(target.dataset.index), 1);
+    this.render();
+  }
+
+  /**
+   * A Boon on the first skill no row names yet, else on the first skill (D-1761):
+   * two rows of one Boon on one skill are two Boons, as two rings are.
+   */
+  static async #onAddBoonBane() {
+    this.#readForm();
+    const s = this.#state;
+    const rows = s.keywords.boonsBanes ?? [];
+    const named = new Set(rows.filter(isSkillEdge).map(r => r.on));
+    const skill = Object.keys(AZEROTH.skills).find(k => !named.has(k)) ?? Object.keys(AZEROTH.skills)[0];
+    s.keywords.boonsBanes = [...rows, { on: skill, kind: "boon" }];
+    this.render();
+  }
+
+  static async #onRemoveBoonBane(event, target) {
+    this.#readForm();
+    this.#state.keywords.boonsBanes?.splice(Number(target.dataset.index), 1);
     this.render();
   }
 

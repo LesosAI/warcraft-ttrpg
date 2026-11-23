@@ -47,7 +47,9 @@
 export const WIELD_FACTS = Object.freeze(["twoHanded", "noSuit", "twoTypes", "hammerOrMace", "bothHands", "oneInEach", "eitherGrip", "glaiveEach", "scytheTwoHands"]);
 
 /** The keys of a gate that read the TARGET (doors 17 and 18). */
-export const TARGET_GATES = Object.freeze(["targetHas", "targetKind", "laidByUser", "watched", "challenged"]);
+// `quarried`: the target is the user's Quarry, the creature its Hunter's Mark names (the class talent
+// audit's Review corrections, a new target fact for A's Hunter's Mark; D-1868).
+export const TARGET_GATES = Object.freeze(["targetHas", "targetKind", "laidByUser", "watched", "challenged", "quarried"]);
 
 /** Every key an object gate may carry. */
 export const GATE_KEYS = Object.freeze([...TARGET_GATES, "wields"]);
@@ -88,6 +90,7 @@ export function isGate(when, { facts = null } = {}) {
   if ("laidByUser" in when && when.laidByUser !== true && !listOf(when.laidByUser).length) return false;
   if ("watched" in when && when.watched !== true) return false;
   if ("challenged" in when && when.challenged !== true) return false;
+  if ("quarried" in when && when.quarried !== true) return false;
   if ("wields" in when) {
     const named = listOf(when.wields);
     if (!named.length || !named.every(f => WIELD_FACTS.includes(f))) return false;
@@ -128,6 +131,7 @@ export function gateHolds(when, facts = {}) {
   }
   if ("watched" in when) answers.push(target ? target.watched === true : null);
   if ("challenged" in when) answers.push(target ? target.challenged === true : null);
+  if ("quarried" in when) answers.push(target ? target.quarried === true : null);
   if ("wields" in when) answers.push(wield ? listOf(when.wields).every(f => wield[f] === true) : null);
   return fold(answers);
 }
@@ -268,6 +272,8 @@ export function targetFactsOf(snapshot, { own = [], marks = {} } = {}) {
     laidByUser,
     watched: names(marks?.watch ?? null, snapshot),
     challenged: names(marks?.challenge ?? null, snapshot),
+    // **THE USER'S QUARRY** (D-1868): the Ranger's Hunter's Mark (`flags.azeroth-rpg.mark`) names it.
+    quarried: names(marks?.quarry ?? null, snapshot),
     // **WHOSE BLOOD CURSES IT IS UNDER** (02 §7; the plan's B.6: *`targetFactsOf` gains `cursedBy`*;
     // D-1241): every Sovereign's uuid off the snapshot, and whether one is the user's hand.
     cursedBy: [...new Set((Array.isArray(snapshot.cursedBy) ? snapshot.cursedBy : []).map(String))].sort(),

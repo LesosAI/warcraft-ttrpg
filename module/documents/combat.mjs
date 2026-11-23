@@ -11,6 +11,8 @@
 
 // Shadowform's mark, cleared at the end of the holder's own turn (D-774).
 import { SECOND_REACTION_MARK } from "../rules/signatures.mjs";
+// R4's holds at 1, by regime (the class talent audit; D-1863).
+import { HOLD_MARK_FLAG, holdMarked, holdReleased, lastingHoldEnds } from "../rules/blow-doors.mjs";
 import { clearLightUsed } from "../effects/shadowform.mjs";
 import { LUNAR_DAMAGE_FLAG, advanceLunarDamage } from "../rules/lunar-guidance.mjs";
 import { iceBlockFor } from "../rules/ice-block.mjs";
@@ -30,6 +32,8 @@ import {
   withoutReaction
 } from "../rules/initiative.mjs";
 import { drainAtRoundEnd, fightStart, idleDecay, leaveFightPools } from "../rules/momentum.mjs";
+// 04's Fanaticism since the class talent audit (class agent A, D-1874): 2 Zeal per rank at a fight's start.
+import { fanaticismZeal } from "../rules/audit-martial.mjs";
 // 04's Second Chance: the last moment a given Reaction may be spent (stage 2b).
 import { givenReactionUntil } from "../rules/chronomancer.mjs";
 import { bleedTick, scorchTick, sustainLimit, upkeep } from "../rules/turn-effects.mjs";
@@ -104,7 +108,7 @@ import { movementLimited } from "../settings.mjs";
 import { reveal } from "../effects/stealth.mjs";
 import { manaPool } from "../rules/pools.mjs";
 // A poison's minute (08 §12, D-719).
-import { coatingEndsWithFight, coatingExpired, coatingStartsIn } from "../rules/consumables.mjs";
+import { coatingAfter, coatingEndsWithFight, coatingExpired, coatingStartsIn } from "../rules/consumables.mjs";
 import { reactionStateOf, shownWith } from "../applications/actions.mjs";
 // An area that strikes at the start of a turn (D-756): the law, what the
 // creature is, who it is to the caster, what the caster stands on, and the
@@ -1239,6 +1243,40 @@ export class AzerothCombatant extends Combatant {
   }
 
   /**
+   * **A HOLD AT 1 CLAIMED ON THIS CREATURE'S FIGHT RECORD** (the class talent audit's R4; D-1863):
+   * a `granted` hold (another creature's) once an encounter, an `identity` hold (Unkillable) once
+   * a round. Queued with every other write to this combatant (D-761) and read when its turn comes
+   * (`rules/blow-doors.mjs#holdMarked`), so two blows in flight cannot both find it unspent: it
+   * answers whether THIS write claimed it. `heldAtOne` is one of `turn-stamp.mjs
+   * #BOOKKEEPING_FLAGS` and goes with the fight (`AzerothCombat#_leaveFight`).
+   *
+   * @param {"granted"|"identity"|"self"|"lasting"|null} regime
+   * @returns {Promise<{added: boolean}>}
+   */
+  async markHold(regime) {
+    return oneAtATime(this, async () => {
+      const next = holdMarked(this.getFlag("azeroth-rpg", HOLD_MARK_FLAG) ?? null, { regime, round: this.combat?.round ?? 0 });
+      if (next.changed) await this.setFlag("azeroth-rpg", HOLD_MARK_FLAG, next.record);
+      return { added: next.added };
+    });
+  }
+
+  /**
+   * **A CLAIMED HOLD GIVEN BACK** (R4; the wave 1 review): the granter said no, so the claim
+   * `markHold` made before asking comes off. Queued with every other write to this combatant.
+   *
+   * @param {"granted"|"identity"|null} regime
+   * @returns {Promise<{released: boolean}>}
+   */
+  async releaseHold(regime) {
+    return oneAtATime(this, async () => {
+      const next = holdReleased(this.getFlag("azeroth-rpg", HOLD_MARK_FLAG) ?? null, { regime });
+      if (next.changed) await this.setFlag("azeroth-rpg", HOLD_MARK_FLAG, next.record);
+      return { released: next.changed };
+    });
+  }
+
+  /**
    * **THE ONCE-A-ROUND MARKS A WITHDRAWN HIT SPENT, GIVEN BACK** (door 13; the lead's
    * *"Yes, take it back"* and O-171's *"No."*): the further gains' marks and a Fast
    * weapon's point the hit took off the round's record (`rules/riders.mjs#roundRelease`),
@@ -1326,6 +1364,9 @@ export class AzerothCombatant extends Combatant {
    * Put a Half-Action or the Reaction back (D-718). **The GM's alone**: it is
    * an undo for a spend the table decided did not happen, and a player holding
    * their own combatant must not be able to refund their turn.
+   *
+   * The turn's Attack count goes back only where the Half-Action put back paid for an Attack, which the
+   * budget's own `paidFor` says (R6; the class talent audit's final review).
    *
    * @param {"half"|"reaction"} cost
    */
@@ -2133,12 +2174,11 @@ export class AzerothCombat extends Combat {
     // in the corridor laid its poison on every hit for the rest of the session.
     // The clock starts when the blade enters its first fight.
     await this._coatingClocksStart(actor);
-    // Fanaticism at rank 2 (04): the Paladin begins every fight holding 3 Zeal.
-    // At rank 1 the Zeal kept out of the last fight carries into this one (D-779;
-    // the lead, 2026-10-03, on O-172: *"Yes"*); rank 2's 3 stands as built.
+    // **04's FANATICISM** (the class talent audit, D-1874: *You begin every fight holding 2 Zeal per
+    // rank*): the start's Zeal, read by name; the Zeal no longer carries between fights.
     const fanaticism = actor.talentRanks?.("Fanaticism") ?? 0;
-    const zealStart = fanaticism >= 2 ? 3 : 0;
-    const updates = fightStart(actor.poolSnapshot(), { zealStart, keepsZeal: fanaticism >= 1 });
+    const zealStart = fanaticismZeal(fanaticism);
+    const updates = fightStart(actor.poolSnapshot(), { zealStart, keepsZeal: false });
     if (updates.length) await actor.updatePool(updates);
   }
 
@@ -2166,9 +2206,10 @@ export class AzerothCombat extends Combat {
       const named = coating?.laid?.combatId ?? null;
       const laidFightLive = named ? Boolean(game.combats.get(named)?.started) : false;
       if (!coatingStartsIn(coating, { laidFightLive })) continue;
-      await item.setFlag("azeroth-rpg", "coating", {
-        ...coating, laid: { combatId: this.id, round: Math.max(1, this.round ?? 1) }
-      });
+      const laid = { combatId: this.id, round: Math.max(1, this.round ?? 1) };
+      // 02's Poisoner's second poison (D-1880) starts its minute beside the first.
+      const alsoLaid = coating.also && coatingStartsIn(coating.also, { laidFightLive }) ? { also: { ...coating.also, laid } } : {};
+      await item.setFlag("azeroth-rpg", "coating", { ...coating, laid, ...alsoLaid });
     }
   }
 
@@ -2673,9 +2714,14 @@ export class AzerothCombat extends Combat {
       const holdTalents = actor.type === "character" ? (actor.takenTalents?.() ?? []) : [];
       const weave = actor.hasFeature?.("Shape the Weave") === true;
       const activeHeld = sustaining.filter(entry => !sustainEntryTransferPending(entry)).length;
+      // **FOR A NUMBER OF EFFECTS** (04's Arcane Concentration, the class talent audit: *for a number
+      // of effects equal to your rank*; D-1890): each Sustain's place among the held ones that pay
+      // Mana, in the order the caster holds them, which `upkeepFor`'s `index` reads.
+      const manaOrder = sustaining.filter(entry => !sustainEntryTransferPending(entry)
+        && (upkeepOf(entry, actor.items?.get?.(entry?.spellId)?.system ?? null)?.mana ?? 0) > 0);
       const costOf = entry => upkeepCost(
         upkeepOf(entry, actor.items?.get?.(entry?.spellId)?.system ?? null),
-        upkeepFor(holdTalents, { name: entry?.name ?? "", held: activeHeld, weave })
+        upkeepFor(holdTalents, { name: entry?.name ?? "", held: activeHeld, weave, index: manaOrder.indexOf(entry) })
       );
       const r = upkeep(sustaining, actor.poolSnapshot(), { costOf, health: actor.system?.health?.value ?? null });
       // **AN UPKEEP SHORT OF VITAE TAKES HEALTH** (02 §7; the San'layn and Sovereign plan's V4): the drain
@@ -2716,6 +2762,12 @@ export class AzerothCombat extends Combat {
       }
       for (const e of r.free) lines.push(game.i18n.format("AZEROTH.Combat.SustainFree", { name: actor.name, spell: e.name }));
       for (const e of r.suspended) lines.push(game.i18n.format("AZEROTH.Spellsteal.UpkeepSuspended", { name: actor.name, spell: e.name }));
+    }
+    // **04's EYE OF THE STORM AND TIDE OF THE ANCESTORS** (the class talent audit's B7 and B8,
+    // D-1886, D-1887), after the upkeep: an Eye whose Sustain went unpaid strikes nothing.
+    if (actor.type === "character") {
+      const shamanLines = await import("../effects/audit-cunning.mjs").then(m => m.shamanTurnStart(actor)).catch(err => { console.warn("azeroth-rpg | a shaman capstone's turn", err); return []; });
+      for (const line of shamanLines) lines.push(line);
     }
     // **HOARFROST GROWS** at the start of each of its caster's turns (07,
     // D-757), after the upkeep: an area whose Sustain went unpaid is swept by
@@ -2952,7 +3004,11 @@ export class AzerothCombat extends Combat {
     const actor = combatant?.actor ?? null;
     if (!actor) return [];
     if (combatant.isDefeated || (actor.type === "npc" && (actor.system?.health?.value ?? 0) <= 0)) return [];
+    // 04's Herald of the Void (the class talent audit's B7, D-1885): what a sustained Shadow
+    // tick dealt this beat, offered to spread on its own card.
+    const heraldBefore = actor.system?.health?.value ?? 0;
     const lines = await landTicks(actor, {combat:this,combatant});
+    lines.push(...await import("../effects/audit-cunning.mjs").then(m => m.heraldSpreadAfterTicks(actor, heraldBefore)).catch(err => { console.warn("azeroth-rpg | Herald of the Void's spread", err); return []; }));
     // 07 §12's Dilation's half lands before this turn's ticks (`_onStartTurn`, the 2a review, M2).
     lines.push(...await advanceVekniss(actor, this));
     lines.push(...await advanceBloodpetal(actor, this));
@@ -3006,10 +3062,13 @@ export class AzerothCombat extends Combat {
     const lines = [];
     for (const item of actor?.items ?? []) {
       const coating = item.getFlag("azeroth-rpg", "coating") ?? null;
-      if (!coatingExpired(coating, { combatId: this.id, round: this.round })) continue;
+      // Each poison its own minute (02's Poisoner's second, D-1880): `coatingAfter`.
+      const after = coatingAfter(coating, c => coatingExpired(c, { combatId: this.id, round: this.round }));
+      if (!after.changed) continue;
       await item.unsetFlag("azeroth-rpg", "coating");
-      lines.push(game.i18n.format("AZEROTH.Combat.CoatingWornOff", {
-        name: actor.name, coating: coating.name ?? "", item: item.name
+      if (after.kept) await item.setFlag("azeroth-rpg", "coating", after.kept);
+      for (const gone of after.ended) lines.push(game.i18n.format("AZEROTH.Combat.CoatingWornOff", {
+        name: actor.name, coating: gone.name ?? "", item: item.name
       }));
     }
     return lines;
@@ -3035,10 +3094,12 @@ export class AzerothCombat extends Combat {
     const lines = [];
     for (const item of actor?.items ?? []) {
       const coating = item.getFlag("azeroth-rpg", "coating") ?? null;
-      if (!coatingEndsWithFight(coating, this.id)) continue;
+      const after = coatingAfter(coating, c => coatingEndsWithFight(c, this.id));
+      if (!after.changed) continue;
       await item.unsetFlag("azeroth-rpg", "coating");
-      lines.push(game.i18n.format("AZEROTH.Combat.CoatingWornOff", {
-        name: actor.name, coating: coating.name ?? "", item: item.name
+      if (after.kept) await item.setFlag("azeroth-rpg", "coating", after.kept);
+      for (const gone of after.ended) lines.push(game.i18n.format("AZEROTH.Combat.CoatingWornOff", {
+        name: actor.name, coating: gone.name ?? "", item: item.name
       }));
     }
     if (lines.length) {
@@ -3166,6 +3227,15 @@ export class AzerothCombat extends Combat {
     // twice your rank*; D-775): the record the damage door kept, read and cleared
     // at every one of the warlock's turn starts, whatever it heals.
     for (const line of await this._siphon(actor)) lines.push(line);
+    // **04's DARK HARVEST** (the class talent audit, D-1891: *At the start of your turn, each creature
+    // within 60 feet carrying two or more of your ongoing effects takes Shadow damage equal to your
+    // tier*): at the same beat, guarded so it never stops the turn (`effects/dark-harvest.mjs`).
+    try {
+      const { darkHarvest } = await import("../effects/dark-harvest.mjs");
+      for (const line of await darkHarvest(actor, this)) lines.push(line);
+    } catch (err) {
+      console.warn("azeroth-rpg | Dark Harvest", err);
+    }
     const health = actor.system?.health ?? { value: 0, max: 0 };
     if (!(health.value > 0) || health.value >= health.max) return lines;
     const due = turnStartHealFor(actor.takenTalents(), { pools: actor.poolSnapshot?.() ?? [] });
@@ -3211,7 +3281,10 @@ export class AzerothCombat extends Combat {
       const round = combatant.getFlag("azeroth-rpg", "round") ?? {};
       const health = actor.system?.health ?? { value: 0, max: 0 };
       const belowHalf = (health.value ?? 0) < (health.max ?? 0) / 2;
-      const holds = (actor.talentRanks?.("Frenzy") ?? 0) > 0 || Boolean(actor.items?.some(i => i.type === "feature" && i.name === "Deathwish"));
+      // **NOTHING KEEPS THE RAGE BELOW HALF ANY MORE** (the class talent audit, D-1870, D-1871): 04's Frenzy
+      // gives Rage the first time each encounter below half, and 02's Deathwish Damage Rating and Rage off a
+      // hit (`effects/audit-martial.mjs`); neither stops the drain, which they both did.
+      const holds = false;
       const updates = [];
       const lines = [];
       for (const pool of actor.poolSnapshot().filter(p => p.kind === "momentum")) {
@@ -3363,10 +3436,9 @@ export class AzerothCombat extends Combat {
     // deleting its world actor, and a write on it here lands after that delete - the server refuses
     // an update of an actor it no longer holds. Its flags go with its combatant.
     if (collapsingNow(actor)) return;
-    // **EVERY MOMENTUM POOL GOES - BUT A FANATIC'S ZEAL** (04's Fanaticism at
-    // rank 1: *Your Zeal does not drain out of combat*; D-772): read by name, the
-    // inline row's own way, and kept between the fights.
-    const momenta = leaveFightPools(actor?.poolSnapshot?.() ?? [], { keepsZeal: (actor?.talentRanks?.("Fanaticism") ?? 0) >= 1 });
+    // **EVERY MOMENTUM POOL GOES** - a fanatic's Zeal too, since the class talent audit's Fanaticism
+    // (D-1874) begins each fight with Zeal rather than keeping it between them.
+    const momenta = leaveFightPools(actor?.poolSnapshot?.() ?? [], { keepsZeal: false });
     if (momenta.length) await actor.updatePool(momenta);
     await actor?.resetUses?.("encounter");
     // **A TALENT'S DAMAGE BUFF BOUGHT FOR THE FIGHT LAPSES WITH IT** (04,
@@ -3376,6 +3448,10 @@ export class AzerothCombat extends Combat {
     const lapsed = (actor?.effects ?? [])
       .filter(e => e.getFlag("azeroth-rpg", "talentBuff") && e.getFlag("azeroth-rpg", "until") === "encounter")
       .map(e => e.id);
+    // **AND A HOLD AT 1 THAT LASTS ENDS WITH THE ENCOUNTER** (the class talent audit's R4, rule 4;
+    // D-1863): 07's Aegis floor, 04's Big Bad Voodoo and Beacon of Hope (`lastingHoldEnds`). Only
+    // where the fight itself is over; a creature walking out of a fight that carries on keeps it.
+    if (ended) for (const e of actor?.effects ?? []) if (!lapsed.includes(e.id) && lastingHoldEnds(e.flags?.["azeroth-rpg"] ?? null)) lapsed.push(e.id);
     if (lapsed.length) await actor.deleteEmbeddedDocuments("ActiveEffect", lapsed);
     // **AND TEMPORARY HEALTH BOUGHT FOR THE FIGHT** (04's Last Stand and Living
     // Seed: *until the encounter ends*; D-777): what is left of it goes.
@@ -3422,6 +3498,8 @@ export class AzerothCombat extends Combat {
     for (const key of ["budget", "round", "lastHitRound", "acted", "heldPosition", "marked", "damageTypes", "ready", "moveHalves", "damaged", LUNAR_DAMAGE_FLAG, "lastTurn", "constructTurn", "signatureEncounter", "turnStartHealth"]) {
       if (combatant.getFlag("azeroth-rpg", key) !== undefined) await combatant.unsetFlag("azeroth-rpg", key);
     }
+    // The holds at 1 this fight counted (R4, D-1863) go with it too.
+    if (combatant.getFlag("azeroth-rpg", HOLD_MARK_FLAG) !== undefined) await combatant.unsetFlag("azeroth-rpg", HOLD_MARK_FLAG);
   }
 
   /**

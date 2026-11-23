@@ -392,27 +392,30 @@ export function shamanTalentsBatch(context) {
       assert.isTrue(walking.getFlag("azeroth-rpg", "ignoresGround"), "the walk does not ignore Difficult ground");
     });
 
-    it("EARTHEN SHIELD: 2 less damage from every source while a totem of the shaman's stands, and none once it is gone", async function () {
+    // Half the tier, rounded down, since the class talent audit (D-1886).
+    it("EARTHEN SHIELD: half the tier less damage from every source while a totem of the shaman's stands, and none once it is gone", async function () {
       this.timeout(240000);
       const shaman = await shamanWith("ZZ ShT Earthen", { level: 13, ranks: { "Earthen Shield": 1 } });
       const before = shaman.system.damageReduction ?? 0;
       const totem = await B().bind({ owner: shaman, feature: featureNamed(shaman, "Totem"), entry: await entryNamed("Searing Totem"), kind: "totem", until: "encounter" });
       assert.ok(totem, "no totem was bound");
       made.push(totem);
-      await until(() => (shaman.system.damageReduction ?? 0) === before + 2, "2 less damage while it stands");
+      const shield = Math.floor(shaman.system.tier / 2);
+      await until(() => (shaman.system.damageReduction ?? 0) === before + shield, `${shield} less damage while it stands`);
       await B().release(shaman, totem.uuid);
       await until(() => (shaman.system.damageReduction ?? 0) === before, "the reduction gone with the totem");
     });
 
     /* ---- Restoration ---------------------------------------------------- */
 
-    it("HEALING WAVE at rank 3 restores 3 more, and the card says so", async function () {
+    // Each rank adds 1, to no more than the tier, since the class talent audit (R1, D-1886).
+    it("HEALING WAVE at rank 3 restores the rank more, to no more than the tier, and the card says so", async function () {
       this.timeout(180000);
       const shaman = await shamanWith("ZZ ShT Wave", { ranks: { "Healing Wave": 3 } });
       const ally = await allyNamed("ZZ ShT Wave Ally");
       await fill(shaman, "mana");
       const card = await cast(shaman, "Healing Wave", { targets: [rowOf(ally)] });
-      assert.include(formulas(card), game.i18n.format("AZEROTH.Card.HealAddRow", { n: 3 }));
+      assert.include(formulas(card), game.i18n.format("AZEROTH.Card.HealAddRow", { n: Math.min(3, shaman.system.tier) }));
     });
 
     it("CHAIN HEAL: Healing Wave's further friends take half, rounded down; one too many is refused", async function () {
@@ -560,15 +563,17 @@ export function shamanTalentsBatch(context) {
       await until(() => usesOf(shaman, "Reincarnation") === 0, "the once a Long Rest struck");
     });
 
-    it("ANCESTRAL TIDE: the cast stamps 4 Health at the start of each target's next turn", async function () {
+    it("TIDE OF THE ANCESTORS: 10 Mana and its totem bound for the encounter outside the tier's count, teaching no spell (B7, D-1887)", async function () {
       this.timeout(180000);
-      const shaman = await shamanWith("ZZ ShT Tide", { level: 20, ranks: { Cloudburst: 1, "Ancestral Tide": 1 } });
-      const ally = await allyNamed("ZZ ShT Tide Ally");
-      await fightWith([ally]);
+      const shaman = await shamanWith("ZZ ShT Tide", { level: 20, ranks: { Cloudburst: 1, "Tide of the Ancestors": 1 } });
       await fill(shaman, "mana");
-      const card = await cast(shaman, "Ancestral Tide", { targets: [rowOf(ally)] });
-      assert.ok(card, "Ancestral Tide was refused");
-      assert.deepInclude(card.flags["azeroth-rpg"].tick, { kind: "heal", amount: 4 }, "the cast stamps no tick of 4");
+      const before = poolOf(shaman, "mana").value;
+      assert.ok(await use(shaman, "Tide of the Ancestors"), "Tide of the Ancestors was refused");
+      const totem = await until(() => game.actors.find(a => a.getFlag("azeroth-rpg", "bond")?.ownerUuid === shaman.uuid && a.getFlag("azeroth-rpg", "bond")?.sourceName === "Tide of the Ancestors"), "the Tide totem bound");
+      made.push(totem);
+      assert.isTrue(totem.getFlag("azeroth-rpg", "bond").uncounted === true, "the Tide totem counts against the tier");
+      assert.equal(poolOf(shaman, "mana").value, before - 10, "the 10 Mana was not paid");
+      assert.isUndefined(shaman.items.find(i => i.type === "spell" && i.name === "Ancestral Tide"), "the capstone still taught Ancestral Tide");
     });
   });
 }

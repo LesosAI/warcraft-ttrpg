@@ -131,7 +131,7 @@ export function areaDamageOn({ actor, caster = null, spell = {}, damage, signatu
   const school = physical ? (spell?.school ?? null) : damageType;
   // **A DEATH SPELL'S BONUSES ARE SHADOW'S** (D-941): the one reading the cast takes too.
   const bonusKey = bonusSchool({ school: spell?.school ?? null, damageSchool: physical ? null : damageType });
-  const talentRows = caster?.takenTalents ? spellDamageFor(caster.takenTalents(), { name: spellName, school: bonusKey }) : [];
+  const talentRows = caster?.takenTalents ? spellDamageFor(caster.takenTalents(), { name: spellName, school: bonusKey, tier: caster.system?.tier ?? 1 }) : [];
   // An ITEM's tick (08 §20's Hand of Ragnaros, D-911) is no spell: nothing the
   // holder's spells add reaches it.
   const bonus = caster && spell?.item !== true
@@ -142,12 +142,15 @@ export function areaDamageOn({ actor, caster = null, spell = {}, damage, signatu
   // runs your Arcane and Nature spells ignore 2 Ward*; D-771), off the spell's
   // own school, read the same way the cast reads it.
   const pierce = Math.max(0, Math.trunc(Number(caster?.spellWardPierce?.(bonusKey)) || 0));
+  // **AND AGAINST THIS CREATURE** (04's Pyromaniac and Lunar Guidance; the class talent audit, D-1890,
+  // D-1892): the rows gated on the creature struck, read off it - a SPELL's blow alone.
+  const pierceAt = spell?.item === true ? 0 : Math.max(0, Math.trunc(Number(caster?.spellWardPierceAt?.(bonusKey, actor)) || 0));
   // **AN IMMUNITY A SPELL READS AS WARD** (04's Burning Soul: *Your Fire spells
   // treat Immune (Fire) as Ward 3 instead*; D-775), on a SPELL's area or tick alone
   // - Ignite's and a feature's are no spell - as the cast reads it.
   const asWard = spellBlowOf(spell) && caster?.takenTalents ? immuneAsWardFor(caster.takenTalents(), { school }).ward : 0;
   const read = physical ? { immune: s.immune ?? [], ward: 0 }
-    : immuneReadAsWard({ immune: s.immune ?? [], ward: Math.max(0, (wardBySchool(s.ward)[school] ?? 0) - pierce), school, asWard });
+    : immuneReadAsWard({ immune: s.immune ?? [], ward: Math.max(0, (wardBySchool(s.ward)[school] ?? 0) - pierce - pierceAt), school, asWard });
   const lane = spellDamageLane({
     type: damageType, spellSchool: spell?.school ?? null,
     apByLocation: { body: s.ap?.body ?? 0, head: s.ap?.head ?? 0, limb: s.ap?.limb ?? 0 }

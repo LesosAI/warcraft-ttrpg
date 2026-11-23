@@ -1,7 +1,12 @@
-/** Classic 7849 / 11819: a fragile alarm calls two 6233 sentries.
- * One six-second round replaces the client's 6.8-second summon delay. */
+/** Classic 7849 / 11819: a fragile alarm calls two 6233 guardians.
+ * One six-second round replaces the client's 6.8-second summon delay.
+ * 14 renamed the pair: the alarm calls two Mechanized Guardians (leper gnomes on
+ * mechanostriders), and the Mechanized Sentry is a separate patrol Elite that no
+ * alarm summons (D-1819). */
 export const MOBILE_ALERT = Object.freeze({ name: "Raise Alarm", seconds: 6,
-  count: 2, entry: "Mechanized Sentry", action: "action" });
+  count: 2, entry: "Mechanized Guardian", action: "action" });
+/** What a pair summoned before D-1819 carries on its flag: recovery still owns it. */
+export const MOBILE_ALERT_FORMER_ENTRIES = Object.freeze(["Mechanized Sentry"]);
 export const MOBILE_ALERT_FLAG = "mobileAlert";
 /** An uncertain payment or placement stays held until the GM reconciles it. */
 export function mobileAlertHeld(record) {

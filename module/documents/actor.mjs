@@ -51,7 +51,7 @@ import { endSymbiosis, shareHealing } from "../effects/symbiosis.mjs";
 // promised, Wounded Beast's price, Light's Reserve, a heal Mortal Strike blocks,
 // Beacon's share, and the schools named at a Long Rest.
 import { NEXT_ATTACK_FLAG, pendingNextAttack } from "../rules/next-attack.mjs";
-import { BEACON_FLAG, DEATH_MARK_FLAG, PLATE_FLAG, openingFor, restBonusFor, turnStartRestoreFor, woundedBeastTaken } from "../rules/class-talents.mjs";
+import { BEACON_FLAG, DEATH_MARK_FLAG, PLATE_FLAG, openingFor, restBonusFor, woundedBeastTaken } from "../rules/class-talents.mjs";
 // What a counter or a charge buys on a roll's own dialog (D-774).
 import { CHARGE_FLAG, spellPoolFor, talentLinesFor } from "../rules/class-talents.mjs";
 import { FREE_CAST_FLAG, freeCastLines, freeCastRefills } from "../rules/free-casts.mjs";
@@ -68,7 +68,10 @@ import { FLIGHT_SCHOOL_FLAG } from "../rules/chromatic-features.mjs";
 // The Mage's and the Warlock's (D-775): Cauterize's catch at the damage door,
 // Ruin's two dice on a spell's Critical Injury, and the Long Rest's release of a
 // demon Command Demon bound and its lifting of Demonic Sacrifice's lock.
-import { SACRIFICED_FLAG, cauterizeFor, cauterizes, ruinFor } from "../rules/class-talents.mjs";
+import { SACRIFICED_FLAG, cauterizeFor, cauterizes } from "../rules/class-talents.mjs";
+// A Ward pierce gated on the target (04's Pyromaniac and Lunar Guidance; the class talent audit, D-1890, D-1892).
+import { igniteBurning } from "../rules/class-talents.mjs";
+import { LUNAR_DAMAGE_FLAG, lunarDamageQualifies } from "../rules/lunar-guidance.mjs";
 // What holds a target under a Rogue's Opening (04's Overkill and Subterfuge; D-773).
 import { openingEntries } from "../effects/talent-states.mjs";
 import { healingAfterBlock } from "../rules/no-healing.mjs";
@@ -115,13 +118,14 @@ import { constructsFor, isWrecked } from "../rules/constructs.mjs";
 import { IDENTIFY_SCOPE, TRIED_FLAG, UNIDENTIFIED_FLAG, isUnidentified, knownBatch, triedThisRest } from "../rules/identify.mjs";
 import { cardName, shownName, unidentifiedSource } from "../helpers/identify-words.mjs";
 import { BLUEPRINT_FLAG, GADGETS_SPENT_FLAG, OVERCLOCK_ENDS, OVERCLOCK_FLAG, cleanBlueprint, gadgetByKey, gadgetFeature, gadgetSpentSwap, gadgetsKnownFor, knownGadgets } from "../rules/gadgets.mjs";
+import { GADGET_TWICE_FLAG, gadgetTwiceKey } from "../rules/gadgets.mjs";
 // THE LEGACY BRANCHES' DOORS (B1): one fact-builder for a row's gate (doors 15, 17,
 // 18), the ability scope (door 16), and the Watch cleared at a Long Rest (door 18).
 import { wieldFacts } from "../rules/wield.mjs";
 import { WATCH_FLAG, marksFrom } from "../rules/marks.mjs";
 import { targetFactsOf } from "../rules/talent-gates.mjs";
 import { abilityScope } from "../rules/expressions.mjs";
-import { usesAfterRestamp, usesStamp } from "../rules/uses.mjs";
+import { refillAfter, usesAfterRestamp, usesStamp } from "../rules/uses.mjs";
 // A Legacy branch embeds only with its people (04 §1; D-781, door 1).
 import { legacyResync, owedTalents } from "../rules/legacy-branches.mjs";
 import { fatigueState } from "../rules/fatigue.mjs";
@@ -141,7 +145,7 @@ import {
   TEMP_FLAG, absorbDamage, cleanTempRecord, grantTemporary, overflowTemporary, temporaryEnds, wholeTemp
 } from "../rules/temporary-health.mjs";
 import { healTempFor } from "../rules/class-talents.mjs";
-import { wouldDrop } from "../rules/blow-doors.mjs";
+import { HOLD_MARK_FLAG, holdRegimeOf, holdRegimeRefusal, wouldDrop } from "../rules/blow-doors.mjs";
 import { recordOf, resolveRecord } from "../rules/blow-records.mjs";
 import { damageAboveHealthFloor } from "../rules/sealing-flame.mjs";
 import {utilityEffectView} from "../rules/utility-draughts.mjs";
@@ -182,6 +186,7 @@ import { refuseDispersion } from "../effects/dispersion-protection.mjs";
 import { offerElunesRegard } from "../effects/elunes-regard.mjs";
 import { dispersionFor, dispersionSuppressesEquipmentEffect } from "../rules/dispersion.mjs";
 import { healingReceived } from "../rules/corruption-effects.mjs";
+import { DAMAGE_BY_OPTION, dealerRecord } from "../rules/death-watch.mjs";
 import { heldAugment } from "../rules/augments.mjs";
 import { emptySandUpdates } from "../rules/sand.mjs";
 // The Death Knight (D-943, D-946): the one healing judgement, and the runes' Long Rest refill.
@@ -209,6 +214,8 @@ import { mirrorMembers, sharedPoolValue } from "../rules/energy-merge.mjs";
 // The Demon Hunter's features (the Demon Hunter plan's Phase 4a): the two riders, Fel Surge's lines, the shape's
 // Energy refill and its no-gain rule.
 import { FEL_SURGE_FEATURE, QUIET_THE_WHISPERS, demonHunterRiders, felSurgeLines, freeFelLash, unleashedGainRefusal, unleashedRefillExtra } from "../rules/demon-hunter-features.mjs";
+// The class talent audit's martial law (class agent A, D-1870 to D-1879): the Ranger's riding features.
+import { rangerRiders } from "../rules/audit-martial.mjs";
 // 04's Demon's Due (the Demon Hunter plan's Phase 5): who makes a Fel Lash free.
 import { DEMONS_DUE, felLashFreeBy } from "../rules/demon-hunter-talents.mjs";
 import { castDealsDamage } from "../rules/area-ticks.mjs";
@@ -422,8 +429,11 @@ function featureStamp(cls, f, { tier = 1, level = 1, int = 0 } = {}) {
     cost: { pool: f.cost?.pool ?? null, amount: f.cost?.amount ?? 0, all: f.cost?.all === true, on: f.cost?.on === "success" ? "success" : null },
     casting: f.casting === true,
     dc: f.dc ?? null,
-    uses: { value: usesMax, max: usesMax, per: f.uses?.per ?? null },
+    // `refill` (D-1868): one use back at each Short Rest, where the descriptor says so.
+    uses: { value: usesMax, max: usesMax, per: f.uses?.per ?? null, refill: f.uses?.refill === "short" ? "short" : null },
     heal: f.heal ?? null,
+    // The conditions its Use ends on its target by choice (Mercy of Uther on Lay on Hands; D-1875), 0 for none.
+    ends: Math.max(0, Math.min(3, Math.trunc(Number(f.ends)) || 0)),
     // And whether a passed Test takes half of it (the lead: *"Build it everywhere"*), or
     // none of it, where the failure is what deals it (02's Shadow Word: Death; the B8a pass).
     damage: { amount: f.damage ? String(f.damage.amount) : null, type: f.damage?.type ?? null, half: f.damage?.half === true, onFail: f.damage?.onFail === true },
@@ -1541,8 +1551,11 @@ export class AzerothActor extends Actor {
     for (const item of this.items.filter(i => i.type === "feature" && i.system?.choice === "gadgets")) {
       const talentId = item.getFlag("azeroth-rpg", "feature")?.talentId ?? null;
       if (!talentId || !taken.some(t => t.id === talentId)) continue;
-      for (const gadget of knownGadgets(item.system?.known ?? [], gadgetsAllowed)) {
-        wanted.set(`${talentId}/${gadget.name}`, { ...gadgetGrants(item, talentId), f: gadgetFeature(gadget), gadget: gadget.key });
+      const knownList = knownGadgets(item.system?.known ?? [], gadgetsAllowed);
+      // Gadgeteer at rank 2's gadget used twice (04; the class talent audit, D-1883).
+      const twice = gadgetTwiceKey({ rank: taken.find(t => t.id === talentId)?.taken ?? 1, chosen: item.getFlag("azeroth-rpg", GADGET_TWICE_FLAG) ?? null, known: knownList.map(g => g.key) });
+      for (const gadget of knownList) {
+        wanted.set(`${talentId}/${gadget.name}`, { ...gadgetGrants(item, talentId), f: gadgetFeature(gadget, { twice: gadget.key === twice }), gadget: gadget.key });
       }
     }
     // **AND THE GADGET MEKKATORQUE'S BLUEPRINT BUILT** (02's gnome: *build one ...
@@ -1602,7 +1615,8 @@ export class AzerothActor extends Actor {
       const current = item.toObject().system ?? {};
       const { uses, ...rest } = stamp;
       const changed = Object.keys(rest).filter(k => !same(current[k], rest[k]));
-      const usesChanged = (current.uses?.max ?? 0) !== uses.max || (current.uses?.per ?? null) !== uses.per;
+      const usesChanged = (current.uses?.max ?? 0) !== uses.max || (current.uses?.per ?? null) !== uses.per
+        || (current.uses?.refill ?? null) !== (uses.refill ?? null);
       const rankChanged = talentId !== null && (item.getFlag("azeroth-rpg", "feature")?.rank ?? null) !== rank;
       if (!changed.length && !usesChanged && !rankChanged) continue;
       const value = usesChanged
@@ -1610,7 +1624,7 @@ export class AzerothActor extends Actor {
         : (current.uses?.value ?? 0);
       updates.push({
         _id: item.id, name: f.name,
-        system: { ...Object.fromEntries(changed.map(k => [k, rest[k]])), uses: { value, max: uses.max, per: uses.per } },
+        system: { ...Object.fromEntries(changed.map(k => [k, rest[k]])), uses: { value, max: uses.max, per: uses.per, refill: uses.refill ?? null } },
         ...(rankChanged ? { flags: { "azeroth-rpg": { feature: flag } } } : {})
       });
     }
@@ -1761,7 +1775,13 @@ export class AzerothActor extends Actor {
     // weapon* (04's Wolf's Pace, Blade Circle; the Legacy branches' door 15): what is
     // worn and held, measured by the one law - melded weapons wielded by nobody.
     const wield = wieldFacts([...this.items], { melded: Boolean(shape && meldsGear(shape.kind)) });
-    const desired = passivesFor(taken, { form, shield: shield && !(shape && meldsGear(shape.kind)), totem, wield });
+    const desired = passivesFor(taken, { form, shield: shield && !(shape && meldsGear(shape.kind)), totem, wield, tier: this.system?.tier ?? 1 });
+    // *While you control a Bound Demon* (04's Demonic Knowledge; the class talent audit, D-1891): the
+    // rows gated on a demon bound to this character, laid beside the rest while one is held; the
+    // bind and the release re-run this sync (`documents/bound.mjs#syncBoundFor`).
+    if (boundOf(this, "demon").length > 0) {
+      desired.push(...passivesFor(taken, { boundDemon: true, tier: this.system?.tier ?? 1 }).filter(r => talentEffect(r.talent.className, r.identifier, r.talent.race ?? null)?.passive?.when === "boundDemon"));
+    }
     const held = this.effects
       .filter(e => e.getFlag("azeroth-rpg", "talentEffect"))
       .map(e => ({ id: e.id, identifier: e.getFlag("azeroth-rpg", "talentEffect"), changes: e.system?.changes ?? [] }));
@@ -1960,6 +1980,15 @@ export class AzerothActor extends Actor {
     const updates = due.map(i => ({ _id: i.id, "system.uses.value": i.system.uses.max }));
     // The rest's card is public: a thing a player is kept from is named by its kind (D-1435).
     const names = due.map(i => cardName(i));
+    // **ONE USE BACK AT A SHORTER REST** (`uses.refill`; Mercy of Uther, D-1868): a thing that
+    // refills whole at a Long Rest and gives one back at each Short Rest (`rules/uses.mjs#refillAfter`).
+    for (const i of this.items) {
+      if (due.includes(i)) continue;
+      const back = refillAfter(i.system?.uses ?? null, event);
+      if (back === null) continue;
+      updates.push({ _id: i.id, "system.uses.value": back });
+      names.push(cardName(i));
+    }
     // An item's castings refresh on the same clock (D-633).
     for (const item of this.items) {
       const spells = Array.isArray(item.system?.spells) ? item.system.spells : [];
@@ -2807,9 +2836,9 @@ export class AzerothActor extends Actor {
 
   /** 05 §12: Energy and Focus refill at the start of the turn. */
   async refillTurn({ still = false } = {}) {
-    // 04's Adrenaline (D-773): *Your Energy pool returns 1 more per rank at the
-    // start of your turn*, beside 05 §12's own refill.
-    const extra = this.type === "character" ? { ...turnStartRestoreFor(this.takenTalents()).byPool } : {};
+    // What a feature adds to 05 §12's refill, by pool. 04's Adrenaline refilled Energy here until the class
+    // talent audit made it a discount (decision 13, D-1881), so no talent adds to the refill now.
+    const extra = {};
     // 02's Demon Unleashed: *At 15 Fel Corruption or more your Energy refills 5 at the start of each of your turns
     // instead of 3* (the Demon Hunter plan's C15), off the Fel a feature's threshold reads (`featureFel`: I Have
     // Prepared's 20, never Embrace the Pain's 5 more; the review's M1).
@@ -2940,10 +2969,14 @@ export class AzerothActor extends Actor {
    * agree are written together), and the grant's record goes with the last of
    * it.
    *
+   * **AND WHO DEALT IT, ON THE SAME WRITE** (D-1729): `by` is the damage door's dealer, written
+   * as `rules/death-watch.mjs#DAMAGE_BY_OPTION` beside `azerothDamageApplied`, so the death watch
+   * reads the creature that dropped a character off the write that dropped it (10 §3's exposure).
+   *
    * @param {number} delta
-   * @param {{temp?: number|null}} [o]
+   * @param {{temp?: number|null, by?: Actor|null}} [o]
    */
-  async adjustHealth(delta, { temp = null, damage = false, manaShield = null } = {}) {
+  async adjustHealth(delta, { temp = null, damage = false, manaShield = null, by = null } = {}) {
     if (refuseIceBlockTarget(this)) return this;
     if (damage === true && refuseDispersion(this, "damage")) return this;
     const health = this.system?.health;
@@ -2974,11 +3007,12 @@ export class AzerothActor extends Actor {
       ? mindControlHarm : null;
     const controlSnapshot = controlHarm?.mindControlHarmSnapshot(this) ?? [];
     const controlHealthBefore = (this.system.health.value ?? 0) + wholeTemp(this.system.health.temp);
+    const damageOptions = damageApplied > 0 ? { azerothDamageApplied: damageApplied, ...(by ? this._damageByOption?.(by) : {}) } : {};
     const written = manaShield
       ? await (await import('../effects/mana-shield-payment.mjs')).commitManaShieldHealth({actor:this,plan:manaShield,update,
-        options:damageApplied>0?{azerothDamageApplied:damageApplied}:{}})
+        options:damageOptions})
       : damageApplied > 0
-      ? await this.update(update, { azerothDamageApplied: damageApplied })
+      ? await this.update(update, damageOptions)
       : await this.update(update);
     if (controlSnapshot.length) {
       const remaining = (this.system.health.value ?? 0) + wholeTemp(this.system.health.temp);
@@ -3008,6 +3042,19 @@ export class AzerothActor extends Actor {
     // An Avatar ended there too (D-769), and is waited for the same way.
     if (value === 0) await this._shapeEnding;
     return written;
+  }
+
+  /**
+   * The update option naming who dealt a blow (D-1729): `{[DAMAGE_BY_OPTION]: record}`, or
+   * nothing where the dealer cannot be named. A method, so `adjustHealth` reads no module name
+   * for it (its body is compiled alone by `consume-damage-adapter.test.mjs`).
+   *
+   * @param {Actor|null} by
+   * @returns {object}
+   */
+  _damageByOption(by) {
+    const dealer = dealerRecord(by);
+    return dealer ? { [DAMAGE_BY_OPTION]: dealer } : {};
   }
 
   /**
@@ -3196,8 +3243,9 @@ export class AzerothActor extends Actor {
    * says*; the lead, 2026-11-18: *"Yes"* to it for every class), or null: a character's spell above
    * the tier its granting class reaches on 07 §4's chart (`casting.mjs#castingReach`, a second class
    * one tier behind) is refused before anything is spent. Tier 5 is outside the cap
-   * (`castCapRefusal`). **A spell a talent or a feature teaches** (`spellFrom` naming an item the grant
-   * table pairs with this spell, `spellGrantTable`; 07 §9) is outside the tome's cap: the talent's own gate placed it. A creature's
+   * (`castCapRefusal`). **A spell a talent, a feature or a class teaches** (`spellFrom` naming an item the grant
+   * table pairs with this spell, `spellGrantTable`; 07 §9) is outside the cap (D-1083; the lead's reversal of R3,
+   * D-1869: *"The spells can be cast if talents give them, they shouldn't be blocked"*). A creature's
    * spells are bounded by 14's review (D-706) and an item's spell is the item's, so neither is asked.
    *
    * @param {Item|{name?: string, system?: object}} spell
@@ -3206,6 +3254,8 @@ export class AzerothActor extends Actor {
   castCapWords(spell) {
     if (this.type !== "character" || !spell) return null;
     const spellFrom = spell.getFlag?.("azeroth-rpg", "spellFrom") ?? spell.flags?.["azeroth-rpg"]?.spellFrom ?? null;
+    // **A SPELL A TALENT, A FEATURE OR A CLASS TEACHES IS NEVER CAPPED** (D-1083; the lead, 2026-11-23,
+    // reversing R3: *"The spells can be cast if talents give them, they shouldn't be blocked"*; D-1869).
     if (spellFromHonoured({ spellFrom, name: spell.name ?? "", grants: this.spellGrantTable() })) return null;
     const sys = spell.system ?? {};
     const classes = (this.classItems ?? []).map((c, index) => ({
@@ -3242,9 +3292,12 @@ export class AzerothActor extends Actor {
       // Frailty are known on top of that count*): the class item, by its name, against `FEATURE_SPELLS`.
       ...this.items.filter(i => i.type === "class").map(i => ({ id: i.id, name: i.name, className: i.name })),
       ...rows.filter(d => d.type === "class" && d._id).map(d => ({ id: d._id, name: d.name ?? "", className: d.name ?? "" }))];
+    // Each row says what kind of item teaches it (`spell-access.mjs#GRANT_KINDS`; D-1862). None is
+    // capped at the cast (D-1869).
+    const kindOf = id => (this.items.get(id)?.type ?? rows.find(d => d._id === id)?.type ?? "feature");
     return [
-      ...spellGrantsFor(taken).map(g => ({ id: String(g.talent.id), name: g.name })),
-      ...featureSpellGrants(features).map(g => ({ id: g.featureId, name: g.spell }))
+      ...spellGrantsFor(taken).map(g => ({ id: String(g.talent.id), name: g.name, kind: "talent" })),
+      ...featureSpellGrants(features).map(g => ({ id: g.featureId, name: g.spell, kind: kindOf(g.featureId) === "class" ? "class" : "feature" }))
     ];
   }
 
@@ -3576,7 +3629,11 @@ export class AzerothActor extends Actor {
         freeBy: felLashFreeBy({ shapeKind: this.shape?.kind ?? null, due: this.effects.some(e => e.active !== false && e.flags?.["azeroth-rpg"]?.[DEMONS_DUE.flag]) })
       })
       : [];
-    const featureLines = [...dkLines, ...dhLines];
+    // **AND THE RANGER'S** (02 §7's Aimed Shot and Kill Shot ride the attack since the class talent audit,
+    // D-1872), through the same reading (`rules/audit-martial.mjs#rangerRiders`).
+    const ranger = rangerRiders(this.items.filter(i => i.type === "feature").map(i => i.name));
+    const rangerLines = ranger.talents.length ? ridersFor(ranger.talents, { ...sharedRiderOptions, rowOf: ranger.rowOf }) : [];
+    const featureLines = [...dkLines, ...dhLines, ...rangerLines];
     return [...ridersFor(this.takenTalents(), {
       pools: this.riderPools(),
       form: this.inShapeshiftForm === true,
@@ -3625,8 +3682,10 @@ export class AzerothActor extends Actor {
     });
     // *You or one of your totems* (04's Cursed Prey): the totems bound to this creature.
     const own = [this.uuid, ...(this.type === "character" ? boundOf(this, "totem").map(t => t.uuid) : [])];
-    const facts = targetFactsOf(target, { own, marks });
-    return { wield, target: facts, challenged: facts?.challenged === true, watched: facts?.watched === true };
+    // The Quarry a Ranger's Hunter's Mark names (`combat-actions.mjs` writes the `mark` flag; D-1868).
+    const quarry = this.getFlag?.("azeroth-rpg", "mark") ?? null;
+    const facts = targetFactsOf(target, { own, marks: { ...marks, quarry } });
+    return { wield, target: facts, challenged: facts?.challenged === true, watched: facts?.watched === true, quarried: facts?.quarried === true };
   }
 
   /**
@@ -3663,11 +3722,12 @@ export class AzerothActor extends Actor {
    *
    * @returns {{boons: number, penetration: number, damage: number, live: object[], lapsed: object[]}}
    */
-  pendingNextAttack({ targetStatuses = null, secondRoll = false } = {}) {
+  pendingNextAttack({ targetStatuses = null, secondRoll = false, targetKey = null } = {}) {
     // The target's conditions, where the attack names a target (07 §17's Scent of Blood; D-1370).
     // And whether this is the Attack's second roll, which alone reads a promise to every roll
-    // its first roll marked (07 §11's Frost Strike; D-1711).
-    return pendingNextAttack(this.getFlag?.("azeroth-rpg", NEXT_ATTACK_FLAG) ?? [], { now: this.fightTurnNow(), targetStatuses, secondRoll: secondRoll === true });
+    // its first roll marked (07 §11's Frost Strike; D-1711). And the target's key (its token id,
+    // else its actor id) for a promise held to one creature (Overpower; D-1870).
+    return pendingNextAttack(this.getFlag?.("azeroth-rpg", NEXT_ATTACK_FLAG) ?? [], { ...{ now: this.fightTurnNow(), targetStatuses, secondRoll: secondRoll === true }, targetKey });
   }
 
   /**
@@ -3716,6 +3776,33 @@ export class AzerothActor extends Actor {
       .map(e => e.getFlag?.("azeroth-rpg", "identifier"))
       .filter(id => typeof id === "string" && id);
     return wardPierceFor(this.takenTalents(), { school, standing }).amount;
+  }
+
+  /**
+   * **THE WARD THIS CASTER'S SPELLS IGNORE AGAINST ONE TARGET** (04's Pyromaniac: *Your Fire
+   * spells ignore 2 Ward against a target burning from Ignite*; Lunar Guidance: *ignore 1 Ward per
+   * rank against a target that has taken Arcane or Nature damage from you since the start of your
+   * last turn*; the class talent audit, D-1890, D-1892): the target-gated rows alone, read off the
+   * creature struck - its Ignite tick of this caster's, and this caster's Lunar mark on it - and
+   * added to `spellWardPierce` by the cast and an area's or a tick's blow.
+   *
+   * @param {string|null} school  the SPELL's school
+   * @param {{tokenId?: string|null, sceneId?: string|null, actorId?: string|null, id?: string|null}|Actor|null} target
+   * @returns {number}
+   */
+  spellWardPierceAt(school, target = null) {
+    if (this.type !== "character" || !school || !target) return 0;
+    const victim = target?.documentName === "Actor" ? target
+      : (target?.tokenId ? (game.scenes?.get(target.sceneId ?? canvas?.scene?.id ?? "")?.tokens?.get(target.tokenId)?.actor ?? null)
+        : (target?.actorId ? (game.actors?.get(target.actorId) ?? null) : null));
+    const ticks = [...(victim?.effects ?? [])].filter(e => e.active !== false).map(e => e.flags?.["azeroth-rpg"]?.tick ?? null);
+    const key = target?.documentName === "Actor" ? (target.token?.id ?? target.id) : (target?.tokenId ?? target?.actorId ?? target?.id ?? null);
+    const mine = this.activeFight?.()?.getCombatantsByActor?.(this)?.[0] ?? null;
+    const facts = {
+      ignited: igniteBurning(ticks, { source: this.uuid }),
+      lunarTarget: lunarDamageQualifies(mine?.getFlag?.("azeroth-rpg", LUNAR_DAMAGE_FLAG) ?? null, key)
+    };
+    return wardPierceFor(this.takenTalents(), { school, facts }).amount;
   }
 
   /**
@@ -3817,8 +3904,10 @@ export class AzerothActor extends Actor {
    * @param {Actor|"other"|null} [o.givenBy]  who the heal comes from, for the undead
    *   judgement ALONE (`rules/undead.mjs#healGiver`), where the door withholds `from`:
    *   a Beacon share names its Paladin, a share or a cure with no caster says `"other"`
+   * @param {string|null} [o.messageId]  the card whose heal this is, where a card's button gave it: 04's
+   *   Twofold Light is judged, marked and read against its Mending Word card (the class talent audit's final review)
    */
-  async applyHealing(amount, { from = null, spell = false, feature = false, shared = false, featureName = null, overflow = false, overflowSource = "", aegis = null, unreduced = false, outcome = null, branch = false, school = null, consumable = false, givenBy = null } = {}) {
+  async applyHealing(amount, { from = null, spell = false, feature = false, shared = false, featureName = null, overflow = false, overflowSource = "", aegis = null, unreduced = false, outcome = null, branch = false, school = null, consumable = false, givenBy = null, messageId = null } = {}) {
     // Optional receipt for once-per-turn healing signatures. The Actor remains
     // the return value; incomplete downstream writes are never proof of delivery.
     if (outcome) Object.assign(outcome, { complete: false, restored: 0 });
@@ -3884,7 +3973,8 @@ export class AzerothActor extends Actor {
     // spell or a feature, and before 10's reduction as the Vestments' is.
     if (from && healed > 0 && (spell || feature) && typeof from.takenTalents === "function") {
       const conditioned = [...(this.statuses ?? [])].some(id => Boolean(AZEROTH.conditions?.[id]));
-      healed += healBonusFor(from.takenTalents(), { via: spell ? "spell" : "feature", conditioned }).amount;
+      // The school and the feature named, and the healer's tier (Healing Hands; D-1875).
+      healed += healBonusFor(from.takenTalents(), { via: spell ? "spell" : "feature", conditioned, school, featureName, tier: from.system?.tier ?? 1 }).amount;
     }
     // **04's VAMPIRIC BLOOD** (*Each time you regain Health, you regain 1 additional Health per
     // rank, for 1 minute*; run F4a): read off THIS creature's own standing state, whoever gives the
@@ -3986,6 +4076,17 @@ export class AzerothActor extends Actor {
         if (branch === true || branchFeatureHeal(from, featureName)) await kindleHealer(from);
       } catch (err) {
         console.warn("azeroth-rpg | Kindling Heart", err);
+      }
+    }
+    // **04's TWOFOLD LIGHT AND FERVOR** (the class talent audit's Benediction, class agent A; D-1875): what a
+    // heal that landed sets off for its Paladin (`effects/audit-martial.mjs#martialAfterHeal`). Guarded: the
+    // Health stands whatever the share or the Zeal does.
+    if (restoredNow > 0 && from) {
+      try {
+        const { martialAfterHeal } = await import("../effects/audit-martial.mjs");
+        await martialAfterHeal({ healed: this, from, spell, school, featureName, restored: restoredNow, shared, messageId });
+      } catch (err) {
+        console.warn("azeroth-rpg | Twofold Light and Fervor", err);
       }
     }
     if (restoredNow > 0) {
@@ -4308,8 +4409,13 @@ export class AzerothActor extends Actor {
    *   own type (`mitigation.mjs#resolveDamage`'s `parts`; D-777), already in
    *   `damage`: what the damage door records of each type, and what a priest's
    *   Ward took off each.
+   * @param {Actor|null} [o.dealtBy]  WHO DEALT IT, for attribution alone (D-1729): a door
+   *   that names no striker - so that nothing `by` drives runs (Curse of Weakness, an
+   *   after-blow, Devour Soul's record) - may still name the creature whose damage it is,
+   *   as a creature's poison tick names the creature that laid it. Only the death watch's
+   *   10 §3 exposure reads it; `by` wins where both are given.
    */
-  async applyDamage(damage, { struck = false, attack = true, location = "body", type = null, messageId = null, by = null, riposte = false, wardTook = 0, spell = false, ignite = false, moved = false, shared = false, parts = null, drain = null, transfer = null, outcome = null, healthFloor = null, falling = false, breath = false, mitigation = null } = {}) {
+  async applyDamage(damage, { struck = false, attack = true, location = "body", type = null, messageId = null, by = null, riposte = false, wardTook = 0, spell = false, ignite = false, moved = false, shared = false, parts = null, drain = null, transfer = null, outcome = null, healthFloor = null, falling = false, breath = false, mitigation = null, dealtBy = null } = {}) {
     // Optional local receipt; retain the historical Actor return value. This
     // reports this actor's committed Health/temp loss, never guesses shares.
     const report = outcome && typeof outcome === "object" ? outcome : null;
@@ -4841,7 +4947,7 @@ export class AzerothActor extends Actor {
         console.warn("azeroth-rpg | Devour Soul's record of a creature damaged", err);
       }
     }
-    await this.adjustHealth(-amount, { temp: soaked.temp, damage: true, manaShield:shield });
+    await this.adjustHealth(-amount, { temp: soaked.temp, damage: true, manaShield:shield, by: by ?? dealtBy });
     // **WHAT A HOLD LANDS ONCE THE HEALTH IS WRITTEN** (04's Too Beautiful to Die: *You gain 3 temporary Health
     // for each Tribute you spend*): after the blow's own temporary Health is written, never under it. Guarded.
     if (typeof hold?.afterWrite === "function") {
@@ -5055,6 +5161,23 @@ export class AzerothActor extends Actor {
         console.warn("azeroth-rpg | life drain", err);
       }
     }
+    // **02's DRAIN** (the class talent audit, D-1894: *Until the end of your turn, damage you deal
+    // restores half as much Health to you, rounded down*): what this blow took off this creature,
+    // halved, to the creature that dealt it while its Drain stands (`effects/warlock-drain.mjs`).
+    // Guarded: the drainer's heal never undoes the blow.
+    if (amount >= 0 && by) {
+      try {
+        const left = (this.system?.health?.value ?? 0) + Math.max(0, Math.trunc(Number(this.system?.health?.temp)) || 0);
+        const took = Math.max(0, tookFrom - left);
+        const dealer = typeof by === "string" ? fromUuidSync(by) : by;
+        if (took > 0 && dealer?.documentName === "Actor" && dealer !== this) {
+          const { drainFeatureHeal } = await import("../effects/warlock-drain.mjs");
+          await drainFeatureHeal({ by: dealer, took, target: this });
+        }
+      } catch (err) {
+        console.warn("azeroth-rpg | Drain", err);
+      }
+    }
     // **04's LIFEBLOOD** (*As a Reaction when an ally within 30 feet drops below half
     // Health*; stage 3A): the blow that took this creature below half its maximum offers it
     // on a card row to every holder near enough, judged again at the press. Guarded: an
@@ -5136,6 +5259,12 @@ export class AzerothActor extends Actor {
         delivered: {amount: Math.max(0, Math.min(amount + soaked.absorbed, healthBeforeWrite - healthAfterWrite)), type, parts} });
     } catch (err) {
       console.error("azeroth-rpg | afterBlow", err);
+    }
+    // **04's MASTER OF SHADOWS: TAKING DAMAGE DOES** (the class talent audit's B10, D-1882): a blow
+    // that took Health ends the minute's state and the Hide (`effects/stealth.mjs#shadowsEndOnDamage`).
+    if (before > (this.system?.health?.value ?? before) && (this.effects ?? []).some(e => e.flags?.["azeroth-rpg"]?.masterOfShadows)) {
+      await import("../effects/stealth.mjs").then(m => m.shadowsEndOnDamage(this, before - (this.system?.health?.value ?? before)))
+        .catch(err => console.warn("azeroth-rpg | Master of Shadows did not end", err));
     }
     // **A PRIEST'S WARD ON THIS CREATURE** (04's Atonement and Absorption, D-774):
     // what the Ward took off this blow - the mitigation's `wardTook` the door
@@ -5485,6 +5614,19 @@ export class AzerothActor extends Actor {
    */
   async _holdAtOne({ before, amount, attack = true, struck = false }) {
     if (!wouldDrop({ before, amount })) return { amount, held: null };
+    // **R4: EACH HOLD OBEYS ITS REGIME** (the class talent audit; D-1863): one hold a blow (the
+    // first that saves returns), a hold another creature grants once an encounter on this
+    // creature, an identity hold (Unkillable) once a round - read off this creature's fight record
+    // (`blow-doors.mjs#holdRegimeRefusal`) and claimed through its queued door (`markHold`) before
+    // anything is paid. Out of a started fight nothing is counted.
+    const holdFight = this.activeFight?.() ?? null;
+    const holdMine = holdFight?.started ? (holdFight.getCombatantsByActor?.(this)?.[0] ?? null) : null;
+    const holdRecord = holdMine?.getFlag?.("azeroth-rpg", HOLD_MARK_FLAG) ?? null;
+    const regimeOpen = (regime, lasting = false) => !holdRegimeRefusal({ regime, record: holdRecord, round: holdFight?.round ?? 0, inFight: Boolean(holdMine), lasting });
+    // **FAILS CLOSED** (the wave 1 review): a fight record this client cannot write is no claim, so a
+    // once-limited hold does not hold here rather than holding unrecorded. Out of a fight nothing is counted.
+    const claimHold = async regime => !holdMine || (holdMine.isOwner === true && (await holdMine.markHold(regime))?.added === true);
+    const releaseHold = async regime => { if (holdMine?.isOwner) await holdMine.releaseHold(regime); };
     try {
       const floor = await aegisFloor({ target: this, before, amount });
       if (floor.held) {
@@ -5498,9 +5640,16 @@ export class AzerothActor extends Actor {
     // `talentRanks` for it, and no talent bears the name, so it never held for
     // anybody (D-768).
     const rage = this.poolSnapshot?.().find(p => p.kind === "momentum" && p.name === "rage") ?? null;
-    if (struck && rage) {
+    // Once a round (R4's identity regime, D-1863), claimed before the Rage is spent; a second blow
+    // in the round that would have been held is said in words, never passed over in silence.
+    if (struck && rage && !regimeOpen(holdRegimeOf({ kind: "unkillable" })) && this.hasFeature("Unkillable") && (rage.value ?? 0) > 0) {
+      ui.notifications?.info(game.i18n.format("AZEROTH.BlowDoor.Refuse.identitySpent", { talent: "Unkillable", name: this.name }));
+    }
+    if (struck && rage && regimeOpen(holdRegimeOf({ kind: "unkillable" }))) {
       const floor = unkillableFloor({ before, amount, rage: rage.value, holds: this.hasFeature("Unkillable") });
-      if (floor.saved) {
+      const claimed = floor.saved ? await claimHold(holdRegimeOf({ kind: "unkillable" })) : false;
+      if (floor.saved && !claimed) ui.notifications?.warn(game.i18n.format("AZEROTH.BlowDoor.Refuse.unclaimed", { talent: "Unkillable", name: this.name }));
+      if (floor.saved && claimed) {
         await this.updatePool({ itemId: rage.itemId, kind: "momentum", value: 0 });
         ui.notifications?.info(game.i18n.format("AZEROTH.Combat.Unkillable", { name: this.name }));
         return { amount: floor.amount, held: { kind: "unkillable", name: "Unkillable" } };
@@ -5597,8 +5746,19 @@ export class AzerothActor extends Actor {
       }
       return { amount: Math.max(0, before - 1), held: { kind: "signature", name: source } };
     }
+    // **02's BEACON OF HOPE** (the class talent audit's A7, class agent A; D-1872): a Paladin's standing Beacon
+    // holds an ally within 30 feet the first time it drops, asked of nobody, before another's hold is asked. A
+    // LASTING hold (06 §9's rule 2; the wave-2 fix run): it neither reads nor claims the shared granted mark.
     try {
-      const asked = await askToHold({ target: this, before, amount, attack: struck && attack });
+      const { beaconOfHopeHold } = await import("../effects/audit-martial.mjs");
+      const beacon = await beaconOfHopeHold({ target: this, before, amount });
+      if (beacon) return beacon;
+    } catch (err) {
+      console.warn("azeroth-rpg | Beacon of Hope", err);
+    }
+    try {
+      // The claim is made before the granter pays and given back on a no (R4, D-1863).
+      const asked = await askToHold({ target: this, before, amount, attack: struck && attack, regimeOpen, claim: claimHold, release: releaseHold });
       if (asked.held) {
         ui.notifications?.info(game.i18n.format("AZEROTH.BlowDoor.Held", { holder: asked.held.holder?.name ?? "", name: this.name, talent: asked.held.name }));
         return asked;
@@ -5652,22 +5812,15 @@ export class AzerothActor extends Actor {
         // **02 §7's UNHOLY PRESENCE ENDS AT 0 HEALTH** (*until you end it, you drop to 0 Health or
         // you finish a Long Rest*; door 10), guarded so a throw never skips what the blow does next.
         await this._endPresenceAtZero?.();
-        // **RUIN** (04: *When one of your spells inflicts a Critical Injury, roll
-        // twice on the table and take the higher result. At rank 2 you also gain 2
-        // Mana*; D-775): a SPELL's blow that took this creature to 0 inflicts it.
-        // Guarded one by one (the final review of D-768 to D-775): a throw here
-        // must not skip what the blow does beyond the target (`afterBlow`, the
-        // Ward's `afterWardedBlow`), which runs after this.
-        const ruin = spell && typeof by?.takenTalents === "function" ? ruinFor(by.takenTalents()) : null;
+        // The Critical Injury a blow to 0 inflicts. Guarded (the final review of D-768 to
+        // D-775): a throw here must not skip what the blow does beyond the target
+        // (`afterBlow`, the Ward's `afterWardedBlow`), which runs after this. 04's Ruin no
+        // longer rolls it twice (the class talent audit, D-1891: Ruin adds damage on a
+        // natural 19 or 20, at the cast).
         try {
-          if (!verdict?.suppressNewCriticalInjury) await game.system.azeroth.workflows.rollCriticalInjury({ actor: this, location, higher: ruin?.higher === true ? ruin.name : null });
+          if (!verdict?.suppressNewCriticalInjury) await game.system.azeroth.workflows.rollCriticalInjury({ actor: this, location });
         } catch (err) {
           console.error("azeroth-rpg | critical injury at 0", err);
-        }
-        try {
-          if (!verdict?.suppressNewCriticalInjury && ruin?.mana > 0) await game.system.azeroth.workflows.ruinMana(by, ruin);
-        } catch (err) {
-          console.error("azeroth-rpg | ruin", err);
         }
         // **THE AVATAR'S PRICE** (02 §7, D-769): *If you are reduced to 0 Health
         // while in this form, you take an additional Critical Injury and start
@@ -5729,6 +5882,24 @@ export class AzerothActor extends Actor {
         const at = gains.findIndex(x => x.itemId === g.itemId && x.kind === g.kind && x.name === g.name);
         if (at >= 0) gains[at] = g;
         else gains.push(g);
+      }
+    }
+    // **04's FRENZY AND RECKLESS AT RANK 2** (the class talent audit, class agent A; D-1870): twice the tier
+    // the first time each encounter below half, and 1 more Rage for each hit taken while exposed, ADDED to
+    // whatever Rage the blow already gave (`effects/audit-martial.mjs#martialWhenStruck`).
+    if (this.type === "character") {
+      try {
+        const { martialWhenStruck } = await import("../effects/audit-martial.mjs");
+        for (const g of await martialWhenStruck({ actor: this, before, after, max, attack })) {
+          const pool = this.poolSnapshot().find(p => p.itemId === g.itemId && p.kind === g.kind) ?? null;
+          const at = gains.findIndex(x => x.itemId === g.itemId && x.kind === g.kind);
+          const base = at >= 0 ? gains[at].value : (pool?.value ?? 0);
+          const row = { itemId: g.itemId, kind: g.kind, name: g.name, value: Math.min(pool?.max ?? base + g.value, base + g.value) };
+          if (at >= 0) gains[at] = row;
+          else gains.push(row);
+        }
+      } catch (err) {
+        console.warn("azeroth-rpg | the martial rows on a blow taken", err);
       }
     }
     // Reckoning (04): reduced below half Health, gain 5 Zeal a rank.

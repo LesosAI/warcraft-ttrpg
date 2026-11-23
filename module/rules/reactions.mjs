@@ -564,7 +564,7 @@ export const READY_TEXT_MAX = 240;
  *
  * @returns {{ok: boolean, reason: string|null, entry: object|null}}
  */
-export function readyEntry({ trigger = "", action = "", round = null, turn = null } = {}) {
+export function readyEntry({ trigger = "", action = "", round = null, turn = null, attack = false } = {}) {
   const clean = v => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, READY_TEXT_MAX);
   const t = clean(trigger);
   const a = clean(action);
@@ -577,7 +577,11 @@ export function readyEntry({ trigger = "", action = "", round = null, turn = nul
       trigger: t,
       action: a,
       round: Number.isFinite(Number(round)) ? Number(round) : null,
-      turn: Number.isFinite(Number(turn)) ? Number(turn) : null
+      turn: Number.isFinite(Number(turn)) ? Number(turn) : null,
+      // **WHETHER THE ACTION IS AN ATTACK** (R6; the class talent audit's final review): the readier's own
+      // tick in the Ready dialog, never read off the words. `rules/initiative.mjs#readiedAttackRefusal`
+      // judges a readied Attack past the turn's two against it before the Reaction is spent.
+      attack: attack === true
     }
   };
 }

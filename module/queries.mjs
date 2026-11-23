@@ -6,6 +6,7 @@
 
 import { ADOPT_QUERY, BIND_QUERY, UNBIND_QUERY, RELEASE_COMMAND_QUERY, adoptQueryHandler, bindQueryHandler, unbindQueryHandler, releaseCommandQueryHandler } from "./documents/bound.mjs";
 import { SUMMON_QUERY, summonQueryHandler } from "./documents/summon.mjs";
+import { MARTIAL_ASK_QUERY, MARTIAL_QUERY, martialAskHandler, martialQueryHandler } from "./effects/audit-martial.mjs";
 import { BLOOD_FILL_QUERY, BLOOD_UNIT_QUERY, bloodFillQueryHandler, bloodUnitQueryHandler } from "./effects/blood.mjs";
 import { ROCKET_JUMP_QUERY, rocketJumpHandler } from "./effects/rocket-jump-use.mjs";
 import { SEARING_USE_QUERY, searingUseHandler } from "./effects/searing-totem-use.mjs";
@@ -72,6 +73,8 @@ import { SAND_ANSWER_QUERY, sandAnswerQueryHandler } from "./effects/sand-answer
 import { TIMELINE_QUERY, timelineQueryHandler } from "./effects/chrono-timeline.mjs";
 import { SHARE_HEAL_QUERY, shareHealQueryHandler } from "./effects/symbiosis.mjs";
 import { WARD_QUERY, wardQueryHandler } from "./effects/wards.mjs";
+// The class talent audit's Tide of the Ancestors: the shaman's player picks the condition that ends (D-1887).
+import { EYE_QUERY, HERALD_QUERY, TIDE_QUERY, eyeQueryHandler, heraldQueryHandler, tideChooseHandler } from "./effects/audit-cunning.mjs";
 import { GIFT_QUERY, giftQueryHandler } from "./effects/gifts.mjs";
 import { CARD_PRESS_QUERY, cardPressQueryHandler } from "./effects/card-presses.mjs";
 import { SIGNATURE_RETALIATION_QUERY, signatureRetaliationHandler } from './effects/signature-retaliation.mjs';
@@ -264,6 +267,10 @@ import { ITEM_CUSTODY_QUERY, ITEM_CUSTODY_CONSENT_QUERY, ITEM_CUSTODY_RECIPIENT_
 
 import { registerPrivateSpellQueries } from "./effects/private-spell-records.mjs";
 import {registerSpecialEquipment} from "./effects/special-equipment.mjs";
+// 02's Drain's Health back on the GM's client (the class talent audit, D-1894).
+import { DRAIN_HEAL_QUERY, drainHealQueryHandler } from "./effects/warlock-drain.mjs";
+// 02's Hibernate, offered to each ally on the client that answers for them (D-1895).
+import { HIBERNATE_QUERY, hibernateQueryHandler } from "./effects/hibernate.mjs";
 
 /** Register at init. */
 export function registerQueries() {
@@ -339,6 +346,8 @@ export function registerQueries() {
   CONFIG.queries[BLOOD_PACT_SPELL_PREPARE] = prepareBloodPactSpell;
   CONFIG.queries[BLOOD_PACT_SPELL_RESOLVE] = resolveBloodPactSpell;
   CONFIG.queries[BLOOD_PACT_SPELL_REVIEW] = reviewBloodPactSpell;
+  CONFIG.queries[DRAIN_HEAL_QUERY] = drainHealQueryHandler;
+  CONFIG.queries[HIBERNATE_QUERY] = hibernateQueryHandler;
   CONFIG.queries[CONFLAGRATE_PREPARE_QUERY] = prepareConflagrate;
   CONFIG.queries[CONFLAGRATE_CONSUME_QUERY] = consumeConflagrate;
   CONFIG.queries[CONFLAGRATE_DAMAGE_QUERY] = applyConflagrateDamage;
@@ -577,6 +586,10 @@ export function registerQueries() {
   // does not own and Absorption's Mana back to a priest the striker's client does
   // not own; Hymn of Hope's Mana and Undying Spirit's friend stood up at 1 Health.
   CONFIG.queries[WARD_QUERY] = wardQueryHandler;
+  CONFIG.queries[TIDE_QUERY] = tideChooseHandler;
+  CONFIG.queries[EYE_QUERY] = eyeQueryHandler;
+  // 04's Herald of the Void's spread, one other creature within 10 feet, once (the class talent audit's final review).
+  CONFIG.queries[HERALD_QUERY] = heraldQueryHandler;
   CONFIG.queries[GIFT_QUERY] = giftQueryHandler;
   // A card's talent button pressed by an owner of the speaker who did not post
   // the card (the architect's review of D-774): the press recorded on the GM's client.
@@ -669,4 +682,11 @@ export function registerQueries() {
   // Vial, empty filled with blood on the GM's word.
   CONFIG.queries[BLOOD_UNIT_QUERY] = bloodUnitQueryHandler;
   CONFIG.queries[BLOOD_FILL_QUERY] = bloodFillQueryHandler;
+  // The class talent audit's martial writes (class agent A, D-1870 to D-1879): Mercy of Uther's condition
+  // ended, Shield Slam's Sustain ended and a Ranger's oldest Snares taken up, on a creature or a scene the
+  // asker's client does not own - each judged again here. And Divine Storm's and Twofold Light's heals, Beacon
+  // of Hope's record (the wave-2 fix run); Twofold Light's pick is asked of whoever answers for the Paladin
+  // (`MARTIAL_ASK_QUERY`, an owning player or the GM), never the client that wrote the first heal.
+  CONFIG.queries[MARTIAL_QUERY] = martialQueryHandler;
+  CONFIG.queries[MARTIAL_ASK_QUERY] = martialAskHandler;
 }

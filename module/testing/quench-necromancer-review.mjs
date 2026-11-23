@@ -388,7 +388,7 @@ export function necromancerReviewBatch(context) {
         }
         const abom = hordeOf(necro).find(x => x.name === "Abomination");
         assert.equal(essenceOf(necro).value, 2, "two grafts less Practiced Stitcher's 1: 1 Essence");
-        assert.equal(abom.system.health.max, 64 * 2 + 5 * 4, "Masterwork doubles 64, then Swollen's five times tier 4");
+        assert.equal(abom.system.health.max, 80 * 2 + 5 * 4, "Masterwork doubles 80, then Swollen's five times tier 4");
       });
     });
 

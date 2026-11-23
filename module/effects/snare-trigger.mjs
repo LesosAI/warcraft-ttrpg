@@ -26,6 +26,17 @@ export async function triggerSnareRegion({ region, document, path, enterType, in
   try { entered = document.segmentizeRegionMovementPath(region, path).some(segment => segment.type === enterType); }
   catch { return false; }
   if (!entered) return false;
+  // **04's MASTER OF THE LAND** (the class talent audit, D-1876: *Your Snare Entangles every creature that
+  // enters its radius, not only the first*): a Snare already sprung catches each later creature once, where
+  // its setter holds the talent (`effects/audit-martial.mjs#snareCatchAgain`).
+  if (flags.snareTrigger != null) {
+    if (pending.has(message.id)) return false;
+    pending.add(message.id);
+    try {
+      const { snareCatchAgain } = await import("./audit-martial.mjs");
+      return await snareCatchAgain({ region, document, actor, message, inflict, live });
+    } finally { pending.delete(message.id); }
+  }
   const reach = flags.snakeTrap?.reach ?? null;
   const inside = [];
   // Capture the complete circle on every Snare, not just Snake Trap rank 2.

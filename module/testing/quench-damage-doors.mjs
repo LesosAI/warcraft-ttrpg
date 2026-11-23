@@ -262,7 +262,8 @@ export function damageDoorsBatch(context) {
       assert.equal(health(pc), max - 2);
     });
 
-    it("LAST STAND: the Use pays 10 Rage and grants twice the tier per rank, and the fight's end takes it", async function () {
+    // 6 Rage since the class talent audit (D-1870).
+    it("LAST STAND: the Use pays 6 Rage and grants twice the tier per rank, and the fight's end takes it", async function () {
       this.timeout(90000);
       const warrior = await characterWith("ZZ Last Stand", "Warrior", { level: 6, ranks: { "Last Stand": 2 } });
       const foe = await makeNpc("Bandit");
@@ -275,7 +276,7 @@ export function damageDoorsBatch(context) {
       await until(() => temp(warrior) === 2 * tier * 2, "twice the tier per rank");
       assert.equal(warrior.getFlag("azeroth-rpg", TEMP_FLAG)?.span, "encounter");
       assert.equal(warrior.getFlag("azeroth-rpg", TEMP_FLAG)?.combatId, combat.id, "the fight it lasts for");
-      assert.equal(poolOf(warrior, "rage").value, 0, "10 Rage paid");
+      assert.equal(poolOf(warrior, "rage").value, 4, "6 Rage paid");
       // `endCombat()` opens core's confirm in v14; deleting the fight runs
       // `_onExit` for every combatant, which is where `_leaveFight` ends it.
       await combat.delete();
@@ -296,17 +297,19 @@ export function damageDoorsBatch(context) {
       assert.equal(ally.getFlag("azeroth-rpg", TEMP_FLAG)?.span, "longRest");
     });
 
-    it("POWER WORD: SHIELD: the Apply grants 6 and 2 a rank with the laid effect, and the effect's end takes it", async function () {
+    // Each rank adds the tier since the class talent audit (D-1884).
+    it("POWER WORD: SHIELD: the Apply grants 6 and the tier a rank with the laid effect, and the effect's end takes it", async function () {
       this.timeout(90000);
       const priest = await characterWith("ZZ Shield Priest", "Priest", { level: 3, ranks: { "Power Word: Shield": 2 }, abilities: { wis: 16 } });
       const ally = await makeCharacter({ name: "ZZ Shielded", classes: [["Warrior", 3]] });
       await setPool(priest, "mana", poolOf(priest, "mana").max);
       const card = await cast(priest, "Power Word: Shield", { targets: [rowOf(ally)] });
-      assert.equal(card.getFlag("azeroth-rpg", "temporaryHealth")?.amount, 10, "07's 6 and the rank's 4 ride the card");
+      const shield = 6 + 2 * priest.system.tier;
+      assert.equal(card.getFlag("azeroth-rpg", "temporaryHealth")?.amount, shield, "07's 6 and the tier a rank ride the card");
       const apply = parsed(card).querySelector('[data-action="applySpellEffect"][data-target-index="0"]');
       assert.ok(apply, "the card offers the Apply");
       await CARD_ACTIONS.applySpellEffect(apply, card);
-      await until(() => temp(ally) === 10, "the Apply to grant it");
+      await until(() => temp(ally) === shield, "the Apply to grant it");
       const laid = ally.effects.find(e => e.getFlag("azeroth-rpg", "spellName") === "Power Word: Shield");
       assert.ok(laid, "the effect it rides");
       assert.equal(ally.getFlag("azeroth-rpg", TEMP_FLAG)?.effectId, laid.id);
@@ -407,7 +410,7 @@ export function damageDoorsBatch(context) {
       assert.equal(paladin.items.get(counter.id).system.uses.value, left - 1, "and strikes nothing");
     });
 
-    it("SPIRIT SHELL: an attack on a creature the priest warded is asked; a yes holds at 1", async function () {
+    it("SPIRIT SHELL holds no one at 1 any more (the class talent audit's B13, R4; D-1884): a warded creature's blow lands", async function () {
       this.timeout(120000);
       const priest = await characterWith("ZZ Shell Priest", "Priest", { level: 9, ranks: { "Spirit Shell": 1 } });
       const ally = await makeCharacter({ name: "ZZ Shelled", classes: [["Warrior", 3]] });
@@ -415,10 +418,8 @@ export function damageDoorsBatch(context) {
       const laid = await layWard({ priest, target: ally, ward: { schools: ["fire"] }, span: null });
       assert.isTrue(laid.landed, "the priest's Ward stands on it");
       await setHealth(ally, 2);
-      const blow = ally.applyDamage(9, { struck: true, attack: true });
-      await answer(priest, "yes");
-      await blow;
-      assert.equal(health(ally), 1);
+      await ally.applyDamage(9, { struck: true, attack: true });
+      assert.equal(health(ally), 0, "Spirit Shell still held the creature at 1");
     });
 
     it("GUARDIAN SPIRIT: a yes holds at 1 and restores the tier", async function () {
@@ -434,9 +435,11 @@ export function damageDoorsBatch(context) {
       await until(() => health(ally) === 1 + priest.system.tier, "held at 1, then the tier restored");
     });
 
-    it("AEGIS OF THE LIGHT: the Apply lays the floor; a blow is held at 1; no Critical Injury; its end restores the tier", async function () {
+    // The Aegis of the Light TALENT left 04 with the class talent audit's Benediction (D-1875): the spell is cast
+    // from a tome, and its floor's end restores nothing (the wave-2 fix run deleted that heal).
+    it("AEGIS OF THE LIGHT: the Apply lays the floor; a blow is held at 1; no Critical Injury; its end restores nothing", async function () {
       this.timeout(150000);
-      const paladin = await characterWith("ZZ Aegis Paladin", "Paladin", { level: 20, ranks: { "Aegis of the Light": 1 } });
+      const paladin = await characterWith("ZZ Aegis Paladin", "Paladin", { level: 20, spells: ["Aegis of the Light"] });
       const ally = await makeCharacter({ name: "ZZ Aegised", classes: [["Warrior", 3]] });
       const foe = await makeNpc("Bandit");
       const combat = await fightWith([paladin, ally, foe]);
@@ -454,7 +457,9 @@ export function damageDoorsBatch(context) {
       made.push(refused);
       assert.include(refused.content, game.i18n.format("AZEROTH.AegisLight.NoCritical", { name: ally.name }));
       await ally.effects.get(floor.id).delete();
-      await until(() => health(ally) === 1 + paladin.system.tier, "the talent's tier restored as the floor ends");
+      await until(() => !ally.effects.get(floor.id), "the floor gone");
+      await new Promise(r => setTimeout(r, 500));
+      assert.equal(health(ally), 1, "a floor's end restores nothing since the talent is gone");
       await combat.delete();
     });
 
@@ -540,18 +545,20 @@ export function damageDoorsBatch(context) {
 
     /* ---- O-162: a second amount of its own type ---------------------------- */
 
-    it("ARCANE POWER: a Fire spell on a creature Immune to Fire lands the Arcane amount alone", async function () {
+    // The tier on every spell's OWN type since the class talent audit (D-1890), never a second Arcane amount:
+    // a Fire spell on a creature Immune to Fire lands nothing at all.
+    it("ARCANE POWER: the tier rides each spell's own type, so a Fire spell on a creature Immune to Fire lands nothing", async function () {
       this.timeout(90000);
-      const mage = await characterWith("ZZ Arcane Mage", "Mage", { level: 9, ranks: { "Arcane Power": 2 }, spells: ["Fireball"], abilities: { int: 16 } });
+      const mage = await characterWith("ZZ Arcane Mage", "Mage", { level: 9, ranks: { "Arcane Missiles": 1, "Arcane Power": 2 }, spells: ["Fireball"], abilities: { int: 16 } });
       await setPool(mage, "mana", poolOf(mage, "mana").max);
       const foe = await makeNpc("Bandit");
       await use(mage, "Arcane Power");
-      await until(() => (mage.system.damageBonus?.typed?.spell?.arcane ?? 0) === 2, "the typed lane's 2 Arcane");
+      await until(() => (mage.system.damageBonus?.spell?.all ?? 0) === mage.system.tier, "the tier on the spell lane");
+      assert.equal(mage.system.damageBonus?.typed?.spell?.arcane ?? 0, 0, "a second Arcane amount was laid");
       const card = await cast(mage, "Fireball", { targets: [rowOf(foe, { immune: ["fire"] })] });
       const row = card.getFlag("azeroth-rpg", "damageByTarget")?.[0];
-      assert.equal(row?.damage, 2, "the Fire is nothing; the Arcane lands");
-      assert.equal(row?.mainDamage, 0, "the spell's own Fire");
-      assert.equal(row?.parts?.[0]?.type, "arcane");
+      assert.equal(row?.damage ?? 0, 0, "a Fire spell landed on a creature Immune to Fire");
+      assert.isFalse((row?.parts ?? []).some(p => p?.type === "arcane" && (Number(p?.damage) || 0) > 0), "an Arcane amount landed beside the Fire");
     });
 
     it("STORMLASH and STORMSTRIKE: a weapon hit carries their Nature as its own amount, met by a Nature Ward", async function () {

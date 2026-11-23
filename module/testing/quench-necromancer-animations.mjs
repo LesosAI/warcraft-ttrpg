@@ -586,6 +586,14 @@ function creatureGaps(context) {
       assert.ok(await useOnSheet(abom, "Gut Spill", [foe]), "Gut Spill posted its card");
     });
 
+    it("ANI: the Abomination's Disease Cloud, pressed on its own sheet beside a foe", async function () {
+      this.timeout(120000);
+      const abom = await npcFor("Abomination", "ANI Abom Cloud");
+      const foe = await creature("Bandit", "ANI Cloud Foe", { hp: 40 });
+      await sceneWith([{ actor: abom, x: 500, y: 600 }, { actor: foe, x: 600, y: 600, side: "hostile" }]);
+      assert.ok(await useOnSheet(abom, "Disease Cloud", [foe]), "Disease Cloud posted its card");
+    });
+
     it("ANI: the Abomination's Cleaver and Chain hook, each attack row pressed on its own sheet", async function () {
       this.timeout(150000);
       const abom = await npcFor("Abomination", "ANI Abom Blows");

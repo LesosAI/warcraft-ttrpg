@@ -8,7 +8,7 @@
  * - Toughness holds Health above the base maximum;
  * - Shield of Faith follows a shield created in hand and one deleted;
  * - Feral Spirit's two Spirit Wolves called off the pack once paid (D-776),
- *   and one of each for Storm, Earth and Fire;
+ *   (Storm, Earth and Fire is Eye of the Storm since the class talent audit, D-1886, and calls nothing);
  * - `afterBlow` reached from an area's tick, and Righteous Fury on the Paladin;
  * - Unkillable read off the class feature;
  * - a refused cast or feature keeps the Half-Action and the Hide (the lead,
@@ -133,7 +133,9 @@ export function talentRootsBatch(context) {
       const card = await game.system.azeroth.workflows.useFeature({ actor: ranger, item: featureNamed(ranger, "Snare") });
       made.push(card);
       assert.ok(card, "Snare posted no card");
-      assert.equal(cardDamage(card), "6", "Explosive Trap at rank 2 did not deal 6");
+      // A set Snare deals its Fire to what ENTERS it (`rules/explosive-trap.mjs`, the snare trigger since 0.12.32):
+      // the card records the trap's rating for the entry, and draws no damage of its own.
+      assert.equal(card.flags["azeroth-rpg"].explosiveTrap?.rating, 6, "Explosive Trap at rank 2 did not set 6 Fire");
     });
 
     // ---- 2. a counter equal to your tier follows the tier ---------------
@@ -174,8 +176,8 @@ export function talentRootsBatch(context) {
       }
       assert.ok(card, "Pyroblast posted no card");
       made.push(card);
-      // 2 × tier (2) + rank (2) is 6, and the lane adds 2.
-      assert.equal(cardDamage(card), "8", "the spell lane never reached a casting feature");
+      // Three times the tier (2) + rank (2) is 8 since the class talent audit (D-1890), and the lane adds 2.
+      assert.equal(cardDamage(card), "10", "the spell lane never reached a casting feature");
       assert.include(card.content, game.i18n.localize("AZEROTH.Card.TalentDamage"), "the card does not say what the lane added");
     });
 
@@ -220,16 +222,15 @@ export function talentRootsBatch(context) {
     // and *"Beast"*), so the call D-768 refused before anything was paid now
     // pays and binds. The refusal itself is `rules/bound.mjs#summonRefusal`'s,
     // held for a name the pack lacks in `bound.test.mjs`.
-    it("SUMMONS: Feral Spirit pays and calls two Spirit Wolves off the pack, and Storm, Earth and Fire calls one of each", async function () {
+    it("SUMMONS: Feral Spirit pays and calls two Spirit Wolves off the pack, and Eye of the Storm calls nothing", async function () {
       this.timeout(120000);
       const shaman = await makeCharacter({ name: "ZZ Roots Shaman", classes: [["Shaman", 5]] });
-      await until(() => talentNamed(shaman, "Feral Spirit") && talentNamed(shaman, "Storm, Earth and Fire"), "the Shaman's talents");
+      await until(() => talentNamed(shaman, "Feral Spirit") && talentNamed(shaman, "Eye of the Storm"), "the Shaman's talents");
       await take(shaman, "Feral Spirit", 1);
-      await take(shaman, "Storm, Earth and Fire", 1);
-      await until(() => featureNamed(shaman, "Feral Spirit") && featureNamed(shaman, "Storm, Earth and Fire"), "the two granted features");
-      const storm = featureNamed(shaman, "Storm, Earth and Fire").system.summons;
-      assert.deepEqual([...storm.entries], ["Storm Elemental", "Earth Elemental", "Fire Elemental"]);
-      assert.equal(storm.count, 1, "Storm, Earth and Fire calls more than one of each");
+      await take(shaman, "Eye of the Storm", 1);
+      await until(() => featureNamed(shaman, "Feral Spirit") && featureNamed(shaman, "Eye of the Storm"), "the two granted features");
+      const storm = featureNamed(shaman, "Eye of the Storm").system.summons;
+      assert.isEmpty([...(storm?.entries ?? [])], "Eye of the Storm summons something");
       const feral = featureNamed(shaman, "Feral Spirit").system.summons;
       assert.deepEqual([...feral.entries], ["Spirit Wolf"], "Feral Spirit calls something other than the Spirit Wolf");
       assert.equal(feral.count, 2, "Feral Spirit does not call two");
@@ -287,7 +288,8 @@ export function talentRootsBatch(context) {
       // *Whenever a friendly target within 20 feet takes damage* - the Paladin is one.
       const zeal = poolValue(paladin, "zeal") ?? 0;
       await paladin.applyDamage(3, { struck: true, attack: false, type: "physical" });
-      await until(() => poolValue(paladin, "zeal") === Math.min(10, zeal + 2), "Righteous Fury's 2 Zeal for the Paladin's own wound");
+      // 1 Zeal a wound, to no more than the rank a round, since the class talent audit (D-1874).
+      await until(() => poolValue(paladin, "zeal") === Math.min(10, zeal + 1), "Righteous Fury's 1 Zeal for the Paladin's own wound");
       await combat.delete();
     });
 

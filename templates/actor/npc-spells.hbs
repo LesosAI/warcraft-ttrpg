@@ -9,7 +9,8 @@
   Power IS its Mana (D-647, `rules/pools.mjs`) — then the Spell DC and the
   count, a number and a control with no explanatory copy (D-615). Then the
   spells by tier, 14's own names first and what a GM gave it after, marked
-  with a WORD rather than a tint (D5).
+  with a WORD rather than a tint (D5). Spellpower joins the header only where
+  a school holds any (D-1727).
 --}}
 <section class="tab azeroth-panel {{tab.cssClass}}" data-tab="spells" data-group="primary">
   <div class="azeroth-spells-header">
@@ -24,6 +25,21 @@
         <dt>{{localize "AZEROTH.Sheet.SpellsKnown"}}</dt>
         <dd><strong>{{spells.count}}</strong></dd>
       </div>
+      {{#if spells.spellpower.length}}
+      {{!-- Its Spellpower by school (D-1727): the school named in words on each
+            chip with the number, never a colour alone. --}}
+      <div>
+        <dt>{{localize "AZEROTH.Sheet.Spellpower"}}</dt>
+        <dd class="azeroth-npc-spellpower">{{#each spells.spellpower as |sp|}}<span class="azeroth-spell-school is-{{sp.school}}">{{localize sp.label}} +{{sp.value}}</span>{{/each}}</dd>
+      </div>
+      {{/if}}
+      {{#if spells.castingBonus}}
+      {{!-- Its Casting Test bonus (D-1760), the total every Casting Test adds. --}}
+      <div>
+        <dt>{{localize "AZEROTH.Sheet.CastingBonus"}}</dt>
+        <dd class="azeroth-npc-casting-bonus"><strong>{{azerothSigned spells.castingBonus}}</strong></dd>
+      </div>
+      {{/if}}
     </dl>
   </div>
 

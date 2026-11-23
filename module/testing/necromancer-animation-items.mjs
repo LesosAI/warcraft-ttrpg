@@ -159,6 +159,8 @@ export const CREATURE_ITEMS = [
   { group: "creatures", name: "the Shade's Unseen", from: ["ANI: the Shade's Unseen"], expect: [use("ability:unseen", "source")] },
   { group: "creatures", name: "the Shade's Chilling touch", from: ["ANI: the Shade's Chilling touch"], expect: [{ kind: "attack", who: "source" }] },
   { group: "creatures", name: "the Abomination's Gut Spill", from: ["ANI: the Abomination's Gut Spill"], expect: [use("ability:gut-spill", "source")] },
+  // 14's phase 1 moved Disease Cloud into the block (D-1753), so the Abomination's Use plays too.
+  { group: "creatures", name: "the Abomination's Disease Cloud", from: ["ANI: the Abomination's Disease Cloud"], expect: [use("ability:disease-cloud", "source")] },
   { group: "creatures", name: "the Abomination's Cleaver and Chain hook", from: ["ANI: the Abomination's Cleaver"], expect: [{ kind: "attack", who: "source" }] }
 ];
 

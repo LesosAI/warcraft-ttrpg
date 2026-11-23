@@ -37,7 +37,7 @@ import { pickLootPlayers } from "./loot-offer.mjs";
 import { rarityClass } from "../helpers/rarity.mjs";
 import {
   RARITIES, SCENARIOS, TIERS,
-  bossesIn, catalogueItemData, catalogueRow, gadgetBlueprintOf, itemDataFor, poolsFrom, purseFor, reviewRows, rollLoot, rollRow, tableFor, tierForPartyLevel, zoneTiers
+  bossesIn, catalogueItemData, catalogueRow, dungeonRoster, gadgetBlueprintOf, itemDataFor, poolsFrom, purseFor, reviewRows, rollLoot, rollRow, tableFor, tierForPartyLevel, zoneTiers
 } from "../rules/loot.mjs";
 
 const TEMPLATE = "systems/azeroth-rpg/templates/dialog/loot-generator.hbs";
@@ -200,11 +200,9 @@ export class AzerothLootGenerator extends HandlebarsApplicationMixin(Application
       index(PACKS.bestiary, ["system.weightClass", "system.tier", "system.dungeon"])
     ]);
     // 14 §14's index, read off the pack: every Boss holds somewhere (D-528).
-    // The pack carries no Province, so the list is grouped by party level.
-    const dungeons = bestiary
-      .filter(b => b.weightClass === "boss" && b.dungeon)
-      .map(b => ({ uuid: b.uuid, boss: b.name, dungeon: b.dungeon, tier: b.tier ?? 1 }))
-      .sort((a, b) => a.dungeon.localeCompare(b.dungeon));
+    // The pack carries no Province, so the list is grouped by party level, and
+    // a dungeon of many Bosses is one row (D-1823).
+    const dungeons = dungeonRoster(bestiary);
     // D-702: the Classic zones, bound to those dungeons and to their tiers.
     // An unresolved zone takes its whole shelf of finds out of the generator,
     // so it is SAID rather than dropped in silence.
@@ -232,10 +230,13 @@ export class AzerothLootGenerator extends HandlebarsApplicationMixin(Application
     for (const rarity of ["rare", "epic"]) {
       for (const kind of ["combat", "noncombat"]) {
         for (const base of pools.found?.[rarity]?.[kind] ?? []) {
-          const { dungeon, tier, boss } = base.found ?? {};
+          const { dungeon, tier, boss, wings } = base.found ?? {};
           total++;
           if (boss) withBoss++;
-          if (dungeon) byDungeon.set(dungeon, (byDungeon.get(dungeon) ?? 0) + 1);
+          // A find counts for every wing its zone covers, as naming any wing draws it (D-1823).
+          for (const place of (Array.isArray(wings) && wings.length ? wings : (dungeon ? [dungeon] : []))) {
+            byDungeon.set(place, (byDungeon.get(place) ?? 0) + 1);
+          }
           if (tier) byTier.set(tier, (byTier.get(tier) ?? 0) + 1);
         }
       }

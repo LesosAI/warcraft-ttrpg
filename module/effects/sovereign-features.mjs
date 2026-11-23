@@ -30,7 +30,7 @@ import { FEATURE_EFFECT_KEYS, askerMay, dropJudgement, layJudgement, obeyJudgeme
 import { LATCH_FEET, cleanLeash } from "../rules/leash.mjs";
 import { LATCH_ESCAPE, LATCH_KEY, cleanLatch, latchEnds, latchRefusal, latchesOn } from "../rules/latch.mjs";
 import { gmAbsentFor } from "../rules/gm-writes.mjs";
-import { PORTRAIT_DIR, TOKEN_DIR } from "../rules/bestiary-art.mjs";
+import { ART_EXT, PORTRAIT_DIR, TOKEN_DIR } from "../rules/bestiary-art.mjs";
 import { conditionEffectOf } from "../rules/condition-carriers.mjs";
 import { onClawHit, isClaws } from "../rules/claw-hit.mjs";
 import { poolWrite } from "../documents/pool-writes.mjs";
@@ -756,7 +756,7 @@ async function takeMonarch(actor, item) {
     uuid: null, name: BLOOD_MONARCH.name, abilities: { str: null, dex: null, con: null }, defense: null,
     ap: { body: null, head: null, limb: null }, speed: null, flies: true, movementSenses: [],
     size: actor.system?.size ?? "medium", tier: 4, attacks: [],
-    token: `${TOKEN_DIR}/${BLOOD_MONARCH.identifier}.png`, portrait: `${PORTRAIT_DIR}/${BLOOD_MONARCH.identifier}.png`
+    token: `${TOKEN_DIR}/${BLOOD_MONARCH.identifier}.${ART_EXT}`, portrait: `${PORTRAIT_DIR}/${BLOOD_MONARCH.identifier}.${ART_EXT}`
   };
   const shaped = await takeShape(actor, { kind: BLOOD_MONARCH.kind, forms: [form] });
   if (!shaped) return t("AZEROTH.Sovereign.Monarch.NotTaken", { name: actor.name });

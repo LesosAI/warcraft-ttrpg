@@ -93,7 +93,10 @@ export const BOOKKEEPING_FLAGS = Object.freeze([
   // (the Hammer of the Lightbringer's Verdict, D-910).
   "signatureEncounter",
   // The Health a creature had as its turn began (the Scepter's Staghelm's Regret, D-912).
-  "turnStartHealth"
+  "turnStartHealth",
+  // The holds at 1 a creature has had this fight (the class talent audit's R4, D-1863):
+  // `AzerothCombatant#markHold`, never the order.
+  "heldAtOne"
 ]);
 
 /**

@@ -37,6 +37,8 @@ import { risenRecord, slugOf } from "../rules/animation-records.mjs";
 // Apparition's strike on the enemies around a creature that died suffering the
 // priest's Shadow, and Shadowform's mark for a Holy blow dealt.
 import { apparitionsFor, damagedTypeKey, drainFor, sufferingFrom } from "../rules/class-talents.mjs";
+// 04's Shattering Cold's Stun (the class talent audit, D-1890).
+import { frozenStunFor } from "../rules/class-talents.mjs";
 // The Mage's and the Warlock's (D-775): Ignite laid by Fire, Living Bomb off it,
 // Siphon's record, and what a death under a held spell or a Haunt returns.
 import {
@@ -57,6 +59,8 @@ import { requestJadefireRetaliation } from "./jadefire-retaliation.mjs";
 import { requestMadeOfFireRetaliation } from "./made-of-fire-retaliation.mjs";
 import { requestFrostArmor } from "./frost-armor.mjs";
 import { requestBleakheartHit } from "./bleakheart-hit.mjs";
+// 04's Righteous Fury since the class talent audit (class agent A, D-1874): 1 Zeal to the rank's ceiling a round.
+import { righteousFuryGain } from "./audit-martial.mjs";
 
 /**
  * The query a Vengeance holder another user owns is reached through, on the
@@ -221,6 +225,14 @@ export async function afterBlow({ target, before, attacker = null, riposte = fal
   } catch (err) {
     console.error("azeroth-rpg | siphon", err);
   }
+  // **04's SHATTERING COLD** (the class talent audit, D-1890: *Once a round, when a Frost spell of
+  // yours damages an Entangled creature, it is Stunned until the end of its next turn unless it
+  // succeeds on a Body Resilience Test against your Spell DC*). Guarded like the rest.
+  try {
+    await shatteringColdFrom({ attacker, target, type, dealt: before - after, spell });
+  } catch (err) {
+    console.warn("azeroth-rpg | Shattering Cold", err);
+  }
   // A creature that died (D-774's reading: an NPC reduced to 0): Shadowy
   // Apparition and Living Bomb off the ticks it carried, whoever's blow it was
   // (D-775), and what a death under a held spell returns its caster.
@@ -294,7 +306,11 @@ export async function afterBlow({ target, before, attacker = null, riposte = fal
     // (D-732); a pair that could not be measured is nobody's to reach.
     const feet = self ? 0 : feetBetweenFootprints(fallen, footprintOf(token), targetToken.document?.parent?.grid ?? null);
     if (feet === null || feet > ZEAL_REACH_FEET) continue;
-    const gain = zealFromBlow({ before, after, self, righteousFury: ally.talentRanks?.("Righteous Fury") ?? 0 });
+    // **RIGHTEOUS FURY TO ITS CEILING** (the class talent audit, D-1874: *gain 1 Zeal, to no more than your
+    // rank each round*): 1 a blow where the round's counted marks still hold one
+    // (`effects/audit-martial.mjs#righteousFuryGain`), beside 02's fallen-friend 2.
+    const fury = before > after ? await righteousFuryGain(ally) : 0;
+    const gain = zealFromBlow({ before, after, self, righteousFury: fury });
     if (gain > 0) await ally.updatePool({ itemId: zeal.itemId, kind: "momentum", value: Math.min(zeal.max, zeal.value + gain) });
   }
 }
@@ -308,7 +324,8 @@ export async function afterBlow({ target, before, attacker = null, riposte = fal
  * @param {Combat} combat
  */
 async function rewardKill(attacker, combat, { spell = false } = {}) {
-  const reward = killRewardsFor(attacker.takenTalents?.() ?? [], undefined, { spell });
+  // The killer's tier, for Follow Through's rank 2 (the class talent audit, D-1870).
+  const reward = killRewardsFor(attacker.takenTalents?.() ?? [], undefined, { spell, tier: attacker.system?.tier ?? 1 });
   if (!reward.by.length) return;
   const combatant = combat.getCombatantsByActor(attacker)?.[0] ?? null;
   if (reward.halfActions > 0 && combatant?.isOwner) await combatant.grantHalfActions(reward.halfActions);
@@ -341,7 +358,8 @@ const KILL_STRIKE_TEMPLATE = "systems/azeroth-rpg/templates/chat/kill-strike.hbs
 async function offerKillStrikes({ attacker, target, riposte = false }) {
   const offers = [];
   if (attacker.type === "character") {
-    for (const s of killStrikesFor(attacker.takenTalents?.() ?? [], { who: "self", riposte })) offers.push({ striker: attacker, ...s, once: false });
+    // Killing Spree is once a round now (the class talent audit, D-1882): the row says so.
+    for (const s of killStrikesFor(attacker.takenTalents?.() ?? [], { who: "self", riposte })) offers.push({ striker: attacker, ...s, once: s.once === true });
   }
   const bond = attacker.type === "npc" ? bondOf(attacker) : null;
   if (bond?.kind === "companion" && bond.ownerUuid) {
@@ -372,7 +390,7 @@ async function offerKillStrikes({ attacker, target, riposte = false }) {
       content,
       flags: { "azeroth-rpg": { kind: "killStrike", killStrike: {
         identifier: offer.identifier, name: offer.name, count: offer.count, target: offer.target,
-        once: offer.once === true, strikerUuid: offer.striker.uuid, killed
+        once: offer.once === true, step: Math.max(0, Math.trunc(Number(offer.step)) || 0), strikerUuid: offer.striker.uuid, killed
       } } }
     });
   }
@@ -650,12 +668,56 @@ export async function strikeCard({ holder, targets = [], amount = 0, type = null
  */
 async function igniteFrom({ attacker, target, type, dealt, fromIgnite = false }) {
   if (!attacker || typeof attacker.takenTalents !== "function") return;
-  const row = igniteFor(attacker.takenTalents());
+  // At the mage's tier, which 04's Pyromaniac reads (the class talent audit, D-1890).
+  const row = igniteFor(attacker.takenTalents(), undefined, { tier: attacker.system?.tier ?? 1 });
   if (!ignites({ row, type, dealt, fromIgnite })) return;
   if (target.type === "npc" && (target.system?.health?.value ?? 0) <= 0) return;
   const laid = await layTickBy({ victim: target, tick: igniteTick(row, { source: attacker.uuid }) });
   if (laid?.landed) ui.notifications?.info(game.i18n.format("AZEROTH.Ignite.Laid", { name: target.name, n: row.amount, talent: row.name }));
   else if (laid?.reason === "noClock") ui.notifications?.info(game.i18n.format("AZEROTH.Tick.NoClockOn", { spell: row.name, name: target.name }));
+}
+
+/**
+ * **04's SHATTERING COLD, THE STUN** (the class talent audit, D-1890): a Frost SPELL's blow that took
+ * Health off an Entangled creature, once a round on the mage's own round record (claimed before the
+ * Test, through the queued door; a client that may not write the mage's combatant asks nothing), the
+ * creature's Body Resilience Test against the mage's Spell DC rolled here through the one Resilience
+ * door, and on its failure the Stun laid through the Inflict door, until the end of the CREATURE's
+ * next turn (or a round of the world's clock out of a fight).
+ *
+ * @param {{attacker: Actor|null, target: Actor, type: string|null, dealt: number, spell?: boolean}} o
+ */
+async function shatteringColdFrom({ attacker, target, type, dealt, spell = false }) {
+  if (!attacker || typeof attacker.takenTalents !== "function" || !target) return;
+  const row = frozenStunFor(attacker.takenTalents(), { spell, type, dealt, statuses: [...(target.statuses ?? [])] });
+  if (!row) return;
+  if (target.type === "npc" && (target.system?.health?.value ?? 0) <= 0) return;
+  const fight = attacker.activeFight?.() ?? null;
+  const mine = fight ? (fight.getCombatantsByActor(attacker)?.[0] ?? null) : null;
+  if (row.once === "round" && mine) {
+    if (!mine.isOwner) return;
+    const marked = await mine.markRoundOnce(row.identifier);
+    if (!marked?.added) return;
+  }
+  const dc = attacker.system?.spellDC ?? attacker.system?.spells?.dc ?? null;
+  const test = await game.system.azeroth.workflows.rollResilience({ actor: target, resilience: row.resilience, dc, source: row.name });
+  const passed = test?.outcome?.success === true;
+  if (passed) {
+    ui.notifications?.info(game.i18n.format("AZEROTH.ShatteringCold.Resisted", { name: target.name, talent: row.name }));
+    return;
+  }
+  const { inflictCondition } = await import("./inflict.mjs");
+  const { untilEndOfNextTurnOrRound } = await import("./durations.mjs");
+  const landed = await inflictCondition({ victim: target, id: row.condition, by: attacker, name: target.name, until: untilEndOfNextTurnOrRound(target) });
+  // Said on a card of its own, which every client plays as the talent's picture (the wave-2 review).
+  if (landed?.landed) {
+    const { postFeatureEvent } = await import("./feature-events.mjs");
+    await postFeatureEvent({
+      actor: attacker, token: attacker.getActiveTokens?.(true)?.[0] ?? null, featureKey: "shattering-cold",
+      lines: [game.i18n.format("AZEROTH.ShatteringCold.Stunned", { name: target.name, talent: row.name })],
+      targets: target.getActiveTokens?.(true)?.slice(0, 1) ?? []
+    });
+  }
 }
 
 /**

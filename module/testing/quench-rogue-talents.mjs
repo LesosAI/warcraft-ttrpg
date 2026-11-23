@@ -332,7 +332,7 @@ export function rogueTalentsBatch(context) {
       await until(() => !ghoul.statuses.has("entangled"), "the ghoul free on a passed Test");
     });
 
-    it("RUPTURE: the Finisher's Bleeding of twice the points plus the rank lands in place of the added damage", async function () {
+    it("RUPTURE: the Finisher's Bleeding of the points spent lands in place of the added damage, at the Spell DC from rank 2 (B9, D-1880)", async function () {
       this.timeout(240000);
       const rogue = await rogueWith("ZZ RoT Rupture", { ranks: { Rupture: 2 } });
       const ghoul = await makeNpc("Plagued Ghoul");
@@ -341,10 +341,22 @@ export function rogueTalentsBatch(context) {
       const card = await strike(rogue, { targets: [rowOf(ghoul)], finisherSpent: 3, finisherMode: "bleeding", budget: "none" });
       assert.isTrue(card.rolls[0].outcome.success);
       const bleed = await until(() => ghoul.effects.find(e => e.statuses?.has("bleeding")), "the Bleeding");
-      assert.equal(bleed.getFlag("azeroth-rpg", "value"), 8, "2 x 3 + 2");
+      assert.equal(bleed.getFlag("azeroth-rpg", "value"), 3, "the points spent");
+      assert.equal(bleed.getFlag("azeroth-rpg", "shedDc")?.dc ?? bleed.flags?.["azeroth-rpg"]?.shedDc?.dc, rogue.system.spellDC, "rank 2's Spell DC is not on the Bleeding");
       assert.notInclude(labels(card), "AZEROTH.Card.FinisherSpent", "the points were also added to the damage");
-      // The three are spent; what stands is 05 §11's gain on the Finisher's own hit (B8b).
+      // The three are spent on the hit; what stands is 05 §11's gain on the Finisher's own hit (B8b).
       assert.equal(poolOf(rogue, "comboPoints").value, hitGain(card.rolls[0].outcome.sl), "the three spent, and the hit's own gain");
+    });
+
+    it("THE FINISHER ON A MISS spends nothing and adds nothing (B4, D-1880)", async function () {
+      this.timeout(240000);
+      const rogue = await rogueWith("ZZ RoT Miss");
+      const ghoul = await makeNpc("Plagued Ghoul");
+      await fightWith([rogue, ghoul]);
+      await setPool(rogue, "comboPoints", 3);
+      const card = await strike(rogue, { targets: [rowOf(ghoul)], finisherSpent: 3, budget: "none", face: 1, dc: 30 });
+      assert.isFalse(card.rolls[0].outcome.success, "the pinned miss hit");
+      assert.equal(poolOf(rogue, "comboPoints").value, 3, "a missed Finisher spent its points");
     });
 
     it("DEATH MARK: the Use names one target, and a Finisher against it spends nothing and counts five", async function () {
@@ -360,6 +372,9 @@ export function rogueTalentsBatch(context) {
       const card = await strike(rogue, { targets: [rowOf(ghoul)], finisherFree: "Death Mark", budget: "none" });
       assert.isAtLeast(poolOf(rogue, "comboPoints").value, 1, "the free Finisher spent points");
       assert.include(card.rolls[0].options.provenance.map(p => `${p.label}:${p.value}`), "Death Mark:5", "it did not count five");
+      // Once a round (B15, D-1880): the round's record holds it after the free one lands.
+      const mine = game.combats.contents.find(c => c.getCombatantsByActor(rogue).length)?.getCombatantsByActor(rogue)?.[0] ?? null;
+      if (mine) await until(() => (mine.getFlag("azeroth-rpg", "round")?.once ?? []).includes("death-mark"), "the free Finisher's round claimed");
       // 05 §16: a Short Rest takes food or drink, and one with neither is refused (B8b).
       assert.ok(await rogue.shortRest({ food: await give(rogue, "Rations, one day") }), "the rest was refused");
       await until(() => !rogue.getFlag("azeroth-rpg", "deathMark"), "the mark gone at a rest");
@@ -401,7 +416,7 @@ export function rogueTalentsBatch(context) {
       await until(() => !ghoul.effects.get(laid.id), "the attack on the Rogue spent it");
     });
 
-    it("ADRENALINE: the turn's start restores the rank more Energy, and the Use buys a point once a round a rank", async function () {
+    it("ADRENALINE: the Use buys a point once a round, its 2 Energy discounted to 1 (decision 13, B12; D-1881)", async function () {
       this.timeout(240000);
       const rogue = await rogueWith("ZZ RoT Adrenaline", { ranks: { Adrenaline: 1 } });
       const ghoul = await makeNpc("Plagued Ghoul");
@@ -411,6 +426,7 @@ export function rogueTalentsBatch(context) {
       await setPool(rogue, "comboPoints", 0);
       assert.ok(await use(rogue, "Adrenaline"), "the first Use was refused");
       await until(() => poolOf(rogue, "comboPoints").value === 1, "a point bought");
+      assert.equal(poolOf(rogue, "energy").value, 9, "the 2 Energy was not discounted to 1");
       const said = await warnings(async () => { assert.isNull(await use(rogue, "Adrenaline")); });
       assert.isNotEmpty(said, "a second Use in the round at rank 1 was not refused in words");
     });
@@ -469,18 +485,22 @@ export function rogueTalentsBatch(context) {
       assert.include(said, game.i18n.format("AZEROTH.ExtraStrike.Spent", { name: "Blade Flurry" }));
     });
 
-    it("COMBAT REFLEXES: with the Reaction spent, a Parry is still free once a round a rank", async function () {
+    it("COMBAT REFLEXES: the Riposte costs no Combo Points once a round, and 06's price after it (D-1882)", async function () {
       this.timeout(240000);
       const rogue = await rogueWith("ZZ RoT Reflexes", { level: 13, ranks: { "Combat Reflexes": 1 } });
       const ghoul = await makeNpc("Plagued Ghoul");
       const combat = await fightWith([rogue, ghoul]);
       const mine = combat.getCombatantsByActor(rogue)[0];
-      await mine.spendAction("reaction");
-      await until(() => mine.budget.reactions === 0, "the Reaction spent");
-      const card = await reactWithDialog(rogue, "parry", { attackTotal: 12 });
-      assert.ok(card, "the free Parry was refused");
-      made.push(card);
-      assert.include(mine.getFlag("azeroth-rpg", "round")?.once ?? [], "combat-reflexes:1");
+      await setPool(rogue, "comboPoints", 5);
+      const { useManeuver } = game.system.azeroth.workflows;
+      const free = await useManeuver({ actor: rogue, key: "riposte", targets: [] });
+      made.push(free);
+      assert.equal(free.flags["azeroth-rpg"].cost, 0, "the first Riposte was not free");
+      assert.equal(poolOf(rogue, "comboPoints").value, 5);
+      assert.include(mine.getFlag("azeroth-rpg", "round")?.once ?? [], "combat-reflexes");
+      const paid = await useManeuver({ actor: rogue, key: "riposte", targets: [] });
+      made.push(paid);
+      assert.isAbove(paid.flags["azeroth-rpg"].cost, 0, "a second Riposte this round was free");
     });
 
     it("MASTER DUELLIST: Engaged with the target alone, the attack gains the Boon and the Critical Injury on 19", async function () {
@@ -576,13 +596,13 @@ export function rogueTalentsBatch(context) {
       assert.equal(effect?.duration?.expiry, "turnEnd");
     });
 
-    it("FIND WEAKNESS: an attack from hiding ignores 2 Armor Points a rank", async function () {
+    it("FIND WEAKNESS: an attack from hiding ignores 1 Armor Point a rank (D-1882)", async function () {
       this.timeout(180000);
       const rogue = await rogueWith("ZZ RoT Weakness", { ranks: { "Find Weakness": 2 } });
       const ghoul = await makeNpc("Plagued Ghoul");
       await conceal(rogue);
       const card = await strike(rogue, { targets: [rowOf(ghoul, { apByLocation: { body: 4, head: 4, limb: 4 } })] });
-      assert.include(formulas(card), game.i18n.format("AZEROTH.NextAttack.PierceRow", { n: 4 }), "the Pierce is not named");
+      assert.include(formulas(card), game.i18n.format("AZEROTH.NextAttack.PierceRow", { n: 2 }), "the Pierce is not named");
     });
 
     it("GHOSTLY STRIKE: an attack from hiding offers no Parry and no Block, and one in the open still does", async function () {
@@ -608,17 +628,18 @@ export function rogueTalentsBatch(context) {
       assert.isTrue(rogue.openingState(rowOf(ghoul, { acted: true })).applies, "the marked target is not under the Opening");
     });
 
-    it("MASTER OF SHADOWS: an attack and a cast leave the Hide standing", async function () {
+    it("MASTER OF SHADOWS: inside its minute an attack leaves the Hide standing; without the minute it reveals (B10, D-1882)", async function () {
       this.timeout(180000);
       const rogue = await rogueWith("ZZ RoT Shadows", { level: 17, ranks: { "Smoke Bomb": 1, "Master of Shadows": 1 } });
       await conceal(rogue);
       await strike(rogue);
+      await until(() => !isHidden(rogue), "an attack before the Use reveals");
+      assert.ok(await use(rogue, "Master of Shadows"), "the Use was refused");
+      await until(() => rogue.effects.some(e => e.getFlag("azeroth-rpg", "masterOfShadows")), "the minute's state");
+      await conceal(rogue);
+      await strike(rogue);
       await settle();
-      assert.isTrue(isHidden(rogue), "the attack revealed the Rogue");
-      const plain = await rogueWith("ZZ RoT Plain");
-      await conceal(plain);
-      await strike(plain);
-      await until(() => !isHidden(plain), "an attack without the talent reveals");
+      assert.isTrue(isHidden(rogue), "the attack revealed the Rogue inside the minute");
     });
   });
 }

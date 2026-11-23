@@ -3,6 +3,10 @@
   {{> systems/azeroth-rpg/templates/chat/partials/card-header.hbs title=title subtitle=subtitle}}
 
   <div class="azeroth-card-body">
+    {{#if exposedBy}}
+    {{!-- 10 §3's what puts you down (D-1729): who put whom down, on which track, at which DC. --}}
+    <p class="azeroth-card-exposed-by">{{exposedBy}}</p>
+    {{/if}}
     {{#if unresisted}}
     {{!-- 10 §3: three occasions are agreed to rather than suffered — you take
           the offer, you cast the spell, you keep the blade — so no Test is
@@ -21,6 +25,10 @@
       </span>
     </div>
     {{> systems/azeroth-rpg/templates/chat/partials/verdict.hbs verdict=verdict}}
+    {{#if exposedResult}}
+    {{!-- Success or Failure and the point, in words: the colour above is never the only carrier (D-622). --}}
+    <p class="azeroth-card-line azeroth-card-mitigated"><strong>{{exposedResult}}</strong></p>
+    {{/if}}
     {{/if}}
 
     <p class="azeroth-card-line">

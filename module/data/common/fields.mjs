@@ -101,6 +101,11 @@ export function usesField() {
     value: new fields.NumberField({ required: true, integer: true, initial: 0, min: 0 }),
     max: new fields.NumberField({ required: true, integer: true, initial: 0, min: 0 }),
     per: new fields.StringField({ required: false, nullable: true, blank: false, initial: null,
-      choices: ["short", "long", "encounter", "arc"] })
+      choices: ["short", "long", "encounter", "arc"] }),
+    // **ONE USE BACK AT A SMALLER REST** (the class talent audit's Mercy of Uther: *Each Short Rest
+    // returns one use of it*; D-1868): `short` gives one use back at each Short Rest to a thing that
+    // refills whole at `per`. A free string, null for none: a new key with an initial, restamped by
+    // the sync at world load (D-621), so a stored word nothing knows reads as none (`uses.mjs#refillAfter`).
+    refill: new fields.StringField({ required: false, nullable: true, blank: false, initial: null })
   });
 }

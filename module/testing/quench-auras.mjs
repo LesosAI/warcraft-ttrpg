@@ -374,48 +374,39 @@ export function aurasBatch(context) {
       }
     });
 
-    /* ---- 04's Tree of Life ------------------------------------------------ */
+    /* ---- 04's Heart of the Grove (the class talent audit, D-1892; it was Tree of Life) ---- */
 
-    it("puts a FLOOR under an ally's Armor Points and Ward while the druid is a tree: 0 rises to 2, 5 stays 5", async function () {
+    it("adds Armor Points and Ward to an ally carrying the druid's heal over time, and to nobody else", async function () {
       this.timeout(240000);
-      const druid = await makeCharacter({ name: "ZZ Tree Druid", classes: [["Druid", 5]] });
-      const bare = await makeCharacter({ name: "ZZ Tree Bare", classes: [["Rogue", 5]] });
-      const plated = await makeCharacter({ name: "ZZ Tree Plated", classes: [["Warrior", 5]], armor: ["Field plate"] });
-      for (const a of [druid, bare, plated]) await a.setParty(true);
-      await plated.items.find(i => i.name === "Field plate").update({ "system.equipped": true });
-      await until(() => plated.system.ap?.body === 5, "the plated ally's Body AP 5");
-      await talentNamed(druid, "Tree of Life").update({ "system.taken": 1 });
-      const spell = await until(() => druid.items.find(i => i.type === "spell" && i.name === "Tree of Life"), "the talent teaching Tree of Life");
-      const tokens = await place(scene, [{ actor: druid, x: 500 }, { actor: bare, x: 800 }, { actor: plated, x: 500, y: 800 }]);
+      const druid = await makeCharacter({ name: "ZZ Grove Druid", classes: [["Druid", 5]] });
+      const healed = await makeCharacter({ name: "ZZ Grove Healed", classes: [["Rogue", 5]] });
+      const bare = await makeCharacter({ name: "ZZ Grove Bare", classes: [["Rogue", 5]] });
+      for (const a of [druid, healed, bare]) await a.setParty(true);
+      await talentNamed(druid, "Heart of the Grove").update({ "system.taken": 1 });
+      const tokens = await place(scene, [{ actor: druid, x: 500 }, { actor: healed, x: 800 }, { actor: bare, x: 500, y: 800 }]);
+      const more = (druid.system.tier ?? 1) >= 4 ? 2 : 1;
       try {
-        // No tree, no floor.
+        // No heal over time, no shelter.
         await aurasSettled();
-        assert.isNull(auraOn(bare, "Tree of Life"), "the floor stood with the druid not a tree");
-        assert.equal(bare.system.ap.body, 0);
-
-        // The spell's laid effect, flagged as its card flags it (D-657, D-724).
-        const [laid] = await druid.createEmbeddedDocuments("ActiveEffect", [{
-          name: "Tree of Life", img: spell.img,
-          flags: { "azeroth-rpg": { spell: spell.uuid, spellName: spell.name, identifier: "tree-of-life" } }
+        assert.isNull(auraOn(healed, "Heart of the Grove"), "the aura stood on an ally carrying nothing of the druid's");
+        // A heal over time of the druid's, as a card's Apply lays one (D-770).
+        const [tick] = await healed.createEmbeddedDocuments("ActiveEffect", [{
+          name: "Rejuvenation", origin: druid.uuid,
+          flags: { "azeroth-rpg": { tick: { kind: "heal", type: null, amount: 2, rounds: 5, until: "", when: "startOfTurn", spellpower: false, source: druid.uuid, castUuid: null, cast: null, name: "Rejuvenation" } } }
         }]);
-        await until(() => bare.system.ap.body === 2 && bare.system.ap.head === 2 && bare.system.ap.limb === 2,
-          "the bare ally's Armor Points rising to 2 at every location");
+        await until(() => auraOn(healed, "Heart of the Grove"), "the aura reaching the healed ally");
+        await until(() => healed.system.ap.body === more && healed.system.ap.head === more && healed.system.ap.limb === more,
+          "the healed ally's Armor Points rising at every location");
         for (const school of Object.keys(CONFIG.AZEROTH.schools)) {
-          assert.equal(bare.system.ward[school], 2, `the bare ally's Ward against ${school}`);
+          assert.equal(healed.system.ward[school], more, `the healed ally's Ward against ${school}`);
         }
-        await until(() => auraOn(plated, "Tree of Life"), "the floor reaching the plated ally");
-        assert.equal(plated.system.ap.body, 5, "the floor lowered an AP 5 ally");
-        assert.equal(plated.system.ap.head, 4);
-        const change = auraOn(bare, "Tree of Life").system.changes.find(c => c.key === "system.ap.body");
-        assert.equal(change.type, "upgrade");
+        const change = auraOn(healed, "Heart of the Grove").system.changes.find(c => c.key === "system.ap.body");
+        assert.equal(change.type, "add", "the aura laid a floor rather than an addition");
         assert.equal(change.phase, "final");
-        // THE DRUID IS AN ALLY INSIDE THEIR OWN TREE (the lead, 2026-09-26):
-        // the effect is laid on them, and a floor lowers nothing.
-        await until(() => auraOn(druid, "Tree of Life") && druid.system.ap.body >= 2, "the floor laid on the druid themselves");
-
-        // The tree ends and the floor goes with it.
-        await laid.delete();
-        await until(() => !auraOn(bare, "Tree of Life") && bare.system.ap.body === 0, "the floor lifting when the tree ends");
+        assert.isNull(auraOn(bare, "Heart of the Grove"), "the aura reached an ally carrying no heal over time");
+        // The heal over time ends and the shelter goes with it.
+        await tick.delete();
+        await until(() => !auraOn(healed, "Heart of the Grove") && healed.system.ap.body === 0, "the aura lifting with the heal over time");
       } finally {
         await scene.deleteEmbeddedDocuments("Token", tokens.map(t => t.id)).catch(() => {});
       }

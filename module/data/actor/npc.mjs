@@ -50,6 +50,13 @@ import { sentinelEnrageBonus } from "../../rules/sentinel-enrage.mjs";
 import { nearbyCreatures } from "../../effects/passives.mjs";
 // 05's temporary Health, its stored value cleaned where present (D-777).
 import { cleanTempSource } from "../../rules/temporary-health.mjs";
+// A creature's own Spellpower, stored apart from the derived total (D-1727).
+import { cleanSpellpowerBaseSource, isDataOperator, spellpowerTotals } from "../../rules/creature-spellpower.mjs";
+// A creature's own Casting Test bonus, Boons and Banes and condition immunities (D-1760 to D-1762).
+import {
+  EDGE_KINDS, cleanBoonsBanesSource, cleanCastingBonusSource, cleanConditionImmuneSource, creatureItemBonus, withOwnEdges
+} from "../../rules/creature-bonuses.mjs";
+import { BONUS_LIMIT } from "../../rules/item-bonuses.mjs";
 import { withLaidVulnerable } from "../../rules/laid-vulnerable.mjs";
 import { veilBanesOn } from "../../rules/sovereign-spells.mjs";
 import { agilityBanesOn } from "../../rules/demon-hunter-spells.mjs";
@@ -164,6 +171,11 @@ export function migrateAutomationSource(source) {
  */
 export function migrateWardSource(source) {
   if (!source || typeof source !== "object" || !("ward" in source)) return source;
+  // A data operator is left whole (D-1727's review): Rework writes the map as a
+  // `ForcedReplacement`, which `migrateData` sees on the update, and remapping
+  // it to a plain object turned the replacement into a merge, so a removed
+  // school survived. Core cleans the operator's value itself.
+  if (isDataOperator(source.ward)) return source;
   source.ward = wardMapOf(source.ward);
   return source;
 }
@@ -235,6 +247,16 @@ export class NpcData extends foundry.abstract.TypeDataModel {
         new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
         { initial: {}, validateKey: key => key in AZEROTH.schools }
       ),
+      // The creature's OWN Spellpower by school (D-1727): what gear would give a
+      // character, set by the GM in the generator, since 14 prints none and a
+      // creature carries no gear unless a GM hands it some. The derived
+      // `spellpower` adds the passives and carried gear to it. Not named
+      // `spellpower`, because Rework reads the stored source back and a stored
+      // total would come back as the base (`rules/creature-spellpower.mjs`).
+      spellpowerBase: new fields.TypedObjectField(
+        new fields.NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+        { initial: {}, validateKey: key => key in AZEROTH.schools }
+      ),
       // A swarm (13 §4, D-646): how many of what, or null for one creature.
       // The chapter's Swarm paragraph rides beside it, the rider 14 prints.
       swarm: new fields.SchemaField({
@@ -281,6 +303,11 @@ export class NpcData extends foundry.abstract.TypeDataModel {
         dc: optionalNumberField({ min: 0 }),
         names: new fields.ArrayField(new fields.StringField(), { initial: [] })
       }),
+      // The creature's OWN Casting Test bonus (D-1760): what an Augment or a GM's
+      // bonus on a ring gives a character, set by the GM in the generator, since
+      // 14 prints none. The derived `itemBonus.casting` adds it to what carried
+      // gear gives, and every Casting Test reads that (`rules/creature-bonuses.mjs`).
+      castingBonus: new fields.NumberField({ required: true, integer: true, min: -BONUS_LIMIT, max: BONUS_LIMIT, initial: 0 }),
 
       // --- abilities, then Boss Actions where held ---
       // An ability states its rule ON THE BLOCK and never defers it (D-533):
@@ -334,6 +361,20 @@ export class NpcData extends foundry.abstract.TypeDataModel {
         new fields.StringField({ choices: () => Object.keys(AZEROTH.conditions) }),
         { initial: [] }
       ),
+      // The GM's own Boons and Banes (D-1761): a row a Boon or a Bane on one of
+      // 02 §8's skills or on a kind of Test, what 08 §6 and §20 give a character
+      // through what it wears. Merged into the derived `skillBoons`, `skillBanes`,
+      // `testBoons` and `testBanes` the roll dialog reads.
+      boonsBanes: new fields.ArrayField(new fields.SchemaField({
+        on: new fields.StringField({ required: true, blank: false, choices: () => [...Object.keys(AZEROTH.skills), ...Object.keys(AZEROTH.testKinds)] }),
+        kind: new fields.StringField({ required: true, blank: false, initial: "boon", choices: () => [...EDGE_KINDS] })
+      }), { initial: [] }),
+      // The A1 conditions the GM has made it immune to (D-1762), added into the
+      // derived `conditionImmunities` every Inflict door refuses at.
+      conditionImmune: new fields.ArrayField(
+        new fields.StringField({ choices: () => Object.keys(AZEROTH.conditions) }),
+        { initial: [] }
+      ),
       momentum: new fields.SchemaField({
         name: choiceField(AZEROTH.momentumTypes),
         value: optionalNumberField({ min: 0 }),
@@ -376,6 +417,12 @@ export class NpcData extends foundry.abstract.TypeDataModel {
     migrateAutomationSource(source);
     // 05's temporary Health (D-777), cleaned where it is present and nowhere else.
     cleanTempSource(source);
+    // Its own Casting Test bonus, Boons and Banes and condition immunities (D-1760 to D-1762), the same way.
+    cleanCastingBonusSource(source);
+    cleanBoonsBanesSource(source);
+    cleanConditionImmuneSource(source);
+    // The creature's own Spellpower (D-1727), cleaned where present and nowhere else.
+    cleanSpellpowerBaseSource(source);
     return super.migrateData(source);
   }
 
@@ -513,6 +560,8 @@ export class NpcData extends foundry.abstract.TypeDataModel {
       ...(this.conditionImmunities ?? []),
       ...passives.conditionImmunities,
       ...signature.conditionImmunities,
+      // What the GM made it immune to in the generator (D-1762): the stored list, read as prepared.
+      ...(this.conditionImmune ?? []),
       // What a Use refuses for a span (04's Unfettered; door 25), off its active effects.
       ...immunitiesFrom((this.parent?.effects ?? []).filter(e => e.active !== false && e.disabled !== true).map(e => e.flags?.["azeroth-rpg"] ?? {}))
     ])];
@@ -622,6 +671,18 @@ export class NpcData extends foundry.abstract.TypeDataModel {
     // the dialog raises two lines with two labels - 14 says *a standing
     // ability of this creature* and 08 §6 says which thing you are wearing.
     this.grants = worn;
+    // **WHAT A GM'S BONUS ON A THING ADDS, AND THE CREATURE'S OWN** (D-1760). The
+    // character's `itemBonus`, in its shape: `workflows.mjs#castSpell` reads
+    // `system.itemBonus.casting` off whichever actor casts, and `NpcData` never
+    // derived it, so a ring's Casting Test bonus did nothing on a creature (D-681).
+    // `castingBonus` is the GM's own number, read as PREPARED and never written.
+    // The Damage Rating total rides along unread here: `npcAttackWithDialog` does
+    // not read it (O-620).
+    this.itemBonus = creatureItemBonus({
+      items: items.map(i => ({ equipped: i.system?.equipped === true, name: i.name, bonus: i.system?.bonus })),
+      castingBonus: this.castingBonus,
+      name: this.parent?.name ?? ""
+    });
 
     // The attribute family (08 §6's *of the Bear*). The score keeps 14's own
     // number and the grant lands on the TOTAL, which is the character's shape
@@ -657,12 +718,16 @@ export class NpcData extends foundry.abstract.TypeDataModel {
     // creature's spell. The creature's OWN passives grant it too and nothing
     // read those either - `passiveEffects` has returned `spellpower` since
     // D-691 and no line in this model consumed it.
-    this.spellpower = { ...Object.fromEntries(Object.keys(AZEROTH.schools).map(key => [key, 0])), ...(this.spellpower ?? {}) };
-    for (const bag of [passives.spellpower, worn.spellpower]) {
-      for (const [school, n] of Object.entries(bag ?? {})) {
-        if (n) this.spellpower[school] = (this.spellpower[school] ?? 0) + n;
-      }
-    }
+    //
+    // **AND THE CREATURE'S OWN** (D-1727): `spellpowerBase`, the GM's number from
+    // the generator, read as PREPARED (after the `initial` effects, never off
+    // `_source`) and never written here, so the total below cannot feed back
+    // into it. Every bag ADDS (`rules/creature-spellpower.mjs#spellpowerTotals`).
+    this.spellpower = spellpowerTotals({
+      base: this.spellpowerBase,
+      prepared: this.spellpower,
+      bags: [passives.spellpower, worn.spellpower]
+    });
 
     // A Boon or a Bane on a NAMED skill (08 §6). Appended to the creature's own
     // standing rows rather than replacing them: `snapshotOf` reads one bag per
@@ -675,6 +740,12 @@ export class NpcData extends foundry.abstract.TypeDataModel {
     for (const [skill, names] of Object.entries(worn.skillBanes)) {
       this.skillBanes[skill] = [...(this.skillBanes[skill] ?? []), ...names];
     }
+    // **AND THE GM'S OWN ROWS** (D-1761): composed into 08 §6's sentences and read
+    // by the one reader a worn Boon takes, then ADDED - a skill row by name, a Test
+    // row onto the creature's standing count - never replacing a passive's or a ring's.
+    Object.assign(this, withOwnEdges({
+      skillBoons: this.skillBoons, skillBanes: this.skillBanes, testBoons: this.testBoons, testBanes: this.testBanes
+    }, this.boonsBanes, this.parent?.name ?? ""));
 
     // Fortitude is a point of Health (08 §6's Sturdy). `health.max` is STORED
     // on a creature - 14 prints it - so this ADDS rather than recomputing a

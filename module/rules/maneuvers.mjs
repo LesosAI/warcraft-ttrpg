@@ -4,8 +4,7 @@
  * a Sunder takes off, and the size note Overbear carries. Pure: no Foundry.
  *
  * Cost modifiers the book states:
- *  - Sunder Armor (Warrior feature): Sunder costs 2 instead of 4.
- *  - Sundering Blows (talent): Sunder costs 2 less per rank, to a minimum of 2.
+ *  - Sunder Armor (Warrior feature): Sunder costs 3 instead of 4 (the class talent audit, D-1871).
  *  - Deflecting at Greater grade (08 SS6): Riposte costs 2.
  *  - Return Stroke (talent, the Blademaster's): Riposte costs 2 less per rank.
  *  - Charge (Warrior feature): the first Overbear or Sunder each encounter
@@ -18,6 +17,9 @@ import { resistsForcedMovement, rung } from "./size.mjs";
 import { maneuverPriceOf } from "./maneuver-pool.mjs";
 
 const BASE = Object.fromEntries(AZEROTH.maneuvers.map(m => [m.key, m.cost]));
+
+/** 02 §7's Sunder Armor: *Your Sunder costs 3 Rage instead of 4* (the class talent audit's A2, D-1871). */
+export const SUNDER_ARMOR_COST = 3;
 
 /** Ranks taken of a named talent, off `{name, taken}` rows. */
 function ranksOf(talents, name) {
@@ -34,23 +36,19 @@ function ranksOf(talents, name) {
  * @returns {{key: string, base: number, cost: number, gain: number, rows: {name: string, cost: number}[]}|null}
  *   `rows` names each modifier and the cost after it, for the row's detail.
  */
-export function maneuverCost(key, { features = [], talents = [], grants = [], chargeAvailable = false } = {}) {
+export function maneuverCost(key, { features = [], talents = [], grants = [], chargeAvailable = false, riposteFree = null } = {}) {
   const base = BASE[key];
   if (base === undefined) return null;
   let cost = base;
   let gain = 0;
   const rows = [];
   const held = new Set(features.map(f => f?.name));
-  if (key === "sunder") {
-    if (held.has("Sunder Armor")) {
-      cost = Math.min(cost, 2);
-      rows.push({ name: "Sunder Armor", cost });
-    }
-    const blows = ranksOf(talents, "Sundering Blows");
-    if (blows > 0) {
-      cost = Math.max(2, cost - 2 * blows);
-      rows.push({ name: "Sundering Blows", cost });
-    }
+  // **SUNDER ARMOR AT 3** (the class talent audit's A2, D-1871: *Your Sunder costs 3 Rage instead of
+  // 4*). Sundering Blows no longer prices the Sunder: it pays off a hit on a sundered target
+  // (`rules/audit-martial.mjs#SUNDERING_BLOWS`).
+  if (key === "sunder" && held.has("Sunder Armor")) {
+    cost = Math.min(cost, SUNDER_ARMOR_COST);
+    rows.push({ name: "Sunder Armor", cost });
   }
   if (key === "riposte" && grants.some(g => /Deflecting \(Greater\)/i.test(String(g)))) {
     cost = Math.min(cost, 2);
@@ -79,7 +77,16 @@ export function maneuverCost(key, { features = [], talents = [], grants = [], ch
     gain = 1;
     rows.push({ name: "Charge", cost: 0 });
   }
-  return { key, base, cost, gain, rows };
+  // **04's COMBAT REFLEXES** (*Once a round, your Riposte costs no Combo Points*; the class
+  // talent audit, D-1882): the talent's name where the door found the round's free one
+  // unspent, and the price nothing. `free` names it, so the door claims the round.
+  let free = null;
+  if (key === "riposte" && typeof riposteFree === "string" && riposteFree && cost > 0) {
+    cost = 0;
+    free = riposteFree;
+    rows.push({ name: riposteFree, cost: 0 });
+  }
+  return { key, base, cost, gain, rows, ...(free ? { free } : {}) };
 }
 
 /** Armor Points a Sunder takes off: one, plus one per rank of Rend Armor. */
