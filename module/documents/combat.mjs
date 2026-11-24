@@ -3018,6 +3018,8 @@ export class AzerothCombat extends Combat {
     lines.push(...await advanceFleshRot(actor, this));
     lines.push(...await advanceToxicPoison(actor, this));
     lines.push(...await advanceWildRegeneration(actor, this));
+    // 08 §12's Troll's Blood and Mageblood: a restore at the start of each of the drinker's turns (D-1945).
+    lines.push(...await import("../effects/consumable-regen.mjs").then(m => m.advanceRegen(actor)).catch(err => { console.warn("azeroth-rpg | a consumable's turn restore", err); return []; }));
     lines.push(...await advanceSentinelMending(actor, this));
     lines.push(...await advanceMindFlay(actor, this));
     // 07 §17's Frenzy of the Dead's Health and Drain Life's drain at the caster's turn start (run 4c-S).

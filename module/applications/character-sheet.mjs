@@ -66,7 +66,6 @@ import { POINTS_AVAILABLE, buildTree, canTake, canTakeRacial, canUntake, canUnta
 import { branchRank } from "../rules/legacy-branches.mjs";
 // The class's crest behind its tree, or null where there is no file (D-758).
 import { crestPath } from "../rules/crests.mjs";
-import { exitsFrom, isEligible } from "../rules/careers.mjs";
 import { tierForLevel, featuresUnlocked, secondaryLevel, secondaryTier } from "../rules/progression.mjs";
 import { spellPrice, showsSpells, spellsKnown, spellPayment } from "../rules/casting.mjs";
 // What counts toward spells known (07 §5; the lead's "If a talent gives a spell, it should not coutn
@@ -112,8 +111,36 @@ import { isAntivenom } from "../rules/antivenom.mjs";
 import { endAffliction } from "../effects/afflictions.mjs";
 import { handLay } from "../effects/bare-afflictions.mjs";
 import { bareKind } from "../rules/bare-afflictions.mjs";
-import { inCareerSkills, skillFromKnown } from "../rules/creation.mjs";
 import { coins } from "../helpers/coins.mjs";
+// The Profession tab (D11 §12; D-1903 to D-1930): the laws it reads, the doors it presses, and
+// its pure view model (`rules/profession-sheet.mjs`).
+import {
+  PROFESSION_BY_ID, PROFESSION_OWED_FLAG, SKILLS_AT_TIER_FOUR, bonusParts, owedPicks, pickRefusal, professionSkills as professionSkillSet,
+  rungFor, toolBonus, toolPrice
+} from "../rules/professions.mjs";
+import {
+  RARITY_CEILING, affixChoices, craftsOf, enchantChoices, enchantVerdict, forgeable, isClassicFind, raritiesFor, recipesFor, traitEntry
+} from "../rules/recipes.mjs";
+import { TARGET_SL, collectable, testRefusal } from "../rules/crafting.mjs";
+import { DISENCHANT_YIELD, GATHER_SKILL, HARVEST } from "../rules/gathering.mjs";
+import { BIOME_KEYS, nodesIn } from "../rules/biomes.mjs";
+import { gatherInputs, materialCounts } from "../rules/profession-door.mjs";
+import { isWellFed } from "../rules/well-fed.mjs";
+import { affixCost } from "../rules/forge.mjs";
+// A Signature row's words clipped on its option, the browser's own clip (D-1990).
+import { clip } from "./browser-categories.mjs";
+import { professionRankCost } from "../rules/xp.mjs";
+import {
+  BIOME_FLAG, OPEN_FLAG, VIEW_FLAG, harvestRows, pressGuard, signatureRowOf, signatureRows, disenchantChoices, expectedFor, expectedView, filterRecipes, filtersActive, heldSkillCount,
+  kindOptions, ladderRows, mergedPicks, openGroups, pickStrips, projectFill, projectSplit, rankView, recipeCard,
+  signedText, skillTierRows, statParts, stepChips, tierOptions, toggleDraft, traitTokens, viewOf, withAllOpen, withGroupOpen
+} from "../rules/profession-sheet.mjs";
+import {
+  abandonProject, chooseProfession, collectProject, craft, craftSnapshot, disenchant, enchant, gather, gatherSnapshot, harvest,
+  harvestSnapshotOf, pickProfessionSkill, professionAffixPool, professionMaterials, projectsOf, raiseProfessionRank, refusalWords,
+  workProject, xpWrite
+} from "../dice/profession-workflows.mjs";
+import { downtimeState, shouldPrompt } from "../settings.mjs";
 // 05's temporary Health on the banner (D-777).
 import { temporaryHealthContext } from "../effects/temporary-health.mjs";
 // The pool a talent pays a spell from (the Chromatic Champion's branch spells, in Rage).
@@ -149,6 +176,109 @@ const PREVIEW_FLAG = "gearPreview";
 function signed(value) {
   const n = Number(value) || 0;
   return n < 0 ? `−${Math.abs(n)}` : `+${n}`;
+}
+
+/* -------------------------------------------- */
+/*  What the Profession tab loads once           */
+/* -------------------------------------------- */
+
+/** The three packs a recipe lives in (D-1918). */
+const RECIPE_PACKS = Object.freeze(["azeroth-rpg.weapons", "azeroth-rpg.armor", "azeroth-rpg.gear"]);
+
+/** A profession's recipes as plain data, by profession key, loaded once and forgotten on a pack edit. */
+const RECIPE_CACHE = new Map();
+
+let professionCachesHooked = false;
+
+/**
+ * **THE SHEET'S PACK CACHES FOLLOW THE PACKS** (the architect's phase 4 review, MINOR 10): any
+ * create, update or delete of an Item in one of the recipe packs or the trait pack forgets what
+ * it fed, on the same hooks the doors' own caches use (`profession-workflows.mjs#hookCaches`), and
+ * the next read loads it again.
+ */
+function hookProfessionCaches() {
+  if (professionCachesHooked || typeof Hooks === "undefined") return;
+  professionCachesHooked = true;
+  const forget = doc => {
+    const pack = doc?.pack ?? null;
+    if (!pack) return;
+    if (RECIPE_PACKS.includes(pack)) { RECIPE_CACHE.clear(); DESCRIPTION_CACHE.clear(); }
+    if (pack === "azeroth-rpg.traits") TRAIT_CACHE = null;
+  };
+  for (const hook of ["createItem", "updateItem", "deleteItem"]) Hooks.on(hook, forget);
+}
+
+/** A cached promise that is FORGOTTEN where it rejects, so one failed first load is never kept for the session. */
+function keepIfLoaded(promise, forget) {
+  promise.catch(() => forget());
+  return promise;
+}
+
+/**
+ * **EVERY RECIPE ONE PROFESSION MAKES**, as plain data `{uuid, id, name, type, img, system, flags}`
+ * (the shape `recipes.mjs` and `workflows.craftSnapshot` read): the three packs' indexes read for
+ * the `craft` stamp, never a Classic find (D-685), and only those documents loaded whole. Every
+ * tier is loaded; `recipesFor` keeps what the character's tier opens (D-1927).
+ */
+function professionRecipes(profession) {
+  hookProfessionCaches();
+  if (!profession) return Promise.resolve([]);
+  if (!RECIPE_CACHE.has(profession)) RECIPE_CACHE.set(profession, keepIfLoaded((async () => {
+    const out = [];
+    for (const id of RECIPE_PACKS) {
+      const pack = game.packs.get(id);
+      if (!pack) continue;
+      const index = await pack.getIndex({ fields: ["system.craft", "system.source", "flags.azeroth-rpg.classic"] });
+      const ids = [...index].filter(e => !isClassicFind(e) && craftsOf({ type: e.type, system: e.system }).some(s => s.trade === profession)).map(e => e._id);
+      if (!ids.length) continue;
+      for (const doc of await pack.getDocuments({ _id__in: ids })) {
+        const data = doc.toObject();
+        out.push({ uuid: doc.uuid, id: doc.id, name: data.name, type: data.type, img: data.img, system: data.system, flags: data.flags ?? {} });
+      }
+    }
+    return out.sort((a, b) => a.uuid.localeCompare(b.uuid));
+  })(), () => RECIPE_CACHE.delete(profession)));
+  return RECIPE_CACHE.get(profession);
+}
+
+let TRAIT_CACHE = null;
+
+/**
+ * The trait pack's entries `{name, system}`, loaded once: every trait chip's tooltip (D-1928). Each
+ * entry's prose is ENRICHED here (`helpers/enrich.mjs`, D-609), so a tooltip never prints a raw
+ * `@UUID[...]`.
+ */
+function professionTraits() {
+  hookProfessionCaches();
+  TRAIT_CACHE ??= keepIfLoaded((async () => {
+    const pack = game.packs.get("azeroth-rpg.traits");
+    const docs = pack ? await pack.getDocuments() : [];
+    const out = [];
+    for (const d of docs) {
+      const system = d.system.toObject();
+      system.description = await enrich(system.description ?? "");
+      out.push({ name: d.name, system });
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+  })(), () => { TRAIT_CACHE = null; });
+  return TRAIT_CACHE;
+}
+
+/**
+ * The affix pool's prefixes and suffixes, read through THE DOORS' OWN READER
+ * (`workflows.professionAffixPool`), so the options the sheet lists and the verdict the door gives
+ * read one pool, forgotten on a pack edit by the door's hooks. Sorted for the reader.
+ */
+async function professionAffixes() {
+  const pool = await professionAffixPool();
+  return [...pool].sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")) || String(a.id).localeCompare(String(b.id)));
+}
+
+/** A recipe's prose, enriched once (`helpers/enrich.mjs`): a pack document does not change in a session. */
+const DESCRIPTION_CACHE = new Map();
+async function professionDescription(item) {
+  if (!DESCRIPTION_CACHE.has(item.uuid)) DESCRIPTION_CACHE.set(item.uuid, await enrich(item.system?.description ?? ""));
+  return DESCRIPTION_CACHE.get(item.uuid);
 }
 
 /**
@@ -367,7 +497,27 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       // core's own and is registered by `DocumentSheetV2`; these two are ours
       // because `system.art` is ours.
       editArt: AzerothCharacterSheet.#onEditArt,
-      viewArt: AzerothCharacterSheet.#onViewArt
+      viewArt: AzerothCharacterSheet.#onViewArt,
+      // The Profession tab (D11 §12; D-1903 to D-1930). The Forge's selects, the filters, the
+      // biome, the node and the item to disenchant are `data-prof-*` change hooks, never actions.
+      professionView: AzerothCharacterSheet.#onProfessionView,
+      chooseProfession: AzerothCharacterSheet.#onChooseProfession,
+      pickProfessionSkill: AzerothCharacterSheet.#onPickProfessionSkill,
+      confirmProfessionPicks: AzerothCharacterSheet.#onConfirmProfessionPicks,
+      raiseProfessionRank: AzerothCharacterSheet.#onRaiseProfessionRank,
+      gather: AzerothCharacterSheet.#onGather,
+      professionDisenchant: AzerothCharacterSheet.#onProfessionDisenchant,
+      inspectRecipe: AzerothCharacterSheet.#onInspectRecipe,
+      craftRecipe: AzerothCharacterSheet.#onCraftRecipe,
+      workProject: AzerothCharacterSheet.#onWorkProject,
+      collectProject: AzerothCharacterSheet.#onCollectProject,
+      abandonProject: AzerothCharacterSheet.#onAbandonProject,
+      openAllRecipes: AzerothCharacterSheet.#onOpenAllRecipes,
+      closeAllRecipes: AzerothCharacterSheet.#onCloseAllRecipes,
+      clearRecipeFilters: AzerothCharacterSheet.#onClearRecipeFilters,
+      layEnchantment: AzerothCharacterSheet.#onLayEnchantment,
+      // Skin, Butcher or Salvage a targeted defeated creature from the Harvest card (D-1996).
+      harvestTarget: AzerothCharacterSheet.#onHarvestTarget
     }
   };
 
@@ -385,13 +535,15 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     combat: { template: "systems/azeroth-rpg/templates/actor/combat.hbs", scrollable: [""] },
     spells: { template: "systems/azeroth-rpg/templates/actor/spells.hbs", scrollable: [""] },
     gear: { template: "systems/azeroth-rpg/templates/actor/gear.hbs", scrollable: [""] },
+    // The eighth tab, wide, between Gear and Progress (D-1910, D11 §12).
+    profession: { template: "systems/azeroth-rpg/templates/actor/profession.hbs", scrollable: [""] },
     progress: { template: "systems/azeroth-rpg/templates/actor/progress.hbs", scrollable: [""] },
     corruption: { template: "systems/azeroth-rpg/templates/actor/corruption.hbs", scrollable: [""] }
   };
 
   /**
-   * The seven tabs of D11 §1: Overview first (D-687), Spells after Combat
-   * (D-599).
+   * The eight tabs of D11 §1 and §12: Overview first (D-687), Spells after
+   * Combat (D-599), Profession between Gear and Progress (D-1910).
    *
    * **`initial` stays `core`.** Making Overview the landing tab is one line,
    * and it is the lead's call: every Quench phase that queries the Core tab
@@ -408,14 +560,15 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         { id: "combat" },
         { id: "spells" },
         { id: "gear" },
+        { id: "profession" },
         { id: "progress" },
         { id: "corruption" }
       ]
     }
   };
 
-  /** Overview, Gear, Progress and Spells span the Skills column (D11 §1, D-599, D-687). */
-  static WIDE_TABS = Object.freeze(["overview", "gear", "progress", "spells"]);
+  /** Overview, Gear, Profession, Progress and Spells span the Skills column (D11 §1, §12; D-599, D-687, D-1910). */
+  static WIDE_TABS = Object.freeze(["overview", "gear", "profession", "progress", "spells"]);
 
   /* -------------------------------------------- */
 
@@ -723,7 +876,6 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     };
     context.talents = await this.#talents();
     context.racial = await this.#racial();
-    context.career = await this.#career();
 
     // The identity line: race and the classes held, the second with the level
     // it functions at (02 §10). A class that is linked but never named on the
@@ -741,6 +893,13 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         level: index === 0 ? system.level : secondaryLevel(system.level)
       }))
     };
+    // The profession on the banner (the plan's M1, D-1912): *Journeyman Blacksmith*, or the door
+    // to choose one where none is held - owed by migration 0.17.0 (D-1916), or simply never chosen
+    // on a character that has a class.
+    const professionItem = this.actor.professionItem;
+    context.professionLine = professionItem ? this.#professionLine(professionItem) : null;
+    context.canChooseProfession = this.isEditable && !professionItem
+      && (this.actor.getFlag("azeroth-rpg", PROFESSION_OWED_FLAG) !== undefined || classItems.length > 0);
     // The level is set on the Progress tab once there is a class to carry it.
     context.levelEditable = this.isEditable && classItems.length > 0;
     // A blank sheet offers the creator (D-636): the player's door.
@@ -824,7 +983,16 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     if (!this.#showsSpells()) {
       for (const stale of this.element.querySelectorAll('[data-application-part="spells"], section[data-tab="spells"]')) stale.remove();
     }
-    this.#applyWideLayout(context.wide === true);
+    // **A PART PREPARED ON ONE TAB CAN LAND ON ANOTHER** (found live by the sheet matrix, 0.17.0).
+    // The Profession part's deferred render (D-1982) is prepared while its tab shows and, at tier 4,
+    // lands after the reader has already moved on: core writes the `active` it prepared, so two
+    // primary tabs stood laid out at once and the context's `wide` was the old tab's. Every primary
+    // tab takes `active` from the tab showing NOW, and the layout with it.
+    const showing = this.tabGroups.primary;
+    for (const section of this.element.querySelectorAll('section.tab[data-group="primary"][data-tab]')) {
+      section.classList.toggle("active", section.dataset.tab === showing);
+    }
+    this.#applyWideLayout(showing ? AzerothCharacterSheet.WIDE_TABS.includes(showing) : context.wide === true);
     this.#applyTabSemantics();
     bindPlateKeys(this.element);
     // The Overview tile is a div carrying `role="button"` (it holds the item
@@ -841,6 +1009,11 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // way the pick does (the lead, 2026-09-20).
     this.#applyPreview();
     this.#bindBags();
+    // The Profession tab's change hooks, trait chips and recipe groups (D11 §12), delegated once
+    // per frame as the bags are, and the picked recipe's card shown again after a render.
+    this.#bindProfession();
+    bindKeyActivation(this.element, '.azeroth-prof-row[data-action]');
+    this.#applyRecipe();
     // The talent card's Escape, focus-out, pointer-out and outside click
     // (D-758), delegated once per frame the way the bags are.
     this.#bindTalentCards();
@@ -1868,6 +2041,25 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // `changeTab` moves `.active` and nothing else, so the ARIA state it
     // leaves behind would say the old tab is the selected one.
     this.#applyTabSemantics();
+    // The Profession part was drawn deferred while another tab showed (D-1982): draw it now.
+    if (tab === "profession" && this.element?.querySelector('section[data-tab="profession"][data-deferred]')) {
+      this.#professionRender = this.render({ parts: ["profession"] });
+    }
+  }
+
+  /**
+   * **THE PROFESSION TAB, SHOWN AND DRAWN** (D-1982): the tab changed to, the view set where one
+   * is named, and the part rendered whole. Resolves once the part is in the DOM, so a live test
+   * (and the shots) can await it instead of polling for `data-deferred` to go.
+   *
+   * @param {{view?: "overview"|"crafting"}} [o]
+   */
+  async showProfession({ view = null } = {}) {
+    if (view) await this.#setProfessionView(view, { render: false });
+    if (this.tabGroups.primary !== "profession") this.changeTab("profession", "primary");
+    await (this.#professionRender ?? Promise.resolve());
+    if (this.element?.querySelector('section[data-tab="profession"][data-deferred]') || view) await this.render({ parts: ["profession"] });
+    return this.element?.querySelector('section[data-tab="profession"]') ?? null;
   }
 
   /**
@@ -1920,6 +2112,11 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     // failed — the run count drops and nothing says why.
     const tab = context.tabs?.[partId];
     if (tab) part.tab = tab;
+    // **THE PROFESSION TAB IS BUILT WHOLE ONLY WHILE IT SHOWS** (D-1982): a card is prerendered
+    // for every recipe the profession may make, and an actor's every write re-renders the sheet,
+    // so while another tab is open the part is drawn deferred (its header alone) and `changeTab`
+    // renders it when the reader comes to it.
+    if (partId === "profession") part.profession = await this.#profession({ full: (this.tabGroups.primary ?? "core") === "profession" });
     return part;
   }
 
@@ -2121,50 +2318,6 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       }, { racial: true });
     }));
     return { race: race.name, tier: tierForLevel(level), picksTotal, picksUsed, picksLeft: Math.max(0, picksTotal - picksUsed), talents };
-  }
-
-  /**
-   * The career held now and the roads out of it (03 SS2).
-   *
-   * **Eligibility is the mechanical half only.** 03 gates on a prior career
-   * and nothing else — no corruption, no faction standing, no level — and the
-   * rest of an Entry is prose the GM judges. The narrative clause is shown
-   * beside each road rather than hidden, because a green light that quietly
-   * dropped half the requirement is worse than no light.
-   */
-  async #career() {
-    const item = this.actor.careerItem;
-    if (!item) return { current: null, exits: [] };
-
-    const held = this.actor.items
-      .filter(i => i.type === "career")
-      .map(i => i.name);
-    const snapshot = { current: item.name, held, tier: item.system.tier };
-
-    // The Exits list names careers; their Entry lines live on the compendium
-    // documents, so an exit the character does not own yet is looked up there.
-    // ASK FOR THE FIELDS. `getIndex` carries name, img and type by default and
-    // nothing else, so reading `entry.system.entry` off the plain index gave an
-    // empty Entry on every exit - which parsed to no requirements and rendered
-    // as an open road. `getIndex({fields})` extends the index in place.
-    const pack = game.packs?.get("azeroth-rpg.careers");
-    const index = pack ? await pack.getIndex({ fields: ["system.entry", "system.tier"] }) : null;
-
-    const exits = await Promise.all(exitsFrom(item).map(async name => {
-      const entry = index?.find(e => e.name === name);
-      const known = this.actor.items.find(i => i.type === "career" && i.name === name);
-      const target = known ?? (entry ? { name, system: entry.system ?? {} } : { name, system: {} });
-      const state = isEligible(snapshot, target);
-      return {
-        name,
-        tier: target.system?.tier ?? null,
-        ok: state.ok,
-        requires: state.requires,
-        narrative: await enrich(state.narrative)
-      };
-    }));
-
-    return { current: { name: item.name, tier: item.system.tier }, exits };
   }
 
   /**
@@ -2788,11 +2941,6 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     return this.actor.items.find(i => i.type === "feature" && i.getFlag("azeroth-rpg", "feature")?.classId === raceId) ?? null;
   }
 
-  /** The skill Adaptable names, recorded on the Human trait's `known` list, or null. */
-  #adaptableSkill() {
-    return skillFromKnown(this.#raceTraitFeature()?.system?.known ?? []);
-  }
-
   /**
    * The twenty-three skills in book order, grouped by the ability each reads
    * (D11 §1). **Total = skill modifier + Proficiency + Rank** (05 §8, D-810),
@@ -2801,9 +2949,14 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
   #skills() {
     const system = this.actor.system;
     const ranks = this.actor.getFlag("azeroth-rpg", "skillRanks") ?? {};
-    // The career's list, and the one skill a Human's Adaptable names, which
-    // is always in-career whatever the career (02 §5, D-636).
-    const inCareer = inCareerSkills({ career: this.actor.careerItem?.system ?? null, adaptable: this.#adaptableSkill() });
+    // **THE CHEAP SKILLS ARE THE PROFESSION'S** (D-1906): its five, the picks made at each tier
+    // reached, and the one skill a Human's Adaptable names, which is cheap whatever the
+    // profession (02 §5, D-636). `AzerothActor#professionSkills` is the one reading; the
+    // profession's own share is read again without Adaptable so the marker can say why.
+    const cheap = this.actor.professionSkills();
+    const prof = this.actor.professionItem;
+    const own = professionSkillSet({ profession: prof?.system ?? null, tier: this.actor.professionTier, picks: prof?.system?.picks ?? null });
+    const profName = prof?.name ?? "";
     const purse = unspent(system.xp ?? {});
 
     return Object.entries(AZEROTH.skills).map(([key, label]) => {
@@ -2826,13 +2979,20 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
           skill: signedModifier(skillModOf(this.actor, ability) ?? 0)
         }),
         rank,
-        // The in-career marker reads the career item's own list — that list is
-        // the only reason a Rank is cheap, and showing it is how a player sees
-        // why (D11 §1).
-        inCareer: inCareer.has(key),
+        // The cheap-skill marker is the PROFESSION'S GLYPH (D11 §12): it is the only reason a
+        // Rank is cheap, and the tooltip says which and what it costs. Adaptable's skill takes
+        // the plain diamond, since the profession is not why.
+        inProfession: cheap.has(key),
+        cheapImg: own.has(key) ? (prof?.img ?? null) : null,
+        cheapTip: own.has(key)
+          ? game.i18n.format("AZEROTH.Sheet.ProfessionSkillTip", { profession: profName })
+          : game.i18n.localize("AZEROTH.Sheet.AdaptableSkillTip"),
+        buyTip: rank < RANK_MAX
+          ? game.i18n.format(cheap.has(key) ? "AZEROTH.Sheet.BuyCost" : "AZEROTH.Sheet.BuyCostOutside", { cost: rankCost(rank + 1, cheap.has(key)) })
+          : null,
         // 02 SS8: the next Rank's cost, and whether the purse covers it.
-        nextCost: rank < RANK_MAX ? rankCost(rank + 1, inCareer.has(key)) : null,
-        canBuy: rank < RANK_MAX && purse >= rankCost(rank + 1, inCareer.has(key)),
+        nextCost: rank < RANK_MAX ? rankCost(rank + 1, cheap.has(key)) : null,
+        canBuy: rank < RANK_MAX && purse >= rankCost(rank + 1, cheap.has(key)),
         total: skillTotalFor(this.actor, key)
       };
     });
@@ -3816,11 +3976,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         // controls; both read the same `signatureContext`, so they can never
         // disagree about whether a thing is available.
         //
-        // A CAREER IS NOT WORN. Its Signature is on the Combat panel, where the
-        // rest of what a character can do in a fight lives; this column is what
-        // the FIGURE beside it adds up to, and a row here for a thing no tile
-        // shows would read as a slot the eye had missed.
-        signatures: signatures.filter(row => !row.career).map(row => ({
+        signatures: signatures.map(row => ({
           id: row.id,
           name: row.name,
           rarityClass: row.rarityClass,
@@ -3947,19 +4103,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
    * into every weapon and carried row's expander) and on the item sheet, which
    * is surface one of the three and the one that prints the reason beside it.
    *
-   * **AND THE CAREER'S, UNCONDITIONALLY.** 03 §5 gives every career a Signature
-   * and it appeared nowhere on this sheet — only in the creator's career pane,
-   * which a player sees once. A career is not equipped, so it is listed on its
-   * own terms.
-   *
-   * **AND THE CAREER'S ROW IS A CONTROL LIKE ANY OTHER NOW.** It printed *the
-   * count is the table's; nothing here keeps it* for one phase, because
-   * `CareerData` had no `signatureEffect` field and `resetUses` walks
-   * `system.signatureEffect.use.uses`. It has one; the parser stamps it from
-   * `CAREER_SIGNATURES` and migration 0.12.0 fills a career already in a
-   * world, so the eight the chapter gives a rest-bounded limit spend and
-   * refill exactly as a worn Signature does — one `signatureContext` for the
-   * career and the sword alike.
+   * **A profession has no Signature** (D-1909), so the panel lists worn things alone.
    */
   async #signatures() {
     const rows = [];
@@ -3979,31 +4123,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
         name: shownName(item),
         img: item.img,
         rarityClass: rarityClass(item.system?.rarity),
-        career: false,
         text: await enrich(item.system.signature ?? "", { relativeTo: item }),
         ...signatureContext(item, this.actor)
-      });
-    }
-    const career = this.actor.careerItem;
-    if (career?.system?.signature?.name) {
-      rows.push({
-        id: career.id,
-        name: career.system.signature.name,
-        img: career.img,
-        rarityClass: null,
-        career: true,
-        origin: game.i18n.format("AZEROTH.Signature.FromCareer", { name: career.name }),
-        text: await enrich(career.system.signature.description ?? "", { relativeTo: career }),
-        // **THE CAREER'S OWN DESCRIPTOR, off the item** (D-692's Phase 6).
-        // `CareerData` carries `signatureEffect` now, the parser stamps it from
-        // `CAREER_SIGNATURES`, and a migration fills a career already in a
-        // world - so the eight the chapter gives a rest-bounded limit count
-        // their uses through `resetUses` like everything else, and this row
-        // draws the same counter and the same Use button as a worn thing.
-        // Reading the TABLE here instead would put a counter on the row that
-        // nothing refills, which is exactly the half-working control D-681
-        // keeps finding.
-        ...signatureContext(career, this.actor)
       });
     }
     return rows;
@@ -4934,29 +5055,35 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
 
   /**
    * Buy the next Rank (02 SS8): 10 XP times the Rank, doubled outside the
-   * career. The purse is checked here, not trusted from the button; the
+   * profession (D-1906). The purse is checked here, not trusted from the button; the
    * spend is ledgered.
    */
   static async #onBuyRank(event, target) {
     const key = target.dataset.skill;
-    const skill = this.#skills().find(s => s.key === key);
-    if (!skill || skill.rank >= RANK_MAX) return null;
-    const cost = rankCost(skill.rank + 1, skill.inCareer);
-    const purse = unspent(this.actor.system.xp ?? {});
-    if (purse < cost) {
-      ui.notifications?.warn(game.i18n.format("AZEROTH.Sheet.CannotAfford", { cost, purse }));
-      return null;
-    }
-    const ledger = foundry.utils.deepClone(this.actor.getFlag("azeroth-rpg", "xpLedger") ?? []);
-    ledger.push({
-      amount: cost,
-      label: game.i18n.format("AZEROTH.Sheet.LedgerRank", { skill: game.i18n.localize(skill.label), rank: skill.rank + 1 }),
-      at: Date.now()
-    });
-    return this.actor.update({
-      [`flags.azeroth-rpg.skillRanks.${key}`]: skill.rank + 1,
-      "system.xp.spent": (this.actor.system.xp?.spent ?? 0) + cost,
-      "flags.azeroth-rpg.xpLedger": ledger
+    // **ONE XP WRITE AT A TIME** (the final review's minor 7): the read and the write run as one
+    // task in the profession's queue (`profession-workflows.mjs#xpWrite`), so a profession Rank
+    // raised in the same round trip is never written over. The skill, its Rank and the purse are
+    // read when the task's turn comes.
+    return xpWrite(this.actor, () => {
+      const skill = this.#skills().find(s => s.key === key);
+      if (!skill || skill.rank >= RANK_MAX) return null;
+      const cost = rankCost(skill.rank + 1, skill.inProfession === true);
+      const purse = unspent(this.actor.system.xp ?? {});
+      if (purse < cost) {
+        ui.notifications?.warn(game.i18n.format("AZEROTH.Sheet.CannotAfford", { cost, purse }));
+        return null;
+      }
+      const ledger = foundry.utils.deepClone(this.actor.getFlag("azeroth-rpg", "xpLedger") ?? []);
+      ledger.push({
+        amount: cost,
+        label: game.i18n.format("AZEROTH.Sheet.LedgerRank", { skill: game.i18n.localize(skill.label), rank: skill.rank + 1 }),
+        at: Date.now()
+      });
+      return this.actor.update({
+        [`flags.azeroth-rpg.skillRanks.${key}`]: skill.rank + 1,
+        "system.xp.spent": (this.actor.system.xp?.spent ?? 0) + cost,
+        "flags.azeroth-rpg.xpLedger": ledger
+      });
     });
   }
 
@@ -5036,5 +5163,1022 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       return this.actor.updateEmbeddedDocuments("Item", [{ _id: item.id, "system.equipped": false }]);
     }
     return this.#wear(item);
+  }
+
+  /* -------------------------------------------- */
+  /*  The Profession tab (D11 §12)                 */
+  /* -------------------------------------------- */
+
+  /**
+   * The picks drafted on the strip, not yet confirmed: `{[tier]: [skill]}`. VIEW STATE, as the
+   * open branch is - a pick is permanent once confirmed, so a mis-click must not write it.
+   */
+  #pickDraft = {};
+
+  /** The recipe picked in the Crafting view (its uuid), view state. */
+  #recipeSel = null;
+
+  /**
+   * The picked recipe's quality: `{uuid, rarity, prefix, suffix, signature}` (affix ids, and the id
+   * of a Signature row picked from the list the door offers; D-1990: chosen from a list, never
+   * typed, and no Legendary item's Signature).
+   */
+  #quality = null;
+
+  /** The Crafting view's filters (D-1927), view state: a search, Have materials, a tier, a kind. */
+  #craftFilters = { search: "", have: false, tier: "all", kind: "all" };
+
+  /** The gathering node picked, and the item picked to disenchant, view state. */
+  #gatherNode = null;
+  #disenchantSel = null;
+
+  /** Enchanting's *Lay an enchantment* choice: `{itemId, affixId}`, view state. */
+  #enchantSel = { itemId: null, affixId: null };
+
+  /** Every card's context from the last render, by recipe uuid, so a pick can redraw one in place. */
+  #cardContexts = new Map();
+
+  /** The element the Profession tab's listeners are bound to, once per frame. */
+  #professionBoundFor = null;
+
+  /** The Profession tab's presses, one at a time each (`profession-sheet.mjs#pressGuard`). */
+  #presses = pressGuard();
+
+  /** The deferred part's render, started by `changeTab`, for `showProfession` to await. */
+  #professionRender = null;
+
+  /** The search box's debounce. */
+  #professionSearchTimer = null;
+
+  /** *Journeyman Blacksmith* (the plan's M1): the rung of the character's tier and the profession's agent noun. */
+  #professionLine(item) {
+    const rung = rungFor(this.actor.professionTier);
+    const id = item.system?.identifier ?? null;
+    const agent = AZEROTH.professionAgents?.[id] ? game.i18n.localize(AZEROTH.professionAgents[id]) : item.name;
+    return game.i18n.format("AZEROTH.Profession.Sheet.Line", { rung: game.i18n.localize(AZEROTH.rungs[rung.key]), agent });
+  }
+
+  /** The tab's view, off the reader's own flag (D11 §12). */
+  #professionView() {
+    return viewOf(game.user?.getFlag("azeroth-rpg", VIEW_FLAG));
+  }
+
+  /** A localized ability, skill or rarity label. */
+  #label(table, key) {
+    const k = table?.[key];
+    return k ? game.i18n.localize(k) : String(key ?? "");
+  }
+
+  /** One part of a Test's modifier in words: `Strength +3`, `Rank 4`, `Rare tool +2` (D-1926: never Proficiency). */
+  #partWords(part, { ability = null, abbr = false } = {}) {
+    if (part.key === "ability") {
+      const label = abbr ? game.i18n.localize(String(AZEROTH.abilities[ability] ?? "").replace(/\.Label$/, ".Abbr")) : this.#label(AZEROTH.abilities, ability);
+      return game.i18n.format("AZEROTH.Profession.Sheet.Part.Ability", { ability: label, value: signedText(part.value) });
+    }
+    if (part.key === "rank") return game.i18n.format("AZEROTH.Profession.Sheet.Part.Rank", { value: part.value });
+    return game.i18n.format("AZEROTH.Profession.Sheet.Part.Tool", { rarity: this.#label(AZEROTH.rarities, part.rarity), value: signedText(part.value) });
+  }
+
+  /**
+   * **THE PROFESSION TAB'S CONTEXT** (D11 §12). With `full` false the header and the picks owed
+   * alone (D-1982); with it, the view the reader's flag names: the Overview (Rank, tiers, skills,
+   * tool, gathering, Disenchant, projects) or the Crafting view (projects, Lay an enchantment, the
+   * filtered recipe list and one card a recipe).
+   */
+  async #profession({ full = false } = {}) {
+    const actor = this.actor;
+    const item = actor.professionItem;
+    const domId = `azeroth-prof-${actor.id}`;
+    if (!item) return { none: true, domId, canChoose: this.isEditable };
+    const sys = item.system ?? {};
+    const id = sys.identifier ?? null;
+    const row = PROFESSION_BY_ID[id] ?? null;
+    const tier = actor.professionTier;
+    const rung = rungFor(tier);
+    const ability = sys.ability ?? row?.ability ?? "int";
+    const tool = actor.professionTool();
+    const parts = bonusParts({
+      abilityMod: actor.system?.abilities?.[ability]?.mod ?? 0,
+      rank: Math.trunc(Number(sys.rank)) || 0,
+      toolRarity: tool?.rarity ?? null,
+      toolCarried: Boolean(tool)
+    });
+    const bonus = parts.reduce((n, p) => n + p.value, 0);
+    const view = this.#professionView();
+    const out = {
+      none: false, domId, id, name: item.name, img: item.img,
+      editable: this.isEditable,
+      view, overview: view === "overview", crafting: view === "crafting",
+      headerLine: game.i18n.format("AZEROTH.Profession.Sheet.Header", {
+        rung: game.i18n.localize(AZEROTH.rungs[rung.key]), tier, ability: this.#label(AZEROTH.abilities, ability), bonus: signedText(bonus)
+      }),
+      bonusText: signedText(bonus),
+      breakdown: parts.map(p => this.#partWords(p, { ability })).join(" + "),
+      strips: this.#pickStripsContext(sys, tier, rung),
+      deferred: !full
+    };
+    if (!full) return out;
+    const materials = await professionMaterials();
+    if (view === "crafting") Object.assign(out, await this.#craftingContext({ sys, id, row, tier, bonus, parts, ability, tool, materials, domId }));
+    else Object.assign(out, await this.#overviewContext({ sys, id, row, tier, bonus, tool, materials, domId }));
+    return out;
+  }
+
+  /** The *choose 2 profession skills* strips (D-1906), the draft laid over the stored picks. */
+  #pickStripsContext(sys, tier) {
+    // A stored pick retires its drafted twin, so a confirmed tier's draft never lingers.
+    return pickStrips({ profession: sys, tier, picks: sys.picks ?? null, draft: this.#pickDraft }).map(strip => ({
+      tier: strip.tier,
+      title: game.i18n.format("AZEROTH.Profession.Sheet.Strip.Title", { tier: strip.tier }),
+      hint: game.i18n.format("AZEROTH.Profession.Sheet.Strip.Hint", { rung: game.i18n.localize(AZEROTH.rungs[rungFor(strip.tier).key]) }),
+      options: strip.options.map(o => ({ ...o, label: this.#label(AZEROTH.skills, o.skill) })),
+      ready: strip.ready,
+      owedWords: game.i18n.format("AZEROTH.Profession.Sheet.Strip.Owed", { n: strip.owed })
+    }));
+  }
+
+  /** The Overview view (the plan's M2). */
+  async #overviewContext({ sys, id, row, tier, bonus, tool, materials, domId }) {
+    const actor = this.actor;
+    const rank = rankView({ rank: sys.rank, purse: unspent(actor.system?.xp ?? {}) });
+    const rows = skillTierRows({ profession: sys, tier, picks: sys.picks ?? null });
+    const toolId = row?.tool ?? sys.tools?.[0] ?? null;
+    const toolRarity = tool?.rarity ?? "common";
+    const projects = projectsOf(actor);
+    const out = {
+      rank: {
+        ...rank,
+        ofWords: game.i18n.format("AZEROTH.Profession.Sheet.Rank.Of", { max: rank.max }),
+        raiseLabel: rank.next === null
+          ? game.i18n.format("AZEROTH.Profession.Sheet.Rank.AtTop", { max: rank.max })
+          : game.i18n.format("AZEROTH.Profession.Sheet.Rank.Raise", { rank: rank.next, cost: professionRankCost(rank.next) }),
+        refusalWords: rank.refusal === "top" ? game.i18n.format("AZEROTH.Profession.Sheet.Rank.Top", { max: rank.max })
+          : rank.refusal === "purse" ? game.i18n.format("AZEROTH.Profession.Sheet.Rank.Purse", { purse: rank.purse, cost: rank.cost })
+          : null
+      },
+      ladder: ladderRows(tier).map(r => ({
+        ...r,
+        label: game.i18n.localize(AZEROTH.rungs[r.key]),
+        line: game.i18n.format("AZEROTH.Profession.Sheet.Tiers.Row", { tier: r.tier, min: r.minLevel, max: r.maxLevel }),
+        state: r.held ? game.i18n.localize("AZEROTH.Profession.Sheet.Tiers.Held") : game.i18n.format("AZEROTH.Profession.Sheet.Tiers.Opens", { level: r.minLevel })
+      })),
+      skills: {
+        countWords: game.i18n.format("AZEROTH.Profession.Sheet.Skills.Count", { held: heldSkillCount(rows), max: SKILLS_AT_TIER_FOUR }),
+        rows: rows.map(r => ({
+          state: r.state,
+          tierLabel: game.i18n.format("AZEROTH.Profession.Sheet.Skills.Tier", { tier: r.tier }),
+          stateWords: r.state === "fixed" ? game.i18n.localize("AZEROTH.Profession.Sheet.Skills.Fixed")
+            : r.state === "picked" ? game.i18n.localize("AZEROTH.Profession.Sheet.Skills.Picked")
+            : r.state === "owed" ? game.i18n.format("AZEROTH.Profession.Sheet.Skills.Owed", { n: Math.max(0, 2 - r.skills.length) })
+            : game.i18n.format("AZEROTH.Profession.Sheet.Skills.Locked", { level: r.minLevel, skills: r.listed.map(k => this.#label(AZEROTH.skills, k)).join(", ") }),
+          chips: r.skills.map(k => this.#label(AZEROTH.skills, k))
+        }))
+      },
+      tool: {
+        name: tool?.item?.name ?? materials[toolId]?.name ?? toolId ?? "",
+        img: tool?.item?.img ?? materials[toolId]?.img ?? null,
+        rarityClass: toolRarity === "common" ? "" : rarityClass(toolRarity),
+        line: game.i18n.format("AZEROTH.Profession.Sheet.Tool.Line", { rarity: this.#label(AZEROTH.rarities, toolRarity), price: coins(toolPrice(toolRarity) ?? 0) }),
+        carried: Boolean(tool),
+        bonusText: signedText(toolBonus(toolRarity))
+      },
+      summary: projects.length ? {
+        heading: game.i18n.format("AZEROTH.Profession.Sheet.Project.Summary", { n: projects.length }),
+        rows: projects.map(p => ({
+          name: p.name,
+          rarityClass: p.rarity && p.rarity !== "common" ? rarityClass(p.rarity) : "",
+          line: game.i18n.format("AZEROTH.Profession.Sheet.Project.SummaryLine", {
+            profession: this.#label(AZEROTH.professions, p.trade), run: p.run < 0 ? signedText(p.run) : p.run, target: p.target, tests: p.tests
+          })
+        }))
+      } : null,
+      harvest: this.#harvestContext(id, domId)
+    };
+    const family = row?.gathers?.family ?? sys.gathers?.family ?? null;
+    if (family === "essence") out.disenchant = this.#disenchantContext({ tool, materials, domId });
+    else if (family) out.gather = await this.#gatherContext({ family, tier, domId, materials });
+    return out;
+  }
+
+  /** What a defeated creature gives this profession, in words, or null (D-1915). */
+  #harvestWords(id) {
+    const kinds = Object.entries(HARVEST).filter(([, h]) => h.profession === id).map(([kind]) => kind);
+    if (!kinds.length) return null;
+    return kinds.map(kind => game.i18n.localize(`AZEROTH.Profession.Sheet.Harvest.Explain.${kind}`)).join(" ");
+  }
+
+  /** A harvest refused, in words (D-681): the creature's type, a harvest already taken, its tier, or the tool. */
+  #harvestReason(k, materials = {}) {
+    if (k.reason === "kind") {
+      return game.i18n.format("AZEROTH.Profession.Sheet.Harvest.Refuse.Kind", {
+        verb: this.#label(AZEROTH.harvestKinds, k.kind), types: k.allowed.map(t => this.#label(AZEROTH.creatureTypes, t)).join(", ")
+      });
+    }
+    if (k.reason === "done") return game.i18n.localize("AZEROTH.Profession.Sheet.Harvest.Refuse.Done");
+    if (k.reason === "tier") return refusalWords({ reason: "harvestTier", tier: k.tier }, { materials });
+    return null;
+  }
+
+  /**
+   * **THE HARVEST CARD** (D-1996; the lead: make Skin, Butcher and Salvage reachable). The DEFEATED
+   * creatures this user has targeted, each with the profession's harvests (`harvestRows`), a refused
+   * one greyed with its reason in words; one line when nothing defeated is targeted. Each press is
+   * `workflows.harvest` with the token as the target. A profession that harvests nothing has none.
+   */
+  #harvestContext(id, domId) {
+    const words = this.#harvestWords(id);
+    if (!words) return null;
+    const tool = this.actor.professionTool();
+    const creatures = [...(game.user?.targets ?? [])].map(token => ({
+      ...harvestSnapshotOf(token),
+      id: token.document?.uuid ?? token.id,
+      name: token.document?.name ?? token.name ?? ""
+    }));
+    const rows = harvestRows({ creatures, profession: id, tier: this.actor.professionTier });
+    const toolWords = tool ? null : refusalWords({ reason: "tool", tool: PROFESSION_BY_ID[id]?.tool ?? null });
+    return {
+      words,
+      toolWords,
+      rows: rows.map(r => ({
+        uuid: r.id,
+        name: r.name,
+        kinds: r.kinds.map(k => ({
+          kind: k.kind,
+          id: `${domId}-harvest-${r.id.replace(/[^A-Za-z0-9_-]/g, "_")}-${k.kind}`,
+          label: this.#label(AZEROTH.harvestKinds, k.kind),
+          ok: k.ok && Boolean(tool) && this.isEditable,
+          reason: this.#harvestReason(k)
+        }))
+      }))
+    };
+  }
+
+  /** The Gather card by biome (D-1915): the biome the GM named, the nodes at the tier and below, the Test. */
+  async #gatherContext({ family, tier, domId, materials }) {
+    const actor = this.actor;
+    const stored = game.user?.getFlag("azeroth-rpg", BIOME_FLAG);
+    const biome = BIOME_KEYS.includes(stored) ? stored : null;
+    const nodes = biome ? nodesIn({ biome, family, tier }) : [];
+    if (!nodes.some(n => n.material === this.#gatherNode)) this.#gatherNode = nodes[0]?.material ?? null;
+    const snap = await gatherSnapshot(actor, { biome, material: this.#gatherNode });
+    const skill = snap.skill ?? GATHER_SKILL[family] ?? null;
+    const ability = skill ? AZEROTH.skillAbility[skill] : null;
+    const total = (snap.parts ?? []).reduce((n, p) => n + (Number(p.value) || 0), 0);
+    // Every grey says why (D-681): no biome picked yet, no node in it (the empty list's own words),
+    // or the door's own refusal beside Gather.
+    const refusal = snap.ok ? null
+      : !biome ? game.i18n.localize("AZEROTH.Profession.Sheet.Gather.PickBiome")
+      : snap.refusal?.reason === "noNode" ? null
+      : snap.words;
+    return {
+      heading: game.i18n.format("AZEROTH.Profession.Sheet.Gather.Heading", { family: this.#label(AZEROTH.gatherFamilies, family) }),
+      biome,
+      biomes: BIOME_KEYS.map(key => ({ key, label: this.#label(AZEROTH.biomes, key), selected: key === biome })),
+      nodes: nodes.map(n => ({
+        ...n,
+        id: `${domId}-node-${n.material}`,
+        name: materials[n.material]?.name ?? n.material,
+        img: materials[n.material]?.img ?? null,
+        checked: n.material === this.#gatherNode,
+        tierWords: game.i18n.format("AZEROTH.Profession.Sheet.Gather.Node", { tier: n.tier, dc: n.dc })
+      })),
+      emptyWords: biome ? game.i18n.format("AZEROTH.Profession.Sheet.Gather.Empty", { biome: this.#label(AZEROTH.biomes, biome) }) : "",
+      testWords: game.i18n.format("AZEROTH.Profession.Sheet.Gather.Test", { skill: this.#label(AZEROTH.skills, skill), bonus: signedText(total) }),
+      partsWords: game.i18n.format("AZEROTH.Profession.Sheet.Gather.Parts", {
+        parts: (snap.parts ?? []).map(p => this.#partWords({ key: p.key, value: p.value, rarity: actor.professionTool()?.rarity }, { ability, abbr: true })).join(" + ")
+      }),
+      wellFed: isWellFed(actor.effects),
+      canPress: this.isEditable && snap.ok,
+      refusal
+    };
+  }
+
+  /** Enchanting's Gather card is Disenchant (D-1915, D-1933): what may be taken apart, the Arcana line, the yields. */
+  #disenchantContext({ tool, materials, domId }) {
+    const actor = this.actor;
+    const choices = disenchantChoices(actor.items);
+    if (!choices.some(i => i.id === this.#disenchantSel)) this.#disenchantSel = choices[0]?.id ?? null;
+    const parts = bonusParts(gatherInputs({ abilities: actor.system?.abilities, ranks: actor.getFlag("azeroth-rpg", "skillRanks") ?? {} },
+      "arcana", AZEROTH.skillAbility.arcana, tool));
+    const total = parts.reduce((n, p) => n + p.value, 0);
+    const toolId = PROFESSION_BY_ID.enchanting.tool;
+    return {
+      domId,
+      hint: game.i18n.format("AZEROTH.Profession.Sheet.Disenchant.Hint", { bonus: signedText(total) }),
+      partsWords: game.i18n.format("AZEROTH.Profession.Sheet.Gather.Parts", {
+        parts: parts.map(p => this.#partWords(p, { ability: AZEROTH.skillAbility.arcana, abbr: true })).join(" + ")
+      }),
+      choices: choices.map(i => ({ id: i.id, label: game.i18n.format("AZEROTH.Profession.Sheet.Disenchant.Option", { name: shownName(i), rarity: this.#label(AZEROTH.rarities, i.system?.rarity) }), selected: i.id === this.#disenchantSel })),
+      canPress: this.isEditable && Boolean(tool) && choices.length > 0,
+      refusal: tool ? null : refusalWords({ reason: "tool", tool: toolId }, { materials }),
+      yields: Object.entries(DISENCHANT_YIELD).map(([rarity, material]) =>
+        game.i18n.format("AZEROTH.Profession.Sheet.Disenchant.Yield", { rarity: this.#label(AZEROTH.rarities, rarity), name: materials[material]?.name ?? material }))
+    };
+  }
+
+  /** The Crafting view (the plan's M3 to M5). */
+  async #craftingContext({ sys, id, tier, bonus, parts, ability, tool, materials, domId }) {
+    const actor = this.actor;
+    const [bases, traits, affixes] = await Promise.all([professionRecipes(id), professionTraits(), professionAffixes()]);
+    const have = materialCounts(actor.items);
+    const downtime = downtimeState();
+    const fed = isWellFed(actor.effects);
+    const groups = recipesFor(id, bases, tier);
+    const known = new Set(groups.flatMap(g => g.recipes.map(r => r.item.uuid)));
+    if (this.#recipeSel && !known.has(this.#recipeSel)) this.#recipeSel = null;
+    if (this.#quality && this.#quality.uuid !== this.#recipeSel) this.#quality = null;
+
+    // One card a recipe, judged by the laws the door judges by (D-1981); the picked one whole.
+    const cards = [];
+    const listGroups = [];
+    for (const group of groups) {
+      const label = group.localize ? game.i18n.localize(group.label) : group.label;
+      const rows = [];
+      for (const { item } of group.recipes) {
+        const card = recipeCard({ base: item, trade: id, tier, materials, have, toolCarried: Boolean(tool), downtime, bonus });
+        rows.push({ id: item.uuid, name: item.name, img: item.img, tier: craftsOf(item).find(s => s.trade === id)?.tier ?? 1, makeable: card.makeable });
+        cards.push({ item, card, label });
+      }
+      listGroups.push({ key: group.key, label, localize: false, recipes: rows });
+    }
+    const open = openGroups(game.user?.getFlag("azeroth-rpg", OPEN_FLAG), id);
+    const filtered = filterRecipes({ groups: listGroups, filters: this.#craftFilters, open });
+
+    this.#cardContexts = new Map();
+    const cardContexts = [];
+    for (const { item, card, label } of cards) {
+      const context = item.uuid === this.#recipeSel
+        ? await this.#pickedCard({ item, label, id, tier, bonus, parts, ability, tool, materials, affixes, traits, fed, domId })
+        : await this.#cardContext({ item, label, card, id, parts, ability, tool, materials, traits, fed, domId, bonus });
+      this.#cardContexts.set(item.uuid, { item, label, card, context });
+      cardContexts.push(context);
+    }
+
+    const projects = projectSplit(projectsOf(actor), id);
+    return {
+      selected: this.#recipeSel,
+      cards: cardContexts,
+      groups: filtered.groups.map(g => ({
+        ...g,
+        countWords: game.i18n.format("AZEROTH.Profession.Sheet.List.Count", { n: g.count }),
+        makeableWords: game.i18n.format("AZEROTH.Profession.Sheet.List.CanMake", { n: g.makeable }),
+        recipes: g.recipes.map(r => ({
+          ...r,
+          domId: `${domId}-row-${r.id.replace(/[^A-Za-z0-9_-]/g, "_")}`,
+          selected: r.id === this.#recipeSel,
+          tierWords: game.i18n.format("AZEROTH.Profession.Sheet.Row.Tier", { tier: r.tier }),
+          makeableWords: game.i18n.format("AZEROTH.Profession.Sheet.Row.Makeable", { n: r.makeable }),
+          makeableTip: r.makeable
+            ? game.i18n.format("AZEROTH.Profession.Sheet.Row.MakeableTip", { n: r.makeable })
+            : game.i18n.localize("AZEROTH.Profession.Sheet.Row.NoneTip")
+        }))
+      })),
+      filters: {
+        ...this.#craftFilters,
+        active: filtered.active,
+        tierOptions: tierOptions(tier).map(t => ({ value: String(t), label: game.i18n.format("AZEROTH.Profession.Sheet.Filter.Tier", { tier: t }), selected: String(this.#craftFilters.tier) === String(t) })),
+        kindOptions: kindOptions(listGroups).map(k => ({ key: k.key, label: k.label, selected: this.#craftFilters.kind === k.key }))
+      },
+      projects: {
+        cards: projects.mine.map(p => this.#projectContext(p, { id, bonus, tool, fed })),
+        othersWords: projects.others ? game.i18n.format("AZEROTH.Profession.Sheet.Project.Others", { n: projects.others }) : ""
+      },
+      enchant: id === "enchanting" ? this.#enchantContext({ tier, affixes, traits, tool, materials }) : null
+    };
+  }
+
+  /** A trait chip (D-1928): its tooltip is 08 §5's entry, read through a parameter, from the trait pack. */
+  #traitChip(name, traits) {
+    const hit = traitEntry(name, traits);
+    if (!hit) return { name, tip: null, aria: name };
+    const sys = hit.entry?.system ?? {};
+    const meta = [];
+    if (sys.kind && AZEROTH.traitKinds?.[sys.kind]) meta.push(game.i18n.format("AZEROTH.Profession.Sheet.Trait.Kind", { kind: game.i18n.localize(AZEROTH.traitKinds[sys.kind]) }));
+    if (sys.firesOn) meta.push(game.i18n.format("AZEROTH.Profession.Sheet.Trait.Fires", { when: sys.firesOn }));
+    const escape = foundry.utils.escapeHTML;
+    const description = String(sys.description ?? "");
+    const tip = `<div class="azeroth-trait-tip"><strong>${escape(hit.name)}</strong>${meta.length ? ` <em>${escape(meta.join(" · "))}</em>` : ""}${description}</div>`;
+    const plain = description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    return { name, tip, aria: `${name}: ${plain}` };
+  }
+
+  /** The words every card shares: the Extended Test, the target, the Craft Test, the time, the collapse risk. */
+  #cardWords({ plan, expected, parts, ability, fed, interval }) {
+    const view = expectedView(expected);
+    const targets = Object.entries(TARGET_SL).map(([r, sl]) => game.i18n.format("AZEROTH.Profession.Sheet.Detail.TargetRow", { rarity: this.#label(AZEROTH.rarities, r), sl })).join(" · ");
+    const total = parts.reduce((n, p) => n + p.value, 0);
+    return {
+      extendedWords: game.i18n.format("AZEROTH.Profession.Sheet.Detail.ExtendedValue", { dc: plan.dc, interval }),
+      targetWords: game.i18n.format("AZEROTH.Profession.Sheet.Detail.TargetValue", { target: plan.target }),
+      targetsWords: game.i18n.format("AZEROTH.Profession.Sheet.Detail.Targets", { targets }),
+      craftTestWords: game.i18n.format(fed ? "AZEROTH.Profession.Sheet.Detail.CraftTestFed" : "AZEROTH.Profession.Sheet.Detail.CraftTestValue", {
+        bonus: signedText(total), parts: parts.map(p => this.#partWords(p, { ability })).join(" + ")
+      }),
+      takesWords: view.tests === null
+        ? game.i18n.localize("AZEROTH.Profession.Sheet.Detail.Never")
+        : game.i18n.format("AZEROTH.Profession.Sheet.Detail.TakesValue", { tests: view.tests, interval }),
+      collapseWords: game.i18n.format("AZEROTH.Profession.Sheet.Detail.CollapseValue", { pct: view.collapse })
+    };
+  }
+
+  /** A hidden card's context, off `recipeCard` (D-1981). */
+  async #cardContext({ item, label, card, id, parts, ability, tool, materials, traits, fed, domId }) {
+    const interval = game.i18n.localize(AZEROTH.craftIntervals[card.plan.interval] ?? card.plan.interval);
+    return {
+      id: item.uuid,
+      domId: `${domId}-card-${item.uuid.replace(/[^A-Za-z0-9_-]/g, "_")}`,
+      selected: false,
+      editable: this.isEditable,
+      name: item.name,
+      img: item.img,
+      rarityClass: "",
+      kindLine: game.i18n.format("AZEROTH.Profession.Sheet.Detail.Kind", { group: label, tier: card.plan.tier }),
+      statLine: this.#statLine(item),
+      traits: traitTokens(item.system?.traits).map(t => this.#traitChip(t, traits)),
+      description: await professionDescription(item),
+      ...this.#cardWords({ plan: card.plan, expected: card.expected, parts, ability, fed, interval }),
+      priceWords: coins(Number(item.system?.cost) || 0),
+      quality: card.forgeable ? this.#qualityContext({ item, rarity: "common", tier: this.actor.professionTier, prefix: null, suffix: null, signature: null, affixes: null, signatures: [], forge: null, id, traits }) : null,
+      reagents: card.reagents.map(l => this.#reagentRow(l)),
+      toolWords: this.#toolWords(id, tool, materials),
+      refusals: card.refusals.map(r => refusalWords(r, { materials })),
+      notes: [],
+      ok: card.ok
+    };
+  }
+
+  /**
+   * **THE PICKED CARD, JUDGED WHOLE** (D-1981): `workflows.craftSnapshot` with the chosen quality,
+   * the bag room included, which is the very reading `workflows.craft` refuses by.
+   */
+  async #pickedCard({ item, label, id, tier, parts, ability, tool, materials, affixes, traits, fed, domId }) {
+    const q = this.#quality?.uuid === item.uuid ? this.#quality : { uuid: item.uuid, rarity: "common", prefix: null, suffix: null, signature: null };
+    const ceiling = raritiesFor(tier);
+    const rarity = ceiling.includes(q.rarity) ? q.rarity : "common";
+    const prefix = affixes.find(a => a.id === q.prefix) ?? null;
+    const suffix = affixes.find(a => a.id === q.suffix) ?? null;
+    const chosen = [prefix && { ...prefix, kind: "prefix" }, suffix && { ...suffix, kind: "suffix" }].filter(Boolean);
+    const snap = await craftSnapshot(this.actor, { base: item, rarity, affixes: chosen, signature: this.#signatureOf(q, rarity) });
+    const interval = game.i18n.localize(AZEROTH.craftIntervals[snap.plan.interval] ?? snap.plan.interval);
+    const forgeOk = snap.forge?.ok === true && rarity !== "common";
+    return {
+      id: item.uuid,
+      domId: `${domId}-card-${item.uuid.replace(/[^A-Za-z0-9_-]/g, "_")}`,
+      selected: true,
+      editable: this.isEditable,
+      name: snap.name || item.name,
+      img: item.img,
+      rarityClass: rarity === "common" ? "" : rarityClass(rarity),
+      kindLine: game.i18n.format("AZEROTH.Profession.Sheet.Detail.Kind", { group: label, tier: snap.plan.tier }),
+      statLine: this.#statLine(item),
+      traits: traitTokens(item.system?.traits).map(t => this.#traitChip(t, traits)),
+      description: await professionDescription(item),
+      ...this.#cardWords({ plan: snap.plan, expected: snap.expected, parts, ability, fed, interval }),
+      priceWords: coins(Number(snap.price) || 0),
+      quality: snap.rows?.rarity ? this.#qualityContext({ item, rarity, tier, prefix, suffix, signature: q.signature, affixes, signatures: snap.signatures ?? [], forge: snap.forge, id, traits, rows: snap.rows }) : null,
+      reagents: snap.reagents.map(l => this.#reagentRow(l)),
+      toolWords: this.#toolWords(id, tool, materials),
+      refusals: snap.words,
+      notes: forgeOk && snap.ok ? (snap.forge.notes ?? []) : [],
+      ok: snap.ok
+    };
+  }
+
+  /**
+   * The Forge's controls for a card (D-1929): Rarity up to the tier's ceiling, Prefix and Suffix
+   * from Uncommon with ONLY the legal options (`affixChoices`), and from Rare a Signature picked
+   * from the rows the door offers (`craftSnapshot().signatures`: already held to the item's type,
+   * the rarity and the budget left, Legendary items' Signatures out; D-1990), each with its source
+   * item, its words and its cost. A hidden card is drawn at Common; its controls are live once it
+   * is picked.
+   */
+  #qualityContext({ item, rarity, tier, prefix, suffix, signature, affixes, signatures, forge, id, traits, rows = null }) {
+    const ceiling = RARITY_CEILING[Math.min(4, Math.max(1, tier))];
+    const show = rows ?? { rarity: true, prefix: false, suffix: false, signature: false };
+    const label = a => game.i18n.format("AZEROTH.Profession.Sheet.Quality.Option", { name: a.name, cost: affixCost(a) });
+    const pool = affixes ?? [];
+    const sigRows = show.signature ? signatureRows(signatures, signature) : [];
+    // The affixes' budget is what the picked Signature leaves: its kind is what `affixChoices` prices.
+    const sigKind = signatureRowOf(sigRows, signature)?.kind ?? null;
+    return {
+      hint: game.i18n.format("AZEROTH.Profession.Sheet.Quality.Hint", { rarity: this.#label(AZEROTH.rarities, ceiling) }),
+      rows: show,
+      rarities: raritiesFor(tier).map(r => ({ value: r, label: this.#label(AZEROTH.rarities, r), selected: r === rarity })),
+      prefixes: show.prefix ? affixChoices({ item, rarity, trade: id, kind: "prefix", affixes: pool, other: suffix, current: prefix, signature: sigKind })
+        .map(a => ({ id: a.id, label: label(a), selected: a.id === prefix?.id })) : [],
+      suffixes: show.suffix ? affixChoices({ item, rarity, trade: id, kind: "suffix", affixes: pool, other: prefix, current: suffix, signature: sigKind })
+        .map(a => ({ id: a.id, label: label(a), selected: a.id === suffix?.id })) : [],
+      // Each row in words: its source item, its cost and its words, clipped on the option and
+      // whole beneath the select for the one picked (D-1990).
+      signatures: sigRows.map(r => ({
+        id: r.id, selected: r.selected,
+        label: game.i18n.format("AZEROTH.Profession.Sheet.Quality.SignatureOption", { from: r.from, cost: r.cost, text: clip(r.text, 60) })
+      })),
+      signaturePicked: (() => {
+        const row = signatureRowOf(sigRows, signature);
+        return row ? { from: game.i18n.format("AZEROTH.Profession.Sheet.Quality.SignatureFrom", { from: row.from, cost: row.cost }), text: row.text } : null;
+      })(),
+      chips: [prefix, suffix].filter(Boolean).map(a => this.#traitChip(a.name, traits)).filter(c => c.tip),
+      legalWords: forge?.ok === true && rarity !== "common" ? game.i18n.format("AZEROTH.Profession.Sheet.Quality.Legal", { spent: forge.spent ?? 0 }) : null
+    };
+  }
+
+  /** A reagent line: `<have> / <need>`, and *short* or *enough* in words (never colour alone). */
+  #reagentRow(line) {
+    return {
+      name: line.name ?? line.identifier,
+      img: line.img ?? null,
+      short: line.short > 0,
+      need: line.need,
+      haveWords: game.i18n.format(line.short > 0 ? "AZEROTH.Profession.Sheet.Detail.HaveShort" : "AZEROTH.Profession.Sheet.Detail.HaveEnough", { have: line.have, need: line.need })
+    };
+  }
+
+  /** The tool line under the reagents: its name, carried or not, in words. */
+  #toolWords(id, tool, materials) {
+    const toolId = PROFESSION_BY_ID[id]?.tool ?? null;
+    const name = tool?.item?.name ?? materials[toolId]?.name ?? toolId ?? "";
+    return game.i18n.format(tool ? "AZEROTH.Profession.Sheet.Detail.ToolCarried" : "AZEROTH.Profession.Sheet.Detail.ToolMissing", { tool: name });
+  }
+
+  /** A weapon's, a suit's or a thing's stat line in words (`statParts`). */
+  #statLine(item) {
+    return statParts(item).map(p => game.i18n.format(`AZEROTH.Profession.Sheet.Stat.${p.key}`, { value: p.value })).join(" · ");
+  }
+
+  /** One stored project's card (the plan's M5). */
+  #projectContext(p, { id, bonus, tool, fed }) {
+    const refusal = testRefusal({ project: p, profession: id, toolCarried: Boolean(tool), ...downtimeState() });
+    // A `delivering` project (a write lost after its item was made) is collected too (`collectable`).
+    const ready = collectable(p);
+    const view = expectedView(expectedFor({ bonus, dc: p.dc, target: p.target, run: p.run, wellFed: fed }));
+    const interval = game.i18n.localize(AZEROTH.craftIntervals[p.interval] ?? p.interval ?? "");
+    return {
+      id: p.id,
+      domId: `azeroth-prof-${this.actor.id}-project-${String(p.id).replace(/[^A-Za-z0-9_-]/g, "_")}`,
+      name: p.name,
+      editable: this.isEditable,
+      rarityClass: p.rarity && p.rarity !== "common" ? rarityClass(p.rarity) : "",
+      planWords: game.i18n.format("AZEROTH.Profession.Sheet.Project.Plan", { rarity: this.#label(AZEROTH.rarities, p.rarity), dc: p.dc, interval }),
+      runningWords: game.i18n.format("AZEROTH.Profession.Sheet.Project.Running", { run: signedText(p.run), target: p.target, tests: p.tests }),
+      fill: projectFill(p),
+      chips: stepChips(p.log),
+      expectedWords: ready ? "" : view.tests === null
+        ? game.i18n.localize("AZEROTH.Profession.Sheet.Project.Never")
+        : game.i18n.format("AZEROTH.Profession.Sheet.Project.Expected", { tests: view.tests, pct: view.collapse }),
+      ready,
+      refusal: !ready && refusal ? refusalWords({ ...refusal, tool: refusal.reason === "tool" ? (PROFESSION_BY_ID[id]?.tool ?? null) : undefined }) : null
+    };
+  }
+
+  /** Enchanting's *Lay an enchantment* (08 §18; D-1929): the items, then only what the item can carry. */
+  #enchantContext({ tier, affixes, traits, tool, materials }) {
+    const items = this.actor.items
+      .filter(i => forgeable(i) && !isClassicFind(i))
+      .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+    if (!items.some(i => i.id === this.#enchantSel.itemId)) this.#enchantSel = { itemId: items[0]?.id ?? null, affixId: null };
+    const item = items.find(i => i.id === this.#enchantSel.itemId) ?? null;
+    // ONLY WHAT THE DOOR ACCEPTS (D-1929; the review's M2): every choice the tier opens is asked
+    // `recipes.mjs#enchantVerdict`, the reading `enchant` and `applyAffixInPlace` refuse by, so no
+    // option is listed that the press would refuse. Where none is left, the first refusal says why.
+    const data = item ? { name: item.name, type: item.type, system: item.system.toObject(), flags: item.toObject().flags ?? {} } : null;
+    const verdicts = item ? enchantChoices({ item, tier, affixes }).map(a => ({ a, v: enchantVerdict({ item: data, affix: a, pool: affixes }) })) : [];
+    const offered = verdicts.filter(x => x.v.ok).map(x => x.a);
+    const barred = verdicts.find(x => !x.v.ok)?.v ?? null;
+    if (!offered.some(a => a.id === this.#enchantSel.affixId)) this.#enchantSel.affixId = null;
+    const affix = offered.find(a => a.id === this.#enchantSel.affixId) ?? null;
+    const chip = affix ? this.#traitChip(affix.name, traits) : null;
+    const refusal = !tool ? refusalWords({ reason: "tool", tool: PROFESSION_BY_ID.enchanting.tool }, { materials })
+      : item && !offered.length && barred ? refusalWords(barred, { materials })
+      : item && offered.length && !affix ? game.i18n.localize("AZEROTH.Profession.Sheet.Enchant.PickFirst")
+      : null;
+    return {
+      items: items.map(i => ({ id: i.id, name: shownName(i), selected: i.id === this.#enchantSel.itemId })),
+      affixes: offered.map(a => ({ id: a.id, label: game.i18n.format("AZEROTH.Profession.Sheet.Quality.Option", { name: a.name, cost: affixCost(a) }), selected: a.id === this.#enchantSel.affixId })),
+      chip: chip?.tip ? chip : null,
+      ready: this.isEditable && Boolean(item && affix && tool),
+      refusal,
+      // The empty list's own line is said only where no door refusal already says why.
+      noAffix: Boolean(item) && !offered.length && !barred
+    };
+  }
+
+  /* -------------------------------------------- */
+  /*  The Profession tab's listeners               */
+  /* -------------------------------------------- */
+
+  /**
+   * Everything the Profession tab needs that an `actions` entry cannot carry, DELEGATED ONCE per
+   * rendered frame (the bags' pattern): the Forge's selects, the filters, the biome, the node and
+   * the Disenchant and enchantment selects are `change` events on `data-prof-*` hooks (D-677); the
+   * search box is debounced; a recipe group's toggle is remembered on the reader's flag; a trait
+   * chip opens its tooltip on focus and Escape closes it (D-1928).
+   */
+  #bindProfession() {
+    AzerothCharacterSheet.#hookProfessionGlobals();
+    if (this.#professionBoundFor === this.element) return;
+    this.#professionBoundFor = this.element;
+    const root = this.element;
+    const inTab = el => el?.closest?.('section[data-tab="profession"]');
+
+    root.addEventListener("change", event => {
+      const el = event.target;
+      if (!inTab(el)) return;
+      const ds = el.dataset ?? {};
+      if (ds.profQuality) return this.#onQualityChange(ds.profQuality, el.value, ds.recipeId);
+      if (ds.profFilter) {
+        const key = ds.profFilter;
+        if (key === "search") return null;
+        this.#craftFilters = { ...this.#craftFilters, [key]: key === "have" ? el.checked === true : (el.value || "all") };
+        return this.render({ parts: ["profession"] });
+      }
+      if (ds.profBiome !== undefined) return this.#setBiome(el.value);
+      if (ds.profNode !== undefined) {
+        this.#gatherNode = el.value || null;
+        return this.render({ parts: ["profession"] });
+      }
+      if (ds.profDisenchant !== undefined) { this.#disenchantSel = el.value || null; return null; }
+      if (ds.profEnchant) {
+        if (ds.profEnchant === "item") this.#enchantSel = { itemId: el.value || null, affixId: null };
+        else this.#enchantSel = { ...this.#enchantSel, affixId: el.value || null };
+        return this.render({ parts: ["profession"] });
+      }
+      return null;
+    });
+
+    // The search re-renders on a pause, and core restores the box's focus and caret by its id.
+    root.addEventListener("input", event => {
+      const el = event.target;
+      if (!inTab(el) || el.dataset?.profFilter !== "search") return;
+      this.#craftFilters = { ...this.#craftFilters, search: el.value };
+      clearTimeout(this.#professionSearchTimer);
+      this.#professionSearchTimer = setTimeout(() => { if (this.rendered) this.render({ parts: ["profession"] }); }, 200);
+    });
+
+    // A group opened or closed by hand is remembered per profession and group (D-1927). A group
+    // forced open by a filter is not written: closing the filter puts it back as the reader left it.
+    root.addEventListener("toggle", event => {
+      const details = event.target;
+      if (!details?.matches?.("details[data-recipe-group]") || !inTab(details)) return;
+      if (filtersActive(this.#craftFilters)) return;
+      const id = this.actor.professionItem?.system?.identifier;
+      if (!id) return;
+      const stored = game.user?.getFlag("azeroth-rpg", OPEN_FLAG);
+      const isOpen = openGroups(stored, id).includes(details.dataset.recipeGroup);
+      if (isOpen === details.open) return;
+      void game.user?.setFlag("azeroth-rpg", OPEN_FLAG, withGroupOpen(stored, id, details.dataset.recipeGroup, details.open)).catch(() => null);
+    }, true);
+
+    // A trait chip: focus opens its tooltip as a hover does, blur and Escape close it. Escape is
+    // kept from core, which would otherwise close the whole sheet (D-758).
+    root.addEventListener("focusin", event => {
+      const chip = event.target.closest?.("[data-prof-trait]");
+      if (chip && inTab(chip)) game.tooltip?.activate?.(chip);
+    });
+    root.addEventListener("focusout", event => {
+      if (event.target.closest?.("[data-prof-trait]") && game.tooltip?.element === event.target) game.tooltip.deactivate();
+    });
+  }
+
+  static #profGlobalsHooked = false;
+
+  /**
+   * Two listeners the whole class shares, bound once: a target change re-draws an open Profession
+   * tab (the Harvest card lists what the user targets, D-1996), and Escape with a trait chip's
+   * tooltip open closes THAT and nothing else. Core reads Escape on the window as *dismiss* and
+   * closes every window when focus is on the body, so the capture listener on the document stops
+   * it before core sees it, whether the tooltip came from focus or a hover (D-1928).
+   */
+  static #hookProfessionGlobals() {
+    if (AzerothCharacterSheet.#profGlobalsHooked) return;
+    AzerothCharacterSheet.#profGlobalsHooked = true;
+    Hooks.on("targetToken", user => {
+      if (user !== game.user) return;
+      for (const app of foundry.applications.instances.values()) {
+        if (app instanceof AzerothCharacterSheet && app.rendered && app.tabGroups.primary === "profession") app.render({ parts: ["profession"] });
+      }
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key !== "Escape") return;
+      const chip = game.tooltip?.element ?? null;
+      if (!chip?.matches?.("[data-prof-trait]")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      game.tooltip.deactivate();
+    }, true);
+  }
+
+  /** Show the picked recipe's card and light its row, with no render (D-738's pattern). */
+  #applyRecipe() {
+    const section = this.element?.querySelector('section[data-tab="profession"]');
+    if (!section) return;
+    const id = this.#recipeSel;
+    let found = false;
+    for (const card of section.querySelectorAll(".azeroth-prof-detail[data-recipe-card]")) {
+      const on = card.dataset.recipeCard === id;
+      card.hidden = !on;
+      if (on) found = true;
+    }
+    for (const row of section.querySelectorAll(".azeroth-prof-row[data-recipe-id]")) {
+      const on = row.dataset.recipeId === id;
+      row.classList.toggle("is-selected", on);
+      row.setAttribute("aria-pressed", String(on));
+    }
+    const hint = section.querySelector(".azeroth-prof-pickhint");
+    if (hint) hint.hidden = found;
+  }
+
+  /** The view switched: the reader's flag, then the part (D11 §12). */
+  async #setProfessionView(view, { render = true } = {}) {
+    const next = viewOf(view);
+    await game.user?.setFlag("azeroth-rpg", VIEW_FLAG, next).catch(() => null);
+    if (render) return this.render({ parts: ["profession"] });
+    return null;
+  }
+
+  /** The biome the GM named, on the reader's flag (D-1915). */
+  async #setBiome(biome) {
+    const value = BIOME_KEYS.includes(biome) ? biome : null;
+    this.#gatherNode = null;
+    await game.user?.setFlag("azeroth-rpg", BIOME_FLAG, value).catch(() => null);
+    return this.render({ parts: ["profession"] });
+  }
+
+  /** The Signature a quality carries, as the door takes it (`{id}`, a row the door offered), or null; none at Common (D-1990). */
+  #signatureOf(q, rarity = q?.rarity) {
+    if (!q?.signature || !rarity || rarity === "common") return null;
+    return { id: q.signature };
+  }
+
+  /** A Forge control changed on the picked card: the quality, then the part. */
+  async #onQualityChange(field, value, recipeId) {
+    if (!recipeId) return null;
+    const q = this.#quality?.uuid === recipeId ? { ...this.#quality } : { uuid: recipeId, rarity: "common", prefix: null, suffix: null, signature: null };
+    if (field === "rarity") Object.assign(q, { rarity: value || "common", prefix: null, suffix: null, signature: null });
+    else q[field] = value || null;
+    this.#recipeSel = recipeId;
+    this.#quality = q;
+    return this.render({ parts: ["profession"] });
+  }
+
+  /* -------------------------------------------- */
+  /*  The Profession tab's actions                 */
+  /* -------------------------------------------- */
+
+  static async #onProfessionView(event, target) {
+    return this.#setProfessionView(target.dataset.view);
+  }
+
+  /**
+   * *Choose a profession* (the plan's M1): the compendium browser in pick mode on the professions
+   * pack (D-645). The pick embeds the profession; `AzerothActor#_onCreateDescendantDocuments`
+   * makes it THE profession, replaces any other with its Rank (03 §4) and clears the owed flag.
+   */
+  static async #onChooseProfession() {
+    if (!this.isEditable) return null;
+    const { AzerothCompendiumBrowser } = await import("./compendium-browser.mjs");
+    return AzerothCompendiumBrowser.browse({
+      category: "professions",
+      pick: {
+        title: game.i18n.localize("AZEROTH.Profession.Sheet.Choose"),
+        onPick: async doc => {
+          if (doc?.type !== "profession") {
+            ui.notifications?.warn(game.i18n.format("AZEROTH.Profession.Sheet.NotProfession", { name: doc?.name ?? "" }));
+            return null;
+          }
+          // The door judges it a profession and embeds it with its source (`workflows.chooseProfession`).
+          return this.#presses.run("chooseProfession", () => chooseProfession(this.actor, { uuid: doc.uuid }));
+        }
+      }
+    });
+  }
+
+  /**
+   * A chip on the picks strip toggled (D-1906): a DRAFT, judged by `pickRefusal` against the
+   * stored picks plus the draft before an add. Nothing is written until Confirm.
+   */
+  static async #onPickProfessionSkill(event, target) {
+    const item = this.actor.professionItem;
+    if (!item || !this.isEditable) return null;
+    const tier = Number(target.dataset.pickTier);
+    const skill = target.dataset.skill;
+    const drafted = (this.#pickDraft[tier] ?? []).includes(skill);
+    if (!drafted) {
+      const merged = mergedPicks({ profession: item.system, picks: item.system.picks, draft: this.#pickDraft, pickTier: tier });
+      const refusal = pickRefusal({ profession: item.system, tier: this.actor.professionTier, picks: { ...(item.system.picks ?? {}), [tier]: merged }, pickTier: tier, skill });
+      if (refusal) {
+        ui.notifications?.warn(game.i18n.format(AZEROTH.professionRefusals[refusal.reason] ?? "AZEROTH.Profession.Refuse.NotListed", refusal));
+        return null;
+      }
+    }
+    this.#pickDraft = toggleDraft(this.#pickDraft, tier, skill);
+    return this.render({ parts: ["profession"] });
+  }
+
+  /**
+   * Confirm a tier's two picks (D-1906) through `workflows.pickProfessionSkill`, which judges them
+   * again (`pickPlan`) and writes them in one update inside the actor's queue. A second press while
+   * the first is unanswered does nothing (`pressGuard`).
+   */
+  static async #onConfirmProfessionPicks(event, target) {
+    const item = this.actor.professionItem;
+    if (!item || !this.isEditable) return null;
+    const tier = Number(target.dataset.pickTier);
+    const owed = owedPicks({ profession: item.system, tier: this.actor.professionTier, picks: item.system.picks });
+    if (!owed.some(o => o.tier === tier)) return null;
+    const merged = mergedPicks({ profession: item.system, picks: item.system.picks, draft: this.#pickDraft, pickTier: tier });
+    if (merged.length !== 2) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Profession.Sheet.Strip.Owed", { n: 2 - merged.length }));
+      return null;
+    }
+    const written = await this.#presses.run(`picks:${tier}`, () => pickProfessionSkill(this.actor, { tier, skills: merged }));
+    if (!written) return null;
+    this.#pickDraft = { ...this.#pickDraft, [tier]: [] };
+    ui.notifications?.info(game.i18n.format("AZEROTH.Profession.Sheet.Strip.Chosen", { tier, skills: written.map(k => this.#label(AZEROTH.skills, k)).join(", ") }));
+    return written;
+  }
+
+  /**
+   * Raise the profession's Rank (D-1905) through `workflows.raiseProfessionRank`: the cheap rate,
+   * judged off the purse and ledgered inside the actor's queue, the Rank written before the XP. A
+   * second press while the first is unanswered does nothing (`pressGuard`; the review's M1: a
+   * double click charged twice when the sheet wrote it itself).
+   */
+  static async #onRaiseProfessionRank() {
+    if (!this.actor.professionItem || !this.isEditable) return null;
+    return this.#presses.run("raiseRank", () => raiseProfessionRank(this.actor));
+  }
+
+  /** Gather (D-1915): the biome the GM named and the node picked, through the one door (the roll dialog, D-1927). */
+  static async #onGather(event) {
+    const biome = game.user?.getFlag("azeroth-rpg", BIOME_FLAG) ?? null;
+    const section = this.element.querySelector('section[data-tab="profession"]');
+    const material = section?.querySelector("input[data-prof-node]:checked")?.value ?? this.#gatherNode;
+    return gather(this.actor, { biome, material, event });
+  }
+
+  /** Disenchant (D-1933): the item picked, through the one door (the roll dialog). */
+  static async #onProfessionDisenchant(event) {
+    const section = this.element.querySelector('section[data-tab="profession"]');
+    const itemId = section?.querySelector("select[data-prof-disenchant]")?.value ?? this.#disenchantSel;
+    if (!itemId) return null;
+    return disenchant(this.actor, { itemId, event });
+  }
+
+  /**
+   * A recipe row picked: its card unhidden and its row lit, NO RENDER (D-738's pattern), then the
+   * card judged whole by `craftSnapshot` and redrawn in place, so the bag room it alone judges
+   * agrees with the door (D-1981).
+   */
+  static async #onInspectRecipe(event, target) {
+    const id = target.closest("[data-recipe-id]")?.dataset.recipeId ?? null;
+    if (!id) return null;
+    if (this.#recipeSel !== id) this.#quality = null;
+    this.#recipeSel = id;
+    this.#applyRecipe();
+    return this.#judgePicked();
+  }
+
+  /** The picked card judged by `craftSnapshot` and its article replaced from the partial. */
+  async #judgePicked() {
+    const id = this.#recipeSel;
+    const held = this.#cardContexts.get(id);
+    if (!held) return null;
+    const item = this.actor.professionItem;
+    const sys = item?.system ?? {};
+    const prof = PROFESSION_BY_ID[sys.identifier] ?? null;
+    const ability = sys.ability ?? prof?.ability ?? "int";
+    const tool = this.actor.professionTool();
+    const parts = bonusParts({ abilityMod: this.actor.system?.abilities?.[ability]?.mod ?? 0, rank: Math.trunc(Number(sys.rank)) || 0, toolRarity: tool?.rarity ?? null, toolCarried: Boolean(tool) });
+    const [materials, traits, affixes] = await Promise.all([professionMaterials(), professionTraits(), professionAffixes()]);
+    const context = await this.#pickedCard({
+      item: held.item, label: held.label, id: sys.identifier, tier: this.actor.professionTier, bonus: parts.reduce((n, p) => n + p.value, 0),
+      parts, ability, tool, materials, affixes, traits, fed: isWellFed(this.actor.effects), domId: `azeroth-prof-${this.actor.id}`
+    });
+    if (this.#recipeSel !== id) return null;
+    const html = await foundry.applications.handlebars.renderTemplate("systems/azeroth-rpg/templates/actor/partials/recipe-detail.hbs", { card: context });
+    const old = this.element?.querySelector(`section[data-tab="profession"] .azeroth-prof-detail[data-recipe-card="${CSS.escape(id)}"]`);
+    if (!old) return null;
+    const holder = document.createElement("div");
+    holder.innerHTML = html.trim();
+    const fresh = holder.firstElementChild;
+    if (fresh) old.replaceWith(fresh);
+    this.#cardContexts.set(id, { ...held, context });
+    return context;
+  }
+
+  /**
+   * **START PROJECT** (D-1924): a short confirm first (D11 §12: the target, the DC and interval,
+   * the Craft Test, *Starting spends the materials now*) unless the roll dialog is skipped, then
+   * `workflows.craft`, which judges everything again and spends in one batch.
+   */
+  static async #onCraftRecipe(event, target) {
+    const id = target.dataset.recipeId ?? this.#recipeSel;
+    const held = this.#cardContexts.get(id);
+    if (!id || !held || !this.isEditable) return null;
+    const q = this.#quality?.uuid === id ? { ...this.#quality } : { rarity: "common", prefix: null, suffix: null, signature: null };
+    if (shouldPrompt(event)) {
+      const c = held.context;
+      const yes = await foundry.applications.api.DialogV2.confirm({
+        window: { title: game.i18n.format("AZEROTH.Profession.Sheet.Confirm.Title", { name: c.name }) },
+        content: `<p>${foundry.utils.escapeHTML(game.i18n.format("AZEROTH.Profession.Sheet.Confirm.Body", { target: c.targetWords, extended: c.extendedWords, test: c.craftTestWords }))}</p>`
+          + `<p>${foundry.utils.escapeHTML(game.i18n.format("AZEROTH.Profession.Sheet.Confirm.Spend", { spent: (c.reagents ?? []).map(r => `${r.need} ${r.name}`).join(", ") || game.i18n.localize("AZEROTH.Profession.Sheet.Detail.NoReagents") }))}</p>`,
+        yes: { label: game.i18n.localize("AZEROTH.Profession.Sheet.Detail.Start") },
+        no: { label: game.i18n.localize("AZEROTH.Profession.Sheet.Confirm.No") },
+        rejectClose: false
+      });
+      if (!yes) return null;
+    }
+    const project = await craft(this.actor, {
+      baseUuid: id, rarity: q.rarity ?? "common",
+      prefixes: q.prefix ? [q.prefix] : [], suffix: q.suffix ?? null, signature: this.#signatureOf(q)
+    });
+    if (project) await this.#setProfessionView("crafting");
+    return project;
+  }
+
+  /** **ROLL A TEST** on a stored project (D-1924): the one door, which opens the roll dialog (D-1927). */
+  static async #onWorkProject(event, target) {
+    const projectId = target.dataset.projectId;
+    if (!projectId) return null;
+    return this.#presses.run(`work:${projectId}`, () => workProject(this.actor, { projectId, event }));
+  }
+
+  /** Collect a finished project the bags had no room for. */
+  static async #onCollectProject(event, target) {
+    const projectId = target.dataset.projectId;
+    if (!projectId) return null;
+    return this.#presses.run(`collect:${projectId}`, () => collectProject(this.actor, { projectId }));
+  }
+
+  /**
+   * **ABANDON** (the plan's M5): ALWAYS asked first, whatever the roll dialog's skip setting, since
+   * the materials are lost (D-1995, overriding D-1984 for Abandon alone).
+   */
+  static async #onAbandonProject(event, target) {
+    const projectId = target.dataset.projectId;
+    const project = projectsOf(this.actor).find(p => p.id === projectId);
+    if (!project) return null;
+    {
+      const yes = await foundry.applications.api.DialogV2.confirm({
+        window: { title: game.i18n.format("AZEROTH.Profession.Sheet.Abandon.Title", { name: project.name }) },
+        content: `<p>${foundry.utils.escapeHTML(game.i18n.localize("AZEROTH.Profession.Sheet.Abandon.Body"))}</p>`,
+        yes: { label: game.i18n.localize("AZEROTH.Profession.Sheet.Abandon.Yes") },
+        no: { label: game.i18n.localize("AZEROTH.Profession.Sheet.Abandon.No") },
+        rejectClose: false
+      });
+      if (!yes) return null;
+    }
+    return this.#presses.run(`abandon:${projectId}`, () => abandonProject(this.actor, { projectId }));
+  }
+
+  /**
+   * **HARVEST A TARGETED CREATURE** (D-1996): Skin, Butcher or Salvage from the Harvest card, the
+   * token as the target, through `workflows.harvest` (its own claim and the roll dialog).
+   */
+  static async #onHarvestTarget(event, target) {
+    const uuid = target.dataset.tokenUuid;
+    const kind = target.dataset.kind;
+    if (!uuid || !kind) return null;
+    const token = await fromUuid(uuid);
+    if (!token) return null;
+    return this.#presses.run(`harvest:${uuid}:${kind}`, () => harvest(this.actor, { target: token, kind, event }));
+  }
+
+  /** Open all, or Close all (D-1927): every group's <details>, remembered on the reader's flag, no render. */
+  static async #onOpenAllRecipes() { return this.#setAllGroups(true); }
+  static async #onCloseAllRecipes() { return this.#setAllGroups(false); }
+
+  async #setAllGroups(open) {
+    const id = this.actor.professionItem?.system?.identifier;
+    const section = this.element.querySelector('section[data-tab="profession"]');
+    if (!id || !section) return null;
+    const keys = [...section.querySelectorAll("details[data-recipe-group]")].map(g => g.dataset.recipeGroup);
+    // While a filter is set the groups shown are the filter's, and the reader's own open set is
+    // left as it was: the press opens or closes what is drawn now, and clearing the filter puts
+    // the groups back as the reader left them.
+    if (!filtersActive(this.#craftFilters)) {
+      const stored = game.user?.getFlag("azeroth-rpg", OPEN_FLAG);
+      // The flag is written first, so the toggle events the loop fires find it already true.
+      await game.user?.setFlag("azeroth-rpg", OPEN_FLAG, withAllOpen(stored, id, keys, open)).catch(() => null);
+    }
+    // Read the groups again: a render during the write replaced them.
+    for (const details of this.element.querySelectorAll('section[data-tab="profession"] details[data-recipe-group]')) details.open = open;
+    return null;
+  }
+
+  /** Clear every filter, and the groups go back to what the reader left open. */
+  static async #onClearRecipeFilters() {
+    this.#craftFilters = { search: "", have: false, tier: "all", kind: "all" };
+    return this.render({ parts: ["profession"] });
+  }
+
+  /** Lay an enchantment (08 §18): the item and the affix picked, through `workflows.enchant`. */
+  static async #onLayEnchantment() {
+    const { itemId, affixId } = this.#enchantSel;
+    if (!itemId || !affixId) return null;
+    const project = await enchant(this.actor, { itemId, affix: affixId });
+    if (project) this.#enchantSel = { itemId, affixId: null };
+    return project;
   }
 }

@@ -610,7 +610,7 @@ export function sovereignGapsBatch(context) {
         const cls = await fromPack(PACK_FOR.class, "Sovereign");
         await creator.setState({ race: race.uuid, cls: cls.uuid, step: "race" });
         await settle();
-        const career = (await game.packs.get(PACK_FOR.career).getDocuments()).find(c => (c.system?.tier ?? 1) === 1);
+        const profession = (await game.packs.get(PACK_FOR.profession).getDocuments()).find(c => c.system?.identifier === "wilderness-survival");
         const racial = (race.system.talents ?? []).find(t => t.name === "Clean Feeder");
         // Sovereign Will, a tier 1 talent with no gate (Gilded Skin waits on Prim and Proper at level 3, B.13 Q35).
         const classTalent = (await game.packs.get(PACK_FOR.talent).getIndex({ fields: ["system.className", "system.tier", "system.identifier", "system.race", "system.legacy"] }))
@@ -622,7 +622,7 @@ export function sovereignGapsBatch(context) {
         const required = 4 + Math.floor((abilities.con - 10) / 2);
         const spells = offered.map(n => index.find(e => e.name === n)?.uuid).filter(Boolean).slice(0, required);
         const result = await creator.apply({
-          method: "array", abilities, rolled: null, career: career.uuid, ranks: {}, racialTalent: racial?.name ?? null,
+          method: "array", abilities, rolled: null, profession: profession.uuid, ranks: {}, racialTalent: racial?.name ?? null,
           classTalent: classTalent?.system?.identifier ?? null, spells, side: "horde", equipment: [], name: "ZZ Gap Created Sovereign", img: "icons/svg/mystery-man.svg"
         });
         assert.ok(result.ok, `the creator refused: ${JSON.stringify(result.reasons)}`);

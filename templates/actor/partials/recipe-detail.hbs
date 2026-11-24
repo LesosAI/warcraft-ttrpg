@@ -1,0 +1,121 @@
+{{!--
+  ONE RECIPE CARD in the Crafting view's inspector (D11 §12, the plan's M3,
+  M3b and M4). **One is PRERENDERED, hidden, for every recipe listed**, so a
+  pick unhides one and hides the rest with no render (D-738's pattern).
+
+  The picked card is judged by `workflows.craftSnapshot` (the bag room
+  included); every other card by the same laws less the room (D-1981), and a
+  card picked later is judged whole and redrawn in place.
+
+  What it draws: the icon and name (the Forge's name once affixes are chosen,
+  in the rarity ink), the group and recipe tier, the stat line with **every
+  trait a focusable chip** whose tooltip is 08 §5's entry (D-1928), the
+  Extended Test, the target, the Craft Test with its parts (never Proficiency,
+  D-1926), the expected time, the Forge's controls where they apply and ONLY
+  the options that can be picked (D-1929), the reagents have/need in words,
+  the tool, and the refusal in words beside a greyed Start (D-681).
+
+  The Forge's selects carry `data-prof-quality` and no `data-action`: a select
+  emits `change`, and the actions map fires on click alone (D-677).
+--}}
+<article class="azeroth-prof-detail" data-recipe-card="{{card.id}}"{{#unless card.selected}} hidden{{/unless}}>
+  <header class="azeroth-prof-detail-head">
+    {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=card.img rarityClass=card.rarityClass}}
+    <div>
+      <h4 class="azeroth-prof-detail-name {{card.rarityClass}}">{{card.name}}</h4>
+      <p class="azeroth-prof-soft">{{card.kindLine}}</p>
+    </div>
+  </header>
+
+  {{#if card.statLine}}<p class="azeroth-prof-stat">{{card.statLine}}</p>{{/if}}
+  {{#if card.traits.length}}
+  <p class="azeroth-prof-traits">
+    {{#each card.traits as |trait|}}
+    {{#if trait.tip}}<button type="button" class="azeroth-prof-trait" data-prof-trait data-tooltip-html="{{trait.tip}}" aria-label="{{trait.aria}}">{{trait.name}}</button>{{else}}<span class="azeroth-prof-trait is-plain">{{trait.name}}</span>{{/if}}
+    {{/each}}
+  </p>
+  {{/if}}
+  {{#if card.description}}<div class="azeroth-prof-desc">{{{card.description}}}</div>{{/if}}
+
+  <dl class="azeroth-prof-kv">
+    <dt>{{localize "AZEROTH.Profession.Sheet.Detail.Extended"}}</dt><dd>{{card.extendedWords}}</dd>
+    <dt>{{localize "AZEROTH.Profession.Sheet.Detail.Target"}}</dt><dd><strong>{{card.targetWords}}</strong> <span class="azeroth-prof-soft">{{card.targetsWords}}</span></dd>
+    <dt>{{localize "AZEROTH.Profession.Sheet.Detail.CraftTest"}}</dt><dd>{{card.craftTestWords}}</dd>
+    <dt>{{localize "AZEROTH.Profession.Sheet.Detail.Takes"}}</dt><dd>{{card.takesWords}}</dd>
+    <dt>{{localize "AZEROTH.Profession.Sheet.Detail.Collapse"}}</dt><dd>{{card.collapseWords}}</dd>
+    <dt>{{localize "AZEROTH.Profession.Sheet.Detail.Price"}}</dt><dd>{{card.priceWords}}</dd>
+  </dl>
+
+  {{#if card.quality}}
+  <h5 class="azeroth-prof-minor">{{localize "AZEROTH.Profession.Sheet.Quality.Heading"}} <span>{{card.quality.hint}}</span></h5>
+  <div class="azeroth-prof-qual">
+    <label for="{{card.domId}}-rarity">{{localize "AZEROTH.Profession.Sheet.Quality.Rarity"}}</label>
+    <select id="{{card.domId}}-rarity" data-prof-quality="rarity" data-recipe-id="{{card.id}}">
+      {{#each card.quality.rarities as |r|}}<option value="{{r.value}}"{{#if r.selected}} selected{{/if}}>{{r.label}}</option>{{/each}}
+    </select>
+    {{#if card.quality.rows.prefix}}
+    <label for="{{card.domId}}-prefix">{{localize "AZEROTH.Profession.Sheet.Quality.Prefix"}}</label>
+    <select id="{{card.domId}}-prefix" data-prof-quality="prefix" data-recipe-id="{{card.id}}">
+      <option value="">{{localize "AZEROTH.Profession.Sheet.Quality.None"}}</option>
+      {{#each card.quality.prefixes as |a|}}<option value="{{a.id}}"{{#if a.selected}} selected{{/if}}>{{a.label}}</option>{{/each}}
+    </select>
+    {{/if}}
+    {{#if card.quality.rows.suffix}}
+    <label for="{{card.domId}}-suffix">{{localize "AZEROTH.Profession.Sheet.Quality.Suffix"}}</label>
+    <select id="{{card.domId}}-suffix" data-prof-quality="suffix" data-recipe-id="{{card.id}}">
+      <option value="">{{localize "AZEROTH.Profession.Sheet.Quality.None"}}</option>
+      {{#each card.quality.suffixes as |a|}}<option value="{{a.id}}"{{#if a.selected}} selected{{/if}}>{{a.label}}</option>{{/each}}
+    </select>
+    {{/if}}
+    {{#if card.quality.rows.signature}}
+    <label for="{{card.domId}}-signature">{{localize "AZEROTH.Profession.Sheet.Quality.Signature"}}</label>
+    <select id="{{card.domId}}-signature" data-prof-quality="signature" data-recipe-id="{{card.id}}">
+      <option value="">{{localize "AZEROTH.Profession.Sheet.Quality.None"}}</option>
+      {{#each card.quality.signatures as |s|}}<option value="{{s.id}}"{{#if s.selected}} selected{{/if}}>{{s.label}}</option>{{/each}}
+    </select>
+    {{/if}}
+  </div>
+  {{!-- A Signature is CHOSEN FROM A LIST, never typed (D-1990; the lead: *"The signatures should be
+        chosen from a list, not typed like the GM can. Exclude legendary signatures"*). The list is the
+        door's own (only what this item, rarity and budget allow, no greyed row), and the one picked is
+        printed whole: its source item, its cost and its words. --}}
+  {{#with card.quality.signaturePicked as |sig|}}
+  <p class="azeroth-prof-signature"><span class="azeroth-prof-soft">{{sig.from}}</span> {{sig.text}}</p>
+  {{/with}}
+  {{#if card.quality.chips.length}}
+  <p class="azeroth-prof-soft">{{localize "AZEROTH.Profession.Sheet.Trait.Hover"}}
+    {{#each card.quality.chips as |chip|}}<button type="button" class="azeroth-prof-trait" data-prof-trait data-tooltip-html="{{chip.tip}}" aria-label="{{chip.aria}}">{{chip.name}}</button>{{/each}}
+  </p>
+  {{/if}}
+  {{#if card.quality.legalWords}}<p class="azeroth-prof-ok">{{card.quality.legalWords}}</p>{{/if}}
+  {{/if}}
+
+  <h5 class="azeroth-prof-minor">{{localize "AZEROTH.Profession.Sheet.Detail.Reagents"}}</h5>
+  <ul class="azeroth-prof-reagents">
+    {{#each card.reagents as |line|}}
+    <li class="{{#if line.short}}is-short{{else}}is-enough{{/if}}">
+      {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=line.img}}
+      <span>{{line.name}}</span>
+      <span class="azeroth-prof-have">{{line.haveWords}}</span>
+    </li>
+    {{else}}
+    <li class="azeroth-prof-soft">{{localize "AZEROTH.Profession.Sheet.Detail.NoReagents"}}</li>
+    {{/each}}
+  </ul>
+  <p class="azeroth-prof-toolref">{{card.toolWords}}</p>
+
+  {{#if card.refusals.length}}
+  <ul class="azeroth-prof-reasons">
+    {{#each card.refusals as |words|}}<li class="azeroth-prof-refusal">{{words}}</li>{{/each}}
+  </ul>
+  {{else}}
+  <p class="azeroth-prof-ok">{{localize "AZEROTH.Profession.Sheet.Detail.Ready"}}</p>
+  {{/if}}
+  {{#each card.notes as |note|}}<p class="azeroth-prof-soft">{{note}}</p>{{/each}}
+  <p class="azeroth-prof-soft">{{localize "AZEROTH.Profession.Sheet.Detail.StartNote"}}</p>
+  {{#if card.editable}}
+  <div class="azeroth-prof-actions">
+    <button type="button" class="azeroth-prof-primary" id="{{card.domId}}-start" data-action="craftRecipe" data-recipe-id="{{card.id}}"{{#unless card.ok}} disabled{{/unless}}>{{localize "AZEROTH.Profession.Sheet.Detail.Start"}}</button>
+  </div>
+  {{/if}}
+</article>

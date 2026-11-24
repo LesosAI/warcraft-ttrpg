@@ -41,7 +41,7 @@ export async function rollDisarmSide(actor, picked, { valid, source = null, defe
       }
       const { AzerothRoll } = await import("../dice/azeroth-roll.mjs");
       const roll = AzerothRoll.build({ dc: NPC_DISARM.dc, modifiers: args.modifiers, boons: args.boons,
-        banes: args.banes, kind: "attack", rollData: actor.getRollData?.() ?? {} });
+        banes: args.banes, kind: "attack", rollData: actor.getRollData?.() ?? {}, roller: actor, chosen: args.chosen ?? null });
       roll.options.provenance.push(...(args.provenanceExtra ?? []));
       await roll.evaluate();
       await actor.offerElunesRegard?.(roll);

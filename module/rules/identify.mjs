@@ -25,6 +25,8 @@
 
 // The ONE reader of the loot offer's mark (CLAUDE.md §4, D-721).
 import { underOffer } from "./loot-offer.mjs";
+// A graded tool is named for what it is (D-1936).
+import { PROFESSION_BY_ID, toolProfession } from "./professions.mjs";
 
 /** The flag scope every key below lives under. */
 export const IDENTIFY_SCOPE = "azeroth-rpg";
@@ -42,7 +44,8 @@ export const TRIED_FLAG = "identifyTried";
 /**
  * The create OPTION that says *this arrives known*: `{azerothIdentify: "known"}`.
  * A closed list of doors holds it (the creator's Finish, the claws, the
- * migration walk, the sheet's stack split, item custody and the Quench fixtures), and
+ * migration walk, the sheet's stack split, item custody, a crafted item's delivery to
+ * its maker and the Quench fixtures), and
  * `identify-doors.test.mjs` scans `module/` for any other use.
  */
 export const IDENTIFY_OPTION = "azerothIdentify";
@@ -223,6 +226,16 @@ export function kindWord(item) {
   if (category && nounOf(flags.base).toLowerCase() === category.toLowerCase()) return { category };
   const named = wordUnlessName(nounOf(flags.base), item);
   if (named) return { word: named };
+
+  // **A GRADED TOOL IS A SET OF TOOLS** (08 §11's Graded tool tables, D-1936): *Superior smith's
+  // tools* found unidentified is *Smith's tools*, its profession's Common tool, which says what
+  // it is and nothing of its grade.
+  const trade = item?.type === "gear" ? toolProfession(item?.system?.identifier) : null;
+  if (trade) {
+    const common = PROFESSION_BY_ID[trade]?.tool ?? "";
+    const word = wordUnlessName(common.split("-").map((w, i) => (i ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(" ").replace(/s tools$/, "'s tools").replace(/s kit$/, "'s kit").replace(/s rod$/, "'s rod"), item);
+    if (word) return { word };
+  }
 
   const slot = item?.system?.slot;
   if (typeof slot === "string" && slot) return { slot };

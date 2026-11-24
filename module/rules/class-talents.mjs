@@ -77,6 +77,7 @@ import { MARK_KINDS } from "./marks.mjs";
 // A Finisher's Shackle carries the escape a feature's condition carries (door 19's
 // binding at the rank; the Legacy branches' B2, door 26).
 import { boundFeatureEscape } from "./escapes.mjs";
+import { SL_CAP } from "./resolution.mjs";
 
 /** A taken talent's rank, a whole number from 1. */
 const rankOf = talent => Math.max(1, Math.trunc(Number(talent?.taken) || 0));
@@ -209,7 +210,7 @@ export function hitConditionsFor(talents = [], { sl = 0, hit = false, opportunit
  * @returns {boolean}
  */
 export function talentLaysOnHit(talents = [], { opportunity = false } = {}, rowOf = talentEffect) {
-  return hitConditionsFor(talents, { sl: 6, hit: true, opportunity: opportunity === true }, rowOf).length > 0;
+  return hitConditionsFor(talents, { sl: SL_CAP, hit: true, opportunity: opportunity === true }, rowOf).length > 0;
 }
 
 /**

@@ -367,7 +367,7 @@ export function sheetMatrixBatch(context) {
       empty: () => makeCharacter({ name: "ZZ Matrix Empty" }),
       "level 1": () => makeCharacter({ name: "ZZ Matrix L1", classes: [["Warrior", 1]], race: "Orc" }),
       "level 11": async () => makeCharacter({
-        name: "ZZ Matrix L11", classes: [["Warrior", 11]], race: "Dwarf", career: "Warden of the March",
+        name: "ZZ Matrix L11", classes: [["Warrior", 11]], race: "Dwarf", profession: "Blacksmithing",
         weapons: await manyFromPack(PACK_FOR.weapon, 3), armor: await manyFromPack(PACK_FOR.armor, 2),
         gear: await manyFromPack(PACK_FOR.gear, 4),
         talents: await manyFromPack(PACK_FOR.talent, 5, d => d.system.className === "Warrior" && d.system.branch === "Arms"),
@@ -376,7 +376,7 @@ export function sheetMatrixBatch(context) {
       "two-class": () => makeCharacter({ name: "ZZ Matrix Mage/Rogue", classes: [["Mage", 9], ["Rogue", 5]], race: "Gnome" }),
       "two Momentum": () => makeCharacter({ name: "ZZ Matrix Warrior/Rogue", classes: [["Warrior", 9], ["Rogue", 5]], race: "Troll" }),
       loaded: async () => makeCharacter({
-        name: "ZZ Matrix Loaded", classes: [["Mage", 15], ["Priest", 5]], race: "Human", career: "Constable",
+        name: "ZZ Matrix Loaded", classes: [["Mage", 15], ["Priest", 5]], race: "Human", profession: "Enchanting",
         // **THE BAGS GO ON FIRST** (08 §11, D-736). Six weapons at nine bag
         // slots, a 40 lb suit at four and twenty pieces of gear at twenty is
         // thirty-three against a base of sixteen, so seventeen of the embeds
@@ -501,7 +501,10 @@ export function sheetMatrixBatch(context) {
     it("every Item subtype measures clean, owned and unowned", async function () {
       this.timeout(120000);
       const owner = await makeCharacter({ name: "ZZ Matrix Item Owner", classes: [["Mage", 5]] });
-      for (const type of Object.keys(game.system.documentTypes.Item)) {
+      // A RETIRED type (the career, D-1916, D-1988) is registered only so a stale document loads:
+      // its fields are gone and nothing makes one, so there is no sheet to measure.
+      const retired = CONFIG.Item.documentClass.RETIRED_TYPES ?? [];
+      for (const type of Object.keys(game.system.documentTypes.Item).filter(t => !retired.includes(t))) {
         for (const owned of [false, true]) {
           // A SECOND CLASS MUST BE ON THE RACE'S ROW (0.14.0's `NotOnRow`, a
           // committed rule): the owner takes the pack's first race (a Troll) a
@@ -604,15 +607,26 @@ export function dropsBatch(context) {
       await cleanup();
     });
 
-    it("a career dropped on the sheet becomes THE career", async function () {
-      this.timeout(20000);
-      const career = await fromPack(PACK_FOR.career, "Watchman");
-      const wait = untilHook("createItem", 5000, item => item.parent?.id === actor.id);
-      forgeDrop(sheet.element, { type: "Item", uuid: career.uuid });
+    it("a profession dropped on the sheet becomes THE profession, and a second replaces it keeping the Rank (D-1903)", async function () {
+      this.timeout(30000);
+      // The career this test dropped is retired (D-1903); the profession is the drop that links now.
+      const smithing = await fromPack(PACK_FOR.profession, "Blacksmithing");
+      let wait = untilHook("createItem", 5000, item => item.parent?.id === actor.id);
+      forgeDrop(sheet.element, { type: "Item", uuid: smithing.uuid });
       const [item] = await wait;
+      for (let i = 0; i < 100 && actor.system.profession?.itemId !== item.id; i++) await new Promise(r => setTimeout(r, 50));
+      assert.equal(item.type, "profession");
+      assert.equal(actor.system.profession?.itemId, item.id, "the dropped profession was not linked as system.profession");
+      await item.update({ "system.rank": 4 });
+      const alchemy = await fromPack(PACK_FOR.profession, "Alchemy");
+      wait = untilHook("createItem", 5000, i => i.parent?.id === actor.id);
+      forgeDrop(sheet.element, { type: "Item", uuid: alchemy.uuid });
+      const [second] = await wait;
+      for (let i = 0; i < 100 && (actor.items.filter(x => x.type === "profession").length !== 1 || actor.items.get(second.id)?.system.rank !== 4); i++) await new Promise(r => setTimeout(r, 50));
+      assert.equal(actor.system.profession?.itemId, second.id, "the second profession is not THE profession");
+      assert.lengthOf(actor.items.filter(x => x.type === "profession"), 1, "two professions held at once");
+      assert.equal(actor.items.get(second.id)?.system.rank, 4, "changing profession cost the Rank (03 section 4)");
       await settle();
-      assert.equal(item.type, "career");
-      assert.equal(actor.system.career?.itemId, item.id, "the dropped career was not linked as system.career");
     });
 
     it("a class dropped on the sheet writes system.classes[]", async function () {
@@ -852,11 +866,16 @@ export function itemSubtypesBatch(context) {
       await cleanup();
     });
 
-    for (const type of Object.keys(game.system.documentTypes.Item)) {
+    // A RETIRED type is registered only so a stale document still loads (the career, D-1916, D-1988):
+    // nothing makes one any more, so it has no sheet to use.
+    const retired = CONFIG.Item.documentClass.RETIRED_TYPES ?? [];
+    for (const type of Object.keys(game.system.documentTypes.Item).filter(t => !retired.includes(t))) {
       it(`${type}: draws fieldsFor's fields in order, edits one, toggles the prose`, async function () {
         this.timeout(30000);
         owner ??= await makeCharacter({ name: "ZZ Subtype Owner", classes: [["Mage", 5]] });
-        const item = await itemOf(type, { owned: owner });
+        // A second class must be on the race's row (0.14.0's `NotOnRow`): the race subtype runs first and
+        // gives the owner the pack's first people, so the class is one every row holds, as the matrix names it.
+        const item = await itemOf(type, { owned: owner, name: type === "class" ? "Warrior" : null });
         const sheet = await openSheet(item);
         try {
           // The reader's own flags, because a descriptor may be LOCKED for one

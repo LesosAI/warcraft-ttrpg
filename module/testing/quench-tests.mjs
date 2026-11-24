@@ -10,7 +10,6 @@ import { placeArea } from "../canvas/regions.mjs";
 import { AIM_PREVIEW, placeSpellArea } from "../canvas/place.mjs";
 import { clearMeasuredAreas } from "../canvas/measure.mjs";
 import { castSpell } from "../dice/workflows.mjs";
-import { isEligible } from "../rules/careers.mjs";
 import { checkClipping, checkColumns, checkNotEmpty, checkOverlap, checkText } from "./geometry.mjs";
 // The talent frame's batch (D-758) builds a real Warrior through the one
 // fixture factory and measures colour through the one colour module.
@@ -100,6 +99,7 @@ import { restBatch } from "./quench-rests.mjs";
 // WoW's character pane: core's frame, the band and the hanging tabs (D-734).
 import { frameBatch } from "./quench-frame.mjs";
 import { bagsBatch } from "./quench-bags.mjs";
+import { professionsBatch } from "./quench-professions.mjs";
 import { afflictionsBatch } from "./quench-afflictions.mjs";
 // What stands on an ally: Aura of Resolve, Avenging Bulwark, Tree of Life and
 // Demonic Pact (D-755).
@@ -570,6 +570,9 @@ export function registerQuenchTests() {
     quench.registerBatch("azeroth-rpg.bags", bagsBatch, {
       displayName: "AZEROTH: Bag slots, and what will not fit"
     });
+    quench.registerBatch("azeroth-rpg.professions", professionsBatch, {
+      displayName: "AZEROTH: Professions replace careers (0.17.0)"
+    });
     quench.registerBatch("azeroth-rpg.auras", aurasBatch, {
       displayName: "AZEROTH: What stands on an ally"
     });
@@ -876,7 +879,8 @@ function characterDataBatch(context) {
       // there is deliberately no total (tracks never sum).
       assert.equal(sys.corruptionState.fel.crossed, 0);
       assert.notProperty(sys.corruptionState, "total");
-      assert.equal(sys.career.tier, 1);
+      // A character holds no profession until one is chosen (D-1903); the career is retired.
+      assert.isNull(sys.profession.itemId, "a blank character holds a profession");
       assert.equal(sys.xp.earned, 0);
       assert.equal(sys.xp.spent, 0);
     });
@@ -1378,8 +1382,9 @@ function diceAndEffectsBatch(context) {
       } finally {
         CONFIG.Dice.randomUniform = real;
       }
-      // Far past the DC, so the SL cap holds.
-      assert.equal(roll.successLevel, 6);
+      // Far past the DC, so the SL cap holds: 10 since D-2000 (it was 6), read off the rule, not pinned.
+      const { SL_CAP } = await import("../rules/resolution.mjs");
+      assert.equal(roll.successLevel, SL_CAP);
       assert.isTrue(roll.outcome.success);
     });
 
@@ -1895,11 +1900,12 @@ function packBatch(context) {
       assert.equal(index.size, PACK_COUNTS.spells.count);
     });
 
-    it("holds 53 careers across four tiers", async function () {
-      const pack = game.packs.get("azeroth-rpg.careers");
-      assert.ok(pack, "the careers pack did not load");
+    it("holds the seven professions and no careers pack (D-1903, D-1904)", async function () {
+      const pack = game.packs.get("azeroth-rpg.professions");
+      assert.ok(pack, "the professions pack did not load");
       const index = await pack.getIndex();
-      assert.equal(index.size, 53);
+      assert.equal(index.size, PACK_COUNTS.professions.count);
+      assert.isUndefined(game.packs.get("azeroth-rpg.careers"), "the retired careers pack still loads");
     });
 
     it("derives a spell's CLASSES from its school, narrowed by Restricted", async function () {
@@ -1920,18 +1926,20 @@ function packBatch(context) {
       assert.notInclude(open.system.classes, "Priest");
     });
 
-    it("parses a career's In-career list into real skill keys", async function () {
-      const pack = game.packs.get("azeroth-rpg.careers");
+    it("parses a profession's skill lists into real skill keys, five then four a tier (D-1906)", async function () {
+      const pack = game.packs.get("azeroth-rpg.professions");
       const index = await pack.getIndex();
-      const runner = index.find(e => e.name === "Runner");
-      const doc = await pack.getDocument(runner._id);
-      assert.equal(doc.system.tier, 1);
-      // The list is what makes a Rank cheap, so it has to be keys the sheet
+      const entry = index.find(e => e.name === "Leatherworking");
+      const doc = await pack.getDocument(entry._id);
+      // The lists are what make a Rank cheap, so they have to be keys the sheet
       // can look up, not prose.
-      for (const key of doc.system.inCareer) {
+      const lists = doc.system.skills;
+      assert.lengthOf(lists["1"] ?? lists[1], 5, "tier 1 does not list five");
+      for (const t of ["2", "3", "4"]) assert.lengthOf(lists[t] ?? lists[Number(t)], 4, `tier ${t} does not list four`);
+      for (const key of Object.values(lists).flat()) {
         assert.property(CONFIG.AZEROTH.skills, key, `${key} is not a skill key`);
       }
-      assert.includeMembers(doc.system.inCareer, ["stealth", "streetwise", "sleightOfHand"]);
+      assert.includeMembers(lists["1"] ?? lists[1], ["survival", "handling", "stealth"]);
     });
 
     it("generates talents that validate against the talent DataModel", async function () {
@@ -2100,12 +2108,14 @@ function packBatch(context) {
       assert.equal(g.threatShare, 1);
       assert.equal(g.tier, 1);
       assert.equal(g.corruption, "undeath");
-      assert.equal(g.health.max, 12);
+      // 14's numbers moved under D4's example in 0.16.2 (`c442c505c`): Health rose a quarter (D-1900,
+      // floor((5 x 12 + 2) / 4) = 15) and the bestiary audit stored Initiative 12. The pins follow the pack.
+      assert.equal(g.health.max, 15);
       assert.equal(g.defense, 12);
       assert.deepEqual(g.ap, { body: 2, head: 1, limb: 1 });
       assert.deepEqual(g.ward, { shadow: 2 }, "the pack's Ward is not the map (D-644)");
       assert.equal(g.speed, 30);
-      assert.equal(g.initiative, 10);
+      assert.equal(g.initiative, 12);
       // Str 14 (+2) ... Int — ... Cha —: D4 §10.2's example is Mindless now
       // (D-781: *"Accept it; dash Int and Cha"*), and a dash is no modifier of -5.
       assert.equal(g.abilities.str.value, 14);
@@ -3567,60 +3577,6 @@ function talentTreeBatch(context) {
 
       assert.equal(actor.items.get(id).system.taken, before,
         "a tier-5 talent was taken with nothing spent in the branch");
-    });
-
-    it("shows the roads out of a career, with what each still needs", async function () {
-      this.timeout(30000);
-      // A REAL career out of the compendium. 03 gates on a prior career and
-      // nothing else, and the prose half of an Entry is the GM's call - so an
-      // exit shows both what it mechanically needs and what it narratively
-      // asks, rather than a bare green light.
-      const pack = game.packs.get("azeroth-rpg.careers");
-      const index = await pack.getIndex({ fields: ["system.tier"] });
-      const tier1 = index.find(e => e.system?.tier === 1);
-      const career = await pack.getDocument(tier1._id);
-
-      const walker = await Actor.create({ name: "Quench Career Walker", type: "character" });
-      await walker.createEmbeddedDocuments("Item", [career.toObject()], { ...KNOWN });
-
-      // The Actor points itself at the career it was just given, in an
-      // `_onCreateDescendantDocuments` update. Let that land before rendering.
-      await new Promise(r => setTimeout(r, 200));
-      assert.ok(walker.careerItem, "the actor did not adopt the career it was given");
-
-      const app = walker.sheet;
-      await app.render({ force: true });
-
-      const exits = app.element.querySelectorAll(".azeroth-career-exit");
-      assert.isAbove(exits.length, 0, "a tier-1 career has roads out");
-
-      // THE ROADS OUT ARE OPEN, and that is the rule rather than a hole in it:
-      // each names this very career in its Entry, and the character holds it.
-      // The first draft of this test asserted the opposite and was wrong about
-      // 03 rather than about the code.
-      const blocked = app.element.querySelectorAll(".azeroth-career-exit--blocked");
-      assert.equal(blocked.length, 0,
-        "holding the named career is what opens its roads");
-
-      // What is NOT satisfied is the prose half, and the sheet states it
-      // rather than hiding it behind a green light.
-      const narrative = app.element.querySelectorAll(".azeroth-career-exit-narrative");
-      assert.isAbove(narrative.length, 0,
-        "03's prose requirement should be shown beside the road");
-
-      // And a career this one does not lead to stays shut.
-      const stranger = await pack.getDocument(
-        index.find(e => e.system?.tier === 4)._id
-      );
-      const state = isEligible(
-        { current: career.name, held: [career.name], tier: 1 },
-        stranger
-      );
-      assert.isFalse(state.ok, "a tier-4 career is not reachable from tier 1");
-      assert.isAbove(state.requires.length, 0, "and it names what it wants");
-
-      await app.close();
-      await walker.delete();
     });
 
     it("takes a tier-1 talent and moves the points", async function () {

@@ -699,7 +699,7 @@ export async function blackDrakeLanding(token, { landed = null, at = null } = {}
     if (!caught) continue;
     const feet = feetBetweenFootprints(where, footprintOf(t), scene.grid ?? null);
     if (feet === null || feet > row.feet) continue;
-    const roll = AzerothRoll.build({ dc, kind: "resilience", modifiers: resilienceModifiers(victim, row.resilience), rollData: victim.getRollData?.() ?? {} });
+    const roll = AzerothRoll.build({ dc, kind: "resilience", modifiers: resilienceModifiers(victim, row.resilience), rollData: victim.getRollData?.() ?? {}, roller: victim, chosen: null });
     // The Resilience the after-the-die seam reads (02's Beyond Limits, D-1724).
     roll.options.resilience = row.resilience;
     await roll.evaluate();

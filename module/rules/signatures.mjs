@@ -52,10 +52,10 @@
  * the first of them. §20 prices *gated* at **1** however many clauses the gate
  * has, so nothing about the budget moves with the shape.
  *
- * **The two hand tables live here**: `BOOK_SIGNATURES`, the twenty-six 08 §20
- * writes by hand, and `CAREER_SIGNATURES`, 03 §5's fifty-three. Both are
- * reviewed one entry at a time against the pack source and both are censused
- * by `signature-tables.test.mjs`, whose ceiling may only fall. A row that
+ * **The hand table lives here**: `BOOK_SIGNATURES`, the twenty-six 08 §20
+ * writes by hand (`CAREER_SIGNATURES`, 03's fifty-three, went with the careers
+ * in 0.17.0). It is reviewed one entry at a time against the pack source and
+ * censused by `signature-tables.test.mjs`, whose ceiling may only fall. A row that
  * states something this system cannot carry is `none(reason)` — never a
  * half-descriptor, and never a number the sentence does not say.
  *
@@ -1487,10 +1487,8 @@ export const SIGNATURE_REFUSALS = Object.freeze(["gate", "spent", "noSpell", "au
  */
 export function signatureWorn(item) {
   if (!item) return false;
-  // A career is held, never carried (03 §5's Signature capability): it has no `equipped`
-  // to read, and the rule above read it as set down, so no career press was ever made
-  // (the D-914 live pass: the Field Surgeon's card stopped posting).
-  if (item.type === "career") return true;
+  // A career's Signature went with careers (D-1903, D-1909: a profession carries no
+  // perk), so only a thing wielded, worn or held presses.
   return item.system?.equipped === true;
 }
 
@@ -3605,8 +3603,8 @@ function seedKind(out, html) {
  * **ONE ROW PER FAMILY, AND NOTHING THE READER DOES NOT KNOW.** The descriptor
  * carries more than this — `onKill`, `arc`, `push`, `aura`, `summon`,
  * `damageMultiplier`, `armorPointsPerTier` and the rest — but every one of
- * those reaches an item from `BOOK_SIGNATURES`, `CAREER_SIGNATURES` or a
- * Classic template, never from a typed sentence. Listing one would promise a
+ * those reaches an item from `BOOK_SIGNATURES` or a Classic template, never
+ * from a typed sentence. Listing one would promise a
  * GM something typing cannot buy. **Add a row here whenever a reader above
  * gains a family**, or the panel goes quietly out of date; the census in
  * `signature-phrases.test.mjs` holds a floor on the count for that reason.
@@ -4745,168 +4743,4 @@ export const BOOK_SIGNATURES = Object.freeze({
   "drillborer-disk": standing({ gates: [gate("hasNotMoved")], blockBonus: 2 })
 });
 
-/* -------------------------------------------- */
-/*  03 §5's fifty-three, by hand                 */
-/* -------------------------------------------- */
-
-/**
- * What each career's Signature DOES, keyed by the career's
- * `system.identifier` and written in tier order.
- *
- * D7 records that every one is *a capability with a scope, a time cost and a
- * limit*, and reading all fifty-three against the pack that is true of the
- * SCOPE and the TIME in prose and of the LIMIT in numbers only eight times.
- * **Forty-five are `none`**, and it is the same honesty as the bestiary's
- * sixty-five: *Any Horde camp feeds you, houses you and finds you a post* is
- * the world answering, not a rule with a number in it, and a `standing` row
- * with nothing in its arrays would meet the census while doing nothing at all
- * — which is precisely the shape D-681 keeps finding.
- *
- * The eight that read are the ones the chapter gives a rest-bounded limit, and
- * `rules/uses.mjs#usesFromText` is what says so: the census reads every
- * career's own description through it and fails a row whose uses disagree, so
- * these numbers cannot drift from 03 §5's own sentence.
- *
- * The six `tableCall` rows are *once in an arc* — a real limit in a unit the
- * campaign keeps and `AZEROTH.abilityUsesPer` does not — and the Hedge-Warden,
- * whose *you cannot be ambushed* is a genuine refusal of `surprise` scoped to
- * a place the table names. An ungated refusal there would mean the character
- * could never be ambushed anywhere.
- */
-export const CAREER_SIGNATURES = Object.freeze({
-  /* ---- Tier 1 ---- */
-
-  // *Any workshop of your craft will let you in, lend you a bench and sell you
-  // materials at trade price, on your master's name rather than your own.*
-  "bound-apprentice": none("narrative"),
-  // *Anywhere in Forsaken country you know which roads are held tonight.*
-  deathguard: none("narrative"),
-  // *Any vessel in a trading port takes you and one companion as working passage.*
-  deckhand: none("narrative"),
-  // *An hour with a site tells you what is buried there.*
-  digger: none("narrative"),
-  // *Stabilizing a Dying character costs you a Half-Action and needs no Test.
-  // Once between Short Rests.* The one tier 1 Signature that is a turn.
-  "field-surgeon": use({ use: { action: "half", uses: once("short") } }),
-  // *Ten minutes lays a body so that it will not rise.*
-  "grave-tender": none("narrative"),
-  // *Any Horde camp feeds you, houses you and finds you a post.*
-  grunt: none("narrative"),
-  // *In a place you have wardened for a month you cannot be ambushed.* A real
-  // refusal of `surprise`, scoped to a place only the table can name — and
-  // ungated it would mean the character can never be ambushed at all.
-  "hedge-warden": none("tableCall"),
-  // *Any non-hostile Beast treats you as familiar rather than as a stranger.*
-  houndmaster: none("narrative"),
-  // *A day in unfamiliar country tells you where the water is.*
-  "hunt-sworn": none("narrative"),
-  // *Given a parish's books and an afternoon, you learn who is related to whom.*
-  "lay-brother": none("narrative"),
-  // *Given an hour and materials, you bring down a wall, a door, a bridge span.*
-  "powder-hand": none("narrative"),
-  // *Once between Long Rests, produce one piece of ordinary equipment from the
-  // party's baggage that nobody said they had.* WHICH piece is the table's;
-  // the limit is the character sheet's, and nothing tracked it before.
-  "quartermasters-clerk": use({ use: { uses: once("long") } }),
-  // *An hour and a surface gives you one rune... You may hold one at a time.*
-  // A limit in a unit nothing counts, over three effects with no mechanic.
-  "runewrights-apprentice": none("narrative"),
-  // *Once between Long Rests, name a person you believe is in a settlement.*
-  runner: use({ use: { uses: once("long") } }),
-  // *In a settlement you have watched for a month, you may detain, question or
-  // enter on your own authority.*
-  watchman: none("narrative"),
-
-  /* ---- Tier 2 ---- */
-
-  // *A dozen answer to you at your post.*
-  "blood-guard": none("narrative"),
-  // *Name a good you want. It arrives at the next cartel port within a week.*
-  "cartel-factor": none("narrative"),
-  // *Over a Long Rest spent working on one patient, you remove one Critical
-  // Injury.* A Critical Injury is a lasting Active Effect off a RollTable
-  // rather than a condition, and `use.ends` names condition keys alone.
-  chirurgeon: none("noEquivalent"),
-  // *Once between Long Rests, name a question about who did what.*
-  constable: use({ use: { uses: once("long") } }),
-  // *The Scourge do not react to you unless you act first.*
-  deathstalker: none("narrative"),
-  // *Ten minutes and materials drop one thing you name... Once between Long
-  // Rests. In a fight it costs a Full Action instead.*
-  demolitionist: use({ use: { action: "full", uses: once("long") } }),
-  // *Name a ruin you can walk. You learn who built it.*
-  "field-archaeologist": none("narrative"),
-  // *Name a dispute, a family, a debt or a death within your people's memory.*
-  firekeeper: none("narrative"),
-  // *Once in an arc, a debt comes due.* An arc is the campaign's unit and
-  // `AZEROTH.abilityUsesPer` does not keep one.
-  fixer: none("tableCall"),
-  // *Any guild town has work for you within the day at the going rate.*
-  journeyman: none("narrative"),
-  // *Once between Long Rests, in a settlement with a church, you learn what is
-  // actually wrong there.*
-  "parish-priest": use({ use: { uses: once("long") } }),
-  // *An hour with a body, a well, a field or a beast tells you what strain
-  // took it.*
-  "plague-worker": none("narrative"),
-  // *Once in an arc the country answers.*
-  "warden-of-the-march": none("tableCall"),
-
-  /* ---- Tier 3 ---- */
-
-  // *Forty people do what you say.*
-  "camp-chieftain": none("narrative"),
-  // *You state the Church's position on a local matter and it is the Church's
-  // position.*
-  canon: none("narrative"),
-  // *Call a council and it convenes... Once between Long Rests, and it takes a
-  // day.*
-  elder: use({ use: { uses: once("long") } }),
-  // *The Deathguard of your holding do what you say without confirmation.*
-  executor: none("narrative"),
-  // *You hold a season's expedition.*
-  "expedition-head": none("narrative"),
-  // *You run four people... Once between Long Rests, one of them answers a
-  // question within the day.*
-  handler: use({ use: { uses: once("long") } }),
-  // *Your ruling stands in your town and is honored across the Alliance.*
-  magistrate: none("narrative"),
-  // *Once in an arc, forty people turn out armed for a week.*
-  marchlord: none("tableCall"),
-  // *You command a house of medicine.*
-  "master-chirurgeon": none("narrative"),
-  // *You keep a shop with hands in it.*
-  "master-of-the-craft": none("narrative"),
-  // *You run a cartel port.*
-  "senior-factor": none("narrative"),
-  // *A day with a fortification tells you how long it holds.*
-  "siege-master": none("narrative"),
-
-  /* ---- Tier 4 ---- */
-
-  // *Forty parishes act on your word.*
-  bishop: none("narrative"),
-  // *Several thousand people go where you send them.*
-  "clan-chieftain": none("narrative"),
-  // *You set prices, standards and admissions for a whole city's trade.*
-  guildmaster: none("narrative"),
-  // *Every Forsaken holding, patrol and deathstalker on your front acts on
-  // your word.*
-  "high-executor": none("narrative"),
-  // *Name any ruin, artefact, people or event of the deep past.*
-  "keeper-of-the-hall": none("narrative"),
-  // *Your ruling binds a province.*
-  "lord-justice": none("narrative"),
-  // *Once in an arc, several hundred people turn out for a season.*
-  "lord-warden": none("tableCall"),
-  // *Name a work — a bridge, a wall, a road, a shaft, a harbor.*
-  "master-of-works": none("narrative"),
-  // *Name a practice, a quarantine, a supply or a training.*
-  "physician-general": none("narrative"),
-  // *Name a question about a place, a person or an intention.*
-  spymaster: none("narrative"),
-  // *Once in an arc, commit a trade prince at a scale that changes a campaign.*
-  "trade-princes-voice": none("tableCall"),
-  // *Your word commits a tribe, and the Horde treats it as the tribe's word.*
-  "tribe-speaker": none("narrative")
-});
+// 03 §5's fifty-three career Signatures went with careers (D-1903, D-1909).

@@ -252,7 +252,7 @@ async function devourTest({ hunter, creature, token, picked, spell, dc, messageI
   }
   const { AzerothRoll } = await import("../dice/azeroth-roll.mjs");
   const { resilienceModifiers } = game.system.azeroth.workflows;
-  const roll = AzerothRoll.build({ dc: spellDC, kind: "resilience", modifiers: resilienceModifiers(creature, "spirit"), rollData: creature.getRollData?.() ?? {} });
+  const roll = AzerothRoll.build({ dc: spellDC, kind: "resilience", modifiers: resilienceModifiers(creature, "spirit"), rollData: creature.getRollData?.() ?? {}, roller: creature, chosen: null });
   roll.options.resilience = "spirit";
   await roll.evaluate();
   await creature.offerElunesRegard?.(roll);

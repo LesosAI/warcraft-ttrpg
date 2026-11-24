@@ -115,6 +115,7 @@ import * as v01622b from "./0.16.2.2-class-audit-b.mjs";
 import * as v01623c from "./0.16.2.3-class-audit-c.mjs";
 import * as v01624h from "./0.16.2.4-bestiary-health.mjs";
 import * as v01625w from "./0.16.2.5-bestiary-webp.mjs";
+import * as v0170p from "./0.17.0-professions.mjs";
 import { forgetPacks } from "./walk.mjs";
 
 // Ordered oldest to newest. Add new entries at the end.
@@ -338,7 +339,11 @@ const CHAIN = [
   { version: "0.16.2.4", module: v01624h },
   // 0.16.2.5: the bestiary's portraits and tokens are WebP (D-1902) - every stored path to a bestiary
   // portrait or token `.png`, on actors, items, effects, placed tokens and unlocked world packs, takes `.webp`.
-  { version: "0.16.2.5", module: v01625w }
+  { version: "0.16.2.5", module: v01625w },
+  // 0.17.0: professions replace careers (D-1903, D-1916) - every career item deleted, `system.career`
+  // cleared, `professionOwed` where no profession is held, a stub profession given 03's fields with its
+  // Rank kept, and every owned item's craft and material stamped against its pack copy. Ranks and XP untouched.
+  { version: "0.17.0", module: v0170p }
 ];
 
 /**
@@ -370,11 +375,32 @@ export function pending(from, chain = CHAIN) {
   return chain.filter(m => compareVersions(m.version, from) > 0);
 }
 
-export async function runMigrations() {
+/**
+ * **A MIGRATION MAY ANSWER "NOT YET"** (the professions review's M1). `migrate`
+ * answers a count of documents touched, or `{deferred: true, reason}` where it
+ * cannot run on what is on disk - 0.17.0 on packs built before the professions,
+ * which hold no stamp to compare against and no profession to give. A deferred
+ * step is NOT a step done: the world's setting stays where it was, the chain
+ * stops behind it (every later step assumes it ran), and the warning is given,
+ * so the step runs again on the next load once the packs are rebuilt. Answering
+ * 0 there would have stamped the world past it for good.
+ *
+ * @param {*} result  what `migrate` answered
+ * @returns {{deferred: boolean, count: number, reason: string}}
+ */
+export function migrationOutcome(result) {
+  if (result && typeof result === "object" && result.deferred === true) {
+    return { deferred: true, count: 0, reason: String(result.reason ?? "") };
+  }
+  const count = Math.trunc(Number(result));
+  return { deferred: false, count: Number.isFinite(count) ? count : 0, reason: "" };
+}
+
+export async function runMigrations({ chain = CHAIN } = {}) {
   if (!game.user.isGM) return;
 
   const from = game.settings.get("azeroth-rpg", SETTING_KEY);
-  const todo = pending(from);
+  const todo = pending(from, chain);
   if (!todo.length) return;
 
   // CLAUDE.md §10: always tell the user to back up before a migration runs.
@@ -384,7 +410,14 @@ export async function runMigrations() {
     for (const { version, module } of todo) {
       console.log(game.i18n.format("AZEROTH.Migration.Begin", { version }));
       try {
-        const count = await module.migrate(console.log);
+        const outcome = migrationOutcome(await module.migrate(console.log));
+        if (outcome.deferred) {
+          // Not yet: the setting is NOT advanced, so this step runs again on the next load.
+          console.warn(`azeroth-rpg | ${version}: ${outcome.reason}`);
+          ui.notifications?.warn(outcome.reason, { permanent: true });
+          return;
+        }
+        const count = outcome.count;
         await game.settings.set("azeroth-rpg", SETTING_KEY, version);
         const done = game.i18n.format("AZEROTH.Migration.Done", { version, count });
         console.log(done);

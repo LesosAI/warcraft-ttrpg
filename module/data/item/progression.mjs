@@ -18,6 +18,8 @@ import { migrateClassSource } from "../../migrations/0.6.0-class-branches.mjs";
 // (D-692). One schema, one guard: `equipment.mjs` owns both because
 // `forged()` was where the first one landed.
 import { cleanSignatureEffect, signatureField } from "./equipment.mjs";
+// A profession's stored shape made valid before the schema reads it (D-1903).
+import { cleanProfession } from "../../rules/professions.mjs";
 
 const fields = foundry.data.fields;
 
@@ -249,8 +251,8 @@ export class CareerData extends foundry.abstract.TypeDataModel {
       // *Once between Long Rests* - and nothing could count one: `resetUses`
       // walks `system.signatureEffect.use.uses` and only `forged()` carried
       // that path, so the Combat row printed *the count is the table's*. The
-      // parser stamps it from `rules/signatures.mjs#CAREER_SIGNATURES`, which
-      // is the hand-reviewed table the census already holds against the pack.
+      // careers parser stamped it from a hand table that went with the careers
+      // in 0.17.0; the field stays so a retired career item still loads.
       // It sits after `signature` for the same reason it does on an item: the
       // key order is the diff `tools/check-packs.mjs` reads.
       signatureEffect: signatureField(),
@@ -673,13 +675,61 @@ export class LegacyData extends foundry.abstract.TypeDataModel {
 
 /* -------------------------------------------- */
 
-/** A profession (11). A trade on 05 §8's Rank ladder, picked up in play. */
+/**
+ * A profession (03-PROFESSIONS; D-1903 to D-1930). A character holds ONE,
+ * chosen at creation; it gives the cheap skills, rises a tier with the
+ * character for nothing, and gathers and crafts. `rules/professions.mjs` is the
+ * law and carries the same rows; the pack document is the book's copy.
+ *
+ * Field order is 03 §2's entry template: Ability, Gathers, Tools, Makes,
+ * Skills (tier 1), Tier 2, Tier 3, Tier 4 (the importer reads in order). The
+ * EMBEDDED copy also carries what the character has done with it: its `rank`
+ * (bought with XP at the cheap rate, D-1905; a new character starts at 1, free,
+ * D-1917) and the `picks` made at tiers 2 to 4 (two each, D-1906).
+ *
+ * Every field is new beside `rank` and `trainer`, with an initial, so a stored
+ * stub item loads unchanged and keeps its Rank (D-1916). `migrateData` cleans
+ * only the keys present, at every depth (CLAUDE.md §15), before a `choices`
+ * or a `max` could refuse the item at load. `trainer` gates nothing any more
+ * (D-1913) and is kept so a stub's text is not dropped.
+ */
 export class ProfessionData extends foundry.abstract.TypeDataModel {
   static defineSchema() {
+    const skillList = (max = undefined) => new fields.ArrayField(
+      new fields.StringField({ required: true, blank: false, choices: () => Object.keys(AZEROTH.skills) }),
+      max === undefined ? { initial: [] } : { initial: [], max }
+    );
     return {
       ...base(),
-      rank: new fields.NumberField({ required: true, integer: true, initial: 0, min: 0, max: AZEROTH.RANK_MAX }),
+      ability: choiceField(AZEROTH.abilities),
+      gathers: new fields.SchemaField({
+        family: choiceField(AZEROTH.gatherFamilies),
+        skill: choiceField(AZEROTH.skills)
+      }),
+      // The tool's gear identifier (D-1923): one tool covers making and gathering.
+      tools: new fields.ArrayField(new fields.StringField({ required: true, blank: false }), { initial: [] }),
+      makes: new fields.StringField({ required: false, blank: true, initial: "" }),
+      // Five fixed at tier 1, then four listed at each later tier (D-1906).
+      skills: new fields.SchemaField({
+        1: skillList(),
+        2: skillList(),
+        3: skillList(),
+        4: skillList()
+      }),
+      rank: new fields.NumberField({ required: true, integer: true, initial: 1, min: 0, max: AZEROTH.RANK_MAX }),
+      // The two picked at each tier the character has reached (D-1906).
+      picks: new fields.SchemaField({
+        2: skillList(2),
+        3: skillList(2),
+        4: skillList(2)
+      }),
       trainer: new fields.StringField({ required: false, blank: true, initial: "" })
     };
+  }
+
+  /** A stored value outside its vocabulary is dropped or nulled, never refused (CLAUDE.md §15). */
+  static migrateData(source) {
+    cleanProfession(source);
+    return super.migrateData(source);
   }
 }

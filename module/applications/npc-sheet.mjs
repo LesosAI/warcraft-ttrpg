@@ -59,6 +59,9 @@ import { temporaryHealthContext } from "../effects/temporary-health.mjs";
 import { npcReloadMenu } from "./reload.mjs";
 import { handLay } from "../effects/bare-afflictions.mjs";
 import { bareKind } from "../rules/bare-afflictions.mjs";
+// Skin, Butcher and Salvage on a defeated creature's banner (D-1915, D-1955): the law and the one door.
+import { harvestOn } from "../rules/gathering.mjs";
+import { harvest, harvestSnapshotOf, refusalWords } from "../dice/profession-workflows.mjs";
 
 const { HandlebarsApplicationMixin } = foundry.applications.api;
 const { ActorSheetV2 } = foundry.applications.sheets;
@@ -138,6 +141,8 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
       // A totem bound off the table, planted beside its shaman (02 §7, D-708).
       plantTotem: AzerothNpcSheet.#onPlantTotem,
       viewArt: AzerothNpcSheet.#onViewArt,
+      // Skin, Butcher or Salvage this creature once it is defeated (D-1915): the viewer's own character.
+      harvestCreature: AzerothNpcSheet.#onHarvestCreature,
       // The Gear tab (the lead's N3, 2026-09-10). Every one of these is
       // rendered by `npc-gear.hbs` or by the row partial it draws, and an
       // action a template carries and the sheet does not register is a SILENT
@@ -359,6 +364,8 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
     context.actor = this.actor;
     context.canReviewChainCast = game.user.isGM && this.actor.getFlag("azeroth-rpg", "chainLightningCast")?.stage === "pending";
     context.reviewSearing = game.user.isGM && (system.attacks ?? []).some(attack => isSearingAttack(attack, bondOf(this.actor)));
+    // The harvests the viewer's character may make on this creature, once it is defeated (D-1915).
+    context.harvest = this.#harvestContext();
     context.effects = effectsContext(this.actor);
     context.tabs = this._prepareTabs("primary");
 
@@ -1075,6 +1082,44 @@ export class AzerothNpcSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
     // The GM's Release is no collapse by the Necromancer's own choice (the lead's Q4 of the 4b
     // review); the Necromancer's player releasing their own raised dead from the banner is.
     return release(owner, worldActorOf(this.actor).uuid, { byChoice: !game.user?.isGM });
+  }
+
+  /**
+   * **WHO HARVESTS, AND WHAT** (D-1915, D-1955): the viewer's own character (the user's assigned
+   * character, else a character token they control), and the harvests its profession may make on
+   * this creature once it is defeated, each made once (`gathering.mjs#harvestOn`). Null where
+   * there is none, so the banner draws nothing.
+   */
+  #harvester() {
+    const own = game.user?.character ?? null;
+    if (own?.type === "character") return own;
+    return canvas?.tokens?.controlled?.find?.(t => t.actor?.type === "character")?.actor ?? null;
+  }
+
+  #harvestContext() {
+    const who = this.#harvester();
+    const id = who?.professionItem?.system?.identifier ?? null;
+    if (!who || !id || who.uuid === this.actor.uuid) return null;
+    const snap = harvestSnapshotOf(this.actor);
+    const rows = harvestOn({ ...snap, harvested: false }, id).filter(h => !snap.done.includes(h.kind));
+    if (!rows.length) return null;
+    // A creature above the harvester's tier is out of reach: the button is greyed and says so (D-681).
+    const tier = who.professionTier ?? 1;
+    return {
+      who: game.i18n.format("AZEROTH.Profession.Sheet.Harvest.Who", { name: who.name }),
+      buttons: rows.map(h => ({
+        kind: h.kind,
+        label: game.i18n.localize(AZEROTH.harvestKinds[h.kind] ?? h.kind),
+        reason: h.tier > tier ? refusalWords({ reason: "harvestTier", tier: h.tier }) : null
+      }))
+    };
+  }
+
+  /** Skin, Butcher or Salvage, through `workflows.harvest` (the roll dialog, D-1927). */
+  static async #onHarvestCreature(event, target) {
+    const who = this.#harvester();
+    if (!who) return null;
+    return harvest(who, { target: this.actor, kind: target.dataset.kind, event });
   }
 
   /**

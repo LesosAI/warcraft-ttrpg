@@ -83,6 +83,11 @@ export const CORE_FALLBACK = Object.freeze({
   "Cloth and hides": "icons/svg/mountain.svg",
   "Stones and essences": "icons/svg/mountain.svg",
   Sundries: "icons/svg/mountain.svg",
+  // 08 §17's groups the professions added (D-1940): stone and powder, the
+  // parts, and Wilderness Survival's fish and game.
+  "Stone and powder": "icons/svg/mountain.svg",
+  Parts: "icons/svg/mountain.svg",
+  "Fish and game": "icons/svg/tankard.svg",
 
   // 08 §11's own sub-sections. These were the six the fallback table missed
   // on its first cut, and only a census of the packs' kinds found them.
@@ -110,7 +115,11 @@ export const CORE_FALLBACK = Object.freeze({
  * legacies, races, spells, talents and traits show without the art drop.
  */
 export const TYPE_FALLBACK = Object.freeze({
+  // A career is a hidden legacy type for one version (D-1903); a world's stale
+  // copy keeps the flag it wore until migration 0.17.0 deletes it.
   career: "icons/svg/tower-flag.svg",
+  // 03-PROFESSIONS' seven (D-1903).
+  profession: "icons/svg/hammer.svg",
   class: "icons/svg/combat.svg",
   // 04's gadgets, the one pack of features (the lead, 2026-10-24): every one a
   // Classic engineering device.

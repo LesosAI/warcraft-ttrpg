@@ -73,6 +73,14 @@
       <button type="button" class="azeroth-build" data-action="bindTo">{{localize "AZEROTH.Bound.BindTo"}}</button>
     </div>
     {{/if}}
+    {{#if harvest}}
+    {{!-- A defeated creature (D-1915): Skin, Butcher or Salvage for the viewer's character, each
+          a Gathering Test through the roll dialog, made once on the creature. --}}
+    <div class="azeroth-identity-line azeroth-harvest-line">
+      <span>{{harvest.who}}</span>
+      {{#each harvest.buttons as |h|}}<button type="button" class="azeroth-build" data-action="harvestCreature" data-kind="{{h.kind}}"{{#if h.reason}} disabled{{/if}}>{{h.label}}</button>{{#if h.reason}}<span class="azeroth-harvest-refusal">{{h.reason}}</span>{{/if}}{{/each}}
+    </div>
+    {{/if}}
   </div>
 
   <dl class="azeroth-callouts">

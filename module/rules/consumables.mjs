@@ -68,7 +68,9 @@ export const CONSUMABLE_KINDS = Object.freeze([
   // 08 §12's Remedies: ends the one disease it names (D12 §4).
   "remedy",
   // Approved special designs/provisions use their own authoritative workflow, not a draught.
-  "special"
+  "special",
+  // 08 §12's Cooked food (D-1919, D-1922): eaten, and its eater is Well Fed (`use.wellFed`).
+  "meal"
 ]);
 
 /** What a coating may be laid on, as 08 §13's *Goes on* column names it. */
@@ -98,6 +100,13 @@ export function emptyUse() {
     // leaves carried on the target (`readCarried`'s descriptor).
     cures: null,
     carried: null,
+    // **THE PROFESSIONS' CATALOGUE** (D-1919, D-1945, O-665): a Cooked food makes its eater
+    // Well Fed (D-1922); Troll's Blood and Mageblood restore at the start of each of the
+    // drinker's turns (`regen`, until the span ends); a Rage potion gives a user of Rage its
+    // Rage (`gain`).
+    wellFed: false,
+    regen: { health: null, mana: null },
+    gain: { pool: null, amount: null },
     note: ""
   };
 }
@@ -108,6 +117,21 @@ const num = v => {
   return Number.isFinite(n) ? n : null;
 };
 const oneOf = (v, keys) => (typeof v === "string" && keys.includes(v) ? v : null);
+
+/**
+ * One nested object cleaned KEY BY KEY: each key the source holds, through its own reader, and
+ * no other (CLAUDE.md §15, at every depth). A non-object becomes every key at its reader's empty
+ * value, as the whole-object guards always made it.
+ */
+function nested(raw, readers) {
+  const out = {};
+  if (!raw || typeof raw !== "object") {
+    for (const [key, read] of Object.entries(readers)) out[key] = read(undefined);
+    return out;
+  }
+  for (const [key, read] of Object.entries(readers)) if (key in raw) out[key] = read(raw[key]);
+  return out;
+}
 
 /**
  * `readCarried`'s descriptor made valid, only the keys that are there at every
@@ -146,11 +170,11 @@ export function cleanUse(raw, { conditions = [], schools = [], resiliences = [],
   if (has("action")) out.action = oneOf(raw.action, actions);
   if (has("target")) out.target = oneOf(raw.target, ["self", "creature", "item", "area"]) ?? "self";
   if (has("appliesTo")) out.appliesTo = oneOf(raw.appliesTo, GOES_ON);
-  if (has("heal")) {
-    out.heal = {
-      health: num(raw.heal?.health), mana: num(raw.heal?.mana), fatigue: num(raw.heal?.fatigue)
-    };
-  }
+  // **EVERY NESTED OBJECT IS CLEANED KEY BY KEY TOO** (CLAUDE.md §15, the recursive rule; the
+  // professions review's minor 8): `migrateData` runs over a partial update, and
+  // `update({"system.use.regen.health": 3})` arrives here as `{regen: {health: 3}}`. Rebuilt whole,
+  // that wrote `mana: null` over the stored Mana; cleaned key by key it writes only the Health.
+  if (has("heal")) out.heal = nested(raw.heal, { health: num, mana: num, fatigue: num });
   const ids = list => (Array.isArray(list) ? list.filter(id => !conditions.length || conditions.includes(id)) : []);
   if (has("ends")) out.ends = ids(raw.ends);
   if (has("statuses")) out.statuses = ids(raw.statuses);
@@ -166,25 +190,27 @@ export function cleanUse(raw, { conditions = [], schools = [], resiliences = [],
   }
   if (has("trait")) out.trait = typeof raw.trait === "string" && raw.trait ? raw.trait : null;
   if (has("rating")) out.rating = num(raw.rating);
-  if (has("damage")) {
-    out.damage = {
-      amount: num(raw.damage?.amount),
-      type: oneOf(raw.damage?.type, ["physical", ...schools])
-    };
-  }
+  if (has("damage")) out.damage = nested(raw.damage, { amount: num, type: v => oneOf(v, ["physical", ...schools]) });
   if (has("resist")) {
-    out.resist = raw.resist && oneOf(raw.resist.resilience, resiliences)
-      ? { resilience: raw.resist.resilience, dc: num(raw.resist.dc) }
-      : null;
+    // A Resilience outside the vocabulary refuses the whole descriptor, as it always did; a partial
+    // write that names only the DC keeps the stored Resilience.
+    const r = raw.resist;
+    out.resist = !r || typeof r !== "object" || ("resilience" in r && !oneOf(r.resilience, resiliences))
+      ? null
+      : nested(r, { resilience: v => oneOf(v, resiliences), dc: num });
   }
   if (has("area")) out.area = typeof raw.area === "string" ? raw.area : "";
   if (has("duration")) {
-    out.duration = { value: num(raw.duration?.value), units: oneOf(raw.duration?.units, ["rounds", "turns", "minutes", "hours", "days"]) };
+    // `shortRest` and `longRest` name the rest that ends it (D-1962, `rules/rest-ends.mjs`).
+    out.duration = nested(raw.duration, { value: num, units: v => oneOf(v, ["rounds", "turns", "minutes", "hours", "days", "shortRest", "longRest"]) });
   }
   if (has("perRest")) out.perRest = oneOf(raw.perRest, ["short", "long"]);
   if (has("xp")) out.xp = num(raw.xp);
   if (has("cures")) out.cures = typeof raw.cures === "string" && DISEASES[raw.cures] ? raw.cures : null;
   if (has("carried")) out.carried = cleanCarried(raw.carried);
+  if (has("wellFed")) out.wellFed = raw.wellFed === true;
+  if (has("regen")) out.regen = nested(raw.regen, { health: num, mana: num });
+  if (has("gain")) out.gain = nested(raw.gain, { pool: v => (typeof v === "string" && v ? v : null), amount: num });
   if (has("note")) out.note = typeof raw.note === "string" ? raw.note : "";
   return out;
 }
@@ -614,8 +640,14 @@ export function consumableImmunities(use, known = []) {
   return conditionsIn(match[1], known);
 }
 
-/** *for ten minutes*, *for an hour*, *for a minute*, *for six hours* → a duration. */
+/**
+ * *for ten minutes*, *for an hour*, *for a minute*, *for six hours* → a duration;
+ * *until your next Short Rest* and *until your next Long Rest* → `{value: 1, units:
+ * "shortRest"|"longRest"}`, a span a rest ends (D-1962, `rules/rest-ends.mjs`).
+ */
 export function durationIn(text) {
+  const rest = /until your next (Short|Long) Rest/i.exec(String(text ?? ""));
+  if (rest) return { value: 1, units: rest[1].toLowerCase() === "short" ? "shortRest" : "longRest" };
   const WORDS = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, ten: 10, twenty: 20, thirty: 30 };
   const m = /for (\d+|a|an|one|two|three|four|five|six|ten|twenty|thirty) (minute|hour|turn|round|day)s?/i.exec(text);
   if (!m) return { value: null, units: null };
@@ -678,6 +710,15 @@ export function seedUse({ name = "", section = "", description = "" } = {}, { co
   // 08 §13: exactly this device is a spent repair, with no printed action time.
   if (/· Devices$/.test(shelf) && ["Repair kit, mechanical","Rocket boots","Target dummy","Spring-loaded grapple"].includes(name)) {
     return {...use, kind:"special", action:null, target:"self", note:name};
+  }
+  // **08 §12's COOKED FOOD MAKES ITS EATER WELL FED** (D-1919, D-1922; the plan's M9): a
+  // Use of its own that lays Well Fed and nothing else - the Health a food restores is the
+  // Short Rest's, which eats it as food (`provisions.mjs`). A Meal grants nothing more and keeps
+  // no Use. Read off the Effect run, never the name.
+  if (/· Food and drink$/.test(shelf)) {
+    const said = runAfter(flatten(description), "Effect") ?? "";
+    if (!/^Well Fed\b/.test(said)) return use;
+    return { ...use, kind: "meal", action: "half", target: "self", wellFed: true };
   }
   // A shelf decides whether a thing has a Use at all.
   if (!usableShelf(shelf)) return use;
@@ -787,12 +828,30 @@ export function seedUse({ name = "", section = "", description = "" } = {}, { co
   }
 
   // ---- 08 §12: drunk, or laid on somebody.
+  // **AT THE START OF EACH OF YOUR TURNS** (Troll's Blood, Mageblood; D-1945, O-665): a
+  // restore every turn until the span ends, never a one-time heal (`effects/consumable-regen.mjs`).
+  const regen = /^Restore (\d+) (Health|Mana) at the start of each of your turns\b/.exec(effect);
+  if (regen) use.regen[regen[2] === "Health" ? "health" : "mana"] = Number(regen[1]);
   // *Restore 4 Health and 4 Mana*: the second number carries no verb of its own.
-  const restore = /[Rr]estore\b/.test(effect) ? [...effect.matchAll(/(\d+) (Health|Mana)\b/g)] : [];
+  const restore = !regen && /[Rr]estore\b/.test(effect) ? [...effect.matchAll(/(\d+) (Health|Mana)\b/g)] : [];
   const fatigue = /Remove (\d+) Fatigue/.exec(effect);
   const attributes = [...effect.matchAll(/\+(\d+) (Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)/g)];
   const speed = /Speed \+(\d+) feet/.exec(effect);
-  const armorPoint = /\+(\d+) Armor Point/.exec(effect);
+  // *your Speed is 10 feet lower* (the Greater Stoneshield Potion, D-1945): a negative add.
+  const slower = /your Speed is (\d+) feet lower/.exec(effect);
+  if (slower) use.changes.push(change("system.speed", `-${slower[1]}`));
+  // **ARMOR POINTS BY LOCATION** (D-1945): *on every location*, *on the Body and +1 elsewhere*
+  // and *on the Body* read as what they say; a bare *+N Armor Point* is the Body, as before.
+  const apEvery = /\+(\d+) Armor Points? on every location/.exec(effect);
+  const apSplit = /\+(\d+) Armor Points? on the Body and \+(\d+) elsewhere/.exec(effect);
+  const armorPoint = !apEvery && !apSplit ? /\+(\d+) Armor Point/.exec(effect) : null;
+  // *+2 Fortitude*: 02's Fortitude is a point of Health each (Toughness's own key, D-768).
+  const fortitude = /\+(\d+) Fortitude\b/.exec(effect);
+  // *+1 Spellpower in Fire*: the school's own lane (08 §10's shape, D-1945).
+  const spellpower = /\+(\d+) Spellpower in (Arcane|Fire|Frost|Holy|Nature|Shadow|Fel)\b/.exec(effect);
+  // *A user of Rage gains 4 Rage* (Classic's Rage Potions, D-1945).
+  const rage = /A user of Rage gains (\d+) Rage/.exec(effect);
+  if (rage) use.gain = { pool: "rage", amount: Number(rage[1]) };
   // *End **Numbed*** opens a row and *and end **Bleeding*** closes one.
   const ends = /\bends?\b\s+(?:every instance of\s+)?((?:\*\*[^*]+\*\*(?:,?\s*(?:and\s+)?)?)+)/i.exec(effect);
 
@@ -807,6 +866,13 @@ export function seedUse({ name = "", section = "", description = "" } = {}, { co
   }
   if (speed) use.changes.push(change("system.speed", speed[1]));
   if (armorPoint) use.changes.push(change("system.ap.body", armorPoint[1]));
+  if (apEvery) for (const at of ["body", "head", "limb"]) use.changes.push(change(`system.ap.${at}`, apEvery[1]));
+  if (apSplit) {
+    use.changes.push(change("system.ap.body", apSplit[1]));
+    for (const at of ["head", "limb"]) use.changes.push(change(`system.ap.${at}`, apSplit[2]));
+  }
+  if (fortitude) use.changes.push(change("system.health.max", fortitude[1]));
+  if (spellpower) use.changes.push(change(`system.spellpower.${spellpower[2].toLowerCase()}`, spellpower[1]));
   if (ends) use.ends = conditionsIn(ends[1], conditions);
   use.duration = durationIn(effect);
 
@@ -820,7 +886,7 @@ export function seedUse({ name = "", section = "", description = "" } = {}, { co
   }
 
   const carries = use.heal.health !== null || use.heal.mana !== null || use.heal.fatigue !== null
-    || use.changes.length || use.ends.length;
+    || use.changes.length || use.ends.length || use.regen.health !== null || use.regen.mana !== null || use.gain.amount !== null;
   if (!carries) {
     // A meal grants nothing and the table's dash is the whole row.
     if (!effect || effect === "—") return use;

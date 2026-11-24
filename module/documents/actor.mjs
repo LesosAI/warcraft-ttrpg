@@ -175,7 +175,7 @@ import { BLOOD_SINCE_REST_FLAG, bloodNeeded, bloodRestPlan, bloodSinceRestOf, vi
 import { restoreSpellUses } from "../effects/spell-limits.mjs";
 import { restoreApprovedSignatureUses } from "../effects/approved-signature-use.mjs";
 // What a Short Rest eats and drinks (05 SS16, 08 SS12; D-733).
-import { FOOD_KINDS, isProvision, restPicks } from "../rules/provisions.mjs";
+import { DRINK_KINDS, FOOD_KINDS, foodTier, isProvision, restPicks, restSpends } from "../rules/provisions.mjs";
 import {prostheticEffectView} from "../rules/prosthetics.mjs";
 import { spendOne } from "../rules/consumables.mjs";
 
@@ -235,6 +235,15 @@ import { grantsOn } from "../rules/grants.mjs";
 // (D-769): the physical half, what melds, and what ends it.
 import { AVATAR, SHAPE_FLAG, isForcedKind, meldsGear, naturalWeapon, readShape, shapePhysical } from "../rules/shapes.mjs";
 import { endShapeAt, endShapeOnDamage, refuseForcedShape } from "./shapes.mjs";
+// THE PROFESSION (D-1903 to D-1930): one at a time, its cheap skills, its tool, and Well Fed.
+import {
+  PROFESSION_OWED_FLAG, carriedTool, professionSkills as professionSkillSet, professionSwap, professionTier as professionTierAt
+} from "../rules/professions.mjs";
+import { skillFromKnown } from "../rules/creation.mjs";
+import { endsAtRest } from "../rules/rest-ends.mjs";
+import { layWellFed } from "../effects/well-fed.mjs";
+// What a rest's meal leaves behind: a cooked food's Well Fed, or a shared Feast's (08 §12; the review's M8).
+import { restWellFed } from "../rules/well-fed.mjs";
 // A glaive Flame Crash threw (07 §15; D-1549): equipped, and out of the hand until it is back.
 import { glaiveAway } from "../rules/demon-hunter-spells.mjs";
 // 14's Hex the Loudest (D-809): a creature that cannot attack.
@@ -897,9 +906,57 @@ export class AzerothActor extends Actor {
     };
   }
 
-  /** The career item, if one is held. */
-  get careerItem() {
-    return this.items.get(this.system?.career?.itemId) ?? null;
+  /**
+   * **THE PROFESSION** (D-1903): the embedded profession item the character's
+   * `system.profession.itemId` names, else the one it holds (an actor made with
+   * `Actor.create({items})` never ran the link, CLAUDE.md §15), else null. One
+   * at a time: `_onCreateDescendantDocuments` deletes any other.
+   * Replaces the career's `careerItem`, retired with careers.
+   */
+  get professionItem() {
+    if (this.type !== "character") return null;
+    return this.items.get(this.system?.profession?.itemId ?? "")
+      ?? this.items.find(i => i.type === "profession") ?? null;
+  }
+
+  /** The profession's tier: the character's own (D-1905), 1 to 4. */
+  get professionTier() {
+    return this.system?.tier ?? professionTierAt(this.system?.level ?? 1);
+  }
+
+  /**
+   * **THE SKILLS AT THE CHEAP RATE** (D-1906): the profession's five, the picks
+   * made at each tier reached, and the skill a Human's Adaptable names, always
+   * cheap (02 §5). A Set of skill keys; empty with no profession beside
+   * Adaptable's. The sheet's Rank prices and every XP door read it
+   * (`xp.mjs#rankCost(rank, set.has(key))`).
+   *
+   * @returns {Set<string>}
+   */
+  professionSkills() {
+    const p = this.professionItem;
+    return professionSkillSet({ profession: p?.system ?? null, tier: this.professionTier, picks: p?.system?.picks ?? null, adaptable: this.adaptableSkill() });
+  }
+
+  /**
+   * The skill a Human's Adaptable names (02 §5, D-636), off the race trait
+   * feature's `known` list, or null: always a cheap skill whatever the
+   * profession (D-1934).
+   */
+  adaptableSkill() {
+    const raceId = this.raceItem?.id ?? null;
+    if (!raceId) return null;
+    const trait = this.items.find(i => i.type === "feature" && i.getFlag("azeroth-rpg", "feature")?.classId === raceId);
+    return skillFromKnown(trait?.system?.known ?? []);
+  }
+
+  /**
+   * The profession's tool this character carries, the best grade of it
+   * (D-1923, D-1936), or null: `{item, rarity, bonus}`.
+   */
+  professionTool() {
+    const id = this.professionItem?.system?.identifier ?? null;
+    return id ? carriedTool(this.items, id) : null;
   }
 
   /**
@@ -1026,12 +1083,24 @@ export class AzerothActor extends Actor {
 
     const update = {};
 
-    // A career: the newest one is THE career (03 §2, one at a time). The
-    // character's, since `system.career` is the character's field.
-    const career = this.type === "character" ? documents.findLast(d => d.type === "career") : null;
-    if (career && this.system?.career?.itemId !== career.id) {
-      update["system.career.itemId"] = career.id;
-      update["system.career.tier"] = career.system?.tier ?? 1;
+    // **A PROFESSION: THE NEWEST IS THE PROFESSION, ONE AT A TIME, AND THE RANK
+    // COMES WITH YOU** (D-1903; 03 §4, D-1933). Replaces the career's link. The
+    // others are deleted and the newcomer takes the highest Rank any held
+    // (`professions.mjs#professionSwap`), so changing trade never costs a Rank.
+    const profession = this.type === "character" ? documents.findLast(d => d.type === "profession") : null;
+    let professionChain = null;
+    if (profession) {
+      const held = this.items.filter(i => i.type === "profession" && i.id !== profession.id);
+      const swap = professionSwap({ arriving: profession, held });
+      if (this.system?.profession?.itemId !== profession.id) update["system.profession.itemId"] = profession.id;
+      if (this.getFlag("azeroth-rpg", PROFESSION_OWED_FLAG) !== undefined) {
+        update[`flags.azeroth-rpg.${PROFESSION_OWED_FLAG}`] = foundry.data.operators.ForcedDeletion.create();
+      }
+      professionChain = async () => {
+        if (swap.rankChanged) await profession.update({ "system.rank": swap.rank });
+        const stale = swap.remove.filter(id => this.items.has(id));
+        if (stale.length) await this.deleteEmbeddedDocuments("Item", stale);
+      };
     }
 
     // A class: linked into `system.classes[]`, which nothing else ever writes.
@@ -1074,7 +1143,11 @@ export class AzerothActor extends Actor {
       if (stale.length) this.deleteEmbeddedDocuments("Item", stale);
     }
 
-    const linked = Object.keys(update).length ? this.update(update) : Promise.resolve(this);
+    let linked = Object.keys(update).length ? this.update(update) : Promise.resolve(this);
+    if (professionChain) {
+      linked = linked.then(professionChain);
+      this._professionLink = linked.catch(err => console.warn("azeroth-rpg | profession link", err));
+    }
 
     // A class brings its three branches with it. 04 gives every class thirty-
     // six talents and the tree is drawn from the talents the actor OWNS, so
@@ -1137,11 +1210,13 @@ export class AzerothActor extends Actor {
     }
 
     const update = {};
-    const held = this.system?.career?.itemId;
-    if (held && ids.includes(held)) {
-      const remaining = this.items.find(i => i.type === "career");
-      update["system.career.itemId"] = remaining?.id ?? null;
-      update["system.career.tier"] = remaining?.system?.tier ?? 1;
+    // The profession the character points at, deleted: the pointer moves to
+    // any other it still holds, or clears (D-1903). A swap's own delete of the
+    // OLD profession leaves the pointer on the new one.
+    const heldProfession = this.system?.profession?.itemId;
+    if (this.type === "character" && heldProfession && ids.includes(heldProfession)) {
+      const remaining = this.items.find(i => i.type === "profession");
+      update["system.profession.itemId"] = remaining?.id ?? null;
     }
 
     // A deleted class leaves `classes[]`; deleting the primary promotes the
@@ -2171,6 +2246,19 @@ export class AzerothActor extends Actor {
     return sharedHours(giver, this, "health");
   }
 
+  /**
+   * **END WHAT LASTS UNTIL THIS REST** (D-1962): every effect whose
+   * `flags.azeroth-rpg.restEnds` this rest ends (`rules/rest-ends.mjs#endsAtRest`),
+   * Well Fed among them. Answers how many went.
+   *
+   * @param {"short"|"long"} kind
+   */
+  async clearRestEnds(kind) {
+    const ids = this.effects.filter(e => endsAtRest(e, kind)).map(e => e.id);
+    if (ids.length) await this.deleteEmbeddedDocuments("ActiveEffect", ids);
+    return ids.length;
+  }
+
   async clearRestDecay() {
     const ids = this.effects.filter(e => e.getFlag("azeroth-rpg", "decay")?.until === "shortRest").map(e => e.id);
     if (ids.length) await this.deleteEmbeddedDocuments("ActiveEffect", ids);
@@ -2425,7 +2513,7 @@ export class AzerothActor extends Actor {
         ui.notifications?.warn(game.i18n.format("AZEROTH.Rest.NotFood", { name: eaten.name }));
         return null;
       }
-      if (drunk && !isProvision(drunk, "drink")) {
+      if (drunk && !isProvision(drunk, DRINK_KINDS)) {
         ui.notifications?.warn(game.i18n.format("AZEROTH.Rest.NotDrink", { name: drunk.name }));
         return null;
       }
@@ -2436,10 +2524,15 @@ export class AzerothActor extends Actor {
       if(!specialRest.ok)return null;
       ate = sharedMeal?.name??eaten?.name ?? null;
       drank = drunk?.name ?? null;
-      picks = restPicks({ foodKind: sharedMeal?"hotMeal":eaten?.system?.provision ?? null, hasDrink: Boolean(drunk) });
+      // **A FOOD ADDS HEALTH EQUAL TO ITS TIER** (O-702, D-2004): read off the eaten item
+      // before the spend, as its name is; a shared Feast adds none of its own.
+      picks = restPicks({ foodKind: sharedMeal?"hotMeal":eaten?.system?.provision ?? null, hasDrink: Boolean(drunk), foodTier: sharedMeal ? 0 : foodTier(eaten) });
       // 4. One item, one rest, whatever the row says it keeps for. `spendOne`
-      // is `useGear`'s own mark-off rule (D-733).
-      for (const item of [eaten, drunk]) {
+      // is `useGear`'s own mark-off rule (D-733). **A dish named as the food AND
+      // the drink is one dish and is marked off once** (`restSpends`; the final
+      // review's M1): twice spent two, and at a quantity of 1 the second delete
+      // named a document already gone.
+      for (const item of restSpends(eaten, drunk)) {
         if (!item) continue;
         const spend = spendOne(item.system?.quantity ?? 1);
         if (spend?.delete) await item.delete();
@@ -2452,6 +2545,12 @@ export class AzerothActor extends Actor {
     // refused leaves the shape standing; Demonic Ascendance keeps a
     // Metamorphosis through a Short one (04).
     await endShapeAt(this, "short");
+    // **STARTING A SHORT REST ENDS WELL FED** (D-1922), and every effect that
+    // lasts *until your next Short Rest* (D-1962): after every refusal, and
+    // before the rest's own cooked food lays a new Well Fed below.
+    // A shared Feast lays it for each participant too (08 §12: *each participant ... is Well Fed*).
+    const fedBy = restWellFed({ eaten, feast: sharedMeal });
+    await this.clearRestEnds("short");
     // **HATRED HELD AT A SHORT REST BECOMES FEL** (the Demon Hunter plan's R2: *gain 1 Fel Corruption
     // for every 3 Momentum held, rounded up, and the pool empties; no Test*), after every refusal
     // above and before the rest empties the pool (`kept-pools.mjs#EMPTIED_BY.hatred`).
@@ -2526,6 +2625,9 @@ export class AzerothActor extends Actor {
     }
     await this.setFlag("azeroth-rpg","restGeneration",restGeneration(this)+1);
     await finishSharedFeast(this,sharedMeal);
+    // **A COOKED FOOD EATEN AS THIS REST'S FOOD MAKES THE EATER WELL FED ONCE IT
+    // IS OVER** (D-1922): `fedBy` above, read off the eaten item, whose data outlives its mark-off.
+    if (fedBy) await layWellFed(this, fedBy);
     await restCard({ actor: this, kind: "short", gains: r.gains, restored, cleared, count, ate, drank, blood: bloodTaken });
     return this;
     });
@@ -2557,6 +2659,9 @@ export class AzerothActor extends Actor {
     const {rechargeSpecialEquipment}=await import("../effects/special-equipment.mjs");
     // **AN AVATAR OR A METAMORPHOSIS ENDS WITH THE REST** (02 §7, D-769).
     await endShapeAt(this, "long");
+    // **AND EVERYTHING THAT LASTS UNTIL A REST** (D-1962): a Long Rest is the
+    // next rest of either kind, so Well Fed and the elixirs end with it.
+    await this.clearRestEnds("long");
     // **THE LONG WATCH ENDS WITH IT** (04: *Until your next Long Rest you know its
     // direction and rough distance*; the Legacy branches' door 18): the user's own flag.
     if (this.getFlag?.("azeroth-rpg", WATCH_FLAG)) await this.unsetFlag("azeroth-rpg", WATCH_FLAG);

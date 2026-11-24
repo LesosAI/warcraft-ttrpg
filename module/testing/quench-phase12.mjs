@@ -1695,7 +1695,7 @@ export function creatorSpellsBatch(context) {
           cls: await uuidOf(PACK_FOR.class, "Warrior"),
           method: "array",
           abilities: { str: 16, dex: 13, con: 14, int: 10, wis: 12, cha: 8 },
-          career: await uuidOf(PACK_FOR.career, "Watchman"),
+          profession: await uuidOf(PACK_FOR.profession, "Wilderness Survival"),
           ranks: { athletics: 1 },
           adaptable: "athletics",
           racialTalent: "Refugee's Road",

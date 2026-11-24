@@ -99,6 +99,8 @@ import { cursedBy } from "../rules/sovereign-spells.mjs";
 // A throw a ticked rider makes on its own ability (04's Storm Bolt; the B6 review).
 import { riderThrowModifiers } from "../rules/wield.mjs";
 import { groupLines } from "../rules/line-groups.mjs";
+// Well Fed's +1 SL, a ticked automatic line on every Test (D-1922).
+import { wellFedLine } from "../rules/well-fed.mjs";
 
 const TEMPLATE = "systems/azeroth-rpg/templates/dialog/roll-test.hbs";
 
@@ -693,6 +695,11 @@ export function prepareRoll(actor, given) {
   });
   situational.automatic.push(...equipment.automatic);
   situational.judgement.push(...equipment.judgement);
+  // **WELL FED** (D-1922; the plan's M9): *"Well Fed: +1 SL"*, ticked, on every Test the roller
+  // makes while it holds the carrier. It counts no Boon, Bane or modifier: the roll adds it to the
+  // SL after the die (`AzerothRoll#outcome`), and an unticked line is the roller's choice.
+  const fed = wellFedLine(actor.effects ?? []);
+  if (fed) situational.automatic.push({ id: fed.key, label: fed.label, name: "", boons: 0, banes: 0, modifier: 0, checked: true, sl: fed.sl });
   for (const partner of symbiosisSkillPartners(actor, { kind: test.kind, skill: spec.skill, source })) {
     situational.automatic.push({
       id: `symbiosis-${partner.uuid}`, label: "AZEROTH.Symbiosis.SkillBoon",
@@ -725,7 +732,7 @@ export function prepareRoll(actor, given) {
   let dc, dcSource;
   if (eachTarget) { dc = null; dcSource = "each"; }
   // A DC the rule fixes (08 §4's Identify, by quality) is drawn read-only and said so (`dcLocked`).
-  else if (spec.dc != null) { dc = spec.dc; dcSource = spec.dcLocked === true ? "ruled" : "given"; }
+  else if (spec.dc != null) { dc = spec.dc; dcSource = spec.dcLocked === true ? (test.kind === "profession" ? "work" : "ruled") : "given"; }
   else if (usesDefense) { dc = target.defense; dcSource = "defense"; }
   else if (spec.fallbackDC != null) { dc = spec.fallbackDC; dcSource = spec.fallbackSource ?? "given"; }
   else { dc = standardDC(actor.system?.tier ?? 1); dcSource = "standard"; }

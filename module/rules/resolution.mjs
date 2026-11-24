@@ -3,7 +3,14 @@
  * d20 + modifier vs. DC produces a Success Level (SL).
  */
 
-export const SL_CAP = 6;
+/**
+ * 05 §2: *SL caps at +10 and −10.* It was 6 until the lead raised the whole cap
+ * (O-699; the lead: *"raise the SL whole cap"*), so Well Fed's +1 and every other
+ * SL bonus stop at the same 10 a Test's own SL does. `config.mjs` carries the same
+ * number for the casting rules, and `resolution.test.mjs` holds the two together and
+ * both to the chapter.
+ */
+export const SL_CAP = 10;
 
 /** Four dice is the ceiling: a fourth Boon changes nothing (05 §4). */
 export const DICE_CEILING = 4;
@@ -113,6 +120,18 @@ export function resolveTest({ natural, modifier = 0, dc = 10, criticalOn = 20 } 
     return { total, sl: Math.min(raw, 0), success: false, natural, critical: false, fumble: true };
   }
   return { total, sl: raw, success: succeeded(total, dc), natural, critical: false, fumble: false };
+}
+
+/**
+ * A Craft Test or a Gathering Test read off the adjusted total alone (D-1980; the
+ * lead, 2026-11-24: *"adjust rolls matter, not crit fails"*). There is no natural
+ * 20 that always succeeds and no natural 1 that always fails: the SL is the
+ * margin's, success is read off the margin (D-678), and `critical` and `fumble`
+ * are never set. Every other Test keeps `resolveTest`.
+ */
+export function resolveAdjusted({ natural, modifier = 0, dc = 10 } = {}) {
+  const total = natural + modifier;
+  return { total, sl: computeSL(total, dc), success: succeeded(total, dc), natural, critical: false, fumble: false };
 }
 
 /**

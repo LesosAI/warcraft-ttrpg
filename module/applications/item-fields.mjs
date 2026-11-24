@@ -40,6 +40,8 @@ import { capacityParts } from "../rules/containers.mjs";
 import { bagSlotsOf, isMount, wellsOf } from "../rules/slots.mjs";
 import { useParts } from "../rules/consumables.mjs";
 import { DISEASES } from "../rules/afflictions.mjs";
+// Every profession that makes an item (O-662, D-1960).
+import { craftsOf } from "../rules/recipes.mjs";
 
 /** Fields every imported item carries, shown under the header. */
 export const PROVENANCE_FIELDS = Object.freeze([
@@ -168,23 +170,9 @@ export const ITEM_FIELDS = Object.freeze({
     }
   ]),
 
-  // 03 §2's eight fields, in order: Tier, Grantor, Entry, In-career,
-  // Signature, Opens, Closes, Exits — then §5's Open to, which the roster
-  // prints and the entry's table does not (D-636).
-  career: Object.freeze([
-    { path: "tier", label: "AZEROTH.Item.Tier", type: "number" },
-    { path: "grantor", label: "AZEROTH.Item.Grantor", type: "text" },
-    { path: "entry", label: "AZEROTH.Item.Entry", type: "text" },
-    { path: "inCareer", label: "AZEROTH.Item.InCareer", type: "tags" },
-    { path: "signature.name", label: "AZEROTH.Item.Signature", type: "text" },
-    { path: "opens", label: "AZEROTH.Item.Opens", type: "text" },
-    { path: "closes", label: "AZEROTH.Item.Closes", type: "text" },
-    {
-      path: "exits", label: "AZEROTH.Item.Exits", type: "table",
-      columns: [{ path: "name", label: "AZEROTH.Item.Career" }]
-    },
-    { path: "side", label: "AZEROTH.Item.Side", type: "select", choices: "sides" }
-  ]),
+  // A career is a hidden legacy type for one version (D-1903): a stale one still opens, and
+  // shows nothing but its description until migration 0.17.0 deletes it.
+  career: Object.freeze([]),
 
   // 04 §2's row: Tier, Talent, Ranks, Requires, Effect. The tier is the
   // BRANCH tier, gated by points spent in that branch, not by character level.
@@ -250,8 +238,24 @@ export const ITEM_FIELDS = Object.freeze({
     { path: "builds", label: "AZEROTH.Item.Builds", type: "text" }
   ]),
 
+  // 03 §2's eight fields, in order (D-1931): Ability, Gathers, Tools, Makes, then the
+  // skills, five at tier 1 and four at each tier after. Then what the character has done
+  // with it: the Rank (D-1905) and the two picked at each tier (D-1906). The trainer
+  // gates nothing any more (D-1913) and is shown so a stub's text is not lost.
   profession: Object.freeze([
+    { path: "ability", label: "AZEROTH.Item.ProfessionAbility", type: "select", choices: "abilities" },
+    { path: "gathers.family", label: "AZEROTH.Item.Gathers", type: "select", choices: "gatherFamilies" },
+    { path: "gathers.skill", label: "AZEROTH.Item.GatherSkill", type: "select", choices: "skills" },
+    { path: "tools", label: "AZEROTH.Item.ProfessionTool", type: "tags" },
+    { path: "makes", label: "AZEROTH.Item.Makes", type: "text" },
+    { path: "skills.1", label: "AZEROTH.Item.ProfessionSkills1", type: "tags", choices: "skills" },
+    { path: "skills.2", label: "AZEROTH.Item.ProfessionSkills2", type: "tags", choices: "skills" },
+    { path: "skills.3", label: "AZEROTH.Item.ProfessionSkills3", type: "tags", choices: "skills" },
+    { path: "skills.4", label: "AZEROTH.Item.ProfessionSkills4", type: "tags", choices: "skills" },
     { path: "rank", label: "AZEROTH.Item.Rank", type: "number" },
+    { path: "picks.2", label: "AZEROTH.Item.ProfessionPicks2", type: "tags", choices: "skills" },
+    { path: "picks.3", label: "AZEROTH.Item.ProfessionPicks3", type: "tags", choices: "skills" },
+    { path: "picks.4", label: "AZEROTH.Item.ProfessionPicks4", type: "tags", choices: "skills" },
     { path: "trainer", label: "AZEROTH.Item.Trainer", type: "text" }
   ]),
 
@@ -301,6 +305,10 @@ export const ITEM_FIELDS = Object.freeze({
     ...SCHOOL_POINTS,
     ...BONUSES,
     ...ECONOMY,
+    // **WHO MAKES IT** (D-1918, D-1960): *Crafted by Blacksmithing, tier 1*, every profession
+    // its stamp names, off 08's Crafting tables. Derived from the stored stamp and read-only:
+    // the parser writes it and a GM never types it (O-673).
+    { path: "craft", label: "AZEROTH.Item.CraftedBy", type: "derived" },
     // A bundle's count (D-407); a weapon that is not shot carries none.
     { path: "quantity", label: "AZEROTH.Item.Quantity", type: "number" },
     BAG_SLOTS,
@@ -330,6 +338,10 @@ export const ITEM_FIELDS = Object.freeze({
     ...SCHOOL_POINTS,
     ...BONUSES,
     ...ECONOMY,
+    // **WHO MAKES IT** (D-1918, D-1960): *Crafted by Blacksmithing, tier 1*, every profession
+    // its stamp names, off 08's Crafting tables. Derived from the stored stamp and read-only:
+    // the parser writes it and a GM never types it (O-673).
+    { path: "craft", label: "AZEROTH.Item.CraftedBy", type: "derived" },
     BAG_SLOTS,
     { path: "equipped", label: "AZEROTH.Item.Equipped", type: "checkbox" }
   ]),
@@ -361,6 +373,12 @@ export const ITEM_FIELDS = Object.freeze({
     ...SCHOOL_POINTS,
     ...BONUSES,
     ...ECONOMY,
+    // **WHO MAKES IT** (D-1918, D-1960): *Crafted by Blacksmithing, tier 1*, every profession
+    // its stamp names, off 08's Crafting tables. Derived from the stored stamp and read-only:
+    // the parser writes it and a GM never types it (O-673).
+    { path: "craft", label: "AZEROTH.Item.CraftedBy", type: "derived" },
+    // **WHAT KIND OF MATERIAL IT IS** (08 §17, D-1958): *Ore, tier 1*. Derived from the stamp.
+    { path: "material", label: "AZEROTH.Item.Material", type: "derived" },
     { path: "quantity", label: "AZEROTH.Item.Quantity", type: "number" },
     BAG_SLOTS,
     { path: "equipped", label: "AZEROTH.Item.Equipped", type: "checkbox" }
@@ -474,6 +492,12 @@ const DERIVED_WORDS = Object.freeze({
     ward: "{n} Ward, awaiting a school"
   }),
   hold: Object.freeze({}),
+  // Who makes it and what it is made of (D-1918, D-1958): the frames and the two enums.
+  craftedBy: "Crafted by {trade}, tier {tier}",
+  craftedByMore: "{trade}, tier {tier}",
+  materialTier: "{family}, tier {tier}",
+  professions: Object.freeze({}),
+  materialFamilies: Object.freeze({}),
   consumable: Object.freeze({}),
   action: Object.freeze({}),
   target: Object.freeze({}),
@@ -605,6 +629,22 @@ export function derivedValue(path, system, labels = null) {
     return joinParts(Object.entries(held)
       .filter(([, n]) => Number(n) > 0)
       .map(([family, n]) => fill(words.awaiting?.[family] ?? "", { n })));
+  }
+
+  // **WHO MAKES IT** (D-1918, D-1960): *Crafted by Blacksmithing, tier 1 · Engineering, tier 1*.
+  if (path === "craft") {
+    const stamps = craftsOf({ type: system?.type ?? "gear", system: { craft: system?.craft ?? null } });
+    if (!stamps.length) return null;
+    return joinParts(stamps.map((s, i) => fill(i === 0 ? words.craftedBy : words.craftedByMore,
+      { trade: words.professions?.[s.trade] ?? s.trade, tier: s.tier })));
+  }
+
+  // **WHAT KIND OF MATERIAL IT IS** (D-1958): *Ore, tier 1*, or the family alone where no tier is stated.
+  if (path === "material") {
+    const m = system?.material ?? null;
+    if (!m || !m.family) return null;
+    const family = words.materialFamilies?.[m.family] ?? m.family;
+    return m.tier === null || m.tier === undefined ? family : fill(words.materialTier, { family, tier: m.tier });
   }
 
   // What the Use button does (08 \u00a712, \u00a713).

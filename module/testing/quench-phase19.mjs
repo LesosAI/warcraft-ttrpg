@@ -777,19 +777,39 @@ export function worldMapBatch(context) {
       // whole book was unreachable from the place a reader looks for it.
       const before = game.journal.filter(isImportedChapter).map(j => j.id);
       const first = await importRulesJournals();
-      const all = game.journal.filter(isImportedChapter);
-      assert.lengthOf(all, 18, `the world holds ${all.length} chapters of 18`);
+      // THE PACK'S CHAPTERS, read off the pack (CLAUDE.md: never a constant a chapter can drift from).
+      // The world's chapters are counted by the pack's ids. Migration 0.17.0 deletes the retired
+      // 03-CAREERS where the import made it (O-700, `profession-migration.mjs#planRetiredChapters`), but
+      // keeps one the GM made or changed, and a world migrated before that step was written (this test
+      // world among them) still holds its copy: neither is one of the book's chapters.
+      const pack = game.packs.get("azeroth-rpg.rules");
+      const book = await pack.getDocuments();
+      const ids = new Set(book.map(d => d.id));
+      const inBook = j => ids.has(j.getFlag("azeroth-rpg", "sourceId"));
+      const all = game.journal.filter(isImportedChapter).filter(inBook);
+      assert.lengthOf(all, book.length, `the world holds ${all.length} chapters of ${book.length}`);
+      assert.equal(book.length, 18, "the rules pack does not hold its eighteen chapters");
       assert.equal(first.added.length + first.already.length, 18);
 
-      // 231 pages across them, and every chapter in the Rules folder.
-      const pages = all.reduce((n, j) => n + j.pages.size, 0);
-      assert.equal(pages, 231, `the chapters carry ${pages} pages of 231`);
+      // Every page the book has, and every chapter in the Rules folder. A chapter the world already
+      // held keeps the GM's pages and takes the book's beside them as `<page> (book)` where they differ
+      // (`repairRulesJournals`, the lead: *"Keep the GM's copy"*), so a held chapter carries MORE pages
+      // than the book: the pinned 231 counted a world that had never been repaired, and 0.17.0's
+      // rewritten chapters (03, 08, 11 and the career sweep) moved the book to its own count. Each of the
+      // book's pages is held by name, or by its book copy's name.
+      const suffix = game.i18n.localize("AZEROTH.Journals.BookCopy");
+      for (const chapter of book) {
+        const held = all.find(j => j.getFlag("azeroth-rpg", "sourceId") === chapter.id);
+        const names = new Set([...held.pages].map(p => p.name));
+        const missing = [...chapter.pages].map(p => p.name).filter(n => !names.has(n) && !names.has(`${n} ${suffix}`));
+        assert.deepEqual(missing, [], `${chapter.name} in the world lacks the book's pages`);
+      }
       for (const journal of all) assert.equal(journal.folder?.name, RULES_FOLDER, `${journal.name} is loose`);
 
       // Running it again adds nothing.
       const second = await importRulesJournals();
       assert.deepEqual(second.added, [], "a second import duplicated chapters");
-      assert.lengthOf(game.journal.filter(isImportedChapter), 18);
+      assert.lengthOf(game.journal.filter(isImportedChapter).filter(inBook), 18);
 
       // The GM's chapters are the GM's (CLAUDE.md SS9).
       const bestiary = worldChapterNamed("14-BESTIARY");

@@ -1,0 +1,15 @@
+{{!--
+  ONE RECIPE ROW of the Crafting view (D11 §12): the 44px icon, the name, a
+  `T<n>` tier chip and how many the bags can make now (`×<n>`, or a dash). A
+  tier is a chip and never a colour (D-508). The row is an `li` carrying
+  `role="button"` with `aria-pressed` for the recipe picked, and the
+  `inspectRecipe` action; Tab reaches it and Enter and Space press it
+  (`bindKeyActivation`). It is not a listbox, which would promise arrow keys.
+  The pick costs no render: the card is already in the inspector, hidden.
+--}}
+<li class="azeroth-prof-row" role="button" tabindex="0" id="{{row.domId}}" data-action="inspectRecipe" data-recipe-id="{{row.id}}" aria-pressed="{{row.selected}}">
+  {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=row.img}}
+  <span class="azeroth-prof-row-name">{{row.name}}</span>
+  <span class="azeroth-prof-tierchip">{{row.tierWords}}</span>
+  <span class="azeroth-prof-makeable{{#unless row.makeable}} is-none{{/unless}}" data-tooltip="{{row.makeableTip}}">{{#if row.makeable}}{{row.makeableWords}}{{else}}{{azerothDash null}}{{/if}}</span>
+</li>

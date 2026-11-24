@@ -10,19 +10,20 @@
   <h3 class="azeroth-column-heading">{{localize "AZEROTH.Sheet.Skills"}}</h3>
   <ol class="azeroth-skill-list">
     {{#each skills}}
-    <li class="azeroth-skill{{#if this.inCareer}} is-in-career{{/if}}" data-skill-key="{{this.key}}">
+    <li class="azeroth-skill{{#if this.inProfession}} is-cheap{{/if}}" data-skill-key="{{this.key}}">
       {{!-- The Rank is set here (D-606): a direct input, and Buy for the next one at 02 SS8's cost. --}}
       <input type="number" class="azeroth-rank" name="flags.azeroth-rpg.skillRanks.{{this.key}}" value="{{this.rank}}" min="0" max="15" step="1"
              aria-label="{{localize 'AZEROTH.Sheet.Rank'}}" data-tooltip="{{localize 'AZEROTH.Sheet.Rank'}}">
       {{#if this.nextCost}}
       <button type="button" class="azeroth-buy{{#unless this.canBuy}} is-short{{/unless}}" data-action="buyRank" data-skill="{{this.key}}"
-              data-tooltip="{{localize 'AZEROTH.Sheet.BuyCost' cost=this.nextCost}}" aria-label="{{localize 'AZEROTH.Sheet.BuyCost' cost=this.nextCost}}">+</button>
+              data-tooltip="{{this.buyTip}}" aria-label="{{this.buyTip}}">+</button>
       {{else}}<span class="azeroth-buy-spacer"></span>{{/if}}
-      {{!-- Always five cells, so the grid's tracks hold: the in-career marker
-            lives inside the name. It reads the career's own list - it is why a
-            Rank is cheap, and showing it is how a player sees why. --}}
+      {{!-- Always five cells, so the grid's tracks hold: the cheap-skill marker
+            lives inside the name. It is the PROFESSION'S GLYPH (D11 §12), the
+            reason a Rank is cheap, and its tooltip says which profession and
+            what a Rank costs; Adaptable's skill takes the plain diamond. --}}
       <button type="button" class="azeroth-skill-name" data-action="rollSkill" data-skill="{{this.key}}"{{#if this.tooltip}} data-tooltip="{{this.tooltip}}" data-tooltip-direction="RIGHT"{{/if}}>
-        {{localize this.label}}{{#if this.inCareer}} <span class="azeroth-in-career" data-tooltip="{{localize 'AZEROTH.Sheet.InCareer'}}">&#9670;</span>{{/if}}
+        {{localize this.label}}{{#if this.inProfession}} <span class="azeroth-cheap-skill" data-tooltip="{{this.cheapTip}}" aria-label="{{this.cheapTip}}">{{#if this.cheapImg}}<img src="{{this.cheapImg}}" alt="">{{else}}&#9670;{{/if}}</span>{{/if}}
       </button>
       <span class="azeroth-skill-ability" data-tooltip="{{this.abilityTip}}">{{localize this.abilityAbbr}}</span>
       <span class="azeroth-skill-total">{{azerothSigned this.total}}</span>

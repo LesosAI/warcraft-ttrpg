@@ -60,7 +60,9 @@ export const NOT_BROWSABLE = Object.freeze({
 export const UNBROWSED_TYPES = Object.freeze({
   character: { owed: false, reason: "a player's own actor, made by the creator and never shipped in a pack" },
   talentTree: { owed: true, reason: "three trees a class are structure the talent items point into; no pack holds a tree entry (CLAUDE.md §4)" },
-  profession: { owed: true, reason: "the type exists and nothing builds an entry for it" },
+  // A career is a hidden legacy type for one version (D-1903): stale documents still load, and
+  // migration 0.17.0 deletes them. No pack holds one and none is owed.
+  career: { owed: false, reason: "retired with careers (D-1903); registered for one version so a stale document loads, and migration 0.17.0 deletes it" },
   feature: {
     owed: true,
     partial: true,
@@ -101,13 +103,15 @@ export const CATEGORIES = Object.freeze({
       classes: { label: "AZEROTH.Browser.ClassAccess", path: "system.classes", kind: "includes" }
     })
   },
-  careers: {
-    pack: "azeroth-rpg.careers",
-    label: "AZEROTH.Browser.Careers",
-    fields: ["system.tier", "system.grantor", "system.inCareer", ...SIGNATURE_GATES],
+  // 03-PROFESSIONS' seven (D-1903; the careers category it replaces is gone).
+  professions: {
+    pack: "azeroth-rpg.professions",
+    label: "AZEROTH.Browser.Professions",
+    fields: ["system.ability", "system.gathers.family", "system.skills.1"],
     filters: () => ({
-      tier: { label: "AZEROTH.Browser.Tier", path: "system.tier", choices: AZEROTH.careerTiers },
-      inCareer: { label: "AZEROTH.Browser.InCareerSkill", path: "system.inCareer", choices: AZEROTH.skills, kind: "includes" }
+      ability: { label: "AZEROTH.Browser.Ability", path: "system.ability", choices: AZEROTH.abilities },
+      gathers: { label: "AZEROTH.Browser.Gathers", path: "system.gathers.family", choices: AZEROTH.gatherFamilies },
+      skill: { label: "AZEROTH.Browser.ProfessionSkill", path: "system.skills.1", choices: AZEROTH.skills, kind: "includes" }
     })
   },
   classes: {
@@ -129,9 +133,12 @@ export const CATEGORIES = Object.freeze({
   weapons: {
     pack: "azeroth-rpg.weapons",
     label: "AZEROTH.Browser.Weapons",
-    fields: ["system.rating", "system.range", "system.traits", "system.rarity", "system.cost", "system.source.section", "system.weaponType", ...SIGNATURE_GATES],
+    fields: ["system.rating", "system.range", "system.traits", "system.rarity", "system.cost", "system.source.section", "system.weaponType", "system.craft", ...SIGNATURE_GATES],
     filters: () => ({
       weaponType: { label: "AZEROTH.Item.WeaponType", path: "system.weaponType", choices: AZEROTH.weaponTypes },
+      // **CRAFTED BY** (D-1918, D-1960): the professions that make it, off 08's Crafting tables,
+      // the stamp's own trade and every `alt` one (`kind: "crafts"`); a Classic find has none.
+      craftedBy: { label: "AZEROTH.Browser.CraftedBy", path: "system.craft", kind: "crafts", choices: AZEROTH.professions },
       shelf: { label: "AZEROTH.Browser.Shelf", path: "system.source.section", kind: "tail" },
       traits: { label: "AZEROTH.Item.Traits", path: "system.traits", kind: "includes" },
       rarity: { label: "AZEROTH.Browser.Rarity", path: "system.rarity", choices: AZEROTH.rarities },
@@ -146,9 +153,12 @@ export const CATEGORIES = Object.freeze({
     // its traits nor shown carrying any (the lead, 2026-09-07). An unindexed
     // field silently reads as absent rather than erroring, which is why the
     // gap was invisible.
-    fields: ["system.category", "system.cuts", "system.traits", "system.rarity", "system.cost", ...SIGNATURE_GATES],
+    fields: ["system.category", "system.cuts", "system.traits", "system.rarity", "system.cost", "system.craft", ...SIGNATURE_GATES],
     filters: () => ({
       category: { label: "AZEROTH.Browser.Category", path: "system.category", choices: AZEROTH.armorCategories },
+      // **CRAFTED BY** (D-1918, D-1960): the professions that make it, off 08's Crafting tables,
+      // the stamp's own trade and every `alt` one (`kind: "crafts"`); a Classic find has none.
+      craftedBy: { label: "AZEROTH.Browser.CraftedBy", path: "system.craft", kind: "crafts", choices: AZEROTH.professions },
       cut: { label: "AZEROTH.Item.Cuts", path: "system.cuts", kind: "includes", choices: AZEROTH.armorCuts },
       traits: { label: "AZEROTH.Item.Traits", path: "system.traits", kind: "includes" },
       rarity: { label: "AZEROTH.Browser.Rarity", path: "system.rarity", choices: AZEROTH.rarities },
@@ -179,10 +189,16 @@ export const CATEGORIES = Object.freeze({
       // A Classic relic says which Augment it is on this flag (D-685), and the
       // class emblem reads it through `augmentOf` (D-849).
       "flags.azeroth-rpg.augment",
+      // Who makes it (D-1918) and what kind of material it is (D-1958).
+      "system.craft", "system.material.family",
       ...SIGNATURE_GATES
     ],
     filters: () => ({
       shelf: { label: "AZEROTH.Browser.Shelf", path: "system.source.section", kind: "tail" },
+      // **CRAFTED BY** (D-1918, D-1960): the professions that make it, off 08's Crafting tables,
+      // the stamp's own trade and every `alt` one (`kind: "crafts"`); a Classic find has none.
+      craftedBy: { label: "AZEROTH.Browser.CraftedBy", path: "system.craft", kind: "crafts", choices: AZEROTH.professions },
+      material: { label: "AZEROTH.Browser.Material", path: "system.material.family", choices: AZEROTH.materialFamilies },
       slot: { label: "AZEROTH.Browser.Slot", path: "system.slot", choices: AZEROTH.wornSlots },
       provision: { label: "AZEROTH.Browser.Provision", path: "system.provision", choices: AZEROTH.provisionKinds },
       use: { label: "AZEROTH.Item.Use", path: "system.use.kind", choices: AZEROTH.consumableKinds },
@@ -284,10 +300,9 @@ function loc(key) {
 export const META_PROSE_MAX = 40;
 
 /**
- * A prose field cut to a row's width, at a word, with an ellipsis. A career's
- * Grantor is a sentence - *A clan or a tribe, and the camp itself, which has
- * to keep bringing you things for it to mean anything* - and printed whole it
- * pushed the Camp Chieftain's row out of the list (the lead, 2026-09-06). The
+ * A prose field cut to a row's width, at a word, with an ellipsis. A gadget's
+ * Use is a sentence, and printed whole a sentence once pushed a row out of the
+ * list (the lead, 2026-09-06). The
  * whole string rides the row's tooltip; only the meta is cut.
  */
 export function clip(text, max = META_PROSE_MAX) {
@@ -327,11 +342,12 @@ export function summary(key, entry) {
   switch (key) {
     case "talents": parts.push(s.className, s.branch, tier(s.tier)); break;
     // 04's Use cell: *Half-Action*, *One minute*, or the Reaction and what it waits on.
-    // Prose, so cut to a row's width as a career's Grantor is.
+    // Prose, so cut to a row's width.
     case "gadgets": parts.push(clip(f[GADGET_ENTRY_FLAG]?.use)); break;
     // A spell 07 prints in Runic Power says so (`casting.mjs#spellCostLabel`, D-944).
     case "spells": parts.push(enumLabel(AZEROTH.spellSchools, s.school), tier(s.tier), s.mana != null ? `${s.mana} ${loc(spellCostLabel({ costPool: s.costPool }))}` : null); break;
-    case "careers": parts.push(enumLabel(AZEROTH.careerTiers, s.tier), clip(s.grantor)); break;
+    // A profession: the ability its Craft Test adds and what it gathers (03 §2).
+    case "professions": parts.push(enumLabel(AZEROTH.abilities, s.ability), enumLabel(AZEROTH.gatherFamilies, s.gathers?.family)); break;
     // A class holds SPELL schools (D-941): the Death Knight's Death is not a damage school.
     case "classes": parts.push(enumLabel(AZEROTH.frames, s.frame), ...(s.schools ?? []).map(k => enumLabel(AZEROTH.spellSchools, k))); break;
     case "races": parts.push(enumLabel(AZEROTH.sizes, s.size)); break;
@@ -401,6 +417,13 @@ export function readPath(source, path) {
  * A `tail` filter offers the shelf; everything else offers what it holds.
  */
 export function valuesFor(entry, def) {
+  // **CRAFTED BY** (D-1960): the stamp's trade and every `alt` trade, an item two
+  // professions make counted under both.
+  if (def.kind === "crafts") {
+    const craft = readPath(entry, def.path);
+    if (!craft || typeof craft !== "object") return [];
+    return [...new Set([craft.trade, ...(Array.isArray(craft.alt) ? craft.alt.map(a => a?.trade) : [])].filter(t => typeof t === "string" && t))];
+  }
   const raw = readPath(entry, def.path);
   const list = Array.isArray(raw) ? raw : [raw];
   const out = [];
@@ -486,7 +509,7 @@ function signatureClasses(effect) {
  *   off the indexed `system.source.section`, the name and a Classic relic's flag
  *   (never a second copy of the reader: `system.augment` is derived and absent
  *   from the index);
- * - **weapons, armor, gear and careers**: every class a Signature's gate names.
+ * - **weapons, armor and gear**: every class a Signature's gate names.
  *
  * **A class with no crest draws nothing** (`crests.mjs#crestPath` answers null),
  * never a broken image: an `<img>` that 404s is a console error.
@@ -514,7 +537,6 @@ export function classBadges(category, entry) {
     }
     case "weapons":
     case "armor":
-    case "careers":
       names.push(...signatureClasses(s.signatureEffect));
       break;
     default:
@@ -565,7 +587,7 @@ export const SORT_KEYS = Object.freeze({
   services: ["name", "system.cost"],
   spells: ["name", "system.tier", "system.mana"],
   talents: ["name", "system.tier"],
-  careers: ["name", "system.tier"],
+  professions: ["name"],
   bestiary: ["name", "system.tier"],
   affixes: ["name", "system.budget"]
 });

@@ -10,8 +10,9 @@
  *
  * Everything the window needs is in the first paint: the two selects, the
  * numbers each pick returns, and the reason the Rest button is greyed. The
- * `render` callback binds `change` and toggles exactly two things - the
- * footer button's `disabled` and the reason text - because **ApplicationV2
+ * `render` callback binds `change` and touches only the DOM - the footer
+ * button's `disabled`, the reason text, and the food's own lines (its whole
+ * Health, the hot meal note, the dish-is-the-drink note) - because **ApplicationV2
  * freezes `options`** and a write to `dialog.options.content` THROWS halfway
  * through a swap (D-731). State lives in the DOM and in the closure below.
  *
@@ -19,8 +20,8 @@
  * the window, and a Short Rest with nothing chosen recovers nothing.
  */
 
-import { bloodNeeded, bloodRestPlan, longRest, shortRest, vialUnits } from "../rules/rest.mjs";
-import { provisionOptions, tierAgain } from "../rules/provisions.mjs";
+import { bloodNeeded, bloodRestPlan, longRest, shortRest, shortRestPreview, vialUnits } from "../rules/rest.mjs";
+import { drinkPreselect, foodTier, isDrink, isFood, provisionOptions, restPicks, tierAgain } from "../rules/provisions.mjs";
 import { shownName } from "../helpers/identify-words.mjs";
 
 /**
@@ -29,9 +30,10 @@ import { shownName } from "../helpers/identify-words.mjs";
  */
 function shownProvisions(actor) {
   const carried = provisionOptions(actor.items ?? []);
+  // And the food's own tier (O-702, D-2004), read off the item as the door reads it.
   const shown = rows => rows.map(row => {
     const item = actor.items?.get?.(row.itemId) ?? null;
-    return item ? { ...row, name: shownName(item) } : row;
+    return item ? { ...row, name: shownName(item), foodTier: foodTier(item) } : row;
   });
   return { food: shown(carried.food), drink: shown(carried.drink), blood: shown(carried.blood) };
 }
@@ -58,7 +60,9 @@ export function restDialogId(actor) {
 function restNumbers(actor) {
   const s = actor.system ?? {};
   const base = {
-    health: s.health, conMod: s.abilities?.con?.mod ?? 0, tier: s.tier ?? 1,
+    // The character's OWN Constitution, as the door reads it (*Druid's own Health*, D-769):
+    // a form's Constitution here promised a number the rest would not give.
+    health: s.health, conMod: s.abilities?.con?.own?.mod ?? s.abilities?.con?.mod ?? 0, tier: s.tier ?? 1,
     fatigue: s.fatigue ?? 0, pools: actor.poolSnapshot?.() ?? []
   };
   const amountOf = (r, kind) => r.gains.find(g => g.kind === kind)?.amount ?? 0;
@@ -66,12 +70,21 @@ function restNumbers(actor) {
   // The hot meal's OWN line, already capped by the rule. The card prints the
   // same gain, so the window cannot promise a point the maximum swallows.
   const hot = amountOf(shortRest({ ...base, eats: true, tierAgain: true }), "tierAgain");
-  const mana = shortRest({ ...base, drinks: true }).gains
-    .filter(g => g.kind === "pool" && g.name === "mana")
-    .reduce((sum, g) => sum + g.amount, 0);
+  // **A FOOD'S OWN TIER** (O-702, D-2004): what a food row of that tier adds on top, through
+  // the door's own `restPicks` and the rule, capped as the card caps it.
+  const foodTierGain = row => amountOf(shortRest({
+    ...base, ...restPicks({ foodKind: row.kind, foodTier: row.foodTier ?? 0 })
+  }), "foodTier");
+  // **THE HEALTH LINE IS THE PICK'S WHOLE HEALTH** (the final review's M1): every Health line the
+  // card will print for that food, summed by `rest.mjs#shortRestPreview` through the door's own
+  // `restPicks`, so a tier 3 dish reads the rest's recovery plus 3 and agrees with the card.
+  const healthOf = row => shortRestPreview(base, restPicks({ foodKind: row.kind, foodTier: row.foodTier ?? 0 })).health;
+  const mana = shortRestPreview(base, { drinks: true }).mana;
   return {
     health: eaten,
     hotMeal: hot,
+    foodTierGain,
+    healthOf,
     mana,
     // Whether there is a Mana pool for a drink to fill at all.
     hasMana: base.pools.some(p => p.kind === "power" && p.name === "mana"),
@@ -81,19 +94,36 @@ function restNumbers(actor) {
   };
 }
 
-/** One select's rows: the `""` abstention first, then what is carried. */
-function optionsFor(rows, preselect = true) {
-  return rows.map((row, i) => ({
+/**
+ * One select's rows: the `""` abstention first, then what is carried.
+ * `gainOf(row)` is what a food row's own tier adds (O-702, D-2004); the drink row passes none.
+ * `selectedId` is the row preselected (the food's first row; the drink's from
+ * `provisions.mjs#drinkPreselect`), or null for *Nothing*. `healthOf(row)` is a food row's whole
+ * Health (`rest.mjs#shortRestPreview`), drawn on the option for the line under the select.
+ */
+function optionsFor(rows, selectedId = null, gainOf = null, healthOf = null) {
+  return rows.map(row => ({
+    // What the line under the food select reads when this row is chosen (M1): the pick's whole
+    // Health, whether it is a hot meal, and whether it is the drink too.
+    health: healthOf ? healthOf(row) : null,
+    hot: tierAgain(row.kind),
+    both: isFood(row.kind) && isDrink(row.kind),
+    name: row.name,
     value: row.itemId,
     label: row.quantity > 1
       ? `${row.name} ${game.i18n.format("AZEROTH.Rest.Quantity", { n: row.quantity })}`
       : row.name,
     // 08 §12's hot meal and feast, marked so the choice is made with the rule
-    // in view rather than by remembering which row it was.
-    tag: tierAgain(row.kind) ? game.i18n.localize("AZEROTH.Rest.TierAgainTag") : null,
-    // THE FIRST CARRIED ROW IS PRESELECTED: the point of the rest is to eat
+    // in view rather than by remembering which row it was. A food with a tier
+    // says what that tier adds (05 §16), the number the card will print.
+    tag: tierAgain(row.kind)
+      ? game.i18n.localize("AZEROTH.Rest.TierAgainTag")
+      : (gainOf && row.foodTier > 0 && gainOf(row) > 0
+        ? game.i18n.format("AZEROTH.Rest.FoodTierTag", { tier: row.foodTier, n: gainOf(row) })
+        : null),
+    // THE FIRST CARRIED FOOD IS PRESELECTED: the point of the rest is to eat
     // and drink, and *Nothing* is the explicit abstention.
-    selected: preselect && i === 0
+    selected: selectedId !== null && row.itemId === selectedId
   }));
 }
 
@@ -120,8 +150,12 @@ export async function promptRest(actor) {
   const carried = shownProvisions(actor);
   const {sharedFeastOptions}=await import("../effects/shared-feast.mjs");
   const sharedMeals=await sharedFeastOptions(actor);
-  const foodOptions=[...optionsFor(carried.food),...sharedMeals];
   const numbers = restNumbers(actor);
+  const firstFood = carried.food[0] ?? null;
+  // A shared Feast is a hot meal (`actor.shortRest`'s `foodKind: sharedMeal ? "hotMeal"`), so its
+  // option carries the hot meal's whole Health for the line under the select.
+  const feastHealth = numbers.healthOf({ kind: "hotMeal", foodTier: 0 });
+  const foodOptions=[...optionsFor(carried.food, firstFood?.itemId ?? null, numbers.foodTierGain, numbers.healthOf),...sharedMeals.map(o => ({ ...o, name: o.label, health: feastHealth, hot: true, both: false }))];
   const empty = !carried.food.length && !sharedMeals.length && !carried.drink.length;
   const content = await renderTemplate(TEMPLATE, {
     name: actor.name,
@@ -129,12 +163,21 @@ export async function promptRest(actor) {
     // A DRINK IS NOT PRESELECTED FOR A CHARACTER WITH NO MANA while there is
     // food to rest on: the default would spend an ale on a Warrior for nothing.
     // With no food carried it is the only way to rest at all, so it is offered.
-    drink: optionsFor(carried.drink, numbers.hasMana || !carried.food.length),
-    // The numbers each pick returns, in the row's own note.
-    eatReturns: game.i18n.format("AZEROTH.Rest.EatReturns", { n: numbers.health }),
+    // **AND NEVER THE DISH PRESELECTED AS THE FOOD** (the final review's M1): a dish that counts as
+    // both is the drink already (`provisions.mjs#drinkPreselect`).
+    drink: optionsFor(carried.drink, drinkPreselect({ food: carried.food, drink: carried.drink, hasMana: numbers.hasMana })),
+    // The numbers each pick returns, in the row's own note: the preselected food's whole Health,
+    // which the `render` callback redraws as the food select changes.
+    eatReturns: game.i18n.format("AZEROTH.Rest.EatReturns", { n: firstFood ? numbers.healthOf(firstFood) : numbers.health }),
+    // The hot meal's extra is said beside a pick that does not already count it.
     hotMealReturns: sharedMeals.length||carried.food.some(r => tierAgain(r.kind))
       ? game.i18n.format("AZEROTH.Rest.HotMealReturns", { n: numbers.hotMeal })
       : null,
+    hotMealHidden: Boolean(firstFood && tierAgain(firstFood.kind)),
+    // A dish that counts as food and as drink says so under the food: one is eaten for both.
+    bothNote: firstFood && isFood(firstFood.kind) && isDrink(firstFood.kind)
+      ? game.i18n.format("AZEROTH.Rest.DishIsDrink", { name: firstFood.name })
+      : "",
     drinkReturns: numbers.hasMana
       ? game.i18n.format("AZEROTH.Rest.DrinkReturns", { n: numbers.mana })
       : game.i18n.localize("AZEROTH.Use.NoMana"),
@@ -156,7 +199,18 @@ export async function promptRest(actor) {
       // `disabled`, so the greying is done here on the rendered element.
       const button = dialog.element.querySelector('button[data-action="rest"]');
       const line = form?.querySelector("[data-rest-reason]");
+      const eatLine = form?.querySelector("[data-rest-eat]");
+      const hotLine = form?.querySelector("[data-rest-hot]");
+      const bothLine = form?.querySelector("[data-rest-both]");
       const update = () => {
+        // **THE FOOD'S LINE FOLLOWS THE FOOD PICKED** (the final review's M1): the option carries
+        // its whole Health (`shortRestPreview`), whether it is a hot meal, and whether it is the
+        // drink too. Text and `hidden` only; nothing is written to `options` (D-731).
+        const chosen = form?.elements.food?.selectedOptions?.[0] ?? null;
+        const data = chosen?.value ? chosen.dataset : null;
+        if (eatLine) eatLine.textContent = game.i18n.format("AZEROTH.Rest.EatReturns", { n: data?.health !== undefined && data?.health !== "" ? Number(data.health) : numbers.health });
+        if (hotLine) hotLine.hidden = data?.hot === "true";
+        if (bothLine) bothLine.textContent = data?.both === "true" ? game.i18n.format("AZEROTH.Rest.DishIsDrink", { name: data.name ?? "" }) : "";
         // Undeath's rung at 5 needs no food (the F1 review's note): the rest may be taken with
         // nothing chosen, and a drink is still what returns Mana.
         const picked = Boolean(form?.elements.food?.value) || Boolean(form?.elements.drink?.value) || actor.system?.needsNoFood === true;

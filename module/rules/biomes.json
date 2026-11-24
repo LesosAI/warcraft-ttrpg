@@ -1,0 +1,2739 @@
+{
+  "source": "docs/book/11-DOWNTIME.md §12",
+  "biomes": [
+    "forest",
+    "grassland",
+    "hills",
+    "swamp",
+    "desert",
+    "snow",
+    "coast",
+    "caves",
+    "blighted",
+    "volcanic"
+  ],
+  "table": {
+    "forest": {
+      "cloth": [
+        {
+          "material": "linen-cloth",
+          "tier": 1
+        },
+        {
+          "material": "wool-cloth",
+          "tier": 2
+        },
+        {
+          "material": "mageweave-cloth",
+          "tier": 3
+        },
+        {
+          "material": "silk-cloth",
+          "tier": 3
+        }
+      ],
+      "fish": [
+        {
+          "material": "bear-meat",
+          "tier": 1
+        },
+        {
+          "material": "boar-meat",
+          "tier": 1
+        },
+        {
+          "material": "coyote-meat",
+          "tier": 1
+        },
+        {
+          "material": "crag-boar-rib",
+          "tier": 1
+        },
+        {
+          "material": "crawler-meat",
+          "tier": 1
+        },
+        {
+          "material": "goretusk-liver",
+          "tier": 1
+        },
+        {
+          "material": "goretusk-snout",
+          "tier": 1
+        },
+        {
+          "material": "kodo-meat",
+          "tier": 1
+        },
+        {
+          "material": "meaty-bat-wing",
+          "tier": 1
+        },
+        {
+          "material": "oily-blackmouth",
+          "tier": 1
+        },
+        {
+          "material": "raw-brilliant-smallfish",
+          "tier": 1
+        },
+        {
+          "material": "raw-longjaw-mud-snapper",
+          "tier": 1
+        },
+        {
+          "material": "raw-rainbow-fin-albacore",
+          "tier": 1
+        },
+        {
+          "material": "raw-slitherskin-mackerel",
+          "tier": 1
+        },
+        {
+          "material": "small-egg",
+          "tier": 1
+        },
+        {
+          "material": "small-spider-leg",
+          "tier": 1
+        },
+        {
+          "material": "soft-frenzy-flesh",
+          "tier": 1
+        },
+        {
+          "material": "strider-meat",
+          "tier": 1
+        },
+        {
+          "material": "stringy-vulture-meat",
+          "tier": 1
+        },
+        {
+          "material": "stringy-wolf-meat",
+          "tier": 1
+        },
+        {
+          "material": "big-bear-meat",
+          "tier": 2
+        },
+        {
+          "material": "boar-ribs",
+          "tier": 2
+        },
+        {
+          "material": "crisp-spider-meat",
+          "tier": 2
+        },
+        {
+          "material": "crocolisk-meat",
+          "tier": 2
+        },
+        {
+          "material": "firefin-snapper",
+          "tier": 2
+        },
+        {
+          "material": "gooey-spider-leg",
+          "tier": 2
+        },
+        {
+          "material": "lean-wolf-flank",
+          "tier": 2
+        },
+        {
+          "material": "lion-meat",
+          "tier": 2
+        },
+        {
+          "material": "raptor-egg",
+          "tier": 2
+        },
+        {
+          "material": "raw-bristle-whisker-catfish",
+          "tier": 2
+        },
+        {
+          "material": "raw-sagefish",
+          "tier": 2
+        },
+        {
+          "material": "stag-meat",
+          "tier": 2
+        },
+        {
+          "material": "tender-crocolisk-meat",
+          "tier": 2
+        },
+        {
+          "material": "thunder-lizard-tail",
+          "tier": 2
+        },
+        {
+          "material": "tough-condor-meat",
+          "tier": 2
+        },
+        {
+          "material": "big-mouth-clam",
+          "tier": 3
+        },
+        {
+          "material": "buzzard-wing",
+          "tier": 3
+        },
+        {
+          "material": "giant-egg",
+          "tier": 3
+        },
+        {
+          "material": "heavy-kodo-meat",
+          "tier": 3
+        },
+        {
+          "material": "mystery-meat",
+          "tier": 3
+        },
+        {
+          "material": "raptor-flesh",
+          "tier": 3
+        },
+        {
+          "material": "raw-glossy-mightfish",
+          "tier": 3
+        },
+        {
+          "material": "raw-greater-sagefish",
+          "tier": 3
+        },
+        {
+          "material": "raw-mithril-head-trout",
+          "tier": 3
+        },
+        {
+          "material": "raw-redgill",
+          "tier": 3
+        },
+        {
+          "material": "raw-rockscale-cod",
+          "tier": 3
+        },
+        {
+          "material": "raw-spotted-yellowtail",
+          "tier": 3
+        },
+        {
+          "material": "red-wolf-meat",
+          "tier": 3
+        },
+        {
+          "material": "savage-coast-blue-sailfin",
+          "tier": 3
+        },
+        {
+          "material": "stonescale-eel",
+          "tier": 3
+        },
+        {
+          "material": "tender-wolf-meat",
+          "tier": 3
+        },
+        {
+          "material": "tiger-meat",
+          "tier": 3
+        },
+        {
+          "material": "turtle-meat",
+          "tier": 3
+        },
+        {
+          "material": "white-spider-meat",
+          "tier": 3
+        },
+        {
+          "material": "chimaerok-tenderloin",
+          "tier": 4
+        },
+        {
+          "material": "feralas-ahi",
+          "tier": 4
+        },
+        {
+          "material": "lightning-eel",
+          "tier": 4
+        },
+        {
+          "material": "plated-armorfish",
+          "tier": 4
+        },
+        {
+          "material": "raw-nightfin-snapper",
+          "tier": 4
+        },
+        {
+          "material": "raw-summer-bass",
+          "tier": 4
+        },
+        {
+          "material": "raw-sunscale-salmon",
+          "tier": 4
+        },
+        {
+          "material": "raw-whitescale-salmon",
+          "tier": 4
+        },
+        {
+          "material": "sandworm-meat",
+          "tier": 4
+        },
+        {
+          "material": "winter-squid",
+          "tier": 4
+        }
+      ],
+      "herb": [
+        {
+          "material": "briarthorn",
+          "tier": 1
+        },
+        {
+          "material": "earthroot",
+          "tier": 1
+        },
+        {
+          "material": "mageroyal",
+          "tier": 1
+        },
+        {
+          "material": "peacebloom",
+          "tier": 1
+        },
+        {
+          "material": "silverleaf",
+          "tier": 1
+        },
+        {
+          "material": "bruiseweed",
+          "tier": 2
+        },
+        {
+          "material": "grave-moss",
+          "tier": 2
+        },
+        {
+          "material": "kingsblood",
+          "tier": 2
+        },
+        {
+          "material": "liferoot",
+          "tier": 2
+        },
+        {
+          "material": "stranglekelp",
+          "tier": 2
+        },
+        {
+          "material": "wild-steelbloom",
+          "tier": 2
+        },
+        {
+          "material": "fadeleaf",
+          "tier": 3
+        },
+        {
+          "material": "goldthorn",
+          "tier": 3
+        },
+        {
+          "material": "khadgars-whisker",
+          "tier": 3
+        },
+        {
+          "material": "purple-lotus",
+          "tier": 3
+        },
+        {
+          "material": "wildvine",
+          "tier": 3
+        },
+        {
+          "material": "blindweed",
+          "tier": 4
+        },
+        {
+          "material": "dreamfoil",
+          "tier": 4
+        },
+        {
+          "material": "ghost-mushroom",
+          "tier": 4
+        },
+        {
+          "material": "golden-sansam",
+          "tier": 4
+        },
+        {
+          "material": "gromsblood",
+          "tier": 4
+        },
+        {
+          "material": "mountain-silversage",
+          "tier": 4
+        },
+        {
+          "material": "sungrass",
+          "tier": 4
+        }
+      ],
+      "hide": [
+        {
+          "material": "light-leather",
+          "tier": 1
+        },
+        {
+          "material": "ruined-leather-scraps",
+          "tier": 1
+        },
+        {
+          "material": "heavy-leather",
+          "tier": 3
+        },
+        {
+          "material": "rugged-leather",
+          "tier": 4
+        },
+        {
+          "material": "thick-leather",
+          "tier": 4
+        }
+      ],
+      "ore": [
+        {
+          "material": "coarse-stone",
+          "tier": 1
+        },
+        {
+          "material": "copper-ore",
+          "tier": 1
+        },
+        {
+          "material": "rough-stone",
+          "tier": 1
+        },
+        {
+          "material": "silver-ore",
+          "tier": 1
+        },
+        {
+          "material": "tin-ore",
+          "tier": 1
+        },
+        {
+          "material": "heavy-stone",
+          "tier": 2
+        },
+        {
+          "material": "iron-ore",
+          "tier": 2
+        },
+        {
+          "material": "gold-ore",
+          "tier": 3
+        },
+        {
+          "material": "mithril-ore",
+          "tier": 3
+        },
+        {
+          "material": "solid-stone",
+          "tier": 3
+        },
+        {
+          "material": "dense-stone",
+          "tier": 4
+        },
+        {
+          "material": "thorium-ore",
+          "tier": 4
+        },
+        {
+          "material": "truesilver-ore",
+          "tier": 4
+        }
+      ]
+    },
+    "grassland": {
+      "cloth": [
+        {
+          "material": "linen-cloth",
+          "tier": 1
+        }
+      ],
+      "fish": [
+        {
+          "material": "bear-meat",
+          "tier": 1
+        },
+        {
+          "material": "boar-meat",
+          "tier": 1
+        },
+        {
+          "material": "coyote-meat",
+          "tier": 1
+        },
+        {
+          "material": "crag-boar-rib",
+          "tier": 1
+        },
+        {
+          "material": "crawler-meat",
+          "tier": 1
+        },
+        {
+          "material": "goretusk-liver",
+          "tier": 1
+        },
+        {
+          "material": "goretusk-snout",
+          "tier": 1
+        },
+        {
+          "material": "kodo-meat",
+          "tier": 1
+        },
+        {
+          "material": "meaty-bat-wing",
+          "tier": 1
+        },
+        {
+          "material": "oily-blackmouth",
+          "tier": 1
+        },
+        {
+          "material": "raw-brilliant-smallfish",
+          "tier": 1
+        },
+        {
+          "material": "raw-longjaw-mud-snapper",
+          "tier": 1
+        },
+        {
+          "material": "raw-rainbow-fin-albacore",
+          "tier": 1
+        },
+        {
+          "material": "raw-slitherskin-mackerel",
+          "tier": 1
+        },
+        {
+          "material": "small-egg",
+          "tier": 1
+        },
+        {
+          "material": "small-spider-leg",
+          "tier": 1
+        },
+        {
+          "material": "soft-frenzy-flesh",
+          "tier": 1
+        },
+        {
+          "material": "strider-meat",
+          "tier": 1
+        },
+        {
+          "material": "stringy-vulture-meat",
+          "tier": 1
+        },
+        {
+          "material": "stringy-wolf-meat",
+          "tier": 1
+        },
+        {
+          "material": "big-bear-meat",
+          "tier": 2
+        },
+        {
+          "material": "boar-ribs",
+          "tier": 2
+        },
+        {
+          "material": "crisp-spider-meat",
+          "tier": 2
+        },
+        {
+          "material": "crocolisk-meat",
+          "tier": 2
+        },
+        {
+          "material": "gooey-spider-leg",
+          "tier": 2
+        },
+        {
+          "material": "lean-wolf-flank",
+          "tier": 2
+        },
+        {
+          "material": "lion-meat",
+          "tier": 2
+        },
+        {
+          "material": "raptor-egg",
+          "tier": 2
+        },
+        {
+          "material": "raw-bristle-whisker-catfish",
+          "tier": 2
+        },
+        {
+          "material": "stag-meat",
+          "tier": 2
+        },
+        {
+          "material": "tender-crocolisk-meat",
+          "tier": 2
+        },
+        {
+          "material": "thunder-lizard-tail",
+          "tier": 2
+        },
+        {
+          "material": "tough-condor-meat",
+          "tier": 2
+        },
+        {
+          "material": "buzzard-wing",
+          "tier": 3
+        },
+        {
+          "material": "giant-egg",
+          "tier": 3
+        },
+        {
+          "material": "heavy-kodo-meat",
+          "tier": 3
+        },
+        {
+          "material": "mystery-meat",
+          "tier": 3
+        },
+        {
+          "material": "raptor-flesh",
+          "tier": 3
+        },
+        {
+          "material": "red-wolf-meat",
+          "tier": 3
+        },
+        {
+          "material": "tender-wolf-meat",
+          "tier": 3
+        },
+        {
+          "material": "tiger-meat",
+          "tier": 3
+        },
+        {
+          "material": "turtle-meat",
+          "tier": 3
+        },
+        {
+          "material": "white-spider-meat",
+          "tier": 3
+        },
+        {
+          "material": "chimaerok-tenderloin",
+          "tier": 4
+        },
+        {
+          "material": "sandworm-meat",
+          "tier": 4
+        }
+      ],
+      "herb": [
+        {
+          "material": "briarthorn",
+          "tier": 1
+        },
+        {
+          "material": "earthroot",
+          "tier": 1
+        },
+        {
+          "material": "mageroyal",
+          "tier": 1
+        },
+        {
+          "material": "peacebloom",
+          "tier": 1
+        },
+        {
+          "material": "silverleaf",
+          "tier": 1
+        },
+        {
+          "material": "swiftthistle",
+          "tier": 1
+        },
+        {
+          "material": "bruiseweed",
+          "tier": 2
+        },
+        {
+          "material": "stranglekelp",
+          "tier": 2
+        }
+      ],
+      "hide": [
+        {
+          "material": "light-leather",
+          "tier": 1
+        },
+        {
+          "material": "ruined-leather-scraps",
+          "tier": 1
+        }
+      ],
+      "ore": [
+        {
+          "material": "coarse-stone",
+          "tier": 1
+        },
+        {
+          "material": "copper-ore",
+          "tier": 1
+        },
+        {
+          "material": "rough-stone",
+          "tier": 1
+        },
+        {
+          "material": "silver-ore",
+          "tier": 1
+        },
+        {
+          "material": "tin-ore",
+          "tier": 1
+        }
+      ]
+    },
+    "hills": {
+      "cloth": [
+        {
+          "material": "linen-cloth",
+          "tier": 1
+        },
+        {
+          "material": "wool-cloth",
+          "tier": 2
+        },
+        {
+          "material": "mageweave-cloth",
+          "tier": 3
+        },
+        {
+          "material": "silk-cloth",
+          "tier": 3
+        }
+      ],
+      "fish": [
+        {
+          "material": "bear-meat",
+          "tier": 1
+        },
+        {
+          "material": "boar-meat",
+          "tier": 1
+        },
+        {
+          "material": "coyote-meat",
+          "tier": 1
+        },
+        {
+          "material": "crag-boar-rib",
+          "tier": 1
+        },
+        {
+          "material": "crawler-meat",
+          "tier": 1
+        },
+        {
+          "material": "goretusk-liver",
+          "tier": 1
+        },
+        {
+          "material": "goretusk-snout",
+          "tier": 1
+        },
+        {
+          "material": "kodo-meat",
+          "tier": 1
+        },
+        {
+          "material": "meaty-bat-wing",
+          "tier": 1
+        },
+        {
+          "material": "oily-blackmouth",
+          "tier": 1
+        },
+        {
+          "material": "raw-brilliant-smallfish",
+          "tier": 1
+        },
+        {
+          "material": "raw-loch-frenzy",
+          "tier": 1
+        },
+        {
+          "material": "raw-longjaw-mud-snapper",
+          "tier": 1
+        },
+        {
+          "material": "raw-rainbow-fin-albacore",
+          "tier": 1
+        },
+        {
+          "material": "small-egg",
+          "tier": 1
+        },
+        {
+          "material": "small-spider-leg",
+          "tier": 1
+        },
+        {
+          "material": "soft-frenzy-flesh",
+          "tier": 1
+        },
+        {
+          "material": "strider-meat",
+          "tier": 1
+        },
+        {
+          "material": "stringy-vulture-meat",
+          "tier": 1
+        },
+        {
+          "material": "stringy-wolf-meat",
+          "tier": 1
+        },
+        {
+          "material": "big-bear-meat",
+          "tier": 2
+        },
+        {
+          "material": "boar-ribs",
+          "tier": 2
+        },
+        {
+          "material": "crisp-spider-meat",
+          "tier": 2
+        },
+        {
+          "material": "crocolisk-meat",
+          "tier": 2
+        },
+        {
+          "material": "firefin-snapper",
+          "tier": 2
+        },
+        {
+          "material": "gooey-spider-leg",
+          "tier": 2
+        },
+        {
+          "material": "lean-wolf-flank",
+          "tier": 2
+        },
+        {
+          "material": "lion-meat",
+          "tier": 2
+        },
+        {
+          "material": "raptor-egg",
+          "tier": 2
+        },
+        {
+          "material": "raw-bristle-whisker-catfish",
+          "tier": 2
+        },
+        {
+          "material": "raw-sagefish",
+          "tier": 2
+        },
+        {
+          "material": "spotted-sunfish",
+          "tier": 2
+        },
+        {
+          "material": "stag-meat",
+          "tier": 2
+        },
+        {
+          "material": "tender-crocolisk-meat",
+          "tier": 2
+        },
+        {
+          "material": "thunder-lizard-tail",
+          "tier": 2
+        },
+        {
+          "material": "tough-condor-meat",
+          "tier": 2
+        },
+        {
+          "material": "buzzard-wing",
+          "tier": 3
+        },
+        {
+          "material": "giant-egg",
+          "tier": 3
+        },
+        {
+          "material": "heavy-kodo-meat",
+          "tier": 3
+        },
+        {
+          "material": "mystery-meat",
+          "tier": 3
+        },
+        {
+          "material": "raptor-flesh",
+          "tier": 3
+        },
+        {
+          "material": "raw-mithril-head-trout",
+          "tier": 3
+        },
+        {
+          "material": "raw-rockscale-cod",
+          "tier": 3
+        },
+        {
+          "material": "raw-spotted-yellowtail",
+          "tier": 3
+        },
+        {
+          "material": "red-wolf-meat",
+          "tier": 3
+        },
+        {
+          "material": "tender-wolf-meat",
+          "tier": 3
+        },
+        {
+          "material": "tiger-meat",
+          "tier": 3
+        },
+        {
+          "material": "turtle-meat",
+          "tier": 3
+        },
+        {
+          "material": "white-spider-meat",
+          "tier": 3
+        },
+        {
+          "material": "chimaerok-tenderloin",
+          "tier": 4
+        },
+        {
+          "material": "sandworm-meat",
+          "tier": 4
+        }
+      ],
+      "herb": [
+        {
+          "material": "briarthorn",
+          "tier": 1
+        },
+        {
+          "material": "earthroot",
+          "tier": 1
+        },
+        {
+          "material": "mageroyal",
+          "tier": 1
+        },
+        {
+          "material": "peacebloom",
+          "tier": 1
+        },
+        {
+          "material": "silverleaf",
+          "tier": 1
+        },
+        {
+          "material": "swiftthistle",
+          "tier": 1
+        },
+        {
+          "material": "bruiseweed",
+          "tier": 2
+        },
+        {
+          "material": "grave-moss",
+          "tier": 2
+        },
+        {
+          "material": "kingsblood",
+          "tier": 2
+        },
+        {
+          "material": "liferoot",
+          "tier": 2
+        },
+        {
+          "material": "stranglekelp",
+          "tier": 2
+        },
+        {
+          "material": "wild-steelbloom",
+          "tier": 2
+        },
+        {
+          "material": "fadeleaf",
+          "tier": 3
+        },
+        {
+          "material": "goldthorn",
+          "tier": 3
+        },
+        {
+          "material": "khadgars-whisker",
+          "tier": 3
+        }
+      ],
+      "hide": [
+        {
+          "material": "medium-leather",
+          "tier": 2
+        },
+        {
+          "material": "heavy-leather",
+          "tier": 3
+        },
+        {
+          "material": "thick-leather",
+          "tier": 4
+        }
+      ],
+      "ore": [
+        {
+          "material": "coarse-stone",
+          "tier": 1
+        },
+        {
+          "material": "copper-ore",
+          "tier": 1
+        },
+        {
+          "material": "rough-stone",
+          "tier": 1
+        },
+        {
+          "material": "silver-ore",
+          "tier": 1
+        },
+        {
+          "material": "tin-ore",
+          "tier": 1
+        },
+        {
+          "material": "heavy-stone",
+          "tier": 2
+        },
+        {
+          "material": "iron-ore",
+          "tier": 2
+        },
+        {
+          "material": "gold-ore",
+          "tier": 3
+        },
+        {
+          "material": "mithril-ore",
+          "tier": 3
+        },
+        {
+          "material": "solid-stone",
+          "tier": 3
+        },
+        {
+          "material": "dark-iron-ore",
+          "tier": 4
+        },
+        {
+          "material": "dense-stone",
+          "tier": 4
+        },
+        {
+          "material": "truesilver-ore",
+          "tier": 4
+        }
+      ]
+    },
+    "swamp": {
+      "cloth": [
+        {
+          "material": "wool-cloth",
+          "tier": 2
+        },
+        {
+          "material": "mageweave-cloth",
+          "tier": 3
+        },
+        {
+          "material": "silk-cloth",
+          "tier": 3
+        }
+      ],
+      "fish": [
+        {
+          "material": "bear-meat",
+          "tier": 1
+        },
+        {
+          "material": "boar-meat",
+          "tier": 1
+        },
+        {
+          "material": "coyote-meat",
+          "tier": 1
+        },
+        {
+          "material": "crag-boar-rib",
+          "tier": 1
+        },
+        {
+          "material": "crawler-meat",
+          "tier": 1
+        },
+        {
+          "material": "goretusk-liver",
+          "tier": 1
+        },
+        {
+          "material": "goretusk-snout",
+          "tier": 1
+        },
+        {
+          "material": "kodo-meat",
+          "tier": 1
+        },
+        {
+          "material": "meaty-bat-wing",
+          "tier": 1
+        },
+        {
+          "material": "oily-blackmouth",
+          "tier": 1
+        },
+        {
+          "material": "raw-longjaw-mud-snapper",
+          "tier": 1
+        },
+        {
+          "material": "raw-rainbow-fin-albacore",
+          "tier": 1
+        },
+        {
+          "material": "small-egg",
+          "tier": 1
+        },
+        {
+          "material": "small-spider-leg",
+          "tier": 1
+        },
+        {
+          "material": "soft-frenzy-flesh",
+          "tier": 1
+        },
+        {
+          "material": "strider-meat",
+          "tier": 1
+        },
+        {
+          "material": "stringy-vulture-meat",
+          "tier": 1
+        },
+        {
+          "material": "stringy-wolf-meat",
+          "tier": 1
+        },
+        {
+          "material": "big-bear-meat",
+          "tier": 2
+        },
+        {
+          "material": "boar-ribs",
+          "tier": 2
+        },
+        {
+          "material": "crisp-spider-meat",
+          "tier": 2
+        },
+        {
+          "material": "crocolisk-meat",
+          "tier": 2
+        },
+        {
+          "material": "firefin-snapper",
+          "tier": 2
+        },
+        {
+          "material": "gooey-spider-leg",
+          "tier": 2
+        },
+        {
+          "material": "lean-wolf-flank",
+          "tier": 2
+        },
+        {
+          "material": "lion-meat",
+          "tier": 2
+        },
+        {
+          "material": "raptor-egg",
+          "tier": 2
+        },
+        {
+          "material": "raw-bristle-whisker-catfish",
+          "tier": 2
+        },
+        {
+          "material": "stag-meat",
+          "tier": 2
+        },
+        {
+          "material": "tender-crocolisk-meat",
+          "tier": 2
+        },
+        {
+          "material": "thunder-lizard-tail",
+          "tier": 2
+        },
+        {
+          "material": "tough-condor-meat",
+          "tier": 2
+        },
+        {
+          "material": "buzzard-wing",
+          "tier": 3
+        },
+        {
+          "material": "giant-egg",
+          "tier": 3
+        },
+        {
+          "material": "heavy-kodo-meat",
+          "tier": 3
+        },
+        {
+          "material": "misty-reed-mahi-mahi",
+          "tier": 3
+        },
+        {
+          "material": "mystery-meat",
+          "tier": 3
+        },
+        {
+          "material": "raptor-flesh",
+          "tier": 3
+        },
+        {
+          "material": "raw-mithril-head-trout",
+          "tier": 3
+        },
+        {
+          "material": "raw-rockscale-cod",
+          "tier": 3
+        },
+        {
+          "material": "raw-spotted-yellowtail",
+          "tier": 3
+        },
+        {
+          "material": "red-wolf-meat",
+          "tier": 3
+        },
+        {
+          "material": "tender-wolf-meat",
+          "tier": 3
+        },
+        {
+          "material": "tiger-meat",
+          "tier": 3
+        },
+        {
+          "material": "turtle-meat",
+          "tier": 3
+        },
+        {
+          "material": "white-spider-meat",
+          "tier": 3
+        },
+        {
+          "material": "chimaerok-tenderloin",
+          "tier": 4
+        },
+        {
+          "material": "sandworm-meat",
+          "tier": 4
+        }
+      ],
+      "herb": [
+        {
+          "material": "briarthorn",
+          "tier": 1
+        },
+        {
+          "material": "mageroyal",
+          "tier": 1
+        },
+        {
+          "material": "bruiseweed",
+          "tier": 2
+        },
+        {
+          "material": "grave-moss",
+          "tier": 2
+        },
+        {
+          "material": "kingsblood",
+          "tier": 2
+        },
+        {
+          "material": "liferoot",
+          "tier": 2
+        },
+        {
+          "material": "stranglekelp",
+          "tier": 2
+        },
+        {
+          "material": "wild-steelbloom",
+          "tier": 2
+        },
+        {
+          "material": "fadeleaf",
+          "tier": 3
+        },
+        {
+          "material": "goldthorn",
+          "tier": 3
+        },
+        {
+          "material": "khadgars-whisker",
+          "tier": 3
+        },
+        {
+          "material": "blindweed",
+          "tier": 4
+        }
+      ],
+      "hide": [
+        {
+          "material": "light-leather",
+          "tier": 1
+        },
+        {
+          "material": "medium-leather",
+          "tier": 2
+        }
+      ],
+      "ore": [
+        {
+          "material": "coarse-stone",
+          "tier": 1
+        },
+        {
+          "material": "copper-ore",
+          "tier": 1
+        },
+        {
+          "material": "rough-stone",
+          "tier": 1
+        },
+        {
+          "material": "silver-ore",
+          "tier": 1
+        },
+        {
+          "material": "tin-ore",
+          "tier": 1
+        },
+        {
+          "material": "heavy-stone",
+          "tier": 2
+        },
+        {
+          "material": "iron-ore",
+          "tier": 2
+        },
+        {
+          "material": "gold-ore",
+          "tier": 3
+        },
+        {
+          "material": "mithril-ore",
+          "tier": 3
+        },
+        {
+          "material": "solid-stone",
+          "tier": 3
+        },
+        {
+          "material": "dense-stone",
+          "tier": 4
+        },
+        {
+          "material": "truesilver-ore",
+          "tier": 4
+        }
+      ]
+    },
+    "desert": {
+      "cloth": [
+        {
+          "material": "linen-cloth",
+          "tier": 1
+        },
+        {
+          "material": "wool-cloth",
+          "tier": 2
+        },
+        {
+          "material": "mageweave-cloth",
+          "tier": 3
+        },
+        {
+          "material": "runecloth",
+          "tier": 4
+        }
+      ],
+      "fish": [
+        {
+          "material": "bear-meat",
+          "tier": 1
+        },
+        {
+          "material": "boar-meat",
+          "tier": 1
+        },
+        {
+          "material": "coyote-meat",
+          "tier": 1
+        },
+        {
+          "material": "crag-boar-rib",
+          "tier": 1
+        },
+        {
+          "material": "crawler-meat",
+          "tier": 1
+        },
+        {
+          "material": "goretusk-liver",
+          "tier": 1
+        },
+        {
+          "material": "goretusk-snout",
+          "tier": 1
+        },
+        {
+          "material": "kodo-meat",
+          "tier": 1
+        },
+        {
+          "material": "meaty-bat-wing",
+          "tier": 1
+        },
+        {
+          "material": "oily-blackmouth",
+          "tier": 1
+        },
+        {
+          "material": "raw-brilliant-smallfish",
+          "tier": 1
+        },
+        {
+          "material": "raw-longjaw-mud-snapper",
+          "tier": 1
+        },
+        {
+          "material": "raw-rainbow-fin-albacore",
+          "tier": 1
+        },
+        {
+          "material": "raw-slitherskin-mackerel",
+          "tier": 1
+        },
+        {
+          "material": "small-egg",
+          "tier": 1
+        },
+        {
+          "material": "small-spider-leg",
+          "tier": 1
+        },
+        {
+          "material": "soft-frenzy-flesh",
+          "tier": 1
+        },
+        {
+          "material": "strider-meat",
+          "tier": 1
+        },
+        {
+          "material": "stringy-vulture-meat",
+          "tier": 1
+        },
+        {
+          "material": "stringy-wolf-meat",
+          "tier": 1
+        },
+        {
+          "material": "big-bear-meat",
+          "tier": 2
+        },
+        {
+          "material": "boar-ribs",
+          "tier": 2
+        },
+        {
+          "material": "crisp-spider-meat",
+          "tier": 2
+        },
+        {
+          "material": "crocolisk-meat",
+          "tier": 2
+        },
+        {
+          "material": "firefin-snapper",
+          "tier": 2
+        },
+        {
+          "material": "gooey-spider-leg",
+          "tier": 2
+        },
+        {
+          "material": "lean-wolf-flank",
+          "tier": 2
+        },
+        {
+          "material": "lion-meat",
+          "tier": 2
+        },
+        {
+          "material": "raptor-egg",
+          "tier": 2
+        },
+        {
+          "material": "raw-bristle-whisker-catfish",
+          "tier": 2
+        },
+        {
+          "material": "stag-meat",
+          "tier": 2
+        },
+        {
+          "material": "tender-crocolisk-meat",
+          "tier": 2
+        },
+        {
+          "material": "thunder-lizard-tail",
+          "tier": 2
+        },
+        {
+          "material": "tough-condor-meat",
+          "tier": 2
+        },
+        {
+          "material": "big-mouth-clam",
+          "tier": 3
+        },
+        {
+          "material": "buzzard-wing",
+          "tier": 3
+        },
+        {
+          "material": "giant-egg",
+          "tier": 3
+        },
+        {
+          "material": "heavy-kodo-meat",
+          "tier": 3
+        },
+        {
+          "material": "mystery-meat",
+          "tier": 3
+        },
+        {
+          "material": "raptor-flesh",
+          "tier": 3
+        },
+        {
+          "material": "raw-glossy-mightfish",
+          "tier": 3
+        },
+        {
+          "material": "raw-mithril-head-trout",
+          "tier": 3
+        },
+        {
+          "material": "raw-rockscale-cod",
+          "tier": 3
+        },
+        {
+          "material": "raw-spotted-yellowtail",
+          "tier": 3
+        },
+        {
+          "material": "red-wolf-meat",
+          "tier": 3
+        },
+        {
+          "material": "sartheris-striker",
+          "tier": 3
+        },
+        {
+          "material": "stonescale-eel",
+          "tier": 3
+        },
+        {
+          "material": "tender-wolf-meat",
+          "tier": 3
+        },
+        {
+          "material": "tiger-meat",
+          "tier": 3
+        },
+        {
+          "material": "turtle-meat",
+          "tier": 3
+        },
+        {
+          "material": "white-spider-meat",
+          "tier": 3
+        },
+        {
+          "material": "chimaerok-tenderloin",
+          "tier": 4
+        },
+        {
+          "material": "raw-summer-bass",
+          "tier": 4
+        },
+        {
+          "material": "sandworm-meat",
+          "tier": 4
+        },
+        {
+          "material": "winter-squid",
+          "tier": 4
+        }
+      ],
+      "herb": [
+        {
+          "material": "earthroot",
+          "tier": 1
+        },
+        {
+          "material": "mageroyal",
+          "tier": 1
+        },
+        {
+          "material": "peacebloom",
+          "tier": 1
+        },
+        {
+          "material": "silverleaf",
+          "tier": 1
+        },
+        {
+          "material": "swiftthistle",
+          "tier": 1
+        },
+        {
+          "material": "bruiseweed",
+          "tier": 2
+        },
+        {
+          "material": "grave-moss",
+          "tier": 2
+        },
+        {
+          "material": "kingsblood",
+          "tier": 2
+        },
+        {
+          "material": "liferoot",
+          "tier": 2
+        },
+        {
+          "material": "stranglekelp",
+          "tier": 2
+        },
+        {
+          "material": "wild-steelbloom",
+          "tier": 2
+        },
+        {
+          "material": "fadeleaf",
+          "tier": 3
+        },
+        {
+          "material": "firebloom",
+          "tier": 3
+        },
+        {
+          "material": "goldthorn",
+          "tier": 3
+        },
+        {
+          "material": "khadgars-whisker",
+          "tier": 3
+        },
+        {
+          "material": "purple-lotus",
+          "tier": 3
+        },
+        {
+          "material": "black-lotus",
+          "tier": 4
+        },
+        {
+          "material": "dreamfoil",
+          "tier": 4
+        },
+        {
+          "material": "ghost-mushroom",
+          "tier": 4
+        },
+        {
+          "material": "golden-sansam",
+          "tier": 4
+        },
+        {
+          "material": "gromsblood",
+          "tier": 4
+        },
+        {
+          "material": "mountain-silversage",
+          "tier": 4
+        },
+        {
+          "material": "sungrass",
+          "tier": 4
+        }
+      ],
+      "hide": [
+        {
+          "material": "light-leather",
+          "tier": 1
+        },
+        {
+          "material": "ruined-leather-scraps",
+          "tier": 1
+        },
+        {
+          "material": "medium-leather",
+          "tier": 2
+        },
+        {
+          "material": "thick-leather",
+          "tier": 4
+        }
+      ],
+      "ore": [
+        {
+          "material": "coarse-stone",
+          "tier": 1
+        },
+        {
+          "material": "copper-ore",
+          "tier": 1
+        },
+        {
+          "material": "rough-stone",
+          "tier": 1
+        },
+        {
+          "material": "silver-ore",
+          "tier": 1
+        },
+        {
+          "material": "tin-ore",
+          "tier": 1
+        },
+        {
+          "material": "heavy-stone",
+          "tier": 2
+        },
+        {
+          "material": "iron-ore",
+          "tier": 2
+        },
+        {
+          "material": "gold-ore",
+          "tier": 3
+        },
+        {
+          "material": "mithril-ore",
+          "tier": 3
+        },
+        {
+          "material": "solid-stone",
+          "tier": 3
+        },
+        {
+          "material": "dense-stone",
+          "tier": 4
+        },
+        {
+          "material": "thorium-ore",
+          "tier": 4
+        },
+        {
+          "material": "truesilver-ore",
+          "tier": 4
+        }
+      ]
+    },
+    "snow": {
+      "cloth": [
+        {
+          "material": "linen-cloth",
+          "tier": 1
+        },
+        {
+          "material": "runecloth",
+          "tier": 4
+        }
+      ],
+      "fish": [
+        {
+          "material": "bear-meat",
+          "tier": 1
+        },
+        {
+          "material": "boar-meat",
+          "tier": 1
+        },
+        {
+          "material": "coyote-meat",
+          "tier": 1
+        },
+        {
+          "material": "crag-boar-rib",
+          "tier": 1
+        },
+        {
+          "material": "crawler-meat",
+          "tier": 1
+        },
+        {
+          "material": "goretusk-liver",
+          "tier": 1
+        },
+        {
+          "material": "goretusk-snout",
+          "tier": 1
+        },
+        {
+          "material": "kodo-meat",
+          "tier": 1
+        },
+        {
+          "material": "meaty-bat-wing",
+          "tier": 1
+        },
+        {
+          "material": "raw-brilliant-smallfish",
+          "tier": 1
+        },
+        {
+          "material": "raw-longjaw-mud-snapper",
+          "tier": 1
+        },
+        {
+          "material": "small-egg",
+          "tier": 1
+        },
+        {
+          "material": "small-spider-leg",
+          "tier": 1
+        },
+        {
+          "material": "soft-frenzy-flesh",
+          "tier": 1
+        },
+        {
+          "material": "strider-meat",
+          "tier": 1
+        },
+        {
+          "material": "stringy-vulture-meat",
+          "tier": 1
+        },
+        {
+          "material": "stringy-wolf-meat",
+          "tier": 1
+        },
+        {
+          "material": "big-bear-meat",
+          "tier": 2
+        },
+        {
+          "material": "boar-ribs",
+          "tier": 2
+        },
+        {
+          "material": "crisp-spider-meat",
+          "tier": 2
+        },
+        {
+          "material": "crocolisk-meat",
+          "tier": 2
+        },
+        {
+          "material": "gooey-spider-leg",
+          "tier": 2
+        },
+        {
+          "material": "lean-wolf-flank",
+          "tier": 2
+        },
+        {
+          "material": "lion-meat",
+          "tier": 2
+        },
+        {
+          "material": "raptor-egg",
+          "tier": 2
+        },
+        {
+          "material": "raw-bristle-whisker-catfish",
+          "tier": 2
+        },
+        {
+          "material": "stag-meat",
+          "tier": 2
+        },
+        {
+          "material": "tender-crocolisk-meat",
+          "tier": 2
+        },
+        {
+          "material": "thunder-lizard-tail",
+          "tier": 2
+        },
+        {
+          "material": "tough-condor-meat",
+          "tier": 2
+        },
+        {
+          "material": "buzzard-wing",
+          "tier": 3
+        },
+        {
+          "material": "giant-egg",
+          "tier": 3
+        },
+        {
+          "material": "heavy-kodo-meat",
+          "tier": 3
+        },
+        {
+          "material": "mystery-meat",
+          "tier": 3
+        },
+        {
+          "material": "raptor-flesh",
+          "tier": 3
+        },
+        {
+          "material": "raw-greater-sagefish",
+          "tier": 3
+        },
+        {
+          "material": "raw-mithril-head-trout",
+          "tier": 3
+        },
+        {
+          "material": "raw-redgill",
+          "tier": 3
+        },
+        {
+          "material": "red-wolf-meat",
+          "tier": 3
+        },
+        {
+          "material": "tender-wolf-meat",
+          "tier": 3
+        },
+        {
+          "material": "tiger-meat",
+          "tier": 3
+        },
+        {
+          "material": "turtle-meat",
+          "tier": 3
+        },
+        {
+          "material": "white-spider-meat",
+          "tier": 3
+        },
+        {
+          "material": "chimaerok-tenderloin",
+          "tier": 4
+        },
+        {
+          "material": "lightning-eel",
+          "tier": 4
+        },
+        {
+          "material": "plated-armorfish",
+          "tier": 4
+        },
+        {
+          "material": "raw-nightfin-snapper",
+          "tier": 4
+        },
+        {
+          "material": "raw-sunscale-salmon",
+          "tier": 4
+        },
+        {
+          "material": "raw-whitescale-salmon",
+          "tier": 4
+        },
+        {
+          "material": "sandworm-meat",
+          "tier": 4
+        }
+      ],
+      "herb": [
+        {
+          "material": "earthroot",
+          "tier": 1
+        },
+        {
+          "material": "peacebloom",
+          "tier": 1
+        },
+        {
+          "material": "silverleaf",
+          "tier": 1
+        },
+        {
+          "material": "bruiseweed",
+          "tier": 2
+        },
+        {
+          "material": "grave-moss",
+          "tier": 2
+        },
+        {
+          "material": "kingsblood",
+          "tier": 2
+        },
+        {
+          "material": "liferoot",
+          "tier": 2
+        },
+        {
+          "material": "stranglekelp",
+          "tier": 2
+        },
+        {
+          "material": "wild-steelbloom",
+          "tier": 2
+        },
+        {
+          "material": "fadeleaf",
+          "tier": 3
+        },
+        {
+          "material": "goldthorn",
+          "tier": 3
+        },
+        {
+          "material": "khadgars-whisker",
+          "tier": 3
+        },
+        {
+          "material": "wintersbite",
+          "tier": 3
+        },
+        {
+          "material": "black-lotus",
+          "tier": 4
+        },
+        {
+          "material": "blindweed",
+          "tier": 4
+        },
+        {
+          "material": "dreamfoil",
+          "tier": 4
+        },
+        {
+          "material": "ghost-mushroom",
+          "tier": 4
+        },
+        {
+          "material": "gromsblood",
+          "tier": 4
+        },
+        {
+          "material": "icecap",
+          "tier": 4
+        },
+        {
+          "material": "mountain-silversage",
+          "tier": 4
+        }
+      ],
+      "hide": [
+        {
+          "material": "heavy-leather",
+          "tier": 3
+        },
+        {
+          "material": "rugged-leather",
+          "tier": 4
+        }
+      ],
+      "ore": [
+        {
+          "material": "coarse-stone",
+          "tier": 1
+        },
+        {
+          "material": "copper-ore",
+          "tier": 1
+        },
+        {
+          "material": "rough-stone",
+          "tier": 1
+        },
+        {
+          "material": "silver-ore",
+          "tier": 1
+        },
+        {
+          "material": "tin-ore",
+          "tier": 1
+        },
+        {
+          "material": "heavy-stone",
+          "tier": 2
+        },
+        {
+          "material": "iron-ore",
+          "tier": 2
+        },
+        {
+          "material": "gold-ore",
+          "tier": 3
+        },
+        {
+          "material": "mithril-ore",
+          "tier": 3
+        },
+        {
+          "material": "solid-stone",
+          "tier": 3
+        },
+        {
+          "material": "dark-iron-ore",
+          "tier": 4
+        },
+        {
+          "material": "dense-stone",
+          "tier": 4
+        },
+        {
+          "material": "thorium-ore",
+          "tier": 4
+        },
+        {
+          "material": "truesilver-ore",
+          "tier": 4
+        }
+      ]
+    },
+    "coast": {
+      "cloth": [
+        {
+          "material": "linen-cloth",
+          "tier": 1
+        },
+        {
+          "material": "mageweave-cloth",
+          "tier": 3
+        }
+      ],
+      "fish": [
+        {
+          "material": "darkshore-grouper",
+          "tier": 1
+        },
+        {
+          "material": "oily-blackmouth",
+          "tier": 1
+        },
+        {
+          "material": "raw-brilliant-smallfish",
+          "tier": 1
+        },
+        {
+          "material": "raw-longjaw-mud-snapper",
+          "tier": 1
+        },
+        {
+          "material": "raw-rainbow-fin-albacore",
+          "tier": 1
+        },
+        {
+          "material": "raw-slitherskin-mackerel",
+          "tier": 1
+        },
+        {
+          "material": "firefin-snapper",
+          "tier": 2
+        },
+        {
+          "material": "raw-bristle-whisker-catfish",
+          "tier": 2
+        },
+        {
+          "material": "big-mouth-clam",
+          "tier": 3
+        },
+        {
+          "material": "misty-reed-mahi-mahi",
+          "tier": 3
+        },
+        {
+          "material": "raw-glossy-mightfish",
+          "tier": 3
+        },
+        {
+          "material": "raw-mithril-head-trout",
+          "tier": 3
+        },
+        {
+          "material": "raw-redgill",
+          "tier": 3
+        },
+        {
+          "material": "raw-rockscale-cod",
+          "tier": 3
+        },
+        {
+          "material": "raw-spotted-yellowtail",
+          "tier": 3
+        },
+        {
+          "material": "sartheris-striker",
+          "tier": 3
+        },
+        {
+          "material": "savage-coast-blue-sailfin",
+          "tier": 3
+        },
+        {
+          "material": "stonescale-eel",
+          "tier": 3
+        },
+        {
+          "material": "darkclaw-lobster",
+          "tier": 4
+        },
+        {
+          "material": "large-raw-mightfish",
+          "tier": 4
+        },
+        {
+          "material": "lightning-eel",
+          "tier": 4
+        },
+        {
+          "material": "raw-nightfin-snapper",
+          "tier": 4
+        },
+        {
+          "material": "raw-summer-bass",
+          "tier": 4
+        },
+        {
+          "material": "raw-sunscale-salmon",
+          "tier": 4
+        },
+        {
+          "material": "winter-squid",
+          "tier": 4
+        }
+      ],
+      "herb": [
+        {
+          "material": "briarthorn",
+          "tier": 1
+        },
+        {
+          "material": "earthroot",
+          "tier": 1
+        },
+        {
+          "material": "mageroyal",
+          "tier": 1
+        },
+        {
+          "material": "peacebloom",
+          "tier": 1
+        },
+        {
+          "material": "silverleaf",
+          "tier": 1
+        },
+        {
+          "material": "bruiseweed",
+          "tier": 2
+        },
+        {
+          "material": "stranglekelp",
+          "tier": 2
+        },
+        {
+          "material": "goldthorn",
+          "tier": 3
+        },
+        {
+          "material": "khadgars-whisker",
+          "tier": 3
+        },
+        {
+          "material": "purple-lotus",
+          "tier": 3
+        },
+        {
+          "material": "dreamfoil",
+          "tier": 4
+        },
+        {
+          "material": "golden-sansam",
+          "tier": 4
+        },
+        {
+          "material": "mountain-silversage",
+          "tier": 4
+        },
+        {
+          "material": "sungrass",
+          "tier": 4
+        }
+      ],
+      "ore": [
+        {
+          "material": "coarse-stone",
+          "tier": 1
+        },
+        {
+          "material": "copper-ore",
+          "tier": 1
+        },
+        {
+          "material": "rough-stone",
+          "tier": 1
+        },
+        {
+          "material": "silver-ore",
+          "tier": 1
+        },
+        {
+          "material": "tin-ore",
+          "tier": 1
+        },
+        {
+          "material": "gold-ore",
+          "tier": 3
+        },
+        {
+          "material": "mithril-ore",
+          "tier": 3
+        },
+        {
+          "material": "solid-stone",
+          "tier": 3
+        },
+        {
+          "material": "dense-stone",
+          "tier": 4
+        },
+        {
+          "material": "thorium-ore",
+          "tier": 4
+        },
+        {
+          "material": "truesilver-ore",
+          "tier": 4
+        }
+      ]
+    },
+    "caves": {
+      "cloth": [
+        {
+          "material": "linen-cloth",
+          "tier": 1
+        },
+        {
+          "material": "wool-cloth",
+          "tier": 2
+        },
+        {
+          "material": "silk-cloth",
+          "tier": 3
+        }
+      ],
+      "fish": [
+        {
+          "material": "raw-brilliant-smallfish",
+          "tier": 1
+        },
+        {
+          "material": "raw-longjaw-mud-snapper",
+          "tier": 1
+        }
+      ],
+      "herb": [
+        {
+          "material": "briarthorn",
+          "tier": 1
+        },
+        {
+          "material": "earthroot",
+          "tier": 1
+        },
+        {
+          "material": "bruiseweed",
+          "tier": 2
+        },
+        {
+          "material": "grave-moss",
+          "tier": 2
+        },
+        {
+          "material": "kingsblood",
+          "tier": 2
+        },
+        {
+          "material": "liferoot",
+          "tier": 2
+        },
+        {
+          "material": "stranglekelp",
+          "tier": 2
+        },
+        {
+          "material": "arthas-tears",
+          "tier": 3
+        },
+        {
+          "material": "fadeleaf",
+          "tier": 3
+        },
+        {
+          "material": "goldthorn",
+          "tier": 3
+        },
+        {
+          "material": "blindweed",
+          "tier": 4
+        },
+        {
+          "material": "ghost-mushroom",
+          "tier": 4
+        }
+      ],
+      "ore": [
+        {
+          "material": "coarse-stone",
+          "tier": 1
+        },
+        {
+          "material": "copper-ore",
+          "tier": 1
+        },
+        {
+          "material": "rough-stone",
+          "tier": 1
+        },
+        {
+          "material": "silver-ore",
+          "tier": 1
+        },
+        {
+          "material": "tin-ore",
+          "tier": 1
+        },
+        {
+          "material": "heavy-stone",
+          "tier": 2
+        },
+        {
+          "material": "iron-ore",
+          "tier": 2
+        },
+        {
+          "material": "gold-ore",
+          "tier": 3
+        },
+        {
+          "material": "mithril-ore",
+          "tier": 3
+        },
+        {
+          "material": "solid-stone",
+          "tier": 3
+        },
+        {
+          "material": "dense-stone",
+          "tier": 4
+        },
+        {
+          "material": "truesilver-ore",
+          "tier": 4
+        }
+      ]
+    },
+    "blighted": {
+      "cloth": [
+        {
+          "material": "mageweave-cloth",
+          "tier": 3
+        },
+        {
+          "material": "silk-cloth",
+          "tier": 3
+        }
+      ],
+      "fish": [
+        {
+          "material": "raw-mithril-head-trout",
+          "tier": 3
+        },
+        {
+          "material": "raw-redgill",
+          "tier": 3
+        },
+        {
+          "material": "lightning-eel",
+          "tier": 4
+        },
+        {
+          "material": "plated-armorfish",
+          "tier": 4
+        },
+        {
+          "material": "raw-nightfin-snapper",
+          "tier": 4
+        },
+        {
+          "material": "raw-sunscale-salmon",
+          "tier": 4
+        },
+        {
+          "material": "raw-whitescale-salmon",
+          "tier": 4
+        }
+      ],
+      "herb": [
+        {
+          "material": "grave-moss",
+          "tier": 2
+        },
+        {
+          "material": "kingsblood",
+          "tier": 2
+        },
+        {
+          "material": "liferoot",
+          "tier": 2
+        },
+        {
+          "material": "arthas-tears",
+          "tier": 3
+        },
+        {
+          "material": "fadeleaf",
+          "tier": 3
+        },
+        {
+          "material": "goldthorn",
+          "tier": 3
+        },
+        {
+          "material": "black-lotus",
+          "tier": 4
+        },
+        {
+          "material": "dreamfoil",
+          "tier": 4
+        },
+        {
+          "material": "golden-sansam",
+          "tier": 4
+        },
+        {
+          "material": "mountain-silversage",
+          "tier": 4
+        },
+        {
+          "material": "plaguebloom",
+          "tier": 4
+        },
+        {
+          "material": "sungrass",
+          "tier": 4
+        }
+      ],
+      "ore": [
+        {
+          "material": "gold-ore",
+          "tier": 3
+        },
+        {
+          "material": "mithril-ore",
+          "tier": 3
+        },
+        {
+          "material": "solid-stone",
+          "tier": 3
+        },
+        {
+          "material": "dense-stone",
+          "tier": 4
+        },
+        {
+          "material": "thorium-ore",
+          "tier": 4
+        },
+        {
+          "material": "truesilver-ore",
+          "tier": 4
+        }
+      ]
+    },
+    "volcanic": {
+      "cloth": [
+        {
+          "material": "mageweave-cloth",
+          "tier": 3
+        },
+        {
+          "material": "runecloth",
+          "tier": 4
+        }
+      ],
+      "fish": [
+        {
+          "material": "lightning-eel",
+          "tier": 4
+        },
+        {
+          "material": "raw-whitescale-salmon",
+          "tier": 4
+        }
+      ],
+      "herb": [
+        {
+          "material": "firebloom",
+          "tier": 3
+        },
+        {
+          "material": "black-lotus",
+          "tier": 4
+        },
+        {
+          "material": "dreamfoil",
+          "tier": 4
+        },
+        {
+          "material": "golden-sansam",
+          "tier": 4
+        },
+        {
+          "material": "gromsblood",
+          "tier": 4
+        },
+        {
+          "material": "mountain-silversage",
+          "tier": 4
+        },
+        {
+          "material": "sungrass",
+          "tier": 4
+        }
+      ],
+      "hide": [
+        {
+          "material": "rugged-leather",
+          "tier": 4
+        }
+      ],
+      "ore": [
+        {
+          "material": "coarse-stone",
+          "tier": 1
+        },
+        {
+          "material": "rough-stone",
+          "tier": 1
+        },
+        {
+          "material": "silver-ore",
+          "tier": 1
+        },
+        {
+          "material": "heavy-stone",
+          "tier": 2
+        },
+        {
+          "material": "iron-ore",
+          "tier": 2
+        },
+        {
+          "material": "gold-ore",
+          "tier": 3
+        },
+        {
+          "material": "mithril-ore",
+          "tier": 3
+        },
+        {
+          "material": "solid-stone",
+          "tier": 3
+        },
+        {
+          "material": "dark-iron-ore",
+          "tier": 4
+        },
+        {
+          "material": "dense-stone",
+          "tier": 4
+        },
+        {
+          "material": "thorium-ore",
+          "tier": 4
+        },
+        {
+          "material": "truesilver-ore",
+          "tier": 4
+        }
+      ]
+    }
+  }
+}

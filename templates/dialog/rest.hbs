@@ -22,11 +22,13 @@
     <select id="azeroth-rest-food" name="food">
       <option value="">{{localize "AZEROTH.Rest.None"}}</option>
       {{#each food as |o|}}
-      <option value="{{o.value}}"{{#if o.selected}} selected{{/if}}>{{o.label}}{{#if o.tag}} ({{o.tag}}){{/if}}</option>
+      <option value="{{o.value}}"{{#if o.selected}} selected{{/if}} data-health="{{o.health}}" data-hot="{{o.hot}}" data-both="{{o.both}}" data-name="{{o.name}}">{{o.label}}{{#if o.tag}} ({{o.tag}}){{/if}}</option>
       {{/each}}
     </select>
   </div>
-  <p class="azeroth-dialog-note">{{eatReturns}}{{#if hotMealReturns}} · {{hotMealReturns}}{{/if}}</p>
+  <p class="azeroth-dialog-note"><span data-rest-eat>{{eatReturns}}</span>{{#if hotMealReturns}}<span data-rest-hot{{#if hotMealHidden}} hidden{{/if}}> · {{hotMealReturns}}</span>{{/if}}</p>
+  {{!-- A dish that counts as food and as drink says so: one is eaten for both (the final review's M1). --}}
+  <p class="azeroth-dialog-note azeroth-rest-reason" data-rest-both>{{bothNote}}</p>
 
   <div class="azeroth-dialog-row azeroth-rest-row">
     <label for="azeroth-rest-drink">{{localize "AZEROTH.Rest.Drink"}}</label>

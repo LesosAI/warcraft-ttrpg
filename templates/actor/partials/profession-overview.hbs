@@ -1,0 +1,161 @@
+{{!--
+  THE PROFESSION TAB'S OVERVIEW VIEW (D11 §12, the plan's M2): the projects in
+  progress, the Rank with the Craft Test's breakdown (ability modifier + Rank +
+  tool, NEVER Proficiency, D-1926), the tiers, the profession skills, the tool,
+  gathering by biome (or Disenchant, for an enchanter), and what a defeated
+  creature gives.
+
+  Every refusal is words beside a greyed control (D-681); a held rung is a
+  filled mark AND the word *held* (never colour alone).
+--}}
+{{#if profession.summary}}
+<div class="azeroth-prof-card azeroth-prof-summary">
+  <h4 class="azeroth-prof-subheading">{{profession.summary.heading}}</h4>
+  <ul class="azeroth-prof-lines">
+    {{#each profession.summary.rows as |row|}}
+    <li><strong class="{{row.rarityClass}}">{{row.name}}</strong> <span>{{row.line}}</span></li>
+    {{/each}}
+  </ul>
+  <button type="button" data-action="professionView" data-view="crafting">{{localize "AZEROTH.Profession.Sheet.Project.Open"}}</button>
+</div>
+{{/if}}
+
+<div class="azeroth-prof-grid">
+  <div class="azeroth-prof-card azeroth-prof-rank">
+    <h4 class="azeroth-prof-subheading">{{localize "AZEROTH.Profession.Sheet.Rank.Heading"}}</h4>
+    <p class="azeroth-prof-big"><strong>{{profession.rank.rank}}</strong> <span>{{profession.rank.ofWords}}</span></p>
+    {{!-- The Rank out of fifteen: a level indicator, not a progress bar (D-508, D11 §12). --}}
+    <div class="azeroth-prof-bar" aria-hidden="true"><i style="width: {{profession.rank.bar}}%"></i></div>
+    <dl class="azeroth-prof-kv">
+      <dt>{{localize "AZEROTH.Profession.Sheet.Rank.CraftTest"}}</dt>
+      <dd><strong class="azeroth-prof-bonus">{{profession.bonusText}}</strong> = {{profession.breakdown}}</dd>
+    </dl>
+    <p class="azeroth-prof-soft">{{localize "AZEROTH.Profession.Sheet.Rank.NoProficiency"}}</p>
+    {{#if profession.editable}}
+    <button type="button" class="azeroth-prof-primary" id="{{profession.domId}}-raise" data-action="raiseProfessionRank"{{#unless profession.rank.canRaise}} disabled{{/unless}}>{{profession.rank.raiseLabel}}</button>
+    {{#if profession.rank.refusalWords}}<p class="azeroth-prof-refusal">{{profession.rank.refusalWords}}</p>{{/if}}
+    {{/if}}
+    <p class="azeroth-prof-soft">{{localize "AZEROTH.Profession.Sheet.Rank.Cheap"}}</p>
+  </div>
+
+  <div class="azeroth-prof-card azeroth-prof-tiers">
+    <h4 class="azeroth-prof-subheading">{{localize "AZEROTH.Profession.Sheet.Tiers.Heading"}}</h4>
+    <ul class="azeroth-prof-ladder">
+      {{#each profession.ladder as |rung|}}
+      <li class="{{#if rung.held}}is-held{{else}}is-open{{/if}}">
+        <span class="azeroth-prof-rung-mark" aria-hidden="true">{{#if rung.held}}&#9670;{{else}}&#9671;{{/if}}</span>
+        <strong>{{rung.label}}</strong> <span>{{rung.line}}</span>
+        <span class="azeroth-prof-rung-state">{{rung.state}}</span>
+      </li>
+      {{/each}}
+    </ul>
+    <p class="azeroth-prof-soft">{{localize "AZEROTH.Profession.Sheet.Tiers.Note"}}</p>
+  </div>
+</div>
+
+<div class="azeroth-prof-card azeroth-prof-skills">
+  <h4 class="azeroth-prof-subheading">{{localize "AZEROTH.Profession.Sheet.Skills.Heading"}} <span>{{profession.skills.countWords}}</span></h4>
+  {{#each profession.skills.rows as |row|}}
+  <div class="azeroth-prof-skillrow is-{{row.state}}">
+    <strong>{{row.tierLabel}}</strong> <span class="azeroth-prof-soft">{{row.stateWords}}</span>
+    {{#if row.chips.length}}
+    <div class="azeroth-prof-chips">{{#each row.chips as |chip|}}<span class="azeroth-prof-chip is-held">{{chip}}</span>{{/each}}</div>
+    {{/if}}
+  </div>
+  {{/each}}
+</div>
+
+<div class="azeroth-prof-grid">
+  <div class="azeroth-prof-card azeroth-prof-tool">
+    <h4 class="azeroth-prof-subheading">{{localize "AZEROTH.Profession.Sheet.Tool.Heading"}}</h4>
+    <div class="azeroth-prof-toolline">
+      {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=profession.tool.img rarityClass=profession.tool.rarityClass}}
+      <div>
+        <strong class="{{profession.tool.rarityClass}}">{{profession.tool.name}}</strong> <span class="azeroth-prof-soft">{{profession.tool.line}}</span><br>
+        {{#if profession.tool.carried}}<span class="azeroth-prof-ok">{{localize "AZEROTH.Profession.Sheet.Tool.Carried"}}</span>{{else}}<span class="azeroth-prof-refusal">{{localize "AZEROTH.Profession.Sheet.Tool.Missing"}}</span>{{/if}}
+      </div>
+    </div>
+    <dl class="azeroth-prof-kv">
+      <dt>{{localize "AZEROTH.Profession.Sheet.Tool.Bonus"}}</dt>
+      <dd><strong>{{profession.tool.bonusText}}</strong> <span class="azeroth-prof-soft">{{localize "AZEROTH.Profession.Sheet.Tool.BonusNote"}}</span></dd>
+    </dl>
+    <p class="azeroth-prof-soft">{{localize "AZEROTH.Profession.Sheet.Tool.Note"}}</p>
+  </div>
+
+  {{#if profession.disenchant}}
+  {{!-- An enchanter gathers essence by Disenchant, with no biome (D-1915, D-1933). --}}
+  <div class="azeroth-prof-card azeroth-prof-gather">
+    <h4 class="azeroth-prof-subheading">{{localize "AZEROTH.Profession.Sheet.Disenchant.Heading"}}</h4>
+    <p class="azeroth-prof-soft">{{profession.disenchant.hint}} {{profession.disenchant.partsWords}}</p>
+    {{#if profession.disenchant.choices.length}}
+    <div class="azeroth-prof-filters">
+      <select id="{{profession.domId}}-disenchant" data-prof-disenchant aria-label="{{localize 'AZEROTH.Profession.Sheet.Disenchant.Item'}}">
+        {{#each profession.disenchant.choices as |it|}}<option value="{{it.id}}"{{#if it.selected}} selected{{/if}}>{{it.label}}</option>{{/each}}
+      </select>
+      <button type="button" class="azeroth-prof-primary" data-action="professionDisenchant"{{#unless profession.disenchant.canPress}} disabled{{/unless}}>{{localize "AZEROTH.Profession.Sheet.Disenchant.Button"}}</button>
+    </div>
+    {{else}}
+    <p class="azeroth-prof-refusal">{{localize "AZEROTH.Profession.Sheet.Disenchant.None"}}</p>
+    {{/if}}
+    {{#if profession.disenchant.refusal}}<p class="azeroth-prof-refusal">{{profession.disenchant.refusal}}</p>{{/if}}
+    <p class="azeroth-prof-soft">{{localize "AZEROTH.Profession.Sheet.Disenchant.Note"}}</p>
+    <ul class="azeroth-prof-lines">{{#each profession.disenchant.yields as |y|}}<li>{{y}}</li>{{/each}}</ul>
+  </div>
+  {{else if profession.gather}}
+  <div class="azeroth-prof-card azeroth-prof-gather">
+    <h4 class="azeroth-prof-subheading">{{profession.gather.heading}}</h4>
+    <div class="azeroth-prof-filters">
+      <label for="{{profession.domId}}-biome">{{localize "AZEROTH.Profession.Sheet.Gather.Biome"}} <span class="azeroth-prof-soft">{{localize "AZEROTH.Profession.Sheet.Gather.BiomeHint"}}</span></label>
+      <select id="{{profession.domId}}-biome" data-prof-biome>
+        <option value="">{{localize "AZEROTH.Profession.Sheet.Gather.PickBiome"}}</option>
+        {{#each profession.gather.biomes as |b|}}<option value="{{b.key}}"{{#if b.selected}} selected{{/if}}>{{b.label}}</option>{{/each}}
+      </select>
+    </div>
+    {{#if profession.gather.nodes.length}}
+    <ul class="azeroth-prof-nodes" role="radiogroup" aria-label="{{profession.gather.heading}}">
+      {{#each profession.gather.nodes as |node|}}
+      <li>
+        <label class="azeroth-prof-node">
+          <input type="radio" name="professionNode" id="{{node.id}}" value="{{node.material}}" data-prof-node{{#if node.checked}} checked{{/if}}>
+          {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=node.img}}
+          <span class="azeroth-prof-node-name">{{node.name}}</span>
+          <span class="azeroth-prof-node-tier">{{node.tierWords}}</span>
+        </label>
+      </li>
+      {{/each}}
+    </ul>
+    {{else if profession.gather.biome}}
+    <p class="azeroth-prof-refusal">{{profession.gather.emptyWords}}</p>
+    {{/if}}
+    <p class="azeroth-prof-test">{{profession.gather.testWords}} <span class="azeroth-prof-soft">{{profession.gather.partsWords}}</span>{{#if profession.gather.wellFed}} <span class="azeroth-prof-ok">{{localize "AZEROTH.Profession.Sheet.Gather.WellFed"}}</span>{{/if}}</p>
+    <div class="azeroth-prof-actions">
+      <button type="button" class="azeroth-prof-primary" data-action="gather"{{#unless profession.gather.canPress}} disabled{{/unless}}>{{localize "AZEROTH.Profession.Sheet.Gather.Button"}}</button>
+      <span class="azeroth-prof-soft">{{localize "AZEROTH.Profession.Sheet.Gather.Note"}}</span>
+    </div>
+    {{#if profession.gather.refusal}}<p class="azeroth-prof-refusal">{{profession.gather.refusal}}</p>{{/if}}
+  </div>
+  {{/if}}
+</div>
+
+{{#if profession.harvest}}
+{{!-- THE HARVEST CARD (D-1996): the defeated creatures this user has targeted, each with the
+      profession's Skin, Butcher or Salvage, a refused one greyed with its reason in words (D-681).
+      A press is `workflows.harvest` with the token as the target. The defeated creature's banner
+      keeps its buttons for those who can open it (D-1985). --}}
+<div class="azeroth-prof-card azeroth-prof-harvest">
+  <h4 class="azeroth-prof-subheading">{{localize "AZEROTH.Profession.Sheet.Harvest.Heading"}}</h4>
+  <p class="azeroth-prof-soft">{{profession.harvest.words}}</p>
+  {{#if profession.harvest.toolWords}}<p class="azeroth-prof-refusal">{{profession.harvest.toolWords}}</p>{{/if}}
+  {{#each profession.harvest.rows as |row|}}
+  <div class="azeroth-prof-harvest-row" data-harvest-token="{{row.uuid}}">
+    <strong>{{row.name}}</strong>
+    {{#each row.kinds as |k|}}
+    <button type="button" id="{{k.id}}" data-action="harvestTarget" data-token-uuid="{{row.uuid}}" data-kind="{{k.kind}}"{{#unless k.ok}} disabled{{/unless}}>{{k.label}}</button>
+    {{#if k.reason}}<span class="azeroth-prof-refusal">{{k.reason}}</span>{{/if}}
+    {{/each}}
+  </div>
+  {{else}}
+  <p class="azeroth-prof-soft azeroth-prof-harvest-none">{{localize "AZEROTH.Profession.Sheet.Harvest.Target"}}</p>
+  {{/each}}
+</div>
+{{/if}}

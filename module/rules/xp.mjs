@@ -11,25 +11,37 @@ export const RANK_MAX = 15;
 
 /** Flat costs from 02 §9. */
 export const LANGUAGE_COST = 20;
-export const CAREER_CHANGE_COST = 100;
 export const SECOND_CLASS_COST = 600;
 export const LEGACY_START_COST = 300;
 
-/** Career advance, tier 1 to 2, 2 to 3, 3 to 4. Keyed by the tier reached. */
-export const CAREER_ADVANCE_COST = Object.freeze({ 2: 200, 3: 300, 4: 400 });
+// A career's advance and change are gone with careers (D-1903): a profession
+// rises a tier with the character for nothing (D-1905).
 
 /** Legacy rank 2, 3, 4. Keyed by the rank reached. */
 export const LEGACY_RANK_COST = Object.freeze({ 2: 200, 3: 300, 4: 400 });
 
 /**
- * "A Rank costs 10 XP times the Rank you are buying. Outside your career it
- * costs double." (02 §8) — the doubling is what makes a career's In-career
- * list worth having.
+ * "A Rank costs 10 XP times the Rank you are buying. Outside your profession
+ * it costs double." (02 §8, D-1906) — the doubling is what makes a
+ * profession's skills worth having.
+ *
+ * **The gate defaults CLOSED** (D-1906): a caller that names no rate pays
+ * double, because a skill nobody named is outside the profession. Every
+ * caller passes the membership it read off `professions.mjs#professionSkills`
+ * (`AzerothActor#professionSkills`, `creation.mjs#proposalSkills`).
  */
-export function rankCost(rank, inCareer = true) {
+export function rankCost(rank, inProfession = false) {
   const r = Math.trunc(rank);
   if (r < 1 || r > RANK_MAX) return 0;
-  return 10 * r * (inCareer ? 1 : 2);
+  return 10 * r * (inProfession === true ? 1 : 2);
+}
+
+/**
+ * A PROFESSION's own Rank (D-1905): always the cheap rate, 10 × the Rank
+ * bought, whatever the skills say. 0 past the ladder's top.
+ */
+export function professionRankCost(rank) {
+  return rankCost(rank, true);
 }
 
 /**
@@ -37,34 +49,12 @@ export function rankCost(rank, inCareer = true) {
  * Cumulative from 0 this is `5 * to * (to + 1)`, which is where 02 §8's
  * landmarks come from: 60 at Rank 3, 210 at 6, 550 at 10, 1,200 at 15.
  */
-export function rankCostBetween(from, to, inCareer = true) {
+export function rankCostBetween(from, to, inProfession = false) {
   let total = 0;
   for (let r = Math.max(RANK_MIN, Math.trunc(from)) + 1; r <= Math.min(RANK_MAX, Math.trunc(to)); r++) {
-    total += rankCost(r, inCareer);
+    total += rankCost(r, inProfession);
   }
   return total;
-}
-
-/** Career advancement gates (03 §3): the XP and the Ranks it also asks for. */
-export const CAREER_GATE = Object.freeze({
-  2: { xp: 200, ranks: 1, atRank: 3 },
-  3: { xp: 300, ranks: 2, atRank: 6 },
-  4: { xp: 400, ranks: 3, atRank: 10 }
-});
-
-/**
- * Whether a character may advance to a career tier. `inCareerRanks` is the
- * list of Ranks they hold in that career's In-career skills.
- */
-export function canAdvanceCareer({ toTier, xpAvailable = 0, inCareerRanks = [] } = {}) {
-  const gate = CAREER_GATE[toTier];
-  if (!gate) return { ok: false, reason: "no such career tier" };
-  if (xpAvailable < gate.xp) return { ok: false, reason: `needs ${gate.xp} XP` };
-  const qualifying = inCareerRanks.filter(r => r >= gate.atRank).length;
-  if (qualifying < gate.ranks) {
-    return { ok: false, reason: `needs ${gate.ranks} in-career skill(s) at Rank ${gate.atRank}` };
-  }
-  return { ok: true, reason: null };
 }
 
 /** The purse: earned minus spent. Never a percentage of anything (D-508). */

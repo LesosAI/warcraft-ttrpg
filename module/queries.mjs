@@ -58,6 +58,8 @@ import { DK_TALENT_QUERY, dkTalentQueryHandler } from "./effects/death-knight-ta
 import { DK_SPELL_QUERY, dkSpellQueryHandler } from "./effects/death-knight-spells.mjs";
 import { NECRO_SPELL_QUERY, necroSpellQueryHandler } from "./effects/necromancer-spells.mjs";
 import { LOSE_REACTION_QUERY, loseReactionQueryHandler } from "./effects/reaction-loss.mjs";
+// Skin, Butcher and Salvage mark a creature this client does not own (D-1915).
+import { HARVEST_QUERY, harvestQueryHandler } from "./dice/profession-workflows.mjs";
 import { SPEED_DROP_QUERY, speedDropQueryHandler } from "./effects/speed-drop.mjs";
 import { HIT_MARK_QUERY, hitMarkQueryHandler } from "./effects/hit-marks.mjs";
 // 07 §9's Decay (D-865): laid on a creature the caster does not own.
@@ -279,6 +281,7 @@ export function registerQueries() {
   void import("./applications/private-spell-keys.mjs")
     .then(({ registerPrivateSpellKeyMenu }) => registerPrivateSpellKeyMenu())
     .catch(error => console.warn("azeroth-rpg | private spell key menu unavailable", error));
+  CONFIG.queries[HARVEST_QUERY] = harvestQueryHandler;
   CONFIG.queries[SHADOW_QUERY] = shadowQueryHandler;
   CONFIG.queries[SHADOW_CONSENT] = shadowConsentHandler;
   registerShadowCardHooks();

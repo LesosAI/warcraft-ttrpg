@@ -295,8 +295,11 @@ export async function prepareSpecialRest(actor,eaten,drunk){
     picked=await pick(eaten,pools.map(p=>({key:p.itemId,name:p.className??p.name,description:`${p.value}/${p.max}`})),"AZEROTH.SpecialEquipment.Pool");
     if(!picked)return {ok:false};
   }
-  const data={phase:"prepare",actorUuid:actor.uuid,itemId:eaten?.id??null,drinkId:drunk?.id??null,poolId:picked?.key??null,
-    source:eaten?sourceOf(eaten):null,drinkSource:drunk?sourceOf(drunk):null,requestId:foundry.utils.randomID(32)};
+  // A dish that is food and drink at once (08 section 12's Smoked Sagefish, `foodAndDrink`) named in both rows is ONE item,
+  // eaten for both: it is claimed once, as the food (found live, 0.17.0; the GM's check below refused a rest on it).
+  const drank=drunk&&drunk!==eaten?drunk:null;
+  const data={phase:"prepare",actorUuid:actor.uuid,itemId:eaten?.id??null,drinkId:drank?.id??null,poolId:picked?.key??null,
+    source:eaten?sourceOf(eaten):null,drinkSource:drank?sourceOf(drank):null,requestId:foundry.utils.randomID(32)};
   const result=gm()?await specialRestQueryHandler(data,{user:game.user}):await game.users?.activeGM?.query(SOUP_QUERY,data,{timeout:180000});
   return result?.ok?{ok:true,prepared:true,requestId:data.requestId}:{ok:false};
 }
@@ -317,8 +320,8 @@ export async function specialRestQueryHandler(data={}, {user}={}){
       const soup=foodEntry?.key==="nightfin-soup",firewater=drinkEntry?.key==="winterfall-firewater";
       const pool=actor.poolSnapshot().find(p=>p.kind==="power"&&p.name==="mana"&&p.itemId===data.poolId);
       if(!/^[A-Za-z0-9]{16,64}$/.test(data.requestId??"")||(!item&&!drink)||item&&item===drink
-        ||(data.itemId&&(!item||sourceOf(item)!==data.source||item.system.quantity<=0||!["food","hotMeal"].includes(item.system.provision)||!guardPendingCustodyItem(item).ok))
-        ||(data.drinkId&&(!drink||sourceOf(drink)!==data.drinkSource||drink.system.quantity<=0||drink.system.provision!=="drink"||!guardPendingCustodyItem(drink).ok))
+        ||(data.itemId&&(!item||sourceOf(item)!==data.source||item.system.quantity<=0||!["food","hotMeal","foodAndDrink"].includes(item.system.provision)||!guardPendingCustodyItem(item).ok))
+        ||(data.drinkId&&(!drink||sourceOf(drink)!==data.drinkSource||drink.system.quantity<=0||!["drink","foodAndDrink"].includes(drink.system.provision)||!guardPendingCustodyItem(drink).ok))
         ||(soup&&(!pool||!drink||(actor.getFlag(NS,"shortRests")??0)>=2||!equipmentLimitAvailable(foodEntry.key,usesOf(actor),usesOf(item))))
         ||(firewater&&!equipmentLimitAvailable(drinkEntry.key,usesOf(actor),usesOf(drink))))return {ok:false};
       const entry=soup?foodEntry:firewater?drinkEntry:{key:"rest-provisions"};

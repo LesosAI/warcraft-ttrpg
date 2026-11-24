@@ -155,6 +155,8 @@ import * as lootOffer from "./documents/loot-offer.mjs";
 import { AzerothLootOffer, registerLootOfferHooks } from "./applications/loot-offer.mjs";
 import { registerLootOfferFolderDoor } from "./applications/loot-offer-folder.mjs";
 import { registerGeneratorButton } from "./applications/npc-generator-button.mjs";
+// The GM's downtime toggle, drawn only while crafting is held to downtime (D-1914).
+import { registerDowntimeButton } from "./applications/downtime-button.mjs";
 import { registerLootButton } from "./applications/loot-generator-button.mjs";
 import { registerIdentifyDirectory } from "./applications/identify-directory.mjs";
 import { registerWorldMapButton } from "./applications/world-map-button.mjs";
@@ -466,6 +468,8 @@ Hooks.once("init", () => {
   registerCreatorButton();
   // The NPC generator's (D-637); an NPC's banner carries Rework.
   registerGeneratorButton();
+  // The GM's downtime toggle (D-1914), only while the world enforces it.
+  registerDowntimeButton();
   // The loot generator's (D-666), in the Item directory.
   registerLootButton();
   // A hidden thing in the Items sidebar reads by its kind for a player (08 §4; D-1435).

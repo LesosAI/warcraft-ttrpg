@@ -24,7 +24,7 @@
 
 import { cleanup, give, made, makeCharacter, makeNpc, openSheet, restDialogFor, settle, useAction, KNOWN } from "./fixtures.mjs";
 import { checkText } from "./geometry.mjs";
-import { provisionOptions } from "../rules/provisions.mjs";
+import { foodTier, provisionOptions } from "../rules/provisions.mjs";
 import { ROLL_DIALOG_SETTING } from "../settings.mjs";
 
 /** Wait for a condition, the way every other batch does. */
@@ -73,8 +73,11 @@ async function emptyPool(actor, name) {
   return poolNamed(actor, name);
 }
 
-/** What the rest's own recovery comes to on this actor, read off the actor. */
-const foodGain = actor => Math.max(0, (actor.system.abilities?.con?.mod ?? 0) + (actor.system.tier ?? 1));
+/**
+ * What the rest's own recovery comes to on this actor, read off the actor, and what the food's
+ * own tier adds on top (O-702, D-2004: Bread and cheese is a tier 1 Wilderness Survival recipe).
+ */
+const foodGain = (actor, food = null) => Math.max(0, (actor.system.abilities?.con?.mod ?? 0) + (actor.system.tier ?? 1)) + foodTier(food);
 
 /** The window's two selects and its footer, once it has painted. */
 function windowParts(app) {
@@ -205,7 +208,7 @@ export function restBatch(context) {
       const mana = await emptyPool(actor, "mana");
       assert.isAbove(mana.max, 0, "the fixture holds no Mana, so the missing drink says nothing");
       const bread = await give(actor, "Bread and cheese");
-      const gain = foodGain(actor);
+      const gain = foodGain(actor, bread);
       assert.isAbove(gain, 0, "the fixture recovers nothing even when it eats");
 
       assert.ok(await actor.shortRest({ food: bread }), "a fed rest was refused");
@@ -277,7 +280,7 @@ export function restBatch(context) {
       const mana = await emptyPool(actor, "mana");
       const bread = await give(actor, "Bread and cheese");
       const ale = await give(actor, "Ale, a pint");
-      const gain = foodGain(actor);
+      const gain = foodGain(actor, bread);
 
       assert.ok(await actor.shortRest({ food: bread, drink: ale }));
       assert.equal(actor.system.health.value, Math.min(actor.system.health.max, 1 + gain));
@@ -320,6 +323,71 @@ export function restBatch(context) {
       assert.equal(actor.system.health.value, 5, "the feast fed the rest differently from the meal");
       assert.match(lastCard().text, /Hot meal\s*\+1/);
       assert.isNull(actor.items.get(feast.id) ?? null, "the feast survived the rest it fed");
+    });
+
+    it("a food adds Health equal to its own tier, on its own line, and the window says so (O-702, D-2004)", async function () {
+      this.timeout(120000);
+      // 05 §16: a tier 3 dish adds 3 on top of the rest's own recovery. Roast Raptor is a tier 3
+      // Wilderness Survival recipe (08 §12's Cooked food).
+      const actor = await makeCharacter({ name: "ZZ Rest Food Tier", classes: [["Warrior", 3]], abilities: { con: 14 } });
+      await actor.update({ "system.health.value": 1 });
+      const raptor = await give(actor, "Roast Raptor");
+      assert.equal(foodTier(raptor), 3, "the pack's Roast Raptor is not a tier 3 recipe");
+      assert.isAtLeast(actor.system.health.max, 1 + foodGain(actor, raptor), "the fixture cannot hold the Health this case counts");
+
+      const { sheet, app } = await openRestWindow(actor, assert);
+      try {
+        const option = [...windowParts(app).food.options].find(o => o.value === raptor.id);
+        assert.ok(option, "the dish is not offered");
+        assert.include(option.textContent, game.i18n.format("AZEROTH.Rest.FoodTierTag", { tier: 3, n: 3 }), "the window does not say what the dish's tier adds");
+        // THE HEALTH LINE IS THE PICK'S WHOLE HEALTH (the final review's M1): the rest's own
+        // recovery and the dish's 3, the number the card's two lines add up to.
+        assert.equal(app.element.querySelector("[data-rest-eat]")?.textContent.trim(),
+          game.i18n.format("AZEROTH.Rest.EatReturns", { n: foodGain(actor, raptor) }),
+          "the window's Health line leaves out the dish's tier");
+      } finally {
+        await app.close();
+        await sheet.close();
+      }
+
+      const gain = foodGain(actor, raptor);
+      assert.ok(await actor.shortRest({ food: raptor }), "a rest on a dish was refused");
+      assert.equal(actor.system.health.value, 1 + gain, "the dish's tier was not added to the rest");
+      assert.match(lastCard().text, /Food.s tier\s*\+3/, "the dish's tier is not on its own line");
+    });
+
+    it("eats a dish that is food and drink once, named in both rows, and never preselects it twice (the final review's M1)", async function () {
+      this.timeout(120000);
+      // Smoked Sagefish counts as food and as drink for a Short Rest (08 §12), so it is listed in
+      // both selects; a caster's window preselected it in both and the door spent it twice.
+      const actor = await makeCharacter({ name: "ZZ Rest Sagefish", classes: [["Mage", 3]], abilities: { con: 14 } });
+      await actor.update({ "system.health.value": 1 });
+      await emptyPool(actor, "mana");
+      const fish = await give(actor, "Smoked Sagefish");
+      assert.equal(fish.system.provision, "foodAndDrink", "the pack's Smoked Sagefish is not food and drink");
+
+      const { sheet, app } = await openRestWindow(actor, assert);
+      try {
+        const parts = windowParts(app);
+        assert.equal(parts.food.value, fish.id, "the Eat row did not open on the dish");
+        assert.equal(parts.drink.value, "", "the dish preselected as the food was preselected as the drink too");
+        assert.include(app.element.querySelector("[data-rest-both]")?.textContent ?? "", fish.name, "the window does not say the dish is the drink too");
+      } finally {
+        await app.close();
+        await sheet.close();
+      }
+
+      // Named in both rows at a quantity of 1: one delete, and the rest lands whole.
+      assert.ok(await actor.shortRest({ food: fish, drink: fish }), "a rest on one dish named twice was refused or threw");
+      assert.isNull(actor.items.get(fish.id) ?? null, "the dish survived the rest it fed");
+      assert.isAbove(actor.system.health.value, 1, "the dish fed no Health");
+      assert.isAbove(poolNamed(actor, "mana").value, 0, "the dish was not the drink");
+
+      // At a quantity of 2, one is eaten for both.
+      const two = await give(actor, "Smoked Sagefish");
+      await two.update({ "system.quantity": 2 });
+      assert.ok(await actor.shortRest({ food: two, drink: two }));
+      assert.equal(actor.items.get(two.id)?.system.quantity, 1, "a dish named in both rows was spent twice");
     });
 
     /* ---- one item, one rest ---------------------------------------------- */

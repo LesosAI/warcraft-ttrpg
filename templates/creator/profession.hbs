@@ -1,0 +1,48 @@
+{{!--
+  Step 4: THE PROFESSION (D-1903, D-1930; the plan's M7, D11 §12). It takes
+  the place of the old step, in the Spells step's list-plus-inspector shape,
+  and it SAYS WHAT A PROFESSION IS above the list (the lead: *"replace with
+  profession selection and explanation"*): one pick, free at Rank 1; five
+  cheap skills now and two more at each later tier; gathering by biome and
+  crafting from the compendium; the tool in the kit.
+
+  A row's name inspects it; the inspector's button chooses it. Validation is
+  `noProfession`, and Finish embeds the profession and its tool in the ONE
+  batch (D-636).
+--}}
+<div class="azeroth-creator-explain">
+  <h4>{{localize "AZEROTH.Creator.Profession.Heading"}}</h4>
+  {{#each pane.explain as |line|}}<p>{{line}}</p>{{/each}}
+</div>
+<div class="azeroth-creator-choice-layout">
+  <div class="azeroth-creator-catalogue">
+    <ul class="azeroth-creator-professions" aria-label="{{localize 'AZEROTH.Creator.Profession.Heading'}}">
+      {{#each pane.professions as |pr|}}
+      <li class="{{#if pr.inspected}}is-inspected{{/if}}{{#if pr.chosen}} is-selected{{/if}}">
+        <img src="{{pr.img}}" alt="">
+        <div>
+          <button type="button" id="{{@root.creatorDetailId}}-profession-{{pr.identifier}}" class="azeroth-creator-expand" data-action="creatorInspectProfession" data-uuid="{{pr.uuid}}" aria-pressed="{{pr.inspected}}">{{pr.name}}</button>
+          <span>{{pr.line}}</span>
+        </div>
+        {{#if pr.chosen}}<span class="azeroth-state-chip">{{localize "AZEROTH.Creator.Profession.Chosen"}}</span>{{/if}}
+      </li>
+      {{/each}}
+    </ul>
+  </div>
+  <aside class="azeroth-creator-inspector" id="{{creatorDetailId}}">
+    {{#with pane.detail as |pr|}}
+    <h4>{{pr.name}}</h4><img class="azeroth-creator-detail-icon" src="{{pr.img}}" alt="">
+    <p>{{pr.line}}</p>
+    <div class="azeroth-creator-rules">{{{pr.html}}}</div>
+    <dl class="azeroth-creator-detail">
+      <dt>{{localize "AZEROTH.Creator.Profession.Makes"}}</dt><dd>{{pr.makes}}</dd>
+      <dt>{{localize "AZEROTH.Creator.Profession.Skills"}}</dt><dd>{{pr.skills}}</dd>
+      <dt>{{localize "AZEROTH.Creator.Profession.LaterHeading"}}</dt><dd>{{localize "AZEROTH.Creator.Profession.Later"}}</dd>
+      <dt>{{localize "AZEROTH.Creator.Profession.Kit"}}</dt><dd>{{#if pr.tool}}<img class="azeroth-creator-kit-icon" src="{{pr.tool.img}}" alt=""> {{pr.tool.name}} <span>{{pr.tool.price}}</span>{{else}}{{azerothDash null}}{{/if}}</dd>
+    </dl>
+    <p>{{pr.starts}}</p>
+    {{#if pr.chosen}}<p><span class="azeroth-state-chip">{{localize "AZEROTH.Creator.Profession.Chosen"}}</span></p>
+    {{else}}<button type="button" data-action="creatorChooseProfession" data-uuid="{{pr.uuid}}">{{pr.chooseLabel}}</button>{{/if}}
+    {{/with}}
+  </aside>
+</div>

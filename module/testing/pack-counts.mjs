@@ -34,7 +34,8 @@ export const PACK_COUNTS = Object.freeze({
     count: 640,
     why: "07 holds 640 across eight schools and five tiers, including the 24 approved thematic additions, the Chromatic Champion's five Earth-Warder spells (Stone Grip, Thunderlash, Earthmeld, Earthen Spike, Shattering Bolt), the Chronomancer's 34 sand spells (D-847), and the Death Knight's 47 (35 new Death spells, Raise Dracolich among them, and twelve Restricted to it in Frost and Shadow; D-918, D-922, D-932), and the Necromancer's 50 new Death spells (12, 11 and 12 at tiers 1 to 3, 9 at tier 4, 6 at tier 5), and the Sovereign's 54 (12, 15 and 14 at tiers 1 to 3, 8 at tier 4, 5 at tier 5; D-1131, and the second batch's 18, D-1340), and the Demon Hunter's 20 Restricted to it (8, 6 and 6 at tiers 1 to 3, paid in Energy; D-1437 to D-1449)"
   },
-  careers: { count: 53, why: "03 holds 53 across four tiers" },
+  // 03-PROFESSIONS replaced the 53 careers (D-1903); the careers pack is retired.
+  professions: { count: 7, why: "03 §5's seven professions, Wilderness Survival among them (D-1904)" },
   races: { count: 13, why: "02 §5's thirteen races: eleven mortal peoples, the Chromatic Outcast and the San'layn (D-1151)" },
   classes: { count: 15, why: "02 §7's fifteen classes (the Chronomancer the eleventh, D-847; the Death Knight the twelfth, D-917; the Necromancer the thirteenth; the Sovereign the fourteenth, D-1120; the Demon Hunter the fifteenth, D-1437)" },
   traits: {
@@ -71,8 +72,8 @@ export const PACK_COUNTS = Object.freeze({
     why: "08's armor categories, every row, §8's 12 shields (D-636), plus §20's 17 named suits and shields (D-632; five Legendaries added by D-909), plus 203 Classic finds off the vendored record (D-685)"
   },
   gear: {
-    count: 1547, classic: 1052,
-    why: "08 §9 to §17's catalogue tables by header name, two Augments a class (nine classes, the Broodstone the seventh, the Necromancer's Bonecharm the eighth and the Sovereign's Bloodglass the ninth, D-1133), §12's Blood vial (D-1107) and the Chronomancer's one ungraded Hourglass (D-847), the Necromancer's Phylactery, the Demon Hunter's Blindfold and Crystalized Soul, and §20's Epic consumables and the Grimoire (D-632) and its eight Legendary worn things and Augments (D-909), plus §11's Leggings and Trinket (D-686), Mantle (D-689), eighteen approved special designs and provisions (D-813), and 1,052 Classic finds off the vendored record (D-685, D-690, D-692)"
+    count: 1885, classic: 1052,
+    why: "08 §9 to §17's catalogue tables by header name, two Augments a class (nine classes, the Broodstone the seventh, the Necromancer's Bonecharm the eighth and the Sovereign's Bloodglass the ninth, D-1133), §12's Blood vial (D-1107) and the Chronomancer's one ungraded Hourglass (D-847), the Necromancer's Phylactery, the Demon Hunter's Blindfold and Crystalized Soul, and §20's Epic consumables and the Grimoire (D-632) and its eight Legendary worn things and Augments (D-909), plus §11's Leggings and Trinket (D-686), Mantle (D-689), eighteen approved special designs and provisions (D-813), the professions' catalogue (D-1919, D-1940: 174 new consumables, 172 since the balance pass struck the two EZ-Thro sticks (D-2003), and 150 new 08 §17 materials, the Tailor's kit, the Survivalist's kit and the Enchanter's rod, the 21 graded tools of D-1936, less the eight struck gathering kits of D-1946), and 1,052 Classic finds off the vendored record (D-685, D-690, D-692)"
   },
   services: {
     count: 41,

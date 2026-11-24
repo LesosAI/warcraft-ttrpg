@@ -10,9 +10,13 @@
  * already hold it — `healthMax`, `suitEffects`, `poolsFor`, `skillTotal`.
  *
  * `validate` returns REASONS and NOTES. A reason refuses the character; a
- * note is a judgement 01 or 03 leaves to the table — an Entry "plausibly
- * met", a career the other side does not recognise, a weapon outside the
- * class's Access — and is shown, never enforced (D2 §12).
+ * note is a judgement 01 leaves to the table — a weapon outside the class's
+ * Access, an Augment issued rather than bought — and is shown, never enforced
+ * (D2 §12).
+ *
+ * **Professions replace careers** (D-1903, D-1930): step 4 is the Profession
+ * step. One pick, free at Rank 1 (D-1917), whose five tier 1 skills are the
+ * cheap rate (D-1906) and whose tool joins the suggested kit (D-1923).
  */
 
 import { AZEROTH } from "../config.mjs";
@@ -27,6 +31,7 @@ import { MAX_CONTAINERS, arrange, baseCapacity, isMount, ledger, wellsOf } from 
 import { carryFactor, classKey, spellGrantsFor, talentLanguages } from "./talent-effects.mjs";
 import { characterToken } from "./tokens.mjs";
 import { RANK_MAX, rankCost, rankCostBetween } from "./xp.mjs";
+import { PROFESSION_BY_ID, STARTING_RANK, professionSkills } from "./professions.mjs";
 import { spellsKnown } from "./casting.mjs";
 // Armor a talent adds to the class's Access (the Legacy branches' door 23).
 import { armorAccessFor } from "./class-talents.mjs";
@@ -46,7 +51,7 @@ import { guiseFacts, guiseRequired, guiseSnapshot, isGuiseRace, peopleOf, raceOp
  * both (`stepsFor`), so every strip is still ten or eleven long.
  */
 export const STEPS = Object.freeze([
-  "race", "guise", "class", "abilities", "career", "skills", "talents", "spells", "languages", "equipment", "numbers", "name"
+  "race", "guise", "class", "abilities", "profession", "skills", "talents", "spells", "languages", "equipment", "numbers", "name"
 ]);
 
 /** The step a guise class picks its people's looks on, in place of the race step. */
@@ -182,10 +187,9 @@ export const ROLL_FLOOR = 14;
 export const ROLL_DICE = 4;
 export const ROLL_KEEP = 3;
 
-/** 01 §4 (D-479): one tier 1 career, free, and a hundred experience for Ranks. */
+/** 01 §4 (D-479): one profession at Rank 1, free (D-1917), and a hundred experience for Ranks. */
 export const STARTING_XP = 100;
 export const STARTING_LEVEL = 1;
-export const STARTING_CAREER_TIER = 1;
 
 /** The portrait a character takes when nobody chose one: core's own. */
 export const DEFAULT_PORTRAIT = "icons/svg/mystery-man.svg";
@@ -252,7 +256,7 @@ export function sameMultiset(a = [], b = []) {
 }
 
 /* -------------------------------------------- */
-/*  Race, languages, career, skills              */
+/*  Race, languages, profession, skills          */
 /* -------------------------------------------- */
 
 /** The side a people belongs to (02 §1), or null for the three that belong to neither. */
@@ -288,32 +292,57 @@ export function classOpenTo(race, cls) {
 }
 
 /**
- * The skills at the cheap rate: the career's In-career list, plus the one a
- * Human's Adaptable names ("always in-career for you, whatever career you
- * hold", 02 §5).
+ * **Professions replace careers** (D-1903, D-1906): the skills at the cheap
+ * rate are the profession's five, the two picked at each tier reached, and
+ * Adaptable's skill. `rules/professions.mjs` is the law; it is named here so
+ * the creator and the sheet read the cheap set from the module they already
+ * import.
  */
-export function inCareerSkills({ career = null, adaptable = null } = {}) {
-  const keys = new Set(career?.inCareer ?? []);
-  if (adaptable) keys.add(adaptable);
-  return keys;
+export { professionSkills };
+
+/**
+ * The creator's cheap set for a proposal (step 5): the chosen profession's
+ * five tier 1 skills and Adaptable's. A proposal's `profession` is the pack
+ * document's system spread flat (`{uuid, identifier, name, skills, tools}`),
+ * or a key of `PROFESSIONS`.
+ */
+export function proposalSkills(p = {}) {
+  return professionSkills({ profession: p.profession ?? null, tier: STARTING_LEVEL, adaptable: p.adaptable ?? null });
+}
+
+/**
+ * **THE PROFESSION'S TOOL JOINS THE SUGGESTED KIT** (D-1923; 01 §6: *and the
+ * tool your profession names in 03-PROFESSIONS*): the one gear row, looked up
+ * in the catalogue by the identifier the profession names (or the
+ * `PROFESSIONS` row's), or null where the catalogue lacks it.
+ *
+ * @param {object|null} profession   the proposal's profession
+ * @param {(identifier: string) => object|null} findTool  a catalogue lookup by gear identifier
+ * @returns {object|null} a kit row `{...item, quantity: 1, road: true, tool: true}`
+ */
+export function professionTool(profession, findTool) {
+  const id = profession?.tools?.[0] ?? PROFESSION_BY_ID[profession?.identifier ?? profession]?.tool ?? null;
+  if (!id || typeof findTool !== "function") return null;
+  const item = findTool(id);
+  return item ? { ...item, quantity: 1, road: true, tool: true } : null;
 }
 
 /** What a spread of Ranks costs from Rank 0, at each skill's rate (02 §8). */
-export function rankSpend(ranks = {}, inCareer = new Set()) {
+export function rankSpend(ranks = {}, cheap = new Set()) {
   let total = 0;
   for (const [key, rank] of Object.entries(ranks)) {
-    total += rankCostBetween(0, Number(rank) || 0, inCareer.has(key));
+    total += rankCostBetween(0, Number(rank) || 0, cheap.has(key));
   }
   return total;
 }
 
 /** The ledger rows a spread of Ranks writes: one per Rank bought, oldest first. */
-export function rankLedger(ranks = {}, inCareer = new Set()) {
+export function rankLedger(ranks = {}, cheap = new Set()) {
   const rows = [];
   for (const key of Object.keys(AZEROTH.skills)) {
     const rank = Number(ranks?.[key]) || 0;
     for (let r = 1; r <= rank; r++) {
-      rows.push({ kind: "rank", skill: key, rank: r, amount: rankCost(r, inCareer.has(key)) });
+      rows.push({ kind: "rank", skill: key, rank: r, amount: rankCost(r, cheap.has(key)) });
     }
   }
   return rows;
@@ -355,7 +384,7 @@ export function purseSpend(rows = [], race = null) {
  * @param {(name: string, type: string) => object|null} find
  * @returns {{rows: object[], missing: string[]}}
  */
-export function kitRows(cls, find) {
+export function kitRows(cls, find, { tool = null } = {}) {
   const rows = [];
   const missing = [];
   for (const row of cls?.kit ?? []) {
@@ -363,6 +392,8 @@ export function kitRows(cls, find) {
     if (!item) { missing.push(row.name); continue; }
     rows.push({ ...item, quantity: row.quantity ?? 1, road: Boolean(row.road) });
   }
+  // The profession's tool, last, as the road kit's own last line names it (D-1923).
+  if (tool) rows.push(tool);
   return { rows, missing };
 }
 
@@ -642,8 +673,7 @@ export function numbersFor(p = {}) {
  *   method      "array" | "pointBuy" | "roll"
  *   abilities   {str..cha: number|null}
  *   rolled      number[] | null
- *   career      {name, tier, entry, inCareer[], side}
- *   allowTier2  the GM's toggle (03 §3)
+ *   profession  {uuid, identifier, name, ability, skills{1..4}, tools[]} (D-1903)
  *   ranks       {skillKey: rank}
  *   adaptable   a skill key, for a Human
  *   racialTalent {name, tier} — a row of race.talents
@@ -695,26 +725,16 @@ export function validate(p = {}) {
     }
   }
 
-  // 4 — career.
-  if (!p.career) refuse("noCareer", "career");
-  else {
-    const tier = Number(p.career.tier) || 1;
-    if (tier > STARTING_CAREER_TIER && !(p.allowTier2 && tier === 2)) refuse("careerTier", "career", { tier });
-    if (p.allowTier2 && tier === 2) note("tier2Allowed", "career");
-    note("entryJudgement", "career", { entry: p.career.entry ?? "" });
-    const side = sideFor(p.race);
-    if (p.career.side && p.career.side !== "anyone" && p.career.side !== side) {
-      note("careerSide", "career", { side: p.career.side });
-    }
-  }
+  // 4 — the profession (D-1903, D-1930): one pick, free at Rank 1.
+  if (!p.profession) refuse("noProfession", "profession");
 
-  // 5 — the hundred experience.
-  const inCareer = inCareerSkills({ career: p.career, adaptable: p.adaptable });
+  // 5 — the hundred experience, at the profession's cheap rate (D-1906).
+  const cheap = proposalSkills(p);
   for (const [key, rank] of Object.entries(p.ranks ?? {})) {
     const r = Number(rank);
     if (!(key in AZEROTH.skills) || !Number.isInteger(r) || r < 0 || r > RANK_MAX) { refuse("rankRange", "skills", { skill: key }); break; }
   }
-  const spent = rankSpend(p.ranks ?? {}, inCareer);
+  const spent = rankSpend(p.ranks ?? {}, cheap);
   if (spent > STARTING_XP) refuse("xpOver", "skills", { spent });
   else if (spent < STARTING_XP) note("xpHeld", "skills", { held: STARTING_XP - spent });
   if (p.race?.identifier === "human" && !p.adaptable) refuse("noAdaptable", "skills");
@@ -801,9 +821,9 @@ export function validate(p = {}) {
  */
 export function plan(p = {}) {
   const numbers = numbersFor(p);
-  const inCareer = inCareerSkills({ career: p.career, adaptable: p.adaptable });
+  const cheap = proposalSkills(p);
   const ranks = Object.fromEntries(Object.entries(p.ranks ?? {}).filter(([, r]) => (Number(r) || 0) > 0).map(([k, r]) => [k, Number(r)]));
-  const ledger = rankLedger(ranks, inCareer);
+  const ledger = rankLedger(ranks, cheap);
   const spent = ledger.reduce((s, row) => s + row.amount, 0);
   // The guise's size where one is held (the Chromatic Champion plan): the token
   // stands at the people the character looks like.
@@ -812,7 +832,8 @@ export function plan(p = {}) {
   const embeds = [];
   if (p.race?.uuid) embeds.push({ uuid: p.race.uuid, kind: "race" });
   if (p.cls?.uuid) embeds.push({ uuid: p.cls.uuid, kind: "class" });
-  if (p.career?.uuid) embeds.push({ uuid: p.career.uuid, kind: "career" });
+  // The profession, in the ONE batch (D-1903): its embedded copy starts at Rank 1 (D-1917).
+  if (p.profession?.uuid) embeds.push({ uuid: p.profession.uuid, kind: "profession" });
   for (const spell of p.spells ?? []) embeds.push({ uuid: spell.uuid, kind: "spell" });
   // THE SUIT, THE SHIELD, THE FIRST WEAPON — AND THE CONTAINERS AND THE MOUNT
   // (D-736). `equippedKit` is the one place that decides, and `validate` asks

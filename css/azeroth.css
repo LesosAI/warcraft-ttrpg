@@ -390,9 +390,6 @@
   .azeroth-card .azeroth-provenance li, .azeroth-card .azeroth-provenance li span {
     font-size: 13px;
   }
-  .azeroth.sheet.actor .azeroth-career-exit-narrative {
-    font-size: 12px;
-  }
   .azeroth.sheet.actor .window-content {
     line-height: 1.4;
   }
@@ -734,8 +731,19 @@
     color: inherit;
     cursor: pointer;
   }
-  .azeroth.sheet.actor .azeroth-in-career {
+  .azeroth.sheet.actor .azeroth-cheap-skill {
     color: var(--azeroth-page-accent);
+  }
+  .azeroth.sheet.actor .azeroth-cheap-skill img {
+    width: 14px;
+    height: 14px;
+    vertical-align: -2px;
+    border: 0;
+    border-radius: 2px;
+  }
+  .azeroth.sheet.actor .azeroth-harvest-refusal {
+    font-size: 13px;
+    color: var(--azeroth-page-alarm);
   }
   .azeroth.sheet.actor .azeroth-skill-ability {
     font-size: 13px;
@@ -5674,43 +5682,594 @@
   .azeroth.azeroth-creator .azeroth-racial-row .azeroth-talent--untaken > .azeroth-talent-tierline {
     color: var(--azeroth-page-ink);
   }
-  .azeroth.sheet.actor.character .azeroth-career-current, .azeroth.azeroth-creator .azeroth-career-current {
-    float: right;
-    font-size: 0.8125rem;
-    font-weight: 400;
-    color: var(--azeroth-page-ink-soft);
+  .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] {
+    --azeroth-rarity-uncommon: var(--azeroth-rarity-uncommon-dark);
+    --azeroth-rarity-rare: var(--azeroth-rarity-rare-dark);
+    --azeroth-rarity-epic: var(--azeroth-rarity-epic-dark);
+    --azeroth-rarity-legendary: var(--azeroth-rarity-legendary-dark);
+    padding: 8px;
+    background-color: var(--azeroth-stone-dark);
+    color: var(--azeroth-ink-light);
+    border: 1px solid var(--azeroth-stone);
+    border-radius: 3px;
+    font-size: 13px;
+    line-height: 1.4;
   }
-  .azeroth.sheet.actor.character .azeroth-career-exits, .azeroth.azeroth-creator .azeroth-career-exits {
-    list-style: none;
-    margin: 0 0 0.5rem;
-    padding: 0;
+  .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] button {
+    font-size: 13px;
+    line-height: 1.4;
+    background: var(--azeroth-iron);
+    color: var(--azeroth-ink-light);
+    border: 1px solid var(--azeroth-stone);
+    transition: none;
+  }
+  .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] button:hover:not(:disabled), .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] button:focus-visible {
+    background: var(--azeroth-stone-dark);
+    color: var(--azeroth-ink-light);
+    border-color: var(--azeroth-alliance-gold);
+  }
+  .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] button:focus-visible {
+    outline: 2px solid var(--azeroth-alliance-gold);
+    outline-offset: 1px;
+  }
+  .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] button:disabled {
+    background: var(--azeroth-panel-dark);
+    color: var(--azeroth-ink-light-soft);
+    border-color: var(--azeroth-slot-edge);
+    cursor: default;
+  }
+  .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] button {
+    height: auto;
+    min-height: 24px;
+    padding: 1px 8px;
+  }
+  .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] select, .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] input[type=search], .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] textarea {
+    background: var(--azeroth-slot);
+    color: var(--azeroth-ink-light);
+    border: 1px solid var(--azeroth-slot-edge);
+    border-radius: 3px;
+    font-size: 13px;
+  }
+  .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] select:focus-visible, .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] input:focus-visible, .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] textarea:focus-visible {
+    outline: 2px solid var(--azeroth-alliance-gold);
+    outline-offset: 1px;
+  }
+  .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] textarea {
+    width: 100%;
+    min-height: 40px;
+    resize: vertical;
+  }
+  .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] .azeroth-icon.azeroth-rarity-common {
+    outline-color: var(--azeroth-slot-ring);
+  }
+  .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] h3, .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] h4, .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] h5, .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] summary {
+    font-family: inherit;
+  }
+  .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] input[type=radio], .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] input[type=checkbox] {
+    --checkbox-background-color: var(--azeroth-slot);
+    --checkbox-checked-color: var(--azeroth-alliance-gold);
+    --checkbox-checkmark-color: var(--azeroth-ink-light);
+    outline: 1px solid var(--azeroth-stone);
+    outline-offset: -1px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-head .azeroth-icon {
+    width: 56px;
+    height: 56px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-title {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-name {
+    margin: 0;
+    font-size: 18px;
+    color: var(--azeroth-gold-text);
+    border: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-sub {
+    margin: 0;
+    color: var(--azeroth-ink-light-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-switch {
+    display: flex;
+    gap: 4px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-switch button[aria-pressed=true] {
+    border-color: var(--azeroth-alliance-gold);
+    color: var(--azeroth-gold-text);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-card {
+    background-color: var(--azeroth-panel-dark);
+    border: 1px solid var(--azeroth-stone);
+    border-radius: 3px;
+    padding: 6px 8px 8px;
+    margin-bottom: 8px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-grid {
     display: grid;
-    gap: 0.3rem;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
   }
-  .azeroth.sheet.actor.character .azeroth-career-exit, .azeroth.azeroth-creator .azeroth-career-exit {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 0 0.4rem;
-    padding: 0.3rem 0.45rem;
-    border-left: 3px solid var(--azeroth-page-accent);
-    background: var(--azeroth-page-quote);
+  .azeroth.sheet.actor.character .azeroth-prof-grid > .azeroth-prof-card {
+    margin-bottom: 0;
   }
-  .azeroth.sheet.actor.character .azeroth-career-exit--blocked, .azeroth.azeroth-creator .azeroth-career-exit--blocked {
-    border-left-color: var(--azeroth-page-edge);
-    color: var(--azeroth-page-ink-soft);
+  .azeroth.sheet.actor.character .azeroth-prof-grid + .azeroth-prof-card,
+  .azeroth.sheet.actor.character .azeroth-prof-card + .azeroth-prof-grid,
+  .azeroth.sheet.actor.character .azeroth-prof-grid + .azeroth-prof-grid {
+    margin-top: 8px;
   }
-  .azeroth.sheet.actor.character .azeroth-career-exit-name, .azeroth.azeroth-creator .azeroth-career-exit-name {
-    font-weight: 600;
+  .azeroth.sheet.actor.character .azeroth-prof-subheading {
+    margin: 0 0 4px;
+    padding-bottom: 3px;
+    border-bottom: 1px solid var(--azeroth-slot-edge);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--azeroth-gold-text);
   }
-  .azeroth.sheet.actor.character .azeroth-career-exit-needs, .azeroth.azeroth-creator .azeroth-career-exit-needs {
-    font-size: 0.8125rem;
+  .azeroth.sheet.actor.character .azeroth-prof-subheading span {
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--azeroth-ink-light-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-minor {
+    margin: 8px 0 3px;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--azeroth-gold-text);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-minor span {
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--azeroth-ink-light-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-soft {
+    margin: 3px 0;
+    color: var(--azeroth-ink-light-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-ok {
+    margin: 3px 0;
+    color: var(--azeroth-green-text);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-refusal {
+    margin: 3px 0;
     color: var(--azeroth-page-alarm);
   }
-  .azeroth.sheet.actor.character .azeroth-career-exit-narrative, .azeroth.azeroth-creator .azeroth-career-exit-narrative {
-    grid-column: 1/-1;
-    font-size: 0.8125rem;
-    font-style: italic;
-    color: var(--azeroth-page-ink-soft);
+  .azeroth.sheet.actor.character .azeroth-prof-primary {
+    border-color: var(--azeroth-alliance-gold);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-kv {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 1px 10px;
+    margin: 4px 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-kv dt {
+    color: var(--azeroth-ink-light-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-kv dd {
+    margin: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-lines {
+    list-style: none;
+    margin: 2px 0;
+    padding: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-big {
+    margin: 0;
+    font-size: 20px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-big strong {
+    color: var(--azeroth-gold-text);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-big span {
+    font-size: 13px;
+    color: var(--azeroth-ink-light-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-bonus {
+    color: var(--azeroth-gold-text);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-bar {
+    height: 8px;
+    margin: 4px 0;
+    background: var(--azeroth-slot);
+    border: 1px solid var(--azeroth-slot-edge);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-bar > i {
+    display: block;
+    height: 100%;
+    background: var(--azeroth-alliance-gold);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 0 8px;
+    font-size: 13px;
+    border: 1px solid var(--azeroth-slot-edge);
+    border-radius: 2px;
+    background: var(--azeroth-iron);
+    color: var(--azeroth-ink-light);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-chip.is-held {
+    border-color: var(--azeroth-alliance-gold);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-chip.is-pick[aria-pressed=true] {
+    border-color: var(--azeroth-green-text);
+    color: var(--azeroth-green-text);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-mark {
+    font-size: 12px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-strip {
+    background-color: var(--azeroth-panel-dark);
+    border: 1px solid var(--azeroth-alliance-gold);
+    border-radius: 3px;
+    padding: 6px 8px;
+    margin-bottom: 8px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-strip strong {
+    color: var(--azeroth-gold-text);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-strip-title {
+    margin: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-strip-title span {
+    color: var(--azeroth-ink-light-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-ladder {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-ladder li {
+    padding: 2px 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-ladder .azeroth-prof-rung-mark {
+    display: inline-block;
+    width: 14px;
+    color: var(--azeroth-ink-light-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-ladder li.is-held .azeroth-prof-rung-mark {
+    color: var(--azeroth-gold-text);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-ladder span {
+    color: var(--azeroth-ink-light-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-ladder .azeroth-prof-rung-state {
+    margin-left: 4px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-skillrow {
+    margin: 3px 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-toolline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-toolline .azeroth-icon {
+    width: 44px;
+    height: 44px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-filters input[type=search] {
+    flex: 1 1 140px;
+    min-width: 120px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-filters select {
+    flex: 0 1 auto;
+    width: auto;
+    max-width: 100%;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-nodes {
+    list-style: none;
+    margin: 2px 0;
+    padding: 0;
+    max-height: 230px;
+    overflow: auto;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-node {
+    display: grid;
+    grid-template-columns: 18px 30px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 4px;
+    cursor: pointer;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-node .azeroth-icon {
+    width: 28px;
+    height: 28px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-node input[type=radio] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    justify-self: center;
+    border-radius: 50%;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-node:hover {
+    background: var(--azeroth-slot);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-node-tier {
+    color: var(--azeroth-ink-light-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-test {
+    margin: 4px 0 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-projects {
+    border: 1px solid var(--azeroth-alliance-gold);
+    background-color: var(--azeroth-panel-dark);
+    border-radius: 3px;
+    padding: 6px 8px;
+    margin-bottom: 8px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-project {
+    border-top: 1px solid var(--azeroth-slot-edge);
+    padding-top: 6px;
+    margin-top: 6px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-project p {
+    margin: 2px 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-subheading + .azeroth-prof-project {
+    border-top: 0;
+    margin-top: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-steplog {
+    font-variant-numeric: tabular-nums;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-step {
+    padding: 0 5px;
+    border: 1px solid var(--azeroth-slot-edge);
+    border-radius: 2px;
+    color: var(--azeroth-green-text);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-step.is-negative {
+    color: var(--azeroth-page-alarm);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-craftframe {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 8px;
+    align-items: start;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-reclist {
+    max-height: 560px;
+    overflow: auto;
+    background: var(--azeroth-slot);
+    border: 1px solid var(--azeroth-slot-edge);
+    border-radius: 3px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-group {
+    border-bottom: 1px solid var(--azeroth-slot-edge);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-grouphead {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 3px 8px;
+    cursor: pointer;
+    background: var(--azeroth-panel-dark);
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--azeroth-gold-text);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-groupname::before {
+    content: "▸";
+    display: inline-block;
+    width: 1.1em;
+    font-size: 1.35em;
+    line-height: 1;
+    vertical-align: -0.05em;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-group[open] > .azeroth-prof-grouphead .azeroth-prof-groupname::before {
+    content: "▾";
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-count {
+    text-transform: none;
+    color: var(--azeroth-ink-light-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-canmake {
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--azeroth-green-text);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-row {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr) auto 32px;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 8px;
+    border-top: 1px solid var(--azeroth-panel-dark);
+    cursor: pointer;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-row .azeroth-icon {
+    width: 44px;
+    height: 44px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-row:hover {
+    background: var(--azeroth-panel-dark);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-row:focus-visible {
+    outline: 2px solid var(--azeroth-alliance-gold);
+    outline-offset: -2px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-row.is-selected, .azeroth.sheet.actor.character .azeroth-prof-row[aria-pressed=true] {
+    background: var(--azeroth-panel-dark);
+    box-shadow: inset 3px 0 0 var(--azeroth-alliance-gold);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-row-name {
+    min-width: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-tierchip {
+    padding: 0 5px;
+    font-size: 13px;
+    line-height: 18px;
+    border: 1px solid var(--azeroth-alliance-gold);
+    border-radius: 2px;
+    color: var(--azeroth-gold-text);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-makeable {
+    text-align: right;
+    color: var(--azeroth-green-text);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-makeable.is-none {
+    color: var(--azeroth-ink-light-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-empty {
+    padding: 8px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-detailcol {
+    background-color: var(--azeroth-panel-dark);
+    border: 1px solid var(--azeroth-stone);
+    border-radius: 3px;
+    padding: 8px;
+    min-height: 300px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-detail-head {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-detail-head .azeroth-icon {
+    width: 44px;
+    height: 44px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-detail-head p {
+    margin: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-detail-name {
+    margin: 0;
+    font-size: 16px;
+    border: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-stat {
+    margin: 6px 0 2px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-desc {
+    margin: 4px 0;
+    color: var(--azeroth-ink-light);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-desc p {
+    margin: 3px 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-traits {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 4px 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] .azeroth-prof-trait {
+    min-height: 24px;
+    padding: 0 6px;
+    font-size: 13px;
+    border-style: dotted;
+    border-color: var(--azeroth-alliance-gold);
+    cursor: help;
+  }
+  .azeroth.sheet.actor.character .azeroth-panel[data-tab=profession] .azeroth-prof-trait.is-plain {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--azeroth-slot-edge);
+    border-radius: 2px;
+    cursor: default;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-qual {
+    display: grid;
+    grid-template-columns: 76px minmax(0, 1fr);
+    align-items: center;
+    gap: 4px 8px;
+    margin: 4px 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-reagents {
+    list-style: none;
+    margin: 4px 0;
+    padding: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-reagents li {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-reagents .azeroth-icon {
+    width: 26px;
+    height: 26px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-reagents li.is-short .azeroth-prof-have {
+    color: var(--azeroth-page-alarm);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-reagents li.is-enough .azeroth-prof-have {
+    color: var(--azeroth-green-text);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-toolref {
+    margin: 2px 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-harvest-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+    border-top: 1px solid var(--azeroth-slot-edge);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-harvest-row strong {
+    flex: 1 1 140px;
+    min-width: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-signature {
+    margin: 2px 0 4px;
+    color: var(--azeroth-ink-light);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-reasons {
+    margin: 4px 0;
+    padding-left: 16px;
+  }
+  .azeroth.sheet.actor.character .azeroth-profession-line {
+    color: var(--azeroth-ink-light);
   }
   .azeroth.sheet.actor.character .azeroth-rune-panel {
     --azeroth-rarity-uncommon: var(--azeroth-rarity-uncommon-dark);
@@ -7061,9 +7620,6 @@
     gap: 12px;
     align-items: center;
   }
-  .azeroth-creator .azeroth-creator-gm {
-    margin-bottom: 4px;
-  }
   .azeroth-creator .azeroth-creator-abilities li {
     gap: 8px;
   }
@@ -7094,19 +7650,6 @@
     font-weight: 600;
     align-self: center;
   }
-  .azeroth-creator .azeroth-creator-row-label {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-    width: 100%;
-    cursor: pointer;
-    font-weight: 400;
-  }
-  .azeroth-creator .azeroth-creator-row-label input[type=radio] {
-    flex: none;
-    margin: 0;
-  }
   .azeroth-creator .azeroth-creator-row-meta {
     flex: 1 1 100%;
     font-size: 13px;
@@ -7122,7 +7665,7 @@
     font-size: 13px;
     color: var(--azeroth-ink-soft);
   }
-  .azeroth-creator .azeroth-creator-careers li.is-selected, .azeroth-creator .azeroth-creator-talents li.is-selected {
+  .azeroth-creator .azeroth-creator-talents li.is-selected {
     outline: 1px solid var(--azeroth-iron);
   }
   .azeroth-creator .azeroth-creator-talents li.is-unavailable .azeroth-forge-name, .azeroth-creator .azeroth-creator-talents li.is-unavailable .azeroth-creator-row-text {
@@ -7161,7 +7704,7 @@
     flex: none;
     min-width: 0;
   }
-  .azeroth-creator .azeroth-in-career {
+  .azeroth-creator .azeroth-cheap-skill {
     color: var(--azeroth-alliance-blue);
   }
   .azeroth-creator .azeroth-creator-skill-ability {
@@ -8184,6 +8727,88 @@
     .azeroth.azeroth-creator .azeroth-creator-shop {
       grid-template-columns: minmax(0, 1fr);
     }
+  }
+  .azeroth.azeroth-creator .azeroth-creator-explain {
+    margin: 0 0 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--azeroth-creator-brass);
+    background: var(--azeroth-creator-well);
+    border-radius: 3px;
+    font-size: 13px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-explain h4 {
+    margin: 0 0 4px;
+    color: var(--azeroth-gold-text);
+    font-family: inherit;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-explain p {
+    margin: 3px 0;
+    color: var(--azeroth-ink-light);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-professions {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-professions > li {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 10px;
+    margin: 4px 0;
+    border: 1px solid var(--azeroth-slot-edge);
+    border-radius: 3px;
+    background: var(--azeroth-creator-well);
+    font-size: 13px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-professions > li > img {
+    width: 40px;
+    height: 40px;
+    object-fit: cover;
+    border: 1px solid var(--azeroth-creator-brass);
+    padding: 2px;
+    background: var(--azeroth-creator-well);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-professions > li > div {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-professions > li > div > span {
+    color: var(--azeroth-ink-light-soft);
+    overflow-wrap: anywhere;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-professions > li > div > .azeroth-creator-expand {
+    justify-self: start;
+    justify-content: flex-start;
+    text-align: left;
+    font-weight: 700;
+  }
+  .azeroth.azeroth-creator .azeroth-creator-professions > li.is-inspected {
+    border-color: var(--azeroth-alliance-blue-dark);
+    background: var(--azeroth-creator-blue);
+    box-shadow: inset 0 0 0 2px var(--azeroth-creator-well);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-professions > li.is-selected {
+    border-color: var(--azeroth-gold-text);
+  }
+  .azeroth.azeroth-creator .azeroth-creator-kit-icon {
+    width: 24px;
+    height: 24px;
+    vertical-align: middle;
+    border: 1px solid var(--azeroth-creator-brass);
+    border-radius: 2px;
+  }
+  .azeroth.azeroth-creator .azeroth-state-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 6px;
+    font-size: 13px;
+    border: 1px solid var(--azeroth-gold-text);
+    border-radius: 2px;
+    color: var(--azeroth-gold-text);
+    background: var(--azeroth-creator-well);
   }
   .azeroth-tracker .azeroth-side {
     display: flex;

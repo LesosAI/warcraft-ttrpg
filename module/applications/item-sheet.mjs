@@ -3,7 +3,7 @@
  *
  * **Twelve bespoke sheets would be twelve places for the book's field order to
  * rot.** The order is already fixed by the chapters — 07 §9 for a spell, D4
- * §10.1 for an item, 03 §2 for a career — and `check-spells.ps1` and
+ * §10.1 for an item, 03 §2 for a profession — and `check-spells.ps1` and
  * `check-equipment.ps1` hold the pages to it because the importer reads it in
  * order. So the sheet is driven by a declarative table in `item-fields.mjs`,
  * which is pure data and unit-tested against those same orders.
@@ -219,6 +219,12 @@ export class AzerothItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
         ward: game.i18n.localize("AZEROTH.Item.WardAwaiting")
       },
       hold: enumWords("holdKinds"),
+      // Who makes it and what it is made of (D-1918, D-1958).
+      craftedBy: game.i18n.localize("AZEROTH.Item.CraftedByLine"),
+      craftedByMore: game.i18n.localize("AZEROTH.Item.CraftedByMore"),
+      materialTier: game.i18n.localize("AZEROTH.Item.MaterialTier"),
+      professions: enumWords("professions"),
+      materialFamilies: enumWords("materialFamilies"),
       consumable: enumWords("consumableKinds"),
       action: enumWords("actions"),
       target: enumWords("useTargets"),
@@ -494,7 +500,7 @@ export class AzerothItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   }
 
   /* -------------------------------------------- */
-  /*  Tags: traits, in-career skills, access lists                            */
+  /*  Tags: traits, profession skills, access lists                           */
   /* -------------------------------------------- */
 
   /**

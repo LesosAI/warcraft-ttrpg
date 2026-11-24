@@ -35,7 +35,11 @@ export function creatorBatch(context) {
     const uuidOf = async (packId, name) => (await fromPack(packId, name)).uuid;
     const ROAD = ["Bedroll", "Waterskin", "Tinderbox", "Hardtack, a week", "Rope, 50 ft (hemp)"];
 
-    /** 01 §9's Kaelen Voss: Human Warrior, Grave-Tender, the array, a greataxe, Athletics 3 and Survival 2. */
+    /**
+     * 01 §9's Kaelen Voss: Human Warrior, **Wilderness Survival** (D-1903; the Grave-Tender went with the
+     * careers), the array, a greataxe, Survival 3 and Medicine 2, Adaptable naming Athletics, and the
+     * Survivalist's kit beside the road kit (01 §9 step 8).
+     */
     async function kaelen(overrides = {}) {
       const road = [];
       for (const name of ROAD) road.push({ uuid: await uuidOf(PACK_FOR.equipment, name), quantity: 1, road: true });
@@ -45,10 +49,10 @@ export function creatorBatch(context) {
         method: "array",
         abilities: { str: 16, dex: 13, con: 14, int: 10, wis: 12, cha: 8 },
         rolled: null,
-        career: await uuidOf(PACK_FOR.career, "Grave-Tender"),
+        profession: await uuidOf(PACK_FOR.profession, "Wilderness Survival"),
         allowTier2: false,
-        ranks: { athletics: 3, survival: 2 },
-        adaptable: "perception",
+        ranks: { survival: 3, medicine: 2 },
+        adaptable: "athletics",
         racialTalent: "Refugee's Road",
         classTalent: "wide-swing",
         spells: [],
@@ -56,7 +60,9 @@ export function creatorBatch(context) {
         equipment: [
           { uuid: await uuidOf(PACK_FOR.armor, "Studded leather"), quantity: 1, road: false },
           { uuid: await uuidOf(PACK_FOR.weapon, "Greataxe"), quantity: 1, road: false },
-          ...road
+          ...road,
+          // The profession's tool (D-1923), 1s, as 01 §9's step 8 buys it.
+          { uuid: await uuidOf(PACK_FOR.equipment, "Survivalist's kit"), quantity: 1, road: true }
         ],
         name: "ZZ Kaelen Voss",
         img: "icons/svg/mystery-man.svg",
@@ -113,8 +119,9 @@ export function creatorBatch(context) {
       const s = actor.system;
       assert.equal(actor.raceItem?.name, "Human");
       assert.equal(actor.items.get(s.classes[0]?.itemId)?.name, "Warrior");
-      assert.equal(actor.careerItem?.name, "Grave-Tender");
-      assert.equal(s.career.tier, 1);
+      assert.equal(actor.professionItem?.name, "Wilderness Survival");
+      assert.equal(actor.professionItem?.system.rank, 1, "01 §9: the profession starts at Rank 1");
+      assert.ok(actor.professionTool(), "the Survivalist's kit is not carried as the tool");
       assert.equal(s.abilities.str.value, 16);
       assert.equal(s.abilities.cha.value, 8);
       assert.equal(s.health.max, 15, "Frame 13 + Con +2");
@@ -134,10 +141,10 @@ export function creatorBatch(context) {
       assert.equal(s.momenta[0]?.value, 0);
       assert.equal(s.xp.earned, 100);
       assert.equal(s.xp.spent, 90);
-      assert.deepEqual(actor.getFlag("azeroth-rpg", "skillRanks"), { athletics: 3, survival: 2 });
+      assert.deepEqual(actor.getFlag("azeroth-rpg", "skillRanks"), { survival: 3, medicine: 2 });
       assert.lengthOf(actor.getFlag("azeroth-rpg", "xpLedger") ?? [], 5);
       assert.deepEqual([...s.languages], ["common"]);
-      assert.equal(s.coin, 249, "10s less studded 3s 60c, a greataxe 3s 30c and the road kit 61c");
+      assert.equal(s.coin, 149, "10s less studded 3s 60c, a greataxe 3s 30c, the road kit 61c and the Survivalist's kit 1s (01 §9: about one and a half silver)");
       assert.match(s.motive, /Lordaeron/);
       assert.isTrue(actor.prototypeToken.actorLink);
       assert.equal(actor.prototypeToken.width, 1);
@@ -151,13 +158,13 @@ export function creatorBatch(context) {
       assert.isAtLeast(features.length, 5, "four Warrior features and the Human trait");
       const adaptable = features.find(f => f.name === "Adaptable");
       assert.ok(adaptable, "no Adaptable feature");
-      assert.equal(adaptable.system.known?.[0]?.uuid, "azeroth-rpg.skill.perception");
+      assert.equal(adaptable.system.known?.[0]?.uuid, "azeroth-rpg.skill.athletics");
 
       const studded = actor.items.find(i => i.name === "Studded leather");
       const axe = actor.items.find(i => i.name === "Greataxe");
       assert.isTrue(studded?.system.equipped, "the suit is not worn");
       assert.isTrue(axe?.system.equipped, "the weapon is not drawn");
-      for (const name of ROAD) {
+      for (const name of [...ROAD, "Survivalist's kit"]) {
         const row = actor.items.find(i => i.name === name);
         assert.ok(row, `no ${name}`);
         assert.equal(row.system.quantity, 1);
@@ -173,19 +180,19 @@ export function creatorBatch(context) {
       made.push(actor);
       const sheet = await openSheet(actor);
       try {
-        const buy = sheet.element.querySelector('[data-action="buyRank"][data-skill="perception"]');
-        assert.ok(buy, "no Buy on the Perception row");
+        const buy = sheet.element.querySelector('[data-action="buyRank"][data-skill="athletics"]');
+        assert.ok(buy, "no Buy on the Athletics row");
         const spent = actor.system.xp.spent;
         click(buy);
         for (let i = 0; i < 100 && actor.system.xp.spent === spent; i++) await new Promise(r => setTimeout(r, 50));
-        assert.equal(actor.system.xp.spent, spent + 10, "Perception is in-career through Adaptable: Rank 1 costs 10, not 20");
-        assert.equal(actor.getFlag("azeroth-rpg", "skillRanks")?.perception, 1);
+        assert.equal(actor.system.xp.spent, spent + 10, "Athletics is cheap through Adaptable whatever the profession: Rank 1 costs 10, not 20");
+        assert.equal(actor.getFlag("azeroth-rpg", "skillRanks")?.athletics, 1);
         const core = sheet.element.querySelector(".azeroth-core-identity");
         assert.ok(core, "the Core tab carries no identity lines");
         assert.include(core.textContent, "Common");
         assert.include(core.querySelector('input[name="system.motive"]')?.value ?? "", "Lordaeron");
         const purse = sheet.element.querySelector(".azeroth-purse-coins");
-        assert.equal(purse?.textContent.trim(), "2s 49c");
+        assert.equal(purse?.textContent.trim(), "1s 49c", "01 §9: about one and a half silver once the Survivalist's kit is bought");
       } finally {
         await sheet.close();
       }
@@ -203,7 +210,7 @@ export function creatorBatch(context) {
       assert.equal(game.actors.size, before, "no other actor");
       assert.equal(blank.name, "ZZ Handed Over, Built");
       assert.equal(blank.system.health.max, 15);
-      assert.equal(blank.system.coin, 249);
+      assert.equal(blank.system.coin, 149);
       assert.equal(blank.raceItem?.name, "Human");
       assert.isTrue(blank.prototypeToken.actorLink);
     });
@@ -232,23 +239,18 @@ export function creatorBatch(context) {
       assert.equal(game.actors.size, before, "a refusal made an actor");
     });
 
-    it("notes the table's judgements on the career step and never refuses them", async function () {
+    it("refuses Finish with no profession, on the Profession step, and makes nothing (D-1930)", async function () {
       this.timeout(60000);
+      // The career step's table notes (side, Entry) went with the careers (D-1903): the Profession
+      // step has one rule, a profession is chosen, and its refusal names the step.
       const creator = creatorOf(null);
-      const base = await kaelen({
-        race: await uuidOf(PACK_FOR.race, "Orc"), adaptable: null, racialTalent: "Warsong Memory",
-        career: await uuidOf(PACK_FOR.career, "Watchman")
-      });
-      await creator.render({ force: true });
-      await settle();
-      await creator.setState({ ...base, step: "career" });
-      await settle();
-      const notes = [...creator.element.querySelectorAll(".azeroth-forge-notes li")].map(li => li.textContent);
-      assert.ok(notes.some(t => /Alliance/.test(t)), "an Alliance career on an orc is not noted");
-      assert.ok(notes.some(t => /Entry/.test(t)), "the Entry is not put to the table");
-      const reasons = [...creator.element.querySelectorAll(".azeroth-forge-reasons li")].map(li => li.textContent);
-      assert.notOk(reasons.some(t => /Alliance|Watchman/.test(t)), "the side was refused");
-      await creator.close();
+      const before = game.actors.size;
+      const r = await creator.apply({ ...(await kaelen()), profession: null });
+      assert.isFalse(r.ok, "a character with no profession was made");
+      const refused = r.reasons.find(x => x.code === "noProfession");
+      assert.ok(refused, "no noProfession reason");
+      assert.equal(refused.step, "profession");
+      assert.equal(game.actors.size, before, "a refusal made an actor");
     });
 
     it("stars the ability 01 §3 puts the 16 in, and the class card names it in words", async function () {
@@ -421,9 +423,12 @@ export function creatorBatch(context) {
       click(kit);
       await settle();
       const rows = creator.state.equipment;
-      assert.lengthOf(rows, 8, "studded, sword, shield and the five of the road");
-      assert.equal(rows.filter(r => r.road).length, 5);
-      assert.include(creator.element.querySelector(".azeroth-creator-purse")?.textContent ?? "", "1s 89c", "811c spent of 10s leaves 1s 89c");
+      // The profession's tool joins the kit, last (D-1923): Kaelen's is the Survivalist's kit, 1s.
+      const tool = await fromPack(PACK_FOR.equipment, "Survivalist's kit");
+      assert.lengthOf(rows, 9, "studded, sword, shield, the five of the road and the profession's tool");
+      assert.equal(rows.at(-1).uuid, tool.uuid, "the profession's tool is not the kit's last row");
+      assert.equal(rows.filter(r => r.road && r.uuid !== tool.uuid).length, 5);
+      assert.include(creator.element.querySelector(".azeroth-creator-purse")?.textContent ?? "", "89c", "911c spent of 10s leaves 89c");
       await creator.close();
     });
 
@@ -468,7 +473,7 @@ export function creatorBatch(context) {
       assert.isUndefined(game.actors.find(a => a.name === "ZZ Never Made"));
     });
 
-    it("the packs carry every class's kit and every career's side", async function () {
+    it("the packs carry every class's kit, and the seven professions each name their tool", async function () {
       this.timeout(30000);
       const classes = await game.packs.get(PACK_FOR.class).getDocuments();
       // The count is pack-counts.mjs's, the one place it lives (ten since the Chromatic Champion).
@@ -479,11 +484,17 @@ export function creatorBatch(context) {
         assert.isAtLeast(c.system.kit.length, 7, `${c.name} has no kit`);
         assert.equal(c.system.kit.filter(r => r.road).length, 5, `${c.name} lacks the road kit`);
       }
-      const careers = await game.packs.get(PACK_FOR.career).getIndex({ fields: ["system.tier", "system.side"] });
-      const tierOne = careers.filter(e => e.system.tier === 1);
-      assert.lengthOf(tierOne, 16);
-      assert.lengthOf(tierOne.filter(e => e.system.side !== "anyone"), 6, "six standing careers among the sixteen");
-      assert.equal(careers.find(e => e.name === "Watchman")?.system.side, "alliance");
+      // The careers and their sides are retired (D-1903). Each profession names the one tool the
+      // creator's kit adds (D-1923), and the tool is a real 08 §11 item at 1s.
+      const professions = await game.packs.get(PACK_FOR.profession).getDocuments();
+      assert.lengthOf(professions, PACK_COUNTS.professions.count);
+      const gear = await game.packs.get(PACK_FOR.equipment).getIndex({ fields: ["system.identifier", "system.cost"] });
+      for (const p of professions) {
+        const id = p.system.tools?.[0];
+        const tool = gear.find(e => e.system?.identifier === id);
+        assert.ok(tool, `${p.name} names no real tool (${id})`);
+        assert.equal(tool.system.cost, 100, `${p.name}'s ${tool.name} is not 1s`);
+      }
     });
   });
 }

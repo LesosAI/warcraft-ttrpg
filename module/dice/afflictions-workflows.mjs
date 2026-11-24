@@ -80,8 +80,9 @@ function verdictOf(roll, dc) {
   };
 }
 
-async function evaluate({ actor, kind, dc, boons = 0, banes = 0, modifiers = [], provenanceExtra = [], resilience = null }) {
-  const roll = AzerothRoll.build({ dc, kind, boons, banes, modifiers, rollData: actor.getRollData() });
+async function evaluate({ actor, kind, dc, boons = 0, banes = 0, modifiers = [], provenanceExtra = [], resilience = null, chosen = null }) {
+  // Well Fed rides the one roll builder (the review's M7): the dialog's ticked lines.
+  const roll = AzerothRoll.build({ dc, kind, boons, banes, modifiers, rollData: actor.getRollData(), roller: actor, chosen });
   // The Resilience the after-the-die seam reads (02's Beyond Limits, D-1724).
   if (kind === "resilience" && resilience) roll.options.resilience = resilience;
   roll.options.provenance.push(...provenanceExtra);
@@ -159,7 +160,7 @@ export async function medicineTest({ patient, afflictionId, event = null } = {})
 }
 
 /** The workflow the Medicine dialog runs: judged again at the die, then the carrier moves. */
-async function medicineRun({ actor: healer, dc = 12, boons = 0, banes = 0, modifiers = [], provenanceExtra = [], afflictionCtx = null } = {}) {
+async function medicineRun({ actor: healer, dc = 12, boons = 0, banes = 0, modifiers = [], provenanceExtra = [], afflictionCtx = null, chosen = null } = {}) {
   const patient = afflictionCtx?.patientUuid ? await fromUuid(afflictionCtx.patientUuid) : null;
   const row = patient ? afflictionsOf(patient).find(r => r.id === afflictionCtx.afflictionId) : null;
   if (!row) { ui.notifications?.warn(t("AZEROTH.Afflictions.Medicine.Gone")); return null; }
@@ -173,7 +174,7 @@ async function medicineRun({ actor: healer, dc = 12, boons = 0, banes = 0, modif
     ui.notifications?.warn(t(`AZEROTH.Afflictions.Medicine.Refuse.${refusal}`, { name: healer.name, disease: row.aff.name }));
     return null;
   }
-  const roll = await evaluate({ actor: healer, kind: "skill", dc, boons, banes, modifiers, provenanceExtra });
+  const roll = await evaluate({ actor: healer, kind: "skill", dc, boons, banes, modifiers, provenanceExtra, chosen });
   const success = roll.outcome.success === true;
   // The die took time: read the carrier AGAIN and judge again before anything is recorded
   // (still carried, not tried since, not in a fight, the healer still clear of it).
@@ -313,10 +314,10 @@ export async function exposeAffliction({ actor, key, kind, dc = null, event = nu
   }, event);
 }
 
-async function exposeRun({ actor, dc = 12, boons = 0, banes = 0, modifiers = [], provenanceExtra = [], afflictionCtx = null } = {}) {
+async function exposeRun({ actor, dc = 12, boons = 0, banes = 0, modifiers = [], provenanceExtra = [], afflictionCtx = null, chosen = null } = {}) {
   const entry = afflictionCtx ? await entryFor(afflictionCtx.kind, afflictionCtx.key) : null;
   if (!entry) return null;
-  const roll = await evaluate({ actor, kind: "resilience", dc, boons, banes, modifiers, provenanceExtra, resilience: "body" });
+  const roll = await evaluate({ actor, kind: "resilience", dc, boons, banes, modifiers, provenanceExtra, resilience: "body", chosen });
   const failed = roll.outcome.success !== true;
   let done = null;
   if (failed) done = await layEntry(actor, entry, null);

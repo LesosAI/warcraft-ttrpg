@@ -211,6 +211,15 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
         itemId: new fields.DocumentIdField({ nullable: true })
       }),
 
+      // THE profession (D-1903): the embedded profession item's id, one at a
+      // time. Its tier is the character's (D-1905), so only the link is stored;
+      // the Rank and the picks live on the item. `career` above stays readable
+      // for one version so migration 0.17.0 can read it (D-1916). A new
+      // nullable field: every stored character reads null, so no migration.
+      profession: new fields.SchemaField({
+        itemId: new fields.DocumentIdField({ nullable: true, initial: null })
+      }),
+
       // 02 §9: levels are granted and XP is a purse. `spent` is reconciled
       // against the ledger flag rather than trusted (D-508, D2 §2.4).
       xp: new fields.SchemaField({

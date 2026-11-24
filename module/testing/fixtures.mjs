@@ -263,7 +263,8 @@ export async function firstFromPack(packId, predicate = () => true) {
 
 /** Which pack holds each Item subtype; the rest are synthetic. */
 export const PACK_FOR = Object.freeze({
-  race: "azeroth-rpg.races", class: "azeroth-rpg.classes", career: "azeroth-rpg.careers",
+  // 03-PROFESSIONS' seven (D-1903): the careers pack is retired, so a batch naming `career` fails at the pack.
+  race: "azeroth-rpg.races", class: "azeroth-rpg.classes", profession: "azeroth-rpg.professions",
   talent: "azeroth-rpg.talents", legacy: "azeroth-rpg.legacies", spell: "azeroth-rpg.spells",
   weapon: "azeroth-rpg.weapons", armor: "azeroth-rpg.armor", trait: "azeroth-rpg.traits",
   gear: "azeroth-rpg.affixes",
@@ -326,7 +327,7 @@ export const KNOWN = Object.freeze({ azerothIdentify: "known" });
 export async function makeCharacter({
   name = "ZZ Quench Character",
   classes = [],          // [["Warrior", 5], ["Rogue", 3]]
-  career = null,         // "Watchman"
+  profession = null,     // "Blacksmithing" (D-1903; `career` is retired with careers)
   race = null,           // "Orc"
   spells = [], weapons = [], armor = [], gear = [], talents = [],   // names
   bags = [],             // names from the equipment pack: worn BEFORE the rest
@@ -359,7 +360,7 @@ export async function makeCharacter({
   const embed = [];
   const named = [];
   for (const [n] of classes) { embed.push((await fromPack(PACK_FOR.class, n)).toObject()); named.push(n); }
-  if (career) embed.push((await fromPack(PACK_FOR.career, career)).toObject());
+  if (profession) embed.push((await fromPack(PACK_FOR.profession, profession)).toObject());
   if (race) embed.push((await fromPack(PACK_FOR.race, race)).toObject());
   for (const [packId, names] of [[PACK_FOR.spell, spells], [PACK_FOR.weapon, weapons],
     [PACK_FOR.armor, armor], [PACK_FOR.gear, gear], [PACK_FOR.talent, talents]]) {

@@ -24,7 +24,7 @@ export const SKILL_TEXT = Object.freeze({
   barter: "<p>Haggling, valuing goods, and knowing when you are being had. A goblin will do this to you before you notice it has started.</p>",
   deception: "<p>Lying well, passing as somebody else, running a bluff. Opposed by Insight.</p>",
   intimidation: "<p>Getting compliance through fear. It works on anything that can be frightened, which rules out a great deal of the Plaguelands.</p>",
-  leadership: "<p>Getting people to follow you, hold a line, or do the thing they have been dreading. Careers that carry rank lean on it.</p>",
+  leadership: "<p>Getting people to follow you, hold a line, or do the thing they have been dreading. Anybody who gives orders leans on it.</p>",
   performance: "<p>Music, oratory, storytelling, holding a room. Trolls and tauren both take it more seriously than the Alliance expects.</p>",
   persuasion: "<p>Changing somebody's mind with an argument they can accept. Opposed when they have a reason to refuse.</p>",
   streetwise: "<p>Knowing who to ask, where the back door is, and what a favor costs. Ravenholdt and the Defias both run on it.</p>"

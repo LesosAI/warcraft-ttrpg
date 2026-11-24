@@ -205,6 +205,26 @@ function learnSpells(documents, operation, user) {
 
 export class AzerothItem extends Item {
   /**
+   * The item types still registered so that stale documents load, and never offered for a NEW
+   * item: `career`, kept for one version after professions replaced careers (D-1903, D-1916).
+   */
+  static RETIRED_TYPES = Object.freeze(["career"]);
+
+  /**
+   * @inheritDoc
+   *
+   * Core's *Create Item* dialog lists every registered type; a retired one is left off it
+   * (`RETIRED_TYPES`), whether the caller restricted the list or not.
+   */
+  static async createDialog(data = {}, createOptions = {}, options = {}, ...rest) {
+    const retired = this.RETIRED_TYPES;
+    const live = this.TYPES.filter(t => t !== CONST.BASE_DOCUMENT_TYPE && !retired.includes(t));
+    const asked = (options.types ?? live).filter(t => !retired.includes(t));
+    // A caller that asked for retired types alone gets the live list, never an empty one core refuses.
+    return super.createDialog(data, createOptions, { ...options, types: asked.length ? asked : live }, ...rest);
+  }
+
+  /**
    * @inheritDoc
    *
    * A THIRD CLASS IS REFUSED BEFORE IT EXISTS. `system.classes[]` holds two

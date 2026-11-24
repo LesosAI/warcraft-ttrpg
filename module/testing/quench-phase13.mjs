@@ -147,12 +147,17 @@ export function lootBatch(context) {
       assert.isTrue(named.ok, JSON.stringify(named.reasons));
       const epic = named.items[0];
       assert.equal(epic.system.rarity, "epic");
-      assert.isNotEmpty(epic.system.signature ?? "", "a named Epic carries a Signature (08 §20)");
       assert.isNull(epic.getFlag("azeroth-rpg", "generated") ?? null, "a named thing was forged rather than copied");
       const packId = { weapon: "azeroth-rpg.weapons", armor: "azeroth-rpg.armor", gear: "azeroth-rpg.gear" }[epic.type];
       const source = (await game.packs.get(packId).getIndex()).find(e => e.name === epic.name);
       assert.ok(source, `${epic.name} is not in the ${epic.type} pack`);
       assert.notEqual(epic.id, source._id, "the copy kept the pack document's id");
+      // COPIED WHOLE, its Signature with it. Not every named Epic carries one: 08 section 20's flasks and
+      // the Invulnerability Potion are Epic consumables with no Signature (D-1919, D-1992), and the full
+      // smoke of 0.17.0 drew one (the professions catalogue added three), which read as "a named Epic
+      // lost its Signature". The copy is held to its own pack document instead.
+      const whole = await game.packs.get(packId).getDocument(source._id);
+      assert.equal(epic.system.signature ?? "", whole.system.signature ?? "", "the named Epic's Signature is not its pack document's (08 §20)");
 
       const unnamed = keep(await generatorOf().apply({
         scenario: "boss", tier: 4,

@@ -401,27 +401,19 @@
   </details>
   {{/if}}
 
-  {{!-- Signatures (08 SS20, S3; D-692): what the things being WORN do, and the
-        career's own capability (03 SS5), which had reached no sheet at all.
+  {{!-- Signatures (08 SS20, S3; D-692): what the things being WORN do.
 
         The same shape as Talents in play above: a name, what it does, its
         limit, a Use button. **A Use button ONLY where there is one to press** -
         a standing Signature, one that fires off a blow and one that gives back
         at the top of the turn are enforced elsewhere, so their rows are text
         (D-681). A gate that does not hold and a use spent are said IN WORDS
-        beside the greyed control, never by the grey alone (D5).
-
-        A career's row is one of these now (D-692's Phase 6): `CareerData`
-        carries the descriptor, so the eight 03 SS5 gives a rest-bounded limit
-        count their uses and press like anything else. --}}
+        beside the greyed control, never by the grey alone (D5). --}}
   {{#if signatures.length}}
   <details class="azeroth-combat-group" data-combat-section="signatures"{{#if combatSections.signatures}} open{{/if}}><summary class="azeroth-panel-heading azeroth-combat-section">{{localize "AZEROTH.Signature.Heading"}}</summary>
   <ul class="azeroth-features azeroth-signatures">
     {{#each signatures as |s|}}
     <li class="azeroth-feature draggable{{#unless s.fires}} is-passive{{/unless}}{{#if s.refusal}} is-spent{{/if}}" data-item-id="{{s.id}}">
-      {{!-- The career's icon too: the rows share a grid and a missing 20px
-            cell would step the whole list left on one of them. It takes the
-            common iron ring, which is what an unrarited thing gets. --}}
       {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=s.img rarityClass=s.rarityClass trainingTip=s.trainingTip}}
       <span class="azeroth-feature-name{{#if s.rarityClass}} {{s.rarityClass}}{{/if}}" data-action="expandItem" role="button" tabindex="0" aria-expanded="false">{{s.name}}</span>
       <span class="azeroth-feature-meta">
@@ -434,7 +426,6 @@
       <button type="button" class="azeroth-use" data-action="useSignature"{{#if s.refusal}} disabled{{/if}}{{#if s.refusalLabel}} data-tooltip="{{localize s.refusalLabel}}"{{/if}}>{{localize "AZEROTH.Feature.Use"}}</button>
       {{/if}}
       <div class="azeroth-item-detail azeroth-feature-effect" data-item-id="{{s.id}}" hidden>
-        {{#if s.origin}}<p class="azeroth-item-origin">{{s.origin}}</p>{{/if}}
         {{{s.text}}}
       </div>
       {{#if s.gateFails}}<span class="azeroth-signature-why">{{localize "AZEROTH.Signature.GateFails"}}</span>{{/if}}

@@ -15,6 +15,7 @@
 
 // 07 §12's Stasis: its repeat Test rides the Stunned as 07's escape (O-306, `holdOutOfTime`).
 import { cleanEscape } from "./escapes.mjs";
+import { SL_CAP } from "./resolution.mjs";
 
 /** A blow's record in the shape `blow-records.mjs#withSteps` writes, or null (read again by the door). */
 const recordOf = x => (x && typeof x === "object" && !Array.isArray(x) && x.input && typeof x.input === "object" && !Array.isArray(x.input) ? x : null);
@@ -516,7 +517,7 @@ export function gritOutcome(line, { success = true } = {}) {
  * @param {{success?: boolean, cap?: number}} [o]
  * @returns {{sl: number, from: number, gained: number, sand: number, kind: "sl"|"damage"|null}}
  */
-export function gritSl(baseSl, line, { success = true, cap = 6 } = {}) {
+export function gritSl(baseSl, line, { success = true, cap = SL_CAP } = {}) {
   const from = Math.trunc(Number(baseSl)) || 0;
   if (!line) return { sl: from, from, gained: 0, sand: 0, kind: null };
   const out = gritOutcome(line, { success });

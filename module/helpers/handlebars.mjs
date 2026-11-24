@@ -92,6 +92,13 @@ const TEMPLATES = [
   // render and takes the whole Progress part down with it (D-705).
   "systems/azeroth-rpg/templates/actor/partials/talent-tile.hbs",
   "systems/azeroth-rpg/templates/actor/partials/talent-tree-body.hbs",
+  // The Profession tab (D11 §12): its two views' partials, a recipe row, a recipe card and a
+  // stored project. A partial a template names and this list does not hold THROWS at render (D-705).
+  "systems/azeroth-rpg/templates/actor/partials/profession-overview.hbs",
+  "systems/azeroth-rpg/templates/actor/partials/recipe-row.hbs",
+  "systems/azeroth-rpg/templates/actor/partials/recipe-detail.hbs",
+  "systems/azeroth-rpg/templates/actor/partials/craft-project.hbs",
+  "systems/azeroth-rpg/templates/chat/craft-card.hbs",
   "systems/azeroth-rpg/templates/chat/rest-card.hbs",
   "systems/azeroth-rpg/templates/chat/maneuver-card.hbs",
   "systems/azeroth-rpg/templates/chat/prompt-card.hbs",
@@ -101,7 +108,8 @@ const TEMPLATES = [
   "systems/azeroth-rpg/templates/creator/guise.hbs",
   "systems/azeroth-rpg/templates/creator/class.hbs",
   "systems/azeroth-rpg/templates/creator/abilities.hbs",
-  "systems/azeroth-rpg/templates/creator/career.hbs",
+  // The Profession step (D-1930): one pick, with what a profession is said above the list.
+  "systems/azeroth-rpg/templates/creator/profession.hbs",
   "systems/azeroth-rpg/templates/creator/skills.hbs",
   "systems/azeroth-rpg/templates/creator/talents.hbs",
   "systems/azeroth-rpg/templates/creator/spells.hbs",

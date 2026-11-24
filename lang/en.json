@@ -1517,13 +1517,410 @@
         "Label": "Stunned"
       }
     },
-    "Career": {
-      "Tier1": "Tier 1",
-      "Tier2": "Tier 2",
-      "Tier3": "Tier 3",
-      "Tier4": "Tier 4",
-      "Roads": "Roads out",
-      "Needs": "Needs"
+    "Profession": {
+      "Name": {
+        "Blacksmithing": "Blacksmithing",
+        "Leatherworking": "Leatherworking",
+        "Tailoring": "Tailoring",
+        "Alchemy": "Alchemy",
+        "Enchanting": "Enchanting",
+        "Engineering": "Engineering",
+        "WildernessSurvival": "Wilderness Survival"
+      },
+      "Rung": {
+        "Apprentice": "Apprentice",
+        "Journeyman": "Journeyman",
+        "Expert": "Expert",
+        "Artisan": "Artisan"
+      },
+      "Family": {
+        "Ore": "Ore",
+        "Hide": "Hides",
+        "Cloth": "Cloth",
+        "Herb": "Herbs",
+        "Fish": "Fish and game",
+        "Essence": "Essence"
+      },
+      "Interval": {
+        "Hour": "hour",
+        "Day": "day",
+        "Week": "week"
+      },
+      "Harvest": {
+        "Skin": "Skin",
+        "Butcher": "Butcher",
+        "Salvage": "Salvage",
+        "Card": {
+          "Title": "{verb}: {name}",
+          "Spoiled": "Nothing is saved. Each harvest is made once on a creature.",
+          "TableNames": "The GM names the material of that family and tier."
+        },
+        "Choose": "Which {family} does the creature yield? Your GM names it from what its tier holds."
+      },
+      "Group": {
+        "Other": "Other"
+      },
+      "Stalled": "A profession write for {name} had no answer for ten seconds, so the next one went ahead.",
+      "Refuse": {
+        "NoProfession": "You hold no profession.",
+        "PickTier": "Tier {tier} skills open at level {level}.",
+        "NotListed": "That skill is not on this tier's list.",
+        "Held": "That skill is already picked.",
+        "Full": "Both tier {tier} skills are already picked.",
+        "NotRecipe": "Nothing makes this.",
+        "Trade": "This is {trade} work.",
+        "RecipeTier": "A tier {tier} recipe: it opens at level {level}.",
+        "Downtime": "Your GM allows crafting only in downtime.",
+        "RarityCeiling": "Your tier makes nothing better than {ceiling}.",
+        "NotForgeable": "This item takes no quality: it is made Common.",
+        "Tool": "You are not carrying {tool}.",
+        "Short": "Needs {lines}.",
+        "ShortLine": "{count} more {name}",
+        "Forge": "The Forge refuses it: {text}",
+        "AffixTrade": "{affix} is {trade} work.",
+        "Room": "There is no room in your bags for the result. Make room first.",
+        "Closed": "This project is finished.",
+        "Pending": "This project was interrupted while it was being started. Abandon it, and ask the GM whether its materials were spent.",
+        "ProjectTrade": "This is a {trade} project. It stays on your sheet, and its next test needs {trade} again.",
+        "NoGathering": "You hold no profession that gathers.",
+        "DisenchantOnly": "An enchanter gathers essence by Disenchant, not by biome.",
+        "NoNode": "Pick something to gather.",
+        "NodeTier": "That opens at tier {tier}.",
+        "NotEnchanter": "Only an enchanter can disenchant.",
+        "NotItem": "Only a weapon, a suit or a worn thing can be disenchanted.",
+        "DisenchantRarity": "Only an Uncommon, Rare or Epic item can be disenchanted.",
+        "Consumable": "A thing that is used up cannot be disenchanted.",
+        "Equipped": "Take it off first.",
+        "HarvestNone": "Your profession takes nothing from this creature, or it has been taken already.",
+        "HarvestTier": "A tier {tier} creature is out of your reach.",
+        "NoGM": "No GM is online to mark the creature. Nothing was rolled.",
+        "RankTop": "Your profession Rank is at its top, 15.",
+        "Purse": "The next Rank costs {cost} XP and you have {purse} unspent.",
+        "NotProfession": "That is not a profession.",
+        "SignatureUnknown": "Choose a Signature from the list: only the book's own Signatures can be crafted.",
+        "SignatureType": "That Signature is written for another kind of item. Choose one from this item's list.",
+        "AlreadyHas": "This item already carries an affix in that place, so the enchantment has nowhere to go. Nothing was spent.",
+        "ForgeBuilt": "This item came off the Forge with a Signature or more than one affix, and an enchantment laid in place would undo it. Nothing was spent.",
+        "AffixRefused": "The enchantment cannot go on this item: {text}. Nothing was spent.",
+        "Harvested": "That has already been taken from this creature. Nothing was rolled.",
+        "Living": "The creature is not defeated. Nothing was rolled.",
+        "HarvestFailed": "The GM's client did not answer, so the creature was not marked. Nothing was rolled."
+      },
+      "Part": {
+        "Ability": "{ability} modifier",
+        "Rank": "{name} Rank",
+        "Tool": "{rarity} tool"
+      },
+      "Craft": {
+        "EnchantName": "{item}: {affix}",
+        "EnchantGone": "The item or the enchantment is gone. Nothing was laid.",
+        "Failed": "The item could not be made just now. The project waits as ready, and Collect tries again.",
+        "Card": {
+          "Started": "Project started: {name}",
+          "Spent": "Materials spent: {spent}.",
+          "Plan": "Target SL {target} ({rarity}). One Test each {interval} at DC {dc}. The running total stays on your sheet until the item is made.",
+          "Test": "Craft Test: {name}",
+          "Running": "Running SL",
+          "RunningText": "{run} of {target}",
+          "StoredName": "Stored",
+          "Stored": "{left} more Success Levels to go.",
+          "CollapsedName": "Collapsed",
+          "Collapsed": "The running total fell to {run} after {tests} Tests. The materials are lost.",
+          "MadeName": "Made",
+          "Made": "{name} goes into your bags.",
+          "Collected": "Collected: {name}",
+          "Abandoned": "Project abandoned: {name}",
+          "Lost": "The materials are lost: {spent}."
+        }
+      },
+      "Gather": {
+        "Title": "Gather: {name}",
+        "Yield": "Yield",
+        "Nothing": "Nothing found. About an hour passes.",
+        "Into": "{n} {name} into your bags.",
+        "Lost": "{n} {name}: the compendium does not hold it, so nothing was added.",
+        "NoRoom": "{n} {name}: there is no room in your bags. Make room first.",
+        "Partial": "{n} {name} into your bags. {lost} more found no room and were left."
+      },
+      "Disenchant": {
+        "Title": "Disenchant: {name}",
+        "Gone": "Destroyed",
+        "Destroyed": "{name} is destroyed, as Disenchant destroys every item it breaks.",
+        "NotGone": "{name} could not be destroyed, so it yields nothing."
+      },
+      "Agent": {
+        "Blacksmithing": "Blacksmith",
+        "Leatherworking": "Leatherworker",
+        "Tailoring": "Tailor",
+        "Alchemy": "Alchemist",
+        "Enchanting": "Enchanter",
+        "Engineering": "Engineer",
+        "WildernessSurvival": "Survivalist"
+      },
+      "Card": {
+        "Crafted": "Crafted",
+        "Collapsed": "Collapsed",
+        "WellFed": "(+{n} Well Fed)"
+      },
+      "Sheet": {
+        "Line": "{rung} {agent}",
+        "Choose": "Choose a profession",
+        "NotProfession": "{name} is not a profession.",
+        "NoneHeading": "No profession yet",
+        "NoneHint": "This character holds no profession. A profession sets the skills that cost the cheap rate, and it lets the character gather materials and craft items from the compendium.",
+        "Header": "{rung} · Tier {tier} · {ability} · Craft Test {bonus}",
+        "View": {
+          "Label": "Profession view",
+          "Overview": "Overview",
+          "Crafting": "Crafting"
+        },
+        "Part": {
+          "Ability": "{ability} {value}",
+          "Rank": "Rank {value}",
+          "Tool": "{rarity} tool {value}"
+        },
+        "Strip": {
+          "Title": "Tier {tier}: choose 2 profession skills.",
+          "Hint": "Your {rung} rung opens four. The two you pick cost 10 × Rank.",
+          "ChosenMark": "chosen",
+          "Confirm": "Confirm",
+          "Owed": "Choose {n} more.",
+          "Chosen": "Tier {tier}: {skills} now cost the cheap rate."
+        },
+        "Rank": {
+          "Heading": "Rank",
+          "Of": "of {max}",
+          "CraftTest": "Craft Test",
+          "NoProficiency": "No Proficiency: a Craft Test goes off the profession's Rank.",
+          "Raise": "Raise to Rank {rank} · {cost} XP",
+          "AtTop": "Rank {max}",
+          "Top": "Rank {max} is the top of the ladder.",
+          "Purse": "You have {purse} XP. This costs {cost}.",
+          "Cheap": "A profession Rank always costs the cheap rate (10 × Rank).",
+          "Ledger": "{profession} Rank {rank}"
+        },
+        "Tiers": {
+          "Heading": "Tiers",
+          "Row": "Tier {tier} · levels {min} to {max}",
+          "Held": "held",
+          "Opens": "opens at level {level}",
+          "Note": "Your tier follows your level and costs nothing. It opens recipes and skills. The Rank is what you roll."
+        },
+        "Skills": {
+          "Heading": "Profession skills",
+          "Count": "({held} of {max})",
+          "Tier": "Tier {tier}",
+          "Fixed": "fixed",
+          "Picked": "picked",
+          "Owed": "{n} still to pick",
+          "Locked": "opens at level {level}: pick 2 of {skills}"
+        },
+        "Tool": {
+          "Heading": "Tool",
+          "Line": "{rarity} · {price}",
+          "Carried": "carried",
+          "Missing": "not carried: no Test",
+          "Bonus": "Test bonus",
+          "BonusNote": "to every Craft and Gathering Test",
+          "Note": "One item in your bags covers making and gathering. It is bought, never made. A better tool is bought or found, and it adds +1 (Uncommon), +2 (Rare) or +3 (Epic)."
+        },
+        "Gather": {
+          "Heading": "Gather {family}",
+          "Biome": "Biome",
+          "BiomeHint": "(your GM names it)",
+          "PickBiome": "Pick a biome",
+          "Node": "T{tier} · DC {dc}",
+          "Empty": "Nothing you can gather lies in {biome}. Ask your GM for another biome.",
+          "Test": "Gathering Test: {skill} {bonus}",
+          "Parts": "({parts}; no Proficiency)",
+          "WellFed": "+1 SL Well Fed",
+          "Button": "Gather",
+          "Note": "About an hour. A success yields 1 + SL. The GM sets how often."
+        },
+        "Disenchant": {
+          "Heading": "Gather essence: Disenchant",
+          "Hint": "An enchanter takes essence from magic items, with no biome. Arcana {bonus}. The DC follows the item's rarity.",
+          "Item": "Item to disenchant",
+          "Option": "{name} ({rarity})",
+          "Button": "Disenchant",
+          "None": "You carry nothing Uncommon or better to take apart.",
+          "Note": "The item is destroyed whether the Test succeeds or fails. A success yields 1 + SL of:",
+          "Yield": "{rarity}: {name}"
+        },
+        "Harvest": {
+          "Heading": "From a defeated creature",
+          "Who": "{name} may take:",
+          "Explain": {
+            "skin": "Target a defeated beast and press Skin here. It is a Gathering Test at the creature's tier, made once on each creature.",
+            "butcher": "Target a defeated beast and press Butcher here. It is a Gathering Test at the creature's tier, made once on each creature.",
+            "salvage": "Target a defeated humanoid and press Salvage here. It is a Gathering Test at the creature's tier, made once on each creature."
+          },
+          "Target": "Target a defeated creature.",
+          "Refuse": {
+            "Kind": "{verb} takes only from: {types}.",
+            "Done": "Already taken from this creature."
+          }
+        },
+        "Project": {
+          "Heading": "Projects in progress",
+          "Hint": "each test adds its Success Level to a total stored on your sheet",
+          "Summary": "Projects in progress ({n})",
+          "SummaryLine": "{profession} · SL {run} of {target} · {tests} tests",
+          "Open": "Open Crafting",
+          "Plan": "{rarity} · DC {dc} · one test each {interval}",
+          "Running": "Running SL {run} of {target} · tests so far: {tests} · collapses at −3",
+          "Log": "Step log",
+          "NoTests": "No test rolled yet.",
+          "Expected": "About {tests} more tests · {pct}% to collapse",
+          "Never": "It never finishes on these numbers.",
+          "Roll": "Roll a test",
+          "Collect": "Collect",
+          "Abandon": "Abandon (materials lost)",
+          "Ready": "Finished. Collect it into your bags.",
+          "Others": "{n} more under another profession, stored until you return to it."
+        },
+        "Enchant": {
+          "Heading": "Lay an enchantment",
+          "Item": "Item",
+          "Affix": "Enchantment",
+          "Pick": "Pick one",
+          "Button": "Start project",
+          "NoAffix": "Nothing your tier opens can go on this item.",
+          "NoItems": "You carry nothing an enchantment can go on.",
+          "PickFirst": "Pick an enchantment.",
+          "Note": "It lays the enchantment on an item you carry, as a project."
+        },
+        "Trait": {
+          "Hover": "The book's rule, on hover or focus:",
+          "Kind": "{kind} trait",
+          "Fires": "fires on {when}"
+        },
+        "Filter": {
+          "Search": "Search recipes",
+          "Have": "Have materials",
+          "TierLabel": "Tier",
+          "AllTiers": "All tiers",
+          "Tier": "Tier {tier}",
+          "KindLabel": "Kind",
+          "AllKinds": "All kinds",
+          "OpenAll": "Open all",
+          "CloseAll": "Close all",
+          "None": "No recipe matches those filters.",
+          "Clear": "Clear"
+        },
+        "List": {
+          "Label": "Recipes",
+          "Count": "({n})",
+          "CanMake": "{n} you can make",
+          "Nothing": "Your profession makes nothing at this tier."
+        },
+        "Row": {
+          "Tier": "T{tier}",
+          "Makeable": "×{n}",
+          "MakeableTip": "Your bags can make it {n} times now.",
+          "NoneTip": "Your bags hold too little to make it now."
+        },
+        "Detail": {
+          "Pick": "Open a group and pick a recipe.",
+          "Kind": "{group} · Recipe tier {tier}",
+          "Extended": "Extended Test",
+          "ExtendedValue": "DC {dc} · one test each {interval}",
+          "Target": "Target",
+          "TargetValue": "SL {target}",
+          "TargetRow": "{rarity} {sl}",
+          "Targets": "({targets})",
+          "CraftTest": "Your Craft Test",
+          "CraftTestValue": "{bonus} ({parts})",
+          "CraftTestFed": "{bonus} ({parts}) and +1 SL (Well Fed)",
+          "Takes": "Takes",
+          "TakesValue": "about {tests} tests, one each {interval}",
+          "Never": "never, on these numbers",
+          "Collapse": "Collapse risk",
+          "CollapseValue": "{pct}% (a running SL of −3)",
+          "Price": "Price",
+          "Reagents": "Reagents",
+          "HaveShort": "{have} / {need}, short",
+          "HaveEnough": "{have} / {need}, enough",
+          "NoReagents": "Nothing is consumed.",
+          "ToolCarried": "Tool: {tool}, carried",
+          "ToolMissing": "Tool: {tool}, not carried",
+          "Ready": "Ready to make.",
+          "StartNote": "Starting spends the materials. Each test you roll adds its Success Level to a running total stored on your sheet. At −3 the attempt collapses.",
+          "Start": "Start project"
+        },
+        "Stat": {
+          "rating": "DMG {value}",
+          "range": "Range {value} ft",
+          "ap": "AP {value}"
+        },
+        "Quality": {
+          "Heading": "Quality",
+          "Hint": "the Forge's rules, up to {rarity} at your tier",
+          "Rarity": "Rarity",
+          "Prefix": "Prefix",
+          "Suffix": "Suffix",
+          "Signature": "Signature",
+          "SignatureOption": "{from} ({cost}): {text}",
+          "SignatureFrom": "From {from}, cost {cost}:",
+          "None": "None",
+          "Option": "{name} ({cost})",
+          "Legal": "Forge: legal. Budget {spent}."
+        },
+        "Confirm": {
+          "Title": "Start project: {name}",
+          "Body": "Target {target}. Each test: {extended}. Your Craft Test: {test}.",
+          "Spend": "Starting spends the materials now: {spent}.",
+          "No": "Cancel"
+        },
+        "Abandon": {
+          "Title": "Abandon {name}?",
+          "Body": "The materials spent at its start are lost.",
+          "Yes": "Abandon",
+          "No": "Keep it"
+        }
+      }
+    },
+    "Biome": {
+      "Forest": "Forest",
+      "Grassland": "Grassland",
+      "Hills": "Hills and mountains",
+      "Swamp": "Swamp and marsh",
+      "Desert": "Desert and barrens",
+      "Snow": "Snow and tundra",
+      "Coast": "Coast and sea",
+      "Caves": "Caves and underground",
+      "Blighted": "Blighted land",
+      "Volcanic": "Volcanic"
+    },
+    "Material": {
+      "Family": {
+        "Ore": "Ore",
+        "Metal": "Metal",
+        "Hide": "Hides",
+        "Cloth": "Cloth",
+        "Herb": "Herbs",
+        "Essence": "Dusts and essences",
+        "Gem": "Stones and gems",
+        "Fish": "Fish",
+        "Game": "Game",
+        "Larder": "Larder",
+        "Powder": "Powder",
+        "Drop": "Creature parts",
+        "Sundry": "Sundries"
+      }
+    },
+    "WellFed": {
+      "Line": "Well Fed: +1 SL",
+      "Row": "+{n} SL",
+      "Name": "Well Fed",
+      "Tooltip": "Well Fed from {source}: +1 SL on every Test until your next Short Rest.",
+      "Laid": "{name} is Well Fed until their next Short Rest."
+    },
+    "Downtime": {
+      "Open": "Open downtime",
+      "Close": "Close downtime",
+      "Opened": "Downtime is open. Crafting may go ahead.",
+      "Closed": "Downtime is closed. Crafting waits for the next downtime."
     },
     "Actor": {
       "Character": "Character"
@@ -1545,6 +1942,7 @@
       "Begin": "Azeroth RPG | migrating world data to {version}",
       "Done": "Azeroth RPG | migration to {version} complete: {count} document(s) updated",
       "Failed": "Azeroth RPG | migration to {version} failed. See the console.",
+      "ProfessionsPackStale": "Migration 0.17.0 found compendium packs built before the professions, so it changed nothing and will run again. Rebuild the packs (npm run packs:parse, then npm run packs:build), restart the server and reload the world to migrate the careers.",
       "BestiaryAudit": "Migration 0.16.1.1 brought {creatures} creature(s) up to the 2026-11 bestiary. {kept} field(s) a GM had changed were kept as they are, and {unmatched} row(s) could not be matched. The console names each one.",
       "BestiaryHealth": "Migration 0.16.2.4 raised the Health of {raised} creature(s) by a quarter, as the bestiary now prints it. {kept} creature(s) whose Health a GM had changed were kept as they are. The console names each one.",
       "LegacyTitles": "A Legacy is a talent branch now, and its ranks are gone. These characters held a Legacy title: {names}. Each keeps the Legacy item as lore, and a character of its people who holds its class has the branch on the Progress tab, untaken."
@@ -3161,6 +3559,7 @@
       "Coating": "Coating",
       "Explosive": "Explosive",
       "Remedy": "Remedy",
+      "Meal": "Cooked food",
       "TargetSelf": "Yourself",
       "TargetCreature": "Willing creature within touch reach",
       "TargetItem": "An item",
@@ -3329,7 +3728,8 @@
       "Food": "Food",
       "HotMeal": "Hot meal",
       "Drink": "Drink",
-      "Blood": "Blood"
+      "Blood": "Blood",
+      "FoodAndDrink": "Food and drink"
     },
     "Rarity": {
       "Common": "Common",
@@ -3536,6 +3936,7 @@
       "EatReturns": "Health +{n}",
       "HotMealReturns": "+{n} more for a hot meal",
       "DrinkReturns": "Mana +{n}",
+      "DishIsDrink": "{name} counts as food and as drink: one is eaten for both.",
       "FocusAnyway": "Focus returns either way.",
       "TierAgainTag": "tier again",
       "NeedsProvision": "A Short Rest needs food or drink. {name} is carrying neither.",
@@ -3548,6 +3949,8 @@
       "NoDrink": "No drink: no Mana recovered.",
       "NoRefill": "No rest refills {pool}: only feeding does.",
       "TierAgain": "Hot meal",
+      "FoodTier": "Food's tier",
+      "FoodTierTag": "tier {tier}: Health +{n} more",
       "TalentMana": "{name}: +{n} Mana",
       "InscribeOpen": "Your runes are refilled, and you may inscribe them anew.",
       "NeedsNoFood": "Does not eat or drink: recovered without either.",
@@ -4009,7 +4412,8 @@
       "WhatItCovers": "What it covers",
       "Close": "Close",
       "Rank": "Rank",
-      "InCareer": "In-career: this Rank costs the cheap rate",
+      "ProfessionSkillTip": "{profession} skill: a Rank costs 10 × Rank",
+      "AdaptableSkillTip": "Adaptable: a cheap skill whatever the profession, 10 × Rank",
       "Proficiency": "Proficiency",
       "SkillModifierTip": "{ability}: skill modifier {skill}",
       "ModifiersTip": "Ability modifier {ability} · skill modifier {skill}",
@@ -4102,6 +4506,7 @@
       "Sustained": "sustained",
       "EndSustain": "End the Sustain: the spell comes off the list and what it laid is lifted",
       "BuyCost": "Buy the next Rank for {cost} XP",
+      "BuyCostOutside": "Buy the next Rank for {cost} XP. Outside your profession: 20 × Rank.",
       "CannotAfford": "The next Rank costs {cost} XP and the purse holds {purse}.",
       "LedgerRank": "{skill} Rank {rank}",
       "GrantXP": "Grant XP",
@@ -4140,7 +4545,8 @@
       "gear": "Gear",
       "progress": "Progress",
       "corruption": "Corruption",
-      "spells": "Spells"
+      "spells": "Spells",
+      "profession": "Profession"
     },
     "Overview": {
       "Worn": "Worn",
@@ -4237,7 +4643,7 @@
       "Talents": "Talents",
       "Gadgets": "Gadgets",
       "Spells": "Spells",
-      "Careers": "Careers",
+      "Professions": "Professions",
       "Classes": "Classes",
       "Races": "Races",
       "Weapons": "Weapons",
@@ -4254,7 +4660,11 @@
       "School": "School",
       "Tier": "Tier",
       "ClassAccess": "Open to",
-      "InCareerSkill": "In-career skill",
+      "ProfessionSkill": "Tier 1 skill",
+      "Ability": "Ability",
+      "Gathers": "Gathers",
+      "CraftedBy": "Crafted by",
+      "Material": "Material",
       "Frame": "Frame",
       "Size": "Size",
       "Rarity": "Rarity",
@@ -4311,6 +4721,23 @@
       "SpellpowerAwaiting": "{n} Spellpower, awaiting a school",
       "WardAwaiting": "{n} Ward, awaiting a school",
       "Encumbering": "Encumbering",
+      "CraftedBy": "Crafted by",
+      "CraftedByLine": "Crafted by {trade}, tier {tier}",
+      "CraftedByMore": "{trade}, tier {tier}",
+      "Material": "Material",
+      "MaterialTier": "{family}, tier {tier}",
+      "ProfessionAbility": "Craft Test ability",
+      "Gathers": "Gathers",
+      "GatherSkill": "Gathering skill",
+      "ProfessionTool": "Tool",
+      "Makes": "Makes",
+      "ProfessionSkills1": "Tier 1 skills",
+      "ProfessionSkills2": "Tier 2 skills",
+      "ProfessionSkills3": "Tier 3 skills",
+      "ProfessionSkills4": "Tier 4 skills",
+      "ProfessionPicks2": "Tier 2 picks",
+      "ProfessionPicks3": "Tier 3 picks",
+      "ProfessionPicks4": "Tier 4 picks",
       "ApBonus": "Body AP bonus",
       "Signature": "Signature",
       "Grants": "Grants",
@@ -4339,7 +4766,6 @@
       "DamageType": "Damage type",
       "Resist": "Resisted by",
       "Budget": "Budget",
-      "Career": "Career",
       "CastingAbility": "Casting ability",
       "Class": "Class",
       "ClassAccess": "Classes",
@@ -4349,18 +4775,13 @@
       "Description": "Description",
       "Duration": "Duration",
       "Effect": "Effect",
-      "Entry": "Entry",
       "Equipped": "Equipped",
-      "Exits": "Exits",
       "Family": "Family",
       "Features": "Features",
       "FiresOn": "Fires on",
       "Frame": "Frame",
       "Grade": "Grade",
-      "Grantor": "Grantor",
-      "InCareer": "In-career",
       "Kit": "Suggested kit",
-      "Side": "Open to",
       "Languages": "Languages",
       "Level": "Level",
       "Mana": "Mana",
@@ -4673,7 +5094,7 @@
       "CompanionNote": "A Handling Test against the DC on its entry in 14-BESTIARY; you hold one bond at a time.",
       "Bonded": "bonded",
       "BondedNotice": "{name} bonded {beast}.",
-      "AdaptableNotice": "{name} is always in-career at {skill}.",
+      "AdaptableNotice": "{name} always buys {skill} at the cheap rate.",
       "KnownLine": "Known",
       "SchoolNote": "Name the school.",
       "NoPoisons": "No poison carried: buy one (08-EQUIPMENT) or brew one (11-DOWNTIME).",
@@ -4792,6 +5213,7 @@
         "Label": "DC",
         "Given": "as the rule names it",
         "Ruled": "set by the item's quality; it cannot be changed",
+        "Work": "set by the rule for this work; it cannot be changed",
         "Defense": "the target's Defense",
         "Standard": "a Standard Test at your tier",
         "Spell": "10 + 2 per tier of the spell",
@@ -5468,6 +5890,13 @@
         "Name": "Hold a drag to the turn's Half-Actions",
         "Hint": "In a started fight, on the mover's own turn, refuse a drag further than the turn's remaining Half-Actions pay for. Turn it off to leave the distance to the table."
       },
+      "CraftingDowntime": {
+        "Name": "Crafting only in downtime",
+        "Hint": "With this on, the GM opens and closes downtime from the Actor directory, and a craft or a project's Test outside it is refused. Gathering is never held to downtime."
+      },
+      "DowntimeOpen": {
+        "Name": "Downtime is open"
+      },
       "BloodLongRest": {
         "Name": "Units of blood a San'layn's Long Rest takes",
         "Hint": "A San'layn's Short Rest takes 1 unit of blood and its Long Rest takes this many. A Long Rest without enough restores no Health, no Power and no Fatigue. Set 0 to need none."
@@ -6005,7 +6434,7 @@
         "guise": "Mortal guise",
         "class": "Class",
         "abilities": "Abilities",
-        "career": "Career",
+        "profession": "Profession",
         "skills": "Skills",
         "talents": "Talents",
         "spells": "Spells",
@@ -6048,7 +6477,23 @@
       "Down": "Down",
       "Up": "Up",
       "Points": "points",
-      "AllowTier2": "Allow a tier 2 start",
+      "Profession": {
+        "Heading": "Choose a profession",
+        "Explain1": "A profession is your trade. You choose one. It is free, and it starts at Rank 1.",
+        "Explain2": "Five of its skills cost the cheap rate now (10 × Rank). At tiers 2, 3 and 4 you pick two more of four, to eleven in all. A skill outside your profession costs double.",
+        "Explain3": "On the Profession tab of your sheet you gather materials by biome and craft items from the compendium.",
+        "Explain4": "Your profession's tool goes into your suggested kit for 1s.",
+        "Line": "{ability} · gathers {family}",
+        "Makes": "Makes",
+        "Skills": "Cheap skills at tier 1",
+        "LaterHeading": "Tiers 2 to 4",
+        "Later": "Pick 2 of 4 at each tier, to 11 in all.",
+        "Kit": "In your kit",
+        "Starts": "Starts at Rank {rank}, {rung}.",
+        "Chosen": "Chosen",
+        "Choose": "Choose {name}",
+        "CheapTip": "A cheap skill: 10 × Rank"
+      },
       "Adaptable": "Adaptable names",
       "XpSpent": "Spent {spent} of {of} experience · {held} held",
       "Racial": "Racial talent",
@@ -6122,8 +6567,7 @@
         "rollNoSet": "Roll the set first.",
         "rollBelowFloor": "No score reaches 14: roll the whole set again.",
         "rollNotFromSet": "Assign the six rolled scores and nothing else.",
-        "noCareer": "Choose a career.",
-        "careerTier": "A starting career is tier 1; this is tier {tier}.",
+        "noProfession": "Choose a profession.",
         "rankRange": "{skill} has a Rank outside 0 to 15.",
         "xpOver": "The hundred experience is spent; this spends {spent}.",
         "noAdaptable": "Adaptable names one skill.",
@@ -6147,9 +6591,6 @@
         "failed": "The character could not be finished."
       },
       "Note": {
-        "tier2Allowed": "A tier 2 start, allowed by the GM, to be justified once.",
-        "entryJudgement": "Entry: {entry} The table judges whether it is plausibly met.",
-        "careerSide": "A {side} career; the other side does not recognise it.",
         "xpHeld": "{held} experience held for the first session.",
         "untrainedWeapon": "{name}: you are not trained in this weapon; a Bane on every Test with it.",
         "armorAccess": "{name} is outside the class's armor: a Bane on every Test with it.",
@@ -6640,6 +7081,11 @@
       }
     },
     "Use": {
+      "Regen": "{name}: {health} Health and {mana} Mana at the start of each of your turns, until the span ends.",
+      "RegenHealth": "{name} restores {n} Health ({source}).",
+      "RegenMana": "{name} restores {n} Mana ({source}).",
+      "PoolGain": "{n} {pool} gained",
+      "NoPool": "No {pool} to gain: you do not use it.",
       "WardSchool": "Choose the school this elixir was brewed for.",
       "SpellpowerSchool": "Choose the school that gains 2 Spellpower for one hour.",
       "FatigueGained": "{n} Fatigue gained",
@@ -6727,7 +7173,6 @@
     "Augment": {
       "Tooltip": "{className} Augment, +{bonus} to a Casting Test (07 §3). Carried in the Ranged slot.",
       "HourglassTooltip": "{className} Augment. It holds your Sand and adds nothing to a Casting Test (07 §3). Carried in the Ranged slot.",
-      "HourglassNote": "{name} holds your Sand and adds nothing to a Casting Test (07 §3).",
       "NotYours": "{name} is {className} equipment: only that class casts through one (08 §9).",
       "HeldNote": "Casting through {name}.",
       "HourglassNote": "{name} holds your Sand. It adds nothing to a Casting Test.",
@@ -7331,7 +7776,6 @@
       "PressOnly": "The button only —",
       "PartHolds": "That sentence applies to you.",
       "PartFails": "That sentence does not apply to you.",
-      "FromCareer": "From your career, {name}",
       "WillHalve": "{name} will halve the next attack that hits you.",
       "WillReduce": "{name} will take {n} off the next attack that hits you.",
       "Mitigated": "{name} took the blow from {from} to {to}.",

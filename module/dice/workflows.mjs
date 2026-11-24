@@ -159,6 +159,10 @@ import { isAntivenom } from "../rules/antivenom.mjs";
 import { isRemedy } from "../rules/cures.mjs";
 import { INVULNERABILITY_POTION_FLAG, isInvulnerabilityPotion } from "../rules/invulnerability-potion.mjs";
 import { useAntivenom } from "../effects/antivenom-use.mjs";
+// Well Fed (D-1922): laid by a cooked food, ended by a rest; the roll reads it in `AzerothRoll.build`.
+import { REST_ENDS_FLAG, restOfDuration } from "../rules/rest-ends.mjs";
+import { layWellFed } from "../effects/well-fed.mjs";
+import { REGEN_FLAG } from "../effects/consumable-regen.mjs";
 import { acquireConsumableUse } from "../effects/consumable-use-lock.mjs";
 import { writeConsumableEffect } from "../effects/consumable-effect.mjs";
 import { requestConsumableReceipt } from "../effects/consumable-receipt.mjs";
@@ -786,6 +790,17 @@ export { medicineTest, exposeAffliction, addAffliction, afflictionCatalogue, cho
   resolveRelapse, markFirstTestBane } from "./afflictions-workflows.mjs";
 // 08 §4's Identify door (D-1435): the item menu's Arcana Test.
 export { identifyTest } from "./identify-workflows.mjs";
+// **THE PROFESSIONS' DOORS** (D-1903 to D-1930): craft, a project's test, gather, harvest,
+// disenchant and the enchantment laid in place, in a module of their own.
+export {
+  craft, workProject, abandonProject, collectProject, gather, harvest, disenchant, enchant,
+  chooseProfession, pickProfessionSkill, raiseProfessionRank,
+  craftSnapshot, gatherSnapshot, professionMaterials, projectsOf, harvestSnapshotOf, refusalWords,
+  CRAFT_PROJECT_FLAG, CRAFTED_FLAG, HARVESTED_FLAG
+} from "./profession-workflows.mjs";
+
+// The Well Fed line a roll reads (D-1922), shared with the profession doors.
+export { wellFedRow } from "./well-fed-row.mjs";
 
 /**
  * The actor a target snapshot points at: its token on its scene, else the
@@ -1107,8 +1122,10 @@ export async function rollTest({
   resilience = null,
   // **THE LINES THE ROLLER LEFT TICKED** (D-772), by id, as the dialog's choice
   // carries them: 04's Reckless lays its exposure only where its own Boon was
-  // taken.
-  chosen = [],
+  // taken. **NULL WHERE NO DIALOG WAS ASKED** (D-1994): a caller that hands no list takes every
+  // automatic line at the roll builder, Well Fed's among them, as a skipped dialog does; every
+  // reader below still reads a list (`chosen`).
+  chosen: chosenGiven = null,
   // **WHAT THE RANGER'S AND THE ROGUE'S TALENTS READ AT THE ROLL** (D-773): the
   // one enemy Engaged being the target, as the attack door measured it (Master
   // Duellist's Critical Injury); the blow being 06 §7's Riposte (Killing Spree,
@@ -1155,6 +1172,7 @@ export async function rollTest({
   clawRoll = 0,
   echo = 0
 } = {}) {
+  const chosen = Array.isArray(chosenGiven) ? chosenGiven : [];
   if (!militiaDrillSelection(actor.getFlag?.('azeroth-rpg', MILITIA_DRILL_FLAG), chosen, kind).ok) {
     ui.notifications.warn(game.i18n.localize('AZEROTH.MilitiaDrill.Refused')); return null;
   }
@@ -1655,7 +1673,11 @@ export async function rollTest({
     banes: banes + shot.banes,
     kind,
     location,
-    rollData: actor?.getRollData() ?? {}
+    rollData: actor?.getRollData() ?? {},
+    // Well Fed is read where the roll is built (`AzerothRoll.build`, the review's M7): the
+    // dialog's own list, or null where none was handed (every automatic line, D-1994).
+    roller: actor ?? null,
+    chosen: chosenGiven
   });
   // **WHICH RESILIENCE THE TEST IS** (D-1724): stamped for the after-the-die seam, which offers 02's Beyond Limits
   // on a Body or Reflex Test alone; an unstamped roll is never offered it.
@@ -3820,7 +3842,10 @@ export async function castSpell({
   // **A SPELL CAST AS A REACTION BY A FEATURE** (02 §7's Claim the Fallen: *you may use your
   // Reaction to cast Raise Dead or Animate Corpse*): `"reaction"` charges the Reaction in place of
   // the spell's own action; every other price stands.
-  castAs = null
+  castAs = null,
+  // The roll dialog's ticked line ids, for Well Fed at the one roll builder (the review's M7);
+  // null where no dialog opened, which takes every automatic line.
+  chosen: castLines = null
 } = {}) {
   if (dispersionExecution && !validDispersionExecution(dispersionExecution, actor, spell)) return null;
   // 07's Hex: *it cannot attack, cast or speak* (D-808), before anything is spent.
@@ -5311,7 +5336,8 @@ export async function castSpell({
   const roll = writtenTotal !== null
     ? AzerothRoll.written({ total: writtenTotal, dc: resolvedDC })
     : AzerothRoll.build({
-      dc: resolvedDC, modifiers, boons, banes: banes + spellLock.banes + legion.banes, kind: attackCalculation ? "attack" : "casting", rollData: actor.getRollData()
+      dc: resolvedDC, modifiers, boons, banes: banes + spellLock.banes + legion.banes, kind: attackCalculation ? "attack" : "casting", rollData: actor.getRollData(),
+      roller: actor, chosen: castLines
     });
   if (legion.banes > 0) roll.options.provenance.push({ label: "Refuse the Legion", value: null, formula: game.i18n.format("AZEROTH.DemonHunter.Talent.Legion.Bane", { names: legion.by.join(", ") }) });
   if (attackCalculation) {
@@ -7456,7 +7482,7 @@ export async function gateCastingTest(actor, { dc, source = null }) {
   modifiers.push({ label: "AZEROTH.Sheet.Proficiency", value: actor.system.proficiency ?? 0 });
   // A Casting Test made while Engaged takes its Bane (06 §5), as every casting roll does.
   const engaged = engagedNow(actor);
-  const roll = AzerothRoll.build({ dc, modifiers, boons: 0, banes: (engaged ? 1 : 0) + spellLock.banes, kind: "casting", rollData: actor.getRollData() });
+  const roll = AzerothRoll.build({ dc, modifiers, boons: 0, banes: (engaged ? 1 : 0) + spellLock.banes, kind: "casting", rollData: actor.getRollData(), roller: actor, chosen: null });
   roll.options.spellLock = { castId: spellLock.castId, banes: spellLock.banes };
   if (spellLock.banes > 0) roll.options.provenance.push({ label: "Spell Lock", value: null,
     formula: `${spellLock.banes} ${spellLock.banes === 1 ? "Bane" : "Banes"}` });
@@ -8342,6 +8368,8 @@ function spiritResistIndex(plan) {
  */
 export async function useFeature({
   actor, item, dc = null, boons = 0, banes = 0, targets = null, provenanceExtra = [],
+  // The roll dialog's ticked line ids, for Well Fed at the one roll builder (the review's M7).
+  chosen: featureLines = null,
   gadgetRest = false,
   // The Damage lines a talent put on the dialog and the roller left ticked - or,
   // with no dialog, the ones that came ticked (04, D-711 phase 2; D-768). The
@@ -11933,7 +11961,7 @@ export async function useFeature({
     if (casting) modifiers.push({ label: AZEROTH.abilities[casting], value: actor.system.abilities?.[casting]?.mod ?? 0 });
     modifiers.push({ label: "AZEROTH.Sheet.Proficiency", value: actor.system.proficiency ?? 0 });
     resolvedDC = dc ?? sys.dc ?? castingDC({ tier: actor.system.tier ?? 1, targetDefense: first?.defense ?? null });
-    roll = AzerothRoll.build({ dc: resolvedDC, modifiers, boons, banes: banes + spellLock.banes, kind: "casting", rollData: actor.getRollData() });
+    roll = AzerothRoll.build({ dc: resolvedDC, modifiers, boons, banes: banes + spellLock.banes, kind: "casting", rollData: actor.getRollData(), roller: actor, chosen: featureLines });
     roll.options.spellLock = { castId: spellLock.castId, banes: spellLock.banes };
     if (spellLock.banes > 0) roll.options.provenance.push({ label: "Spell Lock", value: null,
       formula: `${spellLock.banes} ${spellLock.banes === 1 ? "Bane" : "Banes"}` });
@@ -13545,7 +13573,7 @@ export async function useAbility({ actor, list = "creatureAbilities", index = 0,
     const engaged = engagedNow(actor);
     const invisibleTarget = situationalModifiers({ kind: "casting", targetLesserInvisible: first?.lesserInvisible === true })
       .automatic.find(line => line.id === "lesserInvisibleTarget");
-    roll = AzerothRoll.build({ dc: resolvedDC, modifiers, boons, banes: banes + (engaged ? 1 : 0) + (invisibleTarget?.banes ?? 0) + spellLock.banes, kind: "casting", rollData: actor.getRollData() });
+    roll = AzerothRoll.build({ dc: resolvedDC, modifiers, boons, banes: banes + (engaged ? 1 : 0) + (invisibleTarget?.banes ?? 0) + spellLock.banes, kind: "casting", rollData: actor.getRollData(), roller: actor, chosen: null });
     roll.options.spellLock = { castId: spellLock.castId, banes: spellLock.banes };
     if (spellLock.banes > 0) roll.options.provenance.push({ label: "Spell Lock", value: null,
       formula: `${spellLock.banes} ${spellLock.banes === 1 ? "Bane" : "Banes"}` });
@@ -13978,7 +14006,12 @@ export async function useGear({ actor, item, targets = null } = {}) {
     await actor.update({ "system.xp.earned": earned });
     lines.push(game.i18n.format("AZEROTH.Use.GrantedXp", { xp: use.xp, name: actor.name }));
   }
-  const timing = invulnerability ? untilEndOfNextTurnOrRound(actor) : spellTiming(actor, supreme?.duration ?? warding?.duration ?? durationOf(use)) ?? {};
+  // **A SPAN A REST ENDS** (*until your next Short Rest*, *until your next Long Rest*; D-1962):
+  // no core duration at all, and the effect names its rest (`rules/rest-ends.mjs`).
+  const restSpan = restOfDuration(use.duration);
+  const timing = invulnerability ? untilEndOfNextTurnOrRound(actor)
+    : restSpan ? {} : spellTiming(actor, supreme?.duration ?? warding?.duration ?? durationOf(use)) ?? {};
+  const restFlag = restSpan ? { [REST_ENDS_FLAG]: restSpan } : {};
   if (use.target === "item" && onto) {
     if (onto.parent !== actor || actor.items.get(onto.id) !== onto || !goesOn(use.appliesTo, onto))
       throw Error('Coating target changed during payment');
@@ -14129,13 +14162,42 @@ export async function useGear({ actor, item, targets = null } = {}) {
         description: veiled ? "" : await enrich(item.system.description, { relativeTo: item }),
         system: { changes: useChanges.map(c => ({ key: c.key, type: c.type ?? "add", value: String(c.value ?? ""), phase: c.phase ?? "final" })) },
         ...timing,
-        flags: { "azeroth-rpg": { consumable: item.system.identifier || item.name,
+        flags: { "azeroth-rpg": { consumable: item.system.identifier || item.name, ...restFlag,
           ...(invulnerability ? { [INVULNERABILITY_POTION_FLAG]: { version: 1 } } : {}),
           ...(immuneConditions.length ? { [IMMUNE_FLAG]: { conditions: immuneConditions, source: item.name } } : {}) } }
       });
       lines.push(game.i18n.format("AZEROTH.Use.Lasts", { name: shown }));
     }
     if (use.perRest === "short") await actor.setFlag("azeroth-rpg", "dressed", true);
+    // **A RESTORE AT THE START OF EACH OF YOUR TURNS** (Troll's Blood, Mageblood; D-1945): one
+    // carrier the turn's beat reads (`effects/consumable-regen.mjs`), ended by the rest it names.
+    if (use.regen?.health || use.regen?.mana) {
+      await writeConsumableEffect(actor, {
+        name: shown, img: item.img, origin: actor.uuid,
+        description: veiled ? "" : await enrich(item.system.description, { relativeTo: item }),
+        ...timing,
+        flags: { "azeroth-rpg": { consumable: item.system.identifier || item.name, ...restFlag,
+          [REGEN_FLAG]: { health: use.regen.health ?? 0, mana: use.regen.mana ?? 0, source: item.name } } }
+      });
+      lines.push(game.i18n.format("AZEROTH.Use.Regen", { name: shown, health: use.regen.health ?? 0, mana: use.regen.mana ?? 0 }));
+    }
+    // **A RAGE POTION** (D-1945): *a user of Rage gains N Rage*, to the cap - as ONE delta inside the
+    // pool's queue (`pool-writes.mjs#adjustPool`, D-1086's door), read when its turn comes, so a Rage
+    // gain from a blow landing between a read and the write is never written over (the final
+    // review's minor 5). The card says what moved.
+    if (use.gain?.pool && use.gain?.amount) {
+      const pool = (actor.system?.momenta ?? []).find(p => p?.name === use.gain.pool) ?? null;
+      if (pool) {
+        const { adjustPool } = await import("../documents/pool-writes.mjs");
+        const moved = await adjustPool(actor, { kind: "momentum", name: use.gain.pool, itemId: pool.itemId ?? null }, use.gain.amount);
+        lines.push(game.i18n.format("AZEROTH.Use.PoolGain", { n: Math.max(0, moved.after - moved.before), pool: game.i18n.localize(AZEROTH.momentumTypes?.[use.gain.pool] ?? use.gain.pool) }));
+      } else lines.push(game.i18n.format("AZEROTH.Use.NoPool", { pool: game.i18n.localize(AZEROTH.momentumTypes?.[use.gain.pool] ?? use.gain.pool) }));
+    }
+    // **A COOKED FOOD: WELL FED** (D-1922; the plan's M9), one at a time, until the next rest.
+    if (use.wellFed === true) {
+      await layWellFed(actor, { source: shown, img: item.img });
+      lines.push(game.i18n.format("AZEROTH.WellFed.Laid", { name: actor.name }));
+    }
     // **05's TEMPORARY HEALTH A DRAUGHT GRANTS** (08 §12's Flask of the Titans: *For
     // one hour, gain temporary Health equal to twice your level. It does not stack
     // with itself*; D-777): read off its own words, laid with an effect of the
@@ -15169,7 +15231,7 @@ function boundContext(actor, sys, called = [], dismissed = null, planted = []) {
 export async function featureMenu(actor, item) {
   const sys = item.system;
   if (sys.choice === "skills") {
-    // Adaptable (02 SS5, D-636): one skill, always in-career, held one at a
+    // Adaptable (02 SS5, D-636, D-1934): one skill, always a cheap skill, held one at a
     // time on the trait's `known` list. A race trait has no class behind it,
     // so this answers before the class lookup below.
     const held = skillFromKnown(sys.known ?? []);
@@ -15911,7 +15973,9 @@ export async function rollResilience({ actor, resilience, modifiers = null, ...r
  */
 export async function corruptionExposure({
   actor, track, dc = 12, boons = 0, banes = 0, provenanceExtra = [], occasion = null,
-  resilience: named = null, points = 1, source = null
+  resilience: named = null, points = 1, source = null,
+  // The roll dialog's ticked line ids, for Well Fed at the one roll builder (the review's M7).
+  chosen: exposureLines = null
 } = {}) {
   // THE TRACK'S RESILIENCE, unless the occasion names its own (08 §20, D-910):
   // Raise the Fallen and Undying charge Undeath against a BODY Test, as the
@@ -15930,7 +15994,9 @@ export async function corruptionExposure({
     boons,
     banes,
     modifiers: resilienceModifiers(actor, resilience, { track }),
-    rollData: actor.getRollData()
+    rollData: actor.getRollData(),
+    roller: actor,
+    chosen: exposureLines
   });
   // The Resilience the seam reads (D-1724).
   roll.options.resilience = resilience;

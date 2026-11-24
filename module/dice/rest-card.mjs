@@ -44,6 +44,8 @@ export async function restCard({
     // 08 \u00a712's hot meal and feast: *Health equal to your tier again*, beside
     // the Health it was added to.
     else if (g.kind === "tierAgain") lines.push({ label: game.i18n.localize("AZEROTH.Rest.TierAgain"), value: `+${g.amount}` });
+    // A food's own tier (O-702, D-2004): *Health equal to its tier*, on its own line.
+    else if (g.kind === "foodTier") lines.push({ label: game.i18n.localize("AZEROTH.Rest.FoodTier"), value: `+${g.amount}` });
     else if (g.kind === "pool") lines.push({ label: game.i18n.localize(AZEROTH.poolTypes[g.name] ?? g.name), value: `+${g.amount}` });
     else if (g.kind === "fatigue") lines.push({ label: game.i18n.localize("AZEROTH.Rest.Fatigue"), value: `\u2212${Math.abs(g.amount)}` });
     else if (g.kind === "noFood") flags.push(game.i18n.localize("AZEROTH.Rest.NoFood"));

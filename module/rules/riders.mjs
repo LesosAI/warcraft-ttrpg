@@ -138,6 +138,8 @@ import { talentEffect } from "./talent-effects.mjs";
 import { evaluateExpression } from "./expressions.mjs";
 // ONE reading of a gate (doors 15 and 17): Cursed Prey's *against it*.
 import { gateHolds } from "./talent-gates.mjs";
+// The highest SL a hit could reach, 05 §2's cap (10 since O-699).
+import { SL_CAP } from "./resolution.mjs";
 
 /** The effect flag a switched-on discount rider is read off (Berserk's Use lays it, D-771). */
 export const RIDER_DISCOUNT_FLAG = "riderDiscount";
@@ -492,7 +494,7 @@ export function riderConditionSpan(condition, riderSpan = null, strikerTurnSpan 
  */
 export function riderWritesOnTarget(line, { tier = 1 } = {}) {
   if (!line) return false;
-  const done = outcomeOfLine(line, { hit: true, spent: Math.max(1, Math.trunc(Number(line.cost)) || 1), tier, sl: 6 });
+  const done = outcomeOfLine(line, { hit: true, spent: Math.max(1, Math.trunc(Number(line.cost)) || 1), tier, sl: SL_CAP });
   return riderConditions(done).length > 0 || done.loseReaction === true || (Number(done.speedDrop) || 0) > 0
     || Boolean(done.noHealing) || Boolean(done.bane) || Boolean(done.plague)
     // Mana Rend takes Power off the creature struck (02 §7; D-1520).
@@ -614,7 +616,7 @@ export function ridersFor(talents = [], { pools = [], form = false, weapon = nul
       onHit: onHitAt(rider, rank),
       // What it would do on a hit that reached every SL a clause asks for, so
       // the line can say *at SL 2, Stunned* rather than nothing.
-      does: riderOutcome(rider, { hit: true, spent: spend ?? 0, rank, tier, sl: 6, abilities }),
+      does: riderOutcome(rider, { hit: true, spent: spend ?? 0, rank, tier, sl: SL_CAP, abilities }),
       available: reason === null,
       primed: Boolean(pool) && isPrimed,
       reason,

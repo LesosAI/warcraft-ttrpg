@@ -12,8 +12,8 @@
  *
  * **Preset launches are what make it part of the sheet** rather than a separate
  * tool nobody opens — `browse({category, filters})` opens it narrowed, which is
- * how D11's Progress tab reaches a branch and a career's Exits row reaches that
- * career.
+ * how D11's Progress tab reaches a branch and the Profession tab's *Choose a
+ * profession* opens the professions pack in pick mode.
  */
 
 import { AZEROTH } from "../config.mjs";
@@ -115,8 +115,8 @@ export class AzerothCompendiumBrowser extends CategoryBrowser {
 
   /**
    * Open the browser narrowed to a category, optionally with filters already
-   * applied. This is the entry point D11's Progress tab and a career's Exits
-   * row use, and it is what keeps the browser part of the sheet.
+   * applied. This is the entry point D11's Progress tab and the Profession tab
+   * use, and it is what keeps the browser part of the sheet.
    */
   static async browse({ category = "talents", filters = {}, pick = null } = {}) {
     const app = new this({ initialCategory: category });
@@ -185,9 +185,9 @@ export class AzerothCompendiumBrowser extends CategoryBrowser {
         meta: summary(key, entry).join(" \u00b7 "),
         // The class emblems after the name (D-862), each with its class in words.
         badges: classBadges(key, entry).map(b => ({ ...b, label: game.i18n.format("AZEROTH.Browser.ClassBadge", { className: b.className }) })),
-        // A career's Grantor is a sentence: the meta clips it and the row's
-        // tooltip carries it whole (2026-09-06).
-        metaTitle: key === "careers" && entry.system?.grantor ? String(entry.system.grantor) : null
+        // A long prose meta (a gadget's Use) is clipped and the row's tooltip
+        // carries it whole (2026-09-06).
+        metaTitle: null
       }));
     }
     this.#entries = entries;
@@ -268,7 +268,7 @@ export class AzerothCompendiumBrowser extends CategoryBrowser {
    */
   #sortContext(key) {
     const chosen = this.#sort.get(key) ?? { key: "name", dir: "asc" };
-    const type = { weapons: "weapon", armor: "armor", gear: "gear", services: "gear", spells: "spell", talents: "talent", careers: "career" }[key];
+    const type = { weapons: "weapon", armor: "armor", gear: "gear", services: "gear", spells: "spell", talents: "talent", professions: "profession" }[key];
     const spec = type ? (ITEM_FIELDS[type] ?? []) : [];
     const label = k => {
       if (k === "name") return game.i18n.localize("AZEROTH.Item.Name");

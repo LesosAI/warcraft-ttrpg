@@ -89,7 +89,7 @@ export async function identifyTest({ actor, item, event = null } = {}) {
 }
 
 /** The workflow the Arcana dialog runs: judged again, the stone, the mark, the die, the card. */
-async function identifyRun({ actor, boons = 0, banes = 0, modifiers = [], provenanceExtra = [], identifyCtx = null } = {}) {
+async function identifyRun({ actor, boons = 0, banes = 0, modifiers = [], provenanceExtra = [], identifyCtx = null, chosen = null } = {}) {
   const item = identifyCtx?.itemId ? actor?.items?.get(identifyCtx.itemId) ?? null : null;
   if (!item) {
     ui.notifications?.warn(t("AZEROTH.Identify.Gone"));
@@ -119,7 +119,7 @@ async function identifyRun({ actor, boons = 0, banes = 0, modifiers = [], proven
   await item.update({ [`flags.${IDENTIFY_SCOPE}.${TRIED_FLAG}`]: true });
 
   // 3. THE DIE.
-  const roll = AzerothRoll.build({ dc: testDC, kind: "skill", boons, banes, modifiers, rollData: actor.getRollData() });
+  const roll = AzerothRoll.build({ dc: testDC, kind: "skill", boons, banes, modifiers, rollData: actor.getRollData(), roller: actor, chosen });
   roll.options.provenance.push(...provenanceExtra);
   await roll.evaluate();
   await actor.offerElunesRegard?.(roll);

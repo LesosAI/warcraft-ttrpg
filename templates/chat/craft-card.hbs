@@ -1,0 +1,37 @@
+{{!--
+  THE PROFESSIONS' CARD (D11 §12, the plan's M6). One template for every card
+  the profession doors post (`dice/profession-workflows.mjs`): a Craft Test on a
+  stored project, a gather, a harvest, a Disenchant, and the three notes with
+  no die (a project started, collected or abandoned). The whole context also
+  rides the message as `flags.azeroth-rpg.craft`.
+
+  A rolled card says its verdict in words (D-622): Success or Failure and 05
+  §2's margin name, and the SL with Well Fed's addition in words beside it (the
+  plan's M9: *SL 2 (+1 Well Fed)*). A finished craft says **Crafted**, a
+  collapse **Collapsed**, each a word and never a colour alone. A natural 1 or
+  20 is not special here (D-1980), so the card names neither.
+--}}
+<div class="azeroth azeroth-card azeroth-card-craft" data-message-kind="{{kind}}">
+  {{> systems/azeroth-rpg/templates/chat/partials/card-header.hbs title=title subtitle=subtitle}}
+
+  <div class="azeroth-card-body">
+    {{#if rolled}}
+    <div class="azeroth-card-headline">
+      <span class="azeroth-total">{{total}}</span>
+      <span class="azeroth-versus">{{localize "AZEROTH.Roll.DC"}} {{azerothDash dc}}</span>
+      {{#if natural}}<span class="azeroth-natural" data-tooltip="{{localize "AZEROTH.Card.NaturalTip"}}">d20 {{natural}}{{#if modifier}} {{azerothSigned modifier}}{{/if}}</span>{{/if}}
+      <span class="azeroth-sl {{#if success}}is-success{{else}}is-failure{{/if}}">{{azerothSL sl}}{{#if wellFed}} {{localize "AZEROTH.Profession.Card.WellFed" n=wellFed}}{{/if}}</span>
+    </div>
+    {{> systems/azeroth-rpg/templates/chat/partials/verdict.hbs verdict=verdict}}
+    {{/if}}
+
+    {{#if outcomeWord}}<p class="azeroth-flag azeroth-craft-outcome is-{{outcome}}">{{outcomeWord}}</p>{{/if}}
+
+    {{#each lines as |line|}}
+    <p class="azeroth-card-line azeroth-craft-line"><span>{{line.name}}</span><em>{{line.text}}</em></p>
+    {{/each}}
+    {{#each notes as |text|}}<p class="azeroth-note">{{text}}</p>{{/each}}
+  </div>
+
+  {{#if rolled}}{{> systems/azeroth-rpg/templates/chat/partials/provenance.hbs provenance=provenance}}{{/if}}
+</div>

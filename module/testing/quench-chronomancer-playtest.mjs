@@ -19,6 +19,7 @@ import { cleanup, drainAreaWork, made, settle, warnings } from "./fixtures.mjs";
 import { AGAIN_FLAG, RECALL_FLAG, RECALL_MARKER_FLAG, RECURRENCE_FLAG } from "../rules/chronomancer.mjs";
 import { recallMarkerOf } from "../canvas/recall-marker.mjs";
 import { requestAttackApply } from "../effects/attack-resolution-apply.mjs";
+import { SL_CAP } from "../rules/resolution.mjs";
 import {
   answerAskIfAny, cardButton, castFromSheet, chronoInFight, chronomancerWith, featureNamed, freshTurn, nextTurnUntil, pressCard, pressUse,
   sandOf, textOf, tokenOf, until
@@ -55,7 +56,7 @@ export function chronomancerPlaytestBatch(context) {
       const wf = won.flags["azeroth-rpg"];
       const testSl = won.rolls[0].outcome.sl;
       assert.isTrue(wf.success, "the natural 20 failed");
-      assert.equal(wf.sl, Math.min(6, testSl + 1), "the card's SL is not the Test's raised by 1");
+      assert.equal(wf.sl, Math.min(SL_CAP, testSl + 1), "the card's SL is not the Test's raised by 1");
       assert.include(textOf(won), game.i18n.format("AZEROTH.Grit.SlRaised", { n: wf.sl - testSl, sand: 2, from: testSl, to: wf.sl }));
       // The 2 spent, net of what the same cast's card says it gained (02 §7's Sand on a cast).
       const gainedOn = card => (card.rolls[0].options.provenance ?? []).reduce((n, p) => n + (Number(/(\d+) Sand gained/.exec(String(p.formula ?? ""))?.[1]) || 0), 0);

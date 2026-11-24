@@ -1,0 +1,31 @@
+{{!--
+  ONE STORED PROJECT (D-1924, the plan's M5, D11 §12): the name in its rarity
+  ink, the plan, the running total against the target, the step log (each
+  test's SL a signed chip with a true minus sign, its number in words, never
+  colour alone), the expected time and the collapse chance, then **Roll a
+  test** (`workProject`) and **Abandon** (`abandonProject`), or **Collect** for
+  a finished project the bags had no room for. A refusal is said beside the
+  greyed button (D-681). Abandon always asks first (D-1995). Every button
+  carries an id, so keyboard focus survives the re-render a press causes.
+--}}
+<div class="azeroth-prof-project" data-project-id="{{project.id}}">
+  <p class="azeroth-prof-project-head"><strong class="{{project.rarityClass}}">{{project.name}}</strong> <span class="azeroth-prof-soft">{{project.planWords}}</span></p>
+  <p>{{project.runningWords}}</p>
+  <div class="azeroth-prof-bar" aria-hidden="true"><i style="width: {{project.fill}}%"></i></div>
+  <p class="azeroth-prof-steplog" aria-label="{{localize 'AZEROTH.Profession.Sheet.Project.Log'}}">
+    {{#each project.chips as |chip|}}<span class="azeroth-prof-step{{#if chip.negative}} is-negative{{/if}}">{{chip.text}}</span>{{else}}<span class="azeroth-prof-soft">{{localize "AZEROTH.Profession.Sheet.Project.NoTests"}}</span>{{/each}}
+  </p>
+  <p class="azeroth-prof-soft">{{project.expectedWords}}</p>
+  {{#if project.editable}}
+  <div class="azeroth-prof-actions">
+    {{#if project.ready}}
+    <button type="button" class="azeroth-prof-primary" id="{{project.domId}}-collect" data-action="collectProject" data-project-id="{{project.id}}">{{localize "AZEROTH.Profession.Sheet.Project.Collect"}}</button>
+    {{else}}
+    <button type="button" class="azeroth-prof-primary" id="{{project.domId}}-roll" data-action="workProject" data-project-id="{{project.id}}"{{#if project.refusal}} disabled{{/if}}>{{localize "AZEROTH.Profession.Sheet.Project.Roll"}}</button>
+    {{/if}}
+    <button type="button" id="{{project.domId}}-abandon" data-action="abandonProject" data-project-id="{{project.id}}">{{localize "AZEROTH.Profession.Sheet.Project.Abandon"}}</button>
+  </div>
+  {{/if}}
+  {{#if project.refusal}}<p class="azeroth-prof-refusal">{{project.refusal}}</p>{{/if}}
+  {{#if project.ready}}<p class="azeroth-prof-ok">{{localize "AZEROTH.Profession.Sheet.Project.Ready"}}</p>{{/if}}
+</div>

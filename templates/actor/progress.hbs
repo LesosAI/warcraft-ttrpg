@@ -35,31 +35,6 @@
   </details>
   {{/if}}
 
-  {{#if career.current}}
-  <h3 class="azeroth-panel-heading">
-    {{localize "AZEROTH.Career.Roads"}}
-    <span class="azeroth-career-current">
-      {{career.current.name}} &middot; {{localize "AZEROTH.Talent.Tier"}} {{career.current.tier}}
-    </span>
-  </h3>
-  <ul class="azeroth-career-exits">
-    {{#each career.exits as |exit|}}
-    <li class="azeroth-career-exit {{#unless exit.ok}}azeroth-career-exit--blocked{{/unless}}">
-      <span class="azeroth-career-exit-name">{{exit.name}}</span>
-      {{#unless exit.ok}}
-        <span class="azeroth-career-exit-needs">
-          {{localize "AZEROTH.Career.Needs"}} {{#each exit.requires}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
-        </span>
-      {{/unless}}
-      {{!-- 03's prose half. The GM judges it; the sheet only states it. --}}
-      {{#if exit.narrative}}
-        <span class="azeroth-career-exit-narrative">{{{exit.narrative}}}</span>
-      {{/if}}
-    </li>
-    {{/each}}
-  </ul>
-  {{/if}}
-
   {{!-- D11 §4's "Classes" level: each class held and the features its level
         has reached (02 §6). What is ahead is named, never drawn dimmed. --}}
   <h3 class="azeroth-panel-heading azeroth-classes-heading">

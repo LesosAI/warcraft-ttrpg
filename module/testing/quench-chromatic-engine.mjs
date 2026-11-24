@@ -162,13 +162,13 @@ export function chromaticEngineBatch(context) {
         const strip = [...creator.element.querySelectorAll(".azeroth-creator-step")].map(b => b.dataset.step);
         assert.include(strip, "guise");
         assert.notInclude(strip, "race");
-        const career = (await game.packs.get(PACK_FOR.career).getDocuments()).find(c => (c.system?.tier ?? 1) === 1);
+        const profession = (await game.packs.get(PACK_FOR.profession).getDocuments()).find(c => c.system?.identifier === "wilderness-survival");
         const racial = (outcast.system.talents ?? []).find(t => (t.tier ?? 1) <= 1);
         const classTalent = (await game.packs.get(PACK_FOR.talent).getIndex({ fields: ["system.className", "system.tier", "system.identifier", "system.race"] }))
           .find(t => t.system?.className === CHAMPION && (t.system?.tier ?? 1) === 1 && !t.system?.race);
         const result = await creator.apply({
           method: "array", abilities: { str: 14, dex: 12, con: 16, int: 10, wis: 13, cha: 8 }, rolled: null,
-          career: career.uuid, ranks: {}, racialTalent: racial?.name ?? null, classTalent: classTalent?.system?.identifier ?? null,
+          profession: profession.uuid, ranks: {}, racialTalent: racial?.name ?? null, classTalent: classTalent?.system?.identifier ?? null,
           spells: [], side: "alliance", equipment: [], name: "ZZ Engine Vaelstrasz", img: "icons/svg/mystery-man.svg"
         });
         assert.ok(result.ok, `the creator refused: ${JSON.stringify(result.reasons)}`);
@@ -212,7 +212,7 @@ export function chromaticEngineBatch(context) {
         const strip = [...creator.element.querySelectorAll(".azeroth-creator-step")].map(b => b.dataset.step);
         assert.include(strip, "guise", "an Outcast Warrior did not walk the Mortal guise");
         assert.notInclude(strip, "race");
-        const career = (await game.packs.get(PACK_FOR.career).getDocuments()).find(c => (c.system?.tier ?? 1) === 1);
+        const profession = (await game.packs.get(PACK_FOR.profession).getDocuments()).find(c => c.system?.identifier === "wilderness-survival");
         const racial = (outcast.system.talents ?? []).find(t => (t.tier ?? 1) <= 1);
         // Not a Legacy talent: a Legacy branch belongs to one people (04 §1, D-781), and a
         // guise gives looks, size, Speed and tongue only, so the creator rightly refuses a
@@ -221,7 +221,7 @@ export function chromaticEngineBatch(context) {
           .find(t => t.system?.className === "Warrior" && (t.system?.tier ?? 1) === 1 && !t.system?.race && !t.system?.legacy);
         const result = await creator.apply({
           method: "array", abilities: { str: 16, dex: 12, con: 14, int: 10, wis: 13, cha: 8 }, rolled: null,
-          career: career.uuid, ranks: {}, racialTalent: racial?.name ?? null, classTalent: classTalent?.system?.identifier ?? null,
+          profession: profession.uuid, ranks: {}, racialTalent: racial?.name ?? null, classTalent: classTalent?.system?.identifier ?? null,
           spells: [], side: "alliance", equipment: [], name: "ZZ Engine Outcast Warrior", img: "icons/svg/mystery-man.svg"
         });
         assert.ok(result.ok, `the creator refused: ${JSON.stringify(result.reasons)}`);

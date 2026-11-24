@@ -1097,55 +1097,26 @@ export function signatureBatch(context) {
       }
     });
 
-    /* ---- the career's own capability (03 §5, Phase 6) ----------------------- */
+    /* ---- a profession carries no Signature (D-1909) ---------------------------------- */
 
-    it("counts a career Signature's uses, which nothing kept before (03 §5)", async function () {
+    it("a profession carries no Signature, and the Combat tab draws no row for it (D-1909)", async function () {
       this.timeout(120000);
-      // The Field Surgeon is the one career 03 §5 writes *Once between Short
-      // Rests* on, and `CareerData` had no `signatureEffect` field to strike a
-      // use against - `AzerothActor#resetUses` walks
-      // `system.signatureEffect.use.uses`, which only `forged()` carried - so
-      // the Combat row printed *the count is the table's; nothing here keeps
-      // it*. This is the assertion that the CONSUMER moved (D-681).
+      // The career's Signature uses this test counted went with the careers (D-1903): 03's seven
+      // professions carry skills, recipes and gathering, and nothing a Use could press (D-1909).
       const actor = await makeCharacter({
-        name: "ZZ Career Signature", classes: [["Warrior", 3]], career: "Field Surgeon"
+        name: "ZZ Profession Signature", classes: [["Warrior", 3]], profession: "Blacksmithing"
       });
-      const career = actor.careerItem;
-      assert.ok(career, "the fixture embedded no career");
-      assert.equal(career.system.signatureEffect?.use?.uses?.per, "short",
-        "the career carries no limit at all: the parser stamped no descriptor");
-      assert.equal(career.system.signatureEffect.use.uses.value, 1, "the career's use is stamped empty");
-
-      const since = game.messages.size;
-      const card = await useSignatureWithDialog(actor, career);
-      assert.ok(card, "pressing a career Signature posted no card");
-      assert.equal(game.messages.size - since, 1, "one press posted more than one card");
-      assert.include(card.content, "Stabilizing a Dying character",
-        "the card does not carry 03 §5's own sentence");
-      assert.equal(career.system.signatureEffect.use.uses.value, 0, "the press did not strike the use");
-      // AND THE PARTIAL UPDATE SURVIVED IT (D-671): `CareerData.migrateData`
-      // cleans only the keys the dotted write names.
-      assert.equal(career.system.signatureEffect.use.action, "half", "striking the use emptied the action");
-      assert.equal(career.system.signatureEffect.use.uses.max, 1, "striking the use emptied the maximum");
-
-      const names = await actor.resetUses("short");
-      assert.include(names, career.name, "a Short Rest never named the career it refilled");
-      assert.equal(career.system.signatureEffect.use.uses.value, 1,
-        "a Short Rest did not refill the career's Signature");
-
-      // And the Combat tab draws the counter and a live button on that row.
+      const profession = actor.professionItem;
+      assert.ok(profession, "the fixture embedded no profession");
+      assert.isUndefined(profession.system.signatureEffect, "a profession grew a Signature descriptor");
       const sheet = await openSheet(actor);
       try {
         sheet.changeTab("combat", "primary");
         await settle();
         const row = [...sheet.element.querySelectorAll('section[data-tab="combat"] .azeroth-signatures li')]
-          .find(li => li.dataset.itemId === career.id);
-        assert.ok(row, "the Combat tab draws no row for the career's Signature");
-        assert.include(row.textContent, career.system.signature.name,
-          "the career row does not name the capability");
-        assert.ok(row.querySelector(".azeroth-feature-uses"), "the career row draws no counter");
-        assert.ok(row.querySelector('[data-action="useSignature"]'), "the career row has no Use button");
-        assert.deepEqual(checkNoRawKeys(sheet.element), [], "a raw key reached the career's Signature row");
+          .find(li => li.dataset.itemId === profession.id);
+        assert.isUndefined(row, "the Combat tab draws a row for the profession");
+        assert.notMatch(sheet.element.querySelector('section[data-tab="combat"]')?.textContent ?? "", /career/i, "the Combat tab names a career");
       } finally {
         await sheet.close();
       }
@@ -1327,19 +1298,16 @@ export function signatureBatch(context) {
       const { migrate } = await import("/systems/azeroth-rpg/module/migrations/0.12.0-signature-effects.mjs");
       const { emptySignature } = await import("/systems/azeroth-rpg/module/rules/signatures.mjs");
 
-      // A world made before the descriptor existed: the item and the career
-      // both carry the schema's initial, and both say something on their sheets
-      // that no roll in the game has heard of.
+      // A world made before the descriptor existed: the item carries the schema's initial and
+      // says something on its sheet that no roll in the game has heard of. (The career this test
+      // also staled went with the careers, D-1903.)
       const source = await widensCritical();
       const actor = await makeCharacter({
-        name: "ZZ Migration 0.12.0", classes: [["Warrior", 3]], career: "Field Surgeon"
+        name: "ZZ Migration 0.12.0", classes: [["Warrior", 3]]
       });
       const item = await equip(actor, source, `ZZ Stale ${source.name}`);
-      const career = actor.careerItem;
       await item.update({ "system.signatureEffect": emptySignature() });
-      await career.update({ "system.signatureEffect": emptySignature() });
       await until(() => item.system.signatureEffect.criticalOn === null, "the item's descriptor emptied");
-      await until(() => career.system.signatureEffect.use.uses.per === null, "the career's descriptor emptied");
 
       // **THE NAME IS NOT THE PACK'S**, so this also says the pack copy is
       // found by IDENTIFIER rather than by name alone.
@@ -1349,9 +1317,6 @@ export function signatureBatch(context) {
       assert.isAbove(touched, 0, "the migration touched nothing at all");
       await until(() => item.system.signatureEffect.criticalOn === 19,
         "the pack's descriptor reaching the stale item");
-      await until(() => career.system.signatureEffect.use.uses.per === "short",
-        "03 §5's limit reaching the stale career");
-      assert.equal(career.system.signatureEffect.use.uses.max, 1, "the career's limit came through half-formed");
 
       // AND A SECOND RUN MOVES NOTHING (CLAUDE.md §10). The builder compares
       // against the pack copy rather than against `undefined`, so a field with
@@ -1629,28 +1594,29 @@ export function signatureBatch(context) {
      * reach (D-681).
      */
 
-    it("does not write a career or delete a race when one is dropped on a CREATURE", async function () {
+    it("does not write a profession or delete a race when one is dropped on a CREATURE", async function () {
       this.timeout(90000);
       const npc = await plainCreature();
 
       // `_onCreateDescendantDocuments` wrote `system.career.itemId` against a
-      // model with no career field. The write is pruned by
-      // `ClientDatabaseBackend##preUpdateDocumentArray` before it is
-      // dispatched - but `preUpdateActor` has already fired by then, which is
-      // the only thing there is to see, and it is what the guard removes.
-      const careers = game.packs.get("azeroth-rpg.careers");
-      const career = await careers.getDocument(careers.index.contents[0]._id);
+      // model with no career field, and the profession link took the career's
+      // place (D-1903): it is a character's alone. A write against a model with
+      // no field is pruned by `ClientDatabaseBackend##preUpdateDocumentArray`
+      // before it is dispatched - but `preUpdateActor` has already fired by
+      // then, which is the only thing there is to see.
+      const professions = game.packs.get("azeroth-rpg.professions");
+      const profession = await professions.getDocument((await professions.getIndex()).contents[0]._id);
       const raised = [];
       const hook = Hooks.on("preUpdateActor", doc => { if (doc.id === npc.id) raised.push(doc.id); });
       try {
-        await npc.createEmbeddedDocuments("Item", [career.toObject()], { ...KNOWN });
+        await npc.createEmbeddedDocuments("Item", [profession.toObject()], { ...KNOWN });
         await settle();
         await new Promise(r => setTimeout(r, 250));
-        assert.deepEqual(raised, [], "dropping a career on a creature still updates it");
+        assert.deepEqual(raised, [], "dropping a profession on a creature still updates it");
       } finally {
         Hooks.off("preUpdateActor", hook);
       }
-      assert.isUndefined(npc.system.career, "a creature grew a career field");
+      assert.isUndefined(npc.system.profession, "a creature grew a profession field");
 
       // And *one race at a time* is 02 §5's rule about a character. A creature
       // states its people on the block, so a race item on it is a GM's note

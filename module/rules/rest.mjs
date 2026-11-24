@@ -12,7 +12,8 @@
  * What each rest recovers (05 §16, 05 §12, 02 §6):
  *
  *   Short Rest   Health: Constitution modifier + tier, AND ONLY IF FOOD WAS
- *                EATEN (05 §16, D-733); twice a day, counted by the table and
+ *                EATEN (05 §16, D-733), plus the food's own tier (O-702,
+ *                D-2004); twice a day, counted by the table and
  *                not here. Mana: half the pool, AND ONLY IF DRINK WAS DRUNK.
  *                Focus: full either way (05 §12: "Short Rest, and by holding
  *                position"). Energy and Momentum: untouched - Energy refills
@@ -113,6 +114,9 @@ function poolRecovery(pools, valueFor) {
  * @param {boolean} [s.eats]   food was spent on this rest
  * @param {boolean} [s.drinks] drink was spent on this rest
  * @param {boolean} [s.tierAgain] the food was a hot meal or a feast (08 §12)
+ * @param {number} [s.foodTier] the eaten food's own tier, 1 to 4 (`provisions.mjs#foodTier`;
+ *   O-702, D-2004): Health equal to it on top of the rest's own recovery, only where food
+ *   was eaten. 0 by default, so a caller that names no food adds nothing
  * @param {boolean} [s.needsNoFood] the character does not eat or drink (D-946): Health
  *   and Mana come back with neither, and no flag says either was missing
  * @param {{itemId?: string|null, amount?: number}} [s.manaExtra] Mana a talent
@@ -126,11 +130,12 @@ function poolRecovery(pools, valueFor) {
  *   "pool", name, itemId, amount}` - for the card (D-623), and what did not:
  *   `{kind: "noFood"}` and `{kind: "noDrink"}` are printed as flags so an
  *   empty rest says WHY rather than looking broken. A hot meal adds
- *   `{kind: "tierAgain", amount}` beside the Health.
+ *   `{kind: "tierAgain", amount}` beside the Health, and a food's own tier
+ *   `{kind: "foodTier", amount}` between the two.
  */
 export function shortRest({
   health, conMod = 0, tier = 1, fatigue = 0, pools = [],
-  eats = false, drinks = false, tierAgain = false, manaExtra = null, needsNoFood = false, needsNoDrink = null,
+  eats = false, drinks = false, tierAgain = false, foodTier = 0, manaExtra = null, needsNoFood = false, needsNoDrink = null,
   bloodFed = false, blood = false
 } = {}) {
   // **A SAN'LAYN RESTS ON BLOOD** (02 §5, *Your hunger.*: *You need blood in place of food and
@@ -143,6 +148,7 @@ export function shortRest({
     eats = blood === true;
     drinks = blood === true;
     tierAgain = false;
+    foodTier = 0;
   }
   // **NOTHING TO EAT, AND NOTHING NEEDED** (D-946): the rest recovers as though both
   // were taken. MY READING, for the lead: *"do not have to eat or drink"* lifts the drink
@@ -164,14 +170,19 @@ export function shortRest({
   // 08 §12: *Health equal to your tier again* on the rest a hot meal feeds -
   // added to the rest's own recovery, and only where there was a rest to feed.
   const plain = eats ? Math.max(0, conMod + tier) : 0;
+  // **A FOOD ADDS HEALTH EQUAL TO ITS TIER** (O-702, D-2004; 05 §16): the eaten food's own
+  // Wilderness Survival tier, 1 to 4, only where food was eaten. A hot meal or a Feast carries
+  // none (`provisions.mjs#restPicks`), so 08 §12's tier again is never doubled by it.
+  const own = eats ? Math.min(4, Math.max(0, Math.trunc(Number(foodTier)) || 0)) : 0;
   const bonus = eats && tierAgain ? Math.max(0, tier) : 0;
   const before = health.value ?? 0;
-  // THE TWO LINES ADD UP TO WHAT MOVED. The rest's own recovery lands first
-  // and the hot meal's tier on top of it, each capped by the maximum, so the
-  // card never prints a point of Health the cap swallowed and never counts
-  // the tier twice (once inside *Health* and once beside it).
+  // THE LINES ADD UP TO WHAT MOVED. The rest's own recovery lands first, the
+  // food's tier on it and the hot meal's tier on top, each capped by the
+  // maximum, so the card never prints a point of Health the cap swallowed and
+  // never counts a tier twice (once inside *Health* and once beside it).
   const fedTo = Math.min(health.max, before + plain);
-  const after = Math.min(health.max, fedTo + bonus);
+  const dishTo = Math.min(health.max, fedTo + own);
+  const after = Math.min(health.max, dishTo + bonus);
   // Only a character who HOLDS Mana is told the drink was missing: a
   // Warrior's card says nothing about a pool the Warrior does not have.
   const holdsMana = pools.some(p => p.kind === "power" && p.name === "mana");
@@ -187,7 +198,8 @@ export function shortRest({
     pools: [...updates, ...kept.updates],
     gains: [
       ...(fedTo > before ? [{ kind: "health", amount: fedTo - before }] : []),
-      ...(after > fedTo ? [{ kind: "tierAgain", amount: after - fedTo }] : []),
+      ...(dishTo > fedTo ? [{ kind: "foodTier", amount: dishTo - fedTo }] : []),
+      ...(after > dishTo ? [{ kind: "tierAgain", amount: after - dishTo }] : []),
       ...gains,
       ...kept.gains,
       // A blood-fed rest says *No blood* once, never *No food* and *No drink* (D-1141).
@@ -197,6 +209,29 @@ export function shortRest({
       ]),
       ...(exempt ? [{ kind: "needsNoFood" }] : [])
     ]
+  };
+}
+
+/** The gains `shortRest` prints as Health on the card: the rest's own, the food's tier, a hot meal's. */
+export const HEALTH_GAIN_KINDS = Object.freeze(["health", "foodTier", "tierAgain"]);
+
+/**
+ * **WHAT A SHORT REST WOULD RETURN, AS THE CARD WILL ADD IT** (the final review's M1). The rest
+ * window's Health line is the SUM of every Health line `shortRest` gives for the picks, so a tier 3
+ * dish chosen reads the rest's own recovery plus 3, the number the card's *Health* and *Food's
+ * tier* lines add up to; it read the rest's own recovery alone while the dish's tag said *+3 more*.
+ * Worked out through `shortRest` itself, never a second copy of the arithmetic.
+ *
+ * @param {object} base  `shortRest`'s snapshot (`health`, `conMod`, `tier`, `fatigue`, `pools`)
+ * @param {{eats?: boolean, drinks?: boolean, tierAgain?: boolean, foodTier?: number}} [picks]
+ *   `provisions.mjs#restPicks`'s answer
+ * @returns {{health: number, mana: number}}
+ */
+export function shortRestPreview(base = {}, picks = {}) {
+  const { gains } = shortRest({ ...base, ...picks });
+  return {
+    health: gains.filter(g => HEALTH_GAIN_KINDS.includes(g.kind)).reduce((n, g) => n + g.amount, 0),
+    mana: gains.filter(g => g.kind === "pool" && g.name === "mana").reduce((n, g) => n + g.amount, 0)
   };
 }
 

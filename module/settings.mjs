@@ -37,6 +37,10 @@ export const ANIMATION_LOOPS_SETTING = "animationLoops";
 export const ANIMATION_STOPS_SETTING = "animationStops";
 /** The loops this screen's own reader has hidden, by loop key (D-730). */
 export const ANIMATION_HIDDEN_SETTING = "animationHidden";
+/** *Crafting only in downtime* (D-1914): off by default, the GM's switch. */
+export const CRAFTING_DOWNTIME_SETTING = "craftingDowntimeOnly";
+/** Whether downtime is open, the GM's toggle while the switch above is on (D-1914). */
+export const DOWNTIME_OPEN_SETTING = "downtimeOpen";
 
 /**
  * Read the world map's state, whatever shape a world happens to hold.
@@ -370,6 +374,59 @@ export function registerSettings() {
     default: BLOOD_LONG_REST_DEFAULT,
     requiresReload: false
   });
+
+  // **CRAFTING ONLY IN DOWNTIME** (D-1914; the lead: *"the system should allow crafting to be done
+  // at any time, the GM can enforce it only during downtime"*). WORLD and OFF by default: with it
+  // off nothing refuses (`rules/downtime.mjs#downtimeRefusal`). With it on, the GM opens and closes
+  // downtime from the Actor directory (`DOWNTIME_OPEN_SETTING`) and a craft or a project's test
+  // outside it is refused in words; gathering never is. No reload: every door reads it at the press,
+  // and both `onChange`s re-render the sheets so a greyed Craft follows the switch.
+  game.settings.register("azeroth-rpg", CRAFTING_DOWNTIME_SETTING, {
+    name: "AZEROTH.Setting.CraftingDowntime.Name",
+    hint: "AZEROTH.Setting.CraftingDowntime.Hint",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: false,
+    requiresReload: false,
+    onChange: () => rerenderCharacterSheets()
+  });
+  game.settings.register("azeroth-rpg", DOWNTIME_OPEN_SETTING, {
+    name: "AZEROTH.Setting.DowntimeOpen.Name",
+    scope: "world",
+    config: false,
+    type: Boolean,
+    default: false,
+    requiresReload: false,
+    onChange: () => rerenderCharacterSheets()
+  });
+}
+
+/**
+ * Every open character sheet drawn again, so a Craft or a Roll a test greyed by
+ * downtime follows the GM's switch (D-1914). Guarded: a setting can change
+ * before any sheet exists.
+ */
+function rerenderCharacterSheets() {
+  for (const app of foundry.applications.instances?.values?.() ?? []) {
+    if (app?.document?.documentName === "Actor" && app.document.type === "character" && app.rendered) app.render();
+  }
+}
+
+/**
+ * **WHAT THE DOWNTIME RULE SAYS NOW** (D-1914): `{enforced, open}`, the two
+ * facts `rules/downtime.mjs#downtimeRefusal` judges. Guarded like
+ * `movementLimited`: read before the settings exist, crafting is open.
+ */
+export function downtimeState() {
+  try {
+    return {
+      enforced: game.settings.get("azeroth-rpg", CRAFTING_DOWNTIME_SETTING) === true,
+      open: game.settings.get("azeroth-rpg", DOWNTIME_OPEN_SETTING) === true
+    };
+  } catch {
+    return { enforced: false, open: false };
+  }
 }
 
 /**

@@ -684,7 +684,7 @@ export function classFeatureOnUse(className = "", name = "") {
  * Regeneration and Underfoot stay text, as Bleeding's tick does.
  */
 export const RACE_TRAITS = Object.freeze({
-  // Adaptable names one skill at creation, always in-career (02 SS5): the
+  // Adaptable names one skill at creation, always a cheap skill whatever the profession (02 SS5, D-1934): the
   // creator writes it, and Use re-picks it through the chooser (D-636).
   human: { name: "Adaptable", ...action({ action: null, choice: "skills" }) },
   dwarf: { name: "Stonefast", ...passive() },

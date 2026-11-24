@@ -104,6 +104,12 @@ const GEAR_KIND = Object.freeze({
   "Stones and essences": "material",
   "Herbs": "reagent",
   "Sundries": "sundry",
+  // 08 §17's groups the professions added (D-1940, D-1964): a stone or a powder is a
+  // material as an ore is, a creature part or a bought part a sundry's pound, and a fish or a
+  // cut of game a meal's weight, which is what it becomes.
+  "Stone and powder": "material",
+  "Parts": "sundry",
+  "Fish and game": "meal",
   "Harness and barding": "barding",
   "Storage and carry": "smallContainer"
 });

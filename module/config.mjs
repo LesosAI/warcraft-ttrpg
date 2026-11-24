@@ -79,12 +79,7 @@ AZEROTH.SCORCHED_SCHOOL = "fire";
 // A Long Rest removes one.
 AZEROTH.FATIGUE_MAX = 6;
 
-AZEROTH.careerTiers = {
-  1: "AZEROTH.Career.Tier1",
-  2: "AZEROTH.Career.Tier2",
-  3: "AZEROTH.Career.Tier3",
-  4: "AZEROTH.Career.Tier4"
-};
+// A career's four tiers went with careers (D-1903); a profession's tier is the character's (D-1905).
 
 // 02 SS4's ten languages (D-636; Draconic added by the lead, 2026-11-08: *"Add
 // Draconic"*). A people speaks its own and Common or Orcish by the side that raised
@@ -102,9 +97,10 @@ AZEROTH.languages = {
   lowCommon:   "AZEROTH.Language.LowCommon",
   draconic:    "AZEROTH.Language.Draconic"
 };
-// Who a career is open to (03 SS5), and which side raised a people (02 SS1):
-// four to the Alliance, four to the Horde, and three to neither, whose side
-// the creator asks. The side's tongue is what 02 SS4 adds to your own.
+// Which side raised a people (02 SS1): four to the Alliance, four to the
+// Horde, and three to neither, whose side the creator asks. The side's tongue
+// is what 02 SS4 adds to your own. `anyone` is read only by the retired
+// career type's `side` field, kept so a stored career still loads (0.17.0).
 AZEROTH.sides = {
   anyone:   "AZEROTH.Side.Anyone",
   alliance: "AZEROTH.Side.Alliance",
@@ -652,7 +648,9 @@ AZEROTH.consumableKinds = {
   poison:    "AZEROTH.Consumable.Poison",
   coating:   "AZEROTH.Consumable.Coating",
   explosive: "AZEROTH.Consumable.Explosive",
-  remedy:    "AZEROTH.Consumable.Remedy"
+  remedy:    "AZEROTH.Consumable.Remedy",
+  // 08 §12's Cooked food: eaten, and the eater is Well Fed (D-1922).
+  meal:      "AZEROTH.Consumable.Meal"
 };
 
 /**
@@ -671,7 +669,9 @@ AZEROTH.provisionKinds = {
   hotMeal: "AZEROTH.Provision.HotMeal",
   drink:   "AZEROTH.Provision.Drink",
   // 08 §12's Blood vial: a San'layn's rest (02 §5; D-1141).
-  blood:   "AZEROTH.Provision.Blood"
+  blood:   "AZEROTH.Provision.Blood",
+  // 08 §12's *Counts as food and as drink for a Short Rest* (D-1963): one pick, both.
+  foodAndDrink: "AZEROTH.Provision.FoodAndDrink"
 };
 
 /** Who or what a Use is aimed at. */
@@ -1148,6 +1148,162 @@ AZEROTH.skillAbility = {
 // Ranks run 0 to 15 (D-291). 05 owns the ladder.
 AZEROTH.RANK_MAX = 15;
 
+// The seven professions (03-PROFESSIONS; D-1903, D-1904). The rows - ability,
+// gathering family and skill, tool, the 5/4/4/4 skill lists - are
+// `rules/professions.mjs#PROFESSIONS`; this is the enum and its labels. A key
+// is the parser's slug of the name, so `wilderness-survival`.
+AZEROTH.professions = {
+  blacksmithing:         "AZEROTH.Profession.Name.Blacksmithing",
+  leatherworking:        "AZEROTH.Profession.Name.Leatherworking",
+  tailoring:             "AZEROTH.Profession.Name.Tailoring",
+  alchemy:               "AZEROTH.Profession.Name.Alchemy",
+  enchanting:            "AZEROTH.Profession.Name.Enchanting",
+  engineering:           "AZEROTH.Profession.Name.Engineering",
+  "wilderness-survival": "AZEROTH.Profession.Name.WildernessSurvival"
+};
+// The one who works each (the banner's *Journeyman Blacksmith*, the plan's M1).
+AZEROTH.professionAgents = {
+  blacksmithing:         "AZEROTH.Profession.Agent.Blacksmithing",
+  leatherworking:        "AZEROTH.Profession.Agent.Leatherworking",
+  tailoring:             "AZEROTH.Profession.Agent.Tailoring",
+  alchemy:               "AZEROTH.Profession.Agent.Alchemy",
+  enchanting:            "AZEROTH.Profession.Agent.Enchanting",
+  engineering:           "AZEROTH.Profession.Agent.Engineering",
+  "wilderness-survival": "AZEROTH.Profession.Agent.WildernessSurvival"
+};
+// The four rungs, one a tier (D-1912: Classic's titles, Master renamed Artisan).
+AZEROTH.rungs = {
+  apprentice: "AZEROTH.Profession.Rung.Apprentice",
+  journeyman: "AZEROTH.Profession.Rung.Journeyman",
+  expert:     "AZEROTH.Profession.Rung.Expert",
+  artisan:    "AZEROTH.Profession.Rung.Artisan"
+};
+// What a profession gathers (D-1904, D-1915). Essence comes by Disenchant and
+// takes no biome; `rules/gathering.mjs#GATHER_SKILL` says what each rolls.
+AZEROTH.gatherFamilies = {
+  ore:     "AZEROTH.Profession.Family.Ore",
+  hide:    "AZEROTH.Profession.Family.Hide",
+  cloth:   "AZEROTH.Profession.Family.Cloth",
+  herb:    "AZEROTH.Profession.Family.Herb",
+  fish:    "AZEROTH.Profession.Family.Fish",
+  essence: "AZEROTH.Profession.Family.Essence"
+};
+// 08 SS17's material families, stamped on a material as `system.material
+// {family, tier}` by the parser. `rules/recipes.mjs#cleanMaterial` nulls a
+// stored word this list lacks rather than letting it refuse the item.
+AZEROTH.materialFamilies = {
+  ore:     "AZEROTH.Material.Family.Ore",
+  metal:   "AZEROTH.Material.Family.Metal",
+  hide:    "AZEROTH.Material.Family.Hide",
+  cloth:   "AZEROTH.Material.Family.Cloth",
+  herb:    "AZEROTH.Material.Family.Herb",
+  essence: "AZEROTH.Material.Family.Essence",
+  gem:     "AZEROTH.Material.Family.Gem",
+  fish:    "AZEROTH.Material.Family.Fish",
+  game:    "AZEROTH.Material.Family.Game",
+  larder:  "AZEROTH.Material.Family.Larder",
+  powder:  "AZEROTH.Material.Family.Powder",
+  drop:    "AZEROTH.Material.Family.Drop",
+  sundry:  "AZEROTH.Material.Family.Sundry"
+};
+// The Gather dropdown's biomes (D-1915), drawn from Classic's zone types. The
+// GM names the biome and the player picks it; what grows where is the
+// chapter's table, read by the parser.
+AZEROTH.biomes = {
+  forest:    "AZEROTH.Biome.Forest",
+  grassland: "AZEROTH.Biome.Grassland",
+  hills:     "AZEROTH.Biome.Hills",
+  swamp:     "AZEROTH.Biome.Swamp",
+  desert:    "AZEROTH.Biome.Desert",
+  snow:      "AZEROTH.Biome.Snow",
+  coast:     "AZEROTH.Biome.Coast",
+  caves:     "AZEROTH.Biome.Caves",
+  blighted:  "AZEROTH.Biome.Blighted",
+  volcanic:  "AZEROTH.Biome.Volcanic"
+};
+// What a tool's rarity adds to a Craft and a Gathering Test (D-1926). A tool is
+// 1s and a better one costs the Forge's multiple (`rules/professions.mjs`).
+AZEROTH.toolBonus = { common: 0, uncommon: 1, rare: 2, epic: 3 };
+// What one Craft Test stands for, by effective tier (D-1924).
+AZEROTH.craftIntervals = {
+  hour: "AZEROTH.Profession.Interval.Hour",
+  day:  "AZEROTH.Profession.Interval.Day",
+  week: "AZEROTH.Profession.Interval.Week"
+};
+// The three harvests on a defeated creature's banner (D-1915).
+AZEROTH.harvestKinds = {
+  skin:    "AZEROTH.Profession.Harvest.Skin",
+  butcher: "AZEROTH.Profession.Harvest.Butcher",
+  salvage: "AZEROTH.Profession.Harvest.Salvage"
+};
+// The reasons the profession rules give, in words (a refusal is always said
+// beside its greyed control, D-681). `rules/professions.mjs#pickRefusal`.
+AZEROTH.professionRefusals = {
+  noProfession: "AZEROTH.Profession.Refuse.NoProfession",
+  tierLocked:   "AZEROTH.Profession.Refuse.PickTier",
+  notListed:    "AZEROTH.Profession.Refuse.NotListed",
+  held:         "AZEROTH.Profession.Refuse.Held",
+  full:         "AZEROTH.Profession.Refuse.Full",
+  // The Rank door (`profession-door.mjs#rankRaisePlan`): at the top, or the purse short.
+  top:          "AZEROTH.Profession.Refuse.RankTop",
+  purse:        "AZEROTH.Profession.Refuse.Purse",
+  // The choose door: what was handed in is no profession.
+  notProfession: "AZEROTH.Profession.Refuse.NotProfession"
+};
+// `rules/recipes.mjs#craftRefusals` and `rules/crafting.mjs#testRefusal`.
+AZEROTH.craftRefusals = {
+  notRecipe:     "AZEROTH.Profession.Refuse.NotRecipe",
+  trade:         "AZEROTH.Profession.Refuse.Trade",
+  tierLocked:    "AZEROTH.Profession.Refuse.RecipeTier",
+  downtime:      "AZEROTH.Profession.Refuse.Downtime",
+  rarityCeiling: "AZEROTH.Profession.Refuse.RarityCeiling",
+  notForgeable:  "AZEROTH.Profession.Refuse.NotForgeable",
+  tool:          "AZEROTH.Profession.Refuse.Tool",
+  short:         "AZEROTH.Profession.Refuse.Short",
+  forge:         "AZEROTH.Profession.Refuse.Forge",
+  affixTrade:    "AZEROTH.Profession.Refuse.AffixTrade",
+  room:          "AZEROTH.Profession.Refuse.Room",
+  closed:        "AZEROTH.Profession.Refuse.Closed",
+  // A project interrupted while it was being started (`crafting.mjs#testRefusal`).
+  pending:       "AZEROTH.Profession.Refuse.Pending",
+  // A stored project waits for its own trade (03 §4: the Rank is kept).
+  projectTrade:  "AZEROTH.Profession.Refuse.ProjectTrade",
+  // A crafted Signature is a catalogue row (D-1990): an unknown id or a typed sentence, and a
+  // row written for another kind of item.
+  signatureUnknown: "AZEROTH.Profession.Refuse.SignatureUnknown",
+  signatureType: "AZEROTH.Profession.Refuse.SignatureType",
+  // The enchantment's final door, judged before anything is spent (`recipes.mjs#enchantVerdict`).
+  alreadyHas:    "AZEROTH.Profession.Refuse.AlreadyHas",
+  forgeBuilt:    "AZEROTH.Profession.Refuse.ForgeBuilt",
+  affixRefused:  "AZEROTH.Profession.Refuse.AffixRefused"
+};
+// One line of a `short` refusal: *2 more Copper bar*.
+AZEROTH.CRAFT_SHORT_LINE = "AZEROTH.Profession.Refuse.ShortLine";
+// `rules/gathering.mjs#gatherRefusal` and `#disenchantRefusal`.
+AZEROTH.gatherRefusals = {
+  noProfession:   "AZEROTH.Profession.Refuse.NoGathering",
+  disenchantOnly: "AZEROTH.Profession.Refuse.DisenchantOnly",
+  tool:           "AZEROTH.Profession.Refuse.Tool",
+  noNode:         "AZEROTH.Profession.Refuse.NoNode",
+  tierLocked:     "AZEROTH.Profession.Refuse.NodeTier",
+  room:           "AZEROTH.Profession.Refuse.Room",
+  notEnchanter:   "AZEROTH.Profession.Refuse.NotEnchanter",
+  notItem:        "AZEROTH.Profession.Refuse.NotItem",
+  rarity:         "AZEROTH.Profession.Refuse.DisenchantRarity",
+  consumable:     "AZEROTH.Profession.Refuse.Consumable",
+  equipped:       "AZEROTH.Profession.Refuse.Equipped",
+  // A defeated creature (D-1915, D-1955): nothing this profession takes, one above the
+  // tier, and a mark on a creature nobody online may write.
+  harvestNone:    "AZEROTH.Profession.Refuse.HarvestNone",
+  harvestTier:    "AZEROTH.Profession.Refuse.HarvestTier",
+  noGM:           "AZEROTH.Profession.Refuse.NoGM",
+  // The harvest claimed before the die (the review's minor 1): taken already, the creature
+  // living, or the GM's client gave no answer.
+  harvested:      "AZEROTH.Profession.Refuse.Harvested",
+  living:         "AZEROTH.Profession.Refuse.Living",
+  harvestFailed:  "AZEROTH.Profession.Refuse.HarvestFailed"
+};
+
 // Five weight classes (D-489, D-505). Printed on every bestiary entry so a GM
 // knows what they are looking at before reading a number.
 AZEROTH.weightClasses = {
@@ -1200,12 +1356,17 @@ AZEROTH.MANA_BY_BAND = [
 // and by holding position, Mana on a Long Rest with half on a Short Rest.
 AZEROTH.POWER_REFILL_PER_TURN = { focus: 2, energy: 3 };
 
-// Success Level bounds — SL = trunc((total - dc) / 5), capped at ±SL_CAP.
-AZEROTH.SL_CAP = 6;
+// Success Level bounds — SL = floor((total - dc) / 5), capped at ±SL_CAP (05 §2).
+// 10 since the lead raised the whole cap from 6 (O-699: *"raise the SL whole cap"*);
+// `resolution.mjs#SL_CAP` is the same number and a Vitest holds the two together.
+AZEROTH.SL_CAP = 10;
 
 // 05 SS3: unless a DC is given, a Standard Test at the tier of whatever caused
 // it. Never a world setting - the number is the book's.
 AZEROTH.STANDARD_DC = { 1: 12, 2: 16, 3: 20, 4: 24 };
+// 05 SS3's Easy column: a Craft Test's DC at the item's effective tier (D-1935,
+// the lead's craft pacing). Gathering and Disenchant keep the Standard column.
+AZEROTH.EASY_DC = { 1: 8, 2: 12, 3: 16, 4: 20 };
 
 // 05: the Fatigue rungs that reach a Test. 3 is a Bane on Skill and Attack
 // Tests; 5 puts one on Resilience as well.

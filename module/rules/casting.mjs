@@ -276,9 +276,9 @@ export function clearcastingLays({ success = false, points = 0, free = 0 } = {})
 
 /**
  * The most Overchannel points a cast may take where Health does not bound them:
- * each point is +1 SL and 05 §2 caps a Success Level at 6.
+ * each point is +1 SL and 05 §2 caps a Success Level at `SL_CAP` (10 since O-699; it was 6).
  */
-export const OVERCHANNEL_MAX_POINTS = 6;
+export const OVERCHANNEL_MAX_POINTS = SL_CAP;
 
 /**
  * **WHAT AN OVERCHANNEL COSTS, WITH 02's OVERCHANNEL MASTERY** (the Mage's level 9:
@@ -351,7 +351,7 @@ export function spellDCFor({ abilityMod = 0, proficiency = 0 } = {}) {
 
 /** The Success Level after Overchannel, capped where every SL is capped. */
 export function overchannelledSL(sl, points = 0) {
-  return Math.min(AZEROTH.SL_CAP, sl + Math.max(0, Math.trunc(points) || 0));
+  return Math.min(SL_CAP, sl + Math.max(0, Math.trunc(points) || 0));
 }
 
 /**

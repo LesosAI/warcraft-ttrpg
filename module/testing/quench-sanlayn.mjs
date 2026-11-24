@@ -132,13 +132,13 @@ export function sanlaynBatch(context) {
         const strip = [...creator.element.querySelectorAll(".azeroth-creator-step")].map(b => b.dataset.step);
         assert.include(strip, "race");
         assert.notInclude(strip, "guise", "a San'layn walked the Mortal guise");
-        const career = (await game.packs.get(PACK_FOR.career).getDocuments()).find(c => (c.system?.tier ?? 1) === 1);
+        const profession = (await game.packs.get(PACK_FOR.profession).getDocuments()).find(c => c.system?.identifier === "wilderness-survival");
         const racial = (race.system.talents ?? []).find(t => t.name === "Clean Feeder");
         const classTalent = (await game.packs.get(PACK_FOR.talent).getIndex({ fields: ["system.className", "system.tier", "system.identifier", "system.race", "system.legacy"] }))
           .find(t => t.system?.className === "Warrior" && (t.system?.tier ?? 1) === 1 && !t.system?.race && !t.system?.legacy);
         const result = await creator.apply({
           method: "array", abilities: { str: 16, dex: 12, con: 14, int: 10, wis: 13, cha: 8 }, rolled: null,
-          career: career.uuid, ranks: {}, racialTalent: racial?.name ?? null, classTalent: classTalent?.system?.identifier ?? null,
+          profession: profession.uuid, ranks: {}, racialTalent: racial?.name ?? null, classTalent: classTalent?.system?.identifier ?? null,
           spells: [], side: "horde", equipment: [], name: "ZZ San'layn Made", img: "icons/svg/mystery-man.svg"
         });
         assert.ok(result.ok, `the creator refused: ${JSON.stringify(result.reasons)}`);

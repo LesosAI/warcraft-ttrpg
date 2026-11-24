@@ -11,12 +11,14 @@
  * Nothing is written before Finish, so Cancel is a close.
  *
  * FINISH REPRODUCES THE DROP PATH. `Actor.create({items})` skips every race,
- * class and career side effect - core dispatches descendant events only for
- * a parent that exists - so the actor is made (or taken) first and the race,
- * class, career, spells and gear are embedded in ONE call, which runs
- * `AzerothActor#_onCreateDescendantDocuments` once: the career link, the class
- * entry with Power full, the 36 class talents, the 8 racial talents and the
- * level-1 features (`_talentGrant`). The picks and the Ranks follow the grant.
+ * class and profession side effect - core dispatches descendant events only
+ * for a parent that exists - so the actor is made (or taken) first and the
+ * race, class, profession, spells and gear (the profession's tool among them,
+ * D-1923) are embedded in ONE call, which runs
+ * `AzerothActor#_onCreateDescendantDocuments` once: the profession link, the
+ * class entry with Power full, the 36 class talents, the 8 racial talents and
+ * the level-1 features (`_talentGrant`). The picks and the Ranks follow the
+ * grant.
  */
 
 import { AZEROTH } from "../config.mjs";
@@ -30,8 +32,8 @@ import { featuresFor } from "../rules/class-features.mjs";
 import { RANK_MAX, rankCost } from "../rules/xp.mjs";
 import {
   ARRAY, CLASS_ORDER, METHODS, POINT_BUY, PURSE, ROLL_DICE, ROLL_KEEP, STARTING_XP, STEPS,
-  accessNote, castingLine, classOpenTo, inCareerSkills, kitRows, numbersFor, plan, pointBuyCost, pointBuyTotal, talentArmorFor, talentShieldsFor,
-  primaryAbilities, rankSpend,
+  accessNote, castingLine, classOpenTo, kitRows, numbersFor, plan, pointBuyCost, pointBuyTotal, talentArmorFor, talentShieldsFor,
+  primaryAbilities, professionTool, proposalSkills, rankSpend,
   rollFloorMet, sideFor, skillUuid, spellsRequired, stepOnStrip, stepsFor, castsSpells, talentTaughtSpells, validate
 } from "../rules/creation.mjs";
 import { arrange } from "../rules/slots.mjs";
@@ -44,6 +46,8 @@ import { startingTalents, startingSpell, startingRacialState, draftTree, invalid
 import { crestPath } from "../rules/crests.mjs";
 import { racialTalentIcon } from "../rules/icons.mjs";
 import { SKILL_TEXT } from "../rules/skill-text.mjs";
+// The Profession step (D-1903, D-1930): the seven in 03's order, the rung a new character starts on, the tool's price.
+import { PROFESSIONS, STARTING_RANK, rungFor, toolPrice } from "../rules/professions.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -54,7 +58,7 @@ const raceImage = race => race.identifier === "goblin"
   ? "systems/azeroth-rpg/assets/art/bestiary/portraits/steamwheedle-trader.webp"
   : race.img;
 const PACKS = {
-  races: "azeroth-rpg.races", classes: "azeroth-rpg.classes", careers: "azeroth-rpg.careers",
+  races: "azeroth-rpg.races", classes: "azeroth-rpg.classes", professions: "azeroth-rpg.professions",
   talents: "azeroth-rpg.talents", spells: "azeroth-rpg.spells",
   weapons: "azeroth-rpg.weapons", armor: "azeroth-rpg.armor", gear: "azeroth-rpg.gear"
 };
@@ -75,6 +79,9 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
       creatorChooseTalent: AzerothCharacterCreator.#onChooseTalent,
       creatorUndoTalent: AzerothCharacterCreator.#onUndoTalent,
       creatorInspectSpell: AzerothCharacterCreator.#onInspectSpell,
+      // The Profession step (D-1930): a row inspects, the inspector chooses.
+      creatorInspectProfession: AzerothCharacterCreator.#onInspectProfession,
+      creatorChooseProfession: AzerothCharacterCreator.#onChooseProfession,
       creatorClearSpellFilters: AzerothCharacterCreator.#onClearSpellFilters,
       creatorGo: AzerothCharacterCreator.#onGo,
       creatorBack: AzerothCharacterCreator.#onBack,
@@ -174,8 +181,8 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
         ...(e.system ?? {})
       }));
     };
-    const [races, classes, careers, talents, spells, weapons, armor, gear] = await Promise.all([
-      docs(PACKS.races), docs(PACKS.classes), docs(PACKS.careers),
+    const [races, classes, professions, talents, spells, weapons, armor, gear] = await Promise.all([
+      docs(PACKS.races), docs(PACKS.classes), docs(PACKS.professions),
       // `legacy` is the people a Legacy's twelve belong to (04 §1, D-781).
       index(PACKS.talents, ["sort", "system.className", "system.branch", "system.legacy", "system.tier", "system.race", "system.effect", "system.identifier", "system.ranks", "system.requires"]),
       // The prose rides the index so a row can open on it without a second read (2026-09-06).
@@ -194,13 +201,17 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
         "system.weight", "system.launcher", "system.fits", "system.identifier", "system.weaponType", "flags.azeroth-rpg"]),
       index(PACKS.armor, ["system.cost", "system.rarity", "system.category", "system.shield", "system.apBonus", "system.source", "system.traits", "system.description",
         "system.weight"]),
+      // The identifier rides too: the profession's tool is found by it (D-1923, `creation.mjs#professionTool`).
       index(PACKS.gear, ["system.cost", "system.rarity", "system.quantity", "system.source", "system.traits", "system.description",
-        "system.weight", "system.capacity", "system.slot", "flags.azeroth-rpg"])
+        "system.weight", "system.capacity", "system.slot", "system.identifier", "flags.azeroth-rpg"])
     ]);
     const catalogue = [...weapons, ...armor, ...gear]
       .filter(i => (i.rarity ?? "common") === "common")
       .sort((a, b) => a.name.localeCompare(b.name));
-    this.#data = { races, classes, careers, talents, spells, catalogue };
+    // The seven in 03's order (`PROFESSIONS`), whatever order the pack hands them in.
+    const order = PROFESSIONS.map(p => p.id);
+    professions.sort((a, b) => order.indexOf(a.identifier) - order.indexOf(b.identifier) || a.name.localeCompare(b.name));
+    this.#data = { races, classes, professions, talents, spells, catalogue };
   }
 
   /** The state the window opens on: nothing chosen, the array, the road ahead. */
@@ -213,7 +224,8 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
       method: "array",
       abilities: Object.fromEntries(ABILITIES.map(k => [k, null])),
       rolled: null,
-      career: null, allowTier2: false,
+      // The profession chosen and the one in the inspector, by uuid (D-1930).
+      profession: null, inspectedProfession: null,
       ranks: {},
       adaptable: null,
       racialTalent: null, classTalent: null,
@@ -252,23 +264,24 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
       { races: this.#data.races, classes: this.#data.classes, changed }));
   }
   #classDoc(s = this.#state) { return this.#data.classes.find(c => c.uuid === s.cls) ?? null; }
-  #careerDoc(s = this.#state) { return this.#data.careers.find(c => c.uuid === s.career) ?? null; }
+  #professionDoc(s = this.#state) { return this.#data.professions.find(p => p.uuid === s.profession) ?? null; }
+  /** The profession's tool in the Common catalogue, by its gear identifier (D-1923). */
+  #findTool = identifier => this.#data.catalogue.find(i => i.type === "gear" && i.identifier === identifier) ?? null;
   #catalogueItem(uuid) { return this.#data.catalogue.find(i => i.uuid === uuid) ?? null; }
 
   /** The state as the rule reads it: plain data off the loaded documents. */
   #proposal(s = this.#state) {
     const race = this.#raceDoc(s);
     const cls = this.#classDoc(s);
-    const career = this.#careerDoc(s);
+    const profession = this.#professionDoc(s);
     const classTalent = s.classTalent ? this.#data.talents.find(t => t.identifier === s.classTalent && t.className === cls?.name && !t.race) ?? null : null;
     return {
-      race, cls, career,
+      race, cls, profession,
       // The guise's snapshot, as `system.guise` will hold it (the Chromatic Champion plan).
       guise: guiseSnapshot(this.#guiseDoc(s)),
       method: s.method,
       abilities: { ...s.abilities },
       rolled: s.rolled ? [...s.rolled] : null,
-      allowTier2: Boolean(s.allowTier2) && game.user.isGM,
       ranks: { ...s.ranks },
       adaptable: s.adaptable,
       racialTalent: s.racialTalent ? race?.talents?.find(t => t.name === s.racialTalent) ?? { name: s.racialTalent, tier: 99 } : null,
@@ -317,7 +330,7 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
         pane.raceName = p.race?.name;
         break;
       case "abilities": Object.assign(pane, this.#abilitiesPane(s, numbers)); break;
-      case "career": Object.assign(pane, await this.#careerPane(s, p)); break;
+      case "profession": Object.assign(pane, await this.#professionPane(s, p)); break;
       case "skills": Object.assign(pane, this.#skillsPane(s, p, numbers)); break;
       case "talents": Object.assign(pane, await this.#talentsPane(s, p)); break;
       case "spells": Object.assign(pane, await this.#spellsPane(s, p)); break;
@@ -348,7 +361,7 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
         { step: guiseRequired(p) ? "guise" : "race", label: game.i18n.localize("AZEROTH.Creator.Step.race"), value: p.race?.name },
         ...(guiseRequired(p) ? [{ step: "guise", label: game.i18n.localize("AZEROTH.Creator.Step.guise"), value: p.guise?.name }] : []),
         { step: "class", label: game.i18n.localize("AZEROTH.Creator.Step.class"), value: p.cls?.name },
-        { step: "career", label: game.i18n.localize("AZEROTH.Creator.Step.career"), value: p.career?.name },
+        { step: "profession", label: game.i18n.localize("AZEROTH.Creator.Step.profession"), value: p.profession?.name },
         { step: "talents", label: game.i18n.localize("AZEROTH.Creator.Step.talents"), value: [p.racialTalent?.name, p.classTalent?.name].filter(Boolean).join(", ") },
         ...(castsSpells(p.cls) ? [{ step: "spells", label: game.i18n.localize("AZEROTH.Creator.Step.spells"), value: p.spells.map(sp => sp.name).join(", ") }] : [])
       ] : [],
@@ -505,36 +518,51 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     };
   }
 
-  async #careerPane(s, p) {
-    const side = sideFor(p.race);
-    const tiers = s.allowTier2 && game.user.isGM ? [1, 2] : [1];
-    const groups = [];
-    for (const key of ["anyone", "alliance", "horde"]) {
-      const careers = this.#data.careers
-        .filter(c => tiers.includes(c.tier) && (c.side ?? "anyone") === key)
-        .sort((a, b) => a.tier - b.tier || a.name.localeCompare(b.name))
-        .map(c => ({
-          uuid: c.uuid, name: c.name, tier: c.tier, selected: c.uuid === s.career,
-          foreign: key !== "anyone" && key !== side,
-          inCareer: (c.inCareer ?? []).map(k => game.i18n.localize(AZEROTH.skills[k] ?? k)).join(", ")
-        }));
-      if (careers.length) groups.push({ key, label: game.i18n.localize(AZEROTH.sides[key]), careers });
+  /**
+   * **THE PROFESSION STEP** (D-1903, D-1930; the plan's M7): what a profession is, said above the
+   * list; the seven, each with its ability and what it gathers; and the inspector - the blurb,
+   * what it makes, the five cheap skills, the picks to come, the tool that joins the kit, the rung
+   * a new character starts on, and Choose.
+   */
+  async #professionPane(s, p) {
+    const label = (table, key) => (table?.[key] ? game.i18n.localize(table[key]) : String(key ?? ""));
+    const line = pr => game.i18n.format("AZEROTH.Creator.Profession.Line", {
+      ability: label(AZEROTH.abilities, pr.ability), family: label(AZEROTH.gatherFamilies, pr.gathers?.family)
+    });
+    const inspected = this.#data.professions.find(pr => pr.uuid === s.inspectedProfession)
+      ?? p.profession ?? this.#data.professions[0] ?? null;
+    if (inspected) s.inspectedProfession = inspected.uuid;
+    let detail = null;
+    if (inspected) {
+      const tool = professionTool(inspected, this.#findTool);
+      detail = {
+        uuid: inspected.uuid,
+        name: inspected.name,
+        img: inspected.img,
+        line: line(inspected),
+        html: await enrich(inspected.description ?? ""),
+        makes: inspected.makes ?? "",
+        skills: (inspected.skills?.[1] ?? []).map(k => label(AZEROTH.skills, k)).join(", "),
+        tool: tool ? { name: tool.name, img: tool.img, price: coins(Number.isFinite(tool.cost) ? tool.cost : (toolPrice("common") ?? 0)) } : null,
+        starts: game.i18n.format("AZEROTH.Creator.Profession.Starts", { rank: STARTING_RANK, rung: game.i18n.localize(AZEROTH.rungs[rungFor(1).key]) }),
+        chosen: inspected.uuid === s.profession,
+        chooseLabel: game.i18n.format("AZEROTH.Creator.Profession.Choose", { name: inspected.name })
+      };
     }
-    const chosen = p.career ? {
-      name: p.career.name,
-      grantor: p.career.grantor ?? "",
-      entry: p.career.entry ?? "",
-      signature: p.career.signature?.name ?? "",
-      signatureHtml: await enrich(p.career.signature?.description ?? ""),
-      inCareer: (p.career.inCareer ?? []).map(k => game.i18n.localize(AZEROTH.skills[k] ?? k)).join(", "),
-      html: await enrich(p.career.description ?? "")
-    } : null;
-    return { groups, chosen, allowTier2: Boolean(s.allowTier2) };
+    return {
+      explain: ["Explain1", "Explain2", "Explain3", "Explain4"].map(k => game.i18n.localize(`AZEROTH.Creator.Profession.${k}`)),
+      professions: this.#data.professions.map(pr => ({
+        uuid: pr.uuid, identifier: pr.identifier, name: pr.name, img: pr.img, line: line(pr),
+        chosen: pr.uuid === s.profession, inspected: pr.uuid === inspected?.uuid
+      })),
+      detail
+    };
   }
 
   #skillsPane(s, p, numbers) {
-    const inCareer = inCareerSkills({ career: p.career, adaptable: s.adaptable });
-    const spent = rankSpend(s.ranks, inCareer);
+    // The chosen profession's five and Adaptable's skill cost the cheap rate (D-1906).
+    const cheap = proposalSkills(p);
+    const spent = rankSpend(s.ranks, cheap);
     // 02 §8's own words, under the row they belong to. The step had NO
     // explanation of any skill at all: a player choosing where a hundred
     // experience goes could not read what Warfare or Handling covers without
@@ -545,12 +573,12 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     const rows = Object.entries(AZEROTH.skills).map(([key, label]) => {
       const rank = Number(s.ranks[key]) || 0;
       const ability = AZEROTH.skillAbility[key];
-      const next = rank < RANK_MAX ? rankCost(rank + 1, inCareer.has(key)) : null;
+      const next = rank < RANK_MAX ? rankCost(rank + 1, cheap.has(key)) : null;
       return {
         key, label: game.i18n.localize(label),
         abilityAbbr: game.i18n.localize(AZEROTH.abilities[ability].replace(/\.Label$/, ".Abbr")),
         rank,
-        inCareer: inCareer.has(key),
+        inProfession: cheap.has(key),
         nextCost: next,
         canUp: next !== null && spent + next <= STARTING_XP,
         canDown: rank > 0,
@@ -717,7 +745,7 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
         detail: expanded.has(row.uuid) ? AzerothCharacterCreator.detailOf(row) : ""
       });
     }
-    const kit = p.cls ? kitRows(p.cls, (name, type) => this.#data.catalogue.find(i => i.name === name && i.type === type)) : { rows: [], missing: [] };
+    const kit = p.cls ? kitRows(p.cls, (name, type) => this.#data.catalogue.find(i => i.name === name && i.type === type), { tool: professionTool(p.profession, this.#findTool) }) : { rows: [], missing: [] };
 
     // The whole Common catalogue, shelved by kind, sorted on the toggle, and
     // filtered inside the window (D-638). A shelf's rows are still the
@@ -909,8 +937,6 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
       const v = value(`ability-${key}`);
       if (v !== undefined && s.method !== "pointBuy") s.abilities[key] = v === "" ? null : Number(v);
     }
-    const career = value("career"); if (career !== undefined) s.career = career || null;
-    if (el("allowTier2")) s.allowTier2 = Boolean(el("allowTier2").checked);
     const adaptable = value("adaptable"); if (adaptable !== undefined) s.adaptable = adaptable || null;
     const racial = value("racialTalent"); if (racial !== undefined) s.racialTalent = racial || null;
     const talent = value("classTalent"); if (talent !== undefined) s.classTalent = talent || null;
@@ -1143,6 +1169,32 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     return this.#refreshChoice(target);
   }
 
+  /** A profession row inspected (D-1930): the inspector shows it; nothing is chosen. */
+  static async #onInspectProfession(event, target) {
+    this.#readForm();
+    this.#state.inspectedProfession = target.dataset.uuid ?? null;
+    return this.#refreshChoice(target);
+  }
+
+  /**
+   * A profession chosen (D-1903): one pick. The suggested kit, where it was loaded for this class,
+   * takes the new profession's tool in place of the old one's (D-1923).
+   */
+  static async #onChooseProfession(event, target) {
+    this.#readForm();
+    const doc = this.#data.professions.find(pr => pr.uuid === target.dataset.uuid) ?? null;
+    if (!doc) return null;
+    const before = professionTool(this.#professionDoc(), this.#findTool);
+    this.#state.profession = doc.uuid;
+    this.#state.inspectedProfession = doc.uuid;
+    const after = professionTool(doc, this.#findTool);
+    if (this.#state.kitLoadedFor && before?.uuid !== after?.uuid) {
+      this.#state.equipment = this.#state.equipment.filter(r => r.uuid !== before?.uuid);
+      if (after && !this.#state.equipment.some(r => r.uuid === after.uuid)) this.#state.equipment.push({ uuid: after.uuid, quantity: 1, road: true });
+    }
+    return this.render();
+  }
+
   static async #onClearSpellFilters() {
     clearTimeout(this.#searchTimer);
     Object.assign(this.#state, { spellSearch: "", spellSchool: "", spellAction: "", spellMana: "", spellSort: "name" });
@@ -1253,9 +1305,9 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     const delta = Number(target.dataset.delta) || 0;
     const rank = (Number(s.ranks[key]) || 0) + delta;
     if (rank < 0 || rank > RANK_MAX) return;
-    const inCareer = inCareerSkills({ career: this.#careerDoc(s), adaptable: s.adaptable });
+    const cheap = proposalSkills(this.#proposal(s));
     const next = { ...s.ranks, [key]: rank };
-    if (rankSpend(next, inCareer) > STARTING_XP) return;
+    if (rankSpend(next, cheap) > STARTING_XP) return;
     if (rank === 0) delete next[key];
     s.ranks = next;
     this.render();
@@ -1298,7 +1350,9 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
   loadKit() {
     const cls = this.#classDoc();
     if (!cls) return [];
-    const { rows } = kitRows(cls, (name, type) => this.#data.catalogue.find(i => i.name === name && i.type === type));
+    // The profession's tool joins the kit, last (D-1923, `creation.mjs#kitRows`).
+    const { rows } = kitRows(cls, (name, type) => this.#data.catalogue.find(i => i.name === name && i.type === type),
+      { tool: professionTool(this.#professionDoc(), this.#findTool) });
     this.#state.equipment = rows.map(r => ({ uuid: r.uuid, quantity: r.quantity, road: r.road }));
     this.#state.kitLoadedFor = cls.uuid;
     return this.#state.equipment;

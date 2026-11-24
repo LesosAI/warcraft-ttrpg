@@ -1,0 +1,157 @@
+{{!--
+  THE PROFESSION TAB (D11 §12; D-1903 to D-1930). The eighth tab, WIDE, between
+  Gear and Progress. A header with the Overview / Crafting switch, the picks
+  owed strip above both views, then the view the switch names.
+
+  **The approved mockup is the picture** (`docs/design/mockups/professions.html`).
+  Three of its rulings live in the context, never here: nothing above the
+  character's tier is drawn (D-1927), recipe groups start closed (D-1927), and
+  a refusal is said in words beside a greyed control (D-681).
+
+  **THE PART IS BUILT ONLY WHILE ITS TAB SHOWS** (D-1982). A recipe card is
+  prerendered for every recipe the profession may make (a hundred and more at
+  tier 4), so the sheet draws this part DEFERRED - the header alone - while
+  another tab is open, and `changeTab` renders it when the reader comes here.
+  `data-deferred` is what says so.
+
+  Every selector a test uses is scoped to `section[data-tab="profession"]`
+  (D-751).
+--}}
+<section class="tab azeroth-panel azeroth-panel-wide azeroth-profession {{tab.cssClass}}" data-tab="profession" data-group="primary"{{#if profession.deferred}} data-deferred{{/if}}>
+  {{#if profession.none}}
+  {{!-- No profession: what one is, and the door (the plan's M1). --}}
+  <div class="azeroth-prof-card azeroth-prof-none">
+    <h3 class="azeroth-panel-heading">{{localize "AZEROTH.Profession.Sheet.NoneHeading"}}</h3>
+    <p>{{localize "AZEROTH.Profession.Sheet.NoneHint"}}</p>
+    {{#if profession.canChoose}}
+    <button type="button" class="azeroth-prof-primary" data-action="chooseProfession">{{localize "AZEROTH.Profession.Sheet.Choose"}}</button>
+    {{/if}}
+  </div>
+  {{else}}
+
+  <header class="azeroth-prof-head">
+    {{> systems/azeroth-rpg/templates/actor/partials/item-icon.hbs img=profession.img}}
+    <div class="azeroth-prof-title">
+      <h3 class="azeroth-prof-name">{{profession.name}}</h3>
+      <p class="azeroth-prof-sub">{{profession.headerLine}}</p>
+    </div>
+    <div class="azeroth-prof-switch" role="group" aria-label="{{localize 'AZEROTH.Profession.Sheet.View.Label'}}">
+      <button type="button" id="{{profession.domId}}-view-overview" data-action="professionView" data-view="overview" aria-pressed="{{profession.overview}}">{{localize "AZEROTH.Profession.Sheet.View.Overview"}}</button>
+      <button type="button" id="{{profession.domId}}-view-crafting" data-action="professionView" data-view="crafting" aria-pressed="{{profession.crafting}}">{{localize "AZEROTH.Profession.Sheet.View.Crafting"}}</button>
+    </div>
+  </header>
+
+  {{!-- The picks owed (D-1906): above both views, and the Crafting view still works while it stands. --}}
+  {{#each profession.strips as |strip|}}
+  <div class="azeroth-prof-strip" data-pick-tier="{{strip.tier}}">
+    <p class="azeroth-prof-strip-title"><strong>{{strip.title}}</strong> <span>{{strip.hint}}</span></p>
+    <div class="azeroth-prof-chips">
+      {{#each strip.options as |opt|}}
+      <button type="button" class="azeroth-prof-chip is-pick" id="{{@root.profession.domId}}-pick-{{strip.tier}}-{{opt.skill}}" data-action="pickProfessionSkill" data-pick-tier="{{strip.tier}}" data-skill="{{opt.skill}}"
+              aria-pressed="{{opt.chosen}}"{{#if opt.stored}} disabled{{else}}{{#unless @root.profession.editable}} disabled{{/unless}}{{/if}}>{{opt.label}}{{#if opt.chosen}} <span class="azeroth-prof-mark">{{localize "AZEROTH.Profession.Sheet.Strip.ChosenMark"}}</span>{{/if}}</button>
+      {{/each}}
+      <button type="button" class="azeroth-prof-primary" id="{{@root.profession.domId}}-confirm-{{strip.tier}}" data-action="confirmProfessionPicks" data-pick-tier="{{strip.tier}}"{{#unless strip.ready}} disabled{{else}}{{#unless @root.profession.editable}} disabled{{/unless}}{{/unless}}>{{localize "AZEROTH.Profession.Sheet.Strip.Confirm"}}</button>
+    </div>
+    {{#unless strip.ready}}<p class="azeroth-prof-refusal">{{strip.owedWords}}</p>{{/unless}}
+  </div>
+  {{/each}}
+
+  {{#unless profession.deferred}}
+  {{#if profession.overview}}
+  {{> systems/azeroth-rpg/templates/actor/partials/profession-overview.hbs profession=profession}}
+  {{else}}
+
+  {{!-- THE CRAFTING VIEW (the tradeskill frame, M3). --}}
+  {{#if profession.projects.cards.length}}
+  <div class="azeroth-prof-projects">
+    <h4 class="azeroth-prof-subheading">{{localize "AZEROTH.Profession.Sheet.Project.Heading"}} <span>{{localize "AZEROTH.Profession.Sheet.Project.Hint"}}</span></h4>
+    {{#each profession.projects.cards as |project|}}
+    {{> systems/azeroth-rpg/templates/actor/partials/craft-project.hbs project=project}}
+    {{/each}}
+    {{#if profession.projects.othersWords}}<p class="azeroth-prof-soft">{{profession.projects.othersWords}}</p>{{/if}}
+  </div>
+  {{else if profession.projects.othersWords}}
+  <p class="azeroth-prof-soft">{{profession.projects.othersWords}}</p>
+  {{/if}}
+
+  {{#if profession.enchant}}
+  {{!-- Enchanting lays an affix in place (08 §18): the item, then only what it can carry at a grade the tier opens (D-1929). --}}
+  <div class="azeroth-prof-card azeroth-prof-enchant">
+    <h4 class="azeroth-prof-subheading">{{localize "AZEROTH.Profession.Sheet.Enchant.Heading"}}</h4>
+    {{#if profession.enchant.items.length}}
+    <div class="azeroth-prof-qual">
+      <label for="{{profession.domId}}-enchant-item">{{localize "AZEROTH.Profession.Sheet.Enchant.Item"}}</label>
+      <select id="{{profession.domId}}-enchant-item" data-prof-enchant="item">
+        {{#each profession.enchant.items as |it|}}<option value="{{it.id}}"{{#if it.selected}} selected{{/if}}>{{it.name}}</option>{{/each}}
+      </select>
+      <label for="{{profession.domId}}-enchant-affix">{{localize "AZEROTH.Profession.Sheet.Enchant.Affix"}}</label>
+      <select id="{{profession.domId}}-enchant-affix" data-prof-enchant="affix">
+        <option value="">{{localize "AZEROTH.Profession.Sheet.Enchant.Pick"}}</option>
+        {{#each profession.enchant.affixes as |af|}}<option value="{{af.id}}"{{#if af.selected}} selected{{/if}}>{{af.label}}</option>{{/each}}
+      </select>
+    </div>
+    {{#if profession.enchant.noAffix}}<p class="azeroth-prof-refusal">{{localize "AZEROTH.Profession.Sheet.Enchant.NoAffix"}}</p>{{/if}}
+    {{#with profession.enchant.chip as |chip|}}<p class="azeroth-prof-soft">{{localize "AZEROTH.Profession.Sheet.Trait.Hover"}} <button type="button" class="azeroth-prof-trait" data-prof-trait data-tooltip-html="{{chip.tip}}" aria-label="{{chip.aria}}">{{chip.name}}</button></p>{{/with}}
+    <div class="azeroth-prof-actions">
+      <button type="button" class="azeroth-prof-primary" data-action="layEnchantment"{{#unless profession.enchant.ready}} disabled{{/unless}}>{{localize "AZEROTH.Profession.Sheet.Enchant.Button"}}</button>
+    </div>
+    {{#if profession.enchant.refusal}}<p class="azeroth-prof-refusal">{{profession.enchant.refusal}}</p>{{/if}}
+    {{else}}
+    <p class="azeroth-prof-refusal">{{localize "AZEROTH.Profession.Sheet.Enchant.NoItems"}}</p>
+    {{/if}}
+    <p class="azeroth-prof-soft">{{localize "AZEROTH.Profession.Sheet.Enchant.Note"}}</p>
+  </div>
+  {{/if}}
+
+  <div class="azeroth-prof-craftframe">
+    <div class="azeroth-prof-listcol">
+      <div class="azeroth-prof-filters">
+        <input type="search" id="{{profession.domId}}-search" name="professionSearch" data-prof-filter="search" value="{{profession.filters.search}}"
+               placeholder="{{localize 'AZEROTH.Profession.Sheet.Filter.Search'}}" aria-label="{{localize 'AZEROTH.Profession.Sheet.Filter.Search'}}" autocomplete="off">
+        <label class="azeroth-prof-check"><input type="checkbox" id="{{profession.domId}}-have" data-prof-filter="have"{{#if profession.filters.have}} checked{{/if}}> {{localize "AZEROTH.Profession.Sheet.Filter.Have"}}</label>
+        <select id="{{profession.domId}}-tier" data-prof-filter="tier" aria-label="{{localize 'AZEROTH.Profession.Sheet.Filter.TierLabel'}}">
+          <option value="all">{{localize "AZEROTH.Profession.Sheet.Filter.AllTiers"}}</option>
+          {{#each profession.filters.tierOptions as |t|}}<option value="{{t.value}}"{{#if t.selected}} selected{{/if}}>{{t.label}}</option>{{/each}}
+        </select>
+        <select id="{{profession.domId}}-kind" data-prof-filter="kind" aria-label="{{localize 'AZEROTH.Profession.Sheet.Filter.KindLabel'}}">
+          <option value="all">{{localize "AZEROTH.Profession.Sheet.Filter.AllKinds"}}</option>
+          {{#each profession.filters.kindOptions as |k|}}<option value="{{k.key}}"{{#if k.selected}} selected{{/if}}>{{k.label}}</option>{{/each}}
+        </select>
+        <button type="button" data-action="openAllRecipes">{{localize "AZEROTH.Profession.Sheet.Filter.OpenAll"}}</button>
+        <button type="button" data-action="closeAllRecipes">{{localize "AZEROTH.Profession.Sheet.Filter.CloseAll"}}</button>
+      </div>
+      <div class="azeroth-prof-reclist" aria-label="{{localize 'AZEROTH.Profession.Sheet.List.Label'}}">
+        {{#each profession.groups as |group|}}
+        {{!-- A group is a <details>: it starts closed (D-1927), the reader opens it, and a
+              filter opens what it matches. Its toggle is remembered per profession and group
+              on the reader's own user flag. --}}
+        <details class="azeroth-prof-group" data-recipe-group="{{group.key}}"{{#if group.open}} open{{/if}}>
+          <summary class="azeroth-prof-grouphead">
+            <span class="azeroth-prof-groupname">{{group.label}} <span class="azeroth-prof-count">{{group.countWords}}</span></span>
+            {{#if group.makeable}}<span class="azeroth-prof-canmake">{{group.makeableWords}}</span>{{/if}}
+          </summary>
+          <ul class="azeroth-prof-rows" aria-label="{{group.label}}">
+            {{#each group.recipes as |row|}}
+            {{> systems/azeroth-rpg/templates/actor/partials/recipe-row.hbs row=row}}
+            {{/each}}
+          </ul>
+        </details>
+        {{else}}
+        <p class="azeroth-prof-soft azeroth-prof-empty">{{#if profession.filters.active}}{{localize "AZEROTH.Profession.Sheet.Filter.None"}} <button type="button" data-action="clearRecipeFilters">{{localize "AZEROTH.Profession.Sheet.Filter.Clear"}}</button>{{else}}{{localize "AZEROTH.Profession.Sheet.List.Nothing"}}{{/if}}</p>
+        {{/each}}
+      </div>
+    </div>
+
+    {{!-- ONE CARD PRERENDERED A RECIPE, all hidden but the one picked, so a pick
+          costs no render (D-738's pattern, D11 §12). --}}
+    <aside class="azeroth-prof-detailcol" aria-live="polite">
+      <p class="azeroth-prof-soft azeroth-prof-pickhint"{{#if profession.selected}} hidden{{/if}}>{{localize "AZEROTH.Profession.Sheet.Detail.Pick"}}</p>
+      {{#each profession.cards as |card|}}
+      {{> systems/azeroth-rpg/templates/actor/partials/recipe-detail.hbs card=card}}
+      {{/each}}
+    </aside>
+  </div>
+  {{/if}}
+  {{/unless}}
+  {{/if}}
+</section>

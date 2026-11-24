@@ -59,8 +59,9 @@ export function editingBatch(context) {
         const buy = sheet.element.querySelector('[data-action="buyRank"][data-skill="athletics"]');
         assert.ok(buy, "no Buy button on Athletics");
         assert.isFunction(sheet.options.actions.buyRank, "buyRank is not registered");
-        const inCareer = (actor.careerItem?.system?.inCareer ?? []).includes("athletics");
-        const cost = 10 * 1 * (inCareer ? 1 : 2);
+        // No profession holds Athletics here, so it is outside the profession and double (D-1906).
+        const cheap = actor.professionSkills().has("athletics");
+        const cost = 10 * 1 * (cheap ? 1 : 2);
         const wait = untilHook("updateActor", 5000, a => a.id === actor.id);
         click(buy);
         await wait;

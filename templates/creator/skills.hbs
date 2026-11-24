@@ -1,4 +1,4 @@
-{{!-- Step 5 (01 §4, D-479): the hundred experience on 02 §8's ladder; in-career at the cheap rate. --}}
+{{!-- Step 5 (01 §4, D-479): the hundred experience on 02 §8's ladder; the profession's skills at the cheap rate (D-1906). --}}
 {{#if pane.human}}
 <div class="azeroth-forge-row">
   <label for="azeroth-creator-adaptable">{{localize "AZEROTH.Creator.Adaptable"}}</label>
@@ -14,8 +14,8 @@
   {{!-- The name is a button: 02 §8's own words open UNDER the row, so the
         skill you are reading about stays where your eye already is. The step
         carried no explanation of any skill at all before (2026-09-07). --}}
-  <li class="azeroth-creator-skill{{#if row.inCareer}} is-in-career{{/if}}{{#if row.expanded}} is-open{{/if}}">
-    <button type="button" class="azeroth-creator-skill-name azeroth-creator-expand" data-action="creatorExpand" data-key="{{row.key}}" aria-expanded="{{row.expanded}}">{{#if row.inCareer}}<span class="azeroth-in-career" aria-hidden="true">●</span> {{/if}}{{row.label}}</button>
+  <li class="azeroth-creator-skill{{#if row.inProfession}} is-cheap{{/if}}{{#if row.expanded}} is-open{{/if}}">
+    <button type="button" class="azeroth-creator-skill-name azeroth-creator-expand" data-action="creatorExpand" data-key="{{row.key}}" aria-expanded="{{row.expanded}}">{{#if row.inProfession}}<span class="azeroth-cheap-skill" data-tooltip="{{localize 'AZEROTH.Creator.Profession.CheapTip'}}">●</span> {{/if}}{{row.label}}</button>
     <span class="azeroth-creator-skill-ability">{{row.abilityAbbr}}</span>
     <button type="button" class="azeroth-uses-step" data-action="creatorStepRank" data-skill="{{row.key}}" data-delta="-1" {{#unless row.canDown}}disabled{{/unless}} aria-label="{{localize "AZEROTH.Creator.Down"}}">−</button>
     <span class="azeroth-creator-rank">{{row.rank}}</span>

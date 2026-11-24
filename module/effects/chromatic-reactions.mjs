@@ -170,7 +170,8 @@ export async function askDisruptWeave({ caster, spell, roll }) {
     const { resilienceModifiers } = game.system.azeroth.workflows;
     const test = AzerothRoll.build({
       dc, kind: "resilience", banes: row.banes,
-      modifiers: resilienceModifiers(caster, row.resilience), rollData: caster.getRollData?.() ?? {}
+      modifiers: resilienceModifiers(caster, row.resilience), rollData: caster.getRollData?.() ?? {},
+      roller: caster, chosen: null
     });
     // The Resilience the after-the-die seam reads (02's Beyond Limits, D-1724).
     test.options.resilience = row.resilience;

@@ -125,7 +125,7 @@ export function legacyBranchesBatch(context) {
         method: "array",
         abilities: { str: 10, dex: 16, con: 13, int: 8, wis: 14, cha: 12 },
         rolled: null,
-        career: await uuidOf(PACK_FOR.career, "Grave-Tender"),
+        profession: await uuidOf(PACK_FOR.profession, "Wilderness Survival"),
         allowTier2: false,
         ranks: { survival: 2 },
         adaptable: null,
@@ -175,21 +175,27 @@ export function legacyBranchesBatch(context) {
       const creator = new (game.system.azeroth.creator)({});
       await creator.render({ force: true });
       try {
+        // The step is a talent tree since 0.12.32 (`ccfcae9c4`): a branch is a button
+        // (`creatorBranch`, `data-branch`) and a talent is chosen through `creatorChooseTalent`; the
+        // `input[name="classTalent"]` radios this test read are gone. A Legacy reaches the step as its
+        // branch, so the people who keep it see the branch and nobody else does.
+        const warrior = await fromPack(PACK_FOR.class, "Warrior");
+        const own = (warrior.system.branches ?? []).map(b => b.name ?? b);
         const offered = async race => {
           await creator.setState({ race: await uuidOf(PACK_FOR.race, race), cls: await uuidOf(PACK_FOR.class, "Warrior"), classTalent: null, step: "talents" });
           await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-          return [...creator.element.querySelectorAll('input[name="classTalent"]')].map(i => ({ value: i.value, checked: i.checked }));
+          return {
+            branches: [...creator.element.querySelectorAll('[data-action="creatorBranch"]')].map(b => b.dataset.branch),
+            chosen: creator.state.classTalent ?? null
+          };
         };
         const orc = await offered("Orc");
-        assert.include(orc.map(o => o.value), "wolfs-pace", "an orc Warrior is not offered Wolf's Pace");
-        assert.isFalse(orc.some(o => o.checked), "a talent was chosen before the player chose one");
+        assert.include(orc.branches, "Blademaster", "an orc Warrior is not offered Blademaster, Wolf's Pace's branch");
+        assert.isNull(orc.chosen, "a talent was chosen before the player chose one");
         const human = await offered("Human");
-        assert.isAbove(human.length, 0, "a human Warrior is offered no tier 1 talent at all");
-        assert.notInclude(human.map(o => o.value), "wolfs-pace", "a human Warrior is offered another people's Legacy");
-        for (const id of ["read-the-blade", "telling-blow", "bash", "stout-heart", "axe-and-hammer"]) {
-          assert.notInclude(human.map(o => o.value), id, `a human Warrior is offered the Legacy talent ${id}`);
-        }
-        assert.isFalse(human.some(o => o.checked), "a talent was chosen before the player chose one");
+        assert.isAbove(human.branches.length, 0, "a human Warrior is offered no branch at all");
+        assert.deepEqual(human.branches.filter(b => !own.includes(b)), [], "a human Warrior is offered another people's Legacy branch");
+        assert.isNull(human.chosen, "a talent was chosen before the player chose one");
       } finally {
         await creator.close().catch(() => null);
       }

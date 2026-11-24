@@ -15,9 +15,13 @@
  * using on V14.
  */
 
-import { computeSL, forcedOutcome, forcedSlOf, netAdvantage, resolveTest, testFormula } from "../rules/resolution.mjs";
+import { computeSL, forcedOutcome, forcedSlOf, netAdvantage, resolveAdjusted, resolveTest, testFormula } from "../rules/resolution.mjs";
 // A read scroll's Test is the writer's total, with no die (08 §14; D-1436).
 import { writtenOutcome } from "../rules/scrolls.mjs";
+// Well Fed's +1 SL, added AFTER the SL is worked out and never to the margin (D-1922).
+import { withWellFed } from "../rules/well-fed.mjs";
+// The roller's Well Fed line, read where the roll is built (the review's M7).
+import { wellFedRow } from "./well-fed-row.mjs";
 
 export class AzerothRoll extends Roll {
   /**
@@ -32,6 +36,9 @@ export class AzerothRoll extends Roll {
    * @param {string} [o.kind]          skill | attack | casting | resilience
    * @param {string} [o.location]      body | head | limb, for an attack.
    * @param {object} [o.rollData]      Actor roll data for formula resolution.
+   * @param {Actor|null} o.roller        WHO MAKES THE TEST - required by the census, null for none.
+   * @param {string[]|null} [o.chosen]   the roll dialog's ticked line ids; null where no dialog
+   *        opened, which takes every automatic line (a skipped dialog's own rule).
    * @returns {AzerothRoll}
    */
   static build({
@@ -42,7 +49,9 @@ export class AzerothRoll extends Roll {
     kind = "skill",
     location = null,
     rollData = {},
-    flavor = ""
+    flavor = "",
+    roller = null,
+    chosen = null
   } = {}) {
     const net = netAdvantage(boons, banes);
     const dice = testFormula(boons, banes);
@@ -56,7 +65,7 @@ export class AzerothRoll extends Roll {
     const formula = [dice, ...terms].join(" ");
     const total = modifiers.reduce((sum, m) => sum + (Number(m.value) || 0), 0);
 
-    return new this(formula, rollData, {
+    const roll = new this(formula, rollData, {
       azeroth: true,
       kind,
       dc,
@@ -71,6 +80,19 @@ export class AzerothRoll extends Roll {
       ],
       flavor
     });
+    // **WELL FED: +1 SL ON EVERY TEST, AT THE ONE ROLL BUILDER** (D-1922; the review's M7). The
+    // dialog draws the ticked line on every Test it opens, and 05 §16 says *every Test you make*,
+    // but only `rollTest` and the profession doors set `options.wellFed`, so a Casting Test, a
+    // Medicine Test, an Identify Test and every Resilience Test built elsewhere showed the line and
+    // left it out. The roller is read HERE, so no door can show it and drop it;
+    // `azeroth-roll-census.test.mjs` fails any `AzerothRoll.build` that names no `roller`.
+    // `AzerothRoll#outcome` adds it after the SL and never to the margin.
+    const fed = roller ? wellFedRow(roller, chosen) : null;
+    if (fed) {
+      roll.options.wellFed = fed.sl;
+      roll.options.provenance.push(fed.row);
+    }
+    return roll;
   }
 
   /**
@@ -152,17 +174,29 @@ export class AzerothRoll extends Roll {
     // 14's Shadow Step, Step Aside and Gyth Takes the Air (D-809): *the next attack
     // against him this round misses*, whatever the die - carried on the options so the
     // card read back off its message says the same.
+    // **WELL FED** (D-1922): `options.wellFed` is the roller's ticked line, set by the door
+    // before the die. The SL rises by one after it is worked out; success is still read off
+    // the margin, so a failure stays a failure (`rules/well-fed.mjs#withWellFed`). Carried on
+    // the options, so a card read back off its message says the same.
+    const fed = { fed: Number(this.options?.wellFed) > 0 };
+    // **A CRAFT OR A GATHERING TEST READS THE ADJUSTED TOTAL ALONE** (D-1980; the lead: *"nat 1 -
+    // adjust rolls matter, not crit fails"*): no natural 20 always succeeds and no natural 1
+    // always fails. `options.adjusted` is set by the profession doors; every other Test keeps
+    // 05 section 1's rule below.
+    if (this.options?.adjusted === true) {
+      return withWellFed(resolveAdjusted({ natural: this.natural, modifier: this.total - this.natural, dc: this.dc ?? 10 }), fed);
+    }
     if (this.options?.forcedMiss) {
       const base = resolveTest({ natural: this.natural, modifier: this.total - this.natural, dc: this.dc ?? 10, criticalOn: this.options.criticalOn ?? 20 });
-      return { ...base, success: false, sl: Math.min(base.sl ?? 0, -1), critical: false, forcedMiss: true };
+      return withWellFed({ ...base, success: false, sl: Math.min(base.sl ?? 0, -1), critical: false, forcedMiss: true }, fed);
     }
-    return resolveTest({
+    return withWellFed(resolveTest({
       natural: this.natural,
       modifier: this.total - this.natural,
       dc: this.dc ?? 10,
       // Keen's wider Critical Injury (08 §5), carried on the options.
       criticalOn: this.options.criticalOn ?? 20
-    });
+    }), fed);
   }
 
   /** A natural 20 — normal damage plus a Critical Injury (06 §1). */

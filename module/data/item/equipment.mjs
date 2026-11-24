@@ -36,6 +36,8 @@ import { cleanWeaponType } from "../../rules/wield.mjs";
 import { cleanRuneFields } from "../../rules/runes.mjs";
 import { cleanProvision } from "../../rules/provisions.mjs";
 import {prostheticWieldAllowed} from "../../rules/prosthetics.mjs";
+// Who makes it and what it is made of (the professions, D-1907, D-1918).
+import { cleanCraft, cleanMaterial } from "../../rules/recipes.mjs";
 // 02 §7's Consecrated and 04's Sanctified Weapon (D-772): the trait a
 // Consecrated weapon carries, derived while the flag stands.
 import { CONSECRATED_FLAG, consecratedTrait } from "../../rules/class-features.mjs";
@@ -216,6 +218,42 @@ const forged = () => ({
   )
 });
 
+/**
+ * WHO MAKES IT (D-1918): the profession, the recipe tier and, where 08 prints
+ * them, the recipe's own reagents (D-1921), by §17 material identifier. Null on
+ * anything no 08 *Crafting* table names, every Classic find included. Stamped
+ * by the parser; `rules/recipes.mjs#craftOf` is the one reader. `family` and
+ * `sundry` override the trade's derivation ladder for a recipe with no list of
+ * its own (an alchemist's stones and oils derive from metal); null takes the
+ * trade's (`rules/recipes.mjs#TRADE_DERIVE`).
+ *
+ * Free strings, cleaned in `migrateData` (`cleanCraft`), never a `choices` that
+ * would refuse a stored item at load (CLAUDE.md §15). A new nullable field: no
+ * stored item changes, and the parser emits it LAST so `check-packs.mjs`'s key
+ * order moves only by the appended key.
+ */
+const stampFields = () => ({
+  trade: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+  tier: new fields.NumberField({ required: true, integer: true, initial: 1, min: 1, max: 4 }),
+  reagents: new fields.ArrayField(new fields.SchemaField({
+    identifier: new fields.StringField({ required: true, blank: false }),
+    count: new fields.NumberField({ required: true, integer: true, initial: 1, min: 1 })
+  }), { initial: [] }),
+  family: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+  sundry: new fields.StringField({ required: false, nullable: true, blank: false, initial: null })
+});
+
+const craftField = () => ({
+  craft: new fields.SchemaField({
+    ...stampFields(),
+    // **THE OTHER PROFESSIONS THAT MAKE IT** (O-662, D-1960): the seven smelted bars are
+    // Blacksmithing's and Engineering's, Truesilver bar Alchemy's too. Each is a stamp of
+    // its own shape; `rules/recipes.mjs#craftsOf` reads them all, `craftOf(item, trade)`
+    // the one a trade makes it by. Empty for an item one profession makes.
+    alt: new fields.ArrayField(new fields.SchemaField(stampFields()), { initial: [] })
+  }, { required: false, nullable: true, initial: null })
+});
+
 /* -------------------------------------------- */
 
 /**
@@ -285,7 +323,8 @@ export class WeaponData extends foundry.abstract.TypeDataModel {
           kind: new fields.StringField({ required: true, blank: false, initial: "blood" }),
           spent: new fields.BooleanField({ initial: false })
         }), { initial: [] })
-      }, { required: false, nullable: true, initial: null })
+      }, { required: false, nullable: true, initial: null }),
+      ...craftField()
     };
   }
 
@@ -308,6 +347,7 @@ export class WeaponData extends foundry.abstract.TypeDataModel {
       cleanWellField(source);
       // The runes (D-943): only the keys handed in, at every depth (CLAUDE.md §15).
       cleanRuneFields(source);
+      cleanCraft(source);
     }
     return super.migrateData(source);
   }
@@ -373,7 +413,8 @@ export class ArmorData extends foundry.abstract.TypeDataModel {
       // a Reinforced prefix's point, a shield's own (D-632).
       apBonus: new fields.NumberField({ required: true, integer: true, initial: 0, min: 0 }),
       ...forged(),
-      ...kept()
+      ...kept(),
+      ...craftField()
     };
   }
 
@@ -383,6 +424,7 @@ export class ArmorData extends foundry.abstract.TypeDataModel {
     cleanBonusField(source);
     cleanSignatureEffect(source);
     cleanWellField(source);
+    cleanCraft(source);
     return super.migrateData(source);
   }
 
@@ -435,7 +477,16 @@ export class GearData extends foundry.abstract.TypeDataModel {
       // What pressing Use does (08 §12, §13; D-668). Seeded off the entry's
       // own words by `rules/consumables.mjs` and stamped by the parser;
       // `kind: "none"` is a thing with no Use at all.
-      use: useField()
+      use: useField(),
+      ...craftField(),
+      // WHAT KIND OF MATERIAL it is (08 §17; D-1907): the family a recipe's
+      // derivation and a biome's nodes name, and its tier (0 for a sundry).
+      // Null on everything that is not a §17 material. Stamped by the parser;
+      // a free string cleaned in `migrateData` (`cleanMaterial`).
+      material: new fields.SchemaField({
+        family: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+        tier: new fields.NumberField({ required: false, nullable: true, integer: true, initial: null, min: 0, max: 4 })
+      }, { required: false, nullable: true, initial: null })
     };
   }
 
@@ -473,6 +524,8 @@ export class GearData extends foundry.abstract.TypeDataModel {
     cleanBonusField(source);
     cleanSignatureEffect(source);
     cleanWellField(source);
+    cleanCraft(source);
+    cleanMaterial(source);
     return super.migrateData(source);
   }
 }
@@ -568,6 +621,19 @@ function useField() {
       beats: new fields.ArrayField(new fields.StringField({ blank: false }), { initial: ["turn", "hour"] }),
       reason: new fields.StringField({ required: false, nullable: true, blank: false, initial: null })
     }, { required: false, nullable: true, initial: null }),
+    // **THE PROFESSIONS' CATALOGUE** (D-1919, D-1922, D-1945): a Cooked food makes its eater
+    // Well Fed; Troll's Blood and Mageblood restore at the start of each turn until the span
+    // ends; a Rage potion gives a user of Rage its Rage. New with an initial each, so a stored
+    // descriptor loads unchanged (`cleanUse` cleans only the keys present).
+    wellFed: new fields.BooleanField({ required: false, initial: false }),
+    regen: new fields.SchemaField({
+      health: optionalNumberField({ min: 0 }),
+      mana: optionalNumberField({ min: 0 })
+    }),
+    gain: new fields.SchemaField({
+      pool: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
+      amount: optionalNumberField({ min: 0 })
+    }),
     note: new fields.StringField({ required: false, blank: true, initial: "" })
   });
 }

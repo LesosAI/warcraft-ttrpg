@@ -37,6 +37,10 @@
       {{#each identity.classes as |cls|}}
       <span class="azeroth-class">{{cls.name}}{{#if cls.secondary}} {{cls.level}}{{/if}}</span>
       {{/each}}
+      {{!-- The profession (the plan's M1, D-1912): *Journeyman Blacksmith*, or the door to
+            choose one where none is held (D-1916). --}}
+      {{#if professionLine}}<span class="azeroth-profession-line">{{professionLine}}</span>{{/if}}
+      {{#if canChooseProfession}}<button type="button" class="azeroth-build" data-action="chooseProfession">{{localize "AZEROTH.Profession.Sheet.Choose"}}</button>{{/if}}
       {{!-- Read-only here: the level is set on the Progress tab (D-611). --}}
       <span class="azeroth-level">{{localize "AZEROTH.Sheet.Level"}} {{system.level}}</span>
       <span class="azeroth-tier">{{localize "AZEROTH.Sheet.Tier"}} {{system.tier}}</span>

@@ -20,6 +20,7 @@ import {
   DISEASES, REMEDIES, CURE_SPELLS, makeDisease, makePoison, medicineOutcome, medicineRefusal
 } from "./afflictions.mjs";
 import { BLEEDING_ROW, remedyJudgement } from "./cures.mjs";
+import { SL_CAP } from "./resolution.mjs";
 
 /** The ops a player may ask for, and only through an actor they own. */
 export const PLAYER_OPS = Object.freeze(["lay", "medicine", "cure"]);
@@ -87,7 +88,7 @@ export function cleanCureAsk(raw) {
     spell: typeof o.spell === "string" ? o.spell : "",
     ids: Array.isArray(o.ids) ? [...new Set(o.ids.filter(i => typeof i === "string"))].slice(0, 12) : [],
     rank: num(o.rank, 1, 3, 1),
-    sl: o.sl == null ? null : num(o.sl, -6, 6, null),
+    sl: o.sl == null ? null : num(o.sl, -SL_CAP, SL_CAP, null),
     heal: o.heal === true,
     damage: o.damage === true
   };
