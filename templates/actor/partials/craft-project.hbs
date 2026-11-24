@@ -10,6 +10,7 @@
 --}}
 <div class="azeroth-prof-project" data-project-id="{{project.id}}">
   <p class="azeroth-prof-project-head"><strong class="{{project.rarityClass}}">{{project.name}}</strong> <span class="azeroth-prof-soft">{{project.planWords}}</span></p>
+  {{#if project.cutWords}}<p class="azeroth-prof-soft">{{project.cutWords}}</p>{{/if}}
   <p>{{project.runningWords}}</p>
   <div class="azeroth-prof-bar" aria-hidden="true"><i style="width: {{project.fill}}%"></i></div>
   <p class="azeroth-prof-steplog" aria-label="{{localize 'AZEROTH.Profession.Sheet.Project.Log'}}">

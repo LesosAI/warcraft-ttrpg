@@ -475,6 +475,12 @@ export function professionsBatch(context) {
         const legendary = new Set();
         for (const id of PACKS) for (const e of await game.packs.get(id).getIndex({ fields: ["system.rarity"] })) if (e.system?.rarity === "legendary") legendary.add(e.name);
         assert.isFalse(snap.signatures.some(s => legendary.has(s.from)), "a Legendary item's Signature is on the list (D-1990)");
+        // The option is the effect and its cost, never the item it comes from (D-2008).
+        for (const o of options) {
+          for (const row of snap.signatures) if (row.from) assert.notInclude(o.textContent, row.from, "a Signature option names the item it comes from (D-2008)");
+        }
+        const costs = options.map(o => Number(/(\d+)/.exec(o.textContent)?.[1] ?? 0));
+        assert.deepEqual(costs, [...costs].sort((a, b) => a - b), "the Signature list is not sorted by cost (D-2008)");
         if (options.length) {
           change(fresh.querySelector('select[data-prof-quality="signature"]'), options[0].value);
           await until(() => cardOf(sheet, base.uuid)?.querySelector(".azeroth-prof-signature"), "the picked Signature printed whole");
@@ -483,6 +489,73 @@ export function professionsBatch(context) {
         }
       } finally {
         await sheet.close();
+      }
+    });
+
+    it("a suit with no Cut takes one at Common, beside no Prefix row, and the suit made carries it (D-2009)", async function () {
+      this.timeout(150000);
+      const actor = await makeCharacter({ name: "ZZ Prof Cut", classes: [["Warrior", 5]], profession: "Leatherworking", bags: ["Backpack"], abilities: { str: 30 } });
+      await give(actor, "Leatherworker's tools");
+      const { base } = await baseOf("Leather jerkin", PACK_FOR.armor);
+      assert.deepEqual(base.system.cuts ?? [], [], "the Leather jerkin carries a Cut of its own");
+      await skip();
+      const sheet = await openSheet(actor);
+      let unpin = () => {};
+      try {
+        await sheet.showProfession({ view: "crafting" });
+        click(tab(sheet).querySelector('[data-action="openAllRecipes"]'));
+        let card = await pickRecipe(sheet, "Leather jerkin", base.uuid);
+        const cutSelect = () => cardOf(sheet, base.uuid)?.querySelector('select[data-prof-quality="cut"]');
+        await until(() => cutSelect(), "the Cut row at Common");
+        card = cardOf(sheet, base.uuid);
+        assert.isNull(card.querySelector('select[data-prof-quality="prefix"]'), "a Prefix row beside the Cut row");
+        assert.isNull(cutSelect().getAttribute("data-action"), "the Cut select carries a data-action (D-677)");
+        const values = [...cutSelect().options].map(o => o.value).filter(Boolean);
+        assert.deepEqual(values, ["closed", "open", "long", "harnessed"], "leather is not offered the four Cuts");
+        const long = [...cutSelect().options].find(o => o.value === "long");
+        assert.include(long.textContent, "Limb Armor Points +1", "the Long option does not carry 08 section 5's words");
+        const snap0 = await W().craftSnapshot(actor, { base });
+        const snapCut = await W().craftSnapshot(actor, { base, cut: "long" });
+        assert.deepEqual(snapCut.reagents.map(l => [l.identifier, l.need]), snap0.reagents.map(l => [l.identifier, l.need]), "a Cut changed the reagents");
+        const bad = await W().craftSnapshot(actor, { base, cut: "frilled" });
+        assert.include(bad.refusals.map(r => r.reason), "cut", "an unknown Cut was not refused");
+        // A refused Cut spends nothing.
+        await stockFor(actor, snapCut);
+        const before = actor.items.size;
+        assert.isNull(await W().craft(actor, { baseUuid: base.uuid, cut: "frilled" }), "an unknown Cut started a project");
+        assert.equal(actor.items.size, before, "a refused Cut spent something");
+        assert.lengthOf(actor.getFlag("azeroth-rpg", CRAFT_PROJECT_FLAG) ?? [], 0, "a refused Cut stored a project");
+        change(cutSelect(), "long");
+        await until(() => cutSelect()?.value === "long", "the Cut picked");
+        await new Promise(r => setTimeout(r, 400));
+        await until(() => !cardOf(sheet, base.uuid)?.querySelector('[data-action="craftRecipe"]')?.disabled, "Start live", 10000).catch(async () => {
+          await pickRecipe(sheet, "Leather jerkin", base.uuid);
+        });
+        click(cardOf(sheet, base.uuid).querySelector('[data-action="craftRecipe"]'));
+        await until(() => (actor.getFlag("azeroth-rpg", CRAFT_PROJECT_FLAG) ?? []).some(p => p.status === "stored"), "the project stored");
+        const project = actor.getFlag("azeroth-rpg", CRAFT_PROJECT_FLAG).find(p => p.status === "stored");
+        assert.equal(project.quality?.cut, "long", "the project did not store the Cut");
+        unpin = pinDie(20);
+        for (let i = 0; i < 6 && projectStill(actor, project.id); i++) await W().workProject(actor, { projectId: project.id });
+        const made = actor.items.find(i => i.getFlag("azeroth-rpg", CRAFTED_FLAG)?.project === project.id);
+        assert.ok(made, "the suit was not made");
+        assert.deepEqual(made.system.cuts, ["long"], "the suit made does not carry the Cut");
+        assert.equal(made.system.armorPoints.limb, 2, "Long did not raise the Limb Armor Points (leather 1, +1)");
+      } finally {
+        unpin();
+        await sheet.close();
+      }
+    });
+
+    it("a shield and a suit the book cuts are offered no Cut (D-2009)", async function () {
+      const actor = await makeCharacter({ name: "ZZ Prof Cut None", classes: [["Warrior", 5]], profession: "Leatherworking" });
+      const { base: cut } = await baseOf("Frostwolf furs", PACK_FOR.armor);
+      const snap = await W().craftSnapshot(actor, { base: cut });
+      assert.deepEqual(snap.cuts, [], "a suit the book cuts is offered a Cut");
+      const shieldDoc = (await game.packs.get(PACK_FOR.armor).getDocuments()).find(d => d.system.shield && d.system?.craft?.trade);
+      if (shieldDoc) {
+        const shield = (await W().craftSnapshot(actor, { base: { uuid: shieldDoc.uuid, ...shieldDoc.toObject() } })).cuts;
+        assert.deepEqual(shield, [], "a shield is offered a Cut");
       }
     });
 

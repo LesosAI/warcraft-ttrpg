@@ -135,7 +135,7 @@ export const FOUND_RARE_CEILING = 5;
  *                                   reads them; `build` takes its own copy.
  * @returns {{ok: boolean, reasons: string[], notes: string[], spent: number, band: {lo: number, hi: number}|null, price: number|null, name: string|null}}
  */
-export function plan({ base, rarity = "common", prefixes = [], suffix = null, greater = [], signature = null, spells = [], name = null, found = false, grants = [], classes = [] } = {}) {
+export function plan({ base, rarity = "common", prefixes = [], suffix = null, greater = [], signature = null, spells = [], name = null, found = false, grants = [], classes = [], floor = true } = {}) {
   const reasons = [];
   const notes = [];
   if (!base) return { ok: false, reasons: ["no base item"], notes, spent: 0, band: null, price: null, name: null };
@@ -260,7 +260,9 @@ export function plan({ base, rarity = "common", prefixes = [], suffix = null, gr
   }
   const band = bandFor(rarity, { found });
   if (band && spent > band.hi) reasons.push(`a spend of ${spent} is over ${rarity}'s budget of ${band.hi}`);
-  if (band && spent < band.lo) reasons.push(`a spend of ${spent} is under ${rarity}'s budget of ${band.lo}`);
+  // `floor: false` is a crafted item (D-2007; the lead: *"Remove the budget minimum"*): the budget is a
+  // ceiling the crafter may leave unspent. The GM's Forge keeps the floor.
+  if (floor && band && spent < band.lo) reasons.push(`a spend of ${spent} is under ${rarity}'s budget of ${band.lo}`);
 
   const price = legendary ? null : priceFor({ base, rarity });
   // Prefix, base, suffix below Epic (08 §4); a proper noun above it (08 §20).
@@ -292,8 +294,8 @@ export function plan({ base, rarity = "common", prefixes = [], suffix = null, gr
  *
  * @returns {{name: string, system: object, grants: string[]}}
  */
-export function build({ base, rarity = "common", prefixes = [], suffix = null, greater = [], signature = null, spells = [], name = null, classes = [] } = {}) {
-  const proposal = plan({ base, rarity, prefixes, suffix, greater, signature, spells, name, classes });
+export function build({ base, rarity = "common", prefixes = [], suffix = null, greater = [], signature = null, spells = [], name = null, classes = [], floor = true } = {}) {
+  const proposal = plan({ base, rarity, prefixes, suffix, greater, signature, spells, name, classes, floor });
   const legendary = rarity === "legendary";
   const greaterSet = new Set(greater);
   const system = clone(base.system ?? {});

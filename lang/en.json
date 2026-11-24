@@ -1576,7 +1576,7 @@
         "Tool": "You are not carrying {tool}.",
         "Short": "Needs {lines}.",
         "ShortLine": "{count} more {name}",
-        "Forge": "The Forge refuses it: {text}",
+        "Forge": "It cannot be made that way: {text}",
         "AffixTrade": "{affix} is {trade} work.",
         "Room": "There is no room in your bags for the result. Make room first.",
         "Closed": "This project is finished.",
@@ -1599,8 +1599,9 @@
         "NotProfession": "That is not a profession.",
         "SignatureUnknown": "Choose a Signature from the list: only the book's own Signatures can be crafted.",
         "SignatureType": "That Signature is written for another kind of item. Choose one from this item's list.",
+        "Cut": "This item cannot take the {cut} Cut. Choose a Cut from the list, or none.",
         "AlreadyHas": "This item already carries an affix in that place, so the enchantment has nowhere to go. Nothing was spent.",
-        "ForgeBuilt": "This item came off the Forge with a Signature or more than one affix, and an enchantment laid in place would undo it. Nothing was spent.",
+        "ForgeBuilt": "This item already carries a Signature or more than one affix, and an enchantment laid in place would undo it. Nothing was spent.",
         "AffixRefused": "The enchantment cannot go on this item: {text}. Nothing was spent.",
         "Harvested": "That has already been taken from this creature. Nothing was rolled.",
         "Living": "The creature is not defeated. Nothing was rolled.",
@@ -1795,6 +1796,11 @@
           "Kind": "{kind} trait",
           "Fires": "fires on {when}"
         },
+        "Affix": {
+          "Meta": "{kind} · cost {cost}",
+          "Grants": "Gives: {grants}",
+          "GoesOn": "Goes on: {goesOn}"
+        },
         "Filter": {
           "Search": "Search recipes",
           "Have": "Have materials",
@@ -1855,16 +1861,20 @@
         },
         "Quality": {
           "Heading": "Quality",
-          "Hint": "the Forge's rules, up to {rarity} at your tier",
+          "Hint": "up to {rarity} at your tier",
           "Rarity": "Rarity",
           "Prefix": "Prefix",
           "Suffix": "Suffix",
           "Signature": "Signature",
-          "SignatureOption": "{from} ({cost}): {text}",
-          "SignatureFrom": "From {from}, cost {cost}:",
+          "SignatureOption": "Cost {cost}: {text}",
+          "SignatureCost": "Cost {cost}:",
+          "Cut": "Cut",
+          "CutOption": "{name}: {text}",
+          "CutFree": "A Cut costs nothing.",
+          "CutChosen": "Cut: {name}",
           "None": "None",
           "Option": "{name} ({cost})",
-          "Legal": "Forge: legal. Budget {spent}."
+          "Legal": "Allowed. Cost {spent}."
         },
         "Confirm": {
           "Title": "Start project: {name}",

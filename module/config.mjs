@@ -1272,6 +1272,8 @@ AZEROTH.craftRefusals = {
   // row written for another kind of item.
   signatureUnknown: "AZEROTH.Profession.Refuse.SignatureUnknown",
   signatureType: "AZEROTH.Profession.Refuse.SignatureType",
+  // A Cut the craft window does not offer for this item (`rules/craft-cuts.mjs#cutRefusal`, D-2009).
+  cut:           "AZEROTH.Profession.Refuse.Cut",
   // The enchantment's final door, judged before anything is spent (`recipes.mjs#enchantVerdict`).
   alreadyHas:    "AZEROTH.Profession.Refuse.AlreadyHas",
   forgeBuilt:    "AZEROTH.Profession.Refuse.ForgeBuilt",

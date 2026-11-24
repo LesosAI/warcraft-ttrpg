@@ -27,6 +27,7 @@ import { canGoOn, generate } from "./affixes.mjs";
 import { baseTrait } from "./bestiary.mjs";
 import { PROFESSION_BY_ID, clampTier, rungFor } from "./professions.mjs";
 import { downtimeRefusal } from "./downtime.mjs";
+import { cutRefusal } from "./craft-cuts.mjs";
 
 /* -------------------------------------------- */
 /*  Rarity and tier (D-1911)                     */
@@ -658,6 +659,8 @@ export function traitEntry(name, traits = []) {
  * @param {Array} s.reagents      what the craft consumes (`reagentsFor`)
  * @param {object} s.have         identifier -> count in the bags
  * @param {boolean} s.room        the bags can take the result
+ * @param {string|null} [s.cut]   a Cut asked for (D-2009), one of `craft-cuts.mjs#cutChoices`' or refused (`cut`)
+ * @param {boolean} [s.prefixRow] whether the Prefix row is drawn (`craft-cuts.mjs#prefixRowDrawn`); a Cut is never offered beside it
  * @returns {Array<{reason: string}>}
  */
 export function craftRefusals(s = {}) {
@@ -686,13 +689,17 @@ export function craftRefusals(s = {}) {
   // a descriptor. A bare kind or a typed sentence is refused before anything is spent - it would
   // buy the kind's budget and price for an item that carries no Signature, or one nobody wrote.
   if (signature && !signature.text) out.push({ reason: "signatureUnknown" });
+  // **A CUT IS ONE THE WINDOW OFFERS** (D-2009): a Cut-less suit with no Prefix row, a Cut its
+  // category takes. Anything else is refused here, before anything is spent.
+  const badCut = cutRefusal({ base: s.base, cut: s.cut ?? null, prefixRow: s.prefixRow === true });
+  if (badCut) out.push(badCut);
   if (forgeable(s.base) && RARITY_TIER[rarity]) {
     const affixes = (s.affixes ?? []).filter(Boolean);
     const forge = plan({
       base: s.base,
       rarity,
       prefixes: affixes.filter(a => a.kind === "prefix"),
-      suffix: affixes.find(a => a.kind === "suffix") ?? null,
+      suffix: affixes.find(a => a.kind === "suffix") ?? null, floor: false,
       signature: signature?.text ? { kind: signature.kind, text: signature.text, effect: signature.effect } : null
     });
     for (const text of forge.reasons) out.push({ reason: "forge", text });

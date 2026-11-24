@@ -148,7 +148,7 @@ export function resolveCraftSignature(asked, catalogue = [], base = null) {
  */
 export function signaturesFor({ base = null, rarity = "common", prefixes = [], suffix = null, catalogue = [] } = {}) {
   if (!base || !["rare", "epic"].includes(rarity)) return [];
-  const proposal = { base, rarity, prefixes: (prefixes ?? []).filter(Boolean), suffix: suffix ?? null };
+  const proposal = { base, rarity, prefixes: (prefixes ?? []).filter(Boolean), suffix: suffix ?? null, floor: false };
   const without = new Set(plan(proposal).reasons);
   const out = [];
   for (const row of catalogue ?? []) {

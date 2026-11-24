@@ -25,6 +25,7 @@ import {
 import { craftPlan, expectedSteps } from "./crafting.mjs";
 import { HARVEST, disenchantRefusal, harvestOn } from "./gathering.mjs";
 import { resolveCraftSignature } from "./craft-signatures.mjs";
+import { cutChoices } from "./craft-cuts.mjs";
 
 /** The two views of the tab (D-1910), on a USER flag so a re-render keeps it (D11 §12). */
 export const PROFESSION_VIEWS = Object.freeze(["overview", "crafting"]);
@@ -306,10 +307,13 @@ export function expectedView(expected) {
  * @param {{enforced: boolean, open: boolean}} o.downtime
  * @param {number} o.bonus        the Craft Test's modifier
  * @param {boolean} [o.room]
+ * @param {string|null} [o.cut]       a Cut asked for (D-2009); the hidden cards pass none
+ * @param {boolean} [o.prefixRow]     whether the Prefix row is drawn (`craft-cuts.mjs#prefixRowDrawn`);
+ *   by default whether the rarity opens it, which is exact for the hidden cards (Common: never)
  */
 export function recipeCard({
   base, trade, tier = 1, rarity = "common", affixes = [], signature = null, signatures = [], materials = {}, have = {},
-  toolCarried = false, downtime = { enforced: false, open: false }, bonus = 0, room = true
+  toolCarried = false, downtime = { enforced: false, open: false }, bonus = 0, room = true, cut = null, prefixRow = undefined
 } = {}) {
   const picked = (affixes ?? []).filter(Boolean);
   const resolved = resolveCraftSignature(signature, signatures, base);
@@ -319,12 +323,14 @@ export function recipeCard({
     ? reagents
     : reagentsFor({ base, rarity: "common", affixes: [], signature: null, materials, trade });
   const plan = craftPlan({ tier: recipeTier(base, rarity, trade), rarity });
+  const rows = visibleRows(rarity, { forgeable: forgeable(base) });
+  const prefixDrawn = prefixRow === undefined ? rows.prefix : prefixRow === true;
   const refusals = [
     ...(resolved.refusal ? [resolved.refusal] : []),
     ...craftRefusals({
       profession: trade, base, tier, rarity, affixes: picked, signature: sig,
       enforced: downtime?.enforced === true, open: downtime?.open === true,
-      toolCarried, reagents, have, room
+      toolCarried, reagents, have, room, cut, prefixRow: prefixDrawn
     })
   ];
   return {
@@ -332,7 +338,9 @@ export function recipeCard({
     reagents: shortfall(reagents, have).map(l => ({ ...l, name: materials?.[l.identifier]?.name ?? l.identifier, img: materials?.[l.identifier]?.img ?? null })),
     makeable: makeableCount(common, have),
     expected: expectedFor({ bonus, dc: plan.dc, target: plan.target }),
-    rows: visibleRows(rarity, { forgeable: forgeable(base) }),
+    rows,
+    // The Cuts a Cut-less suit is offered where no Prefix row is drawn (D-2009).
+    cuts: cutChoices({ base, prefixRow: prefixDrawn }),
     forgeable: forgeable(base),
     refusals,
     ok: refusals.length === 0
@@ -370,16 +378,6 @@ export function traitTokens(traits) {
 }
 
 /**
- * **THE SIGNATURE PICKER'S ROWS** (D-1990; the lead: *"The signatures should be chosen from a list,
- * not typed like the GM can. Exclude legendary signatures"*). `rows` are the door's own
- * (`workflows.craftSnapshot().signatures`, `{id, from, text, kind, cost}`), already held to the
- * item's type, the rarity and the budget left, with no Legendary item's Signature; this keeps only
- * a well-formed row, in the door's order, and marks the one picked. Nothing is greyed or added
- * (D-1929).
- *
- * @returns {Array<{id: string, from: string, text: string, kind: string|null, cost: number, selected: boolean}>}
- */
-/**
  * A row's words as a reader sees them: the door hands the prose (`prose.mjs#proseFromHtml`), whose
  * `**strong**` and `*em*` are markers for a text box, so they are taken off for the select and the
  * printed row (the shot printed *cast **Renew** once*).
@@ -388,21 +386,42 @@ export function plainWords(text) {
   return String(text ?? "").replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*\s][^*]*)\*/g, "$1");
 }
 
+/**
+ * **THE SIGNATURE PICKER'S ROWS** (D-1990; the lead: *"The signatures should be chosen from a list,
+ * not typed like the GM can. Exclude legendary signatures"*). `rows` are the door's own
+ * (`workflows.craftSnapshot().signatures`, `{id, from, text, kind, cost}`), already held to the
+ * item's type, the rarity and the budget left, with no Legendary item's Signature. Nothing is greyed
+ * or added (D-1929).
+ *
+ * **A ROW IS ITS EFFECT AND ITS COST, NEVER THE ITEM IT COMES FROM** (D-2008; the lead: *"the
+ * signatures should just show the effect, not the item it comes from"*). The door's `from` stays on
+ * the catalogue row; this view model drops it, so nothing the sheet draws can print it. Two rows
+ * whose words and cost are the same read as one option: the first keeps its id and the others ride
+ * on it as `ids`, so a pick of either is still found (`signatureRowOf`). The rows are sorted by cost,
+ * then by their words, then by id, so the list has an order a reader can use.
+ *
+ * @returns {Array<{id: string, ids: string[], text: string, kind: string|null, cost: number, selected: boolean}>}
+ */
 export function signatureRows(rows = [], picked = null) {
-  const out = [];
+  const clean = [];
   for (const r of Array.isArray(rows) ? rows : []) {
-    if (!r || typeof r !== "object" || typeof r.id !== "string" || !r.id || out.some(o => o.id === r.id)) continue;
-    out.push({
-      id: r.id, from: String(r.from ?? ""), text: plainWords(r.text), kind: r.kind ?? null,
-      cost: Math.max(0, Math.trunc(Number(r.cost)) || 0), selected: r.id === picked
-    });
+    if (!r || typeof r !== "object" || typeof r.id !== "string" || !r.id || clean.some(o => o.id === r.id)) continue;
+    clean.push({ id: r.id, text: plainWords(r.text), kind: r.kind ?? null, cost: Math.max(0, Math.trunc(Number(r.cost)) || 0) });
   }
+  clean.sort((a, b) => a.cost - b.cost || a.text.localeCompare(b.text) || a.id.localeCompare(b.id));
+  const out = [];
+  for (const r of clean) {
+    const twin = out.find(o => o.cost === r.cost && o.text === r.text);
+    if (twin) { twin.ids.push(r.id); continue; }
+    out.push({ id: r.id, ids: [r.id], text: r.text, kind: r.kind, cost: r.cost, selected: false });
+  }
+  for (const o of out) o.selected = picked !== null && picked !== undefined && o.ids.includes(picked);
   return out;
 }
 
-/** The picked row among `signatureRows`' answer, or null where the pick is no longer offered. */
+/** The picked row among `signatureRows`' answer (by its own id or a twin's), or null where the pick is no longer offered. */
 export function signatureRowOf(rows = [], id = null) {
-  return id ? (rows ?? []).find(r => r.id === id) ?? null : null;
+  return id ? (rows ?? []).find(r => r.id === id || (Array.isArray(r.ids) && r.ids.includes(id))) ?? null : null;
 }
 
 /* -------------------------------------------- */
@@ -506,4 +525,17 @@ export function pressGuard() {
       try { return await task(); } finally { busy.delete(key); }
     }
   };
+}
+
+/**
+ * The keyword an affix shows as a chip beside an item's traits (the lead, 2026-11-24: *"of the Stag"
+ * would have the tooltip "stag" next to long*): a suffix's *of the* is dropped, a prefix keeps its
+ * name. The chip's tooltip carries the whole name and what the affix gives.
+ *
+ * @param {string} name  the affix's name
+ * @returns {string}
+ */
+export function affixChipName(name) {
+  const bare = String(name ?? "").trim().replace(/^of\s+(?:the\s+)?/i, "");
+  return bare ? bare.charAt(0).toUpperCase() + bare.slice(1) : String(name ?? "");
 }

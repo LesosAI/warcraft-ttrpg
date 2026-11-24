@@ -31,9 +31,10 @@ import { downtimeState, shouldPrompt } from "../settings.mjs";
 import { resultName } from "../rules/resolution.mjs";
 import { PROFESSION_BY_ID, bonusParts, carriedTool } from "../rules/professions.mjs";
 import {
-  RARITY_CEILING, RARITY_TIER, craftOf, craftRarity, craftRefusals, enchantChoices, enchantReagents, enchantTier, enchantVerdict,
+  RARITY_CEILING, RARITY_TIER, affixChoices, craftOf, craftRarity, craftRefusals, enchantChoices, enchantReagents, enchantTier, enchantVerdict,
   fixedRarity, forgeable, isClassicFind, reagentsFor, recipeTier, shortfall, visibleRows
 } from "../rules/recipes.mjs";
+import { cutChoices, deliveredBase, prefixRowDrawn } from "../rules/craft-cuts.mjs";
 import { SIGNATURE_INDEX_FIELDS, SIGNATURE_PACKS, resolveCraftSignature, signatureCatalogue, signaturesFor } from "../rules/craft-signatures.mjs";
 import { collectable, craftPlan, dropProject, expectedSteps, newProject, stepProject, testRefusal, upsertProject } from "../rules/crafting.mjs";
 import {
@@ -195,6 +196,7 @@ export function refusalWords(refusal, { materials = {} } = {}) {
   if (refusal.trade) data.trade = professionName(refusal.trade);
   if (refusal.tool) data.tool = nameOf(refusal.tool);
   if (refusal.ceiling) data.ceiling = game.i18n.localize(AZEROTH.rarities?.[refusal.ceiling] ?? refusal.ceiling);
+  if (refusal.reason === "cut") data.cut = game.i18n.localize(AZEROTH.armorCuts?.[refusal.cut] ?? refusal.cut ?? "");
   if (refusal.reason === "short") {
     data.lines = (refusal.lines ?? []).map(l => game.i18n.format(AZEROTH.CRAFT_SHORT_LINE, { count: l.short, name: nameOf(l.identifier) })).join(", ");
   }
@@ -443,16 +445,24 @@ async function writeProjects(actor, list) {
  *   cost}` with `text` in prose (`craft-signatures.mjs#signaturesFor`), and only
  *   rows `forge.plan` takes are listed. An unknown id, a typed sentence or a row
  *   written for another kind of item is refused in words.
+ * - **A Cut is offered to a suit with none, where no Prefix row is drawn** (D-2009;
+ *   the lead: *"Items without a prefix option should allow selection of a Cut if
+ *   relevant"*): `prefixRow` says whether the Prefix row has an option to draw
+ *   (`craft-cuts.mjs#prefixRowDrawn` over `recipes.mjs#affixChoices`, the reading
+ *   the sheet draws by), `cuts` the Cuts the window lists (`cutChoices`), and
+ *   `cut` the one asked for where it is offered. A Cut costs nothing; any other
+ *   is refused in words (`cut`).
  *
  * @param {Actor} actor
- * @param {{base: object, rarity?: string, affixes?: object[], signature?: {id: string}|null}} o
+ * @param {{base: object, rarity?: string, affixes?: object[], signature?: {id: string}|null, cut?: string|null}} o
  *   `base` the recipe as plain data (`{name, type, system}`), `affixes` the
  *   chosen affix shapes, prefix first.
  * @returns {Promise<object>}
  */
-export async function craftSnapshot(actor, { base, rarity = "common", affixes = [], signature = null } = {}) {
+export async function craftSnapshot(actor, { base, rarity = "common", affixes = [], signature = null, cut = null } = {}) {
   const materials = await professionMaterials();
   const catalogue = await craftSignatureCatalogue();
+  const pool = await affixPool();
   const prof = professionOf(actor);
   const trade = prof.id;
   const tier = actor?.professionTier ?? 1;
@@ -471,15 +481,23 @@ export async function craftSnapshot(actor, { base, rarity = "common", affixes = 
   const parts = craftParts(actor, prof);
   const bonus = parts.reduce((n, p) => n + p.value, 0);
   const result = canForge && RARITY_TIER[made] ? forgePlan({
-    base, rarity: made, prefixes, suffix,
+    base, rarity: made, prefixes, suffix, floor: false,
     signature: sig ? { kind: sig.kind, text: sig.text, effect: sig.effect } : null
   }) : null;
   const room = roomFor(actor, { name: result?.name ?? base?.name, type: base?.type, system: { ...(base?.system ?? {}), equipped: false, container: null } }, spend);
+  const rows = visibleRows(made, { forgeable: canForge });
+  // The Prefix row is drawn only where a prefix may be picked (D-1929); where it is not, a Cut-less
+  // suit is offered a Cut (D-2009). The same reading the sheet's rows are drawn by.
+  const prefixOptions = rows.prefix ? affixChoices({
+    item: base, rarity: made, trade, kind: "prefix", affixes: pool, other: suffix, current: prefixes[0] ?? null, signature: sig?.kind ?? null
+  }) : [];
+  const prefixRow = prefixRowDrawn(rows.prefix, prefixOptions);
+  const cuts = cutChoices({ base, prefixRow });
   const refusals = isClassicFind(base) ? [{ reason: "notRecipe" }] : [
     ...(chosen.refusal ? [chosen.refusal] : []),
     ...craftRefusals({
       profession: trade, base, tier, rarity, affixes: picked, signature: sig,
-      ...downtimeState(), toolCarried: Boolean(prof.tool), reagents, have, room
+      ...downtimeState(), toolCarried: Boolean(prof.tool), reagents, have, room, cut, prefixRow
     })
   ];
   return {
@@ -497,7 +515,10 @@ export async function craftSnapshot(actor, { base, rarity = "common", affixes = 
     name: result?.name ?? base?.name ?? "",
     price: result?.price ?? base?.system?.cost ?? null,
     expected: expectedSteps({ bonus, dc: plan.dc, target: plan.target }),
-    rows: visibleRows(made, { forgeable: canForge }),
+    rows,
+    prefixRow,
+    cuts,
+    cut: cut && cuts.includes(cut) ? cut : null,
     signatures: canForge ? signaturesFor({ base, rarity: made, prefixes, suffix, catalogue }) : [],
     signature: sig ? { id: sig.id, kind: sig.kind } : null,
     refusals,
@@ -555,9 +576,10 @@ async function startProject(actor, project, spend) {
  * second's judgement runs after the first's spend has landed and finds them short.
  *
  * @param {Actor} actor
- * @param {{baseUuid: string, rarity?: string, prefixes?: Array<object|string>, suffix?: object|string|null, signature?: {id: string}|null}} o
+ * @param {{baseUuid: string, rarity?: string, prefixes?: Array<object|string>, suffix?: object|string|null, signature?: {id: string}|null, cut?: string|null}} o
+ *   `cut` a Cut the window offers this suit (D-2009), or none
  */
-export async function craft(actor, { baseUuid, rarity = "common", prefixes = [], suffix = null, signature = null } = {}) {
+export async function craft(actor, { baseUuid, rarity = "common", prefixes = [], suffix = null, signature = null, cut = null } = {}) {
   if (actor?.type !== "character" || !actor.isOwner) return null;
   const base = await baseFrom(baseUuid);
   if (!base) return warn({ reason: "notRecipe" });
@@ -566,11 +588,11 @@ export async function craft(actor, { baseUuid, rarity = "common", prefixes = [],
   const s = await affixFrom(suffix);
   if (s) affixes.push({ ...s, kind: "suffix" });
   const materials = await professionMaterials();
-  const first = await craftSnapshot(actor, { base, rarity, affixes, signature });
+  const first = await craftSnapshot(actor, { base, rarity, affixes, signature, cut });
   if (!first.ok) return warn(first.refusals[0], { materials });
   const started = await professionWrite(actor, async () => {
     // Read again at the write: a stack, a level or a downtime that moved since the first judgement.
-    const snap = await craftSnapshot(actor, { base, rarity, affixes, signature });
+    const snap = await craftSnapshot(actor, { base, rarity, affixes, signature, cut });
     if (!snap.ok) return { refusal: snap.refusals[0] };
     const lines = snap.reagents.map(l => ({ identifier: l.identifier, count: l.need }));
     const spend = reagentSpend(actor.items, lines);
@@ -589,6 +611,8 @@ export async function craft(actor, { baseUuid, rarity = "common", prefixes = [],
         suffix: affixes.find(a => a.kind === "suffix")?.id ?? null,
         // The book's row, whole (D-1990): its sentence and its descriptor travel to the build.
         signature: chosen ? { id: chosen.id, kind: chosen.kind, text: chosen.text, effect: chosen.effect } : null,
+        // The Cut chosen (D-2009), judged above: it costs nothing and is set on the item made.
+        cut: snap.cut,
         enchant: null
       }
     });
@@ -761,8 +785,12 @@ export async function abandonProject(actor, { projectId } = {}) {
 async function deliverProject(actor, project) {
   const materials = await professionMaterials();
   if (project.quality?.enchant) return deliverEnchant(actor, project);
-  const base = await baseFrom(project.recipe);
-  if (!base) return { ok: false, words: refusalWords({ reason: "notRecipe" }) };
+  const recipe = await baseFrom(project.recipe);
+  if (!recipe) return { ok: false, words: refusalWords({ reason: "notRecipe" }) };
+  // **THE CUT CHOSEN AT THE START IS THE SUIT'S CUT** (D-2009), on both paths: set on the base
+  // before it is copied or built, so the Forge's stored base carries it too and an enchantment laid
+  // later (which rebuilds from that base) keeps it. A Cut the recipe no longer offers is dropped.
+  const { base } = deliveredBase(recipe, project.quality);
   const prefixes = [];
   for (const id of project.quality?.prefixes ?? []) { const a = await affixFrom(id); if (a) prefixes.push(a); }
   const suffix = await affixFrom(project.quality?.suffix ?? null);
@@ -773,7 +801,7 @@ async function deliverProject(actor, project) {
   } else {
     const signature = await projectSignature(project, base);
     if (signature?.refusal) return { ok: false, words: refusalWords(signature.refusal) };
-    const proposal = { base, rarity: project.rarity, prefixes, suffix, signature: signature?.signature ?? null };
+    const proposal = { base, rarity: project.rarity, prefixes, suffix, floor: false, signature: signature?.signature ?? null };
     const verdict = forgePlan(proposal);
     if (!verdict.ok) return { ok: false, words: verdict.reasons.map(text => refusalWords({ reason: "forge", text })).join(" ") };
     const made = forgeBuild(proposal);
@@ -782,7 +810,7 @@ async function deliverProject(actor, project) {
   }
   data.system = { ...data.system, equipped: false, container: null };
   data.flags = foundry.utils.mergeObject(data.flags ?? {}, { "azeroth-rpg": { [CRAFTED_FLAG]: crafted } }, { inplace: false });
-  data._stats = { compendiumSource: base.uuid };
+  data._stats = { compendiumSource: recipe.uuid };
   if (!roomFor(actor, data)) return { ok: false, words: refusalWords({ reason: "room" }, { materials }) };
   const [item] = await actor.createEmbeddedDocuments("Item", [data], { azerothIdentify: "known" });
   if (!item) return { ok: false, words: refusalWords({ reason: "room" }, { materials }) };

@@ -67,6 +67,15 @@
       {{#each card.quality.suffixes as |a|}}<option value="{{a.id}}"{{#if a.selected}} selected{{/if}}>{{a.label}}</option>{{/each}}
     </select>
     {{/if}}
+    {{!-- A CUT for a suit with none, where no Prefix row is drawn (D-2009): only the Cuts its
+          category takes, each with 08 section 5's words; it costs nothing. --}}
+    {{#if card.quality.rows.cut}}
+    <label for="{{card.domId}}-cut">{{localize "AZEROTH.Profession.Sheet.Quality.Cut"}}</label>
+    <select id="{{card.domId}}-cut" data-prof-quality="cut" data-recipe-id="{{card.id}}">
+      <option value="">{{localize "AZEROTH.Profession.Sheet.Quality.None"}}</option>
+      {{#each card.quality.cuts as |c|}}<option value="{{c.value}}"{{#if c.selected}} selected{{/if}}>{{c.label}}</option>{{/each}}
+    </select>
+    {{/if}}
     {{#if card.quality.rows.signature}}
     <label for="{{card.domId}}-signature">{{localize "AZEROTH.Profession.Sheet.Quality.Signature"}}</label>
     <select id="{{card.domId}}-signature" data-prof-quality="signature" data-recipe-id="{{card.id}}">
@@ -78,15 +87,11 @@
   {{!-- A Signature is CHOSEN FROM A LIST, never typed (D-1990; the lead: *"The signatures should be
         chosen from a list, not typed like the GM can. Exclude legendary signatures"*). The list is the
         door's own (only what this item, rarity and budget allow, no greyed row), and the one picked is
-        printed whole: its source item, its cost and its words. --}}
+        printed whole: its cost and its words, never the item it comes from (D-2008). --}}
   {{#with card.quality.signaturePicked as |sig|}}
-  <p class="azeroth-prof-signature"><span class="azeroth-prof-soft">{{sig.from}}</span> {{sig.text}}</p>
+  <p class="azeroth-prof-signature"><span class="azeroth-prof-soft">{{sig.cost}}</span> {{sig.text}}</p>
   {{/with}}
-  {{#if card.quality.chips.length}}
-  <p class="azeroth-prof-soft">{{localize "AZEROTH.Profession.Sheet.Trait.Hover"}}
-    {{#each card.quality.chips as |chip|}}<button type="button" class="azeroth-prof-trait" data-prof-trait data-tooltip-html="{{chip.tip}}" aria-label="{{chip.aria}}">{{chip.name}}</button>{{/each}}
-  </p>
-  {{/if}}
+  {{#if card.quality.cutFree}}<p class="azeroth-prof-soft">{{card.quality.cutFree}}</p>{{/if}}
   {{#if card.quality.legalWords}}<p class="azeroth-prof-ok">{{card.quality.legalWords}}</p>{{/if}}
   {{/if}}
 

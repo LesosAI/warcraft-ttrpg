@@ -127,11 +127,13 @@ import { BIOME_KEYS, nodesIn } from "../rules/biomes.mjs";
 import { gatherInputs, materialCounts } from "../rules/profession-door.mjs";
 import { isWellFed } from "../rules/well-fed.mjs";
 import { affixCost } from "../rules/forge.mjs";
+// A Cut offered to a suit with none, where no Prefix row is drawn (D-2009).
+import { cutChoices, ownCuts, prefixRowDrawn } from "../rules/craft-cuts.mjs";
 // A Signature row's words clipped on its option, the browser's own clip (D-1990).
 import { clip } from "./browser-categories.mjs";
 import { professionRankCost } from "../rules/xp.mjs";
 import {
-  BIOME_FLAG, OPEN_FLAG, VIEW_FLAG, harvestRows, pressGuard, signatureRowOf, signatureRows, disenchantChoices, expectedFor, expectedView, filterRecipes, filtersActive, heldSkillCount,
+  BIOME_FLAG, OPEN_FLAG, VIEW_FLAG, affixChipName, harvestRows, pressGuard, signatureRowOf, signatureRows, disenchantChoices, expectedFor, expectedView, filterRecipes, filtersActive, heldSkillCount,
   kindOptions, ladderRows, mergedPicks, openGroups, pickStrips, projectFill, projectSplit, rankView, recipeCard,
   signedText, skillTierRows, statParts, stepChips, tierOptions, toggleDraft, traitTokens, viewOf, withAllOpen, withGroupOpen
 } from "../rules/profession-sheet.mjs";
@@ -5562,6 +5564,34 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     return { name, tip, aria: `${name}: ${plain}` };
   }
 
+  /**
+   * A picked prefix's or suffix's chip, set beside the item's own traits (the lead, 2026-11-24): the
+   * keyword (*of the Stag* reads *Stag*) and, on hover or focus, the affix's whole name, its kind and
+   * cost, what it gives and where it goes. Where what it gives names a trait (*Keen (Lesser)*), 08
+   * section 5's entry for it follows. Read off the pool's own row, never typed.
+   */
+  #affixChip(affix, kind, traits) {
+    const escape = foundry.utils.escapeHTML;
+    const kindWord = game.i18n.localize(kind === "prefix" ? "AZEROTH.Profession.Sheet.Quality.Prefix" : "AZEROTH.Profession.Sheet.Quality.Suffix");
+    const meta = game.i18n.format("AZEROTH.Profession.Sheet.Affix.Meta", { kind: kindWord, cost: affixCost(affix) });
+    const grants = String(affix.grants ?? "").trim();
+    const goesOn = String(affix.goesOn ?? "").trim();
+    const rule = grants ? traitEntry(grants, traits) : null;
+    const ruleText = String(rule?.entry?.system?.description ?? "");
+    const lines = [
+      grants ? `<p>${escape(game.i18n.format("AZEROTH.Profession.Sheet.Affix.Grants", { grants }))}</p>` : "",
+      ruleText,
+      goesOn ? `<p>${escape(game.i18n.format("AZEROTH.Profession.Sheet.Affix.GoesOn", { goesOn }))}</p>` : ""
+    ].join("");
+    const name = affixChipName(affix.name);
+    const plain = [grants, ruleText.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()].filter(Boolean).join(". ");
+    return {
+      name,
+      tip: `<div class="azeroth-trait-tip"><strong>${escape(affix.name)}</strong> <em>${escape(meta)}</em>${lines}</div>`,
+      aria: `${affix.name}: ${plain || meta}`
+    };
+  }
+
   /** The words every card shares: the Extended Test, the target, the Craft Test, the time, the collapse risk. */
   #cardWords({ plan, expected, parts, ability, fed, interval }) {
     const view = expectedView(expected);
@@ -5594,11 +5624,11 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       rarityClass: "",
       kindLine: game.i18n.format("AZEROTH.Profession.Sheet.Detail.Kind", { group: label, tier: card.plan.tier }),
       statLine: this.#statLine(item),
-      traits: traitTokens(item.system?.traits).map(t => this.#traitChip(t, traits)),
+      traits: this.#itemChips(item, traits),
       description: await professionDescription(item),
       ...this.#cardWords({ plan: card.plan, expected: card.expected, parts, ability, fed, interval }),
       priceWords: coins(Number(item.system?.cost) || 0),
-      quality: card.forgeable ? this.#qualityContext({ item, rarity: "common", tier: this.actor.professionTier, prefix: null, suffix: null, signature: null, affixes: null, signatures: [], forge: null, id, traits }) : null,
+      quality: card.forgeable ? this.#qualityContext({ item, rarity: "common", tier: this.actor.professionTier, prefix: null, suffix: null, signature: null, affixes: null, signatures: [], forge: null, id, traits, cuts: card.cuts, cut: null }) : null,
       reagents: card.reagents.map(l => this.#reagentRow(l)),
       toolWords: this.#toolWords(id, tool, materials),
       refusals: card.refusals.map(r => refusalWords(r, { materials })),
@@ -5612,13 +5642,19 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
    * the bag room included, which is the very reading `workflows.craft` refuses by.
    */
   async #pickedCard({ item, label, id, tier, parts, ability, tool, materials, affixes, traits, fed, domId }) {
-    const q = this.#quality?.uuid === item.uuid ? this.#quality : { uuid: item.uuid, rarity: "common", prefix: null, suffix: null, signature: null };
+    const q = this.#quality?.uuid === item.uuid ? this.#quality : { uuid: item.uuid, rarity: "common", prefix: null, suffix: null, signature: null, cut: null };
     const ceiling = raritiesFor(tier);
     const rarity = ceiling.includes(q.rarity) ? q.rarity : "common";
     const prefix = affixes.find(a => a.id === q.prefix) ?? null;
     const suffix = affixes.find(a => a.id === q.suffix) ?? null;
     const chosen = [prefix && { ...prefix, kind: "prefix" }, suffix && { ...suffix, kind: "suffix" }].filter(Boolean);
-    const snap = await craftSnapshot(this.actor, { base: item, rarity, affixes: chosen, signature: this.#signatureOf(q, rarity) });
+    let snap = await craftSnapshot(this.actor, { base: item, rarity, affixes: chosen, signature: this.#signatureOf(q, rarity), cut: q.cut ?? null });
+    // A Cut picked while no Prefix row was drawn goes once a prefix can be picked again (D-2009):
+    // the window never refuses a pick it no longer shows.
+    if (q.cut && !snap.cuts.includes(q.cut)) {
+      if (this.#quality?.uuid === item.uuid) this.#quality = { ...this.#quality, cut: null };
+      snap = await craftSnapshot(this.actor, { base: item, rarity, affixes: chosen, signature: this.#signatureOf(q, rarity), cut: null });
+    }
     const interval = game.i18n.localize(AZEROTH.craftIntervals[snap.plan.interval] ?? snap.plan.interval);
     const forgeOk = snap.forge?.ok === true && rarity !== "common";
     return {
@@ -5631,11 +5667,17 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       rarityClass: rarity === "common" ? "" : rarityClass(rarity),
       kindLine: game.i18n.format("AZEROTH.Profession.Sheet.Detail.Kind", { group: label, tier: snap.plan.tier }),
       statLine: this.#statLine(item),
-      traits: traitTokens(item.system?.traits).map(t => this.#traitChip(t, traits)),
+      // The item's own traits, then the picked prefix, suffix and Cut: each a chip with its tooltip.
+      traits: [
+        ...this.#itemChips(item, traits),
+        ...(prefix ? [this.#affixChip(prefix, "prefix", traits)] : []),
+        ...(suffix ? [this.#affixChip(suffix, "suffix", traits)] : []),
+        ...(snap.cut && snap.cuts?.includes(snap.cut) ? [this.#cutRow(snap.cut, traits, true).chip] : [])
+      ],
       description: await professionDescription(item),
       ...this.#cardWords({ plan: snap.plan, expected: snap.expected, parts, ability, fed, interval }),
       priceWords: coins(Number(snap.price) || 0),
-      quality: snap.rows?.rarity ? this.#qualityContext({ item, rarity, tier, prefix, suffix, signature: q.signature, affixes, signatures: snap.signatures ?? [], forge: snap.forge, id, traits, rows: snap.rows }) : null,
+      quality: snap.rows?.rarity ? this.#qualityContext({ item, rarity, tier, prefix, suffix, signature: q.signature, affixes, signatures: snap.signatures ?? [], forge: snap.forge, id, traits, rows: snap.rows, cuts: snap.cuts, cut: snap.cut }) : null,
       reagents: snap.reagents.map(l => this.#reagentRow(l)),
       toolWords: this.#toolWords(id, tool, materials),
       refusals: snap.words,
@@ -5648,39 +5690,69 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
    * The Forge's controls for a card (D-1929): Rarity up to the tier's ceiling, Prefix and Suffix
    * from Uncommon with ONLY the legal options (`affixChoices`), and from Rare a Signature picked
    * from the rows the door offers (`craftSnapshot().signatures`: already held to the item's type,
-   * the rarity and the budget left, Legendary items' Signatures out; D-1990), each with its source
-   * item, its words and its cost. A hidden card is drawn at Common; its controls are live once it
-   * is picked.
+   * the rarity and the budget left, Legendary items' Signatures out; D-1990), each as its cost and
+   * its words and never the item it comes from (D-2008). The Prefix row is drawn only where a prefix
+   * may be picked; where none may and the item is a suit with no Cut of its own, a Cut row lists the
+   * Cuts its category takes (D-2009), each with 08 section 5's words. A hidden card is drawn at
+   * Common; its controls are live once it is picked.
    */
-  #qualityContext({ item, rarity, tier, prefix, suffix, signature, affixes, signatures, forge, id, traits, rows = null }) {
+  #qualityContext({ item, rarity, tier, prefix, suffix, signature, affixes, signatures, forge, id, traits, rows = null, cuts = [], cut = null }) {
     const ceiling = RARITY_CEILING[Math.min(4, Math.max(1, tier))];
-    const show = rows ?? { rarity: true, prefix: false, suffix: false, signature: false };
+    const opened = rows ?? { rarity: true, prefix: false, suffix: false, signature: false };
     const label = a => game.i18n.format("AZEROTH.Profession.Sheet.Quality.Option", { name: a.name, cost: affixCost(a) });
     const pool = affixes ?? [];
-    const sigRows = show.signature ? signatureRows(signatures, signature) : [];
+    const sigRows = opened.signature ? signatureRows(signatures, signature) : [];
     // The affixes' budget is what the picked Signature leaves: its kind is what `affixChoices` prices.
     const sigKind = signatureRowOf(sigRows, signature)?.kind ?? null;
+    const prefixes = opened.prefix ? affixChoices({ item, rarity, trade: id, kind: "prefix", affixes: pool, other: suffix, current: prefix, signature: sigKind }) : [];
+    // A Prefix row with nothing to pick is not drawn (D-1929), and a Cut may then be offered (D-2009).
+    const show = { ...opened, prefix: prefixRowDrawn(opened.prefix, prefixes), cut: (cuts ?? []).length > 0 };
+    const cutRows = (cuts ?? []).map(key => this.#cutRow(key, traits, key === cut));
     return {
       hint: game.i18n.format("AZEROTH.Profession.Sheet.Quality.Hint", { rarity: this.#label(AZEROTH.rarities, ceiling) }),
       rows: show,
       rarities: raritiesFor(tier).map(r => ({ value: r, label: this.#label(AZEROTH.rarities, r), selected: r === rarity })),
-      prefixes: show.prefix ? affixChoices({ item, rarity, trade: id, kind: "prefix", affixes: pool, other: suffix, current: prefix, signature: sigKind })
-        .map(a => ({ id: a.id, label: label(a), selected: a.id === prefix?.id })) : [],
+      prefixes: show.prefix ? prefixes.map(a => ({ id: a.id, label: label(a), selected: a.id === prefix?.id })) : [],
       suffixes: show.suffix ? affixChoices({ item, rarity, trade: id, kind: "suffix", affixes: pool, other: prefix, current: suffix, signature: sigKind })
         .map(a => ({ id: a.id, label: label(a), selected: a.id === suffix?.id })) : [],
-      // Each row in words: its source item, its cost and its words, clipped on the option and
-      // whole beneath the select for the one picked (D-1990).
+      // Each row in words: its cost and its words, clipped on the option and whole beneath the
+      // select for the one picked (D-1990). Never the item it comes from (D-2008).
       signatures: sigRows.map(r => ({
         id: r.id, selected: r.selected,
-        label: game.i18n.format("AZEROTH.Profession.Sheet.Quality.SignatureOption", { from: r.from, cost: r.cost, text: clip(r.text, 60) })
+        label: game.i18n.format("AZEROTH.Profession.Sheet.Quality.SignatureOption", { cost: r.cost, text: clip(r.text, 80) })
       })),
       signaturePicked: (() => {
         const row = signatureRowOf(sigRows, signature);
-        return row ? { from: game.i18n.format("AZEROTH.Profession.Sheet.Quality.SignatureFrom", { from: row.from, cost: row.cost }), text: row.text } : null;
+        return row ? { cost: game.i18n.format("AZEROTH.Profession.Sheet.Quality.SignatureCost", { cost: row.cost }), text: row.text } : null;
       })(),
-      chips: [prefix, suffix].filter(Boolean).map(a => this.#traitChip(a.name, traits)).filter(c => c.tip),
+      cuts: cutRows,
+      cutFree: show.cut ? game.i18n.localize("AZEROTH.Profession.Sheet.Quality.CutFree") : null,
       legalWords: forge?.ok === true && rarity !== "common" ? game.i18n.format("AZEROTH.Profession.Sheet.Quality.Legal", { spent: forge.spent ?? 0 }) : null
     };
+  }
+
+  /**
+   * One Cut the window offers (D-2009): its name and 08 section 5's words off the trait pack
+   * (`traitEntry`), so the option reads *Long: Limb Armor Points +1. Bane on Athletics Tests to climb
+   * or swim.* and its chip carries the same tooltip any trait does (D-1928). Never typed text: where
+   * the pack has no entry the option is the Cut's name alone.
+   */
+  #cutRow(key, traits, selected = false) {
+    const name = game.i18n.localize(AZEROTH.armorCuts?.[key] ?? key);
+    const chip = this.#traitChip(name, traits);
+    const hit = traitEntry(name, traits);
+    const text = String(hit?.entry?.system?.description ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    return {
+      value: key, selected,
+      label: text ? game.i18n.format("AZEROTH.Profession.Sheet.Quality.CutOption", { name, text }) : name,
+      chip
+    };
+  }
+
+  /** An item's own traits as chips, then a suit's own Cuts (D-1928, D-2009): a Cut is a trait 08 section 5 defines. */
+  #itemChips(item, traits) {
+    const cutNames = ownCuts(item).map(c => game.i18n.localize(AZEROTH.armorCuts?.[c] ?? c));
+    return traitTokens([...(item.system?.traits ?? []), ...cutNames]).map(t => this.#traitChip(t, traits));
   }
 
   /** A reagent line: `<have> / <need>`, and *short* or *enough* in words (never colour alone). */
@@ -5720,6 +5792,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       editable: this.isEditable,
       rarityClass: p.rarity && p.rarity !== "common" ? rarityClass(p.rarity) : "",
       planWords: game.i18n.format("AZEROTH.Profession.Sheet.Project.Plan", { rarity: this.#label(AZEROTH.rarities, p.rarity), dc: p.dc, interval }),
+      // The Cut the project will give the suit (D-2009), named so the card says what is being made.
+      cutWords: p.quality?.cut ? game.i18n.format("AZEROTH.Profession.Sheet.Quality.CutChosen", { name: game.i18n.localize(AZEROTH.armorCuts?.[p.quality.cut] ?? p.quality.cut) }) : "",
       runningWords: game.i18n.format("AZEROTH.Profession.Sheet.Project.Running", { run: signedText(p.run), target: p.target, tests: p.tests }),
       fill: projectFill(p),
       chips: stepChips(p.log),
@@ -5913,7 +5987,9 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
   /** A Forge control changed on the picked card: the quality, then the part. */
   async #onQualityChange(field, value, recipeId) {
     if (!recipeId) return null;
-    const q = this.#quality?.uuid === recipeId ? { ...this.#quality } : { uuid: recipeId, rarity: "common", prefix: null, suffix: null, signature: null };
+    const q = this.#quality?.uuid === recipeId ? { ...this.#quality } : { uuid: recipeId, rarity: "common", prefix: null, suffix: null, signature: null, cut: null };
+    // A rarity change clears the affixes and the Signature; a Cut costs nothing and stays while it is
+    // still offered (`#pickedCard` drops it where a Prefix row comes back).
     if (field === "rarity") Object.assign(q, { rarity: value || "common", prefix: null, suffix: null, signature: null });
     else q[field] = value || null;
     this.#recipeSel = recipeId;
@@ -6076,7 +6152,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     const id = target.dataset.recipeId ?? this.#recipeSel;
     const held = this.#cardContexts.get(id);
     if (!id || !held || !this.isEditable) return null;
-    const q = this.#quality?.uuid === id ? { ...this.#quality } : { rarity: "common", prefix: null, suffix: null, signature: null };
+    const q = this.#quality?.uuid === id ? { ...this.#quality } : { rarity: "common", prefix: null, suffix: null, signature: null, cut: null };
     if (shouldPrompt(event)) {
       const c = held.context;
       const yes = await foundry.applications.api.DialogV2.confirm({
@@ -6091,7 +6167,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     }
     const project = await craft(this.actor, {
       baseUuid: id, rarity: q.rarity ?? "common",
-      prefixes: q.prefix ? [q.prefix] : [], suffix: q.suffix ?? null, signature: this.#signatureOf(q)
+      prefixes: q.prefix ? [q.prefix] : [], suffix: q.suffix ?? null, signature: this.#signatureOf(q), cut: q.cut ?? null
     });
     if (project) await this.#setProfessionView("crafting");
     return project;
