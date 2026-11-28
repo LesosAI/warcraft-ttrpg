@@ -92,6 +92,7 @@ import { witchHunterCoverageBatch } from "./quench-witch-hunter-coverage.mjs";
 // 08 §20's class items, phase 3 (D-2156 to D-2162): every reader through the real control.
 import { classItemsBatch } from "./quench-class-items.mjs";
 import { enchanterSignaturesBatch } from "./quench-enchanter-signatures.mjs";
+import { chainLightningFinishBatch } from "./quench-chain-lightning-finish.mjs";
 import { reactionBatch } from "./quench-reactions.mjs";
 import { creatureGearBatch } from "./quench-npc-gear.mjs";
 import { creatureSwingBatch } from "./quench-npc-swing.mjs";
@@ -519,6 +520,9 @@ export function registerQuenchTests() {
     });
     quench.registerBatch("azeroth-rpg.enchanter-signatures", enchanterSignaturesBatch, {
       displayName: "AZEROTH: 08 section 18's Enchanter's Signatures - laid from the Profession tab, Minor Speed, Gathering and Unholy Weapon at their doors (phase 4)"
+    });
+    quench.registerBatch("azeroth-rpg.chain-lightning-finish", chainLightningFinishBatch, {
+      displayName: "AZEROTH: Chain Lightning's review window - Finish cast closes a finished cast against its card, through the banner's control (D-2174)"
     });
     quench.registerBatch("azeroth-rpg.move-through", moveThroughBatch, {
       displayName: "AZEROTH: 05's Moving through a space at the move door, with Veil of Mist, Underfoot and the GM's drag (FIXC, O-476)"

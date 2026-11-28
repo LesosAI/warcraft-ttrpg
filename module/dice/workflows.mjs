@@ -29,6 +29,7 @@ import {approvedHitSignature,charmUseView,SIGNATURE_USES_FLAG} from '../rules/ap
 import { prepareChosenSignatures, signatureRecipientKey } from "../effects/chosen-signature-casting.mjs";
 import { prepareHealingSignatures } from "../effects/chosen-signature-healing.mjs";
 import { chosenSignatureExtras } from "../rules/signature-scaling.mjs";
+import { chainResumeRecord } from "../rules/chain-lightning-resume.mjs";
 import { signatureDeliverySeed } from "../rules/signature-delivery.mjs";
 import { offerSecondStrike } from "../effects/second-strike.mjs";
 import { applyInjuryOnce } from "../effects/injury-application.mjs";
@@ -4067,7 +4068,7 @@ export async function castSpell({
     ui.notifications?.warn(game.i18n.localize("AZEROTH.ChainLightning.BeforeFailed"));
     return null;
   }
-  let chainUnresolved = false, chainPrivate = false;
+  let chainUnresolved = false, chainPrivate = false, chainInitial = null;
   const attackCalculation = attackTest ? await (await import("../applications/actions.mjs")).prepareBlademasterTest(actor,attackTest,{targets}) : null;
   if (attackTest && !attackCalculation) {
     ui.notifications?.warn(game.i18n.localize("AZEROTH.Blademaster.Unavailable"));
@@ -5606,6 +5607,8 @@ export async function castSpell({
     } else {
       // The cast is already paid. Post its roll without damage controls;
       // never guess a route or invite the player to pay for the cast again.
+      // The initial target, kept for the GM's review to resume from (D-2174).
+      chainInitial = list.map(t => ({ sceneId: t?.sceneId ?? null, tokenId: t?.tokenId ?? null, actorId: t?.actorId ?? null }));
       list = [];
       ui.notifications?.warn(game.i18n.localize("AZEROTH.ChainLightning.RouteUnresolved"));
     }
@@ -6912,7 +6915,7 @@ export async function castSpell({
     const { dhSpellAfterCast } = await import("../effects/demon-hunter-spells.mjs");
     raiseLines.push(...await dhSpellAfterCast({ actor, spell, plan: dhPlan, list, spellDC, cast, source }));
   }
-  const content = await renderTemplate(TEMPLATE.spell, {
+  const spellCardContext = {
     dismissEverburn:success&&sys.identifier==='everburn',
     chainLightning: sys.identifier === "chain-lightning",
     conflagrate: Boolean(conflagrateTools),
@@ -7003,7 +7006,8 @@ export async function castSpell({
     talentNotes: await Promise.all(spellNotesFor(actor.takenTalents(), { name: spell.name, school })
       .map(async n => ({ name: n.name, effect: await enrich(n.effect) }))),
     provenance: roll.provenance
-  });
+  };
+  const content = await renderTemplate(TEMPLATE.spell, spellCardContext);
 
   const publishSpellCard = data => crossingRecord
     ? crossingPublication.publishCrossingCard(crossingRecord,data) : ChatMessage.create(data);
@@ -7072,6 +7076,12 @@ export async function castSpell({
         } : {}) } } : {}),
         ...(chainTools ? { chainLightningRoute: { automatic: true, unresolved: chainUnresolved } } : {}),
         ...(chainExecution ? { chainLightningRequestId: chainExecution.requestId } : {}),
+        // **WHAT THE GM'S REVIEW FINISHES THIS CAST FROM** (D-2174): on an unresolved card alone, the initial target and
+        // every input the damage above reads, frozen now (`rules/chain-lightning-resume.mjs`). A resolved card carries none.
+        ...(chainUnresolved ? { chainLightningResume: chainResumeRecord({ initial: chainInitial, rating, baseRating: sys.damage?.rating ?? null,
+          rider, extras, boost: gritOut.damage, sl, wardPierce, bonusKey, damageSchool, damageType, spellSchool: school, asWard,
+          typed: typedSpell, halved: halvedCast, bypass: sys.damage?.bypass === true, deals: castDealsDamage(sys), viaItem: Boolean(viaItem),
+          signatureBonuses: chosenSignaturePreparation.bonuses, context: spellCardContext }) } : {}),
         ...(conflagrateTools ? { conflagrate } : {}),
         ...(bloodPactTools ? { bloodPactSpell } : {}),
         ...(soulLinkTools ? { soulLinkPreparation } : {}),
@@ -7825,7 +7835,7 @@ function areaTickLine(tick, { widen = 0 } = {}) {
  * an ally's aura adds after it (D-755) - which is named, because a bare second
  * minus reads as a second Ward.
  */
-function spellDamageExplanation(result, rating) {
+export function spellDamageExplanation(result, rating) {
   // Each second amount of its own type, after the spell's own lane (D-777).
   const parts = partsWords(explainDamage(result).extras);
   const tail = text => (parts ? `${text} \u00b7 ${parts}` : text);

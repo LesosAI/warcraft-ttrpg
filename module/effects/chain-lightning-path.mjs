@@ -3,9 +3,11 @@ import { chainLightningLiving, chainLightningPath } from "../rules/chain-lightni
 
 /** Internal GM preparation, deliberately not a player query response: hidden
  * creatures participate, so neither their documents nor this path may be sent
- * to the casting player's picker. The spell coordinator must retain it on GM. */
-export function resolveChainLightningPath({ actor, spell, source, targets, viaItem = false, user = game.user } = {}) {
-  const refuse = reason => ({ ok: false, reason });
+ * to the casting player's picker. The spell coordinator must retain it on GM.
+ * `paid` is the GM's review resuming a cast already paid (D-2174): the item's use it struck is
+ * not judged again. No query payload reaches it: the cast handler's `optionKeys` do not admit it. */
+export function resolveChainLightningPath({ actor, spell, source, targets, viaItem = false, user = game.user, paid = false } = {}) {
+  const refuse = (reason, detail) => ({ ok: false, reason, ...(detail ? { detail } : {}) });
   if (!game.user?.isGM || game.users?.activeGM?.id !== game.user.id) return refuse("authority");
   if (!user?.active || game.users.get(user.id) !== user || !actor?.testUserPermission(user, "OWNER")) return refuse("permission");
   if (spell?.type !== "spell" || spell.system?.identifier !== "chain-lightning") return refuse("spell");
@@ -13,15 +15,16 @@ export function resolveChainLightningPath({ actor, spell, source, targets, viaIt
     const item = actor.items?.get(viaItem.itemId);
     const entry = Number.isInteger(viaItem.index) && viaItem.index >= 0 ? item?.system?.spells?.[viaItem.index] : null;
     if (!entry || !spell.uuid || entry.uuid !== spell.uuid
-      || ((entry.uses?.max ?? 0) > 0 && !(entry.uses.value > 0))) return refuse("item");
+      || (!paid && (entry.uses?.max ?? 0) > 0 && !(entry.uses.value > 0))) return refuse("item");
   } else if (spell.parent !== actor && !(actor.type === "npc" && spell.pack === "azeroth-rpg.spells"
     && actor.system.spells?.names?.includes(spell.name))) return refuse("spell");
-  if (!Array.isArray(targets) || targets.length !== 1) return refuse("target");
+  if (!Array.isArray(targets) || targets.length !== 1) return refuse("target", "count");
   const scene = game.scenes.get(source?.sceneId), from = scene?.tokens.get(source?.tokenId);
   if (!from || from.actor !== actor) return refuse("source");
   const selected = targets[0];
   const first = selected?.sceneId === scene.id ? scene.tokens.get(selected.tokenId) : null;
-  if (!first?.actor || first.actor.id !== selected.actorId || first._source?.level !== from._source?.level) return refuse("target");
+  if (!first?.actor || first.actor.id !== selected.actorId) return refuse("target", "stale");
+  if (first._source?.level !== from._source?.level) return refuse("target", "level");
   let initialDistance;
   try { initialDistance = feetApart(from, first); } catch { return refuse("geometry"); }
   if (typeof initialDistance !== "number" || !Number.isFinite(initialDistance) || initialDistance < 0) return refuse("geometry");
