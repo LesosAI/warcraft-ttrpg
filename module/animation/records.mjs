@@ -34,7 +34,7 @@
  * key is that name's slug and no second record is needed.
  */
 
-import { ESSENCE_GAIN_OPTION, SOUL_HARVEST_KEY, SOUL_HARVEST_OPTION } from "../rules/animation-records.mjs";
+import { ESSENCE_GAIN_OPTION, SOUL_HARVEST_KEY, SOUL_HARVEST_OPTION, regionPrivacyKey } from "../rules/animation-records.mjs";
 import { COLLAPSE_OPTION, collapseRecordFor, essenceGainRecord, raisedWithRecords } from "../rules/necromancer-animations.mjs";
 import { pixelsPerFoot } from "../canvas/regions.mjs";
 import { loopIdentifiers } from "../rules/animation-table.mjs";
@@ -57,6 +57,8 @@ import { CLAWS_EQUIP_CUE, clawsEquipCue } from "../rules/claws.mjs";
 // The Sovereign's prey mark, standing on the prey (the San'layn and Sovereign plan's C14).
 import { PREY_FLAG, preyMarkState, sovereignCardCue } from "../rules/sovereign-animations.mjs";
 import { demonHunterCardCue } from "../rules/demon-hunter-animations.mjs";
+// The Witch Hunter's Signs filed by the Sign used, its own cards, and the Ash ring under Ashen Ring (wave 3, D-2096).
+import { ashRingKeyOf, witchHunterCardCue, witchHunterCardKey } from "../rules/witch-hunter-animations.mjs";
 
 /**
  * The spells whose row loops on a recorded Resilience Test, which is the only
@@ -171,7 +173,8 @@ export function cardPrivacyKey(message) {
   const flags = flagsOf(message);
   if (flags.kind === "attack" && flags.parry !== true) return attackPrivacyKey(message?.speaker?.actor ?? null);
   if (flags.kind !== "feature" && flags.kind !== "ability") return null;
-  return featurePrivacyKey(message?.speaker?.actor ?? null, flags.featureKey ?? null);
+  // A Witch Hunter's Sign card is noted under the Sign used, the key its states and its cone's Region carry.
+  return featurePrivacyKey(message?.speaker?.actor ?? null, witchHunterCardKey(flags)?.key ?? flags.featureKey ?? null);
 }
 
 /** The last feature card noted for one pair, or null. */
@@ -349,10 +352,14 @@ export function cardRecord(message) {
   // its success; one that made none is its own proof.
   if (flags.kind === "feature" || flags.kind === "ability") {
     const casting = flags.casting === true;
+    // **A WITCH HUNTER'S SIGN** (02 §7's Signs; wave 3, D-2096): one feature holds three Signs, so the card is filed
+    // under the Sign it recorded (`whSign`), with the Empowered state **Greater Signs** paid for.
+    const sign = witchHunterCardKey(flags);
     return featureRecord({
       trigger: "use", contentVisible,
       sceneId: flags.source?.sceneId ?? null,
-      identifier: flags.featureKey ?? null,
+      identifier: sign?.key ?? flags.featureKey ?? null,
+      ...(sign?.states.length ? { states: sign.states } : {}),
       casting,
       success: casting ? flags.success === true : flags.success !== false,
       area: flags.area ?? null,
@@ -463,6 +470,15 @@ export function cardRecord(message) {
       source,
       targets: named
     });
+  }
+  // **A WITCH HUNTER DOOR'S OWN CARD** (wave 3, D-2096): a brew drunk or an oil laid (`whBrewUse`), the Medallion's
+  // whispered sense and Read the Trail's card (`witchHunterCard`), each speaking from the hunter's token
+  // (`rules/witch-hunter-animations.mjs#witchHunterCardCue`). A whispered card is no content to a reader it was not
+  // whispered to, so the law refuses it as `hidden` there.
+  const wh = witchHunterCardCue(flags);
+  if (wh) {
+    const source = speakerToken(message);
+    return featureRecord({ trigger: wh.trigger, contentVisible, sceneId: source?.sceneId ?? null, identifier: wh.key, source });
   }
   return null;
 }
@@ -641,7 +657,7 @@ export function regionRecord(region) {
   // a board that does not draw it - for a feature's Region and a spell's alike.
   const shown = regionShownHere(region);
   if (featureKey) {
-    const privacy = featurePrivacyKey(actorIdOfUuid(regionLayerUuid(flags)), featureKey);
+    const privacy = featurePrivacyKey(actorIdOfUuid(regionLayerUuid(flags)), privacyKeyOfRegion(flags) ?? featureKey);
     const record = featureRecord({
       trigger: "region",
       contentVisible: shown,
@@ -721,10 +737,23 @@ function sourceOfUuid(uuid) {
   return tokenId ? { sceneId: viewed()?.id ?? null, tokenId } : null;
 }
 
-/** The feature key a Region records, or null: a feature card's, else a trap's. */
+/**
+ * The feature key a Region records, or null: a feature card's, else a trap's. A Witch Hunter's Ash ring carrying 04's
+ * Ashen Ring is filed under the talent (`rules/witch-hunter-animations.mjs#ashRingKeyOf`), off what the Region
+ * recorded when it was placed.
+ */
 function featureKeyOfRegion(flags) {
-  const key = flags?.featureKey ?? flags?.[TRAP_FLAG]?.identifier ?? null;
+  const key = ashRingKeyOf(flags) ?? flags?.[TRAP_FLAG]?.identifier ?? null;
   return typeof key === "string" && key ? key : null;
+}
+
+/**
+ * The key a Region's privacy pair is noted under: its Use card's own key, never a talent's that only reshaped it -
+ * the Region's named privacy key first (04's Firestream names its Ember Sign card's `ember-sign`; wave 2d-A, D-2133),
+ * through the one reading (`rules/animation-records.mjs#regionPrivacyKey`).
+ */
+function privacyKeyOfRegion(flags) {
+  return regionPrivacyKey(flags, flags?.[TRAP_FLAG]?.identifier ?? null);
 }
 
 /**
@@ -1220,7 +1249,7 @@ export function stateSnapshot({ resisted = RESISTED_IDENTIFIERS } = {}) {
       regions.push({
         id: region.id, sceneId, cast: region.id, identifier: featureKey, kind: "feature",
         name: region.name ?? null, shape: shapeOf(region), shown,
-        privacy: featurePrivacyKey(actorIdOfUuid(regionLayerUuid(flags)), featureKey)
+        privacy: featurePrivacyKey(actorIdOfUuid(regionLayerUuid(flags)), privacyKeyOfRegion(flags) ?? featureKey)
       });
     }
     if (!flags.cast) continue;

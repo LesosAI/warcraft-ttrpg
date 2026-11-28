@@ -48,6 +48,9 @@ export const TALENT_WORKLIST = Object.freeze({
   // THE SOVEREIGN (the San'layn and Sovereign plan's Phase 5): every one of its 36 talents has its row and a
   // door (`rules/sovereign-talents.mjs#SOV_DOORS`); none left.
   sovereign: Object.freeze({}),
+  // THE WITCH HUNTER (the Witch Hunter plan's wave 2b, D-2080): every one of its 48 talents has its row and a door
+  // (`rules/witch-hunter-talents.mjs#WH_TALENT_DOORS`); none left.
+  "witch-hunter": Object.freeze({}),
   // D-771 (the talent plan's Phase 3): two lines left, each a QUESTION for the
   // lead, its reason on the row's own `gap`. D-777 built Living Seed's
   // temporary Health (the lead: *"raise HP past max as temp hp"*), and D-778
@@ -135,6 +138,8 @@ export const WORKLIST_CEILING = Object.freeze({
   sovereign: 0,
   // THE DEMON HUNTER: 0 - the talents phase (D-1560) wrote all 36 with the class's own doors; nothing parked.
   "demon-hunter": 0,
+  // THE WITCH HUNTER: 0 - wave 2b wrote all 48 with the class's own doors; nothing parked.
+  "witch-hunter": 0,
   // 23 to 22 (D-769): Chimera's patch takes two forms. 22 to 14 (D-770):
   // Mangle, Rip and Feral Charge ride the attack dialog as riders. 14 to 2
   // (D-771): every Druid talent built but Living Seed and Typhoon's push. 2 to
@@ -236,8 +241,9 @@ export function pendingNecromancerRows() {
 
 /**
  * **WHETHER A TALENT'S ROW IS PENDING ON A LATER PHASE** - a Legacy branch's (phase B6, now
- * empty), the Necromancer's (Phase 5, now empty) or the Demon Hunter's (its Phase 5). The ONE
- * question every per-talent census asks.
+ * empty) or the Necromancer's (Phase 5, now empty). The Witch Hunter's forty-eight waited on
+ * wave 2b here; that wave wrote every row and deleted its list, as the list's own comment said.
+ * The ONE question every per-talent census asks.
  */
 export function rowPending(className, identifier) {
   if (legacyRowPending(className, identifier)) return true;

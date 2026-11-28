@@ -378,7 +378,10 @@ export const EXTRA_FEATURE_LEVELS = Object.freeze({
   // Prim and Proper at 3 (R30: *"Move to level 3"*; the San'layn and Sovereign plan's B.8).
   sovereign: Object.freeze([3]),
   // Hunter's Leap and Fel Surge at 3 (the Demon Hunter plan's features table, C64).
-  "demon-hunter": Object.freeze([3])
+  "demon-hunter": Object.freeze([3]),
+  // Read the Trail and Expose Weakness at 3 (the Witch Hunter plan's features table; 02 §6: *the Demon
+  // Hunter and the Witch Hunter two more at level 3*).
+  "witch-hunter": Object.freeze([3])
 });
 
 /** The levels one class grants a feature at: the ladder plus its own extras. */

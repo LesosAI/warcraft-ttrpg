@@ -35,6 +35,7 @@
 
 import { SIGNATURE_KINDS, plan } from "./forge.mjs";
 import { proseFromHtml } from "./prose.mjs";
+import { enchanterCatalogue, goesOnItem } from "./enchanter-signatures.mjs";
 
 /** The index fields the catalogue reads, the GM Forge's own plus the rarity and the identifier. */
 export const SIGNATURE_INDEX_FIELDS = Object.freeze([
@@ -116,6 +117,31 @@ export function signatureCatalogue(entries = []) {
 }
 
 /**
+ * **THE CATALOGUE A CRAFTER CHOOSES FROM** (08 §18; D-2147): every crafter the book's printed
+ * Signatures, and an Enchanting crafter the Enchanter's Signatures too
+ * (`enchanter-signatures.mjs#enchanterCatalogue`), after them. Any other trade's crafter never
+ * sees an Enchanter's row, so an id naming one is refused as unknown (D-2148: a row 08 later
+ * prints on a §20 item reaches the others through the book's own catalogue).
+ *
+ * @param {string|null} trade   the crafter's profession key
+ * @param {Array} book          `signatureCatalogue`'s rows
+ */
+export function craftCatalogueFor(trade, book = []) {
+  return trade === "enchanting" ? [...(book ?? []), ...enchanterCatalogue()] : [...(book ?? [])];
+}
+
+/**
+ * **WHETHER A CATALOGUE ROW GOES ON THIS ITEM**: a book row is written for its kind of item
+ * (`itemType`); an Enchanter's row goes on what its `Goes on` column names
+ * (`enchanter-signatures.mjs#goesOnItem`: a suit or a worn thing, a worn thing on the feet).
+ */
+export function rowFits(row, base) {
+  if (!row || !base?.type) return true;
+  if (row.goesOn) return goesOnItem(row.goesOn, base);
+  return row.itemType === base.type;
+}
+
+/**
  * **A CHOSEN ROW, RESOLVED** for the craft (the door's `signature: {id}`): the row
  * found by id, for this kind of item. A typed sentence is no Signature at all and
  * is refused, as an unknown id is (`signatureUnknown`); a row written for another
@@ -132,7 +158,7 @@ export function resolveCraftSignature(asked, catalogue = [], base = null) {
   const id = typeof asked === "object" ? asked.id : null;
   const row = id ? (catalogue ?? []).find(r => r.id === id) ?? null : null;
   if (!row) return { refusal: { reason: "signatureUnknown" } };
-  if (base?.type && row.itemType !== base.type) return { refusal: { reason: "signatureType", type: row.itemType } };
+  if (base?.type && !rowFits(row, base)) return { refusal: { reason: "signatureType", type: row.itemType } };
   return { signature: { id: row.id, kind: row.kind, text: row.text, effect: row.effect } };
 }
 
@@ -152,7 +178,7 @@ export function signaturesFor({ base = null, rarity = "common", prefixes = [], s
   const without = new Set(plan(proposal).reasons);
   const out = [];
   for (const row of catalogue ?? []) {
-    if (row.itemType !== base.type) continue;
+    if (!rowFits(row, base)) continue;
     const added = plan({ ...proposal, signature: { kind: row.kind, text: row.text, effect: row.effect } }).reasons
       .filter(r => !without.has(r) && !/ is under /.test(r));
     if (added.length) continue;

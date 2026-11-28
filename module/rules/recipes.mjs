@@ -135,11 +135,36 @@ export function forgeable(item) {
   if (!sys) return false;
   // A recipe made at a rarity the book fixes takes no quality (08 §18; the review's M5).
   if (fixedRarity(item)) return false;
+  return takesQuality(item);
+}
+
+/** The KIND of thing a quality goes on: a weapon that is no shot or powder, a suit or shield, a worn thing, barding. */
+function takesQuality(item) {
+  const sys = item?.system;
+  if (!sys) return false;
   if (sys.use && sys.use.kind && sys.use.kind !== "none") return false;
   if (item.type === "weapon") return !(Array.isArray(sys.fits) && sys.fits.length);
   if (item.type === "armor") return true;
   if (item.type === "gear") return Boolean(sys.slot && sys.slot !== "clothing") || /barding/i.test(String(item.name ?? ""));
   return false;
+}
+
+/**
+ * **WHAT *LAY AN ENCHANTMENT* LISTS** (08 §18; the phase 5 run): an item the enchanter CARRIES, of a
+ * kind a quality goes on, whatever rarity it already has. `forgeable` asks a RECIPE whether the
+ * book fixes its rarity, and reads an Uncommon, Rare or Epic item's own rarity as fixed - so the
+ * window, which filtered by it, listed no Rare or Epic item at all, and the Enchanter's Signatures
+ * (Rare or Epic alone, D-2147) could never be reached from it, nor a second affix on an Uncommon.
+ * Section 10's Ward and Spellpower gear stays out, as before (08 §18 makes it Common). What each
+ * item may take is the door's judgement (`enchantVerdict`, `enchanterSignatureVerdict`), never this.
+ *
+ * @param {{type?: string, name?: string, system?: object}} item
+ */
+export function enchantable(item) {
+  const sys = item?.system;
+  if (!sys) return false;
+  if (SECTION_TEN.test(String(sys.source?.section ?? "").trim())) return false;
+  return takesQuality(item);
 }
 
 /** 08 §10's Ward and Spellpower gear, which 08 §18 names among what is made Common. */
@@ -580,9 +605,21 @@ export function enchantChoices({ item, tier = 1, affixes = [] } = {}) {
  */
 export function enchantVerdict({ item = null, affix = null, pool = [] } = {}) {
   if (!item || !affix || !["prefix", "suffix"].includes(affix.kind)) return { ok: false, reason: "notRecipe" };
+  // **A CLASSIC FIND TAKES NO AFFIX IN PLACE** (D-685's finds are converted whole, and `generate` cannot
+  // rebuild one): the window lists a find for an Enchanter's Signature alone (O-778, the lead: *"yes, allow
+  // Signatures on Classic finds"*; D-2171), so the affix branch refuses it here, at the door's own judgement.
+  if (isClassicFind(item)) return { ok: false, reason: "classicFind" };
   const generated = item.flags?.["azeroth-rpg"]?.generated ?? {};
   if (generated[affix.kind]) return { ok: false, reason: "alreadyHas", slot: affix.kind };
   if (generated.base && (generated.signatureKind || (generated.greater ?? []).length || (generated.prefixes ?? []).length > 1)) {
+    return { ok: false, reason: "forgeBuilt" };
+  }
+  // An item carrying a Signature by ANY road - an Enchanter's Signature laid in place on an
+  // item with no stashed base, a printed §20 run, a hand-typed sentence - is refused the
+  // same way: `generate` rebuilds from the base and would strip the Signature AND its cost
+  // (the phase 4 review). The test mirrors `enchanter-signatures.mjs#carriesSignature`,
+  // inlined because that module imports this one.
+  if (item.flags?.["azeroth-rpg"]?.enchanterSignature || itemCarriesSignature(item)) {
     return { ok: false, reason: "forgeBuilt" };
   }
   const byId = id => (id ? (pool ?? []).find(a => a.id === id) ?? null : null);
@@ -597,6 +634,14 @@ export function enchantVerdict({ item = null, affix = null, pool = [] } = {}) {
   if (!result.ok) return { ok: false, reason: "affixRefused", text: String(result.reason ?? "") };
   const rarity = result.item?.system?.rarity ?? enchantGrade(affix);
   return { ok: true, rarity };
+}
+
+/** Whether an item's plain data carries a Signature: prose, or a descriptor of any kind but `none`. */
+function itemCarriesSignature(item) {
+  const sys = item?.system ?? {};
+  if (String(sys.signature ?? "").replace(/<[^>]+>/g, "").trim()) return true;
+  const kind = sys.signatureEffect?.kind;
+  return Boolean(kind) && kind !== "none";
 }
 
 /** What laying one enchantment consumes (the mockup's `enchantReagents`). */

@@ -34,8 +34,13 @@ import {
   ARRAY, CLASS_ORDER, METHODS, POINT_BUY, PURSE, ROLL_DICE, ROLL_KEEP, STARTING_XP, STEPS,
   accessNote, castingLine, classOpenTo, kitRows, numbersFor, plan, pointBuyCost, pointBuyTotal, talentArmorFor, talentShieldsFor,
   primaryAbilities, professionTool, proposalSkills, rankSpend,
-  rollFloorMet, sideFor, skillUuid, spellsRequired, stepOnStrip, stepsFor, castsSpells, talentTaughtSpells, validate
+  rollFloorMet, sideFor, skillUuid, spellsRequired, stepOnStrip, stepsFor, castsSpells, talentTaughtSpells, validate,
+  BREWS_STEP, brewsStep, brewsUpdate
 } from "../rules/creation.mjs";
+// The Witch Hunter's brews step (02 §7's Field Brews and Tome of Silver and Ash; the plan's wave 2c, O-727).
+import { FORMULA_KINDS, formulaChoices, knownCount } from "../rules/brewing.mjs";
+import { brewOf } from "../rules/witch-hunter-brews.mjs";
+import { CREATURE_TYPES } from "../rules/tome.mjs";
 import { arrange } from "../rules/slots.mjs";
 // The Mortal guise (the Chromatic Champion plan).
 import { guiseChoices, guiseRequired, guiseSnapshot, settleGuise } from "../rules/guise.mjs";
@@ -230,6 +235,8 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
       adaptable: null,
       racialTalent: null, classTalent: null,
       spells: [],
+      // A Witch Hunter's formulas (brew identifiers) and its Tome's second type (O-727).
+      formulas: [], tomeType: null,
       side: null,
       equipment: [],
       kitLoadedFor: null,
@@ -289,6 +296,7 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
       // one picked under another race in words (04 §1, D-781).
       classTalent: classTalent ? { identifier: classTalent.identifier, name: classTalent.name, tier: classTalent.tier, className: classTalent.className, legacy: classTalent.legacy ?? "" } : null,
       spells: s.spells.map(uuid => this.#data.spells.find(sp => sp.uuid === uuid)).filter(Boolean),
+      formulas: [...(s.formulas ?? [])], tomeType: s.tomeType ?? null,
       side: s.side,
       equipment: s.equipment.map(row => {
         const item = this.#catalogueItem(row.uuid);
@@ -334,6 +342,7 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
       case "skills": Object.assign(pane, this.#skillsPane(s, p, numbers)); break;
       case "talents": Object.assign(pane, await this.#talentsPane(s, p)); break;
       case "spells": Object.assign(pane, await this.#spellsPane(s, p)); break;
+      case "brews": Object.assign(pane, this.#brewsPane(s, p)); break;
       case "languages": Object.assign(pane, this.#languagesPane(s, p, numbers)); break;
       case "equipment": Object.assign(pane, await this.#equipmentPane(s, p, numbers)); break;
       case "numbers": Object.assign(pane, this.#numbersPane(p, numbers)); break;
@@ -363,7 +372,9 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
         { step: "class", label: game.i18n.localize("AZEROTH.Creator.Step.class"), value: p.cls?.name },
         { step: "profession", label: game.i18n.localize("AZEROTH.Creator.Step.profession"), value: p.profession?.name },
         { step: "talents", label: game.i18n.localize("AZEROTH.Creator.Step.talents"), value: [p.racialTalent?.name, p.classTalent?.name].filter(Boolean).join(", ") },
-        ...(castsSpells(p.cls) ? [{ step: "spells", label: game.i18n.localize("AZEROTH.Creator.Step.spells"), value: p.spells.map(sp => sp.name).join(", ") }] : [])
+        ...(castsSpells(p.cls) ? [{ step: "spells", label: game.i18n.localize("AZEROTH.Creator.Step.spells"), value: p.spells.map(sp => sp.name).join(", ") }] : []),
+        ...(brewsStep(p.cls) ? [{ step: BREWS_STEP, label: game.i18n.localize("AZEROTH.Creator.Step.brews"),
+          value: [...p.formulas.map(id => brewOf(id)?.name ?? id), p.tomeType ? game.i18n.localize(AZEROTH.creatureTypes?.[p.tomeType] ?? p.tomeType) : null].filter(Boolean).join(", ") }] : [])
       ] : [],
       summary: {
         ok: v.ok,
@@ -386,6 +397,9 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     if (out.skill && AZEROTH.skills[out.skill]) out.skill = game.i18n.localize(AZEROTH.skills[out.skill]);
     if (out.side && AZEROTH.sides[out.side]) out.side = game.i18n.localize(AZEROTH.sides[out.side]);
     if (Number.isFinite(out.copper)) out.copper = coins(out.copper);
+    // The brews step's kind of formula, in words (O-727).
+    const kinds = { elixir: "AZEROTH.Creator.Brews.Kind.elixir", oil: "AZEROTH.Creator.Brews.Kind.oil", bomb: "AZEROTH.Creator.Brews.Kind.bomb" };
+    if (typeof out.kind === "string" && kinds[out.kind]) out.kind = game.i18n.localize(kinds[out.kind]);
     return out;
   }
 
@@ -666,6 +680,30 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
       schools: facetOptions(matching, definitions, states, "school").map(r => ({ ...r, selected: r.value === s.spellSchool, label: game.i18n.localize(AZEROTH.spellSchools[r.value] ?? r.value) })),
       actions: facetOptions(matching, definitions, states, "action").map(r => ({ ...r, selected: r.value === s.spellAction, label: game.i18n.localize(AZEROTH.spellActions[r.value] ?? r.value) }))
     } };
+  }
+
+  /**
+   * **THE BREWS STEP** (02 §7's Field Brews and Tome of Silver and Ash; O-727): the whole of 08's table for each kind
+   * a formula is learned in, a checkbox a row, the count tier 1 gives beside it, and the Tome's second type. A row past
+   * the count is greyed while the kind is full; `validate` refuses the step in words until each count is met.
+   */
+  #brewsPane(s, p) {
+    const chosen = new Set(s.formulas ?? []);
+    const describe = id => this.#data.catalogue.find(i => i.type === "gear" && i.identifier === id)?.description ?? "";
+    const kinds = FORMULA_KINDS.map(kind => {
+      const required = knownCount(kind, 1);
+      const ids = formulaChoices()[kind];
+      const picked = ids.filter(id => chosen.has(id)).length;
+      return {
+        kind, required, picked, full: picked >= required,
+        label: game.i18n.localize(`AZEROTH.WitchHunter.Kind.${kind}`),
+        count: game.i18n.format("AZEROTH.Creator.Brews.Count", { picked, required }),
+        rows: ids.map(id => ({ id, name: brewOf(id)?.name ?? id, checked: chosen.has(id),
+          disabled: !chosen.has(id) && picked >= required, text: String(describe(id)).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim() }))
+      };
+    });
+    const types = CREATURE_TYPES.filter(k => k !== "undead").map(key => ({ key, label: game.i18n.localize(AZEROTH.creatureTypes?.[key] ?? key), selected: s.tomeType === key }));
+    return { brews: { className: p.cls?.name, kinds, types, tomeType: s.tomeType ?? "" } };
   }
 
   #languagesPane(s, p, numbers) {
@@ -950,6 +988,10 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     const showUntrained = this.element.querySelector("input[name=showUntrainedGear]");
     if (showUntrained) s.showUntrainedGear = showUntrained.checked;
     const spellSearch = value("spellSearch"); if (spellSearch !== undefined) s.spellSearch = spellSearch;
+    // The brews step's checkboxes and the Tome's type (O-727): read only while the step is drawn.
+    const formulaBoxes = [...this.element.querySelectorAll("input[data-creator=formula]")];
+    if (formulaBoxes.length) s.formulas = formulaBoxes.filter(el => el.checked).map(el => el.value);
+    const tomeType = value("tomeType"); if (tomeType !== undefined) s.tomeType = tomeType || null;
     for (const key of ["spellSchool", "spellAction", "spellMana", "spellSort"]) {
       const v = value(key); if (v !== undefined) s[key] = v;
     }
@@ -1059,6 +1101,8 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
           kind: row.kind
         }))
       };
+      // A Witch Hunter's formulas and Tome begun (O-727), in the one update: nothing for any other class.
+      Object.assign(update, brewsUpdate(proposal));
       if (!created) {
         // The Build door: the fields the new door passed to Actor.create.
         if (Object.keys(ownership).length) update.ownership = { ...actor.ownership, ...ownership };
@@ -1085,13 +1129,23 @@ export class AzerothCharacterCreator extends HandlebarsApplicationMixin(Applicat
     ui.notifications?.info(game.i18n.format(created ? "AZEROTH.Creator.Created" : "AZEROTH.Creator.Filled", { name: actor.name }));
     await this.close();
     actor.sheet?.render({ force: true });
+    // A Witch Hunter's first brewing (the lead, 2026-11-27: *"Field Brews chosen at character creation should have doses
+    // available at start"*): the Prepare window opens on the new character, its brewing window open for this generation.
+    if (brewsStep(proposal.cls)) {
+      try {
+        const { firstBrewing } = await import("../effects/witch-hunter-brews.mjs");
+        await firstBrewing(actor);
+      } catch (err) {
+        console.warn("azeroth-rpg | the first brewing", err);
+      }
+    }
     return { ok: true, reasons: [], actor };
   }
 
   /** Wait for the grant chain: the class's talents, the race's, and the race trait feature. */
   async #untilGranted(actor, proposal) {
     await actor._talentGrant?.catch?.(() => {});
-    // What the grant owes off the pack: the class's thirty-six, and a Legacy's
+    // What the grant owes off the pack: the class's own (thirty-six, forty-eight for a four-branch class), and a Legacy's
     // twelve where the race keeps one on it (04 §1, D-781).
     const wantClass = proposal.cls
       ? owedTalents(this.#data.talents.map(t => ({ system: t })), { classNames: [proposal.cls.name], people: proposal.race?.name ?? null }).length

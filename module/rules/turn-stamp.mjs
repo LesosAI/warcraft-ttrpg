@@ -96,7 +96,10 @@ export const BOOKKEEPING_FLAGS = Object.freeze([
   "turnStartHealth",
   // The holds at 1 a creature has had this fight (the class talent audit's R4, D-1863):
   // `AzerothCombatant#markHold`, never the order.
-  "heldAtOne"
+  "heldAtOne",
+  // The round a Tempo holder entered the fight, where its idle count starts (`AzerothCombat#_fightStart`; the
+  // Witch Hunter's final architect review, finding 3): read by the round's end, never by the order.
+  "enteredRound"
 ]);
 
 /**

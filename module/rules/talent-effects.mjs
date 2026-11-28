@@ -269,6 +269,8 @@ import * as NT from "./necromancer-talents.mjs";
 import * as ST from "./sovereign-talents.mjs";
 // The Demon Hunter's numbers (04's Betrayer, Souleater and Sufferer; the Demon Hunter plan's Phase 5).
 import * as DT from "./demon-hunter-talents.mjs";
+// The Witch Hunter's numbers (04's Wolf, Gryphon, Bear and Cat; the Witch Hunter plan's wave 2b).
+import * as WT from "./witch-hunter-talents.mjs";
 // A summon's count by rank, bound at the stamp (the Legacy branches' door 4).
 import { summonCountAt } from "./summon-places.mjs";
 // R1's cap on a per-rank bonus (the class talent audit; D-1861).
@@ -4037,6 +4039,145 @@ export const TALENT_EFFECTS = Object.freeze({
     // *Once per Short Rest, as an Action, end every spell and spell effect of tier 3 or lower within 30 feet ...*
     "silence-the-weave": { grants: grant({ action: "action", uses: uses(1, DT.SILENCE_THE_WEAVE.per) }), onUse: { dh: { talent: "silence" } } }
   },
+  // **THE WITCH HUNTER** (04's Wolf, Gryphon, Bear and Cat; the Witch Hunter plan's wave 2b, D-2080 to D-2094). Every
+  // number is `rules/witch-hunter-talents.mjs`' (WT), held to 04 at every rank by `witch-hunter-talents.test.mjs`, and
+  // every door is named, function by function, in `WT.WH_TALENT_DOORS`. A row reuses a kind another class built where
+  // one fits; `wh` names what only this class's doors read (`effects/witch-hunter-talents.mjs`, the brews, the Signs and
+  // the Tome), and a Use's `onUse.wh.talent` is judged by `effects/witch-hunter-talents.mjs#judgeWhTalentUse` before
+  // anything is paid.
+  "witch-hunter": {
+    /* ---- Wolf ---- */
+    // *When you brew with Field Brews, you brew 1 more dose per rank*: `brewing.mjs#dosesFor`, at the rest and in Prepare.
+    "extra-measure": { wh: { doses: WT.EXTRA_MEASURE_TALENT.perRank } },
+    // *... that restore Health restore 1 more per rank, and your bombs ... deal 1 more damage per rank*: the brew's
+    // stamp at the Use (`witch-hunter-brews.mjs#stampBrew`).
+    "potent-brews": { wh: { brew: "potent", heal: true, damage: true } },
+    // *Once a round per rank, you may use an elixir or an oil ... as a free action*: claimed before the budget
+    // (`effects/witch-hunter-talents.mjs#freeBrewFor`).
+    "practiced-hands": { wh: { free: WT.PRACTICED_HANDS.kinds } },
+    // *Your Hunter's oil ... adds 1 more damage per rank*: the oil's stamp.
+    "sharper-oils": { wh: { brew: "oil", damage: true } },
+    // *You have a Boon on the Investigation Test ... At rank 2 ... when you finish a Short Rest*: the learning Test and
+    // the rest's chance (`tome.mjs#learnBoons`, `learnRefusal`).
+    "field-notes": { wh: { learn: true } },
+    // *Your bombs ... land 10 feet farther away per rank, and their radius grows by 5 feet per rank*: the bomb's stamp.
+    "wide-blast": { wh: { brew: "bomb" } },
+    // *Your elixirs ... that last 1 minute last 1 more minute per rank*: the elixir's stamp.
+    "lasting-brews": { wh: { brew: "duration" } },
+    // *When you choose types for Studied, you may choose 1 more per rank*: `tome.mjs#studiedCount`, in Prepare.
+    "forewarned": { wh: { studied: WT.FOREWARNED_TALENT.perRank } },
+    // *Once a round per rank, after you throw a bomb ... you may throw another as a free action*: claimed before the
+    // budget, after a bomb this turn (`freeBrewFor`, `markBombThrown`).
+    "cluster-bomb": { wh: { free: ["bomb"] } },
+    // *The Decoction ... does not count toward your Toxicity limit ... At rank 2 ... two Decoctions at a time*:
+    // `toxicity.mjs#countsToward`, `brewing.mjs#decoctionLimit`.
+    "refined-decoctions": { wh: { toxicity: true } },
+    // *Your Toxicity limit from Field Brews rises by 1*: `toxicity.mjs#toxicityLimit`.
+    "seasoned-blood": { wh: { toxicity: true, stat: true } },
+    // *Once per Long Rest, as a Half-Action, each elixir and Decoction you brewed ... returns to the number of doses you
+    // brewed*: the brewing's own record (`WH_BREW_LOG_FLAG`), restored on the hunter.
+    "second-brewing": { grants: grant({ action: WT.SECOND_BREWING_TALENT.action, uses: uses(1, WT.SECOND_BREWING_TALENT.per) }), onUse: { wh: { talent: "secondBrewing" } } },
+    /* ---- Gryphon ---- */
+    // *The cones ... grow by 5 feet per rank, and your Ash Sign and Lull Sign reach 10 feet farther per rank*:
+    // `witch-hunter-features.mjs#signEffect`, read by the Sign's own door.
+    "far-signs": { wh: { sign: "reach" } },
+    // *Your Ember Sign deals 1 more damage per rank*: `signEffect`.
+    "searing-script": { wh: { sign: "damage", damage: true } },
+    // *Your first Sign each turn from Signs costs 1 Energy less per rank*: `signCost`.
+    "quick-script": { wh: { sign: "cost", discount: true } },
+    // *A creature that fails its Test against your Gale Sign takes Physical damage equal to your rank plus your tier*:
+    // the cone card's damage on a failure (`signEffect`, `coneSys`).
+    "shattering-gale": { wh: { sign: "damage" } },
+    // *A creature your Lull Sign leaves Charmed stays Charmed 1 more round per rank*: the Charmed's span lengthened at
+    // the failed Test (`witch-hunter-talents.mjs#lengthenSpan`).
+    "deep-lull": { wh: { sign: "lull" } },
+    // *When you use the Rowan Sign, each enemy within 5 feet of the creature that gains the Ward takes Fire damage*:
+    // the burst after the Ward lands (`burstFromRowan`).
+    "bursting-rowan": { wh: { sign: "burst" } },
+    // *The radius ... grows by 5 feet per rank, and an undead or a demon that starts its turn in it takes Holy damage*:
+    // the ring's radius and its `against` row (`signEffect`, `ashRingTick`).
+    "ashen-ring": { wh: { sign: "ash" } },
+    // *The cone of your Ember Sign stays alight until the start of your next turn ...*: an area that strikes, set down
+    // where the cone was aimed (`placeFirestream`).
+    "firestream": { wh: { sign: "linger" } },
+    // *The Ward your Rowan Sign gives rises by 1 per rank*: `signEffect`.
+    "living-rowan": { wh: { sign: "ward", stat: true } },
+    // *Your second Sign each turn from Signs costs 1 Energy less per rank*: `signCost`.
+    "twin-signs": { wh: { sign: "cost", discount: true } },
+    // *When you use the Ember Sign, you may make it deal Holy damage instead of Fire*: asked in the Sign's judgement.
+    "holy-ember": { wh: { sign: "holy" } },
+    // *Each Sign from Signs costs 1 Energy less, to the minimum of 1*: `signCost`.
+    "sign-of-the-order": { wh: { sign: "cost", discount: true } },
+    /* ---- Bear ---- */
+    // *You may wear plate without a Bane. At rank 2 you ignore the Encumbering trait of the suit you wear* (T3): plate
+    // added to the class's Access, and at rank 2 the suit's Encumbering waived whole - its Speed part and its Stealth
+    // Bane - and never a weapon's (`armorAccessFor`'s `waivesSuitEncumbering`; O-719).
+    "bears-hide": { armorAccess: { categories: [...WT.BEARS_HIDE.categories], atRank: [{ rank: WT.BEARS_HIDE.suitRank, waivesSuitEncumbering: true }] } },
+    // *You have a Boon on Body Resilience Tests. At rank 2 you also have a Boon on Spirit Resilience Tests* (the lead,
+    // 2026-11-27, replacing the +1 SL a rank): an automatic line on the roll dialog (`ironStomachBoons`).
+    "iron-stomach": { wh: { roll: "ironStomach" } },
+    // *Your Sunder costs 1 Tempo less per rank*: `maneuvers.mjs#maneuverCost` reads it by name, floor 1.
+    "splitting-blow": { automated: "inline", wh: { discount: true } },
+    // *You have a Boon on Resilience Tests against being knocked Prone or moved. At rank 2, while you wield a weapon in
+    // two hands, you cannot be moved against your will*: the Resist door's Boon on a card that moves or knocks Prone
+    // (`unbowedBoons`), the table's line on any other Resilience Test, and the forced-move door's refusal.
+    "unbowed": { wh: { boon: "moved", immovable: WT.UNBOWED.immovableRank } },
+    // *Your attacks with a weapon in two hands deal 1 more damage per rank*: a damage line gated on the grip.
+    "bears-weight": { damage: damage(["all"], "attack", { when: { wields: [WT.BEARS_WEIGHT.wields] } }) },
+    // *While you wield a weapon in two hands, a successful Parry gives you 1 Tempo per rank*: the Parry that holds
+    // (`parryGainsFor`).
+    "steel-guard": { parry: { gain: { pool: WT.STEEL_GUARD.pool, amount: "rank" }, when: { wields: [WT.STEEL_GUARD.wields] } } },
+    // *Once a round per rank, when a melee attack hits you, you gain 1 Tempo*: the struck door (`whWhenStruck`).
+    "bears-wrath": { wh: { struck: true } },
+    // *Your Whirling Steel costs 1 Tempo less per rank*: a patch on 02's Whirling Steel's price (O-734).
+    "crushing-sweep": { modifies: mod("Whirling Steel", { cost: { delta: "-rank" } }) },
+    // *The first time in a fight that your Health drops below half, you gain temporary Health*: the struck door, its
+    // once a fight the counter the talent grants (`whWhenStruck`).
+    "bears-endurance": { grants: counter(1, "encounter"), wh: { tempHealth: true } },
+    // *Your Tempo is capped at 8 instead of 5*: `momentum.mjs#capFor` reads it through `tempo.mjs#URSINE_FURY`.
+    "ursine-fury": { wh: { cap: WT.URSINE_FURY_TALENT.cap } },
+    // *When you hit with a weapon in two hands, the target is pushed 5 feet away from you per rank*: the hit door
+    // (`whTalentsOnHit`) through `forceMove`.
+    "thunderous-swing": { wh: { push: WT.THUNDEROUS_SWING.feet } },
+    // *Once per Short Rest, as a Half-Action, for 1 minute: ... extra damage equal to your tier, and you gain 1 Armor
+    // Point on every location*: one effect on the hunter (`landMountainBear`), its damage read by `witchHunterBlow`.
+    "mountain-bear": { grants: grant({ action: WT.MOUNTAIN_BEAR.action, uses: uses(1, WT.MOUNTAIN_BEAR.per) }), onUse: { wh: { talent: "mountainBear" } }, wh: { stat: true } },
+    /* ---- Cat ---- */
+    // *While you wear studded armor or lighter, your Defense rises by 1 per rank*: an owner-side passive gated on the
+    // suit's category (`talent-gates.mjs`' `wears`, D-2113).
+    "feline-reflexes": { passive: passive([add("system.defense", "rank")], { wears: { atMost: WT.FELINE_REFLEXES.atMost } }) },
+    // *Once a round, when a melee attack misses you, you may move 5 feet per rank. This movement does not provoke
+    // Opportunity Attacks*: Elusive's button on the attack's card, free, melee, a miss, once a round.
+    "tumble": { evade: { feet: `${WT.TUMBLE.feet}*rank`, free: true, melee: true, missOnly: true, once: "round" } },
+    // *When you hit at SL 2 or higher, the target is Slowed until the end of its next turn. At rank 2 ... SL 1*.
+    "hobbling-cut": { hitLays: { sl: WT.HOBBLING_CUT.sl, condition: WT.HOBBLING_CUT.condition, until: "endOfNextTurnOrRound", atRank: [{ rank: 2, sl: WT.HOBBLING_CUT.rank2Sl }] } },
+    // *While you wear studded armor or lighter, your Speed rises by 5 feet per rank*: the same gate.
+    "cats-step": { passive: passive([add("system.speed", `${WT.CATS_STEP.feet}*rank`)], { wears: { atMost: WT.CATS_STEP.atMost } }) },
+    // *Your Riposte costs 1 Tempo less per rank, to a minimum of 1. At rank 2, a Riposte against a creature of a Studied
+    // type deals extra damage equal to your tier*: `maneuverCost` by name, and a damage line on the Riposte.
+    "hunters-riposte": { automated: "inline", wh: { discount: true }, damage: damage(["all"], "attack", { amount: "tier", minRank: WT.HUNTERS_RIPOSTE.damageRank, when: ["riposte", { typeStudied: true }] }) },
+    // *Your weapon attacks inflict a Critical Injury on 19 or 20. At rank 2 this applies on 18 to 20 against a creature
+    // of a Studied type*: the attack door's range (`criticalRangeFor`, whose `or` is the rank's second range).
+    "lethal-edge": { critical: { on: WT.LETHAL_EDGE.on, when: "weaponAttack", atRank: [{ rank: 2, or: [{ on: WT.LETHAL_EDGE.studiedOn, when: ["weaponAttack", { typeStudied: true }] }] }] } },
+    // *When you have moved at least 10 feet this turn, your next attack this turn deals 1 more damage per rank*: a
+    // promise to the next attack, laid by the move door (`layLeapingStrike`).
+    "leaping-strike": { wh: { leap: true, damage: true } },
+    // *In dim light or darkness, you have a Boon on Stealth Tests. Your first attack while hidden deals extra damage
+    // equal to your rank plus your tier*: the table's line on a Stealth Test, and a damage line on a hidden attack.
+    "night-eyes": { damage: damage(["all"], "attack", { amount: "rank+tier", when: "hidden" }), wh: { skill: WT.NIGHT_EYES.skill } },
+    // *Once a round, after you hit, you may spend 2 Tempo to make one more attack against the same target. At rank 2 it
+    // costs 1 Tempo*: a button on the hit's card, paid at the press, one roll.
+    "second-cut": { extraStrike: { target: "same", count: 1, cost: { pool: WT.SECOND_CUT.pool, amount: WT.SECOND_CUT.cost }, triggered: true,
+      atRank: [{ rank: 2, cost: { pool: WT.SECOND_CUT.pool, amount: WT.SECOND_CUT.rank2Cost } }] } },
+    // *When you inflict a Critical Injury, gain 1 Tempo per rank*: a further gain on the critical hit.
+    "kill-rhythm": { momentum: { pool: WT.KILL_RHYTHM.pool, amount: "rank", when: "critical" } },
+    // *When an effect lets you halve its damage with a successful Reflex Resilience Test, you take no damage on a success
+    // and half on a failure* (T5): the Apply door's question (`nineLivesFor`).
+    "nine-lives": { wh: { evasion: true } },
+    // *Once a round, when you hit with a weapon, you may spend 2 Tempo to make one attack with a Boon against a
+    // different creature within your reach*: a button on the hit's card, paid at the press, one roll with a Boon.
+    "cats-dance": { extraStrike: { target: "other", count: 1, cost: { pool: WT.CATS_DANCE.pool, amount: WT.CATS_DANCE.cost }, boons: WT.CATS_DANCE.boons, reach: true, weapon: true, triggered: true } }
+  },
   // **THE SOVEREIGN** (04's Dominion, Vainglorious and Ravenous; the San'layn and Sovereign plan's Phase 5).
   // Every number is `rules/sovereign-talents.mjs`' (ST), held to 04 at every rank by
   // `sovereign-talents.test.mjs`, and every door is `effects/sovereign-features.mjs`' - named, function by
@@ -4179,6 +4320,9 @@ export const DAMAGE_FACTS = Object.freeze({
   // per rank*; the lead: *"Yes, the fist too"*): the roller wears the Gnomish Battle
   // Rig (`AzerothActor#shape`, the Legacy branches' B2).
   battleRig: true,
+  // 04's Night Eyes (*Your first attack while hidden*; the Witch Hunter plan's wave 2b): the attacker is hidden as the
+  // attack door reads it (`effects/stealth.mjs#isHiddenFor`), before the roll's reveal.
+  hidden: true,
   // **THE TABLE'S CALL** (D2 §12), so never auto-checked.
   flanking: false,
   judgement: false
@@ -4217,6 +4361,9 @@ export function damageRowsFor(talents = [], { lane = "attack", type = "physical"
     // dialog line, since the Success Level does not exist until the roll -
     // `slDamageFor` is its one reader, inside `rollTest`.
     if (Number(d.sl) > 0) continue;
+    // **A CLAUSE A RANK REACHES** (04's Hunter's Riposte: *At rank 2, a Riposte ... deals extra damage*; the Witch Hunter
+    // plan's wave 2b): a row naming `minRank` is no line below it.
+    if (Number(d.minRank) > 0 && (Number(talent.taken) || 0) < Number(d.minRank)) continue;
     // **A WEAPON BLOW THAT COUNTS AS A SPELL'S** (04's Elemental Blademaster; the
     // lead, 2026-10-03, on O-190; D-779): `alsoSpell` lets a spell row reach the
     // attack lane where the door found the blow magical.
@@ -4497,6 +4644,8 @@ export const CENSUS_DETECTORS = Object.freeze({
       || Boolean(e.classDiscount)
       // And the class talent audit's Overchanneller (class agent C, D-1890): each point's price.
       || Boolean(e.overchannel?.less)
+      // And the Witch Hunter's (wave 2b): the Sign discounts (`signCost`) and the two maneuvers (`maneuverCost`).
+      || Boolean(e.wh?.discount)
   },
   // *your Block reduces 1 more damage per rank*, *you take 2 less damage*.
   // A Block's own bonus (Redoubt, Shield Wall; D-772).
@@ -4573,6 +4722,8 @@ export const CENSUS_DETECTORS = Object.freeze({
       // And class agent B's (D-1887): Tide of the Ancestors' heal at the shaman's turn start
       // (`effects/audit-cunning.mjs#shamanTurnStart`).
       || Boolean(e.onUse?.tide?.heal)
+      // And the Witch Hunter's (wave 2b): Potent Brews' Health on an elixir, at the brew's stamp (`stampBrew`).
+      || e.wh?.heal === true
   },
   // *Your Fortitude rises by 2 per rank*, *your Defense rises by 1 per rank*.
   risesBy: {
@@ -4591,6 +4742,8 @@ export const CENSUS_DETECTORS = Object.freeze({
       || Boolean(e.sov?.stat)
       // And the class talent audit's Curse of Agony (class agent C, D-1891): a tick that rises.
       || Boolean(e.tickRise)
+      // And the Witch Hunter's (wave 2b): Living Rowan's Ward and Seasoned Blood's Toxicity limit, each read by its own door.
+      || Boolean(e.wh?.stat)
   },
   // A number per rank beside Defense, Armor Points or Ward: *1 more Defense per
   // rank*, *Ward 1 per rank*, *ignore 2 Armor Points per rank*. Not *your Ward
@@ -4630,6 +4783,8 @@ export const CENSUS_DETECTORS = Object.freeze({
       // And the Sovereign's (Phase 5): Gilded Skin, Overflowing Cup, Too Beautiful to Die, Tasting Bite and
       // Bloodletting.
       || Boolean(e.sov?.tempHealth)
+      // And the Witch Hunter's (wave 2b): Bear's Endurance at the struck door (`effects/witch-hunter-talents.mjs#whWhenStruck`).
+      || Boolean(e.wh?.tempHealth)
   },
   // *at the start of each of your turns*, *at the start of the target's turns*,
   // *anything starting its turn there*: a tick (the plan's Phase 2b).

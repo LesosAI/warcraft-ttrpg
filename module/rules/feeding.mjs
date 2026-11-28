@@ -258,6 +258,18 @@ export function feedingTests({ mode = "fight", free = false } = {}) {
   return mode === "fight" && free !== true;
 }
 
+/**
+ * **WHETHER A FEEDING'S LANDING GIVES BACK WHAT IT PAID** (the phase 3 review): only where nothing landed -
+ * the creature or the Sovereign gone (`gone`), or no GM to take the creature's Health (`noGM`). A creature
+ * that resisted, a second feeding refused for the day, or a Vitae write that failed after the Health was
+ * taken keeps the price. Pure.
+ *
+ * @param {string|null|undefined} reason  `landFeedingPlan`'s refusal
+ */
+export function feedingGivesBack(reason) {
+  return reason === "gone" || reason === "noGM";
+}
+
 /** What the creature loses in a fight (02 §7: *it loses Health equal to your tier*); nothing outside one. */
 export function feedingHealthLoss({ mode = "fight", tier = 1 } = {}) {
   return mode === "fight" ? Math.max(1, int(tier)) : 0;

@@ -42,6 +42,8 @@ import { animationAvailability, isSettled, loopsOn, setSettled } from "./availab
 import { sovereignCoreRecords } from "../rules/sovereign-core-animations.mjs";
 // The Sovereign's prey mark, read off the mark's own flag write (the plan's C14).
 import { sovereignAnimationRecords } from "../rules/sovereign-animations.mjs";
+// The Witch Hunter's Tempo rising and falling, read off the pool write's options (wave 3, D-2097).
+import { tempoRecords } from "../rules/witch-hunter-animations.mjs";
 import { SequencerPlayer, warn } from "./player.mjs";
 import {
   cardPrivacyKey, cardRecord, cardRecords, effectRecord, effectRecords, effectUpdateRecords, factsFor, featureCardSeen,
@@ -617,6 +619,9 @@ export function registerAnimationHooks() {
   // **THE SOVEREIGN'S PREY MARKED** (02 §7's Hunt Mortal; the plan's C14): the mark door writes the cue on the
   // same update that sets the prey flag, which reaches every client's hook. The mark that stands is a loop.
   Hooks.on("updateActor", guarded("sovereign-prey", (actor, changed, options) => playCuesFor(sovereignAnimationRecords(options))));
+  // **THE WITCH HUNTER'S TEMPO** (wave 3, D-2097): `writePoolsNow` writes the cue on the same update that moves the
+  // Tempo (`rules/witch-hunter-animations.mjs#tempoCue`), which reaches every client's hook.
+  Hooks.on("updateActor", guarded("wh-tempo", (actor, changed, options) => playCuesFor(tempoRecords(options))));
   // **A RAISED DEAD COLLAPSING** (the animation contract's section 3): the collapse door writes the
   // bodies on the Token delete that removes them, which reaches every client's hook.
   Hooks.on("deleteToken", guarded("horde-collapse", (token, options) => playCuesFor(collapseRecords(token, options))));

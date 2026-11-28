@@ -116,6 +116,8 @@ import * as v01623c from "./0.16.2.3-class-audit-c.mjs";
 import * as v01624h from "./0.16.2.4-bestiary-health.mjs";
 import * as v01625w from "./0.16.2.5-bestiary-webp.mjs";
 import * as v0170p from "./0.17.0-professions.mjs";
+import * as v0180w from "./0.18.0-witch-hunter.mjs";
+import * as v0181c from "./0.18.1-class-items.mjs";
 import { forgetPacks } from "./walk.mjs";
 
 // Ordered oldest to newest. Add new entries at the end.
@@ -343,7 +345,15 @@ const CHAIN = [
   // 0.17.0: professions replace careers (D-1903, D-1916) - every career item deleted, `system.career`
   // cleared, `professionOwed` where no profession is held, a stub profession given 03's fields with its
   // Rank kept, and every owned item's craft and material stamped against its pack copy. Ranks and XP untouched.
-  { version: "0.17.0", module: v0170p }
+  { version: "0.17.0", module: v0170p },
+  // 0.18.0: the Witch Hunter, the sixteenth class (the Witch Hunter plan) - a held Human race opens the class,
+  // a held brew or medallion takes its pack copy's Use, slot and rarity ladder, and the rules chapters are
+  // brought up to the book whose 02 §7 counts sixteen classes. Each step warns and stamps nothing on a stale pack.
+  { version: "0.18.0", module: v0180w },
+  // 0.18.1: the new classes' named items and the Enchanter's Signatures (D-2145 to D-2170) - a held Grimoire of
+  // the Fourth Signatory, Codex of the Five Pylons or Idol of the Dreamer takes its pack copy's Augment flag, and
+  // the rules chapters are brought up to 08's new §18 and §20. Warns and stamps nothing on a stale gear pack.
+  { version: "0.18.1", module: v0181c }
 ];
 
 /**

@@ -93,7 +93,9 @@ import { actorInWorld, sceneInWorld } from "../canvas/in-world.mjs";
 // A floor under Health an aura lays, in 07's Aegis floor's own flag (the Legacy
 // branches' door 12: 04's Big Bad Voodoo).
 import { FLOOR_FLAG } from "../rules/blow-doors.mjs";
-import { auraTickFlag, healthFloorFlag, carriesHealTick } from "../rules/auras.mjs";
+import { AURA_ENDS_FLAG, auraTickFlag, healthFloorFlag, carriesHealTick } from "../rules/auras.mjs";
+// The Immune an area strips while a creature remains in it (02's Ash Sign; wave 2a-B, D-2072): the strip's own flag.
+import { REMAINS_FLAG } from "../rules/laid-immune.mjs";
 
 /** Whether this creature carries a heal over time laid by `uuid` (04's Heart of the Grove, D-1892). */
 function carriesHealTickBy(actor, uuid) {
@@ -190,7 +192,9 @@ export function auraSourcesOf(actor) {
         feet: row.feet, targets: row.targets, centre: "self", damageReduction: row.damageReduction,
         spellDamage: row.spellDamage ?? null, floor: row.floor ?? null, excludeOwner: excludesHolder(words),
         boon: row.boon ?? null, bane: row.bane ?? null, attackDamage: row.attackDamage ?? null,
-        tick: row.tick ?? null, who: row.who ?? null
+        tick: row.tick ?? null, who: row.who ?? null,
+        // The Darkmaster's Rod's *ends Frightened at the start of its turn* (D-2158).
+        ends: row.ends ?? []
       }
     });
   }
@@ -362,6 +366,8 @@ function auraDescription(row, shown = {}) {
   if (p.speed) lines.push(game.i18n.format("AZEROTH.Aura.Speed", { feet: p.speed }));
   if (p.healing === "half") lines.push(game.i18n.localize("AZEROTH.Aura.HealingHalved"));
   if (p.standFree) lines.push(game.i18n.localize("AZEROTH.Aura.StandFree"));
+  // 02's Ash Sign (D-2072): the Immune types the ring takes off while the creature stands in it.
+  if (p.loseImmune) lines.push(game.i18n.format("AZEROTH.Aura.LosesImmune", { types: game.i18n.getListFormatter().format(p.loseImmune.map(t => game.i18n.localize(AZEROTH.damageTypes[t] ?? t))) }));
   if (p.schoolArmor) {
     const schools = game.i18n.getListFormatter().format(p.schoolArmor.schools.map(s => game.i18n.localize(AZEROTH.schools[s] ?? s)));
     lines.push(game.i18n.format("AZEROTH.Aura.SchoolArmor", { ap: p.schoolArmor.amount, schools, owner }));
@@ -386,6 +392,18 @@ function auraDescription(row, shown = {}) {
   if (p.unmovable) lines.push(game.i18n.localize("AZEROTH.Aura.Unmovable"));
   if (p.meleeTyped) lines.push(game.i18n.format("AZEROTH.Aura.MeleeTyped", { n: p.meleeTyped.amount, type: game.i18n.localize(AZEROTH.damageTypes[p.meleeTyped.type] ?? p.meleeTyped.type) }));
   return lines.map(line => `<p>${line}</p>`).join("");
+}
+
+/**
+ * **WHETHER A CREATURE IS THIS HOLDER'S OWN RAISED DEAD** (The Darkmaster's Rod: *Each of your
+ * raised dead*; D-2158): its bond is the `raised` kind and names the holder.
+ *
+ * @param {Actor} actor
+ * @param {string} holderUuid
+ */
+function raisedBy(actor, holderUuid) {
+  const bond = bondOf(actor);
+  return bond?.kind === "raised" && bond.ownerUuid === holderUuid;
 }
 
 /**
@@ -418,7 +436,13 @@ function auraData(row, shown = {}) {
     ...(p.taunt ? { [LAID_BANE_FLAG]: { kind: "attack", banes: p.taunt.banes, source: row.name ?? "", except: { ...p.taunt.except }, lasting: true } } : {}),
     // March of the Damned's *ignore Difficult ground* (door 12): the flag a laid effect already
     // carries for it (`canvas/behaviors.mjs#movementFactsOf`), lifted with the aura.
-    ...(p.ignoresGround ? { [IGNORES_GROUND_FLAG]: true } : {})
+    ...(p.ignoresGround ? { [IGNORES_GROUND_FLAG]: true } : {}),
+    // 02's Ash Sign (*A creature in the ring loses **Immune (Physical)***; D-2072): `laid-immune.mjs`' own flag, which
+    // both actor models read through `withoutLaidImmune`, beside the aura's and lifted with it.
+    ...(p.loseImmune ? { [REMAINS_FLAG]: { loseImmune: [...p.loseImmune], source: row.name ?? "" } } : {}),
+    // The Darkmaster's Rod's *ends Frightened at the start of its turn* (D-2158): the conditions
+    // `AzerothCombat#_onStartTurn` ends on this creature, lifted with the aura.
+    ...(p.ends ? { [AURA_ENDS_FLAG]: [...p.ends] } : {})
   };
   return {
     name: game.i18n.format("AZEROTH.Aura.EffectName", { source: row.name, owner }),
@@ -788,7 +812,10 @@ async function syncAurasNow(scene) {
           undead: kindsOfActor(actor).has("undead"),
           // *Who carries one of your ongoing healing effects* (04's Heart of the Grove, D-1892):
           // an active laid heal tick whose hand is the holder's.
-          ...(source.who.healTick === true ? { healTick: carriesHealTickBy(actor, holder.uuid) } : {})
+          ...(source.who.healTick === true ? { healTick: carriesHealTickBy(actor, holder.uuid) } : {}),
+          // *Each of your raised dead* (The Darkmaster's Rod; D-2158): the holder's own `raised`
+          // bond, read off the world actor (`bondOf`), never a guess off the name.
+          ...(source.who.raised === true ? { raised: raisedBy(actor, holder.uuid) } : {})
         } : {})
       }));
       // **AN AURA ON ITS HOLDER ALONE** (04's Sacred Duty, D-772): it stands on

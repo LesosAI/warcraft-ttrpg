@@ -80,6 +80,18 @@ import { demonHunterFeaturesBatch } from "./quench-demon-hunter-features.mjs";
 import { demonHunterSpellsBatch } from "./quench-demon-hunter-spells.mjs";
 import { demonHunterTalentsBatch } from "./quench-demon-hunter-talents.mjs";
 import { demonHunterAnimationsBatch } from "./quench-demon-hunter-animations.mjs";
+// The Witch Hunter's groundwork, brews and Tome (the plan's wave 2a-A).
+import { witchHunterBrewsBatch, witchHunterGroundworkBatch, witchHunterTomeBatch } from "./quench-witch-hunter-2a.mjs";
+// The Witch Hunter's Signs and class features (the plan's wave 2a-B).
+import { witchHunterFeaturesBatch, witchHunterSignsBatch } from "./quench-witch-hunter-signs.mjs";
+import { witchHunterPicksBatch } from "./quench-witch-hunter-picks.mjs";
+import { witchHunterAnimationsBatch } from "./quench-witch-hunter-animations.mjs";
+import { witchHunterTalentsBatch } from "./quench-witch-hunter-talents.mjs";
+// What the other Witch Hunter batches left unpressed (the plan's wave 2d-B; the architect review's section E).
+import { witchHunterCoverageBatch } from "./quench-witch-hunter-coverage.mjs";
+// 08 §20's class items, phase 3 (D-2156 to D-2162): every reader through the real control.
+import { classItemsBatch } from "./quench-class-items.mjs";
+import { enchanterSignaturesBatch } from "./quench-enchanter-signatures.mjs";
 import { reactionBatch } from "./quench-reactions.mjs";
 import { creatureGearBatch } from "./quench-npc-gear.mjs";
 import { creatureSwingBatch } from "./quench-npc-swing.mjs";
@@ -474,6 +486,39 @@ export function registerQuenchTests() {
     });
     quench.registerBatch("azeroth-rpg.demon-hunter-animations", demonHunterAnimationsBatch, {
       displayName: "AZEROTH: The Demon Hunter's animations and sounds, read back live off the real controls (Phase 6, D-1580)"
+    });
+    quench.registerBatch("azeroth-rpg.witch-hunter-groundwork", witchHunterGroundworkBatch, {
+      displayName: "AZEROTH: The Witch Hunter's class, Tempo, Energy, kit and medallion through the real doors (wave 2a-A)"
+    });
+    quench.registerBatch("azeroth-rpg.witch-hunter-brews", witchHunterBrewsBatch, {
+      displayName: "AZEROTH: The Witch Hunter's nineteen brews through the real controls: Prepare, every Use, overdose, oils, bombs (wave 2a-A)"
+    });
+    quench.registerBatch("azeroth-rpg.witch-hunter-tome", witchHunterTomeBatch, {
+      displayName: "AZEROTH: The Tome of Silver and Ash and Studied through the real doors: learning, the hit, the weakness Bane, Tempo (wave 2a-A)"
+    });
+    quench.registerBatch("azeroth-rpg.witch-hunter-signs", witchHunterSignsBatch, {
+      displayName: "AZEROTH: The Witch Hunter's five Signs and Greater Signs through the sheet's Use, the board and the cards (wave 2a-B)"
+    });
+    quench.registerBatch("azeroth-rpg.witch-hunter-features", witchHunterFeaturesBatch, {
+      displayName: "AZEROTH: Read the Trail, Expose Weakness, Whirling Steel, the Medallion, Decoctions and The Last Hunt through the real controls (wave 2a-B)"
+    });
+    quench.registerBatch("azeroth-rpg.witch-hunter-picks", witchHunterPicksBatch, {
+      displayName: "AZEROTH: The Witch Hunter's creator step, Learn formulas, the one Spell DC and The Last Hunt's clip through the real doors (wave 2c)"
+    });
+    quench.registerBatch("azeroth-rpg.witch-hunter-animations", witchHunterAnimationsBatch, {
+      displayName: "AZEROTH: The Witch Hunter's Signs, features, brews, Tempo and talents each play a picture and a sound, read back live (wave 3)"
+    });
+    quench.registerBatch("azeroth-rpg.witch-hunter-talents", witchHunterTalentsBatch, {
+      displayName: "AZEROTH: The Witch Hunter's forty-eight talents, one case each, through the panel, the sheet, the dialog and the cards (wave 2b)"
+    });
+    quench.registerBatch("azeroth-rpg.witch-hunter-coverage", witchHunterCoverageBatch, {
+      displayName: "AZEROTH: The Witch Hunter's eight Decoctions, the other brews, Greater Signs, the warning's Boon, Extra Attack and the type lines, pressed live (wave 2d-B)"
+    });
+    quench.registerBatch("azeroth-rpg.class-items", classItemsBatch, {
+      displayName: "AZEROTH: The class items' readers - feature patches, the runes, the horde, feeding, the prey, the thrown glaive, the Tome - through the real controls (phase 3)"
+    });
+    quench.registerBatch("azeroth-rpg.enchanter-signatures", enchanterSignaturesBatch, {
+      displayName: "AZEROTH: 08 section 18's Enchanter's Signatures - laid from the Profession tab, Minor Speed, Gathering and Unholy Weapon at their doors (phase 4)"
     });
     quench.registerBatch("azeroth-rpg.move-through", moveThroughBatch, {
       displayName: "AZEROTH: 05's Moving through a space at the move door, with Veil of Mist, Underfoot and the GM's drag (FIXC, O-476)"

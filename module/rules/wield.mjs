@@ -34,9 +34,24 @@
  */
 
 import { figureSlots, isTwoHanded } from "./worn.mjs";
+// 08 §8's categories, for the worn suit's category (the Witch Hunter plan's armor-category gate).
+import { isArmorCategory } from "./armor.mjs";
 import { isShot } from "./ammunition.mjs";
 // A glaive thrown by Flame Crash lies where it landed and is in no hand (the review's C4).
 import { glaiveAway } from "./demon-hunter-spells.mjs";
+
+/**
+ * The category of the suit in the Chest tile (`figureSlots`' `body`): `none` with no suit, the suit's
+ * `system.category` where it is one of 08 §8's, else null.
+ *
+ * @param {{system?: {category?: string}}|null} body
+ * @returns {string|null}
+ */
+export function suitCategoryOf(body) {
+  if (!body) return "none";
+  const category = body.system?.category ?? null;
+  return isArmorCategory(category) ? category : null;
+}
 
 /** Ordinary Attack follows the equipped hand; special strikes keep their own economy. */
 export function attackOffHand(weapon, { offHand = null, budget = null, damage = true, opportunity = false, riposte = false, fromFeature = null } = {}) {
@@ -179,7 +194,11 @@ export function wieldFacts(items = [], { melded = false } = {}) {
     glaiveEach,
     scytheTwoHands,
     mainType,
-    offType
+    offType,
+    // **THE WORN SUIT'S CATEGORY** (the Witch Hunter plan's armor-category gate, `talent-gates.mjs
+    // #WEAR_GATE`): 08 §8's category of the suit in the Chest tile, `none` with no suit, null where the
+    // suit names no category the order knows. A string, so it is not one of `WIELD_FACTS`.
+    suitCategory: suitCategoryOf(figure.body)
   };
 }
 

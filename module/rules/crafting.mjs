@@ -110,6 +110,17 @@ export function upsertProject(projects = [], project) {
   return list.sort((a, b) => String(a.id).localeCompare(String(b.id)));
 }
 
+/**
+ * **WHETHER AN ITEM ALREADY STANDS UNDER AN ENCHANTMENT PROJECT** (the phase 4 review): a
+ * stored project, in any status, whose `quality.enchant.itemId` is this item. Two projects on
+ * one item would each be judged against the item as it is now, and the second delivered would
+ * rebuild over the first. The enchant door refuses the second as `enchantPending`.
+ */
+export function enchantPending(projects = [], itemId) {
+  if (!itemId) return false;
+  return (projects ?? []).some(p => p?.quality?.enchant?.itemId === itemId);
+}
+
 /** The list less one project (made, collapsed or abandoned). */
 export function dropProject(projects = [], id) {
   return (projects ?? []).filter(p => p && p.id !== id);

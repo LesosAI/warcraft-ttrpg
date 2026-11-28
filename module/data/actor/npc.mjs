@@ -58,6 +58,7 @@ import {
 } from "../../rules/creature-bonuses.mjs";
 import { BONUS_LIMIT } from "../../rules/item-bonuses.mjs";
 import { withLaidVulnerable } from "../../rules/laid-vulnerable.mjs";
+import { withoutLaidImmune } from "../../rules/laid-immune.mjs";
 import { veilBanesOn } from "../../rules/sovereign-spells.mjs";
 import { agilityBanesOn } from "../../rules/demon-hunter-spells.mjs";
 
@@ -549,6 +550,9 @@ export class NpcData extends foundry.abstract.TypeDataModel {
     // 07 §17's Wracking Pain (*Vulnerable (Physical) until the end of its next turn*; D-1366): a laid type ADDED
     // to the block's own list, which the stored copy never sees.
     this.vulnerable = withLaidVulnerable(this.vulnerable ?? [], this.parent?.effects ?? []);
+    // 08 §12's Silver dust and 02 §7's Ash Sign (*loses **Immune (Physical)***; the Witch Hunter plan, O-707): a laid
+    // strip TAKES a type off the list built above, read off the effects (`rules/laid-immune.mjs`), never the stored block.
+    this.immune = withoutLaidImmune(this.immune ?? [], this.parent?.effects ?? []);
     // 07 §17's Veil of Mist on a creature that cast it (D-1364): the roll dialog's `sovDeterred` lane, as a character's.
     this.sovereignDeterred = veilBanesOn(this.parent?.effects ?? []);
     // And 07 §15's Unnatural Agility on a creature that cast it (D-1546): the same lane.

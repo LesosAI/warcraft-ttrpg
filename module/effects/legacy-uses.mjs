@@ -487,6 +487,30 @@ export async function drainHeal({ healer, amount = 0, messageId = null, index = 
   }
 }
 
+/**
+ * **08 §18's LIFESTEALING, PAID** (D-2169): `drainHeal`'s shape for the enchantment's own record -
+ * on this client where it owns the bearer, else on the GM's (`act: "lifesteal"`), where the
+ * handler holds the amount to the card's `lifesteal.amounts[index]`, never the request's.
+ *
+ * @returns {Promise<number>} the Health the bearer regained
+ */
+export async function lifestealPay({ healer, amount = 0, messageId = null, index = null, name = "" }) {
+  const n = Math.max(0, Math.trunc(Number(amount)) || 0);
+  if (!healer || !(n > 0)) return 0;
+  try {
+    if (healer.isOwner) {
+      const before = healer.system?.health?.value ?? 0;
+      await healer.applyHealing(n, { from: healer, feature: true, featureName: name || null });
+      return Math.max(0, (healer.system?.health?.value ?? before) - before);
+    }
+    const done = await viaGM({ act: "lifesteal", byUuid: healer.uuid, messageId, index, amount: n });
+    return Number(done?.healed) || 0;
+  } catch (err) {
+    ui.notifications?.warn(err.message);
+    return 0;
+  }
+}
+
 /* -------------------------------------------- */
 /*  The GM-side handler                          */
 /* -------------------------------------------- */
@@ -508,6 +532,16 @@ export async function legacyUseQueryHandler(payload = {}, { user = null } = {}) 
     if (flags.healsDealt?.by !== by.uuid) throw new Error(game.i18n.format("AZEROTH.LegacyUse.NotHeld", { name: by.name, feature: flags.healsDealt?.name ?? "" }));
     const row = Number.isInteger(payload.index) ? (flags.damageByTarget?.[payload.index] ?? null) : null;
     const cap = Math.max(0, Math.trunc(Number(row?.damage)) || 0);
+    const n = Math.min(cap, Math.max(0, Math.trunc(Number(payload.amount)) || 0));
+    const before = by.system?.health?.value ?? 0;
+    if (n > 0) await by.applyHealing(n, { from: by, feature: true });
+    return { healed: Math.max(0, (by.system?.health?.value ?? before) - before) };
+  }
+  if (payload.act === "lifesteal") {
+    const card = payload.messageId ? (game.messages?.get(payload.messageId) ?? null) : null;
+    const record = card?.flags?.["azeroth-rpg"]?.lifesteal ?? null;
+    if (record?.by !== by.uuid) throw new Error(game.i18n.format("AZEROTH.LegacyUse.NotHeld", { name: by.name, feature: record?.name ?? "" }));
+    const cap = Number.isInteger(payload.index) ? Math.max(0, Math.trunc(Number(record.amounts?.[payload.index])) || 0) : 0;
     const n = Math.min(cap, Math.max(0, Math.trunc(Number(payload.amount)) || 0));
     const before = by.system?.health?.value ?? 0;
     if (n > 0) await by.applyHealing(n, { from: by, feature: true });

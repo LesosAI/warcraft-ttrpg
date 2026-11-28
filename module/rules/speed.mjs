@@ -35,7 +35,7 @@ export const GREATER_MUFFLED = /Muffled \(Greater\)/i;
  *   a weapon's (`rules/chromatic-features.mjs#scalesWaive` says whether it holds)
  * @returns {{key: string, value: number}[]}
  */
-export function speedParts({ raceSpeed = null, armorSpeed = 0, encumbering = false, grants = [], load = "unencumbered", waivesEncumbering = false, weaponSpeed = 0, scales = false } = {}) {
+export function speedParts({ raceSpeed = null, armorSpeed = 0, encumbering = false, grants = [], load = "unencumbered", waivesEncumbering = false, weaponSpeed = 0, scales = false, suitWaived = false } = {}) {
   const parts = [{ key: "race", value: Number.isFinite(raceSpeed) ? raceSpeed : BASE_SPEED }];
   if (armorSpeed) parts.push({ key: "armor", value: armorSpeed });
   const muffled = encumbering && grants.some(g => GREATER_MUFFLED.test(String(g)));
@@ -54,6 +54,10 @@ export function speedParts({ raceSpeed = null, armorSpeed = 0, encumbering = fal
     const back = (suitBack && scales !== true ? ENCUMBERING_SPEED_PENALTY : 0) + Math.max(0, -(Number(weaponSpeed) || 0));
     if (back > 0) parts.push({ key: "waived", value: back });
   }
+  // **THE SUIT'S TRAIT, IGNORED** (04's Bear's Hide at rank 2: *you ignore the **Encumbering** trait of the suit you
+  // wear*; the Witch Hunter plan's wave 2b): the suit's 5 feet back once - never beside Muffled, Scales or Warden's
+  // Mail, which gave it back already - and never a weapon's.
+  if (suitWaived === true && suitBack && scales !== true && waivesEncumbering !== true) parts.push({ key: "waived", value: ENCUMBERING_SPEED_PENALTY });
   // What you are carrying (05 §10, D-675). A PART rather than a condition:
   // the state is derived from the load every time data is prepared, and a
   // fifteenth condition would put A1's list and `config.mjs` out of step.

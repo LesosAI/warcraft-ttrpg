@@ -79,7 +79,7 @@ import { usesAskedLater } from "../rules/legacy-uses.mjs";
 import { hasUse } from "../rules/consumables.mjs";
 import { coatingName } from "../rules/consumables.mjs";
 import { containerOf, hasCharges, isContainer, isWorn } from "../rules/containers.mjs";
-import { canCarry, heldAugment } from "../rules/augments.mjs";
+import { augmentAtTier, canCarry, heldAugment } from "../rules/augments.mjs";
 import { SAND } from "../rules/sand.mjs";
 import { FIGURE_HANDS, FIGURE_LEFT, FIGURE_RIGHT, copyLabels, displacedBy, figureSlots, fitsSlot, handFor, twoHandedNote } from "../rules/worn.mjs";
 import { BASE_SLOTS, MAX_CONTAINERS, REFUSALS, areTwins, arrange, isMount, isThing, judgeMerge, judgePlace, judgeSplit, judgeSwap, ledger, placeOf, slotLine, slotsIn, stackKey, unitsOf, wearNew, wellsOf } from "../rules/slots.mjs";
@@ -119,9 +119,10 @@ import {
   rungFor, toolBonus, toolPrice
 } from "../rules/professions.mjs";
 import {
-  RARITY_CEILING, affixChoices, craftsOf, enchantChoices, enchantVerdict, forgeable, isClassicFind, raritiesFor, recipesFor, traitEntry
+  RARITY_CEILING, affixChoices, craftsOf, enchantChoices, enchantVerdict, enchantable, isClassicFind, raritiesFor, recipesFor, traitEntry
 } from "../rules/recipes.mjs";
-import { TARGET_SL, collectable, testRefusal } from "../rules/crafting.mjs";
+import { enchanterSignatureHtml, enchanterSignatureRowsFor } from "../rules/enchanter-signatures.mjs";
+import { TARGET_SL, collectable, enchantPending, testRefusal } from "../rules/crafting.mjs";
 import { DISENCHANT_YIELD, GATHER_SKILL, HARVEST } from "../rules/gathering.mjs";
 import { BIOME_KEYS, nodesIn } from "../rules/biomes.mjs";
 import { gatherInputs, materialCounts } from "../rules/profession-door.mjs";
@@ -159,6 +160,14 @@ import { inscriptionRefusalFor, spendRuneBare, useInscription } from "../effects
 import { spectralMove } from "../effects/mount-works.mjs";
 // 02 §7's *Latched*: the latch a Sovereign holds, read for the Combat tab's Let go (the review's S7).
 import { latchesOn } from "../rules/latch.mjs";
+// The Witch Hunter's full Hunter panel, as a view (D11; the Witch Hunter plan's wave 3, D-2100).
+import { brewRows, medallionState, studiedAllowance, toxicitySegments, typeRows } from "../rules/hunter-panel-view.mjs";
+import { isMedallion, medallionBonus, wornMedallion } from "../rules/medallion.mjs";
+import { BREW_EFFECT_FLAG } from "../rules/witch-hunter-standing.mjs";
+import { REST_ENDS_FLAG } from "../rules/rest-ends.mjs";
+import { SIGNS } from "../rules/witch-hunter-features.mjs";
+import { FOREWARNED } from "../rules/tome.mjs";
+import { brewOf } from "../rules/witch-hunter-brews.mjs";
 
 const { HandlebarsApplicationMixin } = foundry.applications.api;
 const { ActorSheetV2 } = foundry.applications.sheets;
@@ -477,6 +486,13 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       // 02 §7's Spectral Sight and 07's Flame Crash (the Demon Hunter review's S1 and C4).
       senseDemons: AzerothCharacterSheet.#onSenseDemons,
       pickUpGlaive: AzerothCharacterSheet.#onPickUpGlaive,
+      // The Witch Hunter's Hunter panel (the Witch Hunter plan's wave 2a-A): Use a brew, Prepare, the formulas, the
+      // Tome begun and the Tome's learning Test.
+      whUseBrew: AzerothCharacterSheet.#onWhUseBrew,
+      whPrepare: AzerothCharacterSheet.#onWhPrepare,
+      whFormulas: AzerothCharacterSheet.#onWhFormulas,
+      whStartTome: AzerothCharacterSheet.#onWhStartTome,
+      whLearn: AzerothCharacterSheet.#onWhLearn,
       drinkVial: AzerothCharacterSheet.#onDrinkVial,
       // 02 §7's *or when you let go*: every latch the Sovereign holds ended (the review's S7).
       letGo: AzerothCharacterSheet.#onLetGo,
@@ -518,6 +534,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       closeAllRecipes: AzerothCharacterSheet.#onCloseAllRecipes,
       clearRecipeFilters: AzerothCharacterSheet.#onClearRecipeFilters,
       layEnchantment: AzerothCharacterSheet.#onLayEnchantment,
+      // 08 §18's Enchanter's Signatures: a row of the list chosen, in place of an affix (D-2147).
+      pickEnchantSignature: AzerothCharacterSheet.#onPickEnchantSignature,
       // Skin, Butcher or Salvage a targeted defeated creature from the Harvest card (D-1996).
       harvestTarget: AzerothCharacterSheet.#onHarvestTarget
     }
@@ -649,7 +667,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     context.factionList = (this.actor.signatureState?.factions ?? []).join(", ");
     context.canConfigureCombatSheet = game.user.isGM;
     context.showManeuvers = showsManeuvers(system, this.actor.getFlag("azeroth-rpg", "showManeuvers"));
-    context.combatSections = Object.fromEntries(["maneuvers", "features", "talents", "runes", "horde", "signatures"].map(key =>
+    context.combatSections = Object.fromEntries(["maneuvers", "features", "talents", "runes", "horde", "hunter", "signatures"].map(key =>
       [key, game.user.getFlag("azeroth-rpg", `combatSections.${key}`) !== false]));
     context.tabs = this._prepareTabs("primary");
 
@@ -766,6 +784,14 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     context.runePanel = this.#runePanel();
     // The horde panel (D11 §2): a Necromancer's alone - a character holding the Essence pool.
     context.hordePanel = this.#hordePanel();
+    // The Witch Hunter's Hunter panel (D11; the Witch Hunter plan's wave 2a-A): a Witch Hunter's alone.
+    context.hunterPanel = await import("../effects/witch-hunter-brews.mjs").then(m => m.hunterPanelFor(this.actor)).catch(err => {
+      console.warn("azeroth-rpg | Hunter panel", err);
+      return null;
+    });
+    // The full panel's view over it (wave 3, D-2100): the Energy and Tempo bars, the Toxicity track, the elixirs acting
+    // with what is left of each, the types with their weakness rows, the brews' controls, the medallion and Prepare.
+    if (context.hunterPanel) context.hunterPanel = this.#hunterView(context.hunterPanel);
     // The Demon Hunter's Hatred in words, for the Overview's Stats pane and the Corruption tab (D-1581).
     context.hatred = this.#hatredPanel();
     context.favorites = await this.#favorites();
@@ -3054,6 +3080,82 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     };
   }
 
+  /**
+   * **THE HUNTER PANEL, DRAWN WHOLE** (D11's *The Witch Hunter's Hunter panel*; the Witch Hunter plan's wave 3, D-2100
+   * to D-2102), over what `hunterPanelFor` worked out: the Energy and Tempo bars through Core's own pool partial (D-614;
+   * the Tempo's cap read through the one cap reader, never a constant), the Toxicity track with its overdose in words,
+   * the elixirs and the Decoction acting with what is left of each span, the types known in 14 §1's order with the
+   * Studied mark in words and each type's weakness row, the medallion's state, the brews held with *Drink*, *Coat
+   * weapon* or *Throw*, and Prepare with its reason. The law is `rules/hunter-panel-view.mjs`; every word is a key.
+   *
+   * @param {object} panel  `effects/witch-hunter-brews.mjs#hunterPanelFor`'s
+   */
+  #hunterView(panel) {
+    const L = key => game.i18n.localize(key);
+    const F = (key, data) => game.i18n.format(key, data);
+    const brews = brewRows({ brews: panel.brews ?? [], doses: panel.doses ?? 0 });
+    const rows = brews.rows.map(b => ({
+      ...b,
+      controlLabel: L(`AZEROTH.WitchHunter.Panel.Control.${b.control}`),
+      left: F("AZEROTH.WitchHunter.Panel.Left", { n: b.quantity ?? 1 })
+    }));
+    if (panel.brewsOnly) return { ...panel, brews: rows };
+    const actor = this.actor;
+    const pools = this.#pools().filter(p => p.held && (p.name === "energy" || p.name === "tempo"))
+      .map(p => ({ ...p, note: L(p.name === "tempo" ? "AZEROTH.WitchHunter.Panel.TempoNote" : "AZEROTH.WitchHunter.Panel.EnergyNote") }))
+      // Energy, then Tempo, as D11 lays the three bars.
+      .sort((a, b) => (a.name === "energy" ? 0 : 1) - (b.name === "energy" ? 0 : 1));
+    const tox = panel.toxicity ?? { used: 0, limit: 1, overdose: 0 };
+    const over = Math.max(0, Math.trunc(tox.overdose ?? 0));
+    const toxicity = {
+      used: tox.used ?? 0, limit: tox.limit ?? 1, overdose: over,
+      segments: toxicitySegments(tox).map(seg => ({ ...seg, label: seg.over ? L("AZEROTH.WitchHunter.Panel.OverSegment") : null })),
+      words: F("AZEROTH.WitchHunter.Panel.ToxicityValue", { used: tox.used ?? 0, limit: tox.limit ?? 1 }),
+      overdoseWords: over ? F(over === 1 ? "AZEROTH.WitchHunter.Panel.OverdoseOne" : "AZEROTH.WitchHunter.Panel.OverdoseMany", { n: over, p: over }) : ""
+    };
+    // What acts on the hunter, each with what is left of its span (core's own words for a timed effect).
+    const acting = [...(actor.effects ?? [])]
+      .filter(e => e.active !== false && e.disabled !== true && e.flags?.["azeroth-rpg"]?.[BREW_EFFECT_FLAG])
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)))
+      .map(e => {
+        const brew = e.flags["azeroth-rpg"][BREW_EFFECT_FLAG];
+        const restLong = Boolean(e.flags["azeroth-rpg"][REST_ENDS_FLAG]);
+        const label = restLong ? L("AZEROTH.WitchHunter.Panel.UntilLongRest") : (e.duration?.label ?? "");
+        return { id: e.id, name: brew.name ?? e.name, remaining: label && label !== L("COMMON.None") ? label : "" };
+      });
+    const typeLabel = key => L(AZEROTH.creatureTypes?.[key] ?? key);
+    const types = typeRows({ known: panel.known ?? [], studied: panel.studied ?? [] }).map(row => ({
+      ...row,
+      label: typeLabel(row.key),
+      weakness: F("AZEROTH.WitchHunter.Panel.Weakness", {
+        sign: SIGNS[row.sign]?.name ?? "", bomb: brewOf(row.bomb)?.name ?? "", damage: L(AZEROTH.damageTypes?.[row.damage] ?? row.damage ?? "")
+      })
+    }));
+    // 04's Forewarned and the carried First Tome's The Margins (D-2162) each add one type for Studied.
+    const allowance = studiedAllowance({ wisMod: actor.system?.abilities?.wis?.mod ?? 0, forewarned: (actor.talentRanks?.(FOREWARNED) ?? 0) + (Number(actor.system?.signatureEffects?.studiedTypes) || 0) });
+    const sign = n => (n >= 0 ? `+${n}` : `\u2212${Math.abs(n)}`);
+    const items = [...(actor.items ?? [])];
+    const worn = wornMedallion(items);
+    const carried = items.find(i => isMedallion(i)) ?? null;
+    const medallion = medallionState({ carried: Boolean(carried), worn: Boolean(worn), bonus: worn ? medallionBonus(worn.system?.rarity) : 0, feature: actor.hasFeature?.("Medallion") === true });
+    const medallionWords = medallion.state === "worn"
+      ? F(medallion.senses ? "AZEROTH.WitchHunter.Panel.MedallionSenses" : "AZEROTH.WitchHunter.Panel.MedallionWorn", { n: medallion.bonus })
+      : L(medallion.state === "carried" ? "AZEROTH.WitchHunter.Panel.MedallionCarried" : "AZEROTH.WitchHunter.Panel.MedallionNone");
+    return {
+      ...panel,
+      brews: rows,
+      view: {
+        pools, toxicity, acting, types,
+        studiedLine: F(allowance.count === 1 ? "AZEROTH.WitchHunter.Panel.StudiedAllowOne" : "AZEROTH.WitchHunter.Panel.StudiedAllowMany", { mod: sign(allowance.wisMod), n: allowance.count }),
+        studiedCount: F("AZEROTH.WitchHunter.Panel.StudiedCount", { n: types.filter(t => t.studied).length }),
+        dosesLine: F("AZEROTH.WitchHunter.Panel.DosesHeld", { held: brews.held, doses: brews.doses }),
+        actingCount: F(acting.length === 1 ? "AZEROTH.WitchHunter.Panel.ActingOne" : "AZEROTH.WitchHunter.Panel.ActingMany", { n: acting.length }),
+        medallion: { ...medallion, words: medallionWords },
+        signDiffers: (panel.dc?.sign ?? null) !== (panel.dc?.spell ?? null)
+      }
+    };
+  }
+
   #pools() {
     const system = this.actor.system;
     const build = (pool, stored, kind = null) => {
@@ -3649,7 +3751,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       // rule `carried.mjs` keeps for the creature's tab.
       equippable: wearable(item),
       equipped: sys.equipped === true,
-      augment: !hidden && sys.augment ? { ...sys.augment } : null,
+      // A by-tier Augment's bonus is the bearer's tier's (D-2152), never *+null*.
+      augment: !hidden && sys.augment ? augmentAtTier(sys.augment, this.actor.system?.tier ?? null) : null,
       // Every field the item stores, LESS the bag-slot line: the card prints
       // that above in words and a second copy under a label read as a bug.
       detail: (described.detail ?? detailFields(item)).filter(f => f.label !== words.bagSlotsLabel),
@@ -3862,7 +3965,8 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     };
     const bySchool = byConfigOrder(AZEROTH.schools);
     const bySkill = byConfigOrder(AZEROTH.skills);
-    const augment = heldAugment(items);
+    // The tier prices a named §20 Augment (D-2152).
+    const augment = heldAugment(items, { tier: this.actor.system?.tier ?? null });
     const left = await Promise.all(FIGURE_LEFT.map(entry => tile(entry)));
     // The right column NEEDS NOTHING OF ITS OWN now. D-689 mirrored its plates
     // so both columns' words faced the portrait; a socket has no words to turn
@@ -4351,6 +4455,42 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     return this.render();
   }
   /** **THE BLOOD ROYAL** (02 §7): feed on the one creature targeted (`effects/sovereign-core.mjs#feedWithDialog`). */
+  /** **USE A BREW** (08 §12): the Hunter panel's row, through `workflows.useGear`, which routes a brew to its door. */
+  static async #onWhUseBrew(event, target) {
+    const item = this.actor.items.get(target.closest("[data-item-id]")?.dataset.itemId ?? target.dataset.itemId);
+    if (!item) return null;
+    const { useGearWithDialog } = await import("./actions.mjs");
+    await useGearWithDialog(this.actor, item);
+    return this.render();
+  }
+
+  /** **PREPARE** (02's Field Brews): the Prepare window, while the rest's brewing stands open. */
+  static async #onWhPrepare() {
+    const { openPrepare } = await import("../effects/witch-hunter-brews.mjs");
+    return openPrepare(this.actor);
+  }
+
+  /** **THE FORMULAS PICKED** (02's Field Brews): one chooser for each kind with picks left. */
+  static async #onWhFormulas() {
+    const { chooseFormulas } = await import("../effects/witch-hunter-brews.mjs");
+    await chooseFormulas(this.actor);
+    return this.render();
+  }
+
+  /** **THE TOME BEGUN** (02: *Undead, and one of your choice*). */
+  static async #onWhStartTome() {
+    const { startTome } = await import("../effects/witch-hunter-tome.mjs");
+    await startTome(this.actor);
+    return this.render();
+  }
+
+  /** **THE TOME'S LEARNING TEST** (02: an **Investigation** Test, Hard at the tier, once per Long Rest). */
+  static async #onWhLearn(event) {
+    const { learnTypeWithDialog } = await import("../effects/witch-hunter-tome.mjs");
+    await learnTypeWithDialog(this.actor, { event });
+    return this.render();
+  }
+
   /** **SENSE DEMONS** (02's Spectral Sight; the review's S1): the demons within 60 feet, whispered on a card. */
   static async #onSenseDemons() {
     const { senseDemons } = await import("../effects/demon-hunter-features.mjs");
@@ -5195,7 +5335,7 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
   #disenchantSel = null;
 
   /** Enchanting's *Lay an enchantment* choice: `{itemId, affixId}`, view state. */
-  #enchantSel = { itemId: null, affixId: null };
+  #enchantSel = { itemId: null, affixId: null, signature: null };
 
   /** Every card's context from the last render, by recipe uuid, so a pick can redraw one in place. */
   #cardContexts = new Map();
@@ -5805,12 +5945,17 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     };
   }
 
-  /** Enchanting's *Lay an enchantment* (08 §18; D-1929): the items, then only what the item can carry. */
+  /**
+   * Enchanting's *Lay an enchantment* (08 §18; D-1929): the items, then only what the item can carry.
+   * A Classic find is listed too, for an Enchanter's Signature alone (O-778, the lead: *"yes, allow
+   * Signatures on Classic finds"*; D-2171): its affix list is empty and `enchantVerdict`'s `classicFind`
+   * says why in words, while its Signature rows are judged as any item's (D-2167's found band).
+   */
   #enchantContext({ tier, affixes, traits, tool, materials }) {
     const items = this.actor.items
-      .filter(i => forgeable(i) && !isClassicFind(i))
+      .filter(i => enchantable(i))
       .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
-    if (!items.some(i => i.id === this.#enchantSel.itemId)) this.#enchantSel = { itemId: items[0]?.id ?? null, affixId: null };
+    if (!items.some(i => i.id === this.#enchantSel.itemId)) this.#enchantSel = { itemId: items[0]?.id ?? null, affixId: null, signature: null };
     const item = items.find(i => i.id === this.#enchantSel.itemId) ?? null;
     // ONLY WHAT THE DOOR ACCEPTS (D-1929; the review's M2): every choice the tier opens is asked
     // `recipes.mjs#enchantVerdict`, the reading `enchant` and `applyAffixInPlace` refuse by, so no
@@ -5822,15 +5967,39 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     if (!offered.some(a => a.id === this.#enchantSel.affixId)) this.#enchantSel.affixId = null;
     const affix = offered.find(a => a.id === this.#enchantSel.affixId) ?? null;
     const chip = affix ? this.#traitChip(affix.name, traits) : null;
+    // **08 §18's ENCHANTER'S SIGNATURES** (D-2147): every row, each with what it costs and its sentence;
+    // a row the item cannot take is greyed with the reason beside it in words, never hidden
+    // (`enchanter-signatures.mjs#enchanterSignatureRowsFor`, the judgement the door refuses by). A
+    // Signature chosen stands in place of an affix: one or the other is laid, never both.
+    // **AN ITEM ALREADY UNDER A PROJECT** (the final review of 0.18.1): the door refuses a second
+    // enchantment project on it (`crafting.mjs#enchantPending`), so the window says so before the press -
+    // every Signature row greyed with the reason beside it, the Start button greyed with the reason under it.
+    const pending = Boolean(item) && enchantPending(projectsOf(this.actor), item.id);
+    const sigRows = item ? enchanterSignatureRowsFor({ item: data, tier }) : [];
+    if (pending || !sigRows.some(r => r.ok && r.key === this.#enchantSel.signature)) this.#enchantSel.signature = null;
+    const signature = this.#enchantSel.signature;
     const refusal = !tool ? refusalWords({ reason: "tool", tool: PROFESSION_BY_ID.enchanting.tool }, { materials })
+      : pending ? game.i18n.localize("AZEROTH.Profession.Sheet.Enchant.Pending")
+      : signature ? null
       : item && !offered.length && barred ? refusalWords(barred, { materials })
       : item && offered.length && !affix ? game.i18n.localize("AZEROTH.Profession.Sheet.Enchant.PickFirst")
       : null;
     return {
       items: items.map(i => ({ id: i.id, name: shownName(i), selected: i.id === this.#enchantSel.itemId })),
       affixes: offered.map(a => ({ id: a.id, label: game.i18n.format("AZEROTH.Profession.Sheet.Quality.Option", { name: a.name, cost: affixCost(a) }), selected: a.id === this.#enchantSel.affixId })),
-      chip: chip?.tip ? chip : null,
-      ready: this.isEditable && Boolean(item && affix && tool),
+      chip: chip?.tip && !signature ? chip : null,
+      signatures: sigRows.map(r => ({
+        key: r.key,
+        name: r.name,
+        costWords: game.i18n.format("AZEROTH.Profession.Sheet.Enchant.SigCost", { n: r.cost }),
+        // The row's own sentence as the item will print it (bold runs as the book sets them).
+        html: enchanterSignatureHtml(r.key).replace(/^<p>|<\/p>$/g, ""),
+        ok: r.ok && !pending,
+        selected: r.ok && !pending && r.key === signature,
+        reason: pending ? game.i18n.localize("AZEROTH.Profession.Sheet.Enchant.PendingRow") : r.ok ? "" : refusalWords(r.refusal, { materials })
+      })),
+      ready: this.isEditable && !pending && Boolean(item && tool && (affix || signature)),
+      pending,
       refusal,
       // The empty list's own line is said only where no door refusal already says why.
       noAffix: Boolean(item) && !offered.length && !barred
@@ -5873,8 +6042,9 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
       }
       if (ds.profDisenchant !== undefined) { this.#disenchantSel = el.value || null; return null; }
       if (ds.profEnchant) {
-        if (ds.profEnchant === "item") this.#enchantSel = { itemId: el.value || null, affixId: null };
-        else this.#enchantSel = { ...this.#enchantSel, affixId: el.value || null };
+        if (ds.profEnchant === "item") this.#enchantSel = { itemId: el.value || null, affixId: null, signature: null };
+        // An affix chosen stands in place of a Signature (08 §18): one or the other is laid.
+        else this.#enchantSel = { ...this.#enchantSel, affixId: el.value || null, signature: el.value ? null : this.#enchantSel.signature };
         return this.render({ parts: ["profession"] });
       }
       return null;
@@ -6249,12 +6419,29 @@ export class AzerothCharacterSheet extends HandlebarsApplicationMixin(ActorSheet
     return this.render({ parts: ["profession"] });
   }
 
-  /** Lay an enchantment (08 §18): the item and the affix picked, through `workflows.enchant`. */
+  /**
+   * Lay an enchantment (08 §18): the item and the affix picked, or an Enchanter's Signature (D-2147),
+   * through the one door, `workflows.enchant`.
+   */
   static async #onLayEnchantment() {
-    const { itemId, affixId } = this.#enchantSel;
-    if (!itemId || !affixId) return null;
-    const project = await enchant(this.actor, { itemId, affix: affixId });
-    if (project) this.#enchantSel = { itemId, affixId: null };
+    const { itemId, affixId, signature } = this.#enchantSel;
+    if (!itemId || (!affixId && !signature)) return null;
+    const project = signature
+      ? await enchant(this.actor, { itemId, signature })
+      : await enchant(this.actor, { itemId, affix: affixId });
+    if (project) this.#enchantSel = { itemId, affixId: null, signature: null };
     return project;
+  }
+
+  /**
+   * Choose an Enchanter's Signature to lay (08 §18), in place of an affix; pressed again, the choice
+   * is put down. A row the item cannot take is drawn disabled with its reason, so it never reaches here.
+   */
+  static async #onPickEnchantSignature(event, target) {
+    const key = target?.dataset?.sigKey ?? null;
+    if (!key) return null;
+    const same = this.#enchantSel.signature === key;
+    this.#enchantSel = { ...this.#enchantSel, signature: same ? null : key, affixId: same ? this.#enchantSel.affixId : null };
+    return this.render({ parts: ["profession"] });
   }
 }

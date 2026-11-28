@@ -7,7 +7,10 @@ export function utilityDraught(use={}){
     ["See in the dark for an hour","darkvision",3600],
     ["See in the dark to 60 feet for an hour","darkvision",3600],
     ["Take no damage from a fall for ten minutes","fallProtection",600],
-    ["Breathe water for an hour","waterBreathing",3600]
+    ["Breathe water for an hour","waterBreathing",3600],
+    // 08 §12's Elixir of Demonslaying: its Boon is a roll-dialog line through the type gate (`rules/type-boons.mjs`,
+    // the Witch Hunter plan's Finding 2, wave 2c); the carrier is the five minutes.
+    ["A Boon on Attack Tests against demons for five minutes","demonslaying",300]
   ];
   const row=definitions.find(([text])=>text===note);
   return use.kind==="draught"&&row?{kind:row[1],seconds:row[2]}:null;

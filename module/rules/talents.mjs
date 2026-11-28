@@ -26,8 +26,9 @@ export const BRANCH_GATES = Object.freeze([0, 4, 8, 12, 16]);
 
 /**
  * Talents per tier in every branch: three, three, three, two, one capstone.
- * All thirty-four branches in 04 are this shape - the classes' twenty-seven and
- * the seven Legacies beside them (D-781) - which is what lets the tree be laid
+ * Every branch in 04 is this shape - the classes' own (four for the Chromatic
+ * Champion and the Witch Hunter, two for the Death Knight) and the seven Legacies
+ * beside them (D-781), `talents.test.mjs` counting them - which is what lets the tree be laid
  * out in three columns. A Legacy branch is laid out here exactly as a class's
  * own is; whose it is and who holds it is `rules/legacy-branches.mjs`'s.
  */

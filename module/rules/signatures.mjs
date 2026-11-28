@@ -159,6 +159,8 @@ import { flatText, sentences } from "./spell-effects.mjs";
 // Whether a worn thing is still unidentified (08 §4; D-1435): its rows then carry the name
 // the caller hands in, never the true one.
 import { isUnidentified } from "./identify.mjs";
+// An amount the bearer's tier is read into at a press (Flame of Azzinoth; D-2161).
+import { evaluateExpression } from "./expressions.mjs";
 
 /**
  * The kinds a Signature can take. `none` is the absence — the 196 placeholders
@@ -324,7 +326,12 @@ export function emptySignature() {
       // +N to its Damage Rating, +N to what it restores, N off what it costs.
       damageRating: null,
       heal: null,
-      cost: null
+      cost: null,
+      // **WHAT AN UNDEAD CREATURE THE SPELL HEALS REGAINS, MORE** (Gorefiend's Runeblade's
+      // First of the Damned: *an undead creature it heals regains 2 additional Health*; D-2156).
+      // Its own number, never `heal`: `castSpell` adds `heal` to the caster's own drain off the
+      // damage too, and the run names the undead creature's heal alone.
+      undeadHeal: null
     },
     // **WHAT A BOUND CREATURE GAINS** (D-698). Four Ahn'Qiraj set bonuses are
     // *increases your pet's damage*, and D-643's bond is what a pet is here:
@@ -419,6 +426,28 @@ export function emptySignature() {
     // *Has a second Reaction each turn, and spends it only on Blink or
     // Counterspell* (Ten Thousand Years of Practice): the features it may pay for.
     secondReaction: [],
+    // **THE CLASS ITEMS (D-2156 to D-2162)**, each one run's mechanic and one door's read.
+    //
+    // **A CLASS FEATURE'S NUMBER MOVED WHILE IT IS WORN** (Oathbreaker's Plate, the
+    // Darkfallen Choker, the Blindfold of the Illidari, Heart of the Brood, Twin Blades, the
+    // Signet Ring of the Bronze Dragonflight). The item rides the feature's own patch reader
+    // (`class-talents.mjs#patchRowsOf`) as a second source beside the taken talents, its name
+    // the chip on the feature: `heal` the Health it restores more whenever it restores any,
+    // `cost` what it costs (a SET, never raised), `damage` the damage it deals more, `feet` the
+    // reach it gains, `sand` the Sand each use gives (`rules/item-patches.mjs`).
+    featurePatch: { feature: "", heal: null, cost: null, damage: null, feet: null, sand: null },
+    // *Your horde has 1 additional place* (The Darkmaster's Rod's A Larger Class): a general
+    // place added in `rules/horde.mjs#hordeCapacity`, judged again on the GM's client.
+    hordePlaces: null,
+    // *They regain additional Vitae equal to their tier* (Lana'thel's Lament's The Queen's
+    // Kiss): Vitae a tier, added at the one feeding door (`feed` source, never a second).
+    feedVitaePerTier: null,
+    // *Knows two additional creature types of their choice* (the First Tome of Silver and Ash's
+    // Every Lesson Written): how many; the types are picked once and kept on the item's flag
+    // (`TOME_TYPES_FLAG`), and the Tome's readers count them only while it is carried.
+    knownTypes: null,
+    // *May choose 1 more* type for Studied (The Margins): added to `tome.mjs#studiedCount`.
+    studiedTypes: null,
     // What a blow that lands does beyond its damage, in `weapon-traits.mjs`'
     // Effect-trait shape: `sl` null is *on a hit*, `sl: 2` is 08 §5's Standard
     // threshold. `arc` is Thunderfury's jump — null where it does not arc.
@@ -487,7 +516,27 @@ export function emptySignature() {
       // Signature DC* (Unholy Grasp, Soulflayer's Venom; D-911): the condition
       // carries the bearer's Signature DC on its own effect, as 07's escape and
       // A1's Poisoned shed DC already ride (`rules/escapes.mjs`).
-      signatureDC: false
+      signatureDC: false,
+      // **THE CONDITION LANDS ON THE HIT, WITH NO BUTTON** (Lana'thel's Lament's Swarming
+      // Shadows: *your prey is Bleeding 2*; D-2160): through `effects/inflict.mjs
+      // #inflictCondition` with the item named as its Bleeding source (R8), so a second hit
+      // keeps the higher value and never adds to itself.
+      lands: false,
+      // **THE ENCHANTER'S SIGNATURES (08 §18; CLASS-ITEMS-AND-ENCHANTS-2026-11 phase 4)**:
+      //
+      // Health the BEARER regains off the blow, a TIER (Crusader: *you regain Health equal to
+      // your tier*): `heal` above is a fixed number, and the tier is the bearer's, read at the
+      // attack door, never stored.
+      healPerTier: null,
+      // *You regain Health equal to the damage it takes* (Lifestealing): the bearer regains
+      // what this row's own `damage` came to on each creature struck, after the creature's
+      // Ward of that type and every other mitigation, read off the blow's resolved parts.
+      drain: false,
+      // *Each of the target's weapon attacks deals N less damage until the end of its next
+      // turn* (Unholy Weapon): laid on the creature struck as a flagged effect
+      // (`rules/enchanter-signatures.mjs#WEAPON_CUT_FLAG`) and read at the damage door on
+      // that creature's own WEAPON blows, the way Withering Contempt is (`isWeaponBlow`).
+      weaponCut: null
     },
     // Gorehowl: *when an attack with it reduces a creature to 0 Health, every
     // enemy within 30 feet that saw it takes a Bane on their next Attack
@@ -514,7 +563,10 @@ export function emptySignature() {
       statuses: [],
       ends: [],
       duration: { value: null, units: null },
-      damage: { amount: null, type: null },
+      // `formula` is an amount the bearer's tier is read into at the press (Flame of
+      // Azzinoth's *4 plus your tier*, `rules/expressions.mjs`), and `half` a passed Test
+      // taking half of it, rounded down (D-2161).
+      damage: { amount: null, type: null, formula: "", half: false },
       // What it takes OFF one incoming blow: `halve` is Battlegear's, and
       // `amount` a flat reduction. Never both.
       mitigates: { halve: false, amount: null },
@@ -591,7 +643,18 @@ export function emptySignature() {
       arcWiden: null,
       // *chooses their Breath's school from the seven* (Brood Breath): the next
       // Breath's school, chosen at the press.
-      breathSchool: false
+      breathSchool: false,
+      // **THE CLASS ITEMS' PRESSES (D-2156 to D-2162)**:
+      //
+      // *refills one spent rune on it* (Gorefiend's Runeblade's The Council's Spirit): runes
+      // refilled on THIS weapon through `documents/runes.mjs`, the one rune writer.
+      runeRefill: null,
+      // *throw it to a point within 30 feet* (Flame of Azzinoth): the feet the point may be
+      // from the bearer; a creature named farther than this plus the area's radius is refused.
+      reach: null,
+      // *They learn that creature's type ... and that type is Studied until the end of the
+      // encounter* (The First Tome's The Drust Chapter): the Tome's own write.
+      learnType: false
     },
     // More bodies on the field (D-691's own shape, verbatim).
     summon: { entry: "", count: null, side: "summoner", from: "nextRound" },
@@ -633,7 +696,7 @@ export function emptySignature() {
  * WHEN A PRESS FIRES ITSELF (D-911): `dropToZero` is Undying's *when damage
  * would reduce you to 0 Health*, read by `AzerothActor#_holdAtOne`.
  */
-export const SIGNATURE_TRIGGERS = Object.freeze(["dropToZero", "blowMoved"]);
+export const SIGNATURE_TRIGGERS = Object.freeze(["dropToZero", "blowMoved", "feedRefused"]);
 
 /** A corruption charge with nothing set (D-910). */
 export function emptyCorruptionGain() {
@@ -775,6 +838,8 @@ export const BRANCH_FAMILIES = Object.freeze([
   // Phase B2 (D-912).
   "breathHalf", "attackerBane", "phantomShot", "resistBane", "freeSpell", "touchHealingFeet", "ordination",
   "spellDamageTest", "sizeStep", "secondReaction",
+  // The class items (D-2156 to D-2162).
+  "featurePatch", "hordePlaces", "feedVitaePerTier", "knownTypes", "studiedTypes",
   "onHit", "onKill", "whenStruck", "tick"
 ]);
 
@@ -1027,7 +1092,8 @@ function standingCleaners() {
       name: text,
       damageRating: n => atLeast(n, 1),
       heal: n => atLeast(n, 1),
-      cost: n => atLeast(n, 1)
+      cost: n => atLeast(n, 1),
+      undeadHeal: n => atLeast(n, 1)
     }),
     bound: v => nested(v, {
       damage: n => atLeast(n, 1),
@@ -1083,6 +1149,20 @@ function standingCleaners() {
     }),
     sizeStep: n => atLeast(n, 1),
     secondReaction: v => strings(v),
+    // The class items (D-2156 to D-2162), present-key at every depth. A patch naming no
+    // feature moves nothing and is kept as written; `item-patches.mjs` reads none of it.
+    featurePatch: v => nested(v, {
+      feature: text,
+      heal: n => atLeast(n, 1),
+      cost: n => atLeast(n, 0),
+      damage: n => atLeast(n, 1),
+      feet: n => atLeast(n, 1),
+      sand: n => atLeast(n, 1)
+    }),
+    hordePlaces: n => atLeast(n, 1),
+    feedVitaePerTier: n => atLeast(n, 1),
+    knownTypes: n => atLeast(n, 1),
+    studiedTypes: n => atLeast(n, 1),
     onHit: v => nested(v, {
       sl: num,
       damage: d => nested(d, { amount: num, type: t => oneOf(t, damageTypes()) }),
@@ -1115,7 +1195,12 @@ function standingCleaners() {
       // is a legal rule and simply not one 08 §20 writes today.
       conditionFromDamage: v2 => atLeast(v2, 1),
       noHealing: v2 => v2 === true,
-      signatureDC: v2 => v2 === true
+      signatureDC: v2 => v2 === true,
+      lands: v2 => v2 === true,
+      // The Enchanter's Signatures (08 §18): a tier's Health, the drain, the weapon cut.
+      healPerTier: v2 => atLeast(v2, 1),
+      drain: v2 => v2 === true,
+      weaponCut: v2 => atLeast(v2, 1)
     }),
     onKill: v => nested(v, { feet: f => atLeast(f, 0), bane: b => atLeast(b, 1), condition: cleanInflicted }),
     whenStruck: v => nested(v, {
@@ -1254,7 +1339,7 @@ function cleanGate(raw) {
 }
 
 /** The gates that are a condition of the world and name nothing beside it. */
-const VALUELESS_GATES = Object.freeze(["belowHalfHealth", "atOrAboveHalfHealth", "hasNotMoved", "targetHasNotActed", "hidden"]);
+const VALUELESS_GATES = Object.freeze(["belowHalfHealth", "atOrAboveHalfHealth", "hasNotMoved", "targetHasNotActed", "hidden", "pairWielded", "prey", "typeStudied"]);
 
 /**
  * A gate's value, as the list of things it names. 08 §20 writes *against
@@ -1316,7 +1401,12 @@ function cleanSignatureUse(raw) {
     statuses: ids,
     ends: ids,
     duration: v => nested(v, { value: num, units: u => oneOf(u, SIGNATURE_DURATION_UNITS) }),
-    damage: v => nested(v, { amount: num, type: t => oneOf(t, Object.keys(AZEROTH.damageTypes)) }),
+    // A `formula` the expression grammar cannot read is no formula (D-2161).
+    damage: v => nested(v, {
+      amount: num, type: t => oneOf(t, Object.keys(AZEROTH.damageTypes)),
+      formula: f => (typeof f === "string" && f.trim() && evaluateExpression(f.trim(), { tier: 1 }) !== null ? f.trim() : ""),
+      half: h => h === true
+    }),
     // *Halve the damage of one attack that hits them*, or take a flat amount
     // off it. NEVER BOTH: a halving that also subtracts is two rules, and 08
     // §20 writes one.
@@ -1361,7 +1451,11 @@ function cleanSignatureUse(raw) {
     move: m => nested(m, { feet: n => atLeast(n, 1) }),
     negates: x => x === true,
     arcWiden: n => atLeast(n, 1),
-    breathSchool: x => x === true
+    breathSchool: x => x === true,
+    // The class items (D-2156 to D-2162).
+    runeRefill: n => atLeast(n, 1),
+    reach: n => atLeast(n, 1),
+    learnType: x => x === true
   });
   // `halve` wins where a caller writes each, and it can only be judged once
   // both are in hand.
@@ -1446,6 +1540,29 @@ export function pressRefusal(signature, { holds = true, spells = 0, worn = true 
   if (signature.kind === "spell" && spells <= 0) return "noSpell";
   const uses = signature.use?.uses ?? null;
   if (uses?.per && (uses.value ?? 0) <= 0) return "spent";
+  return null;
+}
+
+/**
+ * **THE FIRST WORN PRESS THAT A TRIGGER FIRES, WITH A USE LEFT** (Undying's `dropToZero`, D-911;
+ * Vampiric Bite's `feedRefused`, D-2160): judged through the one press judgement but for the
+ * trigger itself - equipped, its gate holding on `state`, a use left. Null where none would
+ * fire. Pure; the door strikes the use at the press's own dotted path.
+ *
+ * @param {Iterable<object>} items  the bearer's items
+ * @param {string} trigger  one of `SIGNATURE_TRIGGERS`
+ * @param {object} state    the bearer's gate snapshot
+ * @returns {{item: object, key: string, press: object}|null}
+ */
+export function pressFiredBy(items = [], trigger, state = {}) {
+  for (const item of items ?? []) {
+    if ((item?.system?.equipped ?? item?.equipped) !== true) continue;
+    for (const { key, press } of pressesOf(item?.system?.signatureEffect ?? item?.signatureEffect)) {
+      if (press.trigger !== trigger) continue;
+      if (pressEntryRefusal({ ...press, trigger: null }, { holds: gateHolds(press.gates ?? [], state) })) continue;
+      return { item, key, press };
+    }
+  }
   return null;
 }
 
@@ -1633,7 +1750,7 @@ export function hitThisTurn(record, { itemId, combatId = null, round = null, tur
  * run): *Only against one kind of creature: demon* says nothing about who may hold
  * the item, so a surface never prints *That sentence does not apply to you* over it.
  */
-export const TARGET_GATE_KINDS = Object.freeze(["creatureType", "targetHasNotActed", "blow", "hidden"]);
+export const TARGET_GATE_KINDS = Object.freeze(["creatureType", "targetHasNotActed", "blow", "hidden", "prey", "typeStudied"]);
 
 /**
  * A gate split by whom it judges (D-913): the bearer's clauses, and the target's.
@@ -1776,6 +1893,15 @@ function oneGateHolds(clause, state) {
   // *While hidden from that creature* (Hexed Fang, D-911): only the attack door
   // knows, and hands `hidden: true`; everything else fails closed.
   if (kind === "hidden") return state.hidden === true;
+  // *While a Demon Hunter wields a Warglaive of Azzinoth in each hand* (Twin Blades; D-2157):
+  // another equipped weapon of THIS item's identifier, which `signatureEffects` reads per item.
+  if (kind === "pairWielded") return state.pairWielded === true;
+  // *When it hits your prey* (Swarming Shadows; D-2160): the creature struck is the bearer's
+  // prey (`rules/prey.mjs`), which only the attack door knows.
+  if (kind === "prey") return state.target?.prey === true;
+  // *Against a creature of a Studied type* (Waycrest Silver; D-2159): the creature struck's
+  // type is Studied in the bearer's Tome (`talent-gates.mjs#targetFactsOf`'s `typeStudied`).
+  if (kind === "typeStudied") return state.target?.typeStudied === true;
 
   // *While you have not moved this turn* — the feet the turn has spent, which
   // `AzerothCombatant#spendMovement` already records (D-659). No number is no
@@ -1846,6 +1972,7 @@ function firesOnHit(onHit) {
   return Boolean(onHit.damage?.amount || onHit.condition?.id || onHit.bane || onHit.sunder
     || onHit.momentum || onHit.heal || onHit.mana || onHit.push || onHit.arc?.targets || onHit.arc?.all === true
     || onHit.noHealing === true
+    || onHit.healPerTier || onHit.weaponCut
     || (onHit.conditions ?? []).some(c => c?.id));
 }
 
@@ -2063,6 +2190,9 @@ export function signatureEffects(items = [], state = {}, { weaponId = null } = {
     // Second Ordination, a spell's damage Test, a size step and the second Reaction.
     breathHalf: [], attackerBane: [], phantomShot: null, resistBane: [], freeSpell: [],
     touchHealingFeet: 0, ordination: [], spellDamageTest: [], sizeStep: 0, secondReaction: [],
+    // The class items (D-2156 to D-2162): the feature patches by item, the horde's places,
+    // the Vitae a feeding adds a tier, the Tome's carried types and the Studied count's addend.
+    featurePatches: [], hordePlaces: 0, feedVitaePerTier: 0, knownTypes: [], studiedTypes: 0,
     onHit: [], onKill: [], whenStruck: [], tick: { health: 0, mana: 0 }
   };
   for (const item of items) {
@@ -2087,20 +2217,47 @@ export function signatureEffects(items = [], state = {}, { weaponId = null } = {
     // (D-910), so Wrath of Ragnaros's card prints Wrath of Ragnaros and not
     // all four of Sulfuras's runs.
     const prose = signatureProse(item);
-    const ctx = part => ({ item, name, hidden, text: hidden ? "" : plainText(runProse(prose, part?.label ?? "")), state });
+    // **ONE IN EACH HAND** (Twin Blades; D-2157): another equipped weapon carrying this item's
+    // identifier, read off the WHOLE list - the attack's `weaponId` skips the other hand's
+    // weapon from the rows, never from this fact.
+    const itemState = type === "weapon" ? { ...state, pairWielded: pairWielded(item, items) } : state;
+    const ctx = part => ({ item, name, hidden, text: hidden ? "" : plainText(runProse(prose, part?.label ?? "")), state: itemState });
 
     // THE TRUNK, under the trunk's own gate.
-    if (gateHolds(signature.gates, state)) applyPart(out, signature, ctx(signature));
+    if (gateHolds(signature.gates, itemState)) applyPart(out, signature, ctx(signature));
     // AND EVERY GATED SENTENCE, under ITS OWN (D-722). The lead, 2026-09-14:
     // a gate covers *only its own sentence*. The aggregate's shape does not
     // move an inch — twenty-odd readers downstream see the same object they
     // always did — because a branch is folded into it by the same function the
     // trunk goes through.
     for (const branch of signature.gated ?? []) {
-      if (gateHolds(branch?.gates ?? [], state)) applyPart(out, branch, ctx(branch));
+      if (gateHolds(branch?.gates ?? [], itemState)) applyPart(out, branch, ctx(branch));
     }
   }
   return out;
+}
+
+/**
+ * **WHETHER ANOTHER COPY OF THIS WEAPON IS WIELDED** (Twin Blades: *a Warglaive of Azzinoth
+ * in each hand*; D-2157): a second equipped weapon, not this one, of the same identifier.
+ * Two equipped weapons are one in each hand, since a hand holds one. Pure.
+ *
+ * @param {object} item
+ * @param {Iterable<object>} items
+ * @returns {boolean}
+ */
+export function pairWielded(item, items = []) {
+  const idOf = i => i?.system?.identifier ?? i?.identifier ?? null;
+  const mine = idOf(item);
+  if (!mine) return false;
+  const self = item?.id ?? item?._id ?? null;
+  for (const other of items ?? []) {
+    if (other === item || (self !== null && (other?.id ?? other?._id ?? null) === self)) continue;
+    if ((other?.type ?? null) !== "weapon") continue;
+    if (!(other?.equipped ?? other?.system?.equipped ?? false)) continue;
+    if (idOf(other) === mine) return true;
+  }
+  return false;
 }
 
 /**
@@ -2210,11 +2367,12 @@ function applyPart(out, part, { item, name, hidden = false, text, state }) {
   // One named ability improved (D-698). Summed by name, so a second item
   // naming the same spell adds to the first.
   const empowered = part.empowers ?? {};
-  if (empowered.name && (empowered.damageRating || empowered.heal || empowered.cost)) {
-    const held = out.empowers[empowered.name] ?? { damageRating: 0, heal: 0, cost: 0, sources: [] };
+  if (empowered.name && (empowered.damageRating || empowered.heal || empowered.cost || empowered.undeadHeal)) {
+    const held = out.empowers[empowered.name] ?? { damageRating: 0, heal: 0, cost: 0, undeadHeal: 0, sources: [] };
     held.damageRating += empowered.damageRating ?? 0;
     held.heal += empowered.heal ?? 0;
     held.cost += empowered.cost ?? 0;
+    held.undeadHeal = (held.undeadHeal ?? 0) + (empowered.undeadHeal ?? 0);
     held.sources.push(name);
     out.empowers[empowered.name] = held;
   }
@@ -2227,7 +2385,10 @@ function applyPart(out, part, { item, name, hidden = false, text, state }) {
   // The target answers the parts of the row only it can (Perdition's Blade).
   const hit = resolveOnHit(part.onHit, state.target ?? null);
   if (firesOnHit(hit)) {
-    out.onHit.push({ key: "signature", name, text, ...hit, sl: hit.sl ?? 0 });
+    // A condition that LANDS (D-2160) names its item, whose identifier is the Bleeding's
+    // source layer (R8), so the door lays it with no button.
+    const lander = hit.lands === true ? { itemId: item?.id ?? item?._id ?? null, identifier: item?.system?.identifier ?? item?.identifier ?? null } : {};
+    out.onHit.push({ key: "signature", name, text, ...hit, ...lander, sl: hit.sl ?? 0 });
     // **ONE ROW A CONDITION** (D-698). The card draws one Inflict button off
     // a fired row, so a blow landing two conditions needs two rows; both
     // carry the item's own sentence, which names both. One item in 2,115
@@ -2315,7 +2476,36 @@ function applyLegendary(out, part, { item, name, label = part.label ?? "" }) {
   }
   out.sizeStep += part.sizeStep ?? 0;
   for (const n of part.secondReaction ?? []) if (!out.secondReaction.includes(n)) out.secondReaction.push(n);
+  // The class items (D-2156 to D-2162).
+  const fp = part.featurePatch ?? null;
+  if (fp?.feature && [fp.heal, fp.cost, fp.damage, fp.feet, fp.sand].some(v => v !== null && v !== undefined)) {
+    // One row an item and a feature: a pair of Warglaives each carry Twin Blades, and the
+    // feature names the item once.
+    const identifier = item?.system?.identifier ?? item?.identifier ?? null;
+    const key = identifier ?? item?.id ?? name;
+    if (!out.featurePatches.some(r => r.key === key && r.feature === fp.feature)) {
+      out.featurePatches.push({
+        key, itemId: item?.id ?? item?._id ?? null, name, feature: fp.feature,
+        heal: fp.heal ?? null, cost: fp.cost ?? null, damage: fp.damage ?? null, feet: fp.feet ?? null, sand: fp.sand ?? null
+      });
+    }
+  }
+  out.hordePlaces += part.hordePlaces ?? 0;
+  out.feedVitaePerTier += part.feedVitaePerTier ?? 0;
+  if (part.knownTypes) {
+    // The types chosen, kept on the item (`TOME_TYPES_FLAG`), at most the count.
+    const picks = Array.isArray(item?.flags?.["azeroth-rpg"]?.[TOME_TYPES_FLAG]) ? item.flags["azeroth-rpg"][TOME_TYPES_FLAG] : [];
+    out.knownTypes.push({ itemId: item?.id ?? item?._id ?? null, name, count: part.knownTypes, picks: picks.map(String).filter(Boolean).slice(0, part.knownTypes) });
+  }
+  out.studiedTypes += part.studiedTypes ?? 0;
 }
+
+/**
+ * **THE FLAG ON THE FIRST TOME THAT KEEPS ITS TWO TYPES** (Every Lesson Written: *knows two
+ * additional creature types of their choice*; D-2162, MY READING): the types chosen, picked
+ * once through the one chooser and kept with the book, so they go with it.
+ */
+export const TOME_TYPES_FLAG = "tomeTypes";
 
 /** The turn budget's key Ten Thousand Years of Practice's second Reaction spends (D-912), reset at the Mage's own turn start (D-913). */
 export const SECOND_REACTION_MARK = "secondReaction";
@@ -2706,6 +2896,12 @@ export function firedSignatureRow(row) {
   // (D-911): `rollTest` lays the mark and the attack card carries the DC.
   if (row.noHealing === true) out.noHealing = true;
   if (row.signatureDC === true && row.condition?.id) out.signatureDC = true;
+  // **A CONDITION THAT LANDS WITH NO BUTTON** (Swarming Shadows; D-2160): `rollTest` lays it through
+  // `inflictCondition` with the item's identifier as its Bleeding source (R8) and takes the button off.
+  if (row.lands === true && row.condition?.id) {
+    out.lands = true;
+    out.identifier = row.identifier ?? null;
+  }
   // **THE ARC LANDS NOW** (Thunderfury, Magma Shot; the lead, on O-319: *"Automate the arc
   // and the Fury"*; D-912): its damage and its condition are the creatures it arcs TO, so
   // the row carries them for `effects/legendary-doors.mjs#landArcs` and lays nothing on
@@ -2727,6 +2923,13 @@ export function firedSignatureRow(row) {
     // of the blow's own type on the Rating as before.
     if (row.damage.type) out.extraType = row.damage.type;
   }
+  // **THE ENCHANTER'S SIGNATURES (08 §18)**: Crusader's Health a tier (the door multiplies by the
+  // bearer's tier), Lifestealing's drain of what this row's own damage came to (the door reads it
+  // off the blow's resolved parts), and Unholy Weapon's cut on the creature struck's weapon attacks
+  // (the door lays it).
+  if (row.healPerTier) out.healPerTier = row.healPerTier;
+  if (row.drain === true && !arcs && row.damage?.amount) out.drain = true;
+  if (row.weaponCut) out.weaponCut = row.weaponCut;
   return out;
 }
 
@@ -3513,7 +3716,7 @@ function seedPress(out, flat, html) {
   const area = /\bevery creature within (\d+) (?:feet|ft)\b[^.]*?\btakes (\d+)\s+([A-Za-z]+)\s+damage/i.exec(flat);
   if (area && AZEROTH.damageTypes[String(area[3]).toLowerCase()]) {
     out.use.area = `Each creature within ${area[1]} ft`;
-    out.use.damage = { amount: Number(area[2]), type: String(area[3]).toLowerCase() };
+    out.use.damage = { ...out.use.damage, amount: Number(area[2]), type: String(area[3]).toLowerCase() };
   }
 
   // What it restores, through 07's own reader. The beat at the top of the turn
@@ -3805,6 +4008,12 @@ function pressLines(u, say) {
   if (u?.negates) say("UseNegates", {});
   if (u?.arcWiden) say("UseArcWiden", { n: u.arcWiden });
   if (u?.breathSchool) say("UseBreathSchool", {});
+  // The class items (D-2156 to D-2162).
+  if (u?.runeRefill) say("UseRuneRefill", { n: u.runeRefill });
+  if (u?.reach) say("UseReach", { feet: u.reach });
+  if (u?.damage?.formula) say("UseDamageFormula", { formula: u.damage.formula, type: u.damage.type ?? "" });
+  if (u?.damage?.half) say("UseDamageHalf", {});
+  if (u?.learnType) say("UseLearnType", {});
 }
 
 /**
@@ -3892,6 +4101,19 @@ function partLines(d) {
   if (d.spellDamageTest?.school && d.spellDamageTest?.onFail?.id) say("SpellDamageTest", { school: d.spellDamageTest.school, key: d.spellDamageTest.onFail.id });
   if (d.sizeStep) say("SizeStep", { n: d.sizeStep });
   if ((d.secondReaction ?? []).length) say("SecondReaction", { names: d.secondReaction.join(", ") });
+  // The class items (D-2156 to D-2162).
+  if (d.featurePatch?.feature && d.featurePatch.heal) say("PatchHeal", { n: d.featurePatch.heal, name: d.featurePatch.feature });
+  if (d.featurePatch?.feature && d.featurePatch.cost !== null && d.featurePatch.cost !== undefined) say("PatchCost", { n: d.featurePatch.cost, name: d.featurePatch.feature });
+  if (d.featurePatch?.feature && d.featurePatch.damage) say("PatchDamage", { n: d.featurePatch.damage, name: d.featurePatch.feature });
+  if (d.featurePatch?.feature && d.featurePatch.feet) say("PatchFeet", { feet: d.featurePatch.feet, name: d.featurePatch.feature });
+  if (d.featurePatch?.feature && d.featurePatch.sand) say("PatchSand", { n: d.featurePatch.sand, name: d.featurePatch.feature });
+  if (d.hordePlaces) say("HordePlaces", { n: d.hordePlaces });
+  if (d.feedVitaePerTier) say("FeedVitae", { n: d.feedVitaePerTier });
+  if (d.knownTypes) say("KnownTypes", { n: d.knownTypes });
+  if (d.studiedTypes) say("StudiedTypes", { n: d.studiedTypes });
+  if (d.empowers?.name && d.empowers.undeadHeal) say("EmpowerUndeadHeal", { n: d.empowers.undeadHeal, name: d.empowers.name });
+  if (d.aura?.who?.raised) say("AuraRaised", {});
+  for (const id of d.aura?.ends ?? []) say("AuraEnds", { key: id });
 
   if (d.onHit?.damage?.amount) say("OnHitDamage", { n: d.onHit.damage.amount, type: d.onHit.damage.type ?? "" });
   if (d.onHit?.damageFromCondition?.id) {
@@ -3915,6 +4137,10 @@ function partLines(d) {
   if (d.onHit?.per) say("OnHitPer", { per: d.onHit.per });
   if (d.onHit?.noHealing) say("OnHitNoHealing", {});
   if (d.onHit?.signatureDC) say("OnHitSignatureDC", {});
+  if (d.onHit?.lands) say("OnHitLands", {});
+  if (d.onHit?.healPerTier) say("OnHitHealPerTier", { n: d.onHit.healPerTier });
+  if (d.onHit?.drain) say("OnHitDrain", {});
+  if (d.onHit?.weaponCut) say("OnHitWeaponCut", { n: d.onHit.weaponCut });
 
   if (d.onKill?.bane) say("OnKillBane", { n: d.onKill.bane, feet: d.onKill.feet ?? 0 });
   if (d.onKill?.condition?.id) say("OnKillCondition", { key: d.onKill.condition.id });
@@ -4340,6 +4566,93 @@ export const BOOK_SIGNATURES = Object.freeze({
     gated: [run("Master of the Shadow Council", { gates: [gate("class", "Warlock")], bound: { damage: 2, creatureType: "demon" } })]
   }),
 
+  // **THE NEW-CLASS LEGENDARIES** (CLASS-ITEMS-AND-ENCHANTS-2026-11, D-2151; phase 3,
+  // D-2156 to D-2162). Phase 2 wrote each run an existing reader carried and parked the
+  // rest with `pendingReader`; phase 3 built every reader, and no run waits now.
+
+  // *Gorefiend's Terror: On a hit at SL 3, the target is Frightened of you until
+  // the end of its next turn* - the onHit condition the Lightbringer's Verdict
+  // already fires. *The Council's Spirit: Once per Short Rest, as a Half-Action, a
+  // Death Knight wielding it refills one spent rune on it* - a press, its uses
+  // counted apart (08 §20), whose rune is refilled on THIS blade through
+  // `documents/runes.mjs`, the one rune writer (`use.runeRefill`, D-2156). *First of
+  // the Damned* names Death Coil: `empowers.damageRating` is the 2 additional damage
+  // (`spell-bonus.mjs`, so the caster's drain of half the damage dealt rises only by
+  // what the extra damage gives), and `empowers.undeadHeal` the undead creature's
+  // heal alone, read where Death Coil heals an undead target instead (D-2156).
+  "gorefiends-runeblade": onHit({
+    label: "Gorefiend's Terror",
+    onHit: { sl: 3, condition: { id: "frightened", until: "endOfNextTurn" } },
+    gated: [
+      run("First of the Damned", { gates: [gate("class", "Death Knight")], empowers: { name: "Death Coil", damageRating: 2, undeadHeal: 2 } })
+    ],
+    presses: pressMap(
+      press("The Council's Spirit", { gates: [gate("class", "Death Knight")], action: "half", uses: once("short"), runeRefill: 1 })
+    )
+  }),
+
+  // *The Class Recites: A Necromancer holding it may cast Raise Dead once per
+  // Short Rest without spending Mana* - Benediction's sentence, so the parser's
+  // `castings` fills `system.spells` with Raise Dead and its Short Rest use, and
+  // `castItemSpell` casts it through `castSpell`. *The Headmaster's Discipline* is
+  // the aura door's (`effects/auras.mjs`, D-696, D-755) filtered to the bearer's own
+  // raised dead (`who.raised`, the `raised` bond kind): +1 Damage Rating on their
+  // attacks, and Frightened ended at the start of each one's turn (`aura.ends`,
+  // `AzerothCombat#_onStartTurn`). *A Larger Class* is a general place added in
+  // `rules/horde.mjs#hordeCapacity`, judged again on the GM's client (D-2158). Neither
+  // names a class, so neither is gated (D-722: a gate covers its own sentence).
+  "the-darkmasters-rod": spell({
+    label: "The Class Recites",
+    gates: [gate("class", "Necromancer")],
+    gated: [
+      run("The Headmaster's Discipline", { aura: { feet: 30, targets: "allies", attackDamage: 1, who: { raised: true }, ends: ["frightened"] } }),
+      run("A Larger Class", { hordePlaces: 1 })
+    ]
+  }),
+
+  // *The Queen's Kiss*: Vitae a tier added at the one feeding door
+  // (`effects/sovereign-core.mjs#feedOn`, under the `feed` source it already names).
+  // *Vampiric Bite* waives the feeding's opening once a Short Rest, in a fight - a
+  // press that fires itself (`feedRefused`), offered as a choice where the feeding is
+  // refused for the opening alone; the Test and once a day still hold. *Swarming
+  // Shadows*: Bleeding 2 on a hit against the bearer's prey (the `prey` gate), landed
+  // with no button and named for the item as its Bleeding source (R8; D-2160).
+  "lanathels-lament": standing({
+    label: "The Queen's Kiss",
+    gates: [gate("class", "Sovereign")],
+    feedVitaePerTier: 1,
+    gated: [
+      run("Swarming Shadows", { gates: [gate("prey")], onHit: { condition: { id: "bleeding", value: 2 }, lands: true } })
+    ],
+    presses: pressMap(
+      press("Vampiric Bite", { gates: [gate("class", "Sovereign")], uses: once("short"), trigger: "feedRefused" })
+    )
+  }),
+
+  // *Azzinoth's Bane: Against demons it adds 2 to its Damage Rating* - the
+  // Rhok'delar row, and weapon-scoped at the attack (`signatureEffects` skips a
+  // weapon that is not the one making it), so a pair adds 2, never 4. *Twin
+  // Blades* is a patch on 02's Fel Lash (`featurePatch`, read through `patchRowsOf`
+  // as the talents' own patches are), gated on a second Warglaive wielded (the
+  // `pairWielded` gate; D-2157). *Flame of Azzinoth* is a press: a point within 30
+  // feet, a Reflex Test a creature in the 10 ft radius against the Signature DC,
+  // `4+tier` Fel read at the press with half on a success, and Ward applies - the
+  // Witch Hunter bomb card's shape (D-2161).
+  "warglaive-of-azzinoth": standing({
+    label: "Azzinoth's Bane",
+    gates: [gate("creatureType", "demon")],
+    grants: ["+2 Damage Rating"],
+    gated: [
+      run("Twin Blades", { gates: [gate("class", "Demon Hunter"), gate("pairWielded")], featurePatch: { feature: "Fel Lash", cost: 1 } })
+    ],
+    presses: pressMap(
+      press("Flame of Azzinoth", {
+        action: "half", uses: once("short"), reach: 30, area: "A 10 ft radius",
+        resist: { resilience: "reflex", dc: null }, damage: { type: "fel", formula: "4+tier", half: true }
+      })
+    )
+  }),
+
   /* ---- Epic weapons ---- */
 
   // *Against a **Scorched** creature, this weapon deals additional damage equal
@@ -4405,6 +4718,18 @@ export const BOOK_SIGNATURES = Object.freeze({
     onHit: { condition: { id: "scorched" }, conditionFromDamage: 2, per: "turn" }
   }),
 
+  // *A Witch Hunter wielding it adds 2 to its Damage Rating against a creature
+  // of a Studied type* (D-2151). The talents read `typeStudied` off
+  // `talent-gates.mjs#targetFactsOf`; the attack door now carries that fact in the
+  // Signature's target snapshot (`actions.mjs#signatureTargetFacts`), and the
+  // `typeStudied` gate reads it (D-2159).
+  "waycrest-silver": standing({
+    gates: [gate("class", "Witch Hunter"), gate("typeStudied")],
+    grants: ["+2 Damage Rating"]
+  }),
+
+  /* ---- Epic worn things and Augments ---- */
+
   // *A Warlock with Fel Corruption 1 or more gains 2 Spellpower in Fel; one
   // with none cannot open it at all.* The gate was the whole Signature and
   // withheld an item that granted nothing (D-696); it grants now, and the
@@ -4417,6 +4742,18 @@ export const BOOK_SIGNATURES = Object.freeze({
     gates: [gate("class", "Warlock"), gate("corruption", "fel 1")],
     grants: ["+2 Spellpower in Fel"]
   }),
+
+  // The four new-class Epics below each move one class feature's number while
+  // worn: Royal Due's Tribute, Spectral Sight's reach, the Sand Another Timeline
+  // gives, Breath's damage - each a `featurePatch` read at the feature's own door
+  // through `class-talents.mjs#patchRowsOf`, the item a second source beside the
+  // talents and its name a chip on the feature (`rules/item-patches.mjs`, D-2156).
+  // The Augment's +1 Fortitude and Ward 1 (Fire) on Heart of the Brood are grants
+  // on its flags.
+  "the-darkfallen-choker": standing({ gates: [gate("class", "Sovereign")], featurePatch: { feature: "Royal Due", cost: 1 } }),
+  "blindfold-of-the-illidari": standing({ gates: [gate("class", "Demon Hunter")], featurePatch: { feature: "Spectral Sight", feet: 10 } }),
+  "signet-ring-of-the-bronze-dragonflight": standing({ gates: [gate("class", "Chronomancer")], featurePatch: { feature: "Another Timeline", sand: 1 } }),
+  "heart-of-the-brood": standing({ gates: [gate("class", "Chromatic Champion")], featurePatch: { feature: "Breath", damage: 2 } }),
 
   /* ---- Legendary armor ---- */
 
@@ -4596,6 +4933,27 @@ export const BOOK_SIGNATURES = Object.freeze({
     )
   }),
 
+  // Every run waits (phase 3; D-2151): two types added to the Tome's known
+  // types, one more type chosen for Studied (`tome.mjs#studiedCount` already
+  // takes Forewarned's addend), and a press that writes a type to `whTome`.
+  // *Every Lesson Written*: two more types known while it is carried, chosen once
+  // through the one chooser and kept on the book (`TOME_TYPES_FLAG`, MY READING,
+  // D-2162), read by every Tome reader through `witch-hunter-standing.mjs
+  // #tomeFlagOf`. *The Margins*: +1 to `tome.mjs#studiedCount`, beside Forewarned.
+  // *The Drust Chapter*: a press that learns the named creature's type through the
+  // Tome's one writer and makes it Studied to the encounter's end.
+  "the-first-tome-of-silver-and-ash": standing({
+    label: "Every Lesson Written",
+    gates: [gate("class", "Witch Hunter")],
+    knownTypes: 2,
+    gated: [
+      run("The Margins", { gates: [gate("class", "Witch Hunter")], studiedTypes: 1 })
+    ],
+    presses: pressMap(
+      press("The Drust Chapter", { gates: [gate("class", "Witch Hunter")], action: "half", uses: once("long"), learnType: true })
+    )
+  }),
+
   // Both runs wait: a tick laid on a demon that pays the Warlock, and a free
   // Banish whose Test a demon makes with a Bane.
   // *Pylon Tether* (D-912): the tether rides the Warlock, landed at each of the
@@ -4728,6 +5086,24 @@ export const BOOK_SIGNATURES = Object.freeze({
   // itself restores. *Every spell that restores any* is the whole scope — the
   // amount rides on the healing rather than on any one school.
   "vestments-of-transcendence": standing({ gates: [gate("class", "Priest")], healingBonus: 2 }),
+
+  // *A Death Knight wearing it regains 2 additional Health whenever Death Strike
+  // restores their Health.* A patch on 02's Death Strike, read at its own door
+  // (`workflows.rollTest`'s Death Strike heal) through `patchRowsOf` (D-2156).
+  "oathbreakers-plate": standing({ gates: [gate("class", "Death Knight")], featurePatch: { feature: "Death Strike", heal: 2 } }),
+
+  // *A Necromancer wearing it adds 1 to the Damage Rating of every attack their
+  // raised dead make* (D-2151). Every raised creature is a world actor the bond
+  // links (`raised` in `rules/bound.mjs`), and `syncBoundFor` already lays the
+  // owner's `bound` rows on every bound creature as `system.damageBonus`, so this
+  // is the Skull of Gul'dan's door, filtered to the undead: a Necromancer's other
+  // bonds (a second class's demon, beast or totem) are not its raised dead, and a
+  // thrall takes none of its owner's Signatures. The plan's raise stamp is not
+  // needed.
+  "vestments-of-the-cult-of-the-damned": standing({
+    gates: [gate("class", "Necromancer")],
+    bound: { damage: 1, creatureType: "undead" }
+  }),
 
   // *A creature that hits you in melee takes 3 Fire damage, and Ward applies.*
   "skullflame-shield": whenStruck({ whenStruck: { damage: { amount: 3, type: "fire" } } }),

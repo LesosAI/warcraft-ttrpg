@@ -139,7 +139,13 @@ export function emptyAura() {
     bane: { kind: null, resilience: null, banes: null },
     attackDamage: null,
     tick: { damage: null, type: null },
-    who: { faction: null, living: false }
+    // `raised`: only the holder's own raised dead (The Darkmaster's Rod's *Each of your raised
+    // dead within 30 feet*; D-2158), `rules/bound.mjs`' `raised` bond kind.
+    who: { faction: null, living: false, raised: false },
+    // The conditions a creature in reach ends at the start of its turn (*and ends Frightened
+    // at the start of its turn*; D-2158), laid as a flag (`AURA_ENDS_FLAG`) and read by the
+    // turn's start (`auraEndsAtTurn`).
+    ends: []
   };
 }
 
@@ -316,7 +322,9 @@ export function cleanAura(raw) {
   sub("bane", { kind: testKind, resilience: resilienceOf, banes: n => atLeast(n, 1) });
   if ("attackDamage" in src) out.attackDamage = atLeast(src.attackDamage, 1);
   sub("tick", { damage: n => atLeast(n, 1), type: t => (typeof t === "string" && t in AZEROTH.damageTypes ? t : null) });
-  sub("who", { faction: f => (typeof f === "string" && f.trim() ? f.trim() : null), living: l => l === true });
+  sub("who", { faction: f => (typeof f === "string" && f.trim() ? f.trim() : null), living: l => l === true, raised: r => r === true });
+  // The conditions ended at a turn's start (D-2158): A1's keys alone, each once.
+  if ("ends" in src) out.ends = cleanConditions(src.ends);
   return out;
 }
 
@@ -510,7 +518,37 @@ export function auraPayloadOf(row = {}) {
   if (src.unmovable === true) out.unmovable = true;
   const melee = cleanMeleeTyped(src.meleeTyped);
   if (melee) out.meleeTyped = melee;
+  // **02's ASH SIGN** (*A creature in the ring loses **Immune (Physical)***; wave 2a-B, D-2072): the Immune types
+  // a placed area's `remains` row takes off while the creature stands in it, laid as `laid-immune.mjs`' own flag
+  // beside the aura's (`effects/auras.mjs#auraData`), never a change, and lifted with the aura.
+  const lose = [...new Set((Array.isArray(src.loseImmune) ? src.loseImmune : []).filter(t => typeof t === "string" && t in AZEROTH.damageTypes))].sort();
+  if (lose.length) out.loseImmune = lose;
+  // **THE DARKMASTER'S ROD** (*ends **Frightened** at the start of its turn*; D-2158): the
+  // conditions ended at the creature's own turn start, a flag beside the aura's, never a change.
+  const ends = cleanConditions(src.ends);
+  if (ends.length) out.ends = ends;
   return out;
+}
+
+/** The flag a laid aura carries naming the conditions its creature ends at its turn start (D-2158). */
+export const AURA_ENDS_FLAG = "auraEnds";
+
+/**
+ * **THE CONDITIONS A CREATURE ENDS AT THE START OF ITS TURN** (The Darkmaster's Rod's The
+ * Headmaster's Discipline; D-2158): every active laid aura's `AURA_ENDS_FLAG`, each condition
+ * once and sorted, read by `AzerothCombat#_onStartTurn` where the turn's other start-of-turn
+ * work runs. Pure.
+ *
+ * @param {Iterable<{active?: boolean, disabled?: boolean, flags?: object}>} effects
+ * @returns {string[]}
+ */
+export function auraEndsAtTurn(effects = []) {
+  const out = new Set();
+  for (const e of effects ?? []) {
+    if (e?.active === false || e?.disabled === true) continue;
+    for (const id of cleanConditions(e?.flags?.["azeroth-rpg"]?.[AURA_ENDS_FLAG])) out.add(id);
+  }
+  return [...out].sort();
 }
 
 /** An aura's start-of-turn damage, resolved, or null (D-911) - or its HEALING (02 §7's Unholy
@@ -695,6 +733,9 @@ export function auraReaches(aura, candidate = {}) {
   // of your ongoing healing effects*; the class talent audit, D-1892): measured by the pass off
   // the candidate's own laid ticks (`healTick`, a heal whose hand is the holder's).
   if (aura.who?.healTick === true && candidate.healTick !== true) return false;
+  // **ONLY THE HOLDER'S OWN RAISED DEAD** (The Darkmaster's Rod; D-2158): a creature whose bond
+  // is `raised` and names this holder, measured by the pass.
+  if (aura.who?.raised === true && candidate.raised !== true) return false;
   const feet = candidate.feet;
   if (typeof feet !== "number" || !Number.isFinite(feet)) return false;
   return feet <= aura.feet;
@@ -775,7 +816,8 @@ export function auraGives(row = {}, candidate = {}) {
   const p = auraPayloadOf(row);
   return Boolean(p.boon) || Boolean(p.bane) || Boolean(p.healing) || Boolean(p.standFree) || Boolean(p.healthFloor)
     || Boolean(p.immune) || Boolean(p.hold) || Boolean(p.taunt) || Boolean(p.tick)
-    || Boolean(p.ignoresGround) || Boolean(p.unmovable) || Boolean(p.meleeTyped)
+    || Boolean(p.ignoresGround) || Boolean(p.unmovable) || Boolean(p.meleeTyped) || Boolean(p.loseImmune)
+    || Boolean(p.ends)
     || auraChanges(row, candidate).length > 0;
 }
 
@@ -1060,9 +1102,9 @@ export function ownerAuras(sources = [], facts = {}) {
       holderOnly: a.holderOnly === true,
       // Who among those in reach (D-911): a faction, or only the living. Carried
       // only where it names one, so every source before it keeps its shape.
-      ...(a.who && (a.who.faction || a.who.living === true || a.who.undead === true || a.who.healTick === true)
+      ...(a.who && (a.who.faction || a.who.living === true || a.who.undead === true || a.who.healTick === true || a.who.raised === true)
         ? { who: { faction: a.who.faction ?? null, living: a.who.living === true, ...(a.who.undead === true ? { undead: true } : {}),
-          ...(a.who.healTick === true ? { healTick: true } : {}) } } : {}),
+          ...(a.who.healTick === true ? { healTick: true } : {}), ...(a.who.raised === true ? { raised: true } : {}) } } : {}),
       // What `effects/auras.mjs` reads to know a follow-up pass may be owed.
       readsOwnArmor: ownArmor,
       ...auraPayloadOf({ ...a, schoolArmor })

@@ -40,6 +40,8 @@ export async function packSystems(packId) {
   const byName = new Map();
   const grantsByIdentifier = new Map();
   const grantsByName = new Map();
+  // The system's own flags by identifier (migration 0.18.0's medallion ladder), from the same read.
+  const flagsByIdentifier = new Map();
   const pack = game.packs.get(packId);
   if (pack) {
     for (const doc of await pack.getDocuments()) {
@@ -49,12 +51,13 @@ export async function packSystems(packId) {
       if (system.identifier) {
         byIdentifier.set(system.identifier, system);
         if (grants) grantsByIdentifier.set(system.identifier, grants);
+        if (object.flags?.["azeroth-rpg"]) flagsByIdentifier.set(system.identifier, object.flags["azeroth-rpg"]);
       }
       byName.set(doc.name, system);
       if (grants) grantsByName.set(doc.name, grants);
     }
   }
-  const table = { byIdentifier, byName, grantsByIdentifier, grantsByName };
+  const table = { byIdentifier, byName, grantsByIdentifier, grantsByName, flagsByIdentifier };
   READ.set(packId, table);
   return table;
 }

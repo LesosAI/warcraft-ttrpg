@@ -1,0 +1,69 @@
+{{!--
+  The Prepare window (02 §7's Field Brews, Studied and Decoctions; the Witch Hunter plan's wave 2a-A).
+  `applications/brew-prepare.mjs` draws it off `rules/witch-hunter-standing.mjs#prepareView`.
+
+  A stepper for each formula known: the one chooser picks options and cannot split doses among them. The
+  steppers carry `data-action="brewStep"` (a click); the selects and the Studied checkboxes carry `data-*`
+  hooks and no `data-action`, because they emit `change` (CLAUDE.md §5).
+
+  `{{r.doses}}` inside `{{#each}}` resolves against the row, which is why every flag the loop needs is spread
+  onto it (D-609). Why Brew is greyed is said in words above it, never by the grey alone.
+--}}
+<div class="azeroth-dialog azeroth-brew-prepare-body">
+  <p class="azeroth-dialog-note azeroth-brew-doses">{{localize "AZEROTH.WitchHunter.Prepare.Doses" used=used doses=doses left=left}}</p>
+
+  <ol class="azeroth-brew-steppers">
+    {{#each rows as |r|}}
+    <li class="azeroth-brew-stepper" data-brew-row="{{r.identifier}}"{{#if r.tip}} data-tooltip="{{r.tip}}" data-tooltip-direction="UP"{{/if}}>
+      <span class="azeroth-brew-name">{{r.name}}</span>
+      <span class="azeroth-chip azeroth-brew-kind">{{r.kindLabel}}</span>
+      <button type="button" data-action="brewStep" data-identifier="{{r.identifier}}" data-by="-1" aria-label="{{localize "AZEROTH.WitchHunter.Prepare.Fewer" name=r.name}}"{{#unless r.canRemove}} disabled{{/unless}}>&minus;</button>
+      <strong class="azeroth-brew-count" data-brew-count="{{r.identifier}}">{{r.doses}}</strong>
+      <button type="button" data-action="brewStep" data-identifier="{{r.identifier}}" data-by="1" aria-label="{{localize "AZEROTH.WitchHunter.Prepare.More" name=r.name}}"{{#unless r.canAdd}} disabled{{/unless}}>+</button>
+    </li>
+    {{else}}
+    <li class="azeroth-dialog-note">{{localize "AZEROTH.WitchHunter.Prepare.NoFormulas"}}</li>
+    {{/each}}
+  </ol>
+
+  {{#if oil}}
+  <div class="azeroth-dialog-row">
+    <label for="azeroth-brew-oil">{{localize "AZEROTH.WitchHunter.Prepare.OilType"}}</label>
+    <select id="azeroth-brew-oil" data-brew-select="oilType">
+      {{#each oilTypes as |o|}}<option value="{{o.value}}"{{#if o.tip}} title="{{o.tip}}"{{/if}}{{#if o.selected}} selected{{/if}}>{{o.label}}</option>{{/each}}
+    </select>
+  </div>
+  {{/if}}
+
+  {{#if decoction}}
+  <div class="azeroth-dialog-row">
+    <label for="azeroth-brew-decoction">{{localize "AZEROTH.WitchHunter.Prepare.DecoctionType"}}</label>
+    <select id="azeroth-brew-decoction" data-brew-select="decoctionType">
+      <option value="">{{localize "AZEROTH.WitchHunter.Prepare.ChooseType"}}</option>
+      {{#each decoctionTypes as |o|}}<option value="{{o.value}}"{{#if o.tip}} title="{{o.tip}}"{{/if}}{{#if o.selected}} selected{{/if}}>{{o.label}}</option>{{/each}}
+    </select>
+  </div>
+  {{#if schools.length}}
+  <div class="azeroth-dialog-row">
+    <label for="azeroth-brew-school">{{localize "AZEROTH.WitchHunter.Prepare.School"}}</label>
+    <select id="azeroth-brew-school" data-brew-select="school">
+      <option value="">{{localize "AZEROTH.WitchHunter.Prepare.ChooseSchool"}}</option>
+      {{#each schools as |o|}}<option value="{{o.value}}"{{#if o.selected}} selected{{/if}}>{{o.label}}</option>{{/each}}
+    </select>
+  </div>
+  {{/if}}
+  {{/if}}
+  {{#if noDecoctionTypes}}<p class="azeroth-dialog-note">{{localize "AZEROTH.WitchHunter.Prepare.NoDefeated"}}</p>{{/if}}
+
+  <fieldset class="azeroth-brew-studied">
+    <legend>{{localize "AZEROTH.WitchHunter.Prepare.StudiedLegend" n=studiedCount}}</legend>
+    {{#each studied as |s|}}
+    <label class="azeroth-brew-studied-type"{{#if s.tip}} data-tooltip="{{s.tip}}" data-tooltip-direction="UP"{{/if}}><input type="checkbox" data-brew-studied value="{{s.value}}"{{#if s.checked}} checked{{/if}}> {{s.label}}</label>
+    {{/each}}
+  </fieldset>
+
+  <p class="azeroth-dialog-note azeroth-brew-reason" data-brew-reason>{{refusal}}</p>
+  <footer class="azeroth-dialog-buttons">
+    <button type="submit" class="azeroth-brew-submit"{{#unless ready}} disabled{{/unless}}>{{localize "AZEROTH.WitchHunter.Prepare.Brew"}}</button>
+  </footer>
+</div>

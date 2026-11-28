@@ -1512,6 +1512,8 @@ export function riderPayload(row, { judged = false } = {}) {
   if (row?.speed) out.speed = row.speed;
   if (row?.healing === "half") out.healing = "half";
   if (row?.standFree) out.standFree = true;
+  // 02's Ash Sign: the Immune types taken off while the creature remains (D-2072), laid as the strip's own flag.
+  if (loseList(row?.loseImmune).length) out.loseImmune = loseList(row.loseImmune);
   return out;
 }
 
@@ -1721,8 +1723,20 @@ function cleanCheckRow(r) {
     ...(r?.who === "enemy" ? { who: "enemy" } : {}),
     ...(r?.picks === "named" ? { picks: "named" } : {}),
     // Desecration's *A creature immune to Shadow damage ignores Desecration* (D-938).
-    ...(typeof r?.spareImmune === "string" && AZEROTH.damageTypes?.[r.spareImmune] ? { spareImmune: r.spareImmune } : {})
+    ...(typeof r?.spareImmune === "string" && AZEROTH.damageTypes?.[r.spareImmune] ? { spareImmune: r.spareImmune } : {}),
+    // **02's TOME ON THE ASH RING'S TEST** (the Witch Hunter's architect review, A1; D-2131): the weakness record the
+    // Resist roll reads (`whWeakness {types, source, name}`), named only where a row names one.
+    ...cleanWeaknessRow(r?.whWeakness)
   };
+}
+
+/** A check row's weakness record (`whWeakness`), whole, or nothing: the types as strings, the source's own keys. */
+function cleanWeaknessRow(w) {
+  const types = Array.isArray(w?.types) ? w.types.filter(x => typeof x === "string" && x) : [];
+  if (!types.length) return {};
+  const source = w.source && typeof w.source === "object" && !Array.isArray(w.source)
+    ? Object.fromEntries(Object.entries(w.source).filter(([, v]) => typeof v === "string")) : {};
+  return { whWeakness: { types, source, name: String(w.name ?? "") } };
 }
 
 /** One stored rider row, whole. */
@@ -1748,8 +1762,16 @@ function cleanRemainsRow(r) {
     // *a Boon on Resilience Tests* (`boon`, a Test kind) and *an attack against a
     // Dying friendly target inside it adds no Death Step* (`noDeathStep`).
     ...(testKind(r?.boon) ? { boon: testKind(r.boon) } : {}),
-    ...(r?.noDeathStep === true ? { noDeathStep: true } : {})
+    ...(r?.noDeathStep === true ? { noDeathStep: true } : {}),
+    // **02's ASH SIGN** (*A creature in the ring loses **Immune (Physical)***; wave 2a-B, D-2072): the Immune types
+    // the row takes off a creature while it remains, named only where a row names one.
+    ...(loseList(r?.loseImmune).length ? { loseImmune: loseList(r.loseImmune) } : {})
   };
+}
+
+/** The damage types a remains row strips from a creature's Immune: the seven schools and Physical, once each. */
+function loseList(v) {
+  return Array.isArray(v) ? [...new Set(v.filter(t => isDamageTypeKey(t)))] : [];
 }
 
 /**

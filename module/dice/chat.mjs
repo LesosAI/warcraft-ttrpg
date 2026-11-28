@@ -182,6 +182,17 @@ import { addSlowedFeet } from "../effects/speed-drop.mjs";
 import { SLOWED_FEET_FLAG } from "../rules/slowing.mjs";
 // And who may make a cast's Test (Holy Wrath's undead, Earth Shock's Sustain; the B9a pass).
 import { asksTestAtCast, castTestRefusal, halvesFor, inflictStands, passedHalf, recordsResist, resistRecordOn, sparedFor } from "../rules/resisted.mjs";
+// The Witch Hunter's Resist lines and a bomb's failure (the plan's wave 2a-A).
+import { resistLinesFor } from "../effects/witch-hunter-tome.mjs";
+// 04's Deep Lull and Nine Lives (the Witch Hunter plan's wave 2b): the Charmed's span lengthened at the failed Test, and
+// what the Apply lands on a creature that halves a Reflex Test's damage.
+import { lengthenSpan } from "../rules/witch-hunter-talents.mjs";
+import { nineLivesFor } from "../effects/witch-hunter-talents.mjs";
+import { bombResisted } from "../effects/witch-hunter-brews.mjs";
+import { BOMB_CARD_FLAG } from "../rules/witch-hunter-standing.mjs";
+// The Witch Hunter's Medallion warning on a spell's Resist (wave 2a-B, D-2076).
+import { medallionWarnedOn, spendMedallionWarning } from "../effects/witch-hunter-features.mjs";
+import { bleedSourceMark } from "../rules/bleeding.mjs";
 // D-779: the lead's class answers - Foresight's Ward from this card, Lightwell's
 // charge, and 07's Barrier's Ward on the creatures chosen.
 import { foresightFor } from "../rules/class-talents.mjs";
@@ -501,7 +512,7 @@ function showTakenBack(message, html) {
   const said = document.createElement("strong");
   said.textContent = taken.map(t => game.i18n.format("AZEROTH.Miss.TakenBackPart", {
     name: t?.name ?? "", n: Math.max(0, Math.trunc(Number(t?.amount)) || 0),
-    pool: game.i18n.localize(AZEROTH.poolTypes[t?.pool] ?? AZEROTH.momentumTypes?.[t?.pool] ?? t?.pool ?? "")
+    pool: game.i18n.localize(t?.pool === "health" ? "AZEROTH.Miss.Health" : AZEROTH.poolTypes[t?.pool] ?? AZEROTH.momentumTypes?.[t?.pool] ?? t?.pool ?? "")
   })).join(" · ");
   line.append(label, said);
   const gains = html.querySelectorAll(".azeroth-momentum-gain");
@@ -724,6 +735,9 @@ export const CARD_ACTIONS = {
   // **02's DEVOUR SOUL** (the Demon Hunter plan's Phase 4a; `templates/chat/dh-offer.hbs`): the death watch's
   // offer, judged again at the press (`effects/demon-hunter-features.mjs#devourFromCard`).
   devourSoul: async (button, message) => (await import("../effects/demon-hunter-features.mjs")).devourFromCard(button, message),
+  // **THE WITCH HUNTER'S CARDS** (02 §7; wave 2a-B): the Medallion's Warn an ally and Read the Trail's GM-only Learn the
+  // type, each judged again at the press (`effects/witch-hunter-features.mjs#whCardPress`).
+  witchHunterCard: async (button, message) => (await import("../effects/witch-hunter-features.mjs")).whCardPress(button, message),
   touchEverburn: async (_button,message) => {
     const {touchEverburn}=await import('../effects/everburn-touch.mjs');
     const result=await touchEverburn(message);
@@ -1764,7 +1778,7 @@ const bindingKey = (region, actor) => `${region?.uuid ?? ""}|${actor?.uuid ?? ""
  * of its next turn*) and Breath under 04's Bronze Drake (*Slowed until the end of its
  * next turn*), by their feature keys (`rules/animation-records.mjs#featureKeyOf`).
  */
-const CREATURE_TURN_SPANS = Object.freeze(["dread-presence", "breath"]);
+const CREATURE_TURN_SPANS = Object.freeze(["dread-presence", "breath", "lull-sign"]);
 
 /** A Breath card's state for its Region: the school and the area's shape (stage 2B). */
 function breathStateOf(breath) {
@@ -2160,6 +2174,11 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
         if (read?.modifiers?.length) talentModifiers = read.modifiers;
       }
     }
+    // **02 §7's TOME OF SILVER AND ASH AND STUDIED** (the Witch Hunter plan's wave 2a-A): the weakness Bane a Sign's or
+    // a bomb's card records, judged against this resister's own type (`WEAKNESS_CARD_FLAG`), and Studied's Boon where
+    // the resister is a Witch Hunter and the card's maker is of a Studied type (`effects/witch-hunter-tome.mjs`).
+    const whResist = resistLinesFor({ flags: message.flags?.["azeroth-rpg"] ?? {}, resister: actor, maker });
+    if (whResist.banes) talentBanes = talentBanes ? { banes: talentBanes.banes + whResist.banes.banes, names: [...talentBanes.names, ...whResist.banes.names] } : whResist.banes;
     if (purpose === "poison" && maker && typeof maker.takenTalents === "function") {
       const vile = poisonTestBanesFor(maker.takenTalents());
       const suffering = vile.banes > 0 && tickEffectsOf(actor).some(e => isPoisonTickBy(e.flags?.["azeroth-rpg"]?.tick ?? null, maker.uuid));
@@ -2181,9 +2200,13 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
     const halving = featureCard ? (message.flags["azeroth-rpg"].halvesDealt ?? null) : null;
     const racialBoon = irradiatedMemory(actor.takenTalents?.() ?? [], { resilience, poison: purpose === "poison" });
     const bossBoon = halving?.bossBoon === true && actor.system?.isBoss === true;
-    const talentBoons = racialBoon || bossBoon ? {
-      boons: (racialBoon?.boons ?? 0) + (bossBoon ? 1 : 0),
-      names: [...(racialBoon?.names ?? []), ...(bossBoon ? [halving.name] : [])]
+    // **02 §7's MEDALLION WARNING** (*you may use your Reaction to give one ally you can see a Boon on its Resilience
+    // Test against that spell*; wave 2a-B, D-2076): the one-shot Boon the warning laid on this creature, keyed to THIS
+    // spell's card - an automatic line, spent once the Test is rolled (`effects/witch-hunter-features.mjs`).
+    const warnedBoon = purpose === "spell" ? medallionWarnedOn(actor, message.id) : null;
+    const talentBoons = racialBoon || bossBoon || whResist.boons || warnedBoon ? {
+      boons: (racialBoon?.boons ?? 0) + (bossBoon ? 1 : 0) + (whResist.boons?.boons ?? 0) + (warnedBoon ? 1 : 0),
+      names: [...(racialBoon?.names ?? []), ...(bossBoon ? [halving.name] : []), ...(whResist.boons?.names ?? []), ...(warnedBoon ? [warnedBoon.name] : [])]
     } : null;
     const tie = link ?? (area ? areaTestLink(message, actor) : null);
     if (escapeHeld || poisonHeld) ESCAPE_PRESSES.add(message.id);
@@ -2202,6 +2225,8 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
         }
       }
       if (bindingArea && result) await recordAreaMark(bindingArea, "binding", actor.uuid);
+      // The Medallion's warning is one Boon on one Test: spent by the roll (D-2076).
+      if (warnedBoon && result) await spendMedallionWarning(actor, message.id);
       if (snakeTrap && typeof result?.rolls?.[0]?.outcome?.success === "boolean"
         && !(await claimSnakeTrapCatch(message, actor, result))) {
         ui.notifications?.warn(game.i18n.localize("AZEROTH.SnakeTrap.CatchRefused"));
@@ -2454,18 +2479,28 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
           : f.until === "casterTurnEnd" ? (caster ? untilEndOfNextTurnOrRound(caster) : null)
           : (f.until === "minute" ? minuteSpan(actor)
             : f.until === "endOfNextTurn" && (gadgetByKey(cardFlags.featureKey) || cardFlags.featureKey === "ability:seduction" || cardFlags.featureKey === "ability:frost-shock") ? untilEndOfNextTurnOrRound(actor) : (f.until || null));
+        // **04's DEEP LULL** (*A creature your **Lull Sign** leaves **Charmed** stays Charmed 1 more round per rank*): the
+        // rounds the card carries laid on the span, a fight's by a round of turns each (`lengthenSpan`).
+        const lengthened = Number(f.moreRounds) > 0 && until && typeof until === "object"
+          ? lengthenSpan(until, f.moreRounds, { turnsPerRound: actor.activeFight?.()?.turns?.length ?? 1 }) : until;
         const escape = cleanEscape(cardFlags.inflictEscapes?.[f.condition] ?? null);
         const marks = {
           ...(escape?.condition === f.condition ? { [ESCAPE_FLAG]: escape } : {}),
           ...(f.condition === "slowed" && Number(cardFlags.slowing?.feet) > 0 ? { [SLOWED_FEET_FLAG]: cardFlags.slowing } : {}),
           // 08 §20's Emerald Slumber (D-911): *until it takes damage*, which the damage door ends.
-          ...(f.endsOnDamage === true ? { [ENDS_ON_DAMAGE_FLAG]: { source: cardFlags.title ?? "" } } : {})
+          ...(f.endsOnDamage === true ? { [ENDS_ON_DAMAGE_FLAG]: { source: cardFlags.title ?? "" } } : {}),
+          // **A SCORCHED OR A BLEEDING THAT NAMES ITS SOURCE** (A1 adds them from separate sources; R8, D-1866): the
+          // card's `failLayer` (02's Ember Sign, wave 2a-B), so two Ember Signs from one hunter keep the higher.
+          ...((f.condition === "scorched" || f.condition === "bleeding") && typeof cardFlags.failLayer === "string" && cardFlags.failLayer ? bleedSourceMark(cardFlags.failLayer) : {})
         };
-        const landing = await inflictCondition({ victim: actor, id: f.condition, value: f.value ?? null, by: maker, name: actor.name, until, marks });
+        const landing = await inflictCondition({ victim: actor, id: f.condition, value: f.value ?? null, by: maker, name: actor.name, until: lengthened, marks });
         if (landing?.landed) laid.push(game.i18n.localize(AZEROTH.conditions[f.condition]));
       }
       if (laid.length) ui.notifications?.info(game.i18n.format("AZEROTH.Card.OnFailLanded", { name: actor.name, conditions: laid.join(", ") }));
     }
+    // **A WITCH HUNTER'S BOMB, BEYOND ITS CONDITIONS** (08 §12's Silver dust: *regains no Health and loses **Immune
+    // (Physical)***, to the end of its next turn; wave 2a-A): on a failure, on this client, which owns the creature.
+    if (featureCard && result && !passed && message.flags?.["azeroth-rpg"]?.[BOMB_CARD_FLAG]) await bombResisted({ message, actor, passed });
     // **08 §20's THE SUNWELL'S TORRENT** (*On a failure one spell it is sustaining ends, of
     // its choice*; D-912): the creature that failed - whoever pressed its Resist - picks one
     // of its Sustains through the one chooser, ended through `workflows.endSustain`, the one
@@ -2797,6 +2832,16 @@ async function rollResists(button, message, { resilience, dc, area, gadgetOverri
         for (const line of await sovereignAfterResist({ message, actor, passed, purpose, caster: casterOf(message), result })) ui.notifications?.info(line);
       } catch (err) {
         console.warn("azeroth-rpg | a Sovereign's Resist", err);
+      }
+    }
+    // **THE WITCH HUNTER'S SIGNS** (02 §7; wave 2a-B): the Lull Sign's calm out of a fight on a failed Spirit Test
+    // (`effects/witch-hunter-signs.mjs#signAfterResist`). Guarded: none undoes the Test.
+    if (result && !passed && !purpose && message.flags?.["azeroth-rpg"]?.whSign) {
+      try {
+        const { signAfterResist } = await import("../effects/witch-hunter-signs.mjs");
+        for (const line of await signAfterResist({ message, actor, passed })) ui.notifications?.info(line);
+      } catch (err) {
+        console.warn("azeroth-rpg | a Witch Hunter's Sign", err);
       }
     }
     // **04's GRINDING BLOCK** (stage 2c): the attacker's Spirit Test on the Block's card, its one
@@ -3357,16 +3402,75 @@ async function extraStrikeFromCard(button, message) {
       ui.notifications?.warn(game.i18n.format("AZEROTH.ExtraStrike.NotSame", { name: offer.name, target: struck.name ?? "" }));
       return null;
     }
+    // **04's CAT'S DANCE** (*against a different creature within your reach*; the Witch Hunter plan's wave 2b): one
+    // creature aimed at, inside the striker's reach between the nearest squares (D-732), where both stand on the board.
+    if (offer.reach) {
+      const aimedTokens = [...(game.user.targets ?? [])];
+      if (aimedTokens.length !== 1) {
+        ui.notifications?.warn(game.i18n.format("AZEROTH.ExtraStrike.OneOther", { name: offer.name }));
+        return null;
+      }
+      const own = actor.getActiveTokens?.(true)?.[0] ?? null;
+      const { feetBetweenTokens, reachOfActor } = await import("../canvas/engaged.mjs");
+      const feet = own && own.document?.parent === aimedTokens[0].document?.parent ? feetBetweenTokens(own, aimedTokens[0]) : null;
+      const reach = reachOfActor(actor);
+      if (typeof feet === "number" && feet > reach) {
+        ui.notifications?.warn(game.i18n.format("AZEROTH.ExtraStrike.OutOfReach", { name: offer.name, target: aimedTokens[0].name ?? "", feet: Math.round(feet), reach }));
+        return null;
+      }
+    }
+  }
+  // **A PRICE PAID AT THE PRESS** (04's Second Cut and Cat's Dance: *you may spend 2 Tempo*; the Witch Hunter plan's
+  // wave 2b): judged here before anything is spent, the pool's own delta paid once the round is claimed, and given
+  // back with the round's mark where the attack's dialog is dismissed.
+  const pool = offer.cost > 0 ? (actor.poolSnapshot?.() ?? []).find(p => p.name === offer.pool) ?? null : null;
+  if (offer.cost > 0 && (!pool || (Number(pool.value) || 0) < offer.cost)) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.ExtraStrike.Short", { name: offer.name, n: offer.cost, held: Number(pool?.value) || 0 }));
+    return null;
   }
   STRIKES_IN_FLIGHT.add(key);
+  let claimed = false;
+  let paid = false;
+  let card = null;
   try {
+    if (offer.cost > 0) {
+      if (combatant?.isOwner && mark) {
+        claimed = (await combatant.markRoundOnce(mark))?.added === true;
+        if (!claimed) {
+          ui.notifications?.warn(game.i18n.format("AZEROTH.ExtraStrike.Spent", { name: offer.name }));
+          return null;
+        }
+      }
+      const { adjustPool } = await import("../documents/pool-writes.mjs");
+      paid = (await adjustPool(actor, { kind: pool.kind, name: pool.name, itemId: pool.itemId }, -offer.cost, { need: true }))?.ok === true;
+      if (!paid) {
+        ui.notifications?.warn(game.i18n.format("AZEROTH.ExtraStrike.Short", { name: offer.name, n: offer.cost, held: Number(pool?.value) || 0 }));
+        return null;
+      }
+    }
     if (offer.target === "same" && struck?.tokenId && onCanvas && canvas.tokens?.get(struck.tokenId)) canvas.tokens.setTargets([struck.tokenId]);
-    const card = await attackWithDialog(actor, weapon, null, { budget: "none", ratingDelta: Math.trunc(Number(offer.rating)) || 0 });
-    if (card && combatant?.isOwner && mark) await combatant.markRoundOnce(mark);
+    card = await attackWithDialog(actor, weapon, null, {
+      budget: "none", ratingDelta: Math.trunc(Number(offer.rating)) || 0,
+      ...(offer.triggered === true ? { triggered: true } : {}),
+      ...(Number(offer.boons) > 0 ? { cardBoons: { boons: Math.trunc(Number(offer.boons)), names: [offer.name] } } : {})
+    });
+    if (card && combatant?.isOwner && mark && !claimed) await combatant.markRoundOnce(mark);
+    // 04's Second Cut and Cat's Dance (wave 2b): the paid strike's own record, where the hunter stands and at whom.
+    if (card && offer.cost > 0) {
+      const { postFeatureEvent } = await import("../effects/feature-events.mjs");
+      const at = (card.flags?.["azeroth-rpg"]?.targets ?? []).map(t => (t?.tokenId ? canvas?.tokens?.get?.(t.tokenId) ?? null : null)).filter(Boolean);
+      await postFeatureEvent({ actor, token: actor.getActiveTokens?.(true)?.[0] ?? null, featureKey: offer.identifier, targets: at,
+        lines: [game.i18n.format("AZEROTH.ExtraStrike.PaidLine", { name: actor.name, talent: offer.name, n: offer.cost, pool: game.i18n.localize(AZEROTH.poolTypes?.[offer.pool] ?? offer.pool ?? "") })] });
+    }
     return card;
   } finally {
     STRIKES_IN_FLIGHT.delete(key);
     if (offer.target === "same" && previous && onCanvas) canvas.tokens.setTargets(previous);
+    if (!card && paid) {
+      const { adjustPool } = await import("../documents/pool-writes.mjs");
+      await adjustPool(actor, { kind: pool.kind, name: pool.name, itemId: pool.itemId }, offer.cost);
+    }
+    if (!card && claimed) await combatant.releaseRoundMarks({ round: combatant.combat?.round ?? 0, once: [mark] });
   }
 }
 
@@ -3582,29 +3686,48 @@ async function evadeFromCard(button, message) {
   }
   const evadeRow = evadeFor(actor.takenTalents?.() ?? []);
   // 04's Adrenaline takes its Energy off Elusive's price too (decision 13, D-1881).
-  const evade = evadeRow ? { ...evadeRow, cost: evadeRow.cost - classDiscountFor(actor.takenTalents?.() ?? [], { pool: evadeRow.pool, className: "Rogue", amount: evadeRow.cost }).discount } : null;
-  const pool = evade ? (actor.poolSnapshot?.() ?? []).find(p => p.name === evade.pool) ?? null : null;
-  if (!evade || !pool || (pool.value ?? 0) < evade.cost) {
+  const evade = evadeRow ? { ...evadeRow, cost: evadeRow.pool ? evadeRow.cost - classDiscountFor(actor.takenTalents?.() ?? [], { pool: evadeRow.pool, className: "Rogue", amount: evadeRow.cost }).discount : 0 } : null;
+  const pool = evade?.pool ? (actor.poolSnapshot?.() ?? []).find(p => p.name === evade.pool) ?? null : null;
+  // 04's Tumble (the Witch Hunter's Cat; wave 2b) costs nothing: no pool is asked.
+  if (!evade || (evade.pool && (!pool || (pool.value ?? 0) < evade.cost))) {
     ui.notifications?.warn(game.i18n.format("AZEROTH.Evade.Short", { name: actor.name, talent: evade?.name ?? "", n: evade?.cost ?? 0 }));
     return null;
   }
   // **AS THOUGH YOU HAD DISENGAGED - AND WHAT BARS A DISENGAGE BARS IT** (the F4b review, S5):
   // an Anchor, Heavy Hours, Relentless Advance and Chains of Ice, asked at the one door every
-  // Disengage asks, before the Energy is spent.
+  // Disengage asks, before the Energy is spent - and before Tumble's once-a-round mark is
+  // claimed, so a barred step keeps its round (judge, then claim; the Witch Hunter's final
+  // architect review, finding 2). The bar says itself in words (`refuseDisengage`).
   const { refuseDisengage } = await import("../effects/disengage-bars.mjs");
   if (await refuseDisengage(actor)) return null;
+  // **ONCE A ROUND** (Tumble: *Once a round, when a melee attack misses you*): the round's record of the creature that
+  // steps, claimed after every refusal and before anything is spent (`markRoundOnce`), refused in words where it is spent.
+  if (evade.once === "round") {
+    const { combatant: mine, used } = roundRecordOf(actor);
+    const onceMark = mine ? nextRoundMark(evade.identifier, 1, used) : null;
+    if (mine && (!onceMark || !mine.isOwner || (await mine.markRoundOnce(onceMark))?.added !== true)) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.Evade.OncePerRound", { name: actor.name, talent: evade.name }));
+      return null;
+    }
+  }
   EVADES_IN_FLIGHT.add(key);
   try {
-    await actor.updatePool({ itemId: pool.itemId, kind: pool.kind, value: pool.value - evade.cost });
+    if (pool && evade.cost > 0) await actor.updatePool({ itemId: pool.itemId, kind: pool.kind, value: pool.value - evade.cost });
     await actor.setFlag("azeroth-rpg", "evaded", { messageId: message.id });
     const fight = actor.activeFight?.() ?? null;
     const span = fight?.started && fight.combatant
       ? { duration: { value: 0, units: "turns", expiry: "turnEnd" }, start: { combat: fight.id, combatant: fight.combatant.id, round: fight.round, turn: fight.turn, time: game.time.worldTime } }
       : null;
     await applyCondition(actor, "disengaging", { until: span });
+    // 04's Tumble (the Witch Hunter plan's wave 2b): its own record, where the hunter stands, so its picture is Tumble's.
+    if (!evade.pool && evade.identifier) {
+      const { postFeatureEvent } = await import("../effects/feature-events.mjs");
+      return postFeatureEvent({ actor, token: actor.getActiveTokens?.(true)?.[0] ?? null, featureKey: evade.identifier,
+        lines: [game.i18n.format("AZEROTH.Evade.LineFree", { name: actor.name, talent: evade.name, feet: evade.feet })] });
+    }
     return ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor }),
-      content: `<p class="azeroth-drain">${game.i18n.format("AZEROTH.Evade.Line", { name: actor.name, talent: evade.name, feet: evade.feet, n: evade.cost })}</p>`,
+      content: `<p class="azeroth-drain">${game.i18n.format(evade.pool ? "AZEROTH.Evade.Line" : "AZEROTH.Evade.LineFree", { name: actor.name, talent: evade.name, feet: evade.feet, n: evade.cost })}</p>`,
       flags: { "azeroth-rpg": { kind: "evade" } }
     });
   } finally {
@@ -3760,7 +3883,15 @@ async function applyDamageToTargets(button, message, recordedAttack = false, tra
     // whose Resist on THIS card passed takes the half its row was worked out at - halved
     // before its own Ward, rounded down - where the card's damage halves on a pass
     // (`rules/resisted.mjs#halvesFor`). A creature with no Test recorded takes the whole.
-    const passedRow = button.dataset.rider === undefined && halvesFor(flags, target) ? effective.passedRow : null;
+    // **04's NINE LIVES** (the Witch Hunter's Cat: *you take no damage on a success and half on a failure*; T5; wave
+    // 2b): a holder whose Reflex Test on THIS card halves its damage takes nothing on its success and the half on its
+    // failure (`effects/witch-hunter-talents.mjs#nineLivesFor`).
+    const nine = button.dataset.rider === undefined ? nineLivesFor(targetActorOf(target), flags, target) : null;
+    if (nine === "none") {
+      ui.notifications?.info(game.i18n.format("AZEROTH.WhTalent.NineLives.None", { name: target.name ?? "" }));
+      return;
+    }
+    const passedRow = button.dataset.rider === undefined && (nine === "half" || halvesFor(flags, target)) ? effective.passedRow : null;
     const damage = passedRow
       ? Math.max(0, Math.trunc(Number(passedRow.damage)) || 0)
       : (effective.row?.damage ?? (Number(button.dataset.damage) || 0));
@@ -3818,6 +3949,9 @@ async function applyDamageToTargets(button, message, recordedAttack = false, tra
       // branches' door 25): the drainer the card names, healed by the damage door off what
       // this blow took, held there to this row's number.
       drain: flags.healsDealt?.by ? { by: flags.healsDealt.by, name: flags.healsDealt.name ?? "", messageId: message.id, index: Number(index) } : null,
+      // **08 §18's LIFESTEALING** (*You regain Health equal to the damage it takes*; D-2169): the bearer
+      // and this row's own Shadow amount after Ward, paid by the damage door off what the blow TOOK.
+      lifesteal: flags.lifesteal?.by ? { by: flags.lifesteal.by, name: flags.lifesteal.name ?? "", messageId: message.id, index: Number(index), amount: Number(flags.lifesteal.amounts?.[Number(index)]) || 0 } : null,
       // **WHETHER THE CARD IS A BREATH'S** (08 §20's Foror's Lesson, D-912): its own record,
       // judged at the damage door by `rules/signatures.mjs#breathSource`.
       breath: { title: flags.title ?? null, featureKey: flags.featureKey ?? null, spellName: flags.spellName ?? null },
@@ -3941,7 +4075,13 @@ async function applyDamageToTargets(button, message, recordedAttack = false, tra
     }
     // **HALF ON A PASSED TEST, ON THE CARD'S ONE BUTTON** (the B6 fix): a selected creature
     // whose Resist on this card passed - recorded under its token - takes the half.
-    const halved = button.dataset.rider === undefined && token.actor && halvesFor(flags, { tokenId: token.id, actorId: token.actor.id });
+    // 04's Nine Lives (wave 2b): nothing on its success, the half on its failure.
+    const nineHere = button.dataset.rider === undefined && token.actor ? nineLivesFor(token.actor, flags, { tokenId: token.id, actorId: token.actor.id }) : null;
+    if (nineHere === "none") {
+      ui.notifications?.info(game.i18n.format("AZEROTH.WhTalent.NineLives.None", { name: token.name ?? token.actor.name }));
+      continue;
+    }
+    const halved = nineHere === "half" || (button.dataset.rider === undefined && token.actor && halvesFor(flags, { tokenId: token.id, actorId: token.actor.id }));
     const amount = halved ? (Number.isFinite(Number(flags.damagePassed)) && flags.damagePassed !== null ? Math.max(0, Math.trunc(Number(flags.damagePassed))) : passedHalf(damage)) : damage;
     if (halved) ui.notifications?.info(game.i18n.format("AZEROTH.Card.PassedHalf", { name: token.name ?? token.actor.name, n: amount }));
     await token.actor?.applyDamage(amount, { struck: true, location: flags.location ?? "body", type: flags.damageType ?? null, messageId: message.id, by: attacker, riposte: flags.riposte === true, spell: flags.kind === "spell",

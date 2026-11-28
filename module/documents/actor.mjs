@@ -42,7 +42,9 @@ import { evaluateAmount, featurePatchesFor, featureRungs, featureTickStamp, feat
 import { cleanWho } from "../rules/area-gather.mjs";
 import { grantsFor, healBonusFor, healingPatchesFor, passivesFor, patchFeature, patchesFor, spellGrantsFor, talentEffect, talentEffectDiff, wardPierceFor } from "../rules/talent-effects.mjs";
 // 02's healing features that name one target, which Divine Providence's chip reaches (D-778).
-import { HEALS_ONE_TARGET } from "../rules/class-talents.mjs";
+import { HEALS_ONE_TARGET, patchRowsOf } from "../rules/class-talents.mjs";
+// A worn item as the class feature patches' second source (08 §20's class items, D-2156).
+import { equipResyncs, itemPatchSources, itemPatchedCost, itemPatchesFor, presenceResyncs } from "../rules/item-patches.mjs";
 // What the next spell was promised (04's Nature's Grace, Predator's Swiftness;
 // D-771), and a heal shared between two partners (04's Symbiosis).
 import { NEXT_SPELL_FLAG, castCapRefusal, castingReach, grantingClass, pendingNextSpell, spellPayment } from "../rules/casting.mjs";
@@ -153,7 +155,8 @@ import {utilityEffectView} from "../rules/utility-draughts.mjs";
 // a blow divided, a creature held at 1, and 07's Aegis floor.
 import { aegisFloor, askToBorrow, askToHold, divideBlow, landShares, redirectBlow } from "../effects/blow-doors.mjs";
 // 04's Exquisite Taste and Overflowing Cup at the one healing door (the Sovereign; pure).
-import { INSOLENCE_FLAG, healExtra as sovereignHealExtra, insolenceBoons } from "../rules/sovereign-talents.mjs";
+import { INSOLENCE_FLAG, healExtra as sovereignHealExtra, insolenceBoons, isWeaponBlow } from "../rules/sovereign-talents.mjs";
+import { lifestealHeal, weaponCutOn } from "../rules/enchanter-signatures.mjs";
 // THE LEGACY BRANCHES' B3 (doors 10, 11 and 25): a Death Step held back or spared, the
 // third one recorded, 06 §10's offer at the second, Ethereal Form's halving at the one
 // damage door, and Life Drain's Health back off what the blow took.
@@ -165,11 +168,11 @@ import { invulnerabilityPotionActive, preventPhysicalDamage } from "../rules/inv
 import { consumeAttackTransfer } from "../effects/attack-transfer.mjs";
 import { dyingNow, etherealOn, realmRefusalFor } from "../effects/spirit-realm.mjs";
 import { postPrompt } from "../effects/prompts.mjs";
-import { drainHeal } from "../effects/legacy-uses.mjs";
+import { drainHeal, lifestealPay } from "../effects/legacy-uses.mjs";
 // The ONE ally rule, for a door that holds both actors (D-755, D-777).
 import { allyOf } from "../canvas/engaged.mjs";
 import { restCard } from "../dice/rest-card.mjs";
-import { burnTether, longRest, shortRest, turnRefill } from "../rules/rest.mjs";
+import { burnTether, longRest, shortRest, refillRatesFor, turnRefill } from "../rules/rest.mjs";
 // A San'layn's rest (02 §5; D-1141 to D-1144): the blood it needs, judged before anything is spent.
 import { BLOOD_SINCE_REST_FLAG, bloodNeeded, bloodRestPlan, bloodSinceRestOf, vialDraws, vialUnits } from "../rules/rest.mjs";
 import { restoreSpellUses } from "../effects/spell-limits.mjs";
@@ -213,7 +216,11 @@ import { poolHeldBy } from "../rules/pools.mjs";
 import { mirrorMembers, sharedPoolValue } from "../rules/energy-merge.mjs";
 // The Demon Hunter's features (the Demon Hunter plan's Phase 4a): the two riders, Fel Surge's lines, the shape's
 // Energy refill and its no-gain rule.
-import { FEL_SURGE_FEATURE, QUIET_THE_WHISPERS, demonHunterRiders, felSurgeLines, freeFelLash, unleashedGainRefusal, unleashedRefillExtra } from "../rules/demon-hunter-features.mjs";
+import { FEL_LASH, FEL_SURGE_FEATURE, QUIET_THE_WHISPERS, demonHunterRiders, felSurgeLines, freeFelLash, unleashedGainRefusal, unleashedRefillExtra } from "../rules/demon-hunter-features.mjs";
+// The Witch Hunter (the plan's wave 2a-A): Mageroyal draught's refill and the Tome's type facts.
+import { brewRefillExtra, tomeFacts, tomeFlagOf } from "../rules/witch-hunter-standing.mjs";
+// The Witch Hunter's Tempo cue, carried on the write that moves the Tempo (wave 3, D-2097).
+import { TEMPO_CUE_OPTION, TEMPO_POOL, tempoCue } from "../rules/witch-hunter-animations.mjs";
 // The class talent audit's martial law (class agent A, D-1870 to D-1879): the Ranger's riding features.
 import { rangerRiders } from "../rules/audit-martial.mjs";
 // 04's Demon's Due (the Demon Hunter plan's Phase 5): who makes a Fel Lash free.
@@ -407,6 +414,12 @@ async function syncLegacyTalents(actor, { people = actor.raceItem?.name ?? null 
  * @param {object} descriptor  the patched descriptor
  * @param {Array} taken  the talents taken, as the sync reads them
  */
+function withItemPatches(descriptor, itemPatches = []) {
+  if (!itemPatches.length) return descriptor;
+  const laid = patchFeature(descriptor, itemPatches, evaluateAmount);
+  return { ...laid, modifiedBy: [...(descriptor.modifiedBy ?? []), ...laid.modifiedBy] };
+}
+
 function withHealingPatches(descriptor, taken) {
   const healing = healingPatchesFor(taken, descriptor, HEALS_ONE_TARGET);
   if (!healing.length) return descriptor;
@@ -791,7 +804,8 @@ export class AzerothActor extends Actor {
    * on the item, so this reads what the sheet reads.
    */
   get heldAugment() {
-    return heldAugment(this.items.filter(i => i.type === "gear"));
+    // The tier prices a named §20 Augment (D-2152).
+    return heldAugment(this.items.filter(i => i.type === "gear"), { tier: this.system?.tier ?? null });
   }
 
   /** The race item, if one is equipped. */
@@ -1080,6 +1094,9 @@ export class AzerothActor extends Actor {
     if (this.type === "character" && documents.some(d => isEquippedShield(d) || wornOrWielded(d))) {
       this.syncTalentEffects().catch(err => console.error("azeroth-rpg | talent effects", err));
     }
+    // An item that patches a feature or lays on the bound, CREATED ALREADY WORN (the phase 3
+    // review): the update door's `equipResyncs` never sees a create. The writing client, once.
+    if (this.type === "character") this.#resyncForPresence(documents);
 
     const update = {};
 
@@ -1149,8 +1166,9 @@ export class AzerothActor extends Actor {
       this._professionLink = linked.catch(err => console.warn("azeroth-rpg | profession link", err));
     }
 
-    // A class brings its three branches with it. 04 gives every class thirty-
-    // six talents and the tree is drawn from the talents the actor OWNS, so
+    // A class brings its branches with it. 04 gives a class twelve talents a
+    // branch (three branches, four for the Chromatic Champion and the Witch
+    // Hunter) and the tree is drawn from the talents the actor OWNS, so
     // without this a dropped class opened no branch at all and the Progress
     // tab said "add a class" to a character who had. Granted after the link
     // lands, so a listener waiting on the class update sees the talents next.
@@ -1208,6 +1226,8 @@ export class AzerothActor extends Actor {
     if (this.type === "character" && documents.some(d => isEquippedShield(d) || wornOrWielded(d))) {
       this.syncTalentEffects().catch(err => console.error("azeroth-rpg | talent effects", err));
     }
+    // An item that patched a feature or laid on the bound, DELETED WHILE WORN (the phase 3 review).
+    if (this.type === "character") this.#resyncForPresence(documents);
 
     const update = {};
     // The profession the character points at, deleted: the pointer moves to
@@ -1479,6 +1499,8 @@ export class AzerothActor extends Actor {
     const snapshot = this.poolSnapshot();
     const classes = (this.system?.classes ?? []).map(c => ({ ...c, power: { ...c.power }, momentum: { ...c.momentum } }));
     let moved = false;
+    // The Witch Hunter's Tempo before and after this write, for its cue (wave 3, D-2097).
+    let tempoMove = null;
     for (const { itemId, kind, value } of list) {
       // **ONE ENERGY POOL, WRITTEN ON THE HOLDER AND MIRRORED** (02 §10, D-1723): a write naming any
       // member of the merged pool finds it (`poolHeldBy`), lands on the holder's entry, and the same
@@ -1519,6 +1541,7 @@ export class AzerothActor extends Actor {
           continue;
         }
       }
+      if (pool.kind === "momentum" && pool.name === TEMPO_POOL) tempoMove = { before: tempoMove?.before ?? (entry[kind]?.value ?? 0), after: next };
       if (next !== (entry[kind]?.value ?? 0)) moved = true;
       entry[kind] = { ...entry[kind], value: next };
       // The mirror: a write that moves only a member's copy still counts as a move, so a stale mirror heals.
@@ -1532,6 +1555,12 @@ export class AzerothActor extends Actor {
     // A write that moves nothing is skipped: the fight's end zeroes twice
     // (before the confirm and again on exit) and the second is silent.
     if (!moved && !Object.keys(extra).length) return this;
+    // **THE TEMPO'S RISE AND FALL RIDE THIS WRITE** (wave 3, D-2097; D-994's shape): the hunter's token on this
+    // client's board, and the cue every client's `updateActor` hook reads (`animation/director.mjs`). A write with no
+    // token here records none.
+    const tempoToken = tempoMove ? (this.getActiveTokens?.(true) ?? []).find(t => t.document?.parent?.id === globalThis.canvas?.scene?.id) ?? null : null;
+    const tempoMoved = tempoMove ? tempoCue({ ...tempoMove, token: tempoToken ? { sceneId: tempoToken.document.parent.id, tokenId: tempoToken.document.id } : null }) : null;
+    if (tempoMoved) options = { ...options, [TEMPO_CUE_OPTION]: tempoMoved };
     return this.update({ "system.classes": classes, ...extra }, options);
   }
 
@@ -1594,7 +1623,9 @@ export class AzerothActor extends Actor {
         // 2026-10-03, on O-160: *"Yes."*; D-778): Devotion and Holy Guidance on a
         // second class's Mend as on the Paladin's Lay on Hands.
         const patched = withHealingPatches(patchFeature(f, [...featurePatchesFor(granted, f.name), ...patchesFor(taken, cls.name, f.name)], evaluateAmount), taken);
-        wanted.set(`${cls.id}/${f.name}`, { cls, f: patched });
+        // **AND A WORN ITEM'S** (08 §20's class items, D-2156): its name on the feature's chips,
+        // last, its number read at the feature's own door (`rules/item-patches.mjs`).
+        wanted.set(`${cls.id}/${f.name}`, { cls, f: withItemPatches(patched, itemPatchesFor(this.system?.signatureEffects?.featurePatches ?? [], f.name)) });
       }
     }
     // The race's trait rides the same door (02 SS5, D-620): free, always on,
@@ -1902,6 +1933,12 @@ export class AzerothActor extends Actor {
     const worn = documents.some((doc, i) => (doc.type === "armor" && (foundry.utils.hasProperty(changes[i] ?? {}, "system.equipped") || foundry.utils.hasProperty(changes[i] ?? {}, "system.shield")))
       || (doc.type === "weapon" && ["system.equipped", "system.offHand", "system.weaponType"].some(k => foundry.utils.hasProperty(changes[i] ?? {}, k))));
     if (worn) this.syncTalentEffects().catch(err => console.error("azeroth-rpg | talent effects", err));
+    // **AN ITEM THAT PATCHES A FEATURE OR LAYS ON THE BOUND, PUT ON OR TAKEN OFF** (the phase 2
+    // review; D-2156): the feature sync restamps the chips and runs the bond sync after it; an
+    // item that lays on the bound alone re-syncs the bound creatures. The writing client, once.
+    const resync = documents.map((doc, i) => equipResyncs(doc, changes[i] ?? {}));
+    if (resync.some(r => r.features)) this.syncClassFeatures();
+    else if (resync.some(r => r.bound)) this.syncBound().catch(err => console.warn("azeroth-rpg | bound sync after an equip", err));
     // ONE THING IN EACH SLOT, WHATEVER DOOR IT CAME THROUGH (08 §11, D-686).
     // The Gear tab's button asks `displacedBy` before it writes, and the item
     // sheet's Equipped checkbox does not - it submits through the ordinary
@@ -1912,6 +1949,19 @@ export class AzerothActor extends Actor {
     // cannot recur.
     const equipped = documents.filter((doc, i) => foundry.utils.hasProperty(changes[i] ?? {}, "system.equipped") && doc.system?.equipped === true);
     if (equipped.length) this.#displaceWorn(equipped);
+  }
+
+  /**
+   * The re-sync an item arriving or leaving ALREADY WORN asks for (`item-patches.mjs#presenceResyncs`,
+   * the phase 3 review): the feature sync, which runs the bond sync after it, where one patches a
+   * class feature; else the bond sync where one lays on the bound. Called on the writing client.
+   *
+   * @param {Item[]} documents  created or deleted, each carrying its data
+   */
+  #resyncForPresence(documents) {
+    const resync = documents.map(d => presenceResyncs(d));
+    if (resync.some(r => r.features)) this.syncClassFeatures();
+    else if (resync.some(r => r.bound)) this.syncBound().catch(err => console.warn("azeroth-rpg | bound sync after a create or delete", err));
   }
 
   /**
@@ -2628,6 +2678,9 @@ export class AzerothActor extends Actor {
     // **A COOKED FOOD EATEN AS THIS REST'S FOOD MAKES THE EATER WELL FED ONCE IT
     // IS OVER** (D-1922): `fedBy` above, read off the eaten item, whose data outlives its mark-off.
     if (fedBy) await layWellFed(this, fedBy);
+    // **02 §7's FIELD BREWS, TOME AND STUDIED AT THE REST'S END** (the Witch Hunter plan's wave 2a-A): the brewing window
+    // keyed by this rest's generation, the Tome's learning chance, and the card's lines (`witchHunterRest`).
+    if (this.type === "character") await import("../effects/witch-hunter-brews.mjs").then(m => m.witchHunterRest(this, "short", { generation: restGeneration(this), gains: r.gains })).catch(err => console.warn("azeroth-rpg | Witch Hunter rest", err));
     await restCard({ actor: this, kind: "short", gains: r.gains, restored, cleared, count, ate, drank, blood: bloodTaken });
     return this;
     });
@@ -2786,6 +2839,8 @@ export class AzerothActor extends Actor {
       const refilled = withheld ? 0 : await refillRunesAtLongRest(this, { restGeneration: restGeneration(this) });
       if (refilled > 0) r.gains.push({ kind: "runesRefilled", amount: refilled });
       if ((this.system?.classKeys ?? []).includes("death-knight")) r.gains.push({ kind: "inscribeOpen" });
+      // **02 §7's FIELD BREWS, TOME AND STUDIED AT THE REST'S END** (the Witch Hunter plan's wave 2a-A).
+      await import("../effects/witch-hunter-brews.mjs").then(m => m.witchHunterRest(this, "long", { generation: restGeneration(this), gains: r.gains })).catch(err => console.warn("azeroth-rpg | Witch Hunter rest", err));
     }
     await restCard({ actor: this, kind: "long", gains: r.gains, restored, cleared, diseased, blood: bloodTaken });
     // 07's Haven and Sanctification: *any that take a Long Rest end it with every disease and
@@ -2949,10 +3004,16 @@ export class AzerothActor extends Actor {
     // Prepared's 20, never Embrace the Pain's 5 more; the review's M1).
     const unleashedMore = this.type === "character" ? unleashedRefillExtra({ unleashed: this.shape?.kind === "unleashed", fel: featureFel(this) }) : 0;
     if (unleashedMore > 0) extra.energy = (Number(extra.energy) || 0) + unleashedMore;
+    // 08 §12's Mageroyal draught (*Your Energy refills 2 more at the start of each of your turns*), off its carrier
+    // (`rules/witch-hunter-standing.mjs#brewRefillExtra`; the Witch Hunter plan's wave 2a-A).
+    const brewMore = this.type === "character" ? brewRefillExtra(this.effects ?? []) : 0;
+    if (brewMore > 0) extra.energy = (Number(extra.energy) || 0) + brewMore;
     // 02's Focus refills only after a still turn (the Legacy branches' door 9):
     // `still` is the combat door's measure, and a caller that names none refills
     // no Focus (`rules/rest.mjs#turnRefill`, a gate closed by default).
-    const changes = turnRefill(this.poolSnapshot(), { extra, still: still === true });
+    // A class's own rate (the Witch Hunter's Energy refills 2, 02 §7): `rest.mjs#refillRatesFor`.
+    const rates = this.type === "character" ? refillRatesFor(this.system?.classKeys ?? []) : {};
+    const changes = turnRefill(this.poolSnapshot(), { extra, still: still === true, rates });
     return changes.length ? this.updatePool(changes) : this;
   }
 
@@ -3440,6 +3501,17 @@ export class AzerothActor extends Actor {
   }
 
   /**
+   * **WHAT PATCHES A CLASS FEATURE: THE TALENTS TAKEN AND THE ITEMS WORN** (08 §20's class
+   * items, D-2156): `takenTalents()` and, after them, one row for each worn item whose gated
+   * `featurePatch` holds (`signatureEffects().featurePatches`, through `rules/item-patches.mjs
+   * #itemPatchSources`). Handed to `class-talents.mjs#patchRowsOf`, the one reader, at each
+   * patched feature's door. Kept apart from `takenTalents()`, whose other readers count talents.
+   */
+  patchSources() {
+    return [...this.takenTalents(), ...itemPatchSources(this.system?.signatureEffects?.featurePatches ?? [])];
+  }
+
+  /**
    * **WHAT A COUNTER OR A CHARGE BUYS ON THIS ROLL, AS IT STANDS NOW** (D-774):
    * Inner Focus's free Mana, Lava Burst's Ward ignored, Static Charge's tier on a
    * damage roll - `rules/class-talents.mjs#talentLinesFor` over the uses left on
@@ -3727,7 +3799,10 @@ export class AzerothActor extends Actor {
     // **AND THE DEMON HUNTER'S** (02 §7's Fel Lash and Mana Rend; the Demon Hunter plan's Phase 4a), through the
     // same reading; Fel Lash costs no Hatred while Demon Unleashed's shape stands (`freeFelLash`).
     // An unarmed strike carries neither (the review's M3: *As part of a weapon attack*; `rules/unarmed.mjs` decides).
-    const dh = demonHunterRiders(this.items.filter(i => i.type === "feature").map(i => i.name), { unarmed });
+    // **AND WHAT A WORN ITEM SETS FEL LASH AT** (the Warglaive of Azzinoth's Twin Blades: *Fel Lash
+    // costs them 1 Hatred*; D-2157): the item's patch on 02's Fel Lash, read through the one reader.
+    const lashPrice = itemPatchedCost(patchRowsOf(this.patchSources(), FEL_LASH.feature), FEL_LASH.hatred);
+    const dh = demonHunterRiders(this.items.filter(i => i.type === "feature").map(i => i.name), { unarmed, price: { [FEL_LASH.identifier]: lashPrice.cost } });
     const dhLines = dh.talents.length
       // And 04's Demon's Due (Phase 5): the promise a devoured demon laid makes the next Fel Lash free too.
       ? freeFelLash(ridersFor(dh.talents, { ...sharedRiderOptions, rowOf: dh.rowOf }), {
@@ -3789,7 +3864,11 @@ export class AzerothActor extends Actor {
     const own = [this.uuid, ...(this.type === "character" ? boundOf(this, "totem").map(t => t.uuid) : [])];
     // The Quarry a Ranger's Hunter's Mark names (`combat-actions.mjs` writes the `mark` flag; D-1868).
     const quarry = this.getFlag?.("azeroth-rpg", "mark") ?? null;
-    const facts = targetFactsOf(target, { own, marks: { ...marks, quarry } });
+    // A Witch Hunter's Tome (the plan's wave 2a-A): the types known and the types Studied now, The Last Hunt included,
+    // for the type facts (`typeKnown`, `typeStudied`); null for anybody who keeps no Tome.
+    // The carried First Tome's types and The Drust Chapter's Studied type ride along (`tomeFlagOf`, D-2162).
+    const tome = this.type === "character" ? tomeFacts({ tome: tomeFlagOf(this), effects: this.effects ?? [] }) : null;
+    const facts = targetFactsOf(target, { own, marks: { ...marks, quarry }, ...(tome ? { tome } : {}) });
     return { wield, target: facts, challenged: facts?.challenged === true, watched: facts?.watched === true, quarried: facts?.quarried === true };
   }
 
@@ -4520,7 +4599,7 @@ export class AzerothActor extends Actor {
    *   as a creature's poison tick names the creature that laid it. Only the death watch's
    *   10 §3 exposure reads it; `by` wins where both are given.
    */
-  async applyDamage(damage, { struck = false, attack = true, location = "body", type = null, messageId = null, by = null, riposte = false, wardTook = 0, spell = false, ignite = false, moved = false, shared = false, parts = null, drain = null, transfer = null, outcome = null, healthFloor = null, falling = false, breath = false, mitigation = null, dealtBy = null } = {}) {
+  async applyDamage(damage, { struck = false, attack = true, location = "body", type = null, messageId = null, by = null, riposte = false, wardTook = 0, spell = false, ignite = false, moved = false, shared = false, parts = null, drain = null, lifesteal = null, transfer = null, outcome = null, healthFloor = null, falling = false, breath = false, mitigation = null, dealtBy = null } = {}) {
     // Optional local receipt; retain the historical Actor return value. This
     // reports this actor's committed Health/temp loss, never guesses shares.
     const report = outcome && typeof outcome === "object" ? outcome : null;
@@ -4601,6 +4680,17 @@ export class AzerothActor extends Actor {
       if (cursedLess.amount > 0 && amount > 0) {
         amount = Math.max(0, amount - cursedLess.amount);
         ui.notifications?.info(game.i18n.format("AZEROTH.SovSpell.AttackLess.Took", { name: by.name, n: cursedLess.amount, sources: cursedLess.sources.join(", ") }));
+      }
+      // **08 §18's UNHOLY WEAPON** (*each of the target's weapon attacks deals 2 less damage until the end of
+      // its next turn*; D-2166): the cut laid on the ATTACKER by a blade it was struck with, off its own WEAPON
+      // blows alone (Withering Contempt's reading, `isWeaponBlow`), the largest standing, once, before the blow
+      // is moved or shared (`enchanter-signatures.mjs#weaponCutOn`).
+      if (amount > 0 && isWeaponBlow({ attack, spell, breath: Boolean(breath), ignite, struck })) {
+        const unholy = weaponCutOn(by.effects ?? []);
+        if (unholy.amount > 0) {
+          ui.notifications?.info(game.i18n.format("AZEROTH.WeaponCut.Took", { name: by.name, n: Math.min(amount, unholy.amount), sources: unholy.sources.join(", ") }));
+          amount = Math.max(0, amount - unholy.amount);
+        }
       }
       // **02 §7's WITHERING CONTEMPT AND 04's UNWORTHY HAND** (*each of its weapon attacks deals 3 less damage*;
       // *1 less damage per rank*; R27, R31; the plan's C11, on WEAPON attacks alone): beside the curses' own
@@ -5266,6 +5356,29 @@ export class AzerothActor extends Actor {
         console.warn("azeroth-rpg | life drain", err);
       }
     }
+    // **08 §18's LIFESTEALING** (*the target takes 2 Shadow damage, and Ward applies. You regain
+    // Health equal to the damage it takes*; D-2169): the bearer regains what this blow TOOK off this
+    // creature, never more than the row's own Shadow amount after Ward the card recorded - paid as the
+    // blow lands. A Block (the mark spent above) reduced the blow and the creature took the rest, so it
+    // heals what got through (the final review of 0.18.1); a Parry that held (a negating mark, and a
+    // withdrawn row never reaches this door), Afterimage, a blow moved onto another creature (`moved`,
+    // `shared`, or the move that returned above) and a card never Applied heal nothing
+    // (`enchanter-signatures.mjs#lifestealHeal`).
+    // Guarded: the bearer's heal never undoes the blow.
+    if (lifesteal?.by && amount >= 0) {
+      try {
+        const left = (this.system?.health?.value ?? 0) + Math.max(0, Math.trunc(Number(this.system?.health?.temp)) || 0);
+        const n = lifestealHeal({ record: lifesteal, took: Math.max(0, tookFrom - left), negated: mitigate?.negate === true, moved, shared });
+        const healer = n > 0 ? fromUuidSync(lifesteal.by) : null;
+        if (healer?.documentName === "Actor") {
+          const healed = await lifestealPay({ healer, amount: n, messageId: lifesteal.messageId ?? messageId, index: Number.isInteger(lifesteal.index) ? lifesteal.index : null, name: lifesteal.name ?? "" });
+          if (healed > 0) ui.notifications?.info(game.i18n.format("AZEROTH.Drain.Healed", { name: healer.name, n: healed, source: lifesteal.name ?? "", target: this.name }));
+        }
+      } catch (err) {
+        ui.notifications?.warn(game.i18n.format("AZEROTH.Drain.Failed", { source: lifesteal.name ?? "", target: this.name }));
+        console.warn("azeroth-rpg | Lifestealing", err);
+      }
+    }
     // **02's DRAIN** (the class talent audit, D-1894: *Until the end of your turn, damage you deal
     // restores half as much Health to you, rounded down*): what this blow took off this creature,
     // halved, to the creature that dealt it while its Drain stands (`effects/warlock-drain.mjs`).
@@ -5349,7 +5462,7 @@ export class AzerothActor extends Actor {
       }
     }
     if (!struck) return completeOutcome();
-    await this._struckBy({ before, amount, location, type, attack, max, shapeKind, by, spell, parts, verdict });
+    await this._struckBy({ before, amount, location, type, attack, max, shapeKind, by, spell, parts, verdict, messageId });
     // What the blow does beyond its target, once, whatever door it came through
     // (D-768): the card's Apply, an area's tick, a failed area Test. **GUARDED**:
     // it runs after the Health is written and is bookkeeping beyond the target,
@@ -5906,7 +6019,7 @@ export class AzerothActor extends Actor {
    * `applyDamage` so the blow's effects BEYOND the target run after it on every
    * path (D-768); the early returns it holds no longer skip them.
    */
-  async _struckBy({ before, amount, location, type, attack, max, shapeKind = null, by = null, spell = false, parts = null, verdict = null }) {
+  async _struckBy({ before, amount, location, type, attack, max, shapeKind = null, by = null, spell = false, parts = null, verdict = null, messageId = null }) {
     const after = this.system?.health?.value ?? 0;
     // Reaching 0 (06 SS8, D-629): Prone, and the Critical Injury the VICTIM
     // rolls; an ATTACK on a character already dying costs a Death Step (06 §9),
@@ -6005,6 +6118,25 @@ export class AzerothActor extends Actor {
         }
       } catch (err) {
         console.warn("azeroth-rpg | the martial rows on a blow taken", err);
+      }
+      // **04's BEAR'S WRATH AND BEAR'S ENDURANCE** (the Witch Hunter's Bear: *Once a round per rank, when a melee attack
+      // hits you, you gain 1 Tempo*; *The first time in a fight that your Health drops below half, you gain temporary
+      // Health*; the Witch Hunter plan's wave 2b): the Tempo ADDED to what the blow gave, the melee read off the card the
+      // blow came from (`effects/witch-hunter-talents.mjs#whWhenStruck`). Guarded, so a throw never skips the blow.
+      if (this.items?.some?.(i => i.type === "class" && i.system?.identifier === "witch-hunter")) {
+        try {
+          const { whWhenStruck } = await import("../effects/witch-hunter-talents.mjs");
+          for (const g of await whWhenStruck({ actor: this, before, after, max, attack, messageId })) {
+            const pool = this.poolSnapshot().find(p => p.itemId === g.itemId && p.kind === g.kind && p.name === g.name) ?? null;
+            const at = gains.findIndex(x => x.itemId === g.itemId && x.kind === g.kind && x.name === g.name);
+            const base = at >= 0 ? gains[at].value : (pool?.value ?? 0);
+            const row = { itemId: g.itemId, kind: g.kind, name: g.name, value: Math.min(pool?.max ?? base + g.value, base + g.value) };
+            if (at >= 0) gains[at] = row;
+            else gains.push(row);
+          }
+        } catch (err) {
+          console.warn("azeroth-rpg | the Witch Hunter's rows on a blow taken", err);
+        }
       }
     }
     // Reckoning (04): reduced below half Health, gain 5 Zeal a rank.

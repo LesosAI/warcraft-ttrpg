@@ -401,6 +401,14 @@
   </details>
   {{/if}}
 
+  {{!-- The Witch Hunter's Hunter panel, the minimal one (D11's Hunter panel; the Witch Hunter plan's wave 2a-A):
+        the brews with a Use each, Toxicity, the types known and Studied, the doses and Prepare. --}}
+  {{#if hunterPanel}}
+  <details class="azeroth-combat-group" data-combat-section="hunter"{{#if combatSections.hunter}} open{{/if}}><summary class="azeroth-panel-heading azeroth-combat-section">{{#if hunterPanel.brewsOnly}}{{localize "AZEROTH.WitchHunter.Panel.BrewsHeading"}}{{else}}{{localize "AZEROTH.WitchHunter.Panel.Heading"}}{{/if}}</summary>
+  {{> systems/azeroth-rpg/templates/actor/partials/hunter-panel.hbs panel=hunterPanel}}
+  </details>
+  {{/if}}
+
   {{!-- Signatures (08 SS20, S3; D-692): what the things being WORN do.
 
         The same shape as Talents in play above: a name, what it does, its

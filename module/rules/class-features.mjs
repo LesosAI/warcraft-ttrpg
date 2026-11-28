@@ -93,6 +93,8 @@ import { DESECRATION, MARCH_OF_THE_DAMNED, RUNIC_DISCIPLINE, UNHOLY_PRESENCE } f
 import { COMMAND_SURGE } from "./necromancer-features.mjs";
 // The Demon Hunter's numbers (02 §7; the Demon Hunter plan's Phase 4a).
 import { HUNTERS_LEAP } from "./demon-hunter-features.mjs";
+// The Witch Hunter's numbers (02 §7; the Witch Hunter plan's wave 2a-B).
+import { EXPOSE_WEAKNESS_RULE, MEDALLION_RULE, THE_LAST_HUNT_RULE, WHIRLING_STEEL_RULE } from "./witch-hunter-features.mjs";
 
 // The descriptor vocabulary, shared with `rules/talent-effects.mjs` (D-642).
 export const passive = (extra = {}) => ({ kind: "passive", action: null, cost: null, casting: false, uses: null, heal: null, damage: null, resist: null, ...extra });
@@ -653,6 +655,60 @@ export const CLASS_FEATURES = Object.freeze({
     "Demon Unleashed": action({ action: "half", cost: { pool: "hatred", amount: 0, all: true }, onUse: { dh: { unleash: true } } }),
     // *Once per Long Rest, as a Half-Action, ... for 1 minute* (D-752's count); a Use while it stands ends it.
     "I Have Prepared": action({ action: "half", uses: once("long"), onUse: { dh: { prepared: true } } })
+  },
+  // **THE WITCH HUNTER** (02 §7; the Witch Hunter plan's wave 2a). Extra Attack is the existing door; Field Brews and
+  // the Tome are 2a-A's brewing doors (`onUse.whBrew`), every other Use is 2a-B's (`onUse.wh`, judged and landed by
+  // `effects/witch-hunter-features.mjs`). The pending list that named the rows still to come is gone.
+  "witch-hunter": {
+    // *When you finish a Short or Long Rest, you may brew doses ...*: the Use opens the Prepare window while the
+    // rest's brewing stands open (`effects/witch-hunter-brews.mjs#openPrepare`, `rules/brewing.mjs#brewPlan`).
+    // Nothing is paid; the Boon on Body Resilience Tests against poison and disease is a reminder below.
+    "Field Brews": action({ action: null, onUse: { whBrew: "prepare" } }),
+    // *... when you finish a Long Rest after a fight in which you damaged a creature of a type you do not know:
+    // make an **Investigation** Test, a Hard Test at your tier, once per Long Rest*: the Use is that Test
+    // (`effects/witch-hunter-tome.mjs#learnTypeWithDialog`, `rules/tome.mjs#learnRefusal`). The weapon numbers
+    // are the attack door's (`witchHunterBlow`); the Boon on Tests to track is a reminder below.
+    // *once per Long Rest*: the row's use, struck by the Test (`learnTypeWithDialog`); the gate itself is the Tome's
+    // own record (`witch-hunter-standing.mjs#learnJudgement`), so a Field Notes Short Rest reads the same count.
+    "Tome of Silver and Ash": action({ action: null, uses: once("long"), onUse: { whBrew: "learn" } }),
+    // *When you finish a Short or Long Rest, choose types you know ...*: chosen in the Prepare window; the numbers
+    // are the attack door's and the Resist roll's (`witchHunterBlow`, `studiedResistBoon`).
+    "Studied": passive({ note: "AZEROTH.Feature.Note.Studied" }),
+    // **THE SIGNS** (wave 2a-B; D-2071 to D-2074): *Using a Sign is a Half-Action and costs the Energy its row names*.
+    // The Sign, its Empowered line and its price are asked by the Use (`effects/witch-hunter-signs.mjs#judgeSign`,
+    // `rules/witch-hunter-features.mjs#signCost`), so the row names no price of its own; the Energy is paid once the
+    // budget is (`landSign`). `aims` hands the Rowan and Lull Signs the creatures targeted (`featureAims`); a cone
+    // gathers its own.
+    "Signs": action({ action: "half", onUse: { wh: { sign: true, aims: true } } }),
+    // *Spend 10 minutes ... then make an **Investigation** Test, a Standard Test at your tier*: its own door, out of a
+    // fight, the GM's call on what the scene reveals and the GM-only Learn the type (`readTheTrail`). Nothing is paid.
+    "Read the Trail": action({ action: null, onUse: { wh: { trail: true } } }),
+    // *As a Half-Action, spend 3 Tempo and choose a creature of a **Studied** type that you can see within 30 feet*:
+    // judged whole before the budget (`exposeWeakness`, the Immune refusal in words) and laid as `laid-vulnerable.mjs`'
+    // flag to the end of the hunter's next turn (`effects/witch-hunter-features.mjs#exposeHere`).
+    "Expose Weakness": action({ action: EXPOSE_WEAKNESS_RULE.action, cost: cost(EXPOSE_WEAKNESS_RULE.pool, EXPOSE_WEAKNESS_RULE.cost), onUse: { wh: { expose: true, aims: true } } }),
+    "Extra Attack": passive({ extraAttack: true }),
+    // *While you wear your witch hunter's medallion in your Neck slot ...*: the cast watcher on the active GM's client
+    // whispers the direction and school with the Warning's button (`medallionWatch`); the Use is the Half-Action pulse.
+    "Medallion": action({ action: MEDALLION_RULE.pulse.action, onUse: { wh: { pulse: true } }, note: "AZEROTH.Feature.Note.Medallion" }),
+    "Ash Sign": action({ action: "half", onUse: { wh: { sign: true, aims: true } } }),
+    // *While you wield a weapon in two hands, as a Half-Action, spend 3 Tempo. Make one attack against every enemy within
+    // your reach*: the card's own Attack, one press a creature (`attacks: "each"`, D-773's allowance), counted on the
+    // turn's Attacks (R6, `isAttack`), each press `budget: "none"` so **Extra Attack** adds no roll, its hits building no
+    // Tempo (the card's `noMomentum`). The two hands are `wields`, judged with the Use's other refusals.
+    "Whirling Steel": action({
+      action: WHIRLING_STEEL_RULE.action, cost: cost(WHIRLING_STEEL_RULE.pool, WHIRLING_STEEL_RULE.cost), attack: true, attacks: WHIRLING_STEEL_RULE.attacks,
+      onUse: { wields: [WHIRLING_STEEL_RULE.wields], wh: { whirl: true } }
+    }),
+    "Lull Sign": action({ action: "half", onUse: { wh: { sign: true, aims: true } } }),
+    // *When you brew with **Field Brews**, one dose may be a **Decoction** ...*: the Prepare window's Decoction row,
+    // offered for a type known and defeated since the last Long Rest (`witch-hunter-standing.mjs#prepareView`).
+    "Decoctions": passive({ note: "AZEROTH.Feature.Note.Decoctions" }),
+    // *you may spend 2 more Energy to empower it*: the Empowered line on each Sign's chooser (`judgeSign`).
+    "Greater Signs": passive({ note: "AZEROTH.Feature.Note.GreaterSigns" }),
+    // *Once per Long Rest, as a Half-Action, for 1 minute*: the carrier `capFor`, `studiedTypes` and `signCost` read
+    // (`effects/witch-hunter-features.mjs#startLastHunt`), the Tempo clipped when it ends.
+    "The Last Hunt": action({ action: THE_LAST_HUNT_RULE.action, uses: once(THE_LAST_HUNT_RULE.per), onUse: { wh: { lastHunt: true } } })
   }
 });
 
@@ -804,6 +860,13 @@ export const FEATURE_REMINDERS = Object.freeze({
   // reminder is a note that says why the Spirit Test carries two Proficiency rows.
   chronomancer: {
     "Timeless Mind": { kinds: ["resilience"], text: "AZEROTH.Feature.Reminder.TimelessMind" }
+  },
+  // *You have a Boon on Body Resilience Tests against poison and disease* (02's Field Brews) and the Tome's *Boon
+  // on Tests to track it, find it or recall what it can do*: what the Test is AGAINST or FOR is the table's call
+  // (D2 §12), so each is an unticked Situational line.
+  "witch-hunter": {
+    "Field Brews": { kinds: ["resilience"], text: "AZEROTH.Feature.Reminder.FieldBrews", boons: 1 },
+    "Tome of Silver and Ash": { kinds: ["skill"], text: "AZEROTH.Feature.Reminder.Tome", boons: 1 }
   }
 });
 

@@ -370,11 +370,12 @@ export async function makeCharacter({
   // macro and states what the character holds. Never the bags' (D-737).
   const items = embed.length ? orThrow(embed, await actor.createEmbeddedDocuments("Item", embed, { azerothLearn: "bypass", ...KNOWN }), name) : [];
 
-  // A class brings its thirty-six talents with it, after the link update
-  // lands. Wait for them here so no test sees the sheet re-render under it.
+  // A class brings its talents with it (thirty-six, forty-eight for a four-branch class), after the
+  // link update lands. Wait for them here so no test sees the sheet re-render under it.
   if (classes.length) {
     // Twelve a branch (D11 §4), the branches read off each class item the pack gave - three, two
-    // for the Death Knight (D-927) - never a count kept here (the Necromancer plan's finding 8).
+    // for the Death Knight (D-927), four for the Chromatic Champion and the Witch Hunter - never a
+    // count kept here (the Necromancer plan's finding 8).
     const want = embed.filter(d => d.type === "class").reduce((n, d) => n + 12 * (d.system?.branches?.length ?? 3), 0);
     // Class talents only: a race's eight land on the same chain (D-620) and
     // would otherwise satisfy the count before the class's had arrived.

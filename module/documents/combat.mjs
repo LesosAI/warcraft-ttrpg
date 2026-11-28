@@ -31,7 +31,8 @@ import {
   withReactionBack,
   withoutReaction
 } from "../rules/initiative.mjs";
-import { drainAtRoundEnd, fightStart, idleDecay, leaveFightPools } from "../rules/momentum.mjs";
+import { decaysIdle, drainAtRoundEnd, fightStart, idleDecay, leaveFightPools } from "../rules/momentum.mjs";
+import { TEMPO } from "../rules/tempo.mjs";
 // 04's Fanaticism since the class talent audit (class agent A, D-1874): 2 Zeal per rank at a fight's start.
 import { fanaticismZeal } from "../rules/audit-martial.mjs";
 // 04's Second Chance: the last moment a given Reaction may be spent (stage 2b).
@@ -150,7 +151,7 @@ import { advanceMindFlay } from "../effects/qiraji-mind-flay-clock.mjs";
 import { roundHurt, roundOnce, roundRelease, roundRiders, roundStruck } from "../rules/riders.mjs";
 // Whether a creature and an area are still in the world after the turn's awaits.
 import { regionInWorld, tokenInWorld } from "../canvas/in-world.mjs";
-import { halvedHealing } from "../rules/auras.mjs";
+import { auraEndsAtTurn, halvedHealing } from "../rules/auras.mjs";
 // Which combatant writes may leave the fight's turn alone (D-765).
 import { leavesTurnAlone } from "../rules/turn-stamp.mjs";
 // The budget's writes one at a time, never held behind one that does not answer
@@ -793,6 +794,13 @@ export class AzerothCombatant extends Combatant {
     if (this.isCurrentTurn && actor?.type === "character" && actor.isOwner) {
       const fleet = fleetFootedFor(actor.takenTalents?.() ?? [], { feet: meteredFeet(movement, steps) });
       if (fleet) await layFleetFooted(actor, { defense: fleet.defense, name: fleet.name, span: untilNextTurn(actor) });
+      // **04's LEAPING STRIKE** (the Witch Hunter's Cat: *When you have moved at least 10 feet this turn, your next
+      // attack this turn deals 1 more damage per rank*; the Witch Hunter plan's wave 2b): the same metered feet, after the
+      // queue has answered, laid as a promise to the next attack (`effects/witch-hunter-talents.mjs#layLeapingStrike`).
+      if (actor.items?.some?.(i => i.type === "class" && i.system?.identifier === "witch-hunter")) {
+        const { layLeapingStrike } = await import("../effects/witch-hunter-talents.mjs");
+        await layLeapingStrike(actor, { combatant: this, feet: meteredFeet(movement, steps) });
+      }
     }
     return charged;
   }
@@ -1239,6 +1247,26 @@ export class AzerothCombatant extends Combatant {
       const next = roundOnce(this.getFlag("azeroth-rpg", "round") ?? null, this.combat?.round ?? 0, key);
       if (next.changed) await this.setFlag("azeroth-rpg", "round", next.round);
       return { added: next.added, round: next.round };
+    });
+  }
+
+  /**
+   * **AN ON-HIT SIGNATURE ROW'S ONCE AN ENCOUNTER, CLAIMED** (08 §20's `onHit.per: "encounter"`,
+   * the Hammer of the Lightbringer's Verdict; D-910): `markRoundOnce`'s shape over the fight's
+   * own record (`signatureEncounter`, one of `turn-stamp.mjs#BOOKKEEPING_FLAGS`), queued with
+   * every other write to this combatant (D-761) and read when its turn comes, so two hits in
+   * flight cannot both find it unspent. Answers whether THIS write claimed it.
+   *
+   * @param {string} key
+   * @returns {Promise<{added: boolean}>}
+   */
+  async markEncounterOnce(key) {
+    return oneAtATime(this, async () => {
+      const had = this.getFlag("azeroth-rpg", "signatureEncounter") ?? [];
+      const list = Array.isArray(had) ? had.filter(k => typeof k === "string" && k) : [];
+      if (typeof key !== "string" || !key || list.includes(key)) return { added: false };
+      await this.setFlag("azeroth-rpg", "signatureEncounter", [...list, key]);
+      return { added: true };
     });
   }
 
@@ -2180,6 +2208,13 @@ export class AzerothCombat extends Combat {
     const zealStart = fanaticismZeal(fanaticism);
     const updates = fightStart(actor.poolSnapshot(), { zealStart, keepsZeal: false });
     if (updates.length) await actor.updatePool(updates);
+    // **WHERE TEMPO'S IDLE COUNT STARTS** (the Witch Hunter's final architect review, finding 3): the round this
+    // combatant entered the fight - floored at 1, since `startCombat` runs before core moves round 0 to 1 - so a
+    // Witch Hunter who joins at round N with no hit yet reads its last hit as round N - 1 (`momentum.mjs#idleDecay`),
+    // never the round before the fight's first. Written for a Tempo holder alone; Combo Points keep their reading.
+    if (combatant.isOwner && actor.poolSnapshot().some(p => p.kind === "momentum" && p.name === TEMPO)) {
+      await combatant.setFlag("azeroth-rpg", "enteredRound", Math.max(1, Math.trunc(Number(this.round)) || 1));
+    }
   }
 
   /**
@@ -2358,6 +2393,22 @@ export class AzerothCombat extends Combat {
       } catch (err) {
         console.warn("azeroth-rpg | horde turn start", err);
       }
+    }
+    // **08 §20's THE DARKMASTER'S ROD** (*Each of your raised dead within 30 feet of you ... ends
+    // **Frightened** at the start of its turn*; D-2158): the conditions a laid aura names on this
+    // creature (`rules/auras.mjs#auraEndsAtTurn`), ended here where the other turn-start work runs.
+    try {
+      const ending = auraEndsAtTurn(combatant.actor?.effects ?? []).filter(id => combatant.actor?.statuses?.has?.(id));
+      for (const id of ending) {
+        await combatant.actor.toggleStatusEffect(id, { active: false });
+        await ChatMessage.create({
+          speaker: ChatMessage.getSpeaker({ actor: combatant.actor }),
+          content: `<p class="azeroth-drain">${foundry.utils.escapeHTML(game.i18n.format("AZEROTH.Aura.EndsAtTurn", { name: combatant.actor.name, condition: game.i18n.localize(AZEROTH.conditions[id] ?? id) }))}</p>`,
+          flags: { "azeroth-rpg": { kind: "tick" } }
+        });
+      }
+    } catch (err) {
+      console.warn("azeroth-rpg | an aura's turn-start ending", err);
     }
     // **04's REGENERATING TISSUE AND UNHOLY FERVOR** (Phase 4c-T): a ghoul's or an Abomination's
     // mending at its own turn's start, and the Health a fervent ally loses at its next one.
@@ -3292,7 +3343,13 @@ export class AzerothCombat extends Combat {
       for (const pool of actor.poolSnapshot().filter(p => p.kind === "momentum")) {
         let value = pool.value;
         if (pool.name === "rage") value = drainAtRoundEnd(pool, { struck: round.struck === true, wasStruck: round.wasStruck === true, belowHalf, holdsBelowHalf: holds });
-        if (pool.name === "comboPoints") value = idleDecay(pool, { round: context?.round ?? this.round, lastHitRound: combatant.getFlag("azeroth-rpg", "lastHitRound") ?? null });
+        // Combo Points and the Witch Hunter's Tempo (`momentum.mjs#IDLE_DECAY_POOLS`): two rounds without a hit
+        // empty them. `firstRound` reads *no hit yet* as a last hit the round before the creature ENTERED the fight
+        // (`enteredRound`, written by `_fightStart`; round 1 where none was written), so a Tempo built with no hit
+        // (04's Bear's Wrath, Steel Guard) empties too (wave 1b's MY READING), and a late joiner is counted from its
+        // own entry (the final architect review, finding 3). Combo Points keep their old reading: no `firstRound`,
+        // so a pool with no hit yet stands.
+        if (decaysIdle(pool.name)) value = idleDecay(pool, { round: context?.round ?? this.round, lastHitRound: combatant.getFlag("azeroth-rpg", "lastHitRound") ?? null, firstRound: pool.name === TEMPO ? (Math.trunc(Number(combatant.getFlag("azeroth-rpg", "enteredRound"))) || 1) : null });
         if (value === pool.value) continue;
         updates.push({ itemId: pool.itemId, kind: "momentum", value });
         lines.push(game.i18n.format("AZEROTH.Combat.PoolDrained", { name: actor.name, pool: game.i18n.localize(AZEROTH.momentumTypes[pool.name] ?? pool.name), value }));
@@ -3464,6 +3521,9 @@ export class AzerothCombat extends Combat {
     if (actor) for (const line of (await this._landDeferred?.(actor)) ?? []) ui.notifications?.info(line);
     // The buffs bought for the fight lapse and the creatures called for it go (D-643).
     if (actor?.type === "character") await endBoundEncounter(actor).catch(err => console.error("azeroth-rpg | bound encounter", err));
+    // **A WITCH HUNTER'S OIL COMES OFF WITH THE FIGHT** (08 §12: *coats one weapon until the fight ends or 1 hour
+    // passes*): every oil on this creature's weapons (`effects/witch-hunter-brews.mjs#clearOils`).
+    if (actor?.type === "character") await import("../effects/witch-hunter-brews.mjs").then(m => m.clearOils(actor)).catch(err => console.warn("azeroth-rpg | Witch Hunter oils", err));
     // The fight's states go with the fight (05, D-694): a Disengage bought a
     // Move in a round that no longer exists.
     if (actor?.statuses?.has("disengaging")) await actor.toggleStatusEffect("disengaging", { active: false });
@@ -3502,6 +3562,8 @@ export class AzerothCombat extends Combat {
     }
     // The holds at 1 this fight counted (R4, D-1863) go with it too.
     if (combatant.getFlag("azeroth-rpg", HOLD_MARK_FLAG) !== undefined) await combatant.unsetFlag("azeroth-rpg", HOLD_MARK_FLAG);
+    // And the round Tempo's idle count started from (the Witch Hunter's final architect review, finding 3).
+    if (combatant.getFlag("azeroth-rpg", "enteredRound") !== undefined) await combatant.unsetFlag("azeroth-rpg", "enteredRound");
   }
 
   /**

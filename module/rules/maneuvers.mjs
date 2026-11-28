@@ -65,6 +65,23 @@ export function maneuverCost(key, { features = [], talents = [], grants = [], ch
       rows.push({ name: "Return Stroke", cost });
     }
   }
+  // **04's SPLITTING BLOW AND HUNTER'S RIPOSTE** (the Witch Hunter's Bear and Cat: *Your **Sunder** costs 1 Tempo less
+  // per rank*; *Your **Riposte** costs 1 Tempo less per rank, to a minimum of 1*; the Witch Hunter plan's wave 2b):
+  // off whatever price stands, never below 1 (the plan's door note: floor 1 for both).
+  if (key === "sunder") {
+    const split = ranksOf(talents, "Splitting Blow");
+    if (split > 0 && cost > 1) {
+      cost = Math.max(1, cost - split);
+      rows.push({ name: "Splitting Blow", cost });
+    }
+  }
+  if (key === "riposte") {
+    const hunters = ranksOf(talents, "Hunter's Riposte");
+    if (hunters > 0 && cost > 1) {
+      cost = Math.max(1, cost - hunters);
+      rows.push({ name: "Hunter's Riposte", cost });
+    }
+  }
   // **02's RUNIC DISCIPLINE** (*Each maneuver costs you 1 Runic Power, whatever its listed
   // price*): the price a held feature sets, never above what the rows above made it.
   const set = maneuverPriceOf(features);

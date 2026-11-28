@@ -1603,6 +1603,12 @@
         "AlreadyHas": "This item already carries an affix in that place, so the enchantment has nowhere to go. Nothing was spent.",
         "ForgeBuilt": "This item already carries a Signature or more than one affix, and an enchantment laid in place would undo it. Nothing was spent.",
         "AffixRefused": "The enchantment cannot go on this item: {text}. Nothing was spent.",
+        "SigRarity": "Only a Rare or Epic item takes an Enchanter's Signature.",
+        "SigGoesOn": "This Signature goes on a {goesOn}, and this item is not one.",
+        "SigHeld": "This item already carries a Signature.",
+        "SigBudget": "This Signature costs {cost}, and the item's budget has room for {room}.",
+        "EnchantPending": "This item is already being enchanted. Finish or abandon that project first. Nothing was spent.",
+        "ClassicFind": "A found item takes no enchantment affix. Choose an Enchanter's Signature for it instead.",
         "Harvested": "That has already been taken from this creature. Nothing was rolled.",
         "Living": "The creature is not defeated. Nothing was rolled.",
         "HarvestFailed": "The GM's client did not answer, so the creature was not marked. Nothing was rolled."
@@ -1788,8 +1794,14 @@
           "Button": "Start project",
           "NoAffix": "Nothing your tier opens can go on this item.",
           "NoItems": "You carry nothing an enchantment can go on.",
-          "PickFirst": "Pick an enchantment.",
-          "Note": "It lays the enchantment on an item you carry, as a project."
+          "PickFirst": "Pick an enchantment or a Signature.",
+          "Note": "It lays the enchantment on an item you carry, as a project.",
+          "SigHeading": "Or a Signature",
+          "SigHint": "one, in place of an enchantment, on a Rare or Epic item with none",
+          "SigCost": "cost {n}",
+          "SigChosen": "chosen",
+          "Pending": "This item is already being enchanted. Finish or abandon that project first.",
+          "PendingRow": "The item is already under an enchantment project."
         },
         "Trait": {
           "Hover": "The book's rule, on hover or focus:",
@@ -1952,6 +1964,7 @@
       "Begin": "Azeroth RPG | migrating world data to {version}",
       "Done": "Azeroth RPG | migration to {version} complete: {count} document(s) updated",
       "Failed": "Azeroth RPG | migration to {version} failed. See the console.",
+      "ClassItemsPackStale": "Migration 0.18.1 found a gear pack built before the class items, so it changed nothing and will run again. Rebuild the packs (npm run packs:parse, then npm run packs:build), restart the server and reload the world to restamp the named Augments.",
       "ProfessionsPackStale": "Migration 0.17.0 found compendium packs built before the professions, so it changed nothing and will run again. Rebuild the packs (npm run packs:parse, then npm run packs:build), restart the server and reload the world to migrate the careers.",
       "BestiaryAudit": "Migration 0.16.1.1 brought {creatures} creature(s) up to the 2026-11 bestiary. {kept} field(s) a GM had changed were kept as they are, and {unmatched} row(s) could not be matched. The console names each one.",
       "BestiaryHealth": "Migration 0.16.2.4 raised the Health of {raised} creature(s) by a quarter, as the bestiary now prints it. {kept} creature(s) whose Health a GM had changed were kept as they are. The console names each one.",
@@ -2021,6 +2034,7 @@
       "Tribute": "Tribute",
       "Vitae": "Vitae",
       "Hatred": "Hatred",
+      "Tempo": "Tempo",
       "Mana": "Mana",
       "Focus": "Focus",
       "Energy": "Energy",
@@ -2053,6 +2067,34 @@
       }
     },
     "DeathKnight": {"Inscribe": {"Refuse": {"fight": "{name} cannot inscribe runes during a fight.", "window": "{name} inscribes runes when a Long Rest finishes, until the first rune is spent.", "noWeapon": "{name} wields no weapon they are trained with that has rune slots."}, "Grip": {"one": "One-handed: {n} rune slots", "two": "Two-handed: {n} rune slots. You cannot wield it in one hand until you inscribe it again after a Long Rest."}, "GripNote": "A Versatile weapon takes either count.", "GripPrompt": "Choose the rune count for {name}.", "Ratio": "{blood} Blood, {frost} Frost", "RatioPrompt": "Inscribe the {n} rune slots of {name}.", "Done": "{name} inscribes {blood} Blood and {frost} Frost runes on {weapon}."}, "Spend": {"Done": "{name} spends a {rune} and gains {n} Runic Power."}, "DeathStrike": {"Healed": "{name} regains {n} Health from Death Strike, up to {cap}."}, "Desecration": {"NoToken": "{name} has no token on this scene, so Desecration lays no ground.", "Area": "Desecration ({name}, {feet} ft)", "Laid": "{name} desecrates the ground within {feet} feet for {minutes} minutes.", "NotLaid": "The desecrated ground could not be placed for {name}.", "NoWard": "{name} holds no Ward against {school}, so Desecration takes nothing from it.", "NotYours": "{name} is not yours to write on, so its Ward is not reduced.", "Effect": "{source}: Ward against {school} reduced", "WardDropped": "{name}'s Ward against {school} is reduced by {n} until the start of its next turn."}, "Plague": {"FrostFever": "Frost Fever", "BloodPlague": "Blood Plague", "Refuse": {"kind": "No such disease: {name}'s Plague lays Frost Fever or Blood Plague.", "notHeld": "{name} does not hold Plague, so no disease is laid."}, "Immune": "{name} is immune to disease and does not gain {plague}.", "Laid": "{name} gains {plague}.", "NotLaid": "{plague} does not take hold on {name}.", "SpreadTest": "{name} is within 5 feet of {from} and makes a Body Resilience Test against Blood Plague."}, "Presence": {"Laid": "{name} takes up an Unholy Presence. Allies within {feet} feet have +{speed} feet Speed, and undead allies regain Health at the start of their turns.", "Ended": "{name} ends the Unholy Presence."}, "March": {"Laid": "{name} marches for 1 minute. Allies within {feet} feet ignore Difficult ground and cannot be Frightened, Slowed or moved against their will. Undead allies within {undead} feet deal {n} Shadow damage on each melee hit."}, "Talent": {"NoGM": "No GM is online to make this change.", "NoGMNothingSpent": "{name}: no GM is online to end what you laid on a creature you do not own. Nothing was spent.", "AskedInBlow": "{name} is a Reaction you take when a blow damages you. It is offered then.", "NothingSpent": "{name}: {actor} has no spent {kind} to refill. Nothing was spent.", "NoToken": "{name}: {actor} has no token on this scene.", "NoFever": "{name}: no Frost Fever you laid stands on a creature within {feet} feet. Nothing was spent.", "Regained": "{talent}: {name} regains {n} Health.", "Marked": "{talent}: for 1 minute, each time an attack by {target} damages {name}, {name} regains {n} Health.", "MarkHealed": "{talent}: {name} regains {n} Health after the blow.", "Vampiric": "{talent}: for 1 minute, each time {name} regains Health, {name} regains {n} additional Health.", "Dancing": "{talent}: the Dancing Runeweapon fights beside {name} for {n} rounds.", "DancingSubtitle": "{talent}", "DancingRolled": "{talent}: the Dancing Runeweapon of {name} makes one more attack roll.", "Winter": "{talent}: a winter surrounds {name} to {feet} feet for {n} rounds.", "WinterSlowed": "{talent}: {name} starts its turn inside the winter and is Slowed until the end of its turn.", "WinterTest": "{talent}: {name} is already Slowed inside the winter and makes a Body Resilience Test.", "Refilled": "{talent}: {name} refills {n} spent {kind}.", "Empowered": "{talent}: {name} ends {ended} Frost Fever and refills {n} spent Frost rune.", "Tide": "{talent}: the tide around {name} damages {n} enemies.", "TideNoGM": "{talent}: no GM is online to strike the enemies around {name}, so the tide waits for a later round.", "RunicFrost": "{talent}: the next Frost spell {name} casts before the end of this turn costs {n} less Runic Power.", "IceboundCut": "{talent}: the blow on {name} is halved before Armor Points and Ward, {n} less damage.", "AskIcebound": "{talent}: a blow of {n} damages {name}. Spend 1 Frost rune and your Reaction to halve it, and each blow until the end of your next turn, before Armor Points and Ward?", "FrozenEdge": "{talent}: {n} additional Frost damage.", "Harvest": "{talent}: {name} regains {n} Health.", "Shield": "{talent}: {name} gains {n} temporary Health until the end of the encounter.", "NoDisengage": "{name} is Slowed within the reach of {holder} and cannot Disengage ({talent}).", "DesecrationSlowed": "{talent}: {name} starts its turn in the Desecration and is Slowed until the end of its turn.", "SanguinePlague": "{talent}: {name} regains {n} Health.", "GripSlowed": "{talent}: {name} is Slowed until the end of its next turn.", "CoilSlowed": "{talent}: {name} is Slowed until the end of its next turn.", "SpeedZero": "{talent}: {name}'s Speed is 0 until the end of its turn.", "SpeedZeroName": "{talent}: Speed 0", "SpeedZeroText": "Your Speed is 0 until the end of your turn ({talent}).", "SpeedZeroCard": "{talent}: on a hit, the creature's Speed is 0 until the end of its turn.", "SpeedZeroNot": "{talent}: {name}'s Speed was not set to 0.", "SpeedZeroAsked": "{talent}: {name}'s Speed is set to 0 until the end of its turn, through the GM.", "SpeedZeroRefuse": {"card": "{talent}: no Opportunity Attack card names {name}, so its Speed stays as it is.", "notOpportunity": "{talent}: that attack was no Opportunity Attack, so {name}'s Speed stays as it is.", "notKnight": "{talent}: that Opportunity Attack is not yours, so {name}'s Speed stays as it is.", "notVictim": "{talent}: that Opportunity Attack did not strike {name}, so its Speed stays as it is.", "miss": "{talent}: that Opportunity Attack did not hit {name}, so its Speed stays as it is.", "claimed": "{talent}: {name}'s Speed is already 0 from that Opportunity Attack."}, "RelentlessFrost": "{talent}: {n} additional Frost damage on the Opportunity Attack.", "MachineGain": "{talent}: {name} gains {n} Runic Power.", "MachineFull": "{talent}: {name}'s Runic Power is full, so it gains none.", "MachineCritical": "{talent}: the hit inflicts a Critical Injury.", "RiposteShadow": "{talent}: {n} additional Shadow damage.", "EdgeSlowed": "{talent}: the first melee hit this turn. {landed}", "EdgeNoGM": "{talent}: no GM is online to make the creature {condition}, so this turn's first melee hit is still unspent.", "Riposte": {"Offer": "{talent}: {name} damaged {holder} with a melee attack from within reach. {holder} may make the Off-Hand Attack for the round against {name} as a Reaction, and on a hit it deals {n} additional Shadow damage.", "Press": "Make the Off-Hand Attack against {name} ({talent})", "Refuse": {"notYours": "{name} is not yours to act for.", "stale": "{talent}: that blow is past, so {name} can no longer answer it.", "notHeld": "{name} does not hold Vengeful Blood.", "grip": "{talent}: {name} needs a one-handed weapon in each hand.", "noOffHand": "{talent}: {name} holds no weapon in the off hand.", "gone": "{talent}: {target} is no longer on the scene.", "reach": "{talent}: {target} is no longer within {name}'s reach.", "marked": "{talent}: {name} has already answered a blow this round.", "offHandSpent": "{talent}: {name} has already made the Off-Hand Attack this round. Nothing was spent.", "noReaction": "{talent}: {name} has no Reaction left. Nothing was spent."}}}, "Spell": {"Refuse": {"noTarget": "{spell} needs a target. Nothing was spent.", "notHalf": "{spell} needs a creature with half its Health or less, and {name} has more. Nothing was spent.", "unmeasured": "{spell} needs a creature with half its Health or less, and {name}'s Health cannot be read. Nothing was spent.", "oneCarrier": "{spell} needs one target: a creature carrying your Frost Fever or Blood Plague. Nothing was spent.", "notCarrier": "{name} carries none of your Frost Fever or Blood Plague, so {spell} has no disease to spread. Nothing was spent.", "unplaced": "{name} has no token on a scene, so {spell} cannot measure from it. Nothing was spent.", "noRing": "No enemy stands within {n} feet of {name}, so {spell} would strike nobody. Nothing was spent.", "oneServant": "{spell} needs one target: an undead creature you control. Nothing was spent.", "notYours": "{name} is not a creature you control, so {spell} cannot take it. Nothing was spent.", "notUndead": "{name} is not undead, so {spell} cannot take it. Nothing was spent.", "noGM": "{spell} writes on a creature only a GM may change, and no GM is online. Nothing was spent."}, "AlwaysLanded": "{name} is {condition} ({spell}). It can end it with an action and a Resilience Test against the Spell DC.", "AlwaysNot": "{name} is not {condition} ({spell}).", "DeathPact": "{servant} is destroyed. {name} regains {n} Health ({spell}; it had {had}).", "HornLaid": "{name} gains a Boon on its next Attack Test or Resilience Test ({spell}).", "HornNot": "{name} gains no Boon ({spell}).", "HornUnplaced": "{name} has no token on the scene, so {spell} reaches only {name}.", "SightRow": "{name}: {feet} feet {direction}. Highest Undeath threshold crossed: {threshold}.", "SightKeyword": "{name}: {feet} feet {direction}. It carries Undeath; its block gives no threshold.", "SightNone": "none", "SightNobody": "No creature within {n} feet carries Undeath Corruption.", "SightUnplaced": "{name} has no token on the scene, so {spell} senses no creature.", "SightGround": "The ground here is Undeath taint grade {n}.", "SightClean": "The ground here carries no Undeath taint grade.", "SightSent": "{spell}: what {name} senses is whispered to {name}'s own players, or to you where only a GM holds {name}.", "NoHealing": "{name} cannot regain Health until the end of its next turn ({spell}).", "NoHealingNot": "{name}'s no-healing mark was not laid ({spell}): it needs a started fight to count its turn.", "NoReactions": "{name} cannot take Reactions while it is Slowed by {spell}.", "NoDisengageLaid": "{name} cannot Disengage while it is Slowed by {spell}.", "NoDisengage": "{name} is Slowed by {spell} and cannot Disengage.", "SlowedBarName": "{spell}: while Slowed by this spell"}},
+    "ClassItem": {
+      "PatchHealed": "{item}: {name} regains {n} additional Health from {feature}.",
+      "TimelineSand": "{item}: {name} gains {n} Sand.",
+      "BiteAsk": "{target} is not Stunned, Entangled, Prone or Latched. Use {run} ({item}) so {name} may feed on it anyway? It still makes its Test, and once a day still holds.",
+      "BiteUsed": "{run}: {name} feeds on {target} without an opening.",
+      "BiteSpent": "{run}: {name} has no use of it left. Nothing was spent.",
+      "NoSpentRune": "{name}: {item} holds no spent rune for {actor} to refill. Nothing was spent.",
+      "RuneRefilled": "{item}: {name} refills {n} spent rune(s) on it.",
+      "RuneTaken": "{name}: another refill took the spent rune on {item} first, so {actor} refills none. The use is kept.",
+      "RuneTakenHalf": "The Half-Action is restored.",
+      "ThrowNoTarget": "{name}: target the creatures within the area to throw it at. Nothing was spent.",
+      "ThrowOutOfReach": "{name}: {target} is {feet} feet away, beyond the {reach} feet the throw and its area reach. Nothing was spent.",
+      "ThrownDamage": "{n} {type} damage",
+      "Drust": {
+        "one": "{name}: target the one creature {actor} can see. Nothing was spent.",
+        "type": "{name}: {target} has no creature type the Tome of Silver and Ash can learn. Nothing was spent.",
+        "tome": "{name}: {actor} has not begun the Tome of Silver and Ash. Nothing was spent.",
+        "EffectName": "{run}: {type} Studied",
+        "Learned": "{name} learns {target}'s type, {type}, which is Studied until the end of the encounter."
+      },
+      "TomeTypes": {
+        "Prompt": "{item}: choose {n} creature types you know while you carry it.",
+        "Chosen": "{item}: {name} knows {types} while carrying it.",
+        "AllKnown": "{item}: {name} already knows every creature type.",
+        "NotHunter": "{item}: only a Witch Hunter carrying it chooses its types, and {name} is not one.",
+        "GmOnly": "{item}: only a GM chooses its types again."
+      }
+    },
     "Undead": {
       "HealsUndeadOnly": "{from} heals only the undead. {name} regains no Health.",
       "OnlyDeathHeals": "{name} is undead, and only a spell of the Death school heals it from another creature. {name} regains no Health.",
@@ -2173,6 +2215,10 @@
       "DrinkVial": "Drink {name} for Vitae ({n} carried)",
       "WayPrompt": "How does {target} come to be fed on?",
       "NoAnswer": "{name}'s client did not answer: {reason}",
+      "GivenBack": "Nothing landed, so {name} is given back what the feeding paid. {what}",
+      "GivenBackBite": "Vampiric Bite's use is restored.",
+      "GivenBackHalf": "The Half-Action is restored.",
+      "NotGivenBack": "Nothing landed. This client cannot write on {name}, so what the feeding paid was not given back.",
       "Way": {
         "willing": "It is willing",
         "sleeping": "It is asleep",
@@ -3821,12 +3867,19 @@
       "ParryBuilt": "{talent}: +{n} {pool}.",
       "ParryUndid": "The Parry takes back what the blow laid on {name}: {conditions}."
     },
+    "EnchanterGoesOn": {
+      "Weapon": "weapon",
+      "SuitOrWorn": "suit or worn thing",
+      "Feet": "worn thing on the feet",
+      "Hands": "worn thing on the hands"
+    },
     "TestKind": {
       "Skill": "Skill",
       "Attack": "Attack",
       "Casting": "Casting",
       "Resilience": "Resilience",
       "Parry": "Parry",
+      "Gathering": "Gathering",
       "AttackOrResilience": "Attack or Resilience"
     },
     "TraitKind": {
@@ -3963,6 +4016,8 @@
       "FoodTierTag": "tier {tier}: Health +{n} more",
       "TalentMana": "{name}: +{n} Mana",
       "InscribeOpen": "Your runes are refilled, and you may inscribe them anew.",
+      "BrewOpen": "You may brew {n} doses with Field Brews and choose your Studied types: press Prepare on the Combat tab.",
+      "TomeLearnOpen": "You may make the Investigation Test the Tome of Silver and Ash gives you to learn a type.",
       "NeedsNoFood": "Does not eat or drink: recovered without either.",
       "NotBloodFed": "{name} does not rest on blood. Rest on food and drink.",
       "BloodNotFood": "{name} rests on blood. Food and drink restore nothing on a San'layn's rest.",
@@ -4607,6 +4662,7 @@
     },
     "Aura": {
       "EffectName": "{source} ({owner})",
+      "EndsAtTurn": "{name} is no longer {condition}.",
       "ConditionalSource": "{source}: {condition}",
       "Reach": "Within {feet} ft of {owner}.",
       "ReachDemon": "Within {feet} ft of {owner}'s Bound Demon.",
@@ -4626,6 +4682,7 @@
       "Speed": "Speed changes by {feet} ft.",
       "HealingHalved": "Healing received is halved.",
       "StandFree": "Standing from Prone costs no Half-Action.",
+      "LosesImmune": "Loses Immune ({types}) while it stands in the area.",
       "Armor": "Your Armor Points rise by {ap} while another friendly creature stands within {feet} feet of you.",
       "ReachTotem": "Within {feet} ft of {owner}'s {totem} totem.",
       "BoonResilienceAll": "Resilience Tests",
@@ -4843,7 +4900,8 @@
       "RemoveTag": "Remove {tag}",
       "TagDuplicate": "{name} already carries {tag}.",
       "AugmentClass": "Augment for",
-      "AugmentBonus": "Casting Test bonus"
+      "AugmentBonus": "Casting Test bonus",
+      "AugmentByTier": "The bonus for your tier"
     },
     "Area": {
       "Place": "Place area",
@@ -5085,7 +5143,11 @@
         "Sprint": "Your first Move of a fight costs no Half-Action.",
         "Scales": "In Mail or Plate, the suit's Encumbering costs you no Speed and puts no Bane on Stealth.",
         "ChromaticBlood": "Your race is the Chromatic Outcast, wearing a guise. You took this class at creation and take no second class.",
-        "TimelessMind": "Your Proficiency Bonus counts twice on a Spirit Resilience Test."
+        "TimelessMind": "Your Proficiency Bonus counts twice on a Spirit Resilience Test.",
+        "Studied": "Choose your Studied types in the Prepare window when you finish a Short or Long Rest. Against a creature of a Studied type, your weapon attacks deal extra damage equal to your tier, a hit gives you 1 more Tempo, and you have a Boon on Resilience Tests against its abilities.",
+        "Medallion": "While you wear your medallion in your Neck slot, each spell cast within 60 feet is whispered to you, with a button to warn an ally. The Use is the Half-Action count of your Studied types within 60 feet.",
+        "Decoctions": "Brew a Decoction in the Prepare window, for a type you know and defeated since your last Long Rest.",
+        "GreaterSigns": "Each Sign's chooser offers it Empowered, for 2 more Energy."
       },
       "Buff": {
         "encounter": "{name}: +{n} damage until the encounter ends.",
@@ -5145,7 +5207,9 @@
         "Stonefast": "Boon on Body Resilience Tests against poison and cold.",
         "Endurance": "Boon on Body Resilience Tests.",
         "WillOfTheForsaken": "Once between Long Rests, a Spirit Resilience Test against fear or domination succeeds.",
-        "CourtlyMasquerade": "Courtly Masquerade: a Boon on a Test to keep your cover when a creature tries to see through it."
+        "CourtlyMasquerade": "Courtly Masquerade: a Boon on a Test to keep your cover when a creature tries to see through it.",
+        "FieldBrews": "Field Brews: a Boon on a Body Resilience Test against poison or disease.",
+        "Tome": "Tome of Silver and Ash: a Boon on a Test to track, find or recall a creature of a type you know."
       },
       "NoFeatures": "No class features.",
       "Choose": "{name}: which?",
@@ -5257,11 +5321,16 @@
         "judgement": "if its condition holds",
         "targetHas": "against a target suffering a condition it names",
         "targetKind": "against a creature of the kind it names",
+        "targetType": "against a creature of the type it names",
+        "typeKnown": "against a creature of a type you know",
+        "typeStudied": "against a creature of a Studied type",
         "laidByUser": "against a target suffering a condition you or your totem laid",
         "watched": "against the creature you are watching",
         "challenged": "against the creature you challenged",
         "quarried": "against your Quarry",
-        "wields": "while you wield and wear what it asks"
+        "wields": "while you wield and wear what it asks",
+        "wears": "while you wear the armor it asks",
+        "hidden": "while you are hidden"
       },
       "SecondAttack": "Second attack",
       "ExtraWeapon": "Extra Attack weapon",
@@ -6448,10 +6517,23 @@
         "skills": "Skills",
         "talents": "Talents",
         "spells": "Spells",
+        "brews": "Brews",
         "languages": "Languages",
         "equipment": "Equipment",
         "numbers": "Review",
         "name": "Name"
+      },
+      "Brews": {
+        "Lead": "Field Brews teaches you four elixirs, one oil and one bomb, and the Tome of Silver and Ash teaches you Undead and one type of your choice.",
+        "Count": "{picked} of {required} chosen",
+        "TomeType": "Second type in your Tome",
+        "TomeNone": "Choose a type",
+        "TomeNote": "It is your first Studied type until you finish a rest.",
+        "Kind": {
+          "elixir": "elixirs",
+          "oil": "oils",
+          "bomb": "bombs"
+        }
       },
       "NotOpen": "Not open to this people",
       "Available": "Available",
@@ -6590,6 +6672,10 @@
         "classTalentNotYourPeople": "{name} is on the {people}'s Legacy branch, which only the {people} keep.",
         "classTalentTier": "{name} is above tier 1.",
         "spellCount": "This class knows {required} spells at level 1; {chosen} chosen.",
+        "formulaCount": "Field Brews: choose {required} from the {kind} at level 1; {chosen} chosen.",
+        "formulaRefused": "{name} is not a formula Field Brews teaches.",
+        "tomeType": "Choose the second type of your Tome of Silver and Ash.",
+        "tomeUndead": "Your Tome of Silver and Ash already holds Undead. Choose another type.",
         "spellTaughtByTalent": "{talent} already teaches {name}, and a spell a talent teaches is known on top of the count. Choose another spell.",
         "spellTier": "{name} is above tier 1.",
         "spellSchool": "{name} is not of this class's schools.",
@@ -7536,7 +7622,10 @@
         "TargetHasNotActed": "Only against a creature that has not yet acted",
         "Blow": "Only on a blow struck a certain way",
         "AtOrAboveHalfHealth": "Only while at or above half Health",
-        "Hidden": "Only on a blow struck while hidden"
+        "Hidden": "Only on a blow struck while hidden",
+        "PairWielded": "Only while you wield one in each hand",
+        "Prey": "Only against your prey",
+        "TypeStudied": "Only against a creature of a Studied type"
       },
       "Blow": {
         "OffHand": "an Off-Hand Attack",
@@ -7564,6 +7653,7 @@
         "FromCard": "It answers an attack on you: press it from that attack's card"
       },
       "HitBonus": "This hit deals {n} additional {type} damage",
+      "Drained": "{name} regains {n} Health from the damage it deals.",
       "HitTarget": "Choose the target that receives this attack's signature damage bonus.",
       "BandHide": "One Boon when using Stealth to hide in dim light or darkness",
       "BandHiddenTarget": "Band of Veiled Shadows: I was Hidden from this target when this Test began",
@@ -7726,7 +7816,28 @@
         "UseMove": "Takes an attack on an ally within {feet} ft",
         "UseNegates": "The attack misses",
         "UseArcWiden": "The next arc reaches {n} creatures",
-        "UseBreathSchool": "The next Breath takes any school"
+        "UseBreathSchool": "The next Breath takes any school",
+        "PatchHeal": "{name} restores {n} more Health whenever it restores any",
+        "PatchCost": "{name} costs {n}",
+        "PatchDamage": "{name} deals {n} more damage",
+        "PatchFeet": "{name} reaches {feet} ft further",
+        "PatchSand": "{n} Sand each time you use {name}",
+        "HordePlaces": "Your horde has {n} more place(s)",
+        "FeedVitae": "+{n} Vitae a tier each time you feed",
+        "KnownTypes": "You know {n} more creature type(s) of your choice",
+        "StudiedTypes": "You choose {n} more type(s) for Studied",
+        "EmpowerUndeadHeal": "An undead creature your {name} heals regains {n} more Health",
+        "AuraRaised": "It reaches only your own raised dead",
+        "AuraEnds": "A creature in it ends {key} at the start of its turn",
+        "OnHitLands": "The condition lands on the hit, with no button",
+        "OnHitHealPerTier": "On a hit, regain {n} Health a tier",
+        "OnHitDrain": "You regain Health equal to the damage that damage deals",
+        "OnHitWeaponCut": "On a hit, the target's weapon attacks deal {n} less damage until the end of its next turn",
+        "UseRuneRefill": "It refills {n} spent rune(s) on this weapon",
+        "UseReach": "Thrown to a point within {feet} ft",
+        "UseDamageFormula": "It deals {formula} {type} damage",
+        "UseDamageHalf": "Half of it, rounded down, on a successful Test",
+        "UseLearnType": "You learn a creature's type, Studied until the end of the encounter"
       },
       "Refused": "{name}: {why}.",
       "AlreadyAnswered": "{name}: this attack has already been answered. Nothing was spent.",
@@ -7753,6 +7864,7 @@
       "GatherNoBoard": "{name}: the bearer has no token on the board, so nobody can be reached. Nothing was spent.",
       "GatherNobody": "{name}: nobody it names is in reach. Nothing was spent.",
       "Drained": "{name} loses {n} Health.",
+      "LifestealOnApply": "{name} regains Health equal to the Shadow damage this deals, when it is applied.",
       "NotDrained": "{name} loses nothing ({n}).",
       "DrainTotal": "{name} regains {n} Health.",
       "OneTarget": "{name}: target one creature. Nothing was spent.",
@@ -7900,7 +8012,13 @@
       "Other": "{name}: one attack against another target within reach, at Damage Rating {rating}",
       "Same": "{name}: one extra attack against the same target",
       "RatingRow": "The extra attack's Damage Rating",
-      "Spent": "{name} has no extra attack left this round."
+      "Spent": "{name} has no extra attack left this round.",
+      "SamePaid": "{name}: one more attack against the same target ({n} {pool})",
+      "OtherPaid": "{name}: one attack against a different creature within your reach ({n} {pool})",
+      "OneOther": "{name} strikes one different creature: target exactly one first.",
+      "OutOfReach": "{name}: your reach is {reach} ft, and {target} is {feet} ft away.",
+      "Short": "{name} costs {n}, and you hold {held}.",
+      "PaidLine": "{talent}: {name} spends {n} {pool} on one more attack."
     },
     "Hammer": {
       "Choose": "Which target does {spell} strike?",
@@ -7992,6 +8110,14 @@
         "untilOwnTurn": "{name}'s next attack before the start of their next turn takes {talent}."
       }
     },
+    "WeaponCut": {
+      "EffectName": "{source}: weapon attacks deal {n} less",
+      "Text": "Each of this creature's weapon attacks deals {n} less damage until the end of its next turn ({source}).",
+      "Laid": "{name}'s weapon attacks deal {n} less damage until the end of its next turn.",
+      "NoGM": "No GM is online to lay {source} on {name}, so its weapon attacks are not reduced.",
+      "NotLaid": "{source} was not laid on {name}.",
+      "Took": "{name}'s weapon attack deals {n} less damage ({sources})."
+    },
     "NoHealing": {
       "EffectName": "{source}: no healing",
       "Text": "This creature restores no Health from any source until the end of {striker}'s next turn."
@@ -8040,7 +8166,10 @@
       "Already": "{name} has already stepped away from this attack.",
       "Button": "{talent}: {name} moves {feet} ft as though Disengaged ({n} Energy)",
       "Line": "{talent}: {name} spends {n} Energy and moves {feet} ft as though Disengaged.",
-      "Short": "{name} cannot pay the {n} Energy {talent} costs."
+      "Short": "{name} cannot pay the {n} Energy {talent} costs.",
+      "ButtonFree": "{talent}: {name} moves {feet} ft, and the move provokes no Opportunity Attack",
+      "LineFree": "{talent}: {name} moves {feet} ft. The move provokes no Opportunity Attack.",
+      "OncePerRound": "{name} has already used {talent} this round."
     },
     "Feint": {
       "Line": "{target}'s next attack against {name} takes {n} Bane."
@@ -8831,7 +8960,8 @@
       "StruckBackWithdrawn": "The hit on {name} was turned into a miss, so nothing answers it.",
       "AttackWithdrawn": "The attack was turned into a miss on every creature it hit, so it gives this no longer.",
       "TakenBack": "Taken back with the hit",
-      "TakenBackPart": "{name}: {n} {pool}"
+      "TakenBackPart": "{name}: {n} {pool}",
+      "Health": "Health"
     },
     "Gather": {
       "Line": "{feature} reaches {who} within {feet} ft: {names}.",
@@ -9278,7 +9408,361 @@
       }
     },
     "MountWork": {"Option": {"undead": "Undead", "spectral": "Spectral", "hallowed": "Zealous Charger", "felsteed": "Felsteed"}, "Refuse": {"fight": "{feature} is made over a Long Rest, never during a fight.", "rested": "{name} has used {feature} since the last Long Rest. Finish a Long Rest to use it again.", "noMount": "{name} owns no mount for {feature}. A mount is with you or in your Stable."}, "Choice": "{mount}: {option} ({traits})", "Prompt": "{feature}: choose a mount you own.", "Done": "{name}'s {mount} becomes {option} and gains {traits}. It keeps everything else it was.", "Lost": "{mount} loses what {feature} gave it."},
-    "Compass": {"here": "here", "N": "north", "NE": "north-east", "E": "east", "SE": "south-east", "S": "south", "SW": "south-west", "W": "west", "NW": "north-west"}
+    "WhTalent": {
+      "FreeBrew": "{talent}: used as a free action.",
+      "SecondBrewing": {
+        "Refuse": {
+          "noLog": "{name}: no brewing is on record to restore. Brew with Field Brews at a rest first.",
+          "full": "{name}: every elixir and Decoction from your last brewing still holds the doses you brewed."
+        },
+        "Restored": "{name} regains {n} doses.",
+        "NoPack": "{name} is not in the gear pack, so it is not restored.",
+        "Nothing": "{name} has nothing to restore."
+      },
+      "MountainBear": {
+        "Standing": "{name} already stands.",
+        "Effect": "Your attacks with a weapon in two hands deal {n} extra damage, and you gain 1 Armor Point on every location.",
+        "Laid": "{name} uses Mountain Bear for 1 minute: {n} extra damage with a weapon in two hands, and 1 Armor Point on every location.",
+        "NotLaid": "Mountain Bear is not laid on {name}."
+      },
+      "BearsWrath": {
+        "Gained": "Bear's Wrath: {name} gains {n} Tempo."
+      },
+      "BearsEndurance": {
+        "Gained": "{talent}: {name} drops below half Health and gains {n} temporary Health."
+      },
+      "Firestream": {
+        "Area": "{name}'s Firestream",
+        "NotPlaced": "{name}: the cone is not placed."
+      },
+      "BurstingRowan": {
+        "NoGM": "{name}: no GM is online to deal the burst.",
+        "NoToken": "{name}: {target} has no token on the board, so the burst reaches nobody.",
+        "Nobody": "{name}: no enemy stands within 5 feet."
+      },
+      "NineLives": {
+        "None": "Nine Lives: {name} succeeded on the Reflex Test and takes no damage."
+      },
+      "IronStomach": {
+        "Line": "Iron Stomach: Body Resilience Tests (and Spirit at rank 2)"
+      },
+      "NightEyes": {
+        "Line": "Night Eyes: in dim light or darkness"
+      },
+      "Unbowed": {
+        "Line": "Unbowed: against being knocked Prone or moved"
+      }
+    },
+    "WhSign": {
+      "Option": "{sign} ({n} Energy)",
+      "OptionEmpowered": "{sign}, Empowered ({n} Energy)",
+      "OptionShort": "You hold {held} Energy, and this costs {n}.",
+      "Prompt": "{name}: choose a Sign.",
+      "Text": {
+        "gale": "Each creature in the cone makes a Body Resilience Test against your Spell DC. On a failure it is pushed 10 feet away from you.",
+        "galeEmpowered": "As the Gale Sign, and a creature that fails is also knocked Prone.",
+        "ember": "Each creature in the cone makes a Reflex Resilience Test against your Spell DC. On a failure it takes Fire damage equal to 2 plus your tier and is Scorched 1, and on a success it takes half of that, rounded down.",
+        "emberEmpowered": "As the Ember Sign, but a creature that fails is Scorched 2 instead, and the damage rises by your tier.",
+        "rowan": "You or one ally within 30 feet gains Ward equal to your tier against every school until the end of your next turn.",
+        "rowanEmpowered": "As the Rowan Sign, and the creature that gains the Ward also gains temporary Health equal to your Intelligence modifier until the end of your next turn.",
+        "ash": "Choose a point within 30 feet. A 10 ft radius centered on it is your Ash ring for 1 minute.",
+        "ashEmpowered": "As the Ash Sign, but the ring is a 20 ft radius and lasts 10 minutes.",
+        "lull": "One creature you can see within 30 feet makes a Spirit Resilience Test against your Spell DC. On a failure it is Charmed by you until the end of its next turn.",
+        "lullEmpowered": "As the Lull Sign, but it affects two creatures, or one creature for 1 minute."
+      },
+      "HolyEmber": "{talent}: the Ember Sign deals Holy damage instead of Fire.",
+      "HolyPrompt": "{name}: choose the damage it deals.",
+      "Refuse": {
+        "unknown": "{name} teaches no such Sign.",
+        "noPool": "{name}: you hold no Energy pool.",
+        "energy": "{name} costs {n} Energy, and you hold {held}."
+      },
+      "NoGM": "{name}: no GM is online to write it on a creature you do not own. Nothing was spent.",
+      "Short": "{name} costs {n} Energy, and the pool no longer holds it. The Sign does nothing.",
+      "ShortNow": "{name} costs {n} Energy, and you now hold {held}. Nothing was spent.",
+      "Used": "{name} uses the {sign} for {n} Energy.",
+      "UsedEmpowered": "{name} uses the {sign}, Empowered, for {n} Energy.",
+      "CostRow": "{talent}: the Sign costs {n} Energy.",
+      "Unaimed": "{sign}: your token is not on the scene you are viewing, so the {area} ft cone gathers no one. The targeted creatures make the Test.",
+      "Rowan": {
+        "one": "{name} wards you or one ally. Target one creature, or none to ward yourself.",
+        "notAlly": "{name} wards you or an ally, and {target} is not your ally.",
+        "tooFar": "{name} reaches an ally within {feet} feet, and {target} is farther away.",
+        "Laid": "{target} gains Ward {n} against every school until the end of your next turn.",
+        "NotLaid": "The Rowan Sign's Ward could not be laid on {target}.",
+        "Temp": "{target} gains {n} temporary Health until the end of your next turn.",
+        "Effect": "{sign} ({owner})",
+        "EffectText": "Ward {n} against every school until the end of the Witch Hunter's next turn."
+      },
+      "Lull": {
+        "none": "{name}: target the creature you use it on.",
+        "tooMany": "{name} affects one creature, or two when Empowered. Target fewer.",
+        "self": "{name} cannot be used on yourself.",
+        "unseen": "{name} reaches a creature you can see.",
+        "tooFar": "{name} reaches a creature within {feet} feet.",
+        "CalmOffered": "Out of a fight, a creature that fails stays calm toward you for {minutes} minutes, and you have a Boon on Persuasion and Deception Tests against it. Whether it then acts on that calm is the GM's call.",
+        "Calm": "{name} stays calm toward {hunter} for {minutes} minutes, and {hunter} has a Boon on Persuasion and Deception Tests against it. Whether it then acts on that calm is the GM's call.",
+        "EffectName": "{sign}: calm toward {hunter}",
+        "EffectText": "{name} stays calm toward {hunter} for {minutes} minutes. {hunter} has a Boon on Persuasion and Deception Tests against it. When the effect ends, it knows {hunter} used the Lull Sign on it. Whether it then acts on that calm is the GM's call.",
+        "Knows": "The Lull Sign's calm on {name} has ended. It knows {hunter} used the Lull Sign on it."
+      },
+      "Ash": {
+        "NoToken": "{name} needs your token on the scene you are viewing, to choose its point.",
+        "Pick": "{name}: choose a point within {feet} feet. Right-click cancels.",
+        "TooFar": "{name}: the point must be within {feet} feet of you.",
+        "Laid": "{name} places an Ash ring with a {feet} ft radius.",
+        "NotLaid": "{name}: the Ash ring could not be placed.",
+        "Area": "Ash ring ({name}, {feet} ft)"
+      }
+    },
+    "WhFeature": {
+      "Whispering": {
+        "Title": "Whispering",
+        "Lesser": "{name} senses the nearest {type} to the {where}, {feet} feet away.",
+        "Greater": "{name} senses {n} {type} within {reach} feet. The nearest is to the {where}, {feet} feet away.",
+        "None": "{name} senses no {type} within {reach} feet."
+      },
+      "Unknown": "{name} has no door here.",
+      "NoGM": "{name}: no GM is online to write it on a creature you do not own. Nothing was spent.",
+      "GivenBack": {
+        "Pool": "Nothing was laid, so the {n} {pool} it cost comes back.",
+        "Half": "Nothing was laid, so the Half-Action comes back.",
+        "Reaction": "Nothing was laid, so the Reaction comes back."
+      },
+      "QueryAuthority": "Only the active GM writes a Witch Hunter's feature for another client.",
+      "NoFeature": "{name} does not hold {feature}.",
+      "Whirl": {
+        "Line": "{name} uses {feature}: one attack against each enemy within reach. Press Attack once for each."
+      },
+      "Expose": {
+        "Refuse": {
+          "noTarget": "{name}: target the one creature you expose.",
+          "unseen": "{name} reaches a creature you can see.",
+          "tooFar": "{name} reaches a creature within {feet} feet, and {target} is farther away.",
+          "notStudied": "{name} reaches a creature of a Studied type, and {target} is not one.",
+          "noRow": "{name}: the type of {target} has no row in the weakness table.",
+          "immune": "{target} is Immune to {type} damage. Expose Weakness does nothing to it.",
+          "tempo": "{name} costs {n} Tempo."
+        },
+        "Laid": "{target} is Vulnerable to {type} damage until the end of your next turn.",
+        "NotLaid": "Expose Weakness could not be laid on {target}.",
+        "Effect": "{feature}: Vulnerable ({type})",
+        "EffectText": "Vulnerable to {type} damage until the end of the next turn of {owner}."
+      },
+      "Medallion": {
+        "NotWorn": "{name}: you are not wearing your witch hunter's medallion in your Neck slot.",
+        "NoToken": "{name} needs your token on the scene you are viewing.",
+        "PulseTitle": "Creatures of your Studied types within {feet} feet",
+        "PulseCount": "Creatures of your Studied types ({types}) within {feet} feet: {n}.",
+        "PulseLine": "{name} reads the medallion. The count is whispered to you.",
+        "NoSchool": "no school",
+        "SenseTitle": "A spell cast within {feet} feet",
+        "Sensed": "{spell} ({school}), {where}, {feet} feet away.",
+        "Warn": "Warn an ally",
+        "Refuse": {
+          "worn": "{name}: you are not wearing your witch hunter's medallion in your Neck slot.",
+          "sensed": "{name}: this card records no spell to warn against.",
+          "one": "{name}: target the one ally you warn.",
+          "self": "{name} warns an ally, never you.",
+          "notAlly": "{name} warns an ally, and {target} is not your ally.",
+          "unseen": "{name} warns an ally you can see.",
+          "warned": "{target} has a warning against this spell already."
+        },
+        "Warned": "{name} warns {target}: a Boon on its Resilience Test against {spell}.",
+        "NotWarned": "The warning could not be laid on {target}.",
+        "WarnEvent": "{name} warns {target} against {spell}."
+      },
+      "LastHunt": {
+        "Standing": "{name} stands already.",
+        "EffectText": "Every type you know counts as Studied, your Tempo is capped at {cap}, and each Sign costs 1 Energy less.",
+        "Begun": "{name} begins The Last Hunt for 1 minute. Tempo is capped at {cap}.",
+        "NotBegun": "The Last Hunt could not begin for {name}."
+      },
+      "Trail": {
+        "InFight": "{name} takes {minutes} minutes. It cannot be used in a fight.",
+        "Title": "{name}: Investigation",
+        "Dc": "Standard DC {standard}, Hard DC {hard}. Result {total}.",
+        "Success": "{name} reads the trail.",
+        "Failure": "{name} learns nothing from the trail.",
+        "GmCall": "The GM says the type of the creature that left the trail, how many there were, how long ago they passed and which way they went.",
+        "Hard": "The result meets the Hard DC. If the Witch Hunter does not know that type, the GM adds it to the Tome of Silver and Ash.",
+        "Learn": "Learn the type",
+        "GmOnly": "Only the GM chooses the type the trail teaches.",
+        "Refuse": {
+          "notHard": "The result of {name} did not meet the Hard DC.",
+          "taught": "This trail has taught {name} a type already.",
+          "type": "Choose one of the eight creature types.",
+          "known": "{name} knows that type already."
+        },
+        "LearnPrompt": "Read the Trail: choose the type {name} learns.",
+        "Learned": "{name} adds {type} to the Tome of Silver and Ash."
+      }
+    },
+    "Compass": {"here": "here", "N": "north", "NE": "north-east", "E": "east", "SE": "south-east", "S": "south", "SW": "south-west", "W": "west", "NW": "north-west"},
+    "TypeBoon": {
+      "Blessed": "gives a Boon on attacks against the undead",
+      "Demonslaying": "gives a Boon on Attack Tests against demons"
+    },
+    "WitchHunter": {
+      "NoGM": "No GM is online to write this for {name}. Nothing was spent.",
+      "Overdose": "points of overdose: Field Brews",
+      "BrewBoon": "gives a Boon on this Test",
+      "TempoClipped": "{name}'s Tempo falls to {n}, the cap it holds now.",
+      "Gromsblood": "Gromsblood draught: {attacker} takes {n} Physical damage for hitting {name} with a melee attack.",
+      "Blindweed": "Blindweed oil: a Bane on the next Casting Test of {names}.",
+      "HuntersOilNamed": "{name} ({type})",
+      "DecoctionNamed": "{name} ({type})",
+      "Kind": {"elixir": "Elixir", "oil": "Oil", "bomb": "Bomb", "decoction": "Decoction"},
+      "Tome": {
+        "Begun": "{name} knows the first two types of the Tome of Silver and Ash already.",
+        "Stalled": "A Tome write for {name} had no answer for ten seconds, so the next one went ahead.",
+        "StartPrompt": "Tome of Silver and Ash: you know Undead. Choose the second type you know.",
+        "Refuse": {
+          "type": "Choose one of the eight creature types.",
+          "undead": "You know Undead already. Choose a different type."
+        }
+      },
+      "Learn": {
+        "Prompt": "Tome of Silver and Ash: which type do you study?",
+        "Title": "Learn a type: {type}",
+        "Learned": "{name} learns the {type} type.",
+        "Failed": "{name} does not learn the {type} type. The Test comes back at the next Long Rest.",
+        "Refuse": {
+          "closed": "{name} may make this Test only when they finish a Long Rest.",
+          "rest": "{name} may make this Test at a Short Rest only with Field Notes at rank 2.",
+          "spent": "{name} made this Test already since the last Long Rest.",
+          "nothing": "{name} damaged no creature of a type they do not know.",
+          "known": "{name} knows that type already, or damaged no creature of it."
+        }
+      },
+      "Decoction": {
+        "Label": "Decoction",
+        "Undead": "Decoction: {name} regains {n} Health."
+      },
+      "Studied": {
+        "Label": "Studied"
+      },
+      "Formulas": {
+        "Prompt": {
+          "elixir": "Field Brews: learn up to {n} more elixirs.",
+          "oil": "Field Brews: learn up to {n} more oils.",
+          "bomb": "Field Brews: learn up to {n} more bombs."
+        },
+        "Known": "You know this formula.",
+        "Learn": "Learn",
+        "Learned": "{name} learns {names}.",
+        "Refuse": {
+          "notBrew": "{name} is not one of the witch hunter's brews.",
+          "decoction": "You brew a Decoction with Decoctions. You do not learn it as a formula.",
+          "tooMany": "Your tier lets you know fewer formulas of this kind.",
+          "none": "{name} knows every formula the tier allows."
+        }
+      },
+      "Prepare": {
+        "Title": "Prepare",
+        "WindowTitle": "Prepare: {name}",
+        "Doses": "{used} of {doses} doses brewed. {left} left.",
+        "Fewer": "One dose fewer of {name}",
+        "More": "One dose more of {name}",
+        "NoFormulas": "You know no formula yet. Choose your formulas on the Combat tab.",
+        "OilType": "Hunter's oil names",
+        "DecoctionType": "Decoction for",
+        "ChooseType": "Choose a type",
+        "School": "Ward against",
+        "ChooseSchool": "Choose a school",
+        "NoDefeated": "You defeated no creature of a type you know since your last Long Rest, so you may brew no Decoction.",
+        "StudiedLegend": "Studied types (up to {n})",
+        "Brew": "Brew",
+        "Made": "{name} brews {brews}.",
+        "Nothing": "nothing",
+        "Spoiled": "{n} brews from the last brewing spoil.",
+        "Studied": "Studied: {types}.",
+        "Refuse": {
+          "notHunter": "{name} is not a Witch Hunter.",
+          "closed": "{name} may brew only when they finish a Short or Long Rest.",
+          "noTome": "{name} must choose the second type of the Tome of Silver and Ash first.",
+          "notKnown": "{name} does not know that formula.",
+          "tooMany": "That is more doses than {name} may brew.",
+          "decoction": "A Decoction needs Decoctions, one dose, and a type you know that you defeated since your last Long Rest.",
+          "oilType": "Hunter's oil must name a type you know.",
+          "school": "The Elemental Decoction must name Fire, Frost or Nature.",
+          "pack": "{name} is not in the gear compendium. Nothing was brewed.",
+          "unconfirmed": "The new brews for {name} were not confirmed. Nothing spoiled.",
+          "studied": {
+            "unknown": "You may choose only types you know as Studied.",
+            "tooMany": "That is more Studied types than you may choose."
+          }
+        }
+      },
+      "Use": {
+        "OilPrompt": "{name}: which weapon do you coat?",
+        "OilReplaced": "It replaces {name}.",
+        "Overdose": "Overdose {n}: {penalty} on every Test.",
+        "Left": "{n} left.",
+        "ElixirsEnded": "{n} elixirs end.",
+        "Refill": "Your Energy refills {n} more at the start of each of your turns.",
+        "NoEffect": "{name} is not a Witch Hunter and gains none of {brew}'s effect.",
+        "PoisonResisted": "{name} succeeds on the Body Resilience Test and takes no damage.",
+        "Poisoned": "{name} fails the Body Resilience Test: {n} Nature damage at the start of each of its turns for {rounds} turns.",
+        "PoisonNotLaid": "{name} fails the Body Resilience Test, and the damage could not be laid. Check the effect before you correct it.",
+        "Refuse": {
+          "decoctionLimit": "{name} is under the effect of as many Decoctions as they may be.",
+          "notDrink": "That brew is not drunk.",
+          "noWeapon": "{name} holds no weapon to coat."
+        }
+      },
+      "Bomb": {
+        "Damage": "{n} {type}",
+        "UntilTheirTurn": "Until the end of its next turn",
+        "SilverDust": "On a failure, until the end of its next turn, it regains no Health and loses Immune (Physical).",
+        "NoTargets": "No creature was targeted in the blast.",
+        "Reach": "Thrown up to {range} feet, {radius} ft radius",
+        "OutOfReach": "{name} cannot reach {target}: {target} is {feet} feet away, and a throw and its blast reach {reach} feet. Nothing was spent.",
+        "NoHealing": "{name} regains no Health until the end of its next turn.",
+        "LosesImmune": "{name} loses Immune (Physical) until the end of its next turn."
+      },
+      "Panel": {
+        "Heading": "Hunter",
+        "BrewsHeading": "Witch hunter's brews",
+        "NoTome": "Choose the second type of your Tome of Silver and Ash.",
+        "StartTome": "Choose a type",
+        "Toxicity": "Toxicity",
+        "ToxicityValue": "{used} of {limit}",
+        "Acting": "Acting on you",
+        "Known": "Types known",
+        "Studied": "Studied",
+        "Prepare": "Prepare",
+        "WindowClosed": "Opens after a Short or Long Rest finishes.",
+        "Formulas": "Learn formulas ({n} left)",
+        "SpellDC": "Spell DC {dc}",
+        "SignDC": "Spell DC for Signs {dc}",
+        "Learn": "Learn a type",
+        "Left": "{n} left",
+        "NoBrews": "You hold no brews.",
+        "Control": {"drink": "Drink", "coat": "Coat weapon", "throw": "Throw"},
+        "EnergyNote": "Refills 2 at the start of each of your turns",
+        "TempoNote": "Empties after two rounds in which you hit nothing",
+        "OverSegment": "Overdose",
+        "OverdoseOne": "{n} point of overdose: −{p} on every Test",
+        "OverdoseMany": "{n} points of overdose: −{p} on every Test",
+        "UntilLongRest": "until your next Long Rest",
+        "Weakness": "Sign: {sign} · Bomb: {bomb} · Damage: {damage}",
+        "StudiedAllowOne": "Wisdom {mod}: up to {n} Studied type",
+        "StudiedAllowMany": "Wisdom {mod}: up to {n} Studied types",
+        "StudiedCount": "{n} Studied",
+        "DosesHeld": "{held} of {doses} doses",
+        "ActingOne": "{n} brew",
+        "ActingMany": "{n} brews",
+        "NothingActing": "No brew acts on you.",
+        "NoTypes": "You know no types yet.",
+        "Held": "Brews held",
+        "Medallion": "Medallion",
+        "MedallionWorn": "Worn in your Neck slot: Spell DC +{n}.",
+        "MedallionSenses": "Worn in your Neck slot: Spell DC +{n}. It senses spells cast within 60 feet.",
+        "MedallionCarried": "Carried, not worn. Wear it in your Neck slot to use it.",
+        "MedallionNone": "You carry no witch hunter's medallion."
+      }
+    }
   },
   "TYPES": {
     "Actor": {

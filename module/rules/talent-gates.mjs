@@ -42,6 +42,11 @@
  * did.
  */
 
+// 14 §1's creature TYPE, the one reading (`tome.mjs#typeOf`), for the Witch Hunter's type gates.
+import { CREATURE_TYPES, cleanType, typeOf } from "./tome.mjs";
+// 08 §8's armor categories, lightest first, for the `wears` gate.
+import { categoryAtMost, isArmorCategory } from "./armor.mjs";
+
 /** What the user wields and wears, as a gate may name it (door 15). */
 // And the Demon Hunter's two grips (04's Twin Blades and the Souleater's scythe; `rules/wield.mjs`).
 export const WIELD_FACTS = Object.freeze(["twoHanded", "noSuit", "twoTypes", "hammerOrMace", "bothHands", "oneInEach", "eitherGrip", "glaiveEach", "scytheTwoHands"]);
@@ -49,10 +54,25 @@ export const WIELD_FACTS = Object.freeze(["twoHanded", "noSuit", "twoTypes", "ha
 /** The keys of a gate that read the TARGET (doors 17 and 18). */
 // `quarried`: the target is the user's Quarry, the creature its Hunter's Mark names (the class talent
 // audit's Review corrections, a new target fact for A's Hunter's Mark; D-1868).
-export const TARGET_GATES = Object.freeze(["targetHas", "targetKind", "laidByUser", "watched", "challenged", "quarried"]);
+// **THE CREATURE'S TYPE** (the Witch Hunter plan's finding 1: *`talent-gates.mjs#gateHolds`'s
+// `targetKind` reads only four kinds. One `type` gate serves every door*): `targetType` - 14 §1's
+// type, any of a list (*against a beast or a dragonkin*); `typeKnown` - a type the user knows from the
+// Tome of Silver and Ash; `typeStudied` - a type the user has **Studied**. All three read `typeOf`,
+// through `targetFactsOf`'s `types`, `typeKnown` and `typeStudied`.
+export const TARGET_GATES = Object.freeze(["targetHas", "targetKind", "laidByUser", "watched", "challenged", "quarried", "targetType", "typeKnown", "typeStudied"]);
+
+/**
+ * **WHAT THE USER WEARS** (the Witch Hunter plan's armor-category gate; 04's Cat's Step and Feline
+ * Reflexes, *While you wear studded armor or lighter*, so `{wears: {atMost: "studded"}}`, which the
+ * class's own studded leather kit meets; D-2113): `wears: {atMost: <category>}`, holding where the worn
+ * suit's category is that category or lighter in 08 §8's order (`armor.mjs#categoryAtMost`), no suit
+ * counting as `none`. It reads `facts.wield.suitCategory`, which `rules/wield.mjs#wieldFacts` gives, so
+ * every door that hands its wield facts in already feeds it.
+ */
+export const WEAR_GATE = "wears";
 
 /** Every key an object gate may carry. */
-export const GATE_KEYS = Object.freeze([...TARGET_GATES, "wields"]);
+export const GATE_KEYS = Object.freeze([...TARGET_GATES, "wields", WEAR_GATE]);
 
 /** A gate's three answers folded the way `every` folds them: any false is false, else any unknown is unknown. */
 function fold(answers = []) {
@@ -91,6 +111,16 @@ export function isGate(when, { facts = null } = {}) {
   if ("watched" in when && when.watched !== true) return false;
   if ("challenged" in when && when.challenged !== true) return false;
   if ("quarried" in when && when.quarried !== true) return false;
+  if ("targetType" in when) {
+    const named = listOf(when.targetType);
+    if (!named.length || !named.every(t => CREATURE_TYPES.includes(t))) return false;
+  }
+  if ("typeKnown" in when && when.typeKnown !== true) return false;
+  if ("typeStudied" in when && when.typeStudied !== true) return false;
+  if (WEAR_GATE in when) {
+    const w = when[WEAR_GATE];
+    if (!w || typeof w !== "object" || Array.isArray(w) || Object.keys(w).join() !== "atMost" || !isArmorCategory(w.atMost)) return false;
+  }
   if ("wields" in when) {
     const named = listOf(when.wields);
     if (!named.length || !named.every(f => WIELD_FACTS.includes(f))) return false;
@@ -132,6 +162,17 @@ export function gateHolds(when, facts = {}) {
   if ("watched" in when) answers.push(target ? target.watched === true : null);
   if ("challenged" in when) answers.push(target ? target.challenged === true : null);
   if ("quarried" in when) answers.push(target ? target.quarried === true : null);
+  // A target whose type could not be read answers no type gate (null), as a missing target does.
+  if ("targetType" in when) {
+    const types = target ? (target.types ?? []) : null;
+    answers.push(types === null || !types.length ? null : listOf(when.targetType).some(t => types.includes(t)));
+  }
+  if ("typeKnown" in when) answers.push(target && typeof target.typeKnown === "boolean" ? target.typeKnown : null);
+  if ("typeStudied" in when) answers.push(target && typeof target.typeStudied === "boolean" ? target.typeStudied : null);
+  if (WEAR_GATE in when) {
+    const suit = wield && typeof wield.suitCategory === "string" ? wield.suitCategory : null;
+    answers.push(suit === null ? null : categoryAtMost(suit, when[WEAR_GATE]?.atMost));
+  }
   if ("wields" in when) answers.push(wield ? listOf(when.wields).every(f => wield[f] === true) : null);
   return fold(answers);
 }
@@ -177,7 +218,7 @@ export function gateLabel(when) {
     const first = when.find(w => !(w && typeof w === "object" && !Array.isArray(w) && Object.keys(w).every(k => k === "wields")));
     return first === undefined ? "wields" : gateLabel(first);
   }
-  if (typeof when === "object") return TARGET_GATES.find(k => k in when) ?? "wields";
+  if (typeof when === "object") return TARGET_GATES.find(k => k in when) ?? (WEAR_GATE in when ? WEAR_GATE : "wields");
   return "always";
 }
 
@@ -257,8 +298,14 @@ function names(entry, target) {
  *   bound to it (Cursed Prey's *you or one of your totems*)
  * @returns {{statuses: string[], kinds: string[], laidByUser: string[], watched: boolean, challenged: boolean}|null}
  */
-export function targetFactsOf(snapshot, { own = [], marks = {} } = {}) {
+export function targetFactsOf(snapshot, { own = [], marks = {}, tome = null } = {}) {
   if (!snapshot || typeof snapshot !== "object") return null;
+  // **ITS TYPE, AND WHETHER THE USER KNOWS OR STUDIES IT** (the Witch Hunter plan's finding 1): the
+  // snapshot's own `types` where the door carried them, else `tome.mjs#typeOf` off what it carries
+  // (`actorType` or `type`, `creatureType`, `race`). `tome` is the USER's `{known, studied}`; without it
+  // `typeKnown` and `typeStudied` are null (the door could not tell), never false.
+  const types = typesOfSnapshot(snapshot);
+  const knows = list => (types.length && Array.isArray(list) ? types.some(t => list.map(cleanType).includes(t)) : null);
   const hands = new Set((own ?? []).filter(u => typeof u === "string" && u));
   const laidBy = snapshot.laidBy && typeof snapshot.laidBy === "object" ? snapshot.laidBy : {};
   const laidByUser = Object.entries(laidBy)
@@ -277,6 +324,24 @@ export function targetFactsOf(snapshot, { own = [], marks = {} } = {}) {
     // **WHOSE BLOOD CURSES IT IS UNDER** (02 §7; the plan's B.6: *`targetFactsOf` gains `cursedBy`*;
     // D-1241): every Sovereign's uuid off the snapshot, and whether one is the user's hand.
     cursedBy: [...new Set((Array.isArray(snapshot.cursedBy) ? snapshot.cursedBy : []).map(String))].sort(),
-    cursedByUser: (Array.isArray(snapshot.cursedBy) ? snapshot.cursedBy : []).some(u => hands.has(u))
+    cursedByUser: (Array.isArray(snapshot.cursedBy) ? snapshot.cursedBy : []).some(u => hands.has(u)),
+    types,
+    typeKnown: tome && typeof tome === "object" ? knows(tome.known ?? []) : null,
+    typeStudied: tome && typeof tome === "object" ? knows(tome.studied ?? []) : null
   };
+}
+
+/**
+ * The 14 §1 types a target snapshot carries: its own `types` list where the door wrote one, else the one
+ * `typeOf` reads off `actorType` (or `type`), `creatureType` and `race`. Sorted, once each; empty where
+ * nothing could be read.
+ *
+ * @param {object} snapshot
+ * @returns {string[]}
+ */
+export function typesOfSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return [];
+  if (Array.isArray(snapshot.types)) return [...new Set(snapshot.types.map(cleanType).filter(Boolean))].sort();
+  const one = typeOf({ type: snapshot.actorType ?? snapshot.type ?? null, creatureType: snapshot.creatureType ?? null, race: snapshot.race ?? null, undead: snapshot.undead === true });
+  return one ? [one] : [];
 }

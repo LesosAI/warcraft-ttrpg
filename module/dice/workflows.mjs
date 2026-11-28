@@ -141,7 +141,7 @@ import { formsFrom, shapeBlocks, takeShape } from "../documents/shapes.mjs";
 import { secondaryLevel, tierForLevel } from "../rules/progression.mjs";
 import { skillFromKnown, skillUuid } from "../rules/creation.mjs";
 import { maneuverCost, sizeNote, sunderAmount } from "../rules/maneuvers.mjs";
-import { HAMMER_OF_JUSTICE_SPELL, appliesHammerOfJustice, furtherGains, gainOnHit, momentumAfter, refundOnSpend } from "../rules/momentum.mjs";
+import { HAMMER_OF_JUSTICE_SPELL, appliesHammerOfJustice, furtherGains, gainOnHit, hitMarksIdleRound, momentumAfter, refundOnSpend } from "../rules/momentum.mjs";
 import { applyCondition, spellTiming, untilEncounterEnd, untilEndOfNextTurn, untilNextTurn } from "../effects/durations.mjs";
 // 06 SS6 (D-693): a Bane laid on ANOTHER creature - Pummel's two, Gorehowl's one.
 import { endBane, layBane, layBoon, spendLaidBanes, spendLaidBoons } from "../effects/banes.mjs";
@@ -278,6 +278,8 @@ import { attackTestPromises } from "../rules/blademaster-test.mjs";
 import { spellHitCondition } from "../rules/spell-hit-condition.mjs";
 import { chainLightningTargetRefusal } from "../rules/chain-lightning.mjs";
 import { layNoHealing } from "../effects/no-healing.mjs";
+import { layWeaponCut, weaponCutWords } from "../effects/weapon-cut.mjs";
+import { drainFrom, tierHealFrom } from "../rules/enchanter-signatures.mjs";
 // 08 §5's Corruption traits (D-911): Fel-touched's natural 1.
 import { traitExposures } from "../rules/trait-corruption.mjs";
 import { nameBeacon } from "../effects/beacon.mjs";
@@ -380,6 +382,11 @@ import { OVERCHANNEL_MAX_POINTS, clearcastingLays, halfManaRestore, overchannelP
 import { SWIFT_REFUSALS, nextDiscountTaken } from "../rules/casting.mjs";
 // R8's Bleeding by source (D-1866).
 import { bleedSourceMark } from "../rules/bleeding.mjs";
+// A worn item as the class feature patches' second source (08 §20's class items, D-2156).
+import { patchRowsOf } from "../rules/class-talents.mjs";
+import { itemPatchSum, itemPayload } from "../rules/item-patches.mjs";
+import { spentRunesOn } from "../rules/runes.mjs";
+import { DRUST_STUDIED_FLAG } from "../rules/witch-hunter-standing.mjs";
 // The class talent audit's martial law (class agent A, D-1872): Avenging Wrath's climb on a Holy spell.
 import { AVENGING_WRATH, avengingWrathBonus, avengingWrathOf, cardTargetLimit } from "../rules/audit-martial.mjs";
 // A full heal (Mercy of Uther's `heal: "max"`; D-1868).
@@ -391,6 +398,8 @@ import { HATRED, castGain, felSurgePlan } from "../rules/hatred.mjs";
 // The Demon Hunter's features (the Demon Hunter plan's Phase 4a): a track lowered (Fel Lash's shed) and the gain
 // refused while unleashed, both pure.
 import { corruptionReduction, dhWeaponAttack, unleashedGainRefusal } from "../rules/demon-hunter-features.mjs";
+// The Witch Hunter's attack door (the Witch Hunter plan's wave 2a-A): the Tome, Studied, the oils.
+import { blindweedOnHit, witchHunterBlow } from "../effects/witch-hunter-tome.mjs";
 // 04's Iron Will on a Spirit Test against Fel (the Demon Hunter plan's Phase 5).
 import { IRON_WILL, dhRankOfItems, ironWillAutomatic, ironWillLines } from "../rules/demon-hunter-talents.mjs";
 import { FLESH_OFFERING, empowerEffects, empowerPicks, essenceDue, fleshOfferingPrice, lastingDuration, lastingTickRounds } from "../rules/necromancer-lines.mjs";
@@ -460,7 +469,7 @@ import { hasCreaturePlan, summonDue } from "../rules/creature-plans.mjs";
 // D-1166, D-1167): the claw rolls one Off-Hand Attack makes, Blooded Claws' free lone blow,
 // and the one hook every claw hit fires.
 import { CLAW_USES_FLAG, freeOffHand, offHandRolls } from "../rules/initiative.mjs";
-import { isClaws as isClawsWeapon, isUnarmedStrike } from "../rules/unarmed.mjs";
+import { isClaws as isClawsWeapon, isUnarmed, isUnarmedStrike } from "../rules/unarmed.mjs";
 import { clawHitPayload, fireClawHits } from "../rules/claw-hit.mjs";
 import { clawRollStamp } from "../rules/claws.mjs";
 // The Sovereign spells' cast doors, asked before their module loads (O-419; `rules/sovereign-scope.mjs`).
@@ -1720,7 +1729,8 @@ export async function rollTest({
   if (kind === "attack" && !parry) {
     // And a Legacy's gate (Mak'gora's *Against the creature you named with The
     // Challenge*; the Legacy branches' door 18), through the actor's one fact-builder.
-    const exec = criticalRangeFor(talentsHeld, { health: first?.health ?? null, pools: actor?.poolSnapshot?.() ?? [], facts: { ...gateFacts, engagedOne: engagedOne === true } });
+    // And 04's Lethal Edge (*Your weapon attacks*; the Witch Hunter plan's wave 2b): a weapon attack, never the bare hand.
+    const exec = criticalRangeFor(talentsHeld, { health: first?.health ?? null, pools: actor?.poolSnapshot?.() ?? [], facts: { ...gateFacts, engagedOne: engagedOne === true, weaponAttack: dhWeaponAttack({ weaponId, strike }) } });
     if (exec.on && exec.on < (roll.options.criticalOn ?? 20)) {
       roll.options.criticalOn = exec.on;
       roll.options.provenance.push({ label: exec.by.join(", "), value: null, formula: game.i18n.format("AZEROTH.Card.CriticalOn", { n: exec.on }) });
@@ -2057,9 +2067,15 @@ export async function rollTest({
       const fightDs = actor.activeFight?.() ?? null;
       const myTurn = fightDs?.started ? fightDs.turns.findIndex(c => c.actor?.uuid === actor.uuid || c.actorId === actor.id) : -1;
       const sinceDs = fightDs?.started && myTurn >= 0 ? lastTurnStart({ combatId: fightDs.id, round: fightDs.round, turn: fightDs.turn, casterTurn: myTurn }) : null;
-      const amountDs = recentHealFor(actor.getFlag?.("azeroth-rpg", LEDGER_FLAG) ?? [], sinceDs, { cap: done.recentHeal, time: game.time?.worldTime ?? 0 });
+      const recentDs = recentHealFor(actor.getFlag?.("azeroth-rpg", LEDGER_FLAG) ?? [], sinceDs, { cap: done.recentHeal, time: game.time?.worldTime ?? 0 });
+      // **08 §20's OATHBREAKER'S PLATE** (*regains 2 additional Health whenever Death Strike restores
+      // their Health*; D-2156): the worn item's patch on 02's Death Strike, read through the one reader
+      // (`class-talents.mjs#patchRowsOf` over `AzerothActor#patchSources`), only where it restores any.
+      const plateDs = recentDs > 0 ? itemPatchSum(patchRowsOf(actor.patchSources?.() ?? [], p.name), "heal") : { amount: 0, by: [] };
+      const amountDs = recentDs > 0 ? recentDs + plateDs.amount : 0;
       const beforeDs = actor.system?.health?.value ?? 0;
       if (amountDs > 0) await actor.applyHealing(amountDs, { from: actor, feature: true, featureName: p.name });
+      if (plateDs.amount > 0) fired.push({ key: "rider", name: plateDs.by.join(", "), text: game.i18n.format("AZEROTH.ClassItem.PatchHealed", { name: actor.name, n: plateDs.amount, feature: p.name, item: plateDs.by.join(", ") }) });
       healed = (healed ?? 0) + Math.max(0, (actor.system?.health?.value ?? beforeDs) - beforeDs);
       fired.push({ key: "rider", name: p.name, text: game.i18n.format("AZEROTH.DeathKnight.DeathStrike.Healed", { name: actor.name, n: Math.max(0, (actor.system?.health?.value ?? beforeDs) - beforeDs), cap: done.recentHeal }) });
       // **04's BLOOD SHIELD** (*When Death Strike restores your Health, you gain temporary Health
@@ -2151,7 +2167,21 @@ export async function rollTest({
   // yours reaches SL 2, the target gains Bleeding equal to your rank*; D-772):
   // with the blow, as a rider's condition lands (the lead, 2026-10-03: *"Lands
   // automatically"*), and a button where the card records no target.
+  // **02's TOME OF SILVER AND ASH AND STUDIED, AND 08's OILS** (the Witch Hunter plan's wave 2a-A): what a Witch
+  // Hunter's weapon attack gains against each target - 1 Armor Point and 1 Ward ignored against a type known, extra
+  // damage equal to the tier and 1 more Tempo against a Studied one, an oil's damage and piercing, the Construct
+  // Decoction's Armor Point (`effects/witch-hunter-tome.mjs#witchHunterBlow`). Read once here; `mitigate` below lays
+  // each target's row on its own resolution, and the Momentum gain reads the Tempo.
+  const whBlow = kind === "attack" && !parry && actor?.type === "character"
+    ? witchHunterBlow(actor, { list, weaponId, weaponAttack: dhWeaponAttack({ weaponId, strike }) })
+    : null;
   if (kind === "attack" && !parry) {
+    // **08's BLINDWEED OIL** (*A creature the coated weapon hits takes a Bane on its next Casting Test*): on a hit,
+    // through the one Bane door, and said on the card.
+    if (outcome.success && whBlow?.oil?.coating?.onHit?.bane && list.length) {
+      const landed = await blindweedOnHit(actor, { oil: whBlow.oil, victims: list.map(t => targetActorOf(t)).filter(Boolean) });
+      if (landed.length) fired.push({ key: "witchHunter", name: whBlow.oil.name, text: game.i18n.format("AZEROTH.WitchHunter.Blindweed", { names: landed.join(", ") }) });
+    }
     // **04's FROZEN EDGE AND GRIM HARVEST** (run F4a): Frozen Edge's Frost on a melee hit against
     // a Slowed creature, its own amount (a fired row's `extraType`, D-777), and Grim Harvest's
     // Health on a melee hit against a creature at half its Health or less - each gated on what is
@@ -2177,6 +2207,15 @@ export async function rollTest({
       const { demonHunterOnHit } = await import("../effects/demon-hunter-features.mjs");
       // A weapon attack, never an unarmed strike (the review's M3): Bane of the Legion and the scythe's talents ask it.
       fired.push(...await demonHunterOnHit({ actor, hit: outcome.success, riderRows, list, weaponId, weaponAttack: dhWeaponAttack({ weaponId, strike }) }));
+    }
+    // **04's THUNDEROUS SWING** (the Witch Hunter's Bear: *When you hit with a weapon in two hands, the target is pushed
+    // 5 feet away from you per rank*; the Witch Hunter plan's wave 2b): a fired row of what landed on whom, each push
+    // recorded for a Parry to take back (`effects/witch-hunter-talents.mjs#whTalentsOnHit`). Asked only of a character
+    // who holds the class, so no other class imports the door.
+    if (outcome.success && actor?.type === "character" && actor.items?.some?.(i => i.type === "class" && i.system?.identifier === "witch-hunter")) {
+      const { whTalentsOnHit } = await import("../effects/witch-hunter-talents.mjs");
+      fired.push(...await whTalentsOnHit({ actor, list, hit: true, weaponId, weaponAttack: dhWeaponAttack({ weaponId, strike }), recordHit,
+        tokenDocOf: t => tokenDocOfTarget(t), actorOf: t => targetActorOf(t) }));
     }
     // And on an Opportunity Attack alone where the row says so (04's Hold the Hall:
     // *On a hit it is knocked Prone*; the Legacy branches' door 22).
@@ -2666,7 +2705,12 @@ export async function rollTest({
       console.warn("azeroth-rpg | the martial rows at the roll", err);
     }
   }
-  await spendLimitedRows(fired, { actor, fight });
+  // **A ROW'S ONCE A ROUND IS GIVEN BACK WITH A WITHDRAWN HIT** (the lead's O-171: *a hit that gains
+  // nothing spends no once*; the final review of 0.18.1): every round mark this hit claimed for a fired row
+  // (Crusader's `signature:signature:Crusader`) rides the card's `onceOnMiss`, so a Parry that holds or
+  // Afterimage releases it (`rules/riders.mjs#roundRelease`) and a later real hit that round may fire it.
+  const roundClaimed = await spendLimitedRows(fired, { actor, fight });
+  if (outcome.success) onceMarkedOnHit.push(...roundClaimed);
   const publishAttackCard = async ({bonuses=[],receipt=null,valid=()=>true}={}) => {
   if(!valid())throw Error('Signature hit authorization changed before damage calculation');
   for(const bonus of bonuses)fired.push({name:bonus.name,key:'signature',
@@ -2708,16 +2752,30 @@ export async function rollTest({
   // moved — the same shape as the Momentum above (D-681). A row naming a
   // DISTANCE heals somebody else and is a button on the card instead, because
   // nothing but the table knows which creature is within fifteen feet.
-  const signatureHeal = fired.reduce((n, f) => n + (f.healFeet ? 0 : (f.heal ?? 0)), 0);
+  // **08 §18's CRUSADER** (*you regain Health equal to your tier*): a fired row's Health a tier, at the
+  // bearer's own tier, paid with every other Health a blow gives back (`enchanter-signatures.mjs#tierHealFrom`).
+  const signatureHeal = fired.reduce((n, f) => n + (f.healFeet ? 0 : (f.heal ?? 0)), 0)
+    + (kind === "attack" && !parry ? tierHealFrom(fired.filter(f => f.key === "signature"), actor.system?.tier ?? 1) : 0);
   const signatureMana = fired.reduce((n, f) => n + (f.mana ?? 0), 0);
-  if (outcome.success && signatureHeal > 0) await actor.applyHealing(signatureHeal, { from: actor });
+  // **AND A WITHDRAWN HIT TAKES IT BACK** (the lead's O-171; the final review of 0.18.1): Crusader's Health
+  // and D-698's `onHit.heal` are a heal on the HIT, so they land at the roll, and what actually landed is
+  // recorded with the Momentum the hit built (`momentumOnMiss`, kind `health`) for a Parry that holds or
+  // Afterimage to take back off the bearer (`dice/annotate.mjs#takeBackPlan`). The Mana a row returns rides
+  // the same record as a Power pool's gain.
+  if (outcome.success && signatureHeal > 0) {
+    const healed = {};
+    await actor.applyHealing(signatureHeal, { from: actor, outcome: healed });
+    if ((healed.restored ?? 0) > 0) recordBuilt(actor, [{ itemId: null, kind: "health", name: "health", gained: healed.restored }]);
+  }
   if (outcome.success && signatureMana > 0) {
     const manaPool = (actor.system.powers ?? []).find(p => p.name === "mana") ?? null;
     if (manaPool) {
+      const manaTo = Math.min(manaPool.max, manaPool.value + signatureMana);
       await actor.updatePool({
         itemId: manaPool.itemId, kind: "power",
-        value: Math.min(manaPool.max, manaPool.value + signatureMana)
+        value: manaTo
       });
+      recordBuilt(actor, [{ itemId: manaPool.itemId ?? null, kind: "power", name: "mana", gained: manaTo - manaPool.value }]);
     }
   }
   // **08 §20's ASH OF THE RISEN** (Ashbringer: *An undead creature it hits cannot
@@ -2731,6 +2789,35 @@ export async function rollTest({
         if (mark?.landed) recordHit(ti, { kind: "noHealing", landed: true, effectId: mark.effectId ?? null, source: f.name });
         f.text = [f.text, noHealingWords(mark)].filter(Boolean).join(" ");
       }
+    }
+  }
+  // **08 §18's UNHOLY WEAPON** (*each of the target's weapon attacks deals 2 less damage until the end
+  // of its next turn*; D-2166): the cut laid on every creature the blow struck through its one writer
+  // (`effects/weapon-cut.mjs`, the GM's client where the creature is another's, no GM judged first),
+  // and recorded for a Parry or Afterimage to take back, as Ash of the Risen's mark is.
+  if (kind === "attack" && !parry && outcome.success && list.length) {
+    for (const f of fired.filter(r => r.key === "signature" && Number(r.weaponCut) > 0)) {
+      for (const [ti, t] of list.entries()) {
+        const laid = await layWeaponCut({ victim: targetActorOf(t), striker: actor, amount: f.weaponCut, source: f.name, name: t?.name ?? "" });
+        if (laid?.landed) recordHit(ti, { kind: "mark", landed: true, effectId: laid.effectId ?? null, source: f.name });
+        f.text = [f.text, weaponCutWords(laid, { n: f.weaponCut, source: f.name })].filter(Boolean).join(" ");
+      }
+    }
+  }
+  // **08 §20's SWARMING SHADOWS** (Lana'thel's Lament: *When it hits your prey, your prey is
+  // **Bleeding 2***; D-2160): the condition LANDS on the hit with no button, through the one condition
+  // door with the item named as its Bleeding source (R8: a second hit keeps the higher value and never
+  // adds to itself), recorded for a Parry or Afterimage to take back, and said on the card.
+  if (kind === "attack" && !parry && outcome.success && list.length) {
+    for (const f of fired.filter(r => r.key === "signature" && r.lands === true && r.condition?.id)) {
+      const lay = f.condition;
+      const marks = ["bleeding", "scorched"].includes(lay.id) ? bleedSourceMark(`signature:${f.identifier ?? f.name}`) : {};
+      const words = [];
+      for (const [ti, t] of list.entries()) {
+        words.push(landedText(recordLanding(ti, await inflictCondition({ victim: targetActorOf(t), id: lay.id, value: lay.value ?? null, by: actor, name: t?.name ?? "", until: lay.until ?? null, marks }))));
+      }
+      f.text = [f.text, ...words].filter(Boolean).join(" ");
+      delete f.condition;
     }
   }
   // **THE ARC, RECORDED FOR THE APPLY** (Thunderfury, Magma Shot; the lead, on O-319:
@@ -2821,10 +2908,14 @@ export async function rollTest({
     roll.options.provenance.push({ label: "Winterfall Firewater", value: equipmentDamage });
   const mitigate = (t,index=-1) => {
   const bonus=hitBonusDamageForTarget(bonuses,index,blowType);
+  // The Witch Hunter's row for this target (`whBlow` above): its Rating, its Pierce and its Ward map less what the
+  // blow ignores. A targetless blow reads the empty row.
+  const wh = whBlow ? (whBlow.rows[index < 0 ? 0 : index] ?? null) : null;
+  const whWard = wh ? wh.wardBySchool(t?.wardBySchool ?? {}) : (t?.wardBySchool ?? {});
   return resolveDamage({
     ...(equipmentDamage ? { sourceDamageBonus: equipmentDamage } : {}),
     fireTakenBonus: t?.fireTakenBonus ?? 0,
-    rating: ratingWithBonus(bonus.rating),
+    rating: ratingWithBonus(bonus.rating + (wh?.rating ?? 0)),
     sl: outcome.sl,
     kind: damage.kind ?? "physical",
     school: damage.school ?? null,
@@ -2836,9 +2927,9 @@ export async function rollTest({
     // an SL ignores Armor Points** (04's Critical Strike at rank 2; door 26): the
     // Pierce raised to the target's own Armor Points at the location struck.
     penetration: slIgnoresArmor
-      ? Math.max((damage.penetration ?? 0) + promisedPierce + talentPierce, Math.trunc(Number(t?.apByLocation?.[location ?? "body"])) || 0)
-      : (damage.penetration ?? 0) + promisedPierce + talentPierce,
-    ward: damage.school ? (t?.wardBySchool?.[damage.school] ?? 0) : 0,
+      ? Math.max((damage.penetration ?? 0) + promisedPierce + talentPierce + (wh?.penetration ?? 0), Math.trunc(Number(t?.apByLocation?.[location ?? "body"])) || 0)
+      : (damage.penetration ?? 0) + promisedPierce + talentPierce + (wh?.penetration ?? 0),
+    ward: damage.school ? (whWard?.[damage.school] ?? 0) : 0,
     // What an ally's aura adds after the Ward, on a magical blow (04's
     // Avenging Bulwark, D-755). `resolveDamage` takes it on that lane alone.
     schoolArmor: damage.school ? (t?.schoolArmor?.[damage.school] ?? 0) : 0,
@@ -2849,7 +2940,7 @@ export async function rollTest({
     // because 08 §6's grammar only adds and adding lands after the SL.
     multiplier: damage.multiplier ?? 1,
     // The blow's second amounts, each met by the target's own type (D-777).
-    extras: [...typedExtras,...bonus.extras], wardBySchool: t?.wardBySchool ?? {}, schoolArmorBySchool: t?.schoolArmor ?? {},
+    extras: [...typedExtras,...bonus.extras], wardBySchool: whWard, schoolArmorBySchool: t?.schoolArmor ?? {},
     dealtHalved: halvedBy,
     // 08 §20's The Sorcerer-Thane's Pact (D-911): the weapon's own blow passes an
     // Immune of these types at half (`attackWithDialog` stamps it off the weapon).
@@ -2858,8 +2949,26 @@ export async function rollTest({
   };
   const hit = Boolean(damage) && outcome.success;
   if (hit && halvedBy) roll.options.provenance.push({ label: halvedBy.source, value: null, formula: game.i18n.localize("AZEROTH.HalvesDealt.Row") });
+  // The Witch Hunter's rows, named by their source, for the first target the card prints (the Tome's Pierce, Studied's
+  // damage, an oil's, the Construct Decoction's).
+  if (hit) for (const row of whBlow?.rows?.[0]?.provenance ?? []) roll.options.provenance.push({ label: row.label, value: row.value });
   const damageByTarget = list.map((t,index) => (hit ? mitigate(t,index) : null));
   const damageResult = hit ? (damageByTarget[0] ?? mitigate(first)) : null;
+  // **08 §18's LIFESTEALING** (*the target takes 2 Shadow damage, and Ward applies. You regain Health
+  // equal to the damage it takes*; D-2165, D-2169): RECORDED here, never paid. What the row's own amount
+  // came to on each creature struck, read off the blow's resolved parts after that creature's Ward of
+  // the type (`enchanter-signatures.mjs#drainFrom`), goes on the card as `lifesteal.amounts[index]`, and
+  // the damage door pays it when the Apply LANDS the blow (`AzerothActor#applyDamage`'s `lifesteal`):
+  // a Parry, a Block, Afterimage, a moved blow or a card never Applied heals nothing.
+  let lifesteal = null;
+  if (kind === "attack" && !parry && hit) {
+    const drainRows = fired.filter(f => f.key === "signature" && f.drain === true);
+    if (drainRows.length) {
+      const amounts = damageByTarget.map(r => drainFrom({ rows: drainRows, results: [r], blowType }));
+      if (amounts.some(n => n > 0)) lifesteal = { by: actor.uuid, name: drainRows.map(f => f.name).filter(Boolean).join(", "), amounts };
+      for (const f of drainRows) f.text = [f.text, game.i18n.format("AZEROTH.Signature.LifestealOnApply", { name: actor.name })].filter(Boolean).join(" ");
+    }
+  }
   // **07 §12's HOURSTRIKE ON EACH ROW IT HIT** (*lays Decay 1 on the creature it hits*; D-865;
   // the 2a review, L3): the promise the spell laid, taken by this attack, on every row the blow
   // damaged - never an Immune one - through Decay's one writer, as the cast's own hit lays it.
@@ -2913,6 +3022,8 @@ export async function rollTest({
         ? momentumOnHitFor(actor.takenTalents(), { sl: outcome.sl, form: inForm, onTurn: fight.combatant?.id === combatant.id, used: usedOnce, facts })
         : { byPool: {}, fired: [] };
       const poolExtra = { ...further.byPool };
+      // **STUDIED'S TEMPO** (02: *a hit gives you 1 more Tempo* against a Studied type; `tome.mjs#tomeHitBonus`).
+      if ((whBlow?.tempo ?? 0) > 0) poolExtra.tempo = (poolExtra.tempo ?? 0) + whBlow.tempo;
       const furtherGiven = [];
       // **04's CHEAP SHOT AT RANK 2** (*that attack builds 1 Combo Point without
       // spending Energy*; D-773): an attack made while hidden, against a target
@@ -2986,6 +3097,18 @@ export async function rollTest({
       // talent puts under it - and not where Cheap Shot built the point free.
       opening = (actor.openingState?.(first, { hidden: hiddenAtRoll })?.applies === true) && !(unseenCombo.amount > 0);
     }
+  } else if (hitMarksIdleRound({ inFight: Boolean(fight), attack: kind === "attack", hit, parry, offHandBuildsNone: momentumOffHand }) && !gainsMomentum) {
+    // **A HIT THAT BUILDS NOTHING IS STILL A HIT** (the architect review's A2, D-2132): Whirling Steel's hits and Extra
+    // Attack's second roll mark the round's last hit for the idle drain (Combo Points, Tempo); only the gain is withheld.
+    const struckBy = fight.getCombatantsByActor(actor)?.[0] ?? null;
+    if (struckBy?.isOwner) await struckBy.setFlag("azeroth-rpg", "lastHitRound", fight.round);
+  }
+  // **THE ONCE-MARKS A HIT SPENT WHERE IT BUILT NO MOMENTUM** (the final review of 0.18.1): a fired row's
+  // round mark (Crusader's) is spent whether or not the hit gains Momentum, so the card records it here too,
+  // or a creature with no Momentum pool kept the mark through a Parry that held.
+  if (!onceOnMiss && fight && outcome.success && onceMarkedOnHit.length) {
+    const claimedBy = fight.getCombatantsByActor(actor)?.[0] ?? null;
+    if (claimedBy) onceOnMiss = { combatantUuid: claimedBy.uuid, round: fight.round, once: [...onceMarkedOnHit].sort(), fast: false };
   }
   // **SHARED QUARRY AT RANK 2** (04: *its hits build Quarry for you as well*;
   // D-773): a companion's hit on its owner's marked target builds the owner's
@@ -3027,8 +3150,10 @@ export async function rollTest({
       const victim = targetActorOf(t);
       const ev = victim ? evadeFor(victim.takenTalents()) : null;
       if (!ev) return;
-      const nothing = !outcome.success || (Boolean(damage) && (damageByTarget[i]?.damage ?? 0) === 0);
-      if (nothing) evades.push({ actorUuid: victim.uuid, name: t?.name ?? victim.name, talent: ev.name, cost: ev.cost, feet: ev.feet });
+      // 04's Tumble (the Witch Hunter's Cat: *when a melee attack misses you*; wave 2b): a miss alone, and a melee one.
+      if (ev.melee === true && (strike?.rangeKind ?? null) !== "melee") return;
+      const nothing = ev.missOnly === true ? !outcome.success : (!outcome.success || (Boolean(damage) && (damageByTarget[i]?.damage ?? 0) === 0));
+      if (nothing) evades.push({ actorUuid: victim.uuid, name: t?.name ?? victim.name, talent: ev.name, cost: ev.cost, feet: ev.feet, ...(ev.pool ? {} : { free: true }) });
     });
   }
 
@@ -3290,6 +3415,8 @@ export async function rollTest({
     rolls: [roll],
     // Maim draws the Critical Injury on the Limb table whatever the blow struck (08 §5).
     flags: { "azeroth-rpg": { kind, location: criticalLocation ?? location, struck: location, damage: damageResult, targets: list, damageByTarget, momentumSpent, offHand,
+      // Lifestealing's record, paid by the damage door at the Apply (08 §18; D-2169).
+      ...(lifesteal ? { lifesteal } : {}),
       // The arcs the Apply lands (D-913).
       ...(arcRows.length ? { arcs: arcRows } : {}),
       // **THE BLOW BEFORE ANY TARGET MET IT** (D-913): what 08 §20's Raised Gauntlet
@@ -3317,7 +3444,9 @@ export async function rollTest({
       // was stamped, for the Test's button to lay on a failure.
       ...(poisons.length ? { poisons } : {}),
       // The extra attacks this blow offered (D-772), as the press reads them.
-      ...(extraStrikes.length ? { extraStrikes: extraStrikes.map(x => ({ identifier: x.identifier, name: x.name, count: x.count, target: x.target, rating: x.rating, weaponId: x.weaponId })) } : {}),
+      ...(extraStrikes.length ? { extraStrikes: extraStrikes.map(x => ({ identifier: x.identifier, name: x.name, count: x.count, target: x.target, rating: x.rating, weaponId: x.weaponId,
+        // A price, a Boon, a reach and one roll (04's Second Cut and Cat's Dance; the Witch Hunter plan's wave 2b).
+        ...(x.cost > 0 ? { cost: x.cost, pool: x.pool } : {}), ...(x.boons > 0 ? { boons: x.boons } : {}), ...(x.reach ? { reach: true } : {}), ...(x.triggered ? { triggered: true } : {}) })) } : {}),
       // **WHAT THE RANGER'S AND THE ROGUE'S PRESSES READ** (D-773): the blow was
       // 06 §7's Riposte (Killing Spree, at the damage door), Intimidation's
       // Banes, Blade Flurry's half, and the defenders Elusive lets step away.
@@ -3467,7 +3596,10 @@ export async function rollTest({
  * @returns {Array<{identifier: string, name: string, count: number, target: string, rating: number, weaponId: string, label: string}>}
  */
 function extraStrikeOffers(actor, { talents, sl, traits, fight, weaponId }) {
-  const offered = extraStrikesFor(talents, { sl, hit: true, traits });
+  // 04's Cat's Dance (*when you hit with a weapon*; the Witch Hunter plan's wave 2b): a row naming `weapon` is offered
+  // off a weapon's blow alone, never the bare hand's.
+  const struckWith = weaponId ? actor.items?.get?.(weaponId) ?? null : null;
+  const offered = extraStrikesFor(talents, { sl, hit: true, traits }).filter(x => !x.weapon || (struckWith && !isUnarmed(struckWith)));
   if (!offered.length) return [];
   const combatant = fight ? (fight.getCombatantsByActor(actor)?.[0] ?? null) : null;
   const round = combatant?.getFlag("azeroth-rpg", "round") ?? {};
@@ -3476,7 +3608,9 @@ function extraStrikeOffers(actor, { talents, sl, traits, fight, weaponId }) {
     .filter(x => !combatant || nextRoundMark(x.identifier, x.count, used) !== null)
     .map(x => ({
       ...x, weaponId,
-      label: game.i18n.format(x.target === "other" ? "AZEROTH.ExtraStrike.Other" : "AZEROTH.ExtraStrike.Same", { name: x.name, rating: x.rating })
+      label: x.cost > 0
+        ? game.i18n.format(x.target === "other" ? "AZEROTH.ExtraStrike.OtherPaid" : "AZEROTH.ExtraStrike.SamePaid", { name: x.name, n: x.cost, pool: game.i18n.localize(AZEROTH.poolTypes?.[x.pool] ?? AZEROTH.momentumTypes?.[x.pool] ?? x.pool) })
+        : game.i18n.format(x.target === "other" ? "AZEROTH.ExtraStrike.Other" : "AZEROTH.ExtraStrike.Same", { name: x.name, rating: x.rating })
     }));
 }
 
@@ -3542,35 +3676,39 @@ function firedCondition(f, damageResult) {
  *
  * @param {Array<object>} fired
  * @param {{actor: Actor, fight: Combat|null}} o
+ * @returns {Promise<string[]>}  the once-a-round marks this write claimed, sorted, for the card's
+ *   `onceOnMiss` (a withdrawn hit gives them back; an encounter's mark is not among them)
  */
 async function spendLimitedRows(fired, { actor, fight } = {}) {
-  if (!fired.some(f => f.per)) return;
+  // The round marks THIS write claimed, for a withdrawn hit to give back (O-171).
+  const claimed = [];
+  if (!fired.some(f => f.per)) return claimed;
   const combatant = fight ? fight.getCombatantsByActor(actor)?.[0] ?? null : null;
-  if (!combatant) return;
-  const round = combatant.getFlag("azeroth-rpg", "round") ?? {};
-  const sameRound = round.number === fight.round;
-  const already = sameRound ? (round.signatures ?? []) : [];
-  const held = [...already];
-  // **ONCE AN ENCOUNTER** (the Hammer of the Lightbringer's Verdict, D-910):
-  // the combatant's own record for the whole fight, which goes with the
-  // combatant when the fight ends. The round's record could never say it - it
-  // is emptied every round.
+  if (!combatant) return claimed;
+  // **CLAIMED THROUGH THE COMBATANT'S QUEUED DOORS** (the phase 4 review; D-761): a once a round
+  // is `markRoundOnce` on the round's record (`once`, `signature:<key>:<name>`), a once an
+  // encounter `markEncounterOnce` on the fight's (the Hammer of the Lightbringer's Verdict,
+  // D-910; the round's record is emptied every round and could never say it). Each answers
+  // whether THIS write claimed the row, so two hits in flight cannot both fire it; a row
+  // another write took is dropped. A client that cannot write the combatant reads the record
+  // as it stands and drops a row already had, as before.
+  const roundRec = combatant.getFlag("azeroth-rpg", "round") ?? {};
+  const roundHad = roundRec.number === fight.round ? (roundRec.once ?? []) : [];
   const encounterHad = combatant.getFlag("azeroth-rpg", "signatureEncounter") ?? [];
-  const encounterHeld = [...encounterHad];
   for (let i = fired.length - 1; i >= 0; i--) {
     const row = fired[i];
     if (!row.per) continue;
-    const id = `${row.key}:${row.name}`;
-    const list = row.per === "encounter" ? encounterHeld : held;
-    if (list.includes(id)) fired.splice(i, 1);
-    else list.push(id);
+    const id = `signature:${row.key}:${row.name}`;
+    const encounter = row.per === "encounter";
+    let kept;
+    if (combatant.isOwner) {
+      kept = encounter ? (await combatant.markEncounterOnce(id))?.added === true
+        : (await combatant.markRoundOnce(id))?.added === true;
+      if (kept && !encounter) claimed.push(id);
+    } else kept = !(encounter ? encounterHad : roundHad).includes(id);
+    if (!kept) fired.splice(i, 1);
   }
-  if (combatant.isOwner && held.length !== already.length) {
-    await combatant.setFlag("azeroth-rpg", "round", { ...(sameRound ? round : {}), number: fight.round, signatures: held });
-  }
-  if (combatant.isOwner && encounterHeld.length !== encounterHad.length) {
-    await combatant.setFlag("azeroth-rpg", "signatureEncounter", encounterHeld);
-  }
+  return claimed.sort();
 }
 
 /**
@@ -6557,9 +6695,15 @@ export async function castSpell({
   // clause's number, given by the caster as a Death spell, so the one healing judgement lets it
   // land on a Death Knight and its raised dead.
   if (undeadHeal && sparedUndead.some(Boolean)) {
-    if (!heal || heal.self) heal = { amount: undeadHeal, perTarget: true, explanation: game.i18n.format("AZEROTH.Card.HealUndeadInstead", { n: undeadHeal }) };
+    // **08 §20's FIRST OF THE DAMNED** (Gorefiend's Runeblade: *an undead creature it heals regains 2
+    // additional Health*; D-2156): the item naming this spell adds to the undead creature's heal alone,
+    // never to the caster's drain off the damage (`empowers.undeadHeal`, not `empowers.heal`).
+    const undeadMore = Math.max(0, Math.trunc(Number(empowered?.undeadHeal)) || 0);
+    const undeadAmount = undeadHeal + undeadMore;
+    if (undeadMore) roll.options.provenance.push({ label: (empowered.sources ?? []).join(", "), value: null, formula: game.i18n.format("AZEROTH.Card.HealAddRow", { n: undeadMore }) });
+    if (!heal || heal.self) heal = { amount: undeadAmount, perTarget: true, explanation: game.i18n.format("AZEROTH.Card.HealUndeadInstead", { n: undeadAmount }) };
     else heal.perTarget = true;
-    for (const [i, spared] of sparedUndead.entries()) healByTarget[i] = spared ? undeadHeal : (healByTarget[i] ?? null);
+    for (const [i, spared] of sparedUndead.entries()) healByTarget[i] = spared ? undeadAmount : (healByTarget[i] ?? null);
   }
 
   // **WHAT THE TALENTS LAY BESIDE THE SPELL'S OWN** (D-774): Pain Suppression's
@@ -8405,7 +8549,13 @@ export async function useFeature({
   if (refuseAncientDespair(actor, "feature")) return null;
   // A creature under Hex or Polymorph uses no feature (D-808), before anything is paid.
   if (actor?.refuseForcedShape?.("feature")) return null;
-  const sys = item.system;
+  // **02 §7's FIELD BREWS AND TOME OF SILVER AND ASH** (the Witch Hunter plan's wave 2a-A): the Prepare window and the
+  // Tome's learning Test, each a door of its own with nothing to pay (`effects/witch-hunter-brews.mjs#whBrewUse`).
+  const whOnUse = item?.type === "feature" ? classFeatureOnUse(item.system?.className ?? "", item.name) : null;
+  if (whOnUse?.whBrew) return (await import("../effects/witch-hunter-brews.mjs")).whBrewUse({ actor, item, onUse: whOnUse });
+  // `let`, never `const`: a Witch Hunter's Sign lays its own view over the stamp once it is paid for (its Resist, its DC,
+  // its damage and conditions; wave 2a-B), so the card below reads the Sign the chooser picked.
+  let sys = item.system;
   // A copy, never the caller's own array: an area Use replaces it with the creatures it
   // gathers (the B6 fix; the lead: *"Measure the area"*), and Cloudburst adds to it.
   const list = [...(targets ?? [])];
@@ -8544,6 +8694,12 @@ export async function useFeature({
   if (onUse?.inscribe === true) {
     const { useInscription } = await import("../effects/death-knight.mjs");
     return useInscription(actor, item);
+  }
+  // **02 §7's READ THE TRAIL** (the Witch Hunter plan's wave 2a-B): its own door - ten minutes, the **Investigation**
+  // Test through the roll dialog, the card with the GM's call and its Learn the type - and nothing to pay.
+  if (onUse?.wh?.trail === true) {
+    const { readTheTrail } = await import("../effects/witch-hunter-features.mjs");
+    return readTheTrail(actor, item);
   }
   // **A MOUNT MADE OVER A LONG REST** (02's Deathcharger, Charger's Blessing and Ritual of the
   // Steed; the Death Knight plan's door 9): its own door, which asks the window, the mount and
@@ -10593,6 +10749,16 @@ export async function useFeature({
     dhPlan = await judgeDemonHunterUse({ actor, item, onUse, rank, list, source: useSource });
     if (!dhPlan) return undoBinds();
   }
+  // **THE WITCH HUNTER'S USES, JUDGED BEFORE ANYTHING IS PAID** (02 §7; the Witch Hunter plan's wave 2a-B): a Sign and
+  // its Empowered line through the one chooser with its Energy, its cone, its creatures or its point; Expose Weakness's
+  // creature, type and Immune; the Medallion's pulse; The Last Hunt's minute (`effects/witch-hunter-features.mjs`).
+  // A cone gathers its creatures into the list in place.
+  let whPlan = null;
+  if (onUse?.wh) {
+    const { judgeWitchHunterUse } = await import("../effects/witch-hunter-features.mjs");
+    whPlan = await judgeWitchHunterUse({ actor, item, onUse, rank, list, source: useSource });
+    if (!whPlan) return undoBinds();
+  }
   // **THE CLASS TALENT AUDIT'S MARTIAL USES, JUDGED BEFORE ANYTHING IS PAID** (class agent A; D-1870 to
   // D-1879): Readiness's refill, Avenging Wrath's and Beacon of Hope's encounter effects, Unbreakable's
   // Reaction, Mending Word's friendly target and Mercy of Uther's condition (`effects/audit-martial.mjs`).
@@ -10809,6 +10975,13 @@ export async function useFeature({
     runesPaid = await spendRunesOn(actor, { kind: runeKind, count: payment.spent, before: () => spendTurnBudget(actor, shiftFree ? null : actionNow, { isAttack: sys.attack === true }),
       privacy: featurePrivacyKey(actor.id, useKey) });
     if (!runesPaid.ok) return undoBinds();
+  } else if (whPlan?.key === "sign") {
+    // **A SIGN'S ENERGY AND ITS HALF-ACTION, JUDGED AND PAID IN ONE QUEUED STEP** (02 §7's Signs; the architect review's
+    // A4, D-2135; the rune door's shape): the Energy judged again on the pool queue's fresh read, then the budget, then
+    // the write, so an Energy spent since the judgement refuses in words with the Half-Action kept, and a budget that
+    // refuses spends no Energy (`effects/witch-hunter-signs.mjs#paySignWithBudget`).
+    const { paySignWithBudget } = await import("../effects/witch-hunter-signs.mjs");
+    if (!(await paySignWithBudget({ actor, plan: whPlan, budget: () => spendTurnBudget(actor, shiftFree ? null : actionNow, { isAttack: sys.attack === true }) }))) return undoBinds();
   } else if (!(await spendTurnBudget(actor, shiftFree ? null : actionNow, { isAttack: sys.attack === true }))) return undoBinds();
   if (foresightCommit !== null && !foresightCommitValid(actor, foresight, foresightCommit)) return null;
   if (spellstealCommit !== null && !spellstealUseValid(actor, item, spellstealCommit)) return null;
@@ -10959,6 +11132,15 @@ export async function useFeature({
     answerLines.push(...await landDemonHunterUse({ actor, item, plan: dhPlan, list }));
     // Hunter's Leap's step, recorded on the card so its landing plays where the hunter came down (Phase 6, D-1580).
     if (dhPlan.step) stepsMade.push(dhPlan.step);
+  }
+  // **AND A WITCH HUNTER'S** (wave 2a-B), now that it is paid for: a Sign's Energy and what it lays, Expose Weakness's
+  // Vulnerable, the Medallion's pulse, The Last Hunt's minute. A Sign's card reads the plan's view of the feature
+  // (`plan.sys`: its Resist, its DC, its damage and conditions), laid over the stamp here.
+  if (whPlan?.key) {
+    const { landWitchHunterUse } = await import("../effects/witch-hunter-features.mjs");
+    // What this Use paid, so a landing the GM's client could not write gives it back (the architect review's A4, D-2136).
+    answerLines.push(...await landWitchHunterUse({ actor, item, plan: whPlan, list, paid: { pool: sys.cost?.pool ? pool : null, spent } }));
+    if (whPlan.sys) sys = { ...sys, ...whPlan.sys };
   }
   // **AND A MARTIAL ONE** (the class talent audit, class agent A), now that it is paid for.
   if (martialPlan?.key) {
@@ -12218,12 +12400,17 @@ export async function useFeature({
         // **WHETHER THE CARD'S TEST GOVERNS IT** (the lead: *"Land automatically"*; the
         // B6 review on Thunder Clap): a failure lays it at once, so its button stands
         // only for a creature whose Test the card has not recorded.
-        onFail: i.onFail === true
+        onFail: i.onFail === true,
+        // 04's Deep Lull's rounds, kept through this copy so `onFailInflicts` below can carry them (wave 4's live run:
+        // the copy dropped them and the Charmed was never lengthened).
+        ...(Number(i?.moreRounds) > 0 ? { moreRounds: Math.trunc(Number(i.moreRounds)) } : {})
       }))
     : [];
   // The conditions a failed Resist on this card lands (`dice/chat.mjs#rollResists`), as
   // the card offers them - only where the card offers a Test at all.
-  const onFailInflicts = sys.resist ? governed(inflicts).onFail.map(i => ({ condition: i.condition, value: i.value, until: i.until })) : [];
+  // 04's Deep Lull (*stays Charmed 1 more round per rank*; the Witch Hunter plan's wave 2b): the rounds the Lull Sign's
+  // Charmed is lengthened by, carried to the failed Test's landing (`dice/chat.mjs#rollResists`).
+  const onFailInflicts = sys.resist ? governed(inflicts).onFail.map(i => ({ condition: i.condition, value: i.value, until: i.until, ...(Number(i.moreRounds) > 0 ? { moreRounds: Math.trunc(Number(i.moreRounds)) } : {}) })) : [];
   // **WHAT THE MEASURED AREA LAYS AT ONCE** (the lead: *"Land automatically"*; the B6
   // fix - *Thunder Clap's Slowed lands on everyone (unresisted); its Prone only on a
   // failure*): each condition no Test of the card's governs (`rules/area-gather.mjs
@@ -12268,7 +12455,16 @@ export async function useFeature({
   // card and landed once it stands (`landLifebinder`), as the spell door records its own.
   let lifebinderRecord = null;
   if (success && sys.damage?.amount) {
-    const base = evaluateAmount(sys.damage.amount, scope) ?? 0;
+    // **08 §20's HEART OF THE BROOD** (*deals 2 additional damage with their Breath*; D-2156): a worn
+    // item's patch on this class feature, read through the one reader (`class-talents.mjs#patchRowsOf`
+    // over `AzerothActor#patchSources`) and added to the feature's own damage, each item a provenance row.
+    const itemDamageRows = actor.type === "character" ? patchRowsOf(actor.patchSources?.() ?? [], item.name) : [];
+    const itemDamage = itemPatchSum(itemDamageRows, "damage");
+    for (const r of itemDamageRows) {
+      const n = Math.trunc(Number(itemPayload(r)?.damage)) || 0;
+      if (n > 0) damageProvenance.push({ label: r.talent?.name ?? "", value: n });
+    }
+    const base = (evaluateAmount(sys.damage.amount, scope) ?? 0) + itemDamage.amount;
     // A Breath's school, chosen at 1b (stage 2B), else the stamp's own type.
     const school = champ.breath?.school ?? sys.damage.type ?? null;
     // **THE LANE AND THE LINES** (D-768). This door built neither: Elemental
@@ -12393,7 +12589,8 @@ export async function useFeature({
         // 04's Thunder Clap: *"10 + Str modifier + Proficiency"*): the Strength one where
         // the feature's `resistDc` names it, else the Spell DC (a creature's own), else
         // none - the table's (the B1 review: never the Strength one in silence).
-        dc: resistDcFor({
+        // A Witch Hunter's Sign names its own (the Spell DC, Firebloom cordial's rise on it; `witch-hunter-signs.mjs#signDC`).
+        dc: sys.resistDcValue ?? resistDcFor({
           kind: sys.resistDc ?? null, spellDC: actor.system.spellDC ?? actor.system.spells?.dc ?? null,
           strMod: actor.system.abilities?.str?.mod ?? 0, proficiency: actor.system.proficiency ?? 0,
           // 02 §5's Tail Sweep's 8 + Constitution modifier + Proficiency (`con8`; the lead, 2026-11-09).
@@ -12575,7 +12772,8 @@ export async function useFeature({
     // A gadget's attack lays what it lays and deals no damage of its own (door 7).
     attackNoDamage: Boolean(gadgetAttack) && !(Number(gadgetAttack.damage) > 0),
     // Divine Storm's attacks gain no Zeal (02 SS7).
-    noMomentum: attack && item.name === "Divine Storm",
+    // And 02's Whirling Steel's: *its hits give no Tempo* (the Witch Hunter plan's wave 2a-B).
+    noMomentum: attack && (item.name === "Divine Storm" || onUse?.wh?.whirl === true),
     // The option chosen, or ALL of them where the use took several (D-710):
     // one name line naming each, and each one's block under it.
     chosen: chosen
@@ -12747,6 +12945,9 @@ export async function useFeature({
       ...(chrono.cardFlags ?? {}),
       // The Sovereign's records its Resist reads (`effects/sovereign-features.mjs#sovereignAfterResist`).
       ...(sovPlan?.cardFlags ?? {}),
+      // The Witch Hunter's (wave 2a-B): which Sign, the Gale Sign's push on a failure, the Ember Sign's Scorched layer, the
+      // Tome's weakness record its Resist reads.
+      ...(whPlan?.cardFlags ?? {}),
       source: useSource ?? null,
       featureKey: useKey,
       casting: sys.casting === true,
@@ -12817,6 +13018,11 @@ export async function useFeature({
       ui.notifications?.warn(game.i18n.format("AZEROTH.Gather.PlaceFailed", { feature: item.name }));
       console.warn("azeroth-rpg | a Breath's cone could not be drawn", err);
     }
+  }
+  // **A SIGN'S CONE, SET DOWN WHERE IT WAS AIMED** (wave 2a-B), as the Breath's is.
+  if (posted && whPlan?.key) {
+    const { afterWitchHunterCard } = await import("../effects/witch-hunter-features.mjs");
+    await afterWitchHunterCard({ actor, item, plan: whPlan, posted });
   }
   if (hammerFalls) await hammerAfterUse(actor, item, list);
   await completeSpellLockGates({ actor, rolls: extraRolls, message: posted });
@@ -13844,7 +14050,7 @@ function attackFor(a, actor) {
  * @param {{actor: Actor, item: Item, targets?: object[]}} o
  * @returns {Promise<ChatMessage|null>}
  */
-export async function useGear({ actor, item, targets = null } = {}) {
+export async function useGear({ actor, item, targets = null, free = false } = {}) {
   if(item?.type==="gear"&&item.system?.identifier==="healers-kit-10-uses")
     return (await import("../effects/healer-kit.mjs")).useHealerKit({actor,item,targets});
   if (refuseDispersion(actor, "gear")) return null;
@@ -13853,6 +14059,12 @@ export async function useGear({ actor, item, targets = null } = {}) {
   // two refusals every gear Use meets (the review's L11), so Dispersion and Ancient Despair refuse it too.
   if (item?.type === "gear" && item.system?.identifier === "crystalized-soul")
     return (await import("../effects/demon-hunter-talents.mjs")).useCrystalizedSoul({ actor, item });
+  // **A WITCH HUNTER'S BREW IS ITS OWN DOOR** (08 §12's *Witch hunter's brews*; the Witch Hunter plan's wave 2a-A):
+  // drunk, laid on a weapon or thrown, with Toxicity, the non-maker's poison and the bomb's card
+  // (`effects/witch-hunter-brews.mjs#useBrew`), after the two refusals every gear Use meets. `free` is 04's
+  // Practiced Hands' door (wave 2b judges the talent's once a round and hands it in): no Half-Action is spent.
+  if (item?.type === "gear" && (await import("../rules/slots.mjs")).isBrew(item))
+    return (await import("../effects/witch-hunter-brews.mjs")).useBrew({ actor, item, targets: targets ?? [], free: free === true });
   // A consumable's reach, before anything is spent (O-288, D-893): after the two refusals that
   // must not inspect the item, before every door that pays.
   if (item && refuseOutOfRange(useRangeRefusal({ actor, name: shownName(item), text: useTextOf(item, actor), targets: targets ?? [] }))) return null;
@@ -14515,6 +14727,39 @@ export async function useSignature({ actor, item, targets = null, approved = nul
     ui.notifications?.warn(game.i18n.format("AZEROTH.Signature.FillNoSand", { name: item.name }));
     return null;
   }
+  // **08 §20's CLASS ITEMS' PRESSES, JUDGED BEFORE ANYTHING IS SPENT** (D-2156 to D-2162, D-768's
+  // order), each refusal said in words with nothing paid:
+  // - Gorefiend's Runeblade's The Council's Spirit needs a spent rune ON the blade to refill;
+  if (use.runeRefill && !(spentRunesOn(actor.system?.runes?.weapons ?? [], item.id) > 0)) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.ClassItem.NoSpentRune", { name: runLabel || item.name, actor: actor.name, item: item.name }));
+    return null;
+  }
+  // - Flame of Azzinoth is thrown at a point within its reach, so a creature named past the reach plus
+  //   the area's radius is refused (the Witch Hunter's bomb's own rule, D-2128);
+  if (use.reach) {
+    if (!lst.length) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.ClassItem.ThrowNoTarget", { name: runLabel || item.name }));
+      return null;
+    }
+    const far = await thrownOutOfReach(actor, lst, { range: use.reach, radius: areaRadius(use.area) });
+    if (far) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.ClassItem.ThrowOutOfReach", { name: runLabel || item.name, target: far.name, feet: far.feet, reach: far.reach }));
+      return null;
+    }
+  }
+  // - The First Tome's The Drust Chapter names one creature whose type the Tome can learn.
+  let drust = null;
+  if (use.learnType) {
+    const tomeDoor = await import("../effects/witch-hunter-tome.mjs");
+    const seen = lst.length === 1 ? targetActorOf(lst[0]) : null;
+    const type = seen ? tomeDoor.typeOfActor(seen) : null;
+    const why = !seen ? "one" : !type ? "type" : !tomeDoor.tomeOf(actor).started ? "tome" : null;
+    if (why) {
+      ui.notifications?.warn(game.i18n.format(`AZEROTH.ClassItem.Drust.${why}`, { name: runLabel || item.name, actor: actor.name, target: seen?.name ?? "" }));
+      return null;
+    }
+    drust = { type, seen, tomeDoor };
+  }
   // **PHASE B2's PRESSES, JUDGED BEFORE ANYTHING IS SPENT** (D-912, D-768's order). Each
   // refusal is said in words with nothing paid.
   const b2 = await legendaryPressPlan({ actor, item, use, targets: lst, answers, runLabel });
@@ -14678,6 +14923,41 @@ export async function useSignature({ actor, item, targets = null, approved = nul
   }
   // **PHASE B2's PRESSES, PAID FOR** (D-912): what each does now that nothing can refuse.
   lines.push(...await legendaryPressLands({ actor, item, use, plan: b2, runLabel, answers }));
+  // **THE CLASS ITEMS' PRESSES, PAID FOR** (D-2156, D-2162): The Council's Spirit's rune through the one
+  // rune writer (`documents/runes.mjs`), on this blade alone; The Drust Chapter's type through the Tome's
+  // one writer (`learnType`), and its Studied to the encounter's end on a carrier the Tome's readers read.
+  // **A RUNE ANOTHER REFILL TOOK FIRST** (the phase 3 review): the judgement saw a spent rune on the
+  // blade, and a refill landing in between (Blood Tap, Empower Runeweapon, a rest) left none for this
+  // write. Nothing landed, so the press keeps its use and the Half-Action it paid is given back, in words.
+  let keepUse = false;
+  if (use.runeRefill) {
+    const { refillRunesOn } = await import("../documents/runes.mjs");
+    const back = await refillRunesOn(actor, { count: use.runeRefill, itemId: item.id });
+    if (back > 0) lines.push(game.i18n.format("AZEROTH.ClassItem.RuneRefilled", { name: actor.name, n: back, item: item.name }));
+    else {
+      keepUse = true;
+      lines.push(game.i18n.format("AZEROTH.ClassItem.RuneTaken", { name: runLabel || item.name, actor: actor.name, item: item.name }));
+      const fight = actor.activeFight?.() ?? null;
+      const mine = use.action === "half" && fight?.started ? (fight.getCombatantsByActor?.(actor)?.[0] ?? null) : null;
+      if (mine?.isOwner) {
+        await mine.grantHalfActions(1);
+        lines.push(game.i18n.localize("AZEROTH.ClassItem.RuneTakenHalf"));
+      }
+    }
+  }
+  if (drust) {
+    await drust.tomeDoor.learnType(actor, drust.type);
+    const typeWord = game.i18n.localize(AZEROTH.creatureTypes?.[drust.type] ?? drust.type);
+    await actor.createEmbeddedDocuments("ActiveEffect", [{
+      name: game.i18n.format("AZEROTH.ClassItem.Drust.EffectName", { run: runLabel || item.name, type: typeWord }),
+      img: item.img, origin: actor.uuid, showIcon: CONST.ACTIVE_EFFECT_SHOW_ICON.ALWAYS, system: { changes: [] },
+      // *Until the end of the encounter*: the fight's end, else - out of a fight - ten minutes of the
+      // world's clock (MY READING, D-2162).
+      ...(untilEncounterEnd(actor) ?? minuteSpan(actor, 10) ?? {}),
+      flags: { "azeroth-rpg": { [DRUST_STUDIED_FLAG]: { type: drust.type, item: item.uuid } } }
+    }]);
+    lines.push(game.i18n.format("AZEROTH.ClassItem.Drust.Learned", { name: actor.name, target: drust.seen.name, type: typeWord }));
+  }
   // **05's TEMPORARY HEALTH A SIGNATURE GRANTS** (a Classic find's `T-use-absorb`,
   // the Mark of the Dragon Lord's *gain 13 temporary Health until the end of the
   // encounter*; D-777), read off the item's own sentence and granted to the
@@ -14702,6 +14982,7 @@ export async function useSignature({ actor, item, targets = null, approved = nul
   // other Signatures*), at its own dotted path - never an array index (D-671).
   let uses = null;
   if (approved) uses={value:0,max:1};
+  else if (use.uses?.per && keepUse) uses = { value: use.uses.value ?? 0, max: use.uses.max };
   else if (use.uses?.per) {
     const path = entry ? `system.signatureEffect.presses.${press}.uses.value` : "system.signatureEffect.use.uses.value";
     await item.update({ [path]: Math.max(0, (use.uses.value ?? 0) - 1) });
@@ -14739,9 +15020,13 @@ export async function useSignature({ actor, item, targets = null, approved = nul
   }
 
   // 6. ONE CARD, the feature's own.
-  const damage = use.damage?.amount
+  // **A THROWN AREA'S DAMAGE** (Flame of Azzinoth: *Fel damage equal to 4 plus your tier, or half that,
+  // rounded down, on a success, and Ward applies*; D-2161): read at the bearer's tier, each target's met
+  // by its own Armor Points and Ward, and the half a passed Test leaves - the bomb card's own shape.
+  const thrown = use.reach ? thrownDamage({ actor, use, list: lst }) : null;
+  const damage = thrown?.damage ?? (use.damage?.amount
     ? { final: use.damage.amount, explanation: String(use.damage.amount) }
-    : null;
+    : null);
   const resist = use.resist?.resilience
     // A CREATURE'S SPELL DC IS `system.spells.dc` (14 §1's `**Spells** (DC n)`
     // run); `system.spellDC` is the character's derived one and does not exist
@@ -14771,7 +15056,7 @@ export async function useSignature({ actor, item, targets = null, approved = nul
   // **THE RESIST NAMES THE CREATURE THE PRESS ANSWERS** (The Wyrm's Roar; the lead, D-915:
   // *"Yes"*): one row for the attacker the card recorded, in the feature door's own shape,
   // so the card names it and its owner or the GM rolls it with nothing selected.
-  const resistRows = signatureResistRows({ resist, list: lst, answering: Boolean(b2.answering) });
+  const resistRows = signatureResistRows({ resist, list: lst, answering: Boolean(b2.answering) || Boolean(use.reach) });
 
   const content = await renderTemplate(TEMPLATE.feature, {
     config: AZEROTH,
@@ -14803,8 +15088,11 @@ export async function useSignature({ actor, item, targets = null, approved = nul
     content,
     flags: { "azeroth-rpg": {
       kind: "signature", itemId: item.id, title: item.name, targets: lst,
-      damageByTarget: lst.map(() => (damage ? { damage: damage.final } : null)),
+      damageByTarget: thrown ? thrown.byTarget : lst.map(() => (damage ? { damage: damage.final } : null)),
       heal: null, sl: 0, area, summon,
+      // A thrown area's half on a pass (D-2161), and no attack (the bomb's own flags).
+      ...(thrown ? { notAttack: true } : {}),
+      ...(thrown?.half ? { halfOnPass: true, passedByTarget: thrown.passed, damagePassed: thrown.damagePassed } : {}),
       ...(press ? { press } : {}),
       ...(onFailInflicts.length ? { onFailInflicts } : {}),
       // What a failed Resist ends beside its conditions (The Sunwell's Torrent, D-912).
@@ -14822,6 +15110,74 @@ export async function useSignature({ actor, item, targets = null, approved = nul
   // The attack Tests, the totem and the healing spell a press hands on ran before it was
   // paid (D-913, F3), above.
   return card;
+}
+
+/**
+ * **A THROWN PRESS'S RADIUS** (Flame of Azzinoth's *within 10 feet of that point*; D-2161): the feet the
+ * area's words carry, or 0 where they name none.
+ *
+ * @param {string} area
+ * @returns {number}
+ */
+function areaRadius(area = "") {
+  const m = /(\d+)\s*(?:ft|feet)/i.exec(String(area ?? ""));
+  return m ? Math.max(0, Number(m[1])) : 0;
+}
+
+/**
+ * **THE FIRST CREATURE A THROWN PRESS CANNOT REACH** (Flame of Azzinoth: *throw it to a point within 30
+ * feet*; D-2161): each creature named measured from the bearer's token, footprint to footprint
+ * (`canvas/footprints.mjs#feetApart`, D-732), judged by the bomb's own rule (`brewing.mjs
+ * #bombThrowRefusal`, D-2128). A creature with no token is not measured and never refused.
+ *
+ * @returns {Promise<{name: string, feet: number, reach: number}|null>}
+ */
+async function thrownOutOfReach(actor, list = [], { range = 30, radius = 0 } = {}) {
+  if (!list.length) return null;
+  const { casterTokenOn, targetTokenDoc } = await import("../canvas/range.mjs");
+  const { feetApart } = await import("../canvas/footprints.mjs");
+  const { bombThrowRefusal } = await import("../rules/brewing.mjs");
+  const feet = list.map(tg => {
+    const doc = targetTokenDoc(tg);
+    const own = doc ? casterTokenOn(actor, doc.parent, { target: doc }) : null;
+    return doc && own ? feetApart(own, doc) : null;
+  });
+  const far = bombThrowRefusal({ feet, range, radius });
+  return far ? { name: list[far.index]?.name ?? "", feet: Math.round(far.feet), reach: far.reach } : null;
+}
+
+/**
+ * **A THROWN PRESS'S DAMAGE, TARGET BY TARGET** (Flame of Azzinoth; D-2161): the amount its formula comes
+ * to at the bearer's tier (`rules/expressions.mjs`, through `evaluateAmount`), met by each creature's own
+ * Armor Points and Ward, and - where the press says so - the half a passed Test leaves. Null where it
+ * deals nothing.
+ */
+function thrownDamage({ actor, use, list = [] }) {
+  const tier = actor?.system?.tier ?? 1;
+  const amount = use.damage?.formula
+    ? Math.max(0, Math.trunc(Number(evaluateAmount(use.damage.formula, { tier }))) || 0)
+    : Math.max(0, Math.trunc(Number(use.damage?.amount)) || 0);
+  const type = use.damage?.type ?? null;
+  if (!(amount > 0) || !type) return null;
+  const halved = dealtHalvedBy(actor);
+  const mitigate = (tg, passed = false) => resolveDamage({
+    rating: amount, sl: 0, kind: type === "physical" ? "physical" : "magical", school: type,
+    fireTakenBonus: tg?.fireTakenBonus ?? 0, apByLocation: tg?.apByLocation ?? {}, ward: tg?.wardBySchool?.[type] ?? 0,
+    schoolArmor: tg?.schoolArmor?.[type] ?? 0, immune: tg?.immune ?? [], vulnerable: tg?.vulnerable ?? [], slAddsToDamage: false,
+    dealtHalved: halved, passedHalf: passed
+  });
+  const half = use.damage?.half === true;
+  const byTarget = list.map(tg => mitigate(tg));
+  const first = byTarget[0] ?? mitigate(null);
+  return {
+    amount, type, half, byTarget,
+    passed: half ? list.map(tg => mitigate(tg, true)) : [],
+    damagePassed: half ? passedHalf(amount) : null,
+    damage: {
+      final: first.damage,
+      explanation: game.i18n.format("AZEROTH.ClassItem.ThrownDamage", { n: amount, type: game.i18n.localize(AZEROTH.damageTypes[type] ?? type) })
+    }
+  };
 }
 
 /**

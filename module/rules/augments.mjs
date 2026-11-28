@@ -113,11 +113,23 @@ function flaggedAugment(item) {
   if (!AUGMENTS[category]) return null;
   // A fixed-bonus category (the Hourglass) is that bonus whatever the flag says.
   const fixed = fixedBonus(category);
+  // **A NAMED AUGMENT IS WORTH THE TIER'S BONUS** (08 §20: *at the bonus section 9
+  // sets for your tier*; D-2152): the flag says `"tier"`, and the number is the
+  // bearer's, read by `heldAugment` where the tier is known.
+  if (fixed === null && flag.bonus === BY_TIER) return { category, bonus: null, byTier: true };
   const bonus = fixed ?? Number(flag.bonus);
   if (flag.bonus === undefined && fixed === null) return null;
   if (!Number.isFinite(bonus)) return null;
   return { category, bonus };
 }
+
+/**
+ * The flag value a §20 named Augment stamps for its bonus (D-2152): Heart of
+ * the Brood, the Grimoire of the Fourth Signatory, the Codex of the Five Pylons
+ * and the Idol of the Dreamer are each *at the bonus section 9 sets for your
+ * tier*, a number that moves with the bearer and so is never stored.
+ */
+export const BY_TIER = "tier";
 
 /**
  * What an item is, as an Augment, or null where it is not one.
@@ -157,7 +169,8 @@ export function augmentOf(item, depth = 0) {
       forms: entry.forms,
       bonus: flagged.bonus,
       planted: flagged.category === PLANTED,
-      holds: poolHeld(flagged.category)
+      holds: poolHeld(flagged.category),
+      ...(flagged.byTier ? { byTier: true } : {})
     };
   }
   const section = String(sys?.source?.section ?? "");
@@ -202,19 +215,43 @@ export function canCarry(category, classNames = []) {
 }
 
 /**
+ * **AN AUGMENT AS A ROW PRINTS IT** (the phase 2 review: a by-tier Augment drew
+ * *+null*): the derived `system.augment` with a by-tier bonus read at the
+ * bearer's tier (07 §3's table), and every other field as it stands. A copy,
+ * never the item's own object; null for no Augment.
+ *
+ * @param {object|null} augment  `item.system.augment`
+ * @param {number|null} tier     the bearer's tier, or null where none is known
+ * @returns {object|null}
+ */
+export function augmentAtTier(augment, tier = null) {
+  if (!augment || typeof augment !== "object") return null;
+  if (!augment.byTier) return { ...augment };
+  const known = tier !== null && tier !== undefined && Number.isFinite(Number(tier));
+  return { ...augment, bonus: known ? bonusAtTier(tier) : null };
+}
+
+/**
  * The Augment in hand, out of everything carried: the equipped one. A caster
  * casts through ONE - 07 §3 speaks of *a caster holding one* throughout - so
  * equipping a second puts the first away, and this reads the first equipped.
  *
+ * **`.bonus` IS NULL WITHOUT A TIER** for a named Augment worth the tier's bonus
+ * (`byTier`, D-2152): pass the bearer's tier, or read `augmentAtTier`.
+ *
  * @param {Array} items  carried items
  * @returns {{item, ...augmentOf}|null}
  */
-export function heldAugment(items = []) {
+export function heldAugment(items = [], { tier = null } = {}) {
   for (const item of items) {
     const sys = item?.system ?? {};
     if (sys.equipped !== true) continue;
     const augment = augmentOf(item);
-    if (augment) return { ...augment, item, name: item.name };
+    if (!augment) continue;
+    // A named Augment's bonus is the bearer's tier's (D-2152); with no tier to
+    // hand it stays null, which every surface prints as no number.
+    const bonus = augment.byTier ? (Number.isFinite(Number(tier)) && tier !== null ? bonusAtTier(tier) : null) : augment.bonus;
+    return { ...augment, bonus, item, name: item.name };
   }
   return null;
 }
@@ -250,8 +287,8 @@ export function carriedAugments(items = []) {
  * @param {string[]} classNames the caster's classes
  * @returns {{value, name, category, planted, note}|null}
  */
-export function castingAugment(items = [], classNames = []) {
-  const held = heldAugment(items);
+export function castingAugment(items = [], classNames = [], { tier = null } = {}) {
+  const held = heldAugment(items, { tier });
   if (!held) return null;
   if (!canCarry(held.category, classNames)) return null;
   return {

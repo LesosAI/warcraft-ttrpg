@@ -111,7 +111,11 @@ const GEAR_KIND = Object.freeze({
   "Parts": "sundry",
   "Fish and game": "meal",
   "Harness and barding": "barding",
-  "Storage and carry": "smallContainer"
+  "Storage and carry": "smallContainer",
+  // The Witch Hunter's (the Witch Hunter plan): a brew is a flask, as an elixir is (it takes no bag slot,
+  // `slots.mjs#isBrew`, and still weighs its row), and the medallion is a worn thing.
+  "Witch hunter's brews": "flask",
+  "Witch hunter's medallion": "garment"
 });
 
 /** The storage entries 08 §11 weighs on their own line, by name. */

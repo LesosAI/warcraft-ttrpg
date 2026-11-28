@@ -21,6 +21,7 @@ import { hasUse } from "../rules/consumables.mjs";
 import { coatingName } from "../rules/consumables.mjs";
 import { hasCharges } from "../rules/containers.mjs";
 import { isWornSlot } from "../rules/worn.mjs";
+import { augmentAtTier } from "../rules/augments.mjs";
 import { rarityClass } from "../helpers/rarity.mjs";
 import { reloadStatus } from "./reload.mjs";
 import { dispersionRefusal } from "../rules/dispersion.mjs";
@@ -66,7 +67,8 @@ export function carriedRows(actor) {
       equipped: item.system.equipped === true,
       // 08 §11's slot, as a chip beside the name.
       slot: isWornSlot(item.system.slot) ? game.i18n.localize(AZEROTH.wornSlots[item.system.slot]) : null,
-      augment: !hidden && item.system.augment ? { ...item.system.augment } : null,
+      // A by-tier Augment's bonus is the bearer's tier's (D-2152), never *+null*.
+      augment: !hidden && item.system.augment ? augmentAtTier(item.system.augment, actor?.system?.tier ?? null) : null,
       rarityClass: rarityClass(item.system.rarity),
       // What Use does, where 08 gives the thing one (D-668).
       usable: hasUse(item.system.use),

@@ -149,7 +149,12 @@ export function primTemp({ spent = 0, gildedSkin = 0 } = {}) {
 }
 
 /** **ROYAL DUE'S PRICE**: 2 Tribute, 1 while Crowned in Blood stands. */
-export const royalDueCost = (crowned = false) => (crowned ? ROYAL_DUE.crownedTribute : ROYAL_DUE.tribute);
+export const royalDueCost = (crowned = false, set = null) => {
+  const base = crowned ? ROYAL_DUE.crownedTribute : ROYAL_DUE.tribute;
+  // **A PRICE A WORN ITEM SETS** (the Darkfallen Choker: *Royal Due costs a Sovereign wearing it 1
+  // Tribute*; D-2156): the lower of the two, never a raise (`rules/item-patches.mjs#itemPatchedCost`).
+  return Number.isInteger(set) && set >= 0 && set < base ? set : base;
+};
 
 /** **ROYAL DUE'S DAMAGE**: half the Charisma modifier, rounded down, and at least 1 (B.13 Q33). */
 export const royalDueAmount = cha => Math.max(ROYAL_DUE.min, halfCha(cha));
@@ -158,12 +163,12 @@ export const royalDueAmount = cha => Math.max(ROYAL_DUE.min, halfCha(cha));
  * **WHETHER ROYAL DUE IS OFFERED** on a blow: the feature held, the struck creature the prey and still
  * standing, the turn's once not spent, the Tribute there. Words for each refusal, or null.
  */
-export function royalDueRefusal({ holds = false, isPrey = false, used = false, tribute = 0, crowned = false, dealt = 0 } = {}) {
+export function royalDueRefusal({ holds = false, isPrey = false, used = false, tribute = 0, crowned = false, dealt = 0, set = null } = {}) {
   if (!holds) return "notHeld";
   if (!isPrey) return "notPrey";
   if (!(whole(dealt) > 0)) return "noDamage";
   if (used) return "used";
-  if (whole(tribute) < royalDueCost(crowned)) return "tribute";
+  if (whole(tribute) < royalDueCost(crowned, set)) return "tribute";
   return null;
 }
 

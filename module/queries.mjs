@@ -40,6 +40,7 @@ import { ANTI_MAGIC_SHIELD_QUERY, antiMagicShieldQueryHandler } from "./effects/
 import { PLANT_TOTEM_QUERY, plantTotemQueryHandler } from "./documents/totems.mjs";
 import { LAY_BANE_QUERY, LAY_BOON_QUERY, layBaneQueryHandler, layBoonQueryHandler } from "./effects/banes.mjs";
 import { NO_HEALING_QUERY, noHealingQueryHandler } from "./effects/no-healing.mjs";
+import { WEAPON_CUT_QUERY, weaponCutQueryHandler } from "./effects/weapon-cut.mjs";
 import { AFFLICT_QUERY, afflictQueryHandler } from "./effects/afflictions.mjs";
 import { BEACON_HEAL_QUERY, beaconHealQueryHandler } from "./effects/beacon.mjs";
 import { LEGENDARY_QUERY, legendaryQueryHandler } from "./effects/legendary-doors.mjs";
@@ -97,7 +98,13 @@ import { DEATH_WATCH_QUERY, deathWatchQueryHandler } from "./effects/death-watch
 import { SOVEREIGN_QUERY, sovereignQueryHandler } from "./effects/sovereign-core.mjs";
 import { SOV_FEATURES_QUERY, sovereignFeaturesQueryHandler } from "./effects/sovereign-features.mjs";
 import { DH_FEATURES_QUERY, demonHunterQueryHandler } from "./effects/demon-hunter-features.mjs";
+// The Witch Hunter's features (wave 2a-B): the Rowan Sign's Ward, Expose Weakness, the Medallion's warning, the Ash ring.
+import { WH_FEATURES_QUERY, witchHunterQueryHandler } from "./effects/witch-hunter-features.mjs";
 import { DH_TALENTS_QUERY, demonHunterTalentsQueryHandler } from "./effects/demon-hunter-talents.mjs";
+import { WH_TOME_QUERY, witchHunterTomeQueryHandler } from "./effects/witch-hunter-tome.mjs";
+import { WH_BREWS_QUERY, witchHunterBrewsQueryHandler } from "./effects/witch-hunter-brews.mjs";
+// 04's Witch Hunter talents (wave 2b): Bursting Rowan's burst on the hunter's enemies.
+import { WH_TALENTS_QUERY, witchHunterTalentsQueryHandler } from "./effects/witch-hunter-talents.mjs";
 import { SOVEREIGN_SPELL_QUERY, sovereignSpellQueryHandler } from "./effects/sovereign-spells.mjs";
 import { DH_SPELL_QUERY, demonHunterSpellQueryHandler } from "./effects/demon-hunter-spells.mjs";
 // 07's Devour the Spell at a creature's turn start: the GM asks the hunter's answering client to cast (D-1726).
@@ -548,6 +555,8 @@ export function registerQueries() {
   // a heal landing on a chosen creature this client does not own.
   CONFIG.queries[LAY_BOON_QUERY] = layBoonQueryHandler;
   CONFIG.queries[NO_HEALING_QUERY] = noHealingQueryHandler;
+  // 08 SS18's Unholy Weapon: its cut laid on a creature this client does not own (D-2166).
+  CONFIG.queries[WEAPON_CUT_QUERY] = weaponCutQueryHandler;
   CONFIG.queries[AFFLICT_QUERY] = afflictQueryHandler;
   CONFIG.queries[BEACON_HEAL_QUERY] = beaconHealQueryHandler;
   // A Vengeance holder another user owns (the architect's review of D-772).
@@ -633,9 +642,17 @@ export function registerQueries() {
   // 02 §7's Demon Hunter (the Demon Hunter plan's Phase 4a): Mana Rend's Power, Bane of the Legion's mark and a
   // soul marked devoured, on a creature the hunter's client does not own (`effects/demon-hunter-features.mjs`).
   CONFIG.queries[DH_FEATURES_QUERY] = demonHunterQueryHandler;
+  CONFIG.queries[WH_FEATURES_QUERY] = witchHunterQueryHandler;
   // 04's Demon Hunter talents (the Demon Hunter plan's Phase 5): Sweeping Arc's and Turn Their Fire's strike, Swallow
   // Their Magic's and Silence the Weave's ended spells, and Feast of Souls' Tests (`effects/demon-hunter-talents.mjs`).
   CONFIG.queries[DH_TALENTS_QUERY] = demonHunterTalentsQueryHandler;
+  // 02 §7's Witch Hunter (the plan's wave 2a-A): the Tome written on a character another client asked for, and a
+  // spoiled brew deleted off an actor the brewer's client does not own (`effects/witch-hunter-tome.mjs`, `-brews.mjs`).
+  CONFIG.queries[WH_TOME_QUERY] = witchHunterTomeQueryHandler;
+  CONFIG.queries[WH_BREWS_QUERY] = witchHunterBrewsQueryHandler;
+  // 04's Witch Hunter talents (wave 2b): Bursting Rowan's burst, worked out again off the hunter's sheet
+  // (`effects/witch-hunter-talents.mjs`).
+  CONFIG.queries[WH_TALENTS_QUERY] = witchHunterTalentsQueryHandler;
   // The Sovereign's spells' writes on a creature, a door or the caster the asker does not own (D-1240).
   CONFIG.queries[SOVEREIGN_SPELL_QUERY] = sovereignSpellQueryHandler;
   // The Demon Hunter's spells' writes on a creature, a card or the caster the asker does not own (D-1540): the brand,

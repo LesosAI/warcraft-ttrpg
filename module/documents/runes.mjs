@@ -208,11 +208,12 @@ export async function settleRuneRiders(actor, paid = [], { privacy = null } = {}
  * @param {{kind?: "blood"|"frost"|"any", count?: number}} [o]
  * @returns {Promise<number>}  how many came back
  */
-export async function refillRunesOn(actor, { kind = "any", count = Infinity } = {}) {
+export async function refillRunesOn(actor, { kind = "any", count = Infinity, itemId = null } = {}) {
   return serially(actor, async () => {
     const rows = actor?.system?.runes?.weapons ?? [];
     if (!rows.length) return 0;
-    const { runes, refilled } = refillRunes(rows, { kind, count });
+    // `itemId`: one weapon's runes alone (Gorefiend's Runeblade's The Council's Spirit; D-2156).
+    const { runes, refilled } = refillRunes(rows, { kind, count, itemId });
     const writes = runeWrites(rows, runes, storedOf(actor));
     if (writes.length) await actor.updateEmbeddedDocuments("Item", writes);
     return refilled;

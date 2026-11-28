@@ -145,6 +145,9 @@ import { DH_FEATURE_ANIMATIONS, DH_FILTERS, DH_SPELL_ANIMATIONS, liveTalentAnima
 import { AUDIT_CUNNING_ANIMATIONS } from "./audit-cunning-animations.mjs";
 // The class talent audit's Mage, Warlock and Druid (D-1890 to D-1899).
 import { AUDIT_ARCANE_ANIMATIONS } from "./audit-arcane-animations.mjs";
+// The Witch Hunter's Signs, features, brews, states, Tempo and talents, and its recolours (the Witch Hunter plan's
+// wave 3; D-2095 to D-2099). A talent's row joins only once the door writing its record has landed.
+import { WH_FEATURE_ANIMATIONS, WH_FILTERS, liveWhTalentAnimations } from "./witch-hunter-animations.mjs";
 import { FORCED_MOVE_KEY } from "./animation-records.mjs";
 
 /* ------------------------------------------------------------------ */
@@ -322,7 +325,9 @@ export const FILTERS = Object.freeze({
   // The Sovereign's blood red, crimson gaze and majesty (`rules/sovereign-animations.mjs`).
   ...SOV_FILTERS,
   // The Demon Hunter's fel washes for a near-white file (`rules/demon-hunter-animations.mjs`).
-  ...DH_FILTERS
+  ...DH_FILTERS,
+  // The Witch Hunter's silver, ash, rowan, dark blood and Tempo red (`rules/witch-hunter-animations.mjs`).
+  ...WH_FILTERS
 });
 
 /* ------------------------------------------------------------------ */
@@ -4073,7 +4078,11 @@ export const FEATURE_ANIMATIONS = Object.freeze({
   ...AUDIT_CUNNING_ANIMATIONS,
   // The class talent audit's Mage, Warlock and Druid (D-1890 to D-1899; `rules/audit-arcane-animations.mjs`).
   ...AUDIT_ARCANE_ANIMATIONS,
-  ...liveTalentAnimations()
+  ...liveTalentAnimations(),
+  // 02 §7's Witch Hunter: each Sign, its features, the nineteen brews, its states and the Tempo's rise and fall, and
+  // 04's talents whose doors have landed (`rules/witch-hunter-animations.mjs`; the Witch Hunter plan's wave 3).
+  ...WH_FEATURE_ANIMATIONS,
+  ...liveWhTalentAnimations()
 });
 
 /* ------------------------------------------------------------------ */

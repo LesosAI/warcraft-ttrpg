@@ -30,6 +30,8 @@ import { FEATURE_EFFECT_KEYS, askerMay, dropJudgement, layJudgement, obeyJudgeme
 import { LATCH_FEET, cleanLeash } from "../rules/leash.mjs";
 import { LATCH_ESCAPE, LATCH_KEY, cleanLatch, latchEnds, latchRefusal, latchesOn } from "../rules/latch.mjs";
 import { gmAbsentFor } from "../rules/gm-writes.mjs";
+import { patchRowsOf } from "../rules/class-talents.mjs";
+import { itemPatchedCost } from "../rules/item-patches.mjs";
 import { ART_EXT, PORTRAIT_DIR, TOKEN_DIR } from "../rules/bestiary-art.mjs";
 import { conditionEffectOf } from "../rules/condition-carriers.mjs";
 import { onClawHit, isClaws } from "../rules/claw-hit.mjs";
@@ -1171,10 +1173,11 @@ export async function offerRoyalDue({ by, target, dealt = 0, attack = true, spel
   if (!by || !target || by === target || !(attack || spell)) return null;
   const crowned = values(by.effects).some(e => e.active !== false && e.flags?.[SCOPE]?.crownedInBlood);
   const key = turnKey(by, ROYAL_DUE.mark);
+  const set = royalDueSet(by);
   const refusal = royalDueRefusal({ holds: by.hasFeature?.(ROYAL_DUE.feature) === true, isPrey: isPrey(by, target), used: Boolean(key && roundMarks(by).includes(key)),
-    tribute: tributePoolOf(by)?.value ?? 0, crowned, dealt });
+    tribute: tributePoolOf(by)?.value ?? 0, crowned, dealt, set });
   if (refusal) return null;
-  const cost = royalDueCost(crowned);
+  const cost = royalDueCost(crowned, set);
   const n = royalDueAmount(chaOf(by));
   return ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor: by }),
@@ -1182,6 +1185,17 @@ export async function offerRoyalDue({ by, target, dealt = 0, attack = true, spel
       [{ label: t("AZEROTH.Sovereign.RoyalDue.Button", { cost }), data: `data-sovereign-offer="royalDue"` }]),
     flags: { [SCOPE]: { kind: "sovOffer", offer: "royalDue", sovereignUuid: by.uuid, targetUuid: target.uuid } }
   });
+}
+
+/**
+ * **WHAT A WORN ITEM SETS ROYAL DUE AT** (the Darkfallen Choker; D-2156): the items' patches on 02's
+ * Royal Due through the one reader (`class-talents.mjs#patchRowsOf` over `AzerothActor#patchSources`),
+ * or null where none sets it.
+ */
+function royalDueSet(by) {
+  const rows = patchRowsOf(by?.patchSources?.() ?? [], ROYAL_DUE.feature);
+  const priced = itemPatchedCost(rows, royalDueCost(false));
+  return priced.by === null ? null : priced.cost;
 }
 
 /** An offer card's HTML: its text and its buttons, pressed by the Sovereign's owner alone. */
@@ -1199,16 +1213,17 @@ export async function landRoyalDue(message) {
   if (!by?.isOwner || !target) return null;
   const crowned = values(by.effects).some(e => e.active !== false && e.flags?.[SCOPE]?.crownedInBlood);
   const key = turnKey(by, ROYAL_DUE.mark);
+  const set = royalDueSet(by);
   const refusal = royalDueRefusal({ holds: by.hasFeature?.(ROYAL_DUE.feature) === true, isPrey: isPrey(by, target), used: Boolean(key && roundMarks(by).includes(key)),
-    tribute: tributePoolOf(by)?.value ?? 0, crowned, dealt: 1 });
+    tribute: tributePoolOf(by)?.value ?? 0, crowned, dealt: 1, set });
   if (refusal) return refuse(`AZEROTH.Sovereign.RoyalDue.Refuse.${refusal}`, { name: by.name, target: target.name });
   if (noGM(target)) return refuse("AZEROTH.Sovereign.NoGM", { name: ROYAL_DUE.feature, target: target.name });
   const { claimCardPress } = await import("./card-presses.mjs");
   const claimed = await claimCardPress(message, { kind: "once", press: "royalDue" });
   if (!claimed.ok) return refuse("AZEROTH.TalentLine.Pressed");
   if (key) await by.activeFight?.()?.getCombatantsByActor?.(by)?.[0]?.markRoundOnce?.(key);
-  const paid = await spendTribute(by, royalDueCost(crowned));
-  if (!paid.ok) return refuse("AZEROTH.Sovereign.Short", { name: ROYAL_DUE.feature, n: royalDueCost(crowned) });
+  const paid = await spendTribute(by, royalDueCost(crowned, set));
+  if (!paid.ok) return refuse("AZEROTH.Sovereign.Short", { name: ROYAL_DUE.feature, n: royalDueCost(crowned, set) });
   const dealt = await strikeShadow({ by, target, rating: royalDueAmount(chaOf(by)), name: ROYAL_DUE.feature, why: "royalDue" });
   if (dealt > 0) await by.applyHealing(dealt, { from: by, feature: true, featureName: ROYAL_DUE.feature, givenBy: by });
   return card(by, [t("AZEROTH.Sovereign.RoyalDue.Landed", { name: by.name, target: target.name, n: dealt })], { royalDue: true, targetUuid: target.uuid });

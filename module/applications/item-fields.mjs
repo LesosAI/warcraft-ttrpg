@@ -496,6 +496,8 @@ const DERIVED_WORDS = Object.freeze({
   craftedBy: "Crafted by {trade}, tier {tier}",
   craftedByMore: "{trade}, tier {tier}",
   materialTier: "{family}, tier {tier}",
+  // A named Augment worth the tier's bonus (D-2152): no number until a bearer holds it.
+  augmentByTier: "The bonus for your tier",
   professions: Object.freeze({}),
   materialFamilies: Object.freeze({}),
   consumable: Object.freeze({}),
@@ -645,6 +647,16 @@ export function derivedValue(path, system, labels = null) {
     if (!m || !m.family) return null;
     const family = words.materialFamilies?.[m.family] ?? m.family;
     return m.tier === null || m.tier === undefined ? family : fill(words.materialTier, { family, tier: m.tier });
+  }
+
+  // **A NAMED AUGMENT IS WORTH THE TIER'S BONUS** (08 SS20, D-2152): the item
+  // has no bearer and so no number, and a bare null drew nothing where the
+  // sentence is the whole answer (the phase 2 review).
+  if (path === "augment.bonus") {
+    const augment = system?.augment ?? null;
+    if (!augment || typeof augment !== "object") return null;
+    if (augment.byTier && (augment.bonus === null || augment.bonus === undefined)) return words.augmentByTier ?? null;
+    return augment.bonus === null || augment.bonus === undefined ? null : String(augment.bonus);
   }
 
   // What the Use button does (08 \u00a712, \u00a713).

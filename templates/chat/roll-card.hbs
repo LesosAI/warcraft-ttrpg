@@ -342,7 +342,8 @@
           defender alone, as a Parry is (`data-reaction-owner`). --}}
     {{#each evades as |e|}}
     <div class="azeroth-card-actions" data-reaction-owner="{{e.actorUuid}}">
-      <button type="button" data-action="evade" data-actor-uuid="{{e.actorUuid}}">{{localize "AZEROTH.Evade.Button" name=e.name talent=e.talent feet=e.feet n=e.cost}}</button>
+      {{!-- 04's Tumble (the Witch Hunter plan's wave 2b) costs nothing, and says so. --}}
+      <button type="button" data-action="evade" data-actor-uuid="{{e.actorUuid}}">{{#if e.free}}{{localize "AZEROTH.Evade.ButtonFree" name=e.name talent=e.talent feet=e.feet}}{{else}}{{localize "AZEROTH.Evade.Button" name=e.name talent=e.talent feet=e.feet n=e.cost}}{{/if}}</button>
     </div>
     {{/each}}
     {{/if}}

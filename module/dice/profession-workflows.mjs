@@ -21,7 +21,8 @@
  *   lost at -3.
  * - `gather`, `harvest` and `disenchant` are Gathering Tests (D-1915). Downtime
  *   never gates them.
- * - `enchant` lays an affix in place through `applyAffixInPlace`, as a project.
+ * - `enchant` lays an affix in place through `applyAffixInPlace`, as a project, or an
+ *   Enchanter's Signature (08 §18's `### Signatures`, D-2147) through the same project.
  */
 
 import { AZEROTH } from "../config.mjs";
@@ -35,8 +36,9 @@ import {
   fixedRarity, forgeable, isClassicFind, reagentsFor, recipeTier, shortfall, visibleRows
 } from "../rules/recipes.mjs";
 import { cutChoices, deliveredBase, prefixRowDrawn } from "../rules/craft-cuts.mjs";
-import { SIGNATURE_INDEX_FIELDS, SIGNATURE_PACKS, resolveCraftSignature, signatureCatalogue, signaturesFor } from "../rules/craft-signatures.mjs";
-import { collectable, craftPlan, dropProject, expectedSteps, newProject, stepProject, testRefusal, upsertProject } from "../rules/crafting.mjs";
+import { SIGNATURE_INDEX_FIELDS, SIGNATURE_PACKS, craftCatalogueFor, resolveCraftSignature, signatureCatalogue, signaturesFor } from "../rules/craft-signatures.mjs";
+import { ENCHANTER_FLAG, ENCHANTER_SIGNATURES, enchanterSignatureReagents, enchanterSignatureUpdate, enchanterSignatureVerdict } from "../rules/enchanter-signatures.mjs";
+import { collectable, craftPlan, dropProject, enchantPending, expectedSteps, newProject, stepProject, testRefusal, upsertProject } from "../rules/crafting.mjs";
 import {
   DISENCHANT_SKILL, GATHER_SKILL, HARVEST, disenchantOf, disenchantRefusal, gatherDC, gatherRefusal, harvestCandidates, harvestMaterial,
   harvestOn, yieldFor
@@ -197,6 +199,8 @@ export function refusalWords(refusal, { materials = {} } = {}) {
   if (refusal.tool) data.tool = nameOf(refusal.tool);
   if (refusal.ceiling) data.ceiling = game.i18n.localize(AZEROTH.rarities?.[refusal.ceiling] ?? refusal.ceiling);
   if (refusal.reason === "cut") data.cut = game.i18n.localize(AZEROTH.armorCuts?.[refusal.cut] ?? refusal.cut ?? "");
+  // An Enchanter's Signature (08 §18): what the row goes on, in the chapter's words.
+  if (refusal.reason === "sigGoesOn") data.goesOn = game.i18n.localize(AZEROTH.enchanterGoesOn?.[refusal.goesOn] ?? refusal.goesOn ?? "");
   if (refusal.reason === "short") {
     data.lines = (refusal.lines ?? []).map(l => game.i18n.format(AZEROTH.CRAFT_SHORT_LINE, { count: l.short, name: nameOf(l.identifier) })).join(", ");
   }
@@ -282,11 +286,14 @@ function partRow(part, { ability = null, profession = null, skill = null } = {})
  * (`prepareRoll`). Under the skip setting or a shift click, straight through
  * what the dialog would open on. Answers `{roll, outcome, fed}` or null.
  */
-async function rollProfessionTest(actor, { title, dc, parts, skill = null, ability = null, event = null, claim = null }) {
+async function rollProfessionTest(actor, { title, dc, parts, skill = null, ability = null, event = null, claim = null, gathering = false }) {
   // A Craft or Gathering Test is not a Skill Test (03 §1: *both Tests add the ability modifier, not
   // the skill modifier*), so it is a kind of its own: no skill line reaches it, and the skill a
   // Gathering Test uses rides `gatherSkill` for the card alone.
-  const spec = { kind: "profession", title, dc, dcLocked: true, modifiers: parts, skill: null, ability, gatherSkill: skill, targets: [] };
+  // `gathering` is said by the door, never derived from the skill (the phase 4 review): gather, harvest
+  // (skin, butcher, salvage) and Disenchant pass it, and it lets a worn Boon on Gathering Tests reach
+  // the dialog (08 §18's Gathering Signature). A Craft Test passes nothing.
+  const spec = { kind: "profession", title, dc, dcLocked: true, modifiers: parts, skill: null, ability, gatherSkill: skill, gathering: gathering === true, targets: [] };
   const choice = shouldPrompt(event) ? await promptRoll(actor, spec) : defaultChoice(actor, spec);
   if (!choice) return null;
   // A claim made after the dialog and before the die (a harvest's once-a-creature mark): a
@@ -461,10 +468,11 @@ async function writeProjects(actor, list) {
  */
 export async function craftSnapshot(actor, { base, rarity = "common", affixes = [], signature = null, cut = null } = {}) {
   const materials = await professionMaterials();
-  const catalogue = await craftSignatureCatalogue();
   const pool = await affixPool();
   const prof = professionOf(actor);
   const trade = prof.id;
+  // An Enchanting crafter may also pick from 08 §18's Enchanter's Signatures (D-2147).
+  const catalogue = craftCatalogueFor(trade, await craftSignatureCatalogue());
   const tier = actor?.professionTier ?? 1;
   const stamp = craftOf(base, trade);
   const picked = (affixes ?? []).filter(Boolean);
@@ -597,7 +605,7 @@ export async function craft(actor, { baseUuid, rarity = "common", prefixes = [],
     const lines = snap.reagents.map(l => ({ identifier: l.identifier, count: l.need }));
     const spend = reagentSpend(actor.items, lines);
     if (!spend) return { refusal: { reason: "short", lines: shortfall(lines, materialCounts(actor.items)).filter(l => l.short > 0) } };
-    const chosen = snap.signature ? resolveCraftSignature(snap.signature, await craftSignatureCatalogue(), base).signature : null;
+    const chosen = snap.signature ? resolveCraftSignature(snap.signature, craftCatalogueFor(snap.profession, await craftSignatureCatalogue()), base).signature : null;
     const project = newProject({
       id: foundry.utils.randomID(16),
       recipe: base.uuid,
@@ -668,6 +676,10 @@ async function claimAndDeliver(actor, project) {
 async function deliveredAlready(actor, project) {
   if (project?.status !== "delivering") return null;
   const enchant = project.quality?.enchant ?? null;
+  if (enchant?.signature) {
+    const item = actor.items.get(enchant.itemId) ?? null;
+    return item && item.getFlag("azeroth-rpg", ENCHANTER_FLAG) === enchant.signature ? item : null;
+  }
   if (enchant) {
     const item = actor.items.get(enchant.itemId) ?? null;
     const affix = await affixFrom(enchant.affix);
@@ -825,7 +837,7 @@ async function deliverProject(actor, project) {
 async function projectSignature(project, base) {
   const stored = project.quality?.signature ?? null;
   if (!stored) return { signature: null };
-  const fresh = resolveCraftSignature({ id: stored.id }, await craftSignatureCatalogue(), base);
+  const fresh = resolveCraftSignature({ id: stored.id }, craftCatalogueFor(project.trade, await craftSignatureCatalogue()), base);
   if (fresh.signature) return { signature: { kind: fresh.signature.kind, text: fresh.signature.text, effect: fresh.signature.effect } };
   if (stored.id && stored.kind && stored.text && stored.effect) return { signature: { kind: stored.kind, text: stored.text, effect: stored.effect } };
   return { refusal: { reason: "signatureUnknown" } };
@@ -847,22 +859,47 @@ async function projectSignature(project, base) {
  * rarity once enchanted sets the target*; the review's minor 6); the recipe tier is
  * the affix's grade's (08 §18), raised to the rarity's where that is higher.
  *
+ * **OR AN ENCHANTER'S SIGNATURE** (08 §18's `### Signatures`; D-2147, the lead: *"Yes"*, on an
+ * existing item): `signature` names a row of `ENCHANTER_SIGNATURES` and `affix` is left out.
+ * The SAME door and the same project: judged whole first
+ * (`enchanter-signatures.mjs#enchanterSignatureVerdict`: Rare or Epic, the row goes on this
+ * kind of item, no Signature already, the recipe tier the rarity needs within the enchanter's,
+ * room in the item's budget through `forge.mjs#plan`), the materials table's Signature line
+ * (`enchanterSignatureReagents`), the project claimed and the reagents spent inside the actor's
+ * queue, then the same Craft Tests: no Proficiency, the adjusted total, 05 §3's Easy column at
+ * the recipe tier, the item's rarity the target. The Signature is written when the project is
+ * delivered (`deliverEnchant`), judged again there.
+ *
  * @param {Actor} actor
- * @param {{itemId: string, affix: object|string}} o
+ * @param {{itemId: string, affix?: object|string|null, signature?: string|null}} o
  */
-export async function enchant(actor, { itemId, affix } = {}) {
+export async function enchant(actor, { itemId, affix = null, signature = null } = {}) {
   if (actor?.type !== "character" || !actor.isOwner) return null;
   const materials = await professionMaterials();
   const prof = professionOf(actor);
-  const chosen = await affixFrom(affix);
+  const chosen = signature ? null : await affixFrom(affix);
   if (prof.id !== "enchanting") return warn({ reason: "notEnchanter" });
   const closed = downtimeRefusal(downtimeState());
   if (closed) return warn(closed);
   if (!prof.tool) return warn({ reason: "tool", tool: prof.row?.tool ?? null }, { materials });
-  const pool = await affixPool();
+  const pool = signature ? [] : await affixPool();
+  // One judgement for both branches, read again inside the queue: what the project lays, its
+  // tier and rarity, its name, and the reagents.
   const judge = () => {
     const item = actor.items.get(itemId) ?? null;
     const tier = actor.professionTier ?? 1;
+    // One project an item, in both branches (the phase 4 review): a second, judged against the
+    // item as it stands now, would be delivered over the first.
+    if (item && enchantPending(projectsOf(actor), item.id)) return { refusal: { reason: "enchantPending" } };
+    if (signature) {
+      if (!item) return { refusal: { reason: "notRecipe" } };
+      const verdict = enchanterSignatureVerdict({ key: signature, item: item.toObject(), tier });
+      if (!verdict.ok) return { refusal: verdict };
+      return {
+        item, rarity: verdict.rarity, tier: verdict.tier, label: ENCHANTER_SIGNATURES[signature].name,
+        reagents: enchanterSignatureReagents(verdict.rarity), enchant: { itemId: item.id, signature }
+      };
+    }
     const offered = item ? enchantChoices({ item, tier, affixes: pool }) : [];
     if (!chosen || !offered.some(a => a.id === chosen.id || a.name === chosen.name)) return { refusal: { reason: "notRecipe" } };
     const verdict = enchantVerdict({ item: item.toObject(), affix: chosen, pool });
@@ -870,25 +907,29 @@ export async function enchant(actor, { itemId, affix } = {}) {
     if (!RARITY_TIER[verdict.rarity] || RARITY_TIER[verdict.rarity] > tier) {
       return { refusal: { reason: "rarityCeiling", rarity: verdict.rarity, ceiling: RARITY_CEILING[Math.min(4, Math.max(1, tier))] } };
     }
-    return { item, rarity: verdict.rarity };
+    return {
+      item, rarity: verdict.rarity, tier: enchantTier(chosen), label: chosen.name,
+      reagents: enchantReagents(chosen), enchant: { itemId: item.id, affix: chosen.id ?? chosen.name }
+    };
   };
   const first = judge();
   if (first.refusal) return warn(first.refusal, { materials });
-  const reagents = enchantReagents(chosen);
+  const reagents = first.reagents;
   if (!reagentSpend(actor.items, reagents)) return warn({ reason: "short", lines: shortfall(reagents, materialCounts(actor.items)).filter(l => l.short > 0) }, { materials });
   const started = await professionWrite(actor, async () => {
     const j = judge();
     if (j.refusal) return j;
-    const spend = reagentSpend(actor.items, reagents);
-    if (!spend) return { refusal: { reason: "short", lines: shortfall(reagents, materialCounts(actor.items)).filter(l => l.short > 0) } };
+    const spend = reagentSpend(actor.items, j.reagents);
+    if (!spend) return { refusal: { reason: "short", lines: shortfall(j.reagents, materialCounts(actor.items)).filter(l => l.short > 0) } };
     const project = newProject({
       id: foundry.utils.randomID(16), recipe: j.item.uuid,
-      name: game.i18n.format("AZEROTH.Profession.Craft.EnchantName", { item: j.item.name, affix: chosen.name }),
-      trade: "enchanting", tier: enchantTier(chosen), rarity: j.rarity, spent: reagents,
-      quality: { prefixes: [], suffix: null, signature: null, enchant: { itemId: j.item.id, affix: chosen.id ?? chosen.name } }
+      name: game.i18n.format("AZEROTH.Profession.Craft.EnchantName", { item: j.item.name, affix: j.label }),
+      trade: "enchanting", tier: j.tier, rarity: j.rarity, spent: j.reagents,
+      quality: { prefixes: [], suffix: null, signature: null, enchant: j.enchant }
     });
+    // CLAIMED BEFORE ANYTHING IS SPENT, then spent in one write, then stored (`startProject`).
     await startProject(actor, project, spend);
-    return { project };
+    return { project, reagents: j.reagents };
   });
   if (started?.refusal) return warn(started.refusal, { materials });
   const project = started?.project ?? null;
@@ -896,15 +937,36 @@ export async function enchant(actor, { itemId, affix } = {}) {
   await postNoteCard(actor, {
     title: game.i18n.format("AZEROTH.Profession.Craft.Card.Started", { name: project.name }), kind: "craftStarted",
     craft: { project: project.id, trade: "enchanting" },
-    lines: [game.i18n.format("AZEROTH.Profession.Craft.Card.Spent", { spent: spentWords(reagents, materials) })]
+    lines: [game.i18n.format("AZEROTH.Profession.Craft.Card.Spent", { spent: spentWords(started.reagents ?? reagents, materials) })]
   });
   return project;
 }
 
+/**
+ * **WHAT A FINISHED ENCHANTMENT LAYS** - an affix through `applyAffixInPlace`, or an Enchanter's
+ * Signature written on the item (`enchanter-signatures.mjs#enchanterSignatureUpdate`: the row's
+ * sentence as the prose, its descriptor, the budget raised by its cost, the row's key on the
+ * item), judged again first, since the item may have changed while the project stood.
+ */
 async function deliverEnchant(actor, project) {
+  const enchantRecord = project.quality.enchant;
+  if (enchantRecord.signature) {
+    const item = actor.items.get(enchantRecord.itemId) ?? null;
+    if (!item) return { ok: false, words: game.i18n.localize("AZEROTH.Profession.Craft.EnchantGone") };
+    const verdict = enchanterSignatureVerdict({ key: enchantRecord.signature, item: item.toObject(), tier: actor.professionTier ?? 1 });
+    if (!verdict.ok) return { ok: false, words: refusalWords(verdict) };
+    const update = enchanterSignatureUpdate({ key: enchantRecord.signature, item: item.toObject() });
+    const done = update ? await item.update(update) : null;
+    return done ? { ok: true, item: done, words: game.i18n.format("AZEROTH.Profession.Craft.Card.Made", { name: done.name }) }
+      : { ok: false, words: game.i18n.localize("AZEROTH.Profession.Craft.EnchantGone") };
+  }
   const item = actor.items.get(project.quality.enchant.itemId) ?? null;
   const affix = await affixFrom(project.quality.enchant.affix);
   if (!item || !affix) return { ok: false, words: game.i18n.localize("AZEROTH.Profession.Craft.EnchantGone") };
+  // Judged again, as the Signature branch is: the item may have taken a Signature or the
+  // other slot's affix while the project stood (the phase 4 review).
+  const verdict = enchantVerdict({ item: item.toObject(), affix, pool: await affixPool() });
+  if (!verdict.ok) return { ok: false, words: refusalWords(verdict) };
   const { applyAffixInPlace } = await import("../applications/affix-dialog.mjs");
   const done = await applyAffixInPlace(item, affix);
   return done ? { ok: true, item: done, words: game.i18n.format("AZEROTH.Profession.Craft.Card.Made", { name: done.name }) }
@@ -958,7 +1020,7 @@ export async function gather(actor, { biome, material, event = null } = {}) {
   const materials = await professionMaterials();
   const name = materials[snap.node.material]?.name ?? snap.node.material;
   const title = game.i18n.format("AZEROTH.Profession.Gather.Title", { name });
-  const rolled = await rollProfessionTest(actor, { title, dc: snap.dc, parts: snap.parts, skill: snap.skill, event });
+  const rolled = await rollProfessionTest(actor, { title, dc: snap.dc, parts: snap.parts, skill: snap.skill, event, gathering: true });
   if (!rolled) return null;
   const units = yieldFor(rolled.outcome.sl, rolled.outcome.success);
   const lines = [];
@@ -1106,7 +1168,7 @@ export async function harvest(actor, { target, kind, material = null, event = nu
   const title = game.i18n.format("AZEROTH.Profession.Harvest.Card.Title", { verb: game.i18n.localize(AZEROTH.harvestKinds?.[kind] ?? kind), name: creature?.name ?? "" });
   // Once on a creature, success or failure (11 §11): claimed after the dialog, before the die.
   const rolled = await rollProfessionTest(actor, {
-    title, dc: offered.dc, parts: gatherParts(actor, offered.skill, prof.tool), skill: offered.skill, event,
+    title, dc: offered.dc, parts: gatherParts(actor, offered.skill, prof.tool), skill: offered.skill, event, gathering: true,
     claim: () => claimHarvest(creature, kind)
   });
   if (!rolled) return null;
@@ -1163,7 +1225,7 @@ export async function disenchant(actor, { itemId, event = null } = {}) {
   if (refusal) return warn(refusal, { materials });
   const test = disenchantOf(item);
   const title = game.i18n.format("AZEROTH.Profession.Disenchant.Title", { name: item.name });
-  const rolled = await rollProfessionTest(actor, { title, dc: test.dc, parts: gatherParts(actor, DISENCHANT_SKILL, prof.tool), skill: DISENCHANT_SKILL, event });
+  const rolled = await rollProfessionTest(actor, { title, dc: test.dc, parts: gatherParts(actor, DISENCHANT_SKILL, prof.tool), skill: DISENCHANT_SKILL, event, gathering: true });
   if (!rolled) return null;
   const name = item.name;
   // Destroyed either way (11 §11), read again at the write inside the queue: an item gone

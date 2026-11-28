@@ -190,7 +190,9 @@ AZEROTH.resilienceAbility = { body: "con", reflex: "dex", spirit: "wis" };
 // attribute"*; the San'layn and Sovereign plan's T2), which also sizes its Vitae (`rules/vitae.mjs`).
 // The Demon Hunter fights with Dexterity and casts with Wisdom (the lead, R7: *"Wisdom
 // (Recommended)"*): its glaives are Deft (C59), so it holds two stars as the Ranger does.
-AZEROTH.primaryAbility = { warrior: "str", rogue: "dex", ranger: "dex", "chromatic-champion": "con", chronomancer: "int", "death-knight": "cha", necromancer: "int", sovereign: "con", "demon-hunter": "dex" };
+// The Witch Hunter fights with Strength (the lead's brief: *"2handed or versatile sword emphasis"*; MY READING:
+// a two-handed or Versatile sword swings on Strength, 06 §1) and sets its Spell DC with Intelligence (R6).
+AZEROTH.primaryAbility = { warrior: "str", rogue: "dex", ranger: "dex", "chromatic-champion": "con", chronomancer: "int", "death-knight": "cha", necromancer: "int", sovereign: "con", "demon-hunter": "dex", "witch-hunter": "str" };
 
 // **A CLASS TAKEN AT CREATION AND NEVER MULTICLASSED, EITHER WAY** (the lead, on the
 // Chromatic Champion plan: *"Creation only; no 2nd class."*). Keyed by identifier;
@@ -200,7 +202,9 @@ AZEROTH.primaryAbility = { warrior: "str", rogue: "dex", ranger: "dex", "chromat
 // and no second class in either direction*; D-942): its Power lives in its weapons.
 // The Sovereign too (02 §7's *One class.*: *You take this class only at character creation, you
 // never take a second class, and no character takes this one as a second class*).
-AZEROTH.creationOnlyClasses = ["chromatic-champion", "chronomancer", "death-knight", "sovereign"];
+// The Witch Hunter too (the lead, P1: *"single class, no multiclass"*; 02 §7's *One class.*: *A Witch
+// Hunter never takes a second class*), by the Death Knight's path, refused in both directions.
+AZEROTH.creationOnlyClasses = ["chromatic-champion", "chronomancer", "death-knight", "sovereign", "witch-hunter"];
 
 // **A CLASS THAT MULTICLASSES WITH A NAMED FEW, EITHER WAY** (the lead, on the Necromancer plan's
 // item 11: *"Multiclassing is allowed with Warrior, Mage, Rogue."*). Keyed by identifier: the
@@ -224,7 +228,9 @@ AZEROTH.guiseRaceFor = { "chromatic-champion": "chromatic-outcast" };
 // - `guiseRaces`: the races that wear another people's guise, read by `isGuiseRace`,
 //   `guiseRequired` and `guiseClassOf`.
 // `guiseRaceFor` stays for one release as the guise half of `classRaceOnly`, read by nothing new.
-AZEROTH.classRaceOnly = { "chromatic-champion": "chromatic-outcast", sovereign: "sanlayn" };
+// The Witch Hunter is the Human's alone (the lead, R5: *"Human only (Recommended)"*; 02 §3's *Only a
+// Human may take the Witch Hunter.*).
+AZEROTH.classRaceOnly = { "chromatic-champion": "chromatic-outcast", sovereign: "sanlayn", "witch-hunter": "human" };
 AZEROTH.guiseRaces = ["chromatic-outcast"];
 
 // Six size rungs, smallest first (D-545). Medium is the default. Size does
@@ -275,7 +281,11 @@ AZEROTH.momentumTypes = {
   // its tier), Beyond Limits and the features that say so, capped at 5 plus 2 for each 5 Fel Corruption
   // held, kept between fights, and turned into Fel Corruption when a Short or Long Rest finishes
   // (`rules/hatred.mjs`).
-  hatred:      "AZEROTH.Pool.Hatred"
+  hatred:      "AZEROTH.Pool.Hatred",
+  // The Witch Hunter's (the Witch Hunter plan, R1: *"Tempo + Energy (Recommended)"*): an ordinary
+  // Momentum pool, NOT kept, begun at 0 in every fight, capped at 5 (8 with Ursine Fury, 10 while The Last
+  // Hunt stands), with 1 more on a hit against a Studied type and the idle drain (`rules/tempo.mjs`).
+  tempo:       "AZEROTH.Pool.Tempo"
 };
 AZEROTH.powerTypes = {
   mana:   "AZEROTH.Pool.Mana",
@@ -603,9 +613,14 @@ AZEROTH.testKinds = {
 // reads its keys), and nothing in the book lays a Bane on a Parry. Parry is a
 // NARROWING: a Boon on Attack Tests helps a Parry as well, and a Boon on Parry
 // Tests helps nothing else.
+// **And the Gathering Test** (03-PROFESSIONS; 08 SS18's Gathering Signature: *You have a Boon on
+// Gathering Tests*): a NARROWING of the profession roll, as Parry is of the Attack Test - the roll
+// dialog reaches it only on a Gathering Test (gather, skin, butcher, salvage, disenchant), never on
+// a Craft Test, and nothing lays a Bane on it.
 AZEROTH.grantTests = {
   ...AZEROTH.testKinds,
-  parry: "AZEROTH.TestKind.Parry"
+  parry: "AZEROTH.TestKind.Parry",
+  gathering: "AZEROTH.TestKind.Gathering"
 };
 
 // The SCALARS a worn thing may grant, and what each one is called (08 SS20,
@@ -822,7 +837,16 @@ AZEROTH.signatureGates = {
   // *While hidden from that creature* (Hexed Fang, D-911): a fact about the blow
   // being made, read where the attack is built (`effects/stealth.mjs#isHiddenFor`),
   // and failing closed everywhere else.
-  hidden: "AZEROTH.Signature.Gate.Hidden"
+  hidden: "AZEROTH.Signature.Gate.Hidden",
+  // *While a Demon Hunter wields a Warglaive of Azzinoth in each hand* (Twin Blades, D-2157):
+  // another equipped weapon of the item's own identifier.
+  pairWielded: "AZEROTH.Signature.Gate.PairWielded",
+  // *When it hits your prey* (Swarming Shadows, D-2160): the creature struck is the bearer's
+  // prey, read where the attack is built and failing closed everywhere else.
+  prey: "AZEROTH.Signature.Gate.Prey",
+  // *Against a creature of a Studied type* (Waycrest Silver, D-2159): the type is Studied in
+  // the bearer's Tome, read where the attack is built.
+  typeStudied: "AZEROTH.Signature.Gate.TypeStudied"
 };
 
 // What a `blow` gate may name (D-696). Two, because 08 SS20 writes two: the
@@ -897,6 +921,9 @@ AZEROTH.signatureReasons = {
   unwritten:      "AZEROTH.Signature.Reason.Unwritten",
   // A press whose last clause lands on a roll already made (The Wyrm's Roar, D-914).
   attackBane:     "AZEROTH.Signature.Reason.AttackBane"
+  // `pendingReader`, the new-class named items' phase 3 worklist (D-2151), is retired: phase 3 built
+  // every reader (D-2156 to D-2162) and no item carried it (the final review of 0.18.1). A stored copy
+  // is cleaned away as any unnamed reason is (`signatures.mjs#cleanReason`).
   // The `needs-reader:<family>` reasons D-910 parked 08 §20's runs on are gone (D-913):
   // D-911 and D-912 built every one, and nothing read them any more.
 };
@@ -1277,7 +1304,23 @@ AZEROTH.craftRefusals = {
   // The enchantment's final door, judged before anything is spent (`recipes.mjs#enchantVerdict`).
   alreadyHas:    "AZEROTH.Profession.Refuse.AlreadyHas",
   forgeBuilt:    "AZEROTH.Profession.Refuse.ForgeBuilt",
-  affixRefused:  "AZEROTH.Profession.Refuse.AffixRefused"
+  affixRefused:  "AZEROTH.Profession.Refuse.AffixRefused",
+  // An Enchanter's Signature laid in place (08 SS18, `enchanter-signatures.mjs#enchanterSignatureVerdict`).
+  sigRarity:     "AZEROTH.Profession.Refuse.SigRarity",
+  sigGoesOn:     "AZEROTH.Profession.Refuse.SigGoesOn",
+  sigHeld:       "AZEROTH.Profession.Refuse.SigHeld",
+  sigBudget:     "AZEROTH.Profession.Refuse.SigBudget",
+  // A second enchantment project on an item that already stands under one (`crafting.mjs#enchantPending`).
+  enchantPending: "AZEROTH.Profession.Refuse.EnchantPending",
+  // A Classic find offered an affix (`recipes.mjs#enchantVerdict`; O-778, D-2171): a find takes a Signature alone.
+  classicFind:   "AZEROTH.Profession.Refuse.ClassicFind"
+};
+// What an Enchanter's Signature goes on (08 SS18's `Goes on` column; `enchanter-signatures.mjs#GOES_ON_WORDS`).
+AZEROTH.enchanterGoesOn = {
+  weapon:     "AZEROTH.EnchanterGoesOn.Weapon",
+  suitOrWorn: "AZEROTH.EnchanterGoesOn.SuitOrWorn",
+  feet:       "AZEROTH.EnchanterGoesOn.Feet",
+  hands:      "AZEROTH.EnchanterGoesOn.Hands"
 };
 // One line of a `short` refusal: *2 more Copper bar*.
 AZEROTH.CRAFT_SHORT_LINE = "AZEROTH.Profession.Refuse.ShortLine";
@@ -1357,6 +1400,8 @@ AZEROTH.MANA_BY_BAND = [
 // Recovery rates (05 SS11): Energy refills every round, Focus on a Short Rest
 // and by holding position, Mana on a Long Rest with half on a Short Rest.
 AZEROTH.POWER_REFILL_PER_TURN = { focus: 2, energy: 3 };
+// A class whose own entry sets a slower refill (the lead, 2026-11-27: *"For this class, I think energy should regain 2/turn instead of 3"*, the Witch Hunter; 02 §7). Keyed by class identifier, read by `rules/rest.mjs#refillRatesFor`.
+AZEROTH.POWER_REFILL_BY_CLASS = { "witch-hunter": { energy: 2 } };
 
 // Success Level bounds — SL = floor((total - dc) / 5), capped at ±SL_CAP (05 §2).
 // 10 since the lead raised the whole cap from 6 (O-699: *"raise the SL whole cap"*);

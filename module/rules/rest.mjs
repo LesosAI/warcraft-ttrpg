@@ -364,6 +364,22 @@ export function longRest({ health, conMod = 0, tier = 1, fatigue = 0, pools = []
 export const REFILL_PER_TURN = AZEROTH.POWER_REFILL_PER_TURN;
 
 /**
+ * **A CLASS'S OWN REFILL RATE** (the lead, 2026-11-27, on the Witch Hunter: *"energy should regain 2/turn instead of 3"*):
+ * the per-pool rates the character's classes set, from the class refill table in config. A class that sets none leaves 05 §12's
+ * rate. Two classes that name a pool take the larger (the Witch Hunter takes no second class, so it never meets one).
+ *
+ * @param {string[]} classKeys  the class identifiers the character holds
+ * @returns {Record<string, number>}
+ */
+export function refillRatesFor(classKeys = []) {
+  const out = {};
+  for (const key of classKeys ?? []) {
+    for (const [pool, rate] of Object.entries(AZEROTH.POWER_REFILL_BY_CLASS?.[key] ?? {})) out[pool] = Math.max(out[pool] ?? 0, rate);
+  }
+  return out;
+}
+
+/**
  * **02's FOCUS REFILLS ONLY AFTER A STILL TURN** (the Legacy branches' door 9):
  * *Focus is a pool of 6, and you begin every fight full. It refills at 2 at the
  * start of any turn in which you have neither moved nor been Engaged.* The turn
@@ -412,11 +428,11 @@ export function turnMoved({ paid = 0, roundOnce = [] } = {}) {
  *   grants is a leak by construction): a caller that does not say the turn was
  *   still refills no Focus. Energy is not gated.
  */
-export function turnRefill(pools = [], { extra = {}, still = false } = {}) {
+export function turnRefill(pools = [], { extra = {}, still = false, rates = {} } = {}) {
   return pools.flatMap(p => {
     if (p.kind !== "power") return [];
     if (p.name === FOCUS_POOL && still !== true) return [];
-    const rate = REFILL_PER_TURN[p.name];
+    const rate = rates?.[p.name] ?? REFILL_PER_TURN[p.name];
     const more = Math.max(0, Math.trunc(Number(extra?.[p.name])) || 0);
     if (!rate || p.value >= p.max) return [];
     return [{ itemId: p.itemId, kind: p.kind, value: Math.min(p.max, p.value + rate + more) }];

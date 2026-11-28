@@ -37,7 +37,7 @@ import { resistKey, resistRecord, rowMatches } from "../rules/records.mjs";
 import { landedOnFail, recordsResist } from "../rules/resisted.mjs";
 // A hit turned into a miss (the Legacy branches' door 13): the rider it paid for, back -
 // and the Momentum it built, off (the lead, 2026-10-21: *"Yes, take it back"*).
-import { everyRowWithdrawn, missRefunds, missWithdrawals, refundedValue, withdrawnValue } from "../rules/miss.mjs";
+import { everyRowWithdrawn, healthWithdrawnValue, missRefunds, missWithdrawals, refundedValue, withdrawnValue } from "../rules/miss.mjs";
 import { TEMP_FLAG, grantTakenBack } from "../rules/temporary-health.mjs";
 
 export const ANNOTATE_QUERY = "azeroth-rpg.annotateCard";
@@ -78,7 +78,8 @@ export async function annotateHere({ messageId, index, reaction, to, mitigated, 
   }
   await message.update(update);
   for (const r of refunds) await refundOne(r);
-  for (const t of takes) await t.actor.updatePool({ itemId: t.itemId, kind: t.kind, value: t.value });
+  // Health a signature row gave on the hit comes back off the bearer as Health, never a pool write.
+  for (const t of takes) await (t.kind === "health" ? t.actor.update({ "system.health.value": t.value }) : t.actor.updatePool({ itemId: t.itemId, kind: t.kind, value: t.value }));
   if (settles) await releaseOnce(flags.onceOnMiss ?? null);
   if (withdrawn===true && !was && flags.signatureHitBonuses) {
     const result=await requestSignatureHitWithdrawal(message,i);
@@ -106,6 +107,14 @@ function takeBackPlan(built = []) {
       holder = null;
     }
     if (holder?.documentName !== "Actor" || !holder.isOwner) continue;
+    // **CRUSADER'S AND A LIFE-STEALING BLADE'S HEALTH** (the final review of 0.18.1): what the hit healed,
+    // off the Health as it stands, never below 1 (`rules/miss.mjs#healthWithdrawnValue`).
+    if (row.kind === "health") {
+      const had = Math.trunc(Number(holder.system?.health?.value)) || 0;
+      const to = healthWithdrawnValue(had, row.amount);
+      if (to !== had) out.push({ actor: holder, name: holder.name, itemId: null, kind: "health", pool: "health", value: to, amount: had - to });
+      continue;
+    }
     const now = (holder.poolSnapshot?.() ?? []).find(p => p.kind === row.kind && p.name === row.pool && (p.itemId ?? null) === (row.itemId ?? null)) ?? null;
     if (!now) continue;
     const value = withdrawnValue(now, row.amount);

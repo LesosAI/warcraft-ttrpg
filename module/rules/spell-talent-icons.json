@@ -5391,6 +5391,83 @@
     "previousIcons": [],
     "reason": "An ascension: the Sovereign sheds a condition beneath its notice."
   },
+  "talent:ashen-ring": {
+    "name": "Ashen Ring",
+    "source": "04-TALENTS",
+    "icon": "ability_fomor_boss_rune_brown",
+    "previousIcons": [],
+    "reason": "An ash-brown rune in a ring: the Ash Sign's ring widened and burning the undead and demons."
+  },
+  "talent:bears-endurance": {
+    "name": "Bear's Endurance",
+    "source": "04-TALENTS",
+    "icon": "talentspec_druid_feral_bear",
+    "previousIcons": [],
+    "reason": "Bear tracks in blue: the bear's endurance when Health falls below half."
+  },
+  "talent:bears-hide": {
+    "name": "Bear's Hide",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_pelt_bear_02",
+    "previousIcons": [],
+    "reason": "A bear pelt: plate worn as a bear wears its hide."
+  },
+  "talent:bears-weight": {
+    "name": "Bear's Weight",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_bearpaw_brown",
+    "previousIcons": [],
+    "reason": "A heavy bear paw: a two-handed blow that lands harder."
+  },
+  "talent:bears-wrath": {
+    "name": "Bear's Wrath",
+    "source": "04-TALENTS",
+    "icon": "ability_racial_bearform",
+    "previousIcons": [],
+    "reason": "A blue bear's paw, the bear form's mark: Tempo from the blows that land on you."
+  },
+  "talent:bursting-rowan": {
+    "name": "Bursting Rowan",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_herb_cinderbloom",
+    "previousIcons": [],
+    "reason": "A cinderbloom bursting into flame: the Rowan Sign that bursts with fire on the enemies beside the ward."
+  },
+  "talent:cats-dance": {
+    "name": "Cat's Dance",
+    "source": "04-TALENTS",
+    "icon": "ability_monk_tigerslust",
+    "previousIcons": [],
+    "reason": "A quick foot in motion: an attack that moves on to the next creature."
+  },
+  "talent:cats-step": {
+    "name": "Cat's Step",
+    "source": "04-TALENTS",
+    "icon": "ability_druid_prowl",
+    "previousIcons": [],
+    "reason": "A prowling cat's face: a lighter, faster step in leather."
+  },
+  "talent:cluster-bomb": {
+    "name": "Cluster Bomb",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_bomb_07",
+    "previousIcons": [],
+    "reason": "A bundle of red charges tied together: a second bomb thrown at once."
+  },
+  "talent:crushing-sweep": {
+    "name": "Crushing Sweep",
+    "source": "04-TALENTS",
+    "icon": "ability_butcher_cleave",
+    "previousIcons": [],
+    "reason": "A heavy cleaving swing: a cheaper Whirling Steel."
+  },
+  "talent:deep-lull": {
+    "name": "Deep Lull",
+    "source": "04-TALENTS",
+    "icon": "spell_nature_sleep",
+    "previousIcons": [],
+    "reason": "A heavy sleeping eyelid: the Lull Sign's charm that lasts longer."
+  },
   "talent:divine-favor": {
     "name": "Divine Favor",
     "source": "04-TALENTS",
@@ -5399,6 +5476,27 @@
       "spell_holy_divinehymn"
     ],
     "reason": "Divine Favor is a different talent under its old identifier (the class talent audit, D-1875): Classic's own Divine Favor icon, for a Holy heal cast as a Half-Action."
+  },
+  "talent:extra-measure": {
+    "name": "Extra Measure",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_cauldron_nature",
+    "previousIcons": [],
+    "reason": "A bubbling cauldron of green brew: more doses brewed at each rest."
+  },
+  "talent:far-signs": {
+    "name": "Far Signs",
+    "source": "04-TALENTS",
+    "icon": "ability_mount_gryphon_01",
+    "previousIcons": [],
+    "reason": "A gryphon in flight, the branch's own beast: Signs that reach farther."
+  },
+  "talent:feline-reflexes": {
+    "name": "Feline Reflexes",
+    "source": "04-TALENTS",
+    "icon": "ability_rogue_reinforcedleather",
+    "previousIcons": [],
+    "reason": "Reinforced leather: Defense in light armor."
   },
   "talent:fervor": {
     "name": "Fervor",
@@ -5409,6 +5507,27 @@
     ],
     "reason": "Fervor (the class talent audit's Benediction, D-1875): divine purpose is the Zeal a Holy heal kindles."
   },
+  "talent:field-notes": {
+    "name": "Field Notes",
+    "source": "04-TALENTS",
+    "icon": "inv_archaeology_80_witch_book",
+    "previousIcons": [],
+    "reason": "A worn book with a quill on it, from the witch-hunting dig: the notes a hunter keeps to learn a type."
+  },
+  "talent:firestream": {
+    "name": "Firestream",
+    "source": "04-TALENTS",
+    "icon": "spell_fire_fireball02",
+    "previousIcons": [],
+    "reason": "A trailing ball of fire: the Ember Sign's cone left burning."
+  },
+  "talent:forewarned": {
+    "name": "Forewarned",
+    "source": "04-TALENTS",
+    "icon": "inv_archaeology_80_witch_fetishofthequestioningmind",
+    "previousIcons": [],
+    "reason": "The witch-hunting dig's fetish of the questioning mind: one more type kept Studied at once."
+  },
   "talent:healing-hands": {
     "name": "Healing Hands",
     "source": "04-TALENTS",
@@ -5417,6 +5536,69 @@
       "spell_holy_heal02"
     ],
     "reason": "Healing Hands (the class talent audit's Benediction, D-1875): the open hands of the Light are the Holy heals and Lay on Hands it strengthens."
+  },
+  "talent:hobbling-cut": {
+    "name": "Hobbling Cut",
+    "source": "04-TALENTS",
+    "icon": "ability_monk_legsweep",
+    "previousIcons": [],
+    "reason": "A sweep at the legs: a hit that leaves the target Slowed."
+  },
+  "talent:holy-ember": {
+    "name": "Holy Ember",
+    "source": "04-TALENTS",
+    "icon": "spell_holy_searinglight",
+    "previousIcons": [],
+    "reason": "A searing holy light: the Ember Sign turned to Holy fire."
+  },
+  "talent:hunters-riposte": {
+    "name": "Hunter's Riposte",
+    "source": "04-TALENTS",
+    "icon": "ability_warrior_unrelentingassault",
+    "previousIcons": [],
+    "reason": "A hooded fighter turning a blow aside with a blade: a cheaper Riposte."
+  },
+  "talent:iron-stomach": {
+    "name": "Iron Stomach",
+    "source": "04-TALENTS",
+    "icon": "inv_drink_32_disgustingrotgut",
+    "previousIcons": [],
+    "reason": "A mug of foul green rotgut kept down: Body Resilience Tests made with SL to spare."
+  },
+  "talent:kill-rhythm": {
+    "name": "Kill Rhythm",
+    "source": "04-TALENTS",
+    "icon": "ability_rogue_combatreadiness",
+    "previousIcons": [],
+    "reason": "Crossed blades over a shield: Tempo from each Critical Injury."
+  },
+  "talent:lasting-brews": {
+    "name": "Lasting Brews",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_herb_evergreenmoss",
+    "previousIcons": [],
+    "reason": "Evergreen moss in a green whorl: an elixir that lasts longer."
+  },
+  "talent:leaping-strike": {
+    "name": "Leaping Strike",
+    "source": "04-TALENTS",
+    "icon": "ability_karoz_leap",
+    "previousIcons": [],
+    "reason": "A booted leap through the air: a strike that lands after a run."
+  },
+  "talent:lethal-edge": {
+    "name": "Lethal Edge",
+    "source": "04-TALENTS",
+    "icon": "ability_gouge",
+    "previousIcons": [],
+    "reason": "A curved blade drawing blood: a wider Critical Injury range."
+  },
+  "talent:living-rowan": {
+    "name": "Living Rowan",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_herb_whispervine",
+    "previousIcons": [],
+    "reason": "A blue living vine curled into a ward: the Rowan Sign's Ward raised."
   },
   "talent:mending-word": {
     "name": "Mending Word",
@@ -5436,6 +5618,27 @@
     ],
     "reason": "Mercy of Uther (the class talent audit's Benediction capstone, D-1875): restoration is Lay on Hands making the creature whole and ending its condition."
   },
+  "talent:mountain-bear": {
+    "name": "Mountain Bear",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_bearclaw_nightmare",
+    "previousIcons": [],
+    "reason": "A great black bear claw: the capstone's two-handed fury and thick hide."
+  },
+  "talent:night-eyes": {
+    "name": "Night Eyes",
+    "source": "04-TALENTS",
+    "icon": "ability_eyeoftheowl",
+    "previousIcons": [],
+    "reason": "An owl's eye in the dark: Stealth and the first strike from hiding."
+  },
+  "talent:nine-lives": {
+    "name": "Nine Lives",
+    "source": "04-TALENTS",
+    "icon": "achievement_halloween_cat_01",
+    "previousIcons": [],
+    "reason": "A black cat before the moon: the cat's nine lives against an area's damage."
+  },
   "talent:overpower": {
     "name": "Overpower",
     "source": "04-TALENTS",
@@ -5444,6 +5647,69 @@
       "ability_parry"
     ],
     "reason": "Overpower replaces Bladeturn (the class talent audit, D-1870): the punishing blow is the strike that answers a miss, a Parry or a Block."
+  },
+  "talent:potent-brews": {
+    "name": "Potent Brews",
+    "source": "04-TALENTS",
+    "icon": "trade_alchemy_dpotion_a11",
+    "previousIcons": [],
+    "reason": "A tall stoppered potion: a stronger draught that heals more and a bomb that deals more."
+  },
+  "talent:practiced-hands": {
+    "name": "Practiced Hands",
+    "source": "04-TALENTS",
+    "icon": "trade_alchemy_dpotion_b10",
+    "previousIcons": [],
+    "reason": "A small blue potion held ready: an elixir or an oil used without losing the Half-Action."
+  },
+  "talent:quick-script": {
+    "name": "Quick Script",
+    "source": "04-TALENTS",
+    "icon": "ability_demonhunter_sigilyellow",
+    "previousIcons": [],
+    "reason": "A yellow sigil drawn in one stroke: the first Sign of a turn costs less."
+  },
+  "talent:refined-decoctions": {
+    "name": "Refined Decoctions",
+    "source": "04-TALENTS",
+    "icon": "trade_alchemy_dpotion_d11",
+    "previousIcons": [],
+    "reason": "A refined violet concentrate in a square bottle: a Decoction that weighs less on the body."
+  },
+  "talent:searing-script": {
+    "name": "Searing Script",
+    "source": "04-TALENTS",
+    "icon": "ability_fomor_boss_rune_red",
+    "previousIcons": [],
+    "reason": "A red rune burning in a spiral: the Ember Sign drawn to burn hotter."
+  },
+  "talent:seasoned-blood": {
+    "name": "Seasoned Blood",
+    "source": "04-TALENTS",
+    "icon": "inv_alchemy_80_alchemiststone01",
+    "previousIcons": [],
+    "reason": "A dark red alchemist's stone: blood seasoned to take one more brew."
+  },
+  "talent:second-brewing": {
+    "name": "Second Brewing",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_cauldron_fire",
+    "previousIcons": [],
+    "reason": "A cauldron over a red fire: the brews refilled a second time."
+  },
+  "talent:second-cut": {
+    "name": "Second Cut",
+    "source": "04-TALENTS",
+    "icon": "ability_rogue_slicedice",
+    "previousIcons": [],
+    "reason": "A second slash after the first: one more attack against the same target."
+  },
+  "talent:sharper-oils": {
+    "name": "Sharper Oils",
+    "source": "04-TALENTS",
+    "icon": "inv_stone_sharpeningstone_05",
+    "previousIcons": [],
+    "reason": "A sharpening stone: an oil that makes the edge bite harder against its type."
   },
   "talent:shattering-cold": {
     "name": "Shattering Cold",
@@ -5551,6 +5817,41 @@
       "ability_shaman_multitotemactivation"
     ],
     "reason": "Retain: the multi-totem spirit image reads as a group return from death, matching the long-rest resurrection effect."
+  },
+  "talent:shattering-gale": {
+    "name": "Shattering Gale",
+    "source": "04-TALENTS",
+    "icon": "ability_druid_galewinds",
+    "previousIcons": [],
+    "reason": "A violet gust of wind: the Gale Sign that strikes as well as pushes."
+  },
+  "talent:sign-of-the-order": {
+    "name": "Sign of the Order",
+    "source": "04-TALENTS",
+    "icon": "inv_tabard_orderoftheembers",
+    "previousIcons": [],
+    "reason": "The Order of Embers' own tabard: every Sign costs 1 Energy less."
+  },
+  "talent:splitting-blow": {
+    "name": "Splitting Blow",
+    "source": "04-TALENTS",
+    "icon": "ability_warrior_colossussmash",
+    "previousIcons": [],
+    "reason": "An axe splitting a shield: a cheaper Sunder."
+  },
+  "talent:steel-guard": {
+    "name": "Steel Guard",
+    "source": "04-TALENTS",
+    "icon": "ability_warrior_weaponmastery",
+    "previousIcons": [],
+    "reason": "A blade caught on a blade: a successful Parry with a two-handed weapon gives Tempo."
+  },
+  "talent:thunderous-swing": {
+    "name": "Thunderous Swing",
+    "source": "04-TALENTS",
+    "icon": "ability_warrior_shockwave",
+    "previousIcons": [],
+    "reason": "A swing that sends a shockwave out: a two-handed hit that pushes the target back."
   },
   "talent:tide-of-the-ancestors": {
     "name": "Tide of the Ancestors",
@@ -11154,6 +11455,13 @@
     ],
     "reason": "Retain: the focused bow image fits an attack that hits without a roll."
   },
+  "talent:tumble": {
+    "name": "Tumble",
+    "source": "04-TALENTS",
+    "icon": "ability_rogue_sprint_blue",
+    "previousIcons": [],
+    "reason": "A blue blur in motion: a step away when a blow misses."
+  },
   "talent:turn-their-fire": {
     "name": "Turn Their Fire",
     "source": "04-TALENTS",
@@ -11176,6 +11484,13 @@
     "icon": "inv_glaive_1h_artifactazgalor_d_02dual",
     "previousIcons": [],
     "reason": "A pair of fel-lit warglaives: one in each hand."
+  },
+  "talent:twin-signs": {
+    "name": "Twin Signs",
+    "source": "04-TALENTS",
+    "icon": "boss_odunrunes_blue",
+    "previousIcons": [],
+    "reason": "Two blue runes crossed: the second Sign of a turn costs less."
   },
   "talent:twinned-hours": {
     "name": "Twinned Hours",
@@ -11241,6 +11556,13 @@
       "inv_misc_head_02"
     ],
     "reason": "A stubborn face amid flames fits shrugging off harsh weather and heat."
+  },
+  "talent:unbowed": {
+    "name": "Unbowed",
+    "source": "04-TALENTS",
+    "icon": "ability_hunter_pet_bear",
+    "previousIcons": [],
+    "reason": "A roaring bear that stands its ground: no knock or push moves it."
   },
   "talent:unbreakable": {
     "name": "Unbreakable",
@@ -11376,6 +11698,13 @@
       "spell_holy_eyeforaneye"
     ],
     "reason": "Replace: Eye for an Eye depicts retaliation. The shield wall image depicts an immovable stance that resists slowing and falling."
+  },
+  "talent:ursine-fury": {
+    "name": "Ursine Fury",
+    "source": "04-TALENTS",
+    "icon": "ability_warrior_bloodfrenzy",
+    "previousIcons": [],
+    "reason": "A clenched bloodied fist: more Tempo held at once."
   },
   "talent:vampiric-blood": {
     "name": "Vampiric Blood",
@@ -11596,6 +11925,13 @@
       "spell_holy_flashheal"
     ],
     "reason": "Replace: Flash Heal depicts a single-target heal. The circular Aura of Light image matches the expanded range of Aura of Resolve."
+  },
+  "talent:wide-blast": {
+    "name": "Wide Blast",
+    "source": "04-TALENTS",
+    "icon": "inv_misc_bomb_01",
+    "previousIcons": [],
+    "reason": "A round black bomb with a lit fuse: a bomb thrown farther with a wider blast."
   },
   "talent:wide-swing": {
     "name": "Wide Swing",

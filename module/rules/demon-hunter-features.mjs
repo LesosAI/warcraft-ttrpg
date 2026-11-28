@@ -150,8 +150,10 @@ export const DH_FEATURE_NAMES = Object.freeze([
  * @param {{eyes?: number}} [o]
  * @returns {number}
  */
-export function spectralSightFeet(fel = 0, { eyes = 0 } = {}) {
-  return SPECTRAL_SIGHT.base + SPECTRAL_SIGHT.step * felSteps(fel) + SPECTRAL_SIGHT.eyesOfTheNether.feet * whole(eyes);
+export function spectralSightFeet(fel = 0, { eyes = 0, extra = 0 } = {}) {
+  // `extra` is what a worn item adds (the Blindfold of the Illidari: *Spectral Sight reaches 10 feet
+  // further*; D-2156), read off its patch through `class-talents.mjs#patchRowsOf`.
+  return SPECTRAL_SIGHT.base + SPECTRAL_SIGHT.step * felSteps(fel) + SPECTRAL_SIGHT.eyesOfTheNether.feet * whole(eyes) + Math.max(0, whole(extra));
 }
 
 /** The token flag that records the feet Spectral Sight wrote, so a feature taken away can put the sight back. */
@@ -490,13 +492,23 @@ export const DH_FEATURE_RIDERS = Object.freeze({
  * @param {{unarmed?: boolean}} [o]
  * @returns {{talents: Array<object>, rowOf: (className: string, identifier: string) => object|null}}
  */
-export function demonHunterRiders(featureNames = [], { unarmed = false } = {}) {
+export function demonHunterRiders(featureNames = [], { unarmed = false, price = {} } = {}) {
   const held = new Set(unarmed === true ? [] : (featureNames ?? []));
   const talents = Object.entries(DH_FEATURE_RIDERS)
     .filter(([, row]) => held.has(row.feature))
     .map(([identifier, row]) => ({ className: DEMON_HUNTER_NAME, identifier, name: row.feature, taken: 1 }))
     .sort((a, b) => a.identifier.localeCompare(b.identifier));
-  return { talents, rowOf: (className, identifier) => (DH_FEATURE_RIDERS[identifier] ? { rider: DH_FEATURE_RIDERS[identifier].rider } : null) };
+  // **A PRICE SET BY A WORN ITEM** (the Warglaive of Azzinoth's Twin Blades: *Fel Lash costs them 1
+  // Hatred*; D-2157): the rider's amount at the lower of its own and the price handed in, so the
+  // dialog's line, the judgement and the payment read the same row (D-770).
+  const riderOf = identifier => {
+    const rider = DH_FEATURE_RIDERS[identifier]?.rider ?? null;
+    if (!rider) return null;
+    const set = Number.isInteger(price?.[identifier]) && price[identifier] >= 0 ? price[identifier] : null;
+    if (set === null || !(set < (rider.cost?.amount ?? 0))) return rider;
+    return { ...rider, cost: { ...rider.cost, amount: set } };
+  };
+  return { talents, rowOf: (className, identifier) => (DH_FEATURE_RIDERS[identifier] ? { rider: riderOf(identifier) } : null) };
 }
 
 /**

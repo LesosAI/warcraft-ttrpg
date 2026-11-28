@@ -85,6 +85,10 @@ import { wisdomBonus } from "../../rules/distilled-wisdom.mjs";
 import { skillBoonsOn, veilBanesOn } from "../../rules/sovereign-spells.mjs";
 import { agilityBanesOn } from "../../rules/demon-hunter-spells.mjs";
 import { withLaidVulnerable } from "../../rules/laid-vulnerable.mjs";
+// The Witch Hunter (wave 2a-A): the strip an effect lays, the brews' refused conditions and The Last Hunt's cap.
+import { withoutLaidImmune } from "../../rules/laid-immune.mjs";
+import { brewImmunities, brewSignDC, isWitchHunterClass, lastHuntStands } from "../../rules/witch-hunter-standing.mjs";
+import { medallionDCBonus, witchHunterDC } from "../../rules/medallion.mjs";
 import { SOURCE_MIGRATIONS } from "../../migrations/index.mjs";
 // 08 §4: a bonus from a hidden item is credited to *an unidentified item* (D-1435).
 import { unidentifiedSource } from "../../helpers/identify-words.mjs";
@@ -555,8 +559,10 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // Hatred's cap is 5 plus 2 for each 5 Fel Corruption, read through the ONE reader every Fel-scaling
     // door asks (`rules/hatred.mjs#felFor`), so I Have Prepared and Embrace the Pain reach it.
     const fel = felFor(this.parent);
-    for (const pool of pools.momenta) pool.max = capFor(pool, ranksOf, { hourglass, chaMod, conMod, crowned, fel });
-    if (pools.momentum && !pools.momenta.includes(pools.momentum)) pools.momentum.max = capFor(pools.momentum, ranksOf, { hourglass, chaMod, conMod, crowned, fel });
+    // Tempo's cap is 10 while 02's The Last Hunt stands (the Witch Hunter plan): the effect's flag, Crowned's way.
+    const lastHunt = lastHuntStands(this.parent?.effects ?? []);
+    for (const pool of pools.momenta) pool.max = capFor(pool, ranksOf, { hourglass, chaMod, conMod, crowned, fel, lastHunt });
+    if (pools.momentum && !pools.momenta.includes(pools.momentum)) pools.momentum.max = capFor(pools.momentum, ranksOf, { hourglass, chaMod, conMod, crowned, fel, lastHunt });
     // A pool the character does not hold keeps its stored value untouched and
     // reports a null cap. Zeroing it here would discard data every time a GM
     // detached a class item, and the null `max` is already what tells the sheet
@@ -644,6 +650,8 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // Frozen Core: *You are Immune (Frost)*; D-775).
     this.immune = damageImmunitiesFor(talentRows);
     if (invulnerabilityPotionActive(this.parent?.effects ?? [])) this.immune = [...new Set([...this.immune, "physical"])];
+    // A laid strip takes a type back off (08 §12's Silver dust, 02 §7's Ash Sign; `rules/laid-immune.mjs`).
+    this.immune = withoutLaidImmune(this.immune, this.parent?.effects ?? []);
     // **EVERY LINE ADDS TO WHAT IS THERE** (D-691's own scar). This key is
     // derived rather than stored, so an `initial`-phase Active Effect that
     // wrote one would land before this method and a plain assignment would
@@ -682,7 +690,10 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
       ...peopleImmune(peopleRace?.system?.identifier ?? peopleRace?.name ?? null),
       // **AND 04's SERENE DISDAIN** (the Sovereign: *While you have 1 or more Tribute, you cannot be Frightened.
       // At rank 2, ... also cannot be Charmed*): off the Tribute held as this preparation reads it.
-      ...sereneImmune({ rank: sovRankIn(talentRows, SERENE_DISDAIN.identifier), tribute: (this.momenta ?? []).find(p => p.name === "tribute")?.value ?? 0 })
+      ...sereneImmune({ rank: sovRankIn(talentRows, SERENE_DISDAIN.identifier), tribute: (this.momenta ?? []).find(p => p.name === "tribute")?.value ?? 0 }),
+      // **AND WHAT A WITCH HUNTER'S BREW REFUSES WHILE IT ACTS** (08 §12's Goldthorn draught: *you cannot be
+      // **Poisoned** while it acts on you*; the Ooze Decoction), off the brew carriers (`witch-hunter-standing.mjs`).
+      ...brewImmunities(this.parent?.effects ?? [])
     ])];
     this.damageRatingBonus = rungs.damageBonus;
     // **WHAT ADDS TO THE DAMAGE, BY LANE AND BY TYPE** (04, D-711 phase 2).
@@ -857,7 +868,11 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     const featureNames = new Set((this.parent?.items ?? []).filter(i => i.type === "feature").map(i => i.name));
     const scales = scalesWaive({ held: featureNames.has(SCALES.feature), category });
     this.scalesWaive = scales;
-    const suitBanes = encumberingBanes({ encumbering: effects.encumbering === true, grants: grantsOn(suit, bearer), waived: scales });
+    // **04's BEAR'S HIDE AT RANK 2** (*you ignore the **Encumbering** trait of the suit you wear*; the Witch Hunter
+    // plan's wave 2b, O-719): the suit's trait waived whole - its Stealth Bane here and its Speed part below - as 02's
+    // Scales waives it, and never an Encumbering weapon's.
+    const suitWaived = effects.encumbering === true && armorAccessFor(talentRows).waivesSuitEncumbering === true;
+    const suitBanes = encumberingBanes({ encumbering: effects.encumbering === true, grants: grantsOn(suit, bearer), waived: scales || suitWaived });
     this.armorBanes = [...new Set([...effects.banes, ...suitBanes, ...wornWeapons.banes])];
 
     // Speed (05 §10, D-621): the race's own, the suit's cost or gift, and
@@ -881,7 +896,9 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
         waivesEncumbering: armorAccessFor(talentRows).waivesEncumbering,
         weaponSpeed: wornWeapons.speed ?? 0,
         // 02's Scales: the Mail or Plate suit's Encumbering costs no Speed (stage 2B).
-        scales
+        scales,
+        // 04's Bear's Hide at rank 2: the suit's Encumbering costs no Speed either (wave 2b).
+        suitWaived
       });
     // Undeath's Speed cost, the track's "in total" (10 §6).
     if (rungs.speed) this.speedParts.push({ key: "corruption", value: rungs.speed });
@@ -1020,6 +1037,22 @@ export class CharacterData extends foundry.abstract.TypeDataModel {
     // character whose classes cast nothing.
     const casting = classItems.find(c => c.castingAbility)?.castingAbility ?? null;
     this.spellDC = casting ? 10 + this.abilities[casting].mod + this.proficiency : null;
+    // **THE WITCH HUNTER'S SPELL DC, DERIVED ONCE** (08 §11's medallion: *adds 1 to their Spell DC for each rarity
+    // above Common, up to +3 at Epic*; 08 §12's Firebloom cordial: *Your Spell DC for **Signs** rises by 1, or 2 at
+    // tier 3 or higher*; the Witch Hunter plan's wave 2c, O-735). The medallion worn in the Neck slot joins
+    // `spellDC` itself, so every reader - a Sign, a bomb, the non-maker's drink, the sheet - takes it once; `signDC`
+    // adds the cordial on top for a Sign alone. `effects/witch-hunter-brews.mjs#whSpellDC` reads these two numbers
+    // and adds nothing, and a census fails a second `witchHunterDC(` caller. Anyone else's `signDC` is its `spellDC`.
+    const witchHunter = isWitchHunterClass(this.classKeys);
+    this.signDC = this.spellDC;
+    if (witchHunter && this.spellDC !== null) {
+      const items = [...(this.parent?.items ?? [])];
+      const effects = [...(this.parent?.effects ?? [])];
+      const base = this.spellDC;
+      const dc = sign => witchHunterDC({ spellDC: base, medallion: medallionDCBonus(items), firebloom: brewSignDC(effects) > 0, tier: this.tier, sign });
+      this.spellDC = dc(false);
+      this.signDC = dc(true);
+    }
     // The casting ability modifier the Spell DC adds, derived beside it and never
     // stored: what an amount's `castingMod` reads (`expressions.mjs#abilityScope`;
     // the audit's Regrowth, D-1861). 0 where the classes cast nothing.

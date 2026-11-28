@@ -390,7 +390,17 @@ export function extraStrikesFor(talents = [], { sl = 0, hit = false, traits = []
       identifier: talent.identifier, name: talent.name, count: n,
       target: r.target === "other" ? "other" : "same",
       rating: Math.trunc(Number(r.rating)) || 0,
-      trait: r.trait ?? null
+      trait: r.trait ?? null,
+      // **A PRICE, A BOON, A REACH AND A WEAPON** (04's Second Cut: *you may spend 2 Tempo to make one more attack
+      // against the same target. At rank 2 it costs 1 Tempo*; Cat's Dance: *when you hit with a weapon, you may spend 2
+      // Tempo to make one attack with a Boon against a different creature within your reach*; the Witch Hunter plan's
+      // wave 2b): named only where a row carries one, so Flurry's and Wide Swing's offers keep their shape. The press
+      // pays the price and claims the round (`dice/chat.mjs#extraStrikeFromCard`), and the attack is ONE roll (R6).
+      ...(r.cost?.pool && amount(r.cost.amount, { rank }) > 0 ? { cost: amount(r.cost.amount, { rank }), pool: String(r.cost.pool) } : {}),
+      ...(Number(r.boons) > 0 ? { boons: Math.trunc(Number(r.boons)) } : {}),
+      ...(r.reach === true ? { reach: true } : {}),
+      ...(r.weapon === true ? { weapon: true } : {}),
+      ...(r.triggered === true ? { triggered: true } : {})
     });
   }
   return out;
@@ -984,7 +994,10 @@ export function patchRowsOf(talents = [], feature, rowOf = talentEffect) {
   const out = [];
   for (const t of talents ?? []) {
     if (!(Math.trunc(Number(t?.taken) || 0) > 0)) continue;
-    const entry = rowOf(t.className, t.identifier, t.race ?? null);
+    // **A WORN ITEM IS A SECOND SOURCE** (08 §20's class items, D-2156): its patches ride on
+    // the row itself (`rules/item-patches.mjs#itemPatchSources`, off `AzerothActor
+    // #patchSources`), never in a talent table, and this one reader reads both.
+    const entry = Array.isArray(t?.itemPatches) ? { modifies: t.itemPatches } : rowOf(t.className, t.identifier, t.race ?? null);
     const mods = !entry?.modifies ? [] : Array.isArray(entry.modifies) ? entry.modifies : [entry.modifies];
     for (const m of mods) if (m?.feature === feature) out.push({ talent: t, patch: m, rank: rankOf(t) });
   }
@@ -1126,8 +1139,13 @@ export function criticalRangeFor(talents = [], { health = null, pools = [], fact
     if (r.while && !poolGateHolds(r.while, pools)) continue;
     // A fact name, or a gate object (the Legacy branches' doors 15, 17, 18: Mak'gora's
     // `challenged`), through the one predicate - a fact name reads as it always did.
-    if (r.when && gateHolds(r.when, facts ?? {}) !== true) continue;
-    on = on === null ? Number(r.on) : Math.min(on, Number(r.on));
+    // **A SECOND RANGE A RANK ADDS** (04's Lethal Edge: *Your weapon attacks inflict a Critical Injury on 19 or 20.
+    // At rank 2 this applies on 18 to 20 against a creature of a **Studied** type*; the Witch Hunter plan's wave 2b):
+    // `r.or`, each its own number behind its own gate, read beside the row's own - the lowest that holds stands.
+    const ranges = [r, ...(Array.isArray(r.or) ? r.or : [])].filter(x => Number.isFinite(Number(x?.on)) && (!x.when || gateHolds(x.when, facts ?? {}) === true));
+    if (!ranges.length) continue;
+    const low = Math.min(...ranges.map(x => Number(x.on)));
+    on = on === null ? low : Math.min(on, low);
     by.push(talent.name);
   }
   return { on, by };
@@ -1885,6 +1903,15 @@ export function evadeFor(talents = [], rowOf = talentEffect) {
   const [first] = rowsOfKind(talents, "evade", rowOf);
   if (!first) return null;
   const feet = at(first.row.feet ?? 0, { rank: first.rank });
+  // **A STEP THAT COSTS NOTHING, OFF A MELEE MISS, ONCE A ROUND** (04's Tumble: *Once a round, when a melee attack
+  // misses you, you may move 5 feet per rank. This movement does not provoke Opportunity Attacks*; the Witch Hunter
+  // plan's wave 2b): `free`, `melee`, `missOnly` and `once` named only where a row carries them.
+  if (first.row.free === true) {
+    return feet > 0 ? {
+      name: first.talent.name, identifier: first.talent.identifier, pool: null, cost: 0, feet,
+      melee: first.row.melee === true, missOnly: first.row.missOnly === true, once: first.row.once === "round" ? "round" : null
+    } : null;
+  }
   const cost = at(first.row.cost?.amount ?? 0, { rank: first.rank });
   return feet > 0 && first.row.cost?.pool ? { name: first.talent.name, pool: first.row.cost.pool, cost, feet } : null;
 }
@@ -2736,6 +2763,9 @@ export function featureAims({ name = "", lays = null, attack = false, onUse = nu
   // Opportunity Attack, the creature targeted, so from the sheet it was refused *one creature* whatever was
   // targeted. The other four choices read no target and are untouched by the hand-over.
   if (o.dh?.limits) return true;
+  // The Witch Hunter's (wave 2a-B): the Rowan Sign's ally and the Lull Sign's creatures, read off the Signs' `aims` (a
+  // cone gathers its own and sets the targets aside), and Expose Weakness's creature.
+  if (o.wh?.aims) return true;
   // The Chronomancer's (stage 2b): Slipstream's and Master of Hours' creature, Suspend's,
   // and the Chronoweaver's allies - Gift of Moments, Quickstep, Second Chance, Echo of Power,
   // Suspended Moment and Recovered Hours name theirs, Temporal Loop and Unfading the creature
@@ -5118,16 +5148,21 @@ export function selfHitTestsFor(talents = [], { sl = 0, hit = false, rangeKind =
 export function armorAccessFor(talents = [], rowOf = talentEffect) {
   const categories = new Set();
   let waivesEncumbering = false;
+  // **THE SUIT'S ENCUMBERING, WAIVED WHOLE** (04's Bear's Hide at rank 2: *you ignore the **Encumbering** trait of the
+  // suit you wear*; T3, O-719): its Speed part AND its Stealth Bane, and never a weapon's - 02's Scales' reading of
+  // the suit, read where Scales' is (`CharacterData`'s `suitWaived`).
+  let waivesSuitEncumbering = false;
   let shields = false;
   const by = [];
   for (const { talent, row: raw, rank } of rowsOfKind(talents, "armorAccess", rowOf)) {
     const row = atRankOf(raw, rank);
     for (const c of row.categories ?? []) if (typeof c === "string" && c) categories.add(c);
     if (row.waivesEncumbering === true) waivesEncumbering = true;
+    if (row.waivesSuitEncumbering === true) waivesSuitEncumbering = true;
     if (row.shields === true) shields = true;
     by.push(talent.name);
   }
-  return { categories: [...categories].sort(), waivesEncumbering, shields, by };
+  return { categories: [...categories].sort(), waivesEncumbering, waivesSuitEncumbering, shields, by };
 }
 
 /**

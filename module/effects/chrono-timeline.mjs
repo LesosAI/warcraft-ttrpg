@@ -23,6 +23,12 @@ import { answerInTime, answerWindow } from "../rules/chromatic-talents.mjs";
 import { manaPool } from "../rules/pools.mjs";
 import { feetApart } from "../canvas/footprints.mjs";
 import { ASK_MS, answererOf, confirmHere } from "./blow-doors.mjs";
+// The Signet Ring of the Bronze Dragonflight's Sand (08 §20, D-2156): the item's patch on this
+// feature, read through the one reader, and the Sand pool's own cap.
+import { patchRowsOf } from "../rules/class-talents.mjs";
+import { itemPatchSum } from "../rules/item-patches.mjs";
+import { gainSand } from "../rules/sand.mjs";
+import { sandPoolOf } from "./sand.mjs";
 
 /** The query a holder is asked through, on whoever answers for it. */
 export const TIMELINE_QUERY = "azeroth-rpg.anotherTimeline";
@@ -147,7 +153,18 @@ async function timelineHere(payload, holder, roller) {
   if (!(await game.system.azeroth.workflows.spendTurnBudget(holder, "reaction"))) return { yes: false };
   const pool = manaPool(holder.poolSnapshot?.() ?? []);
   if (!pool || pool.value < F.mana) return { yes: false };
-  await holder.updatePool({ itemId: pool.itemId, kind: pool.kind, value: pool.value - F.mana });
+  // **08 §20's SIGNET RING OF THE BRONZE DRAGONFLIGHT** (*gains 1 Sand each time they use Another
+  // Timeline*; D-2156): the worn item's patch on this feature, written with the Mana in ONE pool
+  // write (the actor's pool queue), to the Hourglass's cap - no Hourglass, no Sand (D-848).
+  const signet = itemPatchSum(patchRowsOf(holder.patchSources?.() ?? [], F.feature), "sand");
+  const sand = signet.amount > 0 ? sandPoolOf(holder) : null;
+  const writes = [{ itemId: pool.itemId, kind: pool.kind, value: pool.value - F.mana }];
+  const sandAfter = sand ? gainSand(sand.value, signet.amount, sand.max) : null;
+  if (sand && sandAfter !== sand.value) writes.push({ itemId: sand.itemId, kind: "momentum", value: sandAfter });
+  await holder.updatePool(writes.length > 1 ? writes : writes[0]);
+  if (sand && sandAfter > sand.value) {
+    ui.notifications?.info(game.i18n.format("AZEROTH.ClassItem.TimelineSand", { name: holder.name, n: sandAfter - sand.value, item: signet.by.join(", ") }));
+  }
   return { yes: true };
 }
 

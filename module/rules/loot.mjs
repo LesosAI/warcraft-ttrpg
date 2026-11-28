@@ -231,7 +231,9 @@ export function kindOf(item) {
  * A living mount or a wagon is 13 §8's decision, not a chest's contents
  * (D-666, reversible in one line). Harness and barding stay.
  */
-const EXCLUDED = [/·\s*Working animals\s*$/, /·\s*Trained mounts\s*$/, /·\s*War mounts\s*$/, /·\s*Vehicles\s*$/];
+// A Witch Hunter's brew is brewed and never sold (08 §12: *A Witch Hunter brews these, and none is sold*),
+// so no chest holds one.
+const EXCLUDED = [/·\s*Working animals\s*$/, /·\s*Trained mounts\s*$/, /·\s*War mounts\s*$/, /·\s*Vehicles\s*$/, /·\s*Witch hunter's brews\s*$/];
 
 /** Whether a pack item may be drawn as a Common find. */
 export function lootable(item) {

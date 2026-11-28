@@ -524,19 +524,34 @@ export function spendRunes(state = {}, { kind = "any", count = 1 } = {}) {
  * @param {ReturnType<typeof wieldedRunes>} rows
  * @param {{kind?: "blood"|"frost"|"any", count?: number}} [o]
  */
-export function refillRunes(rows = [], { kind = "any", count = Infinity } = {}) {
+export function refillRunes(rows = [], { kind = "any", count = Infinity, itemId = null } = {}) {
   let left = count === Infinity ? Infinity : Math.max(0, int(count));
   let refilled = 0;
+  // `itemId` keeps the refill to one weapon (08 §20's Gorefiend's Runeblade: *refills one spent rune
+  // on it*; D-2156); null is every weapon wielded, as Blood Tap and the Long Rest have it.
   const after = (rows ?? []).map(row => ({
     ...row,
     runes: row.runes.map(r => {
-      if (left < 1 || !r.spent || (kind !== "any" && r.kind !== kind)) return { ...r };
+      if (left < 1 || !r.spent || (kind !== "any" && r.kind !== kind) || (itemId !== null && row.itemId !== itemId)) return { ...r };
       left -= 1;
       refilled += 1;
       return { ...r, spent: false };
     })
   }));
   return { runes: after, refilled };
+}
+
+/**
+ * **HOW MANY SPENT RUNES ONE WIELDED WEAPON HOLDS** (Gorefiend's Runeblade's The Council's Spirit is
+ * refused where there is none to refill, before anything is spent; D-2156).
+ *
+ * @param {ReturnType<typeof wieldedRunes>} rows
+ * @param {string|null} itemId
+ * @returns {number}
+ */
+export function spentRunesOn(rows = [], itemId = null) {
+  return (rows ?? []).filter(row => itemId !== null && row?.itemId === itemId)
+    .reduce((n, row) => n + (row.runes ?? []).filter(r => r?.spent).length, 0);
 }
 
 /**

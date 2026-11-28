@@ -14,7 +14,7 @@ import { chooser, fightWith, manaOf, pick, pressCard, pressUse, sceneWith, token
 import { capacityOf, hordeActorsOf, membersOf, setStitchPick } from "../effects/necromancer-horde.mjs";
 import { HORDE_LEAD_FLAG } from "../rules/horde.mjs";
 import { hordeLoad } from "../rules/horde.mjs";
-import { countedMembers } from "../rules/necromancer-features.mjs";
+import { countedMembers, standAgainHealth } from "../rules/necromancer-features.mjs";
 import { checkOverlap, checkText } from "./geometry.mjs";
 
 const SCOPE = "azeroth-rpg";
@@ -458,7 +458,10 @@ export function necromancerHordeBatch(context) {
         await skeleton.update({ "system.health.temp": 0, "system.health.value": 0 });
         const offer = await offered;
         const { release } = await pressCard(offer, 'button[data-action="unendingDead"][data-fall="false"]');
-        await until(() => skeleton.system.health.value === 1, "standing again with half its Health");
+        // Half its maximum, read through the rule (the phase 5 run: the test pinned 1, half of the Risen Skeleton's
+        // old 3, and D-1900 raised the bestiary's Health a quarter, to 4).
+        const half = standAgainHealth(skeleton.system.health.max);
+        await until(() => skeleton.system.health.value === half, `standing again with half its Health (${half})`);
         await release();
         assert.equal(essenceOf(necro).value, 1, "1 Essence spent");
         assert.isTrue(skeleton.getFlag(SCOPE, "stoodAgain"), "once");

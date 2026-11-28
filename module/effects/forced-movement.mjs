@@ -25,6 +25,8 @@
 import { FORCED_REFUSALS, beingMovedRefusal, forcedPlan, forcedStep } from "../rules/forced-movement.mjs";
 import { allyOf } from "../canvas/engaged.mjs";
 import { refusesPushFor } from "../rules/class-talents.mjs";
+// 04's Unbowed at rank 2 (the Witch Hunter plan's wave 2b).
+import { UNBOWED, unbowedRefuses, whRankOfItems } from "../rules/witch-hunter-talents.mjs";
 import { shapeCentre } from "../rules/area-ticks.mjs";
 import { dispersionRefusal } from "../rules/dispersion.mjs";
 // 07 §12's Stasis: *cannot act, move, speak or be moved* (O-306).
@@ -128,6 +130,17 @@ export function beingMovedBy(victim, by, { ignoreSize = null } = {}) {
   });
 }
 
+/**
+ * Whether 04's Unbowed at rank 2 holds this creature against this move: the talent at its rank, a weapon in two hands
+ * (`AzerothActor#gateFacts`' wield facts), and a mover that is neither the creature nor its ally (`allyOf`, the willing
+ * reading `beingMovedBy` already takes).
+ */
+function unbowedHolds(actor, by) {
+  if (!actor || actor.type !== "character") return false;
+  const willing = Boolean(by) && (by.uuid === actor.uuid || allyOf(by, actor));
+  return unbowedRefuses({ rank: whRankOfItems(actor.items ?? [], UNBOWED.identifier), bothHands: actor.gateFacts?.()?.wield?.bothHands === true, willing });
+}
+
 /** Move it here; the caller has established that this client may write the token. */
 async function moveHere({ token, from, feet, toward, by = null, ignoreSize = null, cue = null }) {
   const actor = token.actor ?? null;
@@ -145,6 +158,10 @@ async function moveHere({ token, from, feet, toward, by = null, ignoreSize = nul
   if (toward !== "toward" && actor && typeof actor.takenTalents === "function" && refusesPushFor(actor.takenTalents())) {
     return result(name, 0, false, "immovable");
   }
+  // **04's UNBOWED AT RANK 2** (the Witch Hunter's Bear: *while you wield a weapon in two hands, you cannot be moved
+  // against your will*; the Witch Hunter plan's wave 2b): a push or a pull alike, never one the creature is willing to
+  // take, said in the creature's own refusal's words.
+  if (unbowedHolds(actor, by)) return result(name, 0, false, "refuses");
   const grid = gridOf(token.parent);
   const centre = token.getCenterPoint();
   const plan = forcedPlan({ centre, from, feet, toward, grid });

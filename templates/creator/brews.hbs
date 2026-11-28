@@ -1,0 +1,26 @@
+{{!-- The Witch Hunter's brews step (02 §7's Field Brews and Tome of Silver and Ash; O-727): the formulas known at
+      tier 1, chosen from the whole of 08's table for each kind, and the Tome's second type. A row past the count is
+      greyed while its kind is full, and the count beside each kind says so in words. --}}
+<p class="azeroth-creator-allowance">{{localize "AZEROTH.Creator.Brews.Lead"}}</p>
+{{#each pane.brews.kinds as |k|}}
+<fieldset class="azeroth-creator-brews" data-brew-kind="{{k.kind}}">
+  <legend><span class="azeroth-forge-name">{{k.label}}</span> <span class="azeroth-creator-allowance">{{k.count}}</span></legend>
+  <ul class="azeroth-creator-chips">
+    {{#each k.rows as |r|}}
+    <li>
+      <label class="azeroth-forge-check" {{#if r.text}}data-tooltip="{{r.text}}"{{/if}}>
+        <input type="checkbox" name="formula-{{r.id}}" value="{{r.id}}" data-creator="formula" {{#if r.checked}}checked{{/if}} {{#if r.disabled}}disabled{{/if}}>
+        {{r.name}}
+      </label>
+    </li>
+    {{/each}}
+  </ul>
+</fieldset>
+{{/each}}
+<label class="azeroth-forge-check">{{localize "AZEROTH.Creator.Brews.TomeType"}}
+  <select name="tomeType" data-creator="tomeType">
+    <option value="">{{localize "AZEROTH.Creator.Brews.TomeNone"}}</option>
+    {{#each pane.brews.types as |ty|}}<option value="{{ty.key}}" {{#if ty.selected}}selected{{/if}}>{{ty.label}}</option>{{/each}}
+  </select>
+</label>
+<p class="azeroth-dialog-note">{{localize "AZEROTH.Creator.Brews.TomeNote"}}</p>

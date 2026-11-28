@@ -131,7 +131,9 @@ export class ClassData extends foundry.abstract.TypeDataModel {
 
       // Three named branches. The sheet never invents one (D11 §4). FOUR for the
       // Chromatic Champion, one a dragonflight, and no Legacy beside them, so a frame
-      // still shows four at most (the Chromatic Champion plan, *Trees*).
+      // still shows four at most (the Chromatic Champion plan, *Trees*). FOUR for the
+      // Witch Hunter too (the lead, R4: *"Wolf, Gryphon, Bear, Cat"*): a Human keeps no
+      // Legacy on it, so its frame is four as well.
       //
       // {name, description}, as the pack source and TalentTreeData carry
       // them. Typed as strings until 0.6.0, so `StringField#_cast` turned every
@@ -612,7 +614,7 @@ export class FeatureData extends foundry.abstract.TypeDataModel {
 
 /* -------------------------------------------- */
 
-/** A talent tree: a class and its three branches (four for the Chromatic Champion). Talents reference into it. */
+/** A talent tree: a class and its three branches (four for the Chromatic Champion and the Witch Hunter). Talents reference into it. */
 export class TalentTreeData extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     return {

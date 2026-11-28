@@ -91,6 +91,23 @@
       </select>
     </div>
     {{#if profession.enchant.noAffix}}<p class="azeroth-prof-refusal">{{localize "AZEROTH.Profession.Sheet.Enchant.NoAffix"}}</p>{{/if}}
+    {{!-- Or an Enchanter's Signature (08 §18, D-2147): every row with its cost and sentence; a row the item cannot take is disabled with its reason in words. --}}
+    {{#if profession.enchant.signatures.length}}
+    <h5 class="azeroth-prof-minor">{{localize "AZEROTH.Profession.Sheet.Enchant.SigHeading"}} <span>{{localize "AZEROTH.Profession.Sheet.Enchant.SigHint"}}</span></h5>
+    <ul class="azeroth-prof-sigs">
+      {{#each profession.enchant.signatures as |sg|}}
+      <li class="azeroth-prof-sig{{#if sg.selected}} is-selected{{/if}}{{#unless sg.ok}} is-barred{{/unless}}" data-sig-row="{{sg.key}}">
+        <button type="button" class="azeroth-prof-sig-pick" data-action="pickEnchantSignature" data-sig-key="{{sg.key}}" aria-pressed="{{#if sg.selected}}true{{else}}false{{/if}}"{{#unless sg.ok}} disabled{{/unless}}>
+          <span class="azeroth-prof-sig-name">{{sg.name}}</span>
+          <span class="azeroth-prof-sig-cost">{{sg.costWords}}</span>
+          {{#if sg.selected}}<span class="azeroth-prof-sig-chosen">{{localize "AZEROTH.Profession.Sheet.Enchant.SigChosen"}}</span>{{/if}}
+        </button>
+        <p class="azeroth-prof-sig-text">{{{sg.html}}}</p>
+        {{#if sg.reason}}<p class="azeroth-prof-refusal">{{sg.reason}}</p>{{/if}}
+      </li>
+      {{/each}}
+    </ul>
+    {{/if}}
     {{#with profession.enchant.chip as |chip|}}<p class="azeroth-prof-soft">{{localize "AZEROTH.Profession.Sheet.Trait.Hover"}} <button type="button" class="azeroth-prof-trait" data-prof-trait data-tooltip-html="{{chip.tip}}" aria-label="{{chip.aria}}">{{chip.name}}</button></p>{{/with}}
     <div class="azeroth-prof-actions">
       <button type="button" class="azeroth-prof-primary" data-action="layEnchantment"{{#unless profession.enchant.ready}} disabled{{/unless}}>{{localize "AZEROTH.Profession.Sheet.Enchant.Button"}}</button>

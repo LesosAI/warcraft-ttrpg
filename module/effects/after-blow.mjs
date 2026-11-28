@@ -61,6 +61,8 @@ import { requestFrostArmor } from "./frost-armor.mjs";
 import { requestBleakheartHit } from "./bleakheart-hit.mjs";
 // 04's Righteous Fury since the class talent audit (class agent A, D-1874): 1 Zeal to the rank's ceiling a round.
 import { righteousFuryGain } from "./audit-martial.mjs";
+// The Witch Hunter's Tome (the plan's wave 2a-A): the types damaged, and the Undead Decoction's kill.
+import { recordBlow as recordWitchHunterBlow } from "./witch-hunter-tome.mjs";
 
 /**
  * The query a Vengeance holder another user owns is reached through, on the
@@ -208,6 +210,14 @@ export async function afterBlow({ target, before, attacker = null, riposte = fal
   // WHICH damage type (04's Twisted Faith: *a target dealt Shadow damage by you*;
   // D-774).
   await markDamaged({ attacker, target, dealt: before - after, type, delivered });
+  // **THE WITCH HUNTER'S RECORD OF TYPES DAMAGED** (02's Tome of Silver and Ash: *after a fight in which you damaged a
+  // creature of a type you do not know*) and the Undead Decoction's Health on a kill (the plan's wave 2a-A). Guarded:
+  // bookkeeping beyond the target never stops the next.
+  try {
+    await recordWitchHunterBlow({ attacker, target, dealt: before - after, attack: attack && !spell, before, after });
+  } catch (err) {
+    console.warn("azeroth-rpg | Witch Hunter blow record", err);
+  }
   // **THE PRIEST'S** (D-774): Shadowform's mark where the blow was Holy, and
   // Vampiric Touch's Health where it was Shadow and reduced the target's Health.
   if (attacker && type === "holy" && before - after > 0) await markLightUsed(attacker);

@@ -5869,6 +5869,52 @@
     margin: 2px 0;
     padding: 0;
   }
+  .azeroth.sheet.actor.character .azeroth-prof-sigs {
+    list-style: none;
+    margin: 2px 0 4px;
+    padding: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-sig {
+    padding: 3px 0 4px;
+    border-bottom: 1px solid var(--azeroth-slot-edge);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-sig.is-selected {
+    box-shadow: inset 3px 0 0 var(--azeroth-alliance-gold);
+    padding-left: 6px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-sig:last-child {
+    border-bottom: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-sig-pick {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-sig-pick[aria-pressed=true] {
+    border-color: var(--azeroth-alliance-gold);
+    color: var(--azeroth-gold-text);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-sig-pick[disabled] {
+    border-style: dashed;
+    cursor: not-allowed;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-sig-name {
+    font-weight: 700;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-sig-cost {
+    color: var(--azeroth-ink-light-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-sig-chosen {
+    color: var(--azeroth-gold-text);
+    text-transform: uppercase;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+  }
+  .azeroth.sheet.actor.character .azeroth-prof-sig-text {
+    margin: 2px 0 0;
+    color: var(--azeroth-ink-light);
+  }
   .azeroth.sheet.actor.character .azeroth-prof-big {
     margin: 0;
     font-size: 20px;
@@ -6773,6 +6819,207 @@
     overflow: hidden;
     clip-path: inset(50%);
     white-space: nowrap;
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-panel {
+    --azeroth-rarity-uncommon: var(--azeroth-rarity-uncommon-dark);
+    --azeroth-rarity-rare: var(--azeroth-rarity-rare-dark);
+    --azeroth-rarity-epic: var(--azeroth-rarity-epic-dark);
+    --azeroth-rarity-legendary: var(--azeroth-rarity-legendary-dark);
+    display: grid;
+    gap: 10px;
+    padding: 8px;
+    background-color: var(--azeroth-panel-dark);
+    color: var(--azeroth-page-ink);
+    border: 1px solid var(--azeroth-page-edge);
+    border-radius: 3px;
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px;
+    margin: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-label {
+    font-weight: 700;
+    color: var(--azeroth-gold-text);
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-meters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+    gap: 8px;
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-meter {
+    display: grid;
+    align-content: start;
+    gap: 4px;
+    padding: 8px 10px;
+    background-color: var(--azeroth-slot);
+    border: 1px solid var(--azeroth-slot-edge);
+    border-radius: 4px;
+    min-width: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-meter .azeroth-pool {
+    margin: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-toxicity .azeroth-segment.is-filled {
+    background: var(--azeroth-green-text);
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-toxicity .azeroth-segment.is-filled.is-over {
+    background: repeating-linear-gradient(135deg, var(--azeroth-page-alarm) 0 3px, transparent 3px 5px);
+    border-color: var(--azeroth-page-alarm);
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-overdose {
+    margin: 2px 0 0;
+    padding: 1px 4px;
+    font-size: 12px;
+    line-height: 1.4;
+    font-weight: 700;
+    color: var(--azeroth-page-ink);
+    border: 1px solid var(--azeroth-page-alarm);
+    border-radius: 2px;
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-dcs {
+    gap: 6px;
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-block {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 0;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--azeroth-gold-text);
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-count {
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--azeroth-page-ink);
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-list {
+    display: grid;
+    gap: 3px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-acting,
+  .azeroth.sheet.actor.character .azeroth-hunter-type {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    padding: 3px 6px;
+    background-color: var(--azeroth-slot);
+    border: 1px solid var(--azeroth-slot-edge);
+    border-radius: 3px;
+    min-width: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-name {
+    font-weight: 700;
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-left,
+  .azeroth.sheet.actor.character .azeroth-hunter-weak {
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--azeroth-page-ink-soft);
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-left {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-weak {
+    flex: 1 1 100%;
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-type.is-studied {
+    border-left: 3px solid var(--azeroth-gold-text);
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-mark {
+    padding: 0 4px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--azeroth-gold-text);
+    border: 1px solid var(--azeroth-gold-text);
+    border-radius: 2px;
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-none {
+    color: var(--azeroth-page-ink-soft);
+    font-style: italic;
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-brews {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-brew {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 6px;
+    background-color: var(--azeroth-slot);
+    border: 1px solid var(--azeroth-slot-edge);
+    border-radius: 3px;
+    min-width: 0;
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-brew button {
+    flex: 0 0 auto;
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-brew-name {
+    flex: 1 1 0;
+    min-width: 6em;
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-brew-count {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-medallion {
+    font-size: 13px;
+  }
+  .azeroth.sheet.actor.character .azeroth-hunter-prepare {
+    align-items: center;
+  }
+  .azeroth-brew-prepare .azeroth-brew-steppers {
+    display: grid;
+    gap: 4px;
+    margin: 0 0 8px;
+    padding: 0;
+    list-style: none;
+  }
+  .azeroth-brew-prepare .azeroth-brew-stepper {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .azeroth-brew-prepare .azeroth-brew-name {
+    flex: 1 1 0;
+    min-width: 8em;
+  }
+  .azeroth-brew-prepare .azeroth-brew-stepper button {
+    flex: 0 0 2em;
+  }
+  .azeroth-brew-prepare .azeroth-brew-count {
+    min-width: 1.5em;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .azeroth-brew-prepare .azeroth-brew-studied {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin: 8px 0;
+  }
+  .azeroth-brew-prepare .azeroth-brew-reason:empty {
+    display: none;
   }
   .azeroth-roll-dialog .window-content {
     background: var(--azeroth-parchment);

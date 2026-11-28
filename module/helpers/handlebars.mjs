@@ -79,6 +79,8 @@ const TEMPLATES = [
   // The Death Knight's rune panel and its sockets (D-919; run F2).
   "systems/azeroth-rpg/templates/actor/partials/rune-panel.hbs",
   "systems/azeroth-rpg/templates/actor/partials/horde-panel.hbs",
+  // The Witch Hunter's Hunter panel (the Witch Hunter plan's wave 2a-A).
+  "systems/azeroth-rpg/templates/actor/partials/hunter-panel.hbs",
   "systems/azeroth-rpg/templates/actor/partials/rune-row.hbs",
   "systems/azeroth-rpg/templates/actor/partials/rune-socket.hbs",
   // One pool row on a creature's sheet, drawn by Statistics and by the Spells
@@ -113,6 +115,7 @@ const TEMPLATES = [
   "systems/azeroth-rpg/templates/creator/skills.hbs",
   "systems/azeroth-rpg/templates/creator/talents.hbs",
   "systems/azeroth-rpg/templates/creator/spells.hbs",
+  "systems/azeroth-rpg/templates/creator/brews.hbs",
   "systems/azeroth-rpg/templates/creator/languages.hbs",
   "systems/azeroth-rpg/templates/creator/equipment.hbs",
   "systems/azeroth-rpg/templates/creator/numbers.hbs",

@@ -23,6 +23,8 @@ import { ESSENCE, essenceCap } from "./essence.mjs";
 import { TRIBUTE, CRIMSON_THRONE, tributeCap } from "./tribute.mjs";
 // Hatred's cap, 5 plus 2 for each 5 Fel Corruption held (the Demon Hunter plan's R5 and C5).
 import { HATRED, hatredCap } from "./hatred.mjs";
+// Tempo's cap, 5, 8 with Ursine Fury and 10 while The Last Hunt stands (the Witch Hunter plan's R1).
+import { TEMPO, URSINE_FURY, tempoCap } from "./tempo.mjs";
 
 /**
  * **THE POOLS THE GUARD ACTION LEAVES ALONE** (the lead, R18: *"guard does not empty it"*; the San'layn
@@ -254,12 +256,68 @@ export function drainAtRoundEnd(pool, { struck = false, wasStruck = false, below
   return Math.max(0, value - 2);
 }
 
-/** Combo Points (02 SS7): all of them go after two rounds without a hit. */
-export function idleDecay(pool, { round = 1, lastHitRound = null } = {}) {
+/**
+ * **THE POOLS THAT EMPTY AFTER TWO ROUNDS WITHOUT A HIT**: 02 §7's Combo Points (*lose them all if
+ * you go two rounds without striking anything*) and the Witch Hunter's Tempo (*When two rounds pass
+ * in which you hit nothing, it empties*; the Witch Hunter plan's R1). `decaysIdle` is the one test a
+ * caller asks; `combat.mjs`'s round-end drain names Combo Points by hand today, and wave 2a moves it
+ * onto this list.
+ */
+export const IDLE_DECAY_POOLS = Object.freeze(["comboPoints", TEMPO]);
+
+/** Whether a Momentum pool empties after two rounds without a hit. */
+export function decaysIdle(name) {
+  return IDLE_DECAY_POOLS.includes(name);
+}
+
+/**
+ * **A HIT THAT BUILDS NO MOMENTUM STILL COUNTS AS A HIT FOR THE IDLE DRAIN** (02 §7's Combo Points: *lose them all if
+ * you go two rounds without striking anything*; the Witch Hunter's Tempo, *two rounds pass in which you hit nothing*;
+ * the architect review's A2, wave 2d-A, D-2132). Whirling Steel's hits give no Tempo and Extra Attack's second roll
+ * builds no Momentum (06 §1), yet each strikes something, so each marks the round's last hit. The attack door asks
+ * this where the Momentum gain is withheld (`gainsMomentum: false`); the gain's own branch marks the round as before.
+ * A Parry is no attack (06 §6), a blow with no damage strikes nothing, and an off-hand blow that builds nothing keeps
+ * 06 §2's reading the gain's branch already gives it.
+ *
+ * @param {{inFight?: boolean, attack?: boolean, hit?: boolean, parry?: boolean, offHandBuildsNone?: boolean}} o
+ * @returns {boolean}
+ */
+export function hitMarksIdleRound({ inFight = false, attack = false, hit = false, parry = false, offHandBuildsNone = false } = {}) {
+  return inFight === true && attack === true && hit === true && parry !== true && offHandBuildsNone !== true;
+}
+
+/**
+ * Combo Points (02 SS7): all of them go after two rounds without a hit. And Tempo, by the same rule.
+ *
+ * **A POOL BUILT WITH NO HIT YET** (MY READING, for the lead): a fight's first hit sets
+ * `lastHitRound`, and with none the old reading keeps the pool. Tempo can be held with no hit made -
+ * 04's Bear's Wrath and Steel Guard give it on a blow taken and a Parry - so a caller that hands
+ * `firstRound` reads *no hit yet* as a last hit the round before `firstRound`: a pool built in the
+ * first round and never added to by a hit empties at the end of the next. A caller that hands no
+ * `firstRound` reads exactly as before.
+ *
+ * **`firstRound` IS THE ROUND THE CREATURE ENTERED THE FIGHT** (the Witch Hunter's final architect
+ * review, finding 3): `combat.mjs#_onEndRound` hands Tempo the combatant's `enteredRound`, so a Witch
+ * Hunter who joins at round 5 and builds Tempo off a Parry that round keeps it to the end of round 6
+ * (*two rounds pass in which you hit nothing*: rounds 5 and 6), where the fight's round 1 emptied it at
+ * the end of round 5. With both given, the later of the last hit and the round before the entry counts.
+ *
+ * @param {{name?: string, value?: number}} pool
+ * @param {{round?: number, lastHitRound?: number|null, firstRound?: number|null}} [o]
+ * @returns {number}  what the pool holds after the round's end
+ */
+export function idleDecay(pool, { round = 1, lastHitRound = null, firstRound = null } = {}) {
   const value = pool?.value ?? 0;
-  if (pool?.name !== "comboPoints" || value === 0) return value;
-  if (lastHitRound === null || lastHitRound === undefined) return value;
-  return round - lastHitRound >= 2 ? 0 : value;
+  if (!decaysIdle(pool?.name) || value === 0) return value;
+  const entry = firstRound === null || firstRound === undefined || !Number.isFinite(Number(firstRound)) ? null : Number(firstRound) - 1;
+  let last = lastHitRound;
+  if (last === null || last === undefined) {
+    if (entry === null) return value;
+    last = entry;
+  } else if (entry !== null) {
+    last = Math.max(Number(last), entry);
+  }
+  return round - last >= 2 ? 0 : value;
 }
 
 /**
@@ -399,7 +457,11 @@ export function unkillableFloor({ before = 0, amount = 0, rage = 0, holds = fals
  * Ranged slot (`sand.mjs#equippedHourglass`), and with none the cap is 0 - the
  * class item's printed 5 is the Common glass's and is never read on its own.
  */
-export function capFor(pool, ranks = () => 0, { hourglass = null, chaMod = 0, conMod = 0, crowned = false, fel = 0 } = {}) {
+export function capFor(pool, ranks = () => 0, { hourglass = null, chaMod = 0, conMod = 0, crowned = false, fel = 0, lastHunt = false } = {}) {
+  // **TEMPO'S CAP IS 5, 8 WITH URSINE FURY, 10 WHILE THE LAST HUNT STANDS** (the Witch Hunter plan's
+  // R1; 04's Ursine Fury, 02's The Last Hunt): `lastHunt` the feature's standing flag, handed in by
+  // the caller. The class item's printed 5 is the base.
+  if (pool?.name === TEMPO) return tempoCap({ ursineFury: ranks(URSINE_FURY) > 0, lastHunt: lastHunt === true });
   // **HATRED'S CAP IS 5 PLUS 2 FOR EACH 5 FEL CORRUPTION HELD** (the Demon Hunter plan's R5, C5):
   // `fel` is `hatred.mjs#felFor`'s reading, the one every Fel-scaling door asks. The class item's
   // printed 5 is the base.

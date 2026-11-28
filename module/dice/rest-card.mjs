@@ -71,6 +71,10 @@ export async function restCard({
     else if (g.kind === "runesRefilled") lines.push({ label: game.i18n.localize("AZEROTH.Pool.Runes"), value: `+${g.amount}` });
     // And the inscription window the rest opened (D-950), said so the knight knows it may.
     else if (g.kind === "inscribeOpen") flags.push(game.i18n.localize("AZEROTH.Rest.InscribeOpen"));
+    // The Witch Hunter's brewing and the Tome's learning chance the rest opened (02 §7; wave 2a-A), said so the
+    // hunter knows they may (`effects/witch-hunter-brews.mjs#witchHunterRest`).
+    else if (g.kind === "brewOpen") flags.push(game.i18n.format("AZEROTH.Rest.BrewOpen", { n: g.doses ?? 0 }));
+    else if (g.kind === "tomeLearnOpen") flags.push(game.i18n.localize("AZEROTH.Rest.TomeLearnOpen"));
     // A San'layn's rest without its blood (02 §5; D-1141, D-1144): what it did not restore.
     else if (g.kind === "noBlood") flags.push(game.i18n.localize(kind === "long" ? "AZEROTH.Rest.NoBloodLong" : "AZEROTH.Rest.NoBlood"));
   }

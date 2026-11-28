@@ -18,9 +18,10 @@ import { attributeGradeOf, canGoOn, grantAtRarity } from "../rules/affixes.mjs";
 import { SIGNATURE_KINDS, build, plan, spellCost } from "../rules/forge.mjs";
 import {
   SIGNATURE_PHRASES, SIGNATURE_PHRASE_GROUPS,
-  hasSignature, isPressable, seedSignature, signatureEffectOf, signatureSummary
+  emptySignature, hasSignature, isPressable, seedSignature, signatureEffectOf, signatureSummary
 } from "../rules/signatures.mjs";
 import { htmlFromProse, proseFromHtml } from "../rules/prose.mjs";
+import { enchanterForgeState } from "../rules/enchanter-signatures.mjs";
 import { coins } from "../helpers/coins.mjs";
 import { bindPickers } from "./picker.mjs";
 import { sectionTail } from "../rules/icons.mjs";
@@ -194,6 +195,10 @@ export class AzerothForge extends HandlebarsApplicationMixin(ApplicationV2) {
   get base() {
     const generated = this.item.getFlag("azeroth-rpg", "generated");
     if (generated?.base?.system) return foundry.utils.deepClone(generated.base);
+    // An Enchanter's Signature laid in place (08 §18, D-2167): the item as it was before it, so the
+    // Signature the state carries is added once and never on top of itself.
+    const enchanted = enchanterForgeState(this.item.toObject(), emptySignature());
+    if (enchanted) return enchanted.base;
     return { name: this.item.name, type: this.item.type, system: this.item.system.toObject() };
   }
 
@@ -202,13 +207,16 @@ export class AzerothForge extends HandlebarsApplicationMixin(ApplicationV2) {
     const generated = this.item.getFlag("azeroth-rpg", "generated") ?? {};
     const sys = this.item.system;
     const prefixes = Array.isArray(generated.prefixes) ? generated.prefixes : (generated.prefix ? [generated.prefix] : []);
+    // An Enchanter's Signature (08 §18, D-2167): its own kind, and its hand-reviewed descriptor kept
+    // while the sentence is still the row's.
+    const enchanted = enchanterForgeState(this.item.toObject());
     return {
       rarity: sys.rarity ?? "common",
       name: this.item.name,
       prefixes: [...prefixes],
       suffix: generated.suffix ?? null,
       greater: Array.isArray(generated.greater) ? [...generated.greater] : [],
-      signatureKind: generated.signatureKind ?? (sys.signature ? "alwaysOn" : null),
+      signatureKind: generated.signatureKind ?? enchanted?.kind ?? (sys.signature ? "alwaysOn" : null),
       // **THE BOX HOLDS PROSE, NOT HTML** (the lead, 2026-09-14). It loaded
       // `sys.signature` verbatim, so opening the Forge on any pack item showed
       // `<p>` and `<strong>` in a plain textarea and taught the GM to type
@@ -218,7 +226,7 @@ export class AzerothForge extends HandlebarsApplicationMixin(ApplicationV2) {
       // Held only while the text is still the text it came with: an edited
       // sentence is the GM's own and is read afresh by `seedSignature`. Kept
       // as PROSE too, so the comparison is prose against prose.
-      signatureTaken: null,
+      signatureTaken: enchanted ? { text: proseFromHtml(enchanted.html), effect: enchanted.effect } : null,
       // The phrase guide is SHUT until it is asked for, and stays open once it
       // has been: every `[data-forge]` change re-renders the window, and a
       // panel opened to copy a phrasing out of would otherwise shut itself the

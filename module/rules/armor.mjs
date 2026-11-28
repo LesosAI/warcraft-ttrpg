@@ -111,6 +111,33 @@ export function categoryTraits(category, own = []) {
   return held.has("encumbering") ? [] : ["encumbering"];
 }
 
+/**
+ * **08 §8's CATEGORIES, LIGHTEST FIRST** (`AZEROTH.armorCategories`' order: none, cloth, leather,
+ * studded, mail, plate), the one order `equipment-training.mjs` already reads for armor access. Studded
+ * is its own category, heavier than leather: *Studded armor is metal set into leather*.
+ */
+export const ARMOR_ORDER = Object.freeze(Object.keys(AZEROTH.armorCategories));
+
+/** Whether a word is one of 08 §8's categories (`none` included). */
+export function isArmorCategory(category) {
+  return typeof category === "string" && ARMOR_ORDER.includes(category);
+}
+
+/**
+ * **WHETHER A SUIT IS THIS CATEGORY OR LIGHTER** (the Witch Hunter plan's armor-category gate: 04's
+ * Cat's Step and Feline Reflexes, *While you wear leather or lighter*): true where `category` sits at or
+ * below `ceiling` in `ARMOR_ORDER`, no suit being `none`. Null where either word is not a category, so a
+ * gate that cannot tell says so rather than failing a creature in silence.
+ *
+ * @param {string|null} category  the worn suit's category, `none` for no suit
+ * @param {string} ceiling        the heaviest category the rule allows
+ * @returns {boolean|null}
+ */
+export function categoryAtMost(category, ceiling) {
+  if (!isArmorCategory(category) || !isArmorCategory(ceiling)) return null;
+  return ARMOR_ORDER.indexOf(category) <= ARMOR_ORDER.indexOf(ceiling);
+}
+
 /** The category's printed Armor Points, before any Cut. */
 export function baseArmorPoints(category) {
   const row = AZEROTH.ARMOR_AP[category];

@@ -94,6 +94,16 @@ import { meldsGear } from "../rules/shapes.mjs";
 // THE LEGACY BRANCHES' DOORS (B1): what a target is and who laid what it suffers
 // (door 17), read into every snapshot.
 import { creatureSnapshot, kindsOf } from "../rules/creature-kinds.mjs";
+import { typeOf } from "../rules/tome.mjs";
+// The Witch Hunter's brews on the dialog (wave 2a-A): overdose's −1 a point and a brew's Boon.
+import { brewLines } from "../rules/witch-hunter-standing.mjs";
+import { DEMONSLAYING, typeBoonLines } from "../rules/type-boons.mjs";
+import { utilityCapability } from "../rules/utility-draughts.mjs";
+import { REFINED_DECOCTIONS, SEASONED_BLOOD } from "../rules/toxicity.mjs";
+// 04's Night Eyes and Unbowed: the table's lines on a Stealth and a Resilience Test (wave 2b).
+import { IRON_STOMACH, NIGHT_EYES, UNBOWED, ironStomachBoons, whDialogLines, whRankOfItems } from "../rules/witch-hunter-talents.mjs";
+// 02's Lull Sign's calm on the hunter's Persuasion and Deception Tests (wave 2a-B).
+import { lullBoons } from "../effects/witch-hunter-signs.mjs";
 import { laidByMap } from "../rules/talent-gates.mjs";
 import { cursedBy } from "../rules/sovereign-spells.mjs";
 // A throw a ticked rider makes on its own ability (04's Storm Bolt; the B6 review).
@@ -200,6 +210,10 @@ export function targetSnapshots(targets = game.user?.targets ?? []) {
       // undead* - and each condition's `laidBy` (Cursed Prey's *a condition that you
       // or one of your totems laid*; None Escape's *that you have Entangled*).
       kinds: [...kindsOf(creatureSnapshot({ type: actor.type, system: s, race: actor.type === "character" ? (actor.items?.find?.(i => i.type === "race")?.name ?? null) : null }))].sort(),
+      // **AND ITS 14 §1 TYPE** (the Witch Hunter plan; D-2041: a type is not a kind): `tome.mjs#typeOf`, the one reader -
+      // a creature's block type, a character Humanoid unless its people or its class or feature makes it undead - for the Tome and Studied at the
+      // attack door and `talent-gates.mjs#targetFactsOf`'s type facts.
+      types: [typeOf({ type: actor.type, system: s, race: actor.type === "character" ? (actor.items?.find?.(i => i.type === "race")?.name ?? null) : null })].filter(Boolean),
       laidBy: laidByMap((actor.effects ?? []).map(e => ({ statuses: [...(e.statuses ?? [])], flags: e.flags ?? {}, disabled: e.active === false }))),
       // Whose blood curses it is under (02 §7; D-1241): the Sovereigns' uuids, for `targetFactsOf`'s `cursedBy`.
       cursedBy: cursedBy((actor.effects ?? []).map(e => ({ flags: e.flags ?? {}, active: e.active !== false })))
@@ -366,7 +380,7 @@ function afflictionBanesFor(actor, { kind, skill = null, resilience = null, abil
   return found.banes > 0 ? found : null;
 }
 
-function snapshotOf(actor, { kind, skill, targets, resilience = null, ability = null, heavy = false, rangeBand = null, engaged = false, range = null, cancelsBane = [], parry = false, against = null, facts = {} }) {
+function snapshotOf(actor, { kind, skill, targets, resilience = null, ability = null, heavy = false, rangeBand = null, engaged = false, range = null, cancelsBane = [], parry = false, gathering = false, against = null, facts = {} }) {
   const s = actor.system ?? {};
   // Poisoned stacks live on the effect (A1: "Poisoned X"); a bare status is one.
   const poisoned = actor.effects?.find?.(e => e.statuses?.has("poisoned"));
@@ -375,7 +389,10 @@ function snapshotOf(actor, { kind, skill, targets, resilience = null, ability = 
   // and `parry` is the NARROWING, so a thing that names only the Parry helps
   // nothing else. `AZEROTH.grantTests` is the vocabulary and `grantsFor` fills
   // the bag; nothing else in this file has to know Parry exists.
-  const wornOn = parry ? [kind, "parry"] : [kind];
+  // **AND A GATHERING TEST** (03-PROFESSIONS; 08 §18's Gathering Signature): the profession roll a
+  // gather, a harvest or a Disenchant makes, never a Craft Test, so a worn Boon on Gathering Tests
+  // reaches it through the same automatic line and nothing else.
+  const wornOn = parry ? [kind, "parry"] : gathering ? [kind, "gathering"] : [kind];
   const wornNames = bag => wornOn.flatMap(k => bag?.[k] ?? []);
   return {
     kind,
@@ -446,7 +463,11 @@ function snapshotOf(actor, { kind, skill, targets, resilience = null, ability = 
     ...(kind === "casting" ? castingTalentLines(actor, targets[0] ?? null, kind, targets) : {}),
     // And 04's Insolence Repaid at rank 2 on a skill Test at the creature that missed (*your next Test of any kind
     // against that creature*), the one Boon named.
-    ...(kind === "skill" && (actor?.insolenceBoons?.(targetActorUuid(targets[0] ?? null), kind) ?? 0) > 0 ? { talentBoons: { boons: 1, names: [game.i18n.localize("AZEROTH.Sovereign.InsolenceName")] } } : {}),
+    // And 02's Lull Sign's calm out of a fight (*you have a Boon on **Persuasion** and **Deception** Tests against it*;
+    // the Witch Hunter plan's wave 2a-B), off the calm this roller laid on the creature: both into the one named line.
+    // And the Boon the door that opened the skill Test hands in (04's Field Notes on the Tome's learning Test; wave 4's
+    // live run found it handed in and never drawn), named in the same line.
+    ...(kind === "skill" ? skillTargetBoons(actor, targets[0] ?? null, skill, kind, facts.talentBoons ?? null) : {}),
     // The Banes a talent of whoever forced this Test lays on it (04's Vile
     // Concoction, D-773), as the door that opened it measured them.
     talentBanes: facts.talentBanes ?? null,
@@ -479,6 +500,27 @@ function snapshotOf(actor, { kind, skill, targets, resilience = null, ability = 
     cancelsBane,
     resilience
   };
+}
+
+/**
+ * **THE BOONS A SKILL TEST TAKES AGAINST THE CREATURE IT IS AT**: 04's Insolence Repaid at rank 2 (*your next Test of any
+ * kind against that creature*) and 02's Lull Sign's calm (`effects/witch-hunter-signs.mjs#lullBoons`), each named, in
+ * the one `talentBoons` line. Nothing where neither holds.
+ */
+function skillTargetBoons(actor, target, skill, kind, given = null) {
+  const names = [...(Number(given?.boons) > 0 ? (given.names ?? []) : [])];
+  let boons = Number(given?.boons) > 0 ? Math.trunc(Number(given.boons)) : 0;
+  if ((actor?.insolenceBoons?.(targetActorUuid(target), kind) ?? 0) > 0) {
+    boons += 1;
+    names.push(game.i18n.localize("AZEROTH.Sovereign.InsolenceName"));
+  }
+  const uuid = targetActorUuid(target);
+  const lull = uuid ? lullBoons(actor, fromUuidSync(uuid), skill) : null;
+  if (lull) {
+    boons += lull.boons;
+    names.push(...lull.names);
+  }
+  return boons > 0 ? { talentBoons: { boons, names } } : {};
 }
 
 /**
@@ -666,6 +708,8 @@ export function prepareRoll(actor, given) {
     // 06 §6: this Attack Test is a Parry, so a worn Boon that names the Parry
     // reaches it as well as one that names Attack Tests.
     parry: spec.parry === true,
+    // A Gathering Test (03-PROFESSIONS), so a worn Boon on Gathering Tests reaches it (08 §18).
+    gathering: spec.gathering === true,
     // The conditions this Resilience Test resists, where its door knows them
     // (a spell card's Resist, an area's Test; D-757), else null.
     against: Array.isArray(spec.against) ? spec.against : null,
@@ -700,6 +744,26 @@ export function prepareRoll(actor, given) {
   // SL after the die (`AzerothRoll#outcome`), and an unticked line is the roller's choice.
   const fed = wellFedLine(actor.effects ?? []);
   if (fed) situational.automatic.push({ id: fed.key, label: fed.label, name: "", boons: 0, banes: 0, modifier: 0, checked: true, sl: fed.sl });
+  // **THE WITCH HUNTER'S BREWS** (02's Field Brews: *you take −1 on every Test for each point* of overdose; 08 §12's
+  // Boons): overdose is the roller's own state, automatic and ticked, on every Test; a brew's Boon is ticked where it
+  // names the Test and a judgement line where what the Test is FOR is the table's (`witch-hunter-standing.mjs#brewLines`).
+  if (actor?.type === "character") {
+    for (const line of brewLines({
+      effects: actor.effects ?? [], conMod: actor.system?.abilities?.con?.mod ?? 0,
+      seasonedBlood: actor.talentRanks?.(SEASONED_BLOOD) ?? 0, refinedDecoctions: actor.talentRanks?.(REFINED_DECOCTIONS) ?? 0,
+      kind: test.kind, skill: spec.skill ?? null, resilience: spec.resilience ?? null, parry: spec.parry === true
+    })) (line.checked ? situational.automatic : situational.judgement).push(line);
+  }
+  // **A BOON AGAINST A TYPE** (08 §6's Blessed (Lesser), *Boon on attacks against the undead*; 08 §12's Elixir of
+  // Demonslaying, *A Boon on Attack Tests against demons*; the Witch Hunter plan's Finding 2, wave 2c): through the one
+  // type gate, ticked where the first target is of the type, unticked where its type could not be read
+  // (`rules/type-boons.mjs#typeBoonLines`).
+  for (const line of typeBoonLines({
+    kind: test.kind, parry: spec.parry === true,
+    weaponTraits: test.weaponId ? [...(actor.items?.get?.(test.weaponId)?.system?.traits ?? [])] : [],
+    draughts: utilityCapability(actor.effects ?? [], DEMONSLAYING, game.time?.worldTime ?? null) ? [DEMONSLAYING] : [],
+    target: targets[0] ?? null
+  })) (line.checked ? situational.automatic : situational.judgement).push(line);
   for (const partner of symbiosisSkillPartners(actor, { kind: test.kind, skill: spec.skill, source })) {
     situational.automatic.push({
       id: `symbiosis-${partner.uuid}`, label: "AZEROTH.Symbiosis.SkillBoon",
@@ -762,6 +826,20 @@ export function prepareRoll(actor, given) {
     const guisedTarget = (targets ?? []).some(t => wearsCourtGuise(targetActorOf(t)));
     const guiseBanes = courtGuiseBanes({ skill: spec.skill, targetGuised: guisedTarget });
     if (guiseBanes) situational.automatic.push({ id: "court-guise", label: "AZEROTH.CourtGuise.Line", name: "", boons: 0, banes: guiseBanes, modifier: 0, checked: true });
+  }
+  // **04's NIGHT EYES AND UNBOWED** (the Witch Hunter plan's wave 2b): *In dim light or darkness, you have a Boon on
+  // **Stealth** Tests*; *a Boon on Resilience Tests against being knocked **Prone** or moved* - the table's lines,
+  // unticked (D2 §12: the light, and what a Test is against). A Resist the card says moves or knocks Prone already
+  // carries Unbowed's Boon as an automatic line (`effects/witch-hunter-tome.mjs#resistLinesFor`), so no second line.
+  {
+    const unbowedNamed = (spec.talentBoons?.names ?? []).includes(UNBOWED.name);
+    situational.judgement.push(...whDialogLines({ kind: test.kind ?? "skill", skill: spec.skill ?? null,
+      nightEyes: whRankOfItems(actor.items ?? [], NIGHT_EYES.identifier), unbowed: unbowedNamed ? 0 : whRankOfItems(actor.items ?? [], UNBOWED.identifier) }));
+    // **04's IRON STOMACH** (*a Boon on Body Resilience Tests; at rank 2 on Spirit Resilience Tests too*): automatic, named.
+    if (test.kind === "resilience") {
+      const stomach = ironStomachBoons({ rank: whRankOfItems(actor.items ?? [], IRON_STOMACH.identifier), resilience: spec.resilience ?? null });
+      if (stomach > 0) situational.automatic.push({ id: "iron-stomach", label: "AZEROTH.WhTalent.IronStomach.Line", name: IRON_STOMACH.name, boons: stomach, banes: 0, modifier: 0, checked: true });
+    }
   }
   // **04's WEIGHT OF AGES** (*A creature you have Slowed takes a Bane on Attack Tests against
   // you. At rank 2 the Bane applies to its Attack Tests against anyone*; stage 3B): read off

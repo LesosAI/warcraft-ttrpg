@@ -42,6 +42,7 @@ import { turnMark } from "../rules/class-answers.mjs";
 // 04's talents on these features (the Demon Hunter plan's Phase 5): the patches on Fel Lash, Devour Soul, Demon
 // Unleashed, Hunter's Leap and Beyond Limits (`patchRowsOf`), read here and landed by the talents' own doors.
 import { patchRowsOf } from "../rules/class-talents.mjs";
+import { equipResyncs, itemPatchSum, patchesFeature } from "../rules/item-patches.mjs";
 import { talentEffect } from "../rules/talent-effects.mjs";
 import { unleashedTalents } from "../rules/demon-hunter-talents.mjs";
 import {
@@ -1003,7 +1004,10 @@ function sightStep(holder, doc) {
   const source = doc?.documentName === "Actor" ? (doc.prototypeToken?.toObject?.() ?? {}) : (doc?.toObject?.() ?? {});
   if (holds(actor, SPECTRAL_SIGHT.feature)) {
     const eyes = actor.talentRanks?.(SPECTRAL_SIGHT.eyesOfTheNether.name) ?? 0;
-    const changes = sightChanges(source, spectralSightPatch(spectralSightFeet(felFor(actor), { eyes })));
+    // **AND A WORN ITEM'S FEET** (the Blindfold of the Illidari; D-2156): its patch on 02's Spectral
+    // Sight, read through the one reader over `AzerothActor#patchSources`.
+    const extra = itemPatchSum(patchRowsOf(actor.patchSources?.() ?? [], SPECTRAL_SIGHT.feature), "feet").amount;
+    const changes = sightChanges(source, spectralSightPatch(spectralSightFeet(felFor(actor), { eyes, extra })));
     return Object.keys(changes).length ? changes : null;
   }
   const back = sightWithdrawn(source);
@@ -1187,11 +1191,19 @@ export function registerDemonHunterFeatures() {
     const actor = item?.parent;
     if (actor?.documentName !== "Actor" || actor.type !== "character") return;
     const moves = (item.type === "feature" && item.name === SPECTRAL_SIGHT.feature) || (item.type === "class" && (item.system?.identifier === "demon-hunter" || item.name === "Demon Hunter"))
-      || movesSpectralSight(item);
+      || movesSpectralSight(item) || (item.system?.equipped === true && patchesFeature(item, SPECTRAL_SIGHT.feature));
     if (moves) await syncSpectralSight(actor).catch(err => console.warn("azeroth-rpg | Spectral Sight", err));
   };
   Hooks.on("createItem", itemMoved);
   Hooks.on("deleteItem", itemMoved);
+  // **AN ITEM THAT PATCHES SPECTRAL SIGHT, PUT ON OR TAKEN OFF** (the Blindfold of the Illidari; D-2156):
+  // the sight read again on the active GM's client (`syncSpectralSight` gates itself).
+  Hooks.on("updateItem", async (item, changes) => {
+    const actor = item?.parent;
+    if (actor?.documentName !== "Actor" || actor.type !== "character") return;
+    if (!equipResyncs(item, changes ?? {}).features || !patchesFeature(item, SPECTRAL_SIGHT.feature)) return;
+    await syncSpectralSight(actor).catch(err => console.warn("azeroth-rpg | Spectral Sight", err));
+  });
   // **A GLAIVE PUT AWAY COMES BACK** (the review's C4): a thrown glaive unequipped no longer lies on the board.
   Hooks.on("updateItem", async (item, changes, options, userId) => {
     if (userId !== game.user?.id || changes?.system?.equipped !== false || !awayOf(item)) return;

@@ -223,6 +223,8 @@ export class AzerothItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
       craftedBy: game.i18n.localize("AZEROTH.Item.CraftedByLine"),
       craftedByMore: game.i18n.localize("AZEROTH.Item.CraftedByMore"),
       materialTier: game.i18n.localize("AZEROTH.Item.MaterialTier"),
+      // A named Augment worth the tier's bonus (D-2152).
+      augmentByTier: game.i18n.localize("AZEROTH.Item.AugmentByTier"),
       professions: enumWords("professions"),
       materialFamilies: enumWords("materialFamilies"),
       consumable: enumWords("consumableKinds"),

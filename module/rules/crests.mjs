@@ -25,13 +25,14 @@
  */
 
 /**
- * The fifteen class identifiers that have a crest, as `packs-src/classes` spells them. The Sovereign's
+ * The sixteen class identifiers that have a crest, as `packs-src/classes` spells them. The Sovereign's
  * placeholder (D-1195) was replaced by generated art. **The Demon Hunter's is generated art** (the Demon
  * Hunter plan's Phase 0: two crossed warglaives over a horned demon skull with a fel-green blindfold
- * band; `docs/design/DEMON-HUNTER-ART-GENERATIONS-2026-11.json`).
+ * band; `docs/design/DEMON-HUNTER-ART-GENERATIONS-2026-11.json`). **The Witch Hunter's is generated art** (the
+ * lead: *"The crest to use the witch hunter hat, sword, and potion"*; `docs/design/WITCH-HUNTER-ART-GENERATIONS-2026-11.json`).
  */
 export const CLASS_CRESTS = Object.freeze([
-  "chromatic-champion", "chronomancer", "death-knight", "demon-hunter", "druid", "mage", "necromancer", "paladin", "priest", "ranger", "rogue", "shaman", "sovereign", "warlock", "warrior"
+  "chromatic-champion", "chronomancer", "death-knight", "demon-hunter", "druid", "mage", "necromancer", "paladin", "priest", "ranger", "rogue", "shaman", "sovereign", "warlock", "warrior", "witch-hunter"
 ]);
 
 /** Where the crests are served from, relative to Foundry's route root. */

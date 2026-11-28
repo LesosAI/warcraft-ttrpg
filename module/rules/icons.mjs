@@ -42,6 +42,9 @@ export function racialTalentIcon(raceName, talentName, fallback) {
 export const CORE_FALLBACK = Object.freeze({
   "Special designs": "icons/svg/item-bag.svg",
   "Special provisions and utility consumables": "icons/svg/pill.svg",
+  // The Witch Hunter's (08 §11's medallion, 08 §12's brews).
+  "Witch hunter's medallion": "icons/svg/cowled.svg",
+  "Witch hunter's brews": "icons/svg/pill.svg",
   "One-handed weapon": "icons/svg/sword.svg",
   "Two-handed weapon": "icons/svg/sword.svg",
   "Light weapon": "icons/svg/sword.svg",

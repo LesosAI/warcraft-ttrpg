@@ -1,0 +1,119 @@
+{{!--
+  The Witch Hunter's Hunter panel (D11's *The Witch Hunter's Hunter panel carries its pools, its Toxicity, its types and
+  its brews*; the Witch Hunter plan's waves 2a-A and 3). Drawn off `effects/witch-hunter-brews.mjs#hunterPanelFor` and
+  the sheet's `#hunterView` (`rules/hunter-panel-view.mjs`): the Energy and Tempo bars through Core's own pool partial,
+  the Toxicity track with any overdose IN WORDS, the elixirs acting with what is left of each, the types known with
+  the Studied mark in words and each type's weakness row, the medallion's state, the brews held with Drink, Coat weapon
+  or Throw, and Prepare.
+
+  Every control is a `<button>` carrying a `data-action` the character sheet registers. A control that cannot be
+  pressed now says why in words beside it, never by the grey alone (D5). Colour is never the only carrier.
+--}}
+<div class="azeroth-hunter-panel" data-hunter-panel>
+  {{!-- A character who is no Witch Hunter and holds a brew (O-723) is drawn the brew list alone. --}}
+  {{#unless panel.brewsOnly}}
+  {{#unless panel.started}}
+  <p class="azeroth-hunter-line">{{localize "AZEROTH.WitchHunter.Panel.NoTome"}}
+    <button type="button" data-action="whStartTome">{{localize "AZEROTH.WitchHunter.Panel.StartTome"}}</button></p>
+  {{/unless}}
+
+  {{!-- D11's three bars side by side: Energy, Tempo (Momentum red), Toxicity. --}}
+  <div class="azeroth-hunter-meters">
+    {{#each panel.view.pools}}
+    <div class="azeroth-hunter-meter" data-wh-pool="{{this.name}}">
+      {{> systems/azeroth-rpg/templates/actor/partials/pool.hbs this}}
+      <p class="azeroth-pool-note">{{this.note}}</p>
+    </div>
+    {{/each}}
+    <div class="azeroth-hunter-meter azeroth-hunter-toxicity" data-wh-toxicity>
+      <div class="azeroth-pool{{#if panel.view.toxicity.overdose}} is-overdosed{{/if}}">
+        <div class="azeroth-pool-head">
+          <span class="azeroth-pool-label">{{localize "AZEROTH.WitchHunter.Panel.Toxicity"}}</span>
+          <span class="azeroth-pool-count">{{panel.view.toxicity.used}} / {{panel.view.toxicity.limit}}</span>
+        </div>
+        <div class="azeroth-pool-track" role="img" aria-label="{{panel.view.toxicity.words}}">
+          {{#each panel.view.toxicity.segments}}<span class="azeroth-segment{{#if this.filled}} is-filled{{/if}}{{#if this.over}} is-over{{/if}}"{{#if this.label}} data-tooltip="{{this.label}}"{{/if}}></span>{{/each}}
+        </div>
+        <p class="azeroth-pool-note">{{panel.view.toxicity.words}}</p>
+        {{#if panel.view.toxicity.overdose}}<p class="azeroth-hunter-overdose" data-wh-overdose>{{panel.view.toxicity.overdoseWords}}</p>{{/if}}
+      </div>
+    </div>
+  </div>
+
+  {{!-- The one Spell DC (wave 2c, O-735), and the Signs' where Firebloom cordial raises it. --}}
+  {{#if panel.dc.spellLabel}}
+  <p class="azeroth-hunter-line azeroth-hunter-dcs">
+    <span class="azeroth-chip" data-wh-dc="spell">{{panel.dc.spellLabel}}</span>
+    {{#if panel.view.signDiffers}}<span class="azeroth-chip" data-wh-dc="sign">{{panel.dc.signLabel}}</span>{{/if}}
+  </p>
+  {{/if}}
+
+  <section class="azeroth-hunter-block" data-wh-acting>
+    <h4 class="azeroth-hunter-heading"><span>{{localize "AZEROTH.WitchHunter.Panel.Acting"}}</span><span class="azeroth-hunter-count">{{panel.view.actingCount}}</span></h4>
+    <ul class="azeroth-hunter-list">
+      {{#each panel.view.acting as |a|}}
+      <li class="azeroth-hunter-acting"><span class="azeroth-hunter-name">{{a.name}}</span>{{#if a.remaining}}<span class="azeroth-hunter-left">{{a.remaining}}</span>{{/if}}</li>
+      {{else}}
+      <li class="azeroth-hunter-none">{{localize "AZEROTH.WitchHunter.Panel.NothingActing"}}</li>
+      {{/each}}
+    </ul>
+  </section>
+
+  <section class="azeroth-hunter-block" data-wh-types>
+    <h4 class="azeroth-hunter-heading"><span>{{localize "AZEROTH.WitchHunter.Panel.Known"}}</span><span class="azeroth-hunter-count">{{panel.view.studiedCount}}</span></h4>
+    <ul class="azeroth-hunter-list">
+      {{#each panel.view.types as |ty|}}
+      <li class="azeroth-hunter-type{{#if ty.studied}} is-studied{{/if}}" data-wh-type="{{ty.key}}">
+        <span class="azeroth-hunter-name">{{ty.label}}</span>
+        {{#if ty.studied}}<span class="azeroth-hunter-mark">{{localize "AZEROTH.WitchHunter.Panel.Studied"}}</span>{{/if}}
+        <span class="azeroth-hunter-weak">{{ty.weakness}}</span>
+      </li>
+      {{else}}
+      <li class="azeroth-hunter-none">{{localize "AZEROTH.WitchHunter.Panel.NoTypes"}}</li>
+      {{/each}}
+    </ul>
+    <p class="azeroth-pool-note">{{panel.view.studiedLine}}</p>
+    {{#if panel.learnOpen}}
+    <p class="azeroth-hunter-line"><button type="button" data-action="whLearn">{{localize "AZEROTH.WitchHunter.Panel.Learn"}}</button></p>
+    {{/if}}
+  </section>
+
+  <p class="azeroth-hunter-line azeroth-hunter-medallion" data-wh-medallion="{{panel.view.medallion.state}}">
+    <span class="azeroth-hunter-label">{{localize "AZEROTH.WitchHunter.Panel.Medallion"}}</span>
+    <span>{{panel.view.medallion.words}}</span>
+  </p>
+  {{/unless}}
+
+  <section class="azeroth-hunter-block" data-wh-brews>
+    {{#unless panel.brewsOnly}}
+    <h4 class="azeroth-hunter-heading"><span>{{localize "AZEROTH.WitchHunter.Panel.Held"}}</span><span class="azeroth-hunter-count">{{panel.view.dosesLine}}</span></h4>
+    {{/unless}}
+    <ul class="azeroth-hunter-brews">
+      {{#each panel.brews as |b|}}
+      <li class="azeroth-hunter-brew" data-item-id="{{b.id}}"{{#if b.tip}} data-tooltip="{{b.tip}}" data-tooltip-direction="LEFT"{{/if}}>
+        <img src="{{b.img}}" alt="" width="20" height="20">
+        <span class="azeroth-hunter-brew-name">{{b.name}}</span>
+        <span class="azeroth-chip">{{b.kindLabel}}</span>
+        <span class="azeroth-hunter-brew-count">{{b.left}}</span>
+        <button type="button" data-action="whUseBrew" data-item-id="{{b.id}}" data-wh-control="{{b.control}}">{{b.controlLabel}}</button>
+      </li>
+      {{else}}
+      <li class="azeroth-hunter-none">{{localize "AZEROTH.WitchHunter.Panel.NoBrews"}}</li>
+      {{/each}}
+    </ul>
+  </section>
+
+  {{#unless panel.brewsOnly}}
+  <p class="azeroth-hunter-line azeroth-hunter-prepare">
+    {{#if panel.window}}
+    <button type="button" class="azeroth-hunter-primary" data-action="whPrepare">{{localize "AZEROTH.WitchHunter.Panel.Prepare"}}</button>
+    {{else}}
+    <button type="button" class="azeroth-hunter-primary" data-wh-prepare-closed disabled>{{localize "AZEROTH.WitchHunter.Panel.Prepare"}}</button>
+    <span class="azeroth-state-why">{{localize "AZEROTH.WitchHunter.Panel.WindowClosed"}}</span>
+    {{/if}}
+    {{#if panel.formulasLeft}}
+    <button type="button" data-action="whFormulas">{{localize "AZEROTH.WitchHunter.Panel.Formulas" n=panel.formulasLeft}}</button>
+    {{/if}}
+  </p>
+  {{/unless}}
+</div>

@@ -130,6 +130,38 @@ export const DH_STATE_NAMES = Object.freeze({ prepared: "I Have Prepared", inner
 export const DH_WINGED_STATE = "unleashedWinged";
 
 /**
+ * **THE WITCH HUNTER'S CARRIERS** (wave 3, D-2096): the Rowan Ward (`effects/witch-hunter-signs.mjs#ROWAN_FLAG`,
+ * `whRowan {by, value}`) and The Last Hunt's minute (`witch-hunter-standing.mjs#LAST_HUNT_FLAG`, `whLastHunt {by,
+ * combatId}`) carry no `source`, nor does 04's Mountain Bear's minute (`whMountainBear`), so each flag names what laid it. Expose Weakness's laid Vulnerable
+ * names it through its own `source`.
+ */
+export const WH_STATE_NAMES = Object.freeze({ whRowan: "Rowan Sign", whLastHunt: "The Last Hunt", whMountainBear: "Mountain Bear" });
+
+/**
+ * **THE KEY A REGION'S PRIVACY PAIR IS NOTED UNDER, WHERE IT IS NOT ITS OWN `featureKey`** (the Witch Hunter's
+ * architect review, A3; wave 2d-A, D-2133). A Region a talent reshaped files its picture under the talent (04's
+ * Firestream: `featureKey: "firestream"`) while the card that placed it is filed under another key (the Ember Sign's
+ * card, `ember-sign`); the director holds a Region's cue for the card of the same pair, so the Region names the card's
+ * key here. `regionPrivacyKey` is the one reading (`animation/records.mjs#privacyKeyOfRegion`).
+ */
+export const REGION_PRIVACY_FLAG = "privacyKey";
+
+/**
+ * The key a Region's privacy pair is noted under: its named privacy key, else its Use card's own `featureKey`, else a
+ * trap's identifier (`trapIdentifier`, handed in so this module keeps no trap law). Null where none.
+ *
+ * @param {object} flags  the Region's `flags["azeroth-rpg"]`
+ * @param {string|null} [trapIdentifier]
+ * @returns {string|null}
+ */
+export function regionPrivacyKey(flags = {}, trapIdentifier = null) {
+  for (const key of [flags?.[REGION_PRIVACY_FLAG], flags?.featureKey, trapIdentifier]) {
+    if (typeof key === "string" && key) return key;
+  }
+  return null;
+}
+
+/**
  * **THE RUNE FLARE'S RECORD** (02 §7: *every rune spent, for any reason*; run F5). The one rune
  * door (`documents/runes.mjs#spendRunesOn`) writes this under `RUNE_SPEND_OPTION` on the SAME
  * update that spends the runes - an operation's own keys reach every client's hook - so each
@@ -660,6 +692,11 @@ export function stateEntriesOf(flags, { only = null } = {}) {
     // and the torment is still its own state.
     if (Object.hasOwn(DH_STATE_NAMES, key)) {
       add(key, DH_STATE_NAMES[key], value.by ?? null);
+      continue;
+    }
+    // **THE WITCH HUNTER'S CARRIERS** (wave 3): see `WH_STATE_NAMES` above.
+    if (Object.hasOwn(WH_STATE_NAMES, key)) {
+      add(key, WH_STATE_NAMES[key], value.by ?? null);
       continue;
     }
     // **THE SOVEREIGN'S STATES** (the San'layn and Sovereign plan's C14): see `SOVEREIGN_STATE_NAMES` below.

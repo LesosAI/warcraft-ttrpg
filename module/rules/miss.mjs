@@ -43,6 +43,12 @@
  * nothing spends no once*). Both, and the rider's refund, are settled ONCE, when the
  * last of the card's rows is withdrawn (`everyRowWithdrawn`): a blow that landed on
  * two is still a hit on the one nobody answered.
+ *
+ * **AND THE HEALTH A SIGNATURE GAVE ON THE HIT** (the final review of 0.18.1): 08 §18's Crusader
+ * (*The first time each round you hit with it, you regain Health equal to your tier*) and D-698's
+ * life-stealing blades heal at the roll, because the heal is the HIT's; what landed rides the same
+ * record as kind `health` and comes back off (`healthWithdrawnValue`), and the row's once-a-round mark
+ * rides the once-marks.
  */
 
 import { parryUndoes } from "./class-answers.mjs";
@@ -288,7 +294,29 @@ function byPool(rows = [], kinds = ["momentum", "power"]) {
  * @returns {Array<{actorUuid: string, itemId: string|null, kind: string, pool: string, amount: number}>}
  */
 export function missWithdrawals(built = []) {
-  return byPool(built);
+  return byPool(built, WITHDRAWAL_KINDS);
+}
+
+/**
+ * **WHAT A WITHDRAWN HIT TAKES BACK OFF THE STRIKER, BY KIND** (the final review of 0.18.1): a pool's gain
+ * (`momentum`, `power`, a signature row's Mana among the Power), and the Health a signature row gave on the
+ * hit (`health`: 08 §18's Crusader, D-698's `onHit.heal`).
+ */
+export const WITHDRAWAL_KINDS = Object.freeze(["momentum", "power", "health"]);
+
+/**
+ * The Health a striker falls to when what a withdrawn hit healed comes back off it (the final review of
+ * 0.18.1): never below 1, because taking back a heal is no damage and must not leave a creature at 0 with
+ * no Dying, and never raised - a creature already at 0 or 1 stays where it is.
+ *
+ * @param {number} value   the striker's Health now
+ * @param {number} amount  what the hit healed
+ */
+export function healthWithdrawnValue(value, amount = 0) {
+  const v = Math.max(0, Math.trunc(Number(value)) || 0);
+  const n = Math.max(0, Math.trunc(Number(amount)) || 0);
+  if (v <= 1) return v;
+  return Math.max(1, v - n);
 }
 
 /**

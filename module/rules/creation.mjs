@@ -40,6 +40,10 @@ import { trainingProfile, trainingWarning } from "./equipment-training.mjs";
 import { keptBy } from "./legacy-branches.mjs";
 import { startingRacialState } from "./creator-choices.mjs";
 import { classLearnsSpell } from "./spell-access.mjs";
+// The Witch Hunter's brews step (02 §7's Field Brews and Tome of Silver and Ash; the Witch Hunter plan's wave 2c, O-727).
+import { FORMULA_KINDS, knownCount, knownRefusal } from "./brewing.mjs";
+import { FORMULAS_FLAG, TOME_FLAG, WITCH_HUNTER_CLASS, tomeStart } from "./witch-hunter-standing.mjs";
+import { BREW_IDENTIFIERS, brewOf } from "./witch-hunter-brews.mjs";
 // The Mortal guise (the Chromatic Champion plan).
 import { guiseFacts, guiseRequired, guiseSnapshot, isGuiseRace, peopleOf, raceOpensClass, wornAsGuise } from "./guise.mjs";
 
@@ -51,7 +55,7 @@ import { guiseFacts, guiseRequired, guiseSnapshot, isGuiseRace, peopleOf, raceOp
  * both (`stepsFor`), so every strip is still ten or eleven long.
  */
 export const STEPS = Object.freeze([
-  "race", "guise", "class", "abilities", "profession", "skills", "talents", "spells", "languages", "equipment", "numbers", "name"
+  "race", "guise", "class", "abilities", "profession", "skills", "talents", "spells", "brews", "languages", "equipment", "numbers", "name"
 ]);
 
 /** The step a guise class picks its people's looks on, in place of the race step. */
@@ -59,6 +63,20 @@ export const GUISE_STEP = "guise";
 
 /** The step a caster's spells are chosen on (07 §5); a class that casts nothing skips it (2026-09-06). */
 export const SPELLS_STEP = "spells";
+
+/**
+ * **THE STEP A WITCH HUNTER PICKS ITS FORMULAS AND ITS TOME'S SECOND TYPE ON** (02 §7's Field Brews: *You know four
+ * elixirs ... You also know one oil and one bomb of your choice*; the Tome of Silver and Ash: *You know two creature
+ * types: Undead, and one of your choice*; the lead's Phase 0 answer, *"Field Brews should also teach 1 oil and 1 bomb
+ * of the players choosing"*; O-727, wave 2c). On the strip only for the Witch Hunter (`stepsFor`), as the spells step
+ * is only for a caster; 01 names no such step, so it is the tool's, beside the spells step (D2 §7).
+ */
+export const BREWS_STEP = "brews";
+
+/** Whether a class walks the brews step: the Witch Hunter, by identifier. */
+export function brewsStep(cls) {
+  return Boolean(cls) && String(cls.identifier ?? "") === WITCH_HUNTER_CLASS;
+}
 
 /**
  * The abilities 01 §3 points a new character at: *"A 16 in the ability your
@@ -133,7 +151,7 @@ export function castsSpells(cls) {
  */
 export function stepsFor(p = {}) {
   const guise = guiseRequired({ race: p.race ?? null, cls: p.cls ?? null });
-  return STEPS.filter(key => (key !== SPELLS_STEP || castsSpells(p.cls))
+  return STEPS.filter(key => (key !== SPELLS_STEP || castsSpells(p.cls)) && (key !== BREWS_STEP || brewsStep(p.cls))
     && (key !== GUISE_STEP || guise) && (key !== "race" || !guise));
 }
 
@@ -169,7 +187,9 @@ export const METHODS = Object.freeze(["array", "pointBuy", "roll"]);
 // class has been - the Vitest says so if 02 lays it elsewhere).
 // The Demon Hunter fifteenth, after the Sovereign (the Demon Hunter plan; last, as each new class has
 // been - the Vitest says so if 02 lays it elsewhere).
-export const CLASS_ORDER = Object.freeze(["warrior", "paladin", "ranger", "rogue", "priest", "shaman", "mage", "warlock", "druid", "chromatic-champion", "chronomancer", "death-knight", "necromancer", "sovereign", "demon-hunter"]);
+// The Witch Hunter sixteenth, after the Demon Hunter (the Witch Hunter plan; last, as each new class has
+// been - the Vitest says so if 02 lays it elsewhere).
+export const CLASS_ORDER = Object.freeze(["warrior", "paladin", "ranger", "rogue", "priest", "shaman", "mage", "warlock", "druid", "chromatic-champion", "chronomancer", "death-knight", "necromancer", "sovereign", "demon-hunter", "witch-hunter"]);
 
 /** "Take these six numbers and assign each to an ability." */
 export const ARRAY = Object.freeze([16, 14, 13, 12, 10, 8]);
@@ -776,6 +796,21 @@ export function validate(p = {}) {
     }
   }
 
+  // 6b — a Witch Hunter's formulas and its Tome's second type (02 §7, O-727): exactly the count tier 1 gives of each
+  // kind, every one a brew of that kind, and a type of choice that is not Undead.
+  if (brewsStep(p.cls)) {
+    const formulas = [...new Set(p.formulas ?? [])];
+    const wrong = knownRefusal({ known: formulas, tier: 1 });
+    if (wrong && wrong.code !== "tooMany") refuse("formulaRefused", BREWS_STEP, { name: brewOf(wrong.identifier)?.name ?? String(wrong.identifier ?? "") });
+    for (const kind of FORMULA_KINDS) {
+      const chosen = formulas.filter(id => brewOf(id)?.kind === kind).length;
+      const required = knownCount(kind, 1);
+      if (chosen !== required) refuse("formulaCount", BREWS_STEP, { kind, required, chosen });
+    }
+    const start = tomeStart(p.tomeType ?? null);
+    if (start.refusal) refuse(start.refusal === "undead" ? "tomeUndead" : "tomeType", BREWS_STEP);
+  }
+
   // 7 — languages: the three peoples of neither side say which raised them. A guise's
   // people answers for a Chromatic Outcast, since its tongue is the guise's.
   const people = peopleOf({ race: p.race ?? null, guise: p.guise ?? null });
@@ -886,7 +921,29 @@ export function plan(p = {}) {
     update: {
       "flags.azeroth-rpg.skillRanks": ranks,
       "system.xp.spent": spent,
-      ledger
+      ledger,
+      // A Witch Hunter's formulas and Tome, in the shapes `effects/witch-hunter-brews.mjs#formulasOf` and
+      // `witch-hunter-standing.mjs#cleanTome` read (O-727); Studied begins on the type of choice, as `startTome` writes it.
+      ...brewsUpdate(p)
     }
+  };
+}
+
+/**
+ * **WHAT FINISH WRITES FOR A WITCH HUNTER'S BREWS STEP**: the formulas known (08's order) and the Tome begun, as flag
+ * paths; nothing for any other class, or where the step is refused (Finish never writes a refused proposal).
+ *
+ * @param {{cls?: object|null, formulas?: string[], tomeType?: string|null}} p
+ * @returns {Record<string, unknown>}
+ */
+export function brewsUpdate(p = {}) {
+  if (!brewsStep(p.cls)) return {};
+  const start = tomeStart(p.tomeType ?? null);
+  if (start.refusal) return {};
+  const formulas = BREW_IDENTIFIERS.filter(id => (p.formulas ?? []).includes(id) && brewOf(id).kind !== "decoction");
+  const type = start.known.find(t => t !== "undead") ?? null;
+  return {
+    [`flags.azeroth-rpg.${FORMULAS_FLAG}`]: formulas,
+    [`flags.azeroth-rpg.${TOME_FLAG}`]: { known: start.known, studied: type ? [type] : [], damaged: [], defeated: [], learned: false, learnOpen: null }
   };
 }

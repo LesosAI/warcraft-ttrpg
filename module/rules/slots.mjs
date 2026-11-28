@@ -59,6 +59,7 @@ import { NOT_CARRIED, sectionParts } from "./weight.mjs";
 import { displacedBy, figureSlots, hasTitansPresence } from "./worn.mjs";
 import { isShot } from "./ammunition.mjs";
 import { isUnarmed } from "./unarmed.mjs";
+import { isBrewIdentifier } from "./witch-hunter-brews.mjs";
 
 /* -------------------------------------------- */
 /*  The chapter's three ladders                  */
@@ -216,11 +217,32 @@ export const CARRIED_TYPES = Object.freeze(["weapon", "armor", "gear"]);
  * nothing, worn or not, so neither ever reaches a panel.
  */
 export function isThing(item) {
+  // **A WITCH HUNTER'S BREW IS NEVER CARRIED** (02 §7's Field Brews: *Brews take no bag slot*; the Witch
+  // Hunter plan's feasibility table: *`isBrew` above `slots.mjs:220` (the claws' way). Never the bag
+  // bypass.*): one of 08 §12's nineteen takes no bag slot in anyone's hands, and never reaches a panel.
+  if (isBrew(item)) return false;
   const type = item?.type ?? null;
   if (type !== null && type !== undefined && type !== "weapon") return CARRIED_TYPES.includes(type);
   if (isUnarmed(item)) return false;
   return type === null || type === undefined || CARRIED_TYPES.includes(type);
 }
+
+/**
+ * Whether an item is one of the Witch Hunter's brews (08 §12): gear whose identifier the hand table holds
+ * (`witch-hunter-brews.mjs#isBrewIdentifier`) and whose source is 08's brews section, so a hand-made gear
+ * item that happens to share a slug (a GM's *Decoction*) is still carried. **A row that names no section is no
+ * brew** (the Witch Hunter's architect review, C; wave 2d-A, D-2138): a GM's hand-made *Decoction* carries no
+ * `source.section` at all, and it was read as a brew and dropped out of every bag. A brew the Prepare window
+ * makes is the pack's own copy, section and all (the migration's `fromPack` asks the same).
+ */
+export function isBrew(item) {
+  if (!item || (item.type !== undefined && item.type !== null && item.type !== "gear")) return false;
+  if (!isBrewIdentifier(item)) return false;
+  return BREW_SECTION_RE.test(String(sysOf(item)?.source?.section ?? ""));
+}
+
+/** 08 §12's brews section, as a stamped `source.section` ends: `12 · Consumables · Witch hunter's brews`. */
+const BREW_SECTION_RE = /·\s*Witch hunter's brews\s*$/;
 
 /** Every row that is a thing, with an id. The one filter every export opens on. */
 function things(items) {

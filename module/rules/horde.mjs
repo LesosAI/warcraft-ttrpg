@@ -89,8 +89,10 @@ export function isFleshServant(member) {
  *   `endlessHost` the talent's rank (or true); `arcanaRanks` the caster's Ranks in Arcana
  * @returns {{general: number, skeletons: number, total: number}}
  */
-export function hordeCapacity({ intMod = 0, swellingRanks = 0, endlessHost = 0, arcanaRanks = 0 } = {}) {
-  const general = Math.max(HORDE_FLOOR, HORDE_BASE + int(intMod));
+export function hordeCapacity({ intMod = 0, swellingRanks = 0, endlessHost = 0, arcanaRanks = 0, extra = 0 } = {}) {
+  // `extra` is what a held item adds (08 §20's The Darkmaster's Rod: *Your horde has 1 additional
+  // place*; D-2158): general places, after the floor.
+  const general = Math.max(HORDE_FLOOR, HORDE_BASE + int(intMod)) + Math.max(0, int(extra));
   const host = endlessHost === true || int(endlessHost) > 0 ? Math.max(0, int(arcanaRanks)) : 0;
   const skeletons = Math.max(0, int(swellingRanks)) + host;
   return { general, skeletons, total: general + skeletons };

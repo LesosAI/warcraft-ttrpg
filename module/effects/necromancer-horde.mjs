@@ -52,7 +52,7 @@ import {
   COLLAPSE_OPTION, ENSLAVE_END_KEY, GRAFT_KEY, HORDE_RISE_KEY, LICH_BIND_KEY, MASTERY_KEY, RAISED_WITH_FLAG, collapseCue, raisedWithEntry
 } from "../rules/necromancer-animations.mjs";
 import { DISEASES } from "../rules/afflictions.mjs";
-import { bondOf, boundOf, createBoundActor, hordeFolder, unbindQueryHandler, worldActorOf } from "../documents/bound.mjs";
+import { bondOf, boundOf, createBoundActor, hordeFolder, syncBoundFor, unbindQueryHandler, worldActorOf } from "../documents/bound.mjs";
 import { summonQueryHandler } from "../documents/summon.mjs";
 import {
   RAISE_QUERY, askGM, chooseCorpses, claimCorpses, collapseRaise, corpsesOn as corpsesFor, holdCarrier, knightToken, raiseQueryHandler, releaseCorpses
@@ -171,7 +171,10 @@ export function capacityOf(owner) {
   return hordeCapacity({
     intMod: owner?.system?.abilities?.int?.mod ?? 0,
     swellingRanks: rankNamed("Swelling Ranks"), endlessHost: rankNamed("The Endless Host"),
-    arcanaRanks: skillRankOf(owner, "arcana")
+    arcanaRanks: skillRankOf(owner, "arcana"),
+    // The Darkmaster's Rod's A Larger Class (08 §20, D-2158): the held item's places, read off the
+    // derived Signatures here and again on the GM's client, which calls this same reader.
+    extra: owner?.system?.signatureEffects?.hordePlaces ?? 0
   });
 }
 
@@ -657,6 +660,17 @@ async function makeHordeRaise(payload = {}, { user = null } = {}) {
       if (vigor > 0) {
         const done = await actor.grantTemporaryHealth?.(vigor, { source: NECRO_FEATURES.deathlyVigor, span: "longRest" });
         if (done?.landed) vigorous.push(...tokenIds);
+      }
+    }
+    // **THE NEW DEAD TAKE THE CASTER'S TALENTS AND SIGNATURES** (the phase 2 review: the
+    // Vestments of the Cult of the Damned never reached a horde raise): the Death Knight's
+    // single raise syncs here too (`death-knight-necromancy.mjs`). Its own step, said and never
+    // undone, so a throw from the sync cannot unmake dead that already stand.
+    if (made.length) {
+      try {
+        await syncBoundFor(owner);
+      } catch (err) {
+        console.warn("azeroth-rpg | horde raise: bond sync", err);
       }
     }
     // *When you have no lead, the next creature you raise is your lead* (02 §7).

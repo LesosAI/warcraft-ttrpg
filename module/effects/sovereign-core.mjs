@@ -17,7 +17,7 @@
 import { VITAE, VITAE_OVERFLOW_OPTION, VITAE_TO_ZERO_FLAG, vitaePayment } from "../rules/vitae.mjs";
 import {
   CORPSE_WINDOW_SECONDS, FED_TODAY_FLAG, FEED_DAYS_FLAG, FEED_REFUSAL_WORDS, OUT_OF_FIGHT_WAYS, BLOOD_SINCE_REST_FLAG, withFeedDay,
-  feedRefusal, feedingHealthLoss, feedingReturn, feedingTests, fedOnToday, hasBlood, vialRefusal, vialReturn, withFed
+  feedRefusal, feedingGivesBack, feedingHealthLoss, feedingReturn, feedingTests, fedOnToday, hasBlood, vialRefusal, vialReturn, withFed
 } from "../rules/feeding.mjs";
 import {
   BLOOD_FORGED_CLAWS, HUNT_MARK, HUNT_MORTAL, PREY_FLAG, PREY_REFUSAL_WORDS, PURSUIT_FREE_MARK, UNENDING_PURSUIT,
@@ -25,6 +25,8 @@ import {
 } from "../rules/prey.mjs";
 import { TRIBUTE, WILL_MARK, crownedGain, tributeAfter, willGain } from "../rules/tribute.mjs";
 import { gmAbsentFor } from "../rules/gm-writes.mjs";
+// Lana'thel's Lament's Vampiric Bite (08 §20, D-2160): the worn press a refused feeding fires.
+import { pressFiredBy } from "../rules/signatures.mjs";
 import { cleanFeedPlan, feedingClaim, feedingResult, preyDiedClaim, tributeClaim } from "../rules/sovereign-asks.mjs";
 import { BLOOD_MONARCH } from "../rules/sovereign-talents.mjs";
 import { readKillTribute, readPreyTribute } from "../rules/sovereign-spells.mjs";
@@ -379,7 +381,18 @@ export async function feedOn(sovereign, target, {
   const fight = sovereign?.activeFight?.() ?? null;
   const m = mode ?? (prey && isDead(prey) ? "corpse" : (fight ? "fight" : "out"));
   const verdict = feedVerdict(sovereign, prey, { mode: m, free, anyDay, way, targetToken: targetToken ?? t.token });
-  if (verdict.refusal) {
+  // **08 §20's VAMPIRIC BITE** (Lana'thel's Lament: *Once per Short Rest, in a fight, a Sovereign
+  // wielding it may feed (The Blood Royal) on any creature within their reach*; D-2160): offered as a
+  // choice where the feeding is refused for the opening alone - every other refusal has already held
+  // by then - and never laid silently. The Test and once a day still apply; the use is struck once the
+  // budget is paid.
+  // **EVERY REFUSAL IS JUDGED BEFORE THE BITE IS ASKED** (the phase 3 review): the Bite is only an answer to
+  // the opening's refusal, so the absent GM and the turn's budget are judged first and a confirm that could
+  // only end in a refusal is never opened.
+  const fired = verdict.refusal === "open" && m === "fight" && fight?.started
+    ? pressFiredBy(sovereign.items ?? [], "feedRefused", sovereign.signatureTurnState ?? {})
+    : null;
+  if (verdict.refusal && !fired) {
     ui.notifications?.warn(feedWords(verdict.refusal, sovereign, prey));
     return { ok: false, reason: verdict.refusal };
   }
@@ -392,23 +405,58 @@ export async function feedOn(sovereign, target, {
   const tests = feedingTests({ mode: m, free });
   // A fight's feeding costs a Half-Action (02 §7), judged before anything is spent.
   const action = m === "fight" && !free && budget ? "half" : null;
-  if (action) {
-    const short = game.system.azeroth.workflows.turnBudgetRefusal(sovereign, action);
+  const shortOf = () => (action ? game.system.azeroth.workflows.turnBudgetRefusal(sovereign, action) : null);
+  let short = shortOf();
+  if (short) {
+    ui.notifications?.warn(game.i18n.format(short.reason, short.params ?? {}));
+    return { ok: false, reason: "budget" };
+  }
+  let bite = null;
+  if (fired) {
+    const yes = await foundry.applications.api.DialogV2.confirm({
+      window: { title: fired.press.label || fired.item.name },
+      content: `<p>${foundry.utils.escapeHTML(game.i18n.format("AZEROTH.ClassItem.BiteAsk", { name: sovereign.name, target: prey?.name ?? "", item: fired.item.name, run: fired.press.label || fired.item.name }))}</p>`,
+      rejectClose: false
+    });
+    if (!yes) {
+      ui.notifications?.warn(feedWords(verdict.refusal, sovereign, prey));
+      return { ok: false, reason: verdict.refusal };
+    }
+    // The use as it stands NOW, after the dialog: a use struck while it stood open is not struck twice.
+    if (!(biteUsesLeft(sovereign, fired) > 0)) {
+      ui.notifications?.warn(game.i18n.format("AZEROTH.ClassItem.BiteSpent", { name: sovereign.name, run: fired.press.label || fired.item.name }));
+      return { ok: false, reason: "spent" };
+    }
+    // And the budget again: the turn may have moved while the dialog stood open.
+    short = shortOf();
     if (short) {
       ui.notifications?.warn(game.i18n.format(short.reason, short.params ?? {}));
       return { ok: false, reason: "budget" };
     }
-    if (!(await game.system.azeroth.workflows.spendTurnBudget(sovereign, action))) return { ok: false, reason: "budget" };
+    bite = fired;
+  }
+  if (action && !(await game.system.azeroth.workflows.spendTurnBudget(sovereign, action))) return { ok: false, reason: "budget" };
+  // Vampiric Bite's use, struck after the budget, at the press's own dotted path (D-671), off the LIVE item
+  // at the write (the phase 3 review), never off the value read before the dialog.
+  if (bite) {
+    await strikeBiteUse(sovereign, bite, -1);
+    ui.notifications?.info(game.i18n.format("AZEROTH.ClassItem.BiteUsed", { name: sovereign.name, target: prey?.name ?? "", run: bite.press.label || bite.item.name }));
   }
   const plan = {
     sovereignUuid: sovereign.uuid, targetUuid: prey.uuid, mode: m, loss, free, anyDay, vitaeFactor, flat, source,
     holder: refOf(verdict.token), corpse: refOf(verdict.targetToken),
     // 07 §17's Sanguine Draught (D-1372): a feeding at the spell's range, which is still a feeding in a fight for 04's
     // Drink Deep where the Sovereign stands in one.
-    ...(atRange === true ? { atRange: true } : {})
+    ...(atRange === true ? { atRange: true } : {}),
+    // What this feeding paid, given back where its landing finds nothing to land on (`feedingGivesBack`).
+    ...(bite || action ? { paid: { bite: bite ? { itemId: bite.item.id, key: bite.key } : null, half: Boolean(action) } } : {})
   };
   if (tests) return { ok: true, card: await postFeedingTest(sovereign, prey, plan) };
-  return landFeedingPlan(plan);
+  // The same give-back as the Test's path (the phase 4 review): a landing that finds the creature or
+  // the Sovereign gone, or no GM to take the creature's Health, keeps neither the Bite nor the Half-Action.
+  const landed = await landFeedingPlan(plan);
+  if (!landed?.ok && feedingGivesBack(landed?.reason)) await giveBackFeeding(plan);
+  return landed;
 }
 
 /** The prompt card the creature's owner rolls its Body Test on (02 §7), the plan on its flags. */
@@ -459,7 +507,61 @@ export async function feedingAfterTest({ message, actor, passed, result = null }
     ui.notifications?.info(game.i18n.format("AZEROTH.Feeding.Resisted", { target: actor.name }));
     return { ok: false, reason: "passed" };
   }
-  return landFeedingPlan(record, { messageId: message.id });
+  const landed = await landFeedingPlan(record, { messageId: message.id });
+  // **NOTHING LANDED, NOTHING KEPT** (the phase 3 review; a refused action keeps its Half-Action, the lead):
+  // where the landing found the creature or the Sovereign gone, or no GM to take the creature's Health,
+  // Vampiric Bite's use and the Half-Action are given back.
+  if (!landed?.ok && feedingGivesBack(landed?.reason)) await giveBackFeeding(record);
+  return landed;
+}
+
+/** The Bite's uses left, read off the LIVE item the Sovereign holds now. */
+function biteUsesLeft(sovereign, bite) {
+  const live = sovereign?.items?.get?.(bite?.item?.id ?? bite?.itemId) ?? null;
+  return int(live?.system?.signatureEffect?.presses?.[bite?.key]?.uses?.value);
+}
+
+/**
+ * Vampiric Bite's use moved by `delta` (-1 struck, +1 given back), read off the LIVE item at the write and
+ * held between 0 and the press's maximum. Answers whether anything was written.
+ */
+async function strikeBiteUse(sovereign, bite, delta) {
+  const id = bite?.item?.id ?? bite?.itemId;
+  const live = sovereign?.items?.get?.(id) ?? null;
+  const uses = live?.system?.signatureEffect?.presses?.[bite?.key]?.uses ?? null;
+  if (!uses) return false;
+  const max = int(uses.max);
+  const now = int(uses.value);
+  const next = Math.max(0, max > 0 ? Math.min(max, now + delta) : now + delta);
+  if (next === now) return false;
+  await live.update({ [`system.signatureEffect.presses.${bite.key}.uses.value`]: next });
+  return true;
+}
+
+/**
+ * **WHAT A FEEDING PAID, GIVEN BACK** (the phase 3 review): the Bite's use and the Half-Action, where this
+ * client owns the Sovereign (the Witch Hunter's `giveBackUse` shape: a Half-Action gained through the
+ * combatant's own queued door, never the GM's undo). Said in words; a client that does not own the
+ * Sovereign says that nothing could be given back.
+ */
+async function giveBackFeeding(plan) {
+  const paid = plan?.paid ?? null;
+  if (!paid?.bite && !paid?.half) return;
+  let sovereign = null;
+  try { sovereign = fromUuidSync(plan.sovereignUuid); } catch { sovereign = null; }
+  if (!sovereign?.isOwner) {
+    ui.notifications?.warn(game.i18n.format("AZEROTH.Feeding.NotGivenBack", { name: sovereign?.name ?? "" }));
+    return;
+  }
+  const lines = [];
+  if (paid.bite && (await strikeBiteUse(sovereign, paid.bite, 1))) lines.push(game.i18n.localize("AZEROTH.Feeding.GivenBackBite"));
+  const fight = sovereign.activeFight?.() ?? null;
+  const mine = paid.half && fight?.started ? (fight.getCombatantsByActor?.(sovereign)?.[0] ?? null) : null;
+  if (mine?.isOwner) {
+    await mine.grantHalfActions(1);
+    lines.push(game.i18n.localize("AZEROTH.Feeding.GivenBackHalf"));
+  }
+  if (lines.length) ui.notifications?.info(game.i18n.format("AZEROTH.Feeding.GivenBack", { name: sovereign.name, what: lines.join(" ") }));
 }
 
 /**
@@ -513,7 +615,11 @@ async function writeFeeding(sovereign, plan) {
       corpse: plan.mode === "corpse", factor: plan.vitaeFactor ?? 1, flat: plan.flat ?? null,
       drinkDeepRanks: ranks(sovereign, "Drink Deep"), inFight: plan.mode === "fight" || (plan.atRange === true && Boolean(sovereign.activeFight?.()?.started))
     });
-    const next = Math.min(pool.max, pool.value + gain);
+    // **08 §20's THE QUEEN'S KISS** (Lana'thel's Lament: *they regain additional Vitae equal to their
+    // tier*; D-2160): the wielded item's Vitae a tier, at the one feeding door, under the `feed`
+    // source the gain already names (never a second source).
+    const kiss = Math.max(0, int(sovereign.system?.signatureEffects?.feedVitaePerTier)) * Math.max(1, int(sovereign.system?.tier ?? 1));
+    const next = Math.min(pool.max, pool.value + gain + kiss);
     const extra = { [`flags.${SCOPE}.${BLOOD_SINCE_REST_FLAG}`]: Math.max(0, int(sovereign.getFlag(SCOPE, BLOOD_SINCE_REST_FLAG))) + 1 };
     if (!plan.anyDay) extra[`flags.${SCOPE}.${FED_TODAY_FLAG}`] = foundry.data.operators.ForcedReplacement.create(withFed(record, plan.targetUuid, now()));
     // **THE DAYS FED ON EACH CREATURE** (07 §17's Blood Bond; D-1368): every feeding, in this same update.

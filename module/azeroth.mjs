@@ -280,12 +280,20 @@ Hooks.once("init", () => {
   // 02 §7's Demon Hunter (the Demon Hunter plan's Phase 4a): Devour Soul on the death watch, I Have Prepared's end,
   // and Spectral Sight's token sight.
   import("./effects/demon-hunter-features.mjs").then(m => m.registerDemonHunterFeatures()).catch(err => console.warn("azeroth-rpg | Demon Hunter features", err));
+  // The Witch Hunter's features (wave 2a-B): the Medallion's cast watcher, The Last Hunt's end, the Lull Sign's calm.
+  import("./effects/witch-hunter-features.mjs").then(m => m.registerWitchHunterFeatures()).catch(err => console.warn("azeroth-rpg | Witch Hunter features", err));
   // 04's Demon Hunter talents (the Demon Hunter plan's Phase 5): Refuse the Legion's refused Charm, Betrayer's Bargain's
   // Fel, Eyes of the Nether's sight and Sight Beyond Sight's whisper.
   import("./effects/demon-hunter-talents.mjs").then(m => m.registerDemonHunterTalents()).catch(err => console.warn("azeroth-rpg | Demon Hunter talents", err));
   // 07 §15's Demon Hunter spells (the Demon Hunter plan's Phase 4b; D-1540): the hunter's sight, Immolation Aura's
   // entering strike and light, Agonizing Flames' way out and Inner Demon's torment.
   import("./effects/demon-hunter-spells.mjs").then(m => m.registerDemonHunterSpellHooks()).catch(err => console.warn("azeroth-rpg | Demon Hunter spell hooks", err));
+  // 02 §7's Witch Hunter (the plan's wave 2a-A): the Tome's record of types defeated on the death watch, and Fadeleaf
+  // drops' token sight as its carrier comes and goes.
+  import("./effects/witch-hunter-tome.mjs").then(m => m.registerWitchHunterTome()).catch(err => console.warn("azeroth-rpg | Witch Hunter Tome", err));
+  // 08 §20's The First Tome of Silver and Ash (D-2162): its two types chosen the first time it is carried.
+  import("./effects/witch-hunter-tome.mjs").then(m => m.registerTomeTypes()).catch(err => console.warn("azeroth-rpg | the First Tome's types", err));
+  import("./effects/witch-hunter-brews.mjs").then(m => m.registerWitchHunterBrews()).catch(err => console.warn("azeroth-rpg | Witch Hunter brews", err));
   registerCrushridgeHelpHooks();
   registerTokenShrinkHooks();
   registerElunesLightHooks();
@@ -331,6 +339,9 @@ Hooks.once("init", () => {
     // The shape door (D-769): take, leave and the token reconciler, for the
     // batches and a macro. The class features are the players' door.
     shapes,
+    // 08 §20's The First Tome of Silver and Ash (D-2162): its two types are chosen the first time a
+    // Witch Hunter carries it; a GM chooses them again through this door (`force: true`).
+    classItems: { chooseTomeTypes: (actor, item, options = {}) => import("./effects/witch-hunter-tome.mjs").then(m => m.chooseTomeTypes(actor, item, options)) },
     // The tick on a creature (D-770): what it carries, landing a turn's worth,
     // laying one by a door of its own, and ending one - and Swiftmend's door
     // (D-771), which ends a heal over time and heals at once, and asks first

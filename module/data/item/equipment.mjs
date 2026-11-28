@@ -769,8 +769,13 @@ function standingSignatureFields() {
       }),
       who: new fields.SchemaField({
         faction: new fields.StringField({ required: false, nullable: true, blank: false, initial: null }),
-        living: new fields.BooleanField({ initial: false })
-      })
+        living: new fields.BooleanField({ initial: false }),
+        // Only the holder's own raised dead (The Darkmaster's Rod; D-2158).
+        raised: new fields.BooleanField({ initial: false })
+      }),
+      // The conditions a creature in reach ends at its turn start (D-2158). Left to `cleanAura`,
+      // never a `choices` here (CLAUDE.md SS15).
+      ends: new fields.ArrayField(new fields.StringField({ blank: false }), { initial: [] })
     }),
     // ONE NAMED SPELL OR CLASS FEATURE, IMPROVED (D-698). The NAME is free
     // text: 02, 04 and 07 have no roster in `config.mjs`, so the vocabulary is
@@ -780,7 +785,9 @@ function standingSignatureFields() {
       name: new fields.StringField({ required: true, blank: true, initial: "" }),
       damageRating: optionalNumberField({ min: 1 }),
       heal: optionalNumberField({ min: 1 }),
-      cost: optionalNumberField({ min: 1 })
+      cost: optionalNumberField({ min: 1 }),
+      // What an undead creature the spell heals regains more (First of the Damned; D-2156).
+      undeadHeal: optionalNumberField({ min: 1 })
     }),
     // What every creature the bearer has bound gains (D-698, D-643's bond).
     // `creatureType`: *a DEMON bound to a Warlock* (D-911); null is every one.
@@ -856,6 +863,21 @@ function standingSignatureFields() {
     }),
     sizeStep: optionalNumberField({ min: 1 }),
     secondReaction: new fields.ArrayField(new fields.StringField({ blank: false }), { initial: [] }),
+    // THE CLASS ITEMS (D-2156 to D-2162), in `emptySignature()`'s own order.
+    // A class feature's number moved while worn (`rules/item-patches.mjs`): the feature is 02's
+    // free name, and every number nullable.
+    featurePatch: new fields.SchemaField({
+      feature: new fields.StringField({ required: true, blank: true, initial: "" }),
+      heal: optionalNumberField({ min: 1 }),
+      cost: optionalNumberField({ min: 0 }),
+      damage: optionalNumberField({ min: 1 }),
+      feet: optionalNumberField({ min: 1 }),
+      sand: optionalNumberField({ min: 1 })
+    }),
+    hordePlaces: optionalNumberField({ min: 1 }),
+    feedVitaePerTier: optionalNumberField({ min: 1 }),
+    knownTypes: optionalNumberField({ min: 1 }),
+    studiedTypes: optionalNumberField({ min: 1 }),
     onHit: new fields.SchemaField({
       // Null is *on a hit*; 2 is 08 SS5's Standard threshold.
       sl: optionalNumberField({ min: 0 }),
@@ -909,7 +931,14 @@ function standingSignatureFields() {
       conditionFromDamage: optionalNumberField({ min: 1 }),
       // Ash of the Risen's no healing, and the Signature DC a condition carries (D-911).
       noHealing: new fields.BooleanField({ initial: false }),
-      signatureDC: new fields.BooleanField({ initial: false })
+      signatureDC: new fields.BooleanField({ initial: false }),
+      // The condition lands on the hit with no button, its item the Bleeding's source (D-2160).
+      lands: new fields.BooleanField({ initial: false }),
+      // The Enchanter's Signatures (08 SS18): Crusader's Health a tier, Lifestealing's drain of
+      // the row's own damage, Unholy Weapon's cut on the creature struck's weapon attacks.
+      healPerTier: optionalNumberField({ min: 1 }),
+      drain: new fields.BooleanField({ initial: false }),
+      weaponCut: optionalNumberField({ min: 1 })
     }),
     // Gorehowl: a blow that FINISHES a creature, which is not one that lands.
     onKill: new fields.SchemaField({
@@ -1028,6 +1057,11 @@ function branchField() {
     spellDamageTest: standing.spellDamageTest,
     sizeStep: standing.sizeStep,
     secondReaction: standing.secondReaction,
+    featurePatch: standing.featurePatch,
+    hordePlaces: standing.hordePlaces,
+    feedVitaePerTier: standing.feedVitaePerTier,
+    knownTypes: standing.knownTypes,
+    studiedTypes: standing.studiedTypes,
     onHit: standing.onHit,
     onKill: standing.onKill,
     whenStruck: standing.whenStruck,
@@ -1091,7 +1125,12 @@ function pressUseFields() {
       value: optionalNumberField({ min: 0 }),
       units: new fields.StringField({ required: false, nullable: true, blank: false, initial: null })
     }),
-    damage: new fields.SchemaField({ amount: optionalNumberField({ min: 0 }), type: choiceField(AZEROTH.damageTypes) }),
+    // `formula` an amount the tier is read into at the press, `half` a passed Test's half (D-2161).
+    damage: new fields.SchemaField({
+      amount: optionalNumberField({ min: 0 }), type: choiceField(AZEROTH.damageTypes),
+      formula: new fields.StringField({ required: true, blank: true, initial: "" }),
+      half: new fields.BooleanField({ initial: false })
+    }),
     // What it takes OFF one incoming blow (Battlegear of Wrath's halving),
     // never both halves at once.
     mitigates: new fields.SchemaField({
@@ -1144,7 +1183,11 @@ function pressUseFields() {
     move: new fields.SchemaField({ feet: optionalNumberField({ min: 1 }) }),
     negates: new fields.BooleanField({ initial: false }),
     arcWiden: optionalNumberField({ min: 1 }),
-    breathSchool: new fields.BooleanField({ initial: false })
+    breathSchool: new fields.BooleanField({ initial: false }),
+    // The class items' presses (D-2156 to D-2162), each read by `workflows.useSignature`.
+    runeRefill: optionalNumberField({ min: 1 }),
+    reach: optionalNumberField({ min: 1 }),
+    learnType: new fields.BooleanField({ initial: false })
   };
 }
 
@@ -1223,6 +1266,11 @@ export function signatureField() {
     spellDamageTest: standing.spellDamageTest,
     sizeStep: standing.sizeStep,
     secondReaction: standing.secondReaction,
+    featurePatch: standing.featurePatch,
+    hordePlaces: standing.hordePlaces,
+    feedVitaePerTier: standing.feedVitaePerTier,
+    knownTypes: standing.knownTypes,
+    studiedTypes: standing.studiedTypes,
     onHit: standing.onHit,
     onKill: standing.onKill,
     whenStruck: standing.whenStruck,

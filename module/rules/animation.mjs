@@ -1371,8 +1371,27 @@ function layerOf(recipe, { state, holder, other, region }) {
       break;
     }
     case "region-scatter": {
-      if (!circle) break;
       const count = Number.isInteger(recipe.count) && recipe.count > 0 ? recipe.count : 1;
+      if (!circle) {
+        // **A CONE'S SCATTER** (04's Firestream: the Ember Sign's cone left alight; the Witch Hunter plan's wave 4):
+        // the same seeded points laid inside the cone's sector from its apex - the radius read as how far along the
+        // axis, the bearing as how far across the angle - sized off the cone's length. Before this a cone drew no
+        // layer at all, so its loop was never built (found in the live run).
+        const cone = coneEnds(shape);
+        if (!cone) break;
+        const half = (cone.angle / 2) * (Math.PI / 180);
+        const facing = cone.rotation * (Math.PI / 180);
+        seededOffsets(region.id ?? "", count).forEach((o, index) => {
+          const along = 0.3 + 0.65 * Math.min(1, Math.hypot(o.x, o.y));
+          const bearing = facing + (Math.atan2(o.y, o.x) / Math.PI) * half;
+          out.push(step(recipe, {
+            at: { x: cone.apex.x + Math.cos(bearing) * along * cone.radius, y: cone.apex.y + Math.sin(bearing) * along * cone.radius },
+            size: sizeOf(recipe, { diameter: cone.radius, pxPerFt, t: o.t }),
+            index, delay: index * (num(recipe.stagger) ?? 0)
+          }));
+        });
+        break;
+      }
       seededOffsets(region.id ?? "", count).forEach((o, index) => {
         out.push(step(recipe, {
           at: { x: circle.x + o.x * circle.radius, y: circle.y + o.y * circle.radius },

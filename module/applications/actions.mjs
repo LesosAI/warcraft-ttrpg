@@ -143,6 +143,7 @@ import { laneBonus as laneBonusFor } from "../rules/spell-bonus.mjs";
 import { castDealsDamage } from "../rules/area-ticks.mjs";
 // A held Sustain that answers a melee blow (07's Immolation, D-757).
 import { retaliationRows } from "../effects/area-strikes.mjs";
+import { gromsbloodRows } from "../effects/witch-hunter-brews.mjs";
 import { bondOf, boundOf } from "../documents/bound.mjs";
 // 06 SS6's Reaction table (D-693): Parry and Block, and what each one asks for.
 import { BLOCK_REDUCTION, PARRY_COST, SHIELDBEARER, blockReduction, canReact, defensiveReactions, meleeInHand, parryHolds, parryPoolFor, shieldsHeld, standingMarkRefusal } from "../rules/reactions.mjs";
@@ -225,6 +226,33 @@ function struckBackRows(targets = [], attacker = null) {
     // that hits you with a melee attack takes 2 Fire damage*, in this row's
     // shape, marked `melee` for the roll to judge once the blow's way is final.
     for (const row of retaliationRows(actor, attacker)) out.push({ ...row, target: snapshot.name ?? actor.name, index });
+    // **AND A WITCH HUNTER'S GROMSBLOOD DRAUGHT** (08 §12: *A creature that hits you with a melee attack takes Physical
+    // damage equal to your tier*; wave 2a-A): its carrier's row, in this shape, marked `melee`.
+    for (const row of gromsbloodRows(actor, attacker)) out.push({ ...row, target: snapshot.name ?? actor.name, index });
+  }
+  return out;
+}
+
+/**
+ * **WHAT A SIGNATURE'S TARGET GATE NEEDS THAT THE SNAPSHOT DOES NOT CARRY** (08 §20's class items):
+ * `typeStudied`, the creature struck's type Studied in the bearer's Tome (Waycrest Silver; D-2159), off
+ * `AzerothActor#gateFacts`, and `prey`, the creature struck is the bearer's prey (Lana'thel's Lament's
+ * Swarming Shadows; D-2160), asked only of a bearer who holds a prey mark.
+ *
+ * @param {Actor} actor  the attacker
+ * @param {object} struck  the target snapshot
+ * @returns {Promise<{typeStudied?: boolean, prey?: boolean}>}
+ */
+async function signatureTargetFacts(actor, struck) {
+  const out = {};
+  try {
+    if (actor?.type === "character") out.typeStudied = actor.gateFacts?.(struck)?.target?.typeStudied === true;
+    if (actor?.getFlag?.("azeroth-rpg", "prey")) {
+      const { isPrey } = await import("../effects/sovereign-core.mjs");
+      out.prey = isPrey(actor, struck) === true;
+    }
+  } catch (err) {
+    console.warn("azeroth-rpg | a Signature's target facts", err);
   }
   return out;
 }
@@ -499,7 +527,8 @@ function heldFor(actor, name) {
  */
 function shownAugment(actor) {
   const gear = actor.items.filter(i => i.type === "gear");
-  const augment = castingAugment(gear, actor.classNames ?? []);
+  // The tier prices a named §20 Augment, *at the bonus section 9 sets for your tier* (D-2152).
+  const augment = castingAugment(gear, actor.classNames ?? [], { tier: actor.system?.tier ?? null });
   const item = augment ? (heldAugment(gear)?.item ?? null) : null;
   return augment && item ? { ...augment, name: shownName(item) } : augment;
 }
@@ -2429,6 +2458,10 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
   const aimedAt = sacrifice.targets;
   const struck = aimedAt[0] ?? null;
   const turnState = actor.signatureTurnState;
+  // **WHAT ONLY THE BEARER KNOWS OF THE CREATURE STRUCK** (08 §20's class items): Waycrest Silver's
+  // *a creature of a Studied type* (the Tome's fact, `talent-gates.mjs#targetFactsOf`; D-2159) and
+  // Lana'thel's Lament's *your prey* (`rules/prey.mjs`, read through the Sovereign's own door; D-2160).
+  const struckFacts = struck ? await signatureTargetFacts(actor, struck) : {};
   const signature = signatureEffects(actor.items.contents, {
     ...turnState,
     // **WHAT IS TRUE OF THIS BLOW** (08 §20's Dal'Rend's Sacred Charge, D-696):
@@ -2443,7 +2476,7 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
     // card takes below (`effects/stealth.mjs#isHiddenFor`).
     hidden: isHiddenFor(actor, sourceOf(actor)) === true,
     ...(struck
-      ? { target: { creatureType: struck.creatureType ?? null, acted: struck.acted, conditions: struck.conditions ?? {} } }
+      ? { target: { creatureType: struck.creatureType ?? null, acted: struck.acted, conditions: struck.conditions ?? {}, ...struckFacts } }
       : {})
   }, { weaponId: weapon.id });
   const weaponEffects = mergeWeaponEffects(traitEffects, signature);
@@ -2542,7 +2575,10 @@ export async function attackWithDialog(actor, weapon, event = null, { location =
     extraFacts: () => ({
       engagedOne: engagedOneNow(),
       // 06 §7's Riposte, from the maneuver card's own button.
-      riposte: riposte === true
+      riposte: riposte === true,
+      // 04's Night Eyes (*Your first attack while hidden*; the Witch Hunter plan's wave 2b): hidden as the attack door
+      // reads it, before the roll's reveal.
+      hidden: isHiddenFor(actor, sourceOf(actor)) === true
     })
   });
   // **A BLOW STRUCK FROM HIDING** (04's Ghostly Strike, D-773): the card offers no
